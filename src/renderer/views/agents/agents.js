@@ -3,9 +3,11 @@
 // its skills; for the Product Owner, its model and effort instead, and its Planning section (#189): the
 // Speed ↔ Quality slider (window.PoCalibration, po-calibration.js) and the Economy ↔ Generous Cost slider
 // (#205, PoCalibration.cost), each control with a "What this changes" line.
-// The workflows' own agents follow, one section per workflow (#68): read-only (View shows their
-// prompt, skills, model, capabilities and steps; only the look is saved), "Open in workflow" and
-// "Duplicate as my agent". Their saved looks are shared through window.AgentLooks.
+// The workflows' own agents follow, one section per workflow (#68): read-only ("Customize look" opens
+// their prompt, skills, model, capabilities and steps; only the look is saved), "Open in workflow" and
+// "Duplicate as my agent". Their saved looks are shared through window.AgentLooks. An agent whose
+// look was never customised is drawn as the run draws it (#297): its provider's robot painted in its
+// role colour (window.AgentColors, agent-colors.js).
 // Registers itself with registerView (view-registry.js), with the agent editor dialog.
 // Storage and validation are in src/agents.js. Uses app.js globals ($, esc, state, openModal,
 // closeModal, confirmDialog, errMsg, dateOf, showToast, showWorkflowDefinition) and window.Robots (robots.js).
@@ -65,6 +67,12 @@
   // A workflow's agent whose look was never customised draws its provider's robot.
   const providerVariant = (a) => Robots.variantFor(a.providerType || a.provider, a.model || '');
   const variantOf = (a, name) => (a.workflow && !a.appearance ? providerVariant(a) : Robots.fromAppearance(a.appearance || a, name ?? a.name));
+  // A workflow agent's role colour (#227): what the run chat and the 3D view paint its provider's
+  // robot in, from the workflow's `agents[key]` (its own `color:` first).
+  const roleColor = (a) => (a?.workflow && window.AgentColors
+    ? window.AgentColors.hexFor(a.key, window.AgentColors.defIn(state.workflows, a.workflow.file, a.key)) : '');
+  // an uncustomised workflow agent's card: the provider's robot in the role colour, as the run shows it
+  const cardPaint = (a) => (a.workflow && !a.appearance ? roleColor(a) : '');
   const isSystem = () => !!ed.agent?.system;
   const isWorkflow = () => !!ed.agent?.workflow;
   const isReadOnly = () => isSystem() || isWorkflow();
@@ -103,10 +111,11 @@
   // workflow / Duplicate for a workflow's agent); `selected` marks the current pick.
   function agentCard(a, { skillIds = new Set((state.skills || []).map((s) => s.id)), actions = false, selected = false } = {}) {
     const fixed = a.system || a.workflow;
+    const paint = cardPaint(a);
     return `
-      <div class="card clickable agent-card${selected ? ' selected' : ''}" data-id="${esc(a.id)}" tabindex="0">
+      <div class="card clickable agent-card${selected ? ' selected' : ''}" data-id="${esc(a.id)}" data-testid="agent-card" tabindex="0">
         <div class="agent-card-body">
-          <span class="agent-avatar" aria-hidden="true">${Robots.svg(variantOf(a), 'idle', { bubble: false, plaque: '' })}</span>
+          <span class="agent-avatar" data-testid="agent-card-robot"${paint ? ` data-color="${esc(paint)}"` : ''} aria-hidden="true">${Robots.svg(variantOf(a), 'idle', { bubble: false, plaque: '', ...(paint ? { color: paint } : {}) })}</span>
           <div class="agent-card-text">
             <div class="card-head">
               <b class="card-title">${esc(a.name)}</b>
@@ -123,7 +132,7 @@
         ${actions && a.workflow ? `<div class="card-actions">
           <span class="muted small">${esc(a.workflow.name)}</span>
           <span class="spacer"></span>
-          <button class="btn sm ghost" data-act="edit">View</button>
+          <button class="btn sm ghost" data-act="edit">Customize look</button>
           <button class="btn sm ghost" data-act="open-workflow">Open in workflow</button>
           <button class="btn sm ghost" data-act="duplicate">Duplicate</button>
         </div>` : actions ? `<div class="card-actions">
@@ -264,12 +273,14 @@
     renderPreview();
     openModal('#agent-modal');
     $a('.ag-form').scrollTop = 0;
-    if (system) document.activeElement?.blur(); else $a('#ag-name').focus();
+    if (system) document.activeElement?.blur(); else $a('#ag-name').focus({ preventScroll: true });
   }
 
   function renderPreview() {
     const name = $a('#ag-name').value.trim() || (isReadOnly() ? ed.agent.name : 'New agent');
-    $a('#ag-robot').innerHTML = Robots.svg(ed.custom ? variantOf(ed.look, name) : providerVariant(ed.agent), ed.state);
+    // not customised: the provider's robot in the role colour, as the card and the run show it
+    const paint = ed.custom ? '' : roleColor(ed.agent);
+    $a('#ag-robot').innerHTML = Robots.svg(ed.custom ? variantOf(ed.look, name) : providerVariant(ed.agent), ed.state, paint ? { color: paint } : {});
   }
 
   function renderEffort() {
@@ -422,7 +433,7 @@
 
   registerView({
     id: 'agents',
-    nav: { label: 'Agents', order: 70, icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="8" width="16" height="12" rx="3" /><path d="M12 8V4" /><circle cx="12" cy="3.5" r="1" /><circle cx="9" cy="14" r="1.2" /><circle cx="15" cy="14" r="1.2" /><path d="M2 13v3M22 13v3" /></svg>' },
+    nav: { label: 'Agents', order: 70, group: 'ai', icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="8" width="16" height="12" rx="3" /><path d="M12 8V4" /><circle cx="12" cy="3.5" r="1" /><circle cx="9" cy="14" r="1.2" /><circle cx="15" cy="14" r="1.2" /><path d="M2 13v3M22 13v3" /></svg>' },
     markup: `
       <section id="view-agents" class="view hidden">
         <div class="page-head">
@@ -440,7 +451,7 @@
   <div id="agent-modal" class="modal hidden">
     <form id="agent-form" class="modal-card agent-editor">
       <aside class="ag-preview">
-        <div id="ag-robot" class="ag-robot"></div>
+        <div id="ag-robot" class="ag-robot" data-testid="agent-editor-robot"></div>
         <div id="ag-states" class="ag-states" role="group" aria-label="Preview state"></div>
         <div class="ag-look-actions">
           <button type="button" id="btn-ag-shuffle" class="btn ghost sm" title="Pick random colors, eyes and emblem">Shuffle look</button>

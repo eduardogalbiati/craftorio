@@ -28,6 +28,18 @@ Read this before writing or changing tests, and before any check that could star
   quits by itself, ~1 min, ~25 windows) only runs with `MULTIAGENT_UI_TESTS=1`: CI's Windows job
   has a step for it (after `node node_modules/electron/install.js`; the matrix sets
   `ELECTRON_SKIP_BINARY_DOWNLOAD`). Run it locally when you change the script or add a view.
+- **The app's E2E suite (#222)**: Playwright + playwright-bdd, `npm run test:e2e` (`-- --grep
+  @smoke`: the 6 critical journeys, ~30 s; `-- --grep @issue-<n>`: one issue). Feature files in
+  `features/` (one per area, every scenario `@issue-<n>`), steps in `features/steps/`, the launch in
+  `features/support/app.js` (`_electron` on a fresh demo workspace seeded with scripts/screenshot.js's
+  data, simulation only, window off-screen; `MULTIAGENT_E2E_SHOW=1` shows it). Steps assert through
+  `getByRole` / `getByTestId` (the renderer's `data-testid`s). Visual baselines:
+  `features/__screenshots__/<name>-<platform>.png`, committed, `maxDiffPixelRatio` in
+  `playwright.config.js`; rewrite one on purpose only (`npm run test:e2e:update -- --grep @visual`).
+  Results: `.test-output/e2e/results.json`; a failed scenario keeps `trace.zip` (with the window's
+  screencast: Playwright's recordVideo stalls Electron 44) and `failure.png` under
+  `.test-output/e2e/artifacts/` (`npx playwright show-trace <zip>`). CI's Windows job runs `@smoke`.
+  The app is dark-only today: the light and dark baselines guard `prefers-color-scheme` both ways.
 
 ## Affected tests, the slow suite, who runs what (#212)
 
@@ -95,18 +107,20 @@ creates a commit needs its own `-c user.name/email`.
 - E2E scenarios (#143): an output schema's `scenarios` array (items with a `status`) gets sample
   scenarios (`mockScenarios` in `src/engine/providers.js`). A schema whose status enum has no
   `passed` (the development workflows' test step, #199) gets two `pending` ones (written, run at
-  release). Otherwise (e2e-release's `e2e` step): on a visit whose `tests_status` fails (the 1st by
-  default) one passed, one failed and one skipped; on later visits the failed one passes; e2e-release's
-  `e2e_status` follows `['fail', 'pass']`. The engine saves them in `<run_dir>/e2e/`
+  release). Otherwise (e2e-release's `heal` step): on a visit whose `tests_status` fails (the 1st by
+  default) one passed, one failed and one skipped; on later visits the failed one passes. e2e-release's
+  `e2e` is a suite step: `mockSequences: { suite: { e2e: ['fail', 'pass'] } }` takes it through
+  heal → fix → review (default: green at once). The engine saves them in `<run_dir>/e2e/`
   (`src/engine/scenarios.js`) and the gates show them ("written, run at release" for pending);
   `npm run screenshot -- --view run --stop-at approve_merge` shows the gate with them. Local hero
   has no merge approval: the run's summary (`renderRunSummary`, views/run/run.js) shows them.
 - **Where E2E runs (#199)**: development runs write the issue's scenarios (user-visible issues only,
   at most 3, `@issue-<n>`) and check that they parse (a dry run), never start the app or a browser
   for them; the whole suite runs once, at release, in the bundled `e2e-release.yaml` (its own
-  worktree of the local base, one feature file at a time within `time_budget_minutes`, a failed
-  scenario → developer → review → the scenario again, at most `max_rounds`, then a human gate; a
-  green pass records `refs/multiagent/e2e-last-green`). Development runs merge locally without
+  worktree of the local base; the orchestrator runs `e2e_command` as a suite step, no agent, #222;
+  a red scenario → the E2E runner sorts it (a stale scenario it updates, or the app) → developer →
+  review → the suite again, at most `max_rounds`, then a human gate; a green pass records
+  `refs/multiagent/e2e-last-green`). Development runs merge locally without
   waiting for it.
 - **Who runs the suite (#177)**: in the software-development workflows and test-batch the
   orchestrator does, not the test writer: a `type: suite` step (`src/engine/suite-step.js`) runs the

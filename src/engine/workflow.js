@@ -8,13 +8,15 @@
 // transition's `status`, `mockSequences` to steer the mock per field in tests, gates with their
 // details kept for runs:active (`pendingGates`), `preexisting_failures` reported by a step).
 // Session modes (`persistent` / `ephemeral` / `handoff`), handoff notes (`takeHandoff`, `saveHandoff`,
-// `requestHandoffNote`), `max_context` rotation, per-turn context metrics (`turnLog`,
+// `requestHandoffNote`), `max_context` rotation, `fresh_after_idle` rotation (#247), per-turn context metrics (`turnLog`,
 // `contextSummary` → `summary.context`). `sendToAgent` builds one turn; `invokeTurn` runs it against
 // the provider (templated `timeout` via `turnTimeout`; a failed attempt's tool calls go to the next
 // one, `attemptSummary`). Exports `render` (nunjucks, autoescape off, filters `to_yaml`, `to_json`,
 // `shuffle(seed)`, `clamp(lo, hi)`, `e2e_scenarios`), `takeHandoff`, `parseTokens`. Steps without an agent: gates
 // (`type: human_approval`), `type: screenshots` (`runScreenshots`, #144) and `type: workflow`
-// (`runChildWorkflows`, #174: child runs, once or `foreach` item, src/engine/workflow-step.js).
+// (`runChildWorkflows`, #174: child runs, once or `foreach` item, src/engine/workflow-step.js),
+// `type: test_ids` (`runTestIdsStep`, #246: the E2E steps' test ids missing from the renderer,
+// src/engine/test-ids.js; filter `missing_test_ids`).
 // Chaining (#134): the declared `outputs:` (`computeOutputs`, in workflow.finished and summary.json),
 // the run's `then` (option, a gate choice's `then`, `setThen`) and `from`; the service starts what
 // comes next. Child runs (#174): `parent_run` in workflow.started and summary, `child_runs` in the summary.
@@ -35,6 +37,7 @@ const {
   isToolTimeout,
   refreshWindowsPath,
   runTurn,
+  seedClaudeTotal,
   sleep,
   storeAttachments,
 } = require('./providers');
@@ -54,19 +57,24 @@ const {
   prepareWorktree,
   removeScratch,
   removeWorktree,
+  restoreWork,
+  retireWorktree,
 } = require('./worktree');
 const capabilities = require('./capabilities');
 const depsCache = require('./deps-cache');
 const evidence = require('../evidence');
 const gateSummary = require('./gate-summary');
 const { scratchWorkspace } = require('../local-preview');
+const { writeResultSummary } = require('../result-summary');
 const { stopProcessesIn } = require('./processes');
+const { sharedMemoryGuard } = require('./memory-guard');
 const { PROBES, runProbe, parseTarget } = require('./probes');
 const scenarios = require('./scenarios');
 const { captureScreenshots } = require('./screenshot-step');
 const suiteStep = require('./suite-step');
 const {
   affectedTests,
+  changedFiles,
   relatedTests,
   selectionLines,
   testMap,
@@ -77,10 +85,13 @@ const {
   validateWorkflowStep,
 } = require('./workflow-step');
 const mergeQueue = require('./merge-queue');
+const { shipRelease } = require('../releases');
 const { IdleWatch } = require('./idle');
 const testPaths = require('./test-paths');
+const testIds = require('./test-ids');
 const { StepTrail } = require('../renderer/run-progress-model');
 const chain = require('../renderer/chain-model');
+const { displayName } = require('../renderer/display-name');
 
 // Skills bundled with the app (skills/ folder at the root). Workspace skills take precedence.
 const BUNDLED_SKILLS = path.join(__dirname, '..', '..', 'skills');
@@ -164,6 +175,26 @@ tpl.addFilter('e2e_scenarios', (output) => scenarios.scenariosMessage(output));
 //   {{ steps.suite.output | suite_failures }}
 tpl.addFilter('suite_failures', (output) => suiteStep.suiteMessage(output));
 
+// The test ids the E2E step definitions of a checkout use and its renderer lacks (#246, the rule of
+// src/engine/test-ids.js), one line per id with the step files that use it; '' when none or without
+// a folder. Optional folders, repository-relative: steps (features/steps), renderer (src/renderer).
+//   {{ worktree_dir | missing_test_ids }}
+tpl.addFilter('missing_test_ids', (dir, steps, renderer) => {
+  if (!dir || !fs.existsSync(String(dir))) return '';
+  try {
+    return testIds.missingTestIdLines(testIds.missingTestIds(String(dir), { steps: steps || undefined, renderer: renderer || undefined }));
+  } catch { return ''; }
+});
+
+// The numbers of the run's issues (#223: their BDD tags @issue-<n>), from `issue` and `issues` (URLs
+// ending in the number), without duplicates; [] without an issue.
+//   {% for n in inputs | issue_numbers %}@issue-{{ n }}|{% endfor %}@smoke
+tpl.addFilter('issue_numbers', (inputs) => {
+  const issues = inputs?.issues;
+  const urls = [inputs?.issue, ...(Array.isArray(issues) ? issues : String(issues || '').split(/\s+/))];
+  return [...new Set(urls.map((u) => /(\d+)\D*$/.exec(String(u || ''))?.[1]).filter(Boolean))];
+});
+
 // A gate's `summary:` (#213): one ✔ / ✖ line per issue of a developer's or a verifier's output
 // (`'not_done'` keeps the failed ones), one ✖ line per failing test of a suite's output, and a long
 // text (a report, an error) on one line cut with an ellipsis.
@@ -234,6 +265,21 @@ const END_STATUSES = ['success', 'failed', 'cancelled'];
 // once a turn ends above it); ephemeral: a fresh session per turn with only the step prompt;
 // handoff: a fresh session per turn that starts from the agent's latest handoff note.
 const SESSION_MODES = ['persistent', 'ephemeral', 'handoff'];
+// Step types without an agent: the engine does the work (no supervisor, no stall check, no agent keys)
+const MACHINE_STEP_TYPES = [
+  'human_approval',
+  'screenshots',
+  'suite',
+  'test_ids',
+  'workflow',
+];
+const DISPLAY_MAX = 40;
+
+// #245: `display` on an agent or a step, the name the screens show instead of its key or id
+function validateDisplay(v, what) {
+  if (v === undefined) return;
+  if (typeof v !== 'string' || !v.trim() || v.length > DISPLAY_MAX) throw new Error(`${what}: display must be a name of 1 to ${DISPLAY_MAX} characters.`);
+}
 
 function loadWorkflow(file) {
   const wf = yaml.load(fs.readFileSync(file, 'utf8'));
@@ -243,21 +289,24 @@ function loadWorkflow(file) {
   for (const [name, a] of [['defaults', wf.defaults || {}], ...Object.entries(wf.agents).map(([n, a]) => [`Agent "${n}"`, a || {}])]) {
     if (a.session !== undefined && !SESSION_MODES.includes(a.session)) throw new Error(`${name}: session must be one of ${SESSION_MODES.join(', ')}.`);
     if (a.max_context !== undefined && !String(a.max_context).includes('{{') && !parseTokens(a.max_context)) throw new Error(`${name}: max_context must be a token count such as 150k.`);
+    if (a.fresh_after_idle !== undefined && parseDuration(a.fresh_after_idle, null) == null) throw new Error(`${name}: fresh_after_idle must be a duration such as 55m.`);
     if (a.persona !== undefined && a.persona !== 'random') throw new Error(`${name}: persona must be "random".`);
     if (a.edits_tests !== undefined && typeof a.edits_tests !== 'boolean') throw new Error(`${name}: edits_tests must be true or false.`);
     validateFileList(a.protect_files, `${name}: protect_files`);
     capabilities.validate(a.capabilities, name, mcpServers);
+    validateDisplay(a.display, name);
   }
   testPaths.validateTestsPaths(wf.tests_paths);
   const ids = new Set(wf.steps.map((s) => s.id));
   for (const s of wf.steps) {
     capabilities.validate(s.capabilities, `Step "${s.id}"`, mcpServers);
+    validateDisplay(s.display, `Step "${s.id}"`);
     if (s.edits_tests !== undefined && typeof s.edits_tests !== 'boolean') throw new Error(`Step "${s.id}": edits_tests must be true or false.`);
     // #220: files its agent may not change (a template, e.g. another step's tests_added), and the
     // code → tests map given to its prompt as {{ test_map }} (#219)
     validateFileList(s.protect_files, `Step "${s.id}": protect_files`);
-    if (s.protect_files !== undefined && ['human_approval', 'screenshots', 'suite', 'workflow'].includes(s.type)) throw new Error(`Step "${s.id}": protect_files is only valid on an agent step.`);
-    if (s.test_map !== undefined && (typeof s.test_map !== 'boolean' || ['human_approval', 'screenshots', 'suite', 'workflow'].includes(s.type))) throw new Error(`Step "${s.id}": test_map must be true or false, on an agent step.`);
+    if (s.protect_files !== undefined && MACHINE_STEP_TYPES.includes(s.type)) throw new Error(`Step "${s.id}": protect_files is only valid on an agent step.`);
+    if (s.test_map !== undefined && (typeof s.test_map !== 'boolean' || MACHINE_STEP_TYPES.includes(s.type))) throw new Error(`Step "${s.id}": test_map must be true or false, on an agent step.`);
     if (s.type === 'screenshots') {
       // `type: screenshots` (#144): no agent; the screens listed in `from`'s `screenshots` output
       if (s.agent || s.agents) throw new Error(`Step "${s.id}": a screenshots step has no agent.`);
@@ -279,6 +328,12 @@ function loadWorkflow(file) {
     } else if (s.type === 'workflow') {
       // `type: workflow` (#174): a child run of another workflow, once or per `foreach` item
       validateWorkflowStep(s, file);
+    } else if (s.type === 'test_ids') {
+      // `type: test_ids` (#246): no agent; the test ids the E2E step definitions use and the renderer lacks
+      if (s.agent || s.agents) throw new Error(`Step "${s.id}": a test_ids step has no agent.`);
+      for (const key of ['steps', 'renderer']) {
+        if (s[key] !== undefined && (typeof s[key] !== 'string' || !s[key].trim())) throw new Error(`Step "${s.id}": ${key} must be a repository-relative folder (a template).`);
+      }
     } else if (s.type !== 'human_approval') {
       // `agents: [...]` = fan-out: the same prompt goes to several agents in parallel
       if (s.agents && (!Array.isArray(s.agents) || !s.agents.length)) throw new Error(`Step "${s.id}": agents must be a non-empty list.`);
@@ -300,9 +355,9 @@ function loadWorkflow(file) {
       if (w.grace !== undefined && parseDuration(w.grace, null) == null) throw new Error(`Step "${s.id}": wait.grace must be a duration such as 10m.`);
     }
     if (s.choices && s.type !== 'human_approval') throw new Error(`Step "${s.id}": choices is only valid for human_approval.`);
-    if (s.full_suite !== undefined && (s.full_suite !== 'warn' || ['human_approval', 'screenshots', 'suite', 'workflow'].includes(s.type))) throw new Error(`Step "${s.id}": full_suite must be "warn", on an agent step (a whole-suite command its agent starts is noted, #177).`);
-    if (s.commit_tests !== undefined && (s.commit_tests !== true || ['human_approval', 'screenshots', 'suite', 'workflow'].includes(s.type) || s.agents)) throw new Error(`Step "${s.id}": commit_tests must be true, on a single-agent step (the orchestrator commits the test files its agent left uncommitted, #209).`);
-    if (s.base_worktree !== undefined && (typeof s.base_worktree !== 'boolean' || ['human_approval', 'screenshots', 'suite', 'workflow'].includes(s.type) || !wf.orchestrator?.worktree)) throw new Error(`Step "${s.id}": base_worktree must be true or false, on an agent step of a workflow with orchestrator.worktree.`);
+    if (s.full_suite !== undefined && (s.full_suite !== 'warn' || MACHINE_STEP_TYPES.includes(s.type))) throw new Error(`Step "${s.id}": full_suite must be "warn", on an agent step (a whole-suite command its agent starts is noted, #177).`);
+    if (s.commit_tests !== undefined && (s.commit_tests !== true || MACHINE_STEP_TYPES.includes(s.type) || s.agents)) throw new Error(`Step "${s.id}": commit_tests must be true, on a single-agent step (the orchestrator commits the test files its agent left uncommitted, #209).`);
+    if (s.base_worktree !== undefined && (typeof s.base_worktree !== 'boolean' || MACHINE_STEP_TYPES.includes(s.type) || !wf.orchestrator?.worktree)) throw new Error(`Step "${s.id}": base_worktree must be true or false, on an agent step of a workflow with orchestrator.worktree.`);
     if (s.local_preview !== undefined && (s.type !== 'human_approval' || typeof s.local_preview !== 'boolean')) throw new Error(`Step "${s.id}": local_preview must be true or false, on a human_approval step.`);
     if (s.diff_base !== undefined && (s.type !== 'human_approval' || typeof s.diff_base !== 'string' || !s.diff_base.trim())) throw new Error(`Step "${s.id}": diff_base must be a ref (e.g. "origin/{{ inputs.base_branch }}"), on a human_approval step.`);
     if (s.save_to_issue !== undefined && (s.type !== 'human_approval' || !(s.choices || []).some((c) => c.id === s.save_to_issue))) throw new Error(`Step "${s.id}": save_to_issue must be the id of one of the step's choices (e.g. accept), on a human_approval step.`);
@@ -374,6 +429,12 @@ function loadWorkflow(file) {
         if (t.merge !== 'local') throw new Error(`Step "${s.id}": transition merge must be "local".`);
         if (!wf.orchestrator?.worktree) throw new Error(`Step "${s.id}": merge: local needs orchestrator.worktree (the run's branch lives in its worktree).`);
       }
+      // `ship: { tag }` (#260): only the answer a person gives at a decision gate ships a release
+      if (t.ship !== undefined) {
+        if (!t.ship || typeof t.ship !== 'object' || !String(t.ship.tag || '').trim()) throw new Error(`Step "${s.id}": transition ship needs a tag (ship: { tag: "{{ inputs.version }}" }).`);
+        if (s.type !== 'human_approval' || s.kind === 'escalation' || s.timeout !== undefined) throw new Error(`Step "${s.id}": ship belongs to a human gate nobody else answers (type: human_approval, no kind: escalation, no timeout).`);
+        if (!wf.orchestrator?.worktree) throw new Error(`Step "${s.id}": ship needs orchestrator.worktree (the repository and its base branch).`);
+      }
     }
   }
   const maxCtx = wf.orchestrator?.limits?.max_total_context;
@@ -389,7 +450,25 @@ function loadWorkflow(file) {
   }
   validateGroups(wf.groups, ids);
   validateOutputs(wf.outputs);
+  // #286: problems that do not stop a run, shown on the workflow's screen (not enumerable, so
+  // nothing that walks the workflow's keys sees it); a templated provider is checked per run
+  Object.defineProperty(wf, 'warnings', { value: silentEfforts(wf), enumerable: false, writable: true });
   return wf;
+}
+
+// #286: the agents whose `effort` never reaches their CLI (the engine adds a provider's
+// effort_args only when it declares them); a templated provider or effort that resolves to
+// nothing is skipped, the run checks its resolved agents again
+function silentEfforts(wf) {
+  const out = [];
+  for (const [name, a] of Object.entries(wf.agents || {})) {
+    const effort = String(a?.effort ?? '').trim();
+    const provider = String(a?.provider ?? '');
+    if (!effort || provider.includes('{{')) continue;
+    const p = wf.providers?.[provider];
+    if (p && !(Array.isArray(p.effort_args) && p.effort_args.length)) out.push(`the effort of ${name} is not passed: its provider has no effort_args`);
+  }
+  return out;
 }
 
 // `outputs:` (#134): the run's result contract, { <name>: { type, description, value } }. `value` is a
@@ -551,6 +630,12 @@ const median = (xs) => {
 };
 // Silence with a command waiting that is worth a warning (an agent polling for text that never shows up).
 const IDLE_WARN_MS = 5 * 60e3;
+// bytes in GB (binary, like Task Manager), one decimal: the memory guard's messages (#276)
+const gib = (bytes) => (bytes / 1024 ** 3).toFixed(1);
+// #276: a suite / e2e step waits at most this long for memory before it starts, and reruns at most
+// this many times a round that failed during a memory incident
+const MEMORY_WAIT_MS = 10 * 60e3;
+const MAX_ENV_RERUNS = 2;
 
 // What the transitions decide on: enum, boolean and number fields of the schema (not the
 // free text, which an LLM rewords on every call). Without a schema, the whole answer.
@@ -575,22 +660,41 @@ function findingsKey(findings, itemSchema) {
   return keys.length ? findings.map((f) => (f && typeof f === 'object' ? keys.map((k) => f[k] ?? null) : f)) : findings;
 }
 
+// The findings a fix round answers, from the output of the step it came from (a review): its
+// `findings`, or for a fan-out each agent's `findings` and `ui_findings`. null: none to answer.
+function answeredKey(from, output) {
+  const props = from.output_schema?.properties || {};
+  if (!(from.agents && output?.results && typeof output.results === 'object')) {
+    return output?.findings == null ? null : findingsKey(output.findings, props.findings?.items);
+  }
+  const per = Object.keys(output.results).sort().map((a) => {
+    const r = output.results[a] || {};
+    return [a, findingsKey(r.findings, props.findings?.items), findingsKey(r.ui_findings, props.ui_findings?.items)];
+  });
+  return per.some(([, f, u]) => f != null || u != null) ? per : null;
+}
+
 // What `same_output` compares between visits of a step: the fields of `stall.same_output_fields` when
-// the step declares them; otherwise its decision fields plus its findings and, for an author step, its
+// the step declares them; otherwise its decision fields plus its findings (and ui_findings) and, for an author step, its
 // progress fields (with the worktree's head when it reports no commit_sha). `answered`: the findings of
 // the step it came from (a review), so a fix round answering new findings never repeats the last one.
 function repeatKey(step, output, { head, answered } = {}) {
+  // a fan-out (agents: [...]) answers { results: { agent: output } }: each agent's answer, keyed alone
+  if (step.agents && output?.results && typeof output.results === 'object') {
+    const per = Object.keys(output.results).sort().map((a) => [a, repeatKey({ ...step, agents: null }, output.results[a], { head })]);
+    return JSON.stringify([per, ...(answered == null ? [] : [{ answered }])]);
+  }
   const props = step.output_schema?.properties || {};
   const value = (k) => {
     if (k === 'commit_sha') return output?.commit_sha || head?.() || null;
-    if (k === 'findings') return findingsKey(output?.findings, props.findings?.items);
+    if (k === 'findings' || k === 'ui_findings') return findingsKey(output?.[k], props[k]?.items);
     return output?.[k] ?? null;
   };
   let fields = step.stall?.same_output_fields;
   if (!fields) {
     const progress = PROGRESS_FIELDS.filter((k) => props[k]);
     if (progress.length && !progress.includes('commit_sha')) progress.unshift('commit_sha');
-    fields = [...progress, ...(props.findings ? ['findings'] : [])];
+    fields = [...progress, ...['findings', 'ui_findings'].filter((k) => props[k])];
   }
   const own = step.stall?.same_output_fields ? [] : [decisionKey(output, step.output_schema)];
   if (!fields.length && answered == null) return own[0];
@@ -713,7 +817,7 @@ class WorkflowRun extends EventEmitter {
   // startChild: ({ file, inputs, parent, label }) => Promise<{ runId, finished: Promise<{ status, outputs, error }>, stop }>,
   //   starts a child run for a `type: workflow` step (the service: a normal run, src/service/areas/runs.js).
   //   Default: startChildRun, a WorkflowRun of its own, emitted as 'child' (its events are the listener's to record).
-  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issues, issue, resume, worktreesDir, mockSequences, notices, stopProcesses, probe, actionsQuota, peerSessions, idleWarnMs, personas, localPreview, attachments, then, from, parent, startChild }) {
+  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issues, issue, resume, worktreesDir, mockSequences, notices, stopProcesses, probe, actionsQuota, peerSessions, idleWarnMs, personas, localPreview, attachments, then, from, parent, startChild, memoryGuard }) {
     super();
     refreshWindowsPath(); // actions (e.g. gh pr merge) need the refreshed PATH
     this.file = file;
@@ -739,6 +843,12 @@ class WorkflowRun extends EventEmitter {
     this.worktreesDir = worktreesDir || null;
     this.worktree = null; // see setupWorktree
     this.stopProcesses = stopProcesses === undefined ? (this.mock ? null : stopProcessesIn) : stopProcesses;
+    // #276 (src/engine/memory-guard.js): stops a process of this run over the memory limit and holds
+    // suites while memory is low; the app's guard for a real run (null when turned off), none for a
+    // simulation unless one is given
+    this.memoryGuard = memoryGuard !== undefined ? memoryGuard : this.mock ? null : sharedMemoryGuard();
+    this.memoryNotes = new Map(); // agent -> [what the guard stopped], told in its next prompt
+    this.memoryStops = new Map(); // `${step}\n${command}` -> stops (the second one notifies the owner)
     this.probe = probe || (this.mock ? (args) => this.mockProbe(args) : runProbe);
     this.actionsQuota = actionsQuota || null;
     this.probeStats = {}; // step -> { polls, agent_calls, completed, errors } (summary.probes)
@@ -772,6 +882,8 @@ class WorkflowRun extends EventEmitter {
       }
     }
     this.dropDisabledAgents();
+    // #286: an effort the CLI never gets goes to the run's log at start, never silent
+    for (const message of silentEfforts(this.wf)) this.notices.push({ level: 'warn', message });
     this.pickPersonas(personas || [], resume?.personas);
     this.ctx = {
       inputs: this.inputs, steps: {}, loop: { iteration: 0 }, run_id: this.runId, run_dir: this.runDir, runs_dir: runsDir, workflows_dir: path.dirname(path.resolve(file)),
@@ -887,7 +999,7 @@ class WorkflowRun extends EventEmitter {
       if (!enabled) delete this.wf.agents[name];
     }
     for (const s of this.wf.steps) {
-      if (s.type === 'human_approval' || s.type === 'screenshots' || s.type === 'suite' || s.type === 'workflow') continue;
+      if (MACHINE_STEP_TYPES.includes(s.type)) continue;
       if (!s.agents) {
         if (!this.wf.agents[s.agent]) throw new Error(`Step "${s.id}" uses agent "${s.agent}", which is disabled for this run.`);
         continue;
@@ -1040,6 +1152,16 @@ class WorkflowRun extends EventEmitter {
     return Object.keys(names).length ? names : undefined;
   }
 
+  // #245: what the screens call each agent and step (the YAML's `display`, else the readable id),
+  // recorded in workflow.started so a past run keeps its own version's names
+  displayNames() {
+    const named = (id, x) => (typeof x?.display === 'string' && x.display.trim()) || displayName(id);
+    return {
+      agents: Object.fromEntries(Object.entries(this.wf.agents).map(([k, a]) => [k, named(k, a)])),
+      steps: Object.fromEntries(this.wf.steps.map((s) => [s.id, named(s.id, s)])),
+    };
+  }
+
   snapshot(s) {
     const duration = (s.closedAt || Date.now()) - s.openedAt;
     return {
@@ -1050,6 +1172,11 @@ class WorkflowRun extends EventEmitter {
       duration_ms: duration, active_ms: s.activeMs, idle_ms: Math.max(0, duration - s.activeMs),
       turns: s.turns, tokens: { ...s.tokens }, cost_usd: +s.costUsd.toFixed(6),
       status: s.status, provider_session_id: s.providerSessionId, cwd: s.cwd || null, mode: s.mode || null,
+      // #233: the part of cost_usd estimated from the stream of attempts killed before their result
+      ...(s.estimatedUsd ? { estimated_cost_usd: +s.estimatedUsd.toFixed(6) } : {}),
+      ...(s.costNotRecorded ? { cost_not_recorded: true } : {}),
+      // the CLI's own running total of its session (Claude): seeds the per-turn cost when a resumed run continues it
+      ...(s.cliTotalUsd != null ? { cli_total_cost_usd: s.cliTotalUsd } : {}),
     };
   }
 
@@ -1069,6 +1196,8 @@ class WorkflowRun extends EventEmitter {
       workflow: this.wf.metadata?.name, version: this.wf.metadata?.version, project_id: this.projectId,
       issues: this.issues || undefined,
       file: path.basename(this.file), inputs: this.inputs, mock: this.mock, run_dir: this.runDir,
+      // #233: each turn's cost_usd is its own (runs without it recorded Claude's cumulative totals)
+      cost_accounting: 'per_turn',
       // the unit / E2E test inputs and where each value came from (#203)
       tests_plan: this.testsPlan.length ? this.testsPlan : undefined,
       attachments: Object.keys(this.attachments).length ? this.attachments : undefined,
@@ -1078,6 +1207,7 @@ class WorkflowRun extends EventEmitter {
       parent_run: this.parent || undefined,
       personas: Object.keys(this.personas).length ? this.personas : undefined,
       agent_names: this.agentNames(),
+      display: this.displayNames(),
       steps: this.wf.steps.map((s) => ({ id: s.id, type: s.type || 'agent', agent: stepAgentLabel(s) })),
       groups: this.wf.groups,
     });
@@ -1152,6 +1282,14 @@ class WorkflowRun extends EventEmitter {
     }
     this.worktree = info;
     this.ctx.worktree_dir = info.workDir;
+    // #202: on the previous run's branch, whose WIP commit (saveWork) holds what that attempt left
+    // uncommitted: back as uncommitted (staged) changes, whether the folder was recreated or reused
+    // (its removal failed, EBUSY). The first agent prompt of the run tells it (a resume may start at a gate).
+    if (prev?.branch && (await currentBranch(info.dir)) === prev.branch && await restoreWork(info.dir)) {
+      info.commit = await git(['rev-parse', 'HEAD'], info.dir);
+      this.restoredWorkNote = 'The worktree holds uncommitted work from the previous attempt of this run (saved as a WIP commit when it ended, restored as staged changes): check it with `git status` and `git diff --cached`, keep what is right and commit it with your own work.';
+      log('info', `worktree: restored the previous attempt's uncommitted work on ${prev.branch}`);
+    }
     const how = info.reused ? 'reusing' : info.recreated ? 'recreated' : 'created';
     this.emitEvent('worktree.ready', {
       dir: info.dir, work_dir: info.workDir, repo: info.repo, base: info.base, ref: info.ref, commit: info.commit, reused: info.reused, recreated: info.recreated,
@@ -1277,7 +1415,8 @@ class WorkflowRun extends EventEmitter {
   }
 
   // Success: remove the worktree and its local branch when merged, and the run's scratch workspace.
-  // Otherwise keep both for a resume.
+  // Otherwise (#202) the branch keeps the work (uncommitted changes as a WIP commit, a detached
+  // worktree gets a branch) and the folder and the scratch go; a resume recreates the folder.
   async finishWorktree(status) {
     const wt = this.worktree;
     if (!wt) return;
@@ -1296,12 +1435,19 @@ class WorkflowRun extends EventEmitter {
         log('info', `worktree: removed ${wt.dir}${r.branch ? `; branch ${r.branch} ${r.branchDeleted ? 'deleted (merged)' : 'kept'}` : ''}`);
         if (r.removed && removeScratch(this.runDir)) log('info', `worktree: removed the run's scratch workspace ${path.join(this.runDir, 'scratch')}`);
       } else {
-        Object.assign(wt, { removed: false, branch: await currentBranch(wt.dir) });
-        this.emitEvent('worktree.kept', { dir: wt.dir, branch: wt.branch });
-        log('info', `worktree: kept ${wt.dir}${wt.branch ? ` (branch ${wt.branch})` : ''} to resume the run`);
+        const r = await retireWorktree({ repo: wt.repo, dir: wt.dir, runId: this.runId, log });
+        Object.assign(wt, { removed: r.removed, branch: r.branch, branchDeleted: false });
+        this.emitEvent('worktree.removed', { dir: wt.dir, removed: r.removed, branch: r.branch, branch_deleted: false, wip_commit: r.wipCommit });
+        log('info', `worktree: ${r.removed ? 'removed' : 'could not remove (the cleanup retries)'} ${wt.dir}; branch ${r.branch} keeps the work to resume the run`);
+        if (r.removed && removeScratch(this.runDir)) log('info', `worktree: removed the run's scratch workspace ${path.join(this.runDir, 'scratch')}`);
       }
     } catch (e) {
       log('warn', `worktree: cleanup failed: ${e.message}`);
+      if (status !== 'success' && !wt.removed) {
+        // the work could not be saved on the branch: the folder stays, as it is
+        Object.assign(wt, { removed: false, branch: await currentBranch(wt.dir) });
+        this.emitEvent('worktree.kept', { dir: wt.dir, branch: wt.branch });
+      }
     }
   }
 
@@ -1394,6 +1540,8 @@ class WorkflowRun extends EventEmitter {
       if (gate.recover) return gate.recover;
       const { answer, feedback } = gate;
       const by = routed ? { by: 'supervisor' } : {};
+      // who answered (#260): a `ship:` transition only follows the owner's own answer
+      st.answeredBy = routed ? 'supervisor' : gate.by || 'unknown';
       if (step.choices) {
         output = { choice: answer, feedback, ...by };
         scope = { ...this.ctx, output, choice: answer, feedback };
@@ -1422,6 +1570,11 @@ class WorkflowRun extends EventEmitter {
         await this.stopWorktreeProcesses(`step ${step.id}`);
       }
       if (this.abort.signal.aborted) throw new Error('Cancelled');
+      st.output = output;
+      scope = { ...this.ctx, output, iteration: st.iteration };
+    } else if (step.type === 'test_ids') {
+      // no agent, no model call (#246): the missing test ids are the output, the transitions route it
+      output = this.runTestIdsStep(step, st);
       st.output = output;
       scope = { ...this.ctx, output, iteration: st.iteration };
     } else if (step.type === 'workflow') {
@@ -1484,7 +1637,7 @@ class WorkflowRun extends EventEmitter {
       if (step.wait) await this.afterAgentTurn(step, st);
     }
     const next = await this.finishStep(step, st, output, scope, t0);
-    return ['human_approval', 'screenshots', 'suite', 'workflow'].includes(step.type) ? next : this.checkStalls(step, st, output, t0, next, again);
+    return MACHINE_STEP_TYPES.includes(step.type) ? next : this.checkStalls(step, st, output, t0, next, again);
   }
 
   // ---- stall detection and the supervisor on call (#41) ---------------------------------------
@@ -1501,8 +1654,7 @@ class WorkflowRun extends EventEmitter {
     if (!(again && isLooping(step)) && same) {
       // the findings a fix round answers: those of the step it came from (e.g. code_review)
       const from = this.ctx.previous_step !== step.id && this.wf.steps.find((s) => s.id === this.ctx.previous_step);
-      const findings = from ? this.ctx.steps[from.id]?.output?.findings : null;
-      const answered = findings == null ? null : findingsKey(findings, from.output_schema?.properties?.findings?.items);
+      const answered = from ? answeredKey(from, this.ctx.steps[from.id]?.output) : null;
       const key = repeatKey(step, output, { head: () => this.worktreeHead(), answered });
       st.repeat = st.repeat?.key === key ? { key, count: st.repeat.count + 1 } : { key, count: 1 };
       if (st.repeat.count % same === 0) signals.push({ kind: 'same_output', detail: `the same answer ${st.repeat.count} visits in a row: ${key.slice(0, 200)}` });
@@ -1767,9 +1919,11 @@ class WorkflowRun extends EventEmitter {
       // `precheck:` the PR/MR is checked right before the action (`true` = the gate's own `check:`)
       const precheck = t.precheck === true ? step.check : t.precheck || null;
       const act = async () => {
+        // `ship:` (#260): refused before anything happens (its merge included) unless the owner answered
+        if (t.ship) this.shipGuard(step);
         if (precheck) await this.runCheck(precheck, step, 'precheck', scope, { failIfNot: true });
         // simulation: mockSequences.action_errors: { step: n } fails the first n actions/merges of that step
-        if (this.mock && (action || t.merge === 'local')) {
+        if (this.mock && (action || t.merge === 'local' || t.ship)) {
           const n = (this.mockActionCalls[step.id] = (this.mockActionCalls[step.id] || 0) + 1);
           if (n <= (this.mockSequences?.action_errors?.[step.id] || 0)) {
             throw new Error(`(simulated) ${t.merge === 'local' ? 'local merge: the branch conflicts with the local base in src/simulated.js' : `action failed: ${action}`}`);
@@ -1778,10 +1932,12 @@ class WorkflowRun extends EventEmitter {
         if (action) await this.runAction(action);
         // `merge: local`: the engine merges the run's branch into the local base (no push, no PR)
         if (t.merge === 'local') await this.mergeWorktreeLocally();
+        // `ship: { tag }` (#260): the local base is pushed and tagged, after the merge when there is one
+        if (t.ship) await this.shipRelease(step, t.ship, scope);
       };
       try {
-        // a merge (checked, or local) waits for the other runs' merges into the same repository
-        if (precheck || t.merge === 'local') {
+        // a merge (checked, or local) and a ship wait for the other runs' merges into the same repository
+        if (precheck || t.merge === 'local' || t.ship) {
           const key = this.mergeKey(precheck, scope);
           await mergeQueue.serialize(key, act);
           mergeQueue.notifyMerged({ key, runId: this.runId });
@@ -1790,7 +1946,8 @@ class WorkflowRun extends EventEmitter {
         // `on_error: <step>` on the transition: a failed check, action or merge goes there (the error
         // is in the template context as `action_error`) instead of ending the run; with `recover:`
         // the supervisor decides first whether to go back to one of those steps
-        if (!t.on_error || this.abort.signal.aborted) throw e;
+        // (`fatal`: a ship nobody may retry, e.g. the gate was not answered by the owner)
+        if (!t.on_error || this.abort.signal.aborted || e.fatal) throw e;
         return this.recoverFromActionError(step, { on_error: t.on_error, recover: t.recover }, e);
       }
       // `set:` run variables for the next steps' templates (`vars.<name>`)
@@ -2146,27 +2303,38 @@ class WorkflowRun extends EventEmitter {
   // Fan-out: the same step runs in parallel for each agent in `agents`, each one
   // in its own session. output = { results: { agent: output }, succeeded, failed }.
   // `min_success` (default: all) says how many must respond for the step to count.
+  // `agent_when: { <agent>: <expr> }` (#151) leaves an agent out of this visit when its expression
+  // is false (output `skipped`; `min_success` capped at the agents that run); `required_agents`
+  // fails the step when one of them ran and did not respond, whatever `min_success` says.
   async runFanOut(step, st) {
-    const settled = await Promise.allSettled(step.agents.map((name) => this.runAgentStep(step, st, name)));
+    const when = step.agent_when || {};
+    const agents = step.agents.filter((name) => when[name] === undefined || evalExpr(when[name], this.ctx));
+    const skipped = step.agents.filter((name) => !agents.includes(name));
+    if (skipped.length) this.emitEvent('log', { level: 'info', message: `[${step.id}] skipped this visit (agent_when): ${skipped.join(', ')}` });
+    if (!agents.length) throw new Error(`Step "${step.id}": agent_when leaves no agent of the fan-out to run.`);
+    const settled = await Promise.allSettled(agents.map((name) => this.runAgentStep(step, st, name)));
     st.delegate_result = null; // consumed by all agents
     st.supervisorNote = null;
+    this.restoredWorkNote = null;
     this.gateImages = [];
     if (this.abort.signal.aborted) throw new Error('Cancelled');
     const results = {};
     const failed = [];
     settled.forEach((r, i) => {
-      const name = step.agents[i];
+      const name = agents[i];
       if (r.status === 'fulfilled') { results[name] = r.value; return; }
       failed.push({ agent: name, error: r.reason?.message || String(r.reason) });
       this.emitEvent('log', { level: 'error', message: `[${step.id}] ${name} failed: ${r.reason?.message || r.reason}` });
     });
     const succeeded = Object.keys(results);
-    const min = step.min_success ?? step.agents.length;
-    if (succeeded.length < min) {
+    const min = Math.min(step.min_success ?? agents.length, agents.length);
+    const missing = (step.required_agents || []).filter((name) => agents.includes(name) && !results[name]);
+    if (succeeded.length < min || missing.length) {
       const why = failed.map((f) => `${f.agent}: ${f.error}`).join(' | ');
-      throw new Error(`Step "${step.id}": only ${succeeded.length}/${step.agents.length} agents responded (minimum ${min}). ${why}`);
+      const need = missing.length ? `required: ${missing.join(', ')}` : `minimum ${min}`;
+      throw new Error(`Step "${step.id}": only ${succeeded.length}/${agents.length} agents responded (${need}). ${why}`);
     }
-    return { results, succeeded, failed };
+    return { results, succeeded, failed, ...(skipped.length ? { skipped } : {}) };
   }
 
   async runAgentStep(step, st, agentName) {
@@ -2180,6 +2348,10 @@ class WorkflowRun extends EventEmitter {
     if (st.supervisorNote) {
       prompt += `\n\n---\nNote from the run supervisor (a previous attempt of this step failed):\n${st.supervisorNote}`;
       if (!step.agents) st.supervisorNote = null;
+    }
+    if (this.restoredWorkNote) {
+      prompt += `\n\n---\n${this.restoredWorkNote}`;
+      if (!step.agents) this.restoredWorkNote = null;
     }
     if (!step.agents) st.delegate_result = null; // consumed (in a fan-out, after all of them)
     // step skills go in the prompt itself; the name can be a template ("{{ inputs.document_skill }}")
@@ -2498,7 +2670,7 @@ class WorkflowRun extends EventEmitter {
   // orchestrator.limits.max_total_context (e.g. 20M): the context the run's agents have read
   // (input + cache read/write, summed over every turn). Past it, the run pauses before the next
   // agent turn until the user answers: Continue grants one more block of the same size, Stop
-  // ends the run as cancelled (its worktree is kept, so it can be resumed). Never cuts a turn.
+  // ends the run as cancelled (its branch keeps the work, so it can be resumed). Never cuts a turn.
   async contextGate(stepId) {
     const raw = this.wf.orchestrator?.limits?.max_total_context;
     const lim = raw == null ? null : parseTokens(render(String(raw), this.ctx));
@@ -2510,7 +2682,7 @@ class WorkflowRun extends EventEmitter {
     this.emitEvent('limit.exceeded', { limit: 'max_total_context', value: this.contextAllowance, current: used, paused: true });
     const { answer } = await this.requestApproval({
       id: `${stepId}:context_limit`, raw: true,
-      message: `Paused: this run's agents have read ${m(used)} tokens of context, past its limit of ${m(this.contextAllowance)} (orchestrator.limits.max_total_context).\n\nContinue to allow another ${m(lim)}, or stop the run (its worktree is kept, so it can be resumed).`,
+      message: `Paused: this run's agents have read ${m(used)} tokens of context, past its limit of ${m(this.contextAllowance)} (orchestrator.limits.max_total_context).\n\nContinue to allow another ${m(lim)}, or stop the run (its branch keeps the work, so it can be resumed).`,
       choices: [{ id: 'continue', label: `Continue (another ${m(lim)})` }, { id: 'stop', label: 'Stop the run' }],
     });
     if (answer !== 'continue') {
@@ -2574,7 +2746,8 @@ class WorkflowRun extends EventEmitter {
   // One turn of an agent. `session` in the YAML (agent or defaults):
   // - persistent (default): one conversation for the whole run. With `max_context` (e.g. 150k), a turn
   //   that ends above it makes the next turn start a fresh session from the agent's handoff note
-  //   (never in the middle of a turn);
+  //   (never in the middle of a turn); with `fresh_after_idle` (e.g. 55m), so does a turn that comes
+  //   longer than that after the last one (#247: a cold prompt cache after a long gate wait);
   // - ephemeral: a fresh session per turn with only the prompt;
   // - handoff: a fresh session per turn that starts from the agent's latest handoff note.
   // Persistent and handoff agents end each turn with a handoff note (runs/<id>/handoffs/).
@@ -2753,6 +2926,19 @@ class WorkflowRun extends EventEmitter {
       if (old) this.closeSession(old, 'success');
       this.agentSessions.delete(agentName);
     }
+    // #247 `fresh_after_idle` (e.g. 55m, the prompt cache's lifetime): a persistent agent idle longer
+    // than that (a long gate wait) continues in a fresh session from its handoff note; resuming would
+    // rewrite its whole context at the cache-write price (the lesson of #244)
+    const idleMax = persistent && !retry && agent.fresh_after_idle !== undefined ? parseDuration(agent.fresh_after_idle, null) : null;
+    const warm = idleMax ? this.sessions.get(this.agentSessions.get(agentName)) : null;
+    if (warm?.lastTurnAt && Date.now() - warm.lastTurnAt > idleMax && this.handoffNotes.has(agentName)) {
+      this.closeSession(warm, 'success');
+      this.agentSessions.delete(agentName);
+      this.emitEvent('log', {
+        level: 'info', kind: 'idle_rotation', agent: agentName, step_id: stepId,
+        message: `[${agentName}] idle for ${Math.round((Date.now() - warm.lastTurnAt) / 60e3)} min (fresh_after_idle ${agent.fresh_after_idle}): this turn starts a fresh session from its handoff note`,
+      });
+    }
     let session = persistent ? this.sessions.get(this.agentSessions.get(agentName)) : null;
     if (!session) {
       session = this.openSession({
@@ -2765,7 +2951,11 @@ class WorkflowRun extends EventEmitter {
       this.resumeSessions ??= { ...(this.resume?.sessions || {}) };
       const previous = persistent && !this.mock && this.resumeSessions[agentName];
       delete this.resumeSessions[agentName];
-      if (previous) { session.providerSessionId = previous; session.turns = 1; }
+      if (previous) {
+        session.providerSessionId = previous; session.turns = 1;
+        // #233: the CLI's running total of that session, so the next turn costs only its own part
+        seedClaudeTotal(previous, this.resume?.cliTotals?.[previous]);
+      }
     }
 
     const turn = ++session.turns;
@@ -2790,6 +2980,13 @@ class WorkflowRun extends EventEmitter {
     if (note) {
       parts.push(`<handoff_note>\n${note.text}\n</handoff_note>\nThis is a fresh session. The note above is what you wrote at the end of your previous turn in this run`
         + ` (step ${note.step}, visit ${note.visit}). The code is in git: re-read only the files you need.`);
+    }
+    // #276: what the memory guard stopped during this agent's previous turn, so it is not rerun unchanged
+    const stops = this.memoryNotes.get(agentName);
+    if (stops?.length) {
+      this.memoryNotes.delete(agentName);
+      parts.push(stops.map((s) => `The orchestrator stopped \`${s.commandLine}\` at ${gib(s.bytes)} GB for passing the memory limit`
+        + ` (${gib(s.limitBytes)} GB per process). Do not run it again unchanged: find why it grows (e.g. a failing assertion that formats a huge object) or run a smaller part of it.`).join('\n'));
     }
     parts.push(wantNote ? `${prompt}\n\n---\n${HANDOFF_INSTRUCTIONS}` : prompt);
     const fullPrompt = parts.join('\n\n');
@@ -2845,11 +3042,12 @@ class WorkflowRun extends EventEmitter {
     const rec = {
       agent: agentName, step: stepId, visit, session: session.id, mode, fresh: turn === 1,
       context_start: res.context.start, context_peak: res.context.peak,
-      tokens: totalTokens(res.usage), cost_usd: res.costUsd || 0, subagent_calls: res.tools.subagents || 0,
+      tokens: totalTokens(res.usage), cost_usd: (res.costUsd || 0) + (res.stoppedCostUsd || 0), subagent_calls: res.tools.subagents || 0,
       waste: res.tools.ran === 0 && res.tools.denials > 0 ? 'refused' : null,
     };
     this.turnLog.push(rec);
     res.turnRec = rec;
+    session.lastTurnAt = Date.now();
     const max = persistent && !retry ? parseTokens(render(String(agent.max_context ?? ''), this.ctx)) : null;
     if (max && res.context.peak > max) {
       this.rotate.add(agentName);
@@ -2881,7 +3079,7 @@ class WorkflowRun extends EventEmitter {
     try {
       const res = await this.invokeTurn({ ...call, hint: { ...call.hint, handoffOnly: true }, attempts: 1, attachments: [] }, ++session.turns, HANDOFF_ONLY);
       rec.tokens += totalTokens(res.usage);
-      rec.cost_usd += res.costUsd || 0;
+      rec.cost_usd += (res.costUsd || 0) + (res.stoppedCostUsd || 0);
       const plain = String(res.text || '').trim();
       return res.handoff || (plain && !plain.includes('```') ? plain.slice(0, 4000) : null);
     } catch (e) {
@@ -2930,6 +3128,37 @@ class WorkflowRun extends EventEmitter {
     return parseDuration(v, 30 * 60e3);
   }
 
+  // #276: watches a process this run started (an agent CLI, a suite command) with the memory guard;
+  // what it stops becomes a `process.killed` event (the second stop of the same command in a step
+  // notifies the owner) and, for an agent, a line of its next prompt. onStop(ev): the caller's own use.
+  watchMemory({ rootPid = null, protectChildren = false, stepId = null, session = null, agentName = null, onStop = null }) {
+    if (!this.memoryGuard) return { stop() {} };
+    return this.memoryGuard.watch({
+      rootPid, protectedPids: [], protectChildren, step: stepId, session,
+      onKill: (ev) => {
+        const key = `${stepId}\n${ev.commandLine}`;
+        const n = (this.memoryStops.get(key) || 0) + 1;
+        this.memoryStops.set(key, n);
+        this.emitEvent('process.killed', {
+          step_id: stepId, session, pid: ev.pid, command_line: ev.commandLine, bytes: ev.bytes, limit_bytes: ev.limitBytes, ...(n === 2 ? { notify: true } : {}),
+          message: `The memory guard stopped \`${ev.commandLine}\` (pid ${ev.pid}) at ${gib(ev.bytes)} GB: over the limit of ${gib(ev.limitBytes)} GB per process${n > 1 ? ` (stopped ${n} times in ${stepId})` : ''}.`,
+        });
+        if (agentName) this.memoryNotes.set(agentName, [...(this.memoryNotes.get(agentName) || []), ev]);
+        onStop?.(ev);
+      },
+      // the agent CLI itself over the limit: never stopped (its turn would be lost), only reported
+      onReport: (ev) => this.emitEvent('log', {
+        level: 'warn', kind: 'memory_over_limit', step_id: stepId, pid: ev.pid, bytes: ev.bytes, limit_bytes: ev.limitBytes,
+        message: `${agentName ? `[${agentName}] the agent CLI` : 'The step\'s command'} uses ${gib(ev.bytes)} GB, over the memory limit of ${gib(ev.limitBytes)} GB: not stopped (it is the turn itself).`,
+      }),
+      onLog: (l) => {
+        if (this.memoryGuardOff) return;
+        this.memoryGuardOff = true;
+        this.emitEvent('log', { level: l.level || 'warn', kind: 'memory_guard_off', step_id: stepId, message: l.message });
+      },
+    });
+  }
+
   async invokeTurn({ session, agentName, agent, provider, extraArgs, agentEnv, stepId, hint, attempts, attachments = [] }, turn, fullPrompt) {
     const timeoutMs = this.turnTimeout(agent);
     this.emitEvent('session.message_sent', { session_id: session.id, turn, step_id: stepId, prompt: fullPrompt, timeout_ms: timeoutMs, ...(attachments.length ? { attachments } : {}) });
@@ -2943,6 +3172,8 @@ class WorkflowRun extends EventEmitter {
     const maxAttempts = attempts || retry.max_attempts || 1;
     let delay = this.mock ? 1000 : parseDuration(retry.initial_delay, 5000);
     let lastErr;
+    // #233: what this turn's attempts stopped before their result cost (the step's record counts it)
+    let stoppedUsd = 0;
 
     for (let a = 1; a <= maxAttempts; a++) {
       const t0 = Date.now();
@@ -3005,8 +3236,15 @@ class WorkflowRun extends EventEmitter {
       const idleTimer = this.idleWarnMs > 0 && setInterval(() => this.warnIdle(idle, { session, agentName, stepId, turn, interrupt }), Math.min(30e3, Math.max(50, this.idleWarnMs / 4)));
       idleTimer?.unref?.();
       let timed = null;
+      // #276: the memory guard watches the CLI's process tree while the turn runs (a mock turn has none)
+      let memWatch = this.mock ? this.watchMemory({ stepId, session: session.id, agentName }) : null;
+      const onSpawn = ({ pid, shim }) => {
+        memWatch?.stop();
+        memWatch = this.watchMemory({ rootPid: pid, protectChildren: shim, stepId, session: session.id, agentName });
+      };
       const timing = () => {
         if (timed) return timed;
+        memWatch?.stop();
         this.abort.signal.removeEventListener('abort', cancel);
         live?.delete(stopSlow);
         clearInterval(idleTimer);
@@ -3018,12 +3256,13 @@ class WorkflowRun extends EventEmitter {
           provider, model: agent.model, effort: agent.effort, providerSessionId: session.providerSessionId,
           prompt, cwd: (session.cwd = this.workingDir(agent)), extraArgs, agentEnv, attachments,
           timeoutMs, attempt: a,
-          signal: turnAbort.signal, hint, render,
+          signal: turnAbort.signal, hint, render, onSpawn,
           onItem: (item) => { track(item); idle.item(item); this.emitEvent('session.stream', { session_id: session.id, turn, item }); },
         });
         const { active_ms, waiting_ms, stalled_ms } = timing();
         res.tools = tools;
         res.context = context;
+        res.stoppedCostUsd = stoppedUsd;
         [res.text, res.handoff] = takeHandoff(res.text);
         if (tools.maxStreak >= DENIAL_WARN) {
           // the agent is fighting its allowlist (cli_args): visible in the run, the supervisor's timeline and the run chat
@@ -3035,6 +3274,7 @@ class WorkflowRun extends EventEmitter {
         const dur = Date.now() - t0;
         session.activeMs += dur;
         if (res.providerSessionId) session.providerSessionId = res.providerSessionId;
+        if (res.cliTotalCostUsd != null) session.cliTotalUsd = res.cliTotalCostUsd;
         addUsage(session.tokens, res.usage);
         session.costUsd += res.costUsd || 0;
         session.status = 'idle';
@@ -3049,6 +3289,8 @@ class WorkflowRun extends EventEmitter {
         timing();
         session.activeMs += Date.now() - t0;
         lastErr = e;
+        const spent = this.countStoppedAttempt({ session, agent, stepId, turn, attempt: a }, e);
+        stoppedUsd += spent.costUsd;
         if (this.abort.signal.aborted) break;
         if (interrupted?.slow) {
           lastErr = Object.assign(new Error(`[${agentName}] turn interrupted by the supervisor on call: ${stepId} ran far longer than usual`),
@@ -3063,7 +3305,7 @@ class WorkflowRun extends EventEmitter {
           this.emitEvent('log', { level: 'warn', kind: 'agent_interrupted', step_id: stepId, agent: agentName, message: lastErr.message });
           break;
         }
-        this.emitEvent('log', { level: 'error', message: `[${agentName}] attempt ${a}/${maxAttempts} failed: ${e.message}` });
+        this.emitEvent('log', { level: 'error', message: `[${agentName}] attempt ${a}/${maxAttempts} failed: ${e.message}${spent.note}` });
         if (!isRetryable(e)) {
           this.emitEvent('log', { level: 'error', message: `[${agentName}] non-retryable error, giving up.` });
           break;
@@ -3085,6 +3327,31 @@ class WorkflowRun extends EventEmitter {
       }
     }
     throw lastErr;
+  }
+
+  // #233: an attempt that ended without its result (timeout, cancel, crash, usage limit) still paid
+  // for the model calls it made: their tokens (summed by the adapter from the stream) are priced with
+  // the run's price table and counted in the session, the step and the run, marked estimated; without
+  // a price for the model its cost is "not recorded". Returns the cost and the note of its log line.
+  countStoppedAttempt({ session, agent, stepId, turn, attempt }, e) {
+    const p = e?.partial;
+    if (!p || !(p.modelCalls || p.costUsd != null)) return { costUsd: 0, note: '' };
+    const reported = p.costUsd != null;
+    const costUsd = reported ? p.costUsd : sessionCost({ model: agent.model || session.model, tokens: p.usage || {} }, this.prices);
+    if (p.usage) addUsage(session.tokens, p.usage);
+    if (costUsd != null) session.costUsd += costUsd;
+    if (costUsd != null && !reported) session.estimatedUsd = (session.estimatedUsd || 0) + costUsd;
+    if (costUsd == null) session.costNotRecorded = true;
+    const calls = `${p.modelCalls || 0} model call${p.modelCalls === 1 ? '' : 's'}`;
+    this.emitEvent('session.attempt_stopped', {
+      session_id: session.id, turn, step_id: stepId, attempt, error: e.message, usage: p.usage || null, model_calls: p.modelCalls || 0,
+      cost_usd: costUsd, estimated: costUsd != null && !reported, ...(costUsd == null ? { cost_not_recorded: true } : {}),
+      session: this.snapshot(session),
+    });
+    const note = reported ? ` (US$ ${costUsd.toFixed(2)})`
+      : costUsd != null ? ` (US$ ${costUsd.toFixed(2)}, estimated from ${calls})`
+        : ` (cost not recorded: no price for ${agent.model || 'the model'}, ${calls})`;
+    return { costUsd: costUsd || 0, note };
   }
 
   // An agent silent for idleWarnMs while a command is waiting: probably polling for output that never
@@ -3277,8 +3544,16 @@ class WorkflowRun extends EventEmitter {
           if (!captions[key]) captions[key] = { caption: `Scenario: ${s.name}` };
         }
       }
+      // a screenshots step (#185): its new elements and errors, with the captions of the developer's list
+      let capture = null;
+      if (output?.kind === 'screenshots' && output.folder) {
+        const entries = this.ctx.steps[step.from]?.output?.screenshots;
+        const names = Object.fromEntries((Array.isArray(entries) ? entries : []).filter((e) => e && typeof e.name === 'string').map((e) => [e.name, String(e.caption || '')]));
+        capture = evidence.captureOf(output, names);
+      }
       evidence.writeManifest(this.runDir, {
         captions, commit: this.worktreeHead(), baseCommit: this.worktree?.commit || null, base: this.worktree?.base || null, branch: this.worktreeBranch(),
+        ...(capture ? { capture } : {}),
       });
     } catch (e) {
       this.emitEvent('log', { level: 'warn', message: `evidence manifest: ${e.message}` });
@@ -3302,6 +3577,7 @@ class WorkflowRun extends EventEmitter {
   // A simulated run captures nothing. Never throws: an error becomes the output's reason.
   async runScreenshots(step, st) {
     const folder = step.folder || step.id;
+    let watch = null;
     try {
       const base = step.base ? render(String(step.base), this.ctx).trim() : this.worktree?.ref || null;
       return await captureScreenshots({
@@ -3321,10 +3597,14 @@ class WorkflowRun extends EventEmitter {
           this.emitEvent('screenshots.waiting', { step_id: step.id, holder_pid: holder?.pid ?? null, holder: holder?.holder || null });
           this.emitEvent('log', { level: 'info', kind: 'screenshot_slot', message: `${step.id}: waiting for the screenshot slot (held by pid ${holder?.pid ?? '?'}${holder?.holder ? `, ${holder.holder}` : ''})` });
         },
+        // #276: each capture's process tree is watched by the memory guard
+        onSpawn: (pid) => { watch?.stop(); watch = this.watchMemory({ rootPid: pid, stepId: step.id }); },
       });
     } catch (e) {
       const reason = `the capture failed: ${e.message}`;
-      return { kind: 'screenshots', folder, round: st.visits, dir: null, taken: 0, screens: 0, screenshots: [], errors: [], reason, message: `No screenshots: ${reason}` };
+      return { kind: 'screenshots', folder, round: st.visits, dir: null, taken: 0, screens: 0, screenshots: [], errors: [], new_elements: [], reason, message: `No screenshots: ${reason}` };
+    } finally {
+      watch?.stop();
     }
   }
 
@@ -3354,13 +3634,64 @@ class WorkflowRun extends EventEmitter {
   // existing behaviour or are wrong) / broken (cannot run), the status is `broken` when one cannot
   // run (else pass: failing is expected), and `affected_tests` lists the existing tests that reach
   // the sources the new tests import (relatedTests, the code → tests graph). Simulation: default red.
+  //
+  // The memory guard (#276): each execution waits first while free memory is under the guard's floor
+  // (at most MEMORY_WAIT_MS), its command's process tree is watched (a stop is named in its message),
+  // and a round that fails while the guard recorded a stop or a low-memory period in its time window
+  // runs again in the same visit (log <name>-env.log, output environment_reruns), at most
+  // MAX_ENV_RERUNS times: only the last result is routed. mockSequences.suite.<step> is indexed by
+  // execution (a visit plus its environment reruns).
   async runSuiteStep(step, st) {
+    const guard = this.memoryGuard;
+    this.suiteEnvReruns ??= {}; // step -> environment reruns so far in this run
+    for (let reruns = 0; ; reruns++) {
+      if (reruns) this.suiteEnvReruns[step.id] = (this.suiteEnvReruns[step.id] || 0) + 1;
+      const execution = st.visits + (this.suiteEnvReruns[step.id] || 0);
+      if (guard) await this.waitForMemory(step.id);
+      const stopped = [];
+      const start = Date.now();
+      const output = await this.suiteRound(step, st, { execution, reruns, stopped });
+      const end = Date.now();
+      if (stopped.length) {
+        const list = [...new Set(stopped.map((ev) => `\`${ev.commandLine}\` (${gib(ev.bytes)} GB)`))].join(', ');
+        output.memory_stops = stopped.map((ev) => ({ pid: ev.pid, command_line: ev.commandLine, bytes: ev.bytes, limit_bytes: ev.limitBytes }));
+        output.message = `${output.message} The memory guard stopped ${list} for passing the memory limit of ${gib(stopped[0].limitBytes)} GB per process.`;
+      }
+      if (reruns) output.environment_reruns = reruns;
+      const incidents = guard && output.status === 'fail' && reruns < MAX_ENV_RERUNS ? guard.incidentsBetween(start, end) : [];
+      if (!incidents.length) return output;
+      const what = incidents.some((i) => i.kind === 'stop') ? 'the memory guard stopped a process' : 'the machine was low on memory';
+      this.emitEvent('log', { level: 'warn', kind: 'suite_env_rerun', step_id: step.id, message: `${step.id}: the round failed while ${what}: an environment failure, not the change's; it runs again once memory recovers (rerun ${reruns + 1} of at most ${MAX_ENV_RERUNS}).` });
+    }
+  }
+
+  // #276: a suite / e2e step waits while free memory is under the memory guard's floor (memory.hold:
+  // the Night watch counts a long one)
+  async waitForMemory(stepId) {
+    let low = null;
+    const r = await this.memoryGuard.waitForMemory({
+      maxWaitMs: MEMORY_WAIT_MS,
+      onWait: (info) => {
+        low = info;
+        this.emitEvent('log', { level: 'warn', kind: 'memory_hold', step_id: stepId, message: `${stepId} waits for memory before it starts: ${gib(info.freeBytes)} GB free, under the memory guard's floor of ${gib(info.floorBytes)} GB (at most ${MEMORY_WAIT_MS / 60e3} min).` });
+      },
+    });
+    if (low) this.emitEvent('memory.hold', { step_id: stepId, waited_ms: r.waitedMs, recovered: r.recovered, free_bytes: low.freeBytes, floor_bytes: low.floorBytes });
+  }
+
+  // One execution of a suite step (see runSuiteStep); stopped: what the memory guard stopped meanwhile.
+  async suiteRound(step, st, { execution, reruns, stopped }) {
     const seq = this.mockSequences?.suite?.[step.id];
-    const mockResult = Array.isArray(seq) && seq.length ? seq[Math.min(st.visits, seq.length) - 1] : step.expect === 'red' ? 'fail' : 'pass';
+    const mockResult = Array.isArray(seq) && seq.length ? seq[Math.min(execution, seq.length) - 1] : step.expect === 'red' ? 'fail' : 'pass';
     const root = path.dirname(path.dirname(this.runDir));
     const project = this.worktree?.repo || this.ctx.worktree_dir || '';
     const scope = step.scope ? render(String(step.scope), this.ctx).trim() : 'full';
+    // an environment rerun logs next to the round's own log
+    const env = reruns ? `-env${reruns > 1 ? `-${reruns}` : ''}` : '';
     const once = async (extra = {}) => {
+      const onStop = (ev) => stopped.push(ev);
+      let watch = this.mock ? this.watchMemory({ stepId: step.id, onStop }) : null;
+      const onSpawn = (pid) => { watch?.stop(); watch = this.watchMemory({ rootPid: pid, stepId: step.id, onStop }); };
       try {
         return await suiteStep.runSuite({
           command: step.command ? render(String(step.command), this.ctx).trim() : '',
@@ -3374,13 +3705,27 @@ class WorkflowRun extends EventEmitter {
           signal: this.abort.signal,
           timeoutMs: step.timeout ? parseDuration(render(String(step.timeout), this.ctx).trim(), suiteStep.SUITE_TIMEOUT_MS) : null,
           history: project ? { file: path.join(root, 'cache', 'suite-durations.json'), project } : null,
-          base: () => this.suiteBase(),
+          // `base_check: false` (#260, release.yaml): the worktree is the base itself, so a test that
+          // fails there too is the regression to fix, never a pre-existing failure to wave through
+          base: step.base_check === false ? null : () => this.suiteBase(),
           baseCacheDir: path.join(root, 'cache', 'base-tests'),
           log: (level, message) => this.emitEvent('log', { level, message }),
+          // a suite step other than `suite` (an e2e step, #223) logs under its own name
+          ...(step.id === 'suite' && !env ? {} : { logName: `${step.id}-${st.visits}${env}` }),
+          // #225: `coverage: true` adds node's coverage; the summary covers the files the run changed
+          coverage: step.coverage === true,
+          changedFiles: () => {
+            const base = this.worktree?.base;
+            return this.ctx.worktree_dir && base ? changedFiles(this.ctx.worktree_dir, base) : [];
+          },
+          onSpawn,
           ...extra,
+          ...(env && extra.logName ? { logName: `${extra.logName}${env}` } : {}),
         });
       } catch (e) {
         return { kind: 'suite', status: 'blocked', round: st.visits, scope: 'full', command: null, log: null, exit_code: null, duration_ms: 0, timed_out: false, failures: [], preexisting: [], reason: e.message, message: `The suite could not run: ${e.message}` };
+      } finally {
+        watch?.stop();
       }
     };
     let output;
@@ -3418,7 +3763,33 @@ class WorkflowRun extends EventEmitter {
     }
     if (output.log) this.emitEvent('file.saved', { step_id: step.id, path: path.join(this.runDir, output.log) });
     if (output.base_check?.log) this.emitEvent('file.saved', { step_id: step.id, path: path.join(this.runDir, output.base_check.log) });
+    if (output.coverage?.path) this.emitEvent('file.saved', { step_id: step.id, path: path.join(this.runDir, output.coverage.path) });
     this.emitEvent('log', { level: output.status === 'pass' ? 'info' : 'warn', kind: 'suite', step_id: step.id, status: output.status, failures: output.failures.length, message: `${step.id}: ${output.message}` });
+    return output;
+  }
+
+  // `type: test_ids` (#246): the test ids the E2E step definitions use and the renderer lacks, in the
+  // run's checkout (src/engine/test-ids.js, the rule test/e2e-playwright.test.js uses too), with the
+  // project's own folders when the step names them (`steps`, `renderer`: templates, repository-relative).
+  // Output: { kind: 'test_ids', status: pass | missing | skipped, missing: [{ id, files }], message };
+  // skipped when the project has no step definitions (no BDD steps) or the run has no checkout.
+  runTestIdsStep(step, st) {
+    const dir = this.ctx.worktree_dir;
+    const folder = (key, def) => (step[key] ? render(String(step[key]), this.ctx).trim() : '') || def;
+    const folders = { steps: folder('steps', testIds.DEFAULT_STEPS), renderer: folder('renderer', testIds.DEFAULT_RENDERER) };
+    const base = { kind: 'test_ids', round: st.visits, steps: folders.steps, renderer: folders.renderer, missing: [] };
+    let output;
+    if (!dir || !fs.existsSync(dir)) {
+      output = { ...base, status: 'skipped', message: 'Test id check skipped: the run has no checkout.' };
+    } else if (!testIds.stepFiles(dir, folders).length) {
+      output = { ...base, status: 'skipped', message: `Test id check skipped: the project has no BDD step definitions in ${folders.steps}.` };
+    } else {
+      const missing = testIds.missingTestIds(dir, folders);
+      output = missing.length
+        ? { ...base, status: 'missing', missing, message: `${missing.length} test id(s) the E2E step definitions use are not in ${folders.renderer}:\n${testIds.missingTestIdLines(missing)}` }
+        : { ...base, status: 'pass', message: `Every test id the E2E step definitions use is in ${folders.renderer}.` };
+    }
+    this.emitEvent('log', { level: output.status === 'missing' ? 'warn' : 'info', kind: 'test_ids', step_id: step.id, status: output.status, message: `${step.id}: ${output.message}` });
     return output;
   }
 
@@ -3534,7 +3905,9 @@ class WorkflowRun extends EventEmitter {
   // images: pictures attached to the feedback (#129), checked (an error names the file and the limit),
   // copied into <run_dir>/attachments/<gate>-feedback/ and given to the next agent step. They never
   // decide anything: the answer is the owner's choice.
-  resolveApproval(id, answer, by = 'user', feedback = '', intent = null, images = []) {
+  // answeredBy: who answered and from where, recorded on the event (#226, the phone gates page:
+  // { answered_by: 'owner', via: 'mobile', device })
+  resolveApproval(id, answer, by = 'user', feedback = '', intent = null, images = [], answeredBy = null) {
     const a = this.approvals.get(id);
     if (!a) return false;
     const text = String(feedback ?? '').trim();
@@ -3551,17 +3924,56 @@ class WorkflowRun extends EventEmitter {
     if (intent === 'save_to_issue' && a.gate?.save_to_issue?.choice === answer) data.intent = intent;
     // the commit the owner decided on (#112): a resume may only pass this gate again while the branch is still there
     const commit = this.worktreeHead();
-    this.emitEvent('approval.resolved', { approval_id: id, step_id: a.stepId, ...data, by, wait_ms: waitMs, ...(commit ? { commit } : {}), ...(text ? { feedback: text } : {}), ...(stored.length ? { attachments: stored } : {}) });
+    this.emitEvent('approval.resolved', { approval_id: id, step_id: a.stepId, ...data, by, ...(answeredBy || {}), wait_ms: waitMs, ...(commit ? { commit } : {}), ...(text ? { feedback: text } : {}), ...(stored.length ? { attachments: stored } : {}) });
     if (text) this.ctx.feedback.push({ step: a.stepId, choice: typeof answer === 'boolean' ? String(answer) : answer, text, ts: new Date().toISOString(), ...(stored.length ? { images: stored } : {}) });
     this.setStatus(this.orchestrator, 'active');
-    a.resolve({ answer, feedback: text });
+    a.resolve({ answer, feedback: text, by });
     return true;
+  }
+
+  // What a `ship:` transition needs before it does anything, its `merge: local` included (#260). Only
+  // the owner's own answer ships: a gate answered by anything else (the supervisor, a timeout,
+  // --auto-approve) ends the run as failed (`fatal`: no `on_error` gate to try it again). And the
+  // local base must still be what the suites ran on: when it moved (another run merged meanwhile), the
+  // release would hold commits nobody checked, so the transition fails (to its `on_error`).
+  shipGuard(step) {
+    if (this.mock) return;
+    const by = this.ctx.steps[step.id]?.answeredBy;
+    if (by !== 'user') throw Object.assign(new Error(`ship: only the owner's own answer at the gate ships a release (${step.id} was answered by ${by || 'nobody'}); nothing was merged or pushed.`), { fatal: true });
+    const wt = this.worktree;
+    if (!wt) throw new Error('ship needs the run\'s git worktree (orchestrator.worktree on a git repository).');
+    try {
+      execFileSync('git', ['merge-base', '--is-ancestor', `refs/heads/${wt.base}`, 'HEAD'], { cwd: wt.workDir || wt.dir, windowsHide: true, timeout: 10000, stdio: 'ignore' });
+    } catch {
+      throw new Error(`ship: the local ${wt.base} has commits this run did not check (it moved since the suites ran). Stop this run and check the release again; nothing was merged or pushed.`);
+    }
+  }
+
+  // The `ship: { tag, build? }` transition (#260, the release workflow's Ship), after `shipGuard` and
+  // the transition's merge: pushes the local base to origin, never forced, and tags that commit
+  // (shipRelease in src/releases.js), which must be the worktree's (what the suites ran on). A
+  // simulation pushes nothing. A failure (origin moved, the tag exists elsewhere) goes to the
+  // transition's `on_error`, like a failed merge.
+  async shipRelease(step, ship, scope) {
+    const tag = render(String(ship.tag), scope).trim();
+    if (this.mock) {
+      this.emitEvent('action.executed', { command: `ship: ${tag}`, skipped: true, output: '[mock] release not pushed, not tagged' });
+      this.ctx.release = { tag, simulated: true };
+      return;
+    }
+    const wt = this.worktree;
+    const r = await shipRelease({ repo: wt.repo, base: wt.base, tag, expect: this.worktreeHead() });
+    this.emitEvent('release.shipped', { tag: r.tag, base: r.base, commit: r.commit, pushed: r.pushed, commits: r.commits.length, issues: r.issues });
+    this.ctx.release = { tag: r.tag, base: r.base, commit: r.commit, pushed: r.pushed, issues: r.issues };
+    // `build:` an optional command run once the release is out (a template; empty: none)
+    const build = ship.build ? render(String(ship.build), scope).trim() : '';
+    if (build) await this.runAction(build);
   }
 
   // The `merge: local` transition (local workflows): fast-forwards the local base to the run's
   // branch, rebasing it first when the base moved; see mergeLocally in src/engine/worktree.js.
   // A failure (conflict, uncommitted changes where the base is checked out) fails the run with
-  // the reason; the worktree is kept, so the run can be resumed after fixing it.
+  // the reason; its branch keeps the work, so the run can be resumed after fixing it.
   async mergeWorktreeLocally() {
     if (this.mock) {
       this.emitEvent('action.executed', { command: 'merge: local', skipped: true, output: '[mock] local merge not executed' });
@@ -3605,47 +4017,55 @@ ${stderr || stdout}`.slice(0, 1500)));
     const tokens = emptyUsage();
     sessions.forEach((s) => addUsage(tokens, s.tokens));
     const outputs = this.computeOutputs();
+    const summary = {
+      run_id: this.runId, workflow: this.wf.metadata?.name, project_id: this.projectId, issues: this.issues || undefined, status,
+      started_at: new Date(this.startedAt).toISOString(), finished_at: new Date().toISOString(),
+      duration_ms: Date.now() - this.startedAt, inputs: this.inputs, mock: this.mock, worktree: this.worktreeSummary(),
+      // `merge: local`: what landed on the local base, not pushed (Backlog: "Local" column, Push)
+      local_merge: this.ctx.local_merge ? { branch: this.ctx.local_merge.branch, base: this.ctx.local_merge.base, commit: this.ctx.local_merge.commit } : null,
+      // `ship:` (#260): the release the owner shipped ({ tag, base, commit, pushed, issues }; `simulated` in a simulation)
+      ...(this.ctx.release ? { release: this.ctx.release } : {}),
+      tokens, cost_usd: +sessions.reduce((a, s) => a + s.cost_usd, 0).toFixed(6), cost_accounting: 'per_turn',
+      // #277: a multi-result Claude turn records its highest total (src/run-costs.js reads older runs from their events)
+      turn_cost: 'max_result',
+      context: this.contextSummary(),
+      timing: this.timingSummary(),
+      // `wait:` steps: checks made without an agent turn, agent turns they asked for, steps they finished
+      ...(Object.keys(this.probeStats).length ? { probes: this.probeStats } : {}),
+      steps: Object.fromEntries(Object.entries(this.ctx.steps).map(([k, v]) => [k, { visits: v.visits, output: v.output }])),
+      // failures that also fail on the base, reported by a step and not chased in this run: follow-up issues for the owner
+      ...(this.preexisting.length ? { preexisting_failures: this.preexisting } : {}),
+      // #203: the unit / E2E test inputs and where each value came from; #177: whole-suite runs
+      // by the engine's suite steps and by the agents' own commands (the measure of the change)
+      ...(this.testsPlan.length ? { tests_plan: this.testsPlan } : {}),
+      ...(Object.values(this.suiteRuns).some(Boolean) ? { suite_runs: this.suiteRuns } : {}),
+      // #209: test files the engine committed for the test writer; #178: commands cut by the tool's timeout
+      ...(this.testsAutocommitted.length ? { tests_autocommitted: this.testsAutocommitted } : {}),
+      ...(this.toolTimeouts ? { tool_timeouts: this.toolTimeouts } : {}),
+      // step visits in order with their agents (runs list); this event's own update lands in it
+      groups: this.wf.groups, progress: this.trail.steps,
+      ...(outputs ? { outputs } : {}),
+      ...(this.then ? { then: this.then } : {}),
+      ...(this.from ? { from: this.from } : {}),
+      // `type: workflow` steps (#174): the run that started this one, the runs this one started
+      ...(this.parent ? { parent_run: this.parent } : {}),
+      ...(this.childRuns.length ? { child_runs: this.childRuns, children_cost_usd: +this.childrenCostUsd().toFixed(6) } : {}),
+      sessions,
+    };
+    // #225: result.md, the run's first artifact, written before the event that refreshes the lists
+    writeResultSummary(this.runDir, { ...summary, error: err?.message || null });
     this.emitEvent('workflow.finished', {
       status, error: err?.message || null,
       // the declared outputs (#134) and the chain, for what starts next
       ...(outputs ? { outputs } : {}),
       ...(this.then ? { then: this.then } : {}),
-      summary: {
-        run_id: this.runId, workflow: this.wf.metadata?.name, project_id: this.projectId, issues: this.issues || undefined, status,
-        started_at: new Date(this.startedAt).toISOString(), finished_at: new Date().toISOString(),
-        duration_ms: Date.now() - this.startedAt, inputs: this.inputs, mock: this.mock, worktree: this.worktreeSummary(),
-        // `merge: local`: what landed on the local base, not pushed (Backlog: "Local" column, Push)
-        local_merge: this.ctx.local_merge ? { branch: this.ctx.local_merge.branch, base: this.ctx.local_merge.base, commit: this.ctx.local_merge.commit } : null,
-        tokens, cost_usd: +sessions.reduce((a, s) => a + s.cost_usd, 0).toFixed(6),
-        context: this.contextSummary(),
-        timing: this.timingSummary(),
-        // `wait:` steps: checks made without an agent turn, agent turns they asked for, steps they finished
-        ...(Object.keys(this.probeStats).length ? { probes: this.probeStats } : {}),
-        steps: Object.fromEntries(Object.entries(this.ctx.steps).map(([k, v]) => [k, { visits: v.visits, output: v.output }])),
-        // failures that also fail on the base, reported by a step and not chased in this run: follow-up issues for the owner
-        ...(this.preexisting.length ? { preexisting_failures: this.preexisting } : {}),
-        // #203: the unit / E2E test inputs and where each value came from; #177: whole-suite runs
-        // by the engine's suite steps and by the agents' own commands (the measure of the change)
-        ...(this.testsPlan.length ? { tests_plan: this.testsPlan } : {}),
-        ...(Object.values(this.suiteRuns).some(Boolean) ? { suite_runs: this.suiteRuns } : {}),
-        // #209: test files the engine committed for the test writer; #178: commands cut by the tool's timeout
-        ...(this.testsAutocommitted.length ? { tests_autocommitted: this.testsAutocommitted } : {}),
-        ...(this.toolTimeouts ? { tool_timeouts: this.toolTimeouts } : {}),
-        // step visits in order with their agents (runs list); this event's own update lands in it
-        groups: this.wf.groups, progress: this.trail.steps,
-        ...(outputs ? { outputs } : {}),
-        ...(this.then ? { then: this.then } : {}),
-        ...(this.from ? { from: this.from } : {}),
-        // `type: workflow` steps (#174): the run that started this one, the runs this one started
-        ...(this.parent ? { parent_run: this.parent } : {}),
-        ...(this.childRuns.length ? { child_runs: this.childRuns, children_cost_usd: +this.childrenCostUsd().toFixed(6) } : {}),
-        sessions,
-      },
+      summary,
     });
   }
 }
 
 module.exports = {
+  answeredKey,
   attemptSummary,
   childRunCost,
   evalExpr,

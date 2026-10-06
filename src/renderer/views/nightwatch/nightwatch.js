@@ -4,7 +4,10 @@
 // metrics from the Oracle's night log (src/night-watch.js, channels nightwatch:*): the summary
 // cards, a timeline of the window, the actions with their permission, backup and Undo, and a
 // table to compare nights (and the baseline night). The sidebar entry shows a moon and the runs
-// it watches while the watch is on; the Dashboard shows the morning summary (renderMorning).
+// it watches while the watch is on; Home shows the morning summary (renderMorning).
+// #278: under Self-healing (Settings › Execution › Oracle) the watch has no end time: the screen says
+// "Self-healing is on" where the end time was, its switch is the setting, and each Self-healing day is
+// a window of the report with its own counts (detected, repaired alone, waiting for you, cost).
 // Registers itself with registerView (view-registry.js); uses app.js globals ($, esc, state, api,
 // errMsg, fmtDur, dateOf, confirmDialog, showView).
 
@@ -22,9 +25,12 @@
   const defaultEnd = () => { const d = new Date(); d.setHours(7, 30, 0, 0); if (d <= new Date()) d.setDate(d.getDate() + 1); return localValue(d); };
   const stat = (label, value, title = '', cls = '') => `<div class="u-stat${cls ? ` ${cls}` : ''}"${title ? ` title="${esc(title)}"` : ''}><label>${esc(label)}</label><b>${value}</b></div>`;
   const KIND = {
-    'dispatch-idle': 'Dispatch idle', failed: 'Failed run', interrupted: 'Interrupted', limit: 'Limit pause',
-    'roadmap-empty': 'Roadmap empty', 'roadmap-paused': 'Roadmap paused', stalled: 'Stalled',
+    'cost-gap': 'Cost gap', 'dispatch-idle': 'Dispatch idle', environment: 'Environment', failed: 'Failed run', interrupted: 'Interrupted', limit: 'Limit pause', memory: 'Memory guard',
+    repeat: 'Repeated failure', 'roadmap-empty': 'Roadmap empty', 'roadmap-paused': 'Roadmap paused', stalled: 'Stalled',
   };
+  // #278: Self-healing (Settings › Execution › Oracle) keeps the watch on with no end time
+  const healing = (w) => !!(w?.active && w.selfHealing);
+  const openExecutionSettings = () => { showView('settings'); if (typeof showSettingsTab === 'function') showSettingsTab('execution'); };
 
   async function load() {
     try {
@@ -32,6 +38,12 @@
       nw.state = s;
       nw.report = r;
       nw.error = null;
+      // a night asked for by another screen (Analytics › 24/7, #188): its window's start
+      if (nw.open) {
+        const i = (r?.nights || []).findIndex((m) => Date.parse(m.window?.from) === Date.parse(nw.open));
+        if (i >= 0) nw.night = i;
+        nw.open = null;
+      }
     } catch (e) { nw.error = errMsg(e); }
     render();
     renderBadge();
@@ -46,7 +58,7 @@
     if (w?.active) {
       const n = nw.state.runs?.active || 0;
       b.textContent = `☾ ${n}`;
-      b.title = `Night watch on until ${hm(w.until)}: watching ${n} run${n === 1 ? '' : 's'}`;
+      b.title = `${healing(w) ? 'Self-healing is on' : `Night watch on until ${hm(w.until)}`}: watching ${n} run${n === 1 ? '' : 's'}`;
     }
   }
   async function refreshBadge() {
@@ -59,13 +71,20 @@
   function switchHtml(s) {
     const w = s.watch || {};
     const f = nw.form;
+    // under Self-healing the watch has no end time and its switch is the setting
+    const standing = healing(w);
+    const watching = `watching ${s.runs.active} run${s.runs.active === 1 ? '' : 's'}${s.runs.waiting ? `, ${s.runs.waiting} at a gate` : ''}`;
+    const switchTitle = standing ? 'Self-healing keeps the watch on: turn it off in Settings › Execution › Oracle' : w.active ? 'Turn the Night watch off' : 'Turn the Night watch on (an end time is required)';
+    const headline = standing ? '<b data-testid="nightwatch-self-healing">Self-healing is on</b>' : `<b>${w.active ? `On until ${esc(hm(w.until))}` : 'Off'}</b>`;
     const head = `<div class="row nw-switch-row">
-        <label class="switch" title="${w.active ? 'Turn the Night watch off' : 'Turn the Night watch on (an end time is required)'}"><input type="checkbox" id="nw-switch"${w.active || f ? ' checked' : ''}${nw.busy ? ' disabled' : ''} /><span></span></label>
+        <label class="switch" title="${switchTitle}"><input type="checkbox" id="nw-switch" data-testid="nightwatch-switch" aria-label="Night watch"${w.active || f ? ' checked' : ''}${nw.busy || standing ? ' disabled' : ''} /><span></span></label>
         <div class="nw-switch-state">
-          <div class="row nw-headline"><b>${w.active ? `On until ${esc(hm(w.until))}` : 'Off'}</b>${w.active ? '<span class="badge live">☾ watching</span>' : ''}</div>
-          <div class="muted small">${w.active
-            ? `Turned on by ${esc(w.by || 'the owner')} at ${esc(hm(w.startedAt))} · watching ${s.runs.active} run${s.runs.active === 1 ? '' : 's'}${s.runs.waiting ? `, ${s.runs.waiting} at a gate` : ''}`
-            : w.startedAt ? `Last on ${esc(dateOf(w.startedAt))}${w.by ? ` by ${esc(w.by)}` : ''}` : 'Never turned on in this workspace'}</div>
+          <div class="row nw-headline">${headline}${w.active ? '<span class="badge live">☾ watching</span>' : ''}</div>
+          <div class="muted small">${standing
+            ? `Day and night, with no end time${w.startedAt ? `, since ${esc(dateOf(w.startedAt))}` : ''} · ${watching} · <button type="button" class="link-btn" id="nw-open-settings" title="Self-healing is a switch in Settings › Execution › Oracle">Turn it off in Settings</button>`
+            : w.active
+              ? `Turned on by ${esc(w.by || 'the owner')} at ${esc(hm(w.startedAt))} · ${watching}`
+              : w.startedAt ? `Last on ${esc(dateOf(w.startedAt))}${w.by ? ` by ${esc(w.by)}` : ''}` : 'Never turned on in this workspace'}</div>
         </div>
       </div>`;
     const form = f ? `<form class="nw-form" id="nw-form">
@@ -88,14 +107,14 @@
         <div class="nw-perm-text"><b>${esc(x.label)}</b><div class="muted small nw-cut" title="${esc(`${x.does} ${x.undo}`)}">${esc(x.does)}</div><div class="muted small nw-cut nw-undo" title="${esc(x.undo)}">↶ ${esc(x.undo)}</div></div>
         <input type="checkbox" class="nw-perm-check" data-perm="${esc(x.id)}"${allowed.has(x.id) ? ' checked' : ''}${edit?.saving ? ' disabled' : ''} />
       </label>`).join('');
-    const never = p.never.map((x) => `<span class="badge nw-never" title="Never allowed during the Night watch: it always needs you">🔒 ${esc(x.label)}</span>`).join('');
+    const never = p.never.map((x) => `<span class="badge nw-never" title="Never allowed, under the Night watch or Self-healing: it always needs you">🔒 ${esc(x.label)}</span>`).join('');
     const saved = p.defaults ? 'Defaults: retry and refresh only.' : `Saved ${esc(dateOf(p.updatedAt))}.`;
-    return `<div class="card nw-card">
-      <div class="row nw-card-head"><h3>What the Oracle may do without asking</h3><span class="muted small">${saved} An item gets at most ${s.loopCap} watch actions a night; the next one is left for you.</span></div>
+    return `<div class="card nw-card" data-testid="nw-permissions">
+      <div class="row nw-card-head"><h3>What the Oracle may do without asking</h3><span class="muted small" title="One checklist for the Night watch and for Self-healing (Settings › Execution › Oracle)">${saved} An item gets at most ${s.loopCap} watch actions a night (a day under Self-healing); the next one is left for you.</span></div>
       <div class="s-group nw-perms">${rows}</div>
       ${edit ? `<div class="row nw-perm-actions">${edit.error ? `<p class="error small">${esc(edit.error)}</p>` : ''}<span class="spacer"></span><button class="btn ghost sm" type="button" id="nw-perm-cancel">Cancel</button><button class="btn primary sm" type="button" id="nw-perm-save"${edit.saving ? ' disabled' : ''}>Save</button></div>` : ''}
       <h4 class="muted small nw-never-title">Never allowed</h4>
-      <div class="row nw-never-list">${never}</div>
+      <div class="row nw-never-list" data-testid="nw-never-allowed">${never}</div>
     </div>`;
   }
 
@@ -104,9 +123,18 @@
     const s = m.safety;
     const idle = m.idleHours;
     const kinds = Object.entries(m.incidents.byKind).filter(([, n]) => n).map(([k, n]) => `${esc(KIND[k] || k)} <b>${n}</b>`).join('<span>·</span>') || 'none';
+    // #278: a Self-healing day (a UTC day of the standing watch) leads with its own counts
+    const sh = m.selfHealing;
+    const title = sh ? `Self-healing · ${m.window.ongoing ? 'today so far' : 'day'}` : m.window.ongoing ? 'Tonight so far' : 'Night';
     return `<div class="card nw-card">
-      <div class="row nw-card-head"><h3>${m.window.ongoing ? 'Tonight so far' : 'Night'} · ${esc(day(m.window.from))} ${esc(hm(m.window.from))} → ${esc(hm(m.window.to))}</h3><span class="muted small">${hours(m.window.hours)} · turned on by ${esc(m.window.by || 'the owner')}</span></div>
+      <div class="row nw-card-head"><h3>${title} · ${esc(day(m.window.from))} ${esc(hm(m.window.from))} → ${esc(hm(m.window.to))}</h3><span class="muted small">${hours(m.window.hours)} · ${sh ? `the UTC day ${esc(sh.day)}` : `turned on by ${esc(m.window.by || 'the owner')}`}</span></div>
       ${s.alarm ? `<div class="nw-alarm" role="alert"><b>Safety alarm.</b> ${esc(m.summary.safety)}</div>` : ''}
+      ${sh ? `<div class="an-totals nw-totals" data-testid="nw-self-healing-day">
+        ${stat('Detected', String(sh.detected), 'what the watch and its detectors found that day')}
+        ${stat('Repaired alone', String(sh.repaired), 'actions the Oracle took without asking, under your permissions, that did not fail')}
+        ${stat('Waiting for you', String(sh.waiting), 'left for you: outside the permissions, asked by content, past the loop cap, or a human gate')}
+        ${stat('Oracle cost', usd(sh.costUsd), `${sh.tokens.toLocaleString('en-US')} tokens that day`)}
+      </div>` : ''}
       <div class="an-totals nw-totals">
         ${stat('Incidents', String(m.incidents.count))}
         ${stat('Autonomy', pct(m.autonomy), 'actions the watch took without asking / incidents (can pass 100% when one incident needed several actions)')}
@@ -131,7 +159,7 @@
         <span>blocked outside permissions <b>${s.blockedOutsidePermissions}</b></span>
         <span>content instructions refused <b>${s.contentRefused}</b></span>
       </div>
-      <div class="nw-morning muted small"><b>Morning summary.</b> ${esc(m.summary.ran)} ${esc(m.summary.did)} ${esc(m.summary.waits)}</div>
+      <div class="nw-morning muted small"><b>Morning summary.</b> ${m.summary.selfHealing ? `${esc(m.summary.selfHealing)} ` : ''}${esc(m.summary.ran)} ${esc(m.summary.did)} ${esc(m.summary.waits)}</div>
     </div>`;
   }
 
@@ -168,7 +196,8 @@
         <td>${a.auto ? `<span class="badge">${esc(a.permission || '?')}</span>` : '<span class="badge" title="You clicked Do it">your click</span>'}</td>
         <td class="muted small nw-cut" title="${esc(a.backup || '')}">${esc(a.backup || '—')}</td>
         <td><span class="pill pill-${a.undone ? 'cancelled' : a.ok ? 'success' : 'failed'}">${a.undone ? 'undone' : a.ok ? 'done' : 'failed'}</span></td>
-        <td class="num">${a.undoable ? `<button class="btn ghost sm" type="button" data-nw-undo="${esc(a.actionId)}" title="Put the backup back">Undo</button>` : ''}</td>
+        <td class="num">${a.undoable ? `<button class="btn ghost sm" type="button" data-nw-undo="${esc(a.actionId)}" title="Put the backup back">Undo</button>`
+    : a.from ? `<button class="btn ghost sm" type="button" data-nw-app-back="${esc(a.from)}" data-testid="app-update-back" title="The same cycle as the update: pause, wait for the runs, move the app folder back, restart">Go back to ${esc(String(a.from).slice(0, 7))}</button>` : ''}</td>
       </tr>`).join('');
     return `<div class="card nw-card">
       <div class="row nw-card-head"><h3>Actions</h3><span class="muted small">${m.actions.auto} without asking${m.actions.undone ? `, ${m.actions.undone} undone` : ''}</span></div>
@@ -180,14 +209,14 @@
   function nightsHtml(r) {
     const b = r.baseline;
     const rows = r.nights.map((m, i) => `<tr class="nw-night${i === nw.night ? ' selected' : ''}" data-nw-night="${i}" tabindex="0" title="Show this night above">
-        <td class="nowrap">${esc(day(m.window.from))} ${esc(hm(m.window.from))} → ${esc(hm(m.window.to))}</td>
+        <td class="nowrap">${esc(day(m.window.from))} ${esc(hm(m.window.from))} → ${esc(hm(m.window.to))}${m.selfHealing ? ` <span class="badge" title="A Self-healing day (UTC ${esc(m.selfHealing.day)}): ${m.selfHealing.detected} detected, ${m.selfHealing.repaired} repaired alone, ${m.selfHealing.waiting} waiting for you">Self-healing</span>` : ''}</td>
         <td class="num">${hours(m.window.hours)}</td><td class="num">${pct(m.yield.occupancy)}</td><td class="num">${hours(m.idleHours.total)}</td><td class="num">${hours(m.idleHours.noWork)}</td>
         <td class="num">${m.incidents.count}</td><td class="num">${pct(m.resolution)}</td><td class="num">${dur(m.ttd.median)}</td><td class="num">${dur(m.ttr.median)}</td>
         <td class="num">${hours(m.hoursSaved)}</td><td class="num">${usd(m.cost.watchUsd)}</td>
         <td>${m.safety.alarm ? '<span class="pill pill-failed">alarm</span>' : '<span class="pill pill-success">ok</span>'}</td>
       </tr>`).join('');
     return `<div class="card nw-card">
-      <div class="row nw-card-head"><h3>Nights</h3><span class="muted small">Click a night to show it above</span></div>
+      <div class="row nw-card-head"><h3>Nights</h3><span class="muted small">Click a night, or a Self-healing day, to show it above</span></div>
       <table class="u-table nw-nights"><thead><tr><th>Window</th><th class="num">Hours</th><th class="num">Occupancy</th><th class="num">Idle</th><th class="num">No work</th><th class="num">Incidents</th><th class="num">Resolved</th><th class="num">TTD</th><th class="num">TTR</th><th class="num">Saved (est.)</th><th class="num">Watch $</th><th>Safety</th></tr></thead>
       <tbody>${rows}
         <tr class="nw-baseline" title="Diário do Orchestrator: the night before the watch; TTD and TTR are the #112 incident's human reference"><td>${esc(b.label)}</td><td class="num">${hours(b.hours)}</td><td class="num">${pct(b.activeHours / b.hours)}</td><td class="num">${hours(b.idleHours)}</td><td class="num">${hours(b.idleNoWorkHours)}</td><td class="num">—</td><td class="num">—</td><td class="num">${dur(b.ttdMs)}</td><td class="num">${dur(b.ttrMs)}</td><td class="num">—</td><td class="num">—</td><td>—</td></tr>
@@ -227,6 +256,7 @@
       nw.form = sw.checked ? { until: defaultEnd(), error: null, saving: false } : null;
       render();
     };
+    if ($('#nw-open-settings')) $('#nw-open-settings').onclick = openExecutionSettings;
     if (nw.form) {
       $('#nw-preset').onclick = () => { nw.form = { ...nw.form, until: localValue(new Date(Date.now() + PRESET_HOURS * 3600e3)), error: null }; render(); };
       $('#nw-form-cancel').onclick = () => { nw.form = null; render(); };
@@ -257,7 +287,7 @@
       $('#nw-perm-save').onclick = async () => {
         nw.perms = { ...nw.perms, saving: true };
         render();
-        try { nw.state = await api.saveNightWatchPermissions({ allowed: nw.perms.allowed }); nw.perms = null; } catch (e) { nw.perms = { ...nw.perms, saving: false, error: errMsg(e) }; }
+        try { nw.state = await api.saveNightWatchPermissions(nw.perms.allowed); nw.perms = null; } catch (e) { nw.perms = { ...nw.perms, saving: false, error: errMsg(e) }; }
         render();
       };
     }
@@ -268,6 +298,14 @@
         await load();
       };
     });
+    document.querySelectorAll('[data-nw-app-back]').forEach((b) => {
+      b.onclick = async () => {
+        const to = b.dataset.nwAppBack;
+        if (!await confirmDialog(`Go back to ${to.slice(0, 7)}`, 'The roadmap pauses, the runs in progress finish, the app folder goes back to that commit and the app restarts.', 'Go back')) return;
+        try { await api.appUpdateBack(to); nw.error = null; } catch (e) { nw.error = errMsg(e); }
+        await load();
+      };
+    });
     document.querySelectorAll('[data-nw-night]').forEach((row) => {
       const pick = () => { nw.night = Number(row.dataset.nwNight); render(); };
       row.onclick = pick;
@@ -275,25 +313,36 @@
     });
   }
 
-  // ---- the Dashboard's morning summary -------------------------------------------------------
-  // renderDashboard runs on every run event: the summary is fetched at most once a minute
+  // ---- Home's morning summary ----------------------------------------------------------------
+  // renderDashboard runs on every run event: the summary is fetched at most once a minute.
+  // Answers the summary shown ({ window, summary }, #255: Home dates "Cost last night" by its window) or null.
   const morning = { at: 0, value: null };
   async function renderMorning(box) {
-    if (!box || !api.nightWatchMorning) return;
+    if (!box || !api.nightWatchMorning) return null;
     if (Date.now() - morning.at > 60e3) {
       morning.at = Date.now();
       try { morning.value = await api.nightWatchMorning(); } catch { morning.value = null; }
     }
     const m = morning.value;
     box.classList.toggle('hidden', !m);
-    if (!m) { box.innerHTML = ''; return; }
+    if (!m) { box.innerHTML = ''; return null; }
     const s = m.summary;
-    box.innerHTML = `<div class="dash-gates-title"><b>☾ Night watch · ${esc(hm(m.window.from))} → ${esc(hm(m.window.to))}</b>${s.alarm ? ' <span class="pill pill-failed">safety alarm</span>' : ''}</div>
-      <div class="nw-dash-lines small"><div>${esc(s.ran)}</div><div>${esc(s.did)}</div><div>${esc(s.waits)}</div><div class="${s.alarm ? 'error' : 'muted'}">${esc(s.safety)}</div></div>
+    // #278: a Self-healing day leads with its line (detected, repaired alone, waiting, cost with tokens)
+    box.innerHTML = `<div class="dash-gates-title"><b>☾ ${m.window.selfHealing ? 'Self-healing' : 'Night watch'} · ${esc(hm(m.window.from))} → ${esc(hm(m.window.to))}</b>${s.alarm ? ' <span class="pill pill-failed">safety alarm</span>' : ''}</div>
+      <div class="nw-dash-lines small">${s.selfHealing ? `<div data-testid="dash-self-healing">${esc(s.selfHealing)}</div>` : ''}<div>${esc(s.ran)}</div><div>${esc(s.did)}</div><div>${esc(s.waits)}</div><div class="${s.alarm ? 'error' : 'muted'}">${esc(s.safety)}</div></div>
       <div class="row"><span class="spacer"></span><button class="btn sm ghost" type="button" id="dash-nw-open">Open Night watch</button></div>`;
     $('#dash-nw-open').onclick = () => showView('nightwatch');
+    return m;
   }
-  window.NightWatchView = { renderMorning };
+  // opens the view on the night that started at `startedAt` (ISO)
+  function openNight(startedAt) {
+    nw.open = startedAt || null;
+    showView('nightwatch');
+  }
+  window.NightWatchView = {
+    openNight,
+    renderMorning,
+  };
 
   registerView({
     id: 'nightwatch',

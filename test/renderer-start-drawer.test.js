@@ -413,3 +413,21 @@ test('startRun: with a pipeline selected, Start calls api.runPipeline with the p
   assert.equal(runPipeline[0][1].task, 'Do the thing');
   assert.equal(runPipeline[0][3], null, 'no project was selected');
 });
+
+// ---------------------------------------------------------------------------
+// #286: an effort the CLI never gets is a warning in the workflow's description, never silent
+// ---------------------------------------------------------------------------
+test('selectWorkflow (#286): a workflow\'s load warnings follow its description as "Warning: ..."; none, no warning', () => {
+  const message = 'the effort of reviewer is not passed: its provider has no effort_args';
+  const workflows = [
+    { file: 'warned.yaml', description: 'Builds things.', warnings: [message], inputs: { task: { required: true } }, agents: {} },
+    { file: 'clean.yaml', description: 'Builds things.', warnings: [], inputs: { task: { required: true } }, agents: {} },
+  ];
+  const { helpers, getEl } = loadStartDrawer({ workflows });
+  helpers.selectWorkflow('warned.yaml');
+  const warned = String(getEl('wf-desc').textContent);
+  assert.match(warned, /^Builds things\./);
+  assert.match(warned, /Warning: the effort of reviewer is not passed: its provider has no effort_args/);
+  helpers.selectWorkflow('clean.yaml');
+  assert.equal(String(getEl('wf-desc').textContent), 'Builds things.');
+});

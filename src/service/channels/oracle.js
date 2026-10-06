@@ -13,16 +13,29 @@
 //   Every backup is a copy in <oracle dir>/backups/ (Undo puts it back).
 // - delegation: the Product Owner (a plan, an issue draft), the supervisor (a run diagnosis) and a
 //   read-only analyzer (a run's tool calls and costs, no model); only the answer and its cost come
-//   back, recorded in the chat.
+//   back, recorded in the chat. #184: the checker runs a test command on a scratch checkout of a
+//   branch (src/oracle-check.js, no model); a long one is a check.run card.
 // - oracle:changed is pushed when a message is added (a wake-up, a card, a result).
+// - inboxes (#240): ctx.performAction runs an action's code for the owners' inboxes (po:request,
+//   supervisor:request); a request the Oracle sent gets a short line in its chat (requested()).
+// - routing (#241): the Oracle changes nothing itself. Its request_agent tool (oracle:requestAgent)
+//   sends a change to the owner's inbox (ctx.productOwnerRequest, ctx.supervisorRequest); a card it
+//   proposes of a kind an owner holds (oracle-actions.js ownerOf) is routed there too. ctx.inboxRules
+//   tells an inbox which requests wait for the owner's click (a paid run, the Night watch's
+//   permissions, content the Oracle read) and logs the night's in the night log; ctx.checkAction and
+//   ctx.restoreAction check a card before it waits and put back an action's backup (the owner's Undo).
 
 const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
+const actions = require('../../oracle-actions');
+const agentInbox = require('../../agent-inbox');
 const agents = require('../../agents');
 const backlog = require('../../backlog');
+const night = require('../../night-watch');
 const notifier = require('../../notifications');
 const oracle = require('../../oracle');
+const oracleCheck = require('../../oracle-check');
 const productOwner = require('../../product-owner');
 const projects = require('../../projects');
 const roadmaps = require('../../roadmap');
@@ -82,7 +95,26 @@ module.exports = (ctx) => {
   };
   const preview = (what) => ({ ok: true, preview: true, text: `Simulation only: nothing was changed. The app would ${what}.` });
 
+  // #184: a check on a scratch checkout of a project's branch (src/oracle-check.js), in the Oracle's folder
+  const check = ({ projectId, branch, command }, timeoutMs) => {
+    const p = projects.readProject(ctx.ws.projects, pid(projectId));
+    if (!p?.folder) throw new Error(`Unknown project: ${projectId}`);
+    return oracleCheck.runCheck({ folder: p.folder, branch, command, checksDir: path.join(dir(), 'checks'), timeoutMs });
+  };
+
+  // the step a retry resumes from (throws when the run cannot be retried)
+  const retryStep = ({ runId }) => {
+    const o = ctx.resumeOptions({ runId });
+    if (o.active) throw new Error('The run is still in progress.');
+    if (!o.suggested) throw new Error('No step can be resumed without crossing a decided human gate.');
+    return o.suggested;
+  };
+
   const PERFORM = {
+    'check.run': async (a) => {
+      // the action is done when the check ran, whatever its result (the text says pass or fail)
+      return { text: (await check(a.params, oracleCheck.LONG_MS)).text };
+    },
     'dispatch.restart': async () => {
       await ctx.dispatchRoadmaps();
       await ctx.dispatchQueue();
@@ -151,7 +183,9 @@ module.exports = (ctx) => {
         if (ids(before).some((list, i) => JSON.stringify(list) !== JSON.stringify(kept[i] || []))) throw new Error('An append may only add items: a planned item moved or disappeared. Nothing was saved.');
       }
       const backup = snapshotRoadmap(a, id);
-      roadmaps.saveStages(ctx.ws.backlog, id, a.params.stages, { issues: synced(id) });
+      // #284: `disabled` is the owner's switch: whatever the Oracle sends, the stored value is kept
+      const stages = (a.params.stages || []).map((s) => { const { disabled, ...rest } = s || {}; return rest; });
+      roadmaps.saveStages(ctx.ws.backlog, id, stages, { issues: synced(id), alive: ctx.runAlive });
       await ctx.dispatchRoadmaps();
       return { text: `The roadmap of ${id} was saved (validated, ${a.params.stages.length} stage(s)).`, backup };
     },
@@ -160,11 +194,9 @@ module.exports = (ctx) => {
       return { text: `Resumed from ${a.params.step}: run ${out.runId}.` };
     },
     'run.retry': async (a, { mock }) => {
-      const o = ctx.resumeOptions({ runId: a.params.runId });
-      if (o.active) throw new Error('The run is still in progress.');
-      if (!o.suggested) throw new Error('No step can be resumed without crossing a decided human gate.');
-      const out = await ctx.resumeRun({ runId: a.params.runId, step: o.suggested, mock });
-      return { text: `Retried from ${o.suggested}: run ${out.runId}.` };
+      const step = retryStep(a.params);
+      const out = await ctx.resumeRun({ runId: a.params.runId, step, mock });
+      return { text: `Retried from ${step}: run ${out.runId}.` };
     },
     'run.stop': async (a) => {
       const run = ctx.liveRun(a.params.runId);
@@ -216,6 +248,64 @@ module.exports = (ctx) => {
     const out = await fn(a, { mock: !!mock, sim: simulation.simulationOnly() });
     return { ok: true, ...out };
   }
+  // #240: the owners' inboxes (po:request, supervisor:request) run their mechanical kinds with these
+  // same functions, checked like a card; the backups go to the Oracle's folder, as a card's do
+  ctx.performAction = (kind, params, { mock } = {}) => {
+    actions.ACTIONS[kind]?.check?.(params);
+    return perform({ id: `request-${Date.now().toString(36)}`, kind, params }, { mock });
+  };
+  // #241: what can be known before a request waits for the owner's click (it is refused at once otherwise)
+  const PRECHECK = {
+    'run.resume': ({ runId, step }) => {
+      const o = ctx.resumeOptions({ runId });
+      if (o.active) throw new Error('The run is still in progress.');
+      if (!(o.steps || []).some((x) => x.id === step)) throw new Error(`Run ${runId} has no step ${step}.`);
+    },
+    'run.retry': (p) => { retryStep(p); },
+  };
+  ctx.checkAction = (kind, params) => {
+    actions.ACTIONS[kind]?.check?.(params);
+    PRECHECK[kind]?.(params);
+  };
+  ctx.restoreAction = (undo) => restore(null, undo);
+  // How an owner's inbox takes a request now (agent-inbox.js handle's wait / check / after): a kind in
+  // clickKinds, a request content asked for (byContent), a kind of confirmKinds the Oracle's model asked
+  // for by day (byModel), a kind the Night watch does not allow, or one more watch action on an item that
+  // already had LOOP_CAP tonight waits for the owner's click; under the watch, what the owner ran and
+  // what waits are in the night log.
+  // `owner`: 'product-owner' | 'supervisor'; `project`: the PO's project, added to the params it checks.
+  ctx.inboxRules = (owner, { clickKinds = [], confirmKinds = [], project = null, byContent = false, byModel = false } = {}) => {
+    // the watch in force: the Night watch, or by day Self-healing's standing watch (#278)
+    const watch = actions.watchState(dir(), workspace.readSettings(ctx.ws));
+    const allowed = night.readPermissions(dir()).allowed;
+    const withProject = (params) => (project ? { ...params, projectId: project } : params);
+    // the watch actions the owners already ran alone on this item tonight (as nightDecision counts them)
+    const actionsOn = (params) => {
+      const { target } = night.targetOf(withProject(params));
+      const since = actions.watchSince(watch);
+      return night.readNightLog(dir()).filter((e) => e.type === 'oracle.action' && e.auto && e.target === target && (!since || e.ts >= since)).length;
+    };
+    // by day under Self-healing the owner's own requests (not the Oracle's model) keep the daytime rules
+    const ruling = watch.selfHealing && !byModel ? { ...watch, active: false } : watch;
+    const why = (kind, params) => {
+      if (byContent) return { reason: 'content', text: 'Content the Oracle read asked for it: it waits for the owner\'s click.' };
+      const text = agentInbox.waitReason(kind, params, { clickKinds, confirmKinds: byModel ? confirmKinds : [], watch: ruling, allowed });
+      if (text) return { reason: 'permission', text };
+      if (ruling.active && actionsOn(params) >= night.LOOP_CAP) return { reason: 'loop', text: `The item already had ${night.LOOP_CAP} watch actions ${watch.selfHealing ? 'today' : 'tonight'}: it waits for the owner's click.` };
+      return null;
+    };
+    return {
+      wait: (kind, params) => why(kind, params)?.text || null,
+      check: (kind, params) => ctx.checkAction(kind, withProject(params)),
+      after: (r) => {
+        if (!watch.active) return;
+        const where = night.targetOf(withProject(r.params));
+        const permission = night.permissionOf(r.kind, r.params);
+        if (r.pending) night.logNight(dir(), 'oracle.blocked', { actionId: r.ref, kind: r.kind, ...where, reason: why(r.kind, r.params)?.reason || 'permission', owner, requestedBy: r.from });
+        else night.logNight(dir(), 'oracle.action', { actionId: r.ref, kind: r.kind, title: r.text, ...where, permission, auto: !!r.auto, ok: r.ok, result: r.text, owner, requestedBy: r.from });
+      },
+    };
+  };
 
   // Undo: puts back the backup an action took.
   async function restore(a, undo) {
@@ -260,7 +350,7 @@ module.exports = (ctx) => {
       defaultWorkflow: settings.defaultWorkflow, // #195
       folder: p.folder, agent: agents.readAgent(ctx.ws.agents, agents.PRODUCT_OWNER_ID),
       skillsDirs: [ctx.ws.skills, ctx.BUNDLED_SKILLS_DIR], resolveCommand,
-      budget: sim ? null : usage.withPeerUsage(usage.budgetBaseline({ runsDir: ctx.ws.runs, settings, extraRuns: oracle.usageRuns(dir()) }), productOwner.monthUsage(ctx.ws.backlog), settings.prices),
+      budget: sim ? null : usage.withPeerUsage(usage.budgetBaseline({ runsDir: ctx.ws.runs, settings, extraRuns: ctx.agentUsageRuns() }), productOwner.monthUsage(ctx.ws.backlog), settings.prices),
       mock: sim, mode,
     });
     const m = out.message || {};
@@ -302,7 +392,7 @@ module.exports = (ctx) => {
     };
   }
 
-  async function delegate({ to, question, projectId, runId } = {}, { mock } = {}) {
+  async function delegate({ to, question, projectId, runId, branch, command } = {}, { mock } = {}) {
     const sim = simulated({ mock });
     const q = String(question || '').trim();
     if (!q) throw new Error('Say what to ask.');
@@ -321,6 +411,10 @@ module.exports = (ctx) => {
       } else if (to === 'analyzer') {
         if (!runId) throw new Error('Say which run (runId) to analyze.');
         out = analyzeRunUse(runId);
+      } else if (to === 'checker') {
+        // #184: no model; a test command runs with MULTIAGENT_SIMULATION_ONLY=1, stopped after ~2 min
+        const res = await check({ projectId, branch, command }, oracleCheck.QUICK_MS);
+        out = { text: res.text, costUsd: 0, model: null, error: false, ref: `a check of ${branch}` };
       } else throw new Error(`Unknown agent: ${to}`);
     } catch (e) {
       out = { text: e.message || String(e), costUsd: 0, model: null, error: true, ref: null };
@@ -328,6 +422,34 @@ module.exports = (ctx) => {
     const text = cut(String(out.text || '(no answer)'), DELEGATE_TEXT);
     get().delegated({ to, question: q, text, costUsd: out.costUsd, model: out.model, error: out.error, ref: out.ref });
     return { to, text, costUsd: out.costUsd || 0, error: out.error, ref: out.ref };
+  }
+
+  // ---- routing to the owners (#241) -------------------------------------------------------------
+  // request_agent: { to: 'po' | 'supervisor', kind, params, reason, projectId?, requestedBy?, mock } →
+  // the owner's answer { ok, text, costUsd, error?, pending? }; the owner records it in its conversation
+  // and the Oracle's chat gets a short line. An unknown `to` is refused here and recorded nowhere.
+  async function requestAgent({ to, kind, params, reason, projectId, requestedBy, mock } = {}) {
+    const p = params && typeof params === 'object' && !Array.isArray(params) ? params : {};
+    const send = to === 'po' ? ctx.productOwnerRequest : to === 'supervisor' ? ctx.supervisorRequest : null;
+    if (!send) {
+      const error = `Unknown agent: ${to || '(none)'}. request_agent goes to po (the Product Owner: issues, roadmap, queue) or supervisor (the Supervisor: runs, workflows, skills).`;
+      return { ok: false, text: error, costUsd: 0, error };
+    }
+    const ref = `oracle-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+    return send({
+      ...(to === 'po' ? { projectId: projectId || p.projectId } : {}),
+      kind, params: p, reason, from: 'oracle', ref, byContent: requestedBy === 'content', byModel: true, mock: simulated({ mock }),
+    });
+  }
+
+  // A card of a kind an owner holds goes to that owner's inbox instead (the Oracle has no write path).
+  // `fromOracle`: false only for the owner's own card (oracle:propose with requestedBy 'owner').
+  async function proposeOrRoute(input = {}, { fromOracle = true } = {}) {
+    const route = actions.ownerOf(input.kind, input.params);
+    if (!route || !fromOracle) return get().propose(input, { mock: simulation.simulationOnly() });
+    if (!route.kind) throw new Error(`${input.kind} (${input.params?.action || '?'}) is the owner's click on the Roadmap: no agent takes it. Tell the owner, or use request_agent (po: roadmap.skip, roadmap.regroup; supervisor: run.retry, run.resume).`);
+    const out = await requestAgent({ to: route.to, kind: route.kind, params: route.params, reason: input.why, requestedBy: input.requestedBy });
+    return { routed: true, to: route.to, kind: route.kind, ...out };
   }
 
   // ---- the Oracle of the workspace -------------------------------------------------------------
@@ -339,10 +461,10 @@ module.exports = (ctx) => {
         skillsDirs: () => [ctx.ws.skills, ctx.BUNDLED_SKILLS_DIR], resolveCommand, refuseReal: simulation.refuseReal,
         agent: () => agents.readAgent(ctx.ws.agents, agents.ORACLE_ID),
         settings: () => workspace.readSettings(ctx.ws),
-        // the runs' spend, the Oracle's own days and the Product Owner's calls this month
+        // the runs' spend, the Oracle's own days, the Supervisor chat's (#280) and the Product Owner's calls this month
         budget: () => {
           const settings = workspace.readSettings(ctx.ws);
-          const base = usage.budgetBaseline({ runsDir: ctx.ws.runs, settings, extraRuns: oracle.usageRuns(dir()) });
+          const base = usage.budgetBaseline({ runsDir: ctx.ws.runs, settings, extraRuns: ctx.agentUsageRuns() });
           return usage.withPeerUsage(base, productOwner.monthUsage(ctx.ws.backlog), settings.prices);
         },
         perform, restore,
@@ -364,9 +486,22 @@ module.exports = (ctx) => {
     file: () => path.join(dir(), 'wake.json'),
     projectOf: (runId) => ctx.liveRun(runId)?.projectId || null,
     projectRunning: (projectId) => roadmaps.readRoadmap(ctx.ws.backlog, projectId).state === 'running',
-    onWake: ({ lines, runIds }) => (ctx.ws ? get().wake({ lines, runIds, mock: simulation.simulationOnly() || runIds.every(runMock) }) : { skipped: 'no-workspace' }),
+    onWake: ({ lines, runIds, notices }) => (ctx.ws ? get().wake({ lines, runIds, notices, mock: simulation.simulationOnly() || runIds.every(runMock) }) : { skipped: 'no-workspace' }),
     onChange: () => ctx.events.emit('oracle:changed', { kind: 'wake' }),
+    nightWatch: () => !!ctx.ws && actions.watchState(dir(), workspace.readSettings(ctx.ws)).active,
   });
+  // #278: Self-healing's findings (src/service/channels/nightwatch.js) wake the Oracle with their
+  // evidence, as lines: one short turn, simulated when every run is → oracle.wake's result
+  ctx.oracleFindings = ({ lines, runIds = [] }) => get().wake({ findings: lines, runIds, mock: simulation.simulationOnly() || (runIds.length > 0 && runIds.every(runMock)) });
+  // ... in the wake-ups' own scope (settings.oracle.wakeScope): every run but the muted ones, or the
+  // runs and roadmaps the Oracle watches; never when wake-ups are off
+  ctx.oracleFindingsScope = (runId) => {
+    const s = wake.state();
+    if (s.wakeScope === 'off') return false;
+    const project = ctx.liveRun(runId)?.projectId || null;
+    const watched = (s.watching || []).some((w) => w.runId === runId || (!!w.projectId && w.projectId === project));
+    return watched || (s.wakeScope === 'all' && !(s.muted || []).includes(runId));
+  };
   // runs of this workspace in progress in another app process (#112): each wakes the Oracle once
   const seenElsewhere = new Set();
   const elsewhere = setInterval(() => {
@@ -381,8 +516,9 @@ module.exports = (ctx) => {
   }, ELSEWHERE_MS);
   elsewhere.unref?.();
 
-  hooks.propose = (input) => get().propose(input, { mock: simulation.simulationOnly() });
+  hooks.propose = (input) => proposeOrRoute(input);
   hooks.delegate = (input) => delegate(input);
+  hooks.requestAgent = (input) => requestAgent(input);
   hooks.watch = (input) => wake.watch(input || {});
 
   const withState = (out) => ({ ...out, messages: get().history(), state: get().state() });
@@ -402,7 +538,7 @@ module.exports = (ctx) => {
         const turn = ctx.chatTurns.start('oracle');
         let out;
         try {
-          out = await get().ask({ question: opts.question, screen: opts.screen, images: opts.images, mock, mockContextTokens: mock ? opts.mockContextTokens : undefined, onItem: turn.onItem, signal: turn.signal });
+          out = await get().ask({ question: opts.question, screen: opts.screen, images: opts.images, context: opts.context || null, mock, mockContextTokens: mock ? opts.mockContextTokens : undefined, onItem: turn.onItem, signal: turn.signal });
         } finally {
           turn.end(turn.stopped() ? 'stopped' : out?.message?.error || !out ? 'failed' : 'done');
         }
@@ -413,7 +549,7 @@ module.exports = (ctx) => {
     { channel: 'oracle:act', method: 'oracleAct', params: 'opts', fn: ({ actionId, mock } = {}) => get().act(actionId, { mock: simulated({ mock }) }) },
     // a pasted image of the conversation (its file name in a user message's attachments) → data: URL or null
     { channel: 'oracle:attachment', method: 'oracleAttachment', params: 'name', fn: (name) => get().attachment(name) },
-    // asks another agent (product-owner, issue-draft, supervisor, analyzer) → { to, text, costUsd, error, ref }; recorded in the chat
+    // asks another agent (product-owner, issue-draft, supervisor, analyzer, checker) → { to, text, costUsd, error, ref }; recorded in the chat
     {
       channel: 'oracle:delegate',
       method: 'oracleDelegate',
@@ -422,6 +558,9 @@ module.exports = (ctx) => {
     },
     { channel: 'oracle:dismiss', method: 'oracleDismiss', params: 'opts', fn: ({ actionId } = {}) => get().dismiss(actionId) },
     { channel: 'oracle:history', method: 'oracleHistory', fn: () => get().history() },
+    // #184: { text (pasted, e.g. a Claude Code memory index), base (the draft; default the saved memory) } →
+    // { text }: the draft with the pasted decisions added; nothing is saved (the owner saves it)
+    { channel: 'oracle:importMemory', method: 'importOracleMemory', params: 'opts', fn: (opts) => get().importMemory(opts || {}) },
     // the owner read the conversation up to { at } (default now) → { readAt }: the unread badge counts after it
     { channel: 'oracle:markRead', method: 'markOracleRead', params: 'opts', fn: (opts) => get().markRead(opts?.at) },
     { channel: 'oracle:memory', method: 'oracleMemory', fn: () => get().memory() },
@@ -429,13 +568,18 @@ module.exports = (ctx) => {
     { channel: 'oracle:mute', method: 'muteOracleRun', params: 'opts', fn: ({ runId, on } = {}) => wake.mute(runId, on !== false) },
     // the Night watch: { on, until (ISO, at most 24 h ahead), from (the screen it was turned on from) } → { nightWatch, messages, state }
     { channel: 'oracle:nightWatch', method: 'setOracleNightWatch', params: 'opts', fn: ({ on, until, from } = {}) => get().setNightWatch({ on, until, by: nightBy(from) }) },
-    // the owner proposes a card themselves (or a check): { kind, params, why } → { id, status, ... }
+    // the owner proposes a card themselves (or a check): { kind, params, why } → { id, status, ... };
+    // #241: a card requested by the Oracle or by content, of a kind an owner holds, goes to that owner's
+    // inbox → { routed, to, kind, ok, text, ... }
     {
       channel: 'oracle:propose',
       method: 'oracleProposeAction',
       params: 'opts',
-      fn: async (input = {}) => withState(await get().propose(input, { mock: simulation.simulationOnly() })),
+      fn: async (input = {}) => withState(await proposeOrRoute(input, { fromOracle: input.requestedBy !== 'owner' })),
     },
+    // #241: the request_agent tool's function: { to: 'po' | 'supervisor', kind, params, reason, projectId?, requestedBy?, mock } →
+    // { ok, text, costUsd, error?, pending? } (pending: a card waits for the owner's click in the owner's chat)
+    { channel: 'oracle:requestAgent', method: 'oracleRequestAgent', params: 'opts', fn: (input = {}) => requestAgent(input) },
     // a new session from a handoff note; the messages and the memory are kept
     { channel: 'oracle:reset', method: 'resetOracle', params: 'opts', fn: (opts) => get().reset({ mock: simulated(opts) }) },
     { channel: 'oracle:saveMemory', method: 'saveOracleMemory', params: 'text', fn: (text) => get().saveMemory(text) },

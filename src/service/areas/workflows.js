@@ -43,20 +43,29 @@ module.exports = (ctx) => {
             description: wf.metadata?.description,
             category: wf.metadata?.category || 'build',
             tags: wf.metadata?.tags || [],
+            // #286: what does not stop a run but does not work as written (an effort never passed)
+            warnings: wf.warnings || [],
             inputs: wf.inputs || {},
             // the result contract a chain maps from (#134)
             outputs: wf.outputs || {},
             // how its work lands (#195): local (no push), remote (a branch and a PR/MR) or none
             merge: mergeOf(wf),
+            // #282: the stations of the roadmap card's pipeline (RunProgress.workflowStations)
+            groups: (wf.groups || []).map((g) => ({ name: g.name, steps: g.steps || [] })),
             agents: Object.fromEntries(Object.entries(wf.agents).map(([k, a]) => {
               const d = { ...(wf.defaults || {}), ...a };
               return [k, {
                 provider: a.provider, model: a.model, session: d.session || 'persistent', max_context: d.max_context || null, skills: a.skills || [],
                 capabilities: capabilities.describe(a.capabilities), isolated: d.isolation !== false,
+                // #224: the agent's colour in the run chat and the runs list (wins over its role's)
+                ...(a.color ? { color: String(a.color) } : {}),
+                // #245: the name the screens show instead of its key
+                ...(a.display ? { display: a.display } : {}),
               }];
             })),
             steps: wf.steps.map((s) => ({
               id: s.id,
+              ...(s.display ? { display: s.display } : {}), // #245
               type: s.type || 'agent',
               agent: s.agents ? s.agents.join(' · ') : s.agent || null,
               agents: s.agents || null,
@@ -66,6 +75,8 @@ module.exports = (ctx) => {
               // `type: workflow` (#174): the child workflow, once or for each item
               ...(s.type === 'workflow' ? { workflow: s.workflow, foreach: s.foreach !== undefined, max_parallel: s.max_parallel ?? null } : {}),
               next: [...new Set((s.transitions || []).map((t) => t.goto).filter(Boolean))],
+              // #282: which transitions a mode turns on (the pipeline's human gate station)
+              transitions: (s.transitions || []).filter((t) => t.goto && /inputs\.mode\b/.test(String(t.when || ''))).map((t) => ({ goto: t.goto, when: String(t.when) })),
             })),
           };
         } catch (e) {

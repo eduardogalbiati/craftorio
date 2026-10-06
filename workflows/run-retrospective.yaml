@@ -23,10 +23,12 @@ metadata:
 # -----------------------------------------------------------------------------
 inputs:
   run_id:
+    label: "Run"
     type: run
     default: latest
     description: 'Id of the run to analyze (its folder name in <workspace>/runs, shown in the run view and in "Open logs"), or "latest" for the most recent run of another workflow.'
   focus:
+    label: "Focus"
     type: string
     default: ""
     description: Optional focus, e.g. "why the CI loop took 40 minutes" or "the arena synthesis quality".

@@ -26,10 +26,42 @@ test('--help prints the header comment: every option, without comment markers', 
   assert.doesNotMatch(text, /^\/\//m);
 });
 
+test('--press takes an element and a part of its width, --key a key (Space, Shift+<key>): what listens to the pointer or the keyboard', () => {
+  const a = parseArgs(['--view', 'run-chat', '--click', '#rc-3d', '--press', '[data-testid=run3d-strip]@0.4', '--press', '.slider', '--key', 'Space', '--key', 'Shift+ArrowLeft']);
+  assert.deepEqual(a.presses, [{ sel: '[data-testid=run3d-strip]', at: 0.4 }, { sel: '.slider', at: 0.5 }]);
+  assert.deepEqual(a.keys, [{ key: ' ', shift: false }, { key: 'ArrowLeft', shift: true }]);
+  assert.throws(() => parseArgs(['--press', '.slider@2']), /--press takes <css> or <css>@<0\.\.1>/);
+  assert.throws(() => parseArgs(['--key', 'Ctrl+A']), /--key takes a key name, or Shift\+<key>/);
+  assert.match(usage(), /--press <css>\[@f\]/);
+  assert.match(usage(), /--key <key>/);
+});
+
 test('the backlog view offers roadmap and epics modes, alongside list and kanban', () => {
   assert.deepEqual(VIEWS.backlog.modes, ['list', 'kanban', 'roadmap', 'epics']);
   assert.equal(parseArgs(['--view', 'backlog', '--mode', 'roadmap']).name, 'backlog-roadmap');
   assert.equal(parseArgs(['--view', 'backlog', '--mode', 'epics']).name, 'backlog-epics');
+});
+
+test('--view roadmap (#254: the Roadmap screen) draws the Backlog in its roadmap mode, named backlog-roadmap, and takes no --mode', () => {
+  const args = parseArgs(['--view', 'roadmap']);
+  assert.equal(args.view, 'backlog');
+  assert.equal(args.mode, 'roadmap');
+  assert.equal(args.name, 'backlog-roadmap');
+  assert.throws(() => parseArgs(['--view', 'roadmap', '--mode', 'kanban']), /--mode kanban does not apply to roadmap/);
+});
+
+test('the analytics view offers the Run (#228) and 24/7 (#188) tabs, alongside usage and performance', () => {
+  for (const tab of ['usage', 'performance', 'run', 'occupancy']) assert.ok(VIEWS.analytics.tabs.includes(tab), `analytics tab ${tab}`);
+  assert.equal(parseArgs(['--view', 'analytics', '--tab', 'run']).name, 'analytics-run');
+  assert.equal(parseArgs(['--view', 'analytics', '--tab', 'occupancy', '--theme', 'light']).name, 'analytics-occupancy-light');
+});
+
+test('--view home-empty (#255) is a view of its own: Home of a new workspace, named home-empty, with no tab or mode', () => {
+  assert.ok(VIEWS['home-empty'], 'a home-empty view');
+  assert.equal(parseArgs(['--view', 'home-empty']).name, 'home-empty');
+  assert.equal(parseArgs(['--view', 'home-empty', '--theme', 'light']).name, 'home-empty-light');
+  assert.throws(() => parseArgs(['--view', 'home-empty', '--mode', 'kanban']), /does not apply to home-empty/);
+  assert.match(usage(), /home-empty/);
 });
 
 test('parseArgs names the file after the scenario and checks options against the view', () => {

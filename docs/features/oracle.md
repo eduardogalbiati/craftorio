@@ -8,8 +8,8 @@ order: 150
 The Oracle is a built-in agent (Agents lists it; model and effort editable, default
 `claude-opus-5-5`, high) with **one persistent conversation for the whole app**: it plays Product
 Owner, supervisor, reliability engineer and operator's assistant in the same context. Its panel is
-docked on the **Dashboard**; on every other screen the **Oracle** button at the bottom left of the
-sidebar opens the same conversation as a drawer that knows the screen you are on (Esc closes it).
+docked on **Home** (its Overview tab); on every other screen the **Oracle** button at the top right of the
+header opens the same conversation as a drawer that knows the screen you are on (Esc closes it).
 The button's badge counts the answers that arrived while the conversation was out of view.
 
 - **What it reads**, read-only: the runs (events, summaries, sessions, decisions, handoff notes,
@@ -22,15 +22,22 @@ The button's badge counts the answers that arrived while the conversation was ou
 - **Memory**: your standing decisions ("reply in Portuguese", "validated mode for UI changes"),
   edited only by you from the drawer's **Memory** button and read at every session start.
   **New session** starts over from a handoff note; the conversation and the memory are kept. Past
-  the context threshold it compacts on its own the same way.
-- **Cost**: each answer shows its time, model, cost and tokens; the footer shows today's spend
+  the context threshold, or after an idle gap longer than the model's cache (55 min), the next
+  turn starts a fresh session from the skill, the memory and a state note the app keeps
+  (`oracle/state.md`), with no extra model call; the drawer's header shows the model and whether
+  the last turn resumed or started fresh.
+- **Cost**: each answer shows its time, model, cost and tokens (the turn's own cost: Claude reports
+  a resumed session's total, the app keeps the difference); the footer shows today's spend
   against the **daily budget** (Settings › Execution, default 20 USD, 0 = no cap). Once reached,
-  the Oracle is paused until the next day (UTC). Its spend counts in the monthly budgets like the
-  runs. Developer mode and automated checks answer from the simulated Oracle: no model call, no cost.
-- **Woken by run events**: a gate waiting, a run that finished (status and cost), a merge
-  conflict, a limit, a stall or a supervisor decision, repeated invalid outputs, an interrupted run
-  or one seen in another app process. Events are batched over 30 seconds, each batch is one short
-  turn; routine events never wake it. Settings › Execution › Oracle chooses which runs (every run,
+  the Oracle is paused until the next day (UTC); a refused question stays in the chat. Its spend
+  counts in the monthly budgets like the runs. `node scripts/oracle-usage-report.js --dir
+  <workspace>/oracle` prints the spend per day. Developer mode and automated checks answer from the
+  simulated Oracle: no model call, no cost.
+- **Woken by run events**: a gate waiting, a merge conflict, a limit, a stall or a supervisor
+  decision, repeated invalid outputs. A run that finished, was cancelled or interrupted (or seen in
+  another app process) and a supervisor retry or resume are notices written by the app, with no
+  model call. Events are batched over 30 seconds, each batch is one short turn (3 min at most); a
+  question sent meanwhile waits for it; routine events never wake it. Settings › Execution › Oracle chooses which runs (every run,
   watched runs only, off) and which events; **Mute** on a wake-up silences one run. Ask it to
   "watch this run" (or a project's roadmap): it follows that run until it ends.
 - **Asks the other agents**: the Product Owner (a backlog analysis, a roadmap proposal, an issue
@@ -46,5 +53,32 @@ The button's badge counts the answers that arrived while the conversation was ou
   stops the roadmap without asking (retry or skip a failed item, regroup or reorder planned items,
   refresh issue text, restore a default, restart the dispatch), notifies each action and posts a
   summary with Undo when it ends. Turning it off stops at once. Gates stay yours.
+- **Self-healing** (Settings › Execution › Oracle, off by default): the same watch, day and night,
+  with no end time. While it is on, an action whose permission you checked ("What it may do alone":
+  the Night watch's checklist, one list for both) runs alone by day exactly as at night, with its
+  backup, its Undo and its notification; anything else stays a card in its owner's inbox. Detectors
+  in code, with no model call until one fires, look inside the runs: `memory` (a process stopped by
+  the memory guard, or a low-memory hold), `cost-gap` (a turn recorded at US$ 0 with tokens, or below
+  what the CLI reported for it), `environment` (test files failing in runs of different issues within
+  an hour and passing on the base) and `repeat` (the same command failing or stopped three times in
+  one step). Each finding is logged once per run and kind with its evidence and wakes the Oracle,
+  which may ask the Product Owner to file an issue with that evidence in the run's project and to
+  append it to that project's roadmap ("File an issue" and "Append" permissions); it never edits a
+  project's code: the roadmap's workflow agents implement the fix. A cause in this app, when the
+  app's repository is not a project of the workspace, is only reported to you. Its turns count in
+  the Oracle's daily budget; while the budget pauses it the detectors keep logging and you get one
+  notification that findings are waiting. The Night watch screen and Home's morning card report each
+  Self-healing day (detected, repaired alone, waiting for you, cost with tokens). Turning it off ends
+  the watch at once. It never answers a gate, pushes, closes an issue or deletes data.
+- **Apply merged fixes to this app** (under Self-healing, off by default; only when the app runs
+  from a source checkout and a project of the workspace is its repository, else the row says why):
+  the app takes the fixes merged into that project's local main after a roadmap stage ends. In code, with no model call: the roadmap pauses
+  ("Updating the app"), the runs in progress finish (a gate is waited for, never answered), the app
+  folder is fast-forwarded (refused with uncommitted changes or a diverged history: nothing changes
+  and the roadmap resumes), dependencies are installed only when `package-lock.json` changed (a
+  failed install goes back), the app restarts and the roadmap resumes by itself. You get a
+  notification before ("Updating the app: febef8b → 5d9be33, 11 commits") and after; Undo is "Go
+  back to <commit>" in the Night watch's actions. If the new code does not start, the next start
+  shows a banner with the command to go back.
 - One app process answers: in a second window the drawer shows the conversation and names the
   process that owns it; that window is read-only (no wake-ups, no actions).

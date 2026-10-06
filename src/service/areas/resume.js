@@ -1,6 +1,6 @@
 // Service area: resuming a run from a step (Resume from step…, the supervisor's recommendations)
 // and the work an ended run kept (#112): the commits of its kept worktree and the kept-work question
-// (#170: its own commits, how stale they are, Resume the old run / Start from scratch), and whether
+// (#170: its own commits, on its branch once the folder is gone (#202), how stale they are, Resume the old run / Start from scratch), and whether
 // the owner may confirm a human gate's earlier approval. Never goes past a human gate on its own.
 
 const fs = require('fs');
@@ -11,27 +11,37 @@ const supervisor = require('../../supervisor');
 const { gitOut } = require('../common');
 
 module.exports = (ctx) => {
-  // The work a run's kept worktree holds (#170), or null when no worktree is left:
+  // The work a run's worktree holds (#170), or null when neither its folder nor its branch is left
+  // (#202: an ended run keeps its branch, not its folder; the branch is then read in the repository):
   // commits: the run's own commits, i.e. not reachable from the local base branch, its remote one or
   // the commit the worktree started from (merged or unpushed commits of the base are not the run's);
   // behind: how many commits the local base has gained since the run's fork point;
   // conflicts: the files the run changed that the base changed too since then.
   function runWorktreeWork(runId) {
-    const ready = supervisor.readEvents(ctx.runFolder(runId)).find((e) => e.type === 'worktree.ready');
-    const dir = ready?.dir;
-    if (!dir || !fs.existsSync(dir)) return null;
-    const name = String(ready.base || '').replace(/^origin\//, '');
+    const events = supervisor.readEvents(ctx.runFolder(runId));
+    const ready = events.find((e) => e.type === 'worktree.ready');
+    if (!ready?.dir) return null;
+    let dir = ready.dir;
+    let head = 'HEAD';
     const exists = (ref) => gitOut(dir, ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`]) !== null;
+    if (!fs.existsSync(dir)) {
+      const branch = events.filter((e) => e.type === 'worktree.removed' || e.type === 'worktree.kept').pop()?.branch;
+      if (!branch || !ready.repo || !fs.existsSync(ready.repo)) return null;
+      dir = ready.repo;
+      head = `refs/heads/${branch}`;
+      if (!exists(head)) return null;
+    }
+    const name = String(ready.base || '').replace(/^origin\//, '');
     const local = name && exists(`refs/heads/${name}`) ? `refs/heads/${name}` : null;
     const exclude = [local, name && `refs/remotes/origin/${name}`, !ready.reused && ready.commit].filter((ref) => ref && exists(ref));
     if (!exclude.length) return null;
-    const commits = Number(gitOut(dir, ['rev-list', '--count', 'HEAD', '--not', ...exclude])) || 0;
-    const fork = local ? gitOut(dir, ['merge-base', 'HEAD', local]) : null;
+    const commits = Number(gitOut(dir, ['rev-list', '--count', head, '--not', ...exclude])) || 0;
+    const fork = local ? gitOut(dir, ['merge-base', head, local]) : null;
     if (!fork) return { commits, base: name || 'main', behind: 0, conflicts: [] };
     const files = (args) => (gitOut(dir, ['diff', '--name-only', ...args]) || '').split('\n').filter(Boolean);
     const behind = Number(gitOut(dir, ['rev-list', '--count', `${fork}..${local}`])) || 0;
     const onBase = behind ? new Set(files([fork, local])) : new Set();
-    return { commits, base: name, behind, conflicts: files([fork, 'HEAD']).filter((f) => onBase.has(f)) };
+    return { commits, base: name, behind, conflicts: files([fork, head]).filter((f) => onBase.has(f)) };
   }
 
   // The commits a run made itself in its kept worktree (0: none, or no worktree left).
@@ -126,7 +136,11 @@ module.exports = (ctx) => {
     if (!approval) return { ok: false, reason: `the decision at ${gate} was ${choice ?? 'a rejection'}, not an approval` };
     const approvedCommit = decided?.commit || null;
     const wt = spec.worktree;
-    const currentCommit = wt?.dir && fs.existsSync(wt.dir) ? gitOut(wt.dir, ['rev-parse', 'HEAD']) : null;
+    // the folder of an ended run is gone (#202): its branch tip, read in the repository (a WIP
+    // commit there is work made after the approval, so it counts as a change)
+    const repo = evs.find((e) => e.type === 'worktree.ready')?.repo;
+    const currentCommit = wt?.dir && fs.existsSync(wt.dir) ? gitOut(wt.dir, ['rev-parse', 'HEAD'])
+      : wt?.branch && repo && fs.existsSync(repo) ? gitOut(repo, ['rev-parse', '--verify', '--quiet', `refs/heads/${wt.branch}`]) : null;
     if (!wt) return { ok: true, approvedCommit, currentCommit };
     if (!approvedCommit) return { ok: false, approvedCommit, currentCommit, reason: `the run did not record the commit approved at ${gate}` };
     if (!currentCommit) return { ok: false, approvedCommit, currentCommit, reason: 'the run\'s worktree is gone' };
@@ -165,7 +179,7 @@ module.exports = (ctx) => {
     if (confirmedGate) steps[gate] = spec.steps[gate];
     return ctx.startWorkflowRun({
       file: spec.file, inputs: spec.inputs, attachments: spec.attachments, mock: spec.mock || mock === true, projectId: spec.projectId, issues: spec.issues,
-      resume: { runId: spec.runId, fromStep, steps, sessions: spec.sessions, handoffs: spec.handoffs, instruction: instruction || null, images: Array.isArray(images) ? images : [], worktree: spec.worktree, confirmedGate, childRuns: spec.childRuns },
+      resume: { runId: spec.runId, fromStep, steps, sessions: spec.sessions, cliTotals: spec.cliTotals, handoffs: spec.handoffs, instruction: instruction || null, images: Array.isArray(images) ? images : [], worktree: spec.worktree, confirmedGate, childRuns: spec.childRuns },
       ...(child ? { parent: child.parent, onFinished: child.onFinished, notices: child.notices, signal: child.signal, onSlotWait: child.onSlotWait } : {}),
     });
   }

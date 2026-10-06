@@ -1,17 +1,22 @@
 /* global api */
-// Settings screen: General (workspace folder, backlog defaults with the default development workflow
+// Settings screen (Phone gates, #226: settings-phone.js): General (workspace folder, backlog defaults with the default development workflow
 // (#195, default-workflow.js), voice input, the workspace index and
 // its Rebuild index, src/store.js), Agents & CLIs (installed CLIs and
-// their sign-in), Execution (developer mode, Keep awake (keep-awake.js), notifications, concurrent runs, the Oracle's daily budget and compaction threshold) and About. Registers
+// their sign-in), Execution (developer mode, Keep awake (keep-awake.js), notifications, concurrent runs, the Oracle's Self-healing switch (#278) and its "Apply merged fixes to this app" row (#279), daily budget and compaction threshold) and About. Registers
 // itself with registerView (view-registry.js); uses app.js globals ($, esc, errMsg, state,
-// applyDeveloperMode, renderHeader, renderWorkspacePaths), commandHint (command-hint.js: the install
+// applyDeveloperMode, renderHeader, renderWorkspacePaths), refreshProjects (views/projects/projects.js: the Projects tab, #254), commandHint (command-hint.js: the install
 // commands of missing CLIs) and window.BACKLOG_PLATFORMS (backlog.js).
 
+let settingsTab = 'general';
 function showSettingsTab(tab) {
+  settingsTab = tab;
   document.querySelectorAll('.settings-tab').forEach((b) => b.classList.toggle('active', b.dataset.stab === tab));
   document.querySelectorAll('.settings-page').forEach((p) => p.classList.toggle('hidden', p.dataset.spage !== tab));
+  // #254: the projects live here (views/projects/projects.js draws them; from another screen, show() reads them)
+  if (tab === 'projects' && state.view === 'settings') refreshProjects();
   if (tab === 'agents') renderTools();
   if (tab === 'about') renderAbout();
+  if (tab === 'phone') window.PhoneGatesSettings.render();
 }
 
 async function renderSettings() {
@@ -37,7 +42,10 @@ async function renderSettings() {
   $('#set-backlog-refresh').value = String(state.settings.backlogRefreshHours ?? 24);
   $('#set-notif-retention').value = state.settings.notificationRetentionDays ?? 30;
   renderConcurrency();
+  renderMemoryGuard();
   renderOracleSettings();
+  renderSelfHealing();
+  renderAppUpdate();
   renderLiveSettings();
   renderBudgetSettings();
   renderOracleWake();
@@ -81,6 +89,40 @@ async function saveConcurrency() {
   state.settings = await api.setSettings({ concurrentRuns });
   renderConcurrency();
   renderHeader();
+}
+
+// Settings › Execution › Memory guard (settings.memoryGuard, #276, src/engine/memory-guard.js): the
+// hint gives the limit in GB for this machine (app:info totalMemoryBytes, binary GB like Task Manager).
+async function renderMemoryGuard() {
+  const g = { enabled: true, limitPercent: 25, floorPercent: 10, ...(state.settings.memoryGuard || {}) };
+  $('#set-mg-enabled').checked = g.enabled !== false;
+  $('#set-mg-limit').value = g.limitPercent;
+  $('#set-mg-floor').value = g.floorPercent;
+  for (const sel of ['#set-mg-limit', '#set-mg-floor']) { $(sel).classList.remove('invalid'); $(sel).removeAttribute('aria-invalid'); }
+  document.querySelectorAll('#set-memory-guard .mg-opt').forEach((el) => el.classList.toggle('hidden', g.enabled === false));
+  if (!state.totalMemoryBytes) state.totalMemoryBytes = (await api.appInfo().catch(() => null))?.totalMemoryBytes || null;
+  const total = Number(state.totalMemoryBytes);
+  const gb = total > 0 ? ((total * g.limitPercent) / 100 / 1024 ** 3).toFixed(1) : null;
+  $('#set-mg-limit-hint').textContent = `${gb ? `${gb} GB on this machine. ` : ''}Between 5 and 90. Measured as committed memory on Windows, resident memory elsewhere.`;
+}
+
+// Saves the group when a field changes; a value out of its range shows the field's error state and nothing is saved.
+async function saveMemoryGuard() {
+  const field = (sel, min, max) => {
+    const el = $(sel);
+    const raw = String(el.value ?? '').trim();
+    const n = Number(raw);
+    const ok = raw !== '' && Number.isFinite(n) && n >= min && n <= max;
+    el.classList.toggle('invalid', !ok);
+    if (ok) el.removeAttribute('aria-invalid'); else el.setAttribute('aria-invalid', 'true');
+    el.title = ok ? '' : `Between ${min} and ${max}: not saved.`;
+    return ok ? n : null;
+  };
+  const limitPercent = field('#set-mg-limit', 5, 90);
+  const floorPercent = field('#set-mg-floor', 0, 50);
+  if (limitPercent == null || floorPercent == null) return;
+  state.settings = await api.setSettings({ memoryGuard: { enabled: $('#set-mg-enabled').checked, limitPercent, floorPercent } });
+  await renderMemoryGuard();
 }
 
 // Settings › General › Live roadmap (settings.liveRoadmap, read by src/live-roadmap.js, #164): every
@@ -135,19 +177,92 @@ function renderOracleSettings() {
   const o = state.settings.oracle || {};
   $('#set-oracle-budget').value = o.dailyBudgetUsd ?? 20;
   $('#set-oracle-compact').value = o.compactAtTokens || 150000;
+  const healing = $('#set-oracle-self-healing');
+  if (healing) healing.checked = o.selfHealing === true;
 }
 
 async function saveOracleSettings() {
   const budget = Number($('#set-oracle-budget').value);
   const compact = Math.floor(Number($('#set-oracle-compact').value));
   const prev = state.settings.oracle || {};
+  const healing = $('#set-oracle-self-healing');
   const oracle = {
     ...prev,
     dailyBudgetUsd: $('#set-oracle-budget').value !== '' && Number.isFinite(budget) && budget >= 0 ? Math.min(budget, 10000) : (prev.dailyBudgetUsd ?? 20),
     compactAtTokens: Number.isFinite(compact) && compact >= 10000 ? Math.min(compact, 1000000) : (prev.compactAtTokens || 150000),
+    ...(healing ? { selfHealing: !!healing.checked } : {}),
   };
   state.settings = await api.setSettings({ oracle });
   renderOracleSettings();
+}
+
+// Self-healing (#278, settings.oracle.selfHealing): the Oracle section's first row. `o`: settings.oracle;
+// `nw`: the nightwatch:state result (null until it is read): its permissions give "N of M", and an
+// Oracle that cannot start in this workspace (nw.oracle false) disables the switch, with the reason.
+function selfHealingHtml(o, nw) {
+  const p = nw && nw.permissions;
+  const count = p ? ` (${p.allowed.length} of ${p.catalog.length})` : '';
+  const on = !!o && o.selfHealing === true;
+  // it can always be turned off: only turning it on needs the Oracle
+  const unavailable = !!nw && !nw.oracle && !on;
+  return `<div class="s-label"><b>Self-healing</b>
+      <span>The Oracle watches every run and roadmap, day and night, and repairs what its permissions allow. It never answers a gate, pushes, closes an issue or deletes data.</span>
+      <span><button type="button" class="link-btn" id="set-oracle-self-healing-perms" data-testid="self-healing-permissions" title="Opens the Night watch's checklist: one list for both">What it may do alone${esc(count)} ›</button></span>
+      ${unavailable ? '<span class="error small" data-testid="self-healing-unavailable">The Oracle cannot start in this workspace, so Self-healing cannot be turned on.</span>' : ''}
+    </div>
+    <label class="switch"${unavailable ? ' title="The Oracle cannot start in this workspace"' : ''}><input type="checkbox" id="set-oracle-self-healing" data-testid="oracle-self-healing" aria-label="Self-healing"${on ? ' checked' : ''}${unavailable ? ' disabled' : ''} /><span></span></label>`;
+}
+
+// Draws the Self-healing row again with the permissions' count and whether the Oracle can start
+// here; the switch saves with the Oracle's other fields (saveOracleSettings).
+async function renderSelfHealing() {
+  const row = $('#set-oracle-self-healing-row');
+  if (!row) return;
+  let nw = null;
+  try { nw = await api.nightWatchState(); } catch { nw = null; }
+  // a click made while the state was read is kept
+  const checked = $('#set-oracle-self-healing')?.checked ?? (state.settings.oracle || {}).selfHealing === true;
+  row.innerHTML = selfHealingHtml({ selfHealing: checked }, nw);
+  // the app update row below needs Self-healing: drawn again with the saved switch
+  $('#set-oracle-self-healing').onchange = async () => { await saveOracleSettings(); renderAppUpdate(false); };
+  $('#set-oracle-self-healing-perms').onclick = () => showView('nightwatch');
+}
+
+// "Apply merged fixes to this app" (#279, settings.oracle.appUpdate, src/app-update.js):
+// the row under Self-healing. `o`: settings.oracle; `info`: the app-update:state result (null while it
+// is read): { applies, reason } or { applies, project, short, behind }. Off and disabled, with the
+// reason, when it does not apply or Self-healing is off; the source line otherwise. One trigger (#285):
+// a roadmap stage that ended; a stored oracle.appUpdateWhen is ignored.
+function appUpdateHtml(o, info) {
+  const healing = !!o && o.selfHealing === true;
+  const applies = !!info && info.applies === true;
+  const why = !info ? 'Checking whether this app runs from a project of this workspace…'
+    : !applies ? `Unavailable: ${info.reason}.`
+      : !healing ? 'Turn Self-healing on first.' : '';
+  const on = applies && healing && o.appUpdate === true;
+  const behind = applies ? (info.behind > 0 ? `${info.behind} commit${info.behind === 1 ? '' : 's'} ahead of this app` : 'the app is up to date') : '';
+  return `<div class="s-label"><b>Apply merged fixes to this app</b>
+      <span>After a roadmap stage ends, the app updates itself from the local main of the project that is its repository: it pauses the roadmap, waits for the runs in progress (a gate is never answered), fast-forwards, restarts and resumes the roadmap. It never pushes.</span>
+      ${applies ? `<span data-testid="app-update-source">Source: <b>${esc(info.project?.name || info.project?.id || '')}</b>, local main (<code>${esc(info.short)}</code>, ${esc(behind)})</span>` : ''}
+      ${why ? `<span class="muted small" data-testid="app-update-reason">${esc(why)}</span>` : ''}
+    </div>
+    <label class="switch"><input type="checkbox" id="set-app-update" data-testid="app-update-switch" aria-label="Apply merged fixes to this app"${on ? ' checked' : ''}${applies && healing ? '' : ' disabled'} /><span></span></label>`;
+}
+
+// Draws the row; `fresh` reads where it applies again (when the screen opens), else the last answer.
+let appUpdateInfo = null;
+async function renderAppUpdate(fresh = true) {
+  const row = $('#set-app-update-row');
+  if (!row) return;
+  if (fresh || !appUpdateInfo) {
+    try { appUpdateInfo = await api.appUpdateState(true); } catch (e) { appUpdateInfo = { applies: false, reason: errMsg(e) }; }
+  }
+  row.innerHTML = appUpdateHtml(state.settings.oracle || {}, appUpdateInfo);
+  const save = async (patch) => {
+    state.settings = await api.setSettings({ oracle: { ...(state.settings.oracle || {}), ...patch } });
+    renderAppUpdate(false);
+  };
+  $('#set-app-update').onchange = (e) => save({ appUpdate: !!e.target.checked });
 }
 
 // The Oracle's wake-ups (#123, src/oracle-wake.js): which runs wake it and on which events, saved
@@ -312,8 +427,10 @@ registerView({
           <aside class="settings-nav">
             <h1>Settings</h1>
             <button class="settings-tab active" data-stab="general">General</button>
+            <button class="settings-tab" data-stab="projects">Projects</button>
             <button class="settings-tab" data-stab="agents">Agents &amp; CLIs</button>
             <button class="settings-tab" data-stab="execution">Execution</button>
+            <button class="settings-tab" data-stab="phone">Phone gates</button>
             <button class="settings-tab" data-stab="about">About</button>
           </aside>
           <div class="settings-body">
@@ -337,7 +454,7 @@ registerView({
                 </div>
                 <div class="s-row">
                   <div class="s-label"><b>Default development workflow</b><span>Used wherever a workflow is not picked by hand: the Product Owner's plans, Split + roadmap, Create + roadmap, the Assign dialog with nothing remembered. Unset: the local workflow (no push, no PR, no CI) when the workspace has it.</span><span id="set-default-wf-note" class="warn-text hidden"></span></div>
-                  <div class="s-ctrl"><select id="set-default-workflow" aria-label="Default development workflow"></select></div>
+                  <div class="s-ctrl"><select id="set-default-workflow" aria-label="Default development workflow" data-testid="settings-default-workflow"></select></div>
                 </div>
                 <div class="s-row">
                   <div class="s-label"><b>Issues per run</b><span>The most issues Assign workflow sends as one run (one branch, one PR/MR that closes all of them).</span></div>
@@ -442,6 +559,10 @@ registerView({
                   <label class="switch"><input type="checkbox" data-setting="confirmStop" /><span></span></label>
                 </div>
                 <div class="s-row">
+                  <div class="s-label"><b>24/7 chip in the top bar</b><span>Shows the share of the last 24 h with at least one run active (green from 90%, amber from 60%, red below). A click opens Analytics › 24/7.</span></div>
+                  <label class="switch"><input type="checkbox" data-setting="showOccupancyChip" data-testid="setting-occupancy-chip" /><span></span></label>
+                </div>
+                <div class="s-row">
                   <div class="s-label"><b>Keep awake</b><span>Keeps this computer from sleeping while runs or a roadmap are active (this workspace; also on the Workflows screen). The display may still turn off; choosing Sleep, closing the lid and the Windows power plan still apply.</span>
                     <span class="keep-awake-line"><span class="badge keep-awake-status" data-keep-awake-status></span><span class="error small" data-keep-awake-error></span></span></div>
                   <label class="switch"><input type="checkbox" data-keep-awake-toggle aria-label="Keep awake" /><span></span></label>
@@ -465,7 +586,7 @@ registerView({
                   <label class="switch"><input type="checkbox" data-setting="notifyOracle" /><span></span></label>
                 </div>
                 <div class="s-row">
-                  <div class="s-label"><b>Keep notifications</b><span>Days the notification center (the bell in the sidebar) keeps notifications; older ones are deleted. 0: keep them all.</span></div>
+                  <div class="s-label"><b>Keep notifications</b><span>Days the notification center (the bell at the top right) keeps notifications; older ones are deleted. 0: keep them all.</span></div>
                   <div class="s-ctrl"><input type="number" id="set-notif-retention" min="0" max="3650" step="1" class="s-num" aria-label="Days to keep notifications" /></div>
                 </div>
               </div>
@@ -488,8 +609,25 @@ registerView({
                   <label class="switch"><input type="checkbox" id="set-cr-sims" /><span></span></label>
                 </div>
               </div>
+              <h3 class="s-subtitle">Memory guard</h3>
+              <div id="set-memory-guard" class="s-group">
+                <div class="s-row">
+                  <div class="s-label"><b>Stop a run's runaway process</b><span>A test, a build or a script a real run started that passes the limit below is stopped with its children, before it exhausts the machine. The agent CLI itself, the app and your other programs are never stopped.</span></div>
+                  <label class="switch"><input type="checkbox" id="set-mg-enabled" data-testid="memory-guard-enabled" aria-label="Memory guard on" /><span></span></label>
+                </div>
+                <div class="s-row mg-opt">
+                  <div class="s-label"><b>Stop a process over (% of the RAM)</b><span id="set-mg-limit-hint" data-testid="memory-guard-limit-hint"></span></div>
+                  <div class="s-ctrl"><input type="number" id="set-mg-limit" data-testid="memory-guard-limit" min="5" max="90" step="1" class="s-num" aria-label="Memory limit per process, percent of the RAM" /></div>
+                </div>
+                <div class="s-row mg-opt">
+                  <div class="s-label"><b>Hold while free memory is under (%)</b><span>Suites and new runs wait while less than this share of the memory is free (a suite at most 10 minutes). 0: never hold. Between 0 and 50.</span></div>
+                  <div class="s-ctrl"><input type="number" id="set-mg-floor" data-testid="memory-guard-floor" min="0" max="50" step="1" class="s-num" aria-label="Free memory floor, percent" /></div>
+                </div>
+              </div>
               <h3 class="s-subtitle">Oracle</h3>
               <div id="set-oracle" class="s-group">
+                <div class="s-row" id="set-oracle-self-healing-row">${selfHealingHtml({}, null)}</div>
+                <div class="s-row" id="set-app-update-row" data-testid="app-update-row">${appUpdateHtml({}, null)}</div>
                 <div class="s-row">
                   <div class="s-label"><b>Daily budget (USD)</b><span>Once today's Oracle spend reaches it, questions are refused until tomorrow (UTC); an answer already running is not cut. It also counts in the monthly Claude Code budget. 0: no cap.</span></div>
                   <div class="s-ctrl"><input type="number" id="set-oracle-budget" min="0" max="10000" step="0.5" class="s-num" aria-label="Oracle daily budget in USD" /></div>
@@ -507,6 +645,15 @@ registerView({
                   <div class="s-ctrl oracle-wake-kinds" id="set-oracle-wake-on"></div>
                 </div>
               </div>
+            </div>
+
+            <!-- #254: the projects (create, edit, folders, repository), drawn by views/projects/projects.js -->
+            <div class="settings-page hidden" data-spage="projects" id="settings-projects"></div>
+
+            <!-- #226: answering the human gates from a paired phone (settings-phone.js) -->
+            <div class="settings-page hidden" data-spage="phone">
+              <h2 class="settings-title">Phone gates</h2>
+              <div id="set-phone" data-testid="phone-gates"></div>
             </div>
 
             <div class="settings-page hidden" data-spage="about">
@@ -548,10 +695,13 @@ registerView({
       e.target.value = state.settings.notificationRetentionDays;
     };
     for (const sel of ['#set-cr-enabled', '#set-cr-max', '#set-cr-project', '#set-cr-sims']) $(sel).onchange = saveConcurrency;
-    for (const sel of ['#set-oracle-budget', '#set-oracle-compact']) $(sel).onchange = saveOracleSettings;
+    for (const sel of ['#set-mg-enabled', '#set-mg-limit', '#set-mg-floor']) $(sel).onchange = saveMemoryGuard;
+    for (const sel of ['#set-oracle-budget', '#set-oracle-compact', '#set-oracle-self-healing']) $(sel).onchange = saveOracleSettings;
+    $('#set-oracle-self-healing-perms').onclick = () => showView('nightwatch');
     for (const sel of ['#set-live-cap', '#set-live-stages', '#set-live-budget', '#set-live-refresh']) $(sel).onchange = saveLiveSettings;
     for (const sel of ['#set-budget-day', '#set-budget-night']) $(sel).onchange = saveBudgetSettings;
     $('#set-oracle-wake').onchange = saveOracleWake;
   },
-  show: renderSettings,
+  // the Projects tab's cards are read again each time the screen opens on it
+  show: () => { renderSettings(); if (settingsTab === 'projects') refreshProjects(); },
 });

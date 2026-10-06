@@ -20,7 +20,10 @@ const SCREENSHOT_SLOT_ENV = 'MULTIAGENT_SCREENSHOT_SLOT';
 const MAX_HOLD_MS = 15 * 60e3;
 const WAIT_MS = 20 * 60e3;
 
-const slotDir = () => process.env.MULTIAGENT_LOCKS_DIR || path.join(os.tmpdir(), 'multiagent-orchestrator', 'locks');
+// The machine-wide folder, whatever MULTIAGENT_LOCKS_DIR says (a suite step sets its own): the E2E
+// suite's Electron launches take the slot here, so they wait for every other run's captures
+const machineSlotDir = () => path.join(os.tmpdir(), 'multiagent-orchestrator', 'locks');
+const slotDir = () => process.env.MULTIAGENT_LOCKS_DIR || machineSlotDir();
 const slotFile = (name, dir = slotDir()) => path.join(dir, `${name}.slot`);
 
 function pidAlive(pid) {
@@ -97,6 +100,7 @@ function acquireSlotSync(name, { dir, waitMs = WAIT_MS, pollMs = 1000, onWait = 
 module.exports = {
   acquireSlot,
   acquireSlotSync,
+  machineSlotDir,
   MAX_HOLD_MS,
   SCREENSHOT_SLOT,
   SCREENSHOT_SLOT_ENV,

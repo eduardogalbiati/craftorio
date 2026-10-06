@@ -35,11 +35,12 @@ async function openDrawer({ category = null, workflow = null, project = null, in
   if (inputs && (!workflow || state.wf?.file === workflow)) {
     for (const [k, v] of Object.entries(inputs)) WorkflowInputs.set($('#drawer'), k, v);
   }
-  renderProjectOptions(project || state.settings.lastProject);
+  // (#254: with no project given, the app's, chosen in the header)
+  renderProjectOptions(project || window.CurrentProject.get() || state.settings.lastProject);
   $('#drawer').classList.add('open');
   $('#drawer').setAttribute('aria-hidden', 'false');
   $('#drawer-backdrop').classList.remove('hidden');
-  setTimeout(() => (mainField() || $('#wf-select')).focus(), 200);
+  setTimeout(() => (mainField() || $('#wf-select')).focus({ preventScroll: true }), 200);
 }
 
 // The drawer's main free-text field (usually `task`), picked by selectWorkflow()
@@ -126,9 +127,9 @@ function selectWorkflow(file) {
   const wf = state.workflows.find((w) => w.file === (pipeline ? pipeline.stages[0].workflow : file));
   state.wf = wf;
   $('#drawer .drawer-title').textContent = pipeline ? 'Start pipeline' : 'Start workflow';
-  $('#wf-desc').textContent = pipeline ? pipeline.description || '' : wf.error ? `Error: ${wf.error}` : wf.description || '';
+  $('#wf-desc').textContent = pipeline ? pipeline.description || '' : wf.error ? `Error: ${wf.error}` : [wf.description || '', ...(wf.warnings || []).map((m) => `Warning: ${m}.`)].filter(Boolean).join(' ');
   $('#wf-steps-mini').innerHTML = (wf.steps || []).map((s) =>
-    `<span class="step-chip ${s.type === 'human_approval' ? 'human' : ''}" title="${esc(s.type === 'human_approval' ? 'human approval' : s.agent)}">${esc(s.id)}</span>`).join('<span class="arrow">›</span>');
+    `<span class="step-chip ${s.type === 'human_approval' ? 'human' : ''}" title="${esc(`${s.id}${s.type === 'human_approval' ? ' (human approval)' : s.agent ? ` · ${s.agent}` : ''}`)}">${esc(s.display || (typeof displayName === 'function' ? displayName(s.id) : s.id))}</span>`).join('<span class="arrow">›</span>');
   // what each agent may use (capabilities) and how its conversation is kept (session)
   $('#wf-agents').innerHTML = Object.entries(wf.agents || {}).map(([name, a]) => `<div class="agent-row">
       <div class="agent-row-main"><span>${esc(name)}</span><span class="model">${esc(a.provider)} · ${esc(a.model)}</span></div>
@@ -150,7 +151,7 @@ function selectWorkflow(file) {
   // the other inputs: human labels and the control that fits each (workflow-inputs.js, #116)
   const field = ([key, def]) => WorkflowInputs.fieldHtml(key, def, { value: values[key], id: `in-${key}`, attrs: `name="${esc(key)}"`, context: values });
   const mainHtml = ([key, def]) => `<div class="field"><label for="in-${key}">Input ${def.required ? '<span class="req">*</span>' : ''}</label>`
-    + `<textarea id="in-${key}" name="${key}" data-wi-input="${esc(key)}" rows="7" placeholder="Describe what needs to be done…">${esc(values[key])}</textarea>`
+    + `<textarea id="in-${key}" name="${key}" data-testid="start-main-input" data-wi-input="${esc(key)}" rows="7" placeholder="Describe what needs to be done…">${esc(values[key])}</textarea>`
     + `${def.description ? `<div class="hint">${esc(def.description)}</div>` : ''}</div>`;
   // a workflow's `mode` (e.g. auto | validated) and its tests (#203: unit_tests, e2e_tests, about
   // half of a run's cost) and its screenshots (#205) change how the run goes: shown next to the task, not in Advanced
@@ -272,7 +273,7 @@ async function startRun({ keepOpen = false } = {}) {
     info.innerHTML = `<button type="button" class="link-btn" title="Open this run">Started ${esc(runLabel(view?.run || { workflow: wf.name, project: project?.name }))}</button>`;
     info.querySelector('button').onclick = () => { closeDrawer(); selectRun(runId, { open: true }); };
     if (oneRunAtATime()) info.insertAdjacentHTML('beforeend', '<br>Turn on concurrent runs in Settings › Execution to start several runs in a row.');
-    main?.focus();
+    main?.focus({ preventScroll: true });
   } catch (e) {
     $('#start-error').textContent = errMsg(e);
   } finally {

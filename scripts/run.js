@@ -100,7 +100,8 @@ run.on('event', (ev) => {
         // with choices, picks the first option
         const answer = ev.choices ? ev.choices[0].id : true;
         console.log(`${t()}     → ${ev.choices ? `chose "${answer}"` : 'approved'} automatically (--auto-approve)`);
-        setTimeout(() => run.resolveApproval(ev.approval_id, answer), 200);
+        // answered as 'auto': a `ship:` transition (#260) only follows the owner's own answer
+        setTimeout(() => run.resolveApproval(ev.approval_id, answer, 'auto'), 200);
       } else {
         console.log('     waiting for approval: use the UI or run with --auto-approve');
       }
@@ -126,7 +127,7 @@ run.on('child', function followChild(child) {
     if (ev.type === 'step.started') console.log(`${t()}   ${tag} ▶ ${ev.step_id}`);
     if (ev.type === 'approval.requested') {
       console.log(`${t()}   ${tag} ? ${short(ev.message, 200)}`);
-      if (args.autoApprove) setTimeout(() => child.resolveApproval(ev.approval_id, ev.choices ? ev.choices[0].id : true), 200);
+      if (args.autoApprove) setTimeout(() => child.resolveApproval(ev.approval_id, ev.choices ? ev.choices[0].id : true, 'auto'), 200);
       else console.log('     waiting for approval: use the UI or run with --auto-approve');
     }
     if (ev.type === 'workflow.finished') console.log(`${t()}   ${tag} ■ ${ev.status}${ev.error ? ': ' + ev.error : ''} (${child.runDir})`);

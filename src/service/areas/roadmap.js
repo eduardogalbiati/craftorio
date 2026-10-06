@@ -5,6 +5,7 @@
 // Cost (#206): the view gives each item and stage its estimate (src/cost-estimate.js, from the
 // project's past runs) and each item with a run its real cost; a real start that would pass the
 // budget cap (areas/budget.js) pauses the roadmap instead (budgetStop) and notifies the owner.
+// Cut lines (#260): a roadmap that reached one starts its release run (areas/releases.js roadmapRelease).
 
 const path = require('path');
 const { loadWorkflow } = require('../../engine/workflow');
@@ -31,8 +32,11 @@ module.exports = (ctx) => {
   // A project's roadmap for the screen: item statuses derived from their runs (#112), each running
   // item with `waiting` (at a human gate), and each item with a run its progress (#194, `run`: the
   // trail, groups, state and the typical step times of its workflow's past runs, for the card's ring).
+  // A paused roadmap shows what the scheduler will settle (#237: a stage run on its own that finished
+  // while paused, e.g. after an edit of the file the scheduler has not seen, shows "Stage N done").
   function roadmapView(projectId, list = []) {
-    const roadmap = roadmaps.withStatus(roadmaps.readRoadmap(ctx.ws.backlog, path.basename(String(projectId))), roadmapRun);
+    const stored = roadmaps.readRoadmap(ctx.ws.backlog, path.basename(String(projectId)));
+    const roadmap = stored.state === 'paused' ? roadmaps.advance(stored, { runOf: roadmapRun, canStart: () => false }).roadmap : roadmaps.withStatus(stored, roadmapRun);
     const byId = new Map(list.map((r) => [r.runId, r]));
     // past runs of the same workflow file, simulated with simulated and real with real
     const history = new Map();
@@ -53,11 +57,13 @@ module.exports = (ctx) => {
       const gate = live?.pendingGates?.()[0]?.brief?.headline || null;
       return {
         status: r.status, mock: !!r.mock, startedAt: r.startedAt || null, finishedAt: r.finishedAt || null, waiting, gate,
-        progress, groups: r.groups || [], agentNames: r.agentNames || null, workflow: r.workflow || null, error: r.error || null,
+        progress, groups: r.groups || [], agentNames: r.agentNames || null, stepNames: r.stepNames || null, workflow: r.workflow || null, error: r.error || null,
         stepTimes: times, history: count,
       };
     };
     const prices = workspace.readSettings(ctx.ws).prices || {};
+    // the backlog's issues: their complexity:n labels scale each item's estimate (#215)
+    const issues = backlog.readBacklog(ctx.ws.backlog, path.basename(String(projectId)))?.issues || [];
     return costEstimate.withEstimates({
       ...roadmap,
       stages: roadmap.stages.map((s) => ({
@@ -68,7 +74,7 @@ module.exports = (ctx) => {
           return { ...x, ...(waiting ? { waiting: true } : {}), ...(run ? { run } : {}) };
         }),
       })),
-    }, list, { prices });
+    }, list, { issues, prices });
   }
 
   // #206: whether the budget cap stops this start: the roadmap pauses with the stage's estimate
@@ -78,7 +84,8 @@ module.exports = (ctx) => {
     const caps = budget.budgetSettings(settings);
     if (!caps.dailyUsd && !caps.nightlyUsd) return false;
     const list = runs.listRuns(ctx.ws.runs);
-    const estimate = (x) => costEstimate.estimateItem(x, list, { prices: settings.prices || {} });
+    const issues = backlog.readBacklog(ctx.ws.backlog, path.basename(String(projectId)))?.issues || [];
+    const estimate = (x) => costEstimate.estimateItem(x, list, { issues, prices: settings.prices || {} });
     const next = estimate(item);
     const block = ctx.budgetBlock(roadmap, next?.usd || 0);
     if (!block) return false;
@@ -87,7 +94,7 @@ module.exports = (ctx) => {
     const stageUsd = known.length ? Math.round(known.reduce((a, v) => a + v, 0) * 100) / 100 : null;
     const message = budget.pauseMessage(block, stageUsd);
     roadmaps.budgetPause(ctx.ws.backlog, projectId, { period: block.period, spentUsd: block.spentUsd, limitUsd: block.limitUsd, nextUsd: block.nextUsd, stageUsd, at: new Date().toISOString() }, message);
-    ctx.notify({ kind: 'run', event: 'failed', title: 'Budget reached', body: message.slice(0, 180), target: { view: 'backlog', projectId } }, { projectId });
+    ctx.notify({ kind: 'run', event: 'failed', title: 'Budget reached', body: message.slice(0, 180), target: { view: 'roadmap', projectId } }, { projectId });
     return true;
   }
 
@@ -138,7 +145,7 @@ module.exports = (ctx) => {
     // an item that reads its issues from the platform at its start (#168) is never skipped on the
     // cache's state (an issue reopened since the sync still runs): the fresh read decides below
     const fromPlatform = (item) => !mockOf(item) && !!known?.repo;
-    const { roadmap, start, refill } = roadmaps.advance(before, {
+    const { roadmap, start, refill, release } = roadmaps.advance(before, {
       runOf: roadmapRun, closed: (n, item) => !fromPlatform(item) && closed.has(n), canStart: (item) => !ctx.slotProblem({ mock: mockOf(item), projectId }),
     });
     // derived statuses are not stored (roadmaps.persisted): only a stored change is written
@@ -150,16 +157,28 @@ module.exports = (ctx) => {
     } else if (roadmap.state === 'paused' && before.state === 'running') {
       ctx.notify({ kind: 'run', event: 'failed', title: 'Roadmap paused', body: String(roadmap.error || '').slice(0, 180) });
     }
-    if (roadmap.state === 'done' && before.state === 'running') ctx.notify({ kind: 'run', event: 'succeeded', title: 'Roadmap finished', body: `Every stage of ${projectId} is done.` });
+    if (roadmap.state === 'done' && before.state === 'running') {
+      // #284: a disabled stage with work left was skipped, not done: the notice says so
+      const off = roadmap.stages.filter((s) => s.disabled && s.items.some((x) => !['done', 'skipped'].includes(x.status))).length;
+      ctx.notify({ kind: 'run', event: 'succeeded', title: 'Roadmap finished', body: off ? `Every enabled stage of ${projectId} is done; ${off} disabled stage${off === 1 ? ' was' : 's were'} left out.` : `Every stage of ${projectId} is done.` });
+    }
+    // #279: a stage that ended may update the app (areas/app-update.js): its cycle paused every
+    // roadmap, nothing more starts here
+    if (!before.simulated && appUpdateStarted(before, roadmap, mockOf)) return;
     // a live roadmap's last stage ended (#164): the Product Owner adds the next stages (not awaited:
     // its answer takes minutes; the refill dispatches the roadmap again)
     if (refill) ctx.refillRoadmap(projectId);
+    // a cut line (#260): the release run starts and everything after the line waits for it; a line
+    // whose release shipped meanwhile lets the next stage start in the same dispatch
+    if (release && await ctx.roadmapRelease(projectId, roadmap, release)) roadmapAgain = true;
     for (const item of start) {
       // a slot may have been taken by the previous start
       if (ctx.slotProblem({ mock: mockOf(item), projectId })) break;
       // #206: the budget cap stops a real start whose estimate would pass it (never a run in progress
       // nor a gate): the roadmap pauses with the next stage's estimate, the owner raises or resumes
       if (!mockOf(item) && budgetStop(projectId, item, roadmap)) break;
+      // #276: low memory holds a real start (not an error of the item): a timer dispatches again once it recovers
+      if (!mockOf(item) && await ctx.memoryHold()) break;
       try {
         const project = projects.readProject(ws.projects, projectId);
         const wf = loadWorkflow(ctx.workflowPath(item.workflow).file);
@@ -193,6 +212,15 @@ module.exports = (ctx) => {
     }
   }
 
+  // The stage that ended in this step (with a real item), as the event of the app update's trigger
+  // (the only one since #285); true when its cycle started.
+  function appUpdateStarted(before, roadmap, mockOf) {
+    const finished = (x) => ['done', 'skipped'].includes(x.status);
+    const at = roadmaps.currentStage(before);
+    const stage = at >= 0 ? roadmap.stages.find((s) => s.id === before.stages[at].id) : null;
+    return !!stage && stage.items.some((x) => !mockOf(x)) && stage.items.every(finished) && ctx.appUpdateEvent({ type: 'stage-done' });
+  }
+
   // Start: a roadmap with real items is refused in simulation-only mode (automated checks), like assignments.
   // `stage` (a stage id): run only that stage (#141); only its items count as real then.
   async function startRoadmap({ projectId, simulated = false, stage = null }) {
@@ -200,7 +228,8 @@ module.exports = (ctx) => {
     const id = path.basename(String(projectId));
     const r = roadmaps.readRoadmap(ws.backlog, id);
     const stages = stage ? r.stages.filter((s) => s.id === stage) : r.stages;
-    if (!simulated && stages.some((s) => s.items.some((x) => !x.mock && !['done', 'skipped'].includes(x.status)))) {
+    // a disabled stage (#284) starts nothing: its real items do not make this start a real one
+    if (!simulated && stages.some((s) => !s.disabled && s.items.some((x) => !x.mock && !['done', 'skipped'].includes(x.status)))) {
       simulation.refuseReal('real runs from a roadmap');
       await host.assertCanRun?.({ mock: false });
     }

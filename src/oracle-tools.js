@@ -8,6 +8,12 @@
 // Part 2 (#123), through `hooks` the service fills: propose_action posts an action card (it runs on
 // the owner's click, src/oracle-actions.js), delegate asks another agent and returns only its answer
 // and cost, watch_run subscribes the Oracle's wake-ups to a run or a project's roadmap.
+// #241: request_agent (hook requestAgent) is the Oracle's only way to change something an owner holds:
+// it routes the change to the Product Owner's or the Supervisor's inbox; propose_action keeps only the
+// Oracle's own kinds (ORACLE_KINDS: a check, stopping a stray process).
+// #184: run_analysis (runs' cost by agent and step, rounds, timeouts, the test writer's context:
+// src/oracle-run-analysis.js), issues_search / issue_view / labels (gh / glab read commands built in
+// src/oracle-platform.js, run with ctx.execCli or backlog.execCli) and the checker delegate.
 // Nothing else here writes: git runs without a pager, external diff or optional locks, every option
 // that writes or starts a program is refused (refusedGitArg), and every path stays in its folder.
 
@@ -15,24 +21,44 @@ const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
 const backlog = require('./backlog');
+const platform = require('./oracle-platform');
 const projects = require('./projects');
 const runs = require('./runs');
 const skills = require('./skills');
 const workflows = require('./workflows');
-const { ACTION_KINDS, REQUESTERS } = require('./oracle-actions');
+const { ORACLE_KINDS, REQUESTERS } = require('./oracle-actions');
+const { REQUEST_KINDS: PO_KINDS } = require('./product-owner');
+const { REQUEST_KINDS: SUPERVISOR_KINDS } = require('./supervisor-chat');
+const {
+  analyzeRun,
+  briefOf,
+  totalOf,
+} = require('./oracle-run-analysis');
 const { bundleStatus } = require('./seed');
+const { readEvents } = require('./supervisor');
 const { callTool, supervisorTools } = require('./supervisor-tools');
 
 const APP_PACKAGE = 'multiagent-orchestrator';
 // the agents the Oracle can delegate to (#123)
 const DELEGATES = [
   'analyzer',
+  'checker',
   'issue-draft',
   'product-owner',
   'supervisor',
 ];
+// #241: the owners request_agent routes a change to (po: the Backlog; supervisor: runs, workflows, skills)
+const REQUEST_TARGETS = [
+  'po',
+  'supervisor',
+];
 const GIT_TIMEOUT_MS = 30e3;
-const MAX_FILE_BYTES = 400e3;
+// #244: what one tool call may add to the Oracle's context (a result stays there for the whole session)
+const MAX_FILE_BYTES = 40 * 1024;
+const DEFAULT_LAST_EVENTS = 200;
+// #184: run_analysis without runIds or since reads the last day's runs, at most MAX_ANALYZED runs
+const DEFAULT_SINCE_MS = 24 * 3600e3;
+const MAX_ANALYZED = 30;
 const ATTACHMENT_TYPES = { gif: 'image/gif', jpg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
 // git subcommands the Oracle may run: they only read (checkout, commit, reset, branch... are refused)
 const READ_GIT_COMMANDS = [
@@ -51,6 +77,7 @@ const READ_GIT_COMMANDS = [
 const REFUSED_GIT_ARG = /^(--output|-O|--open-files-in-pager|--ext-diff|--textconv|--exec|--upload-pack|--receive-pack|--config|--git-dir|--work-tree|--write|--fix|--edit)/;
 
 const json = (x) => JSON.stringify(x, null, 1);
+const readJson = (file) => { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; } };
 const obj = (properties = {}, required = []) => ({ type: 'object', properties, required, additionalProperties: false });
 const str = (description) => ({ type: 'string', description });
 
@@ -73,14 +100,19 @@ function insidePath(root, rel) {
   return real;
 }
 
-function readInside(root, rel) {
+// A folder listing, or at most MAX_FILE_BYTES of a file from byte `offset`, with a note when more follows.
+function readInside(root, rel, offset = 0) {
   const file = insidePath(root, rel);
-  if (fs.statSync(file).isDirectory()) {
+  const st = fs.statSync(file);
+  if (st.isDirectory()) {
     return fs.readdirSync(file, { withFileTypes: true }).map((e) => (e.isDirectory() ? `${e.name}/` : e.name)).sort().join('\n');
   }
-  const buf = fs.readFileSync(file);
-  const text = buf.subarray(0, MAX_FILE_BYTES).toString('utf8');
-  return buf.length > MAX_FILE_BYTES ? `${text}\n… (cut: the file has ${buf.length} bytes)` : text;
+  const start = Math.min(Math.max(0, Math.floor(Number(offset) || 0)), st.size);
+  const buf = Buffer.alloc(Math.min(MAX_FILE_BYTES, st.size - start));
+  const fd = fs.openSync(file, 'r');
+  try { fs.readSync(fd, buf, 0, buf.length, start); } finally { fs.closeSync(fd); }
+  const end = start + buf.length;
+  return end < st.size ? `${buf.toString('utf8')}\n… (cut: the file has ${st.size} bytes; read on with offset ${end})` : buf.toString('utf8');
 }
 
 function git(folder, command, args) {
@@ -108,6 +140,31 @@ function oracleTools(ctx, hooks = {}) {
     return p;
   };
   const projectId = str('The project id (list_projects)');
+  // #184: the gh / glab target of a project's issues: its synced backlog's platform and repository
+  const issueTarget = (id) => {
+    const pid = path.basename(String(id || ''));
+    // a missing file is an unknown project, not a path leaked into the answer
+    const orNull = (read) => { try { return read(); } catch { return null; } };
+    const p = orNull(() => projects.readProject(ws().projects, pid));
+    const data = orNull(() => backlog.readBacklog(ws().backlog, pid));
+    if (!p && !data) throw new Error(`Unknown project: ${id}`);
+    const kind = data?.platform || require('./workspace').readSettings(ws()).backlogPlatform || backlog.DEFAULT_PLATFORM;
+    return { platform: kind, target: backlog.cliTarget(kind, data?.repo || p?.repo) };
+  };
+  const execCli = (cmd) => (ctx.execCli || backlog.execCli)(cmd.cli, cmd.args);
+  // #184: the runs to analyze: runIds, else the runs started since `since` (default: the last day)
+  const analyzedRuns = ({ runIds, since } = {}) => {
+    if (Array.isArray(runIds) && runIds.length) return runIds.slice(0, MAX_ANALYZED).map((id) => ctx.runFolder(id));
+    const from = since ? Date.parse(since) : Date.now() - DEFAULT_SINCE_MS;
+    if (Number.isNaN(from)) throw new Error(`since is not a date: ${since}`);
+    const dirs = fs.readdirSync(ws().runs, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => path.join(ws().runs, d.name));
+    return dirs
+      .map((dir) => ({ dir, start: Date.parse(readJson(path.join(dir, 'summary.json'))?.started_at || readEvents(dir)[0]?.ts || '') }))
+      .filter((r) => r.start >= from)
+      .sort((a, b) => a.start - b.start)
+      .slice(-MAX_ANALYZED)
+      .map((r) => r.dir);
+  };
   return [
     ...supervisorTools(ctx),
     {
@@ -118,22 +175,23 @@ function oracleTools(ctx, hooks = {}) {
     },
     {
       name: 'run_events',
-      description: 'One run\'s events (events.jsonl, live while it runs). activity: true adds the agents\' tool calls and thinking, compacted. last: only the last N events.',
-      inputSchema: obj({ runId: str('The run id'), activity: { type: 'boolean' }, last: { type: 'number' } }, ['runId']),
-      run: ({ runId, activity, last } = {}) => {
+      description: `One run's events (events.jsonl, live while it runs). activity: true adds the agents' tool calls and thinking, compacted. Only the last ${DEFAULT_LAST_EVENTS} events by default; last: only the last N events; all: true for every event.`,
+      inputSchema: obj({ runId: str('The run id'), activity: { type: 'boolean' }, last: { type: 'number' }, all: { type: 'boolean', description: 'Every event (large: prefer last)' } }, ['runId']),
+      run: ({ runId, activity, last, all } = {}) => {
         const events = runs.runEvents(ctx.runFolder(runId), { activity: !!activity });
-        return json(Number(last) > 0 ? events.slice(-Math.floor(Number(last))) : events);
+        if (all) return json(events);
+        return json(events.slice(-(Number(last) > 0 ? Math.floor(Number(last)) : DEFAULT_LAST_EVENTS)));
       },
     },
     {
       name: 'run_file',
-      description: 'A file or folder listing inside one run\'s folder: summary.json, decisions.tsv, handoff notes, sessions, artifacts. path is relative to the run folder ("." lists it).',
-      inputSchema: obj({ runId: str('The run id'), path: str('Relative path in the run folder') }, ['runId']),
-      run: ({ runId, path: rel } = {}) => readInside(ctx.runFolder(runId), rel || '.'),
+      description: 'A file or folder listing inside one run\'s folder: summary.json, decisions.tsv, handoff notes, sessions, artifacts. path is relative to the run folder ("." lists it). At most 40 KB per call: offset (bytes) reads on.',
+      inputSchema: obj({ runId: str('The run id'), path: str('Relative path in the run folder'), offset: { type: 'number', description: 'Byte offset to start from (default 0)' } }, ['runId']),
+      run: ({ runId, path: rel, offset } = {}) => readInside(ctx.runFolder(runId), rel || '.', offset),
     },
     {
       name: 'roadmap',
-      description: 'A project\'s roadmap: stages and items, with each item\'s status derived from its runs.',
+      description: 'A project\'s roadmap: stages and items, with each item\'s status derived from its runs. A stage with disabled: true is the owner\'s switch: the automation skips it; never enable or disable a stage yourself.',
       inputSchema: obj({ projectId }, ['projectId']),
       run: ({ projectId: id }) => json(ctx.roadmapView(path.basename(String(id)), ctx.activeRuns())),
     },
@@ -177,9 +235,9 @@ function oracleTools(ctx, hooks = {}) {
     },
     {
       name: 'repo_read',
-      description: 'A file of a project\'s repository (or a folder listing), read-only. path is relative to the project folder.',
-      inputSchema: obj({ projectId, path: str('Relative path, "." for the root') }, ['projectId']),
-      run: ({ projectId: id, path: rel } = {}) => readInside(project(id).folder, rel || '.'),
+      description: 'A file of a project\'s repository (or a folder listing), read-only. path is relative to the project folder. At most 40 KB per call: offset (bytes) reads on.',
+      inputSchema: obj({ projectId, path: str('Relative path, "." for the root'), offset: { type: 'number', description: 'Byte offset to start from (default 0)' } }, ['projectId']),
+      run: ({ projectId: id, path: rel, offset } = {}) => readInside(project(id).folder, rel || '.', offset),
     },
     {
       name: 'app_source',
@@ -207,10 +265,48 @@ function oracleTools(ctx, hooks = {}) {
       },
     },
     {
+      name: 'run_analysis',
+      description: `Where runs' time and money went (no model, free): per run and in total, cost and tokens by agent and by step, review rounds, attempts timed out, invalid outputs, refused tool calls, merge conflicts, commands cut by a tool timeout, the test writer's turns, peak context and cache re-read, and the whole-suite starts with their durations. runIds: the runs; or since (ISO date): the runs started from then (default: the last 24 h); at most ${MAX_ANALYZED} runs.`,
+      inputSchema: obj({ runIds: { type: 'array', items: { type: 'string' }, description: 'The run ids' }, since: str('ISO date: the runs started from then') }),
+      run: (input = {}) => {
+        const list = analyzedRuns(input).map((dir) => analyzeRun(path.basename(dir), readJson(path.join(dir, 'summary.json')), readEvents(dir)));
+        const total = totalOf(list);
+        const full = JSON.stringify({ runs: list, total });
+        if (full.length <= MAX_FILE_BYTES) return full;
+        // #244: a long answer stays in the context: each run keeps its counts and its costliest agents and steps
+        const briefs = [3, 1, 0].map((top) => JSON.stringify({ runs: list.map((r) => briefOf(r, top)), total, note: `Per run: only the ${top} costliest agents and steps (the total has them all); ask for fewer runIds for the details.` }));
+        return briefs.find((b) => b.length <= MAX_FILE_BYTES) || briefs[briefs.length - 1];
+      },
+    },
+    {
+      name: 'issues_search',
+      description: 'Searches a project\'s issues on its platform (gh / glab, read-only): number, title, state, labels. Search for a duplicate before proposing an issue.file card. state: open (default), closed or all.',
+      inputSchema: obj({ projectId, query: str('Words to search for'), state: { type: 'string', enum: platform.ISSUE_STATES } }, ['projectId', 'query']),
+      run: async ({ projectId: id, query, state } = {}) => {
+        const t = issueTarget(id);
+        return json(platform.searchResult(await execCli(platform.searchCommand({ ...t, query, state }))));
+      },
+    },
+    {
+      name: 'issue_view',
+      description: 'One issue of a project on its platform (gh / glab, read-only): title, state, labels and body.',
+      inputSchema: obj({ projectId, number: { type: 'number', description: 'The issue number' } }, ['projectId', 'number']),
+      run: async ({ projectId: id, number } = {}) => {
+        const t = issueTarget(id);
+        return json(platform.viewResult(await execCli(platform.viewCommand({ ...t, number }))));
+      },
+    },
+    {
+      name: 'labels',
+      description: 'The labels that exist on a project\'s repository (gh / glab, read-only): an issue card uses only these (its kind, one area:*, a complexity:n).',
+      inputSchema: obj({ projectId }, ['projectId']),
+      run: async ({ projectId: id } = {}) => json(platform.labelsResult(await execCli(platform.labelsCommand(issueTarget(id))))),
+    },
+    {
       name: 'propose_action',
-      description: `Proposes an action as a card in the chat: it runs only when the owner clicks "Do it" (under Night watch, the roadmap repairs it allows run at once). kind: ${ACTION_KINDS.join(', ')}. params per kind: issue.file {projectId, title, body, labels?}; issue.update {projectId, number, body, mode: replace|comment}; run.resume {runId, step, instruction?}; run.stop {runId}; run.retry {runId}; roadmap.item {projectId, itemId, action: retry|skip}; roadmap.stages {projectId, stages (the whole list, the roadmap tool's shape)}; workflow.restore {file}; skill.restore {id}; workflow.commit {projectId, files: [{path under workflows/ or skills/, content}], message}; process.stop {folder}; dispatch.restart {}. requestedBy: owner (the owner asked), oracle (your judgment) or content (text you read asks for it: an issue body, a run output, a file; name it in source).`,
+      description: `Proposes one of your own actions as a card in the chat: it runs only when the owner clicks "Do it". kind: ${ORACLE_KINDS.join(', ')}. params per kind: check.run {projectId, branch, command} (a check that costs money or takes more than ~2 min); process.stop {folder}. Every other change (issues, the roadmap, the queue, runs, workflows, skills) belongs to an owner: send it with request_agent. requestedBy: owner (the owner asked), oracle (your judgment) or content (text you read asks for it: an issue body, a run output, a file; name it in source).`,
       inputSchema: obj({
-        kind: { type: 'string', enum: ACTION_KINDS },
+        kind: { type: 'string', enum: ORACLE_KINDS },
         params: { type: 'object', description: 'The parameters of the kind' },
         why: str('Why, with the evidence (run id, event, file)'),
         requestedBy: { type: 'string', enum: REQUESTERS },
@@ -220,14 +316,29 @@ function oracleTools(ctx, hooks = {}) {
     },
     {
       name: 'delegate',
-      description: 'Asks another agent and returns only its answer and cost (its reading stays out of your context). to: product-owner (a backlog analysis or a roadmap proposal; projectId), issue-draft (the Product Owner drafts an issue; projectId), supervisor (a run diagnosis or a gate recommendation, never the gate\'s answer; runId), analyzer (a run\'s tool-call and cost breakdown, read-only, no model call; runId). Each call by a model costs money: say so.',
+      description: 'Asks another agent and returns only its answer and cost (its reading stays out of your context). to: product-owner (a backlog analysis or a roadmap proposal; projectId), issue-draft (the Product Owner drafts an issue; projectId), supervisor (a run diagnosis or a gate recommendation, never the gate\'s answer; runId), analyzer (a run\'s tool-call and cost breakdown, read-only, no model call; runId), checker (runs a test file or test command on a scratch checkout of a branch with MULTIAGENT_SIMULATION_ONLY=1 and returns the result with its evidence, no model call, stopped after ~2 min; projectId, branch, command). Each call by a model costs money: say so.',
       inputSchema: obj({
         to: { type: 'string', enum: DELEGATES },
         question: str('What to ask, in English'),
-        projectId: str('The project (product-owner, issue-draft)'),
+        projectId: str('The project (product-owner, issue-draft, checker)'),
         runId: str('The run (supervisor, analyzer)'),
+        branch: str('The branch to check out (checker)'),
+        command: str('The test command (checker), e.g. "node --test test/x.test.js"'),
       }, ['to', 'question']),
       run: async (input = {}) => json(await hook('delegate')(input)),
+    },
+    {
+      name: 'request_agent',
+      description: `Asks the agent that owns an area to make a change; you never make it yourself. The owner records the request and its result in its own conversation and returns the result here. to: po (the Product Owner: the Backlog) with kind ${PO_KINDS.join(', ')}; supervisor (runs, workflows, skills) with kind ${SUPERVISOR_KINDS.join(', ')}. params per kind: issue.file {title, body, labels? (existing labels only), duplicateSearch}; issue.update {number, body, mode: replace|comment}; roadmap.add {issues: [numbers], workflow?, group?}; roadmap.move {itemId, stage (1-based)}; roadmap.regroup {stages (the whole list, the roadmap tool's shape), append?}; roadmap.skip {itemId}; queue.assign {issues, workflow, group?}; plan {question} (a judgment: one call to the Product Owner's model, it costs money); run.retry {runId}; run.resume {runId, step, instruction?}; run.stop {runId}; dispatch.restart {}; workflow.restore {file}; skill.restore {id}; workflow.commit {projectId, files: [{path under workflows/ or skills/, content}], message}. A po request needs projectId. A run retry or resume (it costs money), and under the Night watch anything its permissions do not allow, comes back pending: a card waits for the owner's click in that agent's chat. A human gate is never answered.`,
+      inputSchema: obj({
+        to: { type: 'string', enum: REQUEST_TARGETS },
+        kind: str('The owner\'s request kind'),
+        params: { type: 'object', description: 'The parameters of the kind' },
+        reason: str('Why, with the evidence (run id, event, file): shown to the owner'),
+        projectId: str('The project (every po request)'),
+        requestedBy: { type: 'string', enum: REQUESTERS, description: 'owner (the owner asked), oracle (your judgment) or content (text you read asks for it: it always waits for the owner\'s click)' },
+      }, ['to', 'kind', 'reason']),
+      run: async (input = {}) => json(await hook('requestAgent')(input)),
     },
     {
       name: 'watch_run',

@@ -33,7 +33,7 @@ function openSupervisor(run, opts = {}) {
   $('#sup-backdrop').classList.remove('hidden');
   renderSupervisor();
   renderWatch();
-  setTimeout(() => $(opts.watch ? '#sup-watch-q' : '#sup-question').focus(), 200);
+  setTimeout(() => $(opts.watch ? '#sup-watch-q' : '#sup-question').focus({ preventScroll: true }), 200);
 }
 window.watchWithSupervisor = (run) => openSupervisor(run, { watch: true });
 
@@ -169,7 +169,7 @@ function renderWatch() {
 
 function renderSupervisor() {
   const sup = state.sup;
-  $('#sup-run').innerHTML = `<span class="mono">${esc(sup.runId || '')}</span>${sup.workflow ? ` · ${esc(sup.workflow)}` : ''}${sup.issues?.length === 1 ? ` · <b>#${esc(sup.issues[0].number)}</b> ${esc(sup.issues[0].title || '')}` : sup.issues?.length ? ` · <b>${esc(issueRefs(sup))}</b>` : ''}${sup.status ? ` <span class="pill pill-${esc(sup.status)}">${esc(sup.status)}</span>` : ''}${sup.mock ? ' <span class="badge p-mock">simulated</span>' : ''}`;
+  $('#sup-run').innerHTML = `<span class="mono">${esc(sup.runId || '')}</span>${sup.workflow ? ` · ${esc(sup.workflow)}` : ''}${sup.issues?.length === 1 ? ` · <b>#${esc(sup.issues[0].number)}</b> ${esc(sup.issues[0].title || '')}` : sup.issues?.length ? ` · <b>${esc(issueRefs(sup))}</b>` : ''}${sup.status ? ` ${StatusPill.statusPill(sup.status)}` : ''}${sup.mock ? ' <span class="badge p-mock">Simulated</span>' : ''}`;
   $('#btn-sup-analyze').disabled = sup.loading;
   $('#btn-sup-analyze').textContent = sup.result ? 'Analyze again' : 'Analyze';
   const box = $('#sup-result');

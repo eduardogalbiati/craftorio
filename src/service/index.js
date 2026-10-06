@@ -11,7 +11,7 @@
 // This file only composes (#155): the state and helpers live in one file per area in
 // src/service/areas/ (found by listing the folder, like the channels): workspace, index-db,
 // notifications, runs, run-meta (PR and title), run-lists, resume, gates, local-preview,
-// local-push, backlog, roadmap, chain (#134), sessions, terminals, artifacts, usage, workflows, settings. Each
+// local-push, backlog, roadmap, chain (#134), phone-gates (#226), sessions, terminals, artifacts, usage, workflows, settings. Each
 // exports (ctx) => { helpers }; they all land on one shared `ctx` (with host, events, code), which
 // the channels receive too. An area reads another's helper or state through ctx at call time
 // (`ctx.ws`, `ctx.active`, `ctx.startWorkflowRun(...)`), never when it is created; a name two
@@ -28,6 +28,8 @@
 //   assertCanRun({ mock })  optional; throws when the account may not start or resume a run
 //   readPrJson(cmd, args)   optional; replaces the gh/glab call that reads a run's PR (tests, UI checks)
 //   userDataDir      optional; the app's user data folder, where speech models live (src/speech.js)
+//   appDir           optional; the app folder Self-healing updates (#279, areas/app-update.js)
+//   relaunch()       optional; restarts the app (src/main.js); without it the app never updates itself
 
 const fs = require('fs');
 const path = require('path');
@@ -102,7 +104,10 @@ function createService({ host }) {
     notifyInterruptedRun: ctx.notifyInterruptedRun,
     // before a restart (the code changed on disk, #83), see src/service/areas/runs.js
     prepareRestart: ctx.prepareRestart,
+    // the owner's answer from a paired phone (#226, src/mobile-gates.js): never a channel
+    answerPhoneGate: ctx.answerPhoneGate,
     shutdown() {
+      ctx.stopPhoneGates();
       ctx.stopPrTimer();
       ctx.stopBacklogWatch();
       ctx.stopDispatchTimers();

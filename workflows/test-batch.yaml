@@ -44,30 +44,36 @@ metadata:
 # -----------------------------------------------------------------------------
 inputs:
   task:
+    label: "Task"
     type: string
     required: true
     default: "Write the missing tests for the work merged since the last green test batch."
     description: What this batch covers. The Backlog fills it with the issues.
   issue:
+    label: "Issue"
     type: string
     default: ""
     description: "URL of an issue this run tests (set by the Backlog screen)."
   issues:
+    label: "Issues"
     type: array
     default: []
     description: "URLs of the issues this run tests (set by the Backlog screen; one per line). Their commits are the range."
   repo_path:
+    label: "Repository"
     type: string
     required: true
     description: Local repository path (a git repository; no remote needed).
   # Picks the unit-test-writer-<language> and e2e-test-writer-<language> skills.
   language:
+    label: "Language"
     type: string
     enum: [js, python, go, java, csharp]
     default: js
     options: { js: JavaScript, python: Python, go: Go, java: Java, csharp: "C#" }
     description: The project's main language, for its tests.
   base_branch:
+    label: "Base branch"
     type: string
     default: main
     description: The local branch whose commits are tested, and where the tests are merged.
@@ -89,6 +95,7 @@ inputs:
     label: Test command
     description: "The project's whole-suite command the orchestrator runs once per round (e.g. npm test). Empty: found from the project's files."
   max_rounds:
+    label: "Max rounds"
     type: integer
     default: 2
     description: Suite rounds that go back to the test writer before you are asked.
@@ -327,7 +334,7 @@ steps:
       {% else %}Tests still fail after 3 rounds of production fixes:
       {{ steps.test.output.failure_report }}
       {% endif %}
-      Approve: one more round of the test writer. Reject: stop the run as failed (the worktree is kept to resume it).
+      Approve: one more round of the test writer. Reject: stop the run as failed (its branch keeps the work to resume it).
     transitions:
       - when: "approved"
         goto: test

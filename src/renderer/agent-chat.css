@@ -1,0 +1,10 @@
+/* The agents' chat (#274, agent-chat.js): its wrappers take no box of their own, so each drawer's
+   layout (its log, foot and form classes) is the same as before the component. */
+.agent-chat-flat, .agent-chat-slot, .agent-chat-msg { display: contents; }
+.agent-chat-working { display: flex; align-items: center; gap: 6px; color: var(--accent); }
+.agent-chat-working .spinner { width: 12px; height: 12px; }
+.agent-chat-attachments { display: flex; gap: 6px; flex-wrap: wrap; }
+.agent-chat-attachment { display: inline-flex; align-items: center; gap: 4px; max-width: 220px; }
+.agent-chat-attachment span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agent-chat-attachment img { width: 24px; height: 24px; object-fit: cover; border-radius: 4px; flex: none; }
+.agent-chat-attachment button { background: none; border: 0; color: var(--muted); cursor: pointer; padding: 0 2px; }

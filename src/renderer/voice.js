@@ -10,11 +10,12 @@
 // uses app.js globals when present (showToast, errMsg).
 (function (root) {
   // fields where talking helps: supervisor questions, gate feedback, the Start drawer (task, issue
-  // intake), Write & Review and Arena prompts, the backlog PO question, the resume instruction
+  // intake), Write & Review and Arena prompts, the Inbox capture box, the backlog PO question, the resume instruction
   const VOICE_FIELDS = [
     '#arena-task',
     '#duo-goal',
     '#duo-prompt',
+    '#inbox-text',
     '#po-question',
     '#sup-question',
     '.duo-ask-text',
@@ -181,7 +182,7 @@
       const e = focused ? ta.selectionEnd : Math.min(r.sel.end ?? s, ta.value.length);
       const out = insertText(ta.value, text, s, e);
       ta.value = out.value;
-      ta.focus();
+      ta.focus({ preventScroll: true });
       ta.setSelectionRange(out.caret, out.caret);
       ta.dispatchEvent(new Event('input', { bubbles: true }));
     } catch (e) {

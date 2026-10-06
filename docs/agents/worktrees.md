@@ -7,9 +7,29 @@ actions, or any code that deletes or checks out branches.
 
 - `orchestrator.worktree: { repo, base }` + `defaults.working_dir: "{{ worktree_dir }}"`: each run
   works in its own worktree (`<workspace>/worktrees/<run_id>`, detached at a freshly fetched
-  `origin/<base>`). Removed on success, kept on failure/cancel for resume. Approval actions run in
+  `origin/<base>`). Removed on success. Approval actions run in
   `worktree_dir`. Falls back to the repo path when it isn't a git repo; mock runs never create
   worktrees. `software-development` and `software-development-local-hero` use it (`multi-model-review` reviews the checked-out branch).
+- **Lifecycle: the branch is the record, the folder is temporary (#202)**. No worktree folder is
+  kept for an ended run. Success: `removeWorktree` (the folder, and the local branch once merged).
+  Failed, cancelled, stopped: `retireWorktree` (from `finishWorktree`) gives a detached worktree a
+  branch (`run/<run id>`), commits anything uncommitted as one WIP commit (`WIP: uncommitted work of
+  run <id>`, `--no-verify`, the deps cache's links removed first), then removes the folder and the
+  run's scratch; the branch is never deleted. The run records `worktree.removed` { dir, removed,
+  branch, branch_deleted: false, wip_commit } and `summary.worktree.branch`. A WIP commit that cannot
+  be made keeps the folder (`worktree.kept`). **Resume from step** (and Retry → Resume the old run):
+  `resumeSpec` takes the branch from that event, `prepareWorktree` recreates the folder from it
+  (`worktree.ready` with `recreated: true`; dependencies from the cache as for a new worktree), and
+  `restoreWork` soft-resets a WIP tip: the work is back as staged changes and the resumed step's
+  prompt says "uncommitted work from the previous attempt". The kept-work question (#170,
+  `runWorktreeWork` in `src/service/areas/resume.js`) counts the run's own commits on its branch, in
+  the repository, once the folder is gone. **Cleanup** (`cleanupWorktrees`, service
+  `cleanupRunWorktrees`): at start and every 30 minutes (`src/main.js`, `scripts/serve.js`), one pass
+  at a time. It never touches the runs in progress here (`active`), a run live in another app process
+  (`owner.json` alive, #112) or a run waiting at a human gate (`approval.requested` without
+  `approval.resolved`); any other run's worktree is retired the same way (interrupted runs included)
+  and recorded in its events.jsonl. A folder a process holds (EBUSY) stays for the next pass; a folder
+  git does not know (`shots-*`) goes once older than an hour.
 - **Local workflows**: `orchestrator.worktree.remote: false` starts the worktree from the **local** `<base>` without fetching (it may hold local merges never pushed), and `removeWorktree` checks "merged" against the local base. A transition with `merge: local` (validated by `loadWorkflow`; needs `orchestrator.worktree`) calls `mergeLocally`: the run's worktree must be on a branch with everything committed; the branch is rebased onto the local base when it moved (a conflict aborts the rebase, leaves the branch untouched and fails with the files); then the base is fast-forwarded with `merge --ff-only` where it is checked out (refused when that checkout has uncommitted changes to tracked files) or by `update-ref` (compare-and-swap) when it is checked out nowhere. No push, no fetch; simulated runs skip it (`action.executed` skipped). Emits `worktree.merged`. Used by `software-development-local-hero`.
 - **Dependencies from a shared cache (#198, `src/engine/deps-cache.js`)**: after `worktree.ready`
   the engine (`prepareDeps`) links the worktree's `node_modules` to
@@ -40,7 +60,7 @@ actions, or any code that deletes or checks out branches.
   (refreshed on each visit) with its dependencies from the same cache, as `base_worktree_dir` in
   its prompt, for the pre-existing-failure check (`setupBaseWorktree`, `prepareBaseWorktree`).
   Removed in `finishWorktree` whatever the status; `cleanupWorktrees` removes an orphan once its run
-  has a `summary.json`.
+  is not live.
 - **Run locally at a gate (#70)**: a gate with `local_preview: true` (developer_check, human_review,
   approve_merge) whose run has a config (the project's `localPreview`, else
   `orchestrator.local_preview: { install, command, url }`) carries `local_preview` and `work_dir`
@@ -74,7 +94,10 @@ actions, or any code that deletes or checks out branches.
   `npm run run -- --mock`, `npm run screenshot`, `npm start` and `node -e` engine scripts from the
   worktree write there, never to the owner's runs, roadmap, queue or backlog. Removed with the
   worktree (`finishWorktree` on success, `cleanupWorktrees` for orphans, `removeScratch` in
-  `src/engine/worktree.js`); a failed or cancelled run keeps it while its worktree is kept. The
+  `src/engine/worktree.js`), whatever the status (#202); the cleanup also removes the scratch of a
+  run that ended 3 days ago and has no worktree folder (#201). Scratch files are not artifacts:
+  `walkFiles` (`src/run-artifacts.js`) skips `scratch/` like `sessions/`; a `file.saved` under it is
+  still listed. The
   evidence agents keep lives in `runs/<id>/logs` and `runs/<id>/evidence`, which stay. Without
   the variable, `resolveWorkspace` under `MULTIAGENT_SIMULATION_ONLY=1` falls back to
   `<os tmp>/multiagent-simulation/workspace`, never the registered workspace.

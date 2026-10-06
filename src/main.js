@@ -112,6 +112,9 @@ const service = createService({
     isPackaged: app.isPackaged,
     assertCanRun: (opts) => auth.assertCanRun(opts),
     userDataDir: app.getPath('userData'),
+    // #279: Self-healing applies merged fixes to this app folder, then restarts it
+    appDir: app.getAppPath(),
+    relaunch: () => restartApp(),
   },
 });
 
@@ -375,6 +378,12 @@ ipcMain.handle('session:terminal', (_e, { sessionId, mode, runId }) => {
 // unless the user confirmed interrupting them, and pauses the Backlog queues first.
 ipcMain.handle('app:relaunch', (_e, arg) => {
   const r = service.prepareRestart({ interruptRuns: !!arg?.interruptRuns });
+  restartApp();
+  return r;
+});
+
+// The restart itself, also after an app update (#279, host.relaunch: prepareRestart already ran).
+function restartApp() {
   setImmediate(() => {
     // the renderer saved the interrupted runs to list after the restart
     if (win && !win.isDestroyed()) win.webContents.session.flushStorageData();
@@ -385,8 +394,7 @@ ipcMain.handle('app:relaunch', (_e, arg) => {
     app.relaunch();
     app.exit(0);
   });
-  return r;
-});
+}
 
 // Windows shows notifications under the app's AppUserModelID (the exe itself in development).
 if (process.platform === 'win32') app.setAppUserModelId(app.isPackaged ? 'MultiagentOrchestrator' : process.execPath);
@@ -401,7 +409,10 @@ app.whenReady().then(async () => {
   setInterval(() => keepAwake.update(), 15 * 1000).unref();
   restrictPermissions(session.defaultSession);
   createWindow();
+  // ended runs' worktrees and scratch (#202, #201): at start, then every 30 minutes (a folder a
+  // process held is retried)
   service.cleanupWorktrees().catch((e) => console.error('worktree cleanup:', e));
+  setInterval(() => service.cleanupWorktrees().catch((e) => console.error('worktree cleanup:', e)), 30 * 60 * 1000).unref();
   service.clearPastedImages();
   // the trial can end while the app is open
   const checkAccount = () => auth.refresh().catch((e) => console.error('account:', e.message));

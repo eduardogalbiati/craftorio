@@ -27,6 +27,7 @@ const PATTERNS = {
   runPr: /const runPr = \(r\) => [^\n]+;/,
   runLabel: /const runLabel = \(r\) => \{[\s\S]*?\n\};/,
   statusLabel: /const statusLabel = [^\n]+;/,
+  agentLabel: /const agentLabel = [^\n]+;/, // readable step names in gate toasts (#245)
   newRunView: /const newRunView = \(\) => \(\{[\s\S]*?\n\}\);/,
   getTurn: /function getTurn\(sess, n\) \{[\s\S]*?\n\}/,
   viewOf: /function viewOf\(ev\) \{[\s\S]*?\n\}/,
@@ -174,6 +175,52 @@ test('hydrateRun: a live event that arrives while the recorded events are still 
   assert.deepEqual([...v.events.map((e) => e.seq)], [1, 2, 3, 4, 5, 6, 7, 8, 9]);
   assert.equal(v.steps.get('review')?.status, 'running');
   assert.equal(v.lastSeq, 9);
+});
+
+// #233: a run recorded before per-turn costs (no cost_accounting on workflow.started): its resumed
+// Claude turns stored the CLI session's running total, and its stopped attempts have no cost.
+function pastCostEvents(runId, failure, workflowStarted = {}) {
+  const ts = (s) => `2026-09-30T10:00:${String(s).padStart(2, '0')}.000Z`;
+  const snap = (cost) => ({ agent: 'developer', provider: 'claude', model: 'm', status: 'idle', provider_session_id: 'cli-1', cost_usd: cost });
+  return [
+    { seq: 1, run_id: runId, ts: ts(0), type: 'workflow.started', workflow: 'fixture', version: '1', mock: false, inputs: { task: 'x' }, steps: [{ id: 'plan' }, { id: 'implement' }], groups: [], ...workflowStarted },
+    { seq: 2, run_id: runId, ts: ts(1), type: 'session.opened', session_id: 's1', session: snap(0) },
+    { seq: 3, run_id: runId, ts: ts(2), type: 'session.message_sent', session_id: 's1', turn: 1, step_id: 'plan', prompt: 'plan' },
+    { seq: 4, run_id: runId, ts: ts(3), type: 'session.message_received', session_id: 's1', turn: 1, usage: {}, cost_usd: 3.21, duration_ms: 500, session: snap(3.21) },
+    { seq: 5, run_id: runId, ts: ts(4), type: 'session.message_sent', session_id: 's1', turn: 2, step_id: 'implement', prompt: 'implement' },
+    { seq: 6, run_id: runId, ts: ts(5), type: 'session.message_received', session_id: 's1', turn: 2, usage: {}, cost_usd: 3.56, duration_ms: 500, session: snap(6.77) },
+    { seq: 7, run_id: runId, ts: ts(6), type: 'log', level: 'error', message: `[developer] attempt 1/2 failed: ${failure}` },
+  ];
+}
+const near = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-9, `${actual} is not ${expected}`);
+
+test('onEvent (#233): a past run\'s resumed Claude turn costs its own part and the session reads the CLI\'s last total', () => {
+  const { helpers, state } = loadHelpers();
+  state.runs.set('r1', helpers.newRunView());
+  for (const ev of pastCostEvents('r1', 'Command "claude" not found in PATH.')) helpers.onEvent(ev);
+  const s = JSON.parse(JSON.stringify({ ...state.runs.get('r1').sessions.get('s1'), turnLog: undefined }));
+  const turns = state.runs.get('r1').sessions.get('s1').turnLog;
+  near(turns.get(1).result.cost, 3.21);
+  near(turns.get(2).result.cost, 0.35);
+  near(s.cost_usd, 3.56);
+  assert.ok(!s.costNotRecorded, 'an attempt that failed before the CLI ran cost nothing');
+});
+
+test('onEvent (#233): a past run\'s attempt stopped by a timeout marks its agent\'s cost as not recorded', () => {
+  const { helpers, state } = loadHelpers();
+  state.runs.set('r1', helpers.newRunView());
+  for (const ev of pastCostEvents('r1', 'Timed out after 1800s')) helpers.onEvent(ev);
+  assert.equal(state.runs.get('r1').sessions.get('s1').costNotRecorded, true);
+});
+
+test('onEvent (#233): a run recorded with per-turn costs is read as recorded', () => {
+  const { helpers, state } = loadHelpers();
+  state.runs.set('r1', helpers.newRunView());
+  for (const ev of pastCostEvents('r1', 'Timed out after 1800s (US$ 0.10, estimated from 3 model calls)', { cost_accounting: 'per_turn' })) helpers.onEvent(ev);
+  const sess = state.runs.get('r1').sessions.get('s1');
+  near(sess.turnLog.get(2).result.cost, 3.56);
+  near(sess.cost_usd, 6.77);
+  assert.ok(!sess.costNotRecorded, 'its stopped attempts have their own events');
 });
 
 test('openPastRun: a finished run becomes the selected view, read-only, with no approvals left pending', async () => {

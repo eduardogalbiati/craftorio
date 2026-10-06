@@ -23,7 +23,9 @@ const clip = (s, n = 180) => {
 
 // The notice for a run event, or null. `run`: { workflow, project (name or null), mock, title? }:
 // the run's display title (#84) is shown with its workflow, "Title (workflow)".
-function runNotice(ev, run = {}) {
+// `gateLink(runId, approvalId)` (#226, src/mobile-gates.js, set while phone gates are on): a gate's
+// notice carries `url`, the signed link to that gate's phone page.
+function runNotice(ev, run = {}, { gateLink } = {}) {
   const workflow = run.workflow || ev.workflow || 'Workflow';
   const name = () => (run.title ? `${run.title} (${workflow})` : workflow);
   const lines = (detail) => [`Project: ${run.project || 'none'}${run.mock ? ' (simulation)' : ''}`, detail && clip(detail)].filter(Boolean).join('\n');
@@ -33,14 +35,20 @@ function runNotice(ev, run = {}) {
   switch (ev.type) {
     case 'workflow.started':
       return notice('started', `Run started: ${name()}`, ev.resumed_from ? `Resumed from ${ev.resumed_from.run_id} at ${ev.resumed_from.step}` : '');
-    case 'approval.requested':
+    case 'approval.requested': {
       // the gate's "What happened" line (#213), else its message
-      return notice('waiting', `Waiting for you: ${name()}`, ev.brief?.headline || ev.message || `Approval needed at ${ev.step_id}`);
+      const n = notice('waiting', `Waiting for you: ${name()}`, ev.brief?.headline || ev.message || `Approval needed at ${ev.step_id}`);
+      if (gateLink && ev.approval_id) n.url = gateLink(ev.run_id, ev.approval_id);
+      return n;
+    }
     case 'workflow.finished': {
       const label = STATUS_LABEL[ev.status] || ev.status;
       const ok = ev.status === 'success' ? (ev.summary?.local_merge ? `Merged locally into ${ev.summary.local_merge.base}, not pushed yet.` : '') : ev.error;
       return notice(ev.status === 'success' ? 'succeeded' : label, `Run ${label}: ${name()}`, ok);
     }
+    // #276: the memory guard stopped the same command a second time in a step (the engine sets notify once)
+    case 'process.killed':
+      return ev.notify ? notice('memory', `Process stopped again for memory: ${name()}`, `${ev.step_id || 'A step'} ran \`${ev.command_line}\` again and the memory guard stopped it again (${(ev.bytes / 1024 ** 3).toFixed(1)} GB, over the ${(ev.limit_bytes / 1024 ** 3).toFixed(1)} GB limit).`) : null;
     default:
       return null;
   }
@@ -108,6 +116,17 @@ function nightWatchNotice({ ran, did, waits, safety, alarm = false } = {}) {
   };
 }
 
+// #278: Self-healing findings the Oracle cannot answer while a budget pauses it (sent once per pause).
+// `text`: the refusal's text (what paused it and when it resumes).
+function findingsWaitingNotice({ text = '' } = {}) {
+  return {
+    kind: 'oracle', event: 'findings-waiting',
+    title: 'Self-healing: findings are waiting',
+    body: clip(`The Oracle is paused, so it cannot look at what Self-healing detected. ${text}`, 240),
+    target: { view: 'nightwatch' },
+  };
+}
+
 // The notice for a run's chain (#134, src/service/areas/chain.js): `state` started | paused | done,
 // `message` what happened; opens the run (paused: to resume or drop the chain), or the next run.
 const CHAIN_TITLE = { done: 'Chain done', paused: 'Chain paused', started: 'Chain: next run started' };
@@ -133,8 +152,8 @@ function liveRoadmapNotice({ project = {}, refill = {} } = {}) {
   return {
     kind: 'run', event: refill.status === 'added' ? 'refilled' : refill.status || 'refilled',
     title: `${title}: ${clip(project.name || project.id || 'project', 60)}`,
-    body: clip(refill.message) || 'Open the Backlog to see the roadmap.',
-    target: { view: 'backlog', projectId: project.id || null },
+    body: clip(refill.message) || 'Open the Roadmap to see it.',
+    target: { view: 'roadmap', projectId: project.id || null },
   };
 }
 
@@ -279,6 +298,7 @@ class WaitDetector {
 module.exports = {
   attentionSignal,
   chainNotice,
+  findingsWaitingNotice,
   interruptedNotice,
   liveRoadmapNotice,
   nightWatchNotice,

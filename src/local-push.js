@@ -23,7 +23,12 @@ const { referencedIssues } = require('./backlog');
 
 const PUSH_TIMEOUT_MS = 120e3;
 const tryGit = (...a) => git(...a).catch(() => null);
-const refExists = async (repo, ref) => !!(await tryGit(['rev-parse', '--verify', '--quiet', `${ref}^{commit}`], repo));
+// A read-only query asked twice before a ref counts as missing: a git process that dies without a
+// word while the machine is busy (seen under the full test suite on Windows) is not a missing branch.
+const refExists = async (repo, ref) => {
+  const args = ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`];
+  return !!((await tryGit(args, repo)) || (await tryGit(args, repo)));
+};
 const firstLine = (s) => String(s || '').split('\n').find((l) => l.trim()) || '';
 
 // The repository's default branch: origin/HEAD, else the branch checked out, else main.

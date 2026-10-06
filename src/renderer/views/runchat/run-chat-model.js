@@ -81,6 +81,11 @@
       return displayName(agent, this.run.agentNames);
     }
 
+    // The readable name of a step (#245): the run's own display names, else its id made readable.
+    stepName(stepId) {
+      return displayName(stepId, this.run.stepNames);
+    }
+
     add(item) {
       item.id = `i${++this.n}`;
       this.items.push(item);
@@ -123,7 +128,9 @@
         id: ev.run_id, workflow: ev.workflow || ev.file || 'workflow', version: ev.version, mock: !!ev.mock,
         runDir: ev.run_dir, status: 'running', startedAt: ev.ts, issues,
         // agents from the Agents menu show their own name (runs recorded before agent_names: the personas)
-        agentNames: { ...Object.fromEntries(Object.entries(ev.personas || {}).map(([k, p]) => [k, p?.name]).filter(([, n]) => n)), ...(ev.agent_names || {}) },
+        // (#245: before them, the YAML's display names)
+        agentNames: { ...ev.display?.agents, ...Object.fromEntries(Object.entries(ev.personas || {}).map(([k, p]) => [k, p?.name]).filter(([, n]) => n)), ...(ev.agent_names || {}) },
+        stepNames: ev.display?.steps || null, // step id → name (#245)
         // its chain (#134): what follows it, and the run whose chain started it
         chain: ev.then || ev.from ? { then: ev.then || null, from: ev.from || null, state: ev.then ? 'waiting' : undefined } : null,
       });
@@ -319,6 +326,9 @@
     },
 
     'limit.exceeded'(ev) { this.system(ev, 'error', `Limit exceeded: ${ev.limit}`); },
+
+    // #276: the memory guard stopped a process of the run
+    'process.killed'(ev) { this.system(ev, 'warn', ev.message || `The memory guard stopped ${ev.command_line}`); },
 
     'budget.exceeded'(ev) {
       this.system(ev, ev.blocked ? 'error' : 'warn', `${ev.provider} reached its monthly budget${ev.blocked ? ': turn blocked' : ' (not blocking)'}`);

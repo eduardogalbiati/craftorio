@@ -1,78 +1,347 @@
-// Dashboard screen (the start screen): the three workflow categories (each opens the Start drawer
-// on it), the last Night watch's morning summary, the gates waiting for approval across runs and the runs in progress. Registers itself with
-// registerView (view-registry.js); uses app.js globals ($, esc, state, liveRuns, selectedView,
-// pendingGates, selectRun, openGateOf, openDrawer, issueRefs, runSessionStatus, statusLabel).
-// renderDashboard is also called by app.js (init, and renderHeader on run events).
+// Home (the start screen; view id `dashboard`, the menu's Home, #254), #255: one overview of the flow
+// from Inbox to Release for the header's project, with Analytics as its second tab.
+// Tabs: Overview (this file) and Analytics (views/analytics/, a view without a menu entry drawn in
+// this section: its `panel` sits next to the overview, showView('analytics') opens the tab and
+// paintHomeTabs lights it). The Oracle's dock (views/oracle/) stays on the Overview.
+// Overview:
+// - the last Night watch's morning summary (views/nightwatch/);
+// - the flow strip: Inbox → Discovery → Ready → Backlog To do → Running → Merged locally → Released,
+//   each stage with its count (HOME_STAGES); a count opens its screen on that stage (the Backlog's
+//   board, Workflows › Runs filtered on the runs in progress); a stage whose screen is not registered
+//   yet (the Discovery board, #261) is left out;
+// - "What needs you": the gates waiting (their age, and the gate's phone page link while Phone gates
+//   is on, #226), the discovery cards whose thread ends with a question (the Inbox opens the card to
+//   answer it) and the roadmap's failed items, each with one button;
+// - "Today": the real cost of the day and of the last night (the Night watch's window), the runs
+//   finished and failed, the 24/7 occupancy (#188) and the roadmap's next stage;
+// - a new workspace (no project, no run): how to start.
+// Registers itself with registerView (view-registry.js); uses viewRegistry and the globals of app.js and
+// the shared pieces ($, esc, state, dateOf, pendingGates, openGateOf, showRun, showView, openDrawer,
+// openProjectModal, issueRefs, displayName, fmtUsd, loadUsage).
+// renderDashboard is also called by app.js (init, and renderHeader on run events): it paints from
+// what was read last (nothing is redrawn while it reads the same) and reads again at most every
+// HOME_REFRESH_MS (at once when Home opens or the header's project changes; every HOME_REFRESH_MS
+// while Home stays open).
+
+const HOME_REFRESH_MS = 30e3;
+// the newest runs read for "Today" (the day's and the last night's are among them)
+const HOME_RUNS = 60;
+// The flow's stages in order: `view` is the screen a count opens (no such screen: the stage is hidden).
+const HOME_STAGES = [
+  { id: 'inbox', label: 'Inbox', view: 'inbox', hint: 'Ideas captured, not triaged yet' },
+  { id: 'discovery', label: 'Discovery', view: 'discovery', hint: 'Cards in Triage, Shape and Define' },
+  { id: 'ready', label: 'Ready', view: 'discovery', hint: 'Cards ready to become issues' },
+  { id: 'todo', label: 'Backlog To do', view: 'backlog', hint: 'Open issues nobody works on yet' },
+  { id: 'running', label: 'Running', view: 'workflows', hint: 'Runs of this project in progress' },
+  { id: 'merged', label: 'Merged locally', view: 'backlog', hint: 'Issues merged into the local base, not pushed yet' },
+  { id: 'released', label: 'Released', view: 'releases', hint: 'Releases shipped' },
+];
+const HOME_FAILED = ['failed', 'cancelled', 'interrupted'];
+// the attributes of the overview's buttons (onHomeClick)
+const HOME_ACTIONS = ['data-home-run', 'data-home-card', 'data-home-roadmap', 'data-home-act', 'data-stage'];
+// asked: the project of the last read started (undefined: none yet); data: what the last read answered
+// html: what the overview shows now
+const homeView = { seq: 0, at: 0, asked: undefined, data: null, morning: null, html: null };
+
+const homeProject = () => window.CurrentProject?.get() || null;
+// the roadmap's items, each with its stage's number (1-based) and name
+const homeItems = (d) => (d.backlog?.roadmap?.stages || []).flatMap((s, n) => (s.items || []).map((x) => ({ ...x, stage: n + 1, stageName: s.name || `Stage ${n + 1}` })));
+const homeList = (v) => (Array.isArray(v) ? v : []);
+// "40 min", "1 h 30 min", "2 d 3 h": by the minute, so a waiting gate does not redraw the list every second
+function homeAge(iso) {
+  const min = Math.max(0, Math.floor((Date.now() - Date.parse(iso)) / 60000));
+  if (min < 60) return min ? `${min} min` : '<1 min';
+  const h = Math.floor(min / 60);
+  return h < 24 ? `${h} h ${String(min % 60).padStart(2, '0')} min` : `${Math.floor(h / 24)} d ${h % 24} h`;
+}
+
+// Reads what the overview shows of the header's project. Every source may be missing (no project, a
+// backlog never synced, an app before the channel): its stage then counts 0.
+async function loadHome() {
+  const projectId = homeProject();
+  const seq = ++homeView.seq;
+  homeView.at = Date.now();
+  homeView.asked = projectId;
+  const read = async (fn) => { try { return await fn(); } catch { return null; } };
+  // (the top bar's usage, read once at start: "Today" waits for its first answer)
+  const [inbox, cards, waiting, backlog, releases, active, runs, occupancy] = await Promise.all([
+    read(() => projectId && api.listDiscoveryCards(projectId, 'inbox')),
+    read(() => projectId && viewRegistry.has('discovery') && api.listDiscoveryCards(projectId)),
+    read(() => projectId && api.listDiscoveryWaiting(projectId)),
+    read(() => projectId && api.getBacklog(projectId)),
+    read(() => projectId && api.listReleases(projectId)),
+    read(() => api.listActiveRuns()),
+    // simulated runs count only where nothing else can run (simulation-only mode)
+    read(() => api.listRuns({ limit: HOME_RUNS, showSim: !!state.simulationOnly })),
+    read(() => api.getOccupancy({ summary: true })),
+    read(() => state.usage || loadUsage()),
+  ]);
+  if (seq !== homeView.seq) return; // a newer read (the project changed) answers instead
+  homeView.data = {
+    projectId, backlog: backlog || null, releases: releases || null, occupancy: occupancy || null,
+    inbox: homeList(inbox), cards: homeList(cards), waiting: homeList(waiting), active: homeList(active), runs: homeList(runs?.runs || runs),
+  };
+  paintHome();
+}
+
+// The project's runs in progress: this app's, and the roadmap's items running in another app.
+function homeRunning(d) {
+  const ids = new Set(d.active.filter((r) => (r.projectId || r.project_id) === d.projectId).map((r) => r.runId));
+  for (const x of homeItems(d)) if (x.status === 'running' && x.runId) ids.add(x.runId);
+  return ids;
+}
+
+function homeCounts(d) {
+  // the board's columns: no epic (#253), no archived issue (#238)
+  const onBoard = (i) => !i.isEpic && window.BacklogArchive?.issueState(i) !== 'archived';
+  const column = (id) => homeList(d.backlog?.issues).filter((i) => onBoard(i) && (i.column || (i.state === 'closed' ? 'done' : 'todo')) === id);
+  const cards = (columns) => d.cards.filter((c) => columns.includes(c.column)).length;
+  // merged locally: the board's column, and the issues of the commits not pushed yet (a simulated
+  // run never moves a card, its local merge still waits for a push)
+  const merged = new Set([...column('local').map((i) => i.number), ...homeList(d.backlog?.local?.issues)]);
+  return {
+    inbox: d.inbox.length,
+    discovery: cards(['triage', 'shape', 'define']),
+    ready: cards(['ready']),
+    todo: column('todo').length,
+    running: homeRunning(d).size,
+    merged: merged.size,
+    released: homeList(d.releases?.releases).length,
+  };
+}
+
+// "#21 Refund a failed payment" (+ how many more), else the item's workflow
+function homeItemTitle(x) {
+  const issues = homeList(x.issues);
+  if (!issues.length) return x.workflow || 'Roadmap item';
+  return `#${issues[0].number}${issues[0].title ? ` ${issues[0].title}` : ''}${issues.length > 1 ? ` +${issues.length - 1} more` : ''}`;
+}
+
+// What waits for the owner: { kind: gate | card | failed-item, title, detail, since?, runId?, cardId?, stage?, phoneUrl? }.
+function homeNeeds(d) {
+  const name = (id, names) => (typeof displayName === 'function' ? displayName(id, names) : id);
+  // the gates of this app's runs, whatever their project
+  const gates = pendingGates().map((g) => {
+    const r = state.runs.get(g.run_id)?.run;
+    return {
+      kind: 'gate', runId: g.run_id, since: g.requested_at || g.ts || null, phoneUrl: g.phoneUrl || null,
+      title: [r?.workflow ? name(r.workflow) : 'workflow', r?.project, issueRefs(r)].filter(Boolean).join(' · '),
+      detail: g.message || `step ${name(g.step_id, r?.stepNames)}`,
+    };
+  });
+  const mine = new Set(gates.map((g) => g.runId));
+  const items = homeItems(d);
+  // the roadmap's runs waiting at a gate in another app: opened there, shown here
+  const elsewhere = items.filter((x) => x.status === 'running' && x.waiting && x.runId && !mine.has(x.runId)).map((x) => ({
+    kind: 'gate', runId: x.runId, since: x.run?.progress?.at(-1)?.ts || x.run?.startedAt || null, phoneUrl: null,
+    title: homeItemTitle(x), detail: x.run?.gate || `Roadmap · ${x.stageName}`,
+  }));
+  const failed = items.filter((x) => x.status === 'failed').map((x) => ({
+    kind: 'failed-item', stage: x.stage, title: homeItemTitle(x), detail: x.error || `Roadmap · ${x.stageName}`,
+  }));
+  // the discovery cards whose thread ends with a question (e.g. a grill-me question); a card that left
+  // the Inbox needs the Discovery board (#261) to be answered
+  const questions = d.waiting.filter((c) => viewRegistry.has(c.column === 'inbox' ? 'inbox' : 'discovery')).map((c) => ({
+    kind: 'card', cardId: c.id, since: c.question?.ts || null,
+    title: c.title || 'Discovery card', detail: [c.question?.author, c.question?.text].filter(Boolean).join(': '),
+  }));
+  return [...gates, ...elsewhere, ...questions, ...failed];
+}
+
+const HOME_NEED_BADGES = {
+  gate: '<span class="badge warn">Gate</span>',
+  card: '<span class="badge warn">Question</span>',
+  'failed-item': '<span class="pill pill-failed">Failed</span>',
+};
+// the one button of a "What needs you" row
+function homeNeedButton(n) {
+  if (n.kind === 'gate') return `<button type="button" class="btn sm primary" data-home-run="${esc(n.runId)}">Open run</button>`;
+  if (n.kind === 'card') return `<button type="button" class="btn sm primary" data-home-card="${esc(n.cardId)}">Answer</button>`;
+  return `<button type="button" class="btn sm" data-home-roadmap="${n.stage}">Open roadmap</button>`;
+}
+
+function homeStripHtml(d) {
+  const counts = homeCounts(d);
+  const project = state.projects.find((p) => p.id === d.projectId);
+  const stages = HOME_STAGES.filter((s) => viewRegistry.has(s.view)).map((s) => `<div class="home-stage" data-testid="home-flow-stage" data-stage="${s.id}" title="${esc(`${s.label}: ${s.hint}`)}">
+      <button type="button" class="home-count" data-testid="home-flow-count" data-stage="${s.id}" aria-label="${esc(`${s.label}: ${counts[s.id]}. Open it`)}">${counts[s.id]}</button>
+      <span class="home-stage-label">${esc(s.label)}</span>
+    </div>`);
+  return `<section class="home-block" aria-label="Flow">
+    <h2 class="home-title">Flow${project ? ` <span class="muted" title="The header's project">· ${esc(project.name)}</span>` : ''}</h2>
+    <div class="card home-strip" data-testid="home-flow-strip" role="group" aria-label="Flow from Inbox to Release">${stages.join('<span class="home-arrow" aria-hidden="true">→</span>')}</div>
+  </section>`;
+}
+
+function homeNeedsHtml(d) {
+  const needs = homeNeeds(d);
+  const rows = needs.map((n) => {
+    const age = n.since && Date.parse(n.since) ? `<span class="muted small home-need-age" title="Asked ${esc(dateOf(n.since))}">waiting ${esc(homeAge(n.since))}</span>` : '';
+    const phone = n.phoneUrl ? `<a class="small home-need-phone" href="${esc(n.phoneUrl)}" target="_blank" rel="noopener" title="This gate's page for a paired phone (Settings › Phone gates)">Phone link</a>` : '';
+    return `<div class="home-need" data-testid="home-needs-item" data-kind="${n.kind}">
+      ${HOME_NEED_BADGES[n.kind]}
+      <span class="home-need-text"><b title="${esc(n.title)}">${esc(n.title)}</b><span class="muted small" title="${esc(n.detail)}">${esc(n.detail)}</span></span>
+      ${age}${phone}
+      ${homeNeedButton(n)}
+    </div>`;
+  });
+  return `<section class="home-block" data-testid="home-needs-you" aria-label="What needs you">
+    <h2 class="home-title">What needs you${needs.length ? ` <span class="badge warn">${needs.length}</span>` : ''}</h2>
+    <div class="card home-needs">${rows.join('') || '<p class="muted small home-none">Nothing waits for you.</p>'}</div>
+  </section>`;
+}
+
+function homeTodayHtml(d) {
+  const start = new Date().setHours(0, 0, 0, 0);
+  const today = (iso) => Date.parse(iso) >= start;
+  const finished = d.runs.filter((r) => r.status === 'success' && today(r.finishedAt)).length;
+  const failed = d.runs.filter((r) => HOME_FAILED.includes(r.status) && today(r.finishedAt || r.startedAt)).length;
+  const sp = state.usage?.spending;
+  const usd = (p) => (p ? `${p.estimated ? '≈ ' : ''}${fmtUsd(p.spentUsd)}` : '—');
+  // the night: tonight's while the Night watch is on, else the real runs started in the last one's window
+  const w = homeView.morning?.window;
+  const inNight = (r) => !r.mock && Date.parse(r.startedAt) >= Date.parse(w.from) && Date.parse(r.startedAt) <= Date.parse(w.to);
+  const night = sp?.night ? ['Cost tonight', usd(sp.night), 'Spent by real runs since the Night watch started']
+    : w ? ['Cost last night', fmtUsd(d.runs.filter(inNight).reduce((a, r) => a + (Number(r.costUsd) || 0), 0)), 'Cost of the real runs started during the last Night watch']
+      : ['Cost last night', '—', 'No Night watch ended recently'];
+  const o = d.occupancy;
+  const occupancy = o && !o.empty ? `${Math.round((Number(o.occupancy) || 0) * 100)}%` : '—';
+  const stages = d.backlog?.roadmap?.stages || [];
+  const next = stages.findIndex((s) => !s.disabled && (s.items || []).some((x) => !['done', 'skipped'].includes(x.status)));
+  const nextName = next < 0 ? '' : stages[next].name || `Stage ${next + 1}`;
+  const stat = (label, value, title) => `<div class="u-stat" title="${esc(title)}"><label>${esc(label)}</label><b>${value}</b></div>`;
+  return `<section class="home-block" data-testid="home-today" aria-label="Today">
+    <h2 class="home-title">Today</h2>
+    <div class="home-stats">
+      ${stat('Cost today', esc(usd(sp?.day)), 'Spent today by real runs (live runs included)')}
+      ${stat(night[0], esc(night[1]), night[2])}
+      ${stat('Runs finished', finished, 'Runs that succeeded today')}
+      ${stat('Runs failed', failed, 'Runs that failed, were cancelled or were interrupted today')}
+      ${stat('24/7 occupancy', occupancy, o && !o.empty ? window.OccupancyChip?.chipModel(o).tooltip || '' : 'No runs yet: start one to measure')}
+      ${stat('Next roadmap stage', nextName ? `<button type="button" class="link-btn home-next" data-home-roadmap="${next + 1}" title="${esc(`Stage ${next + 1} of ${stages.length}: ${nextName}. Open the roadmap`)}">${esc(nextName)}</button>` : '—', nextName ? 'The first stage with work left' : 'No roadmap stage with work left')}
+    </div>
+  </section>`;
+}
+
+const HOME_EMPTY_HTML = `<div class="empty-state home-empty" data-testid="home-empty">
+    <b>Welcome: three steps to your first run</b>
+    <p class="muted">Home shows the flow from an idea to a release once a project has work in it.</p>
+    <div class="home-steps">
+      <div class="home-step"><b>1. Create a project</b><span class="muted small">The repository or folder the agents work in.</span>
+        <button type="button" class="btn primary" data-testid="home-empty-create-project" data-home-act="project">Create a project</button></div>
+      <div class="home-step"><b>2. Capture a first idea</b><span class="muted small">A line in the Inbox is enough; it becomes an issue later.</span>
+        <button type="button" class="btn" data-testid="home-empty-capture-idea" data-home-act="idea">Capture an idea</button></div>
+      <div class="home-step"><b>3. Run a workflow</b><span class="muted small">Pick a workflow and a task; simulation mode costs nothing.</span>
+        <button type="button" class="btn" data-testid="home-empty-run-workflow" data-home-act="run">Run a workflow</button></div>
+    </div>
+  </div>`;
+
+// The overview from what was read last (the gates are the window's own: always current).
+function paintHome() {
+  const d = homeView.data;
+  const body = $('#home-body');
+  const fresh = d && !state.projects.length && !state.runs.size && !d.runs.length;
+  const html = !d ? '<p class="muted small home-none">Loading…</p>' : fresh ? HOME_EMPTY_HTML : homeStripHtml(d) + homeNeedsHtml(d) + homeTodayHtml(d);
+  if (html === homeView.html) return;
+  homeView.html = html;
+  // the button in focus keeps it across the redraw
+  const at = document.activeElement?.closest?.('#home-body') ? document.activeElement : null;
+  const mark = at && HOME_ACTIONS.map((a) => [a, at.getAttribute(a)]).find(([, v]) => v != null);
+  body.innerHTML = html;
+  if (mark) [...body.querySelectorAll(`button[${mark[0]}]`)].find((b) => b.getAttribute(mark[0]) === mark[1])?.focus({ preventScroll: true });
+}
 
 function renderDashboard() {
-  document.querySelectorAll('[data-count]').forEach((el) => {
-    const n = state.workflows.filter((w) => w.category === el.dataset.count).length;
-    el.textContent = n ? `${n} workflow${n > 1 ? 's' : ''}` : 'no workflows yet';
-    el.classList.toggle('none', !n);
+  paintHome();
+  if (homeView.asked !== homeProject() || Date.now() - homeView.at > HOME_REFRESH_MS) loadHome().catch((e) => console.error('home:', e));
+  // the last Night watch's morning summary (#172, views/nightwatch/); its window dates "Cost last night"
+  window.NightWatchView?.renderMorning($('#dash-nightwatch'))?.then((m) => {
+    if ((m || null) === homeView.morning) return;
+    homeView.morning = m || null;
+    paintHome();
+  }).catch((e) => console.error('home:', e));
+}
+
+// The tab of the open view: Analytics on showView('analytics'), the Overview otherwise.
+function paintHomeTabs() {
+  const analytics = state.view === 'analytics';
+  $('#view-dashboard').classList.toggle('home-on-analytics', analytics);
+  $('#home-overview').classList.toggle('hidden', analytics);
+  $('#view-analytics').classList.toggle('hidden', !analytics);
+  document.querySelectorAll('#view-dashboard [data-home-tab]').forEach((b) => {
+    const on = (b.dataset.homeTab === 'analytics') === analytics;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-selected', String(on));
   });
-  // the runs in progress, or the selected one once it is over
-  const list = liveRuns().length ? liveRuns() : state.run ? [selectedView()] : [];
-  const box = $('#dash-run');
-  box.classList.toggle('hidden', !list.length);
-  box.innerHTML = list.map(({ run: r, approvals }) => `<div class="dash-run-row">
-      <span class="status st-${esc(runSessionStatus(r.status))}"><span class="status-dot"></span></span>
-      <span><b>${esc(r.workflow || 'workflow')}</b>${r.project ? ` · ${esc(r.project)}` : ''}${issueRefs(r) ? ` · ${esc(issueRefs(r))}` : ''} <span class="muted">— ${esc(statusLabel(r))}${approvals.size ? ' · waiting for approval' : ''}</span></span>
-      <button class="btn sm ghost" data-run="${esc(r.id)}">View run</button></div>`).join('');
-  box.querySelectorAll('[data-run]').forEach((b) => (b.onclick = () => selectRun(b.dataset.run)));
-  // pending approvals: every gate waiting across runs, each one opening its run (answered there)
-  const gates = pendingGates();
-  const gbox = $('#dash-gates');
-  gbox.classList.toggle('hidden', !gates.length);
-  gbox.innerHTML = gates.length ? `<div class="dash-gates-title"><b>Waiting for your approval</b> <span class="nav-gates">${gates.length}</span></div>${gates.map((g) => {
-    const r = state.runs.get(g.run_id)?.run;
-    return `<div class="dash-run-row">
-      <span class="status st-waiting"><span class="status-dot"></span></span>
-      <span><b>${esc(r?.workflow || 'workflow')}</b>${r?.project ? ` · ${esc(r.project)}` : ''}${issueRefs(r) ? ` · ${esc(issueRefs(r))}` : ''} <span class="muted">— step ${esc(g.step_id)}</span></span>
-      <button class="btn sm primary" data-gate-run="${esc(g.run_id)}">Open run</button></div>`;
-  }).join('')}` : '';
-  gbox.querySelectorAll('[data-gate-run]').forEach((b) => (b.onclick = () => openGateOf(b.dataset.gateRun)));
-  // the last Night watch's morning summary (#172, views/nightwatch/)
-  window.NightWatchView?.renderMorning($('#dash-nightwatch'));
+}
+
+// A stage's count opens its screen on that stage.
+function openHomeStage(id) {
+  const stage = HOME_STAGES.find((s) => s.id === id);
+  if (!stage || !viewRegistry.has(stage.view)) return;
+  if (stage.view === 'backlog') window.BacklogActions?.showColumns();
+  if (stage.view === 'workflows') {
+    // the runs in progress of the header's project (the search matches its name), simulated ones included
+    state.workflowsTab = 'runs';
+    Object.assign(state.wr, { filter: 'running', showSim: true, q: state.projects.find((p) => p.id === homeProject())?.name || '' });
+  }
+  showView(stage.view);
+}
+
+// A waiting card opens where its question is answered: the Inbox with the card open, else the Discovery board.
+function openHomeCard(id) {
+  const card = homeView.data?.waiting.find((c) => c.id === id);
+  return card?.column === 'inbox' ? window.InboxActions?.openCard(id) : showView('discovery');
+}
+
+function onHomeClick(e) {
+  const tab = e.target.closest('[data-home-tab]');
+  if (tab) return showView(tab.dataset.homeTab === 'analytics' ? 'analytics' : 'dashboard');
+  const run = e.target.closest('[data-home-run]');
+  if (run) return state.runs.has(run.dataset.homeRun) ? openGateOf(run.dataset.homeRun) : showRun(run.dataset.homeRun);
+  const card = e.target.closest('[data-home-card]');
+  if (card) return openHomeCard(card.dataset.homeCard);
+  const roadmap = e.target.closest('[data-home-roadmap]');
+  if (roadmap) return window.BacklogActions?.openStage(Number(roadmap.dataset.homeRoadmap));
+  const act = e.target.closest('[data-home-act]')?.dataset.homeAct;
+  if (act === 'project') return openProjectModal(null, { fromHeader: true });
+  if (act === 'idea') return showView('inbox');
+  if (act === 'run') return openDrawer();
+  const stage = e.target.closest('[data-stage]');
+  if (stage) return openHomeStage(stage.dataset.stage);
+  return undefined;
 }
 
 registerView({
   id: 'dashboard',
-  nav: { label: 'Dashboard', order: 20, icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1.5" /><rect x="14" y="3" width="7" height="5" rx="1.5" /><rect x="14" y="12" width="7" height="9" rx="1.5" /><rect x="3" y="16" width="7" height="5" rx="1.5" /></svg>' },
+  // #254: the menu's first entry, Home
+  nav: { label: 'Home', order: 20, icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 11 9-8 9 8" /><path d="M5 9.5V20h14V9.5" /><path d="M10 20v-6h4v6" /></svg>' },
   // the only section shown before any showView: no `hidden`
   markup: `
       <section id="view-dashboard" class="view">
-        <div class="dash">
-          <h1 class="dash-title">What are we building today?</h1>
-          <p class="muted dash-sub">Pick a type of work to see the available workflows.</p>
-          <div class="dash-cards">
-            <button class="dash-card" data-category="plan">
-              <span class="dash-icon plan"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></svg></span>
-              <b>Plan &amp; Design</b>
-              <span class="muted">Spec out features, architecture and scope before coding.</span>
-              <span class="dash-count" data-count="plan"></span>
-            </button>
-            <button class="dash-card" data-category="build">
-              <span class="dash-icon build"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" /></svg></span>
-              <b>Code &amp; Build</b>
-              <span class="muted">Implement, review, test, open a PR and ship.</span>
-              <span class="dash-count" data-count="build"></span>
-            </button>
-            <button class="dash-card" data-category="monitor">
-              <span class="dash-icon monitor"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /></svg></span>
-              <b>Monitor &amp; Improve</b>
-              <span class="muted">Watch production, investigate errors and improve.</span>
-              <span class="dash-count" data-count="monitor"></span>
-            </button>
+        <div class="home-main">
+          <div class="tabs page-tabs" role="tablist" aria-label="Home"><button type="button" class="tab active" role="tab" aria-selected="true" data-home-tab="overview" data-testid="home-tab-overview">Overview</button><button type="button" class="tab" role="tab" aria-selected="false" data-home-tab="analytics" data-testid="home-tab-analytics">Analytics</button></div>
+          <div id="home-overview" class="home-overview" role="tabpanel">
+            <div id="dash-nightwatch" class="home-night hidden"></div>
+            <div id="home-body"></div>
           </div>
-          <div id="dash-nightwatch" class="dash-gates hidden"></div>
-          <div id="dash-gates" class="dash-gates hidden"></div>
-          <div id="dash-run" class="dash-run hidden"></div>
+          ${viewRegistry.get('analytics')?.panel || '<div id="view-analytics" class="hidden"></div>'}
         </div>
       </section>`,
   mount() {
-    document.querySelectorAll('.dash-card').forEach((b) => (b.onclick = () => openDrawer({ category: b.dataset.category })));
+    $('#view-dashboard').addEventListener('click', onHomeClick);
+    // an open Home stays current without run events (a gate waiting in another app, the ages)
+    setInterval(() => {
+      if (state.view !== 'dashboard' || document.hidden) return;
+      homeView.at = 0;
+      renderDashboard();
+    }, HOME_REFRESH_MS);
     // the start screen's sidebar entry starts highlighted, as showView would
     $('nav.sidebar [data-view="dashboard"]').classList.toggle('active', state.view === 'dashboard');
   },
-  show: renderDashboard,
+  show() {
+    paintHomeTabs();
+    homeView.at = 0; // opened: read again
+    renderDashboard();
+  },
 });

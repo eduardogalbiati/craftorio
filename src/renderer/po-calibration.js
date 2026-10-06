@@ -12,6 +12,9 @@
 // packed into one run (`pack`), the items' test options (#203: unit_tests, e2e_tests, a test-batch
 // stage), the evidence screenshots (`screenshots` input) and cheaper agents where a workflow has an
 // input for it (`costInputs`, src/product-owner.js). "Plan this one cheap" asks for Economy once.
+// #235: costApplies(workflow) says whether the Cost axis means anything for a workflow: not for a
+// tests-first one (testsFirst: AI Development, whose tests are always written and run), nor for one
+// without the inputs it sets; the drawer hides the Cost chip and the plan skips the step then.
 // Browser: window.PoCalibration; Node: module.exports.
 // load: early (views/agents/agents.js and views/backlog/backlog-po-settings.js read window.PoCalibration as they load)
 (function (root) {
@@ -212,6 +215,28 @@
     ].join('\n');
   }
 
+  // #235: the workflows whose acceptance tests are always written first and run by the orchestrator
+  // (their test inputs do not trade cost for checks): matched on the file or name, variants included
+  const TESTS_FIRST = [
+    'ai-development',
+  ];
+  const COST_INPUTS = ['e2e_tests', 'screenshots', 'unit_tests'];
+  /**
+   * #235: whether the Cost axis (its inputs, the test-batch stage, the Cost chip) applies to a
+   * workflow ({ file, name, inputs }): it declares an input the axis sets and is not tests-first.
+   * No workflow (unknown): it applies, as before.
+   */
+  function costApplies(wf) {
+    if (!wf) return true;
+    return !testsFirst(wf) && COST_INPUTS.some((k) => wf.inputs && k in wf.inputs);
+  }
+  /** #235: a workflow ({ file, name }) whose acceptance tests are always written first. */
+  function testsFirst(wf) {
+    const slug = String(wf?.file || wf?.name || '').replace(/\.ya?ml$/i, '');
+    const name = String(wf?.name || '');
+    return !!wf?.testsFirst || TESTS_FIRST.some((t) => [slug, name].some((s) => s === t || s.startsWith(`${t}-`)));
+  }
+
   /** "Speed · Economy": the plan's two steps, as each answer shows them. */
   const plannedFor = (level, costLevel) => `${calibration.step(level).name}${costLevel == null ? '' : ` · ${cost.step(costLevel).name}`}`;
 
@@ -239,6 +264,7 @@
     bindSlider: calibration.bindSlider,
     clamp: calibration.clamp,
     cost,
+    costApplies,
     costFromQuestion,
     costPromptSection,
     DEFAULT,
@@ -255,6 +281,7 @@
     step: calibration.step,
     STEPS,
     syncSlider: calibration.syncSlider,
+    testsFirst,
     tooltip: calibration.tooltip,
   };
   if (typeof module === 'object' && module.exports) module.exports = api;

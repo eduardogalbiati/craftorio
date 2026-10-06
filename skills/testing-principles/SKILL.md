@@ -28,6 +28,11 @@ Before writing tests, list the seams you will test at the top of your answer:
   call order of your own collaborators.
 - Covers the happy path, edges (empty, null/zero value, limits, unicode, time zones) and
   expected errors.
+- **Never hands a DOM node, a sandbox / `vm` object or another large object graph to an
+  assertion**: compare a primitive (`el === null`, a count, a string, `Array.from(list)`). A failing
+  assertion serialises both operands for its message, and a node of a fake DOM or a sandbox drags
+  the whole page or context with it: one such failure grew a test process past 70 GB and stalled
+  every other run on the machine.
 
 ## Where a test goes
 
@@ -64,7 +69,13 @@ In a tests-first workflow (AI Development, local hero, #220) the test writer wri
 - derive them from the task and the public interfaces it names, never from today's internals;
   a criterion that cannot be tested automatically is listed as not testable, never faked;
 - the orchestrator runs them once right after (the red check): a test already green before any
-  code guards existing behaviour or is wrong; a file that cannot run comes back to you;
+  code guards existing behaviour or is wrong; a file that cannot run comes back to you (a whole
+  extra turn, which re-reads your context);
+- **each file must load before the code exists**: a module, export or file the change creates is
+  loaded inside each test (or in a per-test helper), never at the top of the file, so a missing
+  module fails each test on its own instead of crashing the file; before answering, run only the
+  new files once to check they load and fail on the missing behaviour (the language skill names
+  the pattern);
 - **the developer never edits the acceptance tests written before it** (the engine refuses a turn
   that changes one, `protect_files`), and **may add its own internal tests**.
 In the other workflows the rule stays: the developer never writes tests (only the test writer does).

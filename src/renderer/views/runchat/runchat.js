@@ -20,23 +20,25 @@
 
   // ---------------------------------------------------------------- avatars
   const isSupervisor = (agent) => /^_?supervisor$/.test(agent || '');
-  // Each agent keeps one colour through the chat (the supervisor has its own).
-  function hueOf(agent) {
-    let h = 0;
-    for (const ch of String(agent)) h = (h * 31 + ch.codePointAt(0)) >>> 0;
-    return Math.round((h % 1000) * 137.508) % 360; // golden angle: close names get distant hues
-  }
-  const colorStyle = (agent) => (isSupervisor(agent) ? '' : ` style="--rc-agent:hsl(${hueOf(agent)} 70% 64%)"`);
+  // Each agent keeps one colour through the chat (the supervisor has its own): its role's fixed
+  // colour, or the workflow's `color` (#224, agent-colors.js); the name hash only for other agents.
+  const agentDef = (agent) => AgentColors.defIn(state.workflows, chat.model.run?.workflow, agent);
+  const agentColor = (agent) => AgentColors.colorFor(agent, agentDef(agent));
+  const colorStyle = (agent) => (isSupervisor(agent) ? '' : ` style="--rc-agent:${agentColor(agent)}"`);
+  // the colour its robot is painted in (#227), as #RRGGBB
+  const paintOf = (agent) => AgentColors.hexFor(agent, agentDef(agent));
   const nameOf = (agent) => (isSupervisor(agent) ? 'Supervisor' : chat.model.nameOf(agent));
   // Robots face the centre of the screen (as in Write & Review and AI Arena): one on the left
   // looks right (mirrored), one on the right looks left. The supervisor sits on the left.
   function robot(who, st = 'idle', opts = {}) {
     const mirror = isSupervisor(who.agent) || who.side !== 'right';
     if (isSupervisor(who.agent)) return Robots.svg('supervisor', st, { mirror, ...opts });
-    // a look saved for this workflow's agent in Agents, else the provider's robot
-    const variant = window.AgentLooks?.forWorkflow(chat.model.run?.workflow, who.agent)
-      || Robots.variantFor(providerType(who.provider, who.model), who.model || '');
-    return Robots.svg(variant, st, { plaque: who.model ? Robots.plaqueFor(who.model) : undefined, mirror, ...opts });
+    // a look saved for this workflow's agent in Agents, else the provider's robot painted in the
+    // agent's colour (#227): the emblem and the plaque keep the provider
+    const saved = window.AgentLooks?.forWorkflow(chat.model.run?.workflow, who.agent);
+    const variant = saved || Robots.variantFor(providerType(who.provider, who.model), who.model || '');
+    const color = !saved && window.AgentColors ? paintOf(who.agent) : undefined;
+    return Robots.svg(variant, st, { plaque: who.model ? Robots.plaqueFor(who.model) : undefined, mirror, ...(color ? { color } : {}), ...opts });
   }
   const avatar = (who) => `<span class="duo-robot still" aria-hidden="true">${robot(who, 'idle', { bubble: false })}</span>`;
 
@@ -54,7 +56,9 @@
     return `<span class="rc-who" tabindex="0" aria-label="${esc(`${nameOf(who.agent)}: ${lines.join(', ')}`)}">${avatar(who)}</span>
       <span class="rc-card" role="tooltip">${lines.map((l) => `<span>${esc(l)}</span>`).join('')}<span class="mono muted">${esc(who.agent)}</span></span>`;
   }
-  const stepTag = (stepId, visit, sub) => `<span class="rc-step" title="Step">${esc(stepId)}${sub ? ` · ${esc(sub)}` : ''}${visit > 1 ? ` · visit ${visit}` : ''}</span>`;
+  // #245: a step by its readable name, its id in the tooltip
+  const stepName = (stepId) => (stepId ? chat.model.stepName(stepId) : '');
+  const stepTag = (stepId, visit, sub) => `<span class="rc-step" data-testid="run-chat-step" title="${esc(`Step ${stepId || ''}`.trim())}">${esc(stepName(stepId))}${sub ? ` · ${esc(sub)}` : ''}${visit > 1 ? ` · visit ${visit}` : ''}</span>`;
 
   // ---------------------------------------------------------------- items → HTML
   function turnHtml(it) {
@@ -83,7 +87,7 @@
     const ctx = it.context?.peak ? ` · context ${it.fresh ? 'fresh ' : ''}${fmtK(it.context.start)} → ${fmtK(it.context.peak)}` : '';
     const foot = it.durationMs ? `${fmtK(it.tokensIn)} in / ${fmtK(it.tokensOut)} out${ctx} · $${it.cost.toFixed(2)} · ${fmtSecs(it.durationMs)}` : '';
     return `<div class="rc-msg rc-${it.side === 'right' ? 'right' : 'left'}" data-item="${it.id}"${colorStyle(it.agent)}>${agentAvatar(it)}<div class="duo-bubble">
-      <div class="duo-meta"><b class="rc-name" title="${esc(it.agent)}">${esc(nameOf(it.agent))}</b>${it.model ? `<span class="tag">${esc(it.model)}</span>` : ''}${stepTag(it.stepId, it.visit, it.sub)}<span class="time">${clock(it.ts)}</span></div>
+      <div class="duo-meta"><b class="rc-name" title="${esc(it.agent)}">${esc(nameOf(it.agent))}</b>${isSupervisor(it.agent) ? '' : AgentColors.roleChip(it.agent, agentDef(it.agent))}${it.model ? `<span class="tag">${esc(it.model)}</span>` : ''}${stepTag(it.stepId, it.visit, it.sub)}<span class="time">${clock(it.ts)}</span></div>
       <div class="rc-body md">${body}</div>${extras.join('')}${foot ? `<div class="duo-foot">${esc(foot)}</div>` : ''}</div></div>`;
   }
 
@@ -94,7 +98,9 @@
     const buttons = choices.map((c, i) => {
       const chosen = it.resolved && String(c.id) === it.resolved.choice && (c.intent || null) === (it.resolved.intent || null);
       return `<button type="button" class="btn sm ${!it.resolved && i === 0 ? 'primary' : ''}${chosen ? ' chosen' : ''}" data-approval="${esc(it.approvalId)}" data-choice="${esc(c.id)}"${c.intent ? ` data-intent="${esc(c.intent)}" title="${esc(c.title)}"` : ''}${c.feedback_required ? ' data-needs-text="1"' : ''}${off}>${esc(c.label)}</button>`;
-    }).join('');
+    }).join('')
+      // #183: "Interact with Oracle" at the end of the row
+      + (window.GateOracle?.gateOracleButtonHtml({ approval_id: it.approvalId, run_id: chat.runId, step_id: it.stepId }) || '');
     // Run App / Open the worktree (app.js), only while the gate waits in the live run
     const open = chat.live && !it.resolved && !it.closed;
     const tools = open && typeof gateToolsHtml === 'function' ? gateToolsHtml(it, { runId: chat.runId }) : '';
@@ -115,9 +121,9 @@
   }
 
   function groupHtml(it) {
-    const state = !it.done ? '<span class="pill pill-running">running</span>'
-      : it.error ? '<span class="pill pill-failed">failed</span>'
-        : it.failed?.length ? `<span class="pill pill-warn">${it.failed.length} failed</span>` : '<span class="pill pill-success">done</span>';
+    const state = !it.done ? StatusPill.statusPill('running')
+      : it.error ? StatusPill.statusPill('failed')
+        : it.failed?.length ? `<span class="pill pill-warn">${it.failed.length} failed</span>` : StatusPill.statusPill('done');
     return `<div class="rc-group" data-item="${it.id}"><div class="rc-group-head">
       <span>Parallel · ${stepTag(it.stepId, it.visit)} · ${it.agents.map((a) => `<b${colorStyle(a)} title="${esc(a)}">${esc(nameOf(a))}</b>`).join(', ')}</span>${state}</div>
       <div class="rc-group-body"></div></div>`;
@@ -130,16 +136,16 @@
         const issue = it.issues.length ? `${it.issues.length > 1 ? 'Issues' : 'Issue'} ${it.issues.map((i) => `<a href="${esc(i.url)}" target="_blank" rel="noopener">#${esc(i.number)}</a> ${esc(i.title || '')}`).join(' · ')}` : '';
         const inputs = Object.entries(it.inputs).filter(([k, v]) => k !== 'task' && v !== '' && v != null);
         return `<div data-item="${it.id}" class="rc-start"><div class="duo-msg user"><div class="duo-bubble">
-          <div class="duo-meta"><b>${esc(it.workflow)}</b>${it.version ? `<span class="tag">v${esc(it.version)}</span>` : ''}${it.mock ? '<span class="badge p-mock">simulated</span>' : ''}<span class="time">${clock(it.ts)}</span></div>
+          <div class="duo-meta"><b>${esc(it.workflow)}</b>${it.version ? `<span class="tag">v${esc(it.version)}</span>` : ''}${it.mock ? '<span class="badge p-mock">Simulated</span>' : ''}<span class="time">${clock(it.ts)}</span></div>
           ${it.task ? `<div class="rc-body md">${md(it.task)}</div>` : '<p class="muted small">No task.</p>'}
           ${inputs.length ? `<details class="rc-more"><summary>Inputs</summary><dl class="rc-inputs">${inputs.map(([k, v]) => `<dt class="mono">${esc(k)}</dt><dd class="mono">${esc(typeof v === 'string' ? v : JSON.stringify(v))}</dd>`).join('')}</dl></details>` : ''}
-          </div></div>${it.resumedFrom ? `<div class="duo-note plain"><span>Resumed from ${esc(it.resumedFrom.run_id)} at ${esc(it.resumedFrom.step)}</span></div>` : ''}${issue ? `<div class="duo-note plain"><span>${issue}</span></div>` : ''}</div>`;
+          </div></div>${it.resumedFrom ? `<div class="duo-note plain"><span>Resumed from ${esc(it.resumedFrom.run_id)} at <span title="${esc(it.resumedFrom.step)}">${esc(stepName(it.resumedFrom.step))}</span></span></div>` : ''}${issue ? `<div class="duo-note plain"><span>${issue}</span></div>` : ''}</div>`;
       }
       case 'turn': return turnHtml(it);
       case 'group': return groupHtml(it);
       case 'gate': return gateHtml(it);
       case 'system': return `<div class="rc-sys ${it.level}" data-item="${it.id}"><span>${esc(it.text)}</span><time>${clock(it.ts)}</time></div>`;
-      case 'fail': return `<div class="rc-sys error" data-item="${it.id}"><span>${esc(it.stepId)} failed: ${esc(it.text.slice(0, 400))}</span><time>${clock(it.ts)}</time></div>`;
+      case 'fail': return `<div class="rc-sys error" data-item="${it.id}"><span title="${esc(it.stepId)}">${esc(stepName(it.stepId))} failed: ${esc(it.text.slice(0, 400))}</span><time>${clock(it.ts)}</time></div>`;
       case 'reply': return `<div class="duo-msg user reply" data-item="${it.id}"><div class="duo-bubble">
         <div class="duo-meta"><b>${it.by === 'user' ? 'You' : esc(it.by)}</b>${stepTag(it.stepId)}<span class="time">${clock(it.ts)}</span></div>
         <p><b>${esc(it.label)}</b></p>${it.feedback ? `<p class="duo-msg-text">${esc(it.feedback)}</p>` : ''}</div></div>`;
@@ -149,7 +155,7 @@
         ${SUP_WHAT[it.action] ? `<p class="muted small">${SUP_WHAT[it.action]}</p>` : ''}</div></div>`;
       case 'end': {
         const ok = it.status === 'success';
-        return `<div class="duo-note ${ok ? 'done' : 'failed'}" data-item="${it.id}"><span><b>${ok ? 'Done' : esc(it.status)}</b>${!ok && it.error ? ` · ${esc(it.error.slice(0, 240))}` : ''} · $${(it.cost || 0).toFixed(2)} · ${fmtSecs(it.durationMs)}</span>
+        return `<div class="duo-note ${ok ? 'done' : 'failed'}" data-item="${it.id}"><span><b data-status="${esc(it.status)}">${ok ? 'Done' : esc(StatusPill.statusLabel(it.status))}</b>${!ok && it.error ? ` · ${esc(it.error.slice(0, 240))}` : ''} · $${(it.cost || 0).toFixed(2)} · ${fmtSecs(it.durationMs)}</span>
           <button type="button" class="link-btn small" data-resume title="Start a new run from a step of this one, keeping the previous outputs (no supervisor call)">Resume from step…</button></div>`;
       }
       default: return '';
@@ -201,7 +207,7 @@
     if (el.dataset.key === key) return;
     el.dataset.key = key;
     el.innerHTML = active.map((a) => `<div class="duo-typing${a.side === 'right' ? ' rc-right' : ''}"${colorStyle(a.agent)} title="${esc([a.agent, ...(isSupervisor(a.agent) ? [] : cardLines(a))].join('\n'))}"><span class="duo-robot" aria-hidden="true">${robot(a, a.state)}</span>
-      <span class="duo-dots"><i></i><i></i><i></i></span><span><b>${esc(nameOf(a.agent))}</b> ${DOING[a.state] || DOING.thinking}… <span class="muted">(${esc(a.stepId)})</span></span></div>`).join('');
+      <span class="duo-dots"><i></i><i></i><i></i></span><span><b>${esc(nameOf(a.agent))}</b> ${DOING[a.state] || DOING.thinking}… <span class="muted" title="${esc(a.stepId)}">(${esc(stepName(a.stepId))})</span></span></div>`).join('');
   }
 
   function drawHead() {
@@ -209,13 +215,14 @@
     // the run's title (editable) and PR (#84, app.js), its workflow next to them
     const run = { ...r, id: r.id };
     if (!$c('#rc-title .run-title-input')) $c('#rc-title').innerHTML = r.id
-      ? `<b>${window.runTitleHtml ? runTitleHtml(run) : esc(r.workflow)}</b> ${window.runPrBadge ? runPrBadge(run) : ''} <span class="muted small">${esc(r.workflow)}</span>${r.mock ? ' <span class="badge p-mock">simulated</span>' : ''}${r.chain && window.ChainModel ? ` ${ChainModel.chainBadgesHtml(r.chain)}` : ''} <span class="muted small mono">${esc(r.id)}</span>`
+      ? `<b>${window.runTitleHtml ? runTitleHtml(run) : esc(r.workflow)}</b> ${window.runPrBadge ? runPrBadge(run) : ''} <span class="muted small">${esc(r.workflow)}</span>${r.mock ? ' <span class="badge p-mock">Simulated</span>' : ''}${r.chain && window.ChainModel ? ` ${ChainModel.chainBadgesHtml(r.chain)}` : ''} <span class="muted small mono">${esc(r.id)}</span>`
       : `<span class="muted mono">${esc(chat.runId || '')}</span>`;
     const status = chat.loading ? 'loading' : r.status === 'running' && !chat.live ? 'interrupted' : r.status || 'unknown';
     const waiting = chat.live && chat.model.pendingGates().length;
     const pill = $c('#rc-status');
     pill.className = `pill pill-${waiting ? 'warn' : status}`;
-    pill.textContent = waiting ? 'waiting for you' : status;
+    pill.dataset.status = waiting ? 'waiting' : status;
+    pill.textContent = StatusPill.statusLabel(status, { waiting: !!waiting });
     $c('#rc-cost').textContent = r.cost ? `$${r.cost.toFixed(2)}` : '';
     $c('#rc-stop').classList.toggle('hidden', !chat.live);
   }
@@ -304,7 +311,7 @@
       if (!b || !chat.live || b.disabled) return;
       const v = b.dataset.choice;
       const text = b.closest('.duo-ask')?.querySelector('textarea')?.value || '';
-      if (b.dataset.needsText && !text.trim()) { showToast('Write your request first', `"${b.textContent}" sends the text to the agent.`); b.closest('.duo-ask')?.querySelector('textarea')?.focus(); return; }
+      if (b.dataset.needsText && !text.trim()) { showToast('Write your request first', `"${b.textContent}" sends the text to the agent.`); b.closest('.duo-ask')?.querySelector('textarea')?.focus({ preventScroll: true }); return; }
       const buttons = b.closest('.duo-ask').querySelectorAll('button');
       buttons.forEach((x) => { x.disabled = true; });
       // the answer opposite to the gate's recommendation asks once (#213); images pasted into the feedback (#130) go with it
@@ -348,6 +355,7 @@
             <button type="button" class="active" aria-pressed="true">Chat</button>
             <button id="rc-details" type="button" title="Sessions, prompts and events of this run">Details</button>
           </div>
+          <button id="rc-3d" class="btn ghost sm" type="button" data-run3d="chat" data-testid="run-3d" title="Show this run in 3D">3D</button>
           <div id="rc-title" class="rc-title"></div>
           <span id="rc-status" class="pill"></span>
           <div class="spacer"></div>

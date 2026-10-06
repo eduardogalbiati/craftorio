@@ -127,6 +127,7 @@ function renderRunList(rl, { prefix, box: boxSel, empty, start, rerender, reload
       openSupervisor({ runId: r.runId, workflow: r.workflow, status: r.status, error: r.error, mock: r.mock, issues: issuesOfRun(r) }, { watch: b.dataset.runAct === 'watch' });
     }
     if (b.dataset.runAct === 'resume') openResumeDialog(r.runId);
+    if (b.dataset.runAct === 'analytics') window.openAnalytics?.({ tab: 'run', runId: r.runId });
   }));
   box.querySelectorAll('[data-art]').forEach((b) => (b.onclick = () => {
     const r = rl.runs.find((x) => x.runId === b.closest('.pr-run').dataset.run);
@@ -187,11 +188,11 @@ function runListRow(r, pv) {
   const firstLine = task.split('\n')[0];
   const dur = r.status === 'running' && r.startedAt ? Date.now() - Date.parse(r.startedAt) : r.durationMs;
   return `
-    <div class="pr-run ${open ? 'open' : ''}${r.nested ? ' pr-child' : ''}" data-run="${esc(r.runId)}"${r.nested ? ` style="--nest:${r.nested}"` : ''}>
+    <div class="pr-run ${open ? 'open' : ''}${r.nested ? ' pr-child' : ''}" data-testid="run-list-row" data-run="${esc(r.runId)}"${r.nested ? ` style="--nest:${r.nested}"` : ''}>
       <div class="pr-row" title="${open ? 'Hide' : 'Show'} sessions">
-        <span class="pill pill-${esc(r.status)}">${esc(r.status)}</span>
+        ${StatusPill.statusPill(r.status)}
         <div class="pr-main">
-          <div><b>${runTitleHtml(r)}</b> ${prBadge(r)} <span class="muted small" title="workflow">${esc(r.workflow || r.file || 'workflow')}${r.version ? ` v${esc(r.version)}` : ''}</span>${r.mock ? ' <span class="badge p-mock">simulated</span>' : ''}${r.current ? ' <span class="badge live">this window</span>' : ''}${r.runningElsewhere ? ' <span class="badge" title="Another app process on this workspace runs it: stop or resume it there">another window</span>' : ''}${r.retryOf ? ` <span class="badge" title="Started by a retry of the same roadmap item: the two runs do the same work">retry of ${esc(String(r.retryOf).slice(9))}</span>` : ''}${issueFallbackBadge(r)}${r.chain && window.ChainModel ? ` ${ChainModel.chainBadgesHtml(r.chain)}` : ''}${childRunBadges(r)}${!pv.id && r.project ? ` <span class="badge" title="project">${esc(r.project.name)}</span>` : ''}</div>
+          <div><b>${runTitleHtml(r)}</b> ${prBadge(r)} <span class="muted small" title="${esc(`Workflow: ${r.workflow || r.file || ''}`)}">${esc(stepName(String(r.workflow || r.file || 'workflow').replace(/\.ya?ml$/i, '')))}${r.version ? ` v${esc(r.version)}` : ''}</span>${r.mock ? ' <span class="badge p-mock">Simulated</span>' : ''}${r.current ? ' <span class="badge live">this window</span>' : ''}${r.runningElsewhere ? ' <span class="badge" title="Another app process on this workspace runs it: stop or resume it there">another window</span>' : ''}${r.retryOf ? ` <span class="badge" title="Started by a retry of the same roadmap item: the two runs do the same work">retry of ${esc(String(r.retryOf).slice(9))}</span>` : ''}${issueFallbackBadge(r)}${r.chain && window.ChainModel ? ` ${ChainModel.chainBadgesHtml(r.chain)}` : ''}${childRunBadges(r)}${!pv.id && r.project ? ` <span class="badge" title="project">${esc(r.project.name)}</span>` : ''}</div>
           <div class="muted small pr-task" title="${esc(task)}">${esc(firstLine || 'No task')}</div>
         </div>
         <span class="pr-meta"><label>started</label>${r.startedAt ? esc(dateOf(r.startedAt)) : '—'}</span>
@@ -221,8 +222,9 @@ function projectRunBody(r, pv) {
       ${canResume(r) ? '<button class="btn sm ghost" data-run-act="resume" title="Start a new run from a step of this one, keeping the previous outputs (no supervisor call)">Resume from step…</button>' : ''}
       <button class="btn sm" data-run-act="chat" title="${esc(CHAT_TITLES[r.workflow] || 'See the agents, the orchestrator and the human gates as a chat')}">Open chat</button>
       <button class="btn sm" data-run-act="view" title="${r.current || state.runs.has(r.runId) ? 'Open its Run screen' : 'Open its Run screen, rebuilt from its recorded events (read-only)'}">View run</button>
+      <button class="btn sm ghost" data-run-act="analytics" title="Its timeline, cost and tokens per agent, compared with its workflow's runs (Analytics › Run)">Open in Analytics</button>
       <span class="spacer"></span>
-      <span class="muted small mono">${esc(r.runId)}</span>
+      <span class="muted small mono" data-testid="run-id">${esc(r.runId)}</span>
     </div>
     ${r.error ? `<pre class="pr-error">${esc(r.error)}</pre>` : ''}
     ${runTaskBlock(r)}
@@ -231,10 +233,10 @@ function projectRunBody(r, pv) {
       <thead><tr><th>Agent</th><th>Provider · model</th><th>Status</th><th class="num">Turns</th><th class="num">Tokens</th><th class="num">Cost</th><th></th></tr></thead>
       <tbody>${[...sessions].sort((a, b) => isOrchSession(b) - isOrchSession(a)).map((s) => {
         const m = pv.msgs.get(`${r.runId}:${s.id}`);
-        return `<tr data-session="${esc(s.id)}" data-agent="${esc(s.agent)}">
+        return `<tr data-session="${esc(s.id)}" data-agent="${esc(s.agent)}" data-testid="run-session-card">
           <td><b title="${esc(s.agent)}">${esc(agentLabel(s.agent, r.agentNames))}</b> <span class="muted small mono">${esc(s.id)}</span></td>
           <td><span class="badge p-${esc(s.provider)}">${esc(s.provider)}</span> <span class="mono small">${esc(s.model || '')}</span></td>
-          <td><span class="status st-${esc(s.status)}"><span class="status-dot"></span>${esc(s.status)}</span></td>
+          <td><span class="status st-${esc(s.status)}" data-status="${esc(s.status)}"><span class="status-dot"></span>${esc(StatusPill.statusLabel(s.status))}</span></td>
           <td class="num mono">${fmtNum(s.turns)}</td>
           ${tokensCell(s.tokens)}
           ${sessionCostCell(s)}
@@ -327,16 +329,22 @@ function tokensCell(t) {
   const tip = TOKEN_PARTS.map(([k, label]) => `${label}: ${fmtNum(t[k])}`).join('\n');
   return `<td class="num mono" title="${esc(tip)}">${fmtTok(t.total)}</td>`;
 }
+// #233: a cost that includes an estimate (attempts stopped before their result, priced from their
+// model calls), or that misses a stopped attempt of a run recorded before costs were estimated.
+// The one badge pair for it: the run lists, the Run screen (views/run/run.js) and Analytics' Run tab.
+function costMarks(estimatedUsd, notRecorded) {
+  return `${estimatedUsd > 0 ? ` <span class="badge" title="${esc(`${fmtUsd(estimatedUsd)} of it estimated from the model calls of attempts stopped before their result`)}">estimated</span>` : ''}${notRecorded ? ' <span class="badge warn" title="An attempt stopped before its result: its cost was not recorded">cost not recorded</span>' : ''}`;
+}
 // Tokens with no cost: a model with no price (Codex, unpriced models), not a free session.
 function sessionCostCell(s) {
-  if (!s.costUsd && s.tokens?.total && s.provider !== 'mock') return '<td class="num mono muted" title="No price for this model: see Usage › Prices">—</td>';
-  return `<td class="num mono">${fmtUsd(s.costUsd)}</td>`;
+  if (!s.costUsd && s.tokens?.total && s.provider !== 'mock' && !s.costNotRecorded) return '<td class="num mono muted" title="No price for this model: see Usage › Prices">—</td>';
+  return `<td class="num mono">${fmtUsd(s.costUsd)}${costMarks(s.costEstimatedUsd, s.costNotRecorded)}</td>`;
 }
 function sessionsTotalRow(sessions) {
   const sum = (f) => sessions.reduce((a, s) => a + (f(s) || 0), 0);
   const tokens = Object.fromEntries([...TOKEN_PARTS.map(([k]) => [k, sum((s) => s.tokens?.[k])]), ['total', sum((s) => s.tokens?.total)]]);
   return `<tfoot><tr class="pr-total"><td colspan="3">Total</td><td class="num mono">${fmtNum(sum((s) => s.turns))}</td>
-    ${tokensCell(tokens)}<td class="num mono">${fmtUsd(sum((s) => s.costUsd))}</td><td></td></tr></tfoot>`;
+    ${tokensCell(tokens)}<td class="num mono" data-testid="run-total-cost">${fmtUsd(sum((s) => s.costUsd))}${costMarks(sum((s) => s.costEstimatedUsd), sessions.some((s) => s.costNotRecorded))}</td><td></td></tr></tfoot>`;
 }
 
 function runTaskBlock(r) {
@@ -355,16 +363,19 @@ function renderRunListsSoon() {
   });
 }
 
-// Robot SVGs are large: one per provider/model/state, reused. A workflow agent with a look saved
-// in Agents (`workflow` + `agent`) gets its own entry, dropped when a look changes.
+// Robot SVGs are large: one per provider/model/colour/state, reused. A workflow agent with a look
+// saved in Agents (`workflow` + `agent`) gets its own entry, dropped when a look changes. Without a
+// saved look the provider's robot is painted in the agent's colour (#227, agent-colors.js): the
+// progress strip, the roadmap and the workflows list draw the same robot.
 const avatarCache = new Map();
 document.addEventListener('robots:changed', (e) => { if (e.detail?.name === 'workflow-agents') avatarCache.clear(); });
 function robotAvatar(provider, model, st, workflow, agent) {
   const look = window.AgentLooks?.forWorkflow(workflow, agent);
-  const key = look ? `look|${workflow}/${agent}|${st}` : `${provider}|${model}|${st}`;
+  const color = !look && agent && window.AgentColors ? AgentColors.hexFor(agent, AgentColors.defIn(state.workflows, workflow, agent)) : '';
+  const key = look ? `look|${workflow}/${agent}|${st}` : `${provider}|${model}|${color}|${st}`;
   if (!avatarCache.has(key)) {
     const variant = look || (window.Robots ? Robots.variantFor(window.RunChatModel?.providerType(provider, model) || provider, model || '') : null);
-    avatarCache.set(key, variant ? Robots.svg(variant, st, { bubble: false, plaque: '' }) : '');
+    avatarCache.set(key, variant ? Robots.svg(variant, st, { bubble: false, plaque: '', ...(color ? { color } : {}) }) : '');
   }
   return avatarCache.get(key);
 }
@@ -373,30 +384,51 @@ const ENGINE_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" 
 const CHIP_ROBOT_STATE = { running: 'thinking', waiting: 'waiting', failed: 'error', stopped: 'sleeping', done: 'idle' };
 const MAX_CHIPS = 8;
 
-function progressAvatar(a, chip, names, workflow) {
+// A step as people read it (#245): the run's own name for it (`stepNames`, from its workflow.started
+// display), else its id made readable; the id itself stays for the tooltips.
+const stepName = (id, stepNames) => (typeof displayName === 'function' ? displayName(id, stepNames) : String(id || ''));
+const stepsTip = (ids, stepNames) => ids.map((s) => `${stepName(s, stepNames)} (${s})`).join(', ');
+
+function progressAvatar(a, chip, names, workflow, stepNames) {
   const tip = a.human
-    ? `${a.steps.join(', ')} · You (human gate)${a.durationMs ? ` · ${fmtDur(a.durationMs)}` : ''}`
-    : `${a.steps.join(', ')} · ${agentLabel(a.agent, names)} (${a.agent})${a.provider ? ` · ${a.provider}${a.model ? `/${a.model}` : ''}` : ''}${a.durationMs ? ` · ${fmtDur(a.durationMs)}` : ''} · ${fmtUsd(a.cost)}`;
+    ? `${stepsTip(a.steps, stepNames)} · You (human gate)${a.durationMs ? ` · ${fmtDur(a.durationMs)}` : ''}`
+    : `${stepsTip(a.steps, stepNames)} · ${agentLabel(a.agent, names)} (${a.agent})${a.provider ? ` · ${a.provider}${a.model ? `/${a.model}` : ''}` : ''}${a.durationMs ? ` · ${fmtDur(a.durationMs)}` : ''} · ${fmtUsd(a.cost)}`;
   // the last chip's working agents show the run's state; the others rest
   const st = chip.status === 'done' ? 'idle' : CHIP_ROBOT_STATE[chip.status];
+  // the agent's fixed colour (#224): its robot is painted in it (#227), the engine's gear is drawn in it
+  const def = !a.human && window.AgentColors ? AgentColors.defIn(state.workflows, workflow, a.agent) : null;
+  const color = !a.human && window.AgentColors ? AgentColors.colorFor(a.agent, def) : '';
   const art = a.human ? PERSON_SVG : a.provider ? robotAvatar(a.provider, a.model, st, workflow, a.agent) : ENGINE_SVG;
-  return `<span class="rp-av${a.human ? ' human' : a.provider ? '' : ' engine'}" title="${esc(tip)}">${art}</span>`;
+  // the hover card: the agent's name with its role chip (#227), then the steps, provider, time and cost
+  // (#236: the human gate's too; never a native title, which would open over the card)
+  const card = a.human
+    ? `<span class="rp-card" role="tooltip"><span><b>You (human gate)</b></span><span class="muted">${esc(tip)}</span></span>`
+    : `<span class="rp-card" role="tooltip"><span><b>${esc(agentLabel(a.agent, names))}</b>${window.AgentColors ? AgentColors.roleChip(a.agent, def) : ''}</span><span class="muted">${esc(tip)}</span></span>`;
+  return `<span class="rp-av${a.human ? ' human' : a.provider ? '' : ' engine'}" data-testid="progress-agent"${color ? ` style="--agent-color:${esc(color)}"` : ''} tabindex="0" aria-label="${esc(tip)}">${art}${card}</span>`;
 }
 
-function progressChip(c, names, workflow) {
+// A small app tooltip (#236) for the strip's "+N" badges: the names it folds, as a card.
+const foldCard = (text) => `<span class="rp-card" role="tooltip"><span class="muted">${esc(text)}</span></span>`;
+
+// stepNames (#245): step id → the run's name for it; a grouped chip keeps its group's name
+function progressChip(c, names, workflow, stepNames) {
+  const current = c.current ? stepName(c.current, stepNames) : c.current;
   const label = {
     done: '✓',
-    running: `${c.current}…`,
-    waiting: 'waiting for you',
-    failed: `✕ ${c.current}`,
-    stopped: `stopped at ${c.current}`,
+    running: `${current}…`,
+    waiting: StatusPill.statusLabel('waiting'),
+    failed: `✕ ${current}`,
+    stopped: `Stopped at ${current}`,
   }[c.status];
   const agents = c.agents.length ? c.agents : [{ agent: 'orchestrator', steps: c.steps.map((e) => e.step), cost: 0, durationMs: 0 }];
-  const avs = agents.slice(0, 4).map((a) => progressAvatar(a, c, names, workflow)).join('') + (agents.length > 4 ? `<span class="rp-av rp-more" title="${esc(agents.slice(4).map((a) => agentLabel(a.agent, names)).join(', '))}">+${agents.length - 4}</span>` : '');
+  const avs = agents.slice(0, 4).map((a) => progressAvatar(a, c, names, workflow, stepNames)).join('') + (agents.length > 4 ? (() => {
+    const more = `Also: ${agents.slice(4).map((a) => agentLabel(a.agent, names)).join(', ')}`;
+    return `<span class="rp-av rp-more" tabindex="0" aria-label="${esc(more)}">+${agents.length - 4}${foldCard(more)}</span>`;
+  })() : '');
   return `<div class="rp-chip st-${c.status}${c.status === 'done' ? ' still' : ''}">
     <div class="rp-avs">${avs}</div>
-    <div class="rp-name${c.grouped ? '' : ' mono'}">${esc(c.name)}${c.round > 1 ? ` <span class="rp-round">×${c.round}</span>` : ''}</div>
-    <div class="rp-state" title="${esc(c.steps.map((e) => e.step).join(' › '))}">${esc(label)}</div>
+    <div class="rp-name">${esc(c.grouped ? c.name : stepName(c.name, stepNames))}${c.round > 1 ? ` <span class="rp-round">×${c.round}</span>` : ''}</div>
+    <div class="rp-state">${esc(label)}</div>
   </div>`;
 }
 
@@ -408,5 +440,41 @@ function runProgressStrip(r) {
   const status = live?.trail ? live.run?.status || r.status : r.status;
   const chips = RunProgress.progressGroups(steps, r.groups || live?.groups, status);
   const skipped = chips.length - MAX_CHIPS;
-  return `<div class="rp-strip">${skipped > 0 ? `<span class="rp-skip" title="${esc(chips.slice(0, skipped).map((c) => c.name).join(' › '))}">+${skipped}</span><span class="rp-sep">›</span>` : ''}${chips.slice(Math.max(0, skipped)).map((c) => progressChip(c, r.agentNames || live?.run?.agentNames, r.workflow || live?.run?.workflow)).join('<span class="rp-sep">›</span>')}</div>`;
+  const stepNames = r.stepNames || live?.run?.stepNames;
+  const folded = skipped > 0 ? `Earlier steps: ${chips.slice(0, skipped).map((c) => (c.grouped ? c.name : stepName(c.name, stepNames))).join(' › ')}` : '';
+  return `<div class="rp-strip" data-testid="run-progress-strip">${skipped > 0 ? `<span class="rp-skip" tabindex="0" aria-label="${esc(folded)}">+${skipped}${foldCard(folded)}</span><span class="rp-sep">›</span>` : ''}${chips.slice(Math.max(0, skipped)).map((c) => progressChip(c, r.agentNames || live?.run?.agentNames, r.workflow || live?.run?.workflow, stepNames)).join('<span class="rp-sep">›</span>')}</div>`;
 }
+
+// #236: the app's tooltips stay on screen. The agent card (.rp-card) and the Roadmap's steps popover
+// (.rm-steps) are placed in the window as they show (position: fixed, so no scrolling container
+// clips them), next to what opened them, moved left or flipped up when there is no room; long lines
+// wrap within their max width (style.css). Without this (before the first hover) the CSS places them.
+const POP_EDGE = 6;
+function placePopover(pop, anchor, { gap = 4, alignRight = false } = {}) {
+  if (!pop || !anchor || !pop.getClientRects().length) return;
+  const a = anchor.getBoundingClientRect();
+  const vw = document.documentElement.clientWidth;
+  const vh = document.documentElement.clientHeight;
+  Object.assign(pop.style, { position: 'fixed', left: '0px', top: '0px', right: 'auto', bottom: 'auto', maxWidth: `${Math.max(120, vw - 2 * POP_EDGE)}px` });
+  const r = pop.getBoundingClientRect();
+  const left = Math.min(Math.max(POP_EDGE, alignRight ? a.right - r.width : a.left), Math.max(POP_EDGE, vw - r.width - POP_EDGE));
+  const below = a.bottom + gap;
+  const top = below + r.height <= vh - POP_EDGE || a.top - gap - r.height < POP_EDGE ? below : a.top - gap - r.height;
+  pop.style.left = `${left}px`;
+  pop.style.top = `${Math.max(POP_EDGE, Math.min(top, vh - r.height - POP_EDGE))}px`;
+}
+function placeShown(from) {
+  const progress = from?.closest?.('.rm-progress');
+  const av = from?.closest?.('.rp-av, .rp-skip');
+  requestAnimationFrame(() => {
+    // the popover first: the card inside it is placed from where the popover now is
+    if (progress) placePopover(progress.querySelector(':scope > .rm-steps'), progress, { gap: 6, alignRight: true });
+    if (av) placePopover(av.querySelector(':scope > .rp-card'), av);
+  });
+}
+document.addEventListener('mouseover', (e) => placeShown(e.target));
+document.addEventListener('focusin', (e) => placeShown(e.target));
+// a pinned popover (the ring's click) follows its ring when the page scrolls
+document.addEventListener('scroll', () => {
+  for (const p of document.querySelectorAll('.rm-progress.open, .rm-progress:hover, .rm-progress:focus-within')) placeShown(p);
+}, true);

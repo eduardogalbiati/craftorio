@@ -389,3 +389,34 @@ test('runEvents with activity keeps a sub-agent call\'s type and description, no
   assert.equal(events[3].item.input, '{"command":"npm test"}');
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+// #201: the run's scratch workspace (<run_dir>/scratch, #120: seeded skills/workflows, Electron
+// caches, test workspaces) is not the run's output: no list shows its files, except one an agent
+// saved on purpose (file.saved).
+test('runArtifacts: files under the run\'s scratch folder are not artifacts, unless an agent saved one on purpose', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'art-scratch-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const run = path.join(root, 'run');
+  const seeded = [
+    ['scratch', 'workspace', 'skills', 'code-review', 'SKILL.md'],
+    ['scratch', 'workspace', 'workflows', 'software-development.yaml'],
+    ['scratch', 'user-data', 'Cache', 'data_0'],
+    ['scratch', 'ws-1234', 'settings.json'],
+  ];
+  for (const parts of seeded) {
+    fs.mkdirSync(path.join(run, ...parts.slice(0, -1)), { recursive: true });
+    fs.writeFileSync(path.join(run, ...parts), 'seeded');
+  }
+  const kept = path.join(run, 'scratch', 'workspace', 'report.md');
+  fs.writeFileSync(kept, '# report');
+  fs.mkdirSync(path.join(run, 'arena'), { recursive: true });
+  fs.writeFileSync(path.join(run, 'arena', 'final.md'), '# final');
+  fs.writeFileSync(path.join(run, 'events.jsonl'), JSON.stringify({ type: 'file.saved', step_id: 'review', agent: 'reviewer', path: kept }) + '\n');
+
+  const list = runs.runArtifacts(run);
+  const rels = list.map((a) => path.relative(run, a.path).replace(/\\/g, '/')).sort();
+  assert.deepEqual(rels.filter((r) => r.startsWith('scratch/')), ['scratch/workspace/report.md'], 'only the file saved on purpose');
+  assert.ok(rels.includes('arena/final.md'), 'the run\'s own outputs are still listed');
+  const saved = list.find((a) => a.path === kept);
+  assert.equal(saved.step, 'review');
+});

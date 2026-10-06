@@ -23,17 +23,19 @@ function renderRunGates() {
   if (box.dataset.key === key) return;
   box.dataset.key = key;
   box.innerHTML = gates.map((g) => {
-    const buttons = g.choices
-      ? gateChoices(g).map((c, i) => `<button type="button" class="btn sm ${i === 0 ? 'primary' : 'ghost'}" data-choice="${esc(c.id)}"${c.intent ? ` data-intent="${esc(c.intent)}" title="${esc(c.title)}"` : ''}${c.feedback_required ? ' data-needs-text="1"' : ''}>${esc(c.label)}</button>`).join('')
-      : `<button type="button" class="btn sm ghost" data-answer="false">${esc(g.reject?.label || 'Reject')}</button><button type="button" class="btn sm primary" data-answer="true">${esc(g.approve?.label || 'Approve')}</button>`;
+    // the choices, then "Interact with Oracle" at the end of the row (#183)
+    const buttons = (g.choices
+      ? gateChoices(g).map((c, i) => `<button type="button" class="btn sm ${i === 0 ? 'primary' : 'ghost'}" data-choice="${esc(c.id)}"${c.intent ? ` data-intent="${esc(c.intent)}" title="${esc(c.title)}"` : ''}${c.feedback_required ? ' data-needs-text="1"' : ''} data-testid="run-gate-choice">${esc(c.label)}</button>`).join('')
+      : `<button type="button" class="btn sm ghost" data-testid="run-gate-choice" data-answer="false">${esc(g.reject?.label || 'Reject')}</button><button type="button" class="btn sm primary" data-testid="run-gate-choice" data-answer="true">${esc(g.approve?.label || 'Approve')}</button>`)
+      + (window.GateOracle?.gateOracleButtonHtml(g) || '');
     const field = g.feedback ? `<label class="duo-ask-label">${esc(g.feedback.label || 'Instructions (optional)')}</label>
       <textarea class="duo-ask-text run-gate-feedback" rows="3" placeholder="${esc(g.feedback.placeholder || '')}"></textarea>` : '';
-    const message = `<pre class="run-gate-message">${esc(g.message || '')}</pre>`;
+    const message = `<pre class="run-gate-message" data-testid="run-gate-message">${esc(g.message || '')}</pre>`;
     const main = `<div class="run-gate-head"><b>Approval required</b><span class="muted small mono">${esc(`${v.run ? `${runLabel(v.run)} · ` : ''}step: ${g.step_id}`)}</span></div>
       ${gateCardHtml(g.run_id, g, message) || message}${gateToolsHtml(g)}${field}<div class="row gate-choices run-gate-actions">${buttons}</div>${gateButtonsHelpHtml(g)}`;
     const side = gateSideHtml(g);
     const rec = g.brief?.recommendation?.answer;
-    return `<div class="run-gate${side ? ' run-gate-wide' : ''}" data-approval="${esc(g.approval_id)}" data-run="${esc(g.run_id)}"${rec ? ` data-recommend="${esc(rec)}"` : ''}>${side ? `<div class="run-gate-main">${main}</div>${side}` : main}</div>`;
+    return `<div class="run-gate${side ? ' run-gate-wide' : ''}" data-testid="run-gate" data-approval="${esc(g.approval_id)}" data-run="${esc(g.run_id)}"${rec ? ` data-recommend="${esc(rec)}"` : ''}>${side ? `<div class="run-gate-main">${main}</div>${side}` : main}</div>`;
   }).join('');
   mountGateSides(box);
   paintGateApps();
@@ -50,7 +52,7 @@ function onRunGateClick(e) {
   if (!card) return;
   const answer = b.dataset.choice !== undefined ? b.dataset.choice : b.dataset.answer === 'true';
   const text = card.querySelector('.run-gate-feedback');
-  if (b.dataset.needsText && !text?.value.trim()) { showToast('Write your request first', `"${b.textContent}" sends the text to the agent.`); text?.focus(); return; }
+  if (b.dataset.needsText && !text?.value.trim()) { showToast('Write your request first', `"${b.textContent}" sends the text to the agent.`); text?.focus({ preventScroll: true }); return; }
   const buttons = card.querySelectorAll('button');
   buttons.forEach((x) => (x.disabled = true));
   const send = () => PasteImage.settle(text)
@@ -73,8 +75,14 @@ function onRunGateClick(e) {
 function focusRunGate() {
   requestAnimationFrame(() => {
     const card = $('#run-gates .run-gate');
-    card?.scrollIntoView({ block: 'nearest' });
-    card?.querySelector('.run-gate-actions button')?.focus();
+    // scrolls the Run view only, never the page (#208: scrollIntoView also scrolled the page sideways)
+    const view = card?.closest('.view');
+    if (card && view) {
+      const c = card.getBoundingClientRect(), v = view.getBoundingClientRect();
+      if (c.top < v.top) view.scrollTop -= v.top - c.top;
+      else if (c.bottom > v.bottom) view.scrollTop += Math.min(c.bottom - v.bottom, c.top - v.top);
+    }
+    card?.querySelector('.run-gate-actions button')?.focus({ preventScroll: true });
   });
 }
 
@@ -130,11 +138,38 @@ function testsPlanHtml(plan) {
   return `<div class="small run-tests-plan">${plan.map((p) => `<span class="badge${p.value === 'off' ? ' warn' : ''}" title="${esc(`${p.label}: ${p.value_label} (${p.source})${p.value === 'off' ? ': nothing of it is tested in this run' : ''}`)}">${esc(p.label)}: ${esc(p.value_label)}</span>`).join(' ')}</div>`;
 }
 
+// The run's scratch workspace (#201: its agents' checks, not artifacts), read at most every 15 s
+// per run: runId → { info: { dir, files, bytes } | null, at }. Shown only while it exists.
+const scratchOfRun = new Map();
+function askScratch(runId) {
+  const cur = scratchOfRun.get(runId);
+  if (cur && (cur.pending || Date.now() - cur.at < 15000)) return;
+  scratchOfRun.set(runId, { ...(cur || { info: null }), pending: true, at: Date.now() });
+  api.runScratch(runId).then((info) => info, () => null).then((info) => {
+    scratchOfRun.set(runId, { info, at: Date.now() });
+    if (state.run?.id === runId && state.view === 'run') renderRunSummary();
+  });
+}
+
+function scratchHtml(runId) {
+  const s = scratchOfRun.get(runId)?.info;
+  if (!s) return '';
+  return `<div class="small run-scratch" title="A scratch copy of the workspace for the checks of this run's agents (simulated runs, screenshots): not artifacts, removed once the run ends. ${esc(s.dir)}">`
+    + `Scratch workspace (${esc(s.files)} file${s.files === 1 ? '' : 's'}, ${esc(fmtSize(s.bytes))}) <button class="btn sm ghost" id="btn-run-scratch">Open folder</button></div>`;
+}
+
 function renderRunSummary() {
   const r = state.run;
   if (!r) return;
   askPrStates([r]);
-  const inputs = Object.entries(r.inputs || {}).filter(([, v]) => v !== undefined && v !== null && v !== '' && !(Array.isArray(v) && !v.length));
+  askScratch(r.id);
+  const all = Object.entries(r.inputs || {}).filter(([, v]) => v !== undefined && v !== null && v !== '' && !(Array.isArray(v) && !v.length));
+  // #216: the choices (enum and yes/no inputs) as the shared pills, with their labels; the rest
+  // (task, paths, numbers) as key / value
+  const wf = (state.workflows || []).find((w) => w.file === r.file || w.name === r.workflow) || null;
+  const isChoice = (k) => Array.isArray(wf?.inputs?.[k]?.enum) || wf?.inputs?.[k]?.type === 'boolean';
+  const pills = WorkflowInputs.inputPills(wf, Object.fromEntries(all.filter(([k]) => isChoice(k))), { defaults: true });
+  const inputs = all.filter(([k]) => !isChoice(k));
   // an accepted Write & Review run started from an issue: Save to issue, now or later (#103)
   const saveIssue = r.workflow === 'writer-reviewer' && r.status === 'success' && window.openDuoSaveToIssue ? (issuesOfRun(r)[0] || null) : null;
   // its title (editable) and PR first, the workflow under it (#84); a past run opened from disk is read-only
@@ -145,6 +180,8 @@ function renderRunSummary() {
     ${(r.issueSaves || []).map((s) => `<div class="small" title="The accepted document was saved to the issue (Save to issue, Write & Review)">Saved to issue: <a href="${esc(s.commentUrl || s.url)}" target="_blank" rel="noopener">#${esc(s.number)}</a> · ${s.mode === 'comment' ? 'as a comment' : 'description replaced'} · ${esc(new Date(s.at).toLocaleString('en-US'))}</div>`).join('')}
     ${r.gateWaitMs ? `<div class="small" title="Time the run waited for your answers at its human gates: no agent works (or costs) meanwhile">Waiting for you at gates: <b>${esc(fmtDur(r.gateWaitMs))}</b></div>` : ''}
     ${testsPlanHtml(r.testsPlan)}
+    ${scratchHtml(r.id)}
+    ${pills ? `<div class="run-input-pills">${pills}</div>` : ''}
     <dl class="kv run-inputs">${inputs.map(([k, v]) => `<dt title="${esc(k)}">${esc(k)}</dt>${inputValueCell(v)}`).join('')}</dl>
     ${inputImagesHtml()}
     ${window.gateScenariosHtml ? window.gateScenariosHtml(r.id) : ''}
@@ -154,6 +191,7 @@ function renderRunSummary() {
       ${canResume(r) ? '<button class="btn sm ghost" id="btn-run-resume" title="Start a new run from a step of this one, keeping the previous outputs (no supervisor call)">Resume from step…</button>' : ''}
       ${hasChanges(r.id) ? '<button class="btn sm ghost" id="btn-run-diff" title="The files this run changed on its branch, file by file, split or unified">Review changes</button>' : ''}
       ${saveIssue ? `<button class="btn sm ghost" id="btn-run-save-issue" title="Save the accepted document to its issue (preview first, then confirm)">Save to issue #${esc(saveIssue.number)}…</button>` : ''}
+      <button class="btn sm ghost" id="btn-run-analytics" title="Its timeline, cost and tokens per agent, compared with its workflow's runs (Analytics › Run, #228)">Open in Analytics</button>
     </div>`;
   // rendered on every event: rebuilt only when it changes, so a hover popover over an input stays open
   const box = $('#run-summary');
@@ -166,7 +204,9 @@ function renderRunSummary() {
   $('#btn-run-sup').onclick = () => openSupervisorForCurrent();
   if ($('#btn-run-watch')) $('#btn-run-watch').onclick = () => openSupervisorForCurrent({ watch: true });
   if ($('#btn-run-resume')) $('#btn-run-resume').onclick = () => openResumeDialog(r.id);
+  if ($('#btn-run-scratch')) $('#btn-run-scratch').onclick = () => api.openPath(scratchOfRun.get(r.id)?.info?.dir).catch((e) => showToast('Could not open the folder', errMsg(e)));
   if ($('#btn-run-diff')) $('#btn-run-diff').onclick = () => DiffViewer.open({ runId: r.id, title: r.title || r.workflow || '' });
+  $('#btn-run-analytics').onclick = () => window.openAnalytics?.({ tab: 'run', runId: r.id });
   if ($('#btn-run-save-issue')) {
     $('#btn-run-save-issue').onclick = () => window.openDuoSaveToIssue({ runId: r.id, issue: saveIssue, mock: !!r.mock, docSkill: r.inputs?.document_skill || '' });
   }
@@ -188,7 +228,8 @@ function mountInputImages(box) {
   imgs.forEach(async (img) => {
     try { const src = (await api.readArtifact(img.dataset.runImage))?.image; if (src) img.src = src; } catch { /* deleted since */ }
   });
-  const open = (img) => ImageViewer.open({ title: 'Input images', images: imgs.map((i) => ({ file: i.dataset.runImage, src: i.getAttribute('src') || undefined, label: i.alt })), index: imgs.indexOf(img) });
+  // every input image of the run, one item each (#182)
+  const open = (img) => ImageViewer.open({ title: 'Input images', items: imgs.map((i) => ({ title: i.alt || 'Input image', images: [{ file: i.dataset.runImage, src: i.getAttribute('src') || undefined, label: i.alt }] })), index: imgs.indexOf(img) });
   const row = box.querySelector('.run-input-images');
   row.onclick = (e) => { const img = e.target.closest('[data-run-image]'); if (img) open(img); };
   row.onkeydown = (e) => { const img = e.target.closest('[data-run-image]'); if (img && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); open(img); } };
@@ -352,7 +393,7 @@ function renderChainBanner() {
     ${editing ? '<div class="chain-banner-edit" data-chain-picker></div>' : ''}
     ${pipeForm}
     ${chainUi.error ? `<p class="error small">${esc(chainUi.error)}</p>` : ''}`;
-  if (savingPipe) box.querySelector('#pipe-save-name').focus();
+  if (savingPipe) box.querySelector('#pipe-save-name').focus({ preventScroll: true });
   if (editing) {
     const source = () => (chainUi.workflows || []).find((w) => w.name === r.workflow || w.file === r.file) || null;
     chainUi.picker = ChainPicker.mount(box.querySelector('[data-chain-picker]'), { workflows: () => chainUi.workflows || [], source, value: then });
@@ -373,8 +414,8 @@ function childRunsStrip(r) {
     // a resumed parent's children (#175): reused when they had succeeded, else resumed
     const how = k.reused ? `, reused from the previous run` : k.resumed_from ? `, resumes ${k.resumed_from}` : '';
     return k.run_id
-      ? `<span class="child-run">${link(k.run_id, name, `Open run ${k.run_id} (${k.workflow || 'workflow'}, step ${k.step_id}${how}${k.cost_usd ? `, ${fmtCost(k.cost_usd)}` : ''})`)} <span class="pill pill-${esc(k.status)}">${esc(k.status)}</span>${k.reused ? ' <span class="badge">reused</span>' : k.resumed_from ? ' <span class="badge">resumed</span>' : ''}</span>`
-      : `<span class="child-run muted small">${esc(name)} <span class="pill pill-${esc(k.status)}">${esc(k.status)}</span></span>`;
+      ? `<span class="child-run">${link(k.run_id, name, `Open run ${k.run_id} (${k.workflow || 'workflow'}, step ${k.step_id}${how}${k.cost_usd ? `, ${fmtCost(k.cost_usd)}` : ''})`)} ${StatusPill.statusPill(k.status)}${k.reused ? ' <span class="badge">reused</span>' : k.resumed_from ? ' <span class="badge">resumed</span>' : ''}</span>`
+      : `<span class="child-run muted small">${esc(name)} ${StatusPill.statusPill(k.status)}</span>`;
   }).join('')}` : '';
   return `<div class="chain-banner-pipe child-runs">${parent}${children}</div>`;
 }
@@ -439,7 +480,7 @@ function renderSteps() {
   const item = (s) => `
     <li class="${s.status}">
       <span class="dot"></span>
-      <span>${esc(s.id)}<br><span class="kind"${s.agent ? ` title="${esc(s.agent)}"` : ''}>${s.type === 'human_approval' ? 'human approval' : s.type === 'screenshots' ? 'screenshots (no agent)' : s.type === 'suite' ? 'test suite (no agent)' : s.type === 'workflow' ? 'child workflow runs' : esc(agentLabel(s.agent, v.run?.agentNames))}</span></span>
+      <span><span title="${esc(s.id)}">${esc(agentLabel(s.id, v.run?.stepNames))}</span><br><span class="kind"${s.agent ? ` title="${esc(s.agent)}"` : ''}>${s.type === 'human_approval' ? 'human approval' : s.type === 'screenshots' ? 'screenshots (no agent)' : s.type === 'suite' ? 'test suite (no agent)' : s.type === 'test_ids' ? 'test id check (no agent)' : s.type === 'workflow' ? 'child workflow runs' : esc(agentLabel(s.agent, v.run?.agentNames))}</span></span>
       <span class="visits">${s.visits ? '×' + s.visits : ''}</span>
     </li>`;
   // in the workflow's step order: a group where its first shown step is
@@ -478,6 +519,10 @@ function renderSessions() {
   const box = $('#sessions');
   if (!state.sessions.size) return;
   const list = [...state.sessions.values()];
+  // #233: the part of a cost estimated from attempts stopped before their result, or not recorded
+  const estimated = list.reduce((a, s) => a + (Number(s.estimated_cost_usd) || 0), 0);
+  const notRecorded = (ss) => ss.some((s) => s.cost_not_recorded || s.costNotRecorded);
+  const marks = costMarks; // run-list.js: the badges shared with the run lists and Analytics
   box.innerHTML = list.map((s) => {
     const isOrch = s.id === 'orchestrator';
     const t = s.tokens || {};
@@ -486,7 +531,7 @@ function renderSessions() {
       <div class="sc-head">
         <span class="name" title="${esc(s.agent)}">${esc(agentLabel(s.agent, selectedView()?.run?.agentNames))}</span>
         <span class="id">${esc(s.id)}</span>
-        <span class="status st-${esc(s.status)}"><span class="status-dot"></span>${esc(s.status)}</span>
+        <span class="status st-${esc(s.status)}" data-status="${esc(s.status)}"><span class="status-dot"></span>${esc(StatusPill.statusLabel(s.status))}</span>
       </div>
       <div class="badges">
         <span class="badge p-${esc(s.provider)}">${esc(s.provider)}</span>
@@ -498,11 +543,11 @@ function renderSessions() {
         ${isOrch ? `
         <div class="metric"><label>steps</label><b>${[...state.steps.values()].reduce((a, x) => a + x.visits, 0)}</b></div>
         <div class="metric"><label>child sessions</label><b>${list.length - 1}</b></div>
-        <div class="metric"><label>total cost</label><b>${fmtCost(totals().cost)}</b></div>${state.run?.childRuns?.length ? `
+        <div class="metric"><label>total cost</label><b>${fmtCost(totals().cost)}${marks(estimated, notRecorded(list))}</b></div>${state.run?.childRuns?.length ? `
         <div class="metric" title="What its child runs cost (their own children included), not in its total cost"><label>child runs cost</label><b>${fmtCost(childRunsCost(state.run))}</b></div>` : ''}` : `
         <div class="metric"><label>active</label><b>${fmtDur(s.active_ms)}</b></div>
         <div class="metric"><label>in / out</label><b>${fmtNum((t.input || 0) + (t.cache_read || 0))} / ${fmtNum(t.output)}</b></div>
-        <div class="metric"><label>cost</label><b>${fmtCost(s.cost_usd)}</b></div>`}
+        <div class="metric"><label>cost</label><b>${fmtCost(s.cost_usd)}${marks(Number(s.estimated_cost_usd) || 0, notRecorded([s]))}</b></div>`}
       </div>
     </div>`;
   }).join('');
@@ -556,7 +601,7 @@ function renderDetail() {
       <dl class="kv">
         <dt>session</dt><dd>${esc(s.id)}</dd>
         <dt>provider session</dt><dd>${esc(s.provider_session_id || '—')}</dd>
-        <dt>status</dt><dd>${esc(s.status)}</dd>
+        <dt>status</dt><dd data-status="${esc(s.status)}">${esc(StatusPill.statusLabel(s.status))}</dd>
         <dt>opened at</dt><dd>${esc(timeOf(s.opened_at))}${s.closed_at ? ' → ' + esc(timeOf(s.closed_at)) : ''}</dd>
         <dt>duration / active / idle</dt><dd>${fmtDur(liveDuration(s))} / ${fmtDur(s.active_ms)} / ${fmtDur(s.idle_ms)}</dd>
         <dt>tokens</dt><dd>in ${fmtNum(s.tokens?.input)} · cache r/w ${fmtNum(s.tokens?.cache_read)}/${fmtNum(s.tokens?.cache_write)} · out ${fmtNum(s.tokens?.output)} · reasoning ${fmtNum(s.tokens?.reasoning)}</dd>
@@ -626,6 +671,7 @@ registerView({
             <button id="run-mode-chat" type="button" title="Follow this run as a chat">Chat</button>
             <button type="button" class="active" aria-pressed="true">Details</button>
           </div>
+          <button id="run-mode-3d" class="btn ghost sm" type="button" data-run3d="run" data-testid="run-3d" title="Show this run in 3D">3D</button>
         </div>
         <div class="run-layout">
           <aside class="panel config">
@@ -650,7 +696,7 @@ registerView({
             <div class="tabs">
               <button class="tab active" data-tab="detail">Session</button>
               <button class="tab" data-tab="events">Events</button>
-              <button class="tab" data-tab="artifacts" title="The files this run produced">Artifacts <span id="tab-artifacts-count" class="tab-count hidden"></span></button>
+              <button class="tab" data-tab="artifacts" data-testid="run-tab-artifacts" title="The files this run produced">Artifacts <span id="tab-artifacts-count" class="tab-count hidden"></span></button>
             </div>
             <div id="tab-detail" class="tab-body">
               <p class="empty muted">Select a session to see prompts, thinking, tool calls and output.</p>

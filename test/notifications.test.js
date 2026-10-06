@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { runNotice, interruptedNotice, sessionNotice, productOwnerNotice, shouldNotify, attentionSignal, promptLine, WaitDetector } = require('../src/notifications');
+const { runNotice, interruptedNotice, sessionNotice, productOwnerNotice, liveRoadmapNotice, shouldNotify, attentionSignal, promptLine, WaitDetector } = require('../src/notifications');
 const { setupWorkspace } = require('../src/workspace');
 const { createService } = require('../src/service');
 
@@ -45,6 +45,19 @@ test('a run\'s display title (#84) is shown with its workflow; without one the w
   assert.equal(noTitle.title, 'Run interrupted: software-development');
 });
 
+// #226: with the phone pairing on, the gate's notice carries the link to that gate's page
+// (src/mobile-gates.js gateLink, a signed link for that gate only; test/mobile-gates.test.js).
+test('#226 a gate notice carries the link to that gate\'s mobile page; other notices and no linker: no url', () => {
+  const asked = [];
+  const gateLink = (runId, approvalId) => { asked.push([runId, approvalId]); return `http://127.0.0.1:7400/gates/${runId}/${approvalId}?t=signed`; };
+  const gate = runNotice({ type: 'approval.requested', run_id: 'r1', approval_id: 'a2', step_id: 'human_review', message: 'Merge the PR?' }, RUN, { gateLink });
+  assert.equal(gate.event, 'waiting');
+  assert.equal(gate.url, 'http://127.0.0.1:7400/gates/r1/a2?t=signed');
+  assert.deepEqual(asked, [['r1', 'a2']]);
+  assert.equal(runNotice({ type: 'workflow.started', run_id: 'r1' }, RUN, { gateLink }).url, undefined);
+  assert.equal(runNotice({ type: 'approval.requested', run_id: 'r1', approval_id: 'a2' }, RUN).url, undefined);
+});
+
 test('notices respect the per-kind setting and what the focused window shows', () => {
   const gate = runNotice({ type: 'approval.requested', run_id: 'r1', message: 'ok?' }, RUN);
   const started = runNotice({ type: 'workflow.started', run_id: 'r1' }, RUN);
@@ -66,6 +79,16 @@ test('notices respect the per-kind setting and what the focused window shows', (
   assert.equal(shouldNotify(started, { context: { focused: true, runId: null } }), true);
   assert.equal(shouldNotify(started, { context: { focused: true, runId: 'r1' } }), false);
   assert.equal(shouldNotify(null, {}), false);
+});
+
+// ---- Live roadmap (#164): its notice opens the Roadmap screen (#254), not the Backlog -----------
+
+test('liveRoadmapNotice: names the project and the refill, and its click opens the project\'s Roadmap screen', () => {
+  const n = liveRoadmapNotice({ project: { id: 'demo', name: 'Demo' }, refill: { status: 'added', added: 2, message: 'Two stages added.' } });
+  assert.equal(n.title, 'Live roadmap: +2 stages: Demo');
+  assert.equal(n.body, 'Two stages added.');
+  assert.deepEqual(n.target, { view: 'roadmap', projectId: 'demo' });
+  assert.deepEqual(liveRoadmapNotice({ refill: { status: 'budget' } }).target, { view: 'roadmap', projectId: null });
 });
 
 // ---- Product Owner (#149): a notice for an answer the owner has not seen yet -------------------

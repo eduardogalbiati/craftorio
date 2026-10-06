@@ -81,6 +81,7 @@ function load() {
     state,
     api: {},
     RunBadges,
+    StatusPill: require('../src/renderer/status-pill.js'), // the real readable statuses (#266)
     document: {
       querySelector: (sel) => ({
         '#nav-run-gates': gates,
@@ -198,18 +199,18 @@ test('renderNavRuns: a failed run stays listed with st-failed, and the Run item 
   state.runs.set('r1', runView(makeRun({ id: 'r1', status: 'failed' })));
   renderNavRuns();
   assert.match(elements.box.innerHTML, /nav-run-item st-failed/);
-  assert.match(elements.box.innerHTML, /nav-run-at">failed</);
+  assert.match(elements.box.innerHTML, /nav-run-at">Failed</);
   assert.equal(elements.item.title, '1 run failed or interrupted: open it to resume');
 });
 
-test('renderNavRuns: a run waiting at a gate shows "waiting for you · <step>", turns the Run item st-waiting and fills the gates badge', () => {
+test('renderNavRuns: a run waiting at a gate shows "Waiting for you · <step>", turns the Run item st-waiting and fills the gates badge', () => {
   const { renderNavRuns, state, elements } = load();
   state.runs.set('r1', runView(
     makeRun({ id: 'r1', status: 'running' }),
     { approvals: new Map([['a1', { run_id: 'r1', approval_id: 'a1', step_id: 'review' }]]) },
   ));
   renderNavRuns();
-  assert.match(elements.box.innerHTML, /nav-run-at">waiting for you · review</);
+  assert.match(elements.box.innerHTML, /nav-run-at">Waiting for you · review</);
   assert.match(elements.item.className, /\bst-waiting\b/);
   assert.equal(elements.gates.classList.contains('hidden'), false);
   assert.equal(elements.gates.textContent, '1');
@@ -242,10 +243,10 @@ test('renderNavRuns: re-rendering unchanged content does not rewrite innerHTML (
 
 // ---- #142: the top-bar pill is decoupled from the sidebar dot ------------------------------
 
-test('statusLabel: a finished run still reads "completed" (the top-bar pill), while the sidebar dot for the same selected run stays idle', () => {
+test('statusLabel: a finished run still reads as ended, "Succeeded" (#266: the top-bar pill), while the sidebar dot for the same selected run stays idle', () => {
   const { renderNavRuns, statusLabel, state, elements } = load();
   const run = makeRun({ id: 'r1', status: 'success' });
-  assert.equal(statusLabel(run), 'completed');
+  assert.equal(statusLabel(run), 'Succeeded');
 
   state.runs.set('r1', runView(run));
   state.runId = 'r1';

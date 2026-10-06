@@ -42,57 +42,71 @@ metadata:
 # -----------------------------------------------------------------------------
 inputs:
   prompt:
+    label: "Prompt"
     type: string
     required: true
     description: What should be written (e.g. a one-page PRD for offline mode, a migration plan, a blog post).
   goal:
+    label: "Goal"
     type: string
     required: true
     description: When the document is good enough. The reviewer scores each draft against it.
   project_path:
+    label: "Project folder"
     type: string
     required: false
     default: ""
     description: Optional project folder. The writer and the reviewer work in it and read its files (read-only) to ground the document.
   document_skill:
+    label: "Document type"
     type: string
     required: false
     default: ""
     description: "Optional skill that defines the document's structure and rubric (issue-writing, rfc-writing, prd-writing, design-doc-writing, or your own). The writer and the reviewer load it. Empty: free-form, as asked in the prompt."
   threshold:
+    label: "Approval threshold"
     type: number
     default: 8
     description: Minimum reviewer score (0-10) to approve a draft.
   max_rounds:
+    label: "Max rounds"
     type: integer
     default: 5
     description: Maximum number of reviews. When they run out, a human decides.
   writer_provider:
+    label: "Writer CLI"
+    options: { "claude": "Claude", "codex": "Codex", "grok": "Grok" }
     type: string
     enum: [claude, codex, grok]
     default: claude
     description: CLI of the writer.
   writer_model:
+    label: "Writer model"
     type: string
     default: claude-opus-5-5
   writer_effort:
+    label: "Writer effort"
     type: string
     enum: [low, medium, high, xhigh]
     default: high
-    options: { xhigh: Extra high }
+    options: { "xhigh": "Extra high", "low": "Low", "medium": "Medium", "high": "High" }
   reviewer_provider:
+    label: "Reviewer CLI"
+    options: { "claude": "Claude", "codex": "Codex", "grok": "Grok" }
     type: string
     enum: [claude, codex, grok]
     default: codex
     description: CLI of the reviewer.
   reviewer_model:
+    label: "Reviewer model"
     type: string
     default: gpt-6-luna
   reviewer_effort:
+    label: "Reviewer effort"
     type: string
     enum: [low, medium, high, xhigh]
     default: high
-    options: { xhigh: Extra high }
+    options: { "xhigh": "Extra high", "low": "Low", "medium": "Medium", "high": "High" }
 
 # -----------------------------------------------------------------------------
 providers:

@@ -73,3 +73,24 @@ test('fromQuestion reads an explicit "for quality" / "for speed" / "for balanced
   assert.equal(calibration.fromQuestion(''), null);
   assert.equal(calibration.fromQuestion(undefined), null);
 });
+
+// #235: the Cost axis (Economy ↔ Generous) only for a workflow that declares the inputs it changes
+// and is not tests-first
+const AI_DEV = { file: 'ai-development-local-hero.yaml', name: 'ai-development-local-hero', inputs: { task: {}, unit_tests: {}, e2e_tests: {}, screenshots: {} } };
+const SW_DEV = { file: 'software-development-local-hero.yaml', name: 'software-development-local-hero', inputs: { task: {}, unit_tests: {}, e2e_tests: {}, screenshots: {} } };
+
+test('#235 testsFirst: true for AI Development and its variants, false for software development', () => {
+  assert.equal(calibration.testsFirst(AI_DEV), true);
+  assert.equal(calibration.testsFirst({ file: 'ai-development.yaml', inputs: {} }), true);
+  assert.equal(calibration.testsFirst({ file: 'my-flow.yaml', inputs: {}, testsFirst: true }), true);
+  assert.equal(calibration.testsFirst(SW_DEV), false);
+  assert.equal(calibration.testsFirst({ file: 'software-development.yaml', inputs: {} }), false);
+});
+
+test('#235 costApplies: false for a tests-first workflow or one without the inputs the Cost step changes, true for software-development-local-hero', () => {
+  assert.equal(calibration.costApplies(AI_DEV), false);
+  assert.equal(calibration.costApplies({ file: 'ai-development.yaml', inputs: { unit_tests: {} } }), false);
+  assert.equal(calibration.costApplies({ file: 'plain.yaml', inputs: { task: {}, mode: {} } }), false);
+  assert.equal(calibration.costApplies(SW_DEV), true);
+  assert.equal(calibration.costApplies({ file: 'other.yaml', inputs: { task: {}, screenshots: {} } }), true);
+});

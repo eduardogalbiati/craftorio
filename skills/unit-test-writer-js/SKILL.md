@@ -55,6 +55,13 @@ used_by: "test writer"
 - Follow the existing layout: `test/`, `__tests__/` or `*.test.ts` next to the code, same naming and imports as neighbouring tests.
 - Expected errors: `await assert.rejects(...)`, `await expect(p).rejects.toThrow(...)`.
 - Every async test `await`s (or returns) its promise; otherwise it passes without testing anything.
+- Tests written before the code: a module that does not exist yet is required inside each test,
+  never at the top (`const load = () => require('../src/x');` then `const { f } = load();` in the
+  test; ESM: `const { f } = await import('../src/x.js');` inside an async test). A top-level
+  `require` of a missing module crashes the whole file, which the red check sends back.
+- Compare primitives, never a DOM node, a `vm` sandbox object or a cross-realm array (see
+  testing-principles): `assert.equal(el === null, true)` instead of `assert.equal(el, null)`,
+  `assert.deepEqual(Array.from(list), [...])` instead of `deepEqual(list, ...)`.
 - Time: fake timers (`vi.useFakeTimers()`, `jest.useFakeTimers()`, `mock.timers.enable()` in node:test).
 - HTTP boundaries: msw or nock if the project has them, or a stubbed `fetch`. Files: `fs.mkdtempSync(path.join(os.tmpdir(), 'x-'))`.
 - Restore mocks and env vars in `afterEach` (`vi.restoreAllMocks()`, `jest.restoreAllMocks()`, `mock.restoreAll()`).

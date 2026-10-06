@@ -121,6 +121,8 @@ function layout(root) {
     localPreviews: path.join(root, 'local-previews'),
     // last issue sync of each project (see src/backlog.js)
     backlog: path.join(root, 'backlog'),
+    // each project's release history and next release notes (#260, src/releases.js), created on demand
+    releases: path.join(root, 'releases'),
     // the supervisor's reports on the sessions of a date range (Analytics), created on demand
     reports: path.join(root, 'reports'),
     // the app-wide Supervisor chat (src/supervisor-chat.js), created on demand
@@ -129,6 +131,8 @@ function layout(root) {
     oracle: path.join(root, 'oracle'),
     // images pasted into the AI prompt fields (#130, src/pasted-images.js): pending/ until submitted
     attachments: path.join(root, 'attachments'),
+    // discovery cards, private to the workspace (#256, src/discovery.js): <project id>/cards/<card id>/, created on demand
+    discovery: path.join(root, 'discovery'),
     settings: path.join(root, 'settings.json'),
     // titles the user gave to CLI sessions on the Sessions screen ({ "<provider>:<id>": title })
     sessionTitles: path.join(root, 'session-titles.json'),
@@ -155,6 +159,10 @@ const DEFAULT_SETTINGS = {
   notifySessions: true,
   // days the notification center keeps notifications (src/store.js); older ones are deleted
   notificationRetentionDays: 30,
+  // Phone gates (#226, src/mobile-gates.js): the gates-only page the app serves on localhost:port to
+  // paired phones; publicUrl: the private address that reaches it from outside (Tailscale serve,
+  // Cloudflare Tunnel with access rules), used in the gate links; '' = the localhost address
+  phoneGates: { enabled: false, port: 7400, publicUrl: '' },
   lastProject: null,
   lastWorkflow: null,
   // where the Backlog screen syncs issues from by default: github | gitlab | bitbucket
@@ -173,8 +181,13 @@ const DEFAULT_SETTINGS = {
   // several workflows at the same time (Settings › Execution); disabled = one run at a time.
   // perProject: null = no limit per project; simulations count toward the limits only if countSimulations.
   concurrentRuns: { enabled: false, max: 2, perProject: null, countSimulations: false },
+  // Memory guard (#276, src/engine/memory-guard.js): a real run's process over limitPercent of the RAM
+  // is stopped; suites and new runs wait while less than floorPercent is free (0 = no hold)
+  memoryGuard: { enabled: true, limitPercent: 25, floorPercent: 10 },
   // Keep awake (#162, src/keep-awake.js): no sleep while runs, a roadmap or a queue have work to do
   keepAwake: false,
+  // the top bar's 24/7 chip (#188, src/renderer/occupancy-chip.js): the last 24 h occupancy
+  showOccupancyChip: true,
   // warn when an agent shows no output for this long while a command it started is waiting; 0 = off
   idleWarningMinutes: 5,
   // monthly limits per provider (see src/usage.js); null = no limit
@@ -184,8 +197,10 @@ const DEFAULT_SETTINGS = {
   budget: { dailyUsd: null, nightlyUsd: null, raised: null },
   // the Oracle (src/oracle.js): its daily spend limit in USD (0 = no cap) and the context size
   // (tokens) past which its next turn starts a new session from a handoff note; what wakes it (#123,
-  // src/oracle-wake.js): wakeScope all | watched | off, wakeOn the event kinds
-  oracle: { dailyBudgetUsd: 20, compactAtTokens: 150000, wakeScope: 'all', wakeOn: ['finished', 'gate', 'interrupted', 'invalid', 'limit', 'merge', 'stall'] },
+  // src/oracle-wake.js): wakeScope all | watched | off, wakeOn the event kinds; selfHealing (#278):
+  // its watch stays on day and night, with no end time (src/oracle-actions.js watchState); appUpdate
+  // (#279, needs selfHealing): apply merged fixes to this app after a roadmap stage ends (src/app-update.js)
+  oracle: { dailyBudgetUsd: 20, compactAtTokens: 150000, wakeScope: 'all', wakeOn: ['finished', 'gate', 'interrupted', 'invalid', 'limit', 'merge', 'stall'], selfHealing: false, appUpdate: false },
   // USD per 1M tokens, for CLIs that do not report cost: { model: { input, output, cache_read } }
   prices: {},
   // GitHub Actions quota minutes included per month (GitHub Free: 2,000), see src/actions-usage.js

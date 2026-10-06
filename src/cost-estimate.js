@@ -8,6 +8,11 @@
 // turned off costs nothing. Sessions without a reported cost (Codex) are priced from their tokens ×
 // settings.prices (src/usage.js sessionCost) and the estimate is marked `estimated`. No history:
 // null ("no estimate yet"). Pure: the service passes the run list (src/runs.js listRuns).
+// Time (#215): the same rules on each step's duration (the run's `progress` trail, human gates left
+// out), so an estimate also has `minutes`; a run without a trail counts its whole duration as one
+// step. A stage's duration is its longest item (its items run in parallel). An item with a run
+// carries its real duration (`actualMinutes`, gate waits left out; elapsed while it runs) and its
+// longest step (`actualTopStep`); a stage the real cost and duration of its items' runs.
 // Used by the roadmap's view (src/service/areas/roadmap.js: "≈ $X" per item and stage, the real
 // cost of a finished item next to it) and by its budget cap (src/budget.js).
 
@@ -45,7 +50,23 @@ function complexityOfIssues(issues) {
   return list.length ? list.reduce((a, i) => a + (complexityOf(i) ?? DEFAULT_COMPLEXITY), 0) : DEFAULT_COMPLEXITY;
 }
 
-// A past run as the estimate reads it: { complexity, inputs, steps: { stepId: usd }, estimated }.
+const MINUTE = 60000;
+const baseStep = (id) => String(id || 'run').split(':')[0];
+
+// A run's minutes per step from its trail (a step visited twice counts both visits; human gates
+// are waiting, not work); a run without a trail is one step 'run' of its whole duration.
+function stepMinutes(run) {
+  const out = {};
+  for (const p of run.progress || []) {
+    if (p?.type === 'human_approval' || !(p?.durationMs > 0)) continue;
+    const id = baseStep(p.step);
+    out[id] = (out[id] || 0) + p.durationMs / MINUTE;
+  }
+  if (!Object.keys(out).length && run.durationMs > 0) out.run = Math.max(0, run.durationMs - (run.gateWaitMs || 0)) / MINUTE;
+  return out;
+}
+
+// A past run as the estimate reads it: { complexity, inputs, steps: { stepId: usd }, minutes: { stepId: min }, estimated }.
 function pastRun(run, byNumber, prices) {
   const steps = {};
   let estimated = false;
@@ -57,7 +78,7 @@ function pastRun(run, byNumber, prices) {
     steps[id] = (steps[id] || 0) + cost;
   }
   const issues = (run.issues || []).map((i) => byNumber.get(Number(i?.number ?? i)) || i);
-  return { complexity: complexityOfIssues(issues), inputs: run.inputs || {}, steps, estimated };
+  return { complexity: complexityOfIssues(issues), inputs: run.inputs || {}, steps, minutes: stepMinutes(run), estimated };
 }
 
 /**
@@ -89,17 +110,11 @@ function stepFactor(id, inputs) {
   return inputsOfStep(id).reduce((f, k) => f * (inputs[k] != null ? STEP_FACTORS[k][inputs[k]] ?? 1 : 1), 1);
 }
 
-/**
- * The estimate of one roadmap item (or a planned group): { usd, perPoint, complexity, runs, basis,
- * estimated } or null when its workflow has no past run. `item`: { workflow, inputs, issues } (issues
- * with their labels), or `complexity` given.
- */
-function estimateItem(item, runs, { issues = [], prices = {}, complexity = null } = {}) {
-  const past = historyOf(runs, item?.workflow, { issues, prices });
-  if (!past.length) return null;
-  const inputs = item?.inputs || {};
-  const size = complexity ?? complexityOfIssues(item?.issues);
-  const ids = [...new Set(past.flatMap((r) => Object.keys(r.steps)))];
+// The estimate per complexity point of one measure (`field`: 'steps' for usd, 'minutes'), from the
+// past runs that have it: { perPoint, notes }.
+function perPointOf(past, field, inputs) {
+  const runs = past.filter((r) => Object.keys(r[field]).length);
+  const ids = [...new Set(runs.flatMap((r) => Object.keys(r[field])))];
   const notes = [];
   let perPoint = 0;
   for (const id of ids) {
@@ -107,37 +122,76 @@ function estimateItem(item, runs, { issues = [], prices = {}, complexity = null 
     const factor = stepFactor(id, inputs);
     if (factor === 0) { notes.push(`${id} off`); continue; }
     // the runs that had this step (a step a run skipped is not a zero cost for an item that runs it)
-    const had = past.filter((r) => r.steps[id] != null);
+    const had = runs.filter((r) => r[field][id] != null);
     const same = keys.length ? had.filter((r) => keys.every((k) => (r.inputs[k] ?? null) === inputs[k])) : [];
     const base = same.length >= SAME_INPUTS ? same : had;
     const scale = same.length >= SAME_INPUTS ? 1 : factor;
     // a step most runs skipped counts for the share of runs that ran it
-    const share = keys.length ? 1 : had.length / past.length;
-    perPoint += median(base.map((r) => r.steps[id] / r.complexity)) * scale * share;
+    const share = keys.length ? 1 : had.length / runs.length;
+    perPoint += median(base.map((r) => r[field][id] / r.complexity)) * scale * share;
     if (keys.length && scale !== 1) notes.push(`${id} ×${scale}`);
   }
+  return { perPoint, notes, runs: runs.length };
+}
+
+/**
+ * The estimate of one roadmap item (or a planned group): { usd, minutes, perPoint, complexity, runs,
+ * basis, estimated } or null when its workflow has no past run (`minutes` null when no past run has
+ * a duration). `item`: { workflow, inputs, issues } (issues with their labels), or `complexity` given.
+ */
+function estimateItem(item, runs, { issues = [], prices = {}, complexity = null } = {}) {
+  const past = historyOf(runs, item?.workflow, { issues, prices });
+  if (!past.length) return null;
+  const inputs = item?.inputs || {};
+  // the item's issues with their labels from the backlog (a roadmap item keeps only number and title;
+  // an item stored before #163 is its one issue)
+  const byNumber = new Map((issues || []).map((i) => [Number(i.number), i]));
+  const own = item?.issues?.length ? item.issues : item?.number ? [item] : [];
+  const size = complexity ?? complexityOfIssues(own.map((i) => byNumber.get(Number(i?.number ?? i)) || i));
+  const { perPoint, notes } = perPointOf(past, 'steps', inputs);
+  const time = perPointOf(past, 'minutes', inputs);
   const estimated = past.some((r) => r.estimated);
+  const runsText = `${past.length} successful run${past.length > 1 ? 's' : ''}`;
   return {
     usd: round(perPoint * size),
+    minutes: time.runs ? Math.round(time.perPoint * size) : null,
     perPoint: round(perPoint),
     complexity: size,
     runs: past.length,
     estimated,
-    basis: `Median cost per step and complexity point of the last ${past.length} successful run${past.length > 1 ? 's' : ''} of ${fileOf(item.workflow)}, × complexity ${size}${notes.length ? ` (${notes.join(', ')})` : ''}${estimated ? '; some costs estimated from tokens × the model prices' : ''}.`,
+    basis: `Median cost per step and complexity point of the last ${runsText} of ${fileOf(item.workflow)}, × complexity ${size}${notes.length ? ` (${notes.join(', ')})` : ''}${estimated ? '; some costs estimated from tokens × the model prices' : ''}.`,
+    timeBasis: time.runs ? `Median duration per step and complexity point of the last ${runsText} of ${fileOf(item.workflow)} (human gates left out), × complexity ${size}${time.notes.length ? ` (${time.notes.join(', ')})` : ''}.` : '',
   };
 }
 
+const runsOf = (item, runById) => [...new Set([...(item?.runs || []), ...(item?.runId ? [item.runId] : [])])].map((id) => runById.get(id)).filter(Boolean);
+
 /** The real cost of an item's runs (`runs`: listRuns rows by id), null when it has none. */
 function actualCost(item, runById) {
-  const ids = [...new Set([...(item?.runs || []), ...(item?.runId ? [item.runId] : [])])];
-  const found = ids.map((id) => runById.get(id)).filter(Boolean);
+  const found = runsOf(item, runById);
   if (!found.length) return null;
   return round(found.reduce((a, r) => a + (r.costUsd || 0) + (r.childrenCostUsd || 0), 0));
 }
 
 /**
- * The roadmap with an `estimate` on each item and stage, and the real cost (`actualUsd`) of each
- * item with a run. A stage's estimate sums its items' (`missing`: items with no estimate yet).
+ * The real duration of an item's runs in minutes (gate waits left out; elapsed while one runs) and its
+ * longest step ({ step, minutes }), null when it has no run.
+ */
+function actualTime(item, runById) {
+  const found = runsOf(item, runById);
+  if (!found.length) return null;
+  const minutes = Math.round(found.reduce((a, r) => a + Math.max(0, (r.durationMs || 0) - (r.gateWaitMs || 0)), 0) / MINUTE);
+  const steps = {};
+  for (const r of found) for (const [id, m] of Object.entries(stepMinutes(r))) if (id !== 'run') steps[id] = (steps[id] || 0) + m;
+  const [step, m] = Object.entries(steps).sort((a, b) => b[1] - a[1])[0] || [];
+  return { minutes, topStep: step ? { step, minutes: Math.round(m) } : null };
+}
+
+/**
+ * The roadmap with an `estimate` on each item and stage, and the real cost (`actualUsd`) and duration
+ * (`actualMinutes`, `actualTopStep`) of each item with a run. A stage's estimate sums its items' costs
+ * and takes its longest item's minutes (`missing`: items with no estimate yet); its `actualUsd` sums
+ * its items' real costs, its `actualMinutes` is its longest item's.
  */
 function withEstimates(roadmap, runs, { issues = [], prices = {} } = {}) {
   const runById = new Map((runs || []).map((r) => [r.runId, r]));
@@ -147,13 +201,31 @@ function withEstimates(roadmap, runs, { issues = [], prices = {} } = {}) {
       const items = (s.items || []).map((x) => {
         const estimate = estimateItem(x, runs, { issues, prices });
         const actualUsd = actualCost(x, runById);
-        return { ...x, estimate, ...(actualUsd != null ? { actualUsd } : {}) };
+        const time = actualTime(x, runById);
+        return {
+          ...x,
+          estimate,
+          ...(actualUsd != null ? { actualUsd } : {}),
+          ...(time ? { actualMinutes: time.minutes, actualTopStep: time.topStep } : {}),
+        };
       });
       const known = items.filter((x) => x.estimate);
+      const timed = known.filter((x) => x.estimate.minutes != null);
+      const ran = items.filter((x) => x.actualUsd != null);
       return {
         ...s,
         items,
-        estimate: known.length ? { usd: round(known.reduce((a, x) => a + x.estimate.usd, 0)), items: known.length, missing: items.length - known.length, runs: Math.max(...known.map((x) => x.estimate.runs)) } : null,
+        estimate: known.length ? {
+          usd: round(known.reduce((a, x) => a + x.estimate.usd, 0)),
+          minutes: timed.length ? Math.max(...timed.map((x) => x.estimate.minutes)) : null,
+          items: known.length,
+          missing: items.length - known.length,
+          runs: Math.max(...known.map((x) => x.estimate.runs)),
+        } : null,
+        ...(ran.length ? {
+          actualUsd: round(ran.reduce((a, x) => a + x.actualUsd, 0)),
+          actualMinutes: Math.max(0, ...items.map((x) => x.actualMinutes || 0)),
+        } : {}),
       };
     }),
   };
@@ -161,6 +233,7 @@ function withEstimates(roadmap, runs, { issues = [], prices = {} } = {}) {
 
 module.exports = {
   actualCost,
+  actualTime,
   complexityOfIssues,
   estimateItem,
   HISTORY,

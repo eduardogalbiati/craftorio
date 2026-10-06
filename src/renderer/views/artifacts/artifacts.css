@@ -5,6 +5,8 @@
 .art-side { background: var(--panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; }
 .art-side-head { padding: 20px 14px 12px; display: grid; gap: 8px; border-bottom: 1px solid var(--border); }
 .art-side-head h1 { font-size: 20px; margin: 0; }
+/* #254: the Runs tabs (All runs / Artifacts), as wide as their two buttons */
+.art-tabs { justify-self: start; }
 .art-toggle-all { justify-self: start; }
 #art-error:empty { display: none; }
 #art-error { padding: 0 14px; }

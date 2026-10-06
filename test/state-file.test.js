@@ -6,13 +6,41 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { writeJsonSafe } = require('../src/state-file');
+const { writeFileAtomic, writeJsonSafe } = require('../src/state-file');
 
 function tmp(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'state-file-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   return dir;
 }
+
+test('writeFileAtomic (#256) writes text or bytes whole, creating the folder, with no temp file and no .bak', (t) => {
+  const dir = tmp(t);
+  const file = path.join(dir, 'card', 'document.md');
+  writeFileAtomic(file, 'first');
+  writeFileAtomic(file, 'second');
+  assert.equal(fs.readFileSync(file, 'utf8'), 'second');
+  writeFileAtomic(path.join(dir, 'card', 'shot.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+  assert.deepEqual([...fs.readFileSync(path.join(dir, 'card', 'shot.png'))], [0x89, 0x50, 0x4e, 0x47]);
+  assert.deepEqual(fs.readdirSync(path.join(dir, 'card')).sort(), ['document.md', 'shot.png']);
+});
+
+test('writeFileAtomic (#256) leaves no temp file when the write fails, and what was there stays whole', (t) => {
+  const dir = tmp(t);
+  // the target is a folder with a file in it: the rename over it fails
+  const target = path.join(dir, 'busy');
+  fs.mkdirSync(target);
+  fs.writeFileSync(path.join(target, 'keep.txt'), 'kept');
+  assert.throws(() => writeFileAtomic(target, 'new content'));
+  assert.deepEqual(fs.readdirSync(dir), ['busy']);
+  assert.equal(fs.readFileSync(path.join(target, 'keep.txt'), 'utf8'), 'kept');
+  // the content cannot be written at all (not a string or bytes)
+  const file = path.join(dir, 'doc.md');
+  fs.writeFileSync(file, 'old');
+  assert.throws(() => writeFileAtomic(file, 42));
+  assert.equal(fs.readFileSync(file, 'utf8'), 'old');
+  assert.deepEqual(fs.readdirSync(dir).sort(), ['busy', 'doc.md']);
+});
 
 test('writeJsonSafe writes the file, formatted, and leaves no temp file behind', (t) => {
   const dir = tmp(t);

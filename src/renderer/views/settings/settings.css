@@ -10,3 +10,15 @@
 .settings-title { font-size: 18px; text-transform: none; letter-spacing: 0; color: var(--text); margin: 0 0 14px; }
 /* Settings › Execution › Oracle: the wake-up kinds, two columns of checkboxes (#123) */
 .oracle-wake-kinds { display: grid; grid-template-columns: repeat(2, max-content); gap: 4px 14px; }
+/* Settings › Phone gates (#226, settings-phone.js): the pairing code with its QR code, the setup steps */
+.phone-intro { margin: 0 0 12px; }
+#phone-form-actions[hidden] { display: none; }
+.phone-public { width: 280px; }
+.phone-check { gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+.phone-pair { display: flex; align-items: center; gap: 14px; margin-top: 8px; min-width: 0; }
+.phone-qr { width: 168px; height: 168px; flex: none; border-radius: 6px; background: #fff; }
+.phone-pair-text { display: grid; gap: 4px; min-width: 0; }
+.phone-code { font-size: 22px; font-weight: 700; letter-spacing: 3px; color: var(--text); }
+.phone-link { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.phone-steps { margin: 0 0 14px; padding-left: 20px; display: grid; gap: 6px; color: var(--muted); }
+.phone-steps code { overflow-wrap: anywhere; }

@@ -5,7 +5,8 @@
 // branch's commits for the commit picker. runDiffFile: one file's patch and both sides' contents
 // (expanding context, "load diff" of a huge file, image previews as data URLs). The folder and the
 // base come from the open gate (approvalId, its work_dir and diff_base) or else from the run's
-// worktree.ready event, never from the caller. A simulated run, or one without a worktree, gets the
+// worktree.ready event (once an ended run's folder is gone, its branch in the repository, #202),
+// never from the caller. A simulated run, or one without a worktree, gets the
 // files the developer reported instead (simulated / unavailable), not an error.
 
 const fs = require('fs');
@@ -64,23 +65,27 @@ module.exports = (ctx) => {
     const gate = approvalId ? live?.pendingGates().find((g) => g.approval_id === approvalId) : null;
     if (gate?.diff_base && gate.work_dir) return { events, dir: gate.work_dir, bases: [gate.diff_base] };
     const ready = events.find((e) => e.type === 'worktree.ready');
-    if (!ready?.dir || !fs.existsSync(ready.dir)) return { events, problem: 'This run has no git worktree left to compare.' };
-    const name = String(ready.base || '').replace(/^origin\//, '');
-    return { events, dir: ready.dir, bases: [ready.base, name, ready.commit].filter(Boolean) };
+    const name = String(ready?.base || '').replace(/^origin\//, '');
+    const bases = [ready?.base, name, ready?.commit].filter(Boolean);
+    if (ready?.dir && fs.existsSync(ready.dir)) return { events, dir: ready.dir, head: 'HEAD', bases };
+    // #202: an ended run's folder is gone, its branch keeps the work: read it in the repository
+    const branch = [...events].reverse().find((e) => e.type === 'worktree.removed' && e.branch)?.branch;
+    if (ready?.repo && branch && !branch.startsWith('-') && fs.existsSync(ready.repo)) return { events, dir: ready.repo, head: `refs/heads/${branch}`, bases };
+    return { events, problem: 'This run has no git worktree left to compare.' };
   }
 
-  // The merge base of HEAD with the first base that resolves.
-  async function mergeBase(dir, bases) {
+  // The merge base of the branch head with the first base that resolves.
+  async function mergeBase(dir, bases, head) {
     for (const b of bases) {
       if (String(b).startsWith('-')) continue;
-      const mb = await gitOrNull(dir, ['merge-base', String(b), 'HEAD']);
+      const mb = await gitOrNull(dir, ['merge-base', String(b), head]);
       if (mb && mb.trim()) return { base: String(b), mergeBase: mb.trim() };
     }
     throw new Error(`None of the run's base refs resolves in its worktree (${bases.join(', ')}).`);
   }
 
-  async function branchCommits(dir, mb) {
-    const out = await git(dir, ['log', '--format=%H%x1f%h%x1f%s%x1f%an%x1f%aI', `${mb}..HEAD`]);
+  async function branchCommits(dir, mb, head) {
+    const out = await git(dir, ['log', '--format=%H%x1f%h%x1f%s%x1f%an%x1f%aI', `${mb}..${head}`]);
     return out.split('\n').filter(Boolean).map((l) => {
       const [sha, short, subject, author, date] = l.split('\x1f');
       return { sha, short, subject, author, date };
@@ -91,10 +96,10 @@ module.exports = (ctx) => {
   async function resolveRange(opts) {
     const src = diffSource(opts);
     if (src.simulated || src.problem) return src;
-    const { base, mergeBase: mb } = await mergeBase(src.dir, src.bases);
-    const commits = await branchCommits(src.dir, mb);
+    const { base, mergeBase: mb } = await mergeBase(src.dir, src.bases, src.head || 'HEAD');
+    const commits = await branchCommits(src.dir, mb, src.head || 'HEAD');
     let from = mb;
-    let to = 'HEAD';
+    let to = src.head || 'HEAD';
     let commit = null;
     if (opts.commit) {
       commit = commits.find((c) => c.sha === opts.commit || c.short === opts.commit);

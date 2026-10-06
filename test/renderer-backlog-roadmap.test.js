@@ -6,6 +6,8 @@
 // workflows are the module's own closure state, not reset between calls.
 const test = require('node:test');
 const assert = require('node:assert/strict');
+// the full roadmap (#217: by default the Roadmap tab shows only the open work)
+const SHOW_ALL = { showAll: true, since: 'total' }; // #268: All, whatever the items' dates
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -22,6 +24,8 @@ const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'views
 const workflowInputsSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'workflow-inputs.js'), 'utf8');
 const runProgressSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'run-progress-model.js'), 'utf8');
 const defaultWorkflowSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'default-workflow.js'), 'utf8');
+const statusPillSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'status-pill.js'), 'utf8');
+const estimatesSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'estimates.js'), 'utf8');
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
 // `choiceDialog`: #195's push confirmation (checkPushes); `showRunCalls`/`scheduleRenderCalls`: #194's
@@ -79,6 +83,8 @@ function loadRoadmap({ listWorkflows, confirmDialog, keptWorkDialog, choiceDialo
   // objects never compare equal) can check it without reaching into the sandbox.
   sandbox.window.showRun = (runId, opts) => showRunCalls.push({ runId, workflow: opts?.workflow });
   vm.createContext(sandbox);
+  vm.runInContext(statusPillSrc, sandbox); // the real StatusPill module (#266: the readable statuses)
+  vm.runInContext(estimatesSrc, sandbox); // the real Estimates module (#215; #272: the run timer's tooltip)
   vm.runInContext(runProgressSrc, sandbox); // the real RunProgress module (#194), not reimplemented
   vm.runInContext(defaultWorkflowSrc, sandbox); // the real DefaultWorkflow module (#195)
   vm.runInContext(workflowInputsSrc, sandbox); // the real WorkflowInputs module (#116), not reimplemented
@@ -144,6 +150,13 @@ function saveButtonTarget(itemId, stage, form) {
     if (sel === '[data-item]' || sel === '[data-stage]') return box;
     return null;
   };
+  return btn;
+}
+
+// #282: the ⋮ button of a stage (its actions are in that menu)
+function stageMenuTarget(id) {
+  const btn = { dataset: { rmStageMenu: id } };
+  btn.closest = (sel) => (sel === '[data-rm-stage-menu]' ? btn : null);
   return btn;
 }
 
@@ -213,7 +226,7 @@ test('html: an item with two issues renders both titles as a linked list; a titl
     }] }] },
     issues: [],
   };
-  const html = BacklogRoadmap.html(data, () => {});
+  const html = BacklogRoadmap.html(data, () => {}, SHOW_ALL);
   assert.match(html, /<ul class="rm-titles">/);
   assert.equal((html.match(/<li class="rm-issue"/g) || []).length, 2);
   assert.match(html, /<span class="rm-num mono">#101<\/span><a class="rm-title" href="https:\/\/github\.com\/x\/y\/issues\/101"[^>]*>Fix the login bug<\/a>/);
@@ -226,9 +239,9 @@ test('html + onClick: a planned item with an enum mode renders a toggle; clickin
   const { BacklogRoadmap, savedCalls } = loadRoadmap({ listWorkflows: async () => [workflow] });
   const item = { id: 'it1', status: 'planned', workflow: 'software-development.yaml', issues: [{ number: 1, title: 'A', url: 'u' }], inputs: { mode: 'auto', language: 'js' } };
   const data = { roadmap: { state: 'planned', stages: [{ id: 'st1', name: '', note: '', items: [item] }] }, issues: [] };
-  BacklogRoadmap.html(data, () => {}); // kicks off loadWorkflows
+  BacklogRoadmap.html(data, () => {}, SHOW_ALL); // kicks off loadWorkflows
   await settle();
-  const html = BacklogRoadmap.html(data, () => {});
+  const html = BacklogRoadmap.html(data, () => {}, SHOW_ALL);
   assert.match(html, /class="seg sm rm-mode-seg"/);
   assert.match(html, /data-rm-mode="auto"[^>]*aria-pressed="true"/);
   assert.match(html, /data-rm-mode="validated"/);
@@ -242,15 +255,17 @@ test('html + onClick: a planned item with an enum mode renders a toggle; clickin
   assert.equal(saved.language, 'js');
 });
 
-test('html: a running item shows the mode as a read-only badge, not draggable; onClick on a mode control there saves nothing', async () => {
+test('html: a running item shows the mode toggle locked (#282), not draggable; onClick on a mode control there saves nothing', async () => {
   const workflow = { file: 'software-development.yaml', inputs: { mode: { enum: ['auto', 'validated'] } } };
   const { BacklogRoadmap, savedCalls } = loadRoadmap({ listWorkflows: async () => [workflow] });
   const item = { id: 'it1', status: 'running', workflow: 'software-development.yaml', issues: [{ number: 1, title: 'A', url: 'u' }], inputs: { mode: 'validated' } };
   const data = { roadmap: { state: 'running', stages: [{ id: 'st1', name: '', note: '', items: [item] }] }, issues: [] };
-  BacklogRoadmap.html(data, () => {});
+  BacklogRoadmap.html(data, () => {}, SHOW_ALL);
   await settle();
-  const html = BacklogRoadmap.html(data, () => {});
-  assert.match(html, /<span class="badge rm-mode rm-mode-validated"/);
+  const html = BacklogRoadmap.html(data, () => {}, SHOW_ALL);
+  assert.match(html, /class="seg sm rm-mode-seg locked"/);
+  assert.match(html, /data-mode="validated" aria-pressed="true" disabled/);
+  assert.match(html, /locked while it runs/);
   assert.doesNotMatch(html, /data-rm-mode=/);
   assert.doesNotMatch(html, /data-rm-edit/);
   assert.doesNotMatch(html, /draggable="true"/);
@@ -275,12 +290,12 @@ test('onClick [data-rm-edit] then html: an enum input renders pills with human l
     inputs: { mode: 'auto', language: 'python', validate_every_round: 'true', task: 'ignored', project_path: '/x' },
   };
   const data = { roadmap: { state: 'planned', stages: [{ id: 'st1', name: '', note: '', items: [item] }] }, issues: [] };
-  BacklogRoadmap.html(data, () => {});
+  BacklogRoadmap.html(data, () => {}, SHOW_ALL);
   await settle();
 
   const ctx = makeCtx();
   await BacklogRoadmap.onClick({ target: editButtonTarget('it1', 0) }, ctx, data);
-  const html = BacklogRoadmap.html(data, () => {});
+  const html = BacklogRoadmap.html(data, () => {}, SHOW_ALL);
   // language (a short enum) renders as pills (#116), with a human label, not the raw key
   assert.match(html, /<label id="rm-f-it1-language-label"[^>]*>Language</);
   assert.match(html, /data-wi-pill="python" class="active"[^>]*title="Python">Python<\/button>/);
@@ -376,17 +391,20 @@ test('busy(): false with nothing open; true while an item\'s Edit form, a stage 
   assert.equal(BacklogRoadmap.busy(), false);
 });
 
-test('a stage note shows "add note" when empty, text + edit when set, and onChange saves the stage note', async () => {
+test('a stage note: "Add note" in the stage\'s ⋮ menu when empty (#282), text + edit when set, and onChange saves the stage note', async () => {
   const { BacklogRoadmap, savedCalls } = loadRoadmap();
   const stage = { id: 'st1', name: '', note: '', items: [] };
   const data = { roadmap: { state: 'planned', stages: [stage] }, issues: [] };
-  let html = BacklogRoadmap.html(data, () => {});
-  assert.match(html, /data-rm-addnote>add note<\/button>/);
+  let html = BacklogRoadmap.html(data, () => {}, SHOW_ALL);
+  assert.doesNotMatch(html, /data-rm-addnote/, 'not in the head: in the stage\'s menu');
   assert.doesNotMatch(html, /data-rm-note/);
 
   const ctx = makeCtx();
+  await BacklogRoadmap.onClick({ target: stageMenuTarget('st1') }, ctx, data);
+  html = BacklogRoadmap.html(data, () => {}, SHOW_ALL);
+  assert.match(html, /<button type="button" role="menuitem" data-rm-addnote[^>]*>Add note<\/button>/);
   await BacklogRoadmap.onClick({ target: addNoteButtonTarget(0) }, ctx, data);
-  html = BacklogRoadmap.html(data, () => {});
+  html = BacklogRoadmap.html(data, () => {}, SHOW_ALL);
   assert.match(html, /<input type="text" class="rm-note small" data-rm-note/);
 
   const noteInput = {
@@ -400,23 +418,24 @@ test('a stage note shows "add note" when empty, text + edit when set, and onChan
   assert.equal(savedCalls[0].stages[0].note, 'Why this order');
 
   const withNote = { roadmap: { state: 'planned', stages: [{ ...stage, note: 'Why this order' }] }, issues: [] };
-  html = BacklogRoadmap.html(withNote, () => {});
+  html = BacklogRoadmap.html(withNote, () => {}, SHOW_ALL);
   assert.match(html, /Why this order <button class="link-btn small" type="button" data-rm-addnote>edit<\/button>/);
 });
 
-test('html: the complexity badge is the sum of the issues\' complexity:n labels; absent when none has one', () => {
+test('html: the issues\' footer says the sum of their complexity:n labels (#282); only the count when none has one', () => {
   const { BacklogRoadmap } = loadRoadmap();
   const item = { id: 'it1', status: 'planned', workflow: 'w.yaml', issues: [{ number: 1, title: 'A', url: 'u' }, { number: 2, title: 'B', url: 'u2' }] };
   const data = {
     roadmap: { state: 'planned', stages: [{ id: 'st1', name: '', note: '', items: [item] }] },
     issues: [{ number: 1, labels: [{ name: 'complexity:3' }] }, { number: 2, labels: [{ name: 'complexity:5' }] }],
   };
-  const html = BacklogRoadmap.html(data, () => {});
-  assert.match(html, /<span class="badge rm-size"[^>]*>complexity 8<\/span>/);
+  const html = BacklogRoadmap.html(data, () => {}, SHOW_ALL);
+  assert.match(html, /data-testid="roadmap-issues-foot"[^>]*>2 issues · complexity 8<\/span>/);
 
   const noLabels = { ...data, issues: [] };
-  const html2 = BacklogRoadmap.html(noLabels, () => {});
-  assert.doesNotMatch(html2, /rm-size/);
+  const html2 = BacklogRoadmap.html(noLabels, () => {}, SHOW_ALL);
+  assert.match(html2, /data-testid="roadmap-issues-foot"[^>]*>2 issues<\/span>/);
+  assert.doesNotMatch(html2, /complexity/);
 });
 
 test('html: status pill classes for a planned, a waiting-at-a-gate and a skipped item', () => {
@@ -430,10 +449,11 @@ test('html: status pill classes for a planned, a waiting-at-a-gate and a skipped
     ] }] },
     issues: [],
   };
-  const html = BacklogRoadmap.html(data, () => {});
-  assert.match(html, /<span class="pill pill-idle rm-state">planned<\/span>/);
-  assert.match(html, /<span class="pill pill-cancelled rm-state">waiting at a gate<\/span>/);
-  assert.match(html, /<span class="pill pill-interrupted rm-state">skipped<\/span>/);
+  const html = BacklogRoadmap.html(data, () => {}, SHOW_ALL);
+  // #266: readable labels, the id in data-status
+  assert.match(html, /<span class="pill pill-idle rm-state" data-status="planned"[^>]*>Planned<\/span>/);
+  assert.match(html, /<span class="pill pill-cancelled rm-state" data-status="waiting"[^>]*>Waiting for you<\/span>/);
+  assert.match(html, /<span class="pill pill-interrupted rm-state" data-status="skipped"[^>]*>Skipped<\/span>/);
 });
 
 test('html: reason and modeReason render inside details.rm-reason', () => {
@@ -443,7 +463,7 @@ test('html: reason and modeReason render inside details.rm-reason', () => {
     reason: 'Groups the UI fixes together', modeReason: 'Validated: the owner can try it in the app',
   };
   const data = { roadmap: { state: 'planned', stages: [{ id: 'st1', name: '', note: '', items: [item] }] }, issues: [] };
-  const html = BacklogRoadmap.html(data, () => {});
+  const html = BacklogRoadmap.html(data, () => {}, SHOW_ALL);
   assert.match(html, /<details class="rm-reason small">/);
   assert.match(html, /Groups the UI fixes together/);
   assert.match(html, /Validated: the owner can try it in the app/);
@@ -464,30 +484,46 @@ function threeStageData(statuses, over = {}) {
   };
 }
 
-test('html: Run this stage is enabled only when the roadmap is not running and the stage has a planned item', () => {
+// #282: Run this stage is an entry of each stage's ⋮ menu (one menu open at a time)
+test('html: Run this stage is enabled only when the roadmap is not running and the stage has a planned item', async () => {
   const { BacklogRoadmap } = loadRoadmap();
-  const planned = BacklogRoadmap.html(threeStageData(['planned', 'planned', 'planned']), () => {});
-  assert.equal((planned.match(/data-rm-run-stage title="Run only this stage/g) || []).length, 3);
-  assert.doesNotMatch(planned, /data-rm-run-stage[^>]*disabled/);
+  const ctx = makeCtx();
+  // the Run this stage entry of each stage, its menu opened in turn
+  const entries = async (data) => {
+    assert.doesNotMatch(BacklogRoadmap.html(data, () => {}, SHOW_ALL), /data-rm-run-stage/, 'no Run this stage outside the menus');
+    const out = [];
+    for (const stage of data.roadmap.stages) {
+      await BacklogRoadmap.onClick({ target: stageMenuTarget(stage.id) }, ctx, data);
+      const found = BacklogRoadmap.html(data, () => {}, SHOW_ALL).match(/<button[^>]*data-rm-run-stage[^>]*>/g) || [];
+      assert.equal(found.length, 1, 'one menu open at a time');
+      out.push(found[0]);
+    }
+    await BacklogRoadmap.onClick({ target: stageMenuTarget(data.roadmap.stages.at(-1).id) }, ctx, data); // closed again
+    return out;
+  };
+  const planned = await entries(threeStageData(['planned', 'planned', 'planned']));
+  for (const e of planned) {
+    assert.match(e, /data-rm-run-stage title="Run only this stage/);
+    assert.doesNotMatch(e, /disabled/);
+  }
 
-  const done = BacklogRoadmap.html(threeStageData(['done', 'planned', 'planned']), () => {});
-  assert.match(done, /data-rm-run-stage title="No planned item in this stage" disabled/);
+  const done = await entries(threeStageData(['done', 'planned', 'planned']));
+  assert.match(done[0], /data-rm-run-stage title="No planned item in this stage" aria-disabled="true"/);
 
-  const running = BacklogRoadmap.html(threeStageData(['planned', 'planned', 'planned'], { state: 'running' }), () => {});
-  assert.match(running, /data-rm-run-stage title="The roadmap is running: pause or stop it first" disabled/g);
-  assert.equal((running.match(/data-rm-run-stage[^>]*disabled/g) || []).length, 3);
+  const running = await entries(threeStageData(['planned', 'planned', 'planned'], { state: 'running' }));
+  for (const e of running) assert.match(e, /data-rm-run-stage title="The roadmap is running: pause or stop it first" aria-disabled="true"/);
 });
 
 test('html: the stage run on its own is highlighted (running or paused), the bar names it, and the other stages keep their plain badge', () => {
   const { BacklogRoadmap } = loadRoadmap();
-  const running = BacklogRoadmap.html(threeStageData(['done', 'running', 'planned'], { state: 'running', scope: { stage: 'st2' } }), () => {});
+  const running = BacklogRoadmap.html(threeStageData(['done', 'running', 'planned'], { state: 'running', scope: { stage: 'st2' } }), () => {}, SHOW_ALL);
   assert.match(running, /<section class="rm-stage current scoped" data-stage="1"[^>]*>[\s\S]*?<span class="badge live">Running this stage only<\/span>/);
-  assert.match(running, /<b>Roadmap<\/b> <span class="badge live">running · stage 2 only<\/span>/);
+  assert.match(running, /<b>Roadmap<\/b> <span class="badge live" data-status="running">Running · stage 2 only<\/span>/);
   // stage 1 (done) and stage 3 (planned, not scoped, not current) keep their own plain badges
-  assert.match(running, /<section class="rm-stage finished" data-stage="0"[^>]*>[\s\S]*?<span class="badge">done<\/span>/);
+  assert.match(running, /<section class="rm-stage finished" data-stage="0"[^>]*>[\s\S]*?<span class="badge" data-status="done">Done<\/span>/);
   assert.doesNotMatch(running, /data-stage="2"[^>]*>[\s\S]{0,400}badge live/);
 
-  const paused = BacklogRoadmap.html(threeStageData(['done', 'failed', 'planned'], { state: 'paused', scope: { stage: 'st2' } }), () => {});
+  const paused = BacklogRoadmap.html(threeStageData(['done', 'failed', 'planned'], { state: 'paused', scope: { stage: 'st2' } }), () => {}, SHOW_ALL);
   assert.match(paused, /<span class="badge warn">This stage only · paused<\/span>/);
 });
 
@@ -538,6 +574,80 @@ test('onClick [data-rm=start]: resuming a paused, scoped roadmap passes that sta
   const plain = threeStageData(['planned', 'planned', 'planned'], { state: 'planned' });
   await BacklogRoadmap.onClick({ target: startButtonTarget() }, ctx, plain);
   assert.equal(startCalls[1].stage, null);
+});
+
+// ---- #243: the confirm of Resume says Resume, not Start ------------------------------------
+
+function captureStartConfirm() {
+  const confirms = [];
+  const loaded = loadRoadmap({ confirmDialog: async (...args) => { confirms.push(args); return false; } });
+  return { ...loaded, confirms };
+}
+
+test('#243 onClick [data-rm=start] on a paused roadmap (no scope) confirms "Resume the roadmap": runs in progress keep going, cost money, button Resume; cancel starts nothing', async () => {
+  const { BacklogRoadmap, startCalls, confirms } = captureStartConfirm();
+  await BacklogRoadmap.onClick({ target: startButtonTarget() }, makeCtx(), threeStageData(['done', 'planned', 'planned'], { state: 'paused' }));
+  assert.equal(confirms.length, 1);
+  const [title, body, label] = confirms[0];
+  assert.equal(title, 'Resume the roadmap');
+  assert.equal(label, 'Resume');
+  assert.match(body, /keep going/i);
+  assert.match(body, /cost money/i);
+  assert.equal(startCalls.length, 0);
+});
+
+test('#243 onClick [data-rm=start] on a paused roadmap scoped to stage 40 confirms "Resume stage 40": the roadmap pauses again when that stage is done', async () => {
+  const { BacklogRoadmap, startCalls, confirms } = captureStartConfirm();
+  const statuses = Array.from({ length: 41 }, (_, n) => (n < 39 ? 'done' : 'planned'));
+  const ids = statuses.map((_, n) => `st${n + 1}`);
+  const data = {
+    roadmap: {
+      state: 'paused', scope: { stage: 'st40' },
+      stages: ids.map((id, n) => ({ id, name: `Stage ${n + 1}`, note: '', items: [{ id: `it${n + 1}`, status: statuses[n], workflow: 'w.yaml', mock: false, issues: [{ number: n + 1, title: `#${n + 1}`, url: 'u' }] }] })),
+    },
+    issues: [],
+  };
+  await BacklogRoadmap.onClick({ target: startButtonTarget() }, makeCtx(), data);
+  assert.equal(confirms.length, 1);
+  const [title, body, label] = confirms[0];
+  assert.equal(title, 'Resume stage 40');
+  assert.equal(label, 'Resume');
+  assert.match(body, /pauses again/i);
+  assert.equal(startCalls.length, 0);
+});
+
+test('#243 guard: onClick [data-rm=start] on a planned or done roadmap still confirms "Start the roadmap" with Start', async () => {
+  const { BacklogRoadmap, startCalls, confirms } = captureStartConfirm();
+  await BacklogRoadmap.onClick({ target: startButtonTarget() }, makeCtx(), threeStageData(['planned', 'planned', 'planned'], { state: 'planned' }));
+  await BacklogRoadmap.onClick({ target: startButtonTarget() }, makeCtx(), threeStageData(['done', 'done', 'planned'], { state: 'done' }));
+  assert.equal(confirms.length, 2);
+  for (const [title, , label] of confirms) {
+    assert.equal(title, 'Start the roadmap');
+    assert.equal(label, 'Start');
+  }
+  assert.equal(startCalls.length, 0);
+});
+
+test('#237 onClick [data-rm=start] on a paused roadmap whose scoped stage is finished resumes the whole roadmap: "Resume the roadmap", no stage sent', async () => {
+  const confirms = [];
+  const { BacklogRoadmap, startCalls } = loadRoadmap({ confirmDialog: async (...args) => { confirms.push(args); return true; } });
+  const ctx = makeCtx('proj-f');
+  await BacklogRoadmap.onClick({ target: startButtonTarget() }, ctx, threeStageData(['done', 'done', 'planned'], { state: 'paused', scope: { stage: 'st2' } }));
+  await BacklogRoadmap.onClick({ target: startButtonTarget() }, ctx, threeStageData(['done', 'done', 'planned'], { state: 'paused', scope: { stage: 'gone' } }));
+  assert.deepEqual(confirms.map(([title, , label]) => [title, label]), [['Resume the roadmap', 'Resume'], ['Resume the roadmap', 'Resume']]);
+  assert.deepEqual(startCalls.map((c) => c.stage), [null, null]);
+});
+
+test('#237 html: a paused roadmap whose scoped stage is finished or gone no longer shows "stage N only"', () => {
+  const { BacklogRoadmap } = loadRoadmap();
+  const finished = BacklogRoadmap.html(threeStageData(['done', 'done', 'planned'], { state: 'paused', scope: { stage: 'st2' } }), () => {}, SHOW_ALL);
+  assert.doesNotMatch(finished, /stage \d+ only/);
+  // #269: the paused state is the bar's amber dot, readable in its aria-label
+  const dot = (finished.match(/<span [^>]*\brm-state-dot\b[^>]*>/) || [''])[0];
+  assert.match(dot, /\bis-paused\b/);
+  assert.match(dot, /aria-label="Paused/);
+  const gone = BacklogRoadmap.html(threeStageData(['done', 'done', 'planned'], { state: 'paused', scope: { stage: 'gone' } }), () => {}, SHOW_ALL);
+  assert.doesNotMatch(gone, /stage \d+ only/);
 });
 
 // ---- Retry on a failed item: the kept-work question (#170) --------------------------------
@@ -596,7 +706,7 @@ test('html: Retry and Skip show on the item that paused the roadmap, even while 
     issues: [{ number: 1, title: 'A', url: 'u' }],
   };
   const data = { roadmap: { state: 'paused', pausedBy: 'it1', stages: [{ id: 'st1', name: '', note: '', items: [item] }] }, issues: [] };
-  const html = BacklogRoadmap.html(data, () => {});
+  const html = BacklogRoadmap.html(data, () => {}, SHOW_ALL);
   assert.match(html, /data-rm-item="retry"/);
   assert.match(html, /data-rm-item="skip"/);
   assert.match(html, /<div class="small rm-error error">Could not start #1: #1 already has work from a cancelled run, run-9 \(1 commit on its branch\)\.<div class="rm-error-hint muted">Retry starts it again[^<]*<\/div><\/div>/);
@@ -606,7 +716,7 @@ test('html: Retry and Skip show on a "planned" item with an error and no run (a 
   const { BacklogRoadmap } = loadRoadmap();
   const item = { id: 'it2', status: 'planned', workflow: 'w.yaml', runId: null, error: 'Every issue is closed.', issues: [{ number: 2, title: 'B', url: 'u' }] };
   const data = { roadmap: { state: 'paused', pausedBy: 'it-other', stages: [{ id: 'st1', name: '', note: '', items: [item] }] }, issues: [] };
-  const html = BacklogRoadmap.html(data, () => {});
+  const html = BacklogRoadmap.html(data, () => {}, SHOW_ALL);
   assert.match(html, /data-rm-item="retry"/);
   assert.match(html, /data-rm-item="skip"/);
 });
@@ -615,7 +725,7 @@ test('html: a plain "planned" item (no error, not the one that paused the roadma
   const { BacklogRoadmap } = loadRoadmap();
   const item = { id: 'it3', status: 'planned', workflow: 'w.yaml', runId: null, error: null, issues: [{ number: 3, title: 'C', url: 'u' }] };
   const data = { roadmap: { state: 'planned', pausedBy: null, stages: [{ id: 'st1', name: '', note: '', items: [item] }] }, issues: [] };
-  const html = BacklogRoadmap.html(data, () => {});
+  const html = BacklogRoadmap.html(data, () => {}, SHOW_ALL);
   assert.doesNotMatch(html, /data-rm-item=/);
 });
 
@@ -623,7 +733,7 @@ test('html: never Retry/Skip while the item\'s own run is still alive, even if i
   const { BacklogRoadmap } = loadRoadmap();
   const item = { id: 'it1', status: 'running', workflow: 'w.yaml', runId: 'run-1', issues: [{ number: 1, title: 'A', url: 'u' }] };
   const data = { roadmap: { state: 'running', pausedBy: 'it1', stages: [{ id: 'st1', name: '', note: '', items: [item] }] }, issues: [] };
-  const html = BacklogRoadmap.html(data, () => {});
+  const html = BacklogRoadmap.html(data, () => {}, SHOW_ALL);
   assert.doesNotMatch(html, /data-rm-item=/);
 });
 
@@ -631,7 +741,7 @@ test('html: a skipped item with a leftover error never shows the retry hint (it 
   const { BacklogRoadmap } = loadRoadmap();
   const item = { id: 'it1', status: 'skipped', workflow: 'w.yaml', runId: null, error: 'Every issue is closed.', issues: [{ number: 1, title: 'A', url: 'u' }] };
   const data = { roadmap: { state: 'planned', pausedBy: null, stages: [{ id: 'st1', name: '', note: '', items: [item] }] }, issues: [] };
-  const html = BacklogRoadmap.html(data, () => {});
+  const html = BacklogRoadmap.html(data, () => {}, SHOW_ALL);
   assert.doesNotMatch(html, /data-rm-item=/);
   assert.match(html, /<div class="small rm-error muted">Every issue is closed\.<\/div>/);
 });
@@ -685,7 +795,7 @@ test('html: a running item shows a progress ring with its estimated percent and 
     },
   };
   const data = { roadmap: { state: 'running', stages: [{ id: 'st1', name: '', note: '', items: [item] }] }, issues: [] };
-  const html = BacklogRoadmap.html(data, () => {});
+  const html = BacklogRoadmap.html(data, () => {}, SHOW_ALL);
   assert.match(html, /class="rm-progress st-running[^"]*" data-rm-progress="run-1"/);
   assert.match(html, /<span class="rm-ring-pct">\d+%<\/span>/);
   assert.match(html, />Review</); // the current step's group name
@@ -699,7 +809,7 @@ test('html: a run waiting at a gate shows the ring in the waiting state, "Waitin
     run: { status: 'running', mock: false, startedAt: '2026-01-01T00:00:00.000Z', progress: [{ step: 'human_review', status: 'waiting', ts: '2026-01-01T00:00:00.000Z', type: 'human_approval', agents: [] }], groups: [], stepTimes: {}, history: 0 },
   };
   const data = { roadmap: { state: 'running', stages: [{ id: 'st1', name: '', note: '', items: [item] }] }, issues: [] };
-  const html = BacklogRoadmap.html(data, () => {});
+  const html = BacklogRoadmap.html(data, () => {}, SHOW_ALL);
   assert.match(html, /class="rm-progress st-waiting/);
   assert.match(html, /Waiting for you/);
 });
@@ -711,7 +821,7 @@ test('html: a failed run shows the ring in the failed state, naming the step it 
     run: { status: 'failed', mock: false, startedAt: '2026-01-01T00:00:00.000Z', progress: [{ step: 'test', status: 'failed', ts: '2026-01-01T00:00:00.000Z', agents: [] }], groups: [], stepTimes: {}, history: 0 },
   };
   const data = { roadmap: { state: 'paused', stages: [{ id: 'st1', name: '', note: '', items: [item] }] }, issues: [] };
-  const html = BacklogRoadmap.html(data, () => {});
+  const html = BacklogRoadmap.html(data, () => {}, SHOW_ALL);
   assert.match(html, /class="rm-progress st-failed/);
   assert.match(html, /Failed at test/);
 });
@@ -723,7 +833,7 @@ test('html: a successful run shows the ring at 100%, "Done"', () => {
     run: { status: 'success', mock: false, startedAt: '2026-01-01T00:00:00.000Z', progress: [{ step: 'merge', status: 'done', ts: '2026-01-01T00:00:00.000Z', agents: [] }], groups: [], stepTimes: {}, history: 1 },
   };
   const data = { roadmap: { state: 'done', stages: [{ id: 'st1', name: '', note: '', items: [item] }] }, issues: [] };
-  const html = BacklogRoadmap.html(data, () => {});
+  const html = BacklogRoadmap.html(data, () => {}, SHOW_ALL);
   assert.match(html, /class="rm-progress st-done/);
   assert.match(html, /<span class="rm-ring-pct">100%<\/span>/);
   assert.match(html, />Done</);
@@ -737,9 +847,9 @@ test('html: a simulated run\'s ring carries the "simulated" badge; a planned ite
   };
   const plannedItem = { id: 'it2', status: 'planned', runId: null, workflow: 'w.yaml', issues: [{ number: 2, title: 'B', url: 'u' }] };
   const data = { roadmap: { state: 'running', stages: [{ id: 'st1', name: '', note: '', items: [simItem, plannedItem] }] }, issues: [] };
-  const html = BacklogRoadmap.html(data, () => {});
+  const html = BacklogRoadmap.html(data, () => {}, SHOW_ALL);
   assert.match(html, /class="rm-progress st-running sim"/);
-  assert.match(html, /<span class="badge p-mock">simulated<\/span>/);
+  assert.match(html, /<span class="badge p-mock">Simulated<\/span>/);
   const perItem = html.split('data-item="it2"')[1];
   assert.doesNotMatch(perItem.split('data-item="it1"')[0] || perItem, /class="rm-progress/);
 });
@@ -804,9 +914,9 @@ test('html: an item whose workflow pushes (remote) while the default is local ge
   sandbox.state.workflows = [{ file: 'software-development.yaml', name: 'Software development', merge: 'remote' }, { file: 'software-development-local-hero.yaml', name: 'Software development (local)', merge: 'local' }];
   const item = { id: 'it1', status: 'planned', workflow: 'software-development.yaml', workflowName: 'Software development', issues: [{ number: 1, title: 'A', url: 'u' }] };
   const data = { roadmap: { state: 'planned', stages: [{ id: 'st1', name: '', note: '', items: [item] }] }, issues: [] };
-  BacklogRoadmap.html(data, () => {}); // kicks off loadWorkflows (the module's own cache)
+  BacklogRoadmap.html(data, () => {}, SHOW_ALL); // kicks off loadWorkflows (the module's own cache)
   return settle().then(() => {
-    const html = BacklogRoadmap.html(data, () => {});
+    const html = BacklogRoadmap.html(data, () => {}, SHOW_ALL);
     assert.match(html, /class="badge rm-wf rm-wf-push"/);
     assert.match(html, /merges locally/);
   });
@@ -819,9 +929,9 @@ test('html: an item already on the default (local) workflow gets no push badge',
   sandbox.state.workflows = list;
   const item = { id: 'it1', status: 'planned', workflow: 'software-development-local-hero.yaml', workflowName: 'Software development (local)', issues: [{ number: 1, title: 'A', url: 'u' }] };
   const data = { roadmap: { state: 'planned', stages: [{ id: 'st1', name: '', note: '', items: [item] }] }, issues: [] };
-  BacklogRoadmap.html(data, () => {});
+  BacklogRoadmap.html(data, () => {}, SHOW_ALL);
   return settle().then(() => {
-    const html = BacklogRoadmap.html(data, () => {});
+    const html = BacklogRoadmap.html(data, () => {}, SHOW_ALL);
     assert.doesNotMatch(html, /rm-wf-push/);
   });
 });
@@ -838,7 +948,7 @@ test('onClick [data-rm=start]: a roadmap with items that would push while the de
   sandbox.state.workflows = list;
   const item = { id: 'it1', status: 'planned', workflow: 'software-development.yaml', workflowName: 'Software development', issues: [{ number: 1, title: 'A', url: 'u' }] };
   const data = { roadmap: { state: 'planned', stages: [{ id: 'st1', name: '', note: '', items: [item] }] }, issues: [] };
-  BacklogRoadmap.html(data, () => {});
+  BacklogRoadmap.html(data, () => {}, SHOW_ALL);
   await settle();
   const ctx = makeCtx();
   const handled = await BacklogRoadmap.onClick({ target: startButtonTarget() }, ctx, data);
@@ -857,7 +967,7 @@ test('onClick [data-rm=start]: "Start anyway" keeps the pushing workflow and sta
   sandbox.state.workflows = list;
   const item = { id: 'it1', status: 'planned', workflow: 'software-development.yaml', workflowName: 'Software development', issues: [{ number: 1, title: 'A', url: 'u' }] };
   const data = { roadmap: { state: 'planned', stages: [{ id: 'st1', name: '', note: '', items: [item] }] }, issues: [] };
-  BacklogRoadmap.html(data, () => {});
+  BacklogRoadmap.html(data, () => {}, SHOW_ALL);
   await settle();
   const ctx = makeCtx();
   await BacklogRoadmap.onClick({ target: startButtonTarget() }, ctx, data);
@@ -872,7 +982,7 @@ test('onClick [data-rm=start]: cancelling the push confirmation starts nothing',
   sandbox.state.workflows = list;
   const item = { id: 'it1', status: 'planned', workflow: 'software-development.yaml', workflowName: 'Software development', issues: [{ number: 1, title: 'A', url: 'u' }] };
   const data = { roadmap: { state: 'planned', stages: [{ id: 'st1', name: '', note: '', items: [item] }] }, issues: [] };
-  BacklogRoadmap.html(data, () => {});
+  BacklogRoadmap.html(data, () => {}, SHOW_ALL);
   await settle();
   const ctx = makeCtx();
   const handled = await BacklogRoadmap.onClick({ target: startButtonTarget() }, ctx, data);
@@ -1084,7 +1194,7 @@ function liveData(over = {}) {
 
 test('liveBox: off shows a plain switch, no LIVE badge, and says the roadmap ends with its last stage while it runs', () => {
   const { BacklogRoadmap } = loadRoadmap();
-  const html = BacklogRoadmap.html(liveData({ live: false }), () => {});
+  const html = BacklogRoadmap.html(liveData({ live: false }), () => {}, SHOW_ALL);
   assert.match(html, /<div class="rm-live" role="group" aria-label="Live roadmap">/); // no " on" class
   assert.doesNotMatch(html, /rm-live-badge/);
   assert.doesNotMatch(html, /data-rm-live[^>]*checked/);
@@ -1093,13 +1203,13 @@ test('liveBox: off shows a plain switch, no LIVE badge, and says the roadmap end
 
 test('liveBox: off on a roadmap that is not running says turning it on starts the roadmap first', () => {
   const { BacklogRoadmap } = loadRoadmap();
-  const html = BacklogRoadmap.html(liveData({ live: false, state: 'planned' }), () => {});
+  const html = BacklogRoadmap.html(liveData({ live: false, state: 'planned' }), () => {}, SHOW_ALL);
   assert.match(html, /rm-live-state"[^>]*>Off\. Turning it on starts the roadmap first\.</);
 });
 
 test('liveBox: on with no refill yet shows the LIVE badge, a checked switch, and "on since" with who turned it on', () => {
   const { BacklogRoadmap } = loadRoadmap();
-  const html = BacklogRoadmap.html(liveData({ live: true, liveSince: '2026-10-02T03:12:00.000Z', liveBy: 'owner' }), () => {});
+  const html = BacklogRoadmap.html(liveData({ live: true, liveSince: '2026-10-02T03:12:00.000Z', liveBy: 'owner' }), () => {}, SHOW_ALL);
   assert.match(html, /<div class="rm-live on" role="group" aria-label="Live roadmap">/);
   assert.match(html, /<b>Live roadmap<\/b> <span class="badge rm-live-badge">LIVE<\/span>/);
   assert.match(html, /data-rm-live[^>]*checked/);
@@ -1108,25 +1218,25 @@ test('liveBox: on with no refill yet shows the LIVE badge, a checked switch, and
 
 test('liveBox: "refilling" and "added" outcomes, in muted tone', () => {
   const { BacklogRoadmap } = loadRoadmap();
-  const refilling = BacklogRoadmap.html(liveData({ live: true, liveRefill: { status: 'refilling' } }), () => {});
+  const refilling = BacklogRoadmap.html(liveData({ live: true, liveRefill: { status: 'refilling' } }), () => {}, SHOW_ALL);
   assert.match(refilling, /rm-live-state"[^>]*>refilling now: the Product Owner is picking the next issues…/);
 
-  const added = BacklogRoadmap.html(liveData({ live: true, liveRefill: { status: 'added', at: '2026-10-02T03:12:00.000Z', added: 2 } }), () => {});
+  const added = BacklogRoadmap.html(liveData({ live: true, liveRefill: { status: 'added', at: '2026-10-02T03:12:00.000Z', added: 2 } }), () => {}, SHOW_ALL);
   assert.match(added, /rm-live-state"[^>]*>last refill \d\d:12 \(\+2 stages\)/);
 });
 
 test('liveBox: "budget" (warn-text) and "failed" (error) outcomes get their tone class', () => {
   const { BacklogRoadmap } = loadRoadmap();
-  const budget = BacklogRoadmap.html(liveData({ live: true, liveRefill: { status: 'budget', message: 'Live roadmap: no more refills today.' } }), () => {});
+  const budget = BacklogRoadmap.html(liveData({ live: true, liveRefill: { status: 'budget', message: 'Live roadmap: no more refills today.' } }), () => {}, SHOW_ALL);
   assert.match(budget, /class="small warn-text rm-live-state" title="Live roadmap: no more refills today\."[^>]*>daily budget reached: no more refills</);
 
-  const failed = BacklogRoadmap.html(liveData({ live: true, liveRefill: { status: 'failed', at: '2026-10-02T03:12:00.000Z', message: 'boom' } }), () => {});
+  const failed = BacklogRoadmap.html(liveData({ live: true, liveRefill: { status: 'failed', at: '2026-10-02T03:12:00.000Z', message: 'boom' } }), () => {}, SHOW_ALL);
   assert.match(failed, /class="small error rm-live-state" title="boom"[^>]*>the last refill failed \(\d\d:12\)</);
 });
 
 test('liveBox: "empty" (nothing left) shows its message with the "Live roadmap: " prefix stripped', () => {
   const { BacklogRoadmap } = loadRoadmap();
-  const html = BacklogRoadmap.html(liveData({ live: true, liveRefill: { status: 'empty', message: 'Live roadmap: nothing left under complexity 2. Start tries again.' } }), () => {});
+  const html = BacklogRoadmap.html(liveData({ live: true, liveRefill: { status: 'empty', message: 'Live roadmap: nothing left under complexity 2. Start tries again.' } }), () => {}, SHOW_ALL);
   assert.match(html, /rm-live-state"[^>]*>nothing left under complexity 2\. Start tries again\.</);
 });
 

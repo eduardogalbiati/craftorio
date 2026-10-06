@@ -7,6 +7,7 @@
 //         web: false                                        # WebSearch / WebFetch
 //         mcp: []                                           # names from the workflow's mcp_servers
 //         subagents: false                                  # the CLI's own sub-agents (Claude's Agent/Task)
+//         screenshots: false                                # not told where screenshots go (default true; #223's healer)
 //
 // A step can override them (`steps[].capabilities`, merged key by key over the agent's).
 // Isolation (on unless `isolation: false` on the agent or in `defaults`) keeps the user's personal
@@ -17,7 +18,7 @@
 const path = require('path');
 
 const TOOL_RE =/^(read|edit|write|bash(:.+)?)$/;
-const KEYS = ['tools', 'web', 'mcp', 'subagents'];
+const KEYS = ['tools', 'web', 'mcp', 'subagents', 'screenshots'];
 
 // Codex features that reach outside the repository (desktop apps, browsers, plugins, memory).
 // `codex features list` keeps removed names as "removed", so these stay valid flags.
@@ -101,6 +102,7 @@ function normalize(caps) {
     web: !!caps.web,
     mcp: [caps.mcp || []].flat(Infinity).map(String),
     subagents: !!caps.subagents,
+    ...(caps.screenshots === false ? { screenshots: false } : {}),
   };
 }
 
@@ -119,7 +121,7 @@ function validate(caps, where, mcpServers = {}) {
   for (const t of [caps.tools || []].flat(Infinity)) {
     if (!TOOL_RE.test(String(t).trim())) throw new Error(`${where}: unknown tool "${t}" (use read, edit, write, bash or bash:<command>).`);
   }
-  for (const k of ['web', 'subagents']) if (caps[k] !== undefined && typeof caps[k] !== 'boolean') throw new Error(`${where}: capabilities.${k} must be true or false.`);
+  for (const k of ['web', 'subagents', 'screenshots']) if (caps[k] !== undefined && typeof caps[k] !== 'boolean') throw new Error(`${where}: capabilities.${k} must be true or false.`);
   if (caps.mcp !== undefined && !Array.isArray(caps.mcp)) throw new Error(`${where}: capabilities.mcp must be a list of server names.`);
   for (const name of caps.mcp || []) {
     if (!mcpServers[name]) throw new Error(`${where}: MCP server "${name}" is not defined in the workflow's mcp_servers.`);
@@ -163,7 +165,8 @@ function commandGuide(caps, runDir, agentVars = AGENT_ENV, shotsDir = null) {
     `- ${env} ${Object.keys(agentVars).length > 1 ? 'are' : 'is'} already set in your environment: never prefix a command with \`VAR=value\`.`,
     ...(agentVars.MULTIAGENT_WORKSPACE ? [`- Simulated runs, screenshots and app checks you start go to this run's scratch workspace \`${agentVars.MULTIAGENT_WORKSPACE}\`: never pass a path under the owner's workspace (its runs/ folder).`] : []),
     '- Avoid shell expansions the CLI cannot check (`$VAR`, `$(...)`, `$?`): write the value out; the tool already reports each command\'s exit code.',
-    ...(logs ? [`- Write command logs to \`${logs}${path.sep}<name>.log\` and screenshots to \`${shots}\` (as \`<issue>-<screen>-<state>.original.png\` / \`.modified.png\`), never to /tmp, $TEMP or AppData (a gitignored folder of the working folder is fine too).`] : []),
+    // screenshots: false (an agent that should not take any): only the logs' folder
+    ...(logs ? [`- Write command logs to \`${logs}${path.sep}<name>.log\`${caps.screenshots === false ? '' : ` and screenshots to \`${shots}\` (as \`<issue>-<screen>-<state>.original.png\` / \`.modified.png\`)`}, never to /tmp, $TEMP or AppData (a gitignored folder of the working folder is fine too).`] : []),
     '- Pipes and `;` chains are fine when every part is an allowed command or a simple utility (tail, head, grep, ls, cat, echo, wc, printenv; mkdir -p, mktemp and sort when you may write files). When unsure, run one command per call; after a refusal, rephrase it once into an allowed form instead of retrying variants.',
   ].join('\n');
 }

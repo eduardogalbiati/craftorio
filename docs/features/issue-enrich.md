@@ -3,8 +3,8 @@ order: 510
 ---
 
 <!-- section:workflows -->
-**Enrich a Backlog issue**: **Enrich in Write & Review** on an open issue (list row, kanban card,
-expanded details) opens this screen prefilled: an enriched issue by default, a prompt with the
+**Enrich a Backlog issue**: **Enrich in Write & Review** in an open issue's **⋯** menu (list row, kanban
+card) opens this screen prefilled: an enriched issue by default, a prompt with the
 issue's title, number, URL, labels and full body, a default goal for the document type (it follows
 the type until you edit it), and the Backlog's project (read-only). Nothing starts by itself. The run
 records its issue (`issues` in `workflow.started`): the chat shows it, and the Backlog card shows

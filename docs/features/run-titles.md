@@ -9,7 +9,7 @@ order: 600
   task. Hover it and click the pencil to give it your own ("Notifications, 2nd try after
   conflict"); an empty title goes back to the default. It is saved in `runs/<id>/meta.json`
   (`events.jsonl` is never changed), a resumed run inherits it, and it is shown everywhere a run is
-  listed: Workflows › Runs, Projects › Project, the left sidebar's run list, the Run screen, the run
+  listed: Workflows › Runs, Settings › Projects › Project, the left sidebar's run list, the Run screen, the run
   chat, Backlog cards, toasts and desktop notifications. The workflow name stays next to it.
 - A run that opened a pull/merge request (the latest step output with `pr_url` / `pr_number`, e.g.
   the `ci` step; a resumed run shows the PR of the run it resumes) shows it in the same places: the

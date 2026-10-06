@@ -55,15 +55,45 @@ function loadAppliedState() {
   return { helpers: sandbox.helpers, setIssues: (list) => { issues = list; } };
 }
 
-test('groupHtml renders the workflow, size, warnings, the mode reason and the Assign/Add to roadmap buttons, never applying anything by itself', () => {
+test('groupHtml renders the size, warnings and the Assign/Add to roadmap buttons, never applying anything by itself', () => {
   const fn = /function groupHtml\(g, m, n\)[\s\S]*?\n  \}/.exec(src)[0];
-  assert.match(fn, /<span class="mono">\$\{esc\(g\.workflow\)\}<\/span>/);
-  assert.match(fn, /\$\{sizeText\(g\)\}/);
-  assert.match(fn, /\$\{\(g\.warnings \|\| \[\]\)\.map\(\(w\) => `<div class="small warn-text">⚠ \$\{esc\(w\)\}<\/div>`\)\.join\(''\)\}/);
-  assert.match(fn, /\$\{g\.modeReason \? `<div class="small"><span class="muted">mode:<\/span> \$\{esc\(g\.modeReason\)\}<\/div>` : ''\}/);
+  assert.match(fn, /sizeText\(g\)/);
+  assert.match(fn, /g\.warnings/);
   assert.match(fn, /data-po-act="assign"/);
   assert.match(fn, /data-po-act="roadmap"/);
   assert.doesNotMatch(fn, /api\.(startRun|assignIssues)/); // rendering never starts a run or assigns by itself
+});
+
+// ---- #216: the proposal card in sections, inputs as the shared pills ----------------------------
+
+test('groupHtml (#216): the workflow by its name, not its file, and its inputs as the shared WorkflowInputs.inputPills', () => {
+  const fn = /function groupHtml\(g, m, n\)[\s\S]*?\n  \}/.exec(src)[0];
+  assert.doesNotMatch(fn, /<span class="mono">\$\{esc\(g\.workflow\)\}<\/span>/);
+  assert.match(src, /inputPills\(/);
+  // no raw key=value anywhere visible on the card (groupHtml or the Cost step's badge)
+  assert.doesNotMatch(src, /`<span class="mono">\$\{esc\(k\)\}=\$\{esc\(v\)\}<\/span>`/);
+  const cost = /function costHtml\(g\) \{[\s\S]*?\n  \}/.exec(src)?.[0] || '';
+  assert.match(cost, /inputPills\(/, 'the Cost step\'s choices are pills too');
+});
+
+test('groupHtml (#216): the reason, the mode reason and the warnings are rendered as Markdown in labelled sections', () => {
+  assert.match(src, /markdownHtml\([^)]*reason/);
+  assert.match(src, /markdownHtml\([^)]*modeReason/);
+  assert.match(src, />\s*Why\s*</);
+  assert.match(src, />\s*Files\s*</);
+  assert.match(src, />\s*Estimate\s*</);
+  assert.match(src, /callout/); // the warnings
+});
+
+test('the proposal\'s estimate (#215, #216) shows the time next to the cost', () => {
+  assert.match(src, /formatMinutes\(/);
+});
+
+test('the Product Owner skill (#216) asks for short reasons, with Markdown allowed (bold for the key point)', () => {
+  const skill = fs.readFileSync(path.join(__dirname, '..', 'skills', 'backlog-product-owner', 'SKILL.md'), 'utf8');
+  assert.match(skill, /reason[^\n]*\bshort\b|\bshort\b[^\n]*reason/i);
+  assert.match(skill, /reason[^\n]*Markdown|Markdown[^\n]*reason/i);
+  assert.match(skill, /\bbold\b/i);
 });
 
 // ---- a group already applied (#140): derived from the Backlog's data, never remembered ----------
@@ -256,7 +286,7 @@ test('ask: a question is refused while another is pending, and the simulated fla
   assert.match(fn, /const calibration = mode === 'plan' \? window\.BacklogPoSettings\?\.override\(\) \?\? null : null;/);
   assert.match(fn, /const cost = mode === 'plan' \? window\.BacklogPoSettings\?\.costOverride\?\.\(\) \?\? null : null;/);
   assert.match(fn, /if \(mode === 'plan'\) window\.BacklogPoSettings\?\.clearOverride\(\);/);
-  assert.match(fn, /await api\.askProductOwner\(projectId, q, devMode\(\), mode, files, issues, devMode\(\) \? po\.scenario \|\| null : null, calibration, cost\);/);
+  assert.match(fn, /await api\.askProductOwner\(projectId, q, devMode\(\), mode, files, issues, devMode\(\) \? po\.scenario \|\| null : null, calibration, costOff \? null : cost, workflow, inputs\);/);
 });
 
 // Runs ask() for real (po, watching and api stubbed): the busy flag is set synchronously, before the
@@ -282,6 +312,8 @@ function loadAsk() {
     // real live-turn.js runs here too, so po.live has its real shape
     window: { LiveTurn: require('../src/renderer/live-turn'), BacklogPoSettings: { override: () => settings.override, costOverride: () => settings.costOverride, clearOverride: settings.clearOverride } },
     renderLive: () => {},
+    // #234: the question just sent kept in view (needs a real layout)
+    questionInView: () => {},
     setInterval: () => 0,
     clearInterval: () => {},
     state: { view: 'backlog' },
@@ -307,7 +339,8 @@ test('ask (#189, plan mode): sends window.BacklogPoSettings.override() as the 8t
   settings.override = 5;
   settings.costOverride = 1;
   ask('Plan this one for quality');
-  assert.equal(calls.askProductOwner[0].length, 9);
+  // #235: then the workflow and its options (10th and 11th)
+  assert.equal(calls.askProductOwner[0].length, 11);
   assert.equal(calls.askProductOwner[0][7], 5);
   assert.equal(calls.askProductOwner[0][8], 1);
   assert.equal(calls.clearOverride, 1);
@@ -471,7 +504,7 @@ test('attach (the Backlog\'s Send to Product Owner button): opens the drawer in 
   assert.match(fn, /if \(po\.mode !== 'plan'\) setMode\('plan'\);/);
   assert.match(fn, /po\.attached = \[\.\.\.new Set\(numbers\)\];/);
   assert.match(fn, /if \(!box\.value\.trim\(\)\) box\.value = SELECTION_QUESTION;/);
-  assert.match(fn, /box\.focus\(\);/);
+  assert.match(fn, /box\.focus\(\{ preventScroll: true \}\);/);
   assert.doesNotMatch(fn, /\bask\(/); // nothing is sent until the owner presses Ask
 });
 
@@ -493,7 +526,7 @@ test('#po-attached\'s click removes one attached issue, or clears them all, then
   const fn = /\$p\('#po-attached'\)\.onclick = \(e\) => \{[\s\S]*?\n  \};/.exec(src)[0];
   assert.match(fn, /po\.attached = po\.attached\.filter\(\(n\) => n !== Number\(one\.dataset\.poUnattachIssue\)\);/);
   assert.match(fn, /else if \(e\.target\.closest\('\[data-po-unattach-all\]'\)\) po\.attached = \[\];/);
-  assert.match(fn, /\$p\('#po-question'\)\.focus\(\);/);
+  assert.match(fn, /\$p\('#po-question'\)\.focus\(\{ preventScroll: true \}\);/);
 });
 
 test('Clear conversation forgets the attached issues and their checked extras, like the files and notes', () => {
@@ -578,11 +611,11 @@ test('apply and fileDraft always render with the default ("keep") scroll: applyi
   assert.doesNotMatch(fileDraftFn, /render\(\{ scroll: 'end' \}\)/);
 });
 
-test('open scrolls to the end when the drawer opens (and again once the history reload lands); ask and setMode keep the default (the owner\'s own new message scrolls down only if they were already there)', () => {
+test('open scrolls to the end when the drawer opens (and again once the history reload lands); ask scrolls to the question and the live turn (#234); setMode keeps the default', () => {
   const openFn = /async function open\(\)[\s\S]*?\n  \}/.exec(src)[0];
   assert.match(openFn, /render\(\{ scroll: 'end' \}\);[\s\S]*render\(\{ scroll: 'end' \}\);/);
   const askFn = /async function ask\(question\)[\s\S]*?\n  \}/.exec(src)[0];
-  assert.doesNotMatch(askFn, /render\(\{ scroll: 'end' \}\)/);
+  assert.match(askFn, /render\(\{ scroll: 'end' \}\)/);
 });
 
 // ---- #148: the simulation-only scenario picker, orange and never in the production UI ------------

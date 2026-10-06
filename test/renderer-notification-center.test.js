@@ -81,6 +81,15 @@ test('openNotificationTarget: a Product Owner answer (#149, openPO) selects the 
   assert.deepEqual(calls.openPO, [[]]);
 });
 
+test('openNotificationTarget: a roadmap target (#254: a live roadmap refill, a budget pause) selects the project and opens the Roadmap screen', () => {
+  const { openNotificationTarget, calls } = loadOpenNotificationTarget();
+  openNotificationTarget({ view: 'roadmap', projectId: 'proj-1' });
+  assert.deepEqual(calls.focusProject, [['proj-1']]);
+  assert.deepEqual(calls.showView, [['roadmap']]);
+  assert.deepEqual(calls.openPO, []);
+  assert.deepEqual(calls.showRun, []);
+});
+
 test('openNotificationTarget: a plain backlog target (a push conflict, #69) never opens the Product Owner drawer', () => {
   const { openNotificationTarget, calls } = loadOpenNotificationTarget();
   openNotificationTarget({ view: 'backlog', projectId: 'proj-1' });

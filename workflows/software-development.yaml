@@ -59,8 +59,8 @@
 #
 # Failure gates (human): they only offer what can change the outcome. Retrying
 # something that cannot change (the same commit, the same failed run) is not offered as
-# the way out of a code failure; stopping ends the run as `failed` (worktree kept, so it
-# can be resumed), rejecting the merge or the review loop ends it as `cancelled`.
+# the way out of a code failure; stopping ends the run as `failed` (its branch keeps the work, so
+# it can be resumed), rejecting the merge or the review loop ends it as `cancelled`.
 #
 # Rules:
 #   - Agents never talk to each other: everything goes through the orchestrator
@@ -113,24 +113,29 @@ metadata:
 # -----------------------------------------------------------------------------
 inputs:
   task:
+    label: "Task"
     type: string
     required: true
     description: Feature or bug to implement.
   issue:
+    label: "Issue"
     type: string
     default: ""
     description: "URL of the issue this run implements (set by the Backlog screen). The PR/MR closes it."
   issues:
+    label: "Issues"
     type: array
     default: []
     description: "URLs of the issues this run implements together, one branch and one PR/MR (set by the Backlog screen; one per line). The PR/MR closes each one."
   repo_path:
+    label: "Repository"
     type: string
     required: true
     description: Local repository path or git URL (cloned into <workspace>/repos). Needs a GitHub or GitLab remote.
   # Picks the unit-test-writer-<language>, e2e-test-writer-<language> and build-audit-<language> skills. The app prefills it
   # from the project's files (package.json, pyproject.toml, go.mod, pom.xml, *.csproj).
   language:
+    label: "Language"
     type: string
     enum: [js, python, go, java, csharp]
     default: js
@@ -145,6 +150,7 @@ inputs:
     options: { gh: GitHub, gl: GitLab }
     description: Where the pull request (GitHub) or merge request (GitLab) is opened.
   base_branch:
+    label: "Base branch"
     type: string
     default: main
     description: The branch the work starts from and is merged into.
@@ -162,6 +168,7 @@ inputs:
     description: "GitHub only: the Actions workflow that runs after the merge."
   # validated: the run stops at developer_check after the developer.
   mode:
+    label: "Mode"
     type: string
     enum: [auto, validated]
     default: auto
@@ -169,6 +176,7 @@ inputs:
     description: "Automatic: the change goes straight from the developer to review and tests. Validated: the run stops after the developer so you can try the change before review and tests are paid for."
   # A boolean; saved inputs "true"/"false" (before #116) are accepted by the engine.
   validate_every_round:
+    label: "Validate every round"
     type: boolean
     default: false
     show_if: "mode == 'validated'"
@@ -211,6 +219,8 @@ providers:
     type: claude-code
     command: claude
     args: ["-p", "--output-format", "stream-json", "--verbose", "--model", "{{ model }}"]
+    # #286: an agent's `effort` reaches the CLI only through effort_args
+    effort_args: ["--effort", "{{ effort }}"]
     resume_args: ["--resume", "{{ session_id }}"]
     # Lets the agent read the skill folder (outside working_dir). Codex in
     # read-only mode can already read any path.
@@ -219,6 +229,7 @@ providers:
     type: codex-cli
     command: codex
     args: ["exec", "--json", "--skip-git-repo-check", "-m", "{{ model }}"]
+    effort_args: ["-c", "model_reasoning_effort={{ effort }}"]
     resume_args: ["resume", "{{ session_id }}"]
     stdin_arg: "-"
 
@@ -276,6 +287,7 @@ orchestrator:
 # -----------------------------------------------------------------------------
 agents:
   developer:
+    color: "#4C7DFF" # #224: its role's colour in the run chat and the runs list
     provider: claude
     model: claude-opus-5-5
     session: handoff
@@ -320,6 +332,7 @@ agents:
       requested fix, report the commit hash.
 
   reviewer:
+    color: "#A06BFF" # #224: its role's colour in the run chat and the runs list
     provider: claude
     model: claude-sonnet-5-5
     effort: high
@@ -333,6 +346,7 @@ agents:
       detect the languages in the diff and read the rules for each one before the verdict.
 
   test_writer:
+    color: "#FF8A3D" # #224: its role's colour in the run chat and the runs list
     provider: claude
     model: claude-sonnet-5
     session: persistent
@@ -371,6 +385,7 @@ agents:
       is left, so the next session continues without mapping the change again.
 
   builder:
+    color: "#E6C229" # #224: its role's colour in the run chat and the runs list
     provider: claude
     model: claude-sonnet-5
     session: persistent
@@ -385,6 +400,7 @@ agents:
       - report only: moderate/low, and anything in development-only dependencies
 
   verifier:
+    color: "#2FBF71" # #224: its role's colour in the run chat and the runs list
     provider: claude
     model: claude-sonnet-5
     session: persistent
@@ -396,6 +412,7 @@ agents:
       you do not run the full test suite (the test writer ran it).
 
   evidence:
+    color: "#1FC2D6" # #224: its role's colour in the run chat and the runs list
     provider: claude
     model: claude-sonnet-5
     session: ephemeral
@@ -687,7 +704,7 @@ steps:
     choices:
       - { id: approve, label: "Approve: go on to the code review" }
       - { id: changes, label: "Ask for changes: back to the developer", feedback_required: true }
-      - { id: stop,    label: "Stop the run (worktree kept to resume)" }
+      - { id: stop,    label: "Stop the run (branch kept to resume)" }
     transitions:
       - when: "choice == 'approve'"
         goto: code_review
@@ -710,7 +727,7 @@ steps:
       The rest is on branch `{{ steps.develop.output.branch }}`; the code review has not run yet.
     choices:
       - { id: continue, label: "Continue without them" }
-      - { id: stop,     label: "Stop the run as failed (worktree kept to resume)" }
+      - { id: stop,     label: "Stop the run as failed (branch kept to resume)" }
     transitions:
       # nothing committed yet: the developer commits the rest first
       - when: "choice == 'continue' and not (steps.develop.output.committed or steps.develop.output.no_change)"
@@ -743,7 +760,7 @@ steps:
       The other issues are done on branch `{{ steps.develop.output.branch }}`.
     choices:
       - { id: continue, label: "Continue without them (the PR/MR will not close them)" }
-      - { id: stop,     label: "Stop the run as failed (worktree kept to resume)" }
+      - { id: stop,     label: "Stop the run as failed (branch kept to resume)" }
     transitions:
       - when: "(choice == 'continue' and inputs.mode == 'validated' and vars.owner_validated != 'yes') and inputs.screenshots == 'off'"
         goto: developer_check
@@ -1038,6 +1055,8 @@ steps:
     type: suite
     command: "{{ inputs.test_command }}"
     scope: affected
+    # #225: node's coverage (an npm script's <name>:coverage, or a plain node --test) as a Tests artifact
+    coverage: true
     transitions:
       # after a merge conflict: the build and the verification already passed on the change; CI
       # builds the merged result, then the PR check, the preview and the owner's approval again
@@ -1081,7 +1100,7 @@ steps:
       {{ steps.test.output.failure_report }}
       {% endif %}
       {{ tests_plan }}
-      Approve: continue to the build anyway (the change is reported as not tested green). Reject: stop the run as failed (the worktree is kept to resume it).
+      Approve: continue to the build anyway (the change is reported as not tested green). Reject: stop the run as failed (its branch keeps the work to resume it).
     transitions:
       - when: "approved"
         goto: build
@@ -1156,7 +1175,7 @@ steps:
     choices:
       - { id: continue, label: "Continue to verification anyway" }
       - { id: retry,    label: "Build again (I fixed the environment)" }
-      - { id: stop,     label: "Stop the run as failed (worktree kept to resume)" }
+      - { id: stop,     label: "Stop the run as failed (branch kept to resume)" }
     transitions:
       - when: "choice == 'continue'"
         goto: evidence
@@ -1256,6 +1275,7 @@ steps:
   # Verifier: does the change do what the task asked? Same command on the base and on
   # the branch. inconclusive (nothing observable, e.g. a refactor) does not block.
   - id: verify_change
+    display: Final verification
     agent: verifier
     prompt: |
       Task: {{ inputs.task }}
@@ -1327,7 +1347,7 @@ steps:
       The change still does not do what the task asked after 2 rounds of fixes.
       Claim: {{ steps.verify_change.output.claim }}
       Observed: {{ steps.verify_change.output.evidence }}
-      Approve: continue to CI anyway. Reject: stop the run as failed (the worktree is kept to resume it).
+      Approve: continue to CI anyway. Reject: stop the run as failed (its branch keeps the work to resume it).
     transitions:
       - when: "approved"
         goto: ci
@@ -1450,7 +1470,7 @@ steps:
     choices:
       - { id: fix,     label: "Send the failure to the developer (one more fix round, then CI again)" }
       - { id: recheck, label: "Check CI again without code changes (stuck or flaky pipeline, re-run by you)" }
-      - { id: stop,    label: "Stop the run as failed (worktree kept to resume)" }
+      - { id: stop,    label: "Stop the run as failed (branch kept to resume)" }
     transitions:
       - when: "choice == 'fix'"
         delegate:
@@ -1653,7 +1673,7 @@ steps:
     choices:
       - { id: retry, label: "Publish the same commit again (infrastructure failure)" }
       - { id: fix,   label: "Send the failure to the developer (fix, then CI, PR check and preview again)" }
-      - { id: stop,  label: "Stop the run as failed (worktree kept to resume)" }
+      - { id: stop,  label: "Stop the run as failed (branch kept to resume)" }
     transitions:
       - when: "choice == 'retry'"
         goto: deploy_test
@@ -1781,7 +1801,7 @@ steps:
     choices:
       - { id: retry,   label: "Merge now (checked right before; you approve the PR/MR's current head)" }
       - { id: resolve, label: "Send it to the developer to resolve (then review, tests, CI, preview and your approval again)" }
-      - { id: stop,    label: "Stop the run as failed (worktree kept to resume)" }
+      - { id: stop,    label: "Stop the run as failed (branch kept to resume)" }
     transitions:
       - when: "choice == 'retry'"
         precheck:

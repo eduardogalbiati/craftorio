@@ -197,7 +197,7 @@ function runsTableHtml(u) {
     <tbody>${runs.map((r) => `<tr title="${esc(r.runId)}">
       <td class="nowrap">${r.startedAt ? esc(dateOf(r.startedAt)) : '—'}</td>
       <td>${esc(r.workflow || '—')}</td>
-      <td><span class="pill pill-${esc(r.status)}">${esc(r.status || '—')}</span></td>
+      <td>${r.status ? StatusPill.statusPill(r.status) : '<span class="pill pill-idle">—</span>'}</td>
       <td class="num mono">${fmtTok(r.tokens)}</td>
       <td class="num mono">${fmtUsd(r.costUsd)}</td>
       <td><div class="u-split">${Object.entries(r.byProvider || {}).map(([id, v]) =>

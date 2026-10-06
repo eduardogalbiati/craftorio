@@ -39,7 +39,12 @@ module.exports = (ctx) => {
     const stages = roadmaps.issueStages(roadmap);
     const refresh = refreshBanner(project, live, local);
     const refreshed = new Set(refresh.refreshed);
-    const issues = backlog.linkRuns(data.issues, live, queue, local)
+    // the issues a release shipped (#260) are marked Released (`released`: its version, shown on the card)
+    // the issues filed from a discovery card (#258) name it (`discoveryCard`: { id, title }, the card's
+    // badge); the card store is the discovery channels' (src/service/channels/discovery.js)
+    const cards = ctx.discoveryIssueCards?.(data.projectId) || new Map();
+    const issues = ctx.markReleasedIssues(data.projectId, backlog.linkRuns(data.issues, live, queue, local))
+      .map((i) => (cards.has(i.number) ? { ...i, discoveryCard: cards.get(i.number) } : i))
       .map((i) => (stages.has(i.number) ? { ...i, roadmap: stages.get(i.number) } : i))
       .map((i) => (refreshed.has(i.number) && i.state === 'open' ? { ...i, refreshed: true } : i));
     return { ...data, queue, local, roadmap, refresh, autoPush: !!project?.autoPush, autoEpic: !!project?.autoEpic, issues };
@@ -150,6 +155,11 @@ module.exports = (ctx) => {
         const next = backlog.claimQueued(ws.backlog, (projectId, item) => !ctx.slotProblem({ mock: !!item.mock, projectId }));
         if (!next) return;
         const { projectId, item } = next;
+        // #276: low memory holds a real start: the item goes back to the queue and a timer dispatches again
+        if (!item.mock && await ctx.memoryHold()) {
+          backlog.releaseQueued(ws.backlog, projectId, item.number);
+          return;
+        }
         try {
           const project = projects.readProject(ws.projects, projectId);
           const wf = loadWorkflow(ctx.workflowPath(item.workflow).file);

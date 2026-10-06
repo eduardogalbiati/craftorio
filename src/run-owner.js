@@ -8,6 +8,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { keepBeating } = require('./app-sessions');
 
 const HEARTBEAT_MS = 5000;
 // a heartbeat older than this means the owner is gone (a suspended laptop catches up on wake)
@@ -81,14 +82,20 @@ const lockFile = (workspace) => path.join(workspace, '.lock');
 function lockWorkspace(workspace, extra = {}) {
   fs.mkdirSync(workspace, { recursive: true });
   const file = lockFile(workspace);
+  // the lock's holder also keeps the app's heartbeat log (the 24/7 meter's "app closed" time, #188)
+  const held = () => {
+    const h = hold(file, extra);
+    const beats = keepBeating(workspace);
+    return { ok: true, ...h, release() { beats.stop(); h.release(); } };
+  };
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       fs.writeFileSync(file, JSON.stringify(record(extra), null, 2), { flag: 'wx' });
-      return { ok: true, ...hold(file, extra) };
+      return held();
     } catch (e) {
       if (e.code !== 'EEXIST') throw e;
       const holder = readJson(file);
-      if (holder?.pid === process.pid) return { ok: true, ...hold(file, extra) };
+      if (holder?.pid === process.pid) return held();
       if (holder && ownerAlive(holder)) return { ok: false, holder };
       try { fs.unlinkSync(file); } catch { /* another process took it over first */ }
     }

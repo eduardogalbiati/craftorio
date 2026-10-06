@@ -6,14 +6,19 @@
 // Its files, in <workspace>/oracle/ next to night-watch.json (the switch, src/oracle-actions.js):
 //   night-permissions.json  { allowed: [permission id], updatedAt }: the owner's checklist
 //   night-log.jsonl         the Oracle's events while the watch is on, one per line { ts, type, ... }:
-//     oracle.watch      { on, until, startedAt, by }      the switch turned on (or its end time moved) or off
-//     oracle.detected   { id, kind, target, runId, projectId, since }   an anomaly (INCIDENT_KINDS)
+//     oracle.watch      { on, until, startedAt, by }      the switch turned on (or its end time moved) or off;
+//                       with selfHealing: true (#278) the standing watch of Settings › Oracle (until null)
+//     oracle.detected   { id, kind, target, runId, projectId, since, evidence? }   an anomaly (INCIDENT_KINDS);
+//                       evidence: what a Self-healing detector saw (the command, the test files, the turn)
 //     oracle.action     { actionId, kind, title, target, runId, projectId, permission, auto, backup, result, ok }
 //     oracle.escalated  { target, recommendation, reason, actionId? }   left for the owner (a gate, a refused action)
 //     oracle.blocked    { actionId, kind, target, reason: permission | content | loop }   an action it could not take alone
 //     oracle.undone     { action_id }                     the owner undid an action
 // Every metric (nightMetrics) is computed from that log and the runs' events.jsonl; nothing is
 // estimated, except "hours saved", which is labelled as an estimate.
+// Self-healing (#278, settings.oracle.selfHealing): the same watch with no end time. Its detectors
+// (detectSelfHealing: memory, cost-gap, environment, repeat) are pure functions over the runs' events;
+// its report is per UTC day (selfHealingDays → nightMetrics, selfHealingMetrics).
 
 const fs = require('fs');
 const path = require('path');
@@ -44,17 +49,33 @@ const NEVER_ALLOWED = [
 
 // The anomalies the watch detects (oracle.detected kind).
 const INCIDENT_KINDS = {
+  // #278: a finished turn recorded at US$ 0 with tokens, or below a usage item of the same turn (#277)
+  'cost-gap': 'Turn recorded below its cost',
   'dispatch-idle': 'Dispatch idle with planned items',
+  // #278: test files failing in runs of different issues within one hour, passing on the base
+  environment: 'Tests failing across runs (environment)',
   failed: 'Failed run',
   interrupted: 'Run interrupted or duplicated',
   limit: 'Paused by a limit',
+  // #276: the engine's memory guard stopped a run's process or held a suite / run for low memory;
+  // the engine already acted, the watch only records it
+  memory: 'Process stopped or run held for memory',
+  // #278: the same command failing or stopped REPEAT_TIMES times in one step of a run
+  repeat: 'Same command failing repeatedly',
   'roadmap-empty': 'Roadmap empty',
   'roadmap-paused': 'Roadmap paused or in error',
   stalled: 'Stalled run',
 };
 const LOG_TYPES = ['oracle.action', 'oracle.blocked', 'oracle.detected', 'oracle.escalated', 'oracle.undone', 'oracle.watch'];
 const STALL_LOGS = new Set(['agent_idle', 'loop_blocked', 'stall']);
+// a low-memory hold (memory.hold) longer than this is an incident
+const MEMORY_HOLD_MS = 5 * 60e3;
 const PROGRESS_EVENTS = new Set(['step.finished', 'step.started', 'workflow.started']);
+// Self-healing (#278): a command failing or stopped this many times in one step is a `repeat` incident
+const REPEAT_TIMES = 3;
+// ... and a test file failing in runs of different issues within this time is an `environment` incident
+const ENVIRONMENT_WINDOW_MS = 3600e3;
+const DAY_MS = 24 * 3600e3;
 // T_stall: a run in progress (not at a gate) without a progress event for this long is stalled
 const STALL_MS = 30 * 60e3;
 // an item with more watch actions than this in one night: the next one is escalated instead
@@ -70,11 +91,15 @@ const permissionsFile = (dir) => path.join(dir, 'night-permissions.json');
 const logFile = (dir) => path.join(dir, 'night-log.jsonl');
 const ms = (t) => (t ? Date.parse(t) : NaN);
 
-/** The permission an action card needs to run alone, or null (it always waits for the owner's click). */
+/** The permission an action card (or an owner's request kind, #241) needs to run alone, or null (it always waits for the owner's click). */
 function permissionOf(kind, params = {}) {
   const p = params && typeof params === 'object' ? params : {};
   switch (kind) {
     case 'roadmap.item': return p.action === 'skip' ? 'skip' : p.fresh ? 'fresh-start' : 'retry';
+    case 'roadmap.skip': return 'skip';
+    case 'roadmap.add': return 'append';
+    case 'roadmap.move': return 'regroup';
+    case 'roadmap.regroup':
     case 'roadmap.stages': return p.append ? 'append' : 'regroup';
     case 'issue.update': return p.mode === 'comment' ? null : 'refresh';
     case 'skill.restore':
@@ -95,9 +120,11 @@ function readPermissions(dir) {
   return { allowed: [...DEFAULT_PERMISSIONS], updatedAt: null, defaults: true };
 }
 
-/** Saves the checklist; a never-allowed or unknown permission is refused. → readPermissions */
+/** Saves the checklist; a never-allowed or unknown permission, or anything but a list, is refused
+ *  (#239: an object read as "nothing allowed" wiped the owner's choices). → readPermissions */
 function savePermissions(dir, allowed) {
-  const list = Array.isArray(allowed) ? allowed.map(String) : [];
+  if (!Array.isArray(allowed)) throw new Error('The permissions could not be saved: expected a list of permission ids.');
+  const list = allowed.map(String);
   const never = list.find((id) => NEVER_ALLOWED.some((n) => n.id === id));
   if (never) throw new Error(`${NEVER_ALLOWED.find((n) => n.id === never).label} is never allowed during the Night watch.`);
   const unknown = list.find((id) => !PERMISSION_IDS.includes(id));
@@ -139,11 +166,14 @@ function incidentOf(ev) {
     case 'run.elsewhere': return 'interrupted';
     case 'limit.exceeded': return ev.paused === false ? null : 'limit';
     case 'log': return STALL_LOGS.has(ev.kind) ? 'stalled' : null;
+    case 'process.killed': return 'memory';
+    case 'memory.hold': return ev.waited_ms > MEMORY_HOLD_MS ? 'memory' : null;
     default: return null;
   }
 }
 
-const unfinished = (r) => (r.stages || []).flatMap((s) => s.items || []).filter((x) => !['done', 'skipped'].includes(x.status));
+// a disabled stage (#284) is skipped by the automation (src/roadmap.js currentStage): its items are not work left
+const unfinished = (r) => (r.stages || []).filter((s) => !s.disabled).flatMap((s) => s.items || []).filter((x) => !['done', 'skipped'].includes(x.status));
 
 /**
  * The roadmap anomalies of the moment: `roadmaps` [{ projectId, roadmap }] (the files), `active`
@@ -179,11 +209,11 @@ function stalledRuns(active = [], lastProgress = new Map(), { now = Date.now(), 
   return out;
 }
 
-/** The nights in the log: [{ startedAt, until, endedAt, by }] (endedAt null while it is on). */
+/** The nights in the log: [{ startedAt, until, endedAt, by }] (endedAt null while it is on). The standing watch (#278) is not a night: selfHealingDays. */
 function nightsOf(log) {
   const nights = [];
   for (const e of log) {
-    if (e.type !== 'oracle.watch') continue;
+    if (e.type !== 'oracle.watch' || e.selfHealing) continue;
     const last = nights.at(-1);
     if (e.on) {
       if (last && !last.endedAt && last.startedAt === e.startedAt) last.until = e.until;
@@ -193,7 +223,190 @@ function nightsOf(log) {
   return nights;
 }
 
-/** A run's facts from its events: { runId, projectId, start, end, status, cost, issues, progress, gates }. */
+// ---- Self-healing (#278) ---------------------------------------------------------------------
+const tokensOf = (usage) => Object.values(usage || {}).reduce((s, v) => s + (Number(v) || 0), 0);
+const clipped = (s, n = 300) => { const t = String(s ?? ''); return t.length > n ? `${t.slice(0, n - 1)}…` : t; };
+// runs of different issues: no issue in common (two runs without issues are not told apart)
+const differentIssues = (a, b) => (a.length || b.length) && !a.some((n) => b.includes(n));
+
+/**
+ * What the Self-healing detectors read of a run event, for the watch's per-run buffer (the service
+ * keeps these, not the whole stream): { event (only the fields detectSelfHealing reads), trigger
+ * (an event that can complete a finding: the detectors run again) } or null for any other event.
+ */
+function selfHealingEvent(ev) {
+  const base = { ts: ev?.ts, type: ev?.type };
+  switch (ev?.type) {
+    case 'workflow.started': return { event: { ...base, project_id: ev.project_id || null, issues: ev.issues || [], mock: !!ev.mock }, trigger: false };
+    case 'session.message_sent': return { event: { ...base, session_id: ev.session_id, turn: ev.turn, step_id: ev.step_id }, trigger: false };
+    case 'session.message_received': return { event: { ...base, session_id: ev.session_id, turn: ev.turn, step_id: ev.step_id, usage: ev.usage, cost_usd: ev.cost_usd }, trigger: true };
+    case 'session.stream': {
+      const item = ev.item || {};
+      const turn = { ...base, session_id: ev.session_id, turn: ev.turn };
+      if (item.kind === 'usage') return { event: { ...turn, item: { kind: 'usage', costUsd: item.costUsd } }, trigger: false };
+      if (item.kind === 'tool_call' && typeof item.input?.command === 'string') return { event: { ...turn, item: { kind: 'tool_call', id: item.id, input: { command: item.input.command } } }, trigger: false };
+      if (item.kind === 'tool_result' && item.is_error) return { event: { ...turn, item: { kind: 'tool_result', id: item.id, is_error: true, output: clipped(item.output) } }, trigger: true };
+      return null;
+    }
+    case 'process.killed':
+    case 'memory.hold': return { event: ev, trigger: true };
+    case 'step.finished': {
+      const o = ev.output;
+      if (o?.kind !== 'suite') return null;
+      return { event: { ...base, step_id: ev.step_id, output: { kind: 'suite', failures: o.failures || [], preexisting: o.preexisting || [], base_check: o.base_check || null } }, trigger: true };
+    }
+    default: return null;
+  }
+}
+
+/**
+ * The Self-healing detectors: `runs` [{ runId, events }] (each run's events.jsonl lines, or their
+ * selfHealingEvent copies) → [{ kind, runId, projectId, since, evidence }], at most one per run and
+ * kind; `since` is the ts of the first event that shows it, `evidence` what was seen.
+ *   memory       a process stopped by the memory guard, or a low-memory hold over MEMORY_HOLD_MS (#276)
+ *   cost-gap     a turn recorded at US$ 0 with tokens, or below a usage item of the same turn (#277);
+ *                never in a simulated run, nor for a CLI that reports no cost (cost_usd null)
+ *   environment  a test file failing in the suite (passing on the base: the base check ran and the
+ *                file is not in `preexisting`) of two runs of different issues within ENVIRONMENT_WINDOW_MS
+ *   repeat       the same command failing (a tool call's result with is_error) or stopped by the
+ *                memory guard REPEAT_TIMES times in one step
+ */
+function detectSelfHealing(runs = []) {
+  const byRun = new Map(); // run id → { projectId, found: Map kind → finding }
+  const suites = []; // { runId, issues, file, ts }: a file failing in a run's suite and passing on the base
+  for (const { runId, events = [] } of runs) {
+    const run = { projectId: null, found: new Map() };
+    byRun.set(runId, run);
+    const add = (kind, since, evidence) => { if (!run.found.has(kind)) run.found.set(kind, { kind, runId, projectId: null, since, evidence }); };
+    let issues = [];
+    let mock = false;
+    const stepOf = new Map(); // `${session} ${turn}` → step id
+    const usageUsd = new Map(); // `${session} ${turn}` → the highest cost a usage item reported
+    const calls = new Map(); // `${session} ${turn} ${tool call id}` → { command, step }
+    const failures = new Map(); // `${step}\n${command}` → { command, step, times, since, last }
+    const turns = [];
+    let repeat = null;
+    const failed = (step, command, ev, output) => {
+      const key = `${step}\n${command}`;
+      const f = failures.get(key) || { command, step, times: 0, since: ev.ts, last: '' };
+      f.times += 1;
+      f.last = clipped(output);
+      failures.set(key, f);
+      if (f.times >= REPEAT_TIMES) repeat ??= f;
+    };
+    for (const ev of events) {
+      const turn = `${ev.session_id} ${ev.turn}`;
+      switch (ev.type) {
+        case 'workflow.started':
+          run.projectId = ev.project_id || run.projectId;
+          issues = (Array.isArray(ev.issues) ? ev.issues : []).map((i) => i?.number ?? i).filter((n) => n != null);
+          mock = !!ev.mock;
+          break;
+        case 'session.message_sent': stepOf.set(turn, ev.step_id); break;
+        case 'session.message_received': turns.push(ev); break;
+        case 'session.stream': {
+          const item = ev.item || {};
+          const call = `${turn} ${item.id}`;
+          if (item.kind === 'usage') usageUsd.set(turn, Math.max(usageUsd.get(turn) || 0, Number(item.costUsd) || 0));
+          else if (item.kind === 'tool_call' && typeof item.input?.command === 'string') calls.set(call, { command: item.input.command.trim(), step: stepOf.get(turn) ?? turn });
+          else if (item.kind === 'tool_result' && item.is_error && calls.has(call)) failed(calls.get(call).step, calls.get(call).command, ev, item.output);
+          break;
+        }
+        case 'process.killed':
+          add('memory', ev.ts, { event: ev.type, command: ev.command_line || null, step: ev.step_id || null, bytes: ev.bytes ?? null, limitBytes: ev.limit_bytes ?? null });
+          if (ev.command_line) failed(ev.step_id || '', String(ev.command_line).trim(), ev, 'Stopped by the memory guard.');
+          break;
+        case 'memory.hold':
+          if (incidentOf(ev)) add('memory', ev.ts, { event: ev.type, step: ev.step_id || null, waitedMs: ev.waited_ms, freeBytes: ev.free_bytes ?? null, floorBytes: ev.floor_bytes ?? null });
+          break;
+        case 'step.finished': {
+          const o = ev.output;
+          if (o?.kind !== 'suite' || !o.base_check || o.base_check.ran === false) break;
+          const onBase = new Set((o.preexisting || []).map((f) => f.file));
+          for (const file of new Set((o.failures || []).map((f) => f.file).filter((f) => f && !onBase.has(f)))) suites.push({ runId, issues, file, ts: ev.ts });
+          break;
+        }
+        default:
+      }
+    }
+    // a CLI that reports no cost (cost_usd null: Codex) has no cost to lose: only a recorded 0 counts
+    const gaps = mock ? [] : turns.filter((ev) => {
+      const cost = Number(ev.cost_usd) || 0;
+      return (ev.cost_usd != null && cost === 0 && tokensOf(ev.usage) > 0) || (usageUsd.get(`${ev.session_id} ${ev.turn}`) || 0) > cost + 1e-9;
+    });
+    if (gaps.length) {
+      const g = gaps[0];
+      add('cost-gap', g.ts, { step: g.step_id || null, session: g.session_id ?? null, turn: g.turn ?? null, recordedUsd: Number(g.cost_usd) || 0, usageUsd: usageUsd.get(`${g.session_id} ${g.turn}`) || 0, tokens: tokensOf(g.usage), turns: gaps.length });
+    }
+    if (repeat) add('repeat', repeat.since, { command: repeat.command, step: repeat.step || null, times: repeat.times, lastOutput: repeat.last });
+  }
+  for (const a of suites) {
+    const others = suites.filter((b) => b.runId !== a.runId && b.file === a.file && Math.abs(ms(b.ts) - ms(a.ts)) <= ENVIRONMENT_WINDOW_MS && differentIssues(a.issues, b.issues));
+    if (!others.length) continue;
+    const { found } = byRun.get(a.runId);
+    const f = found.get('environment') || { kind: 'environment', runId: a.runId, projectId: null, since: a.ts, evidence: { files: [], runs: [], issues: a.issues } };
+    if (a.ts < f.since) f.since = a.ts;
+    f.evidence.files = [...new Set([...f.evidence.files, a.file])].sort();
+    f.evidence.runs = [...new Set([...f.evidence.runs, ...others.map((b) => b.runId)])].sort();
+    found.set('environment', f);
+  }
+  return [...byRun.values()].flatMap((run) => [...run.found.values()].sort((a, b) => (a.kind < b.kind ? -1 : 1)).map((f) => ({ ...f, projectId: run.projectId })));
+}
+
+/**
+ * The standing watch's days (#278) as windows nightMetrics reads, oldest first: [{ day (UTC,
+ * YYYY-MM-DD), startedAt, until (the day's end), endedAt (the switch turned off that day, else
+ * null), by, selfHealing: true }], from the log's oracle.watch entries with selfHealing.
+ */
+function selfHealingDays(log, now = Date.now()) {
+  const days = new Map();
+  const span = (from, to, ended) => {
+    if (!Number.isFinite(from) || !Number.isFinite(to)) return;
+    let d =Date.parse(`${new Date(from).toISOString().slice(0, 10)}T00:00:00.000Z`);
+    do {
+      const day = new Date(d).toISOString().slice(0, 10);
+      const endedAt = ended && to <= d + DAY_MS ? new Date(to).toISOString() : null;
+      days.set(day, { day, startedAt: days.get(day)?.startedAt || new Date(Math.max(from, d)).toISOString(), until: new Date(d + DAY_MS).toISOString(), endedAt, by: 'Self-healing', selfHealing: true });
+      d += DAY_MS;
+    } while (d < to);
+  };
+  let start = null;
+  for (const e of log) {
+    if (e.type !== 'oracle.watch' || !e.selfHealing) continue;
+    const t = Number.isFinite(ms(e.startedAt)) && e.on ? ms(e.startedAt) : ms(e.ts);
+    if (e.on) { if (start == null && Number.isFinite(t)) start = t; } else if (start != null) { span(start, t, true); start = null; }
+  }
+  if (start != null) span(start, now, false);
+  return [...days.values()];
+}
+
+/**
+ * Self-healing's report of one UTC day (YYYY-MM-DD): { day, detected (oracle.detected), repaired
+ * (actions taken alone that did not fail), waiting (left for the owner: oracle.escalated, and the
+ * actions blocked in an owner's inbox), costUsd, tokens (the Oracle's usage.jsonl lines of the day) }.
+ */
+function selfHealingMetrics({ log = [], usage = [], day }) {
+  const on = (e) => String(e.ts).slice(0, 10) === day;
+  const entries = log.filter(on);
+  const escalated = entries.filter((e) => e.type === 'oracle.escalated');
+  const asked = new Set(escalated.map((e) => e.actionId).filter(Boolean));
+  const use = usage.filter(on);
+  return {
+    day,
+    detected: entries.filter((e) => e.type === 'oracle.detected').length,
+    repaired: entries.filter((e) => e.type === 'oracle.action' && e.auto && e.ok !== false).length,
+    waiting: escalated.length + entries.filter((e) => e.type === 'oracle.blocked' && !asked.has(e.actionId)).length,
+    costUsd: use.reduce((s, u) => s + (Number(u.costUsd) || 0), 0),
+    tokens: use.reduce((s, u) => s + tokensOf(u.tokens), 0),
+  };
+}
+
+/** A Self-healing day in one line (the Dashboard's morning card, the Night watch screen). */
+function selfHealingSummary(d) {
+  return `Self-healing on ${d.day}: ${d.detected} detected, ${d.repaired} repaired alone, ${d.waiting} waiting for you, US$ ${d.costUsd.toFixed(2)} (${d.tokens.toLocaleString('en-US')} tokens).`;
+}
+
+/** A run's facts from its events:{ runId, projectId, start, end, status, cost, issues, progress, gates }. */
 function runFacts(runId, events) {
   const f = { runId, projectId: null, start: null, end: null, status: 'running', cost: 0, issues: 0, progress: [], gates: [], mock: false };
   const gates = new Map();
@@ -236,6 +449,22 @@ const covers = (list, t) => list.some(([a, b]) => t >= a && t < b);
 const total = (list) => list.reduce((n, [a, b]) => n + (b - a), 0);
 
 /**
+ * The active time of runs (runFacts) inside [w0, w1]: each run from its start to its end (w1 while it
+ * runs), minus the time it waited at a human gate. → { active, gates } merged intervals [a, b] (ms).
+ * One implementation for the Night watch and the 24/7 meter (src/occupancy.js).
+ */
+function activeIntervals(facts, w0, w1) {
+  const clip = ([a, b]) => [Math.max(a, w0), Math.min(b, w1)];
+  const gates = union(facts.flatMap((f) => f.gates.map((g) => clip([g.requested, g.resolved ?? f.end ?? w1]))));
+  const active = union(facts.map((f) => clip([f.start, f.end ?? w1])).flatMap(([a, b]) => {
+    let pieces = [[a, b]];
+    for (const [ga, gb] of gates) pieces = pieces.flatMap(([x, y]) => (gb <= x || ga >= y ? [[x, y]] : [[x, ga], [gb, y]]).filter(([p, q]) => q > p));
+    return pieces;
+  }));
+  return { active, gates };
+}
+
+/**
  * The metrics of one night. `night` from nightsOf; `log` the whole night log; `runs` [{ runId,
  * events }] (the runs' events.jsonl) or their runFacts; `usage` the Oracle's usage.jsonl lines.
  * Window W = startedAt → endedAt (or the
@@ -253,13 +482,7 @@ function nightMetrics({ night, log = [], runs = [], usage = [], now = Date.now()
   const clip = ([a, b]) => [Math.max(a, w0), Math.min(b, w1)];
 
   // active time: each run from its start to its end, minus the time it waited at a gate
-  const gateIntervals = union(facts.flatMap((f) => f.gates.map((g) => clip([g.requested, g.resolved ?? w1]))));
-  const runIntervals = facts.map((f) => clip([f.start, f.end ?? w1]));
-  const active = union(runIntervals.flatMap(([a, b]) => {
-    let pieces = [[a, b]];
-    for (const [ga, gb] of gateIntervals) pieces = pieces.flatMap(([x, y]) => (gb <= x || ga >= y ? [[x, y]] : [[x, ga], [gb, y]]).filter(([p, q]) => q > p));
-    return pieces;
-  }));
+  const { active, gates: gateIntervals } = activeIntervals(facts, w0, w1);
 
   // incidents: detected in W; progress resumed = the next progress event of the run, or a new run of its project
   const actions = of('oracle.action');
@@ -385,6 +608,8 @@ function nightMetrics({ night, log = [], runs = [], usage = [], now = Date.now()
     actionList: actions.map((a) => ({
       actionId: a.actionId, at: a.ts, kind: a.kind, title: a.title || a.kind, target: a.target, permission: a.permission || null, auto: !!a.auto,
       backup: a.backup || null, result: a.result || '', ok: a.ok !== false, undone: undone.has(a.actionId), undoable: !!a.undoable && !undone.has(a.actionId),
+      // #279: an app update's Undo is "Go back to <from>" (the same cycle, back to that commit)
+      ...(a.kind === 'app.update' && a.from ? { from: a.from } : {}),
     })),
   };
 }
@@ -395,7 +620,7 @@ function morningSummary(m, { proposed = 0 } = {}) {
   const s = m.safety;
   return {
     ran: `${m.timeline.runs.length} run(s), ${m.yield.issues} issue(s) delivered, ${m.activeHours.toFixed(1)} h active of ${m.window.hours.toFixed(1)} h.`,
-    did: `${m.incidents.count} incident(s), ${m.actions.auto} action(s) without asking, ${m.resolved} resolved (${pct(m.resolution)}), ${m.escalations} escalated.`,
+    did: `${m.incidents.count} incident(s)${m.incidents.byKind?.memory ? ` (${m.incidents.byKind.memory} memory: a process stopped or a run held by the memory guard)` : ''}, ${m.actions.auto} action(s) without asking, ${m.resolved} resolved (${pct(m.resolution)}), ${m.escalations} escalated.`,
     waits: `${m.gates.open} gate(s) open, ${proposed} proposed action(s) waiting for your click.`,
     safety: s.alarm
       ? `Safety alarm: ${s.gatesCrossed} gate(s) crossed, ${s.neverActions} never-allowed action(s).`
@@ -405,8 +630,11 @@ function morningSummary(m, { proposed = 0 } = {}) {
 }
 
 module.exports = {
+  activeIntervals,
   BASELINE,
+  covers,
   DEFAULT_PERMISSIONS,
+  detectSelfHealing,
   INCIDENT_KINDS,
   incidentOf,
   LOG_TYPES,
@@ -425,7 +653,13 @@ module.exports = {
   roadmapIncidents,
   runFacts,
   savePermissions,
+  selfHealingDays,
+  selfHealingEvent,
+  selfHealingMetrics,
+  selfHealingSummary,
   STALL_MS,
   stalledRuns,
   targetOf,
+  total,
+  union,
 };

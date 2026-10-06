@@ -16,6 +16,7 @@ const path = require('path');
 const readline = require('readline');
 const { refuseReal } = require('./simulation');
 const { AGENT_ENV } = require('./capabilities');
+const { runShim } = require('../shell');
 
 const emptyUsage = () => ({ input: 0, output: 0, cache_read: 0, cache_write: 0, reasoning: 0 });
 
@@ -84,8 +85,6 @@ function resolveCommand(cmd) {
   return null;
 }
 
-const quoteCmd = (a) => `"${String(a).replace(/"/g, '""')}"`;
-
 function killTree(child) {
   if (!child.pid) return;
   if (process.platform === 'win32') {
@@ -101,6 +100,31 @@ function killTree(child) {
 // Tokens in one request's context window (Anthropic-style usage: new + cached input).
 const contextTokens = (u) => (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0);
 
+// #233: on a resumed session (`--resume`), the `result` event's `total_cost_usd` is the whole CLI
+// session's cost so far (its `usage` is the turn's own): the turn costs the difference with the
+// session's previous total, kept here per CLI session id. The engine records the last total in the
+// session's snapshot (cli_total_cost_usd) and seeds it back with seedClaudeTotal when a resumed run
+// continues the CLI session after the app restarted.
+const claudeTotals = new Map();
+
+function seedClaudeTotal(sessionId, totalUsd) {
+  if (sessionId && totalUsd > 0 && !(claudeTotals.get(sessionId) >= totalUsd)) claudeTotals.set(sessionId, totalUsd);
+}
+
+// The tokens of a turn's distinct model calls (Claude Code repeats a message's usage on each of its
+// content blocks): what a turn killed before its `result` still paid for, priced by the engine.
+function addStreamUsage(acc, id, u) {
+  acc.seenCalls ??= new Set();
+  if (id && acc.seenCalls.has(id)) return;
+  if (id) acc.seenCalls.add(id);
+  acc.modelCalls = (acc.modelCalls || 0) + 1;
+  acc.streamUsage ??= emptyUsage();
+  acc.streamUsage.input += u.input_tokens || 0;
+  acc.streamUsage.output += u.output_tokens || 0;
+  acc.streamUsage.cache_read += u.cache_read_input_tokens || 0;
+  acc.streamUsage.cache_write += u.cache_creation_input_tokens || 0;
+}
+
 function parseClaude(ev, emit, acc) {
   switch (ev.type) {
     case 'system':
@@ -112,6 +136,8 @@ function parseClaude(ev, emit, acc) {
     case 'assistant':
       // each model request's context window (the main conversation's, not a sub-agent's)
       if (ev.message?.usage && !ev.parent_tool_use_id) emit({ kind: 'context', tokens: contextTokens(ev.message.usage) });
+      // a sub-agent's model calls are paid too
+      if (ev.message?.usage) addStreamUsage(acc, ev.message.id, ev.message.usage);
       for (const b of ev.message?.content || []) {
         // Claude Code may omit the thinking content (it only sends the signature)
         if (b.type === 'thinking') { if (b.thinking) emit({ kind: 'thinking', text: b.thinking }); }
@@ -128,18 +154,42 @@ function parseClaude(ev, emit, acc) {
         }
       }
       break;
+    // #277: a turn that used sub-agents ends with 2 to 4 `result` events one ms apart, all carrying
+    // the same (or a growing) session total_cost_usd. The turn costs the highest total seen in the
+    // turn minus the session's total before the turn, so a later event never lowers it. Their usages
+    // overlap (the total does not grow with the later, smaller ones: their tokens were already paid),
+    // so the turn's tokens are the largest of each field, not a sum. The raw `result` events of such
+    // a turn are kept in the run as `raw` stream items, to check this rule against a real stream.
     case 'result': {
       const u = ev.usage || {};
       acc.text = ev.result ?? acc.lastText ?? '';
-      acc.costUsd = ev.total_cost_usd ?? null;
-      acc.usage = {
+      const usage = {
         input: u.input_tokens || 0,
         output: u.output_tokens || 0,
         cache_read: u.cache_read_input_tokens || 0,
         cache_write: u.cache_creation_input_tokens || 0,
         reasoning: 0, // the Anthropic API counts thinking inside output_tokens
       };
+      acc.results = (acc.results || 0) + 1;
+      const first = acc.results === 1;
+      acc.usage = first || !acc.usage ? usage : Object.fromEntries(Object.keys(usage).map((k) => [k, Math.max(usage[k], acc.usage[k] || 0)]));
       if (ev.session_id) acc.providerSessionId = ev.session_id;
+      if (first) acc.firstResult = ev;
+      else {
+        if (acc.results === 2) emit({ kind: 'raw', event: acc.firstResult });
+        emit({ kind: 'raw', event: ev });
+      }
+      if (first) acc.costUsd = null;
+      if (ev.total_cost_usd != null) {
+        const sid = acc.providerSessionId;
+        if (acc.turnTotalBefore == null) acc.turnTotalBefore = (sid && claudeTotals.get(sid)) || 0;
+        const before = acc.turnTotalBefore;
+        const total = Math.max(ev.total_cost_usd, acc.cliTotalCostUsd ?? 0);
+        // a total below the previous one is a new count (a forked session): taken whole
+        acc.costUsd = total >= before ? +(total - before).toFixed(6) : total;
+        if (sid) claudeTotals.set(sid, total);
+        acc.cliTotalCostUsd = total;
+      }
       if (ev.is_error) acc.error = `Claude returned an error: ${ev.subtype} ${ev.result || ''}`;
       emit({ kind: 'usage', usage: acc.usage, costUsd: acc.costUsd });
       break;
@@ -172,6 +222,8 @@ function parseCodex(ev, emit, acc) {
       }
       break;
     }
+    // #233: per turn (summed here over the turn's `turn.completed` events); Codex reports no cost,
+    // the engine prices its tokens. Not streamed per model call: a killed Codex turn leaves nothing.
     case 'turn.completed': {
       const u = ev.usage || {};
       acc.usage = acc.usage || emptyUsage();
@@ -227,6 +279,8 @@ function parseGrok(ev, emit, acc) {
         emit({ kind: 'tool_result', id: ev.toolCallId, output: String(out).slice(0, 4000), is_error: ev.status === 'failed' });
       }
       break;
+    // #233: `total_cost_usd` taken as the turn's own: not checked against a resumed real session
+    // yet (no recorded multi-turn Grok session); if it proves cumulative, do as parseClaude does.
     case 'end': {
       const u = ev.usage || {};
       acc.text = acc.segment ?? acc.lastText ?? '';
@@ -424,9 +478,10 @@ function runCli(opts, parser) {
   if (promptFile) fs.writeFileSync(promptFile, prompt);
 
   return new Promise((resolve, reject) => {
-    const child = resolved.shell
-      ? spawn(quoteCmd(resolved.file), args.map(quoteCmd), { cwd, env, shell: true, windowsHide: true })
-      : spawn(resolved.file, args, { cwd, env, windowsHide: true });
+    const child = runShim(resolved.file, args, { cwd, env, windowsHide: true });
+    // the CLI's process (the memory guard watches its tree, #276); shim: a .cmd/.bat wrapper whose
+    // child is the CLI itself
+    if (child.pid) opts.onSpawn?.({ pid: child.pid, shim: !!resolved.shell });
 
     const acc = { text: '', lastText: '', usage: null, costUsd: null, providerSessionId, error: null };
     let stderr = '';
@@ -435,6 +490,8 @@ function runCli(opts, parser) {
     const finish = (err, val) => {
       if (done) return;
       done = true;
+      // #233: a turn that ends without its result (timeout, cancel, crash) still paid for its model calls
+      if (err) err.partial = { usage: acc.usage || acc.streamUsage || null, costUsd: acc.costUsd, modelCalls: acc.modelCalls || 0 };
       clearTimeout(timer);
       if (promptFile) fs.rm(promptFile, { force: true }, () => {});
       signal?.removeEventListener('abort', onAbort);
@@ -462,6 +519,7 @@ function runCli(opts, parser) {
         text: acc.text || acc.lastText,
         usage: acc.usage || emptyUsage(),
         costUsd: acc.costUsd,
+        ...(acc.cliTotalCostUsd != null ? { cliTotalCostUsd: acc.cliTotalCostUsd } : {}),
         providerSessionId: acc.providerSessionId,
         exitCode: code,
       });
@@ -501,8 +559,6 @@ function mockString(key) {
 const MOCK_SEQUENCES = {
   verdict: ['changes_requested', 'approved'],
   tests_status: ['fail', 'pass'],
-  // e2e-release (#199): the whole suite fails once, the developer fixes it, then it passes
-  e2e_status: ['fail', 'pass'],
   build_status: ['success'],
   ci_status: ['pending', 'failed', 'pending', 'success'],
   state: ['waiting', 'needs_human', 'needs_fix', 'ready_to_merge'],
@@ -581,7 +637,7 @@ function mockValue(s, key, h) {
     // sequences.preexisting_failures: true: the test writer reports a test that also fails on the base
     // sequences.left_out: [1, 0]: the developer declares one gap on its 1st visit, none after (default none)
     // sequences.left_out_not_mine: true: the developer also declares the issue's Tests and Measure tasks (#173)
-    // sequences.ui_findings: true: the evidence step's visual review returns a (blocking) UI finding
+    // sequences.ui_findings: true: the ui_reviewer (code_review, #151) returns a (blocking) UI finding
     case 'array': {
       if (key === 'preexisting_failures' && !h.sequences?.preexisting_failures) return [];
       if (key === 'ui_findings' && !h.sequences?.ui_findings) return [];
@@ -660,9 +716,11 @@ async function runMock({ providerSessionId, model, hint, signal, onItem, attempt
     }
   }
   // sequences.timeouts: { stepId: n }: the first n attempts of each of that step's turns are killed
-  // at their timeout after their tool call (the engine retries with the attempt's summary)
+  // at their timeout after their tool call (the engine retries with the attempt's summary); the two
+  // model calls it made are reported as runCli does (#233: the engine prices them)
   if (hint?.stepId != null && attempt <= (hint?.sequences?.timeouts?.[hint.stepId] || 0)) {
-    throw new Error(`Timed out after ${Math.round((timeoutMs || 0) / 1000)}s`);
+    const usage = { input: 1500, output: 400, cache_read: 2 * start + 10000, cache_write: 0, reasoning: 0 };
+    throw Object.assign(new Error(`Timed out after ${Math.round((timeoutMs || 0) / 1000)}s`), { partial: { usage, costUsd: null, modelCalls: 2 } });
   }
   await d(800);
 
@@ -734,11 +792,12 @@ module.exports = {
   isRetryable,
   isToolTimeout,
   killTree,
+  parseClaude,
   parseGrok,
-  quoteCmd,
   refreshWindowsPath,
   resolveCommand,
   runTurn,
+  seedClaudeTotal,
   sleep,
   sniffImage,
   storeAttachments,

@@ -1,5 +1,5 @@
 /* global api */
-// Keep awake (#162): the switch in the Workflows screen's header (Runs and Definitions) and in
+// Keep awake (#162): the switch in the Workflows screen's header (Runs, Definitions and Pipelines) and in
 // Settings › Execution, one setting (settings.keepAwake, per workspace): changing one changes the
 // other. Shows the blocker's state from main (src/keep-awake.js): Off, "On: waiting for work",
 // "Active: 2 runs, roadmap stage 3/6", or the error of a blocker that failed to start (the switch

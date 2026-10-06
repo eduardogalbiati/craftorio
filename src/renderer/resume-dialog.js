@@ -18,11 +18,19 @@ function resumeFields(id, options, pre, instruction = '') {
       <textarea id="${id}-ins" rows="4" placeholder="e.g. The app was restarted: go on with the same task.">${esc(instruction)}</textarea></div>`;
 }
 
+// A step as people read it (#245): its display name (o.steps[].display when the service gives it),
+// else its id made readable; resumeStepHtml keeps the id in the tooltip.
+function resumeStepName(o, id) {
+  const display = o?.steps?.find((x) => x.id === id)?.display;
+  return display || (typeof displayName === 'function' ? displayName(id) : String(id || ''));
+}
+const resumeStepHtml = (o, id) => `<b title="${esc(id)}">${esc(resumeStepName(o, id))}</b>`;
+
 function resumeStepLabel(o, s) {
   const where = s.id === o.stoppedAt ? (o.status === 'failed' && s.id === o.failedStep ? 'failed here' : 'stopped here')
     : s.id === o.failedStep ? 'failed' : s.visits ? 'reached' : '';
-  const after = s.blockedBy ? `after the decided gate ${s.blockedBy}${s.confirm?.ok ? ' (approve it again)' : s.confirm?.reason ? ` (${s.confirm.reason})` : ''}` : '';
-  return [s.id, s.gate ? 'human gate' : '', where, after].filter(Boolean).join(' · ');
+  const after = s.blockedBy ? `after the decided gate ${resumeStepName(o, s.blockedBy)}${s.confirm?.ok ? ' (approve it again)' : s.confirm?.reason ? ` (${s.confirm.reason})` : ''}` : '';
+  return [resumeStepName(o, s.id), s.gate ? 'human gate' : '', where, after].filter(Boolean).join(' · ');
 }
 
 // A step after a decided gate (#112): the owner may approve that gate again here, while the branch
@@ -34,7 +42,7 @@ function resumeGateConfirm(o, stepId) {
   const commits = s.confirm.approvedCommit
     ? `Approved at commit ${short(s.confirm.approvedCommit)}; the branch is still at ${short(s.confirm.currentCommit)}.`
     : 'A simulation: no branch to compare.';
-  return `<label class="check"><input type="checkbox" id="resume-confirm-gate" data-gate="${esc(s.blockedBy)}"> Approve <b>${esc(s.blockedBy)}</b> again</label>
+  return `<label class="check"><input type="checkbox" id="resume-confirm-gate" data-gate="${esc(s.blockedBy)}"> Approve ${resumeStepHtml(o, s.blockedBy)} again</label>
     <div class="muted small">${commits} It is recorded as your approval in the new run.</div>`;
 }
 
@@ -47,13 +55,16 @@ function resumeEffects(o, stepId) {
   const gates = o.steps.slice(at).filter((s) => s.gate && (s.visits || s.id === stepId)).map((s) => s.id);
   const wt = o.worktree;
   const kept = [
-    before.length ? `the outputs of ${before.map((s) => `<b>${esc(s)}</b>`).join(', ')}` : 'no earlier outputs (it starts at the beginning)',
+    before.length ? `the outputs of ${before.map((s) => resumeStepHtml(o, s)).join(', ')}` : 'no earlier outputs (it starts at the beginning)',
     o.sessions.length || o.handoffs.length ? `the agents' sessions and handoff notes (${esc([...new Set([...o.sessions, ...o.handoffs])].join(', '))})` : '',
-    wt ? (wt.exists ? `the worktree and branch <span class="mono">${esc(wt.branch || '')}</span> <span class="muted mono">${esc(wt.dir)}</span>` : 'not the worktree: it was removed, so the run starts a new one from the base') : '',
+    wt ? (wt.exists ? `the worktree and branch <span class="mono">${esc(wt.branch || '')}</span> <span class="muted mono">${esc(wt.dir)}</span>`
+      // #202: an ended run keeps its branch, not its folder
+      : wt.branch ? `the branch <span class="mono">${esc(wt.branch)}</span>: its worktree folder is recreated from it, with the previous attempt's uncommitted work <span class="muted mono">${esc(wt.dir)}</span>`
+        : 'not the worktree: it was removed, so the run starts a new one from the base') : '',
   ].filter(Boolean);
   return `<div><b>Kept:</b> ${kept.join('; ')}.</div>
-    <div><b>Runs again:</b> <b>${esc(stepId)}</b> and the steps its transitions lead to${again.length > 1 ? ` (reached before: ${again.slice(1).map(esc).join(', ')})` : ''}.</div>
-    <div><b>Human gates ask again</b> when the run reaches them${gates.length ? ` (${gates.map(esc).join(', ')}${o.steps[at].gate ? '; this step is one' : ''})` : ''}: none is treated as already approved${o.steps[at].blockedBy ? `, except ${esc(o.steps[at].blockedBy)} when you approve it again above` : ''}.</div>`;
+    <div><b>Runs again:</b> ${resumeStepHtml(o, stepId)} and the steps its transitions lead to${again.length > 1 ? ` (reached before: ${again.slice(1).map((s) => esc(resumeStepName(o, s))).join(', ')})` : ''}.</div>
+    <div><b>Human gates ask again</b> when the run reaches them${gates.length ? ` (${gates.map((s) => esc(resumeStepName(o, s))).join(', ')}${o.steps[at].gate ? '; this step is one' : ''})` : ''}: none is treated as already approved${o.steps[at].blockedBy ? `, except ${esc(resumeStepName(o, o.steps[at].blockedBy))} when you approve it again above` : ''}.</div>`;
 }
 
 async function openResumeDialog(runId) {
@@ -70,7 +81,7 @@ async function openResumeDialog(runId) {
   openModal('#resume-modal');
   let o;
   try { o = await api.resumeOptions(runId); } catch (e) { body.innerHTML = `<p class="error small">${esc(errMsg(e))}</p>`; return; }
-  $('#resume-run').innerHTML = `<span class="mono">${esc(o.runId)}</span> · ${esc(o.workflow || '')} <span class="pill pill-${esc(o.status)}">${esc(o.status)}</span>${o.mock ? ' <span class="badge p-mock">simulated</span>' : ''}`;
+  $('#resume-run').innerHTML = `<span class="mono">${esc(o.runId)}</span> · ${esc(o.workflow || '')} ${StatusPill.statusPill(o.status)}${o.mock ? ' <span class="badge p-mock">Simulated</span>' : ''}`;
   if (o.active) { body.innerHTML = '<p class="error small">The run is still active: it can be resumed once it ends.</p>'; return; }
   body.innerHTML = `${resumeFields('resume', o.steps.map((s) => ({ id: s.id, label: resumeStepLabel(o, s), disabled: !!s.blockedBy && !s.confirm?.ok })), o.suggested)}
     <div id="resume-gate" class="field"></div>

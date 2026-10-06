@@ -18,3 +18,8 @@
 .wi-grid .wi-field > label { order: 0; margin: 0; }
 .wi-grid .wi-field > .wi-control { order: 0; grid-column: 2; }
 .wi-grid .wi-field > .hint { order: 0; grid-column: 2; margin-top: 0; }
+
+/* read-only pills of a run's inputs (inputPills, #216): roadmap and proposal cards, Assign, the run header */
+.badge.wi-pill { white-space: nowrap; }
+.badge.wi-pill-default { opacity: .6; }
+.run-input-pills, #assign-proposed { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin-top: 4px; }

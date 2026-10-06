@@ -415,6 +415,49 @@ test('parseCounts: node:test spec and TAP, Jest "Tests:", pytest summary; no sum
   assert.deepEqual(parseCounts('no summary here\n'), { passed: null, failed: null });
 });
 
+// #223: the AI Development workflow's e2e step runs `npm run test:e2e -- --grep ...` (playwright-bdd)
+const PLAYWRIGHT_RED = `Running 3 tests using 1 worker
+
+  ✓  1 .features-gen\\features\\app.feature.spec.js:6:7 › App › The app opens on the dashboard @smoke (2.1s)
+  ✘  2 .features-gen\\features\\backlog.feature.spec.js:7:7 › Backlog › Open the kanban board @issue-223 (5.3s)
+  ✓  3 .features-gen\\features\\run.feature.spec.js:6:7 › Run › A mock run finishes @smoke (8.0s)
+
+  1) .features-gen\\features\\backlog.feature.spec.js:7:7 › Backlog › Open the kanban board @issue-223
+
+    Error: Timed out 5000ms waiting for expect(locator).toBeVisible()
+
+    Locator: getByTestId('backlog-board')
+    Expected: visible
+    Received: <element(s) not found>
+
+       at features\\steps\\backlog.js:12:3
+
+    attachment #1: trace (application/zip) ─────────────────────────────────
+    .test-output\\e2e\\artifacts\\backlog-Open-the-kanban-board\\trace.zip
+    Usage:
+
+        npx playwright show-trace .test-output\\e2e\\artifacts\\backlog-Open-the-kanban-board\\trace.zip
+
+    ─────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    .features-gen\\features\\backlog.feature.spec.js:7:7 › Backlog › Open the kanban board @issue-223
+  2 passed (15.4s)
+`;
+
+test('parseFailures: a Playwright (playwright-bdd) failure gives the scenario, its feature, the error and the trace kept for it', () => {
+  const failures = parseFailures(PLAYWRIGHT_RED);
+  assert.equal(failures.length, 1, JSON.stringify(failures));
+  assert.match(failures[0].test, /Open the kanban board/);
+  assert.match(failures[0].file, /backlog\.feature/);
+  assert.match(failures[0].error, /toBeVisible/);
+  assert.match(JSON.stringify(failures[0]), /trace\.zip/, 'the failure points to its trace');
+});
+
+test('parseCounts: the Playwright summary ("1 failed", "2 passed")', () => {
+  assert.deepEqual(parseCounts(PLAYWRIGHT_RED), { passed: 2, failed: 1 });
+});
+
 test('runSuite with files: runs the filtered command, reports scope files, records no duration', async (t) => {
   const runDir = tmp(t);
   const cwd = tmp(t);
@@ -454,4 +497,73 @@ test('runSuite with files: a command that cannot take files runs whole and says 
   assert.deepEqual(seen, ['make test']);
   assert.equal(out.scope, 'full');
   assert.match(out.selection.why, /`make test` cannot run single test files: the whole suite ran$/);
+});
+
+// ---------------------------------------------------------------------------
+// runSuite with coverage (#225)
+// ---------------------------------------------------------------------------
+
+const COVERAGE_REPORT = [
+  'ℹ tests 3',
+  'ℹ pass 3',
+  'ℹ fail 0',
+  'ℹ start of coverage report',
+  'ℹ ---------------------------------------------------------------------',
+  'ℹ file               | line % | branch % | funcs % | uncovered lines',
+  'ℹ ---------------------------------------------------------------------',
+  'ℹ src                |        |          |         | ',
+  'ℹ  evidence.js       |  92.46 |    81.82 |  100.00 | 45-48 120',
+  'ℹ  runs.js           |  78.10 |    70.59 |   85.71 | 12-20 300-310',
+  'ℹ ---------------------------------------------------------------------',
+  'ℹ all files          |  85.33 |    76.47 |   92.31 | ',
+  'ℹ ---------------------------------------------------------------------',
+  'ℹ end of coverage report',
+  '',
+].join('\n');
+
+function coverageProject(t) {
+  const cwd = tmp(t);
+  fs.writeFileSync(path.join(cwd, 'package.json'), JSON.stringify({ scripts: { test: 'node scripts/test.js', 'test:coverage': 'node scripts/test.js --experimental-test-coverage' } }));
+  return cwd;
+}
+
+test('runSuite with coverage: a filtered npm test runs the test:coverage script with the same files', async (t) => {
+  const runDir = tmp(t);
+  const cwd = coverageProject(t);
+  const seen = [];
+  const run = async ({ command }) => { seen.push(command); return { code: 0, timedOut: false, error: null }; };
+  await runSuite({ command: 'npm test', cwd, runDir, round: 1, run, files: ['test/a.test.js'], selection: { why: 'x', files: ['test/a.test.js'], reasons: {} }, coverage: true });
+  assert.deepEqual(seen, ['npm run test:coverage -- test/a.test.js']);
+});
+
+test('runSuite with coverage: node\'s coverage report becomes coverage/coverage-summary.md with the totals and the changed files', async (t) => {
+  const runDir = tmp(t);
+  const cwd = coverageProject(t);
+  const run = async ({ logFile }) => { fs.appendFileSync(logFile, COVERAGE_REPORT); return { code: 0, timedOut: false, error: null }; };
+  const out = await runSuite({ command: 'npm test', cwd, runDir, round: 1, run, coverage: true, changedFiles: () => ['src/runs.js'] });
+  assert.equal(out.status, 'pass');
+  assert.deepEqual(out.coverage, { lines: 85.33, branches: 76.47, functions: 92.31, files: 1, path: 'coverage/coverage-summary.md' });
+  const md = fs.readFileSync(path.join(runDir, 'coverage', 'coverage-summary.md'), 'utf8');
+  assert.match(md, /85\.33/);
+  assert.match(md, /src\/runs\.js/);
+  assert.doesNotMatch(md, /src\/evidence\.js/);
+});
+
+test('the bundled development workflows record coverage on their suite step', () => {
+  const yaml = require('js-yaml');
+  for (const name of ['software-development.yaml', 'software-development-local-hero.yaml', 'ai-development-local-hero.yaml']) {
+    const wf = yaml.load(fs.readFileSync(path.join(__dirname, '..', 'workflows', name), 'utf8'));
+    const suite = wf.steps.find((s) => s.id === 'suite');
+    assert.equal(suite?.coverage, true, name);
+  }
+});
+
+test('runSuite with coverage: an output without a coverage report saves no summary', async (t) => {
+  const runDir = tmp(t);
+  const cwd = coverageProject(t);
+  const run = async ({ logFile }) => { fs.appendFileSync(logFile, 'ℹ pass 3\nℹ fail 0\n'); return { code: 0, timedOut: false, error: null }; };
+  const out = await runSuite({ command: 'npm test', cwd, runDir, round: 1, run, coverage: true });
+  assert.equal(out.status, 'pass');
+  assert.equal(out.coverage, undefined);
+  assert.equal(fs.existsSync(path.join(runDir, 'coverage', 'coverage-summary.md')), false);
 });

@@ -47,9 +47,11 @@ function writeRun(ws, w0, projectId, r) {
 
 /**
  * Writes the two demo nights into `ws` (setupWorkspace's layout) for `projectId`; last night ends
- * `endedMinAgo` minutes ago. → { lastNight: { startedAt, until } }
+ * `endedMinAgo` minutes ago. `selfHealing` (#278): also the standing watch, on for 30 hours (its
+ * log entry and self-healing.json; the caller turns settings.oracle.selfHealing on), with a finding
+ * of each detector, a repair taken alone and an action left for the owner. → { lastNight: { startedAt, until } }
  */
-function writeDemoNights(ws, projectId, { now = Date.now(), endedMinAgo = 60 } = {}) {
+function writeDemoNights(ws, projectId, { now = Date.now(), endedMinAgo = 60, selfHealing = false } = {}) {
   const dir = ws.oracle || path.join(ws.root, 'oracle');
   fs.mkdirSync(dir, { recursive: true });
   const log = [];
@@ -108,6 +110,26 @@ function writeDemoNights(ws, projectId, { now = Date.now(), endedMinAgo = 60 } =
   entry(w0, 540, 'oracle.watch', { on: false, until: new Date(w1).toISOString(), startedAt: new Date(w0).toISOString(), by });
   for (const [m, usd] of [[27, 0.11], [57, 0.08], [106, 0.21], [150, 0.14], [197, 0.09], [232, 0.07], [271, 0.12], [401, 0.06]]) {
     usage.push({ ts: iso(m), provider: 'claude', model: 'claude-opus-5-5', tokens: { input: 1200, output: 420, cache_read: 52000 }, costUsd: usd, sessionId: 'demo-night' });
+  }
+
+  // #278: Self-healing on since yesterday: a finding of each detector with its evidence, one repair
+  // taken alone by day, one action left for the owner, and the Oracle's turns for them
+  if (selfHealing) {
+    const since = new Date(now - 30 * 3600e3).toISOString();
+    const ago = (h) => new Date(now - h * 3600e3).toISOString();
+    const at = (h, type, data) => log.push({ ts: ago(h), type, ...data });
+    at(30, 'oracle.watch', { on: true, until: null, startedAt: since, by: 'Self-healing', selfHealing: true });
+    at(5, 'oracle.detected', { id: 'demo-sh-1', kind: 'memory', target: rSlow, runId: rSlow, projectId, since: ago(5), evidence: { event: 'process.killed', command: 'node --test test/report-export.test.js', step: 'test', bytes: 9.1 * 1024 ** 3, limitBytes: 8 * 1024 ** 3 } });
+    at(4, 'oracle.detected', { id: 'demo-sh-2', kind: 'cost-gap', target: rRetried, runId: rRetried, projectId, since: ago(4.1), evidence: { step: 'implement', session: 'developer', turn: 3, recordedUsd: 0, usageUsd: 3.2, tokens: 7997382, turns: 8 } });
+    at(3, 'oracle.detected', { id: 'demo-sh-3', kind: 'environment', target: rFailed, runId: rFailed, projectId, since: ago(3.2), evidence: { files: ['test/server.test.js'], runs: [rInterrupted], issues: [14] } });
+    at(2, 'oracle.detected', { id: 'demo-sh-4', kind: 'repeat', target: rGate, runId: rGate, projectId, since: ago(2.3), evidence: { command: 'npm run lint', step: 'implement', times: 3, lastOutput: 'Error: exit 1' } });
+    at(3.9, 'oracle.action', {
+      actionId: 'demo-sh-a1', kind: 'roadmap.item', title: 'Retry roadmap item i5 (#15 Usage chart)', target: `${projectId}/i5`, runId: null, projectId,
+      permission: 'retry', auto: true, backup: 'A copy of the roadmap was taken first.', undoable: true, result: 'Roadmap item i5: planned again.', ok: true,
+    });
+    at(2.9, 'oracle.blocked', { actionId: 'demo-sh-a2', kind: 'issue.file', target: projectId, runId: null, projectId, permission: 'file-issue', reason: 'permission', owner: 'product-owner', requestedBy: 'oracle' });
+    for (const [h, usd] of [[3.9, 0.18], [2.9, 0.22], [1.9, 0.12]]) usage.push({ ts: ago(h), provider: 'claude', model: 'claude-opus-5-5', tokens: { input: 1500, output: 520, cache_read: 61000 }, costUsd: usd, sessionId: 'demo-self-healing' });
+    fs.writeFileSync(path.join(dir, 'self-healing.json'), JSON.stringify({ since }, null, 2));
   }
 
   log.sort((a, b) => a.ts.localeCompare(b.ts));

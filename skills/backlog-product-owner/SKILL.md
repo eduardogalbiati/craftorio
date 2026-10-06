@@ -25,6 +25,11 @@ The prompt holds a backlog report:
   they hit with the files named;
 - the **workflows** that take a task, with their inputs.
 
+When the report marks a workflow "chosen by the owner", the workflow is fixed by the owner for this
+plan: give every group that workflow, never another one, and no test-batch stage. The owner's
+choices for its options are added to every group's inputs by the orchestrator. A workflow that
+writes its tests first (AI Development) has no Cost step: do not name one in the summary.
+
 Your working directory is the project's repository, read-only. To estimate which files an issue
 touches, read `docs/agents/code-map.md` (or the README) and grep for the names the issue uses.
 The tests those files reach are in `docs/agents/test-map.md` (the code → tests map: grep it for the
@@ -199,4 +204,7 @@ group is risky for another reason (an unknown area, a migration, a flaky test su
 - Use only issue numbers and workflow files from the report; suggest the inputs that matter
   (`mode` with its `mode_reason`, see above).
 - The summary is short Markdown in English: the recommendation first, then the reasons.
+- Keep each group's `reason` and `mode_reason` short: one or two sentences each, shown on the
+  proposal card. Markdown is allowed in a reason: **bold** for the key point (e.g. "**Same
+  screen**: both change the roadmap card"), `code` for a file; no headings, no lists.
 - End with the JSON block the prompt asks for.

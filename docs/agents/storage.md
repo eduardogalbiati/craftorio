@@ -20,6 +20,68 @@ Read this before touching run listings, the Backlog queue, pending gates, notifi
   `usage.jsonl` (one line per real answer; added to Usage and the monthly budgets as one
   summary-like run per day, `usageRuns`) and `owner.json` (the one app process that answers, a
   run-owner heartbeat). Written by the service, never by the model.
+- The three conversational agents' usage (#280, `src/agents-usage.js`): every real turn appends one line
+  (a simulated turn records nothing; nothing is ever rewritten) to `oracle/usage.jsonl` (the Oracle),
+  `backlog/product-owner.usage.jsonl` (the Product Owner, every project; Clear keeps it) or
+  `supervisor/usage.jsonl` (the Supervisor chat; Clear keeps it). Fields: `ts`, `agent` (`oracle`,
+  `product-owner`, `supervisor`), `projectId` (Product Owner), `provider`, `model`,
+  `tokens { input, output, cache_read, cache_write }`, `costUsd` (the turn's own cost), `sessionId` (the
+  CLI session), `session` (`fresh` or `resumed`), `startReason` on a fresh session (`first`, `compaction`,
+  `model-change`, `idle`, `reset`, `cleared`, `one-shot`) and `contextTokens` (the context after the turn,
+  when known); the Oracle's and the Supervisor chat's lines also hold `cumulativeUsd` (the CLI session's total,
+  #244) and the Oracle's `wake` (a wake-up's turn). Lines from
+  before #280 lack `agent`, `session` and `startReason` (the Product Owner's, `sessionId` too) and are
+  read as they are; the Supervisor chat's turns from before its file are read from the answers' `costUsd`
+  in `supervisor/chat.jsonl` (cost only, until Clear removes them). Readers: Analytics' Agents tab
+  (`analytics:agents`), Usage and the monthly budgets (the Oracle's and the Supervisor chat's days as
+  summary-like runs, the Product Owner's month through `usage.withPeerUsage`).
+- `phone-gates/devices.json` (#226, `src/mobile-gates.js`): the phones paired with the gates page
+  (`id`, `name`, `tokenHash` (SHA-256; the token itself is only on the phone), `pairedAt`,
+  `lastSeen`); Revoke removes the entry. `phone-gates/secret`: the key that signs the gate links,
+  created once, so a link keeps working across restarts until it expires. Pairing codes live in
+  memory only: a restart voids them.
+- `discovery/<project id>/` (#256, `src/discovery.js`): the discovery cards, private to the
+  workspace (`discovery/.gitignore` ignores everything; never committed, never sent to the git
+  platform). `board.json` (columns `{ id, title, wip }`, the card order per column),
+  `cards/<card id>/` (`<yyyymmdd>-<4 hex>`) with `card.json` (id, title, type `idea | prd | rfc | bug |
+  hotfix`, column, author, created, updated, tags, clarity, estimate, links, history `[{ ts, from,
+  to, by }]`), `document.md`, `acceptance.md`, `versions/<iso ts>-<reason>.md` (a snapshot of the
+  document on each column move and before a merge; `snapshotVersion` is there for agent outputs),
+  the Discovery board's (#257) columns `inbox, triage, shape, define, ready` with `wip` 5 on Shape
+  and Define (`setWip`; the store never refuses a move past a limit, the screen asks), a card's
+  place in `order[column]` (`moveCard`'s `index`; a move within its column adds no history entry
+  and no version), the versions `before-restore` / `before-result` (the document a restored version
+  or a run's result replaced, unless the newest version already holds it) and `result-<source>`
+  (`recordResult`, source `write-review` | `ai-arena`, with a thread entry `{ kind: 'result',
+  source, runId, version }`), read with `listVersions` / `readVersion` (a name that is not a
+  version file is refused),
+  `attachments/` (any file up to 50 MB, original names, a taken name gets a `-2` suffix, the same
+  content is stored once) and `conversation.jsonl` (the thread, appended). `archive/<card id>/`: a
+  discarded or merged card, same layout, `card.archived = { ts, reason, by, mergedInto? }`.
+  A committed card (#258, `src/discovery-commit.js`): `card.column = 'committed'` (no board column,
+  in no `order`; `moveCard` and `mergeCard` refuse it, `restoreCard` keeps it committed, and it is
+  kept as it was committed: `updateCard` only takes `links.release`, a new document, attachment,
+  restored version, run result or Grill me interview is refused; its thread still takes notes),
+  `links.issues` the numbers of the issues filed from it (`markCommitted`; `issueCards` gives the
+  Backlog each issue's card from the `card.json` files alone), `filed/<iso ts>-issue-<n>.md` the
+  text of each issue, a thread entry `{ kind: 'commit', issues }`; `links.from` on a card created
+  from another (`createCard`'s `from`). Its delivery is never stored: the `discovery:board`
+  channel computes it on each read from the synced backlog and the release history. Every
+  file is written whole (temp file + rename, `writeFileAtomic` in `src/state-file.js`); project
+  ids, card ids and attachment names are checked before a path is built, so nothing outside a
+  card's folder is read or written. No index row: the folders are read directly. Screens, the
+  Oracle and agents reach a card only through the `discovery:` channels
+  (`src/service/channels/discovery.js`), never by reading the folder.
+- **The gate answer record**: a gate's `approval.resolved` event in `events.jsonl` carries
+  `approval_id`, `step_id`, `choice` (or `approved`), `by`, `wait_ms`, `feedback?`, `commit?`;
+  answered from a paired phone it adds `answered_by: "owner"`, `via: "mobile"`, `device` (the
+  device id of `phone-gates/devices.json`) next to the event's `ts`. Only the phone page writes
+  them (`answerPhoneGate`, never a channel); the `gates` index row is closed by the same event.
+- **Costs and memory events** (#277, #276): a Claude turn with several `result` events keeps them
+  as `raw` items of `session.stream` and records its highest total once; `summary.json` carries
+  `turn_cost: 'max_result'`. A per-turn run without it is read through its `usage` stream items
+  (`src/run-costs.js`, `src/runs.js` `fromEvents`); the files are never rewritten. The memory guard
+  writes `process.killed` and `memory.hold` events (engine.md, "Memory guard").
 - Never make the database the only copy of something a run produced.
 
 ## Issues: the git platform is the source of truth (#168)
@@ -58,12 +120,39 @@ owner actions write to the platform (Save to issue, create, close, epics: `src/b
   dispatch and live refill, the Oracle's `roadmap.stages`, the Product Owner), the refresh banner's
   dismissal (`<project>.refresh.json`), and anything outside the app (another window, a script).
   The roadmap and the queue go through `src/state-file.js` (temp file + rename, `.bak`).
+- Releases (#260): `<workspace>/releases/<project>.json` (`src/releases.js`, through
+  `src/state-file.js` too) holds the shipped releases and the next release's notes. It is the only
+  record of what a release shipped: an issue's "Released" badge is read from it on every Backlog
+  read (`releasedIssues`), never written into the synced `<project>.json`, which each sync rewrites.
+  A roadmap's cut line keeps its release run in `<project>.roadmap.json` (`stage.release`).
+- **A disabled stage** (#284) is `disabled: true` on the stage in `<project>.roadmap.json`; an
+  enabled stage has no such field. `cleanStages` changes it only on an explicit `disabled: true` /
+  `false`: a save that does not mention it (the Oracle's `roadmap.stages`, a proposal, an outside
+  script) keeps what is stored. Undo and "Restore an earlier version…" put the stage back with the
+  switch it had (`roadmap-undo.js` `head`). A save or an Undo that would disable a stage while one
+  of its items runs is refused with the reason (`saveStages`, `restoreStages`), whoever writes it.
+- **The roadmap's history** (#281, `src/roadmap-history.js`): before each owner edit of a roadmap
+  (a save from the screen, a proposal added or replacing it, the queue moved in, Clear, an Undo, a
+  Restore) the roadmap channels keep its stages as they were in
+  `backlog/<project>.roadmap.history/<time>-<n>.json` (`{ at, label, stages }`, the label being what
+  the edit did: "Removed #279 from the roadmap"), the last 20 per project. The Roadmap's ⋮ menu
+  lists them ("Restore an earlier version…"). The engine's own writes (a run started or finished, a
+  live refill) and the Oracle's actions (their own backup, `oracle/backups/`) are not kept there.
+  **Undo** (the toast after an edit) does not read the history: the service keeps the last edit of
+  each project in memory (`{ before, after, label }`, `src/roadmap-undo.js`) until the next edit or
+  a restart. Undo and Restore put back what changed, never the whole file: an item that exists now
+  keeps its run (`status`, `runId`, `runs`, `error`), one that is running or done is not changed,
+  items and stages added since stay, and both refuse (changing nothing) when an issue they bring
+  back is planned in another unfinished item. They write through `roadmap.restoreStages` (ids and
+  run states kept), never stop a run and never answer a gate. The roadmap's state is kept: stages
+  that come back after a Clear are planned again (Start is the owner's), and a roadmap that was done
+  and gets unfinished items back is paused, never started by itself.
 - `src/service/areas/backlog-watch.js` watches the folder (one `fs.watch` per workspace, started by
   `setWorkspace`, closed on a switch and on `shutdown`) and pushes `backlog:changed { projectId,
   file: roadmap | queue | issues | local | refresh, watching: true }` once per file, 300 ms after
   its last write; a write that leaves the same mtime and size pushes nothing. A watcher error
   pushes `{ projectId: null, watching: false }` (`backlogWatching()` answers the same): the Backlog
-  screen then polls every 5 s while its Roadmap tab is visible.
+  screen then polls every 5 s while the Roadmap screen is visible.
 - The Backlog screen reloads the project's data on its project's event, unless the owner types in
   one of its fields, drags, or edits a roadmap item or a stage's note: the reload waits until they
   are done (an open Edit form shows "The roadmap changed. Reload"). Scroll and expanded rows stay.
@@ -116,6 +205,19 @@ and a one-minute roadmap check), `oracle.action` / `oracle.blocked` / `oracle.es
 (`src/night-watch.js` `nightMetrics`) is recomputed on read from that log, the runs'
 `events.jsonl` (start, end, status, cost, progress events, gates) and the Oracle's `usage.jsonl`.
 Lines unblocked come from `git diff --shortstat` of a run's local merge commit.
+Self-healing (#278): the switch is `settings.oracle.selfHealing` (settings.json);
+`self-healing.json` (`since`) records when the standing watch was turned on and is removed when it
+is turned off. Each change writes an `oracle.watch` entry with `selfHealing: true` and `until:
+null`; those are not nights but days of the report (`selfHealingDays`: one window per UTC day).
+A detector's `oracle.detected` carries its `evidence` and is written once per run and kind (the
+log is read at the first finding after a start, so a restart does not log it again).
+An app update (#279, `src/app-update.js`) writes `oracle/app-update.json` `{ from, to, subjects,
+roadmaps, appDir, at }` right before its restart, and an `oracle.action` entry of kind `app.update`
+(`from`, `to`, `subjects`). The next start reads it before the roadmap dispatch: within 2 minutes of
+`at` it resumes the listed roadmaps and deletes it; later it is kept for the failed-update banner
+until the owner dismisses it (`app-update:dismiss`). Setting: `oracle.appUpdate` (a stored
+`oracle.appUpdateWhen` is ignored and an item's `updateAfter` is dropped at the roadmap's next save:
+both removed by #285).
 
 ## Rules
 

@@ -1,0 +1,72 @@
+/* Analytics' Run (#228), 24/7 (#188) and Agents (#280) tabs, and Repository performance's project
+   picker and recommendations (#197): analytics-run.js, analytics-occupancy.js, analytics-agents.js,
+   analytics.js. */
+
+/* the analysed project / the picked run, at the top of the tab */
+.an-project-pick { display: grid; grid-template-columns: minmax(220px, 340px) minmax(0, 1fr); align-items: end; gap: 16px; padding: 12px 14px; margin-bottom: 12px; }
+.an-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; margin: 0; }
+.an-project-summary { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding-bottom: 8px; }
+/* #254: the analysed project is the header's: named here, not picked */
+.an-project-shown { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; margin-bottom: 12px; }
+.an-project-shown .an-project-summary { padding-bottom: 0; }
+
+/* a file's recommendation */
+.an-files .an-rec-cell { min-width: 280px; max-width: 460px; }
+.an-rec { display: flex; flex-direction: column; gap: 3px; font-size: 12px; }
+.an-rec .badge { align-self: flex-start; }
+.an-rec-actions { margin-top: 2px; }
+
+/* the run's header and its comparison */
+.an-run-title { margin: 0; max-width: 70ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.an-verdict { font-size: 12px; }
+.an-verdict.green { color: var(--green); }
+.an-verdict.amber { color: var(--yellow); }
+.an-verdict.red { color: var(--red); }
+.an-verdict.neutral { color: var(--muted); }
+.an-agent { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.an-agent i { width: 9px; height: 9px; border-radius: 3px; display: inline-block; }
+.an-grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+/* the Gantt */
+.an-gantt { position: relative; padding-bottom: 18px; }
+.an-gantt svg { width: 100%; height: auto; display: block; }
+.an-gantt-label { font-size: 11px; fill: #0e1014; pointer-events: none; }
+.an-gantt-label.muted { fill: var(--muted); }
+.an-gantt-row { font-size: 11px; fill: var(--muted); }
+.an-gantt-gate { fill: url(#an-hatch); stroke: var(--yellow); stroke-opacity: .35; }
+.an-hatch-line { stroke: var(--yellow); stroke-opacity: .45; stroke-width: 2; }
+
+/* 24/7 */
+.an-occ[data-level="green"] { color: var(--green); }
+.an-occ[data-level="amber"] { color: var(--yellow); }
+.an-occ[data-level="red"] { color: var(--red); }
+.an-hint { border-left: 3px solid var(--yellow); display: block; text-align: left; }
+.an-hint .btn { margin-left: 8px; }
+.an-occ-note { margin: 6px 0 10px; }
+.an-heat { display: flex; flex-direction: column; gap: 2px; }
+.an-heat-row { display: grid; grid-template-columns: 52px repeat(24, 1fr); gap: 2px; align-items: center; }
+.an-heat-row i { height: 12px; border-radius: 2px; background: var(--green); }
+.an-heat-axis em { font-size: 10px; color: var(--muted); font-style: normal; }
+.an-heat-day { color: var(--muted); }
+.an-idle-cell { min-width: 160px; }
+.an-trend { fill: none; stroke: var(--accent); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.an-trend-dot { fill: var(--accent); }
+
+/* Agents (#280): a card per agent (they wrap on a narrow window), each a button that filters the sessions */
+.ag-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; margin-bottom: 12px; }
+.ag-card { display: flex; flex-direction: column; align-items: stretch; gap: 4px; min-width: 0; padding: 12px 14px; font: inherit; color: inherit; text-align: left; }
+button.ag-card { cursor: pointer; }
+button.ag-card:hover, button.ag-card.active { border-color: var(--accent); }
+button.ag-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ag-card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+/* an-robot, not ag-robot: that class is the Agents screen's 280px editor preview (agents.css, #297) */
+.an-robot { flex: none; width: 44px; height: 44px; }
+.an-robot svg { display: block; width: 100%; height: 100%; }
+.ag-name { font-size: 14px; }
+.ag-line { display: block; min-width: 0; }
+.ag-main { font-size: 15px; }
+.ag-card-empty .an-robot { opacity: .55; }
+.ag-budget { display: block; height: 6px; margin-top: 4px; border-radius: 3px; background: var(--panel-2); overflow: hidden; }
+.ag-budget i { display: block; height: 100%; border-radius: 3px; background: var(--accent); }
+.ag-budget.full i { background: var(--red); }
+.ag-chart-controls { flex-wrap: wrap; justify-content: flex-end; gap: 8px 14px; }

@@ -3,9 +3,10 @@
 // matching) and the child-process calls they make (a tool's output, a git query).
 
 const path = require('path');
-const { execFile, execFileSync } = require('child_process');
+const { execFileSync } = require('child_process');
 const { resolveCommand } = require('../engine/providers');
 const { canonicalPath } = require('../engine/worktree');
+const { execShim } = require('../shell');
 const usage = require('../usage');
 const workflows = require('../workflows');
 
@@ -20,10 +21,9 @@ const q = (a) => `"${String(a).replace(/"/g, '""')}"`;
 const num = (v) => (v === '' || v == null || !Number.isFinite(+v) || +v <= 0 ? null : +v);
 
 // Details for the Settings screen: path, version and (gh) authentication of each CLI.
-function runTool(file, args, shellMode) {
+function runTool(file, args) {
   return new Promise((resolve) => {
-    const cmd = shellMode ? `"${file}"` : file;
-    execFile(cmd, args, { windowsHide: true, timeout: 15000, shell: shellMode }, (err, stdout, stderr) =>
+    execShim(file, args, { windowsHide: true, timeout: 15000 }, (err, stdout, stderr) =>
       resolve({ ok: !err, out: `${stdout || ''}${stderr || ''}`.trim() }));
   });
 }
@@ -40,6 +40,9 @@ function sessionView(x, live) {
     providerSessionId: live ? x.providerSessionId : x.provider_session_id || null,
     cwd: x.cwd || null, turns: x.turns || 0, costUsd: live ? x.costUsd : x.cost_usd || 0,
     tokens: tokensView(x.tokens),
+    // #233: the part of costUsd estimated from attempts stopped before their result; one not recorded
+    ...((live ? x.estimatedUsd : x.estimated_cost_usd) ? { costEstimatedUsd: live ? x.estimatedUsd : x.estimated_cost_usd } : {}),
+    ...((live ? x.costNotRecorded : x.cost_not_recorded) ? { costNotRecorded: true } : {}),
   };
 }
 

@@ -167,7 +167,7 @@ function openBudgetModal(id) {
   $('#bd-outside').checked = !!b.countOutside;
   $('#bd-error').textContent = '';
   openModal('#budget-modal');
-  $('#bd-usd').focus();
+  $('#bd-usd').focus({ preventScroll: true });
 }
 
 async function saveBudget(e) {
@@ -240,7 +240,7 @@ function renderUsageRuns() {
 
 registerView({
   id: 'usage',
-  nav: { label: 'Usage', order: 90, icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 17a9 9 0 1 1 17 0" /><path d="m12 14 4-5" /><circle cx="12" cy="14.5" r="1.3" /></svg>' },
+  nav: { label: 'Usage', order: 90, group: 'ai', icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 17a9 9 0 1 1 17 0" /><path d="m12 14 4-5" /><circle cx="12" cy="14.5" r="1.3" /></svg>' },
   markup: `
       <section id="view-usage" class="view hidden">
         <div class="page-head">

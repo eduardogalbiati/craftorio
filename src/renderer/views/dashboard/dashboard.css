@@ -1,29 +1,41 @@
-/* Dashboard screen (views/dashboard/dashboard.js): the category cards, the gates waiting and the runs */
-.dash { max-width: 980px; margin: 0 auto; padding-top: 8vh; text-align: center; }
-.dash-title { font-size: 34px; font-weight: 700; margin: 0 0 8px; letter-spacing: -.01em; }
-.dash-sub { margin: 0 0 36px; }
-.dash-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
-.dash-card {
-  display: flex; flex-direction: column; align-items: flex-start; gap: 8px; text-align: left;
-  padding: 24px; min-height: 210px; border-radius: 14px; cursor: pointer; font: inherit; color: var(--text);
-  background: var(--panel); border: 1px solid var(--border); transition: border-color .15s, transform .15s, background .15s;
-}
-.dash-card:hover { border-color: var(--accent); background: var(--panel-2); transform: translateY(-2px); }
-.dash-card b { font-size: 18px; }
-.dash-icon { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; margin-bottom: 8px; }
-.dash-icon svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.dash-icon.plan { background: rgba(192,132,252,.14); color: var(--purple); }
-.dash-icon.build { background: rgba(124,156,255,.14); color: var(--accent); }
-.dash-icon.monitor { background: rgba(74,222,128,.12); color: var(--green); }
-.dash-count { margin-top: auto; font-size: 11px; font-family: var(--mono); color: var(--accent); }
-.dash-count.none { color: var(--muted); }
-.dash-run, .dash-gates {
-  margin: 28px auto 0; display: inline-flex; flex-direction: column; align-items: stretch; gap: 8px;
-  padding: 10px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel);
-}
+/* Home (views/dashboard/dashboard.js, #255): its tabs, the flow strip, "What needs you", "Today", the
+   empty state and the Night watch's morning summary. Stats reuse .u-stat, lists .card (style.css). */
+.home-overview { max-width: 980px; margin: 0 auto; display: grid; gap: 22px; }
+#home-body { display: grid; gap: 22px; min-width: 0; }
+.home-block { min-width: 0; }
+.home-title { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; }
+.home-none { margin: 0; }
 
-.dash-run-row { display: flex; align-items: center; gap: 12px; }
-.dash-gates { border-color: rgba(250,204,21,.45); }
-.dash-gates + .dash-run { margin-top: 12px; }
+/* the flow strip: one row, never wrapped (the stages read left to right) */
+.home-strip { flex-direction: row; align-items: stretch; gap: 4px; padding: 12px 10px; overflow-x: auto; }
+.home-stage { flex: 1 1 0; min-width: 58px; display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; }
+.home-count {
+  min-width: 56px; padding: 6px 10px; border-radius: 10px; cursor: pointer; color: var(--text);
+  font: 600 24px var(--mono); background: var(--panel-2); border: 1px solid var(--border); transition: border-color .15s;
+}
+.home-count:hover, .home-stage:hover .home-count { border-color: var(--accent); }
+.home-stage-label { font-size: 12px; color: var(--muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-arrow { flex: none; align-self: center; color: var(--muted); padding-bottom: 18px; }
+
+/* what needs you: one row per gate or failed item, its button at the right */
+.home-needs { padding: 6px 14px; gap: 0; }
+.home-need { display: flex; align-items: center; gap: 10px; padding: 8px 0; min-width: 0; }
+.home-need + .home-need { border-top: 1px solid var(--border); }
+.home-need > .badge, .home-need > .pill, .home-need-age, .home-need-phone, .home-need > .btn { flex: none; }
+.home-need-text { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.home-need-text > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-needs .home-none { padding: 8px 0; }
+
+.home-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.home-stats .u-stat b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-next { font-family: "Segoe UI", system-ui, sans-serif; font-size: 14px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+
+/* a new workspace: the three steps side by side */
+.home-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 20px; text-align: left; }
+.home-step { display: flex; flex-direction: column; gap: 6px; padding: 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); }
+.home-step .btn { margin-top: auto; align-self: flex-start; }
+@media (max-width: 1150px) { .home-steps { grid-template-columns: 1fr; } }
+
+/* the Night watch's morning summary (views/nightwatch/nightwatch.js renderMorning) */
+.home-night { display: flex; flex-direction: column; gap: 8px; padding: 10px 14px; border: 1px solid rgba(250,204,21,.45); border-radius: 10px; background: var(--panel); }
 .dash-gates-title { display: flex; align-items: center; gap: 8px; }
-.dash-run-row .btn { margin-left: auto; }

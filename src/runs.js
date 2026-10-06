@@ -18,9 +18,15 @@ const { trailOf } = require('./renderer/run-progress-model');
 const { defaultTitle, prOfEvents, readMeta } = require('./run-pr');
 const { ownerAlive, readOwner } = require('./run-owner');
 const { storeFor } = require('./store');
-const { kindOf, walkFiles } = require('./run-artifacts');
+const {
+  artifactEntry,
+  kindOf,
+  listed,
+  walkFiles,
+} = require('./run-artifacts');
+const { correctSessions, needsEvents, runCosts } = require('./run-costs');
 
-const SESSION_EVENTS = new Set(['session.opened', 'session.message_received', 'session.closed']);
+const SESSION_EVENTS = new Set(['session.attempt_stopped', 'session.closed', 'session.message_received', 'session.opened']);
 
 // The saves of a run's document to its issue (written by backlog.saveRunToIssue), oldest first.
 function readIssueSaves(dir) {
@@ -58,7 +64,8 @@ function fromEvents(file) {
   const key = `${st.mtimeMs}:${st.size}`;
   const hit = derived.get(file);
   if (hit?.key === key) return hit;
-  const events = readEvents(file).filter((e) => e.type !== 'session.stream');
+  const all = readEvents(file);
+  const events = all.filter((e) => e.type !== 'session.stream');
   const byId = new Map();
   for (const ev of events) {
     if (SESSION_EVENTS.has(ev.type) && ev.session) byId.set(ev.session_id, { ...ev.session, status: ev.type === 'session.closed' ? ev.status : ev.session.status });
@@ -74,8 +81,11 @@ function fromEvents(file) {
     if (ev.type === 'workflow.child_started') children.set(ev.child_run_id, { run_id: ev.child_run_id, step_id: ev.step_id, ...(ev.index !== undefined ? { index: ev.index } : {}), workflow: ev.workflow, status: 'running' });
     else if (ev.type === 'workflow.child_finished' && children.has(ev.child_run_id)) Object.assign(children.get(ev.child_run_id), { status: ev.status, ...(ev.cost_usd !== undefined ? { cost_usd: ev.cost_usd } : {}) });
   }
+  // #233: a run recorded before per-turn costs counted each resumed Claude turn's whole session;
+  // #277: a multi-result turn's cost is in its `usage` stream items
+  const costs = runCosts(all.filter((e) => e.type !== 'session.stream' || e.item?.kind === 'usage'));
   // the PR the run opened (#84): the latest step output with pr_url / pr_number
-  const out = { key, sessions: [...byId.values()], progress: trailOf(events), localMerge, recovery, pr: prOfEvents(events), childRuns: [...children.values()] };
+  const out = { key, sessions: correctSessions([...byId.values()], costs), costs, progress: trailOf(events), localMerge, recovery, pr: prOfEvents(events), childRuns: [...children.values()] };
   derived.set(file, out);
   return out;
 }
@@ -161,6 +171,8 @@ function readRun(runsDir, runId) {
   let progress;
   if (summary) {
     sessions = summary.sessions || [];
+    // #233: costs of a run recorded before per-turn costs, read corrected from its events
+    if (needsEvents(summary)) sessions = correctSessions(sessions, fromEvents(path.join(dir, 'events.jsonl')).costs);
     status = summary.status;
     finishedAt = summary.finished_at;
     // runs recorded before summary.progress existed
@@ -233,8 +245,10 @@ function readRun(runsDir, runId) {
     sessions,
     // null: recorded before groups existed (the workflow file may have them now)
     groups: summary?.groups || started?.groups || null,
-    // agents from the Agents menu: key → their own name (workflow.started)
-    agentNames: started?.agent_names || null,
+    // agent key → name (workflow.started, #245: the YAML's display; the Agents menu's own names win)
+    agentNames: (started?.display?.agents || started?.agent_names) ? { ...started?.display?.agents, ...started?.agent_names } : null,
+    // step id → name (#245, workflow.started display.steps); runs from before it have none
+    stepNames: started?.display?.steps || null,
     progress,
   };
 }
@@ -244,10 +258,12 @@ function readRun(runsDir, runId) {
 // a run whose files changed since it was indexed (signature below), or that has no row, is read
 // again and its row replaced; rows of deleted folders go. The files stay the source of truth.
 const SIG_FILES = ['events.jsonl', 'summary.json', 'meta.json', 'issue-saves.json', 'chain.json'];
+// how a row is read: a new reading (#233: corrected past costs) reads every run again once
+const READ_VERSION = 'costs-per-turn';
 function runSignature(dir) {
-  return SIG_FILES.map((f) => {
+  return `${SIG_FILES.map((f) => {
     try { const st = fs.statSync(path.join(dir, f)); return `${st.mtimeMs}:${st.size}`; } catch { return '-'; }
-  }).join('|');
+  }).join('|')}|${READ_VERSION}`;
 }
 
 const readSummaryText = (dir) => { try { return fs.readFileSync(path.join(dir, 'summary.json'), 'utf8'); } catch { return null; } };
@@ -285,8 +301,8 @@ function currentRow(runsDir, id, row, sig, live) {
   return null;
 }
 
-const statSignature = async (dir) => (await Promise.all(SIG_FILES.map((f) => fs.promises.stat(path.join(dir, f))
-  .then((st) => `${st.mtimeMs}:${st.size}`, () => '-')))).join('|');
+const statSignature = async (dir) => `${(await Promise.all(SIG_FILES.map((f) => fs.promises.stat(path.join(dir, f))
+  .then((st) => `${st.mtimeMs}:${st.size}`, () => '-')))).join('|')}|${READ_VERSION}`;
 const nextTick = () => new Promise((resolve) => setImmediate(resolve));
 
 /**
@@ -393,40 +409,51 @@ function projectOf(run, projectList) {
 // ---------------------------------------------------------------------------
 // Artifacts: files a run produced. Those written by the engine (`save_as`, `file.saved`
 // events, possibly outside the run folder, e.g. docs/arena in the project) plus any other file
-// in the run folder, except the run's own logs. The lists and the Artifacts screen read them from
+// in the run folder, except the run's own logs and its scratch workspace (#201). The lists and the Artifacts screen read them from
 // the cached, asynchronous index of src/run-artifacts.js (#200); runArtifacts reads one run at once.
 // ---------------------------------------------------------------------------
 
-/** Files produced by a run, read now (sync): [{ path, name, rel, location, kind, size, mtime, step, agent, exists }] */
+/**
+ * Files produced by a run, read now (sync): [{ path, name, rel, location, kind, category, size, mtime,
+ * step, agent, exists }], the run's result.md first, without internal files (#225).
+ */
 function runArtifacts(runDir) {
   const byPath = new Map();
-  const add = (file, extra = {}) => {
-    const key = normPath(file);
-    const cur = byPath.get(key) || {};
+  const add = (file, step, agent, event) => {
     let st = null;
     try { st = fs.statSync(file); } catch { /* deleted since */ }
-    const inside = key.startsWith(normPath(runDir) + path.sep);
-    byPath.set(key, {
-      ...cur,
-      path: file,
-      name: path.basename(file),
-      rel: inside ? path.relative(runDir, file) : file,
-      location: inside ? 'run' : 'external',
-      kind: kindOf(file),
-      size: st ? st.size : null,
-      mtime: st ? st.mtime.toISOString() : null,
-      exists: !!st,
-      ...extra,
-    });
+    byPath.set(normPath(file), artifactEntry(runDir, file, st, step, agent, event));
   };
   for (const ev of readEvents(path.join(runDir, 'events.jsonl'))) {
-    if ((ev.type === 'file.saved' || ev.type === 'handoff.saved') && ev.path) add(ev.path, { step: ev.step_id || null, agent: ev.agent || null });
+    if ((ev.type === 'file.saved' || ev.type === 'handoff.saved') && ev.path) add(ev.path, ev.step_id, ev.agent, ev.type);
   }
   for (const rel of walkFiles(runDir)) {
     const file = path.join(runDir, rel);
-    if (!byPath.has(normPath(file))) add(file, { step: null, agent: null });
+    if (!byPath.has(normPath(file))) add(file, null, null, null);
   }
-  return [...byPath.values()].sort((a, b) => a.rel.localeCompare(b.rel));
+  return listed([...byPath.values()]);
+}
+
+/** The run's scratch workspace (#201), for the Run screen: { dir, files, bytes }, or null when there is none. */
+function runScratch(runDir) {
+  const dir = path.join(runDir, 'scratch');
+  if (!fs.existsSync(dir)) return null;
+  let files = 0;
+  let bytes = 0;
+  const walk = (d) => {
+    let entries = [];
+    try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (e.isFile()) {
+        files++;
+        try { bytes += fs.statSync(p).size; } catch { /* deleted since */ }
+      }
+    }
+  };
+  walk(dir);
+  return { dir, files, bytes };
 }
 
 // A run's events without the streamed CLI output (session.stream), which is most of the file:
@@ -478,6 +505,7 @@ module.exports = {
   runArtifacts,
   runEvents,
   runPr,
+  runScratch,
   runsForProject,
   runSummaries,
   runTitle,

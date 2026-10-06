@@ -9,11 +9,11 @@
 // - The title the owner gives a run lives in runs/<id>/meta.json ({ title }), never in
 //   events.jsonl. Without one, the default title is the issue ("#12 Title") or the task's first line.
 
-const { execFile } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const { ghPrState, glMrState, parseTarget } = require('./engine/probes');
 const { resolveCommand } = require('./engine/providers');
+const { execShim } = require('./shell');
 
 // ---- the PR of a run ---------------------------------------------------------------------------
 // One step output → { number, url } or null.
@@ -68,10 +68,10 @@ function glMrDisplay(mr) {
 const GH_FIELDS = 'state,isDraft,mergeable,mergeStateStatus,statusCheckRollup';
 
 function readJson(cmd, args) {
-  const { file, shell } = resolveCommand(cmd) || {};
+  const { file } = resolveCommand(cmd) || {};
   if (!file) return Promise.reject(new Error(`${cmd} is not installed`));
   return new Promise((resolve, reject) => {
-    execFile(file, args, { timeout: 30000, shell, windowsHide: true, maxBuffer: 8 * 1024 * 1024 }, (err, stdout, stderr) => {
+    execShim(file, args, { timeout: 30000, windowsHide: true, maxBuffer: 8 * 1024 * 1024 }, (err, stdout, stderr) => {
       if (err) return reject(new Error(`${cmd}: ${String(stderr || err.message).trim().slice(0, 300)}`));
       try { resolve(JSON.parse(String(stdout).replace(/^﻿/, ''))); } catch { reject(new Error(`${cmd}: the output is not JSON`)); }
     });

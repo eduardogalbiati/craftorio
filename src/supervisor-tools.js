@@ -18,6 +18,12 @@ const clip = (s) => (s.length > MAX_CHARS ? `${s.slice(0, MAX_CHARS)}\n… (clip
 const json = (x) => JSON.stringify(x, null, 1);
 const obj = (properties = {}, required = []) => ({ type: 'object', properties, required, additionalProperties: false });
 const str = (description) => ({ type: 'string', description });
+// Drops what only the UI shows (an input's label and its options' labels, an agent's colour) from list_workflows.
+const withoutUi = (map, ...fields) => Object.fromEntries(Object.entries(map || {}).map(([k, v]) => [k, Object.fromEntries(Object.entries(v).filter(([f]) => !fields.includes(f)))]));
+// Drops a step's empty fields (agents null, goal/loop false, no skills): an absent field reads the same.
+// Nor the transitions a mode turns on (#282): the roadmap card draws its pipeline with them, `next` already names where a step goes.
+const CARD_ONLY = ['transitions'];
+const compactStep = (step) => Object.fromEntries(Object.entries(step || {}).filter(([k, v]) => !CARD_ONLY.includes(k) && v != null && v !== false && !(Array.isArray(v) && !v.length)));
 
 /** The tools over a service ctx (src/service/index.js): [{ name, description, inputSchema, run(args) }]. */
 function supervisorTools(ctx) {
@@ -30,8 +36,12 @@ function supervisorTools(ctx) {
       // The fields the description names, not the screen's extras (builderProblems alone is a fifth of
       // the payload): the whole list must stay under MAX_CHARS, or clip() cuts the JSON mid-string.
       // Compact JSON: the indented list of the bundled workflows alone passed MAX_CHARS.
+      // Nor the inputs' labels and agents' colours (#216, #224): they pushed the bundled workflows over MAX_CHARS again.
+      // Nor the steps' empty fields (#223: the e2e and heal steps pushed them over again).
+      // Nor the inputs' options (#260: release.yaml pushed them over again): the labels of the values `enum` already lists.
+      // Nor the roadmap card's pipeline data (#282: the steps' mode transitions pushed them over again; the groups are not picked).
       run: () => JSON.stringify(ctx.listWorkflows().map(({ file, origin, name, version, description, category, tags, inputs, outputs, agents: a, steps }) => (
-        { file, origin, name, version, description, category, tags, inputs, outputs, agents: a, steps }))),
+        { file, origin, name, version, description, category, tags, inputs: withoutUi(inputs, 'label', 'options'), outputs, agents: withoutUi(a, 'color'), steps: (steps || []).map(compactStep) }))),
     },
     {
       name: 'read_workflow',

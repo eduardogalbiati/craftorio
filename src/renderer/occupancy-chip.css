@@ -1,0 +1,11 @@
+/* The top bar's 24/7 chip (#188, occupancy-chip.js): one number, its level colour and a dot. */
+.occupancy-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; font-size: 12px; white-space: nowrap; flex: none; }
+.occupancy-chip .occ-text { font-weight: 600; }
+.occupancy-chip[data-level="green"] .occ-text { color: var(--green); }
+.occupancy-chip[data-level="amber"] .occ-text { color: var(--yellow); }
+.occupancy-chip[data-level="red"] .occ-text { color: var(--red); }
+.occupancy-chip[data-level="none"] .occ-text { color: var(--muted); }
+.occ-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+.occ-dot[data-dot="pulse"] { background: var(--green); animation: occ-pulse 1.6s ease-in-out infinite; }
+@keyframes occ-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(74, 222, 128, .6); } 50% { box-shadow: 0 0 0 5px rgba(74, 222, 128, 0); } }
+@media (prefers-reduced-motion: reduce) { .occ-dot[data-dot="pulse"] { animation: none; } }

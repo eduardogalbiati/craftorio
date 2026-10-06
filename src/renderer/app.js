@@ -13,7 +13,8 @@
 //   confirm dialog, toasts.
 // Shared pieces with a file of their own: start-drawer.js, usage-widget.js, gate-panel.js,
 // run-list.js, run-meta.js (run titles, issues and PRs), artifact-render.js, supervisor-drawer.js,
-// resume-dialog.js, code-banner.js, term-dock.js, account.js, chat-models.js, kept-work-dialog.js.
+// resume-dialog.js, code-banner.js, term-dock.js, account.js, chat-models.js, kept-work-dialog.js,
+// toast.js (the toast's countdown and its action).
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const fmtNum = (n) => (n || 0).toLocaleString('en-US');
@@ -63,7 +64,7 @@ const state = {
   // runs:list, runs:active, the project's runs and 'run:meta' (PR state changes, a title set)
   runMeta: new Map(),
   tab: 'detail',
-  workflowsTab: 'runs', // 'runs' | 'definitions' | 'builder' (sub-items of Workflows in the sidebar)
+  workflowsTab: 'runs', // 'definitions' | 'runs' | 'builder' | 'pipelines' (the Workflows screen's tabs, each a menu entry)
   pendingProject: null, // project to preselect in the panel on open
   mainKey: null,      // the Start drawer's main free-text input (usually `task`), never remembered
   starting: false,    // a startRun() request is pending: both start buttons stay disabled
@@ -172,8 +173,8 @@ async function init() {
   $('nav.sidebar').addEventListener('click', (e) => {
     const b = e.target.closest('.nav-item');
     if (!b) return;
-    // Workflows opens on Runs; Definitions and Builder are its sub-items
-    if (b.dataset.view === 'workflows') state.workflowsTab = 'runs';
+    // a Workflows entry opens its tab (#254: Definitions, Runs, Builder, Pipelines)
+    if (b.dataset.view === 'workflows') state.workflowsTab = b.dataset.tab || 'runs';
     // the Run item opens the run shown in the top bar in the remembered view
     if (b.dataset.view === 'run' && state.runs.has(state.runId)) { selectRun(state.runId); return; }
     showView(b.dataset.view);
@@ -227,13 +228,14 @@ async function init() {
   $('#sim-only-badge').classList.toggle('hidden', !state.simulationOnly);
   applyDeveloperMode();
   [state.workflows, state.projects, state.skills] = await Promise.all([api.listWorkflows(), api.listProjects(), api.listSkills()]);
+  window.CurrentProject.refresh();
   renderWorkspacePaths();
   await loadActiveRuns();
   initCodeBanner();
   initKeepAwake();
   renderDashboard();
-  // a Run App copy opens on the screen the change is about (#119): its nav item, as a click would
-  if (appInfo.startView) document.querySelector(`.nav-item[data-view="${CSS.escape(appInfo.startView)}"]`)?.click();
+  // a Run App copy opens on the screen the change is about (#119)
+  if (viewRegistry.has(appInfo.startView)) showView(appInfo.startView);
 
   // only a missing CLI is worth a line on the Start drawer: the warning before a real run fails
   const env = await api.checkEnv();
@@ -284,11 +286,19 @@ function scheduleActiveSync() {
 // ---------------------------------------------------------------------------
 function showView(view) {
   state.view = view;
-  document.querySelectorAll('.view').forEach((v) => v.classList.toggle('hidden', v.id !== `view-${view}`));
-  document.querySelectorAll('.nav-item').forEach((b) => b.classList.toggle('active', b.dataset.view === (view === 'project' ? 'projects' : view)));
-  $('#nav-workflows-sub').classList.toggle('hidden', view !== 'workflows');
-  viewRegistry.get(view)?.show?.();
+  const def = viewRegistry.get(view);
+  // a screen drawn in another one's section (#254: the Roadmap, in the Backlog's)
+  const section = def?.section || view;
+  document.querySelectorAll('.view').forEach((v) => v.classList.toggle('hidden', v.id !== `view-${section}`));
+  def?.show?.();
+  paintNav();
   reportNotifyContext();
+}
+// The open screen's menu entry (a screen without one names it in `menu`); a Workflows entry is its tab's.
+function paintNav() {
+  const lit = viewRegistry.get(state.view)?.menu || state.view;
+  document.querySelectorAll('.nav-item').forEach((b) => b.classList.toggle('active',
+    b.dataset.view === lit && (!b.dataset.tab || b.dataset.tab === state.workflowsTab)));
 }
 
 // ---------------------------------------------------------------------------
@@ -314,7 +324,7 @@ function reportNotifyContext() {
       runId: shownRunId(),
       terminalId: state.view === 'sessions' ? window.SessionsView?.shownTerminalId() || null : null,
       // #149: the Product Owner's answers are not notified while its drawer shows them
-      poProjectId: state.view === 'backlog' ? window.BacklogPO?.openProjectId() || null : null,
+      poProjectId: ['backlog', 'roadmap'].includes(state.view) ? window.BacklogPO?.openProjectId() || null : null,
     });
   }, 0);
 }
@@ -328,9 +338,10 @@ function openNotificationTarget(t) {
   if (t.openOracle) { window.OracleChat?.open(); return; }
   // a Night watch's morning summary (#172)
   if (t.view === 'nightwatch') { showView('nightwatch'); return; }
-  if (t.view === 'backlog') {
+  // (a roadmap's notice opens the Roadmap screen, #254)
+  if (t.view === 'backlog' || t.view === 'roadmap') {
     window.BacklogActions?.focusProject(t.projectId);
-    showView('backlog');
+    showView(t.view);
     if (t.openPO) window.BacklogPO?.open();
     return;
   }
@@ -395,7 +406,8 @@ function renderWorkspacePaths() {
 }
 
 const runSessionStatus = (st) => ({ running: 'active', success: 'success', failed: 'failed', interrupted: 'failed', cancelled: 'cancelled' })[st] || 'idle';
-const statusLabel = (r) => ({ idle: 'idle', running: r?.mock ? 'running (simulation)' : 'running', success: 'completed', failed: 'failed', cancelled: 'cancelled' })[r?.status || 'idle'] || r.status;
+// a run's status as people read it (#266, StatusPill): "Running (simulation)", "Succeeded", "Idle" without a run
+const statusLabel = (r) => `${StatusPill.statusLabel(r?.status || 'idle')}${r?.status === 'running' && r.mock ? ' (simulation)' : ''}`;
 
 // Stops the run shown in the top bar (only that one).
 async function stopRun() {
@@ -515,7 +527,7 @@ async function hydrateRun(runId) {
   // the gates it still waits at say so, as when they were asked (the badge and gate card read v.approvals)
   const shown = (state.view === 'run' && state.runId === runId) || window.duoShowsRun?.(runId) || window.arenaShowsRun?.(runId) || window.runChatShowsRun?.(runId);
   if (!v.past && !shown) {
-    for (const g of v.approvals.values()) showToast(`Approval waiting: ${runLabel(v.run)}`, `Step ${g.step_id}. Click to open its run.`, runId, g);
+    for (const g of v.approvals.values()) showToast(`Approval waiting: ${runLabel(v.run)}`, `Step ${agentLabel(g.step_id, v.run?.stepNames)}. Click to open its run.`, runId, g);
   }
   renderRunListsSoon();
   scheduleRender();
@@ -528,7 +540,9 @@ function runInfo(x) {
   return {
     id: x.run_id || x.runId, startedAt: Date.parse(x.ts || x.startedAt) || Date.now(), mock: !!x.mock, workflow: x.workflow,
     version: x.version, inputs, issues: issuesOfRun(x), project: project?.name || null,
-    agentNames: x.agent_names || null, // agents from the Agents menu: key → their own name
+    // agent key → name: the YAML's display (#245), the Agents menu's own names winning
+    agentNames: x.display?.agents || x.agent_names ? { ...x.display?.agents, ...x.agent_names } : null,
+    stepNames: x.display?.steps || null, // step id → name (#245)
     chain: ChainModel.runChain(x), // its chain (#134)
     // `type: workflow` steps (#174): the run that started this one, the runs this one started
     parentRun: x.parent_run || x.parentRun || null, childRuns: [...(x.childRuns || [])],
@@ -551,7 +565,8 @@ function openSaveAfterAccept(v) {
   setTimeout(() => window.openDuoSaveToIssue({ runId: v.run.id, issue, mock: v.run.mock, docSkill: v.run.inputs?.document_skill || '' }), 500);
 }
 
-// An agent's readable name (display-name.js); the slug stays in tooltips.
+// An agent's readable name (display-name.js); the slug stays in tooltips. A step's too (#245), with
+// the run's stepNames.
 const agentLabel = (slug, names) => (window.displayName ? displayName(slug, names) : String(slug || ''));
 
 // Finished runs that are not shown are forgotten (their chat and files keep everything).
@@ -573,10 +588,27 @@ function onEvent(ev) {
   }
   v.events.push(ev);
   const sess = ev.session_id ? v.sessions.get(ev.session_id) : null;
+  // #233 (as src/run-costs.js reads past runs): a run recorded before per-turn costs stored, for each
+  // resumed Claude turn, the CLI session's cumulative total; its turn's own cost is the difference
+  // with the previous turn of the same CLI session, and the session's snapshot counted the rest twice
+  const pastTurnCost = () => {
+    const recorded = Number(ev.cost_usd) || 0;
+    if (v.run?.costPerTurn || (ev.session?.provider || sess.provider) !== 'claude') return ev.cost_usd;
+    const cli = ev.session?.provider_session_id || null;
+    const prev = sess.cliLast;
+    sess.cliLast = { cli, total: recorded };
+    if (!prev || !cli || prev.cli !== cli || recorded < prev.total) return ev.cost_usd;
+    sess.overcount = (sess.overcount || 0) + prev.total;
+    return recorded - prev.total;
+  };
+  const withSnapshot = () => {
+    Object.assign(sess, ev.session);
+    if (sess.overcount) sess.cost_usd = Math.max(0, (Number(sess.cost_usd) || 0) - sess.overcount);
+  };
 
   switch (ev.type) {
     case 'workflow.started':
-      v.run = { ...runInfo(ev), status: 'running' };
+      v.run = { ...runInfo(ev), status: 'running', costPerTurn: ev.cost_accounting === 'per_turn' };
       v.events = [ev];
       v.steps = new Map((ev.steps || []).map((s) => [s.id, { ...s, visits: 0, status: 'pending' }]));
       v.trail = new RunProgress.StepTrail();
@@ -634,7 +666,7 @@ function onEvent(ev) {
       break;
 
     case 'session.closed':
-      if (sess) Object.assign(sess, ev.session);
+      if (sess) withSnapshot();
       if (ev.session_id !== 'orchestrator') orch(ev, `session ${ev.session_id} closed (${ev.status})`);
       break;
 
@@ -656,11 +688,17 @@ function onEvent(ev) {
 
     case 'session.message_received':
       if (sess) {
-        getTurn(sess, ev.turn).result = { usage: ev.usage, cost: ev.cost_usd, duration: ev.duration_ms };
-        Object.assign(sess, ev.session);
+        const cost = pastTurnCost();
+        getTurn(sess, ev.turn).result = { usage: ev.usage, cost, duration: ev.duration_ms };
+        withSnapshot();
         orch(ev, `← ${ev.session_id} replied in ${fmtDur(ev.duration_ms)}`);
       }
       if (v.run?.status === 'running' && !replaying) loadUsageThrottled();
+      break;
+
+    // #233: an attempt stopped before its result: its estimated cost is in the session's snapshot
+    case 'session.attempt_stopped':
+      if (sess) withSnapshot();
       break;
 
     case 'step.started': {
@@ -732,6 +770,14 @@ function onEvent(ev) {
       orch(ev, `limit exceeded: ${ev.limit}`, 'error');
       break;
 
+    // #276: the memory guard stopped a process of this run / held a suite for low memory
+    case 'process.killed':
+      orch(ev, ev.message || `memory guard stopped ${ev.command_line}`, 'warn');
+      break;
+    case 'memory.hold':
+      orch(ev, `${ev.step_id || 'a step'} waited ${Math.round((ev.waited_ms || 0) / 1000)} s for memory${ev.recovered ? '' : ' (started anyway)'}`, 'warn');
+      break;
+
     case 'file.saved':
       orch(ev, `💾 ${ev.step_id}${ev.agent ? ` (${ev.agent})` : ''} saved to ${ev.path}`);
       break;
@@ -744,9 +790,16 @@ function onEvent(ev) {
       orch(ev, `📝 ${ev.agent} logged ${ev.count} decision(s) in ${ev.path}`);
       break;
 
-    case 'log':
+    case 'log': {
       orch(ev, ev.message, ev.level);
+      // #233: a run recorded before costs were estimated: its agent's stopped attempt cost was never
+      // recorded, unless it failed before the CLI ran (src/run-costs.js's ATTEMPT_FAILED and NOT_STARTED)
+      const failed = !v.run?.costPerTurn && ev.level === 'error' && /^\[([^\]]+)\] attempt \d+\/\d+ failed: (.*)$/.exec(String(ev.message || ''));
+      const paid = failed && !/not found in PATH|Working directory does not exist|Provider ".*" is not defined/.test(failed[2]);
+      const owner = paid && [...v.sessions.values()].reverse().find((s) => s.agent === failed[1]);
+      if (owner) owner.costNotRecorded = true;
       break;
+    }
 
     case 'supervisor.started':
       orch(ev, `◆ supervisor called on ${ev.step_id}: ${ev.error || 'step failed'}`, 'supervisor');
@@ -815,6 +868,7 @@ function renderHeader() {
   const pill = $('#run-status');
   const st = r?.status || 'idle';
   pill.className = `pill pill-${st}`;
+  pill.dataset.status = st;
   pill.textContent = statusLabel(r);
   $('#run-meta').classList.toggle('clickable', !!r);
   $('#run-meta').title = r ? `View ${runLabel(r)}` : 'View the current run';
@@ -890,7 +944,7 @@ function renderNavRuns() {
     const gate = [...approvals.values()][0];
     const refs = issueRefs(r);
     const step = [...steps].filter(([, s]) => s.status === 'running').map(([id]) => id).join(', ');
-    const at = gate ? `waiting for you · ${gate.step_id}` : r.status === 'running' ? step || 'starting' : statusLabel(r);
+    const at = gate ? `Waiting for you · ${gate.step_id}` : r.status === 'running' ? step || 'starting' : statusLabel(r);
     const title = gate ? `${runLabel(r)} — waiting for you at ${gate.step_id}: click to answer` : `${runLabel(r)} — ${statusLabel(r)}${step && r.status === 'running' ? ` at ${step}` : ''}`;
     return `<button type="button" class="nav-run-item st-${gate ? 'waiting' : runSessionStatus(r.status)}${r.id === state.runId ? ' selected' : ''}" data-run="${esc(r.id)}"${gate ? ' data-gate="1"' : ''} title="${esc(refs ? `${title} · ${refs}` : title)}">
       <span class="status-dot"></span>
@@ -904,24 +958,25 @@ function renderNavRuns() {
   box.querySelectorAll('[data-run]').forEach((b) => (b.onclick = () => (b.dataset.gate ? openGateOf(b.dataset.run) : selectRun(b.dataset.run))));
 }
 
-let toastTimer = null;
 // runId: the run it is about (a click shows it); gate: an approval.requested event to open.
 // Never blocks anything: it hides by itself and its × dismisses it.
-function showToast(title, detail, runId = null, gate = null) {
-  const el = $('#toast');
-  el.innerHTML = `<button type="button" class="toast-close" aria-label="Dismiss" title="Dismiss">×</button><b>${esc(title)}</b>${detail ? `<span>${esc(String(detail).slice(0, 220))}</span>` : ''}`;
-  el.classList.remove('hidden');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.add('hidden'), gate ? 15000 : 7000);
-  el.onclick = (e) => {
-    el.classList.add('hidden');
+// action (#281): { label, run, done? }, a button inside the toast ("Undo"). toast.js (openToast)
+// draws it, runs it and counts the toast down: 10 s with an action, 15 for a gate, 7 otherwise.
+function showToast(title, detail, runId = null, gate = null, { action = null } = {}) {
+  const html = (head, text) => `<button type="button" class="toast-close" aria-label="Dismiss" title="Dismiss">×</button><b>${esc(head)}</b>${text ? `<span>${esc(String(text).slice(0, 220))}</span>` : ''}`;
+  const onClick = (e) => {
     if (e.target.closest('.toast-close')) return; // dismissed only
     // a gate still waiting opens inside its run (its chat, or the Run screen's gate card)
     if (gate && state.runs.get(gate.run_id)?.approvals.has(gate.approval_id)) return openGateOf(gate.run_id);
     if (runId && state.runs.has(runId)) selectRun(runId);
     else if (state.run) selectRun(state.run.id);
   };
+  openToast($('#toast'), { html, title, detail, action, ms: gate ? 15000 : 7000, onClick });
 }
+
+// #208: the page itself never scrolls (each view scrolls inside); a clipped root still scrolls
+// programmatically (scrollIntoView, focus), which shifted the whole app sideways: undo it at once.
+window.addEventListener('scroll', () => { if (window.scrollX || window.scrollY) window.scrollTo(0, 0); });
 
 // The screens of views/ load after this script and register their markup as they load; the page may
 // yield between scripts (an IPC reply can run then), so init starts once every screen is in place.

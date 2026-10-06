@@ -26,8 +26,8 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
-const { spawn } = require('child_process');
-const { killTree, quoteCmd, resolveCommand } = require('./providers');
+const { killTree, resolveCommand } = require('./providers');
+const { runShim } = require('../shell');
 
 // First match wins (npm uses npm-shrinkwrap.json over package-lock.json)
 const MANAGERS = [
@@ -111,9 +111,7 @@ function runCommand(cmd, args, { cwd, env, timeoutMs = INSTALL_TIMEOUT_MS, signa
   return new Promise((resolve) => {
     let child;
     try {
-      child = exe.shell
-        ? spawn(quoteCmd(exe.file), args.map(quoteCmd), { cwd, env: childEnv, shell: true, windowsHide: true })
-        : spawn(exe.file, args, { cwd, env: childEnv, windowsHide: true });
+      child = runShim(exe.file, args, { cwd, env: childEnv, windowsHide: true });
     } catch (e) {
       resolve({ code: null, output: e.message, timedOut: false });
       return;

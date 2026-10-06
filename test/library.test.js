@@ -185,6 +185,27 @@ test('skills bundled with the app are valid and the referenced files exist', () 
   for (const f of cited) assert.ok(review.files.includes(f), `code-review references ${f}, which does not exist`);
 });
 
+// The skill parser swallows a YAML error (empty meta): parse each bundled frontmatter strictly, so an
+// unquoted ": " in a description (#241, skills/oracle) fails here instead of silently losing the fields.
+test('every bundled SKILL.md frontmatter parses with js-yaml and has name, description and summary', () => {
+  const yaml = require('js-yaml');
+  const dir = path.join(__dirname, '..', 'skills');
+  const ids = fs.readdirSync(dir).filter((id) => fs.existsSync(path.join(dir, id, 'SKILL.md')));
+  assert.ok(ids.includes('oracle'));
+  for (const id of ids) {
+    const text = fs.readFileSync(path.join(dir, id, 'SKILL.md'), 'utf8');
+    const m = text.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+    assert.ok(m, `${id}: has a frontmatter block`);
+    let meta;
+    assert.doesNotThrow(() => { meta = yaml.load(m[1]); }, `${id}: frontmatter is valid YAML`);
+    assert.equal(meta.name, id, `${id}: name`);
+    for (const field of ['description', 'summary']) {
+      assert.equal(typeof meta[field], 'string', `${id}: ${field} is a string`);
+      assert.ok(meta[field].trim().length > 0, `${id}: ${field} is not empty`);
+    }
+  }
+});
+
 // Language/platform skills follow `<capability>-<suffix>` and every workflow input value
 // must resolve to an existing skill (e.g. language: go → unit-test-writer-go).
 test('every templated skill in the workflows resolves for every enum input value', () => {

@@ -162,6 +162,86 @@
     return chips;
   }
 
+  // ---- the fixed stations of a workflow's pipeline (#282: the roadmap card's Workflow band) -----------
+  const MODE_GATE = (mode) => new RegExp(`inputs\\.mode\\s*==\\s*['"]${String(mode).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}['"]`);
+  /**
+   * A workflow's stations, in the order of its steps: one per group (`human`: a group of human gates
+   * only), one per step in no group. A human gate in no group is never a station of its own, but the
+   * gates the item's `mode` turns on: a human_approval step reached by a transition whose `when`
+   * asks for that mode (`inputs.mode == 'validated'`) is a station right after the one that holds it
+   * (its group, else the step that leads to it).
+   * `steps`: [{ id, type, agent, agents, transitions: [{ goto, when }] }], `groups`: [{ name, steps }]
+   * → [{ key, name, grouped, steps: [ids], human?: true, gate?: true, host?: { name, grouped } }]
+   */
+  function workflowStations({ steps = [], groups = [], mode = null } = {}) {
+    const groupOf = new Map();
+    for (const g of groups || []) for (const s of g.steps || []) groupOf.set(s, g.name);
+    const human = (s) => s.type === 'human_approval';
+    const asked = mode == null || mode === '' ? null : MODE_GATE(mode);
+    const targets = new Map(); // gate step id → the first step that leads to it in that mode
+    if (asked) {
+      for (const s of steps) for (const t of s.transitions || []) if (t?.goto && asked.test(String(t.when || '')) && !targets.has(t.goto)) targets.set(t.goto, s.id);
+    }
+    const gates = steps.filter((s) => human(s) && targets.has(s.id));
+    const gateIds = new Set(gates.map((s) => s.id));
+    const byKey = new Map();
+    const out = [];
+    for (const s of steps) {
+      if (gateIds.has(s.id)) continue;
+      const name = groupOf.get(s.id);
+      if (name == null && human(s)) continue;
+      const key = name != null ? `group:${name}` : `step:${s.id}`;
+      let st = byKey.get(key);
+      if (!st) { st = { key, name: name ?? s.id, grouped: name != null, steps: [], work: 0 }; byKey.set(key, st); out.push(st); }
+      st.steps.push(s.id);
+      if (!human(s)) st.work += 1;
+    }
+    const stations = out.map(({ work, ...st }) => (work ? st : { ...st, human: true }));
+    for (const g of gates) {
+      const group = groupOf.get(g.id);
+      const hostKey = group != null ? `group:${group}` : byKey.has(`step:${targets.get(g.id)}`) ? `step:${targets.get(g.id)}` : `group:${groupOf.get(targets.get(g.id))}`;
+      let at = stations.findIndex((st) => st.key === hostKey);
+      if (at < 0) continue;
+      const host = stations[at];
+      while (stations[at + 1]?.gate) at += 1; // after the gates already placed there
+      stations.splice(at + 1, 0, { key: `gate:${g.id}`, name: g.id, grouped: false, steps: [g.id], gate: true, host: { name: host.name, grouped: host.grouped } });
+    }
+    return stations;
+  }
+
+  /**
+   * The stations with what a run did at each (its trail): → the stations, each with
+   * state: todo (not reached) | gate (a mode's gate not reached) | done | skipped (the run went past
+   *   it without entering) | running | waiting | failed | stopped | back (it sent the run back to an
+   *   earlier station: `sentBackBy`, estimateProgress's), round (the times the run entered it), current
+   *   (the step it is at, on the station it is at), agents (who worked there, as progressGroups').
+   * Without a trail every station is todo (a gate: gate).
+   */
+  function pipeline({ steps = [], groups = [], mode = null, progress = [], status = 'running', sentBackBy = null } = {}) {
+    const stations = workflowStations({ steps, groups, mode });
+    const idle = (st) => ({ ...st, state: st.gate ? 'gate' : 'todo', round: 0, current: null, agents: [] });
+    const chips = progressGroups(progress, stations.map((st) => ({ name: st.key, steps: st.steps })), status);
+    const indexOf = (chip) => stations.findIndex((st) => chip.key === `group:${st.key}`);
+    const visits = chips.map(indexOf);
+    // where the run is: the last station it entered (a step of no station, a human gate, stays on it)
+    const at = visits.reduce((a, i) => (i >= 0 ? i : a), -1);
+    if (at < 0) return stations.map(idle);
+    const now = chips.at(-1).status;
+    const over = now === 'done';
+    return stations.map((st, i) => {
+      const mine = chips.filter((c, k) => visits[k] === i);
+      if (!mine.length) return { ...idle(st), ...(i < at || over ? { state: 'skipped' } : {}) };
+      const agents = [];
+      for (const a of mine.flatMap((c) => c.agents)) {
+        const same = agents.find((x) => x.agent === a.agent && !!x.human === !!a.human);
+        if (!same) agents.push({ ...a, steps: [...a.steps] });
+        else Object.assign(same, { provider: a.provider || same.provider, model: a.model || same.model, steps: [...new Set([...same.steps, ...a.steps])], cost: same.cost + a.cost, durationMs: same.durationMs + a.durationMs });
+      }
+      const state = i === at ? now : i < at || over ? 'done' : sentBackBy && st.steps.includes(sentBackBy) ? 'back' : st.gate ? 'gate' : 'todo';
+      return { ...st, state, round: Math.max(...mine.map((c) => c.round)), current: i === at ? chips.at(-1).current : null, agents };
+    });
+  }
+
   // ---- the estimate of a run's progress (#194: the roadmap card's ring) ------------------------------
   /**
    * The typical time of each step in past runs: the median of the finished visits' durations, from
@@ -196,10 +276,15 @@
    * `path`: the workflow's step ids in order; with history, only the steps past runs went through (or
    * this run did). A return to an earlier step (a review → developer loop) lowers the estimate; it
    * never says more than 99% before the run ends.
+   * `keep` (#272, the roadmap card): a return to a step already visited (a fix round) keeps what the
+   * run had earned, the furthest step it reached counted as a step in progress at its cap, so the
+   * percentage never falls (`leftMs` still counts the steps to redo), and the result says the round.
    * → { percent, state: running | waiting | failed | stopped | done, step, elapsedMs, leftMs (null:
-   *   unknown), basis: 'history' | 'steps', done, total }
+   *   unknown), basis: 'history' | 'steps', done, total }; with `keep` also round (the visit of the
+   *   current step: 2 in its first fix round) and sentBackBy (the step the run last went back from
+   *   to an earlier one, while round > 1; null when the step was only retried)
    */
-  function estimateProgress({ steps = [], path = [], typical = {}, status = 'running', startedAt = null, now = Date.now() } = {}) {
+  function estimateProgress({ steps = [], path = [], typical = {}, status = 'running', startedAt = null, now = Date.now(), keep = false } = {}) {
     const last = steps.at(-1) || null;
     const state = status === 'success' ? 'done' : status === 'failed' ? 'failed' : STOPPED.has(status) ? 'stopped'
       : last?.status === 'waiting' ? 'waiting' : last?.status === 'failed' ? 'failed' : 'running';
@@ -213,18 +298,33 @@
     const avg = known.length ? known.reduce((a, b) => a + b, 0) / known.length : 1;
     const weight = (id) => (typical?.[id] > 0 ? typical[id] : avg);
     const total = route.reduce((a, id) => a + weight(id), 0) || 1;
-    const out = { state, step: last?.step || null, elapsedMs, basis, total: route.length };
+    // #272 a fix round: the visit of the current step; the latest visit followed by a step at or
+    // before it on the route (`again`: a step run again, a retry of the same step included) and the
+    // latest one the run went back from, to an earlier step (`back`: what sent it back)
+    const places = steps.map((e) => route.indexOf(e.step));
+    const round = last ? steps.filter((e) => e.step === last.step).length : 1;
+    const latest = (went) => {
+      for (let k = steps.length - 2; k >= 0; k--) if (places[k] >= 0 && places[k + 1] >= 0 && went(places[k + 1], places[k])) return k;
+      return -1;
+    };
+    const again = latest((to, from) => to <= from);
+    const back = latest((to, from) => to < from);
+    const out = { state, step: last?.step || null, elapsedMs, basis, total: route.length, ...(keep ? { round, sentBackBy: round > 1 && back >= 0 ? steps[back].step : null } : {}) };
     if (state === 'done') return { ...out, percent: 100, leftMs: 0, done: route.length };
     const at = last ? route.indexOf(last.step) : -1;
     // the steps before the current one on the route; a step off the route: the route steps visited
     const before = at >= 0 ? route.slice(0, at) : route.filter((id) => visited.has(id) && id !== last?.step);
     let doneW = before.reduce((a, id) => a + weight(id), 0);
+    // a step in progress: its time so far against its typical time (90% at most), half a step without history
+    const cap = basis === 'history' ? 0.9 : 0.5;
     if (last && at >= 0 && state === 'running') {
-      // the current step: its time so far against its typical time (90% at most), half a step without history
       const inStep = toMs(last.ts) != null ? Math.max(0, now - toMs(last.ts)) : 0;
-      doneW += basis === 'history' ? Math.min(inStep, 0.9 * weight(last.step)) : 0.5 * weight(last.step);
+      doneW += basis === 'history' ? Math.min(inStep, cap * weight(last.step)) : cap * weight(last.step);
     }
-    const percent = Math.max(0, Math.min(99, Math.floor((100 * doneW) / total)));
+    // what the run had earned before it ran a step again
+    const far = keep && again >= 0 ? Math.max(...places.slice(0, -1)) : -1;
+    const earnedW = far >= 0 ? route.slice(0, far).reduce((a, id) => a + weight(id), 0) + cap * weight(route[far]) : 0;
+    const percent = Math.max(0, Math.min(99, Math.floor((100 * Math.max(doneW, earnedW)) / total)));
     const leftMs = basis === 'history' ? Math.max(0, Math.round(total - doneW)) : percent > 0 ? Math.round((elapsedMs * (100 - percent)) / percent) : null;
     return { ...out, percent, leftMs, done: before.length };
   }
@@ -249,9 +349,11 @@
     StepTrail,
     estimateProgress,
     hydrationEvents,
+    pipeline,
     progressGroups,
     trailOf,
     typicalStepTimes,
+    workflowStations,
   };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.RunProgress = api;

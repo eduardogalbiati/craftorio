@@ -135,3 +135,31 @@ test('live roadmap: turning it off is persisted and survives a restart; a non-li
   assert.equal(roadmap.stages.length, 1); // no refill was asked for
   assert.equal(roadmap.liveRefill, null);
 });
+
+test('live roadmap (#235): the refill plans on the workflow and options last chosen in the Product Owner\'s drawer for the project', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  fs.writeFileSync(path.join(ws.workflows, 'fixture-issue.yaml'), ISSUE_WORKFLOW);
+  fs.writeFileSync(path.join(ws.workflows, 'fixture-chosen.yaml'), ISSUE_WORKFLOW.replace('name: fixture-issue', 'name: fixture-chosen'));
+  const p = await roadmapProject(api, ws, t, [1], 'live-chosen');
+  fs.writeFileSync(path.join(ws.backlog, `${p.id}.json`), JSON.stringify({
+    projectId: p.id, platform: 'github', repo: 'https://github.com/o/r', issues: [roadmapIssue(1), pickable(2, 1)],
+  }));
+  // the owner planned once in the drawer with fixture-chosen.yaml and language "go"
+  await api['po:ask']({ projectId: p.id, question: 'Analyze the backlog and propose runs', mock: true, mode: 'plan', attachments: [], issues: [], workflow: 'fixture-chosen.yaml', inputs: { language: 'go' } });
+  const { gates } = watchRuns(service);
+
+  await api['roadmap:save']({ projectId: p.id, stages: [{ items: [{ workflow: 'fixture-issue.yaml', number: 1, mock: true }] }] });
+  await api['roadmap:start']({ projectId: p.id, simulated: true });
+  await api['roadmap:live']({ projectId: p.id, on: true });
+
+  await until(() => api['runs:active']().length === 1);
+  const runId = api['runs:active']()[0].runId;
+  await until(() => gates.has(runId));
+  api['approval:resolve']({ runId, id: gates.get(runId), answer: true });
+
+  await until(() => api['roadmap:get']({ projectId: p.id }).stages.length === 2);
+  const item = api['roadmap:get']({ projectId: p.id }).stages[1].items[0];
+  assert.equal(item.workflow, 'fixture-chosen.yaml');
+  assert.equal(item.inputs?.language, 'go');
+});

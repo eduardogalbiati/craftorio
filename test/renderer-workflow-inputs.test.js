@@ -188,3 +188,83 @@ test('applyHints: without a projectId, or without api.projectInputHints, it does
   await assert.doesNotReject(WorkflowInputs.applyHints(root, { language: {} }, null));
   await assert.doesNotReject(WorkflowInputs.applyHints(root, { language: {} }, 'proj-1'));
 });
+
+// ---- inputPills (#216): a run's inputs as friendly pills, the same on every card --------------
+// inputPills(workflow, inputs) → markup: one pill per input not at its workflow default, "<label>:
+// <option label>"; the raw key and value only in the tooltip. Shared by the roadmap card, the
+// Product Owner's proposal card, the Assign dialog summary and the run header.
+
+const pillsText = (html) => String(html ?? '').replace(/<[^>]*>/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ');
+const heroWorkflow = {
+  file: 'software-development-local-hero.yaml',
+  inputs: {
+    unit_tests: { enum: ['write_and_run', 'run_existing', 'off'], default: 'write_and_run', label: 'Unit tests', options: { write_and_run: 'Write and run', run_existing: 'Run existing', off: 'Off' }, description: 'How the change is tested.' },
+    e2e_tests: { enum: ['off', 'write', 'write_and_run'], default: 'off', label: 'E2E', options: { off: 'Off', write: 'Write only', write_and_run: 'Write and run' } },
+    screenshots: { enum: ['all', 'changed', 'off'], default: 'all', label: 'Screenshots', options: { all: 'All', changed: 'Changed', off: 'Off' } },
+  },
+};
+
+test('inputPills: each input not at its default is a pill "<label>: <option label>", with no snake_case and no "="', () => {
+  const t = pillsText(WorkflowInputs.inputPills(heroWorkflow, { unit_tests: 'run_existing', e2e_tests: 'write', screenshots: 'off' }));
+  assert.match(t, /Unit tests: Run existing/);
+  assert.match(t, /E2E: Write only/);
+  assert.match(t, /Screenshots: Off/);
+  assert.doesNotMatch(t, /_|=/);
+});
+
+test('inputPills: an input at its workflow default is hidden or dimmed, never a plain pill', () => {
+  const html = WorkflowInputs.inputPills(heroWorkflow, { unit_tests: 'write_and_run', screenshots: 'off' });
+  assert.match(pillsText(html), /Screenshots: Off/);
+  const at = html.indexOf('Unit tests');
+  if (at >= 0) assert.match(html.slice(html.lastIndexOf('class="', at), at), /dim|default/);
+});
+
+test('inputPills: the tooltip keeps the input\'s description and the raw key and value', () => {
+  const html = WorkflowInputs.inputPills(heroWorkflow, { unit_tests: 'run_existing' });
+  assert.match(html, /title="[^"]*unit_tests[^"]*run_existing[^"]*"/);
+  assert.match(html, /title="[^"]*How the change is tested\.[^"]*"/);
+});
+
+test('inputPills: an input the workflow does not declare falls back to a humanized key and value', () => {
+  const t = pillsText(WorkflowInputs.inputPills(heroWorkflow, { max_rounds: 3, base_branch: 'release_2' }));
+  assert.match(t, /Max rounds: 3/);
+  assert.match(t, /Base branch: /);
+  assert.doesNotMatch(t, /max_rounds|base_branch/);
+});
+
+test('inputPills: no inputs gives no pills; no workflow still labels each input from its key', () => {
+  assert.equal(pillsText(WorkflowInputs.inputPills(heroWorkflow, null)).trim(), '');
+  assert.equal(pillsText(WorkflowInputs.inputPills(heroWorkflow, {})).trim(), '');
+  assert.match(pillsText(WorkflowInputs.inputPills(null, { unit_tests: 'off' })), /Unit tests: Off/);
+});
+
+// ---- #286: developer_effort of ai-development-local-hero, drawn by the shared renderer -------
+// The Start drawer, the Assign dialog and the roadmap item's Edit all draw the workflow's inputs
+// with formHtml, and the roadmap card's input pairs come from inputPills: the real YAML's inputs.
+const heroInputs = () => {
+  const yaml = require('js-yaml');
+  const file = require('path').join(__dirname, '..', 'workflows', 'ai-development-local-hero.yaml');
+  return yaml.load(require('fs').readFileSync(file, 'utf8')).inputs;
+};
+
+test('formHtml (#286): "Developer effort" comes right after "Developer model", Default to Extra high, Default selected', () => {
+  const html = WorkflowInputs.formHtml(heroInputs(), { values: {} });
+  const keys = [...html.matchAll(/data-wi-key="([^"]+)"/g)].map((m) => m[1]);
+  const at = keys.indexOf('developer_effort');
+  assert.ok(at > 0, 'the developer_effort field is drawn');
+  assert.equal(keys[at - 1], 'developer_model');
+  assert.match(html, />Developer effort</);
+  const pills = [...html.matchAll(/data-wi-pill="([^"]+)"[^>]*>([^<]*)</g)].map((m) => `${m[1]}=${m[2]}`);
+  for (const p of ['default=Default', 'low=Low', 'medium=Medium', 'high=High', 'xhigh=Extra high']) assert.ok(pills.includes(p), `pill ${p}`);
+  assert.match(html, /data-wi-input="developer_effort"[^>]*value="default"/);
+  assert.match(WorkflowInputs.formHtml(heroInputs(), { values: { developer_effort: 'high' } }), /data-wi-input="developer_effort"[^>]*value="high"/);
+});
+
+test('inputPills (#286): the roadmap card shows "Developer effort: High", never a plain pill at Default', () => {
+  const wf = { file: 'ai-development-local-hero.yaml', inputs: heroInputs() };
+  assert.match(pillsText(WorkflowInputs.inputPills(wf, { developer_effort: 'high' })), /Developer effort: High/);
+  assert.match(pillsText(WorkflowInputs.inputPills(wf, { developer_effort: 'xhigh' })), /Developer effort: Extra high/);
+  const html = WorkflowInputs.inputPills(wf, { developer_effort: 'default' });
+  const at = html.indexOf('Developer effort');
+  if (at >= 0) assert.match(html.slice(html.lastIndexOf('class="', at), at), /dim|default/);
+});

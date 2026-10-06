@@ -1,0 +1,17 @@
+{
+  "date": "2026-10-02",
+  "question": "Is the Oracle making sense?",
+  "outsideSession": {
+    "answer": "Checked each of the Oracle's claims against its source; confirmed the 4 'PasteImage is not defined' failures by running test/renderer-run-gates.test.js on main.",
+    "evidence": ["a run of test/renderer-run-gates.test.js on main", "file:line of each claim checked"]
+  },
+  "oracleMistake": "Stated claims before checking them; could not run a test to confirm a failure.",
+  "tools": ["repo_read", "delegate"],
+  "delegates": ["checker"],
+  "skillRules": [
+    "primary source",
+    "checker",
+    "hypothes",
+    "correct"
+  ]
+}

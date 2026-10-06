@@ -231,3 +231,48 @@ test('an AI gate that keeps rejecting ends the run as failed after its rounds', 
   assert.equal(events.find((e) => e.type === 'workflow.finished').status, 'failed');
   assert.ok(!events.some((e) => e.type === 'approval.requested'), 'never reaches the human gate');
 });
+
+// #245: a desk's (or agent's) display name, the readable name the screens show instead of its id
+const displayDoc = () => loadWorkflow(path.join(root, 'workflows', 'writer-reviewer.yaml'));
+const withDisplay = (spec, { agent, step }) => ({
+  ...spec,
+  agents: { ...spec.agents, writer: { ...spec.agents.writer, display: agent } },
+  steps: spec.steps.map((s) => (s.id === 'out_of_rounds' ? { ...s, display: step } : s)),
+});
+
+test('#245 patchWorkflow writes an agent\'s and a step\'s display, and an emptied display removes the field', () => {
+  const doc = displayDoc();
+  const spec = builder.describeWorkflow(doc);
+  assert.equal(spec.agents.writer.display, '');
+  const named = yaml.load(builder.patchWorkflow(doc, withDisplay(spec, { agent: 'Author', step: 'Out of review rounds' })));
+  assert.equal(named.agents.writer.display, 'Author');
+  assert.equal(named.steps.find((s) => s.id === 'out_of_rounds').display, 'Out of review rounds');
+  assert.equal(named.steps.find((s) => s.id === 'write').display, undefined, 'a step without one gets none');
+  assert.equal(builder.describeWorkflow(named).agents.writer.display, 'Author');
+
+  const cleared = yaml.load(builder.patchWorkflow(named, withDisplay(builder.describeWorkflow(named), { agent: '', step: '   ' })));
+  assert.ok(!('display' in cleared.agents.writer));
+  assert.ok(!('display' in cleared.steps.find((s) => s.id === 'out_of_rounds')));
+});
+
+test('#245 patchWorkflow refuses a display over 40 characters, naming the agent or the step', () => {
+  const doc = displayDoc();
+  const spec = builder.describeWorkflow(doc);
+  assert.doesNotThrow(() => builder.patchWorkflow(doc, withDisplay(spec, { agent: 'a'.repeat(40) })));
+  assert.throws(() => builder.patchWorkflow(doc, withDisplay(spec, { agent: 'a'.repeat(41) })), /writer.*40 characters/);
+  assert.throws(() => builder.patchWorkflow(doc, withDisplay(spec, { step: 'b'.repeat(41) })), /out_of_rounds.*40 characters/);
+});
+
+test('#245 a desk\'s display is saved on its step, loads in the engine and reads back; over 40 characters is refused', (t) => {
+  const spec = { ...SPEC, steps: SPEC.steps.map((s) => (s.id === 'check_plan' ? { ...s, display: 'Plan approval' } : s.id === 'build' ? { ...s, display: 'Build it' } : s)) };
+  const wf = loadWorkflow(save(t, spec));
+  assert.equal(wf.steps.find((s) => s.id === 'check_plan').display, 'Plan approval');
+  assert.equal(wf.steps.find((s) => s.id === 'build').display, 'Build it');
+  assert.equal(wf.steps.find((s) => s.id === 'plan').display, undefined);
+  const back = builder.fromWorkflow(wf);
+  assert.deepEqual(back.problems, []);
+  assert.deepEqual(back.spec, spec);
+
+  const tooLong = { ...SPEC, steps: SPEC.steps.map((s) => (s.id === 'build' ? { ...s, display: 'x'.repeat(41) } : s)) };
+  assert.throws(() => builder.validateSpec(tooLong), /"build".*at most 40 characters/);
+});

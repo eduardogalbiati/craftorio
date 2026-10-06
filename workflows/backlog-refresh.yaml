@@ -42,12 +42,14 @@ metadata:
 # -----------------------------------------------------------------------------
 inputs:
   project_path:
+    label: "Project folder"
     type: string
     required: true
     description: Local clone of the repository whose open issues are refreshed (read-only). Needs a GitHub or GitLab remote (origin).
   # the Start panel's free-text field (the first text input); the other inputs come prefilled from
   # the Backlog's banner (Refresh now)
   focus:
+    label: "Focus"
     type: string
     default: ""
     description: Optional, what to look at first, e.g. "the screens epic #158 moved to src/renderer/views/". Empty = a plain refresh.
@@ -60,14 +62,17 @@ inputs:
     # gh = GitHub (gh CLI), gl = GitLab (glab CLI): picks the backlog-refresh-<platform> skill.
     description: Where the issues live.
   base_branch:
+    label: "Base branch"
     type: string
     default: main
     description: "The branch that holds today's code, read from this clone (local merges count)."
   since:
+    label: "Since"
     type: string
     default: "24 hours ago"
     description: What counts as recent changes - a date ("2026-10-01"), "24 hours ago", or a git ref/commit.
   issues:
+    label: "Issues"
     type: array
     default: []
     # a roadmap stage fills it with its item's issue URLs (src/backlog.js runInputs)
@@ -113,7 +118,7 @@ agents:
     session: ephemeral
     # read-only is a convention (capabilities.md): git and gh/glab only to read
     capabilities: { tools: [read, bash:git, bash:gh, bash:glab], web: false, subagents: true }
-    skills: ["backlog-refresh-{{ inputs.git_platform }}", context-economy]
+    skills: ["backlog-refresh-{{ inputs.git_platform }}", clarity-score, context-economy]
     system_prompt: |
       You are the backlog refresher. You compare a repository's open issues with its code as it
       is now and describe, exactly, what drifted (backlog-refresh skill). The current folder is
@@ -149,6 +154,9 @@ steps:
       `complexity` (0 = unchanged), a one-sentence `note` for each issue you edit, and the `scope`
       proposals. Copy each issue's update time exactly as the platform gives it into `updated_at`:
       the script skips an issue edited after your review.
+      Score each issue you review with the clarity-score rubric, asking nobody: in `report`, list
+      the ones below 85% as "needs grilling", each with its `clarity: <n>%` and its gaps as open
+      questions. The score never becomes an edit of the issue.
       Answer with `repo`, `base`, `since`, `reviewed`, `issues`, `scope` and `report`.
     output_schema:
       type: object

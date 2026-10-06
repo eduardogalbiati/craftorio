@@ -4,7 +4,9 @@
 // The document type is the workflow's `document_skill` (duo-issue.js). From a Backlog issue
 // (window.openDuoForIssue) the setup is prefilled and the run records the issue; once accepted,
 // "Save to issue" (window.openDuoSaveToIssue, also in Run Details) previews and, on the owner's
-// click, saves the document to it (backlog:save-doc). Registers itself with registerView, with
+// click, saves the document to it (backlog:save-doc). From a Discovery card
+// (window.openDuoForCard, #257) the prompt is the card's document and the run's document goes back
+// to the card when it finishes (DiscoveryRuns). Registers itself with registerView, with
 // its Save to issue and guide dialogs; the chat look it shares with AI Arena and the run chat is
 // chat.css, the models it offers chat-models.js.
 // load: after views/duo/duo-issue.js (window.DuoIssue as it loads)
@@ -47,9 +49,12 @@
   // the writer and the reviewer wear the look saved for writer-reviewer's agents in Agents, if any
   const variantOf = (role) => (roles[role].internal ? 'supervisor'
     : window.AgentLooks?.forWorkflow('writer-reviewer', role) || Robots.variantFor(roles[role].provider, roles[role].model));
+  // without a saved look, the provider's robot is painted in the role's colour (#227, agent-colors.js)
+  const colorOf = (role) => (roles[role].internal || !window.AgentColors || window.AgentLooks?.forWorkflow('writer-reviewer', role) ? undefined
+    : AgentColors.hexFor(role, AgentColors.defIn(state.workflows, 'writer-reviewer', role)));
   // The name plate shows the chosen model; the internal supervisor keeps its own generic plate.
   const plaqueOf = (role) => (roles[role].internal ? undefined : Robots.plaqueFor(roles[role].model));
-  const robotSvg = (role, st = 'idle', opts = {}) => Robots.svg(variantOf(role), st, { mirror: MIRRORED[role], plaque: plaqueOf(role), ...opts });
+  const robotSvg = (role, st = 'idle', opts = {}) => Robots.svg(variantOf(role), st, { mirror: MIRRORED[role], plaque: plaqueOf(role), color: colorOf(role), ...opts });
   // Chat messages keep a still, balloon-less robot; only the live ones animate.
   const avatar = (role) => `<span class="duo-robot still ${role}" aria-hidden="true">${robotSvg(role, 'idle', { bubble: false })}</span>`;
   const DOING = {
@@ -104,9 +109,10 @@
     let mock;
     try { mock = wantsSimulation($d('#duo-mock')); } catch (e) { err.textContent = e.message; return; }
     const scenario = $d('#duo-scenario').value;
-    // a prompt prefilled from an issue is not kept as the next default
-    const own = fromIssue ? { prompt: saved.prompt, goal: saved.goal, project: saved.project } : { prompt: inputs.prompt, goal: inputs.goal, project: $d('#duo-project').value };
-    try { localStorage.setItem(LS, JSON.stringify({ writer: config.writer, reviewer: config.reviewer, ...own, threshold: inputs.threshold, max_rounds: inputs.max_rounds, scenario, skill: fromIssue ? saved.skill : inputs.document_skill })); } catch { /* ignore */ }
+    // a prompt prefilled from an issue or a Discovery card is not kept as the next default
+    const prefilled = fromIssue || fromCard;
+    const own = prefilled ? { prompt: saved.prompt, goal: saved.goal, project: saved.project } : { prompt: inputs.prompt, goal: inputs.goal, project: $d('#duo-project').value };
+    try { localStorage.setItem(LS, JSON.stringify({ writer: config.writer, reviewer: config.reviewer, ...own, threshold: inputs.threshold, max_rounds: inputs.max_rounds, scenario, skill: prefilled ? saved.skill : inputs.document_skill })); } catch { /* ignore */ }
     $d('#duo-run').disabled = true;
     try {
       starting = true; // the run's first events may arrive before startRun resolves
@@ -128,6 +134,12 @@
       PasteImage.clear($d('#duo-prompt'));
       PasteImage.clear($d('#duo-goal'));
       bindLive(out.runId);
+      // started for a Discovery card: its document goes back to the card when the run finishes
+      if (fromCard) {
+        window.DiscoveryRuns.started(out.runId, { projectId: fromCard.projectId, cardId: fromCard.cardId, source: 'write-review' });
+        fromCard = null;
+        renderIssueBanner();
+      }
     } catch (e) {
       starting = false;
       buffer = [];
@@ -157,6 +169,7 @@
   // "Enrich in Write & Review" fills the setup with the issue (DuoIssue.enrichInputs): an enriched
   // issue by default, in the Backlog's project. Nothing starts by itself; the owner can edit it all.
   let fromIssue = null; // { projectId, platform, issue: { number, title, url, body, labels } }
+  let fromCard = null; // a Discovery card instead (#257, openForCard): { projectId, cardId, title }
   const { DOC_TYPES, DEFAULT_ISSUE_SKILL } = window.DuoIssue;
   const docLabel = (skill) => DOC_TYPES.find((t) => t.skill === (skill || ''))?.label || skill;
 
@@ -169,7 +182,13 @@
 
   function renderIssueBanner() {
     const box = $d('#duo-issue');
-    box.classList.toggle('hidden', !fromIssue);
+    box.classList.toggle('hidden', !fromIssue && !fromCard);
+    if (fromCard) {
+      box.innerHTML = `<span>For the Discovery card <b>${esc(fromCard.title)}</b>: when the run finishes, its document comes back to the card as a new version.</span>
+      <button type="button" class="link-btn small" id="duo-card-clear" title="Write a document that is not about this card">not about this card</button>`;
+      $d('#duo-card-clear').onclick = () => { fromCard = null; renderIssueBanner(); };
+      return;
+    }
     if (!fromIssue) { box.innerHTML = ''; return; }
     const i = fromIssue.issue;
     box.innerHTML = `<span>Enriching issue <a href="${esc(i.url)}" target="_blank" rel="noopener">#${esc(i.number)}</a> <b>${esc(i.title)}</b>: once you accept the document, you can save it back to the issue.</span>
@@ -193,21 +212,41 @@
     $d('#duo-chat').classList.add('hidden');
     $d('#duo-setup').classList.remove('hidden');
     fromIssue = { projectId, platform, issue, skill };
+    fromCard = null;
     const inputs = window.DuoIssue.enrichInputs(issue, skill);
+    await prefill({ projectId, skill, prompt: inputs.prompt, goal: inputs.goal });
+  }
+  window.openDuoForIssue = openForIssue;
+
+  // The setup filled for an issue or a card, in its project, the cursor at the top of the prompt.
+  async function prefill({ projectId, skill, prompt: text, goal }) {
     fillSkills(skill);
-    $d('#duo-prompt').value = inputs.prompt;
-    $d('#duo-goal').value = inputs.goal;
+    $d('#duo-prompt').value = text;
+    $d('#duo-goal').value = goal;
     $d('#duo-error').textContent = '';
     renderIssueBanner();
     await loadProjects();
     const sel = $d('#duo-project');
     if ([...sel.options].some((o) => o.value === projectId && !o.disabled)) { sel.value = projectId; sel.onchange(); }
     const prompt = $d('#duo-prompt');
-    prompt.focus();
+    prompt.focus({ preventScroll: true });
     prompt.setSelectionRange(0, 0);
     prompt.scrollTop = 0;
   }
-  window.openDuoForIssue = openForIssue;
+
+  // ---------------------------------------------------------------- from a Discovery card (#257)
+  // "Open in Write & Review" on a card in Shape (views/discovery/discovery.js) fills the setup with
+  // the card's document as the prompt. Nothing starts by itself; the run started here is told to
+  // DiscoveryRuns, which records its document on the card when it finishes.
+  async function openForCard({ projectId, cardId, title, prompt, goal, skill = '' }) {
+    if (typeof showView === 'function') showView('duo');
+    $d('#duo-chat').classList.add('hidden');
+    $d('#duo-setup').classList.remove('hidden');
+    fromIssue = null;
+    fromCard = { projectId, cardId, title };
+    await prefill({ projectId, skill, prompt, goal });
+  }
+  window.openDuoForCard = openForCard;
 
   // ---------------------------------------------------------------- chat state
   const chat = { runId: null, live: false, running: false };
@@ -479,13 +518,15 @@
     const off = chat.live ? '' : ' disabled';
     // with "Accept and save to issue #n" when the run is about an issue (gateChoices in app.js, #125)
     const choices = gateChoices(ev);
-    const buttons = choices.map((c, i) => `<button type="button" class="btn sm ${i === 0 ? 'primary' : ''}" data-approval="${esc(ev.approval_id)}" data-choice="${esc(c.id)}"${c.intent ? ` data-intent="${esc(c.intent)}" title="${esc(c.title)}"` : ''}${off}>${esc(c.label)}</button>`).join('');
+    const buttons = choices.map((c, i) => `<button type="button" class="btn sm ${i === 0 ? 'primary' : ''}" data-approval="${esc(ev.approval_id)}" data-choice="${esc(c.id)}"${c.intent ? ` data-intent="${esc(c.intent)}" title="${esc(c.title)}"` : ''}${off}>${esc(c.label)}</button>`).join('')
+      // #183: "Interact with Oracle" at the end of the row
+      + (window.GateOracle?.gateOracleButtonHtml({ ...ev, run_id: ev.run_id || chat.runId }) || '');
     const field = ev.feedback ? `<label class="duo-ask-label">${esc(ev.feedback.label)}</label>
       <textarea class="duo-ask-text" rows="2" placeholder="${esc(ev.feedback.placeholder)}"${off}></textarea>` : '';
     chat.labels = Object.fromEntries(choices.map((c) => [c.intent ? `${c.id}:${c.intent}` : String(c.id), c.label]));
     message('supervisor', `<div class="duo-ask" data-gate="${esc(ev.approval_id)}"><p class="duo-msg-text">${esc(ev.message)}</p>${field}<div class="row gate-choices">${buttons}</div></div>`, ev.ts);
     $d('#duo-chat-status').textContent = 'The supervisor is waiting for you';
-    if (chat.live) document.querySelector(`[data-gate="${ev.approval_id}"] textarea`)?.focus();
+    if (chat.live) document.querySelector(`[data-gate="${ev.approval_id}"] textarea`)?.focus({ preventScroll: true });
   }
 
   // The user's answer, as their own message.
@@ -660,7 +701,7 @@
       `<figure><span class="duo-robot ${role}" aria-hidden="true">${robotSvg(role, st)}</span><figcaption><b class="c-${role}">${NAMES[role]}</b> · ${st}</figcaption></figure>`).join('');
     roles = prev;
     $d('#duo-help').classList.remove('hidden');
-    $d('#duo-help-close').focus();
+    $d('#duo-help-close').focus({ preventScroll: true });
   }
   const closeHelp = () => { $d('#duo-help').classList.add('hidden'); $d('#duo-help-cast').innerHTML = ''; };
 
@@ -721,7 +762,7 @@
 
   registerView({
     id: 'duo',
-    nav: { label: 'Write &amp; Review', order: 120, title: 'Layout preview: writer and reviewer agents in a chat',
+    nav: { label: 'Write &amp; Review', order: 120, group: 'plan', title: 'Layout preview: writer and reviewer agents in a chat',
       icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z" /><path d="M9 10h6M9 13.5h4" /></svg>' },
     markup: `
       <section id="view-duo" class="view hidden">
@@ -946,8 +987,8 @@
     </div>
   </div>`,
     mount() {
-      // the screen is a preview: a badge after its label
-      document.querySelector('.nav-item[data-view="duo"]').insertAdjacentHTML('beforeend', '<span class="nav-badge">lab</span>');
+      // the screen is a preview: a badge after its label (drawn by CSS, so the entry's name stays its label)
+      document.querySelector('.nav-item[data-view="duo"]').insertAdjacentHTML('beforeend', '<span class="nav-badge nav-lab" aria-hidden="true"></span>');
       init();
     },
   });

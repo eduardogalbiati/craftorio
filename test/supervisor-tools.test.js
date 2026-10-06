@@ -133,6 +133,22 @@ test('list_workflows items carry only the fields the tool describes, not the Wor
   }
 });
 
+test('list_workflows inputs keep their enum but not the UI\'s label or options (#260: release.yaml pushed the list over MAX_CHARS)', async (t) => {
+  const { ctx } = makeCtx(t);
+  const tools = supervisorTools(ctx);
+
+  const list = JSON.parse((await callTool(tools, 'list_workflows', {})).text);
+  for (const w of list) {
+    for (const [name, input] of Object.entries(w.inputs || {})) {
+      assert.ok(!('label' in input), `${w.file} input ${name} carries its label`);
+      assert.ok(!('options' in input), `${w.file} input ${name} carries its options`);
+    }
+  }
+  const release = list.find((w) => w.file === 'release.yaml');
+  assert.deepEqual(release.inputs.e2e_suite.enum, ['run', 'skip']);
+  assert.equal(release.inputs.e2e_suite.default, 'run');
+});
+
 test('callTool: list_runs answers isError false and its limit, projectId and status filters narrow the list', async (t) => {
   const { ctx, api } = makeCtx(t);
   const tools = supervisorTools(ctx);

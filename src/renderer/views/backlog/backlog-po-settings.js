@@ -72,13 +72,13 @@
     $s('#po-set-model-list').innerHTML = (window.ChatModels?.PROVIDERS['claude-code']?.models || []).map((m) => `<option value="${esc(m)}"></option>`).join('');
     renderEffort(a.effort || 'high');
     if (agent()) status('Applies to the next answer.');
-    $s('#po-set-calibration')?.focus();
+    $s('#po-set-calibration')?.focus({ preventScroll: true });
   }
 
   function closeSettings() {
     st.open = false;
     $s('#po-settings').classList.add('hidden');
-    $s('#btn-po-settings').focus();
+    $s('#btn-po-settings').focus({ preventScroll: true });
   }
 
   // Saves the whole agent (its look too: the save rewrites agents/product-owner.json) with `patch`.

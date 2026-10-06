@@ -90,6 +90,7 @@ function load({ runs = [], q = '', projectId = '', showSim = false, developerMod
     },
     api: { listArtifacts: (opts) => Promise.resolve([{ artifacts: runs.find((r) => r.runId === opts.runId)?._files || [] }]) },
     errMsg: (e) => String(e?.message || e),
+    StatusPill: require('../src/renderer/status-pill.js'), // the real readable statuses (#266)
   };
   vm.createContext(sandbox);
   vm.runInContext(

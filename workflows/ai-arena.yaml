@@ -41,53 +41,62 @@ metadata:
 # -----------------------------------------------------------------------------
 inputs:
   task:
+    label: "Task"
     type: string
     required: true
     description: "The request. E.g.: Write a PRD for an appointment-booking app for small clinics."
   project_path:
+    label: "Project folder"
     type: string
     required: false
     default: ""
     description: Optional project folder, used as context (agents only read it) and as the destination of a copy of the final document. Without it the agents work in the run folder.
   attachments:
+    label: "Attachments"
     type: string
     required: false
     default: ""
     description: "Reference documents attached by the user (text), each one after a '===== Attached file: <name> =====' line. Every contender, the synthesizer and the verifier read them."
   document_skill:
+    label: "Document type"
     type: string
     default: prd-writing
     description: "Skill that defines the document's structure and scoring rubric: prd-writing, adr-writing, rfc-writing, design-doc-writing, test-plan-writing, design-sketch, or your own."
   peer_review:
+    label: "Peer review"
+    options: { "yes": "Yes", "no": "No" }
     type: string
     enum: ["yes", "no"]
     default: "yes"
     description: Blind cross-critique round before the synthesis (better quality, higher cost).
   lenses:
+    label: "Lenses"
+    options: { "off": "Off", "on": "On" }
     type: string
     enum: ["off", "on"]
     default: "off"
     description: "on = each contender writes under a different forced lens (user value, lean MVP, risk first, feasibility, evidence) for more divergent proposals."
   save_to:
+    label: "Save to"
     type: string
     default: ""
     description: Project subfolder where a copy of the final document is saved (e.g. docs/arena). Empty (the default) keeps it only in the run folder, arena/final.md in the workspace.
   # The contenders: `none` leaves a slot out. At least two are needed for the critique.
-  contender_1_provider: { type: string, enum: [none, claude, codex, grok], default: claude, description: CLI of contender 1. }
-  contender_1_model:    { type: string, default: claude-opus-5-5 }
-  contender_1_effort:   { type: string, enum: [low, medium, high, xhigh], default: high, options: { xhigh: Extra high } }
-  contender_2_provider: { type: string, enum: [none, claude, codex, grok], default: claude, description: CLI of contender 2. }
-  contender_2_model:    { type: string, default: claude-sonnet-5-5 }
-  contender_2_effort:   { type: string, enum: [low, medium, high, xhigh], default: high, options: { xhigh: Extra high } }
-  contender_3_provider: { type: string, enum: [none, claude, codex, grok], default: codex, description: CLI of contender 3. }
-  contender_3_model:    { type: string, default: gpt-6-luna }
-  contender_3_effort:   { type: string, enum: [low, medium, high, xhigh], default: high, options: { xhigh: Extra high } }
-  contender_4_provider: { type: string, enum: [none, claude, codex, grok], default: grok, description: CLI of contender 4. }
-  contender_4_model:    { type: string, default: grok-4.7 }
-  contender_4_effort:   { type: string, enum: [low, medium, high, xhigh], default: high, options: { xhigh: Extra high } }
-  contender_5_provider: { type: string, enum: [none, claude, codex, grok], default: none, description: "CLI of contender 5 (none = not used)." }
-  contender_5_model:    { type: string, default: claude-haiku-4-5 }
-  contender_5_effort:   { type: string, enum: [low, medium, high, xhigh], default: high, options: { xhigh: Extra high } }
+  contender_1_provider: { label: "Contender 1 CLI", type: string, enum: [none, claude, codex, grok], default: claude, description: CLI of contender 1., options: { "none": "None", "claude": "Claude", "codex": "Codex", "grok": "Grok" } }
+  contender_1_model:    { label: "Contender 1 model", type: string, default: claude-opus-5-5 }
+  contender_1_effort:   { label: "Contender 1 effort", type: string, enum: [low, medium, high, xhigh], default: high, options: { "xhigh": "Extra high", "low": "Low", "medium": "Medium", "high": "High" } }
+  contender_2_provider: { label: "Contender 2 CLI", type: string, enum: [none, claude, codex, grok], default: claude, description: CLI of contender 2., options: { "none": "None", "claude": "Claude", "codex": "Codex", "grok": "Grok" } }
+  contender_2_model:    { label: "Contender 2 model", type: string, default: claude-sonnet-5-5 }
+  contender_2_effort:   { label: "Contender 2 effort", type: string, enum: [low, medium, high, xhigh], default: high, options: { "xhigh": "Extra high", "low": "Low", "medium": "Medium", "high": "High" } }
+  contender_3_provider: { label: "Contender 3 CLI", type: string, enum: [none, claude, codex, grok], default: codex, description: CLI of contender 3., options: { "none": "None", "claude": "Claude", "codex": "Codex", "grok": "Grok" } }
+  contender_3_model:    { label: "Contender 3 model", type: string, default: gpt-6-luna }
+  contender_3_effort:   { label: "Contender 3 effort", type: string, enum: [low, medium, high, xhigh], default: high, options: { "xhigh": "Extra high", "low": "Low", "medium": "Medium", "high": "High" } }
+  contender_4_provider: { label: "Contender 4 CLI", type: string, enum: [none, claude, codex, grok], default: grok, description: CLI of contender 4., options: { "none": "None", "claude": "Claude", "codex": "Codex", "grok": "Grok" } }
+  contender_4_model:    { label: "Contender 4 model", type: string, default: grok-4.7 }
+  contender_4_effort:   { label: "Contender 4 effort", type: string, enum: [low, medium, high, xhigh], default: high, options: { "xhigh": "Extra high", "low": "Low", "medium": "Medium", "high": "High" } }
+  contender_5_provider: { label: "Contender 5 CLI", type: string, enum: [none, claude, codex, grok], default: none, description: "CLI of contender 5 (none = not used).", options: { "none": "None", "claude": "Claude", "codex": "Codex", "grok": "Grok" } }
+  contender_5_model:    { label: "Contender 5 model", type: string, default: claude-haiku-4-5 }
+  contender_5_effort:   { label: "Contender 5 effort", type: string, enum: [low, medium, high, xhigh], default: high, options: { "xhigh": "Extra high", "low": "Low", "medium": "Medium", "high": "High" } }
 
 # -----------------------------------------------------------------------------
 providers:

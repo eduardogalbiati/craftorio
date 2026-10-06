@@ -68,6 +68,59 @@ test('robot(): without a saved look, draws the provider\'s robot as before', () 
   assert.equal(robot({ agent: 'developer', provider: 'claude', model: 'claude-opus-5-5' }).variant, 'claude-code');
 });
 
+// #227: the robot itself is painted in the agent's role colour (Robots.svg's `color`), not only its
+// glow; a look saved in Agents still wins. The avatar helpers block (isSupervisor … robot) runs with
+// the real AgentColors and the AI Development workflow's agents.
+function loadColoredRobot(looks = {}) {
+  const block = /const isSupervisor = [\s\S]*?\n  function robot\(who, st = 'idle', opts = \{\}\) \{[\s\S]*?\n  \}/.exec(src)?.[0];
+  assert.ok(block, 'the avatar helpers (isSupervisor … robot) not found in runchat.js: the source moved');
+  const AgentColors = require('../src/renderer/agent-colors.js');
+  const yaml = require('js-yaml');
+  const wf = yaml.load(fs.readFileSync(path.join(__dirname, '..', 'workflows', 'ai-development-local-hero.yaml'), 'utf8'));
+  const sandbox = {
+    providerType,
+    AgentColors,
+    state: { workflows: [{ file: 'ai-development-local-hero.yaml', name: wf.name, agents: wf.agents }] },
+    chat: { model: { run: { workflow: 'ai-development-local-hero.yaml' }, nameOf: (a) => a } },
+    window: { AgentColors, AgentLooks: { forWorkflow: (workflow, agent) => looks[`${workflow}/${agent}`] || null } },
+    Robots: {
+      svg: (variant, st, opts) => ({ variant, st, ...opts }),
+      variantFor: (type) => type,
+      plaqueFor: (model) => model,
+    },
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(`${block}\nthis.robot = robot;`, sandbox);
+  return sandbox.robot;
+}
+
+test('robot(): a workflow agent\'s robot is painted in its role colour (test writer orange, developer blue)', () => {
+  const robot = loadColoredRobot();
+  assert.equal(String(robot({ agent: 'test_writer', provider: 'claude', model: 'claude-opus-5-5' }).color).toUpperCase(), '#FF8A3D');
+  assert.equal(String(robot({ agent: 'developer', provider: 'claude', model: 'claude-opus-5-5' }).color).toUpperCase(), '#4C7DFF');
+});
+
+test('robot(): a look saved for the agent in Agents wins over the role colour', () => {
+  const robot = loadColoredRobot({ 'ai-development-local-hero.yaml/test_writer': 'saved-look' });
+  const r = robot({ agent: 'test_writer', provider: 'claude', model: 'claude-opus-5-5' });
+  assert.equal(r.variant, 'saved-look');
+  assert.equal(r.color, undefined);
+});
+
+test('robot(): the supervisor keeps its own robot, not painted in a role colour', () => {
+  const robot = loadColoredRobot();
+  const r = robot({ agent: 'supervisor' });
+  assert.equal(r.variant, 'supervisor');
+  assert.equal(r.color, undefined);
+});
+
+// #227: a role chip by the agent's name in a message's header (AgentColors.roleChip)
+test('turnHtml: the message header shows the agent\'s role chip by its name', () => {
+  const turnHtml = /function turnHtml\(it\) \{[\s\S]*?\n  \}/.exec(src)[0];
+  const meta = /<div class="duo-meta">[^\n]*/.exec(turnHtml)?.[0] || '';
+  assert.match(meta, /rc-name[\s\S]*roleChip\(/, 'the chip comes right after the name in the header');
+});
+
 test('cardLines(): the hover card shows provider, model and effort, then the session mode and turn', () => {
   // spread into a plain array: the sandbox's Array is a different realm than assert's
   const lines = [...cardLines({ agent: 'developer', provider: 'claude', model: 'claude-opus-5-5', effort: 'high', mode: 'persistent', turn: 3 })];

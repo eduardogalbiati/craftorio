@@ -35,8 +35,10 @@ async function hardenExe(exe) {
     // terminalSpec in src/main.js), and node can't read app.asar.
     // supervisor-mcp.js (the supervisor's MCP server, a child of claude) likewise.
     asar: { unpack: '{**/node_modules/node-pty/**,**/src/session-tail.js,**/src/supervisor-mcp.js}' },
-    // .claude/ may contain worktrees from other sessions (with their own node_modules)
-    ignore: [/^\/(runs|dist|build|scripts|test|supabase|site|\.github|\.claude)(\/|$)/],
+    // .claude/ may contain worktrees from other sessions (with their own node_modules); poc/ holds
+    // proofs of concept, never part of the app, and site/ the public site; generated/ (the run's 3D view, scripts/build-3d.js) is
+    // packed, and src/renderer/run3d/ (its sources) is not needed once bundled
+    ignore: [/^\/(runs|dist|build|scripts|test|supabase|poc|site|\.github|\.claude)(\/|$)/, /^\/src\/renderer\/run3d(\/|$)/],
     // Hardening: turn the packaged exe into "just this app", not a general Node/Electron runtime
     afterComplete: [({ buildPath }) => hardenExe(path.join(buildPath, 'MultiagentOrchestrator.exe'))],
   });

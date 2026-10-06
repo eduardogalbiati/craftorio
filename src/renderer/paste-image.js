@@ -19,7 +19,7 @@
   const TYPES = { 'image/gif': 'gif', 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
   const HINT = 'Paste an image (Ctrl+V)';
   // fields that already handle a pasted image themselves
-  const OWN_PASTE = '#po-question, .oracle-input';
+  const OWN_PASTE = '#inbox-text, #po-question, .oracle-input';
 
   const mb = (n) => `${Math.round(n / 1024 / 1024)} MB`;
   const formatSize = (n) => (n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
@@ -91,7 +91,7 @@
     st.items = st.items.filter((i) => i !== item);
     if (item.path) api.clipboardDiscardImage(item.path).catch(() => {});
     render(ta);
-    ta.focus();
+    ta.focus({ preventScroll: true });
   }
 
   const chipHtml = (i) => {
@@ -132,7 +132,8 @@
   function view(ta, id) {
     const shown = ta._paste.items.filter((i) => i.dataUrl && i.status !== 'error');
     const index = shown.findIndex((i) => i.id === id);
-    if (index >= 0 && root.ImageViewer) root.ImageViewer.open({ title: 'Pasted images', images: shown.map((i) => ({ src: i.dataUrl, label: i.name })), index });
+    // every pasted image of the field, one item each (#182)
+    if (index >= 0 && root.ImageViewer) root.ImageViewer.open({ title: 'Pasted images', items: shown.map((i) => ({ title: i.name || 'Pasted image', images: [{ src: i.dataUrl, label: i.name }] })), index });
   }
 
   // ---- what the screens that submit a field call ----------------------------------------------

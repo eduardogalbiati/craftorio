@@ -21,14 +21,17 @@
 // The platform is the source of truth (#168): queue and roadmap items keep a read-only copy of their
 // issues, refreshed by each sync (`refreshQueuedCopies`) and read again right before a run starts
 // (`freshIssues`, with the cache as a recorded fallback when the platform cannot be read).
+// Archive (#238): `archiveIssues` closes issues as not planned with the `archived` label (guards:
+// src/renderer/views/backlog/backlog-archive.js), `restoreIssues` reopens them.
 // Screen: src/renderer/views/backlog/backlog.js; channels: src/service/channels/backlog.js.
 
 const fs = require('fs');
 const path = require('path');
-const { execFile } = require('child_process');
 const { resolveCommand } = require('./engine/providers');
+const { execShim } = require('./shell');
 const { writeJsonSafe } = require('./state-file');
 const { storeFor } = require('./store');
+const { ARCHIVED_LABEL, archiveBlockReason } = require('./renderer/views/backlog/backlog-archive');
 
 const PLATFORMS = {
   github: { label: 'GitHub', cli: 'gh', host: 'github.com' },
@@ -104,7 +107,7 @@ function execCli(cli, args) {
   const r = resolveCommand(cli);
   if (!r) return Promise.reject(new Error(`The ${cli} CLI is not installed (see Settings › Agents & CLIs).`));
   return new Promise((resolve, reject) => {
-    execFile(r.shell ? `"${r.file}"` : r.file, args, { windowsHide: true, timeout: 60000, shell: r.shell, maxBuffer: 32 * 1024 * 1024 }, (err, stdout, stderr) => {
+    execShim(r.file, args, { windowsHide: true, timeout: 60000, maxBuffer: 32 * 1024 * 1024 }, (err, stdout, stderr) => {
       if (err) reject(new Error(`${cli} ${args.slice(0, 2).join(' ')} failed: ${String(stderr || err.message).trim()}`));
       else resolve(stdout);
     });
@@ -652,6 +655,113 @@ function updateCachedIssue(dir, projectId, issue) {
   return data;
 }
 
+// ---- archive and restore (#238) ------------------------------------------------------------------
+// Archiving closes the issue (GitHub: not planned) and labels it `archived`; restoring reopens it and
+// removes the label. Each issue goes on its own: a refusal (archiveBlockReason) or a CLI failure is
+// that issue's { ok: false, error }, the issue is put back as it was, and the others still go through.
+// The cache is patched at once (no re-read), so the issue moves between the state chips right away.
+
+const ARCHIVED_COLOR = 'ededed';
+const sameLabel = (l, name) => String(l?.name ?? l).toLowerCase() === name;
+const notAnIssue = (n) => (Number.isInteger(n) && n > 0 ? null : `Not an issue number: ${n}`);
+
+function patchCachedIssue(dir, projectId, number, fn) {
+  const issue = dir && projectId ? readBacklog(dir, projectId)?.issues?.find((i) => i.number === number) : null;
+  if (issue) updateCachedIssue(dir, projectId, fn(issue));
+}
+
+/** The CLI call that adds (`add`) or removes the `archived` label of issue `number`. */
+function archivedLabelCommand({ platform, repo, number, add }) {
+  const target = cliTarget(platform, repo);
+  const n = String(Number(number));
+  if (platform === 'github') return { cli: 'gh', args: ['issue', 'edit', n, '--repo', target, add ? '--add-label' : '--remove-label', ARCHIVED_LABEL] };
+  return { cli: 'glab', args: ['issue', 'update', n, '--repo', target, add ? '--label' : '--unlabel', ARCHIVED_LABEL] };
+}
+
+/** The CLI call that reopens issue `number`. */
+function issueReopenCommand({ platform, repo, number }) {
+  return { cli: platform === 'github' ? 'gh' : 'glab', args: ['issue', 'reopen', String(Number(number)), '--repo', cliTarget(platform, repo)] };
+}
+
+// Creates the `archived` label (neutral grey) when the GitHub repository lacks it; GitLab creates it itself.
+async function ensureArchivedLabel({ platform, repo, exec }) {
+  const labels = await repoLabels({ platform, repo, exec });
+  if (!labels || labels.some((l) => sameLabel(l, ARCHIVED_LABEL))) return;
+  await exec('gh', ['label', 'create', ARCHIVED_LABEL, '--repo', cliTarget(platform, repo), '--color', ARCHIVED_COLOR, '--description', 'Archived from the Backlog: closed as not planned']);
+}
+
+// Runs `steps` in order; when one fails, runs the undo of the steps already done (best effort) and rethrows.
+async function runSteps(steps, exec) {
+  const done = [];
+  try {
+    for (const s of steps) {
+      await exec(s.cli, s.args);
+      done.unshift(s);
+    }
+  } catch (e) {
+    for (const s of done) await exec(s.undo.cli, s.undo.args).catch(() => {});
+    throw e;
+  }
+}
+
+/**
+ * Archives issues: { results: [{ number, ok, error? }] }. `issues`: the Backlog's issues with their
+ * roadmap and run links (the guards); `dir`/`projectId`: the backlog cache to patch.
+ */
+async function archiveIssues({ platform, repo, numbers, issues = [], dir = null, projectId = null, exec = execCli }) {
+  const known = new Map((issues || []).map((i) => [i.number, i]));
+  const results = [];
+  let label = null;
+  for (const number of (numbers || []).map(Number)) {
+    const refused = notAnIssue(number) || archiveBlockReason(known.get(number));
+    if (refused) {
+      results.push({ number, ok: false, error: refused });
+      continue;
+    }
+    try {
+      label = label || ensureArchivedLabel({ platform, repo, exec });
+      await label;
+      const at = { platform, repo, number };
+      await runSteps([
+        { ...issueCloseCommand(at), undo: issueReopenCommand(at) },
+        { ...archivedLabelCommand({ ...at, add: true }), undo: archivedLabelCommand({ ...at, add: false }) },
+      ], exec);
+      patchCachedIssue(dir, projectId, number, (i) => ({
+        ...i,
+        state: 'closed',
+        labels: [...(i.labels || []).filter((l) => !sameLabel(l, ARCHIVED_LABEL)), { name: ARCHIVED_LABEL, color: `#${ARCHIVED_COLOR}` }],
+      }));
+      results.push({ number, ok: true });
+    } catch (e) {
+      results.push({ number, ok: false, error: e.message });
+    }
+  }
+  return { results };
+}
+
+/** Restores archived issues (reopen, remove the label): { results: [{ number, ok, error? }] }. */
+async function restoreIssues({ platform, repo, numbers, dir = null, projectId = null, exec = execCli }) {
+  const results = [];
+  for (const number of (numbers || []).map(Number)) {
+    if (notAnIssue(number)) {
+      results.push({ number, ok: false, error: notAnIssue(number) });
+      continue;
+    }
+    try {
+      const at = { platform, repo, number };
+      await runSteps([
+        { ...issueReopenCommand(at), undo: issueCloseCommand(at) },
+        { ...archivedLabelCommand({ ...at, add: false }), undo: archivedLabelCommand({ ...at, add: true }) },
+      ], exec);
+      patchCachedIssue(dir, projectId, number, (i) => ({ ...i, state: 'open', labels: (i.labels || []).filter((l) => !sameLabel(l, ARCHIVED_LABEL)) }));
+      results.push({ number, ok: true });
+    } catch (e) {
+      results.push({ number, ok: false, error: e.message });
+    }
+  }
+  return { results };
+}
+
 // ---- the platform is the source of truth (#168) ------------------------------------------------
 // Queue and roadmap items keep a read-only copy of their issues (issueFields) for the screen and the
 // Product Owner: every sync brings the copies of the items not started yet up to date
@@ -804,6 +914,7 @@ module.exports = {
   referencedIssues, fetchOpenPullRequests, attachPullRequests,
   readQueue, enqueue, unqueue, skipQueued, newPullRequests, setPaused, nextQueued, pauseAll, runInputs,
   itemIssues, runIssues, execCli, readLocal, writeLocal,
+  archiveIssues,
   claimQueued,
   cliTarget,
   fetchIssue,
@@ -819,6 +930,7 @@ module.exports = {
   refreshQueuedCopies,
   releaseQueued,
   repoLabels,
+  restoreIssues,
   saveRunToIssue,
   updateCachedIssue,
   withSyncedText,

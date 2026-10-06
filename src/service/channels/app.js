@@ -1,5 +1,6 @@
 // The app itself: installed CLIs, version, settings and the workspace folder.
 
+const os = require('os');
 const { resolveCommand } = require('../../engine/providers');
 const simulation = require('../../engine/simulation');
 const workspace = require('../../workspace');
@@ -24,6 +25,8 @@ module.exports = (ctx) => [
       node: process.versions.node,
       workflowsDir: ctx.ws.workflows,
       simulationOnly: simulation.simulationOnly(),
+      // Settings › Execution gives the memory guard's limit in GB for this machine (#276)
+      totalMemoryBytes: os.totalmem(),
       // the screen a Run App copy opens on (#119, set by src/local-preview.js); simulation-only copies only
       startView: simulation.simulationOnly() ? process.env.MULTIAGENT_START_VIEW || null : null,
     }),

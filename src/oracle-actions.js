@@ -12,6 +12,13 @@
 // else still waits for the click. An action requested by content the Oracle read (an issue body, a
 // run output, a file: requestedBy 'content') always waits for the click.
 // Every proposal, action and result is appended to <oracle dir>/actions.jsonl.
+// Self-healing (#278, settings.oracle.selfHealing): the same watch, standing: active day and night
+// with no end time (watchState), under the same permissions and LOOP_CAP (counted per UTC day:
+// watchSince). <oracle dir>/self-healing.json { since } records when it was turned on (markSelfHealing).
+// #241: each area has one owner. The kinds an owner holds (OWNED: the Backlog's for the Product Owner,
+// the runs', workflows' and skills' for the Supervisor) keep their checks and descriptions here (the
+// owners' inboxes run them through the service), but the Oracle never performs them: ownerOf() routes
+// them to the owner's inbox (request_agent). Its own cards are ORACLE_KINDS: check.run, process.stop.
 
 const fs = require('fs');
 const path = require('path');
@@ -28,6 +35,13 @@ const need = (params, names) => {
 const roadmapBackup = 'A copy of the roadmap file, taken before the change (Undo puts it back).';
 
 const ACTIONS = {
+  // #184: a check that costs money or takes long (src/oracle-check.js); a quick one is the checker delegate
+  'check.run': {
+    label: 'Run a check',
+    night: () => false,
+    check: (p) => need(p, ['projectId', 'branch', 'command']),
+    describe: (p) => ({ title: `Run \`${s(p.command)}\` on ${s(p.branch)}`, change: `Runs \`${s(p.command)}\` on a scratch checkout of branch ${s(p.branch)} with MULTIAGENT_SIMULATION_ONLY=1 (up to 20 min) and posts the result with its evidence.`, where: `A scratch checkout of project ${s(p.projectId)}, removed afterwards (the project's own checkout is untouched)`, backup: 'Nothing changes: the checkout is removed after the check.' }),
+  },
   'dispatch.restart': {
     label: 'Restart the dispatch',
     night: () => true,
@@ -38,7 +52,8 @@ const ACTIONS = {
     label: 'File an issue',
     night: () => true,
     check: (p) => need(p, ['projectId', 'title', 'body']),
-    describe: (p) => ({ title: `File an issue: ${s(p.title)}`, change: `Creates a new issue "${s(p.title)}"${Array.isArray(p.labels) && p.labels.length ? ` with labels ${p.labels.join(', ')}` : ''}.`, where: `The issue tracker of project ${s(p.projectId)} (gh / glab)`, backup: 'Nothing is replaced: a new issue.' }),
+    // #184: the card says whether a duplicate was searched (issues_search) and what was found
+    describe: (p) => ({ title: `File an issue: ${s(p.title)}`, change: `Creates a new issue "${s(p.title)}"${Array.isArray(p.labels) && p.labels.length ? ` with labels ${p.labels.join(', ')}` : ''}. ${s(p.duplicateSearch) ? `Duplicate search: ${s(p.duplicateSearch)}` : 'No duplicate search was recorded: check the backlog for one first.'}`, where: `The issue tracker of project ${s(p.projectId)} (gh / glab)`, backup: 'Nothing is replaced: a new issue.' }),
   },
   'issue.update': {
     label: 'Update an issue',
@@ -128,6 +143,24 @@ const ACTIONS = {
   },
 };
 const ACTION_KINDS = Object.keys(ACTIONS).sort();
+// #241: the kinds an owner holds (the Product Owner: the Backlog; the Supervisor: workflows, skills and
+// runs) → { to, kind(params) }: the Oracle routes them to that owner's inbox (request_agent), it never
+// performs them. kind() is the owner's request kind, null when no owner takes that variant.
+const OWNED = {
+  'dispatch.restart': { to: 'supervisor' },
+  'issue.file': { to: 'po' },
+  'issue.update': { to: 'po' },
+  'roadmap.item': { to: 'po', kind: (p) => (p.action === 'skip' ? 'roadmap.skip' : null) },
+  'roadmap.stages': { to: 'po', kind: () => 'roadmap.regroup' },
+  'run.resume': { to: 'supervisor' },
+  'run.retry': { to: 'supervisor' },
+  'run.stop': { to: 'supervisor' },
+  'skill.restore': { to: 'supervisor' },
+  'workflow.commit': { to: 'supervisor' },
+  'workflow.restore': { to: 'supervisor' },
+};
+// what the Oracle still proposes as its own cards: a check, and stopping a stray process (no owner)
+const ORACLE_KINDS = ACTION_KINDS.filter((k) => !OWNED[k]);
 const NIGHT_WATCH_KINDS = [
   'dispatch.restart',
   'issue.file',
@@ -153,6 +186,19 @@ function actionCard({ kind, params, why, requestedBy, source } = {}) {
     kind, params: p, why: s(why), requestedBy: REQUESTERS.includes(requestedBy) ? requestedBy : 'oracle', source: s(source) || null,
     ...def.describe(p), label: def.label,
   };
+}
+
+/**
+ * The owner of an action kind (#241): { to ('po' | 'supervisor'), kind (the owner's request kind, or
+ * null when no owner takes that variant), params } or null for the Oracle's own kinds (ORACLE_KINDS).
+ */
+function ownerOf(kind, params) {
+  const owned = OWNED[kind];
+  if (!owned) return null;
+  const p = params && typeof params === 'object' && !Array.isArray(params) ? params : {};
+  const to = owned.kind ? owned.kind(p) : kind;
+  const { action: _action, ...rest } = p;
+  return { to: owned.to, kind: to, params: kind === 'roadmap.item' ? rest : p };
 }
 
 const nightFile = (dir) => path.join(dir, 'night-watch.json');
@@ -181,6 +227,45 @@ function setNightWatch(dir, { on, until, by } = {}, now = Date.now()) {
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(nightFile(dir), JSON.stringify(next, null, 2));
   return nightWatch(dir, now);
+}
+
+const selfHealingFile = (dir) => path.join(dir, 'self-healing.json');
+
+/**
+ * The watch in force (#278): { on, until, startedAt, by, active, selfHealing }. With
+ * settings.oracle.selfHealing on it is the standing watch: active with no end time (until null),
+ * whatever night-watch.json says; otherwise the Night watch (nightWatch), with selfHealing false.
+ */
+function watchState(dir, settings, now = Date.now()) {
+  if (settings?.oracle?.selfHealing !== true) return { ...nightWatch(dir, now), selfHealing: false };
+  let since = null;
+  try { since = JSON.parse(fs.readFileSync(selfHealingFile(dir), 'utf8')).since || null; } catch { /* not recorded yet */ }
+  return { on: true, until: null, startedAt: since, by: 'Self-healing', active: true, selfHealing: true };
+}
+
+/**
+ * Records the standing watch turned on (writes self-healing.json { since }) or off (removes it).
+ * → { changed (false when it already was in that state: nothing to log), since }.
+ */
+function markSelfHealing(dir, on, now = Date.now()) {
+  let since = null;
+  try { since = JSON.parse(fs.readFileSync(selfHealingFile(dir), 'utf8')).since || null; } catch { /* off */ }
+  if (!!on === !!since) return { changed: false, since };
+  if (!on) {
+    fs.rmSync(selfHealingFile(dir), { force: true });
+    return { changed: true, since };
+  }
+  fs.mkdirSync(dir, { recursive: true });
+  const started = new Date(now).toISOString();
+  fs.writeFileSync(selfHealingFile(dir), JSON.stringify({ since: started }, null, 2));
+  return { changed: true, since: started };
+}
+
+/** Since when a watch's actions on an item count for LOOP_CAP (ISO): the night's start; under Self-healing, the start of the UTC day (or of the watch, if later). */
+function watchSince(watch, now = Date.now()) {
+  if (!watch?.selfHealing) return watch?.startedAt || null;
+  const day = `${new Date(now).toISOString().slice(0, 10)}T00:00:00.000Z`;
+  return watch.startedAt && watch.startedAt > day ? watch.startedAt : day;
 }
 
 /**
@@ -215,9 +300,14 @@ module.exports = {
   ACTIONS,
   actsAlone,
   logAction,
+  markSelfHealing,
   NIGHT_WATCH_KINDS,
   nightDecision,
   nightWatch,
+  ORACLE_KINDS,
+  ownerOf,
   REQUESTERS,
   setNightWatch,
+  watchSince,
+  watchState,
 };

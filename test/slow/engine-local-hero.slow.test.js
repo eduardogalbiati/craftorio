@@ -9,13 +9,13 @@ const evidence = require('../../src/evidence');
 process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
 const { root } = require('../engine-helpers');
 
-test('e2e-release workflow: a simulated run fails once, fixes it (developer, review), passes, and approves the merge', { timeout: 60000 }, async () => {
+test('e2e-release workflow: a simulated suite fails once, the E2E runner traces it to the app, the developer fixes it, the suite passes, and approves the merge', { timeout: 60000 }, async () => {
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
   const run = new WorkflowRun({
     file: path.join(root, 'workflows', 'e2e-release.yaml'),
     inputs: { task: 'Release check', repo_path: root },
     mock: true, runsDir,
-    mockSequences: { verdict: ['approved'] },
+    mockSequences: { verdict: ['approved'], suite: { e2e: ['fail', 'pass'] } },
   });
   const events = [];
   run.on('event', (ev) => {
@@ -28,9 +28,9 @@ test('e2e-release workflow: a simulated run fails once, fixes it (developer, rev
   assert.equal(finished.status, 'success', finished.error);
 
   const visited = events.filter((e) => e.type === 'step.finished').map((e) => e.step_id);
-  assert.deepEqual(visited, ['e2e', 'fix', 'review', 'e2e', 'approve_fixes']);
+  assert.deepEqual(visited, ['e2e', 'heal', 'fix', 'review', 'e2e', 'approve_fixes']);
   const e2eOutputs = events.filter((e) => e.type === 'step.finished' && e.step_id === 'e2e').map((e) => e.output);
-  assert.deepEqual(e2eOutputs.map((o) => o.e2e_status), ['fail', 'pass']);
+  assert.deepEqual(e2eOutputs.map((o) => o.status), ['fail', 'pass']);
   // the developer only went through the fix loop once (max_rounds default: 2)
   assert.ok(!events.some((e) => e.type === 'approval.requested' && e.step_id === 'e2e_failed'));
 });

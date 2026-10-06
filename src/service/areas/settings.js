@@ -24,10 +24,10 @@ module.exports = () => {
     return Promise.all(TOOLS.map(async (t) => {
       const r = resolveCommand(t.id);
       if (!r) return { id: t.id, name: t.name, path: null, connected: false, installCommand: installCommand(t.id), installHint: installHint(t.id) };
-      const v = await runTool(r.file, t.args, r.shell);
+      const v = await runTool(r.file, t.args);
       const out = { id: t.id, name: t.name, path: r.file, version: v.ok ? v.out.split(/\r?\n/)[0] : null, connected: v.ok, auth: !!t.auth };
       if (t.auth) {
-        const a = await runTool(r.file, t.auth, r.shell);
+        const a = await runTool(r.file, t.auth);
         out.connected = a.ok;
         out.account = (a.out.match(/account (\S+)/) || a.out.match(/as (\S+)/) || [])[1] || null;
       }

@@ -3,12 +3,17 @@
 //
 //   npx electron scripts/screenshot.js --view <view> [options]      (or: npm run screenshot -- ...)
 //
-//   --view <name>      dashboard, sessions, projects, project, backlog, artifacts, workflows, agents,
-//                      skills, usage, analytics, supervisor, oracle, nightwatch, settings, duo, arena,
-//                      run-chat, run
-//                      (default dashboard; oracle: Projects with the Oracle's drawer open from its
-//                      sidebar button; the Dashboard shows its docked panel; nightwatch (#172): two
-//                      replayed nights, src/night-watch-demo.js, also the Dashboard's morning
+//   --view <name>      dashboard, sessions, projects, project, backlog, roadmap, artifacts, workflows, agents,
+//                      skills, usage, analytics, oracle, nightwatch, settings, duo, arena, inbox,
+//                      discovery, run-chat, run, home-empty
+//                      (default dashboard, the menu's Home (#255: the flow strip, "What needs you" and
+//                      "Today" on demo data; its Analytics tab: --view analytics; home-empty: Home in a
+//                      new workspace, no project and no run: how to start); projects: Settings › Projects; roadmap: the
+//                      same as backlog --mode roadmap; the Supervisor's drawer: --view workflows --click
+//                      "#btn-wf-supervisor"; a folded menu group: --click ".nav-group[data-group=workflows]
+//                      .nav-group-title"; oracle: Settings with the Oracle's drawer open from its
+//                      header button; Home shows its docked panel; nightwatch (#172): two
+//                      replayed nights, src/night-watch-demo.js, also Home's morning
 //                      summary; its turn-on form: --click "#nw-switch", the permissions' Save /
 //                      Cancel: --click ".nw-perm-check[data-perm=skip]")
 //   --oracle <state>   the Oracle's demo state (#171), on any view: empty | conversation | answering |
@@ -17,9 +22,24 @@
 //                      "#oracle-dock [data-oracle-night]") (unread: on a view other
 //                      than the Dashboard, whose panel reads the answers; the Edit form of its
 //                      memory: --click "#oracle-dock [data-oracle-memory]")
-//   --tab <name>       settings: general | agents | execution | about; workflows: runs | definitions;
-//                      analytics: usage | performance (performance: a demo git repository and a marker)
-//   --mode <name>      backlog: list | kanban | roadmap | epics
+//   --tab <name>       settings: general | projects | agents | execution | phone | about; workflows: runs | definitions | builder | pipelines;
+//                      analytics: usage | performance | run | occupancy | agents (performance: a demo git repository and a
+//                      marker; run: AI Development runs, the newest shown; occupancy: 30 days of runs and nights;
+//                      agents: four weeks of the Oracle's, the Product Owner's and the Supervisor chat's turns, #280)
+//   --mode <name>      backlog: list | kanban | epics (roadmap: the Roadmap screen, #254)
+//                      nightwatch (#278): self-healing (Self-healing on since yesterday: "Self-healing
+//                      is on" in place of the end time, a finding of each detector, its days in the
+//                      report; its switch: --view settings --tab execution)
+//                      inbox (#256): empty (no card: the empty state; without it, demo cards, the
+//                      newest with an image; a card open: --click "[data-testid=inbox-card]")
+//                      discovery (#257): empty (no card: the empty board; without it, demo cards in
+//                      every column, a bug and a hotfix in the fast lane, Define over its WIP limit;
+//                      a card's panel: --click "[data-testid=discovery-card][data-type=prd]
+//                      [data-testid=discovery-card-title]"; a narrow window: --size 820x900;
+//                      #258: two committed cards in the Committed list (a committed card's panel:
+//                      --click "[data-testid=discovery-committed-title]"); the commit dialog:
+//                      --click "[data-testid=discovery-card][data-column=ready]
+//                      [data-testid=discovery-card-title]" --click "[data-testid=discovery-commit]")
 //   --run <mock|dir>   run-chat: a simulated software-development run (default) or a copy of a run folder
 //   --workflow <file>  the workflow of the simulated run (default software-development.yaml)
 //   --pipeline <file>  run: starts this saved pipeline instead (#135, e.g. develop-to-retrospective.yaml):
@@ -45,13 +65,24 @@
 //   --budget <state>   backlog: the spending budget (#206): paused (a daily budget of $60 reached: the
 //                      roadmap paused before its next stage, with Raise for today / Resume anyway) |
 //                      set (the same budget, not reached: the top bar's "$X / $60 today")
+//   --roadmap <state>  backlog: more states of the roadmap card (#282, #284): states (the running run
+//                      in a fix round, back in Develop after its review; the stage "Reports and
+//                      health" disabled; the last stage's item simulated)
 //   --po <state>       backlog: the Product Owner's drawer open with its live turn (#180): working (the
 //                      activity line, timer, Stop and the last steps) | writing (the answer as it is
 //                      written, its JSON block hidden) | stopped (an answer stopped by the owner) |
 //                      failed (an error with what was written kept); Stop: --click "#po-log [data-live-stop]",
-//                      the steps folded: --click "#po-log [data-live-steps]"
+//                      the steps folded: --click "#po-log [data-live-steps]"; with --workflow <file>
+//                      the drawer plans with that workflow (#235, e.g. ai-development-local-hero.yaml)
 //   --click <css>      clicks this element once the view is open (repeatable, in order)
 //   --context <css>    then right-clicks this element (repeatable): e.g. an artifact's copy menu
+//   --press <css>[@f]  then presses the primary button on this element (repeatable), at the part f of
+//                      its width (0..1, default 0.5): a pointerdown / pointerup pair, for what listens
+//                      to the pointer instead of a click, e.g. the timeline of a run's 3D view:
+//                      --view run-chat --click "#rc-3d" --press "[data-testid=run3d-strip]@0.4"
+//   --key <key>        then presses this key on the page (repeatable; a KeyboardEvent key such as
+//                      ArrowLeft, or Space; "Shift+ArrowLeft" holds Shift), e.g. --key Space plays or
+//                      pauses the 3D view's replay
 //   --paste <css>      then pastes a demo screenshot into this prompt field (repeatable, #130): the
 //                      chip row under it, saved in the scratch workspace like a real Ctrl+V; e.g. the
 //                      Start drawer on issue-tracker: --view dashboard --workflow issue-tracker.yaml
@@ -96,6 +127,8 @@
 // (src/engine/machine-slot.js) and prints `screenshot: waiting for the screenshot slot` while
 // another run's capture holds it; a slot held by a dead process is freed.
 // Prints `screenshot: <path>` and exits 0, or exits 1 with the error.
+// The Playwright E2E suite (features/support/app.js, #222) seeds its scratch workspaces with the same
+// demo data: the helpers exported at the end (plain Node, no Electron needed).
 
 const fs = require('fs');
 const os = require('os');
@@ -107,21 +140,34 @@ const machineSlot = require('../src/engine/machine-slot');
 const VIEWS = {
   dashboard: {}, sessions: {}, projects: {}, project: {}, artifacts: {}, agents: {}, skills: {}, usage: {},
   supervisor: {},
-  // the Oracle's drawer (#171), opened from its sidebar button on another screen (Projects)
+  // the Oracle's drawer (#171), opened from its header button on another screen (Settings)
   oracle: {},
-  // the Night watch (#172): two replayed nights
-  nightwatch: {},
-  analytics: { tabs: ['usage', 'performance'] },
+  // Home in a new workspace (#255): no project and no run, how to start
+  'home-empty': {},
+  // #254: the Roadmap screen; the same as --view backlog --mode roadmap (its tab until then)
+  roadmap: {},
+  // #260: the Releases screen (two shipped releases and the next one: #11, merged locally)
+  releases: {},
+  // the Night watch (#172): two replayed nights; self-healing (#278): Self-healing on since yesterday
+  // ("Self-healing is on" in place of the end time, its days in the report)
+  nightwatch: { modes: ['self-healing'] },
+  // run: one AI Development run in depth against its workflow's runs (#228); occupancy: the 24/7 tab (#188)
+  analytics: { tabs: ['usage', 'performance', 'run', 'occupancy', 'agents'] },
   backlog: { modes: ['list', 'kanban', 'roadmap', 'epics'] },
-  workflows: { tabs: ['runs', 'definitions'] },
+  // the Inbox (#256): demo discovery cards; empty: none (the empty state)
+  inbox: { modes: ['empty'] },
+  // the Discovery board (#257): demo cards in every column and the fast lane; empty: none
+  discovery: { modes: ['empty'] },
+  workflows: { tabs: ['runs', 'definitions', 'builder', 'pipelines'] },
   arena: { start: true }, duo: { start: true },
-  settings: { tabs: ['general', 'agents', 'execution', 'about'] },
+  settings: { tabs: ['general', 'projects', 'agents', 'execution', 'phone', 'about'] },
   'run-chat': { run: true },
   run: { live: true },
 };
 const THEMES = ['dark', 'light', 'system'];
 const KEEP_AWAKE = ['off', 'idle', 'active', 'error'];
 const LIVE_STATES = ['off', 'on', 'refilling', 'empty', 'budget'];
+const ROADMAP_STATES = ['states'];
 const PO_STATES = ['working', 'writing', 'stopped', 'failed'];
 
 // what the simulated runs are asked when --task/--goal are not given
@@ -158,7 +204,7 @@ function readSteps(file) {
 }
 
 function parseArgs(argv) {
-  const a = { view: 'dashboard', tab: null, mode: null, run: 'mock', workflow: 'software-development.yaml', clicks: [], contexts: [], pastes: [], inputs: {}, stopAt: null, keepAwake: null, theme: null, size: [1400, 900], ref: null, out: null, name: null, side: null, caption: null, wait: null, timeout: null, demoShots: true,
+  const a = { view: 'dashboard', tab: null, mode: null, run: 'mock', workflow: 'software-development.yaml', clicks: [], contexts: [], presses: [], keys: [], pastes: [], inputs: {}, stopAt: null, keepAwake: null, theme: null, size: [1400, 900], ref: null, out: null, name: null, side: null, caption: null, wait: null, timeout: null, demoShots: true,
     start: false, task: null, goal: null, record: null, fps: 10, mockSpeed: null, steps: null, videoScale: 1, bitrate: 2500 };
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i];
@@ -174,6 +220,15 @@ function parseArgs(argv) {
     else if (k === '--pipeline') a.pipeline = next();
     else if (k === '--click') a.clicks.push(next());
     else if (k === '--context') a.contexts.push(next());
+    else if (k === '--press') {
+      const m = /^(.*?)(?:@([\d.]+))?$/s.exec(next()), at = m[2] === undefined ? 0.5 : Number(m[2]);
+      if (!m[1] || !(at >= 0 && at <= 1)) throw new Error('--press takes <css> or <css>@<0..1>');
+      a.presses.push({ sel: m[1], at });
+    } else if (k === '--key') {
+      const parts = next().split('+'), key = parts.pop();
+      if (!key || parts.some((p) => p !== 'Shift')) throw new Error('--key takes a key name, or Shift+<key>');
+      a.keys.push({ key: key === 'Space' ? ' ' : key, shift: parts.length > 0 });
+    }
     else if (k === '--paste') a.pastes.push({ sel: next(), big: false });
     else if (k === '--paste-big') a.pastes.push({ sel: next(), big: true });
     else if (k === '--stop-at') a.stopAt = next();
@@ -200,6 +255,7 @@ function parseArgs(argv) {
     else if (k === '--oracle') a.oracle = next();
     else if (k === '--live') a.live = next();
     else if (k === '--budget') a.budget = next();
+    else if (k === '--roadmap') a.roadmap = next();
     else if (k === '--po') a.po = next();
     else if (k === '--start') a.start = true;
     else if (k === '--task') a.task = next();
@@ -212,15 +268,19 @@ function parseArgs(argv) {
     else if (k === '--bitrate') a.bitrate = positive();
     else throw new Error(`Unknown argument: ${k}`);
   }
-  const v = VIEWS[a.view];
+  let v = VIEWS[a.view];
   if (!v) throw new Error(`Unknown view: ${a.view}. Views: ${Object.keys(VIEWS).join(', ')}`);
   if (a.tab && !v.tabs?.includes(a.tab)) throw new Error(`--tab ${a.tab} does not apply to ${a.view}${v.tabs ? ` (tabs: ${v.tabs.join(', ')})` : ''}`);
   if (a.mode && !v.modes?.includes(a.mode)) throw new Error(`--mode ${a.mode} does not apply to ${a.view}${v.modes ? ` (modes: ${v.modes.join(', ')})` : ''}`);
+  // #254: the Roadmap screen shows the Backlog's demo data in its roadmap mode
+  if (a.view === 'roadmap') { Object.assign(a, { view: 'backlog', mode: 'roadmap' }); v = VIEWS.backlog; }
   if (a.theme && !THEMES.includes(a.theme)) throw new Error(`--theme takes ${THEMES.join(' | ')}`);
   if (a.keepAwake && !KEEP_AWAKE.includes(a.keepAwake)) throw new Error(`--keep-awake takes ${KEEP_AWAKE.join(' | ')}`);
   if (a.oracle && !ORACLE_STATES.includes(a.oracle)) throw new Error(`--oracle takes ${ORACLE_STATES.join(' | ')}`);
   if (a.live && !LIVE_STATES.includes(a.live)) throw new Error(`--live takes ${LIVE_STATES.join(' | ')}`);
   if (a.live && a.view !== 'backlog') throw new Error('--live applies to --view backlog');
+  if (a.roadmap && !ROADMAP_STATES.includes(a.roadmap)) throw new Error(`--roadmap takes ${ROADMAP_STATES.join(' | ')}`);
+  if (a.roadmap && a.view !== 'backlog') throw new Error('--roadmap applies to --view backlog');
   if (a.po && !PO_STATES.includes(a.po)) throw new Error(`--po takes ${PO_STATES.join(' | ')}`);
   if (a.po && a.view !== 'backlog') throw new Error('--po applies to --view backlog');
   if ((a.stopAt || Object.keys(a.inputs).length) && a.view !== 'run') throw new Error('--stop-at and --input apply to --view run');
@@ -266,7 +326,7 @@ const BIG_TASKS = [
   'Roadmap status derived from runs, shown in `src/renderer/backlog-roadmap.js`', 'Docs: run safety in the README', 'Tests',
 ];
 const DEMO_ISSUES = [
-  { number: 16, title: 'Keyboard focus is lost after closing a dialog', state: 'open', labels: [{ name: 'ui', color: '#c5def5' }, { name: 'complexity:1', color: '#ededed' }], body: '- [ ] Focus returns to the control that opened the dialog\n- [ ] Tests' },
+  { number: 16, title: 'Keyboard focus is lost after closing a dialog', state: 'open', labels: [{ name: 'ui', color: '#c5def5' }, { name: 'complexity:2', color: '#ededed' }], body: '- [ ] Focus returns to the control that opened the dialog\n- [ ] Tests' },
   { number: 15, title: 'Run safety: one app per workspace, run owners, safe writes and a resume dialog that lists the steps', state: 'open', labels: [{ name: 'enhancement', color: '#a2eeef' }, { name: 'complexity:5', color: '#5319e7' }, { name: 'impact:5', color: '#d93f0b' }], body: ['## Context', '', 'Two apps on one workspace overwrite each other\'s runs and queue.', '', 'Decision (owner): one app per workspace; every write is safe.', '', '## Tasks', '', ...BIG_TASKS.map((t) => `- [ ] ${t}`)].join('\n') },
   { number: 14, title: 'Workspace safety and recovery', state: 'open', labels: [{ name: 'epic', color: '#5319e7' }], body: 'Runs, queues and roadmaps survive crashes, renames and a second app.' },
   { number: 13, title: 'Run reports', state: 'open', labels: [{ name: 'epic', color: '#5319e7' }], body: 'Everything a run produces, shared outside the app.' },
@@ -275,6 +335,8 @@ const DEMO_ISSUES = [
   { number: 10, title: 'Dark scrollbars in the terminal dock', state: 'open', labels: [{ name: 'ui', color: '#c5def5' }, { name: 'complexity:1', color: '#ededed' }, { name: 'impact:1', color: '#d93f0b' }], body: '' },
   { number: 9, title: 'Add a /health endpoint', state: 'open', labels: [{ name: 'enhancement', color: '#a2eeef' }, { name: 'server', color: '#fbca04' }, { name: 'complexity:3', color: '#ededed' }], body: '- [ ] Endpoint\n- [ ] Docs' },
   { number: 8, title: 'Document the workflow YAML', state: 'closed', labels: [{ name: 'docs', color: '#0075ca' }], body: '' },
+  // #238: an archived idea (the Backlog's Archived chip)
+  { number: 7, title: 'Splash screen with the workspace name on start', state: 'closed', labels: [{ name: 'archived', color: '#ededed' }, { name: 'ui', color: '#c5def5' }], body: 'An idea for later.' },
 ];
 
 function demoBacklog(projectId, taskProgress) {
@@ -331,6 +393,34 @@ function demoLocalMerge(ws, projectId) {
   }, null, 2));
 }
 
+// The project's release history (#260, src/releases.js): two shipped releases of closed issues, each
+// with its runs, cost, both suites' counts and notes (the last one fixed a regression before Ship);
+// the next release is what demoLocalMerge merged locally (#11). The Backlog shows #8 as Released.
+function demoReleases(ws, projectId) {
+  const dir = path.join(ws.root, 'releases');
+  fs.mkdirSync(dir, { recursive: true });
+  const title = (n) => DEMO_ISSUES.find((x) => x.number === n).title;
+  fs.writeFileSync(path.join(dir, `${projectId}.json`), JSON.stringify({
+    releases: [
+      {
+        version: 'v0.8', tag: 'v0.8', date: '2025-12-19T17:30:00.000Z', commit: '4f2a9c1d7e3b5a6088c1d2e3f4a5b6c7d8e9f001', base: 'main',
+        issues: [{ number: 7, title: title(7) }], runs: ['20251219-160000-demo0007', '20251219-171500-rel00008'], cost: 3.12,
+        tests: { unit: { status: 'pass', passed: 388, failed: 0 }, e2e: { status: 'pass', passed: 31, failed: 0 } },
+        notes: '# v0.8\n\n- #7 Splash screen with the workspace name on start\n\n2 runs, $3.12.', status: 'shipped',
+      },
+      {
+        version: 'v0.9', tag: 'v0.9', date: '2026-01-10T18:00:00.000Z', commit: 'c9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b2c1d0', base: 'main',
+        issues: [{ number: 8, title: title(8) }],
+        runs: ['20260109-210000-demo0008', '20260110-170000-rel00009'], cost: 6.84,
+        tests: { unit: { status: 'pass', passed: 412, failed: 0 }, e2e: { status: 'pass', passed: 37, failed: 0 } },
+        notes: '# v0.9\n\n- #8 Document the workflow YAML\n\nThe release run found a regression in the workflow loader (the unit suite was red once the YAML examples merged) and fixed it before Ship.\n\n2 runs, $6.84.',
+        status: 'shipped',
+      },
+    ],
+    next: { notes: '' },
+  }, null, 2));
+}
+
 // The Product Owner registering an issue (#117): a short request with a screenshot, one question,
 // the owner's answer, then a draft (long title, labels, Related, a close issue: #12), then a plan
 // answer whose groups the demo roadmap already holds (#140), then a question about issues sent from
@@ -351,6 +441,9 @@ function demoPoConversation(ws, projectId, po = null) {
   const big = DEMO_ISSUES.find((x) => x.number === 15);
   const poSplit = require('../src/po-split');
   const split = poSplit.normalizeSplit(poSplit.proposeSplit(big, { complexity: 5 }), big, { complexity: 5 });
+  // #242: a long title and a long task line with inline Markdown, so the card must fit the drawer
+  split.title = `${split.title || big.title}: keep every run's worktree, branch and logs safe when the app closes, crashes or the workspace moves to another disk`;
+  if (split.tasks?.[0]) split.tasks[0] = { ...split.tasks[0], text: `**Recovery inbox per workspace**: list the runs left behind with \`events.jsonl\` and their branches, offer Resume or Discard, and link [the storage doc](https://example.com/storage) from the empty state; ${split.tasks[0].text}` };
   const messages = [
     { ts: at(0), role: 'user', mode: 'issue', text: 'export the report as pdf', attachments: [shot] },
     { ts: at(20), role: 'po', mode: 'issue', model: 'claude-sonnet-5', costUsd: 0.04, text: 'One question before I draft it:', issue: { reply: 'One question before I draft it:', questions: ['Should the PDF replace the Markdown export, or sit next to it?'], draft: null, duplicates: [], existingIssue: null, addition: '', assumptions: [] } },
@@ -400,6 +493,9 @@ function demoPoConversation(ws, projectId, po = null) {
       closed: [8],
       conflicts: [], enrich: [], splits: [], epics: { place: [], create: [], merge: [], split: [] },
     } },
+    // #240: a request from the Oracle, mechanical (no model call, US$ 0): one card with its result
+    { ts: at(160), role: 'request', text: 'Request from the Oracle: roadmap.add (The owner wants it in tonight\'s runs)', request: { from: 'oracle', kind: 'roadmap.add', ref: 'demo-request-1' }, reason: 'The owner wants it in tonight\'s runs', params: { issues: [16] } },
+    { ts: at(161), role: 'po', text: 'Done: #16: added to the roadmap in stage 3 (software-development.yaml).', request: { from: 'oracle', kind: 'roadmap.add', ref: 'demo-request-1' }, costUsd: 0 },
   ];
   // --po stopped | failed (#180): the last answer stopped by the owner, or failed, with what was written kept
   const partial = 'Two runs so far: **#16** on its own (validated), then **#10** with the dock styles.\n\nI was checking whether #15 fits under complexity 5';
@@ -447,7 +543,10 @@ function demoPoTurn(sender, which, projectId) {
 // also pauses the roadmap before its next stage, as the budget cap does.
 // Cost (#205): the group of stage 2 was planned at Economy (grouped, existing tests only, no
 // screenshots), so a test-batch item follows it; the UI issue of stage 3 at Generous.
-function demoRoadmap(ws, projectId, live = 'off', budget = null) {
+// `more` (#282, #284, --roadmap states): the running run is in a fix round, the stage "Reports and
+// health" is disabled and the last stage's item is simulated (the test-batch item has no estimate).
+function demoRoadmap(ws, projectId, live = 'off', budget = null, more = null) {
+  const states = more === 'states';
   const at = (h, m) => { const d = new Date(); d.setHours(h, m, 0, 0); return d.toISOString(); };
   const ended = live === 'empty' || live === 'budget';
   const refill = {
@@ -470,7 +569,7 @@ function demoRoadmap(ws, projectId, live = 'off', budget = null) {
   });
   // without --live: a stage "Tonight" with a running, a waiting and a failed run (#194: the progress
   // rings) and a start refused for kept work that paused the roadmap (#196: Retry / Skip)
-  const tonight = live === 'off' ? demoRoadmapRuns(ws, projectId) : null;
+  const tonight = live === 'off' ? demoRoadmapRuns(ws, projectId, { fixRound: states }) : null;
   const refused = 'Could not start #14: #14 already has work from a cancelled run, 20260119-221000-demo0014 (3 commits on its branch). Choose with Retry on the roadmap item, Resume on the queue or Start on the issue.';
   fs.writeFileSync(path.join(ws.backlog, `${projectId}.roadmap.json`), JSON.stringify({
     state: 'planned', simulated: false, error: null, pausedBy: null, updatedAt: new Date().toISOString(), ...liveFields,
@@ -483,8 +582,11 @@ function demoRoadmap(ws, projectId, live = 'off', budget = null) {
         item('item-5', 'software-development-local-hero.yaml', [15], { runId: tonight.waiting, runs: [tonight.waiting], inputs: { language: 'js', mode: 'validated' } }),
         item('item-6', 'software-development-local-hero.yaml', [13], { runId: tonight.failed, runs: [tonight.failed] }),
         item('item-7', 'software-development-local-hero.yaml', [14], { error: refused.replace(/^Could not start #14: /, '') }),
+        // #215: done, real cost and time against the estimate (folded under the stage's "+2 done" chip, #267)
+        item('item-9', 'software-development-local-hero.yaml', [9], { status: 'done', runId: tonight.better, runs: [tonight.better] }),
+        item('item-10', 'software-development-local-hero.yaml', [12], { status: 'done', runId: tonight.worse, runs: [tonight.worse] }),
       ] }] : []),
-      { id: 'stage-2', name: 'Reports and health', note: 'Both touch the server: one run, no conflict.', items: [item('item-2', 'software-development-local-hero.yaml', [12, 9], {
+      { id: 'stage-2', name: 'Reports and health', note: 'Both touch the server: one run, no conflict.', ...(states ? { disabled: true } : {}), items: [item('item-2', 'software-development-local-hero.yaml', [12, 9], {
         // #193: a reason of 500+ characters ends with "…" at the card's edge, whole when opened
         reason: 'Both add a server route and share the report formatter: one run avoids a merge conflict in src/server. Split from #136, whose tasks were spread over two stages: the report export needs the formatter that the health endpoint introduces, and both register their routes in src/server/routes.js, which every parallel run of this area edits; running them apart would conflict there and in the formatter tests. The health endpoint is small (complexity 3) and the export reuses its formatter, so together they stay under the group size of five issues per run and take one review instead of two.',
         modeReason: 'Auto: server code with no screen to try.',
@@ -492,10 +594,12 @@ function demoRoadmap(ws, projectId, live = 'off', budget = null) {
         inputs: { language: 'js', mode: 'auto', unit_tests: 'run_existing', e2e_tests: 'write', screenshots: 'off', ...(tonight ? { base_branch: 'release/2026-01-reports-and-health-with-a-very-long-branch-name-for-the-roadmap-card' } : {}) },
         cost: { level: 1, name: 'Economy', inputs: { unit_tests: 'run_existing', e2e_tests: 'write', screenshots: 'off' }, grouping: 'Grouped to pay the run overhead once (same area or files).', notAdjustable: ['Agents: not adjustable (the workflow has no model or effort input)'] },
       })] },
-      { id: 'stage-2-tests', name: 'Test batch', note: '', items: [item('item-8', 'test-batch.yaml', [12, 9], {
+      // #260: a cut line after this stage ("Release here"): the last stage waits for the release v0.10
+      { id: 'stage-2-tests', name: 'Test batch', note: '', release: { name: 'v0.10' }, items: [item('item-8', 'test-batch.yaml', [12, 9], {
         inputs: {}, reason: 'Economy: these issues ran with their existing tests only; one test writer session writes their unit tests together, after their stage.',
       })] },
       { id: 'stage-3', name: '', note: '', items: [item('item-3', 'software-development.yaml', [10], {
+        ...(states ? { mock: true } : {}),
         inputs: { language: 'js', mode: 'validated', unit_tests: 'write_and_run', e2e_tests: 'write_and_run', screenshots: 'all' }, reason: 'A small UI fix on its own.', modeReason: 'Validated: a screen the owner can try in the app.',
         cost: { level: 5, name: 'Generous', inputs: { unit_tests: 'write_and_run', e2e_tests: 'write_and_run', screenshots: 'all' }, notAdjustable: [] },
       })] },
@@ -510,9 +614,10 @@ function demoRoadmap(ws, projectId, live = 'off', budget = null) {
 }
 
 // The roadmap's runs (#194): two finished local-hero runs that give each step its typical time, then
-// tonight's runs: one in code review, one waiting at the human review gate (both live in "another app",
+// tonight's runs: one in code review, one waiting at the developer's gate (both live in "another app",
 // studio-pc, whose heartbeat this script keeps fresh), one that failed in its tests. → their run ids.
-function demoRoadmapRuns(ws, projectId) {
+// `fixRound` (--roadmap states): the running one is back in Develop after its review (round 2).
+function demoRoadmapRuns(ws, projectId, { fixRound = false } = {}) {
   const file = 'software-development-local-hero.yaml';
   const workflow = 'software-development-local-hero';
   const groups = [
@@ -525,7 +630,7 @@ function demoRoadmapRuns(ws, projectId) {
     develop: ['developer', 'claude-opus-5-5'], code_review: ['reviewer', 'claude-sonnet-5-5'], test: ['test_writer', 'claude-sonnet-5'],
     build: ['builder', 'claude-sonnet-5'], evidence: ['evidence', 'claude-sonnet-5'], verify_change: ['verifier', 'claude-sonnet-5'],
   };
-  const TYPE = { developer_screenshots: 'screenshots', suite: 'suite', human_review: 'human_approval' };
+  const TYPE = { developer_check: 'human_approval', developer_screenshots: 'screenshots', suite: 'suite', human_review: 'human_approval' };
   // [step, minutes]: the usual path of a run that merged
   const PATH = [['develop', 38], ['developer_screenshots', 2], ['code_review', 11], ['human_review', 9], ['test', 18], ['suite', 4], ['build', 6], ['evidence', 7], ['verify_change', 5]];
   const min = 6e4;
@@ -555,9 +660,14 @@ function demoRoadmapRuns(ws, projectId) {
     if (summary) fs.writeFileSync(path.join(dir, 'summary.json'), JSON.stringify({ run_id: runId, workflow, project_id: projectId, mock: false, groups, inputs: { task: 'Demo roadmap run' }, sessions: [], ...summary }, null, 2));
     if (owner) {
       const data = { pid: 4242, host: 'studio-pc', role: 'run', started_at: new Date(Date.now() - 2 * 3600e3).toISOString() };
-      const beat = () => fs.writeFileSync(path.join(dir, 'owner.json'), JSON.stringify({ ...data, heartbeat_at: new Date().toISOString() }));
+      // stops once the scratch workspace is removed (the E2E suite seeds it from its own process)
+      let timer = null;
+      const beat = () => {
+        try { fs.writeFileSync(path.join(dir, 'owner.json'), JSON.stringify({ ...data, heartbeat_at: new Date().toISOString() })); } catch (e) { if (!timer) throw e; clearInterval(timer); }
+      };
       beat();
-      setInterval(beat, 5000).unref?.();
+      timer = setInterval(beat, 5000);
+      timer.unref?.();
     }
   };
   const trail = (start, steps) => {
@@ -575,24 +685,32 @@ function demoRoadmapRuns(ws, projectId) {
     id: `s-${step}`, step_id: step, agent: AGENT[step][0], provider: 'claude', model: AGENT[step][1], cost_usd: Math.round(STEP_COST[step] * k * 100) / 100, tokens: { input: 1000, output: 2000, cache_read: 0, cache_write: 0 }, turns: 1,
   }));
   const now = Date.now();
-  // the history: two runs that merged (a little slower, a little faster than the usual path)
-  [[-3, 1.1], [-2, 0.9]].forEach(([day, k], n) => {
-    const start = now + day * 864e5;
+  // a run that merged, `k` times the usual path's time and cost
+  const merged = (start, k, runId) => {
     const steps = PATH.map(([s, m]) => [s, Math.round(m * k)]);
-    const runId = `${new Date(start).toISOString().slice(0, 10).replace(/-/g, '')}-210000-hist000${n + 1}`;
     const { lines, end } = events(start, steps, null);
     write(runId, [...lines, ev(end, 'workflow.finished', { status: 'success' })], {
       status: 'success', started_at: new Date(start).toISOString(), finished_at: new Date(end).toISOString(), duration_ms: end - start, progress: trail(start, steps), sessions: sessionsOf(steps, k),
     });
+    return runId;
+  };
+  // the history: two runs that merged (a little slower, a little faster than the usual path)
+  [[-3, 1.1], [-2, 0.9]].forEach(([day, k], n) => {
+    const start = now + day * 864e5;
+    merged(start, k, `${new Date(start).toISOString().slice(0, 10).replace(/-/g, '')}-210000-hist000${n + 1}`);
   });
   const stamp = (m) => new Date(now - m * min).toISOString().slice(0, 10).replace(/-/g, '');
+  // #215: tonight's two runs that already merged: one cheaper and faster than estimated (green),
+  // one far over (red)
+  const better = merged(now - 300 * min, 0.6, `${stamp(300)}-190000-run00009`);
+  const worse = merged(now - 420 * min, 1.8, `${stamp(420)}-170000-run00012`);
   const running = `${stamp(52)}-230500-run00016`;
   const waiting = `${stamp(95)}-221500-run00015`;
   const failed = `${stamp(190)}-204000-run00013`;
   // in code review for 6 minutes
-  write(running, events(now - 52 * min, [['develop', 44], ['developer_screenshots', 2], ['code_review', 6]], 'running').lines, null, true);
-  // at the human review gate
-  write(waiting, events(now - 95 * min, [['develop', 41], ['developer_screenshots', 2], ['code_review', 12], ['human_review', 0]], 'waiting').lines, null, true);
+  write(running, events(now - 52 * min, fixRound ? [['develop', 30], ['developer_screenshots', 2], ['code_review', 11], ['develop', 9]] : [['develop', 44], ['developer_screenshots', 2], ['code_review', 6]], 'running').lines, null, true);
+  // at the developer's gate of the Validated mode (#282: the pipeline's "Your check" station)
+  write(waiting, events(now - 95 * min, [['develop', 41], ['developer_screenshots', 2], ['developer_check', 0]], 'waiting').lines, null, true);
   // failed in its tests (a review → developer loop before)
   const failedSteps = [['develop', 35], ['developer_screenshots', 2], ['code_review', 10], ['develop', 14], ['code_review', 6], ['human_review', 7], ['test', 22]];
   const f = events(now - 190 * min, failedSteps, 'failed');
@@ -601,7 +719,307 @@ function demoRoadmapRuns(ws, projectId) {
   write(failed, [...f.lines, ev(f.end, 'workflow.finished', { status: 'failed', error: 'The suite failed: 3 tests in test/report.test.js' })], {
     status: 'failed', error: 'The suite failed: 3 tests in test/report.test.js', started_at: new Date(now - 190 * min).toISOString(), finished_at: new Date(f.end).toISOString(), duration_ms: f.end - (now - 190 * min), progress: ft,
   });
-  return { running, waiting, failed };
+  demoCostRuns(ws, projectId);
+  demoArtifactRuns(ws, projectId);
+  return { running, waiting, failed, better, worse };
+}
+
+// #233: two runs whose develop attempt was stopped at its timeout: `-run00233` with its estimated
+// cost (priced from the attempt's model calls), `-old00233` recorded before costs were estimated
+// (its cost "not recorded"). Days back, so tonight's roadmap runs stay as they are.
+function demoCostRuns(ws, projectId) {
+  const min = 6e4;
+  const workflow = 'ai-development-local-hero';
+  const file = `${workflow}.yaml`;
+  const tokens = (input, output, cacheRead) => ({ input, output, cache_read: cacheRead, cache_write: 0, reasoning: 0 });
+  const snap = (id, agent, model, extra) => ({
+    id, agent, provider: 'claude', model, effort: null, parent_id: 'orchestrator', step_id: null, turns: 0, tokens: tokens(0, 0, 0), cost_usd: 0,
+    status: 'idle', provider_session_id: `${id}-cli`, cwd: null, mode: 'persistent', ...extra,
+  });
+  const write = (runId, start, list, summary) => {
+    const dir = path.join(ws.runs, runId);
+    fs.mkdirSync(dir, { recursive: true });
+    const at = (m) => new Date(start + m * min).toISOString();
+    fs.writeFileSync(path.join(dir, 'events.jsonl'), `${list.map(([m, type, extra]) => JSON.stringify({ ts: at(m), type, ...extra })).join('\n')}\n`);
+    fs.writeFileSync(path.join(dir, 'summary.json'), JSON.stringify({
+      run_id: runId, workflow, project_id: projectId, mock: false, inputs: { task: 'Demo run with a timed-out attempt' }, started_at: at(0), ...summary,
+    }, null, 2));
+  };
+  const day = (n) => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10).replace(/-/g, '');
+
+  // estimated: attempt 1 killed at 30 min after 212 model calls, attempt 2 answered
+  const start = Date.now() - 4 * 864e5;
+  const dev = (extra) => snap('s1', 'developer', 'claude-opus-5-5', extra);
+  const rev = (extra) => snap('s2', 'reviewer', 'claude-sonnet-5-5', extra);
+  const devDone = dev({ turns: 1, tokens: tokens(9200, 41000, 2100000), cost_usd: 4.06, estimated_cost_usd: 1.84, status: 'idle', step_id: 'develop' });
+  const revDone = rev({ turns: 1, tokens: tokens(2100, 3800, 240000), cost_usd: 0.52, status: 'idle', step_id: 'code_review' });
+  write(`${day(4)}-201500-run00233`, start, [
+    [0, 'workflow.started', { workflow, file, project_id: projectId, mock: false, inputs: { task: 'Demo run with a timed-out attempt' }, cost_accounting: 'per_turn' }],
+    [0, 'step.started', { step_id: 'develop', visit: 1, step_type: 'agent', agent: 'developer' }],
+    [0, 'session.opened', { session_id: 's1', session: dev() }],
+    [0, 'session.message_sent', { session_id: 's1', turn: 1, step_id: 'develop', prompt: 'Implement the task', timeout_ms: 1800e3 }],
+    [30, 'session.attempt_stopped', { session_id: 's1', turn: 1, step_id: 'develop', attempt: 1, error: 'Timed out after 1800s', usage: tokens(6100, 23000, 1500000), model_calls: 212, cost_usd: 1.84, estimated: true, session: dev({ tokens: tokens(6100, 23000, 1500000), cost_usd: 1.84, estimated_cost_usd: 1.84 }) }],
+    [30, 'log', { level: 'error', message: '[developer] attempt 1/2 failed: Timed out after 1800s (US$ 1.84, estimated from 212 model calls)' }],
+    [44, 'session.message_received', { session_id: 's1', turn: 1, step_id: 'develop', text: 'Done.', usage: tokens(3100, 18000, 600000), cost_usd: 2.22, duration_ms: 14 * min, active_ms: 14 * min, waiting_ms: 0, stalled_ms: 0, session: devDone }],
+    [44, 'step.finished', { step_id: 'develop', visit: 1, duration_ms: 44 * min, output: {} }],
+    [44, 'step.started', { step_id: 'code_review', visit: 1, step_type: 'agent', agent: 'reviewer' }],
+    [44, 'session.opened', { session_id: 's2', session: rev() }],
+    [45, 'session.message_sent', { session_id: 's2', turn: 1, step_id: 'code_review', prompt: 'Review the change' }],
+    [53, 'session.message_received', { session_id: 's2', turn: 1, step_id: 'code_review', text: 'Approved.', usage: revDone.tokens, cost_usd: 0.52, duration_ms: 8 * min, active_ms: 8 * min, waiting_ms: 0, stalled_ms: 0, session: revDone }],
+    [53, 'step.finished', { step_id: 'code_review', visit: 1, duration_ms: 9 * min, output: {} }],
+    [53, 'workflow.finished', { status: 'success', error: null }],
+  ], {
+    status: 'success', finished_at: new Date(start + 53 * min).toISOString(), duration_ms: 53 * min, cost_usd: 4.58, cost_accounting: 'per_turn',
+    tokens: tokens(11300, 44800, 2340000), sessions: [{ ...devDone, status: 'success' }, { ...revDone, status: 'success' }],
+  });
+
+  // recorded before #233: the stopped attempt left no cost at all
+  const old = Date.now() - 5 * 864e5;
+  const oldDev = (extra) => snap('s1', 'developer', 'claude-opus-5-5', { step_id: 'develop', ...extra });
+  write(`${day(5)}-193000-old00233`, old, [
+    [0, 'workflow.started', { workflow, file, project_id: projectId, mock: false, inputs: { task: 'Demo run with a timed-out attempt' } }],
+    [0, 'step.started', { step_id: 'develop', visit: 1, step_type: 'agent', agent: 'developer' }],
+    [0, 'session.opened', { session_id: 's1', session: oldDev() }],
+    [1, 'session.message_sent', { session_id: 's1', turn: 1, step_id: 'develop', prompt: 'Implement the task', timeout_ms: 1800e3 }],
+    [31, 'log', { level: 'error', message: '[developer] attempt 1/1 failed: Timed out after 1800s' }],
+    [31, 'session.status', { session_id: 's1', status: 'error' }],
+    [31, 'step.finished', { step_id: 'develop', visit: 1, duration_ms: 31 * min, output: { error: 'Timed out after 1800s' }, error: true }],
+    [31, 'workflow.finished', { status: 'failed', error: 'Timed out after 1800s' }],
+  ], {
+    status: 'failed', error: 'Timed out after 1800s', finished_at: new Date(old + 31 * min).toISOString(), duration_ms: 31 * min, cost_usd: 0,
+    tokens: tokens(0, 0, 0), sessions: [{ ...oldDev({ turns: 1 }), status: 'failed' }],
+  });
+}
+
+// A solid-colour PNG of w × h (a demo screenshot written without a window)
+function solidPng(w, h, [r, g, b]) {
+  const zlib = require('zlib');
+  const table = Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; });
+  const crc = (buf) => { let c = 0xffffffff; for (const x of buf) c = table[(c ^ x) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
+  const chunk = (type, data) => {
+    const body = Buffer.concat([Buffer.from(type, 'ascii'), data]);
+    const out = Buffer.alloc(body.length + 8);
+    out.writeUInt32BE(data.length, 0);
+    body.copy(out, 4);
+    out.writeUInt32BE(crc(body), body.length + 4);
+    return out;
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(w, 0);
+  ihdr.writeUInt32BE(h, 4);
+  ihdr[8] = 8; ihdr[9] = 2; // 8-bit RGB
+  const row = Buffer.concat([Buffer.from([0]), Buffer.from(Array.from({ length: w }, () => [r, g, b]).flat())]);
+  const raw = Buffer.concat(Array.from({ length: h }, () => row));
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
+}
+
+// The Inbox's discovery cards (#256): three ideas in the Inbox (the newest with an image, a CSV and
+// two notes; one from another author; one with a long title, an audio file and a PDF) and one
+// already in Triage (a target for Merge into…).
+function demoDiscovery(ws, projectId) {
+  const discovery = require('../src/discovery');
+  const min = 60000;
+  const card = (minsAgo, author, title, text, column) => {
+    const c = discovery.createCard(ws.discovery, projectId, { title, text, author, column });
+    // created in the past, so the list shows different ages
+    const file = path.join(ws.discovery, projectId, 'cards', c.id, 'card.json');
+    const at = new Date(Date.now() - minsAgo * min).toISOString();
+    fs.writeFileSync(file, JSON.stringify({ ...JSON.parse(fs.readFileSync(file, 'utf8')), created: at, updated: at }, null, 2));
+    return c.id;
+  };
+  card(6 * 24 * 60, 'eduardo', 'Guided setup wizard', 'A first-run wizard that checks the CLIs and creates the first project.', 'triage');
+  const call = card(2 * 24 * 60, 'support', 'Customer call: onboarding takes too long, people give up at the CLI install step before they ever start a run',
+    'Three customers this week stopped at the CLI install step. The recording and the notes are attached.');
+  discovery.addAttachment(ws.discovery, projectId, call, { name: 'call-2026-10-02.m4a', data: Buffer.from('demo audio') });
+  discovery.addAttachment(ws.discovery, projectId, call, { name: 'call-notes.pdf', data: Buffer.from('%PDF-1.4 demo') });
+  const dark = card(3 * 60, 'marina', 'Dark mode for the run log', 'The run log is hard to read at night: follow the app theme.');
+  // a question waiting for the owner (Home's "What needs you", #255)
+  discovery.appendConversation(ws.discovery, projectId, dark, { kind: 'question', author: 'grill-me', text: 'Should the log follow the app theme, or get its own switch?', ts: new Date(Date.now() - 40 * min).toISOString() });
+  const csv = card(5, 'eduardo', 'Export the night\'s runs as CSV', [
+    'The owner wants a spreadsheet of the night\'s runs: the morning summary is read on the phone, the numbers are compared in a spreadsheet.', '',
+    '## Open questions', '', '- Which columns: cost, duration, status, issue?', '- One file per night or per week?',
+  ].join('\n'));
+  discovery.addAttachment(ws.discovery, projectId, csv, { name: 'runs-table.png', data: solidPng(320, 180, [124, 156, 255]) });
+  discovery.addAttachment(ws.discovery, projectId, csv, { name: 'night-2026-10-03.csv', data: Buffer.from('run,status,cost_usd\n20261003-2210,success,1.84\n') });
+  discovery.appendConversation(ws.discovery, projectId, csv, { kind: 'note', author: 'eduardo', text: 'Asked for it twice this month.', ts: new Date(Date.now() - 4 * min).toISOString() });
+  discovery.appendConversation(ws.discovery, projectId, csv, { kind: 'note', author: 'marina', text: 'The Analytics screen already has the numbers: reuse its query.', ts: new Date(Date.now() - 2 * min).toISOString() });
+}
+
+// The Discovery board's cards (#257), next to demoDiscovery's one in Triage: cards in every column,
+// a bug (Triage) and a hotfix (Define) in the fast lane, Define over a WIP limit of 2, and in Shape
+// a PRD with tags, a clarity score, an estimate, acceptance criteria, an image, notes and a
+// Write & Review result (a version and a thread entry).
+function demoDiscoveryBoard(ws, projectId) {
+  const discovery = require('../src/discovery');
+  const dir = ws.discovery;
+  const hour = 3600000;
+  const columns = ['triage', 'shape', 'define', 'ready'];
+  const card = (hoursAgo, to, { title, text = '', type = 'idea', author = 'eduardo', tags, clarity, gaps = [], estimate, acceptance, anyway }) => {
+    const c = discovery.createCard(dir, projectId, { title, text, type, author, tags, column: 'triage' });
+    // the score first: a move into Ready goes through the clarity bar (#166), `anyway` is the
+    // owner's reason to move a card there below it
+    discovery.updateCard(dir, projectId, c.id, { ...(acceptance ? { acceptance } : {}), ...(clarity ? { clarity: { score: clarity, gaps, by: 'Product Owner' } } : {}), ...(estimate ? { estimate } : {}) });
+    // a bug or a hotfix takes the fast lane: Triage → Define
+    const fast = ['bug', 'hotfix'].includes(type);
+    for (const column of columns.slice(1, columns.indexOf(to) + 1)) {
+      if (!(fast && column === 'shape')) discovery.moveCard(dir, projectId, c.id, column, { by: author, ...(column === 'ready' && anyway ? { force: true, reason: anyway } : {}) });
+    }
+    // created and moved in the past, so the cards show different ages
+    const file = path.join(dir, projectId, 'cards', c.id, 'card.json');
+    const json = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const at = new Date(Date.now() - hoursAgo * hour).toISOString();
+    fs.writeFileSync(file, JSON.stringify({ ...json, created: at, updated: at, history: json.history.map((h) => ({ ...h, ts: at })) }, null, 2));
+    return c.id;
+  };
+  card(3, 'triage', { title: 'Crash when a run is stopped twice', type: 'bug', author: 'support', text: 'Stopping a run that is already stopping throws in the engine.' });
+  card(30, 'shape', { title: 'Plugin API for custom steps', type: 'rfc', author: 'marina', tags: ['engine'], text: 'Let a workflow call a step implemented by a workspace plugin.' });
+  const report = card(52, 'shape', {
+    title: 'Weekly cost report by project', type: 'prd', tags: ['cost', 'reports'], clarity: 62, estimate: { usd: 4.2, minutes: 35 },
+    text: ['# Weekly cost report', '', 'A report of what each project spent in the week, sent on Monday morning.', '', '## Open questions', '', '- Per workflow too, or per project only?', '- In the app only, or by e-mail?'].join('\n'),
+    acceptance: ['- [ ] One row per project with its runs, cost and tokens of the week', '- [ ] The report opens from the Dashboard on Monday'].join('\n'),
+  });
+  discovery.addAttachment(dir, projectId, report, { name: 'report-sketch.png', data: solidPng(320, 180, [124, 156, 255]) });
+  discovery.appendConversation(dir, projectId, report, { kind: 'note', author: 'eduardo', text: 'The Usage screen has the weekly totals already.', ts: new Date(Date.now() - 50 * hour).toISOString() });
+  discovery.recordResult(dir, projectId, report, {
+    source: 'write-review', runId: '20261003-1012-ab12', by: 'eduardo',
+    text: ['# Weekly cost report by project', '', '## Problem', '', 'The owner compares what each project spent week by week, and today adds the numbers up by hand from the Usage screen.', '',
+      '## Goals', '', '- One report per week: runs, cost and tokens per project', '- Opened from the Dashboard on Monday morning', '',
+      '## Non-goals', '', '- Budgets and alerts (the spending budget covers them)', '', '## Open questions', '', '- Per workflow too, or per project only?'].join('\n'),
+  });
+  card(20, 'define', { title: 'Keyboard shortcuts for the Roadmap', author: 'marina', tags: ['ux'], clarity: 88, estimate: { usd: 2.1, minutes: 20 }, text: 'Move an item between stages without the mouse.' });
+  card(96, 'define', {
+    title: 'Compare two runs side by side', type: 'prd', tags: ['reports'], clarity: 81, text: 'Two runs of the same workflow next to each other: cost, duration, steps.',
+    gaps: ['Success metrics: how do we know the comparison is used?', 'Non-goals: is comparing runs of different workflows left out?'],
+  });
+  card(1, 'define', { title: 'Login loop after the token refresh', type: 'hotfix', author: 'support', text: 'The phone page asks to log in again after every refresh.' });
+  // Ready (#166): two cards at or above the bar (the forecast: 19 h, 2 nights of 9 h) and one the
+  // owner moved there below it, which the forecast leaves out
+  card(140, 'ready', { title: 'Per-project spending budget', type: 'prd', tags: ['cost'], clarity: 94, estimate: { usd: 7.5, minutes: 540 }, text: 'A daily budget per project, next to the workspace one.',
+    // #258: criteria in two parts, so the commit dialog proposes two issues
+    acceptance: ['## Budget', '- [ ] A daily budget per project in Settings, next to the workspace one', '- [ ] A project that reached its budget starts no new run until the next day', '', '## Reporting', '- [ ] The Usage screen shows what each project spent against its budget', '- [ ] A notice when a project reaches 80% of its budget'].join('\n'),
+  });
+  card(70, 'ready', { title: 'Retry a failed step from the Run screen', tags: ['engine'], clarity: 90, estimate: { usd: 8.2, minutes: 600 }, text: 'A failed step is retried from its card, without restarting the run.' });
+  card(26, 'ready', {
+    title: 'Dark theme for the phone page', author: 'marina', tags: ['ux'], clarity: 58, estimate: { usd: 3, minutes: 240 }, text: 'The phone page follows the system theme.',
+    gaps: ['Acceptance criteria: which screens of the phone page must follow the theme?', 'Scope: the login page too?'], anyway: 'Needed for Friday\'s demo; the open points are cosmetic.',
+  });
+  discovery.setWip(dir, projectId, 'define', 2);
+}
+
+// The committed cards (#258): one in delivery, filed as two issues of the demo backlog (#12 and #9),
+// and one whose issue (#8) the release v0.9 shipped. The Discovery board lists them beside its
+// columns with their delivery; the Backlog shows each of these issues with its card's badge.
+function demoCommittedCards(ws, projectId) {
+  const discovery = require('../src/discovery');
+  const dir = ws.discovery;
+  const committed = ({ title, text, acceptance, clarity, issues }) => {
+    const c = discovery.createCard(dir, projectId, { title, text, type: 'prd', author: 'eduardo', column: 'triage' });
+    discovery.updateCard(dir, projectId, c.id, { acceptance, clarity: { score: clarity, gaps: [], by: 'Product Owner' } });
+    for (const column of ['shape', 'define', 'ready']) discovery.moveCard(dir, projectId, c.id, column, { by: 'eduardo' });
+    discovery.markCommitted(dir, projectId, c.id, { issues, by: 'eduardo' });
+    discovery.appendConversation(dir, projectId, c.id, { kind: 'commit', author: 'eduardo', issues, text: `Committed to the backlog: ${issues.map((n) => `#${n}`).join(', ')}.` });
+    return c.id;
+  };
+  committed({
+    title: 'Share a run outside the app', clarity: 92, issues: [12, 9],
+    text: ['# Share a run outside the app', '', 'The report of a run leaves the app: exported as Markdown, and checked by a monitor through a health endpoint.'].join('\n'),
+    acceptance: ['- [ ] The run report is exported as Markdown', '- [ ] A /health endpoint answers while the server runs'].join('\n'),
+  });
+  committed({
+    title: 'A reference of the workflow YAML for new users', clarity: 88, issues: [8],
+    text: 'New users read one page that lists every key of a workflow file, with an example.',
+    acceptance: '- [ ] Every key of the workflow YAML is documented with an example',
+  });
+}
+
+// #225, #185, #182: finished runs whose artifacts the E2E scenarios (features/artifacts.feature,
+// features/image-viewer.feature) and the screenshots look at, days back so tonight's runs stay as
+// they are: `-res00225` (a result summary, a screenshot, test results, a review report, process
+// files and internal ones never listed), `-new00185` (a pair, a new element with no original, a
+// screenshot that failed), `-img00182` (3 screens, the second a pair) and `-one00182` (one pair).
+function demoArtifactRuns(ws, projectId) {
+  const min = 6e4;
+  const workflow = 'software-development-local-hero';
+  const PNG = { before: solidPng(64, 40, [90, 98, 120]), after: solidPng(64, 40, [86, 140, 230]) };
+  const run = (suffix, daysBack, task, files, shots = null) => {
+    const start = Date.now() - daysBack * 864e5;
+    const runId = `${new Date(start).toISOString().slice(0, 10).replace(/-/g, '')}-101500-${suffix}`;
+    const dir = path.join(ws.runs, runId);
+    fs.mkdirSync(dir, { recursive: true });
+    const at = (m) => new Date(start + m * min).toISOString();
+    const events = [
+      { seq: 1, ts: at(0), type: 'workflow.started', run_id: runId, workflow, file: `${workflow}.yaml`, project_id: projectId, mock: false, inputs: { task } },
+      { seq: 2, ts: at(42), type: 'workflow.finished', run_id: runId, status: 'success' },
+    ];
+    fs.writeFileSync(path.join(dir, 'events.jsonl'), `${events.map((e) => JSON.stringify(e)).join('\n')}\n`);
+    fs.writeFileSync(path.join(dir, 'summary.json'), JSON.stringify({
+      run_id: runId, workflow, project_id: projectId, mock: false, inputs: { task }, status: 'success', started_at: at(0), finished_at: at(42), duration_ms: 42 * min, sessions: [],
+    }, null, 2));
+    for (const [rel, content] of Object.entries(files)) {
+      fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
+      fs.writeFileSync(path.join(dir, rel), content);
+    }
+    if (shots) {
+      const captions = {};
+      for (const [name, caption, sides] of shots.list) {
+        for (const side of sides) {
+          const rel = `evidence/${shots.step}/round-1/${name}.${side}.png`;
+          fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
+          fs.writeFileSync(path.join(dir, rel), side === 'original' ? PNG.before : PNG.after);
+          captions[rel] = { caption };
+        }
+      }
+      evidence.writeManifest(dir, { captions, base: 'main', branch: `feat/${suffix}`, commit: 'a1b2c3d4e5f6', baseCommit: '0f9e8d7c6b5a', ...(shots.capture ? { capture: shots.capture } : {}) });
+    }
+    return runId;
+  };
+
+  const result = [
+    '# Result: software-development-local-hero',
+    '',
+    '- Status: **success**',
+    '- Duration: 42 min',
+    '',
+    '## Issues',
+    '',
+    '- ✓ #225: the run\'s artifacts open on what it produced',
+    '',
+    '## Tests',
+    '',
+    '- `suite`: **pass** (412 passed, 0 failed)',
+    '',
+  ].join('\n');
+  run('res00225', 6, 'Artifacts: what the run produced first', {
+    'result.md': result,
+    'test-results.json': JSON.stringify({ passed: 412, failed: 0 }, null, 2),
+    'review-report.md': '# Review report\n\nApproved: the change follows the conventions.\n',
+    'handoffs/developer-1.md': '# Handoff\n\n- Goal: artifacts by category.\n',
+    'decisions.tsv': 'ts\tagent\tphase\tdecision\n2026-10-01T10:00:00Z\tdeveloper\timplement\tcategories from the path\n',
+    'logs/develop-1.log': 'developer turn 1\n',
+    'owner.json': JSON.stringify({ pid: 4242, host: 'studio-pc', role: 'run', heartbeat_at: new Date(Date.now() - 6 * 864e5).toISOString() }),
+    'scratch/skills/demo-skill/SKILL.md': '# A seeded skill\n',
+    'scratch/workflows/software-development.yaml': 'kind: Workflow\n',
+  }, { step: 'evidence', list: [['225-dashboard-after', 'Dashboard after the change', ['modified']]] });
+
+  run('new00185', 6, 'Export: a new export button', { 'result.md': '# Result: software-development-local-hero\n\n- Status: **success**\n' }, {
+    step: 'developer_screenshots',
+    list: [['185-export-dialog', 'Export dialog', ['original', 'modified']], ['185-export-button', 'New export button', ['modified']]],
+    capture: {
+      step: 'developer_screenshots', round: 1, taken: 3, screens: 2,
+      message: '3 screenshots of 2 screens taken in round 1; 1 new element (no original); 1 error: 185-settings-page (modified): exit 1: Error: the window never loaded',
+      new_elements: [{ name: '185-export-button', caption: 'New export button', selector: '[data-export-now]' }],
+      errors: [{ name: '185-settings-page', caption: 'Settings page', side: 'modified', error: 'exit 1: Error: the window never loaded' }],
+    },
+  });
+
+  run('img00182', 5, 'Image viewer: browse the run\'s screenshots', { 'result.md': '# Result: software-development-local-hero\n\n- Status: **success**\n' }, {
+    step: 'evidence',
+    list: [['182-a-dashboard', 'Dashboard', ['modified']], ['182-b-backlog', 'Backlog board', ['original', 'modified']], ['182-c-report', 'Run report', ['modified']]],
+  });
+
+  run('one00182', 5, 'Image viewer: one screenshot pair', { 'result.md': '# Result: software-development-local-hero\n\n- Status: **success**\n' }, {
+    step: 'evidence', list: [['182-settings-page', 'Settings page', ['original', 'modified']]],
+  });
 }
 
 // Settings › General › Dependency cache (#198): two complete entries of the demo project (sizes
@@ -974,6 +1392,8 @@ function demoOracle(ws, workspace, which, runId) {
   fs.writeFileSync(path.join(dir, 'memory.md'), '- UI issues need UI acceptance criteria and screenshots.\n- Use the validated mode for UI changes.\n- Reply in Portuguese; everything for the product stays in English.\n');
   const spent = which === 'paused' ? 2.4 : 3.12;
   fs.writeFileSync(path.join(dir, 'usage.jsonl'), `${JSON.stringify({ ts: at(29), provider: 'claude', model: 'claude-opus-5-5', tokens: { input: 1200, output: 860 }, costUsd: spent, sessionId: 'demo' })}\n`);
+  // #244: the status shows the model and that the last turn resumed a warm session
+  fs.writeFileSync(path.join(dir, 'state.json'), JSON.stringify({ sessionId: 'demo', model: 'claude-opus-5-5', contextTokens: 50060, lastTurnAt: at(29), lastTurnFresh: false }));
   if (which === 'paused') workspace.writeSettings(ws, { oracle: { dailyBudgetUsd: 2, compactAtTokens: 150000 } });
   fs.writeFileSync(path.join(dir, 'read.json'), JSON.stringify({ readAt: which === 'unread' ? at(31) : at(0) }));
   if (which !== 'unavailable') return null;
@@ -1005,6 +1425,8 @@ function demoOracleActions(dir, at, run) {
       title: 'Retry roadmap item i3 (#14 Report export)', change: 'The item runs again (a new run).', where: 'The roadmap of project demo-app',
       backup: 'A copy of the roadmap file, taken before the change (Undo puts it back).', why: `${failedRun} failed on invalid outputs, not on the code: a retry usually passes (2 of the last 3 did).`,
     }),
+    // #244: a routine event is a code-only notice (no model call)
+    { id: 'nt1', ts: at(17), role: 'system', kind: 'notice', runId: '20260119-231000-7c2d1e90', status: 'succeeded', runCostUsd: 2.14, text: 'Run 20260119-231000-7c2d1e90 finished succeeded, cost $2.14.' },
     { id: 'd1', ts: at(15), role: 'system', kind: 'delegation', to: 'product-owner', question: 'Which planned items of demo-app can run in parallel without merge conflicts?', text: 'Stage 2 can split in two: #15 and #18 touch disjoint folders (src/export, src/settings); #16 must wait for #15 (same report module).', costUsd: 0.6342, model: 'claude-opus-5-5', failed: false, ref: 'the Product Owner\'s conversation of demo-app' },
     card('c2', 12, {
       kind: 'issue.update', label: 'Update an issue', params: { projectId: 'demo-app', number: 14, body: '…', mode: 'comment' }, requestedBy: 'content', source: 'issue #14 body',
@@ -1053,6 +1475,8 @@ function simulateChannels(ipcMain, keepAwake = null, missing = null, holdOracle 
     if (channel === 'oracle:reset') return handle(channel, (e, arg) => fn(e, { ...arg, mock: true }));
     // Save to issue (Write & Review) only previews: never calls gh/glab
     if (channel === 'backlog:save-doc') return handle(channel, (e, arg) => fn(e, { ...arg, preview: true }));
+    // Archive and Restore (#238) are only recorded in the demo backlog: never call gh/glab
+    if (channel === 'backlog:archive' || channel === 'backlog:restore') return handle(channel, (e, arg) => fn(e, { ...arg, simulate: true }));
     // the diff viewer (#118): a demo branch, since a simulated run has no diff of its own
     if (channel === 'run:diff') return handle(channel, (e, arg) => demoRunDiff(arg?.commit));
     if (channel === 'run:diffFile') return handle(channel, (e, arg) => demoRunDiffFile(arg?.file));
@@ -1251,13 +1675,22 @@ function main() {
     const created = await projects.createProject(ws.projects, { name: 'demo-app', description: 'Sample project (simulated data)' });
     const project = projects.updateProject(ws.projects, created.id, { repo: DEMO_REPO });
     workspace.writeSettings(ws, { developerMode: true, lastWorkflow: 'software-development.yaml', lastProject: project.id, keepAwake: !!args.keepAwake && args.keepAwake !== 'off' });
+    // Home (#255) shows every stage of the flow: the Inbox, the backlog, the roadmap's runs, the local merge, the releases
+    const home = args.view === 'dashboard';
     fs.mkdirSync(ws.backlog, { recursive: true });
     fs.writeFileSync(path.join(ws.backlog, `${project.id}.json`), JSON.stringify(demoBacklog(project.id, src('backlog').taskProgress), null, 2));
     // also on Project: its run list shows the run's "issue from cache" badge (#168)
-    if (['backlog', 'project'].includes(args.view)) demoLocalMerge(ws, project.id);
-    if (args.view === 'backlog') demoRoadmap(ws, project.id, args.live, args.budget);
+    if (home || ['backlog', 'project', 'releases'].includes(args.view)) demoLocalMerge(ws, project.id);
+    // #260: the Releases screen's history; the Backlog's "Released" badge on the issues it shipped
+    // (#258: also on Discovery, whose committed cards follow their issues to the release)
+    if (home || ['backlog', 'discovery', 'releases'].includes(args.view)) demoReleases(ws, project.id);
+    if (home || args.view === 'backlog') demoRoadmap(ws, project.id, args.live, args.budget, args.roadmap);
     if (args.view === 'backlog') demoPoConversation(ws, project.id, args.po);
     if (args.view === 'backlog' && project.folder) demoBacklogRefresh(ws, project.folder, project.id);
+    if (home || (['inbox', 'discovery'].includes(args.view) && args.mode !== 'empty')) demoDiscovery(ws, project.id);
+    if (args.view === 'discovery' && args.mode !== 'empty') demoDiscoveryBoard(ws, project.id);
+    // #258: the committed cards, on the Discovery board and as badges on their issues in the Backlog
+    if (['backlog', 'discovery'].includes(args.view) && args.mode !== 'empty') demoCommittedCards(ws, project.id);
     // also on Artifacts: a second run group (its document.md) for Collapse all / Expand all (#126)
     if (['artifacts', 'backlog', 'duo'].includes(args.view)) demoEnrichRun(ws, project.id);
     if (args.view === 'analytics') demoAnalyticsRuns(ws, project.id);
@@ -1269,9 +1702,21 @@ function main() {
     if (args.view === 'workflows') demoPipelines(ws, appDir);
     if (args.view === 'settings') demoDepsCache(ws, project.id);
     if (args.view === 'analytics' && args.tab === 'performance') demoPerformanceRuns(ws, project.folder, project.id);
-    // the Night watch's nights (#172): its screen, and the Dashboard's morning summary (an app before it: nothing)
-    if (['dashboard', 'nightwatch'].includes(args.view)) {
-      try { src('night-watch-demo').writeDemoNights(ws, project.id); } catch (e) { if (e.code !== 'MODULE_NOT_FOUND') throw e; }
+    // the Run (#228), 24/7 (#188) and Agents (#280) tabs (an app before them: nothing)
+    if (args.view === 'analytics' && ['run', 'occupancy', 'agents'].includes(args.tab)) {
+      try {
+        const demo = src('analytics-demo');
+        if (args.tab === 'run') demo.writeDemoRunInDepth(ws, project.id);
+        else if (args.tab === 'agents') demo.writeDemoAgents?.(ws, project.id);
+        else demo.writeDemoOccupancy(ws, project.id);
+      } catch (e) { if (e.code !== 'MODULE_NOT_FOUND') throw e; }
+    }
+    // the Night watch's nights (#172): its screen, and Home's morning summary (an app before it: nothing)
+    if (home || args.view === 'nightwatch') {
+      const selfHealing = args.view === 'nightwatch' && args.mode === 'self-healing';
+      try { src('night-watch-demo').writeDemoNights(ws, project.id, { selfHealing }); } catch (e) { if (e.code !== 'MODULE_NOT_FOUND') throw e; }
+      // #278: the switch itself is a setting (Settings › Execution › Oracle)
+      if (selfHealing) workspace.writeSettings(ws, { oracle: { ...workspace.readSettings(ws).oracle, selfHealing: true } });
     }
     // Run App's setup at a gate is prefilled from the worktree's package.json (#108); the Backlog's
     // Assign dialog shows the language detected from it (#116)
@@ -1280,7 +1725,13 @@ function main() {
       fs.writeFileSync(path.join(project.folder, 'package.json'), JSON.stringify({ name: 'demo-app', private: true, scripts: { start: 'node server.js' } }, null, 2));
     }
     let run = null;
-    if (VIEWS[args.view].run || ['artifacts', 'workflows', 'project', 'usage', 'dashboard'].includes(args.view)) run = recordRun(project);
+    if (VIEWS[args.view].run || home || ['artifacts', 'workflows', 'project', 'usage'].includes(args.view)) run = recordRun(project);
+    // Home's empty state: a workspace without a project
+    if (args.view === 'home-empty') {
+      projects.removeProject(ws.projects, project.id);
+      fs.rmSync(path.join(ws.backlog, `${project.id}.json`), { force: true });
+      workspace.writeSettings(ws, { lastProject: null });
+    }
     demoOracle(ws, workspace, args.oracle, run?.runId);
     return { project, run };
   })();
@@ -1367,6 +1818,7 @@ function main() {
       for (let i = 0; i < 100 && !document.querySelector(sel); i++) await new Promise((r) => setTimeout(r, 100));
       const el = document.querySelector(sel);
       if (!el) throw new Error('nothing matches ' + sel);
+      el.scrollIntoView({ block: 'center' }); // a card deep in a scrolled list or drawer is shown (#242)
       el.click();`);
     // a right-click at the element's center (an artifact's copy menu, #114)
     const context = (sel) => js(`
@@ -1377,6 +1829,22 @@ function main() {
       el.scrollIntoView({ block: 'center' });
       const r = el.getBoundingClientRect();
       el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 }));`);
+    // a primary-button press at a point of the element's width (pointer events, as a slider listens to)
+    const press = ({ sel, at }) => js(`
+      const sel = ${JSON.stringify(sel)};
+      for (let i = 0; i < 100 && !document.querySelector(sel); i++) await new Promise((r) => setTimeout(r, 100));
+      const el = document.querySelector(sel);
+      if (!el) throw new Error('nothing matches ' + sel);
+      const r = el.getBoundingClientRect();
+      const init = { bubbles: true, cancelable: true, button: 0, buttons: 1, pointerId: 1, pointerType: 'mouse', isPrimary: true, clientX: r.left + r.width * ${at}, clientY: r.top + r.height / 2 };
+      el.dispatchEvent(new PointerEvent('pointerdown', init));
+      el.dispatchEvent(new PointerEvent('pointerup', { ...init, buttons: 0 }));`);
+    // a key pressed on what has the focus (the page itself when nothing has)
+    const key = ({ key, shift }) => js(`
+      const init = { key: ${JSON.stringify(key)}, code: ${JSON.stringify(key === ' ' ? 'Space' : key)}, shiftKey: ${shift}, bubbles: true, cancelable: true };
+      const target = document.activeElement || document.body;
+      target.dispatchEvent(new KeyboardEvent('keydown', init));
+      target.dispatchEvent(new KeyboardEvent('keyup', init));`);
     // a prompt field gets a demo screenshot through a real paste event (#130): the chip, the save
     // through clipboard:saveImage; `big`: 12 MB, refused before anything is saved
     const paste = ({ sel, big }) => js(`
@@ -1395,6 +1863,8 @@ function main() {
       el.focus();
       el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));`);
     await pause(1500); // the app's first load (account, settings, workflows)
+    // every capture starts with the menu's groups open: a fold made in an earlier capture is remembered (#254)
+    await js('document.querySelectorAll(\'.nav-group.collapsed .nav-group-title\').forEach((b) => b.click());');
     const v = args.view;
     let approveDuringRecord = null;
     if (args.workflowGiven && v !== 'run') await js(`await api.setSettings({ lastWorkflow: ${JSON.stringify(args.workflow)} });`);
@@ -1446,6 +1916,15 @@ function main() {
             await demoEvidence(win, live);
             await js(`ArtifactsPanel.refreshRun(${JSON.stringify(path.basename(live))}); window.mountGateScenarios?.(document)`);
           }
+          // a live run with a worktree has a scratch workspace (#201; a simulated run has none): a few
+          // demo files, for the Run screen's "Scratch workspace" line
+          if (live) {
+            for (const [rel, text] of [['workspace/skills/code-review/SKILL.md', '# Code review\n'], ['workspace/workflows/software-development.yaml', 'name: demo\n'], ['user-data/Local State', '{}']]) {
+              fs.mkdirSync(path.dirname(path.join(live, 'scratch', rel)), { recursive: true });
+              fs.writeFileSync(path.join(live, 'scratch', rel), text.repeat(400));
+            }
+            await js('scratchOfRun.clear(); renderRunSummary()');
+          }
           await pause(2500); // the gate's Artifacts panel and changed files load
         } else if (args.record) {
           approveDuringRecord = approve; // the recording is the wait; the gates go on being approved
@@ -1454,12 +1933,18 @@ function main() {
         if (approveDuringRecord !== approve) clearInterval(approve);
       }
     } else if (v === 'oracle') {
-      await click('.nav-item[data-view="projects"]');
+      await click('.nav-item[data-view="settings"]');
       await pause(300);
       await click('#nav-oracle');
     } else {
       if (v === 'artifacts' && run?.simulated && args.demoShots) await demoEvidence(win, run.dir);
-      await click(`.nav-item[data-view="${v}"]`);
+      // #254: the screen's menu entry (Workflows has one per tab, the Roadmap its own); Projects
+      // (Settings › Projects), Artifacts (a tab of Runs) and Analytics (a tab of Home, #255) have none
+      if (v === 'workflows') await click(`.nav-item[data-view="workflows"][data-tab="${args.tab || 'runs'}"]`);
+      else if (v === 'backlog' && args.mode === 'roadmap') await click('.nav-item[data-view="roadmap"]');
+      else if (v === 'home-empty') await click('.nav-item[data-view="dashboard"]');
+      else if (['analytics', 'artifacts', 'projects'].includes(v)) await js(`showView(${JSON.stringify(v)})`);
+      else await click(`.nav-item[data-view="${v}"]`);
     }
     if (args.start) {
       const s = START[v];
@@ -1490,7 +1975,6 @@ function main() {
         if (q) { q.value = 'Why is this gate red?'; q.dispatchEvent(new Event('input')); }`);
     }
     if (args.tab && v === 'settings') await click(`.settings-tab[data-stab="${args.tab}"]`);
-    if (args.tab && v === 'workflows') await click(`[data-wtab="${args.tab}"]`);
     if (args.tab && v === 'analytics') await click(`[data-an-tab="${args.tab}"]`);
     // the demo's last night started after this marker: the before/after table shows the difference
     if (args.tab === 'performance') {
@@ -1499,14 +1983,18 @@ function main() {
       await js(`const m = document.querySelector('#an-marker'); m.value = ${JSON.stringify(marker)}; m.dispatchEvent(new Event('change'));`);
       await pause(1500);
     }
-    if (args.mode) await click(`#view-backlog [data-mode="${args.mode}"]`);
+    if (v === 'backlog' && args.mode && args.mode !== 'roadmap') await click(`#view-backlog [data-mode="${args.mode}"]`);
     // --po (#180): the Product Owner's drawer, asking (working, writing) or with its last answer
+    // (#235: with --workflow, the workflow it plans with, as if the owner had chosen it for the project)
+    if (args.po && args.workflowGiven) await js(`localStorage.setItem('po.workflow.' + window.BacklogActions.projectId(), ${JSON.stringify(args.workflow)});`);
     if (['working', 'writing'].includes(args.po)) await js('window.BacklogPO.ask(\'Analyze the backlog and propose runs\'); await new Promise((r) => setTimeout(r, 500));');
     else if (args.po) await js('await window.BacklogPO.open();');
     // the demo runs are simulated, which Artifacts hides by default
     if (v === 'artifacts') await js(`const c = document.querySelector('#art-show-sim'); if (c && !c.checked) c.click();`);
     for (const sel of args.clicks) { await click(sel); await pause(500); }
     for (const sel of args.contexts) { await context(sel); await pause(500); }
+    for (const p of args.presses) { await press(p); await pause(500); }
+    for (const k of args.keys) { await key(k); await pause(500); }
     for (const p of args.pastes) { await paste(p); await pause(500); }
     // one action of --steps, in the page
     const act = (s) => js(`
@@ -1648,13 +2136,20 @@ function main() {
   require(path.join(appDir, 'src', 'main'));
 }
 
-// Electron's main process runs the capture; plain Node (the tests) only imports the helpers.
-if (process.type === 'browser') main();
+// Electron's main process runs the capture; plain Node (the tests) and the E2E suite's Electron main
+// (features/support/electron-main.js, which sets global.multiagentScreenshotHelpers) only import the helpers.
+if (process.type === 'browser' && !global.multiagentScreenshotHelpers) main();
 
 module.exports = {
+  DEMO_REPO,
+  demoBacklog,
+  demoDepsCache,
+  demoLocalMerge,
+  demoRoadmap,
   fileName,
   parseArgs,
   recordShot,
+  simulateChannels,
   usage,
   VIEWS,
 };

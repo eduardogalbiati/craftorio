@@ -25,10 +25,12 @@
 // The conversation is kept per project in <workspace>/backlog/<projectId>.po.jsonl until cleared.
 // Each real call's cost and tokens also go to <workspace>/backlog/product-owner.usage.jsonl, which
 // clearing does not touch: monthUsage feeds them to the monthly budget check (they are in no run).
+// #280: a line is the agents' shared record (src/agents-usage.js); every call is a one-shot session.
 //
 // Registering an issue (#117, mode 'issue'): the same conversation drafts an issue with the owner,
 // like the issue-tracker workflow's analyze + write steps in one turn (skills issue-triage and
-// issue-writing, the code analyzer's cheaper model: ISSUE_AGENT). It may ask at most two short
+// issue-writing, the code analyzer's cheaper model: ISSUE_AGENT); the draft carries its clarity score
+// (#166, skill clarity-score) with each gap as an open question. It may ask at most two short
 // questions over the whole thread; each new message revises the whole draft (ISSUE_SCHEMA). The
 // owner files it with a click (fileDraft: a new issue, or the addition appended to an existing
 // issue's body as a dated section, or as a comment) or discards it (discardDraft); both are recorded
@@ -40,6 +42,10 @@
 // sent to the platform). Clearing the conversation keeps these folders. A preview (simulated) never
 // calls gh/glab.
 //
+// A discovery card's commit (#258, src/discovery-commit.js): `proposeCommit` proposes the issues a
+// Ready card becomes (one read-only turn, mode 'commit': titles, the card's acceptance criteria as
+// tasks, complexity, workflow), kept to the card by normalizeSplit; `mock` answers with the
+// rule-based split. The owner edits and files it in the Discovery board's commit dialog.
 // Splitting (#124, src/po-split.js): the plan answer's `splits` propose 2-4 child issues for each
 // issue too big for one run; `applySplit` files them on the owner's click (the owner may move tasks
 // or merge children first) and updates the parent. Epics (#138, src/epics.js): the answer's `epics`
@@ -53,12 +59,21 @@
 // ask for groups of these issues only, with similar open issues that could join as each group's
 // `suggested` (never in its `issues`: the owner adds one with a checkbox). Closed ones are left out of
 // the groups and listed in the answer's `closed`. The user message records them (`issues`).
+//
+// Its inbox (#240, src/agent-inbox.js): `handleRequest` takes another agent's request (the Oracle's)
+// of a kind in REQUEST_KINDS. The mechanical kinds run the code of the owner's buttons, given by the
+// service (`perform`); `plan` is a question to its model (`ask`). The request and its result are in
+// the conversation, tagged `request: { from, kind, ref }`.
 
 const fs = require('fs');
 const path = require('path');
+const agentInbox = require('./agent-inbox');
+const agentsUsage = require('./agents-usage');
 const backlog = require('./backlog');
+const { isArchived } = require('./renderer/views/backlog/backlog-archive');
 const costEstimate = require('./cost-estimate');
 const DefaultWorkflow = require('./renderer/default-workflow');
+const discoveryCommit = require('./discovery-commit');
 const epics = require('./epics');
 const poCalibration = require('./renderer/po-calibration');
 const poSplit = require('./po-split');
@@ -279,11 +294,16 @@ function sizeGroup(numbers, issues, history) {
 // `defaultWorkflow` (#195): the setting; a group without a known workflow gets it (or its fallback).
 // `cost` (#205, 1..5): the Cost step it was planned with, recorded on the answer, applied to the groups
 // (see the header); `runs` (#206): the past runs, for each group's `costEstimate` and the plan's `estimateUsd`.
-function normalizeAnswer(answer, { issues, history, workflows, epics: epicList = [], selection = [], mock = false, calibration = null, defaultWorkflow = null, cost = null, runs = null, prices = {} }) {
+// `workflow` (#235): the workflow the owner chose in the drawer: every group gets it (never another
+// one), with `inputs` (the owner's choices for its options) in its inputs; the Cost step is skipped
+// when it does not apply to that workflow (poCalibration.costApplies: tests first, or no such inputs).
+function normalizeAnswer(answer, { issues, history, workflows, epics: epicList = [], selection = [], mock = false, calibration = null, defaultWorkflow = null, cost = null, runs = null, prices = {}, workflow = null, inputs = null }) {
   const numbers = new Set((issues || []).map((i) => i.number));
   const byNumber = new Map((issues || []).map((i) => [i.number, i]));
   const files = (workflows || []).map((w) => w.file);
   const fallback = files.length ? DefaultWorkflow.resolve(defaultWorkflow, files).file : '';
+  const chosen = workflow && files.includes(workflow) ? workflow : null;
+  const chosenInputs = chosen && inputs && typeof inputs === 'object' && !Array.isArray(inputs) ? inputs : {};
   const keep = (list) => [...new Set((list || []).map(Number).filter((n) => numbers.has(n)))];
   const isOpen = (n) => byNumber.get(n)?.state === 'open';
   const attached = new Set(keep(selection));
@@ -303,8 +323,8 @@ function normalizeAnswer(answer, { issues, history, workflows, epics: epicList =
     return {
       name: String(g.name || `Group ${n + 1}`),
       issues: nums,
-      workflow: files.includes(g.workflow) ? g.workflow : fallback,
-      inputs: g.inputs && typeof g.inputs === 'object' && !Array.isArray(g.inputs) ? g.inputs : {},
+      workflow: chosen || (files.includes(g.workflow) ? g.workflow : fallback),
+      inputs: { ...(g.inputs && typeof g.inputs === 'object' && !Array.isArray(g.inputs) ? g.inputs : {}), ...chosenInputs },
       reason: String(g.reason || ''),
       ...(g.mode_reason ? { modeReason: String(g.mode_reason) } : {}),
       files: (g.files || []).map(String).slice(0, 20),
@@ -316,7 +336,8 @@ function normalizeAnswer(answer, { issues, history, workflows, epics: epicList =
     };
   }).filter((g) => g.issues.length);
   const level = calibration == null ? null : poCalibration.clamp(calibration);
-  const costLevel = cost == null ? null : poCalibration.cost.clamp(cost);
+  const costOff = !!chosen && !poCalibration.costApplies((workflows || []).find((w) => w.file === chosen));
+  const costLevel = cost == null || costOff ? null : poCalibration.cost.clamp(cost);
   const planned = costedGroups(groups, { level, costLevel, issues, history, workflows, runs, prices });
   const known = planned.map((g) => g.costEstimate?.usd ?? g.estimate?.costUsd).filter((x) => x != null);
   return {
@@ -361,7 +382,8 @@ function costedGroups(groups, { level, costLevel, issues, history, workflows, ru
   if (costStep) {
     const cap = poCalibration.groupCap(level ?? poCalibration.DEFAULT, costLevel);
     if (costStep.pack) out = packGroups(out, cap, { issues, history });
-    out = out.map((g) => ({ ...g, ...costInputs(g, costStep, workflows) }));
+    // #235: a tests-first workflow's test inputs are not the Cost step's to set
+    out = out.map((g) => (poCalibration.testsFirst((workflows || []).find((w) => w.file === g.workflow) || { file: g.workflow }) ? g : { ...g, ...costInputs(g, costStep, workflows) }));
     const base = level ? poCalibration.step(level) : { maxRuns: null };
     out = calibrateGroups(out, { ...base, maxComplexity: cap, name: poCalibration.plannedFor(level ?? poCalibration.DEFAULT, costLevel) });
     if (costStep.testBatch) out = testBatchStages(out, { issues, history, workflows });
@@ -431,8 +453,9 @@ function costInputs(g, step, workflows) {
   for (const [k, v] of Object.entries(want)) if (allowed(k, v)) set[k] = v;
   const notAdjustable = [];
   if (step.cheapAgents) {
-    // the developer keeps its model (a medium effort only); the test writer, evidence and verifier get the cheaper model
-    const agentInputs = Object.keys(declared).filter((k) => /_effort$/.test(k) || (/_model$/.test(k) && !/^develop/.test(k)));
+    // the developer keeps its model and its effort (#286: developer_effort stays out until a
+    // measured run shows medium is as good); the test writer, evidence and verifier get the cheaper model
+    const agentInputs = Object.keys(declared).filter((k) => /_(effort|model)$/.test(k) && !/^develop/.test(k));
     for (const k of agentInputs) {
       const v = /_effort$/.test(k) ? CHEAP_EFFORT : CHEAP_MODEL;
       if (allowed(k, v)) set[k] = v;
@@ -523,11 +546,14 @@ const plannable = (i) => i.state === 'open' && (!i.column || i.column === 'todo'
  * workflows. Capped at MAX_REPORT characters. The issues the owner attached (`selection`, #169) come
  * first and whole, closed ones included (marked), outside the cap; the open issues then skip them.
  */
-function backlogReport({ data, activeRuns = [], history = [], workflows = [], question = '', selection = [], shared = null, defaultWorkflow = null }) {
+function backlogReport({ data, activeRuns = [], history = [], workflows = [], question = '', selection = [], shared = null, defaultWorkflow = null, workflow = null }) {
   const byDefault = DefaultWorkflow.resolve(defaultWorkflow, workflows.map((w) => w.file)).file;
+  // #235: the workflow the owner chose for this plan replaces the default
+  const mark = (file) => (workflow ? (file === workflow ? ' (chosen by the owner: every group uses it)' : '') : file === byDefault ? ' (default)' : '');
   const named = new Set([...String(question).matchAll(/#(\d+)/g)].map((m) => Number(m[1])));
   const all = data?.issues || [];
-  const attached = [...new Set(selection.map(Number))].map((n) => all.find((i) => i.number === n)).filter(Boolean);
+  // #238: an archived issue is out of the plans, even when the owner selected it
+  const attached = [...new Set(selection.map(Number))].map((n) => all.find((i) => i.number === n)).filter((i) => i && !isArchived(i));
   const issues = all.filter((i) => i.state === 'open' && !attached.includes(i));
   const issueText = (i, whole = false) => {
     const labels = (i.labels || []).map((l) => l.name).join(', ');
@@ -549,7 +575,7 @@ function backlogReport({ data, activeRuns = [], history = [], workflows = [], qu
   const stages = data?.roadmap?.stages || [];
   const sections = [
     `# Backlog of ${data?.projectId || 'the project'} (${issues.length} open issues, ${issues.filter(plannable).length} to do)`,
-    `## Workflows\n${workflows.map((w) => `- ${w.file}${w.file === byDefault ? ' (default)' : ''}: ${w.name}${w.inputs ? ` (inputs: ${Object.keys(w.inputs).join(', ')})` : ''}`).join('\n') || '(none)'}`,
+    `## Workflows\n${workflows.map((w) => `- ${w.file}${mark(w.file)}: ${w.name}${w.inputs ? ` (inputs: ${Object.keys(w.inputs).join(', ')})` : ''}`).join('\n') || '(none)'}`,
     `## Queue\n${queue.map((q) => `- ${(q.issues || [q]).map((i) => `#${i.number}`).join(' + ')} → ${q.workflowName || q.workflow}`).join('\n') || '(empty)'}`,
     `## Runs in progress\n${activeRuns.map((r) => `- ${r.runId} ${r.workflow || ''} ${r.status}${r.waiting || r.gates?.length ? ' (waiting at a gate)' : ''}${r.issues?.length ? ` issues ${r.issues.map((i) => `#${i.number ?? i}`).join(', ')}` : ''}`).join('\n') || '(none)'}`,
     `## Merged locally, not pushed\n${local && !local.error ? `${local.ahead || 0} commits ahead${local.issues?.length ? `, issues ${local.issues.map((n) => `#${n}`).join(', ')}` : ''}` : '(unknown or none)'}`,
@@ -691,6 +717,58 @@ function clearConversation(backlogDir, projectId) {
   return [];
 }
 
+// ---- its inbox (#240) -----------------------------------------------------------------------------
+// The kinds another agent may ask for; `plan` is the only judgment kind (a question to the model).
+const REQUEST_KINDS = [
+  'issue.file',
+  'issue.update',
+  'plan',
+  'queue.assign',
+  'roadmap.add',
+  'roadmap.move',
+  'roadmap.regroup',
+  'roadmap.skip',
+];
+const JUDGMENT_KINDS = ['plan'];
+// #241: the kinds that publish to the issue tracker: an Oracle request of one waits for the owner's
+// click by day (under the Night watch, its permissions decide)
+const CONFIRM_KINDS = [
+  'issue.file',
+  'issue.update',
+];
+
+/**
+ * Another agent's request (#240): { kind, params, reason, from, ref } → { ok, text, costUsd, error?, ownerTs }.
+ * `perform(kind, params)` runs a mechanical kind with the owner's buttons' code (→ { text });
+ * `ask({ question, request })` asks the model a plan question tagged with the request (→ { message }).
+ */
+function handleRequest({ backlogDir, projectId, request, perform, ask: askModel, wait, check, after }) {
+  return agentInbox.handle(request, {
+    kinds: REQUEST_KINDS,
+    judgment: JUDGMENT_KINDS,
+    role: 'po',
+    record: (message) => appendMessage(backlogDir, projectId, message),
+    perform,
+    ask: (params, tag, reason) => askModel({ question: String(params.question || reason || '').trim(), request: tag }),
+    // #241: a card waiting for the owner's click (the Night watch did not allow it), and the night log
+    wait,
+    check,
+    after,
+  });
+}
+
+/** The owner's Do it / Dismiss / Undo on a request card (#241, agent-inbox.js act): { ref, action } → { ok, text, ... }. */
+function actRequest({ backlogDir, projectId, input, perform, restore, after }) {
+  return agentInbox.act(input, {
+    history: () => readConversation(backlogDir, projectId),
+    role: 'po',
+    record: (message) => appendMessage(backlogDir, projectId, message),
+    perform,
+    restore,
+    after,
+  });
+}
+
 // The last exchanges, so a follow-up question has its context (answers as their summary only).
 function previousExchanges(messages) {
   const recent = messages.filter((m) => m.role === 'user' || m.role === 'po').slice(-PREVIOUS_EXCHANGES * 2);
@@ -744,6 +822,7 @@ const ISSUE_RULES = [
   'You are the Product Owner of this project, registering an issue with its owner in a conversation inside the orchestrator\'s Backlog screen. The owner describes it in a few words (typed, dictated, sometimes with screenshots); you draft the issue; the owner reviews the draft and files it with a click.',
   'Analyse the request with the issue-triage skill, in the project\'s code (your working directory, read-only: docs/agents/code-map.md, grep): the code involved with evidence (file:line, today\'s behaviour), the files likely to change, impact and complexity, duplicates and overlapping issues from the backlog report (open and closed), open pull requests that already cover part of it, and the grouping advice.',
   'Write the draft with the issue-writing skill: a specific title; a context grounded in the evidence; "Decision (owner): ..." for every decision the owner stated; tasks as verifiable acceptance criteria (for a UI change, UI criteria: the controls, the states, what leads); "Related: #n". Add a short "Triage" section: impact and complexity with their reasons, the estimated files (marked as an estimate) and the grouping advice. Labels: `impact:<n>`, `complexity:<n>`, the kind, `area:<...>`.',
+  'Score the draft with the clarity-score skill: end its "Triage" section with `Clarity: <n>%` ("needs grilling" below 85%) and write every gap the owner has not closed as an open question with the default you took, never as a silent assumption. The interview (Grill me) is not held here: it runs in a discovery card\'s thread.',
   `The owner is here. When the request is ambiguous in a way that changes the issue, ask at most ${MAX_QUESTIONS} short questions in the whole thread (in \`questions\`) and leave the draft's title empty; otherwise draft at once and list your assumptions in \`assumptions\`. Each new message of the owner refines the current draft: always return the whole draft again.`,
   'When the owner asks to add to an existing issue ("add this to #110"), or an open issue already covers the request (`relation: duplicate`), set `existing_issue` to its number and write in `addition` only the new part (a short context and the new tasks as a checklist), keeping what the issue already says; otherwise 0 and "".',
   'Epic: when the new issue clearly belongs to an existing epic of the report\'s Epics section, set `draft.epic` to its id; otherwise "" (and, when several issues share its theme with no epic, say so in `reply`).',
@@ -1172,10 +1251,13 @@ async function applyEpicProposal({ backlogDir, projectId, runsDir, at, key, epic
 // ---- usage: every real call, for the monthly budgets ------------------------------------------------
 const usageFile = (backlogDir) => path.join(backlogDir, 'product-owner.usage.jsonl');
 
-function recordUsage(backlogDir, { projectId, model, tokens, costUsd }) {
-  fs.mkdirSync(backlogDir, { recursive: true });
-  fs.appendFileSync(usageFile(backlogDir), `${JSON.stringify({ ts: new Date().toISOString(), projectId, provider: 'claude', model, tokens: tokens || {}, costUsd: costUsd || 0 })}\n`);
+// #280: each question is a fresh CLI call (callAgent), so every line starts a session: one-shot
+function recordUsage(backlogDir, { projectId, model, tokens, costUsd, sessionId }) {
+  agentsUsage.appendTurn(usageFile(backlogDir), { agent: 'product-owner', projectId, model, tokens, costUsd, sessionId, startReason: 'one-shot' });
 }
+
+/** Every recorded call, every project, oldest first (Analytics' Agents tab, #280; `opts`: agentsUsage.readLines'). */
+const usageLines = (backlogDir, opts) => agentsUsage.readLines(usageFile(backlogDir), opts);
 
 /**
  * The Product Owner's calls this month, every project, as sessions for usage.withPeerUsage
@@ -1183,10 +1265,8 @@ function recordUsage(backlogDir, { projectId, model, tokens, costUsd }) {
  */
 function monthUsage(backlogDir, now = new Date()) {
   const month = now.toISOString().slice(0, 7);
-  let lines = [];
-  try { lines = fs.readFileSync(usageFile(backlogDir), 'utf8').split('\n'); } catch { return []; }
-  return lines.map((l) => { try { return l ? JSON.parse(l) : null; } catch { return null; } })
-    .filter((u) => u && String(u.ts).slice(0, 7) === month)
+  return usageLines(backlogDir)
+    .filter((u) => String(u.ts).slice(0, 7) === month)
     .map((u) => ({ provider: u.provider, model: u.model, tokens: u.tokens, costUsd: u.costUsd }));
 }
 
@@ -1218,19 +1298,27 @@ function checkBudget(budget) {
  * @returns { message, messages }  the answer ({ role: 'po', text, answer | issue, model, costUsd }) and the whole conversation
  */
 // `defaultWorkflow` (#195): the setting (settings.defaultWorkflow); the plan's groups get it unless an issue needs another.
-async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns, runs, workflows, folder, agent, skillsDirs, resolveCommand, budget, mock, mode = 'plan', attachments = [], selection = [], scenario = null, onItem = null, signal = null, calibration = null, defaultWorkflow = null, cost = null, prices = {} }) {
+// `workflow` / `inputs` (#235): the workflow the owner chose in the drawer and its options: every
+// group gets them (recorded on the messages: lastWorkflow); no Cost step where it does not apply.
+async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns, runs, workflows, folder, agent, skillsDirs, resolveCommand, budget, mock, mode = 'plan', attachments = [], selection = [], scenario = null, onItem = null, signal = null, calibration = null, defaultWorkflow = null, cost = null, prices = {}, workflow = null, inputs = null, request = null }) {
   const q = String(question || '').trim();
   if (!q) throw new Error('Ask a question.');
   const byDefault = DefaultWorkflow.resolve(defaultWorkflow, (workflows || []).map((w) => w.file)).file;
   const issueMode = mode === 'issue';
+  const chosenWf = issueMode || !workflow ? null : (workflows || []).find((w) => w.file === workflow) || null;
+  const chosen = chosenWf?.file || null;
+  const costOff = !!chosenWf && !poCalibration.costApplies(chosenWf);
   const saved = poCalibration.clamp(agent?.calibration);
   const level = poCalibration.clamp(calibration, null) ?? poCalibration.fromQuestion(q) ?? saved;
   const savedCost = poCalibration.cost.clamp(agent?.cost);
-  const costLevel = poCalibration.cost.clamp(cost, null) ?? poCalibration.costFromQuestion(q) ?? savedCost;
+  const costLevel = costOff ? null : poCalibration.cost.clamp(cost, null) ?? poCalibration.costFromQuestion(q) ?? savedCost;
   const calib = issueMode ? {} : {
     calibration: level, ...(level !== saved ? { calibrationOverride: true } : {}),
-    cost: costLevel, ...(costLevel !== savedCost ? { costOverride: true } : {}),
+    ...(costLevel == null ? {} : { cost: costLevel, ...(costLevel !== savedCost ? { costOverride: true } : {}) }),
+    ...(chosen ? { workflow: chosen } : {}),
   };
+  // the owner's options, recorded on the question only (lastWorkflow)
+  const chosenInputs = chosen && inputs && typeof inputs === 'object' && !Array.isArray(inputs) && Object.keys(inputs).length ? { inputs } : {};
   // #169: the attached issues the backlog knows (plan mode only)
   const known = new Set((data?.issues || []).map((i) => i.number));
   const selected = issueMode ? [] : [...new Set((selection || []).map(Number))].filter((n) => known.has(n));
@@ -1238,11 +1326,12 @@ async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns,
   const previous = readConversation(backlogDir, projectId);
   const where = { backlogDir, projectId, runsDir };
   const thread = issueMode ? threadOf(previous, projectId) : null;
-  const tag = issueMode ? { mode: 'issue', thread } : {};
+  // #240: a plan question another agent sent (handleRequest): its messages carry the request
+  const tag = issueMode ? { mode: 'issue', thread } : request ? { request } : {};
   const record = (message) => (issueMode ? recordIssueMessage(where, message) : appendMessage(backlogDir, projectId, message));
   const staged = issueMode ? (attachments || []).filter((f) => isAttachment(backlogDir, projectId, f)).map((f) => path.resolve(f)) : [];
   const files = moveAttachments(where, thread, staged);
-  record({ role: 'user', text: q, ...tag, ...calib, ...(files.length ? { attachments: files } : {}), ...(selected.length ? { issues: selected } : {}) });
+  record({ role: 'user', text: q, ...tag, ...calib, ...chosenInputs, ...(files.length ? { attachments: files } : {}), ...(selected.length ? { issues: selected } : {}) });
   const questionsLeft = MAX_QUESTIONS - questionsAsked(previous);
   let raw;
   let costUsd = 0;
@@ -1261,10 +1350,10 @@ async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns,
       try {
         // a scenario of the other mode is ignored (the default simulated answer)
         if (scenario && (MOCK_SCENARIOS[scenario] ?? mode) === mode) {
-          raw = mockScenario(scenario, { data, question: q, previous, files, workflow: byDefault });
+          raw = mockScenario(scenario, { data, question: q, previous, files, workflow: chosen || byDefault });
           analysis = `Simulated (scenario "${scenario}"): no model was called, no code was read.`;
         } else {
-          raw = issueMode ? mockIssueAnswer({ data, question: q, previous }) : mockAnswer({ data, question: q, selection: selected, calibration: level, workflow: byDefault, cost: costLevel });
+          raw = issueMode ? mockIssueAnswer({ data, question: q, previous }) : mockAnswer({ data, question: q, selection: selected, calibration: level, workflow: chosen || byDefault, cost: costLevel });
           analysis = 'Simulated: no model was called, no code was read.';
         }
       } catch (e) { failure = e; }
@@ -1279,12 +1368,13 @@ async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns,
     } else {
       checkBudget(budget);
       let tokens;
+      let sessionId;
       const shared = issueMode ? null : await sharedFiles({ runs: (runs || []).filter((r) => !r.mock).slice(0, SHARED_FILE_RUNS), repo: folder, store: storeFor(runsDir), limit: SHARED_FILES });
-      const report = (issueMode ? issueReport : backlogReport)({ data, activeRuns, history, workflows, question: q, selection: selected, shared, defaultWorkflow: byDefault });
-      ({ raw, costUsd, model, invalid, tokens, text: analysis } = await callAgent({
-        mode, question: q, report, previous, attachments: files, selection: selected, folder, agent: issueMode ? ISSUE_AGENT : agent, skillsDirs, resolveCommand, onItem: seen, signal, calibration: level, cost: costLevel,
+      const report = (issueMode ? issueReport : backlogReport)({ data, activeRuns, history, workflows, question: q, selection: selected, shared, defaultWorkflow: byDefault, workflow: chosen });
+      ({ raw, costUsd, model, invalid, tokens, sessionId, text: analysis } = await callAgent({
+        mode, question: q, report, previous, attachments: files, selection: selected, folder, agent: issueMode ? ISSUE_AGENT : agent, skillsDirs, resolveCommand, onItem: seen, signal, calibration: level, cost: costLevel, workflow: chosen, costOff,
       }));
-      recordUsage(backlogDir, { projectId, model, tokens, costUsd });
+      recordUsage(backlogDir, { projectId, model, tokens, costUsd, sessionId });
     }
   } catch (e) {
     const partial = partialText(written);
@@ -1302,19 +1392,108 @@ async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns,
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, `${message.ts.replace(/[:.]/g, '-')}.md`), `${String(analysis || '').trim()}\n\n\`\`\`json\n${JSON.stringify(raw, null, 2)}\n\`\`\`\n`);
   } else {
-    const answer = normalizeAnswer(raw, { issues: data?.issues, history, workflows, epics: data?.epics, selection: selected, mock: !!mock, calibration: level, defaultWorkflow: byDefault, cost: costLevel, runs: (runs || []).filter((r) => !r.mock), prices });
+    const answer = normalizeAnswer(raw, { issues: data?.issues, history, workflows, epics: data?.epics, selection: selected, mock: !!mock, calibration: level, defaultWorkflow: byDefault, cost: costLevel, runs: (runs || []).filter((r) => !r.mock), prices, workflow: chosen, inputs });
     message = appendMessage(backlogDir, projectId, {
-      role: 'po', text: answer.summary, answer, model, costUsd, ...calib, ...(invalid ? { invalid } : {}),
+      role: 'po', ...tag, text: answer.summary, answer, model, costUsd, ...calib, ...(invalid ? { invalid } : {}),
     });
   }
   return { message, messages: readConversation(backlogDir, projectId) };
 }
 
+// ---- a discovery card's commit (#258) ---------------------------------------------------------------
+// The split of a Ready card into the issues it is committed as (src/discovery-commit.js files them
+// on the owner's click): the model's proposal kept to the card's acceptance criteria
+// (normalizeSplit), or the rule-based one (proposeSplit: the simulated answer, and the fallback).
+const COMMIT_SCHEMA = {
+  type: 'object',
+  required: ['issues'],
+  properties: {
+    issues: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['title', 'tasks'],
+        properties: {
+          title: { type: 'string' },
+          tasks: { type: 'array', items: { type: 'string' } },
+          complexity: { type: 'integer' },
+          workflow: { type: 'string' },
+          reason: { type: 'string' },
+        },
+      },
+    },
+  },
+};
+
+const COMMIT_RULES = [
+  'You are the Product Owner of this project. A discovery card reached Ready and its owner commits it to the backlog: propose the issues it becomes, from the card below and, when you need to, from the project\'s code (your working directory, read-only: docs/agents/code-map.md, grep).',
+  'One issue when one run can deliver the card; two or more when its parts can ship on their own, touch unrelated areas of the code or hold more than about eight tasks. List the issues in the order to deliver them.',
+  'Each issue has a title written with the issue-writing skill, the card\'s acceptance criteria it takes as `tasks` (copied as written; every criterion in exactly one issue, none dropped or invented), its `complexity` (1 to 5), the `workflow` that implements it (a file of the Workflows list; the default unless the issue needs another) and, when the card is split, a one-line `reason`.',
+  'You never file issues and never start runs: the owner edits your proposal and files it with a click. Write in English.',
+].join('\n');
+
+function commitReport({ card, tasks, workflows, workflow }) {
+  return [
+    `## Discovery card ${card.id}: ${card.title}`,
+    `Type: ${card.type}. Clarity: ${card.clarity?.score ?? 'not scored'}%.`,
+    `### Document\n${clip(card.document, MAX_REPORT) || '(empty)'}`,
+    `### Acceptance criteria (the tasks to hand out)\n${tasks.length ? tasks.map((t) => `- [ ] ${t}`).join('\n') : '(none written: derive the tasks from the document)'}`,
+    `## Workflows\n${(workflows || []).map((w) => `- \`${w.file}\`${w.file === workflow ? ' (default)' : ''}: ${w.name || w.file}`).join('\n')}`,
+  ].join('\n\n');
+}
+
+/**
+ * The Product Owner's proposal for committing a discovery card: the issues it becomes.
+ * `mock`: the rule-based proposal (no model call, no cost). The other options are ask's.
+ * @returns {Promise<{ split: { issues: { title, tasks, complexity, workflow, reason }[] }, model: string, costUsd: number, invalid?: string }>}
+ */
+async function proposeCommit({ backlogDir, projectId, card, workflows, defaultWorkflow = null, folder, agent, skillsDirs, resolveCommand, budget, mock }) {
+  const files = (workflows || []).map((w) => w.file);
+  const workflow = DefaultWorkflow.resolve(defaultWorkflow, files).file;
+  if (mock) return { split: discoveryCommit.proposeSplit(card, { workflow }), model: 'simulated', costUsd: 0 };
+  checkBudget(budget);
+  const report = commitReport({ card, tasks: discoveryCommit.cardTasks(card), workflows, workflow });
+  const { raw, costUsd, model, invalid, tokens, sessionId } = await callAgent({ mode: 'commit', report, folder, agent, skillsDirs, resolveCommand });
+  recordUsage(backlogDir, { projectId, model, tokens, costUsd, sessionId });
+  return { split: discoveryCommit.normalizeSplit(raw, card, { workflow, workflows: files }), model, costUsd, ...(invalid ? { invalid } : {}) };
+}
+
+// What each mode of a Product Owner turn brings: its skills, rules, answer schema and step id.
+const TURNS = {
+  commit: { skills: ['issue-writing'], rules: COMMIT_RULES, schema: COMMIT_SCHEMA, stepId: 'product-owner-commit', fallback: () => ({ issues: [] }) },
+  issue: {
+    skills: ['issue-triage', 'issue-writing', 'clarity-score'], rules: ISSUE_RULES, schema: ISSUE_SCHEMA, stepId: 'product-owner-issue',
+    fallback: (prose) => ({ reply: prose, questions: [], draft: { title: '', body: '', labels: [], related: [] }, duplicates: [], existing_issue: 0, addition: '', assumptions: [] }),
+  },
+  plan: {
+    skills: ['backlog-product-owner'], rules: RULES, schema: ANSWER_SCHEMA, stepId: 'product-owner',
+    fallback: (prose) => ({ summary: prose, groups: [], conflicts: [], enrich: [], splits: [], epics: {} }),
+  },
+};
+
 // One read-only Claude Code turn in the project folder. An answer that does not validate is kept as
 // prose (no second call: one call per question). Mode 'issue': the issue skills, ISSUE_SCHEMA, and
 // read access to the attachments' folder. A plan turn states its calibration (#189) and its Cost step
-// (#205) after the rules.
-async function callAgent({ mode = 'plan', question, report, previous, attachments = [], selection = [], folder, agent, skillsDirs, resolveCommand, onItem = () => {}, signal = null, calibration = null, cost = null }) {
+// (#205) after the rules. Mode 'commit' (#258): the card's report only, COMMIT_SCHEMA.
+// #235: the prompt's section for the workflow the owner chose (it replaces the default; the
+// orchestrator puts every group on it and adds the owner's options to the groups' inputs)
+function workflowSection(workflow, costOff) {
+  return [
+    `## Workflow: ${workflow} (chosen by the owner)`,
+    `The owner fixed the workflow of this plan: give every group \`${workflow}\`, never another workflow and no test-batch stage. The owner's choices for its options are added to every group's inputs: do not set them yourself.`,
+    ...(costOff ? ['This workflow writes its acceptance tests first and runs them every time: there is no Cost step for this plan; do not name one (no "Economy" or "Generous") in the summary.'] : []),
+  ].join('\n');
+}
+
+// #235: the workflow (and its options) last chosen in the drawer for the project, as its plan
+// questions recorded them: { workflow, inputs }, or null (the live roadmap's refill plans with it)
+function lastWorkflow(backlogDir, projectId) {
+  const list = readConversation(backlogDir, projectId);
+  for (let i = list.length - 1; i >= 0; i--) if (list[i].role === 'user' && list[i].workflow) return { workflow: list[i].workflow, inputs: list[i].inputs || {} };
+  return null;
+}
+
+async function callAgent({ mode = 'plan', question = '', report, previous = [], attachments = [], selection = [], folder, agent, skillsDirs, resolveCommand, onItem = () => {}, signal = null, calibration = null, cost = null, workflow = null, costOff = false }) {
   const { extractJson, validateSchema, render } = require('./engine/workflow');
   const { runTurn, isImagePath } = require('./engine/providers');
   const { resolveSkill, skillPrompt } = require('./skills');
@@ -1324,8 +1503,10 @@ async function callAgent({ mode = 'plan', question, report, previous, attachment
   if (!resolveCommand(provider.command)) throw new Error(`The Product Owner needs ${provider.command}, which is not installed.`);
   if (!folder || !fs.existsSync(folder)) throw new Error('The project has no folder on this machine: the Product Owner reads its code there.');
   const issueMode = mode === 'issue';
-  const schema = issueMode ? ISSUE_SCHEMA : ANSWER_SCHEMA;
-  const skills = (issueMode ? ['issue-triage', 'issue-writing'] : ['backlog-product-owner']).map((s) => resolveSkill(skillsDirs, s));
+  const planMode = mode === 'plan';
+  const turn = TURNS[mode] || TURNS.plan;
+  const { schema } = turn;
+  const skills = turn.skills.map((s) => resolveSkill(skillsDirs, s));
   const readOnly = providerArgs(provider.type, { caps: normalize({ tools: ['read'] }) }).args;
   // images go as the turn's attachments (#129: checked against the limits, Read on their folder);
   // other files are listed with read access to their folder
@@ -1335,34 +1516,33 @@ async function callAgent({ mode = 'plan', question, report, previous, attachment
   const extraArgs = dedupeFlags([...readOnly, ...dirs, ...skills.flatMap((skill) => (provider.skill_args || []).map((x) => render(x, { skill_dir: skill.path })))], provider.args || []);
   const prompt = [
     ...skills.map(skillPrompt),
-    issueMode ? ISSUE_RULES : RULES,
-    issueMode ? '' : poCalibration.promptSection(calibration ?? agent?.calibration),
-    issueMode ? '' : poCalibration.costPromptSection(cost ?? agent?.cost, poCalibration.clamp(calibration ?? agent?.calibration)),
+    turn.rules,
+    planMode ? poCalibration.promptSection(calibration ?? agent?.calibration) : '',
+    planMode && !costOff ? poCalibration.costPromptSection(cost ?? agent?.cost, poCalibration.clamp(calibration ?? agent?.calibration)) : '',
+    planMode && workflow ? workflowSection(workflow, costOff) : '',
     selection.length ? SELECTION_RULES : '',
     report,
-    issueMode ? issueContext(previous) : previousExchanges(previous),
-    issueMode ? `## The owner's new message\n${question}` : `## The owner's question\n${question}`,
+    issueMode ? issueContext(previous) : planMode ? previousExchanges(previous) : '',
+    issueMode ? `## The owner's new message\n${question}` : planMode ? `## The owner's question\n${question}` : '',
     others.length ? `## Files the owner attached (read them)\n${others.map((f) => `- ${f}`).join('\n')}` : '',
     `\n---\nAt the end of your response you MUST include a \`\`\`json block with an object that validates against this JSON Schema:\n\`\`\`json\n${JSON.stringify(schema, null, 2)}\n\`\`\``,
   ].filter(Boolean).join('\n\n');
   const res = await runTurn({
     provider, model: agent.model, effort: agent.effort && agent.effort !== 'default' ? agent.effort : undefined, prompt, cwd: folder, extraArgs, attachments: images,
-    timeoutMs: 15 * 60e3, render, hint: { stepId: issueMode ? 'product-owner-issue' : 'product-owner', visit: 1, agent: 'product-owner', schema }, onItem, signal,
+    timeoutMs: 15 * 60e3, render, hint: { stepId: turn.stepId, visit: 1, agent: 'product-owner', schema }, onItem, signal,
   });
   let raw;
   let errs;
   try { raw = extractJson(res.text); errs = validateSchema(raw, schema); } catch (e) { errs = [e.message]; }
   if (errs.length) {
     const prose = String(res.text || '').replace(/```json[\s\S]*$/, '').trim() || 'The answer could not be read.';
-    const fallback = issueMode
-      ? { reply: prose, questions: [], draft: { title: '', body: '', labels: [], related: [] }, duplicates: [], existing_issue: 0, addition: '', assumptions: [] }
-      : { summary: prose, groups: [], conflicts: [], enrich: [], splits: [], epics: {} };
-    return { raw: fallback, costUsd: res.costUsd || 0, tokens: res.usage, model: agent.model, invalid: errs.join('; '), text: res.text || '' };
+    return { raw: turn.fallback(prose), costUsd: res.costUsd || 0, tokens: res.usage, sessionId: res.providerSessionId || null, model: agent.model, invalid: errs.join('; '), text: res.text || '' };
   }
-  return { raw, costUsd: res.costUsd || 0, tokens: res.usage, model: agent.model, invalid: null, text: res.text || '' };
+  return { raw, costUsd: res.costUsd || 0, tokens: res.usage, sessionId: res.providerSessionId || null, model: agent.model, invalid: null, text: res.text || '' };
 }
 
 module.exports = {
+  actRequest,
   ANSWER_SCHEMA,
   applyEpicProposal,
   applySplit,
@@ -1371,14 +1551,17 @@ module.exports = {
   calibrateGroups,
   clearConversation,
   complexityOf,
+  CONFIRM_KINDS,
   costedGroups,
   costInputs,
   currentDraft,
   discardDraft,
   estimate,
   fileDraft,
+  handleRequest,
   ISSUE_AGENT,
   ISSUE_SCHEMA,
+  lastWorkflow,
   MOCK_SCENARIOS,
   mockAnswer,
   mockIssueAnswer,
@@ -1387,10 +1570,13 @@ module.exports = {
   normalizeAnswer,
   normalizeIssueAnswer,
   packGroups,
+  proposeCommit,
   readConversation,
+  REQUEST_KINDS,
   runHistory,
   saveAttachment,
   SELECTION_RULES,
   sizeGroup,
   testBatchStages,
+  usageLines,
 };

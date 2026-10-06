@@ -321,6 +321,29 @@ test('renderWorkflowDefinitions: the search box narrows workflows and pipelines 
   helpers.wfDefs.query = '';
 });
 
+test('renderWorkflowDefinitions: the Pipelines tab (#254) shows the pipelines alone; the Definitions tab shows both', () => {
+  const workflows = [workflow('a.yaml', 'Alpha', 'plan'), workflow('b.yaml', 'Beta', 'build')];
+  const pipelines = [{ file: 'p1.yaml', name: 'Release chain', category: 'build', stages: [{ workflow: 'a.yaml', when: null, map: {} }] }];
+  const { sandbox, helpers, box } = loadDefs({ workflows, pipelines });
+  sandbox.state.workflowsTab = 'pipelines';
+  helpers.renderWorkflowDefinitions();
+  assert.match(box.innerHTML, /Release chain/);
+  assert.doesNotMatch(box.innerHTML, />Beta</);
+  sandbox.state.workflowsTab = 'definitions';
+  helpers.renderWorkflowDefinitions();
+  assert.match(box.innerHTML, /Release chain/);
+  assert.match(box.innerHTML, /Beta/);
+});
+
+test('renderWorkflowDefinitions: the Pipelines tab with no pipeline shows its empty state, though workflows exist', () => {
+  const { sandbox, helpers, box, filters } = loadDefs({ workflows: [workflow('a.yaml', 'Alpha', 'plan')], pipelines: [] });
+  sandbox.state.workflowsTab = 'pipelines';
+  helpers.renderWorkflowDefinitions();
+  assert.match(box.innerHTML, /No pipelines yet/);
+  assert.doesNotMatch(box.innerHTML, /Alpha/);
+  assert.equal(filters.innerHTML, '');
+});
+
 test('renderWorkflowDefinitions: custom workflows sort after bundled ones within their section', () => {
   const workflows = [workflow('z.yaml', 'Zzz custom', 'build', 'custom'), workflow('a.yaml', 'Aaa bundled', 'build', 'default')];
   const { helpers, box } = loadDefs({ workflows });
@@ -397,4 +420,17 @@ test('showWorkflowDefinition: resets the section and the search box so a filtere
   assert.equal(helpers.wfDefs.query, '');
   assert.equal(search.value, '');
   assert.deepEqual(calls.showView, [['workflows']]);
+});
+
+// ---------------------------------------------------------------------------
+// #286: the Workflows card shows an effort its provider never passes
+// ---------------------------------------------------------------------------
+test('workflowCard (#286): each load warning is a "Warning: ..." line (data-testid workflow-warning); none, no line', () => {
+  const { helpers } = loadDefs();
+  const base = { file: 'wf.yaml', name: 'WF', description: 'Builds things.', agents: {}, steps: [] };
+  const html = helpers.workflowCard({ ...base, warnings: ['the effort of reviewer is not passed: its provider has no effort_args'] });
+  assert.equal((html.match(/data-testid="workflow-warning"/g) || []).length, 1);
+  assert.match(html, /Warning: the effort of reviewer is not passed: its provider has no effort_args/);
+  assert.doesNotMatch(helpers.workflowCard({ ...base, warnings: [] }), /workflow-warning/);
+  assert.doesNotMatch(helpers.workflowCard(base), /workflow-warning/);
 });

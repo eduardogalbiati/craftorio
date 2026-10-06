@@ -447,6 +447,180 @@ test('advance pauses a roadmap scoped to a stage no longer in it, clearing the s
   assert.match(after.error, /no longer in the roadmap/);
 });
 
+// ---- #237: a stage run on its own that ends while paused drops its scope; Resume never fails ------
+
+const doneRun = () => ({ status: 'success', merged: true });
+
+test('#237 a paused roadmap whose scoped stage ends drops the scope with the same "Stage N done" message as a running one, and starts nothing', () => {
+  const stages = () => [
+    { id: 's1', items: [mkItem('i1', 1)] },
+    { id: 's2', items: [mkItem('i2', 2, { status: 'running', runId: 'r2' })] },
+    { id: 's3', items: [mkItem('i3', 3)] },
+  ];
+  const { roadmap: whileRunning } = roadmaps.advance(mkRoadmap(stages(), { scope: { stage: 's2' } }), { runOf: doneRun });
+  const { roadmap: after, start } = roadmaps.advance(mkRoadmap(stages(), { state: 'paused', scope: { stage: 's2' } }), { runOf: doneRun });
+  assert.deepEqual(start, []);
+  assert.equal(after.state, 'paused');
+  assert.equal(after.scope, null);
+  assert.equal(after.pausedBy, null);
+  assert.match(after.error, /Stage 2 done/);
+  assert.equal(after.error, whileRunning.error);
+  assert.equal(after.stages[1].items[0].status, 'done');
+  assert.equal(after.stages[0].items[0].status, 'planned');
+  assert.equal(after.stages[2].items[0].status, 'planned');
+});
+
+test('#237 a paused roadmap whose scoped stage has only done or skipped items drops the scope on the next step, starting nothing', () => {
+  const roadmap = mkRoadmap([
+    { id: 's1', items: [mkItem('i1', 1)] },
+    { id: 's2', items: [mkItem('i2', 2, { status: 'done', runId: 'r2' }), mkItem('i4', 4, { status: 'skipped' })] },
+  ], { state: 'paused', scope: { stage: 's2' } });
+  const { roadmap: after, start } = roadmaps.advance(roadmap, { runOf: (id) => (id === 'r2' ? doneRun() : null) });
+  assert.deepEqual(start, []);
+  assert.equal(after.state, 'paused');
+  assert.equal(after.scope, null);
+  assert.match(after.error, /Stage 2 done.*first unfinished stage/);
+  assert.equal(after.stages[0].items[0].status, 'planned');
+});
+
+test('#237 Resume with the scope of a finished stage does not refuse: the scope goes and the roadmap runs from its first unfinished stage', (t) => {
+  const dir = tmp(t);
+  roadmaps.writeRoadmap(dir, 'proj', mkRoadmap([
+    { id: 's1', items: [mkItem('i1', 1, { status: 'done' })] },
+    { id: 's2', items: [mkItem('i2', 2, { status: 'done' }), mkItem('i4', 4, { status: 'skipped' })] },
+    { id: 's3', items: [mkItem('i3', 3)] },
+  ], { state: 'paused', scope: { stage: 's2' } }));
+  const after = roadmaps.setState(dir, 'proj', 'running', { stage: 's2' });
+  assert.equal(after.state, 'running');
+  assert.equal(after.scope, null);
+  const { roadmap: next, start } = roadmaps.advance(after, { runOf: () => null });
+  assert.deepEqual(start.map((x) => x.id), ['i3']);
+  assert.equal(next.state, 'running');
+});
+
+test('#237 Resume with the scope of a finished stage on a roadmap with nothing left: no refusal, the scope goes and the roadmap ends as done', (t) => {
+  const dir = tmp(t);
+  roadmaps.writeRoadmap(dir, 'proj', mkRoadmap([
+    { id: 's1', items: [mkItem('i1', 1, { status: 'done' })] },
+    { id: 's2', items: [mkItem('i2', 2, { status: 'skipped' })] },
+  ], { state: 'paused', scope: { stage: 's2' } }));
+  let after;
+  try { after = roadmaps.setState(dir, 'proj', 'running', { stage: 's2' }); } catch (e) {
+    assert.doesNotMatch(e.message, /Every item of this stage/);
+    throw e;
+  }
+  assert.equal(after.scope, null);
+  const { roadmap: next, start } = roadmaps.advance(after, { runOf: () => null });
+  assert.deepEqual(start, []);
+  assert.equal(next.state, 'done');
+  assert.equal(next.scope, null);
+});
+
+test('#237 Resume with the scope of a stage no longer in the roadmap drops the scope and runs from the first unfinished stage', (t) => {
+  const dir = tmp(t);
+  roadmaps.writeRoadmap(dir, 'proj', mkRoadmap([
+    { id: 's1', items: [mkItem('i1', 1, { status: 'done' })] },
+    { id: 's3', items: [mkItem('i3', 3)] },
+  ], { state: 'paused', scope: { stage: 'gone' } }));
+  const after = roadmaps.setState(dir, 'proj', 'running', { stage: 'gone' });
+  assert.equal(after.state, 'running');
+  assert.equal(after.scope, null);
+  const { start } = roadmaps.advance(after, { runOf: () => null });
+  assert.deepEqual(start.map((x) => x.id), ['i3']);
+});
+
+test('#237 Run this stage on another stage while paused with an old finished scope is allowed and replaces the scope', (t) => {
+  const dir = tmp(t);
+  roadmaps.writeRoadmap(dir, 'proj', mkRoadmap([
+    { id: 's1', items: [mkItem('i1', 1)] },
+    { id: 's2', items: [mkItem('i2', 2, { status: 'done' })] },
+    { id: 's3', items: [mkItem('i3', 3)] },
+  ], { state: 'paused', scope: { stage: 's2' } }));
+  const after = roadmaps.setState(dir, 'proj', 'running', { stage: 's3' });
+  assert.equal(after.state, 'running');
+  assert.deepEqual(after.scope, { stage: 's3' });
+  const { start } = roadmaps.advance(after, { runOf: () => null });
+  assert.deepEqual(start.map((x) => x.id), ['i3']);
+});
+
+test('#237 guard: pausing a scoped stage with planned items keeps the scope, and resuming it starts only that stage', (t) => {
+  const dir = tmp(t);
+  roadmaps.writeRoadmap(dir, 'proj', mkRoadmap([
+    { id: 's1', items: [mkItem('i1', 1)] },
+    { id: 's2', items: [mkItem('i2', 2, { status: 'done' }), mkItem('i4', 4)] },
+    { id: 's3', items: [mkItem('i3', 3)] },
+  ], { state: 'running', scope: { stage: 's2' } }));
+  const paused = roadmaps.setState(dir, 'proj', 'paused');
+  assert.deepEqual(paused.scope, { stage: 's2' });
+  const stepped = roadmaps.advance(paused, { runOf: () => null }).roadmap;
+  assert.deepEqual(stepped.scope, { stage: 's2' });
+  assert.equal(stepped.state, 'paused');
+  const resumed = roadmaps.setState(dir, 'proj', 'running', { stage: 's2' });
+  assert.deepEqual(resumed.scope, { stage: 's2' });
+  const { start } = roadmaps.advance(resumed, { runOf: () => null });
+  assert.deepEqual(start.map((x) => x.id), ['i4']);
+});
+
+test('#237 a paused roadmap whose scoped stage ends with no other stage left ends as done, starting nothing', () => {
+  const roadmap = mkRoadmap([
+    { id: 's1', items: [mkItem('i1', 1, { status: 'done' })] },
+    { id: 's2', items: [mkItem('i2', 2, { status: 'running', runId: 'r2' })] },
+  ], { state: 'paused', scope: { stage: 's2' } });
+  const { roadmap: after, start } = roadmaps.advance(roadmap, { runOf: doneRun });
+  assert.deepEqual(start, []);
+  assert.equal(after.state, 'done');
+  assert.equal(after.scope, null);
+  assert.equal(after.error, null);
+});
+
+test('#237 a roadmap paused by the budget whose scoped stage ends drops the scope with the "Stage N done" message, starting nothing', () => {
+  const roadmap = mkRoadmap([
+    { id: 's1', items: [mkItem('i1', 1)] },
+    { id: 's2', items: [mkItem('i2', 2, { status: 'running', runId: 'r2' })] },
+  ], { state: 'paused', scope: { stage: 's2' }, error: 'Budget reached: $58.40 of $60 today.', budget: { period: 'day', spentUsd: 58.4, limitUsd: 60 } });
+  const { roadmap: after, start } = roadmaps.advance(roadmap, { runOf: doneRun });
+  assert.deepEqual(start, []);
+  assert.equal(after.state, 'paused');
+  assert.equal(after.scope, null);
+  assert.match(after.error, /Stage 2 done/);
+});
+
+test('#237 a paused roadmap whose scope names a stage no longer in the roadmap drops it and stays paused, starting nothing', () => {
+  const roadmap = mkRoadmap([
+    { id: 's1', items: [mkItem('i1', 1)] },
+  ], { state: 'paused', scope: { stage: 'gone' } });
+  const { roadmap: after, start } = roadmaps.advance(roadmap, { runOf: () => null });
+  assert.deepEqual(start, []);
+  assert.equal(after.state, 'paused');
+  assert.equal(after.scope, null);
+  assert.equal(after.stages[0].items[0].status, 'planned');
+});
+
+test('#237 guard: a roadmap paused by a failed item of its scoped stage keeps the scope and pausedBy', () => {
+  const roadmap = mkRoadmap([
+    { id: 's1', items: [mkItem('i1', 1)] },
+    { id: 's2', items: [mkItem('i2', 2, { status: 'failed', runId: 'r2' })] },
+  ], { state: 'paused', scope: { stage: 's2' }, pausedBy: 'i2', error: 'i2 failed' });
+  const { roadmap: after, start } = roadmaps.advance(roadmap, { runOf: (id) => (id === 'r2' ? { status: 'failed' } : null) });
+  assert.deepEqual(start, []);
+  assert.equal(after.state, 'paused');
+  assert.equal(after.pausedBy, 'i2');
+  assert.deepEqual(after.scope, { stage: 's2' });
+});
+
+test('#237 guard: Run this stage on a finished stage that is not the roadmap\'s scope is still refused', (t) => {
+  const dir = tmp(t);
+  const stages = [
+    { id: 's1', items: [mkItem('i1', 1, { status: 'done' })] },
+    { id: 's2', items: [mkItem('i2', 2)] },
+  ];
+  roadmaps.writeRoadmap(dir, 'proj', mkRoadmap(stages, { state: 'paused', scope: { stage: 's2' } }));
+  assert.throws(() => roadmaps.setState(dir, 'proj', 'running', { stage: 's1' }), /Every item of this stage is done or skipped/);
+  assert.throws(() => roadmaps.setState(dir, 'proj', 'running', { stage: 'gone' }), /no longer in the roadmap/);
+  roadmaps.writeRoadmap(dir, 'proj', mkRoadmap(stages, { state: 'planned', scope: null }));
+  assert.throws(() => roadmaps.setState(dir, 'proj', 'running', { stage: 's1' }), /Every item of this stage is done or skipped/);
+});
+
 // ---- statuses derived from the runs, whatever the roadmap state (#112) --------------------
 
 test('a paused roadmap still refreshes its items\' statuses from their runs; it never starts new ones', () => {

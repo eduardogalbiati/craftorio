@@ -176,7 +176,6 @@ const START_VIEWS = [
   'sessions',
   'settings',
   'skills',
-  'supervisor',
   'usage',
   'workflows',
 ];

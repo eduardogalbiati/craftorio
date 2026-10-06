@@ -2,7 +2,7 @@
 name: ui-conventions
 description: How a screen change is built, captured and checked for how it looks and is used, not only for what it does - reuse the project's shared components, controls that follow the data, state as badges, the primary information first, explicit Save/Cancel; the interaction states to capture; and the visual review of the screenshots (ui_findings). Use when a change touches a screen, a dialog, a component or styles.
 summary: "UI changes: shared components, controls that follow the data, states to capture, and the visual review of the screenshots (ui_findings)"
-used_by: "developer (software-development workflows, when the change touches the UI); evidence (the visual review)"
+used_by: "developer (software-development workflows, when the change touches the UI); evidence (the visual review); ui_reviewer (ai-development-local-hero, with design-system)"
 ---
 
 # UI conventions
@@ -29,10 +29,20 @@ screen; they are skipped for changes without UI. You run unattended: record a de
   a muted help line from the field's description. A multi-field edit has explicit **Save** /
   **Cancel**; a single obvious choice (a toggle) may save at once. Nothing saves on every keystroke.
 - **Focus on the control**, not on a whole row or card; keyboard reachable, visible focus.
+- **Stable locators**: every new control an end-to-end scenario could use gets a semantic element
+  or an ARIA `role` with an accessible name (a `<button>` with its text, `aria-label` on an icon
+  button), and a `data-testid` (kebab-case, named after what it is, e.g. `gate-approve`) on the
+  controls and containers a step asserts on. E2E steps locate by role and test id, never by CSS
+  classes or layout.
 - **Quiet by default**: optional fields appear when set or when asked ("add note"), not as empty
   inputs everywhere. Edit areas look like edit areas (a framed panel), not like raw controls.
 - **States**: every screen you add or change has its empty state, its edit state, its error state
   and its running/loading state designed, not left to chance.
+- **One click, one way back**: an action that removes or replaces something in one click offers
+  **Undo** in the toast that confirms it (what was removed returns at its place, the previous order
+  or name comes back), or asks first when it cannot be undone. The toast says what changed in the
+  screen's own words ("Removed #279 from the roadmap"), and Undo says why when it can no longer be
+  done; it never undoes more than that one action.
 
 ## 2. Developer: build, log, plan the capture
 

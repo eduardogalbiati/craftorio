@@ -15,21 +15,27 @@ used_by: "test writer, E2E runner"
 | `playwright-bdd` in devDependencies | playwright-bdd | `features/` (its config's `features`) | `npx bddgen` then `npx playwright test --list --grep "@issue-<n>"` | `npx bddgen && npx playwright test <generated spec of the file>` |
 | `@cucumber/cucumber` in devDependencies | Cucumber.js (+ Playwright if present) | `features/` (`cucumber.js` config) | `npx cucumber-js --dry-run --tags "@issue-<n>"` | `npx cucumber-js <file>.feature` |
 | `@badeball/cypress-cucumber-preprocessor` | Cypress + Cucumber | `cypress/e2e/` | read the feature against the step definitions (no dry run); say so in `e2e_note` | `npx cypress run --spec <file>.feature` |
-| an Electron app with `scripts/smoke.js` and no BDD framework | node:test steps driving the smoke/screenshot scripts | `test/e2e/` | `node --check test/e2e/<file>.test.js` | `node --test test/e2e/<file>.test.js` |
 
 - **No E2E framework yet**: default to **Playwright + Cucumber.js** (`@cucumber/cucumber`,
   `@playwright/test`), feature files in `features/`, step definitions in `features/steps/`.
   Record the assumption in `e2e_note`. Adding the devDependencies is part of the tests: add them
   with the package manager (`npm install -D …`) and commit `package.json` and the lockfile; the
   engine installs the new lockfile into the shared dependency cache after your turn.
-- An Electron app that already has a scripted UI check (this orchestrator: `scripts/smoke.js`,
-  `npm run screenshot`): write the `.feature` file and step definitions that drive those scripts
-  rather than adding a browser framework.
+- An Electron app (this orchestrator, #222): playwright-bdd with Playwright's `_electron`. Reuse
+  the project's launch fixture (here `features/steps/fixtures.js`: `Given the app is open`, a
+  fresh simulated demo workspace) and its existing steps before writing new ones; one feature file
+  per area, every scenario tagged `@issue-<n>`, a critical journey also `@smoke`. Steps assert
+  through `getByRole` / `getByTestId`; a control a step needs without a role or test id gets a
+  `data-testid` in the renderer (ask for it in `e2e_note` when the renderer is not yours). Visual
+  baselines (`toHaveScreenshot`) only on purpose, for a key screen; never rewrite one to make a
+  scenario pass.
 - **Development run** (the test step of software-development / -local-hero): write the scenarios
   and check that they parse with the command of the table; never start Electron, the app or a
   browser for them, and never install browsers. Each is reported `pending` (run at release).
-- **Release run** (e2e-release): run the whole suite one feature file at a time, within the time
-  budget the prompt gives. Browsers: `npx playwright install chromium` only when the project uses
+- **Release run** (e2e-release): the orchestrator runs the whole suite itself (a suite step, no
+  agent); you are called only for a red scenario, with its log, the JSON results and its trace.
+  When asked to run feature files yourself, run them one at a time, within the time budget the
+  prompt gives. Browsers: `npx playwright install chromium` only when the project uses
   Playwright and no browser is installed; when it fails, the UI scenarios are `skipped`
   (environment). `npm run screenshot` waits for the machine's screenshot slot: one Electron
   screenshot at a time across all runs.

@@ -160,6 +160,26 @@ test('resumeSpec and runReport read a run folder', (t) => {
   assert.match(report, /▶ check \(visit 1\)/);
 });
 
+test('resumeSpec: cliTotals keeps the last running total of each Claude CLI session (#233)', (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'run-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const ev = (o) => JSON.stringify({ ts: '2026-09-27T10:00:00Z', ...o });
+  const snap = (agent, cli, total) => ({ agent, provider: 'claude', provider_session_id: cli, ...(total != null ? { cli_total_cost_usd: total } : {}) });
+  fs.writeFileSync(path.join(dir, 'events.jsonl'), [
+    ev({ type: 'workflow.started', workflow: 'wf', file: 'wf.yaml', inputs: { task: 'x' } }),
+    ev({ type: 'step.started', step_id: 'check', visit: 1 }),
+    ev({ type: 'session.message_received', session_id: 's1', step_id: 'check', cost_usd: 3.21, session: snap('a', 'ps-1', 3.21) }),
+    ev({ type: 'session.message_received', session_id: 's1', step_id: 'check', cost_usd: 0.35, session: snap('a', 'ps-1', 3.56) }),
+    ev({ type: 'session.message_received', session_id: 's2', step_id: 'check', cost_usd: 1, session: snap('b', 'ps-2', null) }),
+    ev({ type: 'step.finished', step_id: 'check', visit: 1, output: { verdict: 'pass' } }),
+    ev({ type: 'step.started', step_id: 'after', visit: 1 }),
+    ev({ type: 'workflow.finished', status: 'failed', error: 'boom' }),
+  ].join('\n') + '\n');
+  const spec = supervisor.resumeSpec(dir, 'after');
+  assert.deepEqual(spec.cliTotals, { 'ps-1': 3.56 }, 'the last total of ps-1; ps-2 recorded none (a run before the fix)');
+  assert.deepEqual(spec.sessions, { a: 'ps-1', b: 'ps-2' });
+});
+
 test('resumeSpec (#175) collects a `type: workflow` step\'s child runs, by run id, the latest status for each', (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'run-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));

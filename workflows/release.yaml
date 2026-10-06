@@ -1,0 +1,403 @@
+# =============================================================================
+# Workflow: Release (#260)
+# -----------------------------------------------------------------------------
+#   unit (suite, no agent) ──(green)──► e2e (suite, no agent) ──(green)──► ship (you)
+#     ▲   │                               │                                  ├─ Ship ─► push the local base + tag ─► end
+#     │   └──────────(red)──► fix ◄─(red)─┘                                  └─ Hold ─► end (nothing pushed)
+#     └──────────────────── (developer)
+#        at most max_rounds fixes per suite, then regression_failed (you)
+#
+# What it is for: the work of many runs merges into the LOCAL base one after another, and nothing
+# checks their sum. A release run checks it (regressions across runs) and asks you, and only you,
+# whether it goes out. It starts when a roadmap reaches a cut line ("Release here", the stages
+# after the line wait for it) or from Code & Build › Releases.
+#
+# 1. unit:  a suite step (#177: no agent, no tokens): the project's WHOLE unit suite in the run's own
+#           worktree of the local base.
+# 2. e2e:   a suite step: the project's WHOLE end-to-end suite (`e2e_command`, no filter; skipped
+#           with `e2e_suite: skip`, for a project without an E2E suite).
+#           Both suites run with `base_check: false`: the worktree is the base, so nothing that
+#           fails there is "pre-existing".
+# 3. fix:   only for a red suite: the developer gets the history since the last release (the runs,
+#           their issues, decisions and handoff notes, the commits), finds the change that broke it
+#           and fixes the production code on the run's branch; then both suites run again.
+# 4. ship:  your gate, never answered by automation (a decision gate: not the supervisor, no
+#           timeout, not --auto-approve). Ship: a fix made here is merged into the local base
+#           (merge: local), the local base is pushed to origin (never forced) and tagged with the
+#           release's name, then the optional build command runs (`ship:`, src/releases.js). A
+#           local base that moved since the suites ran (another run merged) is refused: it would
+#           ship commits nobody checked. Hold:
+#           the run ends, nothing is pushed or tagged; its branch keeps a fix, resume the run from
+#           this gate to ship later.
+# The release notes are edited in Code & Build › Releases until you ship; shipping records the
+# release there and marks its issues Released.
+# =============================================================================
+
+apiVersion: multiagent/v1
+kind: Workflow
+
+metadata:
+  name: Release
+  version: 0.1.0
+  description: Checks what merged locally since the last release with the project's whole unit suite and whole E2E suite (no agent while they are green; a regression goes to the developer with the history since the last release), then you Ship (push the local base, tag, optional build) or Hold. Nothing is pushed without your Ship.
+  tags: [release, test, e2e, regression, local, worktree]
+  # Dashboard category: plan (Plan & Design), build (Code & Build) or monitor (Monitor & Improve).
+  category: build
+
+# -----------------------------------------------------------------------------
+inputs:
+  task:
+    label: "Task"
+    type: string
+    required: true
+    default: "Check the release: the whole unit suite and the whole E2E suite, then Ship or Hold."
+    description: What this release run is for (e.g. the release it checks). A roadmap's cut line fills it.
+  version:
+    label: "Version"
+    type: string
+    default: ""
+    description: "The release's name or version (e.g. v1.4): the tag Ship pushes. Empty: release-<run id>. A roadmap's cut line fills it with its name."
+  repo_path:
+    label: "Repository"
+    type: string
+    required: true
+    description: Local repository path (a git repository; Ship pushes its base branch to origin).
+  base_branch:
+    label: "Base branch"
+    type: string
+    default: main
+    description: The local branch the suites run on and Ship pushes.
+  unit_command:
+    label: "Unit test command"
+    type: string
+    default: ""
+    description: "The command that runs the project's whole unit suite, run by the orchestrator (e.g. npm test). Empty: found from the project's files."
+  e2e_suite:
+    label: "E2E suite"
+    type: string
+    enum: [run, skip]
+    default: run
+    options: { run: Run, skip: "Skip (the project has none)" }
+    description: "Skip only for a project without an end-to-end suite: the unit suite alone then decides. A roadmap's cut line skips it when the project has no test:e2e script."
+  e2e_command:
+    label: "E2E command"
+    type: string
+    default: "npm run test:e2e"
+    show_if: "e2e_suite == 'run'"
+    description: The command that runs the whole E2E suite, run by the orchestrator (no agent, no filter).
+  build_command:
+    label: "Build command"
+    type: string
+    default: ""
+    description: "Optional: a command Ship runs after the push and the tag (e.g. npm run package). Empty: no build."
+  history:
+    label: "History since the last release"
+    type: string
+    default: ""
+    description: The runs, issues and commits since the last release, for the developer when a suite is red (filled by the app).
+  time_budget_minutes:
+    label: "E2E time budget (minutes)"
+    type: integer
+    default: 60
+    description: The time the whole E2E suite may take in one pass; the suite step stops it after that.
+  max_rounds:
+    label: "Max rounds"
+    type: integer
+    default: 2
+    description: Fix rounds per suite (the developer, then both suites again) before you are asked.
+
+# -----------------------------------------------------------------------------
+providers:
+  claude:
+    type: claude-code
+    command: claude
+    args: ["-p", "--output-format", "stream-json", "--verbose", "--model", "{{ model }}"]
+    resume_args: ["--resume", "{{ session_id }}"]
+    skill_args: ["--add-dir", "{{ skill_dir }}"]
+
+x-tools:
+  # every supported language toolchain: the project's files say which one is used
+  toolchains: &toolchains [bash:git, bash:npm, bash:npx, bash:node, bash:pnpm, bash:yarn, bash:python, bash:python3, bash:py, bash:pip, bash:pytest, bash:uv, bash:poetry, bash:go, bash:mvn, bash:./mvnw, bash:mvnw.cmd, bash:gradle, bash:./gradlew, bash:gradlew.bat, bash:dotnet]
+
+defaults:
+  # the run's own git worktree of the local base
+  working_dir: "{{ worktree_dir }}"
+  timeout: 30m
+  max_context: 150k
+  retry:
+    max_attempts: 2
+    backoff: exponential
+    initial_delay: 10s
+
+orchestrator:
+  provider: claude
+  model: claude-sonnet-5
+  # <workspace>/worktrees/<run_id>, detached at the LOCAL <base> (remote: false: no fetch);
+  # dependencies linked from the shared cache (#198)
+  worktree:
+    repo: "{{ inputs.repo_path }}"
+    base: "{{ inputs.base_branch }}"
+    remote: false
+  supervisor:
+    enabled: true
+    on_call: true
+    max_interventions: 2
+    max_cost_usd: 5
+  limits:
+    max_total_duration: 8h
+    max_total_cost_usd: 40
+    max_total_context: 30M
+
+# -----------------------------------------------------------------------------
+agents:
+  developer:
+    provider: claude
+    model: claude-opus-5-5
+    session: handoff
+    capabilities: { tools: [read, edit, write, *toolchains], web: false, subagents: true }
+    # the tests and scenarios are the specification the release is checked against
+    edits_tests: false
+    skills: [long-commands, bug-diagnosis, context-economy, decision-log]
+    system_prompt: |
+      You are a senior software engineer fixing a regression a release check found: a test that
+      passed when its change merged and fails now, on the sum of the runs merged since the last
+      release. Find the change that broke it from that history, then make the smallest
+      production-code fix that addresses the root cause, following the existing architecture.
+      Never create, edit or delete tests or scenarios (the orchestrator refuses a turn that
+      changes one): when one is wrong, say why in your answer. Run a focused check, not the whole
+      suite (the orchestrator runs both suites again after your step).
+      Work on your own branch in this worktree (it starts detached at the LOCAL
+      {{ inputs.base_branch }}): `git switch -c release-fix-{{ run_id }}` once (or `git switch
+      release-fix-{{ run_id }}` when it exists), then commit there. Never fetch, pull, push or
+      tag: only the owner ships. The dependencies are linked from a shared cache: never run
+      `npm ci` and never delete `node_modules`.
+
+groups:
+  - name: Regression
+    steps: [unit, e2e, suite_blocked]
+  - name: Fix
+    steps: [fix, regression_failed]
+  - name: Ship
+    steps: [ship, ship_failed]
+
+# -----------------------------------------------------------------------------
+steps:
+
+  # the whole unit suite, run by the orchestrator: no agent, no tokens while it is green
+  - id: unit
+    display: Unit tests
+    type: suite
+    command: "{{ inputs.unit_command }}"
+    # the worktree IS the local base: a test that fails here is the regression, not a failure
+    # "that fails on the base too" to wave through (#211)
+    base_check: false
+    transitions:
+      # a project without an E2E suite (e2e_suite: skip): the unit suite alone decides
+      - when: "output.status == 'pass' and inputs.e2e_suite == 'skip'"
+        goto: ship
+      - when: "output.status == 'pass'"
+        goto: e2e
+      - when: "output.status == 'blocked'"
+        goto: suite_blocked
+        set: { red_suite: unit }
+      # a red suite: the only way to an agent
+      - when: "output.status == 'fail'"
+        goto: fix
+        set: { red_suite: unit }
+        max_visits: "{{ inputs.max_rounds }}"
+        on_exhausted: regression_failed
+
+  # the whole E2E suite, once the unit suite is green
+  - id: e2e
+    display: E2E scenarios
+    type: suite
+    command: "{{ inputs.e2e_command }}"
+    timeout: "{{ inputs.time_budget_minutes }}m"
+    base_check: false
+    transitions:
+      - when: "output.status == 'pass'"
+        goto: ship
+      - when: "output.status == 'blocked'"
+        goto: suite_blocked
+        set: { red_suite: e2e }
+      - when: "output.status == 'fail'"
+        goto: fix
+        set: { red_suite: e2e }
+        max_visits: "{{ inputs.max_rounds }}"
+        on_exhausted: regression_failed
+
+  - id: fix
+    display: Fix the regression
+    agent: developer
+    prompt: |
+      {{ inputs.task }}
+      The release check of the local `{{ inputs.base_branch }}` is red.
+      {% if vars.red_suite == 'e2e' %}The whole E2E suite (`{{ steps.e2e.output.command }}`, round {{ steps.e2e.visits }}) fails: {{ steps.e2e.output.message }}
+      {{ steps.e2e.output | suite_failures }}
+      Its whole output: {{ run_dir }}/{{ steps.e2e.output.log }} (read the failures from it, not the whole file); the
+      failed scenarios' traces and screenshots are where the project's E2E config writes them.
+      {% else %}The whole unit suite (`{{ steps.unit.output.command }}`, round {{ steps.unit.visits }}) fails: {{ steps.unit.output.message }}
+      {{ steps.unit.output | suite_failures }}
+      Its whole output: {{ run_dir }}/{{ steps.unit.output.log }} (read the failures from it, not the whole file).
+      {% endif %}
+      These tests passed when each change merged: one of the changes merged since the last release
+      broke them, alone or together with another one. The history since the last release:
+      {% if inputs.history %}{{ inputs.history }}
+      {% endif %}
+      - Commits: `git log --oneline origin/{{ inputs.base_branch }}..HEAD` (what origin does not have; with a
+        release tag, `git log --oneline <last tag>..HEAD`). Each message names the issues it closes (`Closes #n`).
+      - Runs and issues: the `summary.json` files under {{ runs_dir }} whose local merge commit is in
+        that range (run id, workflow, issues, title).
+      - Decisions: each of those runs' `decisions.tsv` (why its agents chose what they did).
+      - Handoff notes: each of those runs' `handoffs/` folder (what its agents left for the next turn).
+      Start from the change that touches the failing behaviour; read a run's decisions and handoff
+      notes only when its commits are suspects.
+      {% if steps.fix.visits > 1 %}
+      Your previous fix (round {{ steps.fix.visits - 1 }}, branch `{{ steps.fix.output.branch }}`) did not turn the suites green: {{ steps.fix.output.summary }}
+      {% endif %}
+      Diagnose following bug-diagnosis, fix the production code on your branch, run a focused
+      check, commit and report the commit hash. In `regression`, name the change that broke it
+      (commit, run, issue). A test you think is wrong goes in `test_notes` with why; do not change it.
+    output_schema:
+      type: object
+      required: [branch, summary, committed]
+      properties:
+        branch:     { type: string }
+        summary:    { type: string }
+        committed:  { type: boolean }
+        commit_sha: { type: string }
+        # the change that broke the suite: commit, run, issue
+        regression: { type: string }
+        test_notes: { type: string }
+    transitions:
+      # a fix changes the code: both suites run again, the unit suite first
+      - when: "true"
+        goto: unit
+
+  # The owner's gate: a decision gate, so the supervisor never answers it, with no timeout; the
+  # engine ships only on the owner's own answer (`ship:`).
+  - id: ship
+    display: Ship
+    type: human_approval
+    summary: |
+      {{ inputs.version or 'The release' }}: {{ 'the unit suite is' if inputs.e2e_suite == 'skip' else 'both suites are' }} green on the local {{ inputs.base_branch }}{% if steps.fix.visits %} after {{ steps.fix.visits }} fix round(s){% endif %}.
+      Unit: {{ steps.unit.output.message | one_line(160) }}
+      E2E: {{ 'skipped (the project has no E2E suite)' if inputs.e2e_suite == 'skip' else (steps.e2e.output.message | one_line(160)) }}
+    message: |
+      Release {{ inputs.version or ('release-' ~ run_id) }}: the whole unit suite {{ 'passes (the E2E suite was skipped: the project has none)' if inputs.e2e_suite == 'skip' else 'and the whole E2E suite pass' }} on the local {{ inputs.base_branch }}.
+      Unit: {{ steps.unit.output.message }}
+      {% if inputs.e2e_suite != 'skip' %}E2E: {{ steps.e2e.output.message }}{% endif %}
+      {% if steps.fix.visits %}
+      A regression was fixed on branch `release-fix-{{ run_id }}` ({{ steps.fix.visits }} round(s)): {{ steps.fix.output.summary }}
+      {% if steps.fix.output.regression %}What broke it: {{ steps.fix.output.regression }}{% endif %}
+      Show the diff to read the fix before you ship.
+      {% endif %}
+      Not on origin yet:
+      {{ worktree_dir | git_commits('origin/' ~ inputs.base_branch) }}
+      The release notes are in Code & Build › Releases: edit them there before you ship.
+      Ship: {% if steps.fix.visits %}merge the fix into the local {{ inputs.base_branch }}, {% endif %}push the local {{ inputs.base_branch }} to origin and tag it `{{ inputs.version or ('release-' ~ run_id) }}`{% if inputs.build_command %}, then run `{{ inputs.build_command }}`{% endif %}.
+      Hold: end the run; nothing is pushed or tagged{% if steps.fix.visits %} (the branch keeps the fix: resume the run from this gate to ship it later){% endif %}.
+    diff_base: "{{ inputs.base_branch }}"
+    choices:
+      - { id: ship, label: Ship, help: "Pushes the local {{ inputs.base_branch }} to origin and tags it; the release's issues become Released." }
+      - { id: hold, label: Hold, help: "Ends the run: nothing is pushed or tagged. Stages after the roadmap's cut line keep waiting." }
+    transitions:
+      # the worktree has commits the local base has not (a fix of any round): they are what the
+      # suites passed on, so they merge before the push
+      - when: "choice == 'ship' and (worktree_dir | git_commits(inputs.base_branch))"
+        merge: local
+        ship: &ship { tag: "{{ inputs.version or ('release-' ~ run_id) }}", build: "{{ inputs.build_command }}" }
+        goto: end
+        on_error: ship_failed
+      - when: "choice == 'ship'"
+        ship: *ship
+        goto: end
+        on_error: ship_failed
+      - when: "choice == 'hold'"
+        goto: end
+        status: cancelled
+
+  # Also a decision gate: Try again ships, so only the owner answers it.
+  - id: ship_failed
+    display: Ship failed
+    type: human_approval
+    message: |
+      The release was not shipped completely: {{ action_error.message if action_error else 'unknown error' }}
+      Try again: {% if worktree_dir | git_commits(inputs.base_branch) %}merge the fix into the local {{ inputs.base_branch }}, {% endif %}push the local {{ inputs.base_branch }} and the tag again (what already went out is kept){% if inputs.build_command %}, then the build{% endif %}.
+      Stop: end the run as failed; what was not pushed stays local.
+    choices:
+      - { id: retry, label: "Try again", help: "Runs Ship again; safe to repeat: a push or a tag already on origin is left as it is." }
+      - { id: stop,  label: "Stop the run as failed", help: "Ends the run as failed; nothing more is pushed." }
+    transitions:
+      # the fix is not merged yet (the merge itself failed)
+      - when: "choice == 'retry' and (worktree_dir | git_commits(inputs.base_branch))"
+        merge: local
+        ship: *ship
+        goto: end
+        on_error: ship_failed
+      - when: "choice == 'retry'"
+        ship: *ship
+        goto: end
+        on_error: ship_failed
+      - when: "choice == 'stop'"
+        goto: end
+        status: failed
+
+  - id: regression_failed
+    display: Regression not fixed
+    type: human_approval
+    kind: escalation   # the supervisor on call tries first
+    message: |
+      The {{ 'E2E' if vars.red_suite == 'e2e' else 'unit' }} suite still fails after {{ inputs.max_rounds }} fix round(s): {{ steps.e2e.output.message if vars.red_suite == 'e2e' else steps.unit.output.message }}
+      Log: {{ run_dir }}/{{ steps.e2e.output.log if vars.red_suite == 'e2e' else steps.unit.output.log }}
+      {% if steps.fix.output %}The developer's last fix: {{ steps.fix.output.summary }}{% endif %}
+      Approve: one more fix round. Reject: stop the run as failed (nothing is pushed; its branch keeps the work to resume it).
+    transitions:
+      - when: "approved"
+        goto: fix
+      - when: "rejected"
+        goto: end
+        status: failed
+
+  - id: suite_blocked
+    display: Suite could not run
+    type: human_approval
+    kind: escalation   # the supervisor on call tries first
+    message: |
+      The {{ 'E2E' if vars.red_suite == 'e2e' else 'unit' }} suite could not run: {{ (steps.e2e.output.reason or steps.e2e.output.message) if vars.red_suite == 'e2e' else (steps.unit.output.reason or steps.unit.output.message) }}
+      Log: {{ run_dir }}/{{ steps.e2e.output.log if vars.red_suite == 'e2e' else steps.unit.output.log }}
+      Approve: run both suites again (after you fixed the environment). Reject: stop the run as failed (nothing is pushed).
+    transitions:
+      - when: "approved"
+        goto: unit
+      - when: "rejected"
+        goto: end
+        status: failed
+
+# -----------------------------------------------------------------------------
+outputs:
+  version:
+    type: string
+    description: The release's name (the tag Ship pushes).
+    value: "{{ inputs.version or ('release-' ~ run_id) }}"
+  unit_status:
+    type: string
+    description: "pass, fail or blocked: the last pass of the unit suite."
+    value: "{{ steps.unit.output.status }}"
+  e2e_status:
+    type: string
+    description: "pass, fail or blocked: the last pass of the E2E suite (empty when it never ran)."
+    value: "{{ steps.e2e.output.status }}"
+
+# -----------------------------------------------------------------------------
+observability:
+  storage:
+    type: jsonl
+    path: "./runs/{{ run_id }}/"
+  capture:
+    prompts: true
+    outputs: true
+    thinking: true
+    tool_calls: true
+    redact:
+      - pattern: "(?i)(api[_-]?key|token|secret|password)\\s*[:=]\\s*\\S+"

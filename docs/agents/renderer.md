@@ -6,7 +6,7 @@ Read this before changing anything in `src/renderer/`.
   (UMD): xterm, addon-fit, marked, DOMPurify. Sandboxed: no Node, only `window.api` (`src/preload.js`,
   or `api-http.js` over the engine server; a test keeps their method lists equal).
 - Views: dashboard, sessions, projects (+ project detail with runs/sessions/artifacts), backlog,
-  artifacts, workflows (sidebar sub-items Runs / Definitions / Builder, `state.workflowsTab`;
+  artifacts, workflows (one menu entry and one tab per `state.workflowsTab`: Definitions / Runs / Builder / Pipelines;
   Definitions shows agents with their session mode and capabilities, Builder is `views/workflows/builder.js`), agents, skills, usage,
   settings, run (+ run chat); terminal dock; supervisor drawer. The code map
   ([code-map.md](code-map.md)) says which file draws which screen.
@@ -15,16 +15,16 @@ Read this before changing anything in `src/renderer/`.
   folder; `index.html` holds no screen, only the app frame (top bar, sidebar with the Run item and
   runs menu, `main.content`, the drawers, the terminal dock, the shared dialogs) and the generated
   file lists. The folders:
-  - `views/dashboard/`: the start screen (its section has no `hidden`; `renderDashboard` is also called on run events);
+  - `views/dashboard/`: Home, the start screen (#255: the flow overview and the Analytics tab; its section has no `hidden`; `renderDashboard` is also called on run events: it paints from the last read and reads again at most every 30 s);
   - `views/sessions/`: `sessions.js` (`window.SessionsView` for notifications and terminal events) and `sessions.css`;
-  - `views/projects/`: the project cards and the New / Edit project dialog (`openProjectModal`, also opened from the Start drawer);
-  - `views/project/`: one project's page (no sidebar entry: `showView` highlights Projects);
+  - `views/projects/`: the project cards, drawn inside Settings › Projects (#254: no screen or menu entry of its own; `showProjects`), and the New / Edit project dialog (`openProjectModal`, also opened from the Start drawer and the header's project selector);
+  - `views/project/`: one project's page (no sidebar entry: its `menu` keeps Settings lit);
   - `views/backlog/`: `backlog.js` (the screen, its dialogs, the sidebar's unpushed badge), `backlog-epics.js`,
     `backlog-labels.js`, `backlog-roadmap.js` (no DOM as they load), `backlog-po.js` and `backlog-po-proposals.js`
     (the Product Owner drawer, put inside `.shell` like the other drawers; `backlog-po.js` wires it as it loads, so
     its header says `load: after views/backlog/backlog.js`) and `backlog.css`;
-  - `views/artifacts/`: the Artifacts screen (`openArtifactsAt` stays a global deep link);
-  - `views/workflows/`: `workflows.js` (Runs, Definitions, the sidebar sub-items it adds after its entry, the deep links
+  - `views/artifacts/`: the Artifacts screen, a tab of Workflows › Runs (#254: no menu entry, its `menu` keeps Runs lit; `openArtifactsAt` stays a global deep link);
+  - `views/workflows/`: `workflows.js` (Definitions, Runs, Pipelines, the screen's tablist and its menu entries, the Supervisor button, the deep links
     `showRunInList` / `showWorkflowDefinition`), `builder.js` + `builder.css` (Builder and its two dialogs);
   - `views/run/`: Run Details (no sidebar entry: the Run item and the runs menu are the shell's): the
     failure banner, the gate cards (`renderRunGates`), the summary, the steps, the sessions and the tabs;
@@ -33,7 +33,8 @@ Read this before changing anything in `src/renderer/`.
     screen's Chat button, so its header says `load: after … views/run/run.js`);
   - `views/duo/` (Write & Review: `duo.js`, `duo-issue.js`, its Save to issue and guide dialogs) and
     `views/arena/` (AI Arena: `arena.js`, `arena-shuffle.js`, its guide); both add their "lab" badge in `mount`;
-  - `views/agents/`, `views/skills/`, `views/analytics/`, `views/settings/`, `views/usage/`, `views/supervisor/`.
+  - `views/analytics/`: a tab of Home (#255): no menu entry and no section of its own (`section: 'dashboard'`, `menu: 'dashboard'`); Home's markup holds its `panel` (`#view-analytics`), `showView('analytics')` opens Home on that tab;
+  - `views/agents/`, `views/skills/`, `views/settings/`, `views/usage/`, `views/supervisor/`.
 
   **Shared pieces stay outside the folders**, one file each: `gate-panel.js` (what a gate offers on the
   Run screen, the run chat and Write & Review: choices, brief, Artifacts side panel, Run App, Show the
@@ -50,12 +51,23 @@ Read this before changing anything in `src/renderer/`.
   Mind the cascade when moving a rule: the views' stylesheets load after every top-level one, so a
   base rule another top-level file builds on (`.run-gate` under `.run-gate-wide`) stays top level.
   The script calls
-  `registerView({ id, nav: { label, icon, order, title }, markup, modals, mount, show })`
+  `registerView({ id, nav: { label, icon, order, title, group, tab }, section, menu, markup, modals, mount, show })`
   (`view-registry.js`, loaded before `app.js`): `markup` is the screen's whole
   `<section id="view-<id>" class="view hidden">`, added to `main.content`; `modals` its own dialogs,
   added to the body; `nav` its sidebar entry, placed by `order` among the other entries'
-  `data-order` (10 = Sessions … 130 = AI Arena: pick a free number between two); `mount()` wires its
-  controls once (and adds what `nav` can't: a badge, sub-items); `show()` runs on each `showView(id)`.
+  `data-order` (20 = Home … 130 = AI Arena: pick a free number between two); `mount()` wires its
+  controls once (and adds what `nav` can't: a badge); `show()` runs on each `showView(id)`.
+  The menu is grouped by the flow (#254, `nav-groups.js`): `nav.group` (`plan`, `code`, `workflows`,
+  `ai`, or none) puts the entry under that group's title, which folds and remembers it; a group sits
+  at its own order among the entries without one (Home, Night watch, Settings), and its
+  entries by theirs inside it. `nav` may be a list: each entry opens the screen on its `tab`
+  (`data-tab`; Workflows: Definitions, Runs, Builder, Pipelines). `section: '<id>'` draws the screen
+  in another screen's section (the Roadmap in the Backlog's) and `menu: '<id>'` names the entry lit
+  on a screen that has none (a project's page and Artifacts). The menu stays generated from the
+  views: a new screen names its group in its own `nav`, there is no shared list to edit.
+  The project is the app's (#254, `current-project.js`): a screen reads `window.CurrentProject.get()`
+  in its `show()` and never adds a project picker of its own; choosing another project in the header
+  (`#header-project`) calls `showView` on the current screen again.
   Sidebar clicks are delegated, so registered entries need no wiring. View scripts load after `app.js`
   and use its globals (`$`, `esc`, `state`, `api`, `errMsg`, `openModal`…); functions other files call
   (`renderDashboard`, `openArtifactsAt`, `loadProjectRunsThrottled`…) are plain top-level functions, so
@@ -84,7 +96,7 @@ Read this before changing anything in `src/renderer/`.
   selected one. Route anything run-specific by `ev.run_id` and pass the `runId` to `stopRun`,
   `resolveApproval` and the terminals. There is no approval dialog: a gate is answered inside its run
   (the run chats, or the gate card on its Run screen, `renderRunGates`); elsewhere the Run badge, a
-  dismissable toast, the dashboard's pending approvals list and a desktop notification say it waits.
+  dismissable toast, Home's "What needs you" list and a desktop notification say it waits.
   Nothing a run raises may cover the screen: dialogs are for the user's own clicks.
 - **Where run state comes from** (#74): a run's view is built only by `onEvent`, the reducer of
   live `run:event`s, and `hydrateRun(runId)` replays the recorded events (`runs:events` with
@@ -127,18 +139,28 @@ Read this before changing anything in `src/renderer/`.
   those checks.
 - Artifacts previews images (`kind: image`, read as a data URL; the CSP allows `img-src data:`).
 - **Artifact images open in the shared viewer** (#145, `image-viewer.js`, math in
-  `image-viewer-model.js`): `ImageViewer.open({ title, images: [{ src | file, label, caption }],
-  index })`, almost full screen, fitted (never upscaled), click / wheel / + − Fit 100% zoom up to
-  400%, drag to pan when zoomed, tabs or ← / → between the two images of an original/modified
-  pair, Esc or a click outside closes, right-click keeps the copy menu. Every artifact image must
-  use it: give the thumbnail `ImageViewer.THUMB` (hand cursor, "Click to enlarge", focusable,
-  Enter opens) and open it on click; no per-screen viewer. Users today: the Artifacts panel and
-  the Artifacts screen (`ArtifactsPanel.openImage`). The chat renders no images.
+  `image-viewer-model.js`, browsing in `image-sequence.js`), **with the whole context** (#182):
+  `ImageViewer.open({ title, items: [{ title, images: [{ src | file, label, caption, side }] }],
+  index, imageIndex })` gets every image of the place the click happened, in the order shown there
+  (an original/modified pair is one item), and the clicked one; `open({ title, images, index })`
+  still opens one item. Almost full screen, fitted (never upscaled), click / wheel / + − Fit 100%
+  zoom up to 400%, drag to pan when zoomed; previous / next arrows on the sides (hover or Tab,
+  disabled at the ends, no wrap-around), ← / → and Home / End between items (a new item is fitted,
+  the neighbours preloaded), a counter "2 / 3"; one item shows neither. Tabs, Space or O / M switch
+  inside a pair at the same zoom; Esc or a click outside closes, right-click keeps the copy menu.
+  Every artifact image must use it: give the thumbnail `ImageViewer.THUMB` (hand cursor, "Click to
+  enlarge", focusable, Enter opens) and open it on click with its context; no per-screen viewer.
+  Users today: the Artifacts panel (its screenshot cards and image files), the Artifacts screen
+  (`ArtifactsPanel.openImage({ files })`: the run group's images), the gate's E2E scenario
+  screenshots, the diff viewer (the changed images), the run's input images and pasted images.
 - **The Run screen's tabs** (#109): the Details panel has Session, Events and Artifacts
   (`switchTab`, `#tab-artifacts`, with a count on the tab). The Artifacts tab and the approval
   gate's side panel are one component, `artifacts-panel.js` (`ArtifactsPanel.mount(root, { runId,
-  flat, extras })`): the run's files from `artifacts:list { runId }` grouped by kind (newest first
-  in a group; `flat` for the gate), a preview in place (markdown, images with their original/modified
+  flat, extras })`): the run's files from `artifacts:list { runId }`, what the run produced first
+  (#225: each file's `category` from `src/artifact-categories.js`; "Produced" = Result, Screenshots &
+  images, Tests, Reports by default, "Show all" adds Process, Internal is never listed; category and
+  kind chips; the Artifacts screen reuses `filtersHtml` / `filterFiles` / `onFilterClick`),
+  grouped by category (newest first in one; `flat` for the gate), a preview in place (markdown, images with their original/modified
   pair from the evidence manifest, TSV as a table, JSON, text) and "Open in Artifacts"
   (`openArtifactsAt`). `onEvent` calls `ArtifactsPanel.refreshRun(runId)` on the events that add a
   file (`ARTIFACT_EVENTS`), so a running run's list follows without a reload. Above the files, the
@@ -173,6 +195,39 @@ Read this before changing anything in `src/renderer/`.
   `--view run --input mode=validated --stop-at developer_check --click "#btn-run-diff"`, then
   `--click ".dv [data-dv-mode=unified]"`, `--click ".dv [data-dv-expand=all]"` or
   `--click ".dv [data-dv-file='docs/images/backoff.svg']"`.
+- **The run's 3D view** (`run3d.js`, `run3d.css`, model `run3d-model.js`) is a full-screen overlay
+  opened by the 3D button beside Chat (Run screen `#run-mode-3d`, run chat `#rc-3d`): the run's
+  recorded events, then its live `run:event`s, into a pure `Run3DModel` (Node-tested); "Open the
+  gate" closes it and calls `showRun` (it never answers a gate). The scene is the one exception to
+  "no bundler": React + React Three Fiber + three in `src/renderer/run3d/*.jsx`, bundled by
+  `scripts/build-3d.js` into `generated/run3d-scene.js` (gitignored, rebuilt by prepare / prestart /
+  prebuild, packed into the app) and loaded with a `<script src>` on the first click: run
+  `npm run build:3d` after changing a `.jsx`.
+  - **Themes** (`run3d-theme.js`): dark by default, the app's own tokens (a test compares its
+    palette with `style.css` `:root`), or the light palette of the approved proof of concept
+    (`poc/run-3d.html`). The HUD's colours are `--r3d-*` variables under `.r3d` /
+    `.r3d[data-theme="light"]` (no literal colour in a rule: a test checks it); the scene's are the
+    theme's palette (`useTheme()` in a component that paints with it; a texture drawn with theme
+    colours passes `themed`, so it is freed when the theme is left). A state colour comes from
+    `statusColor()` and always with its label. The top bar's sun / moon button
+    (`[data-testid=run3d-theme]`) switches; the choice is in localStorage (`multiagent.run3d.theme`).
+  - **Replay** (`run3d-replay.js`, a pure `Run3DPlayer`): it keeps every event, a `head` model (the
+    run now) and a `past` model (the replayed moment: the state kept at the last step boundary, then
+    the events up to it), and the views draw `view.model`, whichever is shown, with `nowMs()` /
+    `robotStateOf()` for the time-dependent parts. Controls in the pipeline card: play / pause
+    (`[data-testid=run3d-play]`, Space), previous / next step (`[data-r3d-step]`, Left / Right; with
+    Shift 1% of the timeline), speeds 1× to 64×, the strip (`[data-testid=run3d-strip]`: click or
+    drag), and `[data-testid=run3d-live]` back to the live run (or to a finished run's end). A wait
+    for the owner over a minute is cut to 45 s in a replay only (marked on the strip); the head of a
+    live run is always in real time.
+  - Capture it with `npm run screenshot -- --view run --input mode=validated --stop-at developer_check
+    --click "#run-mode-3d" --click ".r3d-zoom button[aria-label='Follow the run']"` (a finished run:
+    `--view run-chat --click "#rc-3d"`). Then `--click "[data-testid=run3d-theme]"` for the light
+    theme, `--click "[data-r3d-step='-1']"` (repeatable) for a replay paused at an earlier step (on
+    the live run: with "Live" offered), `--press "[data-testid=run3d-strip]@0.4"` to seek with the
+    pointer, `--key Space` to play, `--size 1150x780` for the narrow layout. The simulated run lasts
+    a few seconds: for hours on the clock and a cut wait, give `--run <folder>` a run folder whose
+    `events.jsonl` has them.
 - Test changes with a temporary Electron script (see `scripts/smoke.js`:
   `npx electron scripts/smoke.js <out.png>` runs a mock run and takes a screenshot) and look at
   the screenshots. Never open real CLI terminals or start real runs in those checks. In a fresh
@@ -183,19 +238,20 @@ Read this before changing anything in `src/renderer/`.
 
 `views/oracle/oracle.js` registers a view with no screen of its own: it docks `#oracle-dock` inside
 `#view-dashboard` (class `oracle-docked`, a two-column grid) and adds `#oracle-drawer` (a `.drawer`
-like `#svc-drawer`) and the sidebar's `#nav-oracle` button, appended after the runs list. The
-button is a `.nav-item` without `data-view` (its click stops before the sidebar's navigation): on
-the Dashboard it focuses the dock, elsewhere it toggles the drawer. Both places render the same
+like `#svc-drawer`) and the header's `#nav-oracle` button, inserted before the notifications bell
+(#254: `.topbar .actions`, top right). On
+Home's Overview it focuses the dock, elsewhere (Home's Analytics tab included, #255: the dock is hidden there) it toggles the drawer. Both places render the same
 state from `OracleChatModel` (`views/oracle/oracle-chat-model.js`, pure, tested in Node):
 
 - **states**: `empty` (a line on what it reads, 4 `.chip` suggestions), `conversation`,
-  `answering` (`.sup-loading` "The Oracle is reading…", Send and chips disabled, input editable),
-  `error` (a `.sup-wmsg system error` line, the question back in the input), `paused` (daily budget:
+  `answering` (the shared chat's working line "Oracle is working…", Send and chips disabled, input
+  editable; the box emptied on Send, #274), `error` (the chat's error line, the question back in the
+  input; the Oracle's own buttons' errors as a `.sup-wmsg system error` line), `paused` (daily budget:
   a notice with spent/limit and a link to Settings › Execution, input and Send disabled),
   `unavailable` (another live process owns `oracle/owner.json`: the form is replaced by a notice
   naming it);
 - **unread**: the `.nav-badge.oracle-unread` counts Oracle answers newer than `oracle:state`'s
-  `readAt`; the conversation in view (dock on the Dashboard, or the open drawer) saves it with
+  `readAt`; the conversation in view (dock on Home's Overview, or the open drawer) saves it with
   `oracle:markRead`, so the count survives a reload;
 - **pasted images** (`addImages`/`removeImage`, 5 MB and 4 per message): thumbnails above the input,
   an inline error under it; sent as data URLs to `oracle:ask`, shown in the log through
@@ -208,6 +264,19 @@ Answers go through `markdownHtml`, then `decorate()` turns run ids and `#<n>` in
 Artifacts links (`openArtifactsAt`) and other absolute paths into copy-on-click code. Screenshots:
 `--view oracle` (Projects with the drawer open) and `--oracle <state>` on any view (see
 `scripts/screenshot.js --help`).
+
+## The agents' chat (#274)
+
+`agent-chat.js` (`window.AgentChat.create(container, options)`, with `agent-chat.css`) is the one
+chat of the Oracle, the Product Owner and the Supervisor drawers: the messages (Markdown, cost and
+tokens), Send (the text box empties at once; a failure or a refusal puts the text back with the
+error), the busy lock (#234), the working line, the live turn (#180), scroll to the end on send,
+attachments, the unread state (#149) and slots for each agent's own parts (`head`, `top`, `pills`,
+`compose`, `actions`, `foot`). Its header lists what it owns. A new agent chat uses agent-chat.js
+(never a copy of a drawer's chat code), and a chat fix goes there so every drawer gets it. A drawer
+keeps its ids and classes through the `ids` / `classes` options, and draws its own message markup
+with `renderMessage`; the component wraps each message in `[data-testid="agent-chat-message"]`
+(`display: contents`, the look is the drawer's).
 
 ## Pasted images in the prompt fields (#130)
 
@@ -224,14 +293,31 @@ request unchanged) and `PasteImage.clear(field)` with the text. Chips are Arena'
 ## UI conventions
 
 The general rules (and the visual review of the screenshots) are in the `ui-conventions` skill,
-which the software-development developer and evidence agents load (#111). In this app:
+which the software-development developer and evidence agents load (#111). The design tokens
+(colours, spacing scale, typography, radius, alignment grid, from the `:root` block of
+`style.css`) are in the separate [`design-system`](../../skills/design-system/SKILL.md) skill (#151);
+ai-development-local-hero's `ui_reviewer` reviews the screenshots against both. A token added or
+changed in `style.css` goes into that skill too. In this app:
 
-- **Reuse what `style.css` has**: `.btn` (`.primary`, `.ghost`, `.sm`), `.link-btn` for small
+- **Reuse what `style.css` has**: `.btn` (`.primary`, `.ghost`, `.sm`; `.ghost.danger` red for a
+  destructive action, `.warn-ghost` amber for one that holds work back, `.btn-icon` with an icon before
+  the text: the Roadmap bar's Stop and Pause, #269), `.link-btn` for small
   actions ("add note", "Edit"); `.badge` (neutral; `.warn`, `.live`, `.p-mock`…) and `.pill`
-  (`-idle`, `-running`, `-success`, `-failed`, `-cancelled`, `-interrupted`) for states; `.field`
+  (`-idle`, `-running`, `-success`, `-failed`, `-cancelled`, `-interrupted`) for states: a run's
+  or an item's status is always drawn by `StatusPill` (`status-pill.js`, #266:
+  `statusPill(status, { waiting })`, or `statusLabel` for plain text), never as its raw id: the
+  label is readable ("Running" with the pulsing dot, "Waiting for you", "Merged locally"), the id
+  stays in `data-status` (tests and E2E steps read it); a new status gets its label there; `.field`
   (label above the control, `.hint` for the help line, `.row` for a pair); `.s-group`/`.s-row` for
   settings-like lists; `.switch` and `.check` for flags; `.seg` (`.sm`) for a small set of choices;
   `.empty-state`; the standard `select` / `input[type=text]` styles (their focus is on the control).
+- **Class names are per screen**: every stylesheet is global and `index.html` loads them in a
+  generated order, so a screen's own classes carry its prefix and no other screen reuses them. The
+  robot containers in particular: `ag-robot` is the Agents screen's 280px editor preview
+  (`views/agents/agents.css`), the Analytics Agents tab's 44px card robot is `an-robot`
+  (`views/analytics/analytics-insights.css`), the 3D HUD's `r3d-avatar`
+  (#297: a second `.ag-robot` once shrank the editor's preview to 44px; a test refuses one outside
+  `views/agents/`).
 - **Controls follow the data**: workflow inputs are always drawn by `WorkflowInputs`
   (`workflow-inputs.js`, #116), never by hand: the input's `label` (or one derived from the key; a
   YAML slug is never shown), its `options` labels, pills (`.seg`) for an enum of up to 5 short
@@ -245,6 +331,52 @@ which the software-development developer and evidence agents load (#111). In thi
   are small badges or links with the full value in `title`. Long titles ellipsize.
 - **Edits**: several fields → an Edit form with Save / Cancel; one obvious choice (a mode) → a
   toggle that saves at once; optional text (a note) appears when set or from an "add …" link.
+- **Page alerts** (#270, `alerts.js`, `window.Alerts`): what a page has to tell its owner goes into
+  the alerts box at the top of the page (above its filter row), never into a banner of its own. The
+  page builds a list on every render and hands it over: `Alerts.mount(box).set(list)`, each alert
+  `{ id, level, title, text, actions: [{ label, onClick, primary, title?, pressed? (a switch),
+  attrs? (e.g. a `data-testid`) }], dismissible, onDismiss?, createdAt? }`. One alert shows at a
+  time with a counter ("1/3") and arrows, errors first, then warnings, then infos. Choose the level
+  by what the owner must do: **error** when something is blocked until they act (a roadmap paused by
+  a failed item, the queue's error; never dismissible: it leaves when its cause does), **warning**
+  when something is stale or will go wrong later (a Backlog Refresh that is due, a retired label),
+  **info** for a state worth knowing with an optional action (local merges not pushed). An alert
+  leaves by itself when the page stops listing it; × hides an info or a warning until its condition
+  comes back. The component has no screen code: the Backlog's list is `renderAlerts` in `backlog.js`
+  (the roadmap's own alert comes from `BacklogRoadmap.alerts`).
+- **A toast with an action** (#281, `showToast(title, detail, runId, gate, { action })` in `app.js`;
+  the countdown and the action live in `toast.js`, `openToast`):
+  `action: { label, run, done? }` draws a button inside the toast ("Undo"). Such a toast stays 10 s
+  (7 without), waits while the pointer is over it or its button has the focus, runs the action once
+  and then says its outcome (`done`, "Restored" by default, or the error's message); a click
+  elsewhere on it does nothing, × dismisses it. **An action that removes or replaces something in
+  one click offers Undo in its toast** (or asks first when it cannot be undone): the Roadmap's edits
+  do (`undoToast` in `backlog-roadmap.js`, `api.undoRoadmap`), with "Restore an earlier version…" in
+  its ⋮ menu for a mistake noticed later.
+- **A menu of actions** (#269): secondary or rare actions go into a ⋮ menu built from a list
+  (`MENU` in `backlog-roadmap.js`: `.bl-menu-wrap`, a button with `aria-haspopup="menu"` and
+  `aria-expanded`, `role="menu"` / `role="menuitem"`, the first entry focused when it opens, Esc
+  closes it and gives the focus back), so a new action is a line in the list, not a new button.
+- **The roadmap item card** (#282, `itemHtml` in `backlog-roadmap.js`, `.rm-*` in `backlog.css`) reads in
+  three bands. Band 1, `.rm-item-top`: the issues (`.rm-issues`: the titles, then the count and the
+  complexity, `roadmap-issues-foot`) | cost and time (`metersHtml`: `roadmap-meter-cost` /
+  `roadmap-meter-time` with `data-verdict` none | estimate | ok | warn | over; the time of a run at
+  work is the live timer, `roadmap-run-timer`, moved by `tick()`) | the status block (`statusHtml`,
+  `roadmap-status`: the ring, the StatusPill and the step, the fix round in full, then Retry / Skip
+  or move and Remove; never an agent avatar). Band 2, `.rm-workflow` (`workflowHtml`,
+  `roadmap-workflow`): the workflow's name, the run chip ("Open run →") or Edit, the mode toggle
+  (`roadmap-mode`: `.seg.sm`, locked while the item runs), the badges and input pills (`.rm-meta`),
+  and the pipeline (`pipelineHtml`, `roadmap-pipeline` / `roadmap-station` with `data-state`), whose
+  stations come from `RunProgress.pipeline` (`run-progress-model.js`): the workflow's groups and its
+  steps in no group, in order (a human gate in no group is no station; the gate a mode turns on is
+  one, right after the station that holds it), each with what the run's trail did there. Band 3: the
+  Product Owner's reason, then the error line and the Edit form. The card answers to its own width
+  (`@container rm-card` on `.rm-items`, not the window: the sidebar and the Oracle's drawer narrow
+  it): the issues share the first row only while they keep 540px, the Workflow band stacks under
+  980px, and under 520px everything is one column. A stage's actions are its ⋮ menu
+  (`stageMenuHtml`, `roadmap-stage-menu`; an entry that cannot be used is `aria-disabled` with its
+  reason under it); a disabled stage (#284) is `.rm-stage.disabled` with `data-disabled="true"`.
+  More states for screenshots: `--roadmap states` (a fix round, a disabled stage, a simulated item).
 - **Check it**: extend the screen's demo data in `scripts/screenshot.js` with the fields you add,
   then capture the default view and each state with `--click` (e.g.
   `npm run screenshot -- --view backlog --mode roadmap --click "[data-rm-edit]"`). List those

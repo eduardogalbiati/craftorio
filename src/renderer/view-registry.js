@@ -1,28 +1,75 @@
 // The view registry: a screen in `src/renderer/views/<view>/` registers itself, so adding one only
 // adds files (its folder; `npm run docs` lists its <script>/<link> lines in index.html).
 // load: early (registerView exists before app.js and the views)
-//   registerView({ id, nav: { label, icon, order, title }, markup, modals, mount, show })
+//   registerView({ id, nav: { label, icon, order, title, group, tab }, section, menu, markup, modals, mount, show })
 // `markup` is the screen's whole `<section id="view-<id>" class="view hidden">`, added to the content
 // container; `modals` its own dialogs, added to the body; `nav` a sidebar entry, placed before the
-// first entry with a higher `data-order` (static entries carry one too, until they move to a folder).
+// first entry with a higher `data-order` (static entries carry one too, until they move to a folder),
+// or a list of entries (the Workflows tabs: each opens the screen on its `tab`). An entry's `group`
+// (#254, nav-groups.js: plan, code, workflows, ai) puts it under that group's title, which folds.
+// `section`: the screen is drawn in another screen's section (the Roadmap, in the Backlog's);
+// `menu`: the entry lit on a screen that has none (a project's page lights Settings).
+// `panel` (#255): the markup of a screen that is a tab of another one (Analytics, in Home), instead
+// of `markup`: that screen places it in its own section.
 // `mount()` runs once, right after the markup is in place; `show()` each time showView opens it.
 const viewRegistry = new Map();
+const navGroupBoxes = new Map(); // a group's id → the element that holds its entries
+
+// The first entry of `box` itself with a higher order (a group's entries belong to the group).
+const navNext = (box, order) => [...box.querySelectorAll('[data-order]')]
+  .find((el) => (el.parentNode || box) === box && Number(el.dataset.order) > order);
+
+// A group's box, created with its title on the group's first entry; the title folds it (remembered).
+function navGroupBox(sidebar, group) {
+  if (navGroupBoxes.has(group.id)) return navGroupBoxes.get(group.id);
+  const el = document.createElement('div');
+  el.className = 'nav-group';
+  el.dataset.group = group.id;
+  el.dataset.order = String(group.order);
+  el.setAttribute('role', 'group');
+  el.setAttribute('aria-label', group.title);
+  const title = document.createElement('button');
+  title.type = 'button';
+  title.className = 'nav-group-title';
+  title.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>';
+  const label = document.createElement('span');
+  label.textContent = group.title;
+  title.append(label);
+  const box = document.createElement('div');
+  box.className = 'nav-group-items';
+  const paint = () => {
+    const collapsed = window.NavGroups.isCollapsed(group.id, localStorage);
+    el.classList.toggle('collapsed', collapsed);
+    box.classList.toggle('hidden', collapsed);
+    title.setAttribute('aria-expanded', String(!collapsed));
+  };
+  title.onclick = () => {
+    window.NavGroups.setCollapsed(group.id, !window.NavGroups.isCollapsed(group.id, localStorage), localStorage);
+    paint();
+  };
+  paint();
+  el.append(title, box);
+  sidebar.insertBefore(el, navNext(sidebar, group.order) || sidebar.querySelector('.nav-spacer'));
+  navGroupBoxes.set(group.id, box);
+  return box;
+}
 
 function registerView(def) {
   const { id, nav, markup, modals } = def;
   if (markup) document.querySelector('main.content').insertAdjacentHTML('beforeend', markup);
   if (modals) document.body.insertAdjacentHTML('beforeend', modals);
-  if (nav) {
+  for (const entry of [].concat(nav || [])) {
     const sidebar = document.querySelector('nav.sidebar');
-    const next = [...sidebar.querySelectorAll('[data-order]')].find((el) => Number(el.dataset.order) > nav.order)
-      || sidebar.querySelector('.nav-spacer');
+    const group = entry.group && window.NavGroups.GROUPS.find((g) => g.id === entry.group);
+    const box = group ? navGroupBox(sidebar, group) : sidebar;
     const btn = document.createElement('button');
     btn.className = 'nav-item';
     btn.dataset.view = id;
-    btn.dataset.order = String(nav.order);
-    if (nav.title) btn.title = nav.title;
-    btn.innerHTML = `${nav.icon || ''}<span>${nav.label}</span>`;
-    sidebar.insertBefore(btn, next);
+    if (entry.tab) btn.dataset.tab = entry.tab;
+    btn.dataset.order = String(entry.order);
+    if (entry.title) btn.title = entry.title;
+    btn.innerHTML = `${entry.icon || ''}<span>${entry.label}</span>`;
+    box.insertBefore(btn, navNext(box, entry.order) || (group ? null : sidebar.querySelector('.nav-spacer')));
   }
   viewRegistry.set(id, def);
   def.mount?.();

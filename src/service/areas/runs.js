@@ -15,6 +15,11 @@ const { Recorder } = require('../../engine/recorder');
 const { resolveCommand } = require('../../engine/providers');
 const simulation = require('../../engine/simulation');
 const { cleanupWorktrees } = require('../../engine/worktree');
+const {
+  configureMemoryGuard,
+  memoryProblem,
+  sharedMemoryGuard,
+} = require('../../engine/memory-guard');
 const { pruneDepsCache } = require('../../engine/deps-cache');
 const workspace = require('../../workspace');
 const projects = require('../../projects');
@@ -22,7 +27,6 @@ const backlog = require('../../backlog');
 const roadmaps = require('../../roadmap');
 const agents = require('../../agents');
 const usage = require('../../usage');
-const oracle = require('../../oracle');
 const actionsUsage = require('../../actions-usage');
 const { readLocalUsage } = require('../../local-usage');
 const runs = require('../../runs');
@@ -33,6 +37,8 @@ const { num } = require('../common');
 
 // how often a child run waiting for a slot of Settings › Execution checks again (#175)
 const SLOT_POLL_MS = 1000;
+// how often a start refused for low memory (#276) checks whether memory recovered
+const MEMORY_RETRY_MS = 30e3;
 
 module.exports = (ctx) => {
   const { host, events } = ctx;
@@ -48,6 +54,40 @@ module.exports = (ctx) => {
   function stopDispatchTimers() {
     for (const t of dispatchTimers) clearTimeout(t);
     dispatchTimers.clear();
+    if (memoryRetry) { clearInterval(memoryRetry); memoryRetry = null; }
+  }
+
+  // ---- memory guard (#276) --------------------------------------------------------------
+  // Settings › Execution › Memory guard configures the app's guard (src/engine/memory-guard.js) that
+  // real runs use. A new real run does not start while free memory is under its floor: the refusal
+  // names the reason like slotProblem, and a timer dispatches the roadmaps and queues again once
+  // memory recovers (they only dispatch at app start, when a run ends and on a screen action).
+  let memoryRetry = null;
+  function applyMemorySettings() {
+    configureMemoryGuard({ ...workspace.DEFAULT_SETTINGS.memoryGuard, ...(workspace.readSettings(ctx.ws).memoryGuard || {}) });
+    return sharedMemoryGuard();
+  }
+  const memoryNow = async (guard) => {
+    const m = guard ? await guard.freeMemory() : null;
+    return m ? memoryProblem({ freeBytes: m.freeBytes, floorBytes: guard.floorBytes }) : '';
+  };
+  // '' or why a new real run cannot start now for memory
+  async function memoryHold() {
+    // automated checks start no real run, so no sampler either
+    if (simulation.simulationOnly()) return '';
+    const guard = applyMemorySettings();
+    const why = await memoryNow(guard);
+    if (why && !memoryRetry) {
+      memoryRetry = setInterval(async () => {
+        if (!ctx.ws || await memoryNow(applyMemorySettings())) return;
+        clearInterval(memoryRetry);
+        memoryRetry = null;
+        Promise.resolve().then(() => ctx.dispatchRoadmaps()).catch((e) => console.error('roadmap dispatch:', e))
+          .then(() => ctx.dispatchQueue()).catch((e) => console.error('backlog dispatch:', e));
+      }, MEMORY_RETRY_MS);
+      memoryRetry.unref?.();
+    }
+    return why;
   }
 
   // The runs in progress are written down until they end: still there at the next start = they
@@ -140,10 +180,13 @@ module.exports = (ctx) => {
     return [...active.values()].map((r) => {
       let gates = r.pendingGates();
       try { if (ctx.store) gates = ctx.store.openGates(r.runId); } catch (e) { console.error('index.db gates:', e.message); }
+      // while Phone gates is on, each gate with its phone page link (#226; Home's "What needs you", #255)
+      const phoneLink = ctx.phoneGateLink?.();
+      if (phoneLink) gates = gates.map((g) => ({ ...g, phoneUrl: phoneLink(r.runId, g.approval_id) }));
       return {
         runId: r.runId, workflow: r.wf.metadata?.name || path.basename(r.file), file: path.basename(r.file), mock: r.mock,
         projectId: r.projectId, issues: r.issues, startedAt: r.startedAt ? new Date(r.startedAt).toISOString() : null,
-        status: r.status, waiting: gates.length, gates, inputs: r.inputs, agent_names: r.agentNames(),
+        status: r.status, waiting: gates.length, gates, inputs: r.inputs, agent_names: r.agentNames(), display: r.displayNames(),
         ...ctx.liveTitle(r), pr: ctx.withPrState(r.pr, r.mock), passedGates: passedGates(r),
         // what happens with its result when it finishes, and the run whose chain started it (#134)
         chain: r.then || r.from ? { then: r.then, from: r.from, state: r.then ? 'waiting' : undefined } : null,
@@ -184,6 +227,13 @@ module.exports = (ctx) => {
       throw err;
     }
     const { ws } = ctx;
+    // #276: the memory guard's settings for this real run; a new one waits while memory is low
+    // (a child run starts inside its parent's run, which already passed the check)
+    if (!mock) {
+      applyMemorySettings();
+      const low = parent ? '' : await memoryHold();
+      if (low) throw new Error(low);
+    }
     const slot = { mock: !!mock, projectId: forcedProject, parentRunId: parent?.run_id || null };
     // a child waits for its slot (waitForSlot reserves it); any other run fails when none is free
     if (parent) await waitForSlot(slot, signal, onSlotWait);
@@ -219,7 +269,7 @@ module.exports = (ctx) => {
       const needsLocal = Object.values(settings.budgets || {}).some((b) => b?.countOutside);
       const baselineAt = Date.now();
       // the Oracle's spend (in no run folder) counts too
-      const budget = usage.budgetBaseline({ runsDir: ws.runs, settings, local: needsLocal ? readLocalUsage() : null, extraRuns: oracle.usageRuns(ws.oracle) });
+      const budget = usage.budgetBaseline({ runsDir: ws.runs, settings, local: needsLocal ? readLocalUsage() : null, extraRuns: ctx.agentUsageRuns() });
       const wfFile = ctx.workflowPath(file);
       const notices = [...(startNotices || [])];
       if (wfFile.fallback) {
@@ -285,7 +335,8 @@ module.exports = (ctx) => {
       if (ev.type === 'workflow.finished' && onFinished) {
         try { onFinished(ev); } catch (e) { console.error('run finished:', e.message); }
       }
-      ctx.notify(notifier.runNotice(ev, runInfo), { projectId: run.projectId, issue: run.issues?.map((i) => `#${i.number}`).join(', ') || null });
+      // a gate's notice carries its phone page link while Phone gates is on (#226)
+      ctx.notify(notifier.runNotice(ev, runInfo, { gateLink: ctx.phoneGateLink() }), { projectId: run.projectId, issue: run.issues?.map((i) => `#${i.number}`).join(', ') || null });
       // the next issues waiting in a Backlog queue start once this run is over; a queued issue whose
       // run failed pauses its queue (a failure that repeats would otherwise burn through it)
       if (ev.type === 'workflow.finished') {
@@ -297,6 +348,8 @@ module.exports = (ctx) => {
           .then(() => ctx.continueChain(run, ev)).catch((e) => console.error('run chain:', e.message));
         // a Backlog Refresh run edited or closed issues: the Backlog syncs the project (#161)
         ctx.afterBacklogRefresh(run).catch((e) => console.error('backlog refresh sync:', e.message));
+        // a release run (#260): a shipped release is recorded and its cut line lets the roadmap go on
+        ctx.afterRelease(run, ev).catch((e) => console.error('release:', e.message));
         // a roadmap's next items first (its stage may be over), then the plain queue; a shutdown
         // cancels it (#186: it would run after the workspace was closed, e.g. a test's removed one)
         const dispatch = setTimeout(() => {
@@ -406,13 +459,20 @@ module.exports = (ctx) => {
     return { interrupted: list };
   }
 
-  // run worktrees left behind: succeeded runs whose removal failed, or unused for 14 days
-  // (call at startup; the worktrees of runs in progress are never touched); then the dependency
+  // run worktrees left behind (#202): every run not in progress here, live in another app process
+  // or waiting at a human gate loses its folder (its branch keeps the work), and the scratch of
+  // runs that ended days ago goes (#201). At startup and every 30 minutes; one pass at a time. Then the dependency
   // cache's entries no worktree links any more (#198: unused for 14 days, or over the size cap)
-  const cleanupRunWorktrees = async () => {
+  let cleaning = null;
+  const cleanupRunWorktrees = () => {
+    cleaning ??= cleanupPass().finally(() => { cleaning = null; });
+    return cleaning;
+  };
+  const cleanupPass = async () => {
+    if (!ctx.ws) return [];
     const removed = await cleanupWorktrees({
       worktreesDir: ctx.ws.worktrees, runsDir: ctx.ws.runs,
-      active: [...active.values()].flatMap((r) => [r.worktree?.dir, r.resume?.worktree?.dir, path.join(ctx.ws.worktrees, r.runId), path.join(ctx.ws.worktrees, `${r.runId}-base`)]).filter(Boolean),
+      active: () => [...active.values()].flatMap((r) => [r.worktree?.dir, r.resume?.worktree?.dir, path.join(ctx.ws.worktrees, r.runId), path.join(ctx.ws.worktrees, `${r.runId}-base`)]).filter(Boolean),
     });
     try { pruneDepsCache({ cacheDir: path.join(ctx.ws.cache, 'deps') }); } catch (e) { console.error('dependency cache cleanup:', e.message); }
     return removed;
@@ -425,6 +485,7 @@ module.exports = (ctx) => {
     isRunning,
     liveRun,
     liveRunForIssues,
+    memoryHold,
     notifyInterruptedRun,
     passedGates,
     prepareRestart,

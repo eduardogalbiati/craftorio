@@ -8,9 +8,9 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const https = require('https');
-const { execFile } = require('child_process');
 const { resolveCommand } = require('./engine/providers');
 const { installCommand } = require('./install-commands');
+const { execShim } = require('./shell');
 
 const DEFAULT_COMMAND = 'whisper-cli';
 const MODEL_URL = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/';
@@ -72,11 +72,9 @@ function decodeWav(audio) {
 }
 
 function runWhisper(resolved, args) {
-  const q = (a) => `"${String(a).replace(/"/g, '""')}"`;
   return new Promise((resolve, reject) => {
-    // a .cmd/.bat runs through the shell: one quoted command line (args passed apart are not escaped)
-    const file = resolved.shell ? [resolved.file, ...args].map(q).join(' ') : resolved.file;
-    execFile(file, resolved.shell ? [] : args, { windowsHide: true, timeout: TIMEOUT_MS, shell: resolved.shell, maxBuffer: 16 * 1024 * 1024 }, (err, stdout, stderr) => {
+    // a .cmd/.bat runs through cmd.exe with escaped arguments (shell.js)
+    execShim(resolved.file, args, { windowsHide: true, timeout: TIMEOUT_MS, maxBuffer: 16 * 1024 * 1024 }, (err, stdout, stderr) => {
       if (err?.code === 'ENOENT') return reject(new Error(`The speech-to-text CLI is not installed (command "${resolved.file}" not found). Install: ${INSTALL_HINT}`));
       if (err) return reject(new Error(`Speech-to-text failed: ${(`${stderr || ''}`.trim().split(/\r?\n/).pop() || err.message).slice(0, 300)}`));
       resolve(String(stdout || ''));

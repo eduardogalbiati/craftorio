@@ -1,0 +1,267 @@
+// Steps of features/app.feature, features/settings.feature and features/navigation.feature (#222,
+// #254, #264): open the app, move through the sidebar's menu (grouped by the flow: Home, Plan &
+// Design, Code & Build, Workflows, AI, Night watch, Settings; a group's title collapses it), the
+// header (project selector, Oracle, notifications bell), the Workflows screen's tabs, Settings
+// (#276: Execution's Memory guard group), the failed app update banner (#279).
+// Locators are roles and data-testid only (skills/ui-conventions).
+// #254: a menu group is a role="group" named by its title, holding its title's toggle button
+// (aria-expanded, named like the group) and its items' buttons; the header's project selector is a
+// <select> with data-testid="header-project" (accessible name "Project").
+
+const fs = require('fs');
+const path = require('path');
+const { expect } = require('@playwright/test');
+const { Given, When, Then } = require('./fixtures');
+
+const root = path.join(__dirname, '..', '..');
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const sidebar = (page) => page.getByRole('navigation');
+const header = (page) => page.getByRole('banner');
+// a sidebar entry by its label; a count badge may follow it ("Backlog 2", or "Night watch ☾ 0" while a watch is on)
+const entryName = (name) => new RegExp(`^${escapeRe(name)}(\\s+(☾\\s+)?\\d+)?$`);
+const navItem = (page, name) => sidebar(page).getByRole('button', { name: entryName(name) });
+const menuGroup = (page, name) => sidebar(page).getByRole('group', { name, exact: true });
+const groupToggle = (page, name) => menuGroup(page, name).getByRole('button', { name, exact: true });
+const workflowsTabs = (page) => page.getByRole('tablist', { name: 'Workflows', exact: true });
+
+Given('the app is open', async ({ e2e }) => {
+  await e2e.open();
+});
+
+Given('the app is open in the {word} theme', async ({ e2e }, theme) => {
+  await e2e.open({ theme });
+});
+
+When('I open {string} in the sidebar', async ({ e2e }, name) => {
+  await navItem(e2e.window, name).click();
+});
+
+When('I reload the app', async ({ e2e }) => {
+  await e2e.window.reload();
+  await e2e.window.waitForLoadState('domcontentloaded');
+});
+
+Then('the sidebar offers {string}', async ({ e2e }, name) => {
+  await expect(navItem(e2e.window, name)).toBeVisible();
+});
+
+Then('the sidebar does not offer {string}', async ({ e2e }, name) => {
+  await expect(navItem(e2e.window, 'Home')).toBeVisible();
+  await expect(navItem(e2e.window, name)).toHaveCount(0);
+});
+
+Then('the run status shows {string}', async ({ e2e }, text) => {
+  // the status id (#266: the pill reads "Idle", "Running"…; its id stays in data-status)
+  await expect(e2e.window.getByTestId('run-status')).toHaveAttribute('data-status', text);
+});
+
+Then('the Start a workflow button is enabled', async ({ e2e }) => {
+  await expect(e2e.window.getByTestId('quick-start')).toBeEnabled();
+});
+
+When('I open the {string} settings tab', async ({ e2e }, name) => {
+  await e2e.window.getByRole('button', { name, exact: true }).click();
+});
+
+When('I choose {string} as the default development workflow', async ({ e2e }, file) => {
+  // fails when the workflow is not offered
+  await e2e.window.getByTestId('settings-default-workflow').selectOption(file);
+});
+
+Then('the default development workflow is {string}', async ({ e2e }, file) => {
+  await expect(e2e.window.getByRole('combobox', { name: 'Default development workflow' })).toHaveValue(file);
+});
+
+// ---- Settings › Execution › Memory guard (#276) -------------------------------------------------------
+// data-testids: memory-guard-enabled (checkbox), memory-guard-limit / memory-guard-floor (number
+// inputs), memory-guard-limit-hint ("(8.0 GB on this machine)"). A field saves on change, like the
+// rest of the Execution tab: setting a value fills it and leaves it (Tab).
+
+const memoryGuard = (page, field) => page.getByTestId(`memory-guard-${field}`);
+
+Then('the memory guard is on', async ({ e2e }) => {
+  await expect(memoryGuard(e2e.window, 'enabled')).toBeChecked();
+});
+
+// field: limit | floor
+Then("the memory guard's {word} is {int}", async ({ e2e }, field, value) => {
+  await expect(memoryGuard(e2e.window, field)).toHaveValue(String(value));
+});
+
+When("I set the memory guard's {word} to {int}", async ({ e2e }, field, value) => {
+  const input = memoryGuard(e2e.window, field);
+  await input.fill(String(value));
+  await input.press('Tab');
+});
+
+// the hint's GB figure is the limit's share of this machine's RAM (GiB or GB, one decimal)
+Then("the memory guard's hint gives its limit in GB for this machine", async ({ e2e }) => {
+  const os = require('os');
+  const page = e2e.window;
+  const limit = Number(await memoryGuard(page, 'limit').inputValue());
+  const hint = memoryGuard(page, 'limit-hint');
+  await expect(hint).toHaveText(/\d+(\.\d+)?\s*GB/);
+  const shown = Number((await hint.innerText()).match(/(\d+(?:\.\d+)?)\s*GB/)[1]);
+  const bytes = (os.totalmem() * limit) / 100;
+  expect(shown).toBeGreaterThanOrEqual(Math.floor((bytes / 1024 ** 3) * 10) / 10 - 0.1);
+  expect(shown).toBeLessThanOrEqual(Math.ceil((bytes / 1e9) * 10) / 10 + 0.1);
+});
+
+// the field's error state: aria-invalid, an error/invalid class, or the input's own :invalid
+Then("the memory guard's {word} field shows an error", async ({ e2e }, field) => {
+  const input = memoryGuard(e2e.window, field);
+  await expect.poll(() => input.evaluate((el) => el.getAttribute('aria-invalid') === 'true'
+    || /\b(error|invalid)\b/.test(el.className) || el.matches(':invalid'))).toBe(true);
+});
+
+// ---- the menu by the flow (#254) ---------------------------------------------------------------------
+
+// | entry | items |: an entry is a group's title (its items comma-separated) or a single item (no
+// items); the entries follow each other top to bottom in the table's order
+Then('the sidebar reads, top to bottom:', async ({ e2e }, table) => {
+  const page = e2e.window;
+  let lastY = -Infinity;
+  for (const row of table.hashes()) {
+    const items = String(row.items || '').split(',').map((s) => s.trim()).filter(Boolean);
+    const entry = items.length ? groupToggle(page, row.entry) : navItem(page, row.entry);
+    await expect(entry, `the sidebar's entry "${row.entry}"`).toBeVisible();
+    const box = await entry.boundingBox();
+    expect(box.y, `"${row.entry}" comes after the entry above it`).toBeGreaterThan(lastY);
+    lastY = box.y;
+    for (const item of items) {
+      await expect(menuGroup(page, row.entry).getByRole('button', { name: entryName(item) }), `"${item}" in the group "${row.entry}"`).toBeVisible();
+    }
+  }
+});
+
+Then('{string} is the top entry of the sidebar', async ({ e2e }, name) => {
+  const page = e2e.window;
+  const top = await navItem(page, name).boundingBox();
+  expect(top, `the sidebar's entry "${name}"`).not.toBeNull();
+  for (const button of await sidebar(page).getByRole('button').filter({ visible: true }).all()) {
+    const box = await button.boundingBox();
+    if (box) expect(box.y).toBeGreaterThanOrEqual(top.y);
+  }
+});
+
+When('I collapse the {string} menu group', async ({ e2e }, name) => {
+  const toggle = groupToggle(e2e.window, name);
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+});
+
+Then('the {string} menu group is collapsed, hiding {string}', async ({ e2e }, name, item) => {
+  const page = e2e.window;
+  await expect(groupToggle(page, name)).toHaveAttribute('aria-expanded', 'false');
+  await expect(menuGroup(page, name).getByRole('button', { name: entryName(item) })).toBeHidden();
+});
+
+Then('the Workflows screen is on its {string} tab', async ({ e2e }, name) => {
+  await expect(workflowsTabs(e2e.window).getByRole('tab', { name, exact: true })).toHaveAttribute('aria-selected', 'true');
+});
+
+// ---- the header: project selector, Oracle, notifications (#254) --------------------------------------
+
+const projectSelect = (page) => header(page).getByTestId('header-project');
+
+// A second project, with its own synced backlog of one open issue, added to the scratch workspace;
+// the app reloads to read the project list again
+Given('the workspace has a second project {string} whose backlog has the open issue {string}', async ({ e2e }, name, title) => {
+  const workspace = require(path.join(root, 'src', 'workspace'));
+  const projects = require(path.join(root, 'src', 'projects'));
+  const { taskProgress } = require(path.join(root, 'src', 'backlog'));
+  const ws = workspace.setupWorkspace(path.join(e2e.scratch, 'workspace'), { persist: false });
+  const repo = `https://github.com/example/${name}`;
+  const created = await projects.createProject(ws.projects, { name, description: 'A second project (simulated data)' });
+  const project = projects.updateProject(ws.projects, created.id, { repo });
+  const now = new Date().toISOString();
+  const issue = { number: 1, title, state: 'open', labels: [], body: '', url: `${repo}/issues/1`, author: 'octocat', assignees: [], tasks: taskProgress(''), createdAt: now, updatedAt: now };
+  fs.mkdirSync(ws.backlog, { recursive: true });
+  fs.writeFileSync(path.join(ws.backlog, `${project.id}.json`), JSON.stringify({ projectId: project.id, platform: 'github', repo, syncedAt: now, issues: [issue], epics: [], epicsError: null }, null, 2));
+  await e2e.window.reload();
+  await e2e.window.waitForLoadState('domcontentloaded');
+});
+
+Then('the header shows the project {string}', async ({ e2e }, name) => {
+  const select = projectSelect(e2e.window);
+  await expect(select).toBeVisible();
+  await expect.poll(() => select.evaluate((el) => el.selectedOptions[0]?.textContent.trim())).toBe(name);
+});
+
+When('I choose the project {string} in the header', async ({ e2e }, name) => {
+  await projectSelect(e2e.window).selectOption({ label: name });
+});
+
+When('I open the notifications from the header bell', async ({ e2e }) => {
+  await header(e2e.window).getByRole('button', { name: /^Notifications\b/ }).click();
+});
+
+Then('the notification centre is open', async ({ e2e }) => {
+  await expect(e2e.window.getByRole('dialog', { name: 'Notifications', exact: true })).toBeVisible();
+});
+
+Then('the header offers {string}', async ({ e2e }, name) => {
+  await expect(header(e2e.window).getByRole('button', { name: entryName(name) })).toBeVisible();
+});
+
+// ---- a failed app update (#279) -----------------------------------------------------------------------
+// <workspace>/oracle/app-update.json is the intent Self-healing writes before it applies merged fixes to
+// the app: { from, to, subjects, roadmaps, appDir, at }. Still there with `at` over 2 minutes old: the new
+// code did not start. The app then shows data-testid="app-update-failed-banner" (what was updated and
+// `git -C <appDir> checkout <from>`, not role="banner": that is the header) with a "Dismiss" button,
+// kept until dismissed. The app checks when the window loads, so the step reloads it.
+
+const failedUpdateBanner = (page) => page.getByTestId('app-update-failed-banner');
+
+Given('an app update from {string} to {string} was started {int} minutes ago without finishing', async ({ e2e }, from, to, minutes) => {
+  const dir = path.join(e2e.scratch, 'workspace', 'oracle');
+  fs.mkdirSync(dir, { recursive: true });
+  const intent = {
+    from, to,
+    subjects: ['Fix the roadmap dispatch after a restart'],
+    roadmaps: [],
+    appDir: root,
+    at: new Date(Date.now() - minutes * 60000).toISOString(),
+  };
+  fs.writeFileSync(path.join(dir, 'app-update.json'), JSON.stringify(intent, null, 2));
+  await e2e.window.reload();
+  await e2e.window.waitForLoadState('domcontentloaded');
+});
+
+Then('a banner says the app update to {string} did not start', async ({ e2e }, to) => {
+  const banner = failedUpdateBanner(e2e.window);
+  await expect(banner).toBeVisible({ timeout: 30000 });
+  await expect(banner).toContainText(to);
+  await expect(banner).toContainText('Fix the roadmap dispatch after a restart');
+});
+
+Then('the banner gives the command to go back to {string}', async ({ e2e }, from) => {
+  await expect(failedUpdateBanner(e2e.window)).toContainText(new RegExp(`git -C .+ checkout ${escapeRe(from)}`));
+});
+
+When('I dismiss the failed app update banner', async ({ e2e }) => {
+  await failedUpdateBanner(e2e.window).getByRole('button', { name: /^Dismiss/ }).click();
+});
+
+Then('no failed app update banner shows', async ({ e2e }) => {
+  await expect(navItem(e2e.window, 'Home')).toBeVisible();
+  await expect(failedUpdateBanner(e2e.window)).toHaveCount(0);
+});
+
+// ---- no Supervisor in the header (#264) ---------------------------------------------------------------
+
+// every screen the menu opens (a group's title only collapses its group: skipped)
+Then('no screen of the menu shows a {string} button in the header', async ({ e2e }, name) => {
+  const page = e2e.window;
+  const items = [];
+  for (const button of await sidebar(page).getByRole('button').filter({ visible: true }).all()) {
+    if ((await button.getAttribute('aria-expanded')) !== null) continue;
+    items.push((await button.innerText()).replace(/\s+\d+$/, '').trim());
+  }
+  expect(items.length, 'the menu has screens').toBeGreaterThan(5);
+  for (const item of items) {
+    await navItem(page, item).click();
+    await expect(header(page).getByRole('button', { name: new RegExp(escapeRe(name)) }), `the header on "${item}"`).toHaveCount(0);
+  }
+});

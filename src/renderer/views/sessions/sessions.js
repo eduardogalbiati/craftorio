@@ -306,7 +306,7 @@
     input.setAttribute('aria-label', 'Session title');
     el.replaceWith(input);
     sx.editing = true;
-    input.focus();
+    input.focus({ preventScroll: true });
     input.select();
     let done = false;
     const finish = async (keep) => {
@@ -435,7 +435,7 @@
     $s('#sx-model').value = '';
     renderForm();
     $s('#sx-modal').classList.remove('hidden');
-    $s('#sx-model-select').focus();
+    $s('#sx-model-select').focus({ preventScroll: true });
   }
 
   // Models come from the CLI's own list ({ id, name, efforts, defaultEffort }); "Other…" takes any
@@ -521,7 +521,7 @@
       const other = e.target.value === OTHER;
       Object.assign(sx.form, { custom: other, model: other ? $s('#sx-model').value.trim() : e.target.value });
       renderForm();
-      if (other) $s('#sx-model').focus();
+      if (other) $s('#sx-model').focus({ preventScroll: true });
     };
     $s('#sx-model').oninput = (e) => { sx.form.model = e.target.value; };
     $s('#btn-sx-pick').onclick = async () => { const d = await api.pickFolder(); if (d) $s('#sx-folder').value = d; };
@@ -546,7 +546,7 @@
 
   registerView({
     id: 'sessions',
-    nav: { label: 'Sessions', order: 10, title: 'Claude Code, Codex and Grok sessions on this machine, in embedded terminals', icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" /><polyline points="7 9 10 12 7 15" /><line x1="12.5" y1="15" x2="17" y2="15" /></svg>' },
+    nav: { label: 'Sessions', order: 50, group: 'code', title: 'Claude Code, Codex and Grok sessions on this machine, in embedded terminals', icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" /><polyline points="7 9 10 12 7 15" /><line x1="12.5" y1="15" x2="17" y2="15" /></svg>' },
     markup: `
       <section id="view-sessions" class="view view-sessions hidden">
         <aside class="sx-side">

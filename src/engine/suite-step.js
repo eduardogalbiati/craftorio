@@ -14,6 +14,8 @@
 // output: the engine adds them to the run's list and to the workspace's failing-on-main.json); files
 // the base does not have are the run's. The base's result per file is cached by base commit + file
 // (<workspace>/cache/base-tests/<commit>.json), so the next round and other runs reuse it.
+// A step with `base_check: false` (#260, release.yaml: its worktree is the base itself) gets no
+// `base`: nothing is checked there, every failing test fails the step.
 // The suite runs as from a shell (#210): `suiteEnv` drops the app's variables (Electron's, npm's, an
 // inspector in NODE_OPTIONS that forces node --test to one file at a time, the scratch workspace that
 // every test process would share) and gives the suite its own lock folder (MULTIAGENT_LOCKS_DIR,
@@ -45,6 +47,7 @@ const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
 const { parseAgentReport } = require('./agent-test-report');
+const { parseNodeCoverage, renderCoverageSummary } = require('../coverage-summary');
 const { processTreeCommands } = require('./processes');
 const { killTree } = require('./providers');
 
@@ -111,10 +114,10 @@ function parseFailures(text, { cwd } = {}) {
   }
   const lines = clean(text).split(/\r?\n/);
   const out = [];
-  const add = (test, file, error) => {
+  const add = (test, file, error, extra = {}) => {
     test = String(test || '').trim();
     if (!test || out.some((f) => f.test === test && f.file === file)) return;
-    out.push({ test, file: file || '', error: error || '' });
+    out.push({ test, file: file || '', error: error || '', ...extra });
   };
   // node:test, spec reporter: "✖ failing tests:", then "test at <file>:<l>:<c>" / "✖ <name> (<ms>)" / the error
   const spec = lines.findIndex((l) => /^\s*✖ failing tests:/.test(l));
@@ -186,6 +189,20 @@ function parseFailures(text, { cwd } = {}) {
     const m = /^\[ERROR\]\s+([\w.$]+)\.(\w+):(\d+)\s+(.*)$/.exec(l);
     if (m) add(m[2], m[1], m[4]);
   }
+  // Playwright (playwright-bdd, #223): "  1) <spec>:7:7 › Feature › Scenario @tag", the error, then the
+  // attachments; the trace kept for the failure is the "trace.zip" line. The generated spec
+  // (.features-gen/features/x.feature.spec.js) is reported as its feature file (features/x.feature).
+  // A config with projects prefixes the file with the project: "1) [chromium] › <spec>:7:7 › ...".
+  for (let i = 0; i < lines.length; i++) {
+    const m = /^\s*\d+\) (?:\[[^\]]+\] › )?(\S+?):\d+:\d+ › (.+)$/.exec(lines[i]);
+    if (!m) continue;
+    const block = [];
+    for (let j = i + 1; j < lines.length && !/^\s*\d+\) (?:\[[^\]]+\] › )?\S+?:\d+:\d+ › /.test(lines[j]) && !/^\s*\d+ (failed|passed|flaky|skipped|interrupted)\b/.test(lines[j]); j++) block.push(lines[j]);
+    const end = block.findIndex((l) => /^\s*attachment #\d+:/.test(l));
+    const trace = block.map((l) => l.trim()).find((l) => /trace\.zip$/.test(l) && !/^npx /.test(l));
+    const file = fileOf(m[1].split('\\').join('/'), cwd).replace(/^\.features-gen\//, '').replace(/\.spec\.[cm]?[jt]s$/, '');
+    add(m[2], file, firstLines(end >= 0 ? block.slice(0, end) : block), trace ? { trace: trace.split('\\').join('/') } : {});
+  }
   return out.slice(0, MAX_FAILURES);
 }
 
@@ -251,7 +268,8 @@ function runningTestFiles(procs, cwd) {
 
 // Runs `command` in a shell in cwd, its whole output into logFile → { code, timedOut, error, running };
 // running: on a timeout, the test files still running. Never rejects.
-function runCommand({ command, cwd, env, timeoutMs, signal, logFile }) {
+// onSpawn(pid): the shell's process, for the memory guard (#276).
+function runCommand({ command, cwd, env, timeoutMs, signal, logFile, onSpawn }) {
   const childEnv = { ...env };
   // the engine may run inside Electron as node: the suite's own Electron children must not
   delete childEnv.ELECTRON_RUN_AS_NODE;
@@ -266,6 +284,7 @@ function runCommand({ command, cwd, env, timeoutMs, signal, logFile }) {
       resolve({ code: null, timedOut: false, error: e.message });
       return;
     }
+    if (child.pid) onSpawn?.(child.pid);
     let timedOut = false;
     let running = [];
     child.stdout?.on('data', (d) => out.write(d));
@@ -444,7 +463,47 @@ function parseCounts(text) {
   if (jest) return { passed: Number(jest.match(/(\d+) passed/)?.[1] || 0), failed: Number(jest.match(/(\d+) failed/)?.[1] || 0) };
   const py = [...t.matchAll(/=+ (.*\b(?:passed|failed)\b.*) in [\d.]+s/g)].pop()?.[1];
   if (py) return { passed: Number(py.match(/(\d+) passed/)?.[1] || 0), failed: Number(py.match(/(\d+) failed/)?.[1] || 0) };
+  // Playwright: "  1 failed" (then the failed tests' lines), "  2 passed (15.4s)"
+  const pw = { passed: last(/^\s*(\d+) passed(?: \([^)]*\))?\s*$/gm), failed: last(/^\s*(\d+) failed\s*$/gm) };
+  if (pw.passed != null || pw.failed != null) return { passed: pw.passed ?? 0, failed: pw.failed ?? 0 };
   return { passed: null, failed: null };
+}
+
+// `node --test …` → `node --test --experimental-test-coverage …` (#225). An npm script (`npm test`,
+// `npm run <name>`, optionally `-- <files>`; cwd: where its package.json is): its `<name>:coverage`
+// script when there is one (this project's `test:coverage`), else a script that is a plain
+// `node --test …` runs inlined with the flag. Any other command, or one that already asks for
+// coverage, unchanged.
+function coverageCommand(command, cwd = null) {
+  const c = String(command || '');
+  if (/--experimental-test-coverage\b/.test(c)) return c;
+  const withFlag = (s) => s.replace(/\bnode(\.exe)?(\s+)--test\b/, (m, exe, sp) => `node${exe || ''}${sp}--test --experimental-test-coverage`);
+  const npm = /^npm\s+(?:(test|t)|run(?:-script)?\s+([\w:.-]+))(\s+--\s+(.*))?$/.exec(c.trim());
+  if (!npm || !cwd) return withFlag(c);
+  let scripts = {};
+  try { scripts = JSON.parse(fs.readFileSync(path.join(cwd, 'package.json'), 'utf8')).scripts || {}; } catch { return c; }
+  const name = npm[2] || 'test';
+  const rest = npm[3] || '';
+  if (scripts[`${name}:coverage`]) return `npm run ${name}:coverage${rest}`;
+  const script = String(scripts[name] || '').trim();
+  if (/^node(\.exe)?\s+--test\b/.test(script) && !/[&|;<>]/.test(script)) return `${withFlag(script)}${npm[4] ? ` ${npm[4]}` : ''}`;
+  return c;
+}
+
+// The coverage report of a suite's output → <run_dir>/coverage/coverage-summary.md and its numbers
+// ({ lines, branches, functions, files, path }), or null without a report. No model call.
+function saveCoverage(text, runDir, changedFiles) {
+  const head = parseNodeCoverage(text);
+  if (!head || !runDir) return null;
+  let changed = [];
+  try { changed = (typeof changedFiles === 'function' ? changedFiles() : changedFiles) || []; } catch { changed = []; }
+  const summary = parseNodeCoverage(text, { changedFiles: changed });
+  const rel = 'coverage/coverage-summary.md';
+  try {
+    fs.mkdirSync(path.join(runDir, 'coverage'), { recursive: true });
+    fs.writeFileSync(path.join(runDir, rel), renderCoverageSummary(summary));
+  } catch { return null; }
+  return { ...summary.totals, files: summary.files.length, path: rel };
 }
 
 // command: rendered (empty: detected); cwd: the worktree; runDir: the run folder (log under logs/);
@@ -458,7 +517,11 @@ function parseCounts(text) {
 // and a command that cannot take files runs whole. selection: why these files (affected-tests.js),
 // kept in the output; logName: the log's name (default suite-<round>). Only whole-suite runs
 // measure the history the timeouts come from. Output adds scope (full | files), selection, passed, failed.
-async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = 'pass', preexisting = [], signal, timeoutMs, history, base, baseCacheDir, run = runCommand, log = () => {}, files = null, selection = null, logName = null }) {
+// coverage (#225): the command runs with node's coverage (coverageCommand); whenever the output
+// has node's coverage report, <run_dir>/coverage/coverage-summary.md (the totals and the changed files',
+// changedFiles(): the files the run changed) is written and `coverage` added to the output.
+// onSpawn(pid): the command's process, watched by the memory guard (#276).
+async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = 'pass', preexisting = [], signal, timeoutMs, history, base, baseCacheDir, run = runCommand, log = () => {}, files = null, selection = null, logName = null, coverage = false, changedFiles = null, onSpawn = null }) {
   const logFile = runDir ? path.join(runDir, 'logs', `${logName || `suite-${round}`}.log`) : null;
   const out = {
     kind: 'suite', status: 'blocked', round, scope: 'full', command: null, log: logFile ? path.relative(runDir, logFile).split(path.sep).join('/') : null,
@@ -492,6 +555,7 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
     if (filtered) { out.scope = 'files'; out.command = filtered; measure = false; }
     else if (out.selection) out.selection = { ...out.selection, why: `${out.selection.why}; \`${out.command}\` cannot run single test files: the whole suite ran` };
   }
+  if (coverage && !mock) out.command = coverageCommand(out.command, cwd);
   const recent = mock ? [] : suiteDurations(hist);
   out.timeout_ms = timeoutMs || suiteTimeout(recent);
   const timeoutWhy = timeoutMs ? 'the step\'s timeout' : recent.length ? `${TIMEOUT_FACTOR}× the median of the last ${plural(recent.length, 'suite run')}` : 'the default, no suite run measured yet';
@@ -513,7 +577,7 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
     if (logFile) fs.appendFileSync(logFile, text);
   } else {
     log('info', `suite: ${out.command} (round ${round}, timeout ${Math.round(out.timeout_ms / 60e3)} min, log ${out.log})`);
-    const r = await run({ command: out.command, cwd, env: { ...childEnv.env, MULTIAGENT_TEST_HUMAN_LOG: humanLog(logFile) }, timeoutMs: out.timeout_ms, signal, logFile });
+    const r = await run({ command: out.command, cwd, env: { ...childEnv.env, MULTIAGENT_TEST_HUMAN_LOG: humanLog(logFile) }, timeoutMs: out.timeout_ms, signal, logFile, ...(onSpawn ? { onSpawn } : {}) });
     out.exit_code = r.code;
     out.timed_out = r.timedOut;
     out.running = r.running || [];
@@ -534,6 +598,11 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
   // a run that ended (not cut by the timeout, not cancelled) measures the suite for the next timeouts
   if (!mock && measure && !out.timed_out && !signal?.aborted) recordDuration(hist, out.duration_ms);
   Object.assign(out, parseCounts(text));
+  // agent mode (#219): the coverage table is in the human-readable report
+  let human = '';
+  if (out.human_log) { try { human = fs.readFileSync(path.join(runDir, out.human_log), 'utf8'); } catch { human = ''; } }
+  const cov = saveCoverage(`${clean(text)}\n${clean(human)}`, runDir, changedFiles);
+  if (cov) out.coverage = cov;
   if (out.exit_code === 0 && !out.timed_out) { out.status = 'pass'; return finish(); }
   const failures = parseFailures(text, { cwd });
   out.preexisting = failures.filter((f) => preexisting.some((p) => sameTest(f, p)));
@@ -579,7 +648,7 @@ function suiteMessage(output) {
     if ((sel.files || []).length > SELECTION_LINES) lines.push(`- … and ${sel.files.length - SELECTION_LINES} more`);
   } else if (sel?.why) lines.push(`Whole suite: ${sel.why}`);
   if (output.failures?.length) lines.push('Failures:');
-  for (const f of output.failures || []) lines.push(`- ${f.test}${f.file ? ` (${f.file}${f.line ? `:${f.line}` : ''})` : ''}${f.error ? `: ${String(f.error).split('\n')[0]}` : ''}`);
+  for (const f of output.failures || []) lines.push(`- ${f.test}${f.file ? ` (${f.file}${f.line ? `:${f.line}` : ''})` : ''}${f.error ? `: ${String(f.error).split('\n')[0]}` : ''}${f.trace ? ` [trace: ${f.trace}]` : ''}`);
   if (output.human_log && output.failures?.length) lines.push(`Human-readable report (read only the lines you need): ${output.human_log}`);
   if (output.preexisting?.length) {
     lines.push('Also failing on the base (reported, not chased):');
@@ -622,6 +691,7 @@ function redCheck(output, files, { mock, mockResult } = {}) {
 
 module.exports = {
   checkOnBase,
+  coverageCommand,
   detectTestCommand,
   filteredCommand,
   isFullSuiteCommand,
@@ -632,6 +702,7 @@ module.exports = {
   runCommand,
   runningTestFiles,
   runSuite,
+  saveCoverage,
   SUITE_TIMEOUT_MS,
   suiteEnv,
   suiteMessage,
