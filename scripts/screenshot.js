@@ -41,6 +41,10 @@
 //                      --click "[data-testid=discovery-card][data-column=ready]
 //                      [data-testid=discovery-card-title]" --click "[data-testid=discovery-commit]")
 //   --run <mock|dir>   run-chat: a simulated software-development run (default) or a copy of a run folder
+//                      (one without summary.json, e.g. its events cut at a moment, is shown as it was
+//                      live then: a window follows only its own runs, so the copy is marked running here)
+//   --sequences <json> the simulated run's scenario (scripts/run.js --mock-sequences, WorkflowRun's
+//                      mockSequences), e.g. '{"invalid_answers":{"verify_change":2}}' calls the supervisor
 //   --workflow <file>  the workflow of the simulated run (default software-development.yaml)
 //   --pipeline <file>  run: starts this saved pipeline instead (#135, e.g. develop-to-retrospective.yaml):
 //                      its Run screen shows each stage's run
@@ -204,7 +208,7 @@ function readSteps(file) {
 }
 
 function parseArgs(argv) {
-  const a = { view: 'dashboard', tab: null, mode: null, run: 'mock', workflow: 'software-development.yaml', clicks: [], contexts: [], presses: [], keys: [], pastes: [], inputs: {}, stopAt: null, keepAwake: null, theme: null, size: [1400, 900], ref: null, out: null, name: null, side: null, caption: null, wait: null, timeout: null, demoShots: true,
+  const a = { view: 'dashboard', tab: null, mode: null, run: 'mock', workflow: 'software-development.yaml', clicks: [], contexts: [], presses: [], keys: [], pastes: [], inputs: {}, stopAt: null, keepAwake: null, theme: null, size: [1400, 900], ref: null, out: null, name: null, side: null, caption: null, wait: null, timeout: null, demoShots: true, sequences: null,
     start: false, task: null, goal: null, record: null, fps: 10, mockSpeed: null, steps: null, videoScale: 1, bitrate: 2500 };
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i];
@@ -215,6 +219,7 @@ function parseArgs(argv) {
     else if (k === '--tab') a.tab = next();
     else if (k === '--mode') a.mode = next();
     else if (k === '--run') a.run = next();
+    else if (k === '--sequences') a.sequences = next();
     else if (k === '--workflow') { a.workflow = next(); a.workflowGiven = true; }
     else if (k === '--then') a.then = next();
     else if (k === '--pipeline') a.pipeline = next();
@@ -1744,9 +1749,9 @@ function main() {
       if (!fs.existsSync(path.join(from, 'events.jsonl'))) throw new Error(`--run ${args.run} is not a run folder (no events.jsonl)`);
       const to = path.join(ws.runs, path.basename(from));
       fs.cpSync(from, to, { recursive: true });
-      return readRun(to);
+      return { ...readRun(to), live: !fs.existsSync(path.join(to, 'summary.json')) };
     }
-    const r = spawnSync(process.execPath, [path.join(appDir, 'scripts', 'run.js'), '--mock', '--auto-approve', '--file', args.workflow, '--repo', project.folder, '--task', args.task || DEFAULT_TASK.run], {
+    const r = spawnSync(process.execPath, [path.join(appDir, 'scripts', 'run.js'), '--mock', '--auto-approve', '--file', args.workflow, '--repo', project.folder, '--task', args.task || DEFAULT_TASK.run, ...(args.sequences ? ['--mock-sequences', args.sequences] : [])], {
       cwd: appDir, env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, encoding: 'utf8', timeout: Math.max(1000, args.timeout - 20000), windowsHide: true,
     });
     const dirs = runDirs();
@@ -1871,7 +1876,9 @@ function main() {
     if (v === 'project') await js(`openProjectView(${JSON.stringify(project.id)})`);
     else if (v === 'run-chat') {
       if (!run) throw new Error('no run to show');
-      await js(`window.openRunChat({ runId: ${JSON.stringify(run.runId)}, workflow: ${JSON.stringify(run.workflow)} })`);
+      // a copied run cut at a moment (--run <dir> without summary.json): shown as it was live then
+      if (run.live) await js(`const v = state.runs.get(${JSON.stringify(run.runId)}) || newRunView(); v.run = { ...(v.run || {}), id: ${JSON.stringify(run.runId)}, status: 'running' }; state.runs.set(${JSON.stringify(run.runId)}, v);`);
+      await js(`window.openRunChat({ runId: ${JSON.stringify(run.runId)}, workflow: ${JSON.stringify(run.workflow)}, running: ${!!run.live} })`);
     } else if (v === 'run') {
       // a live simulated run started from the Start panel; gates are approved as they come
       await js(`

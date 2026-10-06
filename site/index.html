@@ -233,6 +233,18 @@
             </article>
 
             <article class="story-step">
+              <span class="tag tag-violet">Fluxo em 3D</span>
+              <h3>Veja o fluxo agêntico em tempo real.</h3>
+              <p>A execução vira um chão de fábrica: cada agente na sua mesa, o que ele está fazendo agora (lendo, escrevendo, rodando um comando), o item de trabalho passando de mão em mão e o supervisor no seu pódio. O consumo de tokens e o custo sobem ao vivo, por agente e por passo. Pause, volte a qualquer momento da execução e assista de novo em até 64x.</p>
+              <ul class="ticks">
+                <li>Tokens e custo por agente, em tempo real</li>
+                <li>A ação de cada agente no momento, com a ferramenta em uso</li>
+                <li>Replay de qualquer trecho, mesmo com a execução em andamento</li>
+              </ul>
+              <div class="story-slot"></div>
+            </article>
+
+            <article class="story-step">
               <span class="tag tag-amber">Turno da noite</span>
               <h3>Vá dormir. O roadmap continua, e um vigia cuida dele.</h3>
               <p>Ligue o vigia noturno até a hora que quiser e marque o que a IA pode fazer sem perguntar: tentar de novo um item que falhou, atualizar o texto de uma issue, restaurar um workflow. Responder um portão, fazer push ou apagar dados ficam bloqueados. Cada ação fica registrada com backup e botão de desfazer, e de manhã você recebe o resumo da noite.</p>
@@ -286,6 +298,18 @@
                 <li>Cada execução num worktree git isolado</li>
                 <li>JavaScript, Python, Go, Java e C#, no GitHub ou GitLab</li>
                 <li>Personalize passos, agentes e skills em YAML, ou crie os seus</li>
+              </ul>
+              <div class="story-slot"></div>
+            </article>
+
+            <article class="story-step">
+              <span class="tag tag-cyan">Supervisor</span>
+              <h3>Destrava a execução, com a autonomia que você definiu.</h3>
+              <p>Quando um passo falha (uma resposta fora do formato, uma ação que deu erro, um agente travado), o supervisor entra antes de você: lê o que aconteceu, explica a causa e escolhe uma saída que o motor valida. Pedir de novo com uma instrução, corrigir a saída, voltar a um passo permitido ou chamar você. Ele trabalha no workflow, nunca no seu código.</p>
+              <ul class="ticks">
+                <li>Limite de intervenções e de custo por execução</li>
+                <li>Nunca responde um portão humano</li>
+                <li>Cada decisão registrada com o porquê</li>
               </ul>
               <div class="story-slot"></div>
             </article>
@@ -364,11 +388,13 @@
               <div class="shot-bar" aria-hidden="true"><span class="win-dots"><i></i><i></i><i></i></span><span class="shot-label" id="story-label">Arena de IA</span></div>
               <div class="shot-stage">
                 <img class="story-media active" src="img/product-owner.png" width="1400" height="900" loading="eager" alt="O Product Owner monta um roadmap em etapas a partir do backlog, com o roadmap ao vivo rodando">
+                <img class="story-media" src="img/flow-3d.png" width="1400" height="900" loading="lazy" alt="A execução em 3D: cada agente na sua mesa, o passo Evidence lendo com o comando em uso, tokens, custo e tempo decorrido, a linha do tempo e o replay">
                 <img class="story-media" src="img/night-watch.png" width="1400" height="900" loading="lazy" alt="O vigia noturno: o que a IA pode fazer sem perguntar, a linha do tempo e os indicadores de cada noite">
                 <img class="story-media" src="img/triage.png" width="1400" height="900" loading="lazy" alt="Triagem: o analisador de código e o redator de issues trabalham até o portão de revisão">
                 <img class="story-media" src="img/arena.png" width="1400" height="900" loading="lazy" alt="Arena de IA rodando: quatro modelos escrevem em paralelo, se avaliam às cegas e a síntese espera a sua decisão">
                 <img class="story-media" src="img/write-review.png" width="1400" height="900" loading="lazy" alt="Write &amp; Review rodando: o redator entrega versões, o revisor dá nota até aprovar e o supervisor pergunta o que fazer">
                 <img class="story-media" src="img/workflow-run.png" width="1400" height="900" loading="lazy" alt="Workflow de desenvolvimento rodando: passos, sessões de cada agente com tokens e custo, e o log do motor">
+                <img class="story-media" src="img/supervisor-3d.png" width="1400" height="900" loading="lazy" alt="O supervisor no seu pódio, trabalhando no passo de verificação final: o porquê da chamada, o modelo, o custo e os eventos da execução">
                 <img class="story-media" src="img/evidence-gate.png" width="1400" height="900" loading="lazy" alt="O portão de validação com as screenshots de antes e depois, o Run App e o visualizador de imagens">
                 <img class="story-media" src="img/workflow-builder.png" width="1400" height="900" loading="lazy" alt="Builder: um workflow é montado com uma mesa de desenvolvimento, uma de revisão com outro modelo e um portão de aprovação humana">
                 <img class="story-media" src="img/agent-create.png" width="1400" height="900" loading="lazy" alt="Criação de um agente: nome, prompt, visual do robô e skills, e ele aparece na lista de agentes">

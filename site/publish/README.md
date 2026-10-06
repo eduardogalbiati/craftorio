@@ -16,3 +16,6 @@ and serves the folders `/ai-next-level` and `/fabrica-24x7`.
   site/run-3d/poster.jpg.
 - `import-chapter1.js`: brings chapter 1 (PT, EN, image) from the posts session's marketing/ folder.
 - `ga-page.js <file...>`: adds the GA4 tag to a static page.
+- `shots-3d.js [<out dir>]`: the two 3D stills of the full page (flow-3d.png, supervisor-3d.png): a simulated
+  run with a verify_change failure, cut at two moments and captured in the 3D view (needs `npm run build:3d`).
+  The other stills come from `npm run screenshot` with the steps in site/recordings/.
