@@ -9,7 +9,8 @@
     },
     {
       "n": 2,
-      "status": "soon",
+      "status": "published",
+      "date": "2026-10-06",
       "pt": { "slug": "a-ia-saiu-do-meu-volante", "title": "O dia em que a IA saiu do meu volante", "teaser": "No quarto dia, a ferramenta passou a gerar mais trabalho de agente do que eu. Poucos dias depois, mais de 90% já saía dela." },
       "en": { "slug": "ai-took-the-wheel", "title": "The day AI took the wheel from me", "teaser": "On day four, the tool started generating more agent work than I did. A few days later, over 90% came from it." }
     },
