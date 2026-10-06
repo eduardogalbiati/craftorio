@@ -54,10 +54,10 @@ p { margin: 0; }
 .lang:hover { color: var(--on-night); border-color: var(--on-night-soft); }
 
 /* hero */
-.hero { --veil: .72; position: relative; overflow: hidden; background: var(--night); color: var(--on-night); padding: 88px 0 72px; }
+.hero { --veil: .82; position: relative; overflow: hidden; background: var(--night); color: var(--on-night); padding: 88px 0 72px; }
 .hero .wrap { position: relative; z-index: 1; }
 /* the 3D run behind the hero (the full page's cover scene), under a veil: --veil is how much of the night
-   covers it; the poster shows until the scene drew, and alone on small screens and with reduced motion */
+   covers it (82%: the robots stay a hint behind the title); the poster shows until the scene drew, and alone on small screens and with reduced motion */
 .hero-scene { position: absolute; inset: 0; z-index: 0; }
 .hero-scene img, .hero-scene iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; object-fit: cover; object-position: 50% 45%; pointer-events: none; }
 .hero-scene iframe { opacity: 0; transition: opacity .9s ease; }
