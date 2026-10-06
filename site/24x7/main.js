@@ -41,6 +41,16 @@ function startReveal() {
   document.querySelectorAll('.timeline li, .day > div, .lessons article, .frame, .nums div').forEach((el) => { el.classList.add('reveal'); io.observe(el); });
 }
 
+// the hero's 3D scene says when it drew its first frame (site/run-3d/index.html); the poster shows until then
+function startHeroScene() {
+  const scene = document.querySelector('.hero-scene');
+  const frame = scene?.querySelector('iframe');
+  if (!frame) return;
+  window.addEventListener('message', (e) => {
+    if (e.data?.type === 'run3d-ready' && e.source === frame.contentWindow) scene.classList.add('ready');
+  });
+}
+
 // ---------------------------------------------------------------- newsletter
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
@@ -158,4 +168,5 @@ function startTracking() {
 drawClock();
 startTracking();
 startReveal();
+startHeroScene();
 startForm();
