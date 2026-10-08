@@ -55,6 +55,9 @@ Feature: Analytics, what the work costs
     Then the hours heatmap says "more active hours are stronger"
     And the heatmap legend reads "idle", "fully active" and "no data"
 
+  # A guard for a future light theme: today the main renderer has a single dark theme (only the 3D
+  # view has a light one), so this baseline is byte-identical to the dark one. It starts differing
+  # the day a light theme reaches Analytics, which is when the light-specific greens get checked.
   @issue-275 @visual
   Scenario: The hours heatmap and its legend in the light theme
     Given the app is open in the light theme

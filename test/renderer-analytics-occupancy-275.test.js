@@ -235,3 +235,63 @@ describe('#275 24/7 heatmap: more is more, legend, local dates', () => {
     assert.equal(chart.includes('10-04'), false, 'no ISO month-day in the day chart');
   });
 });
+
+// After the change (same sandbox: pt-BR, America/Sao_Paulo). 2026-10-04 is a Sunday: pt-BR's short
+// weekday is "dom." (ICU), and 2026-10-03 a Saturday ("sáb.").
+describe('#275 24/7 tab: weekdays, local nights, the last hour, a malformed day', () => {
+  let tzBefore;
+  before(() => { tzBefore = process.env.TZ; process.env.TZ = 'America/Sao_Paulo'; });
+  after(() => { if (tzBefore === undefined) delete process.env.TZ; else process.env.TZ = tzBefore; });
+  const SUNDAY = /dom\.?,? ?04\/10/;
+
+  test("a cell's tooltip starts with the weekday in the owner's locale", async () => {
+    const { html } = await loadTab();
+    const t = cell(html, 14).title;
+    assert.match(t, SUNDAY, `weekday then day (got "${t}")`);
+  });
+
+  test('the last hour of the day wraps its range to midnight', async () => {
+    const { html } = await loadTab();
+    const t = cell(html, 23).title;
+    assert.match(t, /23:00[–-]00:00/, `23:00–00:00, not 24:00 (got "${t}")`);
+  });
+
+  test("the day chart's bar tooltips name the weekday and the day", async () => {
+    const { html } = await loadTab();
+    const titles = [...element(html, 'an-occ-days').matchAll(/<title>([^<]*)<\/title>/g)].map((m) => m[1]);
+    assert.equal(titles.length > 0, true, 'the bars have tooltips');
+    assert.equal(titles.some((t) => SUNDAY.test(t)), true, `a tooltip of 04/10 with its weekday (got "${titles.join(' | ')}")`);
+    assert.equal(titles.some((t) => t.includes('2026-10-04')), false, 'no ISO date in the tooltips');
+  });
+
+  test("the cost trend's tooltips name the weekday and the day", async () => {
+    const data = payload();
+    data.days = data.days.map((d) => ({ ...d, costUsd: 3 }));
+    const { html } = await loadTab({ data });
+    const dots = [...html.matchAll(/<title>([^<]*per active hour)<\/title>/g)].map((m) => m[1]);
+    assert.equal(dots.length, 2, 'one dot per day with activity');
+    assert.equal(dots.some((t) => SUNDAY.test(t)), true, `the 04/10 dot (got "${dots.join(' | ')}")`);
+    assert.equal(dots.some((t) => t.includes('2026-10-')), false, 'no ISO date in the trend tooltips');
+  });
+
+  test("a night's date is the machine's local day of its start, not the UTC day", async () => {
+    const data = payload();
+    const startedAt = '2026-10-04T02:30:00.000Z'; // 23:30 on Saturday 03/10 in America/Sao_Paulo
+    data.nights = [{ startedAt, watch: true, window: { from: startedAt, to: '2026-10-04T11:00:00.000Z' }, occupancy: 0.5, incidents: 0, actions: 1, hoursSaved: 2, costUsd: 1 }];
+    const { html } = await loadTab({ data });
+    const cellHtml = new RegExp(`<td class="nowrap" title="${startedAt}">([\\s\\S]*?)</td>`).exec(html)?.[1];
+    assert.ok(cellHtml, 'the night row shows its start date');
+    const text = visible(cellHtml).trim();
+    assert.match(text, /s[áa]b\.?,? ?03\/10/, `Saturday 03/10 (got "${text}")`);
+    assert.equal(text.includes('2026-10-04'), false, 'not the ISO UTC day');
+  });
+
+  test('a malformed day is shown as it is, never as an invalid date', async () => {
+    const data = payload();
+    data.days[1] = { ...data.days[1], day: 'unknown' };
+    const { html } = await loadTab({ data });
+    const rows = heatRows(html);
+    assert.equal(rows[0].label, 'unknown', 'the raw text is the label');
+    assert.equal(/Invalid Date|NaN/.test(html), false, 'no "Invalid Date" or NaN anywhere on the tab');
+  });
+});
