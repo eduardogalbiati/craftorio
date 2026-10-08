@@ -41,7 +41,7 @@
   const hh = (h) => `${String(h % 24).padStart(2, '0')}:00`;
 
   // the heatmap's scale (#275): l0 idle, l1 under 25%, l2 under 50%, l3 under 75%, l4 75% and over
-  const HEAT_LEVELS = [[0, 'Idle'], [0.25, 'Under 25% active'], [0.5, '25–50% active'], [0.75, '50–75% active'], [1, 'Over 75% active']];
+  const HEAT_LABELS = ['Idle', 'Under 25% active', '25–50% active', '50–75% active', 'Over 75% active'];
   const heatLevel = (v) => (v <= 0 ? 0 : v < 0.25 ? 1 : v < 0.5 ? 2 : v < 0.75 ? 3 : 4);
 
   async function load() {
@@ -97,7 +97,7 @@
     const axis = `<div class="an-heat-row an-heat-axis"><span class="an-heat-day"></span>${Array.from({ length: 24 }, (_, h) => `<em>${h % 3 === 0 ? h : ''}</em>`).join('')}</div>`;
     return `<div class="an-heat" data-testid="an-occ-heat" role="img" aria-label="Active share of each hour, per day">${rows}${axis}</div>`;
   }
-  const heatLegend = () => `<div class="an-legend an-heat-legend" data-testid="an-occ-heat-legend" aria-label="Heatmap scale"><span class="an-heat-scale">Idle ${HEAT_LEVELS.map(([, l], i) => `<i class="an-heat-cell an-heat-l${i}" title="${esc(l)}"></i>`).join('')} Fully active</span><span><i class="an-heat-cell an-heat-nodata"></i>No data</span></div>`;
+  const heatLegend = () => `<div class="an-legend an-heat-legend" data-testid="an-occ-heat-legend" aria-label="Heatmap scale"><span class="an-heat-scale">Idle ${HEAT_LABELS.map((l, i) => `<i class="an-heat-cell an-heat-l${i}" title="${esc(l)}"></i>`).join('')} Fully active</span><span><i class="an-heat-cell an-heat-nodata"></i>No data</span></div>`;
 
   function gapsTable(gaps) {
     if (!gaps.length) return '<p class="muted small an-empty">No idle gap longer than 15 minutes.</p>';
@@ -134,7 +134,7 @@
     const W = 900; const H = 90; const max = Math.max(...vals) || 1;
     const xy = pts.map((v, i) => (v == null ? null : [((i + 0.5) / days.length) * W, H - 6 - (v / max) * (H - 12)]));
     const path = xy.filter(Boolean).map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
-    const dots = xy.map((p, i) => (p ? `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3" class="an-trend-dot"><title>${esc(fmtDay(days[i].day, true))}:${fmtUsd(pts[i])} per active hour</title></circle>` : '')).join('');
+    const dots = xy.map((p, i) => (p ? `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3" class="an-trend-dot"><title>${esc(fmtDay(days[i].day, true))}: ${fmtUsd(pts[i])} per active hour</title></circle>` : '')).join('');
     return `<div class="an-chart"><div class="an-ymax muted small">${fmtUsd(max)}/h</div><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Cost per active hour, per day"><path d="${path}" class="an-trend" />${dots}</svg></div>`;
   }
 
