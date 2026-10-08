@@ -1,12 +1,14 @@
 // Analytics › 24/7 (#188): how close the machine is to always working, and at what price. Cards
 // (occupancy over 24 h, 7 and 30 days, the current active streak, the week's longest idle gap and its
 // cause, average and peak runs at once), a day-by-day chart of active vs idle time by cause, a 24-hour
-// heat strip per day (the owner's local time), the idle gaps over 15 min, the Night watch split (inside
-// vs outside its windows, and its nights next to the nights without it), the cost per active hour, per
-// delivered issue and per 100 lines with a trend, the split by the Product Owner's calibration (#189),
-// and one plain hint when an idle cause dominates. Channel analytics:occupancy (src/occupancy.js via
-// src/service/areas/insights.js). A tab of views/analytics/analytics.js (window.AnalyticsTabs).
-// Uses app.js globals: api, esc, fmtUsd, fmtDur, fmtNum, dateOf, errMsg, showView.
+// heat strip per day (the owner's local time; #275: five levels from idle to fully active, more is
+// more, a hatched cell for an hour without data, a legend), the idle gaps over 15 min, the Night watch
+// split (inside vs outside its windows, and its nights next to the nights without it), the cost per
+// active hour, per delivered issue and per 100 lines with a trend, the split by the Product Owner's
+// calibration (#189), and one plain hint when an idle cause dominates. Day labels follow the owner's
+// locale (navigator.language) in the machine's time zone (#273). Channel analytics:occupancy
+// (src/occupancy.js via src/service/areas/insights.js). A tab of views/analytics/analytics.js
+// (window.AnalyticsTabs). Uses app.js globals: api, esc, fmtUsd, fmtDur, fmtNum, dateOf, errMsg, showView.
 (() => {
   const LS = 'multiagent.analytics.occupancy';
   const CAUSES = [
@@ -22,6 +24,25 @@
   const pct = (x) => (x == null ? '—' : `${Math.round(x * 100)}%`);
   const hours = (h) => (h == null ? '—' : `${(Math.round(h * 10) / 10).toFixed(1)} h`);
   const level = (x) => window.OccupancyChip?.chipModel({ occupancy: x || 0 }).level || 'none';
+
+  // dates in the owner's convention (#273): the locale of the app, the time zone of the machine (the
+  // engine computes d.day as a local day, so local midnight of that day is the right instant)
+  const dayFormat = (opts) => {
+    try { return new Intl.DateTimeFormat(navigator.language || undefined, opts); } catch { return new Intl.DateTimeFormat(undefined, opts); }
+  };
+  const DAY_SHORT = dayFormat({ day: '2-digit', month: '2-digit' });
+  const DAY_LONG = dayFormat({ weekday: 'short', day: '2-digit', month: '2-digit' });
+  const localMidnight = (day) => { const [y, m, d] = String(day).slice(0, 10).split('-').map(Number); return new Date(y, m - 1, d); };
+  const fmtDay = (day, long = false) => {
+    const t = localMidnight(day);
+    return Number.isNaN(t.getTime()) ? String(day) : (long ? DAY_LONG : DAY_SHORT).format(t);
+  };
+  const fmtWhenDay = (iso) => { const t = new Date(iso); return Number.isNaN(t.getTime()) ? String(iso).slice(0, 10) : DAY_LONG.format(t); };
+  const hh = (h) => `${String(h % 24).padStart(2, '0')}:00`;
+
+  // the heatmap's scale (#275): l0 idle, l1 under 25%, l2 under 50%, l3 under 75%, l4 75% and over
+  const HEAT_LEVELS = [[0, 'Idle'], [0.25, 'Under 25% active'], [0.5, '25–50% active'], [0.75, '50–75% active'], [1, 'Over 75% active']];
+  const heatLevel = (v) => (v <= 0 ? 0 : v < 0.25 ? 1 : v < 0.5 ? 2 : v < 0.75 ? 3 : 4);
 
   async function load() {
     ox.loading = true;
@@ -55,21 +76,28 @@
       const parts = [['active', d.activeHours, ACTIVE], ...CAUSES.map(([k, , c]) => [k, d.idleHours[k], c])].map(([k, v, c]) => {
         const h = (v / 24) * H;
         y -= h;
-        return v > 0 ? `<rect x="${(i * bw + 2).toFixed(1)}" y="${y.toFixed(1)}" width="${Math.max(1, bw - 4).toFixed(1)}" height="${h.toFixed(1)}" style="fill:${c}"><title>${esc(d.day)} · ${esc(k === 'active' ? 'Active' : CAUSE_LABEL[k])}: ${hours(v)}</title></rect>` : '';
+        return v > 0 ? `<rect x="${(i * bw + 2).toFixed(1)}" y="${y.toFixed(1)}" width="${Math.max(1, bw - 4).toFixed(1)}" height="${h.toFixed(1)}" style="fill:${c}"><title>${esc(fmtDay(d.day, true))} · ${esc(k === 'active' ? 'Active' : CAUSE_LABEL[k])}: ${hours(v)}</title></rect>` : '';
       }).join('');
-      return `<g>${parts}<rect x="${(i * bw).toFixed(1)}" y="0" width="${bw.toFixed(1)}" height="${H}" class="an-hit"><title>${esc(d.day)}: ${pct(d.occupancy)} active (${hours(d.activeHours)} of ${hours(span)})${d.partial ? ', partial day' : ''}</title></rect></g>`;
+      return `<g>${parts}<rect x="${(i * bw).toFixed(1)}" y="0" width="${bw.toFixed(1)}" height="${H}" class="an-hit"><title>${esc(fmtDay(d.day, true))}: ${pct(d.occupancy)} active (${hours(d.activeHours)} of ${hours(span)})${d.partial ? ', partial day' : ''}</title></rect></g>`;
     }).join('');
     const every = Math.ceil(days.length / 10);
-    const labels = days.map((d, i) => (i % every === 0 ? `<span style="left:${((i + 0.5) / days.length) * 100}%">${esc(d.day.slice(5))}</span>` : '')).join('');
+    const labels = days.map((d, i) => (i % every === 0 ? `<span style="left:${((i + 0.5) / days.length) * 100}%">${esc(fmtDay(d.day))}</span>` : '')).join('');
     return `<div class="an-chart" data-testid="an-occ-days"><div class="an-ymax muted small">24 h</div><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Active and idle hours per day">${bars}</svg><div class="an-xlabels">${labels}</div></div>`;
   }
 
-  // a 24-hour strip per day: the share of each hour with a run active
+  // a 24-hour strip per day, newest first: the share of each local hour with a run active, as one of
+  // five levels (more is more); a hatched cell when the hour was not measured (before the log, or ahead)
+  function heatCell(day, h, v) {
+    if (v == null) return `<i class="an-heat-cell an-heat-nodata" title="${esc(`${fmtDay(day, true)}, ${hh(h)}–${hh(h + 1)} · no data`)}"></i>`;
+    const title = `${fmtDay(day, true)}, ${hh(h)}–${hh(h + 1)} · ${Math.round(v * 60)} min active (${pct(v)})`;
+    return `<i class="an-heat-cell an-heat-l${heatLevel(v)}" title="${esc(title)}"></i>`;
+  }
   function heatStrip(days) {
-    const rows = [...days].reverse().map((d) => `<div class="an-heat-row"><span class="an-heat-day mono small">${esc(d.day.slice(5))}</span>${d.hourly.map((v, h) => `<i style="opacity:${v == null ? 0 : (0.12 + 0.88 * v).toFixed(2)}" title="${esc(d.day)} ${String(h).padStart(2, '0')}:00 — ${v == null ? 'not measured' : `${pct(v)} active`}"></i>`).join('')}</div>`).join('');
+    const rows = [...days].reverse().map((d) => `<div class="an-heat-row"><span class="an-heat-day mono small" title="${esc(fmtDay(d.day, true))}">${esc(fmtDay(d.day))}</span>${d.hourly.map((v, h) => heatCell(d.day, h, v)).join('')}</div>`).join('');
     const axis = `<div class="an-heat-row an-heat-axis"><span class="an-heat-day"></span>${Array.from({ length: 24 }, (_, h) => `<em>${h % 3 === 0 ? h : ''}</em>`).join('')}</div>`;
     return `<div class="an-heat" data-testid="an-occ-heat" role="img" aria-label="Active share of each hour, per day">${rows}${axis}</div>`;
   }
+  const heatLegend = () => `<div class="an-legend an-heat-legend" data-testid="an-occ-heat-legend" aria-label="Heatmap scale"><span class="an-heat-scale">Idle ${HEAT_LEVELS.map(([, l], i) => `<i class="an-heat-cell an-heat-l${i}" title="${esc(l)}"></i>`).join('')} Fully active</span><span><i class="an-heat-cell an-heat-nodata"></i>No data</span></div>`;
 
   function gapsTable(gaps) {
     if (!gaps.length) return '<p class="muted small an-empty">No idle gap longer than 15 minutes.</p>';
@@ -88,7 +116,7 @@
     const nw = o.nightWatch;
     const row = (label, s) => `<tr><td>${label}</td><td class="num">${hours(s.hours)}</td><td class="num">${occ(s.occupancy)}</td><td class="an-idle-cell">${idleSplit(s.idleHours)}</td><td class="num">${fmtNum(s.issues)}</td><td class="num">${fmtUsd(s.costUsd)}</td></tr>`;
     const nights = o.nights.length ? `<table class="u-table an-sessions"><thead><tr><th>Night</th><th>Window</th><th class="num">Occupancy</th><th class="num">Incidents</th><th class="num">Actions</th><th class="num">Hours saved</th><th class="num">Cost</th><th></th></tr></thead><tbody>
-      ${o.nights.map((n) => `<tr><td class="nowrap">${esc(n.startedAt.slice(0, 10))}${n.watch ? '' : ' <span class="badge" title="No Night watch this night: 00:00-08:00 shown">no watch</span>'}</td>
+      ${o.nights.map((n) => `<tr><td class="nowrap" title="${esc(n.startedAt)}">${esc(fmtWhenDay(n.startedAt))}${n.watch ? '' : ' <span class="badge" title="No Night watch this night: 00:00-08:00 shown">no watch</span>'}</td>
         <td class="nowrap small">${esc(dateOf(n.window.from))} → ${esc(dateOf(n.window.to))}</td><td class="num">${occ(n.occupancy)}</td>
         <td class="num">${n.incidents == null ? '—' : n.incidents}</td><td class="num">${n.actions == null ? '—' : n.actions}</td><td class="num">${n.hoursSaved == null ? '—' : hours(n.hoursSaved)}</td>
         <td class="num">${fmtUsd(n.costUsd || 0)}</td><td>${n.watch ? `<button type="button" class="link-btn" data-occ-night="${esc(n.startedAt)}">Night watch →</button>` : ''}</td></tr>`).join('')}</tbody></table>`
@@ -106,7 +134,7 @@
     const W = 900; const H = 90; const max = Math.max(...vals) || 1;
     const xy = pts.map((v, i) => (v == null ? null : [((i + 0.5) / days.length) * W, H - 6 - (v / max) * (H - 12)]));
     const path = xy.filter(Boolean).map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
-    const dots = xy.map((p, i) => (p ? `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3" class="an-trend-dot"><title>${esc(days[i].day)}: ${fmtUsd(pts[i])} per active hour</title></circle>` : '')).join('');
+    const dots = xy.map((p, i) => (p ? `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3" class="an-trend-dot"><title>${esc(fmtDay(days[i].day, true))}:${fmtUsd(pts[i])} per active hour</title></circle>` : '')).join('');
     return `<div class="an-chart"><div class="an-ymax muted small">${fmtUsd(max)}/h</div><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Cost per active hour, per day"><path d="${path}" class="an-trend" />${dots}</svg></div>`;
   }
 
@@ -155,7 +183,7 @@
       ${hint(o.hint)}
       ${cards(o)}
       <div class="card an-card"><div class="row an-card-head"><h3>Day by day</h3>${legend()}</div>${dayChart(o.days)}</div>
-      <div class="card an-card"><h3>Hours of the day <span class="muted small">(darker: more of the hour active)</span></h3>${heatStrip(o.days)}</div>
+      <div class="card an-card" data-testid="an-occ-hours"><div class="row an-card-head"><h3>Hours of the day <span class="muted small">(more active hours are stronger)</span></h3>${heatLegend()}</div>${heatStrip(o.days)}</div>
       <h3 class="s-subtitle">Night watch <span class="muted small">(inside its windows vs outside, last ${o.span} days)</span></h3>
       ${nightWatch(o)}
       <h3 class="s-subtitle">24/7 at what price</h3>
