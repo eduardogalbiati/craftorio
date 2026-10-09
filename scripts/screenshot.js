@@ -73,6 +73,12 @@
 //                      failed (an error with what was written kept); Stop: --click "#po-log [data-live-stop]",
 //                      the steps folded: --click "#po-log [data-live-steps]"; with --workflow <file>
 //                      the drawer plans with that workflow (#235, e.g. ai-development-local-hero.yaml)
+//   --agents-window <agent>  the Agents window (#263) opened from the view on oracle | product-owner |
+//                      supervisor, and captured instead of the main window (--size sizes it: 700x800
+//                      shows the rail collapsed; --click applies inside it, e.g. a rail item)
+//   --fill <css>=<text>  types this text in the field (its value, then input and change, as a person
+//                      leaving the field; repeatable, in order with the --click options), e.g. the
+//                      runs' search box or a colour's hex field (#309). Not "--type": Chromium's own switch
 //   --click <css>      clicks this element once the view is open (repeatable, in order)
 //   --context <css>    then right-clicks this element (repeatable): e.g. an artifact's copy menu
 //   --press <css>[@f]  then presses the primary button on this element (repeatable), at the part f of
@@ -124,6 +130,8 @@ const { spawnSync, execFileSync } = require('child_process');
 const evidence = require('../src/evidence');
 const machineSlot = require('../src/engine/machine-slot');
 
+// #263: the agents the Agents window can open on (--agents-window)
+const AGENTS_WINDOW_AGENTS = ['oracle', 'product-owner', 'supervisor'];
 const VIEWS = {
   dashboard: {}, sessions: {}, projects: {}, project: {}, artifacts: {}, agents: {}, skills: {}, usage: {}, duo: {}, arena: {},
   // the Oracle's drawer (#171), opened from its header button on another screen (Settings)
@@ -169,6 +177,12 @@ function parseArgs(argv) {
     else if (k === '--then') a.then = next();
     else if (k === '--pipeline') a.pipeline = next();
     else if (k === '--click') a.clicks.push(next());
+    else if (k === '--fill') {
+      // the text follows the last "=": a selector may hold attribute values ([data-color="body"])
+      const m = /^(.+)=(.*)$/s.exec(next());
+      if (!m) throw new Error('--fill takes <css>=<text>');
+      a.clicks.push({ fill: m[1], text: m[2] }); // in order with the clicks
+    }
     else if (k === '--context') a.contexts.push(next());
     else if (k === '--press') {
       const m = /^(.*?)(?:@([\d.]+))?$/s.exec(next()), at = m[2] === undefined ? 0.5 : Number(m[2]);
@@ -207,8 +221,11 @@ function parseArgs(argv) {
     else if (k === '--budget') a.budget = next();
     else if (k === '--roadmap') a.roadmap = next();
     else if (k === '--po') a.po = next();
+    else if (k === '--agents-window') a.agentsWindow = next();
     else throw new Error(`Unknown argument: ${k}`);
   }
+  // #263: the Agents window on an agent, captured instead of the main window (--size sizes it too)
+  if (a.agentsWindow && !AGENTS_WINDOW_AGENTS.includes(a.agentsWindow)) throw new Error(`--agents-window takes ${AGENTS_WINDOW_AGENTS.join(' | ')}`);
   let v = VIEWS[a.view];
   if (!v) throw new Error(`Unknown view: ${a.view}. Views: ${Object.keys(VIEWS).join(', ')}`);
   if (a.tab && !v.tabs?.includes(a.tab)) throw new Error(`--tab ${a.tab} does not apply to ${a.view}${v.tabs ? ` (tabs: ${v.tabs.join(', ')})` : ''}`);
@@ -226,7 +243,7 @@ function parseArgs(argv) {
   if (a.po && a.view !== 'backlog') throw new Error('--po applies to --view backlog');
   if ((a.stopAt || Object.keys(a.inputs).length) && a.view !== 'run') throw new Error('--stop-at and --input apply to --view run');
   a.wait ??= v.live ? 20000 : 1500;
-  a.name ??= [a.view, a.tab, a.mode, a.oracle && `oracle-${a.oracle}`, a.po && `po-${a.po}`, a.theme].filter(Boolean).join('-');
+  a.name ??= [a.agentsWindow ? `agents-window-${a.agentsWindow}` : a.view, a.tab, a.mode, a.oracle && `oracle-${a.oracle}`, a.po && `po-${a.po}`, a.theme].filter(Boolean).join('-');
   if (!/^[\w.-]+$/.test(a.name)) throw new Error(`--name must be a plain file name: ${a.name}`);
   if (a.side && !SIDES.includes(a.side)) throw new Error(`--side takes ${SIDES.join(' | ')}`);
   if (a.caption && !(a.out && runOfRound(path.resolve(a.out)))) throw new Error('--caption needs --out <run_dir>/evidence/<step>/round-<n>');
@@ -1586,7 +1603,8 @@ function main() {
     // #260: the Releases screen's history; the Backlog's "Released" badge on the issues it shipped
     // (#258: also on Discovery, whose committed cards follow their issues to the release)
     if (home || ['backlog', 'discovery', 'releases'].includes(args.view)) demoReleases(ws, project.id);
-    if (home || args.view === 'backlog') demoRoadmap(ws, project.id, args.live, args.budget, args.roadmap);
+    // (#289: also on Workflows › Runs and Project, whose run lists show tonight's runs and the artifact runs expanded)
+    if (home || ['backlog', 'workflows', 'project'].includes(args.view)) demoRoadmap(ws, project.id, args.live, args.budget, args.roadmap);
     if (args.view === 'backlog') demoPoConversation(ws, project.id, args.po);
     if (args.view === 'backlog' && project.folder) demoBacklogRefresh(ws, project.folder, project.id);
     if (home || (['inbox', 'discovery'].includes(args.view) && args.mode !== 'empty')) demoDiscovery(ws, project.id);
@@ -1704,8 +1722,56 @@ function main() {
     win.setMinimumSize(400, 300);
     win.setContentSize(...args.size);
     win.webContents.on('console-message', (ev) => { if (ev.level === 'error') console.log(`[renderer:error] ${ev.message}`); });
-    win.webContents.once('did-finish-load', () => capture(win).catch(fail));
+    // #263: the Agents window (opened from the main window with --agents-window) is the one captured
+    win.webContents.once('did-finish-load', () => (win.webContents.getURL().includes('window=agents') ? captureAgentsWindow(win) : capture(win)).catch(fail));
   });
+
+  // The Agents window on its agent (#263): its rail and pane once loaded, the clicks, then the capture
+  async function captureAgentsWindow(win) {
+    const js = (code) => win.webContents.executeJavaScript(`(async () => { ${code} })()`);
+    const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+    await js(`for (let i = 0; i < 100 && !document.querySelector('[data-testid="agents-rail"] [data-agent]'); i++) await new Promise((r) => setTimeout(r, 100));`);
+    await pause(1500); // the page's first load, the agent's history
+    for (const sel of args.clicks) {
+      if (typeof sel === 'string') await js(`const el = document.querySelector(${JSON.stringify(sel)}); if (!el) throw new Error('nothing matches ' + ${JSON.stringify(sel)}); el.click();`);
+      else await typeIn(win, sel);
+      await pause(500);
+    }
+    await pause(args.wait);
+    await save(win);
+  }
+
+  // --fill: the text in the field (waits up to 10 s for it to show: a modal's field exists before the
+  // modal opens), then input and change, as a person leaving it
+  function typeIn(win, { fill: sel, text }) {
+    return win.webContents.executeJavaScript(`(async () => {
+      const sel = ${JSON.stringify(sel)};
+      const shown = () => { const el = document.querySelector(sel); return el && el.getClientRects().length ? el : null; };
+      for (let i = 0; i < 100 && !shown(); i++) await new Promise((r) => setTimeout(r, 100));
+      const el = shown();
+      if (!el) throw new Error('nothing matches ' + sel);
+      el.focus();
+      el.value = ${JSON.stringify(text)};
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+    })()`);
+  }
+
+  // The capture itself: the PNG (and its caption in the round's manifest), then the app exits
+  async function save(win) {
+    const out = path.resolve(args.out || path.join(repo, 'runs', 'screenshots'));
+    fs.mkdirSync(out, { recursive: true });
+    const file = path.join(out, fileName(args));
+    fs.writeFileSync(file, (await grab(win)).toPNG());
+    console.log(`screenshot: ${file}`);
+    if (args.caption) {
+      recordShot(out, { file, caption: args.caption, commit: sha || gitHead(repo) });
+      console.log(`manifest: ${evidence.manifestPath(runOfRound(out))}`);
+    }
+    win.destroy();
+    cleanup();
+    app.exit(0);
+  }
 
   async function capture(win) {
     const { project, run } = await setup;
@@ -1872,25 +1938,15 @@ function main() {
     else if (args.po) await js('await window.BacklogPO.open();');
     // the demo runs are simulated, which Artifacts hides by default
     if (v === 'artifacts') await js(`const c = document.querySelector('#art-show-sim'); if (c && !c.checked) c.click();`);
-    for (const sel of args.clicks) { await click(sel); await pause(500); }
+    // #263: the Agents window on its agent, captured by captureAgentsWindow (the clicks apply there)
+    if (args.agentsWindow) { await js(`await api.openAgentsWindow({ agent: ${JSON.stringify(args.agentsWindow)} })`); return; }
+    for (const sel of args.clicks) { await (typeof sel === 'string' ? click(sel) : typeIn(win, sel)); await pause(500); }
     for (const sel of args.contexts) { await context(sel); await pause(500); }
     for (const p of args.presses) { await press(p); await pause(500); }
     for (const k of args.keys) { await key(k); await pause(500); }
     for (const p of args.pastes) { await paste(p); await pause(500); }
     if (v !== 'run') await pause(args.wait);
-
-    const out = path.resolve(args.out || path.join(repo, 'runs', 'screenshots'));
-    fs.mkdirSync(out, { recursive: true });
-    const file = path.join(out, fileName(args));
-    fs.writeFileSync(file, (await grab(win)).toPNG());
-    console.log(`screenshot: ${file}`);
-    if (args.caption) {
-      recordShot(out, { file, caption: args.caption, commit: sha || gitHead(repo) });
-      console.log(`manifest: ${evidence.manifestPath(runOfRound(out))}`);
-    }
-    win.destroy();
-    cleanup();
-    app.exit(0);
+    await save(win);
   }
 
   // capturePage fails now and then with Chromium's UnknownVizError while the compositor is busy

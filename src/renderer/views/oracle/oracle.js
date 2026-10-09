@@ -683,7 +683,6 @@
       model: or.service?.model || window.oracleAgent?.model || '',
       cost: or.messages.reduce((a, m) => a + (m.costUsd || 0), 0),
       tokens: or.messages.some((m) => m.tokens != null) ? or.messages.reduce((a, m) => a + (Number(m.tokens) || 0), 0) : null,
-      note: `On: ${screen()}`,
     }),
   });
 

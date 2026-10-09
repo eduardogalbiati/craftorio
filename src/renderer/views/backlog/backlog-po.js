@@ -173,8 +173,15 @@
 
   // #263: the conversation in the Agents window's pane: the project of the Backlog's select, else the
   // app's current project (the window has no Backlog open)
+  let windowTries = 0;
   async function openInWindow() {
     const projectId = actions()?.projectId() || window.CurrentProject?.get?.() || null;
+    // the window's page still loading its projects (app.js init): the current project comes in a moment
+    if (!projectId && window.AgentsWindow?.isWindowPage?.() && windowTries++ < 100) {
+      po.window = true;
+      setTimeout(() => { if (po.window && !po.projectId) openInWindow(); }, 300);
+      return;
+    }
     setProject(projectId);
     Object.assign(po, { window: true, unread: false, unreadCount: 0 });
     po.notice = projectId ? '' : NO_PROJECT;
@@ -985,12 +992,12 @@
     color: '#0F9F8F',
     avatar: () => avatar(),
     mount(el) {
-      el.innerHTML = '<div class="drawer-body sup-body po-window-body"><div class="po-chat po-window-chat"></div></div>';
+      el.innerHTML = '<div class="drawer-body sup-body svc-body"><div class="svc-main po-window-chat"></div></div>';
       winChat = window.AgentChat.create(el.querySelector('.po-window-chat'), {
         ...chatOptions(() => winChat),
         agentId: 'product-owner',
         ids: { messages: 'po-log-window', input: 'po-question-window' },
-        classes: { messages: 'po-log', form: 'po-form', input: 'po-input' },
+        classes: { messages: 'svc-log po-log', form: 'svc-form', input: 'svc-input', send: 'svc-send' },
         placeholder: 'Ask the Product Owner… (Enter to send, Shift+Enter for a new line)',
       });
       openInWindow();

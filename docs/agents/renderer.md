@@ -282,6 +282,31 @@ Artifacts links (`openArtifactsAt`) and other absolute paths into copy-on-click 
 `--view oracle` (Projects with the drawer open) and `--oracle <state>` on any view (see
 `scripts/screenshot.js --help`).
 
+## The Agents window (#263)
+
+The Oracle, the Product Owner and the Supervisor can open in their own window, beside the app:
+`src/agents-window.js` (main process, pure of Electron: `createAgentsWindow({ BrowserWindow,
+statePath, dirname })` → `open({ agent })`, `current()`, `setAgent(id)`) creates one
+`BrowserWindow` with the main window's preload and isolation, loading the app's page with
+`?window=agents&agent=<id>`; its bounds and the last agent live in `<workspace>/agents-window.json`.
+`main.js` answers `agents-window:open` (each drawer's "Open in a window" button
+`[data-agents-window="<id>"]` / `agent-chat-open-window`, and Ctrl+Shift+A, both handled in
+`agents-window.js`) and pushes its events (`chat:progress`, `oracle:changed`, `run:event`…) to both
+windows (`broadcast`). On the page, `agents-window.js` (`window.AgentsWindow`) hides the shell and
+mounts the rail (`agents-rail`, a nav named "Agents", one `agents-rail-item` per agent: its robot in
+its role colour, its name, `agents-rail-unread`, `data-busy` while it answers; icons only under
+900px) and the pane (`agents-window-pane`: `agents-window-header` with the agent, its model, cost
+and tokens, then its chat). The agents declare themselves: each view calls
+`AgentsWindow.register({ id, name, order, color, avatar, mount, unmount, unread, busy, header })` as
+it loads (the Oracle, the Product Owner and the Supervisor; an agent added later registers the same
+way) and `AgentsWindow.changed()` when its state changes. A pane is a second surface of the agent's
+own state through the shared chat (the Oracle's `'window'` surface, the Product Owner's and the
+Supervisor's `winChat`): one conversation, two places, a question sent in one shown in the other as
+a turn started elsewhere (`setTurn`), and across the two real windows through the service's history
+and pushed events. The window never starts a session of its own and never answers a gate.
+`npm run screenshot -- --view backlog --agents-window oracle|product-owner|supervisor` captures it
+(`--size 700x800` for the collapsed rail, `--theme` for the themes).
+
 ## The agents' chat (#274)
 
 `agent-chat.js` (`window.AgentChat.create(container, options)`, with `agent-chat.css`) is the one
