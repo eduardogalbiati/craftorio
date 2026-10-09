@@ -720,6 +720,7 @@ body.resizing-dock .term-body { pointer-events: none; }
 /* #289: the expanded card's two columns, side by side from 900px of card width, stacked below (Artifacts first) */
 .pr-body { container-type: inline-size; }
 .pr-cols { display: grid; grid-template-columns: 1fr; gap: 14px; align-items: start; }
+.pr-arts-head .muted { text-transform: none; letter-spacing: 0; } /* "4 of 8", as read */
 @container (min-width: 900px) { .pr-cols { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); } .pr-cols.pr-cols-one { grid-template-columns: 1fr; } }
 .pr-col { min-width: 0; }
 .pr-arts .ap-filters { margin-bottom: 8px; }
