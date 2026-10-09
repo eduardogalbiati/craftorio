@@ -1,16 +1,22 @@
 // The run list shared by Projects › Project (views/project/) and Workflows › Runs
 // (views/workflows/): filter chips, one row per run (status, title, PR, duration, tokens, cost,
-// progress strip) and, expanded, its actions and agent sessions (tokens and cost per session, a
-// total row). Also the progress strip of a row (runProgressStrip: the groups a run visited, with
-// their agents' robots) and renderRunListsSoon (run events). Uses app.js globals ($, esc, state,
-// fmtDur, fmtNum, dateOf, runTitleHtml, prBadge…), fmtTok / fmtUsd (usage-widget.js), termAction
-// (term-dock.js), canResume (resume-dialog.js), WATCH_TITLE (supervisor-drawer.js), openArtifactsAt.
+// progress strip) and, expanded, its actions, its agent sessions (tokens and cost per session, a
+// total row) and two columns (#289): Artifacts, with the Details tab's filter (ArtifactsPanel:
+// Produced / Show all, category and kind chips, "n of m", the step as a label per file), and
+// Repository (the branch and its base, a state badge, the totals, the run's commits newest first,
+// "Review changes" and a click on a commit opening DiffViewer). Also the progress strip of a row
+// (runProgressStrip: the groups a run visited, with their agents' robots) and renderRunListsSoon
+// (run events). Uses app.js globals ($, esc, state, fmtDur, fmtNum, dateOf, timeOf, runTitleHtml,
+// prBadge, runPr…), fmtTok / fmtUsd (usage-widget.js), termAction (term-dock.js), canResume
+// (resume-dialog.js), WATCH_TITLE (supervisor-drawer.js), openArtifactsAt, ArtifactsPanel, DiffViewer.
 //
 // The lists come in pages from the service (#200: runs:list / projects:runs with { offset, limit,
 // filter, showSim, q, upTo }): the filter chips, "Show simulated" and the search ask the service
 // again, the next page loads when the "Loading more…" row scrolls into view (loadRunListPage), and a
-// row's artifacts load when it opens (artifacts:list { runId }), grouped by step, ART_PAGE at a time.
-// A run event updates its own row (refreshRunRow: runs:list { ids }).
+// row's artifacts (artifacts:list { runId }, ART_PAGE at a time) and changes (run:diff, the commits
+// and the files' counts, never a file's contents) load when it opens; the filter is per card and
+// goes back to Produced when the card is reopened. A run event updates its own row (refreshRunRow:
+// runs:list { ids }); a running run's commits are read again when its row refreshes.
 
 // The filter chips; the service filters and counts (src/service/areas/run-lists.js RUN_FILTERS).
 const RUN_FILTERS = [
@@ -86,8 +92,8 @@ function renderRunList(rl, { prefix, box: boxSel, empty, start, rerender, reload
     return;
   }
   const runs = rl.runs;
-  // the open rows' artifacts load (again when their count changed) before the rows are drawn
-  for (const r of runs) if (rl.expanded.has(r.runId)) ensureRunArtifacts(rl, r, rerender);
+  // the open rows' artifacts (again when their count changed) and changes load before the rows are drawn
+  for (const r of runs) if (rl.expanded.has(r.runId)) { ensureRunArtifacts(rl, r, rerender); ensureRunRepo(rl, r, rerender); }
   const more = !rl.hasMore ? '' : rl.moreError
     ? `<div class="pr-more" data-more><span class="error small">Could not load more runs: ${esc(rl.moreError)}</span> <button type="button" class="btn sm ghost" data-more-retry>Retry</button></div>`
     : '<div class="pr-more muted small" data-more>Loading more…</div>';
@@ -104,7 +110,14 @@ function renderRunList(rl, { prefix, box: boxSel, empty, start, rerender, reload
 
   box.querySelectorAll('.pr-row').forEach((row) => (row.onclick = () => {
     const id = row.closest('.pr-run').dataset.run;
-    rl.expanded.has(id) ? rl.expanded.delete(id) : rl.expanded.add(id);
+    if (rl.expanded.has(id)) {
+      rl.expanded.delete(id);
+      // a reopened card starts on Produced and its first pages again (#289)
+      const e = rl.arts?.get(id);
+      if (e) { e.filter = null; e.shown = ART_PAGE; }
+      const p = rl.repo?.get(id);
+      if (p) p.shown = REPO_PAGE;
+    } else rl.expanded.add(id);
     rerender();
   }));
   box.querySelectorAll('[data-art-more]').forEach((b) => (b.onclick = () => {
@@ -115,6 +128,30 @@ function renderRunList(rl, { prefix, box: boxSel, empty, start, rerender, reload
   box.querySelectorAll('[data-art-retry]').forEach((b) => (b.onclick = () => {
     rl.arts?.delete(b.closest('.pr-run').dataset.run);
     rerender();
+  }));
+  // #289: the Artifacts column's filter (the Details tab's switch and chips), per card
+  box.querySelectorAll('.pr-arts [data-artifact-filter], .pr-arts [data-artifact-category], .pr-arts [data-artifact-kind]').forEach((b) => (b.onclick = () => {
+    const e = rl.arts?.get(b.closest('.pr-run').dataset.run);
+    if (e && ArtifactsPanel.onFilterClick(artifactFilter(e), b)) { e.shown = ART_PAGE; rerender(); }
+  }));
+  box.querySelectorAll('[data-art-show-all]').forEach((b) => (b.onclick = () => {
+    const e = rl.arts?.get(b.closest('.pr-run').dataset.run);
+    if (e) { artifactFilter(e).show = 'all'; rerender(); }
+  }));
+  // #289: the Repository column
+  box.querySelectorAll('[data-repo-retry]').forEach((b) => (b.onclick = () => {
+    rl.repo?.delete(b.closest('.pr-run').dataset.run);
+    rerender();
+  }));
+  box.querySelectorAll('[data-repo-more]').forEach((b) => (b.onclick = () => {
+    const e = rl.repo?.get(b.closest('.pr-run').dataset.run);
+    if (e) e.shown += REPO_PAGE;
+    rerender();
+  }));
+  box.querySelectorAll('[data-repo-review], [data-commit]').forEach((b) => (b.onclick = () => {
+    const r = rl.runs.find((x) => x.runId === b.closest('.pr-run').dataset.run);
+    if (!r || !window.DiffViewer) return;
+    window.DiffViewer.open({ runId: r.runId, title: runDiffTitle(r), ...(b.dataset.commit ? { commit: b.dataset.commit } : {}) });
   }));
   box.querySelectorAll('[data-run-act]').forEach((b) => (b.onclick = () => {
     const r = rl.runs.find((x) => x.runId === b.closest('.pr-run').dataset.run);
@@ -228,7 +265,6 @@ function projectRunBody(r, pv) {
     </div>
     ${r.error ? `<pre class="pr-error">${esc(r.error)}</pre>` : ''}
     ${runTaskBlock(r)}
-    ${runArtifactsBlock(r, pv)}
     ${sessions.length ? `<table class="u-table pr-sessions">
       <thead><tr><th>Agent</th><th>Provider · model</th><th>Status</th><th class="num">Turns</th><th class="num">Tokens</th><th class="num">Cost</th><th></th></tr></thead>
       <tbody>${[...sessions].sort((a, b) => isOrchSession(b) - isOrchSession(a)).map((s) => {
@@ -249,6 +285,7 @@ function projectRunBody(r, pv) {
       }).join('')}</tbody>
       ${sessionsTotalRow(sessions)}
     </table>` : '<p class="muted small">No agent sessions in this run.</p>'}
+    ${runColumnsBlock(r, pv)}
   </div>`;
 }
 
@@ -268,7 +305,8 @@ function ensureRunArtifacts(rl, r, rerender) {
 }
 
 // Artifacts by the step that saved them (in their order), then the run folder's other files and the
-// project copies: [[label, files]].
+// project copies: [[label, files]]. The expanded card groups by category since #289 (the step is a
+// label on the row): no caller here any more; kept as the step grouping its tests read from this file.
 function groupArtifacts(files) {
   const groups = new Map();
   for (const f of files) {
@@ -279,27 +317,131 @@ function groupArtifacts(files) {
   return [...groups].sort((a, b) => last.indexOf(a[0]) - last.indexOf(b[0]));
 }
 
-function runArtifactsBlock(r, pv) {
-  if (!r.artifactCount) return '';
-  const e = pv.arts?.get(r.runId);
-  const head = `<div class="pr-arts-head">Artifacts <span class="muted">${r.artifactCount}</span>${r.imageCount ? ` <span class="badge" title="Images, e.g. the evidence step's screenshots">${r.imageCount} image${r.imageCount === 1 ? '' : 's'}</span>` : ''}</div>`;
-  if (!e || e.status === 'loading') return `<div class="pr-arts">${head}<p class="muted small">Loading…</p></div>`;
-  if (e.status === 'error') return `<div class="pr-arts">${head}<p class="error small">Could not load the artifacts: ${esc(e.error)} <button type="button" class="btn sm ghost" data-art-retry>Retry</button></p></div>`;
-  const shown = e.files.slice(0, e.shown);
-  const left = e.files.length - shown.length;
-  return `<div class="pr-arts">${head}
-    ${groupArtifacts(shown).map(([label, files]) => `<div class="pr-arts-group">
-      <div class="pr-arts-step muted small"><span class="${label === 'Other files' || label === 'Project copies' ? '' : 'mono'}">${esc(label)}</span> <span>${files.length}</span></div>
-      <div class="pr-arts-list">${files.map((a) => `
-        <button class="pr-art ${a.exists ? '' : 'missing'}" data-art="${esc(a.path)}" title="${esc(a.path)}">
-          ${artKindIcon(a.kind)}<span class="pr-art-name">${esc(a.name)}</span>
-          ${a.location === 'external' ? '<span class="badge">project copy</span>' : ''}${a.exists ? '' : '<span class="muted small">deleted</span>'}
-          <span class="muted small">${esc(fmtSize(a.size))}</span>
-        </button>`).join('')}</div>
-    </div>`).join('')}
-    ${left > 0 ? `<button type="button" class="btn sm ghost pr-arts-more" data-art-more>Show ${Math.min(left, ART_PAGE)} more${left > ART_PAGE ? ` <span class="muted">(${left} left)</span>` : ''}</button>` : ''}
-  </div>`;
+// ---- the expanded card's two columns (#289) ------------------------------------------------------
+// Artifacts (the Details tab's filter: Produced / Show all, category and kind chips, from
+// ArtifactsPanel) and Repository (the run's branch, its state, its commits from run:diff, Review
+// changes). Side by side when the card is at least 900px wide (a container query), stacked below.
+const REPO_PAGE = 5;
+const artifactFilter = (e) => (e.filter || (e.filter = ArtifactsPanel.newFilter()));
+const countBy = (files, fn) => files.reduce((acc, f) => { acc[fn(f)] = (acc[fn(f)] || 0) + 1; return acc; }, {});
+const newestFirst = (a, b) => String(b.mtime || '').localeCompare(String(a.mtime || ''));
+const shortSha = (sha) => String(sha || '').slice(0, 7);
+
+function runColumnsBlock(r, pv) {
+  const arts = runArtifactsColumn(r, pv);
+  return `<div class="pr-cols${arts ? '' : ' pr-cols-one'}">${arts}${runRepositoryColumn(r, pv)}</div>`;
 }
+
+// The Artifacts column: '' when the run has no file (the Repository column takes the width).
+function runArtifactsColumn(r, pv) {
+  const e = pv.arts?.get(r.runId);
+  if (!r.artifactCount && !e?.files?.length) return '';
+  if (e?.status === 'ok' && !e.files.length) return '';
+  const head = (n, m) => `<div class="pr-arts-head">Artifacts${n == null ? '' : ` <span class="muted">${n} of ${m}</span>`}</div>`;
+  const wrap = (html) => `<div class="pr-arts pr-col" data-testid="run-card-artifacts">${html}</div>`;
+  if (!e || e.status === 'loading') return wrap(`${head()}<p class="muted small">Loading…</p>`);
+  if (e.status === 'error') return wrap(`${head()}<p class="error small">Could not load the artifacts: ${esc(e.error)} <button type="button" class="btn sm ghost" data-art-retry>Retry</button></p>`);
+  const AP = ArtifactsPanel;
+  const f = artifactFilter(e);
+  const listed = AP.filterFiles(e.files, { show: 'all', category: null, kind: null }); // every file but the internal ones
+  const inView = AP.filterFiles(e.files, f, { ignoreCategory: true });
+  const files = AP.filterFiles(e.files, f);
+  const counts = countBy(inView, AP.categoryOf);
+  const kinds = countBy(AP.filterFiles(e.files, { ...f, kind: null }, { ignoreCategory: true }), AP.chipKindOf);
+  const shown = files.slice(0, e.shown);
+  const left = files.length - shown.length;
+  const filters = `<div data-testid="run-card-artifact-filter">${AP.filtersHtml(f, counts, kinds)}</div>`;
+  if (!files.length) {
+    const nothing = f.show === 'produced' && !f.category && !f.kind;
+    return wrap(`${head(0, listed.length)}${filters}<div class="pr-arts-empty">
+      <b>${nothing ? 'Nothing produced yet' : 'Nothing matches this filter'}</b>
+      ${nothing ? `<p class="muted small">Its handoff notes, decision log and logs are behind Show all.</p><button type="button" class="btn sm ghost" data-art-show-all>Show all (${listed.length})</button>` : '<p class="muted small">Choose another chip.</p>'}
+    </div>`);
+  }
+  const sections = AP.CATEGORIES.map(([id, label]) => {
+    const list = shown.filter((x) => AP.categoryOf(x) === id).sort(newestFirst);
+    return list.length ? `<div class="pr-arts-cat" data-category="${id}"><div class="pr-arts-cat-head muted small">${esc(label)} <span>${list.length}</span></div>
+      <div class="pr-arts-list">${list.map(artifactRowHtml).join('')}</div></div>` : '';
+  }).join('');
+  return wrap(`${head(files.length, listed.length)}${filters}${sections}
+    ${left > 0 ? `<button type="button" class="btn sm ghost pr-arts-more" data-art-more>Show ${Math.min(left, ART_PAGE)} more${left > ART_PAGE ? ` <span class="muted">(${left} left)</span>` : ''}</button>` : ''}`);
+}
+
+// One file row: its kind, its name, the step that saved it (a small label), its size.
+function artifactRowHtml(a) {
+  return `<button type="button" class="pr-art ${a.exists ? '' : 'missing'}" data-testid="run-card-artifact" data-art="${esc(a.path)}" title="${esc(a.path)}">
+    ${artKindIcon(a.kind)}<span class="pr-art-name">${esc(a.name)}</span>
+    ${a.step ? `<span class="pr-art-step mono muted small" title="The step that saved it">${esc(a.step)}</span>` : ''}
+    ${a.location === 'external' ? '<span class="badge">project copy</span>' : ''}${a.exists ? '' : '<span class="muted small">deleted</span>'}
+    <span class="muted small">${esc(fmtSize(a.size))}</span>
+  </button>`;
+}
+
+// The Repository column: what the run did to the code, from run:diff (the same data the diff viewer
+// lists its commits from; no file contents).
+function runRepositoryColumn(r, pv) {
+  const e = pv.repo?.get(r.runId);
+  const wrap = (html, { reviewable = false, why = '' } = {}) => `<div class="pr-repo pr-col" data-testid="run-card-repository">
+    <div class="pr-arts-head pr-repo-head">Repository <button type="button" class="btn sm" data-testid="run-card-review-changes" data-repo-review${reviewable ? '' : ' disabled'} title="${esc(reviewable ? 'The changed files and the commits of this run, in the changes viewer' : why)}">Review changes</button></div>
+    ${html}</div>`;
+  if (r.mock) return wrap('<p class="muted small">Simulated: nothing was committed.</p>', { why: 'A simulated run commits nothing.' });
+  if (!e || e.status === 'loading') return wrap('<p class="muted small">Loading…</p>', { why: 'Loading the run\'s changes…' });
+  if (e.status === 'error') return wrap(`<p class="error small">Could not load the changes: ${esc(e.error)} <button type="button" class="btn sm ghost" data-repo-retry>Retry</button></p>`, { why: `The run's changes could not be read: ${e.error}` });
+  const d = e.data;
+  const commits = d.commits || [];
+  const files = d.files || [];
+  if (d.simulated) return wrap('<p class="muted small">Simulated: nothing was committed.</p>', { why: 'A simulated run commits nothing.' });
+  if (d.unavailable && !commits.length) {
+    const gone = /\bgone\b/i.test(d.unavailable);
+    return wrap(`${repoBranchHtml(r, d)}<p class="muted small">${gone ? 'The branch is gone: nothing is left to compare.' : esc(d.unavailable)}</p>`, { reviewable: files.length > 0, why: 'This run has no changes to show.' });
+  }
+  if (!commits.length) return wrap(`${repoBranchHtml(r, d)}<p class="muted small">This run made no commits.</p>`, { reviewable: files.length > 0, why: 'This run made no commits.' });
+  const added = files.reduce((n, f) => n + (f.added || 0), 0);
+  const deleted = files.reduce((n, f) => n + (f.deleted || 0), 0);
+  const shown = commits.slice(0, e.shown);
+  const left = commits.length - shown.length;
+  const when = (iso) => { const t = Date.parse(iso); return Number.isFinite(t) ? timeOf(iso).replace(/:\d\d (AM|PM)$/, ' $1') : ''; };
+  return wrap(`${repoBranchHtml(r, d)}
+    <div class="muted small pr-repo-totals" data-testid="run-card-repo-totals">${commits.length} commit${commits.length === 1 ? '' : 's'} · ${files.length} file${files.length === 1 ? '' : 's'} · <span class="pr-add">+${added}</span> <span class="pr-del">−${deleted}</span></div>
+    <ul class="pr-commits" data-testid="run-card-commits" aria-label="Commits of this run, newest first">${shown.map((c) => `
+      <li><button type="button" class="pr-commit" data-testid="run-card-commit" data-commit="${esc(c.sha)}" data-sha="${esc(c.sha)}" aria-label="${esc(`${c.short || shortSha(c.sha)} ${c.subject}`)}" title="${esc(`${c.subject}\n${c.author || ''} · ${c.date ? dateOf(c.date) : ''}`)}">
+        <span class="mono pr-commit-sha">${esc(c.short || shortSha(c.sha))}</span><span class="pr-commit-subject">${esc(c.subject)}</span><span class="muted small pr-commit-time">${esc(when(c.date))}</span>
+      </button></li>`).join('')}</ul>
+    ${left > 0 ? `<button type="button" class="btn sm ghost" data-testid="run-card-commits-more" data-repo-more>Show ${left} more</button>` : ''}`, { reviewable: true });
+}
+
+// The branch (mono), its base and the state badge: merged (the PR), pushed (the PR link), merged
+// locally at its merge commit, or not merged.
+function repoBranchHtml(r, d) {
+  const pr = runPr(r);
+  const merge = r.localMerge || r.summary?.local_merge;
+  const branch = d.branch || merge?.branch || r.branch || '';
+  const base = d.base || merge?.base || r.base || '';
+  const state = pr?.state === 'merged' ? `<span class="badge st-success" data-testid="run-card-repo-state">Merged${pr.number ? ` · #${esc(String(pr.number))}` : ''}</span>`
+    : pr?.url ? `<a class="badge" data-testid="run-card-repo-state" href="${esc(pr.url)}" target="_blank" rel="noopener" title="Pushed: its pull request">Pushed · ${esc(pr.number ? `#${pr.number}` : 'PR')}</a>`
+    : merge?.commit ? `<span class="badge st-success" data-testid="run-card-repo-state" title="Merged into ${esc(merge.base || base || 'the base')} on this machine">Merged locally at <span class="mono">${esc(shortSha(merge.commit))}</span></span>`
+    : (d.commits || []).length ? '<span class="badge" data-testid="run-card-repo-state">Not merged</span>' : '';
+  return `<div class="pr-repo-branch"><span class="mono" data-testid="run-card-repo-branch" title="${esc(branch ? 'The run\'s branch' : 'The run\'s branch is not recorded')}">${esc(branch || 'branch not recorded')}</span>${base ? ` <span class="muted small">← ${esc(base)}</span>` : ''} ${state}</div>`;
+}
+
+// An open row's changes (#289): run:diff once (the commits, the changed files' counts; no file
+// contents), again for a run in progress when its row was refreshed by a run event; the entry
+// { status: loading | ok | error, data, error, shown, pending } lives in rl.repo.
+function ensureRunRepo(rl, r, rerender) {
+  if (r.mock) return;
+  const repo = rl.repo || (rl.repo = new Map());
+  const cur = repo.get(r.runId);
+  const stale = cur?.status === 'ok' && r.status === 'running' && cur.item !== r && Date.now() - cur.at > 5000;
+  if (cur && (cur.pending || cur.status === 'error' || !stale)) return;
+  const entry = { status: cur?.status === 'ok' ? 'ok' : 'loading', data: cur?.data || null, error: null, shown: cur?.shown || REPO_PAGE, pending: true, item: r, at: Date.now() };
+  repo.set(r.runId, entry);
+  Promise.resolve().then(() => api.runDiff(r.runId))
+    .then((d) => { entry.data = d || { commits: [], files: [] }; entry.status = 'ok'; }, (e) => { entry.status = 'error'; entry.error = errMsg(e); })
+    .finally(() => { entry.pending = false; entry.at = Date.now(); if (repo.get(r.runId) === entry) rerender(); });
+}
+
+// The title the changes viewer shows for a run (its first task line).
+const runDiffTitle = (r) => String(r.task || r.runId || '').split('\n')[0].slice(0, 80);
 
 // A run event updates that run's row (#200): the row again from the service (runs:list { ids }), at
 // most once a second per run, in whichever list has it loaded; the full reloads are throttled apart.

@@ -179,9 +179,30 @@ Read this before changing anything in `src/renderer/`.
   `npm run screenshot -- --view run --workflow software-development-local-hero.yaml --input
   mode=validated --stop-at developer_check` captures it.
 - **The diff viewer** (#118, `diff-viewer.js`, model `diff-viewer-model.js`, styles
-  `diff-viewer.css`) is a near-full-screen overlay: `DiffViewer.open({ runId, approvalId?, file?, title? })`.
-  Show the diff, the Changed files entries (`onChange` in `mountGateSides`) and the Run screen's
-  Review changes open it. Its data is `run:diff` (the files with their status, counts and patches,
+  `diff-viewer.css`) is a near-full-screen overlay: `DiffViewer.open({ runId, approvalId?, file?, title?, commit? })`
+  (`commit`: one of the branch's commits, the Commits select set to it, #289).
+  Show the diff, the Changed files entries (`onChange` in `mountGateSides`), the Run screen's
+  Review changes and the expanded run card's Review changes and commit rows open it.
+- **The expanded run row** (#289, `run-list.js`, styles `.pr-*`): under the run's actions, task and
+  sessions, two columns (`runColumnsBlock`, `.pr-cols`: side by side from 900px of card width with a
+  container query, stacked below, Artifacts first), wherever the shared run list is expanded
+  (Workflows › Runs, Project, Analytics › Run). **Artifacts** (`runArtifactsColumn`,
+  `run-card-artifacts`) reuses the Details tab's filter from `ArtifactsPanel` (`newFilter`,
+  `filtersHtml`, `filterFiles`, `onFilterClick`, `chipKindOf`, `CATEGORIES`): Produced by default,
+  grouped by category newest first, "n of m" in its head, the step as a mono label on each row,
+  "Nothing produced yet" with a "Show all (n)" button when only process files exist, no column when
+  the run has no file; the filter lives in the row's `rl.arts` entry and resets when the card is
+  reopened. **Repository** (`runRepositoryColumn`, `run-card-repository`) reads `run:diff` once per
+  open card (`ensureRunRepo`, `rl.repo`; a running run's commits again when a run event refreshed
+  its row; never `run:diffFile`): the branch (`run-card-repo-branch`) and its base, a state badge
+  (`run-card-repo-state`: merged or pushed from the PR, merged locally at the merge commit, not
+  merged), the totals (`run-card-repo-totals`), the commits newest first (`run-card-commits`,
+  `run-card-commit` buttons named by hash and subject, five then `run-card-commits-more`), and
+  **Review changes** (`run-card-review-changes`, disabled with the reason in its title when there is
+  nothing to show). States: loading, an error with Retry, "This run made no commits", "Simulated:
+  nothing was committed", "The branch is gone" (the service answers `unavailable` instead of an
+  error when the run's branch was deleted). Screenshots: `--view workflows --tab runs` with the demo
+  runs (every run's `run:diff` is `demoRunDiff`). Its data is `run:diff` (the files with their status, counts and patches,
   and the branch's commits) and `run:diffFile` (one file's patch and both sides, used to expand
   context, load a huge diff and preview images). Both are served by `src/service/areas/diff.js`,
   which takes the folder and base from the open gate or the run's `worktree.ready`. The model is pure

@@ -57,7 +57,8 @@
     document.body.appendChild(el);
     cur = {
       el, runId: String(opts.runId || ''), approvalId: opts.approvalId || null, want: opts.file || null,
-      data: null, error: null, commit: null, selected: null, filter: '', files: new Map(), seq: 0,
+      // commit (#289): open on one of the branch's commits (the Commits select set to it)
+      data: null, error: null, commit: opts.commit ? String(opts.commit) : null, selected: null, filter: '', files: new Map(), seq: 0,
       mode: stored(MODE_KEY, 'split') === 'unified' ? 'unified' : 'split', wrap: stored(WRAP_KEY, '0') === '1',
       viewed: readViewed(opts.runId), opener: document.activeElement,
     };

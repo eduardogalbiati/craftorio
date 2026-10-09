@@ -717,6 +717,28 @@ body.resizing-dock .term-body { pointer-events: none; }
 
 /* project view: artifacts of a run */
 .pr-arts-head { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; margin-bottom: 6px; }
+/* #289: the expanded card's two columns, side by side from 900px of card width, stacked below (Artifacts first) */
+.pr-body { container-type: inline-size; }
+.pr-cols { display: grid; grid-template-columns: 1fr; gap: 14px; align-items: start; }
+@container (min-width: 900px) { .pr-cols { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); } .pr-cols.pr-cols-one { grid-template-columns: 1fr; } }
+.pr-col { min-width: 0; }
+.pr-arts .ap-filters { margin-bottom: 8px; }
+.pr-arts-cat + .pr-arts-cat { margin-top: 8px; }
+.pr-arts-cat-head { margin-bottom: 4px; }
+.pr-arts-empty { padding: 10px 12px; border: 1px dashed var(--border); border-radius: 8px; }
+.pr-arts-empty p { margin: 4px 0 8px; }
+.pr-art-step { font-size: 10.5px; }
+.pr-repo-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.pr-repo-branch { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12px; margin-bottom: 4px; }
+.pr-repo-totals { margin-bottom: 6px; }
+.pr-add { color: var(--green, #4ade80); }
+.pr-del { color: var(--red); }
+.pr-commits { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.pr-commit { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: baseline; gap: 8px; width: 100%; padding: 4px 8px; border-radius: 6px; border: 1px solid transparent; background: none; color: var(--text); font: inherit; font-size: 12px; text-align: left; cursor: pointer; }
+.pr-commit:hover, .pr-commit:focus-visible { border-color: var(--accent); background: var(--panel-2); }
+.pr-commit-sha { color: var(--muted); }
+.pr-commit-subject { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pr-commit-time { white-space: nowrap; }
 .pr-arts-list { display: flex; flex-wrap: wrap; gap: 6px; }
 .pr-arts-group + .pr-arts-group { margin-top: 8px; }
 .pr-arts-step { margin-bottom: 4px; }

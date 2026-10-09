@@ -67,11 +67,15 @@ module.exports = (ctx) => {
     const ready = events.find((e) => e.type === 'worktree.ready');
     const name = String(ready?.base || '').replace(/^origin\//, '');
     const bases = [ready?.base, name, ready?.commit].filter(Boolean);
-    if (ready?.dir && fs.existsSync(ready.dir)) return { events, dir: ready.dir, head: 'HEAD', bases };
+    const ref = String(ready?.ref || '').replace(/^refs\/heads\//, '') || null;
+    if (ready?.dir && fs.existsSync(ready.dir)) return { events, dir: ready.dir, head: 'HEAD', bases, branch: ref };
     // #202: an ended run's folder is gone, its branch keeps the work: read it in the repository
-    const branch = [...events].reverse().find((e) => e.type === 'worktree.removed' && e.branch)?.branch;
-    if (ready?.repo && branch && !branch.startsWith('-') && fs.existsSync(ready.repo)) return { events, dir: ready.repo, head: `refs/heads/${branch}`, bases };
-    return { events, problem: 'This run has no git worktree left to compare.' };
+    const removed = [...events].reverse().find((e) => e.type === 'worktree.removed' && e.branch);
+    const branch = removed?.branch || null;
+    // #289: the branch deleted too (nothing merged): a state, not a git error
+    if (removed?.branch_deleted) return { events, branch, problem: `The branch ${branch} of this run is gone: nothing is left to compare.` };
+    if (ready?.repo && branch && !branch.startsWith('-') && fs.existsSync(ready.repo)) return { events, dir: ready.repo, head: `refs/heads/${branch}`, bases, branch, branchRef: true };
+    return { events, branch: branch || ref, problem: 'This run has no git worktree left to compare.' };
   }
 
   // The merge base of the branch head with the first base that resolves.
@@ -96,6 +100,10 @@ module.exports = (ctx) => {
   async function resolveRange(opts) {
     const src = diffSource(opts);
     if (src.simulated || src.problem) return src;
+    // #289: a branch deleted by hand while the events say it was kept
+    if (src.branchRef && !(await gitOrNull(src.dir, ['rev-parse', '--verify', '--quiet', src.head]))) {
+      return { ...src, problem: `The branch ${src.branch} of this run is gone: nothing is left to compare.` };
+    }
     const { base, mergeBase: mb } = await mergeBase(src.dir, src.bases, src.head || 'HEAD');
     const commits = await branchCommits(src.dir, mb, src.head || 'HEAD');
     let from = mb;
@@ -142,13 +150,14 @@ module.exports = (ctx) => {
   async function runDiff(opts = {}) {
     const r = await resolveRange(opts);
     if (r.simulated || r.problem) {
-      return { simulated: !!r.simulated, unavailable: r.problem || null, base: null, commits: [], commit: null, files: reportedFiles(r.events) };
+      return { simulated: !!r.simulated, unavailable: r.problem || null, base: null, branch: r.branch || null, commits: [], commit: null, files: reportedFiles(r.events) };
     }
     const files = await changedFiles(r.dir, r.from, r.to);
     const all = await patches(r.dir, r.from, r.to);
     const aligned = all.length === files.length;
     return {
-      simulated: false, unavailable: null, base: r.base, mergeBase: r.mergeBase, commits: r.commits, commit: r.commit?.sha || null,
+      // #289: `branch` names the run's branch for the expanded run card's Repository column
+      simulated: false, unavailable: null, base: r.base, branch: r.branch || null, mergeBase: r.mergeBase, commits: r.commits, commit: r.commit?.sha || null,
       files: files.map((f, i) => {
         const image = !!IMAGE_TYPES[path.extname(f.file).toLowerCase()];
         const patch = aligned ? all[i] : null;

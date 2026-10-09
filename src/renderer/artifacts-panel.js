@@ -585,6 +585,7 @@
     CATEGORIES,
     captionOf,
     categoryOf,
+    chipKindOf,
     filterFiles,
     filtersHtml,
     groupOf,

@@ -1429,7 +1429,7 @@ function demoRunDiff(commit) {
     file({ file: 'assets/icon.ico', status: 'added', added: null, deleted: null, binary: true }),
     file({ file: 'package-lock.json', status: 'modified', added: 1840, deleted: 1203, large: true }),
   ];
-  return { simulated: false, unavailable: null, base: 'main', mergeBase: 'c0ffee0', commits, commit: commit || null, files };
+  return { simulated: false, unavailable: null, base: 'main', branch: 'retry-backoff-settings-defaults', mergeBase: 'c0ffee0', commits, commit: commit || null, files };
 }
 function demoRunDiffFile(file) {
   if (file === 'docs/images/backoff.svg') return { file, image: true, patch: null, before: demoSvg('#3b4a7a', 'fixed 1s'), after: demoSvg('#2f7a52', 'backoff 1s → 30s') };
