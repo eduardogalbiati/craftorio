@@ -81,7 +81,9 @@
   const SELECTION_QUESTION = 'What is the best strategy to put these issues in the roadmap? Should any other open issue join them?';
   // attached: issue numbers sent from the Backlog (#169); extras: `${m}:${n}` → the suggested issues checked in a group
   // unread: an answer the owner has not seen yet (#149); scenario: the simulated answer forced (#148)
-  const po = { open: false, busy: false, projectId: null, messages: [], pending: null, error: null, notes: {}, mode: 'plan', files: [], placeEpic: {}, attached: [], extras: {}, unread: false, scenario: '', live: null, since: 0, notice: '', workflow: null, optionsFor: '' };
+  // window (#263): the conversation is shown in the Agents window's pane too; unreadCount: its badge
+  const po = { open: false, busy: false, projectId: null, messages: [], pending: null, error: null, notes: {}, mode: 'plan', files: [], placeEpic: {}, attached: [], extras: {}, unread: false, unreadCount: 0, scenario: '', live: null, liveIn: null, since: 0, notice: '', workflow: null, optionsFor: '', window: false };
+  let winChat = null; // the Agents window's chat of this conversation (#263), while its pane shows it
   const NO_PROJECT = 'Choose a project in the Backlog first: the Product Owner plans for the project of the Backlog\'s project select.';
   const $p = (sel) => document.querySelector(sel);
   const actions = () => window.BacklogActions;
@@ -103,7 +105,8 @@
   const SIM_FILES = 8;
   // the owner reads the drawer: an answer arriving now is seen (#149)
   // (#254: the drawer also opens on the Roadmap screen)
-  const watching = () => (po.open && state.view === 'backlog' && !document.hidden) || (po.open && state.view === 'roadmap' && !document.hidden);
+  // (#263: or the Agents window's pane shows it)
+  const watching = () => (po.open && state.view === 'backlog' && !document.hidden) || (po.open && state.view === 'roadmap' && !document.hidden) || (po.window && !document.hidden);
 
   function renderButton() {
     // #149: the sidebar's yellow status dot while an answer is unseen (the robot thinks while busy)
@@ -125,6 +128,24 @@
     b.title = po.busy ? 'Product Owner is answering: wait for the answer' : 'Ask the Product Owner about the selected issues before planning them';
   }
 
+  // The conversation of `projectId`: another project's attachments not sent yet, messages and notes
+  // belong to that project's conversation and go.
+  function setProject(projectId) {
+    if (po.projectId === projectId) return;
+    Object.assign(po, { projectId, messages: [], pending: null, error: null, notes: {}, files: [], placeEpic: {}, attached: [], extras: {} });
+  }
+  // while a question is in flight the service already recorded it: render() leaves out the pending bubble
+  // (no history yet may come back empty-handed: an empty conversation;
+  // and one that comes back after the drawer moved to another project is not this one's)
+  async function loadHistory(projectId) {
+    try {
+      const messages = await api.productOwnerHistory(projectId) || [];
+      if (po.projectId === projectId) po.messages = messages;
+    } catch (e) { po.error = errMsg(e); }
+    // a draft still to file: back to Register an issue
+    if (openDraftIndex() >= 0 && !po.busy) po.mode = 'issue';
+  }
+
   async function open() {
     // #234: with no project selected the drawer opens and says so (nothing can be asked)
     const projectId = actions()?.projectId() || null;
@@ -134,6 +155,7 @@
     if (po.projectId !== projectId) Object.assign(po, { attached: [], extras: {} });
     if (po.projectId !== projectId) Object.assign(po, { projectId, messages: [], pending: null, error: null, notes: {} });
     Object.assign(po, { open: true, unread: false });
+    po.unreadCount = 0;
     po.notice = projectId ? '' : NO_PROJECT;
     $p('#po-drawer').classList.add('open');
     $p('#po-drawer').setAttribute('aria-hidden', 'false');
@@ -144,17 +166,23 @@
     renderWorkflow();
     render({ scroll: 'end' });
     if (!projectId) return;
-    // while a question is in flight the service already recorded it: render() leaves out the pending bubble
-    // (no history yet may come back empty-handed: an empty conversation;
-    // and one that comes back after the drawer moved to another project is not this one's)
-    try {
-      const messages = await api.productOwnerHistory(projectId) || [];
-      if (po.projectId === projectId) po.messages = messages;
-    } catch (e) { po.error = errMsg(e); }
-    // a draft still to file: back to Register an issue
-    if (openDraftIndex() >= 0 && !po.busy) po.mode = 'issue';
+    await loadHistory(projectId);
     render({ scroll: 'end' });
     setTimeout(() => $p('#po-question').focus({ preventScroll: true }), 200);
+  }
+
+  // #263: the conversation in the Agents window's pane: the project of the Backlog's select, else the
+  // app's current project (the window has no Backlog open)
+  async function openInWindow() {
+    const projectId = actions()?.projectId() || window.CurrentProject?.get?.() || null;
+    setProject(projectId);
+    Object.assign(po, { window: true, unread: false, unreadCount: 0 });
+    po.notice = projectId ? '' : NO_PROJECT;
+    if (!po.workflow) po.workflow = chosenWorkflow();
+    render();
+    if (!projectId) return;
+    if (!po.messages.length && !po.busy) await loadHistory(projectId);
+    render();
   }
 
   function close() {
@@ -212,8 +240,9 @@
       if (po.projectId === projectId) {
         po.messages = out.messages;
         if (mode === 'issue') po.files = [];
-        // #149: the answer arrived while the owner was not looking at the drawer
+        // #149: the answer arrived while the owner was not looking at the drawer (nor the window's pane, #263)
         if (!watching()) po.unread = true;
+        if (!watching()) po.unreadCount += 1;
       }
     } catch (e) {
       if (po.projectId === projectId) po.error = errMsg(e);
@@ -228,6 +257,7 @@
   // selection); the chat keeps an owner at the end of the log there as the answer grows (#274)
   function renderLive() {
     if (po.live && po.open) chat.setLiveTurn(po.live);
+    if (po.live && winChat) winChat.setLiveTurn(po.live);
   }
 
   function stopTurn() {
@@ -624,7 +654,11 @@
   // (so the question sent and the answer show up only then); 'end' when the drawer opens.
   function render({ scroll = 'keep' } = {}) {
     if (po.unread && watching()) po.unread = false;
+    if (!po.unread) po.unreadCount = 0;
     renderButton();
+    // #263: the Agents window's pane shows the same conversation
+    if (winChat) winChat.update({ messages: po.messages, live: po.live, error: po.error, busy: po.busy, turn: turnFor(winChat) });
+    window.AgentsWindow?.changed?.();
     if (!po.open) return;
     const agent = window.productOwnerAgent;
     const simulated = devMode();
@@ -647,7 +681,7 @@
       `<button class="chip" type="button" data-testid="po-pill" data-mode="issue"${po.busy ? ' disabled' : ''} title="Describe an issue; the Product Owner drafts it and you file it">${esc(REGISTER)}…</button>`].join('');
     $p('#po-chips').classList.toggle('hidden', issueMode);
     // #274: the messages, the question in flight, the live turn and the error, through the shared chat
-    chat.update({ messages: po.messages, live: po.live, error: po.error, busy: po.busy });
+    chat.update({ messages: po.messages, live: po.live, error: po.error, busy: po.busy, turn: turnFor(chat) });
     // #148: the simulation-only scenario picker (never in the production UI)
     $p('#po-sim').classList.toggle('hidden', !simulated);
     $p('#po-scenario').innerHTML = simulated ? SCENARIOS.map((s) => `<button type="button" class="po-sim-opt${s.id === po.scenario ? ' active' : ''}" data-po-scenario="${esc(s.id)}" aria-pressed="${s.id === po.scenario}"${po.busy ? ' disabled' : ''}>${esc(s.label)}</button>`).join('') : '';
@@ -799,17 +833,24 @@
         <p class="muted small">${empty}</p></div>`;
   }
   // ask() keeps the turn's own state (busy, the live turn, unread); a failed one gives the question back
-  const chat = window.AgentChat.create($p('#po-chat'), {
+  // `from`: the chat the question is sent from (the drawer's or the Agents window's, #263): the other
+  // one shows it as a turn started elsewhere
+  const chatOptions = (from) => ({
     agent: 'Product Owner',
-    parts: { log: $p('#po-log'), input: $p('#po-question'), send: $p('#btn-po-ask'), working: $p('#po-working'), slots: { pills: $p('#po-chips') } },
     renderMessage: (msg, m) => messageHtml(msg, m),
     emptyHtml,
     pendingHtml: () => (pendingShown() ? `<div class="sup-wmsg user" data-testid="po-message-you"><div class="sup-wmsg-meta">You</div><div>${esc(po.pending)}</div></div>` : ''),
     // #234: no silent no-op when no project is selected (the text stays in the box)
     beforeSend: () => { if (po.projectId) return true; showNotice(NO_PROJECT); return false; },
-    send: async (q) => { await ask(q); return po.error ? { ok: false } : null; },
+    send: async (q) => { po.liveIn = from(); await ask(q); return po.error ? { ok: false } : null; },
     onStop: stopTurn,
     onDone: () => render(),
+  });
+  // the question in flight as the other surface sees it (null for the chat it was sent from)
+  const turnFor = (c) => (po.busy && po.liveIn !== c ? { text: po.pending, since: po.since } : null);
+  const chat = window.AgentChat.create($p('#po-chat'), {
+    ...chatOptions(() => chat),
+    parts: { log: $p('#po-log'), input: $p('#po-question'), send: $p('#btn-po-ask'), working: $p('#po-working'), slots: { pills: $p('#po-chips') } },
   });
 
   // ---- events ----------------------------------------------------------------------------------------
@@ -936,5 +977,36 @@
     openProjectId: () => (po.open ? po.projectId : null),
     syncSendButton,
   };
+  // #263: the Product Owner in the Agents window: the same conversation, a second chat in the pane
+  window.AgentsWindow?.register({
+    id: 'product-owner',
+    name: 'Product Owner',
+    order: 2,
+    color: '#0F9F8F',
+    avatar: () => avatar(),
+    mount(el) {
+      el.innerHTML = '<div class="drawer-body sup-body po-window-body"><div class="po-chat po-window-chat"></div></div>';
+      winChat = window.AgentChat.create(el.querySelector('.po-window-chat'), {
+        ...chatOptions(() => winChat),
+        agentId: 'product-owner',
+        ids: { messages: 'po-log-window', input: 'po-question-window' },
+        classes: { messages: 'po-log', form: 'po-form', input: 'po-input' },
+        placeholder: 'Ask the Product Owner… (Enter to send, Shift+Enter for a new line)',
+      });
+      openInWindow();
+      setTimeout(() => $p('#po-question-window')?.focus({ preventScroll: true }), 50);
+    },
+    unmount() {
+      po.window = false;
+      winChat = null;
+    },
+    unread: () => (po.unread && !po.busy ? Math.max(1, po.unreadCount) : 0),
+    busy: () => po.busy,
+    header: () => ({
+      model: devMode() ? 'simulated' : `${window.productOwnerAgent?.model || 'claude-opus-5-5'}${window.productOwnerAgent?.effort && window.productOwnerAgent.effort !== 'default' ? ` · ${window.productOwnerAgent.effort}` : ''}`,
+      cost: po.messages.reduce((a, x) => a + (x.costUsd || 0), 0),
+      note: !po.projectId ? 'Choose a project in the Backlog first' : `Planning for ${projectName()}`,
+    }),
+  });
   renderButton();
 })();

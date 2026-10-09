@@ -20,9 +20,11 @@ const {
   Notification,
   powerSaveBlocker,
   safeStorage,
+  screen,
   session,
   shell,
 } = require('electron');
+const { createAgentsWindow } = require('./agents-window');
 const workspace = require('./workspace');
 const localPreview = require('./local-preview');
 const runOwner = require('./run-owner');
@@ -102,7 +104,7 @@ function createAccount() {
     }),
     openExternal: (url) => shell.openExternal(url),
   });
-  auth.onChange((s) => { if (win && !win.isDestroyed()) win.webContents.send('auth:changed', s); });
+  auth.onChange((s) => broadcast('auth:changed', s));
 }
 
 const service = createService({
@@ -142,9 +144,21 @@ ipcMain.on('api:manifest', (e) => {
   service.code.markLoaded();
   e.returnValue = service.manifest;
 });
-for (const channel of ['backlog:changed', 'chat:progress', 'notifications:changed','oracle:changed', 'run:event', 'run:meta', 'supervisor:watch', 'term:data', 'term:exit']) {
-  service.events.on(channel, (payload) => { if (win && !win.isDestroyed()) win.webContents.send(channel, payload); });
+// pushed to the main window and to the Agents window (#263) when it is open
+function broadcast(channel, payload) {
+  for (const w of [win, agentsWindow?.current()]) if (w && !w.isDestroyed()) w.webContents.send(channel, payload);
 }
+for (const channel of ['backlog:changed', 'chat:progress', 'notifications:changed','oracle:changed', 'run:event', 'run:meta', 'supervisor:watch', 'term:data', 'term:exit']) {
+  service.events.on(channel, (payload) => broadcast(channel, payload));
+}
+
+// ---- the Agents window (#263, src/agents-window.js) -----------------------------------------
+// Created once the workspace is known (its state file lives there); opened from the drawers'
+// "Open in a window" buttons and Ctrl+Shift+A (agents-window:open), told which agent the window
+// shows (agents-window:agent) so it reopens there.
+let agentsWindow = null;
+ipcMain.handle('agents-window:open', (_e, arg) => { agentsWindow?.open(arg || {}); });
+ipcMain.on('agents-window:agent', (_e, arg) => agentsWindow?.setAgent(arg?.agent));
 
 // ---- keep awake (#162) -----------------------------------------------------------------
 // The app that runs the work (#112) holds the blocker, only while the setting is on and there is
@@ -154,7 +168,7 @@ const keepAwake = createKeepAwake({
   blocker: powerSaveBlocker,
   enabled: () => { const ws = service.workspace(); return !!ws && !!workspace.readSettings(ws).keepAwake; },
   readWork: () => service.pendingWork(),
-  onChange: (s) => { if (win && !win.isDestroyed()) win.webContents.send('keepAwake:changed', s); },
+  onChange: (s) => broadcast('keepAwake:changed', s),
 });
 let keepAwakeTimer = null;
 function checkKeepAwake() {
@@ -285,6 +299,8 @@ function createWindow() {
   win.loadFile(APP_PAGE);
   // a run that died with the app last time, once the window can open it
   win.webContents.once('did-finish-load', () => service.notifyInterruptedRun());
+  // the Agents window goes with the main one (#263)
+  win.on('closed', () => { const aw = agentsWindow?.current(); if (aw) aw.close(); });
 }
 
 // ---- desktop-only actions ----------------------------------------------------------------
@@ -405,6 +421,7 @@ app.whenReady().then(async () => {
   const ws = found && await claimWorkspace(found);
   if (!ws) return app.quit();
   service.setWorkspace(ws);
+  agentsWindow = createAgentsWindow({ BrowserWindow, screen, statePath: path.join(ws.root, 'agents-window.json'), dirname: __dirname, devTools: !app.isPackaged });
   keepAwake.update();
   setInterval(() => keepAwake.update(), 15 * 1000).unref();
   restrictPermissions(session.defaultSession);

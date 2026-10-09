@@ -41,6 +41,11 @@ const DESKTOP = [
   // Keep awake (#162, src/keep-awake.js): the blocker's state, re-checked; pushed when it changes
   { channel: 'keepAwake:state', method: 'keepAwakeState', desktop: 'Keeping the computer awake' },
   { event: 'keepAwake:changed', method: 'onKeepAwakeChange' },
+  // The Agents window (#263, src/agents-window.js): open it on an agent ({ agent }), tell it which
+  // agent it shows (remembered for the next open), and the main process asking it to switch
+  { channel: 'agents-window:open', method: 'openAgentsWindow', params: 'options', desktop: 'The Agents window' },
+  { send: 'agents-window:agent', method: 'setAgentsWindowAgent', params: 'options', desktop: 'The Agents window' },
+  { event: 'agents-window:show', method: 'onAgentsWindowShow' },
 ];
 
 // Account: sign-in with an OAuth provider (system browser) and the free trial. Declared even when

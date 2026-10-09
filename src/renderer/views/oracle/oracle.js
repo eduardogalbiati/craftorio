@@ -39,8 +39,13 @@
     // for the one in flight, and the context of the one in flight
     context: null, queue: [], pendingRef: null,
   };
+  // the surfaces the conversation shows in: Home's dock, the drawer, and the Agents window's pane
+  // (#263, 'window': mounted by AgentsWindow when the Oracle is picked there)
   const SURFACES = ['dock', 'drawer'];
+  const WINDOW = 'window';
+  const ALL_SURFACES = [...SURFACES, WINDOW];
   const chats = {}; // each surface's shared chat (#274, agent-chat.js), mounted with it
+  const shownIn = (w) => (w === 'drawer' ? or.drawer : w === WINDOW ? or.window : onDashboard());
   const SUGGESTIONS = [
     'What happened overnight?',
     'Which runs failed this week, and why?',
@@ -50,7 +55,7 @@
   const attachmentCache = new Map(); // a stored image's name → data: URL (or a pending promise)
   const avatar = (cls = '') => `<span class="oracle-avatar ${cls}" aria-hidden="true">${Robots.svg('oracle', 'idle', { bubble: false, plaque: '' })}</span>`;
   const onDashboard = () => state.view === 'dashboard';
-  const inView = () => or.drawer || onDashboard();
+  const inView = () => or.drawer || onDashboard() || !!or.window;
   const view = () => M.chatView({ messages: or.messages, service: or.service, pending: or.pending, error: or.error, drafts: or.drafts, open: inView() });
   const money = (n) => `$${(Number(n) || 0).toFixed(2)}`;
   const screen = () => (window.supervisorScreenContext ? window.supervisorScreenContext() : state.view || '');
@@ -498,8 +503,8 @@
     const where = screen();
     // a turn the Oracle answers on its own (the service is busy, no send here) runs since it was first seen
     if (!or.service?.busy) or.busySince = null; else if (!or.busySince) or.busySince = Date.now();
-    for (const w of SURFACES) {
-      if (w === 'drawer' ? !or.drawer : !onDashboard()) continue;
+    for (const w of ALL_SURFACES) {
+      if (!shownIn(w) || !chats[w]) continue;
       const chat = chats[w];
       chat.update({ messages: or.messages, turn: turnElsewhere(w) });
       const memBox = $(`#oracle-memory-${w}`);
@@ -549,6 +554,7 @@
     badge.title = `${v.unread} new answer${v.unread === 1 ? '' : 's'} from the Oracle`;
     markRead();
     window.GateOracle?.paint?.();
+    window.AgentsWindow?.changed?.();
   }
 
   // ---- the drawer and the dock -------------------------------------------------------------
@@ -585,6 +591,8 @@
     if (context?.question) Promise.resolve(loading).then(() => { if (or.loaded && or.context === context) ask(context.question); });
   }
 
+  // #263: the drawer's "Open in a window" (the Agents window on the Oracle; agents-window.js hides it in the browser UI)
+  const OPEN_WINDOW_BUTTON = '<button class="icon-btn" type="button" data-agents-window="oracle" data-testid="agent-chat-open-window" title="Open in a window (Ctrl+Shift+A)" aria-label="Open the Oracle in a window"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="14" height="14" rx="2" /><path d="M9 3h12v12M21 3l-9 9" /></svg></button>';
   const surfaceHtml = (w) => `
     <div class="drawer-head oracle-head">
       <div class="oracle-who">${avatar()}
@@ -598,7 +606,7 @@
         <button class="btn ghost sm" type="button" data-oracle-night title="Let the Oracle fix what stops the roadmap without asking, until a time you choose">Night watch</button>
         <button class="btn ghost sm" type="button" data-oracle-memory title="The owner's standing decisions, read at every session start">Memory</button>
         <button class="btn ghost sm" type="button" data-oracle-reset title="A new session from a handoff note; the conversation and the memory are kept">New session</button>
-        ${w === 'drawer' ? '<button id="btn-oracle-close" class="icon-btn" type="button" title="Close (Esc)"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg></button>' : ''}
+        ${w === 'drawer' ? `${OPEN_WINDOW_BUTTON}<button id="btn-oracle-close" class="icon-btn" type="button" title="Close (Esc)"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg></button>` : ''}
       </div>
     </div>
     <div id="oracle-chat-${w}" class="drawer-body svc-body oracle-body"></div>`;
@@ -637,6 +645,48 @@
     chats[w] = chat;
   }
 
+  // the head buttons of every surface (bound again when the window's surface is mounted, #263)
+  function bindOps() {
+    document.querySelectorAll('[data-oracle-reset]').forEach((b) => (b.onclick = reset));
+    document.querySelectorAll('[data-oracle-memory]').forEach((b) => (b.onclick = () => (or.memoryOpen && or.memory.editing ? null : openMemory())));
+    document.querySelectorAll('[data-oracle-night]').forEach((b) => (b.onclick = () => {
+      if (M.nightWatchView(or.service?.nightWatch).active) return;
+      or.nightForm = or.nightForm ? null : { until: M.defaultNightEnd(), saving: false, error: null };
+      render();
+      if (or.nightForm) document.querySelector(`#oracle-night-until-${or.window ? WINDOW : or.drawer ? 'drawer' : 'dock'}`)?.focus({ preventScroll: true });
+    }));
+  }
+
+  // #263: the Oracle in the Agents window: the same conversation as a third surface in the pane
+  window.AgentsWindow?.register({
+    id: 'oracle',
+    name: 'Oracle',
+    order: 1,
+    color: '#1E3A8A',
+    avatar: () => Robots.svg('oracle', 'idle', { bubble: false, plaque: '' }),
+    mount(el) {
+      el.innerHTML = surfaceHtml(WINDOW);
+      mountChat(WINDOW);
+      bindOps();
+      or.window = true;
+      render();
+      if (!or.loaded) load();
+      setTimeout(() => $(`#oracle-q-${WINDOW}`)?.focus({ preventScroll: true }), 50);
+    },
+    unmount() {
+      or.window = false;
+      delete chats[WINDOW];
+    },
+    unread: () => view().unread,
+    busy: () => !!(or.pending || or.service?.busy),
+    header: () => ({
+      model: or.service?.model || window.oracleAgent?.model || '',
+      cost: or.messages.reduce((a, m) => a + (m.costUsd || 0), 0),
+      tokens: or.messages.some((m) => m.tokens != null) ? or.messages.reduce((a, m) => a + (Number(m.tokens) || 0), 0) : null,
+      note: `On: ${screen()}`,
+    }),
+  });
+
   registerView({
     id: 'oracle',
     modals: `
@@ -666,14 +716,7 @@
       $('#btn-oracle-close').onclick = closeDrawer;
       $('#oracle-backdrop').onclick = closeDrawer;
       document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && or.drawer) closeDrawer(); });
-      document.querySelectorAll('[data-oracle-reset]').forEach((b) => (b.onclick = reset));
-      document.querySelectorAll('[data-oracle-memory]').forEach((b) => (b.onclick = () => (or.memoryOpen && or.memory.editing ? null : openMemory())));
-      document.querySelectorAll('[data-oracle-night]').forEach((b) => (b.onclick = () => {
-        if (M.nightWatchView(or.service?.nightWatch).active) return;
-        or.nightForm = or.nightForm ? null : { until: M.defaultNightEnd(), saving: false, error: null };
-        render();
-        if (or.nightForm) document.querySelector(`#oracle-night-until-${or.drawer ? 'drawer' : 'dock'}`)?.focus({ preventScroll: true });
-      }));
+      bindOps();
       document.addEventListener('input', (e) => {
         if (e.target.classList?.contains('oracle-mem-input')) or.memory = { ...or.memory, draft: e.target.value };
         if (e.target.classList?.contains('oracle-mem-import-input')) or.memory = { ...or.memory, importText: e.target.value };

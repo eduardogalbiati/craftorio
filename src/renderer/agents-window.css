@@ -1,0 +1,34 @@
+/* The Agents window (#263, agents-window.js): the rail on the left, the selected agent's pane on the right. */
+body.agents-window-page > .shell { display: none; }
+#agents-window-root { position: fixed; inset: 0; }
+.aw { display: grid; grid-template-columns: 220px minmax(0, 1fr); height: 100%; background: var(--bg); color: var(--text); }
+.aw-rail { display: flex; flex-direction: column; gap: 4px; padding: 10px 8px; border-right: 1px solid var(--border); background: var(--panel); overflow: auto; }
+.aw-item { position: relative; display: grid; grid-template-columns: 36px minmax(0, 1fr); align-items: center; gap: 10px; width: 100%; padding: 6px 8px; border-radius: 10px; border: 1px solid transparent; background: none; color: var(--text); font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+.aw-item:hover { background: var(--panel-2); }
+.aw-item.active { background: var(--panel-2); border-color: var(--border); }
+.aw-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.aw-avatar { position: relative; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: color-mix(in srgb, var(--aw-color, var(--accent)) 18%, transparent); color: var(--aw-color, var(--accent)); }
+.aw-avatar svg { width: 30px; height: 30px; }
+.aw-avatar .sup-mark { font-size: 18px; }
+.aw-initial { font-weight: 700; }
+/* the "busy" ring while the agent answers */
+.aw-item[data-busy="true"] .aw-avatar { box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--aw-color, var(--accent)); animation: aw-pulse 1.2s ease-in-out infinite; }
+@keyframes aw-pulse { 50% { box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px color-mix(in srgb, var(--aw-color, var(--accent)) 35%, transparent); } }
+.aw-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aw-unread { position: absolute; top: 2px; left: 32px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--yellow, #facc15); color: #1a1a1a; font-size: 10px; font-weight: 700; line-height: 16px; text-align: center; }
+.aw-pane { display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; }
+.aw-header { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--border); }
+.aw-head-avatar { width: 28px; height: 28px; display: grid; place-items: center; }
+.aw-head-avatar svg { width: 26px; height: 26px; }
+.aw-title { margin: 0; font-size: 15px; font-weight: 700; }
+.aw-facts { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aw-chat { display: flex; flex-direction: column; min-height: 0; }
+.aw-chat > .drawer-head { flex: none; }
+.aw-chat > .drawer-body { flex: 1; min-height: 0; }
+/* narrow: the rail collapses to icons only (the names stay on hover) */
+@media (max-width: 899px) {
+  .aw { grid-template-columns: 56px minmax(0, 1fr); }
+  .aw-item { grid-template-columns: 36px; padding: 6px 2px; justify-items: center; }
+  .aw-name { display: none; }
+  .aw-unread { left: 28px; }
+}

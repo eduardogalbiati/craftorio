@@ -1322,6 +1322,7 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h3M11 7h9M4 17h9M17 17h3" /><circle cx="9" cy="7" r="2" /><circle cx="15" cy="17" r="2" /></svg>
           </button>
           <button id="btn-po-clear" class="btn sm ghost" type="button" title="Forget this project's conversation">Clear</button>
+          <button class="icon-btn" type="button" data-agents-window="product-owner" data-testid="agent-chat-open-window" title="Open in a window (Ctrl+Shift+A)" aria-label="Open the Product Owner in a window"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="14" height="14" rx="2" /><path d="M9 3h12v12M21 3l-9 9" /></svg></button>
           <button id="btn-po-close" class="icon-btn" title="Close (Esc)">
             <svg viewBox="0 0 24 24" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg>
           </button>

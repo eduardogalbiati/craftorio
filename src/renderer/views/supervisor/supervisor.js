@@ -13,8 +13,12 @@
 // Uses app.js globals ($, esc, state, api, errMsg, devMode, fmtCost, markdownHtml, confirmDialog,
 // shownRunId, registerView).
 (() => {
-  const sv = { messages: [], busy: false, loaded: false, drawer: false, full: false, tools: [], live: null };
+  // window (#263): the Agents window's pane shows the conversation; liveIn / pending: the chat a
+  // question in flight was sent from and its text (the other surface shows the turn); unread: the
+  // answers that arrived while neither the drawer nor the pane showed them
+  const sv = { messages: [], busy: false, loaded: false, drawer: false, full: false, tools: [], live: null, window: false, liveIn: null, pending: null, since: 0, unread: 0 };
   let chat = null; // the shared chat (agent-chat.js), mounted with the drawer
+  let winChat = null; // the Agents window's chat (#263), while its pane shows the Supervisor
   const SUGGESTIONS = [
     'What am I looking at?',
     'Which runs failed recently, and why?',
@@ -65,20 +69,24 @@
   // The chat's send (#274): the question with the screen it was asked on and the images pasted in the
   // box (#130; a suggestion chip sends without them, they stay in the box); a failure goes back to the
   // chat (the question back in the box, the error shown)
-  async function send(q, _attachments, { fromBox } = {}) {
+  // `from`: the chat it was sent from (the drawer's or the Agents window's, #263)
+  const sendFrom = (from) => async (q, _attachments, { fromBox } = {}) => {
+    const c = from();
     const screen = screenContext();
-    Object.assign(sv, { busy: true, live: window.LiveTurn.create({ agent: 'supervisor' }) });
-    chat.setLiveTurn(sv.live);
+    Object.assign(sv, { busy: true, pending: q, since: Date.now(), liveIn: c, live: window.LiveTurn.create({ agent: 'supervisor' }) });
+    c.setLiveTurn(sv.live);
+    render();
     try {
-      const attachments = fromBox ? await PasteImage.collect(chat.input) : [];
-      if (fromBox) PasteImage.clear(chat.input);
+      const attachments = fromBox ? await PasteImage.collect(c.input) : [];
+      if (fromBox) PasteImage.clear(c.input);
       const out = await api.askSupervisorChat({ question: q, screen, mock: devMode(), ...(attachments.length ? { attachments } : {}) });
       sv.messages = out.messages;
+      if (!sv.drawer && !sv.window) sv.unread += 1;
       return { messages: shown() };
     } finally {
-      Object.assign(sv, { busy: false, live: null });
+      Object.assign(sv, { busy: false, live: null, liveIn: null, pending: null });
     }
-  }
+  };
 
   async function clear() {
     if (!await confirmDialog('New conversation', 'The supervisor forgets this conversation and its history is deleted.', 'Clear')) return;
@@ -88,6 +96,7 @@
 
   function openDrawerPanel() {
     sv.drawer = true;
+    sv.unread = 0;
     $('#svc-drawer').classList.add('open');
     $('#svc-drawer').setAttribute('aria-hidden', 'false');
     $('#svc-backdrop').classList.remove('hidden');
@@ -138,16 +147,71 @@
     const cost = sv.messages.reduce((a, x) => a + (x.costUsd || 0), 0);
     const note = `${simulated ? 'Simulated (developer mode): no model is called and nothing is spent.' : 'Each message is one call to the model: it uses your Claude Code subscription.'}${cost ? ` Conversation cost ${fmtCost(cost)}.` : ''}`;
     const chips = SUGGESTIONS.map((q) => `<button class="chip" type="button" data-svc-q="${esc(q)}"${sv.busy ? ' disabled' : ''}>${esc(q)}</button>`).join('');
+    // the drawer and the Agents window's pane (#263): the same conversation; a question sent from
+    // the other one shows as a turn started elsewhere
+    for (const [c, w, on] of [[chat, 'drawer', sv.drawer], [winChat, 'window', sv.window]]) {
+      if (!c || !on) continue;
+      // the pills first: the chat locks them while a message is in flight
+      $(`#svc-chips-${w}`).innerHTML = chips;
+      c.setMessages(shown());
+      c.setTurn(sv.busy && sv.liveIn !== c ? { text: sv.pending, since: sv.since } : null);
+      $(`#svc-note-${w}`).textContent = note;
+    }
     if (sv.drawer) {
       $('#svc-screen').textContent = screenContext();
-      // the pills first: the chat locks them while a message is in flight
-      $('#svc-chips-drawer').innerHTML = chips;
-      chat.setMessages(shown());
-      $('#svc-note-drawer').textContent = note;
       if (sv.full) $('#svc-tools').innerHTML = sv.tools.map((t) => `<li><span class="mono">${esc(t.name)}</span> <span class="muted">${esc(t.description)}</span></li>`).join('');
     }
     document.querySelectorAll('.svc-clear').forEach((b) => (b.disabled = sv.busy || !sv.messages.length));
+    window.AgentsWindow?.changed?.();
   }
+
+  // the shared chat's options (#274), for the drawer and the window's pane: `from` is the chat itself,
+  // read when a message is sent (the live turn's Stop included)
+  const chatOptions = (from) => ({
+    agent: 'Supervisor',
+    classes: { messages: 'svc-log', form: 'svc-form', input: 'svc-input', send: 'svc-send' },
+    placeholder: 'Ask the supervisor… (Enter to send, Shift+Enter for a new line)',
+    renderMessage: messageHtml,
+    emptyHtml,
+    send: sendFrom(from),
+    onStop: () => api.cancelChatTurn('supervisor', '').catch((err) => from().setError(errMsg(err))),
+    onDone: render,
+  });
+
+  // #263: the Supervisor in the Agents window: the same conversation, a second chat in the pane
+  window.AgentsWindow?.register({
+    id: 'supervisor',
+    name: 'Supervisor',
+    order: 3,
+    color: '#7C5CFF',
+    avatar: () => '<span class="sup-mark" aria-hidden="true">◆</span>',
+    mount(el) {
+      el.innerHTML = '<div class="drawer-body sup-body svc-body"><div class="svc-main" data-svc-window></div></div>';
+      winChat = window.AgentChat.create(el.querySelector('[data-svc-window]'), {
+        ...chatOptions(() => winChat),
+        agentId: 'supervisor',
+        ids: { messages: 'svc-log-window', input: 'svc-q-window' },
+      });
+      winChat.slot('pills').innerHTML = '<div id="svc-chips-window" class="svc-chips"></div>';
+      winChat.slot('foot').innerHTML = '<p id="svc-note-window" class="muted small svc-note"></p>';
+      sv.window = true;
+      sv.unread = 0;
+      render();
+      load();
+      setTimeout(() => $('#svc-q-window')?.focus({ preventScroll: true }), 50);
+    },
+    unmount() {
+      sv.window = false;
+      winChat = null;
+    },
+    unread: () => sv.unread,
+    busy: () => sv.busy,
+    header: () => ({
+      model: devMode() ? 'simulated' : [...sv.messages].reverse().find((m) => m.model)?.model || '',
+      cost: sv.messages.reduce((a, x) => a + (x.costUsd || 0), 0),
+      note: `On: ${screenContext()}`,
+    }),
+  });
 
   registerView({
     id: 'supervisor',
@@ -162,6 +226,7 @@
       <div class="row">
         <button id="btn-svc-full" class="btn ghost sm" type="button" aria-pressed="false" title="The whole conversation and what the supervisor can read, over the whole screen">Expand</button>
         <button class="btn ghost sm svc-clear" type="button" title="New conversation: the supervisor forgets this one">New</button>
+        <button class="icon-btn" type="button" data-agents-window="supervisor" data-testid="agent-chat-open-window" title="Open in a window (Ctrl+Shift+A)" aria-label="Open the Supervisor in a window"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="14" height="14" rx="2" /><path d="M9 3h12v12M21 3l-9 9" /></svg></button>
         <button id="btn-svc-close" class="icon-btn" title="Close (Esc)">
           <svg viewBox="0 0 24 24" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg>
         </button>
@@ -184,15 +249,8 @@
       // #274: the shared chat (the live turn's Stop included); the screen is read when the message
       // is sent: the one under the drawer
       chat = window.AgentChat.create($('#svc-chat'), {
-        agent: 'Supervisor',
+        ...chatOptions(() => chat),
         ids: { messages: 'svc-log-drawer', input: 'svc-q-drawer' },
-        classes: { messages: 'svc-log', form: 'svc-form', input: 'svc-input', send: 'svc-send' },
-        placeholder: 'Ask the supervisor… (Enter to send, Shift+Enter for a new line)',
-        renderMessage: messageHtml,
-        emptyHtml,
-        send,
-        onStop: () => api.cancelChatTurn('supervisor', '').catch((err) => chat.setError(errMsg(err))),
-        onDone: render,
       });
       chat.slot('pills').innerHTML = '<div id="svc-chips-drawer" class="svc-chips"></div>';
       chat.slot('foot').innerHTML = '<p id="svc-note-drawer" class="muted small svc-note"></p>';

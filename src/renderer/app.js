@@ -316,6 +316,8 @@ function shownRunId() {
 // After the current task: the screens set the run they show right after switching to it.
 let notifyContextTimer = null;
 function reportNotifyContext() {
+  // the Agents window (#263) never speaks for the main window's screen
+  if (window.AgentsWindow?.isWindowPage?.()) return;
   if (notifyContextTimer) return;
   notifyContextTimer = setTimeout(() => {
     notifyContextTimer = null;

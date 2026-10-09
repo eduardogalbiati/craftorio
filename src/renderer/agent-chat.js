@@ -50,7 +50,7 @@
   // The component's own markup in `container`; its wrappers are display: contents (agent-chat.css)
   function build(container, o, ids, cls) {
     const slotHtml = (name) => `<div class="agent-chat-slot" data-agent-chat-slot="${name}"></div>`;
-    container.innerHTML = `<div class="agent-chat agent-chat-flat${cls.root ? ` ${cls.root}` : ''}" data-testid="agent-chat" data-agent="${e(o.agent)}">
+    container.innerHTML = `<div class="agent-chat agent-chat-flat${cls.root ? ` ${cls.root}` : ''}" data-testid="agent-chat" data-agent="${e(o.agentId || o.agent)}">
       ${slotHtml('head')}${slotHtml('top')}
       <div${attr('id', ids.messages)} class="agent-chat-log ${cls.messages || ''}" data-testid="agent-chat-messages" role="log" aria-label="${e(`Conversation with ${o.agent}`)}"></div>
       <div class="agent-chat-foot ${cls.foot || 'agent-chat-flat'}">
@@ -96,7 +96,8 @@
   }
 
   /**
-   * Mounts a chat in `container`. Options: agent (its name), send(text, attachments, { fromBox }) →
+   * Mounts a chat in `container`. Options: agent (its name), agentId (its id for data-agent, #263: the
+   * Agents window's panes; the name by default), send(text, attachments, { fromBox }) →
    * result (fromBox false: a pill or ask(), not the text box),
    * placeholder, sendLabel, onUnreadChange(unread); and for a view's own parts: renderMessage(m, i, all)
    * (markup, '' to skip one, undefined for the default), roleOf(m), emptyHtml(), pendingHtml(flight),
