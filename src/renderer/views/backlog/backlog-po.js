@@ -82,7 +82,7 @@
   // attached: issue numbers sent from the Backlog (#169); extras: `${m}:${n}` → the suggested issues checked in a group
   // unread: an answer the owner has not seen yet (#149); scenario: the simulated answer forced (#148)
   // window (#263): the conversation is shown in the Agents window's pane too; unreadCount: its badge
-  const po = { open: false, busy: false, projectId: null, messages: [], pending: null, error: null, notes: {}, mode: 'plan', files: [], placeEpic: {}, attached: [], extras: {}, unread: false, unreadCount: 0, scenario: '', live: null, liveIn: null, since: 0, notice: '', workflow: null, optionsFor: '', window: false };
+  const po = { open: false, busy: false, projectId: null, messages: [], pending: null, error: null, notes: {}, mode: 'plan', files: [], placeEpic: {}, attached: [], extras: {}, unread: false, unreadCount: 0, scenario: '', live: null, liveIn: null, elsewhere: false, since: 0, notice: '', workflow: null, optionsFor: '', window: false };
   let winChat = null; // the Agents window's chat of this conversation (#263), while its pane shows it
   const NO_PROJECT = 'Choose a project in the Backlog first: the Product Owner plans for the project of the Backlog\'s project select.';
   const $p = (sel) => document.querySelector(sel);
@@ -972,6 +972,35 @@
     window.LiveTurn.apply(po.live, p);
     renderLive();
   });
+  // #263: the same events for a turn started in the other window (after the live turn above took them)
+  api.onChatProgress?.((p) => {
+    if (p?.chat !== 'po' || p.key !== po.projectId) return;
+    if (!po.live || (p.phase === 'end' && po.elsewhere)) turnElsewhere(p);
+  });
+  // #263: a question sent from the other window (the Agents window or the main one): the service's
+  // progress is the only sign of it here; the question comes with the history, the answer at the end
+  async function turnElsewhere(p) {
+    const projectId = po.projectId;
+    if (p.phase === 'end') {
+      if (!po.elsewhere) return;
+      Object.assign(po, { busy: false, pending: null, live: null, liveIn: null, elsewhere: false });
+      await loadHistory(projectId);
+      if (po.projectId !== projectId) return;
+      if (!watching()) po.unread = true;
+      if (!watching()) po.unreadCount += 1;
+      render();
+      return;
+    }
+    if (po.busy) return;
+    Object.assign(po, { busy: true, elsewhere: true, pending: '…', error: null, since: Date.now(), liveIn: null, live: window.LiveTurn.create({ agent: 'Product Owner' }) });
+    window.LiveTurn.apply(po.live, p);
+    render({ scroll: 'end' });
+    await loadHistory(projectId);
+    if (po.projectId !== projectId || !po.elsewhere) return;
+    const last = po.messages.at(-1);
+    if (last?.role === 'user') po.pending = last.text;
+    render({ scroll: 'end' });
+  }
   document.addEventListener('robots:changed', (e) => { if (e.detail?.name === 'product-owner') renderButton(); });
   // the roadmap, queue or runs changed (backlog.js setData): the groups' applied state follows (#140),
   // the conversation keeps its scroll position (render's default)

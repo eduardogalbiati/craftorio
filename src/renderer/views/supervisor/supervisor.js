@@ -16,7 +16,7 @@
   // window (#263): the Agents window's pane shows the conversation; liveIn / pending: the chat a
   // question in flight was sent from and its text (the other surface shows the turn); unread: the
   // answers that arrived while neither the drawer nor the pane showed them
-  const sv = { messages: [], busy: false, loaded: false, drawer: false, full: false, tools: [], live: null, window: false, liveIn: null, pending: null, since: 0, unread: 0 };
+  const sv = { messages: [], busy: false, loaded: false, drawer: false, full: false, tools: [], live: null, window: false, liveIn: null, pending: null, since: 0, unread: 0, elsewhere: false };
   let chat = null; // the shared chat (agent-chat.js), mounted with the drawer
   let winChat = null; // the Agents window's chat (#263), while its pane shows the Supervisor
   const SUGGESTIONS = [
@@ -89,6 +89,28 @@
       Object.assign(sv, { busy: false, live: null, liveIn: null, pending: null });
     }
   };
+
+  // #263: a question sent from the other window: the service's progress is the only sign of it here;
+  // the question comes with the history, the answer at the end
+  async function turnElsewhere(p) {
+    if (p.phase === 'end') {
+      if (!sv.elsewhere) return;
+      Object.assign(sv, { busy: false, live: null, liveIn: null, pending: null, elsewhere: false });
+      await load();
+      if (!sv.drawer && !sv.window) sv.unread += 1;
+      render();
+      return;
+    }
+    if (sv.busy) return;
+    Object.assign(sv, { busy: true, elsewhere: true, pending: '…', since: Date.now(), liveIn: null, live: window.LiveTurn.create({ agent: 'supervisor' }) });
+    window.LiveTurn.apply(sv.live, p);
+    for (const c of [chat, winChat]) c?.setLiveTurn(sv.live);
+    await load();
+    if (!sv.elsewhere) return;
+    const last = sv.messages.at(-1);
+    if (last?.role === 'user') sv.pending = last.text;
+    render();
+  }
 
   async function clear() {
     if (!await confirmDialog('New conversation', 'The supervisor forgets this conversation and its history is deleted.', 'Clear')) return;
@@ -258,9 +280,11 @@
       chat.slot('foot').innerHTML = '<p id="svc-note-drawer" class="muted small svc-note"></p>';
       // #180: the question in flight, as the service reports it
       api.onChatProgress?.((p) => {
-        if (p?.chat !== 'supervisor' || !sv.live) return;
+        if (p?.chat !== 'supervisor') return;
+        if (!sv.live) { turnElsewhere(p); return; }
         window.LiveTurn.apply(sv.live, p);
         (sv.liveIn || chat).setLiveTurn(sv.live);
+        if (p.phase === 'end' && sv.elsewhere) turnElsewhere(p);
       });
       // #241: the owner's Do it / Dismiss / Undo on a request card (agent-request.js)
       window.addEventListener('agent-request:changed', async (e) => {

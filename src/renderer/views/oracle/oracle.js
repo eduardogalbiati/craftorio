@@ -617,6 +617,7 @@
   function mountChat(w) {
     const chat = window.AgentChat.create($(`#oracle-chat-${w}`), {
       agent: 'Oracle',
+      ...(w === WINDOW ? { agentId: 'oracle' } : {}),
       ids: { messages: `oracle-log-${w}`, input: `oracle-q-${w}` },
       classes: { messages: 'svc-log oracle-log', form: 'svc-form', input: 'svc-input oracle-input', send: 'oracle-send', live: 'oracle-live' },
       placeholder: 'Ask the Oracle… (Enter to send, Shift+Enter for a new line; paste a screenshot)',
@@ -730,9 +731,19 @@
       api.onOracleChanged?.(reloadSoon);
       // #180: the question in flight, as the service reports it
       api.onChatProgress?.((p) => {
-        if (p?.chat !== 'oracle' || !or.live) return;
+        if (p?.chat !== 'oracle') return;
+        // #263: a question sent from the other window: shown as a turn started elsewhere until its
+        // end, when oracle:changed reloads the conversation (reloadSoon)
+        if (!or.live) {
+          if (p.phase === 'end' || or.pending) return;
+          Object.assign(or, { pending: '…', pendingSince: Date.now(), liveIn: null, live: window.LiveTurn.create({ agent: 'Oracle' }), elsewhere: true });
+          window.LiveTurn.apply(or.live, p);
+          render();
+          return;
+        }
         window.LiveTurn.apply(or.live, p);
         chats[or.liveIn]?.setLiveTurn(or.live);
+        if (p.phase === 'end' && or.elsewhere) { Object.assign(or, { pending: null, live: null, liveIn: null, elsewhere: false }); load(); }
       });
       document.addEventListener('click', (e) => {
         const t = e.target;
