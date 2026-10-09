@@ -10,6 +10,8 @@
 //   'dark' theme: a tint of the colour, the text a shade of the same colour with a contrast of at
 //   least 4.5:1 on it (the darkest needed in light, the lightest in dark).
 // - hexFor(agent, def): colorFor as #RRGGBB, the colour a robot is painted in (Robots.svg `color`, #227).
+// - normalizeHex(input): a typed colour as #RRGGBB uppercase ('#' optional, 3 or 6 digits, spaces
+//   trimmed), null when it is not one (#309, the agent editor's hex fields).
 // - roleChip(agent, def, theme): the HTML of the role chip by an agent's name ("test writer"), in chip()'s colours.
 // - defIn(workflows, workflow, agent): an agent's definition from a workflows list, by file or name.
 // Used by the run chat (--rc-agent, its robots, the role chip), the runs list's progress avatars and
@@ -29,6 +31,14 @@
   const BASE = { dark: '#151820', light: '#FFFFFF' };
   const MIN_CONTRAST = 4.5;
   const isHex = (c) => /^#[0-9a-f]{6}$/i.test(String(c || ''));
+  /** What the owner typed as a colour (#309): '#RRGGBB' uppercase for 3 or 6 hex digits, '#' optional, else null. */
+  function normalizeHex(input) {
+    if (typeof input !== 'string') return null;
+    const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(input.trim());
+    if (!m) return null;
+    const digits = m[1].length === 3 ? m[1].split('').map((d) => d + d).join('') : m[1];
+    return `#${digits.toUpperCase()}`;
+  }
 
   /** The name hash of the agents with no role colour: a stable hue, close names far apart. */
   function hueOf(agent) {
@@ -99,6 +109,7 @@
     hexFor,
     hueOf,
     isHex,
+    normalizeHex,
     roleChip,
     ROLES,
   };

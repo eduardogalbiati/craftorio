@@ -60,7 +60,8 @@
 
   const $a = (sel) => document.querySelector(sel);
   // `custom`: a workflow agent's look was customised (else it draws its provider's robot)
-  const ed = { agent: null, look: { ...DEFAULT_LOOK }, custom: true, skills: new Set(), state: 'idle', filter: '' };
+  // `hexErrors`: per colour row, the message of an invalid hex typed in its field (#309)
+  const ed = { agent: null, look: { ...DEFAULT_LOOK }, custom: true, skills: new Set(), state: 'idle', filter: '', hexErrors: {} };
   let agents = [];
   let workflowLooks = {};
 
@@ -221,6 +222,10 @@
     ed.agent = a;
     ed.look = { ...defaultLook(), ...(a?.appearance || {}) };
     ed.custom = !a?.workflow || !!a.appearance;
+    // #309: the colours as #RRGGBB (what the hex fields show and Save stores)
+    const normalize = window.AgentColors?.normalizeHex || (() => null);
+    for (const c of COLORS) ed.look[c.key] = normalize(ed.look[c.key]) || defaultLook()[c.key];
+    ed.hexErrors = {};
     ed.skills = new Set(a?.skills || []);
     ed.state = 'idle';
     ed.filter = '';
@@ -293,15 +298,25 @@
       `<button type="button" class="chip${k === ed.state ? ' active' : ''}" data-state="${k}">${label}</button>`).join('');
   }
 
+  // #309: a row's colour that is none of its presets is a custom colour: its own selected swatch, and
+  // the hex field shows it. The hex field's error is kept per row so a re-render keeps it.
+  const isPreset = (c, hex) => c.swatches.some((h) => h.toUpperCase() === String(hex).toUpperCase());
   function renderLookControls() {
-    $a('#ag-colors').innerHTML = COLORS.map((c) => `
+    $a('#ag-colors').innerHTML = COLORS.map((c) => {
+      const hex = String(ed.look[c.key] || '').toUpperCase();
+      const custom = !isPreset(c, hex);
+      const error = ed.hexErrors?.[c.key] || '';
+      return `
       <div class="ag-color" data-color="${c.key}">
         <div class="ag-color-head"><b>${c.label}</b> <span class="muted">${c.hint}</span></div>
         <div class="ag-swatches">
-          ${c.swatches.map((h) => `<button type="button" class="ag-swatch${h.toUpperCase() === ed.look[c.key].toUpperCase() ? ' active' : ''}" data-hex="${h}" style="background:${h}" title="${h}" aria-label="${c.label} ${h}"></button>`).join('')}
-          <label class="ag-custom" title="Any color"><input type="color" value="${ed.look[c.key].toLowerCase()}" aria-label="${c.label}: any color" /><span>+</span></label>
+          ${c.swatches.map((h) => `<button type="button" class="ag-swatch${h.toUpperCase() === hex ? ' active' : ''}" data-hex="${h}" style="background:${h}" title="${h}" aria-label="${c.label} ${h}"></button>`).join('')}
+          <label class="ag-custom${custom ? ' active' : ''}" title="${custom ? `Custom color ${hex}` : 'Any color'}"><input type="color" value="${hex.toLowerCase()}" aria-label="${c.label}: any color" /><span class="ag-custom-swatch${custom ? ' active' : ''}" data-testid="agent-color-custom" aria-pressed="${custom ? 'true' : 'false'}" style="${custom ? `background:${hex}` : ''}">${custom ? '' : '+'}</span></label>
+          <input type="text" class="ag-hex mono" data-testid="agent-color-hex" value="${hex}" maxlength="7" spellcheck="false" aria-label="${c.label} hex" aria-invalid="${error ? 'true' : 'false'}" placeholder="#RRGGBB" />
         </div>
-      </div>`).join('');
+        <div class="ag-hex-error small" data-testid="agent-color-hex-error" role="alert">${esc(error)}</div>
+      </div>`;
+    }).join('');
     $a('#ag-eyes').innerHTML = Robots.EYE_STYLES.map((k) =>
       `<button type="button" data-eyes="${k}" class="${k === ed.look.eyes ? 'active' : ''}">${EYE_LABELS[k] || k}</button>`).join('');
     $a('#ag-emblems').innerHTML = Robots.EMBLEMS.map((k) =>
@@ -311,9 +326,19 @@
 
   function setLook(patch) {
     Object.assign(ed.look, patch);
+    for (const key of Object.keys(patch)) delete ed.hexErrors[key];
     ed.custom = true;
     renderLookControls();
     renderPreview();
+  }
+
+  // #309: what the owner typed in a row's hex field: a valid colour selects it (the swatch, the "+",
+  // the preview); an invalid one is not stored, the row says so and keeps its colour.
+  function typeHex(key, text) {
+    const hex = window.AgentColors?.normalizeHex ? window.AgentColors.normalizeHex(text) : null;
+    if (hex) { setLook({ [key]: hex }); return; }
+    ed.hexErrors[key] = String(text).trim() ? `Not a color: "${String(text).trim()}". Type a hex like #1A2B3C.` : 'Type a hex like #1A2B3C.';
+    renderLookControls();
   }
 
   function shuffleLook() {
@@ -415,7 +440,14 @@
       ed.custom = true;
       renderPreview();
     });
-    $a('#ag-colors').addEventListener('change', (e) => { if (e.target.type === 'color') renderLookControls(); });
+    $a('#ag-colors').addEventListener('change', (e) => {
+      if (e.target.type === 'color') { delete ed.hexErrors[e.target.closest('[data-color]').dataset.color]; renderLookControls(); }
+      else if (e.target.classList.contains('ag-hex')) typeHex(e.target.closest('[data-color]').dataset.color, e.target.value);
+    });
+    // Enter in a hex field commits it like leaving it, without submitting the form
+    $a('#ag-colors').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && e.target.classList?.contains('ag-hex')) { e.preventDefault(); typeHex(e.target.closest('[data-color]').dataset.color, e.target.value); }
+    });
     $a('#ag-eyes').onclick = (e) => { const b = e.target.closest('[data-eyes]'); if (b) setLook({ eyes: b.dataset.eyes }); };
     $a('#ag-emblems').onclick = (e) => { const b = e.target.closest('[data-emblem]'); if (b) setLook({ emblem: b.dataset.emblem }); };
     $a('#ag-skill-search').oninput = (e) => { ed.filter = e.target.value; renderSkills(); };
