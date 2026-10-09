@@ -911,6 +911,7 @@
     else if (c) chat.ask(c.dataset.q);
   };
   const DRAFT_ACTS = ['append', 'comment', 'create', 'create-assign', 'create-roadmap', 'discard', 'revise'];
+  // the conversation's own controls (proposals, drafts, extras); the Agents window's log gets the same handlers (#263)
   $p('#po-log').onclick = (e) => {
     // an applied group's badge (#140): the Roadmap at its stage, or its run
     const stage = e.target.closest('[data-po-stage]');
@@ -935,8 +936,8 @@
     if (DRAFT_ACTS.includes(b.dataset.poAct)) fileDraft(b.dataset.poAct, b);
     else apply(b.dataset.poAct, b);
   };
-  $p('#po-log').addEventListener('input', (e) => window.BacklogPoProposals.onInput(e, proposalsCtx()));
-  $p('#po-log').addEventListener('change', (e) => {
+  const onLogInput = (e) => window.BacklogPoProposals.onInput(e, proposalsCtx());
+  const onLogChange = (e) => {
     // a draft's workflow select (#195): kept for that draft, the Create + roadmap tooltip follows it
     if (e.target.matches('[data-po-wf]')) {
       draftWorkflow.set(Number(e.target.closest('[data-msg]')?.dataset.msg), e.target.value);
@@ -944,7 +945,15 @@
       return;
     }
     window.BacklogPoProposals.onInput(e, proposalsCtx());
-  });
+  };
+  $p('#po-log').addEventListener('input', onLogInput);
+  $p('#po-log').addEventListener('change', onLogChange);
+  // the Agents window's log (#263): the same click, input and change handlers as the drawer's
+  const bindLog = (log) => {
+    log.onclick = $p('#po-log').onclick;
+    log.addEventListener('input', onLogInput);
+    log.addEventListener('change', onLogChange);
+  };
   $p('#btn-po-clear').onclick = async () => {
     if (!await confirmDialog('Clear the conversation', 'The Product Owner forgets this project\'s questions and answers (and the files attached to them).', 'Clear')) return;
     try { po.messages = await api.clearProductOwner(po.projectId); Object.assign(po, { notes: {}, files: [], attached: [], extras: {} }); } catch (e) { po.error = errMsg(e); }
@@ -1000,6 +1009,8 @@
         classes: { messages: 'svc-log po-log', form: 'svc-form', input: 'svc-input', send: 'svc-send' },
         placeholder: 'Ask the Product Owner… (Enter to send, Shift+Enter for a new line)',
       });
+      bindLog(winChat.log);
+      windowTries = 0;
       openInWindow();
       setTimeout(() => $p('#po-question-window')?.focus({ preventScroll: true }), 50);
     },
@@ -1010,7 +1021,7 @@
     unread: () => (po.unread && !po.busy ? Math.max(1, po.unreadCount) : 0),
     busy: () => po.busy,
     header: () => ({
-      model: devMode() ? 'simulated' : `${window.productOwnerAgent?.model || 'claude-opus-5-5'}${window.productOwnerAgent?.effort && window.productOwnerAgent.effort !== 'default' ? ` · ${window.productOwnerAgent.effort}` : ''}`,
+      model: devMode() ? 'simulated' : `${window.productOwnerAgent?.model || ''}${window.productOwnerAgent?.effort && window.productOwnerAgent.effort !== 'default' ? ` · ${window.productOwnerAgent.effort}` : ''}`,
       cost: po.messages.reduce((a, x) => a + (x.costUsd || 0), 0),
       note: !po.projectId ? 'Choose a project in the Backlog first' : `Planning for ${projectName()}`,
     }),

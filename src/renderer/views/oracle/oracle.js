@@ -46,6 +46,8 @@
   const ALL_SURFACES = [...SURFACES, WINDOW];
   const chats = {}; // each surface's shared chat (#274, agent-chat.js), mounted with it
   const shownIn = (w) => (w === 'drawer' ? or.drawer : w === WINDOW ? or.window : onDashboard());
+  // the surface the owner talks in: the Agents window's pane when it shows the Oracle, else the drawer or Home's dock
+  const activeSurface = () => (or.window && chats[WINDOW] ? WINDOW : or.drawer || !onDashboard() ? 'drawer' : 'dock');
   const SUGGESTIONS = [
     'What happened overnight?',
     'Which runs failed this week, and why?',
@@ -138,7 +140,7 @@
     if (or.pending) { if (q) { or.queue.push({ q, context: queued ? queued.context : or.context }); render(); } return; }
     if (!q || !view().chipsEnabled) return;
     nextQueued = queued || null;
-    chats[or.drawer || !onDashboard() ? 'drawer' : 'dock'].ask(q);
+    chats[activeSurface()].ask(q);
   }
   // The chat's send (#274; the box is already empty, a failure or a refusal gives the question back):
   // the question with the screen, the pasted images and the gate context (#183); w: the surface it came from
@@ -186,7 +188,7 @@
     or.memoryOpen = true;
     try { or.memory = M.editMemory(M.memoryForm((await api.oracleMemory()).text)); } catch (e) { or.memory = { ...M.editMemory(M.memoryForm('')), error: errMsg(e) }; }
     render();
-    document.querySelector(`#oracle-mem-${or.drawer ? 'drawer' : 'dock'}`)?.focus({ preventScroll: true });
+    document.querySelector(`#oracle-mem-${activeSurface()}`)?.focus({ preventScroll: true });
   }
   async function saveMemory() {
     or.memory = { ...or.memory, saving: true };
@@ -198,7 +200,7 @@
   function toggleImport(on) {
     or.memory = { ...or.memory, importing: on, importText: on ? or.memory.importText || '' : '', rev: (or.memory.rev || 0) + 1 };
     render();
-    if (on) document.querySelector(`#oracle-mem-import-${or.drawer ? 'drawer' : 'dock'}`)?.focus({ preventScroll: true });
+    if (on) document.querySelector(`#oracle-mem-import-${activeSurface()}`)?.focus({ preventScroll: true });
   }
   async function importMemory() {
     try {
@@ -213,7 +215,7 @@
   // ---- drafts and pasted images ------------------------------------------------------------
   function setDraftText(text) {
     or.drafts.text = text;
-    SURFACES.forEach((w) => { const el = $(`#oracle-q-${w}`); if (el && el.value !== text) el.value = text; });
+    ALL_SURFACES.forEach((w) => { const el = $(`#oracle-q-${w}`); if (el && el.value !== text) el.value = text; });
   }
   const readFile = (file) => new Promise((resolve, reject) => {
     const r = new FileReader();
@@ -606,7 +608,7 @@
         <button class="btn ghost sm" type="button" data-oracle-night title="Let the Oracle fix what stops the roadmap without asking, until a time you choose">Night watch</button>
         <button class="btn ghost sm" type="button" data-oracle-memory title="The owner's standing decisions, read at every session start">Memory</button>
         <button class="btn ghost sm" type="button" data-oracle-reset title="A new session from a handoff note; the conversation and the memory are kept">New session</button>
-        ${w === 'drawer' ? `${OPEN_WINDOW_BUTTON}<button id="btn-oracle-close" class="icon-btn" type="button" title="Close (Esc)"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg></button>` : ''}
+        ${w === WINDOW ? '' : OPEN_WINDOW_BUTTON}${w === 'drawer' ? '<button id="btn-oracle-close" class="icon-btn" type="button" title="Close (Esc)"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg></button>' : ''}
       </div>
     </div>
     <div id="oracle-chat-${w}" class="drawer-body svc-body oracle-body"></div>`;

@@ -33,6 +33,8 @@
 
   // What the current screen shows, in one line for the supervisor.
   function screenContext() {
+    // the Agents window's page has no screen of its own (#263)
+    if (window.AgentsWindow?.isWindowPage?.()) return 'Agents window';
     const view = state.view;
     const label = LABELS[view] || view || 'unknown screen';
     const parts = [label];
@@ -59,8 +61,8 @@
     try {
       sv.messages = await api.supervisorChatHistory();
       sv.loaded = true;
-      chat.setError('');
-    } catch (e) { chat.setError(errMsg(e)); }
+      for (const c of [chat, winChat]) c?.setError('');
+    } catch (e) { for (const c of [chat, winChat]) c?.setError(errMsg(e)); }
     render();
   }
   // the drawer shows the latest exchanges; expanded, all of them
@@ -258,7 +260,7 @@
       api.onChatProgress?.((p) => {
         if (p?.chat !== 'supervisor' || !sv.live) return;
         window.LiveTurn.apply(sv.live, p);
-        chat.setLiveTurn(sv.live);
+        (sv.liveIn || chat).setLiveTurn(sv.live);
       });
       // #241: the owner's Do it / Dismiss / Undo on a request card (agent-request.js)
       window.addEventListener('agent-request:changed', async (e) => {
@@ -270,7 +272,8 @@
       });
       document.addEventListener('click', (e) => {
         const chip = e.target.closest('[data-svc-q]');
-        if (chip) chat.ask(chip.dataset.svcQ);
+        // a chip of the Agents window's pane asks from that chat (#263)
+        if (chip) (chip.closest('[data-svc-window]') ? winChat : chat)?.ask(chip.dataset.svcQ);
       });
     },
   });

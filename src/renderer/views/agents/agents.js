@@ -223,8 +223,7 @@
     ed.look = { ...defaultLook(), ...(a?.appearance || {}) };
     ed.custom = !a?.workflow || !!a.appearance;
     // #309: the colours as #RRGGBB (what the hex fields show and Save stores)
-    const normalize = window.AgentColors?.normalizeHex || (() => null);
-    for (const c of COLORS) ed.look[c.key] = normalize(ed.look[c.key]) || defaultLook()[c.key];
+    for (const c of COLORS) ed.look[c.key] = window.AgentColors.normalizeHex(ed.look[c.key]) || defaultLook()[c.key];
     ed.hexErrors = {};
     ed.skills = new Set(a?.skills || []);
     ed.state = 'idle';

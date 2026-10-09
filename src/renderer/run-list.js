@@ -148,10 +148,10 @@ function renderRunList(rl, { prefix, box: boxSel, empty, start, rerender, reload
     if (e) e.shown += REPO_PAGE;
     rerender();
   }));
-  box.querySelectorAll('[data-repo-review], [data-commit]').forEach((b) => (b.onclick = () => {
+  box.querySelectorAll('[data-repo-review], .pr-commit[data-sha]').forEach((b) => (b.onclick = () => {
     const r = rl.runs.find((x) => x.runId === b.closest('.pr-run').dataset.run);
     if (!r || !window.DiffViewer) return;
-    window.DiffViewer.open({ runId: r.runId, title: runDiffTitle(r), ...(b.dataset.commit ? { commit: b.dataset.commit } : {}) });
+    window.DiffViewer.open({ runId: r.runId, title: runDiffTitle(r), ...(b.dataset.sha ? { commit: b.dataset.sha } : {}) });
   }));
   box.querySelectorAll('[data-run-act]').forEach((b) => (b.onclick = () => {
     const r = rl.runs.find((x) => x.runId === b.closest('.pr-run').dataset.run);
@@ -392,7 +392,7 @@ function runRepositoryColumn(r, pv) {
   const files = d.files || [];
   if (d.simulated) return wrap('<p class="muted small">Simulated: nothing was committed.</p>', { why: 'A simulated run commits nothing.' });
   if (d.unavailable && !commits.length) {
-    const gone = /\bgone\b/i.test(d.unavailable);
+    const gone = !!d.branchGone || /\bgone\b/i.test(d.unavailable);
     return wrap(`${repoBranchHtml(r, d)}<p class="muted small">${gone ? 'The branch is gone: nothing is left to compare.' : esc(d.unavailable)}</p>`, { reviewable: files.length > 0, why: 'This run has no changes to show.' });
   }
   if (!commits.length) return wrap(`${repoBranchHtml(r, d)}<p class="muted small">This run made no commits.</p>`, { reviewable: files.length > 0, why: 'This run made no commits.' });
@@ -404,10 +404,10 @@ function runRepositoryColumn(r, pv) {
   return wrap(`${repoBranchHtml(r, d)}
     <div class="muted small pr-repo-totals" data-testid="run-card-repo-totals">${commits.length} commit${commits.length === 1 ? '' : 's'} · ${files.length} file${files.length === 1 ? '' : 's'} · <span class="pr-add">+${added}</span> <span class="pr-del">−${deleted}</span></div>
     <ul class="pr-commits" data-testid="run-card-commits" aria-label="Commits of this run, newest first">${shown.map((c) => `
-      <li><button type="button" class="pr-commit" data-testid="run-card-commit" data-commit="${esc(c.sha)}" data-sha="${esc(c.sha)}" aria-label="${esc(`${c.short || shortSha(c.sha)} ${c.subject}`)}" title="${esc(`${c.subject}\n${c.author || ''} · ${c.date ? dateOf(c.date) : ''}`)}">
+      <li><button type="button" class="pr-commit" data-testid="run-card-commit" data-sha="${esc(c.sha)}" aria-label="${esc(`${c.short || shortSha(c.sha)} ${c.subject}`)}" title="${esc(`${c.subject}\n${c.author || ''} · ${c.date ? dateOf(c.date) : ''}`)}">
         <span class="mono pr-commit-sha">${esc(c.short || shortSha(c.sha))}</span><span class="pr-commit-subject">${esc(c.subject)}</span><span class="muted small pr-commit-time">${esc(when(c.date))}</span>
       </button></li>`).join('')}</ul>
-    ${left > 0 ? `<button type="button" class="btn sm ghost" data-testid="run-card-commits-more" data-repo-more>Show ${left} more</button>` : ''}`, { reviewable: true });
+    ${left > 0 ? `<button type="button" class="btn sm ghost" data-testid="run-card-commits-more" data-repo-more>Show ${Math.min(left, REPO_PAGE)} more${left > REPO_PAGE ? ` <span class="muted">(${left} left)</span>` : ''}</button>` : ''}`, { reviewable: true });
 }
 
 // The branch (mono), its base and the state badge: merged (the PR), pushed (the PR link), merged

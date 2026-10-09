@@ -73,7 +73,7 @@ module.exports = (ctx) => {
     const removed = [...events].reverse().find((e) => e.type === 'worktree.removed' && e.branch);
     const branch = removed?.branch || null;
     // #289: the branch deleted too (nothing merged): a state, not a git error
-    if (removed?.branch_deleted) return { events, branch, problem: `The branch ${branch} of this run is gone: nothing is left to compare.` };
+    if (removed?.branch_deleted) return { events, branch, branchGone: true, problem: `The branch ${branch} of this run is gone: nothing is left to compare.` };
     if (ready?.repo && branch && !branch.startsWith('-') && fs.existsSync(ready.repo)) return { events, dir: ready.repo, head: `refs/heads/${branch}`, bases, branch, branchRef: true };
     return { events, branch: branch || ref, problem: 'This run has no git worktree left to compare.' };
   }
@@ -102,7 +102,7 @@ module.exports = (ctx) => {
     if (src.simulated || src.problem) return src;
     // #289: a branch deleted by hand while the events say it was kept
     if (src.branchRef && !(await gitOrNull(src.dir, ['rev-parse', '--verify', '--quiet', src.head]))) {
-      return { ...src, problem: `The branch ${src.branch} of this run is gone: nothing is left to compare.` };
+      return { ...src, branchGone: true, problem: `The branch ${src.branch} of this run is gone: nothing is left to compare.` };
     }
     const { base, mergeBase: mb } = await mergeBase(src.dir, src.bases, src.head || 'HEAD');
     const commits = await branchCommits(src.dir, mb, src.head || 'HEAD');
@@ -150,7 +150,8 @@ module.exports = (ctx) => {
   async function runDiff(opts = {}) {
     const r = await resolveRange(opts);
     if (r.simulated || r.problem) {
-      return { simulated: !!r.simulated, unavailable: r.problem || null, base: null, branch: r.branch || null, commits: [], commit: null, files: reportedFiles(r.events) };
+      // branchGone (#289): the run's branch was deleted, a state the run card names (not a git error)
+      return { simulated: !!r.simulated, unavailable: r.problem || null, branchGone: !!r.branchGone, base: null, branch: r.branch || null, commits: [], commit: null, files: reportedFiles(r.events) };
     }
     const files = await changedFiles(r.dir, r.from, r.to);
     const all = await patches(r.dir, r.from, r.to);
