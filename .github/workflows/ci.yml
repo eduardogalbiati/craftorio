@@ -86,7 +86,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           command -v xvfb-run || (sudo apt-get update && sudo apt-get install -y xvfb)
-          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0; fi
       # scripts/screenshot.js (the test step's UI screenshots): every view opens in simulation and the
       # app quits by itself. Needs the Electron binary and a display: Windows, and Linux under xvfb-run.
       - name: UI screenshots (every view, simulation)
