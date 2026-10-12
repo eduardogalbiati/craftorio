@@ -12,6 +12,7 @@
 //       attachments/              any file, original names, deduplicated
 //       conversation.jsonl        the card's thread, one JSON entry per line
 //     archive/<card id>/          discarded or merged cards (same layout, card.archived says why)
+//     imports/<batch>/            an import's cards while it is written (#322, importCards)
 // The Discovery board (#257): the columns Inbox, Triage, Shape, Define, Ready, a WIP limit on Shape
 // and Define (setWip; a move past it is never refused here: the screen asks), a card's place within
 // its column (moveCard's `index`), and the document's history: versions/ also gets the document a
@@ -980,6 +981,133 @@ function mergeCard(dir, projectId, fromId, intoId, { by = 'owner' } = {}) {
   return readCard(dir, projectId, intoId);
 }
 
+// ---- imports (#322) -------------------------------------------------------------------------------
+// A document imported into the Inbox (src/discovery-import.js) becomes its cards all or none: they
+// are written whole under imports/<batch>/ (never listed), then commit.json says the batch is
+// complete, and only then they move into cards/ and onto the board. A batch without commit.json was
+// cut before it was complete and is dropped; one with it is finished (finishImports, also after the
+// app closed mid-way). The batch's name holds the writing process's pid: a batch another live
+// process is still writing is left alone.
+
+const importsDir = (dir, projectId) => path.join(projectDir(dir, projectId), 'imports');
+
+function processAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  if (pid === process.pid) return true;
+  try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; }
+}
+
+// Moves a complete batch's cards into cards/ (in its order, first in their column), writes the merged
+// cards' new text, then removes the batch. Each step can run again: a batch cut while being
+// finished is finished by the next call.
+function finishBatch(dir, projectId, batch) {
+  const { ids = [], merges = [], column = 'inbox', by = 'import' } = JSON.parse(fs.readFileSync(path.join(batch, 'commit.json'), 'utf8'));
+  for (const id of ids) {
+    const staged = path.join(batch, 'cards', id);
+    if (fs.existsSync(staged)) renameWithRetry(staged, cardDir(dir, projectId, id));
+  }
+  for (const m of merges) {
+    if (!fs.existsSync(path.join(cardDir(dir, projectId, m.id), 'card.json'))) continue; // archived meanwhile
+    snapshotVersion(dir, projectId, m.id, 'import');
+    updateCard(dir, projectId, m.id, { document: m.document, acceptance: m.acceptance });
+    appendConversation(dir, projectId, m.id, { kind: 'import', author: by, text: m.note });
+  }
+  const board = readBoard(dir, projectId);
+  const moved = ids.filter((id) => fs.existsSync(path.join(cardDir(dir, projectId, id), 'card.json')));
+  for (const c of Object.keys(board.order)) board.order[c] = board.order[c].filter((x) => !moved.includes(x));
+  board.order[column] = [...moved, ...(board.order[column] || [])];
+  writeBoard(dir, projectId, board);
+  fs.rmSync(batch, { recursive: true, force: true });
+}
+
+/**
+ * Ends the imports a previous session left (#322): a complete batch is finished, an incomplete one
+ * is dropped, a batch a live process is still writing is left. Returns the number of batches finished.
+ */
+function finishImports(dir, projectId) {
+  let names = [];
+  try { names = fs.readdirSync(importsDir(dir, projectId)); } catch { return 0; }
+  let finished = 0;
+  for (const name of names) {
+    const batch = path.join(importsDir(dir, projectId), name);
+    const complete = fs.existsSync(path.join(batch, 'commit.json'));
+    if (complete) { finishBatch(dir, projectId, batch); finished++; }
+    else if (!processAlive(Number(name.split('-').pop()))) fs.rmSync(batch, { recursive: true, force: true });
+  }
+  return finished;
+}
+
+/**
+ * Creates several cards at once, all or none (#322): `cards` [{ title, text, acceptance }]
+ * in the order they take at the top of `column` (the Inbox); `merges` [{ id, document, acceptance,
+ * note }] the new text of existing cards (a version is kept first, `note` goes to their thread);
+ * `file` { name, data: Buffer } attached to every new card (written once, hard-linked into each
+ * card when the disk allows it); `history` { by, source } the entry each new card starts with;
+ * `note` its first thread entry. Throws, writing nothing, when one card is invalid.
+ * Returns { created: [cards], merged: [ids] }.
+ */
+function importCards(dir, projectId, { cards = [], merges = [], file = null, author = 'owner', type = 'idea', column = 'inbox', history = {}, note = '' } = {}) {
+  checkType(type);
+  for (const m of merges) editableCard(dir, projectId, m.id);
+  if (file && file.data.length > MAX_ATTACHMENT_BYTES) throw new Error(`Attachment too large: ${mb(file.data.length)}, the limit is ${mb(MAX_ATTACHMENT_BYTES)}`);
+  const titles = cards.map((c) => checkTitle(c.title));
+  finishImports(dir, projectId);
+  checkColumn(dir, projectId, column);
+  const base = path.join(ensureProject(dir, projectId), 'imports');
+  const batch = path.join(base, `${Date.now()}-${crypto.randomBytes(2).toString('hex')}-${process.pid}`);
+  const ids = [];
+  try {
+    fs.mkdirSync(path.join(batch, 'cards'), { recursive: true });
+    const stored = file ? fileName(file.name) || 'import.txt' : null;
+    const source = file ? path.join(batch, stored) : null;
+    if (file) writeFileAtomic(source, file.data);
+    const ts = now();
+    cards.forEach((c, i) => {
+      // a millisecond older per card: the lists (newest first) show them in the given order too
+      const created = new Date(Date.parse(ts) - i).toISOString();
+      const d = new Date(created);
+      const day = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+      let id;
+      do id = `${day}-${crypto.randomBytes(2).toString('hex')}`;
+      while (ids.includes(id) || fs.existsSync(cardDir(dir, projectId, id)) || fs.existsSync(cardDir(dir, projectId, id, 'archive')));
+      ids.push(id);
+      const folder = path.join(batch, 'cards', id);
+      fs.mkdirSync(folder);
+      const text = String(c.text ?? '');
+      const acceptance = String(c.acceptance ?? '');
+      writeFileAtomic(path.join(folder, 'document.md'), text);
+      writeFileAtomic(path.join(folder, 'acceptance.md'), acceptance);
+      writeFileAtomic(path.join(folder, 'conversation.jsonl'), note ? `${JSON.stringify({ ts, kind: 'import', author: String(history.by || 'import'), text: note })}\n` : '');
+      if (file) {
+        fs.mkdirSync(path.join(folder, 'attachments'));
+        const to = path.join(folder, 'attachments', stored);
+        try { fs.linkSync(source, to); } catch { fs.copyFileSync(source, to); }
+      }
+      writeJson(path.join(folder, 'card.json'), {
+        id,
+        title: titles[i],
+        type,
+        column,
+        author: String(author || 'owner'),
+        created,
+        updated: created,
+        tags: [],
+        clarity: scored({ type, document: text, acceptance }),
+        estimate: { usd: null, minutes: null },
+        links: { issues: [], release: null },
+        history: [{ ts, from: null, to: column, by: String(history.by || 'import'), ...(history.source ? { source: String(history.source) } : {}) }],
+      });
+    });
+    writeJson(path.join(batch, 'commit.json'), { ids, merges, column, by: String(history.by || 'import') });
+  } catch (e) {
+    fs.rmSync(batch, { recursive: true, force: true });
+    throw e;
+  }
+  // complete: from here the import happens, now or (cut) on the next finishImports
+  finishBatch(dir, projectId, batch);
+  return { created: ids.map((id) => readCard(dir, projectId, id)), merged: merges.map((m) => m.id) };
+}
+
 module.exports = {
   addAttachment,
   answerGrill,
@@ -991,7 +1119,9 @@ module.exports = {
   COMMITTED,
   createCard,
   filedDir,
+  finishImports,
   grillCard,
+  importCards,
   issueCards,
   listArchived,
   listCards,

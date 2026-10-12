@@ -6,6 +6,13 @@
 // attachment count; a card opens next to the list with its document (Edit: Save / Cancel), its
 // attachments and its thread, and the triage actions: Accept (to Discovery › Triage), Merge into…
 // another card, Discard (archived with a reason). Enter captures, Esc closes the open card.
+// Import… (#322, src/discovery-import.js) opens a panel that takes a .md/.txt file (chosen or
+// dropped on it) or pasted text and previews the items the document is cut into (one per top-level
+// heading or list item; its `- [ ]` lines its criteria): title (Rename: Save / Cancel), first lines,
+// number of criteria, the clarity score the card gets, a duplicate of an open card or open synced
+// issue (keep, skip, or merge into that card); Drop, Merge into… and Nest under… with Undo of the
+// last edit. Nothing is written until the confirm button, which creates the cards all or none, in
+// the document's order (more than 200 asks first); Cancel and Esc close it with nothing written.
 // Registers itself with registerView (view-registry.js); uses app.js globals ($, esc, state, api,
 // errMsg, dateOf, openModal, closeModal, confirmDialog, selectRun), ncAgo (notification-center.js),
 // markdownHtml (artifact-render.js), CurrentProject and ImageViewer. Shares how a card's files and
@@ -17,7 +24,7 @@
 
   // files: staged for the next capture ({ name, size, data }); open: the opened card with its thread;
   // previews: "<card id>/<name>" → what discovery:attachment returned (an image's data: URL)
-  const inbox = { projectId: null, cards: [], files: [], busy: false, open: null, thread: [], editing: false, previews: new Map(), seq: 0, openSeq: 0, acting: false };
+  const inbox = { projectId: null, cards: [], files: [], busy: false, open: null, thread: [], editing: false, previews: new Map(), seq: 0, openSeq: 0, acting: false, importing: null };
 
   const formatSize = (n) => (n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
   const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
@@ -43,7 +50,10 @@
   // ---- the list ---------------------------------------------------------------------------------
   async function refresh() {
     const seq = ++inbox.seq;
+    const before = inbox.projectId;
     inbox.projectId = window.CurrentProject?.get() || null;
+    // an import previewed for another project is not written into this one
+    if (inbox.importing && before !== inbox.projectId) { inbox.importing = null; importBox().innerHTML = ''; importBox().classList.add('hidden'); }
     let cards = [];
     let error = '';
     if (inbox.projectId) {
@@ -152,6 +162,271 @@
     if (!files.length) return;
     e.preventDefault();
     stage(files);
+  }
+
+  // ---- import a backlog document (#322) -----------------------------------------------------------
+  // inbox.importing: null (closed), or { name (the file, '' when pasted), text, items (previewed:
+  // clarity, duplicate; a duplicate's `action`), note, message, picking: { op, index } (a Merge into… /
+  // Nest under… choosing its target), renaming: the index being renamed, undo: { items, what } (the
+  // last edit), busy }
+  const MAX_IMPORT = 200; // discovery-import.MAX_IMPORT_ITEMS: more cards ask first
+  const IMPORT_TYPES = /\.(md|markdown|txt)$/i;
+  const IMPORT_EDITS = { merge: 'Merge into', nest: 'Nest under' };
+  const importBox = () => $('#inbox-import-panel');
+  const firstLines = (text) => String(text || '').split('\n').map((l) => l.trim()).filter(Boolean).slice(0, 2).join(' · ');
+  const clarityBadge = (n) => `<span class="badge ${n >= 85 ? 'inbox-import-clear' : n >= 50 ? 'warn' : 'muted'}" title="The clarity score the card gets (#166): ${n}%">Clarity ${n}%</span>`;
+  // what an item becomes: a duplicate may be skipped or merged into its card; anything else is a new card
+  const actionOf = (it) => (it.duplicate && (it.action === 'skip' || (it.action === 'merge' && it.duplicate.kind === 'card')) ? it.action : 'keep');
+  const importCounts = (items) => ({
+    create: items.filter((it) => actionOf(it) === 'keep').length,
+    merge: items.filter((it) => actionOf(it) === 'merge').length,
+  });
+
+  function openImport() {
+    if (inbox.importing) { importBox().querySelector('button')?.focus({ preventScroll: true }); return; }
+    inbox.importing = { name: '', text: '', items: null, note: '', message: inbox.projectId ? '' : 'Choose a project in the header first.', picking: null, renaming: null, undo: null, busy: false };
+    renderImport();
+    $('#btn-inbox-import-pick')?.focus({ preventScroll: true });
+  }
+
+  function closeImport() {
+    inbox.importing = null;
+    importBox().innerHTML = '';
+    importBox().classList.add('hidden');
+    $('#btn-inbox-import').focus({ preventScroll: true });
+  }
+
+  function duplicateHtml(it, i) {
+    const d = it.duplicate;
+    if (!d) return '';
+    const link = d.kind === 'card'
+      ? `<button type="button" class="link-btn small" data-import-card="${esc(d.id)}" title="Open the card">${esc(d.title)}</button>`
+      : `<a class="small" href="${esc(d.url || '#')}" target="_blank" rel="noopener" title="Open the issue">#${esc(d.number)} ${esc(d.title)}</a>`;
+    const options = [['keep', 'Keep as a new card'], ['skip', 'Skip it'], ...(d.kind === 'card' ? [['merge', 'Merge into that card']] : [])];
+    return `
+      <span class="inbox-import-dup" data-testid="inbox-import-duplicate">
+        <span class="badge warn">Duplicate of ${d.kind === 'card' ? 'a card' : 'an open issue'}</span> ${link}
+        <select data-import-action="${i}" aria-label="What to do with the duplicate of ${esc(d.title)}">
+          ${options.map(([v, label]) => `<option value="${v}"${actionOf(it) === v ? ' selected' : ''}>${label}</option>`).join('')}
+        </select>
+      </span>`;
+  }
+
+  function importItemHtml(it, i, items) {
+    const n = (it.acceptance || []).length;
+    const pick = inbox.importing.picking?.index === i ? inbox.importing.picking : null;
+    const others = items.map((o, k) => [o, k]).filter(([, k]) => k !== i);
+    return `
+      <li class="inbox-import-item${actionOf(it) === 'skip' ? ' skipped' : ''}" data-testid="inbox-import-item">
+        <span class="inbox-import-num muted small">${i + 1}</span>
+        <div class="inbox-import-main">
+          ${inbox.importing.renaming === i ? `
+          <div class="row inbox-import-rename">
+            <input type="text" id="inbox-import-rename" maxlength="200" value="${esc(it.title)}" aria-label="New title of item ${i + 1}" />
+            <button type="button" class="btn sm primary" data-import-op="rename-save" data-index="${i}">Save</button>
+            <button type="button" class="btn sm ghost" data-import-op="rename-cancel" data-index="${i}">Cancel</button>
+          </div>` : `<b class="inbox-import-title" title="${esc(it.title)}">${esc(it.title)}</b>`}
+          <span class="inbox-card-meta muted small">
+            <span class="badge" data-testid="inbox-import-criteria" title="Its - [ ] lines, the card's acceptance criteria">${n} ${n === 1 ? 'criterion' : 'criteria'}</span>
+            ${clarityBadge(it.clarity)}
+            <span class="inbox-import-lines" title="${esc(it.text || '')}">${esc(firstLines(it.text)) || 'No text: a title only.'}</span>
+          </span>
+          ${duplicateHtml(it, i)}
+          ${pick ? `
+          <div class="row inbox-import-pick" role="group" aria-label="${esc(IMPORT_EDITS[pick.op])}">
+            <label class="small" for="inbox-import-target">${esc(IMPORT_EDITS[pick.op])}</label>
+            <select id="inbox-import-target">${others.map(([o, k]) => `<option value="${k}">${k + 1}. ${esc(o.title)}</option>`).join('')}</select>
+            <button type="button" class="btn sm primary" data-import-op="apply" data-index="${i}">${pick.op === 'merge' ? 'Merge' : 'Nest'}</button>
+            <button type="button" class="btn sm ghost" data-import-op="unpick" data-index="${i}">Cancel</button>
+          </div>` : ''}
+        </div>
+        <div class="row inbox-import-actions">
+          <button type="button" class="btn sm ghost" data-import-op="rename" data-index="${i}" aria-label="Rename ${esc(it.title)}">Rename</button>
+          ${others.length ? `<button type="button" class="btn sm ghost" data-import-op="merge" data-index="${i}" title="Join its text and criteria into another item">Merge into…</button>
+          <button type="button" class="btn sm ghost" data-import-op="nest" data-index="${i}" title="Make it a section of another item">Nest under…</button>` : ''}
+          <button type="button" class="btn sm ghost danger" data-import-op="drop" data-index="${i}" aria-label="Drop ${esc(it.title)}">Drop</button>
+        </div>
+      </li>`;
+  }
+
+  function renderImport() {
+    const st = inbox.importing;
+    const box = importBox();
+    if (!st) return;
+    box.classList.remove('hidden');
+    const message = `<p class="error small" data-testid="inbox-import-message" role="status">${esc(st.message || '')}</p>`;
+    if (!st.items) {
+      box.innerHTML = `
+        <div class="inbox-import-head"><h2>Import a backlog document</h2></div>
+        <p class="muted small">A <span class="mono">.md</span> or <span class="mono">.txt</span> file (choose it or drop it here) or pasted text. Each top-level heading or list item becomes an idea card, its <span class="mono">- [ ]</span> lines its acceptance criteria. Nothing is written until you confirm the preview.</p>
+        <div class="row">
+          <button type="button" id="btn-inbox-import-pick" class="btn sm" data-import-op="pick">Choose a file…</button>
+          <input type="file" id="inbox-import-file" data-testid="inbox-import-file" class="hidden" accept=".md,.markdown,.txt,text/markdown,text/plain" aria-label="Backlog document to import" />
+          <span class="muted small">or drop it on this panel</span>
+        </div>
+        <div class="field">
+          <label for="inbox-import-text">Or paste the text</label>
+          <textarea id="inbox-import-text" rows="5" class="mono" placeholder="# First idea&#10;What it is about.&#10;- [ ] A criterion"></textarea>
+        </div>
+        ${message}
+        <div class="row">
+          <span class="spacer"></span>
+          <button type="button" class="btn ghost" data-import-op="cancel">Cancel</button>
+          <button type="button" class="btn primary" data-import-op="paste"${st.busy ? ' disabled' : ''}>Preview</button>
+        </div>`;
+      return;
+    }
+    const { create, merge } = importCounts(st.items);
+    const confirm = [create ? `Create ${plural(create, 'card')}` : '', merge ? `merge ${merge}` : ''].filter(Boolean).join(', ') || 'Nothing to create';
+    box.innerHTML = `
+      <div data-testid="inbox-import-preview" class="inbox-import-preview">
+        <div class="inbox-import-head">
+          <h2>Preview: ${esc(plural(st.items.length, 'item'))}</h2>
+          <span class="badge" title="${esc(st.name || 'pasted text')}">${esc(st.name || 'pasted')}</span>
+        </div>
+        <p class="muted small">${esc(st.note)} Nothing is written yet: rename, drop, merge or nest items, then create the cards.</p>
+        ${st.undo ? `<p class="small inbox-import-undo">${esc(st.undo.what)} <button type="button" class="link-btn small" data-import-op="undo">Undo</button></p>` : ''}
+        <ol class="inbox-import-list">${st.items.map((it, i) => importItemHtml(it, i, st.items)).join('')}</ol>
+        ${message}
+        <div class="row">
+          <span class="spacer"></span>
+          <button type="button" class="btn ghost" data-testid="inbox-import-cancel" data-import-op="cancel">Cancel</button>
+          <button type="button" class="btn primary" data-testid="inbox-import-confirm" data-import-op="confirm"${create + merge && !st.busy ? '' : ' disabled'}>${esc(confirm)}</button>
+        </div>
+      </div>`;
+  }
+
+  // The document's text, cut into items and previewed by the store (nothing written).
+  async function previewText(text, name) {
+    const st = inbox.importing;
+    if (!st || st.busy) return;
+    if (!inbox.projectId) { st.message = 'Choose a project in the header first.'; return renderImport(); }
+    st.busy = true;
+    try {
+      const split = await api.splitDiscoveryImport(inbox.projectId, text, name || undefined);
+      if (inbox.importing !== st) return;
+      Object.assign(st, { name: name || '', text, note: split.note, undo: null, picking: null, renaming: null, message: split.items.length ? '' : split.note, items: split.items.length ? split.items : null });
+    } catch (e) {
+      st.message = errMsg(e);
+    } finally { st.busy = false; }
+    if (inbox.importing === st) renderImport();
+  }
+
+  // A picked or dropped file: a .md or .txt file of text, read here.
+  async function importFile(file) {
+    const st = inbox.importing;
+    if (!st || !file) return;
+    const fail = (msg) => { st.items = null; st.message = msg; renderImport(); };
+    if (!IMPORT_TYPES.test(file.name)) return fail(`${file.name} cannot be imported: choose a .md or .txt file.`);
+    if (file.size > MAX_BYTES) return fail(`${file.name} is too large (${formatSize(file.size)}, the limit is 50 MB).`);
+    let text;
+    try { text = await file.text(); } catch (e) { return fail(`${file.name} could not be read: ${errMsg(e)}`); }
+    if (text.includes('\u0000')) return fail(`${file.name} is not a text file.`);
+    return previewText(text, file.name);
+  }
+
+  // A preview edit (rename, drop, merge, nest) through the store, which previews the items again.
+  async function editImport(edit, what) {
+    const st = inbox.importing;
+    if (!st?.items || st.busy) return;
+    st.busy = true;
+    const before = st.items;
+    try {
+      const items = await api.editDiscoveryImport(inbox.projectId, before, edit);
+      if (inbox.importing !== st) return;
+      // a duplicate keeps its choice while it stays one
+      st.items = items.map((it) => (it.duplicate ? it : { ...it, action: undefined }));
+      st.undo = what ? { items: before, what } : null;
+      st.picking = null;
+      st.renaming = null;
+      st.message = '';
+    } catch (e) {
+      st.message = errMsg(e);
+    } finally { st.busy = false; }
+    if (inbox.importing === st) renderImport();
+  }
+
+  async function confirmImport() {
+    const st = inbox.importing;
+    if (!st?.items || st.busy) return;
+    const { create } = importCounts(st.items);
+    let confirmLarge = false;
+    if (create > MAX_IMPORT) {
+      if (!(await confirmDialog('Large import', `This import creates ${create} cards in the Inbox, more than ${MAX_IMPORT}. Create them all?`, `Create ${create} cards`))) return;
+      confirmLarge = true;
+    }
+    const items = st.items.map((it) => ({ title: it.title, text: it.text, acceptance: it.acceptance, action: actionOf(it), ...(actionOf(it) === 'merge' ? { into: it.duplicate.id } : {}) }));
+    st.busy = true;
+    renderImport();
+    try {
+      const done = await api.importDiscoveryItems(inbox.projectId, items, st.name ? { name: st.name, text: st.text } : { pasted: true }, confirmLarge);
+      closeImport();
+      const parts = [`${plural(done.created.length, 'card')} created`, done.merged.length ? `${done.merged.length} merged` : '', done.skipped ? `${done.skipped} skipped` : ''].filter(Boolean);
+      showToast(`Imported ${st.name || 'the pasted text'}`, `${parts.join(', ')} in the Inbox.`);
+    } catch (e) {
+      st.busy = false;
+      st.message = errMsg(e);
+      renderImport();
+    }
+    await refresh();
+  }
+
+  function onImportClick(e) {
+    const st = inbox.importing;
+    const card = e.target.closest('[data-import-card]');
+    if (card) return openCard(card.dataset.importCard);
+    const b = e.target.closest('[data-import-op]');
+    if (!b || !st) return undefined;
+    const op = b.dataset.importOp;
+    const i = Number(b.dataset.index);
+    const title = st.items?.[i]?.title;
+    if (op === 'cancel') return closeImport();
+    if (op === 'pick') return $('#inbox-import-file').click();
+    if (op === 'paste') {
+      const text = String($('#inbox-import-text')?.value || '');
+      if (!text.trim()) { st.message = 'Paste the text first, or choose a file.'; return renderImport(); }
+      return previewText(text, '');
+    }
+    if (op === 'confirm') return confirmImport();
+    if (op === 'undo') { st.items = st.undo.items; st.undo = null; st.picking = null; st.renaming = null; return renderImport(); }
+    if (op === 'drop') return editImport({ op: 'drop', index: i }, `Dropped "${title}".`);
+    if (op === 'merge' || op === 'nest') { st.picking = { op, index: i }; renderImport(); return $('#inbox-import-target')?.focus({ preventScroll: true }); }
+    if (op === 'unpick') { st.picking = null; return renderImport(); }
+    if (op === 'rename') { st.renaming = i; renderImport(); return $('#inbox-import-rename')?.select(); }
+    if (op === 'rename-cancel') { st.renaming = null; return renderImport(); }
+    if (op === 'rename-save') return saveRename(i);
+    if (op === 'apply') {
+      const to = Number($('#inbox-import-target').value);
+      const verb = st.picking.op === 'merge' ? 'Merged' : 'Nested';
+      return editImport({ op: st.picking.op, index: i, to }, `${verb} "${title}" ${st.picking.op === 'merge' ? 'into' : 'under'} "${st.items[to]?.title}".`);
+    }
+    return undefined;
+  }
+
+  // Save of a rename: an empty title is refused, the same one just closes the field.
+  function saveRename(i) {
+    const st = inbox.importing;
+    const title = String($('#inbox-import-rename')?.value || '').trim();
+    if (!title) { st.message = 'An item needs a title.'; renderImport(); return undefined; }
+    if (title === st.items[i].title) { st.renaming = null; return renderImport(); }
+    return editImport({ op: 'rename', index: i, title }, `Renamed "${st.items[i].title}" to "${title}".`);
+  }
+
+  function onImportChange(e) {
+    const st = inbox.importing;
+    if (e.target.id === 'inbox-import-file') { importFile(e.target.files?.[0]); e.target.value = ''; return; }
+    if (!st?.items || e.target.dataset.importAction === undefined) return;
+    const i = Number(e.target.dataset.importAction);
+    st.items = st.items.map((it, k) => (k === i ? { ...it, action: e.target.value } : it));
+    renderImport();
+  }
+
+  // In the rename field: Enter saves, Esc cancels (and leaves the preview open).
+  function onImportKey(e) {
+    const st = inbox.importing;
+    if (e.target.id !== 'inbox-import-rename' || !st || e.isComposing) return;
+    if (e.key === 'Enter') { e.preventDefault(); saveRename(st.renaming); }
+    else if (e.key === 'Escape') { e.preventDefault(); st.renaming = null; renderImport(); }
   }
 
   // ---- the open card ------------------------------------------------------------------------------
@@ -500,6 +775,8 @@
     for (const sel of ['#inbox-discard-modal', '#inbox-merge-modal']) {
       if (!$(sel).classList.contains('hidden')) return closeModal(sel);
     }
+    // the import's preview closes before the open card, writing nothing (#322)
+    if (inbox.importing && !document.querySelector('.modal:not(.hidden)')) return closeImport();
     if (!inbox.open || window.ImageViewer?.isOpen() || document.querySelector('.modal:not(.hidden)')) return;
     if (inbox.editing) {
       if (!editIsDirty()) { inbox.editing = false; renderDetail(); }
@@ -536,7 +813,9 @@
             <h1>Inbox</h1>
             <p class="muted small">Raw ideas of the project chosen in the header, kept privately in this workspace (<span class="mono">discovery/</span>), never on the git platform. Accept one to start its discovery.</p>
           </div>
+          <button type="button" id="btn-inbox-import" class="btn" data-testid="inbox-import" title="Import a backlog document (.md, .txt or pasted text): one card per item, previewed first">Import…</button>
         </div>
+        <div id="inbox-import-panel" class="inbox-import hidden" role="region" aria-label="Import a backlog document"></div>
         <div id="inbox-capture-box" class="inbox-capture" role="group" aria-label="Quick capture">
           <div class="field">
             <label for="inbox-title">Idea <span class="req">*</span></label>
@@ -619,6 +898,20 @@
         renderFiles();
       };
       $('#inbox-list').onclick = onListClick;
+
+      $('#btn-inbox-import').onclick = openImport;
+      const imp = importBox();
+      imp.onclick = onImportClick;
+      imp.addEventListener('change', onImportChange);
+      imp.addEventListener('keydown', onImportKey);
+      imp.addEventListener('dragover', (e) => { if (hasFiles(e)) { e.preventDefault(); imp.classList.add('dropping'); } });
+      imp.addEventListener('dragleave', () => imp.classList.remove('dropping'));
+      imp.addEventListener('drop', (e) => {
+        imp.classList.remove('dropping');
+        if (!e.dataTransfer?.files?.length) return;
+        e.preventDefault();
+        importFile(e.dataTransfer.files[0]);
+      });
 
       const detail = $('#inbox-detail');
       detail.onclick = onDetailClick;

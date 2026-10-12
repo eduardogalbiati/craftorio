@@ -16,11 +16,14 @@
 // Column automations (#259, src/service/areas/discovery-automations.js): discovery:move answers with
 // what the column's on_enter proposes or started, discovery:set-automation sets a column's mode and
 // discovery:run-automation starts a proposed one; the result comes back to the card by itself.
+// Backlog import (#322, src/discovery-import.js): discovery:import-split and discovery:import-edit
+// preview a document's items (nothing written), discovery:import writes the confirmed ones as cards.
 
 const os = require('os');
 const path = require('path');
 const backlog = require('../../backlog');
 const commits = require('../../discovery-commit');
+const imports = require('../../discovery-import');
 const discovery = require('../../discovery');
 const productOwner = require('../../product-owner');
 const projects = require('../../projects');
@@ -50,11 +53,14 @@ module.exports = (ctx) => {
       .sort((a, b) => String(committedAt(b)).localeCompare(String(committedAt(a))))
       .map((c) => ({ ...c, delivery: commits.cardDelivery(c, issues, history) }));
   }
+  // the project's synced issues (#322: an import marks an item matching an open one)
+  const syncedIssues = (projectId) => backlog.readBacklog(ctx.ws.backlog, path.basename(String(projectId)))?.issues || [];
   // the Backlog marks the issues filed from a card with it (#258, src/service/areas/backlog.js withIssueRuns)
   ctx.discoveryIssueCards = (projectId) => discovery.issueCards(dir(), projectId);
   const board = (projectId) => {
     // a card left running by a previous session of the app gets its automation's result (#259)
     ctx.reconcileDiscoveryAutomations(projectId);
+    discovery.finishImports(dir(), projectId);
     return { ...discovery.readBoard(dir(), projectId), forecast: discovery.readyForecast(dir(), projectId), committed: committed(projectId) };
   };
   // A card that may be committed, or the refusal (not Ready, under the commit bar with its gaps).
@@ -70,7 +76,11 @@ module.exports = (ctx) => {
       channel: 'discovery:list',
       method: 'listDiscoveryCards',
       params: ['projectId', 'column'],
-      fn: ({ projectId, column }) => discovery.listCards(dir(), projectId, { column }),
+      fn: ({ projectId, column }) => {
+        // an import a closed app left half-way is finished or dropped first (#322)
+        discovery.finishImports(dir(), projectId);
+        return discovery.listCards(dir(), projectId, { column });
+      },
     },
     // card.json plus its document, acceptance criteria and attachment names
     {
@@ -86,6 +96,36 @@ module.exports = (ctx) => {
       method: 'createDiscoveryCard',
       params: ['projectId', 'title', 'text', 'type', 'from'],
       fn: ({ projectId, title, text, type, from }) => discovery.createCard(dir(), projectId, { title, text, type: type || 'idea', author: owner(), from: from || undefined }),
+    },
+    // import (#322, src/discovery-import.js): a document's text (`name`: its file, or none when pasted)
+    // cut into items, previewed (clarity, duplicates of open cards and open synced issues); nothing written
+    {
+      channel: 'discovery:import-split',
+      method: 'splitDiscoveryImport',
+      params: ['projectId', 'text', 'name'],
+      fn: ({ projectId, text, name }) => {
+        const split = imports.splitDocument(text, { name: name || undefined });
+        return { ...split, items: imports.previewImport(dir(), projectId, split.items, { issues: syncedIssues(projectId) }) };
+      },
+    },
+    // a preview edit, { op: 'rename' | 'drop' | 'merge' | 'nest', index, to, title }: the items previewed again
+    {
+      channel: 'discovery:import-edit',
+      method: 'editDiscoveryImport',
+      params: ['projectId', 'items', 'edit'],
+      fn: ({ projectId, items, edit }) => imports.previewImport(dir(), projectId, imports.applyEdit(items, edit || {}), { issues: syncedIssues(projectId) }),
+    },
+    // the confirmed items, all or none: `source` { name, text } (the file, attached to each card) or
+    // { pasted: true }; more than MAX_IMPORT_ITEMS cards need `confirmLarge`
+    {
+      channel: 'discovery:import',
+      method: 'importDiscoveryItems',
+      params: ['projectId', 'items', 'source', 'confirmLarge'],
+      fn: ({ projectId, items, source, confirmLarge }) => imports.importItems(dir(), projectId, items, {
+        source: source?.name ? { name: source.name, data: String(source.text ?? '') } : { pasted: true },
+        author: owner(),
+        confirmLarge: confirmLarge === true,
+      }),
     },
     // fields: title, type, tags, clarity, estimate, links, document, acceptance
     {
