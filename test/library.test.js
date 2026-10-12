@@ -23,7 +23,9 @@ test('setupWorkspace creates projects/ and skills/', (t) => {
 
 test('settings: defaults, merge and dropping unknown keys', (t) => {
   const ws = setupWorkspace(path.join(tmp(t), 'w'), { store: memStore() });
-  assert.deepEqual(readSettings(ws), DEFAULT_SETTINGS);
+  // #273: an unset time zone reads as this computer's (DEFAULT_SETTINGS keeps null, unsaved)
+  const systemZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  assert.deepEqual(readSettings(ws), { ...DEFAULT_SETTINGS, timeZone: systemZone });
   const s = writeSettings(ws, { developerMode: true, junk: 1 });
   assert.equal(s.developerMode, true);
   assert.equal('junk' in readSettings(ws), false);
