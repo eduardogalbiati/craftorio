@@ -16,8 +16,8 @@
 // record them: see newMetrics() below.
 
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
+const { cliConfigDirs } = require('./cli-config-dirs');
 
 const cache = new Map(); // file -> { key, records, plan, sessions }
 
@@ -299,17 +299,20 @@ function codexPlan(raw) {
   };
 }
 
-const SOURCES = (home) => ({
-  claude: path.join(home, '.claude', 'projects'),
-  codex: path.join(home, '.codex', 'sessions'),
-  grok: path.join(home, '.grok', 'sessions'),
-});
+const SOURCES = (home) => {
+  const cfg = cliConfigDirs(home);
+  return {
+    claude: path.join(cfg.claude, 'projects'),
+    codex: path.join(cfg.codex, 'sessions'),
+    grok: path.join(cfg.grok, 'sessions'),
+  };
+};
 
 /**
  * All usage records the CLIs wrote on this machine, plus Codex plan limits, plus the metrics of each
  * session (`sessions`, keyed "<provider>:<sessionId>").
  */
-function readLocalUsage({ home = os.homedir() } = {}) {
+function readLocalUsage({ home } = {}) {
   const src = SOURCES(home);
   const records = [];
   const sessions = new Map();

@@ -8,11 +8,12 @@
 //   Codex CLI    ~/.codex/config.toml          [projects.'C:\path']  trust_level = "trusted"
 //   Grok Build   ~/.grok/trusted_folders.toml  [folders.'C:\path']   trusted = true
 //
+// CLAUDE_CONFIG_DIR and CODEX_HOME move the first two (src/cli-config-dirs.js).
 // A CLI that was never set up (no config yet) is left alone: it asks the first time, as usual.
 
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
+const { cliConfigDirs } = require('./cli-config-dirs');
 
 /** The folder and the root of the git repository it is in (when it is in one). */
 function foldersToTrust(dir) {
@@ -34,8 +35,7 @@ function replaceFile(file, text) {
   try { fs.renameSync(tmp, file); } catch { fs.writeFileSync(file, text); fs.rmSync(tmp, { force: true }); }
 }
 
-function trustClaude(home, dirs) {
-  const file = path.join(home, '.claude.json');
+function trustClaude(file, dirs) {
   if (!fs.existsSync(file)) return false;
   const text = fs.readFileSync(file, 'utf8');
   const config = JSON.parse(text);
@@ -64,11 +64,12 @@ function trustToml(file, dirs, table, body) {
 }
 
 /** Records that `dir` is trusted in the CLI's own config (no-op when it already is). */
-function trustFolder(provider, dir, { home = os.homedir() } = {}) {
+function trustFolder(provider, dir, { home } = {}) {
   const dirs = foldersToTrust(dir);
-  if (provider === 'claude') return trustClaude(home, dirs);
-  if (provider === 'codex') return trustToml(path.join(home, '.codex', 'config.toml'), dirs, 'projects', 'trust_level = "trusted"');
-  if (provider === 'grok') return trustToml(path.join(home, '.grok', 'trusted_folders.toml'), dirs, 'folders', `trusted = true\ndecided_at = ${Math.floor(Date.now() / 1000)}`);
+  const cfg = cliConfigDirs(home);
+  if (provider === 'claude') return trustClaude(cfg.claudeJson, dirs);
+  if (provider === 'codex') return trustToml(path.join(cfg.codex, 'config.toml'), dirs, 'projects', 'trust_level = "trusted"');
+  if (provider === 'grok') return trustToml(path.join(cfg.grok, 'trusted_folders.toml'), dirs, 'folders', `trusted = true\ndecided_at = ${Math.floor(Date.now() / 1000)}`);
   return false;
 }
 

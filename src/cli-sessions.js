@@ -14,8 +14,8 @@
 // Session: { provider, id, title, cwd, model, createdAt, updatedAt, headless }
 
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
+const { cliConfigDirs } = require('./cli-config-dirs');
 
 const HEAD_BYTES = 512 * 1024;
 const TAIL_BYTES = 256 * 1024;
@@ -64,15 +64,16 @@ function cachedModels(provider, home) {
 }
 
 function rawCachedModels(provider, home) {
-  const read = (rel) => { try { return JSON.parse(fs.readFileSync(path.join(home, rel), 'utf8')); } catch { return null; } };
+  const cfg = cliConfigDirs(home);
+  const read = (file) => { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; } };
   if (provider === 'codex') {
-    const c = read('.codex/models_cache.json');
+    const c = read(path.join(cfg.codex, 'models_cache.json'));
     return (c?.models || []).filter((m) => m.slug && m.visibility !== 'hide')
       .sort((a, b) => (a.priority ?? 99) - (b.priority ?? 99))
       .map((m) => ({ id: m.slug, name: m.display_name || m.slug, efforts: (m.supported_reasoning_levels || []).map((l) => l.effort).filter(Boolean), defaultEffort: m.default_reasoning_level || null }));
   }
   if (provider === 'grok') {
-    const c = read('.grok/models_cache.json');
+    const c = read(path.join(cfg.grok, 'models_cache.json'));
     return Object.values(c?.models || {}).map((m) => m.info || {}).filter((i) => i.id && !i.hidden)
       .map((i) => ({ id: i.id, name: i.name || i.id, efforts: (i.reasoning_efforts || []).map((e) => e.value).filter(Boolean), defaultEffort: i.reasoning_effort || null }));
   }
@@ -80,7 +81,7 @@ function rawCachedModels(provider, home) {
 }
 
 /** The models a provider's CLI offers (see cachedModels), else the built-in list. */
-function providerModels(provider, { home = os.homedir() } = {}) {
+function providerModels(provider, { home } = {}) {
   const p = CLI_PROVIDERS[provider];
   const cached = cachedModels(provider, home);
   if (cached.length) return cached;
@@ -215,14 +216,17 @@ function cached(file, parse) {
 const dirs = (dir) => { try { return fs.readdirSync(dir, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => path.join(dir, e.name)); } catch { return []; } };
 const files = (dir, match) => { try { return fs.readdirSync(dir, { withFileTypes: true }).filter((e) => e.isFile() && match(e.name)).map((e) => path.join(dir, e.name)); } catch { return []; } };
 
-const SOURCES = (home) => ({
-  claude: path.join(home, '.claude', 'projects'),
-  codex: path.join(home, '.codex', 'sessions'),
-  grok: path.join(home, '.grok', 'sessions'),
-});
+const SOURCES = (home) => {
+  const cfg = cliConfigDirs(home);
+  return {
+    claude: path.join(cfg.claude, 'projects'),
+    codex: path.join(cfg.codex, 'sessions'),
+    grok: path.join(cfg.grok, 'sessions'),
+  };
+};
 
 /** Every session the CLIs recorded on this machine, most recently active first. */
-function listCliSessions({ home = os.homedir() } = {}) {
+function listCliSessions({ home } = {}) {
   const src = SOURCES(home);
   const out = [];
   // <project>/<id>.jsonl only: the <id>/ folders next to them hold subagent transcripts

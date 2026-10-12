@@ -8,7 +8,7 @@
 // Normalized items emitted via onItem():
 //   { kind: 'spawn' | 'session' | 'thinking' | 'text' | 'tool_call' | 'tool_result' | 'usage' | 'stderr' | 'raw', ... }
 
-const { spawn, execSync } = require('child_process');
+const { spawn, spawnSync, execSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const crypto = require('crypto');
@@ -55,8 +55,73 @@ function refreshWindowsPath() {
   if (extra.length) process.env.PATH = [...current, ...extra].join(path.delimiter);
 }
 
+// macOS and Linux (#316): an app opened from Finder or the Dock inherits PATH=/usr/bin:/bin:...,
+// without Homebrew, ~/.local/bin, nvm... Once per process, the login shell's PATH goes first and
+// the process's own entries follow. A shell that fails, hangs (3 s) or prints no marked PATH
+// changes nothing. Its stdout goes to a file, not a pipe: a child the shell leaves behind would
+// keep a pipe open past the timeout.
+let loginPathMerged = false;
+function mergeLoginShellPath() {
+  if (process.platform === 'win32' || loginPathMerged) return;
+  loginPathMerged = true;
+  const shell = process.env.SHELL && fs.existsSync(process.env.SHELL) ? process.env.SHELL : '/bin/sh';
+  const mark = '__MULTIAGENT_PATH__';
+  let dir;
+  let out = '';
+  try {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'login-path-'));
+    const file = path.join(dir, 'out');
+    const fd = fs.openSync(file, 'w');
+    try {
+      spawnSync(shell, ['-ilc', `printf '${mark}%s${mark}' "$PATH"`], {
+        stdio: ['ignore', fd, 'ignore'], timeout: 3000, windowsHide: true,
+      });
+    } finally { fs.closeSync(fd); }
+    out = fs.readFileSync(file, 'utf8');
+  } catch { /* no shell: PATH stays as it was */ }
+  if (dir) fs.rmSync(dir, { recursive: true, force: true });
+  // The marked PATH, else a last line made only of absolute folders (a shell that ignores -c).
+  const m = new RegExp(`${mark}(.*?)${mark}`, 's').exec(out);
+  const value = m ? m[1] : out.trim().split('\n').pop() || '';
+  const login = value.split(path.delimiter).filter(Boolean);
+  if (!login.length || !login.every((p) => path.isAbsolute(p))) return;
+  const current = (process.env.PATH || '').split(path.delimiter).filter(Boolean);
+  process.env.PATH = [...new Set([...login, ...current])].join(path.delimiter);
+}
+
+// The folders the CLIs install to that are often missing from PATH (macOS and Linux).
+function knownPosixDirs() {
+  const home = os.homedir();
+  const dirs = [path.join(home, '.local', 'bin'), path.join(home, '.grok', 'bin'), path.join(home, '.npm-global', 'bin')];
+  try {
+    const m = /^\s*prefix\s*=\s*(.+?)\s*$/m.exec(fs.readFileSync(path.join(home, '.npmrc'), 'utf8'));
+    if (m) dirs.push(path.join(m[1].replace(/^~(?=$|\/)/, home), 'bin'));
+  } catch { /* no ~/.npmrc */ }
+  return [...dirs, '/opt/homebrew/bin', '/usr/local/bin'];
+}
+
+function isExecutableFile(p) {
+  try {
+    if (!fs.statSync(p).isFile()) return false;
+    fs.accessSync(p, fs.constants.X_OK);
+    return true;
+  } catch { return false; }
+}
+
+function resolvePosixCommand(cmd) {
+  if (cmd.includes('/')) return isExecutableFile(cmd) ? { file: path.resolve(cmd), shell: false } : null;
+  mergeLoginShellPath();
+  const dirs = [...(process.env.PATH || '').split(path.delimiter).filter(Boolean), ...knownPosixDirs()];
+  for (const dir of dirs) {
+    const p = path.resolve(dir, cmd);
+    if (isExecutableFile(p)) return { file: p, shell: false };
+  }
+  return null;
+}
+
+// The program to spawn for `cmd`: { file, shell }, or null when it is not installed (every OS).
 function resolveCommand(cmd) {
-  if (process.platform !== 'win32') return { file: cmd, shell: false };
+  if (process.platform !== 'win32') return resolvePosixCommand(cmd);
   if (path.isAbsolute(cmd) && fs.existsSync(cmd)) return { file: cmd, shell: /\.(cmd|bat)$/i.test(cmd) };
 
   refreshWindowsPath();

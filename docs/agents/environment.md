@@ -17,6 +17,12 @@ the workspace folder.
   `C:\Program Files\GitHub CLI\gh.exe`, `glab` optional. Inside runs the engine refreshes PATH
   (`refreshWindowsPath`), so agents call bare `gh`/`glab` (see [capabilities.md](capabilities.md)).
   A shell opened outside the app may still lack it on PATH.
+- macOS and Linux (#316): `resolveCommand` (`src/engine/providers.js`) returns the absolute path
+  of an executable file on PATH or in the known folders (`~/.local/bin`, `~/.grok/bin`,
+  `~/.npm-global/bin`, the `~/.npmrc` prefix, `/opt/homebrew/bin`, `/usr/local/bin`), else `null`
+  (as on Windows). Before the first lookup it merges the login shell's PATH once per process
+  (`mergeLoginShellPath`, 3 s timeout; a failing or noisy shell changes nothing). Config folders
+  follow `CLAUDE_CONFIG_DIR` and `CODEX_HOME` (`src/cli-config-dirs.js`).
 - Voice input (optional, `src/speech.js`): `whisper-cli` from whisper.cpp. On Windows download
   `whisper-bin-x64.zip` from https://github.com/ggml-org/whisper.cpp/releases, unzip it (e.g. to
   `%LOCALAPPDATA%\whisper.cpp`) and add that folder to PATH, or put the full path of

@@ -14,6 +14,7 @@
 // The engine decides what each state means (poll again, finish the step, or call the agent).
 
 const { resolveCommand } = require('./providers');
+const { installHint } = require('../install-commands');
 const { execShim } = require('../shell');
 
 const PROBES = ['pr_checks', 'pr_changes', 'workflow_run', 'pr_mergeable'];
@@ -132,7 +133,12 @@ function glPipelineState(p) {
 
 // ---- running the CLIs ----------------------------------------------------------------------------
 function run(cmd, args, { cwd, signal, timeout = 60000 }) {
-  const { file } = resolveCommand(cmd);
+  const resolved = resolveCommand(cmd);
+  if (!resolved) {
+    const hint = installHint(cmd);
+    return Promise.reject(new Error(`${cmd} is not installed${hint ? ` (${hint})` : ''}.`));
+  }
+  const { file } = resolved;
   return new Promise((resolve, reject) => {
     execShim(file, args, { cwd, signal, timeout, windowsHide: true, env: process.env, maxBuffer: 16 * 1024 * 1024 }, (err, stdout, stderr) => {
       if (err) return reject(new Error(`${cmd} ${args.slice(0, 3).join(' ')}: ${String(stderr || err.message).trim().slice(0, 300)}`));
