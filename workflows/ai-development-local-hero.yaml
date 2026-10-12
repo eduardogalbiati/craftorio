@@ -338,6 +338,9 @@ agents:
     # #286: empty for `default`, so no --effort flag and the session records effort null
     effort: "{{ '' if (inputs.developer_effort or 'default') == 'default' else inputs.developer_effort }}"
     session: handoff
+    # #302: a turn ends after 40 model requests (about 150K of context), wraps up with a commit and
+    # its note, and the step continues in a fresh session from that note
+    max_requests: 40
     # subagents: exploration sub-agents map the code, so the main context stays small
     capabilities: { tools: [read, edit, write, *toolchains], web: false, subagents: true }
     # tests first: the developer may add its own internal tests; the acceptance tests written before

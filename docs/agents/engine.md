@@ -281,6 +281,20 @@ same features for users; this is the implementer's summary.
   the prompt cache's lifetime) opens a new session from its handoff note instead of resuming a cold
   conversation; without a note it resumes. Logged as `log` `kind: idle_rotation`. local-hero's
   test writer uses it for the visit from the owner's validation gate.
+- `max_requests` (#302, a whole number such as `40`, agent or `defaults`, may be templated): a
+  request budget per turn, passed to Claude Code as `--max-turns <n>`; Codex and Grok cannot
+  enforce it (noted in the `capabilities:` log line). A turn that ends on it (`error_max_turns`)
+  produces no output: `session.message_received` carries `cut: true` and `requests`, a `log`
+  `kind: context_budget` (agent, step, requests, context peak) is emitted, and one wrap-up request
+  (`WRAP_UP`: commit what is consistent, then only the handoff block; `--max-turns 10`) resumes the
+  same CLI session; its cost counts in the cut turn's record. The session is closed and the same
+  step visit continues in a fresh session (the note, then "continued after N requests", then the
+  step's prompt); the continuation's answer is the step's output. Not an attempt, a retry or a
+  stall; the third cut of one visit (`MAX_CUTS`) fails the step with "the budget was reached 3
+  times". Each session's note is its own handoff file (`-2`, `-3`…), each session a fresh session
+  of the visit in `summary.context` (`per_turn` marks the cut ones). Simulation:
+  `mockSequences.request_budget: { <step>: n }` cuts the first n turns of that step.
+  ai-development-local-hero sets 40 for the developer.
 - Metrics: every turn is a `turnLog` record (context at the first request, peak, tokens, waste:
   `refused` = every tool call refused, `blocked` = a blocked `/loop` iteration);
   `summary.context = { agents: { <name>: { turns, fresh_sessions, tokens, peak, waste_tokens, per_turn } }, waste_tokens }`.

@@ -230,7 +230,10 @@ function parseClaude(ev, emit, acc) {
       break;
     case 'assistant':
       // each model request's context window (the main conversation's, not a sub-agent's)
-      if (ev.message?.usage && !ev.parent_tool_use_id) emit({ kind: 'context', tokens: contextTokens(ev.message.usage) });
+      if (ev.message?.usage && !ev.parent_tool_use_id) {
+        emit({ kind: 'context', tokens: contextTokens(ev.message.usage) });
+        (acc.mainCalls ??= new Set()).add(ev.message.id);
+      }
       // a sub-agent's model calls are paid too
       if (ev.message?.usage) addStreamUsage(acc, ev.message.id, ev.message.usage, !!ev.parent_tool_use_id);
       for (const b of ev.message?.content || []) {
@@ -288,7 +291,9 @@ function parseClaude(ev, emit, acc) {
         if (sid) claudeTotals.set(sid, total);
         acc.cliTotalCostUsd = total;
       }
-      if (ev.is_error) acc.error = `Claude returned an error: ${ev.subtype} ${ev.result || ''}`;
+      // #302: --max-turns reached (the agent's max_requests): not an error, the engine wraps the turn up
+      if (ev.subtype === 'error_max_turns') acc.cut = { requests: ev.num_turns ?? acc.mainCalls?.size ?? 0 };
+      else if (ev.is_error) acc.error = `Claude returned an error: ${ev.subtype} ${ev.result || ''}`;
       emit({ kind: 'usage', usage: acc.usage, costUsd: acc.costUsd });
       break;
     }
@@ -426,6 +431,8 @@ function turnResult(acc) {
     costUsd: acc.costUsd,
     ...(acc.cliTotalCostUsd != null ? { cliTotalCostUsd: acc.cliTotalCostUsd } : {}),
     providerSessionId: acc.providerSessionId,
+    // #302: the turn ended on its request budget, after `requests` model requests
+    ...(acc.cut ? { cut: true, requests: acc.cut.requests } : {}),
   };
 }
 
@@ -628,7 +635,7 @@ function runCli(opts, parser) {
     child.on('close', (code) => {
       parser.flush?.(onItem, acc);
       if (acc.error) return finish(new Error(acc.error));
-      if (code !== 0 && !acc.text) return finish(new Error(`Process exited with code ${code}. ${stderr.slice(-800)}`));
+      if (code !== 0 && !acc.text && !acc.cut) return finish(new Error(`Process exited with code ${code}. ${stderr.slice(-800)}`));
       finish(null, { ...turnResult(acc), exitCode: code });
     });
 
@@ -866,6 +873,15 @@ async function runMock({ providerSessionId, model, hint, signal, onItem, attempt
     throw Object.assign(new Error(`Timed out after ${Math.round((timeoutMs || 0) / 1000)}s`), { partial: { usage, costUsd: null, modelCalls: 2 } });
   }
   await d(800);
+  // sequences.request_budget: { stepId: n }: the first n turns of that step (wrap-up requests not
+  // counted) end on the agent's request budget (hint.maxRequests) without an answer, as
+  // claude -p --max-turns does (#302)
+  if (hint?.maxRequests && hint.call <= (hint.sequences?.request_budget?.[hint.stepId] || 0)) {
+    onItem({ kind: 'context', tokens: start + 40000 });
+    const usage = { input: 1500, output: 400, cache_read: hint.maxRequests * start, cache_write: 0, reasoning: 0 };
+    onItem({ kind: 'usage', usage, costUsd: 0.05 });
+    return { text: '', cut: true, requests: hint.maxRequests, usage, costUsd: 0.05, providerSessionId: sid, exitCode: 0 };
+  }
 
   const out = hint?.schema ? mockValue(hint.schema, '', hint) : null;
   // sequences.invalid_answers: { stepId: n }: the first n answers of that step miss the required fields
