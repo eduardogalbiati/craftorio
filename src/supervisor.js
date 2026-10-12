@@ -264,10 +264,23 @@ function runReport(runDir, { workflowsDir } = {}) {
   } catch { /* workflow file gone */ }
   const answers = {};
   const handoffs = {}; // latest handoff note per agent
+  // #308: per agent, its turns' tokens (usage: the whole turn) and the sub-agents' share of them
+  const sessionAgent = {};
+  const perAgent = {};
+  const tokensOf = (u) => ['input', 'output', 'cache_read', 'cache_write'].reduce((s, k) => s + (Number(u?.[k]) || 0), 0);
   for (const ev of events) {
+    if (ev.type === 'session.opened' && ev.session?.agent) sessionAgent[ev.session_id] = ev.session.agent;
     if (ev.type === 'session.message_received' && ev.step_id) (answers[ev.step_id] ??= []).push(ev.text);
+    if (ev.type === 'session.message_received') {
+      const a = (perAgent[ev.session?.agent || sessionAgent[ev.session_id] || ev.step_id || 'agent'] ??= { turns: 0, tokens: 0, subCalls: 0, subTokens: 0 });
+      a.turns += 1;
+      a.tokens += tokensOf(ev.usage);
+      a.subCalls += Number(ev.subagents?.calls) || 0;
+      a.subTokens += tokensOf(ev.subagents?.usage);
+    }
     if (ev.type === 'handoff.saved' && ev.agent) handoffs[ev.agent] = ev;
   }
+  const agentLines = Object.entries(perAgent).map(([agent, a]) => `- ${agent}: ${a.turns} turn${a.turns === 1 ? '' : 's'}, ${a.tokens} tokens${a.subCalls ? ` (of which sub-agents: ${a.subCalls} call${a.subCalls === 1 ? '' : 's'}, ${a.subTokens} tokens)` : ''}`);
   const failing = finished?.status === 'failed' ? [...events].reverse().find((e) => e.type === 'step.started')?.step_id : null;
   let files = [];
   try { files = require('./runs').runArtifacts(runDir).map((a) => `- ${a.rel}${a.step ? ` (${a.step})` : ''}${a.exists ? '' : ' [deleted]'}`); } catch { /* no artifacts */ }
@@ -278,6 +291,7 @@ function runReport(runDir, { workflowsDir } = {}) {
     `\n## Inputs\n${Object.entries(started.inputs || {}).map(([k, v]) => `- ${k}: ${clip(v, 600)}`).join('\n')}`,
     steps ? `\n## Workflow steps\n${steps}` : '',
     `\n## Timeline\n${timeline(events, 150)}`,
+    agentLines.length ? `\n## Tokens per agent (every model call of its turns; sub-agents included in the turns recorded since #308)\n${agentLines.join('\n')}` : '',
     Object.keys(handoffs).length ? `\n## Handoff notes (each agent's own summary at the end of its latest turn: read them before the transcripts)\n${Object.values(handoffs).map((h) => `### ${h.agent} (step ${h.step_id}, visit ${h.visit})\n${clip(h.note, 2500)}`).join('\n\n')}` : '',
     failing && answers[failing] ? `\n## Answers of the step that was running (${failing}), every attempt\n${answers[failing].slice(-4).map((a, i, all) => `### Attempt ${answers[failing].length - all.length + i + 1}\n${tail(a, 6000)}`).join('\n\n')}` : '',
     files.length ? `\n## Files produced (in this folder)\n${files.join('\n')}` : '',

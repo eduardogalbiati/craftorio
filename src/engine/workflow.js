@@ -3280,6 +3280,9 @@ class WorkflowRun extends EventEmitter {
         session.status = 'idle';
         this.emitEvent('session.message_received', {
           session_id: session.id, turn, step_id: stepId, text: res.text, usage: res.usage,
+          // #308: usage is the whole turn; the main conversation's figures and the sub-agents' apart
+          ...(res.usage_main ? { usage_main: res.usage_main } : {}), ...(res.subagents ? { subagents: res.subagents } : {}),
+          ...(res.model_calls ? { model_calls: res.model_calls } : {}),
           cost_usd: res.costUsd, duration_ms: dur, active_ms, waiting_ms, stalled_ms, session: this.snapshot(session),
           context, ...(res.handoff ? { handoff: res.handoff } : {}), ...(tools.subagents ? { subagent_calls: tools.subagents } : {}),
         });

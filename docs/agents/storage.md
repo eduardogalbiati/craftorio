@@ -25,7 +25,8 @@ Read this before touching run listings, the Backlog queue, pending gates, notifi
   `backlog/product-owner.usage.jsonl` (the Product Owner, every project; Clear keeps it) or
   `supervisor/usage.jsonl` (the Supervisor chat; Clear keeps it). Fields: `ts`, `agent` (`oracle`,
   `product-owner`, `supervisor`), `projectId` (Product Owner), `provider`, `model`,
-  `tokens { input, output, cache_read, cache_write }`, `costUsd` (the turn's own cost), `sessionId` (the
+  `tokens { input, output, cache_read, cache_write }` (#308: every model call of the turn, sub-agents
+  included), `costUsd` (the turn's own cost), `sessionId` (the
   CLI session), `session` (`fresh` or `resumed`), `startReason` on a fresh session (`first`, `compaction`,
   `model-change`, `idle`, `reset`, `cleared`, `one-shot`) and `contextTokens` (the context after the turn,
   when known); the Oracle's and the Supervisor chat's lines also hold `cumulativeUsd` (the CLI session's total,

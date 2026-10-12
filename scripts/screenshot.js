@@ -741,6 +741,28 @@ function demoCostRuns(ws, projectId) {
     status: 'failed', error: 'Timed out after 1800s', finished_at: new Date(old + 31 * min).toISOString(), duration_ms: 31 * min, cost_usd: 0,
     tokens: tokens(0, 0, 0), sessions: [{ ...oldDev({ turns: 1 }), status: 'failed' }],
   });
+
+  // #308: the developer's turn started 3 sub-agents: its usage is the whole turn, usage_main the main
+  // conversation's, subagents their calls and tokens
+  const sub = Date.now() - 6 * 864e5;
+  const subDev = (extra) => snap('s1', 'developer', 'claude-opus-5-5', { step_id: 'develop', ...extra });
+  const whole = tokens(4300, 52000, 2900000);
+  const subDone = subDev({ turns: 1, tokens: whole, cost_usd: 5.12, status: 'idle' });
+  write(`${day(6)}-204500-run00308`, sub, [
+    [0, 'workflow.started', { workflow, file, project_id: projectId, mock: false, inputs: { task: 'Demo run whose developer started sub-agents' }, cost_accounting: 'per_turn' }],
+    [0, 'step.started', { step_id: 'develop', visit: 1, step_type: 'agent', agent: 'developer' }],
+    [0, 'session.opened', { session_id: 's1', session: subDev() }],
+    [1, 'session.message_sent', { session_id: 's1', turn: 1, step_id: 'develop', prompt: 'Implement the task' }],
+    [36, 'session.message_received', {
+      session_id: 's1', turn: 1, step_id: 'develop', text: 'Done.', usage: whole, usage_main: tokens(3100, 41000, 2100000),
+      subagents: { calls: 3, usage: tokens(1200, 11000, 800000) }, model_calls: 96, cost_usd: 5.12, duration_ms: 35 * min, active_ms: 35 * min, waiting_ms: 0, stalled_ms: 0, session: subDone,
+    }],
+    [36, 'step.finished', { step_id: 'develop', visit: 1, duration_ms: 36 * min, output: {} }],
+    [36, 'workflow.finished', { status: 'success', error: null }],
+  ], {
+    status: 'success', finished_at: new Date(sub + 36 * min).toISOString(), duration_ms: 36 * min, cost_usd: 5.12, cost_accounting: 'per_turn',
+    tokens: whole, sessions: [{ ...subDone, status: 'success' }],
+  });
 }
 
 // A solid-colour PNG of w × h (a demo screenshot written without a window)

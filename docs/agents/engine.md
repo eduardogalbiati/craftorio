@@ -290,10 +290,25 @@ same features for users; this is the implementer's summary.
   `total_cost_usd`. `parseClaude` records the turn's cost once: the highest total seen in the turn
   minus the session's total before the turn (a later event never lowers it; `--resume` and forked
   sessions as above). Their usages overlap (the total does not grow with the later, smaller ones), so
-  the turn's tokens are the largest of each field. The raw `result` events of such a turn are kept
-  as `raw` items of `session.stream`. The summary carries `turn_cost: 'max_result'`; a per-turn run
-  without it is read by `src/run-costs.js` with each turn at the highest cost among its `usage`
-  stream items when that is more than its recorded `cost_usd` (the files are never rewritten).
+  the main conversation's tokens (`usage_main`) are the largest of each field. The raw `result`
+  events of such a turn are kept as `raw` items of `session.stream`. The summary carries
+  `turn_cost: 'max_result'`; a per-turn run without it is read by `src/run-costs.js` with each turn
+  at the highest cost among its `usage` stream items when that is more than its recorded `cost_usd`
+  (the files are never rewritten).
+- A turn's tokens (#308): `session.message_received.usage` is everything the turn paid for, as its
+  `cost_usd`. Per provider:
+  - Claude: the sum of the stream's distinct model calls (the main conversation's and the
+    sub-agents', messages with `parent_tool_use_id`), never below the `result`'s figures field by
+    field (a stream that lost messages falls back to them; `reasoning` 0). `usage_main` = the
+    `result`'s figures (the main conversation, the #277 rule above); `subagents` = `{ calls, usage }`
+    of the sub-agents' calls, absent when the turn started none; `model_calls` = the turn's distinct
+    model calls. The `context` stream items stay the main conversation's (a sub-agent's window is not
+    the agent's).
+  - Codex and Grok: `usage` is what their CLIs report for the turn; they give no sub-agent figures,
+    so `usage_main`, `subagents` and `model_calls` are absent (never zero).
+  Events recorded before #308 have `usage` = the main conversation only and none of the new fields;
+  readers (Analytics, the 3D view, the run report) read `usage` either way. `subagent_calls`
+  (capabilities.md) is a different field: the sub-agent tool calls counted from the stream.
 - Idle agents (`src/engine/idle.js`, #46): an agent with no stream item for `idleWarnMs` (setting
   `idleWarningMinutes`, default 5, 0 = off) while a tool call is open → one `log` warn
   `kind: agent_idle` per silence, with `step_id`, `agent`, `tool`, `command`, `idle_ms` (run log,

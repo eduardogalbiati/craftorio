@@ -113,16 +113,30 @@ function seedClaudeTotal(sessionId, totalUsd) {
 
 // The tokens of a turn's distinct model calls (Claude Code repeats a message's usage on each of its
 // content blocks): what a turn killed before its `result` still paid for, priced by the engine.
-function addStreamUsage(acc, id, u) {
-  acc.seenCalls ??= new Set();
-  if (id && acc.seenCalls.has(id)) return;
-  if (id) acc.seenCalls.add(id);
-  acc.modelCalls = (acc.modelCalls || 0) + 1;
+// #308: the sum is also the turn's recorded usage (the `result`'s usage is the main conversation's
+// only); a sub-agent's calls (parent_tool_use_id) are summed apart too, as the turn's `subagents`.
+// A message repeated with larger figures (its output growing over its blocks) adds the difference.
+// The turn's usage is never below the `result`'s figures field by field (a stream that lost
+// messages falls back to them): fieldMax.
+const fieldMax = (a, b) => Object.fromEntries(Object.keys(a).map((k) => [k, Math.max(a[k] || 0, b[k] || 0)]));
+const callFields = (u) => ({ input: u.input_tokens || 0, output: u.output_tokens || 0, cache_read: u.cache_read_input_tokens || 0, cache_write: u.cache_creation_input_tokens || 0 });
+
+function addStreamUsage(acc, id, u, subagent = false) {
+  acc.seenCalls ??= new Map();
+  const now = callFields(u);
+  const before = id ? acc.seenCalls.get(id) : null;
+  if (id) acc.seenCalls.set(id, before ? fieldMax(before, now) : now);
+  if (!before) acc.modelCalls = (acc.modelCalls || 0) + 1;
   acc.streamUsage ??= emptyUsage();
-  acc.streamUsage.input += u.input_tokens || 0;
-  acc.streamUsage.output += u.output_tokens || 0;
-  acc.streamUsage.cache_read += u.cache_read_input_tokens || 0;
-  acc.streamUsage.cache_write += u.cache_creation_input_tokens || 0;
+  if (subagent) {
+    acc.subagents ??= { calls: 0, usage: emptyUsage() };
+    if (!before) acc.subagents.calls += 1;
+  }
+  for (const k of Object.keys(now)) {
+    const add = Math.max(0, now[k] - (before?.[k] || 0));
+    acc.streamUsage[k] += add;
+    if (subagent) acc.subagents.usage[k] += add;
+  }
 }
 
 function parseClaude(ev, emit, acc) {
@@ -137,7 +151,7 @@ function parseClaude(ev, emit, acc) {
       // each model request's context window (the main conversation's, not a sub-agent's)
       if (ev.message?.usage && !ev.parent_tool_use_id) emit({ kind: 'context', tokens: contextTokens(ev.message.usage) });
       // a sub-agent's model calls are paid too
-      if (ev.message?.usage) addStreamUsage(acc, ev.message.id, ev.message.usage);
+      if (ev.message?.usage) addStreamUsage(acc, ev.message.id, ev.message.usage, !!ev.parent_tool_use_id);
       for (const b of ev.message?.content || []) {
         // Claude Code may omit the thinking content (it only sends the signature)
         if (b.type === 'thinking') { if (b.thinking) emit({ kind: 'thinking', text: b.thinking }); }
@@ -160,6 +174,8 @@ function parseClaude(ev, emit, acc) {
     // overlap (the total does not grow with the later, smaller ones: their tokens were already paid),
     // so the turn's tokens are the largest of each field, not a sum. The raw `result` events of such
     // a turn are kept in the run as `raw` stream items, to check this rule against a real stream.
+    // #308: that rule gives the main conversation's figures (usage_main); the turn's usage is the
+    // stream's sum of every model call, sub-agents included, floored by them.
     case 'result': {
       const u = ev.usage || {};
       acc.text = ev.result ?? acc.lastText ?? '';
@@ -172,7 +188,8 @@ function parseClaude(ev, emit, acc) {
       };
       acc.results = (acc.results || 0) + 1;
       const first = acc.results === 1;
-      acc.usage = first || !acc.usage ? usage : Object.fromEntries(Object.keys(usage).map((k) => [k, Math.max(usage[k], acc.usage[k] || 0)]));
+      acc.usageMain = first || !acc.usageMain ? usage : fieldMax(usage, acc.usageMain);
+      acc.usage = acc.streamUsage ? fieldMax(acc.usageMain, acc.streamUsage) : { ...acc.usageMain };
       if (ev.session_id) acc.providerSessionId = ev.session_id;
       if (first) acc.firstResult = ev;
       else {
@@ -314,6 +331,22 @@ function parseGrok(ev, emit, acc) {
   }
 }
 parseGrok.flush = flushGrok;
+
+// The parsed turn runCli resolves with (the engine records it in session.message_received). #308:
+// `usage` is the whole turn; usage_main (the main conversation), subagents and model_calls only when
+// the CLI reports them (Claude), never zeros for the others.
+function turnResult(acc) {
+  return {
+    text: acc.text || acc.lastText,
+    usage: acc.usage || emptyUsage(),
+    ...(acc.usageMain ? { usage_main: acc.usageMain } : {}),
+    ...(acc.subagents ? { subagents: acc.subagents } : {}),
+    ...(acc.modelCalls ? { model_calls: acc.modelCalls } : {}),
+    costUsd: acc.costUsd,
+    ...(acc.cliTotalCostUsd != null ? { cliTotalCostUsd: acc.cliTotalCostUsd } : {}),
+    providerSessionId: acc.providerSessionId,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // CLI runner
@@ -515,14 +548,7 @@ function runCli(opts, parser) {
       parser.flush?.(onItem, acc);
       if (acc.error) return finish(new Error(acc.error));
       if (code !== 0 && !acc.text) return finish(new Error(`Process exited with code ${code}. ${stderr.slice(-800)}`));
-      finish(null, {
-        text: acc.text || acc.lastText,
-        usage: acc.usage || emptyUsage(),
-        costUsd: acc.costUsd,
-        ...(acc.cliTotalCostUsd != null ? { cliTotalCostUsd: acc.cliTotalCostUsd } : {}),
-        providerSessionId: acc.providerSessionId,
-        exitCode: code,
-      });
+      finish(null, { ...turnResult(acc), exitCode: code });
     });
 
     child.stdin.end(promptFile ? '' : prompt);
@@ -793,6 +819,7 @@ module.exports = {
   isToolTimeout,
   killTree,
   parseClaude,
+  parseCodex,
   parseGrok,
   refreshWindowsPath,
   resolveCommand,
@@ -801,4 +828,5 @@ module.exports = {
   sleep,
   sniffImage,
   storeAttachments,
+  turnResult,
 };

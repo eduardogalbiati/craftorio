@@ -1,7 +1,7 @@
 // One run in depth (#228), for Analytics' Run tab: its header, a timeline of step visits per agent
 // (machine steps on the orchestrator's row), per-agent turns, time, cost and tokens (with the
-// effective $/M tokens), per-step visits, suite rounds, gate waits and the slowest tool calls, from
-// the run's summary.json and events.jsonl; and its comparison with the other real successful runs of
+// effective $/M tokens and, #308, the sub-agents' calls and tokens they include), per-step visits,
+// suite rounds, gate waits and the slowest tool calls, from the run's summary.json and events.jsonl; and its comparison with the other real successful runs of
 // the same workflow (median and p25-p75 per figure). Pure: the service (analytics:run in
 // src/service/areas/usage.js) reads the files and caches the figures.
 
@@ -56,6 +56,13 @@ function runFigures({ summary = {}, events = [], now = Date.now() }) {
     const a = agentOf(name);
     a.activeMs += Number(e.active_ms) || 0;
     a.waitingMs += Number(e.waiting_ms) || 0;
+    // #308: the sub-agents' share of the agent's tokens (already in its usage); absent on a turn
+    // recorded before, or one that started none
+    if (e.subagents?.calls) {
+      a.subagents ??= { calls: 0, tokens: 0 };
+      a.subagents.calls += Number(e.subagents.calls) || 0;
+      a.subagents.tokens += sumTokens(tokensOf(e.subagents.usage));
+    }
     // a run without sessions in its summary (an older one): the turns are the only source
     if (!fromSessions.has(name)) {
       a.turns += 1;

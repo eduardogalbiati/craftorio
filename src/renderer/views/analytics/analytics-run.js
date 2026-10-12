@@ -176,6 +176,9 @@
       label: name(a.agent), chip: chip(a.agent), sub: `${fmtTok(a.totalTokens)} · ${a.usdPerMTokens == null ? '—' : `${fmtUsd(a.usdPerMTokens)}/M`}`,
       title: `${name(a.agent)} (${a.agent}): ${Object.keys(TOKEN_LABELS).map((k) => `${TOKEN_LABELS[k]} ${fmtNum(a.tokens[k])}`).join(', ')}; effective ${a.usdPerMTokens == null ? '—' : fmtUsd(a.usdPerMTokens)} per million tokens`,
       parts: Object.keys(TOKEN_LABELS).map((k) => ({ value: a.tokens[k], color: TOKEN_COLORS[k], title: `${TOKEN_LABELS[k]}: ${fmtNum(a.tokens[k])}` })),
+      // #308: the sub-agents' share, already counted in the agent's tokens
+      marks: a.subagents ? ` <span class="muted small" data-testid="an-agent-subagents">· of which sub-agents: ${fmtNum(a.subagents.calls)} call${a.subagents.calls === 1 ? '' : 's'}, ${fmtTok(a.subagents.tokens)} tokens</span>` : '',
+      testid: 'an-agent-tokens',
     })), { stacked: true });
     return `<div class="an-grid">
         <div class="card an-card"><h3>Time per agent <span class="muted small">(active, then waiting on tools)</span></h3>${time}</div>
