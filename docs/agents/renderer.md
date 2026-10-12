@@ -10,8 +10,8 @@ Read this before changing anything in `src/renderer/`.
   Definitions shows agents with their session mode and capabilities, Builder is `views/workflows/builder.js`), agents, skills, usage,
   settings, run (+ run chat); terminal dock; supervisor drawer. The code map
   ([code-map.md](code-map.md)) says which file draws which screen.
-- **Setup** (#319, `views/setup/`): the first-run Setup, a modal-only view (`registerView` with
-  `modals`, no menu entry) with a stepper (Agents · Try it safely · Workflows · First project).
+- **Setup** (#319, `setup.js` + `setup.css`, top-level: a dialog, not a screen): the first-run Setup,
+  registered with `registerView` for its `modals` only (no section, no menu entry) with a stepper (Agents · Try it safely · Workflows · First project).
   `init()` opens it when `settings.setupDone === false` (strictly: a workspace or a test double
   without the key never sees it); Settings › Agents & CLIs › Run setup again calls
   `window.Setup.open()`. Its pure parts (status badges, requirement badges, preselection, hidden

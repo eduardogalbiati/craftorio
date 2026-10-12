@@ -33,5 +33,5 @@ const NO_TERMINAL_HINT = 'Run this on the computer where the app runs';
 
 document.addEventListener('click', (e) => {
   const b = e.target.closest?.('[data-run-command]');
-  if (b) runSuggestedCommand(b.dataset.runCommand, { signIn: b.hasAttribute('data-sign-in') });
+  if (b) runSuggestedCommand(b.dataset.runCommand, { signIn: b.dataset.signIn !== undefined });
 });

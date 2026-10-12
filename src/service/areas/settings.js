@@ -34,7 +34,7 @@ module.exports = () => {
       const signInCommand = signInCommands()[t.id] || null;
       if (!r) return { id: t.id, name: t.name, path: null, connected: false, installCommand: installCommand(t.id), installHint: installHint(t.id), signInCommand };
       const v = await runTool(r.file, t.args);
-      const out = { id: t.id, name: t.name, path: r.file, version: v.ok ? v.out.split(/\r?\n/)[0] : null, connected: v.ok, auth: !!(t.auth || t.signedIn), signInCommand };
+      const out = { id: t.id, name: t.name, path: r.file, version: v.ok ? v.out.split(/\r?\n/)[0] : null, connected: v.ok, auth: !!(t.auth || (t.signedIn && v.ok)), signInCommand };
       if (!v.ok) out.output = lastLines(v.out);
       if (t.auth) {
         const a = await runTool(r.file, t.auth);

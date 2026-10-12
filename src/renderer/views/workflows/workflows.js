@@ -210,8 +210,9 @@ function workflowCard(w) {
   }).join(', ');
   const builderTip = w.origin !== 'custom' ? 'See it in the visual builder (read-only: clone it to change it)' : w.builder ? 'Edit it in the visual builder' : 'See it in the visual builder: its agents and prompts can be changed there, its steps stay as they are';
   // #319: what it needs beyond Claude Code and Git, and whether Start offers it (the Setup hides the unpicked ones)
-  const needs = SetupModel.requirementBadges(w.requirements).map((b) => `<span class="badge" title="The CLIs it needs, with its default inputs">${esc(b)}</span>`).join('');
-  const shown = !(state.settings?.hiddenWorkflows || []).includes(SetupModel.workflowId(w.file));
+  const model = typeof SetupModel === 'undefined' ? null : SetupModel;
+  const needs = (model ? model.requirementBadges(w.requirements) : []).map((b) => `<span class="badge" title="The CLIs it needs, with its default inputs">${esc(b)}</span>`).join('');
+  const shown = !model || !(state.settings?.hiddenWorkflows || []).includes(model.workflowId(w.file));
   return `
     <article class="wf-card${w.origin === 'custom' ? ' custom' : ''}" data-file="${esc(w.file)}" tabindex="-1">
       <div class="wf-card-head">

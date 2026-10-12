@@ -213,8 +213,8 @@ const DEFAULT_SETTINGS = {
   // the first-run Setup (#319, src/renderer/setup.js): done once Finish or Skip is pressed; a
   // settings.json written before Setup existed reads true (readSettings), so current users skip it
   setupDone: false,
-  // workflow ids (file names without .yaml) the Setup's Workflows step left unpicked: hidden from
-  // Start and Home, shown again by Workflows › Definitions › Show in Start
+  // workflow ids (file names without .yaml) the Setup's Workflows step left unpicked: not offered by
+  // Start (Home's Run a workflow opens it), shown again by Workflows › Definitions › Show in Start
   hiddenWorkflows: [],
 };
 

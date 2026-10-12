@@ -390,7 +390,7 @@ async function renderTools() {
   const box = $('#set-tools');
   box.innerHTML = '<div class="s-row"><div class="s-label"><span>Checking…</span></div></div>';
   const tools = await api.envDetails();
-  setCliStates(tools); // the Start panel's missing CLIs follow (#319)
+  if (typeof setCliStates === 'function') setCliStates(tools); // the Start panel's missing CLIs follow (#319)
   box.innerHTML = tools.map((t) => `
     <div class="s-row">
       <div class="s-label">

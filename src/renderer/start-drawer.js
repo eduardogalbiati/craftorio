@@ -78,7 +78,7 @@ function renderDrawerCategories() {
 const startablePipelines = () => (state.pipelines || []).filter((p) => !p.error && state.workflows.some((w) => w.file === p.stages[0]?.workflow && !w.error));
 
 // #319: the workflows the first-run Setup left unpicked (settings.hiddenWorkflows) are not offered
-const hiddenFromStart = (w) => (state.settings?.hiddenWorkflows || []).includes(SetupModel.workflowId(w.file)) && w.file !== state.drawerForced;
+const hiddenFromStart = (w) => typeof SetupModel !== 'undefined' && (state.settings?.hiddenWorkflows || []).includes(SetupModel.workflowId(w.file)) && w.file !== state.drawerForced;
 
 function renderWorkflowOptions(preferred) {
   const list = state.workflows.filter((w) => (!state.category || w.category === state.category) && !hiddenFromStart(w));
@@ -93,7 +93,10 @@ function renderWorkflowOptions(preferred) {
     state.wf = null;
     state.pipeline = null;
     $('#drawer-pipeline').classList.add('hidden');
-    $('#wf-desc').textContent = state.category
+    const hidden = state.workflows.some((w) => (!state.category || w.category === state.category) && hiddenFromStart(w));
+    $('#wf-desc').textContent = hidden
+      ? `Every ${state.category ? `${CATEGORIES[state.category]} ` : ''}workflow is hidden from Start: Workflows › Definitions › Show in Start brings one back.`
+      : state.category
       ? `No ${CATEGORIES[state.category]} workflows yet. Add a .yaml with "category: ${state.category}" to workflows/.`
       : 'No .yaml files found in workflows/.';
     $('#wf-steps-mini').innerHTML = '';
@@ -177,7 +180,7 @@ function selectWorkflow(file) {
   setStartDisabled(!!wf.error || oneRunAtATime());
   drawerChain().refresh();
   renderDrawerPipeline();
-  renderEnvStatus();
+  window.renderEnvStatus?.(); // through window: the drawer's unit tests load selectWorkflow on its own
 }
 
 // #319: each CLI's state ('ready' | 'signed-out' | 'missing'), from env:details (Settings and the
@@ -198,7 +201,7 @@ async function loadCliStatus() {
 function renderEnvStatus() {
   const box = $('#env-status');
   const reqs = state.wf?.requirements;
-  if (!reqs) { box.innerHTML = ''; return; }
+  if (!reqs || typeof SetupModel === 'undefined') { box.innerHTML = ''; return; }
   const badges = SetupModel.requirementBadges(reqs).map((b) => `<span class="badge">${esc(b)}</span>`).join('');
   const missing = state.cliStates ? SetupModel.missingRequirements(reqs, state.cliStates) : [];
   const tool = (id) => (state.cliTools || []).find((t) => t.id === id);

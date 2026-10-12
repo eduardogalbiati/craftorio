@@ -15,7 +15,7 @@
 //   is none). Finish opens the Start drawer on the first picked workflow (Simulation checked when
 //   it shows, applyDeveloperMode).
 // window.Setup = { open(step), isOpen(), skip() } (app.js, Settings, scripts/screenshot.js).
-// Registers itself with registerView (view-registry.js, modals only); uses app.js globals ($, esc,
+// Registers its dialog with registerView (view-registry.js, modals only: no screen, no menu entry); uses app.js globals ($, esc,
 // state, api, errMsg, confirmDialog, showToast, openDrawer, applyDeveloperMode, CATEGORIES),
 // start-drawer.js's loadCliStatus and command-hint.js's runSuggestedCommand / canRunCommands.
 
@@ -61,8 +61,8 @@
   function actionButton(t) {
     const off = !canRunCommands();
     const tip = off ? ` title="${esc(NO_TERMINAL_HINT)}"` : '';
-    if (!t.path && t.installCommand) return `<button type="button" class="btn sm primary" data-setup-run="${esc(t.installCommand)}" data-testid="setup-install-${t.id}"${tip}${off ? ' disabled' : ''}>${ACTION.install}</button>`;
-    if (t.path && !t.connected && t.auth && t.signInCommand) return `<button type="button" class="btn sm primary" data-setup-run="${esc(t.signInCommand)}" data-sign-in data-testid="setup-sign-in-${t.id}"${tip}${off ? ' disabled' : ''}>${ACTION.signIn}</button>`;
+    if (!t.path && t.installCommand) return `<button type="button" class="btn sm primary" data-setup-run="${esc(t.installCommand)}" data-testid="setup-install-${esc(t.id)}"${tip}${off ? ' disabled' : ''}>${ACTION.install}</button>`;
+    if (t.path && !t.connected && t.auth && t.signInCommand) return `<button type="button" class="btn sm primary" data-setup-run="${esc(t.signInCommand)}" data-sign-in data-testid="setup-sign-in-${esc(t.id)}"${tip}${off ? ' disabled' : ''}>${ACTION.signIn}</button>`;
     return '';
   }
 
@@ -104,7 +104,7 @@
       <div class="s-group setup-clis">${tools.map(cliRow).join('')}</div>
       <div class="row setup-row">
         <button type="button" class="btn sm ghost" data-setup-check data-testid="setup-check-again" ${setup.tools ? '' : 'disabled'}>Check again</button>
-        <span class="muted small">A row checks again when its terminal ends.</span>
+        <span class="muted small">After installing or signing in, press Check again (or end its terminal: the rows check again by themselves).</span>
       </div>
       ${agentsNote()}`;
   }
@@ -117,7 +117,7 @@
   }
 
   async function runAction(btn) {
-    const tab = await runSuggestedCommand(btn.dataset.setupRun, { signIn: btn.hasAttribute('data-sign-in') });
+    const tab = await runSuggestedCommand(btn.dataset.setupRun, { signIn: btn.dataset.signIn !== undefined });
     // the dock's own repaint, then this row's CLI checked again (the terminal ended: installed, signed in)
     if (tab) tab.onChange = () => { renderTermTabs(); if (setup.open) checkAgents(); };
   }
@@ -242,7 +242,7 @@
     close();
     const first = picked.includes(window.SetupModel.FIRST) ? window.SetupModel.FIRST : ids.find((id) => picked.includes(id));
     const file = first && (state.workflows || []).find((w) => window.SetupModel.workflowId(w.file) === first)?.file;
-    openDrawer(file ? { workflow: file } : {});
+    openDrawer(file ? { workflow: file } : {}).catch((e) => showToast('Could not open Start', errMsg(e)));
   }
 
   async function skip() {
