@@ -210,8 +210,8 @@ test('ai-development-local-hero (#179): a mock run shows the developer\'s self_r
   assert.equal(finished.status, 'success', finished.error);
   // rendered: the base branch is filled in
   assert.match(prompts[0], /git diff [^\s`{]+\.\.\.HEAD/);
-  // the checklist the self-review reads: the code-review skill is loaded into the develop turn
-  assert.match(prompts[0], /<skill name="code-review"/, 'the develop prompt carries the code-review skill');
+  // #300: the self-review reads a short checklist, not the reviewer's whole code-review skill
+  assert.doesNotMatch(prompts[0], /<skill name="code-review"/, 'the develop prompt no longer carries the code-review skill');
   const developed = events.find((e) => e.type === 'step.finished' && e.step_id === 'develop');
   assert.ok(developed.output.self_review, 'the mock developer answers a self_review (from the schema)');
   // #151: code_review also runs the UI Reviewer; the code reviewer's own session is the one told

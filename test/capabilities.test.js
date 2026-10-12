@@ -11,7 +11,8 @@ const TOOLCHAINS = ['bash:git', 'bash:npm'];
 
 // The read-only shell utilities every agent with a bash:<command> capability also gets (#96): no
 // refusal for a pipe or a `;` chain made of allowed commands, whatever the agent's own toolchain.
-const READ_BASH = ['[', 'basename', 'cat', 'cut', 'dirname', 'echo', 'grep', 'head', 'ls', 'printenv', 'pwd', 'tail', 'test', 'tr', 'wc'].map((u) => `Bash(${u}:*)`);
+// #299: read-only awk too (it writes nothing without a redirect); sed stays out (sed -i writes)
+const READ_BASH = ['[', 'awk', 'basename', 'cat', 'cut', 'dirname', 'echo', 'grep', 'head', 'ls', 'printenv', 'pwd', 'tail', 'test', 'tr', 'wc'].map((u) => `Bash(${u}:*)`);
 const WRITE_BASH = ['mkdir', 'mktemp', 'sort', 'uniq'].map((u) => `Bash(${u}:*)`);
 
 test('claude: capabilities become --tools (offered), --allowedTools (approved) and acceptEdits for writers', () => {
