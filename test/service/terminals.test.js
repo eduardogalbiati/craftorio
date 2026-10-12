@@ -92,3 +92,45 @@ test('term:open kind command: an allowed command is still refused under MULTIAGE
   const { api } = makeService(t);
   assert.throws(() => api['term:open']({ kind: 'command', command: SCOPE_HINT }), /Simulation only .*the command "gh auth refresh -s user"/);
 });
+
+// #319 (acceptance tests, written before the code): the Setup's Sign in buttons run each CLI's
+// sign-in command in a command terminal. Contract: src/install-commands.js exports signInCommands()
+// -> { claude, codex, grok, gh, glab } (codex 'codex login', grok 'grok login', gh 'gh auth login',
+// glab 'glab auth login', claude a command starting with 'claude'), all on the allowlist.
+test('signInCommands (#319): one sign-in command per CLI', () => {
+  const { signInCommands } = require('../../src/install-commands');
+  const cmds = signInCommands();
+  assert.equal(cmds.codex, 'codex login');
+  assert.equal(cmds.grok, 'grok login');
+  assert.equal(cmds.gh, 'gh auth login');
+  assert.equal(cmds.glab, 'glab auth login');
+  assert.equal(typeof cmds.claude, 'string');
+  assert.match(cmds.claude, /^claude\b/);
+});
+
+test('commandSpec (#319): every sign-in command is accepted on every platform', () => {
+  const { signInCommands } = require('../../src/install-commands');
+  const { commandSpec } = areaWith({ root: 'C:/ws' });
+  for (const platform of ['win32', 'linux', 'darwin']) {
+    for (const [id, cmd] of Object.entries(signInCommands())) {
+      assert.doesNotThrow(() => commandSpec(cmd, platform), `${id} on ${platform}`);
+    }
+  }
+});
+
+test('term:open kind command (#319): a sign-in command passes the allowlist and only meets the simulation guard', async (t) => {
+  const { signInCommands } = require('../../src/install-commands');
+  const { api } = makeService(t);
+  for (const cmd of Object.values(signInCommands())) {
+    assert.throws(() => api['term:open']({ kind: 'command', command: cmd }), /Simulation only/);
+  }
+});
+
+test('commandSpec (#319): look-alikes of the sign-in commands are refused', () => {
+  const { signInCommands } = require('../../src/install-commands');
+  assert.equal(typeof signInCommands, 'function', 'signInCommands exists');
+  const { commandSpec } = areaWith({ root: 'C:/ws' });
+  for (const bad of ['gh auth logout', 'codex login --with-api-key', 'claude -p hello', 'glab auth login; rm -rf ~']) {
+    assert.throws(() => commandSpec(bad, 'win32'), /Only the commands the app suggests can run in a command terminal\./, bad);
+  }
+});

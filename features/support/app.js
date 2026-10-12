@@ -69,10 +69,12 @@ function removeScratch(dir) {
 
 /**
  * Launches the app on a fresh demo workspace → { app, window, project, scratch, close }.
- * theme: light | dark; size: WxH. No recordVideo: with Electron 44 it stalls the window before
- * its page loads (the trace's screencast is the scenario's video, features/steps/fixtures.js).
+ * theme: light | dark; size: WxH; empty: true leaves the workspace folder unseeded (a first start:
+ * no settings.json, no project; project is null, #319). No recordVideo: with Electron 44 it stalls
+ * the window before its page loads (the trace's screencast is the scenario's video,
+ * features/steps/fixtures.js).
  */
-async function launchApp({ theme = 'light', size = '1400x900' } = {}) {
+async function launchApp({ theme = 'light', size = '1400x900', empty = false } = {}) {
   const slot = await machineSlot.acquireSlot('screenshot', {
     dir: machineSlot.machineSlotDir(), holder: 'e2e', onWait: (h) => console.log(`e2e: waiting for the screenshot slot (pid ${h?.pid ?? '?'})`),
   });
@@ -84,7 +86,7 @@ async function launchApp({ theme = 'light', size = '1400x900' } = {}) {
     removeScratch(scratch);
   };
   try {
-    const { project } = await seedWorkspace(path.join(scratch, 'workspace'));
+    const { project } = empty ? { project: null } : await seedWorkspace(path.join(scratch, 'workspace'));
     app = await electron.launch({
       executablePath: require('electron'),
       args: [path.join(__dirname, 'electron-main.js')],
