@@ -1107,9 +1107,10 @@ const createBody = (draft) => (draft.related.length && !/^Related:/im.test(draft
  * is the draft's addition for that issue, else the whole draft. `preview` never calls the CLI.
  * The text sent is kept in the thread's folder (runsDir) under filed/.
  * placeEpic (#138): a new issue joins the draft's epic (`epicList`: the cache's epics) once filed.
+ * timeZone (#273): the owner's zone (settings.timeZone), the day of an appended "## Update" section.
  * Returns { preview, action, command, body, filed, message, messages, skippedLabels? }.
  */
-async function fileDraft({ backlogDir, projectId, runsDir, at, action, number, preview, platform, repo, cached = null, placeEpic = false, epicList = [], exec = backlog.execCli }) {
+async function fileDraft({ backlogDir, projectId, runsDir, at, action, number, preview, platform, repo, cached = null, placeEpic = false, epicList = [], timeZone = null, exec = backlog.execCli }) {
   if (!FILE_ACTIONS.includes(action)) throw new Error(`Unknown action: ${action} (${FILE_ACTIONS.join(', ')}).`);
   const messages = readConversation(backlogDir, projectId);
   const open = currentDraft(messages);
@@ -1139,7 +1140,7 @@ async function fileDraft({ backlogDir, projectId, runsDir, at, action, number, p
     const addition = issue.existingIssue === target && issue.addition ? issue.addition : issue.draft ? `### ${issue.draft.title}\n\n${issue.draft.body}` : '';
     if (!addition) throw new Error('There is nothing to add yet.');
     if (action === 'comment') body = `${addition}\n`;
-    else body = backlog.issueAppendBody({ original: preview ? cached?.body : (await backlog.fetchIssue({ platform, repo, number: target, exec })).body, addition });
+    else body = backlog.issueAppendBody({ original: preview ? cached?.body : (await backlog.fetchIssue({ platform, repo, number: target, exec })).body, addition, timeZone });
     file = path.join(dir, `${stamp}-${target}.md`);
     command = backlog.issueSaveCommand({ platform, repo, number: target, mode: action === 'comment' ? 'comment' : 'replace', file, text: body });
   }
@@ -1202,9 +1203,10 @@ const applyDir = (where, kind) => path.join(threadDir(where, `po-${path.basename
 /**
  * Files a proposed split (the owner may have moved tasks or merged children: `split` is the edited
  * proposal { issue, parent, children }) and records it in the conversation. data: the synced backlog.
+ * timeZone (#273): the owner's zone, the day of the umbrella's "## Update" section.
  * Returns fileSplit's result plus { message, messages }.
  */
-async function applySplit({ backlogDir, projectId, runsDir, at, split, preview, platform, repo, data, exec = backlog.execCli }) {
+async function applySplit({ backlogDir, projectId, runsDir, at, split, preview, platform, repo, data, timeZone = null, exec = backlog.execCli }) {
   const messages = readConversation(backlogDir, projectId);
   const answer = planAnswer(messages, at);
   const number = Number(split?.issue);
@@ -1213,7 +1215,7 @@ async function applySplit({ backlogDir, projectId, runsDir, at, split, preview, 
   const parent = (data?.issues || []).find((i) => i.number === number);
   const checked = poSplit.checkSplit(split, parent);
   const res = await poSplit.fileSplit({
-    platform, repo, parent, split: checked, dir: applyDir({ backlogDir, projectId, runsDir }, `split-${number}`), preview, epicList: data?.epics || [], exec,
+    platform, repo, parent, split: checked, dir: applyDir({ backlogDir, projectId, runsDir }, `split-${number}`), preview, epicList: data?.epics || [], timeZone, exec,
   });
   const refs = res.children.map((c) => (c.number ? `[#${c.number}](${c.url})` : c.title)).join(', ');
   const text = preview

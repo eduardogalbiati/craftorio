@@ -125,14 +125,18 @@ function occupancyOf({ runs = [], from, to, now = Date.now(), appSessions = null
   for (let d = TimeZone.startOfDay(w0, timeZone); d < w1; d = TimeZone.nextDay(d, timeZone)) {
     const e = TimeZone.nextDay(d, timeZone);
     const m = measure(segments, [[Math.max(d, w0), Math.min(e, w1)]].filter(([a, b]) => b > a));
-    const hours = [];
+    // one slot per local hour of the clock: a 23-hour day leaves its skipped hour empty, a 25-hour day
+    // adds its repeated hour to the same slot
+    const slots = Array.from({ length: 24 }, () => ({ active: 0, span: 0 }));
     for (let h = d; h < e; h += HOUR) {
       const hm = measure(segments, [[Math.max(h, w0), Math.min(h + HOUR, w1)]].filter(([a, b]) => b > a));
-      hours.push(hm.span ? hm.active / hm.span : null);
+      const slot = slots[Number(TimeZone.formatTime(h, timeZone).slice(0, 2)) % 24];
+      slot.active += hm.active;
+      slot.span += hm.span;
     }
     const inDay = (t) => t >= d && t < e;
     days.push({
-      day: TimeZone.dayKey(d, timeZone), ...hoursOf(m), hourly: hours.slice(0, 24), partial: d < w0 || e > w1,
+      day: TimeZone.dayKey(d, timeZone), ...hoursOf(m), hourly: slots.map((s) => (s.span ? s.active / s.span : null)), partial: d < w0 || e > w1,
       costUsd: facts.filter((f) => inDay(f.start)).reduce((s, f) => s + f.cost, 0),
       issues: facts.filter((f) => f.end != null && f.status === 'success' && inDay(f.end)).reduce((s, f) => s + f.issues, 0),
     });

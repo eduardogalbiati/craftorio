@@ -262,6 +262,7 @@ module.exports = (ctx) => {
           repo: t.repo,
           cached: (t.data.issues || []).find((i) => i.number === Number(number)) || null,
           placeEpic: !!epic,
+          timeZone: workspace.readSettings(ctx.ws).timeZone, // #273: the drawer previews the same day
           epicList: t.data.epics || [],
         });
         return resync(res, t);
@@ -275,6 +276,7 @@ module.exports = (ctx) => {
         const t = target(projectId);
         const res = await productOwner.applySplit({
           backlogDir: ctx.ws.backlog, projectId: t.id, runsDir: ctx.ws.runs, at, split, preview: !!preview || simulation.simulationOnly(), platform: t.platform, repo: t.repo, data: t.data,
+          timeZone: workspace.readSettings(ctx.ws).timeZone, // #273
         });
         return resync(res, t);
       },

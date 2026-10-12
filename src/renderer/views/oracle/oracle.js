@@ -742,7 +742,12 @@
       $('#oracle-backdrop').onclick = closeDrawer;
       document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && or.drawer) closeDrawer(); });
       bindOps();
-      TimeZone.onChange(render); // #273: the messages' times follow the chosen zone
+      // #273: the messages' times follow the chosen zone, in the surfaces not shown too (render skips
+      // them, and coming back to one does not redraw it)
+      TimeZone.onChange(() => {
+        for (const w of ALL_SURFACES) chats[w]?.update({ messages: or.messages, turn: turnElsewhere(w) });
+        render();
+      });
       document.addEventListener('input', (e) => {
         if (e.target.classList?.contains('oracle-mem-input')) or.memory = { ...or.memory, draft: e.target.value };
         if (e.target.classList?.contains('oracle-mem-import-input')) or.memory = { ...or.memory, importText: e.target.value };
