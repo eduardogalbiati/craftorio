@@ -28,7 +28,7 @@ function seedFiles() {
 test('every view of --view has its own seed module in scripts/screenshot/views/', () => {
   const { VIEWS } = loadRunner();
   const views = Object.keys(VIEWS).sort();
-  assert.deepEqual(seedFiles().map((f) => f.replace(/\.js$/, '')), views);
+  assert.deepEqual(seedFiles().map((f) => f.replace(/\.js$/, '')).sort(), views);
 });
 
 test('every screen folder with a screenshot view has a seed module', () => {
