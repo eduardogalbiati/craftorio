@@ -60,7 +60,7 @@ function makeRepo(t) {
 
 // A mock run of the release workflow. Every gate but `ship` takes its first choice (an Approve /
 // Reject gate: approve); `ship` takes `shipAnswer` (default hold: a test never asks for a push).
-async function runRelease(t, { mockSequences = {}, shipAnswer = 'hold', inputs: extra = {} } = {}) {
+async function runRelease(t, { mockSequences = {}, shipAnswer = 'hold', inputs: extra = {}, resume } = {}) {
   const wf = load();
   const repo = makeRepo(t);
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'release-sum-runs-'));
@@ -70,7 +70,7 @@ async function runRelease(t, { mockSequences = {}, shipAnswer = 'hold', inputs: 
     if (def?.default !== undefined && def?.default !== '') continue;
     inputs[k] = /path|dir|repo|folder/i.test(k) ? repo : 'Release v1.0';
   }
-  const run = new WorkflowRun({ file: WORKFLOW, inputs: { task: 'Release v1.0', repo_path: repo, project_path: repo, ...inputs, ...extra }, mock: true, runsDir, mockSequences });
+  const run = new WorkflowRun({ file: WORKFLOW, inputs: { task: 'Release v1.0', repo_path: repo, project_path: repo, ...inputs, ...extra }, mock: true, runsDir, mockSequences, ...(resume ? { resume } : {}) });
   const events = [];
   run.on('event', (ev) => {
     events.push(ev);
@@ -199,4 +199,59 @@ test('release run (mock): release-summary.md in the run folder has a verdict, Ti
   assert.ok(at.every((i) => i >= 0), `every section is there (${at.join(', ')}):\n${text}`);
   assert.deepEqual([...at].sort((a, b) => a - b), at, 'the sections are in order');
   assert.ok(text.slice(0, at[0]).trim().length > 0, 'a verdict line comes before the Timeline');
+});
+
+// ---- after the change: the cases the review asked for -------------------------------------------
+
+test('release run (mock): one green round of each suite: the ship gate has no report and no "summary is missing" line (#290)', { timeout: 120000 }, async (t) => {
+  const { started, shipGate } = await runRelease(t, { mockSequences: { suite: { unit: ['pass'], e2e: ['pass'] } } });
+  assert.ok(shipGate, `the ship gate opened (steps: ${started.join(', ')})`);
+  assert.equal(shipGate.report === undefined || shipGate.report === '', true, 'no report on the gate event');
+  assert.equal(/summary is missing/i.test(String(shipGate.message || '')), false, 'no missing-summary line');
+  assert.equal(/timeline/i.test(String(shipGate.message || '')), false, 'no summary in the message');
+});
+
+test('release run (mock): with a summary, the ship gate event carries it as `report` and the message starts with it (#290)', { timeout: 120000 }, async (t) => {
+  const { shipGate } = await runRelease(t, { mockSequences: { suite: { unit: ['fail', 'pass'], e2e: ['pass'] } } });
+  const report = String(shipGate?.report || '');
+  assert.match(report, /## Timeline/);
+  assert.equal(String(shipGate.message || '').startsWith(report), true, 'the message starts with the report');
+  assert.equal(/summary is missing/i.test(String(shipGate.message || '')), false, 'no missing-summary line when there is a summary');
+});
+
+test('release run (mock): only the E2E suite red once still reaches review, then ship (#290)', { timeout: 120000 }, async (t) => {
+  const { started, gates } = await runRelease(t, { mockSequences: { suite: { unit: ['pass', 'pass'], e2e: ['fail', 'pass'] } } });
+  const review = started.indexOf('review');
+  assert.ok(review >= 0, `review ran (steps: ${started.join(', ')})`);
+  assert.ok(review > started.lastIndexOf('e2e'), 'after the last E2E round');
+  assert.ok(gates.includes('ship') && started.lastIndexOf('ship') > review, 'then the ship gate');
+});
+
+test('release run (mock): a failing review calls no supervisor (supervise: false), runs once and goes on to ship (#290)', { timeout: 180000 }, async (t) => {
+  const { events, started, shipGate } = await runRelease(t, { mockSequences: { suite: { unit: ['fail', 'pass'], e2e: ['pass'] }, timeouts: { review: 20 } } });
+  assert.ok(started.includes('review'), `review ran (steps: ${started.join(', ')})`);
+  const supervised = events.filter((e) => /^supervisor\./.test(e.type) && e.step_id === 'review').map((e) => e.type);
+  assert.deepEqual(supervised, [], 'no supervisor event for the review step');
+  assert.equal(started.filter((id) => id === 'review').length, 1, 'one visit of review');
+  assert.ok(shipGate, 'the ship gate opened');
+});
+
+test('release run (mock): a run resumed at review only has the last fix output, while it counts every fix round (#290)', { timeout: 120000 }, async (t) => {
+  const fix = { branch: 'release-fix-x', summary: 'LAST FIX SUMMARY', committed: true, commit_sha: 'abc1234', regression: '#274 broke #234', test_notes: 'add a regression test' };
+  const { started, prompts } = await runRelease(t, {
+    mockSequences: { suite: { unit: ['pass'], e2e: ['pass'] } },
+    resume: {
+      fromStep: 'review',
+      steps: {
+        unit: { output: { status: 'pass', message: 'unit green' }, visits: 4 },
+        e2e: { output: { status: 'pass', message: 'e2e green' }, visits: 2 },
+        fix: { output: fix, visits: 3 },
+      },
+    },
+  });
+  assert.equal(started[0], 'review', `the run resumed at review (steps: ${started.join(', ')})`);
+  const prompt = prompts('review').join('\n');
+  assert.match(prompt, /The fixes \(3\)/, 'the fix count is the visits');
+  assert.equal(count(prompt, 'LAST FIX SUMMARY'), 1, 'only the last fix output survives a resume (documented limit)');
+  assert.equal(/Fix 2:/.test(prompt), false, 'no second fix entry');
 });

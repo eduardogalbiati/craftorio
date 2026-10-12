@@ -60,6 +60,10 @@ test('gateReportParts: the report as Markdown in release-summary, the message wi
   assert.match(r.reportHtml, /data-testid="release-summary"/);
   assert.match(r.reportHtml, /<md>## Timeline<\/md>/);
   assert.equal(r.message, 'Release v1');
+  // a message that does not start with the report (e.g. a template changed it) is left whole
+  const other = parts({ report: '## Timeline', message: 'Release v1\n## Timeline' });
+  assert.match(other.reportHtml, /data-testid="release-summary"/);
+  assert.equal(other.message, 'Release v1\n## Timeline');
 });
 
 test('releases: a release whose run wrote release-summary.md has `summary` and releases:summary reads it (#290)', async (t) => {
