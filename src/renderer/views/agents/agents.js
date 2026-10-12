@@ -306,8 +306,8 @@
       const custom = !isPreset(c, hex);
       const error = ed.hexErrors?.[c.key] || '';
       return `
-      <div class="ag-color" data-color="${c.key}">
-        <div class="ag-color-head"><b>${c.label}</b> <span class="muted">${c.hint}</span></div>
+      <div class="ag-color" data-color="${c.key}" data-testid="agent-color-row">
+        <div class="ag-color-head" data-testid="agent-color-row-head"><b>${c.label}</b> <span class="muted">${c.hint}</span></div>
         <div class="ag-swatches">
           ${c.swatches.map((h) => `<button type="button" class="ag-swatch${h.toUpperCase() === hex ? ' active' : ''}" data-hex="${h}" style="background:${h}" title="${h}" aria-label="${c.label} ${h}"></button>`).join('')}
           <label class="ag-custom${custom ? ' active' : ''}" title="${custom ? `Custom color ${hex}` : 'Any color'}"><input type="color" value="${hex.toLowerCase()}" aria-label="${c.label}: any color" /><span class="ag-custom-swatch${custom ? ' active' : ''}" data-testid="agent-color-custom" aria-pressed="${custom ? 'true' : 'false'}" style="${custom ? `background:${hex}` : ''}">${custom ? '' : '+'}</span></label>

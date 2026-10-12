@@ -911,13 +911,19 @@
     else if (c) chat.ask(c.dataset.q);
   };
   const DRAFT_ACTS = ['append', 'comment', 'create', 'create-assign', 'create-roadmap', 'discard', 'revise'];
+  // an applied group's badge (#140): the Roadmap at its stage, or its run; the drawer gives way
+  const openStage = (n) => { close(); actions().openStage(n); };
+  const openRun = (runId) => { close(); window.showRun(runId); };
+  window.AgentsWindow?.onNavigate?.('product-owner:stage', openStage);
+  window.AgentsWindow?.onNavigate?.('product-owner:run', openRun);
   // the conversation's own controls (proposals, drafts, extras); the Agents window's log gets the same handlers (#263)
   $p('#po-log').onclick = (e) => {
     // an applied group's badge (#140): the Roadmap at its stage, or its run
+    // (in the Agents window, #263, they open in the main window: its page has no Roadmap or Run screen)
     const stage = e.target.closest('[data-po-stage]');
-    if (stage) { close(); actions().openStage(Number(stage.dataset.poStage)); return; }
+    if (stage) { if (!window.AgentsWindow?.toMainWindow?.('product-owner:stage', Number(stage.dataset.poStage))) openStage(Number(stage.dataset.poStage)); return; }
     const run = e.target.closest('[data-po-run]');
-    if (run) { close(); window.showRun(run.dataset.poRun); return; }
+    if (run) { if (!window.AgentsWindow?.toMainWindow?.('product-owner:run', run.dataset.poRun)) openRun(run.dataset.poRun); return; }
     // a split's or an epic's buttons (#124, #138)
     if (window.BacklogPoProposals.onClick(e, proposalsCtx())) return;
     const epic = e.target.closest('[data-po-epic]');

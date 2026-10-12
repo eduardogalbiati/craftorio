@@ -424,9 +424,9 @@ function repoBranchHtml(r, d) {
   return `<div class="pr-repo-branch"><span class="mono" data-testid="run-card-repo-branch" title="${esc(branch ? 'The run\'s branch' : 'The run\'s branch is not recorded')}">${esc(branch || 'branch not recorded')}</span>${base ? ` <span class="muted small">← ${esc(base)}</span>` : ''} ${state}</div>`;
 }
 
-// An open row's changes (#289): run:diff once (the commits, the changed files' counts; no file
-// contents), again for a run in progress when its row was refreshed by a run event; the entry
-// { status: loading | ok | error, data, error, shown, pending } lives in rl.repo.
+// An open row's changes (#289): run:diff once, as a summary (the commits, the changed files' counts;
+// no patch is computed or sent), again for a run in progress when its row was refreshed by a run
+// event; the entry { status: loading | ok | error, data, error, shown, pending } lives in rl.repo.
 function ensureRunRepo(rl, r, rerender) {
   if (r.mock) return;
   const repo = rl.repo || (rl.repo = new Map());
@@ -435,7 +435,7 @@ function ensureRunRepo(rl, r, rerender) {
   if (cur && (cur.pending || cur.status === 'error' || !stale)) return;
   const entry = { status: cur?.status === 'ok' ? 'ok' : 'loading', data: cur?.data || null, error: null, shown: cur?.shown || REPO_PAGE, pending: true, item: r, at: Date.now() };
   repo.set(r.runId, entry);
-  Promise.resolve().then(() => api.runDiff(r.runId))
+  Promise.resolve().then(() => api.runDiff(r.runId, null, null, true))
     .then((d) => { entry.data = d || { commits: [], files: [] }; entry.status = 'ok'; }, (e) => { entry.status = 'error'; entry.error = errMsg(e); })
     .finally(() => { entry.pending = false; entry.at = Date.now(); if (repo.get(r.runId) === entry) rerender(); });
 }

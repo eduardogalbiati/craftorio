@@ -155,10 +155,18 @@ for (const channel of ['backlog:changed', 'chat:progress', 'notifications:change
 // ---- the Agents window (#263, src/agents-window.js) -----------------------------------------
 // Created once the workspace is known (its state file lives there); opened from the drawers'
 // "Open in a window" buttons and Ctrl+Shift+A (agents-window:open), told which agent the window
-// shows (agents-window:agent) so it reopens there.
+// shows (agents-window:agent) so it reopens there. A link in its chats to a screen of the app
+// (agents-window:navigate) is relayed to the main window (main-window:navigate), brought to the front.
 let agentsWindow = null;
 ipcMain.handle('agents-window:open', (_e, arg) => { agentsWindow?.open(arg || {}); });
 ipcMain.on('agents-window:agent', (_e, arg) => agentsWindow?.setAgent(arg?.agent));
+ipcMain.on('agents-window:navigate', (_e, arg) => {
+  if (!win || win.isDestroyed()) return;
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+  win.webContents.send('main-window:navigate', arg || {});
+});
 
 // ---- keep awake (#162) -----------------------------------------------------------------
 // The app that runs the work (#112) holds the blocker, only while the setting is on and there is

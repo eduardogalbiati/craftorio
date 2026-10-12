@@ -238,9 +238,14 @@
   }
 
   // ---- links in the answers ----------------------------------------------------------------
+  // In the Agents window (#263) the page has no screens: a link's target goes to the main window,
+  // which runs the same function (AgentsWindow.onNavigate); in the main window toMain answers false.
+  const toMain = (name, target) => !!window.AgentsWindow?.toMainWindow?.(name, target);
   // #240: a request's line opens its owner's conversation at the request's card
   const OWNERS = { 'product-owner': 'Product Owner', supervisor: 'Supervisor' };
-  async function openRequest({ oracleOpenRequest: to, ref, project }) {
+  async function openRequest(link) {
+    const { oracleOpenRequest: to, ref, project } = link;
+    if (toMain('oracle:request', { oracleOpenRequest: to, ref, project })) return;
     closeDrawer();
     if (to === 'supervisor') window.openSupervisorChat?.();
     else {
@@ -251,6 +256,7 @@
     window.AgentRequest.reveal(ref);
   }
   function follow(target) {
+    if (toMain('oracle:follow', target)) return;
     if (target.kind === 'run') { closeDrawer(); selectRun(target.runId); }
     else if (target.kind === 'issue') {
       closeDrawer();
@@ -268,6 +274,23 @@
       openArtifactsAt({ projectId: '', path: target.path, mock: !!state.runs.get(target.runId)?.run?.mock });
     }
   }
+  // a run's own line (a watch, an action) and the Oracle's settings
+  function openRun(runId) {
+    if (toMain('oracle:run', runId)) return;
+    closeDrawer();
+    window.showRun(runId);
+  }
+  function openSettings() {
+    if (toMain('oracle:settings', null)) return;
+    closeDrawer();
+    showView('settings');
+    showSettingsTab('execution');
+    setTimeout(() => { $('#set-oracle-budget')?.focus({ preventScroll: true }); $('#set-oracle')?.scrollIntoView({ block: 'center' }); }, 100);
+  }
+  window.AgentsWindow?.onNavigate?.('oracle:follow', follow);
+  window.AgentsWindow?.onNavigate?.('oracle:request', openRequest);
+  window.AgentsWindow?.onNavigate?.('oracle:run', openRun);
+  window.AgentsWindow?.onNavigate?.('oracle:settings', openSettings);
   // run ids and #issues in the text become links; links and absolute paths get their target
   function decorate(box) {
     const walker = document.createTreeWalker(box, NodeFilter.SHOW_TEXT, { acceptNode: (n) => (n.parentElement.closest('a, pre') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT) });
@@ -769,23 +792,16 @@
         const undoBtn = t.closest('[data-oracle-undo]');
         if (undoBtn) { undoAction(undoBtn.dataset.oracleUndo); return; }
         const runLink = t.closest('[data-oracle-open-run]');
-        if (runLink) { e.preventDefault(); closeDrawer(); window.showRun(runLink.dataset.oracleOpenRun); return; }
+        if (runLink) { e.preventDefault(); openRun(runLink.dataset.oracleOpenRun); return; }
         const requestLink = t.closest('[data-oracle-open-request]');
-        if (requestLink) { e.preventDefault(); openRequest(requestLink.dataset); return; }
+        if (requestLink) { e.preventDefault(); openRequest({ ...requestLink.dataset }); return; }
         const mute = t.closest('[data-oracle-mute]');
         if (mute) { setWatch(() => api.muteOracleRun({ runId: mute.dataset.oracleMute, on: mute.dataset.on === '1' })); return; }
         const unwatch = t.closest('[data-oracle-unwatch]');
         if (unwatch) { setWatch(() => api.oracleWatch({ ...JSON.parse(unwatch.dataset.oracleUnwatch), on: false })); return; }
         if (t.closest('[data-oracle-night-cancel]')) { or.nightForm = null; render(); return; }
         if (t.closest('[data-oracle-night-off]')) { stopNightWatch(); return; }
-        if (t.closest('[data-oracle-settings]')) {
-          e.preventDefault();
-          closeDrawer();
-          showView('settings');
-          showSettingsTab('execution');
-          setTimeout(() => { $('#set-oracle-budget')?.focus({ preventScroll: true }); $('#set-oracle')?.scrollIntoView({ block: 'center' }); }, 100);
-          return;
-        }
+        if (t.closest('[data-oracle-settings]')) { e.preventDefault(); openSettings(); return; }
         const link = t.closest('[data-oracle-link]');
         if (link) { e.preventDefault(); follow(JSON.parse(link.dataset.oracleLink)); return; }
         const copy = t.closest('[data-oracle-copy]');

@@ -13,6 +13,11 @@
 //   "Open in a window") switches the agent; the agent shown is reported (agents-window:agent).
 // - From the main window: every drawer's [data-agents-window="<id>"] button and Ctrl+Shift+A call
 //   agents-window:open (api.openAgentsWindow({ agent })); the browser UI has no second window.
+// - Links to a screen (a run, an issue, a file, a request, the settings): the window's page has no
+//   shell, so a view asks AgentsWindow.toMainWindow(name, target) first: on the window's page it sends
+//   the target to the main window (agents-window:navigate, relayed by main.js as main-window:navigate)
+//   and answers true; in the main window it answers false and the view opens the screen itself. The
+//   main window runs the handler the view registered with AgentsWindow.onNavigate(name, fn).
 // Test ids: agents-rail (a nav named "Agents"), agents-rail-item (data-agent, data-busy),
 // agents-rail-unread, agents-window-pane, agents-window-header, agent-chat-open-window.
 // Uses app.js globals at call time (esc, api, state); Robots and AgentColors when present.
@@ -117,6 +122,25 @@
     return { select, refresh: paint };
   }
 
+  // ---- links to a screen: from the window's page to the main window ---------------------------------
+  const navigators = new Map(); // name -> the view's handler, run in the main window
+  function onNavigate(name, fn) {
+    if (typeof fn === 'function') navigators.set(String(name), fn);
+  }
+  /** True when the link was forwarded to the main window (the window's page); false in the main window. */
+  function toMainWindow(name, target = null) {
+    if (!isWindowPage()) return false;
+    const send = root.api?.navigateMainWindow;
+    if (typeof send !== 'function') return false;
+    try { send({ name: String(name), target }); } catch (e) { console.error('[agents-window] navigate:', e?.message || e); }
+    return true;
+  }
+  function navigated(m) {
+    const fn = navigators.get(String(m?.name || ''));
+    if (!fn) return;
+    try { fn(m.target); } catch (e) { console.error('[agents-window] navigate:', e?.message || e); }
+  }
+
   // ---- from the main window: the buttons and the shortcut ------------------------------------------
   function openWindow({ agent } = {}) {
     const call = root.api?.openAgentsWindow;
@@ -139,7 +163,8 @@
     root.document.addEventListener('DOMContentLoaded', () => {
       // the browser UI (npm run serve) has no second window: its buttons go
       if (root.api?.platform === 'browser') root.document.querySelectorAll('[data-agents-window]').forEach((b) => b.remove());
-      if (!isWindowPage()) return;
+      // the main window: the links the Agents window forwards open their screen here
+      if (!isWindowPage()) { root.api?.onMainWindowNavigate?.(navigated); return; }
       root.document.body.classList.add('agents-window-page');
       const el = root.document.createElement('div');
       el.id = 'agents-window-root';
@@ -149,5 +174,5 @@
     });
   }
 
-  root.AgentsWindow = { changed, isWindowPage, mount, open: openWindow, register, select, selected: () => aw.selected };
+  root.AgentsWindow = { changed, isWindowPage, mount, onNavigate, open: openWindow, register, select, selected: () => aw.selected, toMainWindow };
 })(typeof window !== 'undefined' ? window : globalThis);

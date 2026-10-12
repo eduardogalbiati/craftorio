@@ -46,6 +46,10 @@ const DESKTOP = [
   { channel: 'agents-window:open', method: 'openAgentsWindow', params: 'options', desktop: 'The Agents window' },
   { send: 'agents-window:agent', method: 'setAgentsWindowAgent', params: 'options', desktop: 'The Agents window' },
   { event: 'agents-window:show', method: 'onAgentsWindowShow' },
+  // a link in the window's chats (a run, an issue, a file, a request) opens its screen in the main
+  // window: the window sends the target, main relays it to the main window (AgentsWindow.onNavigate)
+  { send: 'agents-window:navigate', method: 'navigateMainWindow', params: 'target', desktop: 'The Agents window' },
+  { event: 'main-window:navigate', method: 'onMainWindowNavigate' },
 ];
 
 // Account: sign-in with an OAuth provider (system browser) and the free trial. Declared even when

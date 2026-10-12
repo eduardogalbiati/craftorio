@@ -193,8 +193,10 @@ Read this before changing anything in `src/renderer/`.
   "Nothing produced yet" with a "Show all (n)" button when only process files exist, no column when
   the run has no file; the filter lives in the row's `rl.arts` entry and resets when the card is
   reopened. **Repository** (`runRepositoryColumn`, `run-card-repository`) reads `run:diff` once per
-  open card (`ensureRunRepo`, `rl.repo`; a running run's commits again when a run event refreshed
-  its row; never `run:diffFile`): the branch (`run-card-repo-branch`) and its base, a state badge
+  open card with its `summary` option (`ensureRunRepo`, `rl.repo`: the commits and the files' counts,
+  no patch; a running run's commits again when a run event refreshed its row; never `run:diffFile`).
+  A run merged locally whose branch the engine deleted still lists its commits (the service reads
+  them from the `worktree.merged` commit). It shows the branch (`run-card-repo-branch`) and its base, a state badge
   (`run-card-repo-state`: merged or pushed from the PR, merged locally at the merge commit, not
   merged), the totals (`run-card-repo-totals`), the commits newest first (`run-card-commits`,
   `run-card-commit` buttons named by hash and subject, five then `run-card-commits-more`), and
@@ -303,7 +305,13 @@ way) and `AgentsWindow.changed()` when its state changes. A pane is a second sur
 own state through the shared chat (the Oracle's `'window'` surface, the Product Owner's and the
 Supervisor's `winChat`): one conversation, two places, a question sent in one shown in the other as
 a turn started elsewhere (`setTurn`), and across the two real windows through the service's history
-and pushed events. The window never starts a session of its own and never answers a gate.
+and pushed events. The window never starts a session of its own and never answers a gate. A link to
+a screen in its chats (a run, an issue, a file, a request, the Oracle's settings) opens in the main
+window: the view asks `AgentsWindow.toMainWindow(name, target)` first (on the window's page it sends
+`agents-window:navigate`, which `main.js` relays to the main window as `main-window:navigate` and
+brings it to the front; in the main window it answers false) and registers the handler the main
+window runs with `AgentsWindow.onNavigate(name, fn)` (the Oracle's `oracle:*`, the Product Owner's
+`product-owner:*`).
 `npm run screenshot -- --view backlog --agents-window oracle|product-owner|supervisor` captures it
 (`--size 700x800` for the collapsed rail, `--theme` for the themes).
 
