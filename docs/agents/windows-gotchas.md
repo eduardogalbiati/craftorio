@@ -37,7 +37,7 @@ Use `canonicalPath`/`samePath` from `src/engine/worktree.js`.
   é muito pequeno para que esta operação seja concluída` / "The paging file is too small for this
   operation to complete", `spawnSync git UNKNOWN`, exit code 3221225794 (0xC0000142, a DLL that could
   not initialize), and waits that time out. A suite round that fails while the guard recorded an
-  incident reruns by itself (engine.md, "Memory guard").
+  incident reruns by itself (engine/agents-and-steps.md, "Memory guard").
 - A failing `assert` serialises both operands: a fake DOM node or a `vm` sandbox drags the whole
   graph into the message (the #274 cause). Compare primitives (`skills/testing-principles`).
 

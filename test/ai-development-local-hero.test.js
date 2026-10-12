@@ -419,7 +419,9 @@ test('ai-development-local-hero (#151): a failed reviewer fails code_review even
 });
 
 test('ai-development-local-hero (#151): the docs name the ui_reviewer, the code_review fan-out and the design-system skill', () => {
-  const engine = fsRead('docs', 'agents', 'engine.md');
+  // the engine docs are one file per topic (#251), engine.md being their index
+  const topics = path.join(__dirname, '..', 'docs', 'agents', 'engine');
+  const engine = fs.readdirSync(topics).filter((f) => f.endsWith('.md')).map((f) => fsRead('docs', 'agents', 'engine', f)).join('\n');
   assert.match(engine, /ui_reviewer/);
   assert.match(engine, /code_review[\s\S]{0,300}(fan-out|parallel)|(fan-out|parallel)[\s\S]{0,300}code_review/i);
   assert.match(fsRead('docs', 'agents', 'renderer.md'), /design-system/);

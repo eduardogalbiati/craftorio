@@ -1,0 +1,255 @@
+# Agents and steps
+
+What agents and steps declare: skills, fan-out, step types (screenshots, suite, test ids), transitions, inputs, agent options, and the events and guards around a turn.
+
+- `agents.<name>.skills` (system prompt, 1st turn of a session) and `steps[].skills` (step prompt);
+  names can be templates (`"unit-test-writer-{{ inputs.language }}"`).
+  Skill frontmatter (src/skills.js): `uses: [a]` injects skill `a` first; `role_sections: [test_writer]`
+  (#300) sends a `## Test writer: …` (or `## 2. Test writer: …`) section only to the agent named
+  `test_writer`, the others get the skill without it; `reads: [code-review]` (#300) grants read access to
+  that skill's folder and lists it, without injecting its text (self-review reads `rules/<language>.md`).
+- `agents: [a, b]` on a step = parallel fan-out → `{ results, succeeded, failed }`, `min_success`.
+  `agent_when: { <agent>: <expr> }` (#151) leaves an agent out of a visit when its expression is
+  false (output `skipped`, `min_success` capped at the agents that run); `required_agents: [a]`
+  fails the step when one of them did not respond, whatever `min_success` says (`runFanOut`).
+  ai-development-local-hero's `code_review` is a parallel fan-out of the `reviewer` and the
+  `ui_reviewer` (read-only, Sonnet, skills `ui-conventions` + `design-system`): `min_success: 1`,
+  `required_agents: [reviewer]` (a failed UI Reviewer never blocks the run), the `ui_reviewer`
+  only on a round whose UI change was just captured by `developer_screenshots` (which runs after
+  `develop` in every mode for a UI change: screenshots listed or files under `src/renderer/`).
+  Transitions read `output.results.reviewer.verdict`; code findings and blocking
+  `output.results.ui_reviewer.ui_findings` go back to `develop` in one turn, the UI once
+  (`vars.ui_review_returned`), and the fix round is reviewed again before test/suite/E2E/build.
+  Its `evidence` step only collects evidence (no `ui_findings`, no way back to develop).
+- `save_as` (string or list, relative to the run folder; `{ path, content }` saves one field), `on_error: <step>`;
+  `supervise: false` (#290): a failing agent step goes straight to its `on_error`, without the supervisor.
+- A **transition** can also take `on_error: <step>`: when its `action`, `merge: local` or `precheck` fails, the run goes there instead of failing, with the error in the template context as `action_error` (`{ step, message, at, check?, head?, supervisor?, diagnosis? }`; `head` = the worktree's HEAD after the failure, which a failed local merge leaves as it was: the last checked commit). `recoverFromActionError` in workflow.js.
+  - `recover: [steps]` (needs `on_error`; agent steps only): the supervisor decides first (`superviseActionError`, `supervisor.actionSchema(recover)`: `goto` one of them | `escalate`; `goto` first = the mock's default). `goto` → that step, `action_error.supervisor = { goto, explanation, instruction, record }` (the step's prompt includes it); `escalate`, an invalid goto, no supervisor or no `max_total` left → `on_error` with `action_error.diagnosis`. Event `supervisor.decision` with `kind: action_error` and `record` ("went back to X at HH:MM UTC because …"), a `supervisor` row in `decisions.tsv`; `runs.js` exposes the latest record as `recovery` (Backlog card badge).
+  - `precheck: { probe, target }` (or `true` = the step's `check`): `runCheck` runs the probe right before the action; anything but `passed` throws (the merge is not attempted). `pr_mergeable` (probes.js `mergeableState`): passed | conflict | failed | pending | blocked | behind | merged | closed; a probe that cannot run = `error`.
+  - A transition with `precheck` or `merge: local` runs check + action + merge inside `merge-queue.js` `serialize(key)` (key = the PR/MR's `host/repo`, else the worktree's repo): one merge at a time per repository across the process's runs; then `notifyMerged`.
+  - `set: { name: value }` (values rendered against the step's scope) → run variables `vars.<name>` (not restored on resume). software-development and local-hero use `vars.recheck == 'resolution'` to scope code_review/test/verify after a conflict.
+  - Simulation: `mockSequences.action_errors: { step: n }` fails the first n actions/merges of that step; probe states per check with `mockSequences.probes: { '<step>:check': [...], '<step>:precheck': [...] }` (default `pr_mergeable: ['passed']`).
+- A **human gate** can take `report:` (#290): a Markdown template (release.yaml: the release summary) put first in the
+  message and sent apart as the event's `report`; the Run screen and the run chat render it above the rest. '' (no
+  report) leaves the message as it is.
+- A **human gate** can take `check: { probe, target, on_fail?, recover? }` (`openGate`): the probe runs right before it opens (`check` in the message's template context: `{ state, detail, target, checked_at }`), and again on every `merged` notification of another run for the same key while it is open. Not `passed`/`error` with `on_fail` → the gate is not opened / is withdrawn (`approval.resolved` with `withdrawn: true, by: 'check', reason`) and the run takes `recoverFromActionError` with `{ on_error: on_fail, recover }`. Nothing ever approves a gate for the person.
+- A **screenshots step** (`type: screenshots`, no agent, #144; `runScreenshots` → `src/engine/screenshot-step.js`): `from: <step>` (whose output lists `screenshots: [{ name, caption, args }]`, `args` = the options of the project's screenshot command), `folder` (default the step id), `base` (template, the ref of the "original" side; default the worktree's base ref), `timeout` per shot (default 3m). It runs `npm run screenshot -- <args> --out <run_dir>/evidence/<folder>/round-<visit> --name <name> --side modified`, then the same with `--side original --ref <base>`, with the agents' environment (simulation only, scratch workspace); at most 8 entries, `--out/--name/--side/--ref/--caption` in `args` are refused. It never fails and never calls the supervisor: an empty list, a simulated run (`mock`: nothing is launched), no worktree, no `screenshot` script in the worktree's package.json, an invalid entry, a timeout or a crash end up in its output `{ kind: 'screenshots', folder, round, dir, taken, screens, screenshots: [{ path, caption, side }], errors: [{ name, side?, error }], reason, message }` (`message`: "N screenshots of M screens taken in round n" or "No screenshots: <reason>"). software-development and local-hero run `developer_screenshots` (from `develop`, folder `developer`) on every way into `developer_check`, whose message shows `message`; the gate's Artifacts panel shows that round only (`lastCapture` in gate-panel.js).
+  - **The screenshot slot (#199)**: at most one Electron screenshot process at a time on the machine, across all runs and apps. Each capture of the step takes the machine-wide slot (`src/engine/machine-slot.js`, `acquireSlot('screenshot')`: a file `<os tmp>/multiagent-orchestrator/locks/screenshot.slot` with pid, host and token, or under `MULTIAGENT_LOCKS_DIR`) and passes its token to `npm run screenshot` (`MULTIAGENT_SCREENSHOT_SLOT`), which then does not wait for it. While another run holds it the step emits `screenshots.waiting` (`holder_pid`) and a log line "waiting for the screenshot slot". `scripts/screenshot.js` takes the same slot itself (`acquireSlotSync`), so an agent's `npm run screenshot` (evidence, test writer, E2E runner) waits too and prints the same line. A slot whose process is gone, or held over 15 minutes, is freed; a wait over 20 minutes fails that capture.
+- A **suite step** (`type: suite`, no agent, #177; `runSuiteStep` → `src/engine/suite-step.js`): the
+  project's whole test suite, once per visit, run by the orchestrator instead of an agent (an agent
+  running it kept its turn and its 100k+ context open for minutes, several times per run).
+  `command` (template; empty → `detectTestCommand` from the worktree's files: package.json's test
+  script → `npm test`, go.mod, pom.xml/mvnw, build.gradle/gradlew, *.sln/*.csproj, pyproject.toml…),
+  `timeout` (default 30m). It runs in the worktree with the agents' environment, its whole output in
+  `<run_dir>/logs/suite-<visit>.log` (`file.saved`), and reads the failing tests from it
+  (`parseFailures`: node:test spec/TAP, Jest, pytest, go test, dotnet test, Maven). Output `{ kind:
+  'suite', status: pass | fail | blocked, round, command, log, exit_code, duration_ms, timed_out,
+  failures: [{ test, file, error }], preexisting, reason, message }`; the run's known pre-existing
+  failures (`notePreexistingFailures`) are moved to `preexisting` and never fail it; `blocked` = it
+  could not run (no worktree, no command). It never throws and never calls the supervisor: the
+  transitions route it. The other failures are checked on the base by the step itself (#211): their
+  test files run in the base checkout (`suiteBase`, prepared on demand, so `run_existing`/`off` runs
+  get it too), cached per base commit + file in `cache/base-tests/`; those failing there too become
+  `preexisting_failures` (the run's list, the summary, the workspace's `failing-on-main.json`). The
+  suite gets a shell-like env (`suiteEnv`: no Electron/npm/inspector variables, no scratch
+  workspace, its own `MULTIAGENT_LOCKS_DIR`, #210); without a step `timeout`, the timeout is 3× the
+  median of the project's recent durations (`cache/suite-durations.json`, min 10 min, 30 min with no
+  history), and a timeout names the test files still running. Filter `suite_failures`
+  (`{{ steps.suite.output | suite_failures }}`): the message plus one line per failing test, for a
+  prompt or a gate. Simulation: `mockSequences.suite: { <step>: ['fail', 'pass'] }` per visit
+  (default pass; `preexisting` = only the run's pre-existing failures fail, so it passes; `base` =
+  the failures fail on the simulated base too, a pass; `mixed` = 2 failures, one on the base, a
+  fail; `blocked`), a simulated log is written.
+  - **`scope: affected`** (#212, default `full`): each visit runs only the affected test files
+    (`affectedSelection` → `src/engine/affected-tests.js`, plus the files that failed in an earlier
+    round, `suiteFailedFiles`), the command filtered to them (`filteredCommand`); when they pass and
+    the whole suite has not passed yet in the run (`fullSuitePassed`), the whole suite runs right after
+    (log `suite-<visit>-full.log`, the affected run in `output.affected`). Output adds `scope` (full |
+    files), `selection` ({ mode, files, reasons, why }: "imports src/roadmap.js"), `passed`, `failed`;
+    `summary.suite_runs.affected` counts the affected runs. Simulation: two simulated files.
+  - **Test requests** (#212, `serveTestRequests`): an agent turn that ends with a ```` ```run-tests ````
+    block (`parseTestRequest`: test files, or `affected`) has them run by the engine in the agent's
+    working folder (log `logs/tests-<step>-<n>.log`), then the agent resumes in the same step with a
+    summary only (`testResultsPrompt`: counts, failures with their first 3 lines, the log's path), at
+    most 3 per turn; `summary.suite_runs.requests` counts them.
+  - **`full_suite: warn`** on an agent step: a tool call of its agent that starts the whole suite
+    (`isFullSuiteCommand`: `npm test`, `pytest`, `go test ./...`, `dotnet test`, `mvn test`, the
+    suite step's own command…) is noted, not refused: a `log` warn `kind: full_suite_by_agent`.
+  - `summary.suite_runs: { engine, agents }`: whole-suite runs by suite steps and by agents (the
+    measure of #177).
+  - **`files` / `expect: red`** on a suite step (#220): only the listed test files (a template such
+    as `"{{ steps.acceptance_tests.output.tests_added }}"`; missing files are left out, log
+    `logs/<step>-<visit>.log`), never the whole suite after them. `expect: red` makes it a red check
+    (`redCheckOutput`, `suiteStep.redCheck`): `red_check { red, green, partly_green, broken }`,
+    status `broken` when a file cannot run (else `pass`), no base check, `affected_tests` /
+    `affected_reasons` from `relatedTests` (the existing tests reaching the sources the new tests
+    import) and a `message` for the next prompt. Simulation: default red; `mockSequences.suite`
+    `pass` = all green, `broken` = all broken.
+  - **`coverage: true`** on a suite step (#225; set on the bundled development workflows' `suite`):
+    a `node --test` command runs with `--experimental-test-coverage` (`suiteStep.coverageCommand`);
+    an npm script (`npm test`, `npm run <name>`, with `-- <files>`) runs its `<name>:coverage`
+    script when package.json has one (this project: `npm run test:coverage`), else a script that is
+    a plain `node --test …` runs inlined with the flag; any other command runs without coverage. Whenever the output (or the #219
+    human log) has node's coverage table, `coverage/coverage-summary.md` (totals and the changed
+    files' coverage, `src/coverage-summary.js`) is saved as a Tests artifact and the output gets
+    `coverage { lines, branches, functions, files, path }`. No model call.
+  - **`result.md`** (#225): `finish` writes the run's result summary (`src/result-summary.js`: status,
+    issues, commits, suite results, coverage, screenshots, key artifacts) before `workflow.finished`;
+    it is the run's first artifact (category `result`, `src/artifact-categories.js`).
+  - **New elements** (#185): a screenshots step's original side that failed only with
+    `screenshot: nothing matches <selector>` while its modified side was taken goes to
+    `new_elements`, not `errors`; the message counts them (`2 new elements (no original)`) and
+    `recordEvidence` keeps the step's outcome in the evidence manifest (`captures`).
+  - **`protect_files`** on an agent or an agent step (#220, the step's wins): a file list template
+    rendered before each turn; `sendToAgent` snapshots exactly those files (`testPaths.snapshot`
+    with the paths as patterns) and refuses a turn that changes one, like `edits_tests: false`
+    (`protectedRefusedPrompt`, event `tests.refused` with `protected: true`, log `kind:
+    protected_refused`, the turn fails after 2 retries), whatever `edits_tests` says.
+  - **`test_map: true`** on an agent step (#219): `writeTestMap` writes the code → tests map of the
+    agent's checkout to `<run_dir>/test-map.md` before each turn and passes its path as
+    `{{ test_map }}`.
+  - Agent mode (#219): `suiteEnv` sets `MULTIAGENT_AGENT_MODE=1`, and each run gets
+    `MULTIAGENT_TEST_HUMAN_LOG=<log>.human.log`; a runner that knows them (this project's
+    `scripts/test.js`) prints one failures-only JSON line, read first by `parseFailures` /
+    `parseCounts` (output `human_log`, `file_counts`, failures with `line` and `kind`).
+  - software-development and local-hero: `test` (test writer, focused tests) → `suite` → build; a
+    failing suite goes back to the test writer (its prompt gets the failures and the log path when
+    `previous_step == 'suite'`), 2 rounds, then `test_failed`.
+  - **`commit_tests: true`** on a single-agent step (the test writer's `test` step in both
+    development workflows and test-batch, #209): after the turn (before the suite, the build and the
+    local merge) `commitLeftoverTests` lists the run worktree's local changes (`localChanges` in
+    test-paths.js; no worktree = nothing to do). `committed: false` in the answer → a `log` warn
+    `kind: tests_uncommitted`. All of them test files (`tests_paths`) → the engine stages and
+    commits them (`Tests for #<issues> (committed by the orchestrator)`), event
+    `tests.autocommitted { files, commit }`, a `log` warn `kind: tests_autocommitted`, the output
+    gets `committed: true, autocommitted`, `summary.tests_autocommitted`. Other files changed too →
+    never committed: the step goes back to its agent once with both lists (`retry`, no new note),
+    then, if non-test files are still changed, a gate (Continue / Stop the run); test files left
+    after it are committed as above.
+- **`tool_timeout` (#178)**: a tool result cut by the tool's own timeout (`isToolTimeout` in
+  providers.js: "Command timed out after …", Claude Code's Bash default is 120 s without a
+  `timeout`) is a `log` warn `kind: tool_timeout` with the command and `timeout_ms` (null = the
+  default), counted in `summary.tool_timeouts`. Simulation: `mockSequences.tool_timeouts: { <step>: n }`
+  (the first n answers of that step have one test command cut at the default).
+- A **test id step** (`type: test_ids`, no agent, no model call, #246; `runTestIdsStep` →
+  `src/engine/test-ids.js`): the static `getByTestId('…')` ids of the E2E step definitions (`steps`,
+  default `features/steps`) that the renderer's source (`renderer`, default `src/renderer`) does not
+  contain; both folders are repository-relative templates. Output `{ kind: 'test_ids', status: pass |
+  missing | skipped, missing: [{ id, files }], steps, renderer, round, message }`; `skipped` when the
+  project has no step definitions. The same rule backs the `missing_test_ids` filter
+  (`{{ worktree_dir | missing_test_ids }}`, one line per id) and test/e2e-playwright.test.js.
+  ai-development-local-hero runs it as `testid_check` after each develop commit when the scenarios
+  were written first (`e2e_scope: scenarios`): missing ids go back to develop at most twice
+  (`vars.testid_returns`), then develop's own routes follow.
+- **Ask for changes through the test writer (#247)**: in ai-development-local-hero, `developer_check`'s
+  `changes` goes to `acceptance_tests` (`vars.criteria_triage`), whose prompt quotes the owner's request
+  and asks for a triage: `criteria_changed: false` → develop; `true` → `red_check` on `tests_changed`
+  only, then develop. The developer's prompt gets the request and the test writer's `criteria_note`.
+- **Test inputs (#203)**: the development workflows' `unit_tests` (write_and_run | run_existing |
+  off) and `e2e_tests` (off | write | write_and_run) route the transitions (code_review/human_review
+  → test, suite or build; test → suite or build; suite failures → test writer or developer) and
+  the test writer's skills and prompt. `testsPlan` (workflow.js) turns them into `ctx.tests_plan`
+  ("Unit tests: Off (workflow default). E2E tests: Write (chosen for this run).": a value differs
+  from the workflow's `default` = chosen for this run), and `tests_plan: [{ input, label, value,
+  value_label, source }]` in `workflow.started` and the summary (runs.js `testsPlan`, the Run
+  screen's badges). The gates and the verifier's prompt show it; nothing off is reported as tested.
+  `test-batch.yaml` writes the skipped tests later, for a range of local commits, in one session.
+- **`base_worktree: true`** on an agent step (#198; needs `orchestrator.worktree`): before each visit the engine prepares the run's checkout of the base (`<worktreesDir>/<run_id>-base`, detached at the current base, dependencies linked from the shared cache) and gives it as `base_worktree_dir` (empty without a worktree), for the test writer's pre-existing-failure check. See [worktrees.md](../worktrees.md).
+- **`deps.ready`** (#198): the run's dependencies from the shared cache, after `worktree.ready`, for the base checkout and after an agent step that changed the lockfile (`{ for: worktree|base, after, status, hit, lockfile, manager, key, entry, seconds, waited, reason }`; nothing when the folder already links its key). Agents with commands get a line about it in their command guide (`depsGuide`). See [worktrees.md](../worktrees.md).
+- **Memory guard** (#276, `src/engine/memory-guard.js`; Settings › Execution, `settings.memoryGuard`
+  `{ enabled, limitPercent: 25, floorPercent: 10 }`): a deterministic watcher, no AI call. While a
+  real run's agent turn, `suite` / `e2e` execution or screenshot capture runs, its process tree is
+  sampled every 5 s (Windows: committed bytes through one long-lived PowerShell helper; Linux:
+  /proc; macOS: one `sh` loop around `ps`) and a descendant over the limit is stopped with its
+  children: a `process.killed` event `{ pid, command_line (300 chars), bytes, limit_bytes, step_id,
+  session }`, the agent's next prompt says "The orchestrator stopped `<command>` at <n> GB for
+  passing the memory limit", a suite's `message` names it, and the second stop of the same command
+  in a step carries `notify: true` (one notification). Never stopped: the app, the agent CLI's root
+  process (a `memory_over_limit` log instead), anything outside the run's tree. A sampler that fails
+  logs `memory_guard_off` once and the run goes on. Before each suite / e2e execution the step waits
+  while free memory (Windows: free commit) is under the floor, at most 10 min (`memory_hold` log,
+  `memory.hold` event); a new real run is refused meanwhile (`memoryHold` in
+  `src/service/areas/runs.js`; the roadmap and the queue hold the item and a 30 s timer dispatches
+  again when memory recovers). A round that fails while the guard recorded a stop or a low-memory
+  period in its time window reruns in the same visit (`<log>-env.log`, output
+  `environment_reruns`, at most 2): only the last result is routed, so it uses no visit of the
+  suite → test transition. A simulation has no guard (`run.memoryGuard` null) unless one is given
+  (`new WorkflowRun({ memoryGuard })`); `mockSequences.suite.<step>` is indexed by execution (a visit
+  plus its environment reruns). The Night watch records `process.killed` and a hold over 5 min as a
+  `memory` incident and takes no action.
+- **Self-healing** (#278, `settings.oracle.selfHealing`, default off): the Oracle's watch stays on day
+  and night with no end time (`oracle-actions.watchState`: `{ active: true, until: null,
+  selfHealing: true }`; off, it is the Night watch as before). Under it an action whose permission
+  is checked runs alone by day as at night (`nightDecision`: the permission, the kind's `night`,
+  `LOOP_CAP` per item, counted per UTC day: `watchSince`); the others stay cards in their owner's
+  inbox. In the inboxes (`agent-inbox.waitReason`) that rule applies to what the Oracle's model
+  asks: a kind no permission covers, and the owner's own requests, keep the daytime rules. Detectors in code (`night-watch.detectSelfHealing`, pure functions over run events, no
+  model call until one fires): `memory` (`process.killed`, or a `memory.hold` over 5 min),
+  `cost-gap` (a `session.message_received` with `cost_usd` 0 and tokens, or below a `usage` stream
+  item of the same turn; never a simulated run, nor a CLI that reports no cost: `cost_usd` null),
+  `environment` (a test file in the `failures` of a
+  suite `step.finished` whose base check ran, in two runs of different issues within one hour) and
+  `repeat` (the same command failing, a `tool_call` whose `tool_result` has `is_error`, or stopped
+  by the memory guard, three times in one step). The service (`channels/nightwatch.js`) keeps a
+  small per-run buffer of the events they read, logs each finding once per run and kind
+  (`oracle.detected` with `evidence`) and wakes the Oracle with it (`wake({ findings })`, batched
+  over 30 s; in the wake-ups' scope only: not when `wakeScope` is `off`, nor for a muted run): the Oracle asks the Product Owner to file an issue in
+  the run's project and append it to the roadmap (`issue.file`, `roadmap.add`: the `file-issue` and
+  `append` permissions), never edits code, and only reports a cause in this app when the app's
+  repository is not a project of the workspace. Those turns count in the Oracle's daily budget;
+  while it is paused the findings are still logged and the owner gets one notification. A human
+  gate is logged `oracle.escalated`, never answered; nothing in `NEVER_ALLOWED` gains a permission.
+  The report has one window per Self-healing day (`selfHealingDays`, `selfHealingMetrics`).
+- `orchestrator.limits.max_total_context` (e.g. `20M`): the context the run's agents read (input + cache, summed over every turn). Past it, `contextGate` pauses the run before the next agent turn with a `<step>:context_limit` gate (choices `continue` = allow another block of the same size, `stop` = cancel; the worktree is kept). A turn is never cut; `limit.exceeded` is emitted with `paused: true`.
+- `groups: [{ name, steps }]` (optional, top level): progress views only, the graph ignores it;
+  `validateGroups` in `loadWorkflow`. Recorded in `workflow.started` and `summary.groups`, with
+  `summary.progress` = the engine's `StepTrail` (`src/renderer/run-progress-model.js`).
+- Inputs with `type: run` take another run's id: empty/`latest` → the most recent run of another
+  workflow; an id with no `runs/<id>/events.jsonl` is refused when the run is created (the UI shows
+  it before anything starts). Used by `run-retrospective`.
+- Inputs with `type: boolean` take true/false; `resolveInputs` also accepts their text ("true",
+  "false", "yes", "no", "1", "0", "": saved inputs, the CLI's `--input`), so a condition reads
+  `inputs.x`, not `inputs.x == 'true'`. UI-only keys the engine ignores (#116, rendered by
+  `src/renderer/workflow-inputs.js`): `label` (else derived from the key), `options` (`{ value:
+  label }` for an enum), `show_if` (`"mode == 'validated'"`: hidden while false, value kept).
+- Images attached to inputs (#129): `attachments: { <input>: [path | { path, name }] }` on
+  `run:start` / `WorkflowRun` (`--attach task=<file>` in `scripts/run.js`). Checked in the
+  constructor (limits in capabilities.md, "Images"), copied into `<run_dir>/attachments/<input>/`
+  at start, recorded in `workflow.started.attachments` (a resume copies them again). Every turn of a
+  step whose prompt template uses `inputs.<input>` gets them (`stepAttachments`, delegations
+  included); `session.message_sent` lists them. Simulations: the mock provider lists them in a
+  thinking item and never opens them.
+- Agent `provider`/`model`/`effort` can be templates over the inputs (resolved once in the constructor);
+  `cli_args` can be a map keyed by provider; providers' `effort_args` get `{{ effort }}`.
+  An agent's `effort` reaches its CLI **only** through its provider's `effort_args` (claude
+  `["--effort", "{{ effort }}"]`, codex `["-c", "model_reasoning_effort={{ effort }}"]`, grok
+  `["--reasoning-effort", "{{ effort }}"]`); an effort that resolves to empty adds no flag and the
+  session records `effort: null` (e.g. `developer_effort: default`, #286). An effort on a provider
+  without `effort_args` is never silent (#286): `loadWorkflow` returns it in its non-enumerable
+  `warnings` (the Workflows card and the Start drawer show it; a test fails for a bundled workflow)
+  and the run logs it as a `warn` at start (resolved providers, so templated ones are checked too).
+  `max_visits` / `loop.max_iterations` accept templates. `agents.<name>.enabled` (bool or template)
+  drops an agent from the run (`dropDisabledAgents`: removed from fan-outs, `min_success` capped;
+  a single-agent step on it throws). ai-arena's five contender slots use it (`provider: none`).
+- `persona: random` (agent): one of the user's agents (Agents menu, `personas` option from the service)
+  is picked when the run starts; its prompt goes before the agent's `system_prompt`, its skills are added
+  (missing ones left out with a warn). Recorded as `personas` in `workflow.started`; `resumeSpec` keeps the pick.
+  Written by the visual builder's "random agent" desk.
+- `capabilities` (agent, overridable per step) and `isolation: false`: see [capabilities.md](../capabilities.md).
+- `color: "#RRGGBB"` (agent, #224): the agent's colour in the run chat and the runs list, over its role's
+  fixed colour (`src/renderer/agent-colors.js`); the engine ignores it, `workflows:list` passes it on.
+- `display: "Final verification"` (agent or step, #245, optional, a string of 1 to 40 characters,
+  `validateDisplay` in `loadWorkflow`): the name the screens show instead of the key or id; without it
+  `displayName(id)` (`src/renderer/display-name.js`: `verify_change` → "Verify change"). `workflow.started`
+  records `display: { agents: { key: name }, steps: { id: name } }` for every agent and step
+  (`displayNames()`), so a past run keeps its own version's names; `readRun` gives the renderer
+  `stepNames` and `agentNames` (the Agents menu's own names win). Ids stay in tooltips and details;
+  prompts, events, transitions and files keep the ids. The Workflows editor edits it ("Display name").
+- `edits_tests: false` (agent or `defaults`, overridable per step, e.g. `resolve_merge: true`) + workflow-level
+  `tests_paths` (globs; default `TESTS_PATHS` in `src/engine/test-paths.js`): `sendToAgent` snapshots the
+  working dir before every turn of that agent (steps and delegations) and, after it, lists the test files the
+  turn changed (new non-merge commits not on `refs/heads/<base>` / `origin/<base>`, uncommitted and new
+  untracked files, only those still different from the snapshot). Any → `tests.refused` event + warn, the turn
+  is sent back with the list (`testsRefusedPrompt`), twice at most, then it throws (supervisor / `on_error`).
+  Not a git work tree → no check. Claude also gets `--disallowedTools Edit(<glob>)`.
+- `providers.<p>.skill_args` (claude `--add-dir {{ skill_dir }}`), `prompt_file_arg` (grok).

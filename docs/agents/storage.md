@@ -6,7 +6,7 @@ Read this before touching run listings, the Backlog queue, pending gates, notifi
 ## Files are the source of truth
 
 - `runs/<id>/` (`events.jsonl`, `summary.json`, `meta.json`, `sessions/`, `handoffs/`, `decisions.tsv`,
-  `evidence/<step>/round-<n>/` screenshots with `evidence/manifest.json`, see engine.md,
+  `evidence/<step>/round-<n>/` screenshots with `evidence/manifest.json`, see engine/evidence.md,
   `attachments/<input>/` and `attachments/<gate>-feedback/` images given to agents (#129),
   `supervisor/attachments/` the images of questions about the run),
   `backlog/<project>.json`, `projects/`, `agents/`, `skills/`, `workflows/`, `pipelines/` (#135), `settings.json`,
@@ -82,7 +82,7 @@ Read this before touching run listings, the Backlog queue, pending gates, notifi
   as `raw` items of `session.stream` and records its highest total once; `summary.json` carries
   `turn_cost: 'max_result'`. A per-turn run without it is read through its `usage` stream items
   (`src/run-costs.js`, `src/runs.js` `fromEvents`); the files are never rewritten. The memory guard
-  writes `process.killed` and `memory.hold` events (engine.md, "Memory guard").
+  writes `process.killed` and `memory.hold` events (engine/agents-and-steps.md, "Memory guard").
 - Never make the database the only copy of something a run produced.
 
 ## Issues: the git platform is the source of truth (#168)

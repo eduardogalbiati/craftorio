@@ -41,7 +41,7 @@ from the bundled workflows: it was documentation only. The run log gets one
 | Sub-agents | `Agent` and `Task` (the tool's current and older name; `--tools` drops names the CLI doesn't know) only with `subagents: true`; the `capabilities:` log line says `subagents: Agent/Task tool offered` | n/a (the log line says `subagents: not offered by Codex`) | `--no-subagents` unless `subagents: true` |
 | MCP | `--mcp-config` with the declared servers + `mcp__<name>` allowed | declared servers only | not passed (noted in the log) |
 | Test files (`edits_tests: false`) | `--disallowedTools "Edit(<glob>) …"` over `tests_paths` (a bare name gets `**/`); Bash can still write them | not refused (noted) | not refused (noted) |
-| Request budget (`max_requests`, #302) | `--max-turns <n>` (unless the provider or `cli_args` set one); an `error_max_turns` result is a cut, wrapped up and continued (engine.md, "Sessions and handoff notes") | **not enforceable** (noted in the `capabilities:` log line); the turn runs to its end | **not enforceable** (noted) |
+| Request budget (`max_requests`, #302) | `--max-turns <n>` (unless the provider or `cli_args` set one); an `error_max_turns` result is a cut, wrapped up and continued (engine/sessions-and-handoff-notes.md) | **not enforceable** (noted in the `capabilities:` log line); the turn runs to its end | **not enforceable** (noted) |
 | Images (#129, **not yet confirmed with a real call**) | `--add-dir <attachments folder>` + `Read` added to a restricted `--tools` (read-only agents and the tool-less Supervisor chat included) + the "Attached images" block with the absolute paths | not enabled until a real call confirms it: the block with the paths only, plus the same warning as Grok. Once `codex exec --image` is confirmed, `IMAGE_INPUT['codex-cli'] = 'flag'` passes `--image=<file>` per image (the `=` form: `--image` takes several values and would swallow `resume` or the stdin `-`) | no known way: the block with the paths only, plus one `log` `kind: attachments_unsupported` warning per step and agent; the step does not fail |
 
 Images row: `src/engine/providers.js` (`IMAGE_INPUT`, `cliInvocation`). Limits, checked by
@@ -53,7 +53,7 @@ each with one small PNG and "Describe this image in one sentence", with a read-o
 agent; then update the row (and `IMAGE_INPUT` if Grok turns out to read images, e.g. with `read_file`).
 
 Whatever the CLI, the engine checks the turn's changes afterwards and sends a turn that touched
-test files back (see `edits_tests` in [engine.md](engine.md)). The `Edit(...)` deny rules were
+test files back (see `edits_tests` in [engine/agents-and-steps.md](engine/agents-and-steps.md)). The `Edit(...)` deny rules were
 not tried against a real Claude CLI yet (real calls cost money): if one is refused, the engine
 check still holds.
 
@@ -102,7 +102,7 @@ trip per refusal (136 of 2,437 tool calls in 7 real runs, #96). The engine remov
   never resolves to the registered workspace (`resolveWorkspace` → OS temp).
 - **`cd` into the worktree** and **writes outside it**: the engine creates `<run_dir>/logs`,
   `<run_dir>/scratch` and `<run_dir>/evidence` (`RUN_DIRS`; screenshots go to the step's round
-  folder `evidence/<step>/round-<n>`, see engine.md) for agents with commands, passes them with
+  folder `evidence/<step>/round-<n>`, see engine/evidence.md) for agents with commands, passes them with
   `--add-dir`, and adds a short
   "How to run commands" block to the agent's first turn (`commandGuide`, any CLI): run commands in
   the current folder, `git -C`/`npm --prefix` for another one, logs in `<run_dir>/logs`, never

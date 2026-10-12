@@ -16,6 +16,13 @@
 //                            engine features, the workspace, the structure) also sit between
 //                            markers, built from docs/features/<feature>.md: each fragment holds
 //                            its feature's pieces of one or more sections (see featurePieces).
+//   README.md itself         (#248) assembled from docs/readme/*.md, one hand-written section per
+//                            file, in file-name order (`<order>-<section>.md`), joined by a blank
+//                            line; a fragment keeps a generated block as its empty markers, filled
+//                            as above. A feature adds a fragment, never edits README.md.
+//   docs/agents/engine.md    (#251) the index of docs/agents/engine/*.md, one topic per file: one
+//                            line per topic from its first heading and the line after it (its
+//                            summary line), in file-name order. Committed; a test fails when stale.
 //   src/renderer/index.html  the renderer's own stylesheets and scripts, between
 //                            `<!-- generated:styles -->` / `<!-- generated:scripts -->` markers
 //                            (#152): adding a screen or a module adds files, never a hand-edited
@@ -29,8 +36,8 @@
 //
 //   npm run docs                   everything
 //   node scripts/docs.js --derived only the gitignored files (the npm hooks)
-//   node scripts/docs.js --check   writes nothing; exit 1 when the README or index.html's lists
-//                                  are out of date or a source file has no header comment (CI)
+//   node scripts/docs.js --check   writes nothing; exit 1 when the README, engine.md or
+//                                  index.html's lists are out of date or a source file has no header comment (CI)
 // No dependency beyond js-yaml (installed before `prepare` runs).
 
 const fs = require('fs');
@@ -56,6 +63,8 @@ const FOLDERS = [
   ['docs/screens/', 'One fragment per screen (`menu`, `order`, text): the README\'s screens table.'],
   ['docs/features/', 'One fragment per feature (`order`, then `<!-- section:<name> -->` pieces): the README\'s generated workflows, engine, workspace and structure sections.'],
   ['docs/agents/', 'These topic docs, indexed by `CLAUDE.md` (`test/claude-md.test.js` keeps the index small and its links valid).'],
+  ['docs/agents/engine/', 'One file per engine topic (`# <Title>`, a summary line, the notes): `docs/agents/engine.md` is their generated index.'],
+  ['docs/readme/', 'One file per hand-written README section, in file-name order: `README.md` is assembled from them (generated blocks kept as empty markers).'],
   ['supabase/migrations/', '`accounts` table (sign-up, last seen, app version, OS) and `touch_account()`. Applied by pasting into the Supabase SQL editor.'],
 ];
 
@@ -136,6 +145,12 @@ function codeMap(root = ROOT) {
     '- **A README paragraph** (a workflow, an engine feature, a workspace file, a source file in Structure):',
     '  a fragment `docs/features/<feature>.md` (`order` in its frontmatter, then one `<!-- section:<name> [order:<n>] -->`',
     '  line per piece; sections: `FEATURE_SECTIONS` in `scripts/docs.js`) instead of editing the README; run `npm run docs`.',
+    '- **A README section** (a `## ` heading of its own): a fragment `docs/readme/<order>-<section>.md` (the',
+    '  README is assembled from them in file-name order: pick a name that sorts where it belongs); never edit',
+    '  `README.md` itself, `npm run docs` rebuilds it and `test/docs.test.js` fails when it is stale.',
+    '- **An engine topic** (implementer\'s notes on a workflow YAML feature): add to its file in',
+    '  `docs/agents/engine/`, or add a file there (`# <Title>`, then a one-line summary); `npm run docs`',
+    '  lists it in the [engine.md](engine.md) index (never edit the index by hand).',
     '- **Something in the workspace index** (`<workspace>/index.db`, `src/store.js`): append a migration to',
     '  `MIGRATIONS` (never edit a shipped one: `PRAGMA user_version` counts them) and a helper next to its',
     '  table\'s; only the service writes (the engine emits). The files stay the source of truth: a cache',
@@ -261,6 +276,56 @@ function renderReadme(text, root = ROOT) {
   return renderSections(text, sections, 'README.md');
 }
 
+const README_FRAGMENTS = path.join('docs', 'readme');
+const mdFiles = (root, dir) => (fs.existsSync(path.join(root, dir))
+  ? fs.readdirSync(path.join(root, dir)).filter((f) => f.endsWith('.md')).sort()
+  : []);
+
+// The README's hand-written text (#248): docs/readme/*.md in file-name order, joined by a blank
+// line; null when there is no fragment (a project whose README.md is its own source).
+function assembleReadme(root = ROOT) {
+  const files = mdFiles(root, README_FRAGMENTS);
+  if (!files.length) return null;
+  return `${files.map((f) => read(root, path.join(README_FRAGMENTS, f)).replace(/^\n+|\s+$/g, '')).join('\n\n')}\n`;
+}
+
+// The README as `npm run docs` writes it: the fragments (or the README itself) with every
+// generated section filled.
+function buildReadme(root = ROOT) {
+  return renderReadme(assembleReadme(root) ?? read(root, 'README.md'), root);
+}
+
+const ENGINE_TOPICS = path.join('docs', 'agents', 'engine');
+const ENGINE_INDEX = path.join('docs', 'agents', 'engine.md');
+
+// docs/agents/engine/*.md (#251): { file, title, summary }, the title from the first heading, the
+// summary from the first non-blank line after it.
+function engineTopics(root = ROOT) {
+  return mdFiles(root, ENGINE_TOPICS).map((file) => {
+    const lines = read(root, path.join(ENGINE_TOPICS, file)).split('\n');
+    const at = lines.findIndex((l) => /^#+\s/.test(l));
+    const summary = at < 0 ? '' : (lines.slice(at + 1).find((l) => l.trim()) || '');
+    return { file, title: at < 0 ? path.basename(file, '.md') : lines[at].replace(/^#+\s+/, '').trim(), summary: /^#/.test(summary) ? '' : summary.trim() };
+  });
+}
+
+// docs/agents/engine.md, the index of the engine topics; null when there is no topic file.
+function engineIndex(root = ROOT) {
+  const topics = engineTopics(root);
+  if (!topics.length) return null;
+  return [
+    '# Engine: workflow YAML features',
+    '',
+    '<!-- Generated by `npm run docs` from docs/agents/engine/*.md (each file\'s first heading and summary line): edit or add a topic file, not this index. -->',
+    '',
+    'Read the topic you need before changing `src/engine/workflow.js` or a workflow YAML. The README',
+    'documents the same features for users; these topics are the implementer\'s summary, one file each.',
+    '',
+    ...topics.map((t) => `- [${t.title}](engine/${t.file})${t.summary ? `: ${t.summary}` : ''}`),
+    '',
+  ].join('\n');
+}
+
 const RENDERER = path.join('src', 'renderer');
 const INDEX_HTML = path.join(RENDERER, 'index.html');
 const RENDERER_MAIN = 'app.js';
@@ -325,9 +390,11 @@ function main(argv = process.argv.slice(2), root = ROOT) {
   const derivedOnly = argv.includes('--derived');
   const hasIndex = fs.existsSync(path.join(root, INDEX_HTML));
   const problems = [];
+  const engine = engineIndex(root);
   if (check) {
-    const readme = read(root, 'README.md');
-    if (renderReadme(readme, root) !== readme) problems.push('README.md is out of date: run `npm run docs` and commit it.');
+    const current = (rel) => (fs.existsSync(path.join(root, rel)) ? read(root, rel) : null);
+    if (buildReadme(root) !== current('README.md')) problems.push('README.md is out of date with docs/readme/: run `npm run docs` and commit it.');
+    if (engine !== null && engine !== current(ENGINE_INDEX)) problems.push('docs/agents/engine.md is out of date with docs/agents/engine/: run `npm run docs` and commit it.');
     if (hasIndex) {
       const html = read(root, INDEX_HTML);
       try {
@@ -344,7 +411,8 @@ function main(argv = process.argv.slice(2), root = ROOT) {
   for (const f of Object.keys(map.sources || {})) if (OUTSIDE.some((dir) => f.startsWith(dir))) delete map.sources[f];
   fs.writeFileSync(path.join(root, TEST_MAP), testMapMarkdown(map, { generatedBy: '`npm run docs` (scripts/docs.js)' }));
   if (!derivedOnly) {
-    fs.writeFileSync(path.join(root, 'README.md'), renderReadme(read(root, 'README.md'), root));
+    fs.writeFileSync(path.join(root, 'README.md'), buildReadme(root));
+    if (engine !== null) fs.writeFileSync(path.join(root, ENGINE_INDEX), engine);
     if (hasIndex) fs.writeFileSync(path.join(root, INDEX_HTML), renderIndexHtml(read(root, INDEX_HTML), root));
   }
   return 0;
@@ -353,7 +421,11 @@ function main(argv = process.argv.slice(2), root = ROOT) {
 if (require.main === module) process.exit(main());
 
 module.exports = {
+  assembleReadme,
+  buildReadme,
   codeMap,
+  engineIndex,
+  engineTopics,
   featurePieces,
   featureSection,
   headerOf,

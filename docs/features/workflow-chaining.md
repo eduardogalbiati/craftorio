@@ -29,4 +29,4 @@ Each workflow declares what it hands over (`outputs:`, recorded in `summary.json
 `issues`; writer-reviewer `document`, `issue`; ai-arena `document`; software-development and the
 local hero `branch`, `merged_commit`, `issues`, `pr_url`; run-retrospective `findings`. The run
 lists and the run chat show "→ then: <workflow>" on a chained run. Engine details:
-[docs/agents/engine.md](docs/agents/engine.md#chaining-declared-outputs-and-then-134).
+[docs/agents/engine/chaining.md](docs/agents/engine/chaining.md).
