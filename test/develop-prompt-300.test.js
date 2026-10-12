@@ -45,7 +45,7 @@ async function mockRun(t) {
   return { finished: events.find((e) => e.type === 'workflow.finished'), turns };
 }
 
-// "## Test writer: ...", "## 2. Developer: ..." → the role the section is addressed to
+// "## Test writer: ...", "## Developer: ..." (a numbered "## 2. Developer: ..." too) → the role the section is addressed to
 const roleHeadings = (prompt) => [...prompt.matchAll(/^## (?:\d+\.\s*)?(Developer|Test writer):/gm)].map((m) => m[1].toLowerCase().replace(/ /g, '_'));
 
 test('develop prompt (#300): a short self-review checklist instead of the code-review skill; the rest of the prompt stays', { timeout: 120000 }, async (t) => {
@@ -57,10 +57,12 @@ test('develop prompt (#300): a short self-review checklist instead of the code-r
 
   assert.equal(prompt.includes('<skill name="code-review"'), false, 'the reviewer\'s code-review skill is not loaded into the develop turn');
   assert.doesNotMatch(prompt, /^## \d+\. (Review on three axes|Severity and verdict|Writing each finding)/m, 'no reviewer sections (axes, severity, verdict, findings format)');
-  // the code-review skill alone was ~25K characters of a ~41.6K mock prompt; the checklist is under 5K
-  assert.ok(prompt.length < 25000, `the develop prompt shrinks by the code-review skill (got ${prompt.length} characters)`);
-  const selfReviewSkill = prompt.match(/<skill name="[^"]*self-review[^"]*"[\s\S]*?<\/skill>/);
-  if (selfReviewSkill) assert.ok(selfReviewSkill[0].length < 5000, `the self-review skill is under 5,000 characters (got ${selfReviewSkill[0].length})`);
+  // the mock develop prompt was ~41.6K characters with the code-review skill (~7.5K of it); the
+  // checklist replaces that skill, so the prompt stays under 40K
+  assert.ok(prompt.length < 40000, `the develop prompt shrinks without the code-review skill (got ${prompt.length} characters)`);
+  const selfReviewSkill = prompt.match(/<skill name="self-review"[\s\S]*?<\/skill>/);
+  assert.ok(selfReviewSkill, 'the self-review checklist is loaded into the develop turn');
+  assert.ok(selfReviewSkill[0].length < 5000, `the self-review skill is under 5,000 characters (got ${selfReviewSkill[0].length})`);
 
   assert.match(prompt, /self-review/i, 'the developer still self-reviews its diff (#179)');
   assert.match(prompt, /rules\//, 'the checklist points to the language\'s rules/<language>.md');
