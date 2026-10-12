@@ -1208,7 +1208,10 @@
       const x = drawn.get(s);
       if (x) return stageHtml(stage, s, r.stages.length, current, byNumber, scoped, r, x) + cutLine(stage, s) + blocksAfter(s);
       return (!v.epic && stage.release?.status !== 'shipped' ? cutLine(stage, s) : '') + blocksAfter(s);
-    }).join('') + (rv.choice ? rv.shown.filter((x) => !placed(x)).map(releaseHtml).join('') : '');
+    }).join('') + (rv.choice ? rv.shown.filter((x) => !placed(x)).map(releaseHtml).join('') : '')
+      // #291: the release's block is always drawn, so the empty state goes next to it when the date
+      // range or the epic hides every stage of the release
+      + (rv.choice && !page.drawn.length && (rangeMs || v.epic) ? nothing : '');
     const earlier = page.earlier ? `<button class="link-btn small rm-earlier" type="button" data-rm-earlier title="Draw the stages before these">↑ ${plural(page.earlier, 'earlier stage')}</button>` : '';
     const loadingRow = page.more ? '<div class="rm-loading small muted" role="status" data-rm-load-more data-testid="roadmap-loading">Loading…</div>' : '';
     const stages = !r.stages.length
