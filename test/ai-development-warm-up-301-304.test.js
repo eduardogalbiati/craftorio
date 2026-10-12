@@ -34,7 +34,9 @@ function makeRepo(t) {
 
 // A mock run of the workflow (the pattern of test/ai-development-local-hero.test.js). failAgent: that
 // agent's turn fails, as when its CLI crashes. answers: { stepId: [[choice, feedback], ...] }.
-async function runAiDev(t, { mockSequences = {}, failAgent, inputs = {}, answers = {} } = {}) {
+// shapeOutput(name, output): the agent's answer as the model would give it (the mock cannot answer an
+// empty tests_added, src/engine/providers.js).
+async function runAiDev(t, { mockSequences = {}, failAgent, shapeOutput, inputs = {}, answers = {} } = {}) {
   const repo = makeRepo(t);
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-dev-warm-runs-'));
   t.after(() => fs.rmSync(runsDir, { recursive: true, force: true }));
@@ -48,6 +50,10 @@ async function runAiDev(t, { mockSequences = {}, failAgent, inputs = {}, answers
   if (failAgent) {
     const turnOf = run.runAgentStep.bind(run);
     run.runAgentStep = (step, st, name) => (name === failAgent ? Promise.reject(new Error(`${name} crashed (simulated)`)) : turnOf(step, st, name));
+  }
+  if (shapeOutput) {
+    const turnOf = run.runAgentStep.bind(run);
+    run.runAgentStep = async (step, st, name) => shapeOutput(name, await turnOf(step, st, name));
   }
   const events = [];
   const answered = {};
@@ -182,6 +188,19 @@ test('ai-development-local-hero (#301): a failed mapper does not fail the run: d
   assert.doesNotMatch(develop, /\(simulated\) map/, 'no map in the prompt');
   assert.match(develop, /without a map|no map/i, 'a one-line notice');
   assert.match(develop, TEST_MAP_LINE, 'today\'s code → tests map instruction applies');
+});
+
+test('ai-development-local-hero (#301): a task with nothing testable goes to develop without Warm Up, and develop gets no map and no Warm Up notice', { timeout: 120000 }, async (t) => {
+  const { transitions, promptsOf } = await runAiDev(t, {
+    shapeOutput: (name, out) => (name === 'test_writer' ? { ...out, tests_added: [] } : out),
+  });
+  assert.equal(transitions[0], 'acceptance_tests>develop', 'no acceptance test: no red check');
+  assert.ok(!transitions.some((x) => x.includes('warm_up')), 'and no Warm Up');
+  const develop = withoutSkills(promptsOf('develop')[0]);
+  assert.ok(develop, 'develop ran');
+  assert.doesNotMatch(develop, /<warm_up_map>/);
+  assert.doesNotMatch(develop, /without a map/i, 'no Warm Up failed: no notice');
+  // (the code → tests map line sits in the acceptance tests' block, on main too: not asserted here)
 });
 
 // ------------------------------------------------------------------ #304: the affected suite
