@@ -86,8 +86,8 @@ Read this before changing anything in `src/renderer/`.
   bar, toasts); an app-wide piece used by several screens gets its own top-level file, and `style.css`
   keeps theme tokens, layout and shared components (buttons, badges, `.s-group`/`.s-row`, `.switch`,
   tables, scrollbars, checkboxes). **Adding a screen is only adding a folder**: `views/<view>/` with
-  its script and stylesheet (plus, for its checks and the README, a `VIEWS` entry in
-  `scripts/screenshot.js` and a `docs/screens/<view>.md` fragment), then `npm run docs`; `index.html`,
+  its script and stylesheet (plus, for its checks and the README, a screenshot seed module
+  `scripts/screenshot/views/<view>.js` and a `docs/screens/<view>.md` fragment), then `npm run docs`; `index.html`,
   `app.js` and `style.css` stay untouched (the nav, `showView`, `init()` and the file lists find it).
 - **How the files are loaded** (#152): `index.html`'s `<link>`/`<script>` lines for `src/renderer/*`
   and `src/renderer/views/*/*` sit between `<!-- generated:styles -->` / `<!-- generated:scripts -->`
@@ -144,8 +144,12 @@ Read this before changing anything in `src/renderer/`.
   scrolled up).
 - Check changes by looking at screenshots: `npm run screenshot -- --view <view> [--tab|--mode|--click]
   --out <dir>` opens one screen with demo data and quits by itself (`--ref origin/main` for the
-  "original"; usage at the top of `scripts/screenshot.js`). A new view or
-  tab goes into its `VIEWS` table, so `test/screenshot.test.js` opens it too. `scripts/smoke.js`
+  "original"; usage at the top of `scripts/screenshot.js`). Each view is a seed module
+  `scripts/screenshot/views/<view>.js` (#249: its tabs, modes, options, demo data and how its screen
+  opens; the interface is described above `VIEWS` in `scripts/screenshot.js`), found by the runner: a
+  new view adds its file, a new tab or state edits its own file, never the runner, and
+  `test/screenshot.test.js` opens it too; shared demo data and helpers are in
+  `scripts/screenshot/helpers.js`. `scripts/smoke.js`
   runs a whole mock run from the Start panel. Never open real CLI terminals or start real runs in
   those checks.
 - Artifacts previews images (`kind: image`, read as a data URL; the CSP allows `img-src data:`).
@@ -225,7 +229,7 @@ Read this before changing anything in `src/renderer/`.
   which takes the folder and base from the open gate or the run's `worktree.ready`. The model is pure
   and Node-testable: `parsePatch`, `rows` (gaps and expansion), `splitRows` (split and unified
   share the hunks), `wordDiff`, `highlightHtml` and `groupByFolder`. In screenshots, `run:diff` /
-  `run:diffFile` answer with a demo branch (`demoRunDiff` in `scripts/screenshot.js`). Use
+  `run:diffFile` answer with a demo branch (`demoRunDiff` in `scripts/screenshot/channels.js`). Use
   `--view run --input mode=validated --stop-at developer_check --click "#btn-run-diff"`, then
   `--click ".dv [data-dv-mode=unified]"`, `--click ".dv [data-dv-expand=all]"` or
   `--click ".dv [data-dv-file='docs/images/backoff.svg']"`.
@@ -480,7 +484,7 @@ changed in `style.css` goes into that skill too. In this app:
   stored roadmap and the reason in the error line, and keeps the form open with the values typed
   (`kept`); when the item or its stage is gone, the "Not saved" box `roadmap-save-conflict`
   (`lostHtml`, `.rm-conflict`) shows the reason and those values read-only, until Dismiss.
-- **Check it**: extend the screen's demo data in `scripts/screenshot.js` with the fields you add,
+- **Check it**: extend the screen's demo data in its seed module (`scripts/screenshot/views/<view>.js`) with the fields you add,
   then capture the default view and each state with `--click` (e.g.
   `npm run screenshot -- --view backlog --mode roadmap --click "[data-rm-edit]"`). List those
   captures in `evidence_plan` and log the UI choices in the decision log.
