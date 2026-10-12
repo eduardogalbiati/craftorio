@@ -162,3 +162,33 @@ test('modelPath(): an absolute .bin path is used as is, ignoring dataDir', (t) =
   const abs = path.join(dataDir, 'custom', 'my-model.bin');
   assert.equal(speech.modelPath(abs, dataDir), abs);
 });
+
+// #318: where the models live on each OS. modelsDir(dataDir, { platform, env, home }): under the
+// app's user data folder (Electron's userData) on every OS; without one (the engine server) the
+// OS's per-user app data folder, Windows unchanged (APPDATA) so an existing folder is reused.
+const slash = (p) => p.replace(/\\/g, '/');
+
+test('modelsDir(): under the given userData folder on Windows, macOS and Linux', () => {
+  for (const platform of ['win32', 'darwin', 'linux']) {
+    const userData = platform === 'win32' ? 'C:\\Users\\u\\AppData\\Roaming\\Multiagent' : '/home/u/userdata';
+    const dir = speech.modelsDir(userData, { platform, env: { APPDATA: 'C:\\elsewhere', XDG_CONFIG_HOME: '/elsewhere' }, home: '/home/u' });
+    assert.equal(slash(dir), slash(path.join(userData, 'speech-models')), platform);
+  }
+});
+
+test('modelsDir(): without userData, macOS uses ~/Library/Application Support/multiagent-orchestrator', () => {
+  const dir = speech.modelsDir(undefined, { platform: 'darwin', env: { APPDATA: 'C:\\nope' }, home: '/Users/u' });
+  assert.equal(slash(dir), '/Users/u/Library/Application Support/multiagent-orchestrator/speech-models');
+});
+
+test('modelsDir(): without userData, Linux uses $XDG_CONFIG_HOME, else ~/.config, /multiagent-orchestrator', () => {
+  const xdg = speech.modelsDir(undefined, { platform: 'linux', env: { XDG_CONFIG_HOME: '/home/u/cfg' }, home: '/home/u' });
+  assert.equal(slash(xdg), '/home/u/cfg/multiagent-orchestrator/speech-models');
+  const def = speech.modelsDir(undefined, { platform: 'linux', env: {}, home: '/home/u' });
+  assert.equal(slash(def), '/home/u/.config/multiagent-orchestrator/speech-models');
+});
+
+test('modelsDir(): without userData, Windows is unchanged (%APPDATA%/multiagent-orchestrator), so an existing folder is reused', () => {
+  const dir = speech.modelsDir(undefined, { platform: 'win32', env: { APPDATA: 'C:\\Users\\u\\AppData\\Roaming' }, home: 'C:\\Users\\u' });
+  assert.equal(slash(dir), 'C:/Users/u/AppData/Roaming/multiagent-orchestrator/speech-models');
+});
