@@ -4,6 +4,8 @@
 // The files run in parallel, one process each: the concurrency is explicit (MULTIAGENT_TEST_CONCURRENCY,
 // else the CPUs minus one) and printed with what could lower it (an inspector in NODE_OPTIONS forces
 // node --test to one file at a time), so a slow suite inside the app can be compared with a shell (#210).
+// The unit report ends with the five slowest files and their wall time (#305): the suite's wall
+// time is bounded below by its longest file.
 // With test files as arguments (the suite step's check of failures on the base, #211), only those
 // run, without the full flow.
 // Agent mode (#219, src/engine/agent-test-report.js isAgentMode: inside an agent or the orchestrator,
@@ -59,9 +61,32 @@ const inspector = /--(inspect|debug)/.test(process.env.NODE_OPTIONS || '') || pr
 say(`\n== Unit tests (${files.length} file(s), concurrency ${concurrency}, availableParallelism ${os.availableParallelism()}, cpus ${os.cpus().length}) ==`);
 if (inspector) say('warning: an inspector is enabled (NODE_OPTIONS or execArgv): node --test runs one file at a time');
 if (process.env.NODE_TEST_CONTEXT) say(`warning: NODE_TEST_CONTEXT=${process.env.NODE_TEST_CONTEXT} is set: node --test acts as a test file, not a runner`);
-const reporters = agent ? ['--test-reporter=spec', '--test-reporter-destination=stdout', '--test-reporter=./scripts/test-reporter-agent.js', `--test-reporter-destination=${reportFile}`] : [];
+// Per-file wall times (scripts/test-reporter-slowest.js, #305), written to a temp file and printed
+// after the report: the five slowest files, the suite's critical path.
+const timesDir = fs.mkdtempSync(path.join(os.tmpdir(), 'multiagent-test-times-'));
+const timesFile = path.join(timesDir, 'times.json');
+const reporters = [
+  '--test-reporter=spec', '--test-reporter-destination=stdout',
+  ...(agent ? ['--test-reporter=./scripts/test-reporter-agent.js', `--test-reporter-destination=${reportFile}`] : []),
+  '--test-reporter=./scripts/test-reporter-slowest.js', `--test-reporter-destination=${timesFile}`,
+];
 const coverage = process.argv.includes('--experimental-test-coverage') ? ['--experimental-test-coverage'] : [];
 const unitStatus = run(['--test', `--test-concurrency=${concurrency}`, ...coverage, ...reporters, ...files]);
+
+function saySlowest() {
+  let times = {};
+  try { times = JSON.parse(fs.readFileSync(timesFile, 'utf8')); } catch { /* the runner died before reporting */ }
+  fs.rmSync(timesDir, { recursive: true, force: true });
+  const slowest = Object.entries(times).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  if (!slowest.length) return;
+  const shown = (file) => {
+    const rel = path.relative(root, file);
+    return (rel.startsWith('..') || path.isAbsolute(rel) ? file : rel).split(path.sep).join('/');
+  };
+  say(`\n== Slowest test files (wall time, ${Object.keys(times).length} file(s)) ==`);
+  for (const [file, ms] of slowest) say(`  ${(ms / 1000).toFixed(1).padStart(7)} s  ${shown(file)}`);
+}
+saySlowest();
 
 // The last lines of the human log: why something failed that the reporter could not see.
 const tail = () => {

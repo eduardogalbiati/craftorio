@@ -2,15 +2,16 @@
 // before; auto files the first draft straight away unless the writer found a duplicate, creates no
 // missing label without a person, and never queues assign_workflow. Full flow in mock mode, the
 // way test/engine.test.js's software-development mode tests do.
+// Moved from test/issue-tracker.test.js by #306: its tests are whole mock runs of a bundled workflow.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { WorkflowRun } = require('../src/engine/workflow');
+const { WorkflowRun } = require('../../src/engine/workflow');
 
 process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.05';
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, '..', '..');
 
 // Gates get `answers[step]` (default: the first choice), like --auto-approve.
 async function runIssueTracker({ mockSequences, answers = {}, feedback = {}, inputs = {} } = {}) {

@@ -2,15 +2,16 @@
 // e2e_tests: off) for a range of local commits in one test writer session, then the orchestrator
 // runs the whole suite once per round (#177, src/engine/suite-step.js), merging locally when green.
 // These are engine-level mock runs, the way test/engine.test.js checks software-development.
+// Moved from test/engine-test-batch.test.js by #306: its tests are whole mock runs of a bundled workflow.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { WorkflowRun } = require('../src/engine/workflow');
+const { WorkflowRun } = require('../../src/engine/workflow');
 
 process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.05';
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, '..', '..');
 
 async function runTestBatch({ mockSequences, answers = {}, inputs = {}, issues } = {}) {
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));

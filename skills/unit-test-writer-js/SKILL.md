@@ -59,6 +59,12 @@ used_by: "test writer"
   never at the top (`const load = () => require('../src/x');` then `const { f } = load();` in the
   test; ESM: `const { f } = await import('../src/x.js');` inside an async test). A top-level
   `require` of a missing module crashes the whole file, which the red check sends back.
+- Whole simulated runs (a workflow run end to end with the mock provider) are the expensive tests:
+  write one only for a new transition, step type or gate; a schema, a rendered prompt or a
+  transition condition gets a cheaper test (load the definition, render the prompt, evaluate the
+  condition). In this orchestrator the rule and the inventory are in `docs/agents/testing.md`
+  ("Whole simulated runs"): a whole run goes to `test/slow/`, one workflow and theme per file, and a
+  helper module (`test/*.js` that is not `*.test.js`) never calls `test()` or `describe()` at load.
 - Compare primitives, never a DOM node, a `vm` sandbox object or a cross-realm array (see
   testing-principles): `assert.equal(el === null, true)` instead of `assert.equal(el, null)`,
   `assert.deepEqual(Array.from(list), [...])` instead of `deepEqual(list, ...)`.

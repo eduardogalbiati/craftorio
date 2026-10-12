@@ -1,16 +1,17 @@
 // #300: the develop step's prompt of ai-development-local-hero carries a short self-review checklist
 // instead of the reviewer's whole code-review skill, and a shared skill's section addressed to one
 // role (e.g. context-economy's "Test writer: ...") reaches only that role's prompt. Mock runs.
+// Moved from test/develop-prompt-300.test.js by #306: its tests are whole mock runs of a bundled workflow.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
-const { WorkflowRun } = require('../src/engine/workflow');
+const { WorkflowRun } = require('../../src/engine/workflow');
 process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
 
-const WORKFLOW = path.join(__dirname, '..', 'workflows', 'ai-development-local-hero.yaml');
+const WORKFLOW = path.join(__dirname, '..', '..', 'workflows', 'ai-development-local-hero.yaml');
 const git = (cwd, ...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'init.defaultBranch=main', '-c', 'core.autocrlf=false', ...args], { cwd, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
 
 // one mock run of the normal path; the prompt of each turn with the agent that received it
