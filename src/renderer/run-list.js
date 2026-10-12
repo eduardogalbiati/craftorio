@@ -490,6 +490,11 @@ function tokensCell(t) {
 function costMarks(estimatedUsd, notRecorded) {
   return `${estimatedUsd > 0 ? ` <span class="badge" title="${esc(`${fmtUsd(estimatedUsd)} of it estimated from the model calls of attempts stopped before their result`)}">estimated</span>` : ''}${notRecorded ? ' <span class="badge warn" title="An attempt stopped before its result: its cost was not recorded">cost not recorded</span>' : ''}`;
 }
+// The Run screen's top-bar cost (app.js renderHeader): the run's sessions' marks after the total.
+function sessionsCostMarks(sessions) {
+  const estimated = sessions.reduce((a, s) => a + (Number(s.estimated_cost_usd) || 0), 0);
+  return costMarks(estimated, sessions.some((s) => s.cost_not_recorded || s.costNotRecorded));
+}
 // #262: the provider and model that answered (a simulated session shows its workflow provider) and,
 // for the session an agent fell back to, the provider · model it left and why.
 const providerModel = (entry) => String(entry || '').replace(':', ' · ');
