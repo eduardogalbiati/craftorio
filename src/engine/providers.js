@@ -57,8 +57,8 @@ function refreshWindowsPath() {
 
 // macOS and Linux (#316): an app opened from Finder or the Dock inherits PATH=/usr/bin:/bin:...,
 // without Homebrew, ~/.local/bin, nvm... Once per process, the login shell's PATH goes first and
-// the process's own entries follow. A shell that fails, hangs (3 s) or prints no marked PATH
-// changes nothing. Its stdout goes to a file, not a pipe: a child the shell leaves behind would
+// the process's own entries follow. A shell that fails, hangs (3 s) or prints no PATH changes
+// nothing. Its stdout goes to a file, not a pipe: a child the shell leaves behind would
 // keep a pipe open past the timeout.
 let loginPathMerged = false;
 function mergeLoginShellPath() {
@@ -80,11 +80,12 @@ function mergeLoginShellPath() {
     out = fs.readFileSync(file, 'utf8');
   } catch { /* no shell: PATH stays as it was */ }
   if (dir) fs.rmSync(dir, { recursive: true, force: true });
-  // The marked PATH, else a last line made only of absolute folders (a shell that ignores -c).
+  // The marked PATH's absolute folders, else a last line made only of absolute folders (a shell
+  // that ignores -c); anything else is noise.
   const m = new RegExp(`${mark}(.*?)${mark}`, 's').exec(out);
-  const value = m ? m[1] : out.trim().split('\n').pop() || '';
-  const login = value.split(path.delimiter).filter(Boolean);
-  if (!login.length || !login.every((p) => path.isAbsolute(p))) return;
+  const entries = (m ? m[1] : out.trim().split('\n').pop() || '').split(path.delimiter).filter(Boolean);
+  const login = m ? entries.filter((p) => path.isAbsolute(p)) : entries.every((p) => path.isAbsolute(p)) ? entries : [];
+  if (!login.length) return;
   const current = (process.env.PATH || '').split(path.delimiter).filter(Boolean);
   process.env.PATH = [...new Set([...login, ...current])].join(path.delimiter);
 }
