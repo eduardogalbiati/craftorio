@@ -36,9 +36,9 @@ const {
   totalOf,
 } = require('./oracle-run-analysis');
 const {
-  FOCUSES,
   focusAnswer,
   focusBrief,
+  FOCUSES,
 } = require('./oracle-run-focus');
 const { bundleStatus } = require('./seed');
 const { readEvents } = require('./supervisor');
@@ -171,27 +171,37 @@ function oracleTools(ctx, hooks = {}) {
       .slice(-MAX_ANALYZED)
       .map((r) => r.dir);
   };
-  // #321: the tests focus reads a run's suite logs (oldest first) and its checkout's test/**/*.test.js
-  const suiteFiles = (dir, summary) => {
+  // #321: the tests focus reads a run's newest suite log and its checkout's test/**/*.test.js: the
+  // run's worktree, else (removed when the run ended) the project's checkout; cache: per repo, one call
+  const suiteFiles = (dir, summary, cache) => {
     const logDir = path.join(dir, 'logs');
     let logs = [];
     try {
-      logs = fs.readdirSync(logDir).filter((f) => /^tests-.*\.log$/.test(f))
-        .map((name) => ({ name, file: path.join(logDir, name), mtime: fs.statSync(path.join(logDir, name)).mtimeMs }))
+      const newest = fs.readdirSync(logDir).filter((f) => /^tests-.*\.log$/.test(f))
+        .map((name) => ({ name, mtime: fs.statSync(path.join(logDir, name)).mtimeMs }))
         .sort((a, b) => a.mtime - b.mtime || a.name.localeCompare(b.name))
-        .map(({ name, file }) => ({ name, text: fs.readFileSync(file, 'utf8') }));
+        .at(-1);
+      if (newest) logs = [{ name: newest.name, text: fs.readFileSync(path.join(logDir, newest.name), 'utf8') }];
     } catch { /* no logs folder */ }
-    const repo = summary?.worktree?.dir || summary?.inputs?.project_path;
-    const testFiles = {};
-    const walk = (rel) => {
-      for (const d of fs.readdirSync(path.join(repo, rel), { withFileTypes: true })) {
-        const child = `${rel}/${d.name}`;
-        if (d.isDirectory() && d.name !== 'node_modules' && !d.name.startsWith('.')) walk(child);
-        else if (d.isFile() && d.name.endsWith('.test.js')) testFiles[child] = fs.readFileSync(path.join(repo, child), 'utf8');
-      }
-    };
-    if (logs.length && repo) try { walk('test'); } catch { /* the checkout is gone */ }
-    return { logs, testFiles };
+    if (!logs.length) return { logs, testFiles: {} };
+    const worktree = summary?.worktree;
+    const ownCheckout = worktree?.dir && !worktree.removed && fs.existsSync(worktree.dir);
+    const repo = ownCheckout ? worktree.dir : summary?.inputs?.project_path;
+    const testsFrom = ownCheckout ? 'worktree' : 'project';
+    if (!repo) return { logs, testFiles: {}, testsFrom };
+    if (!cache.has(repo)) {
+      const testFiles = {};
+      const walk = (rel) => {
+        for (const d of fs.readdirSync(path.join(repo, rel), { withFileTypes: true })) {
+          const child = `${rel}/${d.name}`;
+          if (d.isDirectory() && d.name !== 'node_modules' && !d.name.startsWith('.')) walk(child);
+          else if (d.isFile() && d.name.endsWith('.test.js')) testFiles[child] = fs.readFileSync(path.join(repo, child), 'utf8');
+        }
+      };
+      try { walk('test'); } catch { /* the checkout is gone */ }
+      cache.set(repo, testFiles);
+    }
+    return { logs, testFiles: cache.get(repo), testsFrom };
   };
   return [
     ...supervisorTools(ctx),
@@ -312,15 +322,16 @@ function oracleTools(ctx, hooks = {}) {
       run: (input = {}) => {
         const focus = input.focus || 'cost';
         if (focus !== 'cost') {
+          const testFilesByRepo = new Map();
           const items = analyzedRuns(input).map((dir) => {
             const summary = readJson(path.join(dir, 'summary.json'));
-            return { runId: path.basename(dir), summary, events: readEvents(dir), ...(focus === 'tests' ? suiteFiles(dir, summary) : {}) };
+            return { runId: path.basename(dir), summary, events: readEvents(dir), ...(focus === 'tests' ? suiteFiles(dir, summary, testFilesByRepo) : {}) };
           });
           const answer = focusAnswer(focus, items, input.agent ? { agent: String(input.agent) } : {});
           const full = JSON.stringify(answer);
           if (Buffer.byteLength(full) <= MAX_FILE_BYTES) return full;
           // #244: a long answer stays in the context: each run keeps its counts and the largest entries of its lists
-          const briefs = [3, 1, 0].map((top) => JSON.stringify({ ...focusBrief(focus, answer, top), note: `Per run: only the ${top} largest entries of each list (the counts and the total are whole); ask for fewer runIds, or one run, for the details.` }));
+          const briefs = [3, 1, 0].map((top) => JSON.stringify({ ...focusBrief(focus, answer, top), note: `Per run: ${top ? `only the ${top} largest entries of each list` : 'the lists are left out'} (the counts and the total are whole); ask for fewer runIds, or one run, for the details.` }));
           return briefs.find((b) => Buffer.byteLength(b) <= MAX_FILE_BYTES) || briefs[briefs.length - 1];
         }
         const list = analyzedRuns(input).map((dir) => analyzeRun(path.basename(dir), readJson(path.join(dir, 'summary.json')), readEvents(dir)));

@@ -428,8 +428,9 @@ function declaredTests(source) {
 // suite times of the runs, for the comparison of two runs (kept out of the answer)
 const TIMES = new WeakMap();
 
-// logs: [{ name, text }] oldest first (the latest one is read); testFiles: { <file>: <source> }
-function testsOf({ runId, summary, events, logs = [], testFiles = {} }) {
+// logs: [{ name, text }] oldest first (the latest one is read); testFiles: { <file>: <source> };
+// testsFrom: 'project' when the run's worktree is gone and the tests come from the project's checkout
+function testsOf({ runId, summary, events, logs = [], testFiles = {}, testsFrom }) {
   const at = sessionTracker(summary);
   const testStep = { e2e: { calls: 0, durationMs: 0 }, unit: { calls: 0, durationMs: 0 } };
   const calls = new Map();
@@ -468,7 +469,8 @@ function testsOf({ runId, summary, events, logs = [], testFiles = {} }) {
     files: topBy(Object.values(files), 'durationMs', Infinity),
     slowest: topBy([...times].map(([test, durationMs]) => ({ test, file: fileOf.get(test) || null, durationMs })), 'durationMs', TOP),
     unmatchedTests: unmatched,
-    ...(Object.keys(testFiles).length ? {} : { note: 'The run\'s checkout has no test/*.test.js left: the tests are not matched to their files.' }),
+    ...(!Object.keys(testFiles).length ? { note: 'The run\'s checkout has no test/*.test.js left: the tests are not matched to their files.' }
+      : testsFrom === 'project' ? { note: 'The run\'s worktree is gone: the test names come from the project\'s current checkout.' } : {}),
   };
   TIMES.set(result, { times, fileOf });
   return result;

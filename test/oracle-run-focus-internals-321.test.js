@@ -46,3 +46,11 @@ test('#321 a session with no turns adds no turn to the cache focus, and a run wi
   assert.equal(runs[0].cold.count, 0);
   assert.equal(runs[1].status, 'running');
 });
+
+test('#321 tests: names from the project checkout (the worktree is gone) are matched, with a note saying so', () => {
+  const item = { runId: 'r', summary: null, events: [], logs: [{ name: 'tests-1.log', text: '✔ one (12ms)\n' }], testFiles: { 'test/a.test.js': "test('one', () => {});\n" } };
+  const fromProject = focusAnswer('tests', [{ ...item, testsFrom: 'project' }]).runs[0];
+  assert.deepEqual(fromProject.files.map((f) => f.file), ['test/a.test.js']);
+  assert.match(fromProject.note, /worktree is gone/);
+  assert.equal(focusAnswer('tests', [{ ...item, testsFrom: 'worktree' }]).runs[0].note, undefined);
+});
