@@ -141,18 +141,21 @@ function loadStartDrawer({ workflows = [], projects = [], settings = {}, runs = 
 // ---------------------------------------------------------------------------
 // #319: renderEnvStatus (start-drawer.js) draws it from the chosen workflow's requirements and the
 // CLI states, with the real SetupModel; commandHint and the mode checks are stubs.
-function envStatusHtml(cliStates, requirements = { clis: ['claude', 'codex', 'git'], forge: false }) {
+function envStatusHtml(cliStates, requirements = { clis: ['claude', 'codex', 'git'], forge: false }, { canRun = false, dev = false } = {}) {
   const m = /function renderEnvStatus\(\) \{[\s\S]*?\n\}/.exec(drawerSrc);
   assert.ok(m, 'renderEnvStatus not found in start-drawer.js: the source moved');
   const box = makeEl();
+  const tools = Object.keys(cliStates).map((id) => ({
+    id, path: cliStates[id] !== 'missing' ? `/bin/${id}` : '', installCommand: `install-${id}`, signInCommand: `${id} login`,
+  }));
   const sandbox = {
-    state: { wf: { requirements }, cliStates, cliTools: Object.keys(cliStates).map((id) => ({ id, path: cliStates[id] !== 'missing' ? `/bin/${id}` : '' })) },
+    state: { wf: requirements ? { requirements } : {}, cliStates, cliTools: tools },
     $: () => box,
     esc: (s) => String(s),
     SetupModel: require('../src/renderer/setup-model.js'),
-    canRunCommands: () => false,
-    commandHint: () => '',
-    devMode: () => false,
+    canRunCommands: () => canRun,
+    commandHint: (cmd, opts) => `[${opts?.signIn ? 'sign-in' : 'run'}: ${cmd}]`,
+    devMode: () => dev,
   };
   vm.createContext(sandbox);
   vm.runInContext(`${m[0]}\nrenderEnvStatus();`, sandbox);
@@ -170,6 +173,36 @@ test('#env-status: a missing CLI renders only its warning, nothing for the ones 
   assert.doesNotMatch(html, /Claude Code:|Git:/);
   assert.doesNotMatch(html, /✓/);
   assert.doesNotMatch(html, /use simulation mode/, 'never points to a mode the user may not see');
+});
+
+test('#env-status (#319): with a terminal, a missing CLI offers its install command and a signed-out one its sign-in', () => {
+  const html = envStatusHtml({ claude: 'signed-out', codex: 'missing', git: 'ready' }, undefined, { canRun: true });
+  assert.match(html, /✗ Codex CLI: not installed(<\/span>)?\[run: install-codex\]/);
+  assert.match(html, /✗ Claude Code: not signed in(<\/span>)?\[sign-in: claude login\]/);
+  assert.doesNotMatch(html, /git login|install-git/);
+});
+
+test('#env-status (#319): without a terminal (browser UI) no command is offered', () => {
+  const html = envStatusHtml({ claude: 'signed-out', codex: 'missing', git: 'ready' });
+  assert.doesNotMatch(html, /\[run:|\[sign-in:/);
+});
+
+test('#env-status (#319): a workflow that needs gh or glab warns only when neither is ready', () => {
+  const reqs = { clis: ['claude', 'git'], forge: true };
+  assert.match(envStatusHtml({ claude: 'ready', git: 'ready', gh: 'missing', glab: 'signed-out' }, reqs), /✗ Needs the GitHub CLI or the GitLab CLI/);
+  assert.doesNotMatch(envStatusHtml({ claude: 'ready', git: 'ready', gh: 'missing', glab: 'ready' }, reqs), /✗/);
+});
+
+test('#env-status (#319): the requirement badges show, and the closing line follows whether simulation is visible', () => {
+  const missing = { claude: 'ready', codex: 'missing', git: 'ready' };
+  assert.match(envStatusHtml(missing), /Needs Codex/);
+  assert.match(envStatusHtml(missing), /A real run of this workflow fails at Start without them/);
+  assert.match(envStatusHtml(missing, undefined, { dev: true }), /Simulation runs it without them/);
+  assert.doesNotMatch(envStatusHtml({ claude: 'ready', codex: 'ready', git: 'ready' }), /fails at Start|Simulation runs/);
+});
+
+test('#env-status (#319): a workflow without requirements leaves it empty', () => {
+  assert.equal(envStatusHtml({ claude: 'missing' }, null), '');
 });
 
 test('style.css: the now-unused .env .ok rule is gone, and an empty #env-status leaves no gap', () => {
