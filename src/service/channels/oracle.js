@@ -376,7 +376,8 @@ module.exports = (ctx) => {
       if (e.type === 'session.opened') where.set(e.session_id, { agent: e.session?.agent, step: e.session?.step_id });
       if (e.type === 'session.message_sent' && where.has(e.session_id)) where.get(e.session_id).step = e.step_id || where.get(e.session_id).step;
       if (e.type !== 'session.stream') continue;
-      if (e.item?.kind === 'tool_result') { failed++; continue; }
+      // #321: only a result that failed (the activity view keeps the results with is_error)
+      if (e.item?.kind === 'tool_result') { if (e.item.is_error) failed++; continue; }
       if (e.item?.kind !== 'tool_call') continue;
       calls.set(e.item.name, (calls.get(e.item.name) || 0) + 1);
       const s = where.get(e.session_id) || {};

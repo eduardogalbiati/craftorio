@@ -941,7 +941,14 @@ The button's badge counts the answers that arrived while the conversation was ou
 - **Run analysis**: `run_analysis` (run ids, or the runs since a date) gives per run and in total
   the cost and tokens by agent and step, review rounds, timeouts, invalid outputs, refused calls,
   merge conflicts, commands cut by a tool timeout, the test writer's turns × context and cache
-  re-read, and the whole-suite starts with their durations. Free: no model.
+  re-read, and the whole-suite starts with their durations. Free: no model. Its `focus` (#321)
+  answers other questions on the same runs: `cost` (the default, the figures above); `time`
+  (minutes and visits per step, tool vs model time, the slowest tool calls, gaps over 3 min, the
+  gates' owner time); `context` (one agent's turns, the developer by default: requests, mean and
+  peak context, the read above 100K/150K/200K, the main turn's growth by tool kind); `tools` (calls
+  by tool and Bash kind, re-read files, edits, sub-agents, failed calls by cause, test commands);
+  `cache` (the turns that resumed a session after its prompt cache expired, their cost); `tests`
+  (the suite log's time per test file, two runs compared, E2E vs unit time in the test step).
 - **Platform**: `issues_search`, `issue_view` and `labels` read a project's issues and labels
   through gh / glab, read-only. An issue card uses existing labels and says whether a duplicate
   was searched.

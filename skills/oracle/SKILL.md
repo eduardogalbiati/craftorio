@@ -53,7 +53,14 @@ you do not replace them.
   backlog. Ask for a summary; keep your own context small (each tool result is re-read by every
   later call of the answer).
 - Costs, rounds, timeouts and the test writer's context of runs: `run_analysis` (`runIds` or
-  `since`), free, instead of reading events yourself.
+  `since`), free, instead of reading events yourself. Its `focus` picks the question:
+  - "what did it cost": `cost` (the default);
+  - "where did the time go": `time` (per step, tool vs model time, slowest calls, idle gaps);
+  - "why is develop expensive": `context` (one agent's turns, `agent` default developer: context
+    per request, the read past 100K/150K/200K, what made it grow);
+  - "what did the agent do": `tools` (calls by tool and Bash kind, re-reads, failed calls);
+  - "was that resume cold": `cache` (turns resumed after the prompt cache expired, their cost);
+  - "which test file sets the suite's time": `tests` (time per test file; two runIds compare runs).
 
 ## Route every change to its owner: request_agent
 

@@ -170,7 +170,9 @@ points at the project holding the orchestrator's source (its `package.json` name
 read the app's code (the packaged app's is in app.asar). #184 adds: `run_analysis` (runs' cost and
 tokens by agent and step, review rounds, timeouts, invalid outputs, refused calls, merge conflicts,
 tool timeouts, the test writer's context, whole-suite starts; `src/oracle-run-analysis.js`, no
-model); `issues_search`, `issue_view` and `labels` (`src/oracle-platform.js`: gh / glab `issue
+model; #321: its `focus` `time`, `context`, `tools`, `cache` or `tests` reads the same run files
+for where the time, the context and the tool calls went, `src/oracle-run-focus.js`, also no model
+and read-only); `issues_search`, `issue_view` and `labels` (`src/oracle-platform.js`: gh / glab `issue
 list`, `issue view` and `label list` only, built by the app on the synced backlog's repository,
 never a command from the model); and the `checker` delegate (`src/oracle-check.js`): one test
 runner (node, npm test/run, pytest, go test, dotnet test, mvn...; nothing that fetches a package:
