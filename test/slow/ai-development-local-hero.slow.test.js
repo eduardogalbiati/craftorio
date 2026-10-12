@@ -165,23 +165,20 @@ test('ai-development-local-hero: the developer may add its own test file: the pr
   assert.equal(events.filter((e) => e.type === 'tests.refused').length, 0);
 });
 
-test('ai-development-local-hero (#179): a mock run shows the developer\'s self_review in the code_review prompt', { timeout: 120000 }, async (t) => {
+// #303 (replaces #179's self-review check): the develop turn ends at green acceptance tests and a
+// commit; the review of the diff is the code_review step's, in its own session
+test('ai-development-local-hero (#303): a mock run asks the developer for no self-review of its diff; code_review reviews it', { timeout: 120000 }, async (t) => {
   const { events, finished, prompts } = await runAiDev(t, { mockSequences: { suite: { red_check: ['fail'], suite: ['pass'] } } });
   assert.equal(finished.status, 'success', finished.error);
-  // rendered: the base branch is filled in
-  assert.match(prompts[0], /git diff [^\s`{]+\.\.\.HEAD/);
-  // #300: the self-review reads a short checklist, not the reviewer's whole code-review skill
-  assert.doesNotMatch(prompts[0], /<skill name="code-review"/, 'the develop prompt no longer carries the code-review skill');
-  const developed = events.find((e) => e.type === 'step.finished' && e.step_id === 'develop');
-  assert.ok(developed.output.self_review, 'the mock developer answers a self_review (from the schema)');
-  // #151: code_review also runs the UI Reviewer; the code reviewer's own session is the one told
+  assert.doesNotMatch(prompts[0], /git diff [^\s`{]+\.\.\.HEAD/, 'the develop prompt does not ask to read the branch diff');
+  assert.doesNotMatch(prompts[0], /Fix what you find with a new commit/i, 'no self-review fix commit');
+  assert.doesNotMatch(prompts[0], /<skill name="code-review"/, 'the develop prompt does not carry the code-review skill');
+  // #151: code_review also runs the UI Reviewer; the code reviewer's own session is the one that reviews
   const reviewer = events.find((e) => e.type === 'session.opened' && e.session.agent === 'reviewer');
   assert.ok(reviewer, 'the reviewer has a session');
   const review = events.find((e) => e.type === 'session.message_sent' && e.step_id === 'code_review' && e.session_id === reviewer.session_id);
   assert.ok(review, 'code_review ran');
-  assert.match(review.prompt, /self[- ]review/i, 'the reviewer is told about the developer\'s self-review');
-  // the mock's value for a string field named self_review (src/engine/providers.js mockString)
-  assert.match(review.prompt, /\(simulated\) self_review/, 'the developer\'s self_review is in the prompt');
+  assert.match(review.prompt, /git diff [^\s`{]+\.\.\.[^\s`{]+/, 'the reviewer reads the branch diff');
 });
 
 // the sessions a step opened, by agent: { reviewer: [session ids], ui_reviewer: [...] }

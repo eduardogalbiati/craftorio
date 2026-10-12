@@ -49,28 +49,38 @@ async function mockRun(t) {
 // "## Test writer: ...", "## Developer: ..." (a numbered "## 2. Developer: ..." too) → the role the section is addressed to
 const roleHeadings = (prompt) => [...prompt.matchAll(/^## (?:\d+\.\s*)?(Developer|Test writer):/gm)].map((m) => m[1].toLowerCase().replace(/ /g, '_'));
 
-test('develop prompt (#300): a short self-review checklist instead of the code-review skill; the rest of the prompt stays', { timeout: 120000 }, async (t) => {
+// #303 replaced #300's self-review checklist: the develop turn ends at green acceptance tests and a
+// commit, with no self-review pass over the diff; the screenshots instructions stay as they were
+test('develop prompt (#303): no self-review paragraph and no code-review skill; the screenshots instructions are unchanged', { timeout: 120000 }, async (t) => {
   const { finished, turns } = await mockRun(t);
   assert.equal(finished.status, 'success', finished.error);
   const develop = turns.find((x) => x.step === 'develop');
   assert.ok(develop, 'the developer had a turn');
   const prompt = develop.prompt;
+  const flat = prompt.replace(/\s+/g, ' ');
 
   assert.equal(prompt.includes('<skill name="code-review"'), false, 'the reviewer\'s code-review skill is not loaded into the develop turn');
   assert.doesNotMatch(prompt, /^## \d+\. (Review on three axes|Severity and verdict|Writing each finding)/m, 'no reviewer sections (axes, severity, verdict, findings format)');
-  // the mock develop prompt was ~41.6K characters with the code-review skill (~7.5K of it); the
-  // checklist replaces that skill, so the prompt stays under 40K
-  assert.ok(prompt.length < 40000, `the develop prompt shrinks without the code-review skill (got ${prompt.length} characters)`);
-  const selfReviewSkill = prompt.match(/<skill name="self-review"[\s\S]*?<\/skill>/);
-  assert.ok(selfReviewSkill, 'the self-review checklist is loaded into the develop turn');
-  assert.ok(selfReviewSkill[0].length < 5000, `the self-review skill is under 5,000 characters (got ${selfReviewSkill[0].length})`);
+  assert.ok(prompt.length < 40000, `the develop prompt stays under 40K characters (got ${prompt.length})`);
 
-  assert.match(prompt, /self-review/i, 'the developer still self-reviews its diff (#179)');
-  assert.match(prompt, /rules\//, 'the checklist points to the language\'s rules/<language>.md');
-  assert.match(prompt, /Fix what you find with a new commit/i, 'the fix-with-a-new-commit rule stays (#179)');
-  // nothing else of the develop prompt changes
+  assert.doesNotMatch(flat, /Self-review \(#179\)/i, 'the self-review paragraph is gone');
+  assert.doesNotMatch(flat, /git diff [^\s`{]+\.\.\.HEAD/, 'no reading of the branch diff against its base');
+  assert.doesNotMatch(flat, /Fix what you find with a new commit/i, 'no self-review fix commit');
+
+  // the screenshots instructions (screenshots on, the default) are unchanged
+  for (const line of [
+    'In `screenshots`, list the same UI states as exact options of the project\'s screenshot command',
+    '`<issue>-<screen>-<state>`, `caption` one sentence, `args` the options as a list',
+    'never --out, --name, --side, --ref or --caption (the capture sets them)',
+    'The engine captures each one, original and modified, before the owner tries the change.',
+    'An empty list when the change has no UI.',
+    'make the screenshot demo data cover the fields the change introduces (ui-conventions skill)',
+  ]) assert.ok(flat.includes(line), `the screenshots instructions keep: ${line}`);
+
+  // the rest of the develop prompt stays
   assert.match(prompt, /Add the feature/, 'the task');
-  for (const field of ['self_review', 'evidence_plan', 'screenshots', 'left_out']) assert.ok(prompt.includes(`\`${field}\``) || prompt.includes(`"${field}"`), `the ${field} output stays`);
+  assert.match(prompt, /```run-tests/, 'the focused run-tests block');
+  for (const field of ['evidence_plan', 'screenshots', 'left_out', 'test_notes']) assert.ok(prompt.includes(`\`${field}\``) || prompt.includes(`"${field}"`), `the ${field} output stays`);
   assert.match(prompt, /Handoff note:/, 'the handoff rules stay');
 });
 
