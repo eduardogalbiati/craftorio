@@ -53,7 +53,8 @@
     if (s.mode === 'ephemeral') return { kind: 'new' };
     if (s.mode === 'handoff') return s.has_note ? { kind: 'fresh', ...tokensOf(s.start_context_tokens) } : { kind: 'new' };
     const last = Date.parse(s.last_turn_at || '');
-    if (!Number.isFinite(last)) return { kind: 'new' };
+    // turns without a last turn: a snapshot from before #320 (or a first attempt stopped): unknown
+    if (!Number.isFinite(last)) return s.turns > 0 ? null : { kind: 'new' };
     const idle = now - last;
     if (s.has_note && s.fresh_after_idle_ms > 0 && idle > s.fresh_after_idle_ms) return { kind: 'fresh', ...tokensOf(s.start_context_tokens) };
     const life = lifetimeMs !== undefined ? lifetimeMs
