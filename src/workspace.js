@@ -243,6 +243,7 @@ function readSettings(ws) {
 }
 
 function writeSettings(ws, patch) {
+  if (patch?.timeZone && TimeZone.zoneOf(patch.timeZone) !== patch.timeZone) throw new Error(`Unknown time zone: ${patch.timeZone} (an IANA name, e.g. America/Sao_Paulo).`);
   const saved = savedSettings(ws);
   const next = { ...readSettings(ws), ...patch };
   for (const k of Object.keys(next)) if (!(k in DEFAULT_SETTINGS)) delete next[k];
