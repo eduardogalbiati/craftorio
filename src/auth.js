@@ -103,10 +103,11 @@ function createAuth({
   const stored = () => { try { return JSON.parse(storage.getItem(ACCOUNT_KEY))?.user || null; } catch { return null; } };
 
   // Best effort: records "last seen", the app version and the OS of the signed-in user, once per
-  // start and then at most once a day. Never awaited; a failure is only logged.
-  function touch() {
-    if (touchedAt !== null && now() - touchedAt < DAY_MS) return;
-    touchedAt = now();
+  // start and then at most once a day. Never awaited; a failure is only logged. `at` is when the
+  // refresh began, so a slow session reload does not push the next day's touch a day later.
+  function touch(at) {
+    if (touchedAt !== null && at - touchedAt < DAY_MS) return;
+    touchedAt = at;
     const failed = (message) => console.error(`account: could not record the visit: ${message}`);
     Promise.resolve()
       .then(() => client.rpc('touch_account', { app_version: appVersion, platform: process.platform }))
@@ -116,6 +117,7 @@ function createAuth({
   // Reloads the session (refreshing its token when needed), then touches the account.
   async function refresh() {
     if (!configured) return state();
+    const startedAt = now();
     let session = null;
     let reached = true;
     try {
@@ -136,7 +138,7 @@ function createAuth({
       // the account server can't be reached: a user who signed in once stays signed in
       user = stored();
     }
-    if (user) touch();
+    if (user) touch(startedAt);
     notify();
     return state();
   }
