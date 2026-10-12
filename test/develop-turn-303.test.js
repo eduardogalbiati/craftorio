@@ -43,6 +43,16 @@ test('develop turn (#303): self_review is no longer a required output of develop
   assert.equal(develop.output_schema.required.includes('self_review'), false, 'self_review dropped or optional');
 });
 
+test('code_review (#303): the reviewer prompt no longer reads a developer self-review; every skill a step names exists', () => {
+  const wf = loadWorkflow(WORKFLOW);
+  const review = wf.steps.find((s) => s.id === 'code_review');
+  assert.ok(review, 'the code_review step stays');
+  assert.doesNotMatch(JSON.stringify(review), /self_review/, 'no steps.develop.output.self_review in code_review');
+  const named = [...wf.steps, ...Object.values(wf.agents)].flatMap((x) => x.skills || []).filter((s) => typeof s === 'string' && !s.includes('{'));
+  const missing = [...new Set(named)].filter((s) => !fs.existsSync(path.join(ROOT, 'skills', s, 'SKILL.md')));
+  assert.deepEqual(missing, [], 'the workflow names no removed skill (self-review)');
+});
+
 test('develop turn (#303): the developer is told the reviewer is the next step and never starts a sub-agent to review its diff', () => {
   const wf = loadWorkflow(WORKFLOW);
   const text = flat(`${wf.agents.developer.system_prompt}\n${wf.steps.find((s) => s.id === 'develop').prompt}`);

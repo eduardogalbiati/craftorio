@@ -69,7 +69,7 @@ function developScope({ mode = 'auto', screenshots = [], files = ['src/engine/wo
     inputs: { mode, validate_every_round: false, screenshots: 'all', issues: [], unit_tests: 'write_and_run', e2e_tests: 'write_and_run', base_branch: 'main' },
     vars: {},
     steps: {},
-    output: { committed: true, branch: 'feat', summary: 's', test_notes: 't', self_review: 'r', left_out: [], issues: [], files_changed: files, screenshots },
+    output: { committed: true, branch: 'feat', summary: 's', test_notes: 't', left_out: [], issues: [], files_changed: files, screenshots },
   };
 }
 const SCREEN = { name: '151-dashboard-default', caption: 'The dashboard', args: ['--view', 'dashboard'] };

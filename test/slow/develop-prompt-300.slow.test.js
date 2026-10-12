@@ -1,6 +1,7 @@
-// #300: the develop step's prompt of ai-development-local-hero carries a short self-review checklist
-// instead of the reviewer's whole code-review skill, and a shared skill's section addressed to one
-// role (e.g. context-economy's "Test writer: ...") reaches only that role's prompt. Mock runs.
+// The develop step's rendered prompt of ai-development-local-hero: no self-review paragraph and no
+// code-review skill, the screenshots instructions unchanged (#303, after #300's checklist); and a
+// shared skill's section addressed to one role (e.g. context-economy's "Test writer: ...") reaches
+// only that role's prompt (#300). Mock runs.
 // Moved from test/develop-prompt-300.test.js by #306: its tests are whole mock runs of a bundled workflow.
 const test = require('node:test');
 const assert = require('node:assert/strict');
