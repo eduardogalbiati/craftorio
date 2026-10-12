@@ -59,7 +59,8 @@ function refreshWindowsPath() {
 // without Homebrew, ~/.local/bin, nvm... Once per process, the login shell's PATH goes first and
 // the process's own entries follow. A shell that fails, hangs (3 s) or prints no PATH changes
 // nothing. Its stdout goes to a file, not a pipe: a child the shell leaves behind would
-// keep a pipe open past the timeout.
+// keep a pipe open past the timeout. SIGKILL: an interactive bash or zsh ignores SIGTERM.
+// fish expands "$PATH" with spaces, so it joins the list with colons itself.
 let loginPathMerged = false;
 function mergeLoginShellPath() {
   if (process.platform === 'win32' || loginPathMerged) return;
@@ -73,8 +74,9 @@ function mergeLoginShellPath() {
     const file = path.join(dir, 'out');
     const fd = fs.openSync(file, 'w');
     try {
-      spawnSync(shell, ['-ilc', `printf '${mark}%s${mark}' "$PATH"`], {
-        stdio: ['ignore', fd, 'ignore'], timeout: 3000, windowsHide: true,
+      const value = path.basename(shell) === 'fish' ? '(string join : $PATH)' : '"$PATH"';
+      spawnSync(shell, ['-ilc', `printf '${mark}%s${mark}' ${value}`], {
+        stdio: ['ignore', fd, 'ignore'], timeout: 3000, killSignal: 'SIGKILL', windowsHide: true,
       });
     } finally { fs.closeSync(fd); }
     out = fs.readFileSync(file, 'utf8');
