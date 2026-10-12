@@ -21,6 +21,7 @@ const LOAD_TIMEOUT = 30000;
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 // "14 runs" (or "1 run"), not "114 runs"
 const runsRe = (n) => new RegExp(`(^|\\D)${n} runs?\\b`);
+// the count is its own badge: the row's text joins the badges without a space, its accessible name keeps them apart
 
 const panel = (page) => page.getByTestId('conflict-map').filter({ visible: true }).first();
 const fileRows = (page) => panel(page).getByTestId('conflict-map-file');
@@ -76,13 +77,13 @@ Then('the Conflict map lists {string} first, changed by {int} runs', async ({ e2
   const first = fileRows(e2e.window).first();
   await expect(first).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(first).toContainText(file);
-  await expect(first).toContainText(runsRe(n));
+  await expect(first).toHaveAccessibleName(runsRe(n));
 });
 
 Then('the Conflict map lists {string}, changed by {int} runs', async ({ e2e }, file, n) => {
   const row = fileRow(e2e.window, file);
   await expect(row).toBeVisible({ timeout: LOAD_TIMEOUT });
-  await expect(row).toContainText(runsRe(n));
+  await expect(row).toHaveAccessibleName(runsRe(n));
 });
 
 When('I click {string} in the Conflict map', async ({ e2e }, file) => {
@@ -105,7 +106,7 @@ Then('the Conflict map shows the {int} runs that changed {string}', async ({ e2e
 Then('the Conflict map lists the line {string}, changed by {int} runs', async ({ e2e }, where, n) => {
   const row = lineRows(e2e.window).filter({ hasText: new RegExp(`${escapeRe(where)}(?!\\d)`) }).first();
   await expect(row).toBeVisible({ timeout: LOAD_TIMEOUT });
-  await expect(row).toContainText(runsRe(n));
+  await expect(row).toHaveAccessibleName(runsRe(n));
 });
 
 Then('the Conflict map shows its empty state, with no hot file or line', async ({ e2e }) => {
