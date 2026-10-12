@@ -30,9 +30,9 @@ function fakeCli(dir, name, mode = 0o755) {
   return file;
 }
 
-// A fake login shell: prints `out` on stdout (and logs each call to `log` when given).
-function fakeShell(dir, body) {
-  const file = path.join(dir, 'fake-shell.sh');
+// A fake login shell running `body` (named `name`: the lookup treats a shell named fish apart).
+function fakeShell(dir, body, name = 'fake-shell.sh') {
+  const file = path.join(dir, name);
   fs.writeFileSync(file, `#!/bin/sh\n${body}\n`);
   fs.chmodSync(file, 0o755);
   return file;
@@ -203,4 +203,45 @@ test('login shell PATH (macOS/Linux): a login shell that hangs is given up after
   assert.ok(r.ms < 10000, `the lookup waited ${r.ms} ms for a hanging login shell`);
   const entries = r.path.split(':');
   for (const p of [own, '/usr/bin', '/bin']) assert.ok(entries.includes(p), `${p} was dropped from PATH: ${r.path}`);
+});
+
+// An interactive bash or zsh ignores SIGTERM: the hanging login shell must still be stopped at
+// the timeout (a plain sh script, as in the test above, would die on SIGTERM alone).
+test('login shell PATH (macOS/Linux): a hanging login shell that ignores SIGTERM is still given up after a few seconds, and PATH is unchanged', { skip: !POSIX && 'needs a POSIX shell script' }, (t) => {
+  const dir = tmp(t);
+  const own = path.join(dir, 'own-bin');
+  const file = fakeCli(own, 'owncli-316');
+  const shell = fakeShell(dir, 'trap "" TERM\nsleep 30');
+  const PATH = [own, '/usr/bin', '/bin'].join(':');
+  const r = lookup({ names: ['owncli-316'], env: { HOME: path.join(dir, 'home'), PATH, SHELL: shell }, platform: process.platform });
+  assert.deepEqual(r.results[0], { file, shell: false });
+  assert.ok(r.ms < 8000, `the lookup waited ${r.ms} ms for a login shell that ignores SIGTERM`);
+  assert.equal(r.path, PATH);
+});
+
+// fish expands "$PATH" to its entries joined with spaces. The fake fish below stands in for it: it
+// runs the command it is given with sh, after expanding "$PATH" the way fish does (spaces) and
+// `(string join : $PATH)` to the colon-joined list.
+test('login shell PATH (macOS/Linux): with fish as the login shell, every folder of its PATH is merged (not one space-joined entry)', { skip: !POSIX && 'needs a POSIX shell script' }, (t) => {
+  const dir = tmp(t);
+  const first = path.join(dir, 'fish-a');
+  fs.mkdirSync(first);
+  const second = path.join(dir, 'fish-b');
+  const file = fakeCli(second, 'fishonly-316');
+  const body = [
+    'case "$2" in',
+    `  *"string join"*) list='${first}:${second}:/usr/bin:/bin' ;;`,
+    `  *) list='${first} ${second} /usr/bin /bin' ;;`,
+    'esac',
+    `cmd=$(printf %s "$2" | sed -e "s#(string join : \\$PATH)#'$list'#" -e "s#\\"\\$PATH\\"#'$list'#")`,
+    'exec /bin/sh -c "$cmd"',
+  ].join('\n');
+  const shell = fakeShell(dir, body, 'fish');
+  const own = path.join(dir, 'own-bin');
+  fs.mkdirSync(own);
+  const PATH = [own, '/usr/bin', '/bin'].join(':');
+  const r = lookup({ names: ['fishonly-316'], env: { HOME: path.join(dir, 'home'), PATH, SHELL: shell }, platform: process.platform });
+  assert.deepEqual(r.results[0], { file, shell: false });
+  const entries = r.path.split(':');
+  for (const p of [first, second, own]) assert.ok(entries.includes(p), `${p} missing from PATH: ${r.path}`);
 });
