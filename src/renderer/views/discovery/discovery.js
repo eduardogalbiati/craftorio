@@ -27,8 +27,15 @@
 // board, each with its issues' delivery; a committed card's panel is read-only (it also opens from
 // its issues' badge in the Backlog: window.DiscoveryActions.openCard) and offers "New card from this
 // one": new learning is a new Inbox card linked to it, the committed card never returns to the board.
+// Column automations (#259): a column with an automation (the board's columns[].on_enter: Shape
+// offers AI Arena → Write & Review on the card's document, Ready the clarity check) shows it in its
+// header with its mode; the button opens its settings (the pipeline, the mode Ask me / On / Off,
+// saved at once). A move into an "Ask me" column opens the proposal (the pipeline, its cost estimate)
+// with Run / Not now; "On" starts it with the move (a toast). A card whose automation runs shows
+// Running… on its face until the result comes back (a version and a thread entry with the run and
+// its cost, written by the service); the thread's run link opens the run.
 // Registers itself with registerView (view-registry.js); uses app.js globals ($, esc, state, api,
-// errMsg, dateOf, confirmDialog, openModal, closeModal, showToast), ncAgo (notification-center.js), markdownHtml (artifact-render.js),
+// errMsg, dateOf, confirmDialog, openModal, closeModal, showToast, selectRun), ncAgo (notification-center.js), markdownHtml (artifact-render.js),
 // CurrentProject, ImageViewer, DiscoveryCardParts (views/inbox/inbox.js), DuoIssue (the document
 // types' goals), openDuoForCard (views/duo/duo.js) and openArenaForCard (views/arena/arena.js).
 (() => {
@@ -42,6 +49,9 @@
   const THREAD = '<svg class="inbox-clip" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H8l-5 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>';
   const CLOSE = '<svg viewBox="0 0 24 24" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg>';
   const PENCIL = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></svg>';
+  const BOLT = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 3 14h8l-1 8 10-12h-8z" /></svg>';
+  // a column automation's modes (#259), as the settings dialog names them
+  const AUTOMATION_MODES = { ask: 'Ask me', on: 'On', off: 'Off' };
 
   // menu: the card whose "Move to…" menu is open; wipEdit: the column whose limit is being edited;
   // drag: the card being dragged; open: the opened card (of the project openProject) with its
@@ -49,8 +59,11 @@
   // what discovery:attachment returned; recording: the runs whose result is being recorded;
   // refused: the card whose move to Ready the clarity bar refused ({ id, text }); override: the card
   // the "Move anyway" dialog is open for ({ id, projectId }); committed: the committed cards with
-  // their delivery (#258, the board's `committed`)
+  // their delivery (#258, the board's `committed`); proposal (#259): the automation proposed for a
+  // moved card ({ id, title, column, name, estimate, projectId }); automationCol: the column whose
+  // automation settings are open
   const dv = {
+    automationCol: null, proposal: null,
     committed: [],
     refused: null, override: null,
     projectId: null, board: null, cards: [], loadError: '', error: '', seq: 0,
@@ -174,6 +187,7 @@
             <span data-testid="discovery-card-age" title="In ${esc(columnOf(c.column)?.title || c.column)} since ${esc(dateOf(since(c)))}">${esc(age(since(c)))}</span>
             ${score != null ? `<span class="badge${score < bar ? ' warn' : ''}" data-testid="clarity-badge" title="${esc(score < bar ? `Needs grilling: below the clarity bar of ${bar}%` : `At or above the clarity bar of ${bar}%`)}"><span data-testid="discovery-card-clarity">clarity ${esc(score)}%</span></span>` : ''}
             ${override ? `<span class="badge warn" data-testid="clarity-override" title="${esc(`Moved to Ready below the clarity bar: ${override.reason}`)}">moved anyway</span>` : ''}
+            ${c.automation?.state === 'running' ? `<span class="badge live dsc-auto-badge" data-testid="discovery-card-automation" title="${esc(`${c.automation.name || 'The automation'} is running (run ${c.automation.runId || '…'}): its result comes back to the card`)}">Running…</span>` : ''}
             ${estimate ? `<span data-testid="discovery-card-estimate" title="Estimate">${esc(estimate)}</span>` : ''}
             <span class="inbox-card-files" data-testid="discovery-card-attachments" title="${esc(plural(files, 'attachment'))}">${parts().CLIP} ${files}</span>
             <span class="inbox-card-files" data-testid="discovery-card-thread" title="${esc(`${notes} in the thread`)}">${THREAD} ${notes}</span>
@@ -225,10 +239,15 @@
           <span class="muted small">${n} /</span>
           <input type="number" class="dsc-wip-input" data-wip-input="${esc(c.id)}" min="1" step="1" value="${esc(c.wip)}" aria-label="WIP limit of ${esc(c.title)}" title="Enter saves, Esc cancels" />
         </span>`;
+    // the column's automation (#259): its mode on the button, the rest in its settings
+    const auto = c.on_enter;
+    const mode = auto ? (AUTOMATION_MODES[auto.mode] ? auto.mode : 'ask') : null;
+    const automation = !auto ? '' : `<button type="button" class="btn sm ghost dsc-auto-btn" data-testid="discovery-column-automation" data-column="${esc(c.id)}" data-mode="${esc(mode)}" aria-label="${esc(`Automation of ${c.title}: ${auto.name || auto.pipeline || auto.workflow || 'automation'}, ${AUTOMATION_MODES[mode]}`)}" title="${esc(`Entering ${c.title} ${mode === 'off' ? 'runs nothing' : mode === 'on' ? 'runs' : 'proposes'} ${auto.name || auto.pipeline || auto.workflow || 'an automation'}${mode === 'off' ? ` (${auto.name || 'the automation'} is off)` : ''}: change it`)}">${BOLT}<span class="dsc-auto-mode">${esc(mode)}</span></button>`;
     return `
       <section class="dsc-col" data-testid="discovery-column" data-column="${esc(c.id)}" data-drop="${esc(c.id)}"${over ? ' data-over-wip="true"' : ''} style="grid-column:${i + 1}" aria-label="${esc(c.title)}">
         <header class="dsc-col-head">
           <h3 data-testid="discovery-column-title">${esc(c.title)}</h3>
+          ${automation}
           ${dv.wipEdit === c.id ? editor : count}
         </header>
         <div class="dsc-col-body">${list.filter((x) => !isFast(x) && matches(x)).map(cardHtml).join('')}</div>
@@ -269,6 +288,8 @@
   const focusMove = (id) => document.querySelector(`[data-move-menu="${id}"]`)?.focus({ preventScroll: true });
 
   function onBoardClick(e) {
+    const auto = e.target.closest('[data-testid="discovery-column-automation"]');
+    if (auto) { openAutomationSettings(auto.dataset.column); return; }
     const wip = e.target.closest('[data-testid="discovery-wip-edit"]');
     if (wip) {
       Object.assign(dv, { wipEdit: wip.dataset.column, menu: null });
@@ -340,7 +361,8 @@
     }
     if (projectId !== dv.projectId) return; // another project was chosen while the question was open
     Object.assign(dv, { error: '', refused: null });
-    try { await api.moveDiscoveryCard(projectId, id, column, index); } catch (e) {
+    let moved = null;
+    try { moved = await api.moveDiscoveryCard(projectId, id, column, index); } catch (e) {
       const msg = errMsg(e);
       if (REFUSED.test(msg)) dv.refused = { id, text: `"${card.title}" stays in ${columnOf(card.column)?.title || card.column}. ${msg}` };
       else dv.error = msg;
@@ -349,6 +371,123 @@
     focusMove(id);
     // the move kept a version of the open card's document
     if (dv.open?.id === id) reloadHistory();
+    afterMove(moved, { id, title: card.title, column, projectId });
+  }
+
+  // ---- column automations (#259) ------------------------------------------------------------------
+  // What the move started (the move's `automation`): a proposal to answer, a run to tell about, or a
+  // start that failed (the move is done).
+  function afterMove(moved, { id, title, column, projectId }) {
+    const a = moved?.automation;
+    if (!a || !a.status) return;
+    const where = columnOf(column)?.title || column;
+    if (a.status === 'proposed') openProposal({ id, title, column, projectId, name: a.name, estimate: a.estimate, error: a.error });
+    else if (a.status === 'running') showToast(`${a.name || 'The automation'} started`, `On "${title}", entering ${where}. Its result comes back to the card.`, a.runId || null);
+    else if (a.status === 'failed') {
+      dv.error = `${a.name || 'The automation'} could not start on "${title}": ${a.error || 'unknown error'}`;
+      render();
+    }
+  }
+
+  // "Estimated cost: ≈ $1.20 (…)" from the proposal's estimate (chain-model estimateCost's shape:
+  // costUsd from past runs, null without any; a simulation costs nothing).
+  function estimateLine(est) {
+    const usd = typeof est?.costUsd === 'number' ? est.costUsd : typeof est?.usd === 'number' ? est.usd : null;
+    if (usd == null) return `No cost estimate yet${est?.text ? `: ${est.text}` : ': no past runs to estimate from'}.`;
+    const basis = (est.items || []).reduce((n, i) => n + (Number(i.basis) || 0), 0) || Number(est.runs) || 0;
+    const detail = est.simulated ? 'simulated run: the mock provider costs nothing' : basis ? `an estimate from ${plural(basis, 'past run')}` : 'an estimate';
+    return `Estimated cost: ≈ $${usd.toFixed(2)} (${detail}).`;
+  }
+
+  // The proposal of an "Ask me" column: the owner runs it or not; nothing runs by itself.
+  function openProposal(p) {
+    dv.proposal = p;
+    const where = columnOf(p.column)?.title || p.column;
+    $('#dsc-proposal-title').textContent = `Run the automation of ${where}?`;
+    $('#dsc-proposal-what').textContent = `${p.name || 'The automation'} on "${p.title}", which entered ${where}.`;
+    $('#dsc-proposal-estimate').textContent = estimateLine(p.estimate);
+    $('#dsc-proposal-error').textContent = p.error || '';
+    $('#btn-dsc-proposal-run').disabled = !!p.error;
+    openModal('#dsc-proposal-modal');
+    $('#btn-dsc-proposal-run').focus({ preventScroll: true });
+  }
+
+  function closeProposal() {
+    dv.proposal = null;
+    closeModal('#dsc-proposal-modal');
+  }
+
+  async function runProposal(e) {
+    e?.preventDefault?.();
+    const p = dv.proposal;
+    if (!p || dv.acting) return;
+    dv.acting = true;
+    $('#btn-dsc-proposal-run').disabled = true;
+    try {
+      const out = await api.runDiscoveryAutomation(p.projectId, p.id, p.column);
+      closeProposal();
+      const where = columnOf(p.column)?.title || p.column;
+      if (out?.runId) showToast(`${out.name || p.name || 'The automation'} started`, `On "${p.title}", entering ${where}. Its result comes back to the card.`, out.runId);
+      else showToast(`${out?.name || p.name || 'The automation'} done`, out?.question ? `A question waits for you in the thread of "${p.title}".` : `On "${p.title}".`);
+    } catch (err) {
+      $('#dsc-proposal-error').textContent = errMsg(err);
+      $('#btn-dsc-proposal-run').disabled = false;
+    } finally {
+      dv.acting = false;
+    }
+    if (dv.proposal === null) {
+      await refresh();
+      if (dv.open?.id === p.id) reloadCard().catch((err) => detailError(errMsg(err)));
+    }
+  }
+
+  // The column's automation settings: what runs, and the mode (saved at once).
+  function openAutomationSettings(column) {
+    const col = columnOf(column);
+    const auto = col?.on_enter;
+    if (!auto) return;
+    dv.automationCol = column;
+    const file = auto.pipeline || auto.workflow || '';
+    const what = auto.check ? 'the clarity check, which asks the card\'s open points in its thread (no model, no run)'
+      : `${auto.name || file}${file && auto.name ? ` (${file})` : ''}, a ${auto.pipeline ? 'pipeline' : 'workflow'} on the card's document`;
+    $('#dsc-automation-title').textContent = `Automation of ${col.title}`;
+    $('#dsc-automation-what').textContent = `Entering ${col.title} runs ${what}. Its result becomes a new version of the document, with the run and its cost in the thread.`;
+    $('#dsc-automation-mode').value = AUTOMATION_MODES[auto.mode] ? auto.mode : 'ask';
+    $('#dsc-automation-error').textContent = '';
+    openModal('#dsc-automation-modal');
+    $('#dsc-automation-mode').focus({ preventScroll: true });
+  }
+
+  function closeAutomationSettings() {
+    dv.automationCol = null;
+    closeModal('#dsc-automation-modal');
+  }
+
+  async function saveAutomationMode(e) {
+    const column = dv.automationCol;
+    const mode = e.target.value;
+    if (!column || !AUTOMATION_MODES[mode]) return;
+    const was = columnOf(column)?.on_enter?.mode;
+    $('#dsc-automation-error').textContent = '';
+    try {
+      const board = await api.setDiscoveryAutomation(dv.projectId, column, mode);
+      if (board?.columns && dv.automationCol === column) {
+        dv.board = { ...dv.board, ...board };
+        render();
+      }
+    } catch (err) {
+      $('#dsc-automation-error').textContent = errMsg(err);
+      if (was) e.target.value = was;
+    }
+  }
+
+  // An automation's run ended somewhere: the service wrote its result on the card, the board shows it.
+  function onRunFinished() {
+    if (state.view !== 'discovery' || !dv.cards.some((c) => c.automation?.state === 'running')) return;
+    setTimeout(() => {
+      refresh();
+      if (dv.open && !documentDirty() && !acceptanceDirty()) reloadCard().catch(() => { /* gone: the refresh closes it */ });
+    }, 500);
   }
 
   // ---- the clarity bar (#166) ---------------------------------------------------------------------
@@ -833,7 +972,9 @@
     if (move) return `Moved to ${columnOf(move[1])?.title || move[1]}`;
     const result = /^result-(.+)$/.exec(reason);
     if (result) return `${SOURCES[result[1]] || result[1]} result`;
-    return { merge: 'Before a merge', 'before-grill': 'Before a Grill me answer', 'before-restore': 'Before a restore', 'before-result': 'Before a run\'s result' }[reason] || reason;
+    const automation = /^automation-(.+)$/.exec(reason);
+    if (automation) return `${columnOf(automation[1])?.title || automation[1]} automation result`;
+    return { merge: 'Before a merge', 'before-automation': 'Before an automation\'s result', 'before-grill': 'Before a Grill me answer', 'before-restore': 'Before a restore', 'before-result': 'Before a run\'s result' }[reason] || reason;
   }
 
   function renderVersions() {
@@ -1073,6 +1214,9 @@
   const READ_ONLY_ACTS = ['close', 'view', 'version-open', 'new-from'];
 
   function onDetailClick(e) {
+    // a thread entry's run (an automation's, #259) opens on the Run screen
+    const run = e.target.closest('[data-open-run]');
+    if (run) { selectRun(run.dataset.openRun); return; }
     const b = e.target.closest('[data-detail]');
     if (!b || !dv.open) return;
     const act = b.dataset.detail;
@@ -1114,6 +1258,9 @@
   // drops it), and a dialog or the image viewer on top closes by itself.
   function onEscape(e) {
     if (e.key !== 'Escape' || e.defaultPrevented || state.view !== 'discovery') return;
+    // the automation dialogs (#259) close with Escape: a proposal dismissed runs nothing
+    if (!$('#dsc-proposal-modal').classList.contains('hidden')) { if (!dv.acting) closeProposal(); return; }
+    if (!$('#dsc-automation-modal').classList.contains('hidden')) { closeAutomationSettings(); return; }
     if (window.ImageViewer?.isOpen() || document.querySelector('.modal:not(.hidden)')) return;
     if (dv.menu) {
       const id = dv.menu;
@@ -1303,9 +1450,47 @@
         <button type="submit" class="btn primary" data-testid="clarity-settings-save">Save</button>
       </div>
     </form>
+  </div>
+  <div id="dsc-automation-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="dsc-automation-title" data-testid="discovery-automation-dialog">
+    <form id="dsc-automation-form" class="modal-card">
+      <h3 id="dsc-automation-title">Automation</h3>
+      <p id="dsc-automation-what" class="muted small"></p>
+      <div class="field dsc-automation-field">
+        <label for="dsc-automation-mode">When a card enters</label>
+        <select id="dsc-automation-mode" data-testid="discovery-automation-mode">
+          ${Object.entries(AUTOMATION_MODES).map(([v, label]) => `<option value="${v}">${label}</option>`).join('')}
+        </select>
+        <div class="hint">Ask me proposes the run with its cost estimate, On starts it with the move, Off runs nothing. Every gate of the run still waits for you; the card never moves by itself.</div>
+      </div>
+      <p id="dsc-automation-error" class="error small" role="alert"></p>
+      <div class="modal-actions">
+        <span class="spacer"></span>
+        <button type="button" id="btn-dsc-automation-close" class="btn ghost">Close</button>
+      </div>
+    </form>
+  </div>
+  <div id="dsc-proposal-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="dsc-proposal-title" data-testid="discovery-automation-proposal">
+    <form id="dsc-proposal-form" class="modal-card">
+      <h3 id="dsc-proposal-title">Run the automation?</h3>
+      <p id="dsc-proposal-what" class="small" data-testid="discovery-automation-what"></p>
+      <p id="dsc-proposal-estimate" class="muted small" data-testid="discovery-automation-estimate"></p>
+      <p class="hint">Its result becomes a new version of the card's document, with the run and its cost in the thread. Every gate of the run waits for you; the card never moves by itself.</p>
+      <p id="dsc-proposal-error" class="error small" role="alert"></p>
+      <div class="modal-actions">
+        <span class="spacer"></span>
+        <button type="button" id="btn-dsc-proposal-skip" class="btn ghost" data-testid="discovery-automation-skip">Not now</button>
+        <button type="button" id="btn-dsc-proposal-run" class="btn primary" data-testid="discovery-automation-run">Run</button>
+      </div>
+    </form>
   </div>${window.DiscoveryCommit.MODAL}`,
     mount() {
       commit().mount();
+      $('#dsc-automation-form').onsubmit = (e) => e.preventDefault();
+      $('#dsc-automation-mode').onchange = saveAutomationMode;
+      $('#btn-dsc-automation-close').onclick = closeAutomationSettings;
+      $('#dsc-proposal-form').onsubmit = runProposal;
+      $('#btn-dsc-proposal-run').onclick = runProposal;
+      $('#btn-dsc-proposal-skip').onclick = closeProposal;
       $('#dsc-override-form').onsubmit = moveAnyway;
       $('#dsc-override-reason').oninput = (e) => { $('#btn-dsc-override-confirm').disabled = !e.target.value.trim(); };
       $('#btn-dsc-override-cancel').onclick = () => { dv.override = null; closeModal('#dsc-override-modal'); };
@@ -1352,7 +1537,11 @@
 
       document.addEventListener('keydown', onEscape);
       document.addEventListener('click', onOutsideClick);
-      api.onEvent((ev) => { if (ev?.type === 'workflow.finished') runEnded(ev.run_id, ev); });
+      api.onEvent((ev) => {
+        if (ev?.type !== 'workflow.finished') return;
+        runEnded(ev.run_id, ev);
+        onRunFinished();
+      });
     },
     show() {
       refresh();

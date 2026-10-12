@@ -41,7 +41,9 @@
 //                      #258: two committed cards in the Committed list (a committed card's panel:
 //                      --click "[data-testid=discovery-committed-title]"); the commit dialog:
 //                      --click "[data-testid=discovery-card][data-column=ready]
-//                      [data-testid=discovery-card-title]" --click "[data-testid=discovery-commit]")
+//                      [data-testid=discovery-card-title]" --click "[data-testid=discovery-commit]";
+//                      #259: Shape's automation runs on a card (Running…), Ready's is off; a column's
+//                      automation settings: --click "[data-testid=discovery-column-automation][data-column=shape]")
 //   --run <mock|dir>   run-chat: a simulated software-development run (default) or a copy of a run folder
 //   --workflow <file>  the workflow of the simulated run (default software-development.yaml)
 //   --pipeline <file>  run: starts this saved pipeline instead (#135, e.g. develop-to-retrospective.yaml):
@@ -881,7 +883,10 @@ function demoDiscoveryBoard(ws, projectId) {
     return c.id;
   };
   card(3, 'triage', { title: 'Crash when a run is stopped twice', type: 'bug', author: 'support', text: 'Stopping a run that is already stopping throws in the engine.' });
-  card(30, 'shape', { title: 'Plugin API for custom steps', type: 'rfc', author: 'marina', tags: ['engine'], text: 'Let a workflow call a step implemented by a workspace plugin.' });
+  const plugin = card(30, 'shape', { title: 'Plugin API for custom steps', type: 'rfc', author: 'marina', tags: ['engine'], text: 'Let a workflow call a step implemented by a workspace plugin.' });
+  // #259: the Shape automation runs on this card (Running… on its face); Ready's is turned off
+  discovery.markAutomation(dir, projectId, plugin, { runId: '20261011-2210-cd34', name: 'AI Arena → Write & Review', column: 'shape' });
+  discovery.setColumnAutomation(dir, projectId, 'ready', { mode: 'off' });
   const report = card(52, 'shape', {
     title: 'Weekly cost report by project', type: 'prd', tags: ['cost', 'reports'], clarity: 62, estimate: { usd: 4.2, minutes: 35 },
     text: ['# Weekly cost report', '', 'A report of what each project spent in the week, sent on Monday morning.', '', '## Open questions', '', '- Per workflow too, or per project only?', '- In the app only, or by e-mail?'].join('\n'),

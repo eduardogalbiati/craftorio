@@ -18,6 +18,15 @@ order: 260
   Define → Ready): `board.json` also keeps the WIP limits of Shape and Define (5 by default) and
   each card's place in its column, and `versions/` also gets the document a restored version or a
   Write & Review / AI Arena result replaced, and the result itself (also noted in the thread).
+  **Column automations**: a column of `board.json` may declare `on_enter`, a saved pipeline or a
+  workflow run on a card when it enters the column, its inputs from the card (`{{ card.document }}`,
+  `{{ card.acceptance }}`, `{{ card.attachments }}`, `{{ card.type }}`); Shape offers **AI Arena →
+  Write & Review** on the card's document, Ready the clarity check (Grill me). Each one is **Ask me**
+  (the move proposes it with its cost estimate from past runs; the default), **On** or **Off**, set
+  from the column's header. The run counts in the project's slots and budgets like any run, the card
+  shows **Running…** meanwhile, and its `document` output comes back as a new version with a thread
+  entry naming the run and its cost (`card.json`'s `automation`). An automation never moves or
+  commits a card and never answers a gate: the run's gates wait for you like any run's.
   `card.json` keeps the card's **clarity** (`clarity`: `score` 0 to 100, `gaps`, `ts`, `by`, and
   `override` with the score, the reason and who moved it to Ready below the bar); `board.json` keeps
   the project's bar (`clarity`: `bar`, 85 by default, `byKind`, and `night`, the hours the ready

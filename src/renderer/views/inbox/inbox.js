@@ -320,11 +320,13 @@
     if (inbox.open?.id === c.id) renderAttachments();
   }
 
-  // A card's thread, oldest first: who, when, the entry's kind when it is not a note, its text.
+  // A card's thread, oldest first: who, when, the entry's kind when it is not a note, its text; an
+  // entry about a run (a result, an automation's, #259) links the run and shows its cost.
   const threadHtml = (thread) => (thread.length ? thread.map((m) => `
       <div class="inbox-entry">
         <div class="muted small"><b>${esc(m.author || 'unknown')}</b> <span title="${esc(m.ts ? dateOf(m.ts) : '')}">${esc(m.ts ? ncAgo(m.ts) : '')}</span>${m.kind && m.kind !== 'note' ? ` <span class="badge">${esc(m.kind)}</span>` : ''}</div>
         <div class="inbox-entry-text">${esc(m.text || '')}</div>
+        ${m.runId ? `<div class="muted small inbox-entry-run"><button type="button" class="link-btn small" data-open-run="${esc(m.runId)}" data-testid="thread-run" title="Open the run">run ${esc(m.runId)}</button>${typeof m.costUsd === 'number' ? ` · <span data-testid="thread-run-cost">$${esc(m.costUsd.toFixed(2))}</span>` : ''}</div>` : ''}
       </div>`).join('') : '<p class="muted small">No note yet.</p>');
 
   function renderThread() {

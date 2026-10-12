@@ -13,6 +13,9 @@
 // rule-based one and the issues only join the workspace's synced backlog: never gh/glab, no model.
 // `preview` (the screen's developer mode, like po:file and po:split): the rule-based proposal, and a
 // commit that only answers with the commands it would run.
+// Column automations (#259, src/service/areas/discovery-automations.js): discovery:move answers with
+// what the column's on_enter proposes or started, discovery:set-automation sets a column's mode and
+// discovery:run-automation starts a proposed one; the result comes back to the card by itself.
 
 const os = require('os');
 const path = require('path');
@@ -88,12 +91,39 @@ module.exports = (ctx) => {
       fn: ({ projectId, cardId, fields }) => discovery.updateCard(dir(), projectId, cardId, fields || {}),
     },
     // to another column (Accept: 'triage'): a history entry and a version of the document; `index`
-    // (optional) is its place among the column's other cards, also for a move within its column
+    // (optional) is its place among the column's other cards, also for a move within its column.
+    // Into a column with an automation (#259, areas/discovery-automations.js) the card comes back
+    // with `automation`: { status: 'proposed', column, name, kind, file, estimate } in 'ask' mode,
+    // { status: 'running', runId, name } in 'on' mode ({ status: 'failed', error } when the start
+    // failed: the move is done); nothing in 'off' mode or for a move within the column
     {
       channel: 'discovery:move',
       method: 'moveDiscoveryCard',
       params: ['projectId', 'cardId', 'column', 'index'],
-      fn: ({ projectId, cardId, column, index }) => discovery.moveCard(dir(), projectId, cardId, column, { by: owner(), index }),
+      fn: ({ projectId, cardId, column, index }) => {
+        const from = discovery.readCard(dir(), projectId, cardId).column;
+        const card = discovery.moveCard(dir(), projectId, cardId, column, { by: owner(), index });
+        return ctx.afterDiscoveryMove(projectId, card, from);
+      },
+    },
+    // a column automation's mode (#259): 'ask' (proposed on each move into it), 'on' or 'off' → the board
+    {
+      channel: 'discovery:set-automation',
+      method: 'setDiscoveryAutomation',
+      params: ['projectId', 'column', 'mode'],
+      fn: ({ projectId, column, mode }) => {
+        discovery.setColumnAutomation(dir(), projectId, column, { mode });
+        return board(projectId);
+      },
+    },
+    // runs the column's automation on the card (the owner's Run on a proposal) → { runId, name }; the
+    // card shows it running (automation { state: 'running', runId }) until its result comes back as a
+    // version and a thread entry. The clarity check asks in the thread instead → { runId: null, question }
+    {
+      channel: 'discovery:run-automation',
+      method: 'runDiscoveryAutomation',
+      params: ['projectId', 'cardId', 'column'],
+      fn: ({ projectId, cardId, column }) => ctx.startDiscoveryAutomation({ projectId, cardId, column }),
     },
     // the owner's override (#166): into Ready below the clarity bar, with a `reason` kept on the card
     // (clarity.override). A person's click only: no agent and no automation calls it
