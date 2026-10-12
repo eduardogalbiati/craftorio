@@ -279,8 +279,22 @@ same features for users; this is the implementer's summary.
 - `fresh_after_idle` (#247, a duration such as `55m`, agent or `defaults`): a persistent agent's
   non-retry turn that comes longer than that after its previous turn ended (a long gate wait, past
   the prompt cache's lifetime) opens a new session from its handoff note instead of resuming a cold
-  conversation; without a note it resumes. Logged as `log` `kind: idle_rotation`. local-hero's
-  test writer uses it for the visit from the owner's validation gate.
+  conversation; without a note it resumes. Logged as `log` `kind: idle_rotation`. Since #320 every
+  bundled workflow with a persistent agent sets `fresh_after_idle: 55m` in `defaults:` (Claude's
+  hour minus a margin); an agent's own value wins.
+- **The prompt cache's state** (#320, `src/session-cache.js`, the same module as
+  `src/renderer/session-cache.js`): `cacheLifetimeMs(provider, { auth, tier })` is the one lifetime
+  (Claude 1 h on a subscription, 5 min with `ANTHROPIC_API_KEY`, a tier the usage reports in
+  `cache_creation.ephemeral_1h/5m_input_tokens` wins; Codex and Grok `null`, unknown); the Oracle's
+  `WARM_MS` is it minus `CACHE_MARGIN_MS`. A simulated run keeps the subscription's hour. Each
+  session snapshot carries `last_turn_at`, `context_tokens` (the last request's context),
+  `start_context_tokens` (its first turn's start: the estimate of a fresh start), `has_note`,
+  `fresh_after_idle_ms`, `cache_lifetime_ms`, `cold_resume_usd` (writing the context again at the
+  run's prices, when the model has one) and `next_turn` (`nextTurn`: `fresh` | `warm` with `until`
+  | `cold` with `since` and `tokens` | `resume` (unknown lifetime) | `new`; null when closed). A
+  persistent agent's turn ends with a `session.updated` event (the snapshot after its note was
+  saved); `readRun` rebuilds the same state from the events, and `sessionView` adds `nextTurn`
+  computed at read time.
 - `max_requests` (#302, a whole number such as `40`, agent or `defaults`, may be templated): a
   request budget per turn, passed to Claude Code as `--max-turns <n>`; Codex and Grok cannot
   enforce it (noted in the `capabilities:` log line). A turn that ends on it (`error_max_turns`)

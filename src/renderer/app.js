@@ -221,6 +221,7 @@ async function init() {
   initTerminalDock();
   initFullTextPopover();
   setInterval(renderTicking, 1000);
+  setInterval(tickRunLists, 60e3); // #320: the run lists' Next turn minutes (run-list.js)
   loadUsage();
 
   state.ws = await api.getWorkspace();
@@ -703,6 +704,11 @@ function onEvent(ev) {
 
     // #233: an attempt stopped before its result: its estimated cost is in the session's snapshot
     case 'session.attempt_stopped':
+      if (sess) withSnapshot();
+      break;
+
+    // #320: the snapshot after a persistent agent's whole turn: its note saved, its cache state
+    case 'session.updated':
       if (sess) withSnapshot();
       break;
 

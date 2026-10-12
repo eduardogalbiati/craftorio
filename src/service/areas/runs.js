@@ -27,6 +27,7 @@ const backlog = require('../../backlog');
 const roadmaps = require('../../roadmap');
 const agents = require('../../agents');
 const usage = require('../../usage');
+const sessionCache = require('../../session-cache');
 const actionsUsage = require('../../actions-usage');
 const { readLocalUsage } = require('../../local-usage');
 const runs = require('../../runs');
@@ -197,6 +198,8 @@ module.exports = (ctx) => {
         chain: r.then || r.from ? { then: r.then, from: r.from, state: r.then ? 'waiting' : undefined } : null,
         // `type: workflow` steps (#174): the run that started this one, the runs this one started
         parentRun: r.parent || null, childRuns: r.childRuns.length ? r.childRuns : null,
+        // #320: what Continue at a gate will re-read, per agent (the phone page's gate line)
+        ...(gates.length && r.sessions ? { nextTurns: sessionCache.agentNextTurns([...r.sessions.values()].map((s) => r.snapshot(s))) } : {}),
       };
     });
   }

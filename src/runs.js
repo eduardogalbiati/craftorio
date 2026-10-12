@@ -27,7 +27,14 @@ const {
 } = require('./run-artifacts');
 const { correctSessions, needsEvents, runCosts } = require('./run-costs');
 
-const SESSION_EVENTS = new Set(['session.attempt_stopped', 'session.closed', 'session.message_received', 'session.opened']);
+// session.updated (#320): the snapshot after a persistent agent's whole turn (its note saved)
+const SESSION_EVENTS = new Set([
+  'session.attempt_stopped',
+  'session.closed',
+  'session.message_received',
+  'session.opened',
+  'session.updated',
+]);
 
 // The saves of a run's document to its issue (written by backlog.saveRunToIssue), oldest first.
 function readIssueSaves(dir) {

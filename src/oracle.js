@@ -67,6 +67,7 @@ const knowledge = require('./oracle-knowledge');
 const { mockSteps, partialText } = require('./chat-progress');
 const night = require('./night-watch');
 const { hold, ownerAlive } = require('./run-owner');
+const sessionCache = require('./session-cache');
 
 const DEFAULT_MODEL = 'claude-opus-5-5';
 const DEFAULTS = Object.freeze({ dailyBudgetUsd: 20, compactAtTokens: 150000 });
@@ -78,7 +79,8 @@ const SKILL_ID = 'oracle';
 const TIMEOUT_MS = 20 * 60e3;
 // #244: a wake-up turn is short; a session is resumed only while its prompt cache is warm
 const WAKE_TIMEOUT_MS = 3 * 60e3;
-const WARM_MS = 55 * 60e3;
+// #320: the shared lifetime of Claude's prompt cache (src/session-cache.js) minus its margin: 55 min
+const WARM_MS = sessionCache.cacheLifetimeMs('claude') - sessionCache.CACHE_MARGIN_MS;
 const MAX_MEMORY = 20000;
 const RECENT_EXCHANGES = 3;
 // #180: the fake steps a simulated turn streams to the live view before its answer

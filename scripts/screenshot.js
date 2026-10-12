@@ -767,8 +767,51 @@ function demoRoadmapRuns(ws, projectId, { fixRound = false } = {}) {
     status: 'failed', error: 'The suite failed: 3 tests in test/report.test.js', started_at: new Date(now - 190 * min).toISOString(), finished_at: new Date(f.end).toISOString(), duration_ms: f.end - (now - 190 * min), progress: ft,
   });
   demoCostRuns(ws, projectId);
+  demoCacheRun(ws, projectId);
   demoArtifactRuns(ws, projectId);
   return { running, waiting, failed, better, worse };
+}
+
+// #320: a run stopped at its Developer check gate (`-cch00320`, no summary: read from its events)
+// whose sessions show every Next turn state: the developer fresh from its note, the reviewer warm
+// (18 min ago), the builder cold (3 h ago, 337K tokens), the mapper closed. Its row:
+// --view workflows --tab runs --click "[data-testid=run-list-row][data-run*=cch00320] .pr-row"
+function demoCacheRun(ws, projectId) {
+  const min = 6e4;
+  const now = Date.now();
+  const workflow = 'ai-development-local-hero';
+  const start = now - 240 * min;
+  const runId = `${new Date(start).toISOString().slice(0, 10).replace(/-/g, '')}-091500-cch00320`;
+  const dir = path.join(ws.runs, runId);
+  fs.mkdirSync(path.join(dir, 'handoffs'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'handoffs', 'develop-v1-developer.md'), '# Handoff note: developer\n\n- Goal: the task.\n- Done: the first part.\n');
+  const iso = (t) => new Date(t).toISOString();
+  const lines = [{ ts: iso(start), type: 'workflow.started', workflow, file: `${workflow}.yaml`, project_id: projectId, mock: false, inputs: { task: 'Show what Continue will re-read at a gate' } }];
+  const turn = (id, agent, step, mode, ago, context, extra = {}) => {
+    const end = now - ago * min;
+    const session = {
+      id, agent, provider: 'claude', model: 'claude-opus-5-5', effort: null, parent_id: 'orchestrator', step_id: step, turns: 1,
+      tokens: { input: 1200, output: 3400, cache_read: context, cache_write: 0, reasoning: 0 }, cost_usd: 0.4, status: 'idle',
+      provider_session_id: `${id}-cli`, cwd: null, mode, opened_at: iso(end - 10 * min), closed_at: null,
+      last_turn_at: iso(end), context_tokens: context, start_context_tokens: 20000, has_note: mode === 'handoff', fresh_after_idle_ms: null, ...extra,
+    };
+    lines.push(
+      { ts: iso(end - 10 * min), type: 'step.started', step_id: step, step_type: 'agent', agent, visit: 1 },
+      { ts: iso(end - 10 * min), type: 'session.opened', session_id: id, session },
+      { ts: iso(end), type: 'session.message_received', session_id: id, step_id: step, text: 'Done.', cost_usd: 0.4, duration_ms: 10 * min, session },
+      { ts: iso(end), type: 'step.finished', step_id: step, duration_ms: 10 * min, output: { summary: `${agent} finished.` } },
+    );
+    if (session.status !== 'idle') lines.push({ ts: iso(end), type: 'session.closed', session_id: id, status: session.status, session });
+  };
+  turn('s1', 'mapper', 'map', 'ephemeral', 200, 30000, { status: 'success', closed_at: iso(now - 200 * min) });
+  turn('s2', 'builder', 'build', 'persistent', 180, 337000, { cold_resume_usd: 3.37 });
+  turn('s3', 'developer', 'develop', 'handoff', 25, 20000);
+  turn('s4', 'reviewer', 'code_review', 'persistent', 18, 70000);
+  lines.push(
+    { ts: iso(now - min), type: 'step.started', step_id: 'developer_check', step_type: 'human_approval' },
+    { ts: iso(now - min), type: 'approval.requested', step_id: 'developer_check', approval_id: 'gate-cch00320', message: 'Check the work before the run goes on.' },
+  );
+  fs.writeFileSync(path.join(dir, 'events.jsonl'), `${lines.map((e, i) => JSON.stringify({ seq: i + 1, run_id: runId, ...e })).join('\n')}\n`);
 }
 
 // #233: two runs whose develop attempt was stopped at its timeout: `-run00233` with its estimated

@@ -355,6 +355,23 @@ own image paste (`#po-question`, `.oracle-input`) are skipped. A screen that sub
 request unchanged) and `PasteImage.clear(field)` with the text. Chips are Arena's `.ar-chip` plus
 `.paste-chip` (`paste-image.css`). Screenshots: `--paste <css>` / `--paste-big <css>`.
 
+## The agents' prompt cache: Next turn and the Continue line (#320)
+
+`session-cache.js` (`window.SessionCache`, the engine's `src/session-cache.js` too) derives how a
+session's next turn starts from its snapshot (`currentTurn`: snake_case snapshots or sessionView's
+camelCase, recomputed against the clock). The run lists' session table has a **Next turn** column
+(`nextTurnCell`, `td[data-testid="session-next-turn"][data-next-turn]`): "fresh from note", "warm ·
+42 min left", "cold since 04:57 · ~337K tokens ≈ $X", "new session", "—" when closed; the Run
+screen's session cards show the same as a `next turn` metric. The text leads, `.next-turn` colours
+warm green and cold orange; the tooltip says what the state means and that the lifetime is an
+estimate. `app.js` re-renders an expanded run list once a minute (`tickRunLists`). Every open gate
+card (`gateCardHtml` → `gateNextTurnsHtml`, `p[data-testid="gate-next-turns"]`) lists, from
+`state.runs.get(runId).sessions`, one entry per agent with an open session (a handoff agent whose
+last session closed with its note counts as fresh): "Continue: developer fresh from note ~20K ·
+reviewer resumes cold ~140K ≈ $0.70", or "every agent starts fresh or warm · …". It never answers
+the gate. The phone page (`src/mobile-gates.js`) prints the same line from `runs:active`'s
+`nextTurns`.
+
 ## UI conventions
 
 The general rules (and the visual review of the screenshots) are in the `ui-conventions` skill,

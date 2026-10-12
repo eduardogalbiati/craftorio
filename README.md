@@ -65,6 +65,17 @@ The **Start** button at the top (next to Stop) opens the right side panel: pick 
 the project (its folder becomes `repo_path`/`project_path`) and the input. During and after a
 run, **Run** shows up at the bottom of the menu with the sessions and events.
 
+Each agent session shows its **Next turn** (#320; the run's session table in Projects › Runs and
+Workflows › Runs, and a metric on the Run screen's session cards): "fresh from note" (it starts a
+new session from its handoff note), "warm · 42 min left" (it resumes while its prompt cache lives),
+"cold since 04:57 · ~337K tokens ≈ $X" (resuming writes its whole context to the cache again),
+"new session", or "—" when the session is closed. The cache's lifetime is an estimate: one hour for
+Claude on a subscription, five minutes on an API key, unknown for Codex and Grok. Every open gate
+card says what **Continue** will re-read, one entry per agent ("Continue: developer fresh from note
+~20K · reviewer resumes cold ~140K ≈ $0.70"), in the Run screen, the run chat and the phone page.
+The bundled workflows set `fresh_after_idle: 55m`, so a persistent agent with a handoff note that
+waited past the cache's lifetime starts fresh instead of resuming cold.
+
 Requires Node 24 LTS (`.nvmrc`; `engines` in package.json). The app runs on Electron 44, which
 bundles Node 24 too. npm 11 only runs install scripts that are approved in `allowScripts`
 (package.json): `node-pty` is approved; after upgrading it, run `npm approve-scripts node-pty`.

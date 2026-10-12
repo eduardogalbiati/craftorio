@@ -93,6 +93,7 @@ const testIds = require('./test-ids');
 const { StepTrail } = require('../renderer/run-progress-model');
 const chain = require('../renderer/chain-model');
 const { displayName } = require('../renderer/display-name');
+const sessionCache = require('../session-cache');
 
 // Skills bundled with the app (skills/ folder at the root). Workspace skills take precedence.
 const BUNDLED_SKILLS = path.join(__dirname, '..', '..', 'skills');
@@ -1291,7 +1292,28 @@ class WorkflowRun extends EventEmitter {
       ...(s.cliTotalUsd != null ? { cli_total_cost_usd: s.cliTotalUsd } : {}),
       ...(s.simulates ? { simulates: s.simulates } : {}),
       ...(s.fallbackFrom ? { fallback_from: s.fallbackFrom } : {}),
+      ...this.cacheState(s),
     };
+  }
+
+  // #320: the session's prompt-cache state (src/session-cache.js): when its last turn ended, its
+  // context at the last request, whether its agent has a handoff note, and what its next turn re-reads
+  cacheState(s) {
+    if (s.agent === 'orchestrator') return {};
+    // a simulated run keeps the subscription's hour, whatever key the machine has
+    const auth = !this.mock && process.env.ANTHROPIC_API_KEY ? 'api_key' : 'subscription';
+    const lifetime = sessionCache.cacheLifetimeMs(s.simulates || s.provider, { auth, tier: s.cacheTier || null });
+    const state = {
+      last_turn_at: s.lastTurnAt ? new Date(s.lastTurnAt).toISOString() : null,
+      context_tokens: s.contextTokens ?? null,
+      start_context_tokens: s.startContextTokens ?? null,
+      has_note: this.handoffNotes.has(s.agent),
+      fresh_after_idle_ms: s.freshAfterIdleMs ?? null,
+      cache_lifetime_ms: lifetime,
+      cold_resume_usd: sessionCache.cacheWriteUsd(s.contextTokens, this.prices[s.model], lifetime),
+    };
+    const closed = s.closedAt ? new Date(s.closedAt).toISOString() : null;
+    return { ...state, next_turn: sessionCache.nextTurn({ ...state, agent: s.agent, mode: s.mode, closed_at: closed }) };
   }
 
   // ---- execution ------------------------------------------------------------
@@ -3124,6 +3146,8 @@ class WorkflowRun extends EventEmitter {
       });
       if (fallback) fallback.pending = null;
       if (persistent) this.agentSessions.set(agentName, session.id);
+      // #320: shown in the session's cache state (a fresh session from the note past this idle time)
+      if (persistent && agent.fresh_after_idle !== undefined) session.freshAfterIdleMs = parseDuration(agent.fresh_after_idle, null);
       // resumed run: continue the agent's previous conversation (its system prompt is already there),
       // only for its first session in this run
       this.resumeSessions ??= { ...(this.resume?.sessions || {}) };
@@ -3269,6 +3293,8 @@ class WorkflowRun extends EventEmitter {
       if (text) this.saveHandoff({ agentName, stepId, visit, session, text, fallback });
     }
     if (!persistent) this.closeSession(session, 'success');
+    // #320: the snapshot after the whole turn (its note saved, its last request done)
+    else this.emitEvent('session.updated', { session_id: session.id, session: this.snapshot(session) });
     return res;
   }
 
@@ -3411,11 +3437,17 @@ class WorkflowRun extends EventEmitter {
       const tools = { ran: 0, denials: 0, streak: 0, maxStreak: 0, denied: [], subagents: 0 };
       // context window of each model request: the first one and the largest
       const context = { start: null, peak: null };
+      // #320: the last request's context, and the cache tier the provider reported (Claude: 1h / 5m)
+      const cache = { last: null, tier: null };
       const calls = new Map();
       // `full_suite: warn` (#177): the engine's suite step runs the whole suite; the agent's own run is noted
       const suiteWarn = this.wf.steps.find((s) => s.id === stepId)?.full_suite === 'warn' ? this.suiteCommand() : null;
       const track = (item) => {
-        if (item.kind === 'context') { context.start ??= item.tokens; context.peak = Math.max(context.peak || 0, item.tokens); return; }
+        if (item.kind === 'context') {
+          context.start ??= item.tokens; context.peak = Math.max(context.peak || 0, item.tokens); cache.last = item.tokens;
+          if (item.tier) cache.tier = item.tier;
+          return;
+        }
         if (item.kind === 'tool_call') calls.set(item.id, { ...item });
         if (suiteWarn !== null && item.kind === 'tool_call' && suiteStep.isFullSuiteCommand(item.input?.command, suiteWarn)) {
           this.suiteRuns.agents++;
@@ -3506,6 +3538,11 @@ class WorkflowRun extends EventEmitter {
         addUsage(session.tokens, res.usage);
         session.costUsd += res.costUsd || 0;
         session.status = 'idle';
+        // #320: the cache state of the session (its next turn resumes warm until lastTurnAt + the lifetime)
+        session.lastTurnAt = Date.now();
+        if (cache.last != null) session.contextTokens = cache.last;
+        session.startContextTokens ??= context.start;
+        if (cache.tier) session.cacheTier = cache.tier;
         this.emitEvent('session.message_received', {
           session_id: session.id, turn, step_id: stepId, text: res.text, usage: res.usage,
           // #308: usage is the whole turn; the main conversation's figures and the sub-agents' apart

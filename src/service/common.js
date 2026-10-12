@@ -7,6 +7,7 @@ const { execFileSync } = require('child_process');
 const { resolveCommand } = require('../engine/providers');
 const { canonicalPath } = require('../engine/worktree');
 const { execShim } = require('../shell');
+const sessionCache = require('../session-cache');
 const usage = require('../usage');
 const workflows = require('../workflows');
 
@@ -46,6 +47,20 @@ function sessionView(x, live) {
     // #262: a simulated session's workflow provider, and the provider · model it fell back from ({ from, reason })
     ...(x.simulates ? { simulates: x.simulates } : {}),
     ...((live ? x.fallbackFrom : x.fallback_from) ? { fallbackFrom: live ? x.fallbackFrom : x.fallback_from } : {}),
+    // #320: the prompt-cache state of a snapshot and its next turn now (src/session-cache.js)
+    ...(live ? {} : cacheView(x)),
+  };
+}
+
+function cacheView(x) {
+  if (x.agent === 'orchestrator') return {};
+  return {
+    mode: x.mode || null, lastTurnAt: x.last_turn_at || null, contextTokens: x.context_tokens ?? null,
+    hasNote: !!x.has_note, freshAfterIdleMs: x.fresh_after_idle_ms ?? null,
+    ...(x.cache_lifetime_ms !== undefined ? { cacheLifetimeMs: x.cache_lifetime_ms } : {}),
+    ...(x.start_context_tokens ? { startContextTokens: x.start_context_tokens } : {}),
+    ...(x.cold_resume_usd ? { coldResumeUsd: x.cold_resume_usd } : {}),
+    nextTurn: sessionCache.nextTurn(x),
   };
 }
 

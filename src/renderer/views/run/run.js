@@ -587,7 +587,8 @@ function renderSessions() {
         <div class="metric" title="What its child runs cost (their own children included), not in its total cost"><label>child runs cost</label><b>${fmtCost(childRunsCost(state.run))}</b></div>` : ''}` : `
         <div class="metric"><label>active</label><b>${fmtDur(s.active_ms)}</b></div>
         <div class="metric"><label>in / out</label><b>${fmtNum((t.input || 0) + (t.cache_read || 0))} / ${fmtNum(t.output)}</b></div>
-        <div class="metric"><label>cost</label><b>${fmtCost(s.cost_usd)}${marks(Number(s.estimated_cost_usd) || 0, notRecorded([s]))}</b></div>`}
+        <div class="metric"><label>cost</label><b>${fmtCost(s.cost_usd)}${marks(Number(s.estimated_cost_usd) || 0, notRecorded([s]))}</b></div>
+        ${nextTurnMetric(s)}`}
       </div>
     </div>`;
   }).join('');
@@ -595,6 +596,12 @@ function renderSessions() {
     state.selected = el.dataset.id;
     if (state.tab !== 'detail') switchTab('detail'); else scheduleRender();
   }));
+}
+
+// #320: how the session's next turn starts (session-cache.js), like the run lists' Next turn column
+function nextTurnMetric(s) {
+  const t = SessionCache.currentTurn(s);
+  return `<div class="metric next-turn"${t ? ` data-next-turn="${esc(t.kind)}"` : ''} data-testid="session-next-turn" title="${esc(SessionCache.turnTitle(t))}"><label>next turn</label><b>${esc(SessionCache.turnText(t))}</b></div>`;
 }
 
 function detailsBlock(key, cls, label, body) {

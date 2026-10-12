@@ -17,6 +17,7 @@ const readline = require('readline');
 const { refuseReal } = require('./simulation');
 const { AGENT_ENV } = require('./capabilities');
 const { runShim } = require('../shell');
+const { cacheTier } = require('../session-cache');
 
 const emptyUsage = () => ({ input: 0, output: 0, cache_read: 0, cache_write: 0, reasoning: 0 });
 
@@ -231,7 +232,8 @@ function parseClaude(ev, emit, acc) {
     case 'assistant':
       // each model request's context window (the main conversation's, not a sub-agent's)
       if (ev.message?.usage && !ev.parent_tool_use_id) {
-        emit({ kind: 'context', tokens: contextTokens(ev.message.usage) });
+        // #320: the cache tier when the usage reports it (cache_creation.ephemeral_1h / _5m)
+        emit({ kind: 'context', tokens: contextTokens(ev.message.usage), ...(cacheTier(ev.message.usage) ? { tier: cacheTier(ev.message.usage) } : {}) });
         (acc.mainCalls ??= new Set()).add(ev.message.id);
       }
       // a sub-agent's model calls are paid too

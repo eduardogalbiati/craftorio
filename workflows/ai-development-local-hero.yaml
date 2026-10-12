@@ -275,6 +275,9 @@ x-tools:
   vcs: &vcs [bash:git, bash:gh, bash:glab]
 
 defaults:
+  # #320: a persistent agent idle past its prompt cache's lifetime (Claude on a subscription: 1 h,
+  # minus a margin) continues in a fresh session from its handoff note; an agent's own value wins
+  fresh_after_idle: 55m
   # the run's own git worktree (orchestrator.worktree), or repo_path when it is not a git repo
   working_dir: "{{ worktree_dir }}"
   # one agent turn: 30m, plus 10m per extra issue of a grouped run, at most 60m (#101); times the

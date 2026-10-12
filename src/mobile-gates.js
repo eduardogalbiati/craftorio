@@ -24,6 +24,8 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { continueText } = require('./session-cache');
+const { displayName } = require('./renderer/display-name');
 
 const LINK_TTL_MS = 30 * 60e3;
 const CODE_TTL_MS = 10 * 60e3;
@@ -199,6 +201,8 @@ function createMobileGatesServer({ service, secret, now = Date.now, linkTtlMs = 
     const rec = brief.recommendation ? `<div class="rec"><b>Recommended:</b> ${esc(brief.recommendation.label || brief.recommendation.choice || brief.recommendation)}${brief.recommendation.why ? `<div class="muted">${esc(brief.recommendation.why)}</div>` : ''}</div>` : '';
     const evidence = (brief.evidence || []).filter((x) => x && /^https:\/\//.test(x.url || ''));
     const links = evidence.length ? `<ul>${evidence.map((x) => `<li><a href="${esc(x.url)}" rel="noreferrer">${esc(x.label || x.url)}</a></li>`).join('')}</ul>` : '';
+    // #320: what Continue will re-read (the service's nextTurns of the run)
+    const turns = Array.isArray(run.nextTurns) ? `<p class="muted">${esc(continueText(run.nextTurns, (a) => displayName(a, run.agent_names)))}</p>` : '';
     const self = `/gates/${encodeURIComponent(run.runId)}/${encodeURIComponent(gate.approval_id)}`;
     if (chosen) {
       return page('Confirm your answer', `<div class="card">${head}<p>You chose <b>${esc(chosen.label || chosen.id)}</b>${chosen.help ? `:</p><p class="rec">${esc(chosen.help)}</p>` : '.</p>'}
@@ -208,7 +212,7 @@ function createMobileGatesServer({ service, secret, now = Date.now, linkTtlMs = 
         <p id="msg"></p><p><a href="${esc(`${self}?t=${encodeURIComponent(t)}`)}">Back</a></p></div>`, CONFIRM_SCRIPT);
     }
     const buttons = choicesOf(gate).map((c) => `<a class="btn" href="${esc(`${self}?t=${encodeURIComponent(t)}&answer=${encodeURIComponent(c.id)}`)}">${esc(c.label || c.id)}${c.help ? `<span class="help">${esc(c.help)}</span>` : ''}</a>`).join('');
-    return page(gate.message || 'Gate', `<div class="card">${head}${what}${rec}${links}<div class="btns">${buttons}</div></div><p class="muted"><a href="/">All open gates</a></p>`);
+    return page(gate.message || 'Gate', `<div class="card">${head}${what}${rec}${links}${turns}<div class="btns">${buttons}</div></div><p class="muted"><a href="/">All open gates</a></p>`);
   }
 
   async function handle(req, res) {

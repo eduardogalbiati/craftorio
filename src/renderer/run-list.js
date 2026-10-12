@@ -266,7 +266,7 @@ function projectRunBody(r, pv) {
     ${r.error ? `<pre class="pr-error">${esc(r.error)}</pre>` : ''}
     ${runTaskBlock(r)}
     ${sessions.length ? `<table class="u-table pr-sessions">
-      <thead><tr><th>Agent</th><th>Provider · model</th><th>Status</th><th class="num">Turns</th><th class="num">Tokens</th><th class="num">Cost</th><th></th></tr></thead>
+      <thead><tr><th>Agent</th><th>Provider · model</th><th>Status</th><th class="num">Turns</th><th class="num">Tokens</th><th class="num">Cost</th><th>Next turn</th><th></th></tr></thead>
       <tbody>${[...sessions].sort((a, b) => isOrchSession(b) - isOrchSession(a)).map((s) => {
         const m = pv.msgs.get(`${r.runId}:${s.id}`);
         return `<tr data-session="${esc(s.id)}" data-agent="${esc(s.agent)}" data-testid="run-session-card">
@@ -276,6 +276,7 @@ function projectRunBody(r, pv) {
           <td class="num mono">${fmtNum(s.turns)}</td>
           ${tokensCell(s.tokens)}
           ${sessionCostCell(s)}
+          ${nextTurnCell(s)}
           <td class="pr-term">
             <span class="small ${m?.error ? 'error' : 'muted'}" data-term-msg>${esc(m?.text || '')}</span>
             ${termButtons('live', isOrchSession(s) ? 'Follow the orchestrator log in a terminal' : '')}
@@ -495,7 +496,13 @@ function sessionsTotalRow(sessions) {
   const sum = (f) => sessions.reduce((a, s) => a + (f(s) || 0), 0);
   const tokens = Object.fromEntries([...TOKEN_PARTS.map(([k]) => [k, sum((s) => s.tokens?.[k])]), ['total', sum((s) => s.tokens?.total)]]);
   return `<tfoot><tr class="pr-total"><td colspan="3">Total</td><td class="num mono">${fmtNum(sum((s) => s.turns))}</td>
-    ${tokensCell(tokens)}<td class="num mono" data-testid="run-total-cost">${fmtUsd(sum((s) => s.costUsd))}${costMarks(sum((s) => s.costEstimatedUsd), sessions.some((s) => s.costNotRecorded))}</td><td></td></tr></tfoot>`;
+    ${tokensCell(tokens)}<td class="num mono" data-testid="run-total-cost">${fmtUsd(sum((s) => s.costUsd))}${costMarks(sum((s) => s.costEstimatedUsd), sessions.some((s) => s.costNotRecorded))}</td><td></td><td></td></tr></tfoot>`;
+}
+// #320: how the session's next turn starts (src/renderer/session-cache.js): the text leads, the
+// colour follows (warm green, cold orange); — for a closed session. Run screen too (views/run/run.js).
+function nextTurnCell(s, now = Date.now()) {
+  const t = SessionCache.currentTurn(s, now);
+  return `<td class="next-turn small"${t ? ` data-next-turn="${esc(t.kind)}"` : ''} data-testid="session-next-turn" title="${esc(SessionCache.turnTitle(t))}">${esc(SessionCache.turnText(t, now))}</td>`;
 }
 
 function runTaskBlock(r) {
@@ -512,6 +519,10 @@ function renderRunListsSoon() {
     if (workflowRunsVisible() && state.wr.runs) renderWorkflowRuns();
     if (state.view === 'project' && state.pv?.runs) renderProjectView();
   });
+}
+// #320: the Next turn column's minutes left move on: the lists again (app.js, once a minute) while a run is expanded
+function tickRunLists() {
+  if ([state.wr, state.pv].some((rl) => rl?.expanded?.size)) renderRunListsSoon();
 }
 
 // Robot SVGs are large: one per provider/model/colour/state, reused. A workflow agent with a look
