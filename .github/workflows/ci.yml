@@ -79,23 +79,31 @@ jobs:
         run: node scripts/docs.js --check
       - name: Tests (unit + mock flow)
         run: npm test
+      # Linux has no display: the UI steps below run under xvfb-run. Ubuntu 24.04's AppArmor refuses the
+      # unprivileged user namespaces Chromium's sandbox needs (the packaged AppImage turns the sandbox
+      # off itself, scripts/release-assets.js): allow them on the runner.
+      - name: Display for the UI tests (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          command -v xvfb-run || (sudo apt-get update && sudo apt-get install -y xvfb)
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       # scripts/screenshot.js (the test step's UI screenshots): every view opens in simulation and the
-      # app quits by itself. Needs the Electron binary and a display: Windows only.
+      # app quits by itself. Needs the Electron binary and a display: Windows, and Linux under xvfb-run.
       - name: UI screenshots (every view, simulation)
-        if: runner.os == 'Windows'
+        if: runner.os != 'macOS'
         env:
           MULTIAGENT_UI_TESTS: "1"
-        run: node node_modules/electron/install.js && node --test test/screenshot.test.js
+        run: node node_modules/electron/install.js && ${{ runner.os == 'Linux' && 'xvfb-run -a ' || '' }}node --test test/screenshot.test.js
       # The Playwright + playwright-bdd E2E suite's critical journeys (#222): the real app with
       # _electron on a simulated demo workspace, real assertions; a failure keeps its trace and screenshot.
       - name: E2E smoke (Playwright, @smoke)
-        if: runner.os == 'Windows'
-        run: npm run test:e2e -- --grep "@smoke"
+        if: runner.os != 'macOS'
+        run: ${{ runner.os == 'Linux' && 'xvfb-run -a ' || '' }}npm run test:e2e -- --grep "@smoke"
       - name: E2E results and failure traces
-        if: failure() && runner.os == 'Windows'
+        if: failure() && runner.os != 'macOS'
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-results
+          name: e2e-results-${{ runner.os }}
           path: .test-output/e2e/
           if-no-files-found: ignore
       - name: Production vulnerabilities

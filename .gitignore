@@ -2,6 +2,10 @@ node_modules/
 runs/
 dist/
 build/
+# release files (scripts/release-assets.js writes them to the current folder)
+/MultiagentOrchestrator-*.zip
+/MultiagentOrchestrator-*.tar.gz
+/MultiagentOrchestrator-*.AppImage
 .env
 .env.*
 # derived docs (npm run docs; rebuilt by prepare/prestart/pretest/prebuild): never committed, never conflicts

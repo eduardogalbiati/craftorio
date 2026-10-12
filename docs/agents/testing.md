@@ -19,15 +19,16 @@ Read this before writing or changing tests, and before any check that could star
 - `npm test` must pass on Windows, Linux and macOS: `ci.yml` runs a matrix (checks `test (<os>)`)
   plus a combined `test` check that is green only when every planned OS is. PRs run Ubuntu +
   Windows; macOS only for platform-sensitive paths or the `ci:macos` label, weekly and on manual
-  runs (`scripts/ci-plan.js`, Actions minutes: macOS counts ×10). `preview.yml`/`deploy.yml` run
-  on `windows-latest` and skip `npm test` when CI already passed on the same code (the `ci/tested`
+  runs (`scripts/ci-plan.js`, Actions minutes: macOS counts ×10). `preview.yml`/`deploy.yml` build
+  on each OS (see [environment.md](environment.md)) and skip `npm test` when CI already passed on the same code (the `ci/tested`
   status CI records on the PR head, with the tree it tested: pending at the start of each run, then
   its result, so only the latest run counts). Tests that pass
   locally can still fail on another OS: CI is the judge.
 - The Electron part of `test/screenshot.test.js` (every view of `scripts/screenshot.js` opens and
-  quits by itself, ~1 min, ~25 windows) only runs with `MULTIAGENT_UI_TESTS=1`: CI's Windows job
-  has a step for it (after `node node_modules/electron/install.js`; the matrix sets
-  `ELECTRON_SKIP_BINARY_DOWNLOAD`). Run it locally when you change the script or add a view.
+  quits by itself, ~1 min, ~25 windows) only runs with `MULTIAGENT_UI_TESTS=1`: CI's Windows and
+  Ubuntu jobs have a step for it, with the E2E smoke (after `node node_modules/electron/install.js`;
+  the matrix sets `ELECTRON_SKIP_BINARY_DOWNLOAD`; Ubuntu under `xvfb-run`, with unprivileged user
+  namespaces allowed for Chromium's sandbox). Run it locally when you change the script or add a view.
 - **The app's E2E suite (#222)**: Playwright + playwright-bdd, `npm run test:e2e` (`-- --grep
   @smoke`: the 6 critical journeys, ~30 s; `-- --grep @issue-<n>`: one issue). Feature files in
   `features/` (one per area, every scenario `@issue-<n>`), steps in `features/steps/`, the launch in

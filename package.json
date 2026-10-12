@@ -36,6 +36,7 @@
     "prebuild": "node scripts/docs.js --derived && node scripts/build-3d.js",
     "build": "node scripts/package.js build",
     "build:3d": "node scripts/build-3d.js",
+    "icons": "electron scripts/icons.js",
     "package": "node scripts/package.js"
   },
   "dependencies": {

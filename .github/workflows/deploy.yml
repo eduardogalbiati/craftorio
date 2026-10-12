@@ -1,5 +1,6 @@
-# Automatic production deploy: every push/merge to main builds the packaged
-# Windows app and publishes it as a GitHub Release.
+# Automatic production deploy: every push/merge to main builds the packaged app for Windows, macOS
+# and Linux (one job per OS and architecture), smoke-tests each package in simulation and publishes
+# them together as one GitHub Release. macOS builds are not signed nor notarized (README "Install").
 name: Deploy
 
 on:
@@ -17,15 +18,41 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release:
-    runs-on: windows-latest
+  # Assets: MultiagentOrchestrator-<platform>-<arch>.<ext> (scripts/release-assets.js)
+  build:
+    name: build (${{ matrix.platform }} ${{ matrix.arch }})
+    strategy:
+      fail-fast: true   # a failing OS stops the release: no release without all its downloads
+      matrix:
+        include:
+          - os: windows-latest
+            platform: win32
+            arch: x64
+            assets: MultiagentOrchestrator-win32-x64.zip
+          - os: macos-latest      # Apple Silicon
+            platform: darwin
+            arch: arm64
+            assets: MultiagentOrchestrator-darwin-arm64.zip
+          - os: macos-15-intel    # Intel: its smoke test runs natively
+            platform: darwin
+            arch: x64
+            assets: MultiagentOrchestrator-darwin-x64.zip
+          - os: ubuntu-latest
+            platform: linux
+            arch: x64
+            assets: |
+              MultiagentOrchestrator-linux-x64.AppImage
+              MultiagentOrchestrator-linux-x64.tar.gz
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 30   # a hung job must not eat the quota
+    defaults:
+      run:
+        shell: bash   # Git Bash on Windows: the same scripts on every OS
     steps:
       - uses: actions/checkout@v5
       # The PR's CI already tested this code when the merge kept the tree CI tested (main unchanged since):
-      # do not repeat `npm test` (Windows minutes count x2).
+      # do not repeat `npm test`.
       - id: plan
-        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/ci-plan.js tested "${{ github.sha }}" --merged
@@ -33,23 +60,72 @@ jobs:
         with:
           node-version: 24
           cache: npm
+      - name: Linux build tools (node-pty, AppImage, display)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+          curl -fsSL -o "$RUNNER_TEMP/appimagetool" https://github.com/AppImage/appimagetool/releases/download/1.9.0/appimagetool-x86_64.AppImage
+          chmod +x "$RUNNER_TEMP/appimagetool"
       - run: npm ci
       - run: npm test
         if: steps.plan.outputs.tested != 'true'
         env:
           MULTIAGENT_SIMULATION_ONLY: "1"   # automated checks never call real models
-      - name: Package app (win32 x64)
-        run: npm run package
-      - name: Compress
-        shell: pwsh
-        run: Compress-Archive -Path dist/MultiagentOrchestrator-win32-x64/* -DestinationPath MultiagentOrchestrator-win32-x64.zip
+      # node-pty has no Linux prebuild: npm ci compiled it for Node; build it again for Electron's ABI
+      - name: node-pty for Electron (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          export npm_config_runtime=electron
+          export npm_config_target="$(node -p "require('electron/package.json').version")"
+          export npm_config_disturl=https://electronjs.org/headers
+          export npm_config_build_from_source=true
+          npm rebuild node-pty
+      - name: Package app (${{ matrix.platform }} ${{ matrix.arch }})
+        run: npm run package -- --platform ${{ matrix.platform }} --arch ${{ matrix.arch }}
+      - name: Release assets
+        env:
+          APPIMAGETOOL: ${{ runner.temp }}/appimagetool
+          APPIMAGE_EXTRACT_AND_RUN: "1"   # no FUSE on the runner
+        run: node scripts/release-assets.js --platform ${{ matrix.platform }} --arch ${{ matrix.arch }}
+      # The packaged app opens its window in simulation on a scratch workspace and quits by itself
+      # (scripts/smoke-package.js); Linux runs the AppImage (its AppRun) on a virtual display
+      - name: Smoke test of the packaged app
+        if: runner.os != 'Linux'
+        env:
+          MULTIAGENT_SIMULATION_ONLY: "1"
+        run: node scripts/smoke-package.js
+      - name: Smoke test of the packaged app (AppImage, xvfb-run)
+        if: runner.os == 'Linux'
+        env:
+          MULTIAGENT_SIMULATION_ONLY: "1"
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+        run: xvfb-run -a node scripts/smoke-package.js MultiagentOrchestrator-linux-x64.AppImage
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.platform }}-${{ matrix.arch }}
+          path: ${{ matrix.assets }}
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: assets
       - name: Publish release
-        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          ls -l assets
           VERSION=$(node -p "require('./package.json').version")
           TAG="v${VERSION}-build.${{ github.run_number }}"
-          gh release create "$TAG" MultiagentOrchestrator-win32-x64.zip \
+          gh release create "$TAG" assets/* \
             --target "${{ github.sha }}" --title "$TAG" --generate-notes --latest
           echo "Release published: $TAG"

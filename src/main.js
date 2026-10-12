@@ -296,6 +296,8 @@ function createWindow() {
     minHeight: 700,
     backgroundColor: '#0e1014',
     title: 'Multiagent Orchestrator',
+    // Linux takes the window icon from here (Windows and macOS from the packaged executable)
+    ...(process.platform === 'linux' && { icon: path.join(APP_DIR, 'assets', 'icon.png') }),
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -319,6 +321,17 @@ function createWindow() {
   win.webContents.once('did-finish-load', () => service.notifyInterruptedRun());
   // the Agents window goes with the main one (#263)
   win.on('closed', () => { const aw = agentsWindow?.current(); if (aw) aw.close(); });
+  // Packaged-app smoke (scripts/smoke-package.js, the release jobs): in simulation only, the app
+  // writes MULTIAGENT_SMOKE_FILE a few seconds after its page loads and quits by itself
+  const smokeFile = process.env.MULTIAGENT_SIMULATION_ONLY === '1' && process.env.MULTIAGENT_SMOKE_FILE;
+  if (smokeFile) {
+    win.webContents.once('did-fail-load', (_e, code, desc) => { console.error(`Smoke: the page did not load: ${desc} (${code})`); app.exit(1); });
+    win.webContents.once('render-process-gone', (_e, details) => { console.error(`Smoke: the page crashed: ${details.reason}`); app.exit(1); });
+    win.webContents.once('did-finish-load', () => setTimeout(() => {
+      fs.writeFileSync(smokeFile, `loaded ${win.webContents.getURL()}\n`);
+      app.quit();
+    }, 3000));
+  }
 }
 
 // ---- desktop-only actions ----------------------------------------------------------------

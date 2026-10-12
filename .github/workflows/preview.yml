@@ -1,8 +1,10 @@
 # Test environment: publishes a PR's test build as a GitHub pre-release
 # (tag preview-pr-<n>). Triggered by the Deployer before the merge:
-#   gh workflow run preview.yml --ref <pr-branch> -f pr_number=<n>
-# Built once per PR head: a pre-release already built from the same commit is kept (-f rebuild=true
-# forces a new build), and the tests are skipped when CI passed on that PR head (its ci/tested status).
+#   gh workflow run preview.yml --ref <pr-branch> -f pr_number=<n> [-f os=windows|macos|linux|all]
+# Windows only by default; `os` adds the macOS (arm64 and x64) or Linux (x64) builds, the same jobs as
+# deploy.yml. Built once per PR head: an asset already in the pre-release of the same commit is kept
+# (-f rebuild=true forces a new build), and the tests are skipped when CI passed on that PR head (its
+# ci/tested status).
 name: Preview
 
 on:
@@ -12,6 +14,16 @@ on:
         description: PR number
         required: true
         type: number
+      os:
+        description: Which builds (macOS and Linux run on macos-latest/macos-15-intel and ubuntu-latest)
+        required: false
+        type: choice
+        options:
+          - windows
+          - macos
+          - linux
+          - all
+        default: windows
       rebuild:
         description: Build even if the pre-release already has this commit
         required: false
@@ -26,61 +38,136 @@ concurrency:
   group: preview-${{ inputs.pr_number }}
   cancel-in-progress: true
 
+env:
+  PR_NUMBER: ${{ inputs.pr_number }}
+
 jobs:
-  preview:
-    runs-on: windows-latest
-    timeout-minutes: 30   # a hung job must not eat the quota
-    env:
-      PR_NUMBER: ${{ inputs.pr_number }}
+  # The builds to make: the chosen OS, minus the assets the pre-release of this commit already has
+  targets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.pick.outputs.matrix }}
+      keep: ${{ steps.pick.outputs.keep }}
     steps:
-      - name: Reuse the pre-release of this commit
-        id: reuse
-        shell: bash
+      - id: pick
         env:
           GH_TOKEN: ${{ github.token }}
+          OS: ${{ inputs.os }}
+          REBUILD: ${{ inputs.rebuild }}
         run: |
+          ALL='[
+            {"family":"windows","os":"windows-latest","platform":"win32","arch":"x64","assets":"MultiagentOrchestrator-win32-x64.zip"},
+            {"family":"macos","os":"macos-latest","platform":"darwin","arch":"arm64","assets":"MultiagentOrchestrator-darwin-arm64.zip"},
+            {"family":"macos","os":"macos-15-intel","platform":"darwin","arch":"x64","assets":"MultiagentOrchestrator-darwin-x64.zip"},
+            {"family":"linux","os":"ubuntu-latest","platform":"linux","arch":"x64","assets":"MultiagentOrchestrator-linux-x64.AppImage\nMultiagentOrchestrator-linux-x64.tar.gz"}
+          ]'
           TARGET=$(gh release view "preview-pr-${PR_NUMBER}" --repo "$GITHUB_REPOSITORY" --json targetCommitish -q .targetCommitish 2>/dev/null || true)
-          if [ "${{ inputs.rebuild }}" != "true" ] && [ "$TARGET" = "$GITHUB_SHA" ]; then
-            echo "preview-pr-${PR_NUMBER} is already built from ${GITHUB_SHA::7}: kept"
-            echo "built=true" >> "$GITHUB_OUTPUT"
+          HAVE='[]'
+          if [ "$REBUILD" != "true" ] && [ "$TARGET" = "$GITHUB_SHA" ]; then
+            HAVE=$(gh release view "preview-pr-${PR_NUMBER}" --repo "$GITHUB_REPOSITORY" --json assets -q '[.assets[].name]')
+            echo "keep=true" >> "$GITHUB_OUTPUT"
           fi
+          MATRIX=$(jq -c --arg os "${OS:-windows}" --argjson have "$HAVE" \
+            '[.[] | select($os == "all" or .family == $os) | select((.assets | split("\n")) - $have | length > 0)]' <<< "$ALL")
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+          if [ "$MATRIX" = "[]" ]; then echo "preview-pr-${PR_NUMBER} already has these builds of ${GITHUB_SHA::7}: kept"; fi
+          echo "builds: $MATRIX"
+
+  preview:
+    name: preview (${{ matrix.platform }} ${{ matrix.arch }})
+    needs: targets
+    if: needs.targets.outputs.matrix != '[]'
+    strategy:
+      fail-fast: true
+      matrix:
+        include: ${{ fromJSON(needs.targets.outputs.matrix) }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30   # a hung job must not eat the quota
+    defaults:
+      run:
+        shell: bash   # Git Bash on Windows: the same scripts on every OS
+    steps:
       - uses: actions/checkout@v5
-        if: steps.reuse.outputs.built != 'true'
       - id: plan
-        if: steps.reuse.outputs.built != 'true'
-        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/ci-plan.js tested "$GITHUB_SHA"
       - uses: actions/setup-node@v5
-        if: steps.reuse.outputs.built != 'true'
         with:
           node-version: 24
           cache: npm
+      - name: Linux build tools (node-pty, AppImage, display)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+          curl -fsSL -o "$RUNNER_TEMP/appimagetool" https://github.com/AppImage/appimagetool/releases/download/1.9.0/appimagetool-x86_64.AppImage
+          chmod +x "$RUNNER_TEMP/appimagetool"
       - run: npm ci
-        if: steps.reuse.outputs.built != 'true'
       - run: npm test
-        if: steps.reuse.outputs.built != 'true' && steps.plan.outputs.tested != 'true'
+        if: steps.plan.outputs.tested != 'true'
         env:
           MULTIAGENT_SIMULATION_ONLY: "1"   # automated checks never call real models
-      - name: Package app (win32 x64)
-        if: steps.reuse.outputs.built != 'true'
-        run: npm run package
-      - name: Compress
-        if: steps.reuse.outputs.built != 'true'
-        shell: pwsh
-        run: Compress-Archive -Path dist/MultiagentOrchestrator-win32-x64/* -DestinationPath MultiagentOrchestrator-win32-x64-preview.zip
+      # node-pty has no Linux prebuild: npm ci compiled it for Node; build it again for Electron's ABI
+      - name: node-pty for Electron (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          export npm_config_runtime=electron
+          export npm_config_target="$(node -p "require('electron/package.json').version")"
+          export npm_config_disturl=https://electronjs.org/headers
+          export npm_config_build_from_source=true
+          npm rebuild node-pty
+      - name: Package app (${{ matrix.platform }} ${{ matrix.arch }})
+        run: npm run package -- --platform ${{ matrix.platform }} --arch ${{ matrix.arch }}
+      - name: Release assets
+        env:
+          APPIMAGETOOL: ${{ runner.temp }}/appimagetool
+          APPIMAGE_EXTRACT_AND_RUN: "1"   # no FUSE on the runner
+        run: node scripts/release-assets.js --platform ${{ matrix.platform }} --arch ${{ matrix.arch }}
+      - name: Smoke test of the packaged app
+        if: runner.os != 'Linux'
+        env:
+          MULTIAGENT_SIMULATION_ONLY: "1"
+        run: node scripts/smoke-package.js
+      - name: Smoke test of the packaged app (AppImage, xvfb-run)
+        if: runner.os == 'Linux'
+        env:
+          MULTIAGENT_SIMULATION_ONLY: "1"
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+        run: xvfb-run -a node scripts/smoke-package.js MultiagentOrchestrator-linux-x64.AppImage
+      - uses: actions/upload-artifact@v4
+        with:
+          name: preview-${{ matrix.platform }}-${{ matrix.arch }}
+          path: ${{ matrix.assets }}
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    needs: [targets, preview]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: preview-*
+          merge-multiple: true
+          path: assets
       - name: Publish pre-release
-        if: steps.reuse.outputs.built != 'true'
-        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          KEEP: ${{ needs.targets.outputs.keep }}
         run: |
           TAG="preview-pr-${PR_NUMBER}"
-          # one test build per PR: replaces the previous one
-          gh release delete "$TAG" --cleanup-tag -y 2>/dev/null || true
-          gh release create "$TAG" MultiagentOrchestrator-win32-x64-preview.zip \
-            --prerelease --target "${GITHUB_SHA}" \
-            --title "Preview PR #${PR_NUMBER} (${GITHUB_SHA::7})" \
-            --notes "Test build generated from PR #${PR_NUMBER} (branch ${GITHUB_REF_NAME}, commit ${GITHUB_SHA}). Not for production use."
+          if [ "$KEEP" = "true" ]; then
+            # same commit: add the new builds to the pre-release
+            gh release upload "$TAG" assets/* --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            # one test build per PR: replaces the previous one
+            gh release delete "$TAG" --cleanup-tag -y --repo "$GITHUB_REPOSITORY" 2>/dev/null || true
+            gh release create "$TAG" assets/* --repo "$GITHUB_REPOSITORY" \
+              --prerelease --target "${GITHUB_SHA}" \
+              --title "Preview PR #${PR_NUMBER} (${GITHUB_SHA::7})" \
+              --notes "Test build generated from PR #${PR_NUMBER} (branch ${GITHUB_REF_NAME}, commit ${GITHUB_SHA}). Not for production use."
+          fi
           echo "Pre-release published: $TAG"

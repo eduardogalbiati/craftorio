@@ -100,6 +100,39 @@ HttpOnly cookie after the first visit; API clients send `Authorization: Bearer <
   keeps the computer from sleeping.
 
 Local build: `npm run build` (writes `build/`) or `npm run package` (writes `dist/`, used by the deploy).
+Both build for the current machine; `npm run package -- --platform darwin|linux|win32 --arch arm64|x64`
+picks another target (the macOS signature step needs a Mac).
+
+## Install
+
+Download the file for your system from the latest
+[GitHub Release](https://github.com/eduardogalbiati/multiagent-orchestrator/releases/latest). The
+builds are not signed yet, so each system warns once before the first start.
+
+- **Windows** (x64): `MultiagentOrchestrator-win32-x64.zip`. Unzip it anywhere and run
+  `MultiagentOrchestrator.exe`. If SmartScreen says "Windows protected your PC", click **More info**,
+  then **Run anyway**.
+- **macOS** (Apple Silicon: `MultiagentOrchestrator-darwin-arm64.zip`; Intel:
+  `MultiagentOrchestrator-darwin-x64.zip`). Unzip it and move `MultiagentOrchestrator.app` to
+  Applications. The app is not notarized, so the first start is blocked: open it once, then
+  **System Settings › Privacy & Security**, and click **Open Anyway** next to the message about
+  the app (or, in Terminal: `xattr -dr com.apple.quarantine /Applications/MultiagentOrchestrator.app`).
+  Voice input asks for the microphone the first time you use it.
+- **Linux** (x64): `MultiagentOrchestrator-linux-x64.AppImage`. Make it executable and run it:
+  `chmod +x MultiagentOrchestrator-linux-x64.AppImage && ./MultiagentOrchestrator-linux-x64.AppImage`
+  (if it does not start because FUSE is missing, run it with `--appimage-extract-and-run`). On systems that forbid unprivileged user namespaces (Ubuntu 23.10
+  and later) the AppImage starts with Chromium's sandbox off. `MultiagentOrchestrator-linux-x64.tar.gz`
+  is the same app as a folder: run `./MultiagentOrchestrator` inside it; if it stops with "The SUID
+  sandbox helper binary was found, but is not configured correctly", give the sandbox helper its
+  rights once: `sudo chown root:root chrome-sandbox && sudo chmod 4755 chrome-sandbox`.
+
+The CLIs the workflows use are installed separately: see
+[Installing the CLIs on Windows](#installing-the-clis-on-windows) and its macOS and Linux part.
+
+**App icon.** `assets/icon.ico` (Windows), `assets/icon.icns` (macOS) and `assets/icon.png` (Linux)
+are generated from one source image, `assets/icon-source.png`, which is a placeholder for now. To
+replace the icon, put a square PNG of 1024 px or more at `assets/icon-source.png` (or pass its path)
+and run `npm run icons`, then commit the four files.
 
 ## Account and privacy
 
@@ -1285,11 +1318,15 @@ Enabled in `software-development`. The other bundled workflows only read a folde
   starts, then success or failure, so only the latest run counts. The
   plan lives in `scripts/ci-plan.js`.
 - `.github/workflows/preview.yml`: test environment. Triggered by the Deployer, publishes the
-  pre-release `preview-pr-<n>` from the PR branch. It keeps a pre-release already built from the
-  same commit (`-f rebuild=true` forces it) and skips `npm test` when the PR head has `ci/tested`.
-- `.github/workflows/deploy.yml`: production. Every push to `main` packages and publishes a release;
-  it runs `npm test` only when the merged commit's tree is not the one the PR's CI tested (`main`
-  moved after CI ran).
+  pre-release `preview-pr-<n>` from the PR branch: the Windows build by default, `-f os=macos`,
+  `linux` or `all` for the others. It keeps the builds a pre-release of the same commit already has
+  (`-f rebuild=true` forces them) and skips `npm test` when the PR head has `ci/tested`.
+- `.github/workflows/deploy.yml`: production. Every push to `main` packages the app on
+  `windows-latest` (win32 x64), `macos-latest` (darwin arm64), `macos-15-intel` (darwin x64) and
+  `ubuntu-latest` (linux x64, AppImage and tar.gz), launches each package in simulation until it
+  quits by itself (`scripts/smoke-package.js`, `xvfb-run` on Linux; a failure stops the release) and
+  publishes all of them in one release. Each job runs `npm test` only when the merged commit's tree
+  is not the one the PR's CI tested (`main` moved after CI ran).
 
 Standard GitHub-hosted runners are free for public repositories; CI still runs only what a change
 needs, so it stays fast, and every job has a `timeout-minutes`. A pull request from a fork gets the

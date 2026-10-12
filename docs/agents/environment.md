@@ -23,6 +23,23 @@ the workspace folder.
   (as on Windows). Before the first lookup it merges the login shell's PATH once per process
   (`mergeLoginShellPath`, 3 s timeout; a failing or noisy shell changes nothing). Config folders
   follow `CLAUDE_CONFIG_DIR` and `CODEX_HOME` (`src/cli-config-dirs.js`).
+- **Packaging per OS** (#317, `scripts/package.js`): `npm run package` builds for the current
+  machine into `dist/MultiagentOrchestrator-<platform>-<arch>/`; `-- --platform win32|darwin|linux
+  --arch x64|arm64` picks another target. Same asar ignore/unpack lists everywhere; the fuses are
+  flipped in the `.exe`, the `.app`'s `Contents/MacOS` binary or the ELF, and on macOS the `.app` is
+  re-signed ad hoc right after (needs `codesign`, so a Mac). macOS: bundle id, `.icns`,
+  `NSMicrophoneUsageDescription`; no Developer ID signing nor notarization (owner decision later).
+  Icons: `assets/icon-source.png` → `npm run icons` (`scripts/icons.js`, runs under Electron).
+  `scripts/release-assets.js` turns a build into the release files (Windows zip, macOS zip made with
+  `ditto`, Linux `.tar.gz` and AppImage through `appimagetool`), and `scripts/smoke-package.js`
+  starts a packaged app in simulation on a scratch workspace and waits for it to quit by itself
+  (`MULTIAGENT_SMOKE_FILE`, honoured only with `MULTIAGENT_SIMULATION_ONLY=1`, `src/main.js`).
+- **Release jobs**: `deploy.yml` (push to `main`) runs one build job per target on `windows-latest`
+  (win32 x64), `macos-latest` (darwin arm64), `macos-15-intel` (darwin x64) and `ubuntu-latest`
+  (linux x64: `npm rebuild node-pty` against Electron's headers, AppImage + tar.gz, smoke under
+  `xvfb-run`), then one `publish` job puts every asset in the same GitHub Release. A failing build or
+  smoke stops the release. `preview.yml` runs the same jobs for the OS its `os` input picks
+  (`windows` by default, `macos`, `linux`, `all`).
 - Voice input (optional, `src/speech.js`): `whisper-cli` from whisper.cpp. On Windows download
   `whisper-bin-x64.zip` from https://github.com/ggml-org/whisper.cpp/releases, unzip it (e.g. to
   `%LOCALAPPDATA%\whisper.cpp`) and add that folder to PATH, or put the full path of
