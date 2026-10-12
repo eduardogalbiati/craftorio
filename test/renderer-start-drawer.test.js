@@ -139,23 +139,37 @@ function loadStartDrawer({ workflows = [], projects = [], settings = {}, runs = 
 // ---------------------------------------------------------------------------
 // #132: no green checkmarks, only a missing CLI warns
 // ---------------------------------------------------------------------------
-function envStatusHtml(env) {
-  const m = /\$\('#env-status'\)\.innerHTML = ([\s\S]*?);\n\}/.exec(src);
-  assert.ok(m, 'the #env-status assignment in init() not found in app.js: the source moved');
-  const sandbox = { env };
+// #319: renderEnvStatus (start-drawer.js) draws it from the chosen workflow's requirements and the
+// CLI states, with the real SetupModel; commandHint and the mode checks are stubs.
+function envStatusHtml(cliStates, requirements = { clis: ['claude', 'codex', 'git'], forge: false }) {
+  const m = /function renderEnvStatus\(\) \{[\s\S]*?\n\}/.exec(drawerSrc);
+  assert.ok(m, 'renderEnvStatus not found in start-drawer.js: the source moved');
+  const box = makeEl();
+  const sandbox = {
+    state: { wf: { requirements }, cliStates, cliTools: Object.keys(cliStates).map((id) => ({ id, path: cliStates[id] !== 'missing' ? `/bin/${id}` : '' })) },
+    $: () => box,
+    esc: (s) => String(s),
+    SetupModel: require('../src/renderer/setup-model.js'),
+    canRunCommands: () => false,
+    commandHint: () => '',
+    devMode: () => false,
+  };
   vm.createContext(sandbox);
-  return vm.runInContext(m[1], sandbox);
+  vm.runInContext(`${m[0]}\nrenderEnvStatus();`, sandbox);
+  return box.innerHTML;
 }
 
-test('#env-status: every CLI on PATH renders no line at all (no green checkmarks)', () => {
-  assert.equal(envStatusHtml({ claude: true, codex: true }), '');
+test('#env-status: every CLI the workflow needs is ready renders no warning at all (no green checkmarks)', () => {
+  const html = envStatusHtml({ claude: 'ready', codex: 'ready', git: 'ready' });
+  assert.doesNotMatch(html, /✗|✓/);
 });
 
 test('#env-status: a missing CLI renders only its warning, nothing for the ones that are found', () => {
-  const html = envStatusHtml({ claude: false, codex: true });
-  assert.match(html, /✗ claude not found in PATH \(use simulation mode\)/);
-  assert.doesNotMatch(html, /codex/);
+  const html = envStatusHtml({ claude: 'ready', codex: 'missing', git: 'ready' });
+  assert.match(html, /✗ Codex CLI: not installed/);
+  assert.doesNotMatch(html, /Claude Code:|Git:/);
   assert.doesNotMatch(html, /✓/);
+  assert.doesNotMatch(html, /use simulation mode/, 'never points to a mode the user may not see');
 });
 
 test('style.css: the now-unused .env .ok rule is gone, and an empty #env-status leaves no gap', () => {

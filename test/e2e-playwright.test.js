@@ -120,9 +120,10 @@ test('feature files live in features/, every scenario is tagged @issue-<n>', () 
   for (const s of scenarios) assert.ok(s.steps.length > 0, `${s.file}: "${s.name}" has steps`);
 });
 
-test('5 to 10 critical journeys are tagged @smoke: the app opens, a mock run reaches a gate, the gate card, Backlog Board, Roadmap, Settings', () => {
+// #319 adds the first-run Setup journey (fresh workspace → Setup → Skip → Home) as the 11th.
+test('5 to 11 critical journeys are tagged @smoke: the app opens, a mock run reaches a gate, the gate card, Backlog Board, Roadmap, Settings, Setup', () => {
   const smoke = allScenarios().filter((s) => s.tags.includes('@smoke'));
-  assert.ok(smoke.length >= 5 && smoke.length <= 10, `5 to 10 @smoke scenarios (got ${smoke.length})`);
+  assert.ok(smoke.length >= 5 && smoke.length <= 11, `5 to 11 @smoke scenarios (got ${smoke.length})`);
   const text = smoke.map((s) => [s.name, ...s.steps].join('\n')).join('\n');
   for (const topic of [/gate/i, /backlog/i, /roadmap/i, /settings/i, /run/i]) assert.match(text, topic, `a @smoke journey about ${topic}`);
 });
