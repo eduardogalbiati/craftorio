@@ -502,6 +502,10 @@ details[open] > summary .label::after { content: " ▾"; }
 #sk-body { font-family: var(--mono); font-size: 12px; }
 .modal pre { background: var(--panel-2); padding: 12px; border-radius: 8px; margin: 12px 0 16px; font-family: inherit; font-size: 13px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+/* #288: the kept-work question's Details disclosure and its "choose another step…" link under the buttons */
+.confirm-more { margin: 0 0 12px; }
+.confirm-more ul { margin: 6px 0 0; padding-left: 18px; }
+.confirm-link { display: block; margin: 6px 0 0 auto; }
 
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
 

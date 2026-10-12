@@ -126,7 +126,11 @@ Read this before changing anything in `src/renderer/`.
   (`runTitleHtml`, `[data-title-edit]`) and the PR link (`[data-pr-url]`) are handled by one
   capture-phase click listener, so they never select or expand the row around them.
 - Write & Review and AI Arena keep their own chat screens; every other run uses the run chat
-  (`views/runchat/run-chat-model.js` is pure and unit-tested, `runchat.js` draws it).
+  (`views/runchat/run-chat-model.js` is pure and unit-tested, `runchat.js` draws it). An
+  interrupted run (status running in its events, not live: `interrupted()`) ends with
+  `runchat-interrupted-note` and a primary `runchat-resume` (`[data-resume-at]` →
+  `openResumeDialog(runId, { step })`, the stopped step preselected); a gate it left open has its
+  choices disabled with the reason in their tooltip and its own `runchat-resume` (#288).
 - **How a run is opened**: one global run view, `state.runView` (`'details' | 'chat'`, saved in
   localStorage `multiagent.runView`). Every way of opening a run (sidebar Run menu, toasts,
   notifications, "View run", Backlog run links, the gate badge, a resume) goes through
@@ -436,6 +440,18 @@ changed in `style.css` goes into that skill too. In this app:
   (`stageMenuHtml`, `roadmap-stage-menu`; an entry that cannot be used is `aria-disabled` with its
   reason under it); a disabled stage (#284) is `.rm-stage.disabled` with `data-disabled="true"`.
   More states for screenshots: `--roadmap states` (a fix round, a disabled stage, a simulated item).
+  An item whose run ended interrupted, failed or cancelled has `roadmap-item-resume` ("Resume run",
+  `[data-rm-resume]` → `openResumeDialog`) in `.rm-fail-actions` (#288).
+- **Releases on the Roadmap** (#291, `releaseView` / `releaseBlockHtml` / `releaseLineHtml` in
+  `backlog-roadmap.js`, `.rm-release*` in `backlog.css`): `data.releases` comes with the Backlog read
+  (`roadmapReleases` in `src/service/areas/releases.js`: the history plus the release runs not
+  shipped, or `{ error }`). A block `roadmap-release-block` (card `roadmap-release-card`, `role=group`,
+  aria-label "Release <version>, <state>") and its dashed `roadmap-release-line` follow the release's
+  stage; they are never stages (no `data-stage`, no menu, no drop target) and replace the cut line's
+  row once its release run started. The filter row's `roadmap-release-filter` (`view.release`,
+  localStorage `multiagent.roadmapRelease`) narrows `visibleStages` to the release's runs (`v.runs`).
+  Screenshots: `--release checking|waiting|held|shipped` (the demo cut line's release run) and
+  `--release-filter next|<version>`.
 - **A roadmap changed elsewhere** (#287): every save of the Roadmap screen sends the roadmap's
   `updatedAt` it drew (`save(ctx, r, stages, edit)` → `api.saveRoadmap(projectId, stages, label,
   base)`); the service applies only that edit to a roadmap written since (docs/agents/storage.md).

@@ -520,7 +520,10 @@
       // refused before any run: nothing to open, the error is the tooltip (and under the card)
       : refused ? StatusPill.statusPill('failed_to_start', { title: x.error, className: 'rm-state' })
         : StatusPill.statusPill(x.waiting ? 'waiting' : x.status, { title: gate, className: 'rm-state' });
-    const fail = `${retryable(x, r) ? `<button class="btn sm primary" type="button" data-rm-item="retry" title="${refused ? 'Start it again: when an ended run kept work for its issues, you choose to resume that run or start from scratch' : 'Run it again (a new run)'}">Retry</button><button class="btn sm ghost" type="button" data-rm-item="skip" title="Count it as finished: the roadmap goes on">Skip</button>` : ''}${askOracleHtml(x)}`;
+    // #288: an item whose run ended without finishing (interrupted, failed, cancelled) resumes that run
+    const resume = retryable(x, r) && x.runId && ['interrupted', 'failed', 'cancelled'].includes(x.run?.status)
+      ? `<button class="btn sm ghost" type="button" data-rm-resume="${esc(x.runId)}" data-testid="roadmap-item-resume" title="Resume its run ${esc(x.runId)} from a step (where it stopped is preselected), keeping its work">Resume run</button>` : '';
+    const fail = `${retryable(x, r) ? `<button class="btn sm primary" type="button" data-rm-item="retry" title="${refused ? 'Start it again: when an ended run kept work for its issues, you choose to resume that run or start over' : 'Run it again (a new run)'}">Retry</button><button class="btn sm ghost" type="button" data-rm-item="skip" title="Count it as finished: the roadmap goes on">Skip</button>${resume}` : ''}${askOracleHtml(x)}`;
     const move = locked ? '' : `<button class="btn sm ghost" type="button" data-rm-move="up" title="Earlier in the stage (or into the previous stage)" aria-label="Earlier in the stage"${n === 0 && s === 0 ? ' disabled' : ''}>↑</button><button class="btn sm ghost" type="button" data-rm-move="down" title="Later in the stage (or into the next stage)" aria-label="Later in the stage">↓</button><button class="link-btn small" type="button" data-rm-remove title="Take this item out of the roadmap">Remove</button>`;
     return `<div class="rm-status" data-testid="roadmap-status">${state}${fail ? `<div class="rm-fail-actions">${fail}</div>` : ''}${move ? `<div class="rm-actions">${move}</div>` : ''}</div>`;
   }
@@ -789,6 +792,138 @@
     });
   }
 
+  // ---- releases on the Roadmap (#291): a block after its stage, a dashed version line, a filter ------
+  // A release looks like a stage with a single card, its release run, but is not one: no number, no
+  // menu, no drop target, nothing stored in the roadmap. `data.releases` (backlog.js, the service's
+  // roadmapReleases): { releases: [{ version, status, runId (the release run), mock, runs (run ids in
+  // the release), date, tag, commit, issues, cost, tests, startedAt, durationMs, runCost, stations:
+  // { unit, e2e, fix, ship } (rounds), station (where the run is) }] }, or { error } when the history
+  // could not be read. A cut line whose release run started (`stage.release.runId`) places its
+  // release (named like the line) and its row gives way to the block.
+  // a release's state: [badge tone, label, what it means, what the stages after its cut line wait for]
+  const RELEASE_BLOCK = {
+    checking: ['live', 'Checking', 'Its release run checks the whole unit and E2E suites', 'the stages below wait for the check'],
+    waiting: ['warn', 'Waiting for you', 'Its Ship gate waits for you: open the run to Ship or Hold', 'the stages below wait for Ship'],
+    shipped: ['', 'Shipped', 'Pushed and tagged', ''],
+    held: ['warn', 'On hold', 'Its release run ended without shipping', 'the stages below wait: resume its run from its Ship gate, or Resume the roadmap'],
+    failed: ['error', 'Failed', 'Its release run failed', 'the stages below wait: open the run, then Resume the roadmap to check the release again'],
+  };
+  // the release workflow's stations (workflows/release.yaml)
+  const RELEASE_STATIONS = [['unit', 'Unit tests'], ['e2e', 'E2E scenarios'], ['fix', 'Fix'], ['ship', 'Ship']];
+  const itemRuns = (x) => [...(x.runs || []), x.runId].filter(Boolean);
+  const shortDate = (at) => {
+    const d = new Date(at);
+    return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
+
+  // The releases the Roadmap knows, each with `at`: the stage it follows (its cut line's, else the last
+  // stage with a run in it; -1: none) and `cut` (it has a cut line).
+  function roadmapReleases(r, data) {
+    const list = (data?.releases?.releases || []).filter((x) => x?.version).map((x) => ({ ...x, cut: false, at: -1 }));
+    r.stages.forEach((stage, s) => {
+      const line = stage.release;
+      const x = line?.runId && list.find((y) => y.version === line.name);
+      if (!x) return;
+      x.runId = x.runId || line.runId;
+      x.cut = true;
+      x.at = s;
+    });
+    for (const x of list.filter((y) => !y.cut)) {
+      const runs = new Set(x.runs || []);
+      x.at = r.stages.findLastIndex((stage) => stage.items.some((i) => itemRuns(i).some((id) => runs.has(id))));
+    }
+    return list;
+  }
+
+  // The Releases filter's choice (`view.release`: '' all, 'next' the next release, else a version):
+  // { list, choice, shown (the releases drawn), runs (the run ids a chosen release narrows to, null: all), chosen }
+  function releaseView(r, data, wanted) {
+    const list = roadmapReleases(r, data);
+    const chosen = wanted && wanted !== 'next' ? list.find((x) => x.version === wanted) || null : null;
+    const choice = chosen ? wanted : wanted === 'next' && list.length ? 'next' : '';
+    if (!choice) return { list, choice, shown: list.filter((x) => x.at >= 0), runs: null, chosen: null };
+    if (chosen) return { list, choice, shown: [chosen], runs: new Set(chosen.runs || []), chosen };
+    // what merged since the last release: the done items' runs no shipped release holds
+    const shipped = new Set(list.filter((x) => x.status === 'shipped').flatMap((x) => x.runs || []));
+    const pending = list.filter((x) => x.status !== 'shipped');
+    const runs = new Set([...r.stages.flatMap((s) => s.items).filter((i) => i.status === 'done').flatMap(itemRuns).filter((id) => !shipped.has(id)), ...pending.flatMap((x) => x.runs || [])]);
+    return { list, choice, shown: pending, runs, chosen: null };
+  }
+
+  // The head's count while a release is chosen: its stages and runs shown, the runs of the release the
+  // roadmap does not have (runs started elsewhere), a link to the release on the Releases screen.
+  function releaseCountHtml(r, rv, vis) {
+    const stages = vis.filter((x) => x.items.length).length;
+    const shown = new Set(vis.flatMap((x) => x.items).flatMap(itemRuns).filter((id) => rv.runs.has(id)));
+    const inRoadmap = new Set(r.stages.flatMap((s) => s.items).flatMap(itemRuns));
+    const outside = rv.chosen ? (rv.chosen.runs || []).filter((id) => id !== rv.chosen.runId && !inRoadmap.has(id)).length : 0;
+    const name = rv.chosen ? `Release ${rv.chosen.version}` : 'Next release';
+    const rest = outside ? `; ${plural(outside, 'run')} of this release ${outside === 1 ? 'is' : 'are'} not in the roadmap` : '';
+    return `<span class="small muted rm-count" data-testid="roadmap-count">${esc(name)}: ${plural(stages, 'stage')} · ${plural(shown.size, 'run')}${rest}${rv.chosen?.status === 'shipped' && !rv.chosen.mock ? ' <button class="link-btn small" type="button" data-rm-open-releases title="The release on the Releases screen">Open in Releases</button>' : ''}</span>`;
+  }
+
+  // The filter row's Releases select: All, Next release, each shipped release newest first; not drawn
+  // without any release; disabled with the reason when the history could not be read.
+  function releaseFilterHtml(data, rv) {
+    const attrs = 'class="rm-release-filter" data-rm-release-filter data-testid="roadmap-release-filter" aria-label="Releases"';
+    if (data?.releases?.error) return `<select ${attrs} title="${esc(`The releases could not be read: ${data.releases.error}`)}" disabled><option>Releases could not be read</option></select>`;
+    if (!rv.list.length) return '';
+    const shipped = rv.list.filter((x) => x.status === 'shipped' && x.date).sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    const options = [['', 'All'], ['next', 'Next release (not shipped)'], ...shipped.map((x) => [x.version, `${x.version} · ${shortDate(x.date)}`])];
+    return `<label class="rm-release-pick small"><span class="muted">Release</span><select ${attrs.replace('rm-release-filter"', `rm-release-filter${rv.choice ? ' active' : ''}"`)} title="Show the stages and items whose runs are in a release">${options.map(([id, label]) =>
+      `<option value="${esc(id)}"${id === rv.choice ? ' selected' : ''}>${esc(label)}</option>`).join('')}</select></label>`;
+  }
+
+  // The release block: its state, its release run's stations with their rounds, its time, cost and
+  // fixes, "Open run" (at the Ship gate, the gate waits there: nothing here answers it).
+  function releaseBlockHtml(x) {
+    const [tone, label, help] = RELEASE_BLOCK[x.status] || RELEASE_BLOCK.checking;
+    const name = `Release ${x.version}`;
+    const going = x.status === 'checking' || x.status === 'waiting';
+    const rounds = x.stations || {};
+    const stations = x.runId ? `<ol class="rm-release-stations" aria-label="The release run's stations">${RELEASE_STATIONS.map(([id, text]) => {
+      const n = Number(rounds[id]) || 0;
+      const here = going && x.station === id;
+      return `<li class="rm-release-station${n ? ' visited' : ''}${here ? ' current' : ''}"${here ? ' aria-current="step"' : ''}>${esc(text)}${n > 1 ? ` <span class="muted">×${n}</span>` : ''}${here && x.status === 'waiting' ? ' · waits for you' : ''}</li>`;
+    }).join('')}</ol>` : '';
+    const fixes = Number(rounds.fix) || 0;
+    const tests = ['unit', 'e2e'].map((k) => x.tests?.[k]).every((t) => !t) ? ''
+      : [['unit', 'Unit'], ['e2e', 'E2E']].filter(([k]) => x.tests?.[k]).map(([k, t]) => `${t} ${x.tests[k].passed ?? 0} passed${x.tests[k].failed ? `, ${x.tests[k].failed} failed` : ''}`).join(' · ');
+    const facts = [x.durationMs ? mins(Math.max(1, Math.round(x.durationMs / 60000))) : '', x.runCost != null ? money(x.runCost) : '', fixes ? `${fixes} fix${fixes === 1 ? '' : 'es'}` : '', tests].filter(Boolean).join(' · ');
+    return `
+      <section class="rm-release is-${esc(x.status)}" data-testid="roadmap-release-block" data-release="${esc(x.version)}" role="group" tabindex="0" aria-label="${esc(`${name}, ${label}`)}">
+        <div class="rm-release-card" data-testid="roadmap-release-card" title="${esc(help)}">
+          <div class="rm-release-head">
+            <span class="rm-release-icon" aria-hidden="true">◆</span><b class="rm-release-name">${esc(name)}</b>
+            ${x.mock ? '<span class="badge p-mock">Simulated</span>' : ''}<span class="badge ${tone}" data-status="${esc(x.status)}">${esc(label)}</span>
+            <span class="spacer"></span>
+            ${x.runId ? `<button class="btn sm ${x.status === 'waiting' ? 'primary' : 'ghost'}" type="button" data-rm-release-run="${esc(x.runId)}" title="${esc(x.status === 'waiting' ? 'Open the release run at its Ship gate' : `Open the release run ${x.runId}`)}">Open run</button>` : ''}
+          </div>
+          ${stations}
+          ${facts ? `<div class="small muted rm-release-facts">${esc(facts)}</div>` : ''}
+        </div>
+      </section>`;
+  }
+
+  // The dashed line after the block: shipped, the version, when, its issues, runs and cost, the tag and
+  // short commit, a link to the Releases screen; not shipped, the version, its state and what the
+  // stages after its cut line wait for.
+  function releaseLineHtml(x) {
+    const [, label, , waits] = RELEASE_BLOCK[x.status] || RELEASE_BLOCK.checking;
+    const shipped = x.status === 'shipped';
+    const when = shipped && x.date ? `shipped ${shortDate(x.date)}, ${clock(x.date)}` : shipped ? 'shipped' : '';
+    const tag = x.tag ? `tag ${x.tag}${x.commit ? ` (${String(x.commit).slice(0, 7)})` : ''}` : '';
+    const parts = shipped
+      ? [x.version, when, plural((x.issues || []).length, 'issue'), plural((x.runs || []).length, 'run'), x.cost != null ? money(x.cost) : '', tag]
+      : [x.version, label, x.cut ? waits : ''];
+    return `
+      <div class="rm-release-line is-${esc(x.status)}" data-testid="roadmap-release-line" tabindex="0" aria-label="${esc(`Release ${x.version}: ${parts.filter(Boolean).slice(1).join(', ')}`)}">
+        <span class="rm-release-line-text">${parts.filter(Boolean).map(esc).join(' · ')}</span>
+        ${shipped && x.mock !== true ? '<button class="link-btn small" type="button" data-rm-open-releases title="The release\'s notes, issues and runs on the Releases screen">Open in Releases</button>' : ''}
+      </div>`;
+  }
+  const releaseHtml = (x) => releaseBlockHtml(x) + releaseLineHtml(x);
+
   // ---- what the Roadmap shows (#217, #268): Planned | All, the date range, the epic filter, in pages ------
   const finished = (x) => x.status === 'done' || x.status === 'skipped';
   const DAY_MS = 24 * 60 * 60 * 1000;
@@ -833,14 +968,15 @@
   /**
    * The stages the view shows: [{ stage, s (its real index), items (the ones drawn, in order), folded
    * (Planned: its finished items of the date range, under the "+n done" chip), open (the chip is
-   * unfolded: they are drawn too) }]. `v`: { epic, showAll, rangeMs }.
+   * unfolded: they are drawn too) }]. `v`: { epic, showAll, rangeMs, runs }; `runs` (#291: a release
+   * chosen, its run ids): only the items with a run in it, finished or not, and the stages that have one.
    */
   function visibleStages(r, v, byNumber, now) {
     const out = [];
     r.stages.forEach((stage, s) => {
-      if (!stage.items.length && !v.epic) { out.push({ stage, s, items: [], folded: [], open: false }); return; }
-      const mine = stage.items.filter((x) => inEpic(x, v.epic, byNumber));
-      if (v.showAll) {
+      if (!stage.items.length && !v.epic && !v.runs) { out.push({ stage, s, items: [], folded: [], open: false }); return; }
+      const mine = stage.items.filter((x) => inEpic(x, v.epic, byNumber) && (!v.runs || itemRuns(x).some((id) => v.runs.has(id))));
+      if (v.showAll || v.runs) {
         const items = mine.filter((x) => inRange(x, v, now));
         if (items.length) out.push({ stage, s, items, folded: [], open: false });
         return;
@@ -974,10 +1110,12 @@
   function html(data, rerender, view = {}) {
     loadWorkflows(rerender);
     const [since, , sinceText, rangeMs] = SINCE.find(([id]) => id === view.since) || SINCE[0];
-    const v = { epic: view.epic || '', showAll: !!view.showAll, since, rangeMs };
-    const key = `${view.project || ''}|${v.showAll ? 'all' : 'planned'}|${since}|${v.epic}`;
-    if (pages.key !== key) pages = { key, more: 0, earlier: 0, fresh: true };
     const r = data?.roadmap || { state: 'planned', stages: [] };
+    // #291: the releases, and the one the Releases filter chose
+    const rv = releaseView(r, data, view.release || '');
+    const v = { epic: view.epic || '', showAll: !!view.showAll, since, rangeMs, runs: rv.runs };
+    const key = `${view.project || ''}|${v.showAll ? 'all' : 'planned'}|${since}|${v.epic}|${rv.choice}`;
+    if (pages.key !== key) pages = { key, more: 0, earlier: 0, fresh: true };
     const q = data?.queue?.items || [];
     const byNumber = new Map((data?.issues || []).map((i) => [i.number, i]));
     // a stage run on its own (#141) is the one in progress; the others keep their planned look
@@ -1044,7 +1182,9 @@
     const offItems = offStages.flatMap((s) => s.items).length;
     const shownItems = vis.reduce((a, x) => a + (x.stage.disabled ? 0 : cardCount(x)), 0);
     const epicName = v.epic === NO_EPIC ? 'with no epic' : `in epic ${epics.find((e) => e.id === v.epic)?.title || v.epic}`;
-    const count = r.stages.length ? `<span class="small muted rm-count" data-testid="roadmap-count"${v.epic ? ` title="${esc(`Items ${epicName}`)}"` : ''}>${shownItems} of ${allItems.length} item${allItems.length === 1 ? '' : 's'} · ${sinceText}${offItems ? ` · ${plural(offStages.length, 'disabled stage')} apart (${plural(offItems, 'item')})` : ''}</span>` : '';
+    const count = !r.stages.length ? ''
+      : rv.choice ? releaseCountHtml(r, rv, vis)
+        : `<span class="small muted rm-count" data-testid="roadmap-count"${v.epic ? ` title="${esc(`Items ${epicName}`)}"` : ''}>${shownItems} of ${allItems.length} item${allItems.length === 1 ? '' : 's'} · ${sinceText}${offItems ? ` · ${plural(offStages.length, 'disabled stage')} apart (${plural(offItems, 'item')})` : ''}</span>`;
     const nothing = `<div class="empty-state"><b>No ${v.showAll ? '' : 'open '}roadmap items${v.showAll && rangeMs ? ` in the ${sinceText}` : ''}${v.epic ? ` ${esc(epicName)}` : ''}.</b>
       <p class="muted">${v.showAll ? 'Pick a longer date range, or another epic.' : 'Done and skipped items are under All.'}</p>${v.showAll ? '' : '<button class="btn sm ghost" type="button" data-rm-view="all">Show all items</button>'}</div>`;
     // the page to draw; #260: each drawn stage with its cut line; a hidden (finished) stage's line
@@ -1052,14 +1192,20 @@
     // the page reaches that end of the roadmap)
     const page = pageOf(vis, current);
     const drawn = new Map(page.drawn.map((x) => [x.s, x]));
-    const from = page.earlier ? page.drawn[0].s : 0;
+    const from = page.earlier ? page.drawn[0]?.s ?? 0 : 0;
     const to = page.more ? page.drawn.at(-1).s : r.stages.length - 1;
+    // #291: a release block (and its version line) after its stage, in place of its cut line once its
+    // release run started; with a release chosen, no other line, and its block last when its stage is
+    // not drawn (or it has none)
+    const cutLine = (stage, s) => (rv.choice || rv.list.some((x) => x.cut && x.at === s) ? '' : cutLineHtml(stage, s));
+    const placed = (x) => x.at >= 0 && (!rv.choice || drawn.has(x.at));
+    const blocksAfter = (s) => rv.shown.filter((x) => placed(x) && x.at === s).map(releaseHtml).join('');
     const staged = r.stages.map((stage, s) => {
       if (s < from || s > to) return '';
       const x = drawn.get(s);
-      if (x) return stageHtml(stage, s, r.stages.length, current, byNumber, scoped, r, x) + cutLineHtml(stage, s);
-      return !v.epic && stage.release?.status !== 'shipped' ? cutLineHtml(stage, s) : '';
-    }).join('');
+      if (x) return stageHtml(stage, s, r.stages.length, current, byNumber, scoped, r, x) + cutLine(stage, s) + blocksAfter(s);
+      return (!v.epic && stage.release?.status !== 'shipped' ? cutLine(stage, s) : '') + blocksAfter(s);
+    }).join('') + (rv.choice ? rv.shown.filter((x) => !placed(x)).map(releaseHtml).join('') : '');
     const earlier = page.earlier ? `<button class="link-btn small rm-earlier" type="button" data-rm-earlier title="Draw the stages before these">↑ ${plural(page.earlier, 'earlier stage')}</button>` : '';
     const loadingRow = page.more ? '<div class="rm-loading small muted" role="status" data-rm-load-more data-testid="roadmap-loading">Loading…</div>' : '';
     const stages = !r.stages.length
@@ -1074,7 +1220,8 @@
     const epicSelect = options.length ? `<select class="rm-epic${v.epic ? ' active' : ''}" data-rm-epic aria-label="Epic" title="Show the items of one epic, or those in no epic"><option value="">All epics</option>${options.map((o) =>
       `<option value="${esc(o.id)}"${o.id === v.epic ? ' selected' : ''}>${esc(o.title)} (${o.count})</option>`).join('')}</select>` : '';
     // (`view.synced`: the Board toolbar's "Synced … from GitHub", which is hidden on this screen)
-    const filters = epicSelect || viewSeg || sinceSelect || toggle ? `<div class="rm-filters" data-testid="filter-row">${epicSelect}${viewSeg}${sinceSelect}${toggle}${view.synced ? `<span class="spacer"></span><span class="muted small">${esc(view.synced)}</span>` : ''}</div>` : '';
+    const relSelect = r.stages.length ? releaseFilterHtml(data, rv) : '';
+    const filters = epicSelect || viewSeg || sinceSelect || relSelect || toggle ? `<div class="rm-filters" data-testid="filter-row">${epicSelect}${viewSeg}${sinceSelect}${relSelect}${toggle}${view.synced ? `<span class="spacer"></span><span class="muted small">${esc(view.synced)}</span>` : ''}</div>` : '';
     return `<div class="rm">${filters}${bar.replace('<span class="spacer"></span>', `${count}<span class="spacer"></span>`)}${lostHtml()}${queued}${stages}${liveHtml}${importBox}</div>`;
   }
 
@@ -1548,9 +1695,14 @@
     // #270 and calls showItem itself; a `data-rm-goto` element inside the Roadmap still works)
     const goto = e.target.closest('[data-rm-goto]');
     if (goto) { showItem(goto.dataset.rmGoto); return true; }
-    // #260: a cut line's release run
+    // #260: a cut line's release run (#291: the release block's Open run)
     const releaseRun = e.target.closest('[data-rm-release-run]');
     if (releaseRun) { window.showRun(releaseRun.dataset.rmReleaseRun); return true; }
+    // #291: a shipped release on the Releases screen
+    if (e.target.closest('[data-rm-open-releases]')) { showView('releases'); return true; }
+    // #288: an item's ended run, resumed from a step (Resume from step…, resume-dialog.js)
+    const resumeBtn = e.target.closest('[data-rm-resume]');
+    if (resumeBtn) { if (typeof openResumeDialog === 'function') openResumeDialog(resumeBtn.dataset.rmResume); return true; }
     const act = e.target.closest('[data-rm]')?.dataset.rm;
     const stages = clone(r.stages);
     try {
@@ -1722,6 +1874,11 @@
     // #269: the filter row's epic (backlog.js keeps the choice, shared with the Board)
     if (el.matches('[data-rm-epic]')) {
       ctx.setEpic?.(el.value);
+      return true;
+    }
+    // #291: the Releases filter (remembered by backlog.js with the others)
+    if (el.matches('[data-rm-release-filter]')) {
+      ctx.setRelease?.(el.value);
       return true;
     }
     if (!r || !el.closest('.rm-stage')) return false;

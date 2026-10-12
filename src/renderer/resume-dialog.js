@@ -67,7 +67,14 @@ function resumeEffects(o, stepId) {
     <div><b>Human gates ask again</b> when the run reaches them${gates.length ? ` (${gates.map((s) => esc(resumeStepName(o, s))).join(', ')}${o.steps[at].gate ? '; this step is one' : ''})` : ''}: none is treated as already approved${o.steps[at].blockedBy ? `, except ${esc(resumeStepName(o, o.steps[at].blockedBy))} when you approve it again above` : ''}.</div>`;
 }
 
-async function openResumeDialog(runId) {
+// A run stopped by a limit (#288: the context limit's gate, the cost or time limits): the resumed run
+// is a new run, so its limits count from zero (its own turns' context, cost and time).
+function resumeLimitNote(o) {
+  return o.limit ? `<div class="muted small" data-testid="resume-limit-note">The run stopped at its limit (<span class="mono">${esc(o.limit)}</span>). The resumed run counts its limits from zero: the limit applies again only once the new run reaches it.</div>` : '';
+}
+
+// opts.step: the step to preselect (#288: where an interrupted run stopped), over the suggested one
+async function openResumeDialog(runId, opts = {}) {
   const body = $('#resume-body');
   const msg = $('#resume-msg');
   const yes = $('#btn-resume-yes');
@@ -83,7 +90,10 @@ async function openResumeDialog(runId) {
   try { o = await api.resumeOptions(runId); } catch (e) { body.innerHTML = `<p class="error small">${esc(errMsg(e))}</p>`; return; }
   $('#resume-run').innerHTML = `<span class="mono">${esc(o.runId)}</span> · ${esc(o.workflow || '')} ${StatusPill.statusPill(o.status)}${o.mock ? ' <span class="badge p-mock">Simulated</span>' : ''}`;
   if (o.active) { body.innerHTML = '<p class="error small">The run is still active: it can be resumed once it ends.</p>'; return; }
-  body.innerHTML = `${resumeFields('resume', o.steps.map((s) => ({ id: s.id, label: resumeStepLabel(o, s), disabled: !!s.blockedBy && !s.confirm?.ok })), o.suggested)}
+  const allowed = (id) => o.steps.some((s) => s.id === id && (!s.blockedBy || s.confirm?.ok));
+  const pre = opts.step && allowed(opts.step) ? opts.step : o.suggested;
+  body.innerHTML = `${resumeFields('resume', o.steps.map((s) => ({ id: s.id, label: resumeStepLabel(o, s), disabled: !!s.blockedBy && !s.confirm?.ok })), pre)}
+    ${resumeLimitNote(o)}
     <div id="resume-gate" class="field"></div>
     <div id="resume-effects" class="resume-effects small"></div>`;
   const sel = $('#resume-step');
@@ -101,7 +111,7 @@ async function openResumeDialog(runId) {
   // a simulated run resumes as one; simulation-only (automated checks) never resumes a real run
   box.checked = o.mock || devMode();
   box.disabled = o.mock || !!state.simulationOnly;
-  if (!o.suggested) yes.disabled = true;
+  if (!pre) yes.disabled = true;
   yes.onclick = async () => {
     yes.disabled = true;
     msg.className = 'small muted';

@@ -116,6 +116,8 @@
       }
       const fn = HANDLERS[ev.type];
       if (fn) fn.call(this, ev);
+      // its latest event: the time so far of a run that ended without workflow.finished (#288)
+      if (ev.ts) this.run.lastTs = ev.ts;
       return this.touched;
     }
   }
@@ -209,6 +211,7 @@
 
     'step.started'(ev) {
       this.visits[ev.step_id] = ev.visit || 1;
+      this.run.stepId = ev.step_id; // the step it is at (where an interrupted run stopped, #288)
       const agents = String(ev.agent || '').split(' · ').filter(Boolean);
       if (agents.length > 1) {
         for (const a of agents) this.sideOf(a); // a fan-out's agents get their sides in the step's order

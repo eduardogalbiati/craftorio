@@ -91,14 +91,34 @@
       <div class="rc-body md">${body}</div>${extras.join('')}${foot ? `<div class="duo-foot">${esc(foot)}</div>` : ''}</div></div>`;
   }
 
+  // #288: a run whose events never ended (no workflow.finished) and that no app runs any more: the
+  // app closed while it ran or waited at a gate. Nothing waits for an answer; Resume goes on.
+  const interrupted = () => !chat.live && !chat.loading && chat.model.run.status === 'running';
+  // where it stopped: the gate left waiting, else the step it was at
+  const stoppedStep = () => chat.model.pendingGates().at(-1)?.stepId || chat.model.run.stepId || null;
+  const resumeButton = () => `<button type="button" class="btn sm primary" data-testid="runchat-resume" data-resume-at="${esc(stoppedStep() || '')}" title="Resume the run where it stopped (Resume from step…, that step chosen)">Resume</button>`;
+  // the chat's last message while the run is interrupted (drawn by draw, after the items)
+  function interruptedHtml() {
+    const r = chat.model.run;
+    const at = stoppedStep();
+    const spent = r.lastTs && r.startedAt ? Date.parse(r.lastTs) - Date.parse(r.startedAt) : 0;
+    return `<div class="duo-note failed rc-interrupted" data-testid="runchat-interrupted-note"><span><b data-status="interrupted">Interrupted at <span title="${esc(at || '')}">${esc(at ? stepName(at) : 'its first step')}</span></b> (the app closed) · $${(r.cost || 0).toFixed(2)} · ${fmtSecs(spent)}</span>
+      ${resumeButton()}<button type="button" class="link-btn small" data-resume title="Start a new run from another step of this one, keeping the previous outputs (no supervisor call)">Resume from step…</button></div>`;
+  }
+
   function gateHtml(it) {
     const off = !chat.live || it.resolved || it.closed ? ' disabled' : '';
+    // #288: a gate an interrupted run left waiting: nobody can take the answer, resuming brings it back
+    const stale = !chat.live && !it.resolved && !it.closed;
+    const why = 'The run was interrupted: resume it to answer this gate';
     // with "Accept and save to issue #n" when the run is about an issue (gateChoices in app.js, #125)
     const choices = typeof gateChoices === 'function' ? gateChoices({ choices: it.choices, save_to_issue: it.saveToIssue }) : it.choices;
     const buttons = choices.map((c, i) => {
       const chosen = it.resolved && String(c.id) === it.resolved.choice && (c.intent || null) === (it.resolved.intent || null);
-      return `<button type="button" class="btn sm ${!it.resolved && i === 0 ? 'primary' : ''}${chosen ? ' chosen' : ''}" data-approval="${esc(it.approvalId)}" data-choice="${esc(c.id)}"${c.intent ? ` data-intent="${esc(c.intent)}" title="${esc(c.title)}"` : ''}${c.feedback_required ? ' data-needs-text="1"' : ''}${off}>${esc(c.label)}</button>`;
+      const title = stale ? why : c.intent ? c.title : '';
+      return `<button type="button" class="btn sm ${!it.resolved && i === 0 ? 'primary' : ''}${chosen ? ' chosen' : ''}" data-approval="${esc(it.approvalId)}" data-choice="${esc(c.id)}"${c.intent ? ` data-intent="${esc(c.intent)}"` : ''}${title ? ` title="${esc(title)}"` : ''}${c.feedback_required ? ' data-needs-text="1"' : ''}${off}>${esc(c.label)}</button>`;
     }).join('')
+      + (stale ? resumeButton() : '')
       // #183: "Interact with Oracle" at the end of the row
       + (window.GateOracle?.gateOracleButtonHtml({ approval_id: it.approvalId, run_id: chat.runId, step_id: it.stepId }) || '');
     // Run App / Open the worktree (app.js), only while the gate waits in the live run
@@ -106,7 +126,8 @@
     const tools = open && typeof gateToolsHtml === 'function' ? gateToolsHtml(it, { runId: chat.runId }) : '';
     const field = it.feedback && !it.resolved && !it.closed ? `<label class="duo-ask-label">${esc(it.feedback.label || 'Instructions (optional)')}</label>
       <textarea class="duo-ask-text" rows="2" placeholder="${esc(it.feedback.placeholder || '')}"${off}></textarea>` : '';
-    const state = it.resolved ? '' : it.closed ? '<p class="muted small">The run ended before an answer.</p>' : chat.live ? '' : '<p class="muted small">Waiting for an answer.</p>';
+    const state = it.resolved ? '' : it.closed ? '<p class="muted small">The run ended before an answer.</p>'
+      : stale ? '<p class="muted small" data-testid="runchat-gate-interrupted">This gate was waiting when the run was interrupted (the app closed). Resuming the run brings it back.</p>' : '';
     // every gate's summary card (#213), the long message in its Details; a gate that tries the change
     // (#108) also gets the run's Artifacts panel on the right while it waits
     // a report (#290: the release summary) leads the message, rendered on its own
@@ -114,7 +135,7 @@
     const full = `${parts.reportHtml}<div class="rc-body md">${md(parts.message)}</div>`;
     const card = it.brief?.headline ? window.gateCardHtml?.(chat.runId, open ? it : { ...it, runApp: false, localPreview: null }, full)
       : open ? window.gateBriefHtml?.(chat.runId, it, full) : '';
-    const help = !it.resolved && !it.closed ? window.gateButtonsHelpHtml?.(it) || '' : '';
+    const help = !it.resolved && !it.closed && !stale ? window.gateButtonsHelpHtml?.(it) || '' : '';
     const side = open && typeof gateSideHtml === 'function' ? gateSideHtml(it, chat.runId) : '';
     const main = `<div class="duo-meta"><b>Human gate</b>${stepTag(it.stepId)}<span class="time">${clock(it.ts)}</span></div>
       ${card || full}${tools}${field}<div class="row gate-choices">${buttons}</div>${help}${state}`;
@@ -183,6 +204,9 @@
       const parent = it.parent && box.querySelector(`[data-item="${it.parent}"] .rc-group-body`);
       (parent || box).insertAdjacentHTML('beforeend', html);
     }
+    // an interrupted run's note stays the last message (#288)
+    box.querySelector('[data-testid="runchat-interrupted-note"]')?.remove();
+    if (interrupted()) box.insertAdjacentHTML('beforeend', interruptedHtml());
     // a gate's Artifacts panel and Run App state (app.js)
     window.mountGateSides?.(box);
     window.paintGateApps?.();
@@ -307,6 +331,8 @@
   function init() {
     if (!$c('#view-runchat')) return;
     $c('#rc-messages').addEventListener('click', (e) => {
+      const at = e.target.closest('[data-resume-at]');
+      if (at) { window.openResumeDialog?.(chat.runId, at.dataset.resumeAt ? { step: at.dataset.resumeAt } : {}); return; }
       if (e.target.closest('[data-resume]')) { window.openResumeDialog?.(chat.runId); return; }
       if (e.target.closest('[data-gate-tool]')) { if (chat.live) onGateTool(e, chat.runId); return; }
       const b = e.target.closest('button[data-approval]');

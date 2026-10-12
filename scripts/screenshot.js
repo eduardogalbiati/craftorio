@@ -226,6 +226,8 @@ function parseArgs(argv) {
     else if (k === '--live') a.live = next();
     else if (k === '--budget') a.budget = next();
     else if (k === '--roadmap') a.roadmap = next();
+    else if (k === '--release') a.release = next();
+    else if (k === '--release-filter') a.releaseFilter = next();
     else if (k === '--po') a.po = next();
     else if (k === '--agents-window') a.agentsWindow = next();
     else throw new Error(`Unknown argument: ${k}`);
@@ -408,6 +410,62 @@ function demoReleases(ws, projectId) {
     'Nothing found against shipping.',
     '',
   ].join('\n'));
+}
+
+// #291 (--release checking | waiting | held | shipped): the release v0.10 of the demo roadmap's cut
+// line, checked by a release run (unit tests twice around a fix, then E2E, then Ship): still checking
+// (in E2E), waiting at its Ship gate (both live in "another app", studio-pc), held at Ship, or shipped
+// (recorded in the history with stage 1's and tonight's done runs). Runs after demoRoadmap and
+// demoReleases: the line takes the run.
+function demoReleaseRun(ws, projectId, state) {
+  if (!['checking', 'waiting', 'held', 'shipped'].includes(state)) throw new Error('--release takes checking | waiting | held | shipped');
+  const runId = '20260120-233000-rel00010';
+  const dir = path.join(ws.runs, runId);
+  fs.mkdirSync(dir, { recursive: true });
+  const groups = [{ name: 'Regression', steps: ['unit', 'e2e', 'suite_blocked'] }, { name: 'Fix', steps: ['fix', 'regression_failed'] }, { name: 'Ship', steps: ['ship', 'ship_failed'] }];
+  const start = Date.now() - 50 * 6e4;
+  const ev = (m, type, extra = {}) => JSON.stringify({ ts: new Date(start + m * 6e4).toISOString(), type, ...extra });
+  const lines = [ev(0, 'workflow.started', { run_id: runId, workflow: 'release', file: 'release.yaml', project_id: projectId, mock: false, groups, inputs: { task: 'Check the release v0.10 of demo', version: 'v0.10' } })];
+  // [step, start minute, end minute (null: still there)]
+  const path_ = [['unit', 0, 8], ['fix', 8, 22], ['unit', 22, 30], ['e2e', 30, state === 'checking' ? null : 44], ...(state === 'checking' ? [] : [['ship', 44, state === 'waiting' ? null : 49]])];
+  for (const [step, from, to] of path_) {
+    lines.push(ev(from, 'step.started', { step_id: step, step_type: step === 'ship' ? 'human_approval' : step === 'fix' ? 'agent' : 'suite', ...(step === 'fix' ? { agent: 'developer' } : {}) }));
+    if (step === 'fix') lines.push(ev(from + 0.1, 'session.opened', { session_id: 's-fix', session: { agent: 'developer', provider: 'claude', model: 'claude-opus-5-5' } }));
+    if (step === 'fix') lines.push(ev(to - 0.1, 'session.message_received', { session_id: 's-fix', step_id: 'fix', cost_usd: 2.46, session: { agent: 'developer', provider: 'claude', model: 'claude-opus-5-5' } }));
+    if (step === 'ship' && to == null) lines.push(ev(from + 0.2, 'approval.requested', { step_id: 'ship', approval_id: 'ship-1', message: 'Ship v0.10?' }));
+    if (to != null) lines.push(ev(to, 'step.finished', { step_id: step, duration_ms: (to - from) * 6e4 }));
+  }
+  const ended = state === 'held' || state === 'shipped';
+  if (ended) lines.push(ev(50, 'workflow.finished', { status: state === 'held' ? 'cancelled' : 'success', summary: { cost_usd: 2.46, duration_ms: 50 * 6e4 } }));
+  fs.writeFileSync(path.join(dir, 'events.jsonl'), `${lines.join('\n')}\n`);
+  if (ended) {
+    fs.writeFileSync(path.join(dir, 'summary.json'), JSON.stringify({
+      run_id: runId, workflow: 'release', project_id: projectId, mock: false, groups, status: state === 'held' ? 'cancelled' : 'success', started_at: new Date(start).toISOString(),
+      finished_at: new Date(start + 50 * 6e4).toISOString(), duration_ms: 50 * 6e4, inputs: { version: 'v0.10' }, sessions: [{ id: 's-fix', agent: 'developer', cost_usd: 2.46 }],
+    }, null, 2));
+  } else {
+    // alive in another app (studio-pc) while the screenshot is taken
+    const owner = { pid: 4242, host: 'studio-pc', role: 'run', started_at: new Date(start).toISOString() };
+    const beat = () => { try { fs.writeFileSync(path.join(dir, 'owner.json'), JSON.stringify({ ...owner, heartbeat_at: new Date().toISOString() })); } catch { clearInterval(timer); } };
+    const timer = setInterval(beat, 5000);
+    timer.unref?.();
+    beat();
+  }
+  const file = path.join(ws.backlog, `${projectId}.roadmap.json`);
+  const roadmap = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const line = roadmap.stages.find((s) => s.release?.name === 'v0.10');
+  if (line) line.release = { name: 'v0.10', status: { checking: 'running', waiting: 'running' }[state] || state, runId };
+  fs.writeFileSync(file, JSON.stringify(roadmap, null, 2));
+  if (state !== 'shipped') return;
+  const history = path.join(ws.root, 'releases', `${projectId}.json`);
+  const h = JSON.parse(fs.readFileSync(history, 'utf8'));
+  const done = roadmap.stages.flatMap((s) => s.items).filter((x) => x.status === 'done' && x.runId);
+  h.releases.push({
+    version: 'v0.10', tag: 'v0.10', date: new Date(start + 50 * 6e4).toISOString(), commit: '69a8158e2d4c6b8a0f1e3d5c7b9a1f3e5d7c9b0a', base: 'main',
+    issues: done.map((x) => ({ number: x.number, title: x.title })), runs: [...done.map((x) => x.runId), '20260120-221500-demo0099', runId], cost: 41.37,
+    tests: { unit: { status: 'pass', passed: 431, failed: 0 }, e2e: { status: 'pass', passed: 39, failed: 0 } }, notes: '# v0.10', status: 'shipped',
+  });
+  fs.writeFileSync(history, JSON.stringify(h, null, 2));
 }
 
 // The Product Owner registering an issue (#117): a short request with a screenshot, one question,
@@ -1671,6 +1729,8 @@ function main() {
     if (home || ['backlog', 'discovery', 'releases'].includes(args.view)) demoReleases(ws, project.id);
     // (#289: also on Workflows › Runs and Project, whose run lists show tonight's runs and the artifact runs expanded)
     if (home || ['backlog', 'workflows', 'project'].includes(args.view)) demoRoadmap(ws, project.id, args.live, args.budget, args.roadmap);
+    // #291: the release v0.10 of the roadmap's cut line, in a state (needs the history: Backlog only)
+    if (args.release && args.view === 'backlog') demoReleaseRun(ws, project.id, args.release);
     if (args.view === 'backlog') demoPoConversation(ws, project.id, args.po);
     if (args.view === 'backlog' && project.folder) demoBacklogRefresh(ws, project.folder, project.id);
     if (home || (['inbox', 'discovery'].includes(args.view) && args.mode !== 'empty')) demoDiscovery(ws, project.id);
@@ -2001,6 +2061,11 @@ function main() {
       await pause(1500);
     }
     if (v === 'backlog' && args.mode && args.mode !== 'roadmap') await click(`#view-backlog [data-mode="${args.mode}"]`);
+    // #291: the Roadmap's Releases filter on a choice ('next', or a version)
+    if (args.releaseFilter) {
+      await js(`const s = document.querySelector('[data-rm-release-filter]'); if (s) { s.value = ${JSON.stringify(args.releaseFilter)}; s.dispatchEvent(new Event('change', { bubbles: true })); }`);
+      await pause(800);
+    }
     // --po (#180): the Product Owner's drawer, asking (working, writing) or with its last answer
     // (#235: with --workflow, the workflow it plans with, as if the owner had chosen it for the project)
     if (args.po && args.workflowGiven) await js(`localStorage.setItem('po.workflow.' + window.BacklogActions.projectId(), ${JSON.stringify(args.workflow)});`);

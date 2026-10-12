@@ -37,6 +37,13 @@ function readReleases(dir, projectId) {
   } catch { return emptyHistory(); }
 }
 
+/** Why the project's history file cannot be read (#291: the Roadmap says so), or null (it reads, or there is none yet). */
+function historyError(dir, projectId) {
+  let text;
+  try { text = fs.readFileSync(releasesFile(dir, projectId), 'utf8'); } catch (e) { return e.code === 'ENOENT' ? null : e.message; }
+  try { return historyProblem(JSON.parse(text)); } catch (e) { return e.message; }
+}
+
 // What a release history file must look like (src/state-file.js refuses a write that breaks it).
 function historyProblem(h) {
   if (!h || !Array.isArray(h.releases)) return 'releases is not a list';
@@ -213,6 +220,7 @@ function testResults(steps = {}) {
 }
 
 module.exports = {
+  historyError,
   historyText,
   lastRelease,
   markReleased,

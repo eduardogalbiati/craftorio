@@ -45,7 +45,9 @@ module.exports = (ctx) => {
       .map((i) => (cards.has(i.number) ? { ...i, discoveryCard: cards.get(i.number) } : i))
       .map((i) => (stages.has(i.number) ? { ...i, roadmap: stages.get(i.number) } : i))
       .map((i) => (refreshed.has(i.number) && i.state === 'open' ? { ...i, refreshed: true } : i));
-    return { ...data, queue, local, roadmap, refresh, autoPush: !!project?.autoPush, autoEpic: !!project?.autoEpic, issues };
+    // #291: the releases the Roadmap draws (its release blocks and Releases filter)
+    const releases = ctx.roadmapReleases(project, live);
+    return { ...data, queue, local, roadmap, refresh, autoPush: !!project?.autoPush, autoEpic: !!project?.autoEpic, issues, releases };
   }
 
   // The Backlog Refresh banner (#161, src/backlog-refresh.js): the merges on the base since the

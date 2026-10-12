@@ -57,6 +57,7 @@
   const BOARD_KEY = 'multiagent.backlogBoard';
   const SHOW_ALL_KEY = 'multiagent.roadmapShowAll';
   const SINCE_KEY = 'multiagent.roadmapSince';
+  const RELEASE_KEY = 'multiagent.roadmapRelease'; // #291: the Releases filter ('' all, 'next', a version)
   const WORKFLOW_KEY = 'multiagent.backlogWorkflow';
   const LABELS_KEY = 'multiagent.backlogLabels.'; // + project id
   const SORT_KEY = 'multiagent.backlogSort';
@@ -83,6 +84,7 @@
     board: load(BOARD_KEY) === 'kanban' || (load(BOARD_KEY) == null && load(MODE_KEY) === 'kanban') ? 'kanban' : 'list',
     showAll: load(SHOW_ALL_KEY) === '1',
     since: load(SINCE_KEY) || '',
+    release: load(RELEASE_KEY) || '',
     latest: null, // #287: the Backlog read while the owner is busy, newer than what is shown (backlogChanged)
   };
   // #217: the page tab of a mode (Board: list / kanban); 'roadmap' is the Roadmap screen's (#254)
@@ -649,6 +651,7 @@
     // #217, #268: the Roadmap's Planned | All switch (All when on) and its date range (remembered)
     setShowAll: (on) => { bl.showAll = !!on; save(SHOW_ALL_KEY, bl.showAll ? '1' : ''); render(); },
     setSince: (id) => { bl.since = String(id || ''); save(SINCE_KEY, bl.since); render(); },
+    setRelease: (id) => { bl.release = String(id || ''); save(RELEASE_KEY, bl.release); render(); },
   });
 
   // An issue of a queued group: remove it from the group (the others still go as one run) or
@@ -1292,7 +1295,7 @@
     } else if (!bl.data) {
       list.innerHTML = bl.syncing ? '<p class="muted">Loading issues…</p>' : '<p class="muted">Not synced yet.</p>';
     } else {
-      list.innerHTML = bl.mode === 'roadmap' ? window.BacklogRoadmap.html(bl.data, render, { epic: bl.epic, epicOptions: epicChoices(board), showAll: bl.showAll, since: bl.since, project: bl.projectId, synced: $b('#bl-synced').textContent }) :bl.mode === 'epics' ? renderEpics(issues) : bl.mode === 'kanban' ? renderKanban(board) : renderList(board);
+      list.innerHTML = bl.mode === 'roadmap' ? window.BacklogRoadmap.html(bl.data, render, { epic: bl.epic, epicOptions: epicChoices(board), showAll: bl.showAll, since: bl.since, release: bl.release, project: bl.projectId, synced: $b('#bl-synced').textContent }) :bl.mode === 'epics' ? renderEpics(issues) : bl.mode === 'kanban' ? renderKanban(board) : renderList(board);
       // the open item's "When it finishes" (#134); the next page when its "Loading…" row comes near (#268)
       if (bl.mode === 'roadmap') {
         window.BacklogRoadmap.mountChain(bl.data);
