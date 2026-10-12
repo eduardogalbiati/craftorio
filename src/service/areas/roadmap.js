@@ -20,7 +20,6 @@ const runs = require('../../runs');
 const RunProgress = require('../../renderer/run-progress-model');
 
 module.exports = (ctx) => {
-  const { host } = ctx;
   // a call while one is going runs again right after it (a run that ends meanwhile is never missed)
   let roadmapBusy = false;
   let roadmapAgain = false;
@@ -231,7 +230,6 @@ module.exports = (ctx) => {
     // a disabled stage (#284) starts nothing: its real items do not make this start a real one
     if (!simulated && stages.some((s) => !s.disabled && s.items.some((x) => !x.mock && !['done', 'skipped'].includes(x.status)))) {
       simulation.refuseReal('real runs from a roadmap');
-      await host.assertCanRun?.({ mock: false });
     }
     roadmaps.setState(ws.backlog, id, 'running', { simulated: !!simulated, stage: stage ? String(stage) : null });
     await dispatchRoadmaps();

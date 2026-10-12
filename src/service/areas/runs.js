@@ -41,7 +41,7 @@ const SLOT_POLL_MS = 1000;
 const MEMORY_RETRY_MS = 30e3;
 
 module.exports = (ctx) => {
-  const { host, events } = ctx;
+  const { events } = ctx;
   const active = new Map();
   // Starts under way (between the limit check and the run entering `active`): counted like runs.
   const reserved = new Set();
@@ -244,7 +244,6 @@ module.exports = (ctx) => {
     }
     let run;
     try {
-      await host.assertCanRun?.({ mock: !!mock });
       // repo_path can be a git URL: clones (or updates) it into <workspace>/repos.
       if (workspace.isGitUrl(inputs?.repo_path)) {
         inputs = { ...inputs, repo_path: (await workspace.cloneRepo(inputs.repo_path, ws.repos)).dir };

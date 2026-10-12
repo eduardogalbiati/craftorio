@@ -1017,11 +1017,8 @@ body.resizing-dock .term-body { pointer-events: none; }
   position: absolute; top: calc(100% + 8px); right: 0; z-index: 20; width: 280px; padding: 14px;
   background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 12px 32px rgba(0,0,0,.4);
 }
-.account-pop p { margin: 10px 0 12px; }
-.pill-trial { background: rgba(124,156,255,.12); color: var(--accent); border-color: rgba(124,156,255,.3); }
-.pill-trial-low { background: rgba(250,204,21,.12); color: var(--yellow); border-color: rgba(250,204,21,.3); }
-.pill-trial-ended { background: rgba(248,113,113,.12); color: var(--red); border-color: rgba(248,113,113,.3); }
-.pill-pro { background: rgba(74,222,128,.12); color: var(--green); border-color: rgba(74,222,128,.3); }
+.account-pop #btn-sign-out { margin-top: 12px; }
+.account-chip-name { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ---------- agents ---------- */
 .agents-grid { grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); }

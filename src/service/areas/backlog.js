@@ -18,8 +18,6 @@ const { normalizeThen } = require('../../renderer/chain-model');
 const runs = require('../../runs');
 
 module.exports = (ctx) => {
-  const { host } = ctx;
-
   // A synced backlog with each issue's runs and place in the queue (computed on every read: runs
   // come and go), plus the queue itself.
   function withIssueRuns(data) {
@@ -107,7 +105,6 @@ module.exports = (ctx) => {
     if (!wf.inputs?.task) throw new Error(`Workflow ${wf.metadata?.name || file} has no task input to receive the issue.`);
     if (!mock) {
       simulation.refuseReal('real runs from the Backlog');
-      await host.assertCanRun?.({ mock: false });
     }
     backlog.enqueue(ws.backlog, project.id, { issues, workflow: file, workflowName: wf.metadata?.name || file, inputs: inputs || {}, mock: !!mock, group: !!group, then: chained });
     if (allowKeptWork) allowQueuedKeptWork(project.id, issues);

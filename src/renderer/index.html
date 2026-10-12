@@ -100,14 +100,13 @@
         Start
       </button>
       <div class="account-wrap hidden" id="account-wrap">
-        <button id="account-btn" class="btn ghost account-btn" type="button" aria-haspopup="dialog" aria-expanded="false">
+        <button id="account-btn" class="btn ghost account-btn" type="button" aria-haspopup="dialog" aria-expanded="false" data-testid="account-chip">
           <span id="account-avatar" class="account-avatar" aria-hidden="true"></span>
-          <span id="account-trial" class="pill"></span>
+          <span id="account-chip-name" class="account-chip-name"></span>
         </button>
         <div id="account-pop" class="account-pop hidden" role="dialog" aria-label="Account">
           <b id="account-name"></b>
           <div id="account-email" class="muted small"></div>
-          <p id="account-plan" class="small"></p>
           <button id="btn-sign-out" class="btn ghost sm" type="button">Sign out</button>
         </div>
       </div>
@@ -274,11 +273,11 @@
   </section>
 
   <!-- ================= Sign-in ================= -->
-  <div id="login-screen" class="login-screen hidden">
+  <div id="login-screen" class="login-screen hidden" data-testid="login-screen">
     <div class="login-card">
       <div class="brand">Multiagent <span>Orchestrator</span></div>
       <h3>Sign in</h3>
-      <p class="muted">New accounts start with a 7-day free trial. No credit card needed.</p>
+      <p class="muted">Create a free account. It only tells us how many people use the app.</p>
       <div id="login-providers" class="login-providers"></div>
       <div id="login-waiting" class="login-waiting hidden">
         <span class="muted small">Finish signing in in your browser…</span>

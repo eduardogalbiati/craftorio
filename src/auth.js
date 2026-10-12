@@ -1,11 +1,13 @@
-// Account sign-in (Supabase Auth with OAuth providers) and the free trial. No Electron here:
-// src/main.js passes an encrypted storage and a way to open the system browser.
+// Account sign-in (Supabase Auth with OAuth providers). No Electron here: src/main.js passes an
+// encrypted storage and a way to open the system browser. The app is free: the account gates
+// nothing, it only counts the people using the app (#315).
 //
 // Sign-in follows the native-app pattern (RFC 8252): the system browser goes through the
 // provider and Supabase, which redirect to a one-shot server on 127.0.0.1 with an authorization
 // code; the app exchanges it for a session with its PKCE verifier. Provider secrets live only in
-// Supabase. What the user may do comes from the `entitlement()` database function, computed with
-// the server's clock (see supabase/migrations).
+// Supabase. A signed-in app records "last seen", its version and the OS through the
+// `touch_account()` database function (see supabase/migrations): at every start, then at most
+// once a day. It is best effort: a failure is logged, never shown, and never blocks.
 
 const http = require('http');
 const fs = require('fs');
@@ -14,9 +16,8 @@ const path = require('path');
 const CALLBACK_PORT = 47823; // must match the redirect URL allowed in Supabase (URL Configuration)
 const CALLBACK_PATH = '/auth/callback';
 const LOGIN_TIMEOUT_MS = 5 * 60 * 1000;
-// how long the last entitlement is trusted while the account server can't be reached
-const OFFLINE_GRACE_MS = 3 * 24 * 60 * 60 * 1000;
-const ENTITLEMENT_KEY = 'multiagent-entitlement';
+// the last signed-in user, kept so that an offline start stays signed in
+const ACCOUNT_KEY = 'multiagent-account';
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const PROVIDERS = [
@@ -25,10 +26,8 @@ const PROVIDERS = [
   { id: 'github', name: 'GitHub' },
 ];
 
-const TRIAL_ENDED = 'Your 7-day free trial has ended. Runs can no longer be started or resumed; your projects, runs and artifacts are still available.';
-
 // Key-value storage kept in one file, encrypted by the caller's functions (session tokens, the
-// PKCE verifier and the last entitlement). Same interface as the storage supabase-js expects.
+// PKCE verifier and the last signed-in user). Same interface as the storage supabase-js expects.
 function fileStorage(file, { encrypt = (s) => Buffer.from(s, 'utf8'), decrypt = (b) => b.toString('utf8') } = {}) {
   let data = null;
   const load = () => {
@@ -60,21 +59,6 @@ const callbackPage = (message) => `<!DOCTYPE html><html><head><meta charset="utf
 <body style="font:15px system-ui,sans-serif;background:#0e1014;color:#e6e8ee;display:grid;place-items:center;height:100vh;margin:0">
 <p>${escapeHtml(message)}</p></body></html>`;
 
-// The entitlement as the UI shows it. `active` and the days left use the server's clock, shifted
-// by the time elapsed since the check.
-function entitlementView(e, now) {
-  const serverNow = Date.parse(e.server_time) + (now - e.checked_at);
-  const ends = Date.parse(e.trial_ends_at);
-  const pro = e.plan === 'pro';
-  return {
-    plan: e.plan,
-    trialEndsAt: e.trial_ends_at,
-    active: pro || ends > serverNow,
-    daysLeft: pro ? null : Math.max(0, Math.ceil((ends - serverNow) / DAY_MS)),
-    offline: !!e.offline,
-  };
-}
-
 const userView = (u) => u && {
   id: u.id,
   email: u.email || null,
@@ -84,20 +68,21 @@ const userView = (u) => u && {
 
 /**
  * @param url, key       Supabase project URL and publishable key ('' = sign-in not configured)
- * @param required       true: runs need a signed-in user with an active entitlement
+ * @param required       true: the app asks for a sign-in before it can be used
  * @param providers      provider ids enabled in Supabase; the others show as "coming soon"
  * @param storage        getItem/setItem/removeItem (see fileStorage)
  * @param openExternal   (url) => opens the system browser
+ * @param appVersion     recorded with each touch of the account
  */
 function createAuth({
   url, key, required = true, providers = ['google'], storage, openExternal,
   createClient = (...a) => require('@supabase/supabase-js').createClient(...a),
-  now = Date.now, port = CALLBACK_PORT,
+  now = Date.now, port = CALLBACK_PORT, appVersion = require('../package.json').version,
 }) {
   const configured = !!(url && key);
   const listeners = new Set();
   let user = null;
-  let ent = null; // last entitlement record, or { error }
+  let touchedAt = null; // when this app last recorded the visit (at start, then at most daily)
   let pending = null; // sign-in in progress: { cancel }
 
   const client = configured && createClient(url, key, {
@@ -111,40 +96,43 @@ function createAuth({
       providers: PROVIDERS.map((p) => ({ ...p, enabled: providers.includes(p.id) })),
       signingIn: !!pending,
       user: userView(user),
-      entitlement: !ent ? null : ent.error ? { error: ent.error } : entitlementView(ent, now()),
     };
   }
   const notify = () => { const s = state(); for (const cb of listeners) cb(s); };
 
-  const cached = () => { try { return JSON.parse(storage.getItem(ENTITLEMENT_KEY)); } catch { return null; } };
+  const stored = () => { try { return JSON.parse(storage.getItem(ACCOUNT_KEY))?.user || null; } catch { return null; } };
 
-  // Reloads the session (refreshing its token when needed) and the entitlement.
+  // Best effort: records "last seen", the app version and the OS of the signed-in user, once per
+  // start and then at most once a day. Never awaited; a failure is only logged.
+  function touch() {
+    if (touchedAt !== null && now() - touchedAt < DAY_MS) return;
+    touchedAt = now();
+    const failed = (message) => console.error(`account: could not record the visit: ${message}`);
+    Promise.resolve()
+      .then(() => client.rpc('touch_account', { app_version: appVersion, platform: process.platform }))
+      .then((r) => { if (r?.error) failed(r.error.message); }, (e) => failed(e.message));
+  }
+
+  // Reloads the session (refreshing its token when needed), then touches the account.
   async function refresh() {
     if (!configured) return state();
-    const { data, error } = await client.auth.getSession();
-    const last = cached();
-    if (error && last?.user) {
-      // the account server is unreachable: keep the last known user for a few days
-      user = last.user;
-      ent = now() - last.checked_at < OFFLINE_GRACE_MS ? { ...last, offline: true } : { error: 'Could not reach the account server to check your subscription.' };
-      notify();
-      return state();
+    let session = null;
+    let reached = true;
+    try {
+      const { data, error } = await client.auth.getSession();
+      reached = !error;
+      session = data?.session || null;
+    } catch {
+      reached = false;
     }
-    user = data?.session?.user || null;
-    if (!user) {
-      ent = null;
-      notify();
-      return state();
-    }
-    const r = await client.rpc('entitlement');
-    if (!r.error && r.data) {
-      ent = { ...r.data, checked_at: now(), user: userView(user) };
-      storage.setItem(ENTITLEMENT_KEY, JSON.stringify(ent));
-    } else if (r.error && last?.user?.id === user.id && now() - last.checked_at < OFFLINE_GRACE_MS) {
-      ent = { ...last, offline: true };
+    if (session?.user) {
+      user = session.user;
+      storage.setItem(ACCOUNT_KEY, JSON.stringify({ user }));
     } else {
-      ent = { error: r.error ? 'Could not reach the account server to check your subscription.' : 'No account was found for this user.' };
+      // the account server can't be reached: a user who signed in once stays signed in
+      user = reached ? null : stored();
     }
+    if (user) touch();
     notify();
     return state();
   }
@@ -207,28 +195,16 @@ function createAuth({
     if (configured) {
       try { await client.auth.signOut({ scope: 'local' }); } catch { /* the local session is dropped anyway */ }
     }
-    storage.removeItem(ENTITLEMENT_KEY);
+    storage.removeItem(ACCOUNT_KEY);
     user = null;
-    ent = null;
+    touchedAt = null;
     notify();
     return state();
   }
 
-  // Throws when a run can't start: simulations always can; real runs need a signed-in user whose
-  // trial or plan is active.
-  async function assertCanRun({ mock } = {}) {
-    if (mock || !required) return;
-    if (!configured) throw new Error('Sign-in is not configured in this build.');
-    try { await refresh(); } catch { /* judged with what is known */ }
-    const s = state();
-    if (!s.user) throw new Error('Sign in to start runs.');
-    if (s.entitlement?.error) throw new Error(s.entitlement.error);
-    if (!s.entitlement?.active) throw new Error(TRIAL_ENDED);
-  }
-
   if (client) {
     client.auth.onAuthStateChange((event) => {
-      if (event === 'SIGNED_OUT' && user) { user = null; ent = null; notify(); }
+      if (event === 'SIGNED_OUT' && user) { user = null; storage.removeItem(ACCOUNT_KEY); notify(); }
     });
   }
 
@@ -238,7 +214,6 @@ function createAuth({
     signIn,
     cancelSignIn: () => { pending?.cancel(); return state(); },
     signOut,
-    assertCanRun,
     onChange: (cb) => { listeners.add(cb); return () => listeners.delete(cb); },
   };
 }
@@ -247,8 +222,6 @@ module.exports = {
   CALLBACK_PATH,
   CALLBACK_PORT,
   createAuth,
-  entitlementView,
   fileStorage,
   PROVIDERS,
-  TRIAL_ENDED,
 };

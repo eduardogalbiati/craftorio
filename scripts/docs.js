@@ -56,7 +56,7 @@ const FOLDERS = [
   ['docs/screens/', 'One fragment per screen (`menu`, `order`, text): the README\'s screens table.'],
   ['docs/features/', 'One fragment per feature (`order`, then `<!-- section:<name> -->` pieces): the README\'s generated workflows, engine, workspace and structure sections.'],
   ['docs/agents/', 'These topic docs, indexed by `CLAUDE.md` (`test/claude-md.test.js` keeps the index small and its links valid).'],
-  ['supabase/migrations/', '`accounts` table and `entitlement()` (trial and plan). Applied by pasting into the Supabase SQL editor.'],
+  ['supabase/migrations/', '`accounts` table (sign-up, last seen, app version, OS) and `touch_account()`. Applied by pasting into the Supabase SQL editor.'],
 ];
 
 const posix = (p) => p.split(path.sep).join('/');

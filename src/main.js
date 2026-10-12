@@ -82,7 +82,7 @@ let workspaceLock = null;
 
 let win = null;
 
-// ---- account (sign-in and free trial) --------------------------------------------------------
+// ---- account (sign-in; it only counts the people using the app) ------------------------------
 // The session is machine- and OS-user-specific, so it lives in the app's user data folder
 // (%APPDATA%), not in the workspace, encrypted with the OS (DPAPI on Windows).
 // Created once the app is ready: safeStorage can't decrypt before that, and the Supabase client
@@ -103,6 +103,7 @@ function createAccount() {
       decrypt: (b) => (safeStorage.isEncryptionAvailable() ? safeStorage.decryptString(b) : b.toString('utf8')),
     }),
     openExternal: (url) => shell.openExternal(url),
+    appVersion: app.getVersion(),
   });
   auth.onChange((s) => broadcast('auth:changed', s));
 }
@@ -112,7 +113,6 @@ const service = createService({
     trashItem: (p) => shell.trashItem(p),
     appVersion: app.getVersion(),
     isPackaged: app.isPackaged,
-    assertCanRun: (opts) => auth.assertCanRun(opts),
     userDataDir: app.getPath('userData'),
     // #279: Self-healing applies merged fixes to this app folder, then restarts it
     appDir: app.getAppPath(),
@@ -439,10 +439,10 @@ app.whenReady().then(async () => {
   service.cleanupWorktrees().catch((e) => console.error('worktree cleanup:', e));
   setInterval(() => service.cleanupWorktrees().catch((e) => console.error('worktree cleanup:', e)), 30 * 60 * 1000).unref();
   service.clearPastedImages();
-  // the trial can end while the app is open
-  const checkAccount = () => auth.refresh().catch((e) => console.error('account:', e.message));
-  checkAccount();
-  setInterval(checkAccount, 60 * 60 * 1000).unref();
+  // #315: the account records "last seen" at start, then once a day while the app stays open
+  const touchAccount = () => auth.refresh().catch((e) => console.error('account:', e.message));
+  touchAccount();
+  setInterval(touchAccount, 24 * 60 * 60 * 1000).unref();
 });
 app.on('window-all-closed', () => {
   service.shutdown();

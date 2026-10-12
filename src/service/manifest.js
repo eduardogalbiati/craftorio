@@ -52,7 +52,7 @@ const DESKTOP = [
   { event: 'main-window:navigate', method: 'onMainWindowNavigate' },
 ];
 
-// Account: sign-in with an OAuth provider (system browser) and the free trial. Declared even when
+// Account: sign-in with an OAuth provider (system browser); it only counts users. Declared even when
 // there is no account module (the server without one), so window.api always has the methods.
 function authChannels(auth) {
   return [
