@@ -128,9 +128,13 @@ function createAuth({
     if (session?.user) {
       user = session.user;
       storage.setItem(ACCOUNT_KEY, JSON.stringify({ user }));
+    } else if (reached) {
+      // no session (signed out, or it expired): an offline start must not bring the user back
+      user = null;
+      storage.removeItem(ACCOUNT_KEY);
     } else {
       // the account server can't be reached: a user who signed in once stays signed in
-      user = reached ? null : stored();
+      user = stored();
     }
     if (user) touch();
     notify();
