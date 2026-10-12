@@ -65,6 +65,11 @@ test('#317 parseArgs: an unknown platform or arch is refused with a message nami
   assert.throws(() => parseArgs(['--arch', 'mips'], host), /mips/);
 });
 
+test('#317 parseArgs: an unknown option is refused, not taken as the output folder', () => {
+  const { parseArgs } = load();
+  assert.throws(() => parseArgs(['--plaform', 'linux'], { platform: 'win32', arch: 'x64' }), /--plaform/);
+});
+
 // ---- hardening targets the right executable per OS ----------------------------------------------
 
 test('#317 executablePath: the .exe on Windows, the binary inside the .app on macOS, the ELF on Linux', () => {
