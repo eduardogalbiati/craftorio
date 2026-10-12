@@ -21,16 +21,19 @@ const memStorage = () => {
 // is recorded with its arguments. `rpcError` answers { error }, `rpcReject` makes the call throw.
 function fakeSupabase({ session = null, rpcError = null, rpcReject = null, sessionError = null } = {}) {
   const sb = {
-    session, rpcError, rpcReject, sessionError, calls: [],
+    session, rpcError, rpcReject, sessionError, calls: [], authListeners: [], beforeGetSession: null,
     auth: {
-      getSession: async () => (sb.sessionError ? { data: { session: null }, error: sb.sessionError } : { data: { session: sb.session }, error: null }),
+      getSession: async () => {
+        sb.beforeGetSession?.();
+        return sb.sessionError ? { data: { session: null }, error: sb.sessionError } : { data: { session: sb.session }, error: null };
+      },
       signInWithOAuth: async ({ provider, options }) => {
         sb.calls.push(['oauth', provider, options]);
         return { data: { url: `https://project.supabase.test/auth/v1/authorize?provider=${provider}&redirect_to=${encodeURIComponent(options.redirectTo)}` }, error: null };
       },
       exchangeCodeForSession: async (code) => { sb.calls.push(['exchange', code]); sb.session = { user: USER }; return { error: null }; },
       signOut: async () => { sb.session = null; return { error: null }; },
-      onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } }),
+      onAuthStateChange: (cb) => { sb.authListeners.push(cb); return { data: { subscription: { unsubscribe() {} } } }; },
     },
     rpc: async (name, args) => {
       sb.calls.push(['rpc', name, args]);
@@ -210,6 +213,63 @@ test('#315: an offline start with a stored session signs in, however long the ap
   await settle();
   assert.equal(s.user?.email, 'ana@example.com');
   assert.equal(hasError(auth.state()), false);
+});
+
+// The Electron host touches at start, then every 24 hours from that start; reloading the session
+// takes a moment (longer at start, when the token is refreshed over a cold connection), so each
+// touch is recorded a little after the host asked for it.
+test('#315: a host that refreshes every 24 hours touches the account every day', async () => {
+  const sb = fakeSupabase({ session: { user: USER } });
+  let now = NOW;
+  let reloads = 0;
+  sb.beforeGetSession = () => { now += reloads++ === 0 ? 3000 : 200; }; // 3 s at start, then 200 ms
+  const { auth } = makeAuth(sb, { clock: () => now });
+  await auth.refresh();
+  await settle();
+  for (let day = 1; day <= 3; day++) {
+    now = NOW + day * DAY;
+    await auth.refresh();
+    await settle();
+    assert.equal(touches(sb).length, day + 1, `day ${day}: touched again`);
+  }
+});
+
+test('#315: a start that finds no session forgets the stored user: a later offline start stays signed out', async () => {
+  const sb = fakeSupabase({ session: { user: USER } });
+  const storage = memStorage();
+  await makeAuth(sb, { storage }).auth.refresh();
+  await settle();
+
+  // the session expired: the account server answers, with no session
+  sb.session = null;
+  const reached = await makeAuth(sb, { storage }).auth.refresh();
+  assert.equal(reached.user, null);
+
+  // then a start offline
+  sb.sessionError = new Error('fetch failed');
+  const { auth } = makeAuth(sb, { storage });
+  const s = await auth.refresh();
+  await settle();
+  assert.equal(s.user, null);
+  assert.equal(touches(sb).length, 1, 'only the first, signed-in start touched');
+});
+
+test('#315: a sign-out reported by the account server forgets the stored user', async () => {
+  const sb = fakeSupabase({ session: { user: USER } });
+  const storage = memStorage();
+  const { auth } = makeAuth(sb, { storage });
+  await auth.refresh();
+  await settle();
+  const seen = [];
+  auth.onChange((s) => seen.push(s.user === null));
+  sb.session = null;
+  for (const cb of sb.authListeners) cb('SIGNED_OUT', null);
+  assert.equal(auth.state().user, null);
+  assert.deepEqual(seen, [true]);
+
+  sb.sessionError = new Error('fetch failed');
+  const offline = await makeAuth(sb, { storage }).auth.refresh();
+  assert.equal(offline.user, null);
 });
 
 test('signing out drops the session and what the account stored', async () => {
