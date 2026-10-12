@@ -281,6 +281,14 @@ test('GET /api/manifest lists every channel, and the desktop and browser clients
   assert.deepEqual(preloadMethods, browserMethods);
 });
 
+// #318: the ↗ buttons open a window on the desktop app's machine only: the browser client reports
+// the external terminal unavailable, with a reason the disabled button shows as its tooltip.
+test('the browser client reports the external terminal unavailable, with a reason', () => {
+  const { externalTerminal } = loadApiHttpApi([]);
+  assert.equal(externalTerminal.available, false);
+  assert.match(externalTerminal.reason, /desktop app/);
+});
+
 test('a channel manifest declaring the same channel twice is refused', () => {
   const { declarations } = require('../src/service/manifest');
   assert.throws(() => declarations([{ channel: 'x:y', method: 'a' }, { channel: 'x:y', method: 'b' }]), /x:y is declared twice/);
