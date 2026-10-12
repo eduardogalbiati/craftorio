@@ -62,10 +62,14 @@
   /** Epoch ms of a local wall-clock time (month 1-12; days past the month's end roll over). */
   function epochOf(y, m, d, tz, h = 0, mi = 0) {
     const wall = Date.UTC(y, m - 1, d, h, mi);
-    const first = wall - offsetAt(wall, tz);
-    const second = wall - offsetAt(first, tz);
-    // a wall time inside a DST gap does not exist: the first instant after it
-    return first === second ? first : Math.max(first, second);
+    if (!Number.isFinite(wall)) return NaN;
+    // the candidates from the offsets in force a day before and a day after (a change is never closer)
+    const candidates = [wall - offsetAt(wall - DAY_MS, tz), wall - offsetAt(wall + DAY_MS, tz)];
+    // the instant whose local clock reads the wall time (twice when the clocks go back: the earlier);
+    // none inside a DST gap (the time does not exist): shifted forward by the gap, like Date does
+    const reads = (t) => { const p = partsOf(t, tz); return Date.UTC(p.y, p.m - 1, p.d, p.h, p.mi) === wall; };
+    const found = candidates.filter(reads);
+    return found.length ? Math.min(...found) : Math.max(...candidates);
   }
 
   function dayKey(t, tz) {

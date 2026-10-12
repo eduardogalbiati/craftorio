@@ -17,6 +17,18 @@ test('#273 inputValue / parseInput: a datetime-local value round-trips in the zo
   assert.ok(Number.isNaN(tz.parseInput('not a time', 'Asia/Tokyo')));
 });
 
+test('#273 parseInput around a clocks-back change: the right instant, the earlier one when the time comes twice', () => {
+  // Berlin 2026-10-25: 03:00 CEST becomes 02:00 CET (01:00Z)
+  assert.equal(tz.parseInput('2026-10-25T01:30', 'Europe/Berlin'), Date.parse('2026-10-24T23:30:00Z'));
+  assert.equal(tz.parseInput('2026-10-25T02:30', 'Europe/Berlin'), Date.parse('2026-10-25T00:30:00Z'));
+  assert.equal(tz.parseInput('2026-10-25T03:30', 'Europe/Berlin'), Date.parse('2026-10-25T02:30:00Z'));
+  // New York 2026-11-01 01:30 comes twice (EDT, then EST): the EDT one
+  assert.equal(tz.parseInput('2026-11-01T01:30', 'America/New_York'), Date.parse('2026-11-01T05:30:00Z'));
+  // a time in the spring gap does not exist: shifted forward by the gap (02:30 EST reads 03:30 EDT)
+  assert.equal(tz.parseInput('2026-03-08T02:30', 'America/New_York'), Date.parse('2026-03-08T07:00:00Z') + 30 * 60e3);
+  assert.ok(Number.isNaN(tz.startOfDayKey('bad', 'Asia/Tokyo')));
+});
+
 test('#273 nextAt: today\'s 07:30 while it is ahead, else tomorrow\'s, in the zone', () => {
   // 22:14 on Oct 4 in Sao Paulo: the next 07:30 is Oct 5 07:30 local (10:30Z)
   assert.equal(tz.nextAt(7, 30, 'America/Sao_Paulo', Date.parse('2026-10-05T01:14:00Z')), Date.parse('2026-10-05T10:30:00Z'));

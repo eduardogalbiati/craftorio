@@ -74,7 +74,7 @@ const cache = new Map(); // owner ('' = the gh user) -> { at, value }
  */
 async function getActionsUsage({ owner = '', includedMinutes = DEFAULT_INCLUDED_MINUTES, exec = execCli, now = new Date(), force = false, timeZone = 'UTC' } = {}) {
   const hit = cache.get(owner);
-  if (!force && hit && now - hit.at < CACHE_MS && hit.value.includedMinutes === includedMinutes) return hit.value;
+  if (!force && hit && now - hit.at < CACHE_MS && hit.value.includedMinutes === includedMinutes && hit.timeZone === timeZone) return hit.value;
   let value;
   try {
     const login = owner || String(await exec('gh', ['api', 'user', '--jq', '.login'])).trim();
@@ -87,7 +87,7 @@ async function getActionsUsage({ owner = '', includedMinutes = DEFAULT_INCLUDED_
       ? { error: 'GitHub billing usage needs the gh "user" scope', hint: SCOPE_HINT, includedMinutes }
       : { error: msg, includedMinutes };
   }
-  cache.set(owner, { at: now, value });
+  cache.set(owner, { at: now, value, timeZone });
   return value;
 }
 
