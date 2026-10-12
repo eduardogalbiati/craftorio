@@ -233,8 +233,7 @@ test('the engine records the groups and the step trail in summary.json', { timeo
     events.push(e);
     if (e.type === 'approval.requested') setImmediate(() => run.resolveApproval(e.approval_id, true));
   });
-  await run.start();
-  if (!rec.events.writableFinished) await new Promise((r) => rec.events.once('finish', r));
+  await run.start(); // the recorder writes events.jsonl synchronously (#262): complete here
   assert.equal(events.find((e) => e.type === 'workflow.finished').status, 'success');
   assert.deepEqual(events[0].groups, [{ name: 'Build', steps: ['one', 'two'] }]);
 

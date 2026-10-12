@@ -40,6 +40,11 @@ const SLOT_POLL_MS = 1000;
 // how often a start refused for low memory (#276) checks whether memory recovered
 const MEMORY_RETRY_MS = 30e3;
 
+// #262: Settings' providers.<name>.fallbacks as the WorkflowRun `fallbacks` option ({ <provider>: [entries] })
+const settingsFallbacks = (settings) => Object.fromEntries(Object.entries(settings.providers || {})
+  .filter(([, p]) => Array.isArray(p?.fallbacks) && p.fallbacks.length)
+  .map(([name, p]) => [name, p.fallbacks.map(String)]));
+
 module.exports = (ctx) => {
   const { events } = ctx;
   const active = new Map();
@@ -209,7 +214,9 @@ module.exports = (ctx) => {
   // free, waits for one instead of failing; signal: the parent's abort signal (stops that wait);
   // onSlotWait: (why) => void, called once when it has to wait
   // onFinished: (workflow.finished event) => void, called when the run ends (the parent's step waits on it)
-  async function startWorkflowRun({ file, inputs, mock, mockSequences = null, resume = null, projectId: forcedProject = null, issues = null, allowKeptWork = false, notices: startNotices = [], attachments = null, then = null, from = null, parent = null, onFinished = null, signal = null, onSlotWait = null }) {
+  // agentOverrides: { <agent>: { provider?, model?, effort? } } this run's choice per agent (#262, WorkflowRun);
+  // every run also gets Settings' fallback chains per provider and limits per model (settingsFallbacks)
+  async function startWorkflowRun({ file, inputs, mock, mockSequences = null, resume = null, projectId: forcedProject = null, issues = null, allowKeptWork = false, notices: startNotices = [], attachments = null, then = null, from = null, parent = null, onFinished = null, signal = null, onSlotWait = null, agentOverrides = null }) {
     // simulation-only (automated checks): a real run is refused, never turned into a simulation
     if (!mock) simulation.refuseReal('a real run');
     // the same issues never get a second live run, from this app or another one (#112): resume that run instead
@@ -282,6 +289,7 @@ module.exports = (ctx) => {
         // Run locally at gates: the project's override of the workflow's orchestrator.local_preview
         localPreview: project?.localPreview?.command ? project.localPreview : null,
         budget, prices: settings.prices, projectId, issues, resume, attachments, mockSequences: mock ? mockSequences : null, then, from,
+        agentOverrides, fallbacks: settingsFallbacks(settings), models: settings.models || {},
         // `type: workflow` steps (#174): each child is a normal run of this service, linked to this one
         parent, startChild: (spec) => startChildRun(run, spec),
         // simulation runs never touch git: the agents are mocked and work in the repository folder

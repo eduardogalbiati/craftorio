@@ -18,8 +18,7 @@ async function runFixture(t, opts = {}) {
   const rec = new Recorder(run.runDir);
   const events = [];
   run.on('event', (ev) => { rec.write(ev); events.push(ev); });
-  await run.start();
-  if (!rec.events.writableFinished) await new Promise((r) => rec.events.once('finish', r)); // events.jsonl flushed
+  await run.start(); // the recorder writes events.jsonl synchronously (#262): complete here
   const finished = events.find((e) => e.type === 'workflow.finished');
   assert.equal(finished.status, 'success', finished.error);
   const sessionsOf = (agent) => events.filter((e) => e.type === 'session.opened' && e.session.agent === agent);

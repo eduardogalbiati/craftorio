@@ -814,6 +814,14 @@ async function runMock({ providerSessionId, model, hint, signal, onItem, attempt
 
   onItem({ kind: 'session', sessionId: sid, model });
   onItem({ kind: 'context', tokens: start });
+  // sequences.usage_limits: ['<provider>' | '<provider>:<model>', ...] (#262): every turn of an agent on a
+  // listed provider (hint.provider, the agent's own, not `mock`) or provider:model answers with that
+  // CLI's usage-limit message (hint.providerType), as a real CLI out of credits does
+  const limits = hint?.sequences?.usage_limits;
+  if (Array.isArray(limits) && hint.provider && (limits.includes(hint.provider) || limits.includes(`${hint.provider}:${model}`))) {
+    await d(200);
+    throw new Error(USAGE_LIMIT_MESSAGES[hint.providerType] || `${hint.provider}: usage limit reached`);
+  }
   // the follow-up that asks only for the handoff note
   if (hint?.handoffOnly) {
     await d(300);
@@ -915,6 +923,29 @@ function isRetryable(err) {
   return !/"status":\s*4\d\d|invalid_request|not supported|not found|does not exist/i.test(String(err?.message || err));
 }
 
+// #262: a provider out of credits or past its usage limit: retrying on it is pointless, the agent
+// moves on to the next entry of its fallback chain. Per CLI (`type`), from the messages they print:
+// Claude Code "Claude AI usage limit reached|<epoch>", "5-hour limit reached ∙ resets 3pm", "Credit
+// balance is too low"; Codex "You've hit your usage limit. Upgrade to Plus…", "Quota exceeded",
+// insufficient_quota; Grok (xAI API) "…used all available credits or reached its monthly spending limit".
+const QUOTA_COMMON = /usage limit|credit balance is too low|insufficient[_ ](?:quota|credits?)|quota exceeded|exceeded your (?:current )?quota|out of credits/i;
+const QUOTA_BY_TYPE = {
+  'claude-code': /\blimit reached\b|you['’]ve hit your limit/i,
+  'codex-cli': /usage_limit_reached|rate_limit_exceeded.*quota/i,
+  'grok-cli': /used all available credits|spending limit/i,
+};
+function isQuotaError(type, message) {
+  const text = String(message?.message ?? message ?? '');
+  return QUOTA_COMMON.test(text) || !!QUOTA_BY_TYPE[type]?.test(text);
+}
+
+// The usage-limit message each CLI answers with: the simulation's (mockSequences.usage_limits)
+const USAGE_LIMIT_MESSAGES = {
+  'claude-code': 'Claude AI usage limit reached|1760227200',
+  'codex-cli': "You've hit your usage limit. Upgrade to Plus to continue using Codex (https://openai.com/chatgpt/pricing), or try again later.",
+  'grok-cli': 'Your team has either used all available credits or reached its monthly spending limit. To continue making API requests, please purchase more credits or raise your spending limit.',
+};
+
 module.exports = {
   ATTACHMENT_LIMITS,
   checkAttachments,
@@ -924,6 +955,7 @@ module.exports = {
   imageInput,
   isImagePath,
   isPermissionDenial,
+  isQuotaError,
   isRetryable,
   isToolTimeout,
   killTree,

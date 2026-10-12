@@ -475,8 +475,7 @@ async function runFixture({ inputs, worktreesDir, runsDir, resume, file = 'workt
     if (onEvent && onEvent(ev, run)) return;
     if (ev.type === 'approval.requested') setImmediate(() => run.resolveApproval(ev.approval_id, answer));
   });
-  await run.start();
-  if (!rec.events.writableFinished) await new Promise((r) => rec.events.once('finish', r)); // events.jsonl flushed
+  await run.start(); // the recorder writes events.jsonl synchronously (#262): complete here
   return { run, events, finished: events.find((e) => e.type === 'workflow.finished') };
 }
 

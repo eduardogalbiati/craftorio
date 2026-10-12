@@ -33,6 +33,7 @@ const {
   emptyUsage,
   imageInput,
   isPermissionDenial,
+  isQuotaError,
   isRetryable,
   isToolTimeout,
   refreshWindowsPath,
@@ -304,12 +305,39 @@ function validateDisplay(v, what) {
   if (typeof v !== 'string' || !v.trim() || v.length > DISPLAY_MAX) throw new Error(`${what}: display must be a name of 1 to ${DISPLAY_MAX} characters.`);
 }
 
+// #262: `fallbacks` on an agent or in `defaults` (and Settings' providers.<p>.fallbacks): the ordered
+// "<provider>:<model>" entries a turn moves on to when its provider is out of credits
+const FALLBACK_ENTRY = /^([A-Za-z0-9_.-]+):(\S+)$/;
+function validateFallbacks(v, what, providers) {
+  if (v === undefined) return;
+  if (!Array.isArray(v)) throw new Error(`${what}: fallbacks must be a list of "<provider>:<model>" entries.`);
+  for (const entry of v) {
+    const m = FALLBACK_ENTRY.exec(String(entry ?? ''));
+    if (typeof entry !== 'string' || !m) throw new Error(`${what}: fallbacks entry "${entry}" must be "<provider>:<model>", e.g. "codex:gpt-6-luna".`);
+    if (providers && !providers[m[1]]) throw new Error(`${what}: fallbacks entry "${entry}" names provider "${m[1]}", which the workflow's providers do not define.`);
+  }
+}
+
+// #262: `models: { <model id>: { timeout_factor?, max_total_cost_usd? } }` (the workflow's, or Settings')
+function validateModels(models, what = 'models') {
+  if (models === undefined || models === null) return;
+  if (typeof models !== 'object' || Array.isArray(models)) throw new Error(`${what} must map a model id to its limits.`);
+  for (const [id, lim] of Object.entries(models)) {
+    for (const k of Object.keys(lim || {})) {
+      if (!['timeout_factor', 'max_total_cost_usd'].includes(k)) throw new Error(`${what}.${id}: unknown limit "${k}" (timeout_factor, max_total_cost_usd).`);
+      if (!(Number(lim[k]) > 0)) throw new Error(`${what}.${id}.${k} must be a positive number.`);
+    }
+  }
+}
+
 function loadWorkflow(file) {
   const wf = yaml.load(fs.readFileSync(file, 'utf8'));
   if (!wf || !Array.isArray(wf.steps) || !wf.steps.length) throw new Error('Workflow has no "steps".');
   if (!wf.agents) throw new Error('Workflow has no "agents".');
   const mcpServers = wf.mcp_servers || {};
+  validateModels(wf.models);
   for (const [name, a] of [['defaults', wf.defaults || {}], ...Object.entries(wf.agents).map(([n, a]) => [`Agent "${n}"`, a || {}])]) {
+    validateFallbacks(a.fallbacks, name, wf.providers);
     if (a.session !== undefined && !SESSION_MODES.includes(a.session)) throw new Error(`${name}: session must be one of ${SESSION_MODES.join(', ')}.`);
     if (a.max_context !== undefined && !String(a.max_context).includes('{{') && !parseTokens(a.max_context)) throw new Error(`${name}: max_context must be a token count such as 150k.`);
     if (a.fresh_after_idle !== undefined && parseDuration(a.fresh_after_idle, null) == null) throw new Error(`${name}: fresh_after_idle must be a duration such as 55m.`);
@@ -840,7 +868,14 @@ class WorkflowRun extends EventEmitter {
   // startChild: ({ file, inputs, parent, label }) => Promise<{ runId, finished: Promise<{ status, outputs, error }>, stop }>,
   //   starts a child run for a `type: workflow` step (the service: a normal run, src/service/areas/runs.js).
   //   Default: startChildRun, a WorkflowRun of its own, emitted as 'child' (its events are the listener's to record).
-  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issues, issue, resume, worktreesDir, mockSequences, notices, stopProcesses, probe, actionsQuota, peerSessions, idleWarnMs, personas, localPreview, attachments, then, from, parent, startChild, memoryGuard }) {
+  // agentOverrides (#262): { <agent>: { provider?, model?, effort? } } this run's choice for an agent (the Start
+  //   drawer's "Agents"); the workflow's values are the defaults, '' or null clears an effort. Recorded in
+  //   workflow.started `agents`; an agent the workflow does not have, or an undefined provider, is refused.
+  // fallbacks (#262): { <provider>: ["<provider>:<model>", ...] } Settings' chains per provider, for an agent whose
+  //   workflow declares no `fallbacks` (see fallbackChain).
+  // models (#262): { <model id>: { timeout_factor?, max_total_cost_usd? } } Settings' limits per model; the
+  //   workflow's own `models` win per model (see modelLimits).
+  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issues, issue, resume, worktreesDir, mockSequences, notices, stopProcesses, probe, actionsQuota, peerSessions, idleWarnMs, personas, localPreview, attachments, then, from, parent, startChild, memoryGuard, agentOverrides, fallbacks, models }) {
     super();
     refreshWindowsPath(); // actions (e.g. gh pr merge) need the refreshed PATH
     this.file = file;
@@ -904,6 +939,12 @@ class WorkflowRun extends EventEmitter {
         if (typeof a[k] === 'string' && a[k].includes('{{')) a[k] = render(a[k], { inputs: this.inputs }).trim();
       }
     }
+    this.applyAgentOverrides(agentOverrides);
+    // #262: Settings' fallback chains per provider and limits per model
+    validateModels(models || undefined, 'Settings models');
+    this.models = { ...(models || {}), ...(this.wf.models || {}) };
+    this.providerFallbacks = fallbacks || {};
+    this.fallbackAt = new Map(); // agent -> { chain, index } of its fallback chain (fallbackChain)
     this.dropDisabledAgents();
     // #286: an effort the CLI never gets goes to the run's log at start, never silent
     for (const message of silentEfforts(this.wf)) this.notices.push({ level: 'warn', message });
@@ -1013,6 +1054,27 @@ class WorkflowRun extends EventEmitter {
   stepAttachments(template) {
     const used = new Set([...String(template || '').matchAll(/\binputs\.([A-Za-z0-9_]+)/g)].map((m) => m[1]));
     return Object.entries(this.attachments).filter(([k]) => used.has(k)).flatMap(([, files]) => files);
+  }
+
+  // #262: this run's provider / model / effort of an agent (the constructor's agentOverrides), over the
+  // workflow's resolved values; this.wf is this run's own copy, so the file and the next runs keep theirs.
+  applyAgentOverrides(overrides) {
+    this.agentOverrides = {};
+    for (const [name, o] of Object.entries(overrides || {})) {
+      if (!this.wf.agents[name]) throw new Error(`Agent override: the workflow has no agent "${name}".`);
+      const a = this.wf.agents[name];
+      const clean = {};
+      if (o?.provider) {
+        if (!this.wf.providers?.[o.provider]) throw new Error(`Agent override of "${name}": provider "${o.provider}" is not defined in the workflow.`);
+        clean.provider = String(o.provider);
+      }
+      if (o?.model) clean.model = String(o.model).trim();
+      if (o && 'effort' in o && o.effort !== undefined) clean.effort = o.effort ? String(o.effort) : '';
+      const changed = Object.entries(clean).filter(([k, v]) => (a[k] || '') !== v);
+      if (!changed.length) continue;
+      Object.assign(a, clean);
+      this.agentOverrides[name] = Object.fromEntries(changed);
+    }
   }
 
   // `agents.<name>.enabled` (a boolean or a template over the inputs) leaves an agent out of
@@ -1234,6 +1296,10 @@ class WorkflowRun extends EventEmitter {
       parent_run: this.parent || undefined,
       personas: Object.keys(this.personas).length ? this.personas : undefined,
       agent_names: this.agentNames(),
+      // #262: what each agent runs on in this run, its overrides applied; the overrides themselves
+      // (what differs from the workflow), which a resume of this run applies again
+      agents: Object.fromEntries(Object.entries(this.wf.agents).map(([k, a]) => [k, { provider: a.provider, model: a.model, effort: a.effort || null }])),
+      agent_overrides: Object.keys(this.agentOverrides).length ? this.agentOverrides : undefined,
       display: this.displayNames(),
       steps: this.wf.steps.map((s) => ({ id: s.id, type: s.type || 'agent', agent: stepAgentLabel(s) })),
       groups: this.wf.groups,
@@ -1526,10 +1592,52 @@ class WorkflowRun extends EventEmitter {
     // its child runs' cost counts too (#175)
     const children = this.childrenCostUsd();
     const cost = [...this.sessions.values()].reduce((a, s) => a + s.costUsd, 0) + children;
-    if (lim.max_total_cost_usd && cost > lim.max_total_cost_usd) {
-      this.emitEvent('limit.exceeded', { limit: 'max_total_cost_usd', value: lim.max_total_cost_usd, current: cost, ...(children ? { children } : {}) });
-      throw new Error(`Maximum cost exceeded (US$ ${lim.max_total_cost_usd}${children ? `, of which US$ ${children.toFixed(2)} by its child runs` : ''}).`);
+    const maxCost = this.maxTotalCost();
+    if (maxCost && cost > maxCost) {
+      this.emitEvent('limit.exceeded', { limit: 'max_total_cost_usd', value: maxCost, current: cost, ...(children ? { children } : {}) });
+      throw new Error(`Maximum cost exceeded (US$ ${maxCost}${children ? `, of which US$ ${children.toFixed(2)} by its child runs` : ''}).`);
     }
+  }
+
+  // #262: the limits of a model (the workflow's `models`, else Settings'), {} for none
+  modelLimits(model) {
+    return (model && this.models?.[model]) || {};
+  }
+
+  // The run's cost limit: orchestrator.limits.max_total_cost_usd, lifted to the largest
+  // max_total_cost_usd of the models its agents run on now (#262: e.g. a developer on Fable 5.1).
+  // A workflow without a cost limit stays without one.
+  maxTotalCost() {
+    const base = Number(this.wf.orchestrator?.limits?.max_total_cost_usd) || 0;
+    if (!base) return 0;
+    return Math.max(base, ...Object.values(this.wf.agents).map((a) => Number(this.modelLimits(a.model).max_total_cost_usd) || 0));
+  }
+
+  // #262: an agent's fallback chain, fixed at its first quota error: its own or `defaults`' `fallbacks`,
+  // else Settings' chain of the provider it runs on (the constructor's `fallbacks`).
+  fallbackChain(agentName, agent) {
+    let at = this.fallbackAt.get(agentName);
+    if (!at) {
+      const chain = Array.isArray(agent.fallbacks) ? agent.fallbacks : this.providerFallbacks[agent.provider] || [];
+      at = { chain: chain.map(String), index: -1 };
+      this.fallbackAt.set(agentName, at);
+    }
+    return at;
+  }
+
+  // The next usable entry of the agent's chain ({ provider, model }), or null when none is left.
+  // An entry naming a provider this workflow does not define is skipped with a warning.
+  nextFallback(agentName, agent) {
+    const at = this.fallbackChain(agentName, agent);
+    const current = `${agent.provider}:${agent.model}`;
+    while (++at.index < at.chain.length) {
+      const entry = at.chain[at.index];
+      const m = FALLBACK_ENTRY.exec(entry);
+      if (!m || entry === current) continue;
+      if (this.wf.providers?.[m[1]]) return { provider: m[1], model: m[2] };
+      this.emitEvent('log', { level: 'warn', agent: agentName, message: `[${agentName}] fallback "${entry}" skipped: the workflow does not define provider "${m[1]}".` });
+    }
+    return null;
   }
 
   async runStep(step) {
@@ -2939,7 +3047,9 @@ class WorkflowRun extends EventEmitter {
 
   // opts.attachments: images for this turn ([{ name, path }] in the run folder, #129); a provider that
   // cannot open images still gets their paths, with one warning per step and agent.
-  async agentTurn(agentName, prompt, { stepId, hint, skills: stepSkills = [], capabilities: stepCaps, retry = false, guarded = false, attachments = [] } = {}) {
+  async agentTurn(agentName, prompt, turnOpts = {}) {
+    const { stepId, skills: stepSkills = [], capabilities: stepCaps, retry = false, guarded = false, attachments = [] } = turnOpts;
+    let { hint } = turnOpts;
     const def = this.wf.agents[agentName];
     if (!def) throw new Error(`Unknown agent: ${agentName}`);
     const agent = { ...(this.wf.defaults || {}), ...def };
@@ -3044,7 +3154,8 @@ class WorkflowRun extends EventEmitter {
     const extraArgs = capabilities.dedupeFlags([...capArgs, ...cliArgs, ...skillArgs], provider?.args || []);
 
     const visit = this.ctx.steps[String(stepId).split(':')[0]]?.visits || 0;
-    hint = { ...(hint || { stepId, visit }), handoff: wantNote };
+    // the agent's own provider (not `mock`): the simulation's usage_limits match it (#262)
+    hint = { ...(hint || { stepId, visit }), handoff: wantNote, provider: agent.provider, providerType };
     // simulation: which answer of this step this is (mockSequences.invalid_answers: { step: n } makes the first n invalid)
     if (this.mock) { this.mockCalls ??= {}; hint.call = this.mockCalls[hint.stepId] = (this.mockCalls[hint.stepId] || 0) + 1; }
 
@@ -3062,9 +3173,18 @@ class WorkflowRun extends EventEmitter {
     try {
       res = await this.invokeTurn(call, turn, fullPrompt);
     } catch (e) {
-      if (persistent) this.setStatus(session, 'error');
+      // #262: out of credits / past its usage limit: the turn moves on to the next entry of the agent's
+      // fallback chain, in a fresh session (from its handoff note), and the agent stays there for the run
+      const next = !this.abort.signal.aborted && isQuotaError(providerType, e.message) ? this.nextFallback(agentName, agent) : null;
+      if (persistent && !next) this.setStatus(session, 'error');
       else this.closeSession(session, 'failed');
-      throw e;
+      if (!next) throw e;
+      if (persistent) this.agentSessions.delete(agentName);
+      const from = `${agent.provider}:${agent.model}`;
+      Object.assign(def, { provider: next.provider, model: next.model });
+      this.ctx.agents[agentName] = { provider: next.provider, model: next.model };
+      this.emitEvent('agent.fallback', { agent: agentName, step_id: stepId, from, to: `${next.provider}:${next.model}`, reason: e.message });
+      return this.agentTurn(agentName, prompt, turnOpts);
     }
 
     // metrics: context at the start and peak of the turn, tokens, and whether they were wasted
@@ -3152,9 +3272,10 @@ class WorkflowRun extends EventEmitter {
 
   // An agent's `timeout` for one turn (default 30m). A template is rendered with the run's context,
   // so the budget can grow with the run, e.g. with the number of issues of a grouped run (#101).
+  // Times its model's timeout_factor (#262, `models`: e.g. 3x for Fable 5.1's slower turns).
   turnTimeout(agent) {
     const v = typeof agent.timeout === 'string' && agent.timeout.includes('{{') ? render(agent.timeout, this.ctx).trim() : agent.timeout;
-    return parseDuration(v, 30 * 60e3);
+    return Math.round(parseDuration(v, 30 * 60e3) * (Number(this.modelLimits(agent.model).timeout_factor) || 1));
   }
 
   // #276: watches a process this run started (an agent CLI, a suite command) with the memory guard;
@@ -3338,6 +3459,11 @@ class WorkflowRun extends EventEmitter {
           break;
         }
         this.emitEvent('log', { level: 'error', message: `[${agentName}] attempt ${a}/${maxAttempts} failed: ${e.message}${spent.note}` });
+        // #262: out of credits or past the usage limit: another attempt on the same provider would fail too
+        if (isQuotaError(this.wf.providers?.[agent.provider]?.type, e.message)) {
+          this.emitEvent('log', { level: 'error', kind: 'usage_limit', step_id: stepId, agent: agentName, message: `[${agentName}] ${agent.provider} is out of credits or past its usage limit: not retried on it.` });
+          break;
+        }
         if (!isRetryable(e)) {
           this.emitEvent('log', { level: 'error', message: `[${agentName}] non-retryable error, giving up.` });
           break;

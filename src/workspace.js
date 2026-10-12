@@ -203,6 +203,12 @@ const DEFAULT_SETTINGS = {
   oracle: { dailyBudgetUsd: 20, compactAtTokens: 150000, wakeScope: 'all', wakeOn: ['finished', 'gate', 'interrupted', 'invalid', 'limit', 'merge', 'stall'], selfHealing: false, appUpdate: false },
   // USD per 1M tokens, for CLIs that do not report cost: { model: { input, output, cache_read } }
   prices: {},
+  // #262: per provider, the ordered fallback chain of an agent whose workflow declares none:
+  // { <provider>: { fallbacks: ['<provider>:<model>', ...] } } (a turn out of credits moves on to the next)
+  providers: {},
+  // #262: limits that follow the model an agent runs on: { <model id>: { timeout_factor?, max_total_cost_usd? } }
+  // (the workflow's own `models` win per model)
+  models: {},
   // GitHub Actions quota minutes included per month (GitHub Free: 2,000), see src/actions-usage.js
   actionsIncludedMinutes: 2000,
   // voice input (src/speech.js): the whisper.cpp CLI (a name in PATH or a path), the model (an id

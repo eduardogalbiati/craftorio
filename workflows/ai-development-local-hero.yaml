@@ -176,8 +176,9 @@ inputs:
     default: auto
     options: { auto: Automatic, validated: Validated }
     description: "Automatic: the change goes straight from the developer to review and tests. Validated: the run stops after the developer so you can try the change before review and tests are paid for."
-  # owner 2026-10-04: the developer's model per run (Fable 5.1 for the hardest work); a Fable run gets
-  # 3x the turn timeout (defaults.timeout); a model/provider choice per run with fallbacks is a later issue
+  # owner 2026-10-04: the developer's model per run (Fable 5.1 for the hardest work), the mapper's too;
+  # one case of the per-run agent choice (#262, the Start drawer's Agents): a Fable turn gets 3x the
+  # turn timeout from `models`, whichever way it was chosen
   developer_model:
     label: "Developer model"
     type: string
@@ -276,10 +277,10 @@ x-tools:
 defaults:
   # the run's own git worktree (orchestrator.worktree), or repo_path when it is not a git repo
   working_dir: "{{ worktree_dir }}"
-  # one agent turn: 30m, plus 10m per extra issue of a grouped run, at most 60m (#101); 3x when the
-  # developer runs on Fable 5.1 (owner 2026-10-04: its first run needed more than 1.5x on a 3-issue change);
-  # 2x more when its effort is xhigh (#286: longer turns; high stays within the base limit)
-  timeout: "{{ ((30 + 10 * ((inputs.issues | length) - 1)) | clamp(30, 60)) * (3 if inputs.developer_model == 'claude-fable-5-1' else 1) * (2 if inputs.developer_effort == 'xhigh' else 1) }}m"
+  # one agent turn: 30m, plus 10m per extra issue of a grouped run, at most 60m (#101); times the
+  # model's timeout_factor (`models` below, #262); 2x more when its effort is xhigh (#286: longer
+  # turns; high stays within the base limit)
+  timeout: "{{ ((30 + 10 * ((inputs.issues | length) - 1)) | clamp(30, 60)) * (2 if inputs.developer_effort == 'xhigh' else 1) }}m"
   # persistent agents: once a turn ends above this context size, the next turn starts a fresh
   # session from the agent's handoff note (runs/<id>/handoffs/)
   max_context: 150k
@@ -287,6 +288,12 @@ defaults:
     max_attempts: 2
     backoff: exponential
     initial_delay: 10s
+
+# #262: limits that follow the model an agent runs on (the Developer model input, or any agent's
+# model chosen for one run in the Start drawer's Agents): Fable 5.1 turns are slower, 3x the turn
+# timeout (owner 2026-10-04: its first run needed more than 1.5x on a 3-issue change)
+models:
+  claude-fable-5-1: { timeout_factor: 3 }
 
 # v1: the graph is run by the app's deterministic engine (src/engine).
 orchestrator:

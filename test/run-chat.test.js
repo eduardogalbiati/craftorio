@@ -30,10 +30,8 @@ async function mockRun(file, { inputs = {}, mockSequences, answers = {}, feedbac
       }
     });
     await run.start();
-    if (recorder) {
-      if (!recorder.events.writableFinished) await new Promise((r) => recorder.events.once('finish', r));
-      onRecorded(run.runDir);
-    }
+    // the recorder writes events.jsonl synchronously (#262): complete once the run has finished
+    if (recorder) onRecorded(run.runDir);
     return events;
   } finally {
     fs.rmSync(runsDir, { recursive: true, force: true });

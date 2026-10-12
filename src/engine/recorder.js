@@ -17,7 +17,9 @@ class Recorder {
     this.runDir = runDir;
     this.sessionsDir = path.join(runDir, 'sessions');
     fs.mkdirSync(this.sessionsDir, { recursive: true });
-    this.events = fs.createWriteStream(path.join(runDir, 'events.jsonl'), { flags: 'a' });
+    // written synchronously, like the session files: a reader that sees workflow.finished (the run
+    // list, a resume, a test) finds every event before it in the file
+    this.fd = fs.openSync(path.join(runDir, 'events.jsonl'), 'a');
     this.patterns = (redactRules || []).map((r) => toRegex(r.pattern || r));
   }
 
@@ -31,11 +33,13 @@ class Recorder {
   write(ev) {
     const clean = this.redact(ev);
     const line = JSON.stringify(clean) + '\n';
-    this.events.write(line);
+    if (this.fd === null) throw new Error(`event ${ev.type} after workflow.finished: not recorded`);
+    fs.writeSync(this.fd, line);
     if (ev.session_id) fs.appendFileSync(path.join(this.sessionsDir, `${ev.session_id}.jsonl`), line);
     if (ev.type === 'workflow.finished') {
       fs.writeFileSync(path.join(this.runDir, 'summary.json'), JSON.stringify(clean.summary, null, 2));
-      this.events.end();
+      fs.closeSync(this.fd);
+      this.fd = null;
     }
   }
 }

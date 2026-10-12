@@ -5,7 +5,8 @@
 //   run      a workflow run changed status (started, waiting on a human gate, succeeded, failed,
 //            cancelled, interrupted); target = { runId, workflow }; or a push met a merge conflict
 //            (event `conflict`); target = { view: 'backlog', projectId }; or a live roadmap refilled
-//            itself or stopped refilling (#164, events refilled | empty | budget | failed)
+//            itself or stopped refilling (#164, events refilled | empty | budget | failed); or an agent's
+//            provider fell back to the next one of its chain (#262, event `fallback`)
 //   session  an AI CLI in a Sessions terminal stopped and waits for the user; target = { terminalId }
 //   po       the Backlog's Product Owner answered a question (#149); target = { view: 'backlog', projectId, openPO: true }
 //   oracle   the Oracle acted on its own under the owner's Night watch (#123); target = { openOracle: true };
@@ -49,6 +50,9 @@ function runNotice(ev, run = {}, { gateLink } = {}) {
     // #276: the memory guard stopped the same command a second time in a step (the engine sets notify once)
     case 'process.killed':
       return ev.notify ? notice('memory', `Process stopped again for memory: ${name()}`, `${ev.step_id || 'A step'} ran \`${ev.command_line}\` again and the memory guard stopped it again (${(ev.bytes / 1024 ** 3).toFixed(1)} GB, over the ${(ev.limit_bytes / 1024 ** 3).toFixed(1)} GB limit).`) : null;
+    // #262: an agent's provider ran out of credits or hit its usage limit; the turn moved on to the next one
+    case 'agent.fallback':
+      return notice('fallback', `Provider fell back: ${name()}`, `${ev.agent} fell back in ${ev.step_id || 'a turn'}: ${ev.from} → ${ev.to} (${clip(ev.reason, 120)}). The provider may be out of credits.`);
     default:
       return null;
   }
