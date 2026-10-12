@@ -558,6 +558,65 @@ test('#321 tests: a run without suite logs says so instead of failing', async (t
   assert.match(String(r.note || ''), /log/i);
 });
 
+// A run whose worktree is `worktree` (or none) and whose project checkout is `project`; the log is
+// LOG_S1 unless given. The worktree declares "alpha one" in c.test.js, so the file named in the
+// answer tells which checkout the names came from.
+function otherCheckout(t) {
+  const dir = scratchDir(t, 'oracle-321-wt-');
+  fs.mkdirSync(path.join(dir, 'test'));
+  fs.writeFileSync(path.join(dir, 'test', 'c.test.js'), "const test = require('node:test');\ntest('alpha one', () => {});\ntest('alpha two', () => {});\ntest('beta one', () => {});\n");
+  return dir;
+}
+function fallbackRun(runsDir, id, { worktree, project, logs = { 'tests-develop-1.log': LOG_S1 } }) {
+  const dir = writeRun(runsDir, id, simpleEvents(), summaryOf(id, 1, { inputs: { project_path: project }, worktree }));
+  fs.mkdirSync(path.join(dir, 'logs'), { recursive: true });
+  for (const [name, text] of Object.entries(logs)) fs.writeFileSync(path.join(dir, 'logs', name), text);
+  return dir;
+}
+const fileNames = (r) => (r.files || []).map((f) => path.basename(f.file)).sort();
+
+test('#321 tests: a removed worktree gives way to the project checkout, and the answer says the worktree is gone', async (t) => {
+  const { ctx, runsDir } = makeCtx(t);
+  const wt = otherCheckout(t);
+  fallbackRun(runsDir, 'run-321-wt-removed', { worktree: { dir: wt, work_dir: wt, repo: wt, removed: true }, project: checkout(t) });
+  const r = runOf((await analysis(ctx, { runIds: ['run-321-wt-removed'], focus: 'tests' })).data, 'run-321-wt-removed');
+  assert.deepEqual(fileNames(r), ['a.test.js', 'b.test.js'], 'the names come from the project checkout, not the removed worktree');
+  assert.match(String(r.note || ''), /worktree is gone/i);
+});
+
+test('#321 tests: a worktree folder that no longer exists gives way to the project checkout, with the note', async (t) => {
+  const { ctx, runsDir } = makeCtx(t);
+  const missing = path.join(scratchDir(t, 'oracle-321-gone-'), 'deleted-worktree');
+  fallbackRun(runsDir, 'run-321-wt-missing', { worktree: { dir: missing, work_dir: missing, repo: missing, removed: false }, project: checkout(t) });
+  const r = runOf((await analysis(ctx, { runIds: ['run-321-wt-missing'], focus: 'tests' })).data, 'run-321-wt-missing');
+  assert.deepEqual(fileNames(r), ['a.test.js', 'b.test.js']);
+  assert.match(String(r.note || ''), /worktree is gone/i);
+});
+
+test('#321 tests: a worktree still there is where the names come from, without the note', async (t) => {
+  const { ctx, runsDir } = makeCtx(t);
+  const wt = otherCheckout(t);
+  fallbackRun(runsDir, 'run-321-wt-kept', { worktree: { dir: wt, work_dir: wt, repo: wt, removed: false }, project: checkout(t) });
+  const r = runOf((await analysis(ctx, { runIds: ['run-321-wt-kept'], focus: 'tests' })).data, 'run-321-wt-kept');
+  assert.deepEqual(fileNames(r), ['c.test.js']);
+  assert.doesNotMatch(String(r.note || ''), /worktree is gone/i);
+});
+
+test('#321 tests: of several suite logs, only the newest is read', async (t) => {
+  const { ctx, runsDir } = makeCtx(t);
+  const dir = fallbackRun(runsDir, 'run-321-two-logs', {
+    worktree: null, project: checkout(t),
+    logs: { 'tests-develop-1.log': LOG_S2, 'tests-develop-2.log': LOG_S1 },
+  });
+  // the older log has the later name: the newest is chosen by time, not by name
+  fs.utimesSync(path.join(dir, 'logs', 'tests-develop-2.log'), new Date('2026-10-05T10:00:00Z'), new Date('2026-10-05T10:00:00Z'));
+  fs.utimesSync(path.join(dir, 'logs', 'tests-develop-1.log'), new Date('2026-10-05T11:00:00Z'), new Date('2026-10-05T11:00:00Z'));
+  const r = runOf((await analysis(ctx, { runIds: ['run-321-two-logs'], focus: 'tests' })).data, 'run-321-two-logs');
+  const a = r.files.find((f) => f.file.endsWith('a.test.js'));
+  near(a.durationMs, 3000, 'a.test.js from the newest log (alpha one 3000ms), not both logs added up', 1);
+  assert.equal(r.slowest.some((x) => x.test === 'alpha two'), false, 'nothing from the older log');
+});
+
 // ---- the 40 KB limit --------------------------------------------------------------------------------
 
 // 30 runs of 10 steps, each step with a 4.5-minute tool call on a long command and two gaps.
