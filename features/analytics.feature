@@ -38,6 +38,33 @@ Feature: Analytics, what the work costs
     And I open the "Agents" Analytics tab
     Then "Tokens" is selected for "Cost per day"
 
+  # #308: a turn's tokens include its sub-agents' model calls. Analytics › Run's "Tokens per agent"
+  # bar of an agent (new data-testid="an-agent-tokens", like an-agent-cost) shows its total with
+  # them, its $/M, and "of which sub-agents: n calls, m tokens" (new data-testid="an-agent-subagents")
+  # only when the agent's turns started sub-agents.
+  # Assumes the demo workspace (scripts/screenshot.js, demoRoadmapRuns) gets a finished run whose id
+  # ends in "-run00308": its developer's turns started 3 sub-agents, recorded with the new fields.
+  @issue-308
+  Scenario: An agent whose turns started sub-agents shows their calls and tokens
+    Given the app is open
+    When I open "Home" in the sidebar
+    And I open the "Analytics" tab of Home
+    And I open the "Run" Analytics tab
+    And I pick the run "run00308" in Analytics
+    Then the tokens of the agent "developer" in Analytics show its total and its cost per million tokens
+    And the tokens of the agent "developer" in Analytics show 3 sub-agent calls and their tokens
+
+  # "-run00009" is tonight's merged demo run, recorded without the new sub-agent fields (a past run)
+  @issue-308
+  Scenario: A run without sub-agents shows its tokens and no sub-agent line
+    Given the app is open
+    When I open "Home" in the sidebar
+    And I open the "Analytics" tab of Home
+    And I open the "Run" Analytics tab
+    And I pick the run "run00009" in Analytics
+    Then the tokens of the agent "developer" in Analytics show its total and its cost per million tokens
+    And the tokens of the agent "developer" in Analytics show no sub-agent line
+
   # #275: the 24/7 tab's "Hours of the day" heatmap says more is more (a busier hour is a stronger
   # green: darker on the light theme, brighter on the dark theme, five levels), its caption reads
   # "(more active hours are stronger)" and a small legend shows the scale from "idle" to "fully

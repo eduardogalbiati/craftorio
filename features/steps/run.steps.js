@@ -78,6 +78,31 @@ Then('the cost of the agent {string} in Analytics is marked as estimated', async
   await expect(e2e.window.getByTestId('an-agent-cost').filter({ hasText: agent }).first()).toContainText(/estimated/i);
 });
 
+// #308: Analytics › Run's "Tokens per agent" counts the sub-agents' model calls in the agent's
+// tokens; a bar (data-testid an-agent-tokens) shows "of which sub-agents: n calls, m tokens"
+// (data-testid an-agent-subagents) only when the agent's turns started sub-agents
+const agentTokens = (page, agent) => page.getByTestId('an-agent-tokens').filter({ hasText: agent }).first();
+
+Then('the tokens of the agent {string} in Analytics show {int} sub-agent calls and their tokens', async ({ e2e }, agent, calls) => {
+  const line = agentTokens(e2e.window, agent).getByTestId('an-agent-subagents');
+  await expect(line).toBeVisible({ timeout: 30000 });
+  await expect(line).toContainText(new RegExp(`of which sub-agents: ${calls} calls?, [\\d.,]+\\s*[kKM]? tokens`));
+});
+
+Then('the tokens of the agent {string} in Analytics show its total and its cost per million tokens', async ({ e2e }, agent) => {
+  const bar = agentTokens(e2e.window, agent);
+  await expect(bar).toBeVisible({ timeout: 30000 });
+  await expect(bar).toContainText(/\d/);
+  await expect(bar).toContainText(/\/M/);
+});
+
+Then('the tokens of the agent {string} in Analytics show no sub-agent line', async ({ e2e }, agent) => {
+  const bar = agentTokens(e2e.window, agent);
+  await expect(bar).toBeVisible({ timeout: 30000 });
+  await expect(bar.getByTestId('an-agent-subagents')).toHaveCount(0);
+  await expect(bar).not.toContainText(/sub-agents/i);
+});
+
 When('I open the run from Analytics', async ({ e2e }) => {
   await e2e.window.getByTestId('an-run-header').getByRole('button', { name: 'Open run', exact: true }).click();
 });
