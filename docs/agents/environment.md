@@ -33,7 +33,7 @@ the workspace folder.
   overridable with `MULTIAGENT_WORKSPACE`). Layout: `runs/`, `repos/` (git checkouts, `<owner>-<repo>`),
   `worktrees/` (one git worktree per run, `<run_id>`), `backlog/` (issue sync per project), `projects/` (`<id>.json`),
   `skills/`, `agents/` (`<id>.json`), `settings.json`. The owner's project `multiagent-orchestrator`
-  points at `repos/eduardogalbiati-multiagent-orchestrator` (SSH remote; the repo is private).
+  points at `repos/eduardogalbiati-multiagent-orchestrator` (SSH remote; the repository is public, MIT).
 - **Developing while runs are active**: pulling or merging changes `src/` under the running app.
   Ctrl+R reloads only the window (renderer + preload); the main process (or the `npm run serve`
   server) keeps the code it started with, so new channels are missing. The process records its

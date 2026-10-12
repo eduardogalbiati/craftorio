@@ -92,14 +92,29 @@ HttpOnly cookie after the first visit; API clients send `Authorization: Bearer <
   `term:exit` and `auth:changed`; the client sends `term:input` / `term:resize` the same way.
 - Requests from another origin are refused. Beyond `127.0.0.1` the traffic is plain HTTP: put the
   server behind a reverse proxy with TLS.
-- Runs need the same account as the app (sign in from the browser UI; the sign-in page opens on the
-  server machine). `MULTIAGENT_AUTH=off` disables it in development.
+- The server asks for the same account as the app (sign in from the browser UI; the sign-in page
+  opens on the server machine). `MULTIAGENT_AUTH=off` disables it in development.
 - Desktop-only actions (native folder picker, opening files in their app, external console
   windows, changing the workspace) are not available in the browser; folder paths are typed.
   **Keep awake** is disabled there ("Not available in the browser client"): only the desktop app
   keeps the computer from sleeping.
 
 Local build: `npm run build` (writes `build/`) or `npm run package` (writes `dist/`, used by the deploy).
+
+## Account and privacy
+
+The app is free and open source. The packaged app asks you to sign in (Google, in the system
+browser) once: the account gates nothing, it only tells us how many people use the app. A signed-in
+app records its visit at every start and then at most once a day (best effort: a failure is never
+shown and never blocks anything; an offline start with a stored session stays signed in).
+
+- **Stored**: your email and name from the sign-in provider, the sign-up date, the last seen date,
+  the app version and the OS.
+- **Not stored**: your code, prompts, runs, artifacts or usage. Nothing of your work leaves your
+  machine through the account.
+
+Running from source, `MULTIAGENT_AUTH=off` skips the sign-in (development, tests, screenshots, the
+local preview and `npm run serve`). The account's database is defined in `supabase/migrations/`.
 
 <!-- generated:workflows -->
 ## Software development flow (`workflows/software-development.yaml`)
@@ -1276,10 +1291,12 @@ Enabled in `software-development`. The other bundled workflows only read a folde
   it runs `npm test` only when the merged commit's tree is not the one the PR's CI tested (`main`
   moved after CI ran).
 
-The repository is private: Actions minutes are a monthly quota where Windows counts ×2 and macOS
-×10; every job has a `timeout-minutes`. A self-hosted runner on the owner's Windows machine would
-make the Windows jobs free (`runs-on: self-hosted`); only for a private repository, since a
-self-hosted runner executes the code of every workflow run on that machine.
+Standard GitHub-hosted runners are free for public repositories; CI still runs only what a change
+needs, so it stays fast, and every job has a `timeout-minutes`. A pull request from a fork gets the
+same tests and a green or red `test` check, but records no `ci/tested` status (its token is
+read-only), so preview and deploy run the tests themselves. Never use a self-hosted runner
+(`runs-on: self-hosted`) on a public repository: a fork's pull request could run its code on that
+machine.
 
 **Actions quota in the app.** The Usage screen has a **GitHub Actions** card: this month's quota
 minutes (multipliers applied) against the included ones (`actionsIncludedMinutes` in
@@ -1672,3 +1689,14 @@ test/                    unit tests (node:test) and fixtures
 CLAUDE.md, docs/agents/  context for coding agents working on this repository (short index + topic docs)
 ```
 <!-- /generated:structure -->
+
+## Contributing
+
+Issues and pull requests are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md) for the setup and the
+checks, [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md), and [SECURITY.md](SECURITY.md) to report a
+vulnerability privately.
+
+## License
+
+[MIT](LICENSE), Copyright (c) 2026 Eduardo Galbiati. Some bundled skills and workflows are adapted
+from other MIT projects: see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

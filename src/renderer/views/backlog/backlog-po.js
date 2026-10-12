@@ -540,7 +540,7 @@
     }
     if (a.enrich?.length) {
       parts.push(`<div class="po-sec"><div class="sup-h">Enrich first</div><ul class="po-list">${a.enrich.map((e) =>
-        `<li>${issueRef(e.issue)} ${esc(e.reason)} <a class="small" href="${esc(e.link)}" target="_blank" rel="noopener" title="Enrich an issue (#103)">how to enrich (#103)</a></li>`).join('')}</ul></div>`);
+        `<li>${issueRef(e.issue)} ${esc(e.reason)} <a class="small" href="${esc(e.link)}" target="_blank" rel="noopener" title="Add what is missing (the goal, the acceptance criteria, the files or screens it touches), or use Enrich in Write &amp; Review in the issue's ⋯ menu">how to enrich</a></li>`).join('')}</ul></div>`);
     }
     // #124 / #138: issues too big for one run, and the epics section
     const msg = po.messages[m];

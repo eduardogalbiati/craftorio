@@ -1,5 +1,5 @@
-// GitHub Actions planning, to spend fewer Actions minutes (private repo: Windows minutes count x2,
-// macOS x10). Used by .github/workflows/*.yml; plain Node, no dependencies (runs before `npm ci`).
+// GitHub Actions planning, so CI runs only what a change needs and stays fast (standard runners are
+// free for public repositories). Used by .github/workflows/*.yml; plain Node, no dependencies (runs before `npm ci`).
 //   node scripts/ci-plan.js os                      # ci.yml: which OS runs `npm test` -> os=<json>
 //   node scripts/ci-plan.js report <head> <tested> <state>  # ci.yml: record pending (run starts),
 //                                                   #   success or failure (run ends) on the PR head

@@ -1,9 +1,10 @@
 name: CI
 
-# Actions minutes are a monthly quota (private repo: Windows counts x2, macOS x10), so CI runs only
-# what a change needs (scripts/ci-plan.js): PRs on ubuntu + windows, macOS when a platform-sensitive
+# Standard GitHub-hosted runners are free for public repositories; CI still runs only what a change
+# needs, so it stays fast (scripts/ci-plan.js): PRs on ubuntu + windows, macOS when a platform-sensitive
 # path changes or the PR has the `ci:macos` label (applies from the next push, or re-run it), weekly
-# on main, and on manual runs. Docs-only PRs run no tests.
+# on main, and on manual runs. Docs-only PRs run no tests. A PR from a fork gets the same tests but
+# records no commit status (its token is read-only): the report steps run only for this repository.
 on:
   pull_request:
     branches: [main]
@@ -35,7 +36,7 @@ jobs:
       # A new run (a push or a re-run of the same commit) first clears an older success, so preview
       # and deploy never skip tests on a commit whose latest CI run has not passed.
       - name: Mark the PR head as being tested
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         env:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/ci-plan.js report "${{ github.event.pull_request.head.sha }}" "${{ github.sha }}" pending
@@ -126,7 +127,7 @@ jobs:
       # Written whatever the verdict (the `plan` job marked it pending), so a failing re-run of the
       # same commit replaces an older success.
       - name: Record the result on the PR head
-        if: always() && github.event_name == 'pull_request'
+        if: always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         env:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/ci-plan.js report "${{ github.event.pull_request.head.sha }}" "${{ github.sha }}" "${{ steps.verdict.outcome == 'success' && 'success' || 'failure' }}"

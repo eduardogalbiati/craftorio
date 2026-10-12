@@ -94,7 +94,8 @@ const PREVIOUS_EXCHANGES = 3;
 const CONTEXT_WARN_AT = 7;
 const TEST_TIME_WARN_AT = 5;
 const DEFAULT_COMPLEXITY = 3;
-const ENRICH_ISSUE = 'https://github.com/eduardogalbiati/multiagent-orchestrator/issues/103';
+// how to enrich an issue: the README's Writer & Reviewer section (Enrich in Write & Review)
+const ENRICH_GUIDE = 'https://github.com/eduardogalbiati/multiagent-orchestrator#writer--reviewer-workflowswriter-revieweryaml';
 
 const ANSWER_SCHEMA = {
   type: 'object',
@@ -348,7 +349,7 @@ function normalizeAnswer(answer, { issues, history, workflows, epics: epicList =
     groups: planned,
     ...(closed.length ? { closed } : {}),
     conflicts: (answer.conflicts || []).map((c) => ({ issues: keep(c.issues), reason: String(c.reason || ''), files: (c.files || []).map(String).slice(0, 20) })).filter((c) => c.issues.length > 1),
-    enrich: (answer.enrich || []).filter((e) => numbers.has(Number(e.issue))).map((e) => ({ issue: Number(e.issue), reason: String(e.reason || ''), link: ENRICH_ISSUE })),
+    enrich: (answer.enrich || []).filter((e) => numbers.has(Number(e.issue))).map((e) => ({ issue: Number(e.issue), reason: String(e.reason || ''), link: ENRICH_GUIDE })),
     splits: normalizeSplits(answer.splits, byNumber, history),
     epics: normalizeEpics(answer.epics, byNumber, epicList),
   };
