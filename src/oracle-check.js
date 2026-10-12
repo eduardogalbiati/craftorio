@@ -13,7 +13,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
-const { killTree, resolveCommand } = require('./engine/providers');
+const { killTree, OWN_GROUP, resolveCommand } = require('./engine/providers');
 const { runShim } = require('./shell');
 
 const QUICK_MS = 2 * 60e3;
@@ -120,7 +120,7 @@ function runCommand(argv, cwd, timeoutMs) {
     let timedOut = false;
     let child;
     try {
-      child = runShim(resolved.file, argv.slice(1), { cwd, env, windowsHide: true });
+      child = runShim(resolved.file, argv.slice(1), { cwd, env, windowsHide: true, ...OWN_GROUP });
     } catch (e) {
       resolve({ code: null, output: e.message, timedOut: false, durationMs: 0 });
       return;

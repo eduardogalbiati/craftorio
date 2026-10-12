@@ -110,6 +110,8 @@
 
   const api = {
     platform: 'browser',
+    // the ↗ buttons open a window on the desktop app's machine only (#318)
+    externalTerminal: { available: false, reason: 'External terminal windows are only available in the desktop app.' },
     onReconnect: (cb) => { reconnected.add(cb); return () => reconnected.delete(cb); },
   };
   for (const entry of fetchManifest()) {

@@ -30,10 +30,20 @@ const INSTALL_HINT = process.platform === 'win32'
   : process.platform === 'darwin' ? 'brew install whisper-cpp' : 'build whisper.cpp (https://github.com/ggml-org/whisper.cpp) and put whisper-cli in PATH';
 
 // Where downloaded models live: <user data>/speech-models. `dataDir` is the app's user data folder
-// (Electron's userData); without one (the engine server) the OS's per-user app data folder.
-function modelsDir(dataDir) {
-  const base = dataDir || path.join(process.env.APPDATA || path.join(os.homedir(), '.config'), 'multiagent-orchestrator');
-  return path.join(base, 'speech-models');
+// (Electron's userData); without one (the engine server, tests) the OS's per-user app data folder
+// (#318): %APPDATA% on Windows (unchanged, so an existing folder is reused), ~/Library/Application
+// Support on macOS, $XDG_CONFIG_HOME or ~/.config on Linux. `host` is for tests.
+function appDataBase({ platform, env, home }) {
+  if (platform === 'win32') return env.APPDATA || path.win32.join(home, '.config');
+  if (platform === 'darwin') return path.posix.join(home, 'Library', 'Application Support');
+  return env.XDG_CONFIG_HOME || path.posix.join(home, '.config');
+}
+
+function modelsDir(dataDir, host = {}) {
+  const { platform = process.platform, env = process.env, home = os.homedir() } = host;
+  const flavour = platform === 'win32' ? path.win32 : path.posix;
+  const base = dataDir || flavour.join(appDataBase({ platform, env, home }), 'multiagent-orchestrator');
+  return flavour.join(base, 'speech-models');
 }
 
 // A model id from MODELS, or an absolute path to a ggml .bin file.

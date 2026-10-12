@@ -28,7 +28,8 @@ function method(entry) {
   return (...args) => ipcRenderer.invoke(entry.channel, payload(entry.params, args));
 }
 
-const api = { platform: process.platform };
+// externalTerminal: { available, reason? }, whether the ↗ buttons can open a terminal window (#318)
+const api = { platform: process.platform, externalTerminal: ipcRenderer.sendSync('terminal:external-sync') };
 for (const entry of ipcRenderer.sendSync('api:manifest') || []) {
   if (entry.method) api[entry.method] = method(entry);
 }

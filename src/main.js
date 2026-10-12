@@ -23,8 +23,16 @@ const {
   screen,
   session,
   shell,
+  systemPreferences,
 } = require('electron');
 const { createAgentsWindow } = require('./agents-window');
+const { resolveCommand } = require('./engine/providers');
+const {
+  externalTerminal,
+  NO_TERMINAL,
+  terminalLaunch,
+} = require('./external-terminal');
+const { pathKey } = require('./platform-paths');
 const workspace = require('./workspace');
 const localPreview = require('./local-preview');
 const runOwner = require('./run-owner');
@@ -114,6 +122,8 @@ const service = createService({
     appVersion: app.getVersion(),
     isPackaged: app.isPackaged,
     userDataDir: app.getPath('userData'),
+    // #318: the microphone permission asked on macOS before recording (src/mic-permission.js)
+    systemPreferences,
     // #279: Self-healing applies merged fixes to this app folder, then restarts it
     appDir: app.getAppPath(),
     relaunch: () => restartApp(),
@@ -313,8 +323,7 @@ function createWindow() {
 
 // ---- desktop-only actions ----------------------------------------------------------------
 ipcMain.handle('path:open', (_e, p) => {
-  const norm = (x) => { const r = path.resolve(x); return process.platform === 'win32' ? r.toLowerCase() : r; };
-  if (!service.openableFolders().some((dir) => norm(p) === norm(dir) || norm(p).startsWith(norm(dir) + path.sep))) throw new Error('Path is outside the workspace.');
+  if (!service.openableFolders().some((dir) => pathKey(p) === pathKey(dir) || pathKey(p).startsWith(pathKey(dir) + path.sep))) throw new Error('Path is outside the workspace.');
   return shell.openPath(p);
 });
 
@@ -381,17 +390,19 @@ ipcMain.handle('clipboard:writeFile', async (_e, { path: file }) => {
   return true;
 });
 
-// External console window (Windows) for a session: its live log or its CLI conversation.
-const q = (a) => `"${String(a).replace(/"/g, '""')}"`;
+// External terminal window for a session: its live log or its CLI conversation. The window per OS
+// (cmd on Windows, Terminal.app on macOS, the first terminal installed on Linux) comes from
+// src/external-terminal.js; without one the renderer keeps the ↗ button disabled (#318).
+const terminalHost = () => ({ exists: (name) => !!resolveCommand(name) });
 function openConsole({ title, cwd, file, args, env }) {
-  if (process.platform !== 'win32') throw new Error('Opening a terminal is only supported on Windows for now.');
-  const cmdline = [file, ...args].map(q).join(' ');
-  // start "<title>" /D "<cwd>" cmd /k "<command line>": a new console that stays open on exit
-  const child = spawn('cmd.exe', ['/d', '/s', '/c', `start ${q(title)} /D ${q(cwd)} cmd /k "${cmdline}"`], {
-    windowsVerbatimArguments: true, detached: true, stdio: 'ignore', env,
-  });
+  const launch = terminalLaunch({ ...terminalHost(), title, cwd, file, args, childEnv: env });
+  if (!launch) throw new Error(NO_TERMINAL);
+  const child = spawn(launch.file, launch.args, { ...launch.options, detached: true, stdio: 'ignore' });
+  child.on('error', () => {});
   child.unref();
 }
+
+ipcMain.on('terminal:external-sync', (e) => { e.returnValue = externalTerminal(terminalHost()); });
 
 ipcMain.handle('session:terminal', (_e, { sessionId, mode, runId }) => {
   openConsole(service.terminalSpec(runId, sessionId, mode));

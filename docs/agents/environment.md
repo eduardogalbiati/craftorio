@@ -62,3 +62,27 @@ the workspace folder.
   Night watch's actions) is the same cycle with `git reset --keep <from>`. Never in
   simulation-only mode, never pushes, never touches a packaged install.
 - The owner uses **subscription plans** (Claude, ChatGPT free for Codex, SuperGrok), not API keys.
+
+## Platforms (#318)
+
+The app runs on Windows, macOS and Linux. What differs per OS, and where:
+
+- **Path comparison**: one rule, `samePath` / `pathKey` in `src/platform-paths.js`:
+  case-insensitive on Windows and macOS, case-sensitive on Linux. Never compare paths with an
+  inline `process.platform === 'win32' ? toLowerCase()`; use the helper (store, runs, artifacts,
+  permissions, worktrees, deps cache, process lists, `path:open`).
+- **External terminal (↗)**: `src/external-terminal.js`. Windows `cmd.exe start ... cmd /k`;
+  macOS Terminal.app through `osascript` (the app's environment is exported in the command line,
+  Terminal.app does not inherit it); Linux the first installed of `$TERMINAL`,
+  `x-terminal-emulator`, `gnome-terminal`, `konsole`, `xterm`. None found: the preload's
+  `api.externalTerminal` says why and the ↗ buttons are disabled with that tooltip.
+- **Process trees**: Windows `taskkill /T /F`. macOS/Linux: every process `killTree` may stop is
+  spawned with `OWN_GROUP` (`detached: true`, its own process group) and `killTree` signals the
+  group (SIGTERM, SIGKILL after 2 s), so grandchildren (test servers, sub-agents, npm) die too.
+  Embedded terminals (node-pty) have their own kill in `src/terminals.js`.
+- **Microphone**: macOS asks `systemPreferences.askForMediaAccess('microphone')` before the first
+  recording (`src/mic-permission.js`, channel `voice:mic-access`); a denial points to System
+  Settings. Other OSes never ask. The `NSMicrophoneUsageDescription` string belongs to packaging.
+- **App data**: Electron's `userData` on every OS (speech models in `<userData>/speech-models`).
+  Without Electron (`npm run serve`, tests) `src/speech.js` falls back to `%APPDATA%`,
+  `~/Library/Application Support` or `$XDG_CONFIG_HOME`/`~/.config`, plus `multiagent-orchestrator`.

@@ -49,7 +49,7 @@ const { spawn } = require('child_process');
 const { parseAgentReport } = require('./agent-test-report');
 const { parseNodeCoverage, renderCoverageSummary } = require('../coverage-summary');
 const { processTreeCommands } = require('./processes');
-const { killTree } = require('./providers');
+const { killTree, OWN_GROUP } = require('./providers');
 
 const SUITE_TIMEOUT_MS = 30 * 60e3;
 const MIN_TIMEOUT_MS = 10 * 60e3;
@@ -278,7 +278,7 @@ function runCommand({ command, cwd, env, timeoutMs, signal, logFile, onSpawn }) 
     const out = fs.createWriteStream(logFile, { flags: 'a' });
     let child;
     try {
-      child = spawn(command, { cwd, env: childEnv, shell: true, windowsHide: true });
+      child = spawn(command, { cwd, env: childEnv, shell: true, windowsHide: true, ...OWN_GROUP });
     } catch (e) {
       out.end(`${e.message}\n`);
       resolve({ code: null, timedOut: false, error: e.message });

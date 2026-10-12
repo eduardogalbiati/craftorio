@@ -132,6 +132,9 @@
       const st = await api.speechStatus();
       if (!st.path) throw new Error(`The speech-to-text CLI is not installed (command "${st.command}" not found). Install: ${st.installHint}`);
       if (!st.modelReady) throw new Error(`The speech model "${st.model}" is not downloaded: Settings › General › Voice input.`);
+    // macOS asks the OS for the microphone first (#318, 'voice:mic-access'), or it denies it silently
+    const access = api.micAccess ? await api.micAccess() : { ok: true };
+    if (!access.ok) throw new Error(access.error);
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
       const recorder = new MediaRecorder(stream);
       const r = { ta, btn, recorder, stream, chunks: [], startedAt: Date.now(), sel: { start: ta.selectionStart, end: ta.selectionEnd }, cancelled: false };

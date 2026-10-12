@@ -33,6 +33,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { pathKey } = require('./platform-paths');
 
 // loaded on first use: a process that never opens a store (scripts/run.js, unit tests) never loads it
 let sqlite = null;
@@ -83,10 +84,7 @@ const MIGRATIONS = [
 ];
 
 const open = new Map(); // workspace root → store
-const norm = (p) => {
-  const r = path.resolve(String(p));
-  return process.platform === 'win32' ? r.toLowerCase() : r;
-};
+const norm = (p) => pathKey(String(p));
 const json = (v) => (v === undefined ? null : JSON.stringify(v));
 const parse = (s, fallback = null) => {
   if (s == null) return fallback;

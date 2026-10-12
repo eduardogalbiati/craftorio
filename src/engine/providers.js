@@ -153,13 +153,26 @@ function resolveCommand(cmd) {
   return null;
 }
 
+// The child and every descendant. macOS and Linux (#318): a child spawned with `detached: true`
+// leads its own process group, so the group gets SIGTERM, then SIGKILL after a short grace (a
+// grandchild that ignores SIGTERM, an interactive shell). A child that is not a group leader
+// falls back to signalling the child alone. OWN_GROUP goes into the spawn options of every process
+// killTree may stop (CLI turns, suites, screenshots, installs); on Windows `detached` would open a
+// console, and taskkill /T already finds the tree.
+const OWN_GROUP = { detached: process.platform !== 'win32' };
+const KILL_GRACE_MS = 2000;
 function killTree(child) {
   if (!child.pid) return;
   if (process.platform === 'win32') {
     spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true });
-  } else {
-    child.kill('SIGTERM');
+    return;
   }
+  const signal = (sig) => {
+    try { process.kill(-child.pid, sig); return; } catch { /* not a group leader, or already gone */ }
+    try { child.kill(sig); } catch { /* already gone */ }
+  };
+  signal('SIGTERM');
+  setTimeout(() => signal('SIGKILL'), KILL_GRACE_MS).unref();
 }
 
 // ---------------------------------------------------------------------------
@@ -579,7 +592,7 @@ function runCli(opts, parser) {
   if (promptFile) fs.writeFileSync(promptFile, prompt);
 
   return new Promise((resolve, reject) => {
-    const child = runShim(resolved.file, args, { cwd, env, windowsHide: true });
+    const child = runShim(resolved.file, args, { cwd, env, windowsHide: true, ...OWN_GROUP });
     // the CLI's process (the memory guard watches its tree, #276); shim: a .cmd/.bat wrapper whose
     // child is the CLI itself
     if (child.pid) opts.onSpawn?.({ pid: child.pid, shim: !!resolved.shell });
@@ -886,6 +899,7 @@ module.exports = {
   isRetryable,
   isToolTimeout,
   killTree,
+  OWN_GROUP,
   parseClaude,
   parseCodex,
   parseGrok,

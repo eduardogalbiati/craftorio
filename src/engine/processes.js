@@ -19,6 +19,7 @@ const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
 const { canonicalPath } = require('./worktree');
+const { caseInsensitive } = require('../platform-paths');
 
 const LIST_TIMEOUT_MS = 30e3;
 
@@ -76,7 +77,8 @@ function listProcesses() {
   return listMac();
 }
 
-const CASE_INSENSITIVE = process.platform === 'win32' || process.platform === 'darwin';
+// the app's one rule for case (src/platform-paths.js)
+const CASE_INSENSITIVE = caseInsensitive(process.platform);
 
 /**
  * The processes to stop for `dir`, from a process list (pure: no process is touched).

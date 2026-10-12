@@ -18,6 +18,7 @@ const path = require('path');
 const { execFile } = require('child_process');
 const { unlinkDeps } = require('./deps-cache');
 const { ownerAlive, readOwner } = require('../run-owner');
+const { samePath: platformSamePath } = require('../platform-paths');
 
 const FETCH_TIMEOUT_MS = 60e3;
 const GIT_TIMEOUT_MS = 120e3;
@@ -62,17 +63,12 @@ function canonicalPath(p) {
   }
 }
 
-// Windows file systems are case-insensitive, and so is macOS's default (APFS/HFS+
-// case-insensitive): compare without case there. On a case-sensitive macOS volume two folders
-// that differ only by case would compare equal; run folders never do.
-const CASE_INSENSITIVE = process.platform === 'win32' || process.platform === 'darwin';
-
-/** True when `a` and `b` are the same folder (see canonicalPath). */
-const samePath = (a, b) => {
-  const x = canonicalPath(a);
-  const y = canonicalPath(b);
-  return CASE_INSENSITIVE ? x.toLowerCase() === y.toLowerCase() : x === y;
-};
+/**
+ * True when `a` and `b` are the same folder (see canonicalPath), with the app's one rule for case
+ * (src/platform-paths.js: case-insensitive on Windows and macOS). On a case-sensitive macOS volume
+ * two folders that differ only by case would compare equal; run folders never do.
+ */
+const samePath = (a, b) => platformSamePath(canonicalPath(a), canonicalPath(b));
 
 /** Top-level folder (canonical) of the repository that contains `dir`, or null if it is not in a git repository. */
 async function repoRoot(dir) {

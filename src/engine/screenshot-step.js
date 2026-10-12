@@ -16,7 +16,7 @@
 const fs = require('fs');
 const path = require('path');
 const evidence = require('../evidence');
-const { killTree, resolveCommand } = require('./providers');
+const { killTree, OWN_GROUP, resolveCommand } = require('./providers');
 const { runShim } = require('../shell');
 const {
   acquireSlot,
@@ -76,7 +76,7 @@ function runShot({ cwd, args, env, timeoutMs, signal, onSpawn }) {
   return new Promise((resolve) => {
     let child;
     try {
-      child = runShim(npm.file, argv, { cwd, env: childEnv, windowsHide: true });
+      child = runShim(npm.file, argv, { cwd, env: childEnv, windowsHide: true, ...OWN_GROUP });
     } catch (e) {
       resolve({ code: null, output: e.message, timedOut: false });
       return;

@@ -18,6 +18,7 @@ const { trailOf } = require('./renderer/run-progress-model');
 const { defaultTitle, prOfEvents, readMeta } = require('./run-pr');
 const { ownerAlive, readOwner } = require('./run-owner');
 const { storeFor } = require('./store');
+const { pathKey } = require('./platform-paths');
 const {
   artifactEntry,
   kindOf,
@@ -385,10 +386,7 @@ function runSummaries(runsDir, { mock } = {}) {
   return store.runSummaries({ mock });
 }
 
-const normPath = (p) => {
-  const r = path.resolve(String(p));
-  return process.platform === 'win32' ? r.toLowerCase() : r;
-};
+const normPath = (p) => pathKey(String(p));
 
 /**
  * Runs of a project: recorded with its id, or (older runs) whose folder inputs (repo_path,

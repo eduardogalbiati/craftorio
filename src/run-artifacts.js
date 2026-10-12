@@ -18,6 +18,7 @@ const fs = require('fs');
 const fsp = fs.promises;
 const path = require('path');
 const { categoryOf } = require('./artifact-categories');
+const { pathKey } = require('./platform-paths');
 const { storeFor } = require('./store');
 
 const INTERNAL = new Set(['events.jsonl', 'meta.json', 'summary.json']);
@@ -26,10 +27,7 @@ const INTERNAL = new Set(['events.jsonl', 'meta.json', 'summary.json']);
 const SKIPPED_DIRS = new Set(['scratch', 'sessions']);
 const KINDS = { '.md': 'markdown', '.markdown': 'markdown', '.json': 'json', '.jsonl': 'json', '.tsv': 'table', '.csv': 'table', '.txt': 'text', '.log': 'text', '.yaml': 'text', '.yml': 'text', '.html': 'text', '.patch': 'text', '.diff': 'text', '.png': 'image', '.jpg': 'image', '.jpeg': 'image', '.gif': 'image', '.webp': 'image' };
 const kindOf = (file) => KINDS[path.extname(file).toLowerCase()] || 'other';
-const normPath = (p) => {
-  const r = path.resolve(String(p));
-  return process.platform === 'win32' ? r.toLowerCase() : r;
-};
+const normPath = (p) => pathKey(String(p));
 const SAVED_TYPES = new Set(['file.saved', 'handoff.saved']);
 const READ_CHUNK = 1024 * 1024;
 // bumped when an entry's fields change: an index row of an older version is computed again

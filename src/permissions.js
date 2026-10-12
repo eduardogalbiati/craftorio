@@ -3,10 +3,10 @@
 // (src/renderer/index.html, a file: URL). Everything else (camera, geolocation, notifications
 // from pages, ...) and every other page is denied.
 
-const path = require('path');
 const { fileURLToPath } = require('url');
+const { pathKey } = require('./platform-paths');
 
-const norm = (p) => (process.platform === 'win32' ? path.resolve(p).toLowerCase() : path.resolve(p));
+const norm = (p) => pathKey(p);
 
 // appPage: the absolute path of the app's index.html. url: the page asking.
 function isAppPage(url, appPage) {
