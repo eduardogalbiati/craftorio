@@ -126,3 +126,23 @@ test('#289 run:diff { summary: true } answers the commits and the files\' counts
   const full = await ctx.runDiff({ runId: 'r1' });
   assert.ok(full.files.every((f) => typeof f.patch === 'string'), 'without summary the patches come');
 });
+
+// The engine's local merge when the base moved (src/engine/worktree.js mergeLocally): the branch is
+// rebased onto the base, then the base fast-forwards to it (worktree.merged { rebased: true }).
+// The run's commits are the rebased ones only: the commit the base gained in the meantime is not
+// the run's (issue #289: "The run's own commits only (not the base's)").
+test('#289 run:diff of a rebased local merge whose branch was deleted lists the run\'s two commits, not the commit the base gained meanwhile', async (t) => {
+  const r = worktreeRepo(t);
+  const { ctx, writeRun } = makeDiffCtx(t);
+  fs.writeFileSync(path.join(r.repo, 'c.txt'), 'meanwhile\n');
+  r.git(r.repo, 'add', '.');
+  r.git(r.repo, 'commit', '-q', '-m', 'meanwhile on main');
+  r.git(r.wt, 'rebase', '-q', 'main');
+  const commit = mergeAndClean(r, '--ff-only');
+  const merged = Object.assign(mergedOf(r, commit), { rebased: true });
+  writeRun('r1', [started(), readyOf(r), merged, removedOf(r)]);
+  const d = await ctx.runDiff({ runId: 'r1' });
+  assert.equal(d.unavailable, null, 'nothing is unavailable while the merge commit exists');
+  assert.deepEqual(d.commits.map((c) => c.subject), ['second change', 'first change'], 'the rebased commits of the run, newest first, and no commit of the base');
+  assert.deepEqual(d.files.map((f) => f.file).sort(), ['a.txt', 'b.txt'], 'the files the run changed, not the base\'s c.txt');
+});
