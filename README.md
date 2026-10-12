@@ -452,7 +452,7 @@ The local-hero pipeline with the tests written **first** (#220): acceptance test
 - **Affected suite** (#304): the suite step runs with `scope: affected`: each round the test files the change reaches (plus the ones that failed before), then the whole suite once when they pass. The Run screen's suite card and Analytics › Run's suite rounds show the scope and why each file ran.
 - **Locked for the developer**: the engine refuses a developer turn that changes an acceptance test (`protect_files`), while the developer may add its own internal tests; the reviewer checks the files are unchanged too.
 - `unit_tests` defaults to `run_existing` (the suite after the review, no second test-writer step) and `e2e_tests` to `off`. Reviewer and test writer run on Claude Opus 5.5.
-- **Developer model and effort** per run: `developer_model` (Opus 5.5 or Fable 5.1, 3x turn timeout) and `developer_effort` (#286: `default` passes no `--effort`, the CLI's own effort for the model; `low` to `xhigh` are passed as `--effort`, `xhigh` doubles the turn timeout). The reviewer runs at `effort: high`, passed through the providers' `effort_args`. The Product Owner's Cost step leaves the developer's effort alone.
+- **Developer model and effort** per run: `developer_model` (Opus 5.5 or Fable 5.1, 3x turn timeout from the workflow's `models`; any agent's model can also be chosen in the Start drawer's Agents, #262) and `developer_effort` (#286: `default` passes no `--effort`, the CLI's own effort for the model; `low` to `xhigh` are passed as `--effort`, `xhigh` doubles the turn timeout). The reviewer runs at `effort: high`, passed through the providers' `effort_args`. The Product Owner's Cost step leaves the developer's effort alone.
 
 ## E2E release (`workflows/e2e-release.yaml`)
 
@@ -1056,6 +1056,38 @@ $X of $Y today; next stage ≈ $Z". The roadmap bar then offers two buttons:
 A run already started finishes, and no human gate is answered. The live roadmap's refills (#164)
 and the Night watch's roadmaps respect the same cap. The top bar shows today's spending next to the
 month's usage, "$38 / $60 today", or tonight's while the Night watch is on.
+
+### Agent providers per run, fallbacks and limits per model
+
+**Any agent's provider and model, for one run** (#262). The Start drawer (under Advanced
+parameters), the Backlog's Assign dialog and a roadmap item's Edit list each agent of the workflow
+under **Agents**: its provider, model and effort, with the workflow's values as defaults. A change
+applies to that run only. It is recorded in the run (`workflow.started` `agents`), and a resume
+applies it again. The workflow file and the next runs keep their own values. A workflow no longer
+needs its own `*_model` inputs for this. AI Development's `developer_model` is one case of it.
+
+**Fallbacks when a provider runs out of credits** (#262). There are two places to declare an
+ordered list of entries:
+- a workflow, per agent or in `defaults`: `fallbacks: [claude:claude-opus-5-5, codex:gpt-6-luna]`;
+- Settings › Agents & CLIs › Fallbacks, one list per provider, for the agents whose workflow
+  declares none.
+
+A turn can fail with the provider's quota, credit or usage-limit message. Claude, Codex and Grok are
+recognized, e.g. "You've hit your usage limit" or "Credit balance is too low". Then the engine reruns
+that turn on the next entry, in a fresh session started from the agent's handoff note, and keeps that
+choice for the rest of the run. It tells you three ways:
+- a "fell back" line in the run chat, with the reason;
+- a mark in the run's agents table;
+- a notification, since the provider may be out of credits.
+
+Each turn in the run chat shows the provider and model that answered it. Other errors keep the
+normal retries. With no entry left, the run fails with the provider's message. A fallback never
+skips a step or a gate.
+
+**Limits that follow the model** (#262). Declare them once per model, in a workflow
+(`models: { claude-fable-5-1: { timeout_factor: 3 } }`) or in Settings › Agents & CLIs › Limits per
+model. An agent on that model gets its turn timeout multiplied by the factor. A run with an agent on
+it may spend up to the model's `max_total_cost_usd` when that is above the workflow's cost limit.
 
 ### Chaining workflows: When it finishes
 
