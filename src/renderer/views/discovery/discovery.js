@@ -400,7 +400,8 @@
     return `Estimated cost: ≈ $${usd.toFixed(2)} (${detail}).`;
   }
 
-  // The proposal of an "Ask me" column: the owner runs it or not; nothing runs by itself.
+  // The proposal of an "Ask me" column: the owner runs it or not; nothing runs by itself. Docked in a
+  // corner, not modal: the board stays usable, and the next move's proposal replaces an ignored one.
   function openProposal(p) {
     dv.proposal = p;
     const where = columnOf(p.column)?.title || p.column;
@@ -1475,7 +1476,7 @@
       </div>
     </form>
   </div>
-  <div id="dsc-proposal-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="dsc-proposal-title" data-testid="discovery-automation-proposal">
+  <div id="dsc-proposal-modal" class="dsc-proposal-dock hidden" role="dialog" aria-modal="false" aria-labelledby="dsc-proposal-title" data-testid="discovery-automation-proposal">
     <form id="dsc-proposal-form" class="modal-card">
       <h3 id="dsc-proposal-title">Run the automation?</h3>
       <p id="dsc-proposal-what" class="small" data-testid="discovery-automation-what"></p>

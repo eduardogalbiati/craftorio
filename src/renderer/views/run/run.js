@@ -567,7 +567,7 @@ function renderSessions() {
     const isOrch = s.id === 'orchestrator';
     const t = s.tokens || {};
     return `
-    <div class="session-card ${isOrch ? '' : 'child'} ${state.selected === s.id ? 'selected' : ''}" data-id="${esc(s.id)}">
+    <div class="session-card ${isOrch ? '' : 'child'} ${state.selected === s.id ? 'selected' : ''}" data-id="${esc(s.id)}" data-agent="${esc(s.agent)}" data-testid="run-session-card">
       <div class="sc-head">
         <span class="name" title="${esc(s.agent)}">${esc(agentLabel(s.agent, selectedView()?.run?.agentNames))}</span>
         <span class="id">${esc(s.id)}</span>

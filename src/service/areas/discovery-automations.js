@@ -83,7 +83,11 @@ module.exports = (ctx) => {
     if (!card || card.column === from) return card;
     const auto = columnOf(projectId, card.column).on_enter;
     if (!auto || auto.mode === 'off') return card;
-    if (auto.mode !== 'on') return { ...card, automation: proposal(card.column, auto) };
+    if (auto.mode !== 'on') {
+      // a clarity check with nothing to ask (a clear card, or no open point left) is not offered
+      if (auto.check && !discovery.grillHasQuestion(dir(), projectId, card.id)) return card;
+      return { ...card, automation: proposal(card.column, auto) };
+    }
     try {
       const started = await startDiscoveryAutomation({ projectId, cardId: card.id, column: card.column });
       return { ...discovery.readCard(dir(), projectId, card.id), automation: { status: started.runId ? 'running' : 'done', column: card.column, ...started } };

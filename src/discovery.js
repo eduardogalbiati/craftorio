@@ -898,6 +898,15 @@ function grillCard(dir, projectId, id) {
 }
 
 /**
+ * Whether Grill me has something to ask the card: under its bar, with an open point of the rubric
+ * left (#259: a clarity check entering a column proposes nothing otherwise).
+ */
+function grillHasQuestion(dir, projectId, id) {
+  const card = readCard(dir, projectId, id);
+  return (card.clarity?.score ?? 0) < grillBar(dir, projectId, card) && !!clarity.nextQuestion(card);
+}
+
+/**
  * The person's answer to the waiting question: written into the card (its acceptance criteria, or
  * a section of its document, kept as a version first), noted in the thread, and the card is scored
  * again. Then the next question, or the end of the interview. → { card, bar, question }
@@ -1122,6 +1131,7 @@ module.exports = {
   filedDir,
   finishImports,
   grillCard,
+  grillHasQuestion,
   importCards,
   issueCards,
   listArchived,

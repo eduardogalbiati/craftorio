@@ -893,7 +893,10 @@ function renderHeader() {
   const t = totals();
   $('#kpi-tokens').textContent = `${fmtNum(t.input + t.cache_read)} / ${fmtNum(t.output)}`;
   $('#kpi-reasoning').textContent = fmtNum(t.reasoning);
-  $('#kpi-cost').textContent = `$${t.cost.toFixed(4)}`;
+  // #233: the run's cost marked when part of it is estimated or was not recorded (run-list.js costMarks)
+  const sessions = [...state.sessions.values()];
+  const estimated = sessions.reduce((a, s) => a + (Number(s.estimated_cost_usd) || 0), 0);
+  $('#kpi-cost').innerHTML = `$${t.cost.toFixed(4)}${costMarks(estimated, sessions.some((s) => s.cost_not_recorded || s.costNotRecorded))}`;
   // several runs in progress: their total next to the selected run's numbers
   const live = liveRuns();
   const others = live.length > 1 || (live.length && !isRunLive(state.runId));

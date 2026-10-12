@@ -58,14 +58,14 @@
     </label>
     <button id="run-meta" class="run-meta" type="button" title="View the current run">
       <span id="run-status" class="pill pill-idle" data-testid="run-status" data-status="idle">Idle</span>
-      <span id="run-id" class="muted mono"></span>
+      <span id="run-id" class="muted mono" data-testid="run-id"></span>
     </button>
     <div class="kpis">
       <div class="kpi"><label>Time</label><b id="kpi-time">—</b></div>
       <div class="kpi"><label>Sessions</label><b id="kpi-sessions">0</b></div>
       <div class="kpi"><label>Tokens in / out</label><b id="kpi-tokens">0 / 0</b></div>
       <div class="kpi"><label>Reasoning</label><b id="kpi-reasoning">0</b></div>
-      <div class="kpi"><label>Cost</label><b id="kpi-cost">$0.00</b></div>
+      <div class="kpi"><label>Cost</label><b id="kpi-cost" data-testid="run-total-cost">$0.00</b></div>
       <div id="kpi-all" class="kpi kpi-all hidden"><label>All runs</label><b id="kpi-all-value"></b></div>
     </div>
     <div class="actions">
