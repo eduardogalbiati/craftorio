@@ -87,11 +87,11 @@ function parseAttrs(src) {
   return attrs;
 }
 
-// The arena view's markup (the `markup:` template), mounted under html > body > main.
-function loadArena() {
-  const src = fs.readFileSync(path.join(RENDERER, 'views', 'arena', 'arena.js'), 'utf8');
+// A view's markup (the `markup:` template of views/<view>/<view>.js), mounted under html > body > main.
+function loadMarkup(view) {
+  const src = fs.readFileSync(path.join(RENDERER, 'views', view, `${view}.js`), 'utf8');
   const m = /markup:\s*`([\s\S]*?)`\s*,\s*\n\s*modals:/.exec(src);
-  assert.ok(m, 'arena.js has a markup template');
+  assert.ok(m, `${view}.js has a markup template`);
   const markup = m[1].replace(/<!--[\s\S]*?-->/g, '').replace(/\$\{[^}]*\}/g, '');
   const htmlEl = el('html', {}, null);
   const body = el('body', {}, htmlEl);
@@ -110,7 +110,11 @@ function loadArena() {
   }
   const all = [];
   (function walk(n) { all.push(n); n.children.forEach(walk); })(htmlEl);
-  const byId = (id) => all.find((n) => n.id === id);
+  return { all, byId: (id) => all.find((n) => n.id === id) };
+}
+
+function loadArena() {
+  const { all, byId } = loadMarkup('arena');
   const side = all.find((n) => n.tag === 'aside' && n.classes.includes('duo-side'));
   assert.ok(side, 'the arena run has an <aside class="duo-side"> column');
   const sectionOf = (id) => { let n = byId(id); while (n && n.parent !== side) n = n.parent; return n; };
@@ -128,7 +132,8 @@ function loadArena() {
   const bar = el('span', { class: 'bar' }, row);
   el('i', {}, bar);
   const val = el('span', { class: 'val' }, row);
-  return { side, docSection, boardSection, superSection, tabs: byId('arena-doc-tabs'), tabsHead: docSection.children.find((c) => c.classes.includes('duo-side-head')), docBody, title, row, name, bar, val };
+  const tab = el('button', { type: 'button', class: 'active' }, byId('arena-doc-tabs'));
+  return { side, docSection, boardSection, superSection, tabs: byId('arena-doc-tabs'), tab, tabsHead: docSection.children.find((c) => c.classes.includes('duo-side-head')), docBody, title, row, name, bar, val };
 }
 
 // ---------------------------------------------------------------- selector matching
@@ -344,6 +349,14 @@ test('arena side panel (#311): the document tabs wrap or scroll and never shrink
   }
 });
 
+test('arena side panel (#311): a tab with a long document name is cut with an ellipsis inside the tab row', () => {
+  const { rules, arena } = setup();
+  const t = computed(rules, arena.tab);
+  assert.equal(t['white-space'], 'nowrap', 'the tab label stays on one line');
+  assert.ok(ellipsis(t), `tab: text-overflow ${t['text-overflow'] ?? 'clip'}, overflow-x ${t['overflow-x'] ?? 'visible'}`);
+  assert.ok(isPositiveLength(t['max-width']) && t['max-width'] !== 'none', `tab max-width ${t['max-width'] ?? 'none'}: a long tab must not be wider than its row`);
+});
+
 // ---------------------------------------------------------------- criterion 3
 
 test('arena side panel (#311): a long document title wraps or is clipped inside the document box', () => {
@@ -376,4 +389,21 @@ test('arena side panel (#311): each peer score row keeps the model name, bar and
   const name = computed(rules, arena.name);
   assert.equal(name['white-space'], 'nowrap', 'a long model name stays on one line');
   assert.ok(ellipsis(name), 'a long model name ends with an ellipsis instead of pushing the bar');
+});
+
+// ---------------------------------------------------------------- scope
+
+test('arena side panel (#311): the Write & Review column, which shares .duo-side, is not changed by the arena rules', () => {
+  const rules = loadRules();
+  const withoutArena = rules.filter((r) => r.file !== 'views/arena/arena.css');
+  const { all } = loadMarkup('duo');
+  const side = all.find((n) => n.tag === 'aside' && n.classes.includes('duo-side'));
+  assert.ok(side, 'the Write & Review view has an <aside class="duo-side"> column');
+  const nodes = [side, ...side.children, ...side.children.flatMap((c) => c.children)];
+  const props = ['overflow-y', 'overflow-x', 'flex-grow', 'flex-shrink', 'flex-basis', 'min-height', 'overflow-wrap'];
+  for (const n of nodes) {
+    const label = `${n.tag}.${n.classes.join('.')}${n.id ? `#${n.id}` : ''}`;
+    const a = computed(rules, n), b = computed(withoutArena, n);
+    for (const p of props) assert.equal(a[p] ?? null, b[p] ?? null, `${label} ${p}`);
+  }
 });
