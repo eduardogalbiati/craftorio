@@ -23,7 +23,9 @@ const chain = require('../../renderer/chain-model');
 const { render } = require('./templates');
 const { FALLBACK_ENTRY, parseDuration } = require('./load');
 const { takeHandoff } = require('./outputs');
-const providers = require('../providers'); // runTurn is read when a turn starts: tests fake it there
+// the module too, for `providers.runTurn`: read when a turn starts, not bound when this file loads, so
+// tests that fake the CLI on the module's exports (test/subagent-tokens-engine-308.test.js) reach it
+const providers = require('../providers');
 
 // Consecutive refused tool calls in one turn that are worth a warning (agent fighting its allowlist).
 const DENIAL_WARN = 5;

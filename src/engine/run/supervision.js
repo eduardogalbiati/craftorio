@@ -7,8 +7,6 @@
 'use strict';
 
 const supervisor = require('../../supervisor');
-const capabilities = require('../capabilities');
-const evidence = require('../../evidence');
 const { render } = require('./templates');
 const {
   answeredKey,

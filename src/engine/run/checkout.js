@@ -22,7 +22,6 @@ const {
 const capabilities = require('../capabilities');
 const depsCache = require('../deps-cache');
 const { scratchWorkspace } = require('../../local-preview');
-const { stopProcessesIn } = require('../processes');
 const { render } = require('./templates');
 
 const methods = {

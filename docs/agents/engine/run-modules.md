@@ -6,8 +6,9 @@ Which file owns which part of a run: `src/engine/workflow.js` keeps the run loop
   agents, template context), `start` and `finish`, `runStep` (one visit of a step, by type), `runAgentStep`
   (prompt, turn, schema retries, `save_as`), `runFanOut`, `startChildRun`, `stop`, `emitEvent`, the
   chaining `then`. Everything else lives in `src/engine/run/<area>.js` and is mixed into the prototype
-  at the end of workflow.js (`mixin(...)`): each module exports `methods`, an object of methods written
-  like class methods (`this` is the run), plus the helpers other modules or the public API need.
+  at the end of workflow.js (`mixin(...)`): a module exports `methods`, an object of methods written
+  like class methods (`this` is the run), plus the helpers other modules or the public API need;
+  `templates.js` and `load.js` export helpers only (no methods, not in `mixin(...)`).
 - The public API does not change with the split: `new WorkflowRun(...)`, `loadWorkflow`, `evalExpr`,
   `render` and the helpers `module.exports` lists are re-exported from the modules; the events are the
   same, in the same order (test/slow/engine-run-split-250.slow.test.js compares a mock run of
@@ -39,8 +40,10 @@ Which file owns which part of a run: `src/engine/workflow.js` keeps the run loop
     refused test/protected edits prompts.
   - `resume.js`: what a resumed run reuses (`seedResume`, `replayConfirmedGate`, `resumeSession`,
     `previousChildren`, `resumableSteps`).
-- Rules for the modules: a module requires the leaf modules (`templates`, `load`, `outputs`) and
-  engine files, never `../workflow` (a require cycle); modules call each other's methods through
-  `this`, never by importing them. The provider call goes through `providers.runTurn` at call time
+- Rules for the modules: a module requires engine files and the helpers of other run modules (mostly
+  the leaf modules `templates`, `load`, `outputs`; `turns` and `costs` lend `gib`, `DENIAL_WARN` and
+  `kTokens`), never `../workflow` and never in a cycle (destructured requires bind at load time);
+  modules call each other's methods through `this`, never by importing them. `mixin` throws when two
+  modules define the same method. The provider call goes through `providers.runTurn` at call time
   (tests fake it on the module's exports). Each module stays under 800 lines and workflow.js under
   1,000 (test/engine-run-split-250.test.js); a new area gets its own file, listed in `mixin(...)`.

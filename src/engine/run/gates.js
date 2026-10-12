@@ -8,7 +8,6 @@
 'use strict';
 
 const { checkAttachments } = require('../providers');
-const supervisor = require('../../supervisor');
 const gateSummary = require('../gate-summary');
 const mergeQueue = require('../merge-queue');
 const { render } = require('./templates');

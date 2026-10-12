@@ -1,10 +1,11 @@
 // Engine that runs the step graph defined in the YAML.
 // Emits events ('event') that feed the UI and the observability recorder.
 // `WorkflowRun` keeps the run loop: the constructor (run state, inputs, agents, template context),
-// `start` (workflow.started, the walk from the first step to `end`, `finish`), `runStep` (one visit of a
-// step by type: a gate, a machine step, an agent or a fan-out `agents: [...]`, `on_error`), `runAgentStep`
-// (the prompt, the turn, schema validation and retries, `save_as`), `startChildRun` (the default child
-// run of a `type: workflow` step), `stop`, `emitEvent` and the chaining `then` (#134).
+// `start` (workflow.started, the walk from the first step to `end`) and `finish` (summary.json,
+// workflow.finished), `runStep` (one visit of a step by type: a gate, a machine step, an agent or a
+// fan-out `agents: [...]` through `runFanOut`, `on_error`), `runAgentStep` (the prompt, the turn, schema
+// validation and retries, `save_as`), `startChildRun` (the default child run of a `type: workflow` step),
+// `stop`, `stepById`, `emitEvent` and the chaining `then` (#134: `setThen`, `thenFromChoice`).
 // Everything else is one module per area in src/engine/run/ (#250), mixed into the prototype below:
 // templates (`render`, `evalExpr`, filters) · load (`loadWorkflow`, the YAML vocabularies and parsers) ·
 // setup (inputs, attachments, agent overrides, personas) · transitions (`finishStep`, counters, loops,
@@ -25,8 +26,6 @@ const crypto = require('crypto');
 const { EventEmitter } = require('events');
 const { emptyUsage, refreshWindowsPath } = require('./providers');
 const { resolveSkill, skillPrompt } = require('../skills');
-const supervisor = require('../supervisor');
-const capabilities = require('./capabilities');
 const evidence = require('../evidence');
 const { writeResultSummary } = require('../result-summary');
 const { stopProcessesIn } = require('./processes');
@@ -683,8 +682,14 @@ class WorkflowRun extends EventEmitter {
 
 // The areas' methods join the class here (#250): defined like class methods (not enumerable), so
 // tests can still patch an instance's method and `Object.create(WorkflowRun.prototype)` keeps working.
+// A name two modules (or a module and this class) both define is a mistake, not an override.
 const mixin = (proto, ...sets) => {
-  for (const set of sets) for (const [name, fn] of Object.entries(set)) Object.defineProperty(proto, name, { value: fn, writable: true, configurable: true, enumerable: false });
+  for (const set of sets) {
+    for (const [name, fn] of Object.entries(set)) {
+      if (Object.hasOwn(proto, name)) throw new Error(`WorkflowRun.${name} is defined twice (src/engine/run/)`);
+      Object.defineProperty(proto, name, { value: fn, writable: true, configurable: true, enumerable: false });
+    }
+  }
 };
 mixin(
   WorkflowRun.prototype,
