@@ -89,7 +89,8 @@ test('ai-development e2e: a UI issue gets its scenarios written first, run by th
   const route = transitions.join(',').replace(/develop>testid_check,testid_check>/g, 'develop>').split(',');
   assert.deepEqual(route, [
     'acceptance_tests>red_check',
-    'red_check>develop',
+    'red_check>warm_up',
+    'warm_up>develop',
     // #151: the mock developer lists one screen: captured for the ui_reviewer in automatic mode too
     'develop>developer_screenshots',
     'developer_screenshots>code_review',

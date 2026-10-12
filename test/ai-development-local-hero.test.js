@@ -77,7 +77,8 @@ test('ai-development-local-hero: the normal path runs the acceptance tests, the 
   assert.equal(finished.status, 'success', finished.error);
   assert.deepEqual(transitions, [
     'acceptance_tests>red_check',
-    'red_check>develop',
+    'red_check>warm_up',
+    'warm_up>develop',
     // #151: the mock developer lists one screen, so its screenshots are taken in automatic mode too
     'develop>developer_screenshots',
     'developer_screenshots>code_review',
@@ -94,18 +95,19 @@ test('ai-development-local-hero: the normal path runs the acceptance tests, the 
 test('ai-development-local-hero: an acceptance test that already passes is reported to develop as already green', { timeout: 120000 }, async (t) => {
   const { transitions, finished, prompts } = await runAiDev(t, { mockSequences: { suite: { red_check: ['pass'], suite: ['pass'] } } });
   assert.equal(finished.status, 'success', finished.error);
-  assert.equal(transitions[1], 'red_check>develop', 'a green check goes straight to develop');
+  assert.deepEqual(transitions.slice(1, 3), ['red_check>warm_up', 'warm_up>develop'], 'a green check goes on to develop (through Warm Up, #301)');
   assert.match(prompts[0], /already green/, 'the develop prompt names the tests that already pass');
 });
 
 test('ai-development-local-hero: acceptance tests that cannot run go back to the test writer once, then on to develop', { timeout: 120000 }, async (t) => {
   const { transitions, finished } = await runAiDev(t, { mockSequences: { suite: { red_check: ['broken', 'fail'], suite: ['pass'] } } });
   assert.equal(finished.status, 'success', finished.error);
-  assert.deepEqual(transitions.slice(0, 4), [
+  assert.deepEqual(transitions.slice(0, 5), [
     'acceptance_tests>red_check',
     'red_check>acceptance_tests',
     'acceptance_tests>red_check',
-    'red_check>develop',
+    'red_check>warm_up',
+    'warm_up>develop',
   ]);
 });
 
@@ -485,9 +487,10 @@ test('ai-development-local-hero (#247): changed criteria: acceptance_tests, the 
     mockSequences: { suite: { red_check: ['fail', 'fail'], suite: ['pass'] }, criteria_changed: [true] },
   });
   assert.equal(finished.status, 'success', finished.error);
-  assert.deepEqual(transitions.slice(0, 8), [
+  assert.deepEqual(transitions.slice(0, 9), [
     'acceptance_tests>red_check',
-    'red_check>develop',
+    'red_check>warm_up',
+    'warm_up>develop',
     'develop>developer_check',
     'developer_check>acceptance_tests',
     'acceptance_tests>red_check',
@@ -508,9 +511,10 @@ test('ai-development-local-hero (#247): a simple change no test covers goes from
     mockSequences: { suite: { red_check: ['fail'], suite: ['pass'] }, criteria_changed: [false] },
   });
   assert.equal(finished.status, 'success', finished.error);
-  assert.deepEqual(transitions.slice(0, 6), [
+  assert.deepEqual(transitions.slice(0, 7), [
     'acceptance_tests>red_check',
-    'red_check>develop',
+    'red_check>warm_up',
+    'warm_up>develop',
     'develop>developer_check',
     'developer_check>acceptance_tests',
     'acceptance_tests>develop',

@@ -22,6 +22,11 @@
 .run-summary .run-inputs dt { max-width: 14ch; }
 .run-summary .run-inputs dd[data-full] { cursor: help; }
 .run-summary > .row { margin-top: 8px; gap: 6px; flex-wrap: wrap; }
+/* #304: a suite step with scope affected: its scope, why each test file ran, its logs */
+.run-suite-card { margin: 8px 0; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel-2); display: grid; gap: 4px; }
+.run-suite-card ul { margin: 0; padding-left: 16px; }
+.run-suite-card li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.run-suite-card .row { gap: 10px; flex-wrap: wrap; }
 /* ---------- steps ---------- */
 .steps { list-style: none; padding: 0; margin: 0; display: grid; gap: 4px; }
 .steps li {

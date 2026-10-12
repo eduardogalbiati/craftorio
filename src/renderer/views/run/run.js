@@ -140,6 +140,40 @@ function testsPlanHtml(plan) {
   return `<div class="small run-tests-plan">${plan.map((p) => `<span class="badge${p.value === 'off' ? ' warn' : ''}" title="${esc(`${p.label}: ${p.value_label} (${p.source})${p.value === 'off' ? ': nothing of it is tested in this run' : ''}`)}">${esc(p.label)}: ${esc(p.value_label)}</span>`).join(' ')}</div>`;
 }
 
+// #304: a suite step with `scope: affected`, its latest round as a card: the scope (the affected test
+// files, then the whole suite once), why each file ran (output.selection) and the logs. '' when no
+// suite step of the run selected its files.
+const SUITE_REASONS_SHOWN = 6;
+function suiteCardsHtml(runId, stepNames) {
+  const last = new Map();
+  for (const e of state.runs.get(runId)?.events || []) {
+    if (e.type === 'step.finished' && e.output?.kind === 'suite' && e.output.selection) last.set(e.step_id, e.output);
+  }
+  return [...last].map(([stepId, out]) => {
+    const sel = out.selection;
+    const scope = sel.mode === 'all' ? 'Whole suite' : out.affected && out.scope === 'full' ? 'Affected tests, then the whole suite' : 'Affected tests only';
+    const reasons = Object.entries(sel.reasons || {});
+    const more = reasons.length - SUITE_REASONS_SHOWN;
+    const list = reasons.length
+      ? `<ul>${reasons.slice(0, SUITE_REASONS_SHOWN).map(([f, why]) => `<li><span class="mono" title="${esc(f)}">${esc(f)}</span>: ${esc(why)}</li>`).join('')}${more > 0 ? `<li class="muted">and ${more} more</li>` : ''}</ul>`
+      : '';
+    const logBtn = (log, label, testid) => (log ? `<button type="button" class="link-btn small" data-testid="${testid}" data-suite-log="${esc(log)}" title="${esc(log)}">${label}</button>` : '');
+    const affectedLog = out.affected ? out.affected.log : out.scope === 'files' ? out.log : '';
+    return `<div class="run-suite-card" data-testid="run-suite-card">
+      <div><b title="${esc(stepId)}">${esc(agentLabel(stepId, stepNames))}</b> <span class="badge" data-testid="run-suite-scope" title="${esc(sel.why || '')}">${esc(scope)}</span>${out.round ? ` <span class="muted small">round ${esc(out.round)}</span>` : ''}</div>
+      <div class="small run-suite-selection" data-testid="run-suite-selection">${list}${sel.why ? `<div class="muted">${esc(sel.why)}</div>` : ''}</div>
+      <div class="row">${logBtn(affectedLog, 'Affected tests\' log', 'run-suite-affected-log')}${out.affected && out.scope === 'full' ? logBtn(out.log, 'Whole suite\'s log', 'run-suite-full-log') : ''}</div>
+    </div>`;
+  }).join('');
+}
+
+// Opens a log of the run (a path relative to its folder); a run recorded without its folder opens the folder.
+function openRunLog(runId, rel) {
+  const runDir = state.runs.get(runId)?.events?.find((e) => e.type === 'workflow.started')?.run_dir || '';
+  const opened = runDir ? api.openPath(`${runDir.replace(/[\\/]+$/, '')}/${rel}`) : api.openRunDir(runId);
+  Promise.resolve(opened).catch((e) => showToast('Could not open the log', errMsg(e)));
+}
+
 // The run's scratch workspace (#201: its agents' checks, not artifacts), read at most every 15 s
 // per run: runId → { info: { dir, files, bytes } | null, at }. Shown only while it exists.
 const scratchOfRun = new Map();
@@ -182,6 +216,7 @@ function renderRunSummary() {
     ${(r.issueSaves || []).map((s) => `<div class="small" title="The accepted document was saved to the issue (Save to issue, Write & Review)">Saved to issue: <a href="${esc(s.commentUrl || s.url)}" target="_blank" rel="noopener">#${esc(s.number)}</a> · ${s.mode === 'comment' ? 'as a comment' : 'description replaced'} · ${esc(new Date(s.at).toLocaleString('en-US'))}</div>`).join('')}
     ${r.gateWaitMs ? `<div class="small" title="Time the run waited for your answers at its human gates: no agent works (or costs) meanwhile">Waiting for you at gates: <b>${esc(fmtDur(r.gateWaitMs))}</b></div>` : ''}
     ${testsPlanHtml(r.testsPlan)}
+    ${suiteCardsHtml(r.id, r.stepNames)}
     ${scratchHtml(r.id)}
     ${pills ? `<div class="run-input-pills">${pills}</div>` : ''}
     <dl class="kv run-inputs">${inputs.map(([k, v]) => `<dt title="${esc(k)}">${esc(k)}</dt>${inputValueCell(v)}`).join('')}</dl>
@@ -206,6 +241,7 @@ function renderRunSummary() {
   $('#btn-run-sup').onclick = () => openSupervisorForCurrent();
   if ($('#btn-run-watch')) $('#btn-run-watch').onclick = () => openSupervisorForCurrent({ watch: true });
   if ($('#btn-run-resume')) $('#btn-run-resume').onclick = () => openResumeDialog(r.id);
+  box.querySelectorAll('[data-suite-log]').forEach((b) => (b.onclick = () => openRunLog(r.id, b.dataset.suiteLog)));
   if ($('#btn-run-scratch')) $('#btn-run-scratch').onclick = () => api.openPath(scratchOfRun.get(r.id)?.info?.dir).catch((e) => showToast('Could not open the folder', errMsg(e)));
   if ($('#btn-run-diff')) $('#btn-run-diff').onclick = () => DiffViewer.open({ runId: r.id, title: r.title || r.workflow || '' });
   $('#btn-run-analytics').onclick = () => window.openAnalytics?.({ tab: 'run', runId: r.id });
@@ -683,7 +719,7 @@ registerView({
             </section>
             <section>
               <h2>Steps</h2>
-              <div id="steps" class="step-groups"></div>
+              <div id="steps" class="step-groups" data-testid="run-steps"></div>
             </section>
           </aside>
 

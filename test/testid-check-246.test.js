@@ -160,7 +160,8 @@ test('#246 run: the develop prompt lists upfront the test ids the scenarios use 
 test('#246 run: a missing test id goes back to develop with the id, and after the fix the run reaches the review without a full suite in between', { timeout: 120000 }, async (t) => {
   const { events, transitions, prompts, finished } = await runWithScenarios(t, { onTurn: (repo, n) => n === 2 && addMissingId(repo) });
   assert.equal(finished.status, 'success', finished.error);
-  assert.equal(transitions[transitions.indexOf('acceptance_tests>red_check') + 2], 'develop>testid_check', `the check runs right after develop (got ${transitions.join(', ')})`);
+  // red_check > warm_up (#301) > develop > testid_check
+  assert.equal(transitions[transitions.indexOf('acceptance_tests>red_check') + 3], 'develop>testid_check', `the check runs right after develop (got ${transitions.join(', ')})`);
   const back = transitions.indexOf('testid_check>develop');
   assert.ok(back >= 0, `the check returns to develop (got ${transitions.join(', ')})`);
   assert.equal(transitions.filter((x) => x === 'testid_check>develop').length, 1, 'once: the fix is found by the second check');

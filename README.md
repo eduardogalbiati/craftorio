@@ -444,10 +444,12 @@ Engine options behind it: `orchestrator.worktree.remote: false`, a transition wi
 
 ## AI Development, local hero (`workflows/ai-development-local-hero.yaml`)
 
-The local-hero pipeline with the tests written **first** (#220): acceptance tests → red check → develop → code review → suite → build → verify → local merge. No push, no PR/MR, no CI.
+The local-hero pipeline with the tests written **first** (#220): acceptance tests → red check → Warm Up → develop → code review → suite → build → verify → local merge. No push, no PR/MR, no CI.
 
 - **Acceptance tests before the code**: the test writer (Opus 5.5) writes the tests of the issue from its criteria, not from the implementation, on the run's branch. It gets the project's code → tests map (`test_map: true`) to put them where they belong. A task with nothing testable goes straight to develop.
 - **Red first, really**: the orchestrator runs exactly those files once (a suite step with `files` and `expect: red`, no agent). A test already green before any code is reported to the developer (it guards existing behaviour or is wrong); a file that cannot run goes back to the test writer once. The existing tests related to them come from the code → tests graph and are given to the developer, not guessed.
+- **Warm Up** (#301): before the first develop turn only, a read-only agent (the mapper, skill `code-mapping`, on the developer's model and effort) maps per issue the files and line numbers to change, how they connect, the conventions and the tests to run for each file (#304: direct, then transitive, from the code → tests map, as a `run-tests` block). The developer reads only what the map names and the test step runs the map's tests; a Warm Up that fails or times out goes on to develop without a map.
+- **Affected suite** (#304): the suite step runs with `scope: affected`: each round the test files the change reaches (plus the ones that failed before), then the whole suite once when they pass. The Run screen's suite card and Analytics › Run's suite rounds show the scope and why each file ran.
 - **Locked for the developer**: the engine refuses a developer turn that changes an acceptance test (`protect_files`), while the developer may add its own internal tests; the reviewer checks the files are unchanged too.
 - `unit_tests` defaults to `run_existing` (the suite after the review, no second test-writer step) and `e2e_tests` to `off`. Reviewer and test writer run on Claude Opus 5.5.
 - **Developer model and effort** per run: `developer_model` (Opus 5.5 or Fable 5.1, 3x turn timeout) and `developer_effort` (#286: `default` passes no `--effort`, the CLI's own effort for the model; `low` to `xhigh` are passed as `--effort`, `xhigh` doubles the turn timeout). The reviewer runs at `effort: high`, passed through the providers' `effort_args`. The Product Owner's Cost step leaves the developer's effort alone.
@@ -753,6 +755,7 @@ What is shared by a family lives in a suffix-less skill referenced with `uses:`.
 | `ci-pipeline-{gh,gl}` | CI pusher | Push, PR/MR, mergeability (conflicts fail fast), CI status, missing checks, fetching failed logs, retrying flaky jobs |
 | `claim-verification` | verifier | Falsifiable claim, baseline vs treatment with the same command, verified / not_verified / inconclusive |
 | `clarity-score` | the Discovery board (its score and Grill me, src/clarity.js); issue-tracker (issue_writer); backlog-refresh (refresher); the Product Owner (Register an issue) | Clarity rubric per kind (0-100%), the 85% bar, gaps as open questions, the Grill me interview |
+| `code-mapping` | mapper | Maps the files, functions, line numbers, connections, tests and conventions of a task before the first edit, in a map of at most 300 lines |
 | `code-review` | reviewer; its rules/*.md through `reads` (self-review, the developer) | Correctness, spec and standards axes, severities, `rules/` per language (JS/TS, Python, Go, Java/Kotlin, C#, SQL, Shell/CI) and `rules/smells.md` |
 | `context-economy` | developer, test_writer | Does code research through exploration sub-agents, reads excerpts instead of whole files, writes handoff notes the next fresh session can act on |
 | `decision-log` | developer, PR babysitter | Agents end answers with a ```` ```decisions ```` block; the engine appends it to `<run>/decisions.tsv` |

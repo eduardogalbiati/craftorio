@@ -2,7 +2,7 @@
 # Workflow: AI Development, local hero (tests first)
 # The local-hero pipeline with the tests written BEFORE the code (owner, 2026-10-03; option C of
 # reports/piramide-de-testes-com-agentes-2026-10-03.md, #220):
-#   acceptance_tests ─► red_check ─► develop ─► code_review ─► suite ─► build ─► evidence ─► verify_change ─► local merge
+#   acceptance_tests ─► red_check ─► warm_up ─► develop ─► code_review ─► suite ─► build ─► evidence ─► verify_change ─► local merge
 #   - acceptance_tests (the test writer, Opus 5.5): the acceptance tests of the task, from the issue
 #     and its criteria, not from the implementation, committed on the run's branch. It gets the
 #     project's code → tests map (`test_map: true`, #219) to put the tests where they belong and
@@ -12,6 +12,11 @@
 #     guards existing behaviour or is wrong"); a file that cannot run (a syntax error) goes back to
 #     the test writer once. Its `affected_tests` are the existing tests that reach the sources the
 #     new tests import (the same code → tests graph): given to develop, not guessed.
+#   - warm_up, "Warm Up" (the mapper, read-only, on the developer's model and effort, #301): before
+#     the first develop turn only, it maps per issue the files and line numbers to change, how they
+#     connect, the conventions and the tests to run for each file (#304: direct, then transitive,
+#     from the code → tests map, as a run-tests block); develop and the test step start from that
+#     map. A Warm Up that fails or times out goes on to develop without a map (on_error).
 #   - develop implements until they pass. The engine locks exactly the acceptance files
 #     (`protect_files` on the developer: a turn that changes one is refused, as edits_tests: false
 #     does for all tests), while the developer may add its own internal tests (`edits_tests: true`).
@@ -89,8 +94,11 @@
 #   build, evidence, verify_change and the local merge always run. Nothing is reported as tested
 #   when it was off: verify_failed and the verifier get `tests_plan` ("Unit tests: Off (workflow
 #   default)"), and the run summary records it. Test later, all together: test-batch.yaml.
-#   suite (no agent, #177): the orchestrator runs the project's whole test suite once per round
-#   (`test_command`, else found from the project's files), log in logs/suite-<round>.log; failing
+#   suite (no agent, #177), `scope: affected` (#304, as #212): each round runs the test files the
+#   change reaches (import graph since the base, plus the files that failed before), log in
+#   logs/suite-<round>.log; when they pass and the whole suite has not passed yet in the run, the
+#   whole suite (`test_command`, else found from the project's files) runs once right after
+#   (logs/suite-<round>-full.log); a shared root or a project without a JS/TS graph runs it all. Failing
 #   tests go back to the test writer with the failures and the log (2 rounds, then test_failed).
 #   Tests that also fail on the base (the test writer's preexisting_failures) never count.
 #
@@ -352,7 +360,8 @@ agents:
       output to a log, reading only the summary.
       Keep your context small (context-economy): on a task that touches more than about three
       files, start one exploration sub-agent before your first edit and have it report the
-      files, functions and line numbers to change; then read only the files you will edit, and
+      files, functions and line numbers to change (when your prompt gives you the Warm Up map,
+      start from it instead); then read only the files you will edit, and
       group several changes to a file in one edit. On a fix turn, read only what the findings name.
       Sub-agents are the default for code research: a search across files you will not edit,
       a long output (a failing check, a log, a long diff) or a finding in code you have not
@@ -448,6 +457,25 @@ agents:
       edited, the last test command with its result (pass/fail counts, failing tests), and what
       is left, so the next session continues without mapping the change again.
 
+  # #301: Warm Up maps the code before develop, so the developer starts from a map instead of
+  # waiting for (or racing) its own exploration sub-agent. Read-only (a convention, as for the
+  # reviewer: no edit/write tools); on the developer's model and effort.
+  mapper:
+    color: "#3FB8AF"
+    provider: claude
+    model: "{{ inputs.developer_model or 'claude-opus-5-5' }}"
+    effort: "{{ '' if (inputs.developer_effort or 'default') == 'default' else inputs.developer_effort }}"
+    session: ephemeral
+    # subagents: it fans out exploration sub-agents, one per area of the task
+    capabilities: { tools: [read, bash:git], web: false, subagents: true }
+    skills: [code-mapping]
+    system_prompt: |
+      You are the mapper of this workflow. Before the developer starts, you map the code the task
+      touches, following the code-mapping skill: per issue, the files and functions to change or
+      reuse with their line numbers, how they connect, the tests to run for each file and the
+      conventions to follow. You are read-only: never edit, create or delete a file, never commit,
+      and never run the tests, a build or an install.
+
   builder:
     color: "#E6C229" # #224: its role's colour in the run chat and the runs list
     provider: claude
@@ -508,7 +536,7 @@ agents:
 
 groups:
   - name: Develop
-    steps: [develop, testid_check, requirements_left_out, issue_not_done, developer_screenshots, developer_check]
+    steps: [warm_up, develop,testid_check, requirements_left_out, issue_not_done, developer_screenshots, developer_check]
   - name: Review
     steps: [code_review, human_review]
   - name: Validate
@@ -697,12 +725,67 @@ steps:
         # counts this transition: one way back
         max_visits: 1
         on_exhausted: develop
+      # #301: the first implementation starts from the Warm Up map; an owner's change request
+      # (develop already ran) starts from the request
+      - when: "not steps.develop.output"
+        goto: warm_up
+        set: { criteria_triage: "no" }
       - when: "true"
         goto: develop
         set: { criteria_triage: "no" }
 
+  # Warm Up (#301): a read-only agent maps the code before the first develop turn (fix rounds, change
+  # requests and conflict resolutions start from their findings, not from a new map). Its map names,
+  # per issue, the files and line numbers to change, how they connect, the conventions and the tests
+  # to run for each file (#304: from the code → tests map, as a run-tests block). It never blocks the
+  # run: a failure or a timeout goes on to develop without a map (no supervisor: on_error).
+  - id: warm_up
+    display: Warm Up
+    agent: mapper
+    supervise: false
+    on_error: develop
+    # {{ test_map }}: the checkout's code → tests map (#219), for the tests of each file it maps
+    test_map: true
+    prompt: |
+      Map the code for this task before the developer starts (code-mapping skill). The developer
+      reads your map first and then only the files it names, at the lines it points to.
+
+      Task: {{ inputs.task }}
+      {% if inputs.issue %}Issue: {{ inputs.issue }}
+      {% endif %}{% if inputs.issues | length %}Issues (one section of the map per issue): {{ inputs.issues | join(', ') }}
+      {% endif %}
+      {% set acc = steps.acceptance_tests.output %}
+      {% if acc and (acc.tests_added or []) | length %}
+      Acceptance tests, written before the code on branch `{{ acc.branch }}` (the change must make
+      them pass; follow what they import): {{ acc.tests_added | join(', ') }}.
+      Criteria and their tests: {{ (acc.criteria or []) | to_yaml }}
+      {% if (acc.not_testable or []) | length %}Not testable automatically: {{ acc.not_testable | join('; ') }}{% endif %}
+      {% if (acc.affected_tests or []) | length %}Existing tests the test writer named: {{ acc.affected_tests | join(', ') }}.{% endif %}
+      {% if inputs.e2e_tests != 'off' and acc.e2e_scope == 'scenarios' %}BDD scenarios and step definitions (their test ids and roles are what the screens must offer): {{ (acc.e2e_files or []) | join(', ') }}.{% endif %}
+      {% elif acc %}
+      The test writer wrote no acceptance test: {{ acc.summary }}
+      {% endif %}
+      {% if steps.red_check.output and (steps.red_check.output.affected_tests or []) | length %}
+      Existing tests that reach the sources the acceptance tests import: {{ steps.red_check.output.affected_tests | join(', ') }}.
+      {% endif %}
+      Code → tests map of this checkout: {{ test_map }} (search it for the files you map, do not
+      read it whole). For each production file you name, list its tests to run: direct first, then
+      transitive, or `no test reaches it`; end each issue's section with a ```run-tests block.
+
+      Keep the map under 300 lines. Change nothing: no edit, no commit, no test run.
+    output_schema:
+      type: object
+      required: [map, files]
+      properties:
+        map:   { type: string }
+        files: { type: array, items: { type: string } }
+    transitions:
+      - when: "true"
+        goto: develop
+
   - id: develop
-    display: Developer
+    # a step's name says what it does ("Develop"); "Developer" is its agent's (#301's Run screen shows both)
+    display: Develop
     agent: developer
     # {{ test_map }}: the checkout's code → tests map (#219), for the tests of the files it changes
     test_map: true
@@ -761,6 +844,20 @@ steps:
       `{{ acc.branch if acc else '(none: create it with git switch -c)' }}`{% if acc and acc.commit %} (commit {{ acc.commit }}){% endif %}.
       Stay on that branch (the worktree is on it); do not create another.
       {% endif %}
+      {# #301: the first implementation starts from the Warm Up step's map (none after a failed or timed-out Warm Up) #}
+      {% set wmap = steps.warm_up.output.map if not steps.develop.output and steps.warm_up.output and steps.warm_up.output.map else '' %}
+      {% if wmap %}
+      The Warm Up step mapped the code for you (read-only, before your turn). Start from this map:
+      read only the files the map names, at the lines it points to; start an exploration sub-agent
+      only for something the map lacks; never re-map the code yourself. Tests to run before
+      committing: the map's run-tests blocks (the acceptance tests and the tests that reach each
+      file it names), focused, never the whole suite.
+      <warm_up_map>
+      {{ wmap }}
+      </warm_up_map>
+      {% elif not steps.develop.output and previous_step == 'warm_up' %}
+      The Warm Up step ended without a map (it failed or timed out): map the code yourself, with one exploration sub-agent before your first edit.
+      {% endif %}
       {% set rc = steps.red_check.output %}
       {% if acc and (acc.tests_added or []) | length %}
       Acceptance tests (written before the code, from the task): {{ acc.tests_added | join(', ') }}.
@@ -770,7 +867,9 @@ steps:
       Existing tests to keep green, from the code → tests map (through what the acceptance tests
       import): {{ ((rc.affected_tests if rc else []) or []) | join(', ') or 'none found' }}; named by
       the test writer: {{ (acc.affected_tests or []) | join(', ') or 'none' }}.
-      Code → tests map of this checkout, for the files you change: {{ test_map }} (search it, do not read it whole).
+      {% if wmap %}For a file you change that the map does not name, its tests are in the code → tests map: {{ test_map }} (search it, do not read it whole).
+      {% else %}Code → tests map of this checkout, for the files you change: {{ test_map }} (search it, do not read it whole).
+      {% endif %}
       Criteria and their tests: {{ (acc.criteria or []) | to_yaml }}
       {% if (acc.not_testable or []) | length %}Not testable automatically (say in `summary` how you checked them): {{ acc.not_testable | join('; ') }}{% endif %}
       Implement until they pass. NEVER edit, delete, skip or weaken an acceptance test file: the
@@ -1279,6 +1378,8 @@ steps:
     full_suite: warn
     # test files left uncommitted are committed by the orchestrator before the build (#209)
     commit_tests: true
+    # {{ test_map }}: the checkout's code → tests map (#219), when Warm Up gave no map (#304)
+    test_map: true
     prompt: |
       Branch `{{ steps.develop.output.branch }}` (already reviewed).
       Original task: {{ inputs.task }}
@@ -1346,6 +1447,20 @@ steps:
          tests and leave `tests_added` empty; `tests_status` is pass unless an existing test
          fails because of the production code.
       {% endif %}
+      {# #304: the tests to run come from the Warm Up map; without one, from the code → tests map #}
+      {% if steps.warm_up.output and steps.warm_up.output.map %}
+      Tests to run before committing: the run-tests blocks of the Warm Up step's map (below: the
+      acceptance tests and, for each file it names, the tests that reach it, direct first), plus
+      the test files you write. For a changed file the map does not name, its tests are in the
+      code → tests map of this checkout: {{ test_map }} (search it, do not read it whole).
+      <warm_up_map>
+      {{ steps.warm_up.output.map }}
+      </warm_up_map>
+      {% else %}
+      Tests to run before committing: for each changed file, the test files that reach it in the
+      code → tests map of this checkout: {{ test_map }} (search it, do not read it whole), plus the
+      test files you write.
+      {% endif %}
       {% endif %}
       {% if inputs.e2e_tests != 'off' %}
       The E2E scenarios were written first (acceptance tests step){% if inputs.e2e_tests == 'write_and_run' %} and the orchestrator runs them after the suite{% endif %}: write no scenario here and never start the app for them.
@@ -1412,10 +1527,13 @@ steps:
   # preexisting_failures, or the step's own rerun of the failing files on the base, #211) never
   # count. A suite that cannot run (no command) goes to test_failed. No timeout: it comes from the
   # project's recent suite durations (#210).
+  # scope affected (#212, #304): each round runs the test files the change reaches (import graph since
+  # the base, plus the files that failed before); when they pass, the whole suite runs once in the run.
   - id: suite
     display: Run suite (Unit)
     type: suite
     command: "{{ inputs.test_command }}"
+    scope: affected
     # #225: node's coverage (an npm script's <name>:coverage, or a plain node --test) as a Tests artifact
     coverage: true
     transitions:

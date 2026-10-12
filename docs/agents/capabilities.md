@@ -130,6 +130,10 @@ read-only agents (verifier, builder, blaster, ci_pusher...) must use `git show <
 `git diff` and single `node -e` / `python -c` one-liners, never scratch files, stash or worktrees.
 `bash:git`/`bash:node` can still change the repo: read-only is a convention, not a sandbox.
 
+The **mapper** (AI Development's Warm Up step, #301; skill `code-mapping`) is read-only too:
+`tools: [read, bash:git]` with `subagents: true`, so it can fan out exploration sub-agents, and an
+ephemeral session. It answers `{ map, files }`; the developer's first turn starts from the map.
+
 ## Asking a person: only Grill me (#166)
 
 Agents run unattended, so a skill never "asks the user": it records an assumption or a default.

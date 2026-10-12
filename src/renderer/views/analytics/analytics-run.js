@@ -193,8 +193,15 @@
     const steps = f.steps.length ? `<table class="u-table an-sessions"><thead><tr><th>Step</th><th>Agent</th><th class="num">Visits</th><th class="num">Duration</th></tr></thead><tbody>
       ${f.steps.map((s) => `<tr><td title="${esc(s.step)}">${esc(readable(s.step, f.stepNames))}</td><td>${s.agent ? `<span class="an-agent" title="${esc(s.agent)}"><i style="background:${colorOf(s.agent)}"></i>${esc(readable(s.agent, f.agentNames))}</span>` : '<span class="muted">orchestrator</span>'}</td><td class="num">${s.visits}</td><td class="num">${fmtDur(s.durationMs)}</td></tr>`).join('')}</tbody></table>`
       : '<p class="muted small an-empty">No step recorded.</p>';
-    const suite = f.suiteRounds.length ? `<table class="u-table an-sessions"><thead><tr><th class="num">Round</th><th>Result</th><th class="num">Duration</th><th class="num">Failures</th><th class="num">Pre-existing</th></tr></thead><tbody>
-      ${f.suiteRounds.map((r) => `<tr><td class="num">${r.round}</td><td><span class="badge ${r.status === 'pass' ? 'cat-monitor' : 'warn'}">${esc(r.status || '—')}</span></td><td class="num">${fmtDur(r.durationMs)}</td><td class="num">${r.failures}</td><td class="num">${r.preexisting}</td></tr>`).join('')}</tbody></table>`
+    // #304: a round of a `scope: affected` suite: what it ran, and why each file was selected
+    const scopeOf = (r) => (!r.selection ? (r.scope === 'files' ? 'Files' : 'Whole suite') : r.selection.mode === 'all' ? 'Whole suite' : r.affected && r.scope === 'full' ? 'Affected, then whole suite' : 'Affected');
+    const whyOf = (r) => {
+      if (!r.selection) return '';
+      const reasons = Object.entries(r.selection.reasons || {}).map(([file, why]) => `${file}: ${why}`).join('; ');
+      return reasons || r.selection.why || '';
+    };
+    const suite = f.suiteRounds.length ? `<table class="u-table an-sessions"><thead><tr><th class="num">Round</th><th>Result</th><th>Scope</th><th class="num">Duration</th><th class="num">Failures</th><th class="num">Pre-existing</th></tr></thead><tbody>
+      ${f.suiteRounds.map((r) => `<tr data-testid="an-suite-round"><td class="num">${r.round}</td><td><span class="badge ${r.status === 'pass' ? 'cat-monitor' : 'warn'}">${esc(r.status || '—')}</span></td><td class="an-title"><span class="badge" title="${esc(r.selection?.why || '')}">${esc(scopeOf(r))}</span>${whyOf(r) ? `<div class="muted small an-suite-why" title="${esc(whyOf(r))}">${esc(whyOf(r))}</div>` : ''}</td><td class="num">${fmtDur(r.durationMs)}</td><td class="num">${r.failures}</td><td class="num">${r.preexisting}</td></tr>`).join('')}</tbody></table>`
       : '<p class="muted small an-empty">No suite round in this run.</p>';
     const tools = f.slowestTools.length ? `<table class="u-table an-sessions"><thead><tr><th>Command</th><th>Agent</th><th class="num">Time</th></tr></thead><tbody>
       ${f.slowestTools.map((t) => `<tr><td class="an-title"><code class="an-file" title="${esc(t.command)}">${esc(t.command)}</code></td><td${t.agent ? ` title="${esc(t.agent)}"` : ''}>${esc(t.agent ? readable(t.agent, f.agentNames) : '—')}</td><td class="num">${fmtDur(t.durationMs)}</td></tr>`).join('')}</tbody></table>`

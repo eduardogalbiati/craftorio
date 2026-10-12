@@ -57,7 +57,12 @@
       <span class="rc-card" role="tooltip">${lines.map((l) => `<span>${esc(l)}</span>`).join('')}<span class="mono muted">${esc(who.agent)}</span></span>`;
   }
   // #245: a step by its readable name, its id in the tooltip
-  const stepName = (stepId) => (stepId ? chat.model.stepName(stepId) : '');
+  // (a run recorded without them: its workflow's own `display` names, as the Run screen's progress)
+  const workflowStepNames = () => {
+    const wf = (state.workflows || []).find((w) => w && (w.file === chat.model.run?.workflow || w.name === chat.model.run?.workflow));
+    return wf ? Object.fromEntries((wf.steps || []).filter((s) => s.display).map((s) => [s.id, s.display])) : null;
+  };
+  const stepName = (stepId) => (!stepId ? '' : chat.model.run?.stepNames ? chat.model.stepName(stepId) : displayName(stepId, workflowStepNames()));
   const stepTag = (stepId, visit, sub) => `<span class="rc-step" data-testid="run-chat-step" title="${esc(`Step ${stepId || ''}`.trim())}">${esc(stepName(stepId))}${sub ? ` · ${esc(sub)}` : ''}${visit > 1 ? ` · visit ${visit}` : ''}</span>`;
 
   // ---------------------------------------------------------------- items → HTML
@@ -173,7 +178,7 @@
       case 'group': return groupHtml(it);
       case 'gate': return gateHtml(it);
       case 'system': return `<div class="rc-sys ${it.level}" data-item="${it.id}"><span>${esc(it.text)}</span><time>${clock(it.ts)}</time></div>`;
-      case 'fail': return `<div class="rc-sys error" data-item="${it.id}"><span title="${esc(it.stepId)}">${esc(stepName(it.stepId))} failed: ${esc(it.text.slice(0, 400))}</span><time>${clock(it.ts)}</time></div>`;
+      case 'fail': return `<div class="rc-sys error" data-testid="run-chat-fail" data-item="${it.id}"><span title="${esc(it.stepId)}">${esc(stepName(it.stepId))} failed: ${esc(it.text.slice(0, 400))}</span><time>${clock(it.ts)}</time></div>`;
       case 'reply': return `<div class="duo-msg user reply" data-item="${it.id}"><div class="duo-bubble">
         <div class="duo-meta"><b>${it.by === 'user' ? 'You' : esc(it.by)}</b>${stepTag(it.stepId)}<span class="time">${clock(it.ts)}</span></div>
         <p><b>${esc(it.label)}</b></p>${it.feedback ? `<p class="duo-msg-text">${esc(it.feedback)}</p>` : ''}</div></div>`;

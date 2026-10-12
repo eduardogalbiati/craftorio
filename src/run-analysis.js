@@ -121,6 +121,9 @@ function runFigures({ summary = {}, events = [], now = Date.now() }) {
         suiteRounds.push({
           step: e.step_id, round: e.output.round ?? suiteRounds.length + 1, status: e.output.status || null,
           durationMs: Number(e.output.duration_ms) || durationMs, failures: countOf(e.output.failures), preexisting: countOf(e.output.preexisting),
+          // #304: scope affected: the files it selected and why, and whether the whole suite ran after them
+          scope: e.output.scope || null, affected: !!e.output.affected,
+          selection: e.output.selection ? { mode: e.output.selection.mode || null, why: e.output.selection.why || '', reasons: e.output.selection.reasons || {} } : null,
         });
       }
     }
