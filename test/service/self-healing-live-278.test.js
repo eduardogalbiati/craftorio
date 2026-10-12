@@ -12,6 +12,7 @@ const path = require('path');
 const night = require('../../src/night-watch');
 const actions = require('../../src/oracle-actions');
 const { makeService } = require('./helpers');
+const { dayStart, iso, spanInOneDay } = require('./day-span');
 
 const settle = (ms = 50) => new Promise((r) => setTimeout(r, ms));
 async function waitFor(fn, ms = 3000) {
@@ -31,16 +32,9 @@ function setup(t, oracleExtra = {}) {
   return { service, api, ws, dir, setOracle, log, detected, emit };
 }
 
-const iso = (ms) => new Date(ms).toISOString();
 const ago = (min) => iso(Date.now() - min * 60e3);
 const DAY_MS = 24 * 3600e3;
-const dayStart = (ms) => Date.parse(`${iso(ms).slice(0, 10)}T00:00:00.000Z`);
-// a span ending `endAgoMin` minutes ago, at most two hours long and inside one UTC day
-function spanInOneDay(endAgoMin) {
-  const end = Date.now() - endAgoMin * 60e3;
-  const start = Math.max(dayStart(end) + 60e3, end - 2 * 3600e3);
-  return { start, end, mid: Math.round((start + end) / 2), day: iso(end).slice(0, 10) };
-}
+// spanInOneDay (./day-span.js, #283): a span ending about `endAgoMin` minutes ago inside one UTC day, never inverted
 const logAt = (dir, ms, type, data) => night.logNight(dir, type, data, iso(ms));
 
 const started = (runId, issue, ts) => ({ ts, type: 'workflow.started', run_id: runId, workflow: 'AI Development', project_id: 'orchestrator', issues: [{ number: issue, title: `Issue ${issue}` }], mock: false });

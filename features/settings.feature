@@ -65,3 +65,52 @@ Feature: Settings
     And I open "Settings" in the sidebar
     And I open the "Execution" settings tab
     Then the memory guard's limit is 25
+
+  # Assumes Settings › General gets a "Time zone" select (data-testid="settings-time-zone") of IANA
+  # zones, the computer's zone until one is chosen, saved as `timeZone` in the workspace's settings (#273)
+  @issue-273
+  Scenario: The time zone is the computer's until another is chosen, and the choice is kept
+    Given the app is open
+    When I open "Settings" in the sidebar
+    And I open the "General" settings tab
+    Then the time zone is the computer's time zone
+    And the time zone list offers "Asia/Tokyo"
+    And the time zone list offers "America/Sao_Paulo"
+    When I choose the time zone "Asia/Tokyo"
+    Then the workspace settings keep the time zone "Asia/Tokyo"
+    When I reload the app
+    And I open "Settings" in the sidebar
+    And I open the "General" settings tab
+    Then the time zone is "Asia/Tokyo"
+
+  # A run started at 01:14 UTC: 22:14 in São Paulo (UTC-3), 10:14 in Tokyo (UTC+9). The run list's
+  # "started" time is data-testid="run-list-started" in its row (#273)
+  @issue-273
+  Scenario: The run list shows a run's start time in the chosen time zone
+    Given the app is open
+    And the demo workspace gains a finished run "tzr00273" started at "01:14" UTC three days ago
+    When I open "Settings" in the sidebar
+    And I open the "General" settings tab
+    And I choose the time zone "America/Sao_Paulo"
+    And I open "Runs" in the sidebar
+    And I search the runs for "tzr00273"
+    Then the run "tzr00273" shows it started at "22:14"
+    When I open "Settings" in the sidebar
+    And I open the "General" settings tab
+    And I choose the time zone "Asia/Tokyo"
+    And I open "Runs" in the sidebar
+    And I search the runs for "tzr00273"
+    Then the run "tzr00273" shows it started at "10:14"
+
+  # "With the zone in tooltips where it matters": the run list's start time names the zone it is in
+  @issue-273
+  Scenario: A run's start time says which time zone it is in
+    Given the app is open
+    And the demo workspace gains a finished run "tzt00273" started at "01:14" UTC three days ago
+    When I open "Settings" in the sidebar
+    And I open the "General" settings tab
+    And I choose the time zone "Asia/Tokyo"
+    And I open "Runs" in the sidebar
+    And I search the runs for "tzt00273"
+    Then the run "tzt00273" shows it started at "10:14"
+    And the run "tzt00273"'s start time names the time zone "Asia/Tokyo" in its tooltip
