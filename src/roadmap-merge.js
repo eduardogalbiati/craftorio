@@ -148,8 +148,10 @@ function mergeEdit(read, edited, current) {
       // the issues: the ones the edit took out go, the ones it added come; one added elsewhere stays
       const [had, has] = [new Set(numbers(b)), new Set(numbers(x))];
       if (had.size !== has.size || [...has].some((n) => !had.has(n))) {
-        const added = (x.issues?.length ? x.issues : [x]).filter((i) => !had.has(Number(i?.number ?? i)));
-        cur.issues = [...(cur.issues || []).filter((i) => has.has(Number(i?.number ?? i)) || !had.has(Number(i?.number ?? i))), ...clone(added)];
+        const kept = (cur.issues || []).filter((i) => has.has(Number(i?.number ?? i)) || !had.has(Number(i?.number ?? i)));
+        const held = new Set(kept.map((i) => Number(i?.number ?? i)));
+        const added = (x.issues?.length ? x.issues : [x]).filter((i) => !had.has(Number(i?.number ?? i)) && !held.has(Number(i?.number ?? i)));
+        cur.issues = [...kept, ...clone(added)];
       }
       if (moved) {
         if (at.s.id !== was.stage.id && at.s !== target) return refuse(`${itemLabel(b)} was moved elsewhere too.`);
