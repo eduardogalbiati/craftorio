@@ -92,7 +92,8 @@ test('release workflow: a green suite goes on without any agent step (#260)', ()
     const passes = (suite.transitions || []).filter((t) => /pass/.test(String(t.when)));
     for (const t of passes) {
       assert.equal(t.delegate, undefined, `a green ${suite.id} calls no agent (${t.when})`);
-      for (const next of targets(wf, t)) assert.equal(agentOfStep(next), undefined, `a green ${suite.id} goes to a suite or a gate, not to ${next.id}`);
+      // #290: the read-only `review` step (the release summary) may follow the last green suite
+      for (const next of targets(wf, t).filter((s) => s.id !== 'review')) assert.equal(agentOfStep(next), undefined, `a green ${suite.id} goes to a suite or a gate, not to ${next.id}`);
     }
   }
 });
