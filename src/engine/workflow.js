@@ -1311,6 +1311,8 @@ class WorkflowRun extends EventEmitter {
       fresh_after_idle_ms: s.freshAfterIdleMs ?? null,
       cache_lifetime_ms: lifetime,
       cold_resume_usd: sessionCache.cacheWriteUsd(s.contextTokens, this.prices[s.model], lifetime),
+      // its last turn passed max_context: the next one starts a fresh session (agentTurn's rotation)
+      ...(!s.closedAt && this.rotate.has(s.agent) && this.agentSessions.get(s.agent) === s.id ? { rotate_pending: true } : {}),
     };
     const closed = s.closedAt ? new Date(s.closedAt).toISOString() : null;
     return { ...state, next_turn: sessionCache.nextTurn({ ...state, agent: s.agent, mode: s.mode, closed_at: closed }) };

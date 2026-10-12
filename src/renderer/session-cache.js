@@ -45,7 +45,8 @@
   const tokensOf = (n) => (n > 0 ? { tokens: n } : {});
 
   // session: a snapshot (snake_case: last_turn_at, context_tokens, mode, has_note,
-  // fresh_after_idle_ms, cache_lifetime_ms, start_context_tokens). lifetimeMs: the cache's lifetime
+  // fresh_after_idle_ms, cache_lifetime_ms, start_context_tokens, rotate_pending: its last turn passed
+  // max_context). lifetimeMs: the cache's lifetime
   // (default: the snapshot's, else the provider's, a simulated session's provider it simulates).
   function nextTurn(session, { now = Date.now(), lifetimeMs } = {}) {
     const s = session;
@@ -56,7 +57,7 @@
     // turns without a last turn: a snapshot from before #320 (or a first attempt stopped): unknown
     if (!Number.isFinite(last)) return s.turns > 0 ? null : { kind: 'new' };
     const idle = now - last;
-    if (s.has_note && s.fresh_after_idle_ms > 0 && idle > s.fresh_after_idle_ms) return { kind: 'fresh', ...tokensOf(s.start_context_tokens) };
+    if (s.has_note && (s.rotate_pending || (s.fresh_after_idle_ms > 0 && idle > s.fresh_after_idle_ms))) return { kind: 'fresh', ...tokensOf(s.start_context_tokens) };
     const life = lifetimeMs !== undefined ? lifetimeMs
       : s.cache_lifetime_ms !== undefined ? s.cache_lifetime_ms
         : cacheLifetimeMs(s.simulates || s.provider);
@@ -82,6 +83,7 @@
       fresh_after_idle_ms: pick('fresh_after_idle_ms', 'freshAfterIdleMs'),
       cache_lifetime_ms: pick('cache_lifetime_ms', 'cacheLifetimeMs'),
       start_context_tokens: pick('start_context_tokens', 'startContextTokens'),
+      rotate_pending: pick('rotate_pending', 'rotatePending'),
     };
     if (!raw.mode && !raw.last_turn_at) return given || null;
     const t = nextTurn(raw, { now });

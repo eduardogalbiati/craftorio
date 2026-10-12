@@ -60,6 +60,7 @@ function cacheView(x) {
     ...(x.cache_lifetime_ms !== undefined ? { cacheLifetimeMs: x.cache_lifetime_ms } : {}),
     ...(x.start_context_tokens ? { startContextTokens: x.start_context_tokens } : {}),
     ...(x.cold_resume_usd ? { coldResumeUsd: x.cold_resume_usd } : {}),
+    ...(x.rotate_pending ? { rotatePending: true } : {}),
     nextTurn: sessionCache.nextTurn(x),
   };
 }
