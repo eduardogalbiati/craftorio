@@ -538,6 +538,15 @@
       parts.push(`<div class="po-sec"><div class="sup-h">Do not run in parallel</div><ul class="po-list">${a.conflicts.map((c) =>
         `<li>${c.issues.map(issueRef).join(' ⟷ ')} ${esc(c.reason)}${c.files?.length ? ` <span class="muted mono small">${c.files.map(esc).join(', ')}</span>` : ''}</li>`).join('')}</ul></div>`);
     }
+    // #150: the conflict map's hot spots, each filed as an issue on the owner's click
+    if (a.decongest?.length) {
+      const ts = po.messages[m]?.ts;
+      const filed = (n) => po.messages.some((x) => x.decongestFiled && x.decongestFiled.at === ts && x.decongestFiled.index === n && !x.decongestFiled.preview);
+      parts.push(`<div class="po-sec" data-msg="${m}"><div class="sup-h">Decongest (hot spots of the conflict map)</div><ul class="po-list">${a.decongest.map((d, n) =>
+        `<li><span class="mono">${esc(d.line ? `${d.file}:${d.line}` : d.file)}</span>${d.runs && d.of ? ` <span class="badge">${d.runs} of ${d.of} runs</span>` : ''} ${esc(d.fix)}
+          ${filed(n) ? '<span class="badge">Filed</span>' : `<button class="btn sm ghost" type="button" data-po-decongest="${n}" title="File this fix as an issue on the project's repository"${po.busy ? ' disabled' : ''}>File as issue</button>`}
+          ${po.notes[`decongest:${m}:${n}`] ? `<span class="small ${po.notes[`decongest:${m}:${n}`].error ? 'error' : 'muted'}">${esc(po.notes[`decongest:${m}:${n}`].text)}</span>` : ''}</li>`).join('')}</ul></div>`);
+    }
     if (a.enrich?.length) {
       parts.push(`<div class="po-sec"><div class="sup-h">Enrich first</div><ul class="po-list">${a.enrich.map((e) =>
         `<li>${issueRef(e.issue)} ${esc(e.reason)} <a class="small" href="${esc(e.link)}" target="_blank" rel="noopener" title="Add what is missing (the goal, the acceptance criteria, the files or screens it touches), or use Enrich in Write &amp; Review in the issue's ⋯ menu">how to enrich</a></li>`).join('')}</ul></div>`);
@@ -780,6 +789,32 @@
     render();
   }
 
+  // #150: one hot spot of an answer's `decongest` filed as an issue; asks first, previews in developer or simulated mode
+  async function fileDecongest(el) {
+    const m = Number(el.closest('[data-msg]').dataset.msg);
+    const n = Number(el.dataset.poDecongest);
+    const msg = po.messages[m];
+    const d = msg?.answer?.decongest?.[n];
+    if (!d || po.busy) return;
+    const key = `decongest:${m}:${n}`;
+    const simulated = devMode();
+    if (!simulated && !await confirmDialog(`File “Decongest ${d.line ? `${d.file}:${d.line}` : d.file}”`, 'An issue with this fix is filed on the project\'s repository. Nothing in the code changes.', 'File')) return;
+    Object.assign(po, { busy: true, error: null });
+    po.notes[key] = null;
+    render();
+    try {
+      const out = await api.fileProductOwnerDecongest(po.projectId, msg.ts, n, simulated);
+      po.messages = out.messages;
+      if (out.backlog) actions().showData(out.backlog);
+      if (out.syncError) po.notes[key] = { text: `Filed, but the backlog sync failed: ${out.syncError}`, error: true };
+    } catch (e) {
+      po.notes[key] = { text: errMsg(e), error: true };
+    } finally {
+      po.busy = false;
+      render();
+    }
+  }
+
   // ---- filing a draft (the owner's click; Register an issue) ----------------------------------------
   // act: create | create-roadmap | create-assign | append | comment | revise | discard. A real filing
   // asks once more; developer or simulated mode only previews (the service never calls gh/glab then).
@@ -937,6 +972,8 @@
       po.extras[key] = extra.checked ? [...extrasOf(key).filter((y) => y !== x), x] : extrasOf(key).filter((y) => y !== x);
       return;
     }
+    const hot = e.target.closest('[data-po-decongest]');
+    if (hot) { fileDecongest(hot); return; }
     const b = e.target.closest('[data-po-act]');
     if (!b) return;
     if (DRAFT_ACTS.includes(b.dataset.poAct)) fileDraft(b.dataset.poAct, b);

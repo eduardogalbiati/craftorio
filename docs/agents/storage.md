@@ -121,6 +121,10 @@ owner actions write to the platform (Save to issue, create, close, epics: `src/b
   dispatch and live refill, the Oracle's `roadmap.stages`, the Product Owner), the refresh banner's
   dismissal (`<project>.refresh.json`), and anything outside the app (another window, a script).
   The roadmap and the queue go through `src/state-file.js` (temp file + rename, `.bak`).
+- The conflict map (#150, `src/conflict-map.js`): `<project>.conflict-map.json`, written (temp file +
+  rename) when the Product Owner plans and finds none, and after a real run of a git project merges
+  (`src/service/areas/conflict-map.js`, on `workflow.finished`). The Backlog payload (`conflictMap`)
+  and a simulated Product Owner only read it; deleting it makes the next plan rebuild it.
 - Releases (#260): `<workspace>/releases/<project>.json` (`src/releases.js`, through
   `src/state-file.js` too) holds the shipped releases and the next release's notes. It is the only
   record of what a release shipped: an issue's "Released" badge is read from it on every Backlog
@@ -195,9 +199,10 @@ concurrent runs without a lock; gates and notifications lived only in memory.
 
 ## Repository performance: where the numbers come from (#159)
 
-Analytics › Repository performance and the Product Owner's conflict map (the "Files most runs edit"
-section of its report, #150) share `src/repo-performance.js` (`sharedFiles` = `fileCounts` of
-`filesEditedByRuns`):
+Analytics › Repository performance and the Product Owner's conflict map (`src/conflict-map.js`, the
+"## Conflict map" section of its report, #150) share `src/repo-performance.js` (`commitRanges`,
+`filesEditedByRuns`; the map adds per-line counts from `git -U0` hunks carried to HEAD, and falls back
+to the last commits of the branch when no real run merged yet):
 
 - **A run's files**: its own commits in the project's local clone. Local merge: `git log --name-only
   <local_merge.commit> ^<worktree.ready commit> ^<the tips other runs merged while it ran>` (a

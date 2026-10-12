@@ -10,6 +10,7 @@
 // po:file's `epic`: a new issue joins its draft's epic (#138). po:split files a proposed split of an
 // issue too big for one run (#124); po:epic creates an epic or places issues in one (#138). Both
 // run only on the owner's click, preview like po:file, and sync the backlog after a real write.
+// po:decongest (#150) files one hot spot of an answer's `decongest` as an issue, previewing like po:file.
 // po:ask's `scenario` (#148, simulated only): forces the simulated answer (MOCK_SCENARIOS). Every
 // real answer raises a `po` notice (#149, src/notifications.js); a simulated or stopped one does not.
 // po:ask's progress is pushed on chat:progress ('po', the project id) and chat:cancel stops it (#180).
@@ -264,6 +265,19 @@ module.exports = (ctx) => {
           placeEpic: !!epic,
           timeZone: workspace.readSettings(ctx.ws).timeZone, // #273: the drawer previews the same day
           epicList: t.data.epics || [],
+        });
+        return resync(res, t);
+      },
+    },
+    // #150: one hot spot of an answer's `decongest` filed as an issue on the owner's click (preview like po:file)
+    {
+      channel: 'po:decongest',
+      method: 'fileProductOwnerDecongest',
+      params: ['projectId', 'at', 'index', 'preview'],
+      fn: async ({ projectId, at, index, preview }) => {
+        const t = target(projectId);
+        const res = await productOwner.fileDecongest({
+          backlogDir: ctx.ws.backlog, projectId: t.id, runsDir: ctx.ws.runs, at, index, preview: !!preview || simulation.simulationOnly(), platform: t.platform, repo: t.repo,
         });
         return resync(res, t);
       },

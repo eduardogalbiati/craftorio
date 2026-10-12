@@ -47,7 +47,9 @@ module.exports = (ctx) => {
       .map((i) => (refreshed.has(i.number) && i.state === 'open' ? { ...i, refreshed: true } : i));
     // #291: the releases the Roadmap draws (its release blocks and Releases filter)
     const releases = ctx.roadmapReleases(project, live);
-    return { ...data, queue, local, roadmap, refresh, autoPush: !!project?.autoPush, autoEpic: !!project?.autoEpic, issues, releases };
+    // #150: the saved conflict map, shown beside the Roadmap (null until a plan or a merge builds it)
+    const conflictMap = ctx.savedConflictMap(data.projectId);
+    return { ...data, queue, local, roadmap, refresh, autoPush: !!project?.autoPush, autoEpic: !!project?.autoEpic, issues, releases, conflictMap };
   }
 
   // The Backlog Refresh banner (#161, src/backlog-refresh.js): the merges on the base since the

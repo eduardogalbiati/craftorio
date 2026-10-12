@@ -328,6 +328,19 @@ function demoActionsUsage() {
   return { login: 'demo-user', ...summarizeActionsUsage({ usageItems: [item('Actions Linux', 353, 0.008), item('Actions Windows', 560, 0.016), item('Actions macOS', 35, 0.08)] }, { includedMinutes: 2000, now }) };
 }
 
+// The Roadmap's Conflict map (#150): 20 runs, three hot files (one named by merge conflicts), a quiet
+// one, and a long import line most runs changed.
+function demoConflictMap(ws, projectId) {
+  const runIds = Array.from({ length: 20 }, (_, k) => `20261011-${String(220000 - k * 3700).padStart(6, '0')}-${(0xa1c0 + k).toString(16)}`);
+  const entry = (file, n, conflicts = 0, from = 0) => ({ file, runs: n, runIds: runIds.slice(from, from + n), lastRun: runIds[from], conflicts });
+  const map = {
+    source: 'runs', runs: runIds.length, runIds, builtAt: new Date().toISOString(),
+    files: [entry('src/renderer/app.js', 14, 3), entry('src/renderer/index.html', 13, 1), entry('src/service/index.js', 11), entry('README.md', 7, 0, 4), entry('src/engine/runner.js', 3, 0, 9)],
+    lines: [{ file: 'src/service/index.js', line: 12, text: "const { backlog, gates, notifications, projects, roadmap, runs, settings, usage, workflows } = require('./areas');", runs: 12, runIds: runIds.slice(0, 12) }],
+  };
+  fs.writeFileSync(path.join(ws.backlog, `${projectId}.conflict-map.json`), JSON.stringify(map, null, 2));
+}
+
 // A local-hero run that merged #11 into the local main, not pushed yet (the Backlog's "Merged
 // locally" column and Push bar): its summary and the project's cached push status. It started while
 // GitHub could not be read (#168): its issue came from the last sync (the run list's "issue from cache").
@@ -1772,6 +1785,8 @@ function main() {
     if (home || ['backlog', 'discovery', 'releases'].includes(args.view)) demoReleases(ws, project.id);
     // (#289: also on Workflows › Runs and Project, whose run lists show tonight's runs and the artifact runs expanded)
     if (home || ['backlog', 'workflows', 'project'].includes(args.view)) demoRoadmap(ws, project.id, args.live, args.budget, args.roadmap);
+    // #150: the Roadmap's Conflict map
+    if (args.view === 'backlog') demoConflictMap(ws, project.id);
     // #291: the release v0.10 of the roadmap's cut line, in a state (needs the history: Backlog only)
     if (args.release && args.view === 'backlog') demoReleaseRun(ws, project.id, args.release);
     if (args.view === 'backlog') demoPoConversation(ws, project.id, args.po);

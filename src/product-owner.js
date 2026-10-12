@@ -1348,6 +1348,49 @@ async function applyEpicProposal({ backlogDir, projectId, runsDir, at, key, epic
   return { ...res, message, messages: readConversation(backlogDir, projectId) };
 }
 
+/** #150: the issue a hot spot of an answer's `decongest` becomes: { title, body }. */
+function decongestIssue(d) {
+  const where = d.line ? `${d.file}:${d.line}` : d.file;
+  return {
+    title: `Decongest ${where}: ${d.line ? 'a line' : 'a file'} most runs edit`,
+    body: [
+      `The conflict map shows that ${d.runs && d.of ? `${d.runs} of the last ${d.of} runs` : 'most runs'} changed \`${where}\`: parallel runs collide there when they merge.`,
+      '',
+      '## Suggested fix',
+      '',
+      d.fix || 'Split it so each feature edits its own file or line.',
+      '',
+      '_Proposed by the Product Owner from the conflict map (#150)._',
+    ].join('\n'),
+  };
+}
+
+/**
+ * Files one hot spot of an answer's `decongest` (its `index`) as an issue, on the owner's click, and
+ * records it in the conversation (`decongestFiled`). `preview`: the command only, nothing filed.
+ */
+async function fileDecongest({ backlogDir, projectId, runsDir, at, index, preview, platform, repo, exec = backlog.execCli }) {
+  const messages = readConversation(backlogDir, projectId);
+  const answer = planAnswer(messages, at);
+  const d = (answer.answer.decongest || [])[Number(index)];
+  if (!d) throw new Error('That answer proposes no such fix.');
+  if (messages.some((m) => m.decongestFiled && m.decongestFiled.at === at && m.decongestFiled.index === Number(index) && !m.decongestFiled.preview)) throw new Error('This fix was already filed as an issue.');
+  const issue = decongestIssue(d);
+  const dir = applyDir({ backlogDir, projectId, runsDir }, 'decongest');
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, 'issue.md');
+  fs.writeFileSync(file, issue.body);
+  const cmd = backlog.issueCreateCommand({ platform, repo, title: issue.title, labels: [], file, text: issue.body });
+  const url = preview ? null : String(await exec(cmd.cli, cmd.args) || '').trim();
+  const text = preview
+    ? `**Preview** (simulated): nothing was filed. The app would run:\n- \`${cmd.display}\``
+    : `Filed ${url ? `[${issue.title}](${url})` : issue.title}.`;
+  const message = appendMessage(backlogDir, projectId, {
+    role: 'po', text, decongestFiled: { at, index: Number(index), title: issue.title, ...(url ? { url } : {}), ...(preview ? { preview: true } : {}) },
+  });
+  return { message, messages: readConversation(backlogDir, projectId), ...(preview ? { preview: true } : {}) };
+}
+
 // ---- usage: every real call, for the monthly budgets ------------------------------------------------
 const usageFile = (backlogDir) => path.join(backlogDir, 'product-owner.usage.jsonl');
 
@@ -1660,8 +1703,10 @@ module.exports = {
   costedGroups,
   costInputs,
   currentDraft,
+  decongestIssue,
   discardDraft,
   estimate,
+  fileDecongest,
   fileDraft,
   handleRequest,
   ISSUE_AGENT,

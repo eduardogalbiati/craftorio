@@ -18,7 +18,12 @@
 const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
-const { commitRanges, conflictsOf, filesEditedByRuns, recommendationOf } = require('./repo-performance');
+const {
+  commitRanges,
+  conflictsOf,
+  filesEditedByRuns,
+  recommendationOf,
+} = require('./repo-performance');
 
 const MAX_FILES = 200;
 const MAX_LINES = 100;
