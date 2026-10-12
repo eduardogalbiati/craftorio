@@ -60,10 +60,10 @@
   // refused: the card whose move to Ready the clarity bar refused ({ id, text }); override: the card
   // the "Move anyway" dialog is open for ({ id, projectId }); committed: the committed cards with
   // their delivery (#258, the board's `committed`); proposal (#259): the automation proposed for a
-  // moved card ({ id, title, column, name, estimate, projectId }); automationCol: the column whose
-  // automation settings are open
+  // moved card ({ id, title, column, kind, name, estimate, projectId }), proposing while its Run is
+  // in flight; automationCol: the column whose automation settings are open
   const dv = {
-    automationCol: null, proposal: null,
+    automationCol: null, proposal: null, proposing: false,
     committed: [],
     refused: null, override: null,
     projectId: null, board: null, cards: [], loadError: '', error: '', seq: 0,
@@ -242,7 +242,7 @@
     // the column's automation (#259): its mode on the button, the rest in its settings
     const auto = c.on_enter;
     const mode = auto ? (AUTOMATION_MODES[auto.mode] ? auto.mode : 'ask') : null;
-    const automation = !auto ? '' : `<button type="button" class="btn sm ghost dsc-auto-btn" data-testid="discovery-column-automation" data-column="${esc(c.id)}" data-mode="${esc(mode)}" aria-label="${esc(`Automation of ${c.title}: ${auto.name || auto.pipeline || auto.workflow || 'automation'}, ${AUTOMATION_MODES[mode]}`)}" title="${esc(`Entering ${c.title} ${mode === 'off' ? 'runs nothing' : mode === 'on' ? 'runs' : 'proposes'} ${auto.name || auto.pipeline || auto.workflow || 'an automation'}${mode === 'off' ? ` (${auto.name || 'the automation'} is off)` : ''}: change it`)}">${BOLT}<span class="dsc-auto-mode">${esc(mode)}</span></button>`;
+    const automation = !auto ? '' : `<button type="button" class="btn sm ghost dsc-auto-btn" data-testid="discovery-column-automation" data-column="${esc(c.id)}" data-mode="${esc(mode)}" aria-label="${esc(`Automation of ${c.title}: ${auto.name || auto.pipeline || auto.workflow || 'automation'}, ${AUTOMATION_MODES[mode]}`)}" title="${esc(`Entering ${c.title} ${mode === 'off' ? 'runs nothing' : mode === 'on' ? 'runs' : 'proposes'} ${auto.name || auto.pipeline || auto.workflow || 'an automation'}${mode === 'off' ? ` (${auto.name || 'the automation'} is off)` : ''}: change it`)}">${BOLT}<span class="dsc-auto-mode">Automation: ${esc(AUTOMATION_MODES[mode])}</span></button>`;
     return `
       <section class="dsc-col" data-testid="discovery-column" data-column="${esc(c.id)}" data-drop="${esc(c.id)}"${over ? ' data-over-wip="true"' : ''} style="grid-column:${i + 1}" aria-label="${esc(c.title)}">
         <header class="dsc-col-head">
@@ -381,8 +381,9 @@
     const a = moved?.automation;
     if (!a || !a.status) return;
     const where = columnOf(column)?.title || column;
-    if (a.status === 'proposed') openProposal({ id, title, column, projectId, name: a.name, estimate: a.estimate, error: a.error });
+    if (a.status === 'proposed') openProposal({ id, title, column, projectId, kind: a.kind, name: a.name, estimate: a.estimate, error: a.error });
     else if (a.status === 'running') showToast(`${a.name || 'The automation'} started`, `On "${title}", entering ${where}. Its result comes back to the card.`, a.runId || null);
+    else if (a.status === 'done') showToast(`${a.name || 'The automation'} done`, a.question ? `A question waits for you in the thread of "${title}".` : `On "${title}", entering ${where}.`);
     else if (a.status === 'failed') {
       dv.error = `${a.name || 'The automation'} could not start on "${title}": ${a.error || 'unknown error'}`;
       render();
@@ -406,6 +407,9 @@
     $('#dsc-proposal-title').textContent = `Run the automation of ${where}?`;
     $('#dsc-proposal-what').textContent = `${p.name || 'The automation'} on "${p.title}", which entered ${where}.`;
     $('#dsc-proposal-estimate').textContent = estimateLine(p.estimate);
+    $('#dsc-proposal-hint').textContent = p.kind === 'check'
+      ? 'It asks the card\'s next open point in its thread, one question at a time; each answer is yours and is written into the card. No model, no run.'
+      : 'Its result becomes a new version of the card\'s document, with the run and its cost in the thread. Every gate of the run waits for you; the card never moves by itself.';
     $('#dsc-proposal-error').textContent = p.error || '';
     $('#btn-dsc-proposal-run').disabled = !!p.error;
     openModal('#dsc-proposal-modal');
@@ -420,8 +424,8 @@
   async function runProposal(e) {
     e?.preventDefault?.();
     const p = dv.proposal;
-    if (!p || dv.acting) return;
-    dv.acting = true;
+    if (!p || dv.proposing) return;
+    dv.proposing = true;
     $('#btn-dsc-proposal-run').disabled = true;
     try {
       const out = await api.runDiscoveryAutomation(p.projectId, p.id, p.column);
@@ -433,7 +437,7 @@
       $('#dsc-proposal-error').textContent = errMsg(err);
       $('#btn-dsc-proposal-run').disabled = false;
     } finally {
-      dv.acting = false;
+      dv.proposing = false;
     }
     if (dv.proposal === null) {
       await refresh();
@@ -448,10 +452,10 @@
     if (!auto) return;
     dv.automationCol = column;
     const file = auto.pipeline || auto.workflow || '';
-    const what = auto.check ? 'the clarity check, which asks the card\'s open points in its thread (no model, no run)'
-      : `${auto.name || file}${file && auto.name ? ` (${file})` : ''}, a ${auto.pipeline ? 'pipeline' : 'workflow'} on the card's document`;
+    const what = auto.check ? `Entering ${col.title} runs the clarity check: it asks the card's open points in its thread, one question at a time, each answer yours. No model, no run.`
+      : `Entering ${col.title} runs ${auto.name || file}${file && auto.name ? ` (${file})` : ''}, a ${auto.pipeline ? 'pipeline' : 'workflow'} on the card's document. Its result becomes a new version of the document, with the run and its cost in the thread.`;
     $('#dsc-automation-title').textContent = `Automation of ${col.title}`;
-    $('#dsc-automation-what').textContent = `Entering ${col.title} runs ${what}. Its result becomes a new version of the document, with the run and its cost in the thread.`;
+    $('#dsc-automation-what').textContent = what;
     $('#dsc-automation-mode').value = AUTOMATION_MODES[auto.mode] ? auto.mode : 'ask';
     $('#dsc-automation-error').textContent = '';
     openModal('#dsc-automation-modal');
@@ -512,13 +516,15 @@
     if (!id || !reason) return undefined;
     return once(async () => {
       try {
-        await api.moveDiscoveryCardAnyway(projectId, id, reason);
+        const moved = await api.moveDiscoveryCardAnyway(projectId, id, reason);
         closeModal('#dsc-override-modal');
         Object.assign(dv, { override: null, refused: null });
         if (projectId !== dv.projectId) return;
         await refresh();
         focusMove(id);
         if (dv.open?.id === id) reloadHistory();
+        // Ready's automation (#259) answers like a plain move's
+        afterMove(moved, { id, title: cardOf(id)?.title || id, column: 'ready', projectId });
       } catch (err) { $('#dsc-override-error').textContent = errMsg(err); }
     });
   }
@@ -1259,7 +1265,7 @@
   function onEscape(e) {
     if (e.key !== 'Escape' || e.defaultPrevented || state.view !== 'discovery') return;
     // the automation dialogs (#259) close with Escape: a proposal dismissed runs nothing
-    if (!$('#dsc-proposal-modal').classList.contains('hidden')) { if (!dv.acting) closeProposal(); return; }
+    if (!$('#dsc-proposal-modal').classList.contains('hidden')) { if (!dv.proposing) closeProposal(); return; }
     if (!$('#dsc-automation-modal').classList.contains('hidden')) { closeAutomationSettings(); return; }
     if (window.ImageViewer?.isOpen() || document.querySelector('.modal:not(.hidden)')) return;
     if (dv.menu) {
@@ -1460,7 +1466,7 @@
         <select id="dsc-automation-mode" data-testid="discovery-automation-mode">
           ${Object.entries(AUTOMATION_MODES).map(([v, label]) => `<option value="${v}">${label}</option>`).join('')}
         </select>
-        <div class="hint">Ask me proposes the run with its cost estimate, On starts it with the move, Off runs nothing. Every gate of the run still waits for you; the card never moves by itself.</div>
+        <div class="hint">Ask me proposes it with its cost estimate, On starts it with the move, Off does nothing. Every gate of a run still waits for you; the card never moves by itself.</div>
       </div>
       <p id="dsc-automation-error" class="error small" role="alert"></p>
       <div class="modal-actions">
@@ -1474,7 +1480,7 @@
       <h3 id="dsc-proposal-title">Run the automation?</h3>
       <p id="dsc-proposal-what" class="small" data-testid="discovery-automation-what"></p>
       <p id="dsc-proposal-estimate" class="muted small" data-testid="discovery-automation-estimate"></p>
-      <p class="hint">Its result becomes a new version of the card's document, with the run and its cost in the thread. Every gate of the run waits for you; the card never moves by itself.</p>
+      <p id="dsc-proposal-hint" class="hint"></p>
       <p id="dsc-proposal-error" class="error small" role="alert"></p>
       <div class="modal-actions">
         <span class="spacer"></span>

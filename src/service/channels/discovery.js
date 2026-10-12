@@ -52,7 +52,11 @@ module.exports = (ctx) => {
   }
   // the Backlog marks the issues filed from a card with it (#258, src/service/areas/backlog.js withIssueRuns)
   ctx.discoveryIssueCards = (projectId) => discovery.issueCards(dir(), projectId);
-  const board = (projectId) => ({ ...discovery.readBoard(dir(), projectId), forecast: discovery.readyForecast(dir(), projectId), committed: committed(projectId) });
+  const board = (projectId) => {
+    // a card left running by a previous session of the app gets its automation's result (#259)
+    ctx.reconcileDiscoveryAutomations(projectId);
+    return { ...discovery.readBoard(dir(), projectId), forecast: discovery.readyForecast(dir(), projectId), committed: committed(projectId) };
+  };
   // A card that may be committed, or the refusal (not Ready, under the commit bar with its gaps).
   function committable(projectId, cardId) {
     const card = discovery.readCard(dir(), projectId, cardId);
@@ -126,12 +130,17 @@ module.exports = (ctx) => {
       fn: ({ projectId, cardId, column }) => ctx.startDiscoveryAutomation({ projectId, cardId, column }),
     },
     // the owner's override (#166): into Ready below the clarity bar, with a `reason` kept on the card
-    // (clarity.override). A person's click only: no agent and no automation calls it
+    // (clarity.override). A person's click only: no agent and no automation calls it. Ready's
+    // automation (#259) answers like discovery:move's
     {
       channel: 'discovery:move-anyway',
       method: 'moveDiscoveryCardAnyway',
       params: ['projectId', 'cardId', 'reason'],
-      fn: ({ projectId, cardId, reason }) => discovery.moveCard(dir(), projectId, cardId, 'ready', { by: owner(), force: true, reason }),
+      fn: ({ projectId, cardId, reason }) => {
+        const from = discovery.readCard(dir(), projectId, cardId).column;
+        const card = discovery.moveCard(dir(), projectId, cardId, 'ready', { by: owner(), force: true, reason });
+        return ctx.afterDiscoveryMove(projectId, card, from);
+      },
     },
     // the board (#257): { columns: [{ id, title, wip }], order: { <column>: [card ids] } }, with the
     // project's clarity bar and night (#166: clarity { bar, byKind, night }), the ready work

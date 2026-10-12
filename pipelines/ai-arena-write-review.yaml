@@ -2,7 +2,9 @@
 # merges the best of them, then Writer & Reviewer polishes it against the goal. The Discovery board's
 # Shape column offers it on a card's document when the card enters the column (#259, src/discovery.js
 # ON_ENTER: the card's title, document, acceptance criteria and text attachments are the task). Every
-# gate of both workflows waits for you, like any run's.
+# gate of both workflows waits for you, like any run's. The second stage polishes the Arena's
+# document free-form (a stage's fixed inputs cannot follow the card's type): the structure comes
+# from the first stage, whose document_skill the card sets.
 name: AI Arena → Write & Review
 description: The AI Arena writes the document with several models and merges the best of them (you review it), then Writer & Reviewer polishes it until it meets the goal and asks you to accept it.
 category: plan

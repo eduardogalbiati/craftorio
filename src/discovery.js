@@ -186,13 +186,28 @@ function readBoard(dir, projectId) {
   for (const c of BOARD_COLUMNS) if (!columns.some((x) => x.id === c.id)) columns.push({ ...c });
   const order = {};
   for (const c of columns) order[c.id] = Array.isArray(board?.order?.[c.id]) ? board.order[c.id].filter((id) => CARD_ID.test(id)) : [];
-  // a column stored without an automation (#259) takes the default's; a stored one is the owner's
-  const onEnter = (c) => (c.on_enter && typeof c.on_enter === 'object' ? c.on_enter : ON_ENTER[c.id]);
+  // a column's automation (#259): the default's, under what board.json stores of it (the owner's
+  // mode, or a whole automation of their own on a column without a default)
   const withAutomation = (c) => {
-    const auto = onEnter(c);
+    const stored = c.on_enter && typeof c.on_enter === 'object' ? c.on_enter : null;
+    const auto = ON_ENTER[c.id] || stored ? { ...(ON_ENTER[c.id] || {}), ...(stored || {}) } : null;
     return auto ? { ...c, on_enter: { ...auto, mode: AUTOMATION_MODES.includes(auto.mode) ? auto.mode : 'ask' } } : c;
   };
   return { columns: columns.map((c) => withAutomation({ ...c, wip: c.wip ?? null })), order, clarity: clarity.claritySettings(board?.clarity) };
+}
+
+// Writes board.json: of a column's automation only what differs from the default stays (the owner's
+// mode), so a later default (another pipeline, another prompt) reaches every board.
+function writeBoard(dir, projectId, board) {
+  const columns = board.columns.map((c) => {
+    const def = ON_ENTER[c.id];
+    if (!def || !c.on_enter) return c;
+    const own = Object.fromEntries(Object.entries(c.on_enter).filter(([k, v]) => JSON.stringify(v) !== JSON.stringify(def[k])));
+    const rest = { ...c };
+    delete rest.on_enter;
+    return Object.keys(own).length ? { ...rest, on_enter: own } : rest;
+  });
+  writeJson(path.join(ensureProject(dir, projectId), 'board.json'), { ...board, columns });
 }
 
 // Takes the card off every column, then puts it in `column`: first (a new card), at `index` among
@@ -207,7 +222,7 @@ function placeOnBoard(dir, projectId, id, column, { first = false, index } = {})
     else if (Number.isInteger(index) && index >= 0 && index < list.length) list.splice(index, 0, id);
     else list.push(id);
   }
-  writeJson(path.join(ensureProject(dir, projectId), 'board.json'), board);
+  writeBoard(dir, projectId, board);
 }
 
 /**
@@ -220,7 +235,7 @@ function setWip(dir, projectId, column, limit) {
   if (!col) throw new Error(`Unknown column: ${column}`);
   if (!Number.isInteger(limit) || limit < 1) throw new Error(`A WIP limit is a whole number from 1: ${limit}`);
   col.wip = limit;
-  writeJson(path.join(ensureProject(dir, projectId), 'board.json'), board);
+  writeBoard(dir, projectId, board);
   return board;
 }
 
@@ -236,7 +251,7 @@ function setColumnAutomation(dir, projectId, column, { mode } = {}) {
   if (!col.on_enter) throw new Error(`${col.title} has no automation to set.`);
   if (!AUTOMATION_MODES.includes(mode)) throw new Error(`An automation is ask, on or off: ${mode}`);
   col.on_enter = { ...col.on_enter, mode };
-  writeJson(path.join(ensureProject(dir, projectId), 'board.json'), board);
+  writeBoard(dir, projectId, board);
   return board;
 }
 
@@ -262,7 +277,7 @@ function setClarityBar(dir, projectId, { bar, byKind, night } = {}) {
     if (checked.start !== night?.start || checked.end !== night?.end) throw new Error('A night is { start, end } as HH:MM, e.g. 23:00 to 08:00.');
     board.clarity.night = checked;
   }
-  writeJson(path.join(ensureProject(dir, projectId), 'board.json'), board);
+  writeBoard(dir, projectId, board);
   return board;
 }
 
@@ -469,16 +484,21 @@ function passClarityBar(dir, projectId, card, { by, force, reason }) {
   card.clarity = { ...card.clarity, override: { score, bar, reason: why.slice(0, 500), by: String(by || 'owner'), ts: now() } };
 }
 
-/** Snapshots document.md as versions/<iso ts>-<reason>.md (a column move, a merge, an agent output). Returns the file name. */
-function snapshotVersion(dir, projectId, id, reason) {
-  const folder = existingCard(dir, projectId, id);
+// Writes `text` as versions/<iso ts>-<reason>.md of the card's folder and returns the file name.
+function saveVersion(folder, reason, text) {
   const label = String(reason || 'snapshot').replace(/[^\w-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'snapshot';
   const stamp = now().replace(/[:.]/g, '-');
   let name = `${stamp}-${label}.md`;
   // a second snapshot for the same reason in the same millisecond never replaces the first
   for (let n = 2; fs.existsSync(path.join(folder, 'versions', name)); n++) name = `${stamp}-${label}-${n}.md`;
-  writeFileAtomic(path.join(folder, 'versions', name), readText(path.join(folder, 'document.md')));
+  writeFileAtomic(path.join(folder, 'versions', name), text);
   return name;
+}
+
+/** Snapshots document.md as versions/<iso ts>-<reason>.md (a column move, a merge, an agent output). Returns the file name. */
+function snapshotVersion(dir, projectId, id, reason) {
+  const folder = existingCard(dir, projectId, id);
+  return saveVersion(folder, reason, readText(path.join(folder, 'document.md')));
 }
 
 /**
@@ -630,9 +650,13 @@ function attachmentsText(folder, names) {
   const parts = [];
   let left = MAX_ATTACHMENTS_TEXT;
   for (const name of names) {
+    const file = path.join(folder, 'attachments', name);
     let buf;
-    try { buf = fs.readFileSync(path.join(folder, 'attachments', name)); } catch { continue; }
-    if (sniffImage(buf) || buf.length > left || buf.includes(0)) continue;
+    try {
+      if (fs.statSync(file).size > left) continue; // never read a large file to skip it
+      buf = fs.readFileSync(file);
+    } catch { continue; }
+    if (sniffImage(buf) || buf.includes(0)) continue;
     parts.push(`===== Attached file: ${name} =====\n${buf.toString('utf8')}`);
     left -= buf.length;
   }
@@ -662,9 +686,12 @@ function renderAutomationInputs(dir, projectId, id, inputs = {}) {
   return out;
 }
 
+const documentHash = (text) => crypto.createHash('sha1').update(String(text ?? '')).digest('hex');
+
 /**
  * Records the automation running on the card (#259), `{ runId, name, column }` → card.automation
- * { state: 'running', … , startedAt }; `null` takes the record away. Returns the card.
+ * { state: 'running', …, startedAt, document: a hash of the document it started from }; `null`
+ * takes the record away. Returns the card.
  */
 function markAutomation(dir, projectId, id, automation) {
   const folder = editableCard(dir, projectId, id);
@@ -672,7 +699,7 @@ function markAutomation(dir, projectId, id, automation) {
   if (automation === null) delete card.automation;
   else {
     if (!automation || typeof automation !== 'object') throw new Error('An automation is an object or null.');
-    card.automation = { state: 'running', startedAt: now(), ...automation };
+    card.automation = { state: 'running', startedAt: now(), document: documentHash(card.document), ...automation };
   }
   saveCard(folder, card);
   return load(folder);
@@ -680,29 +707,36 @@ function markAutomation(dir, projectId, id, automation) {
 
 /**
  * The automation's run ended (#259): a successful `text` becomes the document, kept as the version
- * automation-<column> (the document it replaces is kept too), the thread gets { kind: 'automation',
- * name, column, runId, costUsd, status, version } and card.automation ends ('done' or 'failed').
- * Returns the card.
+ * automation-<column> (the document it replaces is kept too); a document edited since the
+ * automation started is left alone, the result is only kept as that version. The thread gets
+ * { kind: 'automation', name, column, runId, costUsd, status, version, applied } and
+ * card.automation ends ('done' or 'failed'). Returns the card.
  */
 function recordAutomation(dir, projectId, id, { runId = null, name, column, status = 'success', text = '', costUsd = 0 } = {}) {
   const folder = editableCard(dir, projectId, id);
   const label = String(name || 'Automation');
-  const done = status === 'success' && !!String(text ?? '').trim();
+  const result = status === 'success' && !!String(text ?? '').trim();
+  const before = load(folder);
+  const edited = !!before.automation?.document && before.automation.document !== documentHash(before.document);
   let version = null;
-  if (done) {
+  if (result && !edited) {
     keepDocument(dir, projectId, id, 'before-automation');
     writeFileAtomic(path.join(folder, 'document.md'), String(text));
     version = snapshotVersion(dir, projectId, id, `automation-${column || 'result'}`);
     rescore(folder);
+  } else if (result) {
+    version = saveVersion(folder, `automation-${column || 'result'}`, String(text));
   }
   const cost = Number.isFinite(Number(costUsd)) ? Number(costUsd) : 0;
   appendConversation(dir, projectId, id, {
-    kind: 'automation', name: label, column: column || null, runId: runId ? String(runId) : null, costUsd: cost, status, author: 'automation', version,
-    text: done ? `${label} finished: its result is the document now (version ${version}).`
-      : status === 'success' ? `${label} finished without a document: the card is unchanged.` : `${label} ended ${status}: the card is unchanged.`,
+    kind: 'automation', name: label, column: column || null, runId: runId ? String(runId) : null, costUsd: cost, status, author: 'automation', version, applied: result && !edited,
+    text: result && !edited ? `${label} finished: its result is the document now (version ${version}).`
+      : result ? `${label} finished: the document was edited meanwhile, so its result is kept as the version ${version} (restore it to use it).`
+        : status === 'success' ? `${label} finished without a document: the card is unchanged.` : `${label} ended ${status}: the card is unchanged.`,
   });
   const card = load(folder);
-  card.automation = { ...(card.automation || {}), state: done || status === 'success' ? 'done' : 'failed', runId: runId ? String(runId) : null, name: label, column: column || null, costUsd: cost, endedAt: now() };
+  card.automation = { ...(card.automation || {}), state: status === 'success' ? 'done' : 'failed', runId: runId ? String(runId) : null, name: label, column: column || null, costUsd: cost, endedAt: now() };
+  delete card.automation.document;
   saveCard(folder, card);
   return load(folder);
 }

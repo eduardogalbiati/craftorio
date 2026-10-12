@@ -7,7 +7,7 @@
 // attachments and its thread, and the triage actions: Accept (to Discovery › Triage), Merge into…
 // another card, Discard (archived with a reason). Enter captures, Esc closes the open card.
 // Registers itself with registerView (view-registry.js); uses app.js globals ($, esc, state, api,
-// errMsg, dateOf, openModal, closeModal, confirmDialog), ncAgo (notification-center.js),
+// errMsg, dateOf, openModal, closeModal, confirmDialog, selectRun), ncAgo (notification-center.js),
 // markdownHtml (artifact-render.js), CurrentProject and ImageViewer. Shares how a card's files and
 // thread are read and drawn with the Discovery board (window.DiscoveryCardParts, views/discovery/).
 (() => {
@@ -473,6 +473,9 @@
   }
 
   function onDetailClick(e) {
+    // a thread entry's run (a result that came back to the card) opens on the Run screen
+    const run = e.target.closest('[data-open-run]');
+    if (run) { selectRun(run.dataset.openRun); return; }
     const b = e.target.closest('[data-detail]');
     if (!b || !inbox.open) return;
     const act = b.dataset.detail;

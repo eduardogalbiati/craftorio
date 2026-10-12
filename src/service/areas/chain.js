@@ -35,11 +35,10 @@ module.exports = (ctx) => {
   // every change of a chain's state is pushed as 'run:chain' { run_id, state, reason?, nextRunId? }:
   // the Discovery board's automations follow a pipeline from stage to stage with it (#259)
   const write = (runDir, patch) => {
-    try {
-      const out = runs.writeChain(runDir, patch);
-      ctx.events.emit('run:chain', { run_id: path.basename(runDir), ...patch });
-      return out;
-    } catch (e) { console.error('chain.json:', e.message); return null; }
+    let out = null;
+    try { out = runs.writeChain(runDir, patch); } catch (e) { console.error('chain.json:', e.message); }
+    try { ctx.events.emit('run:chain', { run_id: path.basename(runDir), ...patch }); } catch (e) { console.error('run:chain:', e.message); }
+    return out;
   };
 
   // The run's start and every change of its `then` (a gate choice, the owner's edit) go to chain.json.

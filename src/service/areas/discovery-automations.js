@@ -13,6 +13,10 @@
 // MULTIAGENT_SIMULATION_ONLY the run is a simulation (the mock provider, no cost) and its gates take
 // their first choice, answered as 'auto' like `npm run run -- --mock --auto-approve` (#260: a ship
 // transition never follows), so a simulated automation ends by itself.
+// The automations in progress are kept in memory; a card left 'running' by a previous session of the
+// app is settled from its runs' folders when the board is read (reconcileDiscoveryAutomations): the
+// result of a pipeline that ended meanwhile comes back, a run still alive is followed again, a run
+// that is gone ends the automation as interrupted.
 
 const path = require('path');
 const { childRunCost, loadWorkflow } = require('../../engine/workflow');
@@ -22,11 +26,16 @@ const discovery = require('../../discovery');
 const projects = require('../../projects');
 const runs = require('../../runs');
 
+// the stages of a pipeline followed from the run folders (a chain's nextRunId), at most
+const MAX_STAGES = 20;
+
 module.exports = (ctx) => {
   const dir = () => ctx.ws.discovery;
   // the automations in progress, by each run of theirs (a pipeline's stages are runs of their own):
   // { projectId, cardId, column, name, runId (the first run's), costUsd, document, waitingOn }
   const tracked = new Map();
+  // the cards whose automation is being started: a second start meanwhile is refused
+  const starting = new Set();
 
   const columnOf = (projectId, column) => {
     const col = discovery.readBoard(dir(), projectId).columns.find((c) => c.id === column);
@@ -67,7 +76,8 @@ module.exports = (ctx) => {
   /**
    * What a card's move into `card.column` starts (#259): the card as it is (no automation there,
    * 'off', or the card only changed place in its column), the card with a proposal ('ask'), or with
-   * the run started ('on'; a start that fails leaves the move done and says why).
+   * the run started ('on': { status: 'running', runId, name }; the clarity check, no run, answers
+   * { status: 'done', question }; a start that fails leaves the move done and says why).
    */
   async function afterDiscoveryMove(projectId, card, from) {
     if (!card || card.column === from) return card;
@@ -76,7 +86,7 @@ module.exports = (ctx) => {
     if (auto.mode !== 'on') return { ...card, automation: proposal(card.column, auto) };
     try {
       const started = await startDiscoveryAutomation({ projectId, cardId: card.id, column: card.column });
-      return { ...discovery.readCard(dir(), projectId, card.id), automation: { status: 'running', column: card.column, ...started } };
+      return { ...discovery.readCard(dir(), projectId, card.id), automation: { status: started.runId ? 'running' : 'done', column: card.column, ...started } };
     } catch (e) {
       return { ...card, automation: { status: 'failed', column: card.column, name: describe(auto).name, error: e.message } };
     }
@@ -89,14 +99,26 @@ module.exports = (ctx) => {
    * Refused when the card left the column, an automation already runs on it, or the column's is off.
    */
   async function startDiscoveryAutomation({ projectId, cardId, column }) {
+    const key = `${path.basename(String(projectId))}/${cardId}`;
+    if (starting.has(key)) throw new Error('This card\'s automation is being started.');
+    starting.add(key);
+    try {
+      return await start({ projectId, cardId, column });
+    } finally {
+      starting.delete(key);
+    }
+  }
+
+  async function start({ projectId, cardId, column }) {
     const card = discovery.readCard(dir(), projectId, cardId);
     const col = columnOf(projectId, column);
     if (card.column !== column) throw new Error(`"${card.title}" is not in ${col.title}: nothing to run.`);
     if (card.automation?.state === 'running') {
-      const { runId, name } = card.automation;
+      const { runId } = card.automation;
       if (tracked.has(runId) || ctx.liveRun(runId)) throw new Error(`An automation is already running on "${card.title}" (run ${runId}).`);
-      // recorded by a previous session of the app, whose run is gone: the card is unchanged, the thread says so
-      discovery.recordAutomation(dir(), projectId, cardId, { runId, name, column: card.automation.column, status: 'interrupted' });
+      // recorded by a previous session of the app: settled from its runs, or ended as interrupted
+      settle(projectId, card);
+      if (discovery.readCard(dir(), projectId, cardId).automation?.state === 'running') throw new Error(`An automation is already running on "${card.title}" (run ${runId}).`);
     }
     const auto = col.on_enter;
     if (!auto || auto.mode === 'off') throw new Error(`${col.title} has no automation on.`);
@@ -133,15 +155,52 @@ module.exports = (ctx) => {
     }
   }
 
+  // A card left 'running' by a previous session of the app: its runs are followed from their folders
+  // (a stage's chain names the next run). A pipeline that ended comes back to the card; a run still
+  // alive is followed again; a run that is gone (not finished, not live) ends it as interrupted.
+  function settle(projectId, card) {
+    const { runId, name, column } = card.automation;
+    const t = { projectId, cardId: card.id, column, name, runId, costUsd: 0, document: '', waitingOn: null };
+    let id = runId;
+    for (let n = 0; id && n < MAX_STAGES; n++) {
+      if (ctx.liveRun(id)) { tracked.set(id, t); return; }
+      let run = null;
+      try { run = runs.readRun(ctx.ws.runs, id); } catch { /* unreadable: gone */ }
+      if (!run || !run.finishedAt) { finish(t, 'interrupted'); return; }
+      t.costUsd += (Number(run.costUsd) || 0) + (Number(run.childrenCostUsd) || 0);
+      if (run.status === 'success' && String(run.outputs?.document ?? '').trim()) t.document = String(run.outputs.document);
+      const chain = run.chain;
+      if (run.status !== 'success' || !chain?.then || chain.then.action !== 'workflow') { finish(t, run.status || 'interrupted'); return; }
+      if (chain.state === 'started' && chain.nextRunId) { id = chain.nextRunId; continue; }
+      if (chain.state === 'done') { finish(t, 'success'); return; }
+      // waiting (the chain never acted: the app closed first), paused or dropped
+      finish(t, chain.state === 'waiting' ? 'interrupted' : chain.state || 'interrupted');
+      return;
+    }
+    finish(t, 'interrupted');
+  }
+
+  /** Settles the project's cards left 'running' by a previous session (the board reads them). */
+  function reconcileDiscoveryAutomations(projectId) {
+    for (const card of discovery.listCards(dir(), projectId)) {
+      const a = card.automation;
+      if (a?.state !== 'running' || !a.runId || tracked.has(a.runId) || ctx.liveRun(a.runId)) continue;
+      try { settle(projectId, card); } catch (e) { console.error('discovery automation:', e.message); }
+    }
+  }
+
   // A simulated automation's gate: nobody is there to answer it and the run is a mock; it takes its
-  // first choice as 'auto' (never 'user'). A real run's gates wait for the owner.
+  // first choice that needs no feedback, as 'auto' (never 'user'). A real run's gates wait for the owner.
   function answerSimulatedGate(ev) {
     if (!simulation.simulationOnly()) return;
     const run = ctx.liveRun(ev.run_id);
     if (!run?.mock) return;
-    const answer = Array.isArray(ev.choices) && ev.choices.length ? ev.choices[0].id : true;
+    const choices = Array.isArray(ev.choices) ? ev.choices : [];
+    const answer = choices.length ? (choices.find((c) => !c.feedback_required) || choices[0]).id : true;
     setTimeout(() => {
-      try { run.resolveApproval(ev.approval_id, answer, 'auto'); } catch (e) { console.error('discovery automation gate:', e.message); }
+      try {
+        if (run.resolveApproval(ev.approval_id, answer, 'auto') === false) console.error(`discovery automation: the simulated gate ${ev.approval_id} of run ${ev.run_id} refused "${answer}".`);
+      } catch (e) { console.error('discovery automation gate:', e.message); }
     }, 50);
   }
 
@@ -173,6 +232,7 @@ module.exports = (ctx) => {
 
   return {
     afterDiscoveryMove,
+    reconcileDiscoveryAutomations,
     startDiscoveryAutomation,
   };
 };
