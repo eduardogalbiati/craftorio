@@ -164,7 +164,63 @@ test('a turn cut by its request budget wraps up in the same session and the visi
   assert.equal(dev.per_turn.filter((p) => p.step === 'develop' && p.visit === 1).length, 2);
 });
 
-test('a visit whose turns keep hitting the budget fails after the third cut', { timeout: 60000 }, async (t) => {
+test('the cut turn counts its wrap-up request: tokens and cost of both requests of the cut session', { timeout: 60000 }, async (t) => {
+  const { run, finished } = await mockRun(t, { mockSequences: { request_budget: { develop: 1 } } });
+  assert.equal(finished.status, 'success', finished.error);
+  // the mock's cut turn: 1500 in + 400 out + 40 requests × 20k cached = 801,900 tokens, $0.05;
+  // its wrap-up (2nd request of that conversation): 200 + 150 + 50k cached = 50,350 tokens, $0.001
+  const cut = finished.summary.context.agents.developer.per_turn.filter((p) => p.cut);
+  assert.equal(cut.length, 1);
+  assert.equal(cut[0].tokens, 852250);
+  const rec = run.turnLog.filter((r) => r.cut);
+  assert.equal(rec.length, 1);
+  assert.equal(+rec[0].cost_usd.toFixed(4), 0.051);
+});
+
+test('a persistent agent cut by its budget continues in a fresh session, which its next turn then keeps', { timeout: 60000 }, async (t) => {
+  const dir = tmp(t, 'budget-persistent-');
+  const file = path.join(dir, 'wf.yaml');
+  fs.writeFileSync(file, [
+    'providers:',
+    '  claude: { type: claude-code, command: claude, args: ["-p"] }',
+    'agents:',
+    '  developer: { provider: claude, model: m, session: persistent, max_requests: 40, capabilities: { tools: [read] } }',
+    'steps:',
+    '  - { id: develop, agent: developer, supervise: false, prompt: "Implement." }',
+    '  - { id: polish, agent: developer, supervise: false, prompt: "Polish." }',
+  ].join('\n'));
+  const { finished, sessionIds, ofSession } = await mockRun(t, { file, mockSequences: { request_budget: { develop: 1 } } });
+  assert.equal(finished.status, 'success', finished.error);
+  const ids = sessionIds('developer');
+  assert.equal(ids.length, 2, 'the cut session, then one fresh session for the rest of the run');
+  const [cutId, nextId] = ids;
+  assert.equal(ofSession('session.message_sent', cutId).length, 2, 'the cut session gets only its prompt and the wrap-up');
+  const nextSent = ofSession('session.message_sent', nextId);
+  assert.equal(nextSent.length, 2, 'the continuation of develop, then polish in the same session');
+  assert.match(nextSent[0].prompt, /continued after 40 requests/);
+  assert.match(nextSent[0].prompt, /simulated goal of this agent/);
+  assert.match(nextSent[1].prompt, /Polish\./);
+});
+
+test('Stop pressed during the wrap-up: the run is cancelled and no continuation starts', { timeout: 60000 }, async (t) => {
+  const runsDir = tmp(t, 'budget-stop-');
+  const run = new WorkflowRun({ file: FIXTURE, inputs: {}, mock: true, runsDir, mockSequences: { request_budget: { develop: 1 } } });
+  const events = [];
+  run.on('event', (ev) => {
+    events.push(ev);
+    if (ev.type === 'session.message_sent' && /request budget/.test(ev.prompt || '')) run.stop();
+  });
+  await run.start();
+  const finished = events.find((e) => e.type === 'workflow.finished');
+  assert.equal(events.some((e) => e.type === 'session.message_sent' && /request budget/.test(e.prompt || '')), true, 'the wrap-up was sent');
+  assert.notEqual(finished.status, 'success');
+  assert.match(`${finished.status} ${finished.error}`, /cancel/i);
+  assert.equal(events.filter((e) => e.type === 'session.opened' && e.session.agent === 'developer').length, 1, 'no continuation session');
+  assert.equal(events.some((e) => e.type === 'session.message_sent' && /continued after/.test(e.prompt || '')), false);
+  assert.equal(events.some((e) => e.type === 'handoff.saved'), false, 'no note saved for the visit');
+});
+
+test('a visit whose turns keep hitting the budget fails after the third cut',{ timeout: 60000 }, async (t) => {
   const { events, finished, sessionIds } = await mockRun(t, { mockSequences: { request_budget: { develop: 99 } } });
   assert.notEqual(finished.status, 'success');
   const cuts = events.filter((e) => e.type === 'session.message_received' && e.cut === true);
