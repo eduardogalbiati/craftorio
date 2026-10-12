@@ -3982,8 +3982,11 @@ class WorkflowRun extends EventEmitter {
     const wt = this.worktree;
     if (!wt) throw new Error('merge: local needs the run\'s git worktree (orchestrator.worktree on a git repository).');
     const log = (level, message) => this.emitEvent('log', { level, message });
+    // base_commit (#289): the base's tip before the merge, so run:diff can list the run's commits once
+    // its branch is deleted, even after a rebase (ready.commit is then below the base's own commits)
+    const baseCommit = await git(['rev-parse', `refs/heads/${wt.base}`], wt.repo).then((s) => s.trim(), () => null);
     const r = await mergeLocally({ repo: wt.repo, dir: wt.dir, base: wt.base, log });
-    this.emitEvent('worktree.merged', { branch: r.branch, base: r.base, commit: r.commit, checkout: r.checkout, rebased: r.rebased });
+    this.emitEvent('worktree.merged', { branch: r.branch, base: r.base, commit: r.commit, checkout: r.checkout, rebased: r.rebased, base_commit: baseCommit });
     this.ctx.local_merge = r;
   }
 

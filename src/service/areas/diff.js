@@ -80,7 +80,14 @@ module.exports = (ctx) => {
       // commit (worktree.merged) down to the base commit the run started from (ready.commit first: the
       // base's name now points at the merge itself)
       const merged = [...events].reverse().find((e) => e.type === 'worktree.merged' && e.commit);
-      if (merged && inRepo) return { events, dir: ready.repo, head: String(merged.commit), bases: [ready.commit, ready.base, name].filter(Boolean), branch, mergedRef: true };
+      if (merged && inRepo) {
+        // resolveRange puts the base's tip right before the merge first (base_commit, recorded by the
+        // engine, or the base's reflog): after a rebase, ready.commit is below the commits the base
+        // gained meanwhile, which are not the run's
+        const mergedBase = String(merged.base || '').replace(/^origin\//, '') || name;
+        const bases = [ready.commit, ready.base, name].filter(Boolean);
+        return { events, dir: ready.repo, head: String(merged.commit), bases, branch, mergedRef: true, mergeCommit: String(merged.commit), mergedBase, baseCommit: merged.base_commit ? String(merged.base_commit) : null };
+      }
       // nothing merged: a state, not a git error
       return { events, branch, branchGone: true, problem: branchGoneProblem(branch) };
     }
@@ -97,6 +104,17 @@ module.exports = (ctx) => {
       if (mb && mb.trim()) return { base: String(b), mergeBase: mb.trim() };
     }
     throw new Error(`None of the run's base refs resolves in its worktree (${bases.join(', ')}).`);
+  }
+
+  // #289: the base's tip before the local merge that moved it to mergeCommit, from the base's reflog
+  // (the entry right before the one whose new value is the merge commit); null when the reflog does
+  // not have it (expired, the base rewritten). Runs merged before the engine recorded base_commit.
+  async function preMergeTip(dir, base, mergeCommit) {
+    if (!base || base.startsWith('-')) return null;
+    const out = await gitOrNull(dir, ['reflog', 'show', '--format=%H', `refs/heads/${base}`, '--']);
+    const tips = String(out || '').split('\n').map((l) => l.trim()).filter(Boolean);
+    const at = tips.lastIndexOf(mergeCommit);
+    return at >= 0 && at + 1 < tips.length ? tips[at + 1] : null;
   }
 
   async function branchCommits(dir, mb, head) {
@@ -121,6 +139,10 @@ module.exports = (ctx) => {
       // a true merge commit: the branch is its second parent; a fast-forward (the engine's local merge): the commit itself
       const second = await gitOrNull(src.dir, ['rev-parse', '--verify', '--quiet', `${src.head}^2`]);
       if (second?.trim()) src = { ...src, head: second.trim() };
+      // the base's tip right before the merge leads: base_commit (recorded by the engine) or, for a run
+      // merged before the engine recorded it, the base's reflog; then the commit the run started from
+      const tip = src.baseCommit || await preMergeTip(src.dir, src.mergedBase, src.mergeCommit);
+      if (tip) src = { ...src, bases: [tip, ...src.bases.filter((b) => b !== tip)] };
     }
     const { base, mergeBase: mb } = await mergeBase(src.dir, src.bases, src.head || 'HEAD');
     const commits = await branchCommits(src.dir, mb, src.head || 'HEAD');
