@@ -135,6 +135,61 @@ test('#287 the same field changed on both sides: the save is refused with the re
   assert.equal(itemWith(stored(ws, p.id).stages, 282).inputs.model, 'haiku');
 });
 
+test('#287 a save whose read is no longer known (more than 50 writes since) is refused, nothing written', async (t) => {
+  const { api, ws, p, read } = await evidence(t, 'stale-forgotten');
+  for (let n = 0; n < 51; n++) {
+    const now = clone(stored(ws, p.id).stages);
+    now[1].note = `outside write ${n}`;
+    roadmaps.saveStages(ws.backlog, p.id, now);
+  }
+  const before = stored(ws, p.id);
+  const form = clone(read.stages);
+  form[0].items[0].inputs = { model: 'sonnet' };
+  const out = await api['roadmap:save']({ projectId: p.id, stages: form, label: 'Edited the inputs of #282 + #284', base: read.updatedAt });
+  assert.match(out?.conflict?.reason || '', /no longer known/, JSON.stringify(out?.conflict));
+  const after = stored(ws, p.id);
+  assert.equal(after.updatedAt, before.updatedAt, 'the file was not written');
+  assert.equal(itemWith(after.stages, 282).inputs.model, 'opus');
+});
+
+test('#287 two writes in a row get strictly increasing updatedAt values, so a save based on the first is told apart', async (t) => {
+  const { ws, p } = await evidence(t, 'increasing');
+  const now = clone(stored(ws, p.id).stages);
+  now[1].note = 'a';
+  roadmaps.saveStages(ws.backlog, p.id, now);
+  const first = stored(ws, p.id).updatedAt;
+  now[1].note = 'b';
+  roadmaps.saveStages(ws.backlog, p.id, now);
+  const second = stored(ws, p.id).updatedAt;
+  assert.ok(Date.parse(second) > Date.parse(first), `${second} is after ${first}`);
+});
+
+// ---- the Oracle's regroup with a base -------------------------------------------------------------------
+
+test('#287 an Oracle roadmap.regroup based on an older read applies only its change: an issue appended since stays', async (t) => {
+  const { api, ws, p, read, outside } = await evidence(t, 'oracle-regroup-stale');
+  const stages = clone(read.stages);
+  await outside((now) => { now[0].items[0].issues.push(285); });
+  stages[1].name = 'Later';
+  const out = await api['po:request']({ projectId: p.id, kind: 'roadmap.regroup', params: { stages, base: read.updatedAt }, reason: 'test', from: 'oracle', ref: 'regroup-stale', mock: true });
+  assert.equal(out.ok, true, out.error);
+  const now = stored(ws, p.id).stages;
+  assert.deepEqual(now.map((s) => s.name), ['One', 'Later']);
+  assert.deepEqual([...numbersIn(itemWith(now, 282))].sort(), [282, 284, 285], 'the issue appended elsewhere is kept');
+});
+
+test('#287 an Oracle roadmap.regroup whose stage was removed since is refused with the reason, nothing written', async (t) => {
+  const { api, ws, p, read, outside } = await evidence(t, 'oracle-regroup-gone');
+  const stages = clone(read.stages);
+  await outside((now) => { now.splice(0, 1); });
+  const before = stored(ws, p.id);
+  stages[0].name = 'Renamed';
+  const out = await api['po:request']({ projectId: p.id, kind: 'roadmap.regroup', params: { stages, base: read.updatedAt }, reason: 'test', from: 'oracle', ref: 'regroup-gone', mock: true });
+  assert.equal(out.ok, false);
+  assert.match(out.error || '', /Nothing was saved/);
+  assert.equal(stored(ws, p.id).updatedAt, before.updatedAt, 'the file was not written');
+});
+
 // ---- as before ----------------------------------------------------------------------------------------
 
 test('#287 a fresh save (base equal to the stored updatedAt) replaces the stages as before, several changes at once', async (t) => {

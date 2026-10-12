@@ -46,6 +46,16 @@ test('#287 merge: an issue taken out of an item goes, one appended elsewhere sta
   assert.deepEqual(numbers(out.stages[0].items[0]), [1, 6]);
 });
 
+test('#287 merge: the same issue added to one item on both sides is in it once', () => {
+  const edited = clone(read());
+  edited[0].items[0].issues.push({ number: 9 });
+  const current = clone(read());
+  current[0].items[0].issues.push({ number: 9 });
+  const out = mergeEdit(read(), edited, current);
+  assert.ok(out.ok, out.reason);
+  assert.deepEqual(numbers(out.stages[0].items[0]), [1, 9]);
+});
+
 test('#287 merge: inputs merge by key; a new stage of the edit comes after the stage before it', () => {
   const edited = clone(read());
   edited[0].items[0].inputs = { model: 'sonnet' };

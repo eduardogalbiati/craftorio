@@ -23,7 +23,7 @@ const settle = () => new Promise((r) => setTimeout(r, 0));
 const SHOW_ALL = { showAll: true, since: 'total' };
 
 // the globals backlog-roadmap.js needs (the same stubs as test/renderer-backlog-roadmap.test.js)
-function roadmapGlobals({ saveRoadmap, listWorkflows } = {}) {
+function roadmapGlobals({ saveRoadmap, listWorkflows, choiceDialog, startRoadmap } = {}) {
   return {
     esc,
     state: {},
@@ -31,7 +31,7 @@ function roadmapGlobals({ saveRoadmap, listWorkflows } = {}) {
     devMode: () => false,
     confirmDialog: async () => true,
     keptWorkDialog: async () => null,
-    choiceDialog: async () => null,
+    choiceDialog: choiceDialog || (async () => null),
     fmtDur: (ms) => (ms == null ? 'unknown' : `${Math.round(ms / 1000)}s`),
     robotAvatar: () => '<svg class="robot"></svg>',
     agentLabel: (agent) => agent,
@@ -43,6 +43,7 @@ function roadmapGlobals({ saveRoadmap, listWorkflows } = {}) {
     api: {
       listWorkflows: listWorkflows || (async () => []),
       saveRoadmap: saveRoadmap || (async (projectId, stages) => ({ roadmap: { state: 'planned', stages } })),
+      startRoadmap: startRoadmap || (async () => ({ roadmap: { state: 'running', stages: [] } })),
     },
   };
 }
@@ -63,7 +64,7 @@ function loadRoadmap(opts = {}) {
   vm.createContext(sandbox);
   for (const m of MODULES) vm.runInContext(m, sandbox);
   vm.runInContext(roadmapSrc, sandbox);
-  return { BacklogRoadmap: sandbox.BacklogRoadmap, saved };
+  return { BacklogRoadmap: sandbox.BacklogRoadmap, saved, sandbox };
 }
 
 function makeCtx(projectId = 'p1') {
@@ -149,6 +150,48 @@ test('#287 a refused save keeps the Edit form open with the values the owner typ
   assert.equal(BacklogRoadmap.busy(), true, 'the form is still open');
   const html = BacklogRoadmap.html(fresh, () => {}, SHOW_ALL);
   assert.match(html, /data-rm-field="language"[^>]*value="python"/, 'the typed value, not the stored "go"');
+});
+
+const GONE = 'Stage "One" was removed elsewhere. Nothing was saved.';
+
+test('#287 a refused save whose item is gone shows the "Not saved" box with the reason; Dismiss clears it', async () => {
+  const gone = { roadmap: { state: 'planned', updatedAt: T2, stages: [{ id: 'st2', name: 'Two', note: '', items: [it2()] }] }, issues: [] };
+  const { BacklogRoadmap } = loadRoadmap({ answer: () => ({ ...gone, conflict: { reason: GONE } }) });
+  const ctx = makeCtx();
+  const data = dataAt(T1);
+  await BacklogRoadmap.onClick({ target: target('[data-rm-edit]', 'it1', 0) }, ctx, data);
+  const form = formOf([{ dataset: { rmField: 'language' }, type: 'select-one', value: 'python' }]);
+  await BacklogRoadmap.onClick({ target: target('[data-rm-save]', 'it1', 0, { form }) }, ctx, data);
+  const html = BacklogRoadmap.html(gone, () => {}, SHOW_ALL);
+  assert.match(html, /data-testid="roadmap-save-conflict"/, 'the "Not saved" box shows');
+  assert.ok(html.includes(esc(GONE)), 'with the reason');
+  await BacklogRoadmap.onClick({ target: target('[data-rm-conflict-dismiss]', null, 0) }, ctx, gone);
+  assert.doesNotMatch(BacklogRoadmap.html(gone, () => {}, SHOW_ALL), /roadmap-save-conflict/, 'Dismiss clears it');
+});
+
+test('#287 Start with items that push: "Switch them" refused because the roadmap changed elsewhere starts nothing and shows the reason', async () => {
+  const list = [{ file: 'software-development.yaml', name: 'Software development', merge: 'remote' }, { file: 'software-development-local-hero.yaml', name: 'Software development (local)', merge: 'local' }];
+  const starts = [];
+  const item = { id: 'it1', status: 'planned', workflow: 'software-development.yaml', workflowName: 'Software development', issues: [issue(1)] };
+  const data = { roadmap: { state: 'planned', updatedAt: T1, stages: [{ id: 'st1', name: '', note: '', items: [item] }] }, issues: [] };
+  const fresh = { roadmap: { ...data.roadmap, updatedAt: T2 }, issues: [] };
+  const { BacklogRoadmap, saved, sandbox } = loadRoadmap({
+    listWorkflows: async () => list,
+    choiceDialog: async () => 'switch',
+    startRoadmap: async (...args) => { starts.push(args.length); return fresh; },
+    answer: () => ({ ...fresh, conflict: { reason: REASON } }),
+  });
+  sandbox.state.settings = { defaultWorkflow: null };
+  sandbox.state.workflows = list;
+  BacklogRoadmap.html(data, () => {}, SHOW_ALL);
+  await settle();
+  const ctx = makeCtx();
+  const start = { dataset: { rm: 'start' }, closest: (sel) => (sel === '[data-rm]' ? start : null) };
+  await BacklogRoadmap.onClick({ target: start }, ctx, data);
+  assert.equal(saved.length, 1, 'the switch was sent');
+  assert.equal(saved[0][3], T1, 'with the updatedAt read');
+  assert.equal(starts.length, 0, 'nothing starts');
+  assert.ok(ctx._calls.setError.some((m) => m.includes(REASON)), `the reason is shown: ${JSON.stringify(ctx._calls.setError)}`);
 });
 
 // ---- the notice on the open form -------------------------------------------------------------------
