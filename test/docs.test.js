@@ -64,15 +64,14 @@ test('the generated code map adds one row per view folder, listing only its .js/
   assert.doesNotMatch(map, /readme\.md/);
 });
 
-// A temporary copy of only what the generator reads (skills/, docs/screens/, README.md): editing
-// one skill's summary there must not touch the real repository's files.
+// A temporary copy of only what the generator reads (skills/, docs/, README.md): editing one
+// skill's summary there must not touch the real repository's files. All of docs/ (#248, #251):
+// the README fragments and the engine topics are generator inputs too.
 function tmpDocsRoot(t) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'docs-root-'));
   t.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
   fs.cpSync(path.join(root, 'skills'), path.join(tmp, 'skills'), { recursive: true });
-  fs.mkdirSync(path.join(tmp, 'docs'));
-  fs.cpSync(path.join(root, 'docs', 'screens'), path.join(tmp, 'docs', 'screens'), { recursive: true });
-  fs.cpSync(path.join(root, 'docs', 'features'), path.join(tmp, 'docs', 'features'), { recursive: true });
+  fs.cpSync(path.join(root, 'docs'), path.join(tmp, 'docs'), { recursive: true });
   fs.copyFileSync(path.join(root, 'README.md'), path.join(tmp, 'README.md'));
   return tmp;
 }
