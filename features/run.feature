@@ -127,3 +127,60 @@ Feature: Runs and gates
     And I open the chat of the run "int00288" from the list
     And I click Resume in the run chat
     Then the resume dialog opens with the step "Developer check" preselected
+
+  # ---- #301: the Warm Up step of AI Development (local hero) ----------------------------------------
+  # A read-only agent step "Warm Up" (step warm_up, agent mapper) maps the code before Develop. It is
+  # an agent step like the others: no new screen.
+
+  # A simulated run of ai-development-local-hero goes acceptance tests, red check, Warm Up, Develop,
+  # then stops at its "Developer check" gate
+  @issue-301
+  Scenario: A simulated AI Development run shows Warm Up right before Develop, run by the mapper
+    Given the app is open
+    When I choose the workflow "ai-development-local-hero" in the Start panel
+    And I start a simulated run with the task "Add a /health endpoint"
+    Then a gate card waits for my approval
+    And the run's steps show "Warm Up" right before "Develop"
+    And the run's step "Warm Up" is run by the agent "Mapper"
+    When I switch the run to its chat
+    Then the "run chat steps" shows the step "Warm Up"
+
+  # The run "-wup00301" is seeded finished: its Warm Up failed (the mapper crashed), Develop ran
+  # after it, and the run succeeded
+  @issue-301
+  Scenario: When Warm Up fails, the run goes on to Develop
+    Given the app is open
+    And the demo project has a finished AI Development run "wup00301" whose Warm Up failed
+    When I open "Runs" in the sidebar
+    And I search the runs for "wup00301"
+    Then the run list row of "wup00301" shows the status "Succeeded" with the id "success"
+    When I open the chat of the run "wup00301" from the list
+    Then the run chat says that "Warm Up" failed
+    And the run chat shows the step "Develop" after the failure of "Warm Up"
+
+  # ---- #304: the affected suite of AI Development (local hero) --------------------------------------
+  # The suite step runs with scope affected: the affected test files first, then (when they pass) the
+  # whole suite once. The run "-sui00304" is seeded finished: its suite ran test/roadmap.test.js
+  # ("imports src/roadmap.js", log logs/suite-1.log), then the whole suite (logs/suite-1-full.log).
+  # "The run report" is read here as Analytics › Run (its Suite rounds table).
+
+  @issue-304
+  Scenario: The suite step's card shows the affected scope, why each test file ran, and the full run's log
+    Given the app is open
+    And the demo project has a finished AI Development run "sui00304" whose suite ran the affected tests, then the whole suite
+    When I open "Runs" in the sidebar
+    And I search the runs for "sui00304"
+    And I view the run "sui00304" from the list
+    Then the "Suite" step card shows that the affected tests ran
+    And the "Suite" step card explains the selection with "imports src/roadmap.js"
+    And the "Suite" step card links the log of the whole suite's run
+
+  @issue-304
+  Scenario: The run report shows the suite's scope and selection
+    Given the app is open
+    And the demo project has a finished AI Development run "sui00304" whose suite ran the affected tests, then the whole suite
+    When I open "Runs" in the sidebar
+    And I search the runs for "sui00304"
+    And I open the run "sui00304" in Analytics from the list
+    Then the run report's suite round shows that the affected tests ran
+    And the run report's suite round explains the selection with "imports src/roadmap.js"

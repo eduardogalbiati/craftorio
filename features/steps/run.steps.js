@@ -1,6 +1,7 @@
 // Steps of features/run.feature (#222): the Start panel, a simulated run of the demo project, its
 // gate card; the "Developer effort" field next to "Developer model" (#286); the chat of a run
-// interrupted at a gate (#288: the note "Interrupted at <step>" and its Resume button). Locators are
+// interrupted at a gate (#288: the note "Interrupted at <step>" and its Resume button); AI
+// Development's Warm Up step (#301) and its affected suite's card and run report (#304). Locators are
 // roles and data-testid only (skills/ui-conventions).
 
 const fs = require('fs');
@@ -305,4 +306,188 @@ Then('the resume dialog opens with the step {string} preselected', async ({ e2e 
   await expect(select).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(select).toHaveValue(stepIdOf(name));
   await expect.poll(() => select.evaluate((el) => el.selectedOptions[0]?.textContent.trim() || '')).toMatch(new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`));
+});
+
+// ---- #301 / #304: AI Development (local hero), its Warm Up step and its affected suite -------------
+// #301: a read-only agent step "Warm Up" (warm_up, agent mapper) before Develop, shown like any agent
+// step: the Run screen's steps list (data-testid run-steps, NEW: the #steps box; one listitem per step,
+// its first line the step's readable name, its second the agent's), the run chat's step tags. A failed
+// Warm Up is a "Warm Up failed: ..." line of the chat (run-chat-fail, NEW), and Develop runs after it.
+// #304: the suite step (scope affected) on the Run screen has a card (data-testid run-suite-card, NEW)
+// with its scope (run-suite-scope, NEW: says the affected tests ran), why each file ran
+// (run-suite-selection, NEW: output.selection, e.g. "imports src/roadmap.js") and, when the whole
+// suite ran after them, a link to that run's log (run-suite-full-log, NEW). Analytics › Run, the run
+// report, gives each suite round a row (an-suite-round, NEW) with the same scope and selection.
+const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const AI_DEV = 'ai-development-local-hero';
+
+// A finished simulated ai-development-local-hero run of the demo project (events.jsonl, summary.json
+// and the given files), days back, written like scripts/screenshot.js demoRoadmapRuns. `steps`:
+// (at) => the events between workflow.started and workflow.finished. The run list reads the runs
+// folder when the screen opens, so no reload is needed.
+function seedAiDevRun(e2e, suffix, task, steps, files = {}) {
+  const min = 6e4;
+  const start = Date.now() - 2 * 864e5;
+  const runId = `${new Date(start).toISOString().slice(0, 10).replace(/-/g, '')}-101500-${suffix}`;
+  const dir = path.join(e2e.scratch, 'workspace', 'runs', runId);
+  const at = (m) => new Date(start + m * min).toISOString();
+  const projectId = e2e.project.id;
+  const inner = steps(at);
+  const end = Math.max(...inner.map((e) => (Date.parse(e.ts) - start) / min)) + 1;
+  const events = [
+    { ts: at(0), type: 'workflow.started', run_id: runId, workflow: AI_DEV, file: `${AI_DEV}.yaml`, project_id: projectId, mock: true, inputs: { task } },
+    ...inner,
+    { ts: at(end), type: 'workflow.finished', run_id: runId, status: 'success' },
+  ].map((e, i) => ({ seq: i + 1, ...e }));
+  const all = {
+    'events.jsonl': `${events.map((e) => JSON.stringify(e)).join('\n')}\n`,
+    'summary.json': JSON.stringify({
+      run_id: runId, workflow: AI_DEV, project_id: projectId, mock: true, inputs: { task }, status: 'success', started_at: at(0), finished_at: at(end), duration_ms: end * min, sessions: [],
+    }, null, 2),
+    ...files,
+  };
+  for (const [rel, content] of Object.entries(all)) {
+    fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
+    fs.writeFileSync(path.join(dir, rel), content);
+  }
+}
+
+const agentTurn = (at, from, to, step, agent, text) => {
+  const session = { agent, provider: 'claude', model: 'claude-opus-5-5' };
+  return [
+    { ts: at(from), type: 'step.started', step_id: step, step_type: 'agent', agent, visit: 1 },
+    { ts: at(from), type: 'session.opened', session_id: `s-${step}`, session },
+    { ts: at(to), type: 'session.message_received', session_id: `s-${step}`, step_id: step, text, cost_usd: 0.1, duration_ms: (to - from) * 6e4, session },
+  ];
+};
+
+// #301: the mapper crashed: warm_up finished with an error, develop ran after it, the run succeeded
+Given('the demo project has a finished AI Development run {string} whose Warm Up failed', async ({ e2e }, suffix) => {
+  seedAiDevRun(e2e, suffix, `A run whose Warm Up failed (${suffix})`, (at) => [
+    { ts: at(1), type: 'step.started', step_id: 'warm_up', step_type: 'agent', agent: 'mapper', visit: 1 },
+    { ts: at(1), type: 'session.opened', session_id: 's-warm_up', session: { agent: 'mapper', provider: 'claude', model: 'claude-opus-5-5' } },
+    { ts: at(2), type: 'step.finished', step_id: 'warm_up', error: true, duration_ms: 6e4, output: { error: 'mapper crashed (simulated)' } },
+    { ts: at(2), type: 'step.transition', from: 'warm_up', to: 'develop', when: '(sequential)' },
+    ...agentTurn(at, 2, 20, 'develop', 'developer', 'Implemented the task without a map.'),
+    { ts: at(20), type: 'step.finished', step_id: 'develop', duration_ms: 18 * 6e4, output: { summary: 'Implemented the task without a map.' } },
+  ]);
+});
+
+// #304: the suite step's one visit, as the engine records it (src/engine/workflow.js, scope affected):
+// test/roadmap.test.js ran first (logs/suite-1.log), passed, then the whole suite ran
+// (logs/suite-1-full.log); the output keeps the selection and the affected round
+Given('the demo project has a finished AI Development run {string} whose suite ran the affected tests, then the whole suite', async ({ e2e }, suffix) => {
+  const files = ['test/roadmap.test.js'];
+  const selection = {
+    mode: 'affected', files, reasons: { 'test/roadmap.test.js': 'imports src/roadmap.js' }, changed: ['src/roadmap.js'], slow: [],
+    why: 'the 1 affected test file(s) passed; the whole suite runs once before the merge',
+  };
+  seedAiDevRun(e2e, suffix, `A run with an affected suite (${suffix})`, (at) => [
+    ...agentTurn(at, 1, 20, 'develop', 'developer', 'Done.'),
+    { ts: at(20), type: 'step.finished', step_id: 'develop', duration_ms: 19 * 6e4, output: { summary: 'Implemented the task.' } },
+    { ts: at(21), type: 'step.started', step_id: 'suite', step_type: 'suite', visit: 1 },
+    { ts: at(21), type: 'log', level: 'info', kind: 'suite', step_id: 'suite', message: 'suite: 1 test file(s) reach the 1 changed file(s)\n- test/roadmap.test.js: imports src/roadmap.js' },
+    {
+      ts: at(25),
+      type: 'step.finished',
+      step_id: 'suite',
+      duration_ms: 4 * 6e4,
+      output: {
+        kind: 'suite', status: 'pass', round: 1, scope: 'full', command: 'npm test', log: 'logs/suite-1-full.log', exit_code: 0, duration_ms: 3 * 6e4, passed: 412, failed: 0, failures: [], preexisting: [], selection,
+        affected: { command: 'node --test test/roadmap.test.js', log: 'logs/suite-1.log', passed: 9, failed: 0, duration_ms: 6e4, files },
+        message: 'The suite passed in round 1 (`npm test`).',
+      },
+    },
+  ], {
+    'logs/suite-1.log': '$ node --test test/roadmap.test.js   (simulated: nothing was run)\n',
+    'logs/suite-1-full.log': '$ npm test   (simulated: nothing was run)\n',
+  });
+});
+
+// Workflows › Runs, after `I search the runs for`: expands the run's row and clicks a button of it
+async function rowButton(page, fragment, name) {
+  const row = page.locator(`[data-testid="run-list-row"][data-run$="${fragment}"]`).filter({ visible: true }).first();
+  await expect(row).toBeVisible({ timeout: LOAD_TIMEOUT });
+  const button = row.getByRole('button', { name, exact: true });
+  if (!(await button.isVisible())) await row.locator('.pr-row').first().click();
+  await button.click();
+}
+
+When('I view the run {string} from the list', async ({ e2e }, fragment) => {
+  await rowButton(e2e.window, fragment, 'View run');
+});
+
+When('I open the run {string} in Analytics from the list', async ({ e2e }, fragment) => {
+  await rowButton(e2e.window, fragment, 'Open in Analytics');
+  await expect(e2e.window.getByTestId('an-run-header')).toContainText(fragment, { timeout: LOAD_TIMEOUT });
+});
+
+// the Run screen's steps list: each step's lines (its readable name, then its agent or kind)
+const stepLines = async (page) => {
+  const box = visibleTestId(page, 'run-steps');
+  await expect(box.getByRole('listitem').first()).toBeVisible({ timeout: LOAD_TIMEOUT });
+  return box.getByRole('listitem').filter({ visible: true }).evaluateAll((els) => els.map((el) => el.innerText.split('\n').map((l) => l.trim()).filter(Boolean)));
+};
+
+Then('the run\'s steps show {string} right before {string}', async ({ e2e }, first, then) => {
+  await expect.poll(async () => {
+    const names = (await stepLines(e2e.window)).map((l) => l[0]);
+    const i = names.indexOf(first);
+    return i >= 0 && names[i + 1] === then ? 'in order' : names.join(' | ');
+  }, { timeout: LOAD_TIMEOUT }).toBe('in order');
+});
+
+Then('the run\'s step {string} is run by the agent {string}', async ({ e2e }, step, agent) => {
+  await expect.poll(async () => (await stepLines(e2e.window)).find((l) => l[0] === step)?.[1] || '', { timeout: LOAD_TIMEOUT }).toBe(agent);
+});
+
+// the chat's "<step> failed: <error>" line (data-testid run-chat-fail, NEW: runchat.js's `fail` item)
+const failLine = (page, step) => page.getByTestId('run-chat-fail').filter({ visible: true }).filter({ hasText: new RegExp(`^${escRe(step)} failed:`) }).first();
+
+Then('the run chat says that {string} failed', async ({ e2e }, step) => {
+  await expect(failLine(e2e.window, step)).toBeVisible({ timeout: LOAD_TIMEOUT });
+});
+
+Then('the run chat shows the step {string} after the failure of {string}', async ({ e2e }, step, failed) => {
+  const page = e2e.window;
+  const fail = failLine(page, failed);
+  await expect(fail).toBeVisible({ timeout: LOAD_TIMEOUT });
+  const tag = page.getByTestId('run-chat-step').filter({ visible: true }).filter({ hasText: new RegExp(`^${escRe(step)}\\b`) }).last();
+  await expect(tag).toBeVisible({ timeout: LOAD_TIMEOUT });
+  const after = await fail.evaluate((a, b) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING), await tag.elementHandle());
+  expect(after, `the "${step}" step shows after "${failed} failed"`).toBe(true);
+});
+
+// the suite step's card on the Run screen, by the step's readable name
+const suiteCard = (page, step) => page.getByTestId('run-suite-card').filter({ visible: true }).filter({ hasText: step }).first();
+
+Then('the {string} step card shows that the affected tests ran', async ({ e2e }, step) => {
+  const card = suiteCard(e2e.window, step);
+  await expect(card).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(card.getByTestId('run-suite-scope')).toContainText(/affected/i);
+});
+
+Then('the {string} step card explains the selection with {string}', async ({ e2e }, step, why) => {
+  const card = suiteCard(e2e.window, step);
+  await expect(card).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(card.getByTestId('run-suite-selection')).toContainText(why);
+});
+
+// the link names the whole suite's log (logs/suite-<visit>-full.log) in its text or its tooltip
+Then('the {string} step card links the log of the whole suite\'s run', async ({ e2e }, step) => {
+  const link = suiteCard(e2e.window, step).getByTestId('run-suite-full-log');
+  await expect(link).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(link).toBeEnabled();
+  const named = `${await link.textContent()} ${(await link.getAttribute('title')) || ''}`;
+  expect(named, 'the link names the whole suite\'s log').toMatch(/suite-1-full\.log/);
+});
+
+const suiteRound = (page) => page.getByTestId('an-suite-round').filter({ visible: true }).first();
+
+Then('the run report\'s suite round shows that the affected tests ran', async ({ e2e }) => {
+  await expect(suiteRound(e2e.window)).toContainText(/affected/i, { timeout: LOAD_TIMEOUT });
+});
+
+Then('the run report\'s suite round explains the selection with {string}', async ({ e2e }, why) => {
+  await expect(suiteRound(e2e.window)).toContainText(why, { timeout: LOAD_TIMEOUT });
 });
