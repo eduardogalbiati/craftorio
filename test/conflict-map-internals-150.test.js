@@ -6,8 +6,33 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { carry, parsePatch } = require('../src/conflict-map');
+const { execFileSync } = require('child_process');
+const { buildConflictMap, carry, parsePatch } = require('../src/conflict-map');
 const productOwner = require('../src/product-owner');
+
+// Isolated identity on every call: nothing depends on the machine's git config.
+const git = (cwd, ...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'init.defaultBranch=main', '-c', 'core.autocrlf=false', ...args], { cwd, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
+const commit = (cwd, file, text) => {
+  fs.writeFileSync(path.join(cwd, file), text);
+  git(cwd, 'add', file);
+  git(cwd, 'commit', '-q', '-m', `${file}: ${text.trim()}`);
+};
+
+// A conversation holding one plan answer with two decongest fixes, at `at`.
+function decongestConversation(t) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'po-decongest-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const backlogDir = path.join(dir, 'backlog');
+  fs.mkdirSync(backlogDir, { recursive: true });
+  const at = '2026-10-12T10:00:00.000Z';
+  const answer = { summary: '', groups: [], conflicts: [], enrich: [], decongest: [
+    { file: 'src/index.js', line: 3, fix: 'One import per line, sorted.', runs: 7, of: 10 },
+    { file: 'src/renderer/app.js', fix: 'Split it by screen.', runs: 8, of: 10 },
+  ] };
+  fs.writeFileSync(path.join(backlogDir, 'demo.po.jsonl'), `${JSON.stringify({ ts: at, role: 'po', text: '', answer })}\n`);
+  const file = (index, preview, exec = () => 'https://github.com/o/r/issues/9\n') => productOwner.fileDecongest({ backlogDir, projectId: 'demo', runsDir: path.join(dir, 'runs'), at, index, preview, platform: 'github', repo: 'https://github.com/o/r', exec });
+  return { file };
+}
 
 test('parsePatch: a git log -p record gives each file its commit and hunks (a missing count is 1)', () => {
   const text = '\x1eabc123\n\ndiff --git a/src/a.js b/src/a.js\n--- a/src/a.js\n+++ b/src/a.js\n@@ -1 +1,2 @@\n-x\n+y\n+z\n@@ -9,0 +11 @@\n+w\n';
@@ -42,4 +67,50 @@ test('fileDecongest: a preview records the issue command without filing, and the
   assert.match(issue.title, /src\/index\.js:3/);
   assert.match(issue.body, /7 of the last 10 runs/);
   assert.match(issue.body, /One import per line, sorted\./);
+});
+
+test('fileDecongest: a fix filed for real is refused the second time; another fix of the answer can still be filed', async (t) => {
+  const { file } = decongestConversation(t);
+  let calls = 0;
+  const out = await file(0, false, () => { calls += 1; return 'https://github.com/o/r/issues/9\n'; });
+  assert.equal(calls, 1);
+  assert.equal(out.message.decongestFiled.url, 'https://github.com/o/r/issues/9');
+  await assert.rejects(file(0, false, () => { calls += 1; return ''; }), /already filed/);
+  assert.equal(calls, 1);
+  await file(1, false);
+});
+
+test('fileDecongest: a preview does not count as filed: the same fix can be filed for real after it', async (t) => {
+  const { file } = decongestConversation(t);
+  await file(0, true);
+  await file(0, true);
+  const out = await file(0, false);
+  assert.equal(out.message.decongestFiled.preview, undefined);
+  await assert.rejects(file(0, false), /already filed/);
+});
+
+test('fileDecongest: an index the answer does not have is refused', async (t) => {
+  const { file } = decongestConversation(t);
+  await assert.rejects(file(5, true), /no such fix/);
+});
+
+test('buildConflictMap (git fallback): hub lines count only the commits of the window, never older ones', async (t) => {
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'conflict-map-window-'));
+  t.after(() => fs.rmSync(repo, { recursive: true, force: true, maxRetries: 3 }));
+  git(repo, 'init', '-q');
+  // five old commits change line 1 of hub.js, 53 commits touch their own file, then two more change hub.js line 1:
+  // the newest 50 commits hold only the last two hub.js changes
+  for (let n = 1; n <= 5; n++) commit(repo, 'hub.js', `v${n}\n`);
+  for (let n = 1; n <= 53; n++) commit(repo, `f${n}.txt`, `${n}\n`);
+  commit(repo, 'hub.js', 'v6\n');
+  commit(repo, 'hub.js', 'v7\n');
+  const map = await buildConflictMap({ runs: [], repo });
+  assert.equal(map.source, 'git');
+  assert.equal(map.runIds.length, 50);
+  assert.equal(map.files.find((f) => f.file === 'hub.js').runs, 2);
+  const hub = map.lines.find((l) => l.file === 'hub.js' && l.line === 1);
+  assert.equal(hub?.runs, 2);
+  const window = new Set(map.runIds);
+  const outside = map.lines.flatMap((l) => l.runIds.filter((id) => !window.has(id)).map((id) => `${l.file}:${l.line} ${id}`));
+  assert.deepEqual(outside, []);
 });

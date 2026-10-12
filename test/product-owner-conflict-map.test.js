@@ -126,6 +126,35 @@ test('mockAnswer: a conflict map with no hot spots gives an empty decongest', ()
   assert.deepEqual(answer.decongest, []);
 });
 
+// Issues of four areas (four groups); #1, #2 and #3 name the hot src/index.js, #4 does not.
+const issueOf = (number, area, file) => ({ number, state: 'open', title: `Change ${area}`, labels: [{ name: `area:${area}` }], body: `Change ${file} for ${area}.${LONG}` });
+const FOUR = { projectId: 'demo', issues: [issueOf(1, 'a', 'src/index.js'), issueOf(2, 'b', 'src/index.js'), issueOf(3, 'c', 'src/index.js'), issueOf(4, 'd', 'src/other.js')] };
+// Quality-leaning: two runs per stage, so #1 + #2 start in stage 1 and #3 + #4 in stage 2
+const QUALITY_LEANING = 4;
+
+test('mockAnswer: three groups of one stage naming the same hot file end in three different stages, each move a conflict naming the file', () => {
+  const data = { projectId: 'demo', issues: FOUR.issues.slice(0, 3) };
+  const answer = productOwner.mockAnswer({ data, calibration: SPEED, conflictMap: hotMap() });
+  assert.equal(new Set([1, 2, 3].map((n) => stageOf(answer, n))).size, 3);
+  const named = answer.conflicts.filter((c) => c.files.includes('src/index.js'));
+  assert.ok(named.length >= 2, `conflicts naming src/index.js: ${named.length}`);
+});
+
+test('mockAnswer: a group moved to a stage where another group names the same hot file moves on again; a group without it keeps its stage', () => {
+  const plain = productOwner.mockAnswer({ data: FOUR, calibration: QUALITY_LEANING });
+  assert.deepEqual([1, 2, 3, 4].map((n) => stageOf(plain, n)), [1, 1, 2, 2]);
+  const answer = productOwner.mockAnswer({ data: FOUR, calibration: QUALITY_LEANING, conflictMap: hotMap() });
+  assert.equal(new Set([1, 2, 3].map((n) => stageOf(answer, n))).size, 3);
+  assert.equal(stageOf(answer, 4), 2);
+});
+
+test('normalizeAnswer of the simulated answer keeps the groups sharing a hot file in different stages', () => {
+  const answer = productOwner.mockAnswer({ data: FOUR, calibration: QUALITY_LEANING, conflictMap: hotMap() });
+  const out = productOwner.normalizeAnswer(answer, { issues: FOUR.issues, history: [], workflows: [{ file: 'software-development.yaml' }], calibration: QUALITY_LEANING, mock: true });
+  const stage = (n) => out.groups.find((g) => g.issues.includes(n)).stage;
+  assert.equal(new Set([1, 2, 3].map(stage)).size, 3);
+});
+
 // ---- normalizeAnswer --------------------------------------------------------------------------------------
 
 const CTX = { issues: DATA.issues, history: [], workflows: [{ file: 'software-development.yaml' }] };
@@ -155,6 +184,24 @@ test('normalizeAnswer: decongest entries without a file are dropped', () => {
 test('normalizeAnswer: an answer without decongest gets an empty one', () => {
   const out = productOwner.normalizeAnswer({ summary: '', groups: [] }, CTX);
   assert.deepEqual(out.decongest, []);
+});
+
+test('normalizeAnswer: decongest keeps at most 20 fixes', () => {
+  const decongest = Array.from({ length: 25 }, (_, n) => ({ file: `src/f${n}.js`, fix: 'Split it.' }));
+  const out = productOwner.normalizeAnswer({ summary: '', groups: [], decongest }, CTX);
+  assert.equal(out.decongest.length, 20);
+  assert.equal(out.decongest[0].file, 'src/f0.js');
+  assert.equal(out.decongest[19].file, 'src/f19.js');
+});
+
+test('normalizeAnswer: a decongest line, runs or of that is not a positive integer is left out', () => {
+  const raw = { summary: '', groups: [], decongest: [
+    { file: 'a.js', fix: 'x', line: 2.5, runs: 'many', of: 0 },
+    { file: 'b.js', fix: 'y', line: -1, runs: 7, of: 10 },
+  ] };
+  const out = productOwner.normalizeAnswer(raw, CTX);
+  assert.deepEqual(out.decongest.map((d) => [d.file, 'line' in d, 'runs' in d, 'of' in d]), [['a.js', false, false, false], ['b.js', false, true, true]]);
+  assert.deepEqual([out.decongest[1].runs, out.decongest[1].of], [7, 10]);
 });
 
 // ---- the skill --------------------------------------------------------------------------------------------
