@@ -193,6 +193,21 @@ test('#291 the Releases filter combines with the epic filter', () => {
   assert.equal(H.itemShown(html, 'i4'), false, 'i4 is not in 1.0.0');
 });
 
+test('#291 a release chosen whose runs the date range hides: the empty state says so and "Show all time" sets the range to Total', async () => {
+  const R = H.loadRoadmap().R;
+  const d = fixture();
+  const old = H.iso(H.NOW - 10 * H.DAY);
+  for (const st of d.roadmap.stages) for (const it of st.items) it.origin = old;
+  const html = R.html(d, () => {}, { showAll: true, since: '24h', release: '1.0.0' });
+  assert.equal(H.stageCount(html), 0);
+  const empty = must(byTestId(html, 'roadmap-release-empty')[0], 'a roadmap-release-empty state');
+  assert.match(H.visibleText(empty.inner), /date range hides/);
+  assert.equal(H.visibleText(empty.inner).includes('Show all items'), false);
+  const { ctx, calls } = H.makeCtx();
+  await R.onClick(H.clickOn(html, (e) => 'data-rm-all-time' in e.attrs), ctx, d);
+  assert.deepEqual(calls.since, ['total']);
+});
+
 test('#291 a release with no stage in the roadmap: its block and line alone, with its run count', () => {
   const html = H.loadRoadmap().R.html(fixture(), () => {}, { showAll: true, since: 'total', release: '0.9.0' });
   assert.equal(H.stageCount(html), 0);

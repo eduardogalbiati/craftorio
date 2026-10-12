@@ -54,3 +54,9 @@ test('roadmapReleases: a shipped release gets its release run\'s stations; relea
   assert.equal(out[1].runCost, 2.46);
   assert.ok(Array.isArray(out[1].runs), 'a pending release holds the next release\'s runs');
 });
+
+test('roadmapReleases: a release run started without a version is "(no version)", never the filter\'s "next"', (t) => {
+  const { svc } = setup(t, { releases: [] });
+  const out = svc.roadmapReleases(project, [relRun('rel-x', { status: 'running', inputs: {} })]).releases;
+  assert.deepEqual(out.map((x) => [x.version, x.runId]), [['(no version)', 'rel-x']]);
+});

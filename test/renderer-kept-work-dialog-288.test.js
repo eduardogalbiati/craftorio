@@ -106,6 +106,23 @@ test('#288 kept-work dialog: Resume resumes the old run at its stopped step at o
   assert.equal(modal.classList.contains('hidden'), true, 'the dialog closed');
 });
 
+test('#288 kept-work dialog: Resume with a decided human gate before the stopped step opens Resume from step… on that step with the reason, without resuming', async () => {
+  const blocked = { runId: 'r-old-282', steps: [
+    { id: 'develop', type: 'agent', gate: false, visits: 1, blockedBy: null, confirm: null },
+    { id: 'evidence', type: 'agent', gate: false, visits: 1, blockedBy: 'approve_plan', confirm: null },
+  ], sessions: [], handoffs: [] };
+  const { modal, answer, resumeDialogs, resumeRuns } = await openKept({ api: { resumeOptions: async () => blocked } });
+  buttonNamed(modal, 'Resume').click();
+  await settle(20);
+  assert.equal(answer(), 'resume');
+  assert.equal(resumeRuns().length, 0, 'api.resumeRun is not called');
+  const calls = resumeDialogs();
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0][0], 'r-old-282');
+  assert.equal(calls[0][1]?.step, 'evidence');
+  assert.match(calls[0][1]?.note || '', /human gate/, 'a one-line reason');
+});
+
 test('#288 kept-work dialog: "choose another step…" opens Resume from step… for the old run, without resuming', async () => {
   const { modal, resumeDialogs, resumeRuns } = await openKept();
   const link = modal.querySelector('[data-testid="kept-work-choose-step"]');

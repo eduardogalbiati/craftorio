@@ -156,6 +156,52 @@ test('#288 a failed run keeps its end note with "Resume from step…" and gets n
   assert.equal(q(box, '[data-testid="runchat-interrupted-note"]') === null, true);
 });
 
+// ---- a run alive in another app window (its row's runningElsewhere, #112) ---------------------------
+
+const elsewhereApi = { listRuns: async () => ({ runs: [{ id: RUN, runId: RUN, status: 'running', runningElsewhere: { pid: 4242, host: 'DESKTOP-2' } }] }) };
+const pillStatus = (page) => {
+  const pill = page.$('#rc-status');
+  return pill.dataset?.status ?? pill.getAttribute('data-status');
+};
+
+test('#288 a run alive in another app window is not interrupted: its chat says to follow it there, offers no Resume, its pill stays running', async () => {
+  const { page, box } = await openChat({ api: elsewhereApi });
+  const note = q(box, '[data-testid="runchat-elsewhere-note"]');
+  assert.ok(note, 'the note [data-testid="runchat-elsewhere-note"]');
+  assert.match(textOf(note), /another app window/);
+  assert.ok(textOf(note).includes('DESKTOP-2'), textOf(note));
+  assert.equal(q(box, '[data-testid="runchat-interrupted-note"]') === null, true);
+  assert.equal(q(box, '[data-testid="runchat-resume"]') === null, true);
+  assert.equal(pillStatus(page), 'running');
+});
+
+test('#288 a gate waiting in another app window says to answer it there, its choices disabled with that reason', async () => {
+  const { box } = await openChat({ gate: true, api: elsewhereApi });
+  const g = gateCard(box);
+  assert.ok(q(g, '[data-testid="runchat-gate-elsewhere"]'), 'the gate says it waits in another app window');
+  assert.equal(textOf(g).includes('Waiting for an answer.'), false);
+  assert.equal(q(g, '[data-testid="runchat-resume"]') === null, true, 'no Resume on the card');
+  const buttons = choiceButtons(g);
+  assert.equal(buttons.length > 0, true);
+  for (const b of buttons) {
+    assert.equal(b.disabled, true, `${textOf(b)} is disabled`);
+    assert.match(b.getAttribute('title') || '', /another app window/, `${textOf(b)} says why in its title`);
+  }
+});
+
+test('#288 the run list cannot be read: the run reads as interrupted', async () => {
+  const { page, box } = await openChat({ api: { listRuns: async () => { throw new Error('index.db locked'); } } });
+  assert.ok(q(box, '[data-testid="runchat-interrupted-note"]'), 'the interrupted note');
+  assert.equal(q(box, '[data-testid="runchat-elsewhere-note"]') === null, true);
+  assert.equal(pillStatus(page), 'interrupted');
+});
+
+test('#288 a run row that is not running elsewhere (no runningElsewhere) reads as interrupted', async () => {
+  const { box } = await openChat({ api: { listRuns: async () => ({ runs: [{ id: RUN, runId: RUN, status: 'running' }] }) } });
+  assert.ok(q(box, '[data-testid="runchat-interrupted-note"]'));
+  assert.equal(q(box, '[data-testid="runchat-elsewhere-note"]') === null, true);
+});
+
 // ---- Resume from step… with a preselected step -------------------------------------------------------
 
 test('#288 openResumeDialog(runId, { step }) preselects that step over the suggested one', async () => {
