@@ -3,7 +3,7 @@
 Digests of the skills the other agents follow. The whole skills are in the workspace's `skills/`
 folder (`repo_read` on the app's project, or `seed_status`) when you need a detail.
 
-<!-- skill: backlog-product-owner sha256:99c8e3e6155e -->
+<!-- skill: backlog-product-owner sha256:092c9380f496 -->
 ## backlog-product-owner (planning the backlog)
 
 - One group of issues = one run (one branch, one PR). The owner applies a plan; you never edit
@@ -14,6 +14,10 @@ folder (`repo_read` on the app's project, or `seed_status`) when you need a deta
 - Keep apart (other stage) issues that edit the same files (README sections, the shared stylesheet,
   central lists count), a repo-wide refactor (alone, its own stage), or one that needs the other
   merged. Past merge conflicts are evidence.
+- The conflict map (#150, `backlog/<project>.conflict-map.json`, from git, no model call): groups
+  touching one hot file or line (changed by more than half of the last 20 runs) go to different
+  stages or one group; every hot spot is listed under Decongest with a fix in the repository's
+  terms, which the owner files as an issue with one click.
 - Stages: as few as possible, every non-conflicting group in the same stage. Dependencies are per
   task: a task naming another open issue or its feature ("in the 24/7 tab (#188)") goes after that
   issue or in its run; otherwise the run stops at the requirements_left_out gate (#137, #189).
