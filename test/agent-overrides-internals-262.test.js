@@ -128,3 +128,66 @@ test('#262 listWorkflows: each agent\'s runs_on resolves its templates with the 
   assert.deepEqual(wf.agents.reviewer.runs_on, { provider: 'claude', model: 'claude-sonnet-5', effort: 'high' });
   assert.deepEqual(wf.providers, { claude: 'claude-code', codex: 'codex-cli' });
 });
+
+// ---- review findings (#262): overrides that must be refused, Settings chains, limits after a fallback ----
+
+const newRun = (t, options) => {
+  const { WorkflowRun } = require('../src/engine/workflow');
+  const { dir, file } = fixture(t);
+  return new WorkflowRun({ file, inputs: {}, mock: true, runsDir: path.join(dir, 'runs'), skillsDirs: [], ...options });
+};
+
+// whatever a failing test leaves on Object / Object.prototype is removed, so it cannot leak into the next tests
+function cleanPrototypes(t) {
+  t.after(() => {
+    for (const k of ['provider', 'model', 'effort']) { delete Object.prototype[k]; delete Object[k]; }
+  });
+}
+
+test('#262 an override keyed "__proto__" is refused and leaves Object.prototype untouched', (t) => {
+  cleanPrototypes(t);
+  // JSON.parse keeps "__proto__" as an own key, as an IPC payload or a saved roadmap item would
+  const agentOverrides = JSON.parse('{"__proto__":{"provider":"codex","model":"gpt-6-luna"}}');
+  assert.throws(() => newRun(t, { agentOverrides }), /__proto__/);
+  assert.equal(({}).model, undefined);
+  assert.equal(({}).provider, undefined);
+});
+
+test('#262 an override keyed "constructor" is refused and leaves Object untouched', (t) => {
+  cleanPrototypes(t);
+  assert.throws(() => newRun(t, { agentOverrides: { constructor: { model: 'gpt-6-luna' } } }), /constructor/);
+  assert.equal(Object.model, undefined);
+});
+
+test('#262 an override whose model is only whitespace is refused instead of running the agent with no model', (t) => {
+  assert.throws(() => newRun(t, { agentOverrides: { reviewer: { model: '   ' } } }), /reviewer/);
+});
+
+test('#262 a malformed Settings fallback entry (no provider:model) is skipped with a warning in the run log', async (t) => {
+  const { events } = await runRecorded(t, { fallbacks: { claude: ['gpt-6-luna', 'codex:gpt-6-luna'] }, mockSequences: { usage_limits: ['claude:claude-opus-5-5'] } });
+  assert.equal(events.find((e) => e.type === 'workflow.finished').status, 'success');
+  assert.equal(events.filter((e) => e.type === 'agent.fallback' && e.agent === 'writer').map((e) => e.to).join(), 'codex:gpt-6-luna');
+  const warned = events.filter((e) => e.type === 'log' && e.level === 'warn' && /"gpt-6-luna"/.test(e.message || ''));
+  assert.equal(warned.length >= 1, true, 'a warning names the malformed entry');
+});
+
+test('#262 an agent whose model is a template over an input runs on the input\'s value when no override is sent', async (t) => {
+  const { events } = await runRecorded(t, { inputs: { writer_model: 'claude-fable-5-1' }, agentOverrides: {} });
+  assert.equal(events.find((e) => e.type === 'workflow.finished').status, 'success');
+  const started = events.find((e) => e.type === 'workflow.started');
+  assert.equal(started.agents.writer.model, 'claude-fable-5-1');
+  assert.equal(started.agent_overrides, undefined);
+  assert.equal(events.find((e) => e.type === 'session.message_received' && e.step_id === 'write').session.model, 'claude-fable-5-1');
+});
+
+test('#262 after a fallback the turn timeout follows the new model\'s timeout_factor, not the old one\'s', async (t) => {
+  const { events } = await runRecorded(t, {
+    fallbacks: { claude: ['codex:gpt-6-luna'] },
+    models: { 'claude-opus-5-5': { timeout_factor: 1.5 } },
+    mockSequences: { usage_limits: ['claude:claude-opus-5-5'] },
+  });
+  assert.equal(events.find((e) => e.type === 'workflow.finished').status, 'success');
+  const timeouts = events.filter((e) => e.type === 'session.message_sent' && e.step_id === 'write').map((e) => e.timeout_ms);
+  // 30m default: 45m on claude-opus-5-5 (x1.5), then 30m on gpt-6-luna (no factor)
+  assert.deepEqual(timeouts, [2700000, 1800000]);
+});
