@@ -314,7 +314,7 @@ function validateFallbacks(v, what, providers) {
   for (const entry of v) {
     const m = FALLBACK_ENTRY.exec(String(entry ?? ''));
     if (typeof entry !== 'string' || !m) throw new Error(`${what}: fallbacks entry "${entry}" must be "<provider>:<model>", e.g. "codex:gpt-6-luna".`);
-    if (providers && !providers[m[1]]) throw new Error(`${what}: fallbacks entry "${entry}" names provider "${m[1]}", which the workflow's providers do not define.`);
+    if (providers && !Object.hasOwn(providers, m[1])) throw new Error(`${what}: fallbacks entry "${entry}" names provider "${m[1]}", which the workflow's providers do not define.`);
   }
 }
 
@@ -1058,17 +1058,21 @@ class WorkflowRun extends EventEmitter {
 
   // #262: this run's provider / model / effort of an agent (the constructor's agentOverrides), over the
   // workflow's resolved values; this.wf is this run's own copy, so the file and the next runs keep theirs.
+  // Names are looked up as own keys only: "__proto__" or "constructor" must not reach Object.prototype.
   applyAgentOverrides(overrides) {
     this.agentOverrides = {};
     for (const [name, o] of Object.entries(overrides || {})) {
-      if (!this.wf.agents[name]) throw new Error(`Agent override: the workflow has no agent "${name}".`);
+      if (!Object.hasOwn(this.wf.agents, name)) throw new Error(`Agent override: the workflow has no agent "${name}".`);
       const a = this.wf.agents[name];
       const clean = {};
       if (o?.provider) {
-        if (!this.wf.providers?.[o.provider]) throw new Error(`Agent override of "${name}": provider "${o.provider}" is not defined in the workflow.`);
+        if (!Object.hasOwn(this.wf.providers || {}, o.provider)) throw new Error(`Agent override of "${name}": provider "${o.provider}" is not defined in the workflow.`);
         clean.provider = String(o.provider);
       }
-      if (o?.model) clean.model = String(o.model).trim();
+      if (o?.model) {
+        clean.model = String(o.model).trim();
+        if (!clean.model) throw new Error(`Agent override of "${name}": the model must be a model id, not blank.`);
+      }
       if (o && 'effort' in o && o.effort !== undefined) clean.effort = o.effort ? String(o.effort) : '';
       const changed = Object.entries(clean).filter(([k, v]) => (a[k] || '') !== v);
       if (!changed.length) continue;
@@ -1605,7 +1609,7 @@ class WorkflowRun extends EventEmitter {
 
   // #262: the limits of a model (the workflow's `models`, else Settings'), {} for none
   modelLimits(model) {
-    return (model && this.models?.[model]) || {};
+    return (model && this.models && Object.hasOwn(this.models, model) && this.models[model]) || {};
   }
 
   // The run's cost limit: orchestrator.limits.max_total_cost_usd, lifted to the largest
@@ -1630,15 +1634,20 @@ class WorkflowRun extends EventEmitter {
   }
 
   // The next usable entry of the agent's chain ({ provider, model }), or null when none is left.
-  // An entry naming a provider this workflow does not define is skipped with a warning.
+  // A malformed entry (Settings' chains are not validated like the workflow's) or one naming a
+  // provider this workflow does not define is skipped with a warning.
   nextFallback(agentName, agent) {
     const at = this.fallbackChain(agentName, agent);
     const current = `${agent.provider}:${agent.model}`;
     while (++at.index < at.chain.length) {
       const entry = at.chain[at.index];
       const m = FALLBACK_ENTRY.exec(entry);
-      if (!m || entry === current) continue;
-      if (this.wf.providers?.[m[1]]) return { provider: m[1], model: m[2] };
+      if (!m) {
+        this.emitEvent('log', { level: 'warn', agent: agentName, message: `[${agentName}] fallback "${entry}" skipped: it must be "<provider>:<model>", e.g. "codex:gpt-6-luna".` });
+        continue;
+      }
+      if (entry === current) continue;
+      if (Object.hasOwn(this.wf.providers || {}, m[1])) return { provider: m[1], model: m[2] };
       this.emitEvent('log', { level: 'warn', agent: agentName, message: `[${agentName}] fallback "${entry}" skipped: the workflow does not define provider "${m[1]}".` });
     }
     return null;
