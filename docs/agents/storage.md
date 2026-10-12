@@ -148,6 +148,23 @@ owner actions write to the platform (Save to issue, create, close, epics: `src/b
   run states kept), never stop a run and never answer a gate. The roadmap's state is kept: stages
   that come back after a Clear are planned again (Start is the owner's), and a roadmap that was done
   and gets unfinished items back is paused, never started by itself.
+- **How the roadmap file is written** (#287): every writer reads the file, changes it and writes
+  it in one synchronous step (`updateRoadmap`: `readRoadmap` → change → `writeRoadmap`, no `await`
+  between), so the service's writers (the screen's save, the Product Owner, the Oracle, the
+  dispatch) never interleave in the service process. `updatedAt` only grows (+1 ms over the last
+  one seen, so two writes in the same millisecond differ), and `src/roadmap.js` keeps in memory the
+  stages of the last 50 reads and writes of each file by `updatedAt` (`readRoadmapAt`). A save from
+  the screen carries the `updatedAt` it read (`roadmap:save` `base`); the Product Owner's move
+  carries its read too (the Oracle's `roadmap.stages` `base`). When the file was written since
+  (another writer, another window, a script), `src/roadmap-merge.js` applies only what the edit
+  changed against that read to the stored stages, by item and stage id: a stage's name, note, cut
+  line or switch; an item's workflow, simulation, chain, each input, its issues (the ones the edit
+  added or took out); a move, a removal, a new item or stage. Everything else stays as stored. It
+  refuses, writing nothing, when the item or stage it changes is gone, the same field changed on
+  both sides, an item it removes changed elsewhere, or the read is no longer known (after a
+  restart): the screen gets the Backlog with `conflict: { reason }`. A merged save keeps one
+  history version with its label, and its Undo takes back only that edit. An Oracle
+  `roadmap.stages` without `base` still replaces the stages (it is the whole list it means).
 - `src/service/areas/backlog-watch.js` watches the folder (one `fs.watch` per workspace, started by
   `setWorkspace`, closed on a switch and on `shutdown`) and pushes `backlog:changed { projectId,
   file: roadmap | queue | issues | local | refresh, watching: true }` once per file, 300 ms after
@@ -156,7 +173,8 @@ owner actions write to the platform (Save to issue, create, close, epics: `src/b
   screen then polls every 5 s while the Roadmap screen is visible.
 - The Backlog screen reloads the project's data on its project's event, unless the owner types in
   one of its fields, drags, or edits a roadmap item or a stage's note: the reload waits until they
-  are done (an open Edit form shows "The roadmap changed. Reload"). Scroll and expanded rows stay.
+  are done (an open Edit form shows "The roadmap changed: 1 item updated elsewhere. Reload", #287:
+  what changed against what is shown). Scroll and expanded rows stay.
 
 ## `<workspace>/index.db`: what it adds
 

@@ -427,6 +427,15 @@ changed in `style.css` goes into that skill too. In this app:
   (`stageMenuHtml`, `roadmap-stage-menu`; an entry that cannot be used is `aria-disabled` with its
   reason under it); a disabled stage (#284) is `.rm-stage.disabled` with `data-disabled="true"`.
   More states for screenshots: `--roadmap states` (a fix round, a disabled stage, a simulated item).
+- **A roadmap changed elsewhere** (#287): every save of the Roadmap screen sends the roadmap's
+  `updatedAt` it drew (`save(ctx, r, stages, edit)` → `api.saveRoadmap(projectId, stages, label,
+  base)`); the service applies only that edit to a roadmap written since (docs/agents/storage.md).
+  While an Edit form is open, a change of the file adds the notice `roadmap-changed-notice` to the
+  form ("The roadmap changed: 1 item updated elsewhere", `staleNotice` in `backlog.js` with
+  `BacklogRoadmap.changedElsewhere`, updated on each change). A refused save (`conflict`) shows the
+  stored roadmap and the reason in the error line, and keeps the form open with the values typed
+  (`kept`); when the item or its stage is gone, the "Not saved" box `roadmap-save-conflict`
+  (`lostHtml`, `.rm-conflict`) shows the reason and those values read-only, until Dismiss.
 - **Check it**: extend the screen's demo data in `scripts/screenshot.js` with the fields you add,
   then capture the default view and each state with `--click` (e.g.
   `npm run screenshot -- --view backlog --mode roadmap --click "[data-rm-edit]"`). List those

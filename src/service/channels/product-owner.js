@@ -131,7 +131,8 @@ module.exports = (ctx) => {
     },
     // the Roadmap's drag of a planned item to another stage ({ itemId, stage: its number, 1-based; one past the last adds a stage })
     'roadmap.move': (p, { mock }) => {
-      const stages = roadmaps.readRoadmap(ctx.ws.backlog, p.projectId).stages || [];
+      const read = roadmaps.readRoadmap(ctx.ws.backlog, p.projectId);
+      const stages = read.stages || [];
       const item = stages.flatMap((s) => s.items || []).find((x) => x.id === String(p.itemId || ''));
       if (!item) throw new Error(`Roadmap item ${p.itemId} does not exist.`);
       if (item.status !== 'planned') throw new Error(`Roadmap item ${p.itemId} is ${item.status}: only a planned item moves.`);
@@ -140,7 +141,8 @@ module.exports = (ctx) => {
       const next = stages.map((s) => ({ ...s, items: (s.items || []).filter((x) => x.id !== item.id) }));
       if (to > next.length) next.push({ name: '', note: '', items: [] });
       next[to - 1].items.push(item);
-      return ctx.performAction('roadmap.stages', { projectId: p.projectId, stages: next }, { mock });
+      // #287: based on this read; a roadmap written before the action runs gets the move only
+      return ctx.performAction('roadmap.stages', { projectId: p.projectId, stages: next, base: read.updatedAt }, { mock });
     },
     // the Roadmap's saved edit: the whole stages, regrouped ({ stages, append? })
     'roadmap.regroup': (p, { mock }) => ctx.performAction('roadmap.stages', p, { mock }),

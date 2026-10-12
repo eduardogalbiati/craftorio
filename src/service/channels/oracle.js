@@ -32,6 +32,7 @@ const actions = require('../../oracle-actions');
 const agentInbox = require('../../agent-inbox');
 const agents = require('../../agents');
 const backlog = require('../../backlog');
+const merge = require('../../roadmap-merge');
 const night = require('../../night-watch');
 const notifier = require('../../notifications');
 const oracle = require('../../oracle');
@@ -182,10 +183,15 @@ module.exports = (ctx) => {
         const kept = ids(a.params.stages).map((list, i) => list.filter((x) => (ids(before)[i] || []).includes(x)));
         if (ids(before).some((list, i) => JSON.stringify(list) !== JSON.stringify(kept[i] || []))) throw new Error('An append may only add items: a planned item moved or disappeared. Nothing was saved.');
       }
-      const backup = snapshotRoadmap(a, id);
       // #284: `disabled` is the owner's switch: whatever the Oracle sends, the stored value is kept
-      const stages = (a.params.stages || []).map((s) => { const { disabled, ...rest } = s || {}; return rest; });
-      roadmaps.saveStages(ctx.ws.backlog, id, stages, { issues: synced(id), alive: ctx.runAlive });
+      const sent = (a.params.stages || []).map((s) => { const { disabled, ...rest } = s || {}; return rest; });
+      // #287 base: the roadmap's updatedAt the stages were built from (the Product Owner's move): a
+      // roadmap written since gets only what this edit changed, or nothing with the reason
+      const base = a.params.base || null;
+      const edit = merge.onStored({ stored: roadmaps.readRoadmap(ctx.ws.backlog, id), stages: sent, base, read: base ? roadmaps.readRoadmapAt(ctx.ws.backlog, id, base) : null });
+      if (!edit.ok) throw new Error(edit.reason);
+      const backup = snapshotRoadmap(a, id);
+      roadmaps.saveStages(ctx.ws.backlog, id, edit.stages, { issues: synced(id), alive: ctx.runAlive });
       await ctx.dispatchRoadmaps();
       return { text: `The roadmap of ${id} was saved (validated, ${a.params.stages.length} stage(s)).`, backup };
     },

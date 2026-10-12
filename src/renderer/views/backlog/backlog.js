@@ -83,6 +83,7 @@
     board: load(BOARD_KEY) === 'kanban' || (load(BOARD_KEY) == null && load(MODE_KEY) === 'kanban') ? 'kanban' : 'list',
     showAll: load(SHOW_ALL_KEY) === '1',
     since: load(SINCE_KEY) || '',
+    latest: null, // #287: the Backlog read while the owner is busy, newer than what is shown (backlogChanged)
   };
   // #217: the page tab of a mode (Board: list / kanban); 'roadmap' is the Roadmap screen's (#254)
   const tabOf = (mode) => (mode === 'roadmap' || mode === 'epics' ? mode : 'board');
@@ -291,7 +292,8 @@
   async function liveReload() {
     if (!visible() || document.hidden) return;
     if (ownerBusy()) {
-      if (!pendingReload && !(await backlogChanged())) return;
+      // read each time (#287): the notice says what changed since the form opened
+      if (!(await backlogChanged()) && !pendingReload) return;
       staleNotice();
       pendingReload ??= setInterval(() => { if (!ownerBusy()) { clearInterval(pendingReload); pendingReload = null; liveReload(); } }, 1000);
       return;
@@ -301,22 +303,35 @@
     await reload();
     if (view && top != null) view.scrollTop = top;
   }
+  // whether the Backlog now differs from what is shown (kept in bl.latest for the notice)
   async function backlogChanged() {
     const id = bl.projectId;
     if (!id) return false;
     try {
       const data = await api.getBacklog(id);
-      return !!data && bl.projectId === id && dataKey(id, data) !== shownData;
+      const changed = !!data && bl.projectId === id && dataKey(id, data) !== shownData;
+      bl.latest = changed ? data : null;
+      return changed;
     } catch { return false; }
   }
-  // the open Edit form tells the owner the file changed under it; Reload drops the unsaved values
+  // the open Edit form tells the owner the file changed under it, and what changed (#287: "1 item
+  // updated elsewhere", against what is shown, updated on each change); Save applies only the form's
+  // edit to the roadmap as it is now; Reload drops the unsaved values
   function staleNotice() {
     const form = $b('#view-backlog .rm-form');
-    if (!form || form.querySelector('[data-bl-stale]')) return;
+    if (!form) return;
+    const what = bl.latest ? window.BacklogRoadmap?.changedElsewhere?.(bl.data?.roadmap, bl.latest.roadmap) || '' : '';
+    const text = `The roadmap changed${what ? `: ${what}` : ''}.`;
+    const shown = form.querySelector('[data-bl-stale]');
+    if (shown) {
+      if (bl.latest) shown.querySelector('[data-bl-stale-text]').textContent = text;
+      return;
+    }
     const p = document.createElement('p');
     p.className = 'small muted bl-stale';
     p.dataset.blStale = '';
-    p.innerHTML = 'The roadmap changed. <button type="button" class="link-btn small" data-bl-stale-reload>Reload</button>';
+    // (the text is counts and fixed words only, never data from the files)
+    p.innerHTML = `<span data-bl-stale-text data-testid="roadmap-changed-notice" role="status">${text}</span> <button type="button" class="link-btn small" data-bl-stale-reload>Reload</button>`;
     p.querySelector('button').addEventListener('click', () => {
       window.BacklogRoadmap?.closeEdit();
       document.activeElement?.blur?.();

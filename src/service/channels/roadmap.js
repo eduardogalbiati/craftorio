@@ -11,6 +11,7 @@
 const path = require('path');
 const backlog = require('../../backlog');
 const history = require('../../roadmap-history');
+const merge = require('../../roadmap-merge');
 const roadmaps = require('../../roadmap');
 const undo = require('../../roadmap-undo');
 
@@ -56,18 +57,25 @@ module.exports = (ctx) => {
   return [
     { channel: 'roadmap:get', method: 'getRoadmap', params: ['projectId'], fn: ({ projectId }) => ctx.roadmapView(project(projectId)) },
     // the edited stages ([{ id?, name, note, items: [{ id?, workflow, inputs, mock, issues }] }]); runs are kept by item id;
-    // label: what the edit did, in the roadmap's words (the history's line and the toast's title)
+    // label: what the edit did, in the roadmap's words (the history's line and the toast's title).
+    // #287 base: the roadmap's updatedAt the screen read. When the roadmap was written since, only what
+    // the edit changed is applied to the stored stages (src/roadmap-merge.js); an edit that cannot be
+    // applied saves nothing and answers the Backlog with `conflict: { reason }`. The read, the merge and
+    // the write happen in one synchronous step: two writers never interleave.
     {
       channel: 'roadmap:save',
       method: 'saveRoadmap',
-      params: ['projectId', 'stages', 'label'],
-      fn: async ({ projectId, stages, label }) => {
+      params: ['projectId', 'stages', 'label', 'base'],
+      fn: async ({ projectId, stages, label, base }) => {
         const id = project(projectId);
-        const before = stagesOf(id);
-        roadmaps.saveStages(ctx.ws.backlog, id, stages, { issues: synced(projectId), alive: ctx.runAlive });
-        const edit = edited(id, before, String(label || 'Edited the roadmap'));
+        const stored = roadmaps.readRoadmap(ctx.ws.backlog, id);
+        const edit = merge.onStored({ stored, stages, base, read: base ? roadmaps.readRoadmapAt(ctx.ws.backlog, id, base) : null });
+        if (!edit.ok) return { ...current(projectId), conflict: { reason: edit.reason } };
+        const before = stored.stages;
+        roadmaps.saveStages(ctx.ws.backlog, id, edit.stages, { issues: synced(projectId), alive: ctx.runAlive });
+        const done = edited(id, before, String(label || 'Edited the roadmap'));
         await ctx.dispatchRoadmaps();
-        return withEdit(projectId, edit);
+        return withEdit(projectId, done);
       },
     },
     // #281 Undo: the last edit taken back (what it removed returns, what it moved or renamed goes

@@ -24,6 +24,11 @@
 // the reason, while the roadmap runs or on a disabled stage), Release here, Run earlier / later, the note. A Product Owner proposal (#105, JSON) is added or replaces the
 // roadmap as planned; the plain queue's items can be moved in. Every edit saves the whole list of
 // stages (api.saveRoadmap); the service keeps each item's runs by id.
+// #287: every save sends the roadmap's `updatedAt` the screen read; when the roadmap was written
+// elsewhere since, the service applies only this edit, or refuses it (`conflict`): the screen shows
+// the reason and the stored roadmap, the Edit form stays open with the values typed (`kept`), or,
+// when its item is gone, those values show in the "Not saved" box (`lost`, roadmap-save-conflict).
+// `changedElsewhere` words what changed for the open form's notice (backlog.js staleNotice).
 // "Group by epic" (#138, shown when the backlog has epics) lists the items under their issues' epics,
 // each with its stage and the epic's items done.
 // Live roadmap (#164): a box under the last stage with its switch (on only while running: turning it
@@ -146,6 +151,8 @@
   let editing = null; // the item whose Edit form is open
   let adding = false; // its "add input" name + value pair is shown
   let noteEditing = null; // the stage whose note is being edited
+  let kept = null; // #287: the values of an Edit form whose save was refused ({ id, inputs, mock })
+  let lost = null; // #287: a refused edit whose item is gone ({ item, reason }), its values shown apart
   // #138: the items grouped by their issues' epics instead of by stage (remembered)
   const BY_EPIC_KEY = 'multiagent.roadmapByEpic';
   let byEpic = (() => { try { return localStorage.getItem(BY_EPIC_KEY) === '1'; } catch { return false; } })();
@@ -309,7 +316,9 @@
   // The Edit form: the workflow's inputs (but the mode, which has its toggle) drawn by WorkflowInputs
   // (#116: human labels, pills / switches, show_if against the item's mode); inputs the workflow
   // does not define (added with "add input") as text.
-  function formHtml(x) {
+  function formHtml(raw) {
+    // #287: a refused save keeps what the owner typed, not the stored values
+    const x = kept?.id === raw.id ? { ...raw, inputs: kept.inputs, mock: kept.mock } : raw;
     const defs = inputDefs(x);
     const fields = Object.fromEntries(Object.entries(defs).filter(([k, def]) => k !== 'mode' && !skipInput(k, def || {})));
     for (const k of Object.keys(x.inputs || {})) if (k !== 'mode' && !defs[k]) fields[k] = {};
@@ -1066,7 +1075,42 @@
       `<option value="${esc(o.id)}"${o.id === v.epic ? ' selected' : ''}>${esc(o.title)} (${o.count})</option>`).join('')}</select>` : '';
     // (`view.synced`: the Board toolbar's "Synced … from GitHub", which is hidden on this screen)
     const filters = epicSelect || viewSeg || sinceSelect || toggle ? `<div class="rm-filters" data-testid="filter-row">${epicSelect}${viewSeg}${sinceSelect}${toggle}${view.synced ? `<span class="spacer"></span><span class="muted small">${esc(view.synced)}</span>` : ''}</div>` : '';
-    return `<div class="rm">${filters}${bar.replace('<span class="spacer"></span>', `${count}<span class="spacer"></span>`)}${queued}${stages}${liveHtml}${importBox}</div>`;
+    return `<div class="rm">${filters}${bar.replace('<span class="spacer"></span>', `${count}<span class="spacer"></span>`)}${lostHtml()}${queued}${stages}${liveHtml}${importBox}</div>`;
+  }
+
+  // #287: a save refused because its item (or its stage) was removed elsewhere: the reason and the
+  // values the owner typed, read-only, so the item can be planned again with them; Dismiss closes it
+  function lostHtml() {
+    if (!lost) return '';
+    const x = lost.item;
+    const defs = inputDefs(x);
+    const fields = Object.fromEntries(Object.entries(defs).filter(([k, def]) => k !== 'mode' && !skipInput(k, def || {})));
+    for (const k of Object.keys(x.inputs || {})) if (k !== 'mode' && !defs[k]) fields[k] = {};
+    const grid = Object.keys(fields).length
+      ? WorkflowInputs.formHtml(fields, { values: x.inputs || {}, context: { mode: x.inputs?.mode ?? defs.mode?.default }, id: (k) => `rm-lost-${k}` })
+      : '';
+    return `<div class="rm-conflict" role="alert" data-testid="roadmap-save-conflict">
+      <p>${esc(lost.reason)}</p>
+      ${grid ? `<p class="small muted">The values of your edit of ${esc(numbers(x))}, to plan it again:</p><fieldset class="rm-form-grid wi-grid" disabled>${grid}</fieldset>` : ''}
+      <div class="rm-conflict-actions"><button class="btn sm ghost" type="button" data-rm-conflict-dismiss>Dismiss</button></div>
+    </div>`;
+  }
+
+  // #287: what changed in the roadmap between two reads, for the open Edit form's notice ("1 item
+  // updated elsewhere"); '' when its stages and items did not change (a run's progress only)
+  function changedElsewhere(before, after) {
+    const items = (r) => new Map((r?.stages || []).flatMap((s) => (s.items || []).map((x) => [x.id, { s: s.id, x }])));
+    const content = ({ s, x }) => JSON.stringify([s, x.workflow, x.inputs || {}, !!x.mock, x.then || null, refs(x).map((i) => i.number)]);
+    const head = (s) => JSON.stringify([s.name || '', s.note || '', s.release?.name || '', !!s.disabled]);
+    const [was, now] = [items(before), items(after)];
+    const added = [...now.keys()].filter((id) => !was.has(id)).length;
+    const removed = [...was.keys()].filter((id) => !now.has(id)).length;
+    const updated = [...now.keys()].filter((id) => was.has(id) && content(was.get(id)) !== content(now.get(id))).length;
+    const stagesBefore = new Map((before?.stages || []).map((s) => [s.id, s]));
+    const stages = (after?.stages || []).filter((s) => stagesBefore.has(s.id) && head(stagesBefore.get(s.id)) !== head(s)).length;
+    const parts = [[added, 'added'], [removed, 'removed'], [updated, 'updated']].filter(([n]) => n).map(([n, what]) => `${plural(n, 'item')} ${what}`);
+    if (stages) parts.push(`${plural(stages, 'stage')} changed`);
+    return parts.length ? `${parts.join(', ')} elsewhere` : '';
   }
 
   // #270: a pause by an item (its run failed, or its start was refused: "Could not start #14: …")
@@ -1227,13 +1271,30 @@
   // `edit` (#281): { label, detail?, quiet? }: what the edit did, in the roadmap's words: the line of
   // the version kept before it (src/roadmap-history.js) and the title of its toast with Undo (not for a
   // `quiet` one: a mode, an input, a note, a cut line set).
-  async function save(ctx, stages, edit = null) {
+  // #287 `r`: the roadmap the edit was made on (its updatedAt is the save's base); `edit.form`: the
+  // item with the Edit form's values, kept when the save is refused
+  async function save(ctx, r, stages, edit = null) {
     try {
-      const out = await (edit ? api.saveRoadmap(ctx.projectId, stages, edit.label) : api.saveRoadmap(ctx.projectId, stages));
+      const out = await api.saveRoadmap(ctx.projectId, stages, edit?.label || null, r?.updatedAt || null);
       ctx.setData(out);
-      if (edit && !edit.quiet) undoToast(ctx, out, edit.label, edit.detail);
+      if (out?.conflict) refused(ctx, out, edit?.form);
+      else if (edit && !edit.quiet) undoToast(ctx, out, edit.label, edit.detail);
     } catch (e) { failed(ctx, 'save', e); }
     ctx.render();
+  }
+  // #287: a save the service refused (the roadmap changed elsewhere in a way the edit cannot be
+  // applied to): the screen shows the stored roadmap (set by save) and the reason; the Edit form
+  // stays open with the values typed, or they show in the "Not saved" box when its item is gone
+  function refused(ctx, out, item) {
+    const reason = out.conflict.reason || 'The roadmap changed elsewhere: nothing was saved.';
+    const stays = item && (out.roadmap?.stages || []).some((s) => (s.items || []).some((x) => x.id === item.id));
+    lost = item && !stays ? { item, reason } : null;
+    if (lost) return;
+    if (item) {
+      editing = item.id;
+      kept = { id: item.id, inputs: item.inputs, mock: item.mock };
+    }
+    ctx.setError(reason);
   }
 
   // #195: before a start (Start, Resume, Run this stage; `scope`: a stage id), the items still to run
@@ -1258,8 +1319,10 @@
     const ids = new Set(items.map((x) => x.id));
     const stages = clone(r.stages);
     for (const x of stages.flatMap((st) => st.items)) if (ids.has(x.id)) Object.assign(x, { workflow: def.file, workflowName: def.name });
-    const out = await api.saveRoadmap(ctx.projectId, stages);
+    const out = await api.saveRoadmap(ctx.projectId, stages, null, r.updatedAt || null);
     ctx.setData(out);
+    // #287: refused (the roadmap changed elsewhere): nothing starts, the reason shows
+    if (out?.conflict) { refused(ctx, out); return null; }
     return out?.roadmap || r;
   }
 
@@ -1550,16 +1613,20 @@
         const item = stages[s]?.items[n];
         if (!item || !editable(item)) return true;
         item.inputs = { ...item.inputs, mode: e.target.closest('[data-rm-mode]').dataset.rmMode };
-        await save(ctx, stages, { label: `Changed the mode of ${numbers(item)}`, quiet: true });
+        await save(ctx, r, stages, { label: `Changed the mode of ${numbers(item)}`, quiet: true });
         return true;
       } else if (e.target.closest('[data-rm-edit]')) {
         editing = e.target.closest('[data-item]').dataset.item;
         adding = false;
+        kept = null;
       } else if (e.target.closest('[data-rm-cancel]')) {
         editing = null;
         adding = false;
+        kept = null;
       } else if (e.target.closest('[data-rm-addinput]')) {
         adding = true;
+      } else if (e.target.closest('[data-rm-conflict-dismiss]')) {
+        lost = null;
       } else if (e.target.closest('[data-rm-save]')) {
         const { s, n } = locate(stages, e.target);
         const item = stages[s]?.items[n];
@@ -1567,7 +1634,9 @@
         applyForm(item, e.target.closest('.rm-form'));
         editing = null;
         adding = false;
-        await save(ctx, stages, { label: `Edited the inputs of ${numbers(item)}`, quiet: true });
+        kept = null;
+        lost = null;
+        await save(ctx, r, stages, { label: `Edited the inputs of ${numbers(item)}`, quiet: true, form: item });
         return true;
       } else if (e.target.closest('[data-rm-release]')) {
         // #260: a cut line after the stage: named in the dialog (add, rename) or removed, saved at once
@@ -1579,12 +1648,12 @@
           const name = stage.release?.name || '';
           if (!await confirmDialog('Remove the cut line', `The stages after it no longer wait for the release ${name}. Nothing is pushed either way.`, 'Remove')) return true;
           delete stage.release;
-          await save(ctx, stages, { label: `Removed the cut line ${name}`.trim(), detail: 'The stages after it no longer wait for that release.' });
+          await save(ctx, r, stages, { label: `Removed the cut line ${name}`.trim(), detail: 'The stages after it no longer wait for that release.' });
         } else {
           const name = await cutLineDialog(stage.release?.name || '');
           if (!name) return true;
           stage.release = { name };
-          await save(ctx, stages, { label: `Set the cut line ${name}`, quiet: true });
+          await save(ctx, r, stages, { label: `Set the cut line ${name}`, quiet: true });
         }
         return true;
       } else if (e.target.closest('[data-rm-toggle-stage]')) {
@@ -1593,7 +1662,7 @@
         if (!stages[s]) return true;
         const off = !stages[s].disabled;
         stages[s].disabled = off; // always sent: a save that does not mention it keeps what is stored
-        await save(ctx, stages, { label: `${off ? 'Disabled' : 'Enabled'} stage ${s + 1}`, detail: off ? 'The roadmap skips it while it runs; it keeps its place.' : 'It runs in its turn again.' });
+        await save(ctx, r, stages, { label: `${off ? 'Disabled' : 'Enabled'} stage ${s + 1}`, detail: off ? 'The roadmap skips it while it runs; it keeps its place.' : 'It runs in its turn again.' });
         return true;
       } else if (e.target.closest('[data-rm-addnote]')) {
         noteEditing = r.stages[locate(stages, e.target).s]?.id ?? null;
@@ -1603,21 +1672,21 @@
         const t = s + (up ? -1 : 1);
         if (!stages[t]) return true;
         [stages[s], stages[t]] = [stages[t], stages[s]];
-        await save(ctx, stages, { label: `Moved stage ${s + 1} ${up ? 'up' : 'down'}`, detail: `It is stage ${t + 1} now.` });
+        await save(ctx, r, stages, { label: `Moved stage ${s + 1} ${up ? 'up' : 'down'}`, detail: `It is stage ${t + 1} now.` });
         return true;
       } else if (e.target.closest('[data-rm-move]')) {
         const { s, n } = locate(stages, e.target);
         const up = e.target.closest('[data-rm-move]').dataset.rmMove === 'up';
         const what = stages[s]?.items[n] ? numbers(stages[s].items[n]) : 'an item';
         moveItem(stages, s, n, up ? -1 : 1);
-        await save(ctx, stages, { label: `Moved ${what} ${up ? 'up' : 'down'}` });
+        await save(ctx, r, stages, { label: `Moved ${what} ${up ? 'up' : 'down'}` });
         return true;
       } else if (e.target.closest('[data-rm-remove]')) {
         const { s, n } = locate(stages, e.target);
         const [gone] = stages[s].items.splice(n, 1);
         // its stage goes with its last item (the service drops empty stages): the toast says so
         const detail = stages[s].items.length ? '' : `Its ${stageName(stages[s], s)} went too.`;
-        await save(ctx, stages, { label: `Removed ${gone ? numbers(gone) : 'an item'} from the roadmap`, detail });
+        await save(ctx, r, stages, { label: `Removed ${gone ? numbers(gone) : 'an item'} from the roadmap`, detail });
         return true;
       } else {
         return false;
@@ -1664,7 +1733,7 @@
       const before = stages[s].name || '';
       if (name) stages[s].name = el.value;
       else { stages[s].note = el.value; noteEditing = null; }
-      await save(ctx, stages, name
+      await save(ctx, r, stages, name
         ? { label: `Renamed stage ${s + 1}`, detail: `${before ? `"${brief(before)}"` : 'No name'} → ${el.value.trim() ? `"${brief(el.value.trim())}"` : 'no name'}` }
         : { label: `Changed the note of stage ${s + 1}`, quiet: true });
     } catch (err) {
@@ -1758,7 +1827,7 @@
         stages[t].items.splice(at < 0 ? stages[t].items.length : at, 0, item);
         label = `Moved ${numbers(item)} ${s === t ? `within stage ${t + 1}` : `to stage ${t + 1}`}`;
       }
-      await save(ctx, stages, { label });
+      await save(ctx, r, stages, { label });
     } catch (err) {
       failed(ctx, 'drop', err);
       ctx.render();
@@ -1775,7 +1844,9 @@
     const why = { ...(reason ? { reason } : {}), ...(modeReason ? { modeReason } : {}), ...(origin ? { origin } : {}), ...(then ? { then } : {}), ...(cost ? { cost } : {}) };
     const items = group ? [{ workflow, workflowName, inputs, mock, issues, ...why }] : issues.map((n) => ({ workflow, workflowName, inputs, mock, issues: [n], ...why }));
     stages.push({ name: '', note: '', items });
-    ctx.setData(await api.saveRoadmap(ctx.projectId, stages, `Added ${issues.map((i) => `#${i.number}`).join(', ')} to the roadmap`));
+    const out = await api.saveRoadmap(ctx.projectId, stages, `Added ${issues.map((i) => `#${i.number}`).join(', ')} to the roadmap`, data?.roadmap?.updatedAt || null);
+    ctx.setData(out);
+    if (out?.conflict) refused(ctx, out);
   }
 
   // #204: a live reload waits while the owner drags, edits an item or a stage's note, or has a ⋮ menu
@@ -1785,6 +1856,7 @@
   function closeEdit() {
     editing = null;
     adding = false;
+    kept = null;
     noteEditing = null;
   }
 
@@ -1793,6 +1865,7 @@
     alerts,
     badge,
     busy,
+    changedElsewhere,
     closeEdit,
     closeMenu,
     dropProblem,

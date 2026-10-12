@@ -33,6 +33,9 @@
 // otherwise leaves the line held or failed and pauses the roadmap there (`holdRelease`,
 // `releaseHold`); Resume checks the release again. A roadmap running one stage (`scope`) and a
 // roadmap without cut lines never wait.
+// Stale edits (#287): every write reads and writes the file in one synchronous step (`updateRoadmap`),
+// so the service's writers never interleave; `readRoadmapAt` gives back the stages a screen read, by
+// their `updatedAt`, for a save based on that read (src/roadmap-merge.js).
 // Screen: src/renderer/views/backlog/backlog-roadmap.js; channels: src/service/channels/roadmap.js.
 
 const fs = require('fs');
@@ -61,11 +64,35 @@ const newId = (prefix) => `${prefix}-${crypto.randomBytes(4).toString('hex')}`;
 const normalizeItem = (x) => (!x || typeof x !== 'object' || (Array.isArray(x.issues) && x.issues.length) || !x.number ? x : { ...x, issues: itemIssues(x) });
 const normalizeStages = (stages) => (Array.isArray(stages) ? stages.map((s) => (s && Array.isArray(s.items) ? { ...s, items: s.items.map(normalizeItem) } : s)) : stages);
 
+// #287: the stages of each roadmap file as recently read or written, by `updatedAt` (in memory, the
+// last SEEN_MAX per file): an edit based on an older read is merged against what it read
+// (src/roadmap-merge.js). `updatedAt` only grows, so two writes in the same millisecond differ.
+const SEEN_MAX = 50;
+const seen = new Map(); // file → Map(updatedAt → stages as JSON)
+const newest = new Map(); // file → the latest updatedAt seen, in ms
+function remember(file, at, stages) {
+  if (!at) return;
+  newest.set(file, Math.max(newest.get(file) || 0, Date.parse(at) || 0));
+  let known = seen.get(file);
+  if (!known) seen.set(file, (known = new Map()));
+  if (known.has(at)) return;
+  known.set(at, JSON.stringify(stages || []));
+  if (known.size > SEEN_MAX) known.delete(known.keys().next().value);
+}
+
 function readRoadmap(dir, projectId) {
   try {
-    const r = { ...emptyRoadmap(), ...JSON.parse(fs.readFileSync(roadmapFile(dir, projectId), 'utf8')) };
+    const file = roadmapFile(dir, projectId);
+    const r = { ...emptyRoadmap(), ...JSON.parse(fs.readFileSync(file, 'utf8')) };
+    remember(file, r.updatedAt, r.stages);
     return { ...r, stages: normalizeStages(r.stages) };
   } catch { return emptyRoadmap(); }
+}
+
+/** #287: the stages of the roadmap as they were at `updatedAt` (read or written by this process), or null. */
+function readRoadmapAt(dir, projectId, updatedAt) {
+  const text = seen.get(roadmapFile(dir, projectId))?.get(String(updatedAt || ''));
+  return text ? normalizeStages(JSON.parse(text)) : null;
 }
 
 // What a roadmap file must look like (#112: a write that breaks it is refused, src/state-file.js).
@@ -130,8 +157,12 @@ function withStatus(roadmap, runOf) {
 const runIsAlive = (item, alive) => (alive ? !!item.runId && !FINISHED.has(item.status) && !!alive(item.runId) : item.status === 'running');
 
 function writeRoadmap(dir, projectId, roadmap) {
-  const out = { ...persisted(roadmap), updatedAt: new Date().toISOString() };
-  return writeJsonSafe(roadmapFile(dir, projectId), out, { validate: roadmapProblem });
+  const file = roadmapFile(dir, projectId);
+  const last = Math.max(newest.get(file) || 0, Date.parse(roadmap?.updatedAt) || 0);
+  const out = { ...persisted(roadmap), updatedAt: new Date(Math.max(Date.now(), last + 1)).toISOString() };
+  const written = writeJsonSafe(file, out, { validate: roadmapProblem });
+  remember(file, out.updatedAt, out.stages);
+  return written;
 }
 
 const updateRoadmap = (dir, projectId, fn) => writeRoadmap(dir, projectId, fn(readRoadmap(dir, projectId)) || readRoadmap(dir, projectId));
@@ -649,6 +680,7 @@ module.exports = {
   persisted,
   propose,
   readRoadmap,
+  readRoadmapAt,
   refreshCopies,
   restoreStages,
   roadmapProjects,

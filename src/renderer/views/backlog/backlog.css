@@ -514,6 +514,11 @@ select.po-wf { width: auto; max-width: 220px; padding: 3px 6px; font-size: 12px;
 .rm-form .rm-add .row input { max-width: 180px; }
 .rm-form > .link-btn { justify-self: start; }
 .rm-form-actions { display: flex; align-items: center; gap: 8px; }
+/* #287: a save refused because its item is gone: the reason, the values typed (read-only), Dismiss */
+.rm-conflict { border: 1px solid var(--yellow); border-radius: 8px; background: var(--panel-2); padding: 10px 12px; margin: 8px 0; display: grid; gap: 6px; }
+.rm-conflict p { margin: 0; }
+.rm-conflict fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.rm-conflict-actions { display: flex; justify-content: flex-end; }
 .rm-import textarea { width: 100%; }
 /* Live roadmap (#164): a burnt, muted red (not an alarm red); its tokens in one place for the themes */
 .bl-live, .rm-live { --live-bg: rgba(176, 74, 52, .13); --live-border: rgba(190, 92, 70, .5); --live-text: #e7b3a5; --live-dot: #e5484d; }
