@@ -126,10 +126,10 @@ test('#320 nextTurn: a simulated session uses the lifetime of the provider it si
 
 // A mock run of the fixture that stops at its gate: returns the latest snapshot per agent seen at
 // the gate, and the run read back from disk (readRun) at that moment.
-async function atGate(t) {
+async function atGate(t, file = FIXTURE) {
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cache-state-'));
   t.after(() => fs.rmSync(runsDir, { recursive: true, force: true, maxRetries: 5 }));
-  const run = new WorkflowRun({ file: FIXTURE, inputs: {}, mock: true, runsDir, mockSequences: { verdict: ['approved'] } });
+  const run = new WorkflowRun({ file, inputs: {}, mock: true, runsDir, mockSequences: { verdict: ['approved'] } });
   const rec = new Recorder(run.runDir);
   const events = [];
   let seen = null;
@@ -141,7 +141,7 @@ async function atGate(t) {
       for (const e of events) if (e.session && typeof e.session === 'object' && e.session.agent) latest[e.session.agent] = e.session;
       const { readRun } = require('../src/runs');
       const recorded = readRun(runsDir, path.basename(run.runDir));
-      seen = { latest, recorded };
+      seen = { latest, recorded, events: events.slice() };
       setImmediate(() => run.resolveApproval(ev.approval_id, true, 'user'));
     }
   });
@@ -188,6 +188,44 @@ test('#320 a recorded run rebuilt from its events gives the same cache state as 
   assert.equal(view.contextTokens, rev.context_tokens);
   assert.equal(view.hasNote, true);
   assert.equal(view.nextTurn?.kind, 'warm', 'just after the gate opened, the reviewer resumes warm');
+});
+
+test('#320 a persistent agent past its max_context starts its next turn fresh from its note: the gate says so, not warm', { timeout: 60000 }, async (t) => {
+  // the fixture's reviewer with a max_context any turn exceeds: its next turn rotates (context_rotation)
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cache-rotate-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5 }));
+  const file = path.join(dir, 'cache-rotate.yaml');
+  const yaml = fs.readFileSync(FIXTURE, 'utf8').replace(/\r\n/g, '\n').replace('    fresh_after_idle: 30m\n', '    max_context: 1\n');
+  assert.ok(/max_context: 1\n/.test(yaml), 'the fixture variant sets max_context');
+  fs.writeFileSync(file, yaml);
+  const { latest, events } = await atGate(t, file);
+  assert.ok(events.some((e) => e.type === 'log' && e.kind === 'context_rotation' && e.agent === 'reviewer'), 'the reviewer\'s context passed its max_context');
+  const rev = latest.reviewer;
+  assert.equal(rev.has_note, true, 'the rotation saved the reviewer\'s handoff note');
+  assert.equal(rev.next_turn?.kind, 'fresh', `the snapshot's next turn is ${JSON.stringify(rev.next_turn)}`);
+  const { agentNextTurns } = load();
+  const entry = agentNextTurns(Object.values(latest), Date.parse(rev.last_turn_at) + 5 * MIN).find((x) => x.agent === 'reviewer');
+  assert.equal(entry?.turn.kind, 'fresh', 'the gate\'s Continue line says the reviewer starts fresh from its note');
+});
+
+test('#320 a real (non-simulated) Claude session with ANTHROPIC_API_KEY set: 5-minute lifetime; a cache tier the usage reports wins', () => {
+  const { cacheLifetimeMs, cacheTier, nextTurn } = load();
+  assert.equal(cacheLifetimeMs('claude', { auth: 'api_key', tier: cacheTier({ cache_creation: { ephemeral_1h_input_tokens: 10, ephemeral_5m_input_tokens: 0 } }) }), HOUR);
+  assert.equal(cacheLifetimeMs('claude', { auth: 'subscription', tier: cacheTier({ cache_creation: { ephemeral_5m_input_tokens: 10 } }) }), 5 * MIN);
+  // the snapshot's own lifetime is used when no lifetime is given
+  const s = persistent(6 * MIN, { cache_lifetime_ms: 5 * MIN });
+  assert.equal(nextTurn(s, { now: NOW }).kind, 'cold');
+  assert.equal(nextTurn(persistent(4 * MIN, { cache_lifetime_ms: 5 * MIN }), { now: NOW }).kind, 'warm');
+});
+
+test('#320 Grok and Codex sessions resume with an unknown lifetime, never warm or cold', () => {
+  const { nextTurn, turnText, gateTurnText } = load();
+  for (const provider of ['grok', 'codex']) {
+    const t = nextTurn(persistent(3 * HOUR, { provider, model: 'm' }), { now: NOW });
+    assert.equal(t.kind, 'resume', provider);
+    assert.equal(turnText(t, NOW), 'resumes · ~140K tokens · cache lifetime unknown');
+    assert.equal(gateTurnText(t), 'resumes ~140K (cache lifetime unknown)');
+  }
 });
 
 // ---- cold resumes become fresh by default ---------------------------------------------------------

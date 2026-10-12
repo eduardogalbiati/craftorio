@@ -93,6 +93,42 @@ test('#320 Next turn: an ephemeral agent or one with no turn yet is a new sessio
   assert.equal(text(closed), '—');
 });
 
+test('#320 the minute tick redraws an expanded runs list: a warm session turns cold once its lifetime passes', async () => {
+  const page = await loadPage({ api: { listArtifacts: async () => [{ artifacts: [] }], runDiff: async () => null } });
+  const t0 = Date.parse('2026-10-12T12:00:00Z');
+  page.sandbox.__now = t0;
+  page.run('Date.now = () => __now'); // the page's own clock (the sandbox's Date, not the test's)
+  page.sandbox.__runs = [{ ...RUN, sessions: [view('reviewer', {
+    mode: 'persistent', hasNote: false, lastTurnAt: new Date(t0 - 50 * MIN).toISOString(), contextTokens: 70000,
+    cacheLifetimeMs: HOUR, nextTurn: { kind: 'warm', until: t0 + 10 * MIN, tokens: 70000 },
+  })] }];
+  page.run("if (!document.querySelector('#workflow-runs')) document.body.insertAdjacentHTML('beforeend', '<div id=\"workflow-runs\"></div>')");
+  page.run("state.view = 'workflows'; state.workflowsTab = 'runs'; state.wr = { ...(state.wr || {}), runs: __runs, expanded: new Set(['r1']), arts: new Map(), msgs: new Map() }; renderWorkflowRuns()");
+  await settle();
+  const sel = '#workflow-runs [data-run="r1"] [data-testid="run-session-card"][data-agent="reviewer"] [data-testid="session-next-turn"]';
+  assert.ok(page.$(sel), 'the expanded run lists the reviewer with its Next turn');
+  assert.equal(page.$(sel).getAttribute('data-next-turn'), 'warm');
+  assert.match(text(page.$(sel)), /^warm · 10 min left/);
+
+  page.sandbox.__now = t0 + 4 * MIN;
+  page.run('tickRunLists()');
+  await settle();
+  assert.match(text(page.$(sel)), /^warm · 6 min left/, 'the minutes left move on');
+
+  page.sandbox.__now = t0 + 15 * MIN;
+  page.run('tickRunLists()');
+  await settle();
+  assert.equal(page.$(sel).getAttribute('data-next-turn'), 'cold');
+  assert.match(text(page.$(sel)), /^cold since \d{1,2}:\d{2} · ~70K tokens/);
+});
+
+test('#320 the colour follows the state: warm green, cold orange, from the theme\'s variables', () => {
+  const css = require('fs').readFileSync(require('path').join(__dirname, '..', 'src', 'renderer', 'style.css'), 'utf8');
+  assert.match(css, /\.next-turn\[data-next-turn="warm"\][^{]*\{[^}]*color:\s*var\(--green\)/);
+  assert.match(css, /\.next-turn\[data-next-turn="cold"\][^{]*\{[^}]*color:\s*var\(--orange\)/);
+  assert.match(css, /:root\s*\{[^}]*--green:[^}]*--orange:/, 'both colours are theme variables');
+});
+
 // ---- the gate card ----------------------------------------------------------------------------------
 
 // the snapshots the Run screen keeps per run (state.runs.get(id).sessions, from the session.* events)
@@ -106,10 +142,10 @@ const GATE = {
   choices: [{ id: 'approve', label: 'Approve' }, { id: 'changes', label: 'Request changes' }],
 };
 
-async function gateLine(sessions) {
+async function gateLine(sessions, gate = GATE) {
   const page = await loadPage();
   page.sandbox.__sessions = sessions;
-  page.sandbox.__gate = GATE;
+  page.sandbox.__gate = gate;
   page.run("state.runs.set('r1', { run: { id: 'r1', workflow: 'ai-development-local-hero', status: 'running' }, events: [], approvals: new Map(), sessions: new Map(__sessions.map((s) => [s.id, s])) })");
   const html = page.run("gateCardHtml('r1', __gate, '<p>Validate the change</p>')");
   page.sandbox.__html = html;
@@ -140,4 +176,13 @@ test('#320 a gate whose agents are all fresh or warm says so in one line, with n
   assert.match(line, /^Continue:/);
   assert.doesNotMatch(line, /cold/i);
   assert.match(line, /warm|fresh/i);
+});
+
+test('#320 a gate without a brief shows its message and the Continue line', async () => {
+  const { line, card } = await gateLine([
+    snap('reviewer', { mode: 'persistent', has_note: false, last_turn_at: ago(3 * HOUR), context_tokens: 140000, cold_resume_usd: 0.7, next_turn: { kind: 'cold', since: Date.now() - 2 * HOUR, tokens: 140000 } }),
+  ], { ...GATE, brief: undefined });
+  assert.match(card, /Validate the change/);
+  assert.match(line, /^Continue:/);
+  assert.match(line, /reviewer[^·]*resumes cold ~140K ≈ \$0\.70/i);
 });
