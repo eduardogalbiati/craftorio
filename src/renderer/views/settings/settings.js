@@ -103,7 +103,7 @@ async function saveFallbackSettings() {
   for (const el of document.querySelectorAll('#set-fallbacks [data-fb-provider]')) {
     const entries = el.value.split(/[,\s]+/).map((s) => s.trim()).filter(Boolean);
     const bad = entries.find((e) => !FALLBACK_ENTRY.test(e));
-    if (bad) { msg.className = 'small error'; msg.textContent = `"${bad}" is not provider:model (e.g. codex:gpt-6-luna).`; el.focus(); return; }
+    if (bad) { msg.className = 'small error'; msg.textContent = `"${bad}" is not provider:model (e.g. codex:gpt-6-luna).`; el.focus({ preventScroll: true }); return; }
     const { fallbacks: _old, ...rest } = providers[el.dataset.fbProvider] || {};
     providers[el.dataset.fbProvider] = entries.length ? { ...rest, fallbacks: entries } : rest;
     if (!Object.keys(providers[el.dataset.fbProvider]).length) delete providers[el.dataset.fbProvider];
@@ -114,7 +114,7 @@ async function saveFallbackSettings() {
     for (const el of row.querySelectorAll('[data-ml]')) {
       const n = Number(el.value);
       el.classList.toggle('invalid', el.value !== '' && !(n > 0));
-      if (el.value !== '' && !(n > 0)) { msg.className = 'small error'; msg.textContent = 'A factor or a cost limit is a positive number.'; el.focus(); return; }
+      if (el.value !== '' && !(n > 0)) { msg.className = 'small error'; msg.textContent = 'A factor or a cost limit is a positive number.'; el.focus({ preventScroll: true }); return; }
       if (el.value !== '') lim[el.dataset.ml] = n;
     }
     if (Object.keys(lim).length) models[row.dataset.mlModel] = lim;

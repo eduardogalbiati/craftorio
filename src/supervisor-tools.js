@@ -40,8 +40,9 @@ function supervisorTools(ctx) {
       // Nor the steps' empty fields (#223: the e2e and heal steps pushed them over again).
       // Nor the inputs' options (#260: release.yaml pushed them over again): the labels of the values `enum` already lists.
       // Nor the roadmap card's pipeline data (#282: the steps' mode transitions pushed them over again; the groups are not picked).
+      // Nor the agents' runs_on (#262: the Start drawer's resolved provider/model, already in the agent, pushed them over again).
       run: () => JSON.stringify(ctx.listWorkflows().map(({ file, origin, name, version, description, category, tags, inputs, outputs, agents: a, steps }) => (
-        { file, origin, name, version, description, category, tags, inputs: withoutUi(inputs, 'label', 'options'), outputs, agents: withoutUi(a, 'color'), steps: (steps || []).map(compactStep) }))),
+        { file, origin, name, version, description, category, tags, inputs: withoutUi(inputs, 'label', 'options'), outputs, agents: withoutUi(a, 'color', 'runs_on'), steps: (steps || []).map(compactStep) }))),
     },
     {
       name: 'read_workflow',
