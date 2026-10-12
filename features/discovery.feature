@@ -128,3 +128,33 @@ Feature: Shape accepted ideas on the Discovery board
     Then an issue of the list shows the badge of the Discovery card "Per-project budget"
     When I open the badge of the Discovery card "Per-project budget"
     Then the Discovery card "Per-project budget" opens read-only
+
+  @issue-259
+  Scenario: Moving a card into Shape asks to run its automation and, accepted, the card shows it Running
+    Given the app is open
+    And I accepted the idea "Export runs as CSV" in the Inbox
+    When I open "Discovery" in the sidebar
+    And I move the Discovery card "Export runs as CSV" to "Shape"
+    Then the move proposes running "AI Arena → Write & Review" on the card, with a cost estimate
+    When I run the proposed automation
+    Then the Discovery column "Shape" shows the card "Export runs as CSV"
+    And the Discovery card "Export runs as CSV" shows its automation "Running"
+
+  @issue-259
+  Scenario: With the Shape automation turned off, moving a card into Shape proposes nothing
+    Given the app is open
+    And I accepted the idea "Keyboard shortcuts" in the Inbox
+    When I open "Discovery" in the sidebar
+    And I set the automation of the Discovery column "Shape" to "Off"
+    And I move the Discovery card "Keyboard shortcuts" to "Shape"
+    Then the Discovery column "Shape" shows the card "Keyboard shortcuts"
+    And no automation is proposed
+    And the Discovery card "Keyboard shortcuts" shows no automation
+
+  @issue-259
+  Scenario: The column automation settings show the Shape automation and its mode
+    Given the app is open
+    When I open "Discovery" in the sidebar
+    And I open the automation settings of the Discovery column "Shape"
+    Then the automation settings show the pipeline "AI Arena → Write & Review" in mode "Ask me"
+    And the automation mode offers "Ask me", "On" and "Off"
