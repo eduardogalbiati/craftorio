@@ -78,8 +78,8 @@ tool's own timeout, although the suite had passed in 3.
   `awk`) are fine; `;`/`&&` chains are accepted only when every part is allowed, so when unsure,
   run one command per call.
 - **No scripts inline**: never `sed -i`, never a heredoc (`cat > file <<'EOF'`, `node - <<'EOF'`),
-  never an inline `node -e "…{…}…"` or `awk '{…}'` program, never a `#` or `$` inside a quoted
-  argument: the CLI's parser refuses them. A script goes to a file under `<run_dir>/scratch`,
+  never an inline `node -e "…{…}…"` or `awk '{…}'` program, never a `#` after a newline or a `$`
+  expansion inside a quoted argument: the CLI's parser refuses them. A script goes to a file under `<run_dir>/scratch`,
   written with the `Write` tool, then `node <file>`.
 - **File tools for files**: `Read` instead of `cat`/`sed -n`, `Grep` instead of `grep -n`, `Glob`
   instead of `ls`/`find`, `Edit` instead of `sed -i`, `Write` instead of `cat > file`. Bash stays

@@ -9,8 +9,7 @@ reads: [code-review]
 
 # Self-review
 
-The last thing before answering: read your branch's diff (`git diff <base>...HEAD`, the diff,
-not the whole files again) as the reviewer will, and fix what you find. You run unattended:
+What to check in your own diff (the step's prompt says when and how). You run unattended:
 record an assumption instead of asking.
 
 ## Checklist
@@ -31,7 +30,3 @@ record an assumption instead of asking.
 - **The language's rules**: read `rules/<language>.md` for the diff's languages in the
   code-review folder listed below (e.g. `rules/javascript-typescript.md`, `rules/python.md`,
   `rules/shell-ci.md` for scripts and CI files), and check the diff against them.
-
-On a large diff, one exploration sub-agent may check it against the rules and return only what
-it finds. Fix what you find with a new commit (never in an acceptance test), and say in
-`self_review`, in a few lines, what you checked and what you changed.

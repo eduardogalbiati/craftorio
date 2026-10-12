@@ -3,7 +3,7 @@ name: ui-conventions
 description: How a screen change is built, captured and checked for how it looks and is used, not only for what it does - reuse the project's shared components, controls that follow the data, state as badges, the primary information first, explicit Save/Cancel; the interaction states to capture; and the visual review of the screenshots (ui_findings). Use when a change touches a screen, a dialog, a component or styles.
 summary: "UI changes: shared components, controls that follow the data, states to capture, and the visual review of the screenshots (ui_findings)"
 used_by: "developer (software-development workflows, when the change touches the UI); evidence (the visual review); ui_reviewer (ai-development-local-hero, with design-system)"
-# "## 2. Developer: ..." reaches only the developer agent's prompt (#300)
+# "## Developer: ..." reaches only the developer agent's prompt (#300)
 role_sections: [developer]
 ---
 
@@ -14,7 +14,7 @@ the title, an enum is a free-text box hidden in a collapsed section, a form is m
 full-width boxes. Nobody catches that in a diff. These rules apply to every change that touches a
 screen; they are skipped for changes without UI. You run unattended: record a default, never ask.
 
-## 1. Conventions (the developer builds with them, the reviewer checks against them)
+## Conventions (the developer builds with them, the reviewer checks against them)
 
 - **Reuse the shared components** before writing new ones: the project's docs name them (this
   orchestrator: "UI conventions" in `docs/agents/renderer.md`; elsewhere the design system, the
@@ -46,7 +46,7 @@ screen; they are skipped for changes without UI. You run unattended: record a de
   screen's own words ("Removed #279 from the roadmap"), and Undo says why when it can no longer be
   done; it never undoes more than that one action.
 
-## 2. Developer: build, log, plan the capture
+## Developer: build, log, plan the capture
 
 - Before writing markup, find the closest existing screen and the shared components it uses.
 - Log each UI choice a reviewer could question in the decision log (which component, which control
@@ -58,17 +58,17 @@ screen; they are skipped for changes without UI. You run unattended: record a de
   (e.g. the screenshot command's `--click <css selector>`, a tab, a mode). Keep it to the states
   that change; at most 4 beyond the default view.
 
-## 3. Evidence: capture the states, then review them
+## Evidence: capture the states, then review them
 
 - Capture what the plan lists (the default view original and modified, plus each listed state
   modified only), with the project's screenshot command and its click option, into your round
   folder (`evidence_dir`) as `<issue>-<screen>-<state>.original.png` / `.modified.png`. Look at
   each PNG once.
-- Review every UI screenshot against section 1 and return `ui_findings`, one per problem:
+- Review every UI screenshot against the Conventions section and return `ui_findings`, one per problem:
   - `element`: what you look at ("the item's mode", "the Edit form's language field");
   - `problem`: what is wrong, concretely ("free-text box for an enum", "label widths differ, the
     boxes don't line up", "file name in bold, the issue titles only in tooltips");
-  - `convention`: the rule of section 1 it breaks;
+  - `convention`: the rule of the Conventions section it breaks;
   - `screenshot`: the file it shows in;
   - `blocking`: true when it makes the screen hard to read or use (a wrong control for the data,
     the primary information hidden, a form without Save/Cancel, a broken layout, a missing state
