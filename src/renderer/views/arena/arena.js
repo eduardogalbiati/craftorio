@@ -424,7 +424,7 @@
       ...contenders().filter((r) => chat.proposals[r] != null).map((r) => ({ id: `p:${r}`, role: r, label: roles[r].name })),
       ...chat.finals.map((_, i) => ({ id: `f:${i}`, role: 'synthesizer', label: `Final v${i + 1}` })),
     ];
-    $a('#arena-doc-tabs').innerHTML = tabs.map((t) => `<button type="button" ${styleOf(t.role)} class="${t.id === chat.docTab ? 'active' : ''}" data-tab="${esc(t.id)}">${esc(t.label)}</button>`).join('');
+    $a('#arena-doc-tabs').innerHTML = tabs.map((t) => `<button type="button" ${styleOf(t.role)} class="${t.id === chat.docTab ? 'active' : ''}" data-tab="${esc(t.id)}" title="${esc(t.label)}">${esc(t.label)}</button>`).join('');
     const [kind, key] = String(chat.docTab || '').split(/:(.*)/);
     const text = kind === 'p' ? chat.proposals[key] : kind === 'f' ? chat.finals[+key] : kind === 'a' ? chat.attachments[+key]?.text : null;
     $a('#arena-doc-body').innerHTML = text == null ? '<p class="muted">No proposal yet.</p>' : md(text);
@@ -443,9 +443,9 @@
     $a('#arena-board').innerHTML = !list.length ? '<p class="muted small">No contenders yet.</p>' : list.map((r) => {
       const v = avg(r);
       const n = chat.scores[r]?.length || 0;
-      return `<div class="ar-board-row${v != null && v === best ? ' best' : ''}" ${styleOf(r)} title="${n} score${n === 1 ? '' : 's'} from the other models">
-        <span class="name">${esc(roles[r].name)}</span><span class="bar"><i style="width:${v == null ? 0 : Math.min(100, v * 10)}%"></i></span>
-        <span class="val">${v == null ? '—' : v.toFixed(1)}</span></div>`;
+      return `<div class="ar-board-row${v != null && v === best ? ' best' : ''}" ${styleOf(r)} title="${n} score${n === 1 ? '' : 's'} from the other models" data-testid="arena-score-row">
+        <span class="name" data-testid="arena-score-name">${esc(roles[r].name)}</span><span class="bar" data-testid="arena-score-bar"><i style="width:${v == null ? 0 : Math.min(100, v * 10)}%"></i></span>
+        <span class="val" data-testid="arena-score-value">${v == null ? '—' : v.toFixed(1)}</span></div>`;
     }).join('') + (chat.peer ? '' : '<p class="muted small">Peer review is off for this run.</p>');
   }
 
@@ -970,17 +970,17 @@
             <div id="arena-messages" class="duo-messages"></div>
           </div>
 
-          <aside class="duo-side">
-            <section class="duo-doc">
+          <aside class="duo-side ar-side" data-testid="arena-side">
+            <section class="duo-doc" data-testid="arena-doc-section">
               <div class="duo-side-head"><h2>Documents</h2></div>
-              <div id="arena-doc-tabs" class="ar-doc-tabs"></div>
+              <div id="arena-doc-tabs" class="ar-doc-tabs" data-testid="arena-doc-tabs"></div>
               <article id="arena-doc-body" class="duo-doc-body md md-compact">No proposal yet.</article>
             </section>
-            <section class="ar-board-panel">
+            <section class="ar-board-panel" data-testid="arena-scores-section">
               <div class="duo-side-head"><h2>Peer scores</h2><span class="muted small">average, 0–10</span></div>
               <div id="arena-board" class="ar-board"></div>
             </section>
-            <section class="duo-super-panel">
+            <section class="duo-super-panel" data-testid="arena-supervisor-section">
               <div class="duo-side-head">
                 <h2>Supervisor</h2>
                 <span id="arena-super-state" class="pill pill-running">watching</span>
