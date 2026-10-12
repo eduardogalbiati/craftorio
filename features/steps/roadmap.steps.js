@@ -3,7 +3,8 @@
 // count (#268), the live run timer and a fix round (#272), no "Update the app after this" switch (#279),
 // the bar's state dot, icons, ⋮ menu and filter row (#269), "Ask the Oracle about this failure" (#271),
 // Undo a removal and earlier versions (#281), the item card's bands, Workflow band, pipeline and the
-// stage actions menu (#282), disabling a stage (#284), no "Update the app after this" control (#285), on the demo roadmap (scripts/screenshot.js
+// stage actions menu (#282), disabling a stage (#284), no "Update the app after this" control (#285),
+// the shipped releases' blocks, version lines and Releases filter (#291), on the demo roadmap (scripts/screenshot.js
 // demoRoadmap / demoRoadmapRuns). Locators are roles and data-testid only (skills/ui-conventions).
 //
 // What the screens expose (the renderer's contract for these steps):
@@ -816,4 +817,104 @@ Then('no roadmap item shows an {string} control', async ({ e2e }, name) => {
   await expect(items.getByRole('checkbox', { name, exact: true })).toHaveCount(0);
   await expect(items.getByRole('switch', { name, exact: true })).toHaveCount(0);
   await expect(items.getByText(name, { exact: true })).toHaveCount(0);
+});
+
+// ---- #291: the shipped releases on the Roadmap ---------------------------------------------------------
+// What the screen exposes (the renderer's contract for these steps):
+// - data-testid="roadmap-release-block": a shipped release's block, headed "Release <version>",
+//   holding the roadmap-stage sections whose runs shipped in it;
+// - data-testid="roadmap-release-card": the block's card (the version, its issues, date, cost);
+// - data-testid="roadmap-release-line": the dashed version line that closes the block, reading the
+//   shipped version;
+// - data-testid="roadmap-release-filter": the filter row's Releases filter (a <select> named
+//   "Releases", or a button opening a menu of the releases).
+// Assumption: the head's count is roadmap-count, which names the chosen release and counts its stages.
+
+const releaseRe = (version) => new RegExp(`${escapeRe(version)}(?![\\w.])`);
+const releaseBlock = (page, version) => page.getByTestId('roadmap-release-block').filter({ hasText: new RegExp(`Release ${releaseRe(version).source}`) }).first();
+
+// A shipped release in the project's history (<workspace>/releases/<projectId>.json, src/releases.js,
+// as scripts/screenshot.js demoReleases writes it), holding the runs of stage n's done items (stage n
+// as the roadmap numbers it: the demo's stage 1 "Stability first", stage 2 "Tonight"). Added to the
+// releases already there; the app reloads to read it.
+Given('the project shipped the release {string} with the done runs of stage {int}', async ({ e2e }, version, n) => {
+  const roadmap = JSON.parse(fs.readFileSync(roadmapFile(e2e), 'utf8'));
+  const target = roadmap.stages[n - 1];
+  expect(target, `the demo roadmap's stage ${n}`).toBeTruthy();
+  const done = target.items.filter((x) => x.status === 'done' && (x.runs?.length || x.runId));
+  expect(done.length, `done items with runs in stage ${n}`).toBeGreaterThan(0);
+  const runs = [...new Set(done.flatMap((x) => (x.runs?.length ? x.runs : [x.runId])))];
+  const issues = done.flatMap((x) => (x.issues?.length ? x.issues : [x])).map((i) => ({ number: i.number, title: i.title }));
+  const dir = path.join(e2e.scratch, 'workspace', 'releases');
+  const file = path.join(dir, `${e2e.project.id}.json`);
+  fs.mkdirSync(dir, { recursive: true });
+  const history = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : { releases: [], next: { notes: '' } };
+  history.releases.push({
+    version, tag: version, date: new Date().toISOString(), base: 'main', issues, runs, cost: 4.2,
+    tests: { unit: { status: 'pass', passed: 412, failed: 0 }, e2e: { status: 'pass', passed: 37, failed: 0 } },
+    notes: `# ${version}`, status: 'shipped',
+  });
+  fs.writeFileSync(file, JSON.stringify(history, null, 2));
+  await e2e.window.reload();
+  await e2e.window.waitForLoadState('domcontentloaded');
+});
+
+// The release block is not a stage (#291): it sits after the last stage that has a run in the
+// release, so the last real stage before it in the reading order is stage n.
+Then('the roadmap shows the block {string} right after stage {int}', async ({ e2e }, title, n) => {
+  const block = releaseBlock(e2e.window, title.replace(/^Release\s+/, ''));
+  await expect(block).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(block).toContainText(title);
+  await expect(block.getByTestId('roadmap-stage')).toHaveCount(0);
+  const before = await block.evaluate((el) => {
+    const stages = Array.from(document.querySelectorAll('[data-testid="roadmap-stage"]'))
+      .filter((s) => s.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING);
+    const last = stages[stages.length - 1];
+    return last ? last.textContent : '';
+  });
+  expect(before, `the stage before the release block "${title}"`).toMatch(new RegExp(`\\bStage ${n}\\b`));
+});
+
+Then('the release block {string} shows its release card', async ({ e2e }, version) => {
+  const card = releaseBlock(e2e.window, version).getByTestId('roadmap-release-card');
+  await expect(card).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(card).toContainText(releaseRe(version));
+});
+
+// dashed: the line itself, or its ::before / ::after, draws a dashed border
+Then('a dashed version line reads {string}', async ({ e2e }, version) => {
+  const line = e2e.window.getByTestId('roadmap-release-line').filter({ hasText: releaseRe(version) }).first();
+  await expect(line).toBeVisible({ timeout: LOAD_TIMEOUT });
+  const dashed = await line.evaluate((el) => [null, '::before', '::after'].some((pseudo) => {
+    const s = getComputedStyle(el, pseudo);
+    return ['borderTopStyle', 'borderBottomStyle', 'borderLeftStyle', 'borderRightStyle', 'outlineStyle'].some((k) => s[k] === 'dashed');
+  }));
+  expect(dashed, `the version line "${version}" is dashed`).toBe(true);
+});
+
+When('I choose the release {string} in the Releases filter', async ({ e2e }, version) => {
+  const page = e2e.window;
+  const filter = page.getByTestId('roadmap-release-filter').filter({ visible: true }).first();
+  await expect(filter).toBeVisible({ timeout: LOAD_TIMEOUT });
+  const re = releaseRe(version);
+  if (await filter.evaluate((el) => el.tagName === 'SELECT')) {
+    const value = await filter.locator('option').evaluateAll((opts, source) => opts.find((o) => new RegExp(source).test(o.textContent))?.value ?? null, re.source);
+    expect(value, `the Releases filter offers "${version}"`).not.toBeNull();
+    await filter.selectOption(value);
+  } else {
+    await filter.click();
+    await page.getByRole('menuitemradio', { name: re }).or(page.getByRole('menuitem', { name: re })).or(page.getByRole('option', { name: re })).first().click();
+  }
+});
+
+Then('the roadmap shows only stage {int}', async ({ e2e }, n) => {
+  const shown = e2e.window.getByTestId('roadmap-stage').filter({ visible: true });
+  await expect(shown).toHaveCount(1, { timeout: LOAD_TIMEOUT });
+  await expect(shown.first()).toContainText(new RegExp(`\\bStage ${n}\\b`));
+});
+
+Then('the roadmap header counts {int} stage(s) for the release {string}', async ({ e2e }, n, version) => {
+  const head = header(e2e.window);
+  await expect(head).toContainText(releaseRe(version), { timeout: LOAD_TIMEOUT });
+  await expect(head).toContainText(new RegExp(`\\b${n} stages?\\b`));
 });

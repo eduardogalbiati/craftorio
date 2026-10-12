@@ -397,3 +397,31 @@ Feature: Roadmap statuses, done items, filters and run timers
     And I open "Backlog" in the sidebar
     And I open the Roadmap
     Then no roadmap item shows an "Update the app after this" control
+
+  # ---- #291: the shipped releases on the Roadmap ------------------------------------------------------
+  # The demo workspace has no release history: the scenarios add shipped releases holding the runs of a
+  # stage's done items (stage 1 "Stability first": #11, months old; stage 2 "Tonight": #9 and #12, a few
+  # hours ago). Assumption: the Releases filter shows a release's stages whatever the date filter; the
+  # scenario still sets "Total" first, since stage 1's run is months old.
+
+  @issue-291
+  Scenario: A shipped release shows as a "Release" block closed by a dashed line with its version
+    Given the app is open
+    And the project shipped the release "v0.9.1" with the done runs of stage 2
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    Then the roadmap shows the block "Release v0.9.1" right after stage 2
+    And the release block "v0.9.1" shows its release card
+    And a dashed version line reads "v0.9.1"
+
+  @issue-291
+  Scenario: Choosing a release in the Releases filter shows only its stages, counted in the head
+    Given the app is open
+    And the project shipped the release "v0.9" with the done runs of stage 1
+    And the project shipped the release "v0.9.1" with the done runs of stage 2
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    And I set the roadmap's date filter to "Total"
+    And I choose the release "v0.9" in the Releases filter
+    Then the roadmap shows only stage 1
+    And the roadmap header counts 1 stage for the release "v0.9"

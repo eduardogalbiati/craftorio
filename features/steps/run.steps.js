@@ -1,8 +1,12 @@
 // Steps of features/run.feature (#222): the Start panel, a simulated run of the demo project, its
-// gate card; the "Developer effort" field next to "Developer model" (#286). Locators are roles and data-testid only (skills/ui-conventions).
+// gate card; the "Developer effort" field next to "Developer model" (#286); the chat of a run
+// interrupted at a gate (#288: the note "Interrupted at <step>" and its Resume button). Locators are
+// roles and data-testid only (skills/ui-conventions).
 
+const fs = require('fs');
+const path = require('path');
 const { expect } = require('@playwright/test');
-const { When, Then } = require('./fixtures');
+const { Given, When, Then } = require('./fixtures');
 
 // a simulated run of software-development reaches its first gate in well under a minute
 const GATE_TIMEOUT = 120000;
@@ -218,4 +222,87 @@ Then('{string} offers the choices {string}, {string}, {string}, {string} and {st
   const norm = (s) => String(s).toLowerCase().replace(/[^a-z]/g, '').replace(/^extra/, 'x');
   await expect(radios).toHaveCount(5);
   expect((await radios.allTextContents()).map(norm)).toEqual([a, b, c, d, e].map(norm));
+});
+
+// #288: the chat of a run interrupted at a human gate (the app closed while the gate waited) shows a
+// note "Interrupted at <step>" (data-testid runchat-interrupted-note) instead of "Waiting for an
+// answer.", and a Resume button (data-testid runchat-resume) that opens the Resume from step dialog
+// (index.html #resume-modal: a dialog named "Resume from step", its step select labelled the same)
+// with the stopped step preselected.
+const LOAD_TIMEOUT = 30000;
+const stepIdOf = (name) => name.trim().toLowerCase().replace(/\s+/g, '_');
+const visibleTestId = (page, id) => page.getByTestId(id).filter({ visible: true }).first();
+const resumeDialog = (page) => page.getByRole('dialog', { name: 'Resume from step', exact: true });
+
+// A simulated software-development-local-hero run of the demo project, written like scripts/screenshot.js
+// demoRoadmapRuns: develop and its screenshots done, then the gate `gate` (its readable name:
+// "Developer check" → developer_check) asked for an answer. No summary.json and no owner.json: the
+// app reads it as interrupted (src/runs.js liveStatus). The run list reads the runs folder when the
+// screen opens, so no reload is needed.
+Given('the demo project has a run {string} interrupted at the gate {string}', async ({ e2e }, suffix, gate) => {
+  const min = 6e4;
+  const workflow = 'software-development-local-hero';
+  const start = Date.now() - 3 * 3600e3;
+  const runId = `${new Date(start).toISOString().slice(0, 10).replace(/-/g, '')}-201500-${suffix}`;
+  const dir = path.join(e2e.scratch, 'workspace', 'runs', runId);
+  const at = (m) => new Date(start + m * min).toISOString();
+  const task = `A run interrupted at a gate (${suffix})`;
+  const session = { agent: 'developer', provider: 'claude', model: 'claude-opus-5-5' };
+  const events = [
+    { ts: at(0), type: 'workflow.started', run_id: runId, workflow, file: `${workflow}.yaml`, project_id: e2e.project.id, mock: true, inputs: { task } },
+    { ts: at(0), type: 'step.started', step_id: 'develop', step_type: 'agent', agent: 'developer' },
+    { ts: at(0), type: 'session.opened', session_id: 's-develop', session },
+    { ts: at(30), type: 'session.message_received', session_id: 's-develop', step_id: 'develop', text: 'Done.', cost_usd: 0.4, duration_ms: 30 * min, session },
+    { ts: at(30), type: 'step.finished', step_id: 'develop', duration_ms: 30 * min, output: { summary: 'Implemented the task.' } },
+    { ts: at(30), type: 'step.started', step_id: 'developer_screenshots', step_type: 'screenshots' },
+    { ts: at(32), type: 'step.finished', step_id: 'developer_screenshots', duration_ms: 2 * min },
+    { ts: at(32), type: 'step.started', step_id: stepIdOf(gate), step_type: 'human_approval' },
+    { ts: at(32), type: 'approval.requested', step_id: stepIdOf(gate), approval_id: 'gate-288', message: 'The developer finished the implementation. Try it before the review and the tests run.' },
+  ];
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'events.jsonl'), `${events.map((e) => JSON.stringify(e)).join('\n')}\n`);
+});
+
+// Workflows › Runs, after `I search the runs for`: expands the run's row and clicks its "Open chat"
+When('I open the chat of the run {string} from the list', async ({ e2e }, fragment) => {
+  const page = e2e.window;
+  const row = page.locator(`[data-testid="run-list-row"][data-run$="${fragment}"]`).filter({ visible: true }).first();
+  await expect(row).toBeVisible({ timeout: LOAD_TIMEOUT });
+  const open = row.getByRole('button', { name: 'Open chat', exact: true });
+  if (!(await open.isVisible())) await row.locator('.pr-row').first().click();
+  await open.click();
+});
+
+Then('the run chat notes {string}', async ({ e2e }, text) => {
+  const note = visibleTestId(e2e.window, 'runchat-interrupted-note');
+  await expect(note).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(note).toContainText(text);
+});
+
+// checked once the chat has drawn its interrupted note
+Then('the run chat does not say {string}', async ({ e2e }, text) => {
+  const page = e2e.window;
+  await expect(visibleTestId(page, 'runchat-interrupted-note')).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(page.getByText(text, { exact: true }).filter({ visible: true })).toHaveCount(0);
+});
+
+Then('the run chat offers a Resume button', async ({ e2e }) => {
+  const button = visibleTestId(e2e.window, 'runchat-resume');
+  await expect(button).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(button).toBeEnabled();
+  await expect(button).toHaveAccessibleName(/Resume/);
+});
+
+When('I click Resume in the run chat', async ({ e2e }) => {
+  await visibleTestId(e2e.window, 'runchat-resume').click();
+});
+
+// the step select holds the step's id as its value, its option reads the readable name first
+Then('the resume dialog opens with the step {string} preselected', async ({ e2e }, name) => {
+  const dialog = resumeDialog(e2e.window);
+  await expect(dialog).toBeVisible({ timeout: LOAD_TIMEOUT });
+  const select = dialog.getByRole('combobox', { name: 'Resume from step', exact: true });
+  await expect(select).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(select).toHaveValue(stepIdOf(name));
+  await expect.poll(() => select.evaluate((el) => el.selectedOptions[0]?.textContent.trim() || '')).toMatch(new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`));
 });

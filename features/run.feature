@@ -102,3 +102,28 @@ Feature: Runs and gates
     Then the Oracle shows a simulated answer
     And a gate card waits for my approval
     And the gate card is still in view with its choices enabled
+
+  # ---- #288: the chat of a run interrupted at a gate ------------------------------------------------
+  # The run "-int00288" is seeded as the app closed it: develop done, then the "Developer check" gate
+  # asked for an answer, no summary and no live owner (the app reads it as interrupted).
+
+  @issue-288
+  Scenario: The chat of a run interrupted at a gate says where it stopped and offers Resume
+    Given the app is open
+    And the demo project has a run "int00288" interrupted at the gate "Developer check"
+    When I open "Runs" in the sidebar
+    And I search the runs for "int00288"
+    And I open the chat of the run "int00288" from the list
+    Then the run chat notes "Interrupted at Developer check"
+    And the run chat does not say "Waiting for an answer."
+    And the run chat offers a Resume button
+
+  @issue-288
+  Scenario: Resume in the chat of an interrupted run opens the resume dialog on the stopped step
+    Given the app is open
+    And the demo project has a run "int00288" interrupted at the gate "Developer check"
+    When I open "Runs" in the sidebar
+    And I search the runs for "int00288"
+    And I open the chat of the run "int00288" from the list
+    And I click Resume in the run chat
+    Then the resume dialog opens with the step "Developer check" preselected
