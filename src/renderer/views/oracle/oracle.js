@@ -734,16 +734,18 @@
         if (p?.chat !== 'oracle') return;
         // #263: a question sent from the other window: shown as a turn started elsewhere until its
         // end, when oracle:changed reloads the conversation (reloadSoon)
+        let started = false;
         if (!or.live) {
           if (p.phase === 'end' || or.pending) return;
           Object.assign(or, { pending: '…', pendingSince: Date.now(), liveIn: null, live: window.LiveTurn.create({ agent: 'Oracle' }), elsewhere: true });
-          window.LiveTurn.apply(or.live, p);
-          render();
-          return;
+          started = true;
         }
         window.LiveTurn.apply(or.live, p);
-        chats[or.liveIn]?.setLiveTurn(or.live);
-        if (p.phase === 'end' && or.elsewhere) { Object.assign(or, { pending: null, live: null, liveIn: null, elsewhere: false }); load(); }
+        // a turn started elsewhere has no surface of its own: every mounted chat shows its steps
+        for (const c of or.liveIn ? [chats[or.liveIn]] : Object.values(chats)) c?.setLiveTurn(or.live);
+        if (started) render();
+        // at its end the conversation is reloaded, then the questions queued here meanwhile are sent (sent)
+        if (p.phase === 'end' && or.elsewhere) { Object.assign(or, { pending: null, live: null, liveIn: null, elsewhere: false }); load().then(sent); }
       });
       document.addEventListener('click', (e) => {
         const t = e.target;

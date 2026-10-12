@@ -283,7 +283,8 @@
         if (p?.chat !== 'supervisor') return;
         if (!sv.live) { turnElsewhere(p); return; }
         window.LiveTurn.apply(sv.live, p);
-        (sv.liveIn || chat).setLiveTurn(sv.live);
+        // a turn started elsewhere has no chat of its own (#263): both show its steps
+        for (const c of sv.liveIn ? [sv.liveIn] : [chat, winChat]) c?.setLiveTurn(sv.live);
         if (p.phase === 'end' && sv.elsewhere) turnElsewhere(p);
       });
       // #241: the owner's Do it / Dismiss / Undo on a request card (agent-request.js)
