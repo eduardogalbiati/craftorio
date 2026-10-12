@@ -31,9 +31,11 @@ const CLAUDE_SUBAGENT_TOOLS = ['Agent', 'Task'];
 // Shell utilities an agent with a command allowlist (bash:<command>) also runs without asking, so a
 // pipe or a `;` chain of allowed commands (`npm test; echo "exit=$?"`, `... | tail -3`) is not
 // refused headless, where nobody can approve it. Read-only: any agent with commands gets them.
-// `[` is `test` in its bracket form (`[ -f file ] && ...`).
+// `[` is `test` in its bracket form (`[ -f file ] && ...`). `awk` (#299): a filter in a pipe; its
+// programs with braces are refused by the CLI's parser anyway. `sed` stays out: `sed -i` writes.
 const READ_UTILITIES = [
   '[',
+  'awk',
   'basename',
   'cat',
   'cut',
@@ -167,7 +169,9 @@ function commandGuide(caps, runDir, agentVars = AGENT_ENV, shotsDir = null) {
     '- Avoid shell expansions the CLI cannot check (`$VAR`, `$(...)`, `$?`): write the value out; the tool already reports each command\'s exit code.',
     // screenshots: false (an agent that should not take any): only the logs' folder
     ...(logs ? [`- Write command logs to \`${logs}${path.sep}<name>.log\`${caps.screenshots === false ? '' : ` and screenshots to \`${shots}\` (as \`<issue>-<screen>-<state>.original.png\` / \`.modified.png\`)`}, never to /tmp, $TEMP or AppData (a gitignored folder of the working folder is fine too).`] : []),
-    '- Pipes and `;` chains are fine when every part is an allowed command or a simple utility (tail, head, grep, ls, cat, echo, wc, printenv; mkdir -p, mktemp and sort when you may write files). When unsure, run one command per call; after a refusal, rephrase it once into an allowed form instead of retrying variants.',
+    '- Pipes and `;` chains are fine when every part is an allowed command or a simple utility (tail, head, grep, awk, ls, cat, echo, wc, printenv; mkdir -p, mktemp and sort when you may write files). When unsure, run one command per call; after a refusal, rephrase it once into an allowed form instead of retrying variants.',
+    // #299: refused by the CLI's own parser whatever the allow list says
+    '- The CLI\'s parser also refuses a `#` after a newline or a `$` inside a quoted argument, a heredoc (`cat > file <<\'EOF\'`, `node - <<\'EOF\'`) and an inline script with braces and quotes (`node -e "...{...}..."`, `awk \'{...}\'`): write the script to a file with your file tool, then run `node <file>`.',
   ].join('\n');
 }
 

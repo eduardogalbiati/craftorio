@@ -706,8 +706,8 @@ steps:
     agent: developer
     # {{ test_map }}: the checkout's code → tests map (#219), for the tests of the files it changes
     test_map: true
-    # the self-review (#179) reads the diff against the reviewer's checklist and its rules/*.md (read access to its folder)
-    skills: [code-review]
+    # the self-review (#179): a short checklist (#300), with read access to code-review's rules/*.md
+    skills: [self-review]
     prompt: |
       Task: {{ inputs.task }}
 
@@ -837,8 +837,8 @@ steps:
       {% endif %}
       Self-review (#179), the last thing before answering: read your branch's diff,
       `git diff {{inputs.base_branch}}...HEAD` (the diff, not the whole files again), against the
-      code-review skill's checklist and its rules for the change's language (`rules/*.md`), as the
-      reviewer will. On a large diff, one exploration sub-agent may check it against the rules and
+      self-review skill's checklist and the code-review rules for the change's language
+      (`rules/*.md`), as the reviewer will. On a large diff, one exploration sub-agent may check it against the rules and
       return only the findings. Fix what you find with a new commit (never in an acceptance test),
       and say in `self_review`, in a few lines, what you checked and what you changed.
     # a fix round with a new commit, summary or set of files is progress, not "the same answer" (#121)

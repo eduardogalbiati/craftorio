@@ -2356,7 +2356,7 @@ class WorkflowRun extends EventEmitter {
     if (!step.agents) st.delegate_result = null; // consumed (in a fan-out, after all of them)
     // step skills go in the prompt itself; the name can be a template ("{{ inputs.document_skill }}")
     const skills = this.loadSkills((step.skills || []).map((n) => render(n, scope).trim()));
-    if (skills.length) prompt = `${skills.map(skillPrompt).join('\n\n')}\n\n${prompt}`;
+    if (skills.length) prompt = `${skills.map((sk) => skillPrompt(sk, agentName)).join('\n\n')}\n\n${prompt}`;
     const extra = goalLoopInstructions(step, st, this.ctx);
     st.probeNews = null; // consumed
     if (extra) prompt += '\n\n---\n' + extra;
@@ -2974,7 +2974,7 @@ class WorkflowRun extends EventEmitter {
     // node_modules linked from the shared cache (#198): Claude refuses `npm ci` and deleting it
     const depsLinked = !!this.deps?.worktree?.entry;
     if (turn === 1 && (agent.system_prompt || agentSkills.length || guide)) {
-      const system = [render(agent.system_prompt, this.ctx).trim(), guide, ...agentSkills.map(skillPrompt)].filter(Boolean).join('\n\n');
+      const system = [render(agent.system_prompt, this.ctx).trim(), guide, ...agentSkills.map((sk) => skillPrompt(sk, agentName))].filter(Boolean).join('\n\n');
       parts.push(`<system>\n${system}\n</system>`);
     }
     if (note) {
@@ -3007,8 +3007,8 @@ class WorkflowRun extends EventEmitter {
       });
     }
     // The provider's `skill_args` grants read access to each skill's folder, which lives
-    // outside the working_dir (e.g. claude --add-dir <folder>). Applies to every turn.
-    const skillDirs = [...new Set([...agentSkills, ...stepSkills].map((sk) => sk.path))];
+    // outside the working_dir (e.g. claude --add-dir <folder>), and to the folders it `reads` (#300). Every turn.
+    const skillDirs = [...new Set([...agentSkills, ...stepSkills].flatMap((sk) => [sk.path, ...(sk.reads || []).map((r) => r.path)]))];
     const skillArgs = skillDirs.flatMap((dir) => (provider?.skill_args || []).map((a) => render(a, { skill_dir: dir })));
     // cli_args may be keyed by provider when the provider is picked at run time
     const cliArgs = Array.isArray(agent.cli_args) ? agent.cli_args : agent.cli_args?.[agent.provider] || [];

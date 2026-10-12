@@ -7,6 +7,10 @@ same features for users; this is the implementer's summary.
 
 - `agents.<name>.skills` (system prompt, 1st turn of a session) and `steps[].skills` (step prompt);
   names can be templates (`"unit-test-writer-{{ inputs.language }}"`).
+  Skill frontmatter (src/skills.js): `uses: [a]` injects skill `a` first; `role_sections: [test_writer]`
+  (#300) sends a `## Test writer: …` (or `## 2. Test writer: …`) section only to the agent named
+  `test_writer`, the others get the skill without it; `reads: [code-review]` (#300) grants read access to
+  that skill's folder and lists it, without injecting its text (self-review reads `rules/<language>.md`).
 - `agents: [a, b]` on a step = parallel fan-out → `{ results, succeeded, failed }`, `min_success`.
   `agent_when: { <agent>: <expr> }` (#151) leaves an agent out of a visit when its expression is
   false (output `skipped`, `min_success` capped at the agents that run); `required_agents: [a]`

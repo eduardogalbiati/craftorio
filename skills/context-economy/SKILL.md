@@ -3,6 +3,8 @@ name: context-economy
 description: Keeps an unattended agent's context small - does code research through exploration sub-agents (the first map, wide searches, long outputs, unmapped findings), reads excerpts instead of whole files, groups edits, and leaves a handoff note that lets the next turn start fresh. Use for agents with long turns that come back for fixes (e.g. the developer, the test writer).
 summary: "Does code research through exploration sub-agents, reads excerpts instead of whole files, writes handoff notes the next fresh session can act on"
 used_by: "developer, test_writer"
+# "## Test writer: ..." reaches only the test_writer agent's prompt (#300)
+role_sections: [test_writer]
 ---
 
 # Context economy
