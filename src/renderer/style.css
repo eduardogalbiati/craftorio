@@ -602,6 +602,7 @@ details[open] > summary .label::after { content: " ▾"; }
 .pr-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
 .pr-toolbar .chips { margin-bottom: 0; }
 .pr-toolbar .pr-search { width: 220px; max-width: 35%; }
+.pr-toolbar #workflow-run-workflow { width: auto; max-width: 260px; text-overflow: ellipsis; }
 .pr-more { padding: 12px; text-align: center; }
 .pr-list { display: grid; gap: 8px; }
 .pr-list > .muted { margin: 4px 0 0; }

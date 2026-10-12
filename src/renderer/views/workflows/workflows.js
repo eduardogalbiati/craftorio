@@ -369,6 +369,7 @@ function showRunInList(runId) {
   state.wr.filter = 'all';
   state.wr.showSim = true;
   state.wr.q = '';
+  state.wr.workflow = '';
   state.wr.upTo = runId;
   state.wr.expanded.add(runId);
   showView('workflows');
@@ -435,6 +436,8 @@ registerView({
               <button type="button" role="tab" id="wf-tab-artifacts" aria-selected="false" title="The files the runs produced: a run's artifacts and the list of every run's">Artifacts</button>
             </div>
             <div id="workflow-run-filters" class="chips"></div>
+            <!-- #310: the runs of one workflow (run-list.js fills it) -->
+            <select id="workflow-run-workflow" data-testid="runs-workflow-filter" aria-label="Workflow" title="Show the runs of one workflow"></select>
             <span class="spacer"></span>
             <input type="text" id="workflow-run-search" class="pr-search" placeholder="Search runs" aria-label="Search runs" spellcheck="false" />
             <label class="check small"><input type="checkbox" id="workflow-show-sim" /><span>Show simulated</span></label>
@@ -512,6 +515,8 @@ registerView({
     $('#wf-tab-artifacts').onclick = () => showView('artifacts');
     $('#btn-workflow-runs-refresh').onclick = () => loadWorkflowRuns();
     $('#workflow-show-sim').onchange = (e) => { state.wr.showSim = e.target.checked; loadWorkflowRuns(); };
+    // #310: kept in state.wr for the session, never saved
+    $('#workflow-run-workflow').onchange = (e) => { state.wr.workflow = e.target.value; renderWorkflowRuns(); loadWorkflowRuns(); };
     let wrSearchTimer = null;
     $('#workflow-run-search').oninput = (e) => {
       clearTimeout(wrSearchTimer);

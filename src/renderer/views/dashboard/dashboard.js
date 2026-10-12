@@ -283,7 +283,7 @@ function openHomeStage(id) {
   if (stage.view === 'workflows') {
     // the runs in progress of the header's project (the search matches its name), simulated ones included
     state.workflowsTab = 'runs';
-    Object.assign(state.wr, { filter: 'running', showSim: true, q: state.projects.find((p) => p.id === homeProject())?.name || '' });
+    Object.assign(state.wr, { filter: 'running', showSim: true, workflow: '', q: state.projects.find((p) => p.id === homeProject())?.name || '' });
   }
   showView(stage.view);
 }

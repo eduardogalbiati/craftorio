@@ -11,8 +11,8 @@
 // (resume-dialog.js), WATCH_TITLE (supervisor-drawer.js), openArtifactsAt, ArtifactsPanel, DiffViewer.
 //
 // The lists come in pages from the service (#200: runs:list / projects:runs with { offset, limit,
-// filter, showSim, q, upTo }): the filter chips, "Show simulated" and the search ask the service
-// again, the next page loads when the "Loading more…" row scrolls into view (loadRunListPage), and a
+// filter, showSim, q, workflow, upTo }): the filter chips, "Show simulated", the search and the
+// workflow filter (#310, a `#<prefix>-run-workflow` select; Workflows › Runs) ask the service again, the next page loads when the "Loading more…" row scrolls into view (loadRunListPage), and a
 // row's artifacts (artifacts:list { runId }, ART_PAGE at a time) and changes (run:diff, the commits
 // and the files' counts, never a file's contents) load when it opens; the filter is per card and
 // goes back to Produced when the card is reopened. A run event updates its own row (refreshRunRow:
@@ -34,7 +34,7 @@ const ART_PAGE = 50;
 // failed or a newer load replaced it.
 async function loadRunListPage(rl, fetchPage, mode = 'reset') {
   const seq = (rl.seq = (rl.seq || 0) + 1);
-  const opts = { filter: rl.filter || 'all', showSim: !!rl.showSim, q: rl.q || '', offset: 0, limit: RUN_PAGE };
+  const opts = { filter: rl.filter || 'all', showSim: !!rl.showSim, q: rl.q || '', workflow: rl.workflow || '', offset: 0, limit: RUN_PAGE };
   if (mode === 'more') opts.offset = rl.nextOffset || 0;
   if (mode === 'refresh') opts.limit = Math.max(RUN_PAGE, rl.nextOffset || 0);
   if (mode === 'reset' && rl.upTo) opts.upTo = rl.upTo;
@@ -48,6 +48,7 @@ async function loadRunListPage(rl, fetchPage, mode = 'reset') {
       rl.runs = [...(rl.runs || []), ...got.filter((r) => !have.has(r.runId))];
     } else rl.runs = got;
     rl.counts = res.counts || null;
+    rl.workflows = res.workflows || [];
     rl.hiddenSim = res.hiddenSim || 0;
     rl.hasMore = !!res.hasMore;
     rl.nextOffset = res.nextOffset || 0;
@@ -75,6 +76,17 @@ function renderRunList(rl, { prefix, box: boxSel, empty, start, rerender, reload
   filters.innerHTML = RUN_FILTERS.map(([id, label]) =>
     `<button type="button" class="chip ${rl.filter === id ? 'active' : ''}" data-filter="${id}" ${id === 'failed' ? 'title="Failed, cancelled or interrupted"' : ''}>${label} <span class="muted">${rl.counts ? rl.counts[id] ?? 0 : ''}</span></button>`).join('');
   filters.querySelectorAll('[data-filter]').forEach((b) => (b.onclick = () => { rl.filter = b.dataset.filter; rerender(); reload(); }));
+  // the workflow filter (#310, a list that has one): the workflows with runs, named as the rows name them;
+  // the picked one stays an option when it has none
+  const wfSelect = $(`#${prefix}-run-workflow`);
+  if (wfSelect) {
+    const list = [...(rl.workflows || [])];
+    if (rl.workflow && !list.some((w) => w.workflow === rl.workflow)) list.push({ workflow: rl.workflow, count: 0 });
+    const label = (file) => stepName(String(file).replace(/\.ya?ml$/i, ''));
+    wfSelect.innerHTML = `<option value="">All workflows</option>${list.map((w) =>
+      `<option value="${esc(w.workflow)}" title="${esc(w.workflow)}"${w.workflow === rl.workflow ? ' selected' : ''}>${esc(label(w.workflow))} (${w.count})</option>`).join('')}`;
+    wfSelect.value = rl.workflow || '';
+  }
 
   const box = $(boxSel);
   // a run's title being edited stays until it is saved or cancelled (which renders again)
@@ -86,7 +98,7 @@ function renderRunList(rl, { prefix, box: boxSel, empty, start, rerender, reload
   }
   const hiddenSim = rl.hiddenSim || 0;
   const simNote = hiddenSim ? `<p class="muted small">${hiddenSim} simulated run${hiddenSim > 1 ? 's' : ''} hidden.</p>` : '';
-  if (!rl.runs.length && !rl.counts?.all && !rl.q) {
+  if (!rl.runs.length && !rl.counts?.all && !rl.q && !rl.workflow) {
     box.innerHTML = `<div class="empty-state"><b>${esc(empty)}</b>${simNote}<button class="btn primary" data-empty-start>Start workflow</button></div>`;
     box.querySelector('[data-empty-start]').onclick = start;
     return;

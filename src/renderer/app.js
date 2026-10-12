@@ -75,7 +75,7 @@ const state = {
   art: { runs: null, error: null, projectId: "", q: "", showSim: false, sel: null, doc: null, mode: "rendered", reveal: null },
   sup: { runId: null, question: '', loading: false, result: null, error: null, recMsgs: {}, watch: null, watchError: null }, // supervisor panel
   pv: null,           // project detail view: { id, project, runs, error, filter, showSim, expanded, msgs }
-  wr: { runs: null, error: null, filter: 'all', showSim: false, q: '', expanded: new Set(), msgs: new Map() }, // Workflows > Runs
+  wr: { runs: null, error: null, filter: 'all', showSim: false, q: '', workflow: '', expanded: new Set(), msgs: new Map() }, // Workflows > Runs
   usageScope: (() => { try { return localStorage.getItem(USAGE_SCOPE_KEY) === 'machine' ? 'machine' : 'orchestrator'; } catch { return 'orchestrator'; } })(),
   // how runs open: 'details' (the Run screen) or 'chat' (the run chat), the last one the owner picked
   runView: (() => { try { return localStorage.getItem(RUN_VIEW_KEY) === 'chat' ? 'chat' : 'details'; } catch { return 'details'; } })(),
