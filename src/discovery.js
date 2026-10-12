@@ -1008,6 +1008,7 @@ function finishBatch(dir, projectId, batch) {
   }
   for (const m of merges) {
     if (!fs.existsSync(path.join(cardDir(dir, projectId, m.id), 'card.json'))) continue; // archived meanwhile
+    if (readCard(dir, projectId, m.id).column === COMMITTED) continue; // committed meanwhile: kept as it was
     snapshotVersion(dir, projectId, m.id, 'import');
     updateCard(dir, projectId, m.id, { document: m.document, acceptance: m.acceptance });
     appendConversation(dir, projectId, m.id, { kind: 'import', author: by, text: m.note });

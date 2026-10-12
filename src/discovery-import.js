@@ -41,10 +41,18 @@ function cleanTitle(text) {
   return String(text ?? '').replace(BOX, '').replace(CLOSING_HASHES, '').trim().replace(/^(\*\*|__)(.+)\1$/, '$2').replace(/:$/, '').trim();
 }
 
+// The smallest number of a list (Infinity when empty); a loop, as Math.min(...list) overflows the
+// stack on a very long document.
+function least(numbers) {
+  let min = Infinity;
+  for (const n of numbers) if (n < min) min = n;
+  return min;
+}
+
 // The lines without their common indentation, joined; runs of blank lines become one.
 function tidy(lines) {
   const used = lines.filter((l) => l.trim());
-  const cut = used.length ? Math.min(...used.map(indent)) : 0;
+  const cut = used.length ? least(used.map(indent)) : 0;
   const out = lines.map((l) => {
     let i = 0;
     let width = 0;
@@ -105,26 +113,28 @@ function splitDocument(text, { name } = {}) {
     if (m && cleanTitle(m[2])) heads.push({ i, level: m[1].length, title: cleanTitle(m[2]) });
   });
   if (heads.length) {
-    let level = Math.min(...heads.map((h) => h.level));
+    let level = least(heads.map((h) => h.level));
     let docTitle = null;
     // a lone heading over deeper ones is the document's title ("# Backlog", then "## item"s)
     while (heads.filter((h) => h.level === level).length === 1 && heads.some((h) => h.level > level)) {
       docTitle = docTitle || heads.find((h) => h.level === level).title;
-      level = Math.min(...heads.filter((h) => h.level > level).map((h) => h.level));
+      level = least(heads.filter((h) => h.level > level).map((h) => h.level));
     }
     // an item ends at the next heading of its level or above
     const starts = heads.filter((h) => h.level <= level);
-    const items = cut(starts.map((h) => h.i), (i) => starts.find((h) => h.i === i).title)
+    const titles = new Map(starts.map((h) => [h.i, h.title]));
+    const items = cut(starts.map((h) => h.i), (i) => titles.get(i))
       .filter((_, k) => starts[k].level === level);
     // the text before the first item, without the document's title
     const first = heads.find((h) => h.level === level).i;
-    const before = lines.slice(0, first).filter((_, i) => !heads.some((h) => h.i === i && h.level < level));
+    const above = new Set(heads.filter((h) => h.i < first && h.level < level).map((h) => h.i));
+    const before = lines.slice(0, first).filter((_, i) => !above.has(i));
     const titleNote = docTitle ? ` "${docTitle}" is the document's title, not an item.` : '';
     return { items, structured: true, note: `${plural(items.length, 'item')} in ${label}, one per "${'#'.repeat(level)}" heading.${titleNote}${preambleNote(before)}` };
   }
 
   const listed = lines.map((l, i) => (!fenced[i] && LIST.exec(l)) || null);
-  const top = Math.min(...listed.filter((m) => m && cleanTitle(m[2])).map((m) => indent(m[1])));
+  const top = least(listed.filter((m) => m && cleanTitle(m[2])).map((m) => indent(m[1])));
   const starts = listed.map((m, i) => (m && indent(m[1]) === top && cleanTitle(m[2]) ? i : -1)).filter((i) => i >= 0);
   if (starts.length) {
     const items = cut(starts, (i) => cleanTitle(listed[i][2]));
