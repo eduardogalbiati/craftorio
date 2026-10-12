@@ -80,7 +80,7 @@ function renderFallbackSettings() {
   const providers = state.settings.providers || {};
   const catalog = Object.values(window.ChatModels?.PROVIDERS || {});
   const names = [...new Set([...catalog.map((p) => p.key), ...Object.keys(providers)])];
-  const hint = (name) => catalog.filter((p) => p.key !== name).map((p) => `${p.key}:${p.models[0]}`).join(', ');
+  const hint = (name) => catalog.filter((p) => p.key !== name).map((p) => `e.g. ${p.key}:${p.models[0]}`)[0] || '';
   $('#set-fallbacks').innerHTML = names.map((name) => `<div class="s-row">
       <div class="s-label"><b>${esc(name)}</b><span>Out of credits on ${esc(name)}: try these next.</span></div>
       <div class="s-ctrl"><input type="text" class="s-fallbacks" data-fb-provider="${esc(name)}" value="${esc((providers[name]?.fallbacks || []).join(', '))}" placeholder="${esc(hint(name))}" aria-label="Fallbacks of ${esc(name)}" spellcheck="false" /></div>

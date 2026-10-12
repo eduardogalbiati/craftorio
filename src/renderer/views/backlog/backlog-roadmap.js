@@ -336,7 +336,7 @@
     const wfDef = workflows?.get(x.workflow);
     const changed = Object.keys(x.agentOverrides || {}).length;
     const agents = wfDef && window.AgentOverrides
-      ? `<details class="rm-agents"${changed ? ' open' : ''}><summary class="small">Agents${changed ? ` · ${changed} changed for this run` : ''}</summary>${AgentOverrides.html(wfDef, { prefix: `rm-ao-${x.id}`, values: x.agentOverrides })}</details>`
+      ? `<details class="rm-agents"${changed ? ' open' : ''}><summary class="small">Agents${changed ? ` · ${changed} changed for this run` : ''}</summary>${AgentOverrides.html(wfDef, { prefix: `rm-ao-${x.id}`, values: x.agentOverrides, hideLegend: true })}</details>`
       : '';
     return `
       <div class="rm-form" role="group" aria-label="Edit the inputs of this item"${WorkflowInputs.scopeAttrs({ mode })}>

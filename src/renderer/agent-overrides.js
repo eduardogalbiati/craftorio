@@ -4,9 +4,10 @@
 // agentOverrides, recorded in workflow.started). Used by the Start drawer, the Backlog's Assign dialog
 // and a roadmap item's Edit.
 // window.AgentOverrides:
-//   html(wf, { prefix, values })  the section: a <fieldset> "Agents" with one <fieldset> per agent (its
-//                                 readable name), the selects Provider and Effort and the Model input
-//                                 (a datalist of the provider's models); `values` an earlier choice
+//   html(wf, { prefix, values, hideLegend })  the section: a <fieldset> "Agents" with one <fieldset> per
+//                                 agent (its readable name), the selects Provider and Effort and the
+//                                 Model input (a datalist of the provider's models); `values` an earlier
+//                                 choice; hideLegend under a heading of its own
 //   read(container)               { <agent>: { provider?, model?, effort? } }: only what differs from
 //                                 the workflow's values ({} when nothing changed)
 // A provider change offers that provider's models (window.ChatModels) and picks its first one when the
@@ -38,7 +39,7 @@
         <div class="field"><label for="${id}-provider">Provider</label>
           <select id="${id}-provider" data-ao="provider" data-ao-default="${esc(def.provider)}">${providers.map((p) => `<option value="${esc(p)}" data-type="${esc(type(p))}"${p === v.provider ? ' selected' : ''}>${esc(p)}</option>`).join('')}</select></div>
         <div class="field"><label for="${id}-model">Model</label>
-          <input id="${id}-model" data-ao="model" data-ao-default="${esc(def.model)}" value="${esc(v.model)}" list="${id}-models" spellcheck="false" autocomplete="off">
+          <input type="text" id="${id}-model" data-ao="model" data-ao-default="${esc(def.model)}" value="${esc(v.model)}" list="${id}-models" spellcheck="false" autocomplete="off">
           <datalist id="${id}-models">${datalist([...new Set([v.model, ...modelsOf(type(v.provider))].filter(Boolean))])}</datalist></div>
         <div class="field"><label for="${id}-effort">Effort</label>
           <select id="${id}-effort" data-ao="effort" data-ao-default="${esc(def.effort)}">${efforts.map(([e, label]) => option(e, label, e === v.effort)).join('')}</select></div>
@@ -47,11 +48,12 @@
     </fieldset>`;
   }
 
-  function html(wf, { prefix = 'ao', values = {} } = {}) {
+  // hideLegend: the section sits under its own "Agents" heading (a <summary>): the legend still names it
+  function html(wf, { prefix = 'ao', values = {}, hideLegend = false } = {}) {
     const agents = Object.entries(wf?.agents || {});
     if (!agents.length) return '';
-    return `<fieldset class="ao" data-testid="agent-overrides"><legend>Agents</legend>
-      <div class="hint">The provider, model and effort of each agent for this run only; the workflow keeps its own.</div>
+    return `<fieldset class="ao" data-testid="agent-overrides"><legend${hideLegend ? ' class="sr-only"' : ''}>Agents</legend>
+      <p class="muted small">The provider, model and effort of each agent for this run only; the workflow keeps its own.</p>
       ${agents.map(([key, a]) => agentHtml(wf, key, a, prefix, values?.[key])).join('')}
     </fieldset>`;
   }

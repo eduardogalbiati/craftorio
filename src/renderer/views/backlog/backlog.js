@@ -410,7 +410,7 @@
     // #262: each agent's provider / model / effort for these runs; a pipeline keeps its workflows'
     const agentsBox = $b('#assign-agents-list');
     if (agentsBox) {
-      agentsBox.innerHTML = !pipe && wf && window.AgentOverrides ? AgentOverrides.html(wf, { prefix: 'assign-ao' }) : '';
+      agentsBox.innerHTML = !pipe && wf && window.AgentOverrides ? AgentOverrides.html(wf, { prefix: 'assign-ao', hideLegend: true }) : '';
       $b('#assign-agents').classList.toggle('hidden', !agentsBox.innerHTML);
     }
     WorkflowInputs.applyHints(box, defs, bl.projectId, { keep: Object.keys(saved) });
