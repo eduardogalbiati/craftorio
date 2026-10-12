@@ -86,7 +86,7 @@ module.exports = (ctx) => {
   // then: what happens with each run's result when it finishes (#134, chain-model normalizeThen).
   // pipeline: a saved pipeline's file (#135): its first workflow (with its fixed inputs under the
   // owner's) receives the issues and the rest of the pipeline is each run's then.
-  async function assignWorkflow({ projectId, numbers, workflow, inputs, mock, group = false, allowKeptWork = false, then = null, pipeline = null }) {
+  async function assignWorkflow({ projectId, numbers, workflow, inputs, mock, group = false, allowKeptWork = false, then = null, pipeline = null, agentOverrides = null }) {
     if (pipeline) {
       const first = ctx.pipelineAssign(pipeline);
       ({ workflow, then } = first);
@@ -108,7 +108,8 @@ module.exports = (ctx) => {
     if (!mock) {
       simulation.refuseReal('real runs from the Backlog');
     }
-    backlog.enqueue(ws.backlog, project.id, { issues, workflow: file, workflowName: wf.metadata?.name || file, inputs: inputs || {}, mock: !!mock, group: !!group, then: chained });
+    // a pipeline's first stage keeps its workflow's agents (#262: the overrides were chosen for `workflow`)
+    backlog.enqueue(ws.backlog, project.id, { issues, workflow: file, workflowName: wf.metadata?.name || file, inputs: inputs || {}, mock: !!mock, group: !!group, then: chained, agentOverrides: pipeline ? null : agentOverrides });
     if (allowKeptWork) allowQueuedKeptWork(project.id, issues);
     // an issue belongs to one plan: assigned here (the screen asked first), it leaves the roadmap's items not started
     roadmaps.dropIssues(ws.backlog, project.id, issues.map((i) => i.number), { alive: ctx.runAlive });
@@ -194,6 +195,7 @@ module.exports = (ctx) => {
             projectId, issues: backlog.recordedIssues(read), notices: warnings.map((message) => ({ level: 'warn', message })),
             allowKeptWork: keys.some((k) => keptWorkAllowed.has(k)),
             then: item.then || null,
+            agentOverrides: item.agentOverrides || null,
           });
           for (const k of keys) keptWorkAllowed.delete(k);
           backlog.unqueue(ws.backlog, projectId, item.number, { cancelGroup: true });

@@ -139,11 +139,10 @@ function selectWorkflow(file) {
   $('#wf-desc').textContent = pipeline ? pipeline.description || '' : wf.error ? `Error: ${wf.error}` : [wf.description || '', ...(wf.warnings || []).map((m) => `Warning: ${m}.`)].filter(Boolean).join(' ');
   $('#wf-steps-mini').innerHTML = (wf.steps || []).map((s) =>
     `<span class="step-chip ${s.type === 'human_approval' ? 'human' : ''}" title="${esc(`${s.id}${s.type === 'human_approval' ? ' (human approval)' : s.agent ? ` · ${s.agent}` : ''}`)}">${esc(s.display || (typeof displayName === 'function' ? displayName(s.id) : s.id))}</span>`).join('<span class="arrow">›</span>');
-  // what each agent may use (capabilities) and how its conversation is kept (session)
-  $('#wf-agents').innerHTML = Object.entries(wf.agents || {}).map(([name, a]) => `<div class="agent-row">
-      <div class="agent-row-main"><span>${esc(name)}</span><span class="model">${esc(a.provider)} · ${esc(a.model)}</span></div>
-      <div class="agent-caps">${esc([`session: ${a.session || 'persistent'}${a.max_context && (a.session || 'persistent') === 'persistent' ? ` (max ${a.max_context})` : ''}`, a.capabilities, a.isolated === false ? 'not isolated' : ''].filter(Boolean).join(' · '))}</div>
-    </div>`).join('');
+  // #262: each agent's provider, model and effort for this run (the workflow's as defaults, never
+  // remembered), with what it may use (capabilities) and how its conversation is kept (session);
+  // a pipeline's stages keep their workflows' agents
+  $('#wf-agents').innerHTML = pipeline ? '' : window.AgentOverrides?.html(wf, { prefix: 'start-ao' }) || '';
 
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem(`${LS_KEY}.${wf.file}`) || '{}'); } catch { /* ignore */ }
@@ -300,9 +299,11 @@ async function startRun({ keepOpen = false } = {}) {
   try {
     const mock = wantsSimulation($('#mock-toggle'));
     const attachments = await pastedImages();
+    // #262: this run's provider / model / effort per agent (only what differs from the workflow)
+    const agentOverrides = window.AgentOverrides?.read($('#wf-agents')) || {};
     const { runId } = state.pipeline
       ? await api.runPipeline(state.pipeline.file, inputs, mock, project?.id || null)
-      : await api.startRun({ file: wf.file, inputs, mock, then: drawerChain().value(), ...(attachments ? { attachments } : {}) });
+      : await api.startRun({ file: wf.file, inputs, mock, then: drawerChain().value(), ...(attachments ? { attachments } : {}), ...(Object.keys(agentOverrides).length ? { agentOverrides } : {}) });
     state.settings = await api.setSettings({ lastWorkflow: wf.file, lastProject: project?.id || null });
     const view = state.runs.get(runId);
     if (view?.run && project) view.run.project = project.name;

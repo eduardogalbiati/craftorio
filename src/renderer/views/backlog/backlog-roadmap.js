@@ -332,10 +332,17 @@
     const add = adding
       ? `<div class="field rm-add"><label>New input</label><div class="row"><input type="text" data-rm-newname placeholder="name" aria-label="New input name" autofocus /><input type="text" data-rm-newvalue placeholder="value" aria-label="New input value" /></div></div>`
       : '<button class="link-btn small" type="button" data-rm-addinput>+ add input</button>';
+    // #262: each agent's provider / model / effort for this item's run, folded unless one was changed
+    const wfDef = workflows?.get(x.workflow);
+    const changed = Object.keys(x.agentOverrides || {}).length;
+    const agents = wfDef && window.AgentOverrides
+      ? `<details class="rm-agents"${changed ? ' open' : ''}><summary class="small">Agents${changed ? ` · ${changed} changed for this run` : ''}</summary>${AgentOverrides.html(wfDef, { prefix: `rm-ao-${x.id}`, values: x.agentOverrides })}</details>`
+      : '';
     return `
       <div class="rm-form" role="group" aria-label="Edit the inputs of this item"${WorkflowInputs.scopeAttrs({ mode })}>
         <div class="rm-form-grid wi-grid">${grid}</div>
         ${add}
+        ${agents}
         <div class="rm-chain" data-rm-chain="${esc(x.id)}"></div>
         <div class="rm-form-actions">
           <label class="check small dev-only"><input type="checkbox" data-rm-field-mock${x.mock ? ' checked' : ''} /><span>Simulation</span></label>
@@ -1395,6 +1402,11 @@
     item.inputs = inputs;
     const mock = form.querySelector('[data-rm-field-mock]');
     if (mock) item.mock = mock.checked;
+    // #262: only what differs from the workflow's agents
+    if (window.AgentOverrides && form.querySelector('[data-ao-agent]')) {
+      const agentOverrides = AgentOverrides.read(form);
+      if (Object.keys(agentOverrides).length) item.agentOverrides = agentOverrides; else delete item.agentOverrides;
+    }
     if (chainPicker) {
       const then = chainPicker.value();
       if (then) item.then = then; else delete item.then;
@@ -2001,12 +2013,14 @@
 
   /** A new stage at the end with the assign dialog's issues: one item (group) or one per issue; `reason`/`modeReason`/`origin`: the Product Owner's. */
   // then: the items' chain (#134), from the Assign dialog's "When it finishes"
-  async function addStage(ctx, data, { issues: asked, workflow, workflowName, inputs, mock, group, reason, modeReason, origin, then, cost }) {
+  async function addStage(ctx, data, { issues: asked, workflow, workflowName, inputs, mock, group, reason, modeReason, origin, then, cost, agentOverrides }) {
     // #253: an epic groups issues, it is never planned as work
     const issues = asked.filter((i) => !i?.isEpic);
     if (!issues.length) return;
     const stages = clone(data?.roadmap?.stages);
-    const why = { ...(reason ? { reason } : {}), ...(modeReason ? { modeReason } : {}), ...(origin ? { origin } : {}), ...(then ? { then } : {}), ...(cost ? { cost } : {}) };
+    const why = { ...(reason ? { reason } : {}), ...(modeReason ? { modeReason } : {}), ...(origin ? { origin } : {}), ...(then ? { then } : {}), ...(cost ? { cost } : {}),
+      // #262: the provider / model / effort per agent chosen in the Assign dialog
+      ...(agentOverrides && Object.keys(agentOverrides).length ? { agentOverrides } : {}) };
     const items = group ? [{ workflow, workflowName, inputs, mock, issues, ...why }] : issues.map((n) => ({ workflow, workflowName, inputs, mock, issues: [n], ...why }));
     stages.push({ name: '', note: '', items });
     const out = await api.saveRoadmap(ctx.projectId, stages, `Added ${issues.map((i) => `#${i.number}`).join(', ')} to the roadmap`, data?.roadmap?.updatedAt || null);

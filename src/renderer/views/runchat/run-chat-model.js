@@ -42,7 +42,8 @@
   const displayName = typeof module === 'object' && module.exports ? require('../../display-name.js').displayName : root.displayName;
   // what the run chat shows about a session's agent (the hover card): recorded in the events,
   // so a replayed run shows what was actually used
-  const sessionInfo = (s) => ({ agent: s.agent, provider: s.provider, model: s.model, effort: s.effort || null, mode: s.mode || null });
+  // simulates (#262): a simulated session's workflow provider (provider is `mock`)
+  const sessionInfo = (s) => ({ agent: s.agent, provider: s.provider, model: s.model, effort: s.effort || null, mode: s.mode || null, simulates: s.simulates || null });
 
   const clip = (s, n = MAX_TEXT) => (s.length > n ? `${s.slice(0, n)}…` : s);
   const brief = (v) => clip(typeof v === 'string' ? v : JSON.stringify(v ?? ''), 600);
@@ -196,7 +197,7 @@
       const u = ev.usage || {};
       const group = !sub ? this.groups.get(stepId) : null;
       this.add({
-        kind: 'turn', ts: ev.ts, sessionId: ev.session_id, turn: ev.turn, agent: s.agent || '?', provider: s.provider,
+        kind: 'turn', ts: ev.ts, sessionId: ev.session_id, turn: ev.turn, agent: s.agent || '?', provider: s.provider, simulates: s.simulates || null,
         model: s.model || '', effort: s.effort || null, mode: s.mode || null, side: this.sideOf(s.agent || '?'), stepId, sub, visit: this.visits[stepId] || 1, text: String(ev.text || ''), activity: t.activity,
         tokensIn: (u.input || 0) + (u.cache_read || 0) + (u.cache_write || 0), tokensOut: u.output || 0,
         cost: ev.cost_usd || 0, durationMs: ev.duration_ms || 0, parent: group?.id,
@@ -331,6 +332,12 @@
     },
 
     'limit.exceeded'(ev) { this.system(ev, 'error', `Limit exceeded: ${ev.limit}`); },
+
+    // #262: an agent's provider was out of credits: its turn moved on to the next provider · model
+    'agent.fallback'(ev) {
+      const stepId = baseStep(ev.step_id);
+      this.add({ kind: 'fallback', ts: ev.ts, agent: ev.agent || '?', stepId, sub: subStep(ev.step_id), visit: this.visits[stepId] || 1, from: String(ev.from || ''), to: String(ev.to || ''), reason: String(ev.reason || '') });
+    },
 
     // #276: the memory guard stopped a process of the run
     'process.killed'(ev) { this.system(ev, 'warn', ev.message || `The memory guard stopped ${ev.command_line}`); },

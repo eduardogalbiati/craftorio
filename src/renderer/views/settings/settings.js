@@ -42,6 +42,7 @@ async function renderSettings() {
   $('#set-backlog-refresh').value = String(state.settings.backlogRefreshHours ?? 24);
   $('#set-notif-retention').value = state.settings.notificationRetentionDays ?? 30;
   renderConcurrency();
+  renderFallbackSettings();
   renderMemoryGuard();
   renderOracleSettings();
   renderSelfHealing();
@@ -68,6 +69,60 @@ function renderDefaultWorkflow() {
   const note = $('#set-default-wf-note');
   note.textContent = cur.missing ? `${cur.missing} no longer exists: ${cur.file} is used instead.` : '';
   note.classList.toggle('hidden', !cur.missing);
+}
+
+// Settings › Agents & CLIs › Fallbacks and Limits per model (#262): settings.providers.<p>.fallbacks
+// (the ordered "provider:model" entries a turn out of credits moves on to) and settings.models.<id>
+// ({ timeout_factor, max_total_cost_usd }); every run gets them (src/service/areas/runs.js).
+// One Save / Cancel for both groups.
+const FALLBACK_ENTRY = /^[A-Za-z0-9_.-]+:\S+$/;
+function renderFallbackSettings() {
+  const providers = state.settings.providers || {};
+  const catalog = Object.values(window.ChatModels?.PROVIDERS || {});
+  const names = [...new Set([...catalog.map((p) => p.key), ...Object.keys(providers)])];
+  const hint = (name) => catalog.filter((p) => p.key !== name).map((p) => `${p.key}:${p.models[0]}`).join(', ');
+  $('#set-fallbacks').innerHTML = names.map((name) => `<div class="s-row">
+      <div class="s-label"><b>${esc(name)}</b><span>Out of credits on ${esc(name)}: try these next.</span></div>
+      <div class="s-ctrl"><input type="text" class="s-fallbacks" data-fb-provider="${esc(name)}" value="${esc((providers[name]?.fallbacks || []).join(', '))}" placeholder="${esc(hint(name))}" aria-label="Fallbacks of ${esc(name)}" spellcheck="false" /></div>
+    </div>`).join('');
+  const models = state.settings.models || {};
+  const ids = [...new Set([...catalog.flatMap((p) => p.models), ...Object.keys(models)])];
+  $('#set-model-limits').innerHTML = ids.map((id) => `<div class="s-row" data-ml-model="${esc(id)}">
+      <div class="s-label"><b class="mono">${esc(id)}</b></div>
+      <div class="s-ctrl">
+        <label class="small">Timeout × <input type="number" class="s-num" data-ml="timeout_factor" min="0.1" step="0.1" value="${esc(models[id]?.timeout_factor ?? '')}" placeholder="1" aria-label="Turn timeout factor of ${esc(id)}" /></label>
+        <label class="small">Cost limit US$ <input type="number" class="s-num" data-ml="max_total_cost_usd" min="1" step="1" value="${esc(models[id]?.max_total_cost_usd ?? '')}" placeholder="workflow's" aria-label="Run cost limit with ${esc(id)}" /></label>
+      </div>
+    </div>`).join('');
+  $('#set-fallbacks-msg').textContent = '';
+}
+
+async function saveFallbackSettings() {
+  const msg = $('#set-fallbacks-msg');
+  const providers = { ...(state.settings.providers || {}) };
+  for (const el of document.querySelectorAll('#set-fallbacks [data-fb-provider]')) {
+    const entries = el.value.split(/[,\s]+/).map((s) => s.trim()).filter(Boolean);
+    const bad = entries.find((e) => !FALLBACK_ENTRY.test(e));
+    if (bad) { msg.className = 'small error'; msg.textContent = `"${bad}" is not provider:model (e.g. codex:gpt-6-luna).`; el.focus(); return; }
+    const { fallbacks: _old, ...rest } = providers[el.dataset.fbProvider] || {};
+    providers[el.dataset.fbProvider] = entries.length ? { ...rest, fallbacks: entries } : rest;
+    if (!Object.keys(providers[el.dataset.fbProvider]).length) delete providers[el.dataset.fbProvider];
+  }
+  const models = {};
+  for (const row of document.querySelectorAll('#set-model-limits [data-ml-model]')) {
+    const lim = {};
+    for (const el of row.querySelectorAll('[data-ml]')) {
+      const n = Number(el.value);
+      el.classList.toggle('invalid', el.value !== '' && !(n > 0));
+      if (el.value !== '' && !(n > 0)) { msg.className = 'small error'; msg.textContent = 'A factor or a cost limit is a positive number.'; el.focus(); return; }
+      if (el.value !== '') lim[el.dataset.ml] = n;
+    }
+    if (Object.keys(lim).length) models[row.dataset.mlModel] = lim;
+  }
+  state.settings = await api.setSettings({ providers, models });
+  renderFallbackSettings();
+  msg.className = 'small muted';
+  msg.textContent = 'Saved: the next runs use them.';
 }
 
 // Settings › Execution › Concurrent runs (settings.concurrentRuns).
@@ -547,6 +602,18 @@ registerView({
                 <button id="btn-tools-refresh" class="btn sm ghost">Check again</button>
                 <button id="btn-setup-again" class="btn sm ghost" data-testid="setup-again">Run setup again</button>
               </div>
+              <h3 class="s-subtitle">Fallbacks</h3>
+              <p class="muted small">When an agent's provider runs out of credits or hits its usage limit, its turn moves on to the next entry, in order (<code>provider:model</code>, e.g. <code>codex:gpt-6-luna</code>), for the rest of the run. Used for an agent whose workflow declares no <code>fallbacks</code>.</p>
+              <div id="set-fallbacks" class="s-group" data-testid="settings-fallbacks"></div>
+              <h3 class="s-subtitle">Limits per model</h3>
+              <p class="muted small">An agent on this model gets its turn timeout multiplied by the factor; a run with an agent on it may spend up to the cost limit (when it is above the workflow's). A workflow's own <code>models</code> win.</p>
+              <div id="set-model-limits" class="s-group" data-testid="settings-model-limits"></div>
+              <div class="row">
+                <span id="set-fallbacks-msg" class="small"></span>
+                <span class="spacer"></span>
+                <button id="btn-fallbacks-cancel" class="btn sm ghost" type="button">Cancel</button>
+                <button id="btn-fallbacks-save" class="btn sm primary" type="button" data-testid="settings-fallbacks-save">Save</button>
+              </div>
             </div>
 
             <div class="settings-page hidden" data-spage="execution">
@@ -674,6 +741,8 @@ registerView({
     $('#btn-ws-open').onclick = () => api.openWorkspace();
     $('#btn-ws-change').onclick = changeWorkspace;
     $('#btn-tools-refresh').onclick = renderTools;
+    $('#btn-fallbacks-save').onclick = () => saveFallbackSettings().catch((e) => { $('#set-fallbacks-msg').className = 'small error'; $('#set-fallbacks-msg').textContent = e.message; });
+    $('#btn-fallbacks-cancel').onclick = renderFallbackSettings;
     $('#btn-setup-again').onclick = () => window.Setup.open();
     document.querySelectorAll('[data-setting]').forEach((el) => (el.onchange = async () => {
       state.settings = await api.setSettings({ [el.dataset.setting]: el.checked });

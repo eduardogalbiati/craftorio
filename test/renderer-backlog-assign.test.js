@@ -60,12 +60,14 @@ test('submitAssign: an ended run\'s kept work (assignWorkflow\'s `kept`) opens t
   // a pipeline (#135) brings its own chain instead, so `then` is null and its file goes as `pipeline`
   assert.match(fn, /const then = pipe \? null : assignChain\(\)\.value\(\);/);
   assert.match(fn, /const pipeline = pipe\?\.file \|\| null;/);
-  assert.match(fn, /let data = await api\.assignWorkflow\(bl\.projectId, numbers, workflow, inputs, mock, grouped\(\), false, then, pipeline\);/);
+  // #262: and the Agents section's choices (none for a pipeline)
+  assert.match(fn, /const agentOverrides = pipe \? null : assignAgentOverrides\(\);/);
+  assert.match(fn, /let data = await api\.assignWorkflow\(bl\.projectId, numbers, workflow, inputs, mock, grouped\(\), false, then, pipeline, agentOverrides\);/);
   assert.match(fn, /if \(data\?\.kept\) \{/);
   assert.match(fn, /const kept = await keptWorkDialog\(data\.kept\);/);
   assert.match(fn, /if \(kept === 'resume'\) closeModal\('#assign-modal'\);/);
   assert.match(fn, /if \(kept !== 'scratch'\) return;/);
-  assert.match(fn, /data = await api\.assignWorkflow\(bl\.projectId, numbers, workflow, inputs, mock, grouped\(\), true, then, pipeline\);/);
+  assert.match(fn, /data = await api\.assignWorkflow\(bl\.projectId, numbers, workflow, inputs, mock, grouped\(\), true, then, pipeline, agentOverrides\);/);
 });
 
 // ---- Assign a saved pipeline (#135): the dropdown lists it, its first workflow receives the issues ---

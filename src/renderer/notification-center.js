@@ -31,7 +31,7 @@ async function renderNotificationPanel() {
     const { items, unread } = await api.listNotifications(100);
     renderNotificationCount(unread);
     list.innerHTML = items.length ? items.map((n) => `
-      <button type="button" class="nc-item${n.readAt ? '' : ' unread'}" data-id="${n.id}">
+      <button type="button" class="nc-item${n.readAt ? '' : ' unread'}" data-id="${n.id}" data-testid="notification-item">
         <span class="nc-dot" aria-hidden="true"></span>
         <span class="nc-text">
           <b>${esc(n.title)}</b>

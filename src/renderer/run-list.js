@@ -271,7 +271,7 @@ function projectRunBody(r, pv) {
         const m = pv.msgs.get(`${r.runId}:${s.id}`);
         return `<tr data-session="${esc(s.id)}" data-agent="${esc(s.agent)}" data-testid="run-session-card">
           <td><b title="${esc(s.agent)}">${esc(agentLabel(s.agent, r.agentNames))}</b> <span class="muted small mono">${esc(s.id)}</span></td>
-          <td><span class="badge p-${esc(s.provider)}">${esc(s.provider)}</span> <span class="mono small">${esc(s.model || '')}</span></td>
+          <td>${sessionProviderCell(s)}</td>
           <td><span class="status st-${esc(s.status)}" data-status="${esc(s.status)}"><span class="status-dot"></span>${esc(StatusPill.statusLabel(s.status))}</span></td>
           <td class="num mono">${fmtNum(s.turns)}</td>
           ${tokensCell(s.tokens)}
@@ -476,6 +476,15 @@ function tokensCell(t) {
 // The one badge pair for it: the run lists, the Run screen (views/run/run.js) and Analytics' Run tab.
 function costMarks(estimatedUsd, notRecorded) {
   return `${estimatedUsd > 0 ? ` <span class="badge" title="${esc(`${fmtUsd(estimatedUsd)} of it estimated from the model calls of attempts stopped before their result`)}">estimated</span>` : ''}${notRecorded ? ' <span class="badge warn" title="An attempt stopped before its result: its cost was not recorded">cost not recorded</span>' : ''}`;
+}
+// #262: the provider and model that answered (a simulated session shows its workflow provider) and,
+// for the session an agent fell back to, the provider · model it left and why.
+const providerModel = (entry) => String(entry || '').replace(':', ' · ');
+function sessionProviderCell(s) {
+  const provider = s.simulates || s.provider;
+  const fb = s.fallbackFrom;
+  return `<span class="badge p-${esc(provider)}"${s.simulates ? ' title="Simulated: no model was called"' : ''}>${esc(provider)}</span> <span class="mono small">${esc(s.model || '')}</span>${fb
+    ? `<div class="pr-fallback small" data-testid="run-session-fallback" title="${esc(fb.reason || '')}"><span class="badge warn">fallback</span> from <span class="mono">${esc(providerModel(fb.from))}</span>: ${esc(String(fb.reason || '').slice(0, 80))}</div>` : ''}`;
 }
 // Tokens with no cost: a model with no price (Codex, unpriced models), not a free session.
 function sessionCostCell(s) {

@@ -200,6 +200,7 @@ module.exports = (ctx) => {
           projectId, issues: backlog.recordedIssues(open), notices: warnings.map((message) => ({ level: 'warn', message })),
           allowKeptWork: keptWorkAllowed.has(`${projectId}:${item.id}`),
           then: item.then || null,
+          agentOverrides: item.agentOverrides || null,
         });
         keptWorkAllowed.delete(`${projectId}:${item.id}`);
         roadmaps.markStarted(ws.backlog, projectId, item.id, { runId: started.runId });

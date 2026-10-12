@@ -407,6 +407,12 @@
     const box = $b('#assign-inputs');
     box.innerHTML = WorkflowInputs.formHtml(defs, { values: saved, id: (k) => `ai-${k}`, attrs: (k) => `data-input="${esc(k)}"` });
     $b('#assign-settings').classList.toggle('hidden', !Object.keys(defs).length);
+    // #262: each agent's provider / model / effort for these runs; a pipeline keeps its workflows'
+    const agentsBox = $b('#assign-agents-list');
+    if (agentsBox) {
+      agentsBox.innerHTML = !pipe && wf && window.AgentOverrides ? AgentOverrides.html(wf, { prefix: 'assign-ao' }) : '';
+      $b('#assign-agents').classList.toggle('hidden', !agentsBox.innerHTML);
+    }
     WorkflowInputs.applyHints(box, defs, bl.projectId, { keep: Object.keys(saved) });
     for (const [k, v] of Object.entries(pipe?.stages[0].inputs || {})) if (defs[k]) WorkflowInputs.set(box, k, v);
     assignChain().refresh();
@@ -431,6 +437,11 @@
   }));
   // The values to send: the YAML values (an enum's value, a switch as true/false).
   const assignInputs = () => WorkflowInputs.read($b('#assign-inputs'));
+  // #262: the Agents section's choices, only what differs from the workflow (null when none)
+  const assignAgentOverrides = () => {
+    const o = window.AgentOverrides?.read($b('#assign-agents-list')) || {};
+    return Object.keys(o).length ? o : null;
+  };
 
   // Selected issues that already have work in flight: an open PR/MR, or a run in progress or waiting.
   const prName = (p) => `${bl.data?.platform === 'gitlab' ? 'MR !' : 'PR #'}${p.number}`;
@@ -596,13 +607,15 @@
       // a pipeline's chain is the service's (pipeline: its file), not the dialog's "When it finishes"
       const then = pipe ? null : assignChain().value();
       const pipeline = pipe?.file || null;
-      let data = await api.assignWorkflow(bl.projectId, numbers, workflow, inputs, mock, grouped(), false, then, pipeline);
+      // #262: each run's provider / model / effort per agent (a pipeline keeps its workflows')
+      const agentOverrides = pipe ? null : assignAgentOverrides();
+      let data = await api.assignWorkflow(bl.projectId, numbers, workflow, inputs, mock, grouped(), false, then, pipeline, agentOverrides);
       // an ended run kept work for these issues (#170): resume that run, or start from scratch
       if (data?.kept) {
         const kept = await keptWorkDialog(data.kept);
         if (kept === 'resume') closeModal('#assign-modal');
         if (kept !== 'scratch') return;
-        data = await api.assignWorkflow(bl.projectId, numbers, workflow, inputs, mock, grouped(), true, then, pipeline);
+        data = await api.assignWorkflow(bl.projectId, numbers, workflow, inputs, mock, grouped(), true, then, pipeline, agentOverrides);
       }
       save(WORKFLOW_KEY, choice);
       bl.selected.clear();
@@ -630,6 +643,7 @@
       const wf = bl.workflows.find((w) => w.file === workflow);
       await window.BacklogRoadmap.addStage(roadmapCtx(), bl.data, {
         issues, workflow, workflowName: wf?.name || workflow, inputs, mock: wantsSimulation($b('#assign-mock')), group: grouped(), then: assignChain().value(),
+        agentOverrides: assignAgentOverrides(),
       });
       save(WORKFLOW_KEY, workflow);
       bl.selected.clear();
@@ -1702,6 +1716,7 @@
           <legend>Settings</legend>
           <div id="assign-inputs" class="wi-grid" data-wi-scope></div>
         </fieldset>
+        <details id="assign-agents" class="adv hidden"><summary>Agents</summary><div id="assign-agents-list"></div></details>
         <div id="assign-chain"></div>
         <div id="assign-pipeline" class="drawer-pipeline hidden"></div>
         <label class="check dev-only"><input type="checkbox" id="assign-mock" /><span>Simulation (no CLI is called, nothing is spent)</span></label>

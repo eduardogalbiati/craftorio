@@ -92,8 +92,18 @@
     const ctx = it.context?.peak ? ` · context ${it.fresh ? 'fresh ' : ''}${fmtK(it.context.start)} → ${fmtK(it.context.peak)}` : '';
     const foot = it.durationMs ? `${fmtK(it.tokensIn)} in / ${fmtK(it.tokensOut)} out${ctx} · $${it.cost.toFixed(2)} · ${fmtSecs(it.durationMs)}` : '';
     return `<div class="rc-msg rc-${it.side === 'right' ? 'right' : 'left'}" data-item="${it.id}"${colorStyle(it.agent)}>${agentAvatar(it)}<div class="duo-bubble">
-      <div class="duo-meta"><b class="rc-name" title="${esc(it.agent)}">${esc(nameOf(it.agent))}</b>${isSupervisor(it.agent) ? '' : AgentColors.roleChip(it.agent, agentDef(it.agent))}${it.model ? `<span class="tag">${esc(it.model)}</span>` : ''}${stepTag(it.stepId, it.visit, it.sub)}<span class="time">${clock(it.ts)}</span></div>
+      <div class="duo-meta"><b class="rc-name" title="${esc(it.agent)}">${esc(nameOf(it.agent))}</b>${isSupervisor(it.agent) ? '' : AgentColors.roleChip(it.agent, agentDef(it.agent))}${it.model ? turnModelTag(it) : ''}${stepTag(it.stepId, it.visit, it.sub)}<span class="time">${clock(it.ts)}</span></div>
       <div class="rc-body md">${body}</div>${extras.join('')}${foot ? `<div class="duo-foot">${esc(foot)}</div>` : ''}</div></div>`;
+  }
+  // #262: the provider and the model that answered the turn (a simulated one: its workflow provider)
+  function turnModelTag(it) {
+    const provider = it.simulates || (it.provider === 'mock' ? '' : it.provider);
+    return `<span class="tag" data-testid="run-chat-turn-model" data-step="${esc(it.stepId || '')}"${it.simulates ? ' title="Simulated: no model was called"' : ''}>${esc([provider, it.model].filter(Boolean).join(' · '))}</span>`;
+  }
+  // #262: an agent's provider out of credits (or past its usage limit): the turn moved on to the next one
+  const fallbackEntry = (entry) => String(entry || '').replace(':', ' · ');
+  function fallbackHtml(it) {
+    return `<div class="rc-sys warn" data-item="${it.id}" data-testid="run-chat-fallback" title="${esc(it.reason)}"><span><b>${esc(nameOf(it.agent))}</b> fell back in ${stepTag(it.stepId, it.visit, it.sub)}: <span class="mono">${esc(fallbackEntry(it.from))}</span> → <span class="mono">${esc(fallbackEntry(it.to))}</span> · ${esc(it.reason.slice(0, 160))}</span><time>${clock(it.ts)}</time></div>`;
   }
 
   // #288: a run whose events never ended (no workflow.finished) and that no app runs any more: the
@@ -175,6 +185,7 @@
           </div></div>${it.resumedFrom ? `<div class="duo-note plain"><span>Resumed from ${esc(it.resumedFrom.run_id)} at <span title="${esc(it.resumedFrom.step)}">${esc(stepName(it.resumedFrom.step))}</span></span></div>` : ''}${issue ? `<div class="duo-note plain"><span>${issue}</span></div>` : ''}</div>`;
       }
       case 'turn': return turnHtml(it);
+      case 'fallback': return fallbackHtml(it);
       case 'group': return groupHtml(it);
       case 'gate': return gateHtml(it);
       case 'system': return `<div class="rc-sys ${it.level}" data-item="${it.id}"><span>${esc(it.text)}</span><time>${clock(it.ts)}</time></div>`;
@@ -188,7 +199,7 @@
         ${SUP_WHAT[it.action] ? `<p class="muted small">${SUP_WHAT[it.action]}</p>` : ''}</div></div>`;
       case 'end': {
         const ok = it.status === 'success';
-        return `<div class="duo-note ${ok ? 'done' : 'failed'}" data-item="${it.id}"><span><b data-status="${esc(it.status)}">${ok ? 'Done' : esc(StatusPill.statusLabel(it.status))}</b>${!ok && it.error ? ` · ${esc(it.error.slice(0, 240))}` : ''} · $${(it.cost || 0).toFixed(2)} · ${fmtSecs(it.durationMs)}</span>
+        return `<div class="duo-note ${ok ? 'done' : 'failed'}" data-item="${it.id}" data-testid="run-chat-finished"><span><b data-status="${esc(it.status)}">${ok ? 'Done' : esc(StatusPill.statusLabel(it.status))}</b>${!ok && it.error ? ` · ${esc(it.error.slice(0, 240))}` : ''} · $${(it.cost || 0).toFixed(2)} · ${fmtSecs(it.durationMs)}</span>
           <button type="button" class="link-btn small" data-resume title="Start a new run from a step of this one, keeping the previous outputs (no supervisor call)">Resume from step…</button></div>`;
       }
       default: return '';

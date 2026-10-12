@@ -412,13 +412,14 @@ function queueStamp() {
  * @param {{ issues: { number, url, title, body, pullRequests? }[], workflow: string, workflowName?: string, inputs?: object, mock?: boolean, group?: boolean }} a
  */
 // then: what happens with each run's result when it finishes (#134, chain-model), given to its start
-function enqueue(dir, projectId, { issues, workflow, workflowName = null, inputs = {}, mock = false, group = false, then = null }) {
+// agentOverrides (#262): the provider / model / effort per agent chosen for these runs (run:start's)
+function enqueue(dir, projectId, { issues, workflow, workflowName = null, inputs = {}, mock = false, group = false, then = null, agentOverrides = null }) {
   return updateQueue(dir, projectId, (q) => {
     const have = new Set(q.items.flatMap((x) => itemIssues(x).map((i) => i.number)));
     const now = queueStamp();
     const fresh = issues.filter((i) => !have.has(i.number))
       .map((i) => issueFields({ ...i, knownPullRequests: (i.pullRequests || []).map((p) => p.url) }));
-    const base = { workflow, workflowName, inputs, mock: !!mock, addedAt: now, ...(then ? { then } : {}) };
+    const base = { workflow, workflowName, inputs, mock: !!mock, addedAt: now, ...(then ? { then } : {}), ...(agentOverrides && Object.keys(agentOverrides).length ? { agentOverrides } : {}) };
     const added = !fresh.length ? [] : group ? [withIssues(base, fresh)] : fresh.map((i) => withIssues(base, [i]));
     const numbers = new Set(fresh.map((x) => x.number));
     return {

@@ -1158,10 +1158,12 @@ class WorkflowRun extends EventEmitter {
   }
 
   // ---- sessions -------------------------------------------------------------
-  openSession({ agent, provider, model, effort = null, parentId, stepId, mode = null }) {
+  // simulates: a simulated session's workflow provider (provider is `mock`), shown instead of it (#262);
+  // fallbackFrom: { from: '<provider>:<model>', reason } the session an agent fell back from (#262)
+  openSession({ agent, provider, model, effort = null, parentId, stepId, mode = null, simulates = null, fallbackFrom = null }) {
     const s = {
       id: agent === 'orchestrator' ? 'orchestrator' : `s${++this.nSession}`,
-      agent, provider, model, effort, parentId, stepId, mode,
+      agent, provider, model, effort, parentId, stepId, mode, simulates, fallbackFrom,
       openedAt: Date.now(), closedAt: null,
       turns: 0, activeMs: 0, tokens: emptyUsage(), costUsd: 0,
       status: 'idle', providerSessionId: null,
@@ -1266,6 +1268,8 @@ class WorkflowRun extends EventEmitter {
       ...(s.costNotRecorded ? { cost_not_recorded: true } : {}),
       // the CLI's own running total of its session (Claude): seeds the per-turn cost when a resumed run continues it
       ...(s.cliTotalUsd != null ? { cli_total_cost_usd: s.cliTotalUsd } : {}),
+      ...(s.simulates ? { simulates: s.simulates } : {}),
+      ...(s.fallbackFrom ? { fallback_from: s.fallbackFrom } : {}),
     };
   }
 
@@ -3080,10 +3084,13 @@ class WorkflowRun extends EventEmitter {
     }
     let session = persistent ? this.sessions.get(this.agentSessions.get(agentName)) : null;
     if (!session) {
+      // #262: the first session after a fallback records what it fell back from
+      const fallback = this.fallbackAt.get(agentName);
       session = this.openSession({
         agent: agentName, provider: this.mock ? 'mock' : agent.provider, model: agent.model, effort: agent.effort || null,
-        parentId: this.orchestrator.id, stepId, mode,
+        parentId: this.orchestrator.id, stepId, mode, simulates: this.mock ? agent.provider : null, fallbackFrom: fallback?.pending || null,
       });
+      if (fallback) fallback.pending = null;
       if (persistent) this.agentSessions.set(agentName, session.id);
       // resumed run: continue the agent's previous conversation (its system prompt is already there),
       // only for its first session in this run
@@ -3183,7 +3190,8 @@ class WorkflowRun extends EventEmitter {
       const from = `${agent.provider}:${agent.model}`;
       Object.assign(def, { provider: next.provider, model: next.model });
       this.ctx.agents[agentName] = { provider: next.provider, model: next.model };
-      this.emitEvent('agent.fallback', { agent: agentName, step_id: stepId, from, to: `${next.provider}:${next.model}`, reason: e.message });
+      this.fallbackAt.get(agentName).pending = { from, reason: e.message };
+      this.emitEvent('agent.fallback',{ agent: agentName, step_id: stepId, from, to: `${next.provider}:${next.model}`, reason: e.message });
       return this.agentTurn(agentName, prompt, turnOpts);
     }
 

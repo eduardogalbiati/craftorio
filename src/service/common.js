@@ -43,6 +43,9 @@ function sessionView(x, live) {
     // #233: the part of costUsd estimated from attempts stopped before their result; one not recorded
     ...((live ? x.estimatedUsd : x.estimated_cost_usd) ? { costEstimatedUsd: live ? x.estimatedUsd : x.estimated_cost_usd } : {}),
     ...((live ? x.costNotRecorded : x.cost_not_recorded) ? { costNotRecorded: true } : {}),
+    // #262: a simulated session's workflow provider, and the provider · model it fell back from ({ from, reason })
+    ...(x.simulates ? { simulates: x.simulates } : {}),
+    ...((live ? x.fallbackFrom : x.fallback_from) ? { fallbackFrom: live ? x.fallbackFrom : x.fallback_from } : {}),
   };
 }
 

@@ -244,10 +244,13 @@ function cleanItem(raw, known, previous) {
   const then = normalizeThen(raw.then);
   // the Product Owner's Cost choices (#205), shown on the card
   const cost = raw.cost && typeof raw.cost === 'object' ? raw.cost : old?.cost || null;
+  // #262: the provider / model / effort per agent chosen for the item's run (its Edit's Agents)
+  const agentOverrides = raw.agentOverrides && typeof raw.agentOverrides === 'object' && Object.keys(raw.agentOverrides).length ? raw.agentOverrides : null;
   return {
     id: old ? old.id : newId('item'), workflow, workflowName: raw.workflowName || old?.workflowName || workflow,
     inputs: raw.inputs && typeof raw.inputs === 'object' ? raw.inputs : {}, mock: !!raw.mock,
     ...(reason ? { reason } : {}), ...(modeReason ? { modeReason } : {}), ...(origin ? { origin } : {}), ...(then ? { then } : {}), ...(cost ? { cost } : {}),
+    ...(agentOverrides ? { agentOverrides } : {}),
     ...issues[0], issues,
     status: ITEM_STATES.includes(state.status) ? state.status : 'planned', runId: state.runId || null, runs: state.runs || [], error: state.error || null,
   };
