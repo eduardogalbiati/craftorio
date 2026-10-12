@@ -54,6 +54,9 @@ Given('the running demo run {string} has moved on to the step {string}', async (
 // Workflows › Runs (the sidebar's Runs, in the Workflows group, opens it): its search keeps the matching runs
 When('I search the runs for {string}', async ({ e2e }, text) => {
   const page = e2e.window;
+  // simulated runs are hidden until "Show simulated" is ticked: the search has to find them too
+  const showSim = page.getByRole('checkbox', { name: 'Show simulated', exact: true }).filter({ visible: true }).first();
+  await showSim.check();
   await page.getByRole('textbox', { name: 'Search runs', exact: true }).filter({ visible: true }).first().fill(text);
   // the row shows its task and title, not the run id: the id is its data-run attribute
   await expect(page.locator(`[data-testid="run-list-row"][data-run$="${text}"]`).filter({ visible: true }).first()).toBeVisible({ timeout: LOAD_TIMEOUT });
