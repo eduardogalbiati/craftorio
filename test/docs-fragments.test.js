@@ -2,14 +2,14 @@
 // a new feature adds a file, never edits the README.
 // #251: docs/agents/engine.md split into one doc per topic (docs/agents/engine/*.md), engine.md
 // being a short index generated from each topic's first heading and summary line.
-// Seams: scripts/docs.js's main (`npm run docs`, `--check`) and codeMap, on the real repository
+// Seams: scripts/docs.js's main (`npm run docs`, `--check`), codeMap and engineIndex, on the real repository
 // or on a temporary copy of what the generator reads (skills/, docs/, README.md).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { codeMap, main } = require('../scripts/docs.js');
+const { codeMap, engineIndex, main } = require('../scripts/docs.js');
 
 const root = path.join(__dirname, '..');
 const read = (p) => fs.readFileSync(p, 'utf8').replace(/\r\n/g, '\n');
@@ -86,6 +86,31 @@ test('a docs/readme/ fragment edited without regenerating makes --check fail; np
   assert.equal(read(path.join(tmp, 'README.md')).split('\n').includes('## Install (edited)'), true);
 });
 
+test('each docs/readme/ fragment holds one README section: at most one "## " heading outside its generated markers', () => {
+  const crowded = mdFiles(path.join(root, READ_ME))
+    .filter((f) => handWritten(read(path.join(root, READ_ME, f))).split('\n').filter((l) => /^## /.test(l)).length > 1);
+  assert.deepEqual(crowded, []);
+});
+
+test('with no docs/readme/ fragment, npm run docs keeps README.md as its own source and writes no engine index', (t) => {
+  const tmp = tmpRoot(t);
+  fs.rmSync(path.join(tmp, READ_ME), { recursive: true, force: true });
+  fs.rmSync(path.join(tmp, ENGINE), { recursive: true, force: true });
+  fs.rmSync(path.join(tmp, 'docs', 'agents', 'engine.md'), { force: true });
+
+  assert.equal(main([], tmp), 0);
+  assert.equal(read(path.join(tmp, 'README.md')) === read(path.join(root, 'README.md')), true, 'the README should be unchanged');
+  assert.equal(fs.existsSync(path.join(tmp, 'docs', 'agents', 'engine.md')), false);
+  assert.equal(main(['--check'], tmp), 0);
+});
+
+test('--check reports a missing README.md as stale; npm run docs writes it', (t) => {
+  const tmp = tmpRoot(t, { withReadme: false });
+  assert.equal(main(['--check'], tmp), 1);
+  assert.equal(main([], tmp), 0);
+  assert.equal(main(['--check'], tmp), 0);
+});
+
 test('the docs guide (code map) says a feature adds a docs/readme/ fragment and an engine topic adds a docs/agents/engine/ file', () => {
   const map = codeMap(root);
   assert.match(map, /docs\/readme\//);
@@ -143,6 +168,30 @@ test('a new docs/agents/engine/ topic makes --check fail; npm run docs lists it 
   assert.match(line, /Zz test topic/);
   assert.match(line, /A one-line summary of the test topic\./);
   assert.doesNotMatch(index, /Body of the test topic/);
+});
+
+// A temporary root with just docs/agents/engine/<name>.md: enough for the engine index.
+function tmpEngineRoot(t, files) {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'docs-engine-'));
+  t.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(tmp, ENGINE), { recursive: true });
+  for (const [name, content] of Object.entries(files)) fs.writeFileSync(path.join(tmp, ENGINE, name), content);
+  return tmp;
+}
+
+test('engine index: topics in file-name order; a heading followed by another heading gives no summary; '
+  + 'a file with no heading is listed by its file name', (t) => {
+  const tmp = tmpEngineRoot(t, {
+    'b-no-summary.md': '## No summary topic\n\n### A sub-heading\n\nText.\n',
+    'a-full.md': '# Full topic\n\n  Its summary line.  \n\nBody.\n',
+    'c-bare.md': 'Just prose, no heading.\n',
+  });
+  const items = engineIndex(tmp).split('\n').filter((l) => l.startsWith('- '));
+  assert.deepEqual(items, [
+    '- [Full topic](engine/a-full.md): Its summary line.',
+    '- [No summary topic](engine/b-no-summary.md)',
+    '- [c-bare](engine/c-bare.md)',
+  ]);
 });
 
 test('no relative link in docs/agents/ (topic files included) or in CLAUDE.md is broken', () => {
