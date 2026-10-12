@@ -77,10 +77,11 @@ module.exports = (ctx) => {
       skillsDirs: [ctx.ws.skills, ctx.BUNDLED_SKILLS_DIR],
       resolveCommand,
       // its own past calls and the Oracle's are in no run: add them to what the runs used this month
-      budget: simulated ? null : usage.withPeerUsage(usage.budgetBaseline({ runsDir: ctx.ws.runs, settings, extraRuns: ctx.agentUsageRuns() }), productOwner.monthUsage(ctx.ws.backlog), settings.prices),
+      budget: simulated ? null : usage.withPeerUsage(usage.budgetBaseline({ runsDir: ctx.ws.runs, settings, extraRuns: ctx.agentUsageRuns() }), productOwner.monthUsage(ctx.ws.backlog, new Date(), settings.timeZone), settings.prices),
       mock: simulated,
       // #206: the prices of the estimates
       prices: settings.prices || {},
+      timeZone: settings.timeZone, // #273: the owner's zone in the turn's prompt
     };
   };
   // a discovery card's commit proposal asks the same Product Owner (#258, src/service/channels/discovery.js)

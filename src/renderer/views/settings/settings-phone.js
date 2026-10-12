@@ -9,7 +9,7 @@
   const ph = { state: null, pairing: null, check: null, error: null, form: null, poll: null };
 
   const localUrl = (s) => s.url || `http://127.0.0.1:${s.port || 7400}`;
-  const when = (iso) => (iso ? new Date(iso).toLocaleString() : 'never');
+  const when = (iso) => (iso ? new Date(iso).toLocaleString(undefined, { timeZone: TimeZone.current() }) : 'never');
 
   function statusHtml(s) {
     return s.running
@@ -43,7 +43,7 @@
     return `<div class="phone-pair" data-testid="phone-pairing">
         <img class="phone-qr" src="${esc(p.qr)}" alt="QR code to pair a phone" width="168" height="168" />
         <div class="phone-pair-text">
-          <div class="muted small">Pairing code (one use, until ${esc(new Date(p.expiresAt).toLocaleTimeString())})</div>
+          <div class="muted small">Pairing code (one use, until ${esc(new Date(p.expiresAt).toLocaleTimeString(undefined, { timeZone: TimeZone.current() }))})</div>
           <div class="phone-code mono" data-testid="phone-pairing-code">${esc(p.code)}</div>
           <div class="muted small phone-link" title="${esc(p.link)}">${esc(p.link)}</div>
         </div>

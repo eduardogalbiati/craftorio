@@ -18,6 +18,7 @@ const path = require('path');
 const { execFile, execFileSync } = require('child_process');
 const { resolveCommand } = require('./engine/providers');
 const { simulationOnly } = require('./engine/simulation');
+const TimeZone = require('./time-zone');
 
 const DEFAULT_NAME = 'multiagent-workspace';
 const REG_KEY = 'HKCU\\Software\\MultiagentOrchestrator';
@@ -222,6 +223,9 @@ const DEFAULT_SETTINGS = {
   // workflow ids (file names without .yaml) the Setup's Workflows step left unpicked: not offered by
   // Start (Home's Run a workflow opens it), shown again by Workflows › Definitions › Show in Start
   hiddenWorkflows: [],
+  // the owner's IANA time zone (#273, src/time-zone.js): screens, day/week/month cuts, the agents'
+  // replies and the daily resets use it; null = this computer's (readSettings fills it in, unsaved)
+  timeZone: null,
 };
 
 // settings.json as saved: null when there is none, {} when it is not valid JSON
@@ -233,15 +237,17 @@ function savedSettings(ws) {
 
 function readSettings(ws) {
   const saved = savedSettings(ws);
-  if (!saved) return { ...DEFAULT_SETTINGS, hiddenWorkflows: [] };
+  if (!saved) return { ...DEFAULT_SETTINGS, hiddenWorkflows: [], timeZone: TimeZone.systemZone() };
   // an existing settings.json without setupDone: a workspace in use before Setup existed (#319)
-  return { ...DEFAULT_SETTINGS, hiddenWorkflows: [], setupDone: true, ...saved };
+  return { ...DEFAULT_SETTINGS, hiddenWorkflows: [], setupDone: true, ...saved, timeZone: saved.timeZone || TimeZone.systemZone() };
 }
 
 function writeSettings(ws, patch) {
   const saved = savedSettings(ws);
   const next = { ...readSettings(ws), ...patch };
   for (const k of Object.keys(next)) if (!(k in DEFAULT_SETTINGS)) delete next[k];
+  // the computer's zone is not saved until one is chosen (#273): the workspace follows the computer
+  if (!(patch && patch.timeZone) && !(saved && saved.timeZone)) next.timeZone = null;
   // setupDone is written once known (#319: the Setup saves false when it opens, true at Finish or
   // Skip); a first write without it (a seeded or scripted workspace) leaves it out, so it reads as set up
   if (!(saved && 'setupDone' in saved) && !(patch && 'setupDone' in patch)) delete next.setupDone;

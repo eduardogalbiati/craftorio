@@ -613,7 +613,7 @@
     if (x.existingIssue && x.addition) {
       const i = issueOf(x.existingIssue);
       parts.push(`<div class="po-sec"><div class="sup-h">Addition to #${x.existingIssue}${i ? ` ${esc(i.title)}` : ''}</div><div class="po-draft">
-        <div class="md md-compact po-draft-body">${markdownHtml(`## Update (${new Date().toISOString().slice(0, 10)})\n\n${x.addition}`)}</div></div></div>`);
+        <div class="md md-compact po-draft-body">${markdownHtml(`## Update (${typeof TimeZone !== 'undefined' ? TimeZone.dayKey(Date.now(), TimeZone.current()) : new Date().toISOString().slice(0, 10)})\n\n${x.addition}`)}</div></div></div>`);
     }
     if (x.duplicates?.length) {
       parts.push(`<div class="po-sec"><div class="sup-h">Close issues</div><ul class="po-list">${x.duplicates.map((d) =>
@@ -625,7 +625,7 @@
   }
 
   function messageHtml(msg, m) {
-    const time = msg.ts ? new Date(msg.ts).toLocaleTimeString() : '';
+    const time = msg.ts ? new Date(msg.ts).toLocaleTimeString(undefined, { timeZone: typeof TimeZone !== 'undefined' ? TimeZone.current() : undefined }) : '';
     // #240: another agent's request and its result, one card (agent-request.js)
     if (msg.role === 'request') return window.AgentRequest.cardHtml(msg, po.messages, { testid: 'po-request', owner: 'po', projectId: po.projectId });
     if (window.AgentRequest.inCard(msg)) return '';

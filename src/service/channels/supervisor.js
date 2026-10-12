@@ -5,6 +5,7 @@
 const path = require('path');
 const simulation = require('../../engine/simulation');
 const supervisor = require('../../supervisor');
+const workspace = require('../../workspace');
 const { createBridge, mcpCommand } = require('../../supervisor-bridge');
 const {
   CLICK_KINDS,
@@ -30,6 +31,7 @@ module.exports = (ctx) => {
         dir: () => ctx.ws.supervisor || path.join(ctx.ws.root, 'supervisor'),
         tools: () => tools, bridge, mcpCommand: () => mcpCommand(!!ctx.host?.isPackaged, resolveCommand),
         skillsDirs: () => [ctx.ws.skills, ctx.BUNDLED_SKILLS_DIR], resolveCommand, refuseReal: simulation.refuseReal,
+        timeZone: () => workspace.readSettings(ctx.ws).timeZone,
       }));
     }
     return chats.get(root);

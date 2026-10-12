@@ -12,6 +12,10 @@ module.exports = (ctx) => [
     channel: 'usage:actions',
     method: 'getActionsUsage',
     params: ['force'],
-    fn: (opts) => actionsUsage.getActionsUsage({ includedMinutes: +workspace.readSettings(ctx.ws).actionsIncludedMinutes || 0, force: !!opts?.force }),
+    fn: (opts) => {
+      const settings = workspace.readSettings(ctx.ws);
+      // #273: the month and its reset are the owner's local ones
+      return actionsUsage.getActionsUsage({ includedMinutes: +settings.actionsIncludedMinutes || 0, force: !!opts?.force, timeZone: settings.timeZone });
+    },
   },
 ];

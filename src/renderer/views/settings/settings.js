@@ -19,6 +19,16 @@ function showSettingsTab(tab) {
   if (tab === 'phone') window.PhoneGatesSettings.render();
 }
 
+// Settings › General › Time zone (#273, time-zone.js): the IANA list, the saved zone (else the
+// computer's) selected, and the local time now in it
+function renderTimeZone() {
+  const zone = TimeZone.current();
+  const sel = $('#set-time-zone');
+  sel.innerHTML = TimeZone.zones(zone).map((z) => `<option value="${esc(z)}">${esc(z)}${z === TimeZone.systemZone() ? ' (this computer)' : ''}</option>`).join('');
+  sel.value = zone;
+  $('#set-time-zone-now').textContent = `Now ${TimeZone.formatDateTime(Date.now(), zone)} (${TimeZone.offsetLabel(Date.now(), zone)})`;
+}
+
 async function renderSettings() {
   state.ws = await api.getWorkspace();
   state.settings = await api.getSettings();
@@ -32,6 +42,7 @@ async function renderSettings() {
       <div class="s-ctrl"><button class="btn sm ghost" data-open="${esc(ws[k])}">Open</button></div>
     </div>`).join('');
   $('#set-ws-folders').querySelectorAll('[data-open]').forEach((b) => (b.onclick = () => api.openPath(b.dataset.open)));
+  renderTimeZone();
   document.querySelectorAll('[data-setting]').forEach((el) => (el.checked = !!state.settings[el.dataset.setting]));
   const platform = $('#set-backlog-platform');
   platform.innerHTML = Object.entries(window.BACKLOG_PLATFORMS || {}).map(([id, p]) => `<option value="${id}">${esc(p.label)}${p.soon ? ' (sync not available yet)' : ''}</option>`).join('');
@@ -502,6 +513,10 @@ registerView({
                 <div class="s-row">
                   <div class="s-label"><b>Path registry entry</b><span>The workspace path is loaded from here the next time the app opens.</span><code id="set-ws-registry"></code></div>
                 </div>
+                <div class="s-row">
+                  <div class="s-label"><b>Time zone</b><span>Times on every screen, where days, nights and months start (Analytics, Usage, budgets, the Oracle's daily limit) and the times the agents report. Until one is chosen: this computer's.</span><span id="set-time-zone-now" class="muted small"></span></div>
+                  <div class="s-ctrl"><select id="set-time-zone" aria-label="Time zone" data-testid="settings-time-zone"></select></div>
+                </div>
               </div>
               <p id="ws-error" class="error small"></p>
               <h3 class="s-subtitle">Backlog</h3>
@@ -748,6 +763,7 @@ registerView({
       state.settings = await api.setSettings({ [el.dataset.setting]: el.checked });
       if (el.dataset.setting === 'developerMode') applyDeveloperMode();
     }));
+    $('#set-time-zone').onchange = async (e) => { state.settings = await api.setSettings({ timeZone: e.target.value }); renderTimeZone(); TimeZone.notify(); };
     $('#set-backlog-platform').onchange = async (e) => { state.settings = await api.setSettings({ backlogPlatform: e.target.value }); };
     $('#set-default-workflow').onchange = async (e) => { state.settings = await api.setSettings({ defaultWorkflow: e.target.value || null }); renderDefaultWorkflow(); };
     $('#set-backlog-refresh').onchange = async (e) => { state.settings = await api.setSettings({ backlogRefreshHours: Number(e.target.value) || 0 }); };

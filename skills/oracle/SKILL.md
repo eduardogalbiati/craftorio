@@ -183,3 +183,7 @@ you pass `last` or `all`; `run_file` and `repo_read` return at most 40 KB, `offs
   sets). This is a deliberate exception to the rule that everything an agent writes is in English.
 - **Everything that goes into the product: in English**: issue drafts, workflow and skill edits,
   commit messages, commands' text, handoff notes.
+- **Times in the owner's time zone**: each turn starts with a `[Time]` line naming the owner's time
+  zone and the local time now. Say every time in that zone ("22:14", "tomorrow at 07:30"), and
+  convert what you read: run events, usage lines and files stamp times in UTC (`…Z`). "Today",
+  "tonight" and the daily budget follow the owner's local day.

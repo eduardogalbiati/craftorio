@@ -14,15 +14,16 @@
 (() => {
   const nw = { state: null, report: null, error: null, form: null, perms: null, night: 0, busy: false };
   const PRESET_HOURS = 8;
-  const pad = (n) => String(n).padStart(2, '0');
-  const hm = (iso) => (iso ? new Date(iso).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }) : '—');
-  const day = (iso) => new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  // #273: times, days and the end-time field in the owner's zone (time-zone.js)
+  const zone = () => (typeof TimeZone !== 'undefined' ? TimeZone.current() : undefined);
+  const hm = (iso) => (iso ? new Date(iso).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: zone() }) : '—');
+  const day = (iso) => new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: zone() });
   const pct = (x) => (x == null ? '—' : `${Math.round(x * 100)}%`);
   const usd = (n) => (n == null ? '—' : `$${Number(n).toFixed(2)}`);
   const hours = (h) => (h == null ? '—' : `${Number(h).toFixed(1)} h`);
   const dur = (msv) => (msv == null ? '—' : fmtDur(Math.round(msv)));
-  const localValue = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  const defaultEnd = () => { const d = new Date(); d.setHours(7, 30, 0, 0); if (d <= new Date()) d.setDate(d.getDate() + 1); return localValue(d); };
+  const localValue = (d) => TimeZone.inputValue(d, TimeZone.current());
+  const defaultEnd = () => localValue(TimeZone.nextAt(7, 30, TimeZone.current()));
   const stat = (label, value, title = '', cls = '') => `<div class="u-stat${cls ? ` ${cls}` : ''}"${title ? ` title="${esc(title)}"` : ''}><label>${esc(label)}</label><b>${value}</b></div>`;
   const KIND = {
     'cost-gap': 'Cost gap', 'dispatch-idle': 'Dispatch idle', environment: 'Environment', failed: 'Failed run', interrupted: 'Interrupted', limit: 'Limit pause', memory: 'Memory guard',
@@ -263,7 +264,7 @@
       $('#nw-until').onchange = (e) => { nw.form.until = e.target.value; };
       $('#nw-form').onsubmit = async (e) => {
         e.preventDefault();
-        const until = nw.form.until ? new Date(nw.form.until) : null;
+        const until = nw.form.until ? new Date(TimeZone.parseInput(nw.form.until, TimeZone.current())) : null;
         if (!until || !(until > new Date())) { nw.form = { ...nw.form, error: 'Pick an end time in the future.' }; render(); return; }
         nw.form = { ...nw.form, saving: true, error: null };
         render();

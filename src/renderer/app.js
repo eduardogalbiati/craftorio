@@ -25,8 +25,9 @@ function fmtDur(ms) {
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), r = s % 60;
   return h ? `${h}h${String(m).padStart(2, '0')}m` : m ? `${m}m${String(r).padStart(2, '0')}s` : `${r}s`;
 }
-const timeOf = (iso) => new Date(iso).toLocaleTimeString('en-US');
-const dateOf = (iso) => new Date(iso).toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short' });
+// in the workspace's time zone (#273, time-zone.js); TimeZone.titleOf names the zone for a tooltip
+const timeOf = (iso) => new Date(iso).toLocaleTimeString('en-US', { timeZone: TimeZone.current() });
+const dateOf = (iso) => new Date(iso).toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short', timeZone: TimeZone.current() });
 const USAGE_SCOPE_KEY = 'multiagent.usageScope';
 const RUN_VIEW_KEY = 'multiagent.runView';
 // A channel or method the running main process (or server) doesn't have: the code on disk is newer
@@ -226,6 +227,7 @@ async function init() {
 
   state.ws = await api.getWorkspace();
   state.settings = await api.getSettings();
+  TimeZone.notify(); // #273: what was drawn before the settings arrived redraws in the saved zone
   const appInfo = await api.appInfo();
   state.simulationOnly = !!appInfo.simulationOnly;
   $('#sim-only-badge').classList.toggle('hidden', !state.simulationOnly);

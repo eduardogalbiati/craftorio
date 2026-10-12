@@ -43,8 +43,9 @@
       localStorage.setItem(LS, JSON.stringify({ scope: ax.scope, days: ax.days, tab: ax.tab, marker: ax.marker }));
     } catch { /* ignore */ }
   };
-  const today = () => new Date().toISOString().slice(0, 10);
-  const daysBack = (n) => new Date(Date.now() - (n - 1) * DAY).toISOString().slice(0, 10);
+  // #273: the owner's local days (time-zone.js; without it, UTC days)
+  const today = () => (window.TimeZone ? window.TimeZone.dayKey(Date.now(), window.TimeZone.current()) : new Date().toISOString().slice(0, 10));
+  const daysBack = (n) => (window.TimeZone ? window.TimeZone.shiftDay(today(), 1 - n) : new Date(Date.now() - (n - 1) * DAY).toISOString().slice(0, 10));
   const pct = (x) => (x == null ? '—' : `${Math.round(x * 100)}%`);
   const val = (x, f = fmtNum) => (x == null ? '—' : f(x));
 

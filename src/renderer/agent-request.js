@@ -13,7 +13,7 @@
 (function () {
   const SENDERS = { oracle: 'the Oracle' };
   const sender = (from) => SENDERS[from] || (from ? `the ${from}` : 'another agent');
-  const hhmm = (ts) => (ts ? new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '');
+  const hhmm = (ts) => (ts ? new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: typeof TimeZone !== 'undefined' ? TimeZone.current() : undefined }) : '');
   /** A request's cost: "US$ 0" (no model call), else the model's cost. */
   const usd = (n) => { const v = Number(n) || 0; return v ? `US$ ${v.toFixed(v < 0.01 ? 4 : 2)}` : 'US$ 0'; };
 

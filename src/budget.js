@@ -1,4 +1,5 @@
-// The spending budget (#206): an optional cap in US$ per day (local calendar day) and per night (the
+// The spending budget (#206): an optional cap in US$ per day (the owner's local calendar day,
+// settings.timeZone, #273) and per night (the
 // Night watch's window, from its start: src/oracle-actions.js nightWatch), in settings.json
 // (`budget: { dailyUsd, nightlyUsd, raised }`, Settings › Budget). Spending is counted from the runs'
 // recorded session costs (live runs included: their sessions so far), real runs only; a session with
@@ -12,15 +13,15 @@
 // until the day or the night ends). The live roadmap's refills check the same cap
 // (src/service/areas/live-roadmap.js). Pure: the service passes the runs and the Night watch state.
 
+const TimeZone = require('./time-zone');
 const { sessionCost } = require('./usage');
 
 const DEFAULTS = Object.freeze({ dailyUsd: null, nightlyUsd: null, raised: null });
 
 const round = (n) => Math.round((Number(n) || 0) * 100) / 100;
-const pad = (n) => String(n).padStart(2, '0');
-/** The local calendar day of `d` (YYYY-MM-DD): the daily budget's period. */
-const dayKey = (d = new Date()) => { const x = new Date(d); return `${x.getFullYear()}-${pad(x.getMonth() + 1)}-${pad(x.getDate())}`; };
-const dayStart = (d = new Date()) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; };
+/** The owner's local calendar day of `d` (YYYY-MM-DD, settings.timeZone, #273; unset: the computer's): the daily budget's period. */
+const dayKey = (d = new Date(), timeZone = null) => TimeZone.dayKey(d, timeZone);
+const dayStart = (d = new Date(), timeZone = null) => new Date(TimeZone.startOfDay(d, timeZone));
 const usd = (n) => `$${round(n).toFixed(2).replace(/\.00$/, '')}`;
 const amount = (v) => (Number.isFinite(Number(v)) && Number(v) > 0 ? round(v) : null);
 
@@ -56,9 +57,9 @@ function spentSince(runs, since, { prices = {} } = {}) {
 function budgetState({ settings, runs, night = null, now = new Date() }) {
   const b = budgetSettings(settings);
   const prices = settings?.prices || {};
-  const today = dayKey(now);
+  const today = dayKey(now, settings?.timeZone);
   const raisedDay = b.raised?.day === today ? amount(b.raised.dailyUsd) : null;
-  const day = spentSince(runs, dayStart(now), { prices });
+  const day = spentSince(runs, dayStart(now, settings?.timeZone), { prices });
   const nightOn = !!(night?.active && night.startedAt);
   const raisedNight = nightOn && b.raised?.night === night.startedAt ? amount(b.raised.nightlyUsd) : null;
   const nightSpent = nightOn ? spentSince(runs, night.startedAt, { prices }) : null;
@@ -97,7 +98,7 @@ function raiseFor(settings, { period = 'day', spentUsd = 0, nextUsd = 0, night =
   const to = Math.ceil(round(spentUsd) + round(nextUsd) + 0.001);
   const raised = { ...(b.raised || {}) };
   if (period === 'night') Object.assign(raised, { night: night?.startedAt || null, nightlyUsd: to });
-  else Object.assign(raised, { day: dayKey(now), dailyUsd: to });
+  else Object.assign(raised, { day: dayKey(now, settings?.timeZone), dailyUsd: to });
   return { ...(settings?.budget || {}), raised };
 }
 

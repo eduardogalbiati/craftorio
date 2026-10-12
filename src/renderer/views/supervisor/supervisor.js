@@ -152,7 +152,7 @@
 
   // ---- rendering ---------------------------------------------------------------------------------
   function messageHtml(msg, i, all) {
-    const time = msg.ts ? new Date(msg.ts).toLocaleString() : '';
+    const time = msg.ts ? new Date(msg.ts).toLocaleString(undefined, { timeZone: TimeZone.current() }) : '';
     // #240: another agent's request and its result, one card (agent-request.js)
     if (msg.role === 'request') return window.AgentRequest.cardHtml(msg, all, { testid: 'svc-request', owner: 'supervisor' });
     if (window.AgentRequest.inCard(msg)) return '';

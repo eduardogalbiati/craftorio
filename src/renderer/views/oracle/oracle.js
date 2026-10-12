@@ -98,7 +98,7 @@
   }
   async function startNightWatch() {
     const f = or.nightForm;
-    const until = f.until ? new Date(f.until) : null;
+    const until = f.until ? new Date(TimeZone.parseInput(f.until, TimeZone.current())) : null;
     if (!until || !(until > new Date())) { or.nightForm = { ...f, error: 'Pick an end time in the future.' }; render(); return; }
     or.nightForm = { ...f, saving: true, error: null };
     render();
@@ -336,7 +336,7 @@
   }
 
   // ---- rendering ---------------------------------------------------------------------------
-  const time = (t) => (t ? new Date(t).toLocaleString() : '');
+  const time = (t) => (t ? new Date(t).toLocaleString(undefined, { timeZone: TimeZone.current() }) : '');
   function thumbsHtml(names = []) {
     if (!names.length) return '';
     return `<div class="oracle-thumbs">${names.map((n) => {
@@ -677,7 +677,7 @@
     document.querySelectorAll('[data-oracle-memory]').forEach((b) => (b.onclick = () => (or.memoryOpen && or.memory.editing ? null : openMemory())));
     document.querySelectorAll('[data-oracle-night]').forEach((b) => (b.onclick = () => {
       if (M.nightWatchView(or.service?.nightWatch).active) return;
-      or.nightForm = or.nightForm ? null : { until: M.defaultNightEnd(), saving: false, error: null };
+      or.nightForm = or.nightForm ? null : { until: M.defaultNightEnd(new Date(), TimeZone.current()), saving: false, error: null };
       render();
       if (or.nightForm) document.querySelector(`#oracle-night-until-${or.window ? WINDOW : or.drawer ? 'drawer' : 'dock'}`)?.focus({ preventScroll: true });
     }));
@@ -742,6 +742,7 @@
       $('#oracle-backdrop').onclick = closeDrawer;
       document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && or.drawer) closeDrawer(); });
       bindOps();
+      TimeZone.onChange(render); // #273: the messages' times follow the chosen zone
       document.addEventListener('input', (e) => {
         if (e.target.classList?.contains('oracle-mem-input')) or.memory = { ...or.memory, draft: e.target.value };
         if (e.target.classList?.contains('oracle-mem-import-input')) or.memory = { ...or.memory, importText: e.target.value };

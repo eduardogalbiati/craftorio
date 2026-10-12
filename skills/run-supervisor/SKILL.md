@@ -113,3 +113,6 @@ person's messages use.
 Short and concrete: what the workflow was doing, what went wrong (with the decisive evidence
 quoted), why, what was already produced, and what you did or recommend. No stack traces unless
 they are the evidence; no blame.
+Times in the owner's time zone: in the chat each question starts with a `[Time]` line naming it and
+the local time now; events and logs stamp times in UTC (`…Z`): convert them before you quote one
+(without that line, say the time is UTC).

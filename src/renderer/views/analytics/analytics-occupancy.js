@@ -25,8 +25,8 @@
   const hours = (h) => (h == null ? '—' : `${(Math.round(h * 10) / 10).toFixed(1)} h`);
   const level = (x) => window.OccupancyChip?.chipModel({ occupancy: x || 0 }).level || 'none';
 
-  // dates in the owner's convention (#273): the locale of the app, the time zone of the machine (the
-  // engine computes d.day as a local day, so local midnight of that day is the right instant)
+  // dates in the owner's convention: the locale of the app; a day key (the engine cuts d.day in the
+  // owner's zone, #273) is drawn from its own date, an instant from its day in that zone
   const dayFormat = (opts) => {
     try { return new Intl.DateTimeFormat(navigator.language || undefined, opts); } catch { return new Intl.DateTimeFormat(undefined, opts); }
   };
@@ -37,7 +37,7 @@
     const t = localMidnight(day);
     return Number.isNaN(t.getTime()) ? String(day) : (long ? DAY_LONG : DAY_SHORT).format(t);
   };
-  const fmtWhenDay = (iso) => { const t = new Date(iso); return Number.isNaN(t.getTime()) ? String(iso).slice(0, 10) : DAY_LONG.format(t); };
+  const fmtWhenDay = (iso) => { const t = new Date(iso); return Number.isNaN(t.getTime()) ? String(iso).slice(0, 10) : typeof TimeZone !== 'undefined' ? fmtDay(TimeZone.dayKey(t, TimeZone.current()), true) : DAY_LONG.format(t); };
   const hh = (h) => `${String(h % 24).padStart(2, '0')}:00`;
 
   // the heatmap's scale (#275): l0 idle, l1 under 25%, l2 under 50%, l3 under 75%, l4 75% and over

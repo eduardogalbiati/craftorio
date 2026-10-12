@@ -81,6 +81,7 @@ const { mockSteps, partialText } = require('./chat-progress');
 const { conflictsOf, sharedFiles } = require('./repo-performance');
 const { storeFor } = require('./store');
 const { readEvents } = require('./supervisor');
+const TimeZone = require('./time-zone');
 
 const MAX_REPORT = 60000;
 const BODY_CLIP = 600;
@@ -1263,11 +1264,12 @@ const usageLines = (backlogDir, opts) => agentsUsage.readLines(usageFile(backlog
 /**
  * The Product Owner's calls this month, every project, as sessions for usage.withPeerUsage
  * ([{ provider, model, tokens, costUsd }]): its spend is in no run, so budgetBaseline misses it.
+ * The month is the owner's local one (settings.timeZone, #273; default UTC).
  */
-function monthUsage(backlogDir, now = new Date()) {
-  const month = now.toISOString().slice(0, 7);
+function monthUsage(backlogDir, now = new Date(), timeZone = 'UTC') {
+  const month = TimeZone.monthKey(now, timeZone);
   return usageLines(backlogDir)
-    .filter((u) => String(u.ts).slice(0, 7) === month)
+    .filter((u) => u.ts && TimeZone.monthKey(u.ts, timeZone) === month)
     .map((u) => ({ provider: u.provider, model: u.model, tokens: u.tokens, costUsd: u.costUsd }));
 }
 
@@ -1301,7 +1303,8 @@ function checkBudget(budget) {
 // `defaultWorkflow` (#195): the setting (settings.defaultWorkflow); the plan's groups get it unless an issue needs another.
 // `workflow` / `inputs` (#235): the workflow the owner chose in the drawer and its options: every
 // group gets them (recorded on the messages: lastWorkflow); no Cost step where it does not apply.
-async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns, runs, workflows, folder, agent, skillsDirs, resolveCommand, budget, mock, mode = 'plan', attachments = [], selection = [], scenario = null, onItem = null, signal = null, calibration = null, defaultWorkflow = null, cost = null, prices = {}, workflow = null, inputs = null, request = null }) {
+// `timeZone` (#273): the owner's zone (settings.timeZone): the turn's prompt names it and the local time.
+async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns, runs, workflows, folder, agent, skillsDirs, resolveCommand, budget, mock, mode = 'plan', attachments = [], selection = [], scenario = null, onItem = null, signal = null, calibration = null, defaultWorkflow = null, cost = null, prices = {}, workflow = null, inputs = null, request = null, timeZone = null }) {
   const q = String(question || '').trim();
   if (!q) throw new Error('Ask a question.');
   const byDefault = DefaultWorkflow.resolve(defaultWorkflow, (workflows || []).map((w) => w.file)).file;
@@ -1373,7 +1376,7 @@ async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns,
       const shared = issueMode ? null : await sharedFiles({ runs: (runs || []).filter((r) => !r.mock).slice(0, SHARED_FILE_RUNS), repo: folder, store: storeFor(runsDir), limit: SHARED_FILES });
       const report = (issueMode ? issueReport : backlogReport)({ data, activeRuns, history, workflows, question: q, selection: selected, shared, defaultWorkflow: byDefault, workflow: chosen });
       ({ raw, costUsd, model, invalid, tokens, sessionId, text: analysis } = await callAgent({
-        mode, question: q, report, previous, attachments: files, selection: selected, folder, agent: issueMode ? ISSUE_AGENT : agent, skillsDirs, resolveCommand, onItem: seen, signal, calibration: level, cost: costLevel, workflow: chosen, costOff,
+        mode, question: q, report, previous, attachments: files, selection: selected, folder, agent: issueMode ? ISSUE_AGENT : agent, skillsDirs, resolveCommand, onItem: seen, signal, calibration: level, cost: costLevel, workflow: chosen, costOff, timeZone,
       }));
       recordUsage(backlogDir, { projectId, model, tokens, costUsd, sessionId });
     }
@@ -1494,7 +1497,7 @@ function lastWorkflow(backlogDir, projectId) {
   return null;
 }
 
-async function callAgent({ mode = 'plan', question = '', report, previous = [], attachments = [], selection = [], folder, agent, skillsDirs, resolveCommand, onItem = () => {}, signal = null, calibration = null, cost = null, workflow = null, costOff = false }) {
+async function callAgent({ mode = 'plan', question = '', report, previous = [], attachments = [], selection = [], folder, agent, skillsDirs, resolveCommand, onItem = () => {}, signal = null, calibration = null, cost = null, workflow = null, costOff = false, timeZone = null }) {
   const { extractJson, validateSchema, render } = require('./engine/workflow');
   const { runTurn, isImagePath } = require('./engine/providers');
   const { resolveSkill, skillPrompt } = require('./skills');
@@ -1524,6 +1527,7 @@ async function callAgent({ mode = 'plan', question = '', report, previous = [], 
     selection.length ? SELECTION_RULES : '',
     report,
     issueMode ? issueContext(previous) : planMode ? previousExchanges(previous) : '',
+    timeZone ? `## The owner's time\n${TimeZone.nowLine(timeZone)}` : '',
     issueMode ? `## The owner's new message\n${question}` : planMode ? `## The owner's question\n${question}` : '',
     others.length ? `## Files the owner attached (read them)\n${others.map((f) => `- ${f}`).join('\n')}` : '',
     `\n---\nAt the end of your response you MUST include a \`\`\`json block with an object that validates against this JSON Schema:\n\`\`\`json\n${JSON.stringify(schema, null, 2)}\n\`\`\``,

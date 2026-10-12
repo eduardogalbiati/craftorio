@@ -45,8 +45,9 @@
 // than WARM_MS ago) and under settings.oracle.compactAtTokens; otherwise it starts a fresh session
 // from the skill, the memory and state.md. Past the cap (or on a model change) a handoff note is
 // written from the same state, without a model call. A turn is never cut.
-// Budget: settings.oracle.dailyBudgetUsd (0 = no cap) refuses questions once today's spend (UTC
-// day, like Usage; each turn's own cost) reaches it, with { refused: { reason: 'daily-budget',
+// Budget: settings.oracle.dailyBudgetUsd (0 = no cap) refuses questions once today's spend (the
+// owner's local day, settings.timeZone, #273, like Usage; each turn's own cost) reaches it, with
+// { refused: { reason: 'daily-budget',
 // spentUsd, limitUsd, resumesAt } }; a blocking Claude Code monthly budget refuses with reason
 // 'monthly-budget'. A refused question is kept in the conversation, marked `refused`.
 // Self-healing (#278, settings.oracle.selfHealing): the watch in force is then the standing watch
@@ -63,6 +64,7 @@ const os = require('os');
 const path = require('path');
 const actions = require('./oracle-actions');
 const agentsUsage = require('./agents-usage');
+const TimeZone = require('./time-zone');
 const knowledge = require('./oracle-knowledge');
 const { mockSteps, partialText } = require('./chat-progress');
 const night = require('./night-watch');
@@ -112,7 +114,6 @@ const readLines = (file) => {
     return fs.readFileSync(file, 'utf8').split('\n').map((l) => { try { return l ? JSON.parse(l) : null; } catch { return null; } }).filter(Boolean);
   } catch { return []; }
 };
-const dayOf = (d) => new Date(d).toISOString().slice(0, 10);
 const cut = (s, n) => (s.length > n ? `${s.slice(0, n)}…` : s);
 
 /** The Oracle's settings with the defaults filled in (settings.oracle may be partial). */
@@ -172,18 +173,18 @@ function sessionTotal(dir, sessionId) {
   return total;
 }
 
-/** Today's (UTC) spend of the Oracle, in USD: each turn's own cost. */
-function spentOn(dir, now = new Date()) {
-  const day = dayOf(now);
-  return usageLines(dir).filter((u) => String(u.ts).slice(0, 10) === day).reduce((s, u) => s + u.turnUsd, 0);
+/** Today's spend of the Oracle, in USD: each turn's own cost; the owner's local day (#273; default UTC). */
+function spentOn(dir, now = new Date(), timeZone = 'UTC') {
+  const day = TimeZone.dayKey(now, timeZone);
+  return usageLines(dir).filter((u) => u.ts && TimeZone.dayKey(u.ts, timeZone) === day).reduce((s, u) => s + u.turnUsd, 0);
 }
 
 /**
- * The Oracle's spend as summary-like runs, one per day (usage.computeUsage's `extraRuns`): it is in
- * no run folder, and counts in Usage and the monthly budgets like the runs.
+ * The Oracle's spend as summary-like runs, one per local day (usage.computeUsage's `extraRuns`): it is
+ * in no run folder, and counts in Usage and the monthly budgets like the runs.
  */
-function usageRuns(dir) {
-  return agentsUsage.dayRuns(usageLines(dir), { id: 'oracle', workflow: 'Oracle' });
+function usageRuns(dir, timeZone = 'UTC') {
+  return agentsUsage.dayRuns(usageLines(dir), { id: 'oracle', workflow: 'Oracle', timeZone });
 }
 
 // #183: what a question is about (a gate's context) is capped: the Oracle reads the rest with its tools
@@ -256,6 +257,8 @@ function createOracle({
   let turnEnd = Promise.resolve(); // settles when that turn ends (#244: a question waits behind a wake-up)
   const acting = new Set(); // action ids being performed
   let owner = null; // our hold on owner.json
+  // #273: the owner's IANA zone (the service's settings always name one; UTC otherwise)
+  const timeZone = () => settings()?.timeZone || 'UTC';
   const files = () => {
     const d = dir();
     return {
@@ -363,19 +366,19 @@ function createOracle({
   }
 
   // ---- budget ------------------------------------------------------------------------------
+  // #273: the day is the owner's (settings.timeZone): the budget resets at local midnight
   function budgetState(now = new Date()) {
     const { dailyBudgetUsd } = oracleSettings(settings());
-    const spentUsd = spentOn(dir(), now);
-    const tomorrow = new Date(`${dayOf(now)}T00:00:00.000Z`);
-    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
-    return { spentUsd, limitUsd: dailyBudgetUsd, paused: dailyBudgetUsd > 0 && spentUsd >= dailyBudgetUsd, resumesAt: tomorrow.toISOString() };
+    const spentUsd = spentOn(dir(), now, timeZone());
+    const resumesAt = new Date(TimeZone.nextDay(now, timeZone())).toISOString();
+    return { spentUsd, limitUsd: dailyBudgetUsd, paused: dailyBudgetUsd > 0 && spentUsd >= dailyBudgetUsd, resumesAt };
   }
   function refusal() {
     const day = budgetState();
     if (day.paused) {
       return {
         reason: 'daily-budget', spentUsd: day.spentUsd, limitUsd: day.limitUsd, resumesAt: day.resumesAt,
-        text: `Paused by budget: the Oracle spent ${day.spentUsd.toFixed(2)} USD today, its daily limit is ${day.limitUsd.toFixed(2)} USD. It resumes tomorrow (${day.resumesAt}), or raise the limit in Settings.`,
+        text: `Paused by budget: the Oracle spent ${day.spentUsd.toFixed(2)} USD today, its daily limit is ${day.limitUsd.toFixed(2)} USD. It resumes at midnight (${TimeZone.formatDateTime(day.resumesAt, timeZone())} ${timeZone()}), or raise the limit in Settings.`,
       };
     }
     const month = monthlyBlock(budget());
@@ -572,7 +575,9 @@ function createOracle({
     const fresh = !st.sessionId;
     // #280: why this session starts, for usage.jsonl (state.json keeps it until a turn answers)
     const startReason = fresh ? st.startReason || 'first' : null;
-    const prompt = fresh ? openingPrompt(text, heading) : text;
+    // #273: the owner's zone and local time, one line in each turn (not in the skill: the cache stays)
+    const timed = `[Time] ${TimeZone.nowLine(timeZone())}\n\n${text}`;
+    const prompt = fresh ? openingPrompt(timed, heading) : timed;
     const res = mock
       ? await mockTurn({ prompt, sessionId: st.sessionId, screen, mockContextTokens, fresh, attachments, about, wake })
       : await realTurn({ prompt, sessionId: st.sessionId, model, effort: a.effort, onItem, signal, timeoutMs, startReason, wake: !!wake });

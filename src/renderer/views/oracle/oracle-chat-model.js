@@ -150,13 +150,10 @@
     return { active, selfHealing, until: active ? nw.until || null : null, label: selfHealing ? 'Self-healing is on' : active ? (nw.until ? `Night watch until ${fmtTime(nw.until)}` : 'Night watch on') : 'Night watch off' };
   }
 
-  /** The default end of a Night watch: the next 07:00 local time, as a datetime-local value. */
-  function defaultNightEnd(now = new Date()) {
-    const d = new Date(now);
-    d.setHours(7, 0, 0, 0);
-    if (d <= now) d.setDate(d.getDate() + 1);
-    const p = (n) => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+  /** The default end of a Night watch: the next 07:00 in the owner's zone (#273, time-zone.js; unset: the computer's), as a datetime-local value. */
+  function defaultNightEnd(now = new Date(), timeZone = null) {
+    const TZ = typeof TimeZone !== 'undefined' ? TimeZone : require('../../time-zone');
+    return TZ.inputValue(TZ.nextAt(7, 0, timeZone, now), timeZone);
   }
 
   /** Where a link goes: { kind: 'run' | 'issue' | 'file' | 'path' | 'external' | 'none', ... }. */

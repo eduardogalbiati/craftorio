@@ -14,6 +14,7 @@ const fs = require('fs');
 const path = require('path');
 const { installCommand } = require('./install-commands');
 const { runSummaries } = require('./runs');
+const TimeZone = require('./time-zone');
 
 // installCommand: what the Usage screen's play button runs (#147); installNote: what to do after it
 const PROVIDERS = [
@@ -72,8 +73,9 @@ function readRuns(runsDir) {
   return runs;
 }
 
-const monthKey = (d) => new Date(d).toISOString().slice(0, 7);
-const dayKey = (d) => new Date(d).toISOString().slice(0, 10);
+// the owner's local month and day (settings.timeZone, #273; UTC when no zone is given)
+const monthKey = (d, tz = 'UTC') => TimeZone.monthKey(d, tz);
+const dayKey = (d, tz = 'UTC') => TimeZone.dayKey(d, tz);
 
 const recordAsSession = (r) => ({ provider: r.provider, model: r.model, tokens: r.tokens, cost_usd: r.costUsd, turns: 1 });
 
@@ -81,7 +83,7 @@ const recordAsSession = (r) => ({ provider: r.provider, model: r.model, tokens: 
  * @param scope       'orchestrator' (default) or 'machine' (needs `local`)
  * @param local       readLocalUsage() result, for the machine scope and countOutside budgets
  * @param runsDir     <workspace>/runs
- * @param settings    workspace settings ({ budgets, prices })
+ * @param settings    workspace settings ({ budgets, prices, timeZone })
  * @param live        optional summary-like object of a run in progress ({ run_id, workflow, started_at, sessions }),
  *                    or a list of them (concurrent runs)
  * @param installed   { claude: bool, codex: bool, grok: bool }
@@ -91,8 +93,9 @@ const recordAsSession = (r) => ({ provider: r.provider, model: r.model, tokens: 
 function computeUsage({ runsDir, settings = {}, live = null, installed = {}, now = new Date(), scope = 'orchestrator', local = null, extraRuns = [] }) {
   const prices = settings.prices || {};
   const budgets = settings.budgets || {};
-  const month = monthKey(now);
-  const today = dayKey(now);
+  const tz = settings.timeZone || 'UTC';
+  const month = monthKey(now, tz);
+  const today = dayKey(now, tz);
   const lives = [].concat(live || []);
   const liveIds = new Set(lives.map((l) => l.run_id));
   const runs = readRuns(runsDir).filter((r) => !liveIds.has(r.run_id));
@@ -107,8 +110,8 @@ function computeUsage({ runsDir, settings = {}, live = null, installed = {}, now
   for (const run of runs) {
     const started = run.started_at || run.startedAt;
     if (!started) continue;
-    const inMonth = monthKey(started) === month;
-    const inToday = dayKey(started) === today;
+    const inMonth = monthKey(started, tz) === month;
+    const inToday = dayKey(started, tz) === today;
     const row = { runId: run.run_id, workflow: run.workflow, startedAt: started, status: run.status, tokens: 0, costUsd: 0, byProvider: {} };
     const seen = { month: new Set(), today: new Set() };
     for (const s of run.sessions || []) {
@@ -153,8 +156,8 @@ function computeUsage({ runsDir, settings = {}, live = null, installed = {}, now
       const inOrch = r.sessionId && orchSessionIds.has(r.sessionId);
       const session = recordAsSession(inOrch ? { ...r, costUsd: 0 } : r); // orchestrator cost is added below
       const buckets = [];
-      if (monthKey(r.ts) === month) buckets.push(m.month, (m.models[r.model] ??= emptyTotals()));
-      if (dayKey(r.ts) === today) buckets.push(m.today);
+      if (monthKey(r.ts, tz) === month) buckets.push(m.month, (m.models[r.model] ??= emptyTotals()));
+      if (dayKey(r.ts, tz) === today) buckets.push(m.today);
       for (const b of buckets) {
         addSession(b, session, prices);
         if (inOrch) b.unpricedTokens -= totalTokens(r.tokens); // priced by the orchestrator's own numbers

@@ -818,9 +818,11 @@
   // the release workflow's stations (workflows/release.yaml)
   const RELEASE_STATIONS = [['unit', 'Unit tests'], ['e2e', 'E2E scenarios'], ['fix', 'Fix'], ['ship', 'Ship']];
   const itemRuns = (x) => [...(x.runs || []), x.runId].filter(Boolean);
+  // #273: the owner's zone (time-zone.js; a page without it: the computer's)
+  const zone = () => (typeof TimeZone !== 'undefined' ? TimeZone.current() : undefined);
   const shortDate = (at) => {
     const d = new Date(at);
-    return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: zone() });
   };
 
   // The releases the Roadmap knows, each with `at`: the stage it follows (its cut line's, else the last
@@ -1046,7 +1048,7 @@
   // ---- Live roadmap (#164, src/live-roadmap.js) ----------------------------------------------------
   const clock = (at) => {
     const d = new Date(at);
-    return Number.isNaN(d.getTime()) ? '' : `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    return Number.isNaN(d.getTime()) ? '' : d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: zone() });
   };
   const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
   // the last refill in a few words: [text, tone] (tone: '' | 'warn' | 'error')
@@ -1591,7 +1593,7 @@
   // "Restore an earlier version…" (#281, the #rm-versions-modal dialog of backlog.js): the roadmap as it
   // was before each of the last edits, newest first; Restore follows Undo's rule (the service refuses
   // with the reason) and can itself be undone from its toast.
-  const timeOf = (iso) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? '' : d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }); };
+  const timeOf = (iso) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? '' : d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: zone() }); };
   async function openVersions(ctx) {
     const q = (sel) => document.querySelector(sel);
     const modal = q('#rm-versions-modal');

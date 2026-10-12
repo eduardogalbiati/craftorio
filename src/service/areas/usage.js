@@ -35,21 +35,24 @@ module.exports = (ctx) => {
   // runs (computeUsage's and budgetBaseline's `extraRuns`). The Product Owner's month joins the
   // budget checks through usage.withPeerUsage.
   function agentUsageRuns() {
-    return [...oracle.usageRuns(oracleDir()), ...supervisorChat.usageRuns(supervisorDir())];
+    const { timeZone } = workspace.readSettings(ctx.ws);
+    return [...oracle.usageRuns(oracleDir(), timeZone), ...supervisorChat.usageRuns(supervisorDir(), timeZone)];
   }
 
-  // Analytics' Agents tab (#280): the three agents' totals, days and sessions in a range of UTC days,
-  // and the Oracle's spend today against its daily budget
+  // Analytics' Agents tab (#280): the three agents' totals, days and sessions in a range of the
+  // owner's local days (#273), and the Oracle's spend today against its daily budget
   function agentsSnapshot({ from, to } = {}) {
-    const range = analytics.dateRange({ from, to });
+    const settings = workspace.readSettings(ctx.ws);
+    const { timeZone } = settings;
+    const range = analytics.dateRange({ from, to, timeZone });
     // strict: a usage file that cannot be read is an error on the tab, not an agent without turns
     const strict = { strict: true };
     const out = agentsUsage.agentsAnalytics({
       oracle: oracle.usageLines(oracleDir(), strict), productOwner: productOwner.usageLines(ctx.ws.backlog, strict), supervisor: supervisorChat.usageTurns(supervisorDir(), strict),
-      from: range.from, to: range.to,
+      from: range.from, to: range.to, timeZone,
     });
-    const { dailyBudgetUsd } = oracle.oracleSettings(workspace.readSettings(ctx.ws));
-    out.agents.oracle.today = { spentUsd: oracle.spentOn(oracleDir()), limitUsd: dailyBudgetUsd };
+    const { dailyBudgetUsd } = oracle.oracleSettings(settings);
+    out.agents.oracle.today = { spentUsd: oracle.spentOn(oracleDir(), new Date(), timeZone), limitUsd: dailyBudgetUsd };
     return out;
   }
 

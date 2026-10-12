@@ -26,7 +26,9 @@
   function prTooltip(pr) {
     const words = pr.state ? PR_STATES[pr.state] || pr.state : 'checking the state…';
     const detail = pr.detail && pr.state !== 'unknown' ? `: ${pr.detail}` : pr.detail ? ` (${pr.detail})` : '';
-    const at = pr.checkedAt ? ` · checked ${new Date(pr.checkedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}` : '';
+    // #273: in the owner's zone (time-zone.js; in node, the computer's)
+    const timeZone = typeof TimeZone !== 'undefined' ? TimeZone.current() : undefined;
+    const at = pr.checkedAt ? ` · checked ${new Date(pr.checkedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone })}` : '';
     return `PR #${pr.number ?? '?'}: ${words}${detail}${at}`;
   }
 

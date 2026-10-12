@@ -303,7 +303,7 @@ module.exports = (ctx) => {
         // `persona: random` agents become one of the user's agents (Agents menu)
         personas: agents.listAgents(ws.agents).filter((a) => !a.system && !a.error),
         // CI waiting on a PR whose account ran out of Actions minutes reports it instead of waiting
-        actionsQuota: async (owner) => actionsUsage.quotaExhausted(await actionsUsage.getActionsUsage({ owner, includedMinutes: +settings.actionsIncludedMinutes || 0 })),
+        actionsQuota: async (owner) => actionsUsage.quotaExhausted(await actionsUsage.getActionsUsage({ owner, includedMinutes: +settings.actionsIncludedMinutes || 0, timeZone: settings.timeZone })),
       });
       if (!mock) {
         // the runs in progress have not written their usage to disk yet

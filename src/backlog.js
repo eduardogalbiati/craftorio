@@ -31,6 +31,7 @@ const { resolveCommand } = require('./engine/providers');
 const { execShim } = require('./shell');
 const { writeJsonSafe } = require('./state-file');
 const { storeFor } = require('./store');
+const TimeZone = require('./time-zone');
 const { ARCHIVED_LABEL, archiveBlockReason } = require('./renderer/views/backlog/backlog-archive');
 
 const PLATFORMS = {
@@ -618,13 +619,14 @@ function issueCloseCommand({ platform, repo, number }) {
 
 /**
  * A description with `addition` appended as a dated section ("## Update (YYYY-MM-DD)"), keeping
- * everything already there (the hand-made updates of #77, #96, #110, #112).
+ * everything already there (the hand-made updates of #77, #96, #110, #112). The date is the owner's
+ * local day (`timeZone`, settings.timeZone, #273; unset: the computer's).
  */
-function issueAppendBody({ original = '', addition, date = new Date() }) {
+function issueAppendBody({ original = '', addition, date = new Date(), timeZone = null }) {
   const current = String(original || '').replace(/\r\n/g, '\n').trimEnd();
   const add = String(addition || '').replace(/\r\n/g, '\n').trim();
   if (!add) throw new Error('Nothing to add to the issue.');
-  const section = `## Update (${date.toISOString().slice(0, 10)})\n\n${add}\n`;
+  const section = `## Update (${TimeZone.dayKey(date, timeZone)})\n\n${add}\n`;
   return current ? `${current}\n\n${section}` : section;
 }
 

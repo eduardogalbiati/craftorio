@@ -356,8 +356,8 @@ module.exports = (ctx) => {
       defaultWorkflow: settings.defaultWorkflow, // #195
       folder: p.folder, agent: agents.readAgent(ctx.ws.agents, agents.PRODUCT_OWNER_ID),
       skillsDirs: [ctx.ws.skills, ctx.BUNDLED_SKILLS_DIR], resolveCommand,
-      budget: sim ? null : usage.withPeerUsage(usage.budgetBaseline({ runsDir: ctx.ws.runs, settings, extraRuns: ctx.agentUsageRuns() }), productOwner.monthUsage(ctx.ws.backlog), settings.prices),
-      mock: sim, mode,
+      budget: sim ? null : usage.withPeerUsage(usage.budgetBaseline({ runsDir: ctx.ws.runs, settings, extraRuns: ctx.agentUsageRuns() }), productOwner.monthUsage(ctx.ws.backlog, new Date(), settings.timeZone), settings.prices),
+      mock: sim, mode, timeZone: settings.timeZone,
     });
     const m = out.message || {};
     const draft = m.issue?.draft;
@@ -471,7 +471,7 @@ module.exports = (ctx) => {
         budget: () => {
           const settings = workspace.readSettings(ctx.ws);
           const base = usage.budgetBaseline({ runsDir: ctx.ws.runs, settings, extraRuns: ctx.agentUsageRuns() });
-          return usage.withPeerUsage(base, productOwner.monthUsage(ctx.ws.backlog), settings.prices);
+          return usage.withPeerUsage(base, productOwner.monthUsage(ctx.ws.backlog, new Date(), settings.timeZone), settings.prices);
         },
         perform, restore,
         notify: (n) => ctx.notify?.(notifier.oracleNotice(n)),

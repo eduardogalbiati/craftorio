@@ -159,7 +159,7 @@ function renderWatch() {
   log.innerHTML = (w?.messages || []).map((m) => {
     const cls = `sup-wmsg ${esc(m.role)}${m.flag ? ' flag' : ''}${m.error ? ' error' : ''}`;
     if (m.role === 'system') return `<div class="${cls} small">${esc(m.text)}</div>`;
-    const meta = `${m.role === 'user' ? 'You' : '◆ Supervisor'} · ${esc(new Date(m.ts).toLocaleTimeString())}${m.costUsd != null ? ` · ${esc(fmtCost(m.costUsd))}` : ''}`;
+    const meta = `${m.role === 'user' ? 'You' : '◆ Supervisor'} · ${esc(new Date(m.ts).toLocaleTimeString(undefined, { timeZone: TimeZone.current() }))}${m.costUsd != null ? ` · ${esc(fmtCost(m.costUsd))}` : ''}`;
     return `<div class="${cls}"><div class="sup-wmsg-meta">${meta}</div><div class="md md-compact">${markdownHtml(m.text)}</div></div>`;
   }).join('')
     + (w?.busy ? '<div class="sup-loading"><span class="spinner"></span><span>The supervisor is reading the run…</span></div>' : '')

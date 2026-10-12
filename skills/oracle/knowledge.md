@@ -3,7 +3,7 @@
 Digests of the skills the other agents follow. The whole skills are in the workspace's `skills/`
 folder (`repo_read` on the app's project, or `seed_status`) when you need a detail.
 
-<!-- skill: backlog-product-owner sha256:6a43e65ee552 -->
+<!-- skill: backlog-product-owner sha256:99c8e3e6155e -->
 ## backlog-product-owner (planning the backlog)
 
 - One group of issues = one run (one branch, one PR). The owner applies a plan; you never edit
@@ -26,7 +26,7 @@ folder (`repo_read` on the app's project, or `seed_status`) when you need a deta
 - Work left by an ended run: start from scratch when stale, resume when recent.
 - Never invent sizes: the app computes them from past runs.
 
-<!-- skill: run-supervisor sha256:780558313683 -->
+<!-- skill: run-supervisor sha256:35ceb66ef400 -->
 ## run-supervisor (explaining and recovering runs)
 
 - Read the evidence first: the failing step, its error, the agent's last answer, the timeline

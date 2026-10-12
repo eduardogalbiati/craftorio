@@ -192,7 +192,7 @@ function homeNeedsHtml(d) {
 }
 
 function homeTodayHtml(d) {
-  const start = new Date().setHours(0, 0, 0, 0);
+  const start = TimeZone.startOfDay(Date.now(), TimeZone.current()); // #273: the owner's local today
   const today = (iso) => Date.parse(iso) >= start;
   const finished = d.runs.filter((r) => r.status === 'success' && today(r.finishedAt)).length;
   const failed = d.runs.filter((r) => HOME_FAILED.includes(r.status) && today(r.finishedAt || r.startedAt)).length;

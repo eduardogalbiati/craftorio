@@ -96,8 +96,8 @@
 
   // ---- how the screens say it -----------------------------------------------------------------
   const kTok = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}K` : String(n));
-  // HH:MM in the owner's time zone
-  const clockOf = (ms) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+  // HH:MM in the owner's time zone (#273, time-zone.js; in node, the computer's)
+  const clockOf = (ms) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: typeof TimeZone !== 'undefined' ? TimeZone.current() : undefined });
   const usdOf = (v) => (v > 0 ? ` ≈ $${v.toFixed(2)}` : '');
   const ESTIMATE = 'The cache lifetime is an estimate (Claude: 1 hour on a subscription, 5 minutes on an API key).';
   const TURN_TITLES = {

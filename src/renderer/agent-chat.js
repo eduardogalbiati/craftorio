@@ -41,7 +41,8 @@
 
   /** The default markup of a message: the owner's as text, the agent's as Markdown with its cost. */
   function messageHtml(m, agent) {
-    const time = m.ts ? new Date(m.ts).toLocaleString() : '';
+    // #273: in the owner's zone (time-zone.js; in node, the computer's)
+    const time = m.ts ? new Date(m.ts).toLocaleString(undefined, { timeZone: typeof TimeZone !== 'undefined' ? TimeZone.current() : undefined }) : '';
     if (m.role === 'user') return `<div class="sup-wmsg user"><div class="sup-wmsg-meta">You${time ? ` · ${e(time)}` : ''}</div><div>${e(m.text)}</div></div>`;
     const meta = [e(agent), time && e(time), m.costUsd != null && e(money(m.costUsd)), m.tokens != null && `${e(Number(m.tokens).toLocaleString('en-US'))} tokens`].filter(Boolean).join(' · ');
     return `<div class="sup-wmsg"><div class="sup-wmsg-meta">${meta}</div><div class="md md-compact">${md(m.text)}</div></div>`;
