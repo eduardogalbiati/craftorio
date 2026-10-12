@@ -104,6 +104,31 @@ test('idleHint: the dominant idle cause points to its fix; no hint when idle tim
   assert.equal(idleHint({ total: 0, noWork: 0, blocked: 0, gate: 0, appClosed: 0, other: 0 }), null);
 });
 
+// #273: the days are the owner's local days, also across a daylight-saving change (America/New_York)
+const isoRun = (runId, start, end) => ({ runId, events: [
+  { ts: start, type: 'workflow.started', project_id: 'p1', issues: [], mock: false },
+  { ts: end, type: 'workflow.finished', status: 'success', summary: { cost_usd: 0 } },
+] });
+
+test('#273 occupancyOf: across the spring change (New York, 2026-03-08) the local days are a 23-hour and a 24-hour day, and the last local hour is counted', () => {
+  // 23:00-24:00 EDT on Mar 8 = 03:00-04:00Z Mar 9
+  const o = occupancyOf({ runs: [isoRun('rS', '2026-03-09T03:00:00.000Z', '2026-03-09T04:00:00.000Z')], from: '2026-03-08T05:00:00.000Z', to: '2026-03-10T04:00:00.000Z', now: Date.parse('2026-03-11T00:00:00Z'), timeZone: 'America/New_York' });
+  assert.deepEqual(o.days.map((d) => d.day), ['2026-03-08', '2026-03-09']);
+  assert.deepEqual(o.days.map((d) => Math.round(d.hours)), [23, 24]);
+  assert.deepEqual(o.days.map((d) => d.partial), [false, false]);
+  near(o.days[0].activeHours, 1, 'the run is on Mar 8');
+  assert.equal(Math.max(...o.days[0].hourly.filter((v) => v != null)), 1);
+});
+
+test('#273 occupancyOf: across the autumn change (New York, 2026-11-01) the 25-hour day is one day and its last local hour is not dropped from the hourly strip', () => {
+  // 23:00-24:00 EST on Nov 1 = 04:00-05:00Z Nov 2
+  const o = occupancyOf({ runs: [isoRun('rF', '2026-11-02T04:00:00.000Z', '2026-11-02T05:00:00.000Z')], from: '2026-10-31T04:00:00.000Z', to: '2026-11-02T05:00:00.000Z', now: Date.parse('2026-11-03T00:00:00Z'), timeZone: 'America/New_York' });
+  assert.deepEqual(o.days.map((d) => d.day), ['2026-10-31', '2026-11-01']);
+  assert.deepEqual(o.days.map((d) => Math.round(d.hours)), [24, 25]);
+  near(o.days[1].activeHours, 1, 'the run is on Nov 1');
+  assert.equal(Math.max(...o.days[1].hourly.filter((v) => v != null)), 1, 'the hourly strip shows the last hour\'s run');
+});
+
 test('costFigures: cost per active hour, per delivered issue and per 100 lines; none without a denominator', () => {
   assert.deepEqual(costFigures({ costUsd: 30, activeHours: 12, issues: 3, lines: 600 }), { perActiveHour: 2.5, perIssue: 10, per100Lines: 5 });
   assert.deepEqual(costFigures({ costUsd: 30, activeHours: 0, issues: 0, lines: 0 }), { perActiveHour: null, perIssue: null, per100Lines: null });

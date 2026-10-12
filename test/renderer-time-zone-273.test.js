@@ -58,3 +58,23 @@ test('#273 the Oracle screen shows a message\'s time in the chosen zone', async 
   assert.ok(markup.includes('Hello'), 'the message is rendered');
   assert.ok(markup.includes('10:14'), 'its time reads 10:14 (Tokyo)');
 });
+
+test('#273 choosing another zone in Settings saves it and redraws the open Oracle screen\'s times in it', async () => {
+  const msg = { id: 'm1', role: 'oracle', ts: '2026-10-05T01:14:00.000Z', text: 'Hello' };
+  const app = await page({ oracleHistory: async () => [msg], oracleState: async () => ({}), setSettings: async (p) => ({ timeZone: p.timeZone }) });
+  app.run("showView('oracle')");
+  await app.settle(20);
+  app.run("showView('settings')");
+  await app.settle(20);
+  // the fake DOM gives one element per selector string: the one the view binds its handler on
+  const select = app.el('#set-time-zone');
+  assert.equal(typeof select.onchange, 'function', 'the time zone select has a change handler');
+  // Kolkata is UTC+5:30: 01:14Z reads 06:44 (or 6:44 AM), a minute no whole-hour zone shows
+  await select.onchange({ target: { value: 'Asia/Kolkata' } });
+  await app.settle(20);
+  assert.deepEqual(app.callsTo('setSettings').map((args) => JSON.stringify(args[0])), ['{"timeZone":"Asia/Kolkata"}']);
+  app.run("showView('oracle')");
+  await app.settle(20);
+  const markup = allEls(app).map((e) => e.innerHTML || '').join('\n');
+  assert.ok(markup.includes('6:44'), 'the Oracle message now reads 06:44 (Kolkata)');
+});
