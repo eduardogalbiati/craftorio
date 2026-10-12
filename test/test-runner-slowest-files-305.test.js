@@ -15,7 +15,7 @@ const DURATION = /\d+(\.\d+)?\s*(ms|s)\b/;
 
 // Six test files in a temp folder: five instant ones and one that waits 1.5 s.
 function fixtures(t) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'slowest-files-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'runner-times-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5 }));
   for (const name of FAST) fs.writeFileSync(path.join(dir, `${name}.test.js`), "const test = require('node:test');\ntest('instant', () => {});\n");
   fs.writeFileSync(path.join(dir, `${SLOW}.test.js`), "const test = require('node:test');\ntest('waits', () => new Promise((r) => setTimeout(r, 1500)));\n");
@@ -63,4 +63,27 @@ test('in agent mode the slowest files go to the human log and stdout stays one J
   assert.equal(lines.length, 1, 'stdout is one JSON line only');
   assert.equal(JSON.parse(lines[0]).failed, 0);
   assertSlowest(slowestSection(fs.readFileSync(log, 'utf8')));
+});
+
+test('the slowest files are listed when the files are given as paths relative to the repository', (t) => {
+  const files = fixtures(t).map((f) => path.relative(root, f));
+  if (path.isAbsolute(files[0])) return t.skip('the temp folder is on another drive than the repository');
+  const r = runScript(files, { MULTIAGENT_AGENT_MODE: '0' });
+  assert.equal(r.status, 0, r.stderr);
+  assertSlowest(slowestSection(r.stdout));
+});
+
+test('a failing run still ends with the slowest files, and exits with 1', (t) => {
+  const files = fixtures(t);
+  fs.writeFileSync(files[0], "const test = require('node:test');\nconst assert = require('node:assert/strict');\ntest('instant', () => assert.equal(1, 2));\n");
+  const r = runScript(files, { MULTIAGENT_AGENT_MODE: '0' });
+  assert.equal(r.status, 1);
+  assertSlowest(slowestSection(r.stdout));
+});
+
+test('with --experimental-test-coverage the report keeps its coverage table and the slowest files', (t) => {
+  const r = runScript([...fixtures(t), '--experimental-test-coverage'], { MULTIAGENT_AGENT_MODE: '0' });
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /coverage report/i, 'the coverage table is in the report');
+  assertSlowest(slowestSection(r.stdout));
 });
