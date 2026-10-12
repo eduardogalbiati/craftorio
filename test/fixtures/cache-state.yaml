@@ -1,0 +1,47 @@
+# Test fixture (#320): the agents' prompt-cache state at a gate. The developer runs in handoff
+# sessions; the reviewer is persistent and rotates into a fresh session after 30 minutes idle; the
+# run then waits at a human gate.
+apiVersion: multiagent/v1
+kind: Workflow
+metadata:
+  name: fixture-cache-state
+agents:
+  developer:
+    provider: claude
+    model: mock-model
+    session: handoff
+    system_prompt: "You are the developer."
+    capabilities: { tools: [read, edit, write, bash:git] }
+  reviewer:
+    provider: claude
+    model: mock-model
+    session: persistent
+    fresh_after_idle: 30m
+    system_prompt: "You are the reviewer."
+    capabilities: { tools: [read, bash:git] }
+steps:
+  - id: develop
+    agent: developer
+    prompt: "Implement the task."
+    output_schema:
+      type: object
+      required: [summary]
+      properties:
+        summary: { type: string }
+  - id: review
+    agent: reviewer
+    prompt: "Review the change."
+    output_schema:
+      type: object
+      required: [verdict]
+      properties:
+        verdict: { type: string, enum: [changes_requested, approved] }
+  - id: check
+    type: human_approval
+    message: "Continue?"
+    transitions:
+      - when: "approved"
+        goto: end
+      - when: "rejected"
+        goto: end
+        status: failed

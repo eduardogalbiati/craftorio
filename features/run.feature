@@ -185,3 +185,39 @@ Feature: Runs and gates
     And I open the run "sui00304" in Analytics from the list
     Then the run report's suite round shows that the affected tests ran
     And the run report's suite round explains the selection with "imports src/roadmap.js"
+
+  # ---- #320: how each session's next turn starts (Claude's cache lives 1 hour) ---------------------
+  # The runs "-wrm00320" and "-cld00320" are seeded stopped at the "Developer check" gate, their times
+  # written relative to now. A seeded run's gate is not live (the app reads it as interrupted, with no
+  # gate card), so its agents table is checked in Workflows › Runs; the gate card's Continue line is
+  # checked on a live simulated run, whose turns have just ended (no session can be cold yet).
+
+  @issue-320
+  Scenario: The agents table says which sessions resume warm, which start fresh from a note, and which are closed
+    Given the app is open
+    And the demo project has a run "wrm00320" stopped at the gate "Developer check" whose persistent "reviewer" last turn ended 18 minutes ago with a context of 60000 tokens
+    And its "developer" works from a handoff note, its last turn ended 25 minutes ago
+    And its "mapper" session is closed
+    When I open "Runs" in the sidebar
+    And I search the runs for "wrm00320"
+    And I open the row of the run "wrm00320" in the list
+    Then the next turn of the run's "reviewer" session shows "warm" and "min left"
+    And the next turn of the run's "developer" session shows "fresh from note"
+    And the next turn of the run's "mapper" session shows "—"
+
+  @issue-320
+  Scenario: A persistent session idle for more than an hour resumes cold, with its context size
+    Given the app is open
+    And the demo project has a run "cld00320" stopped at the gate "Developer check" whose persistent "reviewer" last turn ended 180 minutes ago with a context of 140000 tokens
+    When I open "Runs" in the sidebar
+    And I search the runs for "cld00320"
+    And I open the row of the run "cld00320" in the list
+    Then the next turn of the run's "reviewer" session shows "cold" and "140K"
+
+  @issue-320
+  Scenario: The gate card says what Continue re-reads, and that nothing resumes cold right after the turns
+    Given the app is open
+    When I start a simulated run with the task "Add a /health endpoint"
+    Then a gate card waits for my approval
+    And the gate card's Continue line says "Continue"
+    And the gate card's Continue line does not say "cold"
