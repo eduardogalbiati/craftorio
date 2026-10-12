@@ -162,3 +162,38 @@ test('runs:list: `workflows` lists each workflow that has runs with its run coun
   const picked = await api['runs:list']({ limit: 30, workflow: BF });
   assert.deepEqual(countsOf(picked), { [SD]: 3, [BF]: 1 }, 'picking one keeps the others in the filter\'s options');
 });
+
+test('runs:list: `workflows` counts only the runs "Show simulated" keeps', async (t) => {
+  const { api, service } = makeService(t);
+  const ws = service.workspace();
+  addRun(ws, 'sd-real', { startedAt: future(1), file: SD });
+  addRun(ws, 'sd-sim', { startedAt: future(2), file: SD, mock: true });
+  addRun(ws, 'bf-sim', { startedAt: future(3), file: BF, mock: true });
+
+  const countsOf = (res) => Object.fromEntries((res.workflows || []).map((w) => [w.workflow, w.count]));
+  assert.deepEqual(countsOf(await api['runs:list']({ limit: 30, showSim: false })), { [SD]: 1 },
+    'a workflow with only simulated runs leaves the options');
+  assert.deepEqual(countsOf(await api['runs:list']({ limit: 30, showSim: true })), { [SD]: 2, [BF]: 1 });
+});
+
+test('runs:list { workflow }: a run recorded without a workflow file is listed under its workflow name', async (t) => {
+  const { api, service } = makeService(t);
+  const ws = service.workspace();
+  // an older run: its workflow.started event and summary carry the workflow name but no `file`
+  const dir = path.join(ws.runs, 'legacy1');
+  fs.mkdirSync(dir, { recursive: true });
+  const started = { type: 'workflow.started', ts: future(1), workflow: 'software-development', project_id: null, inputs: { task: 'Old work' }, mock: false };
+  fs.writeFileSync(path.join(dir, 'events.jsonl'), `${JSON.stringify(started)}\n`);
+  fs.writeFileSync(path.join(dir, 'summary.json'), JSON.stringify({
+    run_id: 'legacy1', workflow: 'software-development', project_id: null, status: 'success', mock: false,
+    started_at: future(1), finished_at: future(1), inputs: { task: 'Old work' }, sessions: [],
+  }));
+  addRun(ws, 'sd1', { startedAt: future(2), file: SD });
+
+  const all = await api['runs:list']({ limit: 30 });
+  const countsOf = Object.fromEntries((all.workflows || []).map((w) => [w.workflow, w.count]));
+  assert.deepEqual(countsOf, { 'software-development': 1, [SD]: 1 }, 'apart from the same workflow\'s runs with a file');
+
+  assert.deepEqual(ids(await api['runs:list']({ limit: 30, workflow: 'software-development' })), ['legacy1']);
+  assert.deepEqual(ids(await api['runs:list']({ limit: 30, workflow: SD })), ['sd1']);
+});

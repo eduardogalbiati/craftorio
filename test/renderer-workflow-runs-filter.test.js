@@ -165,3 +165,28 @@ test('a workflow with no runs shows the list\'s empty message, not an error', as
   assert.doesNotMatch(app.el('#workflow-runs').innerHTML, /Could not load/);
   assert.match(text(app.el('#workflow-runs').innerHTML), /No workflows have run yet|No runs match/);
 });
+
+test('a picked workflow the service no longer lists stays an option with count 0, and the list says no runs match', async () => {
+  // e.g. its only runs were simulated and "Show simulated" went off
+  const empty = async () => ({ runs: [], total: 0, nextOffset: 0, hasMore: false, hiddenSim: 0, counts: { all: 0, running: 0, success: 0, failed: 0 }, workflows: [{ workflow: SD, count: 3 }] });
+  const app = loadApp({ api: { listRuns: empty } });
+  await openRuns(app);
+  await pick(app, findFilter(app).el, BF);
+  const options = String(app.el('#workflow-run-workflow').innerHTML);
+  const opt = /<option\b[^>]*value="bug-fix\.yaml"[^>]*>([^<]*)<\/option>/.exec(options);
+  assert.ok(opt, 'the picked workflow is still an option');
+  assert.match(opt[1], /\(0\)/);
+  assert.match(opt[0], /selected/);
+  assert.match(text(app.el('#workflow-runs').innerHTML), /No runs match this filter/);
+  assert.equal(app.el('#workflow-runs-error').textContent, '');
+});
+
+test('opening a run in the list (showRunInList) clears the picked workflow', async () => {
+  const app = loadApp({ api: { listRuns: listRunsStub() } });
+  await openRuns(app);
+  await pick(app, findFilter(app).el, BF);
+  assert.equal(lastWorkflow(app), BF);
+  app.run("showRunInList('sd1')");
+  await app.settle(20);
+  assert.equal(lastWorkflow(app), '', 'the run shows whatever workflow it ran');
+});
