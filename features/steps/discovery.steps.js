@@ -451,7 +451,8 @@ When('I run the proposed automation', async ({ e2e }) => {
 });
 
 Then('no automation is proposed', async ({ e2e }) => {
-  await expect(automationProposal(e2e.window)).toHaveCount(0);
+  // the proposal dialog stays in the page, hidden; only a shown one has a role in the accessibility tree
+  await expect(e2e.window.getByRole('dialog', { name: /^Run the automation/ })).toHaveCount(0);
 });
 
 Then('the Discovery card {string} shows its automation {string}', async ({ e2e }, title, status) => {
