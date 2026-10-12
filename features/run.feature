@@ -138,6 +138,7 @@ Feature: Runs and gates
   Scenario: A simulated AI Development run shows Warm Up right before Develop, run by the mapper
     Given the app is open
     When I choose the workflow "ai-development-local-hero" in the Start panel
+    And I pick "Validated" for "Mode"
     And I start a simulated run with the task "Add a /health endpoint"
     Then a gate card waits for my approval
     And the run's steps show "Warm Up" right before "Develop"
