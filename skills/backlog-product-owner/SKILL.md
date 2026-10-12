@@ -65,6 +65,23 @@ Shared hot spots count as the same file: README sections, the shared stylesheet,
 registries and lists. Code split by folder (one folder per screen, per service area, per test
 area) is what lets issues in different folders run in parallel.
 
+### The conflict map
+
+The report's **Conflict map** lists the files most finished runs changed (with how many runs, and
+how many merge conflicts named them) and the single lines several runs changed (an import or export
+line with many names, an inline list), each as `file:line`. Rows marked "hot" are changed by more
+than half of the last 20 runs. It is evidence from git, read-only: a wrong guess only changes the
+plan's order.
+
+- Two groups expected to touch the same hot file or hot line go to **different stages**, or into
+  **one group** when they belong together. Never put them in parallel in one stage.
+- Each conflict you report names the hot file that causes it in its `files`.
+- List every hot spot under `decongest`: the file (and `line` for a hot line), its `runs` and `of`
+  from the map, and a fix in the repository's own terms: one item per line and sorted for a shared
+  line (`npm run lint:lists` where the project has it), a per-feature file plus a generated
+  aggregate for a shared list, a split by screen or module for a large file. The owner files a
+  suggestion as an issue with one click; you never change or file anything.
+
 ## Order the work
 
 Give each group a `stage` (1 first). Groups of one stage may run in parallel only if nothing in

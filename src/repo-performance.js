@@ -357,6 +357,7 @@ async function repositoryPerformance({ runs, repo, store = null, from, to, marke
 
 module.exports = {
   byCalibration,
+  commitRanges,
   CONFLICT_STEPS,
   conflictsOf,
   fileCounts,

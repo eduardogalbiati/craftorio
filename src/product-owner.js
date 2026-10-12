@@ -20,6 +20,10 @@
 // agent inputs the group's workflow declares (costInputs; "not adjustable" when it has none) and adds
 // a test-batch stage after each stage with untested issues (testBatchStages). The answer records both
 // steps and the plan's estimated total (#206, src/cost-estimate.js when the runs are given).
+// Conflict map (#150, src/conflict-map.js): the report's "## Conflict map" lists the files and lines most
+// runs change (the saved map, built when missing; capped at CONFLICT_MAP_CAP); the answer keeps groups
+// touching one hot file in different stages and lists the hot spots in `decongest`, each with a fix the
+// owner may file as an issue with a click.
 // Live progress (#180, src/chat-progress.js): ask's `onItem` gets the turn's items as they arrive
 // (a simulated turn streams fake steps first); its `signal` stops the turn, keeping what was written.
 // The conversation is kept per project in <workspace>/backlog/<projectId>.po.jsonl until cleared.
@@ -78,7 +82,8 @@ const epics = require('./epics');
 const poCalibration = require('./renderer/po-calibration');
 const poSplit = require('./po-split');
 const { mockSteps, partialText } = require('./chat-progress');
-const { conflictsOf, sharedFiles } = require('./repo-performance');
+const { hotSpots, loadConflictMap, readConflictMap } = require('./conflict-map');
+const { conflictsOf } = require('./repo-performance');
 const { storeFor } = require('./store');
 const { readEvents } = require('./supervisor');
 const TimeZone = require('./time-zone');
@@ -87,9 +92,10 @@ const MAX_REPORT = 60000;
 const BODY_CLIP = 600;
 const BODY_NAMED = 4000;
 const HISTORY_RUNS = 20;
-// the runs whose commits make the conflict map (#150: the files most runs edit, src/repo-performance.js)
-const SHARED_FILE_RUNS = 50;
-const SHARED_FILES = 15;
+// the conflict map's section of the report (#150, src/conflict-map.js): its rows and its size
+const CONFLICT_MAP_FILES = 15;
+const CONFLICT_MAP_LINES = 10;
+const CONFLICT_MAP_CAP = 4000;
 const PREVIOUS_EXCHANGES = 3;
 // Past evidence (30 Sep 2026): a group of complexity 7 hit the context limit, grouped runs hit the test time budget.
 const CONTEXT_WARN_AT = 7;
@@ -136,6 +142,21 @@ const ANSWER_SCHEMA = {
           issues: { type: 'array', items: { type: 'integer' } },
           reason: { type: 'string' },
           files: { type: 'array', items: { type: 'string' } },
+        },
+      },
+    },
+    // #150: the conflict map's hot spots, each with a fix in the repository's terms (the owner files it as an issue)
+    decongest: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['file', 'fix'],
+        properties: {
+          file: { type: 'string' },
+          line: { type: 'integer' },
+          fix: { type: 'string' },
+          runs: { type: 'integer' },
+          of: { type: 'integer' },
         },
       },
     },
@@ -190,6 +211,7 @@ const RULES = [
   'Give every group the default workflow (marked "(default)" in the report\'s Workflows) unless an issue needs another one; then say why in the group\'s `reason`.',
   'When the workflow has a `mode` input, set it on every group and say why in `mode_reason`: `validated` for a change the owner can try in the app (a screen, a dialog, a visible behaviour), `auto` for the engine, refactors, docs and tests.',
   'Split what is too big (`splits`): for an issue the report marks with split signals, propose 2-4 child issues. Each child has a title, the numbers of the parent\'s tasks it takes (every task in exactly one child, none dropped or invented), its complexity and its `stage` (children of one stage can run together). Say whether the parent becomes an umbrella linking its children or is closed in favour of them. Never split an issue without signals.',
+  'Conflict map (the report\'s "## Conflict map"): two groups expected to touch the same hot file or hot line go to different stages, or into one group when they belong together; every conflict you report names the hot file that causes it in `files`. List each hot spot (marked "hot") in `decongest` with a fix in the repository\'s terms (one item per line, sorted; a per-feature file plus a generated aggregate; a split by screen or module) and its `runs` and `of`.',
   'Epics (`epics`): place each issue without an epic in an existing epic of its theme (`place`, the epic\'s id from the report); propose a new epic (a title, a one-paragraph goal, its member issues) when several issues share a theme and no epic exists; name epics to merge or split. Prefer grouping issues of the same epic in one run when they touch the same code.',
   'You never edit issues, never start runs and never answer a human gate: the owner applies a proposal with a click. Do not prescribe code changes.',
   'Write in English. The summary is Markdown, short, and answers the question.',
@@ -350,10 +372,52 @@ function normalizeAnswer(answer, { issues, history, workflows, epics: epicList =
     groups: planned,
     ...(closed.length ? { closed } : {}),
     conflicts: (answer.conflicts || []).map((c) => ({ issues: keep(c.issues), reason: String(c.reason || ''), files: (c.files || []).map(String).slice(0, 20) })).filter((c) => c.issues.length > 1),
+    decongest: normalizeDecongest(answer.decongest),
     enrich: (answer.enrich || []).filter((e) => numbers.has(Number(e.issue))).map((e) => ({ issue: Number(e.issue), reason: String(e.reason || ''), link: ENRICH_GUIDE })),
     splits: normalizeSplits(answer.splits, byNumber, history),
     epics: normalizeEpics(answer.epics, byNumber, epicList),
   };
+}
+
+// #150: the answer's hot spots to decongest, each with a file and a fix; `line` only when given.
+function normalizeDecongest(list) {
+  const count = (x) => (Number.isInteger(Number(x)) && Number(x) > 0 ? Number(x) : null);
+  return (Array.isArray(list) ? list : []).filter((d) => d && String(d.file || '').trim()).slice(0, 20).map((d) => ({
+    file: String(d.file).trim(),
+    ...(count(d.line) ? { line: count(d.line) } : {}),
+    fix: String(d.fix || ''),
+    ...(count(d.runs) ? { runs: count(d.runs) } : {}),
+    ...(count(d.of) ? { of: count(d.of) } : {}),
+  }));
+}
+
+// #150: the report's "## Conflict map": the files and lines more than one run changed, hot spots
+// marked, most-changed first, kept under CONFLICT_MAP_CAP characters (the least-changed rows go).
+function conflictMapSection(map) {
+  if (!map?.files?.length && !map?.lines?.length) return null;
+  const hot = new Set(hotSpots(map).map((s) => (s.kind === 'line' ? `${s.file}:${s.line}` : s.file)));
+  const unit = map.source === 'git' ? 'commits' : 'runs';
+  const head = `## Conflict map (of the last ${map.runs} ${map.source === 'git' ? 'commits of the branch: no run merged yet' : 'finished runs with commits'}; groups that touch the same hot file conflict when they merge: put them in different stages, or in one group)`;
+  const files = (map.files || []).filter((f) => f.runs > 1).slice(0, CONFLICT_MAP_FILES)
+    .map((f) => `- ${f.file}: ${f.runs} ${unit} of ${map.runs}${f.conflicts ? ` · named by ${f.conflicts} merge conflict(s)` : ''}${hot.has(f.file) ? ' · hot' : ''}`);
+  const lines = (map.lines || []).slice(0, CONFLICT_MAP_LINES)
+    .map((l) => `- ${l.file}:${l.line}: ${l.runs} ${unit} · \`${clip(l.text, 80)}\`${hot.has(`${l.file}:${l.line}`) ? ' · hot' : ''}`);
+  if (!files.length && !lines.length) return null;
+  const out = [head];
+  let size = head.length;
+  const add = (title, rows) => {
+    if (!rows.length || size + title.length + 2 > CONFLICT_MAP_CAP) return;
+    out.push(title);
+    size += title.length + 1;
+    for (const r of rows) {
+      if (size + r.length + 1 > CONFLICT_MAP_CAP) break;
+      out.push(r);
+      size += r.length + 1;
+    }
+  };
+  add('Files most runs change:', files);
+  add('Lines several runs change (a shared list or import):', lines);
+  return out.join('\n');
 }
 
 // #189: the groups kept to a calibration step: at most `maxRuns` groups per stage (in the answer's
@@ -548,7 +612,7 @@ const plannable = (i) => i.state === 'open' && (!i.column || i.column === 'todo'
  * workflows. Capped at MAX_REPORT characters. The issues the owner attached (`selection`, #169) come
  * first and whole, closed ones included (marked), outside the cap; the open issues then skip them.
  */
-function backlogReport({ data, activeRuns = [], history = [], workflows = [], question = '', selection = [], shared = null, defaultWorkflow = null, workflow = null }) {
+function backlogReport({ data, activeRuns = [], history = [], workflows = [], question = '', selection = [], conflictMap = null, defaultWorkflow = null, workflow = null }) {
   const byDefault = DefaultWorkflow.resolve(defaultWorkflow, workflows.map((w) => w.file)).file;
   // #235: the workflow the owner chose for this plan replaces the default
   const mark = (file) => (workflow ? (file === workflow ? ' (chosen by the owner: every group uses it)' : '') : file === byDefault ? ' (default)' : '');
@@ -585,7 +649,7 @@ function backlogReport({ data, activeRuns = [], history = [], workflows = [], qu
     `## Roadmap\n${stages.map((s, n) => `- stage ${n + 1}${s.name ? ` ${s.name}` : ''}: ${s.items.map((x) => `${(x.issues || []).map((i) => `#${i.number ?? i}`).join(' + ')} ${x.status}`).join('; ')}`).join('\n') || '(empty)'}`,
     `## Finished runs (newest first; agent time without gate waits)\n${history.map((h) => `- ${h.runId} ${h.workflow || ''} ${h.status} · issues ${h.issues.map((n) => `#${n}`).join(', ') || '-'} · complexity ${h.complexity ?? '?'} · ${h.agentMinutes} min · $${h.costUsd.toFixed(2)} · ${Math.round(h.tokens / 1e3)}k tokens${h.conflicts.count ? ` · ${h.conflicts.count} merge conflict(s)${h.conflicts.files.length ? ` in ${h.conflicts.files.join(', ')}` : ''}` : ''}`).join('\n') || '(none)'}`,
     // the conflict map (#150): parallel runs that edit the same file conflict when they merge
-    ...(shared?.files?.length ? [`## Files most runs edit (of the last ${shared.runs} runs with commits; parallel runs that edit the same file conflict)\n${shared.files.map((f) => `- ${f.file}: ${f.runs} runs (${Math.round(f.share * 100)}%)`).join('\n')}`] : []),
+    ...[conflictMapSection(conflictMap)].filter(Boolean),
   ];
   const whole = attached.length ? `## Attached issues (the owner's selection, in full)\n\n${attached.map((i) => issueText(i, true)).join('\n\n')}` : '';
   const head = [...sections, ...(whole ? [whole] : [])].join('\n\n');
@@ -612,7 +676,9 @@ function backlogReport({ data, activeRuns = [], history = [], workflows = [], qu
 // `workflow`: the default development workflow (#195) every group gets.
 // `cost` (#205): the group cap is groupCap (cost wins); at a packing step (Economy) the issues without
 // a shared area are packed together too, "to pay the run overhead once".
-function mockAnswer({ data, question = '', selection = [], calibration = poCalibration.DEFAULT, workflow = DefaultWorkflow.LOCAL, cost = null }) {
+// `conflictMap` (#150): groups whose issues name the same hot file go to different stages (listed as a
+// conflict naming the file), and the map's hot spots are the answer's `decongest`.
+function mockAnswer({ data, question = '', selection = [], calibration = poCalibration.DEFAULT, workflow = DefaultWorkflow.LOCAL, cost = null, conflictMap = null }) {
   const costStep = cost == null ? null : poCalibration.cost.step(cost);
   const step = { ...poCalibration.step(calibration), ...(costStep ? { maxComplexity: poCalibration.groupCap(calibration, cost) } : {}) };
   const backlogTodo = (data?.issues || []).filter(plannable);
@@ -650,6 +716,12 @@ function mockAnswer({ data, question = '', selection = [], calibration = poCalib
   const splits = todo.map((i) => poSplit.proposeSplit(i, { complexity: complexityOf(i) })).filter(Boolean);
   const epicPlan = attached.size ? { place: [], create: [], merge: [], split: [] } : mockEpics(data);
   const perStage = step.maxRuns || Math.max(1, groups.length);
+  const planned = [
+    ...refactor.map((i, n) => group({ issues: [i.number], refactor: true }, n + 1)),
+    ...groups.map((g, n) => group(g, refactor.length + Math.floor(n / perStage) + 1)),
+  ];
+  const spots = conflictMap ? hotSpots(conflictMap) : [];
+  const hotConflicts = separateHotFiles(planned, [...new Set(spots.map((s) => s.file))], todo);
   return {
     summary: [
       `**Simulated answer** (developer or simulated mode: no model was called)${question ? ` to: “${clip(question, 120)}”` : ''}. Planned for ${cost == null ? poCalibration.label(calibration) : poCalibration.plannedFor(calibration, cost)}.`,
@@ -658,13 +730,37 @@ function mockAnswer({ data, question = '', selection = [], calibration = poCalib
     ].join('\n\n'),
     splits,
     epics: epicPlan,
-    groups: [
-      ...refactor.map((i, n) => group({ issues: [i.number], refactor: true }, n + 1)),
-      ...groups.map((g, n) => group(g, refactor.length + Math.floor(n / perStage) + 1)),
+    groups: planned,
+    conflicts: [
+      ...refactor.flatMap((r) => others.slice(0, 2).map((o) => ({ issues: [r.number, o.number], reason: `#${r.number} looks like a repo-wide change: run it alone, with no other run open.`, files: [] }))),
+      ...hotConflicts,
     ],
-    conflicts: refactor.flatMap((r) => others.slice(0, 2).map((o) => ({ issues: [r.number, o.number], reason: `#${r.number} looks like a repo-wide change: run it alone, with no other run open.`, files: [] }))),
+    decongest: spots.map((s) => ({ file: s.file, ...(s.kind === 'line' ? { line: s.line } : {}), fix: s.fix, runs: s.runs, of: s.of })),
     enrich: todo.filter((i) => String(i.body || '').trim().length < 120).map((i) => ({ issue: i.number, reason: 'The description is too short to implement without guessing.' })),
   };
+}
+
+// #150 (simulated): a group whose issues name a hot file another group of its stage names moves to the
+// next stage without it; each move is a conflict naming the shared hot files. Mutates `planned`.
+function separateHotFiles(planned, hotFiles, issues) {
+  const conflicts = [];
+  if (!hotFiles.length) return conflicts;
+  const textOf = (nums) => nums.map((n) => issues.find((i) => i.number === n)).map((i) => `${i?.title || ''}\n${i?.body || ''}`).join('\n');
+  const byStage = new Map();
+  for (const g of planned) {
+    const files = hotFiles.filter((f) => textOf(g.issues).includes(f));
+    if (!files.length) continue;
+    g.files = [...new Set([...g.files, ...files])];
+    for (;;) {
+      const clash = (byStage.get(g.stage) || []).find((o) => o.files.some((f) => files.includes(f)));
+      if (!clash) break;
+      const shared = clash.files.filter((f) => files.includes(f));
+      conflicts.push({ issues: [...clash.group.issues, ...g.issues], reason: `Both touch ${shared.join(', ')}, a hot file of the conflict map: run them in different stages (simulated).`, files: shared });
+      g.stage += 1;
+    }
+    byStage.set(g.stage, [...(byStage.get(g.stage) || []), { group: g, files }]);
+  }
+  return conflicts;
 }
 
 // The simulated epics section: an open issue without an epic joins the epic whose members share its
@@ -1359,7 +1455,8 @@ async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns,
           raw = mockScenario(scenario, { data, question: q, previous, files, workflow: chosen || byDefault });
           analysis = `Simulated (scenario "${scenario}"): no model was called, no code was read.`;
         } else {
-          raw = issueMode ? mockIssueAnswer({ data, question: q, previous }) : mockAnswer({ data, question: q, selection: selected, calibration: level, workflow: chosen || byDefault, cost: costLevel });
+          // #150: the saved conflict map only (a simulated question builds nothing)
+          raw = issueMode ? mockIssueAnswer({ data, question: q, previous }) : mockAnswer({ data, question: q, selection: selected, calibration: level, workflow: chosen || byDefault, cost: costLevel, conflictMap: readConflictMap(backlogDir, projectId) });
           analysis = 'Simulated: no model was called, no code was read.';
         }
       } catch (e) { failure = e; }
@@ -1375,8 +1472,9 @@ async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns,
       checkBudget(budget);
       let tokens;
       let sessionId;
-      const shared = issueMode ? null : await sharedFiles({ runs: (runs || []).filter((r) => !r.mock).slice(0, SHARED_FILE_RUNS), repo: folder, store: storeFor(runsDir), limit: SHARED_FILES });
-      const report = (issueMode ? issueReport : backlogReport)({ data, activeRuns, history, workflows, question: q, selection: selected, shared, defaultWorkflow: byDefault, workflow: chosen });
+      // #150: the saved conflict map, built when missing; a failure only leaves the section out
+      const conflictMap = issueMode ? null : await loadConflictMap({ backlogDir, projectId, runs, repo: folder, store: storeFor(runsDir) }).catch(() => null);
+      const report = (issueMode ? issueReport : backlogReport)({ data, activeRuns, history, workflows, question: q, selection: selected, conflictMap, defaultWorkflow: byDefault, workflow: chosen });
       ({ raw, costUsd, model, invalid, tokens, sessionId, text: analysis } = await callAgent({
         mode, question: q, report, previous, attachments: files, selection: selected, folder, agent: issueMode ? ISSUE_AGENT : agent, skillsDirs, resolveCommand, onItem: seen, signal, calibration: level, cost: costLevel, workflow: chosen, costOff, timeZone,
       }));
