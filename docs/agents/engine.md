@@ -11,6 +11,7 @@ documents the same features for users; these topics are the implementer's summar
 - [Gates, loops and how a run ends](engine/gates-and-run-end.md): Human gates (feedback, choices, summaries), the supervisor, refused tool calls, waits, how a run ends and ships, and the bundled workflows' rules for several issues.
 - [Providers](engine/providers.md): Turn timeouts, per-run agent overrides, fallback chains, limits per model, retries and other provider details.
 - [Resume from a step](engine/resume.md): Resuming a run from a step: what the new run keeps, the service channels behind the dialog, and why a human gate always asks again.
+- [The engine's modules by area (#250)](engine/run-modules.md): Which file owns which part of a run: `src/engine/workflow.js` keeps the run loop, one module per area in `src/engine/run/` holds the rest, so an engine change touches one module.
 - [Saved pipelines (#135)](engine/saved-pipelines.md): Saved pipelines (`<workspace>/pipelines/*.yaml`): their shape, how they are checked, and how they run as a chain.
 - [Sessions and handoff notes](engine/sessions-and-handoff-notes.md): Session modes (persistent, ephemeral, handoff), handoff notes, context and request limits, the prompt cache, turn metrics and costs, idle agents.
 - [A workflow as a step: `type: workflow` (#174)](engine/workflow-step.md): A step that runs another workflow as child runs: inputs, `foreach`, output, limits, stop and resume, parent and child links.
