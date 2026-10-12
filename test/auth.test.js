@@ -4,21 +4,24 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const http = require('http');
-const { createAuth, fileStorage, entitlementView, TRIAL_ENDED } = require('../src/auth');
+const { createAuth, fileStorage } = require('../src/auth');
 
 const DAY = 24 * 60 * 60 * 1000;
+const HOUR = 60 * 60 * 1000;
 const NOW = Date.parse('2026-09-28T12:00:00Z');
 const USER = { id: 'u1', email: 'ana@example.com', user_metadata: { full_name: 'Ana' }, app_metadata: { providers: ['google'] } };
+const APP_VERSION = '1.2.3';
 
 const memStorage = () => {
   const m = new Map();
   return { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => m.set(k, v), removeItem: (k) => m.delete(k), m };
 };
 
-// Stand-in for the supabase-js client: `session` and the `entitlement()` answer are set by the test.
-function fakeSupabase({ session = null, entitlement = null, rpcError = null, sessionError = null } = {}) {
+// Stand-in for the supabase-js client (the boundary): `session` is set by the test; every rpc call
+// is recorded with its arguments. `rpcError` answers { error }, `rpcReject` makes the call throw.
+function fakeSupabase({ session = null, rpcError = null, rpcReject = null, sessionError = null } = {}) {
   const sb = {
-    session, entitlement, rpcError, sessionError, calls: [],
+    session, rpcError, rpcReject, sessionError, calls: [],
     auth: {
       getSession: async () => (sb.sessionError ? { data: { session: null }, error: sb.sessionError } : { data: { session: sb.session }, error: null }),
       signInWithOAuth: async ({ provider, options }) => {
@@ -29,24 +32,32 @@ function fakeSupabase({ session = null, entitlement = null, rpcError = null, ses
       signOut: async () => { sb.session = null; return { error: null }; },
       onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } }),
     },
-    rpc: async (name) => {
-      sb.calls.push(['rpc', name]);
-      return sb.rpcError ? { data: null, error: sb.rpcError } : { data: sb.entitlement, error: null };
+    rpc: async (name, args) => {
+      sb.calls.push(['rpc', name, args]);
+      if (sb.rpcReject) throw sb.rpcReject;
+      if (sb.rpcError) return { data: null, error: sb.rpcError };
+      // the retired trial function, as a not-yet-migrated project would still answer it
+      if (name === 'entitlement') return { data: { plan: 'trial', trial_ends_at: new Date(NOW - DAY).toISOString(), server_time: new Date(NOW).toISOString(), active: false }, error: null };
+      return { data: null, error: null };
     },
   };
   return sb;
 }
 
-const trial = (daysLeft, plan = 'trial') => ({
-  plan, trial_ends_at: new Date(NOW + daysLeft * DAY).toISOString(), server_time: new Date(NOW).toISOString(), active: plan === 'pro' || daysLeft > 0,
-});
+// the best-effort "count users" call (#315)
+const touches = (sb) => sb.calls.filter((c) => c[0] === 'rpc' && c[1] === 'touch_account');
+// the touch may be fired without being awaited: let pending promises settle
+const settle = () => new Promise((r) => setTimeout(r, 20));
+// any truthy `error` anywhere in the account state
+const hasError = (v) => !!v && typeof v === 'object' && Object.entries(v).some(([k, x]) => (k === 'error' && !!x) || hasError(x));
 
 let nextPort = 47900 + Math.floor(Math.random() * 500);
 function makeAuth(sb, opts = {}) {
   const storage = opts.storage || memStorage();
   const opened = [];
+  const clock = opts.clock || (() => opts.now ?? NOW);
   const auth = createAuth({
-    url: 'https://project.supabase.test', key: 'sb_publishable_test', storage, port: nextPort++, now: () => opts.now ?? NOW,
+    url: 'https://project.supabase.test', key: 'sb_publishable_test', storage, port: nextPort++, now: clock, appVersion: APP_VERSION,
     createClient: () => sb, openExternal: opts.openExternal || (async (u) => { opened.push(u); }), ...opts.auth,
   });
   return { auth, storage, opened };
@@ -58,17 +69,16 @@ const browserReturns = (query) => async (authorizeUrl) => {
   await new Promise((resolve, reject) => http.get(`${redirect}?${query}`, (res) => { res.resume(); res.on('end', resolve); }).on('error', reject));
 };
 
-test('without a Supabase project, sign-in is off and only a required build refuses runs', async () => {
+test('without a Supabase project, sign-in is off and nobody is signed in', async () => {
   const off = createAuth({ url: '', key: '', required: false, storage: memStorage(), openExternal: async () => {} });
   assert.equal(off.state().configured, false);
-  await off.assertCanRun({ mock: false });
-  const packaged = createAuth({ url: '', key: '', required: true, storage: memStorage(), openExternal: async () => {} });
-  await assert.rejects(packaged.assertCanRun({ mock: false }), /not configured/);
-  await packaged.assertCanRun({ mock: true }); // simulations never need an account
+  const s = await off.refresh();
+  assert.equal(s.user, null);
+  await assert.rejects(off.signIn('google'), /not configured/);
 });
 
-test('signs in through the browser and the loopback callback, then loads the trial', async () => {
-  const sb = fakeSupabase({ entitlement: trial(7) });
+test('signs in through the browser and the loopback callback', async () => {
+  const sb = fakeSupabase();
   const { auth } = makeAuth(sb, { openExternal: browserReturns('code=abc123') });
   const s = await auth.signIn('google');
   const [, provider, options] = sb.calls.find((c) => c[0] === 'oauth');
@@ -78,9 +88,7 @@ test('signs in through the browser and the loopback callback, then loads the tri
   assert.deepEqual(sb.calls.find((c) => c[0] === 'exchange'), ['exchange', 'abc123']);
   assert.equal(s.user.email, 'ana@example.com');
   assert.equal(s.user.name, 'Ana');
-  assert.deepEqual([s.entitlement.plan, s.entitlement.active, s.entitlement.daysLeft], ['trial', true, 7]);
   assert.equal(s.signingIn, false);
-  await auth.assertCanRun({ mock: false });
 });
 
 test('a provider error on the callback fails the sign-in', async () => {
@@ -103,63 +111,115 @@ test('sign-in can be cancelled, and disabled providers are refused', async () =>
   assert.deepEqual(auth.state().providers.map((x) => [x.id, x.enabled]), [['google', true], ['azure', false], ['github', false]]);
 });
 
-test('an ended trial blocks real runs but not simulations; pro is always allowed', async () => {
-  const sb = fakeSupabase({ session: { user: USER }, entitlement: trial(-1) });
+// ---- #315: free and open source: the account only counts users -------------------------------------
+
+test('#315: src/auth.js no longer exports the run gate nor the trial (assertCanRun, entitlementView, TRIAL_ENDED)', () => {
+  const auth = require('../src/auth');
+  for (const name of ['assertCanRun', 'entitlementView', 'TRIAL_ENDED']) assert.equal(name in auth, false, name);
+  const instance = makeAuth(fakeSupabase()).auth;
+  assert.equal('assertCanRun' in instance, false, 'createAuth() has no assertCanRun');
+});
+
+test('#315: the account state carries no trial, plan or days left', async () => {
+  const sb = fakeSupabase({ session: { user: USER } });
+  const { auth } = makeAuth(sb);
+  const s = await auth.refresh();
+  assert.equal(s.user.email, 'ana@example.com');
+  assert.doesNotMatch(JSON.stringify(s), /trial|daysLeft|"plan"/i);
+});
+
+test('#315: a start with a session touches the account once, with the app version and the platform', async () => {
+  const sb = fakeSupabase({ session: { user: USER } });
   const { auth } = makeAuth(sb);
   await auth.refresh();
-  assert.deepEqual([auth.state().entitlement.active, auth.state().entitlement.daysLeft], [false, 0]);
-  await assert.rejects(auth.assertCanRun({ mock: false }), (e) => e.message === TRIAL_ENDED);
-  await auth.assertCanRun({ mock: true });
-  sb.entitlement = trial(-30, 'pro');
-  await auth.assertCanRun({ mock: false });
-  assert.equal(auth.state().entitlement.daysLeft, null);
+  await settle();
+  const t = touches(sb);
+  assert.equal(t.length, 1);
+  const args = t[0][2] || {};
+  assert.equal(args.platform, process.platform);
+  const pkgVersion = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8')).version;
+  assert.ok([APP_VERSION, pkgVersion].includes(args.app_version), `app_version: ${args.app_version}`);
 });
 
-test('without a session, runs ask to sign in', async () => {
-  const { auth } = makeAuth(fakeSupabase());
-  await assert.rejects(auth.assertCanRun({ mock: false }), /Sign in to start runs/);
+test('#315: signing in touches the account once', async () => {
+  const sb = fakeSupabase();
+  const { auth } = makeAuth(sb, { openExternal: browserReturns('code=abc123') });
+  await auth.signIn('google');
+  await settle();
+  assert.equal(touches(sb).length, 1);
 });
 
-test('offline, the last entitlement is trusted for 3 days', async () => {
-  const sb = fakeSupabase({ session: { user: USER }, entitlement: trial(5) });
+test('#315: without a session nothing is touched', async () => {
+  const sb = fakeSupabase();
+  const { auth } = makeAuth(sb);
+  await auth.refresh();
+  await settle();
+  assert.equal(touches(sb).length, 0);
+});
+
+test('#315: the account is touched at most once a day', async () => {
+  const sb = fakeSupabase({ session: { user: USER } });
+  let now = NOW;
+  const { auth } = makeAuth(sb, { clock: () => now });
+  await auth.refresh();
+  await settle();
+  now = NOW + 2 * HOUR;
+  await auth.refresh();
+  await settle();
+  now = NOW + 20 * HOUR;
+  await auth.refresh();
+  await settle();
+  assert.equal(touches(sb).length, 1, 'same day: one touch');
+  now = NOW + DAY + HOUR;
+  await auth.refresh();
+  await settle();
+  assert.equal(touches(sb).length, 2, 'a day later: touched again');
+});
+
+test('#315: a failing touch (an error answer) is swallowed: still signed in, no error shown', async () => {
+  const sb = fakeSupabase({ session: { user: USER }, rpcError: { message: 'function touch_account does not exist' } });
+  const { auth } = makeAuth(sb);
+  const s = await auth.refresh();
+  await settle();
+  assert.equal(touches(sb).length, 1);
+  assert.equal(s.user.email, 'ana@example.com');
+  assert.equal(hasError(auth.state()), false);
+});
+
+test('#315: a rejected touch (account server unreachable) is swallowed: still signed in, no error shown', async () => {
+  const sb = fakeSupabase({ session: { user: USER }, rpcReject: new Error('fetch failed') });
+  const { auth } = makeAuth(sb);
+  const s = await auth.refresh();
+  await settle();
+  assert.equal(touches(sb).length, 1);
+  assert.equal(s.user.email, 'ana@example.com');
+  assert.equal(hasError(auth.state()), false);
+});
+
+test('#315: an offline start with a stored session signs in, however long the app was offline', async () => {
+  const sb = fakeSupabase({ session: { user: USER } });
   const storage = memStorage();
   await makeAuth(sb, { storage }).auth.refresh();
+  await settle();
 
-  // the account server is down, one day later
-  sb.rpcError = new Error('fetch failed');
-  const later = makeAuth(sb, { storage, now: NOW + DAY }).auth;
-  await later.refresh();
-  assert.deepEqual([later.state().entitlement.active, later.state().entitlement.offline, later.state().entitlement.daysLeft], [true, true, 4]);
-
-  // the session can't be refreshed either: the last known user is kept
+  // a month later the account server cannot be reached at all
   sb.sessionError = new Error('fetch failed');
-  const noSession = makeAuth(sb, { storage, now: NOW + DAY }).auth;
-  await noSession.refresh();
-  assert.equal(noSession.state().user.email, 'ana@example.com');
-  await noSession.assertCanRun({ mock: false });
-
-  // past the grace period
-  const tooLate = makeAuth(sb, { storage, now: NOW + 4 * DAY }).auth;
-  await tooLate.refresh();
-  assert.match(tooLate.state().entitlement.error, /Could not reach the account server/);
-  await assert.rejects(tooLate.assertCanRun({ mock: false }), /Could not reach the account server/);
+  sb.rpcReject = new Error('fetch failed');
+  const { auth } = makeAuth(sb, { storage, now: NOW + 30 * DAY });
+  const s = await auth.refresh();
+  await settle();
+  assert.equal(s.user?.email, 'ana@example.com');
+  assert.equal(hasError(auth.state()), false);
 });
 
-test('signing out drops the session and the cached entitlement', async () => {
-  const sb = fakeSupabase({ session: { user: USER }, entitlement: trial(3) });
+test('signing out drops the session and what the account stored', async () => {
+  const sb = fakeSupabase({ session: { user: USER } });
   const { auth, storage } = makeAuth(sb);
   await auth.refresh();
-  assert.ok(storage.m.size);
+  await settle();
   const s = await auth.signOut();
   assert.equal(s.user, null);
   assert.equal(storage.m.size, 0);
-});
-
-test('the days left follow the server clock, not the local one', () => {
-  // the local clock is 10 days ahead of the server's
-  const e = { ...trial(2), checked_at: NOW + 10 * DAY };
-  const v = entitlementView(e, NOW + 10 * DAY + DAY / 2);
-  assert.deepEqual([v.active, v.daysLeft], [true, 2]);
 });
 
 test('fileStorage keeps the values encrypted on disk and survives a corrupt file', (t) => {

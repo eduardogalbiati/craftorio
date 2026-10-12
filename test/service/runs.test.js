@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { execFileSync } = require('child_process');
 const { setupWorkspace } = require('../../src/workspace');
 const { createService } = require('../../src/service');
 const backlog = require('../../src/backlog');
@@ -60,12 +61,10 @@ test('runs:active lists the gates a run waits at, for a client that saw none of 
 
 test('with simulation only, real runs and CLI terminals are refused', async (t) => {
   const { service, api } = makeService(t);
-  const asked = [];
-  const host = createService({ host: { trashItem: async () => {}, appVersion: '0', isPackaged: false, assertCanRun: async (o) => { asked.push(o); } } });
+  const host = createService({ host: { trashItem: async () => {}, appVersion: '0', isPackaged: false } });
   host.setWorkspace(service.workspace());
   await assert.rejects(host.api['run:start']({ file: 'fixture-service.yaml', inputs: {}, mock: false }), /Simulation only .*refusing to start a real run/);
   assert.throws(() => host.api['term:open']({ kind: 'cli-new', provider: 'claude' }), /Simulation only .*claude CLI/);
-  assert.deepEqual(asked, []); // refused before the account check: nothing real was attempted
   assert.equal(host.isRunning(), false);
   assert.deepEqual((await api['runs:list']()).runs, []);
   assert.equal(api['app:info']().simulationOnly, true);
@@ -74,21 +73,22 @@ test('with simulation only, real runs and CLI terminals are refused', async (t) 
   host.shutdown();
 });
 
-test('a run starts only if the host allows it (account / free trial)', async (t) => {
-  const { service, api } = makeService(t);
-  // the account check comes after the simulation-only guard: lift it for this real-run request
-  delete process.env.MULTIAGENT_SIMULATION_ONLY;
-  t.after(() => { process.env.MULTIAGENT_SIMULATION_ONLY = '1'; });
+// #315: the account only counts users; no account state ever blocks a run. A host that still
+// passes the retired account hook (one that would refuse everything) is never consulted.
+test('#315: no account state blocks a run: a host account hook that refuses is never consulted', async (t) => {
+  const { service } = makeService(t);
   const asked = [];
-  const blocked = createService({ host: { trashItem: async () => {}, appVersion: '0', isPackaged: false, assertCanRun: async (o) => { asked.push(o); throw new Error('Your 7-day free trial has ended.'); } } });
-  blocked.setWorkspace(service.workspace());
-  await assert.rejects(blocked.api['run:start']({ file: 'fixture-service.yaml', inputs: {}, mock: false }), /trial has ended/);
-  assert.deepEqual(asked, [{ mock: false }]);
-  assert.equal(blocked.isRunning(), false);
-  assert.deepEqual((await api['runs:list']()).runs, []);
-  // shares the index with `service`'s workspace: close it here, before makeService's own
-  // teardown (registered earlier) removes the workspace folder.
-  blocked.shutdown();
+  const host = createService({ host: { trashItem: async () => {}, appVersion: '0', isPackaged: false, assertCanRun: async (o) => { asked.push(o); throw new Error('Sign in to start runs.'); } } });
+  host.setWorkspace(service.workspace());
+  // shares the index with `service`'s workspace: closed here, before makeService's own teardown
+  // (registered earlier) removes the workspace folder.
+  try {
+    const { runId } = await host.api['run:start']({ file: 'fixture-service.yaml', inputs: {}, mock: true });
+    await finishPendingRun(host.api, runId);
+    assert.deepEqual(asked, []);
+  } finally {
+    host.shutdown();
+  }
 });
 
 test('concurrent runs: each run resolves its own gates, stop affects only its run, the limit refuses one more', async (t) => {
@@ -346,19 +346,19 @@ async function finishPendingRun(api, runId) {
 }
 
 test('prepareRestart refuses while a run start is still reserved (e.g. cloning its repository)', async (t) => {
-  const { service: base } = makeService(t);
-  let release;
-  const gate = new Promise((resolve) => { release = resolve; });
-  const service = createService({ host: { trashItem: async () => {}, appVersion: '0', isPackaged: false, assertCanRun: async () => { await gate; } } });
-  service.setWorkspace(base.workspace());
-  const starting = service.api['run:start']({ file: 'fixture-service.yaml', inputs: {}, mock: true });
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  fs.writeFileSync(path.join(ws.workflows, 'fixture-issue.yaml'), ISSUE_WORKFLOW);
+  // repo_path is a git URL already cloned into <workspace>/repos (a repository with no remote): the
+  // start only fetches it, a real git process that keeps the start reserved for a moment
+  const url = 'https://example.invalid/octo/demo.git';
+  const local = path.join(ws.repos, 'octo-demo');
+  fs.mkdirSync(local, { recursive: true });
+  execFileSync('git', ['init', '-q', local], { stdio: 'ignore' });
+  const starting = api['run:start']({ file: 'fixture-issue.yaml', inputs: { task: 'do it', repo_path: url }, mock: true });
   assert.throws(() => service.prepareRestart({ interruptRuns: true }), /starting/);
-  release();
   const { runId } = await starting;
-  await finishPendingRun(service.api, runId);
-  // shares the index with `base`'s workspace: close it here, before makeService's own teardown
-  // (registered earlier) removes the workspace folder.
-  service.shutdown();
+  await finishPendingRun(api, runId);
 });
 
 test('prepareRestart refuses with active runs unless confirmed; once confirmed it pauses the Backlog queues', async (t) => {

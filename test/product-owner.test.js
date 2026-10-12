@@ -144,7 +144,7 @@ test('normalizeAnswer keeps only known issue numbers and workflow files, and fil
   assert.deepEqual(out.conflicts[0].issues, [1, 2]);
 
   assert.deepEqual(out.enrich.map((e) => e.issue), [3]);
-  assert.equal(out.enrich[0].link, 'https://github.com/eduardogalbiati/multiagent-orchestrator/issues/103');
+  // where the enrich link points is covered by test/open-source.test.js (#314)
 });
 
 // ---- #195: a group's unknown workflow falls back to the default development workflow -------------
