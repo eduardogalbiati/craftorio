@@ -634,6 +634,8 @@ function runCli(opts, parser) {
     child.on('error', (e) => finish(e));
     child.on('close', (code) => {
       parser.flush?.(onItem, acc);
+      // a --max-turns of the agent's own args (not its max_requests): the attempt fails, as before #302
+      if (acc.cut && !opts.hint?.maxRequests) acc.error ||= 'Claude returned an error: error_max_turns (the --max-turns of its args)';
       if (acc.error) return finish(new Error(acc.error));
       if (code !== 0 && !acc.text && !acc.cut) return finish(new Error(`Process exited with code ${code}. ${stderr.slice(-800)}`));
       finish(null, { ...turnResult(acc), exitCode: code });

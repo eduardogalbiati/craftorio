@@ -3205,7 +3205,7 @@ class WorkflowRun extends EventEmitter {
     const visit = this.ctx.steps[String(stepId).split(':')[0]]?.visits || 0;
     // the agent's own provider (not `mock`): the simulation's usage_limits match it (#262)
     // maxRequests: the enforced budget (the simulation's request_budget ends a turn on it)
-    hint = { ...(hint || { stepId, visit }), handoff: wantNote, provider: agent.provider, providerType, maxRequests: enforced ? budget : null };
+    hint = { ...(hint || { stepId, visit }), handoff: wantNote, provider: agent.provider, providerType, maxRequests: enforced && !ownLimit ? budget : null };
     // simulation: which answer of this step this is (mockSequences.invalid_answers: { step: n } makes the first n invalid)
     if (this.mock) { this.mockCalls ??= {}; hint.call = this.mockCalls[hint.stepId] = (this.mockCalls[hint.stepId] || 0) + 1; }
 
@@ -3303,6 +3303,8 @@ class WorkflowRun extends EventEmitter {
       message: `[${agentName}] ${stepId}: the turn reached its request budget (${res.requests} requests, context ${kTokens(res.context.peak ?? 0)}): it wraps up and the step continues in a fresh session (cut ${cuts}/${MAX_CUTS})`,
     });
     const note = await this.requestHandoffNote(call, rec, WRAP_UP);
+    // Stop pressed during the wrap-up: no continuation
+    if (this.abort.signal.aborted) { this.closeSession(session, 'failed'); throw new Error('Cancelled'); }
     const text = note || `- (No handoff note: the turn was cut after ${res.requests} requests and its wrap-up wrote none.)\n- Re-read \`git status\` and \`git log\` to see where it stopped.`;
     this.saveHandoff({ agentName, stepId, visit: rec.visit, session, text, fallback: !note });
     this.closeSession(session, 'success');
