@@ -142,7 +142,8 @@ function testsPlanHtml(plan) {
 
 // #304: a suite step with `scope: affected`, its latest round as a card: the scope (the affected test
 // files, then the whole suite once), why each file ran (output.selection) and the logs. '' when no
-// suite step of the run selected its files.
+// suite step of the run selected its files. A step that runs the files it lists (the red check: every
+// reason is "listed by <step>") reads "Listed tests", not the change's affected set.
 const SUITE_REASONS_SHOWN = 6;
 function suiteCardsHtml(runId, stepNames) {
   const last = new Map();
@@ -151,7 +152,8 @@ function suiteCardsHtml(runId, stepNames) {
   }
   return [...last].map(([stepId, out]) => {
     const sel = out.selection;
-    const scope = sel.mode === 'all' ? 'Whole suite' : out.affected && out.scope === 'full' ? 'Affected tests, then the whole suite' : 'Affected tests only';
+    const listed = Object.values(sel.reasons || {}).length > 0 && Object.values(sel.reasons).every((why) => /^listed by /.test(why));
+    const scope = sel.mode === 'all' ? 'Whole suite' : listed ? 'Listed tests' : out.affected && out.scope === 'full' ? 'Affected tests, then the whole suite' : 'Affected tests only';
     const reasons = Object.entries(sel.reasons || {});
     const more = reasons.length - SUITE_REASONS_SHOWN;
     const list = reasons.length
@@ -162,7 +164,7 @@ function suiteCardsHtml(runId, stepNames) {
     return `<div class="run-suite-card" data-testid="run-suite-card">
       <div><b title="${esc(stepId)}">${esc(agentLabel(stepId, stepNames))}</b> <span class="badge" data-testid="run-suite-scope" title="${esc(sel.why || '')}">${esc(scope)}</span>${out.round ? ` <span class="muted small">round ${esc(out.round)}</span>` : ''}</div>
       <div class="small run-suite-selection" data-testid="run-suite-selection">${list}${sel.why ? `<div class="muted">${esc(sel.why)}</div>` : ''}</div>
-      <div class="row">${logBtn(affectedLog, 'Affected tests\' log', 'run-suite-affected-log')}${out.affected && out.scope === 'full' ? logBtn(out.log, 'Whole suite\'s log', 'run-suite-full-log') : ''}</div>
+      <div class="row">${logBtn(affectedLog, listed ? 'Listed tests\' log' : 'Affected tests\' log', 'run-suite-affected-log')}${out.affected && out.scope === 'full' ? logBtn(out.log, 'Whole suite\'s log', 'run-suite-full-log') : ''}</div>
     </div>`;
   }).join('');
 }

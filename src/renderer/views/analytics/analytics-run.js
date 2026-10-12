@@ -194,7 +194,9 @@
       ${f.steps.map((s) => `<tr><td title="${esc(s.step)}">${esc(readable(s.step, f.stepNames))}</td><td>${s.agent ? `<span class="an-agent" title="${esc(s.agent)}"><i style="background:${colorOf(s.agent)}"></i>${esc(readable(s.agent, f.agentNames))}</span>` : '<span class="muted">orchestrator</span>'}</td><td class="num">${s.visits}</td><td class="num">${fmtDur(s.durationMs)}</td></tr>`).join('')}</tbody></table>`
       : '<p class="muted small an-empty">No step recorded.</p>';
     // #304: a round of a `scope: affected` suite: what it ran, and why each file was selected
-    const scopeOf = (r) => (!r.selection ? (r.scope === 'files' ? 'Files' : 'Whole suite') : r.selection.mode === 'all' ? 'Whole suite' : r.affected && r.scope === 'full' ? 'Affected, then whole suite' : 'Affected');
+    // (a red check's round runs the files its step lists: every reason is "listed by <step>")
+    const listed = (sel) => Object.values(sel.reasons || {}).length > 0 && Object.values(sel.reasons).every((why) => /^listed by /.test(why));
+    const scopeOf = (r) => (!r.selection ? (r.scope === 'files' ? 'Files' : 'Whole suite') : r.selection.mode === 'all' ? 'Whole suite' : listed(r.selection) ? 'Listed tests' : r.affected && r.scope === 'full' ? 'Affected, then whole suite' : 'Affected');
     const whyOf = (r) => {
       if (!r.selection) return '';
       const reasons = Object.entries(r.selection.reasons || {}).map(([file, why]) => `${file}: ${why}`).join('; ');
