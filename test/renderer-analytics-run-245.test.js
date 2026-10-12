@@ -79,6 +79,23 @@ test('#245 Analytics Run tab: the per-agent charts (time, turns, cost, tokens) n
   assert.deepEqual(leaks(visible(charts)), []);
 });
 
+// #308: the Tokens per agent bar says how much of the agent's tokens its sub-agents made, only when they ran
+const tokenBars = (html) => html.slice(html.indexOf('Tokens per agent'), html.indexOf('<th>Step</th>'));
+
+test('#308 Analytics Run tab: an agent whose turns started sub-agents shows their calls and tokens in its Tokens per agent bar', async () => {
+  const html = tokenBars(await renderTab({ ...FIGURES, agents: [agent('test_writer'), agent('developer', { subagents: { calls: 3, tokens: 812200 } })] }));
+  const marks = [...html.matchAll(/data-testid="an-agent-subagents"[^>]*>([^<]*)</g)].map((m) => m[1]);
+  assert.equal(marks.length, 1);
+  assert.match(marks[0], /of which sub-agents: 3 calls, 812200 tokens/);
+  assert.equal((html.match(/data-testid="an-agent-tokens"/g) || []).length, 2);
+});
+
+test('#308 Analytics Run tab: agents without sub-agents (and runs recorded before #308) show no sub-agents mark', async () => {
+  const html = tokenBars(await renderTab());
+  assert.equal(html.includes('an-agent-subagents'), false);
+  assert.doesNotMatch(visible(html), /sub-agents/);
+});
+
 test('#245 Analytics Run tab: the timeline\'s visible labels (bars and agent rows) show no step or agent id', async () => {
   const html = await renderTab();
   const gantt = html.slice(html.indexOf('data-testid="an-run-timeline"'), html.indexOf('Time per agent'));
