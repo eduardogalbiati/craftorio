@@ -60,7 +60,7 @@ folder (`repo_read` on the app's project, or `seed_status`) when you need a deta
   screenshots that prove it).
 - Open questions become tasks with a recommended default; never a question to a person.
 
-<!-- skill: context-economy sha256:d4388fd64f7a -->
+<!-- skill: context-economy sha256:5c0d37af3f1e -->
 ## context-economy (small context)
 
 - Every call of an answer re-sends the whole conversation: a big tool result is paid again on
