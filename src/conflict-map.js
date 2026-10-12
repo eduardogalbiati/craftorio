@@ -25,6 +25,8 @@ const {
   recommendationOf,
 } = require('./repo-performance');
 
+// the newest finished runs the map counts (hot spots look at the last 20)
+const MAX_RUNS = 50;
 const MAX_FILES = 200;
 const MAX_LINES = 100;
 const GIT_COMMITS = 50;
@@ -195,11 +197,14 @@ async function fromGit(repo) {
  */
 async function buildConflictMap({ runs = [], repo, store = null }) {
   const builtAt = new Date().toISOString();
-  const real = (runs || []).filter((r) => !r.mock);
-  const counted = real.filter(finished).sort((a, b) => String(b.finishedAt).localeCompare(String(a.finishedAt)));
+  const all = (runs || []).filter((r) => !r.mock);
+  const counted = all.filter(finished).sort((a, b) => String(b.finishedAt).localeCompare(String(a.finishedAt))).slice(0, MAX_RUNS);
+  // the counted runs and the runs they resumed (a resumed run starts where the first run did)
+  const keep = new Set(counted.map((r) => r.runId));
+  for (const r of counted) for (let from = r.resumedFrom; from && !keep.has(from); from = all.find((x) => x.runId === from)?.resumedFrom) keep.add(from);
+  const real = all.filter((r) => keep.has(r.runId));
   const byUnit = new Map();
   if (counted.length && isRepo(repo)) {
-    // every real run, so that a resumed run finds the first run's base
     const edited = await filesEditedByRuns({ runs: real, repo, store });
     for (const r of counted) if (edited.get(r.runId)?.length) byUnit.set(r.runId, edited.get(r.runId));
   }

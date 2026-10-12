@@ -1516,7 +1516,7 @@ async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns,
       let tokens;
       let sessionId;
       // #150: the saved conflict map, built when missing; a failure only leaves the section out
-      const conflictMap = issueMode ? null : await loadConflictMap({ backlogDir, projectId, runs, repo: folder, store: storeFor(runsDir) }).catch(() => null);
+      const conflictMap = issueMode ? null : await loadConflictMap({ backlogDir, projectId, runs, repo: folder, store: storeFor(runsDir) }).catch((e) => { console.error('conflict map:', e.message); return null; });
       const report = (issueMode ? issueReport : backlogReport)({ data, activeRuns, history, workflows, question: q, selection: selected, conflictMap, defaultWorkflow: byDefault, workflow: chosen });
       ({ raw, costUsd, model, invalid, tokens, sessionId, text: analysis } = await callAgent({
         mode, question: q, report, previous, attachments: files, selection: selected, folder, agent: issueMode ? ISSUE_AGENT : agent, skillsDirs, resolveCommand, onItem: seen, signal, calibration: level, cost: costLevel, workflow: chosen, costOff, timeZone,
