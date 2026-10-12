@@ -4,7 +4,7 @@ Feature: The Agents window
   badge, busy while one answers) and the selected agent's conversation. The window opens from a
   drawer's "Open in a window" button or with Ctrl+Shift+A; a conversation is the same in both places.
 
-  @issue-263 @smoke
+  @issue-263
   Scenario: "Open in a window" opens the Agents window on the Oracle
     Given the app is open
     When I open the Oracle
