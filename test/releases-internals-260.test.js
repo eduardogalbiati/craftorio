@@ -259,8 +259,10 @@ test('release.yaml: its suites never wave a failure through as failing on the ba
   const wf = loadWorkflow(path.join(__dirname, '..', 'workflows', 'release.yaml'));
   const suites = wf.steps.filter((s) => s.type === 'suite');
   assert.deepEqual(suites.map((s) => [s.id, s.base_check]), [['unit', false], ['e2e', false]]);
-  const skip = wf.steps[0].transitions.find((t) => /inputs\.e2e_suite == 'skip'/.test(t.when));
-  assert.equal(skip.goto, 'ship');
+  // #290: after a fix the green unit suite goes to the release summary first, else straight to ship
+  const skip = wf.steps[0].transitions.find((t) => /inputs\.e2e_suite == 'skip'/.test(t.when) && t.goto === 'ship');
+  assert.ok(skip, 'a green unit suite with e2e_suite skip goes to ship');
+  assert.ok(wf.steps[0].transitions.filter((t) => /inputs\.e2e_suite == 'skip'/.test(t.when)).every((t) => ['review', 'ship'].includes(t.goto)));
   assert.ok(wf.steps[0].transitions.indexOf(skip) < wf.steps[0].transitions.findIndex((t) => t.goto === 'e2e'), 'checked before the transition to the E2E suite');
 });
 

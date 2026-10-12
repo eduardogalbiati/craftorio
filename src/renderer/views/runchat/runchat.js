@@ -109,7 +109,9 @@
     const state = it.resolved ? '' : it.closed ? '<p class="muted small">The run ended before an answer.</p>' : chat.live ? '' : '<p class="muted small">Waiting for an answer.</p>';
     // every gate's summary card (#213), the long message in its Details; a gate that tries the change
     // (#108) also gets the run's Artifacts panel on the right while it waits
-    const full = `<div class="rc-body md">${md(it.message)}</div>`;
+    // a report (#290: the release summary) leads the message, rendered on its own
+    const parts = window.gateReportParts?.(it) || { reportHtml: '', message: it.message };
+    const full = `${parts.reportHtml}<div class="rc-body md">${md(parts.message)}</div>`;
     const card = it.brief?.headline ? window.gateCardHtml?.(chat.runId, open ? it : { ...it, runApp: false, localPreview: null }, full)
       : open ? window.gateBriefHtml?.(chat.runId, it, full) : '';
     const help = !it.resolved && !it.closed ? window.gateButtonsHelpHtml?.(it) || '' : '';

@@ -5,6 +5,8 @@
 module.exports = (ctx) => [
   // → { projectId, releases (newest first), next: { version, issues, runs, commits, cost, notes, generated }, line, run }
   { channel: 'releases:list', method: 'listReleases', params: ['projectId'], fn: (opts) => ctx.listReleases(opts) },
+  // a shipped release's summary, written by its release run (#290) → { version, runId, text }
+  { channel: 'releases:summary', method: 'readReleaseSummary', params: ['projectId', 'version'], fn: (opts) => ctx.readReleaseSummary(opts) },
   // the next release's notes as the owner edited them (empty: generated again) → the list
   { channel: 'releases:notes', method: 'saveReleaseNotes', params: ['projectId', 'notes'], fn: (opts) => ctx.saveReleaseNotes(opts) },
   // starts the release run (the whole unit and E2E suites, then the Ship gate) → { runId, runDir }

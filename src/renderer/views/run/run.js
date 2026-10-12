@@ -30,7 +30,9 @@ function renderRunGates() {
       + (window.GateOracle?.gateOracleButtonHtml(g) || '');
     const field = g.feedback ? `<label class="duo-ask-label">${esc(g.feedback.label || 'Instructions (optional)')}</label>
       <textarea class="duo-ask-text run-gate-feedback" rows="3" placeholder="${esc(g.feedback.placeholder || '')}"></textarea>` : '';
-    const message = `<pre class="run-gate-message" data-testid="run-gate-message">${esc(g.message || '')}</pre>`;
+    // a report (#290: the release summary) leads, as Markdown, above the rest of the message
+    const parts = typeof gateReportParts === 'function' ? gateReportParts(g) : { reportHtml: '', message: g.message || '' };
+    const message = `${parts.reportHtml}<pre class="run-gate-message" data-testid="run-gate-message">${esc(parts.message)}</pre>`;
     const main = `<div class="run-gate-head"><b>Approval required</b><span class="muted small mono">${esc(`${v.run ? `${runLabel(v.run)} · ` : ''}step: ${g.step_id}`)}</span></div>
       ${gateCardHtml(g.run_id, g, message) || message}${gateToolsHtml(g)}${field}<div class="row gate-choices run-gate-actions">${buttons}</div>${gateButtonsHelpHtml(g)}`;
     const side = gateSideHtml(g);

@@ -147,6 +147,29 @@ tpl.addFilter('git_commits', (dir, base) => {
   } catch { return ''; }
 });
 
+// #290: what a release review reads instead of the run's logs. Each is '' without a folder or when
+// git or the file fails: a prompt never fails on them.
+const gitOut = (dir, args) => {
+  if (!dir || !fs.existsSync(String(dir))) return '';
+  try {
+    return execFileSync('git', args, { cwd: String(dir), encoding: 'utf8', windowsHide: true, timeout: 10000, stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  } catch { return ''; }
+};
+// `git log --stat` of a folder's checkout since a base ref (the files and lines each commit changed)
+tpl.addFilter('git_log_stat', (dir, base) => (base ? gitOut(dir, ['log', '--stat', '--no-decorate', '--format=%h %s', '-n', '30', `${base}..HEAD`]) : ''));
+// the repository's last tags, newest first, one per line
+tpl.addFilter('git_tags', (dir, n = 5) => gitOut(dir, ['tag', '--sort=-creatordate', '--list']).split('\n').filter(Boolean).slice(0, Number(n) || 5).join('\n'));
+// the project's own version from its version file (package.json, pyproject.toml), e.g. "package.json: 0.3.0"
+tpl.addFilter('project_version', (dir) => {
+  if (!dir) return '';
+  const read = (name) => { try { return fs.readFileSync(path.join(String(dir), name), 'utf8'); } catch { return ''; } };
+  let version = '';
+  try { version = JSON.parse(read('package.json') || '{}').version || ''; } catch { /* not JSON */ }
+  if (version) return `package.json: ${version}`;
+  const py = /^\s*version\s*=\s*["']([^"']+)["']/m.exec(read('pyproject.toml'));
+  return py ? `pyproject.toml: ${py[1]}` : '';
+});
+
 // The issues an issue-tracker run created, as its `issues` output (#134): the `file` step's created
 // issues with the analysis' complexity and grouping advice (`group_with`: the open issues it advised
 // to run with them), what a `queue` chain groups by (chain-model queueBatches).
@@ -901,12 +924,14 @@ class WorkflowRun extends EventEmitter {
       // the unit / E2E test inputs (#203), one sentence for the gates and the verifier ('' without them)
       tests_plan: this.testsPlan.map((p) => `${p.label}: ${p.value_label} (${p.source}).`).join(' '),
     };
-    for (const s of this.wf.steps) this.ctx.steps[s.id] = { output: null, visits: 0 };
+    // outputs (#290): every visit's output, oldest first (`output` is the last one); a resumed run
+    // only has the last
+    for (const s of this.wf.steps) this.ctx.steps[s.id] = { output: null, outputs: [], visits: 0 };
     this.resume = resume || null;
     if (resume) {
       if (!this.wf.steps.some((x) => x.id === resume.fromStep)) throw new Error(`Cannot resume: step "${resume.fromStep}" does not exist in this workflow.`);
       for (const [id, v] of Object.entries(resume.steps || {})) {
-        if (this.ctx.steps[id] && id !== resume.fromStep) Object.assign(this.ctx.steps[id], { output: v.output ?? null, visits: v.visits || 1 });
+        if (this.ctx.steps[id] && id !== resume.fromStep) Object.assign(this.ctx.steps[id], { output: v.output ?? null, outputs: v.output ? [v.output] : [], visits: v.visits || 1 });
       }
       if (resume.instruction) this.ctx.steps[resume.fromStep].supervisorNote = resume.instruction;
       // images pasted into the instruction (#130): checked here, copied at start, given to the first agent step
@@ -914,6 +939,8 @@ class WorkflowRun extends EventEmitter {
     }
     this.recent = []; // last events, for the supervisor's timeline
     this.trail = new StepTrail(); // step visits with their agents, for the progress views (summary.progress)
+    // #290: the same visits for templates ({ step, visit, type, status, cost, durationMs, ts }, oldest first)
+    this.ctx.trail = this.trail.steps;
     this.setupSupervisor();
 
     this.sessions = new Map();      // local id -> session
@@ -1896,6 +1923,7 @@ class WorkflowRun extends EventEmitter {
   // step.finished, the /goal check and the transitions of a step that has its output.
   async finishStep(step, st, output, scope, t0, extra = {}) {
     this.emitEvent('step.finished', { step_id: step.id, visit: st.visits, iteration: st.iteration, output, duration_ms: Date.now() - t0, ...extra });
+    st.outputs?.push(output);
     this.notePreexistingFailures(step.id, output);
     this.recordEvidence(step, st, output);
     this.saveScenarios(step, output);
@@ -2497,7 +2525,8 @@ class WorkflowRun extends EventEmitter {
 
   async superviseFailure(step, st, err) {
     const cfg = this.supervisorCfg;
-    if (!cfg) return null;
+    // `supervise: false` (#290): a step whose failure costs nothing to skip goes straight to its on_error
+    if (!cfg || step.supervise === false) return null;
     st.interventions ??= [];
     if (st.interventions.length >= cfg.perStep || this.supervisorUsed >= cfg.total) {
       this.emitEvent('log', { level: 'warn', message: `Supervisor: no more interventions allowed on ${step.id}.` });
@@ -3438,6 +3467,10 @@ class WorkflowRun extends EventEmitter {
         + `${diagnosis.options?.length ? `\nOptions:\n${diagnosis.options.map((o, i) => `${i + 1}. ${o}`).join('\n')}` : ''}`
         + `${diagnosis.user_action ? `\nAction only you can take: ${diagnosis.user_action}` : ''}`;
     }
+    // `report:` (#290): a Markdown document (e.g. the release summary) that leads the message; the
+    // screens render it apart (the event's `report`), '' leaves the message as it is
+    const report = this.gateText(step, step.report);
+    if (report) message = `${report}\n\n${message}`;
     const choices = step.choices ? step.choices.map((c) => ({
       id: c.id,
       label: render(c.label, this.ctx),
@@ -3465,6 +3498,7 @@ class WorkflowRun extends EventEmitter {
     const extra = {
       brief,
       ...yesNo,
+      ...(report ? { report } : {}),
       ...(workDir ? { work_dir: workDir } : {}),
       // run_app: the gate offers Run App even without a config (its setup saves the project's, #108)
       ...(step.local_preview && workDir ? { run_app: true } : {}),

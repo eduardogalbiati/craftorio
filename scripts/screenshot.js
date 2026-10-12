@@ -375,6 +375,37 @@ function demoReleases(ws, projectId) {
     ],
     next: { notes: '' },
   }, null, 2));
+  // #290: v0.9's release run needed a fix, so it wrote the release summary its row links
+  const runDir = path.join(ws.runs, '20260110-170000-rel00009');
+  fs.mkdirSync(runDir, { recursive: true });
+  fs.writeFileSync(path.join(runDir, 'release-summary.md'), [
+    'Both suites are green after 2 unit rounds, 1 E2E round and 1 fix, in 38 minutes for US$ 1.12.',
+    '',
+    '## Timeline',
+    '',
+    '| # | Step | Result | Time | Cost |',
+    '| --- | --- | --- | --- | --- |',
+    '| 1 | Unit tests | red: 3 failures in test/workflows.test.js | 4 min | |',
+    '| 2 | Fix the regression | 7b1e0c4: the workflow loader | 21 min | US$ 1.12 |',
+    '| 3 | Unit tests | green (412) | 4 min | |',
+    '| 4 | E2E scenarios | green (37) | 9 min | |',
+    '',
+    '## The fixes',
+    '',
+    '- **7b1e0c4** (src/engine/workflow.js, +6 −2): the loader read the YAML examples before #8 moved them. A regression of #7 by #8.',
+    '',
+    '## Before you ship',
+    '',
+    '- The diff to read: 1 file, 8 lines. Ship merges the fix, pushes the local main and tags it `v0.9`.',
+    '- The version matches the tags (v0.8 before it).',
+    '',
+    '## Follow-ups',
+    '',
+    '- A unit test for the loader without the examples folder (the fix\'s test_notes).',
+    '',
+    'Nothing found against shipping.',
+    '',
+  ].join('\n'));
 }
 
 // The Product Owner registering an issue (#117): a short request with a screenshot, one question,

@@ -1,5 +1,6 @@
 // Service area: releases (#260, src/releases.js). A project's release history and its next release
-// for the Releases screen (`listReleases`, the owner's notes: `saveReleaseNotes`), the release run
+// for the Releases screen (`listReleases`, the owner's notes: `saveReleaseNotes`, a shipped release's
+// summary its release run wrote, #290: `readReleaseSummary`), the release run
 // (`startRelease`: the bundled release workflow with the history since the last release, started
 // from the screen or by a roadmap's cut line, `roadmapRelease`) and what a release run that ended
 // leaves (`afterRelease`): a shipped one is recorded in the history with its issues, runs, cost,
@@ -60,11 +61,31 @@ module.exports = (ctx) => {
     const live = [...ctx.active.values()].find((r) => r.projectId === project.id && isReleaseRun(r));
     return {
       projectId: project.id,
-      releases: [...history.releases].sort((a, b) => String(b.date || '').localeCompare(String(a.date || ''))),
+      // #290: `summary` when its release run wrote release-summary.md (readReleaseSummary reads it)
+      releases: [...history.releases].sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')))
+        .map((r) => (summaryFile(r) && fs.existsSync(summaryFile(r)) ? { ...r, summary: true } : r)),
       next: nextOf(project, list),
       line: waitingLine(project.id),
       run: live ? { runId: live.runId, mock: !!live.mock, waiting: live.approvals.size > 0 } : null,
     };
+  }
+
+  // #290: a release's summary, written by its release run (the last of its runs) in its folder
+  function summaryFile(release) {
+    const runId = [].concat(release?.runs || []).slice(-1)[0];
+    return typeof runId === 'string' && /^[\w-]+$/.test(runId) ? path.join(ctx.ws.runs, runId, 'release-summary.md') : null;
+  }
+
+  // → { version, runId, text }: the release summary of a shipped release (Releases screen)
+  function readReleaseSummary({ projectId, version } = {}) {
+    if (!projectId) throw new Error('No project.');
+    const release = releases.readReleases(ctx.ws.releases, idOf(projectId)).releases.find((r) => r.version === version);
+    if (!release) throw new Error(`No release ${version} in this project.`);
+    const file = summaryFile(release);
+    let text = null;
+    try { text = file && fs.readFileSync(file, 'utf8'); } catch { /* no summary */ }
+    if (!text) throw new Error(`The release run of ${version} left no release summary.`);
+    return { version, runId: path.basename(path.dirname(file)), text };
   }
 
   function saveReleaseNotes({ projectId, notes }) {
@@ -241,6 +262,7 @@ module.exports = (ctx) => {
     afterRelease,
     listReleases,
     markReleasedIssues,
+    readReleaseSummary,
     roadmapRelease,
     saveReleaseNotes,
     startRelease,

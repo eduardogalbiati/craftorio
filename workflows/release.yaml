@@ -1,11 +1,12 @@
 # =============================================================================
 # Workflow: Release (#260)
 # -----------------------------------------------------------------------------
-#   unit (suite, no agent) ──(green)──► e2e (suite, no agent) ──(green)──► ship (you)
-#     ▲   │                               │                                  ├─ Ship ─► push the local base + tag ─► end
-#     │   └──────────(red)──► fix ◄─(red)─┘                                  └─ Hold ─► end (nothing pushed)
+#   unit (suite, no agent) ──(green)──► e2e (suite, no agent) ──(green)──► [review] ──► ship (you)
+#     ▲   │                               │                                            ├─ Ship ─► push the local base + tag ─► end
+#     │   └──────────(red)──► fix ◄─(red)─┘                                            └─ Hold ─► end (nothing pushed)
 #     └──────────────────── (developer)
 #        at most max_rounds fixes per suite, then regression_failed (you)
+#        review: only after a fix or a second round (nothing to review otherwise)
 #
 # What it is for: the work of many runs merges into the LOCAL base one after another, and nothing
 # checks their sum. A release run checks it (regressions across runs) and asks you, and only you,
@@ -21,7 +22,12 @@
 # 3. fix:   only for a red suite: the developer gets the history since the last release (the runs,
 #           their issues, decisions and handoff notes, the commits), finds the change that broke it
 #           and fixes the production code on the run's branch; then both suites run again.
-# 4. ship:  your gate, never answered by automation (a decision gate: not the supervisor, no
+# 3b. review: after the last green suite of a run that needed a fix (or a second round), a cheap
+#           read-only agent writes the release summary (#290: verdict, timeline, the fixes, what to
+#           check before you ship, follow-ups) from the trail, every fix round's output and the fix
+#           branch's log; it leads the Ship gate and is saved as release-summary.md. It never
+#           blocks: a review that fails goes on to ship, whose message says the summary is missing.
+# 4. ship: your gate, never answered by automation (a decision gate: not the supervisor, no
 #           timeout, not --auto-approve). Ship: a fix made here is merged into the local base
 #           (merge: local), the local base is pushed to origin (never forced) and tagged with the
 #           release's name, then the optional build command runs (`ship:`, src/releases.js). A
@@ -172,13 +178,28 @@ agents:
       tag: only the owner ships. The dependencies are linked from a shared cache: never run
       `npm ci` and never delete `node_modules`.
 
+  # #290: the release summary for the Ship gate. Cheap by construction: the workflow's cheap model,
+  # one turn (no retry, no supervisor), a fresh session, everything it needs in its prompt.
+  reviewer:
+    provider: claude
+    model: claude-sonnet-5
+    session: ephemeral
+    timeout: 5m
+    retry: { max_attempts: 1 }
+    capabilities: { tools: [read], web: false, subagents: false }
+    system_prompt: |
+      You review what a release run did and write its summary for the owner, who reads it at the
+      Ship gate before deciding whether to push and tag. You only read: never edit, write, commit,
+      push or tag, and never answer a gate. Work from the facts in your prompt; write in English,
+      short, and say "unknown" rather than guess.
+
 groups:
   - name: Regression
     steps: [unit, e2e, suite_blocked]
   - name: Fix
     steps: [fix, regression_failed]
   - name: Ship
-    steps: [ship, ship_failed]
+    steps: [review, ship, ship_failed]
 
 # -----------------------------------------------------------------------------
 steps:
@@ -192,7 +213,10 @@ steps:
     # "that fails on the base too" to wave through (#211)
     base_check: false
     transitions:
-      # a project without an E2E suite (e2e_suite: skip): the unit suite alone decides
+      # a project without an E2E suite (e2e_suite: skip): the unit suite alone decides; after a fix
+      # or a second round, the release summary first (#290)
+      - when: "output.status == 'pass' and inputs.e2e_suite == 'skip' and (steps.fix.visits or steps.unit.visits > 1)"
+        goto: review
       - when: "output.status == 'pass' and inputs.e2e_suite == 'skip'"
         goto: ship
       - when: "output.status == 'pass'"
@@ -215,6 +239,10 @@ steps:
     timeout: "{{ inputs.time_budget_minutes }}m"
     base_check: false
     transitions:
+      # after a fix or a second round of a suite, the release summary first (#290); one green round
+      # of each suite: nothing to review
+      - when: "output.status == 'pass' and (steps.fix.visits or steps.unit.visits > 1 or steps.e2e.visits > 1)"
+        goto: review
       - when: "output.status == 'pass'"
         goto: ship
       - when: "output.status == 'blocked'"
@@ -274,17 +302,85 @@ steps:
       - when: "true"
         goto: unit
 
+  # #290: what the run did, for the owner at the Ship gate. Everything is in the prompt (the trail,
+  # every round's output, the fix branch's log, the versions), so it reads no events.jsonl. It never
+  # blocks the release: a failure or a timeout goes on to ship (no supervisor: on_error), whose
+  # message then says the summary is missing.
+  - id: review
+    display: Release summary
+    agent: reviewer
+    supervise: false
+    on_error: ship
+    prompt: |
+      Write the summary of this release run for its owner, who reads it at the Ship gate before
+      deciding whether to push and tag. Everything you need is below: do not read the run's
+      events.jsonl or logs (read a file of the repository only when a fix's diff is unclear).
+
+      Release `{{ inputs.version or ('release-' ~ run_id) }}` of the local `{{ inputs.base_branch }}` ({{ inputs.task }}).
+      Project version: {{ (worktree_dir or inputs.repo_path) | project_version or 'no version file found' }}
+      The repository's last tags (newest first):
+      {{ (worktree_dir or inputs.repo_path) | git_tags(5) or '(none)' }}
+
+      Round by round (step #visit: result, time, cost), {{ ((trail | sum('durationMs')) / 60000) | round(1) }} minutes and US$ {{ (trail | sum('cost')) | round(2) }} so far:
+      {% for t in trail %}{% if t.step != 'review' %}- {{ t.step }} #{{ t.visit }}: {{ t.status }}, {{ (t.durationMs / 1000) | round | int }} s{% if t.cost %}, US$ {{ t.cost | round(2) }}{% endif %}
+      {% endif %}{% endfor %}
+      The unit suite (`{{ steps.unit.output.command }}`), each round:
+      {% for o in steps.unit.outputs %}- unit round {{ loop.index }}: {{ o.status }}: {{ o.message | one_line(300) }}
+      {% endfor %}
+      {% if inputs.e2e_suite == 'skip' %}The E2E suite was skipped (the project has none).{% else %}The E2E suite (`{{ steps.e2e.output.command }}`), each round:
+      {% for o in steps.e2e.outputs %}- e2e round {{ loop.index }}: {{ o.status }}: {{ o.message | one_line(300) }}
+      {% endfor %}{% endif %}
+
+      The fixes ({{ steps.fix.visits }}), oldest first, as the developer reported them:
+      {% for f in steps.fix.outputs %}
+      Fix {{ loop.index }}: commit {{ f.commit_sha or '(none)' }} on `{{ f.branch }}`{% if not f.committed %} (not committed){% endif %}
+      - summary: {{ f.summary }}
+      - regression (what broke it): {{ f.regression or '(not named)' }}
+      - test_notes: {{ f.test_notes or '(none)' }}
+      {% else %}
+      (none)
+      {% endfor %}
+
+      The fix branch `release-fix-{{ run_id }}` against the local base (`git log --stat {{ inputs.base_branch }}..HEAD`):
+      {{ (worktree_dir or inputs.repo_path) | git_log_stat(inputs.base_branch) or '(no commit)' }}
+
+      Answer with `release_summary`, Markdown, short, in this order:
+      1. One verdict line, no heading: both suites green or not, the rounds of each suite, the fixes, the time and the cost.
+      2. `## Timeline`: a table (# | Step | Result | Time | Cost) with each suite round and each fix.
+      3. `## The fixes`: one bullet per fix: what changed (files, lines), why, and its kind: a regression
+         of issue A by issue B, a defect that was already there, or a failure of the machine or of a
+         flaky test. Say when a later fix makes an earlier one unnecessary.
+      4. `## Before you ship`: the size of the diff to read, what Ship will merge, push and tag, and
+         anything that does not match: the release's version against the project's version and its
+         tags, a fix with no focused check, a fix that could not reproduce its failure.
+      5. `## Follow-ups`: one line per thing worth an issue (the tests the fixes asked for in test_notes
+         first), each a line the owner can turn into an issue; "None." when there is nothing.
+      End with one line: "Nothing found against shipping." or "Read before shipping: <what>.". It is a
+      recommendation: the owner alone answers the gate.
+    output_schema:
+      type: object
+      required: [release_summary]
+      properties:
+        release_summary: { type: string }
+    save_as: { path: release-summary.md, content: "{{ output.release_summary }}" }
+    transitions:
+      - when: "true"
+        goto: ship
+
   # The owner's gate: a decision gate, so the supervisor never answers it, with no timeout; the
   # engine ships only on the owner's own answer (`ship:`).
   - id: ship
     display: Ship
     type: human_approval
+    # #290: the release summary leads the message (rendered apart on the screens)
+    report: "{{ steps.review.output.release_summary }}"
     summary: |
       {{ inputs.version or 'The release' }}: {{ 'the unit suite is' if inputs.e2e_suite == 'skip' else 'both suites are' }} green on the local {{ inputs.base_branch }}{% if steps.fix.visits %} after {{ steps.fix.visits }} fix round(s){% endif %}.
       Unit: {{ steps.unit.output.message | one_line(160) }}
       E2E: {{ 'skipped (the project has no E2E suite)' if inputs.e2e_suite == 'skip' else (steps.e2e.output.message | one_line(160)) }}
     message: |
-      Release {{ inputs.version or ('release-' ~ run_id) }}: the whole unit suite {{ 'passes (the E2E suite was skipped: the project has none)' if inputs.e2e_suite == 'skip' else 'and the whole E2E suite pass' }} on the local {{ inputs.base_branch }}.
+      {% if steps.review.output and not steps.review.output.release_summary %}The release summary is missing: its step failed ({{ steps.review.output.error | one_line(200) }}); the run's chat has the rounds.
+      {% endif %}Release {{ inputs.version or ('release-' ~ run_id) }}: the whole unit suite {{ 'passes (the E2E suite was skipped: the project has none)' if inputs.e2e_suite == 'skip' else 'and the whole E2E suite pass' }} on the local {{ inputs.base_branch }}.
       Unit: {{ steps.unit.output.message }}
       {% if inputs.e2e_suite != 'skip' %}E2E: {{ steps.e2e.output.message }}{% endif %}
       {% if steps.fix.visits %}

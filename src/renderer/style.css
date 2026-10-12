@@ -885,6 +885,8 @@ body.resizing-dock .term-body { pointer-events: none; }
 .gate-card-buttons { margin: 2px 0 0; padding-left: 18px; }
 .run-gate-full summary { cursor: pointer; color: var(--muted); }
 .run-gate-full .run-gate-message, .run-gate-full .rc-body { margin-top: 4px; }
+/* a gate's report (#290: the release summary), above the rest of its message */
+.gate-report { margin: 4px 0 8px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; max-height: 50vh; overflow: auto; }
 /* E2E scenarios for the Dev/QA at a gate (#143, gateScenariosHtml) */
 .gate-scenarios { margin: 6px 0; display: flex; flex-direction: column; gap: 2px; }
 .gate-scenarios-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 2px; }

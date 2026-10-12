@@ -124,6 +124,22 @@ function gateCardHtml(runId, g, fullHtml) {
 }
 window.gateCardHtml = gateCardHtml;
 
+// A gate's report (#290: the release run's summary at its Ship gate), which the engine puts first in
+// the message: rendered as Markdown on its own, then the rest of the message.
+// g: the gate record, its event or a run chat gate (report, message) → { reportHtml, message }
+function gateReportParts(g) {
+  const message = String(g.message || '');
+  const report = String(g.report || '');
+  if (!report) return { reportHtml: '', message };
+  const html = typeof markdownHtml === 'function' ? markdownHtml(report) : `<pre>${esc(report)}</pre>`;
+  return {
+    // the only gate report today is the release summary: its test id names it
+    reportHtml: `<div class="gate-report md" data-testid="release-summary">${html}</div>`,
+    message: message.startsWith(report) ? message.slice(report.length).trim() : message,
+  };
+}
+window.gateReportParts = gateReportParts;
+
 // What each button does (#213), under the buttons: one line per answer that has a help text.
 function gateButtonsHelpHtml(g) {
   const rows = gateAnswers(g).filter((a) => a.help);

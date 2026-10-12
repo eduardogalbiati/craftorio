@@ -262,6 +262,8 @@
         // the summary card (#213): { headline, body, recommendation, options, user_action } and an
         // Approve / Reject gate's labels and help
         brief: ev.brief || null, approve: ev.approve || null, reject: ev.reject || null,
+        // the Markdown report that leads the message (#290: the release summary), '' without one
+        report: ev.report || '',
         // Run locally ({ install, command, url }), the folder to open and the diff's base ref, when the gate offers them
         localPreview: ev.local_preview || null, workDir: ev.work_dir || null, diffBase: ev.diff_base || null,
         // Run App without a config (#108): the step has local_preview: true

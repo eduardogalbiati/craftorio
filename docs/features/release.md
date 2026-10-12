@@ -18,6 +18,18 @@ optional `build_command`; it is refused when the local base moved since the suit
 run merged: check the release again) or when the tag already names another commit. **Hold** ends
 the run with nothing pushed (resume it from the gate to ship later).
 
+When the run needed a fix or a second round, a **Release summary** step runs before Ship (#290): a
+cheap read-only agent (Sonnet, one turn, 5 minutes, no edit, no web) gets the round-by-round trail,
+every fix round's `summary`, `regression`, `test_notes` and commit, both suites' results, the fix
+branch's `git log --stat`, the release's version, the project's version and its last tags, and
+writes a verdict line, a Timeline table, The fixes (what, why, and whether each was a regression, an
+older defect or the machine), Before you ship (the diff's size, what Ship does, anything that does
+not match, e.g. the version against `package.json`) and Follow-ups. It leads the Ship gate's
+message, is saved as `release-summary.md` (Reports in the run's Artifacts) and is linked from the
+release on the Releases screen. It is a recommendation: the choices are unchanged and only you
+answer the gate. A run with one green round of each suite skips it; a review that fails or times out
+never blocks: the gate opens with a line saying the summary is missing.
+
 It starts from Code & Build › Releases, or when a roadmap reaches a **cut line**: "Release here"
 on a stage of the Roadmap draws one after it, with the release's name, and the stages after the
 line wait until that release shipped (a held or failed release pauses the roadmap there; a release

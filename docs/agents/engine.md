@@ -24,13 +24,17 @@ same features for users; this is the implementer's summary.
   `output.results.ui_reviewer.ui_findings` go back to `develop` in one turn, the UI once
   (`vars.ui_review_returned`), and the fix round is reviewed again before test/suite/E2E/build.
   Its `evidence` step only collects evidence (no `ui_findings`, no way back to develop).
-- `save_as` (string or list, relative to the run folder; `{ path, content }` saves one field), `on_error: <step>`.
+- `save_as` (string or list, relative to the run folder; `{ path, content }` saves one field), `on_error: <step>`;
+  `supervise: false` (#290): a failing agent step goes straight to its `on_error`, without the supervisor.
 - A **transition** can also take `on_error: <step>`: when its `action`, `merge: local` or `precheck` fails, the run goes there instead of failing, with the error in the template context as `action_error` (`{ step, message, at, check?, head?, supervisor?, diagnosis? }`; `head` = the worktree's HEAD after the failure, which a failed local merge leaves as it was: the last checked commit). `recoverFromActionError` in workflow.js.
   - `recover: [steps]` (needs `on_error`; agent steps only): the supervisor decides first (`superviseActionError`, `supervisor.actionSchema(recover)`: `goto` one of them | `escalate`; `goto` first = the mock's default). `goto` → that step, `action_error.supervisor = { goto, explanation, instruction, record }` (the step's prompt includes it); `escalate`, an invalid goto, no supervisor or no `max_total` left → `on_error` with `action_error.diagnosis`. Event `supervisor.decision` with `kind: action_error` and `record` ("went back to X at HH:MM UTC because …"), a `supervisor` row in `decisions.tsv`; `runs.js` exposes the latest record as `recovery` (Backlog card badge).
   - `precheck: { probe, target }` (or `true` = the step's `check`): `runCheck` runs the probe right before the action; anything but `passed` throws (the merge is not attempted). `pr_mergeable` (probes.js `mergeableState`): passed | conflict | failed | pending | blocked | behind | merged | closed; a probe that cannot run = `error`.
   - A transition with `precheck` or `merge: local` runs check + action + merge inside `merge-queue.js` `serialize(key)` (key = the PR/MR's `host/repo`, else the worktree's repo): one merge at a time per repository across the process's runs; then `notifyMerged`.
   - `set: { name: value }` (values rendered against the step's scope) → run variables `vars.<name>` (not restored on resume). software-development and local-hero use `vars.recheck == 'resolution'` to scope code_review/test/verify after a conflict.
   - Simulation: `mockSequences.action_errors: { step: n }` fails the first n actions/merges of that step; probe states per check with `mockSequences.probes: { '<step>:check': [...], '<step>:precheck': [...] }` (default `pr_mergeable: ['passed']`).
+- A **human gate** can take `report:` (#290): a Markdown template (release.yaml: the release summary) put first in the
+  message and sent apart as the event's `report`; the Run screen and the run chat render it above the rest. '' (no
+  report) leaves the message as it is.
 - A **human gate** can take `check: { probe, target, on_fail?, recover? }` (`openGate`): the probe runs right before it opens (`check` in the message's template context: `{ state, detail, target, checked_at }`), and again on every `merged` notification of another run for the same key while it is open. Not `passed`/`error` with `on_fail` → the gate is not opened / is withdrawn (`approval.resolved` with `withdrawn: true, by: 'check', reason`) and the run takes `recoverFromActionError` with `{ on_error: on_fail, recover }`. Nothing ever approves a gate for the person.
 - A **screenshots step** (`type: screenshots`, no agent, #144; `runScreenshots` → `src/engine/screenshot-step.js`): `from: <step>` (whose output lists `screenshots: [{ name, caption, args }]`, `args` = the options of the project's screenshot command), `folder` (default the step id), `base` (template, the ref of the "original" side; default the worktree's base ref), `timeout` per shot (default 3m). It runs `npm run screenshot -- <args> --out <run_dir>/evidence/<folder>/round-<visit> --name <name> --side modified`, then the same with `--side original --ref <base>`, with the agents' environment (simulation only, scratch workspace); at most 8 entries, `--out/--name/--side/--ref/--caption` in `args` are refused. It never fails and never calls the supervisor: an empty list, a simulated run (`mock`: nothing is launched), no worktree, no `screenshot` script in the worktree's package.json, an invalid entry, a timeout or a crash end up in its output `{ kind: 'screenshots', folder, round, dir, taken, screens, screenshots: [{ path, caption, side }], errors: [{ name, side?, error }], reason, message }` (`message`: "N screenshots of M screens taken in round n" or "No screenshots: <reason>"). software-development and local-hero run `developer_screenshots` (from `develop`, folder `developer`) on every way into `developer_check`, whose message shows `message`; the gate's Artifacts panel shows that round only (`lastCapture` in gate-panel.js).
   - **The screenshot slot (#199)**: at most one Electron screenshot process at a time on the machine, across all runs and apps. Each capture of the step takes the machine-wide slot (`src/engine/machine-slot.js`, `acquireSlot('screenshot')`: a file `<os tmp>/multiagent-orchestrator/locks/screenshot.slot` with pid, host and token, or under `MULTIAGENT_LOCKS_DIR`) and passes its token to `npm run screenshot` (`MULTIAGENT_SCREENSHOT_SLOT`), which then does not wait for it. While another run holds it the step emits `screenshots.waiting` (`holder_pid`) and a log line "waiting for the screenshot slot". `scripts/screenshot.js` takes the same slot itself (`acquireSlotSync`), so an agent's `npm run screenshot` (evidence, test writer, E2E runner) waits too and prints the same line. A slot whose process is gone, or held over 15 minutes, is freed; a wait over 20 minutes fails that capture.
@@ -390,7 +394,9 @@ same features for users; this is the implementer's summary.
   `develop` → `developer_check` while `vars.owner_validated != 'yes'` (set by the gate's
   approve/changes transitions) or `inputs.validate_every_round` (a boolean); the developer's
   prompt shows the change request when `previous_step == 'developer_check'`. Template filter
-  `git_commits(base)` lists a folder's commits for a gate message (empty without a folder).
+  `git_commits(base)` lists a folder's commits for a gate message (empty without a folder);
+  `git_log_stat(base)`, `git_tags(n)` and `project_version` (package.json / pyproject.toml) give a
+  folder's `git log --stat`, its last tags and its own version (#290, release.yaml's `review`; '' on failure).
 - `orchestrator.supervisor: { enabled, max_interventions }` — per step 2, per run 6.
 - Supervisor on call (#41): `orchestrator.supervisor.on_call` (default true), `max_cost_usd`
   (default 5, the supervisor sessions' cost per run), `effort`, `model` (default Opus 5.5 on
@@ -627,7 +633,9 @@ same features for users; this is the implementer's summary.
 ## Worktrees and template context
 
 - `orchestrator.worktree: { repo, base }` + `defaults.working_dir: "{{ worktree_dir }}"`: see [worktrees.md](worktrees.md).
-- Template context: `inputs`, `steps.<id>.output/visits`, `run_id`, `run_dir`, `runs_dir`,
+- Template context: `inputs`, `steps.<id>.output/visits`, `steps.<id>.outputs` (every visit's output,
+  oldest first; a resumed run only has the last), `trail` (the run's step visits so far:
+  `{ step, visit, type, status, cost, durationMs, ts }`, StepTrail, #290), `run_id`, `run_dir`, `runs_dir`,
   `workflows_dir`, `worktree_dir`, `agents.<name>.model`, `agent` (in fan-out), `delegate_result`,
   `skill_dir('<name>')` (a skill's folder, to run its script in an action), and in an agent step's
   prompt `evidence_dir` (`<run_dir>/evidence/<step>/round-<visit>`, where its screenshots go).

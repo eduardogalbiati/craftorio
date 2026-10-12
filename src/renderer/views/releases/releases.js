@@ -4,7 +4,8 @@
 // pushed, the runs and their cost; notes generated from them, editable until Ship and saved when the
 // field is left; "Run the release checks" starts the release workflow, whose Ship gate is answered
 // in the run) and the releases shipped, newest first (version, date, issues, runs, cost, the unit
-// and E2E results, notes). Nothing here pushes: Ship is the release run's own gate.
+// and E2E results, notes, the release summary its release run wrote: #290, read when it is opened).
+// Nothing here pushes: Ship is the release run's own gate.
 // Registers itself with registerView (view-registry.js); uses app.js globals ($, esc, state, api,
 // errMsg, dateOf, devMode, confirmDialog, markdownHtml) and window.CurrentProject, window.showRun.
 
@@ -79,7 +80,23 @@
         </div>
         ${issuesHtml(r.issues)}
         ${r.notes ? `<details class="rel-notes"><summary class="small muted">Notes</summary><div class="md md-compact">${markdownHtml(r.notes)}</div></details>` : ''}
+        ${r.summary ? `<details class="rel-notes"><summary class="small muted" data-testid="release-summary-link" data-rel-summary="${esc(r.version)}" title="What the release run did: its rounds, its fixes, what to check before shipping, follow-ups">Release summary</summary>
+          <div class="md md-compact rel-summary" data-testid="release-summary"><p class="muted small">Loading…</p></div></details>` : ''}
       </article>`;
+  }
+
+  // #290: a release's summary, read once when its row opens it (an error can be retried)
+  async function openSummary(link) {
+    const box = link.closest('details')?.querySelector('.rel-summary');
+    if (!box || box.dataset.loaded) return;
+    box.dataset.loaded = '1';
+    try {
+      const { text } = await api.readReleaseSummary(rel.projectId, link.dataset.relSummary);
+      box.innerHTML = markdownHtml(text);
+    } catch (e) {
+      delete box.dataset.loaded;
+      box.innerHTML = `<p class="error small">${esc(errMsg(e))}</p>`;
+    }
   }
 
   function render() {
@@ -149,7 +166,9 @@
       box.addEventListener('change', (e) => { if (e.target.id === 'rel-notes') saveNotes(e.target); });
       box.addEventListener('click', (e) => {
         const run = e.target.closest('[data-rel-run]');
+        const summary = e.target.closest('[data-rel-summary]');
         if (run) window.showRun(run.dataset.relRun);
+        else if (summary) openSummary(summary);
         else if (e.target.closest('[data-rel-start]')) start();
       });
     },
