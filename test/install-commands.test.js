@@ -4,8 +4,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { installCommand, installCommands, installHint } = require('../src/install-commands');
 
-test('installCommands: every CLI the orchestrator calls has a one-line installer on Windows and Linux, except Grok', () => {
-  for (const platform of ['win32', 'linux']) {
+test('installCommands: every CLI the orchestrator calls has a one-line installer on Windows and macOS, except Grok', () => {
+  for (const platform of ['win32', 'darwin']) {
     const cmds = installCommands(platform);
     for (const id of ['claude', 'codex', 'gh', 'glab', 'git']) {
       assert.ok(cmds[id] && cmds[id].length > 0, `${id} has no install command on ${platform}`);
@@ -14,19 +14,51 @@ test('installCommands: every CLI the orchestrator calls has a one-line installer
   }
 });
 
+// #316: Linux gets real commands (the distro package, the official install script) or short prose,
+// never Homebrew's; macOS keeps brew; Windows is unchanged.
+test('installHint (Linux): every CLI the orchestrator calls has a hint, and none of them is a brew command', () => {
+  for (const id of ['claude', 'codex', 'gh', 'glab', 'git', 'grok']) {
+    const hint = installHint(id, 'linux');
+    assert.ok(hint && hint.length > 0, `${id} has no install hint on Linux`);
+    assert.doesNotMatch(hint, /\bbrew\b/, `${id} suggests Homebrew on Linux: ${hint}`);
+  }
+});
+
+test('installCommands (Linux): no install command is a brew command', () => {
+  for (const [id, cmd] of Object.entries(installCommands('linux'))) {
+    if (cmd) assert.doesNotMatch(cmd, /\bbrew\b/, `${id}: ${cmd}`);
+  }
+});
+
+test('installCommands (macOS): gh, git and glab still install with Homebrew', () => {
+  const mac = installCommands('darwin');
+  assert.equal(mac.gh, 'brew install gh');
+  assert.equal(mac.git, 'brew install git');
+  assert.equal(mac.glab, 'brew install glab');
+});
+
+test('installCommands (Windows): unchanged winget and PowerShell commands', () => {
+  const win = installCommands('win32');
+  assert.equal(win.claude, 'powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://claude.ai/install.ps1 | iex"');
+  assert.equal(win.codex, 'npm install -g @openai/codex');
+  assert.equal(win.gh, 'winget install --id GitHub.cli -e');
+  assert.equal(win.git, 'winget install --id Git.Git -e');
+  assert.equal(win.glab, 'winget install --id GLab.GLab -e');
+});
+
 test('installCommands: whisper-cli only has a one-line installer on macOS', () => {
   assert.equal(installCommands('darwin')['whisper-cli'], 'brew install whisper-cpp');
   assert.equal(installCommands('win32')['whisper-cli'], null);
   assert.equal(installCommands('linux')['whisper-cli'], null);
 });
 
-test('installCommands: the Windows and POSIX commands for the same tool differ (winget vs brew, one PowerShell/curl installer)', () => {
+test('installCommands: the Windows and macOS commands for the same tool differ (winget vs brew, one PowerShell/curl installer)', () => {
   const win = installCommands('win32');
-  const linux = installCommands('linux');
-  assert.notEqual(win.gh, linux.gh);
-  assert.notEqual(win.claude, linux.claude);
+  const mac = installCommands('darwin');
+  assert.notEqual(win.gh, mac.gh);
+  assert.notEqual(win.claude, mac.claude);
   assert.match(win.gh, /winget/);
-  assert.match(linux.gh, /brew/);
+  assert.match(mac.gh, /brew/);
 });
 
 test('installCommand: the command for a known tool, or null for one with no one-line installer', () => {

