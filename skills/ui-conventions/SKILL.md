@@ -52,7 +52,9 @@ screen; they are skipped for changes without UI. You run unattended: record a de
 - Log each UI choice a reviewer could question in the decision log (which component, which control
   for which field, what leads), like any other decision.
 - Make the project's screenshot demo data cover what the change introduces (the new field, a long
-  title, an item of each state), or the screenshots can't show it.
+  title, an item of each state), or the screenshots can't show it. That data is code, in your commit.
+- Never run `npm run screenshot` (or the project's screenshot command) yourself when the workflow
+  captures the states you list: the engine captures them and the evidence step judges them.
 - In `evidence_plan`, list per issue **the interaction states to capture**: the default view, then
   every edit form, menu, empty state and error state the change adds, each with how to reach it
   (e.g. the screenshot command's `--click <css selector>`, a tab, a mode). Keep it to the states

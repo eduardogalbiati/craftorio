@@ -368,7 +368,8 @@ agents:
       task and its criteria. Never edit, delete, skip or weaken them (the orchestrator refuses a
       turn that changes one); if one contradicts the task, say why in `summary` and leave it (the
       reviewer decides). You may add your own tests for
-      internal details in new test files. Never run the full test suite (the orchestrator runs it
+      internal details in new test files, written with the code: your own tests go into the
+      implementation commit. Never run the full test suite (the orchestrator runs it
       after the review): run the acceptance and affected test files, focused, in the foreground,
       output to a log, reading only the summary.
       Keep your context small (context-economy): on a task that touches more than about three
@@ -380,6 +381,8 @@ agents:
       a long output (a failing check, a log, a long diff) or a finding in code you have not
       mapped goes to a sub-agent that returns a summary; edits and the checks that decide your
       step stay in your own turn.
+      Your turn ends at green acceptance tests and a commit (#303): the code_review step reviews
+      your diff next, in its own session, so never start a sub-agent to review your diff.
       Work on your own branch and commit your changes there. This run has its own git
       worktree (the current folder), which starts detached at the LOCAL {{ inputs.base_branch }}:
       this workflow works locally, and the local {{ inputs.base_branch }} holds earlier local
@@ -802,8 +805,7 @@ steps:
     agent: developer
     # {{ test_map }}: the checkout's code → tests map (#219), for the tests of the files it changes
     test_map: true
-    # the self-review (#179): a short checklist (#300), with read access to code-review's rules/*.md
-    skills: [self-review]
+    # #303: no self-review pass (#179, #300) in the develop turn: the code_review step is the review
     prompt: |
       Task: {{ inputs.task }}
 
@@ -888,7 +890,8 @@ steps:
       Implement until they pass. NEVER edit, delete, skip or weaken an acceptance test file: the
       orchestrator refuses a turn that changes one. If one contradicts the task, say why in
       `summary` and leave it (the reviewer decides). You may add your own tests for internal
-      details, in new test files. To check, end your turn with a ```run-tests block listing the
+      details, in new test files: write them with the code, so your own tests go into the
+      implementation commit. To check, end your turn with a ```run-tests block listing the
       acceptance and related test files (the orchestrator runs them and resumes you with a short
       summary); never the whole suite (the orchestrator runs it after the review).
       {% elif acc %}
@@ -930,6 +933,8 @@ steps:
       ["--view", "backlog", "--mode", "roadmap", "--click", "[data-rm-edit]"]), never --out, --name,
       --side, --ref or --caption (the capture sets them). The engine captures each one, original and
       modified, before the owner tries the change. An empty list when the change has no UI.
+      Never run `npm run screenshot` yourself: make the demo data cover the change (that is code)
+      and list the states; the engine captures them and the evidence step judges them.
       {% endif %}
       In `left_out`, list each requirement of the task (its acceptance criteria, each task of the
       issue) that you did not implement, with the reason: never leave one only in prose; an empty
@@ -947,26 +952,21 @@ steps:
       impossible in this run, each with the reason: the owner then decides whether the run goes on
       without them.
       {% endif %}
-      Self-review (#179), the last thing before answering: read your branch's diff,
-      `git diff {{inputs.base_branch}}...HEAD` (the diff, not the whole files again), against the
-      self-review skill's checklist and the code-review rules for the change's language
-      (`rules/*.md`), as the reviewer will. On a large diff, one exploration sub-agent may check it against the rules and
-      return only the findings. Fix what you find with a new commit (never in an acceptance test),
-      and say in `self_review`, in a few lines, what you checked and what you changed.
+      Your turn ends at green acceptance tests and a commit: answer once the ```run-tests block
+      passes and the change is committed. The code_review step reviews your diff next, in its own
+      session: never start a sub-agent to review your diff.
     # a fix round with a new commit, summary or set of files is progress, not "the same answer" (#121)
     stall:
       same_output_fields: [commit_sha, summary, files_changed]
     output_schema:
       type: object
-      required: [branch, summary, files_changed, test_notes, committed, left_out, self_review]
+      required: [branch, summary, files_changed, test_notes, committed, left_out]
       properties:
         branch:        { type: string }
         summary:       { type: string }
         files_changed: { type: array, items: { type: string } }
         # for the test writer: behaviours, edge cases and files to test
         test_notes:    { type: string }
-        # for the reviewer (#179): what the developer's own review of its diff checked and changed
-        self_review:   { type: string }
         # for the evidence step: per issue, the screen/command/request that shows the change
         evidence_plan: { type: string }
         # for developer_screenshots (#144): each UI state as the screenshot command's options;
@@ -1266,9 +1266,6 @@ steps:
       `{{ inputs.base_branch }}` (`git diff {{ inputs.base_branch }}...{{ steps.develop.output.branch }}`).
       Task (the spec for the spec axis): {{ inputs.task }}
       Developer summary: {{ steps.develop.output.summary }}
-      {% if steps.develop.output.self_review %}The developer's self-review of its diff against the code-review rules (review independently all the same):
-      {{ steps.develop.output.self_review }}
-      {% endif %}
       {% if vars.accepted_gaps %}The owner accepted that the run goes on without these requirements (not blocking): {{ vars.accepted_gaps }}{% endif %}
       {% endif %}
       {% if inputs.issues | length > 1 and vars.recheck != 'resolution' %}

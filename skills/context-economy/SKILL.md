@@ -47,6 +47,10 @@ crosses a gate stay in your own turn. A sub-agent may read a log of a run you ma
 replaces running it. When your CLI offers no sub-agent tool (Codex, Grok), do the same research
 yourself with focused searches and excerpts.
 
+A sub-agent maps; it never reviews your branch's diff. When your workflow has a review step, the
+reviewer is the next step, in its own fresh session: never start an "independent review" of your
+own diff in your turn and keep working "meanwhile" (#303).
+
 ## Test writer: map the behaviours before writing tests
 
 Before writing tests, start one exploration sub-agent with the developer's `test_notes` and the

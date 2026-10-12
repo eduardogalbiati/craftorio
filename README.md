@@ -767,7 +767,7 @@ What is shared by a family lives in a suffix-less skill referenced with `uses:`.
 | `claim-verification` | verifier | Falsifiable claim, baseline vs treatment with the same command, verified / not_verified / inconclusive |
 | `clarity-score` | the Discovery board (its score and Grill me, src/clarity.js); issue-tracker (issue_writer); backlog-refresh (refresher); the Product Owner (Register an issue) | Clarity rubric per kind (0-100%), the 85% bar, gaps as open questions, the Grill me interview |
 | `code-mapping` | mapper | Maps the files, functions, line numbers, connections, tests and conventions of a task before the first edit, in a map of at most 300 lines |
-| `code-review` | reviewer; its rules/*.md through `reads` (self-review, the developer) | Correctness, spec and standards axes, severities, `rules/` per language (JS/TS, Python, Go, Java/Kotlin, C#, SQL, Shell/CI) and `rules/smells.md` |
+| `code-review` | reviewer | Correctness, spec and standards axes, severities, `rules/` per language (JS/TS, Python, Go, Java/Kotlin, C#, SQL, Shell/CI) and `rules/smells.md` |
 | `context-economy` | developer, test_writer | Does code research through exploration sub-agents, reads excerpts instead of whole files, writes handoff notes the next fresh session can act on |
 | `decision-log` | developer, PR babysitter | Agents end answers with a ```` ```decisions ```` block; the engine appends it to `<run>/decisions.tsv` |
 | `dependency-audit-policy` | via `uses` | Severity from CVSS, how to report blockers with a fix, redaction |
@@ -794,7 +794,6 @@ What is shared by a family lives in a suffix-less skill referenced with `uses:`.
 | `rfc-writing` | arena, Write & Review (`document_skill`) | RFC (after the Rust RFC template): motivation, guide- and reference-level explanation, drawbacks, alternatives, prior art, rollout, rubric |
 | `run-retrospective` | run retrospective | Friction, waste, skill gaps and no-ops in a run's logs, turned into proposals with evidence |
 | `run-supervisor` | the AI supervisor (a failed step, or on demand) | Plain-words account of a run, root cause from its logs, a safe recovery (fix the output, retry with an instruction, go to an allowed step, resume, or hand over to a human) |
-| `self-review` | developer (ai-development-local-hero, the develop step) | The developer's checklist for its own diff before answering, with the code-review rules for the diff's language; fixes go in a new commit |
 | `test-plan-writing` | arena (`document_skill`) | Test plan (after ISO/IEC/IEEE 29119-3): risk-based approach, traceability to requirements, entry/exit criteria, environment and data, rubric |
 | `testing-principles` | via `uses` | Seams first, no tautological or implementation-coupled tests, mocks only at boundaries, red before green for bug fixes, each suite run once, pre-existing failures reported instead of chased |
 | `ui-conventions` | developer (software-development workflows, when the change touches the UI); evidence (the visual review); ui_reviewer (ai-development-local-hero, with design-system) | UI changes: shared components, controls that follow the data, states to capture, and the visual review of the screenshots (ui_findings) |
