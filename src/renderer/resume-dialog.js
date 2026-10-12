@@ -73,7 +73,8 @@ function resumeLimitNote(o) {
   return o.limit ? `<div class="muted small" data-testid="resume-limit-note">The run stopped at its limit (<span class="mono">${esc(o.limit)}</span>). The resumed run counts its limits from zero: the limit applies again only once the new run reaches it.</div>` : '';
 }
 
-// opts.step: the step to preselect (#288: where an interrupted run stopped), over the suggested one
+// opts.step: the step to preselect (#288: where an interrupted run stopped), over the suggested one;
+// opts.note: one line on why this dialog opened (the kept-work Resume that needs a gate approved)
 async function openResumeDialog(runId, opts = {}) {
   const body = $('#resume-body');
   const msg = $('#resume-msg');
@@ -92,7 +93,7 @@ async function openResumeDialog(runId, opts = {}) {
   if (o.active) { body.innerHTML = '<p class="error small">The run is still active: it can be resumed once it ends.</p>'; return; }
   const allowed = (id) => o.steps.some((s) => s.id === id && (!s.blockedBy || s.confirm?.ok));
   const pre = opts.step && allowed(opts.step) ? opts.step : o.suggested;
-  body.innerHTML = `${resumeFields('resume', o.steps.map((s) => ({ id: s.id, label: resumeStepLabel(o, s), disabled: !!s.blockedBy && !s.confirm?.ok })), pre)}
+  body.innerHTML = `${opts.note ? `<p class="small" data-testid="resume-note">${esc(opts.note)}</p>` : ''}${resumeFields('resume', o.steps.map((s) => ({ id: s.id, label: resumeStepLabel(o, s), disabled: !!s.blockedBy && !s.confirm?.ok })), pre)}
     ${resumeLimitNote(o)}
     <div id="resume-gate" class="field"></div>
     <div id="resume-effects" class="resume-effects small"></div>`;

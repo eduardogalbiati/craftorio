@@ -865,12 +865,12 @@
   // The filter row's Releases select: All, Next release, each shipped release newest first; not drawn
   // without any release; disabled with the reason when the history could not be read.
   function releaseFilterHtml(data, rv) {
-    const attrs = 'class="rm-release-filter" data-rm-release-filter data-testid="roadmap-release-filter" aria-label="Releases"';
-    if (data?.releases?.error) return `<select ${attrs} title="${esc(`The releases could not be read: ${data.releases.error}`)}" disabled><option>Releases could not be read</option></select>`;
+    const attrs = 'data-rm-release-filter data-testid="roadmap-release-filter" aria-label="Releases"';
+    if (data?.releases?.error) return `<select class="rm-release-filter" ${attrs} title="${esc(`The releases could not be read: ${data.releases.error}`)}" disabled><option>Releases could not be read</option></select>`;
     if (!rv.list.length) return '';
     const shipped = rv.list.filter((x) => x.status === 'shipped' && x.date).sort((a, b) => String(b.date).localeCompare(String(a.date)));
     const options = [['', 'All'], ['next', 'Next release (not shipped)'], ...shipped.map((x) => [x.version, `${x.version} · ${shortDate(x.date)}`])];
-    return `<label class="rm-release-pick small"><span class="muted">Release</span><select ${attrs.replace('rm-release-filter"', `rm-release-filter${rv.choice ? ' active' : ''}"`)} title="Show the stages and items whose runs are in a release">${options.map(([id, label]) =>
+    return `<label class="rm-release-pick small"><span class="muted">Release</span><select class="rm-release-filter${rv.choice ? ' active' : ''}" ${attrs} title="Show the stages and items whose runs are in a release">${options.map(([id, label]) =>
       `<option value="${esc(id)}"${id === rv.choice ? ' selected' : ''}>${esc(label)}</option>`).join('')}</select></label>`;
   }
 
@@ -1185,7 +1185,10 @@
     const count = !r.stages.length ? ''
       : rv.choice ? releaseCountHtml(r, rv, vis)
         : `<span class="small muted rm-count" data-testid="roadmap-count"${v.epic ? ` title="${esc(`Items ${epicName}`)}"` : ''}>${shownItems} of ${allItems.length} item${allItems.length === 1 ? '' : 's'} · ${sinceText}${offItems ? ` · ${plural(offStages.length, 'disabled stage')} apart (${plural(offItems, 'item')})` : ''}</span>`;
-    const nothing = `<div class="empty-state"><b>No ${v.showAll ? '' : 'open '}roadmap items${v.showAll && rangeMs ? ` in the ${sinceText}` : ''}${v.epic ? ` ${esc(epicName)}` : ''}.</b>
+    // #291: with a release chosen Planned | All does not apply, the date range does
+    const nothing = rv.choice ? `<div class="empty-state" data-testid="roadmap-release-empty"><b>No stage of this release${rangeMs ? ` in the ${sinceText}` : ''}${v.epic ? ` ${esc(epicName)}` : ''}.</b>
+      <p class="muted">${rangeMs ? 'The date range hides the release\'s runs.' : 'Pick another epic.'}</p>${rangeMs ? '<button class="btn sm ghost" type="button" data-rm-all-time>Show all time</button>' : ''}</div>`
+      : `<div class="empty-state"><b>No ${v.showAll ? '' : 'open '}roadmap items${v.showAll && rangeMs ? ` in the ${sinceText}` : ''}${v.epic ? ` ${esc(epicName)}` : ''}.</b>
       <p class="muted">${v.showAll ? 'Pick a longer date range, or another epic.' : 'Done and skipped items are under All.'}</p>${v.showAll ? '' : '<button class="btn sm ghost" type="button" data-rm-view="all">Show all items</button>'}</div>`;
     // the page to draw; #260: each drawn stage with its cut line; a hidden (finished) stage's line
     // still shows while its release has not shipped (between the drawn stages, and beyond them when
@@ -1663,6 +1666,8 @@
     // #268: the Planned | All switch (and the empty state's "Show all items")
     const viewBtn = e.target.closest('[data-rm-view]');
     if (viewBtn) { ctx.setShowAll?.(viewBtn.dataset.rmView === 'all'); return true; }
+    // #291: a release's empty state (its runs older than the date range): all time
+    if (e.target.closest('[data-rm-all-time]')) { ctx.setSince?.('total'); return true; }
     // #267: a stage's "+n done" chip unfolds its finished items, that stage only
     const doneChip = e.target.closest('[data-rm-done]');
     if (doneChip) {

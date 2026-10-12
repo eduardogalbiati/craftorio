@@ -83,6 +83,14 @@ async function keptWorkDialog(kept) {
   });
   if (id !== 'resume') return id;
   if (!kept.stoppedAt) { window.openResumeDialog?.(kept.runId); return id; }
+  // a decided human gate before the stopped step: the engine refuses a direct resume (#112), so
+  // the owner approves it again in Resume from step… (that step chosen) instead of an error
+  let stopped = null;
+  try { stopped = (await api.resumeOptions(kept.runId))?.steps?.find((s) => s.id === kept.stoppedAt) || null; } catch { /* resumeRun says why below */ }
+  if (stopped?.blockedBy) {
+    window.openResumeDialog?.(kept.runId, { step: kept.stoppedAt, note: 'Resume did not go straight on: a human gate decided before the step where the run stopped must be approved again first.' });
+    return id;
+  }
   try {
     const simulate = typeof devMode === 'function' && devMode();
     const { runId } = await api.resumeRun(kept.runId, kept.stoppedAt, undefined, simulate);

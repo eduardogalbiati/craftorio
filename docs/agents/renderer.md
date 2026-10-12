@@ -130,7 +130,9 @@ Read this before changing anything in `src/renderer/`.
   interrupted run (status running in its events, not live: `interrupted()`) ends with
   `runchat-interrupted-note` and a primary `runchat-resume` (`[data-resume-at]` →
   `openResumeDialog(runId, { step })`, the stopped step preselected); a gate it left open has its
-  choices disabled with the reason in their tooltip and its own `runchat-resume` (#288).
+  choices disabled with the reason in their tooltip and its own `runchat-resume` (#288). A run
+  alive in another app window (its `listRuns` row's `runningElsewhere`) is not interrupted: it
+  ends with `runchat-elsewhere-note`, its gate says to answer it there, and no Resume.
 - **How a run is opened**: one global run view, `state.runView` (`'details' | 'chat'`, saved in
   localStorage `multiagent.runView`). Every way of opening a run (sidebar Run menu, toasts,
   notifications, "View run", Backlog run links, the gate badge, a resume) goes through

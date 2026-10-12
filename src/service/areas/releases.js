@@ -119,7 +119,8 @@ module.exports = (ctx) => {
     let next = null;
     const pending = [];
     for (const run of releaseRuns.filter((r) => String(r.startedAt || '') > last).sort((a, b) => String(b.startedAt).localeCompare(String(a.startedAt)))) {
-      const version = String(run.inputs?.version || '').trim() || 'next';
+      // started without a version: an explicit label ("Release (no version)"), never the filter's 'next'
+      const version = String(run.inputs?.version || '').trim() || '(no version)';
       if (versions.has(version)) continue;
       versions.add(version);
       next ??= nextOf(project, list.filter((r) => !isReleaseRun(r)));
