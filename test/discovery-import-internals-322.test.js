@@ -80,6 +80,13 @@ test('splitDocument of a task list makes each top-level checkbox an item and the
   assert.deepEqual(items.map((i) => i.acceptance), [['One row per run'], []]);
 });
 
+test('splitDocument reads a long line of spaces in linear time and drops closing #s of a heading', () => {
+  const started = Date.now();
+  const { items } = imports.splitDocument(`# Export runs ##\n- a${' '.repeat(200000)}x\n#${' '.repeat(200000)}y\n`);
+  assert.ok(Date.now() - started < 2000, 'split in under 2 s');
+  assert.deepEqual(items.map((i) => i.title), ['Export runs', 'y']);
+});
+
 test('importItems merges two items into the same card, both texts and criteria kept', (t) => {
   const dir = path.join(tmp(t), 'discovery');
   const card = discovery.createCard(dir, P, { title: 'Export runs', text: 'Original.' });

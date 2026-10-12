@@ -23,19 +23,22 @@ const discovery = require('./discovery');
 const MAX_IMPORT_ITEMS = 200;
 const ACTIONS = ['keep', 'skip', 'merge'];
 
-const HEADING = /^ {0,3}(#{1,6})[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*$/;
+// on lines without trailing spaces (splitDocument trims them): no pattern backtracks over a long line
+const HEADING = /^ {0,3}(#{1,6})[ \t]+(.*)$/;
+const CLOSING_HASHES = /\s#+$/;
 const FENCE = /^ {0,3}(`{3,}|~{3,})/;
-const LIST = /^([ \t]*)(?:[-*+]|\d{1,9}[.)])[ \t]+(.*?)[ \t]*$/;
-const CHECKBOX = /^[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+\[[ xX]\][ \t]+(.*?)[ \t]*$/;
+const LIST = /^([ \t]*)(?:[-*+]|\d{1,9}[.)])[ \t]+(.*)$/;
+const CHECKBOX = /^[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+\[[ xX]\][ \t]+(.*)$/;
 const BOX = /^\[[ xX]\][ \t]+/;
 
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const join = (...parts) => parts.map((s) => String(s ?? '').trim()).filter(Boolean).join('\n\n');
 const indent = (line) => /^[ \t]*/.exec(line)[0].replace(/\t/g, '    ').length;
 
-// An item's title from a heading or a list line: no checkbox, no wrapping emphasis, no final colon.
+// An item's title from a heading or a list line: no checkbox, no closing #s, no wrapping emphasis,
+// no final colon.
 function cleanTitle(text) {
-  return String(text ?? '').replace(BOX, '').replace(/^(\*\*|__)(.+)\1$/, '$2').replace(/:$/, '').trim();
+  return String(text ?? '').replace(BOX, '').replace(CLOSING_HASHES, '').trim().replace(/^(\*\*|__)(.+)\1$/, '$2').replace(/:$/, '').trim();
 }
 
 // The lines without their common indentation, joined; runs of blank lines become one.
@@ -87,7 +90,7 @@ function proseTitle(lines) {
  */
 function splitDocument(text, { name } = {}) {
   const label = name ? String(name) : 'The text';
-  const lines = String(text ?? '').replace(/^﻿/, '').replace(/\r\n?/g, '\n').split('\n');
+  const lines = String(text ?? '').replace(/^﻿/, '').replace(/\r\n?/g, '\n').split('\n').map((l) => l.trimEnd());
   if (!lines.some((l) => l.trim())) return { items: [], structured: false, note: `${label} is empty: there is nothing to import.` };
   const fenced = fencedLines(lines);
   const cut = (starts, titleOf) => starts.map((start, k) => {
