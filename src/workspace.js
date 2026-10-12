@@ -218,20 +218,29 @@ const DEFAULT_SETTINGS = {
   hiddenWorkflows: [],
 };
 
-function readSettings(ws) {
+// settings.json as saved: null when there is none, {} when it is not valid JSON
+function savedSettings(ws) {
   let text;
-  try { text = fs.readFileSync(ws.settings, 'utf8'); } catch { return { ...DEFAULT_SETTINGS, hiddenWorkflows: [] }; }
+  try { text = fs.readFileSync(ws.settings, 'utf8'); } catch { return null; }
+  try { const saved = JSON.parse(text); return saved && typeof saved === 'object' && !Array.isArray(saved) ? saved : {}; } catch { return {}; }
+}
+
+function readSettings(ws) {
+  const saved = savedSettings(ws);
+  if (!saved) return { ...DEFAULT_SETTINGS, hiddenWorkflows: [] };
   // an existing settings.json without setupDone: a workspace in use before Setup existed (#319)
-  let saved;
-  try { saved = JSON.parse(text); } catch { saved = {}; }
   return { ...DEFAULT_SETTINGS, hiddenWorkflows: [], setupDone: true, ...saved };
 }
 
 function writeSettings(ws, patch) {
+  const saved = savedSettings(ws);
   const next = { ...readSettings(ws), ...patch };
   for (const k of Object.keys(next)) if (!(k in DEFAULT_SETTINGS)) delete next[k];
+  // setupDone is written once known (#319: the Setup saves false when it opens, true at Finish or
+  // Skip); a first write without it (a seeded or scripted workspace) leaves it out, so it reads as set up
+  if (!(saved && 'setupDone' in saved) && !(patch && 'setupDone' in patch)) delete next.setupDone;
   fs.writeFileSync(ws.settings, JSON.stringify(next, null, 2));
-  return next;
+  return { setupDone: true, ...next };
 }
 
 // ---------------------------------------------------------------------------

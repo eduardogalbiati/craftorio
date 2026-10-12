@@ -390,12 +390,15 @@ async function renderTools() {
   const box = $('#set-tools');
   box.innerHTML = '<div class="s-row"><div class="s-label"><span>Checking…</span></div></div>';
   const tools = await api.envDetails();
+  setCliStates(tools); // the Start panel's missing CLIs follow (#319)
   box.innerHTML = tools.map((t) => `
     <div class="s-row">
       <div class="s-label">
         <b>${esc(t.name)}</b>
         <span>${t.path ? esc(t.version || 'unknown version') : 'Not found in PATH.'}${t.account ? ` · account <b>${esc(t.account)}</b>` : ''}</span>
         ${t.path ? `<code>${esc(t.path)}</code>` : t.installCommand ? commandHint(t.installCommand) : t.installHint ? `<span>Install: ${esc(t.installHint)}</span>` : ''}
+        ${t.path && !t.connected && t.auth && t.signInCommand ? commandHint(t.signInCommand, { signIn: true }) : ''}
+        ${t.path && !t.connected && t.output ? `<pre class="small muted">${esc(t.output)}</pre>` : ''}
       </div>
       <div class="s-ctrl"><span class="conn ${t.connected ? 'on' : 'off'}"><span class="conn-dot"></span>${t.connected ? 'Connected' : t.path ? (t.auth ? 'Not signed in' : 'Error') : 'Not installed'}</span></div>
     </div>`).join('');
@@ -538,9 +541,12 @@ registerView({
 
             <div class="settings-page hidden" data-spage="agents">
               <h2 class="settings-title">Agents &amp; CLIs</h2>
-              <p class="muted small">Agent sessions are opened with these CLIs. Sign in from the terminal (<span class="mono">claude</span>, <span class="mono">codex login</span>, <span class="mono">gh auth login</span>).</p>
+              <p class="muted small">Agent sessions are opened with these CLIs. A CLI that is not signed in shows its sign-in command; <b>Run setup again</b> walks through installing and signing in to each one.</p>
               <div id="set-tools" class="s-group"><div class="s-row"><div class="s-label"><span>Checking…</span></div></div></div>
-              <button id="btn-tools-refresh" class="btn sm ghost">Check again</button>
+              <div class="row">
+                <button id="btn-tools-refresh" class="btn sm ghost">Check again</button>
+                <button id="btn-setup-again" class="btn sm ghost" data-testid="setup-again">Run setup again</button>
+              </div>
             </div>
 
             <div class="settings-page hidden" data-spage="execution">
@@ -668,6 +674,7 @@ registerView({
     $('#btn-ws-open').onclick = () => api.openWorkspace();
     $('#btn-ws-change').onclick = changeWorkspace;
     $('#btn-tools-refresh').onclick = renderTools;
+    $('#btn-setup-again').onclick = () => window.Setup.open();
     document.querySelectorAll('[data-setting]').forEach((el) => (el.onchange = async () => {
       state.settings = await api.setSettings({ [el.dataset.setting]: el.checked });
       if (el.dataset.setting === 'developerMode') applyDeveloperMode();

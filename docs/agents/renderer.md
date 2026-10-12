@@ -10,6 +10,15 @@ Read this before changing anything in `src/renderer/`.
   Definitions shows agents with their session mode and capabilities, Builder is `views/workflows/builder.js`), agents, skills, usage,
   settings, run (+ run chat); terminal dock; supervisor drawer. The code map
   ([code-map.md](code-map.md)) says which file draws which screen.
+- **Setup** (#319, `views/setup/`): the first-run Setup, a modal-only view (`registerView` with
+  `modals`, no menu entry) with a stepper (Agents · Try it safely · Workflows · First project).
+  `init()` opens it when `settings.setupDone === false` (strictly: a workspace or a test double
+  without the key never sees it); Settings › Agents & CLIs › Run setup again calls
+  `window.Setup.open()`. Its pure parts (status badges, requirement badges, preselection, hidden
+  workflows) are `setup-model.js`, shared with Node (`src/workflow-requirements.js`). It sits under
+  the other dialogs (z-index 9, so the Skip confirm and New project show above it) and lifts the
+  terminal dock above itself while open. Check it with `npm run screenshot -- --view setup --mode
+  <agents | try-it-safely | workflows | first-project>` (`--missing-clis` for CLIs not installed).
 - **One folder per screen** (#78, moved in slices, the last in #154): every screen is
   `src/renderer/views/<view>/<view>.js` + `<view>.css`, plus the screen's other parts in the same
   folder; `index.html` holds no screen, only the app frame (top bar, sidebar with the Run item and

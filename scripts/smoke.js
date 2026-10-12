@@ -15,6 +15,8 @@ process.env.MULTIAGENT_SIMULATION_ONLY = '1';
 process.env.MULTIAGENT_MOCK_DELAY_SCALE ??= '0.2';
 const wsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'multiagent-smoke-ws-'));
 process.env.MULTIAGENT_WORKSPACE = wsDir; // scratch workspace, no workspace dialog
+// a workspace already set up: the first-run Setup (#319) would cover the run in the screenshot
+fs.writeFileSync(path.join(wsDir, 'settings.json'), JSON.stringify({ setupDone: true }));
 require('../src/main');
 
 const out = process.argv.find((a) => a.endsWith('.png')) || path.join(__dirname, '..', 'runs', 'smoke.png');

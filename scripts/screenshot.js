@@ -5,7 +5,7 @@
 //
 //   --view <name>      dashboard, sessions, projects, project, backlog, roadmap, artifacts, workflows, agents,
 //                      skills, usage, analytics, oracle, nightwatch, settings, duo, arena, inbox,
-//                      discovery, run-chat, run, home-empty
+//                      discovery, run-chat, run, home-empty, setup
 //                      (default dashboard, the menu's Home (#255: the flow strip, "What needs you" and
 //                      "Today" on demo data; its Analytics tab: --view analytics; home-empty: Home in a
 //                      new workspace, no project and no run: how to start); projects: Settings › Projects; roadmap: the
@@ -27,6 +27,8 @@
 //                      marker; run: AI Development runs, the newest shown; occupancy: 30 days of runs and nights;
 //                      agents: four weeks of the Oracle's, the Product Owner's and the Supervisor chat's turns, #280)
 //   --mode <name>      backlog: list | kanban | epics (roadmap: the Roadmap screen, #254)
+//                      setup (#319): the first-run Setup on one step: agents (default) | try-it-safely |
+//                      workflows | first-project (with --missing-clis: CLIs not installed)
 //                      nightwatch (#278): self-healing (Self-healing on since yesterday: "Self-healing
 //                      is on" in place of the end time, a finding of each detector, its days in the
 //                      report; its switch: --view settings --tab execution)
@@ -138,6 +140,8 @@ const VIEWS = {
   oracle: {},
   // Home in a new workspace (#255): no project and no run, how to start
   'home-empty': {},
+  // the first-run Setup (#319), one mode per step of its stepper
+  setup: { modes: ['agents', 'try-it-safely', 'workflows', 'first-project'] },
   // #254: the Roadmap screen; the same as --view backlog --mode roadmap (its tab until then)
   roadmap: {},
   // #260: the Releases screen (two shipped releases and the next one: #11, merged locally)
@@ -1615,7 +1619,11 @@ function main() {
     const projects = src('projects');
     const created = await projects.createProject(ws.projects, { name: 'demo-app', description: 'Sample project (simulated data)' });
     const project = projects.updateProject(ws.projects, created.id, { repo: DEMO_REPO });
-    workspace.writeSettings(ws, { developerMode: true, lastWorkflow: 'software-development.yaml', lastProject: project.id, keepAwake: !!args.keepAwake && args.keepAwake !== 'off' });
+    workspace.writeSettings(ws, {
+      developerMode: true, lastWorkflow: 'software-development.yaml', lastProject: project.id, keepAwake: !!args.keepAwake && args.keepAwake !== 'off',
+      // #319: --view setup shows a first run (the ready workflows picked); elsewhere the Setup is done
+      setupDone: args.view !== 'setup',
+    });
     // Home (#255) shows every stage of the flow: the Inbox, the backlog, the roadmap's runs, the local merge, the releases
     const home = args.view === 'dashboard';
     fs.mkdirSync(ws.backlog, { recursive: true });
@@ -1912,6 +1920,10 @@ function main() {
       } finally {
         clearInterval(approve);
       }
+    } else if (v === 'setup') {
+      // #319: Settings' Run setup again, on the asked step (an older --ref has no Setup: Home)
+      await js(`if (window.Setup) await window.Setup.open(${JSON.stringify(args.mode || 'agents')})`);
+      await pause(1500); // the CLI checks
     } else if (v === 'oracle') {
       await click('.nav-item[data-view="settings"]');
       await pause(300);

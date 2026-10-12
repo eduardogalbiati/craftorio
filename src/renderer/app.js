@@ -188,6 +188,8 @@ async function init() {
     if ($('#sup-drawer').classList.contains('open')) return closeSupervisor();
     if (!$('#budget-modal').classList.contains('hidden')) return closeModal('#budget-modal');
     if (!$('#project-modal').classList.contains('hidden')) return closeModal('#project-modal');
+    // the Setup (#319): Esc is its Skip, which asks first (once: not while that question shows)
+    if (window.Setup?.isOpen()) return $('#confirm-modal').classList.contains('hidden') ? window.Setup.skip() : undefined;
     if (!$('#skill-modal').classList.contains('hidden')) return closeModal('#skill-modal');
     if (!$('#agent-modal').classList.contains('hidden')) return closeModal('#agent-modal');
     if (!$('#wb-skills-modal').classList.contains('hidden')) return $('#btn-wb-skills-cancel').click();
@@ -237,10 +239,11 @@ async function init() {
   // a Run App copy opens on the screen the change is about (#119)
   if (viewRegistry.has(appInfo.startView)) showView(appInfo.startView);
 
-  // only a missing CLI is worth a line on the Start drawer: the warning before a real run fails
-  const env = await api.checkEnv();
-  $('#env-status').innerHTML = ['claude', 'codex'].filter((k) => !env[k]).map((k) =>
-    `<span class="missing">✗ ${k} not found in PATH (use simulation mode)</span>`).join('');
+  // #319: a new workspace opens the first-run Setup once (under the sign-in screen while it shows);
+  // `=== false`: a workspace whose settings say nothing (an old one, a test double) never does
+  if (state.settings.setupDone === false) window.Setup.open();
+  // the Start drawer lists what the chosen workflow lacks (start-drawer.js renderEnvStatus)
+  loadCliStatus();
 }
 
 // The runs in progress and the gates they wait at, from the engine (runs:active): read when the

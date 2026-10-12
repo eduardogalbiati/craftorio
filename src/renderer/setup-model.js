@@ -8,7 +8,8 @@
 // - missingRequirements(reqs, states): the CLI ids not 'ready', plus 'forge' when neither gh nor glab is;
 // - missingLabel(missing): 'Missing Codex CLI' for a card or the Start panel ('' when nothing);
 // - preselectedWorkflows(workflows, states): the ready ids, ai-development-local-hero first;
-// - visibleWorkflows(workflows, hidden): the workflows not hidden from Start, order kept.
+// - visibleWorkflows(workflows, hidden): the workflows not hidden from Start, order kept;
+// - workflowId(file): the id hiddenWorkflows keeps (the file name without .yaml).
 // Browser: window.SetupModel; Node: module.exports (src/workflow-requirements.js, the tests).
 // load: early
 (function (root) {
@@ -19,6 +20,8 @@
   const FORGE = 'GitHub or GitLab CLI';
 
   const toolName = (id) => NAMES[id] || String(id || '');
+  /** A workflow's id in settings.hiddenWorkflows: its file name without .yaml. */
+  const workflowId = (file) => String(file || '').replace(/\.ya?ml$/i, '');
 
   function statusBadge(tool) {
     if (tool?.checking) return { label: 'Checking…', state: 'checking' };
@@ -71,6 +74,7 @@
     toolName,
     toolRequirement,
     visibleWorkflows,
+    workflowId,
   };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.SetupModel = api;
