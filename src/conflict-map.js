@@ -184,7 +184,8 @@ async function fromGit(repo) {
   const changes = [];
   if (shared.size) {
     const patch = await git(['log', '-n', String(GIT_COMMITS), '-p', '-U0', '--no-merges', '--no-renames', '--no-color', '--format=%x1e%H', 'HEAD', '--', ...shared], repo);
-    for (const p of parsePatch(patch || '')) changes.push({ unit: p.sha, ...p });
+    // the path-limited log reaches past the window: keep only the window's commits
+    for (const p of parsePatch(patch || '')) if (byUnit.has(p.sha)) changes.push({ unit: p.sha, ...p });
   }
   return { source: 'git', runs: unitIds.length, runIds: unitIds, files, lines: linesOf(await hubLines(repo, changes, shared), unitIds) };
 }
