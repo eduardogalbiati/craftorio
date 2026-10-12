@@ -14,6 +14,7 @@ const skills = require('../../skills');
 const { BUNDLED_WORKFLOWS_DIR } = require('../common');
 const { bundleStatus, restoreBundled } = require('../../seed');
 const { mergeOf } = require('../../renderer/default-workflow');
+const { workflowRequirements } = require('../../workflow-requirements');
 
 module.exports = (ctx) => {
   const { host } = ctx;
@@ -50,6 +51,8 @@ module.exports = (ctx) => {
             outputs: wf.outputs || {},
             // how its work lands (#195): local (no push), remote (a branch and a PR/MR) or none
             merge: mergeOf(wf),
+            // #319: the CLIs it needs with its default inputs ({ clis, forge }), for Setup and Start
+            requirements: workflowRequirements(wf),
             // #282: the stations of the roadmap card's pipeline (RunProgress.workflowStations)
             groups: (wf.groups || []).map((g) => ({ name: g.name, steps: g.steps || [] })),
             agents: Object.fromEntries(Object.entries(wf.agents).map(([k, a]) => {

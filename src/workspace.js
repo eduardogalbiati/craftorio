@@ -210,10 +210,21 @@ const DEFAULT_SETTINGS = {
   voiceCommand: 'whisper-cli',
   voiceModel: 'small',
   voiceLanguage: 'pt',
+  // the first-run Setup (#319, src/renderer/setup.js): done once Finish or Skip is pressed; a
+  // settings.json written before Setup existed reads true (readSettings), so current users skip it
+  setupDone: false,
+  // workflow ids (file names without .yaml) the Setup's Workflows step left unpicked: hidden from
+  // Start and Home, shown again by Workflows › Definitions › Show in Start
+  hiddenWorkflows: [],
 };
 
 function readSettings(ws) {
-  try { return { ...DEFAULT_SETTINGS, ...JSON.parse(fs.readFileSync(ws.settings, 'utf8')) }; } catch { return { ...DEFAULT_SETTINGS }; }
+  let text;
+  try { text = fs.readFileSync(ws.settings, 'utf8'); } catch { return { ...DEFAULT_SETTINGS, hiddenWorkflows: [] }; }
+  // an existing settings.json without setupDone: a workspace in use before Setup existed (#319)
+  let saved;
+  try { saved = JSON.parse(text); } catch { saved = {}; }
+  return { ...DEFAULT_SETTINGS, hiddenWorkflows: [], setupDone: true, ...saved };
 }
 
 function writeSettings(ws, patch) {

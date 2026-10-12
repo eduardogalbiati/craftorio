@@ -11,7 +11,29 @@ npm install
 npm start
 ```
 
-Keep **Simulation mode** checked to try a flow without calling the CLIs.
+### Getting started
+
+On a new workspace, after the workspace folder and the sign-in, the app opens **Setup** (#319), a
+stepper you can leave at any time with **Skip** (Esc):
+
+1. **Agents**: one row per CLI (Claude Code and Git are required; Codex CLI and Grok Build enable
+   the multi-model workflows; GitHub CLI or GitLab CLI enable Backlog sync and pull requests), with
+   its status (Ready / Not signed in / Not installed), version and account. **▶ Install** and
+   **▶ Sign in** run the CLI's own command in the terminal dock, and the row checks again when that
+   terminal ends. Claude Code's sign-in is read from its credentials file (the Keychain on macOS),
+   never by calling a model.
+2. **Try it safely**: real runs use your own CLI subscriptions or credits; **Show simulation mode**
+   (on here) adds the Simulation checkbox to Start, which shows a whole flow for free. Turn it off
+   later in Settings › Execution › Developer mode.
+3. **Workflows**: the bundled workflows by category, each with what it needs ("Needs Codex") and
+   whether this computer has it; the ready ones are picked, and the others are hidden from Start and
+   Home (Workflows › Definitions › **Show in Start** brings one back; nothing is deleted).
+4. **First project**: adds a project; **Finish** opens Start on the first picked workflow, with
+   Simulation checked.
+
+Finish or Skip records `setupDone` in `settings.json`, so Setup does not open by itself again;
+Settings › Agents & CLIs › **Run setup again** reopens it. Workspaces created before Setup existed
+are marked as set up.
 
 ### Screens
 

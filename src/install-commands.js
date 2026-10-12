@@ -36,8 +36,22 @@ function installHint(id, platform = process.platform) {
   return installCommand(id, platform) || INSTALL_TEXT[id] || null;
 }
 
+// The sign-in command of each CLI with an account (#319: the first-run Setup's ▶ Sign in, run in a
+// command terminal like the install commands). Claude Code opens its interactive /login; the same
+// on every platform.
+function signInCommands() {
+  return {
+    claude: 'claude /login',
+    codex: 'codex login',
+    gh: 'gh auth login',
+    glab: 'glab auth login',
+    grok: 'grok login',
+  };
+}
+
 module.exports = {
   installCommand,
   installCommands,
   installHint,
+  signInCommands,
 };
