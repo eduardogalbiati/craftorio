@@ -46,7 +46,7 @@
     const m = Number(t?.multiplier) || 0;
     const v = t?.values || {};
     const pick = (k) => (day[k] ? Math.max(day[k], m ? day[k] * m : Number(v[k]) || 0) : 0);
-    return { context: pick('context'), cost: pick('cost'), duration: pick('duration'), turns: Math.max(1, m || Number(v.turns) || 1), budget: day.budget ? Math.max(day.budget, m ? day.budget * m : Number(v.budget) || 0) : Number(v.budget) || 0 };
+    return { context: pick('context'), cost: pick('cost'), duration: pick('duration'), turns: Math.max(1, m || Number(v.turns) || 1), budget: pick('budget') };
   }
   // "×2 tonight: context 80M, cost US$ 240, duration 16h, turns ×2; nightly budget US$ 150"
   function limitsSummary(day, t) {
