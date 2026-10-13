@@ -58,6 +58,33 @@ const sendJson = (res, status, body) => {
   res.end(JSON.stringify(body));
 };
 
+// (token) => (candidate) => boolean, compared in constant time
+function tokenCheck(token) {
+  const expected = crypto.createHash('sha256').update(String(token)).digest();
+  return (t) => !!t && crypto.timingSafeEqual(crypto.createHash('sha256').update(String(t)).digest(), expected);
+}
+
+const bearer = (req) => (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+
+// Browsers send Origin on cross-site requests; non-browser clients usually send none.
+function sameOrigin(req) {
+  if (!req.headers.origin) return true;
+  try { return new URL(req.headers.origin).host === req.headers.host; } catch { return false; }
+}
+
+// Calls a channel's function: { status, body } as POST /api/<channel> answers it. An error of the
+// channel itself (same message the desktop app shows): a refused input (status 4xx,
+// src/service/common.js requireId/requireText) is the client's error.
+async function callChannel(fn, arg) {
+  try {
+    const result = await fn(arg);
+    return { status: 200, body: { result: result === undefined ? null : result } };
+  } catch (e) {
+    const status = e && e.status >= 400 && e.status < 500 ? e.status : 500;
+    return { status, body: { error: (e && e.message) || String(e) } };
+  }
+}
+
 /**
  * @param service  the engine service (src/service)
  * @param auth     optional account module (src/auth): adds the auth:* channels and pushes auth:changed
@@ -66,18 +93,12 @@ const sendJson = (res, status, body) => {
  */
 function createServer({ service, auth = null, token, root = ROOT }) {
   if (!token || String(token).length < 16) throw new Error('The server needs a token of at least 16 characters.');
-  const expected = crypto.createHash('sha256').update(String(token)).digest();
-  const isToken = (t) => !!t && crypto.timingSafeEqual(crypto.createHash('sha256').update(String(t)).digest(), expected);
+  const isToken = tokenCheck(token);
   const cookieToken = (req) => {
     const c = (req.headers.cookie || '').split(/;\s*/).find((x) => x.startsWith(`${COOKIE}=`));
     try { return c ? decodeURIComponent(c.slice(COOKIE.length + 1)) : null; } catch { return null; }
   };
-  const authorized = (req) => isToken((req.headers.authorization || '').replace(/^Bearer\s+/i, '')) || isToken(cookieToken(req));
-  // Browsers send Origin on cross-site requests; non-browser clients usually send none.
-  const sameOrigin = (req) => {
-    if (!req.headers.origin) return true;
-    try { return new URL(req.headers.origin).host === req.headers.host; } catch { return false; }
-  };
+  const authorized = (req) => isToken(bearer(req)) || isToken(cookieToken(req));
 
   const api = { ...service.api };
   if (auth) for (const { channel, fn } of authChannels(auth)) if (channel) api[channel] = fn;
@@ -90,16 +111,8 @@ function createServer({ service, auth = null, token, root = ROOT }) {
     if (!fn) throw new HttpError(404, `Unknown channel: ${channel}`);
     if (req.method !== 'POST') throw new HttpError(405, 'Use POST.');
     const body = await readJson(req);
-    let result;
-    try {
-      result = await fn(body.arg);
-    } catch (e) {
-      // an error of the channel itself (same message the desktop app shows): a refused input
-      // (status 4xx, src/service/common.js requireId/requireText) is the client's error
-      const status = e && e.status >= 400 && e.status < 500 ? e.status : 500;
-      return sendJson(res, status, { error: (e && e.message) || String(e) });
-    }
-    sendJson(res, 200, { result: result === undefined ? null : result });
+    const answer = await callChannel(fn, body.arg);
+    sendJson(res, answer.status, answer.body);
   }
 
   function serveStatic(req, res, pathname) {
@@ -197,4 +210,14 @@ function createServer({ service, auth = null, token, root = ROOT }) {
   return server;
 }
 
-module.exports = { createServer, STATIC_DIRS };
+module.exports = {
+  bearer,
+  callChannel,
+  createServer,
+  HttpError,
+  readJson,
+  sameOrigin,
+  sendJson,
+  STATIC_DIRS,
+  tokenCheck,
+};

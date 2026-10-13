@@ -206,3 +206,15 @@ not allowed, or a fourth watch action on one item, `LOOP_CAP`; anything content 
 never in the Oracle's. Under the Night watch, what the owner runs or leaves waiting is in the night
 log. No inbox takes a kind that answers a human gate (`approval.*`, `gate.*`), whoever sends it. The Oracle's chat replies are in the owner's language, a deliberate exception
 to the English rule; everything it writes for the product is in English (skill `oracle`).
+
+## Outside sessions: the control channel (#336)
+
+A session outside the app (a Claude Code session working as Oracle or Product Owner on the
+workspace, a terminal) acts on the running app through the control endpoint, never by editing
+workspace files such as `backlog/<project>.roadmap.json`: an edited file races the screens (#287)
+and starts nothing. With Settings › Execution › "Allow outside sessions to control this app" on, the
+app writes `<workspace>/control/endpoint.json` (`url` on 127.0.0.1, `token`); `node scripts/ctl.js
+<channel> [json]` (or `curl` / `Invoke-RestMethod`) calls a channel of `src/control/allowlist.js`,
+and each call is logged in `control/calls.jsonl`. The allowlist never holds a channel that answers,
+skips or bypasses a human gate, nor `settings:set`; `confirmGate` is refused on any channel
+(`src/control/index.js`, docs/features/control-channel.md).

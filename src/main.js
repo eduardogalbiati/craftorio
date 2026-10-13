@@ -38,6 +38,7 @@ const localPreview = require('./local-preview');
 const runOwner = require('./run-owner');
 const { allowPermission } = require('./permissions');
 const { createService } = require('./service');
+const { createControlChannel } = require('./control');
 const { authChannels } = require('./service/manifest');
 const { createAuth, fileStorage } = require('./auth');
 const authConfig = require('./auth-config');
@@ -200,6 +201,14 @@ service.events.on('run:event', checkKeepAwake);
 service.events.on('settings:changed', () => keepAwake.update());
 ipcMain.handle('keepAwake:state', () => keepAwake.update());
 
+// ---- control channel (#336) ------------------------------------------------------------
+// Outside sessions drive this app through its own channels (src/control): opened and closed with
+// the setting, closed on quit; the Settings screen shows its port and endpoint file.
+const control = createControlChannel({ service });
+const updateControl = () => control.update().then((s) => { broadcast('control:changed', s); return s; });
+service.events.on('settings:changed', () => { updateControl().catch((e) => console.error('control channel:', e.message)); });
+ipcMain.handle('control:state', () => updateControl());
+
 // ---- desktop notifications -------------------------------------------------------------
 // The service decides what deserves one (settings, what the window shows); clicking it brings the
 // window forward on the run or session. Shown notifications are kept referenced until clicked or
@@ -352,6 +361,8 @@ ipcMain.handle('workspace:change', async () => {
   if (service.isRunning()) throw new Error('Cannot change the workspace while workflows are running.');
   const dir = await pickWorkspaceDir(win);
   if (dir) service.setWorkspace(workspace.setupWorkspace(dir));
+  // the endpoint follows the workspace (its own setting, its own control/ folder)
+  if (dir) await updateControl().catch((e) => console.error('control channel:', e.message));
   return service.workspace();
 });
 
@@ -441,6 +452,7 @@ function restartApp() {
     service.shutdown();
     // app.exit skips will-quit: the new process takes the workspace lock (and holds its own blocker)
     keepAwake.stop();
+    control.stop();
     workspaceLock?.release();
     app.relaunch();
     app.exit(0);
@@ -459,6 +471,7 @@ app.whenReady().then(async () => {
   agentsWindow = createAgentsWindow({ BrowserWindow, screen, statePath: path.join(ws.root, 'agents-window.json'), dirname: __dirname, devTools: !app.isPackaged });
   keepAwake.update();
   setInterval(() => keepAwake.update(), 15 * 1000).unref();
+  updateControl().catch((e) => console.error('control channel:', e.message));
   restrictPermissions(session.defaultSession);
   createWindow();
   // ended runs' worktrees and scratch (#202, #201): at start, then every 30 minutes (a folder a
@@ -474,10 +487,12 @@ app.whenReady().then(async () => {
 app.on('window-all-closed', () => {
   service.shutdown();
   keepAwake.stop();
+  control.stop();
   app.quit();
 });
 app.on('will-quit', () => {
   keepAwake.stop();
+  control.stop();
   workspaceLock?.release();
 });
 // a second copy started on the same user data folder: this window comes forward (#112)

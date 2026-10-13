@@ -16,6 +16,7 @@ module.exports = [
   { channel: 'clipboard:write', reason: 'desktop only (src/main.js): the system clipboard' },
   { channel: 'clipboard:writeFile', reason: 'desktop only (src/main.js): the system clipboard' },
   { channel: 'clipboard:writeImage', reason: 'desktop only (src/main.js): the system clipboard' },
+  { channel: 'control:state', reason: 'desktop only (src/main.js): the control channel endpoint (test/control-channel-336.test.js)' },
   { channel: 'dialog:pickFolder', reason: 'desktop only (src/main.js): a native dialog' },
   { channel: 'keepAwake:state', reason: 'desktop only (src/main.js): the power save blocker' },
   { channel: 'path:open', reason: 'desktop only (src/main.js): opens the file explorer' },

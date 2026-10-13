@@ -29,6 +29,31 @@ function renderTimeZone() {
   $('#set-time-zone-now').textContent = `Now ${TimeZone.formatDateTime(Date.now(), zone)} (${TimeZone.offsetLabel(Date.now(), zone)})`;
 }
 
+// Control channel (#336, src/control): main's endpoint state { enabled, port, file, error }. The
+// browser client (npm run serve) has no endpoint: the switch is disabled there.
+const controlChannelAvailable = () => api.platform !== 'browser' && typeof api.controlChannelState === 'function';
+function renderControlChannel(s, failure) {
+  const status = $('#set-control-status');
+  if (!status) return;
+  const available = controlChannelAvailable();
+  const box = document.querySelector('[data-setting="controlChannel"]');
+  if (box) box.disabled = !available;
+  const on = !!s?.enabled;
+  status.textContent = !available ? 'Not available in the browser client' : on ? `Listening on 127.0.0.1:${s.port} · ${s.file}` : 'Off';
+  status.title = status.textContent;
+  status.className = `badge ${on ? 'cat-monitor' : ''}`;
+  $('#set-control-error').textContent = failure || s?.error || '';
+}
+
+async function refreshControlChannel() {
+  if (!controlChannelAvailable()) return renderControlChannel(null);
+  try {
+    renderControlChannel(await api.controlChannelState());
+  } catch (e) {
+    renderControlChannel(null, errMsg(e));
+  }
+}
+
 async function renderSettings() {
   state.ws = await api.getWorkspace();
   state.settings = await api.getSettings();
@@ -62,6 +87,7 @@ async function renderSettings() {
   renderBudgetSettings();
   renderOracleWake();
   refreshKeepAwake();
+  refreshControlChannel();
   renderVoice();
   renderIndexStatus();
   renderDepsCache();
@@ -655,6 +681,11 @@ registerView({
                     <span class="keep-awake-line"><span class="badge keep-awake-status" data-keep-awake-status></span><span class="error small" data-keep-awake-error></span></span></div>
                   <label class="switch"><input type="checkbox" data-keep-awake-toggle aria-label="Keep awake" /><span></span></label>
                 </div>
+                <div class="s-row">
+                  <div class="s-label"><b>Allow outside sessions to control this app</b><span>A terminal or another agent on this computer can read runs, the backlog and settings and act on roadmaps through a local endpoint (control/endpoint.json, scripts/ctl.js). Human gates stay closed to it.</span>
+                    <span class="keep-awake-line"><span class="badge" data-testid="control-channel-status" id="set-control-status"></span><span class="error small" id="set-control-error"></span></span></div>
+                  <label class="switch"><input type="checkbox" data-setting="controlChannel" data-testid="setting-control-channel" aria-label="Allow outside sessions to control this app" /><span></span></label>
+                </div>
               </div>
               <div class="s-group">
                 <div class="s-row">
@@ -762,7 +793,9 @@ registerView({
     document.querySelectorAll('[data-setting]').forEach((el) => (el.onchange = async () => {
       state.settings = await api.setSettings({ [el.dataset.setting]: el.checked });
       if (el.dataset.setting === 'developerMode') applyDeveloperMode();
+      if (el.dataset.setting === 'controlChannel') refreshControlChannel();
     }));
+    api.onControlChannelChange?.(renderControlChannel);
     $('#set-time-zone').onchange = async (e) => { state.settings = await api.setSettings({ timeZone: e.target.value }); renderTimeZone(); TimeZone.notify(); };
     $('#set-backlog-platform').onchange = async (e) => { state.settings = await api.setSettings({ backlogPlatform: e.target.value }); };
     $('#set-default-workflow').onchange = async (e) => { state.settings = await api.setSettings({ defaultWorkflow: e.target.value || null }); renderDefaultWorkflow(); };

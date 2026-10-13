@@ -41,6 +41,9 @@ const DESKTOP = [
   // Keep awake (#162, src/keep-awake.js): the blocker's state, re-checked; pushed when it changes
   { channel: 'keepAwake:state', method: 'keepAwakeState', desktop: 'Keeping the computer awake' },
   { event: 'keepAwake:changed', method: 'onKeepAwakeChange' },
+  // Control channel (#336, src/control): { enabled, url, port, file, error }, re-checked; pushed when it changes
+  { channel: 'control:state', method: 'controlChannelState', desktop: 'The control channel for outside sessions' },
+  { event: 'control:changed', method: 'onControlChannelChange' },
   // The Agents window (#263, src/agents-window.js): open it on an agent ({ agent }), tell it which
   // agent it shows (remembered for the next open), and the main process asking it to switch
   { channel: 'agents-window:open', method: 'openAgentsWindow', params: 'options', desktop: 'The Agents window' },

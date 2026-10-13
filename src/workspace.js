@@ -187,6 +187,8 @@ const DEFAULT_SETTINGS = {
   memoryGuard: { enabled: true, limitPercent: 25, floorPercent: 10 },
   // Keep awake (#162, src/keep-awake.js): no sleep while runs, a roadmap or a queue have work to do
   keepAwake: false,
+  // Control channel (#336, src/control): outside sessions drive this app through a loopback endpoint
+  controlChannel: false,
   // the top bar's 24/7 chip (#188, src/renderer/occupancy-chip.js): the last 24 h occupancy
   showOccupancyChip: true,
   // warn when an agent shows no output for this long while a command it started is waiting; 0 = off
