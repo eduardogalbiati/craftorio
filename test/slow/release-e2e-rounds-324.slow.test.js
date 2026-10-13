@@ -58,7 +58,8 @@ async function runRelease(t, { mockSequences = {}, inputs: extra = {} } = {}) {
   const started = events.filter((e) => e.type === 'step.started').map((e) => e.step_id);
   const outputs = (stepId) => events.filter((e) => e.type === 'step.finished' && e.step_id === stepId).map((e) => e.output || {});
   const prompts = (stepId) => events.filter((e) => e.type === 'session.message_sent' && e.step_id === stepId).map((e) => String(e.prompt || ''));
-  return { started, outputs, prompts };
+  const shipGate = events.find((e) => e.type === 'approval.requested' && e.step_id === 'ship');
+  return { started, outputs, prompts, shipGate };
 }
 
 const failedFiles = (out) => [...new Set((out.failures || []).map((f) => f.file).filter(Boolean))].sort();
@@ -86,6 +87,16 @@ test('release (mock): round 1 runs the whole E2E suite; after a fix, round 2 run
   assert.deepEqual([...(r2.affected.files || [])].sort(), failed, 'the focused run ran the files that failed in round 1');
   assert.match(JSON.stringify(r2.selection || {}), /failed in round 1/, 'the selection says why');
   assert.equal(nextAfter(started, 'e2e', 2), 'review', `a green whole run leads to review (steps: ${started.join(', ')})`);
+});
+
+test('release (mock): after a focused-then-whole E2E round, the Ship gate reports the whole E2E suite green (#324)', { timeout: 120000 }, async (t) => {
+  const { started, shipGate } = await runRelease(t, { mockSequences: { suite: { unit: ['pass'], e2e: ['fail', 'pass'] } } });
+  assert.ok(shipGate, `the ship gate opened (steps: ${started.join(', ')})`);
+  const message = String(shipGate.message || '');
+  assert.match(message, /the whole E2E suite pass/);
+  const e2eLine = message.split('\n').find((l) => l.startsWith('E2E:')) || '';
+  assert.match(e2eLine, /The suite passed in round 2/, `the E2E line is the whole run's result: ${e2eLine}`);
+  assert.doesNotMatch(e2eLine, /selected tests/i);
 });
 
 test('release (mock): a focused E2E round that fails goes to fix without the whole run, and counts as a round (#324)', { timeout: 180000 }, async (t) => {

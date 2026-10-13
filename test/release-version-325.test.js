@@ -158,6 +158,29 @@ test('a release version lower than package.json never downgrades it and says so 
   assert.equal(head(dir), before);
 });
 
+for (const [what, text] of [['a byte order mark', '﻿{\n  "name": "app",\n  "version": "0.3.0"\n}\n'], ['invalid JSON', '{\n  "name": "app",\n  "version": "0.3.0",\n}\n']]) {
+  test(`a package.json with ${what} is left unchanged, with a reason (#325)`, async (t) => {
+    const dir = repoWith(t, { 'package.json': text });
+    const before = head(dir);
+    const r = await writeReleaseVersion({ dir, version: '1.2.0' });
+    assert.equal(r.written, false);
+    assert.ok(String(r.reason || '').trim(), 'a reason');
+    assert.equal(read(dir, 'package.json'), text);
+    assert.equal(head(dir), before);
+  });
+}
+
+test('a failed version commit leaves the files as they were and throws (#325)', async (t) => {
+  const dir = repoWith(t, { 'package.json': PKG_CRLF, 'package-lock.json': LOCK });
+  const before = head(dir);
+  fs.writeFileSync(path.join(dir, '.git', 'index.lock'), '');
+  t.after(() => fs.rmSync(path.join(dir, '.git', 'index.lock'), { force: true }));
+  await assert.rejects(async () => writeReleaseVersion({ dir, version: '1.2.0' }));
+  assert.equal(read(dir, 'package.json'), PKG_CRLF);
+  assert.equal(read(dir, 'package-lock.json'), LOCK);
+  assert.equal(head(dir), before);
+});
+
 test('mock: writes and commits nothing, and says what it would set (#325)', async (t) => {
   const dir = repoWith(t, { 'package.json': PKG_CRLF, 'package-lock.json': LOCK });
   const before = head(dir);
