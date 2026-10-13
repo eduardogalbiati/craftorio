@@ -132,7 +132,8 @@
       </div>
       <div class="fd-main">
         <div class="fd-stage">
-          <div class="fd-frame">
+          <div class="fd-frame" data-testid="findings-frame">
+            <span class="fd-frame-label">Frozen view · ${size.width}×${size.height}</span>
             ${image ? '<img class="fd-img" alt="The frozen view" draggable="false" />' : '<div class="fd-img fd-blank"></div>'}
             <canvas class="fd-canvas" data-testid="findings-canvas" aria-label="The frozen view: click or drag to mark it"></canvas>
             <div class="fd-pins"></div>
@@ -197,11 +198,16 @@
     cur.el.querySelector('.fd-canvas').dataset.tool = tool;
   }
 
-  // the frame shows the window scaled to fit the stage; marks are kept in the window's coordinates
+  // the frame shows the window scaled to fit the stage's content box, centred; marks are kept in the window's coordinates
   function layout() {
     if (!cur) return;
-    const stage = cur.el.querySelector('.fd-stage').getBoundingClientRect();
-    const scale = Math.min(1, (stage.width - 16) / cur.size.width, (stage.height - 16) / cur.size.height) || 1;
+    const stageEl = cur.el.querySelector('.fd-stage');
+    const pad = getComputedStyle(stageEl);
+    const room = {
+      width: stageEl.clientWidth - parseFloat(pad.paddingLeft) - parseFloat(pad.paddingRight),
+      height: stageEl.clientHeight - parseFloat(pad.paddingTop) - parseFloat(pad.paddingBottom),
+    };
+    const scale = Math.min(1, room.width / cur.size.width, room.height / cur.size.height) || 1;
     const w = Math.max(1, Math.round(cur.size.width * scale));
     const h = Math.max(1, Math.round(cur.size.height * scale));
     const frame = cur.el.querySelector('.fd-frame');
