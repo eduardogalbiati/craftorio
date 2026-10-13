@@ -239,9 +239,9 @@ test('every templated skill in the workflows resolves for every enum input value
 test('language and platform skill families are complete', () => {
   const ids = skills.listSkills(path.join(__dirname, '..', 'skills')).map((s) => s.id);
   const families = {
-    'unit-test-writer': ['js', 'python', 'go', 'java', 'csharp'],
-    'e2e-test-writer': ['js', 'python', 'go', 'java', 'csharp'],
-    'build-audit': ['js', 'python', 'go', 'java', 'csharp'],
+    'unit-test-writer': ['js', 'python', 'go', 'java', 'csharp', 'rust'],
+    'e2e-test-writer': ['js', 'python', 'go', 'java', 'csharp', 'rust'],
+    'build-audit': ['js', 'python', 'go', 'java', 'csharp', 'rust'],
     'ci-pipeline': ['gh', 'gl'],
     'pr-babysitter': ['gh', 'gl'],
     'pr-screenshots': ['gh', 'gl'],

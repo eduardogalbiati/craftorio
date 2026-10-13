@@ -36,6 +36,7 @@ test('detectLanguage: one marker file per language', (t) => {
     ['requirements.txt', 'python'],
     ['setup.py', 'python'],
     ['package.json', 'js'],
+    ['Cargo.toml', 'rust'],
   ];
   for (const [file, lang] of cases) {
     const dir = tmpDir(t);
@@ -50,10 +51,20 @@ test('detectLanguage: no marker file at all gives null', (t) => {
   assert.equal(detectLanguage(dir), null);
 });
 
-test('detectLanguage: go.mod wins over package.json (a JS tooling file does not hide the real language)', (t) => {
+// #340: a mixed repository proposes every language it detects, main one first, as one
+// comma-separated value of the `language` input ("go,js"); a single marker stays a single value.
+test('detectLanguage: go.mod next to package.json proposes both, Go first (a JS tooling file does not hide the real language)', (t) => {
   const dir = tmpDir(t);
   write(dir, 'go.mod', 'package.json');
-  assert.equal(detectLanguage(dir), 'go');
+  assert.equal(detectLanguage(dir), 'go,js');
+});
+
+test('detectLanguage: Cargo.toml next to package.json proposes both Rust and JavaScript (#340)', (t) => {
+  const dir = tmpDir(t);
+  write(dir, 'Cargo.toml', 'package.json');
+  const value = detectLanguage(dir);
+  assert.equal(typeof value, 'string');
+  assert.deepEqual(value.split(',').sort(), ['js', 'rust']);
 });
 
 test('detectLanguage: a folder that cannot be read gives null, not an error', () => {
@@ -109,6 +120,14 @@ test('inputHints: combines the detected language and the branches of a real proj
     assert.equal(h.language, 'js');
     assert.deepEqual(h.branches, ['main']);
     assert.equal(h.defaultBranch, 'main');
+  });
+});
+
+test('inputHints: a Rust workspace next to package.json hints both languages (#340)', (t) => {
+  const dir = tmpDir(t);
+  write(dir, 'package.json', 'Cargo.toml');
+  return inputHints(dir).then((h) => {
+    assert.deepEqual(String(h.language).split(',').sort(), ['js', 'rust']);
   });
 });
 

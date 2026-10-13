@@ -225,6 +225,27 @@ Then('{string} offers the choices {string}, {string}, {string}, {string} and {st
   expect((await radios.allTextContents()).map(norm)).toEqual([a, b, c, d, e].map(norm));
 });
 
+// #340: a field offers an option, whatever control draws it (a row of pills, a select, a list of
+// checkboxes for an input that takes several values); in the Start panel the field may sit in
+// "Advanced parameters", opened first when it is hidden there
+Then('the field {string} offers {string}', async ({ e2e }, field, option) => {
+  const page = e2e.window;
+  const control = page.getByRole('radiogroup', { name: field, exact: true })
+    .or(page.getByRole('combobox', { name: field, exact: true }))
+    .or(page.getByRole('group', { name: field, exact: true }))
+    .or(page.getByRole('listbox', { name: field, exact: true }))
+    .filter({ visible: true }).first();
+  if (!(await control.isVisible())) {
+    const advanced = page.getByText('Advanced parameters', { exact: true }).filter({ visible: true });
+    if (await advanced.count()) await advanced.first().click();
+  }
+  await expect(control).toBeVisible();
+  const choice = control.getByRole('radio', { name: option, exact: true })
+    .or(control.getByRole('option', { name: option, exact: true }))
+    .or(control.getByRole('checkbox', { name: option, exact: true }));
+  await expect(choice.first()).toBeAttached();
+});
+
 // #288: the chat of a run interrupted at a human gate (the app closed while the gate waited) shows a
 // note "Interrupted at <step>" (data-testid runchat-interrupted-note) instead of "Waiting for an
 // answer.", and a Resume button (data-testid runchat-resume) that opens the Resume from step dialog

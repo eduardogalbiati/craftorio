@@ -43,6 +43,14 @@ Feature: Runs and gates
     And "Developer effort" offers the choices "default", "low", "medium", "high" and "xhigh"
     And "Default" is selected for "Developer effort"
 
+  @issue-340
+  Scenario: The Start panel offers Rust as a project language
+    Given the app is open
+    When I open the Start panel
+    And I choose the workflow "software-development" in the Start panel
+    Then the field "Language" offers "Rust"
+    And the field "Language" offers "JavaScript"
+
   # Assumes the demo workspace (scripts/screenshot.js, demoRoadmapRuns) gets a finished run whose id
   # ends in "-run00233": its develop attempt 1/2 timed out, its cost estimated from the stream's model calls
   @issue-233
