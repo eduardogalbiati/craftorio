@@ -46,9 +46,10 @@ function samplesOf(run, byNumber, prices) {
   const steps = new Map();
   for (const s of run.sessions || []) {
     const step = baseStep(s.step_id);
+    // a cost neither reported nor priced is unknown, not zero (as src/cost-estimate.js)
     const cost = s.cost_usd ? s.cost_usd : sessionCost(s, prices);
-    const cur = steps.get(step) || { cost: 0, top: null, topCost: -1 };
-    cur.cost += cost || 0;
+    const cur = steps.get(step) || { cost: null, top: null, topCost: -1 };
+    if (cost != null) cur.cost = (cur.cost || 0) + cost;
     if ((cost || 0) > cur.topCost) Object.assign(cur, { top: s, topCost: cost || 0 });
     steps.set(step, cur);
   }
@@ -58,20 +59,16 @@ function samplesOf(run, byNumber, prices) {
   return [...steps].map(([step, v]) => ({
     step,
     class: classOf(v.top),
-    costPerPoint: v.cost / complexity,
+    costPerPoint: v.cost == null ? null : v.cost / complexity,
     minutes: minutes[step] ?? null,
   }));
 }
 
 // The medians of a window of samples: { costPerPoint, minutes, runIds }.
 function windowOf(list) {
-  const minutes = list.map((x) => x.minutes).filter((m) => m != null);
-  return {
-    costPerPoint: round(median(list.map((x) => x.costPerPoint))),
-    minutes: round(median(minutes)),
-    runIds: list.map((x) => x.runId),
-    raw: { costPerPoint: median(list.map((x) => x.costPerPoint)), minutes: median(minutes) },
-  };
+  const known = (field) => list.map((x) => x[field]).filter((v) => v != null);
+  const raw = { costPerPoint: median(known('costPerPoint')), minutes: median(known('minutes')) };
+  return { costPerPoint: round(raw.costPerPoint), minutes: round(raw.minutes), runIds: list.map((x) => x.runId), raw };
 }
 const publicWindow = ({ raw, ...w }) => w;
 
