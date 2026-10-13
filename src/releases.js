@@ -284,13 +284,20 @@ async function writeReleaseVersion({ dir, version, mock = false, branch = null }
   out.files = Object.keys(edits).filter((name) => edits[name].length);
   const change = `package.json ${out.from || '(no version)'} → ${out.to}`;
   if (mock) return { ...out, reason: `Simulation: nothing written; a real run would set ${change} (${out.files.join(', ')}).` };
-  for (const name of out.files) fs.writeFileSync(path.join(dir, name), applyEdits(texts[name], edits[name]));
   if (branch && !(await git(['symbolic-ref', '-q', 'HEAD'], dir).catch(() => null))) {
     const exists = await git(['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`], dir).catch(() => null);
     if (!exists) await git(['switch', '-c', branch], dir);
   }
-  await git(['add', '--', ...out.files], dir);
-  await git([...(await identityArgs(dir)), 'commit', '-q', '--no-verify', '-m', `Release ${out.to}: package.json version`, '--', ...out.files], dir);
+  for (const name of out.files) fs.writeFileSync(path.join(dir, name), applyEdits(texts[name], edits[name]));
+  try {
+    await git(['add', '--', ...out.files], dir);
+    await git([...(await identityArgs(dir)), 'commit', '-q', '--no-verify', '-m', `Release ${out.to}: package.json version`, '--', ...out.files], dir);
+  } catch (e) {
+    // nothing left half-done: an uncommitted change would stop Ship's local merge
+    for (const name of out.files) fs.writeFileSync(path.join(dir, name), texts[name]);
+    await git(['reset', '-q', '--', ...out.files], dir).catch(() => {});
+    throw e;
+  }
   return { ...out, written: true, commit: await git(['rev-parse', 'HEAD'], dir), reason: `Set ${change} and committed it.` };
 }
 
