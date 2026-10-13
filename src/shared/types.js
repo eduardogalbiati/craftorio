@@ -197,7 +197,7 @@
  * @property {Record<string, any>} inputs
  * @property {boolean} mock
  * @property {RoadmapIssue[]} issues
- * @property {'done' | 'failed' | 'planned' | 'running' | 'skipped'} status the file stores planned, done or skipped
+ * @property {import('./roadmap-model').RoadmapItemStatus} status
  * @property {string | null} runId
  * @property {string[]} runs
  * @property {string | null} error

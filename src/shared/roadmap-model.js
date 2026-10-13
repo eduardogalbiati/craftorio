@@ -11,6 +11,8 @@
 //   edit, move                   the item's editor, drag and ↑/↓/Remove (only planned or failed items)
 //   retry, skip                  the item that failed or could not start (#196)
 // Any load order: read only when a screen draws.
+/** An item's status, ITEM_STATES as a type (#346): the file stores planned, done or skipped.
+ * @typedef {'done' | 'failed' | 'planned' | 'running' | 'skipped'} RoadmapItemStatus */
 (function (root) {
   // planned: edited, never started by itself · running · paused (a failure, the owner, a proposal) · done
   const STATES = ['done', 'paused', 'planned', 'running'];
