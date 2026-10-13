@@ -7,6 +7,9 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
   project was never analysed, while an analysis runs, how many runs finished since the analysis, and
   when the analysis failed. The app runs in simulation: an analysis is simulated, never a real model.
   The demo project "demo-app" (features/support/app.js) is a plain folder, not a git repository.
+  "Map this project" (no map yet) and "Refresh the map" (a saved map) show the estimate of the
+  project map workflow first and start it only once confirmed; the tab advises a refresh, without
+  starting one, when more than 5% of the drawn files match no district or a new top-level folder appears.
 
   @issue-356
   Scenario: A project whose folder is not a git repository has no facts and nothing to analyse
@@ -42,3 +45,42 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     And the Architecture tab offers the "Analyze with the Oracle" button
     When I click "Analyze with the Oracle" on the Architecture tab
     Then the Architecture tab shows a report summary
+
+  @issue-372
+  Scenario: "Map this project" shows its estimate first and starts the project map only once confirmed
+    Given the app is open
+    And the workspace has a git project "billing-service" with a JavaScript and a Python file and no project map
+    When I open "Projects" in the sidebar
+    And I open the project "billing-service" from the Projects screen
+    And I open the "Architecture" project tab
+    Then the Architecture tab offers the "Map this project" map button
+    When I click the "Map this project" map button
+    Then the Architecture tab shows the estimate of the project map before starting it
+    And no project map run has started
+    When I confirm the project map
+    Then a project map run has started
+
+  @issue-372
+  Scenario: A project with a saved map offers "Refresh the map" with its estimate, and cancelling starts nothing
+    Given the app is open
+    And the workspace has a git project "billing-service" with a JavaScript and a Python file and a project map that covers both files
+    When I open "Projects" in the sidebar
+    And I open the project "billing-service" from the Projects screen
+    And I open the "Architecture" project tab
+    Then the Architecture tab offers the "Refresh the map" map button
+    And the Architecture tab does not advise refreshing the map
+    When I click the "Refresh the map" map button
+    Then the Architecture tab shows the estimate of the project map before starting it
+    When I cancel the project map
+    Then no project map run has started
+
+  @issue-372
+  Scenario: The tab advises refreshing the map when files match no district and a new top-level folder appears
+    Given the app is open
+    And the workspace has a git project "billing-service" with a JavaScript and a Python file and a project map that only covers the JavaScript file
+    When I open "Projects" in the sidebar
+    And I open the project "billing-service" from the Projects screen
+    And I open the "Architecture" project tab
+    Then the Architecture tab advises refreshing the map
+    And the Architecture tab offers the "Refresh the map" map button
+    And no project map run has started
