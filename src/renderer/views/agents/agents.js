@@ -11,7 +11,7 @@
 // Registers itself with registerView (view-registry.js), with the agent editor dialog.
 // Storage and validation are in src/agents.js. Uses app.js globals ($, esc, state, openModal,
 // closeModal, confirmDialog, errMsg, dateOf, showToast, showWorkflowDefinition) and window.Robots (robots.js).
-// load: after robots.js po-calibration.js (the agents' robots, the Product Owner's slider)
+// load: after robots.js (the agents' robots; the Product Owner's slider, src/shared/po-calibration.js, loads first)
 /* global api, Robots, PoCalibration */
 (() => {
   const SUPERVISOR = 'supervisor';

@@ -15,8 +15,8 @@
 //   with the issue link, or "Sent" while the request waits for the owner's click in its drawer.
 // - Esc or Cancel closes it; nothing is saved unless Save or File as issue was clicked.
 // Findings.renderList(el): Settings › General's list of saved findings with their status.
-// Uses app.js's globals at call time (api, esc, errMsg, state) and window.CurrentProject.
-// load: after findings-model.js
+// Uses app.js's globals at call time (api, esc, errMsg, state) and window.CurrentProject; reads
+// window.FindingsModel (src/shared/findings-model.js, loaded before the renderer's files) as it loads.
 (() => {
   const M = window.FindingsModel;
   const TOOLS = [['pin', 'Pin'], ['circle', 'Circle'], ['box', 'Box'], ['arrow', 'Arrow'], ['freehand', 'Freehand']];

@@ -41,9 +41,9 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { itemIssues, withSyncedText } = require('./backlog');
-const { normalizeThen } = require('./renderer/chain-model');
-const { isArchived } = require('./renderer/views/backlog/backlog-archive');
+const { itemIssues, withSyncedText } = require('./issues');
+const { normalizeThen } = require('./shared/chain-model');
+const { isArchived } = require('./shared/backlog-archive');
 const { writeJsonSafe } = require('./state-file');
 
 // planned: edited, never started by itself · running · paused (a failure, the owner, a proposal) · done

@@ -9,7 +9,7 @@
 // estimateProgress (#194): a run's estimated % along its workflow's steps, weighted by the typical
 // time of each step in past runs (typicalStepTimes), for the roadmap card's ring.
 // Browser: window.RunProgress; Node: module.exports.
-// load: early (app.js draws its run lists with it)
+// Loaded before the renderer's files, like every src/shared/ module (app.js draws its run lists with it).
 (function (root) {
   const baseStep = (id) => String(id || '').split(':')[0];
   const subStep = (id) => String(id || '').split(':')[1] || null;

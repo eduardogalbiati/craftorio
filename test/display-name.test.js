@@ -2,7 +2,7 @@
 // Backlog cards and the Run screen.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { displayName } = require('../src/renderer/display-name.js');
+const { displayName } = require('../src/shared/display-name.js');
 
 test('displayName: turns a snake_case slug into a capitalised name', () => {
   assert.equal(displayName('test_writer'), 'Test writer');

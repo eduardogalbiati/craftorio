@@ -13,7 +13,6 @@
 // - zones(): the IANA list for the Settings select; current(): the renderer's zone (state.settings);
 //   onChange(fn) / notify(): open screens redraw when the zone is loaded or changed.
 // Browser: window.TimeZone; Node: module.exports (src/time-zone.js re-exports it).
-// load: early
 (function (root) {
   const DAY_MS = 864e5;
   const formatters = new Map();

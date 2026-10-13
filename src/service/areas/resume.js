@@ -6,7 +6,7 @@
 const fs = require('fs');
 const path = require('path');
 const { loadWorkflow } = require('../../engine/workflow');
-const { displayName } = require('../../renderer/display-name');
+const { displayName } = require('../../shared/display-name');
 const runs = require('../../runs');
 const supervisor = require('../../supervisor');
 const { gitOut } = require('../common');

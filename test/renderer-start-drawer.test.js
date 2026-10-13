@@ -152,7 +152,7 @@ function envStatusHtml(cliStates, requirements = { clis: ['claude', 'codex', 'gi
     state: { wf: requirements ? { requirements } : {}, cliStates, cliTools: tools },
     $: () => box,
     esc: (s) => String(s),
-    SetupModel: require('../src/renderer/setup-model.js'),
+    SetupModel: require('../src/shared/setup-model.js'),
     canRunCommands: () => canRun,
     commandHint: (cmd, opts) => `[${opts?.signIn ? 'sign-in' : 'run'}: ${cmd}]`,
     devMode: () => dev,

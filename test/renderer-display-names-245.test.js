@@ -28,7 +28,7 @@ const path = require('path');
 const vm = require('vm');
 const yaml = require('js-yaml');
 const AgentColors = require('../src/renderer/agent-colors.js');
-const { displayName } = require('../src/renderer/display-name.js');
+const { displayName } = require('../src/shared/display-name.js');
 const { fakeRoot, waitTick } = require('./artifacts-panel-helpers');
 
 const R = path.join(__dirname, '..', 'src', 'renderer');
@@ -112,7 +112,7 @@ function loadRunList() {
   sandbox.window = sandbox;
   vm.createContext(sandbox);
   vm.runInContext(read('status-pill.js'), sandbox);
-  vm.runInContext(read('run-progress-model.js'), sandbox);
+  vm.runInContext(read('..', 'shared', 'run-progress-model.js'), sandbox);
   vm.runInContext(read('run-list.js'), sandbox);
   sandbox.PERSON = vm.runInContext('PERSON_SVG', sandbox);
   sandbox.ENGINE = vm.runInContext('ENGINE_SVG', sandbox);
@@ -156,8 +156,8 @@ function loadRoadmap() {
   sandbox.window.showRun = () => {};
   vm.createContext(sandbox);
   vm.runInContext(read('status-pill.js'), sandbox);
-  vm.runInContext(read('run-progress-model.js'), sandbox);
-  vm.runInContext(read('default-workflow.js'), sandbox);
+  vm.runInContext(read('..', 'shared', 'run-progress-model.js'), sandbox);
+  vm.runInContext(read('..', 'shared', 'default-workflow.js'), sandbox);
   vm.runInContext(read('workflow-inputs.js'), sandbox);
   if (fs.existsSync(path.join(R, 'estimates.js'))) vm.runInContext(read('estimates.js'), sandbox);
   vm.runInContext(read('views', 'backlog', 'backlog-roadmap.js'), sandbox);

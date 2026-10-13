@@ -3,7 +3,7 @@
 // test/service/chain.test.js; this file is the model alone (no engine, no files).
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const chain = require('../src/renderer/chain-model');
+const chain = require('../src/shared/chain-model');
 
 // ---- normalizeThen -------------------------------------------------------------------------------
 

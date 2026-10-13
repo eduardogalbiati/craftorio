@@ -18,8 +18,8 @@
 const fs = require('fs');
 const path = require('path');
 const capabilities = require('./engine/capabilities');
-const calibration = require('./renderer/po-calibration');
-const { displayName } = require('./renderer/display-name');
+const calibration = require('./shared/po-calibration');
+const { displayName } = require('./shared/display-name');
 const { loadWorkflow, render } = require('./engine/workflow');
 const { slugify } = require('./projects');
 const { isWorkflowFile } = require('./workflows');

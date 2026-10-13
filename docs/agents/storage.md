@@ -249,7 +249,7 @@ both removed by #285).
   index. Nothing is rewritten when the zone changes.
 - **The zone** is `settings.timeZone` (Settings › General › Time zone, an IANA name). Unset, it is
   the computer's: `readSettings` fills it in, `writeSettings` does not save it until one is chosen.
-- **One helper** cuts and formats: `src/renderer/time-zone.js` (`window.TimeZone`; `src/time-zone.js`
+- **One helper** cuts and formats: `src/shared/time-zone.js` (`window.TimeZone`; `src/time-zone.js`
   in the main process). Day keys, local midnights, weeks, months and visible times go through it.
 - **What follows the zone**: Analytics and Usage days and months, the agents' usage days, the
   Oracle's daily budget and its reset, the day budget (#206), the Product Owner's month, GitHub

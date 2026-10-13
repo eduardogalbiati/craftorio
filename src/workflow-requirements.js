@@ -12,7 +12,7 @@
 // - missingRequirements(reqs, states): from src/renderer/setup-model.js (shared with the renderer).
 
 const { render } = require('./engine/workflow');
-const { missingRequirements } = require('./renderer/setup-model');
+const { missingRequirements } = require('./shared/setup-model');
 
 const CLI_BY_TYPE = { 'claude-code': 'claude', 'codex-cli': 'codex', 'grok-cli': 'grok' };
 const CLIS = ['claude', 'codex', 'grok'];

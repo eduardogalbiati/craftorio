@@ -3,7 +3,8 @@
 // run's workflow.started `agent_names`). Fan-out labels ("a · b") are named part by part. The slug
 // stays in tooltips and details, for debugging.
 // Browser: window.displayName; Node: module.exports.
-// load: early (views/runchat/run-chat-model.js reads window.displayName as it loads)
+// Loaded before the renderer's files, like every src/shared/ module (views/runchat/run-chat-model.js
+// reads window.displayName as it loads).
 (function (root) {
   const ACRONYMS = new Set(['pr', 'ci', 'mr', 'qa', 'ui', 'api', 'ai', 'cli', 'ux', 'id', 'url', 'sql', 'e2e']);
 

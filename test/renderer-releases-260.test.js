@@ -139,8 +139,8 @@ function loadRoadmap() {
   sandbox.window.showRun = () => {};
   vm.createContext(sandbox);
   vm.runInContext(read('status-pill.js'), sandbox);
-  vm.runInContext(read('run-progress-model.js'), sandbox);
-  vm.runInContext(read('default-workflow.js'), sandbox);
+  vm.runInContext(read('..', 'shared', 'run-progress-model.js'), sandbox);
+  vm.runInContext(read('..', 'shared', 'default-workflow.js'), sandbox);
   vm.runInContext(read('workflow-inputs.js'), sandbox);
   if (fs.existsSync(path.join(R, 'estimates.js'))) vm.runInContext(read('estimates.js'), sandbox);
   vm.runInContext(read('views', 'backlog', 'backlog-roadmap.js'), sandbox);

@@ -16,7 +16,14 @@
 
 const fs = require('fs');
 const path = require('path');
-const backlog = require('./backlog');
+const {
+  PLATFORMS,
+  cliTarget,
+  execCli,
+  issueCreateCommand,
+  parseRepoUrl,
+  repoLabels,
+} = require('./issues');
 
 const EPIC_LABEL = 'epic';
 const SCOPE = 'epic::';
@@ -35,7 +42,7 @@ function slugify(title) {
 
 // gh api / glab api need the path without the host, and the host apart for a self-hosted server.
 function apiTarget(platform, repo) {
-  const parsed = backlog.parseRepoUrl(repo);
+  const parsed = parseRepoUrl(repo);
   if (!parsed) throw new Error(`The project's repository is not a recognizable git URL: ${repo || '(none)'}`);
   const own = platform === 'github' ? 'github.com' : 'gitlab.com';
   return { path: parsed.path, host: parsed.host, hostArgs: parsed.host === own ? [] : ['--hostname', parsed.host] };
@@ -46,7 +53,7 @@ function apiTarget(platform, repo) {
  * issue types): `gh issue list` cannot return the type, the REST issues list does (`type.name`). A
  * repository without issue types (or a failed read) gives none: the `epic` label still works.
  */
-async function typedEpics({ platform, repo, exec = backlog.execCli }) {
+async function typedEpics({ platform, repo, exec = execCli }) {
   try {
     const t = apiTarget(platform, repo);
     const out = await exec('gh', ['api', ...t.hostArgs, '--paginate', `repos/${t.path}/issues?state=all&per_page=100`, '--jq', '.[] | select(((.type.name // "") | ascii_downcase) == "epic") | .number']);
@@ -57,7 +64,7 @@ async function typedEpics({ platform, repo, exec = backlog.execCli }) {
 }
 
 /** The member numbers of a GitHub epic: its sub-issues of the same repository. */
-async function subIssues({ platform, repo, number, exec = backlog.execCli }) {
+async function subIssues({ platform, repo, number, exec = execCli }) {
   const t = apiTarget(platform, repo);
   const out = await exec('gh', ['api', ...t.hostArgs, `repos/${t.path}/issues/${Number(number)}/sub_issues?per_page=100`]);
   const own = `/repos/${t.path}`.toLowerCase();
@@ -73,9 +80,9 @@ const progressOf = (members, byNumber) => {
 
 /**
  * Reads the epics of a synced repository: { issues (each member with `epic`), epics, epicsError }.
- * `issues` come from backlog.fetchIssues (GitLab group epics from their `groupEpic`).
+ * `issues` come from fetchIssues (src/issues.js) (GitLab group epics from their `groupEpic`).
  */
-async function readEpics({ platform, repo, issues, exec = backlog.execCli }) {
+async function readEpics({ platform, repo, issues, exec = execCli }) {
   const byNumber = new Map(issues.map((i) => [i.number, i]));
   const epics = [];
   let epicsError = null;
@@ -136,8 +143,8 @@ const display = (cli, args, text) => `${cli} ${args.map((a) => (text && a === te
  * dir: where the text sent is kept (gh reads the new epic's body from a file there).
  * Returns { preview, commands: string[], epic: { id, number, title, url }, linked: number[] }.
  */
-async function applyEpic({ platform, repo, epic, issues = [], epics = [], dir, preview = false, exec = backlog.execCli }) {
-  if (!backlog.PLATFORMS[platform]?.cli) throw new Error('Epics need GitHub or GitLab.');
+async function applyEpic({ platform, repo, epic, issues = [], epics = [], dir, preview = false, exec = execCli }) {
+  if (!PLATFORMS[platform]?.cli) throw new Error('Epics need GitHub or GitLab.');
   const members = [...new Set((issues || []).map(Number).filter(Boolean))];
   const existing = epic?.id ? epics.find((e) => e.id === epic.id) : null;
   if (epic?.id && !existing) throw new Error(`Unknown epic ${epic.id}: sync the backlog again.`);
@@ -149,7 +156,7 @@ async function applyEpic({ platform, repo, epic, issues = [], epics = [], dir, p
     return preview ? '' : String(await exec(cli, args) || '');
   };
   const t = apiTarget(platform, repo);
-  const target = backlog.cliTarget(platform, repo);
+  const target = cliTarget(platform, repo);
   // GitLab group epics when the project already has some: a new epic goes to the same group
   const groupId = platform === 'gitlab' ? epics.find((e) => e.kind === 'group' && e.groupId)?.groupId : null;
   let made = existing ? { id: existing.id, number: existing.number, title, url: existing.url, kind: existing.kind, slug: existing.slug, iid: existing.iid, groupId: existing.groupId } : null;
@@ -164,14 +171,14 @@ async function applyEpic({ platform, repo, epic, issues = [], epics = [], dir, p
       const slug = slugify(title);
       const labels = platform === 'github' ? [EPIC_LABEL] : [EPIC_LABEL, `${SCOPE}${slug}`];
       if (platform === 'github') {
-        const known = preview ? [] : await backlog.repoLabels({ platform, repo, exec });
+        const known = preview ? [] : await repoLabels({ platform, repo, exec });
         if (!known.some((n) => n.toLowerCase() === EPIC_LABEL)) {
           await run('gh', ['label', 'create', EPIC_LABEL, '--repo', target, '--color', EPIC_COLOR, '--description', 'An epic: its sub-issues are its members', '--force']);
         }
       }
       const file = path.join(dir || '.', `${new Date().toISOString().replace(/[:.]/g, '-')}-epic-${slug}.md`);
       if (!preview && dir) { fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(file, body); }
-      const cmd = backlog.issueCreateCommand({ platform, repo, title, labels, file, text: body });
+      const cmd = issueCreateCommand({ platform, repo, title, labels, file, text: body });
       const out = await run(cmd.cli, cmd.args, body);
       const url = out.match(/https?:\/\/\S+/)?.[0] || null;
       const n = Number(url?.match(/\/(\d+)\/?$/)?.[1]) || null;

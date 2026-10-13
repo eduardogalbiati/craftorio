@@ -27,8 +27,9 @@ const { contractHash } = require('../service/contract');
 const PKG = require('../../package.json');
 
 const ROOT = path.join(__dirname, '..', '..');
-// the only folders served as static files (relative to ROOT); generated/: the run's 3D view (scripts/build-3d.js)
-const STATIC_DIRS = ['src/renderer/', 'generated/', 'node_modules/@xterm/xterm/', 'node_modules/@xterm/addon-fit/', 'node_modules/marked/', 'node_modules/dompurify/'];
+// the only folders served as static files (relative to ROOT); generated/: the run's 3D view (scripts/build-3d.js);
+// src/shared/: the pure modules index.html loads as ../shared/<file> (#345)
+const STATIC_DIRS = ['src/renderer/', 'src/shared/', 'generated/', 'node_modules/@xterm/xterm/', 'node_modules/@xterm/addon-fit/', 'node_modules/marked/', 'node_modules/dompurify/'];
 const TYPES = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.json': 'application/json', '.map': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2',

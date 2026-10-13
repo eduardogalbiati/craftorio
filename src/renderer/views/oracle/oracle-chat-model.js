@@ -152,7 +152,7 @@
 
   /** The default end of a Night watch: the next 07:00 in the owner's zone (#273, time-zone.js; unset: the computer's), as a datetime-local value. */
   function defaultNightEnd(now = new Date(), timeZone = null) {
-    const TZ = typeof TimeZone !== 'undefined' ? TimeZone : require('../../time-zone');
+    const TZ = typeof TimeZone !== 'undefined' ? TimeZone : require('../../../shared/time-zone');
     return TZ.inputValue(TZ.nextAt(7, 0, timeZone, now), timeZone);
   }
 

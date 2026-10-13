@@ -39,7 +39,7 @@
     return { prose: prose.trim(), json, decisions };
   }
 
-  const displayName = typeof module === 'object' && module.exports ? require('../../display-name.js').displayName : root.displayName;
+  const displayName = typeof module === 'object' && module.exports ? require('../../../shared/display-name.js').displayName : root.displayName;
   // what the run chat shows about a session's agent (the hover card): recorded in the events,
   // so a replayed run shows what was actually used
   // simulates (#262): a simulated session's workflow provider (provider is `mock`)

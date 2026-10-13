@@ -3,7 +3,7 @@
 //   screenshot.png  the window's capture
 //   marked.png      the capture with the marks drawn on it
 //   marks.json      the marks (pin, circle, box, arrow, freehand), each with its optional note; a pin
-//                   carries the element it resolved to (src/renderer/findings-model.js resolvePin)
+//                   carries the element it resolved to (src/shared/findings-model.js resolvePin)
 //   context.json    the state behind the screen, kept to an allow list (CONTEXT_KEYS), capped
 //                   (50 UI actions, 50 service calls, 200 main log lines), denied keys dropped at
 //                   every depth and token-shaped strings redacted: never tokens, auth state,

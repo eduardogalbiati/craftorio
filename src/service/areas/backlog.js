@@ -14,7 +14,7 @@ const refreshes = require('../../backlog-refresh');
 const { gitOut } = require('../common');
 const epics = require('../../epics');
 const roadmaps = require('../../roadmap');
-const { normalizeThen } = require('../../renderer/chain-model');
+const { normalizeThen } = require('../../shared/chain-model');
 const runs = require('../../runs');
 
 module.exports = (ctx) => {

@@ -26,7 +26,7 @@
 const path = require('path');
 const agents = require('../../agents');
 const backlog = require('../../backlog');
-const DefaultWorkflow = require('../../renderer/default-workflow');
+const DefaultWorkflow = require('../../shared/default-workflow');
 const notifier = require('../../notifications');
 const productOwner = require('../../product-owner');
 const projects = require('../../projects');
@@ -36,7 +36,7 @@ const simulation = require('../../engine/simulation');
 const usage = require('../../usage');
 const workspace = require('../../workspace');
 const { resolveCommand } = require('../../engine/providers');
-const { isArchived } = require('../../renderer/views/backlog/backlog-archive');
+const { isArchived } = require('../../shared/backlog-archive');
 const { requireObject } = require('../common');
 const {
   ANY,

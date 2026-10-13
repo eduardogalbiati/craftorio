@@ -16,7 +16,8 @@
 // tests-first one (testsFirst: AI Development, whose tests are always written and run), nor for one
 // without the inputs it sets; the drawer hides the Cost chip and the plan skips the step then.
 // Browser: window.PoCalibration; Node: module.exports.
-// load: early (views/agents/agents.js and views/backlog/backlog-po-settings.js read window.PoCalibration as they load)
+// Loaded before the renderer's files, like every src/shared/ module (views/agents/agents.js and
+// views/backlog/backlog-po-settings.js read window.PoCalibration as they load).
 (function (root) {
   const MIN = 1;
   const MAX = 5;

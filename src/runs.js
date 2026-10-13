@@ -14,7 +14,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { trailOf } = require('./renderer/run-progress-model');
+const { trailOf } = require('./shared/run-progress-model');
 const { defaultTitle, prOfEvents, readMeta } = require('./run-pr');
 const { ownerAlive, readOwner } = require('./run-owner');
 const { storeFor } = require('./store');

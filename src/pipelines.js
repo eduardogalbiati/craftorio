@@ -17,7 +17,7 @@
 
 const path = require('path');
 const yaml = require('js-yaml');
-const chain = require('./renderer/chain-model');
+const chain = require('./shared/chain-model');
 const { seedBundle, bundleStatus, restoreBundled } = require('./seed');
 const { WORKFLOW_KIND } = require('./workflows');
 

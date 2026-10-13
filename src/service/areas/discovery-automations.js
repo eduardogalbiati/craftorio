@@ -21,7 +21,7 @@
 const path = require('path');
 const { childRunCost, loadWorkflow } = require('../../engine/workflow');
 const simulation = require('../../engine/simulation');
-const chainModel = require('../../renderer/chain-model');
+const chainModel = require('../../shared/chain-model');
 const discovery = require('../../discovery');
 const projects = require('../../projects');
 const runs = require('../../runs');

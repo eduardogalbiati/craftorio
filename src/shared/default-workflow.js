@@ -8,7 +8,6 @@
 //   'remote' (pushed: a branch and a PR/MR) or 'none' (no worktree, or it never merges);
 // - current(): the renderer's default from state.settings and state.workflows (app.js globals).
 // Browser: window.DefaultWorkflow; Node: module.exports (src/product-owner.js).
-// load: early
 (function (root) {
   const LOCAL = 'software-development-local-hero.yaml';
   const REMOTE = 'software-development.yaml';

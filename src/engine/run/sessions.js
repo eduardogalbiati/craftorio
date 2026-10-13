@@ -16,7 +16,7 @@ const { totalTokens } = require('../../usage');
 const capabilities = require('../capabilities');
 const evidence = require('../../evidence');
 const testPaths = require('../test-paths');
-const chain = require('../../renderer/chain-model');
+const chain = require('../../shared/chain-model');
 const { changedFiles } = require('../affected-tests');
 const {
   expandSkillNames,

@@ -46,7 +46,7 @@ function loadOverlay() {
     });
   }
   vm.createContext(sandbox);
-  for (const file of ['findings-model.js', 'findings.js']) {
+  for (const file of ['../shared/findings-model.js', 'findings.js']) {
     vm.runInContext(fs.readFileSync(path.join(RENDERER, file), 'utf8'), sandbox, { filename: file });
   }
   return { sandbox, dom, document: dom.document, room };

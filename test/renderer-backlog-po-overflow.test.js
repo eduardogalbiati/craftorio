@@ -13,7 +13,7 @@ const vm = require('vm');
 
 const BACKLOG = path.join(__dirname, '..', 'src', 'renderer', 'views', 'backlog');
 const src = fs.readFileSync(path.join(BACKLOG, 'backlog-po-proposals.js'), 'utf8');
-const defaultWorkflowSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'default-workflow.js'), 'utf8');
+const defaultWorkflowSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'shared', 'default-workflow.js'), 'utf8');
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const unesc = (s) => String(s).replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
 const textOf = (html) => unesc(String(html).replace(/<[^>]*>/g, '')).replace(/\s+/g, ' ').trim();

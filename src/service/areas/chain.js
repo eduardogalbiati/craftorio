@@ -12,7 +12,7 @@
 const path = require('path');
 const { loadWorkflow } = require('../../engine/workflow');
 const simulation = require('../../engine/simulation');
-const chain = require('../../renderer/chain-model');
+const chain = require('../../shared/chain-model');
 const agents = require('../../agents');
 const backlog = require('../../backlog');
 const live = require('../../live-roadmap');

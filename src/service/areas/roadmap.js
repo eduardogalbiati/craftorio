@@ -17,7 +17,7 @@ const budget = require('../../budget');
 const costEstimate = require('../../cost-estimate');
 const roadmaps = require('../../roadmap');
 const runs = require('../../runs');
-const RunProgress = require('../../renderer/run-progress-model');
+const RunProgress = require('../../shared/run-progress-model');
 
 module.exports = (ctx) => {
   // a call while one is going runs again right after it (a run that ends meanwhile is never missed)

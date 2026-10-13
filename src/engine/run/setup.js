@@ -10,7 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const { checkAttachments, storeAttachments } = require('../providers');
 const { resolveSkill } = require('../../skills');
-const { displayName } = require('../../renderer/display-name');
+const { displayName } = require('../../shared/display-name');
 const { render } = require('./templates');
 const { MACHINE_STEP_TYPES, toBoolean } = require('./load');
 

@@ -7,7 +7,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const PoCalibration = require('../src/renderer/po-calibration');
+const PoCalibration = require('../src/shared/po-calibration');
 
 const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'views', 'backlog', 'backlog-po-settings.js'), 'utf8');
 

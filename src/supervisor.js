@@ -390,7 +390,8 @@ const DEFAULT_MODEL = 'claude-sonnet-5';
  * @returns { analysis, artifactPath, model, costUsd, steps }
  */
 async function analyzeRun({ runDir, question, workflowsDir, skillsDirs, resolveCommand, attachments = [] }) {
-  const { extractJson, validateSchema, render } = require('./engine/workflow');
+  const { extractJson, validateSchema } = require('./engine/run/outputs');
+  const { render } = require('./engine/run/templates');
   const { runTurn, storeAttachments } = require('./engine/providers');
   const images = storeAttachments(attachments, path.join(runDir, 'supervisor', 'attachments'));
   const { resolveSkill, skillPrompt } = require('./skills');
@@ -470,7 +471,8 @@ function sessionsReportMarkdown(r, { from, to, scope, model } = {}) {
  * @returns { report, reportPath, markdown, model, costUsd }
  */
 async function analyzeSessions({ report, from, to, scope, question, reportsDir, skillsDirs, resolveCommand, mock = false, provider: forced, model: forcedModel, attachments = [] }) {
-  const { extractJson, validateSchema, render } = require('./engine/workflow');
+  const { extractJson, validateSchema } = require('./engine/run/outputs');
+  const { render } = require('./engine/run/templates');
   const { runTurn, storeAttachments } = require('./engine/providers');
   const images = storeAttachments(attachments, path.join(reportsDir, 'attachments'));
   const { resolveSkill, skillPrompt } = require('./skills');

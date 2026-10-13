@@ -9,7 +9,7 @@ const os = require('os');
 const path = require('path');
 const { claudeAccount, claudeSignedIn } = require('../src/claude-auth');
 const { workflowRequirements } = require('../src/workflow-requirements');
-const { missingLabel, workflowId } = require('../src/renderer/setup-model');
+const { missingLabel, workflowId } = require('../src/shared/setup-model');
 const { layout, readSettings, writeSettings } = require('../src/workspace');
 
 const tmp = (t) => {

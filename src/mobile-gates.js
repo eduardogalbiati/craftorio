@@ -25,7 +25,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { continueText } = require('./session-cache');
-const { displayName } = require('./renderer/display-name');
+const { displayName } = require('./shared/display-name');
 
 const LINK_TTL_MS = 30 * 60e3;
 const CODE_TTL_MS = 10 * 60e3;

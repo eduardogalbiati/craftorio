@@ -140,8 +140,8 @@ function loadDrawer({ projectId = 'proj-a1b2' } = {}) {
   vm.runInContext(read('live-turn.js'), sandbox);
   // #274: the drawer's chat goes through the agents' shared component
   vm.runInContext(read('agent-chat.js'), sandbox);
-  vm.runInContext(read('po-calibration.js'), sandbox);
-  vm.runInContext(read('default-workflow.js'), sandbox);
+  vm.runInContext(read('..', 'shared', 'po-calibration.js'), sandbox);
+  vm.runInContext(read('..', 'shared', 'default-workflow.js'), sandbox);
   vm.runInContext(read('workflow-inputs.js'), sandbox);
   if (fs.existsSync(path.join(R, 'estimates.js'))) vm.runInContext(read('estimates.js'), sandbox);
   vm.runInContext(read('views', 'backlog', 'backlog-po-settings.js'), sandbox);

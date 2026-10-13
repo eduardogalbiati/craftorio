@@ -8,9 +8,9 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const RunProgress = require('../src/renderer/run-progress-model');
+const RunProgress = require('../src/shared/run-progress-model');
 const RunBadges = require('../src/renderer/run-badges');
-const ChainModel = require('../src/renderer/chain-model'); // #134: runInfo reads a run's chain through it
+const ChainModel = require('../src/shared/chain-model'); // #134: runInfo reads a run's chain through it
 
 // run titles, issues and PRs moved into run-meta.js: both files are searched
 const src = ['app.js', 'run-meta.js'].map((f) => fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', f), 'utf8')).join('\n');

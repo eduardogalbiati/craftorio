@@ -11,7 +11,6 @@
 // - visibleWorkflows(workflows, hidden): the workflows not hidden from Start, order kept;
 // - workflowId(file): the id hiddenWorkflows keeps (the file name without .yaml).
 // Browser: window.SetupModel; Node: module.exports (src/workflow-requirements.js, the tests).
-// load: early
 (function (root) {
   const NAMES = { claude: 'Claude Code', codex: 'Codex CLI', grok: 'Grok Build', gh: 'GitHub CLI', glab: 'GitLab CLI', git: 'Git' };
   const SHORT = { claude: 'Claude Code', codex: 'Codex', grok: 'Grok', git: 'Git' };

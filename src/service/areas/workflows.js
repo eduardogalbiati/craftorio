@@ -16,7 +16,7 @@ const builder = require('../../workflow-builder');
 const skills = require('../../skills');
 const { BUNDLED_WORKFLOWS_DIR } = require('../common');
 const { bundleStatus, restoreBundled } = require('../../seed');
-const { mergeOf } = require('../../renderer/default-workflow');
+const { mergeOf } = require('../../shared/default-workflow');
 const { workflowRequirements } = require('../../workflow-requirements');
 
 module.exports = (ctx) => {

@@ -31,8 +31,8 @@ const { writeResultSummary } = require('../result-summary');
 const { stopProcessesIn } = require('./processes');
 const { sharedMemoryGuard } = require('./memory-guard');
 const { runProbe } = require('./probes');
-const { StepTrail } = require('../renderer/run-progress-model');
-const chain = require('../renderer/chain-model');
+const { StepTrail } = require('../shared/run-progress-model');
+const chain = require('../shared/chain-model');
 const { BUNDLED_SKILLS, methods: sessionsMethods, OUTPUT_LANGUAGE } = require('./run/sessions');
 const { evalExpr, render, testsPlan } = require('./run/templates');
 const {

@@ -13,7 +13,7 @@ const capabilities = require('../capabilities');
 const { PROBES } = require('../probes');
 const { validateWorkflowStep } = require('../workflow-step');
 const testPaths = require('../test-paths');
-const chain = require('../../renderer/chain-model');
+const chain = require('../../shared/chain-model');
 const { render } = require('./templates');
 
 // A list of files in the YAML (`protect_files`, a suite step's `files`, #220): a template or a list of

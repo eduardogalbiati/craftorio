@@ -2,7 +2,7 @@
 // trail did at each (RunProgress.pipeline): internal details of the roadmap card's Workflow band.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { pipeline, workflowStations } = require('../src/renderer/run-progress-model');
+const { pipeline, workflowStations } = require('../src/shared/run-progress-model');
 
 const STEPS = [
   { id: 'acceptance_tests', type: 'agent', agent: 'test_writer' },
