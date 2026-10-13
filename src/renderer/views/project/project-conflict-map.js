@@ -99,7 +99,7 @@
     const action = issue
       ? `<a href="#" class="link-btn" data-pr-url="${esc(issue.url || '')}" title="${esc(issue.title || '')}">Open issue #${esc(issue.number)}</a>`
       : `<button type="button" class="btn sm ghost" data-pcm-issue="${esc(f.file)}" data-testid="pcm-create-issue">Create issue</button>`;
-    return `<div class="an-rec" data-testid="pcm-recommendation"><span class="badge warn">${esc(REC_LABEL[r.kind] || r.kind)}</span> <span>${esc(r.text)}</span> ${action}</div>`;
+    return `<div class="an-rec" data-testid="pcm-recommendation"><span class="badge warn">${esc(REC_LABEL[r.kind] || r.kind)}</span> <span>${esc(r.text)}</span><div class="an-rec-actions">${action}</div></div>`;
   }
 
   function detailHtml(r) {
@@ -122,7 +122,7 @@
 
   function tableHtml(rows, limit) {
     const map = cur.map;
-    return `<table class="u-table pcm-table"><thead><tr><th>File</th><th class="num" title="In the range; a file only the saved conflict map has counts the map's runs">Runs that edited it</th><th class="num">% of runs</th><th>Merge conflicts</th><th class="num">Lines now</th></tr></thead><tbody>
+    return `<table class="u-table an-sessions an-files pcm-table"><thead><tr><th>File</th><th class="num" title="In the range; a file only the saved conflict map has counts the map's runs">Runs that edited it</th><th class="num">% of runs</th><th>Merge conflicts</th><th class="num">Lines now</th></tr></thead><tbody>
       ${rows.map((r) => {
         const open = cur.open === r.file;
         const hot = isHot(map, r.map?.runIds);

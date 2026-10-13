@@ -10,8 +10,7 @@
 .an-project-shown { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; margin-bottom: 12px; }
 .an-project-shown .an-project-summary { padding-bottom: 0; }
 
-/* a file's recommendation */
-.an-files .an-rec-cell { min-width: 280px; max-width: 460px; }
+/* a file's recommendation (#354: in the project's Conflict map tab, views/project/project-conflict-map.js) */
 .an-rec { display: flex; flex-direction: column; gap: 3px; font-size: 12px; }
 .an-rec .badge { align-self: flex-start; }
 .an-rec-actions { margin-top: 2px; }

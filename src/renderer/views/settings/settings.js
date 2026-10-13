@@ -7,9 +7,7 @@
 // applyDeveloperMode, renderHeader, renderWorkspacePaths), commandHint (command-hint.js: the install
 // commands of missing CLIs) and window.BACKLOG_PLATFORMS (backlog.js).
 
-let settingsTab = 'general';
 function showSettingsTab(tab) {
-  settingsTab = tab;
   document.querySelectorAll('.settings-tab').forEach((b) => b.classList.toggle('active', b.dataset.stab === tab));
   document.querySelectorAll('.settings-page').forEach((p) => p.classList.toggle('hidden', p.dataset.spage !== tab));
   if (tab === 'agents') renderTools();
