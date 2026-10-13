@@ -595,6 +595,12 @@ function pauseStage(dir, projectId, stageId, { now = new Date() } = {}) {
     return { ...pauseRoadmap(r, message), pausedStage: stageId, pausedAt: now.toISOString() };
   });
 }
+
+/** #368: the pause line of the stage a roadmap paused at ({ state: 'paused', at, runs }: its paused items), else null (pure). */
+function stagePauseLine(r, stage) {
+  if (r.state !== 'paused' || r.pausedStage !== stage.id) return null;
+  return { state: 'paused', at: r.pausedAt || null, runs: stage.items.filter((x) => x.status === 'paused').length };
+}
 /** The roadmap ended: done, the scope and the pause cleared (pure). */
 const finishRoadmap = (r) => ({ ...r, state: 'done', error: null, pausedBy: null, scope: null });
 
@@ -747,6 +753,7 @@ module.exports = {
   setRelease,
   setState,
   skipClosed,
+  stagePauseLine,
   takeRelease,
   testsLater,
   updateRoadmap,

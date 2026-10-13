@@ -1,6 +1,6 @@
 // @ts-check
 // Steps without an agent (#250, from src/engine/workflow.js): `type: screenshots` (`runScreenshots`,
-// #144), `type: suite` (`runSuiteStep`, `suiteRound` with the memory guard's waits and reruns #276,
+// #144), `type: suite` (`runSuiteStep` naming its command for a pause #368, `suiteRounds`, `suiteRound` with the memory guard's waits and reruns #276,
 // `redCheckOutput` #220, `failedFirstRound` for `scope: failed` #324), `type: test_ids`
 // (`runTestIdsStep`, #246), `type: workflow` child runs (`runChildWorkflows`, #174), `type:
 // release_version` (`runReleaseVersionStep`, #325), and the evidence a step leaves (`recordEvidence`,
@@ -22,6 +22,7 @@ const { runWorkflowStep } = require('../workflow-step');
 const testIds = require('../test-ids');
 const { render } = require('./templates');
 const { parseDuration, renderFileList } = require('./load');
+const { pausedError } = require('./resume');
 const { gib } = require('./turns');
 
 // #276: a suite / e2e step waits at most this long for memory before it starts, and reruns at most
@@ -168,6 +169,16 @@ const methods = {
   // MAX_ENV_RERUNS times: only the last result is routed. mockSequences.suite.<step> is indexed by
   // execution (a visit plus its environment reruns).
   async runSuiteStep(step, st) {
+    // the command a pause waits for (#368, pauseState): it is never cut
+    this.liveCommand = step.command ? render(String(step.command), this.ctx).trim() : step.id;
+    try {
+      return await this.suiteRounds(step, st);
+    } finally {
+      this.liveCommand = null;
+    }
+  },
+
+  async suiteRounds(step, st) {
     const guard = this.memoryGuard;
     this.suiteEnvReruns ??= {}; // step -> environment reruns so far in this run
     for (let reruns = 0; ; reruns++) {
@@ -466,13 +477,17 @@ const methods = {
       this.emitEvent(type, data);
     };
     try {
-      return await runWorkflowStep({
+      const output = await runWorkflowStep({
         step, render, emit, startChild: this.startChild, signal: this.abort.signal, previous: this.previousChildren(step),
         // #368: the children pause with this run; none starts once it pauses
         paused: () => !!this.pausing, handles: this.childHandles,
         scope: { ...this.ctx, iteration: st.iteration },
         parent: { run_id: this.runId, workflow: this.wf.metadata?.name || path.basename(this.file), depth: this.parent?.depth || 0 },
       });
+      // #368: its children paused with this run: the run ends paused here, Resume runs the step
+      // again and resumes them where they paused
+      if (this.pausing && output.status === 'paused' && !this.abort.signal.aborted) throw pausedError();
+      return output;
     } finally {
       this.setStatus(this.orchestrator, 'active');
     }

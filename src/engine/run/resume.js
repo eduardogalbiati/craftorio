@@ -1,6 +1,7 @@
 // @ts-check
 // Resume from a step (#250, from src/engine/workflow.js): what a run restarted from a stopped one
-// reuses. `seedResume` (constructor) pre-seeds the previous run's step outputs, visits and
+// reuses (and, #368, what a paused run records for it: pausedError, pausedRecord; startResumed
+// yields before a resumed run's first step). `seedResume` (constructor) pre-seeds the previous run's step outputs, visits and
 // instruction; `replayConfirmedGate` (start, #112) records the gate the owner confirmed in the
 // Resume dialog as their decision; `resumeSession` continues an agent's previous provider
 // conversation (#233: the CLI's running total seeded); `previousChildren` (#175) the child runs the
@@ -11,7 +12,25 @@
 
 const { checkAttachments, seedClaudeTotal } = require('../providers');
 
+// #368: what ends a run that pauses (the step loop, a gate left unanswered, children that paused):
+// status `paused`, not an error (WorkflowRun#endOfError)
+const pausedError = () => Object.assign(new Error('Paused after the current turn'), { paused: true });
+
 const methods = {
+  // The start of a resumed run: it yields once first (#368: it may start at a gate, a run paused
+  // there; its starter gets the new run's id before the gate opens, so it hears it asked again),
+  // then records the gate the owner confirmed (replayConfirmedGate).
+  async startResumed() {
+    if (!this.resume) return;
+    await new Promise((resolve) => setImmediate(resolve));
+    this.replayConfirmedGate();
+  },
+
+  // #368: { paused: { step, next, at } } for a run that ended paused (summary.json, workflow.finished), else {}
+  pausedRecord(status) {
+    return status === 'paused' && this.paused ? { paused: this.paused } : {};
+  },
+
   // The previous run's step outputs and visits (never the resumed step's own, except for a paused
   // run, #368: its steps are its finished visits, so the resumed step counts on from them), its
   // instruction as the resumed step's supervisor note, and the images pasted into it (#130: checked
@@ -73,4 +92,5 @@ const methods = {
 
 module.exports = {
   methods,
+  pausedError,
 };

@@ -105,6 +105,19 @@ Human gates (feedback, choices, summaries), the supervisor, refused tool calls, 
   Rejecting a failure gate → `failed`; rejecting `human_review`/`approve_merge` → `cancelled`.
   Non-success keeps the worktree. When `max_visits`/`loop.max_iterations` runs out, the transition
   goes to `on_exhausted` WITHOUT its `delegate` (no unchecked "one more fix").
+- **Paused** (#368, the owner's "Pause after current turn"; never a `goto: end` status): `WorkflowRun#pause()`
+  (`run:pause`, a stage's `roadmap:pause-stage`) sets `pausing` and emits `run.pausing { step_id, agents?,
+  command? }`. Nothing is aborted: the turns in progress (every agent of a parallel step) and a suite
+  step's command (`liveCommand`) finish; the step loop checks `pausing` before each step (next to the
+  abort check) and ends the run there; a `type: workflow` step's children pause too (their handles'
+  `pause()`, none starts) and the step ends the run paused when they did. A run waiting at a gate
+  ends at once: its approval is rejected with a paused error, never answered (no `approval.resolved`),
+  and that unfinished visit is not counted. The run ends `paused` (`workflow.finished` and summary.json
+  `paused: { step, next, at }`: where Resume continues, whose turn is next), its worktree kept as it
+  is (`worktree.kept`, cleanupWorktrees never removes it), its sessions and handoff notes recorded.
+  `cancelPause()` (`run:cancel-pause`) takes it back while it waits (`run.pause_cancelled`). runs:active
+  gives a pausing run `pause: pauseState()`. A step's own extra turns (schema retries, the developer's
+  continuations after a cut turn) belong to the turn in progress: the pause waits for the step's end.
 - `ship: { tag, build? }` on a transition (#260, release.yaml's `ship` and `ship_failed` gates; both
   templates): after the transition's `action` and `merge: local`, `shipRelease` (src/releases.js)
   pushes the local base to origin (never forced; a rejected push throws) and tags that commit, then

@@ -109,7 +109,8 @@ body:not(.dev-mode) .dev-only { display: none !important; }
 .pill-running { background: rgba(124,156,255,.15); color: var(--accent); border-color: rgba(124,156,255,.35); }
 .pill-success { background: rgba(74,222,128,.12); color: var(--green); border-color: rgba(74,222,128,.3); }
 .pill-failed { background: rgba(248,113,113,.12); color: var(--red); border-color: rgba(248,113,113,.3); }
-.pill-cancelled { background: rgba(250,204,21,.12); color: var(--yellow); border-color: rgba(250,204,21,.3); }
+/* .pill-paused (#368): the header's pill of a paused run, StatusPill's colour for paused */
+.pill-cancelled, .pill-paused { background: rgba(250,204,21,.12); color: var(--yellow); border-color: rgba(250,204,21,.3); }
 
 .btn {
   border: 1px solid var(--border); background: var(--panel-2); color: var(--text);

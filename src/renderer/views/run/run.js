@@ -112,6 +112,7 @@ function runArtifactsPanel() {
 // What render() draws while the Run screen shows.
 function renderRunScreen() {
   renderRunBanner();
+  renderPauseBanner();
   renderChainBanner();
   renderRunGates();
   renderRunSummary();
@@ -363,6 +364,59 @@ function pipelineRunOf(r, pipe) {
   chainUi.pipes.set(pipe.id, { key, info: got?.info || null });
   api.pipelineRun(pipe.id).then((info) => { chainUi.pipes.set(pipe.id, { key, info }); renderChainBanner(); }).catch(() => {});
   return got?.info || null;
+}
+
+// #368: the run's pause line, while it pauses after the current turn (who or what it waits for, and
+// Cancel pause) and once it paused (where, whose turn comes next, when, and Resume, which continues
+// there). RunProgress.pauseLabel says it; `r.pause` comes from runs:active and the run's events.
+function renderPauseBanner() {
+  const r = selectedView().run;
+  const box = $('#run-pause-banner');
+  const p = r && ((r.status === 'running' && r.pause?.state === 'pausing') || (r.status === 'paused' && r.pause)) ? r.pause : null;
+  box.classList.toggle('hidden', !p);
+  const key = JSON.stringify([r?.id, p]);
+  if (box.dataset.key === key) return;
+  box.dataset.key = key;
+  if (!p) { box.innerHTML = ''; return; }
+  const action = p.state === 'pausing'
+    ? '<button type="button" class="btn sm ghost" data-pause-act="cancel" data-testid="run-cancel-pause" title="Take the pause back: the run goes on after the current turn">Cancel pause</button>'
+    : '<button type="button" class="btn sm primary" data-pause-act="resume" data-testid="run-resume" title="Continue this run where it paused: no finished turn runs again">Resume</button>';
+  box.innerHTML = `<div class="run-pause-state" data-testid="run-pause-state" data-state="${esc(p.state)}"><span class="run-pause-text">${esc(RunProgress.pauseLabel(p))}</span>${action}</div>`;
+}
+
+async function onPauseBannerClick(e) {
+  const b = e.target.closest('[data-pause-act]');
+  const r = selectedView().run;
+  if (!b || !r) return;
+  b.disabled = true;
+  try {
+    if (b.dataset.pauseAct === 'cancel') {
+      await api.cancelPauseRun(r.id);
+      r.pause = null;
+      scheduleRender();
+    } else {
+      await resumePausedRun(r);
+    }
+  } catch (err) {
+    showToast(b.dataset.pauseAct === 'cancel' ? 'Could not cancel the pause' : 'Could not resume the run', errMsg(err));
+  } finally {
+    b.disabled = false;
+  }
+}
+
+// Resume of a paused run: where it continues and what each agent's next turn re-reads (#320: a
+// prompt cache that expired meanwhile shows the first turn's extra cost, cold_resume_usd), then the
+// new run from that point.
+async function resumePausedRun(r) {
+  let o = null;
+  try { o = await api.resumeOptions(r.id); } catch { /* the line without the turns */ }
+  const at = o?.paused ? RunProgress.pauseLabel({ state: 'paused', ...o.paused }) : RunProgress.pauseLabel(r.pause);
+  const turns = o?.paused?.turns || [];
+  const names = { ...(r.display?.agents || {}), ...(r.agentNames || {}) };
+  const cont = turns.length ? ` ${SessionCache.continueText(turns, (a) => names[a] || a)}.` : '';
+  if (!(await confirmDialog('Resume the paused run', `${at}. Resume continues there: no finished turn runs again.${cont}`, 'Resume'))) return;
+  const { runId } = await api.resumeRun(r.id);
+  showRun(runId, { running: true });
 }
 
 function renderChainBanner() {
@@ -711,6 +765,7 @@ registerView({
   markup: `
       <section id="view-run" class="view hidden">
         <div id="run-fail-banner" class="fail-banner hidden"></div>
+        <div id="run-pause-banner" class="run-pause-banner hidden" aria-live="polite"></div>
         <div id="run-chain" class="chain-banner hidden" aria-live="polite"></div>
         <div id="run-gates" class="run-gates hidden" aria-live="polite"></div>
         <div class="run-modebar">
@@ -755,6 +810,7 @@ registerView({
       </section>`,
   mount() {
     $('#run-gates').onclick = onRunGateClick;
+    $('#run-pause-banner').onclick = onPauseBannerClick;
     $('#run-chain').onclick = onChainBannerClick;
     document.querySelectorAll('.tab[data-tab]').forEach((t) => (t.onclick = () => switchTab(t.dataset.tab)));
     $('#tab-detail').addEventListener('toggle', (e) => {

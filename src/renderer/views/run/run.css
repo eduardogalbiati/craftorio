@@ -127,6 +127,10 @@
 .fail-banner-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
 .fail-banner-text b { color: var(--red); }
 .fail-banner-text .mono { color: var(--text); opacity: .85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* #368: pausing after the current turn (Cancel pause) or paused (Resume); the yellow of a paused pill */
+.run-pause-banner { flex: none; padding: 8px 16px; background: rgba(250,204,21,.08); border-bottom: 1px solid rgba(250,204,21,.3); }
+.run-pause-state { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.run-pause-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* the run's chain (#134): what follows it, its state and actions; Edit opens the ChainPicker in it */
 .chain-banner { flex: none; padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--panel); }
 .chain-banner-head { display: flex; align-items: center; gap: 8px; min-width: 0; }

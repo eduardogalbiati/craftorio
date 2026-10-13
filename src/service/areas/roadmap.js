@@ -276,11 +276,10 @@ module.exports = (ctx) => {
   // A stage the roadmap paused at (#368), as the screen shows it: pausing while one of its runs still
   // finishes its turn (that run's pauseState), else paused since `at`; null for any other stage.
   function stagePause(r, stage) {
-    if (r.state !== 'paused' || r.pausedStage !== stage.id) return null;
+    const line = roadmaps.stagePauseLine(r, stage);
+    if (!line) return null;
     const live = stage.items.map((x) => x.runId && ctx.active.get(x.runId)).find((run) => run?.pausing);
-    if (live) return live.pauseState();
-    const runs = stage.items.filter((x) => x.status === 'paused').length;
-    return { state: 'paused', at: r.pausedAt || null, runs };
+    return live ? live.pauseState() : line;
   }
 
   return {

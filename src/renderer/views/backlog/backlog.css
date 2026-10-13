@@ -307,6 +307,8 @@ input[type=text].rm-name:hover { border-color: var(--border); }
 input[type=text].rm-name:focus { border-color: var(--accent); background: var(--panel-2); }
 input[type=text].rm-note { max-width: 520px; }
 .rm-note-text { margin: 0; overflow-wrap: anywhere; }
+/* #368: a stage paused (or pausing) after the current turn: the yellow of a paused pill */
+.rm-stage-pause { margin: 0; padding: 4px 8px; border-radius: 6px; color: var(--yellow); background: rgba(250,204,21,.08); border: 1px solid rgba(250,204,21,.3); overflow-wrap: anywhere; }
 /* #260: a cut line after a stage ("Release here"): a dashed rule on both sides of its label */
 .rm-cut { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; color: var(--accent); }
 .rm-cut::before, .rm-cut::after { content: ""; flex: 1 1 24px; border-top: 2px dashed currentColor; opacity: .6; }

@@ -8,6 +8,14 @@ appears once, in its latest form, naming what it replaced. The hard rules of
 [AGENTS.md](../../AGENTS.md) are not repeated here. This is not the `decision-log` skill (a run's
 own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
 
+- **2026-10-13** (#368): a run or a roadmap stage can be paused after the current agent turn: an
+  agent is never stopped in the middle of a turn (nor a running command), the run ends `paused`
+  with everything kept, and Resume continues from that point without redoing a finished turn. A
+  pause never answers a gate (a run at a gate pauses at once and asks it again on Resume), and only
+  the owner resumes a paused run (never the Night watch, the Oracle or the supervisor). Why: Stop cut
+  the turn in progress and Pause on the roadmap let the runs in progress go on, so updating the app,
+  the CLIs or the issues meant waiting for the runs or losing work.
+
 - **2026-10-13** (#356): a project's Architecture tab works for any language. The deterministic
   facts (lines, churn, hotspots, co-change, languages) are computed by the app from git, through a
   pure core in `src/shared/`; complexity comes only from a real tool, never a regex; the analysis is

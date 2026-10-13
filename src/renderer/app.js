@@ -165,6 +165,7 @@ window.openPastRun = openPastRun;
 async function init() {
   // top bar
   $('#btn-stop').onclick = stopRun;
+  $('#btn-pause').onclick = pauseRun;
   $('#btn-open-dir').onclick = () => api.openRunDir(state.run?.id);
   $('#btn-quick-start').onclick = () => openDrawer();
   $('#run-meta').onclick = () => state.run && selectRun(state.run.id);
@@ -272,6 +273,8 @@ async function loadActiveRuns() {
       hydrateRun(a.runId);
     }
     if (Array.isArray(a.gates)) v.approvals = new Map(a.gates.map((g) => [g.approval_id, { type: 'approval.requested', ...g, run_id: a.runId }]));
+    // #368: pausing after the current turn, as the engine says (a reloaded window included)
+    if (v.run && a.pause !== undefined) v.run.pause = a.pause;
   }
   for (const [runId, v] of state.runs) {
     if (live.has(runId) || v.run?.status !== 'running' || hydrating.has(runId)) continue;
@@ -413,7 +416,7 @@ function renderWorkspacePaths() {
   $('#workflows-dir').textContent = ws.workflows;
 }
 
-const runSessionStatus = (st) => ({ running: 'active', success: 'success', failed: 'failed', interrupted: 'failed', cancelled: 'cancelled' })[st] || 'idle';
+const runSessionStatus = (st) => ({ running: 'active', success: 'success', failed: 'failed', interrupted: 'failed', cancelled: 'cancelled', paused: 'cancelled' })[st] || 'idle';
 // a run's status as people read it (#266, StatusPill): "Running (simulation)", "Succeeded", "Idle" without a run
 const statusLabel = (r) => `${StatusPill.statusLabel(r?.status || 'idle')}${r?.status === 'running' && r.mock ? ' (simulation)' : ''}`;
 
@@ -429,6 +432,21 @@ async function stopRun() {
   const children = kids.length ? `Its ${kids.length} child run${kids.length > 1 ? 's' : ''} in progress (${kids.map((c) => c.label || c.run_id).join(', ')}) will be stopped too; resuming this run resumes them. ` : '';
   if ((state.settings.confirmStop || passed.length || kids.length) && !(await confirmDialog('Stop workflow', `${why}${children}Running sessions of ${runLabel(r)} will be closed. Stop this run?`, 'Stop'))) return;
   api.stopRun(r.id);
+}
+
+// #368: pauses the run shown in the top bar after its current turn: its agents finish their turns
+// (a step command its run), nothing new starts, then it ends paused; the Run screen's pause line
+// says what it waits for and offers Cancel pause. Nothing is lost, so it never asks first.
+async function pauseRun() {
+  const r = state.run;
+  if (r?.status !== 'running' || r.pause) return;
+  try {
+    await api.pauseRun(r.id);
+    if (r.status === 'running' && !r.pause) r.pause = { state: 'pausing', at: new Date().toISOString() };
+    scheduleRender();
+  } catch (e) {
+    showToast('Could not pause the run', errMsg(e));
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -585,6 +603,23 @@ function pruneRuns() {
   }
 }
 
+// The supervisor's decision on a step: the orchestrator's line, and a toast while live.
+function onSupervisorDecision(v, ev) {
+  const target = ev.action === 'goto' && ev.goto ? ` ${ev.goto}` : '';
+  orch(ev, `◆ supervisor → ${ev.action}${target}${ev.cause_class ? ` [${ev.cause_class}]` : ''} — ${ev.explanation || ''}${ev.note ? ` (${ev.note})` : ''}`, 'supervisor');
+  if (!replaying) showToast(`◆ Supervisor on "${ev.step_id}"${liveRuns().length > 1 ? ` (${runLabel(v.run)})` : ''}: ${SUP_ACTIONS[ev.action] || ev.action}`, ev.explanation, ev.run_id);
+}
+
+// #368: run.pausing / run.pause_cancelled → the run's pause (the Run screen's pause line) and the orchestrator's line.
+function onPauseEvent(v, ev) {
+  const pausing = ev.type === 'run.pausing';
+  if (v.run) v.run.pause = pausing ? { state: 'pausing', step: ev.step_id, agents: ev.agents, command: ev.command, at: ev.ts } : null;
+  orch(ev, pausing ? `pausing after the current turn${ev.step_id ? ` (${ev.step_id})` : ''}` : 'pause cancelled: the run goes on', 'transition');
+}
+
+// #368: where a paused run stopped and whose turn is next (its Resume continues there); null for any other end.
+const finishedPause = (ev) => (ev.status === 'paused' && ev.paused ? { state: 'paused', ...ev.paused } : null);
+
 function onEvent(ev) {
   if (ev.type === 'workflow.started' || ev.type === 'workflow.finished') reportNotifyContext();
   if (!replaying) scheduleActiveSync();
@@ -617,6 +652,12 @@ function onEvent(ev) {
       pruneRuns();
       break;
 
+    // #368: pausing after the current turn (the Run screen's pause line), or the pause taken back
+    case 'run.pausing':
+    case 'run.pause_cancelled':
+      onPauseEvent(v, ev);
+      break;
+
     // the chain edited while the run goes (#134): the Run screen's chain banner
     case 'run.then':
       if (v.run) v.run.chain = ChainModel.withThen(v.run.chain, ev.then);
@@ -641,6 +682,7 @@ function onEvent(ev) {
       v.run.status = ev.status;
       v.run.finishedAt = Date.parse(ev.ts);
       v.run.error = ev.error || null;
+      v.run.pause = finishedPause(ev);
       // what the chain did is read again once the service acted on it (#134, views/run/run.js)
       v.chainLoaded = false;
       v.steps.forEach((s) => { if (s.status !== 'pending') s.status = 'done'; });
@@ -807,12 +849,9 @@ function onEvent(ev) {
       orch(ev, `◆ supervisor called on ${ev.step_id}: ${ev.error || 'step failed'}`, 'supervisor');
       break;
 
-    case 'supervisor.decision': {
-      const target = ev.action === 'goto' && ev.goto ? ` ${ev.goto}` : '';
-      orch(ev, `◆ supervisor → ${ev.action}${target}${ev.cause_class ? ` [${ev.cause_class}]` : ''} — ${ev.explanation || ''}${ev.note ? ` (${ev.note})` : ''}`, 'supervisor');
-      if (!replaying) showToast(`◆ Supervisor on "${ev.step_id}"${liveRuns().length > 1 ? ` (${runLabel(v.run)})` : ''}: ${SUP_ACTIONS[ev.action] || ev.action}`, ev.explanation, ev.run_id);
+    case 'supervisor.decision':
+      onSupervisorDecision(v, ev);
       break;
-    }
   }
   // the run's row in the runs lists follows its steps from here, without a reload
   if (v.trail?.apply(ev) && !replaying) renderRunListsSoon();
@@ -895,16 +934,20 @@ function renderHeader() {
   }
   $('#btn-stop').disabled = st !== 'running';
   $('#btn-stop').title = st === 'running' ? `Stop ${runLabel(r)} (only this run)` : '';
+  // #368: offered while the run goes and is not pausing already (the Run screen's pause line then has Cancel pause)
+  const pausable = st === 'running' && !r.pause && !selectedView().past;
+  $('#btn-pause').classList.toggle('hidden', !pausable);
+  $('#btn-pause').title = pausable ? `Pause ${runLabel(r)} once its agents finish their current turn: nothing is cut, Resume continues there` : '';
   const blocked = oneRunAtATime();
   setStartDisabled(blocked || !state.wf || !!state.wf.error);
   $('#btn-start').textContent = blocked ? 'A workflow is already running' : state.pipeline ? 'Start pipeline' : 'Start workflow';
   if (state.view === 'dashboard') renderDashboard();
 }
 
-// The runs the sidebar lists under Run: in progress, or failed/interrupted (they need attention:
+// The runs the sidebar lists under Run: in progress, or failed/interrupted/paused (they need attention:
 // resume, supervisor, and are otherwise unreachable here), or waiting at a gate. A run that
 // finished leaves the list, even when it is the one shown in the top bar.
-const navRunsList = () => [...state.runs.values()].filter((v) => v.run && (['running', 'failed', 'interrupted'].includes(v.run.status) || v.approvals.size));
+const navRunsList = () => [...state.runs.values()].filter((v) => v.run && (['running', 'failed', 'interrupted', 'paused'].includes(v.run.status) || v.approvals.size));
 // The Run item's dot (#142): what is in progress across runs, not the run shown in the top bar.
 // A gate wins (it needs the owner), then a running run, then a failed/interrupted one still listed.
 function navRunState(list) {

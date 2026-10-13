@@ -36,6 +36,10 @@ const PATTERNS = {
   pruneRuns: /function pruneRuns\(\) \{[\s\S]*?\n\}/,
   hydrateBlock: /const hydrating = new Map\(\);[\s\S]*?\nasync function hydrateRun\(runId\) \{[\s\S]*?\n\}/,
   onEvent: /function onEvent\(ev\) \{[\s\S]*?\n\}/,
+  // onEvent's helpers (#368: the run's pause; the supervisor's decision)
+  onSupervisorDecision: /function onSupervisorDecision\(v, ev\) \{[\s\S]*?\n\}/,
+  onPauseEvent: /function onPauseEvent\(v, ev\) \{[\s\S]*?\n\}/,
+  finishedPause: /const finishedPause = [^\n]+;/,
   orch: /function orch\(ev, text, level = ''\) \{[\s\S]*?\n\}/,
   PROJECT_REFRESH_EVENTS: /const PROJECT_REFRESH_EVENTS = new Set\(\[[^\]]+\]\);/,
   RUN_ROW_EVENTS: /const RUN_ROW_EVENTS = new Set\(\[[^\]]+\]\);/,

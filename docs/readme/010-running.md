@@ -39,6 +39,16 @@ The **Start** button at the top (next to Stop) opens the right side panel: pick 
 the project (its folder becomes `repo_path`/`project_path`) and the input. During and after a
 run, **Run** shows up at the bottom of the menu with the sessions and events.
 
+**Pause after current turn** (#368, next to Stop) holds a run without cutting any agent: the agents
+at work finish their turns (every agent of a parallel step, and a build or suite command its run),
+then the run ends **Paused**, its worktree, branch, outputs and sessions kept. While it waits the Run
+screen says "Pausing: waiting for developer to finish its turn (develop)" with **Cancel pause**;
+then "Paused at code_review, next: reviewer's turn" and when, with **Resume**, which continues there
+(also after the app or a CLI was updated): no finished turn runs again, and the confirmation shows
+what each agent's next turn re-reads (a cold cache with its extra cost). A run waiting at a gate
+pauses at once and asks the same gate again on Resume. Only you resume a paused run: the Night watch,
+the Oracle and the supervisor never do. A roadmap stage's ⋮ menu pauses all its runs the same way.
+
 Each agent session shows its **Next turn** (#320; the run's session table in Projects › Runs and
 Workflows › Runs, and a metric on the Run screen's session cards): "fresh from note" (it starts a
 new session from its handoff note), "warm · 42 min left" (it resumes while its prompt cache lives),

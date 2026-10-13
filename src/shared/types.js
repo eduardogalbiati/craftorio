@@ -74,7 +74,7 @@
  * @property {string} [workflow] the workflow's metadata.name
  * @property {string | null} project_id
  * @property {'success' | 'failed' | 'cancelled' | 'paused'} status
- * @property {{ step: string, next: string | null, at: string }} [paused] #368: where a paused run stopped (Resume continues there)
+ * @property {{ step: string, next: string | null, at: string }} [paused] where a paused run stopped, Resume continues there (issue 368)
  * @property {string} started_at
  * @property {string} finished_at
  * @property {number} duration_ms

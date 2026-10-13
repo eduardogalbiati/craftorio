@@ -703,6 +703,8 @@
       off ? entry('data-rm-toggle-stage data-testid="roadmap-stage-toggle" aria-pressed="true"', 'Enable', 'Run this stage with the roadmap again, in its turn')
         : done ? '' : entry('data-rm-toggle-stage data-testid="roadmap-stage-toggle" aria-pressed="false"', 'Disable', 'Skip this stage while the roadmap runs; it stays in the list', acts.disable.reason),
       entry('data-rm-run-stage', '<span aria-hidden="true">▶ </span>Run this stage', 'Run only this stage\'s items; the roadmap pauses when they are done', acts.start.reason),
+      // #368: nothing is cut: its agents finish their turns, then its runs and the roadmap pause
+      done ? '' : entry('data-rm-pause-stage data-testid="roadmap-stage-pause"', 'Pause after current turn', 'Its runs stop once their agents finish the current turn and nothing new starts; Resume continues them where they stopped', acts.pauseStage.reason),
       stage.release?.name ? '' : entry('data-rm-release="add"', '<span aria-hidden="true">✂ </span>Release here', 'Draw a cut line after this stage: when the roadmap reaches it, the whole unit and E2E suites run and you Ship or Hold; the stages below wait for it'),
       entry('data-rm-stage="up"', '<span aria-hidden="true">↑ </span>Run earlier', 'Run this stage earlier', s === 0 ? 'It is the first stage' : ''),
       entry('data-rm-stage="down"', '<span aria-hidden="true">↓ </span>Run later', 'Run this stage later', s === count - 1 ? 'It is the last stage' : ''),
@@ -732,6 +734,8 @@
     const note = noteOpen
       ? `<input type="text" class="rm-note small" data-rm-note value="${esc(stage.note || '')}" placeholder="Why this order" aria-label="Stage note" autofocus />`
       : stage.note ? `<p class="rm-note-text small muted">${esc(stage.note)} <button class="link-btn small" type="button" data-rm-addnote>edit</button></p>` : '';
+    // #368: paused after the current turn (the service's stage.pause): waiting for a turn, or paused since
+    const pause = stage.pause ? `<p class="rm-stage-pause small" data-testid="roadmap-stage-pause-state" data-state="${esc(stage.pause.state)}">${esc(RunProgress.pauseLabel(stage.pause))}</p>` : '';
     const stateBadge = s === scoped ? `<span class="badge ${r.state === 'running' ? 'live' : 'warn'}">${r.state === 'running' ? 'Running this stage only' : 'This stage only · paused'}</span>`
       : s === current ? '<span class="badge live">current</span>' : done ? '<span class="badge" data-status="done">Done</span>' : '';
     const offBadge = off ? '<span class="badge warn rm-disabled-badge" data-testid="roadmap-stage-disabled" title="Skipped while the roadmap runs; it stays in the list. Enable it in the stage\'s ⋮ menu to run it">Disabled</span>' : '';
@@ -745,7 +749,7 @@
           <span class="spacer"></span>
           ${stageMenuHtml(stage, s, count, r, done)}
         </div>
-        ${note}
+        ${pause}${note}
         <div class="rm-items">${cards}</div>
       </section>`;
   }
@@ -1495,6 +1499,22 @@
     return out?.roadmap || r;
   }
 
+  // The stage menu's Pause after current turn (#368): one click, nothing is lost; the stage's pause
+  // line then says what it waits for.
+  async function pauseStage(ctx, stages, target) {
+    const stage = stages[locate(stages, target).s];
+    if (stage) ctx.setData(await api.pauseRoadmapStage(ctx.projectId, stage.id));
+  }
+
+  // #284: Disable / Enable a stage: skipped while the roadmap runs; saved at once, Undo in its toast
+  async function toggleStage(ctx, r, stages, target) {
+    const { s } = locate(stages, target);
+    if (!stages[s]) return;
+    const off = !stages[s].disabled;
+    stages[s].disabled = off; // always sent: a save that does not mention it keeps what is stored
+    await save(ctx, r, stages, { label: `${off ? 'Disabled' : 'Enabled'} stage ${s + 1}`, detail: off ? 'The roadmap skips it while it runs; it keeps its place.' : 'It runs in its turn again.' });
+  }
+
   // Run this stage (#141): only stage `s`'s items start, with Start's simulated choice and real-run
   // confirmation; earlier stages not done ask first (the Product Owner's order is a recommendation).
   async function runStage(ctx, r, s) {
@@ -1750,6 +1770,8 @@
         ctx.setData(await api.startRoadmap(ctx.projectId, simulated, scope));
       } else if (e.target.closest('[data-rm-run-stage]')) {
         await runStage(ctx, r, locate(stages, e.target).s);
+      } else if (e.target.closest('[data-rm-pause-stage]')) {
+        await pauseStage(ctx, stages, e.target);
       } else if (act === 'budget-raise' || act === 'budget-resume') {
         // #206: the budget cap paused it; real runs start again (they cost money)
         if (act === 'budget-resume' && !await confirmDialog('Resume anyway', 'The roadmap goes on past the budget until the day (or the night) ends. Its items run as real runs and cost money.', 'Resume')) return true;
@@ -1835,12 +1857,7 @@
         }
         return true;
       } else if (e.target.closest('[data-rm-toggle-stage]')) {
-        // #284: a disabled stage is skipped while the roadmap runs; saved at once, Undo in its toast
-        const { s } = locate(stages, e.target);
-        if (!stages[s]) return true;
-        const off = !stages[s].disabled;
-        stages[s].disabled = off; // always sent: a save that does not mention it keeps what is stored
-        await save(ctx, r, stages, { label: `${off ? 'Disabled' : 'Enabled'} stage ${s + 1}`, detail: off ? 'The roadmap skips it while it runs; it keeps its place.' : 'It runs in its turn again.' });
+        await toggleStage(ctx, r, stages, e.target);
         return true;
       } else if (e.target.closest('[data-rm-addnote]')) {
         noteEditing = r.stages[locate(stages, e.target).s]?.id ?? null;

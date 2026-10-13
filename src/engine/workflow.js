@@ -64,7 +64,7 @@ const { methods: supervisionMethods } = require('./run/supervision');
 const { methods: checkoutMethods } = require('./run/checkout');
 const { methods: machineStepsMethods } = require('./run/machine-steps');
 const { methods: testRequestsMethods } = require('./run/test-requests');
-const { methods: resumeMethods } = require('./run/resume');
+const { methods: resumeMethods, pausedError } = require('./run/resume');
 const { methods: setupMethods } = require('./run/setup');
 
 const stepAgentLabel = (s) => (s.agents ? s.agents.join(' · ') : s.agent || null);
@@ -87,9 +87,6 @@ function runMachine(machine, mock, sequences) {
 
 // The run's test workers (#367): { testWorkers } for a whole number from 1, else null (not set).
 const runWorkers = (testWorkers) => (Number.isInteger(testWorkers) && testWorkers >= 1 ? { testWorkers } : null);
-
-// #368: what ends a run that pauses (the step loop, a gate left unanswered): status `paused`, not an error
-const pausedError = () => Object.assign(new Error('Paused after the current turn'), { paused: true });
 
 class WorkflowRun extends EventEmitter {
   // budget: { [provider id]: { name, limitUsd, limitTokens, blockOnLimit, usedUsd, usedTokens } }
@@ -354,10 +351,7 @@ class WorkflowRun extends EventEmitter {
     let error = null;
     try {
       await this.setupWorktree();
-      // a resumed run may start at a gate (#368: a run paused there): its starter gets the new run's
-      // id before the gate opens, so it hears the gate asked again
-      if (this.resume) await new Promise((resolve) => setImmediate(resolve));
-      this.replayConfirmedGate();
+      await this.startResumed();
       while (current !== 'end') {
         if (current === 'fail') throw new Error('Workflow routed to "fail" (retry limit reached).');
         if (++guard > 500) throw new Error('Limit of 500 transitions reached.');
@@ -375,16 +369,7 @@ class WorkflowRun extends EventEmitter {
         error = new Error(this.endStatus.message);
       }
     } catch (e) {
-      if (e.paused && !this.abort.signal.aborted) {
-        status = 'paused';
-        // a visit the pause ended unfinished (a gate left unanswered) is not counted: Resume makes it again
-        const st = this.ctx.steps[current];
-        if (this.stepRunning === current && st?.visits) st.visits--;
-        this.paused = { step: current, next: this.nextTurnOf(current), at: new Date().toISOString() };
-      } else {
-        status = this.abort.signal.aborted ? 'cancelled' : 'failed';
-        error = e;
-      }
+      ({ status, error } = this.endOfError(e, current));
     }
     await this.stopWorktreeProcesses('run end');
     await this.finishWorktree(status);
@@ -394,6 +379,22 @@ class WorkflowRun extends EventEmitter {
   stop() {
     this.abort.abort();
     for (const a of this.approvals.values()) a.reject(new Error('Cancelled'));
+  }
+
+  // How an error ends the run at step `current`: cancelled (stopped), paused (#368: Resume continues
+  // at `current`; a visit the pause ended unfinished, a gate left unanswered, is not counted) or failed.
+  endOfError(e, current) {
+    if (this.abort.signal.aborted) return { status: 'cancelled', error: e };
+    if (!e.paused) return { status: 'failed', error: e };
+    const st = this.ctx.steps[current];
+    if (this.stepRunning === current && st?.visits) st.visits--;
+    this.paused = { step: current, next: this.nextTurnOf(current), at: new Date().toISOString() };
+    return { status: 'paused', error: null };
+  }
+
+  // An error that ends the run rather than the step (no supervisor, no on_error): a stop or a pause (#368).
+  endsRun(e) {
+    return this.abort.signal.aborted || !!e?.paused;
   }
 
   // #368: pause after the current turn. The turns in progress (every agent of a parallel step), a
@@ -506,12 +507,9 @@ class WorkflowRun extends EventEmitter {
     } else if (step.type === 'suite') {
       // no agent, no supervisor (#177): the result (pass, fail with the failing tests, blocked) is
       // the output, and the transitions route it
-      // the command a pause waits for (#368): it is never cut
-      this.liveCommand = step.command ? render(String(step.command), this.ctx).trim() : step.id;
       try {
         output = await this.runSuiteStep(step, st);
       } finally {
-        this.liveCommand = null;
         await this.stopWorktreeProcesses(`step ${step.id}`);
       }
       if (this.abort.signal.aborted) throw new Error('Cancelled');
@@ -531,8 +529,6 @@ class WorkflowRun extends EventEmitter {
       // child runs (#174): their gates wait for the owner, and so does this run; no supervisor here
       output = await this.runChildWorkflows(step, st);
       if (this.abort.signal.aborted) throw new Error('Cancelled');
-      // #368: its children paused with this run: Resume runs the step again, resuming them
-      if (this.pausing && output.status === 'paused') throw pausedError();
       st.output = output;
       if (output.status !== 'success') {
         const reason = `the child workflow ${output.workflow} ${output.runs ? `failed for ${output.failed} of ${output.runs.length} items` : `ended ${output.status}${output.error ? `: ${output.error}` : ''}`}`;
@@ -554,7 +550,7 @@ class WorkflowRun extends EventEmitter {
         output = step.agents ? await this.runFanOut(step, st) : await this.runAgentStep(step, st, step.agent);
       } catch (e) {
         this.lastStepError = e.message;
-        if (this.abort.signal.aborted || e.paused) throw e;
+        if (this.endsRun(e)) throw e;
         // the AI supervisor may fix the output, retry with an instruction, or go to an allowed step
         const r = e.idleInterrupt ? this.idleRetry(step, st, e) : await this.superviseFailure(step, st, e);
         if (r?.output) {
@@ -742,8 +738,8 @@ class WorkflowRun extends EventEmitter {
       // the session status reflects the session itself, not the workflow outcome
       if (!s.closedAt) this.closeSession(s, s.status === 'error' ? 'failed' : status === 'cancelled' ? 'cancelled' : s.id === 'orchestrator' ? status : 'success');
     }
-    // #368: where a paused run stopped and whose turn is next (Resume continues there)
-    const paused = status === 'paused' ? this.paused : null;
+    // #368: where a paused run stopped and whose turn is next (Resume continues there), else {}
+    const paused = this.pausedRecord(status);
     const sessions = [...this.sessions.values()].map((s) => this.snapshot(s));
     const tokens = emptyUsage();
     sessions.forEach((s) => addUsage(tokens, s.tokens));
@@ -752,7 +748,7 @@ class WorkflowRun extends EventEmitter {
       run_id: this.runId, workflow: this.wf.metadata?.name, project_id: this.projectId, issues: this.issues || undefined, status,
       started_at: new Date(this.startedAt).toISOString(), finished_at: new Date().toISOString(),
       duration_ms: Date.now() - this.startedAt, inputs: this.inputs, mock: this.mock, worktree: this.worktreeSummary(),
-      ...(paused ? { paused } : {}),
+      ...paused,
       // `merge: local`: what landed on the local base, not pushed (Backlog: "Local" column, Push)
       local_merge: this.ctx.local_merge ? { branch: this.ctx.local_merge.branch, base: this.ctx.local_merge.base, commit: this.ctx.local_merge.commit } : null,
       // `ship:` (#260): the release the owner shipped ({ tag, base, commit, pushed, issues }; `simulated` in a simulation)
@@ -788,7 +784,7 @@ class WorkflowRun extends EventEmitter {
     writeResultSummary(this.runDir, { ...summary, error: err?.message || null });
     this.emitEvent('workflow.finished', {
       status, error: err?.message || null,
-      ...(paused ? { paused } : {}),
+      ...paused,
       // the declared outputs (#134) and the chain, for what starts next
       ...(outputs ? { outputs } : {}),
       ...(this.then ? { then: this.then } : {}),

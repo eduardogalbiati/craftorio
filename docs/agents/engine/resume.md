@@ -13,6 +13,16 @@ Resuming a run from a step: what the new run keeps, the service channels behind 
 - `runs:resumeOptions({ runId })` feeds the dialog: the steps in order (visits, `blockedBy`), where the
   run stopped, the failed step, the suggested step, the worktree (and whether it still exists), the
   agents with sessions/handoffs.
+- **A paused run** (#368, status `paused`): `runs:resume` without a step continues where it paused
+  (summary.json `paused.step`): every step it visited is seeded from its summary (`resume.paused`:
+  seedResume seeds the resumed step's finished visits too), so no finished turn runs again and the
+  outputs end as an uninterrupted run's; the gates the owner answered before the pause are kept (it is
+  the same work going on), the gate it waited at asks again. A resumed run yields once before its
+  first step, so its starter hears that gate. `resumeOptions` gives `paused: { step, next, at, turns }`
+  (turns: each agent's next turn, #320, a cold cache with its `cold_resume_usd`) for the confirmation.
+  The roadmap's Start/Resume resumes its paused items first (areas/roadmap.js `resumePausedItems`). Only
+  the owner resumes one: the Oracle's actions and `supervisor:resume` are refused
+  (`refusePausedResume`), and the Night watch's `resume-paused` is never allowed.
 - **Gates**: a resume never reuses a human gate's decision. A step after (in the workflow's order) a
   `human_approval` step the previous run decided is refused (`supervisor.skippedGate`): resume from
   the gate, which asks again. Gate outputs are dropped from the kept outputs

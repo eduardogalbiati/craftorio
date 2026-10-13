@@ -11,7 +11,8 @@
 //   yet (the Discovery board, #261) is left out;
 // - "What needs you": the gates waiting (their age, and the gate's phone page link while Phone gates
 //   is on, #226), the discovery cards whose thread ends with a question (the Inbox opens the card to
-//   answer it) and the roadmap's failed items, each with one button;
+//   answer it), the runs paused after their current turn (#368, Open run: its Resume) and the
+//   roadmap's failed items, each with one button;
 // - "Today": the real cost of the day and of the last night (the Night watch's window), the runs
 //   finished and failed, the 24/7 occupancy (#188) and the roadmap's next stage;
 // - a new workspace (no project, no run): how to start.
@@ -139,23 +140,29 @@ function homeNeeds(d) {
   const failed = items.filter((x) => x.status === 'failed').map((x) => ({
     kind: 'failed-item', stage: x.stage, title: homeItemTitle(x), detail: x.error || `Roadmap · ${x.stageName}`,
   }));
+  // #368: the runs paused after their current turn wait for the owner's Resume (nothing else resumes them)
+  const paused = d.runs.filter((r) => r.status === 'paused').map((r) => ({
+    kind: 'paused-run', runId: r.runId, since: r.finishedAt || null,
+    title: r.title || (r.workflow ? name(r.workflow) : r.runId), detail: 'Paused after its current turn: Resume continues it where it stopped',
+  }));
   // the discovery cards whose thread ends with a question (e.g. a grill-me question); a card that left
   // the Inbox needs the Discovery board (#261) to be answered
   const questions = d.waiting.filter((c) => viewRegistry.has(c.column === 'inbox' ? 'inbox' : 'discovery')).map((c) => ({
     kind: 'card', cardId: c.id, since: c.question?.ts || null,
     title: c.title || 'Discovery card', detail: [c.question?.author, c.question?.text].filter(Boolean).join(': '),
   }));
-  return [...gates, ...elsewhere, ...questions, ...failed];
+  return [...gates, ...elsewhere, ...questions, ...paused, ...failed];
 }
 
 const HOME_NEED_BADGES = {
   gate: '<span class="badge warn">Gate</span>',
   card: '<span class="badge warn">Question</span>',
   'failed-item': '<span class="pill pill-failed">Failed</span>',
+  'paused-run': StatusPill.statusPill('paused'),
 };
 // the one button of a "What needs you" row
 function homeNeedButton(n) {
-  if (n.kind === 'gate') return `<button type="button" class="btn sm primary" data-home-run="${esc(n.runId)}">Open run</button>`;
+  if (n.kind === 'gate' || n.kind === 'paused-run') return `<button type="button" class="btn sm primary" data-home-run="${esc(n.runId)}">Open run</button>`;
   if (n.kind === 'card') return `<button type="button" class="btn sm primary" data-home-card="${esc(n.cardId)}">Answer</button>`;
   return `<button type="button" class="btn sm" data-home-roadmap="${n.stage}">Open roadmap</button>`;
 }
