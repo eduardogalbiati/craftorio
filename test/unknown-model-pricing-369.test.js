@@ -48,6 +48,14 @@ async function runFake(t, { model, unrecognized = true, tier = '1h', prices, max
 }
 const received = (events, step) => events.find((e) => e.type === 'session.message_received' && e.step_id === step);
 
+test('a claude-haiku-5-5 session with no settings.prices entry prices its cold resume from the adapter\'s table', { timeout: 60000 }, async (t) => {
+  const events = await runFake(t, { model: 'claude-haiku-5-5' });
+  const closed = events.find((e) => e.type === 'session.closed' && e.session?.step_id === 'work');
+  assert.ok(closed, 'the work step\'s session closed');
+  const usd = closed.session.cold_resume_usd;
+  assert.ok(typeof usd === 'number' && usd > 0, `cold_resume_usd ${usd}`);
+});
+
 // --- the Claude adapter ---------------------------------------------------------------------------
 
 test('claude adapter: claude-haiku-5-5 is among its models', () => {

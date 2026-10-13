@@ -95,6 +95,21 @@ test('#278 cost-gap: a priced turn (cost at least its usage items) and a mock tu
   assert.deepEqual(of(detect([{ runId: 'ok', events: priced }, { runId: 'mock', events: mock }]), 'cost-gap'), []);
 });
 
+test('#369 cost-gap: a turn the app priced from its tokens is not a finding, though the CLI\'s usage item is higher', () => {
+  const events = [started('r1', 369), sent(1, 1, 'implement'), usageItem(2, 1, 0.185), { ...received(2, 1, 'implement', TOKENS, 0.005), cost_source: 'tokens', cli_cost_usd: 0.185 }];
+  assert.deepEqual(of(detect([{ runId: 'r1', events }]), 'cost-gap'), []);
+});
+
+test('#369 cost-gap: a turn with no price for its model (cost unknown) is not a finding', () => {
+  const events = [started('r1', 369), sent(1, 1, 'implement'), usageItem(2, 1, 0.185), { ...received(2, 1, 'implement', TOKENS, null), cost_source: 'unknown', cli_cost_usd: 0.185 }];
+  assert.deepEqual(of(detect([{ runId: 'r1', events }]), 'cost-gap'), []);
+});
+
+test('#369 cost-gap: the same gap on a turn priced by the CLI is still a finding', () => {
+  const events = [started('r1', 369), sent(1, 1, 'implement'), usageItem(2, 1, 0.185), received(2, 1, 'implement', TOKENS, 0.005)];
+  assert.equal(of(detect([{ runId: 'r1', events }]), 'cost-gap').length, 1);
+});
+
 test('#278 environment: the same test file failing (passing on the base) in runs of two different issues within one hour', () => {
   const a = { runId: 'r-a', events: [started('r-a', 270, 0), suite(10, { failures: [fail('test/server.test.js')] })] };
   const b = { runId: 'r-b', events: [started('r-b', 271, 20), suite(50, { failures: [fail('test/server.test.js')] })] };
