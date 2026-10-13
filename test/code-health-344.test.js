@@ -396,6 +396,94 @@ test('#344 a shallow clone reports churn as missing, never as zero', (t) => {
   assert.equal(fileRow(report, 'src/a.js').commits, null, 'commits unknown, not 0');
 });
 
+// ---------- follow-ups after the implementation (test step) ----------
+
+test('#344 logical assignments and optional chaining are not branches', () => {
+  assert.equal(fn('function f(a, b) { a.x ||= 1; a.y &&= 2; a.z ??= 3; return b?.c?.(); }').complexity, 1);
+});
+
+test('#344 callbacks passed to the same call in one function get distinct names', () => {
+  const code = "function register(bus) {\n  bus.on('a', () => 1);\n  bus.on('b', () => 2);\n  bus.on('c', function () { return 3; });\n}\n";
+  const names = load().analyzeSource(code, 'src/x.js').map((f) => f.name);
+  assert.equal(names.length, 4, names.join(', '));
+  assert.equal(new Set(names).size, 4, `names are unique: ${names.join(', ')}`);
+  for (const n of names.filter((x) => x !== 'register')) assert.match(n, /register/, `${n}: named after its enclosing function`);
+});
+
+test('#344 a file without functions has total complexity 0 and worst 0', (t) => {
+  const r = repo(t);
+  r.write('src/data.js', "module.exports = { a: 1, b: 'two' };\n");
+  r.write('src/a.js', ifs('alpha', 2));
+  r.commit('create');
+  const row = fileRow(load().hotspots({ root: r.dir }), 'src/data.js');
+  assert.equal(row.complexity, 0);
+  assert.equal(row.worst, 0);
+});
+
+test('#344 a folder that is not a git repository reports churn as missing, never as zero', (t) => {
+  const dir = scratch(t);
+  write(dir, 'src/a.js', ifs('alpha', 3));
+  const report = load().hotspots({ root: dir });
+  assert.ok(report.missing.length > 0, 'the missing churn is named');
+  assert.equal(fileRow(report, 'src/a.js').commits, null);
+  assert.equal(fileRow(report, 'src/a.js').complexity, 4, 'complexity is still measured');
+});
+
+test('#344 an abbreviated hash in .git-blame-ignore-revs is honoured', (t) => {
+  const r = repo(t);
+  r.write('src/a.js', ifs('alpha', 2));
+  r.commit('create');
+  r.write('src/a.js', ifs('alpha', 2) + '// real edit\n');
+  r.commit('edit');
+  r.write('src/a.js', ifs('alpha', 2).replace(/\n/g, '\n\n') + '// real edit\n');
+  const reformat = r.commit('reformat');
+  r.write('.git-blame-ignore-revs', `${reformat.slice(0, 10)}\n`);
+  r.commit('ignore reformat');
+  assert.equal(fileRow(load().hotspots({ root: r.dir }), 'src/a.js').commits, 1);
+});
+
+test('#344 churn follows a file through two renames', (t) => {
+  const r = repo(t);
+  const body = ifs('moved', 4);
+  r.write('src/one.js', body);
+  r.commit('create');
+  r.write('src/one.js', body + '// 1\n');
+  r.commit('edit one');
+  git(r.dir, ['mv', 'src/one.js', 'src/two.js']);
+  r.commit('rename to two');
+  r.write('src/two.js', body + '// 1\n// 2\n');
+  r.commit('edit two');
+  git(r.dir, ['mv', 'src/two.js', 'src/three.js']);
+  r.commit('rename to three');
+  r.write('src/three.js', body + '// 1\n// 2\n// 3\n');
+  r.commit('edit three');
+  const report = load().hotspots({ root: r.dir });
+  assert.equal(report.files.some((f) => f.file === 'src/one.js' || f.file === 'src/two.js'), false, 'only the current name is listed');
+  const commits = fileRow(report, 'src/three.js').commits;
+  assert.ok(commits >= 3 && commits <= 5, `the three edits are counted (renames may count too), not the creation: ${commits}`);
+});
+
+test('#344 --check exits 1 and names an over-limit function; --duplicates lists both places of a copy', (t) => {
+  const dir = scratch(t);
+  const copy = Array.from({ length: 9 }, (_, i) => `  total += values[${i}] * q${i};`).join('\n');
+  write(dir, 'src/a.js', ifs('wayTooBranchy', 30) + `function a(values) {\n  let total = 0;\n${copy}\n  return total;\n}\n`);
+  write(dir, 'src/b.js', `function b(values) {\n  let sum = 0;\n${copy}\n  return sum;\n}\n`);
+  let status = 0;
+  let out = '';
+  try {
+    execFileSync(process.execPath, [SCRIPT, '--check', '--root', dir], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  } catch (err) {
+    status = err.status;
+    out = String(err.stdout);
+  }
+  assert.equal(status, 1);
+  assert.match(out, /wayTooBranchy/);
+  assert.match(out, /\b31\b/);
+  const dups = execFileSync(process.execPath, [SCRIPT, '--duplicates', '--root', dir], { encoding: 'utf8' });
+  assert.match(dups, /src\/a\.js/);
+  assert.match(dups, /src\/b\.js/);
+});
+
 // ---------- repository files and docs ----------
 
 test('#344 .git-blame-ignore-revs lists past mass changes as full commit hashes', () => {
