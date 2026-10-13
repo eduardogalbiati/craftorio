@@ -16,8 +16,8 @@
 //   'projects'; its tabs are rendered as markup: role="tab" buttons labelled Overview, Conflict map,
 //   Architecture and Refactor, the selected one with aria-selected="true", re-rendered when the
 //   selection changes; a click on a tab is delegated (to its container, the section or the document);
-// - the Overview is data-testid="project-overview"; the Architecture and Refactor tabs show
-//   data-testid="project-architecture-empty" / "project-refactor-empty".
+// - the Overview is data-testid="project-overview"; the Refactor tab shows
+//   data-testid="project-refactor-empty" (the Architecture tab is #356's, features/architecture.feature).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('path');
@@ -250,14 +250,6 @@ test('#354 choosing another project in the header switches the open project page
   const h = headings(app);
   assert.deepEqual([h.includes('Project Two'), h.includes('Project One')], [true, false], `headings: ${h.join(', ')}`);
   assert.equal(app.callsTo('listProjectRuns').at(-1)[0], 'p2');
-});
-
-test('#354 the Architecture tab shows an empty state saying it will hold the architecture', async () => {
-  const app = page();
-  await app.boot();
-  await openProject(app, 'p1');
-  await selectTab(app, 'Architecture');
-  assert.match(H.visibleText(region(app, 'project-architecture-empty')), /architecture/i);
 });
 
 test('#354 the Refactor tab shows an empty state saying it will hold the refactors', async () => {

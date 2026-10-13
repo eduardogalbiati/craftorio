@@ -39,11 +39,9 @@ Feature: Projects, a screen of the menu with a page per project
     And the project tab "Conflict map" is selected
 
   @issue-354
-  Scenario: The Architecture and Refactor tabs say what they will hold
+  Scenario: The Refactor tab says what it will hold
     Given the app is open
     When I open "Projects" in the sidebar
     And I open the project "demo-app" from the Projects screen
-    And I open the "Architecture" project tab
-    Then the project tab "Architecture" shows an empty state mentioning "architecture"
-    When I open the "Refactor" project tab
+    And I open the "Refactor" project tab
     Then the project tab "Refactor" shows an empty state mentioning "refactor"
