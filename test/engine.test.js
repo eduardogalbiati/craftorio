@@ -318,7 +318,7 @@ steps:
   }
 });
 
-test('loadWorkflow validates a suite step\'s scope: affected (#212) or full, nothing else', () => {
+test('loadWorkflow validates a suite step\'s scope: affected (#212), failed (#324) or full, nothing else', () => {
   const tmp = path.join(os.tmpdir(), `wf-suite-scope-${process.pid}.yaml`);
   const suite = (scope) => `apiVersion: multiagent/v1
 kind: Workflow
@@ -331,8 +331,10 @@ steps:
 `;
   try {
     fs.writeFileSync(tmp, suite('partial'));
-    assert.throws(() => loadWorkflow(tmp), /scope must be affected or full/);
+    assert.throws(() => loadWorkflow(tmp), /scope must be affected, failed or full/);
     fs.writeFileSync(tmp, suite('affected'));
+    assert.doesNotThrow(() => loadWorkflow(tmp));
+    fs.writeFileSync(tmp, suite('failed'));
     assert.doesNotThrow(() => loadWorkflow(tmp));
   } finally {
     fs.rmSync(tmp, { force: true });
