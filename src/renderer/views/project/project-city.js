@@ -61,8 +61,10 @@
     bundle ||= new Promise((resolve, reject) => {
       const script = document.createElement('script');
       script.src = BUNDLE;
-      script.onload = () => (window.ProjectCityScene ? resolve() : reject(new Error(MISSING)));
-      script.onerror = () => { bundle = null; script.remove(); reject(new Error(MISSING)); };
+      // a failed load (or a script without the global) is forgotten, so Retry loads it again
+      const fail = () => { bundle = null; script.remove(); reject(new Error(MISSING)); };
+      script.onload = () => (window.ProjectCityScene ? resolve() : fail());
+      script.onerror = fail;
       document.head.append(script);
     });
     return bundle;
@@ -421,12 +423,14 @@
       /** The tab's facts and estimate (the quadrants, the Danger Zone count, the plan's estimate); reads the city the first time. */
       update({ facts, estimate } = {}) {
         const factsChanged = facts !== undefined && facts !== c.facts;
+        const estimateChanged = estimate !== undefined && estimate !== c.estimate;
         if (facts !== undefined) c.facts = facts;
         if (estimate !== undefined) c.estimate = estimate;
         shown = self;
         if (!c.answer && !c.loading && !c.error) { load(); return; }
         if (factsChanged && c.answer?.model) relayout();
-        else render();
+        // the tab re-renders on each poll tick: keep the drawn HUD (the search's text, the hover card)
+        else if (factsChanged || estimateChanged || !hud.innerHTML) render();
       },
       /** Reads the city again (after a refresh of the facts). */
       reload() { c.answer = null; load(); },

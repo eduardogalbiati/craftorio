@@ -34,25 +34,41 @@
   const STRIP = 3; // a zone's depth over its width, at most
   const EMPTY_DISTRICT = 16; // the ground of a district without files, so the plan's district still shows
   const COLOUR_BY = ['quadrant', 'zone', 'churn'];
-  const QUADRANTS = ['Danger Zone', 'Cowboy Code', 'Fertile Ground', 'Healthy Closure'];
   // the buildings' colours in the run's two 3D themes (run3d-theme.js), as the proof of concept has
-  // them: the quadrants on the state colours (Danger Zone failed, Cowboy Code changes, Fertile Ground
-  // running, Healthy Closure done), the churn ramp, and one colour per zone in plan order
+  // them: the quadrants on the state colours, in ArchitectureModel.QUADRANTS' order (Danger Zone
+  // failed, Cowboy Code changes, Fertile Ground running, Healthy Closure done), the churn ramp, and
+  // one colour per zone in plan order
   const PALETTES = {
     dark: {
-      quadrant: { 'Danger Zone': '#f87171', 'Cowboy Code': '#facc15', 'Fertile Ground': '#7c9cff', 'Healthy Closure': '#4ade80' },
+      quadrant: ['#f87171', '#facc15', '#7c9cff', '#4ade80'],
       none: '#6f788c',
       zone: ['#8db4e2', '#c47a63', '#7fb08f', '#cda76b', '#c9b58f', '#a4abb8', '#ae8a5a', '#b49cff', '#cdbe9c', '#8a95ab'],
       churn: ['#2a3040', '#facc15', '#fb923c', '#f87171'],
     },
     light: {
-      quadrant: { 'Danger Zone': '#EA4E4B', 'Cowboy Code': '#E39A12', 'Fertile Ground': '#4C6FFF', 'Healthy Closure': '#1FAE6E' },
+      quadrant: ['#EA4E4B', '#E39A12', '#4C6FFF', '#1FAE6E'],
       none: '#A7B0C2',
       zone: ['#8DB4E2', '#C47A63', '#9CC594', '#CDA76B', '#D8C7A4', '#A4ABB8', '#AE8A5A', '#7C5CFF', '#CDBE9C', '#717C90'],
       churn: ['#E9ECF2', '#F6D55C', '#F0883E', '#D7263D'],
     },
   };
-  const TEST_RE = /(^|\/)(__tests__|e2e|spec|specs|test|tests)\/|\.(spec|test)\.[a-z]+$|_test\.(go|py)$|(^|\/)test_[^/]*\.py$/i;
+  // the facts' quadrants and the product's test-file patterns, resolved at call time (in the browser
+  // src/shared/globs.js loads after this file)
+  const node = typeof module === 'object' && module.exports;
+  const quadrantNames = () => {
+    const m = node ? require('./architecture-model') : root.ArchitectureModel;
+    return (m && m.QUADRANTS) || [];
+  };
+  let testMatchers = null;
+  const isTest = (path) => {
+    if (!testMatchers) {
+      const g = node ? require('./globs') : root.Globs;
+      if (!g) return false;
+      testMatchers = g.TESTS_PATHS.map((p) => g.globMatcher(p));
+    }
+    const p = String(path);
+    return testMatchers.some((m) => m.test(p));
+  };
 
   const byString = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
   const sum = (xs, f) => xs.reduce((s, x) => s + f(x), 0);
@@ -124,7 +140,6 @@
   const FLOOR_CAP = 40, FLOOR_LINES = 45, FLOOR_CAP_UNMEASURED = 12;
   const ANTENNA_K = 0.25, ANTENNA_MIN = 8;
   const CAMPUS_SIZE = 0.7, CAMPUS_HEIGHT = 0.5;
-  const isTest = (path) => TEST_RE.test(String(path));
   const footprint = (b) => clamp(0.9 + 0.13 * Math.sqrt(Math.max(0, b.lines || 0)), 0.9, 7) * (isTest(b.path) ? CAMPUS_SIZE : 1);
   const heightOf = (b) => Math.min(60, H_MIN + H_K * Math.sqrt(b.complexity != null ? b.complexity : (b.lines || 0) * PER_LINE)) * (isTest(b.path) ? CAMPUS_HEIGHT : 1);
   const floorsOf = (b) => (b.functions != null ? Math.min(b.functions, FLOOR_CAP) : Math.min(Math.floor((b.lines || 0) / FLOOR_LINES), FLOOR_CAP_UNMEASURED));
@@ -329,9 +344,11 @@
         legend: [{ colour: ramp(pal.churn, 0), label: 'No commit' }, { colour: ramp(pal.churn, t(Math.round(Math.sqrt(max)))), label: `${Math.round(Math.sqrt(max))} commits` }, { colour: ramp(pal.churn, 1), label: `${max} commits` }],
       };
     }
+    const names = quadrantNames();
+    const of = Object.fromEntries(names.map((q, i) => [q, pal.quadrant[i % pal.quadrant.length]]));
     return {
-      colours: buildings.map((b) => pal.quadrant[b.quadrant] || pal.none),
-      legend: [...QUADRANTS.map((q) => ({ colour: pal.quadrant[q], label: q })), { colour: pal.none, label: 'Not measured' }],
+      colours: buildings.map((b) => of[b.quadrant] || pal.none),
+      legend: [...names.map((q) => ({ colour: of[q], label: q })), { colour: pal.none, label: 'Not measured' }],
     };
   }
 
@@ -402,7 +419,6 @@
     layoutCity,
     MAX_BUILDINGS,
     neighbours,
-    QUADRANTS,
     squarify,
     STREET,
   };
