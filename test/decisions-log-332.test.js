@@ -57,6 +57,14 @@ test('the log is seeded with the three standing decisions of the issue', () => {
   assert.ok(/\bMIT\b/.test(openSource.text), 'the #313 entry does not name the MIT license');
 });
 
+test('the log does not repeat a hard rule of the index (AGENTS.md)', () => {
+  const hardRules = read('AGENTS.md').split('## Hard rules')[1].split('\n## ')[0];
+  const leads = [...hardRules.matchAll(/^- \*\*(.+?)\*\*/gm)].map((m) => m[1]);
+  assert.ok(leads.length >= 8, `${leads.length} bold hard-rule leads found in AGENTS.md`);
+  const log = read('docs/agents/decisions.md').toLowerCase();
+  assert.deepEqual(leads.filter((lead) => log.includes(lead.toLowerCase())), []);
+});
+
 test('docs/agents/backlog.md links the decisions log for ideas that were decided', () => {
   assert.ok(/\]\((?:\.\/)?decisions\.md\)/.test(read('docs/agents/backlog.md')), 'backlog.md does not link decisions.md');
 });
