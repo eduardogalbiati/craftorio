@@ -29,6 +29,10 @@ function hostileValues(outsideAbs) {
     ['empty string', ''],
     ['parent path', '../../outside'],
     ['absolute path', outsideAbs],
+    // a path to an existing file once the channel appends its extension (.json, .yaml, .md…): a
+    // traversal that deletes with { force } is invisible when the target does not exist
+    ['parent path to a file', '../../outside/sentinel'],
+    ['absolute path to a file', path.join(outsideAbs, 'sentinel')],
     ['1 MB string', 'x'.repeat(1024 * 1024)],
     ['__proto__ object', JSON.parse('{"__proto__": {"polluted": "yes"}}')],
   ];

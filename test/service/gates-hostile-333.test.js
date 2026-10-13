@@ -4,6 +4,7 @@
 // Seams: the service channels (approval:resolve, runs:resume, runs:active) and the run events.
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { makeResumeService, untilTrue } = require('./helpers');
@@ -31,15 +32,44 @@ async function call(fn) {
   try { await fn(); } catch { /* refused */ }
 }
 
-// Starts fixture-resume.yaml in mock mode and resolves when it waits at its gate (left open).
-function startToGate(service, api) {
+// Starts a workflow (fixture-resume.yaml by default) in mock mode and resolves when it waits at its
+// gate (left open).
+function startToGate(service, api, file = 'fixture-resume.yaml') {
   return new Promise((resolve, reject) => {
     const onEv = (ev) => {
       if (ev.type === 'approval.requested') { service.events.off('run:event', onEv); resolve(ev); }
     };
     service.events.on('run:event', onEv);
-    api['run:start']({ file: 'fixture-resume.yaml', inputs: {}, mock: true }).catch(reject);
+    api['run:start']({ file, inputs: {}, mock: true }).catch(reject);
   });
+}
+
+// A gate with choices: it takes one of its choice ids, never true/false.
+const CHOICE_WORKFLOW = `apiVersion: multiagent/v1
+kind: Workflow
+metadata:
+  name: fixture-choice-333
+agents:
+  a: { provider: claude, model: m, session: ephemeral }
+steps:
+  - id: plan
+    agent: a
+    prompt: "plan the work"
+  - id: decide
+    type: human_approval
+    message: "Proceed?"
+    choices:
+      - { id: approve, label: Approve }
+      - { id: stop, label: Stop }
+  - id: work
+    agent: a
+    prompt: "do the work"
+`;
+
+// What a call threw, as primitives (null when it did not throw).
+async function refusal(fn) {
+  try { await fn(); } catch (e) { return { status: e.status, message: String(e.message) }; }
+  return null;
 }
 
 // Runs fixture-resume.yaml to its end, answering its gate with `answer`.
@@ -95,6 +125,44 @@ test('#333 approval:resolve with hostile input never resolves a gate', async (t)
   api['approval:resolve']({ runId, id: approvalId, answer: true });
   await untilTrue(() => !api['runs:active']().some((r) => r.runId === runId));
   assert.deepEqual(resolved, [approvalId]);
+});
+
+test('#333 approval:resolve on a gate with choices refuses true/false and an id it does not offer, naming its choices; the gate stays open', async (t) => {
+  const { service, api } = makeResumeService(t);
+  fs.writeFileSync(path.join(service.workspace().workflows, 'fixture-choice-333.yaml'), CHOICE_WORKFLOW);
+  const resolved = [];
+  service.events.on('run:event', (ev) => { if (ev.type === 'approval.resolved') resolved.push(ev.approval_id); });
+  const gate = await startToGate(service, api, 'fixture-choice-333.yaml');
+  const { run_id: runId, approval_id: approvalId } = gate;
+  const stillOpen = () => api['runs:active']().some((r) => r.runId === runId && (r.gates || []).some((g) => g.approval_id === approvalId));
+
+  for (const answer of [true, false, 'nope', 'APPROVE']) {
+    const r = await refusal(() => api['approval:resolve']({ runId, id: approvalId, answer }));
+    assert.equal(r?.status, 400, `${JSON.stringify(answer)}: refused with a 400`);
+    assert.match(r.message, /one of its choices/, `${JSON.stringify(answer)}: the message says what the gate takes`);
+    assert.equal(stillOpen(), true, `${JSON.stringify(answer)}: the gate was resolved`);
+  }
+  assert.deepEqual(resolved, []);
+
+  api['approval:resolve']({ runId, id: approvalId, answer: 'approve' });
+  await untilTrue(() => !api['runs:active']().some((r) => r.runId === runId));
+  assert.deepEqual(resolved, [approvalId]);
+});
+
+test('#333 approval:resolve on a gate without choices refuses a choice id, asking for true or false; the gate stays open', async (t) => {
+  const { service, api } = makeResumeService(t);
+  const gate = await startToGate(service, api);
+  const { run_id: runId, approval_id: approvalId } = gate;
+  const stillOpen = () => api['runs:active']().some((r) => r.runId === runId && (r.gates || []).some((g) => g.approval_id === approvalId));
+
+  for (const answer of ['approve', 'true', 1]) {
+    const r = await refusal(() => api['approval:resolve']({ runId, id: approvalId, answer }));
+    assert.equal(r?.status, 400, `${JSON.stringify(answer)}: refused with a 400`);
+    assert.match(r.message, /true or false/, `${JSON.stringify(answer)}: the message says what the gate takes`);
+    assert.equal(stillOpen(), true, `${JSON.stringify(answer)}: the gate was resolved`);
+  }
+  api['approval:resolve']({ runId, id: approvalId, answer: false });
+  await untilTrue(() => !api['runs:active']().some((r) => r.runId === runId));
 });
 
 test('#333 runs:resume with a hostile confirmGate never resumes past a gate', async (t) => {

@@ -2,7 +2,8 @@
 // hand-written list: a new channel is swept automatically) and calls each channel's function in a
 // scratch workspace (MULTIAGENT_SIMULATION_ONLY=1) with a fixed set of hostile values: the whole
 // argument hostile, then each named parameter hostile on its own (missing, null, a number, an array,
-// an object, '', '../../outside', an absolute path outside the workspace, a 1 MB string, an object
+// an object, '', '../../outside', an absolute path outside the workspace, both again ending at an
+// existing sentinel file ('../../outside/sentinel'), a 1 MB string, an object
 // with a __proto__ key). Each call has a time limit (4 s).
 // It passes when every call returns a value or rejects with an Error whose message names the
 // problem (never a raw "Cannot read properties of undefined"), no call blocks the process, no file
@@ -28,7 +29,11 @@ const BLOCKED_MS = 15000; // no output for this long: the call in progress block
 const MAX_RESTARTS = 40;
 
 // A scratch layout: base/a/b/workspace is the workspace; sentinel folders sit next to it at each
-// level a '../..' could reach, and one more is the absolute path outside the workspace.
+// level a '../..' could reach, and one more is the absolute path outside the workspace. Each holds
+// a 'sentinel' file and one per extension a channel appends to an id, so the hostile values
+// '../../outside/sentinel' and '<outside>/sentinel' reach an existing file (a delete with
+// { force } of a missing file would go unseen).
+const SENTINEL_FILES = ['sentinel', 'sentinel.txt', 'sentinel.json', 'sentinel.yaml', 'sentinel.yml', 'sentinel.md', 'sentinel.jsonl', 'sentinel.db', 'sentinel.png'];
 function scratch(t) {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'sweep-333-'));
   t.after(() => fs.rmSync(base, { recursive: true, force: true, maxRetries: 5 }));
@@ -36,7 +41,7 @@ function scratch(t) {
   fs.mkdirSync(wsDir, { recursive: true });
   for (const dir of [path.join(base, 'outside'), path.join(base, 'a', 'outside'), path.join(base, 'a', 'b', 'outside'), path.join(base, 'outside-abs')]) {
     fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, 'sentinel.txt'), 'do not touch\n');
+    for (const name of SENTINEL_FILES) fs.writeFileSync(path.join(dir, name), 'do not touch\n');
   }
   return { base, wsDir, outsideAbs: path.join(base, 'outside-abs') };
 }
