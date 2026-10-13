@@ -24,9 +24,10 @@ function removeScratch(dir) {
 // The server's and the browser's environment: simulation only, no account, no Node mode
 function servedEnv(scratch, { size }) {
   const home = path.join(scratch, 'home');
-  for (const d of [home, path.join(home, 'AppData'), path.join(scratch, 'workspace')]) fs.mkdirSync(d, { recursive: true });
+  for (const d of [home, path.join(home, 'AppData'), path.join(scratch, 'workspace'), path.join(scratch, 'user-data')]) fs.mkdirSync(d, { recursive: true });
   const env = {
     ...process.env,
+    MULTIAGENT_USER_DATA: path.join(scratch, 'user-data'),
     MULTIAGENT_SIMULATION_ONLY: '1',
     MULTIAGENT_AUTH: 'off',
     MULTIAGENT_MOCK_DELAY_SCALE: '0.02',
