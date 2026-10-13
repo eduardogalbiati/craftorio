@@ -19,6 +19,11 @@
 //   map run in progress; "architecture-map-refresh-advised": the refresh advice (> 5% of the drawn
 //   files match no district, or a new top-level folder). A started run is seen in the scratch
 //   workspace's runs/ folder (its records name the project-map workflow).
+// - The project city (#373): the "Facts | City" switch, buttons data-testid="architecture-mode-facts"
+//   / "architecture-mode-city" named "Facts" / "City" with aria-pressed; data-testid="project-city"
+//   (a canvas inside), "project-city-header" (project, "<n> files", "<n> zones", "<n> districts"),
+//   the select labelled "Colour by" and its legend "project-city-legend"; without a plan
+//   "project-city-no-plan" holds the "Map this project" button and its "≈ US$" estimate.
 //
 // The git project is seeded in the scenario's scratch folder after the app opened (like app.steps.js's
 // second project): a repository on main with a .js and a .py file and three commits, the project
@@ -40,6 +45,7 @@ const projectPage = (page) => visible(page.getByTestId('project-page')).first();
 const tab = (page) => projectPage(page).locator('#project-panel-architecture');
 const byId = (page, id) => visible(tab(page).getByTestId(id)).first();
 const analyzeButton = (page) => tab(page).getByTestId('architecture-analyze');
+const cityModeButton = (page, mode) => visible(tab(page).getByTestId(`architecture-mode-${mode.toLowerCase()}`)).first();
 const mapButton = (page) => visible(tab(page).getByTestId('architecture-map')).first();
 
 const SUMMARY = 'Billing rules are split between the API and the export script.';
@@ -100,9 +106,21 @@ function cityPlan(name, folders) {
   };
 }
 
-async function seedGitProject(e2e, name, { withReport = false, planFolders = null } = {}) {
+// The city plan (#371 CITY_PLAN_SCHEMA) of the seeded repository: two zones, one district each,
+// covering both files (no Outskirts)
+const CITY_PLAN = {
+  version: 1, project: 'billing-service', summary: 'Billing rules and the export script.',
+  zones: [{ id: 'backend', name: 'Backend', kind: 'commercial' }, { id: 'tooling', name: 'Tooling', kind: 'workshop' }],
+  districts: [
+    { id: 'billing', name: 'Billing', zone: 'backend', include: ['src/**'] },
+    { id: 'export', name: 'Export', zone: 'tooling', include: ['tools/**'] },
+  ],
+};
+
+async function seedGitProject(e2e, name, { withReport = false, planFolders = null, withPlan = false } = {}) {
   const workspace = require(path.join(root, 'src', 'workspace'));
   const projects = require(path.join(root, 'src', 'projects'));
+  const arch = require(path.join(root, 'src', 'oracle-architecture'));
   const ws = workspace.setupWorkspace(path.join(e2e.scratch, 'workspace'), { persist: false });
   const folder = path.join(e2e.scratch, 'repos', name);
   const head = seedRepo(folder);
@@ -117,6 +135,7 @@ async function seedGitProject(e2e, name, { withReport = false, planFolders = nul
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, 'city-plan.json'), JSON.stringify(cityPlan(name, planFolders), null, 2));
   }
+  if (withPlan) arch.writePlan(path.join(ws.root, 'architecture'), project.id, { ...CITY_PLAN, project: name }, new Date().toISOString());
   await e2e.window.reload();
   await e2e.window.waitForLoadState('domcontentloaded');
 }
@@ -142,6 +161,68 @@ Given('the workspace has a git project {string} with a JavaScript and a Python f
 // tools/ is a top-level folder the plan does not know
 Given('the workspace has a git project {string} with a JavaScript and a Python file and a project map that only covers the JavaScript file', async ({ e2e }, name) => {
   await seedGitProject(e2e, name, { planFolders: ['src'] });
+});
+
+Given('the workspace has a git project {string} with a JavaScript and a Python file and a city plan', async ({ e2e }, name) => {
+  await seedGitProject(e2e, name, { withPlan: true });
+});
+
+// --- The project city (#373) ---
+
+When('I switch the Architecture tab to {string}', async ({ e2e }, mode) => {
+  const button = cityModeButton(e2e.window, mode);
+  await expect(button).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(button).toHaveAccessibleName(new RegExp(`^\\s*${escapeRe(mode)}\\s*$`, 'i'));
+  await button.click();
+});
+
+Then('the Architecture tab shows the project city', async ({ e2e }) => {
+  const city = byId(e2e.window, 'project-city');
+  await expect(city).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(city.locator('canvas').first(), 'the city is drawn in a canvas').toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(byId(e2e.window, 'project-city-header')).toBeVisible({ timeout: LOAD_TIMEOUT });
+});
+
+Then('the city header names {string} with {int} files, {int} zones and {int} districts', async ({ e2e }, name, files, zones, districts) => {
+  const header = byId(e2e.window, 'project-city-header');
+  await expect(header).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(header).toContainText(name, { timeout: LOAD_TIMEOUT });
+  for (const [n, word] of [[files, 'files?'], [zones, 'zones?'], [districts, 'districts?']]) {
+    await expect(header, `the city header's ${n} ${word}`).toContainText(new RegExp(`\\b${n}\\s+${word}\\b`, 'i'));
+  }
+});
+
+Then('the city header counts {int} files', async ({ e2e }, files) => {
+  const header = byId(e2e.window, 'project-city-header');
+  await expect(header).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(header).toContainText(new RegExp(`\\b${files}\\s+files?\\b`, 'i'), { timeout: LOAD_TIMEOUT });
+});
+
+When('I colour the city by {string}', async ({ e2e }, option) => {
+  const select = visible(tab(e2e.window).getByLabel('Colour by', { exact: true })).first();
+  await expect(select).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await select.selectOption({ label: option });
+});
+
+Then('the city legend lists {string} and {string}', async ({ e2e }, a, b) => {
+  const legend = byId(e2e.window, 'project-city-legend');
+  await expect(legend).toBeVisible({ timeout: LOAD_TIMEOUT });
+  for (const entry of [a, b]) await expect(legend, `the legend's "${entry}"`).toContainText(entry);
+});
+
+Then('the {string} view of the Architecture tab is the one selected', async ({ e2e }, mode) => {
+  await expect(cityModeButton(e2e.window, mode)).toHaveAttribute('aria-pressed', 'true', { timeout: LOAD_TIMEOUT });
+  const other = mode.toLowerCase() === 'city' ? 'Facts' : 'City';
+  await expect(cityModeButton(e2e.window, other)).toHaveAttribute('aria-pressed', 'false');
+});
+
+Then('the city offers {string} with a cost estimate in US$', async ({ e2e }, label) => {
+  const button = visible(tab(e2e.window).getByRole('button', { name: new RegExp(escapeRe(label), 'i') })).first();
+  await expect(button).toBeVisible({ timeout: LOAD_TIMEOUT });
+  // the estimate is on the button (text or title) or in the no-plan note that holds it
+  const note = byId(e2e.window, 'project-city-no-plan');
+  await expect(note).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(note).toContainText(/≈\s*US\$\s*\d/, { timeout: LOAD_TIMEOUT });
 });
 
 Then('the Architecture tab says the project folder is not a git repository', async ({ e2e }) => {

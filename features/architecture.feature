@@ -10,6 +10,9 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
   "Map this project" (no map yet) and "Refresh the map" (a saved map) show the estimate of the
   project map workflow first and start it only once confirmed; the tab advises a refresh, without
   starting one, when more than 5% of the drawn files match no district or a new top-level folder appears.
+  A "Facts | City" switch shows the project as a 3D city instead (#373), remembered per window: a
+  header with the project, files, zones and districts, "Colour by" with its legend, and without a
+  city plan the folders as districts with a "Map this project" action and its estimate.
 
   @issue-356
   Scenario: A project whose folder is not a git repository has no facts and nothing to analyse
@@ -84,3 +87,42 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     Then the Architecture tab advises refreshing the map
     And the Architecture tab offers the "Refresh the map" map button
     And no project map run has started
+
+  @issue-373
+  Scenario: The City view draws the project as a city, its header naming files, zones and districts
+    Given the app is open
+    And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
+    When I open "Projects" in the sidebar
+    And I open the project "billing-service" from the Projects screen
+    And I open the "Architecture" project tab
+    And I switch the Architecture tab to "City"
+    Then the Architecture tab shows the project city
+    And the city header names "billing-service" with 2 files, 2 zones and 2 districts
+    When I colour the city by "Zone"
+    Then the city legend lists "Backend" and "Tooling"
+
+  @issue-373
+  Scenario: The City view stays chosen after leaving the Architecture tab and coming back
+    Given the app is open
+    And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
+    When I open "Projects" in the sidebar
+    And I open the project "billing-service" from the Projects screen
+    And I open the "Architecture" project tab
+    And I switch the Architecture tab to "City"
+    Then the Architecture tab shows the project city
+    When I open the "Overview" project tab
+    And I open the "Architecture" project tab
+    Then the Architecture tab shows the project city
+    And the "City" view of the Architecture tab is the one selected
+
+  @issue-373
+  Scenario: A project without a city plan shows its folders as a city and offers to map it
+    Given the app is open
+    And the workspace has a git project "billing-service" with a JavaScript and a Python file and a saved architecture report
+    When I open "Projects" in the sidebar
+    And I open the project "billing-service" from the Projects screen
+    And I open the "Architecture" project tab
+    And I switch the Architecture tab to "City"
+    Then the Architecture tab shows the project city
+    And the city header counts 2 files
+    And the city offers "Map this project" with a cost estimate in US$
