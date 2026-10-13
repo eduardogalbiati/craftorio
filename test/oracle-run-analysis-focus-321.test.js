@@ -642,6 +642,66 @@ test('#321 a focus over many runs stays within 40 KB, shortened per run, with a 
   assert.match(String(data.note || ''), /runIds|fewer|one run/i);
 });
 
+// ---- regressions (#335) -----------------------------------------------------------------------------
+// focus 'regressions': each regressed step (src/step-regressions.js over the workspace's real runs) with
+// its workflow, step, class (model), baseline vs recent cost and minutes and the run ids behind both.
+
+const REG_WF = 'software-development.yaml';
+// A real successful run of REG_WF on `day` (September 2026): one `test` step of `minutes`, costing `cost`.
+function regressionRun(runsDir, id, day, { cost = 3, minutes = 10 } = {}) {
+  const t0 = Date.parse('2026-09-01T10:00:00.000Z') + (day - 1) * 86400000;
+  const iso = (m) => new Date(t0 + m * MIN).toISOString();
+  const events = [
+    { ts: iso(0), type: 'workflow.started', workflow: 'Software Development', file: REG_WF, mock: false, cost_accounting: 'per_turn' },
+    { ts: iso(minutes), type: 'workflow.finished', status: 'success' },
+  ];
+  writeRun(runsDir, id, events, {
+    run_id: id, workflow: 'Software Development', status: 'success', mock: false, cost_accounting: 'per_turn', turn_cost: 'max_result',
+    started_at: iso(0), finished_at: iso(minutes), duration_ms: minutes * MIN, cost_usd: cost, tokens: u(0, 0, 0, 0),
+    progress: [{ step: 'test', type: 'agent', durationMs: minutes * MIN }],
+    sessions: [{ id: `s-${id}`, agent: 'test_writer', provider: 'claude', model: 'claude-opus-5-5', effort: 'high', step_id: 'test', turns: 1, cost_usd: cost, tokens: u(1000, 100, 0, 0) }],
+  });
+}
+// 6 baseline runs (cost 3, 10 min) and 3 recent ones with `recent` options
+function regressionHistory(runsDir, recent = {}) {
+  for (let i = 1; i <= 6; i++) regressionRun(runsDir, `run-335-base-${i}`, i);
+  for (let i = 1; i <= 3; i++) regressionRun(runsDir, `run-335-recent-${i}`, 6 + i, recent);
+}
+
+test('#335 FOCUSES has regressions, and the list stays sorted', () => {
+  const { FOCUSES: list } = require('../src/oracle-run-focus');
+  assert.equal(list.includes('regressions'), true);
+  assert.deepEqual([...list], [...list].sort());
+});
+
+test('#335 run_analysis names the regressions focus in its description and schema', () => {
+  const { oracleTools } = loadTools();
+  const tool = oracleTools({ ws: {}, BUNDLED_SKILLS_DIR, runFolder: () => '' }).find((x) => x.name === 'run_analysis');
+  assert.match(tool.description, /\bregressions\b/);
+  assert.equal(tool.inputSchema.properties.focus.enum.includes('regressions'), true);
+});
+
+test('#335 regressions: a regressed step is listed with its workflow, step, model, baseline vs recent and the run ids', async (t) => {
+  const { ctx, runsDir } = makeCtx(t);
+  regressionHistory(runsDir, { cost: 4.5, minutes: 15 });
+  const { text } = await analysis(ctx, { focus: 'regressions' });
+  assert.match(text, /software-development\.yaml/);
+  assert.match(text, /"test"/);
+  assert.match(text, /claude-opus-5-5/);
+  assert.match(text, /run-335-base-1|run-335-base-6/, 'a baseline run id');
+  assert.match(text, /run-335-recent-3/, 'a recent run id');
+  assert.match(text, /\b1\.5\b/, 'the recent cost per point');
+  assert.match(text, /\b15\b/, 'the recent minutes');
+});
+
+test('#335 regressions: a workspace without regressions lists no regressed step', async (t) => {
+  const { ctx, runsDir } = makeCtx(t);
+  regressionHistory(runsDir);
+  const { text } = await analysis(ctx, { focus: 'regressions' });
+  assert.doesNotMatch(text, /run-335-recent-/, 'no regressed step, so no recent run ids');
+  assert.doesNotMatch(text, /claude-opus-5-5/, 'no regressed class');
+});
+
 // ---- docs and skill ---------------------------------------------------------------------------------
 
 test('#321 the Oracle skill and the docs list the run_analysis focuses', () => {
