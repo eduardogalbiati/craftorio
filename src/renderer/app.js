@@ -596,23 +596,13 @@ function onEvent(ev) {
   }
   v.events.push(ev);
   const sess = ev.session_id ? v.sessions.get(ev.session_id) : null;
-  // #233 (as src/run-costs.js reads past runs): a run recorded before per-turn costs stored, for each
-  // resumed Claude turn, the CLI session's cumulative total; its turn's own cost is the difference
-  // with the previous turn of the same CLI session, and the session's snapshot counted the rest twice
-  const pastTurnCost = () => {
-    const recorded = Number(ev.cost_usd) || 0;
-    if (v.run?.costPerTurn || (ev.session?.provider || sess.provider) !== 'claude') return ev.cost_usd;
-    const cli = ev.session?.provider_session_id || null;
-    const prev = sess.cliLast;
-    sess.cliLast = { cli, total: recorded };
-    if (!prev || !cli || prev.cli !== cli || recorded < prev.total) return ev.cost_usd;
-    sess.overcount = (sess.overcount || 0) + prev.total;
-    return recorded - prev.total;
-  };
-  const withSnapshot = () => {
-    Object.assign(sess, ev.session);
-    if (sess.overcount) sess.cost_usd = Math.max(0, (Number(sess.cost_usd) || 0) - sess.overcount);
-  };
+  // #350: a run recorded before per-turn costs (#233) is read through the run record's upgrade
+  // (src/shared/run-record.js), as the services read past runs: the events so far, upgraded, end with
+  // this one (a turn's own cost, its session's corrected snapshot) and what it stands for (an old
+  // `attempt N/M failed` log line: the stopped attempt after it)
+  const upgraded = () => (v.run?.costPerTurn ? [ev]
+    : RunRecord.upgradeRunRecord({ events: v.events.filter((e) => e.type !== 'session.stream') }).events.slice(-2));
+  const withSnapshot = () => { Object.assign(sess, upgraded().at(-1).session); };
 
   switch (ev.type) {
     case 'workflow.started':
@@ -696,9 +686,9 @@ function onEvent(ev) {
 
     case 'session.message_received':
       if (sess) {
-        const cost = pastTurnCost();
-        getTurn(sess, ev.turn).result = { usage: ev.usage, cost, duration: ev.duration_ms };
-        withSnapshot();
+        const own = upgraded().at(-1);
+        getTurn(sess, ev.turn).result = { usage: ev.usage, cost: own.cost_usd, duration: ev.duration_ms };
+        Object.assign(sess, own.session);
         orch(ev, `← ${ev.session_id} replied in ${fmtDur(ev.duration_ms)}`);
       }
       if (v.run?.status === 'running' && !replaying) loadUsageThrottled();
@@ -806,10 +796,9 @@ function onEvent(ev) {
     case 'log': {
       orch(ev, ev.message, ev.level);
       // #233: a run recorded before costs were estimated: its agent's stopped attempt cost was never
-      // recorded, unless it failed before the CLI ran (src/run-costs.js's ATTEMPT_FAILED and NOT_STARTED)
-      const failed = !v.run?.costPerTurn && ev.level === 'error' && /^\[([^\]]+)\] attempt \d+\/\d+ failed: (.*)$/.exec(String(ev.message || ''));
-      const paid = failed && !/not found in PATH|Working directory does not exist|Provider ".*" is not defined/.test(failed[2]);
-      const owner = paid && [...v.sessions.values()].reverse().find((s) => s.agent === failed[1]);
+      // recorded (the upgrade's stopped attempt after the line)
+      const stopped = ev.level === 'error' && upgraded().find((e) => e.type === 'session.attempt_stopped' && e.ts === ev.ts);
+      const owner = stopped && v.sessions.get(stopped.session_id);
       if (owner) owner.costNotRecorded = true;
       break;
     }

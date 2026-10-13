@@ -25,6 +25,7 @@ const {
   readOwner,
 } = require('../../run-owner');
 const runAnalysisLib = require('../../run-analysis');
+const { readRunRecord } = require('../../run-record');
 const runs = require('../../runs');
 const supervisor = require('../../supervisor');
 const TimeZone = require('../../time-zone');
@@ -188,12 +189,14 @@ module.exports = (ctx) => {
   function figuresOf(runId) {
     const dir = ctx.runFolder ? ctx.runFolder(runId) : path.join(ctx.ws.runs, runId);
     const sigOf = (f) => { try { const st = fs.statSync(path.join(dir, f)); return `${st.size}:${st.mtimeMs}`; } catch { return '-'; } };
-    // costs-per-turn: figures cached before #233 counted resumed Claude turns twice
-    const sig = `${sigOf('events.jsonl')} ${sigOf('summary.json')} costs-per-turn`;
+    // run-record: figures cached before #350 read older runs' shapes on their own (#233, #277)
+    const sig = `${sigOf('events.jsonl')} ${sigOf('summary.json')} run-record`;
     const cached = ctx.store?.runFigures?.(runId, sig);
     if (cached) return cached;
-    const summary = readJson(path.join(dir, 'summary.json')) || {};
-    const figures = { ...runAnalysisLib.runFigures({ summary, events: runs.runEvents(dir) }) };
+    // the run record in the current shape, without the streamed CLI output (as runs.runEvents)
+    const record = readRunRecord(dir);
+    const summary = record.summary || {};
+    const figures = { ...runAnalysisLib.runFigures({ summary: record.summary, events: record.events.filter((e) => e.type !== 'session.stream') }) };
     figures.runId = figures.runId || runId;
     const info = runs.readRun(ctx.ws.runs, runId);
     if (info) Object.assign(figures, { title: info.title || figures.title, projectId: info.projectId, workflow: figures.workflow || info.workflow });

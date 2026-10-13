@@ -1,12 +1,13 @@
 // The Oracle's run_analysis tool (#184): where a run's time and money went, the figures behind the
 // 2026-10-02 efficiency analysis (#176-#179), moved into the app from the outside session's
 // night/tw/perf/toolerr scripts. Per run and in total: cost and tokens by agent and by step (each
-// turn's own cost, src/run-costs.js), review rounds, attempts timed out, invalid outputs, tool calls
+// turn's own cost), review rounds, attempts timed out, invalid outputs, tool calls
 // refused, merge conflicts, commands cut by a tool's timeout, the test writer's turns × context and
 // cache re-read, and the whole-suite starts (the orchestrator's suite step and the ones an agent
-// started itself) with their durations. Pure: the caller reads summary.json and events.jsonl.
+// started itself) with their durations. Pure: the caller reads summary.json and events.jsonl; a
+// record of an older shape is upgraded first (#350, src/shared/run-record.js).
 
-const { runCosts } = require('./run-costs');
+const { upgradeRunRecord } = require('./shared/run-record');
 
 const TOKEN_KINDS = ['input', 'output', 'cache_read', 'cache_write'];
 const TEST_WRITER = /test_?writer/i;
@@ -26,8 +27,8 @@ const addTo = (map, key, cost, tokens, turns = 1) => {
 };
 
 /** One run's figures from its summary.json (may be null: still running) and events.jsonl. */
-function analyzeRun(runId, summary, events = []) {
-  const costs = runCosts(events, summary);
+function analyzeRun(runId, recorded, all = []) {
+  const { summary, events } = upgradeRunRecord({ summary: recorded, events: all });
   const agentOf = new Map(); // session id → agent
   const byAgent = {};
   const byStep = {};
@@ -42,7 +43,7 @@ function analyzeRun(runId, summary, events = []) {
     if (e.type === 'workflow.started' && !started) started = e.ts;
     if (e.type === 'session.message_received') {
       const agent = agentOf.get(e.session_id) || e.agent || '?';
-      const cost = costs.turnCost(e);
+      const cost = Number(e.cost_usd) || 0;
       const tokens = tokensOf(e.usage);
       addTo(byAgent, agent, cost, tokens);
       addTo(byStep, e.step_id || '?', cost, tokens);

@@ -81,9 +81,37 @@ Read this before touching run listings, the Backlog queue, pending gates, notifi
 - **Costs and memory events** (#277, #276): a Claude turn with several `result` events keeps them
   as `raw` items of `session.stream` and records its highest total once; `summary.json` carries
   `turn_cost: 'max_result'`. A per-turn run without it is read through its `usage` stream items
-  (`src/run-costs.js`, `src/runs.js` `fromEvents`); the files are never rewritten. The memory guard
-  writes `process.killed` and `memory.hold` events (engine/agents-and-steps.md, "Memory guard").
+  (the run record's `#277 multi-result turn` upgrade, below); the files are never rewritten. The
+  memory guard writes `process.killed` and `memory.hold` events (engine/agents-and-steps.md,
+  "Memory guard").
 - Never make the database the only copy of something a run produced.
+
+### Old runs: the run record upgrades them on read (#350)
+
+A run's files keep the shape they were recorded in, forever: no migration rewrites a run folder.
+`readRunRecord(runDir)` (`src/run-record.js`) reads `summary.json` and `events.jsonl` and returns
+`{ summary, events }` in the **current shape** (summary null while the run has none);
+`readRunSummary(runDir)` returns the summary alone and reads the events only when it needs them.
+The upgrade itself, `upgradeRunRecord({ summary, events })` in `src/shared/run-record.js`, is pure
+(the record given is never changed), idempotent, and works on in-memory events too: the renderer
+(`app.js`) upgrades a past run's live events with it. Its `UPGRADES` list has one entry per change
+of a run's shape, in order: `single issue: issues`, `#233 stopped attempt`, `#233 per-turn cost`,
+`#277 multi-result turn`, `sessions in the summary`. The readers (`runFigures`, `analyzeRun`,
+`runs.readRun` and the run index, `usage.readRuns` and Analytics, the cost estimates through the
+run list, the Oracle's focus) read the current shape only: they never test for an older one. The
+run index stores the upgraded summary; bump `READ_VERSION` in `src/runs.js` (and the figures' sig
+in `src/service/areas/insights.js`) when an upgrade changes what was indexed.
+
+When a change alters what a run records (a field renamed, a cost counted another way, a list moved):
+1. Change the engine to write the new shape, with a marker an older record lacks when the shape
+   cannot tell by itself (as `cost_accounting: 'per_turn'`, `turn_cost: 'max_result'`).
+2. Add one entry to `UPGRADES`, after the ones it builds on, named after its issue
+   (`#<n> <what changed>`): `applies(record)` says whether the record has the older shape,
+   `upgrade(record)` returns a new record in the newer one (copy what it changes, never mutate) and
+   sets the marker, so a second pass does not apply it again.
+3. Add a fixture of the older shape to `test/run-record-fixtures-350.js`, its own test, and check
+   that the readers give the same figures on it as before.
+4. Don't add a branch for the older shape to any reader.
 
 ## Issues: the git platform is the source of truth (#168)
 

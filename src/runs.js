@@ -25,16 +25,8 @@ const {
   listed,
   walkFiles,
 } = require('./run-artifacts');
-const { correctSessions, needsEvents, runCosts } = require('./run-costs');
-
-// session.updated (#320): the snapshot after a persistent agent's whole turn (its note saved)
-const SESSION_EVENTS = new Set([
-  'session.attempt_stopped',
-  'session.closed',
-  'session.message_received',
-  'session.opened',
-  'session.updated',
-]);
+const { readRunSummary } = require('./run-record');
+const { sessionsOfEvents, upgradeRunRecord } = require('./shared/run-record');
 
 // The saves of a run's document to its issue (written by backlog.saveRunToIssue), oldest first.
 function readIssueSaves(dir) {
@@ -74,11 +66,9 @@ function fromEvents(file) {
   if (hit?.key === key) return hit;
   const all = readEvents(file);
   const events = all.filter((e) => e.type !== 'session.stream');
-  const byId = new Map();
-  for (const ev of events) {
-    if (SESSION_EVENTS.has(ev.type) && ev.session) byId.set(ev.session_id, { ...ev.session, status: ev.type === 'session.closed' ? ev.status : ev.session.status });
-    else if (ev.type === 'session.status' && byId.has(ev.session_id)) byId.get(ev.session_id).status = ev.status;
-  }
+  // the sessions' latest snapshots in the current shape (#350: each turn's own cost, #233, #277 from
+  // the turns' usage items)
+  const upgraded = upgradeRunRecord({ events: all.filter((e) => e.type !== 'session.stream' || e.item?.kind === 'usage') }).events;
   const merged = events.findLast((e) => e.type === 'worktree.merged');
   const localMerge = merged ? { branch: merged.branch, base: merged.base, commit: merged.commit } : null;
   // the supervisor's latest recovery from a failed merge/action ("went back to develop at 00:10 because ...")
@@ -89,11 +79,8 @@ function fromEvents(file) {
     if (ev.type === 'workflow.child_started') children.set(ev.child_run_id, { run_id: ev.child_run_id, step_id: ev.step_id, ...(ev.index !== undefined ? { index: ev.index } : {}), workflow: ev.workflow, status: 'running' });
     else if (ev.type === 'workflow.child_finished' && children.has(ev.child_run_id)) Object.assign(children.get(ev.child_run_id), { status: ev.status, ...(ev.cost_usd !== undefined ? { cost_usd: ev.cost_usd } : {}) });
   }
-  // #233: a run recorded before per-turn costs counted each resumed Claude turn's whole session;
-  // #277: a multi-result turn's cost is in its `usage` stream items
-  const costs = runCosts(all.filter((e) => e.type !== 'session.stream' || e.item?.kind === 'usage'));
   // the PR the run opened (#84): the latest step output with pr_url / pr_number
-  const out = { key, sessions: correctSessions([...byId.values()], costs), costs, progress: trailOf(events), localMerge, recovery, pr: prOfEvents(events), childRuns: [...children.values()] };
+  const out = { key, sessions: sessionsOfEvents(upgraded), progress: trailOf(events), localMerge, recovery, pr: prOfEvents(events), childRuns: [...children.values()] };
   derived.set(file, out);
   return out;
 }
@@ -168,8 +155,8 @@ function liveStatus(dir) {
 function readRun(runsDir, runId) {
   const dir = path.join(runsDir, runId);
   const started = firstEvent(path.join(dir, 'events.jsonl'));
-  let summary = null;
-  try { summary = JSON.parse(fs.readFileSync(path.join(dir, 'summary.json'), 'utf8')); } catch { /* not finished */ }
+  // in the current shape (#350): an older summary is upgraded with its events; null: not finished
+  const summary = readRunSummary(dir);
   if (!summary && started?.type !== 'workflow.started') return null;
 
   let sessions;
@@ -178,9 +165,7 @@ function readRun(runsDir, runId) {
   let error = null;
   let progress;
   if (summary) {
-    sessions = summary.sessions || [];
-    // #233: costs of a run recorded before per-turn costs, read corrected from its events
-    if (needsEvents(summary)) sessions = correctSessions(sessions, fromEvents(path.join(dir, 'events.jsonl')).costs);
+    sessions = summary.sessions;
     status = summary.status;
     finishedAt = summary.finished_at;
     // runs recorded before summary.progress existed
@@ -266,15 +251,17 @@ function readRun(runsDir, runId) {
 // a run whose files changed since it was indexed (signature below), or that has no row, is read
 // again and its row replaced; rows of deleted folders go. The files stay the source of truth.
 const SIG_FILES = ['events.jsonl', 'summary.json', 'meta.json', 'issue-saves.json', 'chain.json'];
-// how a row is read: a new reading (#233: corrected past costs) reads every run again once
-const READ_VERSION = 'costs-per-turn';
+// how a row is read: a new reading (#233: corrected past costs; #350: the upgraded run record, its
+// summary indexed upgraded) reads every run again once
+const READ_VERSION = 'run-record';
 function runSignature(dir) {
   return `${SIG_FILES.map((f) => {
     try { const st = fs.statSync(path.join(dir, f)); return `${st.mtimeMs}:${st.size}`; } catch { return '-'; }
   }).join('|')}|${READ_VERSION}`;
 }
 
-const readSummaryText = (dir) => { try { return fs.readFileSync(path.join(dir, 'summary.json'), 'utf8'); } catch { return null; } };
+// summary.json as the index keeps it (Usage, Analytics): in the current shape (#350)
+const indexedSummary = (dir) => { const s = readRunSummary(dir); return s ? JSON.stringify(s) : null; };
 
 // Reads one run folder into the index; returns its RunInfo (null when it is not a run).
 const readAt = new Map(); // run id → when indexRunIn last read it
@@ -282,7 +269,7 @@ function indexRunIn(store, runsDir, runId) {
   const dir = path.join(runsDir, runId);
   const sig = runSignature(dir);
   const info = readRun(runsDir, runId);
-  if (info) store.putRun(info, sig, readSummaryText(dir));
+  if (info) store.putRun(info, sig, indexedSummary(dir));
   readAt.set(runId, Date.now());
   return info;
 }

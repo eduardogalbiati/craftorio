@@ -3,9 +3,10 @@
 // effective $/M tokens and, #308, the sub-agents' calls and tokens they include), per-step visits,
 // suite rounds, gate waits and the slowest tool calls, from the run's summary.json and events.jsonl; and its comparison with the other real successful runs of
 // the same workflow (median and p25-p75 per figure). Pure: the service (analytics:run in
-// src/service/areas/usage.js) reads the files and caches the figures.
+// src/service/areas/insights.js) reads the run record (src/run-record.js) and caches the figures;
+// a record of an older shape is upgraded first (#350, src/shared/run-record.js).
 
-const { correctSessions, runCosts } = require('./run-costs');
+const { upgradeRunRecord } = require('./shared/run-record');
 
 const MIN_RUNS = 3;
 const HISTORY = 30;
@@ -19,19 +20,24 @@ const addTokens = (a, b) => Object.fromEntries(TOKEN_KINDS.map((k) => [k, a[k] +
 const sumTokens = (t) => TOKEN_KINDS.reduce((s, k) => s + t[k], 0);
 const countOf = (x) => (Array.isArray(x) ? x.length : Number(x) || 0);
 
-/** The figures of one run: `summary` its summary.json, `events` its events.jsonl. */
-function runFigures({ summary = {}, events = [], now = Date.now() }) {
+/** The figures of one run: `summary` its summary.json (null: none yet), `events` its events.jsonl. */
+function runFigures({ summary: recorded = null, events: all = [], now = Date.now() }) {
+  const { summary: upgraded, events } = upgradeRunRecord({ summary: recorded, events: all });
+  const summary = upgraded || {};
   const started = events.find((e) => e.type === 'workflow.started') || {};
   const finished = events.findLast((e) => e.type === 'workflow.finished');
   const startedAt = summary.started_at || started.ts || null;
   const finishedAt = summary.finished_at || finished?.ts || null;
   const end = ms(finishedAt) || now;
   const issues = summary.issues || started.issues || [];
-  // #233 (src/run-costs.js): a run recorded before per-turn costs is read corrected; the attempts
-  // stopped before their result are estimated (or their cost was not recorded)
-  const costs = runCosts(events, summary);
-  const sessions = correctSessions(summary.sessions || [], costs);
-  const costUsd = Math.max(0, (Number(summary.cost_usd ?? finished?.summary?.cost_usd) || 0) - costs.overcountUsd);
+  // each turn's own cost; the attempts stopped before their result are estimated (or their cost
+  // was not recorded)
+  const sessions = summary.sessions || [];
+  const costUsd = Number(summary.cost_usd ?? finished?.summary?.cost_usd) || 0;
+  const turnCost = (e) => Number(e.cost_usd) || 0;
+  const stopped = events.filter((e) => e.type === 'session.attempt_stopped').map((e) => ({
+    agent: e.session?.agent || e.agent || null, sessionId: e.session_id, step: e.step_id || null, t: ms(e.ts), costUsd: turnCost(e), estimated: !!e.estimated, notRecorded: !!e.cost_not_recorded,
+  }));
 
   // agents: the sessions' totals, the turns' active and waiting time
   const sessionAgent = new Map(sessions.map((s) => [s.id, s.agent]));
@@ -63,15 +69,15 @@ function runFigures({ summary = {}, events = [], now = Date.now() }) {
       a.subagents.calls += Number(e.subagents.calls) || 0;
       a.subagents.tokens += sumTokens(tokensOf(e.subagents.usage));
     }
-    // a run without sessions in its summary (an older one): the turns are the only source
+    // a run still going (no summary): the turns are the only source
     if (!fromSessions.has(name)) {
       a.turns += 1;
-      a.costUsd += costs.turnCost(e);
+      a.costUsd += turnCost(e);
       a.tokens = addTokens(a.tokens, tokensOf(e.usage));
     }
-    turns.push({ t: ms(e.ts), step: e.step_id, agent: name, cost: costs.turnCost(e) });
+    turns.push({ t: ms(e.ts), step: e.step_id, agent: name, cost: turnCost(e) });
   }
-  for (const x of costs.stopped) {
+  for (const x of stopped) {
     const name = x.agent || sessionAgent.get(x.sessionId) || stepAgent.get(x.step) || 'agent';
     const a = agentOf(name);
     if (!fromSessions.has(name)) a.costUsd += x.costUsd;
@@ -181,8 +187,8 @@ function runFigures({ summary = {}, events = [], now = Date.now() }) {
     finishedAt,
     costUsd,
     // #233: the part of costUsd estimated from stopped attempts; a stopped attempt without a cost
-    costEstimatedUsd: costs.stopped.reduce((s, x) => s + (x.estimated ? x.costUsd : 0), 0),
-    costNotRecorded: costs.stopped.some((x) => x.notRecorded),
+    costEstimatedUsd: stopped.reduce((s, x) => s + (x.estimated ? x.costUsd : 0), 0),
+    costNotRecorded: stopped.some((x) => x.notRecorded),
     costPerIssue: issues.length ? costUsd / issues.length : null,
     durationMs,
     gateWaitMs,

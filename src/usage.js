@@ -13,6 +13,7 @@
 const fs = require('fs');
 const path = require('path');
 const { installCommand } = require('./install-commands');
+const { readRunSummary } = require('./run-record');
 const { runSummaries } = require('./runs');
 const registry = require('./shared/providers');
 const TimeZone = require('./time-zone');
@@ -60,20 +61,15 @@ function addSession(tot, session, prices) {
   else tot.costUsd += cost;
 }
 
-// From the run index when the service has it open (src/store.js), else the summary.json files.
+// From the run index when the service has it open (src/store.js), else the summary.json files; in
+// the current shape both ways (#350, src/run-record.js).
 function readRuns(runsDir) {
   const indexed = runSummaries(runsDir, { mock: false });
   if (indexed) return indexed;
   let dirs = [];
   try { dirs = fs.readdirSync(runsDir); } catch { return []; }
-  const runs = [];
-  for (const d of dirs) {
-    try {
-      const s = JSON.parse(fs.readFileSync(path.join(runsDir, d, 'summary.json'), 'utf8'));
-      if (!s.mock) runs.push(s);
-    } catch { /* running, crashed or not a run folder */ }
-  }
-  return runs;
+  // null: running, crashed or not a run folder
+  return dirs.map((d) => readRunSummary(path.join(runsDir, d))).filter((s) => s && !s.mock);
 }
 
 // the owner's local month and day (settings.timeZone, #273; UTC when no zone is given)

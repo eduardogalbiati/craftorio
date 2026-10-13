@@ -41,6 +41,7 @@ const {
   FOCUSES,
   regressionsAnswer,
 } = require('./oracle-run-focus');
+const { readRunRecord } = require('./run-record');
 const { bundleStatus } = require('./seed');
 const { readEvents } = require('./supervisor');
 const { callTool, supervisorTools } = require('./supervisor-tools');
@@ -342,7 +343,10 @@ function oracleTools(ctx, hooks = {}) {
           const briefs = [3, 1, 0].map((top) => JSON.stringify({ ...focusBrief(focus, answer, top), note: `Per run: ${top ? `only the ${top} largest entries of each list` : 'the lists are left out'} (the counts and the total are whole); ask for fewer runIds, or one run, for the details.` }));
           return briefs.find((b) => Buffer.byteLength(b) <= MAX_FILE_BYTES) || briefs[briefs.length - 1];
         }
-        const list = analyzedRuns(input).map((dir) => analyzeRun(path.basename(dir), readJson(path.join(dir, 'summary.json')), readEvents(dir)));
+        const list = analyzedRuns(input).map((dir) => {
+          const { summary, events } = readRunRecord(dir);
+          return analyzeRun(path.basename(dir), summary, events);
+        });
         const total = totalOf(list);
         const full = JSON.stringify({ runs: list, total });
         if (full.length <= MAX_FILE_BYTES) return full;

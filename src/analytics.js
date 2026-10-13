@@ -130,13 +130,14 @@ function computeAnalytics({ runsDir, local = null, settings = {}, projects = [],
     else s.costUsd += cost;
   }
 
+  // in the current shape (#350): every summary lists its sessions, with each turn's own cost
   const runs = readRuns(runsDir);
   const outcomes = { total: 0, byStatus: {}, durationMs: 0, waitingMs: 0, supervisorTurns: 0 };
   const orchIds = new Map(); // provider session id -> { runId, agent, step }
   const orchCost = new Map(); // provider session id -> { cost, tokens }: the CLI's records carry no cost for Claude Code
   for (const run of runs) {
     const started = run.started_at || run.startedAt;
-    for (const s of run.sessions || []) {
+    for (const s of run.sessions) {
       if (!s.provider_session_id) continue;
       orchIds.set(s.provider_session_id, { runId: run.run_id, workflow: run.workflow, agent: s.agent, step: s.step_id });
       const c = orchCost.get(s.provider_session_id) || orchCost.set(s.provider_session_id, { cost: 0, tokens: 0, priced: true }).get(s.provider_session_id);
@@ -151,7 +152,7 @@ function computeAnalytics({ runsDir, local = null, settings = {}, projects = [],
     outcomes.durationMs += run.duration_ms || 0;
     outcomes.waitingMs += run.timing?.waiting_ms || 0;
     const project = run.project_id ? { id: run.project_id, name: projectName.get(run.project_id) || run.project_id } : null;
-    for (const s of run.sessions || []) {
+    for (const s of run.sessions) {
       const id = providerId(s.provider);
       if (!id) continue; // orchestrator / mock
       if (s.agent === 'supervisor' || s.step_id === 'supervisor') outcomes.supervisorTurns += s.turns || 0;

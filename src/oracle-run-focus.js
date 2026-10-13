@@ -15,7 +15,7 @@
 //   or minutes regressed against its baseline of the same class (src/step-regressions.js).
 // Pure, no model: the caller reads summary.json, events.jsonl, the suite logs and the test files.
 
-const { runCosts } = require('./run-costs');
+const { upgradeRunRecord } = require('./shared/run-record');
 const { cacheLifetimeMs, cacheTier } = require('./session-cache');
 const { REGRESSION_DEFAULTS, regressionLine, stepRegressions } = require('./step-regressions');
 
@@ -373,8 +373,9 @@ function toolsBrief(r, top) {
 
 // ---- cache -------------------------------------------------------------------------------------
 
-function cacheOf({ runId, summary, events }) {
-  const costs = runCosts(events, summary);
+function cacheOf({ runId, ...recorded }) {
+  // each turn's own cost (#350: an older record upgraded)
+  const { summary, events } = upgradeRunRecord(recorded);
   const at = sessionTracker(summary);
   const sentAt = new Map(); // session id → its latest turn's message
   const ended = new Map(); // session id → { t, usage } of its previous turn
@@ -391,7 +392,7 @@ function cacheOf({ runId, summary, events }) {
     const lifetime = s.lifetimeMs ?? cacheLifetimeMs(s.provider, { tier: cacheTier(prev.usage) });
     const gap = (sentAt.get(e.session_id) ?? ms(e.ts)) - prev.t;
     if (lifetime == null || !(gap > lifetime)) continue;
-    cold.push({ agent: s.agent, session: e.session_id, step: s.step, turn: e.turn ?? null, gapMs: gap, cacheWrite: Number(e.usage?.cache_write) || 0, costUsd: round(costs.turnCost(e)) });
+    cold.push({ agent: s.agent, session: e.session_id, step: s.step, turn: e.turn ?? null, gapMs: gap, cacheWrite: Number(e.usage?.cache_write) || 0, costUsd: round(Number(e.cost_usd) || 0) });
   }
   return { runId, status: statusOf(summary), turns, cold: coldOf(cold, turns) };
 }
