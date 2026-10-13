@@ -194,9 +194,9 @@ test('engine index: topics in file-name order; a heading followed by another hea
   ]);
 });
 
-test('no relative link in docs/agents/ (topic files included) or in CLAUDE.md is broken', () => {
+test('no relative link in docs/agents/ (topic files included), in AGENTS.md or in CLAUDE.md is broken', () => {
   const agents = path.join(root, 'docs', 'agents');
-  const files = [path.join(root, 'CLAUDE.md')];
+  const files = [path.join(root, 'AGENTS.md'), path.join(root, 'CLAUDE.md')];
   for (const dir of [agents, path.join(agents, 'engine')]) {
     // code-map.md and test-map.md are derived (gitignored), not hand-written docs
     for (const f of mdFiles(dir)) if (!['code-map.md', 'test-map.md'].includes(f)) files.push(path.join(dir, f));

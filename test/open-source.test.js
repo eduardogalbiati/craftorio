@@ -123,10 +123,13 @@ test('#314: every skill or workflow adapted from an MIT project is named in THIR
 
 // ---- #314: contributor files ---------------------------------------------------------------------
 
-test('#314: CONTRIBUTING.md explains the setup and the checks (.nvmrc, npm install, npm start, MULTIAGENT_AUTH=off, npm test, CLAUDE.md, docs/agents)', () => {
+test('#314: CONTRIBUTING.md explains the setup and the checks (.nvmrc, npm install, npm start, MULTIAGENT_AUTH=off, npm test, AGENTS.md, docs/agents)', () => {
   assert.ok(exists('CONTRIBUTING.md'), 'CONTRIBUTING.md exists');
   const text = read('CONTRIBUTING.md');
-  for (const s of ['.nvmrc', 'npm install', 'npm start', 'MULTIAGENT_AUTH=off', 'npm test', 'CLAUDE.md', 'docs/agents']) assert.ok(text.includes(s), s);
+  for (const s of ['.nvmrc', 'npm install', 'npm start', 'MULTIAGENT_AUTH=off', 'npm test', 'AGENTS.md', 'docs/agents']) assert.ok(text.includes(s), s);
+  // #331: the agents' instructions are AGENTS.md; CONTRIBUTING links it, not CLAUDE.md
+  assert.ok(text.includes('](AGENTS.md)'), 'CONTRIBUTING.md does not link AGENTS.md');
+  assert.equal(text.includes('](CLAUDE.md)'), false, 'CONTRIBUTING.md still links CLAUDE.md');
 });
 
 test('#314: SECURITY.md sends vulnerabilities to GitHub\'s private vulnerability reporting ("Report a vulnerability")', () => {

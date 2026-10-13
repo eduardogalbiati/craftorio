@@ -26,11 +26,15 @@ test('planOs: a docs-only PR runs no tests', () => {
 
 test('planOs: docs the tests read are not docs-only', () => {
   for (const file of [
-    'CLAUDE.md', 'docs/agents/testing.md', 'skills/code-review/SKILL.md', 'skills/code-review/rules/js.md',
+    'CLAUDE.md', 'AGENTS.md', 'docs/agents/testing.md', 'docs/agents/decisions.md', 'skills/code-review/SKILL.md', 'skills/code-review/rules/js.md',
     'docs/features/software-development.md', 'docs/screens/backlog.md',
   ]) {
     assert.deepEqual(planOs({ event: 'pull_request', files: ['README.md', file] }), ['ubuntu-latest', 'windows-latest'], file);
   }
+});
+
+test('planOs: a PR that changes only AGENTS.md runs the tests, like CLAUDE.md (its size cap and links are tested, #331)', () => {
+  assert.deepEqual(planOs({ event: 'pull_request', files: ['AGENTS.md'] }), ['ubuntu-latest', 'windows-latest']);
 });
 
 test('planOs: a PR whose file list is unknown runs the tests', () => {
