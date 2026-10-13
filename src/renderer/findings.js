@@ -217,6 +217,7 @@
     canvas.width = w;
     canvas.height = h;
     cur.scale = scale;
+    renderPins();
     draw();
   }
 
@@ -312,6 +313,11 @@
         <input type="text" data-fd-note="${i}" value="${esc(m.note || '')}" placeholder="Note (optional)" aria-label="Note for ${esc(markLabel(m))}" />
         <button type="button" class="link-btn" data-fd-remove="${i}" aria-label="Remove ${esc(markLabel(m))}" title="Remove this mark">✕</button>
       </li>`).join('');
+    renderPins();
+  }
+
+  // the pins sit on the frame at the current scale (re-placed on resize; the note inputs are left alone)
+  function renderPins() {
     cur.el.querySelector('.fd-pins').innerHTML = cur.marks.filter((m) => m.type === 'pin').map((m) => `
       <span class="fd-pin" data-testid="findings-pin" style="left:${Math.round(m.x * cur.scale)}px;top:${Math.round(m.y * cur.scale)}px" title="${esc(markLabel(m))}">${m.n}</span>`).join('');
   }
