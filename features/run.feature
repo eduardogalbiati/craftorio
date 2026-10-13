@@ -229,3 +229,41 @@ Feature: Runs and gates
     Then a gate card waits for my approval
     And the gate card's Continue line says "Continue"
     And the gate card's Continue line does not say "cold"
+
+  # ---- #369: a Claude turn on a model the installed Claude Code does not know ----------------------
+  # Claude Code prices a turn on a model it does not know (stderr `[claude-code:unrecognized_model]`)
+  # at Opus rates; the app prices it from its tokens instead, or shows the cost as unknown when it has
+  # no price for the model. The runs are seeded finished (features/steps/turn-costs.steps.js): the
+  # session snapshot's cost_estimate { source, model, cli_version, cli_cost_usd }.
+
+  @issue-369
+  Scenario: A turn on a model Claude Code does not know shows its cost estimated from tokens, in the run list and on the Run screen
+    Given the app is open
+    And the demo project has a finished AI Development run "est00369"
+    And its "developer" turn ran on "claude-haiku-5-5", a model Claude Code "2.3.1" does not know, priced from its tokens at 0.42 while the CLI said 2.84
+    And its "reviewer" turn ran on the known model "claude-opus-5-5" at 1.37
+    When I open "Runs" in the sidebar
+    And I search the runs for "est00369"
+    And I open the row of the run "est00369" in the list
+    Then the cost of the run's "developer" session shows "0.42"
+    And the cost of the run's "developer" session is marked "estimated from tokens" because "Claude Code 2.3.1 does not know claude-haiku-5-5"
+    And the cost of the run's "reviewer" session has no estimate mark
+    When I view the run "est00369" from the list
+    Then the cost of the run's "developer" session shows "0.42"
+    And the cost of the run's "developer" session does not show "2.84"
+    And the cost of the run's "developer" session is marked "estimated from tokens" because "Claude Code 2.3.1 does not know claude-haiku-5-5"
+    And the cost of the run's "reviewer" session has no estimate mark
+
+  @issue-369
+  Scenario: A turn on a model with no price shows its cost as unknown, never the CLI's number
+    Given the app is open
+    And the demo project has a finished AI Development run "unk00369"
+    And its "developer" turn ran on "claude-haiku-5-5", a model Claude Code "2.3.1" does not know and has no price for, while the CLI said 2.84
+    When I open "Runs" in the sidebar
+    And I search the runs for "unk00369"
+    And I open the row of the run "unk00369" in the list
+    Then the cost of the run's "developer" session does not show "2.84"
+    And the cost of the run's "developer" session is marked "no price for claude-haiku-5-5" because "Claude Code 2.3.1 does not know claude-haiku-5-5"
+    When I view the run "unk00369" from the list
+    Then the cost of the run's "developer" session does not show "2.84"
+    And the cost of the run's "developer" session is marked "no price for claude-haiku-5-5" because "Claude Code 2.3.1 does not know claude-haiku-5-5"
