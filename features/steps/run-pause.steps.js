@@ -27,8 +27,9 @@ const LOAD_TIMEOUT = 30000;
 
 const visible = (page, id) => page.getByTestId(id).filter({ visible: true }).first();
 const pauseState = (page) => visible(page, 'run-pause-state');
+// a session card of an agent in the middle of a turn: its status is "active" (or "retrying"), not "running"
 const workingCard = (page) => page.locator('[data-testid="run-session-card"]:not([data-id="orchestrator"])').filter({ visible: true })
-  .filter({ has: page.locator('[data-status="running"]') });
+  .filter({ has: page.locator('[data-status="active"], [data-status="retrying"]') });
 const firstLine = (text) => String(text).trim().split('\n')[0].trim();
 const stepItems = (page) => visible(page, 'run-steps').getByRole('listitem');
 const stage = (page, n) => page.getByTestId('roadmap-stage').filter({ hasText: new RegExp(`\\bStage ${n}\\b`) }).first();
