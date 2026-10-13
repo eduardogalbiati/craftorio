@@ -575,8 +575,7 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
     if (filtered) { out.scope = 'files'; out.command = filtered; measure = false; }
     else if (out.selection) out.selection = { ...out.selection, why: `${out.selection.why}; \`${out.command}\` cannot run single test files: the whole suite ran` };
   }
-  if (coverage && !mock) out.command = coverageCommand(out.command, cwd);
-  if (!mock) out.command = withWorkers(out.command, testWorkers);
+  if (!mock) out.command = withWorkers(coverage ? coverageCommand(out.command, cwd) : out.command, testWorkers);
   const recent = mock ? [] : suiteDurations(hist);
   out.timeout_ms = timeoutMs || suiteTimeout(recent);
   const timeoutWhy = timeoutMs ? 'the step\'s timeout' : recent.length ? `${TIMEOUT_FACTOR}× the median of the last ${plural(recent.length, 'suite run')}` : 'the default, no suite run measured yet';

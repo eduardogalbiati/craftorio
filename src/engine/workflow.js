@@ -75,6 +75,19 @@ function newRunId() {
   return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}-${crypto.randomUUID().slice(0, 8)}`;
 }
 
+// The run's machine actions (#353): the given ones, else real() or simulated() by `mock`; one that does
+// not match `mock` is refused (a real run never simulates, nor the reverse).
+function runMachine(machine, mock, sequences) {
+  const m = machine || (mock ? machineActions.simulated({ sequences }) : machineActions.real());
+  if (m.simulated !== mock) {
+    throw new Error(mock ? 'A simulated run cannot take the real machine actions.' : 'A real run cannot take the simulated machine actions.');
+  }
+  return m;
+}
+
+// The run's test workers (#367): { testWorkers } for a whole number from 1, else null (not set).
+const runWorkers = (testWorkers) => (Number.isInteger(testWorkers) && testWorkers >= 1 ? { testWorkers } : null);
+
 class WorkflowRun extends EventEmitter {
   // budget: { [provider id]: { name, limitUsd, limitTokens, blockOnLimit, usedUsd, usedTokens } }
   // (this month's usage before this run, see src/usage.js); prices: USD per 1M tokens by model.
@@ -133,10 +146,7 @@ class WorkflowRun extends EventEmitter {
     this.wf = loadWorkflow(file);
     this.mock = !!mock;
     this.mockSequences = mockSequences || null;
-    this.machine = machine || (this.mock ? machineActions.simulated({ sequences: this.mockSequences }) : machineActions.real());
-    if (this.machine.simulated !== this.mock) {
-      throw new Error(this.mock ? 'A simulated run cannot take the real machine actions.' : 'A real run cannot take the simulated machine actions.');
-    }
+    this.machine = runMachine(machine, this.mock, this.mockSequences);
     this.notices = notices || [];
     this.runId = newRunId();
     this.runDir = path.join(runsDir, this.runId);
@@ -160,7 +170,7 @@ class WorkflowRun extends EventEmitter {
     // suites while memory is low; the app's guard for a real run (null when turned off), none for a
     // simulation unless one is given
     this.memoryGuard = memoryGuard !== undefined ? memoryGuard : this.mock ? null : sharedMemoryGuard();
-    this.workers = Number.isInteger(testWorkers) && testWorkers >= 1 ? { testWorkers } : null;
+    this.workers = runWorkers(testWorkers);
     this.memoryNotes = new Map(); // agent -> [what the guard stopped], told in its next prompt
     this.memoryStops = new Map(); // `${step}\n${command}` -> stops (the second one notifies the owner)
     this.probe = probe || ((args) => this.machine.probe(args));
