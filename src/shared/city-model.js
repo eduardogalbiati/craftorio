@@ -62,7 +62,7 @@
   const node = typeof module === 'object' && module.exports;
   // the facts' core (glob rule, sorted keys) and the schema validator; in the browser they load after this file
   const facts = () => (node ? require('./architecture-model') : root.ArchitectureModel);
-  const schema = () => (node ? require('../json-schema') : root.JsonSchema || null);
+  const schema = () => (node ? require('./json-schema') : root.JsonSchema || null);
 
   const arr = (x) => (Array.isArray(x) ? x : []);
   const byString = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
