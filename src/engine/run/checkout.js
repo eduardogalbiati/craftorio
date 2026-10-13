@@ -40,7 +40,7 @@ const methods = {
     this.ctx.worktree_dir = repo;
     const log = (level, message) => this.emitEvent('log', { level, message });
     if (!this.worktreesDir) {
-      log('info', `worktree: ${this.mock ? 'simulation, ' : ''}no worktree for this run; agents work in ${repo}`);
+      log('info', `worktree: ${this.machine.simulated ? 'simulation, ' : ''}no worktree for this run; agents work in ${repo}`);
       return;
     }
     const prev = this.resume?.worktree;
@@ -74,7 +74,7 @@ const methods = {
   // once), and into the base worktree. Records `deps.ready`; agents are told in their command guide.
   // which: 'worktree' | 'base'. A simulated run has no worktree, so nothing is installed.
   async prepareDeps(which, dir, after) {
-    if (this.mock || !dir) return null;
+    if (this.machine.simulated || !dir) return null;
     this.deps ??= {};
     const previous = this.deps[which] || null;
     let r;

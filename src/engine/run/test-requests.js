@@ -11,8 +11,7 @@ const fs = require('fs');
 const path = require('path');
 const { git } = require('../worktree');
 const capabilities = require('../capabilities');
-const suiteStep = require('../suite-step');
-const { affectedTests, testMap, testMapMarkdown } = require('../affected-tests');
+const { testMap, testMapMarkdown } = require('../affected-tests');
 const testPaths = require('../test-paths');
 const { render } = require('./templates');
 const {
@@ -25,22 +24,11 @@ const {
 const methods = {
   // The test files the run's change can break (#212, src/engine/affected-tests.js), plus the files
   // that failed in an earlier round (`this.suiteFailedFiles`): { mode, files, reasons, why, ... }.
-  // Simulation: two simulated files. A run without a worktree or a base: the whole suite.
+  // Simulation: two simulated files. A run without a worktree or a base: the whole suite (the
+  // machine adapter's affectedTests, src/engine/machine-actions.js).
   affectedSelection() {
-    if (this.mock) {
-      const files = ['test/simulated.test.js', 'test/simulated-other.test.js'];
-      return { mode: 'affected', files, reasons: { [files[0]]: 'imports src/simulated.js', [files[1]]: 'imports src/simulated.js (through src/simulated-user.js)' }, changed: ['src/simulated.js'], slow: [], why: `${files.length} test file(s) reach the 1 changed file(s) (simulated)` };
-    }
     const base = this.worktree?.base || render(this.wf.orchestrator?.worktree?.base || '', this.ctx).trim();
-    if (!this.ctx.worktree_dir || !base) return { mode: 'all', files: [], reasons: {}, changed: [], slow: [], why: 'the run has no worktree or base branch: the whole suite' };
-    const sel = affectedTests({ root: this.ctx.worktree_dir, base });
-    for (const f of this.suiteFailedFiles) {
-      if (sel.mode !== 'affected' || sel.files.includes(f) || !fs.existsSync(path.join(this.ctx.worktree_dir, f))) continue;
-      sel.files.push(f);
-      sel.reasons[f] = 'failed in an earlier round';
-    }
-    sel.files.sort();
-    return sel;
+    return this.machine.affectedTests({ root: this.ctx.worktree_dir, base, failed: this.suiteFailedFiles });
   },
 
   // `commit_tests: true` on the test writer's step (#209): the run never goes on (build, evidence,
@@ -141,7 +129,7 @@ const methods = {
     const cwd = render(agent.working_dir || '', this.ctx).trim() || this.ctx.worktree_dir;
     this.testRequests = (this.testRequests || 0) + 1;
     const root = path.dirname(path.dirname(this.runDir));
-    let files = request.files.filter((f) => this.mock || (cwd && fs.existsSync(path.join(cwd, f))));
+    let files = this.machine.existingFiles(cwd, request.files);
     const missing = request.files.filter((f) => !files.includes(f));
     const reasons = Object.fromEntries(files.map((f) => [f, `asked by ${agentName}`]));
     let why = `asked by ${agentName}`;
@@ -156,9 +144,9 @@ const methods = {
     if (!files.length) return `The orchestrator ran no test: ${missing.length ? `these files do not exist in ${cwd}: ${missing.join(', ')}` : 'no test file reaches your change'}.`;
     const name = `tests-${String(stepId || agentName).replace(/[^\w-]/g, '_')}-${this.testRequests}`;
     this.emitEvent('log', { level: 'info', kind: 'test_request', agent: agentName, step_id: stepId || null, message: `[${agentName}] asked to run ${files.length} test file(s): the orchestrator runs them (log logs/${name}.log)` });
-    const output = await suiteStep.runSuite({
+    const output = await this.machine.runSuite({
       command: this.suiteCommand(), cwd, runDir: this.runDir, round: this.testRequests, logName: name,
-      env: { ...process.env, ...capabilities.agentEnv() }, testWorkers: this.workers?.testWorkers, mock: this.mock, preexisting: this.preexisting, signal: this.abort.signal,
+      env: { ...process.env, ...capabilities.agentEnv() }, testWorkers: this.workers?.testWorkers, preexisting: this.preexisting, signal: this.abort.signal,
       base: () => this.suiteBase(), baseCacheDir: path.join(root, 'cache', 'base-tests'),
       files, selection: { mode: 'affected', files, reasons, why },
       log: (level, message) => this.emitEvent('log', { level, message }),

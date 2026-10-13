@@ -4,7 +4,8 @@
 // (`runTestIdsStep`, #246), `type: workflow` child runs (`runChildWorkflows`, #174), `type:
 // release_version` (`runReleaseVersionStep`, #325), and the evidence a step leaves (`recordEvidence`,
 // `saveScenarios`).
-// The steps' own logic is src/engine/suite-step.js, screenshot-step.js, test-ids.js and workflow-step.js.
+// The steps' own logic is src/engine/suite-step.js, screenshot-step.js, test-ids.js and workflow-step.js;
+// what they run on the machine goes through the run's machine adapter (`this.machine`, #353).
 
 'use strict';
 
@@ -13,11 +14,9 @@ const fs = require('fs');
 const path = require('path');
 const capabilities = require('../capabilities');
 const evidence = require('../../evidence');
-const { writeReleaseVersion } = require('../../releases');
 const scenarios = require('../scenarios');
-const { captureScreenshots } = require('../screenshot-step');
 const suiteStep = require('../suite-step');
-const { changedFiles, relatedTests, selectionLines } = require('../affected-tests');
+const { changedFiles, selectionLines } = require('../affected-tests');
 const { runWorkflowStep } = require('../workflow-step');
 const testIds = require('../test-ids');
 const { render } = require('./templates');
@@ -106,7 +105,7 @@ const methods = {
     let watch = null;
     try {
       const base = step.base ? render(String(step.base), this.ctx).trim() : this.worktree?.ref || null;
-      return await captureScreenshots({
+      return await this.machine.captureScreenshots({
         entries: this.ctx.steps[step.from]?.output?.screenshots,
         cwd: this.ctx.worktree_dir,
         runDir: this.runDir,
@@ -114,7 +113,6 @@ const methods = {
         round: st.visits,
         base: base || null,
         env: { ...process.env, ...capabilities.agentEnv(this.scratchWorkspace(), this.workers) },
-        mock: this.mock,
         signal: this.abort.signal,
         timeoutMs: parseDuration(step.timeout, undefined),
         log: (level, message) => this.emitEvent('log', { level, message }),
@@ -218,17 +216,17 @@ const methods = {
     const tested = testedTree(this.ctx.worktree_dir);
     const once = async (extra = {}) => {
       const onStop = (ev) => stopped.push(ev);
-      let watch = this.mock ? this.watchMemory({ stepId: step.id, onStop }) : null;
+      // a simulated suite spawns nothing (no onSpawn): its watch starts here, without a process tree
+      let watch = this.machine.simulated ? this.watchMemory({ stepId: step.id, onStop }) : null;
       const onSpawn = (pid) => { watch?.stop(); watch = this.watchMemory({ rootPid: pid, stepId: step.id, onStop }); };
       try {
-        return await suiteStep.runSuite({
+        return await this.machine.runSuite({
           command: step.command ? render(String(step.command), this.ctx).trim() : '',
           cwd: this.ctx.worktree_dir,
           runDir: this.runDir,
           round: st.visits,
           env: { ...process.env, ...capabilities.agentEnv() },
           testWorkers: this.workers?.testWorkers,
-          mock: this.mock,
           mockResult,
           preexisting: this.preexisting,
           signal: this.abort.signal,
@@ -261,7 +259,7 @@ const methods = {
     if (step.files !== undefined) {
       const cwd = this.ctx.worktree_dir;
       const given = renderFileList(step.files, this.ctx);
-      const files = given.filter((f) => this.mock || (cwd && fs.existsSync(path.join(cwd, f))));
+      const files = this.machine.existingFiles(cwd, given);
       const missing = given.filter((f) => !files.includes(f));
       const selection = { mode: 'affected', files, reasons: Object.fromEntries(files.map((f) => [f, `listed by ${step.id}`])), why: `the ${files.length} test file(s) the step lists${missing.length ? ` (not found: ${missing.join(', ')})` : ''}` };
       // new tests are not on the base: no base check for a red check
@@ -290,8 +288,8 @@ const methods = {
     if (output.status === 'pass' && output.scope !== 'files' && step.files === undefined) this.fullSuitePassed = true;
     // the files that failed come back in the next round's affected set
     for (const f of output.failures || []) if (f.file && !this.suiteFailedFiles.includes(f.file)) this.suiteFailedFiles.push(f.file);
-    if (output.preexisting_failures?.length && !this.mock) {
-      suiteStep.noteFailingOnMain(path.join(root, 'failing-on-main.json'), { project, base: this.worktree?.base, commit: output.base_check?.commit, runId: this.runId, failures: output.preexisting_failures });
+    if (output.preexisting_failures?.length) {
+      this.machine.noteFailingOnMain(path.join(root, 'failing-on-main.json'), { project, base: this.worktree?.base, commit: output.base_check?.commit, runId: this.runId, failures: output.preexisting_failures });
     }
     if (output.log) this.emitEvent('file.saved', { step_id: step.id, path: path.join(this.runDir, output.log) });
     if (output.base_check?.log) this.emitEvent('file.saved', { step_id: step.id, path: path.join(this.runDir, output.base_check.log) });
@@ -360,16 +358,17 @@ const methods = {
     const none = (reason) => ({ written: false, from: null, to: null, files: [], commit: null, reason });
     let r;
     let error = false;
+    const simulated = this.machine.simulated;
     try {
-      r = !this.mock && !this.worktree
+      r = !simulated && !this.worktree
         ? none('The run has no worktree of its own: the version is not written in the repository folder.')
-        : await writeReleaseVersion({ dir, version, branch, mock: this.mock });
+        : await this.machine.writeReleaseVersion({ dir, version, branch });
     } catch (e) {
       error = true;
       r = none(`The version could not be written: ${e.message}`);
     }
     // what ships with the release (a simulation: what a real run would write)
-    const change = r.written || (this.mock && r.files.length) ? `package.json ${r.from || '(no version)'} → ${r.to}` : '';
+    const change = r.written || (simulated && r.files.length) ?`package.json ${r.from || '(no version)'} → ${r.to}` : '';
     const output = { kind: 'release_version', status: r.written ? 'written' : 'unchanged', version, ...r, change, message: r.reason };
     this.emitEvent('log', { level: error ? 'warn' : 'info', kind: 'release_version', step_id: step.id, message: `${step.id}: ${r.reason}` });
     return output;
@@ -405,10 +404,10 @@ const methods = {
   // next prompt that names the already-green files.
   redCheckOutput(output, files, mockResult) {
     if (output.status === 'blocked') return output;
-    const check = suiteStep.redCheck(output, files, { mock: this.mock, mockResult });
+    const check = this.machine.redCheck(output, files, { mockResult });
     let related = { files: [], reasons: {}, why: '' };
-    if (!this.mock && files.length) {
-      try { related = relatedTests({ root: this.ctx.worktree_dir, tests: files }); } catch (e) { related.why = `the related tests could not be listed (${e.message.split('\n')[0]})`; }
+    if (files.length) {
+      try { related = this.machine.relatedTests({ root: this.ctx.worktree_dir, tests: files }); } catch (e) { related.why = `the related tests could not be listed (${e.message.split('\n')[0]})`; }
     }
     const lines = [`Red check of ${files.length} test file(s) written before the code (\`${output.command}\`):`];
     if (check.red.length) lines.push(`- red, as expected: ${check.red.join(', ')}`);

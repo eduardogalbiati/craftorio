@@ -30,7 +30,7 @@ const evidence = require('../evidence');
 const { writeResultSummary } = require('../result-summary');
 const { stopProcessesIn } = require('./processes');
 const { sharedMemoryGuard } = require('./memory-guard');
-const { runProbe } = require('./probes');
+const machineActions = require('./machine-actions');
 const { StepTrail } = require('../shared/run-progress-model');
 const chain = require('../shared/chain-model');
 const { BUNDLED_SKILLS, methods: sessionsMethods, OUTPUT_LANGUAGE } = require('./run/sessions');
@@ -91,8 +91,11 @@ class WorkflowRun extends EventEmitter {
   // notices: [{ level, message }] logged right after workflow.started (e.g. the workflow file came from a fallback folder).
   // stopProcesses: (dir) => Promise<[{ pid, exe, cwd, reason, stopped }]>, stops what agents left running in the
   //   worktree (src/engine/processes.js). Default: the real one, none for simulations (mock agents start nothing).
+  // machine (#353): the run's machine actions (git, merges, ship, probes, actions, suites, screenshots, the
+  //   provider of a turn), src/engine/machine-actions.js. Default: real(), or simulated({ sequences: mockSequences })
+  //   for a mock run; one that does not match `mock` is refused (a real run never simulates, nor the reverse).
   // probe: ({ probe, target, cwd, signal, stepId, baseline }) => Promise<{ state, detail, fingerprint? }>, the
-  //   check of a `wait:` step (src/engine/probes.js). Default: the real one; simulations use MOCK_PROBES.
+  //   check of a `wait:` step (src/engine/probes.js). Default: the machine's (simulations use MOCK_PROBES).
   // actionsQuota: (owner) => Promise<string | null>, the message when that GitHub account's Actions quota is
   //   exhausted (src/actions-usage.js), passed to the probe as `quota`: pr_checks then reports `quota_exhausted`.
   // peerSessions: () => [{ provider, model, tokens, costUsd }], the sessions of the other runs in progress (and of
@@ -123,13 +126,17 @@ class WorkflowRun extends EventEmitter {
   //   (src/night-limits.js tonightLimits; see effectiveLimits in src/engine/run/costs.js).
   // testWorkers (#367): the machine profile's test workers per run (src/machine-profile.js), given to
   //   the agents and the suite as MULTIAGENT_TEST_WORKERS / MULTIAGENT_E2E_WORKERS; null = not set.
-  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issues, issue, resume, worktreesDir, mockSequences, notices, stopProcesses, probe, actionsQuota, peerSessions, idleWarnMs, personas, localPreview, attachments, then, from, parent, startChild, memoryGuard, agentOverrides, fallbacks, models, nightLimits, testWorkers }) {
+  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issues, issue, resume, worktreesDir, mockSequences, notices, stopProcesses, probe, actionsQuota, peerSessions, idleWarnMs, personas, localPreview, attachments, then, from, parent, startChild, memoryGuard, agentOverrides, fallbacks, models, nightLimits, testWorkers, machine }) {
     super();
     refreshWindowsPath(); // actions (e.g. gh pr merge) need the refreshed PATH
     this.file = file;
     this.wf = loadWorkflow(file);
     this.mock = !!mock;
     this.mockSequences = mockSequences || null;
+    this.machine = machine || (this.mock ? machineActions.simulated({ sequences: this.mockSequences }) : machineActions.real());
+    if (this.machine.simulated !== this.mock) {
+      throw new Error(this.mock ? 'A simulated run cannot take the real machine actions.' : 'A real run cannot take the simulated machine actions.');
+    }
     this.notices = notices || [];
     this.runId = newRunId();
     this.runDir = path.join(runsDir, this.runId);
@@ -156,11 +163,9 @@ class WorkflowRun extends EventEmitter {
     this.workers = Number.isInteger(testWorkers) && testWorkers >= 1 ? { testWorkers } : null;
     this.memoryNotes = new Map(); // agent -> [what the guard stopped], told in its next prompt
     this.memoryStops = new Map(); // `${step}\n${command}` -> stops (the second one notifies the owner)
-    this.probe = probe || (this.mock ? (args) => this.mockProbe(args) : runProbe);
+    this.probe = probe || ((args) => this.machine.probe(args));
     this.actionsQuota = actionsQuota || null;
     this.probeStats = {}; // step -> { polls, agent_calls, completed, errors } (summary.probes)
-    this.mockProbeCalls = {};
-    this.mockActionCalls = {}; // step -> transition actions/merges run (mockSequences.action_errors)
     this.budget = budget || {};
     this.prices = prices || {};
     this.budgetWarned = new Set();

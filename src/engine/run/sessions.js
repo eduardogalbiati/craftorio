@@ -130,7 +130,7 @@ const methods = {
   cacheState(s) {
     if (s.agent === 'orchestrator') return {};
     // a simulated run keeps the subscription's hour, whatever key the machine has
-    const auth = !this.mock && process.env.ANTHROPIC_API_KEY ? 'api_key' : 'subscription';
+    const auth = !this.machine.simulated && process.env.ANTHROPIC_API_KEY ? 'api_key' : 'subscription';
     const lifetime = sessionCache.cacheLifetimeMs(s.simulates || s.provider, { auth, tier: s.cacheTier || null });
     const state = {
       last_turn_at: s.lastTurnAt ? new Date(s.lastTurnAt).toISOString() : null,
@@ -279,13 +279,17 @@ const methods = {
         message: `[${agentName}] idle for ${Math.round((Date.now() - warm.lastTurnAt) / 60e3)} min (fresh_after_idle ${agent.fresh_after_idle}): this turn starts a fresh session from its handoff note`,
       });
     }
+    // the provider this turn starts, chosen by the run's machine adapter (#353): the simulated one
+    // gives every agent the mock provider, its session records the agent's own as `simulates`
+    const provider = this.machine.provider(agent, this.wf.providers);
+    const simulated = this.machine.simulated;
     let session = persistent ? this.sessions.get(this.agentSessions.get(agentName)) : null;
     if (!session) {
       // #262: the first session after a fallback records what it fell back from
       const fallback = this.fallbackAt.get(agentName);
       session = this.openSession({
-        agent: agentName, provider: this.mock ? 'mock' : agent.provider, model: agent.model, effort: agent.effort || null,
-        parentId: this.orchestrator.id, stepId, mode, simulates: this.mock ? agent.provider : null, fallbackFrom: fallback?.pending || null,
+        agent: agentName, provider: simulated ? 'mock' : agent.provider, model: agent.model, effort: agent.effort || null,
+        parentId: this.orchestrator.id, stepId, mode, simulates: simulated ? agent.provider : null, fallbackFrom: fallback?.pending || null,
       });
       if (fallback) fallback.pending = null;
       if (persistent) this.agentSessions.set(agentName, session.id);
@@ -330,7 +334,6 @@ const methods = {
     parts.push(wantNote ? `${prompt}\n\n---\n${HANDOFF_INSTRUCTIONS}` : prompt);
     const fullPrompt = parts.join('\n\n');
 
-    const provider = this.mock ? { type: 'mock' } : this.wf.providers?.[agent.provider];
     // capabilities + isolation → this CLI's flags (see capabilities.js); cli_args still apply on top
     const providerType = this.wf.providers?.[agent.provider]?.type;
     const isolated = agent.isolation !== false;
@@ -365,7 +368,7 @@ const methods = {
     // maxRequests: the enforced budget (the simulation's request_budget ends a turn on it)
     hint = { ...(hint || { stepId, visit }), handoff: wantNote, provider: agent.provider, providerType, maxRequests: enforced && !ownLimit ? budget : null };
     // simulation: which answer of this step this is (mockSequences.invalid_answers: { step: n } makes the first n invalid)
-    if (this.mock) { this.mockCalls ??= {}; hint.call = this.mockCalls[hint.stepId] = (this.mockCalls[hint.stepId] || 0) + 1; }
+    if (simulated) { this.mockCalls ??= {}; hint.call = this.mockCalls[hint.stepId] = (this.mockCalls[hint.stepId] || 0) + 1; }
 
     const imagesKey = `${stepId}|${agentName}`;
     // the configured provider's type, so a simulation warns like the real run would

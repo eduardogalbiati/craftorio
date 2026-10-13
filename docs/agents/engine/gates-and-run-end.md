@@ -97,7 +97,8 @@ Human gates (feedback, choices, summaries), the supervisor, refused tool calls, 
   the agent turn, whose prompt says why (`st.probeNews`). `pr_changes` compares a fingerprint
   taken right after each agent turn (`afterAgentTurn`). Probe polls do not count as visits
   (mock sequences stay per agent visit). Events `step.probe`; `summary.probes`. The `probe`
-  constructor option replaces the real one (tests); simulations use `MOCK_PROBES` or
+  constructor option replaces the run's machine adapter's (tests); simulations use `MOCK_PROBES`
+  (src/engine/machine-actions.js) or
   `mockSequences.probes: { step: [states] }`.
 - How a run ends: a transition with `goto: end` may carry `status: success | failed | cancelled`
   (default success; also valid with `on_exhausted: end`; `loadWorkflow` rejects other values).

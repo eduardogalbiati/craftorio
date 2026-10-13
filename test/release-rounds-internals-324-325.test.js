@@ -12,6 +12,7 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const { WorkflowRun, loadWorkflow, render } = require('../src/engine/workflow');
+const machineActions = require('../src/engine/machine-actions');
 
 const WORKFLOW = path.join(__dirname, '..', 'workflows', 'release.yaml');
 
@@ -47,7 +48,7 @@ function repo(t, base, fix = {}) {
 
 const runState = (dir, extra = {}) => {
   const events = [];
-  return { events, state: { mock: false, runDir: dir, worktree: { repo: dir, base: 'main' }, ctx: { worktree_dir: dir }, emitEvent: (type, data) => events.push({ type, ...data }), ...extra } };
+  return { events, state: { mock: false, machine: machineActions.real(), runDir: dir, worktree: { repo: dir, base: 'main' }, ctx: { worktree_dir: dir }, emitEvent: (type, data) => events.push({ type, ...data }), ...extra } };
 };
 
 test('scope failed: a later round adds the .feature files a fix changed, with the reason "changed by a fix" (#324)', async (t) => {

@@ -14,6 +14,7 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const { WorkflowRun } = require('../src/engine/workflow');
+const machineActions = require('../src/engine/machine-actions');
 const { suiteScope } = require('../src/engine/suite-step');
 
 const emptyConfig = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'gitcfg-')), 'config');
@@ -168,6 +169,7 @@ function suiteRunState(t, dir) {
   Object.assign(run, {
     mock: true,
     mockSequences: { suite: { e2e: ['pass'] } },
+    machine: machineActions.simulated(),
     runDir,
     runId: 'r1',
     worktree: { repo: dir, base: 'main' },

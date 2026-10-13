@@ -147,12 +147,12 @@ const methods = {
     // a retry after a failed attempt that did work (a timeout, a crash) starts with what it did
     let prompt = fullPrompt;
     if (!provider) throw new Error(`Provider "${agent.provider}" is not defined.`);
-    if (!this.mock) this.checkBudget(agent.provider);
+    if (!this.machine.simulated) this.checkBudget(agent.provider);
     await this.contextGate(stepId);
 
     const retry = agent.retry || {};
     const maxAttempts = attempts || retry.max_attempts || 1;
-    let delay = this.mock ? 1000 : parseDuration(retry.initial_delay, 5000);
+    let delay = this.machine.simulated ? 1000 : parseDuration(retry.initial_delay, 5000);
     let lastErr;
     // #233: what this turn's attempts stopped before their result cost (the step's record counts it)
     let stoppedUsd = 0;
@@ -225,7 +225,7 @@ const methods = {
       idleTimer?.unref?.();
       let timed = null;
       // #276: the memory guard watches the CLI's process tree while the turn runs (a mock turn has none)
-      let memWatch = this.mock ? this.watchMemory({ stepId, session: session.id, agentName }) : null;
+      let memWatch = this.machine.simulated ? this.watchMemory({ stepId, session: session.id, agentName }) : null;
       const onSpawn = ({ pid, shim }) => {
         memWatch?.stop();
         memWatch = this.watchMemory({ rootPid: pid, protectChildren: shim, stepId, session: session.id, agentName });

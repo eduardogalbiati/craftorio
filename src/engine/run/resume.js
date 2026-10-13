@@ -42,7 +42,7 @@ const methods = {
   // only for its first session in this run
   resumeSession(agentName, session, persistent) {
     this.resumeSessions ??= { ...(this.resume?.sessions || {}) };
-    const previous = persistent && !this.mock && this.resumeSessions[agentName];
+    const previous = persistent && !this.machine.simulated &&this.resumeSessions[agentName];
     delete this.resumeSessions[agentName];
     if (previous) {
       session.providerSessionId = previous; session.turns = 1;

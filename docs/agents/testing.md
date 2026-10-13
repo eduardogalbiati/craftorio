@@ -356,9 +356,34 @@ creates a commit needs its own `-c user.name/email`.
   `slow_tools: { step: ms }` makes the step's tool call wait ms silently (exercises the idle warning);
   `request_budget: { step: n }` ends the first n turns of a step on the agent's `max_requests`
   (exercises the cut, the wrap-up, the continuation and the cap, #302).
-- `wait:` probes are simulated too (`MOCK_PROBES` in workflow.js: CI fails once, then passes with
-  no agent turn); `mockSequences.probes: { step: [states] }` overrides them, and the `probe` option
-  of `WorkflowRun` injects a fake (`test/probes.test.js`). A mock run never calls `gh`/`glab`.
+- `wait:` probes are simulated too (`MOCK_PROBES` in `src/engine/machine-actions.js`: CI fails
+  once, then passes with no agent turn); `mockSequences.probes: { step: [states] }` overrides them,
+  and the `probe` option of `WorkflowRun` injects a fake (`test/probes.test.js`). A mock run never
+  calls `gh`/`glab`.
+
+## Simulated machine actions (#353)
+
+Simulation is an adapter given to the run, not a flag the engine checks. `src/engine/machine-actions.js`
+has `real()` and `simulated({ sequences })`, with the same operations: `git`, `mergeLocal`, `ship`
+(and its guard), `runAction`, `probe`, `runSuite` (and the red check, related and affected tests),
+`captureScreenshots`, `writeReleaseVersion` and `provider` (the provider an agent's turn starts:
+the simulated adapter gives every agent `{ type: 'mock' }`, its session records the agent's own as
+`simulates`). The simulated machine actions run nothing: actions, `merge: local` and `ship:` emit
+`action.executed` with `skipped: true` and a `[mock] …` output, git answers empty, suites report
+`mockResult`, screenshots capture nothing, probes follow `MOCK_PROBES`, and
+`mockSequences.action_errors: { step: n }` fails a step's first n transitions.
+- `WorkflowRun`'s `machine` option injects one (tests wrap or replace its methods, like `probe`);
+  without it the run takes the one matching `mock` (the simulated one with the run's
+  `mockSequences`). A mismatch is refused at construction: a real run never takes the simulated
+  adapter, nor the reverse. The run modules call `this.machine.*` and read `this.machine.simulated`
+  for what is not a machine action (retry delays, budgets, deps); no `this.mock` is left in
+  `src/engine/run/` (`test/simulation-adapters-353.test.js` counts them).
+- The safety rule is not in the adapter: under `MULTIAGENT_SIMULATION_ONLY=1` the real adapter's
+  provider is still refused by `providers.runTurn` (see the guard below).
+- A run built without its constructor (`Object.create(WorkflowRun.prototype)` or a plain object
+  passed to a method) sets `machine` itself.
+- The events of a whole simulated software-development run are a snapshot
+  (`test/fixtures/events-software-development-353.json`, `test/slow/simulation-adapters-353.slow.test.js`).
 - Its context grows 30k per turn of the same conversation (start 20k, peak +20k): `max_context`
   rotations are deterministic (`test/fixtures/handoff.yaml`).
 - E2E scenarios (#143): an output schema's `scenarios` array (items with a `status`) gets sample

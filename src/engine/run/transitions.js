@@ -2,19 +2,19 @@
 // walks the step's transitions (`when`, actions, `precheck`, `merge`, `ship`, the merge queue, `set:`,
 // delegation, the ending transition's `status`), with `max_visits` / `max_iterations` and
 // `on_exhausted` (`applyCounters`), the /loop waits and blocked iterations (`loopWait`,
-// `checkBlocked`), `wait:` probe polling between the agent's turns (`pollStep`, `mockProbe`), the
-// recovery of a failed action (`recoverFromActionError`), `merge: local` and `ship:`.
+// `checkBlocked`), `wait:` probe polling between the agent's turns (`pollStep`), the recovery of a
+// failed action (`recoverFromActionError`), `merge: local` and `ship:`. The actions, merges, pushes
+// and probes themselves are the run's machine adapter's (`this.machine`, src/engine/machine-actions.js,
+// #353): a simulated run gets the simulated one.
 
 'use strict';
 
 const fs = require('fs');
 const path = require('path');
-const { exec, execFileSync } = require('child_process');
+const { execFileSync } = require('child_process');
 const { sleep } = require('../providers');
-const { git, mergeLocally } = require('../worktree');
 const { parseTarget } = require('../probes');
 const mergeQueue = require('../merge-queue');
-const { shipRelease } = require('../../releases');
 const { evalExpr, render } = require('./templates');
 const { isLooping, loopConfig, parseDuration } = require('./load');
 const { decisionKey, validateSchema } = require('./outputs');
@@ -31,16 +31,6 @@ const PROBE_WHAT = {
 // A PR/MR with no check registered yet is polled this long after the agent's last turn (the push),
 // then the agent is called to find out why (`wait.grace`).
 const DEFAULT_WAIT_GRACE = '10m';
-// Simulation: probe states per call, per probe (mockSequences.probes: { step: [...] } overrides them).
-// The CI check fails once (the agent triages it), then passes without an agent turn.
-const MOCK_PROBES = {
-  pr_checks: ['pending', 'failed', 'pending', 'passed'],
-  pr_changes: ['unchanged', 'changed'],
-  workflow_run: ['pending', 'passed'],
-  // the check right before a merge (`check:` / `precheck:`): mergeable; a conflict is simulated with
-  // mockSequences.probes: { '<step>:check': [...], '<step>:precheck': [...] }
-  pr_mergeable: ['passed'],
-};
 
 // Instructions in the style of Claude Code's /goal and /loop. The engine is what actually
 // repeats the step and enforces the limits; the agent only needs to know the contract.
@@ -103,12 +93,7 @@ const methods = {
         if (t.ship) this.shipGuard(step);
         if (precheck) await this.runCheck(precheck, step, 'precheck', scope, { failIfNot: true });
         // simulation: mockSequences.action_errors: { step: n } fails the first n actions/merges of that step
-        if (this.mock && (action || t.merge === 'local' || t.ship)) {
-          const n = (this.mockActionCalls[step.id] = (this.mockActionCalls[step.id] || 0) + 1);
-          if (n <= (this.mockSequences?.action_errors?.[step.id] || 0)) {
-            throw new Error(`(simulated) ${t.merge === 'local' ? 'local merge: the branch conflicts with the local base in src/simulated.js' : `action failed: ${action}`}`);
-          }
-        }
+        if (action || t.merge === 'local' || t.ship) this.machine.transitionFault({ stepId: step.id, action, merge: t.merge === 'local' });
         if (action) await this.runAction(action);
         // `merge: local`: the engine merges the run's branch into the local base (no push, no PR)
         if (t.merge === 'local') await this.mergeWorktreeLocally();
@@ -239,14 +224,6 @@ const methods = {
     } catch { /* no baseline: the next check calls the agent */ }
   },
 
-  mockProbe({ probe, stepId, baseline }) {
-    if (baseline) return Promise.resolve({});
-    const seq = this.mockSequences?.probes?.[stepId] || MOCK_PROBES[probe];
-    const n = (this.mockProbeCalls[stepId] = (this.mockProbeCalls[stepId] || 0) + 1);
-    const state = seq[Math.min(n - 1, seq.length - 1)];
-    return Promise.resolve({ state, detail: `(simulated) ${probe}: ${state}` });
-  },
-
   // ---- merge checks and the recovery route of a failed action (#69) ------------------------------
   // `check:` / `precheck:` { probe, target }: one deterministic probe (no agent, no tokens). Its
   // result is `check` in the template context ({ state, detail, target, checked_at }); a probe that
@@ -285,8 +262,8 @@ const methods = {
     const err = { step: step.id, message: e.message, at: new Date().toISOString(), ...(e.check ? { check: e.check } : {}) };
     // the branch head the failure left (a failed local merge leaves the branch as it was): the last
     // checked commit, so the next review can cover only what the resolution changes
-    if (this.worktree && !this.mock) {
-      const head = await git(['rev-parse', 'HEAD'], this.worktree.dir).catch(() => null);
+    if (this.worktree) {
+      const head = await this.machine.git(['rev-parse', 'HEAD'], this.worktree.dir).catch(() => null);
       if (head) err.head = head;
     }
     this.ctx.action_error = err;
@@ -365,7 +342,7 @@ const methods = {
       return exhausted;
     }
     // simulation: at most 3s, scaled like the mock's delays (tests run with a small scale)
-    const interval = Math.min(parseDuration(cfg.interval, 60000), this.mock ? 3000 * +(process.env.MULTIAGENT_MOCK_DELAY_SCALE ?? 1) : Infinity);
+    const interval = Math.min(parseDuration(cfg.interval, 60000), this.machine.simulated ? 3000 * +(process.env.MULTIAGENT_MOCK_DELAY_SCALE ?? 1) : Infinity);
     this.emitEvent('step.waiting', { step_id: step.id, until: new Date(Date.now() + interval).toISOString(), interval_ms: interval });
     this.setStatus(this.orchestrator, 'waiting');
     await sleep(interval, this.abort.signal);
@@ -395,17 +372,19 @@ const methods = {
   // --auto-approve) ends the run as failed (`fatal`: no `on_error` gate to try it again). And the
   // local base must still be what the suites ran on: when it moved (another run merged meanwhile), the
   // release would hold commits nobody checked, so the transition fails (to its `on_error`).
+  // A simulated run (its machine adapter) has no guard: nothing ships.
   shipGuard(step) {
-    if (this.mock) return;
-    const by = this.ctx.steps[step.id]?.answeredBy;
-    if (by !== 'user') throw Object.assign(new Error(`ship: only the owner's own answer at the gate ships a release (${step.id} was answered by ${by || 'nobody'}); nothing was merged or pushed.`), { fatal: true });
-    const wt = this.worktree;
-    if (!wt) throw new Error('ship needs the run\'s git worktree (orchestrator.worktree on a git repository).');
-    try {
-      execFileSync('git', ['merge-base', '--is-ancestor', `refs/heads/${wt.base}`, 'HEAD'], { cwd: wt.workDir || wt.dir, windowsHide: true, timeout: 10000, stdio: 'ignore' });
-    } catch {
-      throw new Error(`ship: the local ${wt.base} has commits this run did not check (it moved since the suites ran). Stop this run and check the release again; nothing was merged or pushed.`);
-    }
+    this.machine.guardShip(() => {
+      const by = this.ctx.steps[step.id]?.answeredBy;
+      if (by !== 'user') throw Object.assign(new Error(`ship: only the owner's own answer at the gate ships a release (${step.id} was answered by ${by || 'nobody'}); nothing was merged or pushed.`), { fatal: true });
+      const wt = this.worktree;
+      if (!wt) throw new Error('ship needs the run\'s git worktree (orchestrator.worktree on a git repository).');
+      try {
+        execFileSync('git', ['merge-base', '--is-ancestor', `refs/heads/${wt.base}`, 'HEAD'], { cwd: wt.workDir || wt.dir, windowsHide: true, timeout: 10000, stdio: 'ignore' });
+      } catch {
+        throw new Error(`ship: the local ${wt.base} has commits this run did not check (it moved since the suites ran). Stop this run and check the release again; nothing was merged or pushed.`);
+      }
+    });
   },
 
   // The `ship: { tag, build? }` transition (#260, the release workflow's Ship), after `shipGuard` and
@@ -415,13 +394,13 @@ const methods = {
   // transition's `on_error`, like a failed merge.
   async shipRelease(step, ship, scope) {
     const tag = render(String(ship.tag), scope).trim();
-    if (this.mock) {
-      this.emitEvent('action.executed', { command: `ship: ${tag}`, skipped: true, output: '[mock] release not pushed, not tagged' });
+    const wt = this.worktree;
+    const r = await this.machine.ship({ repo: wt?.repo, base: wt?.base, tag, expect: this.worktreeHead() });
+    if (r.skipped) {
+      this.emitEvent('action.executed', { command: `ship: ${tag}`, skipped: true, output: r.output });
       this.ctx.release = { tag, simulated: true };
       return;
     }
-    const wt = this.worktree;
-    const r = await shipRelease({ repo: wt.repo, base: wt.base, tag, expect: this.worktreeHead() });
     this.emitEvent('release.shipped', { tag: r.tag, base: r.base, commit: r.commit, pushed: r.pushed, commits: r.commits.length, issues: r.issues });
     this.ctx.release = { tag: r.tag, base: r.base, commit: r.commit, pushed: r.pushed, issues: r.issues };
     // `build:` an optional command run once the release is out (a template; empty: none)
@@ -434,37 +413,30 @@ const methods = {
   // A failure (conflict, uncommitted changes where the base is checked out) fails the run with
   // the reason; its branch keeps the work, so the run can be resumed after fixing it.
   async mergeWorktreeLocally() {
-    if (this.mock) {
-      this.emitEvent('action.executed', { command: 'merge: local', skipped: true, output: '[mock] local merge not executed' });
-      return;
-    }
     const wt = this.worktree;
-    if (!wt) throw new Error('merge: local needs the run\'s git worktree (orchestrator.worktree on a git repository).');
     const log = (level, message) => this.emitEvent('log', { level, message });
     // base_commit (#289): the base's tip before the merge, so run:diff can list the run's commits once
     // its branch is deleted, even after a rebase (ready.commit is then below the base's own commits)
-    const baseCommit = await git(['rev-parse', `refs/heads/${wt.base}`], wt.repo).then((s) => s.trim(), () => null);
-    const r = await mergeLocally({ repo: wt.repo, dir: wt.dir, base: wt.base, log });
+    const { base_commit: baseCommit, ...r } = await this.machine.mergeLocal({ repo: wt?.repo, dir: wt?.dir, base: wt?.base, log });
+    if (r.skipped) {
+      this.emitEvent('action.executed', { command: 'merge: local', skipped: true, output: r.output });
+      return;
+    }
     this.emitEvent('worktree.merged', { branch: r.branch, base: r.base, commit: r.commit, checkout: r.checkout, rebased: r.rebased, base_commit: baseCommit });
     this.ctx.local_merge = r;
   },
 
-  runAction(cmd) {
-    if (this.mock) {
-      this.emitEvent('action.executed', { command: cmd, skipped: true, output: '[mock] action not executed' });
-      return Promise.resolve();
-    }
+  async runAction(cmd) {
     // in the run's worktree when there is one (the feature branch is checked out there)
     const cwd = [this.ctx.worktree_dir, this.inputs.repo_path].find((d) => d && fs.existsSync(d)) || process.cwd();
-    return new Promise((resolve, reject) => {
-      exec(cmd, { cwd, windowsHide: true, env: process.env }, (err, stdout, stderr) => {
-        const exitCode = err ? err.code ?? 1 : 0;
-        this.emitEvent('action.executed', { command: cmd, exit_code: exitCode, output: `${stdout}${stderr}`.slice(-4000) });
-        if (exitCode) reject(new Error(`Action failed (exit ${exitCode}): ${cmd}
-${stderr || stdout}`.slice(0, 1500)));
-        else resolve();
-      });
-    });
+    const r = await this.machine.runAction(cmd, { cwd });
+    if (r.skipped) {
+      this.emitEvent('action.executed', { command: cmd, skipped: true, output: r.output });
+      return;
+    }
+    this.emitEvent('action.executed', { command: cmd, exit_code: r.exit_code, output: r.output });
+    if (r.exit_code) throw new Error(`Action failed (exit ${r.exit_code}): ${cmd}
+${r.stderr || r.stdout}`.slice(0, 1500));
   },
 };
 
