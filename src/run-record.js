@@ -31,11 +31,12 @@ function readRunSummary(runDir) {
   if (!summaryNeedsEvents(summary)) return summary && upgradeRunRecord({ summary }).summary;
   const sig = (f) => { try { const st = fs.statSync(path.join(runDir, f)); return `${st.mtimeMs}:${st.size}`; } catch { return '-'; } };
   const key = `${sig('summary.json')} ${sig('events.jsonl')}`;
+  // a copy for each caller: the cached one stays as read
   const hit = summaries.get(runDir);
-  if (hit?.key === key) return hit.summary;
+  if (hit?.key === key) return structuredClone(hit.summary);
   const out = upgradeRunRecord({ summary, events: readEvents(path.join(runDir, 'events.jsonl')) }).summary;
   summaries.set(runDir, { key, summary: out });
-  return out;
+  return structuredClone(out);
 }
 
 module.exports = {
