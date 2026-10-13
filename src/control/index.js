@@ -152,7 +152,14 @@ function createControlChannel({ service }) {
     try { wanted = !!ws && !!workspace.readSettings(ws).controlChannel; } catch { wanted = false; }
     // off, or another workspace: the old endpoint goes first
     if (open && (!wanted || open.root !== ws.root)) await close();
-    if (!wanted) { error = null; return status(); }
+    if (!wanted) {
+      // one app per workspace (#112): a file left by a crash or a forced exit points at a dead app
+      if (ws) {
+        try { fs.rmSync(path.join(controlDir(ws), 'endpoint.json'), { force: true }); } catch (e) { console.error('control channel:', e.message); }
+      }
+      error = null;
+      return status();
+    }
     if (!server) {
       try {
         const opened = await listen(ws);
