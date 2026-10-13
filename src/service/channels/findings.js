@@ -16,6 +16,23 @@ const productOwner = require('../../product-owner');
 const projects = require('../../projects');
 const simulation = require('../../engine/simulation');
 const { BUNDLED_SKILLS_DIR, clientError, requireObject } = require('../common');
+const {
+  args,
+  described,
+  FLAG,
+  listOf,
+  nullable,
+  OBJECT,
+  PROJECT_ID,
+  REQUEST_ANSWER,
+  shape,
+  STRING,
+} = require('../schemas');
+
+// the finding's PNGs, marks and context are checked by the channel itself, with its own messages
+const FINDING = described(OBJECT, 'A finding: { image, marked, marks, note, context } (PNG data URLs, the marks, the note, the renderer\'s context).');
+const SAVED = shape({ id: STRING, dir: STRING, status: STRING }, ['id']);
+const FILED = shape({ ...REQUEST_ANSWER.properties, status: STRING, issueUrl: nullable(STRING) });
 
 const PLATFORMS = { github: 'gh', gitlab: 'gl' };
 const ISSUE_URL = /https?:\/\/\S+\/issues\/\d+/;
@@ -62,6 +79,7 @@ module.exports = (ctx) => {
       channel: 'findings:save',
       method: 'saveFinding',
       params: 'finding',
+      schema: { params: FINDING, result: SAVED },
       fn: (arg) => {
         const { image, marked, marks, note, context } = requireObject(arg, 'finding');
         if (typeof image !== 'string' || !image.startsWith('data:image/png;base64,')) throw clientError('Invalid finding: image is not a PNG data URL.');
@@ -76,11 +94,12 @@ module.exports = (ctx) => {
         });
       },
     },
-    { channel: 'findings:list', method: 'listFindings', fn: () => findings.listFindings(ctx.ws).map(follow) },
+    { channel: 'findings:list', method: 'listFindings', schema: { result: listOf(OBJECT) }, fn: () => findings.listFindings(ctx.ws).map(follow) },
     {
       channel: 'findings:file',
       method: 'fileFinding',
       params: ['id', 'projectId', 'mock'],
+      schema: { params: args({ id: nullable(STRING), projectId: PROJECT_ID, mock: FLAG }, ['projectId']), result: FILED },
       fn: async ({ id, projectId, mock }) => {
         const found = findings.getFinding(ctx.ws, id);
         if (!found) {
