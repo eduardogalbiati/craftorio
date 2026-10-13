@@ -260,10 +260,11 @@ test('release.yaml: its suites never wave a failure through as failing on the ba
   const suites = wf.steps.filter((s) => s.type === 'suite');
   assert.deepEqual(suites.map((s) => [s.id, s.base_check]), [['unit', false], ['e2e', false]]);
   // #290: after a fix the green unit suite goes to the release summary first, else straight to ship
-  const skip = wf.steps[0].transitions.find((t) => /inputs\.e2e_suite == 'skip'/.test(t.when) && t.goto === 'ship');
+  const unit = suites[0];
+  const skip = unit.transitions.find((t) => /inputs\.e2e_suite == 'skip'/.test(t.when) && t.goto === 'ship');
   assert.ok(skip, 'a green unit suite with e2e_suite skip goes to ship');
-  assert.ok(wf.steps[0].transitions.filter((t) => /inputs\.e2e_suite == 'skip'/.test(t.when)).every((t) => ['review', 'ship'].includes(t.goto)));
-  assert.ok(wf.steps[0].transitions.indexOf(skip) < wf.steps[0].transitions.findIndex((t) => t.goto === 'e2e'), 'checked before the transition to the E2E suite');
+  assert.ok(unit.transitions.filter((t) => /inputs\.e2e_suite == 'skip'/.test(t.when)).every((t) => ['review', 'ship'].includes(t.goto)));
+  assert.ok(unit.transitions.indexOf(skip) < unit.transitions.findIndex((t) => t.goto === 'e2e'), 'checked before the transition to the E2E suite');
 });
 
 // shipGuard on a run built by hand (a real run cannot start in tests): who answered, and whether the

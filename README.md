@@ -480,15 +480,21 @@ never wait for this workflow. It never pushes, tags or publishes.
 ## Release (`workflows/release.yaml`)
 
 Code & Build. Decides "this set is good, ship it" (#260): the work of many runs merges into the
-local base one after another, and a release run checks their sum. It runs the project's whole unit
-suite, then its whole E2E suite (`e2e_suite: skip` for a project without one), in its own worktree
-of the local base, with no agent while they are green; a test that fails there is never waved
-through as "failing on the base too". A red suite calls the developer with the history since the
-last release (the runs, their issues, decisions and handoff notes, the commits) to find and fix
-the regression, then both suites run again, at most `max_rounds`. Then the **Ship** gate, yours
-only (never the supervisor, a timeout or `--auto-approve`): **Ship** merges a fix made by the run,
-pushes the local base to origin (never forced), tags it with the release's name and runs the
-optional `build_command`; it is refused when the local base moved since the suites ran (another
+local base one after another, and a release run checks their sum. For a Node project (a
+`package.json`), it first writes the release's version (a semver such as `1.2.0` or `v1.2.0`) into
+`package.json` and the root of its lockfile and commits it on the run's branch, so the suites check
+the commit Ship tags (#325; a name that is not a semver, a project without `package.json` or a lower
+version writes nothing and the run log says why). It runs the project's whole unit suite, then its
+whole E2E suite (`e2e_suite: skip` for a project without one), in its own worktree of the local
+base, with no agent while they are green; a test that fails there is never waved through as
+"failing on the base too". A red suite calls the developer with the history since the last release
+(the runs, their issues, decisions and handoff notes, the commits) to find and fix the regression,
+then both suites run again, at most `max_rounds`: the unit suite whole, the E2E suite first only on
+the feature files that failed in its previous round, then whole once they pass (#324: only a green
+whole pass leads to Ship). Then the **Ship** gate, yours only (never the supervisor, a timeout or
+`--auto-approve`): **Ship** merges the run's version commit and fix, pushes the local base to
+origin (never forced), tags it with the release's name and runs the optional `build_command`; it
+is refused when the local base moved since the suites ran (another
 run merged: check the release again) or when the tag already names another commit. **Hold** ends
 the run with nothing pushed (resume it from the gate to ship later).
 

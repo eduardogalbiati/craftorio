@@ -67,6 +67,26 @@ What agents and steps declare: skills, fan-out, step types (screenshots, suite, 
     (log `suite-<visit>-full.log`, the affected run in `output.affected`). Output adds `scope` (full |
     files), `selection` ({ mode, files, reasons, why }: "imports src/roadmap.js"), `passed`, `failed`;
     `summary.suite_runs.affected` counts the affected runs. Simulation: two simulated files.
+  - **`scope: failed`** (#324, release.yaml's `e2e`): the first visit runs the whole suite; a later
+    visit runs only the files that failed in the step's previous round (its `failures[].file`) plus
+    the `.feature` files changed since the base (the fixes), `selection.reasons` "failed in round 1",
+    then, when they pass, the whole suite in the same visit (log `<step>-<visit>-full.log`, the
+    focused run in `output.affected`): only a green whole run is a `pass`. A red focused run is the
+    visit's result (`scope: files`, no whole run). A previous round without failed files, or a
+    command `filteredCommand` cannot filter, runs the whole suite (`selection.why` says so).
+    `filteredCommand` filters `npm|pnpm|yarn test`, a package script with no arguments of its own
+    (`npm run test:e2e -- <files>`, `pnpm run e2e <files>`, `yarn e2e <files>`), pytest and
+    `node --test`. Filter `suite_scope` (`{{ o | suite_scope('scenario') }}`): a round as "focused on
+    2 files: …, 1.5 min; then whole: …" or "whole: …", for the release summary.
+- **`type: release_version`** (#325, release.yaml's first step): no agent; the rendered `version`
+  (a semver, a leading `v` dropped) into the package.json of `dir` (default `{{ worktree_dir }}`)
+  and the root `version` / `packages[""].version` of its package-lock.json or npm-shrinkwrap.json,
+  formatting and line endings kept, one commit on `branch` (created when the worktree is detached)
+  (`src/releases.js` `writeReleaseVersion`). Nothing written, with the reason in the output and the
+  run log, for a name that is not a semver, no package.json, the same or a lower version, a run
+  without its own worktree, or a git error: it never fails the run. Output: { status: written |
+  unchanged, from, to, files, commit, change: "package.json 0.3.0 → 1.2.0", message }. Simulation:
+  nothing written, `change` says what a real run would set.
   - **Test requests** (#212, `serveTestRequests`): an agent turn that ends with a ```` ```run-tests ````
     block (`parseTestRequest`: test files, or `affected`) has them run by the engine in the agent's
     working folder (log `logs/tests-<step>-<n>.log`), then the agent resumes in the same step with a

@@ -26,10 +26,13 @@ const agentOfStep = (step) => step?.agent || step?.delegate?.agent;
 // where a transition leads (its goto, or the step it delegates to)
 const targets = (wf, t) => [t.goto && t.goto !== 'end' ? stepById(wf, t.goto) : null].filter(Boolean);
 
-test('release workflow: the first step runs the whole unit suite without an agent (#260)', () => {
+test('release workflow: the first suite step runs the whole unit suite without an agent, right after the version step (#260, #325)', () => {
   const wf = load();
-  const first = wf.steps[0];
-  assert.equal(first.type, 'suite', `the first step (${first.id}) is a suite step`);
+  // #325: the release's version is written first (no agent), then the unit suite
+  assert.equal(wf.steps[0].type, 'release_version');
+  assert.deepEqual(wf.steps[0].transitions.map((t) => t.goto), ['unit']);
+  const first = wf.steps.find((s) => s.type === 'suite');
+  assert.equal(first.id, 'unit');
   assert.equal(first.agent, undefined);
   assert.equal(first.files, undefined, 'the whole suite, not a list of files');
   assert.ok(!['affected', 'files'].includes(String(first.scope || 'full')), 'the whole suite, not the affected tests');

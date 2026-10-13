@@ -1,7 +1,9 @@
 // Steps without an agent (#250, from src/engine/workflow.js): `type: screenshots` (`runScreenshots`,
 // #144), `type: suite` (`runSuiteStep`, `suiteRound` with the memory guard's waits and reruns #276,
-// `redCheckOutput` #220), `type: test_ids` (`runTestIdsStep`, #246), `type: workflow` child runs
-// (`runChildWorkflows`, #174), and the evidence a step leaves (`recordEvidence`, `saveScenarios`).
+// `redCheckOutput` #220, `failedFirstRound` for `scope: failed` #324), `type: test_ids`
+// (`runTestIdsStep`, #246), `type: workflow` child runs (`runChildWorkflows`, #174), `type:
+// release_version` (`runReleaseVersionStep`, #325), and the evidence a step leaves (`recordEvidence`,
+// `saveScenarios`).
 // The steps' own logic is src/engine/suite-step.js, screenshot-step.js, test-ids.js and workflow-step.js.
 
 'use strict';
@@ -10,6 +12,7 @@ const fs = require('fs');
 const path = require('path');
 const capabilities = require('../capabilities');
 const evidence = require('../../evidence');
+const { writeReleaseVersion } = require('../../releases');
 const scenarios = require('../scenarios');
 const { captureScreenshots } = require('../screenshot-step');
 const suiteStep = require('../suite-step');
@@ -254,6 +257,8 @@ const methods = {
         output = await once({ selection: { ...selection, why: `the ${selection.files.length} affected test file(s) passed; the whole suite runs once before the merge` }, logName: `suite-${st.visits}-full` });
         output.affected = affected;
       }
+    } else if (scope === 'failed') {
+      output = await this.failedFirstRound(step, st, once);
     } else {
       output = await once();
     }
@@ -268,6 +273,61 @@ const methods = {
     if (output.base_check?.log) this.emitEvent('file.saved', { step_id: step.id, path: path.join(this.runDir, output.base_check.log) });
     if (output.coverage?.path) this.emitEvent('file.saved', { step_id: step.id, path: path.join(this.runDir, output.coverage.path) });
     this.emitEvent('log', { level: output.status === 'pass' ? 'info' : 'warn', kind: 'suite', step_id: step.id, status: output.status, failures: output.failures.length, message: `${step.id}: ${output.message}` });
+    return output;
+  },
+
+  // `scope: failed` (#324, release.yaml's e2e step): the first visit runs the whole suite; a later
+  // visit runs only the files that failed in the step's previous round (`failures[].file`) plus the
+  // `.feature` files changed since the base (the fixes), and when they pass the whole suite runs right
+  // after (log <step>-<visit>-full.log, the focused run under `affected`), so only a green whole run
+  // routes on. A red focused run is the visit's result. A previous round without failed files, or a
+  // command that cannot be filtered (runSuite says so in `selection.why`): the whole suite.
+  async failedFirstRound(step, st, once) {
+    const prev = st.outputs?.at(-1);
+    if (!prev) return once();
+    const failed = [...new Set((prev.failures || []).map((f) => f.file).filter(Boolean))];
+    const base = this.worktree?.base;
+    const changed = this.ctx.worktree_dir && base ? changedFiles(this.ctx.worktree_dir, base).filter((f) => f.endsWith('.feature') && !failed.includes(f)) : [];
+    const files = [...failed, ...changed];
+    if (prev.status !== 'fail' || !failed.length) {
+      return once({ selection: { mode: 'all', files: [], reasons: {}, why: `no file failed in round ${prev.round} (${prev.status}): the whole suite` } });
+    }
+    const reasons = Object.fromEntries([...failed.map((f) => [f, `failed in round ${prev.round}`]), ...changed.map((f) => [f, 'changed by a fix'])]);
+    const selection = { mode: 'failed', files, reasons, why: `${files.length} file(s): ${failed.length} failed in round ${prev.round}${changed.length ? `, ${changed.length} changed by a fix` : ''}` };
+    this.emitEvent('log', { level: 'info', kind: 'suite', step_id: step.id, message: `${step.id}: the files that failed first, then the whole suite: ${selection.why} (${files.join(', ')})` });
+    let output = await once({ files, selection });
+    if (output.scope !== 'files' || output.status !== 'pass') return output;
+    const focused = { command: output.command, log: output.log, passed: output.passed, failed: output.failed, duration_ms: output.duration_ms, files };
+    if (output.log) this.emitEvent('file.saved', { step_id: step.id, path: path.join(this.runDir, output.log) });
+    output = await once({ selection: { ...selection, why: `${selection.why}; they passed, so the whole suite runs once more` }, logName: `${step.id}-${st.visits}-full` });
+    output.affected = focused;
+    return output;
+  },
+
+  // `type: release_version` (#325, release.yaml before the suites): the release's version written into
+  // the project's package.json and committed on the run's branch (src/releases.js writeReleaseVersion).
+  // Never fails the run: a name that is not a semver, no package.json, nothing to change or a git
+  // error is said in the output and the log. Only in the run's own worktree (never the owner's
+  // checkout); a simulation writes nothing and says what it would set.
+  async runReleaseVersionStep(step) {
+    const dir = render(String(step.dir ?? '{{ worktree_dir }}'), this.ctx).trim();
+    const version = render(String(step.version ?? ''), this.ctx).trim();
+    const branch = step.branch ? render(String(step.branch), this.ctx).trim() : null;
+    const none = (reason) => ({ written: false, from: null, to: null, files: [], commit: null, reason });
+    let r;
+    let error = false;
+    try {
+      r = !this.mock && !this.worktree
+        ? none('The run has no worktree of its own: the version is not written in the repository folder.')
+        : await writeReleaseVersion({ dir, version, branch, mock: this.mock });
+    } catch (e) {
+      error = true;
+      r = none(`The version could not be written: ${e.message}`);
+    }
+    // what ships with the release (a simulation: what a real run would write)
+    const change = r.written || (this.mock && r.files.length) ? `package.json ${r.from || '(no version)'} → ${r.to}` : '';
+    const output = { kind: 'release_version', status: r.written ? 'written' : 'unchanged', version, ...r, change, message: r.reason };
+    this.emitEvent('log', { level: error ? 'warn' : 'info', kind: 'release_version', step_id: step.id, message: `${step.id}: ${r.reason}` });
     return output;
   },
 

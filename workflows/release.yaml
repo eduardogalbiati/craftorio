@@ -1,10 +1,10 @@
 # =============================================================================
 # Workflow: Release (#260)
 # -----------------------------------------------------------------------------
-#   unit (suite, no agent) ──(green)──► e2e (suite, no agent) ──(green)──► [review] ──► ship (you)
-#     ▲   │                               │                                            ├─ Ship ─► push the local base + tag ─► end
-#     │   └──────────(red)──► fix ◄─(red)─┘                                            └─ Hold ─► end (nothing pushed)
-#     └──────────────────── (developer)
+#   version ──► unit (suite, no agent) ──(green)──► e2e (suite, no agent) ──(green)──► [review] ──► ship (you)
+#                 ▲   │                               │                                            ├─ Ship ─► push the local base + tag ─► end
+#                 │   └──────────(red)──► fix ◄─(red)─┘                                            └─ Hold ─► end (nothing pushed)
+#                 └──────────────────── (developer)
 #        at most max_rounds fixes per suite, then regression_failed (you)
 #        review: only after a fix or a second round (nothing to review otherwise)
 #
@@ -13,10 +13,22 @@
 # whether it goes out. It starts when a roadmap reaches a cut line ("Release here", the stages
 # after the line wait for it) or from Code & Build › Releases.
 #
+# 0. version: no agent (#325): a Node project (a package.json in the worktree) gets the release's
+#           version (a semver, a leading `v` dropped) in package.json and the root of its
+#           package-lock.json / npm-shrinkwrap.json, committed on the run's branch
+#           `release-fix-<run id>` BEFORE the suites, so the commit Ship tags is one they passed on.
+#           Nothing is written for a name that is not a semver (`release-<run id>`, `v1.4`), a project
+#           without package.json, the same version or a lower one (never a downgrade): the run log
+#           says why and the run goes on. A simulation writes nothing and says what it would set.
 # 1. unit:  a suite step (#177: no agent, no tokens): the project's WHOLE unit suite in the run's own
-#           worktree of the local base.
-# 2. e2e:   a suite step: the project's WHOLE end-to-end suite (`e2e_command`, no filter; skipped
-#           with `e2e_suite: skip`, for a project without an E2E suite).
+#           worktree of the local base, every round.
+# 2. e2e:   a suite step: the project's end-to-end suite (`e2e_command`; skipped with `e2e_suite:
+#           skip`, for a project without an E2E suite). `scope: failed` (#324): the first round runs
+#           the WHOLE suite; after a fix, a round runs only the feature files that failed in the
+#           previous round (plus the .feature files the fixes changed), then, once they pass, the
+#           whole suite in the same visit: only a green whole run leads to review / ship, and a red
+#           focused run goes back to fix (it counts as a round). A command that cannot be filtered
+#           (not npm/pnpm/yarn test or run <script>) runs the whole suite and its output says so.
 #           Both suites run with `base_check: false`: the worktree is the base, so nothing that
 #           fails there is "pre-existing".
 # 3. fix:   only for a red suite: the developer gets the history since the last release (the runs,
@@ -28,13 +40,13 @@
 #           branch's log; it leads the Ship gate and is saved as release-summary.md. It never
 #           blocks: a review that fails goes on to ship, whose message says the summary is missing.
 # 4. ship: your gate, never answered by automation (a decision gate: not the supervisor, no
-#           timeout, not --auto-approve). Ship: a fix made here is merged into the local base
-#           (merge: local), the local base is pushed to origin (never forced) and tagged with the
+#           timeout, not --auto-approve). Ship: the run's branch (the version commit, a fix made
+#           here) is merged into the local base (merge: local), the local base is pushed to origin (never forced) and tagged with the
 #           release's name, then the optional build command runs (`ship:`, src/releases.js). A
 #           local base that moved since the suites ran (another run merged) is refused: it would
 #           ship commits nobody checked. Hold:
-#           the run ends, nothing is pushed or tagged; its branch keeps a fix, resume the run from
-#           this gate to ship later.
+#           the run ends, nothing is pushed or tagged; its branch keeps the version commit and a fix
+#           (the local base and origin are untouched), resume the run from this gate to ship later.
 # The release notes are edited in Code & Build › Releases until you ship; shipping records the
 # release there and marks its issues Released.
 # =============================================================================
@@ -62,7 +74,7 @@ inputs:
     label: "Version"
     type: string
     default: ""
-    description: "The release's name or version (e.g. v1.4): the tag Ship pushes. Empty: release-<run id>. A roadmap's cut line fills it with its name."
+    description: "The release's name or version (e.g. v1.4.0): the tag Ship pushes. A semver (a leading v dropped) is also written into a Node project's package.json before the suites. Empty: release-<run id>. A roadmap's cut line fills it with its name."
   repo_path:
     label: "Repository"
     type: string
@@ -90,7 +102,7 @@ inputs:
     type: string
     default: "npm run test:e2e"
     show_if: "e2e_suite == 'run'"
-    description: The command that runs the whole E2E suite, run by the orchestrator (no agent, no filter).
+    description: "The command that runs the whole E2E suite, run by the orchestrator (no agent). After a fix, its failed feature files are passed to it first (npm/pnpm/yarn run <script>), then the whole suite."
   build_command:
     label: "Build command"
     type: string
@@ -172,9 +184,10 @@ agents:
       Never create, edit or delete tests or scenarios (the orchestrator refuses a turn that
       changes one): when one is wrong, say why in your answer. Run a focused check, not the whole
       suite (the orchestrator runs both suites again after your step).
-      Work on your own branch in this worktree (it starts detached at the LOCAL
-      {{ inputs.base_branch }}): `git switch -c release-fix-{{ run_id }}` once (or `git switch
-      release-fix-{{ run_id }}` when it exists), then commit there. Never fetch, pull, push or
+      Work on your own branch in this worktree (it starts at the LOCAL {{ inputs.base_branch }};
+      the run's version commit may already be on `release-fix-{{ run_id }}`): stay on
+      `release-fix-{{ run_id }}` when it is checked out, else `git switch -c release-fix-{{ run_id }}`
+      once (or `git switch release-fix-{{ run_id }}` when it exists), then commit there. Never fetch, pull, push or
       tag: only the owner ships. The dependencies are linked from a shared cache: never run
       `npm ci` and never delete `node_modules`.
 
@@ -195,7 +208,7 @@ agents:
 
 groups:
   - name: Regression
-    steps: [unit, e2e, suite_blocked]
+    steps: [version, unit, e2e, suite_blocked]
   - name: Fix
     steps: [fix, regression_failed]
   - name: Ship
@@ -203,6 +216,18 @@ groups:
 
 # -----------------------------------------------------------------------------
 steps:
+
+  # #325: the release's version into a Node project's package.json (and its lockfile's root), one
+  # commit on the run's branch before the suites: what they pass on is what Ship tags. Never fails the
+  # run: a name that is not a semver, no package.json or nothing to change is said in the run log.
+  - id: version
+    display: Release version
+    type: release_version
+    version: "{{ inputs.version or ('release-' ~ run_id) }}"
+    branch: "release-fix-{{ run_id }}"
+    transitions:
+      - when: "true"
+        goto: unit
 
   # the whole unit suite, run by the orchestrator: no agent, no tokens while it is green
   - id: unit
@@ -231,11 +256,13 @@ steps:
         max_visits: "{{ inputs.max_rounds }}"
         on_exhausted: regression_failed
 
-  # the whole E2E suite, once the unit suite is green
+  # the E2E suite, once the unit suite is green: whole in round 1; after a fix, the feature files that
+  # failed first, then the whole suite in the same visit when they pass (#324)
   - id: e2e
     display: E2E scenarios
     type: suite
     command: "{{ inputs.e2e_command }}"
+    scope: failed
     timeout: "{{ inputs.time_budget_minutes }}m"
     base_check: false
     transitions:
@@ -260,7 +287,7 @@ steps:
     prompt: |
       {{ inputs.task }}
       The release check of the local `{{ inputs.base_branch }}` is red.
-      {% if vars.red_suite == 'e2e' %}The whole E2E suite (`{{ steps.e2e.output.command }}`, round {{ steps.e2e.visits }}) fails: {{ steps.e2e.output.message }}
+      {% if vars.red_suite == 'e2e' %}The {{ 'E2E feature files that failed in the previous round' if steps.e2e.output.scope == 'files' else 'whole E2E suite' }} (`{{ steps.e2e.output.command }}`, round {{ steps.e2e.visits }}) fail: {{ steps.e2e.output.message }}
       {{ steps.e2e.output | suite_failures }}
       Its whole output: {{ run_dir }}/{{ steps.e2e.output.log }} (read the failures from it, not the whole file); the
       failed scenarios' traces and screenshots are where the project's E2E config writes them.
@@ -318,17 +345,19 @@ steps:
 
       Release `{{ inputs.version or ('release-' ~ run_id) }}` of the local `{{ inputs.base_branch }}` ({{ inputs.task }}).
       Project version: {{ (worktree_dir or inputs.repo_path) | project_version or 'no version file found' }}
-      The repository's last tags (newest first):
+      {% if steps.version.output.change %}The run's version commit ({{ steps.version.output.commit or 'simulation: not written' }}) ships with the release: {{ steps.version.output.change }}. It already matches the release: do not report the version as a mismatch.
+      {% else %}The run wrote no version: {{ steps.version.output.message | one_line(200) }}
+      {% endif %}The repository's last tags (newest first):
       {{ (worktree_dir or inputs.repo_path) | git_tags(5) or '(none)' }}
 
       Round by round (step #visit: result, time, cost), {{ ((trail | sum('durationMs')) / 60000) | round(1) }} minutes and US$ {{ (trail | sum('cost')) | round(2) }} so far:
       {% for t in trail %}{% if t.step != 'review' %}- {{ t.step }} #{{ t.visit }}: {{ t.status }}, {{ (t.durationMs / 1000) | round | int }} s{% if t.cost %}, US$ {{ t.cost | round(2) }}{% endif %}
       {% endif %}{% endfor %}
       The unit suite (`{{ steps.unit.output.command }}`), each round:
-      {% for o in steps.unit.outputs %}- unit round {{ loop.index }}: {{ o.status }}: {{ o.message | one_line(300) }}
+      {% for o in steps.unit.outputs %}- unit round {{ loop.index }}: {{ o.status }}, {{ o | suite_scope }}: {{ o.message | one_line(300) }}
       {% endfor %}
-      {% if inputs.e2e_suite == 'skip' %}The E2E suite was skipped (the project has none).{% else %}The E2E suite (`{{ steps.e2e.output.command }}`), each round:
-      {% for o in steps.e2e.outputs %}- e2e round {{ loop.index }}: {{ o.status }}: {{ o.message | one_line(300) }}
+      {% if inputs.e2e_suite == 'skip' %}The E2E suite was skipped (the project has none).{% else %}The E2E suite (`{{ inputs.e2e_command }}`), each round (focused: only the files that failed before, then whole):
+      {% for o in steps.e2e.outputs %}- e2e round {{ loop.index }}: {{ o.status }}, {{ o | suite_scope('scenario') }}: {{ o.message | one_line(300) }}
       {% endfor %}{% endif %}
 
       The fixes ({{ steps.fix.visits }}), oldest first, as the developer reported them:
@@ -346,13 +375,16 @@ steps:
 
       Answer with `release_summary`, Markdown, short, in this order:
       1. One verdict line, no heading: both suites green or not, the rounds of each suite, the fixes, the time and the cost.
-      2. `## Timeline`: a table (# | Step | Result | Time | Cost) with each suite round and each fix.
+      2. `## Timeline`: a table (# | Step | Result | Time | Cost) with each suite round and each fix; an
+         E2E round says whether it was focused or whole, with its scenarios and minutes.
       3. `## The fixes`: one bullet per fix: what changed (files, lines), why, and its kind: a regression
          of issue A by issue B, a defect that was already there, or a failure of the machine or of a
          flaky test. Say when a later fix makes an earlier one unnecessary.
-      4. `## Before you ship`: the size of the diff to read, what Ship will merge, push and tag, and
-         anything that does not match: the release's version against the project's version and its
-         tags, a fix with no focused check, a fix that could not reproduce its failure.
+      4. `## Before you ship`: the size of the diff to read, what Ship will merge, push and tag (the
+         run's version commit, e.g. "package.json 0.3.0 → 1.2.0", when there is one), and anything
+         that does not match: the release's version against the project's version (after the run's
+         version commit) and its tags, a fix with no focused check, a fix that could not reproduce
+         its failure.
       5. `## Follow-ups`: one line per thing worth an issue (the tests the fixes asked for in test_notes
          first), each a line the owner can turn into an issue; "None." when there is nothing.
       End with one line: "Nothing found against shipping." or "Read before shipping: <what>.". It is a
@@ -383,6 +415,9 @@ steps:
       {% endif %}Release {{ inputs.version or ('release-' ~ run_id) }}: the whole unit suite {{ 'passes (the E2E suite was skipped: the project has none)' if inputs.e2e_suite == 'skip' else 'and the whole E2E suite pass' }} on the local {{ inputs.base_branch }}.
       Unit: {{ steps.unit.output.message }}
       {% if inputs.e2e_suite != 'skip' %}E2E: {{ steps.e2e.output.message }}{% endif %}
+      {% if steps.version.output.change %}Version: {{ steps.version.output.change }}{% if steps.version.output.commit %} (commit {{ steps.version.output.commit | truncate(8, true, '') }} on `release-fix-{{ run_id }}`, checked by both suites){% else %} (a simulation: not written){% endif %}.
+      {% elif steps.version.output.message %}Version: unchanged: {{ steps.version.output.message | one_line(200) }}
+      {% endif %}
       {% if steps.fix.visits %}
       A regression was fixed on branch `release-fix-{{ run_id }}` ({{ steps.fix.visits }} round(s)): {{ steps.fix.output.summary }}
       {% if steps.fix.output.regression %}What broke it: {{ steps.fix.output.regression }}{% endif %}
@@ -391,8 +426,8 @@ steps:
       Not on origin yet:
       {{ worktree_dir | git_commits('origin/' ~ inputs.base_branch) }}
       The release notes are in Code & Build › Releases: edit them there before you ship.
-      Ship: {% if steps.fix.visits %}merge the fix into the local {{ inputs.base_branch }}, {% endif %}push the local {{ inputs.base_branch }} to origin and tag it `{{ inputs.version or ('release-' ~ run_id) }}`{% if inputs.build_command %}, then run `{{ inputs.build_command }}`{% endif %}.
-      Hold: end the run; nothing is pushed or tagged{% if steps.fix.visits %} (the branch keeps the fix: resume the run from this gate to ship it later){% endif %}.
+      {% set branch_has = (['the version commit'] if steps.version.output.written else []).concat(['the fix'] if steps.fix.visits else []) | join(' and ') %}Ship: {% if branch_has %}merge {{ branch_has }} into the local {{ inputs.base_branch }}, {% endif %}push the local {{ inputs.base_branch }} to origin and tag it `{{ inputs.version or ('release-' ~ run_id) }}`{% if inputs.build_command %}, then run `{{ inputs.build_command }}`{% endif %}.
+      Hold: end the run; nothing is pushed or tagged{% if branch_has %} (the branch keeps {{ branch_has }}: resume the run from this gate to ship it later){% endif %}.
     diff_base: "{{ inputs.base_branch }}"
     choices:
       - { id: ship, label: Ship, help: "Pushes the local {{ inputs.base_branch }} to origin and tags it; the release's issues become Released." }
@@ -419,7 +454,7 @@ steps:
     type: human_approval
     message: |
       The release was not shipped completely: {{ action_error.message if action_error else 'unknown error' }}
-      Try again: {% if worktree_dir | git_commits(inputs.base_branch) %}merge the fix into the local {{ inputs.base_branch }}, {% endif %}push the local {{ inputs.base_branch }} and the tag again (what already went out is kept){% if inputs.build_command %}, then the build{% endif %}.
+      Try again: {% if worktree_dir | git_commits(inputs.base_branch) %}merge the run's branch ({{ (['the version commit, ' ~ steps.version.output.change] if steps.version.output.written else []).concat(['the fix'] if steps.fix.visits else []) | join(' and ') or 'its commits' }}) into the local {{ inputs.base_branch }}, {% endif %}push the local {{ inputs.base_branch }} and the tag again (what already went out is kept){% if inputs.build_command %}, then the build{% endif %}.
       Stop: end the run as failed; what was not pushed stays local.
     choices:
       - { id: retry, label: "Try again", help: "Runs Ship again; safe to repeat: a push or a tag already on origin is left as it is." }

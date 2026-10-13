@@ -20,7 +20,11 @@
 
 const fs = require('fs');
 const path = require('path');
-const { git, repoRoot } = require('./engine/worktree');
+const {
+  git,
+  identityArgs,
+  repoRoot,
+} = require('./engine/worktree');
 const { defaultBase, pushBase } = require('./local-push');
 const { writeJsonSafe } = require('./state-file');
 
@@ -161,6 +165,135 @@ async function remoteTag(root, name) {
   return (lines.find((l) => l[1].endsWith('^{}')) || lines[0])?.[0] || null;
 }
 
+const SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+const LOCKFILES = ['npm-shrinkwrap.json', 'package-lock.json'];
+
+// The release's name as a semver (a leading `v` dropped), or null (`release-<run id>`, `v1.4`, `Spring drop`).
+function releaseSemver(name) {
+  const v = String(name || '').trim().replace(/^v(?=\d)/, '');
+  return SEMVER.test(v) ? v : null;
+}
+
+// Semver precedence: <0, 0 or >0 (a pre-release is lower than its release; build metadata ignored).
+function compareSemver(a, b) {
+  const pa = SEMVER.exec(a);
+  const pb = SEMVER.exec(b);
+  for (let i = 1; i <= 3; i++) if (Number(pa[i]) !== Number(pb[i])) return Number(pa[i]) - Number(pb[i]);
+  if (!pa[4] || !pb[4]) return (pa[4] ? -1 : 0) + (pb[4] ? 1 : 0);
+  const xa = pa[4].split('.');
+  const xb = pb[4].split('.');
+  for (let i = 0; i < Math.max(xa.length, xb.length); i++) {
+    if (xa[i] === undefined || xb[i] === undefined) return xa[i] === undefined ? -1 : 1;
+    const na = /^\d+$/.test(xa[i]);
+    const nb = /^\d+$/.test(xb[i]);
+    if (na && nb && Number(xa[i]) !== Number(xb[i])) return Number(xa[i]) - Number(xb[i]);
+    if (na !== nb) return na ? -1 : 1;
+    if (xa[i] !== xb[i]) return xa[i] < xb[i] ? -1 : 1;
+  }
+  return 0;
+}
+
+// Where each value of a (valid) JSON text sits, by key path (JSON of the path array): { start, end,
+// key } (key: where its member's key starts), so a value is replaced without reformatting the file.
+function jsonSpans(text) {
+  const spans = new Map();
+  let i = 0;
+  const ws = () => { while (/\s/.test(text[i])) i++; };
+  const str = () => {
+    const s = i++;
+    while (text[i] !== '"') i += text[i] === '\\' ? 2 : 1;
+    return JSON.parse(text.slice(s, ++i));
+  };
+  const value = (p, key) => {
+    ws();
+    const start = i;
+    if (text[i] === '{' || text[i] === '[') {
+      const close = text[i++] === '{' ? '}' : ']';
+      ws();
+      if (text[i] === close) i++;
+      else for (let n = 0; ; n++) {
+        ws();
+        const at = i;
+        let k = n;
+        if (close === '}') { k = str(); ws(); i++; }
+        value([...p, k], at);
+        ws();
+        if (text[i++] === close) break;
+      }
+    } else if (text[i] === '"') str();
+    else while (i < text.length && !/[\s,}\]]/.test(text[i])) i++;
+    spans.set(JSON.stringify(p), { start, end: i, key });
+  };
+  value([], 0);
+  return spans;
+}
+
+// `text` with each [start, end, replacement] applied (spans of the original text).
+const applyEdits = (text, edits) => edits.sort((a, b) => b[0] - a[0]).reduce((t, [s, e, r]) => t.slice(0, s) + r + t.slice(e), text);
+
+// The edits that set package.json's `version` (added after `name`, or first, when missing).
+function packageEdits(text, version) {
+  const spans = jsonSpans(text);
+  const at = spans.get('["version"]');
+  if (at) return [[at.start, at.end, JSON.stringify(version)]];
+  const eol = text.includes('\r\n') ? '\r\n' : '\n';
+  const members = [...spans.entries()].filter(([k]) => JSON.parse(k).length === 1).map(([, s]) => s);
+  if (!members.length) return [[spans.get('[]').start, spans.get('[]').end, `{ "version": ${JSON.stringify(version)} }`]];
+  const first = members.sort((a, b) => a.key - b.key)[0];
+  const indent = text.slice(text.lastIndexOf('\n', first.key) + 1, first.key);
+  const line = indent.trim() ? ' ' : eol + indent;
+  const name = spans.get('["name"]');
+  return name
+    ? [[name.end, name.end, `,${line}"version": ${JSON.stringify(version)}`]]
+    : [[first.key, first.key, `"version": ${JSON.stringify(version)},${line}`]];
+}
+
+/**
+ * #325: before the suites, a release run writes the release's version into the project folder's
+ * package.json (`version`, added when missing) and, when present, the root `version` and
+ * `packages[""].version` of package-lock.json / npm-shrinkwrap.json, then commits them on the branch
+ * checked out in `dir` (a detached worktree first gets `branch`). Nothing else changes: formatting,
+ * key order and line endings are kept, no npm, workspace packages untouched. Nothing is written (with
+ * a `reason`) when the name is not a semver, there is no package.json, the file already names the
+ * version or a higher one (never downgrades); a mock run only says what it would set. Throws only
+ * when git fails (the engine's step logs it and the release goes on).
+ * @param {{ dir: string, version: string, mock?: boolean, branch?: string }} o
+ * @returns {Promise<{ written: boolean, from: string|null, to: string|null, files: string[], commit: string|null, reason: string }>}
+ */
+async function writeReleaseVersion({ dir, version, mock = false, branch = null }) {
+  const out = { written: false, from: null, to: releaseSemver(version), files: [], commit: null, reason: '' };
+  const pkgFile = path.join(String(dir || ''), 'package.json');
+  if (!out.to) return { ...out, reason: `The release's name "${version || ''}" is not a semver version (e.g. 1.2.0 or v1.2.0): package.json is left as it is.` };
+  if (!dir || !fs.existsSync(pkgFile)) return { ...out, reason: 'The project has no package.json: no version is written (only Node projects get one).' };
+  const texts = { 'package.json': fs.readFileSync(pkgFile, 'utf8') };
+  let pkg;
+  try { pkg = JSON.parse(texts['package.json']); } catch (e) { return { ...out, reason: `package.json is not valid JSON (${e.message}): its version is left as it is.` }; }
+  out.from = typeof pkg.version === 'string' ? pkg.version : null;
+  if (out.from === out.to) return { ...out, reason: `package.json already names ${out.to}.` };
+  if (out.from && SEMVER.test(out.from) && compareSemver(out.to, out.from) < 0) return { ...out, reason: `The release ${out.to} is lower than package.json's ${out.from}: the version is never downgraded.` };
+  const edits = { 'package.json': packageEdits(texts['package.json'], out.to) };
+  for (const name of LOCKFILES) {
+    const file = path.join(dir, name);
+    if (!fs.existsSync(file)) continue;
+    texts[name] = fs.readFileSync(file, 'utf8');
+    let spans;
+    try { JSON.parse(texts[name]); spans = jsonSpans(texts[name]); } catch { continue; }
+    edits[name] = [['version'], ['packages', '', 'version']].map((p) => spans.get(JSON.stringify(p)))
+      .filter((s) => s && texts[name][s.start] === '"').map((s) => [s.start, s.end, JSON.stringify(out.to)]);
+  }
+  out.files = Object.keys(edits).filter((name) => edits[name].length);
+  const change = `package.json ${out.from || '(no version)'} → ${out.to}`;
+  if (mock) return { ...out, reason: `Simulation: nothing written; a real run would set ${change} (${out.files.join(', ')}).` };
+  for (const name of out.files) fs.writeFileSync(path.join(dir, name), applyEdits(texts[name], edits[name]));
+  if (branch && !(await git(['symbolic-ref', '-q', 'HEAD'], dir).catch(() => null))) {
+    const exists = await git(['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`], dir).catch(() => null);
+    if (!exists) await git(['switch', '-c', branch], dir);
+  }
+  await git(['add', '--', ...out.files], dir);
+  await git([...(await identityArgs(dir)), 'commit', '-q', '--no-verify', '-m', `Release ${out.to}: package.json version`, '--', ...out.files], dir);
+  return { ...out, written: true, commit: await git(['rev-parse', 'HEAD'], dir), reason: `Set ${change} and committed it.` };
+}
+
 /**
  * The next release (pure): what merged locally since the last one.
  * @param {{ history?: object, runs?: object[], local?: { commits?: { sha, subject, issues }[], issues?: number[] } | null, issues?: { number, title }[], version?: string }} o
@@ -234,4 +367,5 @@ module.exports = {
   shipRelease,
   tagName,
   testResults,
+  writeReleaseVersion,
 };

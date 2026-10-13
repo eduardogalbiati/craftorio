@@ -414,6 +414,11 @@ class WorkflowRun extends EventEmitter {
       if (this.abort.signal.aborted) throw new Error('Cancelled');
       st.output = output;
       scope = { ...this.ctx, output, iteration: st.iteration };
+    } else if (step.type === 'release_version') {
+      // no agent, no model call (#325): never fails the run, the output says what was written
+      output = await this.runReleaseVersionStep(step, st);
+      st.output = output;
+      scope = { ...this.ctx, output, iteration: st.iteration };
     } else if (step.type === 'test_ids') {
       // no agent, no model call (#246): the missing test ids are the output, the transitions route it
       output = this.runTestIdsStep(step, st);

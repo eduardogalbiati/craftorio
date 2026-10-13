@@ -9,7 +9,7 @@
 // writer's pre-existing failures, #101) are reported apart and never fail the step.
 // The step tells pre-existing failures apart by itself (#211): when tests fail, it runs only their
 // test files in the base checkout (`base()`, the run's <run_id>-base worktree), same command filtered
-// to those files (`filteredCommand`: npm/pnpm/yarn test, pytest, node --test), log
+// to those files (`filteredCommand`: npm/pnpm/yarn test or run <script>, pytest, node --test), log
 // logs/suite-<round>-base.log. A test failing there too is pre-existing (`preexisting_failures` in the
 // output: the engine adds them to the run's list and to the workspace's failing-on-main.json); files
 // the base does not have are the run's. The base's result per file is cached by base commit + file
@@ -362,12 +362,16 @@ function recordDuration(history, ms) {
 }
 
 // The suite's command restricted to `files`, or null when it cannot be: npm/pnpm/yarn test (the
-// files after `--`, the project's runner gets them), pytest, node --test without files of its own.
+// files after `--`, the project's runner gets them), a package script without arguments of its own
+// (#324: `npm run test:e2e -- <feature files>` reaches `playwright test` after `bddgen`; pnpm and
+// yarn pass them on without `--`), pytest, node --test without files of its own.
 function filteredCommand(command, files) {
   const c = String(command || '').trim();
   if (!c || !files.length) return null;
   const list = files.map((f) => (/[\s"&|<>^()]/.test(f) ? `"${f}"` : f)).join(' ');
   if (/^(npm|pnpm|yarn)( run)? (test|t)$/.test(c)) return `${c} -- ${list}`;
+  if (/^npm run(-script)? [\w:.-]+$/.test(c)) return `${c} -- ${list}`;
+  if (/^(pnpm|yarn)( run)? [\w:.-]+$/.test(c)) return `${c} ${list}`;
   if (/^((uv|poetry) run )?(python3? -m )?pytest\b/.test(c)) return `${c} ${list}`;
   if (/^node\b.*\s--test\b/.test(c) && !new RegExp(TEST_FILE.source).test(c)) return `${c} ${list}`;
   return null;
@@ -634,6 +638,20 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
   return finish();
 }
 
+// How one round of a suite step ran (#324), e.g. "focused on 2 files: 12 scenarios (12 passed, 0
+// failed), 1.5 min; then whole: 193 scenarios (193 passed, 0 failed), 44.0 min" or "whole: …";
+// '' when the output is not a suite's.
+function suiteScope(output, noun = 'test') {
+  if (output?.kind !== 'suite') return '';
+  const part = (o, what) => {
+    const counts = o.passed == null && o.failed == null ? `${noun}s unknown` : `${plural((o.passed || 0) + (o.failed || 0), noun)} (${o.passed || 0} passed, ${o.failed || 0} failed)`;
+    return `${what}: ${counts}, ${(Number(o.duration_ms || 0) / 60e3).toFixed(1)} min`;
+  };
+  const focused = (files) => `focused on ${plural((files || []).length, 'file')}`;
+  if (output.affected) return `${part(output.affected, focused(output.affected.files))}; then ${part(output, 'whole')}`;
+  return part(output, output.scope === 'files' ? focused(output.selection?.files) : 'whole');
+}
+
 // A suite output for a prompt or a gate's message: the result, the log and one line per failing
 // test (file, error's first line); '' when the output is not a suite's.
 function suiteMessage(output) {
@@ -706,5 +724,6 @@ module.exports = {
   SUITE_TIMEOUT_MS,
   suiteEnv,
   suiteMessage,
+  suiteScope,
   suiteTimeout,
 };

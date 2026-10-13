@@ -119,6 +119,10 @@ tpl.addFilter('e2e_scenarios', (output) => scenarios.scenariosMessage(output));
 // per failing test; '' when the output is not a suite's (src/engine/suite-step.js).
 //   {{ steps.suite.output | suite_failures }}
 tpl.addFilter('suite_failures', (output) => suiteStep.suiteMessage(output));
+// How one round of a suite step ran (#324), for a release summary: focused on some files (then the
+// whole suite) or whole, with its tests and minutes; '' when the output is not a suite's.
+//   {% for o in steps.e2e.outputs %}{{ o | suite_scope('scenario') }}{% endfor %}
+tpl.addFilter('suite_scope', (output, noun) => suiteStep.suiteScope(output, noun || undefined));
 
 // The test ids the E2E step definitions of a checkout use and its renderer lacks (#246, the rule of
 // src/engine/test-ids.js), one line per id with the step files that use it; '' when none or without

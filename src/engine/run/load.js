@@ -68,6 +68,7 @@ const SESSION_MODES = ['persistent', 'ephemeral', 'handoff'];
 // Step types without an agent: the engine does the work (no supervisor, no stall check, no agent keys)
 const MACHINE_STEP_TYPES = [
   'human_approval',
+  'release_version',
   'screenshots',
   'suite',
   'test_ids',
@@ -146,8 +147,9 @@ function loadWorkflow(file) {
       if (s.agent || s.agents) throw new Error(`Step "${s.id}": a suite step has no agent.`);
       if (s.command !== undefined && typeof s.command !== 'string') throw new Error(`Step "${s.id}": command must be a string (a template; empty = found from the project's files).`);
       if (s.timeout !== undefined && !String(s.timeout).includes('{{') && parseDuration(s.timeout, null) == null) throw new Error(`Step "${s.id}": timeout must be a duration such as 30m.`);
-      // #212: affected = the affected test files each visit, the whole suite once when they pass
-      if (s.scope !== undefined && !String(s.scope).includes('{{') && !['affected', 'full'].includes(s.scope)) throw new Error(`Step "${s.id}": scope must be affected or full.`);
+      // #212: affected = the affected test files each visit, the whole suite once when they pass;
+      // #324: failed = whole first, then the files that failed in the previous round and the whole suite
+      if (s.scope !== undefined && !String(s.scope).includes('{{') && !['affected', 'failed', 'full'].includes(s.scope)) throw new Error(`Step "${s.id}": scope must be affected, failed or full.`);
       // #220: given test files only (a template, e.g. "{{ steps.acceptance_tests.output.tests_added }}"),
       // and `expect: red` for tests written before the code (the red check)
       validateFileList(s.files, `Step "${s.id}": files`);
@@ -161,6 +163,12 @@ function loadWorkflow(file) {
       if (s.agent || s.agents) throw new Error(`Step "${s.id}": a test_ids step has no agent.`);
       for (const key of ['steps', 'renderer']) {
         if (s[key] !== undefined && (typeof s[key] !== 'string' || !s[key].trim())) throw new Error(`Step "${s.id}": ${key} must be a repository-relative folder (a template).`);
+      }
+    } else if (s.type === 'release_version') {
+      // `type: release_version` (#325): no agent; the release's version into the project's package.json
+      if (s.agent || s.agents) throw new Error(`Step "${s.id}": a release_version step has no agent.`);
+      for (const key of ['version', 'dir', 'branch']) {
+        if (s[key] !== undefined && typeof s[key] !== 'string') throw new Error(`Step "${s.id}": ${key} must be a string (a template).`);
       }
     } else if (s.type !== 'human_approval') {
       // `agents: [...]` = fan-out: the same prompt goes to several agents in parallel
