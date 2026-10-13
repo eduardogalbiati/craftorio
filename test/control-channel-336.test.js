@@ -14,6 +14,7 @@ const { execFile } = require('child_process');
 const { promisify } = require('util');
 const { builtinModules } = require('module');
 const { ISSUE_WORKFLOW, makeService, roadmapProject, until } = require('./service/helpers');
+const { setupWorkspace } = require('../src/workspace');
 
 const ROOT = path.join(__dirname, '..');
 const loadAllowlist = () => require('../src/control/allowlist');
@@ -255,4 +256,141 @@ test('docs: capabilities.md says outside sessions act through the control endpoi
   const doc = fs.readFileSync(path.join(ROOT, 'docs', 'agents', 'capabilities.md'), 'utf8');
   assert.match(doc, /control\/endpoint\.json/);
   assert.match(doc, /outside session/i);
+});
+
+// ---- follow-ups after the change (developer's and reviewer's notes) ---------------------------------
+
+test('a request whose Host is not the loopback address gets 403 even without an Origin (DNS rebinding); localhost works', async (t) => {
+  const { service } = makeService(t);
+  const { endpoint } = await openChannel(t, service);
+  const port = new URL(endpoint.url).port;
+  const auth = { authorization: `Bearer ${endpoint.token}` };
+  const foreign = await request(`${endpoint.url}/api/settings:get`, { headers: { ...auth, host: `evil.example:${port}` }, body: {} });
+  assert.equal(foreign.status, 403);
+  const local = await request(`${endpoint.url}/api/settings:get`, { headers: { ...auth, host: `localhost:${port}` }, body: {} });
+  assert.equal(local.status, 200);
+});
+
+test('error state: when the endpoint cannot open, the status says why and nothing listens; it opens once the cause is gone', async (t) => {
+  const { service, api } = makeService(t);
+  const blocker = path.join(service.workspace().root, 'control');
+  fs.writeFileSync(blocker, 'a file where the control folder goes'); // the endpoint file cannot be written
+  const { createControlChannel } = loadControl();
+  const control = createControlChannel({ service });
+  t.after(() => control.stop());
+  api['settings:set']({ controlChannel: true });
+  const failed = await control.update();
+  assert.equal(failed.enabled, false);
+  assert.equal(failed.port, null);
+  assert.match(String(failed.error), /^The control channel could not open: /);
+
+  fs.rmSync(blocker);
+  const opened = await control.update();
+  assert.equal(opened.enabled, true);
+  assert.equal(opened.error, null);
+  assert.equal(fs.existsSync(path.join(blocker, 'endpoint.json')), true);
+});
+
+test('switch off at start: a stale endpoint.json left by an abrupt exit is removed', async (t) => {
+  const { service } = makeService(t);
+  const dir = path.join(service.workspace().root, 'control');
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, 'endpoint.json');
+  fs.writeFileSync(file, JSON.stringify({ url: 'http://127.0.0.1:1', token: 'stale' }));
+  const { createControlChannel } = loadControl();
+  const control = createControlChannel({ service });
+  t.after(() => control.stop());
+  const status = await control.update();
+  assert.equal(status.enabled, false);
+  assert.equal(fs.existsSync(file), false, 'an outside session never reads the address of a closed app');
+});
+
+test('a workspace change closes the old endpoint (its file removed) and follows the new workspace\'s setting', async (t) => {
+  const { service, api } = makeService(t);
+  const { control, file, endpoint } = await openChannel(t, service);
+  const other = fs.mkdtempSync(path.join(os.tmpdir(), 'control-ws2-'));
+  t.after(() => fs.rmSync(other, { recursive: true, force: true }));
+  service.setWorkspace(setupWorkspace(other, { persist: false }));
+  api['settings:set']({ controlChannel: true });
+  const status = await control.update();
+  assert.equal(fs.existsSync(file), false, 'the first workspace no longer advertises an endpoint');
+  const otherFile = path.join(other, 'control', 'endpoint.json');
+  assert.equal(path.resolve(status.file), path.resolve(otherFile));
+  const next = JSON.parse(fs.readFileSync(otherFile, 'utf8'));
+  assert.notEqual(next.token, endpoint.token);
+  const res = await request(`${next.url}/api/settings:get`, { headers: { authorization: `Bearer ${next.token}` }, body: {} });
+  assert.equal(res.status, 200);
+});
+
+test('confirmGate is refused on any allowed channel, not only runs:resume', async (t) => {
+  const { service } = makeService(t);
+  const { call } = await openChannel(t, service);
+  const res = await call('roadmap:get', { projectId: 'x', confirmGate: 'review' });
+  assert.equal(res.status, 403);
+  assert.match(String(res.json && res.json.error), /confirmGate/);
+});
+
+test('calls.jsonl: a very long channel name and its error are cut short', async (t) => {
+  const { service } = makeService(t);
+  const { call } = await openChannel(t, service);
+  const res = await call('a'.repeat(3000), {});
+  assert.equal(res.status, 403);
+  const line = readCalls(service).find((c) => String(c.channel).startsWith('aaa'));
+  assert.ok(line, 'the call is recorded');
+  assert.ok(line.channel.length <= 300, `channel cut: ${line.channel.length}`);
+  assert.ok(String(line.error).length <= 600, `error cut: ${String(line.error).length}`);
+});
+
+test('roadmap:save through the endpoint with a stale base goes through the #287 merge: the screen\'s save is kept', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  fs.writeFileSync(path.join(ws.workflows, 'fixture-issue.yaml'), ISSUE_WORKFLOW);
+  const p = await roadmapProject(api, ws, t, [1, 2], 'control-merge');
+  await api['roadmap:save']({ projectId: p.id, stages: [
+    { name: 'One', note: '', items: [{ workflow: 'fixture-issue.yaml', number: 1, mock: true }] },
+    { name: 'Two', note: '', items: [{ workflow: 'fixture-issue.yaml', number: 2, mock: true }] },
+  ], label: 'Planned' });
+  const { call } = await openChannel(t, service);
+  const read = (await call('backlog:get', { projectId: p.id })).json.result.roadmap; // the outside session reads
+  assert.ok(read.updatedAt);
+
+  await new Promise((r) => setTimeout(r, 15)); // the screen's save gets a newer updatedAt
+  const screen = JSON.parse(JSON.stringify(read.stages));
+  screen[1].name = 'Screen';
+  await api['roadmap:save']({ projectId: p.id, stages: screen, label: 'Renamed stage 2', base: read.updatedAt });
+
+  const outside = JSON.parse(JSON.stringify(read.stages));
+  outside[0].name = 'Outside';
+  const res = await call('roadmap:save', { projectId: p.id, stages: outside, label: 'Renamed stage 1', base: read.updatedAt });
+  assert.equal(res.status, 200, res.text);
+  assert.equal(res.json.result.conflict, undefined, JSON.stringify(res.json.result.conflict));
+  const names = api['roadmap:get']({ projectId: p.id }).stages.map((s) => s.name);
+  assert.deepEqual(names, ['Outside', 'Screen']);
+});
+
+test('scripts/ctl.js: --workspace <dir> instead of MULTIAGENT_WORKSPACE', async (t) => {
+  const { service } = makeService(t);
+  await openChannel(t, service);
+  const env = { ...process.env };
+  delete env.MULTIAGENT_WORKSPACE;
+  const { stdout } = await promisify(execFile)(process.execPath, [path.join(ROOT, 'scripts', 'ctl.js'), 'settings:get', '--workspace', service.workspace().root], { env, timeout: 30000 });
+  assert.equal(JSON.parse(stdout).controlChannel, true);
+});
+
+test('scripts/ctl.js: an argument that is not JSON, or no endpoint file, exits 1 with the reason on stderr', async (t) => {
+  const { service } = makeService(t);
+  const env = { ...process.env, MULTIAGENT_WORKSPACE: service.workspace().root };
+  const ctl = path.join(ROOT, 'scripts', 'ctl.js');
+  const run = (args) => promisify(execFile)(process.execPath, [ctl, ...args], { env, timeout: 30000 }).then(() => null, (e) => e);
+
+  const noEndpoint = await run(['settings:get']);
+  assert.ok(noEndpoint, 'no endpoint file: exits non-zero');
+  assert.equal(noEndpoint.code, 1);
+  assert.match(String(noEndpoint.stderr), /endpoint/i);
+
+  await openChannel(t, service);
+  const notJson = await run(['roadmap:get', '{projectId: nope']);
+  assert.ok(notJson, 'a non-JSON argument: exits non-zero');
+  assert.equal(notJson.code, 1);
+  assert.match(String(notJson.stderr), /not valid JSON/);
 });
