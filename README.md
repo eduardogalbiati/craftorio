@@ -653,7 +653,9 @@ mix structural and behavioural changes in one commit):
    current behaviour, committed first, in their own commit; it also records the target's figures
    before the change (lines, files, complexity where a parser exists for the language).
 2. **Green check** (`green_check`, no agent): the orchestrator runs exactly those files on the
-   unchanged code (`expect: green`). A pinned test that fails goes back to the test writer, never on.
+   unchanged code (`expect: green`). A pinned test that fails, or a listed file that is not in the
+   worktree, goes back to the test writer, never on; after two rounds the `pin_failed` gate asks
+   you (one more round, or stop).
 3. **Refactor** (`refactor`, the developer): structure only. It may not edit any test
    (`edits_tests: false`) and the pinned tests are locked (`protect_files`): a turn that changes one
    is refused. No behaviour change, no dependency upgrade, no rename of a public interface the issue

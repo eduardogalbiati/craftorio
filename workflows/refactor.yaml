@@ -320,11 +320,14 @@ steps:
       {{ steps.green_check.output | suite_failures }}
       {% else %}The test writer pinned no behaviour: {{ steps.pin_behaviour.output.summary }}
       {% endif %}
-      No refactor starts without pinned behaviour. Approve: one more round of the test writer. Reject: stop the run as failed (its branch keeps the work).
+      No refactor starts without pinned behaviour.
+    choices:
+      - { id: retry, label: "One more round of the test writer", help: "The test writer pins the behaviour again; the green check runs after it." }
+      - { id: stop,  label: "Stop the run as failed (branch kept to resume)", help: "Ends the run as failed; no refactor starts and its branch keeps the work." }
     transitions:
-      - when: "approved"
+      - when: "choice == 'retry'"
         goto: pin_behaviour
-      - when: "rejected"
+      - when: "choice == 'stop'"
         goto: end
         status: failed
 

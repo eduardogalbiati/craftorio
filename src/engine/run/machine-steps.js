@@ -269,6 +269,13 @@ const methods = {
       output = await once({ files, selection, logName: `${step.id}-${st.visits}`, mockResult: step.expect === 'red' && mockResult === 'broken' ? 'fail' : mockResult, ...(step.expect ? { base: null } : {}) });
       output.missing = missing;
       if (step.expect === 'red') output = this.redCheckOutput(output, files, mockResult);
+      // a green check whose listed files are not all on disk proves nothing (#355): never a pass. The
+      // disk is read here even in a simulated run, whose machine lists every file as existing
+      const absent = step.expect === 'green' && cwd && fs.existsSync(cwd) ? given.filter((f) => !fs.existsSync(path.join(cwd, f))) : missing;
+      if (step.expect === 'green' && output.status === 'pass' && (absent.length || !files.length)) {
+        const why = absent.length ? `the listed test file(s) are not in the worktree: ${absent.join(', ')}` : 'no test file to check';
+        output = { ...output, status: 'fail', reason: why, message: `Green check: ${why}. Write and commit them, then list them in tests_added.` };
+      }
     } else if (scope === 'affected') {
       let selection;
       try { selection = this.affectedSelection(); } catch (e) { selection = { mode: 'all', files: [], reasons: {}, changed: [], slow: [], why: `the affected tests could not be listed (${e.message}): the whole suite` }; }
