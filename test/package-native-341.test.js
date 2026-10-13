@@ -27,7 +27,8 @@ test('#341 buildNative: adds the target, builds in release, locked, and stages t
     if (cmd === 'cargo') {
       const built = path.join(process.env.CARGO_TARGET_DIR, 'x86_64-pc-windows-msvc', 'release');
       fs.mkdirSync(built, { recursive: true });
-      fs.writeFileSync(path.join(built, 'multiagent-mcp.exe'), 'bin');
+      // #342: the workspace builds three sidecars
+      for (const name of ['multiagent-ctl', 'multiagent-mcp', 'multiagent-tail']) fs.writeFileSync(path.join(built, `${name}.exe`), 'bin');
     }
     return { status: 0 };
   };
@@ -36,7 +37,8 @@ test('#341 buildNative: adds the target, builds in release, locked, and stages t
   assert.equal(path.basename(staged), 'bin');
   assert.equal(fs.readFileSync(path.join(staged, 'multiagent-mcp.exe'), 'utf8'), 'bin');
   assert.equal(calls[0], 'rustup target add x86_64-pc-windows-msvc');
-  assert.match(calls[1], /^cargo build --release --locked --manifest-path .*Cargo\.toml --target x86_64-pc-windows-msvc -p multiagent-mcp$/);
+  assert.match(calls[1], /^cargo build --release --locked --manifest-path .*Cargo\.toml --target x86_64-pc-windows-msvc( -p multiagent-[a-z]+)+$/);
+  assert.match(calls[1], / -p multiagent-mcp\b/);
   assert.deepEqual(packagerOptions(opts).extraResource, [staged]);
 });
 

@@ -249,7 +249,7 @@ test('docs: a docs/features fragment maps each tools/roadmap operation to channe
   for (const channel of ['roadmap:get', 'roadmap:save', 'roadmap:pause', 'roadmap:start']) assert.equal(doc.includes(channel), true, channel);
   assert.match(doc, /curl/);
   assert.match(doc, /Invoke-RestMethod/);
-  assert.match(doc, /ctl\.js/);
+  assert.match(doc, /multiagent-ctl|ctl\.js/); // #342: the client is the multiagent-ctl binary
 });
 
 test('docs: capabilities.md says outside sessions act through the control endpoint, not by editing workspace files', () => {

@@ -2,7 +2,8 @@
 // control this app" switch (a checkbox named by its aria-label, data-testid="setting-control-channel",
 // off by default, its one-line description mentions human gates), its status
 // (data-testid="control-channel-status": the 127.0.0.1 port and the endpoint file's path) and the
-// workspace's control/endpoint.json ({ url, token }), written while the channel is on, deleted when off.
+// workspace's control/endpoint.json ({ url, token }), written while the channel is on, deleted when off;
+// while on, the multiagent-ctl binary's path and a copy button (#342).
 // Opening Settings and its tabs reuses app.steps.js. Locators are roles and data-testid only
 // (skills/ui-conventions).
 
@@ -71,4 +72,39 @@ Then('the control channel status shows no port', async ({ e2e }) => {
   const shown = status(e2e.window);
   await expect.poll(async () => ((await shown.isVisible()) ? (await shown.innerText()) : ''), { timeout: LOAD_TIMEOUT })
     .not.toMatch(/127\.0\.0\.1:\d+|\bport\b\W*\d+/i);
+});
+
+// #342: the binaries the switch's row offers to copy, by name: its path (data-testid="<id>-path",
+// an absolute path ending in the binary, .exe on Windows) and its copy button (data-testid="<id>-copy").
+// The clipboard is read in the main process (Electron's clipboard module).
+const BINARIES = { 'multiagent-ctl': 'control-ctl' };
+const binaryId = (name) => {
+  if (!BINARIES[name]) throw new Error(`no control channel binary named "${name}"`);
+  return BINARIES[name];
+};
+const binaryPath = (page, name) => page.getByTestId(`${binaryId(name)}-path`);
+const binaryCopy = (page, name) => page.getByTestId(`${binaryId(name)}-copy`);
+const pathOf = (name) => new RegExp(`^(?:[A-Za-z]:[\\\\/]|/).*[\\\\/]${escapeRe(name)}(?:\\.exe)?$`);
+
+Then('the control channel shows the path of {string}', async ({ e2e }, name) => {
+  const shown = binaryPath(e2e.window, name);
+  await expect(shown).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect.poll(async () => (await shown.innerText()).trim(), { timeout: LOAD_TIMEOUT }).toMatch(pathOf(name));
+  await expect(binaryCopy(e2e.window, name)).toBeVisible();
+  await expect(binaryCopy(e2e.window, name)).toBeEnabled();
+});
+
+When('I copy the control channel\'s {string} path', async ({ e2e }, name) => {
+  await e2e.app.evaluate(({ clipboard }) => clipboard.writeText(''));
+  await binaryCopy(e2e.window, name).click();
+});
+
+Then('the clipboard holds the {string} path shown', async ({ e2e }, name) => {
+  const shown = (await binaryPath(e2e.window, name).innerText()).trim();
+  await expect.poll(() => e2e.app.evaluate(({ clipboard }) => clipboard.readText()), { timeout: LOAD_TIMEOUT }).toBe(shown);
+});
+
+Then('the control channel offers no {string} path to copy', async ({ e2e }, name) => {
+  await expect(binaryPath(e2e.window, name)).toBeHidden({ timeout: LOAD_TIMEOUT });
+  await expect(binaryCopy(e2e.window, name)).toBeHidden();
 });

@@ -190,8 +190,8 @@ test('#341 scripts/package.js builds multiagent-mcp in release for each release 
   for (const triple of ['x86_64-pc-windows-msvc', 'aarch64-apple-darwin', 'x86_64-apple-darwin', 'x86_64-unknown-linux-gnu']) {
     assert.ok(src.includes(triple), `target ${triple}`);
   }
-  // the JS fallback stays unpacked (a dev checkout without cargo, an older build)
-  assert.match(src, /src\/supervisor-mcp\.js/);
+  // #342: the JS fallback is no longer unpacked (packaged, the binaries are always there): see
+  // test/rust-tail-ctl-342.test.js
 });
 
 const pkgScript = () => require('../scripts/package.js');
@@ -240,10 +240,12 @@ function nativeBuild(t, { platform, arch, reply = () => ({ status: 0 }) }) {
     calls.push([cmd, ...args]);
     if (cmd === 'cargo' && args.includes('build')) {
       const triple = args[args.indexOf('--target') + 1];
-      const file = platform === 'win32' ? 'multiagent-mcp.exe' : 'multiagent-mcp';
       const dir = path.join(tmp, 'target', triple, 'release');
       fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(path.join(dir, file), `binary for ${triple}`);
+      // #342: the workspace builds three sidecars
+      for (const name of ['multiagent-ctl', 'multiagent-mcp', 'multiagent-tail']) {
+        fs.writeFileSync(path.join(dir, platform === 'win32' ? `${name}.exe` : name), name === 'multiagent-mcp' ? `binary for ${triple}` : name);
+      }
     }
     return reply(cmd, args);
   };
@@ -259,7 +261,7 @@ test('#341 buildNative: builds multiagent-mcp in release for the leg\'s target a
     const b = nativeBuild(t, { platform, arch });
     const dir = buildNative({ platform, arch, out: b.out }, b.run);
     assert.equal(dir, nativeBinDir({ platform, arch, out: b.out }));
-    assert.deepEqual(fs.readdirSync(dir), [file]);
+    assert.ok(fs.readdirSync(dir).includes(file), `${file} staged (#342: next to multiagent-tail and multiagent-ctl)`);
     assert.equal(fs.readFileSync(path.join(dir, file), 'utf8'), `binary for ${triple}`);
     const cargo = b.calls.find((c) => c[0] === 'cargo');
     for (const a of ['build', '--release', '--target', triple, 'multiagent-mcp']) assert.ok(cargo.includes(a), `${platform}: cargo ${a}`);
@@ -272,8 +274,9 @@ test('#341 buildNative: macOS signs the binary ad hoc when packaged on a Mac, ne
   const dir = buildNative({ platform: 'darwin', arch: 'arm64', out: b.out }, b.run);
   const sign = b.calls.filter((c) => c[0] === 'codesign');
   if (process.platform === 'darwin') {
-    assert.equal(sign.length, 1);
-    assert.ok(sign[0].includes('-') && sign[0].includes(path.join(dir, 'multiagent-mcp')), JSON.stringify(sign));
+    // #342: one ad hoc signature per binary, multiagent-mcp's among them
+    assert.ok(sign.length >= 1);
+    assert.ok(sign.some((c) => c.includes('-') && c.includes(path.join(dir, 'multiagent-mcp'))), JSON.stringify(sign));
   } else {
     assert.equal(sign.length, 0, 'no codesign off macOS');
   }
