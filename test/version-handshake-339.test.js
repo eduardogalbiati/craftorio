@@ -367,7 +367,19 @@ function loadBrowser({ builtFor, engine }) {
     window, document, location,
     navigator: { clipboard: {} },
     XMLHttpRequest: FakeXHR, WebSocket: FakeWebSocket,
-    fetch: async (url) => response(answer(url)),
+    // an engine set to { raw: { status, text } } answers GET /api/version with that (an older engine)
+    fetch: async (url) => {
+      const raw = state.engine.raw;
+      if (raw && /\/api\/version(?:[?#]|$)/.test(String(url))) {
+        return {
+          ok: raw.status < 400, status: raw.status,
+          headers: { get: () => 'text/html' },
+          json: async () => JSON.parse(raw.text),
+          text: async () => raw.text,
+        };
+      }
+      return response(answer(url));
+    },
     setTimeout: (fn) => { state.timers.push(fn); return state.timers.length; },
     clearTimeout: (id) => { if (id) state.timers[id - 1] = null; },
     setInterval: () => 0, clearInterval: () => {},
@@ -465,4 +477,51 @@ test('#339 browser: reconnecting to an engine whose contract changed shows the b
   assert.ok(b.text.includes('9.9.9') && b.text.includes('bbbb2222'), b.text);
   await page.reconnect(ENGINE_B);
   assert.equal(page.banner().count, 1, 'a second reconnection to that engine adds no second banner');
+});
+
+test('#339 browser: back on an engine with the page\'s contract, the banner goes away', async () => {
+  const page = loadBrowser({ builtFor: ENGINE_A.contract, engine: ENGINE_B });
+  await page.open();
+  assert.equal(page.banner().count, 1);
+  await page.reconnect(ENGINE_A);
+  assert.equal(page.banner().count, 0, 'the engine speaks this page\'s contract again');
+});
+
+test('#339 browser: an older engine without GET /api/version (404 or not JSON) shows no banner', async () => {
+  for (const raw of [{ status: 404, text: '{"error":"Unknown channel: version"}' }, { status: 200, text: '<!doctype html><title>old</title>' }]) {
+    const page = loadBrowser({ builtFor: ENGINE_A.contract, engine: { raw } });
+    await page.open();
+    assert.equal(page.banner().count, 0, `GET /api/version answered ${raw.status} ${raw.text}`);
+  }
+});
+
+test('#339 browser: a page whose manifest names no contract (an older engine served it) shows no banner', async () => {
+  const page = loadBrowser({ builtFor: null, engine: ENGINE_B });
+  await page.open();
+  assert.equal(page.banner().count, 0);
+});
+
+// ---- the route's fallback when the service gives no version ------------------------------------
+
+async function startOver(t, api) {
+  const manifest = [{ channel: 'test339:ping', method: 'test339Ping', schema: { result: { type: 'null' } } }];
+  const service = { api: { 'test339:ping': () => null, ...api }, notifications: {}, events: { on() {}, off() {} }, manifest };
+  const server = createServer({ service, token: TOKEN });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  t.after(() => new Promise((r) => server.close(r)));
+  return { base: `http://127.0.0.1:${server.address().port}`, manifest };
+}
+
+test('#339 GET /api/version without an app:version channel answers the package version and the manifest\'s hash', async (t) => {
+  const { base, manifest } = await startOver(t, {});
+  const res = await request(base, { path: '/api/version', headers: bearer });
+  assert.equal(res.status, 200, res.text.slice(0, 300));
+  assert.deepEqual({ app: res.json?.app, contract: res.json?.contract }, { app: PKG.version, contract: contractHash()(manifest) });
+});
+
+test('#339 GET /api/version still answers when the app:version channel throws', async (t) => {
+  const { base, manifest } = await startOver(t, { 'app:version': () => { throw new Error('boom'); } });
+  const res = await request(base, { path: '/api/version', headers: bearer });
+  assert.equal(res.status, 200, res.text.slice(0, 300));
+  assert.deepEqual({ app: res.json?.app, contract: res.json?.contract }, { app: PKG.version, contract: contractHash()(manifest) });
 });

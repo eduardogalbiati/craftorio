@@ -120,6 +120,53 @@ test('#339 checkChannel fails a channel that accepts an invalid argument, naming
   assert.match(msg, /200/, `the message says what it got instead: ${msg}`);
 });
 
+test('#339 checkChannel fails a channel the engine does not declare, naming it', async (t) => {
+  const { checkChannel } = harness();
+  const url = await startFake(t);
+  const msg = await outcome(checkChannel({ url, token: TOKEN, channel: 'test339:missing', fixture: FIXTURE }));
+  assert.notEqual(msg, null);
+  assert.ok(msg.includes('test339:missing'), msg);
+  assert.match(msg, /manifest/);
+});
+
+test('#339 checkChannel fails a call answered with another status than the fixture expects', async (t) => {
+  const { checkChannel } = harness();
+  const url = await startFake(t);
+  const msg = await outcome(checkChannel({ url, token: TOKEN, channel: 'test339:good', fixture: { arg: { n: 'one' } } }));
+  assert.notEqual(msg, null, 'a 400 where the fixture expects 200');
+  assert.ok(msg.includes('test339:good'), msg);
+  assert.match(msg, /200/);
+  assert.match(msg, /400/);
+  assert.equal(await outcome(checkChannel({ url, token: TOKEN, channel: 'test339:good', fixture: { arg: { n: 'one' }, status: 400 } })), null,
+    'a fixture expecting the 400 passes');
+});
+
+test('#339 runFixture builds the call from its setup\'s state and tears down, also when the check fails', async (t) => {
+  const { runFixture } = harness();
+  const url = await startFake(t);
+  const seen = [];
+  const fixture = (channel) => ({
+    setup: async (client) => ({ n: 7, ping: await client.call('test339:good', { n: 1 }) }),
+    arg: (state) => ({ n: state.n }),
+    teardown: (_client, state) => { seen.push(`${channel}:${state.n}:${state.ping.ok}`); },
+  });
+  assert.deepEqual(await runFixture({ url, token: TOKEN, channel: 'test339:good', fixture: fixture('good') }), { ok: true });
+  const msg = await outcome(runFixture({ url, token: TOKEN, channel: 'test339:broken', fixture: fixture('broken') }));
+  assert.ok(msg && msg.includes('test339:broken') && /schema\.result/.test(msg), String(msg));
+  assert.deepEqual(seen, ['good:7:true', 'broken:7:true'], 'the teardown ran after both calls');
+});
+
+test('#339 runFixture names the channel when its setup fails', async (t) => {
+  const { runFixture } = harness();
+  const url = await startFake(t);
+  const fixture = { setup: (client) => client.call('test339:good', { n: 'one' }), arg: { n: 1 } };
+  const msg = await outcome(runFixture({ url, token: TOKEN, channel: 'test339:lenient', fixture }));
+  assert.notEqual(msg, null);
+  assert.ok(msg.includes('test339:lenient'), msg);
+  assert.match(msg, /setup/);
+  assert.match(msg, /400/, `the setup call's status: ${msg}`);
+});
+
 test('#339 coverage counts the request/reply channels with a schema, skipping desktop-only ones', () => {
   const { coverage } = harness();
   const manifest = [
