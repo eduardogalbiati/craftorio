@@ -17,7 +17,7 @@
 // A state's colour is the theme's (statusColor) and always comes with its label.
 import { useMemo, useRef, useState } from 'react';
 import {
-  agentDef, clockOf, issueText, itemName, nowMs, PROVIDER, robotStateOf, setTheme, STATUS, stationColor, statusColor, tagEls,
+  agentDef, clockOf, issueText, itemName, nowMs, providerLabel, robotStateOf, setTheme, STATUS, stationColor, statusColor, tagEls,
   tokOf, usd, useTick, view, wallMs,
 } from './view.js';
 
@@ -148,7 +148,7 @@ export function Detail({ shown, onOpenGate, canAnswer }) {
   }
   const step = m.state[st.id], col = statusColor(step.status), total = m.visitsOf(st.id);
   const lead = st.kind === 'agent' ? m.leadOf(st) : null, robot = lead && m.robots[`${st.id}:${lead}`];
-  const kind = st.kind === 'gate' ? 'Human approval' : st.kind === 'machine' ? `Engine step · ${st.type.replace(/_/g, ' ')}` : `Step · ${PROVIDER[agentDef(lead).provider] || 'agent'}`;
+  const kind = st.kind === 'gate' ? 'Human approval' : st.kind === 'machine' ? `Engine step · ${st.type.replace(/_/g, ' ')}` : `Step · ${providerLabel(agentDef(lead).provider) || 'agent'}`;
   const pillText = m.sup.target === st.id ? 'Supervisor on it' : step.status === 'running' && robot?.busy ? `Running · ${robot.act}` : undefined;
   const gate = m.pendingGates().find((g) => g.step === st.id);
   // a gate seen in a replay may have been answered since: only one still open can be opened
@@ -221,7 +221,7 @@ export function List({ shown, onSelect, query }) {
       return (
         <button type="button" key={agent} className={'r3d-row' + (shown === st.id ? ' sel' : '')} onClick={() => onSelect(st.id)}>
           <Avatar agent={agent} state={state} />
-          <span className="r3d-txt"><b>{def.label}</b><small>{def.model ? `${PROVIDER[def.provider] || def.provider} · ${window.Robots.plaqueFor(def.model)}` : 'did not run'}</small></span>
+          <span className="r3d-txt"><b>{def.label}</b><small>{def.model ? `${providerLabel(def.provider) || def.provider} ·${window.Robots.plaqueFor(def.model)}` : 'did not run'}</small></span>
           <span className="r3d-role" style={{ '--c': def.color }}>{state}</span>
           <span className="r3d-mini"><small>{usd(m.agentCost(agent))}</small></span>
         </button>

@@ -14,8 +14,10 @@
 const fs = require('fs');
 const path = require('path');
 const supervisor = require('./supervisor');
+const registry = require('./shared/providers');
 
-const DEFAULTS = { provider: 'claude-code', model: 'claude-opus-5-5', effort: '' };
+// the provider type of the default model's CLI (Claude Code)
+const DEFAULTS = { provider: registry.resolve('claude-opus-5-5').type, model: 'claude-opus-5-5', effort: '' };
 const BATCH_MS = 20e3;
 // events that do not wait for the batch window
 const URGENT = new Set(['approval.requested', 'budget.exceeded', 'limit.exceeded', 'workflow.finished']);

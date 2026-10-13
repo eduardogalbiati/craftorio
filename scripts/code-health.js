@@ -44,12 +44,8 @@ const COMPLEXITY_EXCEPTIONS = {
   'src/agent-inbox.js:handle': 32,
   'src/analytics.js:computeAnalytics': 50,
   'src/analytics.js:sessionRow': 31,
-  'src/engine/capabilities.js:providerArgs': 45,
   'src/engine/deps-cache.js:ensureDeps': 40,
   'src/engine/providers.js:mockValue': 44,
-  'src/engine/providers.js:parseClaude': 49,
-  'src/engine/providers.js:parseCodex': 29,
-  'src/engine/providers.js:parseGrok': 35,
   'src/engine/providers.js:runMock': 40,
   'src/engine/run/gates.js:requestApproval': 34,
   'src/engine/run/load.js:loadWorkflow': 194,
@@ -130,6 +126,9 @@ const COMPLEXITY_EXCEPTIONS = {
   'src/service/areas/runs.js:startWorkflowRun/on(event) callback': 26,
   'src/session-tail.js:print': 29,
   'src/session-tail.js:printOrchestrator': 45,
+  'src/shared/providers/claude.js:parse': 49,
+  'src/shared/providers/codex.js:parse': 29,
+  'src/shared/providers/grok.js:parse': 35,
   'src/supervisor.js:onCallPrompt': 26,
   'src/supervisor.js:resumeSpec': 35,
   'src/supervisor.js:runReport': 30,
@@ -141,10 +140,8 @@ const COMPLEXITY_EXCEPTIONS = {
 
 // file -> its count of duplicated blocks when the rule came; only lower it
 const DUPLICATION_BASELINE = {
-  'src/cli-sessions.js': 1,
   'src/engine/deps-cache.js': 1,
   'src/engine/screenshot-step.js': 1,
-  'src/local-usage.js': 1,
   'src/mobile-gates.js': 1,
   'src/night-watch.js': 1,
   'src/preload.js': 1,

@@ -13,9 +13,9 @@
 
 const { render } = require('./engine/workflow');
 const { missingRequirements } = require('./shared/setup-model');
+const registry = require('./shared/providers');
 
-const CLI_BY_TYPE = { 'claude-code': 'claude', 'codex-cli': 'codex', 'grok-cli': 'grok' };
-const CLIS = ['claude', 'codex', 'grok'];
+const CLIS = registry.clis().map((a) => a.cli);
 const off = (v) => ['', 'false', '0', 'no', 'off', 'none'].includes(String(v).trim().toLowerCase());
 
 function inputValues(wf, inputs = {}) {
@@ -27,7 +27,7 @@ function inputValues(wf, inputs = {}) {
 /** The CLI id of a provider name of the workflow ('claude' for a claude-code provider), or null. */
 function cliOf(wf, name) {
   const cfg = wf?.providers?.[name];
-  if (cfg) return CLI_BY_TYPE[cfg.type] || (CLIS.includes(name) ? name : null);
+  if (cfg) return registry.byType(cfg.type)?.cli || (CLIS.includes(name) ? name : null);
   return CLIS.includes(name) ? name : null;
 }
 

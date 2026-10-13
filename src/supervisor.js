@@ -20,6 +20,7 @@
 const fs = require('fs');
 const path = require('path');
 const yaml = require('js-yaml');
+const registry = require('./shared/providers');
 
 // The app is English-only (#94, #121): the supervisor's words reach the person and decisions.tsv, and
 // its instructions reach the agents, so the language is pinned instead of following the task's.
@@ -378,7 +379,8 @@ function supervisorConfig(runDir, workflowsDir) {
   const provider = wf.providers?.[providerName] || DEFAULT_PROVIDER;
   return { started, wf, provider, providerName, model: orch.supervisor?.model || orch.model || DEFAULT_MODEL };
 }
-const DEFAULT_PROVIDER = { type: 'claude-code', command: 'claude', args: ['-p', '--output-format', 'stream-json', '--verbose', '--model', '{{ model }}'], skill_args: ['--add-dir', '{{ skill_dir }}'] };
+// Claude Code's workflow definition (its adapter's), without effort or resume arguments
+const DEFAULT_PROVIDER = (({ type, command, args, skill_args }) => ({ type, command, args, skill_args }))(registry.byId('claude').definition);
 const DEFAULT_MODEL = 'claude-sonnet-5';
 
 

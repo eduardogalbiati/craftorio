@@ -83,7 +83,7 @@ const WATCH_PICK_KEY = 'supWatchPick';
 function watchPick() {
   let p = {};
   try { p = JSON.parse(localStorage.getItem(WATCH_PICK_KEY) || '{}'); } catch { /* defaults */ }
-  return { provider: 'claude-code', model: 'claude-opus-5-5', effort: 'default', ...p };
+  return { provider: window.Providers.resolve('claude-opus-5-5').type, model: 'claude-opus-5-5', effort: 'default', ...p };
 }
 const saveWatchPick = (change) => localStorage.setItem(WATCH_PICK_KEY, JSON.stringify({ ...watchPick(), ...change }));
 

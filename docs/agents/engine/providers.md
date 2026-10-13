@@ -2,6 +2,25 @@
 
 Turn timeouts, per-run agent overrides, fallback chains, limits per model, retries and other provider details.
 
+- **The provider registry (#348)**: what differs per CLI lives in one adapter each, in
+  `src/shared/providers/` (`claude.js`, `codex.js`, `grok.js`, and `mock.js` for the simulation), listed
+  by `src/shared/providers/index.js`. The registry is the only place that maps the CLI names / adapter
+  ids (`claude`) to the provider types of the workflow YAML (`providers.<name>.type`): `resolve(key)`
+  finds an adapter by id, type, CLI name or model name (its `modelPrefixes`), `byId` / `byType` by
+  exactly one of them, `clis()` lists the CLIs. An adapter carries its id, type, label, short name,
+  robot, models and model prefixes; for a CLI also its workflow provider `definition` (what the
+  Builder writes), `resumeArgs`, `imageInput` (`read`, `flag`, `record` for the mock, or none),
+  `isolationArgs` (the flags per capability set, called by `capabilities.providerArgs` with its
+  helpers), the stream parser `parse(event, emit, acc)` (`parse.flush` when it buffers deltas), the
+  usage-limit `quotaPattern` and `usageLimitMessage` (`isQuotaError`, the simulation's
+  `usage_limits`), feature flags (`requestLimit`: max_requests enforced per turn; `enforcesDenyRules`;
+  `costReported`), where its conversations are (`sessionsDir`, `modelsCache`), how a folder is
+  trusted (`trust`) and its interactive arguments for the Sessions screen. `runTurn` runs a CLI with
+  its adapter's parser, or the simulation. The adapters are dual-load modules: the renderer gets
+  `window.Providers` (`window.ChatModels` and `RunChatModel.providerType` read it). The workflow
+  YAML's `providers:` and `agents.<name>.provider` formats did not change, and
+  `test/provider-args-snapshot-348.test.js` holds every command line built per provider, capability
+  set and session mode. Adding a provider: the code map's "A provider".
 - `timeout` (agent or `defaults`): the limit of one turn, default `30m`; the process is killed
   when it runs out. It may be a template rendered with the run's context (`turnTimeout`), e.g. the
   software-development workflows give grouped runs more time:

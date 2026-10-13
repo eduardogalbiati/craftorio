@@ -11,19 +11,16 @@
   const md = (t) => (typeof markdownHtml === 'function' ? markdownHtml(t) : `<pre>${esc(t)}</pre>`);
   const WORKFLOW = 'ai-arena';
   const FILE = 'ai-arena.yaml';
-  const { PROVIDERS, EFFORTS } = window.ChatModels;
+  const { PROVIDERS, EFFORTS, typeOf } = window.ChatModels;
   const BY_KEY = Object.fromEntries(Object.entries(PROVIDERS).map(([id, p]) => [p.key, id]));
   const MIN = 2;
   const MAX = 5;
   const SLOT_COLORS = ['var(--ar-c1)', 'var(--ar-c2)', 'var(--ar-c3)', 'var(--ar-c4)', 'var(--ar-c5)'];
+  // A contender on a model, with its CLI's provider type.
+  const contender = (model) => ({ provider: typeOf(model), model, effort: 'high' });
   // The workflow's defaults (contender_1 … contender_4; the 5th slot is off).
-  const DEFAULTS = [
-    { provider: 'claude-code', model: 'claude-opus-5-5', effort: 'high' },
-    { provider: 'claude-code', model: 'claude-sonnet-5-5', effort: 'high' },
-    { provider: 'codex-cli', model: 'gpt-6-luna', effort: 'high' },
-    { provider: 'grok-cli', model: 'grok-4.7', effort: 'high' },
-  ];
-  const EXTRA = { provider: 'claude-code', model: 'claude-haiku-4-5', effort: 'high' };
+  const DEFAULTS = ['claude-opus-5-5', 'claude-sonnet-5-5', 'gpt-6-luna', 'grok-4.7'].map(contender);
+  const EXTRA = contender('claude-haiku-4-5');
   // Simulation scenarios (developer mode), as the engine's mockSequences.
   const SCENARIOS = {
     happy: { label: 'The verifier passes the first synthesis', seq: {} },
@@ -41,14 +38,14 @@
   if (setup.contenders.length < MIN) setup.contenders = DEFAULTS.map((c) => ({ ...c }));
 
   // A model id's CLI when the run does not say it (e.g. runs of older ai-arena versions).
-  const providerOfModel = (m = '') => (/claude/i.test(m) ? 'claude-code' : /grok/i.test(m) ? 'grok-cli' : /gpt|codex|^o\d/i.test(m) ? 'codex-cli' : '');
+  const providerOfModel = (m = '') => (PROVIDERS[typeOf(m)] ? typeOf(m) : '');
 
   // ---------------------------------------------------------------- roles and robots
   // roles: agent name → { kind, name, color, side, provider, model, effort, internal }
   let roles = {};
   const INTERNAL = () => ({
-    synthesizer: { kind: 'synthesizer', name: 'Synthesizer', color: 'var(--ar-synth)', side: 'right', provider: 'claude-code', model: 'claude-opus-5-5' },
-    verifier: { kind: 'verifier', name: 'Verifier', color: 'var(--ar-verify)', side: 'right', provider: 'codex-cli', model: 'gpt-6-luna' },
+    synthesizer: { kind: 'synthesizer', name: 'Synthesizer', color: 'var(--ar-synth)', side: 'right', provider: typeOf('claude-opus-5-5'), model: 'claude-opus-5-5' },
+    verifier: { kind: 'verifier', name: 'Verifier', color: 'var(--ar-verify)', side: 'right', provider: typeOf('gpt-6-luna'), model: 'gpt-6-luna' },
     supervisor: { kind: 'supervisor', name: 'Supervisor', color: 'var(--supervisor)', side: 'left', internal: true },
   });
   const contenders = () => Object.keys(roles).filter((r) => roles[r].kind === 'contender');

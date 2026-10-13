@@ -19,34 +19,10 @@
 // `effort: 'default'` leaves the effort out (the CLI's own default).
 
 const yaml = require('js-yaml');
+const registry = require('./shared/providers');
 
-const PROVIDERS = {
-  claude: {
-    type: 'claude-code',
-    command: 'claude',
-    args: ['-p', '--output-format', 'stream-json', '--verbose', '--model', '{{ model }}'],
-    effort_args: ['--effort', '{{ effort }}'],
-    resume_args: ['--resume', '{{ session_id }}'],
-    skill_args: ['--add-dir', '{{ skill_dir }}'],
-  },
-  codex: {
-    type: 'codex-cli',
-    command: 'codex',
-    args: ['exec', '--json', '--skip-git-repo-check', '-m', '{{ model }}'],
-    effort_args: ['-c', 'model_reasoning_effort={{ effort }}'],
-    resume_args: ['resume', '{{ session_id }}'],
-    stdin_arg: '-',
-  },
-  grok: {
-    type: 'grok-cli',
-    command: 'grok',
-    args: ['--output-format', 'streaming-json', '-m', '{{ model }}'],
-    effort_args: ['--reasoning-effort', '{{ effort }}'],
-    resume_args: ['--resume', '{{ session_id }}'],
-    prompt_file_arg: ['--prompt-file', '{{ prompt_file }}'],
-  },
-};
-const PROVIDER_OF_TYPE = Object.fromEntries(Object.entries(PROVIDERS).map(([k, p]) => [p.type, k]));
+// The workflow provider definitions the builder writes, by CLI id: each adapter's `definition`.
+const PROVIDERS = Object.fromEntries(registry.clis().map((a) => [a.id, a.definition]));
 const EFFORTS = ['default', 'low', 'medium', 'high', 'xhigh'];
 const CATEGORIES = ['plan', 'build', 'monitor'];
 const SOURCES = ['custom', 'agent', 'random'];
@@ -383,8 +359,8 @@ function fromWorkflow(doc) {
 // The builder's CLI key ('claude', 'codex', 'grok') of an agent's provider in a workflow.
 function providerOf(doc, key) {
   const type = doc.providers?.[key]?.type;
-  if (type) return PROVIDER_OF_TYPE[type] || null;
-  return PROVIDERS[key] ? key : null;
+  const id = type ? registry.byType(type)?.id : key;
+  return PROVIDERS[id] ? id : null;
 }
 
 /**

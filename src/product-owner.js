@@ -1646,7 +1646,7 @@ async function callAgent({ mode = 'plan', question = '', report, previous = [], 
   const { resolveSkill, skillPrompt } = require('./skills');
   const { providerArgs, normalize, dedupeFlags } = require('./engine/capabilities');
   const { PROVIDERS } = require('./workflow-builder');
-  const provider = Object.values(PROVIDERS).find((p) => p.type === 'claude-code');
+  const provider = PROVIDERS.claude;
   if (!resolveCommand(provider.command)) throw new Error(`The Product Owner needs ${provider.command}, which is not installed.`);
   if (!folder || !fs.existsSync(folder)) throw new Error('The project has no folder on this machine: the Product Owner reads its code there.');
   const issueMode = mode === 'issue';

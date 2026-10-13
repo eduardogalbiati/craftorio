@@ -260,7 +260,7 @@
     $a('#btn-ag-duplicate').classList.toggle('hidden', !workflow);
     $a('#ag-model-row').classList.toggle('hidden', !isTunable());
     $a('#ag-model').value = a?.model || '';
-    $a('#ag-model-list').innerHTML = (window.ChatModels?.PROVIDERS['claude-code']?.models || []).map((m) => `<option value="${esc(m)}"></option>`).join('');
+    $a('#ag-model-list').innerHTML = (window.ChatModels?.models?.('claude') || []).map((m) => `<option value="${esc(m)}"></option>`).join('');
     renderEffort();
     $a('#ag-name').value = a?.name || '';
     $a('#ag-description').value = a?.description || '';

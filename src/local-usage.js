@@ -17,7 +17,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { cliConfigDirs } = require('./cli-config-dirs');
+const { cliConfigDirs, cliSessionDirs } = require('./cli-config-dirs');
 
 const cache = new Map(); // file -> { key, records, plan, sessions }
 
@@ -299,14 +299,7 @@ function codexPlan(raw) {
   };
 }
 
-const SOURCES = (home) => {
-  const cfg = cliConfigDirs(home);
-  return {
-    claude: path.join(cfg.claude, 'projects'),
-    codex: path.join(cfg.codex, 'sessions'),
-    grok: path.join(cfg.grok, 'sessions'),
-  };
-};
+const SOURCES = (home) => cliSessionDirs(cliConfigDirs(home));
 
 /**
  * All usage records the CLIs wrote on this machine, plus Codex plan limits, plus the metrics of each

@@ -9,6 +9,7 @@ const path = require('path');
 const { resolveCommand } = require('../../engine/providers');
 const simulation = require('../../engine/simulation');
 const projects = require('../../projects');
+const registry = require('../../shared/providers');
 const skills = require('../../skills');
 const supervisor = require('../../supervisor');
 const notifier = require('../../notifications');
@@ -48,11 +49,8 @@ module.exports = (ctx) => {
     const cmd = resolveCommand(cfg.provider.command || 'claude');
     if (!cmd) throw new Error(`The supervisor needs ${cfg.provider.command}, which is not installed.`);
     const first = `You are the supervisor of the multi-agent workflow run in this folder. Read ${path.join(skill.path, 'SKILL.md')} (your method) and supervisor/context.md (the run report); events.jsonl, sessions/ and the other files have the details. Then explain briefly what happened in this run and wait for my questions. Do not change any file.`;
-    const args = {
-      'claude-code': ['--model', cfg.model, '--permission-mode', 'plan', '--add-dir', skill.path, first],
-      'codex-cli': ['-m', cfg.model, '-s', 'read-only', first],
-      'grok-cli': ['-m', cfg.model, '--tools', 'read_file,list_dir,grep', first],
-    }[cfg.provider.type] || [first];
+    // read-only: the CLI's own plan mode, sandbox or tool list (its adapter's readOnlyChatArgs)
+    const args = registry.byType(cfg.provider.type)?.readOnlyChatArgs?.({ model: cfg.model, skillDir: skill.path, prompt: first }) || [first];
     return { title: `supervisor · ${path.basename(runDir)}`, cwd: runDir, file: cmd.file, args, env: cliEnv() };
   }
 

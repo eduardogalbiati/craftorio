@@ -7,6 +7,7 @@ const { execFileSync } = require('child_process');
 const { resolveCommand } = require('../engine/providers');
 const { canonicalPath } = require('../engine/worktree');
 const { execShim } = require('../shell');
+const registry = require('../shared/providers');
 const sessionCache = require('../session-cache');
 const usage = require('../usage');
 const workflows = require('../workflows');
@@ -17,7 +18,8 @@ const ROOT = path.join(SRC, '..');
 const BUNDLED_WORKFLOWS_DIR = workflows.BUNDLED_WORKFLOWS_DIR;
 const BUNDLED_SKILLS_DIR = path.join(ROOT, 'skills');
 
-const RESUME_ARGS = { 'claude-code': (id) => ['--resume', id], 'codex-cli': (id) => ['resume', id], 'grok-cli': (id) => ['--resume', id] };
+// The arguments that reopen a CLI session of a provider type (its adapter's), or null.
+const resumeArgsOf = (type) => registry.byType(type)?.resumeArgs || null;
 const q = (a) => `"${String(a).replace(/"/g, '""')}"`;
 const num = (v) => (v === '' || v == null || !Number.isFinite(+v) || +v <= 0 ? null : +v);
 
@@ -80,7 +82,7 @@ function cliReason(sess, providers, running) {
   if (!sess.providerSessionId) return 'No provider conversation yet: the first turn has not finished.';
   if (running && (sess.status === 'active' || sess.status === 'retrying')) return 'The agent is in the middle of a turn.';
   const cfg = providers[sess.provider];
-  if (!cfg || !RESUME_ARGS[cfg.type]) return `Provider "${sess.provider}" cannot be opened interactively.`;
+  if (!cfg || !resumeArgsOf(cfg.type)) return `Provider "${sess.provider}" cannot be opened interactively.`;
   if (!resolveCommand(cfg.command)) return `Command "${cfg.command}" is not installed.`;
   return '';
 }
@@ -185,7 +187,7 @@ module.exports = {
   requireId,
   requireObject,
   requireText,
-  RESUME_ARGS,
+  resumeArgsOf,
   runTool,
   sessionView,
   SRC,

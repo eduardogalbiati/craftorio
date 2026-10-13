@@ -5,14 +5,23 @@
 // Browser: window.RunChatModel; Node: module.exports.
 (function (root) {
   // A session's provider is the workflow's provider key (claude, codex, grok) or its type; in a
-  // simulation it is "mock", so the model name tells which CLI it stands for.
-  const PROVIDER_TYPES = { claude: 'claude-code', codex: 'codex-cli', grok: 'grok-cli', gemini: 'gemini-cli' };
-  const MODEL_TYPES = [[/^claude-/, 'claude-code'], [/^(gpt-|o\d)/, 'codex-cli'], [/^grok-/, 'grok-cli'], [/^gemini-/, 'gemini-cli']];
+  // simulation it is "mock", so the model name tells which CLI it stands for (the provider registry,
+  // src/shared/providers/, resolves both).
+  const registry = typeof module === 'object' && module.exports ? require('../../../shared/providers') : root.Providers;
+  // the CLI adapter named by an id, a type or a CLI name (a model name is not a provider), else null
+  const cliNamed = (key) => {
+    const a = registry.resolve(key);
+    return a?.cli && [a.id, a.type, a.cli].includes(key) ? a : null;
+  };
+  const cliOf = (provider, model) => {
+    const byModel = registry.resolve(model);
+    return cliNamed(provider) || (byModel?.cli ? byModel : null);
+  };
   function providerType(provider, model = '') {
-    if (PROVIDER_TYPES[provider]) return PROVIDER_TYPES[provider];
-    if (Object.values(PROVIDER_TYPES).includes(provider)) return provider;
-    return MODEL_TYPES.find(([re]) => re.test(model || ''))?.[1] || provider || '';
+    return cliOf(provider, model)?.type || provider || '';
   }
+  // The CLI's short name for a hover card ("Claude"), '' when the session is on no known CLI.
+  providerType.short = (provider, model = '') => cliOf(provider, model)?.short || '';
   const baseStep = (id) => String(id || '').split(':')[0];
   const subStep = (id) => String(id || '').split(':')[1] || null;
   const MAX_ACTIVITY = 200; // per turn

@@ -14,15 +14,18 @@ const fs = require('fs');
 const path = require('path');
 const { installCommand } = require('./install-commands');
 const { runSummaries } = require('./runs');
+const registry = require('./shared/providers');
 const TimeZone = require('./time-zone');
 
-// installCommand: what the Usage screen's play button runs (#147); installNote: what to do after it
-const PROVIDERS = [
-  { id: 'claude', type: 'claude-code', command: 'claude', name: 'Claude Code', costReported: true, installCommand: installCommand('claude'), installNote: 'then run `claude` once to log in' },
-  { id: 'codex', type: 'codex-cli', command: 'codex', name: 'Codex CLI', costReported: false, installCommand: installCommand('codex'), installNote: 'then `codex login`' },
-  { id: 'grok', type: 'grok-cli', command: 'grok', name: 'Grok Build', costReported: true, installCommand: null, installNote: 'then `grok login`', installHint: 'install Grok Build from x.ai (then `grok login`)' },
-];
-for (const p of PROVIDERS) p.installHint = p.installHint || `${p.installCommand}   (${p.installNote})`;
+// The CLIs, from their adapters (src/shared/providers/). installCommand: what the Usage screen's play
+// button runs (#147); installNote: what to do after it
+const PROVIDERS = registry.clis().map((a) => {
+  const install = installCommand(a.id);
+  return {
+    id: a.id, type: a.type, command: a.cli, name: a.label, costReported: a.costReported,
+    installCommand: install, installNote: a.installNote, installHint: a.installHint || `${install}   (${a.installNote})`,
+  };
+});
 const WARN_AT = 0.8;
 
 const TOKEN_KEYS = ['input', 'output', 'cache_read', 'cache_write', 'reasoning'];

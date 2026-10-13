@@ -17,6 +17,7 @@ const capabilities = require('../capabilities');
 const evidence = require('../../evidence');
 const testPaths = require('../test-paths');
 const chain = require('../../shared/chain-model');
+const registry = require('../../shared/providers');
 const { changedFiles } = require('../affected-tests');
 const {
   expandSkillNames,
@@ -336,8 +337,8 @@ const methods = {
     const denyEdits = guarded ? this.wf.tests_paths || testPaths.TESTS_PATHS : [];
     const denyCommands = depsLinked ? capabilities.DEPS_DENIED_COMMANDS : [];
     const { args: capArgs, notes } = capabilities.providerArgs(providerType, { caps, isolated, mcpServers: this.wf.mcp_servers || {}, denyEdits, denyCommands, runDir: runDirs.length ? this.runDir : null, env: agentEnv });
-    // #302: only Claude Code can stop a turn after n requests (--max-turns)
-    const enforced = budget && providerType === 'claude-code';
+    // #302: only a CLI with a request limit per turn can stop a turn after n requests (claude --max-turns)
+    const enforced = budget && !!registry.byType(providerType)?.requestLimit;
     if (budget && providerType && !enforced) notes.push(`max_requests (${budget}) not enforceable: ${providerType} has no request limit per turn`);
     const capsKey = `${agentName}|${capabilities.describe(caps)}|${guarded}`;
     if (!this.capsLogged.has(capsKey)) {

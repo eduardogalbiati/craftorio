@@ -43,10 +43,11 @@
   const avatar = (who) => `<span class="duo-robot still" aria-hidden="true">${robot(who, 'idle', { bubble: false })}</span>`;
 
   // The hover card of an agent: provider, model and effort as recorded in the run, its session mode and turn.
-  const PROVIDERS = { 'claude-code': 'Claude', 'codex-cli': 'Codex', 'grok-cli': 'Grok', 'gemini-cli': 'Gemini' };
+  // the CLI's short name ("Claude"), from the provider registry through run-chat-model.js
+  const PROVIDERS = { shortName: providerType.short };
   const MODES = { persistent: 'persistent session', ephemeral: 'new session every turn', handoff: 'new session with a handoff note' };
   function cardLines(who) {
-    const provider = `${PROVIDERS[providerType(who.provider, who.model)] || who.provider || 'Unknown provider'}${who.provider === 'mock' ? ' (simulated)' : ''}`;
+    const provider = `${PROVIDERS.shortName(who.provider, who.model) || who.provider || 'Unknown provider'}${who.provider === 'mock' ? ' (simulated)' : ''}`;
     const first = [provider, who.model ? Robots.plaqueFor(who.model) : '', who.effort ? `effort ${who.effort}` : ''].filter(Boolean).join(' · ');
     const second = [MODES[who.mode] || '', who.turn ? `turn ${who.turn}` : ''].filter(Boolean).join(' · ');
     return [first, second].filter(Boolean);

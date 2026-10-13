@@ -222,8 +222,9 @@ function decodeImages(images) {
 /** Claude Code's flags for the Oracle: isolated, its MCP server only, no built-in tool (no file writes, no commands). */
 function readOnlyArgs(server) {
   const { providerArgs } = require('./engine/capabilities');
+  const { PROVIDERS } = require('./workflow-builder');
   return [
-    ...providerArgs('claude-code', { caps: null, isolated: true }).args,
+    ...providerArgs(PROVIDERS.claude.type, { caps: null, isolated: true }).args,
     '--mcp-config', JSON.stringify({ mcpServers: { [MCP_NAME]: server } }),
     '--tools', '',
     '--allowedTools', `mcp__${MCP_NAME}`,
@@ -406,7 +407,7 @@ function createOracle({
     const { render } = require('./engine/workflow');
     const { dedupeFlags } = require('./engine/capabilities');
     const { PROVIDERS } = require('./workflow-builder');
-    const provider = Object.values(PROVIDERS).find((p) => p.type === 'claude-code');
+    const provider = PROVIDERS.claude;
     if (!resolveCommand(provider.command)) throw new Error(`The Oracle needs ${provider.command}, which is not installed.`);
     const { url, token } = await bridge.start();
     const mcp = mcpCommand();

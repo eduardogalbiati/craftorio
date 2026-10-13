@@ -14,6 +14,7 @@
 const fs = require('fs');
 const path = require('path');
 const { cliConfigDirs } = require('./cli-config-dirs');
+const registry = require('./shared/providers');
 
 /** The folder and the root of the git repository it is in (when it is in one). */
 function foldersToTrust(dir) {
@@ -63,14 +64,14 @@ function trustToml(file, dirs, table, body) {
   return true;
 }
 
-/** Records that `dir` is trusted in the CLI's own config (no-op when it already is). */
+/** Records that `dir` is trusted in the CLI's own config (its adapter's `trust`; no-op when it already is). */
 function trustFolder(provider, dir, { home } = {}) {
+  const trust = registry.byId(provider)?.trust;
+  if (!trust) return false;
   const dirs = foldersToTrust(dir);
   const cfg = cliConfigDirs(home);
-  if (provider === 'claude') return trustClaude(cfg.claudeJson, dirs);
-  if (provider === 'codex') return trustToml(path.join(cfg.codex, 'config.toml'), dirs, 'projects', 'trust_level = "trusted"');
-  if (provider === 'grok') return trustToml(path.join(cfg.grok, 'trusted_folders.toml'), dirs, 'folders', `trusted = true\ndecided_at = ${Math.floor(Date.now() / 1000)}`);
-  return false;
+  if (trust.format === 'claude-json') return trustClaude(cfg.claudeJson, dirs);
+  return trustToml(path.join(cfg[provider], trust.file), dirs, trust.table, trust.entry());
 }
 
 module.exports = { trustFolder, foldersToTrust };

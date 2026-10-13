@@ -1,4 +1,5 @@
-// Adapters that open/resume sessions for each provider and normalize the events.
+// Runs one turn on a provider: spawns its CLI (or the simulation) and normalizes the events with the
+// adapter's stream parser. What differs per CLI lives in its adapter (src/shared/providers/, #348).
 //
 // Each turn = 1 headless process:
 //   claude -p --output-format stream-json ...   (prompt via stdin)
@@ -17,9 +18,8 @@ const readline = require('readline');
 const { refuseReal } = require('./simulation');
 const { AGENT_ENV } = require('./capabilities');
 const { runShim } = require('../shell');
-const { cacheTier } = require('../session-cache');
-
-const emptyUsage = () => ({ input: 0, output: 0, cache_read: 0, cache_write: 0, reasoning: 0 });
+const registry = require('../shared/providers');
+const { emptyUsage } = require('../shared/providers/usage');
 
 function sleep(ms, signal) {
   return new Promise((resolve, reject) => {
@@ -177,248 +177,17 @@ function killTree(child) {
 }
 
 // ---------------------------------------------------------------------------
-// Parsers
+// Parsers: each CLI adapter's own (src/shared/providers/<id>.js `parse`), named here for the tests
+// and the callers that read one turn's stream.
 // ---------------------------------------------------------------------------
-// Tokens in one request's context window (Anthropic-style usage: new + cached input).
-const contextTokens = (u) => (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0);
+const parseClaude = registry.byId('claude').parse;
+const parseCodex = registry.byId('codex').parse;
+const parseGrok = registry.byId('grok').parse;
 
-// #233: on a resumed session (`--resume`), the `result` event's `total_cost_usd` is the whole CLI
-// session's cost so far (its `usage` is the turn's own): the turn costs the difference with the
-// session's previous total, kept here per CLI session id. The engine records the last total in the
-// session's snapshot (cli_total_cost_usd) and seeds it back with seedClaudeTotal when a resumed run
-// continues the CLI session after the app restarted.
-const claudeTotals = new Map();
-
+// #233: the CLI session total a resumed Claude session continues from (src/shared/providers/claude.js).
 function seedClaudeTotal(sessionId, totalUsd) {
-  if (sessionId && totalUsd > 0 && !(claudeTotals.get(sessionId) >= totalUsd)) claudeTotals.set(sessionId, totalUsd);
+  registry.byId('claude').seedTotal(sessionId, totalUsd);
 }
-
-// The tokens of a turn's distinct model calls (Claude Code repeats a message's usage on each of its
-// content blocks): what a turn killed before its `result` still paid for, priced by the engine.
-// #308: the sum is also the turn's recorded usage (the `result`'s usage is the main conversation's
-// only); a sub-agent's calls (parent_tool_use_id) are summed apart too, as the turn's `subagents`.
-// A message repeated with larger figures (its output growing over its blocks) adds the difference.
-// The turn's usage is never below the `result`'s figures field by field (a stream that lost
-// messages falls back to them): fieldMax.
-const fieldMax = (a, b) => Object.fromEntries(Object.keys(a).map((k) => [k, Math.max(a[k] || 0, b[k] || 0)]));
-const callFields = (u) => ({ input: u.input_tokens || 0, output: u.output_tokens || 0, cache_read: u.cache_read_input_tokens || 0, cache_write: u.cache_creation_input_tokens || 0 });
-
-function addStreamUsage(acc, id, u, subagent = false) {
-  acc.seenCalls ??= new Map();
-  const now = callFields(u);
-  const before = id ? acc.seenCalls.get(id) : null;
-  if (id) acc.seenCalls.set(id, before ? fieldMax(before, now) : now);
-  if (!before) acc.modelCalls = (acc.modelCalls || 0) + 1;
-  acc.streamUsage ??= emptyUsage();
-  if (subagent) {
-    acc.subagents ??= { calls: 0, usage: emptyUsage() };
-    if (!before) acc.subagents.calls += 1;
-  }
-  for (const k of Object.keys(now)) {
-    const add = Math.max(0, now[k] - (before?.[k] || 0));
-    acc.streamUsage[k] += add;
-    if (subagent) acc.subagents.usage[k] += add;
-  }
-}
-
-function parseClaude(ev, emit, acc) {
-  switch (ev.type) {
-    case 'system':
-      if (ev.subtype === 'init') {
-        acc.providerSessionId = ev.session_id;
-        emit({ kind: 'session', sessionId: ev.session_id, model: ev.model });
-      }
-      break;
-    case 'assistant':
-      // each model request's context window (the main conversation's, not a sub-agent's)
-      if (ev.message?.usage && !ev.parent_tool_use_id) {
-        // #320: the cache tier when the usage reports it (cache_creation.ephemeral_1h / _5m)
-        emit({ kind: 'context', tokens: contextTokens(ev.message.usage), ...(cacheTier(ev.message.usage) ? { tier: cacheTier(ev.message.usage) } : {}) });
-        (acc.mainCalls ??= new Set()).add(ev.message.id);
-      }
-      // a sub-agent's model calls are paid too
-      if (ev.message?.usage) addStreamUsage(acc, ev.message.id, ev.message.usage, !!ev.parent_tool_use_id);
-      for (const b of ev.message?.content || []) {
-        // Claude Code may omit the thinking content (it only sends the signature)
-        if (b.type === 'thinking') { if (b.thinking) emit({ kind: 'thinking', text: b.thinking }); }
-        else if (b.type === 'redacted_thinking') emit({ kind: 'thinking', text: '(thinking omitted by the provider)' });
-        else if (b.type === 'text') { acc.lastText = b.text; emit({ kind: 'text', text: b.text }); }
-        else if (b.type === 'tool_use') emit({ kind: 'tool_call', id: b.id, name: b.name, input: b.input });
-      }
-      break;
-    case 'user':
-      for (const b of ev.message?.content || []) {
-        if (b.type === 'tool_result') {
-          const out = Array.isArray(b.content) ? b.content.map((c) => c.text || '').join('\n') : String(b.content ?? '');
-          emit({ kind: 'tool_result', id: b.tool_use_id, output: out.slice(0, 4000), is_error: !!b.is_error });
-        }
-      }
-      break;
-    // #277: a turn that used sub-agents ends with 2 to 4 `result` events one ms apart, all carrying
-    // the same (or a growing) session total_cost_usd. The turn costs the highest total seen in the
-    // turn minus the session's total before the turn, so a later event never lowers it. Their usages
-    // overlap (the total does not grow with the later, smaller ones: their tokens were already paid),
-    // so the turn's tokens are the largest of each field, not a sum. The raw `result` events of such
-    // a turn are kept in the run as `raw` stream items, to check this rule against a real stream.
-    // #308: that rule gives the main conversation's figures (usage_main); the turn's usage is the
-    // stream's sum of every model call, sub-agents included, floored by them.
-    case 'result': {
-      const u = ev.usage || {};
-      acc.text = ev.result ?? acc.lastText ?? '';
-      const usage = {
-        input: u.input_tokens || 0,
-        output: u.output_tokens || 0,
-        cache_read: u.cache_read_input_tokens || 0,
-        cache_write: u.cache_creation_input_tokens || 0,
-        reasoning: 0, // the Anthropic API counts thinking inside output_tokens
-      };
-      acc.results = (acc.results || 0) + 1;
-      const first = acc.results === 1;
-      acc.usageMain = first || !acc.usageMain ? usage : fieldMax(usage, acc.usageMain);
-      acc.usage = acc.streamUsage ? fieldMax(acc.usageMain, acc.streamUsage) : { ...acc.usageMain };
-      if (ev.session_id) acc.providerSessionId = ev.session_id;
-      if (first) acc.firstResult = ev;
-      else {
-        if (acc.results === 2) emit({ kind: 'raw', event: acc.firstResult });
-        emit({ kind: 'raw', event: ev });
-      }
-      if (first) acc.costUsd = null;
-      if (ev.total_cost_usd != null) {
-        const sid = acc.providerSessionId;
-        if (acc.turnTotalBefore == null) acc.turnTotalBefore = (sid && claudeTotals.get(sid)) || 0;
-        const before = acc.turnTotalBefore;
-        const total = Math.max(ev.total_cost_usd, acc.cliTotalCostUsd ?? 0);
-        // a total below the previous one is a new count (a forked session): taken whole
-        acc.costUsd = total >= before ? +(total - before).toFixed(6) : total;
-        if (sid) claudeTotals.set(sid, total);
-        acc.cliTotalCostUsd = total;
-      }
-      // #302: --max-turns reached (the agent's max_requests): not an error, the engine wraps the turn up
-      if (ev.subtype === 'error_max_turns') acc.cut = { requests: ev.num_turns ?? acc.mainCalls?.size ?? 0 };
-      else if (ev.is_error) acc.error = `Claude returned an error: ${ev.subtype} ${ev.result || ''}`;
-      emit({ kind: 'usage', usage: acc.usage, costUsd: acc.costUsd });
-      break;
-    }
-    default:
-      emit({ kind: 'raw', event: ev });
-  }
-}
-
-function parseCodex(ev, emit, acc) {
-  switch (ev.type) {
-    case 'thread.started':
-      acc.providerSessionId = ev.thread_id;
-      emit({ kind: 'session', sessionId: ev.thread_id });
-      break;
-    case 'item.completed': {
-      const it = ev.item || {};
-      switch (it.type) {
-        case 'reasoning': if (it.text) emit({ kind: 'thinking', text: it.text }); break;
-        case 'agent_message': acc.text = it.text; emit({ kind: 'text', text: it.text }); break;
-        case 'command_execution':
-          emit({ kind: 'tool_call', id: it.id, name: 'shell', input: { command: it.command } });
-          emit({ kind: 'tool_result', id: it.id, output: String(it.aggregated_output ?? '').slice(0, 4000), is_error: it.exit_code ? true : false });
-          break;
-        case 'file_change': emit({ kind: 'tool_call', id: it.id, name: 'file_change', input: it.changes }); break;
-        case 'mcp_tool_call': emit({ kind: 'tool_call', id: it.id, name: `${it.server}.${it.tool}`, input: it.arguments }); break;
-        case 'web_search': emit({ kind: 'tool_call', id: it.id, name: 'web_search', input: { query: it.query } }); break;
-        case 'error': emit({ kind: 'stderr', text: it.message }); break;
-        default: emit({ kind: 'raw', event: ev });
-      }
-      break;
-    }
-    // #233: per turn (summed here over the turn's `turn.completed` events); Codex reports no cost,
-    // the engine prices its tokens. Not streamed per model call: a killed Codex turn leaves nothing.
-    case 'turn.completed': {
-      const u = ev.usage || {};
-      acc.usage = acc.usage || emptyUsage();
-      // OpenAI's input_tokens already includes cached ones; split them to avoid double counting
-      acc.usage.input += (u.input_tokens || 0) - (u.cached_input_tokens || 0);
-      acc.usage.cache_read += u.cached_input_tokens || 0;
-      acc.usage.output += u.output_tokens || 0;
-      acc.usage.reasoning += u.reasoning_output_tokens || 0;
-      emit({ kind: 'usage', usage: acc.usage, costUsd: null });
-      break;
-    }
-    case 'turn.failed':
-      acc.error = ev.error?.message || 'turn.failed';
-      break;
-    case 'error':
-      acc.error = ev.message || 'codex error';
-      break;
-    case 'turn.started':
-    case 'item.started':
-    case 'item.updated':
-      break;
-    default:
-      emit({ kind: 'raw', event: ev });
-  }
-}
-
-// Grok Build (`grok --output-format streaming-json`): thinking and text arrive as
-// token deltas, tools as tool_call / tool_call_update, and a final `end` event carries
-// the session id, usage and cost. Deltas are buffered into one item per block.
-function flushGrok(emit, acc) {
-  if (acc.buf?.text) emit({ kind: acc.buf.kind, text: acc.buf.text });
-  acc.buf = null;
-}
-
-function parseGrok(ev, emit, acc) {
-  const delta = ev.type === 'thought' ? 'thinking' : ev.type === 'text' ? 'text' : null;
-  if (delta) {
-    if (acc.buf && acc.buf.kind !== delta) flushGrok(emit, acc);
-    acc.buf ??= { kind: delta, text: '' };
-    acc.buf.text += ev.data ?? '';
-    if (delta === 'text') acc.segment = (acc.segment || '') + (ev.data ?? '');
-    return;
-  }
-  flushGrok(emit, acc);
-  switch (ev.type) {
-    case 'tool_call':
-      acc.segment = ''; // the final answer is the text after the last tool call
-      emit({ kind: 'tool_call', id: ev.toolCallId, name: ev.toolName || ev.title, input: ev.rawInput });
-      break;
-    case 'tool_call_update':
-      if (ev.status === 'completed' || ev.status === 'failed') {
-        const out = typeof ev.rawOutput === 'string' ? ev.rawOutput : JSON.stringify(ev.rawOutput ?? ev.content ?? '');
-        emit({ kind: 'tool_result', id: ev.toolCallId, output: String(out).slice(0, 4000), is_error: ev.status === 'failed' });
-      }
-      break;
-    // #233: `total_cost_usd` taken as the turn's own: not checked against a resumed real session
-    // yet (no recorded multi-turn Grok session); if it proves cumulative, do as parseClaude does.
-    case 'end': {
-      const u = ev.usage || {};
-      acc.text = acc.segment ?? acc.lastText ?? '';
-      acc.costUsd = ev.total_cost_usd ?? null;
-      acc.usage = {
-        input: u.input_tokens || 0,
-        output: u.output_tokens || 0,
-        cache_read: u.cache_read_input_tokens || 0,
-        cache_write: u.cache_creation_input_tokens || 0,
-        reasoning: u.reasoning_tokens || 0, // already included in output
-      };
-      if (ev.sessionId) {
-        acc.providerSessionId = ev.sessionId;
-        emit({ kind: 'session', sessionId: ev.sessionId });
-      }
-      emit({ kind: 'usage', usage: acc.usage, costUsd: acc.costUsd });
-      break;
-    }
-    case 'error':
-      acc.error = `Grok returned an error: ${ev.message || 'unknown'}`;
-      break;
-    case 'usage': {           // per-call usage (the context of that request); the totals come in `end`
-      const tokens = contextTokens(ev.usage || ev);
-      if (tokens) emit({ kind: 'context', tokens });
-      break;
-    }
-    case 'available_commands':
-      break;
-    default:
-      emit({ kind: 'raw', event: ev });
-  }
-}
-parseGrok.flush = flushGrok;
 
 // The parsed turn runCli resolves with (the engine records it in session.message_received). #308:
 // `usage` is the whole turn; usage_main (the main conversation), subagents and model_calls only when
@@ -457,11 +226,11 @@ function gitConfigEnv(env, settings) {
 // ---------------------------------------------------------------------------
 // Image attachments (#129): image files a turn hands to the CLI next to its prompt. Callers store
 // them in the workspace first (a run's attachments/ folder, a conversation's folder); runTurn checks
-// them before anything is spawned. How each CLI opens them (IMAGE_INPUT):
+// them before anything is spawned. How each CLI opens them (its adapter's `imageInput`):
 //   read: Claude Code reads them with its Read tool: their folders go with --add-dir, Read is offered
 //   flag: attached to the message with --image=<file> (the `=` form: --image takes several values,
 //         a separate one would swallow `resume` or the `-` stdin argument). Meant for Codex CLI, off
-//         until a real `codex exec --image` call confirms it: then add 'codex-cli': 'flag' below
+//         until a real `codex exec --image` call confirms it: then set it in its adapter
 //   none: no confirmed way (Codex CLI for now, Grok Build): the prompt still lists the paths; the
 //         caller warns (imageInput)
 // Every provider gets the "Attached images" block with the absolute paths.
@@ -474,10 +243,9 @@ const IMAGE_TYPES = {
   '.webp': 'webp',
 };
 const ATTACHMENT_LIMITS = { count: 10, bytes: 10 * 1024 * 1024 };
-const IMAGE_INPUT = { 'claude-code': 'read', mock: 'record' };
 
 // How a provider type opens attached images: 'read', 'flag', 'record' (mock) or null (it cannot).
-const imageInput = (type) => IMAGE_INPUT[type] || null;
+const imageInput = (type) => registry.byType(type)?.imageInput || null;
 
 // The image format of a file's first bytes, or null.
 function sniffImage(buf) {
@@ -834,7 +602,7 @@ async function runMock({ providerSessionId, model, hint, signal, onItem, attempt
   const limits = hint?.sequences?.usage_limits;
   if (Array.isArray(limits) && hint.provider && (limits.includes(hint.provider) || limits.includes(`${hint.provider}:${model}`))) {
     await d(200);
-    throw new Error(USAGE_LIMIT_MESSAGES[hint.providerType] || `${hint.provider}: usage limit reached`);
+    throw new Error(registry.byType(hint.providerType)?.usageLimitMessage || `${hint.provider}: usage limit reached`);
   }
   // the follow-up that asks only for the handoff note
   if (hint?.handoffOnly) {
@@ -917,13 +685,9 @@ async function runMock({ providerSessionId, model, hint, signal, onItem, attempt
 async function runTurn(opts) {
   if (opts.provider.type !== 'mock') refuseReal(`the ${opts.provider.type} provider`);
   opts = { ...opts, attachments: checkAttachments(opts.attachments) };
-  switch (opts.provider.type) {
-    case 'mock': return runMock(opts);
-    case 'claude-code': return runCli(opts, parseClaude);
-    case 'codex-cli': return runCli(opts, parseCodex);
-    case 'grok-cli': return runCli(opts, parseGrok);
-    default: throw new Error(`Unknown provider: ${opts.provider.type}`);
-  }
+  const adapter = registry.byType(opts.provider.type);
+  if (!adapter) throw new Error(`Unknown provider: ${opts.provider.type}`);
+  return adapter.cli ? runCli(opts, adapter.parse) : runMock(opts);
 }
 
 // A tool call refused by the agent's allowlist (cli_args) rather than a command that ran and
@@ -947,27 +711,13 @@ function isRetryable(err) {
 }
 
 // #262: a provider out of credits or past its usage limit: retrying on it is pointless, the agent
-// moves on to the next entry of its fallback chain. Per CLI (`type`), from the messages they print:
-// Claude Code "Claude AI usage limit reached|<epoch>", "5-hour limit reached ∙ resets 3pm", "Credit
-// balance is too low"; Codex "You've hit your usage limit. Upgrade to Plus…", "Quota exceeded",
-// insufficient_quota; Grok (xAI API) "…used all available credits or reached its monthly spending limit".
+// moves on to the next entry of its fallback chain. The messages every CLI may print, plus the
+// CLI's own (`type`: its adapter's quotaPattern, e.g. Claude Code "5-hour limit reached ∙ resets 3pm").
 const QUOTA_COMMON = /usage limit|credit balance is too low|insufficient[_ ](?:quota|credits?)|quota exceeded|exceeded your (?:current )?quota|out of credits/i;
-const QUOTA_BY_TYPE = {
-  'claude-code': /\blimit reached\b|you['’]ve hit your limit/i,
-  'codex-cli': /usage_limit_reached|rate_limit_exceeded.*quota/i,
-  'grok-cli': /used all available credits|spending limit/i,
-};
 function isQuotaError(type, message) {
   const text = String(message?.message ?? message ?? '');
-  return QUOTA_COMMON.test(text) || !!QUOTA_BY_TYPE[type]?.test(text);
+  return QUOTA_COMMON.test(text) || !!registry.byType(type)?.quotaPattern?.test(text);
 }
-
-// The usage-limit message each CLI answers with: the simulation's (mockSequences.usage_limits)
-const USAGE_LIMIT_MESSAGES = {
-  'claude-code': 'Claude AI usage limit reached|1760227200',
-  'codex-cli': "You've hit your usage limit. Upgrade to Plus to continue using Codex (https://openai.com/chatgpt/pricing), or try again later.",
-  'grok-cli': 'Your team has either used all available credits or reached its monthly spending limit. To continue making API requests, please purchase more credits or raise your spending limit.',
-};
 
 module.exports = {
   ATTACHMENT_LIMITS,

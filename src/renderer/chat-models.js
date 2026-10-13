@@ -1,12 +1,13 @@
-// The CLIs, models and effort levels the chat screens offer (window.ChatModels: PROVIDERS,
-// EFFORTS). Read as they load by Write & Review (views/duo/), AI Arena (views/arena/) and the
-// Builder (views/workflows/builder.js); later by Agents and the supervisor drawer.
+// The CLIs, models and effort levels the chat screens offer (window.ChatModels: PROVIDERS by provider
+// type { label, key, models }, EFFORTS, typeOf(id or model) → its provider type, models(id or type) →
+// its models), from the provider registry (window.Providers, src/shared/providers/). Read as they
+// load by Write & Review (views/duo/), AI Arena (views/arena/) and the Builder
+// (views/workflows/builder.js); later by Agents and the supervisor drawer.
 (() => {
-  const PROVIDERS = {
-    'claude-code': { label: 'Claude Code', key: 'claude', models: ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-fable-5-1', 'claude-haiku-4-5'] },
-    'codex-cli': { label: 'Codex CLI', key: 'codex', models: ['gpt-6-luna'] },
-    'grok-cli': { label: 'Grok Build', key: 'grok', models: ['grok-4.7'] },
-  };
+  const registry = window.Providers;
+  const PROVIDERS = Object.fromEntries(registry.clis().map((a) => [a.type, { label: a.label, key: a.id, models: a.models }]));
   const EFFORTS = ['low', 'medium', 'high', 'xhigh'];
-  window.ChatModels = { PROVIDERS, EFFORTS };
+  const typeOf = (key) => registry.resolve(key)?.type || '';
+  const models = (key) => registry.resolve(key)?.models || [];
+  window.ChatModels = { PROVIDERS, EFFORTS, models, typeOf };
 })();

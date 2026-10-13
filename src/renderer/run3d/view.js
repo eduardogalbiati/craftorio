@@ -24,7 +24,8 @@ export const STATUS = {
   failed: { label: 'Failed' },
   waiting: { label: 'Waiting for you' },
 };
-export const PROVIDER = { claude: 'Claude Code', 'claude-code': 'Claude Code', codex: 'Codex CLI', 'codex-cli': 'Codex CLI', grok: 'Grok Build', 'grok-cli': 'Grok Build', mock: 'Simulated' };
+/** A provider's name ("Claude Code") from its id or type (the provider registry, window.Providers), or ''. */
+export const providerLabel = (provider) => (provider && window.Providers?.resolve(provider)?.label) || '';
 export const TAG_LIFT = { item: 1.55, supervisor: 3.0, start: 1.7, end: 3.1, agent: 3.05, machine: 2.45, gate: 3.3 };
 export const VIEW_DIR = new THREE.Vector3(1, 0.86, 1).normalize();
 
@@ -100,7 +101,7 @@ export function setTheme(name) {
 function providerType(provider, model) {
   const fn = window.RunChatModel?.providerType;
   if (fn) return fn(provider, model);
-  return { claude: 'claude-code', codex: 'codex-cli', grok: 'grok-cli' }[provider] || provider || '';
+  return window.Providers?.resolve(provider)?.type || provider || '';
 }
 /**
  * An agent of the run: { name, label, model, provider, color (#RRGGBB: the role's colour, for its desk

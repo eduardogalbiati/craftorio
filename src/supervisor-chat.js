@@ -153,7 +153,7 @@ function createSupervisorChat({ dir, tools, bridge, mcpCommand, skillsDirs, reso
     const { providerArgs, dedupeFlags } = require('./engine/capabilities');
     const { PROVIDERS } = require('./workflow-builder');
     const { resolveSkill } = require('./skills');
-    const provider = Object.values(PROVIDERS).find((p) => p.type === 'claude-code');
+    const provider = PROVIDERS.claude;
     if (!resolveCommand(provider.command)) throw new Error(`The supervisor needs ${provider.command}, which is not installed.`);
     const { url, token } = await bridge.start();
     const mcp = mcpCommand();

@@ -18,7 +18,7 @@ const {
   cliEnv,
   cliReason,
   folderMatcher,
-  RESUME_ARGS,
+  resumeArgsOf,
   sessionView,
 } = require('../common');
 
@@ -66,7 +66,7 @@ module.exports = (ctx) => {
     // fall back to the run's repo/project folder
     const folder = [sess.cwd, run.inputs?.repo_path, run.inputs?.project_path].find((d) => d && fs.existsSync(d)) || run.runDir;
     delete env.ELECTRON_RUN_AS_NODE;
-    return { title: `${sess.agent} (${sess.id}) · ${cfg.command}`, cwd: folder, file: resolveCommand(cfg.command).file, args: RESUME_ARGS[cfg.type](sess.providerSessionId), env };
+    return { title: `${sess.agent} (${sess.id}) · ${cfg.command}`, cwd: folder, file: resolveCommand(cfg.command).file, args: resumeArgsOf(cfg.type)(sess.providerSessionId), env };
   }
 
   // ---- Sessions screen: the CLIs' own conversations on this machine --------------------
