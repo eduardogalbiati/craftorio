@@ -13,6 +13,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { execFileSync } = require('child_process');
 const { WorkflowRun } = require('../src/engine/workflow');
 
 process.env.MULTIAGENT_MOCK_DELAY_SCALE = process.env.MULTIAGENT_MOCK_DELAY_SCALE || '0.02';
@@ -117,7 +118,68 @@ test('#353 the provider choice: the simulated adapter gives every agent the mock
   assert.equal(real().provider({ provider: 'codex' }, providers).type, 'codex-cli');
 });
 
+test('#353 simulated action_errors fail the first n transitions of that step only, with a merge or an action message', () => {
+  const s = load().simulated({ sequences: { action_errors: { deploy: 2, land: 1 } } });
+  assert.throws(() => s.transitionFault({ stepId: 'deploy', action: 'npm run deploy' }), /^Error: \(simulated\) action failed: npm run deploy$/);
+  assert.throws(() => s.transitionFault({ stepId: 'deploy', action: 'npm run deploy' }), /action failed: npm run deploy/);
+  assert.doesNotThrow(() => s.transitionFault({ stepId: 'deploy', action: 'npm run deploy' }));
+  assert.throws(() => s.transitionFault({ stepId: 'land', merge: true }), /\(simulated\) local merge: the branch conflicts with the local base/);
+  assert.doesNotThrow(() => s.transitionFault({ stepId: 'land', merge: true }));
+  assert.doesNotThrow(() => s.transitionFault({ stepId: 'other', action: 'x' }));
+  assert.doesNotThrow(() => load().simulated().transitionFault({ stepId: 'deploy', action: 'x' }));
+  assert.doesNotThrow(() => load().real().transitionFault({ stepId: 'deploy', action: 'x' }));
+});
+
+test('#353 the real local merge refuses a run without a git worktree', async () => {
+  await assert.rejects(() => load().real().mergeLocal({ repo: root, dir: null, base: 'main' }), /merge: local needs the run's git worktree/);
+});
+
+test('#353 the real ship guard runs the check, the simulated one never does', () => {
+  const { real, simulated } = load();
+  let calls = 0;
+  const check = () => { calls++; throw new Error('not approved by the owner'); };
+  assert.throws(() => real().guardShip(check), /not approved by the owner/);
+  assert.equal(calls, 1);
+  assert.doesNotThrow(() => simulated().guardShip(check));
+  assert.equal(calls, 1, 'the simulated guard did not call the check');
+});
+
+test('#353 the real affected tests add the earlier failures that still exist, sorted', (t) => {
+  const repo = tempDir(t, 'sim-353-affected-');
+  const sh = (...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...args], { cwd: repo, stdio: 'ignore', windowsHide: true });
+  const write = (f, s) => { fs.mkdirSync(path.dirname(path.join(repo, f)), { recursive: true }); fs.writeFileSync(path.join(repo, f), s); };
+  write('src/a.js', 'module.exports = 1;\n');
+  write('src/b.js', 'module.exports = 2;\n');
+  write('test/a.test.js', "require('../src/a');\n");
+  write('test/0-old.test.js', "require('../src/b');\n");
+  sh('init', '-q', '-b', 'main');
+  sh('add', '-A');
+  sh('commit', '-q', '-m', 'base');
+  write('src/a.js', 'module.exports = 3;\n');
+  const sel = load().real().affectedTests({ root: repo, base: 'main', failed: ['test/gone.test.js', 'test/a.test.js', 'test/0-old.test.js'] });
+  assert.equal(sel.mode, 'affected');
+  assert.deepEqual(sel.files, ['test/0-old.test.js', 'test/a.test.js']);
+  assert.equal(sel.reasons['test/0-old.test.js'], 'failed in an earlier round');
+  assert.equal(sel.reasons['test/a.test.js'], 'imports src/a.js');
+});
+
+test('#353 the real affected tests are the whole suite without a worktree or a base', () => {
+  const sel = load().real().affectedTests({ root: null, base: 'main', failed: ['test/a.test.js'] });
+  assert.equal(sel.mode, 'all');
+  assert.deepEqual(sel.files, []);
+});
+
 // ---- injection at run creation --------------------------------------------------------------
+
+test('#353 an injected simulated adapter keeps its own sequences: the run\'s mockSequences do not reach it', (t) => {
+  const { simulated } = load();
+  const runsDir = tempDir(t, 'sim-353-runs-');
+  const mockSequences = { action_errors: { gate: 1 } };
+  const own = new WorkflowRun({ file: FIXTURE, inputs: {}, mock: true, runsDir, skillsDirs: [], mockSequences, machine: simulated() });
+  assert.doesNotThrow(() => own.machine.transitionFault({ stepId: 'gate', action: 'x' }));
+  const dflt = new WorkflowRun({ file: FIXTURE, inputs: {}, mock: true, runsDir, skillsDirs: [], mockSequences });
+  assert.throws(() => dflt.machine.transitionFault({ stepId: 'gate', action: 'x' }), /\(simulated\) action failed: x/);
+});
 
 test('#353 a run gets the adapter matching mock when none is given', (t) => {
   const runsDir = tempDir(t, 'sim-353-runs-');
