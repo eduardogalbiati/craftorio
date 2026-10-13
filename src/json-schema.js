@@ -21,11 +21,18 @@ const TYPE_CHECK = {
 const at = (p, key) => (p ? `${p}.${key}` : key);
 const label = (p) => p || 'value';
 const shown = (v) => (typeof v === 'string' && v.length > 60 ? `"${v.slice(0, 60)}…"` : JSON.stringify(v));
+// the schemas' patterns, compiled once; a pattern that is not a valid RegExp refuses every value
+// (a workflow's output schema is hand-written) instead of throwing
 const patterns = new Map();
 const regex = (source) => {
-  if (!patterns.has(source)) patterns.set(source, new RegExp(source, 'u'));
+  if (!patterns.has(source)) {
+    let re = null;
+    try { re = new RegExp(source); } catch { /* invalid: null */ }
+    patterns.set(source, re);
+  }
   return patterns.get(source);
 };
+const matches = (source, v) => regex(source)?.test(v) ?? false;
 
 function validateSchema(v, s, p = 'output', errs = []) {
   if (!s || typeof s !== 'object') return errs;
@@ -40,7 +47,7 @@ function validateSchema(v, s, p = 'output', errs = []) {
     const length = s.minLength != null || s.maxLength != null ? [...v].length : 0;
     if (s.minLength != null && length < s.minLength) errs.push(`${label(p)}: at least ${s.minLength} characters`);
     if (s.maxLength != null && length > s.maxLength) errs.push(`${label(p)}: at most ${s.maxLength} characters`);
-    if (s.pattern != null && !regex(s.pattern).test(v)) errs.push(`${label(p)}: ${s.title ? `not a valid ${s.title}` : `does not match ${s.pattern}`}`);
+    if (s.pattern != null && !matches(s.pattern, v)) errs.push(`${label(p)}: ${s.title ? `not a valid ${s.title}` : `does not match ${s.pattern}`}`);
   }
   if (typeof v === 'number') {
     if (s.minimum != null && v < s.minimum) errs.push(`${label(p)}: at least ${s.minimum}`);

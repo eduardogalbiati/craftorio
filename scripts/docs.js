@@ -42,7 +42,8 @@
 //   node scripts/docs.js --derived only the gitignored files (the npm hooks)
 //   node scripts/docs.js --check   writes nothing; exit 1 when the README, engine.md or
 //                                  index.html's lists are out of date or a source file has no header comment (CI)
-// No dependency beyond js-yaml (installed before `prepare` runs).
+// No dependency beyond js-yaml (installed before `prepare` runs) and the app's own modules (the
+// channel reference loads the channel files).
 
 const fs = require('fs');
 const path = require('path');
@@ -401,11 +402,11 @@ function renderIndexHtml(text, root = ROOT) {
 // The channel reference (#338): the request/reply channels of this app's manifest, by area file, each
 // with its window.api method, its arguments (one row per named param, or the one argument) and its
 // result, as JSON Schema. The channel files are loaded with a stand-in ctx: an entry only reads ctx
-// when it is called.
+// when it is called, and without a workspace (`ws` null) their minute timers do nothing.
 function channelReference() {
   const { CHANNELS_DIR } = require('../src/service/manifest');
   const stub = new Proxy(function stub() {}, { get: () => stub, apply: () => undefined });
-  const ctx = new Proxy({}, { get: (target, key) => (key in target ? target[key] : stub) });
+  const ctx = new Proxy({}, { get: (target, key) => (key in target ? target[key] : key === 'ws' ? null : stub) });
   const json = (s) => (s === undefined ? '(none)' : `\`${JSON.stringify(s)}\``);
   const lines = [
     '# Channel reference',
