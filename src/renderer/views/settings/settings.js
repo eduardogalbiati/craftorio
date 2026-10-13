@@ -171,25 +171,92 @@ async function saveFallbackSettings() {
   msg.textContent = 'Saved: the next runs use them.';
 }
 
-// Settings › Execution › Concurrent runs (settings.concurrentRuns).
-function renderConcurrency() {
+// Settings › Execution › Concurrent runs (settings.concurrentRuns) and the machine profile (#367,
+// settings.machineProfile, src/machine-profile.js through settings:machineProfile): the maximum and
+// the test workers per run follow this machine in auto; a value typed here makes them manual.
+async function renderConcurrency() {
   const c = state.settings.concurrentRuns || {};
   $('#set-cr-enabled').checked = !!c.enabled;
-  $('#set-cr-max').value = c.max || 2;
   $('#set-cr-project').value = c.perProject || '';
   $('#set-cr-sims').checked = !!c.countSimulations;
   document.querySelectorAll('#set-concurrency .cr-opt').forEach((el) => el.classList.toggle('hidden', !c.enabled));
+  const mp = state.machineProfile = await api.machineProfile().catch(() => null);
+  $('#set-cr-max').value = mp?.concurrentRuns || c.max || 2;
+  $('#set-mp-workers').value = mp?.testWorkers || '';
+  const st = mp?.state || 'unknown';
+  const badge = $('#set-mp-state');
+  badge.dataset.state = st;
+  badge.textContent = { auto: 'Auto', manual: 'Manual', unknown: 'Unknown' }[st];
+  badge.className = `badge${st === 'auto' ? ' live' : st === 'unknown' ? ' warn' : ''}`;
+  $('#set-mp-line').textContent = mp?.line || "This machine's threads and memory couldn't be read.";
+  $('#set-mp-hint').textContent = st === 'manual' ? ` Your values: ${mp.concurrentRuns} at once, ${mp.testWorkers} test worker${mp.testWorkers === 1 ? '' : 's'} per run; they stay as they are on any machine.`
+    : st === 'unknown' ? ' Today\'s defaults apply; type values below to set your own.' : ' The values below follow this machine.';
+  // Use these values: turns concurrent runs on with the machine's values (nothing to use when unknown)
+  $('#set-mp-use').classList.toggle('hidden', !mp?.proposal || (st === 'auto' && !!c.enabled));
+  $('#set-mp-auto').classList.toggle('hidden', st !== 'manual');
+  const s = mp?.suggestion;
+  $('#set-mp-suggestion').classList.toggle('hidden', !s);
+  if (s) {
+    $('#set-mp-suggestion-title').textContent = `The memory guard stepped in on ${s.days.length} days this week: lower to ${s.concurrentRuns} run${s.concurrentRuns === 1 ? '' : 's'} at once?`;
+    $('#set-mp-suggestion-evidence').textContent = `Days: ${s.days.join(', ')}. Runs held or stopped: ${s.runs.join(', ') || 'none recorded'}. Nothing changes until you apply it.`;
+  }
 }
 
-async function saveConcurrency() {
-  const int = (sel) => { const n = Math.floor(Number($(sel).value)); return Number.isFinite(n) && n >= 1 ? Math.min(n, 20) : null; };
-  const concurrentRuns = {
-    enabled: $('#set-cr-enabled').checked, max: int('#set-cr-max') || 2,
-    perProject: int('#set-cr-project'), countSimulations: $('#set-cr-sims').checked,
-  };
-  state.settings = await api.setSettings({ concurrentRuns });
-  renderConcurrency();
+const crInt = (sel, max = 20) => { const n = Math.floor(Number($(sel).value)); return Number.isFinite(n) && n >= 1 ? Math.min(n, max) : null; };
+const crSettings = (patch = {}) => ({
+  enabled: $('#set-cr-enabled').checked, max: crInt('#set-cr-max') || 2,
+  perProject: crInt('#set-cr-project'), countSimulations: $('#set-cr-sims').checked, ...patch,
+});
+async function saveMachineProfile(patch) {
+  state.settings = await api.setSettings(patch);
+  await renderConcurrency();
   renderHeader();
+}
+
+// a switch or the per-project field keep the profile's mode; the maximum typed here is manual
+async function saveConcurrency(e) {
+  const concurrentRuns = crSettings();
+  const current = state.settings.machineProfile || { mode: 'auto' };
+  const machineProfile = e?.target?.id === 'set-cr-max'
+    ? { mode: 'manual', concurrentRuns: concurrentRuns.max, ...(current.mode === 'manual' && current.testWorkers ? { testWorkers: current.testWorkers } : {}) }
+    : current;
+  await saveMachineProfile({ concurrentRuns, machineProfile });
+}
+
+// the test workers typed here are manual, with the maximum shown
+async function saveTestWorkers() {
+  const testWorkers = crInt('#set-mp-workers', 64);
+  if (!testWorkers) { $('#set-mp-workers').value = state.machineProfile?.testWorkers || ''; return; }
+  const concurrentRuns = crSettings();
+  await saveMachineProfile({ concurrentRuns, machineProfile: { mode: 'manual', concurrentRuns: concurrentRuns.max, testWorkers } });
+}
+
+// "Use these values": concurrent runs on, the maximum and the workers following this machine
+async function useMachineValues() {
+  const p = state.machineProfile?.proposal;
+  if (!p) return;
+  await saveMachineProfile({ concurrentRuns: crSettings({ enabled: true, max: p.concurrentRuns }), machineProfile: { mode: 'auto' } });
+}
+
+// "back to auto": the machine's values again; the owner's manual values are dropped
+async function machineProfileToAuto() {
+  const p = state.machineProfile?.proposal;
+  await saveMachineProfile({ concurrentRuns: crSettings(p ? { max: p.concurrentRuns } : {}), machineProfile: { mode: 'auto' } });
+}
+
+// the memory guard's suggestion (#367): applied on this click only, as the owner's manual maximum
+async function applyMachineSuggestion() {
+  const s = state.machineProfile?.suggestion;
+  if (!s) return;
+  const before = { concurrentRuns: state.settings.concurrentRuns, machineProfile: state.settings.machineProfile };
+  const workers = state.machineProfile.state === 'manual' ? state.settings.machineProfile?.testWorkers : null;
+  await saveMachineProfile({
+    concurrentRuns: crSettings({ max: s.concurrentRuns }),
+    machineProfile: { mode: 'manual', concurrentRuns: s.concurrentRuns, ...(workers ? { testWorkers: workers } : {}) },
+  });
+  window.showToast?.(`Lowered to ${s.concurrentRuns} runs at once`, 'Settings › Execution › Concurrent runs', null, null, {
+    action: { label: 'Undo', run: () => saveMachineProfile(before) },
+  });
 }
 
 // Settings › Execution › Memory guard (settings.memoryGuard, #276, src/engine/memory-guard.js): the
@@ -737,9 +804,24 @@ registerView({
                   <div class="s-label"><b>Allow several workflows at the same time</b><span>Off: one run at a time. On: runs start while there are free slots, and the Backlog queues fill them. Each run works in its own git worktree.</span></div>
                   <label class="switch"><input type="checkbox" id="set-cr-enabled" /><span></span></label>
                 </div>
-                <div class="s-row cr-opt">
-                  <div class="s-label"><b>Maximum concurrent runs</b><span>A new run is refused while this many are in progress.</span></div>
+                <div class="s-row" id="set-mp-row">
+                  <div class="s-label"><b>This machine <span class="badge" id="set-mp-state" data-testid="machine-profile-state"></span></b><span id="set-mp-line" data-testid="machine-profile-line"></span><span id="set-mp-hint" class="muted small"></span></div>
+                  <div class="s-ctrl">
+                    <button type="button" class="btn sm" id="set-mp-use" data-testid="machine-profile-use">Use these values</button>
+                    <button type="button" class="link-btn" id="set-mp-auto" data-testid="machine-profile-back-to-auto">back to auto</button>
+                  </div>
+                </div>
+                <div class="s-row hidden" id="set-mp-suggestion" data-testid="machine-profile-suggestion">
+                  <div class="s-label"><b id="set-mp-suggestion-title"></b><span id="set-mp-suggestion-evidence"></span></div>
+                  <div class="s-ctrl"><button type="button" class="btn sm" id="set-mp-apply" data-testid="machine-profile-apply">Apply</button></div>
+                </div>
+                <div class="s-row">
+                  <div class="s-label"><b>Maximum concurrent runs</b><span>A new run is refused while this many are in progress (when several workflows are allowed). A value you set is kept, on any machine.</span></div>
                   <div class="s-ctrl"><input type="number" id="set-cr-max" min="1" max="20" step="1" class="s-num" aria-label="Maximum concurrent runs" /></div>
+                </div>
+                <div class="s-row">
+                  <div class="s-label"><b>Test workers per run</b><span>Each run's agents and suite get it as MULTIAGENT_TEST_WORKERS and pass it to the test runner (--workers, --maxWorkers, -n).</span></div>
+                  <div class="s-ctrl"><input type="number" id="set-mp-workers" data-testid="machine-profile-test-workers" min="1" max="64" step="1" class="s-num" aria-label="Test workers per run" /></div>
                 </div>
                 <div class="s-row cr-opt">
                   <div class="s-label"><b>Maximum per project</b><span>So one project's queue can't take every slot. Empty: no limit per project.</span></div>
@@ -853,6 +935,10 @@ registerView({
       e.target.value = state.settings.notificationRetentionDays;
     };
     for (const sel of ['#set-cr-enabled', '#set-cr-max', '#set-cr-project', '#set-cr-sims']) $(sel).onchange = saveConcurrency;
+    $('#set-mp-workers').onchange = saveTestWorkers;
+    $('#set-mp-use').onclick = useMachineValues;
+    $('#set-mp-auto').onclick = machineProfileToAuto;
+    $('#set-mp-apply').onclick = applyMachineSuggestion;
     for (const sel of ['#set-mg-enabled', '#set-mg-limit', '#set-mg-floor']) $(sel).onchange = saveMemoryGuard;
     for (const sel of ['#set-oracle-budget', '#set-oracle-compact', '#set-oracle-self-healing']) $(sel).onchange = saveOracleSettings;
     $('#set-oracle-self-healing-perms').onclick = () => showView('nightwatch');

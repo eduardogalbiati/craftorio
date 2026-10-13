@@ -115,6 +115,17 @@ trip per refusal (136 of 2,437 tool calls in 7 real runs, #96). The engine remov
   the command guide names the folder. The app's tools an agent runs (`npm run run`, `npm run
   screenshot`, the app, engine scripts) resolve to it with no flag. Without it, simulation only
   never resolves to the registered workspace (`resolveWorkspace` → OS temp).
+- **Test workers (#367)**: every run gets the machine profile's test workers per run
+  (`src/machine-profile.js`, Settings › Execution › Concurrent runs: auto from the machine, or the
+  owner's manual value) as `MULTIAGENT_TEST_WORKERS` and `MULTIAGENT_E2E_WORKERS` (the same number;
+  this repository's `playwright.config.js` reads the second one). `capabilities.agentEnv(scratch,
+  { testWorkers })` adds them to the agents' env (so their prefixes are allowed and the command guide
+  names them), `WorkflowRun` gets them from `testWorkers` (src/service/areas/runs.js), child runs
+  inherit them. The suite step and the orchestrator-run test requests set them in `suiteEnv` (never
+  an inherited value) and add `--workers=<n>` to a `playwright test` command / `--maxWorkers=<n>` to
+  a `jest` one that sets none (`suite-step.js withWorkers`). The test and build skills
+  (`unit-test-writer-*`, `e2e-test-writer-*`, `build-audit-*`) tell agents to pass the number to the
+  runner (`--workers`, `--maxWorkers`, `-n`…).
 - **`cd` into the worktree** and **writes outside it**: the engine creates `<run_dir>/logs`,
   `<run_dir>/scratch` and `<run_dir>/evidence` (`RUN_DIRS`; screenshots go to the step's round
   folder `evidence/<step>/round-<n>`, see engine/evidence.md) for agents with commands, passes them with

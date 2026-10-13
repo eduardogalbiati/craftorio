@@ -303,7 +303,7 @@ const methods = {
     // agents with commands: the folders they may write to, and how to run commands unattended
     const runDirs = capabilities.runDirs(caps, this.runDir);
     for (const dir of runDirs) fs.mkdirSync(dir, { recursive: true });
-    const agentEnv = capabilities.agentEnv(this.scratchWorkspace());
+    const agentEnv = capabilities.agentEnv(this.scratchWorkspace(), this.workers);
     const shotsDir = hint?.visit ? evidence.roundDir(this.runDir, stepId, hint.visit) : null;
     const commands = capabilities.commandGuide(caps, this.runDir, agentEnv, shotsDir);
     const guide = commands && [commands, this.depsGuide()].filter(Boolean).join('\n');

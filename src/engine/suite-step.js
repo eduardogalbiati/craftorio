@@ -50,6 +50,7 @@ const { parseAgentReport } = require('./agent-test-report');
 const { parseNodeCoverage, renderCoverageSummary } = require('../coverage-summary');
 const { processTreeCommands } = require('./processes');
 const { killTree, OWN_GROUP } = require('./providers');
+const { workerEnv } = require('../machine-profile');
 
 const SUITE_TIMEOUT_MS = 30 * 60e3;
 const MIN_TIMEOUT_MS = 10 * 60e3;
@@ -232,9 +233,10 @@ function isFullSuiteCommand(cmd, suiteCommand) {
 // would share, an inherited screenshot slot); inspector flags are cut from NODE_OPTIONS (node --test
 // runs one file at a time under an inspector). Set: MULTIAGENT_SIMULATION_ONLY=1, MULTIAGENT_AGENT_MODE=1
 // (#219: a runner that knows it prints the failures-only JSON, src/engine/agent-test-report.js) and,
-// with locksDir, MULTIAGENT_LOCKS_DIR (the suite's own screenshot slot). → { env, removed: [names] }
+// with locksDir, MULTIAGENT_LOCKS_DIR (the suite's own screenshot slot); with testWorkers, the run's
+// test workers (#367, src/machine-profile.js workerEnv), never an inherited value. → { env, removed: [names] }
 const DROP_ENV = /^(ELECTRON_|CHROME_CRASHPAD|NPM_|CLAUDECODE$|NODE_TEST_CONTEXT$|VSCODE_INSPECTOR_OPTIONS$|MULTIAGENT_)/i;
-function suiteEnv(env = {}, { locksDir } = {}) {
+function suiteEnv(env = {}, { locksDir, testWorkers } = {}) {
   const out = {};
   const removed = [];
   for (const [k, v] of Object.entries(env)) {
@@ -251,7 +253,20 @@ function suiteEnv(env = {}, { locksDir } = {}) {
   out.MULTIAGENT_SIMULATION_ONLY = '1';
   out.MULTIAGENT_AGENT_MODE = '1';
   if (locksDir) out.MULTIAGENT_LOCKS_DIR = locksDir;
-  return { env: out, removed: removed.filter((k) => !/^MULTIAGENT_(SIMULATION_ONLY|AGENT_MODE|LOCKS_DIR)$/i.test(k)).sort() };
+  if (testWorkers) Object.assign(out, workerEnv({ testWorkers }));
+  const replaced = (k) => /^MULTIAGENT_(SIMULATION_ONLY|AGENT_MODE|LOCKS_DIR)$/i.test(k) || (!!testWorkers && /^MULTIAGENT_(TEST|E2E)_WORKERS$/i.test(k));
+  return { env: out, removed: removed.filter((k) => !replaced(k)).sort() };
+}
+
+// The suite's command with the run's test workers (#367) when it calls a runner that takes them
+// directly and does not set them already: `playwright test` → --workers, `jest` → --maxWorkers.
+// Anything else (npm test, pytest, go test…) gets them through the environment only.
+function withWorkers(command, testWorkers) {
+  const cmd = String(command || '');
+  if (!testWorkers || /\s&&\s|\|\||[;|]/.test(cmd)) return cmd;
+  if (/\bplaywright\s+test\b/.test(cmd) && !/\s(--workers|-j)\b/.test(cmd)) return `${cmd} --workers=${testWorkers}`;
+  if (/(^|[\s/\\])jest(\.js)?(\s|$)/.test(cmd) && !/\s(--maxWorkers|-w|--runInBand|-i)\b/.test(cmd)) return `${cmd} --maxWorkers=${testWorkers}`;
+  return cmd;
 }
 
 // The test files a list of processes runs, one per process (a runner listing many files is not one):
@@ -525,7 +540,8 @@ function saveCoverage(text, runDir, changedFiles) {
 // has node's coverage report, <run_dir>/coverage/coverage-summary.md (the totals and the changed files',
 // changedFiles(): the files the run changed) is written and `coverage` added to the output.
 // onSpawn(pid): the command's process, watched by the memory guard (#276).
-async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = 'pass', preexisting = [], signal, timeoutMs, history, base, baseCacheDir, run = runCommand, log = () => {}, files = null, selection = null, logName = null, coverage = false, changedFiles = null, onSpawn = null }) {
+// testWorkers (#367): the run's test workers per run, in the env and on the command (withWorkers).
+async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = 'pass', preexisting = [], signal, timeoutMs, history, base, baseCacheDir, run = runCommand, log = () => {}, files = null, selection = null, logName = null, coverage = false, changedFiles = null, onSpawn = null, testWorkers = null }) {
   const logFile = runDir ? path.join(runDir, 'logs', `${logName || `suite-${round}`}.log`) : null;
   const out = {
     kind: 'suite', status: 'blocked', round, scope: 'full', command: null, log: logFile ? path.relative(runDir, logFile).split(path.sep).join('/') : null,
@@ -560,10 +576,11 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
     else if (out.selection) out.selection = { ...out.selection, why: `${out.selection.why}; \`${out.command}\` cannot run single test files: the whole suite ran` };
   }
   if (coverage && !mock) out.command = coverageCommand(out.command, cwd);
+  if (!mock) out.command = withWorkers(out.command, testWorkers);
   const recent = mock ? [] : suiteDurations(hist);
   out.timeout_ms = timeoutMs || suiteTimeout(recent);
   const timeoutWhy = timeoutMs ? 'the step\'s timeout' : recent.length ? `${TIMEOUT_FACTOR}× the median of the last ${plural(recent.length, 'suite run')}` : 'the default, no suite run measured yet';
-  const childEnv = mock ? null : suiteEnv(env || process.env, { locksDir: path.join(runDir, 'locks') });
+  const childEnv = mock ? null : suiteEnv(env || process.env, { locksDir: path.join(runDir, 'locks'), testWorkers });
   if (logFile) {
     fs.mkdirSync(path.dirname(logFile), { recursive: true });
     // what the suite gets, so a slow round can be compared with a shell (#210)
@@ -733,4 +750,5 @@ module.exports = {
   suiteMessage,
   suiteScope,
   suiteTimeout,
+  withWorkers,
 };

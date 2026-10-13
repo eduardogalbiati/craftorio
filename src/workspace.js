@@ -183,6 +183,9 @@ const DEFAULT_SETTINGS = {
   // several workflows at the same time (Settings › Execution); disabled = one run at a time.
   // perProject: null = no limit per project; simulations count toward the limits only if countSimulations.
   concurrentRuns: { enabled: false, max: 2, perProject: null, countSimulations: false },
+  // Machine profile (#367, src/machine-profile.js): 'auto' sizes the concurrent runs' maximum and the
+  // test workers per run from this machine; 'manual' keeps { concurrentRuns, testWorkers } as set
+  machineProfile: { mode: 'auto' },
   // Memory guard (#276, src/engine/memory-guard.js): a real run's process over limitPercent of the RAM
   // is stopped; suites and new runs wait while less than floorPercent is free (0 = no hold)
   memoryGuard: { enabled: true, limitPercent: 25, floorPercent: 10 },
@@ -244,8 +247,12 @@ function savedSettings(ws) {
 function readSettings(ws) {
   const saved = savedSettings(ws);
   if (!saved) return { ...DEFAULT_SETTINGS, hiddenWorkflows: [], timeZone: TimeZone.systemZone() };
+  // a maximum of concurrent runs raised by hand before the machine profile existed (#367) stays the
+  // owner's: manual, never replaced by the machine's proposal
+  const legacyMax = !saved.machineProfile && Number.isFinite(saved.concurrentRuns?.max) && saved.concurrentRuns.max !== DEFAULT_SETTINGS.concurrentRuns.max;
+  const machineProfile = legacyMax ? { mode: 'manual', concurrentRuns: saved.concurrentRuns.max } : saved.machineProfile || DEFAULT_SETTINGS.machineProfile;
   // an existing settings.json without setupDone: a workspace in use before Setup existed (#319)
-  return { ...DEFAULT_SETTINGS, hiddenWorkflows: [], setupDone: true, ...saved, timeZone: saved.timeZone || TimeZone.systemZone() };
+  return { ...DEFAULT_SETTINGS, hiddenWorkflows: [], setupDone: true, ...saved, machineProfile, timeZone: saved.timeZone || TimeZone.systemZone() };
 }
 
 function writeSettings(ws, patch) {
@@ -253,6 +260,10 @@ function writeSettings(ws, patch) {
   const saved = savedSettings(ws);
   const next = { ...readSettings(ws), ...patch };
   for (const k of Object.keys(next)) if (!(k in DEFAULT_SETTINGS)) delete next[k];
+  // a maximum of concurrent runs written without the machine profile's mode is the owner's (#367)
+  if (Number.isFinite(patch?.concurrentRuns?.max) && !('machineProfile' in patch)) {
+    next.machineProfile = { ...next.machineProfile, mode: 'manual', concurrentRuns: patch.concurrentRuns.max };
+  }
   // the computer's zone is not saved until one is chosen (#273): the workspace follows the computer
   if (!(patch && patch.timeZone) && !(saved && saved.timeZone)) next.timeZone = null;
   // setupDone is written once known (#319: the Setup saves false when it opens, true at Finish or

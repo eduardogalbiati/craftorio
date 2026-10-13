@@ -16,6 +16,7 @@
 // docs/agents/capabilities.md; the gaps are logged once per agent in the run.
 
 const path = require('path');
+const { workerEnv } = require('../machine-profile');
 const registry = require('../shared/providers');
 
 const TOOL_RE =/^(read|edit|write|bash(:.+)?)$/;
@@ -84,9 +85,12 @@ const DEPS_DENIED_COMMANDS = [
 // The environment of an agent of a run: AGENT_ENV, plus the run's scratch workspace (#120) when it
 // has one ({ workspace, userData }, see WorkflowRun.scratchWorkspace), so `npm run run`, `npm run
 // screenshot` and the app started from the worktree never open the owner's workspace or user data.
-function agentEnv(scratch = null) {
-  if (!scratch) return { ...AGENT_ENV };
-  return { ...AGENT_ENV, MULTIAGENT_USER_DATA: scratch.userData, MULTIAGENT_WORKSPACE: scratch.workspace };
+// workers: { testWorkers } of the machine profile (#367): the test workers per run, passed to the
+// test runners as MULTIAGENT_TEST_WORKERS / MULTIAGENT_E2E_WORKERS (src/machine-profile.js workerEnv).
+function agentEnv(scratch = null, workers = null) {
+  const env = { ...AGENT_ENV, ...(workers?.testWorkers ? workerEnv(workers) : {}) };
+  if (!scratch) return env;
+  return { ...env, MULTIAGENT_USER_DATA: scratch.userData, MULTIAGENT_WORKSPACE: scratch.workspace };
 }
 
 // Flags that take no value: never passed twice (clap-based CLIs refuse a repeated flag).

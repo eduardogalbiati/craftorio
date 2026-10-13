@@ -26,6 +26,7 @@ const ENGINE_ROOT_UTILITIES = [
   'src/install-commands.js',
   'src/json-schema.js',
   'src/local-preview.js',
+  'src/machine-profile.js',
   'src/platform-paths.js',
   'src/result-summary.js',
   'src/run-owner.js',

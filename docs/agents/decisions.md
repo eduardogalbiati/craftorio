@@ -8,6 +8,12 @@ appears once, in its latest form, naming what it replaced. The hard rules of
 [AGENTS.md](../../AGENTS.md) are not repeated here. This is not the `decision-log` skill (a run's
 own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
 
+- **2026-10-13** (#367): a machine profile sizes the concurrent runs and the test workers per run
+  from the machine (threads, RAM), shown with its reasons in Setup and Settings › Execution and
+  always overridable: a manual value wins and stays when the machine changes. It never lowers a
+  value the owner set by hand on its own, never stops a run and never changes the memory guard's
+  limits; the memory guard's history only suggests (Apply). Why: a new user could not tell how many
+  runs at once were safe until the machine froze.
 - **2026-10-11** (#313, #314, #315): the app is free, open-source software under the MIT licence,
   for Windows, macOS and Linux. The trial is removed; sign-in stays required in the packaged app
   only to count the people using it (the account gates nothing). The history is not rewritten.

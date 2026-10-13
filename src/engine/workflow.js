@@ -121,7 +121,9 @@ class WorkflowRun extends EventEmitter {
   //   workflow's own `models` win per model (see modelLimits).
   // nightLimits (#337): () => tonight's limits ({ multiplier } | { values }) or null, called at each check
   //   (src/night-limits.js tonightLimits; see effectiveLimits in src/engine/run/costs.js).
-  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issues, issue, resume, worktreesDir, mockSequences, notices, stopProcesses, probe, actionsQuota, peerSessions, idleWarnMs, personas, localPreview, attachments, then, from, parent, startChild, memoryGuard, agentOverrides, fallbacks, models, nightLimits }) {
+  // testWorkers (#367): the machine profile's test workers per run (src/machine-profile.js), given to
+  //   the agents and the suite as MULTIAGENT_TEST_WORKERS / MULTIAGENT_E2E_WORKERS; null = not set.
+  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issues, issue, resume, worktreesDir, mockSequences, notices, stopProcesses, probe, actionsQuota, peerSessions, idleWarnMs, personas, localPreview, attachments, then, from, parent, startChild, memoryGuard, agentOverrides, fallbacks, models, nightLimits, testWorkers }) {
     super();
     refreshWindowsPath(); // actions (e.g. gh pr merge) need the refreshed PATH
     this.file = file;
@@ -151,6 +153,7 @@ class WorkflowRun extends EventEmitter {
     // suites while memory is low; the app's guard for a real run (null when turned off), none for a
     // simulation unless one is given
     this.memoryGuard = memoryGuard !== undefined ? memoryGuard : this.mock ? null : sharedMemoryGuard();
+    this.workers = Number.isInteger(testWorkers) && testWorkers >= 1 ? { testWorkers } : null;
     this.memoryNotes = new Map(); // agent -> [what the guard stopped], told in its next prompt
     this.memoryStops = new Map(); // `${step}\n${command}` -> stops (the second one notifies the owner)
     this.probe = probe || (this.mock ? (args) => this.mockProbe(args) : runProbe);
@@ -619,7 +622,7 @@ class WorkflowRun extends EventEmitter {
     const child = new WorkflowRun({
       file: found, inputs, mock: this.mock, runsDir: this.ctx.runs_dir, skillsDirs: this.skillsDirs.filter((d) => d !== BUNDLED_SKILLS),
       budget: this.budget, prices: this.prices, projectId: this.projectId, worktreesDir: this.worktreesDir, parent,
-      ...(this.stopProcesses === null ? { stopProcesses: null } : {}), idleWarnMs: this.idleWarnMs,
+      ...(this.stopProcesses === null ? { stopProcesses: null } : {}), idleWarnMs: this.idleWarnMs, testWorkers: this.workers?.testWorkers,
       notices: [{ level: 'info', message: `Child run of ${this.runId} (step ${parent.step_id}${label ? `, ${label}` : ''}).` }],
     });
     const finished = new Promise((resolve) => child.on('event', (ev) => {

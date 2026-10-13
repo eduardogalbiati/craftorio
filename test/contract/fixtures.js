@@ -198,6 +198,7 @@ module.exports = {
   },
   'run:stop': { setup: run, arg: ({ runId }) => ({ runId }), invalid: BAD_RUN },
   'settings:get': { arg: null },
+  'settings:machineProfile': { arg: null },
   'settings:set': { arg: {}, invalid: { arg: 42 } },
   'skills:create': { arg: () => ({ ...SKILL, name: unique('contract skill') }), invalid: NOT_AN_OBJECT },
   'skills:list': { arg: null },

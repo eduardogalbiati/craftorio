@@ -35,6 +35,7 @@ const runOwner = require('../../run-owner');
 const runPr = require('../../run-pr');
 const notifier = require('../../notifications');
 const nightLimits = require('../../night-limits');
+const machineProfile = require('../../machine-profile');
 const { num } = require('../common');
 
 // how often a child run waiting for a slot of Settings › Execution checks again (#175)
@@ -129,11 +130,14 @@ module.exports = (ctx) => {
 
   // ---- concurrent runs ------------------------------------------------------------------
   // Settings › Execution › Concurrent runs. Disabled: one run at a time, simulations included.
+  // The maximum is the machine profile's (#367): this machine's proposal in auto, the owner's in manual.
   function concurrency() {
-    const c = { ...workspace.DEFAULT_SETTINGS.concurrentRuns, ...(workspace.readSettings(ctx.ws).concurrentRuns || {}) };
+    const settings = workspace.readSettings(ctx.ws);
+    const c = { ...workspace.DEFAULT_SETTINGS.concurrentRuns, ...(settings.concurrentRuns || {}) };
     if (!c.enabled) return { enabled: false, max: 1, perProject: null, countSimulations: true };
+    const max = machineProfile.resolveLimits(settings, machineProfile.readMachine()).concurrentRuns;
     return {
-      enabled: true, max: Math.max(1, Math.floor(num(c.max) || 1)),
+      enabled: true, max: Math.max(1, Math.floor(num(max) || 1)),
       perProject: num(c.perProject) ? Math.max(1, Math.floor(num(c.perProject))) : null, countSimulations: !!c.countSimulations,
     };
   }
@@ -296,6 +300,8 @@ module.exports = (ctx) => {
         agentOverrides, fallbacks: settingsFallbacks(settings), models: settings.models || {},
         // #337: tonight's limits, read at each check (a raise reaches the run at its next one)
         nightLimits: () => nightLimits.tonightLimits(ws.oracle || path.join(ws.root, 'oracle')),
+        // #367: the machine profile's test workers per run (auto from this machine, or the owner's)
+        testWorkers: machineProfile.resolveLimits(settings, machineProfile.readMachine()).testWorkers,
         // `type: workflow` steps (#174): each child is a normal run of this service, linked to this one
         parent, startChild: (spec) => startChildRun(run, spec),
         // simulation runs never touch git: the agents are mocked and work in the repository folder

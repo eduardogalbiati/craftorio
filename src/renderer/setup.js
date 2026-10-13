@@ -7,7 +7,8 @@
 //   for (SetupModel), and one action, ▶ Install or ▶ Sign in, run in the terminal dock
 //   (runSuggestedCommand, command-hint.js); a row re-checks when its terminal exits; disabled with
 //   a tooltip where no terminal can run it (the browser UI, canRunCommands).
-// - Try it safely: Show simulation mode (= settings.developerMode), on by default on a first run.
+// - Try it safely: Show simulation mode (= settings.developerMode), on by default on a first run,
+//   and the machine profile's line (#367: runs at once and test workers sized from this machine).
 // - Workflows: the bundled workflows by category with their requirement badges and Ready / Missing
 //   state; the ready ones are picked (SetupModel.preselectedWorkflows), the unpicked ones go to
 //   settings.hiddenWorkflows at Finish (Workflows › Definitions › Show in Start undoes it).
@@ -33,6 +34,7 @@
     tools: null,       // env:details, null while checking
     picked: null,      // workflow ids picked in the Workflows step (null: not shown yet)
     simulation: true,  // the Try it safely switch
+    machine: null,     // settings:machineProfile (#367), its line shown in Try it safely
   };
   const $s = (sel) => document.querySelector(`#setup-modal ${sel}`);
 
@@ -132,7 +134,16 @@
           <div class="s-label"><b>Show simulation mode</b><span>Adds a Simulation checkbox to Start, checked by default. Turn it off later in Settings › Execution › Developer mode.</span></div>
           <label class="switch"><input type="checkbox" data-setup-sim data-testid="setup-simulation" aria-label="Show simulation mode" ${setup.simulation ? 'checked' : ''} /><span></span></label>
         </div>
+        <div class="s-row">
+          <div class="s-label"><b>Runs at once</b><span data-testid="machine-profile-line">${esc(setup.machine?.line || 'Reading this machine…')}</span><span>Sized from this machine's threads and memory. Turn on several runs at once, or set your own values, in Settings › Execution › Concurrent runs.</span></div>
+        </div>
       </div>`;
+  }
+
+  // the machine profile (#367): the line the Try it safely step shows
+  async function loadMachineProfile() {
+    try { setup.machine = await api.machineProfile(); } catch { setup.machine = { line: "This machine's threads and memory couldn't be read." }; }
+    if (setup.open && STEPS[setup.step].id === 'try-it-safely') render();
   }
 
   // ---------- Workflows ----------
@@ -265,6 +276,7 @@
     document.getElementById('setup-modal').classList.remove('hidden');
     render();
     $s('#btn-setup-next').focus({ preventScroll: true });
+    loadMachineProfile();
     try {
       [state.workflows, state.projects] = await Promise.all([api.listWorkflows(), api.listProjects()]);
     } catch { /* the lists app.js loaded stay */ }

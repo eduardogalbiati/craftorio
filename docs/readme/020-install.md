@@ -21,6 +21,11 @@ builds are not signed yet, so each system warns once before the first start.
   sandbox helper binary was found, but is not configured correctly", give the sandbox helper its
   rights once: `sudo chown root:root chrome-sandbox && sudo chmod 4755 chrome-sandbox`.
 
+**Sizing.** Each run in progress takes about 4 threads and 6 GB of RAM (its agent CLI, its tests,
+its tooling). The app reads this machine at start and proposes how many runs at once (1 to 6) and
+how many test workers per run (Settings › Execution › Concurrent runs, also shown in the Setup); a
+value you set by hand always wins.
+
 The CLIs the workflows use are installed separately: see
 [Installing the CLIs on Windows](#installing-the-clis-on-windows) and its macOS and Linux part.
 

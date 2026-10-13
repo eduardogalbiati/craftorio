@@ -8,6 +8,11 @@ used_by: "test writer, E2E runner"
 
 # E2E scenarios: JavaScript / TypeScript
 
+**Test workers (#367)**: a run gets `MULTIAGENT_TEST_WORKERS` (and `MULTIAGENT_E2E_WORKERS`) in its
+environment, the workers this machine gives each run so parallel runs do not overload it. Read it
+once (`printenv MULTIAGENT_TEST_WORKERS`) and pass the number to the runner you call: Playwright `--workers=<n>` (this repository's playwright.config.js already reads MULTIAGENT_E2E_WORKERS).
+Unset: leave the runner's default.
+
 ## Framework and commands (never switch frameworks)
 
 | Signal in the repository | Framework | Feature folder | Development run: check they parse | Release run: one feature file |

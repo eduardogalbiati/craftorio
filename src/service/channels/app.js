@@ -1,8 +1,11 @@
 // The app itself: installed CLIs, version, settings and the workspace folder.
 
+const fs = require('fs');
 const os = require('os');
+const path = require('path');
 const { resolveCommand } = require('../../engine/providers');
 const simulation = require('../../engine/simulation');
+const machineProfile = require('../../machine-profile');
 const workspace = require('../../workspace');
 const {
   BOOL,
@@ -16,6 +19,30 @@ const {
 } = require('../schemas');
 
 const CLI_PATH = nullable(STRING);
+const DAY_MS = 864e5;
+
+// The memory guard's events (#276: memory.hold, process.killed) of the runs written since `from`
+// (epoch ms), each with its run id; only the lines that name one are parsed.
+const MEMORY_LINE = /"type"\s*:\s*"(memory\.hold|process\.killed)"/;
+function memoryGuardEvents(runsDir, from) {
+  const out = [];
+  let ids = [];
+  try { ids = fs.readdirSync(runsDir); } catch { return out; }
+  for (const id of ids) {
+    const file = path.join(runsDir, id, 'events.jsonl');
+    let text;
+    try {
+      if (fs.statSync(file).mtimeMs < from) continue;
+      text = fs.readFileSync(file, 'utf8');
+    } catch { continue; }
+    if (!MEMORY_LINE.test(text)) continue;
+    for (const line of text.split('\n')) {
+      if (!MEMORY_LINE.test(line)) continue;
+      try { const e = JSON.parse(line); out.push({ ...e, run_id: e.run_id || id }); } catch { /* a cut line */ }
+    }
+  }
+  return out;
+}
 
 module.exports = (ctx) => [
   {
@@ -65,6 +92,28 @@ module.exports = (ctx) => [
   // the code this process started with and the code on disk now (changed: a restart is needed, #83)
   { channel: 'app:codeVersion', method: 'codeVersion', schema: { result: OBJECT }, fn: () => ctx.code.check() },
   { channel: 'settings:get', method: 'getSettings', schema: { result: OBJECT }, fn: () => workspace.readSettings(ctx.ws) },
+  // the machine profile (#367, src/machine-profile.js) for Settings › Execution and the Setup: the
+  // values in force (auto | manual | unknown), this machine's line and proposal, and the memory guard's
+  // suggestion of the last 7 days (null when none). Read-only: Apply goes through settings:set.
+  {
+    channel: 'settings:machineProfile',
+    method: 'machineProfile',
+    schema: {
+      result: shape({
+        state: STRING, concurrentRuns: NUMBER, testWorkers: NUMBER, line: STRING, machine: OBJECT, proposal: nullable(OBJECT), suggestion: nullable(OBJECT),
+      }, ['state', 'concurrentRuns', 'testWorkers', 'line']),
+    },
+    fn: () => {
+      const settings = workspace.readSettings(ctx.ws);
+      const resolved = machineProfile.resolveLimits(settings, machineProfile.readMachine());
+      const now = Date.now();
+      const events = memoryGuardEvents(ctx.ws.runs, now - machineProfile.CONSTANTS.SUGGEST_DAYS * DAY_MS);
+      const suggestion = settings.concurrentRuns?.enabled
+        ? machineProfile.suggestFromMemoryGuard(events, { now, concurrentRuns: resolved.concurrentRuns, timeZone: settings.timeZone })
+        : null;
+      return { ...resolved, line: machineProfile.machineLine(resolved), suggestion };
+    },
+  },
   // patch: the settings to change (src/workspace.js writeSettings checks each one) → the settings
   {
     channel: 'settings:set',
@@ -74,7 +123,7 @@ module.exports = (ctx) => [
     fn: (patch) => {
       const next = workspace.writeSettings(ctx.ws, patch);
       // a higher limit of concurrent runs frees slots for the Backlog queues
-      if (patch && 'concurrentRuns' in patch) ctx.dispatchQueue().catch((e) => console.error('backlog dispatch:', e));
+      if (patch && ('concurrentRuns' in patch || 'machineProfile' in patch)) ctx.dispatchQueue().catch((e) => console.error('backlog dispatch:', e));
       // the desktop app re-checks Keep awake (#162, src/main.js)
       ctx.events.emit('settings:changed', next);
       return next;

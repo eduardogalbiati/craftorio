@@ -158,7 +158,7 @@ const methods = {
     this.emitEvent('log', { level: 'info', kind: 'test_request', agent: agentName, step_id: stepId || null, message: `[${agentName}] asked to run ${files.length} test file(s): the orchestrator runs them (log logs/${name}.log)` });
     const output = await suiteStep.runSuite({
       command: this.suiteCommand(), cwd, runDir: this.runDir, round: this.testRequests, logName: name,
-      env: { ...process.env, ...capabilities.agentEnv() }, mock: this.mock, preexisting: this.preexisting, signal: this.abort.signal,
+      env: { ...process.env, ...capabilities.agentEnv() }, testWorkers: this.workers?.testWorkers, mock: this.mock, preexisting: this.preexisting, signal: this.abort.signal,
       base: () => this.suiteBase(), baseCacheDir: path.join(root, 'cache', 'base-tests'),
       files, selection: { mode: 'affected', files, reasons, why },
       log: (level, message) => this.emitEvent('log', { level, message }),

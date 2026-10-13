@@ -8,6 +8,11 @@ used_by: "builder"
 
 # Build and audit: Rust
 
+**Test workers (#367)**: a run gets `MULTIAGENT_TEST_WORKERS` (and `MULTIAGENT_E2E_WORKERS`) in its
+environment, the workers this machine gives each run so parallel runs do not overload it. Read it
+once (`printenv MULTIAGENT_TEST_WORKERS`) and pass the number to the runner you call: `cargo build -j <n>`, `cargo test -- --test-threads=<n>`.
+Unset: leave the runner's default.
+
 ## Build cache: one target folder per worktree
 
 Each run has its own worktree. Its steps (developer, test writer, builder) share one target

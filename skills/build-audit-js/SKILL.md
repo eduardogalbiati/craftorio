@@ -8,6 +8,11 @@ used_by: "builder"
 
 # Build and audit: JavaScript / TypeScript
 
+**Test workers (#367)**: a run gets `MULTIAGENT_TEST_WORKERS` (and `MULTIAGENT_E2E_WORKERS`) in its
+environment, the workers this machine gives each run so parallel runs do not overload it. Read it
+once (`printenv MULTIAGENT_TEST_WORKERS`) and pass the number to the runner you call: a test run: Jest/Vitest `--maxWorkers=<n>`, Playwright `--workers=<n>`.
+Unset: leave the runner's default.
+
 ## Package manager
 
 From the lockfile: `package-lock.json` → npm · `pnpm-lock.yaml` → pnpm · `yarn.lock` → yarn
