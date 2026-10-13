@@ -18,7 +18,7 @@ const clip = (s) => (s.length > MAX_CHARS ? `${s.slice(0, MAX_CHARS)}\n… (clip
 const json = (x) => JSON.stringify(x, null, 1);
 const obj = (properties = {}, required = []) => ({ type: 'object', properties, required, additionalProperties: false });
 const str = (description) => ({ type: 'string', description });
-// Drops what only the UI shows (an input's label and its options' labels, an agent's colour) from list_workflows.
+// Drops what only the UI shows (an input's label, help line and options' labels, an agent's colour) from list_workflows.
 const withoutUi = (map, ...fields) => Object.fromEntries(Object.entries(map || {}).map(([k, v]) => [k, Object.fromEntries(Object.entries(v).filter(([f]) => !fields.includes(f)))]));
 // Drops a step's empty fields (agents null, goal/loop false, no skills): an absent field reads the same.
 // Nor the transitions a mode turns on (#282): the roadmap card draws its pipeline with them, `next` already names where a step goes.
@@ -41,8 +41,10 @@ function supervisorTools(ctx) {
       // Nor the inputs' options (#260: release.yaml pushed them over again): the labels of the values `enum` already lists.
       // Nor the roadmap card's pipeline data (#282: the steps' mode transitions pushed them over again; the groups are not picked).
       // Nor the agents' runs_on (#262: the Start drawer's resolved provider/model, already in the agent, pushed them over again).
+      // Nor the inputs' descriptions (#340: rust in the language enums pushed them over again): the Start panel's help
+      // lines, a quarter of the inputs' payload; read_workflow has them.
       run: () => JSON.stringify(ctx.listWorkflows().map(({ file, origin, name, version, description, category, tags, inputs, outputs, agents: a, steps }) => (
-        { file, origin, name, version, description, category, tags, inputs: withoutUi(inputs, 'label', 'options'), outputs, agents: withoutUi(a, 'color', 'runs_on'), steps: (steps || []).map(compactStep) }))),
+        { file, origin, name, version, description, category, tags, inputs: withoutUi(inputs, 'label', 'options', 'description'), outputs, agents: withoutUi(a, 'color', 'runs_on'), steps: (steps || []).map(compactStep) }))),
     },
     {
       name: 'read_workflow',
