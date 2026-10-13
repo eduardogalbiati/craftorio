@@ -33,6 +33,13 @@ test('planOs: docs the tests read are not docs-only', () => {
   }
 });
 
+test('#341 planOs: every file of the cargo workspace (native/**) is code, its Markdown too', () => {
+  for (const file of ['native/Cargo.toml', 'native/Cargo.lock', 'native/multiagent-mcp/src/main.rs', 'native/multiagent-mcp/README.md', 'native/README.md']) {
+    const os = planOs({ event: 'pull_request', files: ['README.md', file] });
+    assert.ok(os.includes('ubuntu-latest') && os.includes('windows-latest'), `${file}: ${JSON.stringify(os)}`);
+  }
+});
+
 test('planOs: a PR that changes only AGENTS.md runs the tests, like CLAUDE.md (its size cap and links are tested, #331)', () => {
   assert.deepEqual(planOs({ event: 'pull_request', files: ['AGENTS.md'] }), ['ubuntu-latest', 'windows-latest']);
 });
