@@ -189,6 +189,77 @@ test('#354 Conflict map tab: "7 days" reads the last 7 days', async () => {
   assert.equal((Date.parse(to) - Date.parse(from)) / DAY, 6, `from ${from} to ${to}`);
 });
 
+// an event of `type` on a parsed element of the tab, through the project page's own listeners
+async function fire(app, type, el, extra = {}) {
+  const target = app.el(`[data-test-${type}-${(fired += 1)}]`);
+  for (const [k, v] of Object.entries(el.attrs)) {
+    if (k.startsWith('data-')) target.dataset[k.slice(5).replace(/-([a-z])/g, (_, c) => c.toUpperCase())] = v;
+    else target.attrs[k] = v;
+  }
+  Object.assign(target, extra);
+  const ev = { type, target, currentTarget: target, key: extra.key || '', defaultPrevented: false, preventDefault() { this.defaultPrevented = true; }, stopPropagation() {} };
+  for (const fn of app.el('#view-project').listeners[type] || []) await fn(ev);
+  await app.settle(10);
+  return ev;
+}
+let fired = 0;
+const input = (app, attr) => H.findEl(region(app, 'project-conflict-map'), (e) => e.name === 'input' && attr in e.attrs);
+const pressed = (app) => H.findAll(region(app, 'project-conflict-map'), (e) => e.name === 'button' && e.attrs['aria-pressed'] === 'true').map((e) => H.visibleText(e.inner));
+const detailShown = (app) => hasTestId(app, 'project-conflict-detail', { defs: false });
+
+test('#354 Conflict map tab: Enter or Space on a row opens it, another key does not', async () => {
+  for (const [key, opens] of [['Enter', true], [' ', true], ['a', false]]) {
+    const app = await conflictTab();
+    await fire(app, 'keydown', row(app, 'src/a.js'), { key });
+    assert.equal(detailShown(app), opens, `key ${JSON.stringify(key)}`);
+  }
+});
+
+test('#354 Conflict map tab: a From date reads that range again, with no quick range pressed', async () => {
+  const app = await conflictTab();
+  assert.deepEqual(pressed(app), ['30 days']);
+  const before = app.callsTo('getRepositoryPerformance').length;
+  await fire(app, 'change', input(app, 'data-pcm-from'), { value: '2026-09-01' });
+  assert.equal(app.callsTo('getRepositoryPerformance').length - before, 1);
+  assert.equal(lastPerfArgs(app).from, '2026-09-01');
+  assert.deepEqual(pressed(app), []);
+});
+
+test('#354 Conflict map tab: a To date reads the range up to it', async () => {
+  const app = await conflictTab();
+  await fire(app, 'change', input(app, 'data-pcm-to'), { value: '2026-10-05' });
+  assert.equal(lastPerfArgs(app).to, '2026-10-05');
+  assert.deepEqual(pressed(app), []);
+});
+
+test('#354 Conflict map tab: a before/after marker reads the data again with it', async () => {
+  const app = await conflictTab();
+  await fire(app, 'change', input(app, 'data-pcm-marker'), { value: '  abc1234 ' });
+  assert.equal(lastPerfArgs(app).marker, 'abc1234');
+});
+
+test('#354 Conflict map tab: a file only the saved map has shows the map\'s share of its runs', async () => {
+  const app = await conflictTab();
+  const t = H.visibleText(row(app, 'src/only-map.js').inner);
+  assert.match(t, /\b2\b/, `row: ${t}`);
+  assert.match(t, /\b33%/, `row: ${t}`);
+});
+
+test('#354 Conflict map tab: "Create issue" of an opened file over the limit opens the Issue tracker prefilled', async () => {
+  const app = await conflictTab();
+  // the Start drawer is another screen: record what it is asked to open
+  app.run('openDrawer = (o) => { globalThis.__drawer = o; }');
+  await clickRendered(app, row(app, 'src/a.js'));
+  const btn = H.findEl(region(app, 'project-conflict-detail'), (e) => e.attrs['data-testid'] === 'pcm-create-issue');
+  assert.ok(btn, 'no "Create issue" button in the opened row');
+  await clickRendered(app, btn);
+  const drawer = app.run('globalThis.__drawer && JSON.stringify(globalThis.__drawer)');
+  assert.ok(drawer, 'the Issue tracker drawer did not open');
+  const { workflow, project, inputs } = JSON.parse(drawer);
+  assert.deepEqual([workflow, project], ['issue-tracker.yaml', 'p1']);
+  assert.ok(inputs.request.includes('src/a.js') && inputs.request.includes('Split it by feature'), `request: ${inputs.request}`);
+});
+
 // ---- what the Roadmap and Analytics › Performance keep ------------------------------------------
 
 test('#354 the Roadmap no longer draws the Conflict map panel: a one-line link "Conflict map: in Projects › <project>" in its place', async () => {
