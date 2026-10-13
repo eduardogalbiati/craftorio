@@ -1,0 +1,36 @@
+# The cargo workspace of the app's native sidecars (#341): small binaries that run outside the app's
+# process, shipped in resources/bin/ by scripts/package.js. One crate per binary.
+#   multiagent-mcp: the supervisor's and the Oracle's stdio MCP server (the Rust twin of src/supervisor-mcp.js)
+# Build: cargo build --release --manifest-path native/Cargo.toml (output in native/target/, gitignored).
+
+[workspace]
+resolver = "3"
+members = [
+    "multiagent-mcp",
+]
+
+[workspace.package]
+edition = "2024"
+license = "MIT"
+publish = false
+rust-version = "1.85"
+
+[workspace.dependencies]
+serde_json = "1"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+# Never crash: non-test code handles every error. clippy.toml allows these in tests.
+[workspace.lints.clippy]
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+unreachable = "deny"
+unwrap_used = "deny"
+
+[profile.release]
+codegen-units = 1
+lto = true
+strip = true

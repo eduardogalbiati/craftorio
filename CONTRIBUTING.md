@@ -7,6 +7,11 @@ Thanks for your interest in Multiagent Orchestrator. Issues and pull requests ar
 1. Install the Node version in [`.nvmrc`](.nvmrc) (`nvm use`, or install it by hand).
 2. `npm install`
 3. `npm start` opens the app.
+4. Optional: the Rust toolchain (`rustup`, stable; on Windows with the MSVC build tools). `cargo`
+   builds the native sidecars in `native/` (the supervisor's MCP server, `multiagent-mcp`). It is
+   optional for JS-only changes: without cargo the app uses the JS fallback
+   (`src/supervisor-mcp.js`) and `npm test` skips the binary's cases. A change under `native/`, and
+   `npm run package`, need it.
 
 **Sign-in during development**: the packaged app asks for an account (it only counts the people
 using the app). From source, set `MULTIAGENT_AUTH=off` to skip it:
@@ -28,6 +33,8 @@ so you can try a change for free.
 - `node scripts/docs.js --check` checks that the generated README tables are up to date
   (`npm run docs` regenerates them).
 - `npm run lint:lists` checks that shared name lists are one item per line, sorted.
+- Rust changes (`native/`): `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings` and
+  `cargo test`, each with `--manifest-path native/Cargo.toml` (CI runs them on every OS).
 - UI changes: `npx electron scripts/smoke.js <out.png>` (a simulated run and a screenshot) or
   `npm run screenshot -- --view <screen> --out <dir>`.
 

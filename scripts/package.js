@@ -2,6 +2,8 @@
 // by default. Requires Node 24 (see .nvmrc). The release jobs (deploy.yml, preview.yml) run it on each OS.
 //   node scripts/package.js [--platform win32|darwin|linux] [--arch x64|arm64] [output-folder]   (default: dist/)
 // Icons: assets/icon.ico, .icns and .png, generated from one source image by scripts/icons.js.
+// Native sidecars (#341): first builds the cargo workspace native/ in release for the target (needs
+// rustup and stable Rust) and ships its binaries in resources/bin/, outside app.asar.
 // Exports parseArgs, executablePath and packagerOptions for the tests; packages only when run directly.
 
 const path = require('path');
@@ -50,6 +52,47 @@ async function hardenExe(exe, platform) {
   });
 }
 
+// The native sidecars (native/, #341): the Rust target of each platform and arch, and the binaries
+// shipped in resources/bin/ (src/supervisor-bridge.js mcpBinaryPath finds them there).
+const RUST_TARGETS = {
+  'darwin-arm64': 'aarch64-apple-darwin',
+  'darwin-x64': 'x86_64-apple-darwin',
+  'linux-arm64': 'aarch64-unknown-linux-gnu',
+  'linux-x64': 'x86_64-unknown-linux-gnu',
+  'win32-arm64': 'aarch64-pc-windows-msvc',
+  'win32-x64': 'x86_64-pc-windows-msvc',
+};
+const NATIVE_BINARIES = ['multiagent-mcp'];
+
+// The folder packaged as resources/bin/ for one platform and arch (filled by buildNative).
+function nativeBinDir({ platform, arch, out }) {
+  return path.join(out, '.native', `${platform}-${arch}`, 'bin');
+}
+
+// Builds the native sidecars in release for the target and copies them into nativeBinDir. Needs cargo
+// (rustup, stable); the release jobs install it. macOS: signed ad hoc, like the app.
+function buildNative(opts, run = require('child_process').spawnSync) {
+  const fs = require('fs');
+  const target = RUST_TARGETS[`${opts.platform}-${opts.arch}`];
+  const manifest = path.join(root, 'native', 'Cargo.toml');
+  const exec = (cmd, args) => {
+    const r = run(cmd, args, { stdio: 'inherit' });
+    if (r.error || r.status !== 0) throw new Error(`${cmd} ${args.join(' ')} failed${r.error ? `: ${r.error.message}` : ''} (the build needs the Rust toolchain: rustup, stable)`);
+  };
+  exec('rustup', ['target', 'add', target]);
+  exec('cargo', ['build', '--release', '--locked', '--manifest-path', manifest, '--target', target, ...NATIVE_BINARIES.flatMap((b) => ['-p', b])]);
+  const targetDir = process.env.CARGO_TARGET_DIR || path.join(root, 'native', 'target');
+  const dir = nativeBinDir(opts);
+  fs.rmSync(dir, { recursive: true, force: true });
+  fs.mkdirSync(dir, { recursive: true });
+  for (const name of NATIVE_BINARIES) {
+    const file = opts.platform === 'win32' ? `${name}.exe` : name;
+    fs.copyFileSync(path.join(targetDir, target, 'release', file), path.join(dir, file));
+    if (opts.platform === 'darwin' && process.platform === 'darwin') exec('codesign', ['--force', '--sign', '-', path.join(dir, file)]);
+  }
+  return dir;
+}
+
 // The @electron/packager options: the same app, ignore and unpack lists on every OS.
 function packagerOptions({ platform, arch, out }) {
   return {
@@ -65,8 +108,11 @@ function packagerOptions({ platform, arch, out }) {
     // node-pty is a native module (embedded terminals): it has to live outside app.asar.
     // session-tail.js runs under the system node in the external live terminal (see
     // terminalSpec in src/main.js), and node can't read app.asar.
-    // supervisor-mcp.js (the supervisor's MCP server, a child of claude) likewise.
+    // supervisor-mcp.js (the supervisor's MCP server, a child of claude) likewise: the fallback when
+    // the Rust multiagent-mcp is missing from resources/bin/ (an older build, a dev checkout).
     asar: { unpack: '{**/node_modules/node-pty/**,**/src/session-tail.js,**/src/supervisor-mcp.js}' },
+    // the native sidecars (buildNative), outside app.asar: resources/bin/multiagent-mcp[.exe]
+    extraResource: [nativeBinDir({ platform, arch, out })],
     // .claude/ may contain worktrees from other sessions (with their own node_modules); poc/ holds
     // proofs of concept, never part of the app; generated/ (the run's 3D view, scripts/build-3d.js) is
     // packed, and src/renderer/run3d/ (its sources) is not needed once bundled
@@ -83,14 +129,18 @@ function packagerOptions({ platform, arch, out }) {
 }
 
 module.exports = {
+  buildNative,
   executablePath,
+  nativeBinDir,
   packagerOptions,
   parseArgs,
+  RUST_TARGETS,
 };
 
 if (require.main === module) {
   (async () => {
     const opts = parseArgs(process.argv.slice(2));
+    buildNative(opts);
     const { packager } = await import('@electron/packager');
     const paths = await packager(packagerOptions(opts));
     console.log(`Build created at: ${paths.join(', ')}`);

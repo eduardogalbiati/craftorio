@@ -70,3 +70,19 @@ These writing skills follow the structure of a published practice or standard; n
 - `test-plan-writing`: the test plan contents of ISO/IEC/IEEE 29119-3 (which superseded IEEE 829).
 
 A new skill or workflow adapted from an MIT project must be added here (a test checks it).
+
+## Rust crates (native sidecars)
+
+The native sidecars (`native/`, shipped in `resources/bin/`) are built with these crates from
+crates.io, each used under its MIT license (the MIT permission notice above). Their copyright
+notices are in each crate's sources (`cargo tree -e normal -f "{p} {l}"` lists them).
+
+| Crate | License | Used by |
+|---|---|---|
+| serde_json | MIT OR Apache-2.0 | multiagent-mcp (direct dependency) |
+| itoa | MIT OR Apache-2.0 | serde_json |
+| memchr | Unlicense OR MIT | serde_json |
+| serde_core | MIT OR Apache-2.0 | serde_json |
+| zmij | MIT | serde_json |
+
+A new Rust dependency must be added here (a test checks the direct ones).

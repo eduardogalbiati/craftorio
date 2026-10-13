@@ -72,6 +72,20 @@ jobs:
       # node-pty's install script is approved in package.json (allowScripts): prebuilt binaries on
       # Windows and macOS, a node-gyp build on Linux
       - run: npm ci
+      # The cargo workspace of the native sidecars (native/, #341): checked on every OS; npm test then
+      # builds multiagent-mcp in release and runs the MCP cases against it (CI never skips them)
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: native
+      - name: Rust format
+        run: cargo fmt --manifest-path native/Cargo.toml --all -- --check
+      - name: Rust lints
+        run: cargo clippy --manifest-path native/Cargo.toml --locked --all-targets -- -D warnings
+      - name: Rust tests
+        run: cargo test --manifest-path native/Cargo.toml --locked
       - name: Syntax check
         run: for f in $(git ls-files '*.js'); do node --check "$f" || exit 1; done
       # README tables and index.html's generated script/style lists match their sources (#152)

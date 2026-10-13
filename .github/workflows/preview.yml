@@ -104,6 +104,11 @@ jobs:
           sudo apt-get install -y xvfb
           curl -fsSL -o "$RUNNER_TEMP/appimagetool" https://github.com/AppImage/appimagetool/releases/download/1.9.0/appimagetool-x86_64.AppImage
           chmod +x "$RUNNER_TEMP/appimagetool"
+      # scripts/package.js builds the native sidecars (native/, #341) for this leg's target into resources/bin/
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: native
       - run: npm ci
       - run: npm test
         if: steps.plan.outputs.tested != 'true'

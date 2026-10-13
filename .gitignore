@@ -2,6 +2,8 @@ node_modules/
 runs/
 dist/
 build/
+# cargo's output (native/, #341); Cargo.lock is committed
+native/target/
 # release files (scripts/release-assets.js writes them to the current folder)
 /MultiagentOrchestrator-*.zip
 /MultiagentOrchestrator-*.tar.gz

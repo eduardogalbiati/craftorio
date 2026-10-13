@@ -70,6 +70,7 @@ readline.createInterface({ input: process.stdin }).on('line', async (line) => {
   try {
     write({ id: msg.id, result: await handle(msg) });
   } catch (e) {
-    write({ id: msg.id, error: { code: e.code || -32603, message: e.message || String(e) } });
+    // a JSON-RPC code is a number: Node's own codes (ECONNREFUSED when the bridge is down) are -32603
+    write({ id: msg.id, error: { code: Number.isInteger(e.code) ? e.code : -32603, message: e.message || String(e) } });
   }
 });

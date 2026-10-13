@@ -7,15 +7,27 @@
 // The Oracle (src/oracle.js) has its own bridge over its own tools; mcpCommand serves both.
 
 const crypto = require('crypto');
+const fs = require('fs');
 const http = require('http');
 const path = require('path');
 const { callTool, describeTools } = require('./supervisor-tools');
 
 const MAX_BODY = 1024 * 1024;
 
-// How `claude` starts the MCP server. Dev: Electron itself as node. Packaged: the RunAsNode fuse is
-// off, so the system node runs the unpacked copy (node can't read app.asar), like session-tail.js.
-function mcpCommand(isPackaged, resolveCommand) {
+// Where the Rust MCP server (native/multiagent-mcp, #341) of this platform lives: packaged, in
+// resources/bin/ (scripts/package.js); in a dev checkout, cargo's release output under native/.
+// Never looked up on the PATH.
+function mcpBinaryPath({ isPackaged, resourcesPath = process.resourcesPath, platform = process.platform } = {}) {
+  const name = platform === 'win32' ? 'multiagent-mcp.exe' : 'multiagent-mcp';
+  if (isPackaged) return path.join(resourcesPath, 'bin', name);
+  return path.join(__dirname, '..', 'native', 'target', 'release', name);
+}
+
+// How `claude` starts the MCP server: the Rust binary when it exists (no Node needed), else the JS
+// script. Dev: Electron itself as node. Packaged: the RunAsNode fuse is off, so the system node runs
+// the unpacked copy (node can't read app.asar), like session-tail.js.
+function mcpCommand(isPackaged, resolveCommand, { binary = mcpBinaryPath({ isPackaged }) } = {}) {
+  if (fs.existsSync(binary)) return { command: binary, args: [], env: {} };
   const script = path.join(__dirname, 'supervisor-mcp.js').replace(/app\.asar([\\/])/, 'app.asar.unpacked$1');
   const node = isPackaged ? resolveCommand('node') : { file: process.execPath };
   if (!node) throw new Error('The supervisor\'s tools need Node.js on the PATH.');
@@ -65,5 +77,6 @@ function createBridge({ tools }) {
 
 module.exports = {
   createBridge,
+  mcpBinaryPath,
   mcpCommand,
 };

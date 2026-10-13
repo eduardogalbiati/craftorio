@@ -25,10 +25,12 @@ const TESTED_CONTEXT = 'ci/tested';
 // Changes that cannot break `npm test`. Not every .md: the tests read AGENTS.md, CLAUDE.md,
 // docs/agents/*.md (test/claude-md.test.js), the bundled skills (skills/**, seeded and parsed by the engine tests)
 // and the README's fragments (docs/screens/, docs/features/: test/docs.test.js checks the README's
-// generated sections against them).
+// generated sections against them). The cargo workspace (native/, #341) is code, its Markdown too:
+// CI checks the whole workspace (a crate may include its README as docs).
 function isDocsFile(file) {
   if (!file.toLowerCase().endsWith('.md')) return false;
   if (file === 'AGENTS.md' || file === 'CLAUDE.md' || file.startsWith('docs/agents/') || file.startsWith('skills/')) return false;
+  if (file.startsWith('native/')) return false;
   if (file.startsWith('docs/screens/') || file.startsWith('docs/features/')) return false;
   return true;
 }
@@ -39,7 +41,7 @@ const MACOS_PATHS = [
   'src/engine/worktree.js', 'src/engine/processes.js', 'src/terminals.js',
   'test/worktree.test.js', 'test/processes.test.js', 'test/terminals.test.js',
   'scripts/package.js', 'scripts/ci-plan.js', 'package.json', 'package-lock.json', '.nvmrc',
-  '.github/workflows/',
+  '.github/workflows/', 'native/',
 ];
 const isMacosFile = (file) => MACOS_PATHS.some((p) => (p.endsWith('/') ? file.startsWith(p) : file === p));
 

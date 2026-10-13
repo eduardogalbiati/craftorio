@@ -13,6 +13,20 @@ the workspace folder.
   `writeBuffer`, `readImage` and `readBuffer` are gone: write an image as
   `clipboard.write([new ClipboardItem({ 'image/png': new Blob([img.toPNG()]) })])` and await it
   (`src/main.js`, #139). Raw OS formats use `electron application/osclipboard;format="<name>"`.
+- Rust (#341): **stable** through `rustup` (cargo 1.99 here; the workspace needs 1.85+ for edition
+  2024), with the **MSVC** build tools on Windows (Visual Studio Build Tools, "Desktop development
+  with C++"; `rustup` installs the `x86_64-pc-windows-msvc` toolchain). The cargo workspace is
+  `native/` (one crate per sidecar binary, `Cargo.lock` committed, never-crash clippy lints
+  denied outside tests via `native/clippy.toml`). Checks: `cargo fmt --manifest-path
+  native/Cargo.toml --all -- --check`, `cargo clippy --manifest-path native/Cargo.toml
+  --all-targets -- -D warnings`, `cargo test --manifest-path native/Cargo.toml`. The **target
+  folder is per worktree** (`native/target/`, gitignored; `CARGO_TARGET_DIR` moves it, and
+  `test/supervisor-mcp.test.js` follows it): a run's first `npm test` builds `multiagent-mcp` in
+  release (about a minute), later ones are incremental. Without cargo, `npm test` skips the
+  binary's cases with one line; CI never does. `mcpCommand` (`src/supervisor-bridge.js`) starts
+  `native/target/release/multiagent-mcp[.exe]` when it exists (packaged: `resources/bin/`), else
+  `src/supervisor-mcp.js` under Node; never a binary from PATH. `npm run package` builds the
+  release target of the platform and arch (`rustup target add` first) and needs cargo.
 - Installed CLIs: `claude` (~/.local/bin), `codex` (WinGet), `grok` (~/.grok/bin), `gh` in
   `C:\Program Files\GitHub CLI\gh.exe`, `glab` optional. Inside runs the engine refreshes PATH
   (`refreshWindowsPath`), so agents call bare `gh`/`glab` (see [capabilities.md](capabilities.md)).

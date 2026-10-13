@@ -8,6 +8,7 @@
 //   path in APPIMAGETOOL). The AppImage's AppRun turns Chromium's sandbox off only when the kernel
 //   refuses unprivileged user namespaces (Ubuntu 23.10+): the setuid chrome-sandbox cannot work from
 //   the AppImage's read-only mount.
+// Every asset carries the native sidecars package.js built for its target (resources/bin/, #341).
 // Exports assetNames for the tests; builds the assets only when run directly.
 
 const { execFileSync } = require('child_process');
