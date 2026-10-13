@@ -760,5 +760,29 @@
     "kind": "order",
     "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n    kind: x\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\norchestrator:\n  supervisor:\n    on_call: x\n",
     "error": "Step \"build\": kind must be one of decision, escalation, on a human_approval step."
+  },
+  {
+    "name": "wait: null on a looping step",
+    "kind": "required",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n    loop:\n      max: 3\n    wait: null\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"build\": wait.probe must be one of pr_checks, pr_changes, workflow_run, pr_mergeable."
+  },
+  {
+    "name": "stall: null",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n    stall: null\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"build\": stall.same_output_fields must be a non-empty list of output field names."
+  },
+  {
+    "name": "transition: ship a text",
+    "kind": "required",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - goto: end\n        ship: v1\n",
+    "error": "Step \"gate\": transition ship needs a tag (ship: { tag: \"{{ inputs.version }}\" })."
+  },
+  {
+    "name": "agent: max_context a list holding a template is refused (#352 change)",
+    "kind": "template",
+    "yaml": "agents:\n  dev:\n    provider: mock\n    max_context:\n      - '{{ inputs.ctx }}'\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Agent \"dev\": max_context must be a token count such as 150k."
   }
 ]

@@ -123,6 +123,25 @@ test('#366 loading the config prints one start line with the choice, and a warni
   assert.equal(bad.printed.some((l) => l.includes('MULTIAGENT_E2E_WORKERS') && l.includes('abc')), true, `printed: ${JSON.stringify(bad.printed)}`);
 });
 
+test('#366 a Playwright worker process loading the config prints nothing (the line is printed once, by the main process)', (t) => {
+  const before = process.env.TEST_WORKER_INDEX;
+  t.after(() => { if (before === undefined) delete process.env.TEST_WORKER_INDEX; else process.env.TEST_WORKER_INDEX = before; });
+  process.env.TEST_WORKER_INDEX = '0';
+  for (const value of [undefined, '3']) {
+    const r = configOn(t, value, { threads: 20, free: 11 });
+    assert.deepEqual(r.printed.filter((l) => l.startsWith('E2E: ')), [], `MULTIAGENT_E2E_WORKERS=${value}`);
+  }
+});
+
+test('#366 a number with surrounding spaces is still that number', (t) => {
+  const { e2eWorkers } = load();
+  const r = e2eWorkers({ value: ' 3 ', threads: 4, freeBytes: 5 * GB });
+  assert.equal(r.workers, 3);
+  assert.equal(Boolean(r.warning), false);
+  const c = configOn(t, ' 3 ', { threads: 4, free: 5 });
+  assert.deepEqual([c.pool, c.behaviour, c.visual], [3, 3, 1]);
+});
+
 test("#366 the config's header documents auto and points at the measurements", () => {
   const header = read('playwright.config.js').split(/\r?\n/).filter((l) => l.startsWith('//')).join('\n');
   assert.match(header, /#366/);
