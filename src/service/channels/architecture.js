@@ -6,6 +6,10 @@
 // project's real finished runs since), the cost estimate from the last real analyses, the
 // project's exclude list, and "Send to Refactor": a finding becomes a proposal of the Refactor tab
 // (src/refactor-proposals.js, refactor:proposals).
+// The project city (#371): architecture:city is the facts grouped by the saved city plan (folder
+// districts without one) with its edges and validation (src/architecture-facts.js readCity, core
+// src/shared/city-model.js); architecture:savePlan checks a plan against CITY_PLAN_SCHEMA and saves
+// it, keeping the one it replaces. Neither starts a model call.
 
 const path = require('path');
 const agents = require('../../agents');
@@ -15,6 +19,8 @@ const projects = require('../../projects');
 const proposals = require('../../refactor-proposals');
 const runs = require('../../runs');
 const simulation = require('../../engine/simulation');
+const { validateSchema } = require('../../json-schema');
+const { CITY_PLAN_SCHEMA } = require('../../shared/city-model');
 const { clientError, requireId } = require('../common');
 const {
   ANY,
@@ -35,6 +41,7 @@ const WINDOW = { since: DATE, until: DATE, includeMass: FLAG, refresh: FLAG };
 const FACTS = shape({ state: { type: 'string', enum: ['ok', 'not-git', 'no-commits'] }, model: nullable(OBJECT), gate: listOf(OBJECT), exclude: listOf(STRING) }, ['state', 'model']);
 const ESTIMATE = shape({ estimate: nullable(shape({ usd: { type: 'number' }, basis: INT }, ['usd', 'basis'])) }, ['estimate']);
 const REPORT_VIEW = shape({ report: nullable(OBJECT), findings: listOf(OBJECT), gone: listOf(OBJECT), runsSince: nullable(INT), previousId: nullable(STRING), running: nullable(OBJECT) }, ['report', 'findings', 'gone']);
+const CITY = shape({ state: { type: 'string', enum: ['ok', 'not-git', 'no-commits'] }, model: nullable(OBJECT), validation: nullable(OBJECT) }, ['state', 'model', 'validation']);
 const PROGRESS_TEXT = 160;
 
 module.exports = (ctx) => {
@@ -122,6 +129,28 @@ module.exports = (ctx) => {
       fn: async ({ projectId, ...opts }) => {
         const p = projectOf(projectId);
         return { ...(await readFacts(p, opts)), exclude: arch.readSettings(root(), p.id).exclude };
+      },
+    },
+    {
+      channel: 'architecture:city',
+      method: 'architectureCity',
+      params: ['projectId'],
+      schema: { params: args({ projectId: PROJECT_ID }, ['projectId']), result: CITY },
+      fn: async ({ projectId }) => {
+        const p = projectOf(projectId);
+        return facts.readCity(p.folder, { exclude: arch.readSettings(root(), p.id).exclude, plan: arch.readPlan(root(), p.id) });
+      },
+    },
+    {
+      channel: 'architecture:savePlan',
+      method: 'saveCityPlan',
+      params: ['projectId', 'plan'],
+      schema: { params: args({ projectId: PROJECT_ID, plan: CITY_PLAN_SCHEMA }, ['projectId', 'plan']), result: shape({ history: nullable(STRING) }, ['history']) },
+      fn: async ({ projectId, plan }) => {
+        const p = projectOf(projectId);
+        const errors = validateSchema(plan, CITY_PLAN_SCHEMA, 'plan');
+        if (errors.length) throw clientError(`Invalid city plan: ${errors.slice(0, 5).join('; ')}`);
+        return arch.writePlan(root(), p.id, plan, new Date().toISOString());
       },
     },
     {

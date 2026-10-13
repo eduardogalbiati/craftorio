@@ -7,7 +7,7 @@
 // the sources the service reads at the default branch's commit (src/architecture-facts.js) and
 // gives lines, churn, hotspots (lines × commits), co-change pairs, languages, exclusions (per
 // group), mass changes (> 25% of the files, kept unless includeMass is false), complexity per file
-// (total and worst function, only from a real tool) and the monthly Danger Zone frames. Keys sorted,
+// (total, worst function and function count, only from a real tool) and the monthly Danger Zone frames. Keys sorted,
 // dates from the commits only. Browser: window.ArchitectureModel; Node: module.exports.
 (function (root) {
   const QUADRANTS = ['Danger Zone', 'Cowboy Code', 'Fertile Ground', 'Healthy Closure'];
@@ -323,6 +323,7 @@
       if (!fns) continue;
       r.complexity = fns.reduce((sum, f) => sum + f.complexity, 0);
       r.worst = fns.reduce((max, f) => Math.max(max, f.complexity), 0);
+      r.functions = fns.length;
       measured.push(r);
     }
     return measured;
@@ -359,7 +360,7 @@
     const pairs = coChangePairs(counted.filter((c) => !massSet.has(c.hash)), commits);
     const rows = kept.map((f) => ({
       file: f.path, lines: f.lines, language: languageOf(f.path), commits: commits[f.path], last_change: last[f.path] || null,
-      hotspot: f.lines * commits[f.path], rank: 0, co_change: null, complexity: null, worst: null, quadrant: null, score: null,
+      hotspot: f.lines * commits[f.path], rank: 0, co_change: null, complexity: null, worst: null, functions: null, quadrant: null, score: null,
     }));
     rows.sort((a, b) => b.hotspot - a.hotspot || a.file.localeCompare(b.file)).forEach((r, i) => { r.rank = i + 1; });
     for (const r of rows) {

@@ -1205,6 +1205,26 @@ and tokens; the tab shows the latest (or one you pick), its findings marked **ne
 since the previous one, and how many real runs finished since. **Send to Refactor** makes a finding
 a proposal of the Refactor tab, where the Product Owner prioritizes.
 
+**The project city** (#371) adds structure to the same facts: which area of the product each file
+belongs to, and how areas depend on each other, as one deterministic model for the 3D view (#373).
+A **city plan** (`architecture/<project id>/city-plan.json` in the workspace, written by the plan
+workflow (#372) and checked against its JSON Schema; the plan it replaces is kept in
+`city-plan-history/`) names the zones (each one of nine kinds: civic, commercial, industrial,
+infrastructure, logistics, power, workshop, library, campus), the districts with `include` /
+`exclude` path globs, the landmarks, the ports and the files not drawn (`ignore`). Each drawn file
+is a building in the first district whose rules match it (a pattern without a slash matches at any
+depth, a leading `/` anchors to the root); the unmatched ones go to the **Outskirts** district. A
+building carries its lines, churn, last change and, only when a real tool measured them, its
+complexity, worst function and function count ("not measured" otherwise). Without a plan the
+districts come from folders: top-level folders are zones, their subfolders districts, a subfolder
+under 3 files folds into its parent. Dependency edges are read at the facts' commit: between files
+from relative `require`/`import` (JavaScript, TypeScript), between districts from each `Cargo.toml`
+dependency on a sibling crate (Rust); for any other language the model says they are not read,
+never an empty graph. The validation comes with the model: the share of drawn files matched and the
+first 30 unmatched, districts with no files or under 3, unknown zones, duplicate ids, landmark and
+port paths missing at the commit, and the plan's schema errors. Same commit, plan and exclusions,
+same model (no clock, keys sorted); no model call.
+
 What the numbers can't tell, shown on the tab: churn from a planned migration looks like
 instability; complexity tools disagree with each other; code moved between files resets both
 metrics; churn says nothing about bugs unless it is joined with fix commits.

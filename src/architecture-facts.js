@@ -10,10 +10,15 @@
 // and a failed check is shown, never hidden. Without a tool the model names the tools needed.
 // The project's own quality gate (complexity, coverage, duplication in its CI or package.json) is
 // listed with each input measured (its own report found), pending (configured, no report) or
-// missing; missing evidence is never shown as clean. Used by src/service/channels/architecture.js.
+// missing; missing evidence is never shown as clean.
+// The project city (#371, readCity): the facts and a city plan through the pure core
+// src/shared/city-model.js, with the edges' sources read at the same commit (the tracked files, the
+// relative require/import lines of JavaScript/TypeScript files in one `git grep`, the Cargo.toml
+// files), cached per commit, plan hash and exclusions. Used by src/service/channels/architecture.js.
 
 'use strict';
 
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
@@ -23,6 +28,7 @@ const {
   DEFAULT_EXCLUDES,
   parseIgnoreRevs,
 } = require('./shared/architecture-model');
+const { buildCity } = require('./shared/city-model');
 const { resolveCommand } = require('./engine/providers');
 
 const GIT_TIMEOUT_MS = 120e3;
@@ -37,7 +43,11 @@ const GATE_INPUTS = {
   duplication: /jscpd|duplicat|\bcpd\b|code-health(\.js)? --check/i,
 };
 
+const JS_SOURCE = /\.(?:[cm]?[jt]s|[jt]sx)$/;
+const JS_PATHSPECS = ['*.js', '*.cjs', '*.mjs', '*.jsx', '*.ts', '*.cts', '*.mts', '*.tsx'];
+
 const cache = new Map();
+const cityCache = new Map();
 
 function run(file, args, cwd, timeout = GIT_TIMEOUT_MS) {
   return new Promise((resolve, reject) => {
@@ -176,7 +186,49 @@ async function readFacts(folder, opts = {}) {
   return { state: model.commits ? 'ok' : 'no-commits', model, gate };
 }
 
+// What the city's edges are read from at `commit`, in one pass each: { tracked: [path], imports:
+// [{ from, text }] (the JavaScript/TypeScript lines that name a relative path, one `git grep`),
+// manifests: { path: Cargo.toml text } }
+async function citySources(folder, commit) {
+  const tracked = String(await tryGit(folder, ['ls-tree', '-r', '--name-only', '-z', commit]) || '').split('\0').filter(Boolean).sort();
+  const imports = [];
+  if (tracked.some((p) => JS_SOURCE.test(p))) {
+    const out = await tryGit(folder, ['grep', '-I', '-z', '-E', '-e', '[\'"]\\.\\.?/', commit, '--', ...JS_PATHSPECS]);
+    for (const line of String(out || '').split('\n')) {
+      const at = line.indexOf('\0');
+      if (at < 0) continue;
+      const from = line.slice(0, at).slice(commit.length + 1);
+      if (JS_SOURCE.test(from)) imports.push({ from, text: line.slice(at + 1) });
+    }
+  }
+  const cargo = tracked.filter((p) => p === 'Cargo.toml' || p.endsWith('/Cargo.toml'));
+  const manifests = Object.fromEntries(await Promise.all(cargo.map(async (p) => [p, await showAt(folder, commit, p)])));
+  return { imports, manifests, tracked };
+}
+
+/**
+ * The project city (#371) of the repository in `folder`: { state, model, validation }, from the
+ * facts (readFacts, with the project's exclusions) and the plan (null: folder districts), cached
+ * per commit, plan and exclusions. opts: { exclude: [pattern], plan }.
+ */
+async function readCity(folder, opts = {}) {
+  const exclude = (opts.exclude || []).map(String).filter(Boolean);
+  const { state, model } = await readFacts(folder, { exclude });
+  if (state !== 'ok') return { state, model: null, validation: null };
+  const commit = model.head.commit;
+  const plan = opts.plan || null;
+  const planHash = plan ? crypto.createHash('sha256').update(JSON.stringify(plan)).digest('hex') : null;
+  const key = JSON.stringify([path.resolve(folder), commit, planHash, exclude]);
+  if (!cityCache.has(key)) {
+    const sources = await citySources(folder, commit);
+    cityCache.set(key, buildCity({ plan, facts: model, tracked: sources.tracked, sources }));
+    if (cityCache.size > CACHE_SIZE) cityCache.delete(cityCache.keys().next().value);
+  }
+  return { state, ...cityCache.get(key) };
+}
+
 module.exports = {
   parseLizard,
+  readCity,
   readFacts,
 };

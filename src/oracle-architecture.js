@@ -11,7 +11,9 @@
 // Reports are saved per project as <workspace>/architecture/<project id>/<stamp>.json
 // ({ id, date, project_id, head, costUsd, tokens, simulated, report }); compareReports marks each
 // finding new or kept against the previous report and lists the gone ones; estimateCost is the
-// mean cost of the 5 newest real reports. Service: src/service/channels/architecture.js.
+// mean cost of the 5 newest real reports. The project's city plan (#371) is stored next to them,
+// city-plan.json, the plans it replaced in city-plan-history/ (never listed as reports).
+// Service: src/service/channels/architecture.js.
 
 'use strict';
 
@@ -24,6 +26,8 @@ const KINDS = ['missing-abstraction', 'duplicated-rule', 'wrong-dependency', 'ov
 const ESTIMATE_BASIS = 5;
 const PROMPT_ROWS = 15;
 const SETTINGS_FILE = 'settings.json';
+const CITY_PLAN_FILE = 'city-plan.json';
+const PLAN_HISTORY_DIR = 'city-plan-history';
 
 const LINE_TEXT = { type: 'string', minLength: 1 };
 const REPORT_SCHEMA = {
@@ -188,7 +192,7 @@ async function analyze({ project, model, mock, oracle, agent, onItem = null }) {
 // ---------- the saved reports ----------
 
 const projectDir = (root, projectId) => path.join(root, path.basename(String(projectId)));
-const isReportFile = (name) => name.endsWith('.json') && name !== SETTINGS_FILE;
+const isReportFile = (name) => name.endsWith('.json') && name !== SETTINGS_FILE && name !== CITY_PLAN_FILE;
 
 /** The saved reports of a project, newest first. */
 function listReports(root, projectId) {
@@ -231,6 +235,36 @@ function writeSettings(root, projectId, settings) {
   return settings;
 }
 
+/** The project's city plan (#371), or null (none saved, or unreadable). */
+function readPlan(root, projectId) {
+  try {
+    const plan = JSON.parse(fs.readFileSync(path.join(projectDir(root, projectId), CITY_PLAN_FILE), 'utf8'));
+    return plan && typeof plan === 'object' && !Array.isArray(plan) ? plan : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Writes the project's city plan (checked by the caller); the plan it replaces moves to
+ * city-plan-history/<stamp>.json. Returns { history: the history file name, or null }.
+ */
+function writePlan(root, projectId, plan, date) {
+  const dir = projectDir(root, projectId);
+  const file = path.join(dir, CITY_PLAN_FILE);
+  fs.mkdirSync(dir, { recursive: true });
+  let history = null;
+  if (fs.existsSync(file)) {
+    const historyDir = path.join(dir, PLAN_HISTORY_DIR);
+    fs.mkdirSync(historyDir, { recursive: true });
+    const stamp = date.replace(/[:.]/g, '-');
+    for (let n = 0; !history || fs.existsSync(path.join(historyDir, history)); n++) history = `${stamp}${n ? `-${n}` : ''}.json`;
+    fs.renameSync(file, path.join(historyDir, history));
+  }
+  fs.writeFileSync(file, `${JSON.stringify(plan, null, 2)}\n`);
+  return { history };
+}
+
 module.exports = {
   analysisPrompt,
   analyze,
@@ -240,10 +274,12 @@ module.exports = {
   KINDS,
   listReports,
   mockReport,
+  readPlan,
   readSettings,
   REPORT_SCHEMA,
   saveReport,
   SEVERITIES,
   validateReport,
+  writePlan,
   writeSettings,
 };

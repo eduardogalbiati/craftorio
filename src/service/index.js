@@ -80,9 +80,18 @@ function createService({ host }) {
   // once here instead of in each handler. #338: then the argument is checked against the entry's
   // schema.params (src/service/contract.js), so fn never sees one its schema refuses; under the test
   // runner, the result against schema.result. Each call is recorded for a finding's context (#361,
-  // areas/findings.js).
+  // areas/findings.js). An async handler's channel answers every error as a rejected promise, its
+  // argument's included (#371), still checked synchronously.
   const checked = (e, arg) => checkParams(e, requireArgs(arg, e.params));
-  const guarded = (e) => (arg) => ctx.recordCall(e.channel, () => { ctx.workspaceDir(); return checkResult(e, e.fn(checked(e, arg))); });
+  const isAsync = (fn) => fn.constructor.name === 'AsyncFunction';
+  const guarded = (e) => (arg) => {
+    try {
+      return ctx.recordCall(e.channel, () => { ctx.workspaceDir(); return checkResult(e, e.fn(checked(e, arg))); });
+    } catch (err) {
+      if (isAsync(e.fn)) return Promise.reject(err);
+      throw err;
+    }
+  };
   const api = Object.fromEntries(entries.filter((e) => e.channel).map((e) => [e.channel, guarded(e)]));
   const notifications = Object.fromEntries(entries.filter((e) => e.send).map((e) => [e.send, (arg) => e.fn(checked(e, arg))]));
   // what window.api is built from (src/preload.js, src/renderer/api-http.js), desktop and account included
