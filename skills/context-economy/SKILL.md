@@ -3,8 +3,9 @@ name: context-economy
 description: Keeps an unattended agent's context small - does code research through exploration sub-agents (the first map, wide searches, long outputs, unmapped findings), reads excerpts instead of whole files, groups edits, and leaves a handoff note that lets the next turn start fresh. Use for agents with long turns that come back for fixes (e.g. the developer, the test writer).
 summary: "Does code research through exploration sub-agents, reads excerpts instead of whole files, writes handoff notes the next fresh session can act on"
 used_by: "developer, test_writer"
-# "## Test writer: ..." reaches only the test_writer agent's prompt (#300)
-role_sections: [test_writer]
+# "## Test writer: ..." reaches only the test_writer agent's prompt, "## Developer: ..." only the
+# developer's (#300, #347)
+role_sections: [developer, test_writer]
 ---
 
 # Context economy
@@ -63,6 +64,19 @@ diff of the branch, and ask it for, with file and line numbers:
 Then read in your own context only the test files you edit and the production lines under test.
 When the suite fails, have a sub-agent read its log and return the failing tests with their
 errors; rerun the suite yourself to decide.
+
+## Developer: reuse before you add
+
+Before you add a function, a constant or a mapping table, search the repository for an existing
+helper, constant or mapping that already does it (#347): by its name and synonyms, by the literal
+values it would map (`'claude-code'`, a status name, a stage id), and by the rule it computes (a
+cost correction, a "current stage"). Ask the first exploration sub-agent for it with the map.
+- Found one: call it. When it is private, export it or move it to a shared module next to the
+  data it reads; never write a second table or a second copy of the rule.
+- Found none: add yours where the next developer will look for it (next to the related code).
+- When unsure whether two rules are the same, record the assumption in the decision log; never ask.
+- In your handoff note (and `summary`), name what you reused and where it lives, or say you
+  searched and found nothing to reuse.
 
 ## Read excerpts, not files
 

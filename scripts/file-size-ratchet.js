@@ -78,6 +78,8 @@ if (require.main === module) {
 module.exports = {
   checkFileSizes,
   countLines,
+  DIRS,
   EXCEPTIONS,
+  listFiles,
   MAX_LINES,
 };

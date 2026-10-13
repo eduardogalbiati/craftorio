@@ -227,6 +227,42 @@ in the next 5 real runs (baseline 5.5 min per visit) are the owner's to record h
   (`src/engine/run/`, methods on `WorkflowRun.prototype`, #250). Each new file documents itself
   in its header comment (the code map is built from it).
 
+## Code health (#344)
+
+`scripts/code-health.js` measures every function under `src/` and `scripts/` with a real parser
+(`acorn`, a pinned dev dependency): lines, cyclomatic complexity (1 + each `if`, `else if`,
+ternary, `&&`, `||`, `??`, `case`, `catch` and loop; a nested function counts on its own), max
+nesting and parameter count. `test/code-health-344.test.js` holds both ratchets; the line ratchet
+above stays as it is.
+
+- **Complexity limit 25**: a function above 25 fails. The functions above it when the rule came
+  are in `COMPLEXITY_EXCEPTIONS` as `'<file>:<function name>': value`: a listed function may not
+  grow (lower the value when it shrinks), and one at 25 or below (or gone) fails until it leaves
+  the list. A callback is named after its call and its enclosing function
+  (`startWorkflowRun/on(event) callback`); a name repeated in a file gets ` #2`. No new exception
+  without the owner's ok in its issue.
+- **Duplication**: a block of 8 or more lines (trimmed, blank lines dropped) found in two places is
+  a duplicated block; `DUPLICATION_BASELINE` holds the count per file. A new duplicate fails: call
+  the existing code or move it to a shared helper. A file with fewer than its baseline fails until
+  the baseline is lowered. `node scripts/code-health.js --duplicates` shows where each block sits.
+- **Reading the report**: `node scripts/code-health.js` prints the distribution (median, p90,
+  p99, max per area) and the top 20 functions; `--json` prints every function. `--check` runs both
+  ratchets. `--hotspots` ranks by complexity x churn (#356, after ToolSeeds' `turbulence`): churn
+  is the commits that touched a file, without merges, the commit that created it and the commits
+  of `.git-blame-ignore-revs` (mass moves and reformats: add one there), following renames. Each
+  file has its total complexity and its worst function; files sit in four quadrants on `log1p`
+  axes split at the medians: **Danger Zone** (complex and often changed: refactor these first),
+  Cowboy Code (complex, rarely changed), Fertile Ground (simple, often changed), Healthy Closure.
+  The Danger Zone comes first, ranked by `sqrt(u² + v²)`; a function's churn is its file's. The
+  output is deterministic (sorted keys, dates from the commits); churn git cannot read (a shallow
+  clone) is `null` and listed under `missing`, never 0.
+- **How to split a function** that is over the limit or grew: pull each branch body that does its
+  own job into a named function (one per `case` or per kind of event, often a lookup table of
+  handlers instead of a long `switch`/`if` chain); return early instead of nesting; move a derived
+  value (a label, a status, a cost) into a small helper next to the data it reads, and call the
+  existing helper when one already computes it (#347). Keep the new functions in the same file or
+  module unless the file nears the line cap.
+
 ## The channel sweep (#333)
 
 `test/slow/service-channel-sweep-333.slow.test.js` enumerates the service's manifest (no
