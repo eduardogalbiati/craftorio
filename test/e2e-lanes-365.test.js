@@ -1,6 +1,6 @@
 // The E2E suite in two lanes (#365): the @visual scenarios run one at a time (they hold the machine's
-// screenshot slot, #199), the behaviour scenarios run in N workers (N a config value, at least 2 by
-// default). Checked on the Playwright config's projects: each scenario of features/*.feature, by its
+// screenshot slot, #199), the behaviour scenarios run in N workers (N a config value; its default,
+// sized from the machine, is #366's: test/e2e-workers-366.test.js). Checked on the Playwright config's projects: each scenario of features/*.feature, by its
 // tags, falls in exactly one lane, every @visual scenario in a lane of one worker. The speed and the
 // stability (3 green suites in a row) are measured in the PR, not here.
 const test = require('node:test');
@@ -82,8 +82,9 @@ test('every @visual scenario runs in a lane of one worker (#365)', () => {
   assert.deepEqual(wrong, []);
 });
 
-test('the behaviour scenarios run in a lane of at least 2 workers by default, which the whole run allows (#365)', () => {
-  const config = loadConfig();
+test('the behaviour scenarios run in a lane of at least 2 workers when asked for 2, which the whole run allows (#365)', () => {
+  // the default depends on the machine since #366: ask for 2
+  const config = freshConfig('2');
   assert.ok(Array.isArray(config.projects), 'playwright.config.js defines projects');
   const behaviour = scenarios().filter((s) => !s.tags.includes('@visual'));
   const parallel = behaviour.filter((s) => lanesOf(config, s.text).some((p) => typeof p.workers === 'number' && p.workers >= 2));
@@ -102,16 +103,14 @@ test('the suite still never retries a scenario (#365, #362)', () => {
 });
 
 // The config loaded again with MULTIAGENT_E2E_WORKERS set to value (undefined: unset)
-function configWith(value) {
+function freshConfig(value) {
   const file = require.resolve('../playwright.config.js');
   const before = process.env.MULTIAGENT_E2E_WORKERS;
   delete require.cache[file];
   if (value === undefined) delete process.env.MULTIAGENT_E2E_WORKERS;
   else process.env.MULTIAGENT_E2E_WORKERS = value;
   try {
-    const config = require(file);
-    const lane = (name) => config.projects.find((p) => p.name === name);
-    return { pool: config.workers, behaviour: lane('behaviour').workers, visual: lane('visual').workers };
+    return require(file);
   } finally {
     delete require.cache[file];
     if (before === undefined) delete process.env.MULTIAGENT_E2E_WORKERS;
@@ -119,17 +118,17 @@ function configWith(value) {
   }
 }
 
+function configWith(value) {
+  const config = freshConfig(value);
+  const lane = (name) => config.projects.find((p) => p.name === name);
+  return { pool: config.workers, behaviour: lane('behaviour').workers, visual: lane('visual').workers };
+}
+
+// the default (auto) and an invalid value are #366's: test/e2e-workers-366.test.js
 test('MULTIAGENT_E2E_WORKERS sets the behaviour lane and the pool; the visual lane stays at one worker (#365)', () => {
-  assert.deepEqual(configWith(undefined), { pool: 2, behaviour: 2, visual: 1 });
   assert.deepEqual(configWith('3'), { pool: 3, behaviour: 3, visual: 1 });
   // 1 gives back the old one-Electron-at-a-time suite
   assert.deepEqual(configWith('1'), { pool: 1, behaviour: 1, visual: 1 });
-});
-
-test('an empty, zero or non-numeric MULTIAGENT_E2E_WORKERS falls back to 2 workers (#365)', () => {
-  for (const value of ['', '0', 'abc']) {
-    assert.deepEqual(configWith(value), { pool: 2, behaviour: 2, visual: 1 }, `MULTIAGENT_E2E_WORKERS=${JSON.stringify(value)}`);
-  }
 });
 
 test('only the visual lane asks for the screenshot slot (#365)', () => {
