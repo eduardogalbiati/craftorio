@@ -47,6 +47,10 @@ module.exports = (ctx) => [
       totalMemoryBytes: os.totalmem(),
       // the screen a Run App copy opens on (#119, set by src/local-preview.js); simulation-only copies only
       startView: simulation.simulationOnly() ? process.env.MULTIAGENT_START_VIEW || null : null,
+      // run from source or packaged: the Findings button shows from source (#361, findings-model.js)
+      isPackaged: Boolean(ctx.host.isPackaged),
+      // a scripts/screenshot.js capture: the Findings button stays hidden unless the setting is on
+      screenshot: process.env.MULTIAGENT_SCREENSHOT === '1',
     }),
   },
   // the code this process started with and the code on disk now (changed: a restart is needed, #83)

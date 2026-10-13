@@ -57,6 +57,8 @@ const DESKTOP = [
   // window: the window sends the target, main relays it to the main window (AgentsWindow.onNavigate)
   { send: 'agents-window:navigate', method: 'navigateMainWindow', params: 'target', desktop: 'The Agents window' },
   { event: 'main-window:navigate', method: 'onMainWindowNavigate' },
+  // the Findings button (#361): the calling window's capture, a PNG data URL
+  { channel: 'window:capture', method: 'captureWindow', desktop: 'Capturing the window' },
 ];
 
 // Account: sign-in with an OAuth provider (system browser); it only counts users. Declared even when

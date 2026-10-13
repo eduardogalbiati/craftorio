@@ -189,6 +189,9 @@ const DEFAULT_SETTINGS = {
   keepAwake: false,
   // Control channel (#336, src/control): outside sessions drive this app through a loopback endpoint
   controlChannel: false,
+  // Findings button (#361, src/renderer/findings.js): shown in a packaged app (and in screenshot
+  // captures) only when on; the app run from source always shows it
+  findingsButton: false,
   // the top bar's 24/7 chip (#188, src/renderer/occupancy-chip.js): the last 24 h occupancy
   showOccupancyChip: true,
   // warn when an agent shows no output for this long while a command it started is waiting; 0 = off

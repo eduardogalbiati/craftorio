@@ -21,7 +21,7 @@
 
 const { permissionOf } = require('./night-watch');
 
-const SENDERS = { oracle: 'the Oracle' };
+const SENDERS = { findings: 'the Findings button', oracle: 'the Oracle' };
 const ACT_ACTIONS = ['dismiss', 'do', 'undo'];
 // the refs of the cards being performed after a click
 const acting = new Set();

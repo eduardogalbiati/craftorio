@@ -22,6 +22,7 @@ module.exports = [
   { channel: 'path:open', reason: 'desktop only (src/main.js): opens the file explorer' },
   { channel: 'run:openDir', reason: 'desktop only (src/main.js): opens the file explorer' },
   { channel: 'session:terminal', reason: 'desktop only (src/main.js): opens an external terminal window' },
+  { channel: 'window:capture', reason: 'desktop only (src/main.js): captures the window' },
   { channel: 'workspace:change', reason: 'desktop only (src/main.js): a native dialog, then switches the workspace' },
   { channel: 'workspace:open', reason: 'desktop only (src/main.js): opens the file explorer' },
   // answered by src/auth.js (system browser sign-in), not by the service

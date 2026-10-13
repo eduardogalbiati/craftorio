@@ -28,6 +28,11 @@ In this order: the task/summary given in your prompt; issue references in commit
 (`#123`, `Closes #45`, GitLab `!67`); spec or PRD files under `docs/`, `specs/` matching the
 branch or feature. No spec found → skip the spec axis and say so.
 
+When the issue names a **finding bundle** (a `findings/<timestamp>/` folder), it is part of the
+spec. Read `note.md` and `marks.json`: each numbered pin names the element (`data-testid`, view,
+tab, ids) the fix must change. Check that the diff touches the module behind each pin. Check that
+a check reproduces the finding: it fails without the change and passes with it.
+
 ## 3. Load the rules
 
 - Detect the languages from the changed files' extensions and **read the rules file for each**

@@ -78,9 +78,10 @@ function createService({ host }) {
   // runId, projectId and cardId are file names (#333, requireArgs in src/service/common.js): checked
   // once here instead of in each handler. #338: then the argument is checked against the entry's
   // schema.params (src/service/contract.js), so fn never sees one its schema refuses; under the test
-  // runner, the result against schema.result.
+  // runner, the result against schema.result. Each call is recorded for a finding's context (#361,
+  // areas/findings.js).
   const checked = (e, arg) => checkParams(e, requireArgs(arg, e.params));
-  const guarded = (e) => (arg) => { ctx.workspaceDir(); return checkResult(e, e.fn(checked(e, arg))); };
+  const guarded = (e) => (arg) => ctx.recordCall(e.channel, () => { ctx.workspaceDir(); return checkResult(e, e.fn(checked(e, arg))); });
   const api = Object.fromEntries(entries.filter((e) => e.channel).map((e) => [e.channel, guarded(e)]));
   const notifications = Object.fromEntries(entries.filter((e) => e.send).map((e) => [e.send, (arg) => e.fn(checked(e, arg))]));
   // what window.api is built from (src/preload.js, src/renderer/api-http.js), desktop and account included

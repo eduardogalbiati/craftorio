@@ -28,6 +28,14 @@ Try, in order, until one works:
 If you truly cannot reproduce it, say so, list what you tried, and stop: a fix without a
 reproduction is a guess.
 
+**A finding bundle** (an issue that names a `findings/<timestamp>/` folder: `marked.png`,
+`marks.json`, `context.json`, `note.md`) is the report's captured input: follow its sightline.
+Look at `marked.png`. For each numbered pin in `marks.json`, map its element's `data-testid` and
+view to the module that renders it (the project's code map). Rebuild the state from `context.json`
+(view, tab, project, run ids, the last UI actions and service calls with their errors, the main
+log), with the project's screenshot seeds for that view when it has them. Then write the check that
+fails before the fix. The project's renderer docs say how to read one in detail.
+
 ## 2. Minimise
 
 Shrink the input and the path until removing anything more makes the failure disappear.

@@ -359,6 +359,8 @@ function main() {
     MULTIAGENT_AUTH: 'off',
     MULTIAGENT_WORKSPACE: wsDir,
     MULTIAGENT_MOCK_DELAY_SCALE: '0.02',
+    // app:info's `screenshot`: the Findings button (#361) is hidden unless the setting is on
+    MULTIAGENT_SCREENSHOT: '1',
     HOME: home, USERPROFILE: home, APPDATA: path.join(home, 'AppData'),
     GH_CONFIG_DIR: path.join(home, 'gh'), GLAB_CONFIG_DIR: path.join(home, 'glab'),
   });

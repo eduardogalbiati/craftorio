@@ -43,6 +43,10 @@ const { authChannels } = require('./service/manifest');
 const { createAuth, fileStorage } = require('./auth');
 const authConfig = require('./auth-config');
 const { createKeepAwake } = require('./keep-awake');
+const mainLog = require('./main-log');
+
+// the last lines of this process's console, for a finding's context (#361)
+mainLog.capture();
 
 // The packaged app doesn't accept Chromium's remote debugging switches (the Node inspector is
 // already disabled by a fuse, see scripts/package.js)
@@ -351,6 +355,9 @@ ipcMain.handle('path:open', (_e, p) => {
   if (!service.openableFolders().some((dir) => pathKey(p) === pathKey(dir) || pathKey(p).startsWith(pathKey(dir) + path.sep))) throw new Error('Path is outside the workspace.');
   return shell.openPath(p);
 });
+
+// the window's real pixels for the Findings button (#361): a PNG data URL
+ipcMain.handle('window:capture', async (e) => (await e.sender.capturePage()).toDataURL());
 
 ipcMain.handle('dialog:pickFolder', async () => {
   const r = await dialog.showOpenDialog(win, { properties: ['openDirectory', 'createDirectory'], defaultPath: service.workspace().projects });

@@ -68,6 +68,7 @@ async function renderSettings() {
     </div>`).join('');
   $('#set-ws-folders').querySelectorAll('[data-open]').forEach((b) => (b.onclick = () => api.openPath(b.dataset.open)));
   renderTimeZone();
+  window.Findings?.renderList($('#set-findings-list'));
   document.querySelectorAll('[data-setting]').forEach((el) => (el.checked = !!state.settings[el.dataset.setting]));
   const platform = $('#set-backlog-platform');
   platform.innerHTML = Object.entries(window.BACKLOG_PLATFORMS || {}).map(([id, p]) => `<option value="${id}">${esc(p.label)}${p.soon ? ' (sync not available yet)' : ''}</option>`).join('');
@@ -633,6 +634,18 @@ registerView({
                   <div class="s-ctrl"><button id="btn-deps-clear" class="btn sm">Clear dependency cache</button></div>
                 </div>
               </div>
+              <h3 class="s-subtitle">Findings</h3>
+              <div class="s-group">
+                <div class="s-row">
+                  <div class="s-label"><b>Findings button</b><span>For the people building this app: freeze the view, mark what is wrong and save it with the state behind it, or file it as an issue (Ctrl+Shift+F). Always shown when the app runs from source.</span></div>
+                  <label class="switch"><input type="checkbox" data-setting="findingsButton" data-testid="settings-findings-button" aria-label="Findings button" /><span></span></label>
+                </div>
+                <div class="s-row fd-list-row">
+                  <div class="s-label"><b>Saved findings</b><span>In the workspace's findings/ folder, newest first.</span>
+                    <ul id="set-findings-list" class="fd-list" data-testid="settings-findings-list" aria-label="Saved findings" data-empty="No findings yet: the Findings button saves them here."></ul>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div class="settings-page hidden" data-spage="agents">
@@ -794,6 +807,7 @@ registerView({
       state.settings = await api.setSettings({ [el.dataset.setting]: el.checked });
       if (el.dataset.setting === 'developerMode') applyDeveloperMode();
       if (el.dataset.setting === 'controlChannel') refreshControlChannel();
+      if (el.dataset.setting === 'findingsButton') window.Findings?.refresh();
     }));
     api.onControlChannelChange?.(renderControlChannel);
     $('#set-time-zone').onchange = async (e) => { state.settings = await api.setSettings({ timeZone: e.target.value }); renderTimeZone(); TimeZone.notify(); };
