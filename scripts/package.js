@@ -77,7 +77,8 @@ function buildNative(opts, run = require('child_process').spawnSync) {
   const manifest = path.join(root, 'native', 'Cargo.toml');
   const exec = (cmd, args) => {
     const r = run(cmd, args, { stdio: 'inherit' });
-    if (r.error || r.status !== 0) throw new Error(`${cmd} ${args.join(' ')} failed${r.error ? `: ${r.error.message}` : ''} (the build needs the Rust toolchain: rustup, stable)`);
+    if (r.error) throw new Error(`${cmd} ${args.join(' ')} failed: ${r.error.message} (the build needs the Rust toolchain: rustup, stable)`);
+    if (r.status !== 0) throw new Error(`${cmd} ${args.join(' ')} failed with exit status ${r.status}`);
   };
   exec('rustup', ['target', 'add', target]);
   exec('cargo', ['build', '--release', '--locked', '--manifest-path', manifest, '--target', target, ...NATIVE_BINARIES.flatMap((b) => ['-p', b])]);
@@ -115,8 +116,9 @@ function packagerOptions({ platform, arch, out }) {
     extraResource: [nativeBinDir({ platform, arch, out })],
     // .claude/ may contain worktrees from other sessions (with their own node_modules); poc/ holds
     // proofs of concept, never part of the app; generated/ (the run's 3D view, scripts/build-3d.js) is
-    // packed, and src/renderer/run3d/ (its sources) is not needed once bundled
-    ignore: [/^\/(runs|dist|build|scripts|test|supabase|poc|\.github|\.claude)(\/|$)/, /^\/src\/renderer\/run3d(\/|$)/],
+    // packed, and src/renderer/run3d/ (its sources) is not needed once bundled; native/ (the Rust
+    // sources and cargo's target/) arrives as resources/bin/ through extraResource
+    ignore: [/^\/(runs|dist|build|scripts|test|supabase|poc|native|\.github|\.claude)(\/|$)/, /^\/src\/renderer\/run3d(\/|$)/],
     ...(platform === 'darwin' && {
       appBundleId: 'io.github.eduardogalbiati.multiagent-orchestrator',
       appCategoryType: 'public.app-category.developer-tools',
