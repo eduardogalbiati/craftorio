@@ -9,6 +9,7 @@ const simulation = require('../../engine/simulation');
 const projects = require('../../projects');
 const runs = require('../../runs');
 const workspace = require('../../workspace');
+const { clientError, requireId } = require('../common');
 
 module.exports = (ctx) => {
   const project = (projectId) => path.basename(String(projectId));
@@ -99,6 +100,8 @@ module.exports = (ctx) => {
       // agentOverrides: each run's provider / model / effort per agent (#262, run:start's)
       params: ['projectId', 'numbers', 'workflow', 'inputs', 'mock', 'group', 'confirmed', 'then', 'pipeline', 'agentOverrides'],
       fn: ({ confirmed, ...opts }) => {
+        if (opts.numbers != null && !Array.isArray(opts.numbers)) throw clientError('Invalid issue numbers: expected a list.');
+        if (opts.pipeline != null && opts.pipeline !== '') requireId(opts.pipeline, 'pipeline file');
         const kept = confirmed ? null : ctx.keptWorkForIssues(opts.numbers);
         if (kept) return { confirm: kept.text, kept, runId: kept.runId };
         return ctx.assignWorkflow({ ...opts, allowKeptWork: !!confirmed });

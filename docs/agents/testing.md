@@ -197,6 +197,48 @@ in the next 5 real runs (baseline 5.5 min per visit) are the owner's to record h
   display title); `src/renderer/toast.js` (countdown and action timing); `views/arena/arena.js`
   (no feature of its own: an E2E scenario or a model to extract); `scripts/lint-lists.js`.
 
+## File size ratchet (#334)
+
+- **The rule**: every `.js` file under `src/` and `scripts/` has at most 1,000 lines (counted the
+  same on every OS, CRLF normalized). `scripts/file-size-ratchet.js` checks it
+  (`test/file-size-ratchet-334.test.js`; `node scripts/file-size-ratchet.js` reports by hand).
+- **Exceptions only shrink**: the files over the cap when the rule came are in its `EXCEPTIONS`,
+  each with its line count then. A listed file that grows past its count fails: split it, never
+  raise the count. A lower count may replace the recorded one. A listed file at 1,000 lines or
+  fewer (or gone) fails until it leaves the list.
+- **No new exception by default**: adding a file to `EXCEPTIONS` needs the owner's ok written in
+  its issue; code review checks it.
+- **How to split** a file near the cap, the usual ways: a screen into its view's folder
+  (`src/renderer/views/<view>/`, one file per part, #154); the service into one file per area
+  (`src/service/areas/`, `src/service/channels/`, #155); the run into its modules
+  (`src/engine/run/`, methods on `WorkflowRun.prototype`, #250). Each new file documents itself
+  in its header comment (the code map is built from it).
+
+## The channel sweep (#333)
+
+`test/slow/service-channel-sweep-333.slow.test.js` enumerates the service's manifest (no
+hand-written list: a new channel is swept by itself) and calls every channel in a scratch
+workspace, under `MULTIAGENT_SIMULATION_ONLY`, with hostile values: the whole argument, then each
+named param on its own, missing, `null`, a number, a list, an object, `''`, `../../outside`, an
+absolute path outside the workspace, a 1 MB string and an object with a `__proto__` key. Each call
+has 4 s. It passes when every call answers or rejects with an `Error` that names the problem
+(never a raw "Cannot read properties of undefined"), nothing outside the workspace is created,
+changed or trashed, and nothing is left unhandled. The calls run in a child process
+(`test/service/channel-sweep-runner.js`): a call that blocks it is killed and named.
+
+- **A failing channel is fixed at its entry**, with the guards of `src/service/common.js`:
+  `requireId` (an id is a file name inside its folder), `requireText` (a string of at most N
+  characters), `requireObject` (an options object). The service checks every channel with named
+  params once (`requireArgs`): the argument is an object, and a `runId`, `projectId` or `cardId`
+  in it is an id. A refusal carries status 400, so `npm run serve` answers it with a 4xx. A
+  try/catch that hides the error is not a fix.
+- **Gates**: `test/service/gates-hostile-333.test.js` checks that hostile input to
+  `approval:resolve` and `runs:resume` never opens a human gate.
+- **How to add a skip**: only a channel with effects outside the process (the desktop shell, the
+  network, `gh`/`glab`, a push, the machine's shared caches or its own files) is skipped. Add
+  `{ channel, reason }` (or `<area>:*` for a whole area) to `test/service/channel-sweep-skips.js`;
+  the sweep checks that every skip names a channel of the manifest and says why.
+
 ## Machine-independent tests
 
 Git tests run with an empty `GIT_CONFIG_GLOBAL` and `GIT_CONFIG_NOSYSTEM`, passing identity,

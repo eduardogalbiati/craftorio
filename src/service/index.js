@@ -36,7 +36,11 @@ const { EventEmitter } = require('events');
 const pastedImages = require('../pasted-images');
 const projects = require('../projects');
 const { createCodeVersion } = require('../code-version');
-const { BUNDLED_SKILLS_DIR, BUNDLED_WORKFLOWS_DIR } = require('./common');
+const {
+  BUNDLED_SKILLS_DIR,
+  BUNDLED_WORKFLOWS_DIR,
+  requireArgs,
+} = require('./common');
 const {
   authChannels,
   declarations,
@@ -66,10 +70,12 @@ function createService({ host }) {
   const ctx = loadAreas({ host, events, code, BUNDLED_SKILLS_DIR });
 
   const entries = loadChannels(ctx);
-  // Every channel needs an open workspace (checked once here instead of in each handler).
-  const withWorkspace = (fn) => (arg) => { ctx.workspaceDir(); return fn(arg); };
-  const api = Object.fromEntries(entries.filter((e) => e.channel).map((e) => [e.channel, withWorkspace(e.fn)]));
-  const notifications = Object.fromEntries(entries.filter((e) => e.send).map((e) => [e.send, e.fn]));
+  // Every channel needs an open workspace, and a channel with named params an object argument
+  // (#333): checked once here instead of in each handler. The ids inside it are checked by each
+  // channel (requireId in src/service/common.js).
+  const guarded = (e) => (arg) => { ctx.workspaceDir(); return e.fn(requireArgs(arg, e.params)); };
+  const api = Object.fromEntries(entries.filter((e) => e.channel).map((e) => [e.channel, guarded(e)]));
+  const notifications = Object.fromEntries(entries.filter((e) => e.send).map((e) => [e.send, (arg) => e.fn(requireArgs(arg, e.params))]));
   // what window.api is built from (src/preload.js, src/renderer/api-http.js), desktop and account included
   const manifest = declarations([...entries, ...DESKTOP, ...authChannels(null)]);
 

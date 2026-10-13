@@ -99,6 +99,69 @@ function folderMatcher() {
   };
 }
 
+// #333: the input guards of the channels. A client (the desktop app over IPC, any machine with the
+// token over `npm run serve`) sends anything: a channel checks what it receives where it receives
+// it. A refusal is an Error with status 400 naming the parameter (the server answers it as a 4xx),
+// never a TypeError from deep inside an area.
+const MAX_ID = 200;
+const clientError = (message) => Object.assign(new Error(message), { status: 400 });
+// A value in an error message: short, on one line.
+const shown = (v) => {
+  const s = typeof v === 'string' ? JSON.stringify(v.length > 60 ? `${v.slice(0, 60)}…` : v) : Array.isArray(v) ? 'a list' : v === null ? 'null' : typeof v;
+  return s.replace(/[\r\n]/g, ' ');
+};
+
+// An id is a file name inside its folder: a non-empty string without a separator, `.`/`..` or NUL,
+// so a path built from it never leaves the folder. Returns it unchanged.
+function requireId(value, what) {
+  if (typeof value !== 'string' || !value) throw clientError(`Missing ${what}: expected a name, got ${shown(value)}.`);
+  if (value.length > MAX_ID) throw clientError(`Invalid ${what}: longer than ${MAX_ID} characters.`);
+  if (value === '.' || value === '..' || /[\\/\0]/.test(value) || path.isAbsolute(value) || path.basename(value) !== value) {
+    throw clientError(`Invalid ${what}: ${shown(value)} is not a name inside its folder.`);
+  }
+  return value;
+}
+
+// A string of at most `max` characters. Returns it unchanged.
+function requireText(value, what, max) {
+  if (typeof value !== 'string') throw clientError(`Missing ${what}: expected text, got ${shown(value)}.`);
+  if (value.length > max) throw clientError(`Invalid ${what}: longer than ${max} characters (${value.length}).`);
+  return value;
+}
+
+// The one argument of a channel that takes an options object (`params: 'opts'`): none is {},
+// anything but an object is refused.
+function requireObject(value, what) {
+  if (value === undefined) return {};
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) throw clientError(`Invalid ${what}: expected an object, got ${shown(value)}.`);
+  return value;
+}
+
+// The params that always name a folder or a file of the workspace (runs/<runId>/,
+// projects/<projectId>.json, discovery/<projectId>/cards/<cardId>/): when given, each is an id.
+const ID_PARAMS = {
+  cardId: 'card id',
+  projectId: 'project id',
+  runId: 'run id',
+};
+
+// The argument of a channel whose manifest entry names its params (an array): an object, as the
+// clients build it from the positional arguments (src/preload.js payload). None at all is the
+// object of a call without arguments; null, a list or a scalar is refused before the channel runs,
+// and so is an ID_PARAMS value that is not a file name (none, null or '' is left to the channel:
+// several take "no run" or "no project").
+function requireArgs(arg, params) {
+  if (!Array.isArray(params)) return arg;
+  if (arg === undefined) return {};
+  if (arg === null || typeof arg !== 'object' || Array.isArray(arg)) {
+    throw clientError(`Invalid argument: expected an object with ${params.map((p) => p.replace(/^\.\.\./, '')).join(', ')}, got ${shown(arg)}.`);
+  }
+  for (const p of params) {
+    if (Object.hasOwn(ID_PARAMS, p) && arg[p] != null && arg[p] !== '') requireId(arg[p], ID_PARAMS[p]);
+  }
+  return arg;
+}
+
 // The environment of a CLI or a shell started from the app (not nested in Claude Code, not as node).
 const cliEnv = () => {
   const env = { ...process.env };
@@ -110,12 +173,17 @@ const cliEnv = () => {
 module.exports = {
   BUNDLED_SKILLS_DIR,
   BUNDLED_WORKFLOWS_DIR,
+  clientError,
   cliEnv,
   cliReason,
   folderMatcher,
   gitOut,
   num,
   q,
+  requireArgs,
+  requireId,
+  requireObject,
+  requireText,
   RESUME_ARGS,
   runTool,
   sessionView,

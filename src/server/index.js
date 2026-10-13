@@ -94,8 +94,10 @@ function createServer({ service, auth = null, token, root = ROOT }) {
     try {
       result = await fn(body.arg);
     } catch (e) {
-      // an error of the channel itself (same message the desktop app shows)
-      return sendJson(res, 500, { error: e.message || String(e) });
+      // an error of the channel itself (same message the desktop app shows): a refused input
+      // (status 4xx, src/service/common.js requireId/requireText) is the client's error
+      const status = e && e.status >= 400 && e.status < 500 ? e.status : 500;
+      return sendJson(res, status, { error: (e && e.message) || String(e) });
     }
     sendJson(res, 200, { result: result === undefined ? null : result });
   }

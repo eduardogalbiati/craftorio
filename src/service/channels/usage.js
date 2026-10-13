@@ -2,10 +2,11 @@
 
 const actionsUsage = require('../../actions-usage');
 const workspace = require('../../workspace');
+const { requireText } = require('../common');
 
 module.exports = (ctx) => [
   { channel: 'usage:get', method: 'getUsage', params: ['scope'], fn: (opts) => ctx.usageSnapshot(opts?.scope) },
-  { channel: 'usage:setBudget', method: 'setBudget', params: ['provider', 'budget', 'scope'], fn: (opts) => ctx.setBudget(opts) },
+  { channel: 'usage:setBudget', method: 'setBudget', params: ['provider', 'budget', 'scope'], fn: (opts) => ctx.setBudget({ ...opts, provider: requireText(opts.provider, 'provider', 100) }) },
   { channel: 'usage:setPrice', method: 'setPrice', params: ['model', 'price', 'scope'], fn: (opts) => ctx.setPrice(opts) },
   // GitHub Actions minutes of the month vs the included quota (needs gh's `user` scope)
   {

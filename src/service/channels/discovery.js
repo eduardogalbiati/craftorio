@@ -30,6 +30,7 @@ const projects = require('../../projects');
 const releases = require('../../releases');
 const simulation = require('../../engine/simulation');
 const workspace = require('../../workspace');
+const { clientError, requireText } = require('../common');
 
 // who captures, moves and discards from this app
 function owner() {
@@ -156,7 +157,7 @@ module.exports = (ctx) => {
       method: 'setDiscoveryAutomation',
       params: ['projectId', 'column', 'mode'],
       fn: ({ projectId, column, mode }) => {
-        discovery.setColumnAutomation(dir(), projectId, column, { mode });
+        discovery.setColumnAutomation(dir(), projectId, requireText(column, 'column', 100), { mode });
         return board(projectId);
       },
     },
@@ -260,6 +261,7 @@ module.exports = (ctx) => {
       method: 'setDiscoveryClarityBar',
       params: ['projectId', 'bar', 'byKind', 'night'],
       fn: ({ projectId, bar, byKind, night }) => {
+        if (bar != null && typeof bar === 'object') throw clientError('Invalid clarity bar: a whole number from 0 to 100.');
         discovery.setClarityBar(dir(), projectId, { bar, byKind, night });
         return board(projectId);
       },
@@ -284,7 +286,7 @@ module.exports = (ctx) => {
       channel: 'discovery:set-wip',
       method: 'setDiscoveryWip',
       params: ['projectId', 'column', 'limit'],
-      fn: ({ projectId, column, limit }) => discovery.setWip(dir(), projectId, column, limit),
+      fn: ({ projectId, column, limit }) => discovery.setWip(dir(), projectId, requireText(column, 'column', 100), limit),
     },
     // the versions of the card's document, newest first: [{ name, ts, reason }]
     {

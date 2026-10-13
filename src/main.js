@@ -147,7 +147,10 @@ for (const { channel, fn } of authChannels(account)) if (channel) ipcMain.handle
 
 // ---- IPC transport ------------------------------------------------------------------
 for (const [channel, fn] of Object.entries(service.api)) ipcMain.handle(channel, (_e, arg) => fn(arg));
-for (const [channel, fn] of Object.entries(service.notifications)) ipcMain.on(channel, (_e, arg) => fn(arg));
+// a fire-and-forget channel has no reply to carry a refusal: logged, like the server's (#333)
+for (const [channel, fn] of Object.entries(service.notifications)) {
+  ipcMain.on(channel, (_e, arg) => { try { fn(arg); } catch (e) { console.error(`${channel}:`, e.message); } });
+}
 // what the preload builds window.api from, asked once when the window loads (sync: the page's
 // scripts use window.api right away); also when the window's code is recorded (#83)
 ipcMain.on('api:manifest', (e) => {

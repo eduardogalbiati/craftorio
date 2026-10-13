@@ -26,6 +26,8 @@ module.exports = [
   // answered by src/auth.js (system browser sign-in), not by the service
   { channel: 'auth:*', reason: 'the account module (src/auth.js): sign-in opens the system browser' },
   // effects outside the process
+  { channel: 'analytics:analyze', reason: "reads this machine's CLI usage logs in the home folder (outside the workspace): ~10 s cold, blocking" },
+  { channel: 'analytics:get', reason: "reads this machine's CLI usage logs in the home folder (outside the workspace): ~10 s cold, blocking" },
   { channel: 'app-update:back', reason: "moves the app's own checkout to another commit and relaunches it" },
   { channel: 'app-update:state', reason: "fetches the app's repository (network)" },
   { channel: 'audio:downloadModel', reason: 'downloads a speech model (network)' },
@@ -37,6 +39,7 @@ module.exports = [
   { channel: 'backlog:sync', reason: 'reads the issues with gh/glab and fetches origin' },
   { channel: 'backlog:update-push', reason: 'git fetch/rebase/push of a project base branch' },
   { channel: 'depsCache:clear', reason: "empties the machine's shared dependency cache, used by every run" },
+  { channel: 'env:details', reason: 'runs every installed CLI (--version) and gh auth status (network): ~5 s on a machine with the CLIs' },
   { channel: 'localPreview:start', reason: "starts a project's dev server process" },
   { channel: 'phonegates:check', reason: 'HTTP requests to the phone page and its public URL (network)' },
   { channel: 'phonegates:configure', reason: 'starts or restarts the phone page web server (a listening port)' },

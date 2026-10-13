@@ -14,6 +14,7 @@ const history = require('../../roadmap-history');
 const merge = require('../../roadmap-merge');
 const roadmaps = require('../../roadmap');
 const undo = require('../../roadmap-undo');
+const { requireText } = require('../common');
 
 module.exports = (ctx) => {
   const project = (projectId) => path.basename(String(projectId));
@@ -166,7 +167,7 @@ module.exports = (ctx) => {
       method: 'roadmapBudget',
       params: ['projectId', 'action'],
       fn: async ({ projectId, action }) => {
-        await ctx.budgetAction({ projectId: project(projectId), action: String(action) });
+        await ctx.budgetAction({ projectId: project(projectId), action: requireText(action, 'budget action', 40) });
         return current(projectId);
       },
     },
@@ -202,6 +203,7 @@ module.exports = (ctx) => {
       method: 'roadmapItem',
       params: ['projectId', 'itemId', 'action', 'confirmed'],
       fn: async ({ projectId, itemId, action, confirmed }) => {
+        requireText(action, 'roadmap item action', 40);
         const id = project(projectId);
         const item = roadmaps.findItem(roadmaps.readRoadmap(ctx.ws.backlog, id), String(itemId));
         if (action === 'retry' && item && !(item.runId && ctx.runAlive(item.runId))) {

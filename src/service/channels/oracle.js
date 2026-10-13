@@ -50,6 +50,7 @@ const { createWake } = require('../../oracle-wake');
 const { oracleTools } = require('../../oracle-tools');
 const { resolveCommand } = require('../../engine/providers');
 const { stopProcessesIn } = require('../../engine/processes');
+const { requireObject } = require('../common');
 
 const ELSEWHERE_MS = 60e3;
 const DELEGATE_TEXT = 8000;
@@ -539,7 +540,8 @@ module.exports = (ctx) => {
       channel: 'oracle:ask',
       method: 'askOracle',
       params: 'opts',
-      fn: async (opts = {}) => {
+      fn: async (arg) => {
+        const opts = requireObject(arg, 'options');
         const mock = simulated(opts);
         // #180: its progress is pushed on chat:progress; chat:cancel ('oracle') stops it
         const turn = ctx.chatTurns.start('oracle');
@@ -553,7 +555,7 @@ module.exports = (ctx) => {
       },
     },
     // the owner's "Do it" on an action card (#123): performs exactly that card, once → { ok, text, messages, state }
-    { channel: 'oracle:act', method: 'oracleAct', params: 'opts', fn: ({ actionId, mock } = {}) => get().act(actionId, { mock: simulated({ mock }) }) },
+    { channel: 'oracle:act', method: 'oracleAct', params: 'opts', fn: (arg) => { const { actionId, mock } = requireObject(arg, 'options'); return get().act(actionId, { mock: simulated({ mock }) }); } },
     // a pasted image of the conversation (its file name in a user message's attachments) → data: URL or null
     { channel: 'oracle:attachment', method: 'oracleAttachment', params: 'name', fn: (name) => get().attachment(name) },
     // asks another agent (product-owner, issue-draft, supervisor, analyzer, checker) → { to, text, costUsd, error, ref }; recorded in the chat
@@ -561,9 +563,12 @@ module.exports = (ctx) => {
       channel: 'oracle:delegate',
       method: 'oracleDelegate',
       params: 'opts',
-      fn: ({ mock, ...input } = {}) => delegate(input, { mock }),
+      fn: (arg) => {
+        const { mock, ...input } = requireObject(arg, 'options');
+        return delegate(input, { mock });
+      },
     },
-    { channel: 'oracle:dismiss', method: 'oracleDismiss', params: 'opts', fn: ({ actionId } = {}) => get().dismiss(actionId) },
+    { channel: 'oracle:dismiss', method: 'oracleDismiss', params: 'opts', fn: (arg) => get().dismiss(requireObject(arg, 'options').actionId) },
     { channel: 'oracle:history', method: 'oracleHistory', fn: () => get().history() },
     // #184: { text (pasted, e.g. a Claude Code memory index), base (the draft; default the saved memory) } →
     // { text }: the draft with the pasted decisions added; nothing is saved (the owner saves it)
@@ -572,9 +577,9 @@ module.exports = (ctx) => {
     { channel: 'oracle:markRead', method: 'markOracleRead', params: 'opts', fn: (opts) => get().markRead(opts?.at) },
     { channel: 'oracle:memory', method: 'oracleMemory', fn: () => get().memory() },
     // mutes (on) or unmutes one run's wake-ups → the wake-up state
-    { channel: 'oracle:mute', method: 'muteOracleRun', params: 'opts', fn: ({ runId, on } = {}) => wake.mute(runId, on !== false) },
+    { channel: 'oracle:mute', method: 'muteOracleRun', params: 'opts', fn: (arg) => { const { runId, on } = requireObject(arg, 'options'); return wake.mute(runId, on !== false); } },
     // the Night watch: { on, until (ISO, at most 24 h ahead), from (the screen it was turned on from) } → { nightWatch, messages, state }
-    { channel: 'oracle:nightWatch', method: 'setOracleNightWatch', params: 'opts', fn: ({ on, until, from } = {}) => get().setNightWatch({ on, until, by: nightBy(from) }) },
+    { channel: 'oracle:nightWatch', method: 'setOracleNightWatch', params: 'opts', fn: (arg) => { const { on, until, from } = requireObject(arg, 'options'); return get().setNightWatch({ on, until, by: nightBy(from) }); } },
     // the owner proposes a card themselves (or a check): { kind, params, why } → { id, status, ... };
     // #241: a card requested by the Oracle or by content, of a kind an owner holds, goes to that owner's
     // inbox → { routed, to, kind, ok, text, ... }
@@ -582,18 +587,21 @@ module.exports = (ctx) => {
       channel: 'oracle:propose',
       method: 'oracleProposeAction',
       params: 'opts',
-      fn: async (input = {}) => withState(await proposeOrRoute(input, { fromOracle: input.requestedBy !== 'owner' })),
+      fn: async (arg) => {
+        const input = requireObject(arg, 'options');
+        return withState(await proposeOrRoute(input, { fromOracle: input.requestedBy !== 'owner' }));
+      },
     },
     // #241: the request_agent tool's function: { to: 'po' | 'supervisor', kind, params, reason, projectId?, requestedBy?, mock } →
     // { ok, text, costUsd, error?, pending? } (pending: a card waits for the owner's click in the owner's chat)
-    { channel: 'oracle:requestAgent', method: 'oracleRequestAgent', params: 'opts', fn: (input = {}) => requestAgent(input) },
+    { channel: 'oracle:requestAgent', method: 'oracleRequestAgent', params: 'opts', fn: (arg) => requestAgent(requireObject(arg, 'options')) },
     // a new session from a handoff note; the messages and the memory are kept
     { channel: 'oracle:reset', method: 'resetOracle', params: 'opts', fn: (opts) => get().reset({ mock: simulated(opts) }) },
     { channel: 'oracle:saveMemory', method: 'saveOracleMemory', params: 'text', fn: (text) => get().saveMemory(text) },
     // { busy, paused, today, owner, model, effort, contextTokens, compactAtTokens, nightWatch, ... }
     { channel: 'oracle:state', method: 'oracleState', fn: () => get().state() },
     { channel: 'oracle:tools', method: 'listOracleTools', fn: () => tools.map(({ name, description }) => ({ name, description })) },
-    { channel: 'oracle:undo', method: 'oracleUndo', params: 'opts', fn: ({ actionId } = {}) => get().undo(actionId) },
+    { channel: 'oracle:undo', method: 'oracleUndo', params: 'opts', fn: (arg) => get().undo(requireObject(arg, 'options').actionId) },
     // watch a run ({ runId }) or a project's roadmap ({ projectId }) until it ends; on: false stops
     { channel: 'oracle:watch', method: 'oracleWatch', params: 'opts', fn: (input) => wake.watch(input || {}) },
     // the batch waiting for the wake-up window now (the owner's "wake now", checks) → the wake's answer or null

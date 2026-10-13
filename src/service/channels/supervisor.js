@@ -13,6 +13,7 @@ const {
   createSupervisorChat,
 } = require('../../supervisor-chat');
 const { createWatches } = require('../../supervisor-watch');
+const { requireObject } = require('../common');
 const { resolveCommand } = require('../../engine/providers');
 const { supervisorTools } = require('../../supervisor-tools');
 
@@ -70,7 +71,13 @@ module.exports = (ctx) => {
     },
     // resuming needs no supervisor: runs:resume is the channel; this one is kept for older clients
     // (never with the owner's gate confirmation, #112: automation does not cross a human gate)
-    { channel: 'supervisor:resume', fn: ({ confirmGate: _owner, ...opts } = {}) => ctx.resumeRun(opts) },
+    {
+      channel: 'supervisor:resume',
+      fn: (arg) => {
+        const { confirmGate: _owner, ...opts } = requireObject(arg, 'options');
+        return ctx.resumeRun(opts);
+      },
+    },
     // Watch mode (opt-in per run, it costs tokens): on/off with { provider, model, effort }; the
     // messages are pushed on supervisor:watch.
     {
@@ -107,14 +114,15 @@ module.exports = (ctx) => {
     // functions, ctx.performAction), never a model; the request and its result are messages of the chat,
     // and a request from the Oracle leaves a short line in its chat. A refused or failed one is ok: false.
     // #241: a run retry or resume (or what the Night watch does not allow) is a card waiting for the owner's click.
-    { channel: 'supervisor:request', method: 'supervisorRequest', params: 'opts', fn: (opts) => request(opts) },
+    { channel: 'supervisor:request', method: 'supervisorRequest', params: 'opts', fn: (opts) => request(requireObject(opts, 'options')) },
     // #241: the owner's click on a request card in this chat: { ref, action: 'do' | 'dismiss' | 'undo', mock } →
     // { ok, text, costUsd, error?, messages }
     {
       channel: 'supervisor:requestAct',
       method: 'supervisorRequestAct',
       params: 'opts',
-      fn: async ({ ref, action, mock } = {}) => {
+      fn: async (arg) => {
+        const { ref, action, mock } = requireObject(arg, 'options');
         const out = await chat().actRequest({ ref, action }, { perform: performer(mock), restore: ctx.restoreAction, after: rules().after });
         sent(out);
         return { ...answer(out), messages: chat().history() };

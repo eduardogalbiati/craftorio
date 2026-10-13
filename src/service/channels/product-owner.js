@@ -37,6 +37,7 @@ const usage = require('../../usage');
 const workspace = require('../../workspace');
 const { resolveCommand } = require('../../engine/providers');
 const { isArchived } = require('../../renderer/views/backlog/backlog-archive');
+const { requireObject } = require('../common');
 
 module.exports = (ctx) => {
   const project = (projectId) => path.basename(String(projectId));
@@ -312,14 +313,15 @@ module.exports = (ctx) => {
     // { ok, text, costUsd, error?, pending? }; a refused or failed request is ok: false (recorded in the
     // conversation too), never a throw. #241: under the Night watch, a kind it does not allow is a card
     // waiting for the owner's click (pending).
-    { channel: 'po:request', method: 'productOwnerRequest', params: 'opts', fn: (opts) => request(opts) },
+    { channel: 'po:request', method: 'productOwnerRequest', params: 'opts', fn: (opts) => request(requireObject(opts, 'options')) },
     // #241: the owner's click on a request card in the drawer: { projectId, ref, action: 'do' | 'dismiss' | 'undo', mock } →
     // { ok, text, costUsd, error?, messages }
     {
       channel: 'po:requestAct',
       method: 'productOwnerRequestAct',
       params: 'opts',
-      fn: async ({ projectId, ref, action, mock } = {}) => {
+      fn: async (arg) => {
+        const { projectId, ref, action, mock } = requireObject(arg, 'options');
         const id = project(projectId);
         const out = await productOwner.actRequest({
           backlogDir: ctx.ws.backlog, projectId: id, input: { ref, action },

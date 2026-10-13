@@ -3,6 +3,11 @@
 // Execution › Concurrent runs): the channels that act on one take its runId.
 
 const runs = require('../../runs');
+const {
+  clientError,
+  requireId,
+  requireObject,
+} = require('../common');
 
 module.exports = (ctx) => [
   {
@@ -15,7 +20,8 @@ module.exports = (ctx) => [
     // attachments: { <input>: [path | { path, name }] } images attached to inputs (#129, WorkflowRun).
     // then: what happens with the run's result when it finishes (#134, chain-model normalizeThen).
     // agentOverrides: { <agent>: { provider?, model?, effort? } } this run's choice per agent (#262, WorkflowRun).
-    fn: ({ file, inputs, mock, mockSequences, projectId, issues, confirmed, attachments, then, agentOverrides }) => {
+    fn: (payload) => {
+      const { file, inputs, mock, mockSequences, projectId, issues, confirmed, attachments, then, agentOverrides } = requireObject(payload, 'run options');
       const list = Array.isArray(issues) && issues.length
         ? issues.map((i) => ({ number: Number(i.number), url: String(i.url || ''), title: String(i.title || '') }))
         : undefined;
@@ -46,7 +52,7 @@ module.exports = (ctx) => [
     channel: 'runs:events',
     method: 'runEvents',
     params: ['runId', '...opts'],
-    fn: ({ runId, activity }) => runs.runEvents(ctx.runFolder(runId), { activity: !!activity }),
+    fn: ({ runId, activity }) => runs.runEvents(ctx.runFolder(requireId(runId, 'run id')), { activity: !!activity }),
   },
   // the run's scratch workspace (#201: not artifacts, shown on the Run screen while it exists):
   // { dir, files, bytes } or null
@@ -54,15 +60,23 @@ module.exports = (ctx) => [
   // answer: true/false or the id of a choice; feedback: the optional text typed at the gate;
   // intent: 'save_to_issue' for "Accept and save to issue #n" (#125).
   // Gate ids are per run (a1, a2…): runId says which run (without it, the only run waiting on that id).
+  // #333: a human gate opens only to the owner's answer: a run id given as null or '' is refused (never
+  // "the only run waiting"), and so is an answer that is neither true/false nor one of the gate's choices.
   {
     channel: 'approval:resolve',
     method: 'resolveApproval',
     // images: pictures attached to the feedback (#129), given to the next agent step
     params: ['id', 'answer', 'feedback', 'runId', 'intent', 'images'],
     fn: ({ runId, id, answer, feedback, intent, images }) => {
+      if (runId !== undefined) requireId(runId, 'run id');
       const waiting = [...ctx.active.values()].filter((r) => r.approvals.has(id));
-      const run = runId ? ctx.active.get(String(runId)) : waiting.length === 1 ? waiting[0] : null;
-      return run?.resolveApproval(id, answer, 'user', feedback, intent || null, Array.isArray(images) ? images : []) ?? false;
+      const run = runId ? ctx.active.get(runId) : waiting.length === 1 ? waiting[0] : null;
+      const gate = run?.approvals.get(id)?.gate;
+      if (!gate) return false;
+      if (typeof answer !== 'boolean' && !(typeof answer === 'string' && (gate.choices || []).some((c) => c.id === answer))) {
+        throw clientError(`Invalid answer for gate ${id}: true, false or one of its choices.`);
+      }
+      return run.resolveApproval(id, answer, 'user', feedback, intent || null, Array.isArray(images) ? images : []);
     },
   },
   // resume a run from a step (a new run, no supervisor call) and what the dialog offers;
