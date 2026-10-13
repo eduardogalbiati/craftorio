@@ -98,7 +98,7 @@ function stateWith({ watch = { on: false, active: false }, day = DAY, tonight = 
   };
 }
 
-function loadView(state) {
+function loadView(state, apiOverrides = {}) {
   const box = body();
   const replay = element();
   let view = null;
@@ -134,6 +134,7 @@ function loadView(state) {
       nightWatchReport: async () => ({ nights: [], baseline: night.BASELINE }),
       setOracleNightWatch: async (...args) => { calls.watch.push(args); return {}; },
       setNightWatchLimits: async (...args) => { calls.limits.push(args); return state.current; },
+      ...apiOverrides,
     },
   };
   sandbox.window = sandbox;
@@ -249,4 +250,31 @@ test('#337 while the watch is on the screen shows the limits in force, changeabl
   await view.show();
   assert.match(textOf(box.html, 'nw-active-limits') || '', /×2 tonight: context 80M, cost US\$ 240, duration 16h, turns ×2; nightly budget US\$ 150/);
   assert.ok(outerOf(outerOf(box.html, 'nw-active-limits'), 'nw-limits-multiplier'), 'the active limits can be changed (nw-limits-multiplier)');
+});
+
+const watchOn = () => ({ on: true, active: true, until: new Date(Date.now() + 6 * 3600e3).toISOString(), startedAt: new Date().toISOString(), by: 'the owner', selfHealing: false });
+
+test('#337 a multiplier refused on the active view shows the reason and the select can be used again', async () => {
+  const state = { current: stateWith({ watch: watchOn(), tonight: { multiplier: 2 } }) };
+  const { view, box } = loadView(state, { setNightWatchLimits: async () => { throw new Error('Limits refused: the Night watch has ended'); } });
+  view.mount();
+  await view.show();
+  const sel = byTestid(box, 'nw-limits-multiplier');
+  sel.value = '3';
+  await fire(sel);
+  await new Promise((resolve) => setImmediate(resolve)); // the change handler does not return the save's promise
+  assert.match(box.html, /Limits refused: the Night watch has ended/);
+  const select = outerOf(outerOf(box.html, 'nw-active-limits') || '', 'nw-limits-multiplier') || '';
+  assert.ok(select, 'the active limits still offer the multiplier');
+  assert.doesNotMatch(select.slice(0, select.indexOf('>') + 1), /\sdisabled\b/);
+});
+
+test('#337 a custom nightly budget with no nightly budget set is not shown as a cap: the warning stays', async () => {
+  const state = { current: stateWith({ watch: watchOn(), day: { ...DAY, budget: null }, tonight: { values: { context: 60000000, budget: 200 } } }) };
+  const { view, box } = loadView(state);
+  view.mount();
+  await view.show();
+  const text = textOf(box.html, 'nw-active-limits') || '';
+  assert.match(text, /No nightly budget: nothing caps tonight's spending/);
+  assert.doesNotMatch(text, /nightly budget US\$/);
 });

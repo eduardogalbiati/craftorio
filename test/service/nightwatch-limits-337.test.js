@@ -17,6 +17,7 @@ const path = require('path');
 const actions = require('../../src/oracle-actions');
 const night = require('../../src/night-watch');
 const workspace = require('../../src/workspace');
+const budget = require('../../src/budget');
 const { makeService } = require('./helpers');
 
 // The same mapping as src/preload.js payload(): positional arguments -> the channel's argument.
@@ -71,6 +72,15 @@ test('#337 setNightWatchLimits raises the nightly budget for that night only, th
   assert.deepEqual([raised.night, raised.nightlyUsd], [w.startedAt, 150]);
   await api.setNightWatchLimits({ values: { budget: 200 } });
   assert.equal(workspace.readSettings(ws).budget.raised.nightlyUsd, 200);
+});
+
+test('#337 a custom nightly budget without a nightly budget set does not create a cap: the warning stays', async (t) => {
+  const { api, dir, ws } = setup(t);
+  const w = nightOn(dir);
+  const out = await api.setNightWatchLimits({ values: { budget: 200 } });
+  assert.equal(out.limits.day.budget, null, 'no nightly budget: the screen keeps its warning');
+  const state = budget.budgetState({ settings: workspace.readSettings(ws), runs: [], night: { active: true, startedAt: w.startedAt } });
+  assert.equal(state.night.limitUsd, null, 'nothing caps tonight\'s spending');
 });
 
 test('#337 nightwatch:state shows the day values and no limits tonight while the watch is off', async (t) => {
