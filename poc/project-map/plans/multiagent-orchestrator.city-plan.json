@@ -50,7 +50,7 @@
     { "id": "shell", "name": "App shell and widgets", "zone": "ui", "purpose": "The page, the navigation, drawers, dialogs and shared widgets.", "include": ["src/renderer/**"] },
 
     { "id": "screenshot-tools", "name": "Screenshot tooling", "zone": "tooling", "purpose": "Simulated data and views for UI screenshots.", "include": ["scripts/screenshot/**", "scripts/screenshot.js"] },
-    { "id": "scripts", "name": "Build and dev scripts", "zone": "tooling", "purpose": "Packaging, docs, the CLI runner, ratchets and checks.", "include": ["scripts/**", "supabase/**", "*"] },
+    { "id": "scripts", "name": "Build and dev scripts", "zone": "tooling", "purpose": "Packaging, docs, the CLI runner, ratchets and checks.", "include": ["scripts/**", "supabase/**", "/*"] },
 
     { "id": "skills", "name": "Skills", "zone": "library", "purpose": "The bundled skills agents get, with their rules and references.", "include": ["skills/**"] },
     { "id": "workflows", "name": "Workflows and pipelines", "zone": "library", "purpose": "The bundled workflow YAML and saved pipelines.", "include": ["workflows/**", "pipelines/**"] }

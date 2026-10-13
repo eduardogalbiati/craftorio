@@ -51,7 +51,7 @@
     { "id": "automation", "name": "Automation and MCP", "zone": "civic", "purpose": "An MCP server over the engine and a bridge to a running GUI.", "include": ["crates/automation/**"] },
 
     { "id": "xtask", "name": "Build tasks", "zone": "workshop", "purpose": "xtask commands and the test corpora manifests.", "include": ["xtask/**"] },
-    { "id": "release", "name": "Packaging and release", "zone": "workshop", "purpose": "Installers, perf and scorecard checks, scripts and the workspace configuration.", "include": ["packaging/**", "perf/**", "scorecard/**", "scripts/**", "*"] }
+    { "id": "release", "name": "Packaging and release", "zone": "workshop", "purpose": "Installers, perf and scorecard checks, scripts and the workspace configuration.", "include": ["packaging/**", "perf/**", "scorecard/**", "scripts/**", ".cargo/**", ".config/**", "/*"] }
   ],
   "landmarks": [
     { "path": "apps/photocraft/src/main.rs", "label": "Desktop app entry" },

@@ -69,9 +69,14 @@ const git = (repo, argv) => execFileSync('git', ['-c', 'core.quotepath=off', ...
 
 // ---------- globs ----------
 /** A glob as a RegExp over repository paths: `**` crosses folders, `*` and `?` stay in a segment, no slash means a root file. */
+// Same rules as the app's src/shared/globs.js: a pattern without a slash matches the file name at
+// any depth (as in .gitignore); a leading `/` anchors it to the root (`/*` = the root files).
 function globToRegExp(glob) {
-  const segments = glob.split('/');
-  let re = '^';
+  let g = String(glob).trim();
+  const anywhere = !g.includes('/');
+  if (g.startsWith('/')) g = g.slice(1);
+  const segments = g.split('/');
+  let re = anywhere ? '^(?:[^/]+/)*' : '^';
   segments.forEach((seg, i) => {
     const last = i === segments.length - 1;
     if (seg === '**') { re += last ? '(?:[^/]+/)*[^/]+' : '(?:[^/]+/)*'; return; }

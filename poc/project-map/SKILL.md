@@ -61,8 +61,10 @@ really calls.
 
 ## Rules over paths
 
-- `include` / `exclude` are globs relative to the repository root (`**` crosses folders, `*` does
-  not). **The first district whose rules match wins**, in the order you list them: put specific
+- `include` / `exclude` are globs relative to the repository root, with the app's glob rules
+  (`src/shared/globs.js`): `**` crosses folders, `*` and `?` do not; a pattern without a slash
+  matches the file name at any depth (as in .gitignore); a leading `/` anchors it to the root
+  (`/*` = the files at the root). **The first district whose rules match wins**, in the order you list them: put specific
   districts before general ones (`crates/ui-egui/src/*_tests.rs` before `crates/ui-egui/**`).
 - `ignore` lists what is not drawn at all (binary assets, lock files, generated output, vendored
   code). Markdown docs are drawn only if you give them a district.
