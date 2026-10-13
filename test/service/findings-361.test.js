@@ -66,6 +66,16 @@ test('app:info tells whether the app is packaged (a packaged build)', async (t) 
   assert.equal((await api['app:info']()).isPackaged, true);
 });
 
+test('app:info\'s result schema lists isPackaged and screenshot as booleans, and its answer gives booleans', async (t) => {
+  const { service, api } = makeService(t, { isPackaged: false });
+  const props = service.manifest.find((e) => e.channel === 'app:info').schema.result.properties;
+  assert.equal(props.isPackaged?.type, 'boolean', 'schema.result names isPackaged');
+  assert.equal(props.screenshot?.type, 'boolean', 'schema.result names screenshot');
+  const info = await api['app:info']();
+  assert.equal(typeof info.isPackaged, 'boolean');
+  assert.equal(typeof info.screenshot, 'boolean');
+});
+
 test('findings:save writes the finding into <workspace>/findings/<id>/', async (t) => {
   const { service, api } = makeService(t);
   const out = await channel(api, 'findings:save')(finding());
