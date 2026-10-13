@@ -76,6 +76,16 @@ const row = (model, file) => model.files.find((f) => f.file === file);
 const commitsOf = (model, file) => { const r = row(model, file); return r ? r.commits : undefined; };
 const excludedSum = (model) => Object.values(model.excluded).reduce((s, n) => s + n, 0);
 
+// ---------- the window's bounds ----------
+
+// The tab's "To" date is sent as that day's T23:59:59Z (project-architecture.js range()): a commit
+// made later that day is inside the window, one of the next day is not.
+test('#356 buildModel: the window\'s until bound includes the whole of that day', () => {
+  assert.equal(commitsOf(build({ window: { since: null, until: '2026-03-15T23:59:59Z' } }), 'src/app.js'), 4);
+  assert.equal(commitsOf(build({ window: { since: null, until: '2026-03-14T23:59:59Z' } }), 'src/app.js'), 3);
+  assert.equal(commitsOf(build({ window: { since: '2026-03-15T00:00:00Z', until: '2026-03-15T23:59:59Z' } }), 'src/app.js'), 1);
+});
+
 // ---------- parseLog, median, sortKeys ----------
 
 test('#356 parseLog reads hashes, dates, statuses and paths, newest first, renames with both paths', () => {

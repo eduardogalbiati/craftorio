@@ -122,3 +122,55 @@ test('#356 estimateCost uses the 5 newest real reports, in any order, simulated 
 test('#356 estimateCost with only simulated reports is null', () => {
   assert.equal(load().estimateCost([{ date: '2026-10-01T10:00:00Z', costUsd: 0, simulated: true }]), null);
 });
+
+// ---------- analyze: one real Oracle turn (the turn itself is faked at the src/oracle.js boundary) ----------
+
+// a facts model built by the core, as the service hands it to the turn
+const MODEL = require('../src/shared/architecture-model').buildModel({
+  head: { commit: 'c2', date: '2026-01-02T00:00:00Z' }, branch: 'main',
+  files: [{ path: 'src/app.js', lines: 200 }],
+  log: '\x01c2 2026-01-02T00:00:00Z\n\nM\tsrc/app.js\n\x01c1 2026-01-01T00:00:00Z\n\nA\tsrc/app.js\n',
+});
+
+// a fake { oneTurn, budgetRefusal } of src/oracle.js: records each turn's arguments, answers `text`
+function fakeOracle(text, { refusal = null } = {}) {
+  const turns = [];
+  return {
+    turns,
+    budgetRefusal: () => refusal,
+    oneTurn: async (args) => { turns.push(args); return { text, costUsd: 0.12, tokens: { input: 1000, output: 200 } }; },
+  };
+}
+
+const analyzeWith = (oracle) => load().analyze({ project: { id: 'p1', name: 'Demo' }, model: MODEL, mock: false, oracle, agent: { model: 'claude-opus-5-5', effort: 'high' } });
+
+test('#356 a real analysis starts a fresh Oracle session with the startReason "architecture"', async () => {
+  const oracle = fakeOracle(JSON.stringify(report()));
+  await analyzeWith(oracle);
+  assert.equal(oracle.turns.length, 1);
+  const [turn] = oracle.turns;
+  // no sessionId: a fresh session, recorded in usage.jsonl as session 'fresh' because startReason is set
+  assert.equal(turn.sessionId ?? null, null);
+  assert.equal(turn.startReason, 'architecture');
+  assert.equal(turn.model, 'claude-opus-5-5');
+});
+
+test('#356 a real analysis gives the validated report with its real cost and tokens', async () => {
+  const out = await analyzeWith(fakeOracle(`Here it is:\n\`\`\`json\n${JSON.stringify(report())}\n\`\`\`\n`));
+  assert.equal(out.simulated, false);
+  assert.equal(out.costUsd, 0.12);
+  assert.deepEqual(out.tokens, { input: 1000, output: 200 });
+  assert.equal(out.report.summary, report().summary);
+});
+
+test('#356 an invalid Oracle answer is an error, not half a report', async () => {
+  const bad = { ...report(), summary: undefined };
+  await assert.rejects(analyzeWith(fakeOracle(JSON.stringify(bad))), /summary/);
+});
+
+test('#356 an analysis over the Oracle\'s daily budget is refused without a turn', async () => {
+  const oracle = fakeOracle(JSON.stringify(report()), { refusal: { reason: 'daily-budget', spentUsd: 20, limitUsd: 20 } });
+  const out = await analyzeWith(oracle);
+  assert.equal(out.refused.reason, 'daily-budget');
+  assert.equal(oracle.turns.length, 0);
+});

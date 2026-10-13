@@ -7,6 +7,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { spawnSync } = require('child_process');
 const core = require('../src/shared/architecture-model');
 const { parseLizard } = require('../src/architecture-facts');
 const proposals = require('../src/refactor-proposals');
@@ -23,6 +24,28 @@ test('#356 globRe: a hostile pattern does not backtrack (runs of * collapse, too
   assert.equal(hostile.test(`${'a'.repeat(60)}c`), false);
   assert.equal(core.globRe('***.lock').test('x/yarn.lock'), true);
   assert.ok(Number(process.hrtime.bigint() - started) / 1e6 < 1000);
+});
+
+// A repository's .gitattributes (or the project's exclude list) with 8 single `*` wildcards, the most
+// the cap allows, against a long path that does not match. Run in a child process with a deadline,
+// so a catastrophic backtrack fails the test instead of hanging the file.
+test('#356 globRe: 8 single-star wildcards against a 200-character path that does not match return fast', () => {
+  const modulePath = JSON.stringify(path.join(__dirname, '..', 'src', 'shared', 'architecture-model.js'));
+  const script = [
+    `const core = require(${modulePath});`,
+    "const pattern = '*a'.repeat(8);",
+    "const file = 'a'.repeat(200) + 'c';",
+    'const t0 = Date.now();',
+    'const hit = core.globRe(pattern).test(file);',
+    "core.buildModel({ files: [{ path: file, lines: 1 }], log: '', attributes: pattern + ' linguist-generated\\n', exclude: [pattern] });",
+    'process.stdout.write(JSON.stringify({ hit, ms: Date.now() - t0 }));',
+  ].join('\n');
+  const out = spawnSync(process.execPath, ['-e', script], { encoding: 'utf8', timeout: 10000 });
+  assert.equal(out.signal, null, 'globRe still running after 10 s: the wildcard cap does not prevent catastrophic backtracking');
+  assert.equal(out.status, 0, out.stderr);
+  const { hit, ms } = JSON.parse(out.stdout);
+  assert.equal(hit, false);
+  assert.ok(ms < 1000, `globRe and buildModel took ${ms} ms`);
 });
 
 test('#356 globRe: a pattern without a slash matches at any depth, a directory pattern its contents, ** spans folders', () => {
