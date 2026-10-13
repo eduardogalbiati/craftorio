@@ -246,6 +246,51 @@ test('allowedActions on a disabled stage: Start says to enable it first', () => 
   refused(actions(allowedActions(r, r.stages[0])), 'start', /disabled|enable/i);
 });
 
+test('allowedActions on a stage: Enable only on a disabled stage, Disable only on an enabled one', () => {
+  const { allowedActions } = load();
+  const r = roadmap('planned', [stage('s1', [item('i1', 'planned')], { disabled: true }), stage('s2', [item('i2', 'planned')])]);
+  const off = actions(allowedActions(r, r.stages[0]));
+  allowed(off, 'enable');
+  refused(off, 'disable');
+  const on = actions(allowedActions(r, r.stages[1]));
+  refused(on, 'enable');
+  allowed(on, 'disable');
+});
+
+test('allowedActions: Stop applies to a running or paused roadmap, not to a planned one', () => {
+  const { allowedActions } = load();
+  const stages = () => [stage('s1', [item('i1', 'planned')])];
+  refused(actions(allowedActions(roadmap('planned', stages()))), 'stop');
+  allowed(actions(allowedActions(roadmap('paused', stages()))), 'stop');
+  allowed(actions(allowedActions(roadmap('running', stages()))), 'stop');
+});
+
+test('allowedActions: Resume is refused on a paused roadmap with no stage', () => {
+  const { allowedActions } = load();
+  refused(actions(allowedActions(roadmap('paused', []))), 'resume');
+});
+
+test('allowedActions on a stage: Run this stage gives the stage menu\'s reasons', () => {
+  const { allowedActions } = load();
+  const disabled = roadmap('planned', [stage('s1', [item('i1', 'planned')], { disabled: true })]);
+  assert.equal(actions(allowedActions(disabled, disabled.stages[0])).start.reason, 'This stage is disabled: enable it first');
+  const running = roadmap('running', [stage('s1', [item('i1', 'running')]), stage('s2', [item('i2', 'planned')])]);
+  assert.equal(actions(allowedActions(running, running.stages[1])).start.reason, 'The roadmap is running: pause or stop it first');
+  const over = roadmap('paused', [stage('s1', [item('i1', 'done'), item('i2', 'failed')]), stage('s2', [item('i3', 'planned')])]);
+  assert.equal(actions(allowedActions(over, over.stages[0])).start.reason, 'No planned item in this stage');
+  allowed(actions(allowedActions(over, over.stages[1])), 'start');
+});
+
+test('scopedStage is the index of the scope\'s stage while it has work, -1 otherwise (#237)', () => {
+  const { scopedStage } = load();
+  const stages = (extra = {}) => [stage('s1', [item('i1', 'planned')]), stage('s2', [item('i2', 'planned')], extra)];
+  assert.equal(scopedStage(roadmap('paused', stages(), { scope: { stage: 's2' } })), 1);
+  assert.equal(scopedStage(roadmap('paused', stages())), -1);
+  assert.equal(scopedStage(roadmap('paused', stages({ disabled: true }), { scope: { stage: 's2' } })), -1);
+  assert.equal(scopedStage(roadmap('paused', [stage('s1', [item('i1', 'planned')]), stage('s2', [item('i2', 'done'), item('i3', 'skipped')])], { scope: { stage: 's2' } })), -1);
+  assert.equal(scopedStage(roadmap('paused', stages(), { scope: { stage: 'gone' } })), -1);
+});
+
 test('loaded by a <script>, the model sets window.RoadmapModel', () => {
   const sandbox = { window: {} };
   sandbox.window.window = sandbox.window;
