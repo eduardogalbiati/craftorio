@@ -327,3 +327,32 @@ test('manifest: keepAwake:state is desktop-only, keepAwake:changed is a pushed e
   assert.equal(typeof browser.keepAwakeState, 'function');
   await assert.rejects(browser.keepAwakeState(), /Keeping the computer awake is only available in the desktop app\./);
 });
+
+// #338: the arguments are checked against the channel's schema before its code runs; over HTTP a
+// refused call is a 400 that names the parameter and the rule, and the server keeps serving.
+test('#338 a call whose arguments break the channel schema answers 400 naming the parameter and the rule', async (t) => {
+  const { base } = await start(t);
+  const runId = '20261013-000930-076152f0';
+  const long = await callApi(base, 'runs:setTitle', { runId, title: 'x'.repeat(201) });
+  assert.equal(long.status, 400);
+  assert.match(long.json?.error || '', /title: at most 200 characters/);
+  const wrongType = await callApi(base, 'runs:setTitle', { runId, title: 42 });
+  assert.equal(wrongType.status, 400);
+  assert.match(wrongType.json?.error || '', /title/);
+  const list = await callApi(base, 'projects:list');
+  assert.deepEqual([list.status, list.json], [200, { result: [] }]);
+});
+
+test('#338 GET /api/manifest publishes each entry\'s schema', async (t) => {
+  const { base } = await start(t);
+  const res = await request(base, { path: '/api/manifest', headers: bearer });
+  assert.equal(res.status, 200);
+  const entry = res.json.result.find((e) => e.channel === 'runs:setTitle');
+  assert.ok(entry?.schema, 'runs:setTitle has no schema in the published manifest');
+  assert.equal(entry.schema.params.type, 'object');
+  assert.equal(entry.schema.params.properties.title.type, 'string');
+  assert.equal(entry.schema.params.properties.title.maxLength, 200);
+  assert.ok(entry.schema.params.properties.runId, 'the run id is described');
+  assert.equal('result' in entry.schema, true);
+  assert.equal('fn' in entry, false);
+});

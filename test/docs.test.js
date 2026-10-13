@@ -394,3 +394,18 @@ test('main(--check): reports index.html as stale when a generated line is missin
   ));
   assert.equal(main(['--check'], tmp), 1);
 });
+
+// #338: the channel reference, generated from the app's manifest and its schemas (derived like the
+// code map: rebuilt by --derived, gitignored).
+test('#338 main(--derived) writes docs/agents/channels.md: each channel with its arguments and result', (t) => {
+  const tmp = tmpFullRoot(t);
+  assert.equal(main(['--derived'], tmp), 0);
+  const file = path.join(tmp, 'docs', 'agents', 'channels.md');
+  assert.equal(fs.existsSync(file), true, 'no channel reference written');
+  const ref = read(file);
+  for (const channel of ['runs:setTitle', 'runs:events', 'roadmap:get', 'projects:list']) assert.match(ref, new RegExp(channel), channel);
+  const setTitle = ref.slice(ref.indexOf('runs:setTitle'), ref.indexOf('runs:setTitle') + 1500);
+  assert.match(setTitle, /title/);
+  assert.match(setTitle, /200/, 'the title limit is in the reference');
+  assert.match(read(path.join(root, '.gitignore')), /^docs\/agents\/channels\.md$/m);
+});
