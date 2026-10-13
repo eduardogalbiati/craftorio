@@ -194,6 +194,111 @@ test('#341 scripts/package.js builds multiagent-mcp in release for each release 
   assert.match(src, /src\/supervisor-mcp\.js/);
 });
 
+const pkgScript = () => require('../scripts/package.js');
+const PACK_LEGS = [['win32', 'x64'], ['darwin', 'arm64'], ['darwin', 'x64'], ['linux', 'x64']];
+
+test('#341 packagerOptions: app.asar gets nothing from native/ (sources, Cargo files, cargo\'s target/)', () => {
+  const { packagerOptions } = pkgScript();
+  const out = path.join(root, '.scratch', 'pkg-out');
+  for (const [platform, arch] of PACK_LEGS) {
+    const { ignore } = packagerOptions({ platform, arch, out });
+    const ignored = (p) => ignore.some((re) => re.test(p));
+    for (const p of ['/native', '/native/Cargo.toml', '/native/Cargo.lock', '/native/target/release/multiagent-mcp.exe', '/native/multiagent-mcp/src/main.rs']) {
+      assert.equal(ignored(p), true, `${platform}-${arch}: ${p} is kept in app.asar`);
+    }
+    for (const p of ['/src/supervisor-mcp.js', '/src/main.js', '/nativeish.js', '/src/native/x.js']) {
+      assert.equal(ignored(p), false, `${platform}-${arch}: ${p} is dropped`);
+    }
+  }
+});
+
+test('#341 packagerOptions: the folder buildNative fills is an extra resource named bin, one per platform and arch', () => {
+  const { packagerOptions, nativeBinDir } = pkgScript();
+  const out = path.join(root, '.scratch', 'pkg-out');
+  const dirs = new Set();
+  for (const [platform, arch] of PACK_LEGS) {
+    const extra = [].concat(packagerOptions({ platform, arch, out }).extraResource || []);
+    const dir = nativeBinDir({ platform, arch, out });
+    assert.ok(extra.includes(dir), `${platform}-${arch}: extraResource has ${dir}`);
+    assert.equal(path.basename(dir), 'bin', 'packaged as resources/bin/');
+    dirs.add(dir);
+  }
+  assert.equal(dirs.size, PACK_LEGS.length, 'each leg has its own folder');
+});
+
+// buildNative with a stubbed process runner (the boundary) and a fake cargo target folder.
+function nativeBuild(t, { platform, arch, reply = () => ({ status: 0 }) }) {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'native-341-'));
+  const before = process.env.CARGO_TARGET_DIR;
+  process.env.CARGO_TARGET_DIR = path.join(tmp, 'target');
+  t.after(() => {
+    if (before === undefined) delete process.env.CARGO_TARGET_DIR; else process.env.CARGO_TARGET_DIR = before;
+    fs.rmSync(tmp, { recursive: true, force: true });
+  });
+  const calls = [];
+  const run = (cmd, args) => {
+    calls.push([cmd, ...args]);
+    if (cmd === 'cargo' && args.includes('build')) {
+      const triple = args[args.indexOf('--target') + 1];
+      const file = platform === 'win32' ? 'multiagent-mcp.exe' : 'multiagent-mcp';
+      const dir = path.join(tmp, 'target', triple, 'release');
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, file), `binary for ${triple}`);
+    }
+    return reply(cmd, args);
+  };
+  return { out: path.join(tmp, 'out'), calls, run };
+}
+
+test('#341 buildNative: builds multiagent-mcp in release for the leg\'s target and copies it into the bin folder', (t) => {
+  const { buildNative, nativeBinDir } = pkgScript();
+  for (const [platform, arch, triple, file] of [
+    ['win32', 'x64', 'x86_64-pc-windows-msvc', 'multiagent-mcp.exe'],
+    ['linux', 'x64', 'x86_64-unknown-linux-gnu', 'multiagent-mcp'],
+  ]) {
+    const b = nativeBuild(t, { platform, arch });
+    const dir = buildNative({ platform, arch, out: b.out }, b.run);
+    assert.equal(dir, nativeBinDir({ platform, arch, out: b.out }));
+    assert.deepEqual(fs.readdirSync(dir), [file]);
+    assert.equal(fs.readFileSync(path.join(dir, file), 'utf8'), `binary for ${triple}`);
+    const cargo = b.calls.find((c) => c[0] === 'cargo');
+    for (const a of ['build', '--release', '--target', triple, 'multiagent-mcp']) assert.ok(cargo.includes(a), `${platform}: cargo ${a}`);
+  }
+});
+
+test('#341 buildNative: macOS signs the binary ad hoc when packaged on a Mac, never elsewhere', (t) => {
+  const { buildNative } = pkgScript();
+  const b = nativeBuild(t, { platform: 'darwin', arch: 'arm64' });
+  const dir = buildNative({ platform: 'darwin', arch: 'arm64', out: b.out }, b.run);
+  const sign = b.calls.filter((c) => c[0] === 'codesign');
+  if (process.platform === 'darwin') {
+    assert.equal(sign.length, 1);
+    assert.ok(sign[0].includes('-') && sign[0].includes(path.join(dir, 'multiagent-mcp')), JSON.stringify(sign));
+  } else {
+    assert.equal(sign.length, 0, 'no codesign off macOS');
+  }
+  const linux = nativeBuild(t, { platform: 'linux', arch: 'x64' });
+  buildNative({ platform: 'linux', arch: 'x64', out: linux.out }, linux.run);
+  assert.equal(linux.calls.some((c) => c[0] === 'codesign'), false, 'Linux is never signed');
+});
+
+test('#341 buildNative: a command that cannot start names the Rust toolchain; a failing build gives its exit status only', (t) => {
+  const { buildNative } = pkgScript();
+  const missing = nativeBuild(t, { platform: 'linux', arch: 'x64', reply: () => ({ error: new Error('spawn rustup ENOENT'), status: null }) });
+  assert.throws(() => buildNative({ platform: 'linux', arch: 'x64', out: missing.out }, missing.run), (e) => {
+    assert.match(e.message, /ENOENT/);
+    assert.match(e.message, /Rust toolchain/);
+    return true;
+  });
+  const failing = nativeBuild(t, { platform: 'linux', arch: 'x64', reply: (cmd) => ({ status: cmd === 'cargo' ? 101 : 0 }) });
+  assert.throws(() => buildNative({ platform: 'linux', arch: 'x64', out: failing.out }, failing.run), (e) => {
+    assert.match(e.message, /^cargo build\b/);
+    assert.match(e.message, /exit status 101/);
+    assert.doesNotMatch(e.message, /Rust toolchain/);
+    return true;
+  });
+});
+
 const jobsOf = (file) => Object.entries(yaml.load(read(file)).jobs).map(([name, j]) => ({ name, steps: j.steps || [] }));
 const isRustSetup = (s) => /rust-toolchain|rustup/.test(`${s.uses || ''} ${s.run || ''}`);
 

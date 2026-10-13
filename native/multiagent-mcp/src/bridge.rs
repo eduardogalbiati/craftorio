@@ -245,4 +245,96 @@ mod tests {
         assert_eq!(reply(500, b"{}").unwrap_err(), "HTTP 500");
         assert!(reply(200, b"not json").is_err());
     }
+
+    // A one-request HTTP server on 127.0.0.1: answers `response`, returns the raw request it read.
+    fn serve_once(response: &'static [u8]) -> (String, std::thread::JoinHandle<Vec<u8>>) {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        let handle = std::thread::spawn(move || {
+            let (mut s, _) = listener.accept().unwrap();
+            let mut req = Vec::new();
+            let mut buf = [0u8; 4096];
+            loop {
+                let n = s.read(&mut buf).unwrap();
+                if n == 0 {
+                    break;
+                }
+                req.extend_from_slice(&buf[..n]);
+                if let Some(end) = find(&req, b"\r\n\r\n") {
+                    let head = String::from_utf8_lossy(&req[..end]).to_lowercase();
+                    let len = head
+                        .lines()
+                        .find_map(|l| l.strip_prefix("content-length:"))
+                        .map(|v| v.trim().parse::<usize>().unwrap())
+                        .unwrap_or(0);
+                    if req.len() >= end + 4 + len {
+                        break;
+                    }
+                }
+            }
+            s.write_all(response).unwrap();
+            req
+        });
+        (url, handle)
+    }
+
+    fn bridge(url: String) -> Bridge {
+        Bridge {
+            url,
+            token: "tok123".into(),
+        }
+    }
+
+    #[test]
+    fn post_sends_the_route_token_and_json_body_and_returns_a_200_reply() {
+        let (url, server) =
+            serve_once(b"HTTP/1.1 200 OK\r\nContent-Length: 12\r\n\r\n{\"tools\":[]}");
+        let body = json!({ "name": "echo", "arguments": { "s": "ação ✓" } });
+        let out = bridge(url).post("/tools/call", &body).unwrap();
+        assert_eq!(out, json!({ "tools": [] }));
+        let req = server.join().unwrap();
+        let end = find(&req, b"\r\n\r\n").unwrap();
+        let head = String::from_utf8_lossy(&req[..end]).to_string();
+        assert!(head.starts_with("POST /tools/call HTTP/1.1\r\n"), "{head}");
+        assert!(head.contains("Authorization: Bearer tok123\r\n"), "{head}");
+        let sent = &req[end + 4..];
+        assert!(
+            head.contains(&format!("Content-Length: {}\r\n", sent.len())),
+            "the length counts bytes: {head}"
+        );
+        assert_eq!(serde_json::from_slice::<Value>(sent).unwrap(), body);
+    }
+
+    #[test]
+    fn post_gives_the_bridges_error_on_a_403() {
+        let (url, server) = serve_once(
+            b"HTTP/1.1 403 Forbidden\r\nContent-Type: application/json\r\nContent-Length: 21\r\n\r\n{\"error\":\"forbidden\"}",
+        );
+        assert_eq!(
+            bridge(url).post("/tools/list", &json!({})).unwrap_err(),
+            "forbidden"
+        );
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn post_reads_a_chunked_reply() {
+        let (url, server) = serve_once(
+            b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n7\r\n{\"text\"\r\n6\r\n:\"hi\"}\r\n0\r\n\r\n",
+        );
+        assert_eq!(
+            bridge(url).post("/tools/call", &json!({})).unwrap(),
+            json!({ "text": "hi" })
+        );
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn post_to_a_closed_port_is_an_error_that_says_why() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        drop(listener);
+        let err = bridge(url).post("/tools/list", &json!({})).unwrap_err();
+        assert!(err.starts_with("connect 127.0.0.1:"), "{err}");
+    }
 }
