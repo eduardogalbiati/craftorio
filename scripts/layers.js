@@ -83,10 +83,12 @@ function listJs(dir) {
   }).sort();
 }
 
-// The source with comments blanked (strings and line breaks kept, so targets and lines survive).
+// The source with comments and regex literals blanked (strings and line breaks kept, so targets
+// and lines survive). A / after an operator, an opening bracket or `return` starts a regex.
 function withoutComments(src) {
   let out = '';
   let i = 0;
+  let prev = '';
   while (i < src.length) {
     const two = src.slice(i, i + 2);
     if (two === '//' || two === '/*') {
@@ -102,9 +104,27 @@ function withoutComments(src) {
       while (j < src.length && src[j] !== c) j += src[j] === '\\' ? 2 : 1;
       out += src.slice(i, j + 1);
       i = j + 1;
+      prev = '"';
+      continue;
+    }
+    if (c === '/' && /[(,=:[!&|?{};+\-*%<>~^]|^$|return$/.test(prev)) {
+      let j = i + 1;
+      let cls = false;
+      while (j < src.length && (cls || src[j] !== '/') && src[j] !== '\n') {
+        if (src[j] === '\\') j++;
+        else if (src[j] === '[') cls = true;
+        else if (src[j] === ']') cls = false;
+        j++;
+      }
+      j++;
+      while (/[a-z]/.test(src[j] || '')) j++;
+      out += src.slice(i, j).replace(/[^\n]/g, ' ');
+      i = j;
+      prev = '"';
       continue;
     }
     out += c;
+    if (!/\s/.test(c)) prev = (/[\w$]/.test(c) && /[\w$]$/.test(prev) ? prev + c : c).slice(-6);
     i++;
   }
   return out;
