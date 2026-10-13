@@ -242,7 +242,9 @@ module.exports = (ctx) => {
   // A paused run's resume point (#368): { step, next, at, steps, turns } from its summary.json (steps:
   // the ones it visited, { output, visits }; turns: what each agent's next turn re-reads, #320, its
   // sessions taken as open again: a cold cache shows its cold_resume_usd), or null when the run did
-  // not end paused.
+  // not end paused. The summary, not the step.finished events resumeSpec reads: it carries the
+  // engine's visit counters after endOfError uncounted the visit the pause left unfinished, and each
+  // step's last output, an on_error one included, exactly as the paused run would have routed it.
   function pausedStep(runDir) {
     let summary = null;
     try { summary = JSON.parse(fs.readFileSync(path.join(runDir, 'summary.json'), 'utf8')); } catch { return null; }

@@ -269,6 +269,7 @@ class WorkflowRun extends EventEmitter {
     // stopped once it did ({ step, next, at }: summary.paused, what Resume continues from)
     this.pausing = null;
     this.paused = null;
+    this.lastFinished = null; // { step, visit } of the last step.finished (endOfError)
     this.childHandles = new Set(); // the handles of the child runs in progress (startChild), paused with this run
     this.liveCommand = null; // the step command in progress (a suite step's), named while the run pauses
     this.seq = 0;
@@ -280,6 +281,7 @@ class WorkflowRun extends EventEmitter {
   emitEvent(type, data = {}) {
     const ev = { seq: ++this.seq, ts: new Date().toISOString(), run_id: this.runId, type, ...data };
     if (type !== 'session.stream') { this.recent.push(ev); if (this.recent.length > 300) this.recent.shift(); this.trail.apply(ev); }
+    if (type === 'step.finished') this.lastFinished = { step: data.step_id, visit: data.visit }; // endOfError (#368)
     this.emit('event', ev);
     return ev;
   }
@@ -388,7 +390,9 @@ class WorkflowRun extends EventEmitter {
     if (!e.paused) return { status: 'failed', error: e };
     if (this.pausing) this.pausing.final = true; // ending now: Cancel pause no longer applies
     const st = this.ctx.steps[current];
-    if (this.stepRunning === current && st?.visits) st.visits--;
+    // a gate after step.finished (a stall check) leaves its visit counted: it has its output
+    const finished = this.lastFinished?.step === current && this.lastFinished.visit === st?.visits;
+    if (this.stepRunning === current && st?.visits && !finished) st.visits--;
     this.paused = { step: current, next: this.nextTurnOf(current), at: new Date().toISOString() };
     return { status: 'paused', error: null };
   }
@@ -502,7 +506,7 @@ class WorkflowRun extends EventEmitter {
     } else if (step.type === 'screenshots') {
       // no agent, no supervisor: whatever fails is in the output, for the gate that follows (#144)
       try {
-        output = await this.runScreenshots(step, st);
+        output = await this.withLiveCommand(`the screenshots of ${step.id}`, () => this.runScreenshots(step, st));
       } finally {
         await this.stopWorktreeProcesses(`step ${step.id}`);
       }
@@ -696,7 +700,8 @@ class WorkflowRun extends EventEmitter {
       }
       this.emitEvent('log', { level: 'warn', kind: 'invalid_output', step_id: step.id, message: `Invalid output in ${step.id}${step.agents ? ` (${agentName})` : ''}: ${errs.join('; ')}` });
       if (attempt >= 2) throw new Error(`Output of step "${step.id}" failed validation: ${errs.join('; ')}`);
-      res = await this.sendToAgent(agentName, this.retryPrompt(agentName, prompt, res.text, schema, errs), { ...opts, retry: true });
+      if (this.pausing) throw pausedError(); // #368: no retry turn; Resume runs the visit again
+      res =await this.sendToAgent(agentName, this.retryPrompt(agentName, prompt, res.text, schema, errs), { ...opts, retry: true });
       countTools(res);
       st.lastAnswer = res.text;
     }

@@ -36,11 +36,13 @@ const {
 const TITLE = shape({ runId: RUN_ID, title: STRING, customTitle: ANY }, ['runId']);
 
 // The run in progress in this process that `opts.runId` names, for `what` (run:pause, #368).
-function liveRunOf(ctx, opts, what) {
+// (optional: null for a run that is not in progress, run:stop's answer)
+function liveRunOf(ctx, opts, what, optional = false) {
   const runId = requireId(opts?.runId, 'runId');
   const run = ctx.liveRun(runId);
   if (run) return run;
   if (ctx.runAlive(runId)) throw new Error(`Run ${runId} runs in another app window: ${what} it there.`);
+  if (optional) return null;
   throw clientError(`Run ${runId} is not in progress: there is nothing to ${what}.`);
 }
 
@@ -87,9 +89,8 @@ module.exports = (ctx) => [
     params: ['runId'],
     schema: { params: args({ runId: RUN_ID }), result: BOOL },
     fn: (opts) => {
-      const run = ctx.liveRun(opts?.runId);
+      const run = opts?.runId ? liveRunOf(ctx, opts, 'stop', true) : ctx.liveRun(null);
       if (!run && !opts?.runId && ctx.active.size > 1) throw new Error('Several runs are in progress: say which one to stop.');
-      if (!run && opts?.runId && ctx.runAlive(opts.runId)) throw new Error(`Run ${opts.runId} runs in another app window: stop it there.`);
       run?.stop();
       return !!run;
     },

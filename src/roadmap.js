@@ -609,7 +609,7 @@ const stageName = (r, at) => r.stages[at].name || `Stage ${at + 1}`;
 
 // One stage's step: its items whose issues are all closed are skipped, a failure pauses the roadmap,
 // else the items to start; null when every item is finished.
-function stageStep(r, at, { closed, canStart }) {
+function stageStep(r, at, { closed, canStart, now }) {
   const stage = r.stages[at];
   for (const item of stage.items) {
     if (item.status === 'planned' && !testsLater(item) && itemIssues(item).every((i) => closed(i.number, item))) {
@@ -626,7 +626,7 @@ function stageStep(r, at, { closed, canStart }) {
   if (stage.items.every((x) => isFinished(x))) return null;
   // #368: what is left of the stage is runs the owner paused: the roadmap waits at it, paused, for Resume
   if (!stage.items.some((x) => ['planned', 'running'].includes(x.status))) {
-    return { roadmap: { ...pauseRoadmap(r, `${stageName(r, at)}: its runs are paused. Resume continues them where they stopped.`), pausedStage: stage.id }, start: [] };
+    return { roadmap: { ...pauseRoadmap(r, `${stageName(r, at)}: its runs are paused. Resume continues them where they stopped.`), pausedStage: stage.id, pausedAt: r.pausedAt || now().toISOString() }, start: [] };
   }
   return { roadmap: r, start: stage.items.filter((x) => x.status === 'planned' && canStart(x)) };
 }
@@ -636,14 +636,15 @@ function stageStep(r, at, { closed, canStart }) {
  * a failure, moves to the next stage when every item is done or skipped, and lists the items to start.
  * A roadmap running one stage (`scope`, #141) only works on that stage, and pauses when it is over.
  * @param {object} roadmap
- * @param {{ runOf: (runId) => ({ status, waiting?, merged? } | null), closed?: (number, item) => boolean, canStart?: (item) => boolean }} env
+ * @param {{ runOf: (runId) => ({ status, waiting?, merged? } | null), closed?: (number, item) => boolean, canStart?: (item) => boolean, now?: () => Date }} env
+ * (now: the clock of a stage pause's `pausedAt`, #368)
  * A live roadmap (#164) whose last stage ends stays running and asks for a refill (`refill: true`):
  * the caller adds the next stages, or ends it (src/live-roadmap.js applyRefill).
  * A cut line (#260) the roadmap reached and whose release has not shipped holds everything after it:
  * nothing starts and the caller is asked for the release run (`release: { stage, name }`).
  * @returns {{ roadmap: object, start: object[], refill?: true, release?: { stage: string, name: string } }} the items to start (still `planned`: the caller marks them)
  */
-function advance(roadmap, { runOf, closed = () => false, canStart = () => true }) {
+function advance(roadmap, { runOf, closed = () => false, canStart = () => true, now = () => new Date() }) {
   // Statuses follow the runs whatever the roadmap state (#112): `runOf` reports a run another live
   // process owns as running, so an item is never failed while its run is alive; and a roadmap paused
   // by an item whose run is alive again (resumed, or judged by another app process) goes on.
@@ -668,7 +669,7 @@ function advance(roadmap, { runOf, closed = () => false, canStart = () => true }
     if (at < 0) return { roadmap: { ...r, state: 'paused', pausedBy: null, scope: null, error: 'The stage run on its own is no longer in the roadmap: press Start to run the roadmap.' }, start: [] };
     // #284: disabled meanwhile (a file edited outside the app): nothing of it starts
     if (r.stages[at].disabled) return { roadmap: { ...r, state: 'paused', pausedBy: null, scope: null, error: 'The stage run on its own is disabled: enable it, or press Start to run the roadmap.' }, start: [] };
-    const step = stageStep(r, at, { closed, canStart });
+    const step = stageStep(r, at, { closed, canStart, now });
     if (step) return step;
     return scopeOver(at);
   }
@@ -677,7 +678,7 @@ function advance(roadmap, { runOf, closed = () => false, canStart = () => true }
     const line = pendingRelease(r, at);
     if (line) return { roadmap: r, start: [], release: { stage: line.id, name: line.release.name } };
     if (at < 0) return r.live ? { roadmap: r, start: [], refill: true } : { roadmap: finished, start: [] };
-    const step = stageStep(r, at, { closed, canStart });
+    const step = stageStep(r, at, { closed, canStart, now });
     if (step) return step;
   }
 }

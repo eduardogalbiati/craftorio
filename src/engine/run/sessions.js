@@ -38,6 +38,7 @@ const {
   renderFileList,
 } = require('./load');
 const { gib } = require('./turns');
+const { pausedError } = require('./resume');
 const { kTokens } = require('./costs');
 
 // Skills bundled with the app (skills/ folder at the root). Workspace skills take precedence.
@@ -481,6 +482,8 @@ const methods = {
     if (this.agentSessions.get(agentName) === session.id) this.agentSessions.delete(agentName);
     this.rotate.delete(agentName);
     if (cuts >= MAX_CUTS) throw new Error(`[${agentName}] ${stepId}: the budget was reached ${MAX_CUTS} times in one visit (max_requests ${budget}): the step stops.`);
+    // #368: paused: no continuation turn; Resume starts the agent's fresh session from this note
+    if (this.pausing) throw pausedError();
     const next = await this.agentTurn(agentName, prompt, { ...turnOpts, continued: { after: res.requests, cuts } });
     next.cutRecs = [rec, ...(next.cutRecs || [])];
     return next;

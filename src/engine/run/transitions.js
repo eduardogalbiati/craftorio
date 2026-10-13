@@ -431,7 +431,7 @@ const methods = {
   async runAction(cmd) {
     // in the run's worktree when there is one (the feature branch is checked out there)
     const cwd = [this.ctx.worktree_dir, this.inputs.repo_path].find((d) => d && fs.existsSync(d)) || process.cwd();
-    const r = await this.machine.runAction(cmd, { cwd });
+    const r = await this.withLiveCommand(cmd, () => this.machine.runAction(cmd, { cwd }));
     if (r.skipped) {
       this.emitEvent('action.executed', { command: cmd, skipped: true, output: r.output });
       return;

@@ -169,10 +169,15 @@ const methods = {
   // MAX_ENV_RERUNS times: only the last result is routed. mockSequences.suite.<step> is indexed by
   // execution (a visit plus its environment reruns).
   async runSuiteStep(step, st) {
-    // the command a pause waits for (#368, pauseState): it is never cut
-    this.liveCommand = step.command ? render(String(step.command), this.ctx).trim() : step.id;
+    return this.withLiveCommand(step.command ? render(String(step.command), this.ctx).trim() : step.id, () => this.suiteRounds(step, st));
+  },
+
+  // The command a pause waits for while fn runs (#368, pauseState: a suite, the screenshots, a
+  // transition action): it is never cut.
+  async withLiveCommand(command, fn) {
+    this.liveCommand = command;
     try {
-      return await this.suiteRounds(step, st);
+      return await fn();
     } finally {
       this.liveCommand = null;
     }
@@ -485,8 +490,9 @@ const methods = {
         parent: { run_id: this.runId, workflow: this.wf.metadata?.name || path.basename(this.file), depth: this.parent?.depth || 0 },
       });
       // #368: its children paused with this run: the run ends paused here, Resume runs the step
-      // again and resumes them where they paused
-      if (this.pausing && output.status === 'paused' && !this.abort.signal.aborted) throw pausedError();
+      // again and resumes them where they paused (whatever this.pausing says now: a Cancel pause that
+      // came after a child had paused cannot take that back)
+      if (output.status === 'paused' && !this.abort.signal.aborted) throw pausedError();
       return output;
     } finally {
       this.setStatus(this.orchestrator, 'active');
