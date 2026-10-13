@@ -2,7 +2,7 @@
 // Oracle may do without asking), ticked, saved and found again; #278: Self-healing, its switch in
 // Settings › Execution › Oracle and what the Night watch screen shows of it; #279: the "Apply merged
 // fixes to this app" row under it; #335: a step whose cost or minutes regress, in Home's morning
-// summary. Locators are roles and data-testid
+// summary; #337: the turn-on form's "Limits tonight" group and the active limits. Locators are roles and data-testid
 // only (skills/ui-conventions).
 
 const fs = require('fs');
@@ -245,4 +245,62 @@ Then('applying merged fixes to the app says {string}', async ({ e2e }, text) => 
 Then('applying merged fixes to the app names no source', async ({ e2e }) => {
   await expect(appUpdateRow(e2e.window)).toBeVisible();
   await expect(appUpdateRow(e2e.window).getByTestId('app-update-source')).toHaveCount(0);
+});
+
+// ---- Limits tonight (#337) -------------------------------------------------------------------------------
+// The turn-on form (shown once the watch's switch is ticked) holds data-testid="nw-limits" (the group):
+// "nw-limits-expand" (the "Expand all limits" switch, a checkbox), "nw-limits-multiplier" (a select,
+// option values 1.5 / 2 / 3), "nw-limits-customize" (one row per limit: nw-limits-row-context / -cost /
+// -duration / -turns / -budget), "nw-limits-summary" (off: "Runs keep each workflow's limits"; on:
+// "×2 tonight: context …, turns ×2; nightly budget US$ …"), "nw-limits-warning" (no nightly budget).
+// While the watch is on, data-testid="nw-active-limits" shows the limits in force.
+
+const limits = (page) => page.getByTestId('nw-limits');
+const expandAll = (page) => limits(page).getByTestId('nw-limits-expand');
+
+When('I start turning the Night watch on', async ({ e2e }) => {
+  const sw = watchSwitch(e2e.window);
+  await expect(sw).toBeEnabled();
+  await expect(sw).not.toBeChecked();
+  await sw.click();
+  await expect(limits(e2e.window)).toBeVisible();
+});
+
+// `factor` as the owner reads it: "×1.5", "×2" or "×3" (the select's option values are the numbers)
+When('I expand all limits to {string}', async ({ e2e }, factor) => {
+  await expandAll(e2e.window).setChecked(true);
+  await expect(expandAll(e2e.window)).toBeChecked();
+  const select = limits(e2e.window).getByTestId('nw-limits-multiplier');
+  await select.selectOption(factor.replace(/^×/, ''));
+  await expect(select).toHaveValue(factor.replace(/^×/, ''));
+});
+
+When('I confirm turning the Night watch on', async ({ e2e }) => {
+  await e2e.window.locator('#nw-form').getByRole('button', { name: 'Turn on', exact: true }).click();
+  await expect(watchSwitch(e2e.window)).toBeChecked();
+  await expect(e2e.window.getByText(/On until \d/)).toBeVisible();
+});
+
+Then('the limits switch {string} is off', async ({ e2e }, name) => {
+  const box = expandAll(e2e.window);
+  await expect(box).toHaveAccessibleName(new RegExp(escapeRe(name)));
+  await expect(box).not.toBeChecked();
+});
+
+Then('the limits tonight say {string}', async ({ e2e }, text) => {
+  await expect(limits(e2e.window).getByTestId('nw-limits-summary')).toContainText(text);
+});
+
+Then('the limits tonight do not say {string}', async ({ e2e }, text) => {
+  const summary = limits(e2e.window).getByTestId('nw-limits-summary');
+  await expect(summary).toBeVisible();
+  await expect(summary).not.toContainText(text);
+});
+
+Then('the limits tonight warn {string}', async ({ e2e }, text) => {
+  await expect(limits(e2e.window).getByTestId('nw-limits-warning')).toHaveText(new RegExp(escapeRe(text)));
+});
+
+Then('the Night watch shows the active limits {string}', async ({ e2e }, text) => {
+  await expect(e2e.window.getByTestId('nw-active-limits')).toContainText(text);
 });

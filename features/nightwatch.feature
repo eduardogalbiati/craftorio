@@ -125,3 +125,36 @@ Feature: Night watch
     And I open "Home" in the sidebar
     Then the morning summary is shown
     And the morning summary flags no regression
+
+  # #337: the turn-on form's "Limits tonight" group. One switch, "Expand all limits", with a
+  # multiplier (×1.5, ×2 by default, ×3) scales every run's limits for the night (context, cost and
+  # duration per run, agent turn timeouts); the nightly budget (Settings › Budget) caps the night's
+  # spending. The demo workspace sets no nightly budget (settings.budget.nightlyUsd is null).
+  @issue-337
+  Scenario: Expanding all limits ×2 shows the doubled limits and keeps them while the watch is on
+    Given the app is open
+    When I open "Night watch" in the sidebar
+    And I start turning the Night watch on
+    And I expand all limits to "×2"
+    Then the limits tonight say "×2 tonight"
+    And the limits tonight say "turns ×2"
+    When I confirm turning the Night watch on
+    Then the Night watch shows the active limits "×2"
+
+  @issue-337
+  Scenario: With "Expand all limits" off, runs keep each workflow's limits
+    Given the app is open
+    When I open "Night watch" in the sidebar
+    And I start turning the Night watch on
+    Then the limits switch "Expand all limits" is off
+    And the limits tonight say "Runs keep each workflow's limits"
+    And the limits tonight do not say "tonight:"
+
+  @issue-337
+  Scenario: Without a nightly budget the limits warn that nothing caps tonight's spending
+    Given the app is open
+    When I open "Night watch" in the sidebar
+    And I start turning the Night watch on
+    And I expand all limits to "×2"
+    Then the limits tonight warn "No nightly budget: nothing caps tonight's spending"
+    And the limits tonight do not say "nightly budget US$"
