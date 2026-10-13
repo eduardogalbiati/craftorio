@@ -13,4 +13,6 @@ as `backlog/<project>.conflict-map.json`, built when the Product Owner plans and
 rebuilt after each run that merges. The Product Owner reads it to put groups that touch one hot file
 in different stages, and lists each hot spot (changed by more than half of the last 20 runs) under
 **Decongest** with a fix in the repository's terms; **File as issue** files one on your click. The
-Roadmap shows the map under its stages: click a row to see the runs behind its count and the trend.
+project's page shows the map on its **Conflict map** tab (#354, merged with the repository
+performance of a date range; the Roadmap links to it): click a row to see the runs behind its count,
+the lines most changed in the file and the trend.

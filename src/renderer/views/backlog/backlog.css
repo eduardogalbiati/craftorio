@@ -552,19 +552,6 @@ select.po-wf { width: auto; max-width: 220px; padding: 3px 6px; font-size: 12px;
 .rm-live.on { border-style: solid; border-color: var(--live-border); background: var(--live-bg); }
 .rm-live-body { display: grid; gap: 2px; min-width: 0; }
 .badge.rm-live-badge { margin-left: 6px; color: var(--live-text); border-color: var(--live-border); font-weight: 700; letter-spacing: .06em; }
-/* #150: the Conflict map under the stages (backlog-conflict-map.js) */
-.rm-cmap { display: grid; gap: 6px; margin-top: 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); }
-.rm-cmap-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
-.rm-cmap-sec { margin-top: 4px; }
-.rm-cmap-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
-.rm-cmap-row { display: flex; align-items: center; gap: 8px; width: 100%; padding: 4px 6px; border: 0; border-radius: 6px; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
-.rm-cmap-row:hover, .rm-cmap-row[aria-expanded="true"] { background: var(--hover, rgba(127, 127, 127, .1)); }
-.rm-cmap-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.rm-cmap-where { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rm-cmap-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rm-cmap-badges { display: inline-flex; gap: 4px; margin-left: auto; flex: none; }
-.rm-cmap-runs { display: grid; gap: 4px; padding: 4px 6px 8px 18px; }
-.rm-cmap-ids { display: flex; flex-wrap: wrap; gap: 4px; }
 /* #238: an issue's actions menu (Archive, disabled with its reason) and the archived state */
 #btn-bl-archive { white-space: nowrap; flex: none; }
 .bl-menu-wrap { position: relative; display: inline-flex; }

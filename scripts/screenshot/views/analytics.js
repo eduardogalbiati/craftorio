@@ -146,6 +146,7 @@ async function afterOpen({ args, click, js, pause }) {
 
 module.exports = {
   afterOpen,
+  demoPerformanceRuns,
   open,
   seed,
   tabs: ['usage', 'performance', 'run', 'occupancy', 'agents'],

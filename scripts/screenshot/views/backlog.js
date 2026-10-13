@@ -1,6 +1,7 @@
 // Screenshot seed of the Backlog (--view backlog, #249): its modes, the options only it takes (--live,
 // --roadmap, --po) and its demo data: the release flow (views/releases.js), the demo roadmap
-// (views/roadmap.js) and its Conflict map (#150), the release run of --release (#291), the Product
+// (views/roadmap.js) and its Conflict map (#150; #354: drawn on the project's page, the Roadmap links
+// to it; demoConflictMap, also on views/project.js), the release run of --release (#291), the Product
 // Owner's conversation, a Backlog Refresh run, the committed cards (views/discovery.js), an issue
 // enriched by Write & Review (demoEnrichRun, also on Artifacts and Duo) and the project's
 // package.json. Opens the Backlog, or the Roadmap screen in its roadmap mode (views/roadmap.js).
@@ -212,6 +213,7 @@ async function afterOpen({ args, click, js, pause }) {
 
 module.exports = {
   afterOpen,
+  demoConflictMap,
   demoEnrichRun,
   modes: ['list', 'kanban', 'roadmap', 'epics'],
   open,

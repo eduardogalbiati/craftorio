@@ -2,17 +2,18 @@
 // orchestrator's runs or every CLI session on this machine (the same scopes as Usage). Charts are
 // plain SVG/CSS. "Ask the supervisor" writes a report on the range (a real model call: it asks first).
 // Two tabs (the selected one is remembered with the scope and range): Usage (the above) and Repository
-// performance (#159: per project, the files most runs edit, the runs that hit a merge conflict, the
-// runs at once, split before/after a marker; channel analytics:performance, src/repo-performance.js).
-// #197, #254: the analysed project is the header's (window.CurrentProject), named at the top of that tab, and each file
-// over the shared limit has a recommendation, "Create issue" (or its open issue) and "Ask for a plan".
+// performance (#159: per project, the runs that hit a merge conflict, the runs at once, split
+// before/after a marker; channel analytics:performance, src/repo-performance.js).
+// #197, #254: the analysed project is the header's (window.CurrentProject), named at the top of that tab.
+// #354: the files most runs edit (their recommendations, "Create issue", "Ask for a plan") moved to
+// the project's Conflict map tab: a one-line link leads there (views/project/project-conflict-map.js).
 // More tabs register in window.AnalyticsTabs before this file loads: Run (#228, analytics-run.js) and
 // 24/7 (#188, analytics-occupancy.js), each { id, label, order, load(), render(body), sub(), context() };
 // Agents (#280, analytics-agents.js) has `usesRange`: it keeps the date range controls and its load()
 // gets the range.
 // window.openAnalytics({ tab, runId }) opens a tab (the top bar's 24/7 chip, "Open in Analytics").
 // Registers itself with registerView (view-registry.js).
-// Uses app.js globals: api, esc, fmtTok, fmtUsd, fmtDur, fmtNum, dateOf, errMsg, markdownHtml, state, window.showRun, openDrawer.
+// Uses app.js globals: api, esc, fmtTok, fmtUsd, fmtDur, fmtNum, dateOf, errMsg, markdownHtml, state, window.showRun.
 (() => {
   const $a = (sel) => document.querySelector(sel);
   const LS = 'multiagent.analytics';
@@ -35,8 +36,7 @@
     tab: ['usage', 'performance', ...Object.keys(window.AnalyticsTabs || {})].includes(saved.tab) ? saved.tab : 'usage',
     project: null, // the project the performance on screen is of (asked for the header's, #254)
     marker: saved.marker || '',
-    perf: null, perfError: null, perfLoading: false, perfSort: 'runs',
-    perfIssues: null, plan: null, planError: null, planning: false,
+    perf: null, perfError: null, perfLoading: false,
   };
   const persist = () => {
     try {
@@ -90,26 +90,12 @@
     try {
       // #254: the header's project; another one than the one on screen drops its issues and plan
       const projectId = window.CurrentProject.get();
-      if (projectId !== ax.project) Object.assign(ax, { perfIssues: null, plan: null, planError: null });
       ax.perf = await api.getRepositoryPerformance({ projectId, marker: ax.marker, ...range() });
       ax.project = ax.perf.project?.id || null;
       ax.perfError = null;
     } catch (e) { ax.perfError = errMsg(e); }
     ax.perfLoading = false;
     render();
-    loadPerfIssues();
-  }
-
-  // the project's open issues, so a file that already has one links to it instead of "Create issue"
-  async function loadPerfIssues() {
-    const id = ax.project;
-    if (!id || !ax.perf?.files?.some((f) => f.recommendation) || !api.getBacklog) return;
-    try {
-      const data = await api.getBacklog(id);
-      if (ax.project !== id) return;
-      ax.perfIssues = (data?.issues || []).filter((i) => !i.state || String(i.state).toLowerCase() === 'open');
-      if (ax.tab === 'performance' && $a('#an-files')) $a('#an-files').innerHTML = filesTable(ax.perf.files, ax.perf.sharedLimit);
-    } catch { ax.perfIssues = null; }
   }
 
   function renderControls() {
@@ -275,66 +261,6 @@
   }
 
   // ---- Repository performance (#159) ------------------------------------------------------
-  const PERF_SORTS = { runs: (f) => f.runs, lines: (f) => f.lines ?? -1, file: null };
-  function filesTable(files, limit) {
-    if (!files.length) return '<p class="muted small an-empty">No run with commits in this range.</p>';
-    const sort = PERF_SORTS[ax.perfSort];
-    const rows = [...files].sort(sort ? (a, b) => sort(b) - sort(a) || a.file.localeCompare(b.file) : (a, b) => a.file.localeCompare(b.file));
-    const th = (key, label, num = true) => `<th class="${num ? 'num ' : ''}an-sort${ax.perfSort === key ? ' active' : ''}" data-an-psort="${key}">${label}</th>`;
-    return `<table class="u-table an-sessions an-files"><thead><tr>${th('file', 'File', false)}${th('runs', 'Runs that edited it')}<th class="num">% of runs</th>${th('lines', 'Lines now')}<th>Recommendation</th></tr></thead><tbody>
-      ${rows.map((f) => `<tr>
-        <td class="an-title"><span class="an-file" title="${esc(f.file)}">${esc(f.file)}</span>${f.generated ? ' <span class="badge" title="A tool writes this file (a generated list): runs edit it through the generator">generated</span>' : ''}${f.lines == null ? ' <span class="badge" title="No longer in the repository">deleted</span>' : ''}</td>
-        <td class="num">${f.runs}</td>
-        <td class="num">${f.runs > 1 && f.share > limit ? `<span class="badge warn" title="More than ${pct(limit)} of the runs edit it">${pct(f.share)}</span>` : pct(f.share)}</td>
-        <td class="num">${f.lines == null ? '—' : fmtNum(f.lines)}</td>
-        <td class="an-rec-cell">${recommendationCell(f)}</td>
-      </tr>`).join('')}</tbody></table>`;
-  }
-
-  // #197: what to do with a file over the shared limit, its evidence, and its issue (open or to create)
-  const REC_LABEL = { generated: 'Generated', registry: 'Registry', large: 'Large file', stylesheet: 'Stylesheet', doc: 'Doc', test: 'Test file', hotspot: 'Hot spot' };
-  const evidenceText = (e) => `${pct(e.share)} of the runs (${e.runs})${e.lines != null ? ` · ${fmtNum(e.lines)} lines now` : ''} · ${e.conflicts ? `named by ${e.conflicts} merge conflict${e.conflicts === 1 ? '' : 's'}` : 'no conflict named it'}`;
-  function openIssueFor(file) {
-    return (ax.perfIssues || []).find((i) => `${i.title || ''}\n${i.body || ''}`.includes(file)) || null;
-  }
-  function recommendationCell(f) {
-    const r = f.recommendation;
-    if (!r) return '<span class="muted small">—</span>';
-    const issue = openIssueFor(f.file);
-    const action = issue
-      ? `<a href="#" class="link-btn" data-pr-url="${esc(issue.url || '')}" title="${esc(issue.title || '')}">Open issue #${esc(issue.number)}</a>`
-      : `<button type="button" class="btn sm ghost" data-an-issue="${esc(f.file)}" data-testid="an-create-issue">Create issue</button>`;
-    return `<div class="an-rec" data-testid="an-recommendation"><span class="badge warn">${esc(REC_LABEL[r.kind] || r.kind)}</span> <span>${esc(r.text)}</span>
-      <div class="muted small">${esc(evidenceText(r.evidence))}</div><div class="an-rec-actions">${action}</div></div>`;
-  }
-  function createIssue(file) {
-    const f = ax.perf?.files.find((x) => x.file === file);
-    if (!f?.recommendation || typeof openDrawer !== 'function') return;
-    const r = f.recommendation;
-    const request = `Stop parallel runs colliding on ${file}: ${r.text}\n\nEvidence (Analytics › Repository performance, ${ax.perf.from} to ${ax.perf.to}): edited by ${pct(r.evidence.share)} of the runs with commits (${r.evidence.runs} of ${ax.perf.runsWithCommits})${r.evidence.lines != null ? `, ${r.evidence.lines} lines now` : ''}, named by ${r.evidence.conflicts} merge conflict(s). The shared limit is ${pct(ax.perf.sharedLimit)} of the runs.`;
-    openDrawer({ workflow: 'issue-tracker.yaml', project: ax.project, inputs: { request } });
-  }
-
-  async function askPlan() {
-    const files = (ax.perf?.files || []).filter((f) => f.recommendation).map((f) => f.file);
-    if (!files.length || ax.planning) return;
-    if (!window.confirm(`The supervisor (Claude Code) will read the ${files.length} file(s) over the limit and their recommendations, and suggest a plan. This calls a real model and costs money. Continue?`)) return;
-    ax.planning = true; ax.planError = null;
-    renderPlan();
-    try { ax.plan = await api.askPerformancePlan({ projectId: ax.project, files, mock: false }); } catch (e) { ax.planError = errMsg(e); }
-    ax.planning = false;
-    renderPlan();
-  }
-  function renderPlan() {
-    const box = $a('#an-plan-box');
-    if (!box) return;
-    const btn = $a('#an-plan');
-    if (btn) { btn.disabled = ax.planning; btn.textContent = ax.planning ? 'Asking…' : 'Ask for a plan'; }
-    if (ax.planning) { box.innerHTML = '<div class="card an-card an-report"><p class="muted">The supervisor is reading the files over the limit… this can take a few minutes.</p></div>'; return; }
-    if (ax.planError) { box.innerHTML = `<div class="usage-unavailable" role="alert">The plan failed: ${esc(ax.planError)}</div>`; return; }
-    box.innerHTML = ax.plan ? `<div class="card an-card an-report"><div class="md">${markdownHtml(ax.plan.markdown || '')}</div>${ax.plan.reportPath ? `<p class="muted small">Saved in ${esc(ax.plan.reportPath)}${ax.plan.costUsd ? ` · ${fmtUsd(ax.plan.costUsd)}` : ''}</p>` : ''}</div>` : '';
-  }
-
   // #197: the analysed project (#254: the one chosen in the header), at the top of the tab, and what the page counts
   function projectHeader(p) {
     const pr = p.project;
@@ -401,11 +327,12 @@
     if (!p.project) { body.innerHTML = '<div class="empty-state"><b>No projects yet</b><p class="muted">Add a project with a git repository: its runs\' commits are measured here.</p></div>'; return; }
     const notGit = p.project.isGit ? '' : `<div class="usage-unavailable">${esc(p.project.name)}'s folder is not a git repository: the files runs edit cannot be read.</div>`;
     const head = projectHeader(p);
+    // #354: the files most runs edit moved to the project's Conflict map tab (views/project/project-conflict-map.js)
+    const link = window.ProjectConflictMap ? window.ProjectConflictMap.linkHtml(p.project.id) : '';
     if (p.empty) {
-      body.innerHTML = `${head}${notGit}<div class="empty-state"><b>No runs with commits on this repository in this range</b><p class="muted">Runs count once their work is merged (a local merge or a merged PR/MR). Try a longer range.</p></div>`;
+      body.innerHTML = `${head}${notGit}${link}<div class="empty-state"><b>No runs with commits on this repository in this range</b><p class="muted">Runs count once their work is merged (a local merge or a merged PR/MR). Try a longer range.</p></div>`;
       return;
     }
-    const over = p.files.filter((f) => f.recommendation).length;
     body.innerHTML = `${head}${notGit}
       <div class="an-totals">
         ${stat('Runs', fmtNum(p.runs), `${p.runsWithCommits} with commits on ${p.project.name}`)}
@@ -416,15 +343,11 @@
         ${stat('Peak of runs at once', fmtNum(p.peak))}
       </div>
       ${compareCard(p.compare, p.sharedLimit)}
-      <div class="row an-card-head"><h3 class="s-subtitle">Files most runs edit <span class="muted small">(of ${p.runsWithCommits} runs with commits; each run counts once per file)</span></h3>
-        ${over ? `<button type="button" class="btn" id="an-plan" data-testid="an-plan" title="The supervisor suggests a plan for the ${over} file(s) over ${pct(p.sharedLimit)} (a real model call: it asks first)">Ask for a plan</button>` : ''}</div>
-      <div id="an-plan-box"></div>
-      <div class="card table-wrap" id="an-files">${filesTable(p.files, p.sharedLimit)}</div>
+      ${link}
       <h3 class="s-subtitle">Merge conflicts</h3>
       <div class="card table-wrap">${conflictsTable(p.conflicts)}</div>
       <h3 class="s-subtitle">Parallel work</h3>
       ${parallelCard(p.parallel)}`;
-    renderPlan();
   }
 
   function wire() {
@@ -436,16 +359,9 @@
       const days = e.target.closest('[data-an-days]');
       const sort = e.target.closest('[data-an-sort]');
       const tab = e.target.closest('[data-an-tab]');
-      const psort = e.target.closest('[data-an-psort]');
       const run = e.target.closest('[data-an-run]');
-      const issue = e.target.closest('[data-an-issue]');
-      if (issue) createIssue(issue.dataset.anIssue);
-      if (e.target.closest('#an-plan')) askPlan();
+      if (window.ProjectConflictMap?.onLinkClick(e)) return;
       if (tab && tab.dataset.anTab !== ax.tab) { ax.tab = tab.dataset.anTab; persist(); render(); load(); }
-      if (psort && ax.perf) {
-        ax.perfSort = psort.dataset.anPsort;
-        $a('#an-files').innerHTML = filesTable(ax.perf.files, ax.perf.sharedLimit);
-      }
       if (run) window.showRun(run.dataset.anRun, { workflow: run.dataset.workflow || undefined });
       if (scope) { ax.scope = scope.dataset.anScope; ax.report = null; persist(); load(); }
       if (days) { ax.days = +days.dataset.anDays; ax.report = null; persist(); load(); }

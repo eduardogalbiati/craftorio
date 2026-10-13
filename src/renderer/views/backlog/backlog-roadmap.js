@@ -1237,8 +1237,8 @@
     // (`view.synced`: the Board toolbar's "Synced … from GitHub", which is hidden on this screen)
     const relSelect = r.stages.length ? releaseFilterHtml(data, rv) : '';
     const filters = epicSelect || viewSeg || sinceSelect || relSelect || toggle ? `<div class="rm-filters" data-testid="filter-row">${epicSelect}${viewSeg}${sinceSelect}${relSelect}${toggle}${view.synced ? `<span class="spacer"></span><span class="muted small">${esc(view.synced)}</span>` : ''}</div>` : '';
-    // #150: the files and lines most runs change, under the stages (backlog-conflict-map.js)
-    const cmapHtml = window.BacklogConflictMap ? window.BacklogConflictMap.html(data?.conflictMap) : '';
+    // #354: the files and lines most runs change (#150) moved to the project's Conflict map tab: a link under the stages
+    const cmapHtml = window.ProjectConflictMap ? window.ProjectConflictMap.linkHtml() : '';
     return `<div class="rm">${filters}${bar.replace('<span class="spacer"></span>', `${count}<span class="spacer"></span>`)}${lostHtml()}${queued}${stages}${liveHtml}${cmapHtml}${importBox}</div>`;
   }
 
@@ -1654,8 +1654,8 @@
     return mine;
   }
   async function clicked(e, ctx, data) {
-    // #150: a Conflict map row shows its runs (the panel is drawn with or without a roadmap)
-    if (window.BacklogConflictMap?.onClick(e, ctx.render)) return true;
+    // #354: the Conflict map link opens the project's page on its tab (drawn with or without a roadmap)
+    if (window.ProjectConflictMap?.onLinkClick(e)) return true;
     const r = data?.roadmap;
     if (!r) return false;
     // #269: the ⋮ button opens its menu (the first entry gets the focus) or closes it

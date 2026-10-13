@@ -1301,9 +1301,9 @@
 
     const list = $b('#bl-list');
     if (!bl.projects.length) {
-      list.innerHTML = '<div class="empty-state"><b>No projects yet</b><p class="muted">Create a project with a repository (New project… in the header, or Settings › Projects) to see its issues here.</p></div>';
+      list.innerHTML = '<div class="empty-state"><b>No projects yet</b><p class="muted">Create a project with a repository (New project… in the header, or Projects in the menu) to see its issues here.</p></div>';
     } else if (!p?.repo) {
-      list.innerHTML = '<div class="empty-state"><b>This project has no repository</b><p class="muted">Add a repository URL to the project in Settings › Projects to sync its issues, or choose another project in the header.</p></div>';
+      list.innerHTML = '<div class="empty-state"><b>This project has no repository</b><p class="muted">Add a repository URL to the project in Projects (Edit) to sync its issues, or choose another project in the header.</p></div>';
     } else if (PLATFORMS[bl.platform]?.soon) {
       list.innerHTML = `<div class="empty-state"><b>${esc(PLATFORMS[bl.platform].label)} sync is not available yet</b><p class="muted">Pick GitHub or GitLab.</p></div>`;
     } else if (!bl.data) {

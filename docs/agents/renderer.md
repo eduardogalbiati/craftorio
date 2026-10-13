@@ -33,8 +33,8 @@ Read this before changing anything in `src/renderer/`.
   file lists. The folders:
   - `views/dashboard/`: Home, the start screen (#255: the flow overview and the Analytics tab; its section has no `hidden`; `renderDashboard` is also called on run events: it paints from the last read and reads again at most every 30 s);
   - `views/sessions/`: `sessions.js` (`window.SessionsView` for notifications and terminal events) and `sessions.css`;
-  - `views/projects/`: the project cards, drawn inside Settings › Projects (#254: no screen or menu entry of its own; `showProjects`), and the New / Edit project dialog (`openProjectModal`, also opened from the Start drawer and the header's project selector);
-  - `views/project/`: one project's page (no sidebar entry: its `menu` keeps Settings lit);
+  - `views/projects/`: the Projects screen (#354: Code & Build, before Backlog; `showProjects`), its project cards, and the New / Edit project dialog (`openProjectModal`, also opened from the Start drawer and the header's project selector);
+  - `views/project/`: one project's page (no sidebar entry: its `menu` keeps Projects lit), with the tabs Overview, Conflict map (`project-conflict-map.js`, also the "Conflict map: in Projects › <project>" link of the Roadmap and Analytics › Performance), Architecture and Refactor; the selected tab is remembered per project, and the page follows the header's project;
   - `views/backlog/`: `backlog.js` (the screen, its dialogs, the sidebar's unpushed badge), `backlog-epics.js`,
     `backlog-labels.js`, `backlog-roadmap.js` (no DOM as they load), `backlog-po.js` and `backlog-po-proposals.js`
     (the Product Owner drawer, put inside `.shell` like the other drawers; `backlog-po.js` wires it as it loads, so

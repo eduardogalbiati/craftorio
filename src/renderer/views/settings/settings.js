@@ -4,7 +4,7 @@
 // its Rebuild index, src/store.js), Agents & CLIs (installed CLIs and
 // their sign-in), Execution (developer mode, Keep awake (keep-awake.js), notifications, concurrent runs, the Oracle's Self-healing switch (#278) and its "Apply merged fixes to this app" row (#279), daily budget and compaction threshold) and About. Registers
 // itself with registerView (view-registry.js); uses app.js globals ($, esc, errMsg, state,
-// applyDeveloperMode, renderHeader, renderWorkspacePaths), refreshProjects (views/projects/projects.js: the Projects tab, #254), commandHint (command-hint.js: the install
+// applyDeveloperMode, renderHeader, renderWorkspacePaths), commandHint (command-hint.js: the install
 // commands of missing CLIs) and window.BACKLOG_PLATFORMS (backlog.js).
 
 let settingsTab = 'general';
@@ -12,8 +12,6 @@ function showSettingsTab(tab) {
   settingsTab = tab;
   document.querySelectorAll('.settings-tab').forEach((b) => b.classList.toggle('active', b.dataset.stab === tab));
   document.querySelectorAll('.settings-page').forEach((p) => p.classList.toggle('hidden', p.dataset.spage !== tab));
-  // #254: the projects live here (views/projects/projects.js draws them; from another screen, show() reads them)
-  if (tab === 'projects' && state.view === 'settings') refreshProjects();
   if (tab === 'agents') renderTools();
   if (tab === 'about') renderAbout();
   if (tab === 'phone') window.PhoneGatesSettings.render();
@@ -595,10 +593,9 @@ registerView({
   markup: `
       <section id="view-settings" class="view hidden">
         <div class="settings">
-          <aside class="settings-nav">
+          <aside class="settings-nav" data-testid="settings-tabs">
             <h1>Settings</h1>
             <button class="settings-tab active" data-stab="general">General</button>
-            <button class="settings-tab" data-stab="projects">Projects</button>
             <button class="settings-tab" data-stab="agents">Agents &amp; CLIs</button>
             <button class="settings-tab" data-stab="execution">Execution</button>
             <button class="settings-tab" data-stab="phone">Phone gates</button>
@@ -870,9 +867,6 @@ registerView({
               </div>
             </div>
 
-            <!-- #254: the projects (create, edit, folders, repository), drawn by views/projects/projects.js -->
-            <div class="settings-page hidden" data-spage="projects" id="settings-projects"></div>
-
             <!-- #226: answering the human gates from a paired phone (settings-phone.js) -->
             <div class="settings-page hidden" data-spage="phone">
               <h2 class="settings-title">Phone gates</h2>
@@ -946,6 +940,5 @@ registerView({
     for (const sel of ['#set-budget-day', '#set-budget-night']) $(sel).onchange = saveBudgetSettings;
     $('#set-oracle-wake').onchange = saveOracleWake;
   },
-  // the Projects tab's cards are read again each time the screen opens on it
-  show: () => { renderSettings(); if (settingsTab === 'projects') refreshProjects(); },
+  show: () => renderSettings(),
 });

@@ -8,7 +8,7 @@
 //                      discovery, run-chat, run, home-empty, setup
 //                      (default dashboard, the menu's Home (#255: the flow strip, "What needs you" and
 //                      "Today" on demo data; its Analytics tab: --view analytics; home-empty: Home in a
-//                      new workspace, no project and no run: how to start); projects: Settings › Projects; roadmap: the
+//                      new workspace, no project and no run: how to start); projects: the Projects screen; roadmap: the
 //                      same as backlog --mode roadmap; the Supervisor's drawer: --view workflows --click
 //                      "#btn-wf-supervisor"; a folded menu group: --click ".nav-group[data-group=workflows]
 //                      .nav-group-title"; oracle: Settings with the Oracle's drawer open from its
@@ -22,7 +22,8 @@
 //                      "#oracle-dock [data-oracle-night]") (unread: on a view other
 //                      than the Dashboard, whose panel reads the answers; the Edit form of its
 //                      memory: --click "#oracle-dock [data-oracle-memory]")
-//   --tab <name>       settings: general | projects | agents | execution | phone | about; workflows: runs | definitions | builder | pipelines;
+//   --tab <name>       settings: general | agents | execution | phone | about; workflows: runs | definitions | builder | pipelines;
+//                      project: overview | conflicts | architecture | refactor (conflicts --mode loading | no-runs | not-git);
 //                      analytics: usage | performance | run | occupancy | agents (performance: a demo git repository and a
 //                      marker; run: AI Development runs, the newest shown; occupancy: 30 days of runs and nights;
 //                      agents: four weeks of the Oracle's, the Product Owner's and the Supervisor chat's turns, #280)

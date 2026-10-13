@@ -56,5 +56,5 @@ module.exports = {
   demoDepsCache,
   modes: ['machine-auto', 'machine-manual', 'machine-suggestion', 'machine-unknown'],
   seed,
-  tabs: ['general', 'projects', 'agents', 'execution', 'phone', 'about'],
+  tabs: ['general', 'agents', 'execution', 'phone', 'about'],
 };
