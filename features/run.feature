@@ -267,3 +267,33 @@ Feature: Runs and gates
     When I view the run "unk00369" from the list
     Then the cost of the run's "developer" session does not show "2.84"
     And the cost of the run's "developer" session is marked "no price for claude-haiku-5-5" because "Claude Code 2.3.1 does not know claude-haiku-5-5"
+
+  # ---- #368: pause a run after the current agent turn, resume from there ----------------------------
+  # The simulated turns are slowed down here (a turn of about 15 to 30 s) so the pause lands while an
+  # agent works; the agent finishes its turn, then the run ends with the status "paused".
+
+  @issue-368
+  Scenario: Pausing a run after the current turn lets the agent finish, then the run stops as Paused and offers Resume
+    Given the app is open with slow simulated turns
+    When I start a simulated run with the task "Add a /health endpoint"
+    And an agent's turn of the run is under way
+    And I click "Pause after current turn" on the run
+    Then the run says it is pausing, waiting for the working agent to finish its turn, with a "Cancel pause" button
+    And the run shows where it paused and the next agent's turn
+    And the run's status is "Paused" with the id "paused"
+    And the run offers Resume
+    When I open "Runs" in the sidebar
+    And I search the runs for this run
+    Then this run's row shows the status "Paused" with the id "paused"
+
+  @issue-368
+  Scenario: Cancelling a pause keeps the run going after the current turn
+    Given the app is open with slow simulated turns
+    When I start a simulated run with the task "Add a /health endpoint"
+    And an agent's turn of the run is under way
+    And I click "Pause after current turn" on the run
+    Then the run says it is pausing, waiting for the working agent to finish its turn, with a "Cancel pause" button
+    When I click "Cancel pause" on the run
+    Then the run no longer says it is pausing
+    And the run offers "Pause after current turn" again
+    And the run goes on past the current turn without pausing

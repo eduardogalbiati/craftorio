@@ -425,3 +425,21 @@ Feature: Roadmap statuses, done items, filters and run timers
     And I choose the release "v0.9" in the Releases filter
     Then the roadmap shows only stage 1
     And the roadmap header counts 1 stage for the release "v0.9"
+
+  # ---- #368: pause a stage after the current agent turn ---------------------------------------------
+  # The roadmap is set running as a simulation (its refused item skipped). Stage 2's runs are seeded,
+  # with no live agent turn to wait for, so the stage ends paused once the pause is asked.
+
+  @issue-368
+  Scenario: Pausing a stage after the current turn shows it paused, not failed, with no Retry or Skip on its items
+    Given the app is open
+    And the roadmap is running as a simulation
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    And I open the stage actions menu of stage 2
+    Then the stage actions menu entry "Pause after current turn" pauses the stage
+    When I choose "Pause after current turn" in the stage actions menu
+    Then stage 2 is shown as paused, not failed
+    And the roadmap bar shows "Paused"
+    And the roadmap item "Keyboard focus is lost after closing a dialog" is not shown as failed
+    And the roadmap item "Keyboard focus is lost after closing a dialog" offers neither Retry nor Skip
