@@ -370,39 +370,10 @@
 
   // ---- the run's timer (#272): its working time in the time line, against the item's time estimate ----
   const toMs = (ts) => { const t = Date.parse(ts || ''); return Number.isFinite(t) ? t : null; };
-  const pad2 = (n) => String(n).padStart(2, '0');
-  // "23:41", "1:05:12"
-  function clockText(ms) {
-    const s = Math.floor(Math.max(0, ms) / 1000);
-    const h = Math.floor(s / 3600);
-    return `${h ? `${h}:${pad2(Math.floor((s % 3600) / 60))}` : Math.floor(s / 60)}:${pad2(s % 60)}`;
-  }
-  // within the estimate, up to 130% of it, beyond; neutral without an estimate
-  function timerTone(ms, minutes) {
-    if (!(minutes > 0)) return 'neutral';
-    const ratio = ms / (minutes * 60000);
-    return ratio < 1 ? 'ok' : ratio <= 1.3 ? 'warn' : 'over';
-  }
-  /**
-   * How long a run has worked, gate waits left out as #215 counts them (a finished human gate's
-   * duration, and the time since the gate it waits at started): → { ms, since }, or null when the run
-   * has no start. `since`: the instant the timer counts from while it ticks (the run's start moved by
-   * its gate waits); null while it is paused at a gate or frozen at the run's end.
-   */
-  function runClock(run, now = Date.now()) {
-    const start = toMs(run.startedAt) ?? toMs(run.progress?.[0]?.ts);
-    const active = run.status === 'running' || run.status === 'pending';
-    const end = active ? now : toMs(run.finishedAt);
-    if (start == null || end == null) return null;
-    let gates = 0;
-    let paused = false;
-    for (const e of run.progress || []) {
-      if (e.type !== 'human_approval' && e.status !== 'waiting') continue;
-      if (e.status !== 'waiting' && e.status !== 'running') gates += e.durationMs || 0;
-      else if (active && toMs(e.ts) != null) { gates += Math.max(0, now - toMs(e.ts)); paused = true; }
-    }
-    return { ms: Math.max(0, end - start - gates), since: active && !paused ? start + gates : null };
-  }
+  // the clock ("23:41"), its tone against the estimate and the run's working time: RunProgress
+  const clockText = (ms) => RunProgress.clockText(ms);
+  const timerTone = (ms, minutes) => RunProgress.timerTone(ms, minutes);
+  const runClock = (run) => RunProgress.runClock(run);
   // "23 min of ≈ 22 min (estimate from 30 past runs)"
   function timeAgainst(ms, e) {
     const spent = mins(Math.floor(ms / 60000));

@@ -420,35 +420,6 @@ const runSessionStatus = (st) => ({ running: 'active', success: 'success', faile
 // a run's status as people read it (#266, StatusPill): "Running (simulation)", "Succeeded", "Idle" without a run
 const statusLabel = (r) => `${StatusPill.statusLabel(r?.status || 'idle')}${r?.status === 'running' && r.mock ? ' (simulation)' : ''}`;
 
-// Stops the run shown in the top bar (only that one).
-async function stopRun() {
-  const r = state.run;
-  if (r?.status !== 'running') return;
-  // a run past a human gate holds work the owner already approved: always ask (#112)
-  const passed = ((await api.listActiveRuns().catch(() => [])) || []).find((x) => x.runId === r.id)?.passedGates || [];
-  const why = passed.length ? `It has already passed the human gate${passed.length > 1 ? 's' : ''} ${passed.join(', ')}: a new run would redo that work. ` : '';
-  // its `type: workflow` steps' child runs in progress stop with it: always ask (#175)
-  const kids = (r.childRuns || []).filter((c) => c.run_id && c.status === 'running');
-  const children = kids.length ? `Its ${kids.length} child run${kids.length > 1 ? 's' : ''} in progress (${kids.map((c) => c.label || c.run_id).join(', ')}) will be stopped too; resuming this run resumes them. ` : '';
-  if ((state.settings.confirmStop || passed.length || kids.length) && !(await confirmDialog('Stop workflow', `${why}${children}Running sessions of ${runLabel(r)} will be closed. Stop this run?`, 'Stop'))) return;
-  api.stopRun(r.id);
-}
-
-// #368: pauses the run shown in the top bar after its current turn: its agents finish their turns
-// (a step command its run), nothing new starts, then it ends paused; the Run screen's pause line
-// says what it waits for and offers Cancel pause. Nothing is lost, so it never asks first.
-async function pauseRun() {
-  const r = state.run;
-  if (r?.status !== 'running' || r.pause) return;
-  try {
-    await api.pauseRun(r.id);
-    if (r.status === 'running' && !r.pause) r.pause = { state: 'pausing', at: new Date().toISOString() };
-    scheduleRender();
-  } catch (e) {
-    showToast('Could not pause the run', errMsg(e));
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Sidebar: commits merged locally (local workflows) and not pushed yet, over every project, from
 // the service's last checks (no git call here). The Backlog pushes them.
@@ -932,12 +903,7 @@ function renderHeader() {
     $('#kpi-all-value').textContent = `${live.length} · $${all.cost.toFixed(4)}`;
     $('#kpi-all').title = `${live.length} runs in progress: ${fmtNum(all.tokens)} tokens, $${all.cost.toFixed(4)} in total`;
   }
-  $('#btn-stop').disabled = st !== 'running';
-  $('#btn-stop').title = st === 'running' ? `Stop ${runLabel(r)} (only this run)` : '';
-  // #368: offered while the run goes and is not pausing already (the Run screen's pause line then has Cancel pause)
-  const pausable = st === 'running' && !r.pause && !selectedView().past;
-  $('#btn-pause').classList.toggle('hidden', !pausable);
-  $('#btn-pause').title = pausable ? `Pause ${runLabel(r)} once its agents finish their current turn: nothing is cut, Resume continues there` : '';
+  renderRunControls(r); // Stop and Pause (run-controls.js)
   const blocked = oneRunAtATime();
   setStartDisabled(blocked || !state.wf || !!state.wf.error);
   $('#btn-start').textContent = blocked ? 'A workflow is already running' : state.pipeline ? 'Start pipeline' : 'Start workflow';
