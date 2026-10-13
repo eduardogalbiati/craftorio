@@ -44,7 +44,7 @@ const methods = {
       return output;
     }
     if (step.action === 'validate') {
-      const output = await projectMap.validateMap({ ...place, proposed: from?.city_plan ?? null });
+      const output = await projectMap.validateMap({ ...place, proposed: from?.city_plan ?? {} });
       this.projectMapWrite('plan.json', `${JSON.stringify(output.plan, null, 2)}\n`);
       this.projectMapWrite('validation.md', `${output.report}\n`);
       log(output.ok ? 'info' : 'warn', `round ${st.visits}: ${output.ok ? 'the plan passes' : output.problems.join('; ')}.`);

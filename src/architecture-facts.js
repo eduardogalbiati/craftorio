@@ -47,6 +47,8 @@ const JS_SOURCE = /\.(?:[cm]?[jt]s|[jt]sx)$/;
 const JS_PATHSPECS = ['*.js', '*.cjs', '*.mjs', '*.jsx', '*.ts', '*.cts', '*.mts', '*.tsx'];
 
 const cache = new Map();
+// folder and commit -> what was read there (readsAt), shared by every model of that commit
+const readsCache = new Map();
 // facts model -> Map(plan key -> city): a city lives as long as the facts it was built from
 // (a refresh or an uncached read gives new facts, so a new city)
 const cityCache = new WeakMap();
@@ -151,7 +153,8 @@ async function qualityGate(folder, commit, files) {
 
 /**
  * The facts of the repository in `folder`: { state: 'ok' | 'not-git' | 'no-commits', model, gate }.
- * opts: { since, until, exclude: [pattern], includeMass }.
+ * opts: { since, until, exclude: [pattern], includeMass, includeTests (the city's: the test files
+ * kept), refresh }.
  */
 async function readFacts(folder, opts = {}) {
   // the folder's own repository (.git: a folder, or a file in a worktree), never an enclosing one
@@ -163,34 +166,45 @@ async function readFacts(folder, opts = {}) {
   const exclude = (opts.exclude || []).map(String).filter(Boolean);
   const includeMass = opts.includeMass !== false;
   const includeTests = !!opts.includeTests;
+  const commitKey = JSON.stringify([path.resolve(folder), commit]);
   const key = JSON.stringify([path.resolve(folder), commit, window, exclude, includeMass, includeTests]);
   // Refresh reads again what the commit does not fix (a tool installed since, the checkout moved):
-  // every read of that commit, the city's (with the tests) included
+  // every model of that commit, the city's (with the tests) included
   if (opts.refresh) {
-    const commitKey = JSON.stringify([path.resolve(folder), commit]).slice(0, -1);
-    for (const k of [...cache.keys()]) if (k.startsWith(`${commitKey},`)) cache.delete(k);
+    readsCache.delete(commitKey);
+    for (const k of [...cache.keys()]) if (k.startsWith(`${commitKey.slice(0, -1)},`)) cache.delete(k);
   }
   if (!cache.has(key)) {
-    const [date, shallow, log, files, revs, attributes] = await Promise.all([
-      git(folder, ['show', '-s', '--format=%cI', commit]),
-      tryGit(folder, ['rev-parse', '--is-shallow-repository']),
-      git(folder, ['log', commit, '--no-merges', '-M', '--name-status', '--format=%x01%H %cI']),
-      filesAt(folder, commit),
-      showAt(folder, commit, '.git-blame-ignore-revs'),
-      showAt(folder, commit, '.gitattributes'),
-    ]);
-    const [complexity, gate] = await Promise.all([measureComplexity(folder, commit), qualityGate(folder, commit, files)]);
-    const model = buildModel({
-      head: { commit, date: date.trim() }, branch: target.branch, shallow: String(shallow).trim() === 'true',
-      window, files, log, ignoreRevs: parseIgnoreRevs(revs), attributes, exclude, includeMass, includeTests, complexity,
-    });
+    const reads = await readsAt(folder, commit, commitKey);
+    const model = buildModel({ ...reads.sources, head: { commit, date: reads.date }, branch: target.branch, window, exclude, includeMass, includeTests });
     // no file read (git grep failed or timed out): shown, never kept for the commit
-    if (!files.length) return { state: model.commits ? 'ok' : 'no-commits', model, gate };
-    cache.set(key, { model, gate });
+    if (!reads.sources.files.length) return { state: model.commits ? 'ok' : 'no-commits', model, gate: reads.gate };
+    cache.set(key, { model, gate: reads.gate });
     if (cache.size > CACHE_SIZE) cache.delete(cache.keys().next().value);
   }
   const { model, gate } = cache.get(key);
   return { state: model.commits ? 'ok' : 'no-commits', model, gate };
+}
+
+// The git reads and the complexity tool's of one commit, once for all its models (the hotspots'
+// windows and the city's, #372): { date, gate, sources: buildModel's inputs read at the commit }
+async function readsAt(folder, commit, commitKey) {
+  if (readsCache.has(commitKey)) return readsCache.get(commitKey);
+  const [date, shallow, log, files, revs, attributes] = await Promise.all([
+    git(folder, ['show', '-s', '--format=%cI', commit]),
+    tryGit(folder, ['rev-parse', '--is-shallow-repository']),
+    git(folder, ['log', commit, '--no-merges', '-M', '--name-status', '--format=%x01%H %cI']),
+    filesAt(folder, commit),
+    showAt(folder, commit, '.git-blame-ignore-revs'),
+    showAt(folder, commit, '.gitattributes'),
+  ]);
+  const [complexity, gate] = await Promise.all([measureComplexity(folder, commit), qualityGate(folder, commit, files)]);
+  const reads = { date: date.trim(), gate, sources: { shallow: String(shallow).trim() === 'true', files, log, ignoreRevs: parseIgnoreRevs(revs), attributes, complexity } };
+  if (files.length) {
+    readsCache.set(commitKey, reads);
+    if (readsCache.size > CACHE_SIZE) readsCache.delete(readsCache.keys().next().value);
+  }
+  return reads;
 }
 
 // What the city's edges are read from at `commit`, in one pass each: { tracked: [path], imports:
