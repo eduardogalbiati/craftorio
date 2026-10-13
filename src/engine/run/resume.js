@@ -1,3 +1,4 @@
+// @ts-check
 // Resume from a step (#250, from src/engine/workflow.js): what a run restarted from a stopped one
 // reuses. `seedResume` (constructor) pre-seeds the previous run's step outputs, visits and
 // instruction; `replayConfirmedGate` (start, #112) records the gate the owner confirmed in the

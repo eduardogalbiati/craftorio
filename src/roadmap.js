@@ -1,3 +1,4 @@
+// @ts-check
 // Backlog roadmap (#106): an ordered plan of runs per project, in
 // <workspace>/backlog/<project id>.roadmap.json, next to the queue (src/backlog.js). Stages run one
 // after the other; the items of a stage (each one run: a workflow with one issue or a group, the
@@ -56,10 +57,14 @@ const {
 } = require('./shared/roadmap-model');
 const { writeJsonSafe } = require('./state-file');
 
+/** @typedef {import('./shared/types').Roadmap} Roadmap */
+/** @typedef {((runId: string) => any) | null} Alive `alive(runId)`: as for `runIsAlive` */
+
 // #205: a test-batch item tests the issues the items before it implemented
 const testsLater = (item) => path.basename(String(item?.workflow || '')) === 'test-batch.yaml';
 
 const roadmapFile = (dir, projectId) => path.join(dir, `${path.basename(String(projectId))}.roadmap.json`);
+/** @returns {Roadmap} */
 const emptyRoadmap = () => ({ state: 'planned', simulated: false, error: null, pausedBy: null, scope: null, stages: [], updatedAt: null });
 const newId = (prefix) => `${prefix}-${crypto.randomBytes(4).toString('hex')}`;
 
@@ -182,9 +187,18 @@ function roadmapProjects(dir) {
   try { return fs.readdirSync(dir).filter((f) => f.endsWith('.roadmap.json')).map((f) => f.slice(0, -'.roadmap.json'.length)); } catch { return []; }
 }
 
-const allItems = (roadmap) => (roadmap.stages || []).flatMap((s) => s.items || []);
+/** @param {Roadmap} roadmap */
+const allItems = (roadmap) => roadmap.stages.flatMap((s) => s.items);
+/**
+ * @param {Roadmap} roadmap
+ * @param {string} itemId
+ */
 const findItem = (roadmap, itemId) => allItems(roadmap).find((x) => x.id === itemId) || null;
-const findStage = (roadmap, stageId) => (roadmap.stages || []).find((s) => s.id === stageId) || null;
+/**
+ * @param {Roadmap} roadmap
+ * @param {string} stageId
+ */
+const findStage = (roadmap, stageId) => roadmap.stages.find((s) => s.id === stageId) || null;
 
 // One issue of an item, from a number, an issue of the synced backlog or an item's issue.
 function issueOf(ref, known) {
@@ -285,6 +299,8 @@ const DISABLE_BUSY = 'An item of this stage is running: wait for it, or stop its
  * Validated stages from the UI or a proposal: [{ id?, name?, note?, release?: { name }, items: [...] }].
  * Empty stages are dropped. `known`: the synced backlog's issues (titles, URLs, bodies); `previous`:
  * the roadmap edited; `alive(runId)`: as for `runIsAlive` (the file stores a running item as planned).
+ * @param {any} stages
+ * @param {{ issues?: any[] | null, previous?: Roadmap | null, alive?: Alive }} [options]
  */
 function cleanStages(stages, { issues = [], previous = null, alive = null } = {}) {
   const known = new Map((issues || []).map((i) => [i.number, i]));
@@ -311,7 +327,13 @@ function cleanStages(stages, { issues = [], previous = null, alive = null } = {}
   return out;
 }
 
-/** Replaces the stages (reorder, move an issue, add/remove items, edit inputs). The state is kept. */
+/**
+ * Replaces the stages (reorder, move an issue, add/remove items, edit inputs). The state is kept.
+ * @param {string} dir
+ * @param {string} projectId
+ * @param {any} stages
+ * @param {{ issues?: any[] | null, alive?: Alive }} [options]
+ */
 function saveStages(dir, projectId, stages, { issues, alive = null } = {}) {
   return updateRoadmap(dir, projectId, (r) => {
     const next = { ...r, stages: cleanStages(stages, { issues, previous: r, alive }) };
@@ -351,7 +373,10 @@ function plannedNumbers(roadmap) {
  * roadmap already plans (listed in `dropped`). It never starts by itself: a running roadmap is paused
  * so the owner reviews the new stages and presses Start. `keepRunning` (a live roadmap's refill, #164):
  * the state is kept, so a running roadmap goes on with the new stages.
+ * @param {string} dir
+ * @param {string} projectId
  * @param {{ stages: object[], note?: string } | object[]} proposal
+ * @param {{ replace?: boolean, issues?: any[] | null, alive?: Alive, keepRunning?: boolean }} [options]
  */
 function propose(dir, projectId, proposal, { replace = false, issues = [], alive = null, keepRunning = false } = {}) {
   // #238: archived issues are left out of a proposal; the rest of it is kept
@@ -420,6 +445,12 @@ function fromQueue(queueItems, name = 'From the queue') {
 // pause (nothing new starts, runs in progress go on), stop (back to a plan). `stage` (a stage id, with
 // running): run only that stage (#141); a start without it runs the whole roadmap, a pause keeps the scope.
 // Stop also turns a live roadmap off (#164): a plan never refills itself.
+/**
+ * @param {string} dir
+ * @param {string} projectId
+ * @param {string} state
+ * @param {{ simulated?: boolean, stage?: string | null }} [options]
+ */
 function setState(dir, projectId, state, { simulated, stage = null } = {}) {
   if (!STATES.includes(state)) throw new Error(`Unknown roadmap state: ${state}`);
   return updateRoadmap(dir, projectId, (r) => {

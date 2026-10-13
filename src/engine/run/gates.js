@@ -1,3 +1,4 @@
+// @ts-check
 // Human gates, `type: human_approval` (#250, from src/engine/workflow.js): `openGate` runs the gate's
 // `check:` then `requestApproval` emits approval.requested (choices, feedback, local preview, diff,
 // the gate brief) and waits for `resolveApproval` (the public API the service and the UI answer
@@ -73,6 +74,7 @@ const methods = {
   // worktree's changes since that ref, in an embedded terminal).
   // diagnosis: the supervisor on call could not solve the problem of an escalation gate
   // ({ explanation, recommendation, user_action, note }): it goes under the message and in `supervisor`.
+  /** @param {{ explanation?: string, recommend?: string | null, recommendation?: string | null, options?: string[] | null, user_action?: string | null, note?: string } | null} [diagnosis] */
   requestApproval(step, diagnosis = null) {
     const id = `a${++this.nApproval}`;
     let message = step.raw ? String(step.message).trim() : render(step.message, this.ctx).trim();
@@ -93,7 +95,7 @@ const methods = {
       ...(c.help ? { help: this.gateText(step, c.help) } : {}),
     })) : null;
     // an Approve / Reject gate: what its buttons say and do (#213)
-    const yesNo = step.choices ? {} : {
+    const yesNo = step.choices ? null : {
       approve: { label: this.gateText(step, step.approve_label) || 'Approve', help: this.gateText(step, step.approve_help) },
       reject: { label: this.gateText(step, step.reject_label) || 'Reject', help: this.gateText(step, step.reject_help) },
     };
@@ -102,7 +104,8 @@ const methods = {
       summary: this.gateText(step, step.summary),
       recommend: this.gateText(step, step.recommend),
       diagnosis,
-      answers: choices || [{ id: 'approve', label: yesNo.approve.label }, { id: 'reject', label: yesNo.reject.label }],
+      // a gate with choices has no yes/no buttons
+      answers: yesNo ? [{ id: 'approve', label: yesNo.approve.label }, { id: 'reject', label: yesNo.reject.label }] : /** @type {object[]} */ (choices),
     });
     const fb = step.feedback === true ? {} : step.feedback || null;
     const feedback = fb && { label: render(fb.label || 'Anything to add? (optional)', this.ctx), placeholder: render(fb.placeholder || '', this.ctx) };
@@ -128,7 +131,7 @@ const methods = {
     // registered before its event, so runs:active lists it as soon as anyone hears of it
     const answered = new Promise((resolve, reject) => {
       const onTimeout = step.choices ? step.choices[step.choices.length - 1].id : false;
-      const timer = timeout ? setTimeout(() => this.resolveApproval(id, onTimeout, 'timeout'), timeout) : null;
+      const timer = timeout ? setTimeout(() => this.resolveApproval(id, onTimeout, 'timeout'), timeout) : undefined;
       this.approvals.set(id, {
         stepId: step.id,
         // what pendingGates() hands the UI, so a reloaded window rebuilds the gate without its event

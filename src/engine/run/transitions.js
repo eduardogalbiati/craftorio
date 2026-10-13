@@ -1,3 +1,4 @@
+// @ts-check
 // Transitions and visits (#250, from src/engine/workflow.js): `finishStep` evaluates the goal and
 // walks the step's transitions (`when`, actions, `precheck`, `merge`, `ship`, the merge queue, `set:`,
 // delegation, the ending transition's `status`), with `max_visits` / `max_iterations` and
@@ -259,6 +260,7 @@ const methods = {
   // `action_error.supervisor`, or the failure route (`on_error` / `check.on_fail`, a gate) with its
   // diagnosis. Without a supervisor (or interventions left) the failure route is taken.
   async recoverFromActionError(step, route, e) {
+    /** @type {{ step: string, message: string, at: string, check?: any, head?: string, supervisor?: object, diagnosis?: string }} */
     const err = { step: step.id, message: e.message, at: new Date().toISOString(), ...(e.check ? { check: e.check } : {}) };
     // the branch head the failure left (a failed local merge leaves the branch as it was): the last
     // checked commit, so the next review can cover only what the resolution changes

@@ -8,6 +8,7 @@
 // Pure: time comes from `now()`; the engine calls check() on a timer.
 
 class IdleWatch {
+  /** @param {{ idleMs?: number, now?: () => number }} [options] */
   constructor({ idleMs, now = Date.now } = {}) {
     this.idleMs = idleMs;
     this.now = now;

@@ -77,6 +77,7 @@ function parseRecommend(text, ids) {
 // message: the gate's rendered message; summary / recommend: the step's rendered templates ('' when
 // it has none); diagnosis: the supervisor on call's ({ explanation, recommend, recommendation,
 // options, user_action }) or null; answers: [{ id, label }], `approve` / `reject` for a yes/no gate.
+/** @param {{ message?: string, summary?: string, recommend?: string, diagnosis?: object | null, answers?: object[] }} [options] */
 function gateBrief({ message = '', summary = '', recommend = '', diagnosis = null, answers = [] } = {}) {
   const lines = String(summary || '').trim().split(/\r?\n/);
   const head = lines.findIndex((l) => l.trim());

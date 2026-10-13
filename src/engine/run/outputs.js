@@ -1,3 +1,4 @@
+// @ts-check
 // Step outputs and their validation (#250, from src/engine/workflow.js): `extractJson` reads the
 // ```json block of an answer, `validateSchema` (src/json-schema.js) checks it against the step's `output` schema (the
 // retry prompt `retryPrompt` asks for a fix), `parseTestRequest` reads a ```run-tests block,
@@ -85,6 +86,11 @@ function answeredKey(from, output) {
 // the step declares them; otherwise its decision fields plus its findings (and ui_findings) and, for an author step, its
 // progress fields (with the worktree's head when it reports no commit_sha). `answered`: the findings of
 // the step it came from (a review), so a fix round answering new findings never repeats the last one.
+/**
+ * @param {any} step
+ * @param {any} output
+ * @param {{ head?: () => string | null, answered?: any }} [options]
+ */
 function repeatKey(step, output, { head, answered } = {}) {
   // a fan-out (agents: [...]) answers { results: { agent: output } }: each agent's answer, keyed alone
   if (step.agents && output?.results && typeof output.results === 'object') {
@@ -162,7 +168,7 @@ const methods = {
   // An entry can also be `{ path, content }`: `content` is a template with the step's `output`,
   // e.g. { path: document.md, content: "{{ output.document }}" } saves one field of a JSON answer.
   saveOutput(step, scope, text, output) {
-    for (const t of step.save_as ? [].concat(step.save_as) : []) {
+    for (const t of step.save_as ? [step.save_as].flat() : []) {
       const rel = render(typeof t === 'object' ? t.path : t, scope).trim();
       if (!rel) continue;
       const content = typeof t === 'object' && t.content != null ? render(t.content, { ...scope, output }) : text;

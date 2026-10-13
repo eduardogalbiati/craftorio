@@ -1,3 +1,4 @@
+// @ts-check
 // The AI supervisor in a run (#250, from src/engine/workflow.js): `superviseFailure` on a step error
 // (`askSupervisor` validates one decision), the supervisor on call (`checkStalls`: the same output or
 // a slow visit → `superviseStall` / `superviseSlow`; escalation gates → `superviseEscalation`; a
@@ -144,6 +145,11 @@ const methods = {
     return null;
   },
 
+  /**
+   * @param {any} step
+   * @param {any} st
+   * @param {{ kind: string, gate?: any, signals: any[], retryStep?: string | null, steps: string[], actions: string[], running?: boolean }} options
+   */
   async askOnCall(step, st, { kind, gate, signals, retryStep, steps, actions, running = false }) {
     const cfg = this.supervisorCfg;
     this.supervisorUsed++;
@@ -162,6 +168,13 @@ const methods = {
   },
 
   // Every on-call intervention: an event (run chat, watch mode, timeline) and a decision-log row.
+  /**
+   * @param {any} step
+   * @param {string} kind
+   * @param {any} d
+   * @param {string} action
+   * @param {{ goto?: string | null, route?: any, note?: string | null, evidence?: string }} [options]
+   */
   onCallDecided(step, kind, d, action, { goto = null, route = null, note = null, evidence = '' } = {}) {
     this.emitEvent('supervisor.decision', {
       step_id: step.id, kind, action, goto, cause_class: d.cause_class || null, explanation: d.explanation, instruction: d.instruction || null,

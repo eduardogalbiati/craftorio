@@ -188,7 +188,11 @@
     },
   ];
 
-  /** `{ summary, events }` of a recorded run (summary null: none yet) in the current shape. */
+  /**
+   * `{ summary, events }` of a recorded run (summary null: none yet) in the current shape.
+   * @param {{ summary?: any, events?: any[] }} [record]
+   * @returns {{ summary: any, events: any[] }}
+   */
   function upgradeRunRecord({ summary = null, events = [] } = {}) {
     let record = { summary: summary || null, events: events || [] };
     for (const u of UPGRADES) if (u.applies(record)) record = u.upgrade(record);

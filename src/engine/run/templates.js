@@ -1,3 +1,4 @@
+// @ts-check
 // Templates and expressions of a run (#250, from src/engine/workflow.js): the nunjucks environment
 // (`render`, autoescape off) with the filters the workflows use (`to_yaml`, `to_json`, `shuffle(seed)`,
 // `clamp(lo, hi)`, `github_repo`, `pr_url`, `git_commits`, `git_log_stat`, `git_tags`, `project_version`,

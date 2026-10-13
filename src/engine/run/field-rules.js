@@ -1,3 +1,4 @@
+// @ts-check
 // The workflow YAML's field rules as a table (#352): `FIELD_RULES` holds one entry per checked field,
 // `{ field, appliesTo, type, template, required, message }` (plus `values` for a `one of` type,
 // `present` when "set" is not "defined", `elsewhere: 'skip'` for a field ignored on other step types,
@@ -82,6 +83,11 @@ const GATE = ['human_approval'];
 const AGENTS = 'agents and defaults';
 const WORKFLOW = 'workflow';
 
+/**
+ * @typedef {{ field: string, appliesTo: any, type: string, template: boolean, required: boolean, message: string,
+ *   values?: string[], placeMessage?: string, elsewhere?: string }} FieldRule
+ * @returns {FieldRule}
+ */
 const entry = (field, appliesTo, type, message, more = {}) => ({ field, appliesTo, type, template: false, required: false, message, ...more });
 const gateText = (key) => entry(`steps[].${key}`, GATE, 'text', `${key} must be a text (a template), on a human_approval step.`, { template: true });
 const text = (key, types) => entry(`steps[].${key}`, types, 'text', `${key} must be a string (a template).`, { template: true, elsewhere: 'skip' });
@@ -232,7 +238,7 @@ function fieldReference() {
   const rows = FIELD_RULES.map((r) => [
     `\`${r.field}\``,
     where(r),
-    r.type === 'one of' ? `one of ${r.values.join(', ')}` : r.type,
+    r.type === 'one of' ? `one of ${/** @type {string[]} */ (r.values).join(', ')}` : r.type,
     r.template ? 'yes' : '',
     r.required ? 'yes' : '',
     r.placeMessage ? `${r.message} / ${r.placeMessage}` : r.message,

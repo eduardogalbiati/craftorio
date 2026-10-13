@@ -1,3 +1,4 @@
+// @ts-check
 // Loading and validating the workflow YAML (#250, from src/engine/workflow.js): `loadWorkflow` parses
 // the file, checks agents, steps, transitions, gates, `outputs:`, `groups:`, `display`, fallbacks and
 // model limits, and returns the workflow object the engine walks. The checks of a single field are the
@@ -71,7 +72,8 @@ function validateModels(models, what = 'models') {
 // The named rules across fields: (the object checked, ctx), ctx = { prefix, type, wf, ids, file,
 // mcpServers, step }; the message of a rule that shares its field's message comes from the table
 const fail = (ctx, message) => { throw new Error(`${ctx.prefix}${message}`); };
-const messageOf = (field) => FIELD_RULES.find((r) => r.field === field).message;
+// (every caller names a field of the table)
+const messageOf = (field) => /** @type {{ message: string }} */ (FIELD_RULES.find((r) => r.field === field)).message;
 const isAgentStep = (s) => !MACHINE_STEP_TYPES.includes(s.type);
 const isGate = (s) => s.type === 'human_approval';
 

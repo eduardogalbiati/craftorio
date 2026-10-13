@@ -1,3 +1,4 @@
+// @ts-check
 // Costs, limits and budgets (#250, from src/engine/workflow.js): the run's `max_total_duration` and
 // `max_total_cost_usd` checked before every step (`checkLimits`, children included), the limits per
 // model (`modelLimits`, #262), the monthly budget per provider over this run and its peers

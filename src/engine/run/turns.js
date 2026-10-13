@@ -1,3 +1,4 @@
+// @ts-check
 // One provider turn (#250, from src/engine/workflow.js): `invokeTurn` runs a session's turn against
 // the provider with the agent's retry policy (a failed attempt's tool calls go to the next one,
 // `attemptSummary`), quota errors and the fallback chain (`fallbackChain`, `nextFallback`, #262),
@@ -110,6 +111,7 @@ const methods = {
   // #276: watches a process this run started (an agent CLI, a suite command) with the memory guard;
   // what it stops becomes a `process.killed` event (the second stop of the same command in a step
   // notifies the owner) and, for an agent, a line of its next prompt. onStop(ev): the caller's own use.
+  /** @param {{ rootPid?: number | null, protectChildren?: boolean, stepId?: string | null, session?: string | null, agentName?: string | null, onStop?: ((ev: any) => void) | null }} options */
   watchMemory({ rootPid = null, protectChildren = false, stepId = null, session = null, agentName = null, onStop = null }) {
     if (!this.memoryGuard) return { stop() {} };
     return this.memoryGuard.watch({
@@ -162,10 +164,12 @@ const methods = {
       this.setStatus(session, 'active');
       // tool calls of this turn: refused ones (allowlist) vs the ones that ran
       // subagents: the sub-agent calls of this turn (capabilities.subagents, Claude's Agent/Task tool)
-      const tools = { ran: 0, denials: 0, streak: 0, maxStreak: 0, denied: [], subagents: 0 };
+      const tools = { ran: 0, denials: 0, streak: 0, maxStreak: 0, denied: /** @type {string[]} */ ([]), subagents: 0 };
       // context window of each model request: the first one and the largest
+      /** @type {{ start: number | null, peak: number | null }} */
       const context = { start: null, peak: null };
       // #320: the last request's context, and the cache tier the provider reported (Claude: 1h / 5m)
+      /** @type {{ last: number | null, tier: string | null }} */
       const cache = { last: null, tier: null };
       const calls = new Map();
       // `full_suite: warn` (#177): the engine's suite step runs the whole suite; the agent's own run is noted
@@ -202,7 +206,8 @@ const methods = {
       const turnAbort = new AbortController();
       const cancel = () => turnAbort.abort();
       this.abort.signal.addEventListener('abort', cancel, { once: true });
-      let interrupted = null;
+      // (a cast: set in the callbacks below, which the checker does not follow)
+      let interrupted = /** @type {{ instruction?: string, slow?: boolean } | null} */ (null);
       // only while the stall the supervisor decided on still holds: the command may have produced
       // output or finished while it was thinking
       const interrupt = (decision, stall) => {
@@ -221,7 +226,7 @@ const methods = {
       };
       live?.add(stopSlow);
       const idle = new IdleWatch({ idleMs: this.idleWarnMs });
-      const idleTimer = this.idleWarnMs > 0 && setInterval(() => this.warnIdle(idle, { session, agentName, stepId, turn, interrupt }), Math.min(30e3, Math.max(50, this.idleWarnMs / 4)));
+      const idleTimer = this.idleWarnMs > 0 ? setInterval(() => this.warnIdle(idle, { session, agentName, stepId, turn, interrupt }), Math.min(30e3, Math.max(50, this.idleWarnMs / 4))) : undefined;
       idleTimer?.unref?.();
       let timed = null;
       // #276: the memory guard watches the CLI's process tree while the turn runs (a mock turn has none)

@@ -73,6 +73,7 @@ const actionSchema = (recover) => ({
 // run go on as planned. `step` is limited to the agent steps the run already went through, `route`
 // to the gate's own answers. At a gate, `recommend` (one of `answers`: approve / reject or a choice
 // id), `recommendation` (why, one line) and `options` (up to 3) are what the person's card shows (#213).
+/** @param {{ actions: string[], steps?: string[], routes?: string[], answers?: string[] }} options */
 const onCallSchema = ({ actions, steps = [], routes = [], answers = [] }) => ({
   type: 'object',
   required: ['explanation', 'action'],

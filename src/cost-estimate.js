@@ -1,3 +1,4 @@
+// @ts-check
 // Roadmap cost estimates (#206): what an item will cost before it runs, from the last HISTORY real
 // runs of its workflow file that succeeded. Each past run's cost is split by step (its sessions'
 // `step_id`) and divided by its complexity (the sum of its issues' `complexity:n` labels, 3 for an
@@ -84,6 +85,9 @@ function pastRun(run, byNumber, prices) {
 /**
  * The past runs an estimate of `workflow` reads: real, finished with success, newest first, at most
  * HISTORY. `issues`: the backlog's issues (their labels give the past runs' complexity).
+ * @param {any[] | null | undefined} runs
+ * @param {string | undefined} workflow
+ * @param {{ issues?: any[] | null, prices?: object }} [options]
  */
 function historyOf(runs, workflow, { issues = [], prices = {} } = {}) {
   const byNumber = new Map((issues || []).map((i) => [i.number, i]));
@@ -138,6 +142,9 @@ function perPointOf(past, field, inputs) {
  * The estimate of one roadmap item (or a planned group): { usd, minutes, perPoint, complexity, runs,
  * basis, estimated } or null when its workflow has no past run (`minutes` null when no past run has
  * a duration). `item`: { workflow, inputs, issues } (issues with their labels), or `complexity` given.
+ * @param {any} item
+ * @param {any[] | null | undefined} runs
+ * @param {{ issues?: any[] | null, prices?: object, complexity?: number | null }} [options]
  */
 function estimateItem(item, runs, { issues = [], prices = {}, complexity = null } = {}) {
   const past = historyOf(runs, item?.workflow, { issues, prices });
@@ -192,13 +199,16 @@ function actualTime(item, runById) {
  * (`actualMinutes`, `actualTopStep`) of each item with a run. A stage's estimate sums its items' costs
  * and takes its longest item's minutes (`missing`: items with no estimate yet); its `actualUsd` sums
  * its items' real costs, its `actualMinutes` is its longest item's.
+ * @param {import('./shared/types').Roadmap} roadmap
+ * @param {any[] | null | undefined} runs
+ * @param {{ issues?: any[], prices?: object }} [options]
  */
 function withEstimates(roadmap, runs, { issues = [], prices = {} } = {}) {
   const runById = new Map((runs || []).map((r) => [r.runId, r]));
   return {
     ...roadmap,
-    stages: (roadmap.stages || []).map((s) => {
-      const items = (s.items || []).map((x) => {
+    stages: roadmap.stages.map((s) => {
+      const items = s.items.map((x) => {
         const estimate = estimateItem(x, runs, { issues, prices });
         const actualUsd = actualCost(x, runById);
         const time = actualTime(x, runById);
@@ -209,21 +219,21 @@ function withEstimates(roadmap, runs, { issues = [], prices = {} } = {}) {
           ...(time ? { actualMinutes: time.minutes, actualTopStep: time.topStep } : {}),
         };
       });
-      const known = items.filter((x) => x.estimate);
-      const timed = known.filter((x) => x.estimate.minutes != null);
-      const ran = items.filter((x) => x.actualUsd != null);
+      const known = items.map((x) => x.estimate).filter((e) => e != null);
+      const timed = known.map((e) => e.minutes).filter((m) => m != null);
+      const ran = items.map((x) => x.actualUsd).filter((usd) => usd != null);
       return {
         ...s,
         items,
         estimate: known.length ? {
-          usd: round(known.reduce((a, x) => a + x.estimate.usd, 0)),
-          minutes: timed.length ? Math.max(...timed.map((x) => x.estimate.minutes)) : null,
+          usd: round(known.reduce((a, e) => a + e.usd, 0)),
+          minutes: timed.length ? Math.max(...timed) : null,
           items: known.length,
           missing: items.length - known.length,
-          runs: Math.max(...known.map((x) => x.estimate.runs)),
+          runs: Math.max(...known.map((e) => e.runs)),
         } : null,
         ...(ran.length ? {
-          actualUsd: round(ran.reduce((a, x) => a + x.actualUsd, 0)),
+          actualUsd: round(ran.reduce((a, usd) => a + usd, 0)),
           actualMinutes: Math.max(0, ...items.map((x) => x.actualMinutes || 0)),
         } : {}),
       };

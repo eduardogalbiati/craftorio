@@ -1,3 +1,4 @@
+// @ts-check
 // The run's checkout (#250, from src/engine/workflow.js): the per-run git worktree and its branch
 // (`setupWorktree` / `finishWorktree`: removed or retired, the worktree summary, HEAD and branch),
 // its dependencies from the shared cache (`prepareDeps`, `depsGuide`), the base worktree a suite

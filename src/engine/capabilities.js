@@ -156,6 +156,7 @@ const runDirs = (caps, runDir) => (caps && runDir && bashRules(caps).length ? RU
 // would ask about is refused, so this says how to run commands that are never asked about.
 // agentVars: the agent's environment (agentEnv); shotsDir: the folder of this step's round
 // (<run_dir>/evidence/<step>/round-<n>), else the evidence folder.
+/** @param {string | null} [shotsDir] */
 function commandGuide(caps, runDir, agentVars = AGENT_ENV, shotsDir = null) {
   if (!caps || !bashRules(caps).length) return '';
   const dirs = runDirs(caps, runDir);
@@ -215,6 +216,8 @@ const ADAPTER_LIB = {
  * env: the agent's environment (agentEnv), accepted as a command prefix by Claude's allow rules.
  * denyCommands: command prefixes the agent may not run (DEPS_DENIED_COMMANDS); only Claude refuses them.
  * Returns { args, notes }: notes say what this CLI could not enforce (logged once per agent).
+ * @param {string} type
+ * @param {{ caps?: object | null, isolated?: boolean, mcpServers?: object, denyEdits?: string[], denyCommands?: string[], runDir?: string | null, env?: object }} [options]
  */
 function providerArgs(type, { caps = null, isolated = true, mcpServers = {}, denyEdits = [], denyCommands = [], runDir = null, env = AGENT_ENV } = {}) {
   const mcp = caps ? pick(mcpServers, caps.mcp) : {};

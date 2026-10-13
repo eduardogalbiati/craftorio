@@ -1,3 +1,4 @@
+// @ts-check
 // Steps without an agent (#250, from src/engine/workflow.js): `type: screenshots` (`runScreenshots`,
 // #144), `type: suite` (`runSuiteStep`, `suiteRound` with the memory guard's waits and reruns #276,
 // `redCheckOutput` #220, `failedFirstRound` for `scope: failed` #324), `type: test_ids`
@@ -102,7 +103,8 @@ const methods = {
   // A simulated run captures nothing. Never throws: an error becomes the output's reason.
   async runScreenshots(step, st) {
     const folder = step.folder || step.id;
-    let watch = null;
+    // (a cast, not a declared type: `watch` is set in a callback the checker does not follow)
+    let watch = /** @type {{ stop(): void } | null} */ (null);
     try {
       const base = step.base ? render(String(step.base), this.ctx).trim() : this.worktree?.ref || null;
       return await this.machine.captureScreenshots({
@@ -192,7 +194,7 @@ const methods = {
   // #276: a suite / e2e step waits while free memory is under the memory guard's floor (memory.hold:
   // the Night watch counts a long one)
   async waitForMemory(stepId) {
-    let low = null;
+    let low = /** @type {{ freeBytes: number, floorBytes: number } | null} */ (null);
     const r = await this.memoryGuard.waitForMemory({
       maxWaitMs: MEMORY_WAIT_MS,
       onWait: (info) => {

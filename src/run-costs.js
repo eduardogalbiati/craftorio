@@ -1,3 +1,4 @@
+// @ts-check
 // Run costs as read from a run's events (#233, #277), for callers that hold a run's events as
 // recorded. The corrections themselves are the run record's upgrades (src/shared/run-record.js,
 // #350): this reads their result back per event. The readers of recorded runs read the upgraded
@@ -14,6 +15,8 @@ const isTurn = (e) => e.type === 'session.message_received';
  * session.message_received or session.attempt_stopped events, `overcount` per session id (what its
  * recorded cost_usd counted twice), `stopped` the attempts stopped before their result
  * ({ agent, sessionId, step, t, costUsd, estimated, notRecorded }).
+ * @param {import('./shared/types').RunEvent[]} [events]
+ * @param {import('./shared/types').RunSummary | null} [summary]
  */
 function runCosts(events = [], summary = null) {
   const upgraded = upgradeRunRecord({ summary, events }).events;

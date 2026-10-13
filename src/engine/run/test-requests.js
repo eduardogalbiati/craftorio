@@ -1,3 +1,4 @@
+// @ts-check
 // Tests around an agent's turn (#250, from src/engine/workflow.js): the ```run-tests requests a turn
 // ends with (`serveTestRequests`, `runTestRequest`, #212) and the follow-up prompt with their result,
 // the code → tests map written for the agents (`writeTestMap`, #219), the affected test files of a

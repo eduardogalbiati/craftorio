@@ -1,3 +1,4 @@
+// @ts-check
 // Run setup (#250, from src/engine/workflow.js): the inputs with their defaults and types
 // (`resolveInputs`, `resolveRunInput` for `type: run`), the images attached to inputs (#129:
 // `checkInputAttachments`, `copyAttachments`, `stepAttachments`), the per-run agent overrides

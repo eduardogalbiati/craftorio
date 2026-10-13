@@ -1,3 +1,4 @@
+// @ts-check
 // Sessions, turns and handoff notes (#250, from src/engine/workflow.js): session records and their
 // events (`openSession`, `setStatus`, `closeSession`, `snapshot`, `cacheState` #320), `sendToAgent`
 // builds one turn and `agentTurn` runs it in the agent's session (modes persistent / ephemeral /
