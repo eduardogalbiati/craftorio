@@ -17,7 +17,6 @@
   const PAIR_MIN_TOGETHER = 2;
 
   const MAX_PATTERN = 200;
-  const MAX_WILDCARDS = 8;
 
   // Excluded by default, per group (and `tests`: the engine's test files, TESTS_PATHS of
   // src/shared/globs.js); .gitattributes (linguist-generated / -vendored) and the project's own
@@ -174,17 +173,16 @@
   // the shared glob rule and test patterns (src/shared/globs.js; in the browser it loads after this file)
   const globs = () => (typeof module === 'object' && module.exports ? require('./globs') : root.Globs);
 
-  // A gitignore-style pattern → a RegExp over a repository path: the shared glob rule, plus a
+  // A gitignore-style pattern → a { test(path) } over a repository path: the shared glob rule, plus a
   // trailing `/` for a folder (`dist/`: any dist folder's files). A repository's .gitattributes must
   // not stall the service: the pattern is cut at MAX_PATTERN, runs of `*` and repeated `**/`
-  // collapse, and a pattern with more than MAX_WILDCARDS wildcards matches nothing (ignored).
+  // collapse, and the match never backtracks (globMatcher, not a RegExp: `*a*a*a…` would be exponential).
   function globRe(pattern) {
     let p = String(pattern).trim().replace(/\\/g, '/').slice(0, MAX_PATTERN).replace(/\*{3,}/g, '**').replace(/(\*\*\/)+/g, '**/');
-    if ((p.match(/\*+/g) || []).length > MAX_WILDCARDS) return /(?!)/;
     const anchored = p.startsWith('/');
     if (anchored) p = p.slice(1);
     if (p.endsWith('/')) p = anchored || p.slice(0, -1).includes('/') ? `${p}**` : `**/${p}**`;
-    return globs().globToRegExp(anchored ? `/${p}` : p);
+    return globs().globMatcher(anchored ? `/${p}` : p);
   }
 
   // .gitattributes → [{ re, generated, vendored }] (true, false or undefined), in file order
