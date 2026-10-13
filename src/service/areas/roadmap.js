@@ -17,6 +17,7 @@ const budget = require('../../budget');
 const costEstimate = require('../../cost-estimate');
 const roadmaps = require('../../roadmap');
 const runs = require('../../runs');
+const RoadmapModel = require('../../shared/roadmap-model');
 const RunProgress = require('../../shared/run-progress-model');
 
 module.exports = (ctx) => {
@@ -158,7 +159,7 @@ module.exports = (ctx) => {
     }
     if (roadmap.state === 'done' && before.state === 'running') {
       // #284: a disabled stage with work left was skipped, not done: the notice says so
-      const off = roadmap.stages.filter((s) => s.disabled && s.items.some((x) => !['done', 'skipped'].includes(x.status))).length;
+      const off = roadmap.stages.filter((s) => s.disabled && RoadmapModel.hasUnfinished(s)).length;
       ctx.notify({ kind: 'run', event: 'succeeded', title: 'Roadmap finished', body: off ? `Every enabled stage of ${projectId} is done; ${off} disabled stage${off === 1 ? ' was' : 's were'} left out.` : `Every stage of ${projectId} is done.` });
     }
     // #279: a stage that ended may update the app (areas/app-update.js): its cycle paused every
@@ -215,10 +216,9 @@ module.exports = (ctx) => {
   // The stage that ended in this step (with a real item), as the event of the app update's trigger
   // (the only one since #285); true when its cycle started.
   function appUpdateStarted(before, roadmap, mockOf) {
-    const finished = (x) => ['done', 'skipped'].includes(x.status);
-    const at = roadmaps.currentStage(before);
+    const at = RoadmapModel.currentStage(before);
     const stage = at >= 0 ? roadmap.stages.find((s) => s.id === before.stages[at].id) : null;
-    return !!stage && stage.items.some((x) => !mockOf(x)) && stage.items.every(finished) && ctx.appUpdateEvent({ type: 'stage-done' });
+    return !!stage && stage.items.some((x) => !mockOf(x)) && !RoadmapModel.hasUnfinished(stage) && ctx.appUpdateEvent({ type: 'stage-done' });
   }
 
   // Start: a roadmap with real items is refused in simulation-only mode (automated checks), like assignments.
@@ -229,7 +229,7 @@ module.exports = (ctx) => {
     const r = roadmaps.readRoadmap(ws.backlog, id);
     const stages = stage ? r.stages.filter((s) => s.id === stage) : r.stages;
     // a disabled stage (#284) starts nothing: its real items do not make this start a real one
-    if (!simulated && stages.some((s) => !s.disabled && s.items.some((x) => !x.mock && !['done', 'skipped'].includes(x.status)))) {
+    if (!simulated && RoadmapModel.unfinishedItems({ stages }).some((x) => !x.mock)) {
       simulation.refuseReal('real runs from a roadmap');
     }
     roadmaps.setState(ws.backlog, id, 'running', { simulated: !!simulated, stage: stage ? String(stage) : null });

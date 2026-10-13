@@ -93,7 +93,7 @@
 // Rendered into #bl-list by backlog.js (mode 'roadmap'), which passes `ctx`
 // ({ projectId, setData, render, setError, setShowAll, setSince, setEpic, showRoadmap }). Uses app.js globals (esc, state, errMsg, devMode, confirmDialog,
 // fmtDur, agentLabel, scheduleRender, showToast), run-list.js's (progressAvatar, robotAvatar, PERSON_SVG, ENGINE_SVG),
-// choiceDialog (kept-work-dialog.js), RunProgress, StatusPill, DefaultWorkflow and GateOracle.
+// choiceDialog (kept-work-dialog.js), RoadmapModel, RunProgress, StatusPill, DefaultWorkflow and GateOracle.
 /* global api */
 (() => {
   const ICON = {
@@ -106,10 +106,11 @@
   const COMPLEXITY = /^complexity\s*[:=/-]?\s*(\d+)/i;
   // an item's issues: its `issues` list, or (an item stored before #163) the item itself as one issue
   const refs = (x) => (x.issues?.length ? x.issues : x.number ? [{ number: x.number, url: x.url, title: x.title, body: x.body, knownPullRequests: x.knownPullRequests }] : []);
-  const editable = (x) => x.status === 'planned' || x.status === 'failed';
+  const may = (r, stage, x) => RoadmapModel.allowedActions(r, stage, x); // #349: the model decides the buttons
+  const editable = (x) => may(null, null, x).edit.allowed;
   // #237: the stage run on its own (#141), or -1 when there is none or it is over (no unfinished item,
   // or no longer in the roadmap): such a scope is dropped by the engine, a Resume runs the roadmap
-  const scopedStage = (r) => (r.scope ? r.stages.findIndex((s) => s.id === r.scope.stage && !s.disabled && s.items.some((x) => x.status !== 'done' && x.status !== 'skipped')) : -1);
+  const scopedStage = (r) => RoadmapModel.scopedStage(r);
   const clone = (stages) => JSON.parse(JSON.stringify(stages || []));
   // inputs the Backlog fills itself when the run starts (as backlog.js's skipInput): never edited here
   const skipInput = (k, def) => k === 'task' || k === 'issue' || k === 'issues' || def.type === 'run' || ((def.type || 'string') === 'string' && /path|dir/i.test(k));
@@ -134,8 +135,8 @@
   }
   // #196: Retry / Skip on a failed run and on a refused start (the item that paused the roadmap, or an
   // error without a run, e.g. kept work of an ended run), never while its run is alive
-  const refusedStart = (x) => !x.runId && !!x.error && x.status !== 'skipped' && x.status !== 'done';
-  const retryable = (x, r) => x.status === 'failed' || (x.status !== 'running' && (r?.pausedBy === x.id || refusedStart(x)));
+  const refusedStart = (x) => RoadmapModel.refusedStart(x);
+  const retryable = (x, r) => may(r, null, x).retry.allowed;
   // #271: "Ask the Oracle about this failure" on an item whose run failed, was interrupted or stopped,
   // or that could not start; never on a planned (no ended run), running, waiting or done one. The
   // button and what it asks are the gate button's code (gate-oracle.js, looked up when drawn).
@@ -666,7 +667,7 @@
           ${statusHtml(x, s, n, r, locked, v)}
         </div>${workflowHtml(x, locked, open, v)}
         ${reasonHtml(x)}
-        ${x.error ? `<div class="small rm-error ${x.status === 'failed' || refused ? 'error' : 'muted'}">${esc(x.error)}${refused && x.status !== 'skipped'
+        ${x.error ? `<div class="small rm-error ${x.status === 'failed' || refused ? 'error' : 'muted'}">${esc(x.error)}${refused
     ? '<div class="rm-error-hint muted">Retry starts it again: when an ended run kept work for its issues, you choose to resume that run or start from scratch. Skip counts it as finished.</div>' : ''}</div>` : ''}
         ${open ? formHtml(x) : ''}
       </div>`;
@@ -695,15 +696,13 @@
     const button = `<button class="btn sm ghost rm-menu-btn" type="button" data-rm-stage-menu="${esc(stage.id)}" data-testid="roadmap-stage-menu" aria-label="Stage actions" title="Stage actions" aria-haspopup="menu" aria-expanded="${open}">⋮</button>`;
     if (!open) return `<span class="bl-menu-wrap rm-stage-menu-wrap">${button}</span>`;
     const off = !!stage.disabled;
-    const busy = stage.items.some((x) => x.status === 'running');
-    const runnable = !off && r.state !== 'running' && stage.items.some((x) => x.status === 'planned');
-    const runWhy = off ? 'This stage is disabled: enable it first' : r.state === 'running' ? 'The roadmap is running: pause or stop it first' : runnable ? '' : 'No planned item in this stage';
+    const acts = may(r, stage); // with a stage, start is "Run this stage" (#141)
     const entry = (attrs, label, title, why = '') => `<button type="button" role="menuitem" ${attrs} title="${esc(why || title)}"${why ? ' aria-disabled="true"' : ''}>${label}</button>${why ? `<div class="bl-menu-why small muted">${esc(why)}</div>` : ''}`;
     const entries = [
       // #284: a finished stage has nothing left to hold back (a disabled one can always be enabled)
       off ? entry('data-rm-toggle-stage data-testid="roadmap-stage-toggle" aria-pressed="true"', 'Enable', 'Run this stage with the roadmap again, in its turn')
-        : done ? '' : entry('data-rm-toggle-stage data-testid="roadmap-stage-toggle" aria-pressed="false"', 'Disable', 'Skip this stage while the roadmap runs; it stays in the list', busy ? 'An item of this stage is running: wait for it, or stop its run' : ''),
-      entry('data-rm-run-stage', '<span aria-hidden="true">▶ </span>Run this stage', 'Run only this stage\'s items; the roadmap pauses when they are done', runWhy),
+        : done ? '' : entry('data-rm-toggle-stage data-testid="roadmap-stage-toggle" aria-pressed="false"', 'Disable', 'Skip this stage while the roadmap runs; it stays in the list', acts.disable.reason),
+      entry('data-rm-run-stage', '<span aria-hidden="true">▶ </span>Run this stage', 'Run only this stage\'s items; the roadmap pauses when they are done', acts.start.reason),
       stage.release?.name ? '' : entry('data-rm-release="add"', '<span aria-hidden="true">✂ </span>Release here', 'Draw a cut line after this stage: when the roadmap reaches it, the whole unit and E2E suites run and you Ship or Hold; the stages below wait for it'),
       entry('data-rm-stage="up"', '<span aria-hidden="true">↑ </span>Run earlier', 'Run this stage earlier', s === 0 ? 'It is the first stage' : ''),
       entry('data-rm-stage="down"', '<span aria-hidden="true">↓ </span>Run later', 'Run this stage later', s === count - 1 ? 'It is the last stage' : ''),
@@ -721,7 +720,7 @@
   // `stage.disabled`) is skipped while the roadmap runs: still listed in its place, dimmed, with a
   // "Disabled" badge, never the current one.
   function stageHtml(stage, s, count, current, byNumber, scoped, r, shown) {
-    const done = stage.items.every(finished);
+    const done = !RoadmapModel.hasUnfinished(stage);
     const off = !!stage.disabled;
     const { items, folded, open, cut = Infinity } = shown;
     const card = (x) => itemHtml(x, s, stage.items.indexOf(x), byNumber, r);
@@ -934,7 +933,7 @@
   const releaseHtml = (x) => releaseBlockHtml(x) + releaseLineHtml(x);
 
   // ---- what the Roadmap shows (#217, #268): Planned | All, the date range, the epic filter, in pages ------
-  const finished = (x) => x.status === 'done' || x.status === 'skipped';
+  const finished = (x) => RoadmapModel.isFinished(x);
   const DAY_MS = 24 * 60 * 60 * 1000;
   // the date ranges: [id, the option, in the header's count, its length in ms (null: no limit)]
   const SINCE = [
@@ -1129,10 +1128,11 @@
     const byNumber = new Map((data?.issues || []).map((i) => [i.number, i]));
     // a stage run on its own (#141) is the one in progress; the others keep their planned look
     const scoped = scopedStage(r);
-    // #284: a disabled stage is skipped (src/roadmap.js currentStage): never the current one, counted apart
-    const current = scoped >= 0 ? scoped : r.stages.findIndex((s) => !s.disabled && s.items.some((x) => x.status !== 'done' && x.status !== 'skipped'));
+    // #284: a disabled stage is skipped (RoadmapModel.currentStage): never the current one, counted apart
+    const current = scoped >= 0 ? scoped : RoadmapModel.currentStage(r);
     const offStages = r.stages.filter((s) => s.disabled);
-    const offOpen = offStages.filter((s) => !s.items.every(finished));
+    const offOpen = offStages.filter(RoadmapModel.hasUnfinished);
+    const acts = may(r);
     const leftOut = r.state === 'done' && offOpen.length
       ? `<span class="small muted" data-testid="roadmap-left-out">Done. ${plural(offOpen.length, 'disabled stage')} ${offOpen.length === 1 ? 'was' : 'were'} left out: enable ${offOpen.length === 1 ? 'it' : 'them'} in ${offOpen.length === 1 ? 'its' : 'their'} ⋮ menu, then Start.</span>` : '';
     // #269: the state is a dot before the title (blue and pulsing while running, amber paused, red
@@ -1156,10 +1156,10 @@
         <span class="rm-bar-title">${dot}<b>Roadmap</b> ${scopeBadge} ${r.stages.length} stage${r.stages.length === 1 ? '' : 's'}${offStages.length ? `, ${offStages.length} disabled` : ''}</span>
         ${note}${leftOut}
         <span class="spacer"></span>
-        ${r.state !== 'running' && r.stages.length ? `<label class="check small dev-only"><input type="checkbox" id="rm-simulate"${state.simulationOnly || r.simulated ? ' checked' : ''} /><span>Simulated</span></label>
-          <button class="btn sm primary" type="button" data-rm="start"${scoped >= 0 && r.state === 'paused' ? ` title="Resume stage ${scoped + 1} only"` : ''}>${r.state === 'paused' ? 'Resume' : 'Start'}</button>` : ''}
-        ${r.state === 'running' ? `<button class="btn sm btn-icon warn-ghost" type="button" data-rm="pause" title="Nothing new starts; runs in progress go on">${ICON.pause}Pause</button>` : ''}
-        ${r.state === 'running' || r.state === 'paused' ? `<button class="btn sm btn-icon ghost danger" type="button" data-rm="stop" title="Back to a plan: nothing starts until Start (asks first)">${ICON.stop}Stop</button>` : ''}
+        ${acts.start.allowed || acts.resume.allowed ? `<label class="check small dev-only"><input type="checkbox" id="rm-simulate"${state.simulationOnly || r.simulated ? ' checked' : ''} /><span>Simulated</span></label>
+          <button class="btn sm primary" type="button" data-rm="start"${scoped >= 0 && acts.resume.allowed ? ` title="Resume stage ${scoped + 1} only"` : ''}>${acts.resume.allowed ? 'Resume' : 'Start'}</button>` : ''}
+        ${acts.pause.allowed ? `<button class="btn sm btn-icon warn-ghost" type="button" data-rm="pause" title="Nothing new starts; runs in progress go on">${ICON.pause}Pause</button>` : ''}
+        ${acts.stop.allowed ? `<button class="btn sm btn-icon ghost danger" type="button" data-rm="stop" title="Back to a plan: nothing starts until Start (asks first)">${ICON.stop}Stop</button>` : ''}
         ${menu}
       </div>`;
     const queued = q.length ? `
@@ -1500,7 +1500,7 @@
   async function runStage(ctx, r, s) {
     const stage = r.stages[s];
     if (!stage) return;
-    const earlier = r.stages.slice(0, s).map((x, n) => (!x.disabled && x.items.some((i) => i.status !== 'done' && i.status !== 'skipped') ? n : -1)).filter((n) => n >= 0);
+    const earlier = r.stages.slice(0, s).map((x, n) => (RoadmapModel.isOpen(x) ? n : -1)).filter((n) => n >= 0);
     if (earlier.length && !await confirmDialog(`Run stage ${s + 1} out of order`, `${stagesText(earlier)} ${earlier.length > 1 ? 'are' : 'is'} not done: ${earlier.length > 1 ? 'their' : 'its'} issues may conflict with this stage's. They stay planned.`, 'Run this stage')) return;
     if (!await checkPushes(ctx, r, stage.id)) return;
     const simulated = !!document.querySelector('#rm-simulate')?.checked && devMode();

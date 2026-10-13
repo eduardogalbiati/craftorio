@@ -56,6 +56,7 @@ function loadRoadmap({ listWorkflows } = {}) {
   vm.runInContext(read('status-pill.js'), sandbox);
   vm.runInContext(read('..', 'shared', 'run-progress-model.js'), sandbox);
   vm.runInContext(read('..', 'shared', 'default-workflow.js'), sandbox);
+  vm.runInContext(read('..', 'shared', 'roadmap-model.js'), sandbox); // the real RoadmapModel (#349)
   vm.runInContext(read('workflow-inputs.js'), sandbox);
   // #215's shared estimate rules; missing before the change (the tests then fail on their assertions)
   if (fs.existsSync(path.join(R, 'estimates.js'))) vm.runInContext(read('estimates.js'), sandbox);

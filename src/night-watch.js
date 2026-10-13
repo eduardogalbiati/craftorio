@@ -24,6 +24,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { unfinishedItems } = require('./shared/roadmap-model');
 const { regressionLine, stepRegressions } = require('./step-regressions');
 
 // What the Oracle may do without asking, each with what it does and its undo. Defaults: retry and refresh.
@@ -177,13 +178,11 @@ function incidentOf(ev) {
   }
 }
 
-// a disabled stage (#284) is skipped by the automation (src/roadmap.js currentStage): its items are not work left
-const unfinished = (r) => (r.stages || []).filter((s) => !s.disabled).flatMap((s) => s.items || []).filter((x) => !['done', 'skipped'].includes(x.status));
-
 /**
  * The roadmap anomalies of the moment: `roadmaps` [{ projectId, roadmap }] (the files), `active`
  * [{ projectId }] the runs in progress. → [{ kind, projectId }]: a paused roadmap (or one with an
  * error), a running roadmap with items left and no run of its project, or nothing left anywhere.
+ * A disabled stage's items (#284) are not work left (src/shared/roadmap-model.js unfinishedItems).
  */
 function roadmapIncidents(roadmaps = [], active = []) {
   const out = [];
@@ -191,9 +190,9 @@ function roadmapIncidents(roadmaps = [], active = []) {
   for (const { projectId, roadmap: r } of roadmaps) {
     if (!r) continue;
     if (r.state === 'paused' || r.error) out.push({ kind: 'roadmap-paused', projectId });
-    else if (r.state === 'running' && unfinished(r).length && !busy.has(projectId)) out.push({ kind: 'dispatch-idle', projectId });
+    else if (r.state === 'running' && unfinishedItems(r).length && !busy.has(projectId)) out.push({ kind: 'dispatch-idle', projectId });
   }
-  const left = roadmaps.some(({ roadmap: r }) => r && ['paused', 'running'].includes(r.state) && unfinished(r).length);
+  const left = roadmaps.some(({ roadmap: r }) => r && ['paused', 'running'].includes(r.state) && unfinishedItems(r).length);
   if (!active.length && !left) out.push({ kind: 'roadmap-empty', projectId: null });
   return out;
 }

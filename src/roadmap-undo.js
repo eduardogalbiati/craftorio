@@ -16,8 +16,8 @@
 // (src/service/channels/roadmap.js) and src/roadmap-history.js.
 
 const { testsLater } = require('./roadmap');
+const { isFinished } = require('./shared/roadmap-model');
 
-const FINISHED = new Set(['done', 'skipped']);
 const clone = (v) => JSON.parse(JSON.stringify(v ?? null));
 const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 const issuesOf = (x) => (x.issues?.length ? x.issues : x.number ? [x] : []);
@@ -88,7 +88,7 @@ function undoEdit(currentStages, edit) {
   }
 
   // an issue belongs to one unfinished item (src/roadmap.js assertUnique)
-  const open = (x) => !FINISHED.has(x.status) && !testsLater(x);
+  const open = (x) => !isFinished(x) && !testsLater(x);
   for (const [n, stage] of stages.entries()) {
     for (const x of stage.items.filter(open)) {
       for (const [m, other] of stages.entries()) {

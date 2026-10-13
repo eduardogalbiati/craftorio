@@ -150,6 +150,7 @@ function loadRoadmap({ listWorkflows, now = NOW, runTitle } = {}) {
   evalStatusPill(sandbox);
   vm.runInContext(read('..', 'shared', 'run-progress-model.js'), sandbox);
   vm.runInContext(read('..', 'shared', 'default-workflow.js'), sandbox);
+  vm.runInContext(read('..', 'shared', 'roadmap-model.js'), sandbox); // the real RoadmapModel (#349)
   vm.runInContext(read('workflow-inputs.js'), sandbox);
   if (exists('estimates.js')) vm.runInContext(read('estimates.js'), sandbox);
   vm.runInContext(read('views', 'backlog', 'backlog-roadmap.js'), sandbox);

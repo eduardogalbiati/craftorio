@@ -17,7 +17,7 @@ const vm = require('vm');
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', ...p), 'utf8');
 const roadmapSrc = read('views', 'backlog', 'backlog-roadmap.js');
 const backlogSrc = read('views', 'backlog', 'backlog.js');
-const MODULES = ['status-pill.js', 'estimates.js', '../shared/run-progress-model.js', '../shared/default-workflow.js', 'workflow-inputs.js'].map((f) => read(f));
+const MODULES = ['status-pill.js', 'estimates.js', '../shared/run-progress-model.js', '../shared/default-workflow.js', '../shared/roadmap-model.js', 'workflow-inputs.js'].map((f) => read(f));
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const settle = () => new Promise((r) => setTimeout(r, 0));
 const SHOW_ALL = { showAll: true, since: 'total' };
