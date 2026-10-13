@@ -829,6 +829,22 @@ an id with no run folder is refused before the run starts), reads that run's `ev
 evidence-backed edits to skills and workflows (`retrospective.md`, also copied into the analyzed
 run's folder). It only proposes; a human applies.
 
+## Project map (`workflows/project-map.yaml`)
+
+Plan & Design, started from a project's Architecture tab ("Map this project", or "Refresh the
+map" once a plan is saved, each with its estimate first). The `facts` step counts the tracked
+files by folder and by file-name pattern, lists the manifests and reads #371's folder city with
+its edges (no model). The cartographer (skill `project-map`, read-only on the project: it never
+edits code, docs or agent instructions) answers a city plan: zones, districts, landmarks and ports
+as path rules. `validate` runs the city model's validator (schema, duplicate ids, unknown zones,
+at least 95% of the drawn files in a district); a failing plan goes back to the cartographer with
+the report at most twice, then the run fails and nothing is saved. The gate shows the plan and its
+validation (on a refresh: the districts added and removed, the coverage before and after); approved,
+`save` writes `<workspace>/architecture/<project id>/city-plan.json` (the plan it replaces goes to
+`city-plan-history/`). A refresh starts from the saved plan and keeps its zone and district ids and
+the names the owner saw. The tab advises a refresh, without starting one, when more than 5% of the
+drawn files match no district or a new top-level folder appears.
+
 ## Visual builder
 
 Workflows › **Builder** draws a workflow as a vertical flow of **desks**, each with an agent seated at it
@@ -944,6 +960,7 @@ What is shared by a family lives in a suffix-less skill referenced with `uses:`.
 | `pr-screenshots` | via `uses` | `publish.js`: commits the PNGs to the `pr-screenshots` branch (one folder per PR/MR, closed ones pruned) without touching the checkout, then posts one original/modified comment |
 | `pr-screenshots-{gh,gl}` | CI pusher | Screenshots comment on the PR/MR (GitHub `blob/...?raw=true`, GitLab `-/raw/` URLs) |
 | `prd-writing` | arena, Write & Review (`document_skill`) | PRD structure (user stories, traceable requirements, testing decisions, questions with defaults) and scoring rubric |
+| `project-map` | cartographer | Writes a project's city plan (zones, districts, landmarks, ports as path rules) from evidence, at least 95% of the files matched, read-only; a refresh keeps the ids and names |
 | `review-synthesis` | multi-model review judge | Lead judgment: merge, verify, weigh agreement and nitpicks, act on / consider / noted / dismissed |
 | `rfc-writing` | arena, Write & Review (`document_skill`) | RFC (after the Rust RFC template): motivation, guide- and reference-level explanation, drawbacks, alternatives, prior art, rollout, rubric |
 | `run-retrospective` | run retrospective | Friction, waste, skill gaps and no-ops in a run's logs, turned into proposals with evidence |

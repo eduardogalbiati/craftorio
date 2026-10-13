@@ -11,7 +11,7 @@
 // The project's own quality gate (complexity, coverage, duplication in its CI or package.json) is
 // listed with each input measured (its own report found), pending (configured, no report) or
 // missing; missing evidence is never shown as clean.
-// The project city (#371, readCity): the facts and a city plan through the pure core
+// The project city (#371, readCity): the facts (with the test files, its campus, #372) and a city plan through the pure core
 // src/shared/city-model.js, with the edges' sources read at the same commit (the tracked files, the
 // relative require/import lines of JavaScript/TypeScript files in one `git grep`, the Cargo.toml
 // files), cached per facts read (a refresh rebuilds it) and plan hash. Used by src/service/channels/architecture.js.
@@ -162,9 +162,14 @@ async function readFacts(folder, opts = {}) {
   const window = { since: opts.since || null, until: opts.until || null };
   const exclude = (opts.exclude || []).map(String).filter(Boolean);
   const includeMass = opts.includeMass !== false;
-  const key = JSON.stringify([path.resolve(folder), commit, window, exclude, includeMass]);
-  // Refresh reads again what the commit does not fix (a tool installed since, the checkout moved)
-  if (opts.refresh) cache.delete(key);
+  const includeTests = !!opts.includeTests;
+  const key = JSON.stringify([path.resolve(folder), commit, window, exclude, includeMass, includeTests]);
+  // Refresh reads again what the commit does not fix (a tool installed since, the checkout moved):
+  // every read of that commit, the city's (with the tests) included
+  if (opts.refresh) {
+    const commitKey = JSON.stringify([path.resolve(folder), commit]).slice(0, -1);
+    for (const k of [...cache.keys()]) if (k.startsWith(`${commitKey},`)) cache.delete(k);
+  }
   if (!cache.has(key)) {
     const [date, shallow, log, files, revs, attributes] = await Promise.all([
       git(folder, ['show', '-s', '--format=%cI', commit]),
@@ -177,7 +182,7 @@ async function readFacts(folder, opts = {}) {
     const [complexity, gate] = await Promise.all([measureComplexity(folder, commit), qualityGate(folder, commit, files)]);
     const model = buildModel({
       head: { commit, date: date.trim() }, branch: target.branch, shallow: String(shallow).trim() === 'true',
-      window, files, log, ignoreRevs: parseIgnoreRevs(revs), attributes, exclude, includeMass, complexity,
+      window, files, log, ignoreRevs: parseIgnoreRevs(revs), attributes, exclude, includeMass, includeTests, complexity,
     });
     // no file read (git grep failed or timed out): shown, never kept for the commit
     if (!files.length) return { state: model.commits ? 'ok' : 'no-commits', model, gate };
@@ -216,7 +221,8 @@ async function citySources(folder, commit) {
  */
 async function readCity(folder, opts = {}) {
   const exclude = (opts.exclude || []).map(String).filter(Boolean);
-  const { state, model } = await readFacts(folder, { exclude });
+  // the city draws the tests (its campus, #372), which the hotspots leave out
+  const { state, model } = await readFacts(folder, { exclude, includeTests: true });
   if (state !== 'ok') return { state, model: null, validation: null };
   const commit = model.head.commit;
   const plan = opts.plan || null;

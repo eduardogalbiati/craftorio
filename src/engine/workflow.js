@@ -63,11 +63,21 @@ const { methods: gatesMethods } = require('./run/gates');
 const { methods: supervisionMethods } = require('./run/supervision');
 const { methods: checkoutMethods } = require('./run/checkout');
 const { methods: machineStepsMethods } = require('./run/machine-steps');
+const { methods: projectMapStepsMethods } = require('./run/project-map-steps');
 const { methods: testRequestsMethods } = require('./run/test-requests');
 const { methods: resumeMethods, pausedError } = require('./run/resume');
 const { methods: setupMethods } = require('./run/setup');
 
 const stepAgentLabel = (s) => (s.agents ? s.agents.join(' · ') : s.agent || null);
+
+// The machine steps whose output is all there is (no worktree processes, no supervisor): type → method.
+// project_map (#372): the project map's facts, validation and save; release_version (#325): never
+// fails the run, the output says what was written; test_ids (#246): the missing test ids
+const PLAIN_MACHINE_STEPS = {
+  project_map: 'runProjectMapStep',
+  release_version: 'runReleaseVersionStep',
+  test_ids: 'runTestIdsStep',
+};
 
 function newRunId() {
   const d = new Date();
@@ -523,14 +533,9 @@ class WorkflowRun extends EventEmitter {
       if (this.abort.signal.aborted) throw new Error('Cancelled');
       st.output = output;
       scope = { ...this.ctx, output, iteration: st.iteration };
-    } else if (step.type === 'release_version') {
-      // no agent, no model call (#325): never fails the run, the output says what was written
-      output = await this.runReleaseVersionStep(step, st);
-      st.output = output;
-      scope = { ...this.ctx, output, iteration: st.iteration };
-    } else if (step.type === 'test_ids') {
-      // no agent, no model call (#246): the missing test ids are the output, the transitions route it
-      output = this.runTestIdsStep(step, st);
+    } else if (PLAIN_MACHINE_STEPS[step.type]) {
+      // no agent, no model call: the output is the step's result, the transitions route it
+      output = await this[PLAIN_MACHINE_STEPS[step.type]](step, st);
       st.output = output;
       scope = { ...this.ctx, output, iteration: st.iteration };
     } else if (step.type === 'workflow') {
@@ -824,6 +829,7 @@ mixin(
   supervisionMethods,
   checkoutMethods,
   machineStepsMethods,
+  projectMapStepsMethods,
   testRequestsMethods,
   resumeMethods,
   setupMethods,

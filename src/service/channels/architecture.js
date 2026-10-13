@@ -10,6 +10,9 @@
 // districts without one) with its edges and validation (src/architecture-facts.js readCity, core
 // src/shared/city-model.js); architecture:savePlan checks a plan against CITY_PLAN_SCHEMA and saves
 // it, keeping the one it replaces. Neither starts a model call.
+// The project map (#372): architecture:city also says whether to advise "Refresh the map"
+// (CityModel.refreshSignal: never without a saved plan) and names the project map run in progress;
+// the tab starts that workflow itself (run:start, workflows/project-map.yaml), only on a click.
 
 const path = require('path');
 const agents = require('../../agents');
@@ -20,7 +23,10 @@ const proposals = require('../../refactor-proposals');
 const runs = require('../../runs');
 const simulation = require('../../engine/simulation');
 const { validateSchema } = require('../../json-schema');
-const { CITY_PLAN_SCHEMA } = require('../../shared/city-model');
+const {
+  CITY_PLAN_SCHEMA,
+  refreshSignal,
+} = require('../../shared/city-model');
 const { clientError, requireId } = require('../common');
 const {
   ANY,
@@ -41,7 +47,10 @@ const WINDOW = { since: DATE, until: DATE, includeMass: FLAG, refresh: FLAG };
 const FACTS = shape({ state: { type: 'string', enum: ['ok', 'not-git', 'no-commits'] }, model: nullable(OBJECT), gate: listOf(OBJECT), exclude: listOf(STRING) }, ['state', 'model']);
 const ESTIMATE = shape({ estimate: nullable(shape({ usd: { type: 'number' }, basis: INT }, ['usd', 'basis'])) }, ['estimate']);
 const REPORT_VIEW = shape({ report: nullable(OBJECT), findings: listOf(OBJECT), gone: listOf(OBJECT), runsSince: nullable(INT), previousId: nullable(STRING), running: nullable(OBJECT) }, ['report', 'findings', 'gone']);
-const CITY = shape({ state: { type: 'string', enum: ['ok', 'not-git', 'no-commits'] }, model: nullable(OBJECT), validation: nullable(OBJECT) }, ['state', 'model', 'validation']);
+const REFRESH = shape({ suggested: { type: 'boolean' }, unmatchedShare: { type: 'number' }, newFolders: listOf(STRING) }, ['suggested', 'unmatchedShare', 'newFolders']);
+const CITY = shape({ state: { type: 'string', enum: ['ok', 'not-git', 'no-commits'] }, model: nullable(OBJECT), validation: nullable(OBJECT), refresh: REFRESH, mapRun: nullable(STRING) }, ['state', 'model', 'validation', 'refresh']);
+// the project map workflow (#372): its run writes the project's city plan
+const PROJECT_MAP_WORKFLOW = 'project-map.yaml';
 const PROGRESS_TEXT = 160;
 
 module.exports = (ctx) => {
@@ -139,7 +148,10 @@ module.exports = (ctx) => {
       fn: async ({ projectId }) => {
         const p = projectOf(projectId);
         const { plan, error } = arch.readPlan(root(), p.id);
-        return facts.readCity(p.folder, { exclude: arch.readSettings(root(), p.id).exclude, plan, planError: error });
+        const city = await facts.readCity(p.folder, { exclude: arch.readSettings(root(), p.id).exclude, plan, planError: error });
+        // #372: whether to advise "Refresh the map" (never starts a run), and the project map run in progress
+        const mapRun = [...ctx.active.values()].find((r) => r.projectId === p.id && path.basename(String(r.file || '')) === PROJECT_MAP_WORKFLOW);
+        return { ...city, refresh: refreshSignal(city), mapRun: mapRun ? mapRun.runId : null };
       },
     },
     {

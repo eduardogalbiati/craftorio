@@ -29,6 +29,9 @@
 .arch-facts p { margin: 0; }
 .arch-edit { padding: 10px 12px; display: grid; gap: 6px; max-width: 640px; }
 .arch-edit textarea { width: 100%; font-family: var(--mono, monospace); }
+/* the project map (#372): its button, the refresh advice and the confirmation with the estimate */
+.arch-map { display: grid; gap: 6px; margin-bottom: 12px; }
+.arch-map p { margin: 0; }
 .arch-scatter { width: 100%; max-width: 480px; height: auto; }
 .arch-axis { stroke: currentColor; opacity: .4; }
 .arch-dot { fill: var(--accent, #4a8); opacity: .7; }

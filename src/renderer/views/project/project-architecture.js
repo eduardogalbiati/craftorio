@@ -10,12 +10,18 @@
 // report picker, the From / To range and the mass-change toggle. States: not a git repository, no
 // commits in the range, never analysed, analysing (the Oracle turn's progress, polled), a report
 // (with "N runs since this analysis") and an error with its message.
+// The project map (#372, workflows/project-map.yaml, architecture:city): "Map this project" (no saved
+// city plan) or "Refresh the map" (a saved one) opens a confirmation with its estimate (chain:estimate
+// from past real runs) and Start / Cancel; only Start starts the run (run:start, a simulation when the
+// app runs simulations only), then the tab shows it running. The advice to refresh (more than 5% of
+// the drawn files match no district, or a new top-level folder) never starts anything.
 // Also the Refactor tab's proposal list (showRefactor, refactor:proposals).
 // Drawn into the box project.js gives it (show), its clicks and changes routed from the project
 // page's listeners (onClick, onChange). Uses app.js globals at call time: api, esc, errMsg, fmtNum,
-// fmtUsd (usage-widget.js), showToast. Browser: window.ProjectArchitecture.
+// fmtUsd (usage-widget.js), showToast, state (projects, simulationOnly). Browser: window.ProjectArchitecture.
 (() => {
   const POLL_MS = 1500;
+  const MAP_WORKFLOW = 'project-map.yaml';
   const TABLE_ROWS = 40;
   const STALE_RUNS = 5;
   const LIMITS = [
@@ -24,7 +30,8 @@
     'Code moved between files resets both metrics: the new file starts with no history and the old one disappears.',
     'Churn says nothing about bugs unless it is joined with fix commits: a busy file is not a buggy file.',
   ];
-  // the project on screen: { id, box, facts, view, reports, estimate, error, loadError, loading, analyzing, progress, reportId, since, until, includeMass, editing, seq }
+  // the project on screen: { id, box, facts, view, reports, estimate, error, loadError, loading, analyzing, progress, reportId, since, until, includeMass, editing, seq,
+  // city, mapEstimate, mapConfirm, mapStarting, mapRun, mapError } (the project map, #372)
   let cur = null;
   let poll = null;
 
@@ -50,6 +57,73 @@
       <label class="check small" title="Commits that touched more than 25% of the files (a reformat, a rename): counted unless unchecked"><input type="checkbox" data-arch-mass ${cur.includeMass ? 'checked' : ''} /><span>Count mass changes</span></label>
       <button type="button" class="btn" data-arch-refresh ${cur.loading ? 'disabled' : ''}>Refresh</button>
     </div>`;
+  }
+
+  // ---------- the project map (#372) ----------
+
+  function mapEstimateText() {
+    const item = cur.mapEstimate?.items?.[0];
+    const simulated = state.simulationOnly ? ' This app runs simulations only: no model is called.' : '';
+    if (item?.basis) return `≈ US$ ${Number(item.costUsd).toFixed(2)}, ~${item.minutes} min (estimate from ${plural(item.basis, 'past runs')}).${simulated}`;
+    return `No cost estimate yet: no real project map run to estimate from. One cartographer turn, up to three when its plan fails the validation.${simulated}`;
+  }
+
+  function mapAdviceHtml(r) {
+    if (!r?.suggested) return '';
+    const why = [
+      r.unmatchedShare > 0.05 ? `${Math.round(r.unmatchedShare * 100)}% of the drawn files match no district` : '',
+      r.newFolders.length ? `new top-level ${r.newFolders.length === 1 ? 'folder' : 'folders'}: ${r.newFolders.join(', ')}` : '',
+    ].filter(Boolean).join('; ');
+    return `<p class="small" role="status" data-testid="architecture-map-refresh-advised"><span class="badge warn">Refresh advised</span> ${esc(why)}. "Refresh the map" asks the cartographer for new rules; nothing starts on its own.</p>`;
+  }
+
+  function mapConfirmHtml(label) {
+    if (!cur.mapConfirm) return '';
+    const error = cur.mapError ? `<div class="usage-unavailable" role="alert">${esc(cur.mapError)}</div>` : '';
+    return `<div class="card arch-edit" role="dialog" aria-label="${esc(label)}" data-testid="architecture-map-confirm">
+      <p class="small"><b>${esc(label)}</b>: the cartographer reads the repository (read-only) and writes the city plan; it is validated by rules and shown at a gate before anything is saved.</p>
+      <p class="small" data-testid="architecture-map-estimate">${esc(mapEstimateText())}</p>
+      ${error}
+      <div class="row"><button type="button" class="btn primary" data-arch-map-start data-testid="architecture-map-start" ${cur.mapStarting ? 'disabled' : ''}>${cur.mapStarting ? 'Starting…' : 'Start'}</button><button type="button" class="btn ghost" data-arch-map-cancel data-testid="architecture-map-cancel">Cancel</button></div>
+    </div>`;
+  }
+
+  function mapHtml() {
+    const city = cur.city;
+    if (!city || city.state !== 'ok') return '';
+    const hasPlan = city.model?.grouping === 'plan';
+    const label = hasPlan ? 'Refresh the map' : 'Map this project';
+    const plan = hasPlan
+      ? `City plan: ${plural(city.model.districts.length, 'districts')}, ${Math.floor((city.validation?.coverage || 0) * 1000) / 10}% of the drawn files in a district.`
+      : 'No city plan yet: the city groups the files by folder.';
+    const running = cur.mapRun ? `<span class="badge live" role="status" data-testid="architecture-map-running" title="${esc(cur.mapRun)}">Project map running: its plan waits at its gate</span>` : '';
+    return `<section class="arch-map" data-testid="architecture-map-panel">
+      <div class="row"><button type="button" class="btn" data-arch-map data-testid="architecture-map" ${cur.mapRun || cur.mapConfirm ? 'disabled' : ''}>${label}</button>${running}<span class="small muted">${esc(plan)}</span></div>
+      ${mapAdviceHtml(city.refresh)}
+      ${mapConfirmHtml(label)}
+    </section>`;
+  }
+
+  async function startMap() {
+    const c = cur;
+    if (!c || c.mapStarting) return;
+    const folder = state.projects.find((p) => p.id === c.id)?.folder;
+    if (!folder) {
+      c.mapError = 'The project has no folder: there is nothing to map.';
+      render();
+      return;
+    }
+    Object.assign(c, { mapStarting: true, mapError: null });
+    render();
+    try {
+      const out = await api.startRun({ file: MAP_WORKFLOW, inputs: { repo_path: folder, project_id: c.id }, mock: !!state.simulationOnly, projectId: c.id });
+      Object.assign(c, { mapRun: out?.runId || null, mapConfirm: false });
+      showToast('Project map started: its plan waits for you at its gate');
+    } catch (e) {
+      c.mapError = errMsg(e);
+    }
+    c.mapStarting = false;
+    if (cur === c) render();
   }
 
   function findingHtml(f, i) {
@@ -180,7 +254,7 @@
       return `<div class="empty-state" data-testid="architecture-state-not-git"><b>Not a git repository</b><p class="muted">The project folder is not a git repository: there are no commits to read and nothing to analyse. Point the project to a git checkout to see its hotspots.</p></div>`;
     }
     const noCommits = cur.facts.state === 'no-commits' ? '<div class="empty-state" data-testid="architecture-state-no-commits"><b>No commits in this range</b><p class="muted">Widen the From / To range: churn counts the commits of the default branch inside it.</p></div>' : '';
-    return `${controlsHtml()}${stateHtml()}${noCommits}${cur.facts.model ? factsHtml() : ''}${limitsHtml()}`;
+    return `${controlsHtml()}${stateHtml()}${mapHtml()}${noCommits}${cur.facts.model ? factsHtml() : ''}${limitsHtml()}`;
   }
 
   function render() {
@@ -196,11 +270,13 @@
     const seq = ++c.seq;
     Object.assign(c, { loading: true, loadError: null });
     render();
-    const [facts, view, reports, estimate] = await Promise.allSettled([
+    const [facts, view, reports, estimate, city, mapEstimate] = await Promise.allSettled([
       api.architectureFacts(c.id, { ...range(), refresh }),
       api.architectureReport(c.id, { reportId: c.reportId }),
       api.listArchitectureReports(c.id),
       api.architectureEstimate(c.id),
+      api.architectureCity(c.id),
+      api.chainEstimate(MAP_WORKFLOW, null),
     ]);
     if (cur !== c || seq !== c.seq) return;
     c.loading = false;
@@ -210,6 +286,9 @@
     c.view = value(view);
     c.reports = value(reports) || [];
     c.estimate = value(estimate)?.estimate || null;
+    c.city = value(city);
+    c.mapEstimate = value(mapEstimate);
+    c.mapRun = c.city?.mapRun || null;
     render();
   }
 
@@ -270,7 +349,8 @@
   function show(id, box) {
     if (cur?.id !== id) {
       stopPoll();
-      cur = { id, box, facts: null, view: null, reports: [], estimate: null, error: null, loadError: null, loading: false, analyzing: false, progress: null, reportId: null, since: '', until: '', includeMass: true, editing: false, seq: 0 };
+      cur = { id, box, facts: null, view: null, reports: [], estimate: null, error: null, loadError: null, loading: false, analyzing: false, progress: null, reportId: null, since: '', until: '', includeMass: true, editing: false, seq: 0,
+        city: null, mapEstimate: null, mapConfirm: false, mapStarting: false, mapRun: null, mapError: null };
     }
     cur.box = box;
     if (!cur.facts && !cur.loading && !cur.loadError) load();
@@ -286,6 +366,9 @@
     if (e.target.closest('[data-arch-exclude-edit]')) return () => { cur.editing = true; render(); };
     if (e.target.closest('[data-arch-exclude-cancel]')) return () => { cur.editing = false; render(); };
     if (e.target.closest('[data-arch-exclude-save]')) return saveExclude;
+    if (e.target.closest('[data-arch-map]')) return () => { Object.assign(cur, { mapConfirm: true, mapError: null }); render(); };
+    if (e.target.closest('[data-arch-map-start]')) return startMap;
+    if (e.target.closest('[data-arch-map-cancel]')) return () => { cur.mapConfirm = false; render(); };
     return null;
   }
 

@@ -81,10 +81,23 @@ function demoArchitectureRepo(folder, commits = ARCH_COMMITS) {
   return commits.length ? String(git(['rev-parse', 'HEAD'])).trim() : null;
 }
 
+// #372: a saved city plan that only covers src/: tools/export.py matches no district (50% of the
+// drawn files, and a new top-level folder), so the tab advises "Refresh the map"
+function demoCityPlan(ws, projectId) {
+  const dir = path.join(ws.root, 'architecture', projectId);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'city-plan.json'), JSON.stringify({
+    version: 1, project: 'demo-app', summary: 'The billing API and its export tools (simulated data).',
+    zones: [{ id: 'core', name: 'Billing core', kind: 'industrial', purpose: 'The billing rules.' }],
+    districts: [{ id: 'billing', name: 'Billing rules', zone: 'core', purpose: 'Prices and discounts.', include: ['/src/**'] }],
+  }, null, 2));
+}
+
 function seedArchitecture(args, ws, project) {
   if (args.mode === 'not-git') return;
   const head = demoArchitectureRepo(project.folder, args.mode === 'empty' ? [] : ARCH_COMMITS);
   if (head && args.mode !== 'never') demoArchitectureReports(ws, project.id, { commit: head, date: '2026-09-15T10:00:00Z' });
+  if (args.mode === 'map-refresh') demoCityPlan(ws, project.id);
 }
 
 function seed({ args, ws, project }) {
@@ -130,7 +143,7 @@ async function afterOpen({ args, click }) {
 
 module.exports = {
   afterOpen,
-  modes: ['analyzing', 'empty', 'error', 'loading', 'never', 'no-runs', 'not-git'],
+  modes: ['analyzing', 'empty', 'error', 'loading', 'map-refresh', 'never', 'no-runs', 'not-git'],
   open,
   run: true,
   seed,

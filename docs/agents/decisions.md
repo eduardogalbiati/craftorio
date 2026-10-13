@@ -8,12 +8,18 @@ appears once, in its latest form, naming what it replaced. The hard rules of
 [AGENTS.md](../../AGENTS.md) are not repeated here. This is not the `decision-log` skill (a run's
 own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
 
-- **2026-10-13** (#371): the project city is on the roadmap, built from the proof of concept
-  (PR #370, `poc/embed-city.js` and its two plans at 100% coverage); groma.md is not used. Why:
+- **2026-10-13** (#371, #372): the project city is on the roadmap, built from the proof of concept
+  (PR #370, `poc/embed-city.js` and its two plans at 100% coverage); groma.md is not used. The city
+  is one deterministic model (`src/shared/city-model.js`) from #356's facts and a city plan, drawn
+  by the 3D view (#373). The plan of any project is written by an agent, the cartographer of the
+  `project-map` workflow (skill `project-map`, one for every kind of project), and validated by
+  rules (95% of the drawn files match a district); the cartographer is read-only on the project
+  (it never writes into its code, docs or `AGENTS.md`/`CLAUDE.md`), a human gate approves the plan,
+  a refresh keeps the ids and the names the owner saw, and a run starts only on a click in the
+  Architecture tab, which only advises a refresh (over 5% unmatched, or a new top-level folder). Why:
   evaluated on this repository, groma.md gave 112 one-file "renderer" containers, 81% of the files
   "unidentified" and no relationships, and it writes into `AGENTS.md`/`CLAUDE.md` and serves on all
-  interfaces. The city is one deterministic model (`src/shared/city-model.js`) from #356's facts and
-  an agent-written city plan (#372), drawn by the 3D view (#373).
+  interfaces; placing every file with a model is costly and goes stale with the next commit.
 - **2026-10-13** (#368): a run or a roadmap stage can be paused after the current agent turn: an
   agent is never stopped in the middle of a turn (nor a running command), the run ends `paused`
   with everything kept, and Resume continues from that point without redoing a finished turn. A

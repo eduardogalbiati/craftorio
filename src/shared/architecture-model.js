@@ -333,13 +333,14 @@
    * The model of a repository at one commit.
    * sources: { head: { commit, date }, branch, shallow, window: { since, until }, files: [{ path, lines }],
    * log (git log text), ignoreRevs: [rev], attributes (.gitattributes text), exclude: [pattern],
-   * includeMass, complexity: { tool, metric, functions: [{ file, name, line, complexity, length }] } | null }
+   * includeMass, includeTests (the test files are kept, not excluded), complexity: { tool, metric, functions: [{ file, name, line, complexity, length }] } | null }
    */
   function buildModel(sources) {
     const window = { since: (sources.window && sources.window.since) || null, until: (sources.window && sources.window.until) || null };
     const attributes = parseAttributes(sources.attributes);
     const projectRes = (sources.exclude || []).filter(Boolean).map(globRe);
-    const groups = { ...DEFAULT_EXCLUDES, tests: globs().TESTS_PATHS };
+    // includeTests (#372): the city draws the tests too (its campus); the hotspots leave them out
+    const groups = { ...DEFAULT_EXCLUDES, ...(sources.includeTests ? {} : { tests: globs().TESTS_PATHS }) };
     const defaultRes = Object.keys(groups).sort().map((g) => [g, groups[g].map(globRe)]);
     const excluded = { build: 0, generated: 0, lock: 0, project: 0, tests: 0, vendored: 0 };
     const kept = [];

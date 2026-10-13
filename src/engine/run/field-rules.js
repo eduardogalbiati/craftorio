@@ -45,6 +45,7 @@ const SESSION_MODES = ['persistent', 'ephemeral', 'handoff'];
 // Step types without an agent: the engine does the work (no supervisor, no stall check, no agent keys)
 const MACHINE_STEP_TYPES = [
   'human_approval',
+  'project_map',
   'release_version',
   'screenshots',
   'suite',
@@ -54,6 +55,8 @@ const MACHINE_STEP_TYPES = [
 // Human gates (#41): `decision` (default) is a choice only the person makes (scope, merge, publish);
 // `escalation` is a problem the supervisor on call tries to solve before the person is asked.
 const GATE_KINDS = ['decision', 'escalation'];
+// `type: project_map` (#372): what the step does (src/engine/run/project-map-steps.js)
+const PROJECT_MAP_ACTIONS = ['facts', 'validate', 'save', 'fail'];
 const DISPLAY_MAX = 40;
 
 // The value types of the table: name → check of a value that is set (a template is checked before)
@@ -78,7 +81,7 @@ const TYPES = {
 
 // Where a step field applies: every step type, a list of types, or every type except some
 const AGENT_STEPS = { except: MACHINE_STEP_TYPES };
-const NO_AGENT_TYPES = ['release_version', 'screenshots', 'suite', 'test_ids'];
+const NO_AGENT_TYPES = ['project_map', 'release_version', 'screenshots', 'suite', 'test_ids'];
 const GATE = ['human_approval'];
 const AGENTS = 'agents and defaults';
 const WORKFLOW = 'workflow';
@@ -141,6 +144,8 @@ const FIELD_RULES = [
   text('version', ['release_version']),
   text('dir', ['release_version']),
   text('branch', ['release_version']),
+  // `type: project_map` (#372): the project map's machine steps, `from` the step whose output they read
+  entry('steps[].action', ['project_map'], 'one of', `action must be one of ${PROJECT_MAP_ACTIONS.join(', ')}, on a project_map step.`, { values: PROJECT_MAP_ACTIONS, required: true, elsewhere: 'skip' }),
   entry('steps[].goal.until', 'all', 'any', 'goal requires "until".', { required: true, present: 'truthy' }),
   entry('steps[].wait', { except: GATE }, 'any', 'wait is only valid on a single-agent step with a loop.'),
   entry('steps[].wait.probe', 'all', 'one of', `wait.probe must be one of ${PROBES.join(', ')}.`, { values: PROBES, required: true }),
@@ -271,6 +276,7 @@ module.exports = {
   parseDuration,
   parseRequests,
   parseTokens,
+  PROJECT_MAP_ACTIONS,
   resolveChecks,
   runChecks,
   SESSION_MODES,

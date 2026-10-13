@@ -23,7 +23,8 @@
 //                      than the Dashboard, whose panel reads the answers; the Edit form of its
 //                      memory: --click "#oracle-dock [data-oracle-memory]")
 //   --tab <name>       settings: general | agents | execution | phone | about; workflows: runs | definitions | builder | pipelines;
-//                      project: overview | conflicts | architecture | refactor (conflicts --mode loading | no-runs | not-git);
+//                      project: overview | conflicts | architecture | refactor (conflicts --mode loading | no-runs | not-git;
+//                      architecture --mode map-refresh: a saved city plan that covers part of the files, #372);
 //                      analytics: usage | performance | run | occupancy | agents (performance: a demo git repository and a
 //                      marker; run: AI Development runs, the newest shown; occupancy: 30 days of runs and nights;
 //                      agents: four weeks of the Oracle's, the Product Owner's and the Supervisor chat's turns, #280)

@@ -18,10 +18,17 @@
 //   and `edgesNotRead` lists "not read for <language>" for each code language left out of the graph.
 // - The validation: coverage, the first UNMATCHED_SAMPLE unmatched files, empty and small
 //   districts, unknown zones, duplicate ids, landmark and port paths missing at the commit, schema
-//   errors. Keys sorted. Browser: window.CityModel; Node: module.exports.
+//   errors. Keys sorted.
+// - The project map workflow (#372): planVerdict (the validate step's ok / problems), refreshPlan
+//   (a refresh keeps the ids and names the owner saw), planDiff (districts added / removed) and
+//   refreshSignal (when the Architecture tab suggests "Refresh the map").
+// Browser: window.CityModel; Node: module.exports.
 (function (root) {
   const MIN_DISTRICT_FILES = 3;
   const UNMATCHED_SAMPLE = 30;
+  // the project map (#372): a plan passes at this coverage; the tab suggests a refresh above this unmatched share
+  const MIN_COVERAGE = 0.95;
+  const REFRESH_SHARE = 0.05;
   const ZONE_KINDS = ['campus', 'civic', 'commercial', 'industrial', 'infrastructure', 'library', 'logistics', 'power', 'workshop'];
   const OUTSKIRTS = { id: 'outskirts', name: 'Outskirts', kind: 'outskirts', purpose: 'Drawn files no district rule matched.' };
   const ROOT = '(root)';
@@ -361,6 +368,68 @@
     return facts().sortKeys({ model: city, validation });
   }
 
+  // ---------- the project map workflow (#372) ----------
+
+  const percent = (share) => `${Math.floor(share * 1000) / 10}%`;
+
+  // The validate step's verdict on a validation: { ok, problems: [text] }; not ok on schema errors,
+  // duplicate ids, districts in unknown zones, or coverage under MIN_COVERAGE (exactly 95% passes)
+  function planVerdict(validation) {
+    const v = validation || {};
+    const problems = [
+      ...arr(v.schemaErrors).map((e) => `schema: ${e}`),
+      ...(arr(v.duplicateIds).length ? [`duplicate ids: ${arr(v.duplicateIds).join(', ')}`] : []),
+      ...arr(v.unknownZones).map((u) => `district "${u.district}" is in an unknown zone "${u.zone}"`),
+    ];
+    const coverage = Number(v.coverage) || 0;
+    if (coverage < MIN_COVERAGE) problems.push(`coverage ${percent(coverage)} (${v.matched || 0} of ${v.drawn || 0} drawn files) is under ${percent(MIN_COVERAGE)}`);
+    return { ok: !problems.length, problems };
+  }
+
+  // A refresh (#372): the proposal's order and rules (include/exclude), the current plan's ids, names,
+  // zones and purposes for what both have, the current zones and districts the proposal drops kept
+  // (after the rest), the proposal's new ones added; the rest of the plan (summary, ignore,
+  // landmarks, ports, evidence) is the proposal's
+  function refreshPlan(current, proposed) {
+    if (!isObject(current)) return proposed;
+    const next = isObject(proposed) ? proposed : {};
+    const merge = (was, now, rules) => {
+      const old = new Map(arr(was).filter(isObject).map((x) => [x.id, x]));
+      const out = arr(now).filter(isObject).map((x) => (old.has(x.id) ? { ...old.get(x.id), ...rules(x) } : x));
+      return [...out, ...[...old.values()].filter((x) => !out.some((y) => y.id === x.id))];
+    };
+    return {
+      ...next,
+      version: current.version,
+      project: current.project,
+      zones: merge(current.zones, next.zones, () => ({})),
+      districts: merge(current.districts, next.districts, (d) => ({ include: arr(d.include), exclude: arr(d.exclude) })),
+    };
+  }
+
+  // The districts a plan adds and removes: { added: [id], removed: [id] }, sorted
+  function planDiff(before, after) {
+    const ids = (p) => new Set(arr(p && p.districts).filter(isObject).map((d) => d.id));
+    const a = ids(before);
+    const b = ids(after);
+    return { added: uniqueSorted([...b].filter((id) => !a.has(id))), removed: uniqueSorted([...a].filter((id) => !b.has(id))) };
+  }
+
+  // Whether the Architecture tab suggests "Refresh the map" for a city (buildCity's result):
+  // { suggested, unmatchedShare, newFolders }: more than REFRESH_SHARE of the drawn files match no
+  // rule, or a top-level folder has drawn files and none matches a rule; never for a folder city
+  function refreshSignal(city) {
+    const model = city && city.model;
+    if (!model || model.grouping !== 'plan') return { newFolders: [], suggested: false, unmatchedShare: 0 };
+    const buildings = arr(model.buildings);
+    const unmatched = buildings.filter((b) => b.district === OUTSKIRTS.id);
+    const top = (b) => (b.path.includes('/') ? b.path.split('/')[0] : null);
+    const matchedTops = new Set(buildings.filter((b) => b.district !== OUTSKIRTS.id).map(top));
+    const newFolders = uniqueSorted(unmatched.map(top).filter((t) => t && !matchedTops.has(t)));
+    const unmatchedShare = buildings.length ? unmatched.length / buildings.length : 0;
+    return { newFolders, suggested: unmatchedShare > REFRESH_SHARE || newFolders.length > 0, unmatchedShare };
+  }
+
   const api = {
     applyPlan,
     buildCity,
@@ -368,8 +437,14 @@
     districtOf,
     folderDistricts,
     importSpecs,
+    MIN_COVERAGE,
     MIN_DISTRICT_FILES,
     OUTSKIRTS,
+    planDiff,
+    planVerdict,
+    refreshPlan,
+    REFRESH_SHARE,
+    refreshSignal,
     ROOT,
     UNMATCHED_SAMPLE,
     ZONE_KINDS,

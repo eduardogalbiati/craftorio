@@ -585,6 +585,24 @@ function mockValue(s, key, h) {
   }
 }
 
+// The project map's cartographer (#372) without mockSequences.city_plan: one district that takes
+// every file, so the plan passes the validation of any repository
+const MOCK_CITY_PLAN = {
+  version: 1, project: 'simulated', summary: 'A simulated plan: every file in one district.', ignore: [],
+  zones: [{ id: 'core', name: 'Core', kind: 'industrial', purpose: 'Every file of the project (simulated).' }],
+  districts: [{ id: 'everything', name: 'Everything', zone: 'core', purpose: 'Every file (simulated).', include: ['*'], exclude: [] }],
+  landmarks: [], ports: [], evidence: [],
+};
+
+// A schema's mock answer; its `city_plan` (#372) is mockSequences.city_plan[visit - 1] (the last
+// one repeats), else MOCK_CITY_PLAN
+function mockAnswer(h) {
+  const out = mockValue(h.schema, '', h);
+  if (!out || typeof out !== 'object' || !('city_plan' in out)) return out;
+  const plans = Array.isArray(h.sequences?.city_plan) && h.sequences.city_plan.length ? h.sequences.city_plan : [MOCK_CITY_PLAN];
+  return { ...out, city_plan: structuredClone(plans[Math.min(h.visit - 1, plans.length - 1)]) };
+}
+
 // Simulated context window: grows with each turn of the same conversation (30k more per turn),
 // so max_context and handoff sessions can be exercised deterministically.
 const mockTurns = new Map();
@@ -662,7 +680,7 @@ async function runMock({ providerSessionId, model, hint, signal, onItem, attempt
     return { text: '', cut: true, requests: hint.maxRequests, usage, costUsd: 0.05, providerSessionId: sid, exitCode: 0 };
   }
 
-  const out = hint?.schema ? mockValue(hint.schema, '', hint) : null;
+  const out = hint?.schema ? mockAnswer(hint) : null;
   // sequences.invalid_answers: { stepId: n }: the first n answers of that step miss the required fields
   const invalid = out && hint.call <= (hint.sequences?.invalid_answers?.[hint.stepId] || 0);
   let text = invalid

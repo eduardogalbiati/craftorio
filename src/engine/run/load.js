@@ -86,6 +86,10 @@ const stepCapabilities = (s, ctx) => capabilities.validate(s.capabilities, `Step
 function screenshotsFrom(s, ctx) {
   if (s.type === 'screenshots' && !ctx.ids.has(s.from)) fail(ctx, 'from must be the step whose output lists the screenshots.');
 }
+// `type: project_map` (#372): every action but facts reads the output of its `from` step
+function projectMapFrom(s, ctx) {
+  if (s.type === 'project_map' && s.action !== 'facts' && !ctx.ids.has(s.from)) fail(ctx, `from must be the step whose output the ${s.action} action reads.`);
+}
 function filesWithoutScope(s, ctx) {
   if (s.type === 'suite' && s.files !== undefined && s.scope !== undefined) fail(ctx, 'files and scope cannot be combined.');
 }
@@ -228,7 +232,7 @@ const STEP_CHECKS = resolveChecks('steps[].', [
   stepCapabilities, 'display', 'edits_tests', 'protect_files', 'test_map', 'agent', 'agents',
   // the step types without an agent, then the agent steps (one applies to a step)
   screenshotsFrom, 'folder', 'command', 'timeout', 'scope', 'files', filesWithoutScope, 'expect', expectWithFiles,
-  childWorkflow, 'steps', 'renderer', 'version', 'dir', 'branch', fanOutGoal, knownAgents,
+  childWorkflow, 'steps', 'renderer', 'version', 'dir', 'branch', 'action', projectMapFrom, fanOutGoal, knownAgents,
   'goal.until', 'wait', waitOnLoop, 'wait.probe', 'wait.target', 'wait.output', outputNeedsProbe('output'),
   'wait.infra_output', outputNeedsProbe('infra_output'), 'wait.grace',
   'choices', 'full_suite', 'commit_tests', commitTestsSingleAgent, 'base_worktree', baseWorktreeNeedsWorktree,

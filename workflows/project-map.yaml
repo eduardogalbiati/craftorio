@@ -1,0 +1,235 @@
+# =============================================================================
+# Workflow: Project map (#372): an agent writes the project's city plan, validated by rules
+# -----------------------------------------------------------------------------
+#   facts ─► plan ─► validate ──ok──► gate ──approved──► save
+#              ▲         │                 └─rejected─► end (nothing saved)
+#              └─────────┘ not ok: back with the report, at most 2 times; then invalid (run failed)
+#
+# A deterministic scan cannot say what a project's areas are for; placing every file with a model is
+# costly and goes stale with the next commit. So the cartographer writes a short city plan (zones,
+# districts, landmarks and ports as path rules, #371's format) and the deterministic core applies the
+# rules on every draw: a new file lands in its district without another model call.
+#   1. facts (no agent): the tracked files counted by folder and by file-name pattern, the manifests,
+#      #371's folder city and its edges, and the plan saved now (project-map/facts.json in the run).
+#   2. plan (the cartographer, read-only on the project, project-map skill): answers the plan only;
+#      the engine writes it (project-map/plan.json). A refresh starts from the saved plan.
+#   3. validate (no agent): #371's validator (schema, duplicate ids, unknown zones, 95% coverage). A
+#      refresh keeps the saved plan's zone and district ids and the names the owner saw, takes the new
+#      rules and adds districts (CityModel.refreshPlan).
+#   4. gate (human): the plan, the validation (on a refresh: districts added and removed, coverage
+#      before and after) and, once the city view exists (#373), the city screenshot.
+#   5. save (no agent): written as architecture:savePlan writes it (the replaced plan is kept).
+# Started only on a click in the project's Architecture tab ("Map this project" / "Refresh the map").
+# =============================================================================
+
+apiVersion: multiagent/v1
+kind: Workflow
+
+metadata:
+  name: project-map
+  version: 0.1.0
+  description: "The project's city plan for the Architecture tab: the cartographer reads the repository (read-only) and writes zones, districts, landmarks and ports as path rules; the plan is validated by rules (95% of the files must match a district, back to the cartographer at most twice), shown at a gate and saved. A refresh keeps the ids and the names the owner saw."
+  tags: [architecture, map, read-only]
+  # Dashboard category: plan (Plan & Design), build (Code & Build) or monitor (Monitor & Improve).
+  category: plan
+
+# -----------------------------------------------------------------------------
+inputs:
+  repo_path:
+    label: "Repository"
+    type: string
+    required: true
+    description: "The project's local git repository (read-only: nothing in it changes)."
+  project_id:
+    label: "Project"
+    type: string
+    default: ""
+    description: "The project whose plan is written (set by the Architecture tab); empty: the run's project, found from the repository."
+
+# -----------------------------------------------------------------------------
+providers:
+  claude:
+    type: claude-code
+    command: claude
+    args: ["-p", "--output-format", "stream-json", "--verbose", "--model", "{{ model }}"]
+    # #286: an agent's `effort` reaches the CLI only through effort_args
+    effort_args: ["--effort", "{{ effort }}"]
+    resume_args: ["--resume", "{{ session_id }}"]
+    skill_args: ["--add-dir", "{{ skill_dir }}"]
+
+defaults:
+  working_dir: "{{ inputs.repo_path }}"
+  timeout: 20m
+  retry:
+    max_attempts: 2
+    backoff: exponential
+    initial_delay: 10s
+
+orchestrator:
+  provider: claude
+  model: claude-sonnet-5-5
+  # no worktree: nothing is merged into the project
+  supervisor:
+    enabled: true
+    max_interventions: 1
+  limits:
+    max_total_duration: 1h
+    max_total_cost_usd: 10
+
+# -----------------------------------------------------------------------------
+agents:
+  cartographer:
+    display: Cartographer
+    color: "#3DB8FF"
+    provider: claude
+    # the workflow's defaults; a run can pick another model or effort per agent
+    model: claude-sonnet-5-5
+    effort: medium
+    session: ephemeral
+    # read-only on the project: it never edits code, docs or agent instructions; the engine writes the plan
+    capabilities: { tools: [read], web: false }
+    skills: [project-map]
+    system_prompt: |
+      You are the cartographer: you read a repository and write its city plan, following the
+      project-map skill. You are read-only: never edit, create or delete a file of the project;
+      your answer is the plan, and the orchestrator writes it.
+
+groups:
+  - name: Facts
+    steps: [facts]
+  - name: Plan
+    steps: [plan, validate, invalid]
+  - name: Review
+    steps: [gate, save]
+
+# -----------------------------------------------------------------------------
+steps:
+
+  - id: facts
+    display: Facts
+    type: project_map
+    action: facts
+    transitions:
+      - when: "true"
+        goto: plan
+
+  - id: plan
+    display: City plan
+    agent: cartographer
+    prompt: |
+      Write the city plan of the repository in the current folder ({{ inputs.repo_path }}),
+      following the project-map skill. Read the manifests, the README, the agent instructions and
+      the entry points it names before you write; never edit a file.
+
+      The facts step's inputs (counted from `git ls-files`, no model):
+      - tracked files: {{ steps.facts.output.files }}
+      - manifests: {{ steps.facts.output.manifests | join(', ') or 'none' }}
+      - files per folder (any depth, `(root)` = the files at the root):
+      {{ steps.facts.output.folders | to_json }}
+      - files per file-name pattern:
+      {{ steps.facts.output.patterns | to_json }}
+      - #371's folder city (districts by folder, with their files and lines) and the edges between
+        its districts (imports or crate dependencies, heaviest first; a text when not read):
+      {{ steps.facts.output.folder_city | to_json }}
+      {% if steps.facts.output.current_plan %}
+
+      This is a REFRESH. The current plan, which the owner has seen:
+      {{ steps.facts.output.current_plan | to_json }}
+      Start from it: keep every zone and district id and name, change only the rules (include,
+      exclude, ignore) and add districts for what the rules miss. The orchestrator keeps the ids
+      and names of the current plan whatever you answer.
+      {% endif %}
+      {% if steps.validate.visits %}
+
+      Your previous plan failed the validation (round {{ steps.validate.visits }}):
+      {{ steps.validate.output.report }}
+
+      Your previous plan:
+      {{ steps.plan.output.city_plan | to_json }}
+      Fix the rules so that the problems above go away; do not add a catch-all district.
+      {% endif %}
+
+      Answer with the plan as `city_plan` in the JSON block, in the format of the project-map skill.
+    output_schema:
+      type: object
+      required: [city_plan]
+      properties:
+        city_plan: { type: object }
+        notes: { type: string }
+    transitions:
+      - when: "true"
+        goto: validate
+
+  # #371's validator on the plan (a refresh keeps the saved plan's ids and names)
+  - id: validate
+    display: Validation
+    type: project_map
+    action: validate
+    from: plan
+    transitions:
+      - when: "output.ok"
+        goto: gate
+      - when: "not output.ok"
+        goto: plan
+        max_visits: 2
+        on_exhausted: invalid
+
+  # the plan failed the validation 3 times: the run fails with the report, nothing is saved
+  - id: invalid
+    display: Plan not valid
+    type: project_map
+    action: fail
+    from: validate
+    transitions:
+      - when: "true"
+        goto: end
+        status: failed
+
+  - id: gate
+    display: Review the plan
+    type: human_approval
+    summary: "{% if steps.validate.output.refresh %}A refresh of the saved city plan{% else %}A new city plan{% endif %}: coverage {{ (steps.validate.output.coverage * 100) | round(1) }}%."
+    report: "{{ steps.validate.output.report }}"
+    message: |
+      {% if steps.validate.output.refresh %}A refresh of the saved city plan{% else %}A new city plan{% endif %} for {{ steps.validate.output.plan.project }}: {{ steps.validate.output.plan.summary }}
+
+      Zones:
+      {% for z in steps.validate.output.plan.zones %}- {{ z.name }} (`{{ z.id }}`, {{ z.kind }}){% if z.purpose %}: {{ z.purpose }}{% endif %}
+      {% endfor %}
+      Districts, the first whose rules match a file wins:
+      {% for d in steps.validate.output.plan.districts %}- {{ d.name }} (`{{ d.id }}`, zone `{{ d.zone }}`): {{ d.include | join(', ') }}{% if d.exclude and d.exclude | length %}, except {{ d.exclude | join(', ') }}{% endif %}
+      {% endfor %}
+      The whole plan is project-map/plan.json in the run folder. The city screenshot shows here once
+      the city view exists (#373).
+    approve_label: Save the plan
+    approve_help: "Saves it as the project's city plan (the plan it replaces is kept in city-plan-history/)."
+    reject_label: Discard
+    reject_help: "Ends the run; the saved plan does not change."
+    transitions:
+      - when: "approved"
+        goto: save
+      - when: "rejected"
+        goto: end
+        status: cancelled
+
+  - id: save
+    display: Save the plan
+    type: project_map
+    action: save
+    from: validate
+    transitions:
+      - when: "true"
+        goto: end
+
+# -----------------------------------------------------------------------------
+observability:
+  storage:
+    type: jsonl
+    path: "./runs/{{ run_id }}/"
+  capture:
+    prompts: true
+    outputs: true
+    thinking: true
+    tool_calls: true
+    redact:
+      - pattern: "(?i)(api[_-]?key|token|secret|password)\\s*[:=]\\s*\\S+"
