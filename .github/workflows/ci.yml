@@ -110,8 +110,9 @@ jobs:
         run: node node_modules/electron/install.js && ${{ runner.os == 'Linux' && 'xvfb-run -a ' || '' }}node --test test/screenshot.test.js
       # The Playwright + playwright-bdd E2E suite's critical journeys (#222): the real app with
       # _electron on a simulated demo workspace, real assertions; a failure keeps its trace and screenshot.
-      # Same two lanes as locally (#365, playwright.config.js): behaviour in 2 workers, @visual one at
-      # a time. The hosted runners (Windows/Ubuntu: 4 vCPU, 16 GB) fit two Electron apps.
+      # Same two lanes as locally (#365, playwright.config.js), @visual one at a time. The behaviour
+      # lane's workers are left to auto (#366, MULTIAGENT_E2E_WORKERS unset): sized from the runner's
+      # threads and free memory, 1 on the hosted 4-vCPU runners; the log's "E2E: ..." line says it.
       - name: E2E smoke (Playwright, @smoke)
         if: runner.os != 'macOS'
         run: ${{ runner.os == 'Linux' && 'xvfb-run -a ' || '' }}npm run test:e2e -- --grep "@smoke"

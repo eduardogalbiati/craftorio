@@ -41,12 +41,18 @@ Read this before writing or changing tests, and before any check that could star
   screencast: Playwright's recordVideo stalls Electron 44) and `failure.png` under
   `.test-output/e2e/artifacts/` (`npx playwright show-trace <zip>`). CI's Windows job runs `@smoke`.
   Two lanes (#365, Playwright projects in `playwright.config.js`): `behaviour` runs every scenario
-  that is neither `@visual` nor `@serial` in `MULTIAGENT_E2E_WORKERS` workers (default 2), fully
+  that is neither `@visual` nor `@serial` in `MULTIAGENT_E2E_WORKERS` workers, fully
   parallel, without the machine's screenshot slot; `visual` runs the `@visual` (and `@serial`)
   scenarios one at a time, each launch holding the screenshot slot (#199), so a run capturing
   screenshots elsewhere still makes it wait. A scenario that shares state with another one (a fixed
   file, port or the clipboard) gets `@serial` with the reason in a comment; `MULTIAGENT_E2E_WORKERS=1`
   is the old serial suite. One lane only: `npm run test:e2e -- --project behaviour`.
+  Workers (#366): unset or `auto` sizes the behaviour lane from the machine,
+  `clamp(1, 4, min(floor(threads / 8), floor((freeGB - 4) / 1.5)))` (20 threads and 11 GB free give 2,
+  a 4-vCPU runner 1; constants and measurements in `scripts/e2e-workers.js`); a number forces it, an
+  invalid value falls back to auto with a warning. The suite's first line says the choice
+  ("E2E: 2 workers (auto: 20 threads, 11.2 GB free)"). On a slow machine, or when scenarios time out
+  while other work runs, set `MULTIAGENT_E2E_WORKERS=1`; on a big idle one, a number above auto.
   The app is dark-only today: the light and dark baselines guard `prefers-color-scheme` both ways.
   E2E visual scenarios render at a fixed clock, never the real one (#362): `the app is open in the
   <theme> theme` seeds the workspace and starts the app's main process at `VISUAL_NOW`

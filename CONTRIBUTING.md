@@ -37,6 +37,8 @@ so you can try a change for free.
   `cargo test`, each with `--manifest-path native/Cargo.toml` (CI runs them on every OS).
 - UI changes: `npx electron scripts/smoke.js <out.png>` (a simulated run and a screenshot) or
   `npm run screenshot -- --view <screen> --out <dir>`.
+- `npm run test:e2e` sizes its parallel workers from your machine (`auto`); on a slow machine set
+  `MULTIAGENT_E2E_WORKERS=1` (or any number) to choose them yourself.
 
 ## Rules
 
