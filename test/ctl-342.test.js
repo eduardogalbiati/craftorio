@@ -152,23 +152,125 @@ test('#342 multiagent-ctl: --workspace <dir> instead of MULTIAGENT_WORKSPACE', {
   assert.equal(resultOf(r.stdout).controlChannel, true);
 });
 
-// ---- JS side: the route the client checks first ----------------------------------------------------
+// A workspace whose endpoint.json holds the given text.
+function workspaceWithEndpoint(t, text) {
+  const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'ctl-ws-342-'));
+  t.after(() => fs.rmSync(ws, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(ws, 'control'));
+  fs.writeFileSync(path.join(ws, 'control', 'endpoint.json'), text);
+  return ws;
+}
 
-test('#342 the control channel answers GET /api/version (with the token) with { version: string }', async (t) => {
-  const { service } = makeService(t);
-  const endpoint = await openChannel(t, service);
-  const res = await new Promise((resolve, reject) => {
-    const req = http.request(`${endpoint.url}/api/version`, { method: 'GET', headers: { authorization: `Bearer ${endpoint.token}` } }, (r) => {
+test('#342 multiagent-ctl: a stale endpoint.json (the app closed) exits 1 saying the app is not answering', { skip: SKIP }, async (t) => {
+  // a port that was open a moment ago and is closed now
+  const server = http.createServer();
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const { port } = server.address();
+  await new Promise((resolve) => server.close(resolve));
+  const ws = workspaceWithEndpoint(t, JSON.stringify({ url: `http://127.0.0.1:${port}`, token: 't'.repeat(64) }));
+  const r = await ctl(['settings:get'], envFor(ws));
+  assert.equal(r.code, 1, r.stderr);
+  assert.match(r.stderr, /not answering/);
+});
+
+test('#342 multiagent-ctl: an endpoint.json that is not JSON, or has no url, exits 2', { skip: SKIP }, async (t) => {
+  for (const text of ['{ not json', JSON.stringify({ token: 't'.repeat(64) })]) {
+    const r = await ctl(['settings:get'], envFor(workspaceWithEndpoint(t, text)));
+    assert.equal(r.code, 2, `${text}: ${r.stderr}`);
+    assert.match(r.stderr, /endpoint/i);
+  }
+});
+
+test('#342 multiagent-ctl: an older app without the version route (404) exits 3 before calling the channel', { skip: SKIP }, async (t) => {
+  const posts = [];
+  const server = http.createServer((req, res) => {
+    req.resume();
+    if (req.method === 'GET') {
+      res.writeHead(404, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Not found' }));
+      return;
+    }
+    posts.push(`${req.method} ${req.url}`);
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ result: 'should not be called' }));
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => server.close());
+  const ws = workspaceWithEndpoint(t, JSON.stringify({ url: `http://127.0.0.1:${server.address().port}`, token: 't'.repeat(64) }));
+  const r = await ctl(['settings:get'], envFor(ws));
+  assert.equal(r.code, 3, r.stderr);
+  assert.deepEqual(posts, [], 'no channel was called');
+});
+
+// ---- JS side: the routes the client reads ----------------------------------------------------------
+
+function call(endpoint, route, { method = 'GET', token = endpoint.token, body } = {}) {
+  return new Promise((resolve, reject) => {
+    const headers = token ? { authorization: `Bearer ${token}` } : {};
+    if (body !== undefined) headers['content-type'] = 'application/json';
+    const req = http.request(`${endpoint.url}${route}`, { method, headers }, (r) => {
       let data = '';
       r.on('data', (c) => { data += c; });
       r.on('end', () => resolve({ status: r.statusCode, text: data }));
     });
     req.on('error', reject);
     req.setTimeout(10000, () => req.destroy(new Error('timeout')));
-    req.end();
+    req.end(body);
   });
+}
+
+const callsLog = (service) => {
+  const file = path.join(service.workspace().root, 'control', 'calls.jsonl');
+  return fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
+};
+
+test('#342 the control channel answers GET /api/version (with the token) with { version: string }', async (t) => {
+  const { service } = makeService(t);
+  const endpoint = await openChannel(t, service);
+  const res = await call(endpoint, '/api/version');
   assert.equal(res.status, 200, res.text);
   const body = JSON.parse(res.text);
   assert.equal(typeof body.version, 'string');
   assert.ok(body.version.length > 0);
+});
+
+test('#342 GET /api/channels lists exactly the allowed channels, each with its argument schema', async (t) => {
+  const { CHANNELS } = require('../src/control/allowlist');
+  const { service } = makeService(t);
+  const endpoint = await openChannel(t, service);
+  const res = await call(endpoint, '/api/channels');
+  assert.equal(res.status, 200, res.text);
+  const { channels } = JSON.parse(res.text);
+  const names = channels.map((c) => c.channel);
+  assert.deepEqual([...names].sort(), [...CHANNELS].filter((c) => Object.hasOwn(service.api, c)).sort());
+  assert.equal(names.includes('approval:resolve'), false, 'a gate channel is never listed');
+  const roadmapGet = channels.find((c) => c.channel === 'roadmap:get');
+  assert.match(JSON.stringify(roadmapGet.schema), /projectId/);
+});
+
+test('#342 GET /api/version and /api/channels refuse a missing or wrong token with 401', async (t) => {
+  const { service } = makeService(t);
+  const endpoint = await openChannel(t, service);
+  for (const route of ['/api/version', '/api/channels']) {
+    assert.equal((await call(endpoint, route, { token: null })).status, 401, `${route} without a token`);
+    assert.equal((await call(endpoint, route, { token: 'f'.repeat(64) })).status, 401, `${route} with a wrong token`);
+  }
+});
+
+test('#342 the client\'s reads (GET /api/version, /api/channels) are not appended to control/calls.jsonl', async (t) => {
+  const { service } = makeService(t);
+  const endpoint = await openChannel(t, service);
+  assert.equal((await call(endpoint, '/api/version')).status, 200);
+  assert.equal((await call(endpoint, '/api/channels')).status, 200);
+  assert.equal(callsLog(service), '');
+  // a real call is still logged
+  assert.equal((await call(endpoint, '/api/settings:get', { method: 'POST', body: '{}' })).status, 200);
+  assert.match(callsLog(service), /settings:get/);
+});
+
+test('#342 POST /api/version is not a channel: refused with 403', async (t) => {
+  const { service } = makeService(t);
+  const endpoint = await openChannel(t, service);
+  const res = await call(endpoint, '/api/version', { method: 'POST', body: '{}' });
+  assert.equal(res.status, 403, res.text);
 });

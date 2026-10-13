@@ -8,6 +8,7 @@
 // them with cargo's message. Ctrl+C: on macOS/Linux, SIGINT ends either without a stack trace; on
 // Windows a console Ctrl+C cannot be sent to a piped child, so that case is skipped there.
 // Fixture times are local (toLocaleTimeString), so both run on this machine with the same timezone.
+// One intended divergence, tested on the binary only: a UTF-8 character split across two reads.
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -248,3 +249,22 @@ for (const [label, env] of [['FORCE_COLOR=1', { FORCE_COLOR: '1' }], ['no FORCE_
     assert.equal(actual, expected);
   });
 }
+
+// An intended divergence: session-tail.js decodes each read on its own, so a character split across
+// two reads prints as U+FFFD; multiagent-tail keeps the bytes between reads and prints it intact. The
+// byte-for-byte comparisons above never split a character.
+test('#342 multiagent-tail: a multibyte character split across two reads prints intact', { skip: BIN.skip }, async (t) => {
+  const runDir = runFolder(t, { session: jsonl(SESSION_EVENTS.slice(0, 1)) });
+  const file = path.join(runDir, 'sessions', 'developer-1.jsonl');
+  const run = startTail(t, BIN, runDir, 'developer-1');
+  await run.waitFor('opus');
+  const bytes = Buffer.from(`${JSON.stringify({ type: 'session.stream', ts: at(30), item: { kind: 'text', text: 'split 日本 end' } })}\n`, 'utf8');
+  const cut = bytes.indexOf(Buffer.from('日', 'utf8')) + 1; // inside the 3-byte character
+  fs.appendFileSync(file, bytes.subarray(0, cut));
+  await new Promise((r) => setTimeout(r, 900));
+  fs.appendFileSync(file, bytes.subarray(cut));
+  await run.waitFor('split');
+  await new Promise((r) => setTimeout(r, 100));
+  assert.equal(run.out().includes('split 日本 end'), true, JSON.stringify(run.out().slice(-200)));
+  assert.equal(run.out().includes('�'), false, 'no replacement character');
+});
