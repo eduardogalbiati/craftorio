@@ -178,7 +178,8 @@ async function analyze({ project, model, mock, oracle, agent, onItem = null }) {
   if (mock) return { report: mockReport(model), costUsd: 0, tokens: {}, simulated: true };
   const refused = oracle.budgetRefusal();
   if (refused) return { refused };
-  const res = await oracle.oneTurn({ prompt: analysisPrompt({ project, model }), model: agent.model, effort: agent.effort, onItem });
+  // a fresh session each time: usage.jsonl reads a null startReason as a resumed one (#280)
+  const res = await oracle.oneTurn({ prompt: analysisPrompt({ project, model }), model: agent.model, effort: agent.effort, onItem, startReason: 'architecture' });
   const out = validateReport(res.text);
   if (out.error) throw new Error(out.error);
   return { report: out.report, costUsd: res.costUsd, tokens: res.tokens || {}, simulated: false };

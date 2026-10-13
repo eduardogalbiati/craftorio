@@ -17,6 +17,7 @@
   const PAIR_MIN_TOGETHER = 2;
 
   const MAX_PATTERN = 200;
+  const MAX_WILDCARDS = 8;
 
   // Excluded by default, per group (and `tests`: the engine's test files, TESTS_PATHS of
   // src/shared/globs.js); .gitattributes (linguist-generated / -vendored) and the project's own
@@ -86,6 +87,11 @@
     return { target, drop: null, link: null };
   }
 
+  // .git-blame-ignore-revs text → the revisions to skip (lowercase hashes; comments and blanks dropped)
+  function parseIgnoreRevs(text) {
+    return String(text || '').split(/\r?\n/).map((l) => l.trim().toLowerCase()).filter((l) => /^[0-9a-f]{7,40}$/.test(l));
+  }
+
   // The commits (newest first) with the files of `files` each one changed: [{ hash, date, ignored, targets }].
   // A commit's changes are read against the mapping before it (`git mv b a; git mv c b` in one commit).
   function walkHistory(commits, files, ignoreRevs = []) {
@@ -122,15 +128,16 @@
   }
 
   const round3 = (n) => Math.round(n * 1000) / 1000;
+  const isKnown = (r) => r.commits !== null && r.commits !== undefined;
 
   // score = sqrt(u² + v²), u = log1p(complexity) / its maximum, v = log1p(commits) / its maximum;
   // a row with unknown commits scores null
   function scoreRows(rows) {
-    const known = rows.filter((r) => r.commits !== null && r.commits !== undefined);
-    const maxU = Math.max(0, ...known.map((r) => Math.log1p(r.complexity)));
-    const maxV = Math.max(0, ...known.map((r) => Math.log1p(r.commits)));
+    const known = rows.filter(isKnown);
+    const maxU = known.reduce((m, r) => Math.max(m, Math.log1p(r.complexity)), 0);
+    const maxV = known.reduce((m, r) => Math.max(m, Math.log1p(r.commits)), 0);
     for (const r of rows) {
-      if (!known.includes(r)) { r.score = null; continue; }
+      if (!isKnown(r)) { r.score = null; continue; }
       const u = maxU ? Math.log1p(r.complexity) / maxU : 0;
       const v = maxV ? Math.log1p(r.commits) / maxV : 0;
       r.score = round3(Math.hypot(u, v));
@@ -140,11 +147,11 @@
 
   // Quadrant and score of each row ({ complexity, commits }); unknown commits: both null
   function placeQuadrants(rows) {
-    const known = rows.filter((r) => r.commits !== null && r.commits !== undefined);
+    const known = rows.filter(isKnown);
     const mu = median(known.map((r) => Math.log1p(r.complexity)));
     const mv = median(known.map((r) => Math.log1p(r.commits)));
     for (const r of rows) {
-      if (!known.includes(r)) { r.quadrant = null; continue; }
+      if (!isKnown(r)) { r.quadrant = null; continue; }
       const complex = Math.log1p(r.complexity) > mu;
       const busy = Math.log1p(r.commits) > mv;
       r.quadrant = QUADRANTS[(complex ? 0 : 2) + (busy ? 0 : 1)];
@@ -168,10 +175,12 @@
   const globs = () => (typeof module === 'object' && module.exports ? require('./globs') : root.Globs);
 
   // A gitignore-style pattern → a RegExp over a repository path: the shared glob rule, plus a
-  // trailing `/` for a folder (`dist/`: any dist folder's files). Repeated `**/` collapse and the
-  // pattern is cut at MAX_PATTERN (a repository's .gitattributes must not stall the service).
+  // trailing `/` for a folder (`dist/`: any dist folder's files). A repository's .gitattributes must
+  // not stall the service: the pattern is cut at MAX_PATTERN, runs of `*` and repeated `**/`
+  // collapse, and a pattern with more than MAX_WILDCARDS wildcards matches nothing (ignored).
   function globRe(pattern) {
-    let p = String(pattern).trim().replace(/\\/g, '/').slice(0, MAX_PATTERN).replace(/(\*\*\/)+/g, '**/');
+    let p = String(pattern).trim().replace(/\\/g, '/').slice(0, MAX_PATTERN).replace(/\*{3,}/g, '**').replace(/(\*\*\/)+/g, '**/');
+    if ((p.match(/\*+/g) || []).length > MAX_WILDCARDS) return /(?!)/;
     const anchored = p.startsWith('/');
     if (anchored) p = p.slice(1);
     if (p.endsWith('/')) p = anchored || p.slice(0, -1).includes('/') ? `${p}**` : `**/${p}**`;
@@ -279,7 +288,9 @@
     return { ok: problems.length === 0, problems, longest };
   }
 
-  // Files that entered or left the Danger Zone month by month (head complexity, churn up to each month)
+  // Files that entered or left the Danger Zone month by month. Known limit: complexity is the head
+  // commit's in every frame (the tool measures one checkout), only the churn up to each month
+  // changes, so an entry or exit reflects churn alone; the tab says so next to the frames.
   function dangerFrames(rows, counted) {
     const months = [...new Set(counted.map((c) => String(c.date).slice(0, 7)))].sort();
     const frames = [];
@@ -395,6 +406,7 @@
     globRe,
     languageOf,
     median,
+    parseIgnoreRevs,
     parseLog,
     placeQuadrants,
     QUADRANTS,

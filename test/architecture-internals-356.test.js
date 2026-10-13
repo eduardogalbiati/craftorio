@@ -12,6 +12,19 @@ const { parseLizard } = require('../src/architecture-facts');
 const proposals = require('../src/refactor-proposals');
 const arch = require('../src/oracle-architecture');
 
+test('#356 parseIgnoreRevs: hashes lowercased, comments and blanks dropped (the app and code-health.js share it)', () => {
+  assert.deepEqual(core.parseIgnoreRevs('# formatting\n\nABCDEF1234\r\n  0123456789abcdef  \nnot-a-hash\n'), ['abcdef1234', '0123456789abcdef']);
+  assert.deepEqual(core.parseIgnoreRevs(''), []);
+});
+
+test('#356 globRe: a hostile pattern does not backtrack (runs of * collapse, too many wildcards match nothing)', () => {
+  const started = process.hrtime.bigint();
+  const hostile = core.globRe(`${'**a'.repeat(30)}b`);
+  assert.equal(hostile.test(`${'a'.repeat(60)}c`), false);
+  assert.equal(core.globRe('***.lock').test('x/yarn.lock'), true);
+  assert.ok(Number(process.hrtime.bigint() - started) / 1e6 < 1000);
+});
+
 test('#356 globRe: a pattern without a slash matches at any depth, a directory pattern its contents, ** spans folders', () => {
   assert.equal(core.globRe('*.lock').test('a/b/yarn.lock'), true);
   assert.equal(core.globRe('dist/').test('pkg/dist/x.js'), true);

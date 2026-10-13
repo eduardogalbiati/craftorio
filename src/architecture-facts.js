@@ -17,7 +17,12 @@
 const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
-const { buildModel, checkComplexity, DEFAULT_EXCLUDES } = require('./shared/architecture-model');
+const {
+  buildModel,
+  checkComplexity,
+  DEFAULT_EXCLUDES,
+  parseIgnoreRevs,
+} = require('./shared/architecture-model');
 const { resolveCommand } = require('./engine/providers');
 
 const GIT_TIMEOUT_MS = 120e3;
@@ -70,7 +75,6 @@ async function filesAt(folder, commit) {
 }
 
 const showAt = (folder, commit, file) => tryGit(folder, ['show', `${commit}:${file}`]).then((t) => t || '');
-const ignoreRevs = (text) => text.split(/\r?\n/).map((l) => l.trim().toLowerCase()).filter((l) => /^[0-9a-f]{7,40}$/.test(l));
 
 // One CSV line of lizard (quoted fields with "" escapes)
 function csvFields(line) {
@@ -161,7 +165,7 @@ async function readFacts(folder, opts = {}) {
     const [complexity, gate] = await Promise.all([measureComplexity(folder, commit), qualityGate(folder, commit, files)]);
     const model = buildModel({
       head: { commit, date: date.trim() }, branch: target.branch, shallow: String(shallow).trim() === 'true',
-      window, files, log, ignoreRevs: ignoreRevs(revs), attributes, exclude, includeMass, complexity,
+      window, files, log, ignoreRevs: parseIgnoreRevs(revs), attributes, exclude, includeMass, complexity,
     });
     // no file read (git grep failed or timed out): shown, never kept for the commit
     if (!files.length) return { state: model.commits ? 'ok' : 'no-commits', model, gate };

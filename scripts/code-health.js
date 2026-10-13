@@ -35,6 +35,7 @@ const {
   byHotness,
   byScore,
   countCommits,
+  parseIgnoreRevs,
   parseLog,
   placeQuadrants,
   QUADRANTS,
@@ -418,7 +419,7 @@ function git(root, args) {
 function readIgnoreRevs(root) {
   const file = path.join(root, '.git-blame-ignore-revs');
   if (!fs.existsSync(file)) return [];
-  return fs.readFileSync(file, 'utf8').split(/\r?\n/).map((l) => l.trim()).filter((l) => /^[0-9a-f]{7,40}$/.test(l));
+  return parseIgnoreRevs(fs.readFileSync(file, 'utf8'));
 }
 
 // { commits: { file: n }, last: { file: date } } or { missing: 'why' }.

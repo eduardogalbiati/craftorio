@@ -128,7 +128,8 @@
     return `<h3 class="arch-sub">Quadrants (${esc(model.complexity.metric)} complexity from ${esc(model.complexity.tool)})</h3>
       <svg class="arch-scatter" viewBox="0 0 400 220" role="img" aria-label="Commits against complexity, log1p axes"><line x1="20" y1="200" x2="390" y2="200" class="arch-axis"/><line x1="20" y1="10" x2="20" y2="200" class="arch-axis"/>${dots}<text x="390" y="214" text-anchor="end" class="arch-label">commits →</text><text x="24" y="16" class="arch-label">complexity ↑</text></svg>
       <p class="small muted">Split at the medians: Danger Zone (complex and changing), Cowboy Code (complex, rarely touched), Fertile Ground (simple, changing), Healthy Closure (simple, stable). The Danger Zone ranks by <span class="mono">score = √(u² + v²)</span>, u = log1p(complexity) / its maximum, v = log1p(commits) / its maximum.</p>
-      ${frames ? `<ul class="small arch-frames" data-testid="architecture-frames">${frames}</ul>` : ''}`;
+      ${frames ? `<p class="small muted">Monthly frames: files that entered or left the Danger Zone. Each frame uses the churn up to that month and today's complexity, so a move reflects churn alone.</p>
+      <ul class="small arch-frames" data-testid="architecture-frames">${frames}</ul>` : ''}`;
   }
 
   function complexityNote(c) {
