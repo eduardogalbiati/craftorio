@@ -7,10 +7,15 @@
 // - the channels that would call a model (Product Owner, Oracle, supervisor chat, analysis) answer
 //   with simulated data or previews, as in scripts/screenshot.js;
 // - the window stays off-screen, so a run never takes the owner's screen (MULTIAGENT_E2E_SHOW=1
-//   shows it, e.g. to watch a scenario); Chromium keeps painting it (no occlusion throttling).
+//   shows it, e.g. to watch a scenario); Chromium keeps painting it (no occlusion throttling);
+// - the main process's clock starts at MULTIAGENT_E2E_NOW (ms) when set: the visual scenarios
+//   render at a fixed instant (#362, features/support/fixed-clock.js).
 
 const path = require('path');
 const { app, ipcMain, nativeTheme } = require('electron');
+const { shiftClock } = require('./fixed-clock');
+
+if (process.env.MULTIAGENT_E2E_NOW) shiftClock(Number(process.env.MULTIAGENT_E2E_NOW));
 // the helpers only: scripts/screenshot.js runs its own capture in an Electron main process otherwise
 global.multiagentScreenshotHelpers = true;
 const { simulateChannels } = require('../../scripts/screenshot');

@@ -29,6 +29,10 @@
 #           whole suite in the same visit: only a green whole run leads to review / ship, and a red
 #           focused run goes back to fix (it counts as a round). A command that cannot be filtered
 #           (not npm/pnpm/yarn test or run <script>) runs the whole suite and its output says so.
+#           A fix round that changed nothing (#364: no commit since the round that last ran the whole
+#           suite and a clean worktree) skips the whole rerun: the green focused files complete the
+#           round and that whole run's result stands for the rest; any commit or uncommitted change
+#           keeps the whole rerun. Each round's output records its commit (`suite_scope` shows it).
 #           Both suites run with `base_check: false`: the worktree is the base, so nothing that
 #           fails there is "pre-existing".
 # 3. fix:   only for a red suite: the developer gets the history since the last release (the runs,
@@ -257,7 +261,8 @@ steps:
         on_exhausted: regression_failed
 
   # the E2E suite, once the unit suite is green: whole in round 1; after a fix, the feature files that
-  # failed first, then the whole suite in the same visit when they pass (#324)
+  # failed first, then the whole suite in the same visit when they pass (#324), unless nothing changed
+  # since the last whole run (#364)
   - id: e2e
     display: E2E scenarios
     type: suite

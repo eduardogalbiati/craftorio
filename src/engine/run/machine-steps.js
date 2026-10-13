@@ -8,6 +8,7 @@
 
 'use strict';
 
+const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const capabilities = require('../capabilities');
@@ -27,6 +28,25 @@ const { gib } = require('./turns');
 // this many times a round that failed during a memory incident
 const MEMORY_WAIT_MS = 10 * 60e3;
 const MAX_ENV_RERUNS = 2;
+
+// #364: the commit a suite round tests and whether the worktree was clean when it started (no
+// uncommitted or untracked change), or { commit: null, clean: false } without a git checkout
+function testedTree(dir) {
+  if (!dir) return { commit: null, clean: false };
+  const git = (...args) => execFileSync('git', args, { cwd: dir, encoding: 'utf8', windowsHide: true, timeout: 30000, stdio: ['ignore', 'pipe', 'ignore'] });
+  try {
+    const commit = git('rev-parse', 'HEAD').trim() || null;
+    return { commit, clean: !!commit && git('status', '--porcelain').trim() === '' };
+  } catch {
+    return { commit: null, clean: false };
+  }
+}
+
+// #364: a step's last round that ran the whole suite to the end (not focused, not blocked, not timed
+// out, every failure in a known file), so its result stands for the files a focused rerun leaves out
+function lastWholeRound(outputs) {
+  return (outputs || []).findLast((o) => o && o.scope !== 'files' && (o.status === 'pass' || o.status === 'fail') && !o.timed_out && (o.failures || []).every((f) => f.file)) || null;
+}
 
 const methods = {
   // Rebuilds <run_dir>/evidence/manifest.json after a step (#146, src/evidence.js): a new image
@@ -194,6 +214,8 @@ const methods = {
     const scope = step.scope ? render(String(step.scope), this.ctx).trim() : 'full';
     // an environment rerun logs next to the round's own log
     const env = reruns ? `-env${reruns > 1 ? `-${reruns}` : ''}` : '';
+    // #364: what this round tests, taken before it runs (output.commit, output.clean)
+    const tested = testedTree(this.ctx.worktree_dir);
     const once = async (extra = {}) => {
       const onStop = (ev) => stopped.push(ev);
       let watch = this.mock ? this.watchMemory({ stepId: step.id, onStop }) : null;
@@ -258,11 +280,12 @@ const methods = {
         output.affected = affected;
       }
     } else if (scope === 'failed') {
-      output = await this.failedFirstRound(step, st, once);
+      output = await this.failedFirstRound(step, st, once, tested);
     } else {
       output = await once();
     }
-    if (output.status !== 'blocked' && output.scope !== 'files') this.suiteRuns.engine++;
+    Object.assign(output, tested);
+    if (output.status !== 'blocked' && output.scope !== 'files' && !output.whole_run) this.suiteRuns.engine++;
     if (output.status === 'pass' && output.scope !== 'files' && step.files === undefined) this.fullSuitePassed = true;
     // the files that failed come back in the next round's affected set
     for (const f of output.failures || []) if (f.file && !this.suiteFailedFiles.includes(f.file)) this.suiteFailedFiles.push(f.file);
@@ -282,7 +305,12 @@ const methods = {
   // after (log <step>-<visit>-full.log, the focused run under `affected`), so only a green whole run
   // routes on. A red focused run is the visit's result. A previous round without failed files, or a
   // command that cannot be filtered (runSuite says so in `selection.why`): the whole suite.
-  async failedFirstRound(step, st, once) {
+  // #364: when the worktree is clean at the commit of the round that last ran the whole suite (a fix
+  // round that changed nothing), the green focused run completes the round: that whole run's result
+  // stands for the other files, no whole rerun (a whole pass with the focused run in `affected` and
+  // that run in `whole_run`, so the Ship gate reads as after a whole rerun). A commit or an
+  // uncommitted change since then, or a whole round without a recorded commit, keeps the whole rerun.
+  async failedFirstRound(step, st, once, tested = testedTree(this.ctx.worktree_dir)) {
     const prev = st.outputs?.at(-1);
     if (!prev) return once();
     const failed = [...new Set((prev.failures || []).map((f) => f.file).filter(Boolean))];
@@ -298,6 +326,21 @@ const methods = {
     let output = await once({ files, selection });
     if (output.scope !== 'files' || output.status !== 'pass') return output;
     const focused = { command: output.command, log: output.log, passed: output.passed, failed: output.failed, duration_ms: output.duration_ms, files };
+    const whole = lastWholeRound(st.outputs);
+    if (whole?.commit && whole.clean === true && tested.clean && tested.commit === whole.commit) {
+      // the suite's result at this commit: the focused files now, that whole run for the others
+      const sha = whole.commit.slice(0, 7);
+      const why = `no commit since round ${whole.round}'s whole run (${sha}): the failed files passed, the whole suite is not rerun`;
+      this.emitEvent('log', { level: 'info', kind: 'suite', step_id: step.id, message: `${step.id}: ${why}; round ${whole.round}'s result stands for the other files` });
+      return {
+        ...output,
+        scope: 'full',
+        selection: { ...selection, why: `${selection.why}; ${why}` },
+        affected: focused,
+        whole_run: { round: whole.round, commit: whole.commit, passed: whole.passed ?? null, failed: whole.failed ?? null },
+        message: `The suite passed in round ${st.visits}: the ${files.length} file(s) that failed in round ${prev.round} passed (\`${output.command}\`), and round ${whole.round}'s whole run (${sha}) stands for the others: no commit since.`,
+      };
+    }
     if (output.log) this.emitEvent('file.saved', { step_id: step.id, path: path.join(this.runDir, output.log) });
     output = await once({ selection: { ...selection, why: `${selection.why}; they passed, so the whole suite runs once more` }, logName: `${step.id}-${st.visits}-full` });
     output.affected = focused;

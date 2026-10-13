@@ -16,6 +16,7 @@ const path = require('path');
 const { _electron: electron } = require('@playwright/test');
 const demo = require('../../scripts/screenshot');
 const machineSlot = require('../../src/engine/machine-slot');
+const { shiftClock } = require('./fixed-clock');
 
 const root = path.join(__dirname, '..', '..');
 const src = (m) => require(path.join(root, 'src', m));
@@ -44,7 +45,7 @@ async function seedWorkspace(wsDir) {
 }
 
 // The launched app's environment: simulation only, the scratch workspace, no Node mode
-function appEnv(scratch, { theme, size }) {
+function appEnv(scratch, { theme, size, now }) {
   const home = path.join(scratch, 'home');
   for (const d of [home, path.join(home, 'AppData'), path.join(scratch, 'user-data')]) fs.mkdirSync(d, { recursive: true });
   const env = {
@@ -60,6 +61,8 @@ function appEnv(scratch, { theme, size }) {
     GH_CONFIG_DIR: path.join(home, 'gh'), GLAB_CONFIG_DIR: path.join(home, 'glab'),
   };
   delete env.ELECTRON_RUN_AS_NODE;
+  if (now != null) env.MULTIAGENT_E2E_NOW = String(now);
+  else delete env.MULTIAGENT_E2E_NOW;
   return env;
 }
 
@@ -70,11 +73,12 @@ function removeScratch(dir) {
 /**
  * Launches the app on a fresh demo workspace → { app, window, project, scratch, close }.
  * theme: light | dark; size: WxH; empty: true leaves the workspace folder unseeded (a first start:
- * no settings.json, no project; project is null, #319). No recordVideo: with Electron 44 it stalls
- * the window before its page loads (the trace's screencast is the scenario's video,
- * features/steps/fixtures.js).
+ * no settings.json, no project; project is null, #319); now: a fixed clock (ms, #362,
+ * features/support/fixed-clock.js) for the seed and the app's main process, the real one without it.
+ * No recordVideo: with Electron 44 it stalls the window before its page loads (the trace's
+ * screencast is the scenario's video, features/steps/fixtures.js).
  */
-async function launchApp({ theme = 'light', size = '1400x900', empty = false } = {}) {
+async function launchApp({ theme = 'light', size = '1400x900', empty = false, now = null } = {}) {
   const slot = await machineSlot.acquireSlot('screenshot', {
     dir: machineSlot.machineSlotDir(), holder: 'e2e', onWait: (h) => console.log(`e2e: waiting for the screenshot slot (pid ${h?.pid ?? '?'})`),
   });
@@ -86,12 +90,16 @@ async function launchApp({ theme = 'light', size = '1400x900', empty = false } =
     removeScratch(scratch);
   };
   try {
-    const { project } = empty ? { project: null } : await seedWorkspace(path.join(scratch, 'workspace'));
+    let project = null;
+    if (!empty) {
+      const restore = now != null ? shiftClock(now) : () => {};
+      try { ({ project } = await seedWorkspace(path.join(scratch, 'workspace'))); } finally { restore(); }
+    }
     app = await electron.launch({
       executablePath: require('electron'),
       args: [path.join(__dirname, 'electron-main.js')],
       cwd: root,
-      env: appEnv(scratch, { theme, size }),
+      env: appEnv(scratch, { theme, size, now }),
       timeout: 60000,
     });
     const window = await app.firstWindow();

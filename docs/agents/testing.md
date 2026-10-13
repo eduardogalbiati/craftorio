@@ -41,6 +41,12 @@ Read this before writing or changing tests, and before any check that could star
   screencast: Playwright's recordVideo stalls Electron 44) and `failure.png` under
   `.test-output/e2e/artifacts/` (`npx playwright show-trace <zip>`). CI's Windows job runs `@smoke`.
   The app is dark-only today: the light and dark baselines guard `prefers-color-scheme` both ways.
+  E2E visual scenarios render at a fixed clock, never the real one (#362): `the app is open in the
+  <theme> theme` seeds the workspace and starts the app's main process at `VISUAL_NOW`
+  (`features/support/fixed-clock.js`, MULTIAGENT_E2E_NOW), so a baseline with days or hours (the
+  hours heatmap) passes at any hour; never fix a clock-dependent diff by raising the limit. A step
+  that searches or filters waits for the filtered list itself (no row left from before), never for a
+  row that was already there or a fixed sleep (`I search the runs for`).
 
 ## Affected tests, the slow suite, who runs what (#212)
 

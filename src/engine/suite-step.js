@@ -639,8 +639,9 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
 }
 
 // How one round of a suite step ran (#324), e.g. "focused on 2 files: 12 scenarios (12 passed, 0
-// failed), 1.5 min; then whole: 193 scenarios (193 passed, 0 failed), 44.0 min" or "whole: …";
-// '' when the output is not a suite's.
+// failed), 1.5 min; then whole: 193 scenarios (193 passed, 0 failed), 44.0 min" or "whole: …",
+// with the commit the round tested (#364, "; at abc1234") and, for a focused round that completed
+// without a whole rerun, the whole run its result rests on; '' when the output is not a suite's.
 function suiteScope(output, noun = 'test') {
   if (output?.kind !== 'suite') return '';
   const part = (o, what) => {
@@ -648,8 +649,14 @@ function suiteScope(output, noun = 'test') {
     return `${what}: ${counts}, ${(Number(o.duration_ms || 0) / 60e3).toFixed(1)} min`;
   };
   const focused = (files) => `focused on ${plural((files || []).length, 'file')}`;
-  if (output.affected) return `${part(output.affected, focused(output.affected.files))}; then ${part(output, 'whole')}`;
-  return part(output, output.scope === 'files' ? focused(output.selection?.files) : 'whole');
+  const short = (sha) => String(sha).slice(0, 7);
+  let text = output.whole_run?.commit
+    ? `${part(output.affected || output, focused(output.affected?.files || output.selection?.files))}; no whole rerun, round ${output.whole_run.round}'s whole run (${short(output.whole_run.commit)}) stands for the other files`
+    : output.affected
+      ? `${part(output.affected, focused(output.affected.files))}; then ${part(output, 'whole')}`
+      : part(output, output.scope === 'files' ? focused(output.selection?.files) : 'whole');
+  if (output.commit) text += `; at ${short(output.commit)}`;
+  return text;
 }
 
 // A suite output for a prompt or a gate's message: the result, the log and one line per failing

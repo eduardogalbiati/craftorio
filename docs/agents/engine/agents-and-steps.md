@@ -74,6 +74,15 @@ What agents and steps declare: skills, fan-out, step types (screenshots, suite, 
     focused run in `output.affected`): only a green whole run is a `pass`. A red focused run is the
     visit's result (`scope: files`, no whole run). A previous round without failed files, or a
     command `filteredCommand` cannot filter, runs the whole suite (`selection.why` says so).
+    #364: every suite round records `commit` (the worktree's HEAD) and `clean` (no uncommitted or
+    untracked change) as it starts. When the tree is clean at the commit of the step's last round
+    that ran the whole suite to the end (clean too; not blocked, not timed out), a green focused run
+    completes the visit with no whole rerun, a whole `pass` as the Ship gate shows it (`scope: full`,
+    the focused run in `affected`, `whole_run: { round, commit, passed, failed }`, log "no commit
+    since round 2's whole run (abc1234): the failed files passed, the whole suite is not rerun"):
+    that whole run's result stands for the other files. A commit or an uncommitted change
+    since, or a whole round without a recorded commit, keeps the whole rerun; a red focused run
+    still fails the visit. Applies to any step with this scope (unit or e2e).
     `filteredCommand` filters `npm|pnpm|yarn test`, a package script with no arguments of its own
     (`npm run test:e2e -- <files>`, `pnpm run e2e <files>`, `yarn e2e <files>`), pytest and
     `node --test`. Filter `suite_scope` (`{{ o | suite_scope('scenario') }}`): a round as "focused on
