@@ -206,3 +206,89 @@ test('suiteScope: a round names the commit it tested, for the release summary (#
   assert.match(suiteScope({ kind: 'suite', scope: 'full', passed: 193, failed: 0, duration_ms: 44 * 60e3, commit: sha }, 'scenario'), /abc1234/);
   assert.match(suiteScope({ kind: 'suite', scope: 'files', passed: 2, failed: 0, duration_ms: 60e3, selection: { files: ['features/a.feature'] }, commit: sha }, 'scenario'), /abc1234/);
 });
+
+test('suiteScope: a round completed without a whole rerun names the focused run and the whole run it rests on (#364)', () => {
+  const line = suiteScope({
+    kind: 'suite', scope: 'full', status: 'pass', passed: 3, failed: 0, duration_ms: 60e3, commit: 'abc1234def5678901234567890abcdef12345678',
+    affected: { files: ['features/a.feature'], passed: 3, failed: 0, duration_ms: 60e3 },
+    whole_run: { round: 2, commit: 'abc1234def5678901234567890abcdef12345678', passed: 190, failed: 3 },
+  }, 'scenario');
+  assert.equal(line, "focused on 1 file: 3 scenarios (3 passed, 0 failed), 1.0 min; no whole rerun, round 2's whole run (abc1234) stands for the other files; at abc1234");
+});
+
+test('scope failed: a skipped whole rerun returns a whole pass for the Ship gate, with the focused run and the whole run it rests on (#364)', async (t) => {
+  const dir = repo(t);
+  const head = git(dir, 'rev-parse', 'HEAD');
+  const { state } = runState(dir);
+  const suite = fakeSuite();
+  const st = { visits: 2, outputs: [{ ...wholeRound(1, head), passed: 190, failed: 3 }] };
+  const out = await WorkflowRun.prototype.failedFirstRound.call(state, { id: 'e2e' }, st, suite.once);
+  assert.equal(out.status, 'pass');
+  assert.equal(out.scope, 'full');
+  assert.deepEqual(out.affected.files, ['features/a.feature']);
+  assert.deepEqual(out.whole_run, { round: 1, commit: head, passed: 190, failed: 3 });
+  assert.match(out.message, /round 1's whole run/);
+});
+
+test('scope failed: a reference whole round that was itself not clean keeps the whole rerun (#364)', async (t) => {
+  const dir = repo(t);
+  const head = git(dir, 'rev-parse', 'HEAD');
+  const { state } = runState(dir);
+  const suite = fakeSuite();
+  const st = { visits: 2, outputs: [{ ...wholeRound(1, head), clean: false }] };
+  await WorkflowRun.prototype.failedFirstRound.call(state, { id: 'e2e' }, st, suite.once);
+  assert.equal(suite.wholeRuns(), 1);
+});
+
+test('scope failed: a whole round that timed out is not a reference: the whole suite reruns (#364)', async (t) => {
+  const dir = repo(t);
+  const head = git(dir, 'rev-parse', 'HEAD');
+  const { state } = runState(dir);
+  const suite = fakeSuite();
+  const st = { visits: 2, outputs: [{ ...wholeRound(1, head), timed_out: true }] };
+  await WorkflowRun.prototype.failedFirstRound.call(state, { id: 'e2e' }, st, suite.once);
+  assert.equal(suite.wholeRuns(), 1);
+});
+
+test('scope failed: a whole round with a failure in no known file is not a reference: the whole suite reruns (#364)', async (t) => {
+  const dir = repo(t);
+  const head = git(dir, 'rev-parse', 'HEAD');
+  const { state } = runState(dir);
+  const suite = fakeSuite();
+  const r1 = wholeRound(1, head);
+  const st = { visits: 2, outputs: [{ ...r1, failures: [...r1.failures, { test: 'a crash outside any file' }] }] };
+  await WorkflowRun.prototype.failedFirstRound.call(state, { id: 'e2e' }, st, suite.once);
+  assert.equal(suite.wholeRuns(), 1);
+});
+
+test('scope failed: a blocked round is passed over, the last whole run that ended is the reference (#364)', async (t) => {
+  const dir = repo(t);
+  const head = git(dir, 'rev-parse', 'HEAD');
+  const { state, events } = runState(dir);
+  const suite = fakeSuite();
+  const st = {
+    visits: 4,
+    outputs: [
+      wholeRound(1, head),
+      { status: 'blocked', round: 2, scope: 'full', commit: head, clean: true, failures: [] },
+      { status: 'fail', round: 3, scope: 'files', commit: head, clean: true, failures: [{ test: 'x', file: 'features/a.feature' }] },
+    ],
+  };
+  const out = await WorkflowRun.prototype.failedFirstRound.call(state, { id: 'e2e' }, st, suite.once);
+  assert.equal(suite.wholeRuns(), 0);
+  assert.equal(out.whole_run.round, 1);
+  assert.ok(logs(events).some((m) => /no commit since round 1's whole run/.test(m)), `got: ${logs(events).join(' | ')}`);
+});
+
+test('a suite round that skips the whole rerun does not count as a whole run of the engine (#364)', async (t) => {
+  const dir = repo(t);
+  const head = git(dir, 'rev-parse', 'HEAD');
+  const run = suiteRunState(t, dir);
+  run.mockSequences = { suite: { e2e: ['fail', 'pass'] } };
+  const step = { id: 'e2e', type: 'suite', command: 'npm run test:e2e', scope: 'failed', base_check: false };
+  const out = await run.suiteRound(step, { visits: 2, outputs: [wholeRound(1, head)] }, { execution: 2, reruns: 0, stopped: [] });
+  assert.equal(out.status, 'pass');
+  assert.equal(out.whole_run?.round, 1);
+  assert.equal(run.suiteRuns.engine, 0, 'no whole run happened in this round');
+  assert.ok(head.startsWith(out.commit), 'the round still records the commit it tested');
+});
