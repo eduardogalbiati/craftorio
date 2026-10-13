@@ -73,6 +73,20 @@ test('advance (#368): a paused run never pauses the roadmap as a failure and is 
   assert.deepEqual(step.start.map((x) => x.id), ['i2']);
 });
 
+test('advance (#368): a stage left with only paused runs pauses the roadmap there, pausedAt from env.now, kept once set', () => {
+  const runOf = () => ({ status: 'paused' });
+  const now = () => new Date('2026-10-13T10:00:00Z');
+  const r = plan('running', [stage('s1', [item('i1', 'planned', { runId: 'run-1', runs: ['run-1'] })]), stage('s2', [item('i2', 'planned')])]);
+  const step = roadmap.advance(r, { runOf, now });
+  assert.equal(step.roadmap.state, 'paused');
+  assert.equal(step.roadmap.pausedStage, 's1');
+  assert.equal(step.roadmap.pausedBy, null);
+  assert.equal(step.roadmap.pausedAt, '2026-10-13T10:00:00.000Z');
+  assert.deepEqual(step.start, []);
+  const again = roadmap.advance({ ...r, pausedAt: '2026-10-12T08:00:00.000Z' }, { runOf, now });
+  assert.equal(again.roadmap.pausedAt, '2026-10-12T08:00:00.000Z');
+});
+
 test('pauseStage (#368): the roadmap pauses at that stage, blaming no item and naming no failure', (t) => {
   const dir = tmpDir(t);
   roadmap.writeRoadmap(dir, 'p1', plan('running', [stage('s1', [item('i1', 'planned')]), stage('s2', [item('i2', 'planned')])]));
