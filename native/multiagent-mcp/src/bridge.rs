@@ -148,7 +148,8 @@ fn dechunk(mut body: &[u8]) -> Result<Vec<u8>, String> {
             return Ok(out);
         }
         out.extend_from_slice(body.get(..size).ok_or_else(bad)?);
-        body = body.get(size + 2..).ok_or_else(bad)?;
+        let next = size.checked_add(2).ok_or_else(bad)?;
+        body = body.get(next..).ok_or_else(bad)?;
     }
 }
 
@@ -228,6 +229,7 @@ mod tests {
         assert_eq!(b, b"{\"a\":1}");
         assert!(dechunk(b"zz\r\n").is_err());
         assert!(dechunk(b"5\r\nab").is_err());
+        assert!(dechunk(b"ffffffffffffffff\r\nab").is_err());
     }
 
     #[test]
