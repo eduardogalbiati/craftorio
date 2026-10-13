@@ -26,8 +26,6 @@ module.exports = [
   // answered by src/auth.js (system browser sign-in), not by the service
   { channel: 'auth:*', reason: 'the account module (src/auth.js): sign-in opens the system browser' },
   // effects outside the process
-  { channel: 'analytics:analyze', reason: "reads this machine's CLI usage logs in the home folder (outside the workspace): ~10 s cold, blocking" },
-  { channel: 'analytics:get', reason: "reads this machine's CLI usage logs in the home folder (outside the workspace): ~10 s cold, blocking" },
   { channel: 'app-update:back', reason: "moves the app's own checkout to another commit and relaunches it" },
   { channel: 'app-update:state', reason: "fetches the app's repository (network)" },
   { channel: 'audio:downloadModel', reason: 'downloads a speech model (network)' },

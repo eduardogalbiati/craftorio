@@ -70,6 +70,10 @@ async function main() {
   const from = Number(fromArg) || 0;
   process.env.MULTIAGENT_SIMULATION_ONLY = '1'; // never a real run, provider or CLI terminal
   process.env.MULTIAGENT_MOCK_DELAY_SCALE ??= '0.05';
+  // the CLIs' config folders (src/cli-config-dirs.js) inside the scratch workspace: the usage
+  // channels (analytics:*) read empty folders instead of this machine's logs in the home folder
+  process.env.CLAUDE_CONFIG_DIR = path.join(path.resolve(wsDir), 'cli-config', 'claude');
+  process.env.CODEX_HOME = path.join(path.resolve(wsDir), 'cli-config', 'codex');
   process.on('unhandledRejection', (e) => emit({ type: 'unhandled', text: `unhandled rejection: ${String(e?.stack || e).slice(0, 300)}` }));
   process.on('uncaughtException', (e) => emit({ type: 'unhandled', text: `uncaught exception: ${String(e?.stack || e).slice(0, 300)}` }));
   let relaunched = 0;

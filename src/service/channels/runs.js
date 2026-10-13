@@ -61,7 +61,8 @@ module.exports = (ctx) => [
   // intent: 'save_to_issue' for "Accept and save to issue #n" (#125).
   // Gate ids are per run (a1, a2…): runId says which run (without it, the only run waiting on that id).
   // #333: a human gate opens only to the owner's answer: a run id given as null or '' is refused (never
-  // "the only run waiting"), and so is an answer that is neither true/false nor one of the gate's choices.
+  // "the only run waiting"), and so is an answer the gate does not offer: true/false on a gate
+  // without choices, one of its choice ids on a gate with choices.
   {
     channel: 'approval:resolve',
     method: 'resolveApproval',
@@ -73,9 +74,10 @@ module.exports = (ctx) => [
       const run = runId ? ctx.active.get(runId) : waiting.length === 1 ? waiting[0] : null;
       const gate = run?.approvals.get(id)?.gate;
       if (!gate) return false;
-      if (typeof answer !== 'boolean' && !(typeof answer === 'string' && (gate.choices || []).some((c) => c.id === answer))) {
-        throw clientError(`Invalid answer for gate ${id}: true, false or one of its choices.`);
-      }
+      const offered = gate.choices
+        ? typeof answer === 'string' && gate.choices.some((c) => c.id === answer)
+        : typeof answer === 'boolean';
+      if (!offered) throw clientError(`Invalid answer for gate ${id}: ${gate.choices ? 'one of its choices' : 'true or false'}.`);
       return run.resolveApproval(id, answer, 'user', feedback, intent || null, Array.isArray(images) ? images : []);
     },
   },
