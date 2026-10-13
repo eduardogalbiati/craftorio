@@ -624,6 +624,10 @@ function stageStep(r, at, { closed, canStart }) {
     };
   }
   if (stage.items.every((x) => isFinished(x))) return null;
+  // #368: what is left of the stage is runs the owner paused: the roadmap waits at it, paused, for Resume
+  if (!stage.items.some((x) => ['planned', 'running'].includes(x.status))) {
+    return { roadmap: { ...pauseRoadmap(r, `${stageName(r, at)}: its runs are paused. Resume continues them where they stopped.`), pausedStage: stage.id }, start: [] };
+  }
   return { roadmap: r, start: stage.items.filter((x) => x.status === 'planned' && canStart(x)) };
 }
 

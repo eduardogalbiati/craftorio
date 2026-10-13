@@ -386,6 +386,7 @@ class WorkflowRun extends EventEmitter {
   endOfError(e, current) {
     if (this.abort.signal.aborted) return { status: 'cancelled', error: e };
     if (!e.paused) return { status: 'failed', error: e };
+    if (this.pausing) this.pausing.final = true; // ending now: Cancel pause no longer applies
     const st = this.ctx.steps[current];
     if (this.stepRunning === current && st?.visits) st.visits--;
     this.paused = { step: current, next: this.nextTurnOf(current), at: new Date().toISOString() };
@@ -409,13 +410,16 @@ class WorkflowRun extends EventEmitter {
       this.emitEvent('run.pausing', { step_id: p.step, ...(p.agents ? { agents: p.agents } : {}), ...(p.command ? { command: p.command } : {}) });
     }
     for (const h of this.childHandles) { try { h.pause?.(); } catch { /* ending */ } }
+    // a gate left unanswered ends the run at once: past that, the pause cannot be taken back
+    if (this.approvals.size) this.pausing.final = true;
     for (const a of this.approvals.values()) a.reject(pausedError());
     return true;
   }
 
-  // Takes a pause back while the run still waits for its turns: it goes on as if never asked.
+  // Takes a pause back while the run still waits for its turns: it goes on as if never asked
+  // (false: not pausing, or already ending, its gate left unanswered).
   cancelPause() {
-    if (!this.pausing || this.status !== 'running') return false;
+    if (!this.pausing || this.pausing.final || !['pending', 'running'].includes(this.status)) return false;
     this.pausing = null;
     for (const h of this.childHandles) { try { h.cancelPause?.(); } catch { /* ended */ } }
     this.emitEvent('run.pause_cancelled', { step_id: this.prevStepId || null });

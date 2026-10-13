@@ -13,6 +13,16 @@ const gateSummary = require('../gate-summary');
 const mergeQueue = require('../merge-queue');
 const { render } = require('./templates');
 const { parseDuration } = require('./load');
+const { pausedError } = require('./resume');
+
+// What the supervisor on call found, under a gate's message ('' without a diagnosis)
+function diagnosisText(diagnosis) {
+  if (!diagnosis) return '';
+  return `\n\n---\nSupervisor on call${diagnosis.note ? ` (${diagnosis.note})` : ''}: ${diagnosis.explanation}`
+    + `${diagnosis.recommendation ? `\nRecommendation${diagnosis.recommend ? ` (${diagnosis.recommend})` : ''}: ${diagnosis.recommendation}` : ''}`
+    + `${diagnosis.options?.length ? `\nOptions:\n${diagnosis.options.map((o, i) => `${i + 1}. ${o}`).join('\n')}` : ''}`
+    + `${diagnosis.user_action ? `\nAction only you can take: ${diagnosis.user_action}` : ''}`;
+}
 
 const methods = {
   // A gate with `check:` (approve_merge): the PR/MR is checked right before the gate opens (its
@@ -76,14 +86,10 @@ const methods = {
   // ({ explanation, recommendation, user_action, note }): it goes under the message and in `supervisor`.
   /** @param {{ explanation?: string, recommend?: string | null, recommendation?: string | null, options?: string[] | null, user_action?: string | null, note?: string } | null} [diagnosis] */
   requestApproval(step, diagnosis = null) {
+    // #368: a run pausing after its current turn asks nothing more (a gate is never answered by a pause)
+    if (this.pausing) return Promise.reject(pausedError());
     const id = `a${++this.nApproval}`;
-    let message = step.raw ? String(step.message).trim() : render(step.message, this.ctx).trim();
-    if (diagnosis) {
-      message += `\n\n---\nSupervisor on call${diagnosis.note ? ` (${diagnosis.note})` : ''}: ${diagnosis.explanation}`
-        + `${diagnosis.recommendation ? `\nRecommendation${diagnosis.recommend ? ` (${diagnosis.recommend})` : ''}: ${diagnosis.recommendation}` : ''}`
-        + `${diagnosis.options?.length ? `\nOptions:\n${diagnosis.options.map((o, i) => `${i + 1}. ${o}`).join('\n')}` : ''}`
-        + `${diagnosis.user_action ? `\nAction only you can take: ${diagnosis.user_action}` : ''}`;
-    }
+    let message = (step.raw ? String(step.message).trim() : render(step.message, this.ctx).trim()) + diagnosisText(diagnosis);
     // `report:` (#290): a Markdown document (e.g. the release summary) that leads the message; the
     // screens render it apart (the event's `report`), '' leaves the message as it is
     const report = this.gateText(step, step.report);

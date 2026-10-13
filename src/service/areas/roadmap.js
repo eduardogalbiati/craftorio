@@ -236,19 +236,21 @@ module.exports = (ctx) => {
       simulation.refuseReal('real runs from a roadmap');
     }
     // #368: the paused runs first, where they paused (each takes its item's place, adoptResumed), then the new items
-    await resumePausedItems(id, stages);
+    await resumePausedItems(id, stages, !!simulated);
     roadmaps.setState(ws.backlog, id, 'running', { simulated: !!simulated, stage: stage ? String(stage) : null });
     await dispatchRoadmaps();
     return ctx.withIssueRuns(backlog.readBacklog(ws.backlog, id));
   }
 
-  // The owner's Resume or Start continues every item of `stages` whose run ended paused (#368); a run
-  // that cannot resume keeps its item paused and the owner is told why.
-  async function resumePausedItems(projectId, stages) {
-    const paused = roadmaps.withStatus({ stages }, roadmapRun).stages.flatMap((s) => s.items).filter((x) => x.status === 'paused');
+  // The owner's Resume or Start continues every item of the enabled `stages` whose run ended paused
+  // (#368), as a simulation when the roadmap runs as one; a run that cannot resume (no free slot, a
+  // refused real run) keeps its item paused and the owner is told why.
+  async function resumePausedItems(projectId, stages, simulated) {
+    const enabled = stages.filter((s) => !s.disabled);
+    const paused = roadmaps.withStatus({ stages: enabled }, roadmapRun).stages.flatMap((s) => s.items).filter((x) => x.status === 'paused');
     for (const item of paused) {
       try {
-        await ctx.resumeRun({ runId: item.runId });
+        await ctx.resumeRun({ runId: item.runId, mock: simulated || !!item.mock });
       } catch (e) {
         ctx.notify({ kind: 'run', event: 'failed', title: 'Paused run not resumed', body: `Run ${item.runId}: ${e.message}`.slice(0, 180), target: { view: 'roadmap', projectId } }, { projectId });
       }
@@ -268,7 +270,8 @@ module.exports = (ctx) => {
     roadmaps.pauseStage(ctx.ws.backlog, id, stage.id);
     for (const x of stage.items) {
       const run = x.runId && ctx.active.get(x.runId);
-      if (run && ['pending', 'running'].includes(run.status)) run.pause();
+      // a run stopping meanwhile refuses the pause: the others still pause
+      try { if (run && ['pending', 'running'].includes(run.status)) run.pause(); } catch (e) { console.error('roadmap stage pause:', x.runId, e.message); }
     }
     return ctx.withIssueRuns(backlog.readBacklog(ctx.ws.backlog, id));
   }
