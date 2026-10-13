@@ -110,11 +110,12 @@ const shown = (v) => {
   const s = typeof v === 'string' ? JSON.stringify(v.length > 60 ? `${v.slice(0, 60)}…` : v) : Array.isArray(v) ? 'a list' : v === null ? 'null' : typeof v;
   return s.replace(/[\r\n]/g, ' ');
 };
+const missing = (v) => (v == null || v === '' ? 'Missing' : 'Invalid');
 
 // An id is a file name inside its folder: a non-empty string without a separator, `.`/`..` or NUL,
 // so a path built from it never leaves the folder. Returns it unchanged.
 function requireId(value, what) {
-  if (typeof value !== 'string' || !value) throw clientError(`Missing ${what}: expected a name, got ${shown(value)}.`);
+  if (typeof value !== 'string' || !value) throw clientError(`${missing(value)} ${what}: expected a name, got ${shown(value)}.`);
   if (value.length > MAX_ID) throw clientError(`Invalid ${what}: longer than ${MAX_ID} characters.`);
   if (value === '.' || value === '..' || /[\\/\0]/.test(value) || path.isAbsolute(value) || path.basename(value) !== value) {
     throw clientError(`Invalid ${what}: ${shown(value)} is not a name inside its folder.`);
@@ -124,7 +125,7 @@ function requireId(value, what) {
 
 // A string of at most `max` characters. Returns it unchanged.
 function requireText(value, what, max) {
-  if (typeof value !== 'string') throw clientError(`Missing ${what}: expected text, got ${shown(value)}.`);
+  if (typeof value !== 'string') throw clientError(`${missing(value)} ${what}: expected text, got ${shown(value)}.`);
   if (value.length > max) throw clientError(`Invalid ${what}: longer than ${max} characters (${value.length}).`);
   return value;
 }

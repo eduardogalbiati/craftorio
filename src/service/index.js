@@ -70,9 +70,9 @@ function createService({ host }) {
   const ctx = loadAreas({ host, events, code, BUNDLED_SKILLS_DIR });
 
   const entries = loadChannels(ctx);
-  // Every channel needs an open workspace, and a channel with named params an object argument
-  // (#333): checked once here instead of in each handler. The ids inside it are checked by each
-  // channel (requireId in src/service/common.js).
+  // Every channel needs an open workspace, and a channel with named params an object argument whose
+  // runId, projectId and cardId are file names (#333, requireArgs in src/service/common.js): checked
+  // once here instead of in each handler. A channel checks its other ids and values at its entry.
   const guarded = (e) => (arg) => { ctx.workspaceDir(); return e.fn(requireArgs(arg, e.params)); };
   const api = Object.fromEntries(entries.filter((e) => e.channel).map((e) => [e.channel, guarded(e)]));
   const notifications = Object.fromEntries(entries.filter((e) => e.send).map((e) => [e.send, (arg) => e.fn(requireArgs(arg, e.params))]));
