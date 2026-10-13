@@ -51,7 +51,7 @@ npm run screenshot -- --view backlog --mode kanban --out <dir>   # one screen, s
 
 ## Topic docs (read the one that matches your task)
 
-- [docs/agents/code-map.md](docs/agents/code-map.md), [docs/agents/test-map.md](docs/agents/test-map.md): each file's role and tests, how to add a channel/screen/skill (`npm run docs`, gitignored).
+- [code-map.md](docs/agents/code-map.md), [test-map.md](docs/agents/test-map.md), [channels.md](docs/agents/channels.md): file roles, tests, channel schemas; to add a channel/screen/skill (`npm run docs`, gitignored).
 - [docs/agents/decisions.md](docs/agents/decisions.md): the owner's decisions. Read before changing behaviour an earlier decision set.
 - [docs/agents/engine.md](docs/agents/engine.md): workflow YAML, sessions and handoff notes, gates, how a run ends, templates. Read before changing the engine or a workflow.
 - [docs/agents/capabilities.md](docs/agents/capabilities.md): agents' tools, isolation per CLI, `gh`/`glab`, read-only agents. Read before changing an agent's tools or a read-only skill.

@@ -239,6 +239,25 @@ changed or trashed, and nothing is left unhandled. The calls run in a child proc
   `{ channel, reason }` (or `<area>:*` for a whole area) to `test/service/channel-sweep-skips.js`;
   the sweep checks that every skip names a channel of the manifest and says why.
 
+## The channel contract (#338)
+
+Every manifest entry carries `schema: { params, result }` (JSON Schema; shared definitions in
+`src/service/schemas.js`, the validator in `src/json-schema.js`). The service checks the arguments
+against `params` before the channel runs, in the app too (a refusal is a 400 naming the parameter
+and the rule). **The result is checked only under the test runner** (`src/service/contract.js`:
+`node --test` sets `NODE_TEST_CONTEXT` in each test file's process): every channel call any test
+makes through `service.api` also checks what the channel answers against `schema.result`, and a
+mismatch rejects the call (`<channel> answered outside its schema.result: …`), so the test fails.
+A test that fails that way found a schema that says less than the channel answers (or a channel
+that broke its contract): fix the schema or the channel, never the check. In the app no result is
+validated (no runtime cost).
+
+- **The ratchet**: `test/service/channel-schema-ratchet-338.test.js` fails on a channel without a
+  schema unless `test/service/channels-without-schema.js` lists it with its reason (arguments
+  free-form by design). The list only shrinks: a listed channel that gains a schema leaves it.
+- **The reference**: `npm run docs` writes `docs/agents/channels.md` (gitignored), every channel
+  with its arguments and result.
+
 ## Machine-independent tests
 
 Git tests run with an empty `GIT_CONFIG_GLOBAL` and `GIT_CONFIG_NOSYSTEM`, passing identity,

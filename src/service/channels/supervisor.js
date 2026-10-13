@@ -16,6 +16,24 @@ const { createWatches } = require('../../supervisor-watch');
 const { requireObject } = require('../common');
 const { resolveCommand } = require('../../engine/providers');
 const { supervisorTools } = require('../../supervisor-tools');
+const {
+  ANY,
+  args,
+  FLAG,
+  IMAGES,
+  MESSAGES,
+  nullable,
+  OBJECT,
+  REQUEST_ANSWER,
+  RUN_ID,
+  shape,
+  STARTED,
+  STEP_ID,
+  STRING,
+  TOOL_LIST,
+} = require('../schemas');
+
+const CHAT_ANSWER = shape({ message: OBJECT, messages: MESSAGES }, ['messages']);
 
 module.exports = (ctx) => {
   const watches = createWatches({
@@ -64,6 +82,7 @@ module.exports = (ctx) => {
       method: 'askSupervisor',
       // attachments: images for the question (#129)
       params: ['runId', 'question', 'attachments'],
+      schema: { params: args({ runId: RUN_ID, question: nullable(STRING), attachments: nullable(IMAGES) }, ['runId']), result: OBJECT },
       fn: ({ runId, question, attachments }) => supervisor.analyzeRun({
         runDir: ctx.runFolder(runId), question, workflowsDir: ctx.workflowDirs(), skillsDirs: [ctx.ws.skills, ctx.BUNDLED_SKILLS_DIR], resolveCommand,
         attachments: Array.isArray(attachments) ? attachments : [],
@@ -73,6 +92,11 @@ module.exports = (ctx) => {
     // (never with the owner's gate confirmation, #112: automation does not cross a human gate)
     {
       channel: 'supervisor:resume',
+      // runs:resume's options (confirmGate is dropped)
+      schema: {
+        params: args({ runId: RUN_ID, step: nullable(STEP_ID), instruction: nullable(STRING), mock: FLAG, confirmGate: ANY, images: nullable(IMAGES) }, ['runId']),
+        result: STARTED,
+      },
       fn: (arg) => {
         const { confirmGate: _owner, ...opts } = requireObject(arg, 'options');
         return ctx.resumeRun(opts);
@@ -84,10 +108,17 @@ module.exports = (ctx) => {
       channel: 'supervisor:watchRun',
       method: 'watchRun',
       params: ['runId', 'on', 'options'],
+      schema: { params: args({ runId: RUN_ID, on: FLAG, options: nullable(OBJECT) }, ['runId']), result: OBJECT },
       fn: ({ runId, on, options }) => (on ? watches.start(runId, options || {}) : watches.stop(runId)),
     },
-    { channel: 'supervisor:watchAsk', method: 'askWatch', params: ['runId', 'question'], fn: ({ runId, question }) => watches.ask(runId, question) },
-    { channel: 'supervisor:watchState', method: 'watchState', params: 'runId', fn: (runId) => watches.state(runId) },
+    {
+      channel: 'supervisor:watchAsk',
+      method: 'askWatch',
+      params: ['runId', 'question'],
+      schema: { params: args({ runId: RUN_ID, question: STRING }, ['runId']), result: OBJECT },
+      fn: ({ runId, question }) => watches.ask(runId, question),
+    },
+    { channel: 'supervisor:watchState', method: 'watchState', params: 'runId', schema: { params: RUN_ID, result: OBJECT }, fn: (runId) => watches.state(runId) },
     { event: 'supervisor:watch', method: 'onWatch' },
     // The app-wide chat (the drawer opened from Workflows): { question, screen, mock, model }.
     // `mock` and MULTIAGENT_SIMULATION_ONLY answer from the simulated supervisor (no model call).
@@ -95,6 +126,7 @@ module.exports = (ctx) => {
       channel: 'supervisor:chat',
       method: 'askSupervisorChat',
       params: 'opts',
+      schema: { params: { type: ['object', 'null'], properties: { question: STRING, screen: ANY, mock: FLAG, model: nullable(STRING) } }, result: CHAT_ANSWER },
       fn: async (opts) => {
         // #180: its progress is pushed on chat:progress; chat:cancel ('supervisor') stops it
         const turn = ctx.chatTurns.start('supervisor');
@@ -107,20 +139,28 @@ module.exports = (ctx) => {
         return out;
       },
     },
-    { channel: 'supervisor:chatHistory', method: 'supervisorChatHistory', fn: () => chat().history() },
-    { channel: 'supervisor:chatClear', method: 'clearSupervisorChat', fn: () => chat().clear() },
+    { channel: 'supervisor:chatHistory', method: 'supervisorChatHistory', schema: { result: MESSAGES }, fn: () => chat().history() },
+    { channel: 'supervisor:chatClear', method: 'clearSupervisorChat', schema: { result: MESSAGES }, fn: () => chat().clear() },
     // #240: another agent's request in the Supervisor's inbox: { kind, params, reason, from, ref, byContent?, mock } →
     // { ok, text, costUsd: 0, error?, pending? }. Every kind runs the app's own code (the Oracle's action
     // functions, ctx.performAction), never a model; the request and its result are messages of the chat,
     // and a request from the Oracle leaves a short line in its chat. A refused or failed one is ok: false.
     // #241: a run retry or resume (or what the Night watch does not allow) is a card waiting for the owner's click.
-    { channel: 'supervisor:request', method: 'supervisorRequest', params: 'opts', fn: (opts) => request(requireObject(opts, 'options')) },
+    {
+      channel: 'supervisor:request',
+      method: 'supervisorRequest',
+      params: 'opts',
+      // params: the request kind's own (the action functions check them per kind)
+      schema: { params: args({ kind: STRING, params: ANY, reason: ANY, from: ANY, ref: ANY, byContent: FLAG, mock: FLAG }), result: REQUEST_ANSWER },
+      fn: (opts) => request(requireObject(opts, 'options')),
+    },
     // #241: the owner's click on a request card in this chat: { ref, action: 'do' | 'dismiss' | 'undo', mock } →
     // { ok, text, costUsd, error?, messages }
     {
       channel: 'supervisor:requestAct',
       method: 'supervisorRequestAct',
       params: 'opts',
+      schema: { params: args({ ref: ANY, action: STRING, mock: FLAG }), result: { ...REQUEST_ANSWER, properties: { ...REQUEST_ANSWER.properties, messages: MESSAGES } } },
       fn: async (arg) => {
         const { ref, action, mock } = requireObject(arg, 'options');
         const out = await chat().actRequest({ ref, action }, { perform: performer(mock), restore: ctx.restoreAction, after: rules().after });
@@ -129,6 +169,6 @@ module.exports = (ctx) => {
       },
     },
     // what the MCP server offers (names and descriptions), for the expanded Supervisor drawer
-    { channel: 'supervisor:tools', method: 'supervisorTools', fn: () => tools.map(({ name, description }) => ({ name, description })) },
+    { channel: 'supervisor:tools', method: 'supervisorTools', schema: { result: TOOL_LIST }, fn: () => tools.map(({ name, description }) => ({ name, description })) },
   ];
 };

@@ -13,6 +13,10 @@
 // `params` is the argument shape: absent = no argument; a string = the first argument as is; an
 // array of names = an object built from the positional arguments, where `...name` spreads that
 // argument (an object) into it. `desktop` (desktop-only entries): what the browser says it can't do.
+// `schema` (#338, the service's entries): `{ params, result }` in JSON Schema, plain JSON published
+// with the manifest. `params` describes the argument fn receives (for named params, the object built
+// from them); the service refuses a call that breaks it before fn runs, and the tests check what fn
+// answers against `result` (src/service/contract.js). Shared definitions: src/service/schemas.js.
 
 const fs = require('fs');
 const path = require('path');

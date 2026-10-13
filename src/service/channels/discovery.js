@@ -31,6 +31,34 @@ const releases = require('../../releases');
 const simulation = require('../../engine/simulation');
 const workspace = require('../../workspace');
 const { clientError, requireText } = require('../common');
+const {
+  ANY,
+  args,
+  BOOL,
+  CARD_ID,
+  FLAG,
+  INT,
+  listOf,
+  nullable,
+  NUMBER,
+  OBJECT,
+  PROJECT_ID,
+  RUN_ID,
+  shape,
+  STRING,
+  text,
+} = require('../schemas');
+
+// Every discovery channel works on one project's cards (the store checks the rest of each value)
+const onProject = (properties = {}, required = []) => args({ projectId: PROJECT_ID, ...properties }, ['projectId', ...required]);
+const onCard = (properties = {}, required = []) => onProject({ cardId: CARD_ID, ...properties }, ['cardId', ...required]);
+const COLUMN = text(100);
+const CARDS = listOf(OBJECT);
+// a card with its document, criteria and attachments; the board with its columns, order, clarity, forecast, committed
+const CARD = OBJECT;
+const BOARD = OBJECT;
+// Grill me's answer: the card, its clarity bar and the next question (null: the interview ended)
+const GRILL = shape({ card: OBJECT, bar: ANY, question: nullable(OBJECT) }, ['card']);
 
 // who captures, moves and discards from this app
 function owner() {
@@ -77,6 +105,7 @@ module.exports = (ctx) => {
       channel: 'discovery:list',
       method: 'listDiscoveryCards',
       params: ['projectId', 'column'],
+      schema: { params: onProject({ column: nullable(COLUMN) }), result: CARDS },
       fn: ({ projectId, column }) => {
         // an import a closed app left half-way is finished or dropped first (#322)
         discovery.finishImports(dir(), projectId);
@@ -88,6 +117,7 @@ module.exports = (ctx) => {
       channel: 'discovery:get',
       method: 'getDiscoveryCard',
       params: ['projectId', 'cardId'],
+      schema: { params: onCard(), result: CARD },
       fn: ({ projectId, cardId }) => discovery.readCard(dir(), projectId, cardId),
     },
     // quick capture: a card (an `idea` unless `type` says otherwise) in the Inbox, `text` its document;
@@ -96,6 +126,7 @@ module.exports = (ctx) => {
       channel: 'discovery:create',
       method: 'createDiscoveryCard',
       params: ['projectId', 'title', 'text', 'type', 'from'],
+      schema: { params: onProject({ title: STRING, text: nullable(STRING), type: nullable(STRING), from: nullable(STRING) }), result: CARD },
       fn: ({ projectId, title, text, type, from }) => discovery.createCard(dir(), projectId, { title, text, type: type || 'idea', author: owner(), from: from || undefined }),
     },
     // import (#322, src/discovery-import.js): a document's text (`name`: its file, or none when pasted)
@@ -104,6 +135,7 @@ module.exports = (ctx) => {
       channel: 'discovery:import-split',
       method: 'splitDiscoveryImport',
       params: ['projectId', 'text', 'name'],
+      schema: { params: onProject({ text: STRING, name: nullable(STRING) }), result: shape({ items: CARDS, structured: ANY, note: ANY }, ['items']) },
       fn: ({ projectId, text, name }) => {
         const split = imports.splitDocument(text, { name: name || undefined });
         return { ...split, items: imports.previewImport(dir(), projectId, split.items, { issues: syncedIssues(projectId) }) };
@@ -114,6 +146,7 @@ module.exports = (ctx) => {
       channel: 'discovery:import-edit',
       method: 'editDiscoveryImport',
       params: ['projectId', 'items', 'edit'],
+      schema: { params: onProject({ items: listOf(OBJECT), edit: nullable(OBJECT) }), result: CARDS },
       fn: ({ projectId, items, edit }) => imports.previewImport(dir(), projectId, imports.applyEdit(items, edit || {}), { issues: syncedIssues(projectId) }),
     },
     // the confirmed items, all or none: `source` { name, text } (the file, attached to each card) or
@@ -122,6 +155,7 @@ module.exports = (ctx) => {
       channel: 'discovery:import',
       method: 'importDiscoveryItems',
       params: ['projectId', 'items', 'source', 'confirmLarge'],
+      schema: { params: onProject({ items: listOf(OBJECT), source: nullable(OBJECT), confirmLarge: FLAG }), result: shape({ created: ANY, merged: ANY, skipped: ANY }) },
       fn: ({ projectId, items, source, confirmLarge }) => imports.importItems(dir(), projectId, items, {
         source: source?.name ? { name: source.name, data: String(source.text ?? '') } : { pasted: true },
         author: owner(),
@@ -133,6 +167,7 @@ module.exports = (ctx) => {
       channel: 'discovery:update',
       method: 'updateDiscoveryCard',
       params: ['projectId', 'cardId', 'fields'],
+      schema: { params: onCard({ fields: nullable(OBJECT) }), result: CARD },
       fn: ({ projectId, cardId, fields }) => discovery.updateCard(dir(), projectId, cardId, fields || {}),
     },
     // to another column (Accept: 'triage'): a history entry and a version of the document; `index`
@@ -145,6 +180,7 @@ module.exports = (ctx) => {
       channel: 'discovery:move',
       method: 'moveDiscoveryCard',
       params: ['projectId', 'cardId', 'column', 'index'],
+      schema: { params: onCard({ column: COLUMN, index: nullable(INT) }), result: CARD },
       fn: ({ projectId, cardId, column, index }) => {
         const from = discovery.readCard(dir(), projectId, cardId).column;
         const card = discovery.moveCard(dir(), projectId, cardId, column, { by: owner(), index });
@@ -156,6 +192,7 @@ module.exports = (ctx) => {
       channel: 'discovery:set-automation',
       method: 'setDiscoveryAutomation',
       params: ['projectId', 'column', 'mode'],
+      schema: { params: onProject({ column: COLUMN, mode: STRING }), result: BOARD },
       fn: ({ projectId, column, mode }) => {
         discovery.setColumnAutomation(dir(), projectId, requireText(column, 'column', 100), { mode });
         return board(projectId);
@@ -168,6 +205,7 @@ module.exports = (ctx) => {
       channel: 'discovery:run-automation',
       method: 'runDiscoveryAutomation',
       params: ['projectId', 'cardId', 'column'],
+      schema: { params: onCard({ column: COLUMN }), result: shape({ runId: nullable(RUN_ID), name: STRING, question: ANY }, ['runId']) },
       fn: ({ projectId, cardId, column }) => ctx.startDiscoveryAutomation({ projectId, cardId, column }),
     },
     // the owner's override (#166): into Ready below the clarity bar, with a `reason` kept on the card
@@ -177,6 +215,7 @@ module.exports = (ctx) => {
       channel: 'discovery:move-anyway',
       method: 'moveDiscoveryCardAnyway',
       params: ['projectId', 'cardId', 'reason'],
+      schema: { params: onCard({ reason: nullable(STRING) }), result: CARD },
       fn: ({ projectId, cardId, reason }) => {
         const from = discovery.readCard(dir(), projectId, cardId).column;
         const card = discovery.moveCard(dir(), projectId, cardId, 'ready', { by: owner(), force: true, reason });
@@ -191,6 +230,7 @@ module.exports = (ctx) => {
       channel: 'discovery:board',
       method: 'discoveryBoard',
       params: ['projectId'],
+      schema: { params: onProject(), result: BOARD },
       fn: ({ projectId }) => board(projectId),
     },
     // the Product Owner's proposal for committing a Ready card (#258): { split: { issues: [{ title,
@@ -201,6 +241,7 @@ module.exports = (ctx) => {
       channel: 'discovery:commit-proposal',
       method: 'proposeDiscoveryCommit',
       params: ['projectId', 'cardId', 'preview'],
+      schema: { params: onCard({ preview: FLAG }), result: shape({ split: OBJECT, model: ANY, costUsd: NUMBER, fallback: STRING }, ['split']) },
       fn: async ({ projectId, cardId, preview }) => {
         const card = committable(projectId, cardId);
         const simulated = !!preview || simulation.simulationOnly();
@@ -222,6 +263,7 @@ module.exports = (ctx) => {
       channel: 'discovery:commit',
       method: 'commitDiscoveryCard',
       params: ['projectId', 'cardId', 'split', 'preview'],
+      schema: { params: onCard({ split: nullable(OBJECT), preview: FLAG }), result: shape({ issues: listOf(OBJECT), card: CARD, simulated: BOOL, preview: BOOL, commands: ANY }, ['issues']) },
       fn: async ({ projectId, cardId, split, preview }) => {
         committable(projectId, cardId);
         const id = path.basename(String(projectId));
@@ -260,6 +302,7 @@ module.exports = (ctx) => {
       channel: 'discovery:set-clarity-bar',
       method: 'setDiscoveryClarityBar',
       params: ['projectId', 'bar', 'byKind', 'night'],
+      schema: { params: onProject({ bar: { type: ['number', 'string', 'null'] }, byKind: nullable(OBJECT), night: nullable(OBJECT) }), result: BOARD },
       fn: ({ projectId, bar, byKind, night }) => {
         if (bar != null && typeof bar === 'object') throw clientError('Invalid clarity bar: a whole number from 0 to 100.');
         discovery.setClarityBar(dir(), projectId, { bar, byKind, night });
@@ -271,6 +314,7 @@ module.exports = (ctx) => {
       channel: 'discovery:grill',
       method: 'grillDiscoveryCard',
       params: ['projectId', 'cardId'],
+      schema: { params: onCard(), result: GRILL },
       fn: ({ projectId, cardId }) => discovery.grillCard(dir(), projectId, cardId),
     },
     // the person's answer to the waiting question, written into the card → { card, bar, question }
@@ -279,6 +323,7 @@ module.exports = (ctx) => {
       channel: 'discovery:grill-answer',
       method: 'answerDiscoveryGrill',
       params: ['projectId', 'cardId', 'text'],
+      schema: { params: onCard({ text: STRING }), result: GRILL },
       fn: ({ projectId, cardId, text }) => discovery.answerGrill(dir(), projectId, cardId, { text, by: owner() }),
     },
     // a column's WIP limit (a positive integer) → the board; the limit warns, the store never blocks a move
@@ -286,6 +331,7 @@ module.exports = (ctx) => {
       channel: 'discovery:set-wip',
       method: 'setDiscoveryWip',
       params: ['projectId', 'column', 'limit'],
+      schema: { params: onProject({ column: COLUMN, limit: ANY }), result: BOARD },
       fn: ({ projectId, column, limit }) => discovery.setWip(dir(), projectId, requireText(column, 'column', 100), limit),
     },
     // the versions of the card's document, newest first: [{ name, ts, reason }]
@@ -293,6 +339,7 @@ module.exports = (ctx) => {
       channel: 'discovery:versions',
       method: 'discoveryVersions',
       params: ['projectId', 'cardId'],
+      schema: { params: onCard(), result: listOf(OBJECT) },
       fn: ({ projectId, cardId }) => discovery.listVersions(dir(), projectId, cardId),
     },
     // a version's text (`name`: one of discovery:versions' names)
@@ -300,6 +347,7 @@ module.exports = (ctx) => {
       channel: 'discovery:version',
       method: 'discoveryVersion',
       params: ['projectId', 'cardId', 'name'],
+      schema: { params: onCard({ name: STRING }), result: STRING },
       fn: ({ projectId, cardId, name }) => discovery.readVersion(dir(), projectId, cardId, name),
     },
     // the version becomes the document again (the replaced document is kept as a version) → the card
@@ -307,6 +355,7 @@ module.exports = (ctx) => {
       channel: 'discovery:restore-version',
       method: 'restoreDiscoveryVersion',
       params: ['projectId', 'cardId', 'name'],
+      schema: { params: onCard({ name: STRING }), result: CARD },
       fn: ({ projectId, cardId, name }) => discovery.restoreVersion(dir(), projectId, cardId, name, { by: owner() }),
     },
     // the result of a run started from the card (`source`: 'write-review' | 'ai-arena'): the new
@@ -315,6 +364,7 @@ module.exports = (ctx) => {
       channel: 'discovery:record-result',
       method: 'recordDiscoveryResult',
       params: ['projectId', 'cardId', 'source', 'text', 'runId'],
+      schema: { params: onCard({ source: STRING, text: STRING, runId: nullable(RUN_ID) }), result: CARD },
       fn: ({ projectId, cardId, source, text, runId }) => discovery.recordResult(dir(), projectId, cardId, { source, text, runId, by: owner() }),
     },
     // a pasted, dropped or picked file (`name` + base64 `data`) → the stored name. A `path` is refused:
@@ -323,6 +373,8 @@ module.exports = (ctx) => {
       channel: 'discovery:add-attachment',
       method: 'addDiscoveryAttachment',
       params: ['projectId', 'cardId', 'path', 'name', 'data'],
+      // path: refused by the channel itself, with why
+      schema: { params: onCard({ path: ANY, name: STRING, data: STRING }), result: STRING },
       fn: ({ projectId, cardId, path, name, data }) => {
         if (path) throw new Error('A file is attached by its name and data, not by a path.');
         return discovery.addAttachment(dir(), projectId, cardId, { name, data });
@@ -332,6 +384,7 @@ module.exports = (ctx) => {
       channel: 'discovery:remove-attachment',
       method: 'removeDiscoveryAttachment',
       params: ['projectId', 'cardId', 'name'],
+      schema: { params: onCard({ name: STRING }), result: BOOL },
       fn: ({ projectId, cardId, name }) => discovery.removeAttachment(dir(), projectId, cardId, name),
     },
     // { name, size, folder, dataUrl }: dataUrl is the image itself for a thumbnail, null for another file
@@ -339,6 +392,7 @@ module.exports = (ctx) => {
       channel: 'discovery:attachment',
       method: 'discoveryAttachment',
       params: ['projectId', 'cardId', 'name'],
+      schema: { params: onCard({ name: STRING }), result: shape({ name: STRING, size: NUMBER, folder: STRING, dataUrl: nullable(STRING) }, ['name']) },
       fn: ({ projectId, cardId, name }) => discovery.readAttachment(dir(), projectId, cardId, name),
     },
     // the card's thread, oldest first
@@ -346,6 +400,7 @@ module.exports = (ctx) => {
       channel: 'discovery:conversation',
       method: 'discoveryConversation',
       params: ['projectId', 'cardId'],
+      schema: { params: onCard(), result: listOf(OBJECT) },
       fn: ({ projectId, cardId }) => discovery.readConversation(dir(), projectId, cardId),
     },
     // entry: { text, kind? ('note' by default), author? (the person at this machine by default) }
@@ -353,6 +408,8 @@ module.exports = (ctx) => {
       channel: 'discovery:append-conversation',
       method: 'appendDiscoveryConversation',
       params: ['projectId', 'cardId', 'entry'],
+      // entry: { text, kind?, author? }, or its text alone
+      schema: { params: onCard({ entry: ANY }), result: OBJECT },
       fn: ({ projectId, cardId, entry }) => {
         // the store stamps the time: a caller's `ts` is dropped
         const { ts, ...e } = entry && typeof entry === 'object' ? entry : { text: String(entry ?? '') };
@@ -366,6 +423,7 @@ module.exports = (ctx) => {
       channel: 'discovery:waiting',
       method: 'listDiscoveryWaiting',
       params: ['projectId'],
+      schema: { params: onProject(), result: CARDS },
       fn: ({ projectId }) => discovery.listWaiting(dir(), projectId),
     },
     // Discard: the card moves to archive/ with its reason
@@ -373,12 +431,14 @@ module.exports = (ctx) => {
       channel: 'discovery:archive',
       method: 'archiveDiscoveryCard',
       params: ['projectId', 'cardId', 'reason'],
+      schema: { params: onCard({ reason: nullable(STRING) }), result: CARD },
       fn: ({ projectId, cardId, reason }) => discovery.archiveCard(dir(), projectId, cardId, { reason, by: owner() }),
     },
     {
       channel: 'discovery:restore',
       method: 'restoreDiscoveryCard',
       params: ['projectId', 'cardId'],
+      schema: { params: onCard(), result: CARD },
       fn: ({ projectId, cardId }) => discovery.restoreCard(dir(), projectId, cardId, { by: owner() }),
     },
     // Merge into…: `cardId` joins `intoId` (documents, attachments) and is archived with a link to it
@@ -386,6 +446,7 @@ module.exports = (ctx) => {
       channel: 'discovery:merge',
       method: 'mergeDiscoveryCard',
       params: ['projectId', 'cardId', 'intoId'],
+      schema: { params: onCard({ intoId: CARD_ID }, ['intoId']), result: CARD },
       fn: ({ projectId, cardId, intoId }) => discovery.mergeCard(dir(), projectId, cardId, intoId, { by: owner() }),
     },
   ];

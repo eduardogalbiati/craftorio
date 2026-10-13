@@ -42,6 +42,10 @@ const {
   requireArgs,
 } = require('./common');
 const {
+  checkParams,
+  checkResult,
+} = require('./contract');
+const {
   authChannels,
   declarations,
   DESKTOP,
@@ -72,10 +76,13 @@ function createService({ host }) {
   const entries = loadChannels(ctx);
   // Every channel needs an open workspace, and a channel with named params an object argument whose
   // runId, projectId and cardId are file names (#333, requireArgs in src/service/common.js): checked
-  // once here instead of in each handler. A channel checks its other ids and values at its entry.
-  const guarded = (e) => (arg) => { ctx.workspaceDir(); return e.fn(requireArgs(arg, e.params)); };
+  // once here instead of in each handler. #338: then the argument is checked against the entry's
+  // schema.params (src/service/contract.js), so fn never sees one its schema refuses; under the test
+  // runner, the result against schema.result.
+  const checked = (e, arg) => checkParams(e, requireArgs(arg, e.params));
+  const guarded = (e) => (arg) => { ctx.workspaceDir(); return checkResult(e, e.fn(checked(e, arg))); };
   const api = Object.fromEntries(entries.filter((e) => e.channel).map((e) => [e.channel, guarded(e)]));
-  const notifications = Object.fromEntries(entries.filter((e) => e.send).map((e) => [e.send, (arg) => e.fn(requireArgs(arg, e.params))]));
+  const notifications = Object.fromEntries(entries.filter((e) => e.send).map((e) => [e.send, (arg) => e.fn(checked(e, arg))]));
   // what window.api is built from (src/preload.js, src/renderer/api-http.js), desktop and account included
   const manifest = declarations([...entries, ...DESKTOP, ...authChannels(null)]);
 

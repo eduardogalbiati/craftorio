@@ -38,6 +38,25 @@ const runs = require('../../runs');
 const simulation = require('../../engine/simulation');
 const workspace = require('../../workspace');
 const { requireObject } = require('../common');
+const {
+  args,
+  listOf,
+  nullable,
+  NUMBER,
+  OBJECT,
+  oneOf,
+  shape,
+  STRING,
+} = require('../schemas');
+
+// the screen's state (see nightwatch:state below) and the report of the nights
+const STATE = shape({ watch: OBJECT, permissions: OBJECT, runs: OBJECT }, ['watch', 'permissions']);
+const REPORT = shape({ nights: listOf(OBJECT) }, ['nights']);
+// #337: tonight's limits, one of the documented alternatives (src/night-limits.js checks the values)
+const LIMITS = oneOf(
+  { type: 'object', required: ['multiplier'], properties: { multiplier: NUMBER } },
+  { type: 'object', required: ['values'], properties: { values: OBJECT } },
+);
 
 const TICK_MS = 60e3;
 const NIGHTS_SHOWN = 14;
@@ -463,25 +482,27 @@ module.exports = (ctx) => {
   return [
     // { oracle, watch: { on, until (null under Self-healing), startedAt, by, active, selfHealing }, permissions: { catalog, never, allowed, updatedAt, defaults }, runs: { active, waiting }, loopCap, simulation,
     //   limits: { day: { context, cost, duration, budget }, tonight: { multiplier } | { values } | null } (#337) }
-    { channel: 'nightwatch:state', method: 'nightWatchState', fn: () => state() },
+    { channel: 'nightwatch:state', method: 'nightWatchState', schema: { result: STATE }, fn: () => state() },
     // { nights: [metrics + summary], newest first; baseline }
-    { channel: 'nightwatch:report', method: 'nightWatchReport', fn: () => report() },
+    { channel: 'nightwatch:report', method: 'nightWatchReport', schema: { result: REPORT }, fn: () => report() },
     // the last night's summary for the Dashboard (less than 18 h after it ended), or null
-    { channel: 'nightwatch:morning', method: 'nightWatchMorning', fn: () => morning() },
+    { channel: 'nightwatch:morning', method: 'nightWatchMorning', schema: { result: nullable(shape({ window: OBJECT }, ['window'])) }, fn: () => morning() },
     // the owner's checklist: [permission id] → state (a never-allowed permission is refused)
     {
       channel: 'nightwatch:permissions',
       method: 'saveNightWatchPermissions',
       params: ['allowed'],
+      schema: { params: args({ allowed: listOf(STRING) }, ['allowed']), result: STATE },
       fn: ({ allowed }) => { night.savePermissions(dir(), allowed); return state(); },
     },
     // #337: tonight's limits { multiplier } (1.5, 2 or 3) or { values: { context, cost, duration, turns, budget } } → state
     // (refused without a Night watch with an end time: Self-healing never expands limits)
-    { channel: 'nightwatch:limits', method: 'setNightWatchLimits', params: 'limits', fn: (limits) => setLimits(requireObject(limits, 'limits')) },
+    { channel: 'nightwatch:limits', method: 'setNightWatchLimits', params: 'limits', schema: { params: LIMITS, result: STATE }, fn: (limits) => setLimits(requireObject(limits, 'limits')) },
     // simulated mode: replays two demo nights into the workspace (src/night-watch-demo.js) → report
     {
       channel: 'nightwatch:replay',
       method: 'replayNightWatch',
+      schema: { result: REPORT },
       fn: async () => {
         if (!simulation.simulationOnly()) throw new Error('Replaying a sample night writes demo runs: only in simulated mode.');
         const projectId = projects.listProjects(ctx.ws.projects)[0]?.id || 'demo-app';

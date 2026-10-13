@@ -1,5 +1,5 @@
 // Step outputs and their validation (#250, from src/engine/workflow.js): `extractJson` reads the
-// ```json block of an answer, `validateSchema` checks it against the step's `output` schema (the
+// ```json block of an answer, `validateSchema` (src/json-schema.js) checks it against the step's `output` schema (the
 // retry prompt `retryPrompt` asks for a fix), `parseTestRequest` reads a ```run-tests block,
 // `takeHandoff` splits the answer from its ```handoff note; the repeat keys of an output the stall
 // check compares (`decisionKey`, `answeredKey`, `repeatKey`).
@@ -41,26 +41,8 @@ function parseTestRequest(text) {
   return affected || files.length ? { affected, files } : null;
 }
 
-const TYPE_CHECK = {
-  object: (x) => x !== null && typeof x === 'object' && !Array.isArray(x),
-  array: Array.isArray,
-  string: (x) => typeof x === 'string',
-  integer: Number.isInteger,
-  number: (x) => typeof x === 'number',
-  boolean: (x) => typeof x === 'boolean',
-};
-
-function validateSchema(v, s, p = 'output', errs = []) {
-  if (!s) return errs;
-  if (s.type && TYPE_CHECK[s.type] && !TYPE_CHECK[s.type](v)) { errs.push(`${p}: expected ${s.type}`); return errs; }
-  if (s.enum && !s.enum.includes(v)) errs.push(`${p}: "${v}" not in ${JSON.stringify(s.enum)}`);
-  if (s.type === 'object') {
-    for (const r of s.required || []) if (v[r] === undefined) errs.push(`${p}.${r}: required`);
-    for (const [k, ps] of Object.entries(s.properties || {})) if (v[k] !== undefined) validateSchema(v[k], ps, `${p}.${k}`, errs);
-  }
-  if (s.type === 'array' && s.items) v.forEach((x, i) => validateSchema(x, s.items, `${p}[${i}]`, errs));
-  return errs;
-}
+// the shared validator (#338, src/json-schema.js): its paths start at `output`
+const { validateSchema } = require('../../json-schema');
 
 // What the transitions decide on: enum, boolean and number fields of the schema (not the
 // free text, which an LLM rewords on every call). Without a schema, the whole answer.

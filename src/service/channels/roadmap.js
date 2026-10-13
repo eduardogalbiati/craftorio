@@ -15,6 +15,24 @@ const merge = require('../../roadmap-merge');
 const roadmaps = require('../../roadmap');
 const undo = require('../../roadmap-undo');
 const { requireText } = require('../common');
+const {
+  ANY,
+  args,
+  BACKLOG,
+  FLAG,
+  listOf,
+  nullable,
+  OBJECT,
+  PROJECT_ID,
+  shape,
+  STRING,
+  text,
+} = require('../schemas');
+
+// most roadmap channels answer the project's Backlog (its `roadmap` is what the screen shows)
+const ON_PROJECT = args({ projectId: PROJECT_ID }, ['projectId']);
+const ACTION = text(40);
+const ITEM_ID = { type: ['string', 'number'], description: 'A roadmap item or edit id.' };
 
 module.exports = (ctx) => {
   const project = (projectId) => path.basename(String(projectId));
@@ -56,7 +74,7 @@ module.exports = (ctx) => {
     return out.stages;
   }, { alive: ctx.runAlive });
   return [
-    { channel: 'roadmap:get', method: 'getRoadmap', params: ['projectId'], fn: ({ projectId }) => ctx.roadmapView(project(projectId)) },
+    { channel: 'roadmap:get', method: 'getRoadmap', params: ['projectId'], schema: { params: ON_PROJECT, result: OBJECT }, fn: ({ projectId }) => ctx.roadmapView(project(projectId)) },
     // the edited stages ([{ id?, name, note, items: [{ id?, workflow, inputs, mock, issues }] }]); runs are kept by item id;
     // label: what the edit did, in the roadmap's words (the history's line and the toast's title).
     // #287 base: the roadmap's updatedAt the screen read. When the roadmap was written since, only what
@@ -67,6 +85,7 @@ module.exports = (ctx) => {
       channel: 'roadmap:save',
       method: 'saveRoadmap',
       params: ['projectId', 'stages', 'label', 'base'],
+      schema: { params: args({ projectId: PROJECT_ID, stages: listOf(OBJECT), label: nullable(text(500)), base: ANY }, ['projectId', 'stages']), result: OBJECT },
       fn: async ({ projectId, stages, label, base }) => {
         const id = project(projectId);
         const stored = roadmaps.readRoadmap(ctx.ws.backlog, id);
@@ -85,6 +104,7 @@ module.exports = (ctx) => {
       channel: 'roadmap:undo',
       method: 'undoRoadmap',
       params: ['projectId', 'editId'],
+      schema: { params: args({ projectId: PROJECT_ID, editId: ITEM_ID }, ['projectId']), result: BACKLOG },
       fn: async ({ projectId, editId }) => {
         const id = project(projectId);
         const edit = lastEdit.get(id);
@@ -98,11 +118,18 @@ module.exports = (ctx) => {
       },
     },
     // #281 the kept versions, newest first ([{ id, at, label }]: the roadmap as it was before `label`)
-    { channel: 'roadmap:versions', method: 'roadmapVersions', params: ['projectId'], fn: ({ projectId }) => history.listVersions(workspace(), project(projectId)) },
+    {
+      channel: 'roadmap:versions',
+      method: 'roadmapVersions',
+      params: ['projectId'],
+      schema: { params: ON_PROJECT, result: listOf(shape({ id: STRING, at: STRING, label: STRING }, ['id'])) },
+      fn: ({ projectId }) => history.listVersions(workspace(), project(projectId)),
+    },
     {
       channel: 'roadmap:restore-version',
       method: 'restoreRoadmapVersion',
       params: ['projectId', 'versionId'],
+      schema: { params: args({ projectId: PROJECT_ID, versionId: ITEM_ID }, ['projectId']), result: OBJECT },
       fn: async ({ projectId, versionId }) => {
         const id = project(projectId);
         const before = stagesOf(id);
@@ -118,6 +145,7 @@ module.exports = (ctx) => {
       channel: 'roadmap:propose',
       method: 'proposeRoadmap',
       params: ['projectId', 'proposal', 'replace'],
+      schema: { params: args({ projectId: PROJECT_ID, proposal: ANY, replace: FLAG }, ['projectId']), result: OBJECT },
       fn: ({ projectId, proposal, replace }) => {
         const before = stagesOf(project(projectId));
         const { dropped } = roadmaps.propose(ctx.ws.backlog, project(projectId), proposal, { replace: !!replace, issues: synced(projectId), alive: ctx.runAlive });
@@ -130,6 +158,7 @@ module.exports = (ctx) => {
       channel: 'roadmap:from-queue',
       method: 'roadmapFromQueue',
       params: ['projectId'],
+      schema: { params: ON_PROJECT, result: BACKLOG },
       fn: ({ projectId }) => {
         const id = project(projectId);
         const queue = backlog.readQueue(ctx.ws.backlog, id);
@@ -147,6 +176,7 @@ module.exports = (ctx) => {
       channel: 'roadmap:start',
       method: 'startRoadmap',
       params: ['projectId', 'simulated', 'stage'],
+      schema: { params: args({ projectId: PROJECT_ID, simulated: FLAG, stage: nullable(STRING) }, ['projectId']), result: nullable(OBJECT) },
       fn: ({ projectId, simulated, stage }) => ctx.startRoadmap({ projectId, simulated: !!simulated, stage: stage || null }),
     },
     // pause: nothing new starts (runs in progress go on); stop: back to a plan
@@ -154,6 +184,7 @@ module.exports = (ctx) => {
       channel: 'roadmap:pause',
       method: 'pauseRoadmap',
       params: ['projectId', 'stop'],
+      schema: { params: args({ projectId: PROJECT_ID, stop: FLAG }, ['projectId']), result: BACKLOG },
       fn: ({ projectId, stop }) => {
         roadmaps.setState(ctx.ws.backlog, project(projectId), stop ? 'planned' : 'paused');
         return current(projectId);
@@ -166,6 +197,7 @@ module.exports = (ctx) => {
       channel: 'roadmap:budget',
       method: 'roadmapBudget',
       params: ['projectId', 'action'],
+      schema: { params: args({ projectId: PROJECT_ID, action: ACTION }, ['projectId']), result: BACKLOG },
       fn: async ({ projectId, action }) => {
         await ctx.budgetAction({ projectId: project(projectId), action: requireText(action, 'budget action', 40) });
         return current(projectId);
@@ -177,6 +209,7 @@ module.exports = (ctx) => {
       channel: 'roadmap:live',
       method: 'setRoadmapLive',
       params: ['projectId', 'on'],
+      schema: { params: args({ projectId: PROJECT_ID, on: FLAG }, ['projectId']), result: BACKLOG },
       fn: async ({ projectId, on }) => {
         roadmaps.setLive(ctx.ws.backlog, project(projectId), !!on, { by: 'owner' });
         await ctx.dispatchRoadmaps();
@@ -187,6 +220,7 @@ module.exports = (ctx) => {
       channel: 'roadmap:clear',
       method: 'clearRoadmap',
       params: ['projectId'],
+      schema: { params: ON_PROJECT, result: OBJECT },
       fn: ({ projectId }) => {
         const before = stagesOf(project(projectId));
         roadmaps.clearRoadmap(ctx.ws.backlog, project(projectId));
@@ -202,6 +236,7 @@ module.exports = (ctx) => {
       channel: 'roadmap:item',
       method: 'roadmapItem',
       params: ['projectId', 'itemId', 'action', 'confirmed'],
+      schema: { params: args({ projectId: PROJECT_ID, itemId: ITEM_ID, action: ACTION, confirmed: FLAG }, ['projectId']), result: BACKLOG },
       fn: async ({ projectId, itemId, action, confirmed }) => {
         requireText(action, 'roadmap item action', 40);
         const id = project(projectId);

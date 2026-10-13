@@ -38,6 +38,29 @@ const workspace = require('../../workspace');
 const { resolveCommand } = require('../../engine/providers');
 const { isArchived } = require('../../renderer/views/backlog/backlog-archive');
 const { requireObject } = require('../common');
+const {
+  ANY,
+  args,
+  FLAG,
+  INT,
+  ISSUE_NUMBER,
+  listOf,
+  MESSAGES,
+  nullable,
+  NUMBER,
+  OBJECT,
+  orNone,
+  PROJECT_ID,
+  REQUEST_ANSWER,
+  shape,
+  STRING,
+} = require('../schemas');
+
+// Every drawer channel works on one project's conversation; `at` names one of its answers
+const onProject = (properties = {}, required = []) => args({ projectId: PROJECT_ID, ...properties }, ['projectId', ...required]);
+const AT = { type: ['string', 'integer'], description: 'An answer of the conversation (its time or index).' };
+// what filing on the platform answers (the Backlog synced again after a real filing, syncError when that failed)
+const FILED = OBJECT;
 
 module.exports = (ctx) => {
   const project = (projectId) => path.basename(String(projectId));
@@ -195,6 +218,21 @@ module.exports = (ctx) => {
       channel: 'po:ask',
       method: 'askProductOwner',
       params: ['projectId', 'question', 'mock', 'mode', 'attachments', 'issues', 'scenario', 'calibration', 'cost', 'workflow', 'inputs'],
+      schema: {
+        params: onProject({
+          question: STRING,
+          mock: FLAG,
+          mode: nullable(STRING),
+          attachments: ANY,
+          issues: ANY,
+          scenario: ANY,
+          calibration: ANY,
+          cost: ANY,
+          workflow: nullable(STRING),
+          inputs: ANY,
+        }),
+        result: shape({ message: OBJECT, messages: MESSAGES }, ['messages']),
+      },
       fn: async ({ projectId, question, mock, mode, attachments, issues, scenario, calibration, cost, workflow, inputs }) => {
         const id = project(projectId);
         const p = projects.readProject(ctx.ws.projects, id);
@@ -236,13 +274,15 @@ module.exports = (ctx) => {
       channel: 'po:attach',
       method: 'attachProductOwnerFile',
       params: ['projectId', 'name', 'data'],
+      schema: { params: onProject({ name: STRING, data: STRING }), result: shape({ name: STRING, path: STRING, size: NUMBER }, ['path']) },
       fn: ({ projectId, name, data }) => productOwner.saveAttachment(ctx.ws.backlog, project(projectId), { name, data }),
     },
-    { channel: 'po:clear', method: 'clearProductOwner', params: ['projectId'], fn: ({ projectId }) => productOwner.clearConversation(ctx.ws.backlog, project(projectId)) },
+    { channel: 'po:clear', method: 'clearProductOwner', params: ['projectId'], schema: { params: onProject(), result: MESSAGES }, fn: ({ projectId }) => productOwner.clearConversation(ctx.ws.backlog, project(projectId)) },
     {
       channel: 'po:discard',
       method: 'discardProductOwnerDraft',
       params: ['projectId', 'at'],
+      schema: { params: onProject({ at: AT }), result: MESSAGES },
       fn: ({ projectId, at }) => productOwner.discardDraft(ctx.ws.backlog, project(projectId), at, ctx.ws.runs),
     },
     // Returns fileDraft's result plus, after a real filing, the backlog synced again (syncError when that failed).
@@ -250,6 +290,7 @@ module.exports = (ctx) => {
       channel: 'po:file',
       method: 'fileProductOwnerDraft',
       params: ['projectId', 'at', 'action', 'number', 'preview', 'epic'],
+      schema: { params: onProject({ at: AT, action: nullable(STRING), number: nullable(ISSUE_NUMBER), preview: FLAG, epic: FLAG }), result: FILED },
       fn: async ({ projectId, at, action, number, preview, epic }) => {
         const t = target(projectId);
         const res = await productOwner.fileDraft({
@@ -275,6 +316,7 @@ module.exports = (ctx) => {
       channel: 'po:decongest',
       method: 'fileProductOwnerDecongest',
       params: ['projectId', 'at', 'index', 'preview'],
+      schema: { params: onProject({ at: AT, index: INT, preview: FLAG }), result: FILED },
       fn: async ({ projectId, at, index, preview }) => {
         const t = target(projectId);
         const res = await productOwner.fileDecongest({
@@ -287,6 +329,7 @@ module.exports = (ctx) => {
       channel: 'po:split',
       method: 'splitProductOwnerIssue',
       params: ['projectId', 'at', 'split', 'preview'],
+      schema: { params: onProject({ at: AT, split: ANY, preview: FLAG }), result: FILED },
       fn: async ({ projectId, at, split, preview }) => {
         const t = target(projectId);
         const res = await productOwner.applySplit({
@@ -300,6 +343,7 @@ module.exports = (ctx) => {
       channel: 'po:epic',
       method: 'applyProductOwnerEpic',
       params: ['projectId', 'at', 'key', 'epic', 'issues', 'preview'],
+      schema: { params: onProject({ at: AT, key: ANY, epic: ANY, issues: ANY, preview: FLAG }), result: FILED },
       fn: async ({ projectId, at, key, epic, issues, preview }) => {
         const t = target(projectId);
         const res = await productOwner.applyEpicProposal({
@@ -308,18 +352,29 @@ module.exports = (ctx) => {
         return resync(res, t);
       },
     },
-    { channel: 'po:history', method: 'productOwnerHistory', params: ['projectId'], fn: ({ projectId }) => productOwner.readConversation(ctx.ws.backlog, project(projectId)) },
+    { channel: 'po:history', method: 'productOwnerHistory', params: ['projectId'], schema: { params: onProject(), result: MESSAGES }, fn: ({ projectId }) => productOwner.readConversation(ctx.ws.backlog, project(projectId)) },
     // #240: another agent's request: { projectId, kind, params, reason, from, ref, byContent?, mock } →
     // { ok, text, costUsd, error?, pending? }; a refused or failed request is ok: false (recorded in the
     // conversation too), never a throw. #241: under the Night watch, a kind it does not allow is a card
     // waiting for the owner's click (pending).
-    { channel: 'po:request', method: 'productOwnerRequest', params: 'opts', fn: (opts) => request(requireObject(opts, 'options')) },
+    {
+      channel: 'po:request',
+      method: 'productOwnerRequest',
+      params: 'opts',
+      // params: the request kind's own (src/product-owner.js checks them per kind)
+      schema: {
+        params: args({ projectId: orNone(PROJECT_ID), kind: STRING, params: ANY, reason: ANY, from: ANY, ref: ANY, byContent: FLAG, mock: FLAG }),
+        result: REQUEST_ANSWER,
+      },
+      fn: (opts) => request(requireObject(opts, 'options')),
+    },
     // #241: the owner's click on a request card in the drawer: { projectId, ref, action: 'do' | 'dismiss' | 'undo', mock } →
     // { ok, text, costUsd, error?, messages }
     {
       channel: 'po:requestAct',
       method: 'productOwnerRequestAct',
       params: 'opts',
+      schema: { params: onProject({ ref: ANY, action: STRING, mock: FLAG }), result: { ...REQUEST_ANSWER, properties: { ...REQUEST_ANSWER.properties, messages: MESSAGES } } },
       fn: async (arg) => {
         const { projectId, ref, action, mock } = requireObject(arg, 'options');
         const id = project(projectId);
