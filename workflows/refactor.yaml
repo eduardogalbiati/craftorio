@@ -1,0 +1,635 @@
+# =============================================================================
+# Workflow: Refactor (#355): one refactor, done safely, in any language
+# -----------------------------------------------------------------------------
+#   pin_behaviour ─► green_check ─► refactor ─► suite ─► build ─► review ──merge: local──► end
+#        ▲               │             ▲          │        │        │
+#        └──(red: fails on the unchanged code)    └────────┴────────┘ (behaviour changed, or not simpler)
+#
+# Structure only gets worse when every run adds behaviour: this workflow improves it, one target at a
+# time, behind deterministic gates, with the behaviour pinned before the change (Kent Beck: never mix
+# structural and behavioural changes in one commit). Which refactor comes next is decided elsewhere
+# (the Projects screen's Refactor tab, the Product Owner, a cadence of every X runs).
+#   1. Target: an issue of the project's refactor list (`issue`/`issues`, the task) or a free `target`
+#      (files or functions) with the expected improvement written in the task.
+#   2. pin_behaviour (the test writer): characterization tests of the target's CURRENT behaviour, with
+#      the language's unit-test skill, committed first in their own commit on the run's branch.
+#   3. green_check (no agent): the orchestrator runs exactly those files on the unchanged code
+#      (`files`, `expect: green`): they must pass. A red one goes back to the test writer, never on.
+#   4. refactor (the developer): structure only. `edits_tests: false` refuses a turn that changes any
+#      test (the existing ones included) and `protect_files` locks the pinned tests (#220's guard).
+#      Never: a behaviour change, a dependency upgrade, a rename of a public interface the issue does
+#      not name.
+#   5. Gates: the project's full suite (suite, no agent; in this repository it includes the
+#      code-health ratchets) and the build audit (build, build-audit-<language>).
+#   6. review: one question, "same behaviour, simpler structure?", from the target's before/after
+#      figures (lines, files touched by the change, complexity where a tool exists for the language,
+#      otherwise the reviewer's reading). A behaviour change, or no simpler structure, goes back to
+#      refactor. Approved: the branch merges into the local base (merge: local, never pushed).
+# Measured: the figures are the run's outputs (`before`, `after`), recorded in summary.json with the
+# run's cost, so a month of refactor runs can be compared through run_analysis (#184).
+# Commits end with "Closes #<n>" for the run's issues: GitHub closes them when you push <base>.
+# =============================================================================
+
+apiVersion: multiagent/v1
+kind: Workflow
+
+metadata:
+  name: refactor
+  version: 0.1.0
+  description: "One refactor, done safely, in any language: the test writer pins the target's current behaviour first (characterization tests, green on the unchanged code), the developer changes structure only (no test may change), then the full suite, the build audit and a review of \"same behaviour, simpler structure?\" from before/after figures, and the local merge. No push, no PR."
+  tags: [dev, refactor, test, build, local, worktree]
+  # Dashboard category: plan (Plan & Design), build (Code & Build) or monitor (Monitor & Improve).
+  category: build
+
+# -----------------------------------------------------------------------------
+inputs:
+  task:
+    label: "Task"
+    type: string
+    required: true
+    description: "The refactor to do and the improvement expected (e.g. \"split the click handler by action: one function per data attribute\")."
+  issue:
+    label: "Issue"
+    type: string
+    default: ""
+    description: "URL of the refactor issue this run implements (set by the Backlog screen). Nothing is closed on GitHub/GitLab until you push."
+  issues:
+    label: "Issues"
+    type: array
+    default: []
+    description: "URLs of the refactor issues this run implements together, in one branch (set by the Backlog screen; one per line)."
+  repo_path:
+    label: "Repository"
+    type: string
+    required: true
+    description: Local repository path (a git repository; no remote needed).
+  target:
+    label: "Target"
+    type: string
+    default: ""
+    description: "A free target when there is no issue: the files or functions to refactor (e.g. src/app/handlers.js, onClick). Empty: the issue names it."
+  # Picks the unit-test-writer-<language> (pin step) and build-audit-<language> (builder) skills.
+  language:
+    label: "Language"
+    type: string
+    enum: [js, python, go, java, csharp, rust]
+    default: js
+    multiple: true
+    options: { js: JavaScript, python: Python, go: Go, java: Java, csharp: "C#", rust: Rust }
+    description: The project's languages, main one first, for the characterization tests and the build checks. A repository that mixes several takes them all; a run loads the skills of the languages whose files it changed.
+  base_branch:
+    label: "Base branch"
+    type: string
+    default: main
+    description: The local branch the refactor starts from and is merged into.
+  test_command:
+    type: string
+    default: ""
+    label: Test command
+    description: "The project's whole-suite command the orchestrator runs (e.g. npm test). Empty: found from the project's files (package.json, go.mod, pom.xml, build.gradle, *.csproj, pyproject.toml)."
+
+# -----------------------------------------------------------------------------
+providers:
+  claude:
+    type: claude-code
+    command: claude
+    args: ["-p", "--output-format", "stream-json", "--verbose", "--model", "{{ model }}"]
+    # #286: an agent's `effort` reaches the CLI only through effort_args
+    effort_args: ["--effort", "{{ effort }}"]
+    resume_args: ["--resume", "{{ session_id }}"]
+    skill_args: ["--add-dir", "{{ skill_dir }}"]
+
+x-tools:
+  # every supported language toolchain: the language skill says which one to use
+  toolchains: &toolchains [bash:git, bash:npm, bash:npx, bash:node, bash:pnpm, bash:yarn, bash:python, bash:python3, bash:py, bash:pip, bash:pytest, bash:uv, bash:poetry, bash:pip-audit, bash:osv-scanner, bash:go, bash:govulncheck, bash:mvn, bash:./mvnw, bash:mvnw.cmd, bash:gradle, bash:./gradlew, bash:gradlew.bat, bash:dotnet, bash:cargo]
+
+defaults:
+  # #320: a persistent agent idle past its prompt cache's lifetime continues in a fresh session
+  # from its handoff note; an agent's own value wins
+  fresh_after_idle: 55m
+  # the run's own git worktree of the local base
+  working_dir: "{{ worktree_dir }}"
+  timeout: 45m
+  max_context: 150k
+  retry:
+    max_attempts: 2
+    backoff: exponential
+    initial_delay: 10s
+
+orchestrator:
+  provider: claude
+  model: claude-sonnet-5
+  # <workspace>/worktrees/<run_id>, detached at the LOCAL <base> (remote: false: no fetch);
+  # dependencies linked from the shared cache (#198)
+  worktree:
+    repo: "{{ inputs.repo_path }}"
+    base: "{{ inputs.base_branch }}"
+    remote: false
+  supervisor:
+    enabled: true
+    on_call: true
+    max_interventions: 2
+    max_cost_usd: 5
+  limits:
+    max_total_duration: 6h
+    max_total_cost_usd: 60
+    max_total_context: 40M
+
+# -----------------------------------------------------------------------------
+agents:
+  test_writer:
+    color: "#FF8A3D"
+    provider: claude
+    model: claude-opus-5-5
+    session: persistent
+    max_context: 120k
+    capabilities: { tools: [read, edit, write, *toolchains], web: false, subagents: true }
+    skills: ["unit-test-writer-{{ inputs.language }}", context-economy]
+    system_prompt: |
+      You are the test writer of a refactor: you pin the CURRENT behaviour of the target with
+      characterization tests before anyone changes its structure, following the test skill for
+      this language. They describe what the code does today, not what it should do: a behaviour
+      that looks wrong is pinned as it is and reported in `summary`. You never change production
+      code. Commit test files only, on the run's branch. Never fetch, pull or push.
+      Keep your context small (context-economy): one exploration sub-agent maps the target's
+      public seams, its callers and the tests that already cover it before you write.
+
+  developer:
+    color: "#4C7DFF"
+    provider: claude
+    model: claude-opus-5-5
+    session: handoff
+    max_requests: 40
+    capabilities: { tools: [read, edit, write, *toolchains], web: false, subagents: true }
+    # structure only: no test changes at all, the existing ones included (the engine refuses a turn
+    # that changes one, on the agent so the fixes delegated to it are covered too)
+    edits_tests: false
+    # the characterization tests, whatever the test paths say
+    protect_files:
+      - "{{ steps.pin_behaviour.output.tests_added }}"
+    skills: [long-commands, bug-diagnosis, context-economy, decision-log]
+    system_prompt: |
+      You are a senior software engineer doing a REFACTOR: you change the structure of the code,
+      never its behaviour. The behaviour is pinned by characterization tests written before you
+      and by the existing tests; you never create, edit, delete or skip a test (the orchestrator
+      refuses a turn that changes one). Never: a behaviour change (outputs, errors, side effects,
+      timing the callers rely on), a dependency upgrade, a rename of a public interface (exported
+      names, CLI flags, file formats, API routes) the issue does not name. Prefer a few cohesive
+      moves (extract, inline, split by responsibility, remove duplication) over renames and type
+      changes. Every commit is structural only; when you spot a bug, leave it and report it in
+      `summary`.
+      Keep your context small (context-economy): start one exploration sub-agent that maps the
+      target, its callers and its tests with line numbers before your first edit. Run only the
+      pinned and affected tests, focused, in the foreground; never the whole suite (the
+      orchestrator runs it after your turn).
+      Work on the run's branch (the worktree is on it). Never fetch, pull or push: the
+      orchestrator merges your branch into the local {{ inputs.base_branch }} after the review.
+      The dependencies are linked from a shared cache: never run `npm ci` and never delete
+      `node_modules`.
+      {% if inputs.issue or (inputs.issues | length) %}End every commit message with one line per issue this run implements,
+      `Closes #<number>` (the numbers from: {{ inputs.issue }}{% for u in inputs.issues %} {{ u }}{% endfor %}).
+      {% endif %}When you finish a requested fix, report the commit hash.
+
+  reviewer:
+    color: "#A06BFF"
+    provider: claude
+    model: claude-opus-5-5
+    effort: high
+    session: persistent
+    # read-only by role: the toolchains only to measure (line counts, a complexity tool)
+    capabilities: { tools: [read, *toolchains], web: false }
+    skills: [code-review]
+    system_prompt: |
+      You are the reviewer of a refactor. You answer one question: same behaviour, simpler
+      structure? Follow the code-review skill for the correctness axis, and measure the target
+      before and after the change. You never change code, never commit and never run the test
+      suite (the orchestrator ran it).
+
+  builder:
+    color: "#E6C229"
+    provider: claude
+    model: claude-sonnet-5
+    session: persistent
+    capabilities: { tools: [read, *toolchains], web: false }
+    skills: ["build-audit-{{ inputs.language }}"]
+    system_prompt: |
+      You are the builder. You build the application and check its dependencies for
+      vulnerabilities, following the build skill for this language. You do not change
+      code and you do not run the test suite (the orchestrator ran it). Vulnerability policy:
+      - blocks: any critical; high in production dependencies
+      - report only: moderate/low, and anything in development-only dependencies
+
+groups:
+  - name: Pin
+    steps: [pin_behaviour, green_check, pin_failed]
+  - name: Refactor
+    steps: [refactor]
+  - name: Gates
+    steps: [suite, build, tests_failed, build_failed]
+  - name: Review
+    steps: [review, review_blocked]
+  - name: Merge
+    steps: [merge_blocked]
+
+# -----------------------------------------------------------------------------
+steps:
+
+  # Behaviour first: characterization tests of the target as it is today, in their own commit.
+  - id: pin_behaviour
+    display: Pin the behaviour
+    agent: test_writer
+    # the language's unit-test skill (#340's family): one per language the run changed
+    skills: ["unit-test-writer-{{ inputs.language }}", context-economy]
+    # {{ test_map }}: the checkout's code → tests map (#219), for the tests that already cover the target
+    test_map: true
+    prompt: |
+      Refactor task: {{ inputs.task }}
+      {% if inputs.issue %}Issue: {{ inputs.issue }}
+      {% endif %}{% if inputs.issues | length %}Issues: {{ inputs.issues | join(', ') }}
+      {% endif %}{% if inputs.target %}Target: {{ inputs.target }}
+      {% endif %}
+      {% if previous_step == 'green_check' %}
+      The orchestrator ran your characterization tests on the UNCHANGED code and they do not pass:
+      {{ steps.green_check.output | suite_failures }}
+      They must describe what the code does today: fix the tests (never the production code) so
+      they pass on the unchanged code, commit them on the same branch, and answer again in full.
+      {% else %}
+      Pin the CURRENT behaviour of the target before anyone changes its structure:
+      1. Create the run's branch where the worktree starts (the local {{ inputs.base_branch }}):
+         `git switch -c <branch>` (a short name, e.g. refactor-<target>). Never fetch, pull or push.
+      2. Find the target's public seams (exported functions, the module's entry points, a CLI or
+         a screen's rendered output) and its callers. The code → tests map of this checkout is
+         {{ test_map }} (search it for the target's files, do not read it whole): list in
+         `affected_tests` the existing tests that already reach the target.
+      3. Write characterization tests through those seams for what the code does today: the main
+         paths, the edge cases its branches handle, its errors. They must not depend on the
+         internals the refactor will move (private helpers, file layout inside the target).
+      4. Run only your new files: they must PASS on the unchanged code (the orchestrator checks it
+         right after your turn on exactly `tests_added`).
+      5. Commit them alone, in their own commit (message: "Pin the behaviour of <target>"), and
+         report its hash in `commit`. Never change production code.
+      List the target's production files in `target_files` (repository-relative).
+      {% endif %}
+    output_schema:
+      type: object
+      required: [branch, tests_added, commit, committed, target_files, summary]
+      properties:
+        branch:         { type: string }
+        # repository-relative paths of the characterization tests: the green check runs them and the
+        # developer may not change them (protect_files)
+        tests_added:    { type: array, items: { type: string } }
+        affected_tests: { type: array, items: { type: string } }
+        target_files:   { type: array, items: { type: string } }
+        commit:         { type: string }
+        committed:      { type: boolean }
+        summary:        { type: string }
+    transitions:
+      # nothing pinned: no green check can stand for the behaviour; once more, then you
+      - when: "(output.tests_added or []) | length == 0"
+        goto: pin_behaviour
+        max_visits: 1
+        on_exhausted: pin_failed
+      - when: "true"
+        goto: green_check
+
+  # The pinned tests must pass on the unchanged code (no agent): exactly those files, `expect: green`.
+  - id: green_check
+    display: Green check (pinned)
+    type: suite
+    command: "{{ inputs.test_command }}"
+    files: "{{ steps.pin_behaviour.output.tests_added }}"
+    expect: green
+    transitions:
+      - when: "output.status == 'pass'"
+        goto: refactor
+      - when: "output.status == 'fail'"
+        goto: pin_behaviour
+        max_visits: 2
+        on_exhausted: pin_failed
+      - when: "true"
+        goto: pin_failed
+
+  - id: pin_failed
+    type: human_approval
+    kind: escalation   # the supervisor on call tries first
+    message: |
+      {% if steps.green_check.output and steps.green_check.output.status == 'blocked' %}The characterization tests could not run:
+      {{ steps.green_check.output.reason }}
+      Set the workflow's `test_command` input (e.g. npm test) when the project's files do not give it.
+      {% elif steps.green_check.output %}The characterization tests still fail on the unchanged code after {{ steps.green_check.visits }} round(s):
+      {{ steps.green_check.output | suite_failures }}
+      {% else %}The test writer pinned no behaviour: {{ steps.pin_behaviour.output.summary }}
+      {% endif %}
+      No refactor starts without pinned behaviour. Approve: one more round of the test writer. Reject: stop the run as failed (its branch keeps the work).
+    transitions:
+      - when: "approved"
+        goto: pin_behaviour
+      - when: "rejected"
+        goto: end
+        status: failed
+
+  - id: refactor
+    display: Refactor
+    agent: developer
+    test_map: true
+    prompt: |
+      Refactor task: {{ inputs.task }}
+      {% if inputs.target %}Target: {{ inputs.target }}
+      {% endif %}{% set pin = steps.pin_behaviour.output %}
+      {% set review = steps.review.output %}
+      {% if previous_step == 'review' and review %}
+      The reviewer sent the refactor back (same behaviour: {{ review.same_behaviour }}, simpler
+      structure: {{ review.simpler_structure }}):
+      {{ review.findings | to_yaml }}
+      Fix it on the same branch with a new structural commit and answer each finding in `summary`.
+      {% else %}
+      The behaviour is pinned on branch `{{ pin.branch }}` (commit {{ pin.commit }}) by these
+      characterization tests: {{ pin.tests_added | join(', ') }}; they pass on the unchanged code.
+      Target files: {{ (pin.target_files or []) | join(', ') or 'see the task' }}.
+      Existing tests that reach the target: {{ (pin.affected_tests or []) | join(', ') or 'none named' }};
+      for the other files you change, search the code → tests map: {{ test_map }} (do not read it whole).
+      Stay on that branch; do not create another.
+      {% endif %}
+      Change the structure only: every test (pinned or existing) passes unchanged before and after
+      each commit. Commit with a message that says the structural move ("refactor: ..."). End your
+      turn with a ```run-tests block listing the pinned and affected test files (the orchestrator
+      runs them and resumes you with a short summary); never the whole suite.
+      In `files_changed`, list the files you changed; in `summary`, the moves you made and anything
+      you left (a bug you saw, a rename the issue did not name) with the reason.
+    stall:
+      same_output_fields: [commit_sha, summary, files_changed]
+    output_schema:
+      type: object
+      required: [branch, summary, files_changed, committed]
+      properties:
+        branch:        { type: string }
+        summary:       { type: string }
+        files_changed: { type: array, items: { type: string } }
+        committed:     { type: boolean }
+        commit_sha:    { type: string }
+    transitions:
+      - when: "output.committed"
+        goto: suite
+      - when: "true"
+        goto: refactor
+        max_visits: 3
+        on_exhausted: fail
+
+  # The project's whole suite, without an agent (#177): the pinned tests, the existing ones and, in
+  # this repository, the code-health ratchets.
+  - id: suite
+    display: Run suite
+    type: suite
+    command: "{{ inputs.test_command }}"
+    transitions:
+      - when: "output.status == 'pass'"
+        goto: build
+      - when: "output.status == 'blocked'"
+        goto: tests_failed
+      - when: "output.status == 'fail'"
+        delegate:
+          agent: developer
+          prompt: |
+            The project's test suite fails after the refactor on branch `{{ steps.refactor.output.branch }}`:
+            {{ output | suite_failures }}
+            The whole log: {{ run_dir }}/{{ output.log }} (read only the failing tests' part).
+            The tests pin the behaviour: a failure means the refactor changed it. Fix the production
+            code only, structurally (never a test), run only the failing tests, commit and report
+            the commit hash.
+        goto: suite
+        max_visits: 2
+        on_exhausted: tests_failed
+
+  - id: tests_failed
+    type: human_approval
+    kind: escalation   # the supervisor on call tries first
+    message: |
+      {% if steps.suite.output and steps.suite.output.status == 'blocked' %}The project's test suite could not run:
+      {{ steps.suite.output.reason }}
+      Set the workflow's `test_command` input (e.g. npm test) when the project's files do not give it.
+      {% else %}The suite still fails after {{ steps.suite.visits }} round(s) of fixes:
+      {{ steps.suite.output | suite_failures }}
+      {% endif %}
+      Approve: run the suite again (after you fixed the environment). Reject: stop the run as failed (its branch keeps the work).
+    transitions:
+      - when: "approved"
+        goto: suite
+      - when: "rejected"
+        goto: end
+        status: failed
+
+  - id: build
+    display: Builder
+    agent: builder
+    prompt: |
+      On branch `{{ steps.refactor.output.branch }}`:
+      {% if delegate_result %}
+      The developer applied a fix: {{ delegate_result.text }}
+      {% endif %}
+      1. Build the project following the build skill.
+      2. Audit the dependencies following the build skill, separating production from development.
+      Apply your role's vulnerability policy. In `vulnerabilities`, report the PRODUCTION
+      counts; summarize the development ones in `dev_vulnerabilities`.
+      When the build fails, set failure_class (see the build skill): code = a commit on the branch
+      can fix it; infra = no commit can (a locked file, permissions, network, disk; never reinstall
+      with `npm ci`); unknown = you could not tell.
+    output_schema:
+      type: object
+      required: [build_status, vulnerabilities, report]
+      properties:
+        build_status: { type: string, enum: [success, failed] }
+        failure_class: { type: string, enum: [code, infra, unknown] }
+        vulnerabilities:
+          type: object
+          required: [critical, high, moderate, low]
+          properties:
+            critical: { type: integer }
+            high:     { type: integer }
+            moderate: { type: integer }
+            low:      { type: integer }
+        dev_vulnerabilities: { type: string }
+        report:              { type: string }
+    transitions:
+      - when: "output.build_status == 'success' and output.vulnerabilities.critical == 0 and output.vulnerabilities.high == 0"
+        goto: review
+      - when: "output.build_status == 'failed' and output.failure_class == 'infra'"
+        goto: build_failed
+      # a refactor upgrades no dependency: a vulnerable one is reported to you, never fixed here
+      - when: "output.build_status == 'success'"
+        goto: build_failed
+      - when: "true"
+        delegate:
+          agent: developer
+          prompt: |
+            The build fails after the refactor on branch `{{ steps.refactor.output.branch }}`:
+            {{ output.report }}
+            Fix it structurally (no behaviour change, no dependency upgrade, never a test), check it
+            with the build or a focused test, commit and report the commit hash.
+        goto: build
+        max_visits: 3
+        on_exhausted: build_failed
+
+  - id: build_failed
+    type: human_approval
+    kind: escalation   # the supervisor on call tries first
+    message: |
+      {% if steps.build.output.build_status == 'success' %}The build passes but the dependency audit blocks it (a refactor upgrades no dependency):{% else %}The build is still failing:{% endif %}
+      {{ steps.build.output.report }}
+    choices:
+      - { id: continue, label: "Continue to the review anyway", help: "The review runs with the build or the audit still failing." }
+      - { id: retry,    label: "Build again (I fixed the environment)", help: "Runs the build again; useful only after you fixed what blocked it." }
+      - { id: stop,     label: "Stop the run as failed (branch kept to resume)", help: "Ends the run as failed; nothing is merged and its branch keeps the work." }
+    transitions:
+      - when: "choice == 'continue'"
+        goto: review
+      - when: "choice == 'retry'"
+        goto: build
+      - when: "choice == 'stop'"
+        goto: end
+        status: failed
+
+  # One question: same behaviour, simpler structure? From the target's before/after figures.
+  - id: review
+    display: Review (same behaviour, simpler?)
+    agent: reviewer
+    prompt: |
+      {% set pin = steps.pin_behaviour.output %}
+      Review the refactor on branch `{{ steps.refactor.output.branch }}`: answer one question,
+      same behaviour, simpler structure?
+      Refactor task: {{ inputs.task }}
+      {% if inputs.target %}Target: {{ inputs.target }}
+      {% endif %}Developer: {{ steps.refactor.output.summary }}
+      The behaviour was pinned at commit `{{ pin.commit }}` (tests: {{ pin.tests_added | join(', ') }});
+      the refactor is `git diff {{ pin.commit }} {{ steps.refactor.output.branch }}`. The suite and the
+      build passed after it.
+      1. Same behaviour (`same_behaviour`): read the diff against the code-review skill's
+         correctness axis. A changed output, error, side effect or public interface the task does
+         not name is a behaviour change, and so is any change to a test (check
+         `git diff {{ pin.commit }} {{ steps.refactor.output.branch }} -- <the test files>`) or to a
+         dependency manifest or lockfile.
+      2. Simpler structure (`simpler_structure`): measure the target ({{ (pin.target_files or []) | join(', ') or 'the files the task names' }})
+         at `{{ pin.commit }}` (`before`) and at the branch's head (`after`):
+         - `lines`: the target's non-blank lines;
+         - `files_touched`: the files the refactor changed (`git diff --stat {{ pin.commit }} {{ steps.refactor.output.branch }}`; 0 before);
+         - `complexity`: the cyclomatic complexity of the target from the language's tool when the
+           project has one (e.g. eslint's complexity rule, radon, gocyclo); otherwise leave it out
+           and judge from your reading. Say which in `complexity_source`.
+         Fewer lines alone is not simpler: judge cohesion, duplication and how far a reader jumps.
+      `verdict`: approved only when both answers are yes; otherwise changes_requested with the
+      findings the developer must fix (one per problem, with the file and line).
+    output_schema:
+      type: object
+      required: [verdict, same_behaviour, simpler_structure, before, after, findings]
+      properties:
+        verdict:           { type: string, enum: [approved, changes_requested] }
+        same_behaviour:    { type: boolean }
+        simpler_structure: { type: boolean }
+        before:
+          type: object
+          required: [lines, files_touched]
+          properties:
+            lines:             { type: integer }
+            files_touched:     { type: integer }
+            complexity:        { type: number }
+            complexity_source: { type: string }
+        after:
+          type: object
+          required: [lines, files_touched]
+          properties:
+            lines:             { type: integer }
+            files_touched:     { type: integer }
+            complexity:        { type: number }
+            complexity_source: { type: string }
+        findings:
+          type: array
+          items:
+            type: object
+            required: [severity, file, description]
+            properties:
+              axis:        { type: string, enum: [behaviour, structure, standards] }
+              severity:    { type: string, enum: [blocker, major, minor, nit] }
+              file:        { type: string }
+              line:        { type: integer }
+              description: { type: string }
+        summary: { type: string }
+    transitions:
+      # a behaviour change (or no simpler structure) goes back to the refactor, never on
+      - when: "output.verdict != 'approved' or not output.same_behaviour or not output.simpler_structure"
+        goto: refactor
+        loop:
+          name: review_cycle
+          max_iterations: 3
+          on_exhausted: review_blocked
+      - when: "true"
+        merge: local
+        goto: end
+        on_error: merge_blocked
+
+  - id: review_blocked
+    type: human_approval
+    message: |
+      The reviewer still does not find the same behaviour with a simpler structure after 3 rounds:
+      same behaviour: {{ steps.review.output.same_behaviour }}, simpler structure: {{ steps.review.output.simpler_structure }}.
+      {{ steps.review.output.findings | to_yaml }}
+      Approve: merge the branch into the local {{ inputs.base_branch }} as it is (nothing is pushed). Reject: stop the run as failed (its branch keeps the work).
+    diff_base: "{{ inputs.base_branch }}"
+    transitions:
+      - when: "approved"
+        merge: local
+        goto: end
+        on_error: merge_blocked
+      - when: "rejected"
+        goto: end
+        status: failed
+
+  - id: merge_blocked
+    type: human_approval
+    kind: escalation   # the supervisor on call tries first
+    message: |
+      The local merge into {{ inputs.base_branch }} failed: {{ action_error.message if action_error else 'unknown error' }}
+      Approve: try the merge again (after you resolved it, e.g. committed the changes in your checkout of {{ inputs.base_branch }}). Reject: stop the run as failed (the worktree and the branch are kept).
+    transitions:
+      - when: "approved"
+        merge: local
+        goto: end
+        on_error: merge_blocked
+      - when: "rejected"
+        goto: end
+        status: failed
+
+# -----------------------------------------------------------------------------
+# What the run records (summary.json, with its cost) and hands to the next one (#134).
+outputs:
+  target:
+    type: string
+    description: The refactor's target (the free target, else the task).
+    value: "{{ inputs.target or inputs.task }}"
+  before:
+    type: object
+    description: "The target's figures before the refactor (lines, files_touched, complexity), measured by the reviewer at the pin commit."
+    value: "{{ (steps.review.output.before if steps.review.output else none) | to_json }}"
+  after:
+    type: object
+    description: "The target's figures after the refactor (lines, files_touched, complexity), measured by the reviewer at the branch's head."
+    value: "{{ (steps.review.output.after if steps.review.output else none) | to_json }}"
+  branch:
+    type: string
+    description: The branch the refactor was made on.
+    value: "{{ steps.refactor.output.branch }}"
+  merged_commit:
+    type: string
+    description: The commit the run merged into the local base branch. Empty when nothing was merged.
+    value: "{{ run.local_merge.commit if run.local_merge else '' }}"
+
+# -----------------------------------------------------------------------------
+observability:
+  storage:
+    type: jsonl
+    path: "./runs/{{ run_id }}/"
+  capture:
+    prompts: true
+    outputs: true
+    thinking: true
+    tool_calls: true
+    redact:
+      - pattern: "(?i)(api[_-]?key|token|secret|password)\\s*[:=]\\s*\\S+"

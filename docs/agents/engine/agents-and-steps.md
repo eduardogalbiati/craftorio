@@ -120,6 +120,10 @@ fields (references between steps, agents, transitions, groups) are the named rul
     `affected_reasons` from `relatedTests` (the existing tests reaching the sources the new tests
     import) and a `message` for the next prompt. Simulation: default red; `mockSequences.suite`
     `pass` = all green, `broken` = all broken.
+  - **`expect: green`** (#355, `workflows/refactor.yaml`'s `green_check`): the listed tests pin the
+    current behaviour and must pass on the unchanged code: a plain `pass | fail | blocked` status,
+    no base check (a pinned test that fails is never waved through as failing on the base).
+    Simulation: default `pass`.
   - **`coverage: true`** on a suite step (#225; set on the bundled development workflows' `suite`):
     a `node --test` command runs with `--experimental-test-coverage` (`suiteStep.coverageCommand`);
     an npm script (`npm test`, `npm run <name>`, with `-- <files>`) runs its `<name>:coverage`

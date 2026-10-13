@@ -264,8 +264,9 @@ const methods = {
       const files = this.machine.existingFiles(cwd, given);
       const missing = given.filter((f) => !files.includes(f));
       const selection = { mode: 'affected', files, reasons: Object.fromEntries(files.map((f) => [f, `listed by ${step.id}`])), why: `the ${files.length} test file(s) the step lists${missing.length ? ` (not found: ${missing.join(', ')})` : ''}` };
-      // new tests are not on the base: no base check for a red check
-      output = await once({ files, selection, logName: `${step.id}-${st.visits}`, mockResult: step.expect === 'red' && mockResult === 'broken' ? 'fail' : mockResult, ...(step.expect === 'red' ? { base: null } : {}) });
+      // new tests are not on the base: no base check for a red or a green check (#355: a pinned test
+      // that fails is never waved through as failing on the base too)
+      output = await once({ files, selection, logName: `${step.id}-${st.visits}`, mockResult: step.expect === 'red' && mockResult === 'broken' ? 'fail' : mockResult, ...(step.expect ? { base: null } : {}) });
       output.missing = missing;
       if (step.expect === 'red') output = this.redCheckOutput(output, files, mockResult);
     } else if (scope === 'affected') {

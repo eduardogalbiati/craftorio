@@ -272,14 +272,14 @@
   {
     "name": "suite step: expect not red",
     "kind": "type",
-    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - transitions:\n      - goto: gate\n    id: suite\n    type: suite\n    files: a.js\n    expect: green\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
-    "error": "Step \"suite\": expect must be \"red\", with files (the red check of tests written before the code)."
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - transitions:\n      - goto: gate\n    id: suite\n    type: suite\n    files: a.js\n    expect: blue\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"suite\": expect must be \"red\", with files (the red check of tests written before the code), or \"green\" (the green check of tests that pin the current behaviour)."
   },
   {
     "name": "suite step: expect red without files",
     "kind": "cross-field",
     "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - transitions:\n      - goto: gate\n    id: suite\n    type: suite\n    expect: red\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
-    "error": "Step \"suite\": expect must be \"red\", with files (the red check of tests written before the code)."
+    "error": "Step \"suite\": expect must be \"red\", with files (the red check of tests written before the code), or \"green\" (the green check of tests that pin the current behaviour)."
   },
   {
     "name": "test_ids step with an agent",

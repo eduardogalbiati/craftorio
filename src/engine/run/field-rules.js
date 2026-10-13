@@ -130,9 +130,10 @@ const FIELD_RULES = [
   // #212: affected = the affected test files each visit, the whole suite once when they pass;
   // #324: failed = whole first, then the files that failed in the previous round and the whole suite
   entry('steps[].scope', ['suite'], 'one of', 'scope must be affected, failed or full.', { values: ['affected', 'failed', 'full'], template: true, elsewhere: 'skip' }),
-  // #220: given test files only, and `expect: red` for tests written before the code (the red check)
+  // #220: given test files only, and `expect: red` for tests written before the code (the red check);
+  // #355: `expect: green` for tests that pin the current behaviour (they must pass on the unchanged code)
   entry('steps[].files', ['suite'], 'file list', 'files must be a file list: a template or a list of paths.', { template: true, elsewhere: 'skip' }),
-  entry('steps[].expect', ['suite'], 'one of', 'expect must be "red", with files (the red check of tests written before the code).', { values: ['red'], elsewhere: 'skip' }),
+  entry('steps[].expect', ['suite'], 'one of', 'expect must be "red", with files (the red check of tests written before the code), or "green" (the green check of tests that pin the current behaviour).', { values: ['red', 'green'], elsewhere: 'skip' }),
   // `type: test_ids` (#246): the test ids the E2E step definitions use and the renderer lacks
   folder('steps'),
   folder('renderer'),
