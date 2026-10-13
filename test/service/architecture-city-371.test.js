@@ -154,6 +154,53 @@ test('#371 architecture:city on a plain folder is not-git', async (t) => {
   assert.equal(out.state, 'not-git');
 });
 
+test('#371 architecture:city in a JavaScript and Python repository gives the JS edges and says Python is not read', async (t) => {
+  const { api, projectId } = await setup(t, { ...JS_FILES, ...PY_FILES });
+  const { model } = await call(api, 'architecture:city', { projectId });
+  assert.ok(Array.isArray(model.edges), `edges ${JSON.stringify(model.edges)}`);
+  assert.ok(hasEdge(model.edges, 'src/engine/run.js', 'src/engine/queue.js'), 'the JavaScript edges are read');
+  assert.equal(model.edges.some((e) => String(e.from).startsWith('lib/')), false, 'no Python edge');
+  // the graph covers only part of the city: the model names what it did not read
+  assert.match(JSON.stringify(model), /not read for Python/);
+});
+
+// A fake `lizard` that fails when run: installed after the first read, only a refresh sees it
+function installFailingLizard(t) {
+  const dir = tmp(t, 'city371-bin-');
+  if (process.platform === 'win32') {
+    fs.writeFileSync(path.join(dir, 'lizard.cmd'), '@exit /b 3\r\n');
+  } else {
+    fs.writeFileSync(path.join(dir, 'lizard'), '#!/bin/sh\nexit 3\n');
+    fs.chmodSync(path.join(dir, 'lizard'), 0o755);
+  }
+  const saved = process.env.PATH;
+  process.env.PATH = `${dir}${path.delimiter}${saved}`;
+  t.after(() => { process.env.PATH = saved; });
+}
+
+test('#371 architecture:city after architecture:facts with refresh shows the refreshed facts', async (t) => {
+  const { api, projectId } = await setup(t, JS_FILES);
+  const before = await call(api, 'architecture:facts', { projectId });
+  if (before.model.complexity.status === 'measured') return t.skip('a real lizard is installed on this machine');
+  await call(api, 'architecture:city', { projectId });
+  installFailingLizard(t);
+  const refreshed = await call(api, 'architecture:facts', { projectId, refresh: true });
+  assert.notEqual(refreshed.model.complexity.reason, before.model.complexity.reason, 'the refresh read the new tool');
+  const { model } = await call(api, 'architecture:city', { projectId });
+  assert.equal(model.complexity.reason, refreshed.model.complexity.reason);
+});
+
+test('#371 architecture:city with an unreadable city-plan.json still draws the city and says the plan was not read', async (t) => {
+  const { service, api, projectId } = await setup(t, JS_FILES);
+  const folder = path.join(service.workspace().root, 'architecture', projectId);
+  fs.mkdirSync(folder, { recursive: true });
+  fs.writeFileSync(path.join(folder, 'city-plan.json'), '{ "version": 1, "zones": [');
+  const out = await call(api, 'architecture:city', { projectId });
+  assert.equal(out.state, 'ok');
+  assert.equal(out.model.buildings.length, Object.keys(JS_FILES).length);
+  assert.match(JSON.stringify(out.validation), /city-plan\.json/, `validation ${JSON.stringify(out.validation)}`);
+});
+
 // ---------- architecture:savePlan ----------
 
 test('#371 architecture:savePlan writes the plan to <workspace>/architecture/<project>/city-plan.json', async (t) => {

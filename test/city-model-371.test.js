@@ -177,7 +177,8 @@ test('#371 a building carries its lines, churn, last change and measured complex
   const run = building(model, 'src/engine/run.js');
   assert.equal(run.district, 'engine');
   assert.equal(run.lines, 100);
-  assert.equal(run.churn, 3);
+  // created in commit 1, modified in 2 and 3: #356 does not count the creating commit
+  assert.equal(run.churn, 2);
   assert.equal(run.complexity, 15);
   assert.equal(run.worst, 12);
   assert.equal(run.functions, 2);
