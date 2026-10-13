@@ -22,8 +22,9 @@ function normaliseString(s, dirs) {
     .replace(/\b\d{8}-\d{6}-[0-9a-f]{6,}\b/g, '<run-id>');
 }
 
-// inside a step's output: timings, ids, the mock's random usage and the repository's commit vary
-const VOLATILE = /(_ms$|Ms$|_at$|^ts$|cost|Usd$|_usd$|^usage$|^tokens$|^context$|^commit$|^head$|^sha$|(^|_)id$|Id$)/;
+// inside a step's output: timings, ids, the mock's random usage and the repository's commit vary, and
+// so does `clean` (the run tests this checkout: whether it has uncommitted files when the suite runs)
+const VOLATILE = /(_ms$|Ms$|_at$|^ts$|cost|Usd$|_usd$|^usage$|^tokens$|^context$|^commit$|^clean$|^head$|^sha$|(^|_)id$|Id$)/;
 function normalise(value, dirs) {
   if (Array.isArray(value)) return value.map((v) => normalise(v, dirs));
   if (value && typeof value === 'object') {

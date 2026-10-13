@@ -12,6 +12,7 @@ const { execFileSync } = require('child_process');
 const releases = require('../src/releases');
 const roadmaps = require('../src/roadmap');
 const { WorkflowRun, loadWorkflow } = require('../src/engine/workflow');
+const machineActions = require('../src/engine/machine-actions');
 process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
 
 // No user git config (identity, hooks, aliases), as on CI.
@@ -274,7 +275,9 @@ test('shipGuard: only the owner\'s answer ships, and never a local base that mov
   const run = new WorkflowRun({ file: workflowFile(t, SHIP_WORKFLOW(GATE())), inputs: { repo_path: f.repo }, mock: true, runsDir: tmp(t, 'ship-runs-') });
   const step = { id: 'ship' };
   run.shipGuard(step); // a simulation: nothing to guard
+  // a real run from here on (#353: the run's machine adapter says whether it is simulated)
   run.mock = false;
+  run.machine = machineActions.real();
   // the run's worktree: detached at the local main
   const wt = path.join(f.dir, 'wt');
   git(f.repo, 'worktree', 'add', '-q', '--detach', wt, 'main');
