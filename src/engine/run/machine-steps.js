@@ -259,23 +259,7 @@ const methods = {
     };
     let output;
     if (step.files !== undefined) {
-      const cwd = this.ctx.worktree_dir;
-      const given = renderFileList(step.files, this.ctx);
-      const files = this.machine.existingFiles(cwd, given);
-      const missing = given.filter((f) => !files.includes(f));
-      const selection = { mode: 'affected', files, reasons: Object.fromEntries(files.map((f) => [f, `listed by ${step.id}`])), why: `the ${files.length} test file(s) the step lists${missing.length ? ` (not found: ${missing.join(', ')})` : ''}` };
-      // new tests are not on the base: no base check for a red or a green check (#355: a pinned test
-      // that fails is never waved through as failing on the base too)
-      output = await once({ files, selection, logName: `${step.id}-${st.visits}`, mockResult: step.expect === 'red' && mockResult === 'broken' ? 'fail' : mockResult, ...(step.expect ? { base: null } : {}) });
-      output.missing = missing;
-      if (step.expect === 'red') output = this.redCheckOutput(output, files, mockResult);
-      // a green check whose listed files are not all on disk proves nothing (#355): never a pass. The
-      // disk is read here even in a simulated run, whose machine lists every file as existing
-      const absent = step.expect === 'green' && cwd && fs.existsSync(cwd) ? given.filter((f) => !fs.existsSync(path.join(cwd, f))) : missing;
-      if (step.expect === 'green' && output.status === 'pass' && (absent.length || !files.length)) {
-        const why = absent.length ? `the listed test file(s) are not in the worktree: ${absent.join(', ')}` : 'no test file to check';
-        output = { ...output, status: 'fail', reason: why, message: `Green check: ${why}. Write and commit them, then list them in tests_added.` };
-      }
+      output = await this.listedFilesRound(step, st, once, mockResult);
     } else if (scope === 'affected') {
       let selection;
       try { selection = this.affectedSelection(); } catch (e) { selection = { mode: 'all', files: [], reasons: {}, changed: [], slow: [], why: `the affected tests could not be listed (${e.message}): the whole suite` }; }
@@ -306,6 +290,32 @@ const methods = {
     if (output.coverage?.path) this.emitEvent('file.saved', { step_id: step.id, path: path.join(this.runDir, output.coverage.path) });
     this.emitEvent('log', { level: output.status === 'pass' ? 'info' : 'warn', kind: 'suite', step_id: step.id, status: output.status, failures: output.failures.length, message: `${step.id}: ${output.message}` });
     return output;
+  },
+
+  // A suite step with `files:` runs only the files it lists; `expect: red|green` (#355) checks them.
+  async listedFilesRound(step, st, once, mockResult) {
+    const cwd = this.ctx.worktree_dir;
+    const given = renderFileList(step.files, this.ctx);
+    const files = this.machine.existingFiles(cwd, given);
+    const missing = given.filter((f) => !files.includes(f));
+    const selection = { mode: 'affected', files, reasons: Object.fromEntries(files.map((f) => [f, `listed by ${step.id}`])), why: `the ${files.length} test file(s) the step lists${missing.length ? ` (not found: ${missing.join(', ')})` : ''}` };
+    // new tests are not on the base: no base check for a red or a green check (#355: a pinned test
+    // that fails is never waved through as failing on the base too)
+    let output = await once({ files, selection, logName: `${step.id}-${st.visits}`, mockResult: step.expect === 'red' && mockResult === 'broken' ? 'fail' : mockResult, ...(step.expect ? { base: null } : {}) });
+    output.missing = missing;
+    if (step.expect === 'red') output = this.redCheckOutput(output, files, mockResult);
+    if (step.expect === 'green') output = this.greenCheckOutput(output, cwd, given, files, missing);
+    return output;
+  },
+
+  // A green check whose listed files are not all on disk proves nothing (#355): never a pass. The
+  // disk is read here even in a simulated run, whose machine lists every file as existing
+  greenCheckOutput(output, cwd, given, files, missing) {
+    if (output.status !== 'pass') return output;
+    const absent = cwd && fs.existsSync(cwd) ? given.filter((f) => !fs.existsSync(path.join(cwd, f))) : missing;
+    if (!absent.length && files.length) return output;
+    const why = absent.length ? `the listed test file(s) are not in the worktree: ${absent.join(', ')}` : 'no test file to check';
+    return { ...output, status: 'fail', reason: why, message: `Green check: ${why}. Write and commit them, then list them in tests_added.` };
   },
 
   // `scope: failed` (#324, release.yaml's e2e step): the first visit runs the whole suite; a later
