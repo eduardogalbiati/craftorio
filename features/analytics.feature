@@ -85,14 +85,14 @@ Feature: Analytics, what the work costs
   # A guard for a future light theme: today the main renderer has a single dark theme (only the 3D
   # view has a light one), so this baseline is byte-identical to the dark one. It starts differing
   # the day a light theme reaches Analytics, which is when the light-specific greens get checked.
-  @issue-275 @visual
+  @issue-275 @issue-362 @visual
   Scenario: The hours heatmap and its legend in the light theme
     Given the app is open in the light theme
     When I open the "Analytics" tab of Home
     And I open the "24/7" Analytics tab
     Then the hours heatmap looks like the baseline "analytics-hours-heatmap-light.png"
 
-  @issue-275 @visual
+  @issue-275 @issue-362 @visual
   Scenario: The hours heatmap and its legend in the dark theme
     Given the app is open in the dark theme
     When I open the "Analytics" tab of Home

@@ -18,7 +18,7 @@ Feature: Readable step names
     And the "roadmap progress" tooltip contains "acceptance_tests"
 
   # The demo run "-run00016" is in code review: its strip's last chip says what runs now
-  @issue-245
+  @issue-245 @issue-362
   Scenario: The run list's progress strip names the steps readably, the step ids in their tooltips
     Given the app is open
     When I open "Runs" in the sidebar
