@@ -224,6 +224,8 @@ function readRun(runsDir, runId) {
     // this one, and [{ run_id, step_id, index?, workflow, status, cost_usd }] of the runs this one started (null: none)
     parentRun: summary?.parent_run || started?.parent_run || null,
     childRuns: childRuns?.length ? childRuns : null,
+    // #368: a paused run's { step, next, at }: where Resume continues (null: not paused)
+    paused: summary?.status === 'paused' ? summary.paused || null : null,
     // what those child runs cost (#175, their own children included; not in costUsd), 0 without any
     childrenCostUsd: summary?.children_cost_usd ?? (childRuns || []).reduce((a, c) => a + (+c.cost_usd || 0), 0),
     recovery: fromEvents(path.join(dir, 'events.jsonl')).recovery,

@@ -35,6 +35,15 @@ const {
 // a run's title as the lists show it (run-meta setRunTitle, pushed on run:meta)
 const TITLE = shape({ runId: RUN_ID, title: STRING, customTitle: ANY }, ['runId']);
 
+// The run in progress in this process that `opts.runId` names, for `what` (run:pause, #368).
+function liveRunOf(ctx, opts, what) {
+  const runId = requireId(opts?.runId, 'runId');
+  const run = ctx.liveRun(runId);
+  if (run) return run;
+  if (ctx.runAlive(runId)) throw new Error(`Run ${runId} runs in another app window: ${what} it there.`);
+  throw clientError(`Run ${runId} is not in progress: there is nothing to ${what}.`);
+}
+
 module.exports = (ctx) => [
   {
     channel: 'run:start',
@@ -84,6 +93,23 @@ module.exports = (ctx) => [
       run?.stop();
       return !!run;
     },
+  },
+  // #368: pause the run after the current turn (WorkflowRun#pause): its turns and step command
+  // finish, nothing new starts, it ends `paused`; a run at a gate pauses at once, the gate unanswered
+  {
+    channel: 'run:pause',
+    method: 'pauseRun',
+    params: ['runId'],
+    schema: { params: args({ runId: RUN_ID }), result: BOOL },
+    fn: (opts) => liveRunOf(ctx, opts, 'pause').pause(),
+  },
+  // #368: take a pause back while the run waits for its turns: it goes on (false: nothing to cancel)
+  {
+    channel: 'run:cancel-pause',
+    method: 'cancelPauseRun',
+    params: ['runId'],
+    schema: { params: args({ runId: RUN_ID }), result: BOOL },
+    fn: (opts) => liveRunOf(ctx, opts, 'cancel the pause of').cancelPause(),
   },
   // each run with its pending gates: the source of truth of "waiting for you" in every view
   { channel: 'runs:active', method: 'listActiveRuns', schema: { result: listOf(OBJECT) }, fn: () => ctx.activeRuns() },

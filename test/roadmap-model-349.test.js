@@ -48,7 +48,8 @@ test('the model lists the roadmap states and the item states', () => {
   const m = load();
   const states = m.STATES || m.ROADMAP_STATES;
   assert.deepEqual([...states].sort(), ['done', 'paused', 'planned', 'running']);
-  assert.deepEqual([...m.ITEM_STATES].sort(), ['done', 'failed', 'planned', 'running', 'skipped']);
+  // #368: `paused`, an item whose run ended paused after its current turn
+  assert.deepEqual([...m.ITEM_STATES].sort(), ['done', 'failed', 'paused', 'planned', 'running', 'skipped']);
 });
 
 test('isFinished: done and skipped items are finished, the others are not', () => {

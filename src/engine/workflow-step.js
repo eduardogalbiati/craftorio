@@ -105,7 +105,7 @@ async function schedule(count, max, files, runOne, signal) {
   }
 }
 
-const overall = (statuses) => (statuses.every((s) => s === 'success') ? 'success' : statuses.includes('failed') ? 'failed' : 'cancelled');
+const overall = (statuses) => (statuses.every((s) => s === 'success') ? 'success' : statuses.includes('failed') ? 'failed' : statuses.includes('paused') ? 'paused' : 'cancelled');
 
 /**
  * Runs a `type: workflow` step. startChild({ file, inputs, parent, label, signal, previous }) →
@@ -115,7 +115,9 @@ const overall = (statuses) => (statuses.every((s) => s === 'success') ? 'success
  * parent's previous run started for this step (#175): startChild reuses a child that succeeded and
  * resumes one that did not, from where it stopped; an item with another label starts afresh.
  */
-async function runWorkflowStep({ step, scope, render, startChild, emit, signal, parent, previous = null }) {
+// paused() (#368): the parent pauses after the current turn: no item starts (status `paused`);
+// handles: the parent's Set of child handles in progress ({ pause, cancelPause }), paused with it.
+async function runWorkflowStep({ step, scope, render, startChild, emit, signal, parent, previous = null, paused = () => false, handles = null }) {
   const workflow = render(step.workflow, scope).trim();
   const foreach = step.foreach !== undefined;
   const items = foreach ? foreachItems(step, scope, render) : [null];
@@ -131,6 +133,11 @@ async function runWorkflowStep({ step, scope, render, startChild, emit, signal, 
     const label = foreach ? itemLabel(item, index) : null;
     const base = { index, ...(foreach ? { item } : {}), run_id: null, status: 'failed', error: null, outputs: {} };
     let cost = 0;
+    let handle = null;
+    if (paused()) {
+      results[index] = { ...base, status: 'paused', error: 'not started: the run was paused' };
+      return;
+    }
     try {
       if (depth > MAX_DEPTH) throw new Error(`child workflows nest at most ${MAX_DEPTH} deep.`);
       const itemScope = foreach ? { ...scope, item, index } : scope;
@@ -143,7 +150,10 @@ async function runWorkflowStep({ step, scope, render, startChild, emit, signal, 
       });
       base.run_id = child.runId;
       live.set(index, child.stop);
+      handle = child;
+      handles?.add(child);
       if (signal?.aborted) child.stop();
+      else if (paused()) child.pause?.();
       emit('workflow.child_started', {
         step_id: step.id, child_run_id: child.runId, workflow, ...(foreach ? { index, label } : {}),
         ...(child.resumedFrom ? { resumed_from: child.resumedFrom } : {}), ...(child.reused ? { reused: true } : {}),
@@ -157,6 +167,7 @@ async function runWorkflowStep({ step, scope, render, startChild, emit, signal, 
       if (signal?.aborted) base.status = 'cancelled';
     } finally {
       live.delete(index);
+      if (handle) handles?.delete(handle);
     }
     emit('workflow.child_finished', { step_id: step.id, child_run_id: base.run_id, workflow, status: base.status, error: base.error, cost_usd: cost, ...(foreach ? { index, label } : {}) });
     results[index] = base;

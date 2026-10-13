@@ -8,18 +8,20 @@
 // reason, when it is refused, is what the screen shows on the disabled control):
 //   start, resume, pause, stop   the roadmap's (with a stage, start is "Run this stage", #141)
 //   disable, enable              the stage's switch (#284)
+//   pauseStage                   the stage's "Pause after current turn" (#368): its runs and the roadmap
 //   edit, move                   the item's editor, drag and ↑/↓/Remove (only planned or failed items)
-//   retry, skip                  the item that failed or could not start (#196)
+//   retry, skip                  the item that failed or could not start (#196), never a paused one
 // Any load order: read only when a screen draws.
 /** An item's status, ITEM_STATES as a type (#346): the file stores planned, done or skipped.
- * @typedef {'done' | 'failed' | 'planned' | 'running' | 'skipped'} RoadmapItemStatus */
+ * @typedef {'done' | 'failed' | 'paused' | 'planned' | 'running' | 'skipped'} RoadmapItemStatus */
 (function (root) {
   // planned: edited, never started by itself · running · paused (a failure, the owner, a proposal) · done
   const STATES = ['done', 'paused', 'planned', 'running'];
-  const ITEM_STATES = ['done', 'failed', 'planned', 'running', 'skipped'];
+  // paused (#368): its run ended paused after its current turn; the roadmap's Resume continues it
+  const ITEM_STATES = ['done', 'failed', 'paused', 'planned', 'running', 'skipped'];
   // an item done (merged) or skipped (the owner, or every issue closed) counts as finished
   const FINISHED = new Set(['done', 'skipped']);
-  const ACTIONS = ['disable', 'edit', 'enable', 'move', 'pause', 'resume', 'retry', 'skip', 'start', 'stop'];
+  const ACTIONS = ['disable', 'edit', 'enable', 'move', 'pause', 'pauseStage', 'resume', 'retry', 'skip', 'start', 'stop'];
 
   const isFinished = (item) => !!item && FINISHED.has(item.status);
   const stagesOf = (roadmap) => (roadmap && Array.isArray(roadmap.stages) ? roadmap.stages : []);
@@ -79,17 +81,25 @@
     };
   }
 
-  function stageActions(stage) {
-    if (!stage) return { disable: no('No stage given.'), enable: no('No stage given.') };
+  function stageActions(r, stage) {
+    if (!stage) return { disable: no('No stage given.'), enable: no('No stage given.'), pauseStage: no('No stage given.') };
     const busy = itemsOf(stage).some((x) => x.status === 'running');
+    // #368: its runs pause after their current turn and the roadmap pauses (no new item starts)
+    const pauseStage = () => {
+      if (r?.state === 'paused' && r.pausedStage === stage.id && !busy) return no('This stage is already paused.');
+      if (busy || r?.state === 'running') return yes();
+      return no('Nothing of this stage is running and the roadmap is not running.');
+    };
     return {
       disable: stage.disabled ? no('This stage is already disabled.') : busy ? no('An item of this stage is running: wait for it, or stop its run') : yes(),
       enable: stage.disabled ? yes() : no('This stage is already enabled.'),
+      pauseStage: pauseStage(),
     };
   }
 
   const LOCKED = {
     done: 'This item is done: its run merged.',
+    paused: 'Its run is paused: Resume continues it where it stopped.',
     running: 'Its run is in progress.',
     skipped: 'This item was skipped.',
   };
@@ -101,7 +111,8 @@
     const locked = editable ? yes() : no(LOCKED[item.status] || 'This item cannot change now.');
     // #196: Retry / Skip on a failed run and on a refused start (the item that paused the roadmap, or an
     // error without a run, e.g. kept work of an ended run), never while its run is alive
-    const failed = item.status === 'failed' || (item.status !== 'running' && (r?.pausedBy === item.id || refusedStart(item)));
+    // a paused run (#368) is not a failure: only the roadmap's Resume continues it
+    const failed = item.status === 'failed' || (!['paused', 'running'].includes(item.status) && (r?.pausedBy === item.id || refusedStart(item)));
     const fix = failed ? yes() : no(item.status === 'running' ? 'Its run is in progress: stop the run first.' : LOCKED[item.status] || 'Nothing failed: the item has not failed.');
     return { edit: locked, move: locked, retry: fix, skip: fix };
   }
@@ -111,7 +122,7 @@
    * { allowed, reason } (the reason says why when it is refused). See the header for the actions.
    */
   function allowedActions(roadmap, stage = null, item = null) {
-    return { ...roadmapActions(roadmap, stage), ...stageActions(stage), ...itemActions(roadmap, item) };
+    return { ...roadmapActions(roadmap, stage), ...stageActions(roadmap, stage), ...itemActions(roadmap, item) };
   }
 
   const api = {

@@ -114,7 +114,7 @@
   }
 
   // The chip of a run's last visited group says how the run stands there.
-  const END_STATES = { success: 'done', failed: 'failed', cancelled: 'stopped', interrupted: 'stopped' };
+  const END_STATES = { success: 'done', failed: 'failed', cancelled: 'stopped', interrupted: 'stopped', paused: 'stopped' };
 
   /**
    * Trail steps + the workflow's groups → the chips of the runs list:
@@ -267,7 +267,7 @@
     return { times, runs: count };
   }
 
-  const STOPPED = new Set(['cancelled', 'interrupted']);
+  const STOPPED = new Set(['cancelled', 'interrupted', 'paused']);
   const toMs = (ts) => { const t = Date.parse(ts || ''); return Number.isFinite(t) ? t : null; };
 
   /**
@@ -329,6 +329,27 @@
     return { ...out, percent, leftMs, done: before.length };
   }
 
+  /**
+   * #368: the pause line of the run screen and the roadmap's stage, from a pause record: pausing
+   * ({ state: 'pausing', step, agents?, command? }, runs:active) or paused ({ state: 'paused', step,
+   * next, at }, a paused run's summary; a stage's has no step: { state: 'paused', at, runs }). '' for none.
+   */
+  function pauseLabel(pause) {
+    if (!pause) return '';
+    if (pause.state === 'pausing') {
+      const agents = pause.agents || [];
+      const what = pause.command ? `${pause.command} to finish`
+        : agents.length ? `${agents.join(' and ')} to finish ${agents.length > 1 ? 'their turns' : 'its turn'}` : 'the current step to finish';
+      return `Pausing: waiting for ${what}${pause.step ? ` (${pause.step})` : ''}`;
+    }
+    if (pause.state !== 'paused') return '';
+    const at = toMs(pause.at);
+    // in the owner's time zone (#273, time-zone.js; in node, the computer's)
+    const when = at == null ? '' : ` · ${new Date(at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short', timeZone: typeof TimeZone !== 'undefined' ? TimeZone.current() : undefined })}`;
+    if (!pause.step) return `Paused after the current turn${pause.runs ? ` (${pause.runs} run${pause.runs === 1 ? '' : 's'} paused)` : ''}${when}`;
+    return `Paused at ${pause.step}, next: ${pause.next || 'the next step'}'s turn${when}`;
+  }
+
   // The events that rebuild the view of a run picked up mid-way: the ones recorded on disk (from
   // workflow.started on), then the live ones that came in while the file was read and are not on
   // disk yet: those after the last recorded `seq` (the engine numbers a run's events). Events
@@ -349,6 +370,7 @@
     StepTrail,
     estimateProgress,
     hydrationEvents,
+    pauseLabel,
     pipeline,
     progressGroups,
     trailOf,

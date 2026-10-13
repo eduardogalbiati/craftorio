@@ -367,12 +367,13 @@ function openGate(runDir) {
 }
 
 // What the cleanup may do with a run folder: { exists, live, endedAt, status }. live: no summary.json and
-// either an owner process alive (this one or another app process, #112) or a human gate waiting.
+// either an owner process alive (this one or another app process, #112) or a human gate waiting; or a
+// run that ended paused (#368): Resume continues in its folder, so it stays as it is.
 function runState(runDir) {
   if (!fs.existsSync(runDir)) return { exists: false, live: false, endedAt: 0 };
   const summary = readJson(path.join(runDir, 'summary.json'));
   const endedAt = Date.parse(summary?.finished_at || '') || mtime(path.join(runDir, 'events.jsonl'));
-  if (summary) return { exists: true, live: false, endedAt, status: summary.status || null };
+  if (summary) return { exists: true, live: summary.status === 'paused', endedAt, status: summary.status || null };
   return { exists: true, live: ownerAlive(readOwner(runDir)) || openGate(runDir), endedAt, status: null };
 }
 

@@ -191,6 +191,8 @@ module.exports = {
   'roadmap:get': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   'roadmap:live': { setup: project, arg: ({ projectId }) => ({ projectId, on: false }), invalid: BAD_PROJECT },
   'roadmap:pause': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
+  // #368: a stage the roadmap does not have is refused
+  'roadmap:pause-stage': { setup: project, arg: ({ projectId }) => ({ projectId, stageId: 'stage-none' }), status: 400, invalid: BAD_PROJECT },
   'roadmap:save': { setup: project, arg: ({ projectId }) => ({ projectId, stages: [] }), invalid: { arg: { projectId: 'p', stages: 'none' } } },
   'roadmap:versions': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   'runs:active': { arg: null },
@@ -205,6 +207,9 @@ module.exports = {
     invalid: { arg: { file: 42 } },
     teardown: (client, _state, result) => stopRun(client, result),
   },
+  // #368: Cancel pause on a run that is not pausing answers false; Pause after current turn (the run ends paused)
+  'run:cancel-pause': onRun({ arg: ({ runId }) => ({ runId }), invalid: BAD_RUN }),
+  'run:pause': onRun({ arg: ({ runId }) => ({ runId }), invalid: BAD_RUN }),
   'run:stop': { setup: run, arg: ({ runId }) => ({ runId }), invalid: BAD_RUN },
   'settings:get': { arg: null },
   'settings:machineProfile': { arg: null },

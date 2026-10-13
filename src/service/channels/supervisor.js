@@ -13,7 +13,10 @@ const {
   createSupervisorChat,
 } = require('../../supervisor-chat');
 const { createWatches } = require('../../supervisor-watch');
-const { requireObject } = require('../common');
+const {
+  requireId,
+  requireObject,
+} = require('../common');
 const { resolveCommand } = require('../../engine/providers');
 const { supervisorTools } = require('../../supervisor-tools');
 const {
@@ -99,6 +102,8 @@ module.exports = (ctx) => {
       },
       fn: (arg) => {
         const { confirmGate: _owner, ...opts } = requireObject(arg, 'options');
+        // #368: only the owner resumes a paused run (runs:resume)
+        ctx.refusePausedResume(requireId(opts.runId, 'runId'));
         return ctx.resumeRun(opts);
       },
     },

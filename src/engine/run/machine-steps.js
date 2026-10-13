@@ -468,6 +468,8 @@ const methods = {
     try {
       return await runWorkflowStep({
         step, render, emit, startChild: this.startChild, signal: this.abort.signal, previous: this.previousChildren(step),
+        // #368: the children pause with this run; none starts once it pauses
+        paused: () => !!this.pausing, handles: this.childHandles,
         scope: { ...this.ctx, iteration: st.iteration },
         parent: { run_id: this.runId, workflow: this.wf.metadata?.name || path.basename(this.file), depth: this.parent?.depth || 0 },
       });

@@ -198,6 +198,8 @@ module.exports = (ctx) => {
         runId: r.runId, workflow: r.wf.metadata?.name || path.basename(r.file), file: path.basename(r.file), mock: r.mock,
         projectId: r.projectId, issues: r.issues, startedAt: r.startedAt ? new Date(r.startedAt).toISOString() : null,
         status: r.status, waiting: gates.length, gates, inputs: r.inputs, agent_names: r.agentNames(), display: r.displayNames(),
+        // #368: pausing after the current turn ({ state: 'pausing', step, agents?, command?, at }), else null
+        pause: r.pauseState(),
         ...ctx.liveTitle(r), pr: ctx.withPrState(r.pr, r.mock), passedGates: passedGates(r),
         // what happens with its result when it finishes, and the run whose chain started it (#134)
         chain: r.then || r.from ? { then: r.then, from: r.from, state: r.then ? 'waiting' : undefined } : null,
@@ -426,19 +428,24 @@ module.exports = (ctx) => {
     let started = null;
     if (old && old.status !== 'running') {
       try {
-        const o = ctx.resumeOptions({ runId: old.runId });
-        const at = o.steps.find((s) => s.id === o.suggested);
-        const fromStep = at?.blockedBy || o.suggested;
+        // a child paused with its parent (#368) continues where it paused
+        const o = old.status === 'paused' ? null : ctx.resumeOptions({ runId: old.runId });
+        const at = o?.steps.find((s) => s.id === o.suggested);
+        const fromStep = o ? at?.blockedBy || o.suggested : old.paused?.step;
         if (!fromStep) throw new Error('no step to resume from');
         child.notices = [{ level: 'info', message: `Child run of ${parentRun.runId} (${step}), resuming ${old.runId} from ${fromStep}.` }];
-        started = { ...(await ctx.resumeRun({ runId: old.runId, step: fromStep, mock: parentRun.mock }, child)), resumedFrom: old.runId };
+        started = { ...(await ctx.resumeRun({ runId: old.runId, step: o ? fromStep : undefined, mock: parentRun.mock }, child)), resumedFrom: old.runId };
       } catch (e) {
         if (signal?.aborted) throw e;
         parentRun.emitEvent('log', { level: 'warn', step_id: parent.step_id, message: `${parent.step_id}: child run ${old.runId} could not be resumed (${e.message}); starting it again.` });
       }
     }
     started ||= await startWorkflowRun({ file, inputs, mock: parentRun.mock, projectId: parentRun.projectId, ...child });
-    return { runId: started.runId, finished, stop: () => active.get(started.runId)?.stop(), ...(started.resumedFrom ? { resumedFrom: started.resumedFrom } : {}) };
+    return {
+      runId: started.runId, finished, stop: () => active.get(started.runId)?.stop(),
+      pause: () => active.get(started.runId)?.pause(), cancelPause: () => active.get(started.runId)?.cancelPause(),
+      ...(started.resumedFrom ? { resumedFrom: started.resumedFrom } : {}),
+    };
   }
 
   // Provider config of a run's workflow: the live one, or the workflow file named in its events.

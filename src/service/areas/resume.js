@@ -8,6 +8,7 @@ const path = require('path');
 const { loadWorkflow } = require('../../engine/workflow');
 const { displayName } = require('../../shared/display-name');
 const runs = require('../../runs');
+const sessionCache = require('../../shared/session-cache');
 const supervisor = require('../../supervisor');
 const { gitOut } = require('../common');
 
@@ -207,6 +208,10 @@ module.exports = (ctx) => {
   // images: pictures pasted into the instruction (#130), for the first resumed agent step
   // child: { parent, onFinished, notices, signal, onSlotWait } when a resumed parent resumes its child
   // run (#175, startChildRun); never from a channel. The run's own child runs go with `childRuns`.
+  // A paused run (#368) without a step continues where it paused: the step after its last finished
+  // turn (the gate it waited at asks again), every step it finished seeded as the run had it (its
+  // summary, the steps a resumed run carried included), the gates the owner answered before the pause
+  // kept: it is the same work going on, not a run sent back to a step.
   function resumeRun({ runId, step, instruction, mock, confirmGate = null, images = [] }, child = null) {
     const runDir = ctx.runFolder(runId);
     if (ctx.runIsLive(path.basename(runDir))) throw new Error('The run is still active: wait for it to end (or stop it) before resuming it.');
@@ -214,9 +219,10 @@ module.exports = (ctx) => {
     const spec = supervisor.resumeSpec(runDir, step);
     if (!spec.file) throw new Error('The run does not record its workflow file.');
     const wf = loadWorkflow(ctx.workflowPath(spec.file).file);
-    const fromStep = step || wf.steps[0].id;
+    const pausedAt = step ? null : pausedStep(runDir);
+    const fromStep = step || pausedAt?.step || wf.steps[0].id;
     if (!wf.steps.some((s) => s.id === fromStep)) throw new Error(`Cannot resume: step "${fromStep}" does not exist in the current version of the workflow.`);
-    const gate = supervisor.skippedGate(wf, fromStep, spec.steps);
+    const gate = pausedAt ? null : supervisor.skippedGate(wf, fromStep, spec.steps);
     let confirmedGate = null;
     if (gate) {
       if (confirmGate !== gate) throw new Error(`Cannot resume from "${fromStep}": it would go past the human gate "${gate}" on the previous run's decision. Resume from "${gate}" instead: it asks again.`);
@@ -224,13 +230,32 @@ module.exports = (ctx) => {
       if (!check.ok) throw new Error(`Cannot confirm ${gate} again: ${check.reason}. Resume from "${gate}" instead: it asks again.`);
       confirmedGate = { step: gate, commit: check.currentCommit };
     }
-    const steps = supervisor.withoutGateDecisions(wf, spec.steps);
+    const steps = pausedAt ? pausedAt.steps : supervisor.withoutGateDecisions(wf, spec.steps);
     if (confirmedGate) steps[gate] = spec.steps[gate];
     return ctx.startWorkflowRun({
       file: spec.file, inputs: spec.inputs, attachments: spec.attachments, mock: spec.mock || mock === true, projectId: spec.projectId, issues: spec.issues, agentOverrides: spec.agentOverrides,
-      resume: { runId: spec.runId, fromStep, steps, sessions: spec.sessions, cliTotals: spec.cliTotals, handoffs: spec.handoffs, instruction: instruction || null, images: Array.isArray(images) ? images : [], worktree: spec.worktree, confirmedGate, childRuns: spec.childRuns },
+      resume: { runId: spec.runId, fromStep, steps, sessions: spec.sessions, cliTotals: spec.cliTotals, handoffs: spec.handoffs, instruction: instruction || null, images: Array.isArray(images) ? images : [], worktree: spec.worktree, confirmedGate, childRuns: spec.childRuns, ...(pausedAt ? { paused: true } : {}) },
       ...(child ? { parent: child.parent, onFinished: child.onFinished, notices: child.notices, signal: child.signal, onSlotWait: child.onSlotWait } : {}),
     });
+  }
+
+  // A paused run's resume point (#368): { step, next, at, steps, turns } from its summary.json (steps:
+  // the ones it visited, { output, visits }; turns: what each agent's next turn re-reads, #320, its
+  // sessions taken as open again: a cold cache shows its cold_resume_usd), or null when the run did
+  // not end paused.
+  function pausedStep(runDir) {
+    let summary = null;
+    try { summary = JSON.parse(fs.readFileSync(path.join(runDir, 'summary.json'), 'utf8')); } catch { return null; }
+    if (summary?.status !== 'paused' || !summary.paused?.step) return null;
+    const steps = Object.fromEntries(Object.entries(summary.steps || {}).filter(([, v]) => v?.visits > 0).map(([id, v]) => [id, { output: v.output ?? null, visits: v.visits }]));
+    const turns = sessionCache.agentNextTurns((summary.sessions || []).map((s) => ({ ...s, closed_at: null })));
+    return { ...summary.paused, steps, turns };
+  }
+
+  // Whether automation may resume this run (#368): never a paused one, only the owner resumes it
+  // (the Oracle, the supervisor and the Night watch are refused).
+  function refusePausedResume(runId) {
+    if (pausedStep(ctx.runFolder(runId))) throw new Error(`Run ${path.basename(String(runId))} is paused: only the owner resumes a paused run.`);
   }
 
   // What the Resume from step… dialog shows: the workflow's steps in order (reached, where the run
@@ -269,19 +294,23 @@ module.exports = (ctx) => {
     // where the run stopped, else the nearest allowed step before it; never the first step by default
     const stoppedIdx = steps.findIndex((s) => s.id === stoppedAt);
     const before = stoppedIdx > 0 ? steps.slice(0, stoppedIdx).reverse().find((s) => allowed(s.id))?.id : null;
-    const suggested = [status === 'failed' ? failedStep : null, stoppedAt, failedStep, before].find(allowed) || steps.find((s) => !s.blockedBy)?.id || null;
+    const paused = status === 'paused' ? pausedStep(runDir) : null;
+    const suggested = [paused?.step, status === 'failed' ? failedStep : null, stoppedAt, failedStep, before].find(allowed) || steps.find((s) => !s.blockedBy)?.id || null;
     const wt = spec.worktree;
     return {
       runId: id, workflow: wf.metadata?.name || spec.file, file: spec.file, status, active: status === 'running', mock: spec.mock,
       steps, stoppedAt, failedStep, suggested, limit: status === 'running' ? null : limit,
       worktree: wt ? { dir: wt.dir, branch: wt.branch, exists: fs.existsSync(wt.dir) } : null,
       sessions: Object.keys(spec.sessions), handoffs: Object.keys(spec.handoffs),
+      // #368: a paused run's { step, next, at, turns } (Resume without a step continues there)
+      paused: paused ? { step: paused.step, next: paused.next || null, at: paused.at || null, turns: paused.turns } : null,
     };
   }
 
   return {
     keptWorkForIssues,
     keptWorkOfRun,
+    refusePausedResume,
     resumeOptions,
     resumeRun,
     runWorktreeCommits,

@@ -19,6 +19,7 @@ const roadmaps = require('../../roadmap');
 const runs = require('../../runs');
 const RoadmapModel = require('../../shared/roadmap-model');
 const RunProgress = require('../../shared/run-progress-model');
+const { clientError } = require('../common');
 
 module.exports = (ctx) => {
   // a call while one is going runs again right after it (a run that ends meanwhile is never missed)
@@ -68,6 +69,8 @@ module.exports = (ctx) => {
       ...roadmap,
       stages: roadmap.stages.map((s) => ({
         ...s,
+        // #368: the stage's pause line ({ state: 'pausing' | 'paused', ... }), on the stage it paused at
+        pause: stagePause(roadmap, s),
         items: s.items.map((x) => {
           const run = x.runId ? runView(x) : null;
           const waiting = x.status === 'running' && (byId.get(x.runId)?.waiting || run?.waiting);
@@ -232,14 +235,58 @@ module.exports = (ctx) => {
     if (!simulated && RoadmapModel.unfinishedItems({ stages }).some((x) => !x.mock)) {
       simulation.refuseReal('real runs from a roadmap');
     }
+    // #368: the paused runs first, where they paused (each takes its item's place, adoptResumed), then the new items
+    await resumePausedItems(id, stages);
     roadmaps.setState(ws.backlog, id, 'running', { simulated: !!simulated, stage: stage ? String(stage) : null });
     await dispatchRoadmaps();
     return ctx.withIssueRuns(backlog.readBacklog(ws.backlog, id));
   }
 
+  // The owner's Resume or Start continues every item of `stages` whose run ended paused (#368); a run
+  // that cannot resume keeps its item paused and the owner is told why.
+  async function resumePausedItems(projectId, stages) {
+    const paused = roadmaps.withStatus({ stages }, roadmapRun).stages.flatMap((s) => s.items).filter((x) => x.status === 'paused');
+    for (const item of paused) {
+      try {
+        await ctx.resumeRun({ runId: item.runId });
+      } catch (e) {
+        ctx.notify({ kind: 'run', event: 'failed', title: 'Paused run not resumed', body: `Run ${item.runId}: ${e.message}`.slice(0, 180), target: { view: 'roadmap', projectId } }, { projectId });
+      }
+    }
+  }
+
+  // #368: a stage's "Pause after current turn": the roadmap pauses at the stage (no new item starts)
+  // and each run of the stage in progress in this app pauses after its current turn (a run at a gate
+  // at once, the gate unanswered). A run another app window owns goes on: it is paused there.
+  function pauseStage({ projectId, stageId }) {
+    const id = path.basename(String(projectId));
+    const r = roadmaps.withStatus(roadmaps.readRoadmap(ctx.ws.backlog, id), roadmapRun);
+    const stage = r.stages.find((s) => s.id === stageId);
+    if (!stage) throw clientError('This stage is no longer in the roadmap.');
+    const may = RoadmapModel.allowedActions(r, stage).pauseStage;
+    if (!may.allowed) throw clientError(may.reason);
+    roadmaps.pauseStage(ctx.ws.backlog, id, stage.id);
+    for (const x of stage.items) {
+      const run = x.runId && ctx.active.get(x.runId);
+      if (run && ['pending', 'running'].includes(run.status)) run.pause();
+    }
+    return ctx.withIssueRuns(backlog.readBacklog(ctx.ws.backlog, id));
+  }
+
+  // A stage the roadmap paused at (#368), as the screen shows it: pausing while one of its runs still
+  // finishes its turn (that run's pauseState), else paused since `at`; null for any other stage.
+  function stagePause(r, stage) {
+    if (r.state !== 'paused' || r.pausedStage !== stage.id) return null;
+    const live = stage.items.map((x) => x.runId && ctx.active.get(x.runId)).find((run) => run?.pausing);
+    if (live) return live.pauseState();
+    const runs = stage.items.filter((x) => x.status === 'paused').length;
+    return { state: 'paused', at: r.pausedAt || null, runs };
+  }
+
   return {
     allowKeptWork,
     dispatchRoadmaps,
+    pauseStage,
     roadmapView,
     startRoadmap,
   };

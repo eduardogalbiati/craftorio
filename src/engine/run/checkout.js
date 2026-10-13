@@ -165,6 +165,7 @@ const methods = {
     return this.scratch;
   },
 
+  // Paused (#368): the folder stays as it is.
   // Success: remove the worktree and its local branch when merged, and the run's scratch workspace.
   // Otherwise (#202) the branch keeps the work (uncommitted changes as a WIP commit, a detached
   // worktree gets a branch) and the folder and the scratch go; a resume recreates the folder.
@@ -179,7 +180,12 @@ const methods = {
       this.baseWorktree = null;
     }
     try {
-      if (status === 'success') {
+      if (status === 'paused') {
+        // #368: a paused run keeps its folder as it is (uncommitted work included): Resume continues in it
+        Object.assign(wt, { removed: false, branch: await currentBranch(wt.dir) });
+        this.emitEvent('worktree.kept', { dir: wt.dir, branch: wt.branch, paused: true });
+        log('info', `worktree: kept ${wt.dir} (paused)${wt.branch ? ` on ${wt.branch}` : ''}`);
+      } else if (status === 'success') {
         const r = await removeWorktree({ repo: wt.repo, dir: wt.dir, base: wt.base, log, remote: wt.remote !== false });
         Object.assign(wt, { removed: r.removed, branch: r.branch, branchDeleted: r.branchDeleted });
         this.emitEvent('worktree.removed', { dir: wt.dir, removed: r.removed, branch: r.branch, branch_deleted: r.branchDeleted });

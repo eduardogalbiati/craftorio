@@ -221,11 +221,13 @@ module.exports = (ctx) => {
       return { text: `The roadmap of ${id} was saved (validated, ${a.params.stages.length} stage(s)).`, backup };
     },
     'run.resume': async (a, { mock }) => {
+      ctx.refusePausedResume(a.params.runId);
       const out = await ctx.resumeRun({ runId: a.params.runId, step: a.params.step, instruction: a.params.instruction || null, mock });
       return { text: `Resumed from ${a.params.step}: run ${out.runId}.` };
     },
     'run.retry': async (a, { mock }) => {
       const step = retryStep(a.params);
+      ctx.refusePausedResume(a.params.runId);
       const out = await ctx.resumeRun({ runId: a.params.runId, step, mock });
       return { text: `Retried from ${step}: run ${out.runId}.` };
     },

@@ -12,13 +12,14 @@
 const { checkAttachments, seedClaudeTotal } = require('../providers');
 
 const methods = {
-  // The previous run's step outputs and visits (never the resumed step's own), its instruction as
-  // the resumed step's supervisor note, and the images pasted into it (#130: checked here, copied
-  // at start, given to the first agent step).
+  // The previous run's step outputs and visits (never the resumed step's own, except for a paused
+  // run, #368: its steps are its finished visits, so the resumed step counts on from them), its
+  // instruction as the resumed step's supervisor note, and the images pasted into it (#130: checked
+  // here, copied at start, given to the first agent step).
   seedResume(resume) {
     if (!this.wf.steps.some((x) => x.id === resume.fromStep)) throw new Error(`Cannot resume: step "${resume.fromStep}" does not exist in this workflow.`);
     for (const [id, v] of Object.entries(resume.steps || {})) {
-      if (this.ctx.steps[id] && id !== resume.fromStep) Object.assign(this.ctx.steps[id], { output: v.output ?? null, outputs: v.output ? [v.output] : [], visits: v.visits || 1 });
+      if (this.ctx.steps[id] && (resume.paused || id !== resume.fromStep)) Object.assign(this.ctx.steps[id], { output: v.output ?? null, outputs: v.output ? [v.output] : [], visits: v.visits || 1 });
     }
     if (resume.instruction) this.ctx.steps[resume.fromStep].supervisorNote = resume.instruction;
     // images pasted into the instruction (#130): checked here, copied at start, given to the first agent step

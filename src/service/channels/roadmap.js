@@ -190,6 +190,15 @@ module.exports = (ctx) => {
         return current(projectId);
       },
     },
+    // #368: a stage's "Pause after current turn": its runs pause after their current turn and the
+    // roadmap pauses at the stage (areas/roadmap.js pauseStage); Resume (roadmap:start) continues them
+    {
+      channel: 'roadmap:pause-stage',
+      method: 'pauseRoadmapStage',
+      params: ['projectId', 'stageId'],
+      schema: { params: args({ projectId: PROJECT_ID, stageId: text(200) }, ['projectId', 'stageId']), result: BACKLOG },
+      fn: ({ projectId, stageId }) => ctx.pauseStage({ projectId, stageId: requireText(stageId, 'stage id', 200) }),
+    },
     // A roadmap paused by the budget cap (#206, areas/budget.js): raise (the cap for today or tonight
     // becomes what is spent plus the next stage) or resume (this roadmap ignores the cap until the
     // day or the night ends); both run it again

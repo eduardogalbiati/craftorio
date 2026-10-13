@@ -49,6 +49,8 @@ const NEVER_ALLOWED = [
   { id: 'delete-data', label: 'Delete data' },
   { id: 'paid-calls', label: 'Start paid calls outside the plan' },
   { id: 'push', label: 'Push' },
+  // #368: a run the owner paused waits for the owner
+  { id: 'resume-paused', label: 'Resume a paused run' },
 ];
 
 // The anomalies the watch detects (oracle.detected kind).

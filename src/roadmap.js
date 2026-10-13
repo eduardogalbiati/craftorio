@@ -131,7 +131,8 @@ function roadmapProblem(r) {
 function persisted(roadmap) {
   return {
     ...roadmap,
-    stages: normalizeStages(roadmap.stages || []).map((s) => ({
+    // a stage's `pause` (#368: its pause line) is the screen's too
+    stages: normalizeStages(roadmap.stages || []).map(({ pause: _p, ...s }) => ({
       ...s,
       // `waiting` and `run` (#194: its progress for the card) are the screen's, never stored
       items: (s.items || []).map(({ waiting: _w, run: _r, ...x }) => (isFinished(x) ? x : { ...x, status: 'planned', error: x.runId ? null : x.error || null })),
@@ -143,13 +144,15 @@ const runFailure = (runId, run) => `Run ${runId} ${run.status === 'success' ? 'f
   : `${run.status === 'interrupted' ? 'was interrupted' : run.status}${run.error ? `: ${String(run.error).slice(0, 200)}` : ''}`}`;
 
 // An item's status from its run: running (a live run, in this process or another one, `waiting` at
-// a gate), done (it merged), failed (it ended otherwise, or it could not start), else as stored.
+// a gate), paused (#368: its run paused after its current turn, never a failure), done (it merged),
+// failed (it ended otherwise, or it could not start), else as stored.
 function itemStatus(item, runOf) {
   if (isFinished(item)) return { status: item.status, error: item.error || null };
   if (!item.runId) return item.error ? { status: 'failed', error: item.error } : { status: 'planned', error: null };
   const run = runOf(item.runId);
   if (!run) return { status: 'failed', error: `Run ${item.runId} no longer exists.` };
   if (['pending', 'running'].includes(run.status)) return { status: 'running', error: null, ...(run.waiting ? { waiting: true } : {}) };
+  if (run.status === 'paused') return { status: 'paused', error: null };
   if (run.status === 'success' && run.merged) return { status: 'done', error: null };
   return { status: 'failed', error: runFailure(item.runId, run) };
 }
@@ -466,7 +469,7 @@ function setState(dir, projectId, state, { simulated, stage = null } = {}) {
       scope = { stage: s.id };
     }
     return {
-      ...r, state, scope, error: null, pausedBy: null, budget: null, ...(r.releaseHold ? { releaseHold: null } : {}), ...(simulated !== undefined ? { simulated: !!simulated } : {}), ...(state === 'planned' && r.live ? { live: false } : {}),
+      ...r, state, scope, error: null, pausedBy: null, budget: null, ...(r.pausedStage ? { pausedStage: null, pausedAt: null } : {}), ...(r.releaseHold ? { releaseHold: null } : {}), ...(simulated !== undefined ? { simulated: !!simulated } : {}), ...(state === 'planned' && r.live ? { live: false } : {}),
     };
   });
 }
@@ -578,6 +581,20 @@ function holdRelease(dir, projectId, stageId, status, message) {
 
 /** The roadmap paused with `message`, no item to blame (pure; a refill that failed, src/live-roadmap.js). */
 const pauseRoadmap = (r, message) => ({ ...r, state: 'paused', pausedBy: null, error: message });
+
+/**
+ * #368: the stage's "Pause after current turn": the roadmap pauses at that stage (`pausedStage`,
+ * `pausedAt`), no item to blame and no failure named; the service pauses the stage's runs after
+ * their current turn. Start / Resume (setState) clears it.
+ */
+function pauseStage(dir, projectId, stageId, { now = new Date() } = {}) {
+  return updateRoadmap(dir, projectId, (r) => {
+    const at = r.stages.findIndex((s) => s.id === stageId);
+    if (at < 0) throw new Error('This stage is no longer in the roadmap.');
+    const message = `${stageName(r, at)} paused after the current turn: Resume continues its runs where they stopped, then starts the next items.`;
+    return { ...pauseRoadmap(r, message), pausedStage: stageId, pausedAt: now.toISOString() };
+  });
+}
 /** The roadmap ended: done, the scope and the pause cleared (pure). */
 const finishRoadmap = (r) => ({ ...r, state: 'done', error: null, pausedBy: null, scope: null });
 
@@ -717,6 +734,7 @@ module.exports = {
   mergedPullRequest,
   normalizeItem,
   pauseRoadmap,
+  pauseStage,
   persisted,
   propose,
   readRoadmap,
