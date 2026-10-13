@@ -13,7 +13,10 @@ const fs = require('fs');
 const path = require('path');
 const { emptyUsage, imageInput, isQuotaError } = require('../providers');
 const { resolveSkill, skillPrompt } = require('../../skills');
-const { totalTokens } = require('../../usage');
+const {
+  priceOf,
+  totalTokens,
+} = require('../../usage');
 const capabilities = require('../capabilities');
 const evidence = require('../../evidence');
 const testPaths = require('../test-paths');
@@ -143,7 +146,7 @@ const methods = {
       has_note: this.handoffNotes.has(s.agent),
       fresh_after_idle_ms: s.freshAfterIdleMs ?? null,
       cache_lifetime_ms: lifetime,
-      cold_resume_usd: sessionCache.cacheWriteUsd(s.contextTokens, this.prices[s.model], lifetime),
+      cold_resume_usd: sessionCache.cacheWriteUsd(s.contextTokens, priceOf(s.model, this.prices), lifetime),
       // its last turn passed max_context: the next one starts a fresh session (agentTurn's rotation)
       ...(!s.closedAt && this.rotate.has(s.agent) && this.agentSessions.get(s.agent) === s.id ? { rotate_pending: true } : {}),
     };

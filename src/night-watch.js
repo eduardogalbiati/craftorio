@@ -333,8 +333,10 @@ function detectSelfHealing(runs = []) {
         default:
       }
     }
-    // a CLI that reports no cost (cost_usd null: Codex) has no cost to lose: only a recorded 0 counts
+    // a CLI that reports no cost (cost_usd null: Codex) has no cost to lose: only a recorded 0 counts;
+    // a turn the app priced itself (cost_source tokens / unknown, #369) is below the CLI's usage on purpose
     const gaps = mock ? [] : turns.filter((ev) => {
+      if (ev.cost_source) return false;
       const cost = Number(ev.cost_usd) || 0;
       return (ev.cost_usd != null && cost === 0 && tokensOf(ev.usage) > 0) || (usageUsd.get(`${ev.session_id} ${ev.turn}`) || 0) > cost + 1e-9;
     });

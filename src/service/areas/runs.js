@@ -126,7 +126,7 @@ module.exports = (ctx) => {
   const isRunning = () => active.size > 0 || reserved.size > 0;
   // The run in progress with this id; without an id, the only one in progress (older callers).
   const liveRun = (runId) => (runId ? active.get(String(runId)) : active.size === 1 ? [...active.values()][0] : null) || null;
-  const usageOf = (run) => [...run.sessions.values()].map((s) => ({ provider: s.provider, model: s.model, tokens: s.tokens, costUsd: s.costUsd }));
+  const usageOf = (run) => [...run.sessions.values()].map((s) => ({ provider: s.provider, model: s.model, tokens: s.tokens, costUsd: s.costUsd, cliOnlyUsd: s.cliOnlyUsd || 0 }));
 
   // ---- concurrent runs ------------------------------------------------------------------
   // Settings › Execution › Concurrent runs. Disabled: one run at a time, simulations included.

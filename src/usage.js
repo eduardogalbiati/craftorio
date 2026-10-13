@@ -246,14 +246,15 @@ function budgetBaseline({ runsDir, settings = {}, now = new Date(), local = null
 /**
  * The budget state with the usage of other runs in progress added (their sessions are not on disk
  * yet): what a new run's preflight checks against.
- * @param sessions [{ provider, model, tokens, costUsd }]
+ * @param sessions [{ provider, model, tokens, costUsd, cliOnlyUsd }] (cliOnlyUsd: the CLI's figure of
+ *   turns with no known price, #369, counted like the run's own)
  */
 function withPeerUsage(budget, sessions, prices = {}) {
   const out = Object.fromEntries(Object.entries(budget || {}).map(([id, b]) => [id, { ...b }]));
   for (const s of sessions || []) {
     const b = out[providerId(s.provider)];
     if (!b) continue;
-    b.usedUsd = (b.usedUsd || 0) + (sessionCost({ cost_usd: s.costUsd, model: s.model, tokens: s.tokens }, prices) || 0);
+    b.usedUsd = (b.usedUsd || 0) + (sessionCost({ cost_usd: s.costUsd + (s.cliOnlyUsd || 0), model: s.model, tokens: s.tokens }, prices) || 0);
     b.usedTokens = (b.usedTokens || 0) + totalTokens(s.tokens);
   }
   return out;

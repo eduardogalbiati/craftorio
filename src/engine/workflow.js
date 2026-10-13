@@ -111,7 +111,7 @@ class WorkflowRun extends EventEmitter {
   //   check of a `wait:` step (src/engine/probes.js). Default: the machine's (simulations use MOCK_PROBES).
   // actionsQuota: (owner) => Promise<string | null>, the message when that GitHub account's Actions quota is
   //   exhausted (src/actions-usage.js), passed to the probe as `quota`: pr_checks then reports `quota_exhausted`.
-  // peerSessions: () => [{ provider, model, tokens, costUsd }], the sessions of the other runs in progress (and of
+  // peerSessions: () => [{ provider, model, tokens, costUsd, cliOnlyUsd }], the sessions of the other runs in progress (and of
   //   those that finished after `budget` was computed): the per-turn budget check counts them too (concurrent runs).
   // idleWarnMs: an agent silent this long while a tool call is open gets an `agent_idle` warning (src/engine/idle.js).
   //   Default 5 minutes; 0 disables it.
