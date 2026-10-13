@@ -1,8 +1,15 @@
 # Proofs of concept
 
 This folder holds proofs of concept the owner asks a Claude session to explore before a feature is
-built (for example `run-3d.html`, the 3D view of a run, and `embed-run.js`, which embeds real runs
-into it). They are references, not part of the app:
+built. They are references, not part of the app:
+
+- `run-3d.html`, the 3D view of a run, and `embed-run.js`, which embeds real runs into it;
+- `project-city.html`, the repository as a 3D city (districts, buildings by lines and complexity,
+  quadrant colours), and `embed-city.js`, which builds the model into it from `git ls-files` and
+  `scripts/code-health.js --hotspots` (`node poc/embed-city.js`, with `NODE_PATH` pointing to a
+  `node_modules` when the checkout has none).
+
+Rules:
 
 - the packaged app leaves this folder out (`scripts/package.js`);
 - the generated docs leave it out (the code map and the code → tests map, `scripts/docs.js`);
