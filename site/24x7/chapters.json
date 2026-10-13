@@ -16,7 +16,8 @@
     },
     {
       "n": 3,
-      "status": "soon",
+      "status": "published",
+      "date": "2026-10-13",
       "pt": { "slug": "dormi-e-acordei-com-o-trabalho-pronto", "title": "Dormi e acordei com o trabalho pronto", "teaser": "A primeira noite inteira: um roadmap em etapas, nenhum prompt meu e 10 tarefas entregues, testadas e integradas de manhã." },
       "en": { "slug": "woke-up-to-finished-work", "title": "I went to sleep and woke up to the work done", "teaser": "The first full night: a roadmap in stages, not a single prompt from me, and 10 tasks delivered, tested and merged by morning." }
     },
