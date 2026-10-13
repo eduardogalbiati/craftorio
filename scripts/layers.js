@@ -33,7 +33,7 @@ const ENGINE_ROOT_UTILITIES = [
   'src/shell.js',
 ];
 
-// area -> the areas it may require (its own included) and what it holds. A file's area: AREA_OF.
+// area -> the areas it may require (its own included) and what it holds. A file's area: areaOf.
 const AREAS = {
   shared: { may: ['shared'], what: 'pure modules both sides use (dual-load: require and a renderer <script>)' },
   utility: { may: ['utility', 'shared'], what: 'the low-level root files of ENGINE_ROOT_UTILITIES' },
@@ -49,7 +49,7 @@ const DESKTOP = ['src/agents-window.js', 'src/main.js', 'src/preload.js'];
 const FOLDERS = { control: 'server', engine: 'engine', renderer: 'renderer', server: 'server', service: 'service', shared: 'shared' };
 
 // The area of a file (path from the repository root, with /), or null when no area holds it.
-function AREA_OF(file) {
+function areaOf(file) {
   const parts = file.split('/');
   if (parts[0] !== 'src' || parts.length < 2) return null;
   if (parts.length === 2) return DESKTOP.includes(file) ? 'desktop' : ENGINE_ROOT_UTILITIES.includes(file) ? 'utility' : 'root';
@@ -133,15 +133,15 @@ function requireGraph(root) {
 }
 
 function allowed(from, to) {
-  const area = AREA_OF(from);
-  const target = AREA_OF(to);
+  const area = areaOf(from);
+  const target = areaOf(to);
   return !!area && !!target && AREAS[area].may.includes(target);
 }
 
 // Why a require breaks the table, in words.
 function rule(from, to) {
-  const area = AREA_OF(from);
-  const target = AREA_OF(to);
+  const area = areaOf(from);
+  const target = areaOf(to);
   if (!area || !target) return `${!area ? from : to} is in no area: add its folder to AREAS of scripts/layers.js`;
   return `the ${area} area may require only ${AREAS[area].may.join(', ')}, not the ${target} area (scripts/layers.js; move the shared code down, or list the exception with its reason)`;
 }
@@ -205,7 +205,7 @@ function checkLayers({ root = ROOT, exceptions = EXCEPTIONS } = {}) {
 }
 
 module.exports = {
-  AREA_OF,
+  areaOf,
   AREAS,
   checkLayers,
   ENGINE_ROOT_UTILITIES,
