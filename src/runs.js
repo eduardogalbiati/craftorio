@@ -136,12 +136,8 @@ const firstText = (inputs) => {
   return typeof v === 'string' ? v : null;
 };
 
-// The issues recorded in workflow.started / summary.json: `issues`, or the single `issue` of runs
-// recorded before a run could implement several; null when there are none.
-function issuesOf(rec) {
-  if (Array.isArray(rec?.issues) && rec.issues.length) return rec.issues;
-  return rec?.issue ? [rec.issue] : null;
-}
+// The issues recorded in an upgraded workflow.started / summary.json; null when there are none.
+const issuesOf = (rec) => (rec?.issues?.length ? rec.issues : null);
 
 // A run without summary.json (#112): "running" while its owner (runs/<id>/owner.json, src/run-owner.js)
 // is alive, in this process or another one; "interrupted" only once the owner is gone.
@@ -154,8 +150,9 @@ function liveStatus(dir) {
 /** One run folder → RunInfo base (sessions as engine snapshots), or null if it is not a run. */
 function readRun(runsDir, runId) {
   const dir = path.join(runsDir, runId);
-  const started = firstEvent(path.join(dir, 'events.jsonl'));
+  const first = firstEvent(path.join(dir, 'events.jsonl'));
   // in the current shape (#350): an older summary is upgraded with its events; null: not finished
+  const started = first && upgradeRunRecord({ events: [first] }).events[0];
   const summary = readRunSummary(dir);
   if (!summary && started?.type !== 'workflow.started') return null;
 

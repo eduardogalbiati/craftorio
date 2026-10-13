@@ -19,25 +19,31 @@ const tokensOf = (u = {}) => Object.fromEntries(TOKEN_KINDS.map((k) => [k, Numbe
 const addTokens = (a, b) => Object.fromEntries(TOKEN_KINDS.map((k) => [k, a[k] + b[k]]));
 const sumTokens = (t) => TOKEN_KINDS.reduce((s, k) => s + t[k], 0);
 const countOf = (x) => (Array.isArray(x) ? x.length : Number(x) || 0);
+// the record in the current shape; a run still going has no summary: {}
+function upgradedOf(summary, events) {
+  const record = upgradeRunRecord({ summary, events });
+  return { summary: record.summary || {}, events: record.events };
+}
+// each turn's own cost (the record's upgrades corrected the older ones)
+const turnCost = (e) => Number(e.cost_usd) || 0;
+// the attempts stopped before their result: estimated, or their cost was not recorded
+const stoppedOf = (events) => events.filter((e) => e.type === 'session.attempt_stopped').map((e) => ({
+  agent: e.session?.agent || e.agent || null, sessionId: e.session_id, step: e.step_id || null, t: ms(e.ts), costUsd: turnCost(e), estimated: !!e.estimated, notRecorded: !!e.cost_not_recorded,
+}));
 
 /** The figures of one run: `summary` its summary.json (null: none yet), `events` its events.jsonl. */
 function runFigures({ summary: recorded = null, events: all = [], now = Date.now() }) {
-  const { summary: upgraded, events } = upgradeRunRecord({ summary: recorded, events: all });
-  const summary = upgraded || {};
+  const { summary, events } = upgradedOf(recorded, all);
   const started = events.find((e) => e.type === 'workflow.started') || {};
   const finished = events.findLast((e) => e.type === 'workflow.finished');
   const startedAt = summary.started_at || started.ts || null;
   const finishedAt = summary.finished_at || finished?.ts || null;
   const end = ms(finishedAt) || now;
   const issues = summary.issues || started.issues || [];
-  // each turn's own cost; the attempts stopped before their result are estimated (or their cost
-  // was not recorded)
+  // a run still going has no summary, so no sessions yet
   const sessions = summary.sessions || [];
   const costUsd = Number(summary.cost_usd ?? finished?.summary?.cost_usd) || 0;
-  const turnCost = (e) => Number(e.cost_usd) || 0;
-  const stopped = events.filter((e) => e.type === 'session.attempt_stopped').map((e) => ({
-    agent: e.session?.agent || e.agent || null, sessionId: e.session_id, step: e.step_id || null, t: ms(e.ts), costUsd: turnCost(e), estimated: !!e.estimated, notRecorded: !!e.cost_not_recorded,
-  }));
+  const stopped = stoppedOf(events);
 
   // agents: the sessions' totals, the turns' active and waiting time
   const sessionAgent = new Map(sessions.map((s) => [s.id, s.agent]));

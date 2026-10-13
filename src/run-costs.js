@@ -1,7 +1,9 @@
 // Run costs as read from a run's events (#233, #277), for callers that hold a run's events as
 // recorded. The corrections themselves are the run record's upgrades (src/shared/run-record.js,
 // #350): this reads their result back per event. The readers of recorded runs read the upgraded
-// record instead (src/run-record.js). Pure: the files are read by the callers and never rewritten.
+// record instead (src/run-record.js), so no module calls this any more: it stays as the seam of
+// the #233/#277 tests (test/run-costs*.test.js), which pin the upgrades' costs per event. Pure: the
+// files are read by the callers and never rewritten.
 
 const { upgradeRunRecord } = require('./shared/run-record');
 

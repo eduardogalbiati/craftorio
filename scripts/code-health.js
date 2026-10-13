@@ -113,7 +113,6 @@ const COMPLEXITY_EXCEPTIONS = {
   'src/roadmap-merge.js:mergeEdit': 65,
   'src/roadmap.js:cleanItem': 38,
   'src/run-analysis.js:runFigures': 105,
-  'src/run-costs.js:runCosts': 41,
   'src/runs.js:readRun': 46,
   'src/service/areas/live-roadmap.js:refill': 35,
   'src/service/areas/releases.js:settleRelease': 29,

@@ -18,6 +18,8 @@ const ms = (t) => Date.parse(t || '');
 const tokensOf = (u = {}) => Object.fromEntries(TOKEN_KINDS.map((k) => [k, Number(u?.[k]) || 0]));
 const addTokens = (a, b) => Object.fromEntries(TOKEN_KINDS.map((k) => [k, (a[k] || 0) + (b[k] || 0)]));
 const round = (n) => +Number(n || 0).toFixed(6);
+// a turn's own cost (the record's upgrades corrected the older ones)
+const costOf = (e) => Number(e.cost_usd) || 0;
 const emptyFigures = () => ({ costUsd: 0, turns: 0, tokens: tokensOf() });
 const addTo = (map, key, cost, tokens, turns = 1) => {
   const f = map[key] || (map[key] = emptyFigures());
@@ -43,7 +45,7 @@ function analyzeRun(runId, recorded, all = []) {
     if (e.type === 'workflow.started' && !started) started = e.ts;
     if (e.type === 'session.message_received') {
       const agent = agentOf.get(e.session_id) || e.agent || '?';
-      const cost = Number(e.cost_usd) || 0;
+      const cost = costOf(e);
       const tokens = tokensOf(e.usage);
       addTo(byAgent, agent, cost, tokens);
       addTo(byStep, e.step_id || '?', cost, tokens);

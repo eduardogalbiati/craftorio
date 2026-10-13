@@ -102,8 +102,9 @@
     },
     {
       // #233: an attempt stopped before its result was recorded only as an `attempt N/M failed` log
-      // line: it becomes a session.attempt_stopped whose cost was not recorded, on the session of
-      // its agent open at that time, after the line (the line stays)
+      // line: it becomes a session.attempt_stopped whose cost was not recorded, after the line (the
+      // line stays), on the agent's session opened last among those open at that time; every open
+      // session of that agent is flagged (the line does not say which one ran the attempt)
       name: '#233 stopped attempt',
       applies: (record) => !perTurn(record) && record.events.some(failedAttempt),
       upgrade({ summary, events }) {
@@ -121,10 +122,11 @@
           const failed = failedAttempt(e);
           if (!failed) continue;
           const t = Date.parse(e.ts || '');
-          const id = [...snaps].reverse().find(([, s]) => s.agent === failed.agent)?.[0]
-            ?? (summary?.sessions || []).findLast((s) => s.agent === failed.agent && openAt(s, t))?.id ?? null;
+          const open = [...snaps].filter(([, s]) => s.agent === failed.agent).map(([sid]) => sid);
+          const ids = open.length ? open : (summary?.sessions || []).filter((s) => s.agent === failed.agent && openAt(s, t)).map((s) => s.id);
+          const id = ids.at(-1) ?? null;
           const step = [...steps].reverse().find(([, agent]) => agent === failed.agent)?.[0] ?? null;
-          if (id != null) flagged.add(id);
+          ids.forEach((x) => flagged.add(x));
           out.push({
             ts: e.ts, type: 'session.attempt_stopped', session_id: id, step_id: step, agent: failed.agent, cost_usd: 0, cost_not_recorded: true,
             ...(snaps.has(id) ? { session: flag(snaps.get(id)) } : {}),

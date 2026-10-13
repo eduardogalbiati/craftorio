@@ -655,7 +655,7 @@ class WorkflowRun extends EventEmitter {
       // `ship:` (#260): the release the owner shipped ({ tag, base, commit, pushed, issues }; `simulated` in a simulation)
       ...(this.ctx.release ? { release: this.ctx.release } : {}),
       tokens, cost_usd: +sessions.reduce((a, s) => a + s.cost_usd, 0).toFixed(6), cost_accounting: 'per_turn',
-      // #277: a multi-result Claude turn records its highest total (src/run-costs.js reads older runs from their events)
+      // #277: a multi-result Claude turn records its highest total (src/shared/run-record.js upgrades older runs on read)
       turn_cost: 'max_result',
       context: this.contextSummary(),
       timing: this.timingSummary(),

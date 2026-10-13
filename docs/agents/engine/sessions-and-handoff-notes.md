@@ -63,7 +63,8 @@ Session modes (persistent, ephemeral, handoff), handoff notes, context and reque
   `session.attempt_stopped` event (`estimated: true`, or `cost_not_recorded` without a price), its
   cost in the session (`estimated_cost_usd`), the step's record, the run and `max_total_cost_usd`;
   the `attempt N/M failed` log line says what it cost. `workflow.started` and the summary carry
-  `cost_accounting: 'per_turn'`; runs without it are read corrected by `src/run-costs.js`.
+  `cost_accounting: 'per_turn'`; runs without it are read corrected by the run record's upgrades
+  (`src/shared/run-record.js`, #350).
 - Several `result` events in one Claude turn (#277): a turn that used sub-agents (the `Agent` tool)
   ends with 2 to 4 `result` events one ms apart, all with the same (or a growing) session
   `total_cost_usd`. `parseClaude` records the turn's cost once: the highest total seen in the turn
@@ -71,7 +72,8 @@ Session modes (persistent, ephemeral, handoff), handoff notes, context and reque
   sessions as above). Their usages overlap (the total does not grow with the later, smaller ones), so
   the main conversation's tokens (`usage_main`) are the largest of each field. The raw `result`
   events of such a turn are kept as `raw` items of `session.stream`. The summary carries
-  `turn_cost: 'max_result'`; a per-turn run without it is read by `src/run-costs.js` with each turn
+  `turn_cost: 'max_result'`; a per-turn run without it is read (upgrade `#277 multi-result turn` in
+  `src/shared/run-record.js`) with each turn
   at the highest cost among its `usage` stream items when that is more than its recorded `cost_usd`
   (the files are never rewritten).
 - A turn's tokens (#308): `session.message_received.usage` is everything the turn paid for, as its

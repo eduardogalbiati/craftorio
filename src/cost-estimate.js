@@ -70,7 +70,7 @@ function stepMinutes(run) {
 function pastRun(run, byNumber, prices) {
   const steps = {};
   let estimated = false;
-  for (const s of run.sessions || []) {
+  for (const s of run.sessions) {
     const id = String(s.step_id || 'run');
     const cost = s.cost_usd ? s.cost_usd : sessionCost(s, prices);
     if (cost == null) continue;
