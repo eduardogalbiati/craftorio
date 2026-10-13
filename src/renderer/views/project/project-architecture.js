@@ -189,14 +189,14 @@
 
   const range = () => ({ since: cur.since ? `${cur.since}T00:00:00Z` : null, until: cur.until ? `${cur.until}T23:59:59Z` : null, includeMass: cur.includeMass });
 
-  async function load() {
+  async function load(refresh = false) {
     const c = cur;
     if (!c) return;
     const seq = ++c.seq;
     Object.assign(c, { loading: true, loadError: null });
     render();
     const [facts, view, reports, estimate] = await Promise.allSettled([
-      api.architectureFacts(c.id, range()),
+      api.architectureFacts(c.id, { ...range(), refresh }),
       api.architectureReport(c.id, { reportId: c.reportId }),
       api.listArchitectureReports(c.id),
       api.architectureEstimate(c.id),
@@ -281,7 +281,7 @@
     const send = e.target.closest('[data-arch-send]');
     if (send) return () => sendToRefactor(+send.dataset.archSend);
     if (e.target.closest('[data-arch-analyze]')) return analyze;
-    if (e.target.closest('[data-arch-refresh]')) return load;
+    if (e.target.closest('[data-arch-refresh]')) return () => load(true);
     if (e.target.closest('[data-arch-exclude-edit]')) return () => { cur.editing = true; render(); };
     if (e.target.closest('[data-arch-exclude-cancel]')) return () => { cur.editing = false; render(); };
     if (e.target.closest('[data-arch-exclude-save]')) return saveExclude;

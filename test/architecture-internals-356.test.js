@@ -19,6 +19,14 @@ test('#356 globRe: a pattern without a slash matches at any depth, a directory p
   assert.equal(core.globRe('docs/**').test('docs/a/b.md'), true);
   assert.equal(core.globRe('docs/**').test('src/docs/a.md'), false);
   assert.equal(core.globRe('src/**/*.gen.ts').test('src/a/b/c.gen.ts'), true);
+  assert.equal(core.globRe('/build/').test('build/x.js'), true);
+  assert.equal(core.globRe('/build/').test('a/build/x.js'), false);
+  // repeated **/ collapse: no catastrophic backtracking on a long path that does not match
+  assert.equal(core.globRe(`${'**/'.repeat(40)}x`).test(`${'a/'.repeat(200)}y`), false);
+});
+
+test('#356 estimateCost leaves out a real report whose cost is unknown', () => {
+  assert.deepEqual(arch.estimateCost([{ date: '2026-10-01T00:00:00Z', costUsd: null }, { date: '2026-10-02T00:00:00Z', costUsd: 0.5 }]), { usd: 0.5, basis: 1 });
 });
 
 test('#356 .gitattributes: -linguist-generated on a later line keeps a file in', () => {
@@ -31,6 +39,23 @@ test('#356 .gitattributes: -linguist-generated on a later line keeps a file in',
 test('#356 parseLog resolves the {a => b} rename form into both paths', () => {
   const [c] = core.parseLog('\x01abc 2026-01-01T00:00:00Z\n\nR100\tsrc/{old => new}/a.js\n');
   assert.deepEqual(c.changes[0].paths, ['src/old/a.js', 'src/new/a.js']);
+});
+
+test('#356 two renames in one commit (git mv b a; git mv c b) keep each file\'s own history', () => {
+  const log = [
+    '\x01c3 2026-01-03T00:00:00Z\n\nR100\tb.js\ta.js\nR100\tc.js\tb.js',
+    '\x01c2 2026-01-02T00:00:00Z\n\nM\tc.js',
+    '\x01c1 2026-01-01T00:00:00Z\n\nA\tb.js\nA\tc.js',
+  ].join('\n');
+  const walked = core.walkHistory(core.parseLog(log), ['a.js', 'b.js']);
+  const { commits } = core.countCommits(walked, ['a.js', 'b.js']);
+  assert.deepEqual(commits, { 'a.js': 1, 'b.js': 2 });
+});
+
+test('#356 the tests group uses the engine\'s test patterns (a Java test class is excluded)', () => {
+  const model = core.buildModel({ files: [{ path: 'src/main/App.java', lines: 5 }, { path: 'src/main/AppTest.java', lines: 5 }], log: '' });
+  assert.deepEqual(model.files.map((f) => f.file), ['src/main/App.java']);
+  assert.equal(model.excluded.tests, 1);
 });
 
 test('#356 checkComplexity lists the three longest functions and flags an output where they all score 1', () => {

@@ -31,7 +31,7 @@ const {
 
 const DATE = nullable({ type: 'string', maxLength: 40, description: 'An ISO date, or null for no bound.' });
 const PATTERN = { type: 'string', maxLength: 200, description: 'A gitignore-style path pattern.' };
-const WINDOW = { since: DATE, until: DATE, includeMass: FLAG };
+const WINDOW = { since: DATE, until: DATE, includeMass: FLAG, refresh: FLAG };
 const FACTS = shape({ state: { type: 'string', enum: ['ok', 'not-git', 'no-commits'] }, model: nullable(OBJECT), gate: listOf(OBJECT), exclude: listOf(STRING) }, ['state', 'model']);
 const ESTIMATE = shape({ estimate: nullable(shape({ usd: { type: 'number' }, basis: INT }, ['usd', 'basis'])) }, ['estimate']);
 const REPORT_VIEW = shape({ report: nullable(OBJECT), findings: listOf(OBJECT), gone: listOf(OBJECT), runsSince: nullable(INT), previousId: nullable(STRING), running: nullable(OBJECT) }, ['report', 'findings', 'gone']);
@@ -48,7 +48,11 @@ module.exports = (ctx) => {
     if (!p || !p.folder) throw clientError(`Unknown project: ${id}`);
     return p;
   };
-  const readFacts = (p, opts = {}) => facts.readFacts(p.folder, { ...opts, exclude: arch.readSettings(root(), p.id).exclude });
+  const readFacts = (p, opts = {}) => {
+    // a bound that is not a date would be ignored silently by the window
+    for (const bound of ['since', 'until']) if (opts[bound] && !Number.isFinite(Date.parse(opts[bound]))) throw clientError(`Invalid ${bound}: ${opts[bound]} is not a date.`);
+    return facts.readFacts(p.folder, { ...opts, exclude: arch.readSettings(root(), p.id).exclude });
+  };
 
   // the project's real (not simulated) runs that finished after `date`
   const runsSince = (p, date) => runs.runsForProject(runs.listRuns(ctx.ws.runs), p)

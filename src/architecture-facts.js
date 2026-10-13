@@ -147,6 +147,8 @@ async function readFacts(folder, opts = {}) {
   const exclude = (opts.exclude || []).map(String).filter(Boolean);
   const includeMass = opts.includeMass !== false;
   const key = JSON.stringify([path.resolve(folder), commit, window, exclude, includeMass]);
+  // Refresh reads again what the commit does not fix (a tool installed since, the checkout moved)
+  if (opts.refresh) cache.delete(key);
   if (!cache.has(key)) {
     const [date, shallow, log, files, revs, attributes] = await Promise.all([
       git(folder, ['show', '-s', '--format=%cI', commit]),
@@ -161,6 +163,8 @@ async function readFacts(folder, opts = {}) {
       head: { commit, date: date.trim() }, branch: target.branch, shallow: String(shallow).trim() === 'true',
       window, files, log, ignoreRevs: ignoreRevs(revs), attributes, exclude, includeMass, complexity,
     });
+    // no file read (git grep failed or timed out): shown, never kept for the commit
+    if (!files.length) return { state: model.commits ? 'ok' : 'no-commits', model, gate };
     cache.set(key, { model, gate });
     if (cache.size > CACHE_SIZE) cache.delete(cache.keys().next().value);
   }

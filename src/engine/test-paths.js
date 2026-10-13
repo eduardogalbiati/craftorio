@@ -21,41 +21,8 @@ const worktree = require('./worktree');
 // while the machine is busy, seen under the full test suite on Windows) does not fail the turn.
 const git = (args, cwd) => worktree.git(args, cwd).catch(() => worktree.git(args, cwd));
 
-const TESTS_PATHS = [
-  // folders
-  '**/test/**', '**/tests/**', '**/__tests__/**', '**/spec/**', '**/testdata/**',
-  // JavaScript / TypeScript
-  '*.test.*', '*.spec.*',
-  // Python
-  'test_*.py', '*_test.py', 'conftest.py',
-  // Go
-  '*_test.go',
-  // Java / Kotlin (Maven and Gradle layout)
-  '**/src/test/**', '*Test.java', '*Tests.java', '*Test.kt', '*Tests.kt',
-  // C# / .NET
-  '*Tests.cs', '*Test.cs', '**/*.Tests/**', '**/*.Test/**',
-  // end-to-end / BDD (#143): feature files and their step definitions (e2e-test-writer-<language>)
-  '*.feature', '**/e2e/**', '**/cypress/**', '**/features/steps/**', '**/features/step_definitions/**',
-  '**/StepDefinitions/**', '**/*.E2E/**',
-];
-
-function globToRegExp(pattern) {
-  let p = String(pattern).trim().replace(/\\/g, '/').replace(/^\.\//, '');
-  const anywhere = !p.includes('/') || p.startsWith('**/');
-  if (p.startsWith('**/')) p = p.slice(3);
-  if (p.startsWith('/')) p = p.slice(1);
-  let re = '';
-  for (let i = 0; i < p.length; i++) {
-    const c = p[i];
-    if (c === '*' && p[i + 1] === '*') {
-      i++;
-      if (p[i + 1] === '/') { i++; re += '(?:.*/)?'; } else re += '.*';
-    } else if (c === '*') re += '[^/]*';
-    else if (c === '?') re += '[^/]';
-    else re += c.replace(/[.+^${}()|[\]\\]/g, '\\$&');
-  }
-  return new RegExp(`^${anywhere ? '(?:.*/)?' : ''}${re}$`);
-}
+// the default patterns and the glob rule are shared with the Architecture tab (#356)
+const { globToRegExp, TESTS_PATHS } = require('../shared/globs');
 
 // patterns → (file) => true when it is a test file
 function testMatcher(patterns = TESTS_PATHS) {

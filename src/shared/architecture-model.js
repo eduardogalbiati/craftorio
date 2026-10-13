@@ -16,21 +16,24 @@
   const PAIR_SHARE = 0.6;
   const PAIR_MIN_TOGETHER = 2;
 
-  // Excluded by default, per group; .gitattributes (linguist-generated / -vendored) and the
-  // project's own list come first
+  const MAX_PATTERN = 200;
+
+  // Excluded by default, per group (and `tests`: the engine's test files, TESTS_PATHS of
+  // src/shared/globs.js); .gitattributes (linguist-generated / -vendored) and the project's own
+  // list come first
   const DEFAULT_EXCLUDES = {
     build: ['build/', 'coverage/', 'dist/', 'out/', 'target/', '*.map', '*.min.css', '*.min.js'],
     lock: ['*.lock', 'composer.lock', 'go.sum', 'package-lock.json', 'pnpm-lock.yaml', 'yarn.lock'],
-    tests: ['__tests__/', 'spec/', 'test/', 'tests/', '*.spec.*', '*.test.*', '*_test.go', 'test_*.py'],
     vendored: ['node_modules/', 'third_party/', 'vendor/'],
   };
 
-  // Display languages by extension (line counts); the skill languages are src/engine/language-skills.js
+  // Display languages by extension (line counts, any file type: Markdown, CSS, YAML...); the
+  // languages a run's skills are picked for are src/engine/language-skills.js's, by skill suffix
   const LANGUAGES = {
     '.c': 'C', '.h': 'C', '.cc': 'C++', '.cpp': 'C++', '.hpp': 'C++', '.cs': 'C#', '.css': 'CSS', '.go': 'Go',
     '.html': 'HTML', '.java': 'Java', '.js': 'JavaScript', '.cjs': 'JavaScript', '.mjs': 'JavaScript', '.jsx': 'JavaScript',
     '.json': 'JSON', '.kt': 'Kotlin', '.kts': 'Kotlin', '.md': 'Markdown', '.php': 'PHP', '.ps1': 'PowerShell',
-    '.py': 'Python', '.rb': 'Ruby', '.rs': 'Rust', '.scss': 'SCSS', '.sh': 'Shell', '.sql': 'SQL', '.swift': 'Swift',
+    '.py': 'Python', '.pyi': 'Python', '.rb': 'Ruby', '.rs': 'Rust', '.scss': 'SCSS', '.sh': 'Shell', '.sql': 'SQL', '.swift': 'Swift',
     '.ts': 'TypeScript', '.tsx': 'TypeScript', '.mts': 'TypeScript', '.cts': 'TypeScript', '.vue': 'Vue', '.yaml': 'YAML', '.yml': 'YAML',
   };
 
@@ -71,32 +74,27 @@
     return commits;
   }
 
-  // Walks history backwards: `owner` maps a path at that point in history to today's file; the
-  // file a change counts for, or null (a creation, a deletion, a file gone since).
-  function applyChange({ status, paths }, owner) {
+  // Walks history backwards: `owner` maps a path at that point in history to today's file. A
+  // change's plan: the file it counts for (null: a creation, a deletion, a file gone since), the
+  // paths that stop mapping and the old path a rename maps to that file.
+  function planChange({ status, paths }, owner) {
     const now = paths[paths.length - 1];
     const target = owner.get(now);
-    if (status === 'A' || status === 'C') {
-      owner.delete(now);
-      return null;
-    }
-    if (!target || status === 'D') return null;
-    if (status === 'R') {
-      owner.delete(now);
-      owner.set(paths[0], target);
-    }
-    return target;
+    if (status === 'A' || status === 'C') return { target: null, drop: now, link: null };
+    if (!target || status === 'D') return { target: null, drop: null, link: null };
+    if (status === 'R') return { target, drop: now, link: [paths[0], target] };
+    return { target, drop: null, link: null };
   }
 
-  // The commits (newest first) with the files of `files` each one changed: [{ hash, date, ignored, targets }]
+  // The commits (newest first) with the files of `files` each one changed: [{ hash, date, ignored, targets }].
+  // A commit's changes are read against the mapping before it (`git mv b a; git mv c b` in one commit).
   function walkHistory(commits, files, ignoreRevs = []) {
     const owner = new Map(files.map((f) => [f, f]));
     return commits.map((commit) => {
-      const targets = new Set();
-      for (const change of commit.changes) {
-        const target = applyChange(change, owner);
-        if (target) targets.add(target);
-      }
+      const plans = commit.changes.map((change) => planChange(change, owner));
+      for (const p of plans) if (p.drop) owner.delete(p.drop);
+      for (const p of plans) if (p.link) owner.set(p.link[0], p.link[1]);
+      const targets = new Set(plans.map((p) => p.target).filter(Boolean));
       const ignored = ignoreRevs.some((rev) => rev && commit.hash.startsWith(rev));
       return { hash: commit.hash, date: commit.date, ignored, targets: [...targets].sort() };
     });
@@ -166,23 +164,18 @@
 
   // ---------- exclusions ----------
 
-  const escapeRe = (s) => s.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+  // the shared glob rule and test patterns (src/shared/globs.js; in the browser it loads after this file)
+  const globs = () => (typeof module === 'object' && module.exports ? require('./globs') : root.Globs);
 
-  // A gitignore-style pattern → a RegExp over a repository path ('/' separators)
+  // A gitignore-style pattern → a RegExp over a repository path: the shared glob rule, plus a
+  // trailing `/` for a folder (`dist/`: any dist folder's files). Repeated `**/` collapse and the
+  // pattern is cut at MAX_PATTERN (a repository's .gitattributes must not stall the service).
   function globRe(pattern) {
-    let p = String(pattern).trim().replace(/\\/g, '/');
-    const dir = p.endsWith('/');
-    if (dir) p = p.slice(0, -1);
-    const anchored = p.startsWith('/') || p.slice(0, -1).includes('/');
-    p = p.replace(/^\//, '');
-    const body = p.split(/(\*\*\/|\*\*|\*|\?)/).map((part) => {
-      if (part === '**/') return '(?:.*/)?';
-      if (part === '**') return '.*';
-      if (part === '*') return '[^/]*';
-      if (part === '?') return '[^/]';
-      return escapeRe(part);
-    }).join('');
-    return new RegExp(`^${anchored ? '' : '(?:.*/)?'}${body}${dir ? '/.*' : '(?:/.*)?'}$`);
+    let p = String(pattern).trim().replace(/\\/g, '/').slice(0, MAX_PATTERN).replace(/(\*\*\/)+/g, '**/');
+    const anchored = p.startsWith('/');
+    if (anchored) p = p.slice(1);
+    if (p.endsWith('/')) p = anchored || p.slice(0, -1).includes('/') ? `${p}**` : `**/${p}**`;
+    return globs().globToRegExp(anchored ? `/${p}` : p);
   }
 
   // .gitattributes → [{ re, generated, vendored }] (true, false or undefined), in file order
@@ -336,7 +329,8 @@
     const window = { since: (sources.window && sources.window.since) || null, until: (sources.window && sources.window.until) || null };
     const attributes = parseAttributes(sources.attributes);
     const projectRes = (sources.exclude || []).filter(Boolean).map(globRe);
-    const defaultRes = Object.entries(DEFAULT_EXCLUDES).map(([g, list]) => [g, list.map(globRe)]);
+    const groups = { ...DEFAULT_EXCLUDES, tests: globs().TESTS_PATHS };
+    const defaultRes = Object.keys(groups).sort().map((g) => [g, groups[g].map(globRe)]);
     const excluded = { build: 0, generated: 0, lock: 0, project: 0, tests: 0, vendored: 0 };
     const kept = [];
     for (const f of sources.files || []) {

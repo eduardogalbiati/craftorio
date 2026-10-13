@@ -100,7 +100,8 @@ function compareReports(previous, current) {
 
 /** { usd, basis }: the mean cost of the 5 newest real (not simulated) reports, or null. */
 function estimateCost(saved) {
-  const real = (saved || []).filter((r) => r && !r.simulated && Number.isFinite(Number(r.costUsd)))
+  // a real turn whose CLI reported no cost (costUsd null) is not a $0 analysis
+  const real = (saved || []).filter((r) => r && !r.simulated && r.costUsd != null && Number.isFinite(Number(r.costUsd)) && Number.isFinite(Date.parse(r.date)))
     .sort((a, b) => Date.parse(b.date) - Date.parse(a.date))
     .slice(0, ESTIMATE_BASIS);
   if (!real.length) return null;
