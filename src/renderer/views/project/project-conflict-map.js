@@ -107,10 +107,10 @@
     const runIds = r.map?.runIds || null;
     const lines = (map?.lines || []).filter((l) => l.file === r.file);
     const runs = runIds?.length
-      ? `<div class="pcm-ids">${runIds.map((id) => `<span class="badge mono" title="${esc(id)}">${esc(id)}</span>`).join('')}</div>`
+      ? `<div class="pcm-ids" data-testid="conflict-map-runs">${runIds.map((id) => `<span class="badge mono" title="${esc(id)}">${esc(id)}</span>`).join('')}</div>`
       : '<span class="muted">The saved conflict map has no run of this file (the count is the range\'s).</span>';
     const lineList = lines.length
-      ? `<ul class="pcm-lines">${lines.map((l) => `<li><span class="mono">${esc(`${l.file}:${l.line}`)}</span> <span class="mono muted pcm-line-text" title="${esc(l.text || '')}">${esc(l.text || '')}</span> <span class="badge">${plural((l.runIds || []).length, 'runs')}</span></li>`).join('')}</ul>`
+      ? `<ul class="pcm-lines">${lines.map((l) => `<li data-testid="conflict-map-line" aria-label="${esc(`${l.file}:${l.line}, ${plural((l.runIds || []).length, 'runs')}`)}"><span class="mono">${esc(`${l.file}:${l.line}`)}</span> <span class="mono muted pcm-line-text" title="${esc(l.text || '')}">${esc(l.text || '')}</span> <span class="badge">${plural((l.runIds || []).length, 'runs')}</span></li>`).join('')}</ul>`
       : '<span class="muted">No single line of this file was changed by several runs.</span>';
     return `<tr class="pcm-detail-row"><td colspan="5"><div class="pcm-detail small" data-testid="project-conflict-detail">
       <div><b>Runs behind the count</b> <span class="muted">(the saved conflict map${map?.runs ? `, last ${plural(map.runs, 'finished runs')}` : ''})</span>${runs}</div>
@@ -128,7 +128,7 @@
         const hot = isHot(map, r.map?.runIds);
         const over = r.perf && r.runs > 1 && r.share > limit;
         return `<tr class="pcm-row" data-testid="project-conflict-row" data-pcm-row="${esc(r.file)}" aria-expanded="${open}" tabindex="0" title="${esc(r.file)}: click to see the runs, the lines and the trend">
-          <td class="an-title"><span class="an-file mono">${esc(r.file)}</span>${hot ? ' <span class="badge warn" title="Changed by more than half of the newest runs: the Product Owner sends groups that touch it to different stages">hot</span>' : ''}${r.perf?.generated ? ' <span class="badge" title="A tool writes this file (a generated list)">generated</span>' : ''}</td>
+          <td class="an-title" data-testid="conflict-map-file" aria-label="${esc(`${r.file}, ${plural(r.runs, 'runs')}`)}"><span class="an-file mono">${esc(r.file)}</span>${hot ? ' <span class="badge warn" title="Changed by more than half of the newest runs: the Product Owner sends groups that touch it to different stages">hot</span>' : ''}${r.perf?.generated ? ' <span class="badge" title="A tool writes this file (a generated list)">generated</span>' : ''}</td>
           <td class="num">${r.runs}</td>
           <td class="num">${over ? `<span class="badge warn" title="More than ${pct(limit)} of the runs edit it">${pct(r.share)}</span>` : pct(r.share)}</td>
           <td>${r.conflicts ? `<span class="badge" title="Merge conflicts that named this file">${plural(r.conflicts, 'conflicts')}</span>` : '<span class="muted small">none</span>'}</td>
@@ -146,7 +146,7 @@
     const mapNote = cur.mapError ? `<p class="muted small">The saved conflict map could not be read: ${esc(cur.mapError)}</p>` : '';
     const rows = mergeRows(p.empty ? null : p, cur.map);
     if (!rows.length) {
-      return `${notGit}${mapNote}${p.project.isGit === false ? '' : '<div class="empty-state"><b>No runs with commits on this repository in this range</b><p class="muted">Runs count once their work is merged (a local merge or a merged PR/MR); simulated runs never count. Try a longer range.</p></div>'}`;
+      return `${notGit}${mapNote}${p.project.isGit === false ? '' : '<div class="empty-state" data-testid="conflict-map-empty"><b>No runs with commits on this repository in this range</b><p class="muted">Runs count once their work is merged (a local merge or a merged PR/MR); simulated runs never count. Try a longer range.</p></div>'}`;
     }
     const of = `${p.empty ? 'No run with commits in this range: the counts are the saved conflict map\'s' : `Of ${plural(p.runsWithCommits, 'runs with commits')}, ${esc(p.from)} to ${esc(p.to)}; each run counts once per file`}`;
     return `${notGit}${mapNote}<p class="muted small">${of}${cur.map?.runs ? ` · the conflict map covers the last ${plural(cur.map.runs, cur.map.source === 'git' ? 'commits of the branch' : 'finished runs')}` : ''}</p>
@@ -157,7 +157,7 @@
   function render() {
     if (!cur?.box) return;
     const over = cur.perf && !cur.loading && !cur.error ? (cur.perf.files || []).filter((f) => f.recommendation).length : 0;
-    cur.box.innerHTML = `${controlsHtml(over)}${bodyHtml()}`;
+    cur.box.innerHTML = `${controlsHtml(over)}<div data-testid="conflict-map">${bodyHtml()}</div>`;
   }
 
   async function load() {
