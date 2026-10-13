@@ -14,6 +14,9 @@ const path = require('path');
 const { ghPrState, glMrState, parseTarget } = require('./engine/probes');
 const { resolveCommand } = require('./engine/providers');
 const { execShim } = require('./shell');
+const github = require('./shared/platforms/github');
+const gitlab = require('./shared/platforms/gitlab');
+const { resolvePlatform } = require('./shared/platforms');
 
 // ---- the PR of a run ---------------------------------------------------------------------------
 // One step output → { number, url } or null.
@@ -65,7 +68,10 @@ function glMrDisplay(mr) {
   return { state: 'open', detail: `open, ${s.detail}` };
 }
 
-const GH_FIELDS = 'state,isDraft,mergeable,mergeStateStatus,statusCheckRollup';
+// gh pr view's --json fields (glab mr view returns its whole JSON)
+const REQUEST_FIELDS = 'state,isDraft,mergeable,mergeStateStatus,statusCheckRollup';
+// a request's JSON → { state, detail }, per platform
+const DISPLAY = { [github.id]: ghPrDisplay, [gitlab.id]: glMrDisplay };
 
 function readJson(cmd, args) {
   const { file } = resolveCommand(cmd) || {};
@@ -82,8 +88,9 @@ function readJson(cmd, args) {
 async function fetchPrState(pr, { reader = readJson } = {}) {
   const t = parseTarget(pr?.url);
   if (!t || t.kind !== 'pr') return { state: 'unknown', detail: 'not a pull/merge request URL' };
-  if (t.platform === 'gh') return ghPrDisplay(await reader('gh', ['pr', 'view', String(t.id), '--repo', `${t.host}/${t.repo}`, '--json', GH_FIELDS]));
-  return glMrDisplay(await reader('glab', ['mr', 'view', String(t.id), '--repo', `https://${t.host}/${t.repo}`, '--output', 'json']));
+  const p = resolvePlatform(t.platform);
+  const c = p.requestViewCommand(t, REQUEST_FIELDS);
+  return DISPLAY[p.id](await reader(c.cli, c.args));
 }
 
 // PR states by URL, with the time they were read. A merged or closed PR does not change any more;

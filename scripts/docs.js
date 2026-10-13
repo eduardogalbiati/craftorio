@@ -31,7 +31,8 @@
 //                            `<!-- generated:styles -->` / `<!-- generated:scripts -->` markers
 //                            (#152): adding a screen or a module adds files, never a hand-edited
 //                            line. Committed (the page loads it as is). Order, per list: the pure
-//                            modules of src/shared/ (scripts, `../shared/<file>`, #345), then the files
+//                            modules of src/shared/ (scripts, `../shared/<file>`, #345; its subfolders
+//                            first, each folder's index.js after its other files, #351), then the files
 //                            whose header has `load: early`, then app.js (scripts), then the other
 //                            files of src/renderer/, then those of src/renderer/views/<view>/, each
 //                            group sorted by path; `load: after <file> [<file>…]` in a header puts
@@ -159,6 +160,11 @@ function codeMap(root = ROOT) {
     '- **Code both the UI and the backend use** (pure: no DOM, no fs, no Electron): a dual-load module in',
     '  `src/shared/` (`module.exports` under Node, a `window` global as a `<script>`; copy',
     '  `src/shared/display-name.js`) and run `npm run docs`. The backend never requires `src/renderer/`.',
+    '- **Something GitHub and GitLab do differently** (a `gh`/`glab` command, its JSON, a term such as',
+    '  "PR #" / "MR !"): a member of both platform adapters, `src/shared/platforms/github.js` and `gitlab.js`',
+    '  (#351), called through the registry (`resolvePlatform` / `platformOrDefault` in `src/shared/platforms/index.js`,',
+    '  by either vocabulary: `github`/`gh`, `gitlab`/`gl`), never an `if (platform === ...)` branch: a',
+    '  platform literal outside the adapters fails `test/platform-literals-351.test.js`. See [capabilities.md](capabilities.md).',
     '- **Where a new module goes**: the area whose rules fit what it requires (`AREAS` in `scripts/layers.js`:',
     '  shared requires nothing of the app; the engine shared and the root utilities it lists; the root domain',
     '  modules the engine and shared; the service all of these; the desktop entry and the server the service',
@@ -398,10 +404,19 @@ function rendererAssets(root, ext) {
   }
   // the pure modules of src/shared/ first: they need nothing as they load, the renderer's files read them
   const sharedDir = path.join(root, SHARED);
-  const shared = ext === '.js' && fs.existsSync(sharedDir)
-    ? fs.readdirSync(sharedDir, { withFileTypes: true }).filter((e) => e.isFile() && e.name.endsWith(ext)).map((e) => `../shared/${e.name}`).sort()
-    : [];
+  const shared = ext === '.js' && fs.existsSync(sharedDir) ? sharedScripts(sharedDir, ext) : [];
   return [...shared, ...placed];
+}
+
+// The scripts of src/shared/: its subfolders first (e.g. platforms/, #351: the adapters, then the
+// folder's index.js, which reads them as it loads), then its own files, each sorted by name.
+function sharedScripts(sharedDir, ext) {
+  const entries = fs.readdirSync(sharedDir, { withFileTypes: true });
+  const files = (dir) => fs.readdirSync(dir, { withFileTypes: true }).filter((e) => e.isFile() && e.name.endsWith(ext)).map((e) => e.name).sort();
+  const indexLast = (names) => [...names.filter((n) => n !== `index${ext}`), ...names.filter((n) => n === `index${ext}`)];
+  const nested = entries.filter((e) => e.isDirectory()).map((e) => e.name).sort()
+    .flatMap((d) => indexLast(files(path.join(sharedDir, d))).map((n) => `../shared/${d}/${n}`));
+  return [...nested, ...files(sharedDir).map((n) => `../shared/${n}`)];
 }
 
 const ASSET_SECTIONS = {

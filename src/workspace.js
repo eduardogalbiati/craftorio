@@ -19,6 +19,7 @@ const { execFile, execFileSync } = require('child_process');
 const { resolveCommand } = require('./engine/providers');
 const { simulationOnly } = require('./engine/simulation');
 const TimeZone = require('./time-zone');
+const { DEFAULT_PLATFORM } = require('./shared/platforms');
 
 const DEFAULT_NAME = 'multiagent-workspace';
 const REG_KEY = 'HKCU\\Software\\MultiagentOrchestrator';
@@ -167,7 +168,7 @@ const DEFAULT_SETTINGS = {
   lastProject: null,
   lastWorkflow: null,
   // where the Backlog screen syncs issues from by default: github | gitlab | bitbucket
-  backlogPlatform: 'github',
+  backlogPlatform: DEFAULT_PLATFORM,
   // the most issues the Backlog sends as one run (one branch, one PR/MR)
   backlogMaxGroup: 5,
   // the Backlog suggests a Backlog Refresh run when the last one is older than this (#161); 0 = off

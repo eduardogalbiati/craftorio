@@ -4,16 +4,20 @@
 // - execCli: runs a platform CLI; fetchIssues / fetchIssue: the issues, normalized (taskProgress);
 // - issueCreateCommand, repoLabels: filing an issue (the Product Owner's Create, the epics);
 // - issueFields, itemIssues, withSyncedText: the read-only copies queue and roadmap items keep (#168).
+// The commands and JSON of each platform come from its adapter (src/shared/platforms/, #351):
+// adapterOf (the adapter of a syncing platform, or null), runCommand ({ cli, args } with an exec),
+// commandDisplay (a command as a preview shows it).
 
 const { resolveCommand } = require('./engine/providers');
 const { execShim } = require('./shell');
+const Platforms = require('./shared/platforms');
 
+// the backlog's platforms: the adapters, and Bitbucket (no sync yet)
 const PLATFORMS = {
-  github: { label: 'GitHub', cli: 'gh', host: 'github.com' },
-  gitlab: { label: 'GitLab', cli: 'glab', host: 'gitlab.com' },
+  ...Object.fromEntries(Platforms.PLATFORMS.map((p) => [p.id, { label: p.label, cli: p.cli, host: p.host }])),
   bitbucket: { label: 'Bitbucket', cli: null, host: 'bitbucket.org' },
 };
-const DEFAULT_PLATFORM = 'github';
+const { DEFAULT_PLATFORM } = Platforms;
 const MAX_ISSUES = 300;
 
 /**
@@ -38,39 +42,19 @@ function taskProgress(body) {
   return { done: boxes.filter((b) => /\[[xX]\]/.test(b)).length, total: boxes.length };
 }
 
-function normalizeGithub(raw) {
-  return raw.map((i) => ({
-    number: i.number,
-    title: i.title,
-    state: String(i.state).toLowerCase() === 'open' ? 'open' : 'closed',
-    labels: (i.labels || []).map((l) => ({ name: l.name, color: l.color ? `#${l.color}` : null })),
-    url: i.url,
-    author: i.author?.login || null,
-    assignees: (i.assignees || []).map((a) => a.login),
-    body: i.body || '',
-    tasks: taskProgress(i.body),
-    createdAt: i.createdAt,
-    updatedAt: i.updatedAt,
-  }));
+// The platform's issues (the adapter's parseIssue) with their task progress.
+function normalize(adapter, raw) {
+  return raw.map((i) => {
+    const issue = adapter.parseIssue(i);
+    return { ...issue, tasks: taskProgress(issue.body) };
+  });
 }
 
-function normalizeGitlab(raw) {
-  return raw.map((i) => ({
-    number: i.iid,
-    title: i.title,
-    state: i.state === 'opened' ? 'open' : 'closed',
-    labels: (i.labels || []).map((name) => ({ name: typeof name === 'string' ? name : name.name, color: name.color || null })),
-    url: i.web_url,
-    author: i.author?.username || null,
-    assignees: (i.assignees || []).map((a) => a.username),
-    body: i.description || '',
-    tasks: taskProgress(i.description),
-    createdAt: i.created_at,
-    updatedAt: i.updated_at,
-    // a group epic (GitLab paid tiers): read by src/epics.js, not kept in the cache
-    ...(i.epic?.iid ? { groupEpic: { iid: i.epic.iid, title: i.epic.title || null, groupId: i.epic.group_id ?? null, url: i.epic.web_url || i.epic.url || null } } : {}),
-  }));
-}
+// { cli, args } run with `exec`
+const runCommand = (exec, c) => exec(c.cli, c.args);
+
+// The adapter of a platform that syncs (src/shared/platforms/), or null.
+const adapterOf = (platform) => Platforms.findPlatform(platform);
 
 // Runs a platform CLI and resolves with its stdout.
 function execCli(cli, args) {
@@ -89,34 +73,29 @@ function execCli(cli, args) {
  * @param {{ platform: string, repo: string, exec?: (cli: string, args: string[]) => Promise<string> }} opts
  */
 async function fetchIssues({ platform, repo, exec = execCli }) {
-  const p = PLATFORMS[platform];
+  const p = adapterOf(platform);
+  if (!p && PLATFORMS[platform]) throw new Error(`${PLATFORMS[platform].label} sync is not available yet. Pick GitHub or GitLab.`);
   if (!p) throw new Error(`Unknown backlog platform: ${platform}`);
-  if (!p.cli) throw new Error(`${p.label} sync is not available yet. Pick GitHub or GitLab.`);
   const parsed = parseRepoUrl(repo);
   if (!parsed) throw new Error(`The project's repository is not a recognizable git URL: ${repo || '(none)'}`);
   const owner = platformOfHost(parsed.host);
-  if (owner && owner !== platform) throw new Error(`The project's repository is on ${parsed.host}; pick ${PLATFORMS[owner].label} to sync it.`);
+  if (owner && owner !== p.id) throw new Error(`The project's repository is on ${parsed.host}; pick ${PLATFORMS[owner].label} to sync it.`);
 
-  if (platform === 'github') {
-    const target = parsed.host === 'github.com' ? parsed.path : `${parsed.host}/${parsed.path}`;
-    const out = await exec('gh', ['issue', 'list', '--repo', target, '--state', 'all', '--limit', String(MAX_ISSUES),
-      '--json', 'number,title,state,labels,url,author,assignees,body,createdAt,updatedAt']);
-    return normalizeGithub(JSON.parse(out || '[]'));
-  }
-  const target = parsed.host === 'gitlab.com' ? parsed.path : `https://${parsed.host}/${parsed.path}`;
-  const out = await exec('glab', ['issue', 'list', '--repo', target, '--all', '--per-page', '100', '--output', 'json']);
-  return normalizeGitlab(JSON.parse(out || '[]'));
+  const out = await runCommand(exec, p.issueListCommand(p.cliTarget(parsed), MAX_ISSUES));
+  return normalize(p, JSON.parse(out || '[]'));
 }
 
 // The --repo value of gh/glab for a repository URL (same rules as fetchIssues).
 function cliTarget(platform, repo) {
-  const p = PLATFORMS[platform];
-  if (!p?.cli) throw new Error(`Saving to an issue needs GitHub or GitLab (the backlog's platform is ${p?.label || platform || 'not set'}).`);
+  const p = adapterOf(platform);
+  if (!p) throw new Error(`Saving to an issue needs GitHub or GitLab (the backlog's platform is ${PLATFORMS[platform]?.label || platform || 'not set'}).`);
   const parsed = parseRepoUrl(repo);
   if (!parsed) throw new Error(`The project's repository is not a recognizable git URL: ${repo || '(none)'}`);
-  if (platform === 'github') return parsed.host === 'github.com' ? parsed.path : `${parsed.host}/${parsed.path}`;
-  return parsed.host === 'gitlab.com' ? parsed.path : `https://${parsed.host}/${parsed.path}`;
+  return p.cliTarget(parsed);
 }
+
+// The command as shown in a preview: `text` (a document passed as an argument) replaced.
+const commandDisplay = ({ cli, args }, text) => `${cli} ${args.map((a) => (a === text ? '<document>' : /\s/.test(a) ? `"${a}"` : a)).join(' ')}`;
 
 /**
  * The CLI call that files a new issue (the Product Owner's Create, #117): gh reads the body from
@@ -126,36 +105,23 @@ function issueCreateCommand({ platform, repo, title, labels = [], file, text }) 
   const target = cliTarget(platform, repo);
   const t = String(title || '').trim();
   if (!t) throw new Error('The issue has no title.');
-  let cli;
-  let args;
-  if (platform === 'github') {
-    cli = 'gh';
-    args = ['issue', 'create', '--repo', target, '--title', t, '--body-file', file, ...labels.flatMap((l) => ['--label', l])];
-  } else {
-    cli = 'glab';
-    args = ['issue', 'create', '--repo', target, '--title', t, '--description', text, ...(labels.length ? ['--label', labels.join(',')] : []), '--yes'];
-  }
-  const shown = args.map((a) => (a === text ? '<document>' : /\s/.test(a) ? `"${a}"` : a));
-  return { cli, args, display: `${cli} ${shown.join(' ')}` };
+  const c = adapterOf(platform).issueCreateCommand({ target, title: t, labels, file, text });
+  return { ...c, display: commandDisplay(c, text) };
 }
 
 /** The repository's label names (GitHub), or null when unknown (GitLab creates missing labels itself). */
 async function repoLabels({ platform, repo, exec = execCli }) {
-  if (platform !== 'github') return null;
-  const out = await exec('gh', ['label', 'list', '--repo', cliTarget(platform, repo), '--limit', '500', '--json', 'name']);
-  return JSON.parse(out || '[]').map((l) => l.name);
+  const p = adapterOf(platform);
+  if (!p?.readsLabels) return null;
+  return p.parseLabelNames(await runCommand(exec, p.labelListCommand(cliTarget(platform, repo))));
 }
 
 /** One issue, read again from the platform (same shape as fetchIssues). */
 async function fetchIssue({ platform, repo, number, exec = execCli }) {
   const target = cliTarget(platform, repo);
-  const n = String(Number(number));
-  if (platform === 'github') {
-    const out = await exec('gh', ['issue', 'view', n, '--repo', target, '--json', 'number,title,state,labels,url,author,assignees,body,createdAt,updatedAt']);
-    return normalizeGithub([JSON.parse(out)])[0];
-  }
-  const out = await exec('glab', ['issue', 'view', n, '--repo', target, '--output', 'json']);
-  return normalizeGitlab([JSON.parse(out)])[0];
+  const p = adapterOf(platform);
+  const out = await runCommand(exec, p.issueViewCommand(target, String(Number(number))));
+  return normalize(p, [JSON.parse(out)])[0];
 }
 
 // An item's copy of an issue (#168: read-only, refreshed by each sync and right before its run starts)
@@ -173,7 +139,9 @@ function withSyncedText(copy, synced) {
 }
 
 module.exports = {
+  adapterOf,
   cliTarget,
+  commandDisplay,
   DEFAULT_PLATFORM,
   execCli,
   fetchIssue,
@@ -186,6 +154,7 @@ module.exports = {
   platformOfHost,
   PLATFORMS,
   repoLabels,
+  runCommand,
   taskProgress,
   withSyncedText,
 };

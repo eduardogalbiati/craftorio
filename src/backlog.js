@@ -33,7 +33,9 @@ const {
   DEFAULT_PLATFORM,
   MAX_ISSUES,
   PLATFORMS,
+  adapterOf,
   cliTarget,
+  commandDisplay,
   execCli,
   fetchIssue,
   fetchIssues,
@@ -43,6 +45,7 @@ const {
   parseRepoUrl,
   platformOfHost,
   repoLabels,
+  runCommand,
   taskProgress,
   withSyncedText,
 } = require('./issues');
@@ -88,31 +91,20 @@ function referencedIssues({ title = '', body = '', closing = [] }, issuesUrl) {
  */
 async function fetchOpenPullRequests({ platform, repo, exec = execCli }) {
   const parsed = parseRepoUrl(repo);
-  if (!parsed || !PLATFORMS[platform]?.cli) return [];
-  if (platform === 'github') {
-    const target = parsed.host === 'github.com' ? parsed.path : `${parsed.host}/${parsed.path}`;
-    const args = (fields) => ['pr', 'list', '--repo', target, '--state', 'open', '--limit', String(MAX_ISSUES), '--json', fields];
-    const fields = 'number,title,url,isDraft,body';
-    let out;
-    try {
-      out = await exec('gh', args(`${fields},closingIssuesReferences`));
-    } catch (e) {
-      // older gh versions do not know closingIssuesReferences: the text references still work
-      if (!/closingIssuesReferences/.test(e.message)) throw e;
-      out = await exec('gh', args(fields));
-    }
-    const issuesUrl = `https://${parsed.host}/${parsed.path}/issues/`;
-    return JSON.parse(out || '[]').map((p) => ({
-      number: p.number, title: p.title, url: p.url, draft: !!p.isDraft,
-      issues: referencedIssues({ title: p.title, body: p.body, closing: (p.closingIssuesReferences || []).map((i) => i.number) }, issuesUrl),
-    }));
+  const p = adapterOf(platform);
+  if (!parsed || !p) return [];
+  const target = p.cliTarget(parsed);
+  let out;
+  try {
+    out = await runCommand(exec, p.requestListCommand(target, MAX_ISSUES));
+  } catch (e) {
+    // older CLI versions do not know the closing references (gh's closingIssuesReferences): the text references still work
+    if (!p.olderCli(e.message)) throw e;
+    out = await runCommand(exec, p.requestListCommand(target, MAX_ISSUES, { closing: false }));
   }
-  const target = parsed.host === 'gitlab.com' ? parsed.path : `https://${parsed.host}/${parsed.path}`;
-  const out = await exec('glab', ['mr', 'list', '--repo', target, '--per-page', '100', '--output', 'json']);
-  const issuesUrl = `https://${parsed.host}/${parsed.path}/-/issues/`;
-  return JSON.parse(out || '[]').map((m) => ({
-    number: m.iid, title: m.title, url: m.web_url, draft: !!(m.draft || m.work_in_progress),
-    issues: referencedIssues({ title: m.title, body: m.description }, issuesUrl),
+  const issuesUrl = p.issuesUrl(parsed);
+  return p.parseRequests(out).map(({ number, title, url, draft, body, closing }) => ({
+    number, title, url, draft, issues: referencedIssues({ title, body, closing }, issuesUrl),
   }));
 }
 
@@ -475,27 +467,15 @@ function issueSaveBody({ mode, document, original = '' }) {
 function issueSaveCommand({ platform, repo, number, mode, file, text }) {
   if (!SAVE_MODES.includes(mode)) throw new Error(`Unknown save mode: ${mode} (replace or comment).`);
   const target = cliTarget(platform, repo);
-  const n = String(Number(number));
-  let cli;
-  let args;
-  if (platform === 'github') {
-    cli = 'gh';
-    args = ['issue', mode === 'replace' ? 'edit' : 'comment', n, '--repo', target, '--body-file', file];
-  } else {
-    cli = 'glab';
-    args = mode === 'replace' ? ['issue', 'update', n, '--repo', target, '--description', text] : ['issue', 'note', n, '--repo', target, '--message', text];
-  }
-  const shown = args.map((a) => (a === text ? '<document>' : /\s/.test(a) ? `"${a}"` : a));
-  return { cli, args, display: `${cli} ${shown.join(' ')}` };
+  const c = adapterOf(platform).issueSaveCommand({ target, n: String(Number(number)), mode, file, text });
+  return { ...c, display: commandDisplay(c, text) };
 }
 
 /** The CLI call that closes issue `number` (a parent split into child issues, #124): { cli, args, display }. */
 function issueCloseCommand({ platform, repo, number }) {
   const target = cliTarget(platform, repo);
-  const n = String(Number(number));
-  const cli = platform === 'github' ? 'gh' : 'glab';
-  const args = platform === 'github' ? ['issue', 'close', n, '--repo', target, '--reason', 'not planned'] : ['issue', 'close', n, '--repo', target];
-  return { cli, args, display: `${cli} ${args.map((a) => (/\s/.test(a) ? `"${a}"` : a)).join(' ')}` };
+  const c = adapterOf(platform).issueCloseCommand(target, String(Number(number)));
+  return { ...c, display: commandDisplay(c) };
 }
 
 /**
@@ -538,21 +518,21 @@ function patchCachedIssue(dir, projectId, number, fn) {
 /** The CLI call that adds (`add`) or removes the `archived` label of issue `number`. */
 function archivedLabelCommand({ platform, repo, number, add }) {
   const target = cliTarget(platform, repo);
-  const n = String(Number(number));
-  if (platform === 'github') return { cli: 'gh', args: ['issue', 'edit', n, '--repo', target, add ? '--add-label' : '--remove-label', ARCHIVED_LABEL] };
-  return { cli: 'glab', args: ['issue', 'update', n, '--repo', target, add ? '--label' : '--unlabel', ARCHIVED_LABEL] };
+  return adapterOf(platform).issueLabelCommand({ target, n: String(Number(number)), label: ARCHIVED_LABEL, add });
 }
 
 /** The CLI call that reopens issue `number`. */
 function issueReopenCommand({ platform, repo, number }) {
-  return { cli: platform === 'github' ? 'gh' : 'glab', args: ['issue', 'reopen', String(Number(number)), '--repo', cliTarget(platform, repo)] };
+  const target = cliTarget(platform, repo);
+  return adapterOf(platform).issueReopenCommand(target, String(Number(number)));
 }
 
 // Creates the `archived` label (neutral grey) when the GitHub repository lacks it; GitLab creates it itself.
 async function ensureArchivedLabel({ platform, repo, exec }) {
   const labels = await repoLabels({ platform, repo, exec });
   if (!labels || labels.some((l) => sameLabel(l, ARCHIVED_LABEL))) return;
-  await exec('gh', ['label', 'create', ARCHIVED_LABEL, '--repo', cliTarget(platform, repo), '--color', ARCHIVED_COLOR, '--description', 'Archived from the Backlog: closed as not planned']);
+  const target = cliTarget(platform, repo);
+  await runCommand(exec, adapterOf(platform).labelCreateCommand({ target, name: ARCHIVED_LABEL, color: ARCHIVED_COLOR, description: 'Archived from the Backlog: closed as not planned' }));
 }
 
 // Runs `steps` in order; when one fails, runs the undo of the steps already done (best effort) and rethrows.

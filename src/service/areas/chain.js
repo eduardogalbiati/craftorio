@@ -13,6 +13,7 @@ const path = require('path');
 const { loadWorkflow } = require('../../engine/workflow');
 const simulation = require('../../engine/simulation');
 const chain = require('../../shared/chain-model');
+const { platformOrDefault } = require('../../shared/platforms');
 const agents = require('../../agents');
 const backlog = require('../../backlog');
 const live = require('../../live-roadmap');
@@ -131,7 +132,7 @@ module.exports = (ctx) => {
       return null;
     }
     const project = projects.readProject(ws.projects, prev.projectId);
-    const platform = prev.inputs.git_platform === 'gl' ? 'gitlab' : 'github';
+    const platform = platformOrDefault(prev.inputs.git_platform).id;
     await backlog.syncBacklog({ dir: ws.backlog, project, platform });
     for (const batch of batches) {
       await ctx.assignWorkflow({ projectId: project.id, numbers: batch.numbers, workflow: then.workflow, inputs: then.inputs || {}, mock: false, group: batch.group });

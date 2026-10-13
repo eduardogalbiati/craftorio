@@ -15,6 +15,7 @@ const { gitOut } = require('../common');
 const epics = require('../../epics');
 const roadmaps = require('../../roadmap');
 const { normalizeThen } = require('../../shared/chain-model');
+const { platformOrDefault, requestRef } = require('../../shared/platforms');
 const runs = require('../../runs');
 
 module.exports = (ctx) => {
@@ -76,7 +77,7 @@ module.exports = (ctx) => {
     if (!refreshes.isRefreshRun({ file: run.file }) || !run.projectId || run.mock) return;
     const { ws } = ctx;
     const project = projects.readProject(ws.projects, run.projectId);
-    const platform = backlog.readBacklog(ws.backlog, project.id)?.platform || (run.inputs?.git_platform === 'gl' ? 'gitlab' : 'github');
+    const platform = backlog.readBacklog(ws.backlog, project.id)?.platform || platformOrDefault(run.inputs?.git_platform).id;
     await backlog.syncBacklog({ dir: ws.backlog, project, platform });
   }
 
@@ -128,7 +129,7 @@ module.exports = (ctx) => {
     if (!plan || !run.projectId || run.mock) return;
     const project = projects.readProject(ws.projects, run.projectId);
     if (!project?.autoEpic) return;
-    const platform = run.inputs.git_platform === 'gl' ? 'gitlab' : 'github';
+    const platform = platformOrDefault(run.inputs.git_platform).id;
     const synced = await backlog.syncBacklog({ dir: ws.backlog, project, platform });
     const list = synced?.epics || backlog.readBacklog(ws.backlog, project.id)?.epics || [];
     if (!list.some((e) => e.id === plan.epic)) return;
@@ -175,7 +176,7 @@ module.exports = (ctx) => {
             if (prs.length) {
               for (const n of new Set(prs.map((p) => p.issue ?? item.number))) {
                 const mine = prs.filter((p) => (p.issue ?? item.number) === n);
-                backlog.skipQueued(ws.backlog, projectId, n, `open ${mine.map((p) => `${platform === 'gitlab' ? 'MR !' : 'PR #'}${p.number}`).join(', ')} since it was queued`);
+                backlog.skipQueued(ws.backlog, projectId, n, `open ${mine.map((p) => requestRef(platform, p.number)).join(', ')} since it was queued`);
               }
               continue;
             }

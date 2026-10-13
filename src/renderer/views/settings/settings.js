@@ -80,7 +80,7 @@ async function renderSettings() {
   document.querySelectorAll('[data-setting]').forEach((el) => (el.checked = !!state.settings[el.dataset.setting]));
   const platform = $('#set-backlog-platform');
   platform.innerHTML = Object.entries(window.BACKLOG_PLATFORMS || {}).map(([id, p]) => `<option value="${id}">${esc(p.label)}${p.soon ? ' (sync not available yet)' : ''}</option>`).join('');
-  platform.value = state.settings.backlogPlatform || 'github';
+  platform.value = state.settings.backlogPlatform || window.Platforms.DEFAULT_PLATFORM;
   $('#set-backlog-group').value = state.settings.backlogMaxGroup || 5;
   state.workflows = await api.listWorkflows();
   renderDefaultWorkflow();

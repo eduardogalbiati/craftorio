@@ -15,6 +15,7 @@ const mainLog = require('../../main-log');
 const productOwner = require('../../product-owner');
 const projects = require('../../projects');
 const simulation = require('../../engine/simulation');
+const { DEFAULT_PLATFORM, findPlatform } = require('../../shared/platforms');
 const { BUNDLED_SKILLS_DIR, clientError, requireObject } = require('../common');
 const {
   args,
@@ -34,7 +35,6 @@ const FINDING = described(OBJECT, 'A finding: { image, marked, marks, note, cont
 const SAVED = shape({ id: STRING, dir: STRING, status: STRING }, ['id']);
 const FILED = shape({ ...REQUEST_ANSWER.properties, status: STRING, issueUrl: nullable(STRING) });
 
-const PLATFORMS = { github: 'gh', gitlab: 'gl' };
 const ISSUE_URL = /https?:\/\/\S+\/issues\/\d+/;
 
 module.exports = (ctx) => {
@@ -44,7 +44,8 @@ module.exports = (ctx) => {
       const id = path.basename(String(projectId));
       const data = backlog.readBacklog(ctx.ws.backlog, id);
       const p = projects.readProject(ctx.ws.projects, id);
-      const platform = PLATFORMS[data?.platform || 'github'];
+      // publish.js takes the short id (gh | gl)
+      const platform = findPlatform(data?.platform || DEFAULT_PLATFORM)?.short;
       if (!data?.repo || !p?.folder || !platform) return null;
       const { publishFiles } = require(path.join(BUNDLED_SKILLS_DIR, 'pr-screenshots', 'publish.js'));
       const file = path.join(found.dir, 'marked.png');

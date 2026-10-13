@@ -48,8 +48,9 @@
 // closeModal, devMode, wantsSimulation, openGateOf, openNextGate, selectRun, confirmDialog).
 /* global api */
 (() => {
-  // Must match PLATFORMS in src/backlog.js (soon = no sync yet).
-  const PLATFORMS = { github: { label: 'GitHub' }, gitlab: { label: 'GitLab' }, bitbucket: { label: 'Bitbucket', soon: true } };
+  // The platform adapters (src/shared/platforms/, #351; platformOf: GitHub's when unknown) plus Bitbucket (soon = no sync yet), as in src/issues.js.
+  const { DEFAULT_PLATFORM, platformOrDefault: platformOf, requestRef } = window.Platforms;
+  const PLATFORMS = { ...Object.fromEntries(window.Platforms.PLATFORMS.map((p) => [p.id, { label: p.label }])), bitbucket: { label: 'Bitbucket', soon: true } };
   window.BACKLOG_PLATFORMS = PLATFORMS;
   const MODE_KEY = 'multiagent.backlogMode';
   // #217: the Board tab's last view (list or kanban) and the Roadmap's Show all (#268: its Planned |
@@ -175,7 +176,7 @@
     bl.epic = '';
     if (!id) { render(); return; }
     try { setData(await api.getBacklog(id)); } catch (e) { bl.error = errMsg(e); }
-    bl.platform = bl.data?.platform || state.settings.backlogPlatform || 'github';
+    bl.platform = bl.data?.platform || state.settings.backlogPlatform || DEFAULT_PLATFORM;
     render();
     // the stage openStage was asked for before this read
     const stage = stageToShow;
@@ -369,7 +370,7 @@
   // the owner writes the request and starts it. The issue shows here after the next sync.
   function newIssue() {
     if (!project()?.repo) return;
-    openDrawer({ workflow: ISSUE_TRACKER, project: bl.projectId, inputs: { git_platform: bl.platform === 'gitlab' ? 'gl' : 'gh' } });
+    openDrawer({ workflow: ISSUE_TRACKER, project: bl.projectId, inputs: { git_platform: platformOf(bl.platform).short } });
   }
 
   // "Review approval" opens its run, where the gate is answered (the run chat, or the Run screen's
@@ -444,7 +445,7 @@
   };
 
   // Selected issues that already have work in flight: an open PR/MR, or a run in progress or waiting.
-  const prName = (p) => `${bl.data?.platform === 'gitlab' ? 'MR !' : 'PR #'}${p.number}`;
+  const prName = (p) => requestRef(bl.data?.platform, p.number);
   function inFlight(i) {
     const why = (i.pullRequests || []).map((p) => `open ${prName(p)}${p.draft ? ' (draft)' : ''}`);
     const r = i.runs?.[0];
@@ -488,7 +489,7 @@
     $b('#btn-assign-ok').textContent = `${mock ? 'Simulate' : 'Start'} ${runs} run${plural}`;
     const note = $b('#assign-note');
     note.className = `small ${n && !tooMany ? 'muted' : 'warn-text'}`;
-    const what = group ? `${n} issues → 1 run, 1 ${bl.data?.platform === 'gitlab' ? 'MR' : 'PR'} closing ${numbers.map((x) => `#${x}`).join(', ')}.` : '';
+    const what = group ? `${n} issues → 1 run, 1 ${platformOf(bl.data?.platform).request.short} closing ${numbers.map((x) => `#${x}`).join(', ')}.` : '';
     note.textContent = !n ? 'Nothing to start: every selected issue is skipped.'
       : tooMany ? `One run takes at most ${maxGroup()} issues (Settings › General › Backlog): select fewer or send them as separate runs.`
         : mock ? `${what ? `${what} ` : ''}${runs} simulated run${plural}: no CLI is called and nothing is spent.`
@@ -759,9 +760,8 @@
   // The Epics view (#138): each epic with its progress and members, then the issues in no epic.
   function renderEpics(issues) {
     const epics = bl.data?.epics || [];
-    const platform = bl.data?.platform === 'gitlab' ? 'GitLab: a group epic, or an issue labelled epic whose members carry epic::<name>' : 'GitHub: an issue labelled epic, whose sub-issues are its members';
     const bar = `<div class="bl-queue bl-epics-bar">
-        <span><b>Epics</b> <span class="muted small">${epics.length} · ${esc(platform)}</span></span>
+        <span><b>Epics</b> <span class="muted small">${epics.length} · ${esc(platformOf(bl.data?.platform).epicHelp)}</span></span>
         ${bl.data?.epicsError ? `<span class="warn-text small" title="${esc(bl.data.epicsError)}">members could not be read: last known</span>` : ''}
         <span class="spacer"></span>
         <label class="check small" title="A new issue the Product Owner registers joins the existing epic it clearly matches, with no extra click. Creating an epic always asks."><input type="checkbox" data-auto-epic${bl.data?.autoEpic ? ' checked' : ''} /><span>Auto-place new issues</span></label>
@@ -914,7 +914,7 @@
         ${open ? `
         <div class="pr-body">
           <div class="muted small">Opened by ${esc(i.author || 'unknown')} on ${esc(dateOf(i.createdAt))}${i.assignees.length ? ` · assigned to ${esc(i.assignees.join(', '))}` : ''}</div>
-          ${i.pullRequests?.length ? `<div class="bl-prs"><span class="muted small">Open ${bl.data?.platform === 'gitlab' ? 'MRs' : 'PRs'}</span>${i.pullRequests.map((p) => `<span class="small">${prBadges({ pullRequests: [p] })} ${esc(p.title)}</span>`).join('')}</div>` : ''}
+          ${i.pullRequests?.length ? `<div class="bl-prs"><span class="muted small">Open ${platformOf(bl.data?.platform).request.short}s</span>${i.pullRequests.map((p) => `<span class="small">${prBadges({ pullRequests: [p] })} ${esc(p.title)}</span>`).join('')}</div>` : ''}
           ${i.runs?.length ? `<div class="bl-runs"><span class="muted small">Runs</span>${i.runs.map(runLink).join('')}</div>` : ''}
           <div class="md bl-md">${i.body.trim() ? markdownHtml(i.body) : '<p class="muted">No description.</p>'}</div>
           <div class="row"><a class="btn sm ghost" href="${esc(i.url)}" target="_blank" rel="noopener">Open on ${esc(host)}</a></div>
@@ -1067,7 +1067,7 @@
   // base and `since` = the last refresh's start (the owner presses Start; developer mode starts it simulated).
   function refreshNow() {
     const r = bl.data?.refresh;
-    const inputs = { git_platform: bl.platform === 'gitlab' ? 'gl' : 'gh' };
+    const inputs = { git_platform: platformOf(bl.platform).short };
     if (r?.base) inputs.base_branch = r.base;
     if (r?.since) inputs.since = r.since;
     openDrawer({ workflow: REFRESH, project: bl.projectId, inputs });
@@ -1235,7 +1235,7 @@
     $b('#bl-toolbar').classList.toggle('hidden', roadmap);
     const plat = $b('#bl-platform');
     plat.innerHTML = Object.entries(PLATFORMS).map(([id, p]) => `<option value="${id}">${esc(p.label)}${p.soon ? ' (soon)' : ''}</option>`).join('');
-    plat.value = bl.platform || state.settings.backlogPlatform || 'github';
+    plat.value = bl.platform || state.settings.backlogPlatform || DEFAULT_PLATFORM;
 
     const p = project();
     const btn = $b('#btn-bl-sync');
@@ -1291,7 +1291,7 @@
     for (const id of ['#bl-search', '#bl-label-active']) $b(id).classList.toggle('hidden', tab === 'roadmap');
     if (tab === 'roadmap') $b('#bl-labels-wrap').classList.add('hidden');
     $b('#bl-synced').textContent = bl.syncing ? 'Syncing…' : bl.data ? `Synced ${dateOf(bl.data.syncedAt)} from ${PLATFORMS[bl.data.platform]?.label || bl.data.platform}` : '';
-    const prError = bl.data?.pullRequestsError ? `Open ${bl.data.platform === 'gitlab' ? 'MRs' : 'PRs'} could not be read: ${bl.data.pullRequestsError}` : '';
+    const prError = bl.data?.pullRequestsError ? `Open ${platformOf(bl.data.platform).request.short}s could not be read: ${bl.data.pullRequestsError}` : '';
     $b('#bl-error').textContent = bl.error || prError;
     // (#269: an empty error line takes no room between the alerts, the filter row and the list)
     $b('#bl-error').classList.toggle('hidden', !(bl.error || prError));

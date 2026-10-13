@@ -32,12 +32,14 @@
     return null;
   }
 
+  // the platform registry (./platforms, #351): required in Node, a global loaded before this in the browser
+  const platforms = () => (typeof module === 'object' && module.exports ? require('./platforms') : root.Platforms);
+
   function archiveConfirmText(numbers, platform) {
     const list = (numbers || []).map((n) => `#${n}`).join(', ');
     const them = (numbers || []).length === 1 ? 'it' : 'them';
-    return platform === 'gitlab'
-      ? `Close ${list} on GitLab and label ${them} archived?`
-      : `Close ${list} as not planned on GitHub and label ${them} archived?`;
+    const p = platforms().platformOrDefault(platform);
+    return `Close ${list}${p.closeReason ? ` as ${p.closeReason}` : ''} on ${p.label} and label ${them} archived?`;
   }
 
   function deprioritizedIssues(issues) {

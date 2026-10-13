@@ -138,6 +138,19 @@ Agents with `bash:gh` / `bash:glab` call them **bare, in the Bash tool, one comm
 that is the only form the allowlist accepts (no PowerShell tool, full or 8.3 paths, PATH edits,
 `&&` chains, body files: use `--body`; a pipe into an allowed utility such as `| head` is fine). Inside runs the engine refreshes PATH, so bare `gh` works.
 
+The app's own calls (the Backlog sync, issues, labels, PRs/MRs, epics, the Oracle's read tools, the
+probes and the PR states) are built by the **platform adapters** (#351): `src/shared/platforms/github.js`
+and `gitlab.js` hold each platform's identity (id `github`/`gitlab`, short id `gh`/`gl`, CLI, label),
+its request terms ("PR #" / "MR !"), a `{ cli, args }` builder per operation, the parsers of each
+command's JSON and the URL parsers. `src/shared/platforms/index.js` resolves either vocabulary
+(`resolvePlatform('gh') === resolvePlatform('github')`; the workflow input `git_platform` and the
+skill suffixes `-gh`/`-gl` use the short id). Code outside the adapters asks the adapter instead of
+branching on the platform: `test/platform-literals-351.test.js` fails on a `'github'`/`'gitlab'`/
+`'gh'`/`'gl'` literal elsewhere in `src/` (its listed exceptions may only shrink), and
+`test/platform-wire-351.test.js` holds the exact commands and parsed results per operation and
+platform. A new operation adds a builder (and a parser) to both adapters; a new forge adds an adapter
+with the same members and registers it in `index.js`.
+
 ## Read-only agents
 
 A Claude agent without `edit`/`write` can't Write/Edit, `mkdir`, redirect output or run heredocs
