@@ -199,7 +199,11 @@ local preview and `npm run serve`). The account's database is defined in `supaba
 | | Deployer | Sonnet 5 | Publishes the preview, and after the merge tracks the production deploy. A failure carries `failure_class` (`code`, `infra`, `unknown`): a preview `code` failure goes to the developer, then CI, the PR check and the preview run again (2 rounds at most) | `deploy-<platform>` |
 
 Two inputs choose the skills:
-- `language`: `js`, `python`, `go`, `java` or `csharp`.
+- `language`: `js`, `python`, `go`, `java`, `csharp` or `rust`, or several, main one first
+  (`js,rust` for a repository that mixes them, #340). With several, the test writer and the builder
+  load the skills of each language whose files the run changed (a JS-only change gets only the JS
+  skills); before anything changed (acceptance tests written first), all of them. The Start panel
+  shows one toggle per language and preselects every language found in the project's files.
 - `git_platform`: `gh` (GitHub, `gh` CLI) or `gl` (GitLab, `glab` CLI). This also picks the merge
   command at the approval gate.
 
@@ -814,7 +818,7 @@ uses: [testing-principles]   # loaded first, once, cycles ignored
 
 Language- or platform-specific skills are named `<capability>-<suffix>`, and every family has
 one skill per suffix (a test enforces it):
-- language suffixes: `js`, `python`, `go`, `java`, `csharp`;
+- language suffixes: `js`, `python`, `go`, `java`, `csharp`, `rust`;
 - platform suffixes: `gh` (GitHub), `gl` (GitLab).
 
 What is shared by a family lives in a suffix-less skill referenced with `uses:`.
@@ -831,13 +835,13 @@ What is shared by a family lives in a suffix-less skill referenced with `uses:`.
 | `backlog-refresh-{gh,gl}` | backlog-refresh (refresher) | Backlog refresh on GitHub: read issues and PRs with `gh`, apply.js --platform gh |
 | `blast-radius` | multi-model review | Boundary changes, their consumers, and the safety fact proven on an evidence ladder |
 | `bug-diagnosis` | developer | Red feedback loop first, ranked hypotheses, regression test, cleanup |
-| `build-audit-{js,python,go,java,csharp}` | builder | Build and audit commands, production vs development scope per ecosystem |
+| `build-audit-{js,python,go,java,csharp,rust}` | builder | Build and audit commands, production vs development scope per ecosystem |
 | `ci-failure-triage` | via `uses` | Classify a failure (code, environment, infrastructure, needs-human) and write a root-cause report |
 | `ci-pipeline-{gh,gl}` | CI pusher | Push, PR/MR, mergeability (conflicts fail fast), CI status, missing checks, fetching failed logs, retrying flaky jobs |
 | `claim-verification` | verifier | Falsifiable claim, baseline vs treatment with the same command, verified / not_verified / inconclusive |
 | `clarity-score` | the Discovery board (its score and Grill me, src/clarity.js); issue-tracker (issue_writer); backlog-refresh (refresher); the Product Owner (Register an issue) | Clarity rubric per kind (0-100%), the 85% bar, gaps as open questions, the Grill me interview |
 | `code-mapping` | mapper | Maps the files, functions, line numbers, connections, tests and conventions of a task before the first edit, in a map of at most 300 lines |
-| `code-review` | reviewer | Correctness, spec and standards axes, severities, `rules/` per language (JS/TS, Python, Go, Java/Kotlin, C#, SQL, Shell/CI) and `rules/smells.md` |
+| `code-review` | reviewer | Correctness, spec and standards axes, severities, `rules/` per language (JS/TS, Python, Go, Java/Kotlin, C#, Rust, SQL, Shell/CI) and `rules/smells.md` |
 | `context-economy` | developer, test_writer | Does code research through exploration sub-agents, reads excerpts instead of whole files, writes handoff notes the next fresh session can act on |
 | `decision-log` | developer, PR babysitter | Agents end answers with a ```` ```decisions ```` block; the engine appends it to `<run>/decisions.tsv` |
 | `dependency-audit-policy` | via `uses` | Severity from CVSS, how to report blockers with a fix, redaction |
@@ -846,7 +850,7 @@ What is shared by a family lives in a suffix-less skill referenced with `uses:`.
 | `design-sketch` | arena (`document_skill: design-sketch`) | Usage-first design: usage snippets, types and signatures, trade-offs, alternatives, design red-flag screen, rubric |
 | `design-system` | ui_reviewer (ai-development-local-hero, code_review fan-out) | UI changes: the app's design tokens (colours, spacing, typography, alignment) from src/renderer/style.css |
 | `e2e-scenarios` | via `uses` | User-visible changes only, at most 3 scenarios per issue reusing existing steps; development runs write and parse-check them (pending); the release workflow runs them all; per-scenario status with reason |
-| `e2e-test-writer-{js,python,go,java,csharp}` | test writer, E2E runner | E2E/BDD framework detection, feature folder, the parse check of a development run and the release run's commands |
+| `e2e-test-writer-{js,python,go,java,csharp,rust}` | test writer, E2E runner | E2E/BDD framework detection, feature folder, the parse check of a development run and the release run's commands |
 | `implementation-evidence` | evidence | Evidence by kind of change (screenshots, HTTP request/response, CLI output, logs), local and simulated only, one list per issue |
 | `issue-creator-{gh,gl}` | issue-tracker (code_analyzer, issue_filer), backlog planner (#30), any agent that files issues | Search for duplicates, create/comment/edit issues with gh or glab, existing labels only (new ones only when a person confirmed them) |
 | `issue-triage` | issue-tracker (code_analyzer, issue_writer); the Product Owner (Register an issue) | Rubric for impact 1-5 and complexity 1-5, estimated files, duplicates, run alone vs group with #n |
@@ -867,7 +871,7 @@ What is shared by a family lives in a suffix-less skill referenced with `uses:`.
 | `test-plan-writing` | arena (`document_skill`) | Test plan (after ISO/IEC/IEEE 29119-3): risk-based approach, traceability to requirements, entry/exit criteria, environment and data, rubric |
 | `testing-principles` | via `uses` | Seams first, no tautological or implementation-coupled tests, mocks only at boundaries, red before green for bug fixes, each suite run once, pre-existing failures reported instead of chased |
 | `ui-conventions` | developer (software-development workflows, when the change touches the UI); evidence (the visual review); ui_reviewer (ai-development-local-hero, with design-system) | UI changes: shared components, controls that follow the data, states to capture, and the visual review of the screenshots (ui_findings) |
-| `unit-test-writer-{js,python,go,java,csharp}` | test writer | Framework detection, commands, idioms per language |
+| `unit-test-writer-{js,python,go,java,csharp,rust}` | test writer | Framework detection, commands, idioms per language |
 <!-- /generated:skills -->
 
 `bug-diagnosis`, `merge-conflict-resolver`, `pr-description`, `testing-principles` and parts of

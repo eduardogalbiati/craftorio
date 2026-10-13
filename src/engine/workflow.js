@@ -542,7 +542,7 @@ class WorkflowRun extends EventEmitter {
     }
     if (!step.agents) st.delegate_result = null; // consumed (in a fan-out, after all of them)
     // step skills go in the prompt itself; the name can be a template ("{{ inputs.document_skill }}")
-    const skills = this.loadSkills((step.skills || []).map((n) => render(n, scope).trim()));
+    const skills = this.loadSkills(this.skillNames(step.skills || [], scope));
     if (skills.length) prompt = `${skills.map((sk) => skillPrompt(sk, agentName)).join('\n\n')}\n\n${prompt}`;
     const extra = goalLoopInstructions(step, st, this.ctx);
     st.probeNews = null; // consumed

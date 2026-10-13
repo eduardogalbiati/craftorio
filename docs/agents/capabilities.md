@@ -29,6 +29,12 @@ flag is never passed twice (`dedupeFlags`, clap-based CLIs refuse repeats). `per
 from the bundled workflows: it was documentation only. The run log gets one
 `log` `kind: capabilities` line per agent with what was granted and what this CLI can't enforce.
 
+The development workflows' `&toolchains` anchor lists the commands of every supported language;
+the language skill says which one to use. Rust (#340) adds `bash:cargo`: `cargo test`, `cargo
+clippy`, `cargo fmt`, and the optional `cargo nextest` / `cargo audit` subcommands all go through
+it. The builder and the test writer need `cargo` (with clippy and rustfmt, as rustup installs
+them in `~/.cargo/bin`) on the PATH the app starts with; nothing else is installed by the run.
+
 ## Per CLI (verified with Claude Code 2.1.283, Codex CLI 0.157, Grok Build 1.0.41)
 
 | | Claude Code | Codex CLI | Grok Build |

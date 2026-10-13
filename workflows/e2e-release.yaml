@@ -77,10 +77,11 @@ inputs:
   language:
     label: "Language"
     type: string
-    enum: [js, python, go, java, csharp]
+    enum: [js, python, go, java, csharp, rust]
     default: js
-    options: { js: JavaScript, python: Python, go: Go, java: Java, csharp: "C#" }
-    description: The project's main language, for its E2E framework and commands.
+    multiple: true
+    options: { js: JavaScript, python: Python, go: Go, java: Java, csharp: "C#", rust: Rust }
+    description: The project's languages, main one first, for its E2E framework and commands. A repository that mixes several (e.g. JavaScript and Rust) takes them all; a run loads the skills of the languages whose files it changed.
   base_branch:
     label: "Base branch"
     type: string
@@ -115,7 +116,7 @@ providers:
 
 x-tools:
   # every supported language toolchain: the language skill says which one to use
-  toolchains: &toolchains [bash:git, bash:npm, bash:npx, bash:node, bash:pnpm, bash:yarn, bash:python, bash:python3, bash:py, bash:pip, bash:pytest, bash:uv, bash:poetry, bash:behave, bash:robot, bash:go, bash:mvn, bash:./mvnw, bash:mvnw.cmd, bash:gradle, bash:./gradlew, bash:gradlew.bat, bash:dotnet]
+  toolchains: &toolchains [bash:git, bash:npm, bash:npx, bash:node, bash:pnpm, bash:yarn, bash:python, bash:python3, bash:py, bash:pip, bash:pytest, bash:uv, bash:poetry, bash:behave, bash:robot, bash:go, bash:mvn, bash:./mvnw, bash:mvnw.cmd, bash:gradle, bash:./gradlew, bash:gradlew.bat, bash:dotnet, bash:cargo]
 
 defaults:
   # #320: a persistent agent idle past its prompt cache's lifetime (Claude on a subscription: 1 h,

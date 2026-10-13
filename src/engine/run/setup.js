@@ -23,7 +23,12 @@ const methods = {
       if (def.required && (v === undefined || v === '')) throw new Error(`Required input not provided: ${k}`);
       // a yes/no: a boolean, or its text from a form, the CLI or inputs saved before it was one ("true"/"false")
       if (def.type === 'boolean' && v !== undefined) v = toBoolean(k, v);
-      if (def.enum && v !== undefined && !def.enum.includes(v)) throw new Error(`Input "${k}" must be one of ${def.enum.join(', ')}`);
+      // `multiple: true` (#340, e.g. language "js,rust"): one or more enum values, comma-separated, main one first
+      if (def.enum && def.multiple && v !== undefined) {
+        const items = [...new Set(String(v).split(',').map((x) => x.trim()).filter(Boolean))];
+        if (!items.length || items.some((x) => !def.enum.includes(x))) throw new Error(`Input "${k}" must be one or more of ${def.enum.join(', ')}, comma-separated`);
+        v = items.join(',');
+      } else if (def.enum && v !== undefined && !def.enum.includes(v)) throw new Error(`Input "${k}" must be one of ${def.enum.join(', ')}`);
       if (def.type === 'run') v = this.resolveRunInput(k, v);
       // a list typed in a form arrives as text: one item per line or comma
       if (def.type === 'array' && typeof v === 'string') v = v.split(/[\n,]/).map((x) => x.trim()).filter(Boolean);

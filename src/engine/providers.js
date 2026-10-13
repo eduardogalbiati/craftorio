@@ -787,6 +787,9 @@ function mockValue(s, key, h) {
     case 'array': {
       if (key === 'preexisting_failures' && !h.sequences?.preexisting_failures) return [];
       if (key === 'ui_findings' && !h.sequences?.ui_findings) return [];
+      // sequences.files_changed: [[...files of visit 1], ...] (#340: the languages a run changed)
+      const files = key === 'files_changed' && h.sequences?.files_changed;
+      if (Array.isArray(files) && files.length) return [...files[Math.min(h.visit - 1, files.length - 1)]];
       // the developer's screens to capture (#144): one valid entry of the screenshot command
       if (key === 'screenshots' && s.items?.properties?.args) return [{ name: '144-dashboard-default', caption: 'The dashboard (simulated)', args: ['--view', 'dashboard'] }];
       if (key === 'scenarios' && s.items?.properties?.status) return mockScenarios(h, s.items.properties.status.enum || []);

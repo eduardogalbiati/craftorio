@@ -17,6 +17,13 @@ const capabilities = require('../capabilities');
 const evidence = require('../../evidence');
 const testPaths = require('../test-paths');
 const chain = require('../../renderer/chain-model');
+const { changedFiles } = require('../affected-tests');
+const {
+  expandSkillNames,
+  filesChangedByOutputs,
+  languagesFor,
+  splitValues,
+} = require('../language-skills');
 const sessionCache = require('../../session-cache');
 const { render } = require('./templates');
 const {
@@ -156,6 +163,21 @@ const methods = {
     return out;
   },
 
+  // The skill names of a turn, rendered with `scope`; several languages (#340, "js,rust"): a
+  // language skill once per language whose files the run changed (src/engine/language-skills.js).
+  skillNames(names, scope = this.ctx) {
+    const languages = splitValues(scope.inputs?.language);
+    if (languages.length < 2) return names.map((n) => render(n, scope).trim());
+    const base = this.worktree?.base;
+    let diff = [];
+    // a diff that cannot be read: the steps' outputs still say what changed (else every language)
+    try { diff = this.ctx.worktree_dir && base ? changedFiles(this.ctx.worktree_dir, base) : []; } catch (e) {
+      this.emitEvent('log', { level: 'warn', message: `Could not list the files this run changed (language skills): ${e.message}` });
+    }
+    const changed = [...diff, ...filesChangedByOutputs(this.ctx.steps)];
+    return expandSkillNames(names, scope, languagesFor(languages, changed), render);
+  },
+
   loadSkill(name) {
     this.skillCache ??= new Map();
     if (!this.skillCache.has(name)) {
@@ -230,7 +252,7 @@ const methods = {
     const mode = agent.session || 'persistent';
     const persistent = mode === 'persistent';
     // agent skills go in the system prompt (1st turn); step skills, in the step prompt
-    const agentSkills = this.loadSkills((agent.skills || []).map((n) => render(n, this.ctx).trim()));
+    const agentSkills = this.loadSkills(this.skillNames(agent.skills || []));
     // #302: the turn's request budget (an empty templated value: none)
     const budgetText = agent.max_requests === undefined ? '' : render(String(agent.max_requests), this.ctx).trim();
     const budget = budgetText ? parseRequests(budgetText) : null;

@@ -18,7 +18,11 @@ order: 100
 | | Deployer | Sonnet 5 | Publishes the preview, and after the merge tracks the production deploy. A failure carries `failure_class` (`code`, `infra`, `unknown`): a preview `code` failure goes to the developer, then CI, the PR check and the preview run again (2 rounds at most) | `deploy-<platform>` |
 
 Two inputs choose the skills:
-- `language`: `js`, `python`, `go`, `java` or `csharp`.
+- `language`: `js`, `python`, `go`, `java`, `csharp` or `rust`, or several, main one first
+  (`js,rust` for a repository that mixes them, #340). With several, the test writer and the builder
+  load the skills of each language whose files the run changed (a JS-only change gets only the JS
+  skills); before anything changed (acceptance tests written first), all of them. The Start panel
+  shows one toggle per language and preselects every language found in the project's files.
 - `git_platform`: `gh` (GitHub, `gh` CLI) or `gl` (GitLab, `glab` CLI). This also picks the merge
   command at the approval gate.
 

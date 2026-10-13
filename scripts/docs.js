@@ -48,7 +48,7 @@ const { testMap, testMapMarkdown } = require('../src/engine/affected-tests');
 const ROOT = path.join(__dirname, '..');
 const CODE_MAP = path.join('docs', 'agents', 'code-map.md');
 const TEST_MAP = path.join('docs', 'agents', 'test-map.md');
-const SUFFIXES = ['js', 'python', 'go', 'java', 'csharp', 'gh', 'gl'];
+const SUFFIXES = ['js', 'python', 'go', 'java', 'csharp', 'rust', 'gh', 'gl'];
 // Source folders mapped file by file (their .js and .jsx files, recursively: .jsx are the run's 3D view's
 // sources, src/renderer/run3d/, bundled by scripts/build-3d.js).
 const SOURCE_DIRS = ['src', 'scripts'];

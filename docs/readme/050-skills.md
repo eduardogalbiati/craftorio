@@ -32,7 +32,7 @@ uses: [testing-principles]   # loaded first, once, cycles ignored
 
 Language- or platform-specific skills are named `<capability>-<suffix>`, and every family has
 one skill per suffix (a test enforces it):
-- language suffixes: `js`, `python`, `go`, `java`, `csharp`;
+- language suffixes: `js`, `python`, `go`, `java`, `csharp`, `rust`;
 - platform suffixes: `gh` (GitHub), `gl` (GitLab).
 
 What is shared by a family lives in a suffix-less skill referenced with `uses:`.

@@ -1,7 +1,7 @@
 ---
 name: code-review
 description: Reviews a diff/branch on three separate axes - correctness (bugs, security, tests), spec (does it do what the task asked) and standards (repo conventions plus market best practices) - applying per-language rules from rules/<language>.md. Use whenever you review code changes.
-summary: "Correctness, spec and standards axes, severities, `rules/` per language (JS/TS, Python, Go, Java/Kotlin, C#, SQL, Shell/CI) and `rules/smells.md`"
+summary: "Correctness, spec and standards axes, severities, `rules/` per language (JS/TS, Python, Go, Java/Kotlin, C#, Rust, SQL, Shell/CI) and `rules/smells.md`"
 used_by: "reviewer"
 ---
 
@@ -43,6 +43,7 @@ branch or feature. No spec found → skip the spec axis and say so.
 | `.go` | `rules/go.md` |
 | `.java` `.kt` `.kts` | `rules/java-kotlin.md` |
 | `.cs` | `rules/csharp.md` |
+| `.rs` | `rules/rust.md` |
 | `.sql`, migrations, queries in strings | `rules/sql.md` |
 | `.sh` `.bash` `.ps1`, `Dockerfile`, CI files (`.github/workflows/*.yml`, `.gitlab-ci.yml`) | `rules/shell-ci.md` |
 
