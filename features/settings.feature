@@ -66,6 +66,43 @@ Feature: Settings
     And I open the "Execution" settings tab
     Then the memory guard's limit is 25
 
+  # Settings › Execution › Concurrent runs shows this machine's profile (#367); the CI machine varies,
+  # so the scenarios check the line's shape, never its numbers
+  @issue-367
+  Scenario: Concurrent runs sizes the runs and test workers from this machine, in auto state
+    Given the app is open
+    When I open "Settings" in the sidebar
+    And I open the "Execution" settings tab
+    Then Concurrent runs shows this machine's threads and memory, with the runs and test workers it allows
+    And the machine profile is in auto state
+    And the machine profile offers "Use these values"
+    And the machine profile does not offer "back to auto"
+
+  @issue-367
+  Scenario: A manual maximum wins over the machine profile until I go back to auto
+    Given the app is open
+    When I open "Settings" in the sidebar
+    And I open the "Execution" settings tab
+    And I set the maximum concurrent runs to 3
+    Then the machine profile is in manual state
+    And the machine profile offers "back to auto"
+    When I reload the app
+    And I open "Settings" in the sidebar
+    And I open the "Execution" settings tab
+    Then the maximum concurrent runs is 3
+    And the machine profile is in manual state
+    When I go back to auto in the machine profile
+    Then the machine profile is in auto state
+    And the machine profile does not offer "back to auto"
+
+  @issue-367
+  Scenario: "Use these values" fills the maximum concurrent runs from the machine profile
+    Given the app is open
+    When I open "Settings" in the sidebar
+    And I open the "Execution" settings tab
+    And I use the machine profile's values
+    Then the maximum concurrent runs is the machine profile's runs at once
+
   # Assumes Settings › General gets a "Time zone" select (data-testid="settings-time-zone") of IANA
   # zones, the computer's zone until one is chosen, saved as `timeZone` in the workspace's settings (#273)
   @issue-273
