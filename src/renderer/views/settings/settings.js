@@ -819,8 +819,15 @@ registerView({
       if (el.dataset.setting === 'findingsButton') window.Findings?.refresh();
     }));
     api.onControlChannelChange?.(renderControlChannel);
-    $('#btn-control-ctl-copy').onclick = async () => {
-      try { await api.clipboardWrite($('#set-control-ctl-path').textContent); } catch (e) { $('#set-control-error').textContent = errMsg(e); }
+    $('#btn-control-ctl-copy').onclick = async (e) => {
+      const btn = e.currentTarget;
+      try {
+        await api.clipboardWrite($('#set-control-ctl-path').textContent);
+        btn.textContent = 'Copied';
+        setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+      } catch (err) {
+        $('#set-control-error').textContent = errMsg(err);
+      }
     };
     $('#set-time-zone').onchange = async (e) => { state.settings = await api.setSettings({ timeZone: e.target.value }); renderTimeZone(); TimeZone.notify(); };
     $('#set-backlog-platform').onchange = async (e) => { state.settings = await api.setSettings({ backlogPlatform: e.target.value }); };
