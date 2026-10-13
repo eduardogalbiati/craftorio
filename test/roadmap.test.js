@@ -871,3 +871,27 @@ test('mergedPullRequest is true only for a successful, unskipped gh/glab merge a
   ].join('\n'));
   assert.equal(roadmaps.mergedPullRequest(notMerged), false);
 });
+
+test('#346 findItem and findStage on a roadmap read from its file find across stages, null when absent', (t) => {
+  const dir = tmp(t);
+  fs.writeFileSync(path.join(dir, 'proj.roadmap.json'), JSON.stringify(mkRoadmap([
+    { id: 's1', name: '', note: '', items: [mkItem('i1', 1)] },
+    { id: 's2', name: '', note: '', items: [mkItem('i2', 2), mkItem('i3', 3)] },
+  ])));
+  const roadmap = roadmaps.readRoadmap(dir, 'proj');
+  assert.equal(roadmaps.findItem(roadmap, 'i3').number, 3);
+  assert.equal(roadmaps.findStage(roadmap, 's2').items.length, 2);
+  assert.equal(roadmaps.findItem(roadmap, 'nope'), null);
+  assert.equal(roadmaps.findStage(roadmap, 'nope'), null);
+});
+
+test('#346 a roadmap file without stages, or no file at all, reads with empty stages: findItem and findStage answer null', (t) => {
+  const dir = tmp(t);
+  fs.writeFileSync(path.join(dir, 'bare.roadmap.json'), JSON.stringify({ state: 'planned' }));
+  for (const id of ['bare', 'missing']) {
+    const roadmap = roadmaps.readRoadmap(dir, id);
+    assert.deepEqual(roadmap.stages, [], id);
+    assert.equal(roadmaps.findItem(roadmap, 'i1'), null, id);
+    assert.equal(roadmaps.findStage(roadmap, 's1'), null, id);
+  }
+});

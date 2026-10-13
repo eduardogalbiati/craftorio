@@ -147,6 +147,12 @@ test('#346 a file of NEXT that opted in fails until it leaves NEXT: the list onl
   assert.deepEqual(checkRatchet({ root: dir, checked: ['src/done.js'], next: ['src/todo.js'] }), []);
 });
 
+test('#346 a file listed in both CHECKED and NEXT that dropped // @ts-check is reported once, as opted out', (t) => {
+  const { checkRatchet } = load();
+  const dir = project(t, { 'src/both.js': 'module.exports = 1;\n' });
+  assert.deepEqual(found(checkRatchet({ root: dir, checked: ['src/both.js'], next: ['src/both.js'] })), [{ file: 'src/both.js', kind: 'opted-out' }]);
+});
+
 test('#346 src/shared/types.js defines the core shapes as JSDoc typedefs another checked file can import', async (t) => {
   const { typecheck } = load();
   const text = read('src/shared/types.js');
