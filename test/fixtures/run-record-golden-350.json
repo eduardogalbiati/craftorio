@@ -1,0 +1,1553 @@
+{
+  "current": {
+    "runFigures": {
+      "runId": "r-current",
+      "workflow": "AI Development",
+      "file": "ai-development.yaml",
+      "agentNames": {
+        "developer": "Developer",
+        "reviewer": "Reviewer"
+      },
+      "stepNames": null,
+      "title": null,
+      "issues": [
+        350
+      ],
+      "status": "success",
+      "mock": false,
+      "startedAt": "2026-09-20T10:00:00.000Z",
+      "finishedAt": "2026-09-20T10:12:00.000Z",
+      "costUsd": 1.85,
+      "costEstimatedUsd": 0.05,
+      "costNotRecorded": false,
+      "costPerIssue": 1.85,
+      "durationMs": 720000,
+      "gateWaitMs": 0,
+      "activeMs": 720000,
+      "tokens": {
+        "input": 3015,
+        "output": 3200,
+        "cache_read": 160000,
+        "cache_write": 6000
+      },
+      "agents": [
+        {
+          "agent": "developer",
+          "turns": 2,
+          "costUsd": 1.5,
+          "costEstimatedUsd": 0.05,
+          "costNotRecorded": false,
+          "activeMs": 600000,
+          "waitingMs": 0,
+          "tokens": {
+            "input": 15,
+            "output": 2800,
+            "cache_read": 160000,
+            "cache_write": 6000
+          },
+          "subagents": {
+            "calls": 1,
+            "tokens": 301
+          },
+          "totalTokens": 168815,
+          "usdPerMTokens": 8.885466339
+        },
+        {
+          "agent": "reviewer",
+          "turns": 1,
+          "costUsd": 0.3,
+          "costEstimatedUsd": 0,
+          "costNotRecorded": false,
+          "activeMs": 300000,
+          "waitingMs": 0,
+          "tokens": {
+            "input": 3000,
+            "output": 400,
+            "cache_read": 0,
+            "cache_write": 0
+          },
+          "totalTokens": 3400,
+          "usdPerMTokens": 88.235294118
+        }
+      ],
+      "steps": [
+        {
+          "step": "implement",
+          "visits": 1,
+          "durationMs": 300000,
+          "agent": "developer"
+        },
+        {
+          "step": "review",
+          "visits": 1,
+          "durationMs": 240000,
+          "agent": "reviewer"
+        },
+        {
+          "step": "fix",
+          "visits": 1,
+          "durationMs": 180000,
+          "agent": "developer"
+        }
+      ],
+      "suiteRounds": [],
+      "gates": [],
+      "slowestTools": [],
+      "timeline": [
+        {
+          "row": "developer",
+          "step": "implement",
+          "visit": 1,
+          "agent": "developer",
+          "kind": "agent",
+          "from": "2026-09-20T10:00:00.000Z",
+          "to": "2026-09-20T10:05:00.000Z",
+          "durationMs": 300000,
+          "costUsd": 1.15,
+          "costEstimatedUsd": 0.05,
+          "costNotRecorded": false,
+          "status": null
+        },
+        {
+          "row": "reviewer",
+          "step": "review",
+          "visit": 1,
+          "agent": "reviewer",
+          "kind": "agent",
+          "from": "2026-09-20T10:05:00.000Z",
+          "to": "2026-09-20T10:09:00.000Z",
+          "durationMs": 240000,
+          "costUsd": 0.3,
+          "costEstimatedUsd": 0,
+          "costNotRecorded": false,
+          "status": "changes_requested"
+        },
+        {
+          "row": "developer",
+          "step": "fix",
+          "visit": 1,
+          "agent": "developer",
+          "kind": "agent",
+          "from": "2026-09-20T10:09:00.000Z",
+          "to": "2026-09-20T10:12:00.000Z",
+          "durationMs": 180000,
+          "costUsd": 0.4,
+          "costEstimatedUsd": 0,
+          "costNotRecorded": false,
+          "status": null
+        }
+      ]
+    },
+    "analyzeRun": {
+      "runId": "r-current",
+      "workflow": "AI Development",
+      "status": "success",
+      "mock": false,
+      "startedAt": "2026-09-20T10:00:00.000Z",
+      "durationMs": 720000,
+      "costUsd": 1.85,
+      "tokens": {
+        "input": 3015,
+        "output": 3200,
+        "cache_read": 160000,
+        "cache_write": 6000
+      },
+      "byAgent": {
+        "developer": {
+          "costUsd": 1.5,
+          "turns": 2,
+          "tokens": {
+            "input": 15,
+            "output": 2800,
+            "cache_read": 160000,
+            "cache_write": 6000
+          }
+        },
+        "reviewer": {
+          "costUsd": 0.3,
+          "turns": 1,
+          "tokens": {
+            "input": 3000,
+            "output": 400,
+            "cache_read": 0,
+            "cache_write": 0
+          }
+        }
+      },
+      "byStep": {
+        "implement": {
+          "costUsd": 1.1,
+          "turns": 1,
+          "tokens": {
+            "input": 10,
+            "output": 2000,
+            "cache_read": 100000,
+            "cache_write": 5000
+          }
+        },
+        "review": {
+          "costUsd": 0.3,
+          "turns": 1,
+          "tokens": {
+            "input": 3000,
+            "output": 400,
+            "cache_read": 0,
+            "cache_write": 0
+          }
+        },
+        "fix": {
+          "costUsd": 0.4,
+          "turns": 1,
+          "tokens": {
+            "input": 5,
+            "output": 800,
+            "cache_read": 60000,
+            "cache_write": 1000
+          }
+        }
+      },
+      "reviewRounds": 0,
+      "timeouts": 1,
+      "invalidOutputs": 0,
+      "refusedCalls": 0,
+      "mergeConflicts": 0,
+      "toolTimeouts": 0,
+      "testWriter": {
+        "turns": 0,
+        "peakContextTokens": 0,
+        "cacheReadTokens": 0,
+        "costUsd": 0
+      },
+      "fullSuites": []
+    },
+    "runList": {
+      "runId": "r-current",
+      "status": "success",
+      "issues": [
+        350
+      ],
+      "costUsd": 1.8,
+      "childrenCostUsd": 0,
+      "durationMs": 720000,
+      "gateWaitMs": 0,
+      "sessions": [
+        {
+          "id": "s1",
+          "agent": "developer",
+          "provider": "claude",
+          "turns": 2,
+          "tokens": {
+            "input": 15,
+            "output": 2800,
+            "cache_read": 160000,
+            "cache_write": 6000,
+            "reasoning": 0
+          },
+          "cost_usd": 1.5
+        },
+        {
+          "id": "s2",
+          "agent": "reviewer",
+          "provider": "codex",
+          "turns": 1,
+          "tokens": {
+            "input": 3000,
+            "output": 400,
+            "cache_read": 0,
+            "cache_write": 0,
+            "reasoning": 0
+          },
+          "cost_usd": 0.3
+        }
+      ]
+    },
+    "estimates": {
+      "actualCost": 1.8,
+      "actualTime": {
+        "minutes": 12,
+        "topStep": {
+          "step": "implement",
+          "minutes": 5
+        }
+      },
+      "stepMinutes": {
+        "implement": 5,
+        "review": 4,
+        "fix": 3
+      }
+    },
+    "analyticsTotals": {
+      "tokens": {
+        "input": 3015,
+        "output": 3200,
+        "cache_read": 160000,
+        "cache_write": 6000,
+        "reasoning": 0,
+        "total": 172215
+      },
+      "costUsd": 1.8,
+      "unpricedTokens": 0,
+      "sessions": 2,
+      "cacheHitRate": 0.946661539
+    }
+  },
+  "#233 cumulative cost": {
+    "runFigures": {
+      "runId": "r-cumulative",
+      "workflow": "AI Development",
+      "file": "ai-development.yaml",
+      "agentNames": null,
+      "stepNames": null,
+      "title": null,
+      "issues": [],
+      "status": "success",
+      "mock": false,
+      "startedAt": "2026-09-20T10:00:00.000Z",
+      "finishedAt": "2026-09-20T10:20:00.000Z",
+      "costUsd": 3.56,
+      "costEstimatedUsd": 0,
+      "costNotRecorded": false,
+      "costPerIssue": null,
+      "durationMs": 1200000,
+      "gateWaitMs": 0,
+      "activeMs": 1200000,
+      "tokens": {
+        "input": 20,
+        "output": 4200,
+        "cache_read": 430000,
+        "cache_write": 46000
+      },
+      "agents": [
+        {
+          "agent": "developer",
+          "turns": 2,
+          "costUsd": 3.56,
+          "costEstimatedUsd": 0,
+          "costNotRecorded": false,
+          "activeMs": 600000,
+          "waitingMs": 0,
+          "tokens": {
+            "input": 20,
+            "output": 4200,
+            "cache_read": 430000,
+            "cache_write": 46000
+          },
+          "totalTokens": 480220,
+          "usdPerMTokens": 7.413268918
+        }
+      ],
+      "steps": [
+        {
+          "step": "plan",
+          "visits": 1,
+          "durationMs": 600000,
+          "agent": "developer"
+        },
+        {
+          "step": "implement",
+          "visits": 1,
+          "durationMs": 600000,
+          "agent": "developer"
+        }
+      ],
+      "suiteRounds": [],
+      "gates": [],
+      "slowestTools": [],
+      "timeline": [
+        {
+          "row": "developer",
+          "step": "plan",
+          "visit": 1,
+          "agent": "developer",
+          "kind": "agent",
+          "from": "2026-09-20T10:00:00.000Z",
+          "to": "2026-09-20T10:10:00.000Z",
+          "durationMs": 600000,
+          "costUsd": 3.21,
+          "costEstimatedUsd": 0,
+          "costNotRecorded": false,
+          "status": null
+        },
+        {
+          "row": "developer",
+          "step": "implement",
+          "visit": 1,
+          "agent": "developer",
+          "kind": "agent",
+          "from": "2026-09-20T10:10:00.000Z",
+          "to": "2026-09-20T10:20:00.000Z",
+          "durationMs": 600000,
+          "costUsd": 0.35,
+          "costEstimatedUsd": 0,
+          "costNotRecorded": false,
+          "status": null
+        }
+      ]
+    },
+    "analyzeRun": {
+      "runId": "r-cumulative",
+      "workflow": "AI Development",
+      "status": "success",
+      "mock": false,
+      "startedAt": "2026-09-20T10:00:00.000Z",
+      "durationMs": 1200000,
+      "costUsd": 6.77,
+      "tokens": {
+        "input": 20,
+        "output": 4200,
+        "cache_read": 430000,
+        "cache_write": 46000
+      },
+      "byAgent": {
+        "developer": {
+          "costUsd": 3.56,
+          "turns": 2,
+          "tokens": {
+            "input": 20,
+            "output": 4200,
+            "cache_read": 430000,
+            "cache_write": 46000
+          }
+        }
+      },
+      "byStep": {
+        "plan": {
+          "costUsd": 3.21,
+          "turns": 1,
+          "tokens": {
+            "input": 12,
+            "output": 3000,
+            "cache_read": 340000,
+            "cache_write": 41000
+          }
+        },
+        "implement": {
+          "costUsd": 0.35,
+          "turns": 1,
+          "tokens": {
+            "input": 8,
+            "output": 1200,
+            "cache_read": 90000,
+            "cache_write": 5000
+          }
+        }
+      },
+      "reviewRounds": 0,
+      "timeouts": 0,
+      "invalidOutputs": 0,
+      "refusedCalls": 0,
+      "mergeConflicts": 0,
+      "toolTimeouts": 0,
+      "testWriter": {
+        "turns": 0,
+        "peakContextTokens": 0,
+        "cacheReadTokens": 0,
+        "costUsd": 0
+      },
+      "fullSuites": []
+    },
+    "runList": {
+      "runId": "r-cumulative",
+      "status": "success",
+      "issues": null,
+      "costUsd": 3.56,
+      "childrenCostUsd": 0,
+      "durationMs": 1200000,
+      "gateWaitMs": 0,
+      "sessions": [
+        {
+          "id": "s1",
+          "agent": "developer",
+          "provider": "claude",
+          "turns": 2,
+          "tokens": {
+            "input": 20,
+            "output": 4200,
+            "cache_read": 430000,
+            "cache_write": 46000,
+            "reasoning": 0
+          },
+          "cost_usd": 3.56
+        }
+      ]
+    },
+    "estimates": {
+      "actualCost": 3.56,
+      "actualTime": {
+        "minutes": 20,
+        "topStep": {
+          "step": "plan",
+          "minutes": 10
+        }
+      },
+      "stepMinutes": {
+        "plan": 10,
+        "implement": 10
+      }
+    },
+    "analyticsTotals": {
+      "tokens": {
+        "input": 20,
+        "output": 4200,
+        "cache_read": 430000,
+        "cache_write": 46000,
+        "reasoning": 0,
+        "total": 480220
+      },
+      "costUsd": 6.77,
+      "unpricedTokens": 0,
+      "sessions": 1,
+      "cacheHitRate": 0.90332339
+    }
+  },
+  "#233 cumulative cost, Codex session": {
+    "runFigures": {
+      "runId": "r-cumulative-codex",
+      "workflow": "AI Development",
+      "file": "ai-development.yaml",
+      "agentNames": null,
+      "stepNames": null,
+      "title": null,
+      "issues": [],
+      "status": "success",
+      "mock": false,
+      "startedAt": "2026-09-20T10:00:00.000Z",
+      "finishedAt": "2026-09-20T10:20:00.000Z",
+      "costUsd": 6.77,
+      "costEstimatedUsd": 0,
+      "costNotRecorded": false,
+      "costPerIssue": null,
+      "durationMs": 1200000,
+      "gateWaitMs": 0,
+      "activeMs": 1200000,
+      "tokens": {
+        "input": 20,
+        "output": 4200,
+        "cache_read": 430000,
+        "cache_write": 46000
+      },
+      "agents": [
+        {
+          "agent": "developer",
+          "turns": 2,
+          "costUsd": 6.77,
+          "costEstimatedUsd": 0,
+          "costNotRecorded": false,
+          "activeMs": 600000,
+          "waitingMs": 0,
+          "tokens": {
+            "input": 20,
+            "output": 4200,
+            "cache_read": 430000,
+            "cache_write": 46000
+          },
+          "totalTokens": 480220,
+          "usdPerMTokens": 14.097705218
+        }
+      ],
+      "steps": [
+        {
+          "step": "plan",
+          "visits": 1,
+          "durationMs": 600000,
+          "agent": "developer"
+        },
+        {
+          "step": "implement",
+          "visits": 1,
+          "durationMs": 600000,
+          "agent": "developer"
+        }
+      ],
+      "suiteRounds": [],
+      "gates": [],
+      "slowestTools": [],
+      "timeline": [
+        {
+          "row": "developer",
+          "step": "plan",
+          "visit": 1,
+          "agent": "developer",
+          "kind": "agent",
+          "from": "2026-09-20T10:00:00.000Z",
+          "to": "2026-09-20T10:10:00.000Z",
+          "durationMs": 600000,
+          "costUsd": 3.21,
+          "costEstimatedUsd": 0,
+          "costNotRecorded": false,
+          "status": null
+        },
+        {
+          "row": "developer",
+          "step": "implement",
+          "visit": 1,
+          "agent": "developer",
+          "kind": "agent",
+          "from": "2026-09-20T10:10:00.000Z",
+          "to": "2026-09-20T10:20:00.000Z",
+          "durationMs": 600000,
+          "costUsd": 3.56,
+          "costEstimatedUsd": 0,
+          "costNotRecorded": false,
+          "status": null
+        }
+      ]
+    },
+    "analyzeRun": {
+      "runId": "r-cumulative-codex",
+      "workflow": "AI Development",
+      "status": "success",
+      "mock": false,
+      "startedAt": "2026-09-20T10:00:00.000Z",
+      "durationMs": 1200000,
+      "costUsd": 6.77,
+      "tokens": {
+        "input": 20,
+        "output": 4200,
+        "cache_read": 430000,
+        "cache_write": 46000
+      },
+      "byAgent": {
+        "developer": {
+          "costUsd": 6.77,
+          "turns": 2,
+          "tokens": {
+            "input": 20,
+            "output": 4200,
+            "cache_read": 430000,
+            "cache_write": 46000
+          }
+        }
+      },
+      "byStep": {
+        "plan": {
+          "costUsd": 3.21,
+          "turns": 1,
+          "tokens": {
+            "input": 12,
+            "output": 3000,
+            "cache_read": 340000,
+            "cache_write": 41000
+          }
+        },
+        "implement": {
+          "costUsd": 3.56,
+          "turns": 1,
+          "tokens": {
+            "input": 8,
+            "output": 1200,
+            "cache_read": 90000,
+            "cache_write": 5000
+          }
+        }
+      },
+      "reviewRounds": 0,
+      "timeouts": 0,
+      "invalidOutputs": 0,
+      "refusedCalls": 0,
+      "mergeConflicts": 0,
+      "toolTimeouts": 0,
+      "testWriter": {
+        "turns": 0,
+        "peakContextTokens": 0,
+        "cacheReadTokens": 0,
+        "costUsd": 0
+      },
+      "fullSuites": []
+    },
+    "runList": {
+      "runId": "r-cumulative-codex",
+      "status": "success",
+      "issues": null,
+      "costUsd": 6.77,
+      "childrenCostUsd": 0,
+      "durationMs": 1200000,
+      "gateWaitMs": 0,
+      "sessions": [
+        {
+          "id": "s1",
+          "agent": "developer",
+          "provider": "codex",
+          "turns": 2,
+          "tokens": {
+            "input": 20,
+            "output": 4200,
+            "cache_read": 430000,
+            "cache_write": 46000,
+            "reasoning": 0
+          },
+          "cost_usd": 6.77
+        }
+      ]
+    },
+    "estimates": {
+      "actualCost": 6.77,
+      "actualTime": {
+        "minutes": 20,
+        "topStep": {
+          "step": "plan",
+          "minutes": 10
+        }
+      },
+      "stepMinutes": {
+        "plan": 10,
+        "implement": 10
+      }
+    },
+    "analyticsTotals": {
+      "tokens": {
+        "input": 20,
+        "output": 4200,
+        "cache_read": 430000,
+        "cache_write": 46000,
+        "reasoning": 0,
+        "total": 480220
+      },
+      "costUsd": 6.77,
+      "unpricedTokens": 0,
+      "sessions": 1,
+      "cacheHitRate": 0.90332339
+    }
+  },
+  "#233 stopped attempt in a log line": {
+    "runFigures": {
+      "runId": "r-stopped",
+      "workflow": "AI Development",
+      "file": "ai-development.yaml",
+      "agentNames": null,
+      "stepNames": null,
+      "title": null,
+      "issues": [],
+      "status": "failed",
+      "mock": false,
+      "startedAt": "2026-09-20T10:00:00.000Z",
+      "finishedAt": "2026-09-20T10:31:00.000Z",
+      "costUsd": 0,
+      "costEstimatedUsd": 0,
+      "costNotRecorded": true,
+      "costPerIssue": null,
+      "durationMs": 1860000,
+      "gateWaitMs": 0,
+      "activeMs": 1860000,
+      "tokens": {
+        "input": 0,
+        "output": 0,
+        "cache_read": 0,
+        "cache_write": 0
+      },
+      "agents": [
+        {
+          "agent": "developer",
+          "turns": 1,
+          "costUsd": 0,
+          "costEstimatedUsd": 0,
+          "costNotRecorded": true,
+          "activeMs": 0,
+          "waitingMs": 0,
+          "tokens": {
+            "input": 0,
+            "output": 0,
+            "cache_read": 0,
+            "cache_write": 0
+          },
+          "totalTokens": 0,
+          "usdPerMTokens": null
+        }
+      ],
+      "steps": [
+        {
+          "step": "work",
+          "visits": 1,
+          "durationMs": 1860000,
+          "agent": "developer"
+        }
+      ],
+      "suiteRounds": [],
+      "gates": [],
+      "slowestTools": [],
+      "timeline": [
+        {
+          "row": "developer",
+          "step": "work",
+          "visit": 1,
+          "agent": "developer",
+          "kind": "agent",
+          "from": "2026-09-20T10:00:00.000Z",
+          "to": "2026-09-20T10:31:00.000Z",
+          "durationMs": 1860000,
+          "costUsd": 0,
+          "costEstimatedUsd": 0,
+          "costNotRecorded": true,
+          "status": null
+        }
+      ]
+    },
+    "analyzeRun": {
+      "runId": "r-stopped",
+      "workflow": "AI Development",
+      "status": "failed",
+      "mock": false,
+      "startedAt": "2026-09-20T10:00:00.000Z",
+      "durationMs": 1860000,
+      "costUsd": 0,
+      "tokens": {
+        "input": 0,
+        "output": 0,
+        "cache_read": 0,
+        "cache_write": 0
+      },
+      "byAgent": {},
+      "byStep": {},
+      "reviewRounds": 0,
+      "timeouts": 0,
+      "invalidOutputs": 0,
+      "refusedCalls": 0,
+      "mergeConflicts": 0,
+      "toolTimeouts": 0,
+      "testWriter": {
+        "turns": 0,
+        "peakContextTokens": 0,
+        "cacheReadTokens": 0,
+        "costUsd": 0
+      },
+      "fullSuites": []
+    },
+    "runList": {
+      "runId": "r-stopped",
+      "status": "failed",
+      "issues": null,
+      "costUsd": 0,
+      "childrenCostUsd": 0,
+      "durationMs": 1860000,
+      "gateWaitMs": 0,
+      "sessions": [
+        {
+          "id": "s1",
+          "agent": "developer",
+          "provider": "claude",
+          "turns": 1,
+          "tokens": {
+            "input": 0,
+            "output": 0,
+            "cache_read": 0,
+            "cache_write": 0,
+            "reasoning": 0
+          },
+          "cost_usd": 0,
+          "cost_not_recorded": true
+        }
+      ]
+    },
+    "estimates": {
+      "actualCost": 0,
+      "actualTime": {
+        "minutes": 31,
+        "topStep": {
+          "step": "work",
+          "minutes": 31
+        }
+      },
+      "stepMinutes": {
+        "work": 31
+      }
+    },
+    "analyticsTotals": {
+      "tokens": {
+        "input": 0,
+        "output": 0,
+        "cache_read": 0,
+        "cache_write": 0,
+        "reasoning": 0,
+        "total": 0
+      },
+      "costUsd": 0,
+      "unpricedTokens": 0,
+      "sessions": 1,
+      "cacheHitRate": null
+    }
+  },
+  "#277 multi-result turn": {
+    "runFigures": {
+      "runId": "r-multi-result",
+      "workflow": "AI Development",
+      "file": "ai-development.yaml",
+      "agentNames": null,
+      "stepNames": null,
+      "title": null,
+      "issues": [],
+      "status": "success",
+      "mock": false,
+      "startedAt": "2026-09-20T10:00:00.000Z",
+      "finishedAt": "2026-09-20T10:30:00.000Z",
+      "costUsd": 15.123904,
+      "costEstimatedUsd": 0,
+      "costNotRecorded": false,
+      "costPerIssue": null,
+      "durationMs": 1800000,
+      "gateWaitMs": 0,
+      "activeMs": 1800000,
+      "tokens": {
+        "input": 22,
+        "output": 18805,
+        "cache_read": 1203311,
+        "cache_write": 40211
+      },
+      "agents": [
+        {
+          "agent": "developer",
+          "turns": 1,
+          "costUsd": 15.123904,
+          "costEstimatedUsd": 0,
+          "costNotRecorded": false,
+          "activeMs": 300000,
+          "waitingMs": 0,
+          "tokens": {
+            "input": 22,
+            "output": 18805,
+            "cache_read": 1203311,
+            "cache_write": 40211
+          },
+          "totalTokens": 1262349,
+          "usdPerMTokens": 11.980762848
+        }
+      ],
+      "steps": [
+        {
+          "step": "implement",
+          "visits": 1,
+          "durationMs": 1740000,
+          "agent": "developer"
+        }
+      ],
+      "suiteRounds": [],
+      "gates": [],
+      "slowestTools": [],
+      "timeline": [
+        {
+          "row": "developer",
+          "step": "implement",
+          "visit": 1,
+          "agent": "developer",
+          "kind": "agent",
+          "from": "2026-09-20T10:01:00.000Z",
+          "to": "2026-09-20T10:30:00.000Z",
+          "durationMs": 1740000,
+          "costUsd": 15.123904,
+          "costEstimatedUsd": 0,
+          "costNotRecorded": false,
+          "status": null
+        }
+      ]
+    },
+    "analyzeRun": {
+      "runId": "r-multi-result",
+      "workflow": "AI Development",
+      "status": "success",
+      "mock": false,
+      "startedAt": "2026-09-20T10:00:00.000Z",
+      "durationMs": 1800000,
+      "costUsd": 0,
+      "tokens": {
+        "input": 22,
+        "output": 18805,
+        "cache_read": 1203311,
+        "cache_write": 40211
+      },
+      "byAgent": {
+        "developer": {
+          "costUsd": 15.123904,
+          "turns": 1,
+          "tokens": {
+            "input": 22,
+            "output": 18805,
+            "cache_read": 1203311,
+            "cache_write": 40211
+          }
+        }
+      },
+      "byStep": {
+        "implement": {
+          "costUsd": 15.123904,
+          "turns": 1,
+          "tokens": {
+            "input": 22,
+            "output": 18805,
+            "cache_read": 1203311,
+            "cache_write": 40211
+          }
+        }
+      },
+      "reviewRounds": 0,
+      "timeouts": 0,
+      "invalidOutputs": 0,
+      "refusedCalls": 0,
+      "mergeConflicts": 0,
+      "toolTimeouts": 0,
+      "testWriter": {
+        "turns": 0,
+        "peakContextTokens": 0,
+        "cacheReadTokens": 0,
+        "costUsd": 0
+      },
+      "fullSuites": []
+    },
+    "runList": {
+      "runId": "r-multi-result",
+      "status": "success",
+      "issues": null,
+      "costUsd": 15.123904,
+      "childrenCostUsd": 0,
+      "durationMs": 1800000,
+      "gateWaitMs": 0,
+      "sessions": [
+        {
+          "id": "s1",
+          "agent": "developer",
+          "provider": "claude",
+          "turns": 1,
+          "tokens": {
+            "input": 22,
+            "output": 18805,
+            "cache_read": 1203311,
+            "cache_write": 40211,
+            "reasoning": 0
+          },
+          "cost_usd": 15.123904
+        }
+      ]
+    },
+    "estimates": {
+      "actualCost": 15.12,
+      "actualTime": {
+        "minutes": 30,
+        "topStep": {
+          "step": "implement",
+          "minutes": 29
+        }
+      },
+      "stepMinutes": {
+        "implement": 29
+      }
+    },
+    "analyticsTotals": {
+      "tokens": {
+        "input": 22,
+        "output": 18805,
+        "cache_read": 1203311,
+        "cache_write": 40211,
+        "reasoning": 0,
+        "total": 1262349
+      },
+      "costUsd": 0,
+      "unpricedTokens": 1262349,
+      "sessions": 1,
+      "cacheHitRate": 0.967646501
+    }
+  },
+  "no sessions in the summary": {
+    "runFigures": {
+      "runId": "r-no-sessions",
+      "workflow": "AI Development",
+      "file": "ai-development.yaml",
+      "agentNames": null,
+      "stepNames": null,
+      "title": null,
+      "issues": [],
+      "status": "success",
+      "mock": false,
+      "startedAt": "2026-09-20T10:00:00.000Z",
+      "finishedAt": "2026-09-20T10:12:00.000Z",
+      "costUsd": 1,
+      "costEstimatedUsd": 0,
+      "costNotRecorded": false,
+      "costPerIssue": null,
+      "durationMs": 720000,
+      "gateWaitMs": 0,
+      "activeMs": 720000,
+      "tokens": {
+        "input": 5400,
+        "output": 1600,
+        "cache_read": 20000,
+        "cache_write": 3000
+      },
+      "agents": [
+        {
+          "agent": "developer",
+          "turns": 1,
+          "costUsd": 0.8,
+          "costEstimatedUsd": 0,
+          "costNotRecorded": false,
+          "activeMs": 300000,
+          "waitingMs": 0,
+          "tokens": {
+            "input": 400,
+            "output": 900,
+            "cache_read": 20000,
+            "cache_write": 3000
+          },
+          "totalTokens": 24300,
+          "usdPerMTokens": 32.9218107
+        },
+        {
+          "agent": "reviewer",
+          "turns": 1,
+          "costUsd": 0.2,
+          "costEstimatedUsd": 0,
+          "costNotRecorded": false,
+          "activeMs": 300000,
+          "waitingMs": 0,
+          "tokens": {
+            "input": 5000,
+            "output": 700,
+            "cache_read": 0,
+            "cache_write": 0
+          },
+          "totalTokens": 5700,
+          "usdPerMTokens": 35.087719298
+        }
+      ],
+      "steps": [
+        {
+          "step": "implement",
+          "visits": 1,
+          "durationMs": 480000,
+          "agent": "developer"
+        },
+        {
+          "step": "review",
+          "visits": 1,
+          "durationMs": 240000,
+          "agent": "reviewer"
+        }
+      ],
+      "suiteRounds": [],
+      "gates": [],
+      "slowestTools": [],
+      "timeline": [
+        {
+          "row": "developer",
+          "step": "implement",
+          "visit": 1,
+          "agent": "developer",
+          "kind": "agent",
+          "from": "2026-09-20T10:00:00.000Z",
+          "to": "2026-09-20T10:08:00.000Z",
+          "durationMs": 480000,
+          "costUsd": 0.8,
+          "costEstimatedUsd": 0,
+          "costNotRecorded": false,
+          "status": null
+        },
+        {
+          "row": "reviewer",
+          "step": "review",
+          "visit": 1,
+          "agent": "reviewer",
+          "kind": "agent",
+          "from": "2026-09-20T10:08:00.000Z",
+          "to": "2026-09-20T10:12:00.000Z",
+          "durationMs": 240000,
+          "costUsd": 0.2,
+          "costEstimatedUsd": 0,
+          "costNotRecorded": false,
+          "status": "approved"
+        }
+      ]
+    },
+    "analyzeRun": {
+      "runId": "r-no-sessions",
+      "workflow": "AI Development",
+      "status": "success",
+      "mock": false,
+      "startedAt": "2026-09-20T10:00:00.000Z",
+      "durationMs": 720000,
+      "costUsd": 1,
+      "tokens": {
+        "input": 5400,
+        "output": 1600,
+        "cache_read": 20000,
+        "cache_write": 3000
+      },
+      "byAgent": {
+        "developer": {
+          "costUsd": 0.8,
+          "turns": 1,
+          "tokens": {
+            "input": 400,
+            "output": 900,
+            "cache_read": 20000,
+            "cache_write": 3000
+          }
+        },
+        "reviewer": {
+          "costUsd": 0.2,
+          "turns": 1,
+          "tokens": {
+            "input": 5000,
+            "output": 700,
+            "cache_read": 0,
+            "cache_write": 0
+          }
+        }
+      },
+      "byStep": {
+        "implement": {
+          "costUsd": 0.8,
+          "turns": 1,
+          "tokens": {
+            "input": 400,
+            "output": 900,
+            "cache_read": 20000,
+            "cache_write": 3000
+          }
+        },
+        "review": {
+          "costUsd": 0.2,
+          "turns": 1,
+          "tokens": {
+            "input": 5000,
+            "output": 700,
+            "cache_read": 0,
+            "cache_write": 0
+          }
+        }
+      },
+      "reviewRounds": 0,
+      "timeouts": 0,
+      "invalidOutputs": 0,
+      "refusedCalls": 0,
+      "mergeConflicts": 0,
+      "toolTimeouts": 0,
+      "testWriter": {
+        "turns": 0,
+        "peakContextTokens": 0,
+        "cacheReadTokens": 0,
+        "costUsd": 0
+      },
+      "fullSuites": []
+    },
+    "runList": {
+      "runId": "r-no-sessions",
+      "status": "success",
+      "issues": null,
+      "costUsd": 0,
+      "childrenCostUsd": 0,
+      "durationMs": 720000,
+      "gateWaitMs": 0,
+      "sessions": []
+    },
+    "estimates": {
+      "actualCost": 0,
+      "actualTime": {
+        "minutes": 12,
+        "topStep": {
+          "step": "implement",
+          "minutes": 8
+        }
+      },
+      "stepMinutes": {
+        "implement": 8,
+        "review": 4
+      }
+    },
+    "analyticsTotals": {
+      "tokens": {
+        "input": 0,
+        "output": 0,
+        "cache_read": 0,
+        "cache_write": 0,
+        "reasoning": 0,
+        "total": 0
+      },
+      "costUsd": 0,
+      "unpricedTokens": 0,
+      "sessions": 0,
+      "cacheHitRate": null
+    }
+  },
+  "single issue": {
+    "runFigures": {
+      "runId": "r-single-issue",
+      "workflow": "AI Development",
+      "file": "ai-development.yaml",
+      "agentNames": null,
+      "stepNames": null,
+      "title": null,
+      "issues": [],
+      "status": "success",
+      "mock": false,
+      "startedAt": "2026-09-20T10:00:00.000Z",
+      "finishedAt": "2026-09-20T10:06:00.000Z",
+      "costUsd": 0.25,
+      "costEstimatedUsd": 0,
+      "costNotRecorded": false,
+      "costPerIssue": null,
+      "durationMs": 360000,
+      "gateWaitMs": 0,
+      "activeMs": 360000,
+      "tokens": {
+        "input": 100,
+        "output": 300,
+        "cache_read": 0,
+        "cache_write": 0
+      },
+      "agents": [
+        {
+          "agent": "developer",
+          "turns": 1,
+          "costUsd": 0.25,
+          "costEstimatedUsd": 0,
+          "costNotRecorded": false,
+          "activeMs": 300000,
+          "waitingMs": 0,
+          "tokens": {
+            "input": 100,
+            "output": 300,
+            "cache_read": 0,
+            "cache_write": 0
+          },
+          "totalTokens": 400,
+          "usdPerMTokens": 625
+        }
+      ],
+      "steps": [
+        {
+          "step": "implement",
+          "visits": 1,
+          "durationMs": 360000,
+          "agent": "developer"
+        }
+      ],
+      "suiteRounds": [],
+      "gates": [],
+      "slowestTools": [],
+      "timeline": [
+        {
+          "row": "developer",
+          "step": "implement",
+          "visit": 1,
+          "agent": "developer",
+          "kind": "agent",
+          "from": "2026-09-20T10:00:00.000Z",
+          "to": "2026-09-20T10:06:00.000Z",
+          "durationMs": 360000,
+          "costUsd": 0.25,
+          "costEstimatedUsd": 0,
+          "costNotRecorded": false,
+          "status": null
+        }
+      ]
+    },
+    "analyzeRun": {
+      "runId": "r-single-issue",
+      "workflow": "AI Development",
+      "status": "success",
+      "mock": false,
+      "startedAt": "2026-09-20T10:00:00.000Z",
+      "durationMs": null,
+      "costUsd": 0.25,
+      "tokens": {
+        "input": 100,
+        "output": 300,
+        "cache_read": 0,
+        "cache_write": 0
+      },
+      "byAgent": {
+        "developer": {
+          "costUsd": 0.25,
+          "turns": 1,
+          "tokens": {
+            "input": 100,
+            "output": 300,
+            "cache_read": 0,
+            "cache_write": 0
+          }
+        }
+      },
+      "byStep": {
+        "implement": {
+          "costUsd": 0.25,
+          "turns": 1,
+          "tokens": {
+            "input": 100,
+            "output": 300,
+            "cache_read": 0,
+            "cache_write": 0
+          }
+        }
+      },
+      "reviewRounds": 0,
+      "timeouts": 0,
+      "invalidOutputs": 0,
+      "refusedCalls": 0,
+      "mergeConflicts": 0,
+      "toolTimeouts": 0,
+      "testWriter": {
+        "turns": 0,
+        "peakContextTokens": 0,
+        "cacheReadTokens": 0,
+        "costUsd": 0
+      },
+      "fullSuites": []
+    },
+    "runList": {
+      "runId": "r-single-issue",
+      "status": "success",
+      "issues": [
+        42
+      ],
+      "costUsd": 0.25,
+      "childrenCostUsd": 0,
+      "durationMs": 2004890210,
+      "gateWaitMs": 0,
+      "sessions": [
+        {
+          "id": "s1",
+          "agent": "developer",
+          "provider": "claude",
+          "turns": 1,
+          "tokens": {
+            "input": 100,
+            "output": 300,
+            "cache_read": 0,
+            "cache_write": 0,
+            "reasoning": 0
+          },
+          "cost_usd": 0.25
+        }
+      ]
+    },
+    "estimates": {
+      "actualCost": 0.25,
+      "actualTime": {
+        "minutes": 33415,
+        "topStep": {
+          "step": "implement",
+          "minutes": 6
+        }
+      },
+      "stepMinutes": {
+        "implement": 6
+      }
+    },
+    "analyticsTotals": {
+      "tokens": {
+        "input": 100,
+        "output": 300,
+        "cache_read": 0,
+        "cache_write": 0,
+        "reasoning": 0,
+        "total": 400
+      },
+      "costUsd": 0.25,
+      "unpricedTokens": 0,
+      "sessions": 1,
+      "cacheHitRate": 0
+    }
+  },
+  "running (no summary.json)": {
+    "runFigures": null,
+    "analyzeRun": {
+      "runId": "r-running",
+      "workflow": "AI Development",
+      "status": "running",
+      "mock": false,
+      "startedAt": "2026-09-20T10:00:00.000Z",
+      "durationMs": null,
+      "costUsd": 3.56,
+      "tokens": {
+        "input": 20,
+        "output": 4200,
+        "cache_read": 430000,
+        "cache_write": 46000
+      },
+      "byAgent": {
+        "developer": {
+          "costUsd": 3.56,
+          "turns": 2,
+          "tokens": {
+            "input": 20,
+            "output": 4200,
+            "cache_read": 430000,
+            "cache_write": 46000
+          }
+        }
+      },
+      "byStep": {
+        "plan": {
+          "costUsd": 3.21,
+          "turns": 1,
+          "tokens": {
+            "input": 12,
+            "output": 3000,
+            "cache_read": 340000,
+            "cache_write": 41000
+          }
+        },
+        "implement": {
+          "costUsd": 0.35,
+          "turns": 1,
+          "tokens": {
+            "input": 8,
+            "output": 1200,
+            "cache_read": 90000,
+            "cache_write": 5000
+          }
+        }
+      },
+      "reviewRounds": 0,
+      "timeouts": 0,
+      "invalidOutputs": 0,
+      "refusedCalls": 0,
+      "mergeConflicts": 0,
+      "toolTimeouts": 0,
+      "testWriter": {
+        "turns": 0,
+        "peakContextTokens": 0,
+        "cacheReadTokens": 0,
+        "costUsd": 0
+      },
+      "fullSuites": []
+    },
+    "runList": {
+      "runId": "r-running",
+      "status": "interrupted",
+      "issues": null,
+      "costUsd": 3.56,
+      "childrenCostUsd": 0,
+      "durationMs": 2004890216,
+      "gateWaitMs": 0,
+      "sessions": [
+        {
+          "id": "s1",
+          "agent": "developer",
+          "provider": "claude",
+          "turns": 2,
+          "tokens": {
+            "input": 20,
+            "output": 4200,
+            "cache_read": 430000,
+            "cache_write": 46000,
+            "reasoning": 0
+          },
+          "cost_usd": 3.56
+        }
+      ]
+    },
+    "estimates": {
+      "actualCost": 3.56,
+      "actualTime": {
+        "minutes": 33415,
+        "topStep": {
+          "step": "plan",
+          "minutes": 10
+        }
+      },
+      "stepMinutes": {
+        "plan": 10,
+        "implement": 10
+      }
+    },
+    "analyticsTotals": null
+  }
+}
