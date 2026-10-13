@@ -15,7 +15,9 @@
 // `turbulence`, MIT): churn counts the commits of `git log` that touched the file, skipping merges,
 // the commit that created the file and the commits of .git-blame-ignore-revs, following renames.
 // A function's churn is its file's. Files sit in four quadrants on log1p axes split at the medians
-// (Danger Zone, Cowboy Code, Fertile Ground, Healthy Closure) and rank by sqrt(u^2 + v^2). Output
+// (Danger Zone, Cowboy Code, Fertile Ground, Healthy Closure) and rank by sqrt(u^2 + v^2), u and v
+// each axis's log1p divided by its maximum. The log parsing, the rename walk, the quadrants and the
+// score are the Architecture tab's pure core (src/shared/architecture-model.js, #356). Output
 // is deterministic: sorted JSON keys, dates from the commits; churn git cannot read (a shallow
 // clone, no repository) is `null` and named in `missing`, never 0. How to read it and how to split
 // a function: docs/agents/testing.md ("Code health"). Checked by test/code-health-344.test.js.
@@ -29,13 +31,23 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 const acorn = require('acorn');
 const { DIRS, listFiles } = require('./file-size-ratchet');
+const {
+  byHotness,
+  byScore,
+  countCommits,
+  parseLog,
+  placeQuadrants,
+  QUADRANTS,
+  scoreRows,
+  sortKeys,
+  walkHistory,
+} = require('../src/shared/architecture-model');
 
 const ROOT = path.join(__dirname, '..');
 const MAX_COMPLEXITY = 25;
 const MIN_DUPLICATE_LINES = 8;
 const HOW_TO = 'docs/agents/testing.md ("Code health")';
 const ANONYMOUS = '(anonymous)';
-const QUADRANTS = ['Danger Zone', 'Cowboy Code', 'Fertile Ground', 'Healthy Closure'];
 
 // '<file>:<function name>' -> its complexity when listed; only lower it
 const COMPLEXITY_EXCEPTIONS = {
@@ -409,39 +421,6 @@ function readIgnoreRevs(root) {
   return fs.readFileSync(file, 'utf8').split(/\r?\n/).map((l) => l.trim()).filter((l) => /^[0-9a-f]{7,40}$/.test(l));
 }
 
-// [{ hash, date, changes: [{ status, paths }] }], newest first.
-function parseLog(text) {
-  const commits = [];
-  for (const line of text.split('\n')) {
-    if (line.startsWith('\x01')) {
-      const [hash, date] = line.slice(1).split(' ');
-      commits.push({ hash, date, changes: [] });
-    } else if (line.includes('\t') && commits.length) {
-      const [status, ...paths] = line.split('\t');
-      commits[commits.length - 1].changes.push({ status: status[0], paths });
-    }
-  }
-  return commits;
-}
-
-// Walks history backwards: `owner` maps a path at that point in history to today's file.
-function applyChange({ status, paths }, commit, counts) {
-  const now = paths[paths.length - 1];
-  const target = counts.owner.get(now);
-  if (status === 'A' || status === 'C') {
-    counts.owner.delete(now);
-    return;
-  }
-  if (!target || status === 'D') return;
-  if (status === 'R') {
-    counts.owner.delete(now);
-    counts.owner.set(paths[0], target);
-  }
-  if (commit.ignored) return;
-  counts.commits[target]++;
-  counts.last[target] = counts.last[target] || commit.date;
-}
-
 // { commits: { file: n }, last: { file: date } } or { missing: 'why' }.
 function readChurn(root, files) {
   const shallow = git(root, ['rev-parse', '--is-shallow-repository']);
@@ -449,13 +428,7 @@ function readChurn(root, files) {
   if (shallow.trim() === 'true') return { missing: 'churn: shallow clone, git log does not hold the whole history (git fetch --unshallow)' };
   const log = git(root, ['log', '--no-merges', '-M', '--name-status', '--format=%x01%H %cI']);
   if (log === null) return { missing: 'churn: git log failed (no commits?), commits unknown' };
-  const ignored = readIgnoreRevs(root);
-  const counts = { owner: new Map(files.map((f) => [f, f])), commits: Object.fromEntries(files.map((f) => [f, 0])), last: {} };
-  for (const commit of parseLog(log)) {
-    commit.ignored = ignored.some((rev) => commit.hash.startsWith(rev));
-    for (const change of commit.changes) applyChange(change, commit, counts);
-  }
-  return { commits: counts.commits, last: counts.last };
+  return countCommits(walkHistory(parseLog(log), files, readIgnoreRevs(root)), files);
 }
 
 function readHead(root) {
@@ -465,38 +438,13 @@ function readHead(root) {
   return { commit, date };
 }
 
-function median(values) {
-  const s = [...values].sort((a, b) => a - b);
-  if (!s.length) return 0;
-  const mid = Math.floor(s.length / 2);
-  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
-}
-
-const round3 = (n) => Math.round(n * 1000) / 1000;
-const score = (complexity, commits) => (commits === null ? null : round3(Math.hypot(Math.log1p(complexity), Math.log1p(commits))));
-
-function placeQuadrants(rows) {
-  const known = rows.filter((r) => r.commits !== null);
-  const mu = median(known.map((r) => Math.log1p(r.complexity)));
-  const mv = median(known.map((r) => Math.log1p(r.commits)));
-  for (const r of known) {
-    const complex = Math.log1p(r.complexity) > mu;
-    const busy = Math.log1p(r.commits) > mv;
-    r.quadrant = QUADRANTS[(complex ? 0 : 2) + (busy ? 0 : 1)];
-  }
-}
-
-const quadrantRank = (q) => (q ? QUADRANTS.indexOf(q) : QUADRANTS.length);
-const byScore = (a, b) => (b.score ?? -1) - (a.score ?? -1) || b.complexity - a.complexity;
-const byHotness = (a, b) => quadrantRank(a.quadrant) - quadrantRank(b.quadrant) || byScore(a, b) || a.file.localeCompare(b.file);
-
 function fileRows(files, functions, churn) {
   const rows = files.map((file) => {
     const own = functions.filter((f) => f.file === file);
     const commits = churn.commits ? churn.commits[file] : null;
     const complexity = own.reduce((sum, f) => sum + f.complexity, 0);
     const worst = own.reduce((max, f) => Math.max(max, f.complexity), 0);
-    return { file, commits, complexity, worst, functions: own.length, last_change: (churn.last && churn.last[file]) || null, quadrant: null, score: score(complexity, commits) };
+    return { file, commits, complexity, worst, functions: own.length, last_change: (churn.last && churn.last[file]) || null, quadrant: null, score: null };
   });
   placeQuadrants(rows);
   return rows.sort(byHotness);
@@ -508,19 +456,12 @@ function hotspots({ root = ROOT } = {}) {
   const measured = measureFiles(root, files);
   const churn = readChurn(root, files);
   const commitsOf = (file) => (churn.commits ? churn.commits[file] : null);
-  const functions = measured
-    .map(({ file, name, line, complexity }) => ({ file, name, line, complexity, commits: commitsOf(file), score: score(complexity, commitsOf(file)) }))
+  const functions = scoreRows(measured.map(({ file, name, line, complexity }) => ({ file, name, line, complexity, commits: commitsOf(file), score: null })))
     .sort((a, b) => byScore(a, b) || byFileAndName(a, b));
   return { files: fileRows(files, measured, churn), functions, head: readHead(root), missing: churn.missing ? [churn.missing] : [] };
 }
 
 // ---------- the CLI ----------
-
-function sortKeys(value) {
-  if (Array.isArray(value)) return value.map(sortKeys);
-  if (!value || typeof value !== 'object') return value;
-  return Object.fromEntries(Object.keys(value).sort().map((k) => [k, sortKeys(value[k])]));
-}
 
 const json = (value) => `${JSON.stringify(sortKeys(value), null, 2)}\n`;
 const percentile = (sorted, p) => sorted[Math.max(0, Math.ceil(p * sorted.length) - 1)] ?? 0;

@@ -259,7 +259,9 @@ above stays as it is.
   file has its total complexity and its worst function; files sit in four quadrants on `log1p`
   axes split at the medians: **Danger Zone** (complex and often changed: refactor these first),
   Cowboy Code (complex, rarely changed), Fertile Ground (simple, often changed), Healthy Closure.
-  The Danger Zone comes first, ranked by `sqrt(u² + v²)`; a function's churn is its file's. The
+  The Danger Zone comes first, ranked by `sqrt(u² + v²)`, u and v each axis's `log1p` divided by
+  its maximum (files against files, functions against functions; the pure core shared with the
+  Architecture tab, `src/shared/architecture-model.js`, #356); a function's churn is its file's. The
   output is deterministic (sorted keys, dates from the commits); churn git cannot read (a shallow
   clone) is `null` and listed under `missing`, never 0.
 - **How to split a function** that is over the limit or grew: pull each branch body that does its

@@ -108,6 +108,24 @@ Use `delegate` instead of reading everything yourself; only the answer and its c
   is removed after). A check that costs money or takes more than ~2 min is a `check.run` card.
 A delegation by a model costs money: say so, with the cost the chat shows.
 
+## Architecture report
+
+The owner's **Analyze with the Oracle** (Projects › a project › Architecture, #356) gives you one
+turn with the project's facts model: hotspots (lines × commits), files that change together,
+languages, exclusions, and complexity when a real tool measured it. Write an **architecture
+report**:
+- Interpret the numbers; never recompute them. Read the top hotspots and the co-changing files
+  with `repo_read` / `repo_git` (the projectId given) before you claim anything; cite files and lines.
+- `summary`: two or three sentences; `areas`: a short verdict per top-level area you read.
+- `findings`: each with `kind` (missing-abstraction, duplicated-rule, wrong-dependency,
+  oversized-unit, test-gap, other), `title`, `files` (`path`, `lines`), `evidence`, `severity`
+  (low, medium, high) and `refactor`: one refactor sized as one issue. Keep a finding's kind and
+  files stable across reports: the tab marks findings new or gone by them.
+- Remember what the numbers can't tell: a planned migration looks like churn, tools disagree,
+  moved code resets history, churn is not bugs without fix commits.
+- Never edit code and never prescribe a fix to a run: a finding goes to the Refactor tab, where
+  the Product Owner prioritizes. Answer with one JSON object in a ```json fence, in English.
+
 ## Night watch
 
 When the owner turns on the Night watch (with an end time), the owner agents run **at once** the

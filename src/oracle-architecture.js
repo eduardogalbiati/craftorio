@@ -1,0 +1,247 @@
+// The Oracle's architecture analysis of a project (#356): one turn, outside its conversation, that
+// reads the facts model (src/shared/architecture-model.js: hotspots, co-change pairs, languages)
+// and checks the top hotspots with its read-only repository tools (repo_read, repo_git). It
+// answers a report in English, { summary, areas: [{ area, verdict }], findings: [{ kind, title,
+// files: [{ path, lines }], evidence, severity, refactor }] }, checked against REPORT_SCHEMA with
+// validateSchema (#338): an invalid answer is an error, never half a report. It never edits code
+// and never prescribes a fix to a run (the supervisor rule): a finding goes to the Refactor tab,
+// where the Product Owner prioritizes. The turn runs on the Oracle's model in its daily budget
+// (src/oracle.js oneTurn / budgetRefusal); simulated (mock, MULTIAGENT_SIMULATION_ONLY): a report
+// derived from the facts, no model, no cost.
+// Reports are saved per project as <workspace>/architecture/<project id>/<stamp>.json
+// ({ id, date, project_id, head, costUsd, tokens, simulated, report }); compareReports marks each
+// finding new or kept against the previous report and lists the gone ones; estimateCost is the
+// mean cost of the 5 newest real reports. Service: src/service/channels/architecture.js.
+
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+const { validateSchema } = require('./json-schema');
+
+const SEVERITIES = ['low', 'medium', 'high'];
+const KINDS = ['missing-abstraction', 'duplicated-rule', 'wrong-dependency', 'oversized-unit', 'test-gap', 'other'];
+const ESTIMATE_BASIS = 5;
+const PROMPT_ROWS = 15;
+const SETTINGS_FILE = 'settings.json';
+
+const LINE_TEXT = { type: 'string', minLength: 1 };
+const REPORT_SCHEMA = {
+  type: 'object',
+  required: ['summary', 'areas', 'findings'],
+  properties: {
+    summary: LINE_TEXT,
+    areas: {
+      type: 'array',
+      items: { type: 'object', required: ['area', 'verdict'], properties: { area: LINE_TEXT, verdict: LINE_TEXT } },
+    },
+    findings: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['kind', 'title', 'files', 'evidence', 'severity', 'refactor'],
+        properties: {
+          kind: LINE_TEXT,
+          title: LINE_TEXT,
+          files: {
+            type: 'array',
+            items: { type: 'object', required: ['path'], properties: { path: LINE_TEXT, lines: { type: ['string', 'integer'] } } },
+          },
+          evidence: LINE_TEXT,
+          severity: { type: 'string', enum: SEVERITIES },
+          refactor: LINE_TEXT,
+        },
+      },
+    },
+  },
+};
+
+// The JSON of an answer: an object, a ```json fence (the last one), or the text itself
+function parseAnswer(input) {
+  if (input && typeof input === 'object') return input;
+  const text = String(input ?? '');
+  const fences = [...text.matchAll(/```(?:json)?\s*\n([\s\S]*?)```/g)];
+  const body = fences.length ? fences[fences.length - 1][1] : text;
+  try {
+    return JSON.parse(body);
+  } catch {
+    const start = body.indexOf('{');
+    const end = body.lastIndexOf('}');
+    if (start >= 0 && end > start) return JSON.parse(body.slice(start, end + 1));
+    throw new Error('no JSON object found');
+  }
+}
+
+/** { report } (a valid report) or { error } (never a partial report). */
+function validateReport(input) {
+  let value;
+  try {
+    value = parseAnswer(input);
+  } catch (e) {
+    return { error: `The Oracle's answer is not a JSON report (${e.message}).` };
+  }
+  const errors = validateSchema(value, REPORT_SCHEMA, 'report');
+  if (errors.length) return { error: `The Oracle's answer is not a valid architecture report: ${errors.slice(0, 5).join('; ')}.` };
+  return { report: { summary: value.summary, areas: value.areas, findings: value.findings } };
+}
+
+// A finding's identity across reports: its kind and its sorted file paths
+const findingKey = (f) => `${f.kind}:${(f.files || []).map((x) => x.path).sort().join(',')}`;
+
+/** The current findings marked 'new' or 'kept' against `previous`, and the previous ones now gone. */
+function compareReports(previous, current) {
+  const before = new Set(((previous && previous.findings) || []).map(findingKey));
+  const now = new Set(((current && current.findings) || []).map(findingKey));
+  return {
+    findings: ((current && current.findings) || []).map((f) => ({ ...f, status: before.has(findingKey(f)) ? 'kept' : 'new' })),
+    gone: ((previous && previous.findings) || []).filter((f) => !now.has(findingKey(f))).map((f) => ({ ...f, status: 'gone' })),
+  };
+}
+
+/** { usd, basis }: the mean cost of the 5 newest real (not simulated) reports, or null. */
+function estimateCost(saved) {
+  const real = (saved || []).filter((r) => r && !r.simulated && Number.isFinite(Number(r.costUsd)))
+    .sort((a, b) => Date.parse(b.date) - Date.parse(a.date))
+    .slice(0, ESTIMATE_BASIS);
+  if (!real.length) return null;
+  return { usd: real.reduce((sum, r) => sum + Number(r.costUsd), 0) / real.length, basis: real.length };
+}
+
+// ---------- the turn ----------
+
+const hotspotLine = (r) => `- ${r.file}: ${r.lines} lines, ${r.commits} commits, rank ${r.rank}${r.complexity != null ? `, complexity ${r.complexity} (worst function ${r.worst}, ${r.quadrant})` : ''}${r.co_change ? `, changes with ${r.co_change.file} (${Math.round(r.co_change.share * 100)}%)` : ''}`;
+
+/** The analysis prompt: the facts model (never recomputed by the Oracle) and the report's schema. */
+function analysisPrompt({ project, model }) {
+  const files = model.files.slice(0, PROMPT_ROWS);
+  const pairs = model.pairs.slice(0, PROMPT_ROWS);
+  return [
+    `Architecture analysis of the project "${project.name}" (projectId "${project.id}"), at ${model.branch || 'HEAD'} ${model.head ? model.head.commit : ''}.`,
+    'The numbers below were computed by the app from git; interpret them, never recompute them. Read the top hotspots and the co-changing files with your read-only tools (repo_read, repo_git with this projectId) before you claim anything. Never edit code and never prescribe a fix to a run: each finding suggests one refactor, sized as one issue, for the owner\'s Refactor tab.',
+    '',
+    `Languages (lines): ${model.languages.map((l) => `${l.language} ${l.lines}`).join(', ') || 'none'}.`,
+    `Commits in the window: ${model.commits}${model.shallow ? ' (shallow clone: history is cut)' : ''}; mass changes: ${model.mass_changes.length}; excluded files: ${Object.entries(model.excluded).filter(([, n]) => n).map(([g, n]) => `${g} ${n}`).join(', ') || 'none'}.`,
+    `Complexity: ${model.complexity.status === 'measured' ? `${model.complexity.metric} from ${model.complexity.tool}` : `not measured (${model.complexity.status})`}.`,
+    '',
+    'Top hotspots (lines x commits):',
+    ...files.map(hotspotLine),
+    '',
+    'Files that change together (share of the commits of either file):',
+    ...(pairs.length ? pairs.map((p) => `- ${p.a} + ${p.b}: ${p.together} commits together (${Math.round(p.share * 100)}%)`) : ['- none']),
+    '',
+    `Answer with one JSON object in a \`\`\`json fence, in English, matching this schema. kind is one of ${KINDS.join(', ')}; severity is one of ${SEVERITIES.join(', ')}; files give the lines ("12-40") your evidence points to.`,
+    JSON.stringify(REPORT_SCHEMA),
+  ].join('\n');
+}
+
+const topArea = (file) => (file.includes('/') ? file.split('/')[0] : '.');
+
+/** The simulated report: derived from the facts, no model. */
+function mockReport(model) {
+  const top = model.files[0];
+  const pair = model.pairs[0];
+  const areas = [...new Set(model.files.map((f) => topArea(f.file)))].sort().map((area) => {
+    const own = model.files.filter((f) => topArea(f.file) === area);
+    return { area, verdict: `Simulated: ${own.length} file(s), ${own.reduce((s, f) => s + f.lines, 0)} lines.` };
+  });
+  const findings = [];
+  if (top) {
+    findings.push({
+      kind: 'oversized-unit', title: `${top.file} is the top hotspot`, severity: 'low',
+      files: [{ path: top.file, lines: `1-${Math.max(1, top.lines)}` }],
+      evidence: `${top.lines} lines changed in ${top.commits} commit(s), hotspot rank 1.`,
+      refactor: `Simulated: read ${top.file} and move its most-changed part into its own module.`,
+    });
+  }
+  if (pair) {
+    findings.push({
+      kind: 'missing-abstraction', title: `${pair.a} and ${pair.b} change together`, severity: 'low',
+      files: [{ path: pair.a, lines: '1' }, { path: pair.b, lines: '1' }],
+      evidence: `${pair.together} commits changed both (${Math.round(pair.share * 100)}% of either file's).`,
+      refactor: 'Simulated: find the rule both files repeat and give it one home.',
+    });
+  }
+  return {
+    summary: `Simulated analysis, no model was called: ${model.files.length} file(s) in ${model.languages.length} language(s); ${top ? `the top hotspot is ${top.file}` : 'no hotspot'}.`,
+    areas,
+    findings,
+  };
+}
+
+/**
+ * One analysis: { report, costUsd, tokens, simulated } or { refused } (the Oracle's budget).
+ * `oracle`: { oneTurn, budgetRefusal } of src/oracle.js; `agent`: the Oracle's { model, effort }.
+ * Throws on an invalid answer (its cost is already recorded in the Oracle's usage).
+ */
+async function analyze({ project, model, mock, oracle, agent, onItem = null }) {
+  if (mock) return { report: mockReport(model), costUsd: 0, tokens: {}, simulated: true };
+  const refused = oracle.budgetRefusal();
+  if (refused) return { refused };
+  const res = await oracle.oneTurn({ prompt: analysisPrompt({ project, model }), model: agent.model, effort: agent.effort, onItem });
+  const out = validateReport(res.text);
+  if (out.error) throw new Error(out.error);
+  return { report: out.report, costUsd: res.costUsd, tokens: res.tokens || {}, simulated: false };
+}
+
+// ---------- the saved reports ----------
+
+const projectDir = (root, projectId) => path.join(root, path.basename(String(projectId)));
+const isReportFile = (name) => name.endsWith('.json') && name !== SETTINGS_FILE;
+
+/** The saved reports of a project, newest first. */
+function listReports(root, projectId) {
+  const dir = projectDir(root, projectId);
+  if (!fs.existsSync(dir)) return [];
+  const out = [];
+  for (const name of fs.readdirSync(dir).filter(isReportFile)) {
+    try {
+      const saved = JSON.parse(fs.readFileSync(path.join(dir, name), 'utf8'));
+      if (saved && saved.report) out.push({ ...saved, id: saved.id || name.slice(0, -5) });
+    } catch { /* a broken file is not a report */ }
+  }
+  return out.sort((a, b) => Date.parse(b.date) - Date.parse(a.date) || String(b.id).localeCompare(String(a.id)));
+}
+
+/** Saves a report ({ date, ... }) under its stamp; the saved entry. */
+function saveReport(root, projectId, entry) {
+  const dir = projectDir(root, projectId);
+  fs.mkdirSync(dir, { recursive: true });
+  const id = entry.date.replace(/[:.]/g, '-');
+  const saved = { ...entry, id, project_id: projectId };
+  fs.writeFileSync(path.join(dir, `${id}.json`), `${JSON.stringify(saved, null, 2)}\n`);
+  return saved;
+}
+
+/** The project's Architecture settings ({ exclude: [pattern] }). */
+function readSettings(root, projectId) {
+  try {
+    const s = JSON.parse(fs.readFileSync(path.join(projectDir(root, projectId), SETTINGS_FILE), 'utf8'));
+    return { exclude: Array.isArray(s.exclude) ? s.exclude.map(String) : [] };
+  } catch {
+    return { exclude: [] };
+  }
+}
+
+function writeSettings(root, projectId, settings) {
+  const dir = projectDir(root, projectId);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, SETTINGS_FILE), `${JSON.stringify(settings, null, 2)}\n`);
+  return settings;
+}
+
+module.exports = {
+  analysisPrompt,
+  analyze,
+  compareReports,
+  estimateCost,
+  findingKey,
+  KINDS,
+  listReports,
+  mockReport,
+  readSettings,
+  REPORT_SCHEMA,
+  saveReport,
+  SEVERITIES,
+  validateReport,
+  writeSettings,
+};

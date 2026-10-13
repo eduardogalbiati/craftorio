@@ -8,6 +8,12 @@ appears once, in its latest form, naming what it replaced. The hard rules of
 [AGENTS.md](../../AGENTS.md) are not repeated here. This is not the `decision-log` skill (a run's
 own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
 
+- **2026-10-13** (#356): a project's Architecture tab works for any language. The deterministic
+  facts (lines, churn, hotspots, co-change, languages) are computed by the app from git, through a
+  pure core in `src/shared/`; complexity comes only from a real tool, never a regex; the analysis is
+  the Oracle's, on demand, in its daily budget. What the Oracle finds feeds the Refactor tab, where
+  the Product Owner prioritizes. Why: a parser per language cannot be the base when a project can be
+  in any language, or several.
 - **2026-10-13** (#367): a machine profile sizes the concurrent runs and the test workers per run
   from the machine (threads, RAM), shown with its reasons in Setup and Settings › Execution and
   always overridable: a manual value wins and stays when the machine changes. It never lowers a

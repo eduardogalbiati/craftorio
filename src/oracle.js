@@ -675,6 +675,9 @@ function createOracle({
     history,
     memory,
     state: status,
+    // #356: one turn outside the conversation (src/oracle-architecture.js), in the daily budget
+    budgetRefusal: refusal,
+    oneTurn: realTurn,
 
     /**
      * { question, screen, images, context, mock, mockContextTokens } → { message, messages, state }, or

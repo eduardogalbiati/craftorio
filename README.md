@@ -1163,6 +1163,42 @@ project's page shows the map on its **Conflict map** tab (#354, merged with the 
 performance of a date range; the Roadmap links to it): click a row to see the runs behind its count,
 the lines most changed in the file and the trend.
 
+### The Architecture tab
+
+How healthy a project's code is, in any language, and how it changes as runs pile up (#356). The
+project's page (**Projects › a project › Architecture**) shows facts the app reads from git, with
+no model: per file its lines, its commits (churn), its hotspot rank (lines × commits) and the file
+it changes with most (pairs together in at least 60% of the commits of either file), and the
+languages by line count. Churn is read on the default branch's current commit (not the checked-out
+branch), merges skipped, the creating commit not counted, renames followed,
+`.git-blame-ignore-revs` honoured; commits that touched more than 25% of the files are listed as
+mass changes (counted by default, with a toggle). Lock files, build output, tests, vendored code and
+`.gitattributes`' `linguist-generated` / `linguist-vendored` files are excluded, with a count per
+group, plus an editable list per project. The commit, the window (From / To) and a shallow clone are
+shown. Complexity per function comes only from a real tool (lizard when the machine has it, checked
+before use); without one the tab names the tool needed and shows churn and size only. With it, each
+file has its total complexity and its worst function, sits in a quadrant (Danger Zone, Cowboy Code,
+Fertile Ground, Healthy Closure, split at the medians on `log1p` axes), the Danger Zone ranks by
+`sqrt(u² + v²)` with each axis normalized by its maximum, and monthly frames list the files that
+entered or left it. The numbers come from a pure core (`src/shared/architecture-model.js`, shared
+with `scripts/code-health.js --hotspots`), cached per commit. The project's own quality gate
+(complexity, coverage, duplication in its CI) is listed as measured, pending or missing: missing
+evidence is never shown as clean.
+
+**Analyze with the Oracle** (its estimate, ≈ US$ from the last analyses, on the button) runs one
+Oracle turn in its daily budget: it reads the top hotspots and the co-change pairs with its
+read-only repository tools and writes a report in English: a summary, a verdict per area, and
+findings (kind, files with lines, evidence, severity, one refactor sized as one issue). It never
+edits code and never prescribes a fix to a run. An invalid answer is an error, never half a report.
+Reports are saved as `architecture/<project id>/<date>.json` in the workspace with their real cost
+and tokens; the tab shows the latest (or one you pick), its findings marked **new** or **gone**
+since the previous one, and how many real runs finished since. **Send to Refactor** makes a finding
+a proposal of the Refactor tab, where the Product Owner prioritizes.
+
+What the numbers can't tell, shown on the tab: churn from a planned migration looks like
+instability; complexity tools disagree with each other; code moved between files resets both
+metrics; churn says nothing about bugs unless it is joined with fix commits.
+
 ### Agents: calibrating the Product Owner
 
 How the Backlog's Product Owner trades speed for quality when it plans is the owner's call: a
