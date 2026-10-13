@@ -34,6 +34,7 @@ const runs = require('../../runs');
 const runOwner = require('../../run-owner');
 const runPr = require('../../run-pr');
 const notifier = require('../../notifications');
+const nightLimits = require('../../night-limits');
 const { num } = require('../common');
 
 // how often a child run waiting for a slot of Settings › Execution checks again (#175)
@@ -293,6 +294,8 @@ module.exports = (ctx) => {
         localPreview: project?.localPreview?.command ? project.localPreview : null,
         budget, prices: settings.prices, projectId, issues, resume, attachments, mockSequences: mock ? mockSequences : null, then, from,
         agentOverrides, fallbacks: settingsFallbacks(settings), models: settings.models || {},
+        // #337: tonight's limits, read at each check (a raise reaches the run at its next one)
+        nightLimits: () => nightLimits.tonightLimits(ws.oracle || path.join(ws.root, 'oracle')),
         // `type: workflow` steps (#174): each child is a normal run of this service, linked to this one
         parent, startChild: (spec) => startChildRun(run, spec),
         // simulation runs never touch git: the agents are mocked and work in the repository folder

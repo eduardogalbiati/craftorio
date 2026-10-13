@@ -17,7 +17,7 @@ function stamp(t) {
   return `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}-${p(d.getUTCHours())}${p(d.getUTCMinutes())}${p(d.getUTCSeconds())}`;
 }
 
-// One run: { id, start, end?, status?, cost, issues, steps: [minute], gate?: [requested, resolved?], logs: [{ at, kind }], limitAt?, interruptedAt? } (minutes from the night's start)
+// One run: { id, start, end?, status?, cost, issues, steps: [minute], gate?: [requested, resolved?], logs: [{ at, kind }], limitAt?, interruptedAt?, contextRead? } (minutes from the night's start)
 function writeRun(ws, w0, projectId, r) {
   const at = (m) => new Date(w0 + m * 60e3).toISOString();
   const runId = `${stamp(w0 + r.start * 60e3)}-nw${r.id}`;
@@ -27,6 +27,11 @@ function writeRun(ws, w0, projectId, r) {
   for (const m of r.steps) { push(m, 'step.started', { step_id: 'implement', visit: 1 }); push(m + 1, 'step.finished', { step_id: 'implement', visit: 1, duration_ms: 60e3 }); }
   for (const l of r.logs || []) push(l.at, 'log', { kind: l.kind, message: `Simulated ${l.kind}` });
   if (r.limitAt != null) push(r.limitAt, 'limit.exceeded', { limit: 'max_cost_usd', value: 5, current: 5.2, paused: true });
+  // #337: limits expanded ×2 tonight, and the context its turns read (past the day limit of 40M)
+  if (r.contextRead) {
+    push(r.start, 'limits.expanded', { day: { context: 40e6, cost: 120, duration: 8 * 3600e3 }, limits: { context: 80e6, cost: 240, duration: 16 * 3600e3, turns: 2 } });
+    push(r.end ?? r.start, 'session.message_received', { step_id: 'implement', usage: { input: 0, output: 0, cache_read: r.contextRead, cache_write: 0 }, cost_usd: r.cost });
+  }
   if (r.gate) {
     push(r.gate[0], 'approval.requested', { approval_id: 'review', step_id: 'review', message: 'Accept the change?', choices: ['approve', 'reject'] });
     if (r.gate[1] != null) push(r.gate[1], 'approval.resolved', { approval_id: 'review', step_id: 'review', approved: true, by: 'owner', wait_ms: (r.gate[1] - r.gate[0]) * 60e3 });
@@ -80,11 +85,12 @@ function writeDemoNights(ws, projectId, { now = Date.now(), endedMinAgo = 60, se
   const rInterrupted = writeRun(ws, w0, projectId, { id: '0003', start: 15, end: 25, status: 'interrupted', cost: 0.4, issues: [16], steps: [16] });
   const rLimit = writeRun(ws, w0, projectId, { id: '0004', start: 30, end: 60, status: 'cancelled', cost: 5.2, issues: [17], steps: [31, 45], limitAt: 55 });
   writeRun(ws, w0, projectId, { id: '0005', start: 5, end: 80, status: 'success', cost: 3.2, issues: [12], steps: [6, 30, 60] });
-  const rRetried = writeRun(ws, w0, projectId, { id: '0006', start: 108, end: 190, status: 'success', cost: 4.75, issues: [14], steps: [109, 140, 170] });
+  const rRetried = writeRun(ws, w0, projectId, { id: '0006', start: 108, end: 190, status: 'success', cost: 4.75, issues: [14], steps: [109, 140, 170], contextRead: 58e6 });
   const rSlow = writeRun(ws, w0, projectId, { id: '0007', start: 200, end: 262, status: 'success', cost: 2.9, issues: [15], steps: [201, 215, 236, 250], logs: [{ at: 230, kind: 'stall' }] });
   const rGate = writeRun(ws, w0, projectId, { id: '0008', start: 380, cost: 1.8, issues: [18], steps: [381, 392], gate: [400, null] });
 
   entry(w0, 0, 'oracle.watch', { on: true, until: new Date(w1).toISOString(), startedAt: new Date(w0).toISOString(), by });
+  entry(w0, 0.5, 'oracle.limits', { multiplier: 2, values: null, by: 'the owner', at: iso(0.5) });
   entry(w0, 26, 'oracle.detected', { id: 'demo-1', kind: 'interrupted', target: rInterrupted, runId: rInterrupted, projectId, since: iso(25) });
   entry(w0, 27, 'oracle.escalated', { target: rInterrupted, runId: rInterrupted, projectId, reason: 'interrupted', recommendation: 'Resume the run from its last step (a second app process held the workspace, #112).' });
   entry(w0, 56, 'oracle.detected', { id: 'demo-2', kind: 'limit', target: rLimit, runId: rLimit, projectId, since: iso(55) });

@@ -8,11 +8,13 @@
 // #278: under Self-healing (Settings › Execution › Oracle) the watch has no end time: the screen says
 // "Self-healing is on" where the end time was, its switch is the setting, and each Self-healing day is
 // a window of the report with its own counts (detected, repaired alone, waiting for you, cost).
+// #337: the turn-on form's "Limits tonight" group (Expand all limits, a multiplier, Customize rows),
+// the limits in force while the watch is on (nightwatch:limits), and the morning's runs past a day limit.
 // Registers itself with registerView (view-registry.js); uses app.js globals ($, esc, state, api,
 // errMsg, fmtDur, dateOf, confirmDialog, showView).
 
 (() => {
-  const nw = { state: null, report: null, error: null, form: null, perms: null, night: 0, busy: false };
+  const nw = { state: null, report: null, error: null, form: null, perms: null, limits: null, night: 0, busy: false };
   const PRESET_HOURS = 8;
   // #273: times, days and the end-time field in the owner's zone (time-zone.js)
   const zone = () => (typeof TimeZone !== 'undefined' ? TimeZone.current() : undefined);
@@ -32,6 +34,117 @@
   // #278: Self-healing (Settings › Execution › Oracle) keeps the watch on with no end time
   const healing = (w) => !!(w?.active && w.selfHealing);
   const openExecutionSettings = () => { showView('settings'); if (typeof showSettingsTab === 'function') showSettingsTab('execution'); };
+
+  // ---- Limits tonight (#337): every run limit expanded while the Night watch is on -----------
+  // nightwatch:state `limits` { day: { context, cost, duration, budget }, tonight: { multiplier } | { values } | null }
+  const MULTIPLIERS = [1.5, 2, 3];
+  const tokM = (n) => `${+(n / 1e6).toFixed(1)}M`;
+  const dollars = (n) => `US$ ${+Number(n).toFixed(2)}`;
+  const hrs = (msv) => `${+(msv / 3600e3).toFixed(1)}h`;
+  // tonight's values from the settings ({ multiplier } | { values }): never below the day's; a limit the day does not set stays unset
+  function tonightValues(day, t) {
+    const m = Number(t?.multiplier) || 0;
+    const v = t?.values || {};
+    const pick = (k) => (day[k] ? Math.max(day[k], m ? day[k] * m : Number(v[k]) || 0) : 0);
+    return { context: pick('context'), cost: pick('cost'), duration: pick('duration'), turns: Math.max(1, m || Number(v.turns) || 1), budget: day.budget ? Math.max(day.budget, m ? day.budget * m : Number(v.budget) || 0) : Number(v.budget) || 0 };
+  }
+  // "×2 tonight: context 80M, cost US$ 240, duration 16h, turns ×2; nightly budget US$ 150"
+  function limitsSummary(day, t) {
+    if (!t) return 'Runs keep each workflow\'s limits';
+    const x = tonightValues(day, t);
+    const parts = [x.context && `context ${tokM(x.context)}`, x.cost && `cost ${dollars(x.cost)}`, x.duration && `duration ${hrs(x.duration)}`, `turns ×${x.turns}`].filter(Boolean);
+    return `${t.multiplier ? `×${t.multiplier}` : 'Custom'} tonight: ${parts.join(', ')}${x.budget ? `; nightly budget ${dollars(x.budget)}` : ''}`;
+  }
+  const multiplierSelect = (value, placeholder = '') => `<select id="nw-limits-multiplier" data-testid="nw-limits-multiplier" aria-label="Multiplier of every limit"${nw.limits?.saving || nw.form?.saving ? ' disabled' : ''}>
+      ${placeholder ? `<option value="" selected disabled>${esc(placeholder)}</option>` : ''}${MULTIPLIERS.map((m) => `<option value="${m}"${!placeholder && Number(value) === m ? ' selected' : ''}>×${m}</option>`).join('')}
+    </select>`;
+  // Customize: one row per limit, the day value and tonight's (in M tokens, US$, hours, a factor, US$)
+  const LIMIT_ROWS = [
+    { id: 'context', label: 'Context per run', unit: 'M tokens', day: (d) => (d.context ? tokM(d.context) : 'no limit'), shown: (x) => x.context / 1e6, sent: (n) => n * 1e6 },
+    { id: 'cost', label: 'Cost per run', unit: 'US$', day: (d) => (d.cost ? dollars(d.cost) : 'no limit'), shown: (x) => x.cost, sent: (n) => n },
+    { id: 'duration', label: 'Duration per run', unit: 'hours', day: (d) => (d.duration ? hrs(d.duration) : 'no limit'), shown: (x) => x.duration / 3600e3, sent: (n) => n * 3600e3 },
+    { id: 'turns', label: 'Agent turn timeouts', unit: '× each agent\'s own', day: () => '×1', shown: (x) => x.turns, sent: (n) => n },
+    { id: 'budget', label: 'Nightly budget', unit: 'US$', day: (d) => (d.budget ? dollars(d.budget) : 'none'), shown: (x) => x.budget || '', sent: (n) => n },
+  ];
+  function limitRowsHtml(day, values, disabled) {
+    const x = tonightValues(day, { values });
+    return `<div class="nw-limit-rows">${LIMIT_ROWS.map((r) => `<div class="nw-limit-row" data-testid="nw-limits-row-${r.id}">
+        <label for="nw-lim-${r.id}">${esc(r.label)}</label><span class="muted small">Day ${esc(r.day(day))}</span>
+        <span class="row"><input type="number" class="s-num" id="nw-lim-${r.id}" data-nw-lim="${r.id}" min="0" step="any" value="${esc(r.shown(x) ? +Number(r.shown(x)).toFixed(2) : '')}"${disabled ? ' disabled' : ''} /><span class="muted small">${esc(r.unit)}</span></span>
+      </div>`).join('')}</div>`;
+  }
+  // the custom values from the rows' inputs (renderer units → tokens, US$, ms, factor, US$)
+  function readLimitRows(values) {
+    const out = { ...values };
+    document.querySelectorAll('[data-nw-lim]').forEach((input) => {
+      const r = LIMIT_ROWS.find((x) => x.id === input.dataset.nwLim);
+      const n = Number(input.value);
+      if (r && Number.isFinite(n) && n > 0) out[r.id] = r.sent(n); else if (r) delete out[r.id];
+    });
+    return out;
+  }
+  // the turn-on form's group: the switch, the multiplier, Customize, the summary and the warning
+  function limitsFormHtml(day, l, saving) {
+    const t = !l.expand ? null : l.custom ? { values: l.values } : { multiplier: l.multiplier };
+    return `<fieldset class="nw-limits" data-testid="nw-limits">
+        <legend>Limits tonight</legend>
+        <div class="row">
+          <label class="switch" title="Expand every run limit while the watch is on"><input type="checkbox" id="nw-limits-expand" data-testid="nw-limits-expand" aria-label="Expand all limits"${l.expand ? ' checked' : ''}${saving ? ' disabled' : ''} /><span></span></label>
+          <span>Expand all limits</span>
+          ${l.expand && !l.custom ? multiplierSelect(l.multiplier) : ''}
+          ${l.expand ? `<button type="button" class="link-btn" id="nw-limits-customize" data-testid="nw-limits-customize">${l.custom ? 'Use a multiplier' : 'Customize'}</button>` : ''}
+        </div>
+        <div class="muted small nw-cut" data-testid="nw-limits-summary" title="${esc(limitsSummary(day, t))}">${esc(limitsSummary(day, t))}</div>
+        ${l.expand && !day.budget ? '<p class="warn-text small nw-limits-warning" data-testid="nw-limits-warning">No nightly budget: nothing caps tonight\'s spending</p>' : ''}
+        ${l.expand && l.custom ? limitRowsHtml(day, l.values, saving) : ''}
+      </fieldset>`;
+  }
+  // while the watch is on: the limits in force, the multiplier saved at once, Customize with Save / Cancel
+  function activeLimitsHtml(lim) {
+    const t = lim.tonight;
+    const edit = nw.limits;
+    return `<div class="nw-active-limits" data-testid="nw-active-limits">
+        <div class="row"><span class="small"><b>Limits tonight</b> · <span class="nw-cut" title="${esc(limitsSummary(lim.day, t))}">${esc(limitsSummary(lim.day, t))}</span></span>
+          ${multiplierSelect(t?.multiplier, t?.multiplier ? '' : t ? 'Custom' : 'Not expanded')}
+          ${edit?.custom ? '' : '<button type="button" class="link-btn" id="nw-active-customize" data-testid="nw-limits-customize">Customize</button>'}</div>
+        ${!lim.day.budget ? '<p class="warn-text small nw-limits-warning" data-testid="nw-limits-warning">No nightly budget: nothing caps tonight\'s spending</p>' : ''}
+        ${edit?.custom ? `${limitRowsHtml(lim.day, edit.values, edit.saving)}<div class="row">${edit.error ? `<p class="error small">${esc(edit.error)}</p>` : ''}<span class="spacer"></span><button class="btn ghost sm" type="button" id="nw-limits-cancel">Cancel</button><button class="btn primary sm" type="button" id="nw-limits-save"${edit.saving ? ' disabled' : ''}>Save</button></div>` : ''}
+      </div>`;
+  }
+  async function saveLimits(limits) {
+    nw.limits = { ...(nw.limits || {}), saving: true, error: null };
+    render();
+    try {
+      nw.state = await api.setNightWatchLimits(limits);
+      nw.limits = null;
+    } catch (e) {
+      // the rows keep what was typed, with the error; a multiplier refused shows on the screen
+      if (nw.limits.custom) nw.limits = { ...nw.limits, saving: false, error: errMsg(e) };
+      else { nw.limits = null; nw.error = errMsg(e); }
+    }
+    render();
+  }
+  function wireLimits() {
+    const l = nw.form?.limits;
+    if (l) {
+      if ($('#nw-limits-expand')) $('#nw-limits-expand').onchange = (e) => { l.expand = !!e.target.checked; render(); };
+      if ($('#nw-limits-multiplier')) $('#nw-limits-multiplier').onchange = (e) => { l.multiplier = Number(e.target.value) || 2; render(); };
+      if ($('#nw-limits-customize')) {
+        $('#nw-limits-customize').onclick = () => {
+          if (!l.custom) l.values = { ...tonightValues(nw.state.limits.day, { multiplier: l.multiplier }) };
+          l.custom = !l.custom;
+          render();
+        };
+      }
+      document.querySelectorAll('[data-nw-lim]').forEach((input) => { input.onchange = () => { l.values = readLimitRows(l.values); render(); }; });
+      return;
+    }
+    if (!$('[data-testid="nw-active-limits"]')) return;
+    if ($('#nw-limits-multiplier')) $('#nw-limits-multiplier').onchange = (e) => { if (Number(e.target.value)) saveLimits({ multiplier: Number(e.target.value) }); };
+    if ($('#nw-active-customize')) $('#nw-active-customize').onclick = () => { nw.limits = { custom: true, values: { ...tonightValues(nw.state.limits.day, nw.state.limits.tonight) }, saving: false, error: null }; render(); };
+    if ($('#nw-limits-cancel')) $('#nw-limits-cancel').onclick = () => { nw.limits = null; render(); };
+    if ($('#nw-limits-save')) $('#nw-limits-save').onclick = () => saveLimits({ values: readLimitRows(nw.limits.values) });
+  }
 
   async function load() {
     try {
@@ -65,7 +178,7 @@
   async function refreshBadge() {
     try { nw.state = await api.nightWatchState(); } catch { return; }
     renderBadge();
-    if (state.view === 'nightwatch' && !nw.form && !nw.perms) render();
+    if (state.view === 'nightwatch' && !nw.form && !nw.perms && !nw.limits) render();
   }
 
   // ---- (1) the switch and the permissions ----------------------------------------------------
@@ -87,7 +200,7 @@
               ? `Turned on by ${esc(w.by || 'the owner')} at ${esc(hm(w.startedAt))} · ${watching}`
               : w.startedAt ? `Last on ${esc(dateOf(w.startedAt))}${w.by ? ` by ${esc(w.by)}` : ''}` : 'Never turned on in this workspace'}</div>
         </div>
-      </div>`;
+      </div>${w.active && !standing && s.limits ? activeLimitsHtml(s.limits) : ''}`;
     const form = f ? `<form class="nw-form" id="nw-form">
         <div class="field">
           <label for="nw-until">Until</label>
@@ -95,6 +208,7 @@
           <div class="hint">An end time is required (at most 24 hours). Until then the Oracle does only what the permissions below allow; everything else waits for your click.</div>
           ${f.error ? `<p class="error small">${esc(f.error)}</p>` : ''}
         </div>
+        ${s.limits && f.limits ? limitsFormHtml(s.limits.day, f.limits, f.saving) : ''}
         <div class="row"><button class="btn primary sm" type="submit"${f.saving ? ' disabled' : ''}>Turn on</button><button class="btn ghost sm" type="button" id="nw-form-cancel">Cancel</button></div>
       </form>` : '';
     return `<div class="card nw-card">${head}${form}</div>`;
@@ -254,9 +368,10 @@
         await load();
         return;
       }
-      nw.form = sw.checked ? { until: defaultEnd(), error: null, saving: false } : null;
+      nw.form = sw.checked ? { until: defaultEnd(), error: null, saving: false, limits: { expand: false, multiplier: 2, custom: false, values: {} } } : null;
       render();
     };
+    wireLimits();
     if ($('#nw-open-settings')) $('#nw-open-settings').onclick = openExecutionSettings;
     if (nw.form) {
       $('#nw-preset').onclick = () => { nw.form = { ...nw.form, until: localValue(new Date(Date.now() + PRESET_HOURS * 3600e3)), error: null }; render(); };
@@ -268,10 +383,15 @@
         if (!until || !(until > new Date())) { nw.form = { ...nw.form, error: 'Pick an end time in the future.' }; render(); return; }
         nw.form = { ...nw.form, saving: true, error: null };
         render();
+        const l = nw.form.limits;
         try {
           await api.setOracleNightWatch({ on: true, until: until.toISOString(), from: 'the Night watch screen' });
           nw.form = null;
         } catch (err) { nw.form = { ...nw.form, saving: false, error: errMsg(err) }; }
+        // #337: the watch is on: tonight's limits, when expanded (a refusal shows on the screen; the watch stays on)
+        if (!nw.form && l?.expand) {
+          try { await api.setNightWatchLimits(l.custom ? { values: l.values } : { multiplier: l.multiplier }); } catch (err) { nw.error = `Limits tonight: ${errMsg(err)}`; }
+        }
         await load();
       };
     }
@@ -330,7 +450,7 @@
     const s = m.summary;
     // #278: a Self-healing day leads with its line (detected, repaired alone, waiting, cost with tokens)
     box.innerHTML = `<div class="dash-gates-title"><b>☾ ${m.window.selfHealing ? 'Self-healing' : 'Night watch'} · ${esc(hm(m.window.from))} → ${esc(hm(m.window.to))}</b>${s.alarm ? ' <span class="pill pill-failed">safety alarm</span>' : ''}</div>
-      <div class="nw-dash-lines small">${s.selfHealing ? `<div data-testid="dash-self-healing">${esc(s.selfHealing)}</div>` : ''}<div>${esc(s.ran)}</div><div>${esc(s.did)}</div><div>${esc(s.waits)}</div><div class="${s.alarm ? 'error' : 'muted'}">${esc(s.safety)}</div>${regressionLines(s)}</div>
+      <div class="nw-dash-lines small">${s.selfHealing ? `<div data-testid="dash-self-healing">${esc(s.selfHealing)}</div>` : ''}<div>${esc(s.ran)}</div><div>${esc(s.did)}</div><div>${esc(s.waits)}</div><div class="${s.alarm ? 'error' : 'muted'}">${esc(s.safety)}</div>${regressionLines(s)}${limitLines(s)}</div>
       <div class="row"><span class="spacer"></span><button class="btn sm ghost" type="button" id="dash-nw-open">Open Night watch</button></div>`;
     $('#dash-nw-open').onclick = () => showView('nightwatch');
     box.querySelectorAll('[data-testid="nw-regression-run"]').forEach((b) => { b.onclick = () => window.showRun(b.dataset.run); });
@@ -344,6 +464,12 @@
   };
   function regressionLines(s) {
     return (s.regressions || []).map((line, i) => `<div class="nw-regression" data-testid="nw-regression">${esc(line)} <span class="pill pill-cancelled">regression</span>${(s.regressionRuns?.[i] || []).map((id) => ` <button class="btn sm ghost" type="button" data-testid="nw-regression-run" data-run="${esc(id)}" title="Open run ${esc(id)}" aria-label="Open run ${esc(id)}">${esc(runLabel(id))}</button>`).join('')}</div>`).join('');
+  }
+  // #337: one line per run that went past a day limit under tonight's limits, then what the night
+  // spent above the day cost limits
+  function limitLines(s) {
+    if (!s.limits?.length) return '';
+    return `${s.limits.map((line) => `<div class="nw-past-limit" data-testid="nw-past-limit">${esc(line)} <span class="badge warn">past a day limit</span></div>`).join('')}${s.overDayUsd ? `<div class="muted" data-testid="nw-over-day">${esc(`Spent above the day limits: ${dollars(s.overDayUsd)}`)}</div>` : ''}`;
   }
   // opens the view on the night that started at `startedAt` (ISO)
   function openNight(startedAt) {

@@ -13,6 +13,7 @@ const {
   totalTokens,
   WARN_AT,
 } = require('../../usage');
+const nightLimits = require('../../night-limits');
 const { render } = require('./templates');
 const { parseDuration, parseTokens } = require('./load');
 
@@ -27,10 +28,12 @@ const childRunCost = (summary) => +((+summary?.cost_usd || 0) + (+summary?.child
 const methods = {
   checkLimits() {
     const lim = this.wf.orchestrator?.limits || {};
-    const maxDur = parseDuration(lim.max_total_duration, null);
+    const day = this.dayLimits();
+    const maxDur = this.effectiveLimits().duration;
     if (maxDur && Date.now() - this.startedAt > maxDur) {
-      this.emitEvent('limit.exceeded', { limit: 'max_total_duration', value: lim.max_total_duration });
-      throw new Error(`Maximum duration exceeded (${lim.max_total_duration}).`);
+      const value = maxDur === day.duration ? lim.max_total_duration : `${+(maxDur / 3600e3).toFixed(1)}h`;
+      this.emitEvent('limit.exceeded', { limit: 'max_total_duration', value });
+      throw new Error(`Maximum duration exceeded (${value}).`);
     }
     // its child runs' cost counts too (#175)
     const children = this.childrenCostUsd();
@@ -47,25 +50,68 @@ const methods = {
     return (model && this.models && Object.hasOwn(this.models, model) && this.models[model]) || {};
   },
 
-  // The run's cost limit: orchestrator.limits.max_total_cost_usd, lifted to the largest
+  // The day cost limit: orchestrator.limits.max_total_cost_usd, lifted to the largest
   // max_total_cost_usd of the models its agents run on now (#262: e.g. a developer on Fable 5.1).
   // A workflow without a cost limit stays without one.
-  maxTotalCost() {
+  dayTotalCost() {
     const base = Number(this.wf.orchestrator?.limits?.max_total_cost_usd) || 0;
     if (!base) return 0;
     return Math.max(base, ...Object.values(this.wf.agents).map((a) => Number(this.modelLimits(a.model).max_total_cost_usd) || 0));
+  },
+
+  // The run's cost limit in force: the day one, expanded tonight (#337)
+  maxTotalCost() {
+    return this.effectiveLimits().cost;
+  },
+
+  // The workflow's own limits (#337): { context (tokens), cost (US$, after the #262 lift), duration (ms) },
+  // templates rendered; null / 0 when it sets none
+  dayLimits() {
+    const lim = this.wf.orchestrator?.limits || {};
+    const rendered = (raw) => (raw == null ? null : render(String(raw), this.ctx).trim());
+    return {
+      context: parseTokens(rendered(lim.max_total_context)) || null,
+      cost: this.dayTotalCost(),
+      duration: parseDuration(rendered(lim.max_total_duration), null) || null,
+    };
+  },
+
+  // The limits in force now (#337, src/night-limits.js): the day ones, expanded by tonight's settings
+  // (read at each call, so a raise reaches a run in progress at its next check), never below the
+  // highest this run was granted (the morning never cuts a run). Each new grant is recorded as a
+  // `limits.expanded` event { day, limits } (the morning summary's runs past a day limit).
+  effectiveLimits() {
+    const day = this.dayLimits();
+    const tonight = this.nightLimits?.() || null;
+    const e = nightLimits.effectiveLimits(day, tonight, this.grantedLimits);
+    if (tonight || this.grantedLimits) {
+      const prev = this.grantedLimits;
+      this.grantedLimits = e;
+      if (!prev || ['context', 'cost', 'duration', 'turns'].some((k) => e[k] !== prev[k])) this.emitEvent('limits.expanded', { day, limits: e });
+    }
+    return e;
+  },
+
+  // The owner raised tonight's limits (#337, the service calls it on every live run): a context_limit
+  // gate already open stays open for the owner to answer, with a note. Never resolves, skips or times out a gate.
+  noteLimitsRaised() {
+    for (const a of this.approvals.values()) {
+      if (!a.gate || !String(a.stepId).endsWith(':context_limit')) continue;
+      a.gate.note = 'The limits were raised after it opened: it still waits for your answer.';
+      this.emitEvent('log', { level: 'info', message: `${a.stepId}: the limits were raised after it opened; it still waits for the owner.` });
+    }
   },
 
   // orchestrator.limits.max_total_context (e.g. 20M): the context the run's agents have read
   // (input + cache read/write, summed over every turn). Past it, the run pauses before the next
   // agent turn until the user answers: Continue grants one more block of the same size, Stop
   // ends the run as cancelled (its branch keeps the work, so it can be resumed). Never cuts a turn.
+  // #337: the limit is the one in force (effectiveLimits), so tonight's raise moves the allowance up.
   async contextGate(stepId) {
-    const raw = this.wf.orchestrator?.limits?.max_total_context;
-    const lim = raw == null ? null : parseTokens(render(String(raw), this.ctx));
+    const lim = this.effectiveLimits().context;
     if (!lim) return;
     const used = [...this.sessions.values()].reduce((a, s) => a + contextTokens(s.tokens), 0);
-    this.contextAllowance ??= lim;
+    this.contextAllowance = Math.max(this.contextAllowance || 0, lim);
     if (used < this.contextAllowance) return;
     const m = (n) => `${(n / 1e6).toFixed(1)}M`;
     this.emitEvent('limit.exceeded', { limit: 'max_total_context', value: this.contextAllowance, current: used, paused: true });

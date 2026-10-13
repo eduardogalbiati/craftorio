@@ -119,7 +119,9 @@ class WorkflowRun extends EventEmitter {
   //   workflow declares no `fallbacks` (see fallbackChain).
   // models (#262): { <model id>: { timeout_factor?, max_total_cost_usd? } } Settings' limits per model; the
   //   workflow's own `models` win per model (see modelLimits).
-  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issues, issue, resume, worktreesDir, mockSequences, notices, stopProcesses, probe, actionsQuota, peerSessions, idleWarnMs, personas, localPreview, attachments, then, from, parent, startChild, memoryGuard, agentOverrides, fallbacks, models }) {
+  // nightLimits (#337): () => tonight's limits ({ multiplier } | { values }) or null, called at each check
+  //   (src/night-limits.js tonightLimits; see effectiveLimits in src/engine/run/costs.js).
+  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issues, issue, resume, worktreesDir, mockSequences, notices, stopProcesses, probe, actionsQuota, peerSessions, idleWarnMs, personas, localPreview, attachments, then, from, parent, startChild, memoryGuard, agentOverrides, fallbacks, models, nightLimits }) {
     super();
     refreshWindowsPath(); // actions (e.g. gh pr merge) need the refreshed PATH
     this.file = file;
@@ -189,6 +191,9 @@ class WorkflowRun extends EventEmitter {
     this.models = { ...(models || {}), ...(this.wf.models || {}) };
     this.providerFallbacks = fallbacks || {};
     this.fallbackAt = new Map(); // agent -> { chain, index } of its fallback chain (fallbackChain)
+    // #337: tonight's limits, read at each check (effectiveLimits); the highest granted so far stays
+    this.nightLimits = typeof nightLimits === 'function' ? nightLimits : null;
+    this.grantedLimits = null;
     this.dropDisabledAgents();
     // #286: an effort the CLI never gets goes to the run's log at start, never silent
     for (const message of silentEfforts(this.wf)) this.notices.push({ level: 'warn', message });

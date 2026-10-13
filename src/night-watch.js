@@ -14,6 +14,7 @@
 //     oracle.escalated  { target, recommendation, reason, actionId? }   left for the owner (a gate, a refused action)
 //     oracle.blocked    { actionId, kind, target, reason: permission | content | loop }   an action it could not take alone
 //     oracle.undone     { action_id }                     the owner undid an action
+//     oracle.limits     { multiplier, values, by, at }    the owner set tonight's limits (#337, src/night-limits.js)
 // Every metric (nightMetrics) is computed from that log and the runs' events.jsonl; nothing is
 // estimated, except "hours saved", which is labelled as an estimate.
 // Self-healing (#278, settings.oracle.selfHealing): the same watch with no end time. Its detectors
@@ -70,7 +71,7 @@ const INCIDENT_KINDS = {
   'roadmap-paused': 'Roadmap paused or in error',
   stalled: 'Stalled run',
 };
-const LOG_TYPES = ['oracle.action', 'oracle.blocked', 'oracle.detected', 'oracle.escalated', 'oracle.undone', 'oracle.watch'];
+const LOG_TYPES = ['oracle.action', 'oracle.blocked', 'oracle.detected', 'oracle.escalated', 'oracle.limits', 'oracle.undone', 'oracle.watch'];
 const STALL_LOGS = new Set(['agent_idle', 'loop_blocked', 'stall']);
 // a low-memory hold (memory.hold) longer than this is an incident
 const MEMORY_HOLD_MS = 5 * 60e3;
@@ -436,7 +437,7 @@ function selfHealingSummary(d) {
 
 /** A run's facts from its events:{ runId, projectId, start, end, status, cost, issues, progress, gates }. */
 function runFacts(runId, events) {
-  const f = { runId, projectId: null, start: null, end: null, status: 'running', cost: 0, issues: 0, progress: [], gates: [], mock: false };
+  const f = { runId, projectId: null, start: null, end: null, status: 'running', cost: 0, issues: 0, progress: [], gates: [], mock: false, label: runId, context: 0, turnsCost: 0, limits: null };
   const gates = new Map();
   for (const e of events) {
     const t = ms(e.ts);
@@ -445,16 +446,34 @@ function runFacts(runId, events) {
       f.start ??= t;
       f.projectId = e.project_id || f.projectId;
       f.issues = Array.isArray(e.issues) ? e.issues.length : f.issues;
+      const n = (Array.isArray(e.issues) ? e.issues[0] : e.issue)?.number;
+      if (n) f.label = `#${n}`;
       f.mock = !!e.mock;
     } else if (e.type === 'workflow.finished') {
       f.end = t;
       f.status = e.status || 'failed';
       f.cost = Number(e.summary?.cost_usd) || 0;
-    } else if (e.type === 'approval.requested') gates.set(e.approval_id, { requested: t, resolved: null, by: null });
+    } else if (e.type === 'session.message_received') {
+      // #337: the context read and the cost so far (the morning summary's runs past a day limit)
+      const u = e.usage || {};
+      f.context += (u.input || 0) + (u.cache_read || 0) + (u.cache_write || 0);
+      f.turnsCost += Number(e.cost_usd) || 0;
+    } else if (e.type === 'limits.expanded') f.limits = { day: e.day || {}, tonight: e.limits || {}, at: t };
+    else if (e.type === 'approval.requested') gates.set(e.approval_id, { requested: t, resolved: null, by: null });
     else if (e.type === 'approval.resolved' && gates.has(e.approval_id) && !e.withdrawn) Object.assign(gates.get(e.approval_id), { resolved: t, by: e.by || null });
   }
   f.gates = [...gates.values()];
   return f;
+}
+
+/**
+ * #337: the runs (runFacts) granted expanded limits during [from, to] (ISO), as src/night-limits.js
+ * pastDayLimits takes them: [{ label, used: { context, cost }, day, tonight }].
+ */
+function expandedRuns(facts, from, to) {
+  const [a, b] = [ms(from), ms(to)];
+  return (facts || []).filter((f) => f.limits && f.limits.at >= a && f.limits.at <= b)
+    .map((f) => ({ label: f.label, used: { context: f.context, cost: f.cost || f.turnsCost }, day: f.limits.day, tonight: f.limits.tonight }));
 }
 
 const quantile = (list, q) => {
@@ -646,8 +665,9 @@ function nightMetrics({ night, log = [], runs = [], usage = [], now = Date.now()
 /**
  * The morning summary's lines (the notification and the Dashboard card): what ran, what the watch did,
  * what waits, safety, and one line per step regression (#335 `regressions`: regressionFindings).
+ * #337 `limits`: src/night-limits.js pastDayLimits, the runs past a day limit and the spending above them.
  */
-function morningSummary(m, { proposed = 0, regressions = [] } = {}) {
+function morningSummary(m, { proposed = 0, regressions = [], limits = null } = {}) {
   const pct = (x) => (x == null ? '—' : `${Math.round(x * 100)}%`);
   const s = m.safety;
   return {
@@ -661,6 +681,8 @@ function morningSummary(m, { proposed = 0, regressions = [] } = {}) {
     regressions: (regressions || []).map((f) => f.evidence?.line || regressionLine(f.evidence || f)),
     // the runs behind each line (its recent window, newest first): the card's links
     regressionRuns: (regressions || []).map((f) => [...((f.evidence || f).recent?.runIds || [])]),
+    limits: [...(limits?.lines || [])],
+    overDayUsd: limits?.overDayUsd || 0,
   };
 }
 
@@ -670,6 +692,7 @@ module.exports = {
   covers,
   DEFAULT_PERMISSIONS,
   detectSelfHealing,
+  expandedRuns,
   INCIDENT_KINDS,
   incidentOf,
   LOG_TYPES,

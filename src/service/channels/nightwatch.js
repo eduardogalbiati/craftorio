@@ -19,6 +19,8 @@
 // (oracle.detected kind regression; the keys flagged until they recover in oracle/regressions.json).
 // Report only: it wakes no one and changes nothing. The morning card lists the current regressions
 // with the runs behind them.
+// Limits tonight (#337, src/night-limits.js): `nightwatch:limits` sets them for the Night watch in force
+// (never under Self-healing alone); the morning summary lists the runs that went past a day limit.
 
 const crypto = require('crypto');
 const fs = require('fs');
@@ -27,6 +29,7 @@ const { execFile } = require('child_process');
 const backlog = require('../../backlog');
 const actions = require('../../oracle-actions');
 const night = require('../../night-watch');
+const nightLimits = require('../../night-limits');
 const demo = require('../../night-watch-demo');
 const notifier = require('../../notifications');
 const projects = require('../../projects');
@@ -34,6 +37,7 @@ const roadmaps = require('../../roadmap');
 const runs = require('../../runs');
 const simulation = require('../../engine/simulation');
 const workspace = require('../../workspace');
+const { requireObject } = require('../common');
 
 const TICK_MS = 60e3;
 const NIGHTS_SHOWN = 14;
@@ -374,7 +378,9 @@ module.exports = (ctx) => {
     for (const n of nights.reverse()) {
       const m = night.nightMetrics({ night: n, log, runs: facts, usage });
       m.unblocked.lines = await unblockedLines(m.unblocked.runs);
-      const summary = night.morningSummary(m, { proposed: waiting });
+      // #337: the runs past a day limit under tonight's expanded limits
+      const limits = n.selfHealing ? null : nightLimits.pastDayLimits(night.expandedRuns(facts, m.window.from, m.window.to));
+      const summary = night.morningSummary(m, { proposed: waiting, limits });
       if (n.selfHealing) {
         m.window.selfHealing = true;
         m.selfHealing = night.selfHealingMetrics({ log, usage, day: n.day });
@@ -401,7 +407,27 @@ module.exports = (ctx) => {
       runs: { active: active.length, waiting: active.filter((r) => r.waiting).length },
       loopCap: night.LOOP_CAP,
       simulation: simulation.simulationOnly(),
+      // #337: the day values the screen shows, and tonight's settings in force (null by day)
+      limits: { day: nightLimits.dayReference(ctx.ws.workflows, settings()), tonight: nightLimits.tonightLimits(dir()) },
     };
+  }
+
+  // #337: the owner sets tonight's limits during a Night watch with an end time: saved and logged
+  // (oracle.limits), the nightly budget raised for that night only (budget.raised), every live run
+  // told (a context_limit gate already open stays open, with a note). Never the Oracle.
+  function setLimits(limits) {
+    const saved = nightLimits.saveNightLimits(dir(), limits, { by: 'the owner' });
+    const s = settings();
+    const nightly = Number(s.budget?.nightlyUsd) || 0;
+    const raisedUsd = saved.values ? Number(saved.values.budget) || 0 : nightly * (saved.multiplier || 1);
+    if (raisedUsd > nightly) {
+      workspace.writeSettings(ctx.ws, { budget: { ...(s.budget || {}), raised: { ...(s.budget?.raised || {}), night: saved.night, nightlyUsd: Math.round(raisedUsd * 100) / 100 } } });
+      ctx.events.emit('settings:changed', workspace.readSettings(ctx.ws));
+    }
+    for (const run of ctx.active?.values() || []) {
+      try { run.noteLimitsRaised?.(); } catch (e) { console.error('Night watch limits:', e.message); }
+    }
+    return state();
   }
 
   /**
@@ -435,7 +461,8 @@ module.exports = (ctx) => {
   timer.unref?.();
 
   return [
-    // { oracle, watch: { on, until (null under Self-healing), startedAt, by, active, selfHealing }, permissions: { catalog, never, allowed, updatedAt, defaults }, runs: { active, waiting }, loopCap, simulation }
+    // { oracle, watch: { on, until (null under Self-healing), startedAt, by, active, selfHealing }, permissions: { catalog, never, allowed, updatedAt, defaults }, runs: { active, waiting }, loopCap, simulation,
+    //   limits: { day: { context, cost, duration, budget }, tonight: { multiplier } | { values } | null } (#337) }
     { channel: 'nightwatch:state', method: 'nightWatchState', fn: () => state() },
     // { nights: [metrics + summary], newest first; baseline }
     { channel: 'nightwatch:report', method: 'nightWatchReport', fn: () => report() },
@@ -448,6 +475,9 @@ module.exports = (ctx) => {
       params: ['allowed'],
       fn: ({ allowed }) => { night.savePermissions(dir(), allowed); return state(); },
     },
+    // #337: tonight's limits { multiplier } (1.5, 2 or 3) or { values: { context, cost, duration, turns, budget } } → state
+    // (refused without a Night watch with an end time: Self-healing never expands limits)
+    { channel: 'nightwatch:limits', method: 'setNightWatchLimits', params: 'limits', fn: (limits) => setLimits(requireObject(limits, 'limits')) },
     // simulated mode: replays two demo nights into the workspace (src/night-watch-demo.js) → report
     {
       channel: 'nightwatch:replay',
