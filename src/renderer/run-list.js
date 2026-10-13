@@ -504,10 +504,22 @@ function sessionProviderCell(s) {
   return `<span class="badge p-${esc(provider)}"${s.simulates ? ' title="Simulated: no model was called"' : ''}>${esc(provider)}</span> <span class="mono small">${esc(s.model || '')}</span>${fb
     ? `<div class="pr-fallback small" data-testid="run-session-fallback" title="${esc(fb.reason || '')}"><span class="badge warn">fallback</span> from <span class="mono">${esc(providerModel(fb.from))}</span>: ${esc(String(fb.reason || '').slice(0, 80))}</div>` : ''}`;
 }
+// #369: a session on a model the installed Claude Code does not know (estimate: the snapshot's
+// cost_estimate): its cost estimated from tokens, or none with no price for the model; the CLI's own
+// figure (at another model's rates) only on hover. The one note for the run lists and the Run screen.
+function costEstimateNote(estimate) {
+  if (!estimate) return '';
+  const model = estimate.model || 'the model';
+  const why = `Claude Code${estimate.cli_version ? ` ${estimate.cli_version}` : ''} does not know ${model}: it priced the turns at another model's rates (${fmtUsd(estimate.cli_cost_usd)}). Update it with \`claude update\`.`;
+  return estimate.source === 'unknown'
+    ? ` <span class="badge warn" data-testid="session-cost-note" title="${esc(`${why} Add a price for ${model} in Usage › Prices.`)}">no price for ${esc(model)}</span>`
+    : ` <span class="badge" data-testid="session-cost-note" title="${esc(why)}">estimated from tokens</span>`;
+}
 // Tokens with no cost: a model with no price (Codex, unpriced models), not a free session.
 function sessionCostCell(s) {
-  if (!s.costUsd && s.tokens?.total && s.provider !== 'mock' && !s.costNotRecorded) return '<td class="num mono muted" title="No price for this model: see Usage › Prices">—</td>';
-  return `<td class="num mono">${fmtUsd(s.costUsd)}${costMarks(s.costEstimatedUsd, s.costNotRecorded)}</td>`;
+  if (s.costEstimate?.source === 'unknown') return `<td class="num mono muted" data-testid="session-cost">—${costEstimateNote(s.costEstimate)}</td>`;
+  if (!s.costUsd && s.tokens?.total && s.provider !== 'mock' && !s.costNotRecorded) return '<td class="num mono muted" data-testid="session-cost" title="No price for this model: see Usage › Prices">—</td>';
+  return `<td class="num mono" data-testid="session-cost">${fmtUsd(s.costUsd)}${costMarks(s.costEstimatedUsd, s.costNotRecorded)}${costEstimateNote(s.costEstimate)}</td>`;
 }
 function sessionsTotalRow(sessions) {
   const sum = (f) => sessions.reduce((a, s) => a + (f(s) || 0), 0);

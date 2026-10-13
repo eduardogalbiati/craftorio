@@ -201,6 +201,8 @@ function turnResult(acc) {
     ...(acc.modelCalls ? { model_calls: acc.modelCalls } : {}),
     costUsd: acc.costUsd,
     ...(acc.cliTotalCostUsd != null ? { cliTotalCostUsd: acc.cliTotalCostUsd } : {}),
+    // #369: { model, cliVersion }: the CLI did not know the model, costUsd is its figure at another model's rates
+    ...(acc.unrecognized ? { unrecognized: acc.unrecognized } : {}),
     providerSessionId: acc.providerSessionId,
     // #302: the turn ended on its request budget, after `requests` model requests
     ...(acc.cut ? { cut: true, requests: acc.cut.requests } : {}),
@@ -404,6 +406,8 @@ function runCli(opts, parser) {
     child.on('error', (e) => finish(e));
     child.on('close', (code) => {
       parser.flush?.(onItem, acc);
+      // #369: what the CLI said on stderr about the turn (Claude: a model it does not know)
+      parser.stderr?.(stderr, acc);
       // a --max-turns of the agent's own args (not its max_requests): the attempt fails, as before #302
       if (acc.cut && !opts.hint?.maxRequests) acc.error ||= 'Claude returned an error: error_max_turns (the --max-turns of its args)';
       if (acc.error) return finish(new Error(acc.error));

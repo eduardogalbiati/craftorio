@@ -100,6 +100,7 @@
       case 'system':
         if (ev.subtype === 'init') {
           acc.providerSessionId = ev.session_id;
+          acc.cliVersion = ev.claude_code_version; // #369: named in the unknown-model warning
           emit({ kind: 'session', sessionId: ev.session_id, model: ev.model });
         }
         break;
@@ -178,6 +179,25 @@
     }
   }
 
+  // #369: a model the installed Claude Code does not know: it still runs it, writes
+  // `[claude-code:unrecognized_model] {"model":"claude-haiku-5-5",...}` to stderr and prices the turn
+  // at another model's rates. The engine then prices the turn from its tokens (acc.unrecognized).
+  const UNRECOGNIZED = /\[claude-code:unrecognized_model\]\s*(\{[^\r\n]*\})?/;
+  parse.stderr = (text, acc) => {
+    const m = UNRECOGNIZED.exec(text || '');
+    if (!m) return;
+    let model = null;
+    try { model = JSON.parse(m[1] || '{}').model || null; } catch { /* the marker alone */ }
+    acc.unrecognized = { model, cliVersion: acc.cliVersion || null };
+  };
+
+  // US$ per million tokens of the models whose price the app needs (#369: a turn the CLI priced at
+  // another model's rates); settings.prices overrides an entry. cache_write unset: 1.25× input for
+  // a 5-minute cache, 2× for an hour (src/shared/session-cache.js cacheWriteUsd).
+  const PRICES = {
+    'claude-haiku-5-5': { input: 0.10, output: 0.50, cache_read: 0.01 },
+  };
+
   const claude = {
     id: 'claude',
     type: DEFINITION.type,
@@ -186,7 +206,8 @@
     short: 'Claude',
     robot: 'claude',
     modelPrefixes: [/^claude-/],
-    models: ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-fable-5-1', 'claude-haiku-4-5'],
+    models: ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-fable-5-1', 'claude-haiku-5-5', 'claude-haiku-4-5'],
+    prices: PRICES,
     definition: DEFINITION,
     resumeArgs: (id) => DEFINITION.resume_args.map((a) => a.replace('{{ session_id }}', id)),
     // attached images: read with its Read tool, their folders given with --add-dir

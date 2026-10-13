@@ -587,7 +587,7 @@ function renderSessions() {
         <div class="metric" title="What its child runs cost (their own children included), not in its total cost"><label>child runs cost</label><b>${fmtCost(childRunsCost(state.run))}</b></div>` : ''}` : `
         <div class="metric"><label>active</label><b>${fmtDur(s.active_ms)}</b></div>
         <div class="metric"><label>in / out</label><b>${fmtNum((t.input || 0) + (t.cache_read || 0))} / ${fmtNum(t.output)}</b></div>
-        <div class="metric"><label>cost</label><b>${fmtCost(s.cost_usd)}${marks(Number(s.estimated_cost_usd) || 0, notRecorded([s]))}</b></div>
+        <div class="metric"><label>cost</label><b data-testid="session-cost">${s.cost_estimate?.source === 'unknown' ? '—' : fmtCost(s.cost_usd)}${marks(Number(s.estimated_cost_usd) || 0, notRecorded([s]))}${costEstimateNote(s.cost_estimate)}</b></div>
         ${nextTurnMetric(s)}`}
       </div>
     </div>`;

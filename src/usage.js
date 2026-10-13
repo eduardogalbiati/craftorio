@@ -6,8 +6,8 @@
 //   are ignored) plus the sessions of the run in progress;
 // - machine: everything the CLIs recorded on this machine (src/local-usage.js), including use
 //   outside the orchestrator. The orchestrator's part is found by provider session id. Cost is what the CLI reported
-// (Claude Code and Grok do), otherwise an estimate from the per-model prices in settings
-// (Codex does not report cost). Budgets live in settings.json and are enforced by the
+// (Claude Code and Grok do), otherwise an estimate from the per-model prices in settings, else the
+// adapter's price table (Codex does not report cost; #369: a Claude turn on a model the CLI does not know). Budgets live in settings.json and are enforced by the
 // engine before each agent turn.
 
 const fs = require('fs');
@@ -16,6 +16,7 @@ const { installCommand } = require('./install-commands');
 const { readRunSummary } = require('./run-record');
 const { runSummaries } = require('./runs');
 const registry = require('./shared/providers');
+const { cacheWriteUsd } = require('./session-cache');
 const TimeZone = require('./time-zone');
 
 // The CLIs, from their adapters (src/shared/providers/). installCommand: what the Usage screen's play
@@ -41,13 +42,27 @@ function providerId(p) {
   return hit ? hit.id : null;
 }
 
-/** USD for a session: the reported cost, else an estimate from prices, else null. */
+// A model's price (US$ per million tokens): settings.prices, else the price table of a CLI adapter (#369)
+function priceOf(model, prices = {}) {
+  return prices[model] || registry.clis().find((a) => a.prices?.[model])?.prices[model] || null;
+}
+
+// What tokens cost at `price`: input, output, cache reads, and cache writes at the cache's lifetime
+// (src/session-cache.js cacheWriteUsd: 1.25× input for 5 minutes, 2× for an hour, unless the price sets it)
+function tokensCost(t = {}, price, lifetimeMs) {
+  const base = (t.input || 0) * (price.input || 0) + (t.output || 0) * (price.output || 0) + (t.cache_read || 0) * (price.cache_read ?? price.input ?? 0);
+  return base / 1e6 + (cacheWriteUsd(t.cache_write, price, lifetimeMs) || 0);
+}
+
+/**
+ * USD for a session: the reported cost, else an estimate from prices, else null. #369: a session the
+ * CLI priced at another model's rates and the app has no price for counts the CLI's figure.
+ */
 function sessionCost(session, prices = {}) {
   if (session.cost_usd) return session.cost_usd;
-  const price = prices[session.model];
-  if (!price) return null;
-  const t = session.tokens || {};
-  return ((t.input || 0) * (price.input || 0) + (t.output || 0) * (price.output || 0) + (t.cache_read || 0) * (price.cache_read ?? price.input ?? 0)) / 1e6;
+  const price = priceOf(session.model, prices);
+  if (!price) return session.cost_estimate?.source === 'unknown' ? (session.cost_estimate.cli_cost_usd ?? null) : null;
+  return tokensCost(session.tokens || {}, price, session.cache_lifetime_ms);
 }
 
 function addSession(tot, session, prices) {
@@ -279,10 +294,12 @@ module.exports = {
   budgetBaseline,
   computeUsage,
   preflight,
+  priceOf,
   providerId,
   PROVIDERS,
   readRuns,
   sessionCost,
+  tokensCost,
   totalTokens,
   WARN_AT,
   withPeerUsage,

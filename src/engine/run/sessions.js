@@ -120,6 +120,9 @@ const methods = {
       ...(s.costNotRecorded ? { cost_not_recorded: true } : {}),
       // the CLI's own running total of its session (Claude): seeds the per-turn cost when a resumed run continues it
       ...(s.cliTotalUsd != null ? { cli_total_cost_usd: s.cliTotalUsd } : {}),
+      // #369: a model Claude Code does not know: cost_usd priced from tokens (source tokens) or left
+      // out (source unknown, no price); { source, model, cli_version, cli_cost_usd: the CLI's figure }
+      ...(s.costEstimate ? { cost_estimate: { ...s.costEstimate } } : {}),
       ...(s.simulates ? { simulates: s.simulates } : {}),
       ...(s.fallbackFrom ? { fallback_from: s.fallbackFrom } : {}),
       ...this.cacheState(s),

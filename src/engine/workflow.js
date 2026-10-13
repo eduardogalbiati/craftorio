@@ -179,6 +179,8 @@ class WorkflowRun extends EventEmitter {
     this.budget = budget || {};
     this.prices = prices || {};
     this.budgetWarned = new Set();
+    // #369: the models Claude Code did not know, warned once each
+    this.unknownModelWarned = new Set();
     this.peerSessions = peerSessions || (() => []);
     this.idleWarnMs = idleWarnMs ?? IDLE_WARN_MS;
     this.stepTiming = {};           // step id -> { turns, duration_ms, active_ms, waiting_ms, stalled_ms } (summary.timing)

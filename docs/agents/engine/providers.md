@@ -21,6 +21,21 @@ Turn timeouts, per-run agent overrides, fallback chains, limits per model, retri
   YAML's `providers:` and `agents.<name>.provider` formats did not change, and
   `test/provider-args-snapshot-348.test.js` holds every command line built per provider, capability
   set and session mode. Adding a provider: the code map's "A provider".
+- **Where a turn's cost comes from (#369)**: the CLI's own figure when it reports one (Claude Code's
+  `total_cost_usd`, the difference with the session's previous total, #233; Grok), else the tokens ×
+  the model's price (`src/usage.js` `sessionCost`: input, output, cache read, and cache write at the
+  model's `cache_write` price, else 1.25× input for a 5-minute cache and 2× for an hour). A model's
+  price is `settings.prices[model]`, else the adapter's `prices` table (`priceOf`; Claude:
+  `claude-haiku-5-5`). One exception: when Claude Code does not know the model it runs, it writes
+  `[claude-code:unrecognized_model] {"model":...}` to stderr (the adapter's `parse.stderr`) and prices
+  the turn at another model's rates. Such a turn is priced by the app from its tokens at the session's
+  cache tier (`priceUnrecognizedTurn`, `src/engine/run/costs.js`): its `session.message_received`
+  carries `cost_source: 'tokens'` and the CLI's figure as `cli_cost_usd`, the session snapshot a
+  `cost_estimate` `{ source, model, cli_version, cli_cost_usd }`. With no price for the model its cost
+  is unknown (`cost_usd: null`, `cost_source: 'unknown'`, `cost_note: 'no price for <model>'`) and the
+  run's `max_total_cost_usd` and the budgets count the CLI's figure, so a limit is never skipped. The
+  run log warns once per model (`kind: unrecognized_model`, with `claude update`). Turns of models the
+  CLI knows keep its cost exactly; past run records are not rewritten.
 - `timeout` (agent or `defaults`): the limit of one turn, default `30m`; the process is killed
   when it runs out. It may be a template rendered with the run's context (`turnTimeout`), e.g. the
   software-development workflows give grouped runs more time:

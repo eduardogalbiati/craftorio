@@ -3,18 +3,22 @@
 // `max_total_cost_usd` checked before every step (`checkLimits`, children included), the limits per
 // model (`modelLimits`, #262), the monthly budget per provider over this run and its peers
 // (`checkBudget`), the `max_total_context` pause gate (`contextGate`), the supervisor's and the
-// children's spend, and the step timing and context metrics of the summary (`timingSummary`,
+// children's spend, the price of a turn on a model Claude Code does not know (`priceUnrecognizedTurn`,
+// #369), and the step timing and context metrics of the summary (`timingSummary`,
 // `contextSummary`). `childRunCost`: what a child run cost from its summary (#175).
 
 'use strict';
 
 const {
+  priceOf,
   providerId,
   sessionCost,
+  tokensCost,
   totalTokens,
   WARN_AT,
 } = require('../../usage');
 const nightLimits = require('../../night-limits');
+const sessionCache = require('../../session-cache');
 const { render } = require('./templates');
 const { parseDuration, parseTokens } = require('./load');
 
@@ -38,7 +42,8 @@ const methods = {
     }
     // its child runs' cost counts too (#175)
     const children = this.childrenCostUsd();
-    const cost = [...this.sessions.values()].reduce((a, s) => a + s.costUsd, 0) + children;
+    // #369: the CLI's figure of the turns the app has no price for counts too, so a limit is never skipped
+    const cost = [...this.sessions.values()].reduce((a, s) => a + s.costUsd + (s.cliOnlyUsd || 0), 0) + children;
     const maxCost = this.maxTotalCost();
     if (maxCost && cost > maxCost) {
       this.emitEvent('limit.exceeded', { limit: 'max_total_cost_usd', value: maxCost, current: cost, ...(children ? { children } : {}) });
@@ -141,7 +146,7 @@ const methods = {
     let tokens = b.usedTokens || 0;
     for (const s of [...this.sessions.values(), ...this.peerSessions()]) {
       if (providerId(s.provider) !== id) continue;
-      usd += sessionCost({ cost_usd: s.costUsd, model: s.model, tokens: s.tokens }, this.prices) || 0;
+      usd += sessionCost({ cost_usd: s.costUsd + (s.cliOnlyUsd || 0), model: s.model, tokens: s.tokens }, this.prices) || 0;
       tokens += totalTokens(s.tokens);
     }
     const pct = Math.max(b.limitUsd ? usd / b.limitUsd : 0, b.limitTokens ? tokens / b.limitTokens : 0);
@@ -153,6 +158,41 @@ const methods = {
       this.budgetWarned.add(id);
       this.emitEvent('log', { level: 'warn', message: `${b.name || id} is at ${Math.round(pct * 100)}% of its monthly budget (${detail}).` });
     }
+  },
+
+  // #369: a Claude turn on a model the installed Claude Code does not know (res.unrecognized, from its
+  // stderr): the CLI priced it at another model's rates, so the turn is priced from its tokens at the
+  // model's prices (settings.prices, else the adapter's table), cache writes at the session's cache
+  // tier. The CLI's figure stays as cli_cost_usd. With no price the turn's cost is unknown (null) and
+  // the CLI's figure counts toward the limits (s.cliOnlyUsd). Rewrites res.costUsd; warns once per
+  // model. Returns the fields of the turn's event ({} for a model the CLI knows).
+  priceUnrecognizedTurn(session, res, { tier, stepId, agentName }) {
+    const u = res.unrecognized;
+    if (!u) return {};
+    const model = u.model || session.model;
+    const cliCost = res.costUsd ?? null;
+    const price = priceOf(model, this.prices);
+    const cost = price ? +tokensCost(res.usage, price, sessionCache.cacheLifetimeMs('claude', { tier: tier || session.cacheTier || null })).toFixed(6) : null;
+    const source = cost == null ? 'unknown' : 'tokens';
+    res.costUsd = cost;
+    if (cost == null) session.cliOnlyUsd = (session.cliOnlyUsd || 0) + (cliCost || 0);
+    session.costEstimate = {
+      source, model, cli_version: u.cliVersion || null,
+      cli_cost_usd: +((session.costEstimate?.cli_cost_usd || 0) + (cliCost || 0)).toFixed(6),
+    };
+    if (!this.unknownModelWarned.has(model)) {
+      this.unknownModelWarned.add(model);
+      const cli = `Claude Code${u.cliVersion ? ` ${u.cliVersion}` : ''}`;
+      this.emitEvent('log', {
+        level: 'warn', kind: 'unrecognized_model', step_id: stepId, agent: agentName, model,
+        message: `[${agentName}] ${cli} does not know ${model}: it priced the turn at another model's rates (US$ ${(cliCost || 0).toFixed(4)}). `
+          + (cost == null
+            ? `There is no price for ${model}: its cost is unknown (add one in Usage › Prices); the run's limits count the CLI's figure.`
+            : 'Its turns are estimated from tokens at its own prices.')
+          + ' Update the CLI with `claude update`.',
+      });
+    }
+    return { cost_source: source, cli_cost_usd: cliCost, ...(cost == null ? { cost_note: `no price for ${model}` } : {}) };
   },
 
   // What this run's child runs cost (#175), their own children included: it counts toward this run's
