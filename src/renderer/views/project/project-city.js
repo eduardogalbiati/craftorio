@@ -120,6 +120,9 @@
       const model = c.answer?.model;
       c.layout = model && window.CityLayout ? CityLayout.layoutCity(model, { quadrants: quadrants() }) : null;
       if (c.layout && !c.colour) c.colour = CityLayout.defaultColourBy(model);
+      // a new layout starts with nothing hovered or pinned (the scene drops its own too)
+      c.hover = null;
+      c.pinned = null;
       render();
       draw();
     }
@@ -198,7 +201,7 @@
       const light = c.theme === 'light';
       return `<div class="r3d-top r3d-card" data-testid="project-city-header">
         <div class="r3d-brand"><i>${ICON_CITY}</i></div>
-        <div class="r3d-run"><b title="${esc(title)}">${esc(title)}</b><small title="${esc(facts1)}" data-testid="project-city-facts">${esc(facts1)}</small></div>
+        <div class="r3d-run"><b title="${esc(title)}">${esc(title)}</b> <small title="${esc(facts1)}" data-testid="project-city-facts">${esc(facts1)}</small></div>
         <span class="r3d-grow"></span>
         <label class="r3d-search"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="7" cy="7" r="5"/><path d="M11 11l4 4"/></svg>
           <input type="search" list="pc-targets-${esc(projectId)}" placeholder="Fly to a file or a district" aria-label="Search the city" data-pc-search data-testid="project-city-search" /></label>
@@ -273,7 +276,8 @@
         <div class="r3d-hint r3d-card">Drag to pan, right-drag to rotate, scroll to zoom; click a building to pin its card</div>
         <div class="r3d-card pc-hover hidden" data-pc-hover data-testid="project-city-hover"></div>
         <div class="r3d-detail r3d-card hidden" data-pc-detail data-testid="project-city-card"></div>`;
-      if (c.layout) { c.legend = CityLayout.colourBy(c.layout, c.colour, { light: c.theme === 'light' }).legend; renderLegend(); }
+      c.legend = CityLayout.colourBy(c.layout, c.colour, { light: c.theme === 'light' }).legend;
+      renderLegend();
       renderDetail();
     }
 
