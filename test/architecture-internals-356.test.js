@@ -48,6 +48,26 @@ test('#356 globRe: 8 single-star wildcards against a 200-character path that doe
   assert.ok(ms < 1000, `globRe and buildModel took ${ms} ms`);
 });
 
+test('#356 globMatcher: the glob rules of globToRegExp without a RegExp (worked examples and the TESTS_PATHS defaults)', () => {
+  const { globMatcher, globToRegExp, TESTS_PATHS } = require('../src/shared/globs');
+  assert.equal(globMatcher('*.lock').test('a/b/yarn.lock'), true);
+  assert.equal(globMatcher('*.lock').test('a/b/yarn.locks'), false);
+  assert.equal(globMatcher('src/*.js').test('src/a/b.js'), false);
+  assert.equal(globMatcher('src/**/*.js').test('src/b.js'), true);
+  assert.equal(globMatcher('src/**/*.js').test('src/a/b/c.js'), true);
+  assert.equal(globMatcher('**/fixtures/**').test('x/fixtures/y/z.json'), true);
+  assert.equal(globMatcher('a?c').test('a/c'), false);
+  assert.equal(globMatcher('a?c').test('abc'), true);
+  assert.equal(globMatcher('').test(''), true);
+  const paths = ['test/a.test.js', 'src/a.js', 'src/a.spec.ts', 'pkg/__tests__/x.js', 'a/b/c_test.go', 'tests/unit/x.py',
+    'src/main/java/AppTest.java', 'features/steps/x.js', 'testdata/x', 'contest/x.js', 'Tests/X.cs', 'é/ü.test.js'];
+  for (const pattern of TESTS_PATHS) {
+    for (const file of paths) {
+      assert.equal(globMatcher(pattern).test(file), globToRegExp(pattern).test(file), `${pattern} on ${file}`);
+    }
+  }
+});
+
 test('#356 globRe: a pattern without a slash matches at any depth, a directory pattern its contents, ** spans folders', () => {
   assert.equal(core.globRe('*.lock').test('a/b/yarn.lock'), true);
   assert.equal(core.globRe('dist/').test('pkg/dist/x.js'), true);
