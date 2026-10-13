@@ -101,6 +101,18 @@ test('findings:file sends the finding to the Product Owner\'s inbox as an issue.
   assert.ok(inJson(requests[0].params, saved.dir), `the request names the finding's folder ${saved.dir}`);
 });
 
+test('findings:file without a repository to publish on files the issue with the local marked.png path', async (t) => {
+  const { service, api } = makeService(t);
+  const p = await roadmapProject(api, service.workspace(), t, [1], 'findings-local-image');
+  const saved = await channel(api, 'findings:save')(finding());
+  const out = await channel(api, 'findings:file')({ id: saved.id, projectId: p.id, mock: true });
+  assert.equal(out.ok, true, JSON.stringify(out));
+  const history = await api['po:history']({ projectId: p.id });
+  const request = history.find((m) => m.role === 'request' && m.request?.from === 'findings');
+  assert.ok(inJson(request.params, path.join(saved.dir, 'marked.png')), 'the issue body names the local marked.png');
+  assert.equal(/!\[[^\]]*\]\(https?:/.test(JSON.stringify(request.params)), false, 'no published image link');
+});
+
 test('a finding sent to the Product Owner is no longer listed as "saved"', async (t) => {
   const { service, api } = makeService(t);
   const p = await roadmapProject(api, service.workspace(), t, [1], 'findings-status');

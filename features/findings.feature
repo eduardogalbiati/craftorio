@@ -51,6 +51,7 @@ Feature: Findings
     And I open "Backlog" in the sidebar
     And I open the Product Owner
     Then the request in the Product Owner's drawer shows "The Backlog's empty state has no call to action"
-    When I open "Settings" in the sidebar
+    When I press Escape
+    And I open "Settings" in the sidebar
     And I open the "General" settings tab
     Then the findings list shows the finding "The Backlog's empty state has no call to action" as "Filed"

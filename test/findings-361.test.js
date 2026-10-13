@@ -154,7 +154,8 @@ test('recent UI actions and service calls are capped at the last 50, calls keepi
   assert.equal(ctx.calls.length, 50);
   assert.equal(ctx.calls[0].at, 2030);
   assert.equal(ctx.calls[49].at, 2079);
-  assert.equal(ctx.calls.find((c) => c.at === 2031).error, 'failed 31');
+  assert.equal(ctx.calls.find((c) => c.at === 2033).error, 'failed 33');
+  assert.equal(ctx.calls.find((c) => c.at === 2031).error, null);
 });
 
 test('the main process log is capped at its last 200 lines', (t) => {
