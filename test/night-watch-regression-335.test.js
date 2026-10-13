@@ -128,3 +128,36 @@ test('#335 morningSummary: two regressed steps give two lines', () => {
   assert.equal(s.regressions.some((l) => l.startsWith('test:')), true);
   assert.equal(s.regressions.some((l) => l.startsWith('review:')), true);
 });
+
+// ---- after the change: what the acceptance tests left open ----------------------------------------
+
+test('#335 morningSummary: a step regressed on both measures is one line, cost first', () => {
+  const regressions = findingsOf(history({ cost: 4.5, minutes: 15 }));
+  const s = night.morningSummary(metrics(), { proposed: 0, regressions });
+  assert.deepEqual(s.regressions, ['test: +50% cost, +50% minutes over 3 runs']);
+});
+
+test('#335 morningSummary: each line comes with the runs behind it (the controls of the card)', () => {
+  const regressions = findingsOf(history({ cost: 4.5 }));
+  const s = night.morningSummary(metrics(), { proposed: 0, regressions });
+  assert.equal(s.regressionRuns.length, 1);
+  assert.deepEqual([...s.regressionRuns[0]].sort(), ['n1', 'n2', 'n3']);
+  assert.deepEqual(night.morningSummary(metrics(), { proposed: 0, regressions: [] }).regressionRuns, []);
+});
+
+// a regression logged by the watch (oracle.detected), on a run that already finished
+const regressionLog = () => [{
+  ts: new Date(W0 + 60 * MIN).toISOString(), type: 'oracle.detected', id: 'g1', kind: 'regression', target: 'n3', runId: 'n3', projectId: 'p1',
+  since: new Date(W0 + 50 * MIN).toISOString(), evidence: { step: 'test', regressed: ['cost'] },
+}];
+const nightOf = () => ({ startedAt: new Date(W0).toISOString(), until: new Date(W0 + 540 * MIN).toISOString() });
+
+test('#335 nightMetrics: a logged regression is counted under its kind', () => {
+  const m = night.nightMetrics({ night: nightOf(), log: regressionLog(), runs: [], now: W0 + 540 * MIN });
+  assert.equal(m.incidents.byKind.regression, 1);
+});
+
+test('#335 nightMetrics: a regression is report only, so it adds no blocked idle time', () => {
+  const m = night.nightMetrics({ night: nightOf(), log: regressionLog(), runs: [], now: W0 + 540 * MIN });
+  assert.equal(m.idleHours.blocked, 0);
+});

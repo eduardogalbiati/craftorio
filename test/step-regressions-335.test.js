@@ -187,3 +187,55 @@ test('#335 thresholds override the defaults: with cost 0.6, a 50% rise is within
   assert.equal(e.status, 'within');
   assert.deepEqual(e.regressed, []);
 });
+
+// ---- after the change: what the acceptance tests left open ----------------------------------------
+
+// a run whose `test` session reported no cost (Codex) and, without prices, cannot be priced
+const unpriced = (r) => ({ ...r, sessions: r.sessions.map((s) => ({ ...s, cost_usd: undefined })), costUsd: 0 });
+
+test('#335 a session cost neither reported nor priced is unknown, not zero, in the baseline median', () => {
+  // 3 of the 6 baseline runs unpriced: as zeros they would halve the median and make 3 look like +100%
+  const runs = [...series('b', 3, 1), ...series('u', 3, 4).map(unpriced), ...series('n', 3, 7)];
+  const e = only(load().stepRegressions(runs, { prices: {} }));
+  assert.equal(e.baseline.costPerPoint, 1);
+  assert.equal(e.regressed.includes('cost'), false);
+});
+
+test('#335 a class whose costs are all unknown has no cost median and no cost regression', () => {
+  const runs = [...series('b', 6, 1), ...series('n', 3, 7)].map(unpriced);
+  const e = only(load().stepRegressions(runs, { prices: {} }));
+  assert.equal(e.recent.costPerPoint, null);
+  assert.equal(e.regressed.includes('cost'), false);
+});
+
+test('#335 a step with a cost but no progress trail has no minutes and no minutes regression', () => {
+  const noTrail = (r) => ({ ...r, progress: [] });
+  const runs = [...series('b', 6, 1).map(noTrail), ...series('n', 3, 7, { minutes: 30 }).map(noTrail)];
+  const e = only(load().stepRegressions(runs));
+  assert.equal(e.baseline.minutes, null);
+  assert.equal(e.recent.minutes, null);
+  assert.deepEqual(e.regressed, []);
+  assert.equal(e.status, 'within');
+});
+
+test('#335 cost and minutes can both regress in one entry', () => {
+  const e = only(load().stepRegressions(history({ cost: 4.5, minutes: 15 })));
+  assert.equal(e.status, 'regressed');
+  assert.deepEqual([...e.regressed].sort(), ['cost', 'minutes']);
+});
+
+test('#335 the effort is part of the class: the same model at another effort is a new class', () => {
+  const runs = [...series('b', 6, 1), ...series('n', 3, 7, { cost: 9, effort: 'max' })];
+  const entries = load().stepRegressions(runs);
+  assert.equal(entries.length, 2);
+  assert.equal(entries.some((e) => e.status === 'regressed'), false);
+  assert.equal(entries.find((e) => e.class.effort === 'max').status, 'not-measurable');
+});
+
+test('#335 runs of another workflow file are another baseline', () => {
+  const other = series('o', 3, 7, { cost: 9 }).map((r) => ({ ...r, file: 'C:/ws/workflows/ai-arena.yaml' }));
+  const entries = load().stepRegressions([...history(), ...other]);
+  const sd = entries.find((e) => e.workflow === WF);
+  assert.equal(sd.status, 'within');
+  assert.equal(entries.find((e) => e.workflow === 'ai-arena.yaml').status, 'not-measurable');
+});
