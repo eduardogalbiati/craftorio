@@ -40,8 +40,8 @@ function makeRepo(t, { pinned = true } = {}) {
 }
 
 // A mock run of the workflow, recorded as the app records it (a Recorder writes summary.json);
-// `onTurn(repo, n)` plays the developer's side effects before its n-th refactor turn. Gates get their
-// first choice, except the ones `reject` names (their last choice).
+// `onTurn(repo, n)` plays the developer's side effects before its n-th refactor turn. Gates are
+// approved (first choice), except the ones `reject` names (last choice, or rejected).
 async function runRefactor(t, { mockSequences = {}, onTurn, inputs = {}, pinned = true, reject = [] } = {}) {
   const repo = makeRepo(t, { pinned });
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'refactor-runs-'));
@@ -60,8 +60,11 @@ async function runRefactor(t, { mockSequences = {}, onTurn, inputs = {}, pinned 
     rec.write(ev);
     events.push(ev);
     if (ev.type === 'approval.requested') {
-      const choice = reject.includes(ev.step_id) ? ev.choices[ev.choices.length - 1] : ev.choices[0];
-      setImmediate(() => run.resolveApproval(ev.approval_id, choice.id, 'user'));
+      // a gate with choices gets its first (or, rejected, its last); a plain approve/reject gate a boolean
+      const rejected = reject.includes(ev.step_id);
+      const choices = ev.choices || [];
+      const answer = choices.length ? choices[rejected ? choices.length - 1 : 0].id : !rejected;
+      setImmediate(() => run.resolveApproval(ev.approval_id, answer, 'user'));
     }
     if (ev.type === 'session.message_sent' && ev.step_id === 'refactor' && onTurn) onTurn(repo, ++turn);
   });
