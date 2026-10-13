@@ -14,11 +14,17 @@
 // Oracle with that evidence (ctx.oracleFindings, batched; in the wake-ups' scope only:
 // ctx.oracleFindingsScope). While a budget pauses the Oracle the findings are still logged and the owner gets one
 // notification. The report gains one window per Self-healing day (selfHealingDays).
+// Step regressions (#335): after each finished run, while a watch is active, a step whose recent cost
+// or minutes rose past its baseline (src/step-regressions.js) is logged once per step and class
+// (oracle.detected kind regression; the keys flagged until they recover in oracle/regressions.json).
+// Report only: it wakes no one and changes nothing. The morning card lists the current regressions
+// with the runs behind them.
 
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
+const backlog = require('../../backlog');
 const actions = require('../../oracle-actions');
 const night = require('../../night-watch');
 const demo = require('../../night-watch-demo');
@@ -42,6 +48,8 @@ const BUFFER_KEEP_MS = 2 * 3600e3;
 // a run first seen mid-way: its workflow.started is read from this much of the head of its events.jsonl
 const HEAD_BYTES = 256 * 1024;
 const FINDING_LINE_CHARS = 1500;
+// #335: the step regressions are checked this long after a run's workflow.finished
+const REGRESSION_DELAY_MS = 10e3;
 
 const shortstat = (repo, commit) => new Promise((resolve) => {
   execFile('git', ['-C', repo, 'diff', '--shortstat', `${commit}^1`, commit], { timeout: 15e3, windowsHide: true }, (err, out) => {
@@ -222,6 +230,50 @@ module.exports = (ctx) => {
   }
   const onInterrupted = (info) => onRunEvent({ type: 'run.interrupted', run_id: info?.runId, ts: new Date().toISOString() });
 
+  // ---- step regressions (#335) ---------------------------------------------------------------
+  const regressionsFile = () => path.join(dir(), 'regressions.json');
+  const readFlagged = () => {
+    try { return JSON.parse(fs.readFileSync(regressionsFile(), 'utf8')).flagged || []; } catch { return []; }
+  };
+  // the run list and what prices it (the issues' complexity labels, the settings' prices)
+  function regressionInputs() {
+    const issues = projects.listProjects(ctx.ws.projects).flatMap((p) => backlog.readBacklog(ctx.ws.backlog, p.id)?.issues || []);
+    return { list: runs.listRuns(ctx.ws.runs), opts: { issues, prices: settings().prices || {} } };
+  }
+  // every step regressed now (flagged or not): the morning card's lines
+  function currentRegressions() {
+    try {
+      const { list, opts } = regressionInputs();
+      return night.regressionFindings(list, opts);
+    } catch (e) { console.error('Step regressions:', e.message); return []; }
+  }
+  // after a run: a new regression is logged once; the flagged keys are the ones regressed now (a
+  // recovered step leaves the list, so its next rise is reported again)
+  function checkRegressions() {
+    try {
+      const { list, opts } = regressionInputs();
+      const flagged = readFlagged();
+      const fresh = night.regressionFindings(list, { ...opts, flagged });
+      const byId = new Map(list.map((r) => [r.runId, r]));
+      for (const f of fresh) detect({ kind: 'regression', runId: f.runId, projectId: byId.get(f.runId)?.projectId || null, since: f.since, key: `regression ${f.key}`, evidence: f.evidence });
+      const now = night.regressionFindings(list, opts).map((f) => f.key).sort();
+      if (JSON.stringify(now) !== JSON.stringify([...flagged].sort())) fs.writeFileSync(regressionsFile(), `${JSON.stringify({ flagged: now, updatedAt: new Date().toISOString() }, null, 2)}\n`);
+    } catch (e) { console.error('Step regressions:', e.message); }
+  }
+  // checked a little after the run's end, once its summary.json (what listRuns reads) is written
+  function onRunFinished(ev) {
+    if (ev?.type !== 'workflow.finished' || !ctx.ws) return;
+    const t = setTimeout(() => {
+      try { if (ctx.ws && watch().active) checkRegressions(); } catch (e) { console.error('Step regressions:', e.message); }
+    }, REGRESSION_DELAY_MS);
+    t.unref?.();
+  }
+  // the summary with the current regressions, as morningSummary words them (a line and its runs each)
+  const withRegressions = (summary) => {
+    const found = currentRegressions();
+    return { ...summary, regressions: found.map((f) => f.evidence.line), regressionRuns: found.map((f) => f.evidence.recent.runIds) };
+  };
+
   // the last run's end: when a roadmap went idle or empty
   function lastEnd() {
     let t = null;
@@ -362,10 +414,11 @@ module.exports = (ctx) => {
     const last = [night.nightsOf(log).at(-1), night.selfHealingDays(log).filter((d) => endOf(d) <= now).at(-1)].filter(recent).sort((a, b) => endOf(a) - endOf(b)).at(-1);
     if (!last) return null;
     const m = windowOf(await report(), last.startedAt);
-    return m ? { window: m.window, summary: m.summary } : null;
+    return m ? { window: m.window, summary: withRegressions(m.summary) } : null;
   }
 
   ctx.events.on('run:event', onRunEvent);
+  ctx.events.on('run:event', onRunFinished);
   ctx.events.on('run:interrupted', onInterrupted);
   ctx.events.on('settings:changed', syncSelfHealing);
   ctx.events.on('nightwatch:ended', async (w) => {

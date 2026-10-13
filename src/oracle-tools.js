@@ -13,7 +13,7 @@
 // Oracle's own kinds (ORACLE_KINDS: a check, stopping a stray process).
 // #184: run_analysis (runs' cost by agent and step, rounds, timeouts, the test writer's context:
 // src/oracle-run-analysis.js; #321: its focuses time, context, tools, cache and tests in
-// src/oracle-run-focus.js), issues_search / issue_view / labels (gh / glab read commands built in
+// src/oracle-run-focus.js; #335: regressions, over the whole run list), issues_search / issue_view / labels (gh / glab read commands built in
 // src/oracle-platform.js, run with ctx.execCli or backlog.execCli) and the checker delegate.
 // Nothing else here writes: git runs without a pager, external diff or optional locks, every option
 // that writes or starts a program is refused (refusedGitArg), and every path stays in its folder.
@@ -39,6 +39,7 @@ const {
   focusAnswer,
   focusBrief,
   FOCUSES,
+  regressionsAnswer,
 } = require('./oracle-run-focus');
 const { bundleStatus } = require('./seed');
 const { readEvents } = require('./supervisor');
@@ -312,15 +313,22 @@ function oracleTools(ctx, hooks = {}) {
         '- tools: per agent and step, calls by tool and by Bash kind, re-read files, searches, edits, sub-agents, failed calls by cause, the test commands with their durations.',
         '- cache: the turns that resumed a session past its prompt cache lifetime (cold): cache written, cost, share of all turns.',
         '- tests: the suite logs\' time per test file and slowest tests, two runIds compared (the tests both ran), the test step\'s time on E2E vs unit tests.',
+        '- regressions: over all the real successful runs (runIds and since ignored), each workflow step whose median cost per complexity point or minutes over its last 3 runs is over 30% above its baseline with the same provider, model and effort: the baseline vs recent medians and the run ids behind both. Report only.',
       ].join('\n'),
       inputSchema: obj({
         runIds: { type: 'array', items: { type: 'string' }, description: 'The run ids' },
         since: str('ISO date: the runs started from then'),
-        focus: { type: 'string', enum: FOCUSES, description: 'What to analyze: cost (default), time, context, tools, cache or tests' },
+        focus: { type: 'string', enum: FOCUSES, description: 'What to analyze: cost (default), time, context, tools, cache, tests or regressions' },
         agent: str('The context focus: the agent whose turns to read (default developer)'),
       }),
       run: (input = {}) => {
         const focus = input.focus || 'cost';
+        if (focus === 'regressions') {
+          const orNull = (read) => { try { return read(); } catch { return null; } };
+          const issues = projects.listProjects(ws().projects).flatMap((p) => orNull(() => backlog.readBacklog(ws().backlog, p.id))?.issues || []);
+          const prices = orNull(() => require('./workspace').readSettings(ws()).prices) || {};
+          return JSON.stringify(regressionsAnswer(runs.listRuns(ws().runs), { issues, prices }));
+        }
         if (focus !== 'cost') {
           const testFilesByRepo = new Map();
           const items = analyzedRuns(input).map((dir) => {

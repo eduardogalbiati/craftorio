@@ -239,5 +239,6 @@ module.exports = {
   HISTORY,
   historyOf,
   STEP_FACTORS,
+  stepMinutes,
   withEstimates,
 };

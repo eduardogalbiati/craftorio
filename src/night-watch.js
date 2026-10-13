@@ -19,9 +19,11 @@
 // Self-healing (#278, settings.oracle.selfHealing): the same watch with no end time. Its detectors
 // (detectSelfHealing: memory, cost-gap, environment, repeat) are pure functions over the runs' events;
 // its report is per UTC day (selfHealingDays → nightMetrics, selfHealingMetrics).
+// Step regressions (#335, regressionFindings): over the run list, not the events; report only.
 
 const fs = require('fs');
 const path = require('path');
+const { regressionLine, stepRegressions } = require('./step-regressions');
 
 // What the Oracle may do without asking, each with what it does and its undo. Defaults: retry and refresh.
 const PERMISSIONS = [
@@ -60,6 +62,8 @@ const INCIDENT_KINDS = {
   // #276: the engine's memory guard stopped a run's process or held a suite / run for low memory;
   // the engine already acted, the watch only records it
   memory: 'Process stopped or run held for memory',
+  // #335: a step's recent median cost or minutes above its baseline (src/step-regressions.js); report only
+  regression: 'Step cost or time regressed',
   // #278: the same command failing or stopped REPEAT_TIMES times in one step of a run
   repeat: 'Same command failing repeatedly',
   'roadmap-empty': 'Roadmap empty',
@@ -354,6 +358,30 @@ function detectSelfHealing(runs = []) {
 }
 
 /**
+ * The regression detector (#335), next to detectSelfHealing but over the run list (src/runs.js
+ * listRuns rows, not events): one { kind: 'regression', key, runId (the newest recent run), since,
+ * evidence: { workflow, step, class, baseline, recent, regressed, line } } per regressed step and class
+ * (src/step-regressions.js) whose key is not in `flagged`, so a step is reported once until it
+ * recovers. Report only: a finding carries no action and no proposal.
+ */
+function regressionFindings(runs, { issues = [], prices = {}, thresholds = {}, flagged = [] } = {}) {
+  const seen = new Set(flagged || []);
+  const byId = new Map((runs || []).map((r) => [r.runId, r]));
+  return stepRegressions(runs, { issues, prices, thresholds, flagged })
+    .filter((e) => e.status === 'regressed' && !seen.has(e.key))
+    .map((e) => {
+      const newest = byId.get(e.recent.runIds[0]);
+      return {
+        kind: 'regression',
+        key: e.key,
+        runId: newest?.runId || null,
+        since: newest?.finishedAt || newest?.startedAt || null,
+        evidence: { workflow: e.workflow, step: e.step, class: e.class, baseline: e.baseline, recent: e.recent, regressed: e.regressed, line: regressionLine(e) },
+      };
+    });
+}
+
+/**
  * The standing watch's days (#278) as windows nightMetrics reads, oldest first: [{ day (UTC,
  * YYYY-MM-DD), startedAt, until (the day's end), endedAt (the switch turned off that day, else
  * null), by, selfHealing: true }], from the log's oracle.watch entries with selfHealing.
@@ -614,8 +642,11 @@ function nightMetrics({ night, log = [], runs = [], usage = [], now = Date.now()
   };
 }
 
-/** The morning summary's lines (the notification and the Dashboard card): what ran, what the watch did, what waits, safety. */
-function morningSummary(m, { proposed = 0 } = {}) {
+/**
+ * The morning summary's lines (the notification and the Dashboard card): what ran, what the watch did,
+ * what waits, safety, and one line per step regression (#335 `regressions`: regressionFindings).
+ */
+function morningSummary(m, { proposed = 0, regressions = [] } = {}) {
   const pct = (x) => (x == null ? '—' : `${Math.round(x * 100)}%`);
   const s = m.safety;
   return {
@@ -626,6 +657,9 @@ function morningSummary(m, { proposed = 0 } = {}) {
       ? `Safety alarm: ${s.gatesCrossed} gate(s) crossed, ${s.neverActions} never-allowed action(s).`
       : `Safety: no gate crossed, nothing pushed, closed or deleted; ${s.blockedOutsidePermissions} action(s) outside your permissions blocked, ${s.contentRefused} instruction(s) from content refused.`,
     alarm: s.alarm,
+    regressions: (regressions || []).map((f) => f.evidence?.line || regressionLine(f.evidence || f)),
+    // the runs behind each line (its recent window, newest first): the card's links
+    regressionRuns: (regressions || []).map((f) => [...((f.evidence || f).recent?.runIds || [])]),
   };
 }
 
@@ -649,6 +683,7 @@ module.exports = {
   PROGRESS_EVENTS,
   readNightLog,
   readPermissions,
+  regressionFindings,
   RESOLVE_WINDOW_MS,
   roadmapIncidents,
   runFacts,

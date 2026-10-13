@@ -11,16 +11,20 @@
 // - cache: the turns that resumed a session past its prompt cache's lifetime (src/session-cache.js);
 // - tests: the suite logs' time per test file and slowest tests, two runs compared, and the test
 //   step's time on E2E vs unit tests.
+// - regressions (#335): over the workspace's whole run list (not per run), each step whose recent cost
+//   or minutes regressed against its baseline of the same class (src/step-regressions.js).
 // Pure, no model: the caller reads summary.json, events.jsonl, the suite logs and the test files.
 
 const { runCosts } = require('./run-costs');
 const { cacheLifetimeMs, cacheTier } = require('./session-cache');
+const { REGRESSION_DEFAULTS, regressionLine, stepRegressions } = require('./step-regressions');
 
 // focus names run_analysis takes (cost is src/oracle-run-analysis.js)
 const FOCUSES = [
   'cache',
   'context',
   'cost',
+  'regressions',
   'tests',
   'time',
   'tools',
@@ -517,11 +521,28 @@ const FOCUS = {
  */
 function focusAnswer(focus, items, options = {}) {
   const f = FOCUS[focus];
-  if (!f) throw new Error(`Unknown focus ${focus}: one of ${FOCUSES.join(', ')}.`);
+  if (!f) throw new Error(`Unknown focus ${focus}: one of ${FOCUSES.filter((x) => x !== 'regressions').join(', ')} (per run) or regressions (over all the runs).`);
   const runs = items.map((item) => f.run({ events: [], ...item }, options));
   const answer = { runs, total: f.total(runs) };
   if (focus === 'tests' && runs.length === 2) answer.comparison = compareTests(runs[0], runs[1]);
   return answer;
+}
+
+/**
+ * The regressions focus (#335): { regressions: [{ line, workflow, step, class, regressed, baseline,
+ * recent }] (baseline and recent: median cost per point, minutes and their run ids), measured,
+ * notMeasurable (classes counted), thresholds }. `rows`: src/runs.js listRuns rows.
+ */
+function regressionsAnswer(rows, { issues = [], prices = {} } = {}) {
+  const entries = stepRegressions(rows, { issues, prices });
+  return {
+    regressions: entries.filter((e) => e.status === 'regressed').map((e) => ({
+      line: regressionLine(e), workflow: e.workflow, step: e.step, class: e.class, regressed: e.regressed, baseline: e.baseline, recent: e.recent,
+    })),
+    measured: entries.filter((e) => e.baseline).length,
+    notMeasurable: entries.filter((e) => !e.baseline).length,
+    thresholds: { ...REGRESSION_DEFAULTS },
+  };
 }
 
 /** The answer with each run's lists cut to their `top` largest entries (a short answer for many runs). */
@@ -538,5 +559,6 @@ module.exports = {
   focusAnswer,
   focusBrief,
   FOCUSES,
+  regressionsAnswer,
   suiteTimes,
 };

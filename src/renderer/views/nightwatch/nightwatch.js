@@ -330,10 +330,20 @@
     const s = m.summary;
     // #278: a Self-healing day leads with its line (detected, repaired alone, waiting, cost with tokens)
     box.innerHTML = `<div class="dash-gates-title"><b>☾ ${m.window.selfHealing ? 'Self-healing' : 'Night watch'} · ${esc(hm(m.window.from))} → ${esc(hm(m.window.to))}</b>${s.alarm ? ' <span class="pill pill-failed">safety alarm</span>' : ''}</div>
-      <div class="nw-dash-lines small">${s.selfHealing ? `<div data-testid="dash-self-healing">${esc(s.selfHealing)}</div>` : ''}<div>${esc(s.ran)}</div><div>${esc(s.did)}</div><div>${esc(s.waits)}</div><div class="${s.alarm ? 'error' : 'muted'}">${esc(s.safety)}</div></div>
+      <div class="nw-dash-lines small">${s.selfHealing ? `<div data-testid="dash-self-healing">${esc(s.selfHealing)}</div>` : ''}<div>${esc(s.ran)}</div><div>${esc(s.did)}</div><div>${esc(s.waits)}</div><div class="${s.alarm ? 'error' : 'muted'}">${esc(s.safety)}</div>${regressionLines(s)}</div>
       <div class="row"><span class="spacer"></span><button class="btn sm ghost" type="button" id="dash-nw-open">Open Night watch</button></div>`;
     $('#dash-nw-open').onclick = () => showView('nightwatch');
+    box.querySelectorAll('[data-testid="nw-regression-run"]').forEach((b) => { b.onclick = () => window.showRun(b.dataset.run); });
     return m;
+  }
+  // #335: one line per step whose cost or minutes regressed (led by the step and the rise), with a
+  // link to each run behind it (its recent window); none: nothing. Report only: no other control.
+  const runLabel = (id) => {
+    const t = String(id).match(/^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})/);
+    return t ? `${t[2]}/${t[3]} ${t[4]}:${t[5]}` : String(id);
+  };
+  function regressionLines(s) {
+    return (s.regressions || []).map((line, i) => `<div class="nw-regression" data-testid="nw-regression">${esc(line)} <span class="pill pill-cancelled">regression</span>${(s.regressionRuns?.[i] || []).map((id) => ` <button class="btn sm ghost" type="button" data-testid="nw-regression-run" data-run="${esc(id)}" title="Open run ${esc(id)}" aria-label="Open run ${esc(id)}">${esc(runLabel(id))}</button>`).join('')}</div>`).join('');
   }
   // opens the view on the night that started at `startedAt` (ISO)
   function openNight(startedAt) {

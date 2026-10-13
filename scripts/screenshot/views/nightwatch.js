@@ -3,9 +3,10 @@
 // Self-healing on since yesterday ("Self-healing is on" in place of the end time, its days in the
 // report), the switch itself a setting (Settings › Execution › Oracle).
 
-// The nights (an app before the Night watch: nothing), and with selfHealing its setting on.
-function writeNights({ ws, project, src, workspace }, { selfHealing = false } = {}) {
-  try { src('night-watch-demo').writeDemoNights(ws, project.id, { selfHealing }); } catch (e) { if (e.code !== 'MODULE_NOT_FOUND') throw e; }
+// The nights (an app before the Night watch: nothing), and with selfHealing its setting on;
+// regressions (#335, Home): a step's run history whose last runs cost more.
+function writeNights({ ws, project, src, workspace }, { selfHealing = false, regressions = false } = {}) {
+  try { src('night-watch-demo').writeDemoNights(ws, project.id, { selfHealing, regressions }); } catch (e) { if (e.code !== 'MODULE_NOT_FOUND') throw e; }
   if (selfHealing) workspace.writeSettings(ws, { oracle: { ...workspace.readSettings(ws).oracle, selfHealing: true } });
 }
 

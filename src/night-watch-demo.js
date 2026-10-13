@@ -39,7 +39,8 @@ function writeRun(ws, w0, projectId, r) {
   if (r.end != null) {
     fs.writeFileSync(path.join(dir, 'summary.json'), JSON.stringify({
       run_id: runId, workflow: r.workflow || 'software-development', project_id: projectId, issues: r.issues.map((number) => ({ number })), status: r.status, mock: false,
-      started_at: at(r.start), finished_at: at(r.end), duration_ms: (r.end - r.start) * 60e3, cost_usd: r.cost, inputs: {}, sessions: [],
+      started_at: at(r.start), finished_at: at(r.end), duration_ms: (r.end - r.start) * 60e3, cost_usd: r.cost, inputs: {}, sessions: r.sessions || [],
+      ...(r.progress ? { progress: r.progress } : {}),
     }, null, 2));
   }
   return runId;
@@ -49,9 +50,11 @@ function writeRun(ws, w0, projectId, r) {
  * Writes the two demo nights into `ws` (setupWorkspace's layout) for `projectId`; last night ends
  * `endedMinAgo` minutes ago. `selfHealing` (#278): also the standing watch, on for 30 hours (its
  * log entry and self-healing.json; the caller turns settings.oracle.selfHealing on), with a finding
- * of each detector, a repair taken alone and an action left for the owner. → { lastNight: { startedAt, until } }
+ * of each detector, a repair taken alone and an action left for the owner. `regressions` (#335): also
+ * a test step's history whose last 3 runs cost 42% more (Home's morning summary flags it).
+ * → { lastNight: { startedAt, until } }
  */
-function writeDemoNights(ws, projectId, { now = Date.now(), endedMinAgo = 60, selfHealing = false } = {}) {
+function writeDemoNights(ws, projectId, { now = Date.now(), endedMinAgo = 60, selfHealing = false, regressions = false } = {}) {
   const dir = ws.oracle || path.join(ws.root, 'oracle');
   fs.mkdirSync(dir, { recursive: true });
   const log = [];
@@ -130,6 +133,21 @@ function writeDemoNights(ws, projectId, { now = Date.now(), endedMinAgo = 60, se
     at(2.9, 'oracle.blocked', { actionId: 'demo-sh-a2', kind: 'issue.file', target: projectId, runId: null, projectId, permission: 'file-issue', reason: 'permission', owner: 'product-owner', requestedBy: 'oracle' });
     for (const [h, usd] of [[3.9, 0.18], [2.9, 0.22], [1.9, 0.12]]) usage.push({ ts: ago(h), provider: 'claude', model: 'claude-opus-5-5', tokens: { input: 1500, output: 520, cache_read: 61000 }, costUsd: usd, sessionId: 'demo-self-healing' });
     fs.writeFileSync(path.join(dir, 'self-healing.json'), JSON.stringify({ since }, null, 2));
+  }
+
+  // #335: the test step's history: 6 runs at US$ 1.00 before last night, then 3 at US$ 1.42 (a
+  // regression of +42% on its cost, the morning summary's line with its 3 runs)
+  if (regressions) {
+    for (let n = 1; n <= 9; n += 1) {
+      const recent = n > 6;
+      const start = recent ? w0 + (n - 7) * 60 * 60e3 + 300 * 60e3 : n0 - (7 - n) * 24 * 3600e3;
+      const cost = recent ? 1.42 : 1;
+      writeRun(ws, start, projectId, {
+        id: `-rg${n}`, start: 0, end: 10, status: 'success', cost, issues: [], steps: [0],
+        sessions: [{ id: `s-rg${n}`, agent: 'test_writer', provider: 'claude', model: 'claude-opus-5-5', effort: 'high', step_id: 'test', turns: 1, cost_usd: cost }],
+        progress: [{ step: 'test', type: 'agent', durationMs: 10 * 60e3 }],
+      });
+    }
   }
 
   log.sort((a, b) => a.ts.localeCompare(b.ts));

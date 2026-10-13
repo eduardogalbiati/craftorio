@@ -60,7 +60,10 @@ you do not replace them.
     per request, the read past 100K/150K/200K, what made it grow);
   - "what did the agent do": `tools` (calls by tool and Bash kind, re-reads, failed calls);
   - "was that resume cold": `cache` (turns resumed after the prompt cache expired, their cost);
-  - "which test file sets the suite's time": `tests` (time per test file; two runIds compare runs).
+  - "which test file sets the suite's time": `tests` (time per test file; two runIds compare runs);
+  - "which step got slower or dearer": `regressions` (all real runs; each step whose last 3 runs
+    rose over 30% against its own history with the same model, with the run ids). Report what it
+    lists; a regression never changes a model or effort by itself.
 
 ## Route every change to its owner: request_agent
 

@@ -53,6 +53,17 @@ The button's badge counts the answers that arrived while the conversation was ou
   stops the roadmap without asking (retry or skip a failed item, regroup or reorder planned items,
   refresh issue text, restore a default, restart the dispatch), notifies each action and posts a
   summary with Undo when it ends. Turning it off stops at once. Gates stay yours.
+- **Step regressions** (#335): after each real run that ends while the Night watch or Self-healing
+  is on, each workflow step is compared with its own history in the same class (provider, model and
+  effort): the median cost per complexity point and the median minutes of its last 3 successful
+  runs against the baseline, the median of its runs before them (at least 5; fewer: "not measurable
+  yet"). More than 30% above (thresholds in `src/step-regressions.js` REGRESSION_DEFAULTS) is a
+  `regression` finding, logged once per step and class with the baseline, the recent figures and
+  the run ids, and again only after the step recovers. Home's morning card lists each one led by the
+  step and the rise ("test: +42% cost over 3 runs") with links to its runs. Simulated runs never
+  count, and a step moved to another model starts a new class instead of regressing. Report only:
+  it never pauses the roadmap, changes a model or effort, wakes the Oracle or answers a gate; the
+  roadmap's budget cap stays the only automatic stop.
 - **Self-healing** (Settings › Execution › Oracle, off by default): the same watch, day and night,
   with no end time. While it is on, an action whose permission you checked ("What it may do alone":
   the Night watch's checklist, one list for both) runs alone by day exactly as at night, with its
