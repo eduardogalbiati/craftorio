@@ -461,7 +461,7 @@
     busy(true);
     setStatus('busy', 'Sending it to the Product Owner…');
     try {
-      const out = await api.fileFinding({ id: saved.id, projectId });
+      const out = await api.fileFinding(saved.id, projectId);
       if (cur !== mine) return;
       if (!out.ok) setStatus('error', `Saved, not filed: ${out.error || out.text || 'the Product Owner refused it'}`);
       else if (out.status === 'sent') setStatus('sent', 'Sent to the Product Owner: it waits for your click in its drawer.');
