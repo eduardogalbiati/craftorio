@@ -33,7 +33,7 @@ so you can try a change for free.
 
 ## Rules
 
-These come from [`CLAUDE.md`](CLAUDE.md), which holds the full list:
+These come from [`AGENTS.md`](AGENTS.md), which holds the full list (`CLAUDE.md` imports it):
 
 - **English everywhere**: UI, YAML, skills, docs, comments, logs, errors, test names.
 - **Branch + pull request**: never commit to `main`; the maintainer merges.
@@ -50,8 +50,8 @@ These come from [`CLAUDE.md`](CLAUDE.md), which holds the full list:
 ## Built by its own workflows
 
 Most of this project is written by its own workflows: agents implement issues on a branch, a
-reviewer checks them, and the maintainer merges. [`CLAUDE.md`](CLAUDE.md) is the agents' context;
-keep it short and accurate when you change how the project works.
+reviewer checks them, and the maintainer merges. [`AGENTS.md`](AGENTS.md) is the agents' context
+(Codex and Grok read it, `CLAUDE.md` imports it for Claude Code); keep it short and accurate when you change how the project works.
 
 ## Licence
 

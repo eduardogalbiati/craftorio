@@ -22,13 +22,13 @@ const PR_OS = ['ubuntu-latest', 'windows-latest'];
 const MACOS_LABEL = 'ci:macos';
 const TESTED_CONTEXT = 'ci/tested';
 
-// Changes that cannot break `npm test`. Not every .md: the tests read CLAUDE.md, docs/agents/*.md
-// (test/claude-md.test.js), the bundled skills (skills/**, seeded and parsed by the engine tests)
+// Changes that cannot break `npm test`. Not every .md: the tests read AGENTS.md, CLAUDE.md,
+// docs/agents/*.md (test/claude-md.test.js), the bundled skills (skills/**, seeded and parsed by the engine tests)
 // and the README's fragments (docs/screens/, docs/features/: test/docs.test.js checks the README's
 // generated sections against them).
 function isDocsFile(file) {
   if (!file.toLowerCase().endsWith('.md')) return false;
-  if (file === 'CLAUDE.md' || file.startsWith('docs/agents/') || file.startsWith('skills/')) return false;
+  if (file === 'AGENTS.md' || file === 'CLAUDE.md' || file.startsWith('docs/agents/') || file.startsWith('skills/')) return false;
   if (file.startsWith('docs/screens/') || file.startsWith('docs/features/')) return false;
   return true;
 }

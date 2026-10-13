@@ -1413,7 +1413,7 @@ Enabled in `software-development`. The other bundled workflows only read a folde
   (checks `test (<os>)`), plus a production `npm audit`. macOS runs too when the PR touches a
   platform-sensitive path (worktrees, processes, terminals, packaging, dependencies, CI) or has the
   `ci:macos` label (from the next push), every Monday on `main`, and on manual runs. A docs-only PR
-  (`.md` files other than `CLAUDE.md`, `docs/agents/`, `skills/`, `docs/screens/` and `docs/features/`,
+  (`.md` files other than `AGENTS.md`, `CLAUDE.md`, `docs/agents/`, `skills/`, `docs/screens/` and `docs/features/`,
   which the tests read) runs no
   tests. A new push to a PR cancels the previous run. The `test` check is green only when every
   planned OS is: use that name in branch protection. Each run records a `ci/tested` commit status
@@ -1760,20 +1760,23 @@ Everything the app produces lives in a local workspace folder:
 - `scripts/run.js` uses the same workspace; with nothing stored, it creates the default folder.
 <!-- /generated:workspace -->
 
-## Structuring your repository's CLAUDE.md for unattended agents
+## Structuring your repository's AGENTS.md (CLAUDE.md) for unattended agents
 
-Claude Code loads a repository's `CLAUDE.md` (Codex: `AGENTS.md`) into every session that works
-in it, on every request: each workflow agent pays for all of it, on every turn. Keep it a short
-index (a few KB) and move the details to topic docs the agents read only when their task needs them:
+Codex loads a repository's `AGENTS.md` and Claude Code its `CLAUDE.md` into every session that
+works in it, on every request: each workflow agent pays for all of it, on every turn. Keep one file,
+`AGENTS.md`, and make `CLAUDE.md` the single line `@AGENTS.md` (Claude Code's file import), so every
+CLI reads the same instructions. Keep it a short index (a few KB) and move the details to topic docs
+the agents read only when their task needs them:
 
-- `CLAUDE.md`: what the project is, the hard rules (what must never happen), the commands, and one
+- `AGENTS.md`: what the project is, the hard rules (what must never happen), the commands, and one
   line per topic doc saying **when** to read it (e.g. "before changing the database schema").
 - `docs/agents/<topic>.md`: the code map, architecture notes, gotchas, testing, deployment...
   Each section of the old file lands in exactly one doc; the user docs (README) are not duplicated.
-- A test that fails when `CLAUDE.md` grows past its limit or points to a missing doc keeps it honest.
+- A test that fails when `AGENTS.md` grows past its limit, points to a missing doc, or `CLAUDE.md`
+  stops being the import keeps it honest.
 
-This repository does it itself: `CLAUDE.md` went from 25 KB to 4 KB, and a Claude agent's first
-request from 22.0k to 15.7k tokens (with isolation; 41.1k before both changes).
+This repository does it itself: its `CLAUDE.md` went from 25 KB to 4 KB (now `AGENTS.md`), and a
+Claude agent's first request from 22.0k to 15.7k tokens (with isolation; 41.1k before both changes).
 
 ## Observability
 
@@ -1835,7 +1838,7 @@ skills/                  bundled skills (copied into <workspace>/skills)
 .github/workflows/       CI (PRs) and deploy (merge into main)
 scripts/                 terminal runner, tests, build, UI smoke test and UI screenshots (screenshot.js)
 test/                    unit tests (node:test) and fixtures
-CLAUDE.md, docs/agents/  context for coding agents working on this repository (short index + topic docs)
+AGENTS.md, docs/agents/  context for coding agents working on this repository (short index, imported by CLAUDE.md, + topic docs)
 ```
 <!-- /generated:structure -->
 

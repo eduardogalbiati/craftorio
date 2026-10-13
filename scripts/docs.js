@@ -62,7 +62,7 @@ const FOLDERS = [
   ['skills/', 'The bundled skills, one folder each (`SKILL.md` + support files, seeded into `<workspace>/skills/`); the README table is generated from their frontmatter.'],
   ['docs/screens/', 'One fragment per screen (`menu`, `order`, text): the README\'s screens table.'],
   ['docs/features/', 'One fragment per feature (`order`, then `<!-- section:<name> -->` pieces): the README\'s generated workflows, engine, workspace and structure sections.'],
-  ['docs/agents/', 'These topic docs, indexed by `CLAUDE.md` (`test/claude-md.test.js` keeps the index small and its links valid).'],
+  ['docs/agents/', 'These topic docs, indexed by `AGENTS.md` (`CLAUDE.md` imports it; `test/claude-md.test.js` keeps the index small and its links valid).'],
   ['docs/agents/engine/', 'One file per engine topic (`# <Title>`, a summary line, the notes): `docs/agents/engine.md` is their generated index.'],
   ['docs/readme/', 'One file per hand-written README section, in file-name order: `README.md` is assembled from them (generated blocks kept as empty markers).'],
   ['supabase/migrations/', '`accounts` table (sign-up, last seen, app version, OS) and `touch_account()`. Applied by pasting into the Supabase SQL editor.'],

@@ -48,6 +48,7 @@ prefixes, no trailing period.
 - [ ] ...
 - [ ] **Tests**: <what proves it: unit/integration test, the scenario, what it asserts>.
 - [ ] **Docs**: <README/docs sections that change>, when user-facing or architectural.
+      With a product-wide decision line: "record the decision in `docs/agents/decisions.md`".
 
 Related: #<n> (<why>), #<n>.
 ```
@@ -69,6 +70,11 @@ Related: #<n> (<why>), #<n>.
 - Include a **measure** task when the issue claims a gain (tokens, time, cost): before/after on
   one real case.
 - Order tasks by dependency; the last ones are tests, docs and measurement.
+- A **product-wide "Decision (owner)" line** (a rule for the whole product, not one screen's
+  layout) gets a Docs task "record the decision in `docs/agents/decisions.md`" (date, decision,
+  why, issue; newest first), so the run that implements the issue adds the entry, or replaces the
+  one it changes. Use the repository's own decisions log when it keeps one elsewhere; skip the
+  task when it keeps none.
 
 ## UI acceptance criteria (any issue that touches a screen)
 

@@ -57,6 +57,15 @@ test files back (see `edits_tests` in [engine/agents-and-steps.md](engine/agents
 not tried against a real Claude CLI yet (real calls cost money): if one is refused, the engine
 check still holds.
 
+**Project instructions (#331)**: the engine passes no instructions file of its own; each CLI loads
+the repository's from the worktree it runs in. This repository keeps them in `AGENTS.md`, and
+`CLAUDE.md` is the import line `@AGENTS.md`. Codex CLI reads `AGENTS.md` (git root down to its
+working directory). Claude Code reads `CLAUDE.md` and follows the import. Grok Build, per its
+README (`~/.grok/README.md`, section "AGENTS.md", 1.0.41), reads `Agents.md`, `Claude.md`,
+`AGENT.md` and `AGENTS.md` in every folder from the git root down to its working directory (10,000
+characters per file): it gets `AGENTS.md` too, plus the one-line `CLAUDE.md`, which it does not
+expand (harmless).
+
 `--bare` would isolate Claude further but only accepts API keys (no OAuth/subscription), so it is
 not used. Measured on this repo (first request of a Claude agent, Haiku, "reply OK"): **41.1k
 tokens with the user's setup → 22.0k isolated with the developer's capabilities**.

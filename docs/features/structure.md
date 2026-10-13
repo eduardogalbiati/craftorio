@@ -29,4 +29,4 @@ skills/                  bundled skills (copied into <workspace>/skills)
 .github/workflows/       CI (PRs) and deploy (merge into main)
 scripts/                 terminal runner, tests, build, UI smoke test and UI screenshots (screenshot.js)
 test/                    unit tests (node:test) and fixtures
-CLAUDE.md, docs/agents/  context for coding agents working on this repository (short index + topic docs)
+AGENTS.md, docs/agents/  context for coding agents working on this repository (short index, imported by CLAUDE.md, + topic docs)

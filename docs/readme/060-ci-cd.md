@@ -4,7 +4,7 @@
   (checks `test (<os>)`), plus a production `npm audit`. macOS runs too when the PR touches a
   platform-sensitive path (worktrees, processes, terminals, packaging, dependencies, CI) or has the
   `ci:macos` label (from the next push), every Monday on `main`, and on manual runs. A docs-only PR
-  (`.md` files other than `CLAUDE.md`, `docs/agents/`, `skills/`, `docs/screens/` and `docs/features/`,
+  (`.md` files other than `AGENTS.md`, `CLAUDE.md`, `docs/agents/`, `skills/`, `docs/screens/` and `docs/features/`,
   which the tests read) runs no
   tests. A new push to a PR cancels the previous run. The `test` check is green only when every
   planned OS is: use that name in branch protection. Each run records a `ci/tested` commit status

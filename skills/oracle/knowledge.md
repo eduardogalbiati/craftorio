@@ -50,7 +50,7 @@ folder (`repo_read` on the app's project, or `seed_status`) when you need a deta
   (#168); "Cannot find module" only in the project's clone = a stale install there; merged locally
   but not pushed = the issues stay open until the owner pushes.
 
-<!-- skill: issue-writing sha256:0be000602640 -->
+<!-- skill: issue-writing sha256:d5c2379d9463 -->
 ## issue-writing (issues someone else can finish)
 
 - Search first: no duplicate; link related issues. One problem per issue; split past ~8 tasks.
@@ -60,6 +60,8 @@ folder (`repo_read` on the app's project, or `seed_status`) when you need a deta
   file:line, numbers; estimates marked as estimates), the decision taken (`**Decision (who): …**`),
   then `## Tasks`: checkboxes, each a bold lead and one verifiable criterion (where, edge cases,
   invariants), ending with Tests, Docs and a measure task when a gain is claimed. `Related: #n`.
+- A product-wide "Decision (owner)" line gets the Docs task "record the decision in
+  `docs/agents/decisions.md`".
 - Any screen: UI criteria (what leads, which controls, the states, the shared components, the
   screenshots that prove it).
 - Open questions become tasks with a recommended default; never a question to a person.

@@ -33,7 +33,8 @@ tool, no full paths, no `;`/`&&`/pipes, no files: long bodies go inline with `--
    your task lists labels a person confirmed creating (the issue-tracker's review gate): create
    exactly those that are still missing, once, `gh label create <name> --repo <r> --color <hex>`.
 4. **Create**: `gh issue create --repo <r> --title "<title>" --label <label> --body "<body>"`.
-   It prints the issue URL.
+   It prints the issue URL. A body with a product-wide "Decision (owner)" line has the Docs task
+   "record the decision in `docs/agents/decisions.md`" (see `issue-writing`).
 5. **Link**: reference related issues in the body (`#<n>`); when a new issue splits or follows
    up another, comment on the other one with the new link.
 

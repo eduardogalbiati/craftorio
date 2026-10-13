@@ -1,6 +1,7 @@
 # Open ideas / backlog
 
-Read this when planning new work, to avoid redoing a discussion.
+Read this when planning new work, to avoid redoing a discussion. Ideas the owner already decided
+(built or ruled out) are in [decisions.md](decisions.md), not here.
 
 - Dynamic model roles: role → provider/model map with fallbacks when a CLI is missing or over
   budget (discussed, not built; the owner accepted requiring all three CLIs for now). Portable
