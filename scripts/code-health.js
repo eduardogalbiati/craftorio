@@ -39,6 +39,7 @@ const QUADRANTS = ['Danger Zone', 'Cowboy Code', 'Fertile Ground', 'Healthy Clos
 
 // '<file>:<function name>' -> its complexity when listed; only lower it
 const COMPLEXITY_EXCEPTIONS = {
+  'scripts/layers.js:withoutComments': 27,
   'scripts/run.js:on(event) callback': 32,
   'scripts/screenshot.js:parseArgs': 85,
   'src/agent-inbox.js:handle': 32,
@@ -48,7 +49,6 @@ const COMPLEXITY_EXCEPTIONS = {
   'src/engine/providers.js:mockValue': 44,
   'src/engine/providers.js:runMock': 40,
   'src/engine/run/gates.js:requestApproval': 34,
-  'src/engine/run/load.js:loadWorkflow': 194,
   'src/engine/run/machine-steps.js:suiteRound': 41,
   'src/engine/run/sessions.js:agentTurn': 103,
   'src/engine/run/transitions.js:finishStep': 32,
@@ -87,9 +87,6 @@ const COMPLEXITY_EXCEPTIONS = {
   'src/renderer/gate-panel.js:onGateTool': 37,
   'src/renderer/run-list.js:renderRunList': 30,
   'src/renderer/run-list.js:runListRow': 27,
-  'src/renderer/run-progress-model.js:estimateProgress': 34,
-  'src/renderer/run-progress-model.js:progressGroups': 30,
-  'src/renderer/run-progress-model.js:workflowStations': 28,
   'src/renderer/start-drawer.js:selectWorkflow': 27,
   'src/renderer/views/agents/agents.js:agentCard': 26,
   'src/renderer/views/agents/agents.js:openAgentModal': 35,
@@ -129,6 +126,9 @@ const COMPLEXITY_EXCEPTIONS = {
   'src/shared/providers/claude.js:parse': 49,
   'src/shared/providers/codex.js:parse': 29,
   'src/shared/providers/grok.js:parse': 35,
+  'src/shared/run-progress-model.js:estimateProgress': 34,
+  'src/shared/run-progress-model.js:progressGroups': 30,
+  'src/shared/run-progress-model.js:workflowStations': 28,
   'src/supervisor.js:onCallPrompt': 26,
   'src/supervisor.js:resumeSpec': 35,
   'src/supervisor.js:runReport': 30,

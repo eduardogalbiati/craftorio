@@ -12,6 +12,10 @@
 //                            manifest (src/service/manifest.js) with its arguments and its result,
 //                            from each entry's `schema`. Derived and gitignored like the code map;
 //                            always this app's channels (the ones of the checkout docs.js runs from).
+//   docs/agents/engine/field-reference.md  (#352) the workflow YAML's field rules, one row per entry of
+//                            FIELD_RULES (src/engine/run/field-rules.js): field, applies to, type,
+//                            template, required, message. Derived and gitignored like the code map;
+//                            not an engine topic (left out of engine.md's index).
 //   README.md tables        between `<!-- generated:<name> -->` markers: the bundled skills (each
 //                            skills/*/SKILL.md frontmatter: name, summary, used_by) and the screens
 //                            (docs/screens/*.md: menu, order, text). Committed (GitHub readers);
@@ -51,6 +55,7 @@ const fs = require('fs');
 const path = require('path');
 const yaml = require('js-yaml');
 const { testMap, testMapMarkdown } = require('../src/engine/affected-tests');
+const { fieldReference } = require('../src/engine/run/field-rules');
 
 const ROOT = path.join(__dirname, '..');
 const CODE_MAP = path.join('docs', 'agents', 'code-map.md');
@@ -333,11 +338,12 @@ function buildReadme(root = ROOT) {
 
 const ENGINE_TOPICS = path.join('docs', 'agents', 'engine');
 const ENGINE_INDEX = path.join('docs', 'agents', 'engine.md');
+const FIELD_REF = path.join(ENGINE_TOPICS, 'field-reference.md');
 
 // docs/agents/engine/*.md (#251): { file, title, summary }, the title from the first heading, the
-// summary from the first non-blank line after it.
+// summary from the first non-blank line after it. The generated field reference is not a topic.
 function engineTopics(root = ROOT) {
-  return mdFiles(root, ENGINE_TOPICS).map((file) => {
+  return mdFiles(root, ENGINE_TOPICS).filter((file) => file !== path.basename(FIELD_REF)).map((file) => {
     const lines = read(root, path.join(ENGINE_TOPICS, file)).split('\n');
     const at = lines.findIndex((l) => /^#+\s/.test(l));
     const summary = at < 0 ? '' : (lines.slice(at + 1).find((l) => l.trim()) || '');
@@ -356,6 +362,8 @@ function engineIndex(root = ROOT) {
     '',
     'Read the topic you need before changing `src/engine/workflow.js` or a workflow YAML. The README',
     'documents the same features for users; these topics are the implementer\'s summary, one file each.',
+    'Which field is valid where, its type and the loader\'s message: [the field reference](engine/field-reference.md)',
+    '(generated from the loader\'s rule table, #352; gitignored like the code map).',
     '',
     ...topics.map((t) => `- [${t.title}](engine/${t.file})${t.summary ? `: ${t.summary}` : ''}`),
     '',
@@ -503,6 +511,8 @@ function main(argv = process.argv.slice(2), root = ROOT) {
   for (const f of Object.keys(map.sources || {})) if (OUTSIDE.some((dir) => f.startsWith(dir))) delete map.sources[f];
   fs.writeFileSync(path.join(root, TEST_MAP), testMapMarkdown(map, { generatedBy: '`npm run docs` (scripts/docs.js)' }));
   fs.writeFileSync(path.join(root, CHANNELS_REF), channelReference());
+  fs.mkdirSync(path.join(root, ENGINE_TOPICS), { recursive: true });
+  fs.writeFileSync(path.join(root, FIELD_REF), fieldReference());
   if (!derivedOnly) {
     fs.writeFileSync(path.join(root, 'README.md'), buildReadme(root));
     if (engine !== null) fs.writeFileSync(path.join(root, ENGINE_INDEX), engine);

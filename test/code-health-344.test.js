@@ -173,7 +173,8 @@ test('#344 the exceptions list holds only functions above 25, as "<file>:<name>"
     assert.equal(fs.existsSync(path.join(root, ...file.split('/'))), true, `${key}: the file exists`);
     assert.equal(Number.isInteger(COMPLEXITY_EXCEPTIONS[key]) && COMPLEXITY_EXCEPTIONS[key] > 25, true, `${key}: a whole value above 25`);
   }
-  assert.ok(keys.some((k) => k.startsWith('src/engine/run/load.js:')), 'loadWorkflow (188 at 383469a) is listed');
+  // loadWorkflow (188 at 383469a) left the list with its rule table (#352)
+  assert.ok(keys.some((k) => k.startsWith('src/engine/run/sessions.js:')), 'agentTurn (103) is listed');
 });
 
 test('#344 a new function above 25 fails, naming the function, its value and where the how-to is', (t) => {

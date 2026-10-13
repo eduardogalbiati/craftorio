@@ -4,6 +4,8 @@
 
 Read the topic you need before changing `src/engine/workflow.js` or a workflow YAML. The README
 documents the same features for users; these topics are the implementer's summary, one file each.
+Which field is valid where, its type and the loader's message: [the field reference](engine/field-reference.md)
+(generated from the loader's rule table, #352; gitignored like the code map).
 
 - [Agents and steps](engine/agents-and-steps.md): What agents and steps declare: skills, fan-out, step types (screenshots, suite, test ids), transitions, inputs, agent options, and the events and guards around a turn.
 - [Chaining: declared outputs and `then` (#134)](engine/chaining.md): Declared run outputs and `then`: what a finished run hands to the next one, and how the service starts it.
