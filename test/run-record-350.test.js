@@ -68,6 +68,27 @@ test('#233 stopped attempt: an old attempt recorded only as an error log line be
   assert.deepEqual([stopped[0].session_id, stopped[0].step_id, stopped[0].cost_not_recorded], ['s1', 'work', true]);
 });
 
+test('#233 stopped attempt: with two open sessions of the agent (a fan-out), both are flagged and the attempt sits on the one opened last', () => {
+  const at = (min) => new Date(Date.parse('2026-09-20T10:00:00.000Z') + min * 60e3).toISOString();
+  const snap = (id, min) => ({ id, agent: 'developer', provider: 'claude', model: 'claude-opus-5-5', step_id: 'work', opened_at: at(min), closed_at: null, turns: 0, tokens: { input: 0, output: 0, cache_read: 0, cache_write: 0, reasoning: 0 }, cost_usd: 0, status: 'idle', provider_session_id: `${id}-cli`, mode: 'handoff' });
+  const events = [
+    { ts: at(0), type: 'workflow.started', run_id: 'r-fanout', workflow: 'AI Development', mock: false, inputs: {} },
+    { ts: at(0), type: 'step.started', step_id: 'work', visit: 1, step_type: 'agent', agent: 'developer' },
+    { ts: at(0), type: 'session.opened', session_id: 's1', session: snap('s1', 0) },
+    { ts: at(1), type: 'session.opened', session_id: 's2', session: snap('s2', 1) },
+    { ts: at(5), type: 'log', level: 'error', message: '[developer] attempt 1/2 failed: Timed out after 240s' },
+    { ts: at(9), type: 'step.finished', step_id: 'work', visit: 1, duration_ms: 9 * 60e3, output: {} },
+  ];
+  const summary = {
+    run_id: 'r-fanout', workflow: 'AI Development', status: 'success', mock: false, started_at: at(0), finished_at: at(9), duration_ms: 9 * 60e3,
+    cost_usd: 0, sessions: [{ ...snap('s1', 0), status: 'success' }, { ...snap('s2', 1), status: 'success' }],
+  };
+  const out = loadUpgrade().upgradeRunRecord({ summary, events });
+  assert.deepEqual(out.summary.sessions.map((s) => [s.id, s.cost_not_recorded === true]), [['s1', true], ['s2', true]]);
+  const stopped = out.events.filter((e) => e.type === 'session.attempt_stopped');
+  assert.deepEqual(stopped.map((e) => [e.session_id, e.step_id, e.cost_not_recorded]), [['s2', 'work', true]]);
+});
+
 test('#277 multi-result turn: a per-turn run recorded before turn_cost costs each turn its highest usage item', () => {
   const { summary, events } = upgraded('#277 multi-result turn');
   near(received(events, 's1', 1).cost_usd, 15.123904, 'the turn\'s cost');
@@ -156,6 +177,12 @@ test('readRunRecord of a run still going returns a null summary and its upgraded
   assert.equal(record.events.length, f.events.length);
 });
 
+test('the run list lists the single issue of an old run that has no summary yet', (t) => {
+  const f = fx.fixture('single issue');
+  const { runsDir } = fx.writeRun(t, { ...f, summary: null, events: f.events.filter((e) => e.type !== 'workflow.finished') });
+  assert.deepEqual(runs.readRun(runsDir, f.runId).issues, [42]);
+});
+
 // ---------------------------------------------------------------------------
 // Nothing changes in the figures: each reader, each historical shape
 // ---------------------------------------------------------------------------
@@ -175,8 +202,12 @@ const KNOWN_DISAGREEMENTS = {
     'estimates.actualCost': 1,
     'analyticsTotals': { tokens: { input: 5400, output: 1600, cache_read: 20000, cache_write: 3000, reasoning: 0, total: 30000 }, costUsd: 1, unpricedTokens: 0, sessions: 2, cacheHitRate: 0.704225352 },
   },
-  'single issue': { 'runFigures.issues': [42] },
+  'single issue': { 'runFigures.issues': [42], 'runFigures.costPerIssue': 0.25 },
 };
+
+// The run list measures a run without summary.duration_ms against the clock: the golden's run list
+// durations and the roadmap's real time were taken at fx.NOW.
+const atFixedClock = (t) => t.mock.timers.enable({ apis: ['Date'], now: fx.NOW });
 
 function expected(name, reader) {
   const value = structuredClone(GOLDEN[name][reader]);
@@ -209,6 +240,7 @@ test('analyzeRun (the Oracle) on the upgraded record gives the figures it gave b
 });
 
 test('the run list (run costs) reads the same run ids, costs and tokens as before, for every historical shape', (t) => {
+  atFixedClock(t);
   for (const f of fx.fixtures()) {
     const { runsDir } = fx.writeRun(t, f);
     assert.deepEqual(fx.runRow(runs.readRun(runsDir, f.runId)), expected(f.name, 'runList'), f.name);
@@ -216,6 +248,7 @@ test('the run list (run costs) reads the same run ids, costs and tokens as befor
 });
 
 test('the roadmap\'s real cost and time (cost estimates) are the same as before, for every historical shape', (t) => {
+  atFixedClock(t);
   for (const f of fx.fixtures()) {
     const { runsDir } = fx.writeRun(t, f);
     const info = runs.readRun(runsDir, f.runId);

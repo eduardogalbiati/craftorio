@@ -1398,7 +1398,7 @@
       ],
       "costUsd": 0.25,
       "childrenCostUsd": 0,
-      "durationMs": 2004890210,
+      "durationMs": 86400000,
       "gateWaitMs": 0,
       "sessions": [
         {
@@ -1420,7 +1420,7 @@
     "estimates": {
       "actualCost": 0.25,
       "actualTime": {
-        "minutes": 33415,
+        "minutes": 1440,
         "topStep": {
           "step": "implement",
           "minutes": 6
@@ -1515,7 +1515,7 @@
       "issues": null,
       "costUsd": 3.56,
       "childrenCostUsd": 0,
-      "durationMs": 2004890216,
+      "durationMs": 86400000,
       "gateWaitMs": 0,
       "sessions": [
         {
@@ -1537,7 +1537,7 @@
     "estimates": {
       "actualCost": 3.56,
       "actualTime": {
-        "minutes": 33415,
+        "minutes": 1440,
         "topStep": {
           "step": "plan",
           "minutes": 10
