@@ -59,3 +59,10 @@ test('withWorkers: playwright and jest commands get the workers unless they set 
   assert.equal(withWorkers('npx jest && npm run lint', 3), 'npx jest && npm run lint');
   assert.equal(withWorkers('npx jest', null), 'npx jest');
 });
+
+test('withWorkers: a command filtered to some test files still gets the workers at the end; -j / -w set by hand are kept', () => {
+  assert.equal(withWorkers('npx playwright test a.spec.js b.spec.js', 2), 'npx playwright test a.spec.js b.spec.js --workers=2');
+  assert.equal(withWorkers('npx jest test/a.test.js', 4), 'npx jest test/a.test.js --maxWorkers=4');
+  assert.equal(withWorkers('npx playwright test -j 4', 2), 'npx playwright test -j 4');
+  assert.equal(withWorkers('npx jest -w 2 test/a.test.js', 4), 'npx jest -w 2 test/a.test.js');
+});
