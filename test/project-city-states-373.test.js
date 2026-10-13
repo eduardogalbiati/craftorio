@@ -100,6 +100,26 @@ test('#373 City states: a stale plan, its problems and the edges not read', asyn
   assert.match(text(q(city.el, 'project-city-header')), /plan covers 60%/);
 });
 
+test('#373 City: an update with the same facts and estimate keeps the HUD, a new estimate redraws the note', async () => {
+  const w = load({ state: 'ok', ...buildCity({ plan: null, facts: facts() }) });
+  const city = w.ProjectCity.create({ projectId: 'p1', name: 'fixture-app' });
+  w.document.body.appendChild(city.el);
+  const same = { state: 'ok', model: facts() };
+  const estimate = { usd: 0.42, basis: 3 };
+  city.update({ facts: same, estimate });
+  await settle();
+  const search = q(city.el, 'project-city-search');
+  assert.equal(search === null, false, 'a search box');
+  search.value = 'src/engine';
+  city.update({ facts: same, estimate });
+  city.update({ facts: same, estimate });
+  assert.equal(q(city.el, 'project-city-search') === search, true, 'the same search box (the HUD was not redrawn)');
+  assert.equal(q(city.el, 'project-city-search').value, 'src/engine', 'the typed text survives the poll');
+  city.update({ facts: same, estimate: { usd: 0.9, basis: 4 } });
+  assert.match(text(q(city.el, 'project-city-no-plan')), /≈ US\$ 0\.90/);
+  city.destroy();
+});
+
 test('#373 City: the overlay API reaches the city on screen, and Colour by changes the legend', async () => {
   const { w, city } = await open({ state: 'ok', ...buildCity({ plan: null, facts: facts() }) });
   await settle();
