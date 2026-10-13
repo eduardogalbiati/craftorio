@@ -397,6 +397,59 @@ test('#372 planDiff lists the districts added and removed', () => {
   assert.equal(back.removed.join(','), 'tests');
 });
 
+test('#372 refreshPlan keeps the proposal\'s order and puts the districts and zones it drops at the end', () => {
+  const { refreshPlan } = cityModel();
+  const out = refreshPlan(CURRENT, PROPOSED);
+  assert.equal(out.districts.map((d) => d.id).join(','), 'engine,tests,views');
+  assert.equal(out.zones.map((z) => z.id).join(','), 'core,campus,ui');
+});
+
+test('#372 refreshPlan without a current plan (a first map) is the proposal itself', () => {
+  const { refreshPlan } = cityModel();
+  const out = refreshPlan(null, PROPOSED);
+  assert.equal(out.districts.map((d) => `${d.id}:${d.name}`).join(','), 'engine:Engine,tests:Test suite');
+});
+
+// ---------- the loader on `type: project_map` steps ----------
+
+function variant(t, from, to) {
+  const text = read('workflows', 'project-map.yaml').replace(/\r\n/g, '\n');
+  assert.ok(text.includes(from), `the bundled workflow contains ${JSON.stringify(from)}`);
+  const file = path.join(tmp(t, 'pm-wf-'), 'project-map.yaml');
+  fs.writeFileSync(file, text.replace(from, to));
+  return file;
+}
+
+test('#372 the loader refuses a project_map step with an unknown action', (t) => {
+  const file = variant(t, 'action: facts\n', 'action: guess\n');
+  assert.throws(() => loadWorkflow(file), /action/);
+});
+
+test('#372 the loader refuses a project_map step without an action', (t) => {
+  const file = variant(t, '    action: facts\n', '');
+  assert.throws(() => loadWorkflow(file), /action/);
+});
+
+test('#372 the loader refuses a validate step whose from is not a known step', (t) => {
+  const file = variant(t, 'action: validate\n    from: plan\n', 'action: validate\n    from: nowhere\n');
+  assert.throws(() => loadWorkflow(file), /from/);
+});
+
+test('#372 the loader refuses a validate step without from', (t) => {
+  const file = variant(t, 'action: validate\n    from: plan\n', 'action: validate\n');
+  assert.throws(() => loadWorkflow(file), /from/);
+});
+
+// ---------- the facts step on a folder that is not a git repository ----------
+
+test('#372 the facts step fails on a folder that is not a git repository', async (t) => {
+  const { mapFacts } = projectMap();
+  const folder = tmp(t, 'pm-notgit-');
+  fs.writeFileSync(path.join(folder, 'a.js'), 'x\n');
+  const archRoot = tmp(t, 'pm-arch-');
+  await assert.rejects(mapFacts({ folder, archRoot, projectId: 'p1' }), /not a git repository/);
+});
+
 // ---------- the refresh signal of the Architecture tab (src/shared/city-model.js) ----------
 
 const SIGNAL_PLAN = {
