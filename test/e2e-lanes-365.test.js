@@ -101,6 +101,88 @@ test('the suite still never retries a scenario (#365, #362)', () => {
   for (const p of config.projects || []) assert.ok(p.retries == null || p.retries === 0, `${p.name}: retries ${p.retries}`);
 });
 
+// The config loaded again with MULTIAGENT_E2E_WORKERS set to value (undefined: unset)
+function configWith(value) {
+  const file = require.resolve('../playwright.config.js');
+  const before = process.env.MULTIAGENT_E2E_WORKERS;
+  delete require.cache[file];
+  if (value === undefined) delete process.env.MULTIAGENT_E2E_WORKERS;
+  else process.env.MULTIAGENT_E2E_WORKERS = value;
+  try {
+    const config = require(file);
+    const lane = (name) => config.projects.find((p) => p.name === name);
+    return { pool: config.workers, behaviour: lane('behaviour').workers, visual: lane('visual').workers };
+  } finally {
+    delete require.cache[file];
+    if (before === undefined) delete process.env.MULTIAGENT_E2E_WORKERS;
+    else process.env.MULTIAGENT_E2E_WORKERS = before;
+  }
+}
+
+test('MULTIAGENT_E2E_WORKERS sets the behaviour lane and the pool; the visual lane stays at one worker (#365)', () => {
+  assert.deepEqual(configWith(undefined), { pool: 2, behaviour: 2, visual: 1 });
+  assert.deepEqual(configWith('3'), { pool: 3, behaviour: 3, visual: 1 });
+  // 1 gives back the old one-Electron-at-a-time suite
+  assert.deepEqual(configWith('1'), { pool: 1, behaviour: 1, visual: 1 });
+});
+
+test('an empty, zero or non-numeric MULTIAGENT_E2E_WORKERS falls back to 2 workers (#365)', () => {
+  for (const value of ['', '0', 'abc']) {
+    assert.deepEqual(configWith(value), { pool: 2, behaviour: 2, visual: 1 }, `MULTIAGENT_E2E_WORKERS=${JSON.stringify(value)}`);
+  }
+});
+
+test('only the visual lane asks for the screenshot slot (#365)', () => {
+  const config = loadConfig();
+  const slot = Object.fromEntries(config.projects.map((p) => [p.name, Boolean(p.metadata?.screenshotSlot)]));
+  assert.deepEqual(slot, { behaviour: false, visual: true });
+});
+
+test('a launch without the slot never takes it; a launch with it holds it until released (#365)', async (t) => {
+  // the machine's slot folder lives under the OS temp folder: point it at a scratch one
+  const tmp = fs.mkdtempSync(path.join(require('os').tmpdir(), 'e2e-lanes-365-'));
+  const saved = { TEMP: process.env.TEMP, TMP: process.env.TMP, TMPDIR: process.env.TMPDIR, slot: process.env.MULTIAGENT_SCREENSHOT_SLOT };
+  t.after(() => {
+    for (const [k, v] of Object.entries({ TEMP: saved.TEMP, TMP: saved.TMP, TMPDIR: saved.TMPDIR, MULTIAGENT_SCREENSHOT_SLOT: saved.slot })) {
+      if (v === undefined) delete process.env[k]; else process.env[k] = v;
+    }
+    fs.rmSync(tmp, { recursive: true, force: true });
+  });
+  process.env.TEMP = tmp; process.env.TMP = tmp; process.env.TMPDIR = tmp;
+  delete process.env.MULTIAGENT_SCREENSHOT_SLOT;
+  const machineSlot = require('../src/engine/machine-slot');
+  const { screenshotSlot } = require('../features/support/app');
+  assert.equal(machineSlot.machineSlotDir().startsWith(tmp), true, 'the slot folder follows the scratch temp folder');
+  const held = () => machineSlot.slotHolder('screenshot', { dir: machineSlot.machineSlotDir() }) !== null;
+
+  const free = await screenshotSlot(false);
+  assert.equal(held(), false, 'the behaviour lane does not take the slot');
+  free.release();
+
+  const slot = await screenshotSlot(true);
+  assert.equal(held(), true, 'the visual lane holds the slot');
+  slot.release();
+  assert.equal(held(), false, 'released on close');
+});
+
+test('a Playwright failure prefixed with a lane ("[behaviour] › ", "[visual] › ") is read with its feature file (#365)', () => {
+  const { parseFailures } = require('../src/engine/suite-step');
+  const out = [
+    '  1) [behaviour] › .features-gen/features/backlog.feature.spec.js:7:7 › Backlog › Kanban board @issue-223 ',
+    '',
+    '    Error: expect(locator).toBeVisible() failed',
+    '',
+    '  2) [visual] › .features-gen/features/visual.feature.spec.js:5:7 › Visual › The Backlog Board looks like its baseline @visual ',
+    '    Error: Screenshot comparison failed',
+    '',
+    '  2 failed',
+  ].join('\n');
+  const failures = parseFailures(out);
+  assert.deepEqual(failures.map((f) => f.file), ['features/backlog.feature', 'features/visual.feature']);
+  assert.match(failures[0].error, /toBeVisible/);
+  assert.match(failures[1].error, /Screenshot comparison/);
+});
+
 test("the config's header comment describes the two lanes instead of one Electron at a time (#365)", () => {
   const header = read('playwright.config.js').split(/\r?\n/).filter((l) => l.startsWith('//')).join('\n');
   assert.match(header, /#365/);
