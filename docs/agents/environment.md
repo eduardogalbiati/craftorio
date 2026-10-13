@@ -27,6 +27,14 @@ the workspace folder.
   `native/target/release/multiagent-mcp[.exe]` when it exists (packaged: `resources/bin/`), else
   `src/supervisor-mcp.js` under Node; never a binary from PATH. `npm run package` builds the
   release target of the platform and arch (`rustup target add` first) and needs cargo.
+- **No system Node in the packaged app** (#342): it ships three sidecars in `resources/bin/`
+  (`nativeBinaryPath`, `src/native-bin.js`): `multiagent-mcp`, `multiagent-tail` (the external
+  live terminal, `tailCommand` in `terminalSpec`; the embedded one keeps `followSession` in
+  `src/session-tail.js`) and `multiagent-ctl` (the control channel's client, its path shown in
+  Settings › Execution). Node is needed for development only: `npm start`, the tests and the
+  JS fallbacks of a checkout without cargo (`src/session-tail.js`, `src/supervisor-mcp.js`,
+  `scripts/ctl.js`). `test/session-tail-342.test.js` and `test/ctl-342.test.js` build the two
+  binaries in release on their first run, like `multiagent-mcp`.
 - Installed CLIs: `claude` (~/.local/bin), `codex` (WinGet), `grok` (~/.grok/bin), `gh` in
   `C:\Program Files\GitHub CLI\gh.exe`, `glab` optional. Inside runs the engine refreshes PATH
   (`refreshWindowsPath`), so agents call bare `gh`/`glab` (see [capabilities.md](capabilities.md)).

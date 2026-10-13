@@ -74,15 +74,27 @@ A new skill or workflow adapted from an MIT project must be added here (a test c
 ## Rust crates (native sidecars)
 
 The native sidecars (`native/`, shipped in `resources/bin/`) are built with these crates from
-crates.io, each used under its MIT license (the MIT permission notice above). Their copyright
-notices are in each crate's sources (`cargo tree -e normal -f "{p} {l}"` lists them).
+crates.io, each used under its MIT license (the MIT permission notice above), except foldhash,
+under the zlib license (no notice required in a binary). Their copyright notices are in each
+crate's sources (`cargo tree -e normal -f "{p} {l}"` lists them).
 
 | Crate | License | Used by |
 |---|---|---|
-| serde_json | MIT OR Apache-2.0 | multiagent-mcp (direct dependency) |
+| serde_json | MIT OR Apache-2.0 | multiagent-ctl, multiagent-mcp, multiagent-tail (direct dependency) |
+| jiff | Unlicense OR MIT | multiagent-tail (direct dependency: local times) |
+| anstyle-query | MIT OR Apache-2.0 | multiagent-tail (direct dependency, Windows: console colours) |
+| equivalent | Apache-2.0 OR MIT | indexmap |
+| foldhash | Zlib | serde_json (preserve_order) |
+| hashbrown | MIT OR Apache-2.0 | indexmap |
+| indexmap | Apache-2.0 OR MIT | serde_json (preserve_order) |
 | itoa | MIT OR Apache-2.0 | serde_json |
+| jiff-core | Unlicense OR MIT | jiff |
+| jiff-tzdb | Unlicense OR MIT | jiff-tzdb-platform (Windows) |
+| jiff-tzdb-platform | Unlicense OR MIT | jiff (Windows) |
 | memchr | Unlicense OR MIT | serde_json |
 | serde_core | MIT OR Apache-2.0 | serde_json |
+| windows-link | MIT OR Apache-2.0 | windows-sys (Windows) |
+| windows-sys | MIT OR Apache-2.0 | jiff, anstyle-query (Windows) |
 | zmij | MIT | serde_json |
 
 A new Rust dependency must be added here (a test checks the direct ones).

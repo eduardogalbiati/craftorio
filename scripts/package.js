@@ -53,7 +53,8 @@ async function hardenExe(exe, platform) {
 }
 
 // The native sidecars (native/, #341): the Rust target of each platform and arch, and the binaries
-// shipped in resources/bin/ (src/supervisor-bridge.js mcpBinaryPath finds them there).
+// shipped in resources/bin/ (src/native-bin.js nativeBinaryPath finds them there): the MCP server,
+// the external live terminal's follower and the control channel's client (#342).
 const RUST_TARGETS = {
   'darwin-arm64': 'aarch64-apple-darwin',
   'darwin-x64': 'x86_64-apple-darwin',
@@ -62,7 +63,11 @@ const RUST_TARGETS = {
   'win32-arm64': 'aarch64-pc-windows-msvc',
   'win32-x64': 'x86_64-pc-windows-msvc',
 };
-const NATIVE_BINARIES = ['multiagent-mcp'];
+const NATIVE_BINARIES = [
+  'multiagent-ctl',
+  'multiagent-mcp',
+  'multiagent-tail',
+];
 
 // The folder packaged as resources/bin/ for one platform and arch (filled by buildNative).
 function nativeBinDir({ platform, arch, out }) {
@@ -107,12 +112,10 @@ function packagerOptions({ platform, arch, out }) {
     prune: true,
     tmpdir: false, // avoids EPERM when moving from %TEMP% on Windows
     // node-pty is a native module (embedded terminals): it has to live outside app.asar.
-    // session-tail.js runs under the system node in the external live terminal (see
-    // terminalSpec in src/main.js), and node can't read app.asar.
-    // supervisor-mcp.js (the supervisor's MCP server, a child of claude) likewise: the fallback when
-    // the Rust multiagent-mcp is missing from resources/bin/ (an older build, a dev checkout).
-    asar: { unpack: '{**/node_modules/node-pty/**,**/src/session-tail.js,**/src/supervisor-mcp.js}' },
-    // the native sidecars (buildNative), outside app.asar: resources/bin/multiagent-mcp[.exe]
+    // Nothing else is (#342): the external live terminal and the MCP server are the Rust binaries
+    // of resources/bin/, always shipped, so no script needs the system node.
+    asar: { unpack: '**/node_modules/node-pty/**' },
+    // the native sidecars (buildNative), outside app.asar: resources/bin/multiagent-{ctl,mcp,tail}[.exe]
     extraResource: [nativeBinDir({ platform, arch, out })],
     // .claude/ may contain worktrees from other sessions (with their own node_modules); poc/ holds
     // proofs of concept, never part of the app; generated/ (the run's 3D view, scripts/build-3d.js) is

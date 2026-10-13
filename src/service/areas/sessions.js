@@ -13,13 +13,13 @@ const projects = require('../../projects');
 const runs = require('../../runs');
 const cliSessions = require('../../cli-sessions');
 const { trustFolder } = require('../../cli-trust');
+const { tailCommand } = require('../../native-bin');
 const {
   cliEnv,
   cliReason,
   folderMatcher,
   RESUME_ARGS,
   sessionView,
-  SRC,
 } = require('../common');
 
 module.exports = (ctx) => {
@@ -50,15 +50,12 @@ module.exports = (ctx) => {
     const env = { ...process.env };
     delete env.CLAUDECODE;
     if (mode === 'live') {
-      // Dev: Electron itself as node. Packaged: the RunAsNode fuse is off, so the system node runs
-      // the unpacked copy of session-tail.js (node can't read app.asar).
-      const node = host.isPackaged ? resolveCommand('node') : { file: process.execPath };
-      if (!node) throw new Error('The external live terminal needs Node.js on the PATH. Use the embedded live terminal instead.');
-      const tail = path.join(SRC, 'session-tail.js').replace(/app\.asar([\\/])/, 'app.asar.unpacked$1');
+      // the multiagent-tail binary (#342), else session-tail.js under node (src/native-bin.js)
+      const tail = tailCommand(!!host.isPackaged, resolveCommand);
       return {
         title: sess.agent === 'orchestrator' ? 'orchestrator · live' : `${sess.agent} (${sess.id}) · live`,
-        cwd: run.runDir, file: node.file,
-        args: [tail, run.runDir, sess.id], env: { ...env, ELECTRON_RUN_AS_NODE: '1', FORCE_COLOR: '1' },
+        cwd: run.runDir, file: tail.command,
+        args: [...tail.args, run.runDir, sess.id], env: { ...env, ...tail.env, FORCE_COLOR: '1' },
       };
     }
     const providers = ctx.runWorkflow(run.runId, run.file).providers || {};

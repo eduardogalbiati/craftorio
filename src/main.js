@@ -39,6 +39,7 @@ const runOwner = require('./run-owner');
 const { allowPermission } = require('./permissions');
 const { createService } = require('./service');
 const { createControlChannel } = require('./control');
+const { nativeBinaryPath } = require('./native-bin');
 const { authChannels } = require('./service/manifest');
 const { createAuth, fileStorage } = require('./auth');
 const authConfig = require('./auth-config');
@@ -208,7 +209,7 @@ ipcMain.handle('keepAwake:state', () => keepAwake.update());
 // ---- control channel (#336) ------------------------------------------------------------
 // Outside sessions drive this app through its own channels (src/control): opened and closed with
 // the setting, closed on quit; the Settings screen shows its port and endpoint file.
-const control = createControlChannel({ service });
+const control = createControlChannel({ service, ctlPath: nativeBinaryPath('multiagent-ctl', { isPackaged: app.isPackaged }) });
 const updateControl = () => control.update().then((s) => { broadcast('control:changed', s); return s; });
 service.events.on('settings:changed', () => { updateControl().catch((e) => console.error('control channel:', e.message)); });
 ipcMain.handle('control:state', () => updateControl());

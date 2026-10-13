@@ -7,13 +7,18 @@
 // Only the channels of src/control/allowlist.js are answered (others: 403 naming the channel); no
 // argument may cross a human gate (confirmGate). Every call is appended to control/calls.jsonl.
 // The calls go to the running app's own service: actions dispatch as from the screen, and no second
-// engine opens the workspace (#112). scripts/ctl.js is the small client.
+// engine opens the workspace (#112). Two reads for the client (#342), with the token, not logged:
+//   GET /api/version    ->  { version }: CONTROL_VERSION, the client refuses another one (exit 3)
+//   GET /api/channels   ->  { channels: [{ channel, params, schema }] }: the allowlist, argument schemas
+// The client: the multiagent-ctl binary (native/multiagent-ctl, its path in the status as ctlPath);
+// scripts/ctl.js for development.
 
 const crypto = require('crypto');
 const fs = require('fs');
 const http = require('http');
 const path = require('path');
 const workspace = require('../workspace');
+const { nativeBinaryPath } = require('../native-bin');
 const { CHANNELS, GATE_ARGS } = require('./allowlist');
 const {
   bearer,
@@ -27,6 +32,19 @@ const {
 
 const SUMMARY_CHARS = 200;
 
+// The version of this HTTP contract (routes, bodies, exit codes the client relies on). Bump it with
+// CONTROL_VERSION in native/multiagent-ctl/src/main.rs when either changes incompatibly.
+const CONTROL_VERSION = '1';
+
+// the allowlisted channels with their argument schemas (#338), for `multiagent-ctl --list`
+function describeChannels(service) {
+  const byChannel = new Map((service.manifest || []).filter((e) => e.channel).map((e) => [e.channel, e]));
+  return [...CHANNELS].filter((c) => Object.hasOwn(service.api, c)).map((channel) => {
+    const e = byChannel.get(channel) || {};
+    return { channel, params: e.params ?? null, schema: e.schema?.params ?? null };
+  });
+}
+
 // a short, single-line summary of a value for the call log
 function summarize(value) {
   let text;
@@ -39,10 +57,11 @@ const controlDir = (ws) => path.join(ws.root, 'control');
 
 /**
  * @param service  the running app's engine service (src/service)
+ * @param ctlPath  where the multiagent-ctl client is (main.js: nativeBinaryPath for app.isPackaged)
  * @returns { update(), stop(), status() }: update() follows the setting and resolves the status
- *          { enabled, url, port, file, error }
+ *          { enabled, url, port, file, error, ctlPath }
  */
-function createControlChannel({ service }) {
+function createControlChannel({ service, ctlPath = nativeBinaryPath('multiagent-ctl', { isPackaged: false }) }) {
   let server = null;
   let open = null; // { url, port, file, root }
   let error = null;
@@ -54,6 +73,7 @@ function createControlChannel({ service }) {
     port: open?.port || null,
     file: open?.file || null,
     error,
+    ctlPath,
   });
 
   function record(root, entry) {
@@ -85,6 +105,12 @@ function createControlChannel({ service }) {
         if (!sameOrigin(req) || !hosts.has(req.headers.host)) throw new HttpError(403, 'Cross-origin requests are not allowed.');
         if (!isToken(bearer(req))) throw new HttpError(401, 'Missing or invalid token: read it from control/endpoint.json.');
         if (channel === null) throw new HttpError(404, 'Not found: use POST /api/<channel>.');
+        if (req.method === 'GET' && (channel === 'version' || channel === 'channels')) {
+          const body = channel === 'version' ? { version: CONTROL_VERSION } : { channels: describeChannels(service) };
+          channel = null; // the client's own reads are not calls: not logged
+          sendJson(res, 200, body);
+          return;
+        }
         if (req.method !== 'POST') throw new HttpError(405, 'Use POST.');
         const body = await readJson(req);
         args = summarize(body.arg);
@@ -187,4 +213,4 @@ function createControlChannel({ service }) {
   };
 }
 
-module.exports = { createControlChannel };
+module.exports = { CONTROL_VERSION, createControlChannel };

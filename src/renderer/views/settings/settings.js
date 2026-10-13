@@ -29,8 +29,9 @@ function renderTimeZone() {
   $('#set-time-zone-now').textContent = `Now ${TimeZone.formatDateTime(Date.now(), zone)} (${TimeZone.offsetLabel(Date.now(), zone)})`;
 }
 
-// Control channel (#336, src/control): main's endpoint state { enabled, port, file, error }. The
-// browser client (npm run serve) has no endpoint: the switch is disabled there.
+// Control channel (#336, src/control): main's endpoint state { enabled, port, file, error, ctlPath }.
+// While on, the multiagent-ctl client's path (#342) with a Copy button. The browser client (npm run
+// serve) has no endpoint: the switch is disabled there.
 const controlChannelAvailable = () => api.platform !== 'browser' && typeof api.controlChannelState === 'function';
 function renderControlChannel(s, failure) {
   const status = $('#set-control-status');
@@ -43,6 +44,13 @@ function renderControlChannel(s, failure) {
   status.title = status.textContent;
   status.className = `badge ${on ? 'cat-monitor' : ''}`;
   $('#set-control-error').textContent = failure || s?.error || '';
+  const ctl = $('#set-control-ctl');
+  const shown = $('#set-control-ctl-path');
+  if (!ctl || !shown) return;
+  const ctlPath = available && on ? s.ctlPath || '' : '';
+  ctl.classList.toggle('hidden', !ctlPath);
+  shown.textContent = ctlPath;
+  shown.title = ctlPath;
 }
 
 async function refreshControlChannel() {
@@ -695,8 +703,9 @@ registerView({
                   <label class="switch"><input type="checkbox" data-keep-awake-toggle aria-label="Keep awake" /><span></span></label>
                 </div>
                 <div class="s-row">
-                  <div class="s-label"><b>Allow outside sessions to control this app</b><span>A terminal or another agent on this computer can read runs, the backlog and settings and act on roadmaps through a local endpoint (control/endpoint.json, scripts/ctl.js). Human gates stay closed to it.</span>
-                    <span class="keep-awake-line"><span class="badge" data-testid="control-channel-status" id="set-control-status"></span><span class="error small" id="set-control-error"></span></span></div>
+                  <div class="s-label"><b>Allow outside sessions to control this app</b><span>A terminal or another agent on this computer can read runs, the backlog and settings and act on roadmaps through a local endpoint (control/endpoint.json) with the multiagent-ctl client. Human gates stay closed to it.</span>
+                    <span class="keep-awake-line"><span class="badge" data-testid="control-channel-status" id="set-control-status"></span><span class="error small" id="set-control-error"></span></span>
+                    <span class="keep-awake-line hidden" id="set-control-ctl"><span class="muted small">Client:</span><code class="small" data-testid="control-ctl-path" id="set-control-ctl-path"></code><button type="button" class="btn sm ghost" data-testid="control-ctl-copy" id="btn-control-ctl-copy" aria-label="Copy the multiagent-ctl path">Copy</button></span></div>
                   <label class="switch"><input type="checkbox" data-setting="controlChannel" data-testid="setting-control-channel" aria-label="Allow outside sessions to control this app" /><span></span></label>
                 </div>
               </div>
@@ -810,6 +819,9 @@ registerView({
       if (el.dataset.setting === 'findingsButton') window.Findings?.refresh();
     }));
     api.onControlChannelChange?.(renderControlChannel);
+    $('#btn-control-ctl-copy').onclick = async () => {
+      try { await api.clipboardWrite($('#set-control-ctl-path').textContent); } catch (e) { $('#set-control-error').textContent = errMsg(e); }
+    };
     $('#set-time-zone').onchange = async (e) => { state.settings = await api.setSettings({ timeZone: e.target.value }); renderTimeZone(); TimeZone.notify(); };
     $('#set-backlog-platform').onchange = async (e) => { state.settings = await api.setSettings({ backlogPlatform: e.target.value }); };
     $('#set-default-workflow').onchange = async (e) => { state.settings = await api.setSettings({ defaultWorkflow: e.target.value || null }); renderDefaultWorkflow(); };

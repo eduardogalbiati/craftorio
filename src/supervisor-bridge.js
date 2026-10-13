@@ -10,17 +10,16 @@ const crypto = require('crypto');
 const fs = require('fs');
 const http = require('http');
 const path = require('path');
+const { nativeBinaryPath } = require('./native-bin');
 const { callTool, describeTools } = require('./supervisor-tools');
 
 const MAX_BODY = 1024 * 1024;
 
 // Where the Rust MCP server (native/multiagent-mcp, #341) of this platform lives: packaged, in
 // resources/bin/ (scripts/package.js); in a dev checkout, cargo's release output under native/.
-// Never looked up on the PATH.
+// Never looked up on the PATH (src/native-bin.js).
 function mcpBinaryPath({ isPackaged, resourcesPath = process.resourcesPath, platform = process.platform } = {}) {
-  const name = platform === 'win32' ? 'multiagent-mcp.exe' : 'multiagent-mcp';
-  if (isPackaged) return path.join(resourcesPath, 'bin', name);
-  return path.join(__dirname, '..', 'native', 'target', 'release', name);
+  return nativeBinaryPath('multiagent-mcp', { isPackaged, resourcesPath, platform });
 }
 
 // How `claude` starts the MCP server: the Rust binary when it exists (no Node needed), else the JS

@@ -313,12 +313,20 @@ and the file's path.
 - The endpoint is part of the running app: nothing here opens a second engine on the workspace (#112).
 
 Calling a channel (`POST /api/<channel>`, body `{ "arg": ... }`, answer `{ "result": ... }` or
-`{ "error": "..." }`). With the small client (plain Node, it reads `endpoint.json` from
-`MULTIAGENT_WORKSPACE` or `--workspace <dir>`; a refused call exits with 1):
+`{ "error": "..." }`). With the client shipped next to the app, `multiagent-ctl` (#342, no Node
+needed; Settings › Execution shows its path to copy while the switch is on: `resources/bin/` in
+the installed app). It reads `endpoint.json` from `MULTIAGENT_WORKSPACE` or `--workspace <dir>`,
+checks the app's contract version (`GET /api/version`) and prints the result as JSON:
 
 ```
-node scripts/ctl.js roadmap:get "{\"projectId\":\"my-app\"}" --workspace C:/Users/me/multiagent-workspace
+multiagent-ctl roadmap:get "{\"projectId\":\"my-app\"}" --workspace C:/Users/me/multiagent-workspace
+multiagent-ctl --list
 ```
+
+`multiagent-ctl --list` prints the allowed channels with their argument schemas (`GET /api/channels`).
+Exit codes: `0` the result printed, `1` a refused or failed call (the reason on stderr), `2` no
+endpoint (the switch is off), `3` the app speaks another contract version (use the client shipped
+with that app). In a development checkout, `scripts/ctl.js` does the same under Node.
 
 With `curl` (the URL and the token from `control/endpoint.json`):
 
