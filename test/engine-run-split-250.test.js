@@ -30,10 +30,7 @@ const AREAS = {
   resume: /resum/i,
 };
 
-test('#250 src/engine/workflow.js is under 1,000 lines', () => {
-  const n = lineCount(path.join(root, 'src', 'engine', 'workflow.js'));
-  assert.ok(n < 1000, `src/engine/workflow.js has ${n} lines`);
-});
+// src/engine/workflow.js's 1,000-line cap is the rule of every source file (#334, file-size-ratchet-334.test.js).
 
 test('#250 the area modules live in src/engine/run/, none over 800 lines', () => {
   const files = runModules();

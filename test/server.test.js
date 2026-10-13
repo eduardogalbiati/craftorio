@@ -87,6 +87,24 @@ test('unknown channels, wrong methods, bad bodies and channel errors', async (t)
   assert.deepEqual([err.status, err.json.error], [500, 'Project not found: missing']);
 });
 
+// #333: a channel that refuses bad input answers a client error (4xx) with its message, not a 500,
+// and the server keeps serving the next request.
+test('#333 a channel that refuses bad input answers 4xx with the message, and the server keeps serving', async (t) => {
+  const { base } = await start(t);
+  for (const runId of ['../../outside', null, 42, 'x'.repeat(1024 * 1024)]) {
+    const label = typeof runId === 'string' ? runId.slice(0, 20) : String(runId);
+    const res = await callApi(base, 'runs:events', { runId });
+    assert.ok(res.status >= 400 && res.status < 500, `runId ${label}: status ${res.status}, expected 4xx`);
+    assert.equal(typeof res.json?.error, 'string', `runId ${label}: an { error } body`);
+    assert.match(res.json.error, /run/i, `runId ${label}: the message names the problem: ${res.json.error.slice(0, 200)}`);
+    assert.doesNotMatch(res.json.error, /Cannot read propert|Cannot destructure|is not a function|The "\w+" argument must be/);
+  }
+  const info = await callApi(base, 'app:info');
+  assert.deepEqual([info.status, info.json.result.version], [200, '1.2.3']);
+  const list = await callApi(base, 'projects:list');
+  assert.deepEqual([list.status, list.json], [200, { result: [] }]);
+});
+
 // #130: a pasted image (up to 10 MB) travels as base64, about 1/3 bigger; MAX_BODY (15 MB) was
 // raised from the previous 5 MB limit to fit it. Over the limit, readJson's `req.destroy()` tears
 // down the socket before the 413 response can flush (the same pre-existing mechanism as the old
