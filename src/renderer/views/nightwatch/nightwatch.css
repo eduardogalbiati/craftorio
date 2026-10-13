@@ -49,14 +49,18 @@
 .nav-badge.nw-moon { color: var(--yellow); background: transparent; border: 1px solid rgba(250,204,21,.35); }
 .nw-dash-lines { display: flex; flex-direction: column; gap: 2px; margin: 4px 0 6px; text-align: left; }
 /* Limits tonight (#337): the turn-on form's group and the limits in force while the watch is on */
-.nw-limits { display: flex; flex-direction: column; gap: 6px; border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; margin: 0; background: var(--panel-2); }
+/* a fieldset defaults to min-width: min-content, which pushed the group past its card: keep it inside */
+.nw-limits { display: flex; flex-direction: column; gap: 6px; border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; margin: 0; min-width: 0; max-width: 100%; box-sizing: border-box; background: var(--panel-2); }
 .nw-limits legend { font-weight: 600; font-size: 12px; padding: 0 4px; }
 .nw-limits .row, .nw-active-limits .row { align-items: center; gap: 8px; flex-wrap: wrap; }
 .nw-limits select, .nw-active-limits select { width: auto; }
-.nw-limits .nw-cut, .nw-active-limits .nw-cut { max-width: 520px; }
+/* the summary wraps so every limit, the nightly budget included, stays readable */
+.nw-limits-line { white-space: normal; overflow-wrap: anywhere; min-width: 0; }
 .nw-limits-warning { margin: 0; }
-.nw-limit-rows { display: grid; grid-template-columns: max-content max-content 1fr; gap: 6px 12px; align-items: center; }
+.nw-limit-rows { display: grid; grid-template-columns: minmax(0, max-content) max-content minmax(0, 1fr); gap: 6px 12px; align-items: center; min-width: 0; }
 .nw-limit-row { display: contents; }
-.nw-limit-row .s-num { width: 90px; }
-.nw-active-limits { display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--border); padding-top: 8px; }
+.nw-limit-row .row { flex-wrap: nowrap; min-width: 0; }
+.nw-limit-row .row .muted { min-width: 0; white-space: normal; }
+.nw-limit-row .s-num { width: 90px; flex: none; }
+.nw-active-limits { display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--border); padding-top: 8px; min-width: 0; }
 @media (max-width: 900px) { .nw-top { grid-template-columns: 1fr; } }

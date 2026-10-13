@@ -94,7 +94,7 @@
           ${l.expand && !l.custom ? multiplierSelect(l.multiplier) : ''}
           ${l.expand ? `<button type="button" class="link-btn" id="nw-limits-customize" data-testid="nw-limits-customize">${l.custom ? 'Use a multiplier' : 'Customize'}</button>` : ''}
         </div>
-        <div class="muted small nw-cut" data-testid="nw-limits-summary" title="${esc(limitsSummary(day, t))}">${esc(limitsSummary(day, t))}</div>
+        <div class="muted small nw-limits-line" data-testid="nw-limits-summary">${esc(limitsSummary(day, t))}</div>
         ${l.expand && !day.budget ? '<p class="warn-text small nw-limits-warning" data-testid="nw-limits-warning">No nightly budget: nothing caps tonight\'s spending</p>' : ''}
         ${l.expand && l.custom ? limitRowsHtml(day, l.values, saving) : ''}
       </fieldset>`;
@@ -104,9 +104,10 @@
     const t = lim.tonight;
     const edit = nw.limits;
     return `<div class="nw-active-limits" data-testid="nw-active-limits">
-        <div class="row"><span class="small"><b>Limits tonight</b> · <span class="nw-cut" title="${esc(limitsSummary(lim.day, t))}">${esc(limitsSummary(lim.day, t))}</span></span>
+        <div class="row"><b class="small">Limits tonight</b>
           ${multiplierSelect(t?.multiplier, t?.multiplier ? '' : t ? 'Custom' : 'Not expanded')}
           ${edit?.custom ? '' : '<button type="button" class="link-btn" id="nw-active-customize" data-testid="nw-limits-customize">Customize</button>'}</div>
+        <div class="small nw-limits-line">${esc(limitsSummary(lim.day, t))}</div>
         ${!lim.day.budget ? '<p class="warn-text small nw-limits-warning" data-testid="nw-limits-warning">No nightly budget: nothing caps tonight\'s spending</p>' : ''}
         ${edit?.custom ? `${limitRowsHtml(lim.day, edit.values, edit.saving)}<div class="row">${edit.error ? `<p class="error small">${esc(edit.error)}</p>` : ''}<span class="spacer"></span><button class="btn ghost sm" type="button" id="nw-limits-cancel">Cancel</button><button class="btn primary sm" type="button" id="nw-limits-save"${edit.saving ? ' disabled' : ''}>Save</button></div>` : ''}
       </div>`;
