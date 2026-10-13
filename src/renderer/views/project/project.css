@@ -40,3 +40,6 @@
 .arch-frames, .arch-gate { margin: 4px 0; padding-left: 18px; }
 .arch-limits { margin-top: 14px; }
 .arch-limits ul { margin: 4px 0 0; padding-left: 18px; }
+/* #373: the "Facts | City" switch, and the hotspot row a City card opened */
+.arch-mode-row { margin-bottom: 10px; }
+.arch-focus td { background: color-mix(in srgb, var(--accent, #7c9cff) 16%, transparent); }

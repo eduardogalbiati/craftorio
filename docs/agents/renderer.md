@@ -247,7 +247,13 @@ Read this before changing anything in `src/renderer/`.
   "no bundler": React + React Three Fiber + three in `src/renderer/run3d/*.jsx`, bundled by
   `scripts/build-3d.js` into `generated/run3d-scene.js` (gitignored, rebuilt by prepare / prestart /
   prebuild, packed into the app) and loaded with a `<script src>` on the first click: run
-  `npm run build:3d` after changing a `.jsx`.
+  `npm run build:3d` after changing a `.jsx`. The same script builds the **project city** (#373):
+  `src/renderer/city3d/*` → `generated/project-city.js` (`window.ProjectCityScene`), loaded by the
+  Architecture tab's City view (`views/project/project-city.js`, whose HUD is plain DOM with the
+  `r3d-*` classes, placed by `project-city.css`). Its layout is pure (`src/shared/city-layout.js`,
+  Node-tested); the scene draws it with instancing (`city3d/geometry.js`: rounded corners at any
+  instance scale) and the run's theme, lights and materials. Capture it with
+  `npm run screenshot -- --view project --tab architecture --mode city`.
   - **Themes** (`run3d-theme.js`): dark by default, the app's own tokens (a test compares its
     palette with `style.css` `:root`), or the light palette of the approved proof of concept
     (`poc/run-3d.html`). The HUD's colours are `--r3d-*` variables under `.r3d` /

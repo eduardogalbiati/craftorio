@@ -11,6 +11,8 @@
 // with a new and a kept finding, the previous one's gone finding) and six real runs since. Its
 // states, --mode: not-git, never (no report), empty (a repository with no commit), analyzing
 // (architecture:analyze never answers) and error (it fails), the last two after a click on Analyze.
+// #373: --mode city switches the tab to its City view, on a bigger demo repository (four folders, 31
+// more files) with a city plan: four zones of different kinds, five districts, a landmark and a port.
 
 const { execFileSync } = require('child_process');
 const fs = require('fs');
@@ -93,11 +95,42 @@ function demoCityPlan(ws, projectId) {
   }, null, 2));
 }
 
+// #373: a bigger city: four folders of files of growing size, then a city plan with a landmark and a port
+const cityFile = (n) => `${Array.from({ length: n }, (_, i) => `function step${i}(x) {\n  return x > ${i} ? x - ${i} : x + ${i};\n}`).join('\n')}\nmodule.exports = {};\n`;
+const CITY_FOLDERS = { 'src/engine': 9, 'src/renderer/views': 12, 'docs/guides': 6, 'scripts/build': 4 };
+const CITY_COMMITS = [
+  ...ARCH_COMMITS,
+  ['2026-09-22', 'Grow the engine and the views', Object.fromEntries(Object.entries(CITY_FOLDERS).flatMap(([dir, n]) => Array.from({ length: n }, (_, i) => [
+    `${dir}/${dir.startsWith('docs') ? `guide-${i}.md` : `part-${i}.js`}`, dir.startsWith('docs') ? `# Guide ${i}\n${'Text.\n'.repeat(4 + i * 3)}` : cityFile(2 + ((i * 7) % 11)),
+  ])))],
+  ['2026-09-29', 'Tune the engine', { 'src/engine/part-0.js': cityFile(16), 'src/engine/part-3.js': cityFile(12), 'src/renderer/views/part-1.js': cityFile(14) }],
+];
+const CITY_PLAN = {
+  version: 1, project: 'demo-app', summary: 'Billing, its engine and views, with the export and the docs.',
+  zones: [
+    { id: 'core', name: 'Core', kind: 'industrial', purpose: 'Billing and the engine.' },
+    { id: 'ui', name: 'Interface', kind: 'commercial', purpose: 'What people see.' },
+    { id: 'tooling', name: 'Tooling', kind: 'workshop', purpose: 'Build and export scripts.' },
+    { id: 'books', name: 'Library', kind: 'library', purpose: 'Docs.' },
+  ],
+  districts: [
+    { id: 'billing', name: 'Billing', zone: 'core', include: ['src/billing.js', 'src/api.js'] },
+    { id: 'engine', name: 'Engine', zone: 'core', include: ['src/engine/**'] },
+    { id: 'views', name: 'Views', zone: 'ui', include: ['src/renderer/**'] },
+    { id: 'scripts', name: 'Scripts', zone: 'tooling', include: ['scripts/**', 'tools/**'] },
+    { id: 'guides', name: 'Guides', zone: 'books', include: ['docs/**', 'README.md'] },
+  ],
+  landmarks: [{ path: 'src/billing.js', label: 'Billing rules' }],
+  ports: [{ id: 'payments', name: 'Payments API', via: ['src/api.js', 'src/billing.js'] }],
+};
+
 function seedArchitecture(args, ws, project) {
   if (args.mode === 'not-git') return;
-  const head = demoArchitectureRepo(project.folder, args.mode === 'empty' ? [] : ARCH_COMMITS);
+  const commits = { empty: [], city: CITY_COMMITS }[args.mode] || ARCH_COMMITS;
+  const head = demoArchitectureRepo(project.folder, commits);
   if (head && args.mode !== 'never') demoArchitectureReports(ws, project.id, { commit: head, date: '2026-09-15T10:00:00Z' });
   if (args.mode === 'map-refresh') demoCityPlan(ws, project.id);
+  if (args.mode === 'city') require('../../../src/oracle-architecture').writePlan(path.join(ws.root, 'architecture'), project.id, CITY_PLAN, '2026-10-01T09:00:00.000Z');
 }
 
 function seed({ args, ws, project }) {
@@ -139,11 +172,12 @@ async function afterOpen({ args, click }) {
   }
   await click(`[data-pv-tab="${args.tab}"]`);
   if (args.tab === 'architecture' && analysis) await click('[data-testid="architecture-analyze"]');
+  if (args.tab === 'architecture' && args.mode === 'city') await click('[data-testid="architecture-mode-city"]');
 }
 
 module.exports = {
   afterOpen,
-  modes: ['analyzing', 'empty', 'error', 'loading', 'map-refresh', 'never', 'no-runs', 'not-git'],
+  modes: ['analyzing', 'city', 'empty', 'error', 'loading', 'map-refresh', 'never', 'no-runs', 'not-git'],
   open,
   run: true,
   seed,

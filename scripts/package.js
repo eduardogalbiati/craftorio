@@ -118,10 +118,11 @@ function packagerOptions({ platform, arch, out }) {
     // the native sidecars (buildNative), outside app.asar: resources/bin/multiagent-{ctl,mcp,tail}[.exe]
     extraResource: [nativeBinDir({ platform, arch, out })],
     // .claude/ may contain worktrees from other sessions (with their own node_modules); poc/ holds
-    // proofs of concept, never part of the app; generated/ (the run's 3D view, scripts/build-3d.js) is
-    // packed, and src/renderer/run3d/ (its sources) is not needed once bundled; native/ (the Rust
-    // sources and cargo's target/) arrives as resources/bin/ through extraResource
-    ignore: [/^\/(runs|dist|build|scripts|test|supabase|poc|native|\.github|\.claude)(\/|$)/, /^\/src\/renderer\/run3d(\/|$)/],
+    // proofs of concept, never part of the app; generated/ (the run's 3D view and the project city,
+    // scripts/build-3d.js) is packed, and src/renderer/run3d/ and city3d/ (their sources) are not
+    // needed once bundled; native/ (the Rust sources and cargo's target/) arrives as resources/bin/
+    // through extraResource
+    ignore: [/^\/(runs|dist|build|scripts|test|supabase|poc|native|\.github|\.claude)(\/|$)/, /^\/src\/renderer\/(run3d|city3d)(\/|$)/],
     ...(platform === 'darwin' && {
       appBundleId: 'io.github.eduardogalbiati.multiagent-orchestrator',
       appCategoryType: 'public.app-category.developer-tools',

@@ -15,6 +15,10 @@
 // from past real runs) and Start / Cancel; only Start starts the run (run:start, a simulation when the
 // app runs simulations only), then the tab shows it running. The advice to refresh (more than 5% of
 // the drawn files match no district, or a new top-level folder) never starts anything.
+// A "Facts | City" switch leads the tab (#373), remembered per window (sessionStorage MODE_KEY): City
+// shows the project as a 3D city in place of all the above (views/project/project-city.js, one per
+// project on screen, kept while the tab switches back and forth); a building's "Open in Facts"
+// comes back here with its hotspot row marked and scrolled to.
 // Also the Refactor tab's proposal list (showRefactor, refactor:proposals).
 // Drawn into the box project.js gives it (show), its clicks and changes routed from the project
 // page's listeners (onClick, onChange). Uses app.js globals at call time: api, esc, errMsg, fmtNum,
@@ -30,10 +34,28 @@
     'Code moved between files resets both metrics: the new file starts with no history and the old one disappears.',
     'Churn says nothing about bugs unless it is joined with fix commits: a busy file is not a buggy file.',
   ];
+  const MODE_KEY = 'multiagent.architecture.view';
   // the project on screen: { id, box, facts, view, reports, estimate, error, loadError, loading, analyzing, progress, reportId, since, until, includeMass, editing, seq,
-  // city, mapEstimate, mapConfirm, mapStarting, mapRun, mapError } (the project map, #372)
+  // cityMap, mapEstimate, mapConfirm, mapStarting, mapRun, mapError (the project map, #372: cityMap is architecture:city's answer),
+  // city, focusFile (the City view, #373: city is its ProjectCity) }
   let cur = null;
   let poll = null;
+  let mode = loadMode(); // 'facts' | 'city', for every project of this window
+
+  function loadMode() {
+    try { return sessionStorage.getItem(MODE_KEY) === 'city' ? 'city' : 'facts'; } catch { return 'facts'; }
+  }
+
+  function setMode(next) {
+    mode = next;
+    try { sessionStorage.setItem(MODE_KEY, next); } catch { /* remembered until the window reloads */ }
+    render();
+  }
+
+  const modeSwitch = () => {
+    const b = (m, label, title) => `<button type="button" class="${mode === m ? 'active' : ''}" data-arch-mode="${m}" data-testid="architecture-mode-${m}" aria-pressed="${mode === m}" title="${title}">${label}</button>`;
+    return `<div class="seg arch-mode" role="group" aria-label="Architecture view">${b('facts', 'Facts', 'The git facts and the Oracle&#39;s report, as tables')}${b('city', 'City', 'The project as a 3D city: zones, districts and a building per file')}</div>`;
+  };
 
   const plural = (n, unit) => `${n} ${n === 1 ? unit.replace(/s$/, '') : unit}`;
   const day = (iso) => String(iso || '').slice(0, 10);
@@ -89,7 +111,7 @@
   }
 
   function mapHtml() {
-    const city = cur.city;
+    const city = cur.cityMap;
     if (!city || city.state !== 'ok') return '';
     const hasPlan = city.model?.grouping === 'plan';
     const label = hasPlan ? 'Refresh the map' : 'Map this project';
@@ -181,7 +203,10 @@
 
   function hotspotsHtml(model) {
     const measured = model.complexity.status === 'measured';
-    const rows = model.files.slice(0, TABLE_ROWS).map((r) => `<tr>
+    // the file a City card opened: marked, and listed even below the top rows
+    const top = model.files.slice(0, TABLE_ROWS);
+    const focus = cur.focusFile && !top.some((r) => r.file === cur.focusFile) ? model.files.filter((r) => r.file === cur.focusFile) : [];
+    const rows = [...top, ...focus].map((r) => `<tr data-arch-file="${esc(r.file)}"${r.file === cur.focusFile ? ' class="arch-focus" data-testid="architecture-focus-row"' : ''}>
       <td class="an-title"><span class="an-file mono" title="${esc(r.file)}">${esc(r.file)}</span> <span class="muted small">${esc(r.language)}</span></td>
       <td class="num">${fmtNum(r.lines)}</td><td class="num">${r.commits}</td><td class="num">${r.rank}</td>
       <td>${r.co_change ? `<span class="mono small" title="${esc(r.co_change.file)}">${esc(r.co_change.file)}</span> <span class="badge">${Math.round(r.co_change.share * 100)}%</span>` : '<span class="muted small">none</span>'}</td>
@@ -259,7 +284,27 @@
 
   function render() {
     if (!cur?.box) return;
-    cur.box.innerHTML = `<div data-testid="architecture">${bodyHtml()}</div>`;
+    if (mode === 'city') { renderCity(); return; }
+    cur.box.innerHTML = `<div data-testid="architecture"><div class="row arch-mode-row">${modeSwitch()}</div>${bodyHtml()}</div>`;
+    if (cur.focusFile) cur.box.querySelector('.arch-focus')?.scrollIntoView?.({ block: 'center' });
+  }
+
+  // the project's name, as the Projects list has it (app.js state), for the city's header
+  const projectName = (id) => (typeof state !== 'undefined' ? state.projects?.find((p) => p.id === id)?.name : '') || '';
+
+  // City: the switch, then the project's city (created once, moved back into the box on each render)
+  function renderCity() {
+    const c = cur;
+    if (!window.ProjectCity) {
+      c.box.innerHTML = `<div data-testid="architecture"><div class="row arch-mode-row">${modeSwitch()}</div><div class="usage-unavailable" role="alert">The City view did not load: the Facts view has the same numbers.</div></div>`;
+      return;
+    }
+    c.city ||= ProjectCity.create({ projectId: c.id, name: projectName(c.id), onOpenFacts: (file) => { if (cur === c) { c.focusFile = file; setMode('facts'); } } });
+    if (!c.box.contains(c.city.el)) {
+      c.box.innerHTML = `<div data-testid="architecture" class="arch-city-mode"><div class="row arch-mode-row">${modeSwitch()}</div><div data-arch-city-slot></div></div>`;
+      c.box.querySelector('[data-arch-city-slot]').appendChild(c.city.el);
+    }
+    c.city.update({ facts: c.facts, estimate: c.estimate });
   }
 
   const range = () => ({ since: cur.since ? `${cur.since}T00:00:00Z` : null, until: cur.until ? `${cur.until}T23:59:59Z` : null, includeMass: cur.includeMass });
@@ -286,9 +331,11 @@
     c.view = value(view);
     c.reports = value(reports) || [];
     c.estimate = value(estimate)?.estimate || null;
-    c.city = value(city);
+    c.cityMap = value(city);
     c.mapEstimate = value(mapEstimate);
-    c.mapRun = c.city?.mapRun || null;
+    c.mapRun = c.cityMap?.mapRun || null;
+    // a refresh of the facts rebuilds the city (#371): the City view reads it again
+    if (refresh) c.city?.reload();
     render();
   }
 
@@ -349,8 +396,9 @@
   function show(id, box) {
     if (cur?.id !== id) {
       stopPoll();
+      cur?.city?.destroy(); // another project: the previous city gives its WebGL context back
       cur = { id, box, facts: null, view: null, reports: [], estimate: null, error: null, loadError: null, loading: false, analyzing: false, progress: null, reportId: null, since: '', until: '', includeMass: true, editing: false, seq: 0,
-        city: null, mapEstimate: null, mapConfirm: false, mapStarting: false, mapRun: null, mapError: null };
+        cityMap: null, mapEstimate: null, mapConfirm: false, mapStarting: false, mapRun: null, mapError: null, city: null, focusFile: null };
     }
     cur.box = box;
     if (!cur.facts && !cur.loading && !cur.loadError) load();
@@ -359,6 +407,8 @@
 
   // a click → its action, or null
   function clickAction(e) {
+    const view = e.target.closest('[data-arch-mode]');
+    if (view) return () => { if (view.dataset.archMode !== mode) { cur.focusFile = null; setMode(view.dataset.archMode); } };
     const send = e.target.closest('[data-arch-send]');
     if (send) return () => sendToRefactor(+send.dataset.archSend);
     if (e.target.closest('[data-arch-analyze]')) return analyze;
