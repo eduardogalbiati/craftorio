@@ -5,15 +5,15 @@
 // (features/support/browser-main.js), so window.api is src/renderer/api-http.js over HTTP, as in a
 // real browser. Electron is the browser on purpose: it is always installed with the app, Playwright's
 // own browsers may not be. The window starts on about:blank: a step can set routes (page.route) before
-// it opens the served UI (open()). Takes the machine's screenshot slot like launchApp (#199);
-// close() stops the window and the server and removes the scratch folder.
+// it opens the served UI (open()). Takes the machine's screenshot slot like launchApp (#199), only
+// with slot: true (the visual lane, #365); close() stops the window and the server and removes the scratch folder.
 
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
 const { _electron: electron } = require('@playwright/test');
-const machineSlot = require('../../src/engine/machine-slot');
+const { screenshotSlot } = require('./app');
 
 const root = path.join(__dirname, '..', '..');
 
@@ -62,10 +62,8 @@ function startServer(scratch, env) {
  * Starts a served engine and a browser window on about:blank → { app, window, url, open, scratch, close }.
  * open() loads the served UI (the url with its token) in the window.
  */
-async function launchServedUi({ size = '1400x900' } = {}) {
-  const slot = await machineSlot.acquireSlot('screenshot', {
-    dir: machineSlot.machineSlotDir(), holder: 'e2e', onWait: (h) => console.log(`e2e: waiting for the screenshot slot (pid ${h?.pid ?? '?'})`),
-  });
+async function launchServedUi({ size = '1400x900', slot: takeSlot = true } = {}) {
+  const slot = await screenshotSlot(takeSlot);
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'multiagent-e2e-served-'));
   let app = null;
   let server = null;

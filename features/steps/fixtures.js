@@ -4,7 +4,8 @@
 // `use.video` and `use.screenshot` itself: a failed scenario keeps its trace (trace.zip, with the
 // window's screencast: Playwright's recordVideo stalls Electron 44 windows, so the trace's
 // screencast is the scenario's video) and a screenshot of the window, attached to the report
-// (results.json) and kept under the output folder.
+// (results.json) and kept under the output folder. Only the visual lane's launches (the project
+// with metadata.screenshotSlot, playwright.config.js) take the machine's screenshot slot (#365).
 
 const fs = require('fs');
 const { test: base, createBdd } = require('playwright-bdd');
@@ -19,6 +20,7 @@ const test = base.extend({
   e2e: async ({}, use, testInfo) => {
     const { trace, video, screenshot } = testInfo.project.use;
     const recordTrace = modeOf(trace) !== 'off' || modeOf(video) !== 'off';
+    const slot = Boolean(testInfo.project.metadata?.screenshotSlot);
     const state = {
       app: null,
       window: null,
@@ -26,7 +28,7 @@ const test = base.extend({
       // opens the app (once per scenario): { theme: light | dark, size: 'WxH' }
       async open(options = {}) {
         if (state.app) throw new Error('the app is already open in this scenario');
-        const opened = await launchApp(options);
+        const opened = await launchApp({ ...options, slot });
         Object.assign(state, opened);
         if (recordTrace) await opened.app.context().tracing.start({ screenshots: true, snapshots: true, sources: true });
         return opened.window;
@@ -35,7 +37,7 @@ const test = base.extend({
       // until state.served.open() (features/support/served.js); same trace and screenshot handling
       async openServed(options = {}) {
         if (state.app) throw new Error('the app is already open in this scenario');
-        const opened = await launchServedUi(options);
+        const opened = await launchServedUi({ ...options, slot });
         Object.assign(state, opened, { served: opened });
         if (recordTrace) await opened.app.context().tracing.start({ screenshots: true, snapshots: true, sources: true });
         return opened.window;

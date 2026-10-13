@@ -69,9 +69,11 @@ test('package.json has @playwright/test and playwright-bdd as dev dependencies a
   assert.match(p.scripts?.['test:e2e'] || '', /bddgen|playwright/, 'scripts["test:e2e"] runs playwright-bdd / playwright');
 });
 
-test('the Playwright config runs the feature files one at a time, keeps traces, videos and screenshots of failures and writes JSON results', async () => {
+test('the Playwright config runs the visual lane one at a time, keeps traces, videos and screenshots of failures and writes JSON results', async () => {
   const config = await loadConfig();
-  assert.equal(config.workers, 1, 'one Electron at a time (the machine slot, #199)');
+  // #365: the behaviour lane runs in parallel; the @visual lane keeps one Electron at a time (the machine slot, #199)
+  const visual = (config.projects || []).find((p) => p.name === 'visual');
+  assert.equal(visual?.workers, 1, 'the visual lane runs one Electron at a time (the machine slot, #199)');
   const use = config.use || {};
   assert.match(String(use.trace), /retain-on-failure|on-first-retry|^on$/, 'a trace is kept for a failing scenario');
   assert.match(String(use.video?.mode ?? use.video), /retain-on-failure|on-first-retry|^on$/, 'a video is kept for a failing scenario');

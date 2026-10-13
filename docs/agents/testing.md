@@ -40,6 +40,13 @@ Read this before writing or changing tests, and before any check that could star
   Results: `.test-output/e2e/results.json`; a failed scenario keeps `trace.zip` (with the window's
   screencast: Playwright's recordVideo stalls Electron 44) and `failure.png` under
   `.test-output/e2e/artifacts/` (`npx playwright show-trace <zip>`). CI's Windows job runs `@smoke`.
+  Two lanes (#365, Playwright projects in `playwright.config.js`): `behaviour` runs every scenario
+  that is neither `@visual` nor `@serial` in `MULTIAGENT_E2E_WORKERS` workers (default 2), fully
+  parallel, without the machine's screenshot slot; `visual` runs the `@visual` (and `@serial`)
+  scenarios one at a time, each launch holding the screenshot slot (#199), so a run capturing
+  screenshots elsewhere still makes it wait. A scenario that shares state with another one (a fixed
+  file, port or the clipboard) gets `@serial` with the reason in a comment; `MULTIAGENT_E2E_WORKERS=1`
+  is the old serial suite. One lane only: `npm run test:e2e -- --project behaviour`.
   The app is dark-only today: the light and dark baselines guard `prefers-color-scheme` both ways.
   E2E visual scenarios render at a fixed clock, never the real one (#362): `the app is open in the
   <theme> theme` seeds the workspace and starts the app's main process at `VISUAL_NOW`

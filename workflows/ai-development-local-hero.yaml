@@ -1577,8 +1577,8 @@ steps:
         on_exhausted: test_failed
 
   # E2E (#223), without an agent like suite (#177): the issue's scenarios (written first, locked for
-  # the developer) plus the @smoke journeys, one Electron at a time (the E2E launcher takes the
-  # machine's screenshot slot, #199), log in logs/e2e-<round>.log; a failure keeps its trace and the
+  # the developer) plus the @smoke journeys, in the suite's two lanes (#365: @visual one at a time
+  # holding the machine's screenshot slot, #199; the rest in parallel), log in logs/e2e-<round>.log; a failure keeps its trace and the
   # page's accessibility snapshot under .test-output/e2e/artifacts/. The visual baselines of the
   # screens the issue changes are checked in the same run. Green: no LLM at all. Red: the healer.
   - id: e2e

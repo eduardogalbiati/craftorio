@@ -6,9 +6,10 @@
 // MULTIAGENT_SIMULATION_ONLY=1 (the engine refuses real runs, real providers and CLI terminals),
 // sign-in off, HOME/USERPROFILE/APPDATA inside the scratch folder (no CLI session or account of this
 // machine shows). Electron is never started as plain Node: ELECTRON_RUN_AS_NODE is removed.
-// One Electron at a time on the machine (#199): each launch takes the machine-wide screenshot slot
-// (src/engine/machine-slot.js, in machineSlotDir: not the suite step's own MULTIAGENT_LOCKS_DIR,
-// so a release run waits for other runs' captures) and frees it on close. close() removes the scratch folder.
+// A launch with slot: true (the visual lane, #365) takes the machine-wide screenshot slot (#199,
+// src/engine/machine-slot.js, in machineSlotDir: not the suite step's own MULTIAGENT_LOCKS_DIR,
+// so a release run waits for other runs' captures) and frees it on close; the behaviour lane's
+// launches (slot: false) never wait for it. close() removes the scratch folder.
 
 const fs = require('fs');
 const os = require('os');
@@ -66,6 +67,14 @@ function appEnv(scratch, { theme, size, now }) {
   return env;
 }
 
+// The machine's screenshot slot (#199) when take is set, else a no-op holder (#365) → { release }
+async function screenshotSlot(take) {
+  if (!take) return { release() {} };
+  return machineSlot.acquireSlot('screenshot', {
+    dir: machineSlot.machineSlotDir(), holder: 'e2e', onWait: (h) => console.log(`e2e: waiting for the screenshot slot (pid ${h?.pid ?? '?'})`),
+  });
+}
+
 function removeScratch(dir) {
   try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 }); } catch { /* EBUSY: the OS temp folder cleans it */ }
 }
@@ -75,13 +84,12 @@ function removeScratch(dir) {
  * theme: light | dark; size: WxH; empty: true leaves the workspace folder unseeded (a first start:
  * no settings.json, no project; project is null, #319); now: a fixed clock (ms, #362,
  * features/support/fixed-clock.js) for the seed and the app's main process, the real one without it.
+ * slot: hold the machine's screenshot slot while the app is open (#365: the visual lane).
  * No recordVideo: with Electron 44 it stalls the window before its page loads (the trace's
  * screencast is the scenario's video, features/steps/fixtures.js).
  */
-async function launchApp({ theme = 'light', size = '1400x900', empty = false, now = null } = {}) {
-  const slot = await machineSlot.acquireSlot('screenshot', {
-    dir: machineSlot.machineSlotDir(), holder: 'e2e', onWait: (h) => console.log(`e2e: waiting for the screenshot slot (pid ${h?.pid ?? '?'})`),
-  });
+async function launchApp({ theme = 'light', size = '1400x900', empty = false, now = null, slot: takeSlot = true } = {}) {
+  const slot = await screenshotSlot(takeSlot);
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'multiagent-e2e-'));
   let app = null;
   const close = async () => {
@@ -113,5 +121,6 @@ async function launchApp({ theme = 'light', size = '1400x900', empty = false, no
 
 module.exports = {
   launchApp,
+  screenshotSlot,
   seedWorkspace,
 };
