@@ -35,7 +35,8 @@ module.exports = (ctx) => [
     schema: {
       result: shape({
         version: STRING, electron: STRING, node: STRING, workflowsDir: STRING, simulationOnly: BOOL, totalMemoryBytes: NUMBER, startView: nullable(STRING),
-      }, ['simulationOnly']),
+        isPackaged: BOOL, screenshot: BOOL,
+      },['simulationOnly']),
     },
     fn: () => ({
       version: ctx.host.appVersion,
