@@ -9,6 +9,7 @@
 const fs = require('fs');
 const { test: base, createBdd } = require('playwright-bdd');
 const { launchApp } = require('../support/app');
+const { launchServedUi } = require('../support/served');
 
 const modeOf = (v) => String(v?.mode ?? v ?? 'off');
 // keep an artifact: 'on' always, the retain/only/first-retry modes when the scenario failed
@@ -27,6 +28,15 @@ const test = base.extend({
         if (state.app) throw new Error('the app is already open in this scenario');
         const opened = await launchApp(options);
         Object.assign(state, opened);
+        if (recordTrace) await opened.app.context().tracing.start({ screenshots: true, snapshots: true, sources: true });
+        return opened.window;
+      },
+      // #339: a served engine (scripts/serve.js) and a browser window for its UI, on about:blank
+      // until state.served.open() (features/support/served.js); same trace and screenshot handling
+      async openServed(options = {}) {
+        if (state.app) throw new Error('the app is already open in this scenario');
+        const opened = await launchServedUi(options);
+        Object.assign(state, opened, { served: opened });
         if (recordTrace) await opened.app.context().tracing.start({ screenshots: true, snapshots: true, sources: true });
         return opened.window;
       },
