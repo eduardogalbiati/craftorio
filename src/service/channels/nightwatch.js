@@ -257,6 +257,8 @@ module.exports = (ctx) => {
       const byId = new Map(list.map((r) => [r.runId, r]));
       for (const f of fresh) detect({ kind: 'regression', runId: f.runId, projectId: byId.get(f.runId)?.projectId || null, since: f.since, key: `regression ${f.key}`, evidence: f.evidence });
       const now = night.regressionFindings(list, opts).map((f) => f.key).sort();
+      // a recovered step's incident closes, so its next rise in the same watch is detected again
+      for (const key of flagged) if (!now.includes(key)) open.delete(`regression ${key}`);
       if (JSON.stringify(now) !== JSON.stringify([...flagged].sort())) fs.writeFileSync(regressionsFile(), `${JSON.stringify({ flagged: now, updatedAt: new Date().toISOString() }, null, 2)}\n`);
     } catch (e) { console.error('Step regressions:', e.message); }
   }

@@ -548,7 +548,8 @@ function nightMetrics({ night, log = [], runs = [], usage = [], now = Date.now()
   const ttr = resumed.map((i) => i.resumedAt - i.detectedAt);
 
   // idle hours by cause: W minus the active time, each moment given to its first cause
-  const blocked = incidents.filter((i) => i.kind !== 'roadmap-empty').map((i) => clip([i.since, i.resumedAt ?? w1]));
+  // a step regression is report only (its run already finished): it blocks nothing
+  const blocked = incidents.filter((i) => i.kind !== 'roadmap-empty' && i.kind !== 'regression').map((i) => clip([i.since, i.resumedAt ?? w1]));
   const empty = incidents.filter((i) => i.kind === 'roadmap-empty').map((i) => clip([i.since, i.resumedAt ?? w1]));
   const cuts = [...new Set([w0, w1, ...[...active, ...gateIntervals, ...blocked, ...empty].flat()].filter((t) => t >= w0 && t <= w1))].sort((a, b) => a - b);
   const idle = { noWork: 0, blocked: 0, gate: 0, other: 0 };

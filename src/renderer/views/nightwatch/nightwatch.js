@@ -27,7 +27,7 @@
   const stat = (label, value, title = '', cls = '') => `<div class="u-stat${cls ? ` ${cls}` : ''}"${title ? ` title="${esc(title)}"` : ''}><label>${esc(label)}</label><b>${value}</b></div>`;
   const KIND = {
     'cost-gap': 'Cost gap', 'dispatch-idle': 'Dispatch idle', environment: 'Environment', failed: 'Failed run', interrupted: 'Interrupted', limit: 'Limit pause', memory: 'Memory guard',
-    repeat: 'Repeated failure', 'roadmap-empty': 'Roadmap empty', 'roadmap-paused': 'Roadmap paused', stalled: 'Stalled',
+    regression: 'Regression', repeat: 'Repeated failure', 'roadmap-empty': 'Roadmap empty', 'roadmap-paused': 'Roadmap paused', stalled: 'Stalled',
   };
   // #278: Self-healing (Settings › Execution › Oracle) keeps the watch on with no end time
   const healing = (w) => !!(w?.active && w.selfHealing);
