@@ -221,7 +221,7 @@ export function List({ shown, onSelect, query }) {
       return (
         <button type="button" key={agent} className={'r3d-row' + (shown === st.id ? ' sel' : '')} onClick={() => onSelect(st.id)}>
           <Avatar agent={agent} state={state} />
-          <span className="r3d-txt"><b>{def.label}</b><small>{def.model ? `${providerLabel(def.provider) || def.provider} ·${window.Robots.plaqueFor(def.model)}` : 'did not run'}</small></span>
+          <span className="r3d-txt"><b>{def.label}</b><small>{def.model ? `${providerLabel(def.provider) || def.provider} · ${window.Robots.plaqueFor(def.model)}` : 'did not run'}</small></span>
           <span className="r3d-role" style={{ '--c': def.color }}>{state}</span>
           <span className="r3d-mini"><small>{usd(m.agentCost(agent))}</small></span>
         </button>
