@@ -14,7 +14,8 @@
 // - Edges from the sources the service reads at the facts' commit (src/architecture-facts.js
 //   readCity): `imports` ([{ from, text }], the lines of JavaScript/TypeScript files that name a
 //   relative path) give file edges from relative require/import, `manifests` ({ path: Cargo.toml text }) give district edges from each
-//   dependency on a sibling crate; for any other language `edges` is "not read for <language>".
+//   dependency on a sibling crate; for any other language `edges` is "not read for <language>",
+//   and `edgesNotRead` lists "not read for <language>" for each code language left out of the graph.
 // - The validation: coverage, the first UNMATCHED_SAMPLE unmatched files, empty and small
 //   districts, unknown zones, duplicate ids, landmark and port paths missing at the commit, schema
 //   errors. Keys sorted. Browser: window.CityModel; Node: module.exports.
@@ -244,10 +245,19 @@
       .sort((a, b) => byString(a.kind, b.kind) || byString(a.from, b.from) || byString(a.to, b.to));
   }
 
+  // ["not read for <language>"]: the code languages of the buildings whose edges were not read,
+  // so a graph of part of the city never looks complete
+  function edgesNotRead(sources, rows) {
+    const hasCargo = Object.keys((sources && sources.manifests) || {}).length > 0;
+    const read = (l) => !!sources && (JS_LANGUAGES.includes(l) || (hasCargo && l === 'Rust'));
+    return uniqueSorted(rows.map((r) => r.language).filter((l) => l && !NOT_CODE.includes(l) && !read(l)))
+      .map((l) => `not read for ${l}`);
+  }
+
   // ---------- validation ----------
 
   // plan: the drawn plan (lists of objects only), raw: the plan as given (its schema errors)
-  function validate(plan, raw, { drawn, of, unmatched, tracked }) {
+  function validate(plan, raw, { drawn, of, planError, unmatched, tracked }) {
     const out = {
       coverage: drawn.length ? (drawn.length - unmatched.length) / drawn.length : 1,
       drawn: drawn.length,
@@ -262,6 +272,7 @@
     };
     const validator = schema();
     if (raw != null && validator) out.schemaErrors = validator.validateSchema(raw, CITY_PLAN_SCHEMA, 'plan');
+    if (planError) out.schemaErrors = [String(planError), ...out.schemaErrors];
     if (!plan) return out;
     const ids = (xs) => arr(xs).map((x) => x && x.id);
     const seen = (xs) => xs.filter((id, i) => xs.indexOf(id) !== i);
@@ -289,7 +300,8 @@
    * The city of a repository at the facts' commit: { model, validation }.
    * input: { plan (CITY_PLAN_SCHEMA) | null, facts (architecture-model buildModel), tracked: [path]
    * (the files at the commit; default: the facts' files), sources: { imports: [{ from, text }],
-   * manifests: { path: text } } | undefined (edges not read) }
+   * manifests: { path: text } } | undefined (edges not read), planError: why the saved plan could
+   * not be read (a schema error; the city falls back to folder districts) | undefined }
    */
   const isObject = (x) => !!x && typeof x === 'object' && !Array.isArray(x);
 
@@ -312,7 +324,7 @@
     return { churn: r.commits, complexity: tool(r.complexity), district, functions: tool(r.functions), lastChange: r.last_change || null, lines: r.lines, path: r.file, worst: tool(r.worst) };
   }
 
-  function buildCity({ plan: raw = null, facts: model, tracked, sources } = {}) {
+  function buildCity({ plan: raw = null, facts: model, tracked, sources, planError } = {}) {
     const plan = drawablePlan(raw);
     const ignored = plan ? matcher(plan.ignore) : () => false;
     const rows = arr(model && model.files).filter((r) => !ignored(r.file)).sort((a, b) => byString(a.file, b.file));
@@ -336,6 +348,7 @@
       complexity,
       districts,
       edges: edgesOf(sources, rows, of, campus, plan ? String(plan.project || '') : ''),
+      edgesNotRead: edgesNotRead(sources, rows),
       grouping: plan ? 'plan' : 'folders',
       buildings,
       landmarks: plan ? plan.landmarks.filter((l) => isDrawn.has(l.path)).map((l) => ({ label: l.label, path: l.path })) : [],
@@ -344,7 +357,7 @@
       summary: plan ? plan.summary || '' : '',
       zones: layout.zones,
     };
-    const validation = validate(plan, raw, { drawn, of, unmatched: layout.unmatched, tracked: tracked || arr(model && model.files).map((r) => r.file) });
+    const validation = validate(plan, raw, { drawn, of, planError, unmatched: layout.unmatched, tracked: tracked || arr(model && model.files).map((r) => r.file) });
     return facts().sortKeys({ model: city, validation });
   }
 

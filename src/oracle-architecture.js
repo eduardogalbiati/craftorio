@@ -235,13 +235,19 @@ function writeSettings(root, projectId, settings) {
   return settings;
 }
 
-/** The project's city plan (#371), or null (none saved, or unreadable). */
+/**
+ * The project's city plan (#371): { plan (null: none saved, or unreadable), error (why a saved
+ * plan could not be read, naming the file) | null }.
+ */
 function readPlan(root, projectId) {
+  const file = path.join(projectDir(root, projectId), CITY_PLAN_FILE);
+  if (!fs.existsSync(file)) return { plan: null, error: null };
   try {
-    const plan = JSON.parse(fs.readFileSync(path.join(projectDir(root, projectId), CITY_PLAN_FILE), 'utf8'));
-    return plan && typeof plan === 'object' && !Array.isArray(plan) ? plan : null;
-  } catch {
-    return null;
+    const plan = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (plan && typeof plan === 'object' && !Array.isArray(plan)) return { plan, error: null };
+    return { plan: null, error: `${CITY_PLAN_FILE} is not a JSON object: the plan was not read` };
+  } catch (err) {
+    return { plan: null, error: `${CITY_PLAN_FILE} could not be read (${err.message}): the plan was not read` };
   }
 }
 

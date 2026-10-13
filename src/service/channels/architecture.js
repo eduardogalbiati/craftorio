@@ -138,7 +138,8 @@ module.exports = (ctx) => {
       schema: { params: args({ projectId: PROJECT_ID }, ['projectId']), result: CITY },
       fn: async ({ projectId }) => {
         const p = projectOf(projectId);
-        return facts.readCity(p.folder, { exclude: arch.readSettings(root(), p.id).exclude, plan: arch.readPlan(root(), p.id) });
+        const { plan, error } = arch.readPlan(root(), p.id);
+        return facts.readCity(p.folder, { exclude: arch.readSettings(root(), p.id).exclude, plan, planError: error });
       },
     },
     {

@@ -14,7 +14,7 @@
 // The project city (#371, readCity): the facts and a city plan through the pure core
 // src/shared/city-model.js, with the edges' sources read at the same commit (the tracked files, the
 // relative require/import lines of JavaScript/TypeScript files in one `git grep`, the Cargo.toml
-// files), cached per commit, plan hash and exclusions. Used by src/service/channels/architecture.js.
+// files), cached per facts read (a refresh rebuilds it) and plan hash. Used by src/service/channels/architecture.js.
 
 'use strict';
 
@@ -47,7 +47,9 @@ const JS_SOURCE = /\.(?:[cm]?[jt]s|[jt]sx)$/;
 const JS_PATHSPECS = ['*.js', '*.cjs', '*.mjs', '*.jsx', '*.ts', '*.cts', '*.mts', '*.tsx'];
 
 const cache = new Map();
-const cityCache = new Map();
+// facts model -> Map(plan key -> city): a city lives as long as the facts it was built from
+// (a refresh or an uncached read gives new facts, so a new city)
+const cityCache = new WeakMap();
 
 function run(file, args, cwd, timeout = GIT_TIMEOUT_MS) {
   return new Promise((resolve, reject) => {
@@ -209,7 +211,8 @@ async function citySources(folder, commit) {
 /**
  * The project city (#371) of the repository in `folder`: { state, model, validation }, from the
  * facts (readFacts, with the project's exclusions) and the plan (null: folder districts), cached
- * per commit, plan and exclusions. opts: { exclude: [pattern], plan }.
+ * per facts read and plan. opts: { exclude: [pattern], plan, planError (why the saved plan could
+ * not be read) }.
  */
 async function readCity(folder, opts = {}) {
   const exclude = (opts.exclude || []).map(String).filter(Boolean);
@@ -217,14 +220,17 @@ async function readCity(folder, opts = {}) {
   if (state !== 'ok') return { state, model: null, validation: null };
   const commit = model.head.commit;
   const plan = opts.plan || null;
+  const planError = opts.planError || null;
   const planHash = plan ? crypto.createHash('sha256').update(JSON.stringify(plan)).digest('hex') : null;
-  const key = JSON.stringify([path.resolve(folder), commit, planHash, exclude]);
-  if (!cityCache.has(key)) {
+  const key = JSON.stringify([planHash, planError]);
+  if (!cityCache.has(model)) cityCache.set(model, new Map());
+  const cities = cityCache.get(model);
+  if (!cities.has(key)) {
     const sources = await citySources(folder, commit);
-    cityCache.set(key, buildCity({ plan, facts: model, tracked: sources.tracked, sources }));
-    if (cityCache.size > CACHE_SIZE) cityCache.delete(cityCache.keys().next().value);
+    cities.set(key, buildCity({ plan, facts: model, tracked: sources.tracked, sources, planError: planError || undefined }));
+    if (cities.size > CACHE_SIZE) cities.delete(cities.keys().next().value);
   }
-  return { state, ...cityCache.get(key) };
+  return { state, ...cities.get(key) };
 }
 
 module.exports = {
