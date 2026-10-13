@@ -969,6 +969,21 @@ The button's badge counts the answers that arrived while the conversation was ou
   stops the roadmap without asking (retry or skip a failed item, regroup or reorder planned items,
   refresh issue text, restore a default, restart the dispatch), notifies each action and posts a
   summary with Undo when it ends. Turning it off stops at once. Gates stay yours.
+- **Limits tonight** (#337): the turn-on form's "Limits tonight" group expands every run limit for
+  the night, so no run waits on a limit sized for the day. One switch, "Expand all limits", with a
+  multiplier (×1.5, ×2 by default, ×3); "Customize" opens one row per limit with its day value:
+  context, cost and duration per run, agent turn timeouts (each workflow's own values × a factor)
+  and the nightly budget (raised for that night only). Off: "Runs keep each workflow's limits"; on:
+  one line, e.g. "×2 tonight: context 80M, cost US$ 240, duration 16h, turns ×2; nightly budget
+  US$ 150"; no nightly budget: a warning that nothing caps tonight's spending. While the watch is on
+  the screen shows the limits in force and they can be changed. Runs in progress get a raise at their
+  next check, and keep the highest limit they were granted after the watch ends; runs that start
+  afterwards get the day limits. A `context_limit` gate already open stays open for you (with a note).
+  Never relaxed: a workflow without a limit, the provider monthly budgets, the memory guard. Only you
+  set them: the Oracle has no permission over them, and Self-healing never expands limits. The night
+  log records each change (`oracle.limits`); the morning summary lists each run that went past a day
+  limit ("#262: context 58M of 80M tonight (day limit 40M), US$ 61 of US$ 240") and the spending
+  above the day limits.
 - **Step regressions** (#335): after each real run that ends while the Night watch or Self-healing
   is on, each workflow step is compared with its own history in the same class (provider, model and
   effort): the median cost per complexity point and the median minutes of its last 3 successful
