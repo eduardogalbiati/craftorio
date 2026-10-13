@@ -1,0 +1,215 @@
+// The HTTP contract suite's examples (#339): { [channel]: fixture }, one per request/reply channel
+// with a schema (test/contract/harness.js coverage; the channels still without one are listed, with
+// why, in test/contract/channels-without-fixture.js, a list that may only shrink).
+//
+// A fixture: { arg, status?, invalid?: { arg }, setup?, teardown? }
+//   arg       the channel's argument, or (state) => argument when it needs what setup prepared
+//   status    the HTTP status the call answers (default 200; its result is then checked against the
+//             entry's schema.result)
+//   invalid   an argument the channel's schema.params refuses: the engine must answer 400
+//   setup     async (client) => state: the state the call needs (a project, a card, a simulated run),
+//             made through the API itself so it works against any engine; client.call(channel, arg)
+//             answers the result or throws
+//   teardown  async (client, state, result): undoes what the call left running (a run is stopped)
+// Each fixture prepares its own state under unique names: the suite runs in any order, and twice in
+// a row against the same engine with the same result. Fixtures only touch what they create (or
+// read), so they are safe against a scratch engine; never point ENGINE_URL at a workspace you use.
+
+'use strict';
+
+const crypto = require('crypto');
+
+const unique = (prefix) => `${prefix} ${crypto.randomBytes(4).toString('hex')}`;
+
+// ---- shared states -------------------------------------------------------------------------------
+
+// a fresh project (no folder, no repository: an empty folder in the engine's workspace)
+async function project(client) {
+  const p = await client.call('projects:create', { name: unique('Contract project') });
+  return { projectId: p.id };
+}
+
+// a project with one discovery card
+async function card(client) {
+  const { projectId } = await project(client);
+  const c = await client.call('discovery:create', { projectId, title: unique('Contract card'), text: 'A card the contract suite reads.' });
+  return { projectId, cardId: c.id };
+}
+
+// a simulated run (mock agents) of a bundled workflow, waiting at its first gate or still working
+async function run(client) {
+  const { runId } = await client.call('run:start', {
+    file: 'writer-reviewer.yaml',
+    mock: true,
+    inputs: { prompt: 'A one-line release note.', goal: 'One clear line.' },
+  });
+  return { runId };
+}
+async function stopRun(client, { runId }) {
+  await client.call('run:stop', { runId }).catch(() => {});
+}
+const onRun = (fixture) => ({ setup: run, teardown: stopRun, ...fixture });
+// an archived card
+async function archivedCard(client) {
+  const state = await card(client);
+  await client.call('discovery:archive', { ...state, reason: 'The contract suite archives it.' });
+  return state;
+}
+
+const AGENT = { name: 'Contract agent', provider: 'claude', prompt: 'Checks the contract suite.' };
+async function agent(client) {
+  const a = await client.call('agents:create', { ...AGENT, name: unique('Contract agent') });
+  return { id: a.id };
+}
+
+const SKILL = { description: 'A skill the contract suite creates.', body: 'Do the work.' };
+async function skill(client) {
+  const s = await client.call('skills:create', { ...SKILL, name: unique('contract skill') });
+  return { id: s.id };
+}
+
+// a copy of a bundled workflow, and its spec as the builder edits it
+async function workflowCopy(client) {
+  const { file } = await client.call('builder:clone', 'writer-reviewer.yaml');
+  const { spec } = await client.call('builder:load', file);
+  return { file, spec };
+}
+
+// ---- invalid arguments the schemas refuse --------------------------------------------------------
+
+const NOT_AN_OBJECT = { arg: 'not an object' };
+const BAD_PROJECT = { arg: { projectId: 42 } };
+const BAD_CARD = { arg: { projectId: 'p', cardId: 42 } };
+const BAD_RUN = { arg: { runId: 42 } };
+const BAD_FILE = { arg: '../outside.yaml' };
+
+module.exports = {
+  'agents:create': { arg: AGENT, invalid: NOT_AN_OBJECT },
+  'agents:list': { arg: null },
+  'agents:remove': { setup: agent, arg: ({ id }) => id, invalid: { arg: '..' } },
+  'agents:save': { setup: agent, arg: ({ id }) => ({ id, data: { ...AGENT, prompt: 'Checks the contract suite again.' } }), invalid: { arg: { id: 42 } } },
+  'analytics:agents': { arg: null, invalid: { arg: 42 } },
+  'analytics:analyze': { arg: { mock: true }, invalid: { arg: 42 } },
+  'analytics:get': { arg: null, invalid: { arg: 42 } },
+  'analytics:occupancy': { arg: null, invalid: { arg: 42 } },
+  'analytics:performance': { arg: null, invalid: { arg: 42 } },
+  'analytics:plan': { arg: { mock: true }, invalid: { arg: 42 } },
+  'analytics:run': { arg: null, invalid: { arg: 42 } },
+  'app-update:dismiss': { arg: null },
+  'app-update:failed': { arg: null },
+  'app-update:state': { arg: {}, invalid: { arg: { fresh: 'yes' } } },
+  'app:codeVersion': { arg: null },
+  'app:info': { arg: null },
+  'app:version': { arg: null },
+  'artifacts:evidence': onRun({ arg: ({ runId }) => ({ runId }), invalid: BAD_RUN }),
+  'artifacts:list': { arg: {}, invalid: { arg: { limit: 'ten' } } },
+  'audio:status': { arg: null },
+  'backlog:auto-epic': { setup: project, arg: ({ projectId }) => ({ projectId, on: false }), invalid: BAD_PROJECT },
+  'backlog:auto-push': { setup: project, arg: ({ projectId }) => ({ projectId, on: false }), invalid: BAD_PROJECT },
+  'backlog:dismiss-refresh': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
+  'backlog:get': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
+  'backlog:local': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
+  'backlog:pause': { setup: project, arg: ({ projectId }) => ({ projectId, paused: false }), invalid: BAD_PROJECT },
+  'backlog:unpushed': { arg: null },
+  'backlog:watching': { arg: null },
+  'backlog:unqueue': { setup: project, arg: ({ projectId }) => ({ projectId, number: 1 }), invalid: BAD_PROJECT },
+  'builder:clone': { arg: 'writer-reviewer.yaml', invalid: BAD_FILE },
+  'builder:load': { arg: 'writer-reviewer.yaml', invalid: BAD_FILE },
+  'builder:save': { setup: workflowCopy, arg: ({ file, spec }) => ({ file, spec }), invalid: { arg: { spec: 'name: x' } } },
+  'chain:drop': onRun({ arg: ({ runId }) => ({ runId }), invalid: BAD_RUN }),
+  'chain:estimate': { arg: { file: 'writer-reviewer.yaml' }, invalid: { arg: { file: 42 } } },
+  'chain:get': onRun({ arg: ({ runId }) => ({ runId }), invalid: BAD_RUN }),
+  'chain:set': onRun({ arg: ({ runId }) => ({ runId, then: null }), invalid: BAD_RUN }),
+  'chat:cancel': { arg: { chat: 'oracle' }, invalid: { arg: { chat: 42 } } },
+  'cliSessions:list': { arg: null },
+  'depsCache:info': { arg: null },
+  'discovery:archive': { setup: card, arg: (s) => ({ ...s, reason: 'The contract suite archives it.' }), invalid: BAD_CARD },
+  'discovery:merge': {
+    setup: async (client) => {
+      const s = await card(client);
+      const into = await client.call('discovery:create', { projectId: s.projectId, title: unique('Contract card') });
+      return { ...s, intoId: into.id };
+    },
+    arg: (s) => s,
+    invalid: { arg: { projectId: 'p', cardId: 'c', intoId: 42 } },
+  },
+  'discovery:move': { setup: card, arg: (s) => ({ ...s, column: 'triage' }), invalid: { arg: { projectId: 'p', cardId: 'c', column: 42 } } },
+  'discovery:move-anyway': { setup: card, arg: (s) => ({ ...s, reason: 'The contract suite moves it.' }), invalid: BAD_CARD },
+  'discovery:record-result': { setup: card, arg: (s) => ({ ...s, source: 'write-review', text: 'A result the contract suite records.' }), invalid: BAD_CARD },
+  'discovery:set-clarity-bar': { setup: project, arg: ({ projectId }) => ({ projectId, bar: 3 }), invalid: { arg: { projectId: 'p', bar: true } } },
+  'discovery:restore': { setup: archivedCard, arg: (s) => s, invalid: BAD_CARD },
+  'discovery:set-automation': { setup: project, arg: ({ projectId }) => ({ projectId, column: 'shape', mode: 'off' }), invalid: BAD_PROJECT },
+  'discovery:set-wip': { setup: project, arg: ({ projectId }) => ({ projectId, column: 'shape', limit: 4 }), invalid: BAD_PROJECT },
+  'discovery:board': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
+  'discovery:conversation': { setup: card, arg: (s) => s, invalid: BAD_CARD },
+  'discovery:create': { setup: project, arg: ({ projectId }) => ({ projectId, title: 'A contract card' }), invalid: BAD_PROJECT },
+  'discovery:get': { setup: card, arg: (s) => s, invalid: BAD_CARD },
+  'discovery:list': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
+  'discovery:update': { setup: card, arg: (s) => ({ ...s, fields: { title: 'A renamed contract card' } }), invalid: BAD_CARD },
+  'discovery:versions': { setup: card, arg: (s) => s, invalid: BAD_CARD },
+  'discovery:waiting': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
+  'env:check': { arg: null },
+  'env:details': { arg: null },
+  'findings:list': { arg: null },
+  'gates:interrupted': { arg: null },
+  'index:rebuild': { arg: null },
+  'index:status': { arg: null },
+  'localPreview:list': { arg: null },
+  'nightwatch:morning': { arg: null },
+  'nightwatch:report': { arg: null },
+  'nightwatch:state': { arg: null },
+  'notifications:list': { arg: {}, invalid: { arg: { limit: 'ten' } } },
+  'notifications:read': { arg: { ids: [] }, invalid: { arg: { ids: 'all' } } },
+  'oracle:history': { arg: null },
+  'oracle:markRead': { arg: null, invalid: { arg: 42 } },
+  'oracle:memory': { arg: null },
+  'oracle:mute': onRun({ arg: ({ runId }) => ({ runId, on: false }), invalid: BAD_RUN }),
+  'oracle:state': { arg: null },
+  'oracle:tools': { arg: null },
+  'oracle:wakeState': { arg: null },
+  'phonegates:state': { arg: null },
+  'po:clear': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
+  'po:history': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
+  'projects:create': { arg: { name: unique('Contract project') }, invalid: NOT_AN_OBJECT },
+  'projects:inputHints': { setup: project, arg: ({ projectId }) => projectId, invalid: { arg: 42 } },
+  'projects:list': { arg: null },
+  'projects:remove': { setup: project, arg: ({ projectId }) => projectId, invalid: { arg: '..' } },
+  'projects:runs': { setup: project, arg: ({ projectId }) => ({ id: projectId }), invalid: { arg: { id: 42 } } },
+  'projects:update': { setup: project, arg: ({ projectId }) => ({ id: projectId, patch: { name: 'A renamed contract project' } }), invalid: { arg: { id: 42 } } },
+  'releases:list': { arg: {}, invalid: BAD_PROJECT },
+  'releases:notes': { setup: project, arg: ({ projectId }) => ({ projectId, notes: 'Contract notes.' }), invalid: BAD_PROJECT },
+  'roadmap:clear': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
+  'roadmap:get': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
+  'roadmap:live': { setup: project, arg: ({ projectId }) => ({ projectId, on: false }), invalid: BAD_PROJECT },
+  'roadmap:pause': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
+  'roadmap:save': { setup: project, arg: ({ projectId }) => ({ projectId, stages: [] }), invalid: { arg: { projectId: 'p', stages: 'none' } } },
+  'roadmap:versions': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
+  'runs:active': { arg: null },
+  'runs:events': onRun({ arg: ({ runId }) => ({ runId }), invalid: BAD_RUN }),
+  'runs:list': { arg: {}, invalid: { arg: { limit: 'ten' } } },
+  'runs:prState': onRun({ arg: ({ runId }) => ({ runId }), invalid: BAD_RUN }),
+  'runs:resumeOptions': onRun({ arg: ({ runId }) => ({ runId }), invalid: BAD_RUN }),
+  'runs:scratch': onRun({ arg: ({ runId }) => ({ runId }), invalid: BAD_RUN }),
+  'runs:setTitle': onRun({ arg: ({ runId }) => ({ runId, title: 'A contract run' }), invalid: { arg: { runId: 'r', title: 'x'.repeat(201) } } }),
+  'run:start': {
+    arg: { file: 'writer-reviewer.yaml', mock: true, inputs: { prompt: 'A one-line release note.', goal: 'One clear line.' } },
+    invalid: { arg: { file: 42 } },
+    teardown: (client, _state, result) => stopRun(client, result),
+  },
+  'run:stop': { setup: run, arg: ({ runId }) => ({ runId }), invalid: BAD_RUN },
+  'settings:get': { arg: null },
+  'settings:set': { arg: {}, invalid: { arg: 42 } },
+  'skills:create': { arg: { ...SKILL, name: unique('contract skill') }, invalid: NOT_AN_OBJECT },
+  'skills:list': { arg: null },
+  'skills:remove': { setup: skill, arg: ({ id }) => id, invalid: { arg: 42 } },
+  'skills:save': { setup: skill, arg: ({ id }) => ({ id, data: { ...SKILL, body: 'Do the work again.' } }), invalid: { arg: { id: 42 } } },
+  'supervisor:chatHistory': { arg: null },
+  'supervisor:tools': { arg: null },
+  'supervisor:watchState': onRun({ arg: ({ runId }) => runId, invalid: { arg: 42 } }),
+  'usage:actions': { arg: { force: false }, invalid: { arg: { force: 'yes' } } },
+  'usage:get': { arg: {}, invalid: { arg: { scope: 42 } } },
+  'voice:mic-access': { arg: null },
+  'workflows:list': { arg: null },
+  'workflows:pipelines': { arg: null },
+  'workspace:get': { arg: null },
+};

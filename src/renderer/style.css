@@ -790,6 +790,8 @@ body.resizing-dock .term-body { pointer-events: none; }
 .code-banner-run { display: inline-flex; align-items: center; gap: 6px; }
 /* #279: a failed app update, under the code banner when both show */
 .code-banner.app-update-banner { top: 116px; border-color: rgba(248,113,113,.6); }
+/* #339: the engine speaks another contract than this page (src/renderer/api-http.js), above the others */
+.code-banner.version-skew-banner { z-index: 61; border-color: rgba(248,113,113,.6); }
 #confirm-message { white-space: pre-line; }
 
 .sup-drawer { width: 640px; z-index: 8; }

@@ -5,9 +5,13 @@
 // code runs. checkResult checks what a channel answers against schema.result under the test runner
 // only (node --test sets NODE_TEST_CONTEXT in each test file's process): in the app, results are not
 // validated, so the contract costs nothing at runtime.
+// contractHash (#339) names the contract a manifest declares: a short hash of its channels, their
+// params and schemas (never their code), answered by GET /api/version and app:version so a client
+// built for another contract can tell (src/renderer/api-http.js).
 
 'use strict';
 
+const crypto = require('crypto');
 const { validateSchema } = require('../json-schema');
 const { clientError } = require('./common');
 
@@ -39,7 +43,27 @@ function checkResult(entry, out) {
   return out && typeof out.then === 'function' ? out.then(check) : check(out);
 }
 
+// JSON with the object keys sorted, so the same content always gives the same text
+function canonical(value) {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value).sort().filter((k) => value[k] !== undefined).map((k) => `${JSON.stringify(k)}:${canonical(value[k])}`).join(',')}}`;
+  }
+  return JSON.stringify(value === undefined ? null : value);
+}
+
+// The contract of a manifest (entries with or without their fn): a 12-character hex hash of each
+// entry's names (channel / send / event, method), params, schema and desktop flag, in name order.
+function contractHash(manifest) {
+  const contract = (manifest || []).map((e) => ({
+    channel: e.channel, send: e.send, event: e.event, method: e.method, params: e.params, schema: e.schema, desktop: e.desktop,
+  }));
+  const lines = contract.map(canonical).sort();
+  return crypto.createHash('sha256').update(lines.join('\n')).digest('hex').slice(0, 12);
+}
+
 module.exports = {
   checkParams,
   checkResult,
+  contractHash,
 };

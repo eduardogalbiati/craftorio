@@ -1,0 +1,123 @@
+// The shrinking allowance of the HTTP contract suite (#339): the request/reply channels with a schema
+// that have no fixture in test/contract/fixtures.js yet, each with why. It may only shrink: a channel
+// that gets a fixture leaves the list (test/contract-harness-339.test.js fails while it stays), and a
+// channel with a schema that has neither fails the same test. One entry per line, sorted.
+
+'use strict';
+
+// why, by kind of channel
+const AGENT = 'starts an agent CLI (the Oracle, the PO, the supervisor or a run agent): needs a mock option or a scripted provider over HTTP';
+const ANSWER = 'answers an earlier agent turn or action card: needs a conversation recorded first, which only an agent turn makes';
+const ATTACHMENT = 'needs a file uploaded to the engine first (an attachment or a pasted image), no fixture uploads one yet';
+const DIFF_GATE = 'needs a run waiting at a gate with a diff or Run locally (a software-development run in a git project), too slow for this suite yet';
+const DESTRUCTIVE = 'replaces or clears state the whole engine shares (memory, budgets, caches, chat history): unsafe against an engine at ENGINE_URL';
+const GIT = 'reads or writes a git repository or calls gh/glab: needs a project backed by a scratch repository';
+const NETWORK = 'reaches outside the engine (downloads, the app update, phone pairing)';
+const PIPELINE = 'needs a saved pipeline (a pipeline run saved first), no fixture makes one yet';
+const RELEASE = 'needs a release or a roadmap with items in the project, no fixture prepares one yet';
+const TERMINAL = 'opens or kills a terminal process: refused in simulation (MULTIAGENT_SIMULATION_ONLY=1)';
+const VERSION = 'needs an earlier version of the card or roadmap, made by an edit that saves one';
+const WIDE = 'acts on several runs or schedules (the night watch, resuming runs): needs its own scenario';
+
+module.exports = [
+  { channel: 'app-update:back', reason: NETWORK },
+  { channel: 'approval:resolve', reason: 'answers a human gate: the suite never crosses one, even in simulation' },
+  { channel: 'artifacts:read', reason: ATTACHMENT },
+  { channel: 'audio:downloadModel', reason: NETWORK },
+  { channel: 'audio:transcribe', reason: 'needs a speech model downloaded first' },
+  { channel: 'backlog:archive', reason: GIT },
+  { channel: 'backlog:assign', reason: GIT },
+  { channel: 'backlog:push', reason: GIT },
+  { channel: 'backlog:resolve-push', reason: GIT },
+  { channel: 'backlog:restore', reason: GIT },
+  { channel: 'backlog:save-doc', reason: GIT },
+  { channel: 'backlog:sync', reason: GIT },
+  { channel: 'backlog:update-push', reason: GIT },
+  { channel: 'chain:resume', reason: WIDE },
+  { channel: 'cliSessions:rename', reason: 'needs a CLI session recorded on the engine machine' },
+  { channel: 'clipboard:discardImage', reason: ATTACHMENT },
+  { channel: 'clipboard:saveImage', reason: ATTACHMENT },
+  { channel: 'depsCache:clear', reason: DESTRUCTIVE },
+  { channel: 'discovery:add-attachment', reason: ATTACHMENT },
+  { channel: 'discovery:append-conversation', reason: ANSWER },
+  { channel: 'discovery:attachment', reason: ATTACHMENT },
+  { channel: 'discovery:commit', reason: GIT },
+  { channel: 'discovery:commit-proposal', reason: GIT },
+  { channel: 'discovery:grill', reason: AGENT },
+  { channel: 'discovery:grill-answer', reason: ANSWER },
+  { channel: 'discovery:import', reason: AGENT },
+  { channel: 'discovery:import-edit', reason: AGENT },
+  { channel: 'discovery:import-split', reason: AGENT },
+  { channel: 'discovery:remove-attachment', reason: ATTACHMENT },
+  { channel: 'discovery:restore-version', reason: VERSION },
+  { channel: 'discovery:run-automation', reason: AGENT },
+  { channel: 'discovery:version', reason: VERSION },
+  { channel: 'findings:file', reason: GIT },
+  { channel: 'findings:save', reason: ATTACHMENT },
+  { channel: 'gate:changes', reason: DIFF_GATE },
+  { channel: 'localPreview:info', reason: DIFF_GATE },
+  { channel: 'localPreview:save', reason: DIFF_GATE },
+  { channel: 'localPreview:start', reason: DIFF_GATE },
+  { channel: 'localPreview:stop', reason: DIFF_GATE },
+  { channel: 'localPreview:suggest', reason: 'reads a project folder on the engine machine: needs a project with files' },
+  { channel: 'nightwatch:limits', reason: WIDE },
+  { channel: 'nightwatch:permissions', reason: WIDE },
+  { channel: 'nightwatch:replay', reason: WIDE },
+  { channel: 'oracle:act', reason: ANSWER },
+  { channel: 'oracle:ask', reason: AGENT },
+  { channel: 'oracle:attachment', reason: ATTACHMENT },
+  { channel: 'oracle:delegate', reason: AGENT },
+  { channel: 'oracle:dismiss', reason: ANSWER },
+  { channel: 'oracle:importMemory', reason: DESTRUCTIVE },
+  { channel: 'oracle:nightWatch', reason: WIDE },
+  { channel: 'oracle:propose', reason: AGENT },
+  { channel: 'oracle:requestAgent', reason: AGENT },
+  { channel: 'oracle:reset', reason: DESTRUCTIVE },
+  { channel: 'oracle:saveMemory', reason: DESTRUCTIVE },
+  { channel: 'oracle:undo', reason: ANSWER },
+  { channel: 'oracle:wakeNow', reason: AGENT },
+  { channel: 'oracle:watch', reason: WIDE },
+  { channel: 'phonegates:check', reason: NETWORK },
+  { channel: 'phonegates:configure', reason: NETWORK },
+  { channel: 'phonegates:pair', reason: NETWORK },
+  { channel: 'phonegates:revoke', reason: NETWORK },
+  { channel: 'pipelines:estimate', reason: PIPELINE },
+  { channel: 'pipelines:get-run', reason: PIPELINE },
+  { channel: 'pipelines:restore', reason: PIPELINE },
+  { channel: 'pipelines:run', reason: PIPELINE },
+  { channel: 'pipelines:save', reason: PIPELINE },
+  { channel: 'po:ask', reason: AGENT },
+  { channel: 'po:attach', reason: ATTACHMENT },
+  { channel: 'po:decongest', reason: ANSWER },
+  { channel: 'po:discard', reason: ANSWER },
+  { channel: 'po:epic', reason: ANSWER },
+  { channel: 'po:file', reason: ANSWER },
+  { channel: 'po:request', reason: AGENT },
+  { channel: 'po:requestAct', reason: ANSWER },
+  { channel: 'po:split', reason: ANSWER },
+  { channel: 'releases:start', reason: RELEASE },
+  { channel: 'releases:summary', reason: RELEASE },
+  { channel: 'roadmap:budget', reason: RELEASE },
+  { channel: 'roadmap:from-queue', reason: RELEASE },
+  { channel: 'roadmap:item', reason: RELEASE },
+  { channel: 'roadmap:propose', reason: RELEASE },
+  { channel: 'roadmap:restore-version', reason: VERSION },
+  { channel: 'roadmap:start', reason: RELEASE },
+  { channel: 'roadmap:undo', reason: VERSION },
+  { channel: 'run:diff', reason: DIFF_GATE },
+  { channel: 'run:diffFile', reason: DIFF_GATE },
+  { channel: 'runs:resume', reason: WIDE },
+  { channel: 'supervisor:analyze', reason: AGENT },
+  { channel: 'supervisor:chat', reason: AGENT },
+  { channel: 'supervisor:chatClear', reason: DESTRUCTIVE },
+  { channel: 'supervisor:request', reason: AGENT },
+  { channel: 'supervisor:requestAct', reason: ANSWER },
+  { channel: 'supervisor:resume', reason: WIDE },
+  { channel: 'supervisor:watchAsk', reason: AGENT },
+  { channel: 'supervisor:watchRun', reason: AGENT },
+  { channel: 'term:kill', reason: TERMINAL },
+  { channel: 'term:open', reason: TERMINAL },
+  { channel: 'usage:setBudget', reason: DESTRUCTIVE },
+  { channel: 'usage:setPrice', reason: DESTRUCTIVE },
+  { channel: 'workflows:restore', reason: 'needs a bundled workflow edited first (a restore answers 500 when there is nothing to restore)' },
+];

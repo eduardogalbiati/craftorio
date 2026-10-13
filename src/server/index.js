@@ -2,7 +2,11 @@
 // app uses over IPC, so the engine can run on a server and the UI can be used from a browser.
 //
 //   POST /api/<channel>   body { "arg": ... }  ->  200 { "result": ... } | 4xx/500 { "error": "..." }
-//   GET  /api/manifest    { "result": [...] }: the channels window.api is built from (src/service/manifest.js)
+//   GET  /api/manifest    { "result": [...], "contract" }: the channels window.api is built from
+//                         (src/service/manifest.js) and their contract (contractHash, src/service/contract.js)
+//   GET  /api/version     { "app", "contract" } (#339): the engine's version and the contract it speaks,
+//                         as app:version answers it; a client built for another contract shows a banner
+//                         (src/renderer/api-http.js). Contract tests over HTTP: test/contract/.
 //   GET  /ws              WebSocket. The server pushes { "channel", "payload" } (chat:progress, run:event,
 //                         supervisor:watch, term:data, term:exit, auth:changed); the client sends { "channel", "arg" }
 //                         for the fire-and-forget channels (term:input, term:resize).
@@ -19,6 +23,8 @@ const path = require('path');
 const crypto = require('crypto');
 const { WebSocketServer } = require('ws');
 const { authChannels } = require('../service/manifest');
+const { contractHash } = require('../service/contract');
+const PKG = require('../../package.json');
 
 const ROOT = path.join(__dirname, '..', '..');
 // the only folders served as static files (relative to ROOT); generated/: the run's 3D view (scripts/build-3d.js)
@@ -105,6 +111,19 @@ function createServer({ service, auth = null, token, root = ROOT }) {
   // what api-http.js builds window.api from (the service's manifest also declares the desktop-only
   // and account methods, so the browser has them all)
   const manifest = service.manifest || [];
+  const contract = contractHash(manifest);
+  // { app, contract } (#339): the service's app:version when it has one (IPC answers the same),
+  // else this package's version
+  const version = async () => {
+    const own = { app: PKG.version, contract };
+    if (!api['app:version']) return own;
+    try {
+      const v = await api['app:version']();
+      return { app: v.app, contract: v.contract };
+    } catch {
+      return own;
+    }
+  };
 
   async function handleApi(req, res, channel) {
     const fn = Object.hasOwn(api, channel) ? api[channel] : null;
@@ -157,7 +176,8 @@ function createServer({ service, auth = null, token, root = ROOT }) {
         res.writeHead(302, { Location: '/src/renderer/index.html' });
         return res.end();
       }
-      if (url.pathname === '/api/manifest' && req.method === 'GET') return sendJson(res, 200, { result: manifest });
+      if (url.pathname === '/api/manifest' && req.method === 'GET') return sendJson(res, 200, { result: manifest, contract });
+      if (url.pathname === '/api/version' && req.method === 'GET') return sendJson(res, 200, await version());
       if (url.pathname.startsWith('/api/')) return await handleApi(req, res, decodeURIComponent(url.pathname.slice(5)));
       return serveStatic(req, res, url.pathname);
     } catch (e) {

@@ -44,6 +44,7 @@ const {
 const {
   checkParams,
   checkResult,
+  contractHash,
 } = require('./contract');
 const {
   authChannels,
@@ -86,6 +87,8 @@ function createService({ host }) {
   const notifications = Object.fromEntries(entries.filter((e) => e.send).map((e) => [e.send, (arg) => e.fn(checked(e, arg))]));
   // what window.api is built from (src/preload.js, src/renderer/api-http.js), desktop and account included
   const manifest = declarations([...entries, ...DESKTOP, ...authChannels(null)]);
+  // its contract (#339), which app:version answers
+  ctx.contract = contractHash(manifest);
 
   return {
     api,

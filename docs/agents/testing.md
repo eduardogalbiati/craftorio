@@ -258,6 +258,32 @@ validated (no runtime cost).
 - **The reference**: `npm run docs` writes `docs/agents/channels.md` (gitignored), every channel
   with its arguments and result.
 
+## Contract tests over HTTP and the version handshake (#339)
+
+The same contract, seen from outside as a client sees it: `test/contract/contract.test.js` calls
+each channel of `test/contract/fixtures.js` with `POST /api/<channel>` and checks the status, the
+result against the engine's own `schema.result` (from `GET /api/manifest`) and a 400 for one invalid
+argument. The JS engine's answers are the reference a second engine (the Rust phases) must match.
+
+- **Which engine**: `ENGINE_URL` (+ `ENGINE_TOKEN`, the server's token) names one, e.g.
+  `npm run serve -- --port 7300` with `MULTIAGENT_SERVER_TOKEN` set, then
+  `ENGINE_URL=http://127.0.0.1:7300 ENGINE_TOKEN=<token> node --test test/contract/`. Without it the
+  suite starts `node scripts/serve.js` itself on a scratch workspace in simulation, with no account,
+  and stops it after; that is how it runs in `npm test` (about 10 s). Never point it at a workspace
+  you use: fixtures create projects, cards, agents, skills and simulated runs.
+- **Fixtures**: `{ arg, status?, invalid?, setup?, teardown? }`; `setup` makes the state the call
+  needs through the API itself (a project, a card, a simulated run), under unique names, so the
+  suite runs in any order and twice in a row against the same engine. Desktop-only channels are
+  skipped, as the browser skips them.
+- **Coverage ratchet**: the suite prints `contract tests: N of M channels with a schema`;
+  `test/contract-harness-339.test.js` fails on a channel with a schema and no fixture unless
+  `test/contract/channels-without-fixture.js` lists it with its reason. The list only shrinks.
+- **The handshake**: `GET /api/version` (and the `app:version` channel over IPC) answers
+  `{ app, contract }`, `contract` being `contractHash` of the manifest (`src/service/contract.js`):
+  any change to a channel, its params or its schemas changes it. `GET /api/manifest` carries the
+  same `contract`; the browser UI (`src/renderer/api-http.js`) compares them on every WebSocket
+  connection and shows a Reload banner when the engine speaks another contract.
+
 ## Machine-independent tests
 
 Git tests run with an empty `GIT_CONFIG_GLOBAL` and `GIT_CONFIG_NOSYSTEM`, passing identity,

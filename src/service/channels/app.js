@@ -54,6 +54,14 @@ module.exports = (ctx) => [
       screenshot: process.env.MULTIAGENT_SCREENSHOT === '1',
     }),
   },
+  // the engine's version and the contract its channels declare (#339): what GET /api/version answers
+  // (src/server), so a client built for another contract can tell
+  {
+    channel: 'app:version',
+    method: 'appVersion',
+    schema: { result: shape({ app: STRING, contract: STRING }, ['app', 'contract']) },
+    fn: () => ({ app: ctx.host.appVersion, contract: ctx.contract }),
+  },
   // the code this process started with and the code on disk now (changed: a restart is needed, #83)
   { channel: 'app:codeVersion', method: 'codeVersion', schema: { result: OBJECT }, fn: () => ctx.code.check() },
   { channel: 'settings:get', method: 'getSettings', schema: { result: OBJECT }, fn: () => workspace.readSettings(ctx.ws) },
