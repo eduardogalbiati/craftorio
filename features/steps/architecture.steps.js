@@ -24,6 +24,15 @@
 //   (a canvas inside), "project-city-header" (project, "<n> files", "<n> zones", "<n> districts"),
 //   the select labelled "Colour by" and its legend "project-city-legend"; without a plan
 //   "project-city-no-plan" holds the "Map this project" button and its "≈ US$" estimate.
+// - The agents on the city (#374): data-testid="city-agents", the agents HUD of the City view ("No
+//   agent is working on this project" with no run in progress of the project); one
+//   data-testid="city-agent" per agent, its text "<agent> · <step>"; data-testid="city-collision" per
+//   building two runs in progress change (its path) with a data-testid="conflict-map-link" link.
+//   A run in progress is seeded as one in "another app" (scripts/screenshot/views/roadmap.js
+//   demoRoadmapRuns): runs/<id>/events.jsonl without summary.json, owner.json of another host whose
+//   heartbeat this process keeps fresh; its events: workflow.started (project_id), worktree.ready
+//   (a worktree folder in the scratch folder), step.started, session.opened, then session.stream
+//   with an Edit tool call on <worktree>/<file>.
 //
 // The git project is seeded in the scenario's scratch folder after the app opened (like app.steps.js's
 // second project): a repository on main with a .js and a .py file and three commits, the project
@@ -223,6 +232,91 @@ Then('the city offers {string} with a cost estimate in US$', async ({ e2e }, lab
   const note = byId(e2e.window, 'project-city-no-plan');
   await expect(note).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(note).toContainText(/≈\s*US\$\s*\d/, { timeout: LOAD_TIMEOUT });
+});
+
+// --- The agents on the city (#374) ---
+
+let seededRuns = 0;
+
+// A run in progress of the project `name`, in "another app": its agent `agent` of step `step` edited
+// `file` (relative to the run's worktree). The heartbeat stops once the scratch folder is removed.
+function seedRunInProgress(e2e, name, agent, step, file) {
+  const projects = require(path.join(root, 'src', 'projects'));
+  const wsDir = path.join(e2e.scratch, 'workspace');
+  const project = projects.listProjects(path.join(wsDir, 'projects')).find((p) => p.name === name);
+  if (!project) throw new Error(`no project "${name}" in the scratch workspace`);
+  seededRuns += 1;
+  const now = Date.now();
+  const stamp = new Date(now - 10 * 60e3).toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15);
+  const runId = `${stamp}-0e2e37${String(seededRuns).padStart(2, '0')}`;
+  const dir = path.join(wsDir, 'runs', runId);
+  const worktree = path.join(e2e.scratch, 'worktrees', runId);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.mkdirSync(worktree, { recursive: true });
+  const workflow = 'software-development';
+  const sid = `s-${step}-${seededRuns}`;
+  const at = (minutesAgo) => new Date(now - minutesAgo * 60e3).toISOString();
+  const events = [
+    { ts: at(10), type: 'workflow.started', workflow, file: `${workflow}.yaml`, project_id: project.id, mock: false, inputs: { task: 'Change the discount rule (simulated data)' } },
+    { ts: at(9), type: 'worktree.ready', dir: worktree, work_dir: worktree, repo: project.folder, base: 'main', ref: 'main', reused: false, recreated: false },
+    { ts: at(8), type: 'step.started', step_id: step, step_type: 'agent', agent },
+    { ts: at(8), type: 'session.opened', session_id: sid, step_id: step, session: { agent, step_id: step, provider: 'claude', model: 'claude-opus-5-5' } },
+    { ts: at(7), type: 'session.stream', session_id: sid, step_id: step, turn: 1, item: { kind: 'tool_call', name: 'Read', input: { file_path: path.join(worktree, file) } } },
+    { ts: at(6), type: 'session.stream', session_id: sid, step_id: step, turn: 1, item: { kind: 'tool_call', name: 'Edit', input: { file_path: path.join(worktree, file), old_string: 'total * 0.9', new_string: 'total * 0.85' } } },
+  ];
+  fs.writeFileSync(path.join(dir, 'events.jsonl'), `${events.map((e, i) => JSON.stringify({ seq: i + 1, run_id: runId, ...e })).join('\n')}\n`);
+  const owner = { pid: 4242, host: 'studio-pc', role: 'run', started_at: at(10) };
+  let timer = null;
+  const beat = () => {
+    try { fs.writeFileSync(path.join(dir, 'owner.json'), JSON.stringify({ ...owner, heartbeat_at: new Date().toISOString() })); } catch (e) { if (!timer) throw e; clearInterval(timer); }
+  };
+  beat();
+  timer = setInterval(beat, 5000);
+  timer.unref?.();
+}
+
+Given('a run in progress of {string} where the {string} agent of step {string} edits {string}', async ({ e2e }, name, agent, step, file) => {
+  seedRunInProgress(e2e, name, agent, step, file);
+  await e2e.window.reload();
+  await e2e.window.waitForLoadState('domcontentloaded');
+});
+
+const cityAgents = (page) => byId(page, 'city-agents');
+
+Then('the city says {string}', async ({ e2e }, text) => {
+  const hud = cityAgents(e2e.window);
+  await expect(hud).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(hud).toContainText(text, { timeout: LOAD_TIMEOUT });
+  await expect(visible(tab(e2e.window).getByTestId('city-agent'))).toHaveCount(0);
+});
+
+Then('the city shows the agent {string}', async ({ e2e }, label) => {
+  await expect(cityAgents(e2e.window)).toBeVisible({ timeout: LOAD_TIMEOUT });
+  const entry = visible(tab(e2e.window).getByTestId('city-agent')).filter({ hasText: label });
+  await expect(entry, `the city's agent "${label}"`).toHaveCount(1, { timeout: LOAD_TIMEOUT });
+  await expect(cityAgents(e2e.window)).not.toContainText('No agent is working on this project');
+});
+
+Then('the city does not show the agent {string}', async ({ e2e }, label) => {
+  await expect(visible(tab(e2e.window).getByTestId('city-agent')).first()).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(visible(tab(e2e.window).getByTestId('city-agent')).filter({ hasText: label })).toHaveCount(0);
+});
+
+Then('the city shows no collision risk', async ({ e2e }) => {
+  await expect(visible(tab(e2e.window).getByTestId('city-agent')).first()).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(visible(tab(e2e.window).getByTestId('city-collision'))).toHaveCount(0);
+});
+
+Then('the city marks {string} as a collision risk with a link to the Conflict map', async ({ e2e }, file) => {
+  const collision = visible(tab(e2e.window).getByTestId('city-collision')).filter({ hasText: file }).first();
+  await expect(collision).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(collision.getByTestId('conflict-map-link')).toBeVisible();
+});
+
+When('I follow the city\'s link to the Conflict map', async ({ e2e }) => {
+  const link = visible(tab(e2e.window).getByTestId('city-collision')).first().getByTestId('conflict-map-link');
+  await link.scrollIntoViewIfNeeded();
+  await link.click();
 });
 
 Then('the Architecture tab says the project folder is not a git repository', async ({ e2e }) => {

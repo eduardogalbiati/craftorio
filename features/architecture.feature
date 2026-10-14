@@ -13,6 +13,10 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
   A "Facts | City" switch shows the project as a 3D city instead (#373), remembered per window: a
   header with the project, files, zones and districts, "Colour by" with its legend, and without a
   city plan the folders as districts with a "Map this project" action and its estimate.
+  The City view shows the agents of the project's runs in progress (#374), read from their
+  events.jsonl: "<agent> · <step>" on the building the agent last changed, a building two runs in
+  progress change marked as a collision risk with a link to the Conflict map, and "No agent is
+  working on this project" when none runs. Runs of other projects are not shown.
 
   @issue-356
   Scenario: A project whose folder is not a git repository has no facts and nothing to analyse
@@ -126,3 +130,46 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     Then the Architecture tab shows the project city
     And the city header counts 2 files
     And the city offers "Map this project" with a cost estimate in US$
+
+  @issue-374
+  Scenario: With no run in progress the city says no agent is working on the project
+    Given the app is open
+    And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
+    When I open "Projects" in the sidebar
+    And I open the project "billing-service" from the Projects screen
+    And I open the "Architecture" project tab
+    And I switch the Architecture tab to "City"
+    Then the Architecture tab shows the project city
+    And the city says "No agent is working on this project"
+
+  @issue-374
+  Scenario: An agent of a run in progress shows on the city, and a run of another project does not
+    Given the app is open
+    And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
+    And a run in progress of "billing-service" where the "developer" agent of step "implement" edits "src/billing.js"
+    And a run in progress of "demo-app" where the "tester" agent of step "write_tests" edits "src/billing.js"
+    When I open "Projects" in the sidebar
+    And I open the project "billing-service" from the Projects screen
+    And I open the "Architecture" project tab
+    And I switch the Architecture tab to "City"
+    Then the Architecture tab shows the project city
+    And the city shows the agent "developer · implement"
+    And the city does not show the agent "tester · write_tests"
+    And the city shows no collision risk
+
+  @issue-374
+  Scenario: Two runs in progress changing the same file mark it as a collision risk that links to the Conflict map
+    Given the app is open
+    And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
+    And a run in progress of "billing-service" where the "developer" agent of step "implement" edits "src/billing.js"
+    And a run in progress of "billing-service" where the "refactorer" agent of step "refactor" edits "src/billing.js"
+    When I open "Projects" in the sidebar
+    And I open the project "billing-service" from the Projects screen
+    And I open the "Architecture" project tab
+    And I switch the Architecture tab to "City"
+    Then the Architecture tab shows the project city
+    And the city shows the agent "developer · implement"
+    And the city shows the agent "refactorer · refactor"
+    And the city marks "src/billing.js" as a collision risk with a link to the Conflict map
+    When I follow the city's link to the Conflict map
+    Then the project tab "Conflict map" is selected
