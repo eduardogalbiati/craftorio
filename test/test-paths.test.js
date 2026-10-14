@@ -4,7 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
-const { testMatcher, snapshot, changedTestFiles } = require('../src/engine/test-paths');
+const { testMatcher, snapshot, changedTestFiles, localChanges } = require('../src/engine/test-paths');
 const { WorkflowRun, loadWorkflow } = require('../src/engine/workflow');
 
 process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.05';
@@ -94,6 +94,31 @@ test('changedTestFiles leaves out what comes from the base: a merge of the base,
   assert.deepEqual(await changedTestFiles(snap, { bases: ['refs/heads/main', 'refs/remotes/origin/main'] }), []);
   git(dir, 'switch', '-q', '-c', 'fix', 'main');
   assert.deepEqual(await changedTestFiles(snap, { bases: ['refs/heads/main'] }), []);
+});
+
+test('#374 localChanges: the modified and new files of the whole repository, relative to its root', async (t) => {
+  const dir = makeRepo(t);
+  commit(dir, 'app', { 'app/b.js': 'b\n' });
+  write(dir, 'src/app.js', 'module.exports = 2;\n');
+  write(dir, 'app/b.js', 'b2\n');
+  write(dir, 'app/new.js', 'new\n');
+  assert.deepEqual((await localChanges(dir)).sort(), ['app/b.js', 'app/new.js', 'src/app.js']);
+});
+
+test('#374 localChanges relative: from a project folder inside the repository, only its files, relative to it', async (t) => {
+  const dir = makeRepo(t);
+  commit(dir, 'app', { 'app/b.js': 'b\n' });
+  write(dir, 'src/app.js', 'module.exports = 2;\n'); // outside the folder: left out
+  write(dir, 'app/b.js', 'b2\n');
+  write(dir, 'app/lib/new.js', 'new\n');
+  assert.deepEqual((await localChanges(path.join(dir, 'app'), { relative: true })).sort(), ['b.js', 'lib/new.js']);
+});
+
+test('#374 localChanges gives up when git takes longer than its timeout, instead of waiting for the default', async (t) => {
+  const dir = makeRepo(t);
+  write(dir, 'src/app.js', 'module.exports = 2;\n');
+  // no git process starts and ends within 1 ms: a timeout that reaches git makes the call fail
+  await assert.rejects(() => localChanges(dir, { timeout: 1 }));
 });
 
 test('snapshot is null outside a git work tree (nothing to check)', async (t) => {

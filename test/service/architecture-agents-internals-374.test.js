@@ -12,15 +12,16 @@ const T0 = Date.parse('2026-10-13T10:00:00.000Z');
 const at = (s) => new Date(T0 + s * 1000).toISOString();
 
 // a run of `projectId` whose `agent` (step `step`) edits `files` in `worktree`; `finished`: with a summary
-function seedRun(runsDir, runId, { projectId, worktree, agent, step, files, finished = false }) {
+// `workDir`: the project's folder inside the worktree (default: the worktree itself)
+function seedRun(runsDir, runId, { projectId, worktree, workDir = worktree, agent, step, files, finished = false }) {
   const dir = path.join(runsDir, runId);
   fs.mkdirSync(dir, { recursive: true });
   const sid = `s-${runId}`;
   const events = [
     { ts: at(0), type: 'workflow.started', workflow: 'software-development', project_id: projectId, mock: false, inputs: {} },
-    { ts: at(1), type: 'worktree.ready', dir: worktree, work_dir: worktree },
+    { ts: at(1), type: 'worktree.ready', dir: worktree, work_dir: workDir },
     { ts: at(2), type: 'session.opened', session_id: sid, step_id: step, session: { agent, step_id: step, provider: 'claude', model: 'claude-opus-5-5' } },
-    ...files.map((f, i) => ({ ts: at(3 + i), type: 'session.stream', session_id: sid, step_id: step, turn: 1, item: { kind: 'tool_call', name: 'Edit', input: { file_path: path.join(worktree, f) } } })),
+    ...files.map((f, i) => ({ ts: at(3 + i), type: 'session.stream', session_id: sid, step_id: step, turn: 1, item: { kind: 'tool_call', name: 'Edit', input: { file_path: path.join(workDir, f) } } })),
   ];
   fs.writeFileSync(path.join(dir, 'events.jsonl'), `${events.map((e, i) => JSON.stringify({ seq: i + 1, run_id: runId, ...e })).join('\n')}\n`);
   if (finished) {
@@ -60,6 +61,19 @@ test('#374 architecture:agents: the runs in progress of the project, their agent
   assert.deepEqual(two.dirty, [], 'a folder that is not a git worktree has no uncommitted file');
   assert.deepEqual(out.collisions, [{ path: 'src/shared.js', runs: ['20261013-100000-aaaa0001', '20261013-100500-aaaa0002'] }]);
   assert.equal(out.replay, undefined);
+});
+
+test('#374 architecture:agents: a project in a subfolder of the worktree gets its uncommitted files on the same base as its touches', async (t) => {
+  const { api, runsDir, repo, projectId } = await setup(t);
+  const workDir = path.join(repo.dir, 'app');
+  fs.mkdirSync(path.join(workDir, 'src'), { recursive: true });
+  fs.writeFileSync(path.join(workDir, 'src', 'new.js'), 'new\n'); // new, inside the project's folder
+  fs.appendFileSync(path.join(repo.dir, 'a.txt'), 'more\n'); // changed, outside it: not the project's
+  seedRun(runsDir, '20261013-100000-bbbb0001', { projectId, worktree: repo.dir, workDir, agent: 'developer', step: 'implement', files: ['src/new.js'] });
+
+  const [run] = (await api['architecture:agents']({ projectId })).runs;
+  assert.deepEqual(run.agents.map((a) => a.path), ['src/new.js']);
+  assert.deepEqual(run.dirty, ['src/new.js']);
 });
 
 test('#374 architecture:agents with a runId: that run\'s touches for the replay; a run of another project is refused', async (t) => {
