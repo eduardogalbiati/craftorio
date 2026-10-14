@@ -44,10 +44,11 @@ function validateTestsPaths(v) {
 const lines = (s) => String(s || '').split('\n').map((l) => l.trim()).filter(Boolean);
 const G = ['-c', 'core.quotepath=off'];
 
-// Files with local changes (modified, deleted or untracked), relative to the repository root.
-const localChanges = async (root) => [...new Set([
-  ...lines(await git([...G, 'diff', '--name-only', 'HEAD'], root)),
-  ...lines(await git([...G, 'ls-files', '--others', '--exclude-standard'], root)),
+// Files with local changes (modified, deleted or untracked), relative to the repository root;
+// `relative`: only those under `root`, relative to it (a project folder inside a run's worktree).
+const localChanges = async (root, { relative = false, timeout } = {}) => [...new Set([
+  ...lines(await git([...G, 'diff', '--name-only', ...(relative ? ['--relative'] : []), 'HEAD'], root, { timeout })),
+  ...lines(await git([...G, 'ls-files', '--others', '--exclude-standard'], root, { timeout })),
 ])];
 
 // file → blob id of its content in the working tree (null when it does not exist)

@@ -7,7 +7,8 @@
 // - touchOf(item): a session.stream tool_call naming a file → { tool, kind: 'change'|'read', file };
 //   Edit, Write, MultiEdit and NotebookEdit change it, Read and Grep only look at it.
 // - extractTouches(events, { worktree }) → [{ session_id, agent, step, tool, kind, path, ts }];
-//   lastTouches(touches) → each session's last one; trailOf(touches, n) → the last n changed paths.
+//   lastTouches(touches) → each session's last one; trailOf(touches, n) → the last n changed paths;
+//   closedSessions(events) → the sessions whose agents no longer work (shown only while open).
 // - collisions(runs [{ id, changed }]) → [{ path, runs }]: a path two runs or more change.
 // - placeAgents(layout, agents) → { robots, cranes, building, trails, collisions }: a changing agent
 //   on its building's roof, a reading one at its door, a file the city lacks as a building under
@@ -74,6 +75,11 @@
       out.push({ agent: s.agent, kind: t.kind, model: s.model, path, provider: s.provider, session_id: e.session_id, step: s.step, tool: t.tool, ts: e.ts || null });
     }
     return out;
+  }
+
+  /** The sessions the run has closed: their agents no longer work on the city. */
+  function closedSessions(events) {
+    return new Set(arr(events).filter((e) => e && e.type === 'session.closed' && e.session_id).map((e) => e.session_id));
   }
 
   /** Each session's last touch, one entry per session. */
@@ -215,6 +221,7 @@
     // the tools that change a file (the Oracle's run focus counts their edits too)
     CHANGE_TOOLS: Object.keys(CHANGE),
     CityReplay,
+    closedSessions,
     collisions,
     districtFor,
     extractTouches,

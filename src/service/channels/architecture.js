@@ -28,7 +28,7 @@ const projects = require('../../projects');
 const proposals = require('../../refactor-proposals');
 const runs = require('../../runs');
 const simulation = require('../../engine/simulation');
-const { git } = require('../../engine/worktree');
+const { localChanges } = require('../../engine/test-paths');
 const { readEvents } = require('../../supervisor');
 const cityAgents = require('../../shared/city-agents');
 const { validateSchema } = require('../../json-schema');
@@ -73,29 +73,32 @@ const PROGRESS_TEXT = 160;
 const RUN_COLOURS = ['#e4572e', '#4c9be8', '#3fb68b', '#f2a541', '#9b6ef3', '#e05297'];
 const DIRTY_TIMEOUT_MS = 10e3;
 
-// The files a run's worktree changes and has not committed (tracked and new), relative to its
-// working folder; none when it is not a git worktree (yet) or git fails.
-async function uncommitted(worktree, workDir) {
-  if (!worktree || !fs.existsSync(path.join(worktree, '.git'))) return [];
-  const list = async (args) => String(await git(['-c', 'core.quotepath=off', ...args], workDir, { timeout: DIRTY_TIMEOUT_MS }).catch(() => '')).split('\n').map((s) => s.trim()).filter(Boolean);
-  const [tracked, added] = await Promise.all([list(['diff', '--name-only', '--relative', 'HEAD']), list(['ls-files', '--others', '--exclude-standard'])]);
-  return [...new Set([...tracked, ...added])];
-}
-
-// A run's worktree (its root) and the folder its agents work in (the project's folder inside it)
-function worktreeOf(events) {
+// A run's worktree (its root) and the folder its agents work in (the project's folder inside it);
+// without a worktree (mock run, worktrees off, not git) they work in the run's repo_path input or
+// the project's folder, as the engine's gates do (src/engine/run/gates.js).
+function worktreeOf(events, folder) {
   const ready = events.find((e) => e.type === 'worktree.ready');
-  return { dir: (ready && ready.dir) || null, workDir: (ready && (ready.work_dir || ready.dir)) || null };
+  if (ready && ready.dir) return { dir: ready.dir, workDir: ready.work_dir || ready.dir };
+  const inputs = (events.find((e) => e.type === 'workflow.started') || {}).inputs || {};
+  return { dir: null, workDir: inputs.repo_path || inputs.project_path || folder || null };
 }
 
-// A run in progress on the city: its agents' last files, its trail and its uncommitted files.
-async function runOnCity(run, colour) {
+// The files a run's worktree changes and has not committed (tracked and new), relative to its
+// working folder; none without a git worktree (the project's own changes are not the run's) or when git fails.
+async function uncommitted(dir, workDir) {
+  if (!dir || !fs.existsSync(path.join(dir, '.git'))) return [];
+  return localChanges(workDir, { relative: true, timeout: DIRTY_TIMEOUT_MS }).catch(() => []);
+}
+
+// A run in progress on the city: its working agents' last files, its trail and its uncommitted files.
+async function runOnCity(run, colour, folder) {
   const events = readEvents(run.runDir);
-  const { dir, workDir } = worktreeOf(events);
+  const { dir, workDir } = worktreeOf(events, folder);
   const touches = cityAgents.extractTouches(events, { worktree: workDir });
+  const closed = cityAgents.closedSessions(events);
   const dirty = await uncommitted(dir, workDir);
   return {
-    id: run.runId, workflow: run.workflow, colour, agents: cityAgents.lastTouches(touches), trail: cityAgents.trailOf(touches), dirty,
+    id: run.runId, workflow: run.workflow, colour, agents: cityAgents.lastTouches(touches).filter((t) => !closed.has(t.session_id)), trail: cityAgents.trailOf(touches), dirty,
     // what the collision rule compares: every file the run changed, committed or not
     changed: [...new Set([...touches.filter((t) => t.kind === 'change').map((t) => t.path), ...dirty])],
   };
@@ -217,7 +220,7 @@ module.exports = (ctx) => {
         const mine = runs.runsForProject(runs.listRuns(ctx.ws.runs), p);
         // the project's runs in progress, in this app or another one; other projects' runs are not shown
         const live = mine.filter((r) => r.status === 'running').sort((a, b) => String(a.startedAt).localeCompare(String(b.startedAt)));
-        const onCity = await Promise.all(live.map((r, i) => runOnCity(r, RUN_COLOURS[i % RUN_COLOURS.length])));
+        const onCity = await Promise.all(live.map((r, i) => runOnCity(r, RUN_COLOURS[i % RUN_COLOURS.length], p.folder)));
         const out = {
           projectId: p.id,
           runs: onCity.map(({ changed, ...r }) => r),
@@ -228,7 +231,7 @@ module.exports = (ctx) => {
         const run = mine.find((r) => r.runId === runId);
         if (!run) throw clientError(`Unknown run of this project: ${runId}`);
         const events = readEvents(run.runDir);
-        return { ...out, replay: { runId, touches: cityAgents.extractTouches(events, { worktree: worktreeOf(events).workDir }) } };
+        return { ...out, replay: { runId, touches: cityAgents.extractTouches(events, { worktree: worktreeOf(events, p.folder).workDir }) } };
       },
     },
     {
