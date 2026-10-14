@@ -313,7 +313,7 @@
     }
     c.city ||= ProjectCity.create({ projectId: c.id, name: projectName(c.id), onOpenFacts: (file) => { if (cur === c) { c.focusFile = file; setMode('facts'); } } });
     // #374: the agents of the project's runs in progress on its city (views/project/project-city-agents.js)
-    c.agents ||= window.ProjectCityAgents?.attach(c.city, { projectId: c.id }) || null;
+    c.agents ||= (window.CityAgents && window.ProjectCityAgents?.attach(c.city, { projectId: c.id })) || null;
     if (!c.box.contains(c.city.el)) {
       c.box.innerHTML = `<div data-testid="architecture" class="arch-city-mode"><div class="row arch-mode-row">${modeSwitch()}</div><div data-arch-city-slot></div></div>`;
       c.box.querySelector('[data-arch-city-slot]').appendChild(c.city.el);

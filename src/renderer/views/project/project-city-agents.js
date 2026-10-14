@@ -134,6 +134,7 @@
         r.player.tick(TICK_MS * r.scale);
         draw(true);
       }, TICK_MS);
+      r.timer?.unref?.();
       player.play();
     }
 
@@ -178,6 +179,7 @@
 
     // live: polled while the city is on screen; a replay plays on its own clock
     const poll = setInterval(() => { if (el.isConnected && !replay) refresh(); }, POLL_MS);
+    poll?.unref?.(); // under Node (the renderer's tests) the poll never keeps the process alive
     const handle = {
       el,
       projectId,
