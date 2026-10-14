@@ -30,7 +30,7 @@
     const f = slashes(file.trim());
     if (!isAbsolute(f)) {
       const rel = f.replace(/^(\.\/)+/, '');
-      return rel && !rel.startsWith('../') ? rel : null;
+      return rel && !rel.split('/').some((p) => p === '.' || p === '..') ? rel : null;
     }
     if (typeof worktree !== 'string' || !worktree.trim()) return null;
     const wt = slashes(worktree.trim()).replace(/\/+$/, '');
@@ -48,7 +48,10 @@
     const kind = Object.hasOwn(CHANGE, name) ? 'change' : Object.hasOwn(READ, name) ? 'read' : null;
     if (!kind) return null;
     const file = item.input[kind === 'change' ? CHANGE[name] : READ[name]];
-    return typeof file === 'string' && file.trim() ? { tool: name, kind, file } : null;
+    if (typeof file !== 'string' || !file.trim()) return null;
+    // Grep's path is often a folder ('.', 'src'): only a name with an extension counts as a file
+    if (name === 'Grep' && !/\.[^./\\]+$/.test(slashes(file.trim()).split('/').pop())) return null;
+    return { tool: name, kind, file };
   }
 
   /** The run's file touches in event order, each with its session's agent and step. */

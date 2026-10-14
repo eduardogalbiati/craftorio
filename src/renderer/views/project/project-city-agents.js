@@ -130,6 +130,7 @@
       replay = { runId: answerReplay.runId, player, scale: Math.max(1, player.duration / REPLAY_MS), timer: null };
       const r = replay;
       r.timer = setInterval(() => {
+        if (el.isConnected === false) return stopReplay(); // the card left the screen
         if (!r.player.playing) return;
         r.player.tick(TICK_MS * r.scale);
         draw(true);
