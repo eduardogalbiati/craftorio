@@ -15,6 +15,7 @@
 //   or minutes regressed against its baseline of the same class (src/step-regressions.js).
 // Pure, no model: the caller reads summary.json, events.jsonl, the suite logs and the test files.
 
+const { CHANGE_TOOLS } = require('./shared/city-agents');
 const { upgradeRunRecord } = require('./shared/run-record');
 const { cacheLifetimeMs, cacheTier } = require('./session-cache');
 const { REGRESSION_DEFAULTS, regressionLine, stepRegressions } = require('./step-regressions');
@@ -73,7 +74,7 @@ function toolKind(name, input) {
   if (command) return bashKind(command);
   if (name === 'Read') return 'read';
   if (['Grep', 'Glob'].includes(name)) return 'search';
-  if (['Edit', 'MultiEdit', 'NotebookEdit', 'Write'].includes(name)) return 'edit';
+  if (CHANGE_TOOLS.includes(name)) return 'edit';
   if (['Agent', 'Task'].includes(name)) return 'sub-agent';
   return String(name || '?');
 }
@@ -320,7 +321,7 @@ function toolsOf({ runId, summary, events }) {
       if (name === 'Read' && file) inc(a.reads, file);
       if (name === 'Grep') a.searches.grep += 1;
       if (name === 'Glob') a.searches.glob += 1;
-      if (['Edit', 'MultiEdit', 'NotebookEdit', 'Write'].includes(name) && file) {
+      if (CHANGE_TOOLS.includes(name) && file) {
         const ed = a.edits[file] || (a.edits[file] = { file, edits: 0, writes: 0 });
         if (name === 'Write') ed.writes += 1;
         else ed.edits += 1;

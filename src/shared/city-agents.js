@@ -209,6 +209,8 @@
   }
 
   const api = {
+    // the tools that change a file (the Oracle's run focus counts their edits too)
+    CHANGE_TOOLS: Object.keys(CHANGE),
     CityReplay,
     collisions,
     districtFor,
