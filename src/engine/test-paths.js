@@ -19,7 +19,7 @@ const worktree = require('./worktree');
 
 // Read-only queries: one retry, so a transient failure (a git process that dies without a word
 // while the machine is busy, seen under the full test suite on Windows) does not fail the turn.
-const git = (args, cwd) => worktree.git(args, cwd).catch(() => worktree.git(args, cwd));
+const git = (args, cwd, opts) => worktree.git(args, cwd, opts).catch(() => worktree.git(args, cwd, opts));
 
 // the default patterns and the glob rule are shared with the Architecture tab (#356)
 const { globToRegExp, TESTS_PATHS } = require('../shared/globs');
