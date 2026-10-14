@@ -536,7 +536,7 @@ function runInfo(x) {
   const project = state.projects.find((p) => p.id === (x.project_id || x.projectId)) || state.projects.find((p) => Object.values(inputs).includes(p.folder));
   return {
     id: x.run_id || x.runId, startedAt: Date.parse(x.ts || x.startedAt) || Date.now(), mock: !!x.mock, workflow: x.workflow,
-    version: x.version, inputs, issues: issuesOfRun(x), project: project?.name || null,
+    version: x.version, inputs, issues: issuesOfRun(x), project: project?.name || null, projectId: project?.id || null,
     // agent key → name: the YAML's display (#245), the Agents menu's own names winning
     agentNames: x.display?.agents || x.agent_names ? { ...x.display?.agents, ...x.agent_names } : null,
     stepNames: x.display?.steps || null, // step id → name (#245)

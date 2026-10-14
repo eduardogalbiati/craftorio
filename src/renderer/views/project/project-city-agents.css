@@ -1,0 +1,23 @@
+/* The agents at work on the project city (#374, project-city-agents.js): a card over the city, in the
+   run's 3D view classes (run3d.css .r3d-card, .r3d-dot), next to the camera buttons. */
+.pc-city .pca { position: absolute; right: 64px; bottom: 12px; width: min(340px, calc(100% - 90px)); max-height: 45%; overflow: auto; padding: 10px 12px; font-size: 12.5px; color: var(--r3d-ink-2); z-index: 2; }
+.pca-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.pca-head b { color: var(--r3d-ink); }
+.pca-empty { margin: 0; }
+.pca-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.pca-agent { width: 100%; display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 9px; text-align: left; color: inherit; background: none; border: 0; cursor: pointer; font: inherit; }
+.pca-agent:hover { background: var(--r3d-hover); }
+.pca-agent:focus-visible { outline: 2px solid var(--r3d-accent); outline-offset: 1px; }
+.pca-robot { width: 30px; height: 30px; flex: none; }
+.pca-robot svg { width: 100%; height: 100%; }
+.pca-who { display: grid; min-width: 0; flex: 1; }
+.pca-who b { color: var(--r3d-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pca-who small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pca-collision { margin-top: 8px; padding: 8px 10px; border-radius: 9px; background: color-mix(in srgb, #d7263d 14%, var(--r3d-card)); display: grid; gap: 2px; }
+.pca-collision b { color: #d7263d; }
+.pca-collision code, .pca-new code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pca-collision .pcm-link { margin: 4px 0 0; }
+.pca-new { margin: 8px 0 0; display: flex; flex-wrap: wrap; gap: 4px 6px; }
+.pca-replay { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.pca-replay input[type="range"] { flex: 1; min-width: 80px; accent-color: var(--r3d-accent); }
+.pca-replay select { font: inherit; }

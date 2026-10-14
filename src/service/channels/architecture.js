@@ -13,7 +13,13 @@
 // The project map (#372): architecture:city also says whether to advise "Refresh the map"
 // (CityModel.refreshSignal: never without a saved plan) and names the project map run in progress;
 // the tab starts that workflow itself (run:start, workflows/project-map.yaml), only on a click.
+// The agents on the city (#374): architecture:agents reads the project's runs in progress (any app
+// process): each agent session's last file, the run's trail of changed files and its uncommitted
+// files (git, in the run's worktree), and the files two runs change (src/shared/city-agents.js); with
+// a runId, also every file touch of that run of the project ("Replay on the map"). It never starts
+// a run, answers a gate or calls a model.
 
+const fs = require('fs');
 const path = require('path');
 const agents = require('../../agents');
 const arch = require('../../oracle-architecture');
@@ -22,6 +28,9 @@ const projects = require('../../projects');
 const proposals = require('../../refactor-proposals');
 const runs = require('../../runs');
 const simulation = require('../../engine/simulation');
+const { git } = require('../../engine/worktree');
+const { readEvents } = require('../../supervisor');
+const cityAgents = require('../../shared/city-agents');
 const { validateSchema } = require('../../json-schema');
 const {
   CITY_PLAN_SCHEMA,
@@ -37,6 +46,7 @@ const {
   nullable,
   OBJECT,
   PROJECT_ID,
+  RUN_ID,
   shape,
   STRING,
 } = require('../schemas');
@@ -49,9 +59,47 @@ const ESTIMATE = shape({ estimate: nullable(shape({ usd: { type: 'number' }, bas
 const REPORT_VIEW = shape({ report: nullable(OBJECT), findings: listOf(OBJECT), gone: listOf(OBJECT), runsSince: nullable(INT), previousId: nullable(STRING), running: nullable(OBJECT) }, ['report', 'findings', 'gone']);
 const REFRESH = shape({ suggested: { type: 'boolean' }, unmatchedShare: { type: 'number' }, newFolders: listOf(STRING) }, ['suggested', 'unmatchedShare', 'newFolders']);
 const CITY = shape({ state: { type: 'string', enum: ['ok', 'not-git', 'no-commits'] }, model: nullable(OBJECT), validation: nullable(OBJECT), refresh: REFRESH, mapRun: nullable(STRING) }, ['state', 'model', 'validation', 'refresh']);
+const TOUCH = shape({ session_id: STRING, agent: nullable(STRING), step: nullable(STRING), provider: nullable(STRING), model: nullable(STRING), tool: STRING, kind: { type: 'string', enum: ['change', 'read'] }, path: STRING, ts: nullable(STRING) }, ['session_id', 'kind', 'path']);
+const AGENTS = shape({
+  projectId: STRING,
+  runs: listOf(shape({ id: STRING, workflow: nullable(STRING), colour: STRING, agents: listOf(TOUCH), trail: listOf(STRING), dirty: listOf(STRING) }, ['id', 'colour', 'agents', 'trail', 'dirty'])),
+  collisions: listOf(shape({ path: STRING, runs: listOf(STRING) }, ['path', 'runs'])),
+  replay: shape({ runId: STRING, touches: listOf(TOUCH) }, ['runId', 'touches']),
+}, ['projectId', 'runs', 'collisions']);
 // the project map workflow (#372): its run writes the project's city plan
 const PROJECT_MAP_WORKFLOW = 'project-map.yaml';
 const PROGRESS_TEXT = 160;
+// #374: each run in progress's trail colour on the city, in the order the runs started
+const RUN_COLOURS = ['#e4572e', '#4c9be8', '#3fb68b', '#f2a541', '#9b6ef3', '#e05297'];
+const DIRTY_TIMEOUT_MS = 10e3;
+
+// The files a run's worktree changes and has not committed (tracked and new), relative to its
+// working folder; none when it is not a git worktree (yet) or git fails.
+async function uncommitted(worktree, workDir) {
+  if (!worktree || !fs.existsSync(path.join(worktree, '.git'))) return [];
+  const list = async (args) => String(await git(['-c', 'core.quotepath=off', ...args], workDir, { timeout: DIRTY_TIMEOUT_MS }).catch(() => '')).split('\n').map((s) => s.trim()).filter(Boolean);
+  const [tracked, added] = await Promise.all([list(['diff', '--name-only', '--relative', 'HEAD']), list(['ls-files', '--others', '--exclude-standard'])]);
+  return [...new Set([...tracked, ...added])];
+}
+
+// A run's worktree (its root) and the folder its agents work in (the project's folder inside it)
+function worktreeOf(events) {
+  const ready = events.find((e) => e.type === 'worktree.ready');
+  return { dir: (ready && ready.dir) || null, workDir: (ready && (ready.work_dir || ready.dir)) || null };
+}
+
+// A run in progress on the city: its agents' last files, its trail and its uncommitted files.
+async function runOnCity(run, colour) {
+  const events = readEvents(run.runDir);
+  const { dir, workDir } = worktreeOf(events);
+  const touches = cityAgents.extractTouches(events, { worktree: workDir });
+  const dirty = await uncommitted(dir, workDir);
+  return {
+    id: run.runId, workflow: run.workflow, colour, agents: cityAgents.lastTouches(touches), trail: cityAgents.trailOf(touches), dirty,
+    // what the collision rule compares: every file the run changed, committed or not
+    changed: [...new Set([...touches.filter((t) => t.kind === 'change').map((t) => t.path), ...dirty])],
+  };
+}
 
 module.exports = (ctx) => {
   const root = () => path.join(ctx.ws.root, 'architecture');
@@ -60,7 +108,12 @@ module.exports = (ctx) => {
 
   const projectOf = (projectId) => {
     const id = requireId(projectId, 'project id');
-    const p = projects.readProject(ctx.ws.projects, id);
+    let p = null;
+    try {
+      p = projects.readProject(ctx.ws.projects, id);
+    } catch (e) {
+      if (e.code !== 'ENOENT') throw e;
+    }
     if (!p || !p.folder) throw clientError(`Unknown project: ${id}`);
     return p;
   };
@@ -152,6 +205,30 @@ module.exports = (ctx) => {
         // #372: whether to advise "Refresh the map" (never starts a run), and the project map run in progress
         const mapRun = [...ctx.active.values()].find((r) => r.projectId === p.id && path.basename(String(r.file || '')) === PROJECT_MAP_WORKFLOW);
         return { ...city, refresh: refreshSignal(city), mapRun: mapRun ? mapRun.runId : null };
+      },
+    },
+    {
+      channel: 'architecture:agents',
+      method: 'architectureAgents',
+      params: ['...opts'],
+      schema: { params: args({ projectId: PROJECT_ID, runId: nullable(RUN_ID) }, ['projectId']), result: AGENTS },
+      fn: async ({ projectId, runId = null }) => {
+        const p = projectOf(projectId);
+        const mine = runs.runsForProject(runs.listRuns(ctx.ws.runs), p);
+        // the project's runs in progress, in this app or another one; other projects' runs are not shown
+        const live = mine.filter((r) => r.status === 'running').sort((a, b) => String(a.startedAt).localeCompare(String(b.startedAt)));
+        const onCity = await Promise.all(live.map((r, i) => runOnCity(r, RUN_COLOURS[i % RUN_COLOURS.length])));
+        const out = {
+          projectId: p.id,
+          runs: onCity.map(({ changed, ...r }) => r),
+          collisions: cityAgents.collisions(onCity.map((r) => ({ id: r.id, changed: r.changed }))),
+        };
+        if (!runId) return out;
+        // "Replay on the map": every file touch of one run of the project, finished or not
+        const run = mine.find((r) => r.runId === runId);
+        if (!run) throw clientError(`Unknown run of this project: ${runId}`);
+        const events = readEvents(run.runDir);
+        return { ...out, replay: { runId, touches: cityAgents.extractTouches(events, { worktree: worktreeOf(events).workDir }) } };
       },
     },
     {

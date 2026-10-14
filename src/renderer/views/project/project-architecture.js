@@ -18,7 +18,9 @@
 // A "Facts | City" switch leads the tab (#373), remembered per window (sessionStorage MODE_KEY): City
 // shows the project as a 3D city in place of all the above (views/project/project-city.js, one per
 // project on screen, kept while the tab switches back and forth); a building's "Open in Facts"
-// comes back here with its hotspot row marked and scrolled to.
+// comes back here with its hotspot row marked and scrolled to. The city carries the agents of the
+// project's runs in progress (#374, views/project/project-city-agents.js); openCity(id) opens the
+// tab on the City view (a run's "Replay on the map").
 // Also the Refactor tab's proposal list (showRefactor, refactor:proposals).
 // Drawn into the box project.js gives it (show), its clicks and changes routed from the project
 // page's listeners (onClick, onChange). Uses app.js globals at call time: api, esc, errMsg, fmtNum,
@@ -46,10 +48,20 @@
     try { return sessionStorage.getItem(MODE_KEY) === 'city' ? 'city' : 'facts'; } catch { return 'facts'; }
   }
 
-  function setMode(next) {
+  function rememberMode(next) {
     mode = next;
     try { sessionStorage.setItem(MODE_KEY, next); } catch { /* remembered until the window reloads */ }
+  }
+
+  function setMode(next) {
+    rememberMode(next);
     render();
+  }
+
+  /** Opens project `id`'s Architecture tab on its City view (#374, "Replay on the map"). */
+  function openCity(id) {
+    rememberMode('city');
+    openProjectView(id, { tab: 'architecture' });
   }
 
   const modeSwitch = () => {
@@ -300,6 +312,8 @@
       return;
     }
     c.city ||= ProjectCity.create({ projectId: c.id, name: projectName(c.id), onOpenFacts: (file) => { if (cur === c) { c.focusFile = file; setMode('facts'); } } });
+    // #374: the agents of the project's runs in progress on its city (views/project/project-city-agents.js)
+    c.agents ||= window.ProjectCityAgents?.attach(c.city, { projectId: c.id }) || null;
     if (!c.box.contains(c.city.el)) {
       c.box.innerHTML = `<div data-testid="architecture" class="arch-city-mode"><div class="row arch-mode-row">${modeSwitch()}</div><div data-arch-city-slot></div></div>`;
       c.box.querySelector('[data-arch-city-slot]').appendChild(c.city.el);
@@ -396,9 +410,10 @@
   function show(id, box) {
     if (cur?.id !== id) {
       stopPoll();
+      cur?.agents?.destroy();
       cur?.city?.destroy(); // another project: the previous city gives its WebGL context back
       cur = { id, box, facts: null, view: null, reports: [], estimate: null, error: null, loadError: null, loading: false, analyzing: false, progress: null, reportId: null, since: '', until: '', includeMass: true, editing: false, seq: 0,
-        cityMap: null, mapEstimate: null, mapConfirm: false, mapStarting: false, mapRun: null, mapError: null, city: null, focusFile: null };
+        cityMap: null, mapEstimate: null, mapConfirm: false, mapStarting: false, mapRun: null, mapError: null, city: null, agents: null, focusFile: null };
     }
     cur.box = box;
     if (!cur.facts && !cur.loading && !cur.loadError) load();
@@ -458,6 +473,7 @@
   window.ProjectArchitecture = {
     onChange,
     onClick,
+    openCity,
     show,
     showRefactor,
   };

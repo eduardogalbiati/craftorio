@@ -13,6 +13,9 @@
 // (architecture:analyze never answers) and error (it fails), the last two after a click on Analyze.
 // #373: --mode city switches the tab to its City view, on a bigger demo repository (four folders, 31
 // more files) with a city plan: four zones of different kinds, five districts, a landmark and a port.
+// #374: --mode city-agents is that city with two simulated runs in progress on it (architecture:agents
+// answers demoCityAgents): agents on a roof and at a door, a crane, the trails, a new building and a
+// collision risk.
 
 const { execFileSync } = require('child_process');
 const fs = require('fs');
@@ -124,13 +127,41 @@ const CITY_PLAN = {
   ports: [{ id: 'payments', name: 'Payments API', via: ['src/api.js', 'src/billing.js'] }],
 };
 
+// #374: two runs in progress on the city (architecture:agents' answer, simulated data): a developer
+// changing an engine file (its building has uncommitted changes: a crane), a reviewer reading the
+// billing rules, a second run's developer writing a file the city does not have yet, and both runs
+// changing src/billing.js (a collision risk)
+const agentAt = (session_id, agent, step, p, kind, provider, model) => ({ session_id, agent, step, provider, model, tool: kind === 'change' ? 'Edit' : 'Read', kind, path: p, ts: '2026-10-13T10:05:00.000Z' });
+const demoCityAgents = (projectId) => ({
+  projectId,
+  runs: [
+    {
+      id: '20261013-100000-c1ty0001', workflow: 'software-development', colour: '#e4572e',
+      agents: [
+        agentAt('s-dev-1', 'developer', 'implement', 'src/engine/part-3.js', 'change', 'claude', 'claude-opus-5-5'),
+        agentAt('s-rev-1', 'reviewer', 'code_review', 'src/billing.js', 'read', 'codex', 'gpt-5.5'),
+      ],
+      trail: ['src/billing.js', 'src/engine/part-0.js', 'src/engine/part-3.js'],
+      dirty: ['src/engine/part-3.js'],
+    },
+    {
+      id: '20261013-101500-c1ty0002', workflow: 'software-development', colour: '#4c9be8',
+      agents: [agentAt('s-dev-2', 'developer', 'implement', 'src/renderer/views/part-new.js', 'change', 'claude', 'claude-sonnet-5-5')],
+      trail: ['src/billing.js', 'src/renderer/views/part-1.js', 'src/renderer/views/part-new.js'],
+      dirty: [],
+    },
+  ],
+  collisions: [{ path: 'src/billing.js', runs: ['20261013-100000-c1ty0001', '20261013-101500-c1ty0002'] }],
+});
+
 function seedArchitecture(args, ws, project) {
   if (args.mode === 'not-git') return;
-  const commits = { empty: [], city: CITY_COMMITS }[args.mode] || ARCH_COMMITS;
+  const city = args.mode === 'city' || args.mode === 'city-agents';
+  const commits = args.mode === 'empty' ? [] : city ? CITY_COMMITS : ARCH_COMMITS;
   const head = demoArchitectureRepo(project.folder, commits);
   if (head && args.mode !== 'never') demoArchitectureReports(ws, project.id, { commit: head, date: '2026-09-15T10:00:00Z' });
   if (args.mode === 'map-refresh') demoCityPlan(ws, project.id);
-  if (args.mode === 'city') require('../../../src/oracle-architecture').writePlan(path.join(ws.root, 'architecture'), project.id, CITY_PLAN, '2026-10-01T09:00:00.000Z');
+  if (city) require('../../../src/oracle-architecture').writePlan(path.join(ws.root, 'architecture'), project.id, CITY_PLAN, '2026-10-01T09:00:00.000Z');
 }
 
 function seed({ args, ws, project }) {
@@ -170,14 +201,19 @@ async function afterOpen({ args, click }) {
     ipcMain.removeHandler('architecture:analyze');
     ipcMain.handle('architecture:analyze', analysis);
   }
+  if (args.tab === 'architecture' && args.mode === 'city-agents') {
+    const { ipcMain } = require('electron');
+    ipcMain.removeHandler('architecture:agents');
+    ipcMain.handle('architecture:agents', (_e, arg) => demoCityAgents(arg && arg.projectId));
+  }
   await click(`[data-pv-tab="${args.tab}"]`);
   if (args.tab === 'architecture' && analysis) await click('[data-testid="architecture-analyze"]');
-  if (args.tab === 'architecture' && args.mode === 'city') await click('[data-testid="architecture-mode-city"]');
+  if (args.tab === 'architecture' && (args.mode === 'city' || args.mode === 'city-agents')) await click('[data-testid="architecture-mode-city"]');
 }
 
 module.exports = {
   afterOpen,
-  modes: ['analyzing', 'city', 'empty', 'error', 'loading', 'map-refresh', 'never', 'no-runs', 'not-git'],
+  modes: ['analyzing', 'city', 'city-agents', 'empty', 'error', 'loading', 'map-refresh', 'never', 'no-runs', 'not-git'],
   open,
   run: true,
   seed,
