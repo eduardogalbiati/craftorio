@@ -19,8 +19,25 @@ and the file's path.
   roadmap actions (`roadmap:save`, `roadmap:pause`, `roadmap:cancel-pause`, `roadmap:start`,
   `roadmap:item`, `roadmap:undo`). Anything else gets `403` naming the channel; a missing or wrong token gets
   `401`; a request from a web page (another origin) gets `403`.
-- **Human gates stay closed**: no gate channel is reachable (`approval:resolve`, `phonegates:*`),
-  any argument `confirmGate` is refused, and settings are read-only from outside.
+- What the operation sessions need (#399):
+  - `roadmap:pause-stage` (#368, *Pause after current step*) and `roadmap:park-stage` (#395, *Move on
+    from this stage*) act as on the screen: the same refusals (nothing of the stage running; Move on
+    while an item runs an agent turn), a line in the roadmap history and an `edit` in the answer for
+    `roadmap:undo`. A stage pause is resumed with `roadmap:start`.
+  - `runs:resume` `{ runId, step }` resumes a run as the Resume dialog does; `runs:resumeOptions`
+    `{ runId }` lists the steps it offers. A resume that would go past a gate the previous run decided
+    gets the dialog's refusal. A real (non-mock) `runs:resume` costs the owner's money, like
+    `roadmap:start`; it is refused under `MULTIAGENT_SIMULATION_ONLY`.
+  - `workflows:restore` puts a workspace copy back to its bundled default, the old copy to the trash.
+    Through this channel it is refused, naming the steps, when the copy has a `human_approval` step its
+    default lacks (the app's Restore button still restores it).
+  - Reads for watching: `notifications:list`, `gates:interrupted`, `nightwatch:state`,
+    `nightwatch:report`, `usage:get` (any scope, `machine` included: computed off the main process, #389).
+- **Human gates stay closed**: no gate channel is reachable (`approval:resolve`, `gate:*`,
+  `phonegates:*`), any argument `confirmGate` is refused, and settings are read-only from outside.
+- Left out on purpose: `run:stop` (at a gate, stopping the run is one of the gate's answers);
+  `nightwatch:permissions`, `nightwatch:limits`, `oracle:act` and `oracle:nightWatch` (they change what
+  automation may do on its own); `settings:set` (it could turn gates or this channel off).
 - Every call is appended to `<workspace>/control/calls.jsonl` (time, channel, a short summary of
   the arguments, the status, the result's summary or the error).
 - The endpoint is part of the running app: nothing here opens a second engine on the workspace (#112).

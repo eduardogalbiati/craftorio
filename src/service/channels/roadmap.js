@@ -50,9 +50,11 @@ module.exports = (ctx) => {
   // After an owner edit: the version before it is kept and the edit becomes the one to undo
   // (`undoable: false`: kept only, e.g. the queue moved in, which Undo could not give back).
   // → { id, label } for the screen's toast, or null when there is nothing to undo.
-  function edited(id, before, label, { undoable = true } = {}) {
+  // `always`: kept and recorded even when the stages did not change (#399: a stage pause changes the
+  // roadmap's state only; the history still says it happened).
+  function edited(id, before, label, { undoable = true, always = false } = {}) {
     const after = stagesOf(id);
-    if (JSON.stringify(before) === JSON.stringify(after)) return null;
+    if (!always && JSON.stringify(before) === JSON.stringify(after)) return null;
     keep(id, before, label);
     if (!undoable) return null;
     edits += 1;
@@ -207,13 +209,22 @@ module.exports = (ctx) => {
       },
     },
     // #368: a stage's "Pause after current turn": its runs pause after their current turn and the
-    // roadmap pauses at the stage (areas/roadmap.js pauseStage); Resume (roadmap:start) continues them
+    // roadmap pauses at the stage (areas/roadmap.js pauseStage); Resume (roadmap:start) continues them.
+    // #399: a line in the roadmap history and an edit in the answer, as Move on (the control channel)
     {
       channel: 'roadmap:pause-stage',
       method: 'pauseRoadmapStage',
       params: ['projectId', 'stageId'],
       schema: { params: args({ projectId: PROJECT_ID, stageId: text(200) }, ['projectId', 'stageId']), result: BACKLOG },
-      fn: ({ projectId, stageId }) => ctx.pauseStage({ projectId, stageId: requireText(stageId, 'stage id', 200) }),
+      fn: async ({ projectId, stageId }) => {
+        const id = project(projectId);
+        const before = stagesOf(id);
+        const at = before.findIndex((s) => s.id === String(stageId));
+        const out = await ctx.pauseStage({ projectId, stageId: requireText(stageId, 'stage id', 200) });
+        const name = at >= 0 ? before[at].name || `stage ${at + 1}` : 'a stage';
+        const edit = edited(id, before, `Paused ${name} after the current step`, { always: true });
+        return { ...out, ...(edit ? { edit } : {}) };
+      },
     },
     // #395: a stage's "Move on from this stage": its items waiting at a human gate are parked (their
     // gates stay the owner's), its planned items not started skipped, and the next stage starts;

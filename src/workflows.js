@@ -6,6 +6,7 @@
 const fs = require('fs');
 const crypto = require('crypto');
 const path = require('path');
+const yaml = require('js-yaml');
 const { seedBundle, bundleStatus, restoreBundled } = require('./seed');
 
 const BUNDLED_WORKFLOWS_DIR = path.join(__dirname, '..', 'workflows');
@@ -74,6 +75,28 @@ const workflowStatus = (srcDir, destDir) => bundleStatus(srcDir, destDir, WORKFL
 /** Replaces the user's copy of a bundled workflow with the default. */
 const restoreWorkflow = (srcDir, destDir, file) => restoreBundled(srcDir, destDir, WORKFLOW_KIND, path.basename(String(file || '')));
 
+// the ids of the human_approval steps of a parsed workflow, nested steps (parallel, loops) included
+function gateIds(node, out = new Set()) {
+  if (Array.isArray(node)) for (const v of node) gateIds(v, out);
+  else if (node && typeof node === 'object') {
+    if (node.type === 'human_approval' && node.id != null) out.add(String(node.id));
+    for (const v of Object.values(node)) gateIds(v, out);
+  }
+  return out;
+}
+
+/**
+ * The human gates (human_approval step ids) the workspace copy of a bundled workflow has and its
+ * default lacks: what a restore would remove (#399, the control channel refuses it). A copy that
+ * cannot be read or parsed has none to keep.
+ */
+function addedGates(srcDir, destDir, file) {
+  const name = path.basename(String(file || ''));
+  const read = (dir) => { try { return yaml.load(fs.readFileSync(path.join(dir, name), 'utf8')); } catch { return null; } };
+  const bundled = gateIds(read(srcDir));
+  return [...gateIds(read(destDir))].filter((id) => !bundled.has(id));
+}
+
 /**
  * Finds a workflow file. Absolute paths are used as they are; a name or relative path is looked up
  * in the folders in order (workspace first, then the bundled defaults).
@@ -92,6 +115,7 @@ function resolveWorkflow(file, dirs) {
 }
 
 module.exports = {
+  addedGates,
   BUNDLED_WORKFLOWS_DIR,
   isWorkflowFile,
   resolveWorkflow,
