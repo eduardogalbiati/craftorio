@@ -1,12 +1,16 @@
 // src/install-commands.js: the install commands offered by the Usage and Settings screens' play
-// buttons (#147), per platform.
+// buttons (#147), per platform. On macOS the Homebrew commands depend on Homebrew being installed
+// (#398): the tests pass `{ brew }` to make that machine-independent.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { installCommand, installCommands, installHint } = require('../src/install-commands');
 
-test('installCommands: every CLI the orchestrator calls has a one-line installer on Windows and macOS, except Grok', () => {
+const WITH_BREW = { brew: true };
+const NO_BREW = { brew: false };
+
+test('installCommands: every CLI the orchestrator calls has a one-line installer on Windows and on macOS with Homebrew, except Grok', () => {
   for (const platform of ['win32', 'darwin']) {
-    const cmds = installCommands(platform);
+    const cmds = installCommands(platform, WITH_BREW);
     for (const id of ['claude', 'codex', 'gh', 'glab', 'git']) {
       assert.ok(cmds[id] && cmds[id].length > 0, `${id} has no install command on ${platform}`);
     }
@@ -30,8 +34,8 @@ test('installCommands (Linux): no install command is a brew command', () => {
   }
 });
 
-test('installCommands (macOS): gh, git and glab still install with Homebrew', () => {
-  const mac = installCommands('darwin');
+test('installCommands (macOS with Homebrew): gh, git and glab still install with Homebrew', () => {
+  const mac = installCommands('darwin', WITH_BREW);
   assert.equal(mac.gh, 'brew install gh');
   assert.equal(mac.git, 'brew install git');
   assert.equal(mac.glab, 'brew install glab');
@@ -46,15 +50,15 @@ test('installCommands (Windows): unchanged winget and PowerShell commands', () =
   assert.equal(win.glab, 'winget install --id GLab.GLab -e');
 });
 
-test('installCommands: whisper-cli only has a one-line installer on macOS', () => {
-  assert.equal(installCommands('darwin')['whisper-cli'], 'brew install whisper-cpp');
+test('installCommands: whisper-cli only has a one-line installer on macOS with Homebrew', () => {
+  assert.equal(installCommands('darwin', WITH_BREW)['whisper-cli'], 'brew install whisper-cpp');
   assert.equal(installCommands('win32')['whisper-cli'], null);
   assert.equal(installCommands('linux')['whisper-cli'], null);
 });
 
 test('installCommands: the Windows and macOS commands for the same tool differ (winget vs brew, one PowerShell/curl installer)', () => {
   const win = installCommands('win32');
-  const mac = installCommands('darwin');
+  const mac = installCommands('darwin', WITH_BREW);
   assert.notEqual(win.gh, mac.gh);
   assert.notEqual(win.claude, mac.claude);
   assert.match(win.gh, /winget/);
@@ -80,4 +84,65 @@ test('installHint: a tool with an installer returns the command itself, not the 
 
 test('installHint: an unknown id (no command, no prose) returns null', () => {
   assert.equal(installHint('not-a-real-tool', 'win32'), null);
+});
+
+// #398 (acceptance tests, written before the code): on a Mac without Homebrew no command or hint is
+// a brew command; gh, glab and whisper-cli get prose naming Homebrew (https://brew.sh) and the
+// official alternative where one exists; git installs with Apple's Command Line Tools.
+test('installCommands (macOS without Homebrew, #398): no install command uses brew', () => {
+  for (const [id, cmd] of Object.entries(installCommands('darwin', NO_BREW))) {
+    if (cmd) assert.doesNotMatch(cmd, /\bbrew\b/, `${id}: ${cmd}`);
+  }
+});
+
+test('installHint (macOS without Homebrew, #398): no hint is a brew install command', () => {
+  for (const id of ['claude', 'codex', 'gh', 'glab', 'git', 'grok', 'whisper-cli']) {
+    const hint = installHint(id, 'darwin', NO_BREW);
+    assert.ok(hint && hint.length > 0, `${id} has no install hint on a Mac without Homebrew`);
+    assert.doesNotMatch(hint, /\bbrew install\b/, `${id}: ${hint}`);
+  }
+});
+
+test('installHint (macOS without Homebrew, #398): gh has no command, and its prose names Homebrew and the installer from cli.github.com', () => {
+  assert.equal(installCommand('gh', 'darwin', NO_BREW), null);
+  const hint = installHint('gh', 'darwin', NO_BREW);
+  assert.match(hint, /Homebrew/);
+  assert.match(hint, /https:\/\/brew\.sh/);
+  assert.match(hint, /https:\/\/cli\.github\.com/);
+});
+
+test('installHint (macOS without Homebrew, #398): glab has no command, and its prose names Homebrew and the GitLab CLI releases page', () => {
+  assert.equal(installCommand('glab', 'darwin', NO_BREW), null);
+  const hint = installHint('glab', 'darwin', NO_BREW);
+  assert.match(hint, /Homebrew/);
+  assert.match(hint, /https:\/\/brew\.sh/);
+  assert.match(hint, /gitlab\.com\/gitlab-org\/cli\/-\/releases/);
+});
+
+test('installCommand (macOS without Homebrew, #398): git installs with Apple\'s Command Line Tools (xcode-select --install)', () => {
+  assert.equal(installCommand('git', 'darwin', NO_BREW), 'xcode-select --install');
+  assert.equal(installHint('git', 'darwin', NO_BREW), 'xcode-select --install');
+});
+
+test('installHint (macOS without Homebrew, #398): whisper-cli has no command, and its prose says it needs Homebrew', () => {
+  assert.equal(installCommand('whisper-cli', 'darwin', NO_BREW), null);
+  const hint = installHint('whisper-cli', 'darwin', NO_BREW);
+  assert.match(hint, /Homebrew/);
+  assert.match(hint, /https:\/\/brew\.sh/);
+});
+
+test('installCommands (macOS without Homebrew, #398): Claude Code and Codex keep their installers (they do not need Homebrew)', () => {
+  const mac = installCommands('darwin', NO_BREW);
+  assert.equal(mac.claude, 'curl -fsSL https://claude.ai/install.sh | bash');
+  assert.equal(mac.codex, 'npm install -g @openai/codex');
+});
+
+test('installCommands (#398): the Homebrew flag changes nothing on Linux and Windows', () => {
+  for (const platform of ['linux', 'win32']) {
+    assert.deepEqual(installCommands(platform, WITH_BREW), installCommands(platform, NO_BREW), platform);
+    assert.deepEqual(installCommands(platform, WITH_BREW), installCommands(platform), platform);
+  }
+  for (const cmd of Object.values(installCommands('linux', WITH_BREW))) {
+    if (cmd) assert.doesNotMatch(cmd, /\bbrew\b/);
+  }
 });
