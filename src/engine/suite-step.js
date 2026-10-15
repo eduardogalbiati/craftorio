@@ -48,7 +48,10 @@ const path = require('path');
 const { spawn } = require('child_process');
 const { parseAgentReport } = require('./agent-test-report');
 const { parseNodeCoverage, renderCoverageSummary } = require('../coverage-summary');
-const { processTreeCommands } = require('./processes');
+const {
+  processTreeCommands,
+  stopProcessesIn,
+} = require('./processes');
 const { killTree, OWN_GROUP } = require('./providers');
 const { workerEnv } = require('../machine-profile');
 
@@ -284,7 +287,11 @@ function runningTestFiles(procs, cwd) {
 // Runs `command` in a shell in cwd, its whole output into logFile → { code, timedOut, error, running };
 // running: on a timeout, the test files still running. Never rejects.
 // onSpawn(pid): the shell's process, for the memory guard (#276).
-function runCommand({ command, cwd, env, timeoutMs, signal, logFile, onSpawn }) {
+// It leaves nothing behind (#390): once the command has ended, timed out or been stopped, what its
+// process group still holds is stopped and, unless `sweep` is false (a folder the run does not own),
+// every process still running from cwd (src/engine/processes.js: test workers orphaned when their
+// runner ended, which taskkill /T can no longer find from the dead shell), named in the log.
+function runCommand({ command, cwd, env, timeoutMs, signal, logFile, onSpawn, sweep = true }) {
   const childEnv = { ...env };
   // the engine may run inside Electron as node: the suite's own Electron children must not
   delete childEnv.ELECTRON_RUN_AS_NODE;
@@ -312,12 +319,17 @@ function runCommand({ command, cwd, env, timeoutMs, signal, logFile, onSpawn }) 
     }, timeoutMs);
     signal?.addEventListener('abort', stop, { once: true });
     let finished = false;
-    const done = (code, err) => {
+    const done = async (code, err) => {
       if (finished) return;
       finished = true;
       clearTimeout(timer);
       signal?.removeEventListener('abort', stop);
-      out.end(err ? `\n${err.message}\n` : '', () => resolve({ code, timedOut, error: err?.message || null, running }));
+      // the group outlives its leader while a member runs (never on Windows: a dead pid may be reused)
+      if (process.platform !== 'win32') killTree(child);
+      const left = sweep ? await stopProcessesIn(cwd).catch(() => []) : [];
+      const named = left.map((p) => `pid ${p.pid}${p.stopped ? '' : ` (not stopped: ${p.error})`}: ${p.cmd || p.exe || '?'}`);
+      const note = named.length ? `\nStopped ${named.length} process(es) the command left running in ${cwd}:\n${named.join('\n')}\n` : '';
+      out.end(`${err ? `\n${err.message}\n` : ''}${note}`, () => resolve({ code, timedOut, error: err?.message || null, running }));
     };
     child.on('error', (e) => done(null, e));
     child.on('close', (code) => done(code));
@@ -541,7 +553,9 @@ function saveCoverage(text, runDir, changedFiles) {
 // changedFiles(): the files the run changed) is written and `coverage` added to the output.
 // onSpawn(pid): the command's process, watched by the memory guard (#276).
 // testWorkers (#367): the run's test workers per run, in the env and on the command (withWorkers).
-async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = 'pass', preexisting = [], signal, timeoutMs, history, base, baseCacheDir, run = runCommand, log = () => {}, files = null, selection = null, logName = null, coverage = false, changedFiles = null, onSpawn = null, testWorkers = null }) {
+// sweep (#390): false when cwd is not a folder the run owns (no worktree): runCommand then stops only
+// the command's own tree, not every process running from cwd.
+async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = 'pass', preexisting = [], signal, timeoutMs, history, base, baseCacheDir, run = runCommand, log = () => {}, files = null, selection = null, logName = null, coverage = false, changedFiles = null, onSpawn = null, testWorkers = null, sweep = true }) {
   const logFile = runDir ? path.join(runDir, 'logs', `${logName || `suite-${round}`}.log`) : null;
   const out = {
     kind: 'suite', status: 'blocked', round, scope: 'full', command: null, log: logFile ? path.relative(runDir, logFile).split(path.sep).join('/') : null,
@@ -597,7 +611,7 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
     if (logFile) fs.appendFileSync(logFile, text);
   } else {
     log('info', `suite: ${out.command} (round ${round}, timeout ${Math.round(out.timeout_ms / 60e3)} min, log ${out.log})`);
-    const r = await run({ command: out.command, cwd, env: { ...childEnv.env, MULTIAGENT_TEST_HUMAN_LOG: humanLog(logFile) }, timeoutMs: out.timeout_ms, signal, logFile, ...(onSpawn ? { onSpawn } : {}) });
+    const r = await run({ command: out.command, cwd, env: { ...childEnv.env, MULTIAGENT_TEST_HUMAN_LOG: humanLog(logFile) }, timeoutMs: out.timeout_ms, signal, logFile, ...(onSpawn ? { onSpawn } : {}), ...(sweep ? {} : { sweep: false }) });
     out.exit_code = r.code;
     out.timed_out = r.timedOut;
     out.running = r.running || [];

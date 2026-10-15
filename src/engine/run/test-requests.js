@@ -151,6 +151,8 @@ const methods = {
       base: () => this.suiteBase(), baseCacheDir: path.join(root, 'cache', 'base-tests'),
       files, selection: { mode: 'affected', files, reasons, why },
       log: (level, message) => this.emitEvent('log', { level, message }),
+      // #390: what the tests leave running in the run's own worktree is stopped (never in a folder it does not own)
+      sweep: !!this.worktree?.dir,
     }).catch((e) => ({ status: 'blocked', reason: e.message, failures: [], preexisting: [] }));
     if (output.log) this.emitEvent('file.saved', { step_id: stepId || null, path: path.join(this.runDir, output.log) });
     this.suiteRuns.requests = (this.suiteRuns.requests || 0) + 1;

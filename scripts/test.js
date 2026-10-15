@@ -14,6 +14,9 @@
 // to MULTIAGENT_TEST_HUMAN_LOG (default .test-output/human.log), named in the JSON's `human_log`.
 //   npm test
 //   npm test -- test/a.test.js test/b.test.js
+// Every test has a timeout (#390; MULTIAGENT_TEST_TIMEOUT_MS, default 10 minutes, 0 = none) and a
+// file's process exits once its tests end (--test-force-exit): a hung test fails with its name and
+// file instead of running, and holding the run's worktree, forever.
 // --experimental-test-coverage (`npm run test:coverage`, the suite step's `coverage: true`, #225)
 // passes on to node --test: its coverage table ends the report.
 //   npm run test:coverage [-- test/a.test.js]
@@ -71,7 +74,10 @@ const reporters = [
   '--test-reporter=./scripts/test-reporter-slowest.js', `--test-reporter-destination=${timesFile}`,
 ];
 const coverage = process.argv.includes('--experimental-test-coverage') ? ['--experimental-test-coverage'] : [];
-const unitStatus = run(['--test', `--test-concurrency=${concurrency}`, ...coverage, ...reporters, ...files]);
+const DEFAULT_TEST_TIMEOUT_MS = 10 * 60e3;
+const testTimeoutMs = Number(process.env.MULTIAGENT_TEST_TIMEOUT_MS ?? DEFAULT_TEST_TIMEOUT_MS);
+const timeout = Number.isFinite(testTimeoutMs) && testTimeoutMs >= 0 ? testTimeoutMs : DEFAULT_TEST_TIMEOUT_MS;
+const unitStatus = run(['--test', `--test-concurrency=${concurrency}`, `--test-timeout=${timeout}`, '--test-force-exit', ...coverage, ...reporters, ...files]);
 
 function saySlowest() {
   let times = {};

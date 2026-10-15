@@ -8,12 +8,15 @@
 // stopping electron.exe by name would also close the user's app). So the engine stops them
 // itself after each agent step and when the run ends.
 //
-// What is stopped: processes whose executable is inside the folder (every platform) or, on
-// Linux/macOS, whose working directory is (Windows does not expose another process's working
-// directory cheaply), with their whole process tree. Never touched: this process, its ancestors
-// and its descendants (e.g. the app's embedded terminals), and, for the working-directory match,
-// processes with a terminal (a shell the user opened there). Nothing outside the folder is
-// matched, so the user's app and other runs are safe.
+// What is stopped: processes whose executable is inside the folder (every platform), whose
+// command line names a file inside it (#390: a `node --test` worker run by the machine's node,
+// orphaned when its suite ended, held a worktree for 21 hours) or, on Linux/macOS, whose working
+// directory is (Windows does not expose another process's working directory cheaply), with their
+// whole process tree. Never touched: this process, its ancestors and its descendants (e.g. the
+// app's embedded terminals), and, for the command-line and working-directory matches, processes
+// with a terminal (a shell the user opened there). Nothing outside the folder is matched, so the
+// user's app and other runs are safe; the folder itself on a command line (an editor opened on
+// it) is not a match either, only a path inside it.
 
 const fs = require('fs');
 const path = require('path');
@@ -29,15 +32,15 @@ const run = (cmd, args) => new Promise((resolve) => {
   });
 });
 
-// Win32_Process gives the executable path, not the working directory. UTF-8 output: user
-// folders may have non-ASCII names.
-const WIN_LIST = "[Console]::OutputEncoding=[Text.Encoding]::UTF8; Get-CimInstance -ClassName Win32_Process -Property ProcessId,ParentProcessId,ExecutablePath | ForEach-Object { '{0}|{1}|{2}' -f $_.ProcessId,$_.ParentProcessId,$_.ExecutablePath }";
+// Win32_Process gives the executable path and the command line, not the working directory. UTF-8
+// output: user folders may have non-ASCII names.
+const WIN_LIST = "[Console]::OutputEncoding=[Text.Encoding]::UTF8; Get-CimInstance -ClassName Win32_Process -Property ProcessId,ParentProcessId,ExecutablePath,CommandLine | ForEach-Object { '{0}|{1}|{2}|{3}' -f $_.ProcessId,$_.ParentProcessId,$_.ExecutablePath,($_.CommandLine -replace '[\\r\\n]+',' ') }";
 
 async function listWindows() {
   const out = await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', WIN_LIST]);
   if (out == null) throw new Error('could not list processes (Get-CimInstance Win32_Process)');
-  return out.split(/\r?\n/).map((l) => l.trim().split('|')).filter((f) => f.length >= 3 && /^\d+$/.test(f[0]))
-    .map(([pid, ppid, ...exe]) => ({ pid: +pid, ppid: +ppid, exe: exe.join('|') || null, cwd: null, tty: false }));
+  return out.split(/\r?\n/).map((l) => l.trim().split('|')).filter((f) => f.length >= 4 && /^\d+$/.test(f[0]))
+    .map(([pid, ppid, exe, ...cmd]) => ({ pid: +pid, ppid: +ppid, exe: exe || null, cmd: cmd.join('|') || null, cwd: null, tty: false }));
 }
 
 function listLinux() {
@@ -50,6 +53,7 @@ function listLinux() {
     return {
       pid: +d, ppid: +f[1], tty: +f[4] !== 0,
       exe: read(() => fs.readlinkSync(`/proc/${d}/exe`)), cwd: read(() => fs.readlinkSync(`/proc/${d}/cwd`)),
+      cmd: read(() => fs.readFileSync(`/proc/${d}/cmdline`, 'utf8').split('\0').join(' ').trim()) || null,
     };
   }).filter(Boolean);
 }
@@ -58,10 +62,15 @@ async function listMac() {
   const out = await run('ps', ['-axo', 'pid=,ppid=,tty=,comm=']);
   if (out == null) throw new Error('could not list processes (ps)');
   const procs = out.split('\n').map((l) => /^\s*(\d+)\s+(\d+)\s+(\S+)\s+(.*)$/.exec(l)).filter(Boolean)
-    .map((m) => ({ pid: +m[1], ppid: +m[2], tty: m[3] !== '??', exe: m[4].trim() || null, cwd: null }));
+    .map((m) => ({ pid: +m[1], ppid: +m[2], tty: m[3] !== '??', exe: m[4].trim() || null, cmd: null, cwd: null }));
+  const byPid = new Map(procs.map((p) => [p.pid, p]));
+  // command lines apart: comm and args both may hold spaces
+  for (const m of String(await run('ps', ['-axo', 'pid=,args=']) || '').split('\n').map((l) => /^\s*(\d+)\s+(.*)$/.exec(l))) {
+    const p = m && byPid.get(+m[1]);
+    if (p) p.cmd = m[2].trim() || null;
+  }
   // working directories: lsof -F prints "p<pid>", "fcwd", "n<path>" per process
   const cwd = await run('lsof', ['-nP', '-d', 'cwd', '-Fpn']);
-  const byPid = new Map(procs.map((p) => [p.pid, p]));
   let cur = null;
   for (const l of String(cwd || '').split('\n')) {
     if (l[0] === 'p') cur = byPid.get(+l.slice(1));
@@ -70,7 +79,7 @@ async function listMac() {
   return procs;
 }
 
-/** Every process: [{ pid, ppid, exe, cwd, tty }] (exe/cwd null when unknown). */
+/** Every process: [{ pid, ppid, exe, cmd, cwd, tty }] (exe/cmd/cwd null when unknown). */
 function listProcesses() {
   if (process.platform === 'win32') return listWindows();
   if (process.platform === 'linux') return Promise.resolve(listLinux());
@@ -81,13 +90,26 @@ function listProcesses() {
 const CASE_INSENSITIVE = caseInsensitive(process.platform);
 
 /**
+ * Whether a command line names a path inside `dir` (`dir` followed by a separator; `dir` alone is
+ * not enough, nor `dir`'s siblings sharing its prefix: run-1 is not run-10). On Windows `/` counts as `\`.
+ */
+function commandMentions(commandLine, dir, { caseInsensitive = CASE_INSENSITIVE } = {}) {
+  if (!commandLine || !dir) return false;
+  const norm = (s) => {
+    const t = path.sep === '\\' ? String(s).replace(/\//g, '\\') : String(s);
+    return caseInsensitive ? t.toLowerCase() : t;
+  };
+  return norm(commandLine).includes(norm(dir).replace(/[\\/]+$/, '') + path.sep);
+}
+
+/**
  * The processes to stop for `dir`, from a process list (pure: no process is touched).
- * @param {object[]} procs  [{ pid, ppid, exe, cwd, tty }]
+ * @param {object[]} procs  [{ pid, ppid, exe, cmd, cwd, tty }]
  * @param {string} dir      the worktree
  * @param {object} [o]
  * @param {number} [o.self] pid to protect with its ancestors and descendants (default: this process)
  * @param {boolean} [o.caseInsensitive]
- * @returns {object[]} [{ pid, ppid, exe, cwd, reason: 'executable' | 'cwd' | 'child' }], roots first
+ * @returns {object[]} [{ pid, ppid, exe, cmd, cwd, reason: 'executable' | 'cwd' | 'command' | 'child' }], roots first
  */
 function selectProcesses(procs, dir, { self = process.pid, caseInsensitive = CASE_INSENSITIVE } = {}) {
   const norm = (p) => (caseInsensitive ? p.toLowerCase() : p);
@@ -98,6 +120,9 @@ function selectProcesses(procs, dir, { self = process.pid, caseInsensitive = CAS
     const rel = path.relative(root, norm(canonicalPath(p)));
     return !rel.startsWith('..') && !path.isAbsolute(rel);
   };
+  // the folder as given and resolved: a command line may name either
+  const dirs = [...new Set([path.resolve(dir), canonicalPath(dir)])];
+  const named = (cmd) => !!cmd && norm(cmd).includes(name) && dirs.some((d) => commandMentions(cmd, d, { caseInsensitive }));
   const byPid = new Map(procs.map((p) => [p.pid, p]));
   const children = new Map();
   for (const p of procs) if (p.ppid !== p.pid) children.set(p.ppid, [...(children.get(p.ppid) || []), p]);
@@ -111,12 +136,12 @@ function selectProcesses(procs, dir, { self = process.pid, caseInsensitive = CAS
   const out = new Map();
   for (const p of procs) {
     if (spared.has(p.pid) || out.has(p.pid)) continue;
-    const reason = inside(p.exe) ? 'executable' : !p.tty && inside(p.cwd) ? 'cwd' : null;
+    const reason = inside(p.exe) ? 'executable' : p.tty ? null : inside(p.cwd) ? 'cwd' : named(p.cmd) ? 'command' : null;
     if (!reason) continue;
     out.set(p.pid, { ...p, reason });
     for (const c of tree(p.pid)) if (!spared.has(c) && !out.has(c)) out.set(c, { ...byPid.get(c), reason: 'child' });
   }
-  return [...out.values()].map(({ pid, ppid, exe, cwd, reason }) => ({ pid, ppid, exe, cwd, reason }));
+  return [...out.values()].map(({ pid, ppid, exe, cmd, cwd, reason }) => ({ pid, ppid, exe, cmd: cmd || null, cwd, reason }));
 }
 
 /**
@@ -168,6 +193,7 @@ async function processTreeCommands(pid) {
 }
 
 module.exports = {
+  commandMentions,
   listProcesses,
   processTreeCommands,
   selectProcesses,

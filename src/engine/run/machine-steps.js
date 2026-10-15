@@ -264,6 +264,8 @@ const methods = {
             return this.ctx.worktree_dir && base ? changedFiles(this.ctx.worktree_dir, base) : [];
           },
           onSpawn,
+          // #390: what the suite leaves running in the run's own worktree is stopped (never in a folder it does not own)
+          sweep: !!this.worktree?.dir,
           ...extra,
           ...(env && extra.logName ? { logName: `${extra.logName}${env}` } : {}),
         });
