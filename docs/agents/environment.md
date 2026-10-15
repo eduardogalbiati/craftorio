@@ -45,6 +45,14 @@ the workspace folder.
   (as on Windows). Before the first lookup it merges the login shell's PATH once per process
   (`mergeLoginShellPath`, 3 s timeout; a failing or noisy shell changes nothing). Config folders
   follow `CLAUDE_CONFIG_DIR` and `CODEX_HOME` (`src/cli-config-dirs.js`).
+- Spawned CLIs get the lookup's folders (#397): `withCliPath` (`src/engine/providers.js`) appends
+  the `cliDirs()` that exist (the known folders above; Windows `~\.local\bin`, `%APPDATA%\npm`),
+  re-read per launch, after the env's own PATH, without duplicates. `cliEnv()`
+  (`src/service/common.js`: command, shell, Sessions and supervisor terminals) and agent turns use it.
+- macOS without Homebrew (#398): `installCommands(platform, { brew })` (`src/install-commands.js`)
+  offers brew commands only when `brew` resolves; otherwise git gets `xcode-select --install` and
+  gh, glab and whisper-cli get prose (`MAC_NO_BREW_TEXT`). The command terminal's allowlist uses the
+  same list.
 - **Packaging per OS** (#317, `scripts/package.js`): `npm run package` builds for the current
   machine into `dist/MultiagentOrchestrator-<platform>-<arch>/`; `-- --platform win32|darwin|linux
   --arch x64|arm64` picks another target. Same asar ignore/unpack lists everywhere; the fuses are

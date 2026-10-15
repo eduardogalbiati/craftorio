@@ -4,18 +4,25 @@
 // any command that is not suggested here or by src/actions-usage.js). Per platform; a tool without a
 // one-line installer has no command, only the prose of INSTALL_TEXT. Linux has no single package
 // manager (#316): gh, git and glab get prose that names the distro package instead of a command.
+// macOS (#398): the brew commands only when `brew` resolves; without Homebrew, git installs with
+// Apple's Command Line Tools and gh, glab and whisper-cli get the prose of MAC_NO_BREW_TEXT.
 
-function installCommands(platform = process.platform) {
+const { resolveCommand } = require('./engine/providers');
+
+// `brew`: whether Homebrew is installed (macOS only); looked up when not given.
+function installCommands(platform = process.platform, { brew } = {}) {
   const win = platform === 'win32';
   const mac = platform === 'darwin';
+  const withBrew = mac && (brew ?? !!resolveCommand('brew'));
+  const brewOr = (cmd, fallback = null) => (withBrew ? cmd : fallback);
   return {
     claude: win ? 'powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://claude.ai/install.ps1 | iex"' : 'curl -fsSL https://claude.ai/install.sh | bash',
     codex: 'npm install -g @openai/codex',
-    gh: win ? 'winget install --id GitHub.cli -e' : mac ? 'brew install gh' : null,
-    git: win ? 'winget install --id Git.Git -e' : mac ? 'brew install git' : null,
-    glab: win ? 'winget install --id GLab.GLab -e' : mac ? 'brew install glab' : null,
+    gh: win ? 'winget install --id GitHub.cli -e' : mac ? brewOr('brew install gh') : null,
+    git: win ? 'winget install --id Git.Git -e' : mac ? brewOr('brew install git', 'xcode-select --install') : null,
+    glab: win ? 'winget install --id GLab.GLab -e' : mac ? brewOr('brew install glab') : null,
     grok: null,
-    'whisper-cli': mac ? 'brew install whisper-cpp' : null,
+    'whisper-cli': mac ? brewOr('brew install whisper-cpp') : null,
   };
 }
 
@@ -26,14 +33,26 @@ const INSTALL_TEXT = {
   grok: 'install Grok Build from x.ai (it lands in ~/.grok/bin, which must be on the PATH)',
 };
 
+// #398: macOS without Homebrew: what the one-click install needs, and the official alternative.
+const MAC_NO_BREW_TEXT = {
+  gh: 'the one-click install needs Homebrew (https://brew.sh); without it, install the GitHub CLI with the macOS installer from https://cli.github.com',
+  glab: 'the one-click install needs Homebrew (https://brew.sh); without it, download the GitLab CLI for macOS from https://gitlab.com/gitlab-org/cli/-/releases',
+  'whisper-cli': 'whisper-cli installs with Homebrew: install Homebrew (https://brew.sh), then come back here for the one-click install',
+};
+
+// The options for one tool: Homebrew is only looked up for a tool that installs with it (not for
+// claude, codex and grok, whose commands src/usage.js reads when it loads).
+const needsBrew = (id) => /\bbrew\b/.test(installCommands('darwin', { brew: true })[id] || '');
+const optsFor = (id, opts) => (opts.brew === undefined && !needsBrew(id) ? { brew: false } : opts);
+
 // The command that installs a tool on this platform, or null when there is none.
-function installCommand(id, platform = process.platform) {
-  return installCommands(platform)[id] || null;
+function installCommand(id, platform = process.platform, opts = {}) {
+  return installCommands(platform, optsFor(id, opts))[id] || null;
 }
 
 // What to show for a tool that is missing: its install command, else the prose.
-function installHint(id, platform = process.platform) {
-  return installCommand(id, platform) || INSTALL_TEXT[id] || null;
+function installHint(id, platform = process.platform, opts = {}) {
+  return installCommand(id, platform, opts) || (platform === 'darwin' && MAC_NO_BREW_TEXT[id]) || INSTALL_TEXT[id] || null;
 }
 
 // The sign-in command of each CLI with an account (#319: the first-run Setup's ▶ Sign in, run in a

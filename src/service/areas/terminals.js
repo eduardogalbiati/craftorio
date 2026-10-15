@@ -82,14 +82,17 @@ module.exports = (ctx) => {
 
   // A command the app suggests (#147: an install command, gh's billing scope; #319: a CLI's sign-in)
   // in a shell in the workspace folder; the shell stays open afterwards to show the result or finish
-  // a login. Any other command is refused: the play buttons only send these fixed strings.
-  function commandSpec(command, platform = process.platform) {
-    const allowed = [...Object.values(installCommands(platform)), ...Object.values(signInCommands()), SCOPE_HINT].filter(Boolean);
+  // a login. Any other command is refused: the play buttons only send these fixed strings (#398: the
+  // same Homebrew-aware list as the hints; `opts.brew` overrides the lookup). One env for the whole
+  // terminal, with the folders detection searched (#397), so the shell left open finds the CLI too.
+  function commandSpec(command, platform = process.platform, opts = {}) {
+    const allowed = [...Object.values(installCommands(platform, opts)), ...Object.values(signInCommands()), SCOPE_HINT].filter(Boolean);
     if (!allowed.includes(command)) throw new Error('Only the commands the app suggests can run in a command terminal.');
     const cwd = ctx.ws.root || os.homedir();
-    if (platform === 'win32') return { title: command, cwd, file: 'cmd.exe', args: `/s /k "${command}"`, env: cliEnv() };
+    const env = cliEnv(platform);
+    if (platform === 'win32') return { title: command, cwd, file: 'cmd.exe', args: `/s /k "${command}"`, env };
     const shell = process.env.SHELL || '/bin/sh';
-    return { title: command, cwd, file: shell, args: ['-c', `${command}; exec '${shell}'`], env: cliEnv() };
+    return { title: command, cwd, file: shell, args: ['-c', `${command}; exec '${shell}'`], env };
   }
 
   function openTerminal({ kind, runId, sessionId, cols, rows, ...opts }) {

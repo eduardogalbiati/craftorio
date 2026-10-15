@@ -9,7 +9,10 @@ const os = require('os');
 const path = require('path');
 const https = require('https');
 const { resolveCommand } = require('./engine/providers');
-const { installCommand } = require('./install-commands');
+const {
+  installCommand,
+  installHint,
+} = require('./install-commands');
 const { execShim } = require('./shell');
 
 const DEFAULT_COMMAND = 'whisper-cli';
@@ -25,9 +28,10 @@ const MODELS = [
 const LANGUAGES = ['auto', 'pt', 'en', 'es', 'fr', 'de', 'it'];
 const MAX_AUDIO_BYTES = 10 * 1024 * 1024;
 const TIMEOUT_MS = 3 * 60 * 1000;
-const INSTALL_HINT = process.platform === 'win32'
+// macOS: install-commands' hint, per call (#398: brew install whisper-cpp only with Homebrew)
+const installHintFor = () => (process.platform === 'win32'
   ? 'download whisper-bin-x64.zip from https://github.com/ggml-org/whisper.cpp/releases, unzip it and add the folder to PATH (or set the path of whisper-cli.exe in Settings › General › Voice input)'
-  : process.platform === 'darwin' ? 'brew install whisper-cpp' : 'build whisper.cpp (https://github.com/ggml-org/whisper.cpp) and put whisper-cli in PATH';
+  : process.platform === 'darwin' ? installHint(DEFAULT_COMMAND) : 'build whisper.cpp (https://github.com/ggml-org/whisper.cpp) and put whisper-cli in PATH');
 
 // Where downloaded models live: <user data>/speech-models. `dataDir` is the app's user data folder
 // (Electron's userData); without one (the engine server, tests) the OS's per-user app data folder
@@ -61,7 +65,7 @@ function status(settings, dataDir) {
   return {
     command,
     path: resolved ? resolved.file : null,
-    installHint: INSTALL_HINT,
+    installHint: installHintFor(),
     // the command run by the play button (#147), only for the default CLI
     installCommand: command === DEFAULT_COMMAND ? installCommand(DEFAULT_COMMAND) : null,
     modelsDir: modelsDir(dataDir),
@@ -85,7 +89,7 @@ function runWhisper(resolved, args) {
   return new Promise((resolve, reject) => {
     // a .cmd/.bat runs through cmd.exe with escaped arguments (shell.js)
     execShim(resolved.file, args, { windowsHide: true, timeout: TIMEOUT_MS, maxBuffer: 16 * 1024 * 1024 }, (err, stdout, stderr) => {
-      if (err?.code === 'ENOENT') return reject(new Error(`The speech-to-text CLI is not installed (command "${resolved.file}" not found). Install: ${INSTALL_HINT}`));
+      if (err?.code === 'ENOENT') return reject(new Error(`The speech-to-text CLI is not installed (command "${resolved.file}" not found). Install: ${installHintFor()}`));
       if (err) return reject(new Error(`Speech-to-text failed: ${(`${stderr || ''}`.trim().split(/\r?\n/).pop() || err.message).slice(0, 300)}`));
       resolve(String(stdout || ''));
     });
@@ -99,7 +103,7 @@ async function transcribe({ audio, language }, settings, dataDir) {
   const command = settings.voiceCommand || DEFAULT_COMMAND;
   const resolved = resolveCommand(command);
   if (!resolved || (path.isAbsolute(command) && !fs.existsSync(resolved.file))) {
-    throw new Error(`The speech-to-text CLI is not installed (command "${command}" not found). Install: ${INSTALL_HINT}`);
+    throw new Error(`The speech-to-text CLI is not installed (command "${command}" not found). Install: ${installHintFor()}`);
   }
   const model = modelPath(settings.voiceModel, dataDir);
   if (!fs.existsSync(model)) {

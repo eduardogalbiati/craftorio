@@ -166,14 +166,30 @@ function resolveCommand(cmd) {
   return null;
 }
 
-const windowsDirs = () => {
-  const home = process.env.USERPROFILE || '';
-  return [
-    ...(process.env.PATH || '').split(path.delimiter),
-    path.join(home, '.local', 'bin'),
-    path.join(process.env.APPDATA || '', 'npm'),
-  ].filter(Boolean);
-};
+// The folders the CLIs install to that are often missing from PATH (Windows).
+const windowsExtraDirs = () => [
+  path.join(process.env.USERPROFILE || '', '.local', 'bin'),
+  path.join(process.env.APPDATA || '', 'npm'),
+];
+const windowsDirs = () => [...(process.env.PATH || '').split(path.delimiter), ...windowsExtraDirs()].filter(Boolean);
+
+// #397: the folders the lookup searches beyond PATH that exist now, read again on every launch (a
+// folder an installer creates after the app started counts).
+function cliDirs(platform = process.platform) {
+  return (platform === 'win32' ? windowsExtraDirs() : knownPosixDirs()).filter((d) => path.isAbsolute(d) && fs.existsSync(d));
+}
+
+// #397: a spawn env whose PATH is its own entries first, in order, then the missing cliDirs(), so a
+// terminal, an agent and their children find the CLI detection found. One PATH key whatever its case
+// (`Path` on Windows); Windows compares folders case-insensitively, like mergeRegistryPaths.
+function withCliPath(env, platform = process.platform) {
+  const key = Object.keys(env).find((k) => k.toUpperCase() === 'PATH') || 'PATH';
+  const norm = platform === 'win32' ? (p) => p.toLowerCase().replace(/[\\/]+$/, '') : (p) => p;
+  const current = String(env[key] || '').split(path.delimiter).filter(Boolean);
+  const seen = new Set(current.map(norm));
+  const extra = cliDirs(platform).filter((d) => { const k = norm(d); if (seen.has(k)) return false; seen.add(k); return true; });
+  return extra.length ? { ...env, [key]: [...current, ...extra].join(path.delimiter) } : env;
+}
 const suffixedName = (cmd) => (n) => n.toLowerCase().startsWith(`${cmd}-`) && /-windows-[a-z]+\.exe$/i.test(n);
 
 // resolveCommand without blocking the process (#389: listing every PATH folder for a CLI that is not
@@ -402,7 +418,7 @@ function runCli(opts, parser) {
 
   onItem({ kind: 'spawn', command: resolved.file, args, cwd });
 
-  const env = { ...process.env };
+  const env = withCliPath({ ...process.env }); // #397: the agent and its children (gh, npm shims' node) find what detection found
   delete env.CLAUDECODE; // avoids the "nested session" block if the app is launched from inside Claude Code
   Object.assign(env, gitConfigEnv(env, { 'rerere.enabled': 'true' }));
   // agents' own checks never start real runs, and need no `VAR=value` prefix (refused by allowlists);
@@ -789,6 +805,7 @@ function isQuotaError(type, message) {
 module.exports = {
   ATTACHMENT_LIMITS,
   checkAttachments,
+  cliDirs,
   cliInvocation,
   emptyUsage,
   gitConfigEnv,
@@ -812,4 +829,5 @@ module.exports = {
   sniffImage,
   storeAttachments,
   turnResult,
+  withCliPath,
 };

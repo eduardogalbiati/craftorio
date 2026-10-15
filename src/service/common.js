@@ -4,7 +4,10 @@
 
 const path = require('path');
 const { execFileSync } = require('child_process');
-const { resolveCommand } = require('../engine/providers');
+const {
+  resolveCommand,
+  withCliPath,
+} = require('../engine/providers');
 const { canonicalPath } = require('../engine/worktree');
 const { execShim } = require('../shell');
 const registry = require('../shared/providers');
@@ -171,9 +174,10 @@ function requireArgs(arg, params) {
   return arg;
 }
 
-// The environment of a CLI or a shell started from the app (not nested in Claude Code, not as node).
-const cliEnv = () => {
-  const env = { ...process.env };
+// The environment of a CLI or a shell started from the app (not nested in Claude Code, not as node),
+// with the folders the CLI lookup searches on its PATH (#397).
+const cliEnv = (platform = process.platform) => {
+  const env = withCliPath({ ...process.env }, platform);
   delete env.CLAUDECODE;
   delete env.ELECTRON_RUN_AS_NODE;
   return env;
