@@ -360,10 +360,12 @@ function seedAiDevRun(e2e, suffix, task, steps, files = {}, summary = {}) {
   // the steps the run went through, as workflow.started lists them (the Run screen builds its steps from it)
   const started = inner.filter((e) => e.type === 'step.started');
   const stepList = [...new Map(started.map((e) => [e.step_id, { id: e.step_id, type: e.step_type || 'agent', agent: e.agent }])).values()];
+  // the engine's workflow.finished carries the run's summary (the Run screen reads `tested` from it, #396)
+  const finishedSummary = summary.tested ? { summary: { tested: summary.tested, tested_failures: summary.tested_failures } } : {};
   const events = [
     { ts: at(0), type: 'workflow.started', run_id: runId, workflow: AI_DEV, file: `${AI_DEV}.yaml`, project_id: projectId, mock: true, inputs: { task }, steps: stepList },
     ...inner,
-    { ts: at(end), type: 'workflow.finished', run_id: runId, status: 'success' },
+    { ts: at(end), type: 'workflow.finished', run_id: runId, status: 'success', ...finishedSummary },
   ].map((e, i) => ({ seq: i + 1, run_id: runId, ...e }));
   const all = {
     'events.jsonl': `${events.map((e) => JSON.stringify(e)).join('\n')}\n`,
