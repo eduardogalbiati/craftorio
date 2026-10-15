@@ -133,7 +133,7 @@ module.exports = (ctx) => {
   function productOwnerMessages(id) {
     try { return require('../../product-owner').readConversation(ctx.ws.backlog, id).filter((m) => m.role === 'po' && m.answer); } catch { return []; }
   }
-  const filesOf = (x) => [...new Set([...(x.files || []).map(cadenceRules.pathOf), ...(x.target ? [x.target] : [])].filter(Boolean))];
+  const { filesOf } = cadenceRules;
   const withFiles = (item, planned) => ({ ...item, files: numbersOf(item.issues).flatMap((n) => planned.get(n) || []) });
   const syncedIssues = (id) => backlog.readBacklog(ctx.ws.backlog, id)?.issues || [];
 
@@ -142,8 +142,11 @@ module.exports = (ctx) => {
   async function addToRoadmap(p, proposal) {
     if (!proposal.issue) throw clientError('File the proposal as an issue first: a roadmap item runs an issue.');
     const roadmap = roadmapOf(p.id);
-    const status = roadmaps.issueStages(roadmap).get(Number(proposal.issue))?.status;
-    if (status && !['done', 'skipped'].includes(status)) throw clientError(`Issue #${proposal.issue} is in the roadmap already (${status}).`);
+    // unfinished as pickNext reads it: a failed and parked item is finished, so the cadence can add it again
+    if (cadenceRules.unfinishedNumbers(roadmap).has(Number(proposal.issue))) {
+      const status = roadmaps.issueStages(roadmap).get(Number(proposal.issue))?.status;
+      throw clientError(`Issue #${proposal.issue} is in the roadmap already (${status || 'unfinished'}).`);
+    }
     const planned = plannedFiles(p.id);
     const enriched = { ...roadmap, stages: roadmap.stages.map((s) => ({ ...s, items: s.items.map((x) => withFiles(x, planned)) })) };
     const { stage } = cadenceRules.placeRefactor({ roadmap: enriched, files: filesOf(proposal), conflictMap: conflictMaps.readConflictMap(ctx.ws.backlog, p.id) });
@@ -233,9 +236,10 @@ module.exports = (ctx) => {
       prioritizing.delete(p.id);
     }
   }
-  // what a real turn reads: the Product Owner's agent, folder, skills and budget (channels/product-owner.js)
+  // what a real turn reads: the Product Owner's agent, folder, skills and budget (channels/product-owner.js),
+  // without the synced backlog: the ranking reads no issue
   function realOptions(p) {
-    const o = asClient(() => ctx.productOwnerOptions(p.id, false));
+    const o = asClient(() => ctx.productOwnerAgentOptions(p.id, false));
     return { mock: false, backlogDir: o.backlogDir, projectId: p.id, folder: o.folder, agent: o.agent || agentsMod.readAgent(ctx.ws.agents, agentsMod.PRODUCT_OWNER_ID), skillsDirs: o.skillsDirs, resolveCommand: o.resolveCommand, budget: o.budget };
   }
 
@@ -253,12 +257,21 @@ module.exports = (ctx) => {
     }
   }
 
+  // the project's runs, with the finished one counted even when the run index does not list it yet
+  function runsWith(p, summary) {
+    const list = projectRuns(p);
+    if (!summary.run_id || list.some((r) => r.runId === summary.run_id)) return list;
+    return [...list, { runId: summary.run_id, projectId: p.id, mock: false, status: summary.status || 'success', finishedAt: summary.finished_at || new Date().toISOString() }];
+  }
+
   async function afterRun(summary) {
+    if (!ctx.ws) return; // the workspace closed meanwhile
     let p;
     try { p = projectOf(summary.project_id); } catch { return; }
     await recordOutcome(p, summary);
+    if (!ctx.ws) return;
     const c = readCadence(p.id);
-    if (!c.on || cadenceRules.runsUntilNext({ runs: projectRuns(p), project: p, every: c.every, since: c.since }) > 0) return;
+    if (!c.on || cadenceRules.runsUntilNext({ runs: runsWith(p, summary), project: p, every: c.every, since: c.since }) > 0) return;
     const next = cadenceRules.pickNext(proposals.listProposals(root(), p.id), roadmapOf(p.id));
     if (!next) return; // nothing ready: the tab says so, the next run tries again
     await addToRoadmap(p, next);
@@ -281,7 +294,8 @@ module.exports = (ctx) => {
       schema: { params: ON_PROJECT, result: listOf(OBJECT) },
       fn: ({ projectId }) => {
         const p = projectOf(projectId);
-        return cadenceRules.withIssueStatus(proposals.listProposals(root(), p.id), roadmaps.issueStages(roadmapOf(p.id)), syncedIssues(p.id));
+        const roadmap = roadmapOf(p.id);
+        return cadenceRules.withIssueStatus(proposals.listProposals(root(), p.id), roadmaps.issueStages(roadmap), syncedIssues(p.id), cadenceRules.unfinishedNumbers(roadmap));
       },
     },
     {

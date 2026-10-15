@@ -96,13 +96,10 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   only to count the people using it (the account gates nothing). The history is not rewritten.
   Why: without a licence the code is not open source, and the owner wants to know how many people
   use the app.
-- **2026-10-04** (#247, #47): only the test writer writes, edits or deletes tests; the developer
-  changes production code only (#47, 2026-09-29). Ask for changes at a validation gate goes to the
-  test writer first. It only checks whether the request changes the acceptance criteria: if so, it
-  updates the affected acceptance tests and scenarios (then the red check); otherwise the run goes
-  straight to the developer. Why: overlapping test responsibilities made one run pay for the full
-  suite up to four times, and the locked tests still described the old behaviour and cost extra
-  rounds.
+- **2026-10-04** (#247): Ask for changes at a validation gate goes to the test writer first. It
+  only checks whether the request changes the acceptance criteria: if so, it updates the affected
+  acceptance tests and scenarios (then the red check); otherwise the run goes straight to the
+  developer. Why: the locked tests still described the old behaviour and cost extra rounds.
 - **2026-10-04** (#245): no snake_case or file-name id is shown to people; agents and steps have a
   readable `display` name, and ids stay in tooltips and details for debugging. Why: screens showed
   internal ids such as "acceptance_tests" where people read them.
@@ -127,3 +124,6 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   (#238, replacing the retired `deprioritized` label). Why: planned items kept stale copies, so an
   issue edited after planning ran with its old text; there was no way to put an issue aside, and
   the Product Owner kept proposing unwanted ideas.
+- **2026-09-29** (#47): only the test writer writes, edits or deletes tests; the developer changes
+  production code only. Why: overlapping test responsibilities made one run pay for the full suite
+  up to four times.

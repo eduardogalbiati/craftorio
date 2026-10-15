@@ -82,6 +82,17 @@ module.exports = (ctx) => {
       return { ...res, syncError: e.message, backlog: ctx.withIssueRuns(backlog.readBacklog(ctx.ws.backlog, id)) };
     }
   };
+  // What any Product Owner turn runs with: its agent, the project's folder, the skills and its budget (no backlog needed).
+  const agentOptions = (id, simulated, settings = workspace.readSettings(ctx.ws)) => ({
+    backlogDir: ctx.ws.backlog,
+    projectId: id,
+    folder: projects.readProject(ctx.ws.projects, id)?.folder,
+    agent: agents.readAgent(ctx.ws.agents, agents.PRODUCT_OWNER_ID),
+    skillsDirs: [ctx.ws.skills, ctx.BUNDLED_SKILLS_DIR],
+    resolveCommand,
+    // its own past calls and the Oracle's are in no run: add them to what the runs used this month
+    budget: simulated ? null : usage.withPeerUsage(usage.budgetBaseline({ runsDir: ctx.ws.runs, settings, extraRuns: ctx.agentUsageRuns() }), productOwner.monthUsage(ctx.ws.backlog, new Date(), settings.timeZone), settings.prices),
+  });
   // What every question to the Product Owner reads: the synced backlog, the runs, the workflows, its agent and budget.
   const askOptions = (id, simulated) => {
     const p = projects.readProject(ctx.ws.projects, id);
@@ -89,20 +100,13 @@ module.exports = (ctx) => {
     if (!data) throw new Error('Sync the backlog first: the Product Owner reads the synced issues.');
     const settings = workspace.readSettings(ctx.ws);
     return {
-      backlogDir: ctx.ws.backlog,
-      projectId: id,
+      ...agentOptions(id, simulated, settings),
       runsDir: ctx.ws.runs,
       data,
       activeRuns: ctx.activeRuns().filter((r) => r.projectId === id),
       runs: runs.runsForProject(runs.listRuns(ctx.ws.runs), p),
       workflows: ctx.listWorkflows().filter((w) => !w.error && w.inputs?.task),
       defaultWorkflow: settings.defaultWorkflow, // #195
-      folder: p?.folder,
-      agent: agents.readAgent(ctx.ws.agents, agents.PRODUCT_OWNER_ID),
-      skillsDirs: [ctx.ws.skills, ctx.BUNDLED_SKILLS_DIR],
-      resolveCommand,
-      // its own past calls and the Oracle's are in no run: add them to what the runs used this month
-      budget: simulated ? null : usage.withPeerUsage(usage.budgetBaseline({ runsDir: ctx.ws.runs, settings, extraRuns: ctx.agentUsageRuns() }), productOwner.monthUsage(ctx.ws.backlog, new Date(), settings.timeZone), settings.prices),
       mock: simulated,
       // #206: the prices of the estimates
       prices: settings.prices || {},
@@ -111,6 +115,8 @@ module.exports = (ctx) => {
   };
   // a discovery card's commit proposal asks the same Product Owner (#258, src/service/channels/discovery.js)
   ctx.productOwnerOptions = askOptions;
+  // the Refactor tab's ranking reads no issue (#357, src/service/channels/refactor.js)
+  ctx.productOwnerAgentOptions = agentOptions;
 
   // ---- the inbox's mechanical kinds (#240): the code of the owner's own buttons ------------------
   const numbersOf = (list) => [...new Set((Array.isArray(list) ? list : [list]).map(Number).filter((n) => Number.isInteger(n) && n > 0))];

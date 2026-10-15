@@ -24,7 +24,6 @@
   let cur = null;
 
   const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
-  const filesOf = (p) => [...new Set([...(p.files || []).map((f) => (typeof f === 'string' ? f : f?.path)), p.target].filter(Boolean))];
   const usd = (v) => (typeof fmtUsd === 'function' ? fmtUsd(v) : `$${Number(v || 0).toFixed(2)}`);
   const day = (iso) => String(iso || '').slice(0, 10);
   const byRank = (a, b) => (a.rank || Infinity) - (b.rank || Infinity) || String(a.createdAt || '').localeCompare(String(b.createdAt || ''));
@@ -92,7 +91,7 @@
   function actionsMarkup(c, p) {
     if (p.status === 'dismissed') return '';
     const busy = c.busy === p.id ? 'disabled' : '';
-    const placed = p.roadmapStatus && !['done', 'skipped'].includes(p.roadmapStatus);
+    const placed = !!p.roadmapUnfinished;
     return `<div class="row rf-actions">
       ${p.issue ? '' : `<button type="button" class="btn sm" data-rf-file="${esc(p.id)}" data-testid="refactor-file" ${busy}>File as issue</button>`}
       ${p.issue && !placed ? `<button type="button" class="btn sm" data-rf-roadmap="${esc(p.id)}" data-testid="refactor-add-roadmap" ${busy}>Add to roadmap now</button>` : ''}
@@ -109,7 +108,7 @@
   }
 
   function rowMarkup(c, p) {
-    const files = filesOf(p);
+    const files = p.targetFiles || [];
     const dismissed = p.status === 'dismissed';
     return `<li class="rf-row" data-testid="refactor-proposal">
       <span class="rf-rank" data-testid="refactor-proposal-rank" title="Rank">${p.rank ? `#${esc(p.rank)}` : '—'}</span>

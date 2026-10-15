@@ -33,7 +33,7 @@ function cleanCadence({ on, every } = {}) {
   return { on: !!on, every };
 }
 
-// the issue numbers of the roadmap's items not finished yet
+/** The issue numbers of the roadmap's items not finished yet (roadmap-model isFinished). */
 const unfinishedNumbers = (roadmap) => new Set((roadmap?.stages || []).flatMap((s) => s.items || [])
   .filter((x) => !RoadmapModel.isFinished(x)).flatMap((x) => RoadmapModel.itemIssues(x).map((i) => Number(i.number))));
 
@@ -46,6 +46,9 @@ function pickNext(proposals, roadmap) {
 
 // a file path, from a string or a finding's { path }
 const pathOf = (f) => (typeof f === 'string' ? f : f?.path || f?.file || '');
+
+/** A proposal's files: its files' paths, then its target, without repeats. */
+const filesOf = (p) => [...new Set([...(p?.files || []).map(pathOf), ...(p?.target ? [p.target] : [])].filter(Boolean))];
 
 // the files the conflict map records merge conflicts on (src/conflict-map.js files[].conflicts)
 const conflictFiles = (conflictMap) => new Set((conflictMap?.files || []).filter((f) => f.conflicts > 0).map((f) => f.file));
@@ -76,14 +79,18 @@ function placeRefactor({ roadmap, files, conflictMap = null }) {
 /**
  * The proposals as the tab lists them: each with its issue's state on the platform (`issueState`,
  * from the synced backlog's `issues`) and its roadmap item's (`roadmapStatus`, `roadmapStage`, from
- * src/roadmap.js issueStages: number → { stage, status }).
+ * src/roadmap.js issueStages: number → { stage, status }), whether that item is unfinished
+ * (`roadmapUnfinished`, from unfinishedNumbers) and its files (`targetFiles`, filesOf).
  */
-function withIssueStatus(proposals, stages, issues = []) {
+function withIssueStatus(proposals, stages, issues = [], unfinished = new Set()) {
   const byNumber = new Map((issues || []).map((i) => [Number(i.number), i]));
   return (proposals || []).map((p) => {
     const n = Number(p.issue) || null;
     const placed = n ? stages.get(n) : null;
-    return { ...p, issueState: n ? byNumber.get(n)?.state || null : null, roadmapStatus: placed?.status || null, roadmapStage: placed?.stage || null };
+    return {
+      ...p, issueState: n ? byNumber.get(n)?.state || null : null, roadmapStatus: placed?.status || null, roadmapStage: placed?.stage || null,
+      roadmapUnfinished: !!n && unfinished.has(n), targetFiles: filesOf(p),
+    };
   });
 }
 
@@ -93,9 +100,11 @@ module.exports = {
   cleanCadence,
   countedRuns,
   DEFAULT_CADENCE,
+  filesOf,
   pathOf,
   pickNext,
   placeRefactor,
   runsUntilNext,
+  unfinishedNumbers,
   withIssueStatus,
 };

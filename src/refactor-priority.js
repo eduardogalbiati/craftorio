@@ -10,7 +10,7 @@
 'use strict';
 
 const { validateSchema } = require('./json-schema');
-const { pathOf } = require('./refactor-cadence');
+const { filesOf, pathOf } = require('./refactor-cadence');
 
 const SKILLS = ['backlog-product-owner'];
 const STEP_ID = 'product-owner-refactor';
@@ -46,7 +46,6 @@ Give each proposal its id, a rank (1 is the first to do, no gaps), a one-line re
 /** The errors of an answer against PRIORITY_SCHEMA (empty when valid). */
 const validatePriority = (answer) => validateSchema(answer, PRIORITY_SCHEMA);
 
-const filesOf = (p) => [...new Set([...(p.files || []).map(pathOf), ...(p.target ? [p.target] : [])].filter(Boolean))];
 const open = (proposals) => (proposals || []).filter((p) => p && p.status !== 'dismissed');
 
 /** The simulated answer: open proposals by Danger Zone score, the ones on an unfinished item's files last. */
