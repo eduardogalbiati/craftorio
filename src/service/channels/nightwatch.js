@@ -19,6 +19,9 @@
 // (oracle.detected kind regression; the keys flagged until they recover in oracle/regressions.json).
 // Report only: it wakes no one and changes nothing. The morning card lists the current regressions
 // with the runs behind them.
+// Move on (#395): with the skip permission, a roadmap run waiting at a human gate for
+// settings.oracle.parkAfterMinutes while nothing else of its roadmap runs is parked (parkAtGates,
+// oracle.parked, a notification naming the gate); the gate stays the owner's.
 // Limits tonight (#337, src/night-limits.js): `nightwatch:limits` sets them for the Night watch in force
 // (never under Self-healing alone); the morning summary lists the runs that went past a day limit.
 
@@ -333,7 +336,38 @@ module.exports = (ctx) => {
       for (const s of night.stalledRuns(active, lastProgress, { floor: watchingSince })) {
         detect({ kind: 'stalled', runId: s.runId, projectId: s.projectId, since: floor(s.since), key: `stalled ${s.runId}` });
       }
+      parkAtGates(files, active);
     } catch (e) { console.error('Night watch check:', e.message); }
+  }
+
+  // #395: a running roadmap's item whose run has waited at a human gate for parkAfterMinutes, with
+  // nothing else of that roadmap running, is moved past (Move on) when the skip permission allows it:
+  // the gate keeps waiting for the owner, who gets a phone notification naming it. Without the
+  // permission the gate was escalated when it was asked (onRunEvent); the watch never answers it.
+  function parkAtGates(files, active) {
+    const allowed = night.readPermissions(dir()).allowed;
+    const byRun = new Map(active.map((r) => [r.runId, r]));
+    for (const { projectId, roadmap } of files) {
+      if (roadmap.state !== 'running') continue;
+      const items = roadmap.stages.flatMap((s) => s.items).filter((x) => x.runId && byRun.has(x.runId) && x.status !== 'parked');
+      for (const item of items) {
+        const run = byRun.get(item.runId);
+        const gate = run.waiting ? run.gates[0] : null;
+        if (!gate) continue;
+        const othersRunning = items.some((x) => x !== item && !byRun.get(x.runId).waiting);
+        const decision = night.gateDecision({ waitingSince: gate.requested_at, now: Date.now(), allowed, othersRunning, settings: settings() });
+        if (decision !== 'park') continue;
+        const name = run.display?.steps?.[gate.step_id] || gate.step_id;
+        Promise.resolve(ctx.parkItem({ projectId, itemId: item.id })).then(() => {
+          night.logNight(dir(), 'oracle.parked', { target: `${projectId}/${item.id}`, runId: item.runId, projectId, gate: name, waitedMs: Date.now() - Date.parse(gate.requested_at) });
+          ctx.notify?.({
+            kind: 'oracle', event: 'acted', title: `Night watch moved on past "${name}"`,
+            body: `Run ${item.runId} still waits at the gate "${name}" for you; the roadmap went on to its next stage.${gate.phoneUrl ? ` Answer it: ${gate.phoneUrl}` : ''}`,
+            target: { view: 'roadmap', projectId },
+          }, { projectId });
+        }, (e) => console.error('Night watch move on:', item.runId, e.message));
+      }
+    }
   }
 
   // ---- the metrics ---------------------------------------------------------------------------

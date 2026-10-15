@@ -506,9 +506,21 @@
     // #288: an item whose run ended without finishing (interrupted, failed, cancelled) resumes that run
     const resume = retryable(x, r) && x.runId && ['interrupted', 'failed', 'cancelled'].includes(x.run?.status)
       ? `<button class="btn sm ghost" type="button" data-rm-resume="${esc(x.runId)}" data-testid="roadmap-item-resume" title="Resume its run ${esc(x.runId)} from a step (where it stopped is preselected), keeping its work">Resume run</button>` : '';
-    const fail = `${retryable(x, r) ? `<button class="btn sm primary" type="button" data-rm-item="retry" title="${refused ? 'Start it again: when an ended run kept work for its issues, you choose to resume that run or start over' : 'Run it again (a new run)'}">Retry</button><button class="btn sm ghost" type="button" data-rm-item="skip" title="Count it as finished: the roadmap goes on">Skip</button>${resume}` : ''}${askOracleHtml(x)}`;
+    // #395: Move on past an item whose run waits at a human gate (the gate stays the owner's)
+    const moveOn = may(r, null, x).park.allowed ? `<button class="btn sm ghost" type="button" data-rm-item="park" data-testid="roadmap-item-move-on" title="The next stage starts without this change; its run keeps waiting at its gate for you">Move on</button>` : '';
+    const fail = `${moveOn}${retryable(x, r) ? `<button class="btn sm primary" type="button" data-rm-item="retry" title="${refused ? 'Start it again: when an ended run kept work for its issues, you choose to resume that run or start over' : 'Run it again (a new run)'}">Retry</button><button class="btn sm ghost" type="button" data-rm-item="skip" title="Count it as finished: the roadmap goes on">Skip</button>${resume}` : ''}${askOracleHtml(x)}`;
     const move = locked ? '' : `<button class="btn sm ghost" type="button" data-rm-move="up" title="Earlier in the stage (or into the previous stage)" aria-label="Earlier in the stage"${n === 0 && s === 0 ? ' disabled' : ''}>↑</button><button class="btn sm ghost" type="button" data-rm-move="down" title="Later in the stage (or into the next stage)" aria-label="Later in the stage">↓</button><button class="link-btn small" type="button" data-rm-remove title="Take this item out of the roadmap">Remove</button>`;
-    return `<div class="rm-status" data-testid="roadmap-status">${state}${fail ? `<div class="rm-fail-actions">${fail}</div>` : ''}${move ? `<div class="rm-actions">${move}</div>` : ''}</div>`;
+    return `<div class="rm-status" data-testid="roadmap-status">${state}${parkedHtml(x)}${fail ? `<div class="rm-fail-actions">${fail}</div>` : ''}${move ? `<div class="rm-actions">${move}</div>` : ''}</div>`;
+  }
+
+  // #395: a parked item's line, "Parked at <gate>": it opens the run at its gate (backlog.js: any
+  // [data-run]); a run interrupted there (a closed app) is resumed first, as the gate card says
+  function parkedHtml(x) {
+    if (x.status !== 'parked' || !x.runId) return '';
+    const gate = x.parked?.gate || x.run?.gate || 'its gate';
+    const interrupted = x.run?.status === 'interrupted';
+    const tip = interrupted ? `Its run ${x.runId} was interrupted at this gate: open it and Resume it first, then answer the gate` : `Open the run ${x.runId} at its gate: the gate is still yours to answer`;
+    return `<button class="link-btn small rm-parked" type="button" data-testid="roadmap-item-parked" data-run="${esc(x.runId)}" data-workflow="${esc(x.workflowName || '')}" title="${esc(tip)}">Parked at ${esc(gate)}${interrupted ? ' · resume its run first' : ''}</button>`;
   }
 
   // ---- the pipeline (#282): the workflow's stations, always visible in the Workflow band -----------------
@@ -682,7 +694,8 @@
     if (!open) return `<span class="bl-menu-wrap rm-stage-menu-wrap">${button}</span>`;
     const off = !!stage.disabled;
     const acts = may(r, stage); // with a stage, start is "Run this stage" (#141)
-    const entry = (attrs, label, title, why = '') => `<button type="button" role="menuitem" ${attrs} title="${esc(why || title)}"${why ? ' aria-disabled="true"' : ''}>${label}</button>${why ? `<div class="bl-menu-why small muted">${esc(why)}</div>` : ''}`;
+    // whyId: the test id of the line that says why the entry is off (#395: "Move on from this stage" refused)
+    const entry = (attrs, label, title, why = '', whyId = '') => `<button type="button" role="menuitem" ${attrs} title="${esc(why || title)}"${why ? ' aria-disabled="true"' : ''}>${label}</button>${why ? `<div class="bl-menu-why small muted"${whyId ? ` data-testid="${whyId}"` : ''}>${esc(why)}</div>` : ''}`;
     const entries = [
       // #284: a finished stage has nothing left to hold back (a disabled one can always be enabled)
       off ? entry('data-rm-toggle-stage data-testid="roadmap-stage-toggle" aria-pressed="true"', 'Enable', 'Run this stage with the roadmap again, in its turn')
@@ -690,6 +703,8 @@
       entry('data-rm-run-stage', '<span aria-hidden="true">▶ </span>Run this stage', 'Run only this stage\'s items; the roadmap pauses when they are done', acts.start.reason),
       // #368: nothing is cut: its agents finish their turns, then its runs and the roadmap pause
       done ? '' : entry('data-rm-pause-stage data-testid="roadmap-stage-pause"', 'Pause after current step', 'Its runs stop once their agents finish the current turn and no step starts after them; Resume continues them where they stopped', acts.pauseStage.reason),
+      // #395: its items at a gate are parked (their gates stay yours), its planned ones skipped; the next stage starts
+      done ? '' : entry('data-rm-park-stage data-testid="roadmap-stage-move-on"', 'Move on from this stage', 'Park its items waiting at a gate (the gates keep waiting for you) and skip its planned items: the next stage starts', acts.parkStage.reason, 'roadmap-move-on-refused'),
       stage.release?.name ? '' : entry('data-rm-release="add"', '<span aria-hidden="true">✂ </span>Release here', 'Draw a cut line after this stage: when the roadmap reaches it, the whole unit and E2E suites run and you Ship or Hold; the stages below wait for it'),
       entry('data-rm-stage="up"', '<span aria-hidden="true">↑ </span>Run earlier', 'Run this stage earlier', s === 0 ? 'It is the first stage' : ''),
       entry('data-rm-stage="down"', '<span aria-hidden="true">↓ </span>Run later', 'Run this stage later', s === count - 1 ? 'It is the last stage' : ''),
@@ -889,7 +904,8 @@
   const releaseHtml = (x) => releaseBlockHtml(x) + releaseLineHtml(x);
 
   // ---- what the Roadmap shows (#217, #268): Planned | All, the date range, the epic filter, in pages ------
-  const finished = (x) => RoadmapModel.isFinished(x);
+  // a parked item (#395) still needs the owner at its gate: it stays with the open work
+  const finished = (x) => RoadmapModel.isFinished(x) && x.status !== 'parked';
   const DAY_MS = 24 * 60 * 60 * 1000;
   // the date ranges: [id, the option, in the header's count, its length in ms (null: no limit)]
   const SINCE = [
@@ -1105,11 +1121,14 @@
     // a pause that is not an item's failure (the budget cap, a stage run on its own that ended, a
     // release on hold) keeps its line here; a failure is the page's error alert (#270, alerts())
     const note = r.error && !pausedByFailure ? `<span class="${r.state === 'paused' ? 'warn-text' : 'error'} small">${esc(r.error)}${r.state === 'paused' && r.budget ? ` <button class="btn sm primary" type="button" data-rm="budget-raise" title="${esc(`The ${r.budget.period === 'night' ? 'night' : 'daily'} budget becomes what is spent plus the next stage, for ${r.budget.period === 'night' ? 'tonight' : 'today'} only; the roadmap goes on`)}">Raise for ${r.budget.period === 'night' ? 'tonight' : 'today'}</button> <button class="btn sm ghost" type="button" data-rm="budget-resume" title="${esc(`This roadmap ignores the budget until ${r.budget.period === 'night' ? 'the night' : 'the day'} ends; the budget stays as it is`)}">Resume anyway</button>` : ''}</span>` : '';
+    // #395: the items the roadmap moved past while their runs wait at a gate (each still the owner's)
+    const parkedCount = r.stages.flatMap((s) => s.items).filter((x) => x.status === 'parked').length;
+    const parked = parkedCount ? ` <span class="badge warn" data-testid="roadmap-parked-count" title="The roadmap moved on past these items: their runs still wait at their gates for you (each card's &quot;Parked at …&quot; opens it)">${parkedCount} parked at a gate</span>` : '';
     const menuItems = MENU.filter((m) => m.show(r));
     const menu = `<span class="bl-menu-wrap rm-menu-wrap"><button class="btn sm ghost rm-menu-btn" type="button" data-rm-menu data-testid="roadmap-menu-button" aria-label="Roadmap actions" title="More actions" aria-haspopup="menu" aria-expanded="${menuOpen}">⋮</button>${menuOpen ? `<div class="bl-menu rm-menu" role="menu" data-testid="roadmap-menu" aria-label="Roadmap actions">${menuItems.map((m) => `<button type="button" role="menuitem" data-rm="${m.id}" title="${esc(m.title)}">${esc(m.label)}</button>`).join('')}</div>` : ''}</span>`;
     const bar = `
       <div class="bl-queue rm-bar" data-testid="roadmap-bar">
-        <span class="rm-bar-title">${dot}<b>Roadmap</b> ${scopeBadge} ${r.stages.length} stage${r.stages.length === 1 ? '' : 's'}${offStages.length ? `, ${offStages.length} disabled` : ''}</span>
+        <span class="rm-bar-title">${dot}<b>Roadmap</b> ${scopeBadge} ${r.stages.length} stage${r.stages.length === 1 ? '' : 's'}${offStages.length ? `, ${offStages.length} disabled` : ''}${parked}</span>
         ${note}${leftOut}
         <span class="spacer"></span>
         ${acts.start.allowed || acts.resume.allowed ? `<label class="check small dev-only"><input type="checkbox" id="rm-simulate"${state.simulationOnly || r.simulated ? ' checked' : ''} /><span>Simulated</span></label>
@@ -1245,7 +1264,10 @@
     if (!failedPause(r) || !r.error) return [];
     const item = r.stages.flatMap((s) => s.items).find((x) => x.id === r.pausedBy);
     const act = (action) => async () => {
-      try { await itemAction(ctx, r.pausedBy, action); } catch (err) { failed(ctx, 'edit', err); }
+      try {
+        if (action === 'park') await moveOn(ctx, item);
+        else await itemAction(ctx, r.pausedBy, action);
+      } catch (err) { failed(ctx, 'edit', err); }
       ctx.render();
     };
     return [{
@@ -1255,6 +1277,10 @@
       text: r.error,
       dismissible: false,
       actions: [
+        // #395: its run waits at a gate (interrupted there by a closed app): the roadmap may go on without it
+        ...(item && may(r, null, item).park.allowed ? [
+          { label: 'Move on', title: 'The next stage starts without this change; its run keeps waiting at its gate for you', onClick: act('park') },
+        ] : []),
         ...(item && retryable(item, r) ? [
           { label: 'Retry', primary: true, title: 'Start the item that paused the roadmap again', onClick: act('retry') },
           { label: 'Skip', title: 'Count it as finished: the roadmap goes on', onClick: act('skip') },
@@ -1521,6 +1547,28 @@
       out = await api.roadmapItem(ctx.projectId, itemId, action, true);
     }
     ctx.setData(out);
+    return out;
+  }
+
+  // #395 Move on (the card's button, the paused roadmap's alert): asks first, then parks the item; its
+  // gate keeps waiting for the owner, and Undo in the toast puts it back in its stage
+  async function moveOn(ctx, x) {
+    if (!x) return;
+    const gate = x.run?.gate ? ` ("${brief(x.run.gate, 60)}")` : '';
+    if (!await confirmDialog(`Move on past ${numbers(x)}`, `The next stage starts without the parked change: its run keeps waiting at its gate${gate} for you, and nothing answers it. When you answer it later, the item ends done or failed.`, 'Move on')) return;
+    const out = await itemAction(ctx, x.id, 'park');
+    undoToast(ctx, out, `Moved on past ${numbers(x)}`, 'Its run still waits at its gate for you.');
+  }
+
+  // #395 the stage menu's "Move on from this stage": asks first; refused (with the reason) while a turn runs
+  async function moveOnStage(ctx, stages, target) {
+    const { s } = locate(stages, target);
+    const stage = stages[s];
+    if (!stage) return;
+    if (!await confirmDialog(`Move on from ${stageName(stage, s)}`, 'Its items waiting at a gate are parked (their gates keep waiting for you) and its planned items are skipped: the next stage starts without the parked changes.', 'Move on')) return;
+    const out = await api.parkRoadmapStage(ctx.projectId, stage.id);
+    ctx.setData(out);
+    undoToast(ctx, out, `Moved on from ${stageName(stage, s)}`, 'Its runs at a gate still wait for you.');
   }
 
   // ---- the ⋮ menus (#269 the bar's, #282 a stage's) and the earlier versions (#281) ----------------------
@@ -1734,6 +1782,8 @@
         await runStage(ctx, r, locate(stages, e.target).s);
       } else if (e.target.closest('[data-rm-pause-stage]')) {
         await pauseStage(ctx, stages, e.target);
+      } else if (e.target.closest('[data-rm-park-stage]')) {
+        await moveOnStage(ctx, stages, e.target);
       } else if (act === 'budget-raise' || act === 'budget-resume') {
         // #206: the budget cap paused it; real runs start again (they cost money)
         if (act === 'budget-resume' && !await confirmDialog('Resume anyway', 'The roadmap goes on past the budget until the day (or the night) ends. Its items run as real runs and cost money.', 'Resume')) return true;
@@ -1766,7 +1816,9 @@
         if (act === 'replace') undoToast(ctx, out, 'Replaced the roadmap', `${plural(r.stages.length, 'stage')} gave way to the proposal.`);
       } else if (e.target.closest('[data-rm-item]')) {
         const box = e.target.closest('[data-item]');
-        await itemAction(ctx, box.dataset.item, e.target.closest('[data-rm-item]').dataset.rmItem);
+        const action = e.target.closest('[data-rm-item]').dataset.rmItem;
+        if (action === 'park') await moveOn(ctx, r.stages.flatMap((s) => s.items).find((x) => x.id === box.dataset.item));
+        else await itemAction(ctx, box.dataset.item, action);
       } else if (e.target.closest('[data-rm-mode]')) {
         // the mode toggle: saved at once, on planned and failed items only
         const { s, n } = locate(stages, e.target);

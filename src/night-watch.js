@@ -15,6 +15,8 @@
 //     oracle.blocked    { actionId, kind, target, reason: permission | content | loop }   an action it could not take alone
 //     oracle.undone     { action_id }                     the owner undid an action
 //     oracle.limits     { multiplier, values, by, at }    the owner set tonight's limits (#337, src/night-limits.js)
+//     oracle.parked     { target, runId, projectId, gate, waitedMs }   #395: it moved the roadmap on past an item
+//                       waiting at a human gate (the skip permission, gateDecision); the gate still waits for the owner
 // Every metric (nightMetrics) is computed from that log and the runs' events.jsonl; nothing is
 // estimated, except "hours saved", which is labelled as an estimate.
 // Self-healing (#278, settings.oracle.selfHealing): the same watch with no end time. Its detectors
@@ -30,7 +32,7 @@ const { regressionLine, stepRegressions } = require('./step-regressions');
 // What the Oracle may do without asking, each with what it does and its undo. Defaults: retry and refresh.
 const PERMISSIONS = [
   { id: 'retry', label: 'Retry a failed roadmap item', does: 'Plans the failed item again: a new run starts from its workflow.', undo: 'Undo puts the roadmap file back; the new run is kept.', default: true },
-  { id: 'skip', label: 'Skip an item', does: 'The item counts as finished and the roadmap goes on to the next one.', undo: 'Undo puts the roadmap file back: the item is planned again.', default: false },
+  { id: 'skip', label: 'Skip an item', does: 'The item counts as finished and the roadmap goes on to the next one. Also Move on past an item whose run waited at a human gate for a while (#395): the gate stays yours.', undo: 'Undo puts the roadmap file back: the item is planned again.', default: false },
   { id: 'regroup', label: 'Regroup or reorder planned items', does: 'Moves planned items between stages or changes their order (validated before it is written).', undo: 'Undo puts the roadmap file back.', default: false },
   { id: 'fresh-start', label: 'Start from scratch over kept work', does: 'Retries an item whose earlier run kept unmerged work (#170), in a new run.', undo: 'Undo puts the roadmap file back; the kept work stays in its branch.', default: false },
   { id: 'refresh', label: 'Refresh issue text and planned-item copies', does: 'Replaces an issue\'s stale description, so planned items read the current text (#161, #168).', undo: 'Undo writes the previous description back.', default: true },
@@ -74,7 +76,9 @@ const INCIDENT_KINDS = {
   'roadmap-paused': 'Roadmap paused or in error',
   stalled: 'Stalled run',
 };
-const LOG_TYPES = ['oracle.action', 'oracle.blocked', 'oracle.detected', 'oracle.escalated', 'oracle.limits', 'oracle.undone', 'oracle.watch'];
+const LOG_TYPES = ['oracle.action', 'oracle.blocked', 'oracle.detected', 'oracle.escalated', 'oracle.limits', 'oracle.parked', 'oracle.undone', 'oracle.watch'];
+// #395: a roadmap run waiting at a human gate this long (settings.oracle.parkAfterMinutes) is moved past
+const PARK_AFTER_MINUTES = 15;
 const STALL_LOGS = new Set(['agent_idle', 'loop_blocked', 'stall']);
 // a low-memory hold (memory.hold) longer than this is an incident
 const MEMORY_HOLD_MS = 5 * 60e3;
@@ -103,7 +107,8 @@ const ms = (t) => (t ? Date.parse(t) : NaN);
 function permissionOf(kind, params = {}) {
   const p = params && typeof params === 'object' ? params : {};
   switch (kind) {
-    case 'roadmap.item': return p.action === 'skip' ? 'skip' : p.fresh ? 'fresh-start' : 'retry';
+    // #395: Move on (park) needs the skip permission: the roadmap goes on, the gate stays the owner's
+    case 'roadmap.item': return ['park', 'skip'].includes(p.action) ? 'skip' : p.fresh ? 'fresh-start' : 'retry';
     case 'roadmap.skip': return 'skip';
     case 'roadmap.add': return 'append';
     case 'roadmap.move': return 'regroup';
@@ -117,6 +122,21 @@ function permissionOf(kind, params = {}) {
     case 'issue.file': return 'file-issue';
     default: return null;
   }
+}
+
+/**
+ * #395: what the watch does about a roadmap run waiting at a human gate since `waitingSince`:
+ * 'park' (Move on: the skip permission allowed, the wait reached settings.oracle.parkAfterMinutes,
+ * default 15, and no other run of the roadmap still going), 'escalate' (no skip permission: left to the
+ * owner, as before) or 'wait'. It never answers the gate.
+ */
+function gateDecision({ waitingSince, now = Date.now(), allowed = [], othersRunning = false, settings = {} }) {
+  if (!allowed.includes('skip')) return 'escalate';
+  const minutes = Number(settings?.oracle?.parkAfterMinutes);
+  const after = (Number.isFinite(minutes) && minutes >= 0 ? minutes : PARK_AFTER_MINUTES) * 60e3;
+  const since = ms(waitingSince);
+  if (othersRunning || !Number.isFinite(since) || Number(now) - since < after) return 'wait';
+  return 'park';
 }
 
 /** The owner's checklist: { allowed, updatedAt, defaults } (the defaults until it is saved). */
@@ -696,6 +716,7 @@ module.exports = {
   DEFAULT_PERMISSIONS,
   detectSelfHealing,
   expandedRuns,
+  gateDecision,
   INCIDENT_KINDS,
   incidentOf,
   LOG_TYPES,
@@ -705,6 +726,7 @@ module.exports = {
   NEVER_ALLOWED,
   nightMetrics,
   nightsOf,
+  PARK_AFTER_MINUTES,
   permissionOf,
   PERMISSIONS,
   PROGRESS_EVENTS,

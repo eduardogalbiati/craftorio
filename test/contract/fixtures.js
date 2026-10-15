@@ -198,6 +198,8 @@ module.exports = {
   'roadmap:cancel-pause': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   'roadmap:get': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   'roadmap:live': { setup: project, arg: ({ projectId }) => ({ projectId, on: false }), invalid: BAD_PROJECT },
+  // #395: a stage the roadmap does not have is refused
+  'roadmap:park-stage': { setup: project, arg: ({ projectId }) => ({ projectId, stageId: 'stage-none' }), status: 400, invalid: BAD_PROJECT },
   'roadmap:pause': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   // #368: a stage the roadmap does not have is refused
   'roadmap:pause-stage': { setup: project, arg: ({ projectId }) => ({ projectId, stageId: 'stage-none' }), status: 400, invalid: BAD_PROJECT },

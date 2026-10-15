@@ -16,6 +16,14 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   Oracle and the Night watch never change the input of a run in progress. A timed-out round is
   checked like a failure (the files still running rerun alone, on the branch and on the base).
   Why: a flaky or hanging test the change never touched held the roadmap for hours at the gate (#386).
+- **2026-10-15** (#395): the roadmap can move on past an item or a stage without answering its human
+  gate ("Move on": the item is `parked`, which counts as finished for its stage, and the next stage
+  starts without its change). The gate stays the owner's: nothing answers, stops or closes it. A gate
+  answered later gives the item the run's outcome (done when it merged, else failed), and a parked
+  item never pauses the roadmap after the fact. The Night watch moves on by itself only with the
+  `skip` permission, after `settings.oracle.parkAfterMinutes` (default 15) at the gate with nothing
+  else of the roadmap running; it still never answers a gate. Why: "my goal today is to work without
+  stopping" (one gate held stages 96 to 104 for about 4 hours on the night of 2026-10-14).
 - **2026-10-14** (#387): the developer builds with `design-system` beside `ui-conventions`, whose
   design section is adapted from Anthropic's `frontend-design` (the app's tokens always win), and
   the UI reviewer's rubric has the same items: a pass/fail line of evidence per item and per

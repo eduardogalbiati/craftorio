@@ -122,6 +122,16 @@ Human gates (feedback, choices, summaries), the supervisor, refused tool calls, 
   (`continueAfterCut`), an invalid output ends it before the schema retry; the visit is not counted and
   Resume starts that agent's fresh session from its note. The guards' turns (test or protected files
   put back, test results served to the agent) still run: they finish the turn in progress.
+- **Parked roadmap items** (#395, Move on): a roadmap item whose run waits at a human gate (live, or
+  interrupted there by a closed app) can be parked: `roadmap:item` `action: 'park'`, a stage's
+  `roadmap:park-stage` (its gate items parked, its planned items skipped; refused while one of its
+  items runs a turn or a command), or the Night watch (`skip` permission, `gateDecision`). The run is
+  untouched: no approval is resolved or rejected, it keeps waiting at the same gate with the same
+  choices. The item's `status: 'parked'` (stored, with `parked: { at, gate }`) counts as finished,
+  so the next stage starts without its change. When the owner answers the gate later the item takes
+  the run's outcome (`src/roadmap.js` `itemStatus`): done when it merged, else failed, still marked
+  `parked`, so it counts as finished and never sets `pausedBy`. Retry clears the mark; Undo of the
+  move puts the item back in its stage (`src/roadmap-undo.js`).
 - `ship: { tag, build? }` on a transition (#260, release.yaml's `ship` and `ship_failed` gates; both
   templates): after the transition's `action` and `merge: local`, `shipRelease` (src/releases.js)
   pushes the local base to origin (never forced; a rejected push throws) and tags that commit, then

@@ -341,6 +341,8 @@ function renderOracleSettings() {
   const o = state.settings.oracle || {};
   $('#set-oracle-budget').value = o.dailyBudgetUsd ?? 20;
   $('#set-oracle-compact').value = o.compactAtTokens || 150000;
+  const park = $('#set-oracle-park');
+  if (park) park.value = o.parkAfterMinutes ?? 15;
   const healing = $('#set-oracle-self-healing');
   if (healing) healing.checked = o.selfHealing === true;
 }
@@ -348,12 +350,15 @@ function renderOracleSettings() {
 async function saveOracleSettings() {
   const budget = Number($('#set-oracle-budget').value);
   const compact = Math.floor(Number($('#set-oracle-compact').value));
+  const park = Math.floor(Number($('#set-oracle-park')?.value));
   const prev = state.settings.oracle || {};
   const healing = $('#set-oracle-self-healing');
   const oracle = {
     ...prev,
     dailyBudgetUsd: $('#set-oracle-budget').value !== '' && Number.isFinite(budget) && budget >= 0 ? Math.min(budget, 10000) : (prev.dailyBudgetUsd ?? 20),
     compactAtTokens: Number.isFinite(compact) && compact >= 10000 ? Math.min(compact, 1000000) : (prev.compactAtTokens || 150000),
+    // #395: the Night watch's Move on past a gate (an empty or invalid field keeps what was saved)
+    ...(Number.isFinite(park) && park >= 1 ? { parkAfterMinutes: Math.min(park, 1440) } : {}),
     ...(healing ? { selfHealing: !!healing.checked } : {}),
   };
   state.settings = await api.setSettings({ oracle });
@@ -855,6 +860,10 @@ registerView({
                   <div class="s-ctrl"><input type="number" id="set-oracle-compact" min="10000" max="1000000" step="10000" class="s-num" aria-label="Oracle compaction threshold in tokens" /></div>
                 </div>
                 <div class="s-row">
+                  <div class="s-label"><b>Move on past a gate after (minutes)</b><span>With the Night watch's "Skip an item" permission, a roadmap run waiting this long at a human gate, with nothing else of its roadmap running, is moved past: the next stage starts and the gate keeps waiting for you.</span></div>
+                  <div class="s-ctrl"><input type="number" id="set-oracle-park" min="1" max="1440" step="1" class="s-num" aria-label="Minutes at a gate before the Night watch moves on" data-testid="settings-oracle-park-after" /></div>
+                </div>
+                <div class="s-row">
                   <div class="s-label"><b>Wake on run events</b><span>Which runs' events wake the Oracle: every run (except the runs you mute from its chat), only the runs and roadmaps it watches, or none. Each wake-up is one short model call, batched over 30 seconds.</span></div>
                   <div class="s-ctrl"><select id="set-oracle-wake" aria-label="Which runs wake the Oracle"><option value="all">Every run</option><option value="watched">Watched runs only</option><option value="off">Off</option></select></div>
                 </div>
@@ -932,7 +941,7 @@ registerView({
     $('#set-mp-auto').onclick = machineProfileToAuto;
     $('#set-mp-apply').onclick = applyMachineSuggestion;
     for (const sel of ['#set-mg-enabled', '#set-mg-limit', '#set-mg-floor']) $(sel).onchange = saveMemoryGuard;
-    for (const sel of ['#set-oracle-budget', '#set-oracle-compact', '#set-oracle-self-healing']) $(sel).onchange = saveOracleSettings;
+    for (const sel of ['#set-oracle-budget', '#set-oracle-compact', '#set-oracle-park', '#set-oracle-self-healing']) $(sel).onchange = saveOracleSettings;
     $('#set-oracle-self-healing-perms').onclick = () => showView('nightwatch');
     for (const sel of ['#set-live-cap', '#set-live-stages', '#set-live-budget', '#set-live-refresh']) $(sel).onchange = saveLiveSettings;
     for (const sel of ['#set-budget-day', '#set-budget-night']) $(sel).onchange = saveBudgetSettings;

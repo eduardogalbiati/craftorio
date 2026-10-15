@@ -56,7 +56,9 @@ function undoEdit(currentStages, edit) {
     if (!cur) { if (after && then.has(old.id)) return null; changed.add(old.id); return clone(old); }
     if (untouchable(cur)) return cur;
     if (after && same(content(old), content(then.get(old.id) || {}))) return cur;
-    const out = { ...clone(content(old)), status: cur.status, runId: cur.runId, runs: cur.runs, error: cur.error };
+    // #395: a Move on taken back: the item waits at its gate again as the stage's (its run untouched)
+    const unparked = cur.status === 'parked' && old.status !== 'parked';
+    const out = { ...clone(content(old)), status: unparked ? old.status : cur.status, runId: cur.runId, runs: cur.runs, error: cur.error, ...(cur.parked && !unparked ? { parked: cur.parked } : {}) };
     if (!same(out, cur)) changed.add(old.id);
     return out;
   }

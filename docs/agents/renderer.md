@@ -530,6 +530,15 @@ In this app:
   More states for screenshots: `--roadmap states` (a fix round, a disabled stage, a simulated item).
   An item whose run ended interrupted, failed or cancelled has `roadmap-item-resume` ("Resume run",
   `[data-rm-resume]` → `openResumeDialog`) in `.rm-fail-actions` (#288).
+  Move on (#395): an item whose run waits at a human gate (`RoadmapModel.atGate`) has "Move on"
+  (`roadmap-item-move-on`, `data-rm-item="park"`, asks first in the confirm modal, Undo in its toast)
+  in `.rm-fail-actions`, and so does the paused roadmap's alert when its item's run was interrupted
+  at a gate. A parked card (`data-status="parked"`) has `roadmap-item-parked`, "Parked at <gate>"
+  (`parkedHtml`, a `[data-run]` button that opens the run at its gate; "resume its run first" when it
+  was interrupted); the bar counts `roadmap-parked-count` ("N parked at a gate"). Parked items stay in
+  Planned. The stage menu's "Move on from this stage" (`roadmap-stage-move-on`, `[data-rm-park-stage]`)
+  is off while an item of the stage runs a turn: its reason line is `roadmap-move-on-refused`.
+  Screenshot state: `--roadmap parked`.
 - **Releases on the Roadmap** (#291, `releaseView` / `releaseBlockHtml` / `releaseLineHtml` in
   `backlog-roadmap.js`, `.rm-release*` in `backlog.css`): `data.releases` comes with the Backlog read
   (`roadmapReleases` in `src/service/areas/releases.js`: the history plus the release runs not

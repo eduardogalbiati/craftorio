@@ -3,6 +3,8 @@
 // answers, skips or bypasses a human gate (approval:*, gate:*, phonegates:*, runs:resume with
 // confirmGate) and nothing that writes settings (it could turn gates or this channel off) belongs
 // here: test/control-channel-336.test.js fails when one does. One channel per line, sorted.
+// roadmap:item's `park` (#395, Move on) is allowed: the roadmap moves on and the gate keeps waiting,
+// unanswered, for the owner.
 
 const CHANNELS = new Set([
   'backlog:get',

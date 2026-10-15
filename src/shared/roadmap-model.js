@@ -11,19 +11,26 @@
 //   pauseStage                   the stage's "Pause after current step" (#368): its runs and the roadmap
 //   edit, move                   the item's editor, drag and ↑/↓/Remove (only planned or failed items)
 //   retry, skip                  the item that failed or could not start (#196), never a paused one
+//   park                         the item's "Move on" (#395): its run waits at a human gate, the roadmap goes on
+//   parkStage                    the stage's "Move on from this stage" (#395): parks its items at a gate, skips the planned
 // Any load order: read only when a screen draws.
-/** An item's status, ITEM_STATES as a type (#346): the file stores planned, done or skipped.
- * @typedef {'done' | 'failed' | 'paused' | 'planned' | 'running' | 'skipped'} RoadmapItemStatus */
+/** An item's status, ITEM_STATES as a type (#346): the file stores planned, done, parked or skipped.
+ * @typedef {'done' | 'failed' | 'parked' | 'paused' | 'planned' | 'running' | 'skipped'} RoadmapItemStatus */
 (function (root) {
   // planned: edited, never started by itself · running · paused (a failure, the owner, a proposal) · done
   const STATES = ['done', 'paused', 'planned', 'running'];
   // paused (#368): its run ended paused after its current turn; the roadmap's Resume continues it
-  const ITEM_STATES = ['done', 'failed', 'paused', 'planned', 'running', 'skipped'];
-  // an item done (merged) or skipped (the owner, or every issue closed) counts as finished
-  const FINISHED = new Set(['done', 'skipped']);
-  const ACTIONS = ['disable', 'edit', 'enable', 'move', 'pause', 'pauseStage', 'resume', 'retry', 'skip', 'start', 'stop'];
+  // parked (#395): the owner (or the Night watch) moved on while its run waits at a human gate
+  const ITEM_STATES = ['done', 'failed', 'parked', 'paused', 'planned', 'running', 'skipped'];
+  // an item done (merged), skipped (the owner, or every issue closed) or parked counts as finished
+  const FINISHED = new Set(['done', 'parked', 'skipped']);
+  const ACTIONS = ['disable', 'edit', 'enable', 'move', 'park', 'parkStage', 'pause', 'pauseStage', 'resume', 'retry', 'skip', 'start', 'stop'];
 
-  const isFinished = (item) => !!item && FINISHED.has(item.status);
+  // #395: a parked item (`parked`: { at, gate }) whose gate was answered later and whose run then
+  // failed is finished too: the roadmap moved past it, so it never holds its stage or pauses the roadmap
+  const isFinished = (item) => !!item && (FINISHED.has(item.status) || (item.status === 'failed' && !!item.parked));
+  /** #395: an item whose run waits at a human gate (live: running and waiting; interrupted by a closed app: its run waits). */
+  const atGate = (item) => !!item && ((item.status === 'running' && !!item.waiting) || (item.status === 'failed' && !!item.runId && !!item.run?.atGate));
   const stagesOf = (roadmap) => (roadmap && Array.isArray(roadmap.stages) ? roadmap.stages : []);
   const itemsOf = (stage) => (stage && Array.isArray(stage.items) ? stage.items : []);
   /** Whether a stage still has work: an item not done or skipped (disabled or not). */
@@ -106,8 +113,17 @@
   }
 
   function stageActions(r, stage) {
-    if (!stage) return { disable: no('No stage given.'), enable: no('No stage given.'), pauseStage: no('No stage given.') };
+    if (!stage) return { disable: no('No stage given.'), enable: no('No stage given.'), parkStage: no('No stage given.'), pauseStage: no('No stage given.') };
     const busy = itemsOf(stage).some((x) => x.status === 'running');
+    // #395: its items at a gate are parked and its planned ones not started skipped; never while a turn runs
+    const parkStage = () => {
+      if (stage.disabled) return no('This stage is disabled: enable it first');
+      if (itemsOf(stage).some((x) => x.status === 'running' && !x.waiting)) {
+        return no('An agent turn or a command of this stage is running: use "Pause after current step", or move on once it waits at a gate.');
+      }
+      const work = itemsOf(stage).some((x) => atGate(x) || (x.status === 'planned' && !x.runId));
+      return work ? yes() : no('Nothing of this stage waits at a gate or is still to start.');
+    };
     // #368: its runs pause after their current turn and the roadmap pauses (no new item starts)
     const pauseStage = () => {
       if (r?.state === 'paused' && r.pausedStage === stage.id && !busy) return no('This stage is already paused.');
@@ -117,19 +133,21 @@
     return {
       disable: stage.disabled ? no('This stage is already disabled.') : busy ? no('An item of this stage is running: wait for it, or stop its run') : yes(),
       enable: stage.disabled ? yes() : no('This stage is already enabled.'),
+      parkStage: parkStage(),
       pauseStage: pauseStage(),
     };
   }
 
   const LOCKED = {
     done: 'This item is done: its run merged.',
+    parked: 'The roadmap moved on: its run still waits at its gate for you.',
     paused: 'Its run is paused: Resume continues it where it stopped.',
     running: 'Its run is in progress.',
     skipped: 'This item was skipped.',
   };
 
   function itemActions(r, item) {
-    if (!item) return { edit: no('No item given.'), move: no('No item given.'), retry: no('No item given.'), skip: no('No item given.') };
+    if (!item) return { edit: no('No item given.'), move: no('No item given.'), park: no('No item given.'), retry: no('No item given.'), skip: no('No item given.') };
     // only planned or failed items change: a running, done or skipped item keeps what its run used
     const editable = item.status === 'planned' || item.status === 'failed';
     const locked = editable ? yes() : no(LOCKED[item.status] || 'This item cannot change now.');
@@ -138,7 +156,11 @@
     // a paused run (#368) is not a failure: only the roadmap's Resume continues it
     const failed = item.status === 'failed' || (!['paused', 'running'].includes(item.status) && (r?.pausedBy === item.id || refusedStart(item)));
     const fix = failed ? yes() : no(item.status === 'running' ? 'Its run is in progress: stop the run first.' : LOCKED[item.status] || 'Nothing failed: the item has not failed.');
-    return { edit: locked, move: locked, retry: fix, skip: fix };
+    // #395: Move on only past a human gate; the gate stays the owner's (nothing answers it)
+    const park = atGate(item) ? yes() : no(item.status === 'parked' ? LOCKED.parked
+      : item.status === 'running' ? 'Its run is in an agent turn or a command: Move on works once it waits at a human gate.'
+        : 'Its run is not waiting at a human gate.');
+    return { edit: locked, move: locked, park, retry: fix, skip: fix };
   }
 
   /**
@@ -197,6 +219,7 @@
     ITEM_STATES,
     STATES,
     allowedActions,
+    atGate,
     currentStage,
     earlierRuns,
     hasUnfinished,

@@ -42,6 +42,10 @@
 // action applies) are src/shared/roadmap-model.js, pure and shared with the screens; this module is
 // the only writer of a roadmap's `state`, `pausedBy`, `scope` and item statuses (other modules ask
 // it: `pauseRoadmap`, `finishRoadmap`).
+// Move on (#395): an item whose run waits at a human gate is parked (`itemAction` park, or the stage's
+// `parkStage`): it counts as finished, the next stage starts and the run keeps waiting at its gate,
+// the owner's to answer. Answered later, the item takes the run's outcome (done, or failed without
+// pausing the roadmap). A later stage's runs start without the parked change.
 // Screen: src/renderer/views/backlog/backlog-roadmap.js; channels: src/service/channels/roadmap.js.
 
 const fs = require('fs');
@@ -51,6 +55,8 @@ const { itemIssues, withSyncedText } = require('./issues');
 const { normalizeThen } = require('./shared/chain-model');
 const { isArchived } = require('./shared/backlog-archive');
 const {
+  allowedActions,
+  atGate,
   currentStage,
   isFinished,
   ITEM_STATES,
@@ -148,7 +154,18 @@ const runFailure = (runId, run) => `Run ${runId} ${run.status === 'success' ? 'f
 // An item's status from its run: running (a live run, in this process or another one, `waiting` at
 // a gate), paused (#368: its run paused after its current turn, never a failure), done (it merged),
 // failed (it ended otherwise, or it could not start), else as stored.
+// #395: a parked item stays parked while its run waits (or was interrupted, or paused); once its gate
+// is answered it takes the run's outcome: done when it merged, else failed, still marked `parked` so
+// it never holds its stage or pauses the roadmap (src/shared/roadmap-model.js isFinished).
 function itemStatus(item, runOf) {
+  if (item.status === 'parked') {
+    const parked = item.parked || { at: null, gate: null };
+    const run = item.runId ? runOf(item.runId) : null;
+    if (!run) return { status: 'failed', error: `Run ${item.runId} no longer exists.`, parked };
+    if (['interrupted', 'paused', 'pending', 'running'].includes(run.status)) return { status: 'parked', error: null, parked };
+    if (run.status === 'success' && run.merged) return { status: 'done', error: null, parked };
+    return { status: 'failed', error: runFailure(item.runId, run), parked };
+  }
   if (isFinished(item)) return { status: item.status, error: item.error || null };
   if (!item.runId) return item.error ? { status: 'failed', error: item.error } : { status: 'planned', error: null };
   const run = runOf(item.runId);
@@ -168,8 +185,8 @@ function withStatus(roadmap, runOf) {
 }
 
 // Whether an item's run is alive: `alive(runId)` from the service, else (no service: a stored file
-// written before #112) its stored status.
-const runIsAlive = (item, alive) => (alive ? !!item.runId && !isFinished(item) && !!alive(item.runId) : item.status === 'running');
+// written before #112) its stored status. A parked item's run (#395) still waits at its gate.
+const runIsAlive = (item, alive) => (alive ? !!item.runId && (!isFinished(item) || item.status === 'parked') && !!alive(item.runId) : ['parked', 'running'].includes(item.status));
 
 function writeRoadmap(dir, projectId, roadmap) {
   const file = roadmapFile(dir, projectId);
@@ -271,6 +288,8 @@ function cleanItem(raw, known, previous) {
     ...(agentOverrides ? { agentOverrides } : {}),
     ...issues[0], issues,
     status: ITEM_STATES.includes(state.status) ? state.status : 'planned', runId: state.runId || null, runs: state.runs || [], error: state.error || null,
+    // #395: where the roadmap moved on past the item's gate
+    ...(state.parked ? { parked: state.parked } : {}),
   };
 }
 
@@ -490,11 +509,15 @@ function setLive(dir, projectId, on, { by = 'owner', now = new Date() } = {}) {
 // On the item that paused the roadmap, the roadmap goes on (the owner decided what to do with it).
 // `alive(runId)`: whether a process (this one or another app) still runs it (#112): a retry then
 // would start the same work twice, so it is refused (and a skip: stop the run first).
-function itemAction(dir, projectId, itemId, action, { alive = null } = {}) {
-  if (!['retry', 'skip'].includes(action)) throw new Error(`Unknown roadmap item action: ${action}`);
+// park (#395, "Move on"): the item's run waits at a human gate (`runOf(runId).waiting`, as advance's
+// env, with the gate's name in `gate`): the item is parked (finished for its stage) and the run is
+// left as it is, still waiting at the same gate for the owner.
+function itemAction(dir, projectId, itemId, action, { alive = null, runOf = null, now = new Date() } = {}) {
+  if (!['park', 'retry', 'skip'].includes(action)) throw new Error(`Unknown roadmap item action: ${action}`);
   return updateRoadmap(dir, projectId, (r) => {
     const item = findItem(r, itemId);
     if (!item) throw new Error('This roadmap item no longer exists.');
+    if (action === 'park') return parkItems(r, new Set([itemId]), gateOf(item, runOf), now);
     if (runIsAlive(item, alive)) {
       throw new Error(action === 'retry' && item.runId ? `Run ${item.runId} is still running.` : 'Its run is in progress: stop the run first.');
     }
@@ -502,8 +525,56 @@ function itemAction(dir, projectId, itemId, action, { alive = null } = {}) {
     const unblocked = r.pausedBy === itemId;
     return {
       ...r, ...(unblocked ? { pausedBy: null, error: null, state: r.state === 'paused' ? 'running' : r.state } : {}),
-      stages: r.stages.map((s) => ({ ...s, items: s.items.map((x) => (x.id === itemId ? { ...x, status, runId: action === 'retry' ? null : x.runId, error: action === 'skip' ? 'Skipped by the owner.' : null } : x)) })),
+      // a retried item runs again from its stage: it is no longer parked (#395)
+      stages: r.stages.map((s) => ({ ...s, items: s.items.map((x) => (x.id === itemId ? { ...(action === 'retry' ? unparked(x) : x), status, runId: action === 'retry' ? null : x.runId, error: action === 'skip' ? 'Skipped by the owner.' : null } : x)) })),
     };
+  });
+}
+
+const unparked = ({ parked: _p, ...x }) => x;
+
+// #395: the gate an item's run waits at ({ gate }: its name, or null), or an error saying why it cannot move on
+function gateOf(item, runOf) {
+  if (item.status === 'parked') throw new Error('This item is already parked: its run waits at its gate for you.');
+  const run = !isFinished(item) && item.runId && runOf ? runOf(item.runId) : null;
+  if (!run?.waiting) throw new Error('Only an item whose run waits at a human gate can move on: this one is not at a gate.');
+  return { gate: run.gate || null };
+}
+
+// #395: the items `ids` parked (their gates named in `gates`: id → { gate }, or one { gate } for a
+// single item) and the items `skip` skipped; a roadmap paused by one of them goes on.
+function parkItems(r, ids, gates, now, skip = new Set()) {
+  const unblocked = ids.has(r.pausedBy) || skip.has(r.pausedBy);
+  const gateFor = (id) => (gates instanceof Map ? gates.get(id) : gates)?.gate || null;
+  return {
+    ...r, ...(unblocked ? { pausedBy: null, error: null, state: r.state === 'paused' ? 'running' : r.state } : {}),
+    stages: r.stages.map((s) => ({
+      ...s,
+      items: s.items.map((x) => (ids.has(x.id) ? { ...x, status: 'parked', error: null, parked: { at: now.toISOString(), gate: gateFor(x.id) } }
+        : skip.has(x.id) ? { ...x, status: 'skipped', error: 'Skipped: the owner moved on from the stage.' } : x)),
+    })),
+  };
+}
+
+/**
+ * #395: a stage's "Move on from this stage": its items whose run waits at a human gate are parked, its
+ * planned items not started are skipped, so the next stage starts. Refused (nothing written) while an
+ * item of the stage runs an agent turn or a command: the reason points to "Pause after current step".
+ * `runOf` as advance's env (`waiting` at a gate, `gate` its name). Nothing answers, stops or closes a gate.
+ */
+function parkStage(dir, projectId, stageId, { runOf, now = new Date() }) {
+  return updateRoadmap(dir, projectId, (r) => {
+    const run = (x) => (x.runId && !isFinished(x) ? runOf(x.runId) : null);
+    // the items as the screen sees them: an interrupted run still at its gate is `run.atGate`
+    const view = withStatus(r, runOf);
+    const seen = { ...view, stages: view.stages.map((s) => ({ ...s, items: s.items.map((x) => ({ ...x, run: { atGate: !!run(findItem(r, x.id))?.waiting } })) })) };
+    const stage = seen.stages.find((s) => s.id === stageId);
+    if (!stage) throw new Error('This stage is no longer in the roadmap.');
+    const may = allowedActions(seen, stage).parkStage;
+    if (!may.allowed) throw new Error(may.reason);
+    const gates = new Map(stage.items.filter(atGate).map((x) => [x.id, { gate: run(findItem(r, x.id))?.gate || null }]));
+    const skip = new Set(stage.items.filter((x) => x.status === 'planned' && !x.runId).map((x) => x.id));
+    return parkItems(r, new Set(gates.keys()), gates, now, skip);
   });
 }
 
@@ -521,7 +592,8 @@ function adoptResumed(dir, projectId, oldRunId, newRunId) {
   if (!item) return null;
   return updateRoadmap(dir, projectId, (cur) => ({
     ...cur, ...(cur.pausedBy === item.id ? { state: 'running', pausedBy: null, error: null } : {}),
-    stages: cur.stages.map((s) => ({ ...s, items: s.items.map((x) => (x.id === item.id ? { ...x, status: 'planned', runId: newRunId, runs: [...(x.runs || []), newRunId], error: null } : x)) })),
+    // a parked item (#395) stays parked: its resumed run waits at its gate again, the roadmap moved on
+    stages: cur.stages.map((s) => ({ ...s, items: s.items.map((x) => (x.id === item.id ? { ...x, status: x.status === 'parked' ? 'parked' : 'planned', runId: newRunId, runs: [...(x.runs || []), newRunId], error: null } : x)) })),
   }));
 }
 
@@ -630,7 +702,8 @@ function stageStep(r, at, { closed, canStart, now }) {
       Object.assign(item, { status: 'skipped', error: 'Every issue is closed.' });
     }
   }
-  const failed = stage.items.find((x) => x.status === 'failed');
+  // a parked item that failed later (#395) never pauses the roadmap: it counts as finished
+  const failed = stage.items.find((x) => x.status === 'failed' && !isFinished(x));
   if (failed) {
     return {
       roadmap: { ...r, state: 'paused', pausedBy: failed.id, error: `${stageName(r, at)}: ${refs(failed)} failed. Resume its run, retry or skip the item, or stop the roadmap. ${failed.error || ''}`.trim() },
@@ -763,6 +836,7 @@ module.exports = {
   markStarted,
   mergedPullRequest,
   normalizeItem,
+  parkStage,
   pauseAfterStage,
   pauseRoadmap,
   pauseStage,

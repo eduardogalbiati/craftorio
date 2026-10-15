@@ -209,8 +209,9 @@ const DEFAULT_SETTINGS = {
   // (tokens) past which its next turn starts a new session from a handoff note; what wakes it (#123,
   // src/oracle-wake.js): wakeScope all | watched | off, wakeOn the event kinds; selfHealing (#278):
   // its watch stays on day and night, with no end time (src/oracle-actions.js watchState); appUpdate
-  // (#279, needs selfHealing): apply merged fixes to this app after a roadmap stage ends (src/app-update.js)
-  oracle: { dailyBudgetUsd: 20, compactAtTokens: 150000, wakeScope: 'all', wakeOn: ['finished', 'gate', 'interrupted', 'invalid', 'limit', 'merge', 'stall'], selfHealing: false, appUpdate: false },
+  // (#279, needs selfHealing): apply merged fixes to this app after a roadmap stage ends (src/app-update.js);
+  // parkAfterMinutes (#395): the watch moves on past a roadmap run waiting this long at a human gate (skip permission)
+  oracle: { dailyBudgetUsd: 20, compactAtTokens: 150000, wakeScope: 'all', wakeOn: ['finished', 'gate', 'interrupted', 'invalid', 'limit', 'merge', 'stall'], selfHealing: false, appUpdate: false, parkAfterMinutes: 15 },
   // USD per 1M tokens, for CLIs that do not report cost: { model: { input, output, cache_read } }
   prices: {},
   // #262: per provider, the ordered fallback chain of an agent whose workflow declares none:

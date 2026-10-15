@@ -215,6 +215,23 @@ module.exports = (ctx) => {
       schema: { params: args({ projectId: PROJECT_ID, stageId: text(200) }, ['projectId', 'stageId']), result: BACKLOG },
       fn: ({ projectId, stageId }) => ctx.pauseStage({ projectId, stageId: requireText(stageId, 'stage id', 200) }),
     },
+    // #395: a stage's "Move on from this stage": its items waiting at a human gate are parked (their
+    // gates stay the owner's), its planned items not started skipped, and the next stage starts;
+    // refused while one of its items runs an agent turn or a command ("Pause after current step")
+    {
+      channel: 'roadmap:park-stage',
+      method: 'parkRoadmapStage',
+      params: ['projectId', 'stageId'],
+      schema: { params: args({ projectId: PROJECT_ID, stageId: text(200) }, ['projectId', 'stageId']), result: BACKLOG },
+      fn: async ({ projectId, stageId }) => {
+        const id = project(projectId);
+        const before = stagesOf(id);
+        const at = before.findIndex((s) => s.id === String(stageId));
+        await ctx.parkStage({ projectId: id, stageId: requireText(stageId, 'stage id', 200) });
+        const name = at >= 0 ? before[at].name || `stage ${at + 1}` : 'a stage';
+        return withEdit(projectId, edited(id, before, `Moved on from ${name}`));
+      },
+    },
     // A roadmap paused by the budget cap (#206, areas/budget.js): raise (the cap for today or tonight
     // becomes what is spent plus the next stage) or resume (this roadmap ignores the cap until the
     // day or the night ends); both run it again
@@ -266,6 +283,13 @@ module.exports = (ctx) => {
         requireText(action, 'roadmap item action', 40);
         const id = project(projectId);
         const item = roadmaps.findItem(roadmaps.readRoadmap(ctx.ws.backlog, id), String(itemId));
+        // #395 Move on: an owner edit (kept in the history, Undo takes it back); the run keeps its gate
+        if (action === 'park') {
+          const before = stagesOf(id);
+          await ctx.parkItem({ projectId: id, itemId });
+          const refs = item ? backlog.itemIssues(item).map((i) => `#${i.number}`).join(', ') : 'an item';
+          return withEdit(projectId, edited(id, before, `Moved on past ${refs} at its gate`));
+        }
         if (action === 'retry' && item && !(item.runId && ctx.runAlive(item.runId))) {
           if (!confirmed) {
             const issues = backlog.itemIssues(item);

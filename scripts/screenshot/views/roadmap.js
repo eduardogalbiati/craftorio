@@ -27,6 +27,7 @@ const {
 // screenshots), so a test-batch item follows it; the UI issue of stage 3 at Generous.
 // `more` (#282, #284, --roadmap states): the running run is in a fix round, the stage "Reports and
 // health" is disabled and the last stage's item is simulated (the test-batch item has no estimate).
+// `more` parked (#395, --roadmap parked): the item waiting at the developer's gate is parked.
 function demoRoadmap(ws, projectId, live = 'off', budget = null, more = null) {
   const states = more === 'states';
   const at = (h, m) => { const d = new Date(); d.setHours(h, m, 0, 0); return d.toISOString(); };
@@ -64,7 +65,11 @@ function demoRoadmap(ws, projectId, live = 'off', budget = null, more = null) {
       { id: 'stage-1', name: 'Stability first', note: 'The rename crash blocks the rest.', items: [item('item-1', 'software-development-local-hero.yaml', [11], { status: 'done', runId: '20260118-120000-demo0011', runs: ['20260118-120000-demo0011'] })] },
       ...(tonight ? [{ id: 'stage-tonight', name: 'Tonight', note: 'Three runs at once, then the refused start waits for your answer.', items: [
         item('item-4', 'software-development-local-hero.yaml', [16], { runId: tonight.running, runs: [tonight.resumed, tonight.running] }),
-        item('item-5', 'software-development-local-hero.yaml', [15], { runId: tonight.waiting, runs: [tonight.waiting], inputs: { language: 'js', mode: 'validated' } }),
+        item('item-5', 'software-development-local-hero.yaml', [15], {
+          runId: tonight.waiting, runs: [tonight.waiting], inputs: { language: 'js', mode: 'validated' },
+          // #395 (--roadmap parked): the roadmap moved on past it, its run still waits at the gate
+          ...(more === 'parked' ? { status: 'parked', parked: { at: at(2, 40), gate: 'Developer check' } } : {}),
+        }),
         item('item-6', 'software-development-local-hero.yaml', [13], { runId: tonight.failed, runs: [tonight.failed] }),
         item('item-7', 'software-development-local-hero.yaml', [14], { error: refused.replace(/^Could not start #14: /, '') }),
         // #215: done, real cost and time against the estimate (folded under the stage's "+2 done" chip, #267)

@@ -21,6 +21,8 @@
     in_progress: ['running', 'In progress'],
     interrupted: ['interrupted', 'Interrupted'],
     local: ['success', 'Merged locally'],
+    // #395: a roadmap item moved past while its run waits at a human gate
+    parked: ['cancelled', 'Parked at a gate'],
     paused: ['cancelled', 'Paused'],
     pending: ['idle', 'Pending'],
     planned: ['idle', 'Planned'],

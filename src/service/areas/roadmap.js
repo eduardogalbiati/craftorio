@@ -6,6 +6,8 @@
 // project's past runs) and each item with a run its real cost; a real start that would pass the
 // budget cap (areas/budget.js) pauses the roadmap instead (budgetStop) and notifies the owner.
 // Cut lines (#260): a roadmap that reached one starts its release run (areas/releases.js roadmapRelease).
+// Move on (#395): parkItem / parkStage park the items whose runs wait at a human gate (`gateRun`: the
+// gate's step name, also for a run interrupted there) and dispatch; nothing answers the gate.
 
 const path = require('path');
 const { loadWorkflow } = require('../../engine/workflow');
@@ -66,8 +68,10 @@ module.exports = (ctx) => {
       const { times, runs: count } = typical(r.file, r.mock);
       // gate: the "What happened" line of the gate a live run waits at (#213), for the waiting badge
       const gate = live?.pendingGates?.()[0]?.brief?.headline || null;
+      // #395: the gate the run waits at (live, or interrupted there by a closed app), by its step's name
+      const atGate = gateRun(x.runId, find)?.gate ?? null;
       return {
-        status: r.status, mock: !!r.mock, startedAt: r.startedAt || null, finishedAt: r.finishedAt || null, waiting, gate,
+        status: r.status, mock: !!r.mock, startedAt: r.startedAt || null, finishedAt: r.finishedAt || null, waiting, gate, atGate,
         progress, groups: r.groups || [], agentNames: r.agentNames || null, stepNames: r.stepNames || null, workflow: r.workflow || null, error: r.error || null,
         stepTimes: times, history: count,
       };
@@ -93,10 +97,10 @@ module.exports = (ctx) => {
 
   // #384: an item whose run was resumed (#250) shows the run that resumed it (the latest of the chain),
   // the earlier ones in its `runs`, also when its file still names the earlier run (adoptResumed, #100,
-  // records it when the resume starts); a done or skipped item keeps its run
+  // records it when the resume starts); a done or skipped item keeps its run, a parked one (#395) follows it
   const findRun = (runId) => runs.findRun(ctx.ws.runs, runId);
   function resumedItem(x, find = findRun) {
-    if (!x.runId || RoadmapModel.isFinished(x)) return x;
+    if (!x.runId || (RoadmapModel.isFinished(x) && x.status !== 'parked')) return x;
     const chain = [];
     while (chain.length < 20) {
       const next = find(chain.at(-1) || x.runId)?.resumedBy?.runId;
@@ -154,6 +158,40 @@ module.exports = (ctx) => {
     const r = runId ? find(runId) : null;
     if (!r) return null;
     return { status: r.status, error: r.error, merged: r.status === 'success' && (r.mock || !!r.localMerge || roadmaps.mergedPullRequest(r.runDir) || neverMerges(r.file)) };
+  }
+
+  // #395: roadmapRun, with `waiting` and `gate` (the step's name) when the run waits at a human gate:
+  // live, or interrupted there (a closed app; its trail's last step waits), so Move on can park it
+  function gateRun(runId, find = findRun) {
+    const base = roadmapRun(runId, find);
+    if (!base) return null;
+    const live = runId && ctx.active.get(runId);
+    if (live) {
+      const open = live.pendingGates?.()[0];
+      return open ? { ...base, waiting: true, gate: live.displayNames?.().steps?.[open.step_id] || open.step_id } : base;
+    }
+    const r = base.status === 'interrupted' ? find(runId) : null;
+    const last = r?.progress?.at(-1);
+    if (last?.status !== 'waiting') return base;
+    const step = last.id || last.name || '';
+    return { ...base, waiting: true, gate: r.stepNames?.[step] || step || 'its gate' };
+  }
+
+  // #395 Move on: the item parked, or the stage's items at a gate parked and its planned ones skipped
+  // (refused while a turn of the stage runs); the runs keep waiting at their gates, then the next stage starts
+  async function parkItem({ projectId, itemId }) {
+    const id = path.basename(String(projectId));
+    try {
+      roadmaps.itemAction(ctx.ws.backlog, id, String(itemId), 'park', { alive: ctx.runAlive, runOf: (runId) => gateRun(runId) });
+    } catch (e) { throw clientError(e.message); }
+    await dispatchRoadmaps();
+  }
+  async function parkStage({ projectId, stageId }) {
+    const id = path.basename(String(projectId));
+    try {
+      roadmaps.parkStage(ctx.ws.backlog, id, String(stageId), { runOf: (runId) => gateRun(runId) });
+    } catch (e) { throw clientError(e.message); }
+    await dispatchRoadmaps();
   }
 
   function neverMerges(file) {
@@ -315,6 +353,8 @@ module.exports = (ctx) => {
   return {
     allowKeptWork,
     dispatchRoadmaps,
+    parkItem,
+    parkStage,
     pauseStage,
     roadmapView,
     startRoadmap,
