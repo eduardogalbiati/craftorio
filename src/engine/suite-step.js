@@ -11,7 +11,7 @@
 // test files in the base checkout (`base()`, the run's <run_id>-base worktree), same command filtered
 // to those files (`filteredCommand`: npm/pnpm/yarn test or run <script>, pytest, node --test), log
 // logs/suite-<round>-base.log. A test failing there too is pre-existing (`preexisting_failures` in the
-// output: the engine adds them to the run's list and to the workspace's failing-on-main.json); files
+// output: the engine adds them to the run's list and to the project's base-health store, #405); files
 // the base does not have are the run's. The base's result per file is cached by base commit + file
 // (<workspace>/cache/base-tests/<commit>.json), so the next round and other runs reuse it.
 // A step with `base_check: false` (#260, release.yaml: its worktree is the base itself) gets no
@@ -565,25 +565,6 @@ async function checkOnBase({ command, failures, base, mock, env, timeoutMs, sign
   return { onBase: failures.filter((f) => present.some((p) => sameFile(p, f.file)) && baseFailing.some((x) => sameTest(f, x))), info };
 }
 
-// The workspace's list of tests failing on the base (#211), <workspace>/failing-on-main.json:
-// { updated_at, failures: [{ project, base, commit, test, file, error, first_seen, last_seen, runs }] },
-// one entry per project + file + test, so a follow-up issue (#186) can take them instead of every run.
-function noteFailingOnMain(file, { project, base, commit, runId, failures }) {
-  if (!file || !failures?.length) return;
-  try {
-    const data = readJson(file);
-    const list = Array.isArray(data.failures) ? data.failures : [];
-    const now = new Date().toISOString();
-    for (const f of failures) {
-      let e = list.find((x) => x.project === project && x.file === f.file && x.test === f.test);
-      if (!e) list.push(e = { project, base: base || null, commit: null, test: f.test, file: f.file, error: '', first_seen: now, last_seen: now, runs: [] });
-      Object.assign(e, { base: base || e.base, commit: commit || e.commit, error: String(f.error || e.error || '').split('\n')[0], last_seen: now });
-      if (runId && !e.runs.includes(runId)) e.runs = [...e.runs, runId].slice(-HISTORY);
-    }
-    writeJson(file, { updated_at: now, failures: list });
-  } catch { /* reported in the run anyway */ }
-}
-
 // The passed / failed counts a runner prints at the end (node:test, TAP, Jest, pytest), null when
 // none is recognized.
 function parseCounts(text) {
@@ -973,7 +954,6 @@ module.exports = {
   detectTestCommand,
   filteredCommand,
   isFullSuiteCommand,
-  noteFailingOnMain,
   parseCounts,
   parseFailures,
   redCheck,
@@ -982,6 +962,7 @@ module.exports = {
   runSuite,
   saveCoverage,
   SUITE_TIMEOUT_MS,
+  suiteDurations,
   suiteEnv,
   suiteMessage,
   suiteScope,

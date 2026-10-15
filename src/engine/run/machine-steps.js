@@ -148,8 +148,8 @@ const methods = {
   // environment a shell would give it (simulation only, no scratch workspace shared by every test
   // process, its own lock folder, #210), its log in logs/suite-<visit>.log; the run's known
   // pre-existing failures do not count, and the other failures are checked on the base checkout
-  // (#211: those failing there too become the run's pre-existing failures and go to the workspace's
-  // failing-on-main.json). Without a step `timeout`, the timeout comes from the project's recent suite
+  // (#211: those failing there too become the run's pre-existing failures and go to the project's
+  // base-health store, #405 src/base-health.js). Without a step `timeout`, the timeout comes from the project's recent suite
   // durations (cache/suite-durations.json). Simulation: mockSequences.suite: { <step>: [...] }.
   // #403: each round of a local workflow first brings the moved local base into the branch
   // (bringBaseIn); the output's `base_commit` is the base commit it tested on.
@@ -317,8 +317,8 @@ const methods = {
     if (output.status === 'pass' && output.scope !== 'files' && step.files === undefined) this.fullSuitePassed = true;
     // the files that failed come back in the next round's affected set
     for (const f of output.failures || []) if (f.file && !this.suiteFailedFiles.includes(f.file)) this.suiteFailedFiles.push(f.file);
-    if (output.preexisting_failures?.length) {
-      this.machine.noteFailingOnMain(path.join(root, 'failing-on-main.json'), { project, base: this.worktree?.base, commit: output.base_check?.commit, runId: this.runId, failures: output.preexisting_failures });
+    if (output.preexisting_failures?.length && this.projectId) {
+      this.machine.noteFailingOnMain(root, { projectId: this.projectId, commit: output.base_check?.commit, runId: this.runId, failures: output.preexisting_failures });
     }
     if (output.log) this.emitEvent('file.saved', { step_id: step.id, path: path.join(this.runDir, output.log) });
     if (output.base_check?.log) this.emitEvent('file.saved', { step_id: step.id, path: path.join(this.runDir, output.base_check.log) });

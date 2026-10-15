@@ -404,7 +404,7 @@ module.exports = (ctx) => {
       if (ev.type === 'worktree.merged') ctx.afterLocalMerge(run, ev).catch((e) => console.error('after local merge:', e));
       // #405: pre-existing failures are tracked, and a merge starts the base check (areas/base-health.js)
       try {
-        if (ev.type === 'step.finished') ctx.afterStepFinished(run, ev)?.catch((e) => console.error('base health:', e.message));
+        if (ev.type === 'step.finished') ctx.afterStepFinished(run, ev).catch((e) => console.error('base health:', e.message));
         if (ev.type === 'worktree.merged') ctx.afterBaseMerge(run, ev);
       } catch (e) { console.error('base health:', e.message); }
       if (ev.type === 'workflow.started' || ev.type === 'run.then') ctx.recordChain(run, ev);
@@ -429,6 +429,8 @@ module.exports = (ctx) => {
         ctx.afterBacklogRefresh(run).catch((e) => console.error('backlog refresh sync:', e.message));
         // a release run (#260): a shipped release is recorded and its cut line lets the roadmap go on
         ctx.afterRelease(run, ev).catch((e) => console.error('release:', e.message));
+        // #405: a base check deferred while this release run held the base runs now
+        try { ctx.afterBaseReleased(run); } catch (e) { console.error('base health:', e.message); }
         // a merged run changes the conflict map the Product Owner plans with (#150)
         ctx.afterRunConflictMap(run, ev).catch((e) => console.error('conflict map:', e.message));
         // a roadmap's next items first (its stage may be over), then the plain queue; a shutdown

@@ -24,6 +24,7 @@ const { captureScreenshots } = require('./screenshot-step');
 const suiteStep = require('./suite-step');
 const { affectedTests, relatedTests } = require('./affected-tests');
 const { shipRelease, writeReleaseVersion } = require('../releases');
+const { recordPreexisting } = require('../base-health');
 
 // Simulation: probe states per call, per probe (mockSequences.probes: { step: [...] } overrides them).
 // The CI check fails once (the agent triages it), then passes without an agent turn.
@@ -66,8 +67,9 @@ function real() {
     relatedTests: (opts) => relatedTests(opts),
     // the listed test files that exist in the checkout
     existingFiles: (cwd, files) => files.filter((f) => cwd && fs.existsSync(path.join(cwd, f))),
-    // #211: the run's pre-existing failures go to the workspace's failing-on-main.json
-    noteFailingOnMain: (file, info) => suiteStep.noteFailingOnMain(file, info),
+    // #211, #405: the run's pre-existing failures go to the project's base-health store (record only:
+    // the service files the issue, src/service/areas/base-health.js)
+    noteFailingOnMain: (root, info) => recordPreexisting(root, info).catch(() => { /* reported in the run anyway */ }),
     // the test files the run's change can break (#212), plus those that failed in an earlier round
     affectedTests({ root, base, failed = [] }) {
       if (!root || !base) return { mode: 'all', files: [], reasons: {}, changed: [], slow: [], why: 'the run has no worktree or base branch: the whole suite' };

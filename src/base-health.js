@@ -1,12 +1,14 @@
 // Main stays green (#405): the tests known to fail on a project's base, and the base check.
 // - recordPreexisting: each failure a run counted as pre-existing (#211, #396: it fails on the base
 //   too) is recorded per project, keyed by file + test: first_seen, last_seen, the runs that saw it.
-//   Seen by a second run (or already tracked), it files one bug issue, then updates it.
+//   Seen by a second run (or already tracked), it files one bug issue, then updates it. This is the
+//   one store of those failures: the engine records each run's (record only), the service files.
+//   A test red again after a green check reopens its issue and gets a fix item again.
 // - runBaseCheck: after a merge into the local base (and at once after a merge "not tested green"),
 //   the whole suite runs on a clean detached checkout of the base tip (<workspace>/worktrees/
 //   base-check-<project>), with no agent, in simulation (MULTIAGENT_SIMULATION_ONLY=1), one check at
 //   a time, deferred while a release run holds the base. A red test files a bug issue naming the
-//   commit range (last green, this commit) and the log; with Settings › Execution's onRed 'fix' a
+//   commit range (last green, first red) and the log; with Settings › Execution's onRed 'fix' a
 //   fix item, mode auto, goes in a new stage before the roadmap's current one (src/roadmap.js
 //   insertFrontStage). It never pushes, never answers a gate and never touches a running item.
 // - knownFailures: what the Roadmap shows ("N known failures on the base", backlog:get baseFailures).
@@ -59,15 +61,24 @@ function withStore(ws, projectId, fn) {
   return next;
 }
 
-// The failure's entry in the store, added when new; a fixed one is failing again
-function upsert(store, f, at) {
+// The failure's entry in the store, added when new; a fixed one is failing again (its issue is
+// reopened, its first red commit is this one). `commit`: the base commit it is red at.
+function upsert(store, f, at, commit) {
   let entry = store.failures.find((x) => keyOf(x) === keyOf(f));
   if (!entry) {
     entry = { test: String(f.test || ''), file: String(f.file || ''), first_seen: at, last_seen: at, runs: [], issue: null };
     store.failures.push(entry);
   }
-  delete entry.fixed_at;
+  if (entry.fixed_at) {
+    if (entry.issue) entry.reopen = true;
+    delete entry.first_red_commit;
+    delete entry.fixed_at;
+  }
   entry.last_seen = at;
+  if (commit) {
+    entry.last_commit = commit;
+    entry.first_red_commit ||= commit;
+  }
   if (f.reason || f.error) entry.reason = String(f.reason || f.error).slice(0, 400);
   return entry;
 }
@@ -86,7 +97,8 @@ function issueBody(entry, { commit, lastGreen, logFile, logText, runId }) {
     `The test \`${entry.test}\` in \`${entry.file || '(unknown file)'}\` fails on the base.`,
     '',
     `- Last green commit: ${lastGreen ? short(lastGreen) : 'unknown (no green base check yet)'}`,
-    `- First red commit: ${short(commit)}`,
+    `- First red commit: ${short(entry.first_red_commit || commit)}`,
+    ...(commit && entry.first_red_commit && commit !== entry.first_red_commit ? [`- Still red at: ${short(commit)}`] : []),
     `- First seen: ${entry.first_seen}; last seen: ${entry.last_seen}`,
     `- Runs that counted it as pre-existing: ${entry.runs.length ? entry.runs.join(', ') : 'none yet'}`,
     ...(runId ? [`- Seen by run ${runId}`] : []),
@@ -109,9 +121,17 @@ async function fileIssue(ws, projectId, entry, { platform, repo, exec, ...ctx })
   const text = issueBody(entry, ctx);
   fs.writeFileSync(file, text);
   if (entry.issue?.number) {
-    const c = p.issueSaveCommand({ target, n: String(entry.issue.number), mode: 'comment', file, text: `Still red on the base.\n\n${text}` });
+    const n = String(entry.issue.number);
+    // red again after a green check: the issue (closed with its fix, most likely) is reopened
+    const reopen = !!entry.reopen;
+    if (reopen) {
+      const r = p.issueReopenCommand(target, n);
+      await Promise.resolve(exec(r.cli, r.args)).catch(() => { /* already open */ });
+    }
+    const c = p.issueSaveCommand({ target, n, mode: 'comment', file, text: `${reopen ? 'Red again on the base.' : 'Still red on the base.'}\n\n${text}` });
     await exec(c.cli, c.args);
-    return { url: entry.issue.url, number: entry.issue.number, action: 'updated', test: entry.test };
+    delete entry.reopen;
+    return { url: entry.issue.url, number: entry.issue.number, action: reopen ? 'reopened' : 'updated', test: entry.test };
   }
   // the bug label when the repository has it (GitLab creates a missing one itself)
   let labels = ['bug'];
@@ -138,23 +158,28 @@ function addFixItem(ws, projectId, filed, workflow) {
   return stage?.items[0] || null;
 }
 
-// Files (or updates) the issues of `entries` and, with onRed 'fix', a fix item for the new ones
+// Whether `opts` can file issues (setting not off, a platform, a repository and a way to run its CLI)
+const canReport = (opts) => (opts.onRed || 'fix') !== 'off' && !!opts.exec && !!opts.platform && !!(opts.ghRepo || opts.repo) && !!issues.adapterOf(opts.platform);
+
+// Files (or updates) the issues of `entries` and, with onRed 'fix', a fix item for them (none when
+// the roadmap plans their issues already)
 async function report(ws, projectId, entries, opts) {
-  const { onRed = 'fix', exec, platform } = opts;
+  const { onRed = 'fix' } = opts;
   const repo = opts.ghRepo || opts.repo;
-  if (onRed === 'off' || !entries.length || !exec || !platform || !repo || !issues.adapterOf(platform)) return { issues: [], fixItem: null };
+  if (!entries.length || !canReport(opts)) return { issues: [], fixItem: null };
   const filed = [];
   for (const entry of entries) {
     try { filed.push(await fileIssue(ws, projectId, entry, { ...opts, repo })); } catch (e) { console.error(`base health: issue for ${entry.test}:`, e.message); }
   }
-  const created = filed.filter((x) => x.action === 'created');
-  const fixItem = onRed === 'fix' && created.length ? addFixItem(ws, projectId, created, opts.workflow) : null;
+  const fixItem = onRed === 'fix' && filed.length ? addFixItem(ws, projectId, filed, opts.workflow) : null;
   return { issues: filed.map(({ url, action, test }) => ({ url, action, test })), fixItem };
 }
 
 /**
  * A run's pre-existing failures (the suite step's preexisting_failures): recorded, and an issue filed
- * once two runs saw a failure (updated by every later sighting). Without exec/platform/repo: record only.
+ * once two runs saw a failure (updated by every later sighting). Without exec/platform/repo: record
+ * only (the engine's suite step, src/engine/machine-actions.js); the service's call for the same run
+ * then files what is due (`reported`: the runs whose sighting went to the issue already).
  * @param {string} ws the workspace root
  * @param {{ projectId: string, runId?: string, commit?: string, failures: object[], at?: string,
  *   onRed?: string, platform?: string, repo?: string, exec?: Function, workflow?: string }} opts
@@ -166,13 +191,15 @@ function recordPreexisting(ws, opts) {
     const store = readStore(ws, projectId);
     const due = [];
     for (const f of failures) {
-      const entry = upsert(store, f, at);
-      if (commit) entry.last_commit = commit;
-      if (!runId || entry.runs.includes(runId)) continue;
-      entry.runs = [...entry.runs, runId].slice(-HISTORY);
+      const entry = upsert(store, f, at, commit);
+      if (!runId) continue;
+      if (!entry.runs.includes(runId)) entry.runs = [...entry.runs, runId].slice(-HISTORY);
+      if ((entry.reported || []).includes(runId)) continue;
       if (entry.issue || entry.runs.length >= RUNS_FOR_ISSUE) due.push(entry);
     }
     writeStore(ws, projectId, store);
+    if (!canReport(opts)) return { issues: [], fixItem: null };
+    for (const entry of due) entry.reported = [...(entry.reported || []), runId].slice(-HISTORY);
     const out = await report(ws, projectId, due, { ...opts, commit, lastGreen: store.lastGreen?.commit, runId });
     writeStore(ws, projectId, store);
     return out;
@@ -209,7 +236,9 @@ function runBaseCheck(ws, opts) {
     if (!info) return { status: 'error', error: `${repo} is not a git repository`, commit: null, issues: [], fixItem: null };
     let result;
     try {
-      result = await opts.runSuite({ cwd: info.workDir, env: suiteEnv(process.env).env });
+      // the check's own screenshot slot (#210), as each run's suite has
+      const env = suiteEnv(process.env, { locksDir: path.join(ws, 'worktrees', `base-check-${slug(projectId)}-locks`) }).env;
+      result = await opts.runSuite({ cwd: info.workDir, env });
     } catch (e) {
       result = { failures: [], log: '', error: e.message };
     } finally {
@@ -231,7 +260,7 @@ function runBaseCheck(ws, opts) {
       fs.mkdirSync(dirLog, { recursive: true });
       const logFile = path.join(dirLog, `${stamp(at)}-suite.log`);
       fs.writeFileSync(logFile, String(result.log || ''));
-      const entries = failures.map((f) => Object.assign(upsert(store, f, at), { last_commit: info.commit, base_check: { at, commit: info.commit, trigger: opts.trigger || 'merge' } }));
+      const entries = failures.map((f) => Object.assign(upsert(store, f, at, info.commit), { base_check: { at, commit: info.commit, trigger: opts.trigger || 'merge' } }));
       writeStore(ws, projectId, store);
       const out = await report(ws, projectId, entries, { ...opts, onRed, commit: info.commit, lastGreen: store.lastGreen?.commit, logFile, logText: result.log });
       writeStore(ws, projectId, store);

@@ -62,17 +62,21 @@ fields (references between steps, agents, transitions, groups) are the named rul
   transitions route it. The other failures are checked on the base by the step itself (#211): their
   test files run in the base checkout (`suiteBase`, prepared on demand, so `run_existing`/`off` runs
   get it too), cached per base commit + file in `cache/base-tests/`; those failing there too become
-  `preexisting_failures` (the run's list, the summary, the workspace's `failing-on-main.json`).
+  `preexisting_failures` (the run's list, the summary, the project's base-health store below).
   **Main stays green (#405, `src/base-health.js`, wired in `src/service/areas/base-health.js`)**: a
   real run's `preexisting_failures` are recorded per project in `backlog/base-health/<project>.json`
-  (test, file, first/last seen, runs); seen by 2 runs, a failure files one bug issue, updated (a
-  comment) by every later sighting, never a second one. After each `worktree.merged` of a real run
+  (test, file, first/last seen, runs; the engine records them, the service files); seen by 2 runs, a
+  failure files one bug issue, updated (a comment) by every later sighting, never a second one.
+  After each `worktree.merged` of a real run
   (`tested: 'not green'` makes it trigger `not-green`), the base check runs the whole suite on a
   clean detached checkout of the local base tip (`worktrees/base-check-<project>`), with no agent,
-  `MULTIAGENT_SIMULATION_ONLY=1`, one check at a time, deferred while a release run holds the base.
-  A red test files (or updates) its issue with the commit range (the last green check, this commit)
-  and the log; Settings › Execution `baseCheck.onRed` (`off` | `issue` | `fix`, default `fix`)
-  adds a fix item, mode auto, in a new stage before the roadmap's current one (`insertFrontStage`).
+  `MULTIAGENT_SIMULATION_ONLY=1`, its own lock folder, the suite timeout from the project's recent
+  durations, one check at a time. While a release run holds the base it is deferred, and runs when
+  that release run ends. A red test files (or updates) its issue with the commit range (the last
+  green check, the first red commit) and the log; a test red again after a green check reopens its
+  issue. Settings › Execution `baseCheck.onRed` (`off` | `issue` | `fix`, default `fix`)
+  adds a fix item, mode auto, in a new stage before the roadmap's current one (`insertFrontStage`;
+  none while the roadmap plans that issue already). A red or failed check notifies the owner.
   It never pushes, never answers a gate and never changes a running item. The Roadmap bar shows
   "N known failures on the base" (`backlog:get` `baseFailures`). The
   suite gets a shell-like env (`suiteEnv`: no Electron/npm/inspector variables, no scratch
