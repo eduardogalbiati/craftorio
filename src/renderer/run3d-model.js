@@ -39,6 +39,8 @@
   function outcome(o) {
     if (!o || typeof o !== 'object') return 'done';
     if (o.kind === 'suite' || o.kind === 'test_ids') return o.status === 'pass' ? 'done' : 'failed';
+    // #404: the rule checks, skipped when the project has none
+    if (o.kind === 'check') return o.status === 'fail' ? 'failed' : 'done';
     if (o.results) return Object.values(o.results).some((r) => r && r.verdict && r.verdict !== 'approved') ? 'changes' : 'done';
     if (o.verdict) return o.verdict === 'not_verified' ? 'failed' : 'done';
     if (o.tests_status) return o.tests_status === 'pass' ? 'done' : 'failed';

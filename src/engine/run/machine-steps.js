@@ -2,10 +2,10 @@
 // Steps without an agent (#250, from src/engine/workflow.js): `type: screenshots` (`runScreenshots`,
 // #144), `type: suite` (`runSuiteStep` naming its command for a pause #368, `suiteRounds`, `suiteRound` with the memory guard's waits and reruns #276,
 // `redCheckOutput` #220, `failedFirstRound` for `scope: failed` #324), `type: test_ids`
-// (`runTestIdsStep`, #246), `type: workflow` child runs (`runChildWorkflows`, #174), `type:
-// release_version` (`runReleaseVersionStep`, #325), and the evidence a step leaves (`recordEvidence`,
-// `saveScenarios`).
-// The steps' own logic is src/engine/suite-step.js, screenshot-step.js, test-ids.js and workflow-step.js;
+// (`runTestIdsStep`, #246), `type: check` (`runCheckStep`, the project's rule checks, #404), `type:
+// workflow` child runs (`runChildWorkflows`, #174), `type: release_version` (`runReleaseVersionStep`,
+// #325), and the evidence a step leaves (`recordEvidence`, `saveScenarios`).
+// The steps' own logic is src/engine/suite-step.js, screenshot-step.js, test-ids.js, check-step.js and workflow-step.js;
 // what they run on the machine goes through the run's machine adapter (`this.machine`, #353).
 
 'use strict';
@@ -14,6 +14,7 @@ const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const capabilities = require('../capabilities');
+const checkStep = require('../check-step');
 const evidence = require('../../evidence');
 const scenarios = require('../scenarios');
 const suiteStep = require('../suite-step');
@@ -435,6 +436,19 @@ const methods = {
         : { ...base, status: 'pass', message: `Every test id the E2E step definitions use is in ${folders.renderer}.` };
     }
     this.emitEvent('log', { level: output.status === 'missing' ? 'warn' : 'info', kind: 'test_ids', step_id: step.id, status: output.status, message: `${step.id}: ${output.message}` });
+    return output;
+  },
+
+  // `type: check` (#404): the project's rule checks in the run's checkout (src/engine/check-step.js),
+  // `command` rendered (empty: the project's `check` script), `timeout` optional, the log under
+  // logs/check-<visit>.log. Output: { kind: 'check', status: pass | fail | skipped, command,
+  // findings, message, round }.
+  async runCheckStep(step, st) {
+    const command = step.command ? render(String(step.command), this.ctx).trim() : '';
+    const timeoutMs = step.timeout ? parseDuration(render(String(step.timeout), this.ctx).trim(), undefined) : undefined;
+    const logFile = path.join(this.runDir, 'logs', `check-${st.visits}.log`);
+    const output = { ...(await checkStep.runCheck({ dir: this.ctx.worktree_dir, command, logFile, timeoutMs, signal: this.abort.signal })), round: st.visits };
+    this.emitEvent('log', { level: output.status === 'fail' ? 'warn' : 'info', kind: 'check', step_id: step.id, status: output.status, message: `${step.id}: ${output.message.split('\n')[0]}` });
     return output;
   },
 

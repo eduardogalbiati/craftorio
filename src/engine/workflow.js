@@ -73,8 +73,10 @@ const stepAgentLabel = (s) => (s.agents ? s.agents.join(' · ') : s.agent || nul
 
 // The machine steps whose output is all there is (no worktree processes, no supervisor): type → method.
 // project_map (#372): the project map's facts, validation and save; release_version (#325): never
-// fails the run, the output says what was written; test_ids (#246): the missing test ids
+// fails the run, the output says what was written; test_ids (#246): the missing test ids; check
+// (#404): the project's rule checks (its command sweeps what it leaves running)
 const PLAIN_MACHINE_STEPS = {
+  check: 'runCheckStep',
   project_map: 'runProjectMapStep',
   release_version: 'runReleaseVersionStep',
   test_ids: 'runTestIdsStep',

@@ -44,6 +44,7 @@ const END_STATUSES = ['success', 'failed', 'cancelled'];
 const SESSION_MODES = ['persistent', 'ephemeral', 'handoff'];
 // Step types without an agent: the engine does the work (no supervisor, no stall check, no agent keys)
 const MACHINE_STEP_TYPES = [
+  'check',
   'human_approval',
   'project_map',
   'release_version',
@@ -81,7 +82,7 @@ const TYPES = {
 
 // Where a step field applies: every step type, a list of types, or every type except some
 const AGENT_STEPS = { except: MACHINE_STEP_TYPES };
-const NO_AGENT_TYPES = ['project_map', 'release_version', 'screenshots', 'suite', 'test_ids'];
+const NO_AGENT_TYPES = ['check', 'project_map', 'release_version', 'screenshots', 'suite', 'test_ids'];
 const GATE = ['human_approval'];
 const AGENTS = 'agents and defaults';
 const WORKFLOW = 'workflow';
@@ -127,9 +128,10 @@ const FIELD_RULES = [
   // `type: screenshots` (#144): the screens listed in `from`'s `screenshots` output
   entry('steps[].folder', ['screenshots'], 'plain name', 'folder must be a plain folder name (e.g. developer).', { elsewhere: 'skip' }),
   entry('steps[].timeout', ['screenshots'], 'duration', 'timeout must be a duration such as 3m.', { elsewhere: 'skip' }),
-  // `type: suite` (#177): the project's whole test suite, once per visit
-  entry('steps[].command', ['suite'], 'text', 'command must be a string (a template; empty = found from the project\'s files).', { template: true, elsewhere: 'skip' }),
-  entry('steps[].timeout', ['suite'], 'duration', 'timeout must be a duration such as 30m.', { template: true, elsewhere: 'skip' }),
+  // `type: suite` (#177): the project's whole test suite, once per visit; `type: check` (#404): the
+  // project's rule checks (empty = its package.json `check` script)
+  entry('steps[].command', ['check', 'suite'], 'text', 'command must be a string (a template; empty = found from the project\'s files).', { template: true, elsewhere: 'skip' }),
+  entry('steps[].timeout', ['check', 'suite'], 'duration', 'timeout must be a duration such as 30m.', { template: true, elsewhere: 'skip' }),
   // #212: affected = the affected test files each visit, the whole suite once when they pass;
   // #324: failed = whole first, then the files that failed in the previous round and the whole suite
   entry('steps[].scope', ['suite'], 'one of', 'scope must be affected, failed or full.', { values: ['affected', 'failed', 'full'], template: true, elsewhere: 'skip' }),

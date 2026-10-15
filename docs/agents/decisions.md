@@ -8,6 +8,15 @@ appears once, in its latest form, naming what it replaced. The hard rules of
 [AGENTS.md](../../AGENTS.md) are not repeated here. This is not the `decision-log` skill (a run's
 own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
 
+- **2026-10-15** (#404): the developer finds the repository's rule check failures in its own turn,
+  before the suite. `npm run check` runs the fast rule checks (lists, layers, file sizes, code
+  health, decisions log, docs, types, the Oracle's capabilities) with the same code the rule tests
+  call; the developer runs the project's check command before its final answer, and in AI
+  Development (local hero) an agent-less step runs it after each commit (input `check_command`,
+  default the project's `check` script, none: skipped). A failure goes back to the developer, never
+  to the test writer, at most twice per review round, then to the owner at `check_failed`. The suite
+  still runs every test, the rule tests included. Why: rule tests failed in 16 of the 32 runs with a
+  red first suite round, each costing a suite round (4.7 min median) and a fix turn.
 - **2026-10-15** (#396): the owner may choose, before a run, that an AI Development (local hero)
   run whose suite is red only outside the change goes on to the build and the merge, reported as
   not tested green (input `suite_red_outside_change: ask | continue`, default `ask`). A failure in
@@ -42,8 +51,8 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   file's connections from a list of the most connected files; hovering never greys the city.
   Replaces #372's gate for every run. Why: the owner's first test found two buttons for one intent,
   a gate that showed nothing to validate, a tab stuck on "running" after the run had finished, and a
-  city of stacked squares in place of the POC he had approved.
-- **2026-10-13** (#371, #372): the project city is on the roadmap, built from the proof of concept
+  city of stacked squares in place of the POC he had approved. Earlier the same day (#371, #372):
+  the project city is on the roadmap, built from the proof of concept
   (PR #370, `poc/embed-city.js` and its two plans at 100% coverage); groma.md is not used. The city
   is one deterministic model (`src/shared/city-model.js`) from #356's facts and a city plan, drawn
   by the 3D view (#373). The plan of any project is written by an agent, the cartographer of the

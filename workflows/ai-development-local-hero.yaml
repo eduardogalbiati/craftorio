@@ -2,7 +2,7 @@
 # Workflow: AI Development, local hero (tests first)
 # The local-hero pipeline with the tests written BEFORE the code (owner, 2026-10-03; option C of
 # reports/piramide-de-testes-com-agentes-2026-10-03.md, #220):
-#   acceptance_tests ─► red_check ─► warm_up ─► develop ─► code_review ─► suite ─► build ─► evidence ─► verify_change ─► local merge
+#   acceptance_tests ─► red_check ─► warm_up ─► develop ─► rule_check ─► code_review ─► suite ─► build ─► evidence ─► verify_change ─► local merge
 #   - acceptance_tests (the test writer, Opus 5.5): the acceptance tests of the task, from the issue
 #     and its criteria, not from the implementation, committed on the run's branch. It gets the
 #     project's code → tests map (`test_map: true`, #219) to put the tests where they belong and
@@ -21,6 +21,10 @@
 #     (`protect_files` on the developer: a turn that changes one is refused, as edits_tests: false
 #     does for all tests), while the developer may add its own internal tests (`edits_tests: true`).
 #     code_review still checks the acceptance files are unchanged (`git diff`), as a second line.
+#   - rule_check (no agent, #404): after each develop commit the orchestrator runs the project's
+#     rule checks (`check_command`, or the `check` script of its package.json; none: skipped). A
+#     failure goes back to develop with the findings, at most twice per review round, then to the
+#     owner at check_failed; never to the test writer. The suite still runs every test after it.
 #   - unit_tests defaults to run_existing (the suite after the review, no second test-writer
 #     step); e2e_tests to off.
 # The rule "the developer never writes tests" (#47) becomes, here only: the developer never edits
@@ -246,6 +250,12 @@ inputs:
     default: ""
     label: Test command
     description: "The project's whole-suite command the orchestrator runs once per test round (e.g. npm test). Empty: found from the project's files (package.json, go.mod, pom.xml, build.gradle, *.csproj, pyproject.toml)."
+  # #404: the project's fast rule checks, run after each develop commit (rule_check)
+  check_command:
+    type: string
+    default: ""
+    label: Check command
+    description: "The project's fast rule checks (lint, layers, docs...) the orchestrator runs after each developer commit; failures go back to the developer. Empty: the project's `check` script from its package.json (npm run check); a project without one skips the step."
   # #396 (owner 2026-10-15): set before the run, never changed by an agent while it runs. With
   # continue, a suite red only outside the change goes on to the build without the test_failed gate.
   suite_red_outside_change:
@@ -868,6 +878,12 @@ steps:
       accessible name the step uses), commit, and answer again in full. Never edit the scenarios or
       their step definitions.
       {% endif %}
+      {% if previous_step == 'rule_check' and steps.rule_check.output.status == 'fail' %}
+      The orchestrator ran the project's rule checks after your commit (#404), and they fail:
+      {{ steps.rule_check.output.message }}
+      Fix what they report in the production code or the docs (never weaken a rule or an acceptance
+      test), run the check command again, commit, and answer again in full.
+      {% endif %}
       {% if not steps.develop.output %}
       Tests first: the test writer already worked on this task, on the run's branch
       `{{ acc.branch if acc else '(none: create it with git switch -c)' }}`{% if acc and acc.commit %} (commit {{ acc.commit }}){% endif %}.
@@ -966,6 +982,10 @@ steps:
       impossible in this run, each with the reason: the owner then decides whether the run goes on
       without them.
       {% endif %}
+      Before your final answer, run the project's check command (`{{ inputs.check_command or 'npm run check' }}`
+      when the project has one: its rule checks, about a minute), in the foreground with its output
+      in a log, fix what it reports and commit. Record the result in `checks` (`checks: pass` or the
+      findings left). The orchestrator runs it again after your commit and sends failures back here.
       Your turn ends at green acceptance tests and a commit: answer once the ```run-tests block
       passes and the change is committed. The code_review step reviews your diff next, in its own
       session: never start a sub-agent to review your diff.
@@ -981,6 +1001,8 @@ steps:
         files_changed: { type: array, items: { type: string } }
         # for the test writer: behaviours, edge cases and files to test
         test_notes:    { type: string }
+        # #404: the project's check command before the answer: "checks: pass" or the findings left
+        checks:        { type: string }
         # for the evidence step: per issue, the screen/command/request that shows the change
         evidence_plan: { type: string }
         # for developer_screenshots (#144): each UI state as the screenshot command's options;
@@ -1029,35 +1051,63 @@ steps:
         set: { gaps_returned: "yes" }
       - when: "output.left_out | developer_gaps | length"
         goto: requirements_left_out
-      # #246: scenarios written first: their test ids are checked right after each commit
-      # (testid_check, no model call); it then takes the routes below
-      - when: "output.committed and inputs.e2e_tests != 'off' and steps.acceptance_tests.output and steps.acceptance_tests.output.e2e_scope == 'scenarios'"
-        goto: testid_check
-      # an issue of the group could not be done: the owner decides (once) whether the run goes on without it
-      - when: "output.committed and inputs.issues | length > 1 and not steps.issue_not_done.output and (output.issues or []) | rejectattr('done') | list | length"
-        goto: issue_not_done
-      # validated mode: the owner tries the first implementation and every round they asked for
-      # (vars.owner_validated is "yes" once they approved; a review fix round goes on without them,
-      # unless validate_every_round)
-      - when: "(inputs.mode == 'validated' and output.committed and (vars.owner_validated != 'yes' or inputs.validate_every_round)) and inputs.screenshots == 'off'"
-        goto: developer_check
-      - when: "inputs.mode == 'validated' and output.committed and (vars.owner_validated != 'yes' or inputs.validate_every_round)"
-        goto: developer_screenshots
-      # #151: a committed UI change (screens to capture, or files under src/renderer/) is captured
-      # right after develop in every mode too, for the ui_reviewer in code_review (a UI fix round
-      # included); a change without UI skips it
-      - when: "output.committed and inputs.screenshots != 'off' and ((output.screenshots or []) | length or 'src/renderer/' in ((output.files_changed or []) | join(' ') | replace('\\\\', '/')))"
-        goto: developer_screenshots
+      # #404: every commit goes through the project's rule checks first (rule_check, no model
+      # call); it then takes develop's routes after a commit (test ids, validation, screenshots, review)
+      - when: "output.committed"
+        goto: rule_check
       # the review findings needed no production change (e.g. they ask for tests, which the test
       # writer owns): the reviewer gets the answer; a disagreement ends at human_review, never in a loop
       - when: "output.no_change and steps.code_review.output"
-        goto: code_review
-      - when: "output.committed"
         goto: code_review
       - when: "true"
         goto: develop
         max_visits: 3
         on_exhausted: fail
+
+  # #404: the project's rule checks (lint, layers, file sizes, code health, docs, types...), run by
+  # the orchestrator after each develop commit (no agent, no model call, about a minute): the
+  # check_command input, or `npm run check` when the project's package.json has a `check` script;
+  # a project without one skips the step (a note in the output). Findings go back to the developer,
+  # at most twice per review round (a pass resets the count), then to the owner at check_failed;
+  # never to the test writer. The suite still runs every test, the rule tests included.
+  - id: rule_check
+    display: Rule checks
+    type: check
+    command: "{{ inputs.check_command }}"
+    transitions:
+      - when: "output.status == 'fail' and (vars.check_returns or 0) | int < 2"
+        goto: develop
+        set: { check_returns: "{{ (vars.check_returns or 0) | int + 1 }}" }
+      # rounds used up: the owner decides (a goto, not on_exhausted: no supervisor wake-up first)
+      - when: "output.status == 'fail'"
+        goto: check_failed
+      # then develop's own routes after a commit (its output is steps.develop.output here)
+      # #246: scenarios written first: their test ids are checked right after each commit
+      - when: "inputs.e2e_tests != 'off' and steps.acceptance_tests.output and steps.acceptance_tests.output.e2e_scope == 'scenarios'"
+        goto: testid_check
+        set: &checks_passed { check_returns: "0" }
+      # an issue of the group could not be done: the owner decides (once) whether the run goes on without it
+      - when: "inputs.issues | length > 1 and not steps.issue_not_done.output and (steps.develop.output.issues or []) | rejectattr('done') | list | length"
+        goto: issue_not_done
+        set: *checks_passed
+      # validated mode: the owner tries the first implementation and every round they asked for
+      # (vars.owner_validated is "yes" once they approved; a review fix round goes on without them,
+      # unless validate_every_round)
+      - when: "(inputs.mode == 'validated' and (vars.owner_validated != 'yes' or inputs.validate_every_round)) and inputs.screenshots == 'off'"
+        goto: developer_check
+        set: *checks_passed
+      - when: "inputs.mode == 'validated' and (vars.owner_validated != 'yes' or inputs.validate_every_round)"
+        goto: developer_screenshots
+        set: *checks_passed
+      # #151: a committed UI change (screens to capture, or files under src/renderer/) is captured
+      # right after develop in every mode too, for the ui_reviewer in code_review (a UI fix round
+      # included); a change without UI skips it
+      - when: "inputs.screenshots != 'off' and ((steps.develop.output.screenshots or []) | length or 'src/renderer/' in ((steps.develop.output.files_changed or []) | join(' ') | replace('\\\\', '/')))"
+        goto: developer_screenshots
+        set: *checks_passed
+      - when: "true"
+        goto: code_review
+        set: *checks_passed
 
   # #246: the test ids of the E2E scenarios written first, checked by the orchestrator right after
   # develop commits (no agent, no model call, milliseconds): every static getByTestId('…') of the
@@ -1760,6 +1810,46 @@ steps:
       - when: "output.heal_status == 'app'"
         delegate: *app_fix
         goto: e2e
+
+  # #404: the project's rule checks still fail after the developer's rounds (rule_check). A human
+  # gate (a decision: neither the supervisor nor a retry answers it). Continue takes develop's
+  # routes after a commit; the suite's rule tests still report what is left.
+  - id: check_failed
+    type: human_approval
+    summary: |
+      The project's rule checks still fail after {{ vars.check_returns or 0 }} developer round(s) (`{{ steps.rule_check.output.command }}`).
+      {% for l in steps.rule_check.output.findings %}{% if loop.index <= 4 %}- ✖ {{ l | one_line(120) }}
+      {% endif %}{% endfor %}
+    message: |
+      The project's rule checks still fail after {{ vars.check_returns or 0 }} developer round(s):
+      {{ steps.rule_check.output.message }}
+      The change is on branch `{{ steps.develop.output.branch }}`; the code review has not run yet.
+    choices:
+      - { id: continue, label: "Continue to the review anyway", help: "The review and the suite run; the change is reported as not passing the rule checks." }
+      - { id: stop,     label: "Stop the run as failed (branch kept to resume)", help: "Ends the run as failed; nothing is merged and its branch keeps the work to resume it." }
+    transitions:
+      - when: "choice == 'stop'"
+        goto: end
+        status: failed
+      # continue: develop's routes after a commit, as rule_check takes them
+      - when: "inputs.e2e_tests != 'off' and steps.acceptance_tests.output and steps.acceptance_tests.output.e2e_scope == 'scenarios'"
+        goto: testid_check
+        set: *checks_passed
+      - when: "inputs.issues | length > 1 and not steps.issue_not_done.output and (steps.develop.output.issues or []) | rejectattr('done') | list | length"
+        goto: issue_not_done
+        set: *checks_passed
+      - when: "(inputs.mode == 'validated' and (vars.owner_validated != 'yes' or inputs.validate_every_round)) and inputs.screenshots == 'off'"
+        goto: developer_check
+        set: *checks_passed
+      - when: "inputs.mode == 'validated' and (vars.owner_validated != 'yes' or inputs.validate_every_round)"
+        goto: developer_screenshots
+        set: *checks_passed
+      - when: "inputs.screenshots != 'off' and ((steps.develop.output.screenshots or []) | length or 'src/renderer/' in ((steps.develop.output.files_changed or []) | join(' ') | replace('\\\\', '/')))"
+        goto: developer_screenshots
+        set: *checks_passed
+      - when: "true"
+        goto: code_review
+        set: *checks_passed
 
   - id: test_failed
     type: human_approval

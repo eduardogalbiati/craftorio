@@ -35,7 +35,7 @@ Which file owns which part of a run: `src/engine/workflow.js` keeps the run loop
   - `supervision.js`: `superviseFailure` and the supervisor on call (stalls, escalation gates, failed
     actions, exhausted loops, idle agents).
   - `checkout.js`: the run's worktree, dependencies, base worktree, scratch workspace, leftover processes.
-  - `machine-steps.js`: `type: screenshots`, `suite`, `test_ids`, `workflow` (child runs), evidence.
+  - `machine-steps.js`: `type: screenshots`, `suite`, `test_ids`, `check` (#404), `workflow` (child runs), evidence.
   - `test-requests.js`: ```run-tests requests, the test map, affected tests, leftover test commits, the
     refused test/protected edits prompts.
   - `resume.js`: what a resumed run reuses (`seedResume`, `replayConfirmedGate`, `resumeSession`,

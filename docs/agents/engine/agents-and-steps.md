@@ -206,6 +206,16 @@ fields (references between steps, agents, transitions, groups) are the named rul
   ai-development-local-hero runs it as `testid_check` after each develop commit when the scenarios
   were written first (`e2e_scope: scenarios`): missing ids go back to develop at most twice
   (`vars.testid_returns`), then develop's own routes follow.
+- A **check step** (`type: check`, no agent, no model call, #404; `runCheckStep` →
+  `src/engine/check-step.js`): the project's rule checks in the run's checkout, `command` (a
+  template; empty: `npm run check` when the project's package.json has a `check` script) through the
+  suite's `runCommand`, `timeout` optional (default 10m), the log in `logs/check-<visit>.log`. It runs
+  in a mock run too (a local, free check, like the test id step). Output `{ kind: 'check', status:
+  pass | fail | skipped, command, findings, message, round }`: `findings` are the command's last 40
+  lines, `skipped` when there is no checkout or no command. ai-development-local-hero runs it as
+  `rule_check` after each develop commit (input `check_command`): a failure goes back to develop with
+  the findings at most twice per review round (`vars.check_returns`), then to the `check_failed`
+  gate; a pass or a skip takes develop's own routes.
 - **Ask for changes through the test writer (#247)**: in ai-development-local-hero, `developer_check`'s
   `changes` goes to `acceptance_tests` (`vars.criteria_triage`), whose prompt quotes the owner's request
   and asks for a triage: `criteria_changed: false` → develop; `true` → `red_check` on `tests_changed`
