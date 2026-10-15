@@ -4,7 +4,8 @@
 // the bar's state dot, icons, ⋮ menu and filter row (#269), "Ask the Oracle about this failure" (#271),
 // Undo a removal and earlier versions (#281), the item card's bands, Workflow band, pipeline and the
 // stage actions menu (#282), disabling a stage (#284), no "Update the app after this" control (#285),
-// the shipped releases' blocks, version lines and Releases filter (#291), on the demo roadmap (scripts/screenshot.js
+// the shipped releases' blocks, version lines and Releases filter (#291), the bar's Pause menu ("Pause
+// after this stage" / "Pause now", the pausing badge and Cancel pause, #391), on the demo roadmap (scripts/screenshot.js
 // demoRoadmap / demoRoadmapRuns). Locators are roles and data-testid only (skills/ui-conventions).
 //
 // What the screens expose (the renderer's contract for these steps):
@@ -917,4 +918,120 @@ Then('the roadmap header counts {int} stage(s) for the release {string}', async 
   const head = header(e2e.window);
   await expect(head).toContainText(releaseRe(version), { timeout: LOAD_TIMEOUT });
   await expect(head).toContainText(new RegExp(`\\b${n} stages?\\b`));
+});
+
+// ---- #391: the bar's Pause menu, "Pause after this stage" and "Pause now" ---------------------------
+// What the screen exposes (new for #391):
+// - the bar's "Pause" button (accessible name "Pause", as #269) opens a menu, data-testid=
+//   "roadmap-pause-menu" (role="menu") with two role="menuitem" entries, each with its one-line hint:
+//   data-testid="roadmap-pause-after-stage" ("Pause after this stage", first, the default; hint "The
+//   items of stage N still start and finish; the next stage waits") and data-testid="roadmap-pause-now"
+//   ("Pause now"; hint "Nothing new starts; runs in progress go on").
+// - while the stage finishes: data-testid="roadmap-pausing-badge" in the bar ("Pausing after stage N")
+//   and data-testid="roadmap-cancel-pause", a button "Cancel pause" in the bar.
+// - once the stage is over the roadmap is paused (state dot data-state="paused") and the bar reads
+//   "Stage N done" (as #237).
+// A simulated local-hero run takes some 20 to 60 s at mock delay scale 1; the slowest wait here is two
+// runs back to back (A, then B or C).
+
+const RUN_TIMEOUT = 240000;
+const pauseMenu = (page) => page.getByTestId('roadmap-pause-menu').filter({ visible: true }).first();
+const pauseEntry = (page, label) => pauseMenu(page).getByRole('menuitem').filter({ hasText: label }).first();
+const PAUSE_ENTRIES = { 'Pause after this stage': 'roadmap-pause-after-stage', 'Pause now': 'roadmap-pause-now' };
+const pausingBadge = (page) => rmBar(page).getByTestId('roadmap-pausing-badge');
+
+Given('the app is open with simulated turns of a few seconds', async ({ e2e }) => {
+  await e2e.open({ mockDelayScale: 1 });
+});
+
+// The demo roadmap's stages replaced by two planned stages (issues #3911…#3913, made up: the runs are
+// simulated), the roadmap paused with nothing to settle, so the bar offers Resume; Concurrent runs
+// off: one run at a time, simulations included (src/service/areas/runs.js concurrency()).
+Given('the roadmap has two planned stages, items A and B in stage 1 and item C in stage 2, one run at a time', async ({ e2e }) => {
+  editRoadmap(e2e, (r) => {
+    const model = r.stages.flatMap((s) => s.items).find((x) => x.workflow === 'software-development-local-hero.yaml');
+    expect(model, 'a software-development-local-hero item in the demo roadmap').toBeTruthy();
+    const item = (letter, number) => {
+      const issue = { number, url: `https://github.com/example/demo-app/issues/${number}`, title: `Pause item ${letter}`, body: `A small change (${letter}) for the pause scenarios.`, knownPullRequests: [] };
+      const base = JSON.parse(JSON.stringify(model));
+      for (const k of ['issues', 'reason', 'modeReason', 'origin', 'cost']) delete base[k];
+      return {
+        ...base, id: `pause-item-${letter.toLowerCase()}`, ...issue, mock: true,
+        inputs: { language: 'js', mode: 'auto', screenshots: 'off' }, status: 'planned', runId: null, runs: [], error: null,
+      };
+    };
+    Object.assign(r, {
+      state: 'paused', simulated: true, pausedBy: null, error: null, scope: null, budget: null, live: false,
+      stages: [
+        { id: 'stage-pause-1', name: 'Pause batch', note: '', items: [item('A', 3911), item('B', 3912)] },
+        { id: 'stage-pause-2', name: 'After the pause', note: '', items: [item('C', 3913)] },
+      ],
+    });
+  });
+  const file = path.join(e2e.scratch, 'workspace', 'settings.json');
+  const settings = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
+  fs.writeFileSync(file, JSON.stringify({ ...settings, concurrentRuns: { ...(settings.concurrentRuns || {}), enabled: false } }, null, 2));
+});
+
+// started: the card left "planned" and links its run
+Then('the roadmap item {string} has started', async ({ e2e }, title) => {
+  const item = roadmapItem(e2e.window, title);
+  await expect(item.getByTestId('run-chip')).toHaveAttribute('data-run', /\S/, { timeout: RUN_TIMEOUT });
+  await expect(item).not.toHaveAttribute('data-status', 'planned');
+});
+
+Then('the roadmap item {string} has not started', async ({ e2e }, title) => {
+  const item = roadmapItem(e2e.window, title);
+  await expect(item).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(item).toHaveAttribute('data-status', 'planned');
+  await expect(item.getByTestId('run-chip')).toHaveCount(0);
+});
+
+Then('the roadmap item {string} is done', async ({ e2e }, title) => {
+  await expect(roadmapItem(e2e.window, title)).toHaveAttribute('data-status', 'done', { timeout: RUN_TIMEOUT });
+});
+
+Then('the pause menu offers {string} first, with the hint {string}', async ({ e2e }, label, hint) => {
+  const page = e2e.window;
+  await expect(pauseMenu(page)).toBeVisible();
+  await expect(rmBar(page).getByRole('button', { name: 'Pause', exact: true })).toHaveAttribute('aria-expanded', 'true');
+  const first = pauseMenu(page).getByRole('menuitem').first();
+  await expect(first).toHaveAttribute('data-testid', PAUSE_ENTRIES[label]);
+  await expect(first).toContainText(label);
+  await expect(first).toContainText(hint);
+});
+
+Then('the pause menu offers {string}, with the hint {string}', async ({ e2e }, label, hint) => {
+  const entry = pauseEntry(e2e.window, label);
+  await expect(entry).toBeVisible();
+  await expect(entry).toHaveAttribute('data-testid', PAUSE_ENTRIES[label]);
+  await expect(entry).toContainText(hint);
+});
+
+When('I choose {string} in the pause menu', async ({ e2e }, label) => {
+  const page = e2e.window;
+  await expect(pauseMenu(page)).toBeVisible();
+  await pauseEntry(page, label).click();
+  await expect(page.getByTestId('roadmap-pause-menu').filter({ visible: true })).toHaveCount(0);
+});
+
+Then('the roadmap bar shows the badge {string} with a {string} button', async ({ e2e }, text, button) => {
+  const page = e2e.window;
+  await expect(pausingBadge(page)).toHaveText(text, { timeout: LOAD_TIMEOUT });
+  const cancel = rmBar(page).getByTestId('roadmap-cancel-pause');
+  await expect(cancel).toHaveAccessibleName(button);
+  await expect(cancel).toBeEnabled();
+});
+
+Then('the roadmap bar shows no pausing badge', async ({ e2e }) => {
+  const page = e2e.window;
+  await expect(pausingBadge(page)).toHaveCount(0, { timeout: LOAD_TIMEOUT });
+  await expect(rmBar(page).getByTestId('roadmap-cancel-pause')).toHaveCount(0);
+});
+
+// the stage is over: the roadmap is paused (not failed) and says which stage is done
+Then('the roadmap pauses with {string}', async ({ e2e }, text) => {
+  const page = e2e.window;
+  await expect(stateDot(page)).toHaveAttribute('data-state', 'paused', { timeout: RUN_TIMEOUT });
+  await expect(rmBar(page)).toContainText(text);
 });

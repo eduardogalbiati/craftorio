@@ -277,7 +277,7 @@ Feature: Runs and gates
     Given the app is open with slow simulated turns
     When I start a simulated run with the task "Add a /health endpoint"
     And an agent's turn of the run is under way
-    And I click "Pause after current turn" on the run
+    And I click "Pause after current step" on the run
     Then the run says it is pausing, waiting for the working agent to finish its turn, with a "Cancel pause" button
     And the run shows where it paused and the next agent's turn
     And the run's status is "Paused" with the id "paused"
@@ -291,9 +291,9 @@ Feature: Runs and gates
     Given the app is open with slow simulated turns
     When I start a simulated run with the task "Add a /health endpoint"
     And an agent's turn of the run is under way
-    And I click "Pause after current turn" on the run
+    And I click "Pause after current step" on the run
     Then the run says it is pausing, waiting for the working agent to finish its turn, with a "Cancel pause" button
     When I click "Cancel pause" on the run
     Then the run no longer says it is pausing
-    And the run offers "Pause after current turn" again
+    And the run offers "Pause after current step" again
     And the run goes on past the current turn without pausing

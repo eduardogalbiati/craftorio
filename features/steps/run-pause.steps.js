@@ -3,7 +3,7 @@
 // (skills/ui-conventions).
 //
 // What the screens expose (the renderer's contract for these steps):
-// - Run screen: data-testid="run-pause", a button "Pause after current turn" next to Stop.
+// - Run screen: data-testid="run-pause", a button "Pause after current step" (#391) next to Stop.
 // - data-testid="run-pause-state": the run's pause line, data-state = pausing | paused. Pausing reads
 //   "Pausing: waiting for <agent> to finish its turn (<step>)" and holds data-testid="run-cancel-pause"
 //   (a button "Cancel pause"); paused reads "Paused at <step>, next: <agent>'s turn" and when.
@@ -11,7 +11,7 @@
 //   list's status label (data-testid="status-label", #266) reads "Paused", data-status="paused".
 // - data-testid="run-resume": a button "Resume" on a paused run (continues from where it stopped; not
 //   the "Resume from step…" of a finished run).
-// - Roadmap: the stage actions menu (#282) has a menuitem "Pause after current turn",
+// - Roadmap: the stage actions menu (#282) has a menuitem "Pause after current step" (#391),
 //   data-testid="roadmap-stage-pause"; a pausing or paused stage shows data-testid=
 //   "roadmap-stage-pause-state" with data-state = pausing | paused ("Pausing: …" / "Paused at …").
 // Simulated turns run slower here (Given the app is open with slow simulated turns: the mock delay
@@ -51,9 +51,9 @@ When("an agent's turn of the run is under way", async ({ e2e }) => {
   e2e.runId = (await page.getByTestId('run-id').innerText()).trim();
 });
 
-When('I click "Pause after current turn" on the run', async ({ e2e }) => {
+When('I click "Pause after current step" on the run', async ({ e2e }) => {
   const button = visible(e2e.window, 'run-pause');
-  await expect(button).toHaveAccessibleName('Pause after current turn');
+  await expect(button).toHaveAccessibleName('Pause after current step');
   await button.click();
 });
 
@@ -112,9 +112,9 @@ Then('the run no longer says it is pausing', async ({ e2e }) => {
   await expect(e2e.window.getByTestId('run-pause-state').filter({ visible: true })).toHaveCount(0, { timeout: LOAD_TIMEOUT });
 });
 
-Then('the run offers "Pause after current turn" again', async ({ e2e }) => {
+Then('the run offers "Pause after current step" again', async ({ e2e }) => {
   const button = visible(e2e.window, 'run-pause');
-  await expect(button).toHaveAccessibleName('Pause after current turn');
+  await expect(button).toHaveAccessibleName('Pause after current step');
   await expect(button).toBeEnabled();
 });
 
