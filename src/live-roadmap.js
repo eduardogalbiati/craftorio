@@ -17,7 +17,10 @@
 
 const { itemIssues } = require('./backlog');
 const roadmaps = require('./roadmap');
-const { unfinishedItems } = require('./shared/roadmap-model');
+const {
+  itemRuns,
+  unfinishedItems,
+} = require('./shared/roadmap-model');
 
 const DEFAULTS = { complexityCap: 2, maxStages: 3, dailyBudgetUsd: 50, refreshFirst: true };
 const DAY_MS = 24 * 3600e3;
@@ -123,7 +126,7 @@ function refillStages(answer, { allowed, maxStages = DEFAULTS.maxStages, maxGrou
 function spentToday({ roadmap, runCost, now = new Date() }) {
   const since = Math.max(now.getTime() - DAY_MS, Date.parse(roadmap?.liveSince) || 0);
   const refills = (roadmap?.liveRefills || []).filter((x) => Date.parse(x.at) >= since).reduce((a, x) => a + (Number(x.costUsd) || 0), 0);
-  const ids = new Set((roadmap?.stages || []).flatMap((s) => (s.items || []).flatMap((x) => [...(x.runs || []), ...(x.runId ? [x.runId] : [])])));
+  const ids = new Set((roadmap?.stages || []).flatMap((s) => (s.items || []).flatMap(itemRuns)));
   let used = 0;
   for (const id of ids) {
     const r = runCost(id);

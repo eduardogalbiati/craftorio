@@ -200,7 +200,8 @@
         ${SUP_WHAT[it.action] ? `<p class="muted small">${SUP_WHAT[it.action]}</p>` : ''}</div></div>`;
       case 'end': {
         const ok = it.status === 'success';
-        return `<div class="duo-note ${ok ? 'done' : 'failed'}" data-item="${it.id}" data-testid="run-chat-finished"><span><b data-status="${esc(it.status)}">${ok ? 'Done' : esc(StatusPill.statusLabel(it.status))}</b>${!ok && it.error ? ` · ${esc(it.error.slice(0, 240))}` : ''} · $${(it.cost || 0).toFixed(2)} · ${fmtSecs(it.durationMs)}</span>
+        // #384: the run that resumed this one (its row's resumedBy, read when a past run opens)
+        return `<div class="duo-note ${ok ? 'done' : 'failed'}" data-item="${it.id}" data-testid="run-chat-finished"><span><b data-status="${esc(it.status)}">${ok ? 'Done' : esc(StatusPill.statusLabel(it.status))}</b>${!ok && it.error ? ` · ${esc(it.error.slice(0, 240))}` : ''} · $${(it.cost || 0).toFixed(2)} · ${fmtSecs(it.durationMs)}${StatusPill.resumedLink(chat.resumedBy)}</span>
           <button type="button" class="link-btn small" data-resume title="Start a new run from a step of this one, keeping the previous outputs (no supervisor call)">Resume from step…</button></div>`;
       }
       default: return '';
@@ -311,13 +312,15 @@
     chat.buffer = [];
     chat.loading = false;
     chat.live = chat.live && chat.model.run.status === 'running';
-    // a run without an end that this window does not run: interrupted, or alive in another app
-    // window (its row's runningElsewhere, #112); unreadable, it reads as interrupted
-    if (!chat.live && chat.model.run.status === 'running') {
+    // a past run's row: a run without an end that this window does not run is interrupted, or alive in
+    // another app window (its row's runningElsewhere, #112; unreadable, it reads as interrupted); an
+    // ended run may have been resumed by a later run (#384)
+    if (!chat.live) {
       try {
         const [row] = (await api.listRuns?.({ ids: [runId] }))?.runs || [];
         if (chat.runId !== runId) return;
-        chat.elsewhere = row?.status === 'running' && row.runningElsewhere || null;
+        if (chat.model.run.status === 'running') chat.elsewhere = row?.status === 'running' && row.runningElsewhere || null;
+        chat.resumedBy = row?.resumedBy || null;
       } catch { /* the run list could not be read */ }
     }
     draw(ids);
@@ -364,6 +367,8 @@
   function init() {
     if (!$c('#view-runchat')) return;
     $c('#rc-messages').addEventListener('click', (e) => {
+      const resumed = e.target.closest('[data-testid="run-resumed-link"]');
+      if (resumed) { e.preventDefault(); window.showRun?.(resumed.dataset.run); return; }
       const at = e.target.closest('[data-resume-at]');
       if (at) { window.openResumeDialog?.(chat.runId, at.dataset.resumeAt ? { step: at.dataset.resumeAt } : {}); return; }
       if (e.target.closest('[data-resume]')) { window.openResumeDialog?.(chat.runId); return; }

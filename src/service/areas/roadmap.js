@@ -37,12 +37,16 @@ module.exports = (ctx) => {
   // while paused, e.g. after an edit of the file the scheduler has not seen, shows "Stage N done").
   // `issues`: the backlog's issues when the caller has read them already (the Backlog, #389)
   function roadmapView(projectId, list = [], issues = null) {
+    // #384: each run read once per draw (an item's run, its resume chain, its earlier runs)
+    const found = new Map();
+    const find = (runId) => (found.has(runId) ? found.get(runId) : found.set(runId, findRun(runId)).get(runId));
+    const runOfItem = (runId) => roadmapRun(runId, find);
     const read = roadmaps.readRoadmap(ctx.ws.backlog, path.basename(String(projectId)));
-    const stored = { ...read, stages: read.stages.map((s) => ({ ...s, items: s.items.map(resumedItem) })) };
-    const roadmap = stored.state === 'paused' ? roadmaps.advance(stored, { runOf: roadmapRun, canStart: () => false }).roadmap : roadmaps.withStatus(stored, roadmapRun);
+    const stored = { ...read, stages: read.stages.map((s) => ({ ...s, items: s.items.map((x) => resumedItem(x, find)) })) };
+    const roadmap = stored.state === 'paused' ? roadmaps.advance(stored, { runOf: runOfItem, canStart: () => false }).roadmap : roadmaps.withStatus(stored, runOfItem);
     const byId = new Map(list.map((r) => [r.runId, r]));
     // a run the caller did not list (roadmap:get lists none): its index row
-    const runOf = (runId) => byId.get(runId) || runs.findRun(ctx.ws.runs, runId);
+    const runOf = (runId) => byId.get(runId) || find(runId);
     // #384: the item's earlier runs, oldest first, with their status
     const runHistory = (x) => RoadmapModel.earlierRuns(x).map((id) => ({ runId: id, status: runOf(id)?.status || null }));
     // past runs of the same workflow file, simulated with simulated and real with real
@@ -90,11 +94,12 @@ module.exports = (ctx) => {
   // #384: an item whose run was resumed (#250) shows the run that resumed it (the latest of the chain),
   // the earlier ones in its `runs`, also when its file still names the earlier run (adoptResumed, #100,
   // records it when the resume starts); a done or skipped item keeps its run
-  function resumedItem(x) {
+  const findRun = (runId) => runs.findRun(ctx.ws.runs, runId);
+  function resumedItem(x, find = findRun) {
     if (!x.runId || RoadmapModel.isFinished(x)) return x;
     const chain = [];
     while (chain.length < 20) {
-      const next = runs.findRun(ctx.ws.runs, chain.at(-1) || x.runId)?.resumedBy?.runId;
+      const next = find(chain.at(-1) || x.runId)?.resumedBy?.runId;
       if (!next || next === x.runId || chain.includes(next)) break;
       chain.push(next);
     }
@@ -142,11 +147,11 @@ module.exports = (ctx) => {
   // a local merge, a PR/MR merge action, or a simulation that succeeded (simulations never merge);
   // a run of a workflow that never merges (`metadata.merges: false`, e.g. backlog-refresh, #161)
   // counts as merged when it succeeds.
-  function roadmapRun(runId) {
+  function roadmapRun(runId, find = findRun) {
     const live = runId && ctx.active.get(runId);
     if (live) return { status: 'running', waiting: live.approvals.size > 0 };
     // its index row when current (#389: no events.jsonl parsed per item and per read)
-    const r = runId ? runs.findRun(ctx.ws.runs, runId) : null;
+    const r = runId ? find(runId) : null;
     if (!r) return null;
     return { status: r.status, error: r.error, merged: r.status === 'success' && (r.mock || !!r.localMerge || roadmaps.mergedPullRequest(r.runDir) || neverMerges(r.file)) };
   }

@@ -2,7 +2,7 @@
 // Run screen (Run Details): the run shown in the top bar, its failure banner, its chain banner (#134:
 // renderChainBanner), the gates it waits at
 // (gate cards: renderRunGates, onRunGateClick; what a gate offers is gate-panel.js), its summary
-// (inputs, supervisor, watch, resume, Save to issue, Review changes: the diff viewer, #118), its
+// (inputs, supervisor, watch, resume, the run that resumed it: #384, Save to issue, Review changes: the diff viewer, #118), its
 // steps by group, its sessions and the Session / Events / Artifacts tabs. No sidebar entry of its own: the Run item and the runs menu
 // belong to the shell (app.js), which also keeps the run state it draws (state.runs, onEvent,
 // hydrateRun) and calls renderRunScreen() from render() while it shows. Registers itself with
@@ -197,11 +197,26 @@ function scratchHtml(runId) {
     + `Scratch workspace (${esc(s.files)} file${s.files === 1 ? '' : 's'}, ${esc(fmtSize(s.bytes))}) <button class="btn sm ghost" id="btn-run-scratch">Open folder</button></div>`;
 }
 
+// #384: the run that resumed an ended run (its row's resumedBy, runs:list { ids }), read at most every
+// 15 s per run: runId → { by: { runId, status } | null, at }. A running run is not asked.
+const resumedOfRun = new Map();
+function askResumed(r) {
+  if (!r.id || r.status === 'running') return;
+  const cur = resumedOfRun.get(r.id);
+  if (cur && (cur.pending || Date.now() - cur.at < 15000)) return;
+  resumedOfRun.set(r.id, { ...(cur || { by: null }), pending: true, at: Date.now() });
+  Promise.resolve().then(() => api.listRuns({ ids: [r.id] })).then((d) => d?.runs?.[0]?.resumedBy || null, () => cur?.by || null).then((by) => {
+    resumedOfRun.set(r.id, { by, at: Date.now() });
+    if (state.run?.id === r.id && state.view === 'run') renderRunSummary();
+  });
+}
+
 function renderRunSummary() {
   const r = state.run;
   if (!r) return;
   askPrStates([r]);
   askScratch(r.id);
+  askResumed(r);
   const all = Object.entries(r.inputs || {}).filter(([, v]) => v !== undefined && v !== null && v !== '' && !(Array.isArray(v) && !v.length));
   // #216: the choices (enum and yes/no inputs) as the shared pills, with their labels; the rest
   // (task, paths, numbers) as key / value
@@ -213,7 +228,7 @@ function renderRunSummary() {
   const saveIssue = r.workflow === 'writer-reviewer' && r.status === 'success' && window.openDuoSaveToIssue ? (issuesOfRun(r)[0] || null) : null;
   // its title (editable) and PR first, the workflow under it (#84); a past run opened from disk is read-only
   const html = `
-    <div class="run-summary-name"><b>${runTitleHtml(r)}</b> ${prBadge(r)}</div>
+    <div class="run-summary-name"><b>${runTitleHtml(r)}</b>${StatusPill.resumedLink(resumedOfRun.get(r.id)?.by)} ${prBadge(r)}</div>
     <div class="small muted">${esc(r.workflow || '')}${r.version ? ` v${esc(r.version)}` : ''}${selectedView().past ? ' · <span title="Opened from its recorded events: nothing here can change it">read-only</span>' : ''}</div>
     ${r.project ? `<div class="small">Project: <b>${esc(r.project)}</b></div>` : ''}
     ${(r.issueSaves || []).map((s) => `<div class="small" title="The accepted document was saved to the issue (Save to issue, Write & Review)">Saved to issue: <a href="${esc(s.commentUrl || s.url)}" target="_blank" rel="noopener">#${esc(s.number)}</a> · ${s.mode === 'comment' ? 'as a comment' : 'description replaced'} · ${esc(new Date(s.at).toLocaleString('en-US'))}</div>`).join('')}
@@ -245,6 +260,7 @@ function renderRunSummary() {
   $('#btn-run-sup').onclick = () => openSupervisorForCurrent();
   if ($('#btn-run-watch')) $('#btn-run-watch').onclick = () => openSupervisorForCurrent({ watch: true });
   if ($('#btn-run-resume')) $('#btn-run-resume').onclick = () => openResumeDialog(r.id);
+  box.querySelectorAll('[data-testid="run-resumed-link"]').forEach((a) => (a.onclick = (e) => { e.preventDefault(); showRun(a.dataset.run); }));
   box.querySelectorAll('[data-suite-log]').forEach((b) => (b.onclick = () => openRunLog(r.id, b.dataset.suiteLog)));
   if ($('#btn-run-scratch')) $('#btn-run-scratch').onclick = () => api.openPath(scratchOfRun.get(r.id)?.info?.dir).catch((e) => showToast('Could not open the folder', errMsg(e)));
   if ($('#btn-run-diff')) $('#btn-run-diff').onclick = () => DiffViewer.open({ runId: r.id, title: r.title || r.workflow || '' });

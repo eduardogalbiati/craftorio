@@ -21,6 +21,7 @@ const supervisorChat = require('../../supervisor-chat');
 const repoPerformance = require('../../repo-performance');
 const roadmap = require('../../roadmap');
 const runs = require('../../runs');
+const { itemRuns } = require('../../shared/roadmap-model');
 const {
   computeUsageAsync,
   readLocalUsageAsync,
@@ -107,7 +108,7 @@ module.exports = (ctx) => {
       || projectList.find((p) => all.some((r) => runs.projectOf(r, projectList)?.id === p.id)) || projectList[0] || null;
     const list = project ? runs.runsForProject(all, project) : [];
     const stages = project ? roadmap.readRoadmap(ctx.ws.backlog, project.id).stages.map((s, i) => ({
-      name: s.name || `Stage ${i + 1}`, runIds: s.items.flatMap((x) => [x.runId, ...(x.runs || [])].filter(Boolean)),
+      name: s.name || `Stage ${i + 1}`, runIds: s.items.flatMap(itemRuns),
     })) : [];
     const perf = await repoPerformance.repositoryPerformance({
       runs: list, repo: project?.isGit ? project.folder : null, store: storeFor(ctx.ws.runs), from, to, marker, stages,

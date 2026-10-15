@@ -355,11 +355,20 @@ function findOne(runsDir, id, live) {
 
 // The id of the run that resumed `info` (the index's resumed_from column). A run that could have been
 // resumed and has no resumer indexed first indexes the folders newer than it that the index does not
-// have yet (run ids start with their start time; a resume starts after the run it resumes).
+// have yet (run ids start with their start time; a resume starts after the run it resumes), at most
+// once every 2 s per runs folder while no folder was added to it: a roadmap draw asks it for each
+// failed item.
 const RESUMED_DONE = new Set(['pending', 'running', 'success']);
+const FRESH_SCAN_MS = 2000;
+const freshScans = new Map(); // runs folder → { at, mtimeMs } of its last comparison with the index
 function resumerOf(store, runsDir, info) {
   const found = store.runResumedBy(info.runId);
   if (found || RESUMED_DONE.has(info.status)) return found;
+  let mtimeMs = 0;
+  try { mtimeMs = fs.statSync(runsDir).mtimeMs; } catch { return null; }
+  const last = freshScans.get(runsDir);
+  if (last && last.mtimeMs === mtimeMs && Date.now() - last.at < FRESH_SCAN_MS) return null;
+  freshScans.set(runsDir, { at: Date.now(), mtimeMs });
   let names = [];
   try { names = fs.readdirSync(runsDir); } catch { return null; }
   const indexed = store.runIds();
