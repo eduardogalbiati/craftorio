@@ -29,6 +29,11 @@ first lines of the error) and the log's path: at most 2 rounds, then the `test_f
 that also fail on the base (the test writer's pre-existing failures) are reported, never chased.
 The test writer runs only focused tests; a whole-suite command it starts anyway is noted in the
 run as a warning. The summary counts the suite runs (`suite_runs: { engine, agents }`).
+A round cut by its timeout is checked like a failure (#396): each test file still running reruns
+alone on the branch and, when it hangs there too, alone on the base (each with its own timeout, at
+least 2 min); a file that passes alone, or hangs or fails on the base too, is reported outside the
+change instead of failing "the whole suite".
 
 <!-- section:local-hero -->
 - **Tests on or off** (#203): the same `unit_tests` / `e2e_tests` inputs and the same `suite` step (the orchestrator runs the whole suite once per round, #177) as `software-development`. With unit tests off nothing is reported as tested: `verify_failed` and the verifier say so, and the run's Details show it.
+- **Suite red outside the change** (#396, input `suite_red_outside_change`): *Ask* (default) = a red suite opens `test_failed` as before; *Continue* = a suite whose failures are all outside the change goes on to the build and the merge, the run marked **Not tested green** (Run screen, chat, `summary.json` `tested`). A failure in the change still opens the gate.

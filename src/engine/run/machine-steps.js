@@ -258,10 +258,11 @@ const methods = {
           // a suite step other than `suite` (an e2e step, #223) logs under its own name
           ...(step.id === 'suite' && !env ? {} : { logName: `${step.id}-${st.visits}${env}` }),
           // #225: `coverage: true` adds node's coverage; the summary covers the files the run changed
+          // (#396: and the failures are classed in or outside the change; null: unknown, in the change)
           coverage: step.coverage === true,
           changedFiles: () => {
             const base = this.worktree?.base;
-            return this.ctx.worktree_dir && base ? changedFiles(this.ctx.worktree_dir, base) : [];
+            return this.ctx.worktree_dir && base ? changedFiles(this.ctx.worktree_dir, base) : null;
           },
           onSpawn,
           // #390: what the suite leaves running in the run's own worktree is stopped (never in a folder it does not own)

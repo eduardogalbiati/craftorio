@@ -53,11 +53,12 @@ function issueLines(issues, { only = null, max = ISSUE_LINES } = {}) {
 }
 
 // One Markdown line per failing test of a `type: suite` step's output (src/engine/suite-step.js),
-// then the pre-existing failures as one count (#211: they fail on the base too). '' when not a suite's.
+// with its class (#396: in or outside the change, and why), then the pre-existing failures as one
+// count (#211: they fail on the base too). '' when not a suite's.
 function suiteLines(output, { max = 4 } = {}) {
   if (output?.kind !== 'suite') return '';
   const fails = output.failures || [];
-  const lines = fails.slice(0, max).map((f) => `- ✖ \`${clip(f.test, 80)}\`${f.file ? ` (${clip(f.file, 60)})` : ''}`);
+  const lines = fails.slice(0, max).map((f) => `- ✖ \`${clip(f.test, 80)}\`${f.file ? ` (${clip(f.file, 60)})` : ''}${f.class ? `: ${f.class} (${clip(f.class_reason, 70)})` : ''}`);
   if (fails.length > max) lines.push(`- … and ${fails.length - max} more (see Details)`);
   const pre = output.preexisting?.length || 0;
   if (pre) lines.push(`- ${pre} pre-existing failure${pre === 1 ? '' : 's'} not counted (they fail on the base too)`);

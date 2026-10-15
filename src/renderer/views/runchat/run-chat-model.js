@@ -363,7 +363,8 @@
       // a fan-out that threw (too few agents answered) gets no step.finished
       for (const group of this.groups.values()) { Object.assign(group, { done: true, error: ev.status !== 'success' }); this.touch(group); }
       this.groups.clear();
-      this.add({ kind: 'end', ts: ev.ts, status: ev.status, error: String(ev.error || ''), cost: s.cost_usd ?? this.run.cost, durationMs: s.duration_ms || 0 });
+      // tested (#396): 'not green' when the run went on without a green suite
+      this.add({ kind: 'end', ts: ev.ts, status: ev.status, error: String(ev.error || ''), cost: s.cost_usd ?? this.run.cost, durationMs: s.duration_ms || 0, tested: s.tested || null });
     },
   };
 

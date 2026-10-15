@@ -15,7 +15,8 @@
 // src/engine/workflow.js); scripts/affected-tests.js prints it.
 // The same graph gives the static code → tests map (#219, `testMap` / `testMapMarkdown`: every source
 // file and the tests that reach it; docs/agents/test-map.md and a step's `test_map: true`) and the
-// existing tests related to new tests (#220, `relatedTests`: what the acceptance tests' sources reach).
+// existing tests related to new tests (#220, `relatedTests`: what the acceptance tests' sources reach),
+// and whether a suite's failures are in or outside the change (#396, `classifyFailures`).
 
 const fs = require('fs');
 const path = require('path');
@@ -169,6 +170,36 @@ function affectedTests({ root, base, changed } = {}) {
   return out;
 }
 
+// In or outside the change (#396): a failure is "in the change" when its test file is changed itself
+// or reaches a changed file through the graph (slow tests too), "outside the change" otherwise;
+// `class_reason` says why ("imports src/a.js", "reaches none of the 3 changed file(s)"). When it
+// cannot be told (no file named, the changed files unknown, a shared root changed, no JS/TS graph)
+// the failure counts as in the change: only failures known to be elsewhere are outside. A failure
+// that already has a class keeps it. → copies of `failures` with { class, class_reason }; never throws.
+const IN_CHANGE = 'in the change';
+const OUTSIDE_CHANGE = 'outside the change';
+function classifyFailures({ root, changed, failures = [] } = {}) {
+  const inChange = (f, reason) => ({ ...f, class: IN_CHANGE, class_reason: reason });
+  const all = (reason) => failures.map((f) => (f.class ? f : inChange(f, reason)));
+  if (!failures.some((f) => !f.class)) return failures;
+  if (!Array.isArray(changed)) return all('cannot tell: the run\'s changed files are unknown');
+  const list = changed.map(slash);
+  const shared = list.filter((f) => SHARED.some((re) => re.test(f)));
+  if (shared.length) return all(`a shared root changed (${shared.join(', ')})`);
+  let graph;
+  try { graph = importGraph(root, projectFiles(root), list); } catch (e) { return all(`cannot tell: the project's files could not be listed (${e.message.split('\n')[0]})`); }
+  if (!graph.code.some(isTest)) return all('cannot tell: no JS/TS import graph for this project');
+  const from = reach(graph, list);
+  return failures.map((f) => {
+    if (f.class) return f;
+    if (!f.file) return inChange(f, 'cannot tell: the failure names no test file');
+    const file = slash(f.file);
+    const r = from.get(file);
+    if (r) return inChange(f, r.seed === file ? 'the test file is changed' : reasonOf(r, file));
+    return { ...f, class: OUTSIDE_CHANGE, class_reason: `reaches none of the ${list.length} changed file(s)` };
+  });
+}
+
 // One line per chosen file, for a step's output or a prompt: "test/a.test.js: imports src/a.js".
 function selectionLines(sel) {
   if (!sel) return [];
@@ -257,8 +288,11 @@ function relatedTests({ root, tests = [] } = {}) {
 module.exports = {
   affectedTests,
   changedFiles,
+  classifyFailures,
+  IN_CHANGE,
   isSlow,
   isTest,
+  OUTSIDE_CHANGE,
   relatedTests,
   selectionLines,
   testMap,

@@ -141,6 +141,16 @@ function testsPlanHtml(plan) {
   return `<div class="small run-tests-plan">${plan.map((p) => `<span class="badge${p.value === 'off' ? ' warn' : ''}" title="${esc(`${p.label}: ${p.value_label} (${p.source})${p.value === 'off' ? ': nothing of it is tested in this run' : ''}`)}">${esc(p.label)}: ${esc(p.value_label)}</span>`).join(' ')}</div>`;
 }
 
+// #396: a run that went on to the build without a green suite (the owner's policy on a suite red
+// only outside the change, or Continue at the test gate), as a warn badge; its failures and their
+// class on hover. '' for a run tested green or without a suite.
+function testedPillHtml(r) {
+  if (r.tested !== 'not green') return '';
+  const fails = (r.testedFailures || []).map((f) => `${f.test}${f.file ? ` (${f.file})` : ''}${f.class ? `: ${f.class}` : ''}`);
+  const title = `The run reached the build without a green suite.${fails.length ? `\n${fails.join('\n')}` : ''}`;
+  return ` <span class="badge warn" data-testid="run-tested-pill" title="${esc(title)}">Not tested green</span>`;
+}
+
 // #304: a suite step with `scope: affected`, its latest round as a card: the scope (the affected test
 // files, then the whole suite once), why each file ran (output.selection) and the logs. '' when no
 // suite step of the run selected its files. A step that runs the files it lists (the red check: every
@@ -228,7 +238,7 @@ function renderRunSummary() {
   const saveIssue = r.workflow === 'writer-reviewer' && r.status === 'success' && window.openDuoSaveToIssue ? (issuesOfRun(r)[0] || null) : null;
   // its title (editable) and PR first, the workflow under it (#84); a past run opened from disk is read-only
   const html = `
-    <div class="run-summary-name"><b>${runTitleHtml(r)}</b>${StatusPill.resumedLink(resumedOfRun.get(r.id)?.by)} ${prBadge(r)}</div>
+    <div class="run-summary-name"><b>${runTitleHtml(r)}</b>${StatusPill.resumedLink(resumedOfRun.get(r.id)?.by)} ${prBadge(r)}${testedPillHtml(r)}</div>
     <div class="small muted">${esc(r.workflow || '')}${r.version ? ` v${esc(r.version)}` : ''}${selectedView().past ? ' · <span title="Opened from its recorded events: nothing here can change it">read-only</span>' : ''}</div>
     ${r.project ? `<div class="small">Project: <b>${esc(r.project)}</b></div>` : ''}
     ${(r.issueSaves || []).map((s) => `<div class="small" title="The accepted document was saved to the issue (Save to issue, Write & Review)">Saved to issue: <a href="${esc(s.commentUrl || s.url)}" target="_blank" rel="noopener">#${esc(s.number)}</a> · ${s.mode === 'comment' ? 'as a comment' : 'description replaced'} · ${esc(new Date(s.at).toLocaleString('en-US'))}</div>`).join('')}

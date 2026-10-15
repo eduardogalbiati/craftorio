@@ -18,3 +18,13 @@ can change the outcome:
 
 Once a fix loop reaches its limit the engine goes to the gate without asking for yet another fix,
 and a gate never re-runs the same failed thing as the only way forward.
+
+A suite red only outside the change (#396): every counted failure of the suite says whether it is
+**in the change** (its test file is changed or reaches a changed file through the import graph) or
+**outside the change** (it reaches none, passes alone, or fails or hangs on the base too), with the
+reason, in the gate's summary. AI Development (local hero) has the input **Suite red outside the
+change**: *Ask* (default) opens `test_failed` as for any red suite; *Continue* lets such a run go on
+to the build and the merge without the gate. A failure in the change always opens it. A run that
+reaches the build without a green suite (the policy, or your Continue at the gate) shows a **Not
+tested green** badge on the Run screen and in its chat, `tested: "not green"` with the failures in
+its `summary.json`, and its build and verification prompts get the failures.

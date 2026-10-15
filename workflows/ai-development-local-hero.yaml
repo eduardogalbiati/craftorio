@@ -246,6 +246,15 @@ inputs:
     default: ""
     label: Test command
     description: "The project's whole-suite command the orchestrator runs once per test round (e.g. npm test). Empty: found from the project's files (package.json, go.mod, pom.xml, build.gradle, *.csproj, pyproject.toml)."
+  # #396 (owner 2026-10-15): set before the run, never changed by an agent while it runs. With
+  # continue, a suite red only outside the change goes on to the build without the test_failed gate.
+  suite_red_outside_change:
+    type: string
+    enum: [ask, continue]
+    default: ask
+    label: Suite red outside the change
+    options: { ask: Ask, continue: Continue }
+    description: "When the suite still fails but every failing test is outside the change (its test file reaches no changed file, passes alone, or fails or hangs on the base too). Ask: the test_failed gate waits for you, as for any red suite. Continue: the run goes on to the build and the merge, reported as not tested green. A failure in the change always asks."
 
 # -----------------------------------------------------------------------------
 # Final command line = args + capability and isolation flags + agent.cli_args + (resume_args if
@@ -1618,13 +1627,26 @@ steps:
     coverage: true
     transitions:
       # #223: the issue's scenarios, written first, run after the suite
+      # (#396: a green suite clears an earlier "not tested green")
       - when: "output.status == 'pass' and inputs.e2e_tests == 'write_and_run' and steps.acceptance_tests.output.e2e_scope == 'scenarios'"
         goto: e2e
+        set: { tested: "" }
       # build: after a merge-conflict resolution it goes on to verify_change (evidence kept)
       - when: "output.status == 'pass'"
         goto: build
+        set: { tested: "" }
       - when: "output.status == 'blocked'"
         goto: test_failed
+      # #396, the owner's policy: a suite red only outside the change (no counted failure in it, see
+      # suite-step.js) goes on like a green one, recorded as not tested green (summary.json `tested`,
+      # the build and verify prompts). Affected rounds only run files of the change, so such a red
+      # comes from the whole-suite run, the step's last round. A failure in the change goes on below.
+      - when: "output.status == 'fail' and output.in_change == 0 and inputs.suite_red_outside_change == 'continue' and inputs.e2e_tests == 'write_and_run' and steps.acceptance_tests.output.e2e_scope == 'scenarios'"
+        goto: e2e
+        set: { tested: "not green" }
+      - when: "output.status == 'fail' and output.in_change == 0 and inputs.suite_red_outside_change == 'continue'"
+        goto: build
+        set: { tested: "not green" }
       - when: "output.status == 'fail' and inputs.unit_tests == 'write_and_run'"
         goto: test
         max_visits: 2
@@ -1774,8 +1796,10 @@ steps:
       {{ tests_plan }}
       Continue to the build anyway: the change is reported as not tested green. Stop the run: the run ends as failed (its branch keeps the work to resume it).
     transitions:
+      # #396: recorded in summary.json `tested` and told to the build and verify prompts
       - when: "choice == 'continue'"
         goto: build
+        set: { tested: "not green" }
       - when: "choice == 'stop'"
         goto: end
         status: failed
@@ -1788,6 +1812,11 @@ steps:
       On branch `{{ steps.develop.output.branch }}`:
       {% if delegate_result %}
       The developer applied a fix: {{ delegate_result.text }}
+      {% endif %}
+      {% if vars.tested == 'not green' %}
+      The change is not tested green (#396): {% if steps.test_failed.output.choice == 'continue' %}the owner chose to continue at the test_failed gate{% else %}the suite is red only outside the change and the owner's policy (suite_red_outside_change: continue) lets the run go on{% endif %}. The failures:
+      {% if steps.e2e.output and steps.e2e.output.status != 'pass' %}{{ steps.e2e.output | suite_failures }}{% elif steps.suite.output and steps.suite.output.status != 'pass' %}{{ steps.suite.output | suite_failures }}{% else %}{{ steps.test.output.failure_report }}{% endif %}
+      Never report the change as tested green; do not try to fix these tests.
       {% endif %}
       1. Build the project following the build skill.
       2. Audit the dependencies following the build skill, separating production from development.
@@ -1975,6 +2004,11 @@ steps:
       {% if tests_plan %}
       This run's tests (#203): {{ tests_plan }} Never claim or imply test coverage for a part that
       was off: say "not tested in this run" for it in your summary.
+      {% endif %}
+      {% if vars.tested == 'not green' %}
+      The change is not tested green (#396): {% if steps.test_failed.output.choice == 'continue' %}the owner chose to continue at the test_failed gate{% else %}the suite is red only outside the change and the owner's policy (suite_red_outside_change: continue) lets the run go on{% endif %}. The failures:
+      {% if steps.e2e.output and steps.e2e.output.status != 'pass' %}{{ steps.e2e.output | suite_failures }}{% elif steps.suite.output and steps.suite.output.status != 'pass' %}{{ steps.suite.output | suite_failures }}{% else %}{{ steps.test.output.failure_report }}{% endif %}
+      Say "not tested green" in your summary; these failures are not a reason for not_verified on their own.
       {% endif %}
       {% if inputs.issues | length > 1 %}
       This run implements several issues: verify each one the developer did (their report:

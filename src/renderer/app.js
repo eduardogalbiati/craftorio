@@ -655,6 +655,9 @@ function onEvent(ev) {
       v.run.finishedAt = Date.parse(ev.ts);
       v.run.error = ev.error || null;
       v.run.pause = finishedPause(ev);
+      // #396: the run went on without a green suite (views/run/run.js "Not tested green")
+      v.run.tested = ev.summary?.tested || null;
+      v.run.testedFailures = ev.summary?.tested_failures || null;
       // what the chain did is read again once the service acted on it (#134, views/run/run.js)
       v.chainLoaded = false;
       v.steps.forEach((s) => { if (s.status !== 'pending') s.status = 'done'; });

@@ -66,12 +66,23 @@ fields (references between steps, agents, transitions, groups) are the named rul
   suite gets a shell-like env (`suiteEnv`: no Electron/npm/inspector variables, no scratch
   workspace, its own `MULTIAGENT_LOCKS_DIR`, #210); without a step `timeout`, the timeout is 3× the
   median of the project's recent durations (`cache/suite-durations.json`, min 10 min, 30 min with no
-  history), and a timeout names the test files still running. Filter `suite_failures`
-  (`{{ steps.suite.output | suite_failures }}`): the message plus one line per failing test, for a
-  prompt or a gate. Simulation: `mockSequences.suite: { <step>: ['fail', 'pass'] }` per visit
+  history), and a timeout names the test files still running. A timed-out round is checked like a
+  failure (#396, `rerunAlone`): each file still running reruns alone on the branch and, when it hangs
+  there too, alone on the base, each with its own timeout (3× its recent alone runs, at least 2 min;
+  logs `suite-<visit>-alone-<n>[-base].log`, `output.alone`); one that finishes alone, or hangs or
+  fails on the base too, is a failure outside the change with its reason, instead of "(the whole
+  suite)"; the finished files' failures are kept. Every counted failure gets `class` (`in the
+  change` | `outside the change`) and `class_reason` (`classifyFailures` in affected-tests.js: its
+  test file is changed or reaches a changed file through the import graph; when it cannot be told,
+  in the change), and the output counts `in_change` / `outside_change`. AI Development (local hero)
+  routes `output.in_change == 0` with the input `suite_red_outside_change: continue` to the build (or
+  e2e) without `test_failed`, with `set: { tested: "not green" }` (so does Continue at the gate);
+  `summary.json` then has `tested` and `tested_failures`. Filter `suite_failures`
+  (`{{ steps.suite.output | suite_failures }}`): the message plus one line per failing test (with
+  its class), for a prompt or a gate. Simulation: `mockSequences.suite: { <step>: ['fail', 'pass'] }` per visit
   (default pass; `preexisting` = only the run's pre-existing failures fail, so it passes; `base` =
   the failures fail on the simulated base too, a pass; `mixed` = 2 failures, one on the base, a
-  fail; `blocked`), a simulated log is written.
+  fail; `outside` = a failure outside the change, a fail; `blocked`), a simulated log is written.
   - **`scope: affected`** (#212, default `full`): each visit runs only the affected test files
     (`affectedSelection` → `src/engine/affected-tests.js`, plus the files that failed in an earlier
     round, `suiteFailedFiles`), the command filtered to them (`filteredCommand`); when they pass and

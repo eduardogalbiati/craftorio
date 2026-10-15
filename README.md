@@ -310,6 +310,10 @@ first lines of the error) and the log's path: at most 2 rounds, then the `test_f
 that also fail on the base (the test writer's pre-existing failures) are reported, never chased.
 The test writer runs only focused tests; a whole-suite command it starts anyway is noted in the
 run as a warning. The summary counts the suite runs (`suite_runs: { engine, agents }`).
+A round cut by its timeout is checked like a failure (#396): each test file still running reruns
+alone on the branch and, when it hangs there too, alone on the base (each with its own timeout, at
+least 2 min); a file that passes alone, or hangs or fails on the base too, is reported outside the
+change instead of failing "the whole suite".
 
 **Control channel for outside sessions** (#336, Settings › Execution › *Allow outside sessions to
 control this app*, off by default). A terminal or another agent on this computer (a Claude Code
@@ -475,6 +479,16 @@ can change the outcome:
 Once a fix loop reaches its limit the engine goes to the gate without asking for yet another fix,
 and a gate never re-runs the same failed thing as the only way forward.
 
+A suite red only outside the change (#396): every counted failure of the suite says whether it is
+**in the change** (its test file is changed or reaches a changed file through the import graph) or
+**outside the change** (it reaches none, passes alone, or fails or hangs on the base too), with the
+reason, in the gate's summary. AI Development (local hero) has the input **Suite red outside the
+change**: *Ask* (default) opens `test_failed` as for any red suite; *Continue* lets such a run go on
+to the build and the merge without the gate. A failure in the change always opens it. A run that
+reaches the build without a green suite (the policy, or your Continue at the gate) shows a **Not
+tested green** badge on the Run screen and in its chat, `tested: "not green"` with the failures in
+its `summary.json`, and its build and verification prompts get the failures.
+
 **Merge conflicts at the approval.** With several runs at once, a PR/MR that was clean when checked
 can conflict by the time you approve it. The engine checks the PR/MR itself (`gh pr view` /
 `glab mr view`, no model call) right before `approve_merge` opens (the message says "CI green and
@@ -535,6 +549,7 @@ The same develop → code review → test → build → verify pipeline as `soft
 
 <!-- generated:local-hero -->
 - **Tests on or off** (#203): the same `unit_tests` / `e2e_tests` inputs and the same `suite` step (the orchestrator runs the whole suite once per round, #177) as `software-development`. With unit tests off nothing is reported as tested: `verify_failed` and the verifier say so, and the run's Details show it.
+- **Suite red outside the change** (#396, input `suite_red_outside_change`): *Ask* (default) = a red suite opens `test_failed` as before; *Continue* = a suite whose failures are all outside the change goes on to the build and the merge, the run marked **Not tested green** (Run screen, chat, `summary.json` `tested`). A failure in the change still opens the gate.
 - Each run still gets its own git worktree, started from your **local** `base_branch` (nothing is fetched, so a run sees the local merges of earlier runs you haven't pushed).
 - **No merge approval**: once `verify_change` passes, the engine merges the run's branch into the local `base_branch` automatically: rebased onto it first if it moved (another run merged meanwhile), fast-forward only (linear history), never pushed. The run's worktree and branch are then removed.
 - **Conflicts are resolved automatically**: a failed merge goes to `resolve_merge`, where the developer rebases onto the local base and resolves the conflicts (skill `merge-conflict-resolver`). Then only what the resolution changed is checked again: the review covers the rebase against the last approved commit (`git range-diff`; findings on untouched code are not blocking), the tests are the ones related to the files the resolution touched plus a smoke check (the full suite when it touched more than 5 files), the build runs, the verifier re-checks only the claims whose files were touched, and the merge is attempted right after. A resolution that changes behaviour (the developer answers `behaviour_changed: true`) goes through the full review, suite and verification. Merges of concurrent runs go one at a time. At most 3 rounds; what the developer can't fix, such as uncommitted changes in the checkout where the base is checked out (your work), stops at the `merge_blocked` gate (retry / stop).

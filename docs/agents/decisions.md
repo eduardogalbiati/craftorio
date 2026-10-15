@@ -8,6 +8,14 @@ appears once, in its latest form, naming what it replaced. The hard rules of
 [AGENTS.md](../../AGENTS.md) are not repeated here. This is not the `decision-log` skill (a run's
 own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
 
+- **2026-10-15** (#396): the owner may choose, before a run, that an AI Development (local hero)
+  run whose suite is red only outside the change goes on to the build and the merge, reported as
+  not tested green (input `suite_red_outside_change: ask | continue`, default `ask`). A failure in
+  the change, or a suite that cannot run, still opens `test_failed`. The gate is never answered by an
+  agent: with the policy on it does not open for failures outside the change; the supervisor, the
+  Oracle and the Night watch never change the input of a run in progress. A timed-out round is
+  checked like a failure (the files still running rerun alone, on the branch and on the base).
+  Why: a flaky or hanging test the change never touched held the roadmap for hours at the gate (#386).
 - **2026-10-14** (#387): the developer builds with `design-system` beside `ui-conventions`, whose
   design section is adapted from Anthropic's `frontend-design` (the app's tokens always win), and
   the UI reviewer's rubric has the same items: a pass/fail line of evidence per item and per
