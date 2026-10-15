@@ -14,6 +14,7 @@ const history = require('../../roadmap-history');
 const merge = require('../../roadmap-merge');
 const roadmaps = require('../../roadmap');
 const undo = require('../../roadmap-undo');
+const RoadmapModel = require('../../shared/roadmap-model');
 const { requireText } = require('../common');
 const {
   ANY,
@@ -232,7 +233,9 @@ module.exports = (ctx) => {
         const at = before.findIndex((s) => s.id === String(stageId));
         const out = await ctx.pauseStage({ projectId, stageId: requireText(stageId, 'stage id', 200) });
         const name = at >= 0 ? before[at].name || `stage ${at + 1}` : 'a stage';
-        const paused = { stage: String(stageId), simulated: !!r.simulated, scope: r.scope?.stage || null };
+        // the screen's Resume rule: a #391 "Pause after this stage" scope resumes the whole roadmap
+        const scoped = RoadmapModel.scopedStage(r);
+        const paused = { stage: String(stageId), simulated: !!r.simulated, scope: scoped >= 0 ? r.stages[scoped].id : null };
         const edit = edited(id, before, `Paused ${name} after the current step`, { paused });
         return { ...out, ...(edit ? { edit } : {}) };
       },
