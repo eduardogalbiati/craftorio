@@ -74,6 +74,7 @@ test('#250 the public API of src/engine/workflow.js is unchanged', () => {
   assert.deepEqual(Object.keys(api).sort(), [
     'WorkflowRun', 'answeredKey', 'attemptSummary', 'childRunCost', 'evalExpr', 'extractJson',
     'loadWorkflow', 'parseTestRequest', 'parseTokens', 'render', 'repeatKey', 'takeHandoff', 'validateSchema',
+    'stepOutputSchema', // #387: one fan-out agent's output schema (the ui_reviewer's per-screen lines)
   ].sort());
   assert.equal(typeof api.WorkflowRun, 'function');
   assert.equal(typeof api.WorkflowRun.prototype.on, 'function', 'WorkflowRun still emits events');
