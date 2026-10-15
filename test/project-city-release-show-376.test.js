@@ -72,6 +72,8 @@ function load({ release = async () => RELEASE(), capture = async () => 'data:ima
   for (const f of ['globs.js', 'json-schema.js', 'architecture-model.js', 'city-model.js', 'city-layout.js', 'city-agents.js', 'city-impact.js', 'city-release.js', 'roadmap-model.js']) {
     vm.runInContext(fs.readFileSync(path.join(ROOT, 'src', 'shared', f), 'utf8'), sandbox, { filename: f });
   }
+  // The app's select builder, so the pickers are built as in the app (#383).
+  vm.runInContext(fs.readFileSync(path.join(ROOT, 'src', 'renderer', 'select.js'), 'utf8'), sandbox, { filename: 'select.js' });
   for (const f of ['project-city-notes.js', 'project-city-cards.js', 'project-city.js']) {
     vm.runInContext(fs.readFileSync(path.join(DIR, f), 'utf8'), sandbox, { filename: f });
   }
