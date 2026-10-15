@@ -68,14 +68,19 @@
         }
       }
     }
-    if (Array.isArray(v) && s.minItems != null && v.length < s.minItems) errs.push(`${label(p)}: at least ${s.minItems} item${s.minItems === 1 ? '' : 's'}`);
-    if (Array.isArray(v) && s.items) v.forEach((x, i) => validateSchema(x, s.items, `${p}[${i}]`, errs));
+    if (Array.isArray(v)) validateArray(v, s, p, errs);
     if (Array.isArray(s.oneOf)) {
       const matching = s.oneOf.filter((alt) => !validateSchema(v, alt, p).length).length;
       if (matching === 0) errs.push(`${label(p)}: matches none of ${s.oneOf.length} alternatives`);
       if (matching > 1) errs.push(`${label(p)}: matches ${matching} alternatives, expected one`);
     }
     return errs;
+  }
+
+  // an array's own keywords (minItems, #387) and its items
+  function validateArray(v, s, p, errs) {
+    if (s.minItems != null && v.length < s.minItems) errs.push(`${label(p)}: at least ${s.minItems} item${s.minItems === 1 ? '' : 's'}`);
+    if (s.items) v.forEach((x, i) => validateSchema(x, s.items, `${p}[${i}]`, errs));
   }
 
   const api = {

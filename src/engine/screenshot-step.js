@@ -8,7 +8,7 @@
 // a timeout or a crash end up in the output (`errors`, `reason`, `message`), and the run goes on to
 // the next step (the developer_check gate, which says what failed). Nothing is retried by an agent.
 // Output: { kind: 'screenshots', folder, round, dir, taken, screens, screenshots, errors, new_elements,
-// axe_findings, reason, message }. axe_findings (#387, src/ui-review-checks.js): the axe-core and
+// axe_findings, reason, message }. axe_findings (#387, src/engine/ui-review-checks.js): the axe-core and
 // native-control findings of each modified side (the `<name>.<side>.checks.json` the capture writes),
 // a baseline when the original side has them too; the ui_reviewer's prompt lists them. new_elements (#185): screens whose original side failed only because a --click /
 // context / paste selector matched nothing ("screenshot: nothing matches <selector>") while the
@@ -20,7 +20,7 @@ const path = require('path');
 const evidence = require('../evidence');
 const { killTree, OWN_GROUP, resolveCommand } = require('./providers');
 const { runShim } = require('../shell');
-const { readChecks, screenChecks } = require('../ui-review-checks');
+const { readChecks, screenChecks } = require('./ui-review-checks');
 const {
   acquireSlot,
   SCREENSHOT_SLOT,
@@ -120,6 +120,14 @@ async function withSlot({ signal, onSlotWait, slot }, fn) {
   try { return await fn(held.token); } finally { held.release(); }
 }
 
+// #387: the deterministic checks of a screen's modified side (none when it was not taken), baselines
+// from its original side
+function screenAxeFindings(dir, name, modified) {
+  const checked = modified ? readChecks(path.join(dir, `${name}.modified.png`)) : null;
+  if (!checked) return [];
+  return screenChecks({ modified: checked, original: readChecks(path.join(dir, `${name}.original.png`)), screen: `${name}.modified.png` });
+}
+
 // entries: the developer's list; cwd: the worktree; base: the ref of the "original" side (none: modified
 // only); env: the agents' environment (simulation only, scratch workspace); run: runShot (replaceable);
 // slot: acquireSlot (replaceable); onSlotWait(holder): a capture waits for another run's screenshot;
@@ -184,9 +192,7 @@ async function captureScreenshots({ entries, cwd, runDir, folder, round, base, e
       if (r.code === 2 || signal?.aborted) break;
     }
     if (shot) out.screens++;
-    // #387: the deterministic checks of the modified side, baselines from the original side
-    const checked = modified ? readChecks(path.join(dir, `${e.name}.modified.png`)) : null;
-    if (checked) out.axe_findings.push(...screenChecks({ modified: checked, original: readChecks(path.join(dir, `${e.name}.original.png`)), screen: `${e.name}.modified.png` }));
+    out.axe_findings.push(...screenAxeFindings(dir, e.name, modified));
     if (signal?.aborted) break;
   }
   return finish();

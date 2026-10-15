@@ -8,14 +8,14 @@ appears once, in its latest form, naming what it replaced. The hard rules of
 [AGENTS.md](../../AGENTS.md) are not repeated here. This is not the `decision-log` skill (a run's
 own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
 
-- **2026-10-14** (#387): the UI review must catch screens that are not made for a human to read
-  (2026-10-13), so the developer builds with `design-system` beside `ui-conventions`, whose design
-  section is adapted from Anthropic's `frontend-design` (the app's tokens always win), and the UI
-  reviewer's rubric has the same items: a pass/fail line of evidence per item and per screenshot,
-  the 5-second message and the biggest weakness even on an approval, and the axe-core findings
-  kept or dismissed with a reason. The UI reviewer's model stays the workflow's default
+- **2026-10-14** (#387): the developer builds with `design-system` beside `ui-conventions`, whose
+  design section is adapted from Anthropic's `frontend-design` (the app's tokens always win), and
+  the UI reviewer's rubric has the same items: a pass/fail line of evidence per item and per
+  screenshot, the 5-second message and the biggest weakness even on an approval, and the axe-core
+  findings kept or dismissed with a reason. The UI reviewer's model stays the workflow's default
   (Sonnet) until the owner has the cost of the UI review on the last 10 UI items and decides
-  whether UI-heavy items get a stronger one.
+  whether UI-heavy items get a stronger one. Why: the UI review approved screens that were not
+  made for a human to read (2026-10-13).
 - **2026-10-13** (#381, #382): one click analyses a project: "Analyze this project" in the
   Architecture tab runs the project map (the city plan) and the Oracle's analysis together, as one
   run of `project-map.yaml`, with its combined estimate shown first and no human gate (validated
@@ -83,12 +83,12 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
 - **2026-10-03** (#238): archiving an issue closes it on the git platform (GitHub: "not planned")
   with an `archived` label; restoring reopens it. It replaces the retired `deprioritized` label.
   Why: there was no way to put an issue aside, and the Product Owner kept proposing unwanted ideas.
-- **2026-10-03** (#222): E2E tests stay and run on Playwright + BDD (`playwright-bdd`),
-  deterministically by the machine; an LLM only writes and repairs them. Why: the old E2E tests
-  asserted little, and the release run paid a model to run the suite.
-- **2026-10-03** (#211): which test failures are the run's (and which were already on the base) is
-  decided deterministically by the orchestrator (failing tests rerun on the base), never by an
-  agent. Why: failures already on main made every round fail and the run looped.
+- **2026-10-03** (#222, #211): tests are run and judged by the machine, never by a model. E2E
+  tests stay on Playwright + BDD (`playwright-bdd`), run deterministically; an LLM only writes and
+  repairs them. Which test failures are the run's (and which were already on the base) is decided
+  by the orchestrator (failing tests rerun on the base), never by an agent. Why: the old E2E tests
+  asserted little and the release run paid a model to run the suite, and failures already on main
+  made every round fail and the run looped.
 - **2026-10-02** (#202): an ended run keeps its branch, not its worktree folder; Resume recreates
   the folder. Why: 13 worktrees of ended runs took about 8.3 GB, and their commits were already on
   their branches.

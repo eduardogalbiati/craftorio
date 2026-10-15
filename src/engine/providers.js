@@ -567,6 +567,11 @@ function mockScenarios(h, statuses = []) {
   ];
 }
 
+// The lists empty in a simulated answer: preexisting_failures and ui_findings unless their sequence
+// asks for one, the ui_reviewer's dismissed deterministic findings (#387) always
+const EMPTY_UNLESS_ASKED = ['preexisting_failures', 'ui_findings'];
+const mockEmptyList = (key, h) => key === 'dismissed' || (EMPTY_UNLESS_ASKED.includes(key) && !h.sequences?.[key]);
+
 // h.sequences (WorkflowRun's mockSequences) overrides the defaults per field
 function mockValue(s, key, h) {
   if (s.enum) {
@@ -598,10 +603,7 @@ function mockValue(s, key, h) {
     // sequences.left_out_not_mine: true: the developer also declares the issue's Tests and Measure tasks (#173)
     // sequences.ui_findings: true: the ui_reviewer (code_review, #151) returns a (blocking) UI finding
     case 'array': {
-      if (key === 'preexisting_failures' && !h.sequences?.preexisting_failures) return [];
-      if (key === 'ui_findings' && !h.sequences?.ui_findings) return [];
-      // the ui_reviewer's dismissed deterministic findings (#387): none in a simulated review
-      if (key === 'dismissed') return [];
+      if (mockEmptyList(key, h)) return [];
       // sequences.files_changed: [[...files of visit 1], ...] (#340: the languages a run changed)
       const files = key === 'files_changed' && h.sequences?.files_changed;
       if (Array.isArray(files) && files.length) return [...files[Math.min(h.visit - 1, files.length - 1)]];
