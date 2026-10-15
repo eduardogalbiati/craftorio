@@ -212,6 +212,7 @@ const RULES = [
   'When the workflow has a `mode` input, set it on every group and say why in `mode_reason`: `validated` for a change the owner can try in the app (a screen, a dialog, a visible behaviour), `auto` for the engine, refactors, docs and tests.',
   'Split what is too big (`splits`): for an issue the report marks with split signals, propose 2-4 child issues. Each child has a title, the numbers of the parent\'s tasks it takes (every task in exactly one child, none dropped or invented), its complexity and its `stage` (children of one stage can run together). Say whether the parent becomes an umbrella linking its children or is closed in favour of them. Never split an issue without signals.',
   'Conflict map (the report\'s "## Conflict map"): two groups expected to touch the same hot file or hot line go to different stages, or into one group when they belong together; every conflict you report names the hot file that causes it in `files`. List each hot spot (marked "hot") in `decongest` with a fix in the repository\'s terms (one item per line, sorted; a per-feature file plus a generated aggregate; a split by screen or module) and its `runs` and `of`.',
+  'Shared test files count too: two groups of one stage that add scenarios to the same `.feature` file (or tests to the same test file) conflict in it at the merge, like a shared source file: put them in different stages or one group, and name that file in the conflict\'s `files`.',
   'Epics (`epics`): place each issue without an epic in an existing epic of its theme (`place`, the epic\'s id from the report); propose a new epic (a title, a one-paragraph goal, its member issues) when several issues share a theme and no epic exists; name epics to merge or split. Prefer grouping issues of the same epic in one run when they touch the same code.',
   'You never edit issues, never start runs and never answer a human gate: the owner applies a proposal with a click. Do not prescribe code changes.',
   'Write in English. The summary is Markdown, short, and answers the question.',
@@ -721,7 +722,11 @@ function mockAnswer({ data, question = '', selection = [], calibration = poCalib
     ...groups.map((g, n) => group(g, refactor.length + Math.floor(n / perStage) + 1)),
   ];
   const spots = conflictMap ? hotSpots(conflictMap) : [];
-  const hotConflicts = separateHotFiles(planned, [...new Set(spots.map((s) => s.file))], todo);
+  const hotFiles = [...new Set(spots.map((s) => s.file))];
+  const hotConflicts = separateHotFiles(planned, hotFiles, todo);
+  // #380: two runs of a stage adding scenarios to one feature file conflict in it, as on a hot file
+  const featureFiles = [...new Set(todo.flatMap((i) => `${i.title || ''}\n${i.body || ''}`.match(FEATURE_FILE) || []))].filter((f) => !hotFiles.includes(f));
+  hotConflicts.push(...separateHotFiles(planned, featureFiles, todo, 'a feature file both add scenarios to'));
   return {
     summary: [
       `**Simulated answer** (developer or simulated mode: no model was called)${question ? ` to: “${clip(question, 120)}”` : ''}. Planned for ${cost == null ? poCalibration.label(calibration) : poCalibration.plannedFor(calibration, cost)}.`,
@@ -740,9 +745,13 @@ function mockAnswer({ data, question = '', selection = [], calibration = poCalib
   };
 }
 
+// a feature file (Gherkin scenarios) named in an issue's text, e.g. features/architecture.feature
+const FEATURE_FILE = /(?:[\w.-]+\/)*[\w.-]+\.feature\b/g;
+
 // #150 (simulated): a group whose issues name a hot file another group of its stage names moves to the
 // next stage without it; each move is a conflict naming the shared hot files. Mutates `planned`.
-function separateHotFiles(planned, hotFiles, issues) {
+// `what`: what the shared files are, for the reason (#380: also the feature files both add scenarios to).
+function separateHotFiles(planned, hotFiles, issues, what = 'a hot file of the conflict map') {
   const conflicts = [];
   if (!hotFiles.length) return conflicts;
   const textOf = (nums) => nums.map((n) => issues.find((i) => i.number === n)).map((i) => `${i?.title || ''}\n${i?.body || ''}`).join('\n');
@@ -755,7 +764,7 @@ function separateHotFiles(planned, hotFiles, issues) {
       const clash = (byStage.get(g.stage) || []).find((o) => o.files.some((f) => files.includes(f)));
       if (!clash) break;
       const shared = clash.files.filter((f) => files.includes(f));
-      conflicts.push({ issues: [...clash.group.issues, ...g.issues], reason: `Both touch ${shared.join(', ')}, a hot file of the conflict map: run them in different stages (simulated).`, files: shared });
+      conflicts.push({ issues: [...clash.group.issues, ...g.issues], reason: `Both touch ${shared.join(', ')}, ${what}: run them in different stages (simulated).`, files: shared });
       g.stage += 1;
     }
     byStage.set(g.stage, [...(byStage.get(g.stage) || []), { group: g, files }]);

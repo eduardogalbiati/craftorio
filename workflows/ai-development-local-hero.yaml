@@ -52,7 +52,9 @@
 # when it moved, fast-forward only (linear history), never pushed.
 #   - A merge that fails (usually a conflict with another run merged meanwhile) goes to
 #     resolve_merge: the developer rebases onto the local <base> and resolves the conflicts (test
-#     files included). Then only what the resolution changed is checked again (`vars.recheck ==
+#     files included: protect_files accepts a protected test file that only combines both sides,
+#     #380). A test conflict that needs new or changed test lines is left in the rebase and handed
+#     to the test writer (`test_conflict`), then the developer finishes the rebase. Then only what the resolution changed is checked again (`vars.recheck ==
 #     'resolution'`): code_review reviews the rebase against the last approved commit (git
 #     range-diff), test runs the tests related to the files the resolution touched plus a smoke
 #     check (the full suite past 5 files), build runs, evidence is kept, verify_change re-checks only the claims
@@ -2004,6 +2006,19 @@ steps:
       `git rebase --continue` and make sure everything is committed; answer the new commit as `head`.
       Resolve conflicts in test files too, but write no new tests and do not run the full suite: only
       what the resolution changed is reviewed and tested again. Never fetch, pull or push.
+      A conflicted test file may only combine both sides: every line of the result comes from the
+      branch's version (`git show :3:<file>` during the rebase) or the base's (`git show :2:<file>`),
+      and no line either side added is dropped; the engine checks it. When a test file needs more
+      than that (new or changed test lines, e.g. both sides edited the same step), do not write
+      them: leave that file conflicted (do not `git add` it), stop the rebase there (no
+      `--continue`, no `--abort`) and answer `test_conflict` with each such file, the conflicting
+      hunk and both sides; the test writer resolves it, then you finish the rebase.
+      {% if delegate_result %}
+      The test writer resolved the test conflict you handed over:
+      {{ delegate_result.text }}
+      Finish the rebase (`git status` shows where it stands): resolve what is left outside the
+      tests, `git rebase --continue`, and answer as above (`previous_head` is the commit you noted).
+      {% endif %}
       In `files_changed`, list only the files where you resolved a conflict (not every file of the
       change). Answer `behaviour_changed: true` when the resolution does more than combine both
       sides (e.g. you had to adapt the change's logic to what the base now does): the change is
@@ -2023,9 +2038,29 @@ steps:
         previous_head:     { type: string }
         head:              { type: string }
         behaviour_changed: { type: boolean }
+        # #380: a test conflict that needs new or changed test lines (files, hunks, both sides)
+        test_conflict:     { type: string }
     transitions:
       - when: "output.blocked"
         goto: merge_blocked
+      # #380: the developer never writes tests; the test writer resolves the test conflict in the
+      # rebase the developer left open, then the developer finishes it
+      - when: "output.test_conflict"
+        delegate:
+          agent: test_writer
+          prompt: |
+            Rebasing branch `{{ steps.develop.output.branch }}` onto the local `{{ inputs.base_branch }}`
+            stopped on a merge conflict in test files that needs new or changed test lines, which
+            the developer may not write. The rebase is in progress in the checkout. The conflict:
+            {{ output.test_conflict }}
+            Resolve only the conflicted test files (`git diff --name-only --diff-filter=U`): keep
+            the intent of both sides (`git show :2:<file>` is the base's, `:3:<file>` the branch's),
+            then `git add` them. Do not resolve conflicts outside the tests and do not run
+            `git rebase --continue` or `--abort`: the developer finishes the rebase. Run only the
+            tests of the files you resolved, and say what you changed and why.
+        goto: resolve_merge
+        max_visits: 2
+        on_exhausted: merge_blocked
       # `recheck: resolution`: code_review, test and verify_change cover only what the resolution changed
       - when: "output.resolved"
         set: { recheck: "{{ '' if output.behaviour_changed else 'resolution' }}" }

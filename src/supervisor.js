@@ -37,6 +37,9 @@ const DECISION_SCHEMA = {
     instruction: { type: 'string' },
     output: {},
     goto: { type: 'string' },
+    // #380: with ask_human, a retry would fail the same way (e.g. the prompt and a guard contradict
+    // each other): the gate offers `goto` (a way forward) instead of Retry
+    retry_would_fail: { type: 'boolean' },
   },
 };
 
@@ -164,7 +167,7 @@ function decisionPrompt({ wf, step, error, answer, allowed, events, previous, ha
     `- fix_output: put in \`output\` the step's output rebuilt ONLY from the agent's answer above; it must validate against the step's output_schema${step.agents ? ' (not available for parallel steps)' : ''}.`,
     '- retry: run the step again; `instruction` is added to the agent\'s prompt.',
     `- goto: continue at one of these steps: ${allowed.length ? allowed.join(', ') : '(none)'}.`,
-    '- ask_human: stop and ask the person (explain what they need to decide or change).',
+    '- ask_human: stop and ask the person (explain what they need to decide or change). When a retry would fail the same way (e.g. the prompt and a guard contradict each other), set `retry_would_fail: true` and put in `goto` the step of the list above to resume from: the person is offered that instead of a retry.',
     '- fail: end the run.',
     WRITE_ENGLISH,
   ].filter(Boolean).join('\n');

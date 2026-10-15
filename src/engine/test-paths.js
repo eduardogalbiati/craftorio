@@ -12,6 +12,8 @@
 // commits and anything already on the base excluded, so updating the branch with the base is not a
 // change of the agent's own) and local changes, kept only when their content differs from the
 // snapshot (a change the agent reverted, or a file that was already dirty and stayed so, is fine).
+// A merge-conflict resolution is not a change either (#380): a file that only combines the branch's
+// and the base's versions (`combinesBothSides`), or a conflict still left to resolve (unmerged).
 
 const fs = require('fs');
 const path = require('path');
@@ -103,14 +105,46 @@ async function changedTestFiles(snap, { bases = [] } = {}) {
   const isTest = testMatcher(snap.patterns);
   const exclude = [];
   for (const ref of bases) {
-    if (await git(['rev-parse', '--verify', '--quiet', `${ref}^{commit}`], root).catch(() => null)) exclude.push(`^${ref}`);
+    if (await git(['rev-parse', '--verify', '--quiet', `${ref}^{commit}`], root).catch(() => null)) exclude.push(ref);
   }
-  const committed = lines(await git([...G, 'log', '--no-merges', '--name-only', '--format=', 'HEAD', `^${head}`, ...exclude, '--'], root));
+  const committed = lines(await git([...G, 'log', '--no-merges', '--name-only', '--format=', 'HEAD', `^${head}`, ...exclude.map((r) => `^${r}`), '--'], root));
   const files = [...new Set([...committed, ...(await localChanges(root)), ...Object.keys(snap.dirty)])].filter(isTest);
   // compared by content with the snapshot: a test file changed and then restored is not a change
   const now = await workingBlobs(root, files);
   const before = { ...(await commitBlobs(root, head, files.filter((f) => !(f in snap.dirty)))), ...snap.dirty };
-  return files.filter((f) => now[f] !== before[f]).sort();
+  const changed = files.filter((f) => now[f] !== before[f]);
+  const unmerged = new Set(lines(await git([...G, 'diff', '--name-only', '--diff-filter=U'], root)));
+  const out = [];
+  for (const f of changed) {
+    // #380: a conflict the turn's rebase left for someone else (git wrote the markers, not the agent)
+    if (unmerged.has(f)) continue;
+    if (now[f] && !(f in snap.dirty) && await combinesBothSides(root, head, exclude, f)) continue;
+    out.push(f);
+  }
+  return out.sort();
+}
+
+const splitLines = (text) => String(text).split('\n').map((l) => l.replace(/\r$/, ''));
+const blobLines = async (root, blob) => (blob ? splitLines(await git(['cat-file', '-p', blob], root)) : []);
+
+// #380: true when the file in the working tree only combines the branch's version (at `head`) with a
+// base's version, as a merge or rebase resolution does: the file changed on both sides since their
+// merge base, every line of the result comes from one side, and every line either side added is kept
+// (so neither a new test line nor a dropped one passes). Checked against each base ref in turn.
+async function combinesBothSides(root, head, bases, file) {
+  const result = new Set(splitLines((await fs.promises.readFile(path.join(root, file), 'utf8')).trim()));
+  for (const base of bases) {
+    const fork = await git(['merge-base', head, base], root).catch(() => null);
+    if (!fork) continue;
+    const [mine, theirs, old] = await Promise.all([head, base, fork].map((c) => commitBlobs(root, c, [file]).then((b) => b[file])));
+    if (mine === old || theirs === old) continue; // not changed on both sides: nothing to combine
+    const [m, t, o] = await Promise.all([mine, theirs, old].map((b) => blobLines(root, b)));
+    const sides = new Set([...m, ...t]);
+    const kept = new Set(o);
+    const added = [...sides].filter((l) => !kept.has(l));
+    if ([...result].every((l) => sides.has(l)) && added.every((l) => result.has(l))) return true;
+  }
+  return false;
 }
 
 module.exports = {

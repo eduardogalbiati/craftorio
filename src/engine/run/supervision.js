@@ -398,10 +398,10 @@ const methods = {
       case 'goto':
         if (allowed.includes(decision.goto)) { emit('goto'); return { goto: decision.goto, decision }; }
         emit('ask_human', { note: `goto "${decision.goto}" is not allowed` });
-        return this.supervisorAsksHuman(step, decision, retry);
+        return this.supervisorAsksHuman(step, decision, retry, allowed);
       case 'ask_human':
         emit('ask_human');
-        return this.supervisorAsksHuman(step, decision, retry);
+        return this.supervisorAsksHuman(step, decision, retry, allowed);
       default:
         emit('fail');
         return null;
@@ -463,13 +463,19 @@ const methods = {
     return { goto: step.id, decision: { action: 'retry', explanation: e.message } };
   },
 
-  async supervisorAsksHuman(step, decision, retry) {
+  // #380: when the supervisor says a retry would fail the same way and names an allowed step to
+  // resume from (`goto`), the gate offers that instead of Retry. Only the person answers it.
+  async supervisorAsksHuman(step, decision, retry, allowed = []) {
+    const forward = decision.retry_would_fail && allowed.includes(decision.goto) && decision.goto !== step.id ? decision.goto : null;
     const { answer, feedback } = await this.requestApproval({
       id: step.id, raw: true,
       message: `The step "${step.id}" failed and the supervisor needs you.\n\n${decision.explanation}${decision.instruction ? `\n\nSuggested instruction for a new attempt:\n${decision.instruction}` : ''}`,
-      choices: [{ id: 'retry', label: 'Retry the step with the suggestion' }, { id: 'stop', label: 'Stop here' }],
-      feedback: { label: 'Your instruction for the new attempt (optional, replaces the suggestion)' },
+      choices: forward
+        ? [{ id: 'resume', label: `Resume from "${forward}"` }, { id: 'stop', label: 'Stop here' }]
+        : [{ id: 'retry', label: 'Retry the step with the suggestion' }, { id: 'stop', label: 'Stop here' }],
+      ...(forward ? {} : { feedback: { label: 'Your instruction for the new attempt (optional, replaces the suggestion)' } }),
     });
+    if (forward && answer === 'resume') return { goto: forward, decision };
     return answer === 'retry' ? retry(feedback) : null;
   },
 };

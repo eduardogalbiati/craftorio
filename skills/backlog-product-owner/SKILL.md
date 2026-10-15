@@ -58,7 +58,10 @@ List the issues that must **not run in parallel**, with the reason:
 - they edit the same files (name them), so parallel runs conflict at the merge;
 - one is a **repo-wide refactor or reformat** (moves or reformats files every feature touches): it
   runs alone, with no other run open, in its own stage;
-- one depends on the other being merged first.
+- one depends on the other being merged first;
+- they add scenarios to the same `.feature` file, or tests to the same test file (its step
+  definitions too): shared test files conflict at the merge like shared source files, and the
+  developer may not resolve a conflict that needs new test lines. Name the file in `files`.
 
 Past merge conflicts in the finished runs are evidence: files that conflicted before will again.
 Shared hot spots count as the same file: README sections, the shared stylesheet, central
