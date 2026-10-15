@@ -250,17 +250,27 @@ const WORKFLOW_CHECKS = resolveChecks('', [
   groups, outputs,
 ]);
 
-// #389: the parsed YAML of each file, kept while its text does not change (the Backlog and the
-// roadmap load the same workflows many times); every call checks and hands out its own copy.
-// Keyed on the text, not mtime + size (#407): a rewrite of the same length within the clock's
-// resolution kept the old parse
-const parsedCache = new Map(); // file → { text, wf }
+// #389: the parsed YAML of each file, kept while its mtime and size do not change (the Backlog and
+// the roadmap load the same workflows many times); every call checks and hands out its own copy.
+// #407: a rewrite of the same size within the mtime's resolution keeps the mtime, so an entry read
+// less than RACY_MS after the file's mtime is checked against the text (still no parse) until the
+// file is older than that (git's "racy clean" rule)
+const RACY_MS = 2000; // above the coarsest mtime resolution we meet (FAT: 2 s)
+const parsedCache = new Map(); // file → { key, readAt, text, wf }
 function parseWorkflowFile(file) {
+  let st = null;
+  try { st = fs.statSync(file); } catch { /* readFileSync says why */ }
+  const key = st && `${st.mtimeMs}:${st.size}`;
+  const hit = key && parsedCache.get(path.resolve(file));
+  if (hit && hit.key === key && hit.readAt - st.mtimeMs > RACY_MS) return structuredClone(hit.wf);
+  const readAt = Date.now();
   const text = fs.readFileSync(file, 'utf8');
-  const hit = parsedCache.get(path.resolve(file));
-  if (hit && hit.text === text) return structuredClone(hit.wf);
+  if (hit && hit.key === key && hit.text === text) {
+    hit.readAt = readAt;
+    return structuredClone(hit.wf);
+  }
   const wf = yaml.load(text);
-  parsedCache.set(path.resolve(file), { text, wf: structuredClone(wf) });
+  if (key) parsedCache.set(path.resolve(file), { key, readAt, text, wf: structuredClone(wf) });
   return wf;
 }
 
