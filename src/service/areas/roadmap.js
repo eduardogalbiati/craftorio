@@ -198,6 +198,16 @@ module.exports = (ctx) => {
     await dispatchRoadmaps();
   }
 
+  // #395: whether a run is a parked item's (the roadmap moved on past it): while it waits at its gate
+  // it holds no run slot (areas/runs.js slotProblem), so the next stage can start
+  function parkedRun(runId, projectId) {
+    if (!ctx.ws || !runId || !projectId) return false;
+    try {
+      const r = roadmaps.readRoadmap(ctx.ws.backlog, path.basename(String(projectId)));
+      return r.stages.some((s) => s.items.some((x) => x.runId === runId && x.status === 'parked'));
+    } catch { return false; }
+  }
+
   function neverMerges(file) {
     if (!file) return false;
     try { return loadWorkflow(ctx.workflowPath(file).file).metadata?.merges === false; } catch { return false; }
@@ -359,6 +369,7 @@ module.exports = (ctx) => {
     dispatchRoadmaps,
     parkItem,
     parkStage,
+    parkedRun,
     pauseStage,
     roadmapView,
     startRoadmap,

@@ -692,14 +692,16 @@
   // An entry that cannot be used stays in the menu, off (aria-disabled, so the keyboard still reaches
   // it), with its reason in its tooltip and on the line under it.
   let stageMenu = null; // the id of the stage whose menu is open
+  let moveOnWhy = null; // #395: the id of the stage whose refused "Move on from this stage" was clicked
   function stageMenuHtml(stage, s, count, r, done) {
     const open = stageMenu === stage.id;
     const button = `<button class="btn sm ghost rm-menu-btn" type="button" data-rm-stage-menu="${esc(stage.id)}" data-testid="roadmap-stage-menu" aria-label="Stage actions" title="Stage actions" aria-haspopup="menu" aria-expanded="${open}">⋮</button>`;
     if (!open) return `<span class="bl-menu-wrap rm-stage-menu-wrap">${button}</span>`;
     const off = !!stage.disabled;
     const acts = may(r, stage); // with a stage, start is "Run this stage" (#141)
-    // whyId: the test id of the line that says why the entry is off (#395: "Move on from this stage" refused)
-    const entry = (attrs, label, title, why = '', whyId = '') => `<button type="button" role="menuitem" ${attrs} title="${esc(why || title)}"${why ? ' aria-disabled="true"' : ''}>${label}</button>${why ? `<div class="bl-menu-why small muted"${whyId ? ` data-testid="${whyId}"` : ''}>${esc(why)}</div>` : ''}`;
+    const entry = (attrs, label, title, why = '') => `<button type="button" role="menuitem" ${attrs} title="${esc(why || title)}"${why ? ' aria-disabled="true"' : ''}>${label}</button>${why ? `<div class="bl-menu-why small muted">${esc(why)}</div>` : ''}`;
+    // #395: refused (a turn runs), "Move on from this stage" still answers a click: it says why under it (moveOnWhy)
+    const moveOn = (why) => `<button type="button" role="menuitem" data-rm-park-stage data-testid="roadmap-stage-move-on"${why ? ' data-refused="true"' : ''} title="${esc(why || 'Park its items waiting at a gate (the gates keep waiting for you) and skip its planned items: the next stage starts')}">Move on from this stage</button>${why && moveOnWhy === stage.id ? `<div class="bl-menu-why small muted" role="alert" data-testid="roadmap-move-on-refused">${esc(why)}</div>` : ''}`;
     const entries = [
       // #284: a finished stage has nothing left to hold back (a disabled one can always be enabled)
       off ? entry('data-rm-toggle-stage data-testid="roadmap-stage-toggle" aria-pressed="true"', 'Enable', 'Run this stage with the roadmap again, in its turn')
@@ -708,7 +710,7 @@
       // #368: nothing is cut: its agents finish their turns, then its runs and the roadmap pause
       done ? '' : entry('data-rm-pause-stage data-testid="roadmap-stage-pause"', 'Pause after current step', 'Its runs stop once their agents finish the current turn and no step starts after them; Resume continues them where they stopped', acts.pauseStage.reason),
       // #395: its items at a gate are parked (their gates stay yours), its planned ones skipped; the next stage starts
-      done ? '' : entry('data-rm-park-stage data-testid="roadmap-stage-move-on"', 'Move on from this stage', 'Park its items waiting at a gate (the gates keep waiting for you) and skip its planned items: the next stage starts', acts.parkStage.reason, 'roadmap-move-on-refused'),
+      done ? '' : moveOn(acts.parkStage.reason),
       stage.release?.name ? '' : entry('data-rm-release="add"', '<span aria-hidden="true">✂ </span>Release here', 'Draw a cut line after this stage: when the roadmap reaches it, the whole unit and E2E suites run and you Ship or Hold; the stages below wait for it'),
       entry('data-rm-stage="up"', '<span aria-hidden="true">↑ </span>Run earlier', 'Run this stage earlier', s === 0 ? 'It is the first stage' : ''),
       entry('data-rm-stage="down"', '<span aria-hidden="true">↓ </span>Run later', 'Run this stage later', s === count - 1 ? 'It is the last stage' : ''),
@@ -1540,7 +1542,7 @@
   /** Closes the open ⋮ menu, the bar's or a stage's (a click elsewhere on the page); true when one was open. */
   function closeMenu() {
     const was = menuOpen || pauseOpen || stageMenu != null;
-    [menuOpen, pauseOpen, stageMenu] = [false, false, null];
+    [menuOpen, pauseOpen, stageMenu, moveOnWhy] = [false, false, null, null];
     return was;
   }
   /** Keys of the open ⋮ menu: Escape closes it (the focus goes back to its button), the arrows move between its entries. True when the key was the menu's. */
@@ -1628,6 +1630,13 @@
   async function onClick(e, ctx, data) {
     // a menu entry that is off says why (its tooltip, the line under it): nothing to do, its menu stays
     if (e.target.closest('[role="menuitem"][aria-disabled="true"]')) return true;
+    // #395: a refused "Move on from this stage" keeps its menu open and says why under it
+    if (stageMenu != null && e.target.closest('[data-rm-park-stage][data-refused]')) {
+      moveOnWhy = stageMenu;
+      ctx.render();
+      focusStageMenu(stageMenu, '[data-rm-park-stage]');
+      return true;
+    }
     const closing = (menuOpen && !e.target.closest('.rm-menu-wrap')) || (pauseOpen && !e.target.closest('.rm-pause-wrap'));
     if (closing) menuOpen = pauseOpen = false;
     // #282: a stage's menu closes on any click but its own button's: hidden at once (the click's
@@ -1635,7 +1644,7 @@
     // still gets its change, an entry still finds its stage); the redraw follows the action
     const closingStage = stageMenu != null && !e.target.closest('[data-rm-stage-menu]');
     if (closingStage) {
-      stageMenu = null;
+      stageMenu = moveOnWhy = null;
       const open = document.querySelector('#bl-list .rm-stage-menu');
       if (open) open.hidden = true;
       open?.previousElementSibling?.setAttribute('aria-expanded', 'false');
@@ -1661,6 +1670,7 @@
     if (stageBtn) {
       const id = stageBtn.dataset.rmStageMenu;
       stageMenu = stageMenu === id ? null : id;
+      moveOnWhy = null;
       menuOpen = pauseOpen = false;
       ctx.render();
       focusStageMenu(id, stageMenu ? '[role="menuitem"]' : '[data-rm-stage-menu]');

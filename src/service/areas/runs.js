@@ -187,7 +187,9 @@ module.exports = (ctx) => {
     const ancestors = new Set();
     for (let id = parentRunId; id && !ancestors.has(id); id = parentOf(active.get(id))) ancestors.add(id);
     const lends = (r) => !!r.runId && (ancestors.has(r.runId) || all.some((x) => parentOf(x) === r.runId));
-    const taken = all.filter((r) => (c.countSimulations || !r.mock) && !lends(r));
+    // #395: a parked roadmap item's run waiting at its gate holds no slot (the roadmap moved on past it)
+    const parked = (r) => r.approvals?.size > 0 && !!ctx.parkedRun?.(r.runId, r.projectId);
+    const taken = all.filter((r) => (c.countSimulations || !r.mock) && !lends(r) && !parked(r));
     if (taken.length >= c.max) {
       return c.enabled ? `${taken.length} of ${c.max} runs in progress: wait for one to finish, or raise the limit in Settings › Execution.` : 'A workflow is already running.';
     }
