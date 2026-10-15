@@ -15,13 +15,16 @@ const workspace = src('workspace');
 const projects = src('projects');
 
 // the runner's base workspace (scripts/screenshot.js main()), then the view's seed
-async function seedView(t, argv) {
+// (withFolder: the project gets an empty folder in the scratch dir, for seeds that make it a repository)
+async function seedView(t, argv, { withFolder = false } = {}) {
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'seed-view-'));
-  t.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
+  t.after(() => fs.rmSync(scratch, { recursive: true, force: true, maxRetries: 5 }));
   const ws = workspace.setupWorkspace(path.join(scratch, 'workspace'), { persist: false });
   const args = parseArgs(argv);
   const created = await projects.createProject(ws.projects, { name: 'demo-app', description: 'Sample project (simulated data)' });
-  const project = projects.updateProject(ws.projects, created.id, { repo: DEMO_REPO });
+  const folder = withFolder ? path.join(scratch, 'demo-app') : undefined;
+  if (folder) fs.mkdirSync(folder);
+  const project = projects.updateProject(ws.projects, created.id, { repo: DEMO_REPO, ...(folder ? { folder } : {}) });
   workspace.writeSettings(ws, { developerMode: true, lastWorkflow: 'software-development.yaml', lastProject: project.id, setupDone: true });
   fs.mkdirSync(ws.backlog, { recursive: true });
   fs.writeFileSync(path.join(ws.backlog, `${project.id}.json`), JSON.stringify(demoBacklog(project.id, src('backlog').taskProgress), null, 2));
@@ -83,3 +86,13 @@ for (const argv of CASES) {
     assert.deepEqual(bad, []);
   });
 }
+
+test('--view project --mode large (#387): the Architecture tab gets a latest report of production-like volume', async (t) => {
+  const { ws, project } = await seedView(t, ['--view', 'project', '--tab', 'architecture', '--mode', 'large'], { withFolder: true });
+  const dir = path.join(ws.root, 'architecture', project.id);
+  const reports = fs.readdirSync(dir).filter((f) => f.endsWith('.json'))
+    .map((f) => JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'))).filter((r) => r.report);
+  const latest = reports.sort((a, b) => String(b.date).localeCompare(String(a.date)))[0];
+  assert.equal(latest.report.findings.length >= 50, true, `findings: ${latest.report.findings.length}`);
+  assert.match(latest.report.summary, /^1,?\d{3} files/);
+});

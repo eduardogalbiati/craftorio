@@ -15,7 +15,8 @@ function skillsDir(t) {
     fs.writeFileSync(path.join(dir, id, 'SKILL.md'), text);
   };
   write('shared', '---\nname: shared\nrole_sections: [test_writer, developer]\n---\n# Shared\n\nIntro.\n\n## Common: for all\n\nAll.\n\n## Test writer: map first\n\nTW only.\n\n### Detail\n\nTW detail.\n\n## 2. Developer: build\n\nDev only.\n\n## Fix turns: findings\n\nAll again.\n');
-  write('plain', '---\nname: plain\n---\n## Test writer: kept\n\nNo role_sections.\n');
+  write('pair', '---\nname: pair\nrole_sections: [developer, evidence, ui_reviewer]\n---\n# Pair\n\n## Developer: plan\n\nDev only.\n\n## Evidence and UI reviewer: review\n\nReview pair.\n\n## Common: for all\n\nAll.\n');
+  write('plain','---\nname: plain\n---\n## Test writer: kept\n\nNo role_sections.\n');
   write('rules-owner', '---\nname: rules-owner\n---\nRules.\n');
   write('reader', '---\nname: reader\nreads: [rules-owner, missing]\n---\nChecklist.\n');
   return dir;
@@ -35,6 +36,30 @@ test('skillPrompt (#300): a role section reaches only its agent; without a reade
   assert.match(skillPrompt(shared), /TW only[\s\S]*Dev only/, 'no reader: the whole skill');
   assert.deepEqual([shared].map(skillPrompt), [skillPrompt(shared)], '.map(skillPrompt) passes an index, not a reader');
   assert.match(skillPrompt(resolveSkill([dir], 'plain'), 'developer'), /No role_sections/, 'without role_sections the heading is plain text');
+});
+
+test('skillPrompt (#387): an "A and B:" section reaches both agents and nobody else', (t) => {
+  const pair = resolveSkill([skillsDir(t)], 'pair');
+  for (const reader of ['evidence', 'ui_reviewer']) {
+    const text = skillPrompt(pair, reader);
+    assert.match(text, /Review pair/, reader);
+    assert.doesNotMatch(text, /Dev only/, reader);
+    assert.match(text, /All\./, reader);
+  }
+  const dev = skillPrompt(pair, 'developer');
+  assert.match(dev, /Dev only/);
+  assert.doesNotMatch(dev, /Review pair/);
+  assert.doesNotMatch(skillPrompt(pair, 'reviewer'), /Review pair|Dev only/);
+});
+
+test('ui-conventions (#387): the evidence agent keeps its review section; the developer gets the plan, not the review', () => {
+  const ui = resolveSkill([path.join(__dirname, '..', 'skills')], 'ui-conventions');
+  const evidence = skillPrompt(ui, 'evidence');
+  assert.match(evidence, /## Evidence/);
+  assert.doesNotMatch(evidence, /plan before the markup/i);
+  const dev = skillPrompt(ui, 'developer');
+  assert.match(dev, /plan before the markup/i);
+  assert.doesNotMatch(dev, /^## Evidence/m);
 });
 
 test('skillPrompt (#300): `reads` lists the folders of the skills it points to, not their text', (t) => {

@@ -207,6 +207,13 @@ test('ai-development-local-hero (#151): a mock run with a UI change takes the sc
   const uiPrompt = events.find((e) => e.type === 'session.message_sent' && e.session_id === sessions.ui_reviewer[0]).prompt;
   assert.match(uiPrompt, /<skill name="ui-conventions"/);
   assert.match(uiPrompt, /<skill name="design-system"/);
+  // #387: its answer carries the per-screen lines its own schema requires, so it is not dropped as failed
+  const review = events.find((e) => e.type === 'step.finished' && e.step_id === 'code_review');
+  assert.deepEqual([...review.output.succeeded].sort(), ['reviewer', 'ui_reviewer']);
+  const screens = review.output.results.ui_reviewer.screens;
+  assert.equal(Array.isArray(screens) && screens.length >= 1, true);
+  assert.equal(typeof screens[0].message, 'string');
+  assert.equal(typeof screens[0].weakness, 'string');
 });
 
 test('ai-development-local-hero (#151): a blocking UI finding goes back to develop once, and the second review comes before test, suite, E2E and build', { timeout: 120000 }, async (t) => {
