@@ -35,6 +35,8 @@ module.exports = (ctx) => {
     ctx.watchBacklog();
     // the phone gates page (#226, areas/phone-gates.js), when the owner turned it on
     ctx.resumePhoneGates();
+    // processes of finished runs that keep using CPU (#390, areas/runs.js)
+    ctx.watchStrayProcesses();
     // queued issues never start on their own after a restart or a workspace change
     try { backlog.pauseAll(ws.backlog, 'Paused when the app started: resume to start the queued issues.'); } catch (e) { console.error('backlog queues:', e); }
     // after an app update's restart (#279, areas/app-update.js): the roadmaps it paused run again,

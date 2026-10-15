@@ -8,6 +8,7 @@ const simulation = require('../../engine/simulation');
 const machineProfile = require('../../machine-profile');
 const workspace = require('../../workspace');
 const {
+  args,
   BOOL,
   listOf,
   nullable,
@@ -113,6 +114,22 @@ module.exports = (ctx) => [
         : null;
       return { ...resolved, line: machineProfile.machineLine(resolved), suggestion };
     },
+  },
+  // #390: the processes of finished runs that keep using CPU (the memory guard's last sample), each
+  // { pid, ppid, runId, worktree, commandLine, bytes, cpuShare }; [] while the guard is off
+  {
+    channel: 'memory:strays',
+    method: 'strayProcesses',
+    schema: { result: listOf(OBJECT) },
+    fn: () => ctx.strayProcesses(),
+  },
+  // stops one of them with its children; refused for any other process or a run in progress again
+  {
+    channel: 'memory:stopStray',
+    method: 'stopStray',
+    params: ['pid'],
+    schema: { params: args({ pid: NUMBER }, ['pid']), result: OBJECT },
+    fn: (opts) => ctx.stopStray(opts?.pid),
   },
   // patch: the settings to change (src/workspace.js writeSettings checks each one) → the settings
   {

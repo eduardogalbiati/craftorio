@@ -168,6 +168,7 @@ module.exports = {
   'index:rebuild': { arg: null },
   'index:status': { arg: null },
   'localPreview:list': { arg: null },
+  'memory:strays': { arg: null },
   'nightwatch:morning': { arg: null },
   'nightwatch:report': { arg: null },
   'nightwatch:state': { arg: null },

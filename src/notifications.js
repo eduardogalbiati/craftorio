@@ -63,6 +63,17 @@ function interruptedNotice({ runId, workflow, project, mock, title }) {
   return runNotice({ type: 'workflow.finished', run_id: runId, status: 'interrupted', error: 'The app closed while the run was in progress. Resume it from the run screen.' }, { workflow, project, mock, title });
 }
 
+// The notice for a process of a finished run that keeps using CPU (#390, src/engine/memory-guard.js
+// strayProcesses): it names the run and the command; memory:stopStray stops it. Opens the run.
+function strayNotice({ pid, runId, commandLine, cpuShare } = {}) {
+  return {
+    kind: 'run', event: 'stray',
+    title: `A process of a finished run keeps using CPU: ${clip(runId || 'run', 60)}`,
+    body: clip(`PID ${pid}, ${Math.round((Number(cpuShare) || 0) * 100)}% of a core: ${commandLine || 'unknown command'}. Stop it with memory:stopStray, or end it in the Task Manager.`, 240),
+    target: { runId: runId || null },
+  };
+}
+
 // The notice for a CLI waiting in a Sessions terminal.
 function sessionNotice(terminalId, { title } = {}, message = '') {
   return {
@@ -314,5 +325,6 @@ module.exports = {
   runNotice,
   sessionNotice,
   shouldNotify,
+  strayNotice,
   WaitDetector,
 };

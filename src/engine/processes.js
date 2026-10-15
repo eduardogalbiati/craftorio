@@ -16,7 +16,8 @@
 // app's embedded terminals), and, for the command-line and working-directory matches, processes
 // with a terminal (a shell the user opened there). Nothing outside the folder is matched, so the
 // user's app and other runs are safe; the folder itself on a command line (an editor opened on
-// it) is not a match either, only a path inside it.
+// it) is not a match either, only a path inside it, and only for a runtime, runner or shell
+// (RUNNERS): an editor opened on a file of the folder is left alone.
 
 const fs = require('fs');
 const path = require('path');
@@ -102,6 +103,15 @@ function commandMentions(commandLine, dir, { caseInsensitive = CASE_INSENSITIVE 
   return norm(commandLine).includes(norm(dir).replace(/[\\/]+$/, '') + path.sep);
 }
 
+// The programs a command line may name a worktree's file to run (#390): runtimes, runners and
+// shells. A tool opened on one of its files (an editor) is the owner's: naming it is not enough.
+const RUNNERS = /^(bash|bun|cargo|cmd|deno|dotnet|electron|go|gradlew?|java|javaw|jest|mocha|mvnw?|node|nodejs|npm|npx|perl|php|pnpm|powershell|pwsh|py|pytest|python\d*(\.\d+)?|pythonw|ruby|sh|tsx|vitest|yarn|zsh)(\.(exe|cmd|bat))?$/i;
+const programOf = (p) => {
+  const first = String(p.cmd || '').match(/^\s*(?:"([^"]+)"|(\S+))/);
+  return (p.exe || first?.[1] || first?.[2] || '').split(/[\\/]/).pop();
+};
+const isRunner = (p) => RUNNERS.test(programOf(p));
+
 /**
  * The processes to stop for `dir`, from a process list (pure: no process is touched).
  * @param {object[]} procs  [{ pid, ppid, exe, cmd, cwd, tty }]
@@ -122,7 +132,7 @@ function selectProcesses(procs, dir, { self = process.pid, caseInsensitive = CAS
   };
   // the folder as given and resolved: a command line may name either
   const dirs = [...new Set([path.resolve(dir), canonicalPath(dir)])];
-  const named = (cmd) => !!cmd && norm(cmd).includes(name) && dirs.some((d) => commandMentions(cmd, d, { caseInsensitive }));
+  const named = (p) => !!p.cmd && isRunner(p) && norm(p.cmd).includes(name) && dirs.some((d) => commandMentions(p.cmd, d, { caseInsensitive }));
   const byPid = new Map(procs.map((p) => [p.pid, p]));
   const children = new Map();
   for (const p of procs) if (p.ppid !== p.pid) children.set(p.ppid, [...(children.get(p.ppid) || []), p]);
@@ -136,7 +146,7 @@ function selectProcesses(procs, dir, { self = process.pid, caseInsensitive = CAS
   const out = new Map();
   for (const p of procs) {
     if (spared.has(p.pid) || out.has(p.pid)) continue;
-    const reason = inside(p.exe) ? 'executable' : p.tty ? null : inside(p.cwd) ? 'cwd' : named(p.cmd) ? 'command' : null;
+    const reason = inside(p.exe) ? 'executable' : p.tty ? null : inside(p.cwd) ? 'cwd' : named(p) ? 'command' : null;
     if (!reason) continue;
     out.set(p.pid, { ...p, reason });
     for (const c of tree(p.pid)) if (!spared.has(c) && !out.has(c)) out.set(c, { ...byPid.get(c), reason: 'child' });

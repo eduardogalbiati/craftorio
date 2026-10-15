@@ -60,6 +60,7 @@ module.exports = [
   { channel: 'localPreview:start', reason: DIFF_GATE },
   { channel: 'localPreview:stop', reason: DIFF_GATE },
   { channel: 'localPreview:suggest', reason: 'reads a project folder on the engine machine: needs a project with files' },
+  { channel: 'memory:stopStray', reason: 'needs a busy process flagged under a finished run\'s worktree, which a simulation never leaves' },
   { channel: 'nightwatch:limits', reason: WIDE },
   { channel: 'nightwatch:permissions', reason: WIDE },
   { channel: 'nightwatch:replay', reason: WIDE },

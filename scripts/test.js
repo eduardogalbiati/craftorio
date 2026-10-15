@@ -75,7 +75,9 @@ const reporters = [
 ];
 const coverage = process.argv.includes('--experimental-test-coverage') ? ['--experimental-test-coverage'] : [];
 const DEFAULT_TEST_TIMEOUT_MS = 10 * 60e3;
-const testTimeoutMs = Number(process.env.MULTIAGENT_TEST_TIMEOUT_MS ?? DEFAULT_TEST_TIMEOUT_MS);
+// a blank value is unset (Number('') would be 0, no timeout)
+const testTimeoutRaw = String(process.env.MULTIAGENT_TEST_TIMEOUT_MS ?? '').trim();
+const testTimeoutMs = testTimeoutRaw ? Number(testTimeoutRaw) : DEFAULT_TEST_TIMEOUT_MS;
 const timeout = Number.isFinite(testTimeoutMs) && testTimeoutMs >= 0 ? testTimeoutMs : DEFAULT_TEST_TIMEOUT_MS;
 const unitStatus = run(['--test', `--test-concurrency=${concurrency}`, `--test-timeout=${timeout}`, '--test-force-exit', ...coverage, ...reporters, ...files]);
 

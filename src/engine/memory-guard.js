@@ -25,7 +25,8 @@
 // a process whose command line names a file of a finished run's worktree and that used at least half
 // a core between two samples is a stray (strayProcesses, onStray once per process), named with its
 // run and command. Only the owner stops one (stopStray, with its children): the guard never does on
-// its own, and never offers a live run's process.
+// its own, and never offers a live run's process. The app's guard gets its runs from the service
+// (watchStrays, src/service/areas/runs.js): a notification per stray, memory:stopStray stops it.
 
 const fs = require('fs');
 const os = require('os');
@@ -230,10 +231,15 @@ function createMemoryGuard({ limitBytes, floorBytes, intervalMs = 5000, sampler,
   const notified = new Set();
   let lastSubtree = () => [];
   let strayTimer = null;
-  if (runs) {
+  const watchStrays = (next) => {
+    runs = next?.runs || null;
+    onStray = next?.onStray || null;
+    if (strayTimer) { clearInterval(strayTimer); strayTimer = null; }
+    if (!runs) { strays = []; return; }
     strayTimer = setInterval(() => { guard.tick(); }, strayIntervalMs);
     strayTimer.unref?.();
-  }
+  };
+  if (runs) watchStrays({ runs, onStray });
 
   // busy processes under a finished run's worktree, the topmost of each tree only
   function findStrays(procs, at) {
@@ -352,6 +358,8 @@ function createMemoryGuard({ limitBytes, floorBytes, intervalMs = 5000, sampler,
     incidentsBetween(startMs, endMs) {
       return incidents.filter((i) => (i.kind === 'stop' ? i.at >= startMs && i.at <= endMs : i.start <= endMs && i.end >= startMs)).map((i) => ({ ...i }));
     },
+    /** Starts (or, with null, stops) the stray check of a guard made without `runs`: { runs, onStray } as above. */
+    watchStrays,
     /** The strays of the last sample (#390): [{ pid, ppid, runId, worktree, commandLine, bytes, cpuShare }]. */
     async strayProcesses() {
       return strays.map((s) => ({ ...s }));

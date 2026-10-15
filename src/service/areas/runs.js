@@ -63,6 +63,8 @@ module.exports = (ctx) => {
     for (const t of dispatchTimers) clearTimeout(t);
     dispatchTimers.clear();
     if (memoryRetry) { clearInterval(memoryRetry); memoryRetry = null; }
+    // the stray check (#390) runs again with the next workspace
+    sharedMemoryGuard()?.watchStrays(null);
   }
 
   // ---- memory guard (#276) --------------------------------------------------------------
@@ -97,6 +99,38 @@ module.exports = (ctx) => {
     }
     return why;
   }
+
+  // #390: the guard also flags a process under a finished run's worktree that keeps using CPU. Its
+  // runs are the folders of worktrees/ (<runId> and <runId>-base), live while the run is in progress
+  // here or in another app process; each stray is a notification, memory:stopStray stops it. Started
+  // with the workspace (strays of an earlier app session too), never in automated checks.
+  function watchStrayProcesses() {
+    if (simulation.simulationOnly() || !ctx.ws) return;
+    const guard = applyMemorySettings();
+    if (!guard) return;
+    const runsOfWorktrees = () => {
+      let names = [];
+      try { names = fs.readdirSync(ctx.ws.worktrees, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name); } catch { return []; }
+      return names.map((name) => {
+        const id = name.replace(/-base$/, '');
+        return { id, worktree: path.join(ctx.ws.worktrees, name), live: active.has(id) || runAlive(id) };
+      });
+    };
+    guard.watchStrays({
+      runs: runsOfWorktrees,
+      onStray: (s) => {
+        console.warn(`memory guard: process ${s.pid} of finished run ${s.runId} keeps using CPU: ${s.commandLine}`);
+        ctx.notify(notifier.strayNotice(s));
+      },
+    });
+  }
+  const strayGuard = () => {
+    const guard = sharedMemoryGuard();
+    if (!guard) throw new Error('The memory guard is off (Settings › Execution): it watches no process.');
+    return guard;
+  };
+  const strayProcesses = () => sharedMemoryGuard()?.strayProcesses() || [];
+  const stopStray = (pid) => strayGuard().stopStray(pid);
 
   // The runs in progress are written down until they end: still there at the next start = they
   // died with the app. The file holds a list (one object in older versions).
@@ -525,5 +559,8 @@ module.exports = (ctx) => {
     slotProblem,
     startWorkflowRun,
     stopDispatchTimers,
+    stopStray,
+    strayProcesses,
+    watchStrayProcesses,
   };
 };
