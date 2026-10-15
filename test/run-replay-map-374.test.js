@@ -37,6 +37,9 @@ function renderSummary(run, { cityAgents = true } = {}) {
     esc: (s) => String(s ?? ''),
     askPrStates: () => {},
     askScratch: () => {},
+    askResumed: () => {}, // #384: the run that resumed this one (none here)
+    resumedOfRun: new Map(),
+    StatusPill: { resumedLink: () => '' },
     WorkflowInputs: { inputPills: () => '' },
     issuesOfRun: () => [],
     runTitleHtml: (r) => String(r.title || r.id),
