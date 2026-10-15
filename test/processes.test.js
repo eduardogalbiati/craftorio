@@ -8,7 +8,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawn, execFileSync } = require('child_process');
-const { selectProcesses, stopProcessesIn } = require('../src/engine/processes');
+const { commandMentions, selectProcesses, stopProcessesIn } = require('../src/engine/processes');
 
 function tempDir(t) {
   const base = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'procs-')));
@@ -51,6 +51,45 @@ test('selectProcesses: case-insensitive paths match on Windows/macOS file system
   const procs = [{ pid: 5, ppid: 1, exe: path.join(base, 'RUN-1', 'tool.exe') }];
   assert.deepEqual(selectProcesses(procs, wt, { self: 2, caseInsensitive: true }).map((p) => p.pid), [5]);
   assert.deepEqual(selectProcesses(procs, wt, { self: 2, caseInsensitive: false }), []);
+});
+
+test('selectProcesses: a runner naming a file of the worktree (#390), not a sibling run, the bare folder or a terminal', (t) => {
+  const base = tempDir(t);
+  const wt = path.join(base, 'worktrees', 'run-1');
+  const sibling = path.join(base, 'worktrees', 'run-10');
+  fs.mkdirSync(wt, { recursive: true });
+  const node = path.join(base, 'nodejs', 'node.exe');
+  const procs = [
+    { pid: 1, ppid: 0, exe: null, cmd: null },
+    { pid: 20, ppid: 1, exe: node, cmd: `"${node}" --test ${path.join(wt, 'test', 'slow', 'a.slow.test.js')}` }, // a test worker
+    { pid: 21, ppid: 20, exe: path.join(base, 'bin', 'helper.exe'), cmd: 'helper.exe --serve' }, // its child
+    { pid: 30, ppid: 1, exe: node, cmd: `"${node}" ${path.join(sibling, 'b.js')}` }, // another run, same prefix
+    { pid: 31, ppid: 1, exe: node, cmd: `"${node}" ${path.join(sibling, 'run-1', 'c.js')}` }, // run-1 inside another folder
+    { pid: 40, ppid: 1, exe: node, cmd: `"${node}" scripts/x.js --dir ${wt}` }, // the folder itself, no file of it
+    { pid: 50, ppid: 1, exe: path.join(base, 'bin', 'bash'), cmd: `bash ${path.join(wt, 'run.sh')}`, tty: true }, // the owner's terminal
+  ];
+  const found = selectProcesses(procs, wt, { self: 999 });
+  assert.deepEqual(found.map((p) => [p.pid, p.reason]).sort((a, b) => a[0] - b[0]), [[20, 'command'], [21, 'child']]);
+});
+
+test('commandMentions: a file under the folder, never the folder alone nor a sibling sharing its prefix (#390)', (t) => {
+  const base = tempDir(t);
+  const wt = path.join(base, 'Run-1');
+  assert.equal(commandMentions(`node ${path.join(wt, 'a.js')}`, wt), true);
+  assert.equal(commandMentions(`node ${path.join(wt, 'a.js')}`, wt + path.sep), true, 'a trailing separator on the folder');
+  assert.equal(commandMentions(`node ${wt}`, wt), false, 'the folder alone');
+  assert.equal(commandMentions(`node ${path.join(base, 'Run-10', 'a.js')}`, wt), false, 'a sibling sharing the prefix');
+  assert.equal(commandMentions('', wt), false);
+  assert.equal(commandMentions(`node ${path.join(wt, 'a.js')}`, ''), false);
+  const upper = `node ${path.join(wt, 'a.js').toUpperCase()}`;
+  assert.equal(commandMentions(upper, wt, { caseInsensitive: true }), true);
+  assert.equal(commandMentions(upper, wt, { caseInsensitive: false }), false);
+});
+
+test('commandMentions: on Windows a command line with forward slashes names the folder too (#390)', { skip: path.sep !== '\\' && 'Windows paths only' }, () => {
+  const wt = 'C:\\ws\\worktrees\\run-1';
+  assert.equal(commandMentions('node C:/ws/worktrees/run-1/test/a.test.js', wt, { caseInsensitive: true }), true);
+  assert.equal(commandMentions('node c:/WS/worktrees/run-10/test/a.test.js', wt, { caseInsensitive: true }), false);
 });
 
 test('stopProcessesIn: stops an orphan running a program from the folder, leaves other processes alone', { timeout: 60000 }, async (t) => {
