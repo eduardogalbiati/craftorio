@@ -235,6 +235,12 @@ const methods = {
     const env = reruns ? `-env${reruns > 1 ? `-${reruns}` : ''}` : '';
     // #403: the change on top of the current local base (checkout.js bringBaseIn), before the tree is taken
     const sync = await this.bringBaseIn(step);
+    // a rebase that could not be aborted leaves a half-rebased tree: never tested
+    if (sync?.blocked) {
+      const output = { kind: 'suite', status: 'blocked', round: st.visits, scope: 'full', command: null, log: null, exit_code: null, duration_ms: 0, timed_out: false, failures: [], preexisting: [], reason: sync.blocked, message: `The suite could not run: ${sync.blocked}`, base_commit: sync.base_commit };
+      this.emitEvent('log', { level: 'warn', kind: 'suite', step_id: step.id, status: output.status, failures: 0, message: `${step.id}: ${output.message}` });
+      return output;
+    }
     // #364: what this round tests, taken before it runs (output.commit, output.clean)
     const tested = testedTree(this.ctx.worktree_dir);
     const once = async (extra = {}) => {
@@ -272,6 +278,7 @@ const methods = {
           onSpawn,
           // #390: what the suite leaves running in the run's own worktree is stopped (never in a folder it does not own)
           sweep: !!this.worktree?.dir,
+          ...(sync?.base_commit ? { baseCommit: sync.base_commit } : {}),
           ...extra,
           ...(env && extra.logName ? { logName: `${extra.logName}${env}` } : {}),
         });

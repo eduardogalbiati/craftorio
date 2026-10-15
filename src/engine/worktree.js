@@ -285,6 +285,29 @@ async function identityArgs(repo) {
   return email ? [] : ['-c', 'user.name=Multiagent Orchestrator', '-c', 'user.email=orchestrator@localhost'];
 }
 
+// A rebase stopped half-way (a conflict) leaves one of these folders in the worktree's git dir
+async function rebaseInProgress(dir) {
+  for (const name of ['rebase-merge', 'rebase-apply']) {
+    const p = await tryGit(['rev-parse', '--git-path', name], dir);
+    if (p && fs.existsSync(path.resolve(dir, p))) return true;
+  }
+  return false;
+}
+
+// Rebases the worktree's HEAD onto <ref> (mergeLocally, syncWithBase #403). A failure lists the
+// unmerged files (none: not a conflict) and aborts a rebase left in progress → { ok, files, error
+// (git's first line), aborted (false: the worktree is still mid-rebase) }
+async function rebaseOnto(dir, ref, root) {
+  try {
+    await git([...(await identityArgs(root)), 'rebase', ref], dir);
+    return { ok: true, files: [], error: null, aborted: true };
+  } catch (e) {
+    const files = String(await tryGit(['diff', '--name-only', '--diff-filter=U'], dir) || '').split('\n').filter(Boolean);
+    if (await rebaseInProgress(dir)) await tryGit(['rebase', '--abort'], dir);
+    return { ok: false, files, error: String(e.message).split('\n')[0], aborted: !(await rebaseInProgress(dir)) };
+  }
+}
+
 /**
  * Merges the run's branch into the local base branch, without GitHub/GitLab and without pushing
  * (orchestrator.worktree.remote: false + a transition with `merge: local`).
@@ -310,15 +333,12 @@ async function mergeLocally({ repo, dir, base, log = () => {} }) {
   let rebased = false;
   if (!(await git(['merge-base', '--is-ancestor', base, branch], root).then(() => true, () => false))) {
     log('info', `local merge: ${base} moved since ${branch} started; rebasing ${branch} onto it`);
-    try {
-      await git([...(await identityArgs(root)), 'rebase', base], dir);
-      rebased = true;
-    } catch (e) {
-      const files = (await tryGit(['diff', '--name-only', '--diff-filter=U'], dir)) || '';
-      await tryGit(['rebase', '--abort'], dir);
-      const list = files.split('\n').filter(Boolean);
+    const r = await rebaseOnto(dir, base, root);
+    if (!r.ok) {
+      const list = r.files;
       throw new Error(`local merge: ${branch} conflicts with the local ${base}${list.length ? ` in ${list.join(', ')}` : ''}. The branch was left as it was; resolve the conflict on it and merge again.`);
     }
+    rebased = true;
   }
   const commit = await git(['rev-parse', `refs/heads/${branch}`], root);
   const checkout = (await listWorktrees(root)).find((w) => w.branch === base);
@@ -339,10 +359,11 @@ async function mergeLocally({ repo, dir, base, log = () => {} }) {
  * Brings the local base into the run's branch before a suite or E2E round (#403): when the local
  * <base> moved past the branch's fork point, the worktree's HEAD (its branch, or the detached HEAD)
  * is rebased onto it, as mergeLocally does at the end. A conflict aborts the rebase and leaves the
- * branch as it was; uncommitted changes to tracked files skip it. The base is never modified, nothing
- * is fetched or pushed.
+ * branch as it was; uncommitted changes to tracked files or a rebase that fails for another reason (a
+ * locked file, a hook) skip it; a rebase that cannot be aborted is `blocked` (a half-rebased tree is
+ * never tested). The base is never modified, nothing is fetched or pushed.
  * @returns {Promise<object|null>} null without a git repository or a local base; else { moved,
- *   conflict, files, skipped, base, base_commit (the base commit the HEAD now sits on), from, to,
+ *   conflict, files, skipped, blocked, base, base_commit (the base commit the HEAD now sits on), from, to,
  *   count, commits: ['<sha> <subject>', ...] (the base commits brought in, or that did not apply) }
  */
 async function syncWithBase({ repo, dir, base }) {
@@ -351,7 +372,7 @@ async function syncWithBase({ repo, dir, base }) {
   if (!root || !base || !(await refExists(root, ref))) return null;
   const from = await git(['rev-parse', 'HEAD'], dir);
   const tip = await git(['rev-parse', ref], root);
-  const result = { moved: false, conflict: false, files: [], skipped: null, base, base_commit: tip, from, to: from, count: 0, commits: [] };
+  const result = { moved: false, conflict: false, files: [], skipped: null, blocked: null, base, base_commit: tip, from, to: from, count: 0, commits: [] };
   if ((await currentBranch(dir)) === base) return result;
   if (await git(['merge-base', '--is-ancestor', ref, 'HEAD'], dir).then(() => true, () => false)) return result;
   result.base_commit = await tryGit(['merge-base', ref, 'HEAD'], dir);
@@ -361,12 +382,11 @@ async function syncWithBase({ repo, dir, base }) {
     result.skipped = 'the worktree has uncommitted changes';
     return result;
   }
-  try {
-    await git([...(await identityArgs(root)), 'rebase', ref], dir);
-  } catch {
-    result.files = String(await tryGit(['diff', '--name-only', '--diff-filter=U'], dir) || '').split('\n').filter(Boolean);
-    await tryGit(['rebase', '--abort'], dir);
-    result.conflict = true;
+  const r = await rebaseOnto(dir, ref, root);
+  if (!r.ok) {
+    if (!r.aborted) result.blocked = `the rebase onto ${base} failed (${r.error}) and could not be aborted: the worktree ${dir} is mid-rebase; run \`git rebase --abort\` there, then resume`;
+    else if (r.files.length) { result.conflict = true; result.files = r.files; }
+    else result.skipped = `the rebase failed: ${r.error}`;
     return result;
   }
   result.moved = true;

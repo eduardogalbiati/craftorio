@@ -271,8 +271,8 @@ const methods = {
   // too), so the round tests the change on top of the current base; a resumed run gets it before its
   // first round the same way. Skipped for `base_check: false` (the worktree is the base) and for a
   // remote workflow (its branch may be pushed: rebasing it would rewrite a pushed history). A log line
-  // only when the base moved or did not apply; the next agent turn is told (baseSyncNote). null:
-  // nothing checked.
+  // only when the base moved or did not apply; the next agent turn is told (baseSyncNote). A rebase
+  // that could not be aborted (`blocked`) blocks the round (suiteRound). null: nothing checked.
   async bringBaseIn(step) {
     const wt = this.worktree;
     if (!wt?.dir || !wt.base || wt.remote !== false || step.base_check === false) return null;
@@ -286,7 +286,9 @@ const methods = {
     if (!sync) return null;
     const tip = sync.base_commit ? sync.base_commit.slice(0, 7) : '?';
     const list = sync.commits.length ? `: ${sync.commits.join('; ')}${sync.count > sync.commits.length ? ` (and ${sync.count - sync.commits.length} more)` : ''}` : '';
-    if (sync.moved) {
+    if (sync.blocked) {
+      this.emitEvent('log', { level: 'error', kind: 'base_sync', step_id: step.id, message: `${step.id}: ${sync.blocked}` });
+    } else if (sync.moved) {
       this.emitEvent('log', { level: 'info', kind: 'base_sync', step_id: step.id, message: `${step.id}: brought ${wt.base} (${tip}) into the branch: ${sync.count} commit(s)${list}` });
       const note = `Before the ${step.id} round the orchestrator rebased the branch onto ${wt.base} (${tip}), which had moved: it got ${sync.count} commit(s)${list}. Your earlier commits now sit on top of them.`;
       this.baseSyncNote = this.baseSyncNote ? `${this.baseSyncNote}\n${note}` : note;

@@ -20,9 +20,9 @@
 // src/engine/test-timeouts.js): 90 s for test/*.test.js, 5 min for the slow files, so the unit files
 // and the slow ones run as two node --test runs at the same time, each with its own --test-timeout
 // and half the concurrency (the slow files' half at most their count); their reports merge into one.
-// With the override or coverage (one coverage table), one run with the largest budget.
+// With a concurrency of 1 the two runs go one after the other. With the override, one run.
 // --experimental-test-coverage (`npm run test:coverage`, the suite step's `coverage: true`, #225)
-// passes on to node --test: its coverage table ends the report.
+// passes on to node --test: each run's coverage table ends its report (coverage-summary.js merges them).
 //   npm run test:coverage [-- test/a.test.js]
 
 const fs = require('fs');
@@ -76,7 +76,7 @@ const coverage = process.argv.includes('--experimental-test-coverage') ? ['--exp
 // One group per budget (#402), the shortest first; the override gives every file the same budget
 const budgetOf = new Map(files.map((f) => [f, testTimeoutMs(f)]));
 const budgets = [...new Set(budgetOf.values())].sort((a, b) => a - b);
-const groups = coverage.length || budgets.length < 2
+const groups = budgets.length < 2
   ? [{ timeout: Math.max(0, ...budgets), files }]
   : budgets.map((ms) => ({ timeout: ms, files: files.filter((f) => budgetOf.get(f) === ms) }));
 // two groups share the concurrency: the slow files get half, at most their count
@@ -105,7 +105,11 @@ const argsOf = (g) => [
 const runAsync = (args) => new Promise((resolve) => {
   const fd = agent ? fs.openSync(humanLog, 'a') : null;
   const child = spawn(process.execPath, args, { cwd: root, stdio: agent ? ['ignore', fd, fd] : 'inherit', env: process.env });
+  let closed = false;
+  // a spawn error may emit both 'error' and 'exit'
   const done = (code) => {
+    if (closed) return;
+    closed = true;
     if (fd != null) fs.closeSync(fd);
     resolve(code);
   };
@@ -165,7 +169,9 @@ function finish(flow) {
 }
 
 async function main() {
-  await Promise.all(groups.map(async (g) => { g.status = await runAsync(argsOf(g)); }));
+  // a concurrency of 1 is one test file at a time: the groups run one after the other
+  if (concurrency < 2) for (const g of groups) g.status = await runAsync(argsOf(g));
+  else await Promise.all(groups.map(async (g) => { g.status = await runAsync(argsOf(g)); }));
   unitStatus = groups.every((g) => g.status === 0) ? 0 : 1;
   for (const g of groups.filter((x) => x.specFile)) {
     try { say(fs.readFileSync(g.specFile, 'utf8').trimEnd()); } catch { /* the runner died before reporting */ }
