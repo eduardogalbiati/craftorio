@@ -52,6 +52,19 @@ test('a view of another folder is a --view for parseArgs given that folder, neve
   assert.equal(parseArgs(['--view', 'backlog']).view, 'backlog');
 });
 
+test('parseArgs given a folder of views resolves an alias and names unknown views from that folder', (t) => {
+  const dir = tempViews(t, {
+    'zz-target-394.js': "module.exports = { modes: ['grid'] };\n",
+    'zz-alias-394.js': "module.exports = { alias: { view: 'zz-target-394', mode: 'grid' } };\n",
+  });
+  const { loadViews, parseArgs } = loadRunner();
+  const views = loadViews(dir);
+  const a = parseArgs(['--view', 'zz-alias-394'], views);
+  assert.equal(a.view, 'zz-target-394');
+  assert.equal(a.mode, 'grid');
+  assert.throws(() => parseArgs(['--view', 'dashboard'], views), /Unknown view: dashboard\. Views: zz-alias-394, zz-target-394$/);
+});
+
 test('running test/screenshot-seeds-249.test.js never adds a file to scripts/screenshot/views/', { timeout: 180000 }, async () => {
   const before = new Set(fs.readdirSync(VIEWS_DIR));
   const added = new Set();
