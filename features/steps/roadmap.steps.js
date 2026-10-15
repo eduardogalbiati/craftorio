@@ -977,13 +977,14 @@ Given('the roadmap has two planned stages, items A and B in stage 1 and item C i
 Then('the roadmap item {string} has started', async ({ e2e }, title) => {
   const item = roadmapItem(e2e.window, title);
   await expect(item.getByTestId('run-chip')).toHaveAttribute('data-run', /\S/, { timeout: RUN_TIMEOUT });
-  await expect(item).not.toHaveAttribute('data-status', 'planned');
+  await expect(item).not.toHaveClass(/\brm-planned\b/);
 });
 
+// a planned card has no data-status attribute: the renderer marks it with the rm-planned class only
 Then('the roadmap item {string} has not started', async ({ e2e }, title) => {
   const item = roadmapItem(e2e.window, title);
   await expect(item).toBeVisible({ timeout: LOAD_TIMEOUT });
-  await expect(item).toHaveAttribute('data-status', 'planned');
+  await expect(item).toHaveClass(/\brm-planned\b/);
   await expect(item.getByTestId('run-chip')).toHaveCount(0);
 });
 
