@@ -20,7 +20,15 @@
 
   const dot = (colour) => ProjectCityCards.dot(colour);
   const countsHtml = (list, testid, label) => ProjectCityCards.countsHtml(list, testid, label);
-  const options = (values, selected) => values.map((v) => `<option value="${esc(v)}" ${String(v) === String(selected) ? 'selected' : ''}>${esc(v)}</option>`).join('');
+  const options = (values, selected, label = (v) => v) => values.map((v) => `<option value="${esc(v)}" ${String(v) === String(selected) ? 'selected' : ''}>${esc(label(v))}</option>`).join('');
+  // the app's select (select.js, #383); a page without select.js (a test's mini DOM) gets the same element from the DOM
+  function selectMarkup(attrs, optionsHtml) {
+    if (window.Select) return window.Select.markup(Object.entries(attrs).map(([k, v]) => (v === '' ? k : `${k}="${esc(v)}"`)).join(' '), optionsHtml);
+    const el = document.createElement('select');
+    for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+    el.innerHTML = optionsHtml;
+    return el.outerHTML;
+  }
   // the status chips: each count with its colour on the map
   const statusColour = () => ({ added: CityRelease.ADDED_COLOUR, changed: CityRelease.CHANGE_RAMP[CityRelease.CHANGE_RAMP.length - 1], removed: GHOST, renamed: CityRelease.CHANGE_RAMP[1] });
 
@@ -28,8 +36,8 @@
   function pickerMarkup(tags, from, to) {
     const refs = [...tags, ...[to, from].filter((r) => r && !tags.includes(r))];
     return `<div class="pcr-picker">
-        <label class="r3d-chip"><span>From</span><select data-pcr-from data-testid="city-release-from" aria-label="The previous release">${options(refs, from)}</select></label>
-        <label class="r3d-chip"><span>To</span><select data-pcr-to data-testid="city-release-to" aria-label="The release">${options(refs, to)}</select></label>
+        <label class="r3d-chip"><span>From</span>${selectMarkup({ 'data-pcr-from': '', 'data-testid': 'city-release-from', 'aria-label': 'The previous release' }, options(refs, from))}</label>
+        <label class="r3d-chip"><span>To</span>${selectMarkup({ 'data-pcr-to': '', 'data-testid': 'city-release-to', 'aria-label': 'The release' }, options(refs, to))}</label>
       </div>`;
   }
 
@@ -46,9 +54,8 @@
       ${countsHtml(header.districts || [], 'city-release-district', 'By district')}
       ${countsHtml(header.zones || [], 'city-release-zone', 'By zone')}
       <div class="pcr-actions">
-        <label class="r3d-chip"><span>Issue</span><select data-pcr-issue data-testid="city-release-issue" aria-label="Filter by issue">
-          <option value="" ${issue == null ? 'selected' : ''}>All issues</option>${issues.map((n) => `<option value="${esc(n)}" ${Number(n) === Number(issue) ? 'selected' : ''}>#${esc(n)}</option>`).join('')}
-        </select></label>
+        <label class="r3d-chip"><span>Issue</span>${selectMarkup({ 'data-pcr-issue': '', 'data-testid': 'city-release-issue', 'aria-label': 'Filter by issue' },
+          `<option value="" ${issue == null ? 'selected' : ''}>All issues</option>${options(issues, issue, (n) => `#${n}`)}`)}</label>
         <span class="r3d-grow"></span>
         <button type="button" class="r3d-primary inline" data-pcr-save data-testid="city-release-save-image" title="Save a PNG of this view with a caption, for release notes">Save image</button>
       </div>
