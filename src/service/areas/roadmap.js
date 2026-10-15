@@ -69,7 +69,7 @@ module.exports = (ctx) => {
       // gate: the "What happened" line of the gate a live run waits at (#213), for the waiting badge
       const gate = live?.pendingGates?.()[0]?.brief?.headline || null;
       // #395: the gate the run waits at (live, or interrupted there by a closed app), by its step's name
-      const atGate = gateRun(x.runId, find)?.gate ?? null;
+      const atGate = gateOf(x.runId, find);
       return {
         status: r.status, mock: !!r.mock, startedAt: r.startedAt || null, finishedAt: r.finishedAt || null, waiting, gate, atGate,
         progress, groups: r.groups || [], agentNames: r.agentNames || null, stepNames: r.stepNames || null, workflow: r.workflow || null, error: r.error || null,
@@ -164,17 +164,21 @@ module.exports = (ctx) => {
   // live, or interrupted there (a closed app; its trail's last step waits), so Move on can park it
   function gateRun(runId, find = findRun) {
     const base = roadmapRun(runId, find);
-    if (!base) return null;
+    const gate = base && gateOf(runId, find);
+    return gate ? { ...base, waiting: true, gate } : base;
+  }
+  // the name of the human gate a run waits at, or null (cheap: no events.jsonl read, #389)
+  function gateOf(runId, find = findRun) {
     const live = runId && ctx.active.get(runId);
     if (live) {
       const open = live.pendingGates?.()[0];
-      return open ? { ...base, waiting: true, gate: live.displayNames?.().steps?.[open.step_id] || open.step_id } : base;
+      return open ? live.displayNames?.().steps?.[open.step_id] || open.step_id : null;
     }
-    const r = base.status === 'interrupted' ? find(runId) : null;
-    const last = r?.progress?.at(-1);
-    if (last?.status !== 'waiting') return base;
-    const step = last.id || last.name || '';
-    return { ...base, waiting: true, gate: r.stepNames?.[step] || step || 'its gate' };
+    const r = runId ? find(runId) : null;
+    const last = r?.status === 'interrupted' ? r.progress?.at(-1) : null;
+    if (last?.status !== 'waiting') return null;
+    const step = last.step || '';
+    return r.stepNames?.[step] || step || 'its gate';
   }
 
   // #395 Move on: the item parked, or the stage's items at a gate parked and its planned ones skipped
