@@ -173,7 +173,8 @@ function affectedTests({ root, base, changed } = {}) {
 // In or outside the change (#396): a failure is "in the change" when its test file is changed itself
 // or reaches a changed file through the graph (slow tests too), "outside the change" otherwise;
 // `class_reason` says why ("imports src/a.js", "reaches none of the 3 changed file(s)"). When it
-// cannot be told (no file named, the changed files unknown, a shared root changed, no JS/TS graph)
+// cannot be told (no file named, a file the project does not have, the changed files unknown, a
+// shared root changed, no JS/TS graph; an absolute file path is made relative to `root` first)
 // the failure counts as in the change: only failures known to be elsewhere are outside. A failure
 // that already has a class keeps it. → copies of `failures` with { class, class_reason }; never throws.
 const IN_CHANGE = 'in the change';
@@ -193,9 +194,10 @@ function classifyFailures({ root, changed, failures = [] } = {}) {
   return failures.map((f) => {
     if (f.class) return f;
     if (!f.file) return inChange(f, 'cannot tell: the failure names no test file');
-    const file = slash(f.file);
+    const file = slash(path.isAbsolute(f.file) ? path.relative(root, f.file) : f.file);
     const r = from.get(file);
     if (r) return inChange(f, r.seed === file ? 'the test file is changed' : reasonOf(r, file));
+    if (!graph.known.has(file)) return inChange(f, `cannot tell: ${slash(f.file)} is not a file of the project`);
     return { ...f, class: OUTSIDE_CHANGE, class_reason: `reaches none of the ${list.length} changed file(s)` };
   });
 }
