@@ -66,6 +66,9 @@ test('#403 a commit that lands on the local base during the run is in the tree t
   assert.equal(isAncestor(f.repo, fix, suite.commit), true, 'the suite round tested the change on top of the base fix');
   assert.equal(suite.base_commit, fix, 'the suite round names the base commit it tested on');
   assert.equal(logs(r.events).some((m) => m.includes(fix.slice(0, 7))), true, 'a log line names the base commit');
+  assert.ok(suite.log, 'the round has a log');
+  assert.match(fs.readFileSync(path.join(r.run.runDir, suite.log), 'utf8'), new RegExp(`^# base: tested on top of ${fix}$`, 'm'),
+    'the round\'s log says which base commit it tested on');
   const [e2e] = finishedOf(r.events, 'e2e');
   assert.ok(e2e?.commit, `the E2E round says what it tested: ${JSON.stringify(e2e)}`);
   assert.equal(isAncestor(f.repo, late, e2e.commit), true, 'the E2E round brought the later base commit in too');
@@ -125,6 +128,36 @@ test('#403 a base that conflicts with the branch leaves the round on the branch 
   assert.equal(logs(r.events).some((m) => /conflict/i.test(m)), true, 'a log line says so');
   assert.equal(git(f.repo, 'rev-parse', 'refs/heads/main'), conflicting, 'the base itself is not modified');
   assert.equal(isAncestor(f.repo, conflicting, suite.commit), false);
+});
+
+test('#403 a rebase git refuses without a conflict (a pre-rebase hook) leaves the round on the branch as it is, with git\'s message', { timeout: 90000 }, async (t) => {
+  const f = fixture(t);
+  // the hooks folder is shared by the repository's worktrees
+  const hooks = path.resolve(f.repo, git(f.repo, 'rev-parse', '--git-path', 'hooks'));
+  fs.mkdirSync(hooks, { recursive: true });
+  fs.writeFileSync(path.join(hooks, 'pre-rebase'), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+  let workDir = null;
+  let head = null;
+  let fix = null;
+  const r = await runFixture({
+    repo: f.repo, worktreesDir: f.worktrees, runsDir: path.join(f.tmp, 'runs'),
+    onEvent: (ev) => {
+      if (ev.type === 'worktree.ready') workDir = ev.work_dir || ev.dir;
+      if (ev.type === 'step.finished' && ev.step_id === 'work') {
+        head = commit(workDir, 'feature.txt', 'feature\n', 'the run\'s change');
+        fix = commit(f.repo, 'fix.txt', 'fixed\n', 'fix the failing test on main');
+      }
+      return false;
+    },
+  });
+  const [suite] = finishedOf(r.events, 'suite');
+  assert.ok(suite, 'the suite round still runs');
+  assert.notEqual(suite.status, 'blocked', `a refused rebase does not block the round: ${suite.message}`);
+  assert.equal(suite.commit, head, 'the round tested the branch as it was');
+  assert.match(String(suite.message || ''), /not brought in: the rebase failed: .*pre-rebase hook refused/i, 'the round\'s message says why');
+  assert.equal(logs(r.events).some((m) => /pre-rebase hook refused/i.test(m)), true, 'a log line says so');
+  assert.equal(isAncestor(f.repo, fix, suite.commit), false);
+  assert.equal(git(f.repo, 'rev-parse', 'refs/heads/main'), fix, 'the base itself is not modified');
 });
 
 test('#403 a run resumed from the suite gets the base before its first round', { timeout: 90000 }, async (t) => {

@@ -91,3 +91,73 @@ test('#402 a hung test is reported by name and file, "timed out after N s", and 
   assert.match(String(red[0].file), /redfx-charlie\.test\.js$/);
   assert.equal(report.passed >= 1, true, 'the passing file still reports');
 });
+
+// A unit file and a slow file (slow/…slow.test.js), each requiring its own module and writing
+// "start|end <name>" to a trace file around a short wait. Inside the repository (a gitignored
+// folder) so node's coverage table lists the modules.
+function twoGroups(t) {
+  const dir = fs.mkdtempSync(path.join(root, '.test-output', 'runner-groups-402-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }));
+  const trace = path.join(dir, 'trace.txt');
+  const testFile = (name, lib) => [
+    "const test = require('node:test');",
+    "const fs = require('fs');",
+    `const lib = require(${JSON.stringify(lib)});`,
+    `test(${JSON.stringify(`${name} works`)}, async () => {`,
+    `  fs.appendFileSync(${JSON.stringify(trace)}, 'start ${name}\\n');`,
+    '  await new Promise((r) => setTimeout(r, 1500));',
+    `  if (lib.twice(2) !== 4) throw new Error('lib');`,
+    `  fs.appendFileSync(${JSON.stringify(trace)}, 'end ${name}\\n');`,
+    '});',
+    '',
+  ].join('\n');
+  fs.mkdirSync(path.join(dir, 'slow'));
+  fs.writeFileSync(path.join(dir, 'unitlib402.js'), 'exports.twice = (n) => n * 2;\nexports.unused = (n) => n + 1;\n');
+  fs.writeFileSync(path.join(dir, 'slowlib402.js'), 'exports.twice = (n) => n * 2;\n');
+  fs.writeFileSync(path.join(dir, 'unitfx.test.js'), testFile('unit', './unitlib402.js'));
+  fs.writeFileSync(path.join(dir, 'slow', 'slowfx.slow.test.js'), testFile('slow', '../slowlib402.js'));
+  const files = [path.join(dir, 'unitfx.test.js'), path.join(dir, 'slow', 'slowfx.slow.test.js')];
+  const humanLog = path.join(dir, 'human.log');
+  const env = { ...process.env, MULTIAGENT_AGENT_MODE: '1', MULTIAGENT_TEST_HUMAN_LOG: humanLog };
+  delete env.NODE_TEST_CONTEXT;
+  delete env.MULTIAGENT_TEST_TIMEOUT_MS;
+  return { dir, trace, files, humanLog, env };
+}
+const runRunner = (files, env, extra = []) => spawnSync(process.execPath, ['scripts/test.js', ...extra, ...files], { cwd: root, encoding: 'utf8', env, timeout: 120000 });
+
+test('#402 at concurrency 1 the unit files and the slow files run as two groups, one after the other, each with its own budget', { timeout: 150000 }, (t) => {
+  const g = twoGroups(t);
+  const { testTimeoutMs } = budgets();
+  const r = runRunner(g.files, { ...g.env, MULTIAGENT_TEST_CONCURRENCY: '1' });
+  assert.equal(r.error?.code, undefined);
+  assert.equal(r.status, 0, r.stdout.slice(-2000));
+  const report = JSON.parse(r.stdout.trim().split(/\r?\n/).pop());
+  assert.equal(report.passed, 2, 'both groups report');
+  assert.equal(report.failed, 0);
+  const human = fs.readFileSync(g.humanLog, 'utf8');
+  assert.match(human, new RegExp(`1 file\\(s\\): --test-timeout=${testTimeoutMs('test/x.test.js', {})} ms`), 'the unit group gets the unit budget');
+  assert.match(human, new RegExp(`1 file\\(s\\): --test-timeout=${testTimeoutMs('test/slow/x.slow.test.js', {})} ms`), 'the slow group gets the slow budget');
+  // never two test processes at once: each file ends before the other starts
+  const lines = fs.readFileSync(g.trace, 'utf8').trim().split(/\r?\n/);
+  assert.equal(lines.length, 4, lines.join(' | '));
+  assert.equal(lines[0].replace('start ', 'end '), lines[1], `one group after the other: ${lines.join(' | ')}`);
+  assert.equal(lines[2].replace('start ', 'end '), lines[3], `one group after the other: ${lines.join(' | ')}`);
+});
+
+test('#402 with coverage the unit and slow groups each print a coverage table, and the merged summary sees the files of both', { timeout: 150000 }, (t) => {
+  const g = twoGroups(t);
+  const { parseNodeCoverage } = require('../src/coverage-summary');
+  const r = runRunner(g.files, { ...g.env, MULTIAGENT_TEST_CONCURRENCY: '2' }, ['--experimental-test-coverage']);
+  assert.equal(r.error?.code, undefined);
+  assert.equal(r.status, 0, r.stdout.slice(-2000));
+  const human = fs.readFileSync(g.humanLog, 'utf8');
+  assert.equal((human.match(/start of coverage report/g) || []).length, 2, 'one coverage table per group');
+  assert.match(human, /--test-timeout=\d+ ms, concurrency 1[\s\S]*--test-timeout=\d+ ms, concurrency 1/, 'still two groups under coverage');
+  // the suite step reads the round's log and the human log together (suite-step.js saveCoverage)
+  const changedFiles = ['unitlib402.js', 'slowlib402.js'].map((n) => path.relative(root, path.join(g.dir, n)).split(path.sep).join('/'));
+  const summary = parseNodeCoverage(`${r.stdout}\n${human}`, { changedFiles });
+  assert.ok(summary, 'a coverage summary');
+  const names = (summary.files || []).map((f) => path.basename(String(f.file)));
+  assert.equal(names.includes('unitlib402.js'), true, `the unit group's module: ${names.join(', ')}`);
+  assert.equal(names.includes('slowlib402.js'), true, `the slow group's module: ${names.join(', ')}`);
+});
