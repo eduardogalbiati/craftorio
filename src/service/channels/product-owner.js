@@ -10,6 +10,7 @@
 // po:file's `epic`: a new issue joins its draft's epic (#138). po:split files a proposed split of an
 // issue too big for one run (#124); po:epic creates an epic or places issues in one (#138). Both
 // run only on the owner's click, preview like po:file, and sync the backlog after a real write.
+// po:decongest (#150) files one hot spot of an answer's `decongest` as an issue, previewing like po:file.
 // po:ask's `scenario` (#148, simulated only): forces the simulated answer (MOCK_SCENARIOS). Every
 // real answer raises a `po` notice (#149, src/notifications.js); a simulated or stopped one does not.
 // po:ask's progress is pushed on chat:progress ('po', the project id) and chat:cancel stops it (#180).
@@ -25,7 +26,7 @@
 const path = require('path');
 const agents = require('../../agents');
 const backlog = require('../../backlog');
-const DefaultWorkflow = require('../../renderer/default-workflow');
+const DefaultWorkflow = require('../../shared/default-workflow');
 const notifier = require('../../notifications');
 const productOwner = require('../../product-owner');
 const projects = require('../../projects');
@@ -35,7 +36,31 @@ const simulation = require('../../engine/simulation');
 const usage = require('../../usage');
 const workspace = require('../../workspace');
 const { resolveCommand } = require('../../engine/providers');
-const { isArchived } = require('../../renderer/views/backlog/backlog-archive');
+const { isArchived } = require('../../shared/backlog-archive');
+const { requireObject } = require('../common');
+const {
+  ANY,
+  args,
+  FLAG,
+  INT,
+  ISSUE_NUMBER,
+  listOf,
+  MESSAGES,
+  nullable,
+  NUMBER,
+  OBJECT,
+  orNone,
+  PROJECT_ID,
+  REQUEST_ANSWER,
+  shape,
+  STRING,
+} = require('../schemas');
+
+// Every drawer channel works on one project's conversation; `at` names one of its answers
+const onProject = (properties = {}, required = []) => args({ projectId: PROJECT_ID, ...properties }, ['projectId', ...required]);
+const AT = { type: ['string', 'integer'], description: 'An answer of the conversation (its time or index).' };
+// what filing on the platform answers (the Backlog synced again after a real filing, syncError when that failed)
+const FILED = OBJECT;
 
 module.exports = (ctx) => {
   const project = (projectId) => path.basename(String(projectId));
@@ -77,10 +102,11 @@ module.exports = (ctx) => {
       skillsDirs: [ctx.ws.skills, ctx.BUNDLED_SKILLS_DIR],
       resolveCommand,
       // its own past calls and the Oracle's are in no run: add them to what the runs used this month
-      budget: simulated ? null : usage.withPeerUsage(usage.budgetBaseline({ runsDir: ctx.ws.runs, settings, extraRuns: ctx.agentUsageRuns() }), productOwner.monthUsage(ctx.ws.backlog), settings.prices),
+      budget: simulated ? null : usage.withPeerUsage(usage.budgetBaseline({ runsDir: ctx.ws.runs, settings, extraRuns: ctx.agentUsageRuns() }), productOwner.monthUsage(ctx.ws.backlog, new Date(), settings.timeZone), settings.prices),
       mock: simulated,
       // #206: the prices of the estimates
       prices: settings.prices || {},
+      timeZone: settings.timeZone, // #273: the owner's zone in the turn's prompt
     };
   };
   // a discovery card's commit proposal asks the same Product Owner (#258, src/service/channels/discovery.js)
@@ -131,7 +157,8 @@ module.exports = (ctx) => {
     },
     // the Roadmap's drag of a planned item to another stage ({ itemId, stage: its number, 1-based; one past the last adds a stage })
     'roadmap.move': (p, { mock }) => {
-      const stages = roadmaps.readRoadmap(ctx.ws.backlog, p.projectId).stages || [];
+      const read = roadmaps.readRoadmap(ctx.ws.backlog, p.projectId);
+      const stages = read.stages || [];
       const item = stages.flatMap((s) => s.items || []).find((x) => x.id === String(p.itemId || ''));
       if (!item) throw new Error(`Roadmap item ${p.itemId} does not exist.`);
       if (item.status !== 'planned') throw new Error(`Roadmap item ${p.itemId} is ${item.status}: only a planned item moves.`);
@@ -140,7 +167,8 @@ module.exports = (ctx) => {
       const next = stages.map((s) => ({ ...s, items: (s.items || []).filter((x) => x.id !== item.id) }));
       if (to > next.length) next.push({ name: '', note: '', items: [] });
       next[to - 1].items.push(item);
-      return ctx.performAction('roadmap.stages', { projectId: p.projectId, stages: next }, { mock });
+      // #287: based on this read; a roadmap written before the action runs gets the move only
+      return ctx.performAction('roadmap.stages', { projectId: p.projectId, stages: next, base: read.updatedAt }, { mock });
     },
     // the Roadmap's saved edit: the whole stages, regrouped ({ stages, append? })
     'roadmap.regroup': (p, { mock }) => ctx.performAction('roadmap.stages', p, { mock }),
@@ -190,6 +218,21 @@ module.exports = (ctx) => {
       channel: 'po:ask',
       method: 'askProductOwner',
       params: ['projectId', 'question', 'mock', 'mode', 'attachments', 'issues', 'scenario', 'calibration', 'cost', 'workflow', 'inputs'],
+      schema: {
+        params: onProject({
+          question: STRING,
+          mock: FLAG,
+          mode: nullable(STRING),
+          attachments: ANY,
+          issues: ANY,
+          scenario: ANY,
+          calibration: ANY,
+          cost: ANY,
+          workflow: nullable(STRING),
+          inputs: ANY,
+        }),
+        result: shape({ message: OBJECT, messages: MESSAGES }, ['messages']),
+      },
       fn: async ({ projectId, question, mock, mode, attachments, issues, scenario, calibration, cost, workflow, inputs }) => {
         const id = project(projectId);
         const p = projects.readProject(ctx.ws.projects, id);
@@ -231,13 +274,15 @@ module.exports = (ctx) => {
       channel: 'po:attach',
       method: 'attachProductOwnerFile',
       params: ['projectId', 'name', 'data'],
+      schema: { params: onProject({ name: STRING, data: STRING }), result: shape({ name: STRING, path: STRING, size: NUMBER }, ['path']) },
       fn: ({ projectId, name, data }) => productOwner.saveAttachment(ctx.ws.backlog, project(projectId), { name, data }),
     },
-    { channel: 'po:clear', method: 'clearProductOwner', params: ['projectId'], fn: ({ projectId }) => productOwner.clearConversation(ctx.ws.backlog, project(projectId)) },
+    { channel: 'po:clear', method: 'clearProductOwner', params: ['projectId'], schema: { params: onProject(), result: MESSAGES }, fn: ({ projectId }) => productOwner.clearConversation(ctx.ws.backlog, project(projectId)) },
     {
       channel: 'po:discard',
       method: 'discardProductOwnerDraft',
       params: ['projectId', 'at'],
+      schema: { params: onProject({ at: AT }), result: MESSAGES },
       fn: ({ projectId, at }) => productOwner.discardDraft(ctx.ws.backlog, project(projectId), at, ctx.ws.runs),
     },
     // Returns fileDraft's result plus, after a real filing, the backlog synced again (syncError when that failed).
@@ -245,6 +290,7 @@ module.exports = (ctx) => {
       channel: 'po:file',
       method: 'fileProductOwnerDraft',
       params: ['projectId', 'at', 'action', 'number', 'preview', 'epic'],
+      schema: { params: onProject({ at: AT, action: nullable(STRING), number: nullable(ISSUE_NUMBER), preview: FLAG, epic: FLAG }), result: FILED },
       fn: async ({ projectId, at, action, number, preview, epic }) => {
         const t = target(projectId);
         const res = await productOwner.fileDraft({
@@ -259,7 +305,22 @@ module.exports = (ctx) => {
           repo: t.repo,
           cached: (t.data.issues || []).find((i) => i.number === Number(number)) || null,
           placeEpic: !!epic,
+          timeZone: workspace.readSettings(ctx.ws).timeZone, // #273: the drawer previews the same day
           epicList: t.data.epics || [],
+        });
+        return resync(res, t);
+      },
+    },
+    // #150: one hot spot of an answer's `decongest` filed as an issue on the owner's click (preview like po:file)
+    {
+      channel: 'po:decongest',
+      method: 'fileProductOwnerDecongest',
+      params: ['projectId', 'at', 'index', 'preview'],
+      schema: { params: onProject({ at: AT, index: INT, preview: FLAG }), result: FILED },
+      fn: async ({ projectId, at, index, preview }) => {
+        const t = target(projectId);
+        const res = await productOwner.fileDecongest({
+          backlogDir: ctx.ws.backlog, projectId: t.id, runsDir: ctx.ws.runs, at, index, preview: !!preview || simulation.simulationOnly(), platform: t.platform, repo: t.repo,
         });
         return resync(res, t);
       },
@@ -268,10 +329,12 @@ module.exports = (ctx) => {
       channel: 'po:split',
       method: 'splitProductOwnerIssue',
       params: ['projectId', 'at', 'split', 'preview'],
+      schema: { params: onProject({ at: AT, split: ANY, preview: FLAG }), result: FILED },
       fn: async ({ projectId, at, split, preview }) => {
         const t = target(projectId);
         const res = await productOwner.applySplit({
           backlogDir: ctx.ws.backlog, projectId: t.id, runsDir: ctx.ws.runs, at, split, preview: !!preview || simulation.simulationOnly(), platform: t.platform, repo: t.repo, data: t.data,
+          timeZone: workspace.readSettings(ctx.ws).timeZone, // #273
         });
         return resync(res, t);
       },
@@ -280,6 +343,7 @@ module.exports = (ctx) => {
       channel: 'po:epic',
       method: 'applyProductOwnerEpic',
       params: ['projectId', 'at', 'key', 'epic', 'issues', 'preview'],
+      schema: { params: onProject({ at: AT, key: ANY, epic: ANY, issues: ANY, preview: FLAG }), result: FILED },
       fn: async ({ projectId, at, key, epic, issues, preview }) => {
         const t = target(projectId);
         const res = await productOwner.applyEpicProposal({
@@ -288,19 +352,31 @@ module.exports = (ctx) => {
         return resync(res, t);
       },
     },
-    { channel: 'po:history', method: 'productOwnerHistory', params: ['projectId'], fn: ({ projectId }) => productOwner.readConversation(ctx.ws.backlog, project(projectId)) },
+    { channel: 'po:history', method: 'productOwnerHistory', params: ['projectId'], schema: { params: onProject(), result: MESSAGES }, fn: ({ projectId }) => productOwner.readConversation(ctx.ws.backlog, project(projectId)) },
     // #240: another agent's request: { projectId, kind, params, reason, from, ref, byContent?, mock } →
     // { ok, text, costUsd, error?, pending? }; a refused or failed request is ok: false (recorded in the
     // conversation too), never a throw. #241: under the Night watch, a kind it does not allow is a card
     // waiting for the owner's click (pending).
-    { channel: 'po:request', method: 'productOwnerRequest', params: 'opts', fn: (opts) => request(opts) },
+    {
+      channel: 'po:request',
+      method: 'productOwnerRequest',
+      params: 'opts',
+      // params: the request kind's own (src/product-owner.js checks them per kind)
+      schema: {
+        params: args({ projectId: orNone(PROJECT_ID), kind: STRING, params: ANY, reason: ANY, from: ANY, ref: ANY, byContent: FLAG, mock: FLAG }),
+        result: REQUEST_ANSWER,
+      },
+      fn: (opts) => request(requireObject(opts, 'options')),
+    },
     // #241: the owner's click on a request card in the drawer: { projectId, ref, action: 'do' | 'dismiss' | 'undo', mock } →
     // { ok, text, costUsd, error?, messages }
     {
       channel: 'po:requestAct',
       method: 'productOwnerRequestAct',
       params: 'opts',
-      fn: async ({ projectId, ref, action, mock } = {}) => {
+      schema: { params: onProject({ ref: ANY, action: STRING, mock: FLAG }), result: { ...REQUEST_ANSWER, properties: { ...REQUEST_ANSWER.properties, messages: MESSAGES } } },
+      fn: async (arg) => {
+        const { projectId, ref, action, mock } = requireObject(arg, 'options');
         const id = project(projectId);
         const out = await productOwner.actRequest({
           backlogDir: ctx.ws.backlog, projectId: id, input: { ref, action },

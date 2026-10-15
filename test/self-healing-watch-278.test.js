@@ -89,7 +89,7 @@ test('#278 nightDecision under Self-healing: a kind that never runs alone stays 
 });
 
 test('#278 invariant: NEVER_ALLOWED is unchanged and none of it can be checked (guard, green today)', (t) => {
-  assert.deepEqual(night.NEVER_ALLOWED.map((n) => n.id), ['answer-gate', 'close-issue', 'delete-data', 'paid-calls', 'push']);
+  assert.deepEqual(night.NEVER_ALLOWED.map((n) => n.id), ['answer-gate', 'close-issue', 'delete-data', 'paid-calls', 'push', 'resume-paused']); // #368: only the owner resumes a paused run
   const dir = tmpDir(t);
   for (const n of night.NEVER_ALLOWED) assert.throws(() => night.savePermissions(dir, ['retry', n.id]), /never allowed/);
   assert.equal(night.PERMISSIONS.some((p) => night.NEVER_ALLOWED.some((n) => n.id === p.id)), false);

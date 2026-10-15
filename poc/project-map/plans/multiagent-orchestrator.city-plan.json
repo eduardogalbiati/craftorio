@@ -1,0 +1,79 @@
+{
+  "version": 1,
+  "project": "multiagent-orchestrator",
+  "summary": "An Electron desktop app that runs multi-agent workflows defined in YAML, each agent turn a headless CLI (Claude Code, Codex, Grok). Layers: shared pure modules at the bottom, the run engine and the product logic in the middle, the service channels and the renderer on top; bundled skills and workflows are product content.",
+  "ignore": ["**/*.png", "**/*.jpg", "**/*.gif", "**/*.svg", "**/*.ico", "package-lock.json", "**/Cargo.lock", "poc/**", ".github/**", "docs/**", "assets/**", "generated/**"],
+  "zones": [
+    { "id": "shared", "name": "Shared foundations", "kind": "infrastructure", "purpose": "Pure modules loaded by both the backend and the page: types, models, provider and platform adapters." },
+    { "id": "native", "name": "Native sidecars", "kind": "power", "purpose": "Rust binaries the packaged app ships: the supervisor's MCP server, the session tail and the control client." },
+    { "id": "engine", "name": "Run engine", "kind": "industrial", "purpose": "The deterministic engine that walks a workflow graph, runs agent turns and machine steps, and records every event." },
+    { "id": "domain", "name": "Product logic", "kind": "industrial", "purpose": "What the app does around runs: roadmap and backlog, the Oracle and the supervisor, costs and records, the workspace." },
+    { "id": "civic", "name": "App entry and service", "kind": "civic", "purpose": "The Electron main process, the engine server and the service channels that connect the page to everything else." },
+    { "id": "ui", "name": "Renderer", "kind": "commercial", "purpose": "The screens the owner works in: the shell, every view, the run's 3D floor and the styles." },
+    { "id": "tooling", "name": "Dev tooling", "kind": "workshop", "purpose": "Scripts for building, packaging, docs, screenshots and the code-health ratchets." },
+    { "id": "library", "name": "Bundled content", "kind": "library", "purpose": "The skills and workflow definitions seeded into every workspace." },
+    { "id": "campus", "name": "Tests", "kind": "campus", "purpose": "Unit, service, slow and contract tests, fixtures and the BDD scenarios." }
+  ],
+  "districts": [
+    { "id": "service-tests", "name": "Service tests", "zone": "campus", "purpose": "Tests of the service channels and areas.", "include": ["test/service/**"] },
+    { "id": "slow-tests", "name": "Slow and contract tests", "zone": "campus", "purpose": "Whole simulated runs, snapshots and HTTP contract tests.", "include": ["test/slow/**", "test/contract/**"] },
+    { "id": "fixtures", "name": "Test fixtures", "zone": "campus", "purpose": "Recorded runs, event snapshots and sample files.", "include": ["test/fixtures/**"] },
+    { "id": "unit-tests", "name": "Unit tests", "zone": "campus", "purpose": "One test file per feature or issue.", "include": ["test/**"] },
+    { "id": "scenarios", "name": "E2E scenarios", "zone": "campus", "purpose": "Playwright BDD features and their steps.", "include": ["features/**"] },
+
+    { "id": "providers", "name": "Provider adapters", "zone": "shared", "purpose": "One adapter per agent CLI: arguments, parsing, quota patterns.", "include": ["src/shared/providers/**"] },
+    { "id": "platforms", "name": "Platform adapters", "zone": "shared", "purpose": "One module each for GitHub and GitLab commands and terms.", "include": ["src/shared/platforms/**"] },
+    { "id": "shared-models", "name": "Shared models", "zone": "shared", "purpose": "Types, the roadmap model, the run record and other pure models.", "include": ["src/shared/**"] },
+
+    { "id": "sidecars", "name": "Rust sidecars", "zone": "native", "purpose": "Cargo workspace with the MCP, tail and ctl crates.", "include": ["native/**"] },
+
+    { "id": "run-machine", "name": "Run machine", "zone": "engine", "purpose": "WorkflowRun split by area: transitions, gates, sessions, turns, costs, resume.", "include": ["src/engine/run/**"] },
+    { "id": "engine-core", "name": "Engine core", "zone": "engine", "purpose": "Providers, worktrees, suite and screenshot steps, simulation, memory guard.", "include": ["src/engine/**"] },
+
+    { "id": "planning", "name": "Roadmap and backlog", "zone": "domain", "purpose": "The roadmap, the backlog, the Product Owner, epics, discovery and releases.", "include": ["src/roadmap*.js", "src/live-roadmap.js", "src/backlog*.js", "src/product-owner.js", "src/po-*.js", "src/epics.js", "src/issues.js", "src/discovery*.js", "src/clarity.js", "src/releases.js", "src/conflict-map.js", "src/repo-performance.js", "src/projects.js", "src/project-inputs.js", "src/findings.js"] },
+    { "id": "agents", "name": "Oracle and supervisor", "zone": "domain", "purpose": "The conversational agents: the Oracle, the supervisor and the agents' inboxes and chats.", "include": ["src/oracle*.js", "src/supervisor*.js", "src/agent-inbox.js", "src/agents*.js", "src/chat-progress.js", "src/pasted-images.js", "src/speech.js"] },
+    { "id": "records", "name": "Runs and records", "zone": "domain", "purpose": "Run folders, summaries, evidence, artifacts and session files.", "include": ["src/run*.js", "src/evidence.js", "src/result-summary.js", "src/coverage-summary.js", "src/step-regressions.js", "src/session-*.js", "src/cli-sessions.js", "src/app-sessions.js", "src/artifact-categories.js", "src/store.js", "src/state-file.js"] },
+    { "id": "costs", "name": "Costs, usage and Night watch", "zone": "domain", "purpose": "Usage, budgets, estimates, analytics, occupancy and the night limits.", "include": ["src/usage.js", "src/local-usage.js", "src/*-usage.js", "src/budget.js", "src/cost-estimate.js", "src/analytics*.js", "src/occupancy.js", "src/night*.js", "src/machine-profile.js", "src/keep-awake.js"] },
+    { "id": "workspace", "name": "Workspace, workflows and skills", "zone": "domain", "purpose": "The workspace folder, seeding, workflow and skill loading, CLI config and trust.", "include": ["src/workspace.js", "src/seed.js", "src/skills.js", "src/workflow*.js", "src/pipelines.js", "src/json-schema.js", "src/platform-paths.js", "src/cli-*.js", "src/claude-auth.js", "src/install-commands.js", "src/permissions.js", "src/time-zone.js"] },
+
+    { "id": "app-entry", "name": "App entry and control", "zone": "civic", "purpose": "Electron main and preload, the engine server and the control channel.", "include": ["src/main.js", "src/main-log.js", "src/preload.js", "src/server/**", "src/control/**"] },
+    { "id": "channels", "name": "Service channels", "zone": "civic", "purpose": "Every channel the page and outside sessions call, with its schema.", "include": ["src/service/channels/**"] },
+    { "id": "service-areas", "name": "Service areas", "zone": "civic", "purpose": "The service's state and behaviour per area, and the channel contract.", "include": ["src/service/**"] },
+    { "id": "desktop", "name": "Desktop integration", "zone": "civic", "purpose": "Terminals, notifications, updates, accounts, local preview and push.", "include": ["src/*.js"] },
+
+    { "id": "styles", "name": "Styles", "zone": "ui", "purpose": "The stylesheets of the shell and the views.", "include": ["src/renderer/**/*.css"] },
+    { "id": "run-3d", "name": "Run 3D floor", "zone": "ui", "purpose": "The run's 3D view (React Three Fiber) and its model and replay.", "include": ["src/renderer/run3d*.js", "src/renderer/run3d/**", "src/renderer/robots.js"] },
+    { "id": "backlog-screens", "name": "Backlog and roadmap screens", "zone": "ui", "purpose": "Board, roadmap, epics and the Product Owner drawer.", "include": ["src/renderer/views/backlog/**"] },
+    { "id": "insight-screens", "name": "Analytics and usage screens", "zone": "ui", "purpose": "Analytics, usage and Night watch views.", "include": ["src/renderer/views/analytics/**", "src/renderer/views/usage/**", "src/renderer/views/nightwatch/**"] },
+    { "id": "run-screens", "name": "Run and workflow screens", "zone": "ui", "purpose": "Workflows, the run page, run chat, Arena and Write and Review.", "include": ["src/renderer/views/workflows/**", "src/renderer/views/run/**", "src/renderer/views/runchat/**", "src/renderer/views/arena/**", "src/renderer/views/duo/**"] },
+    { "id": "other-screens", "name": "Other screens", "zone": "ui", "purpose": "Home, projects, discovery, settings, agents, skills and the rest.", "include": ["src/renderer/views/**"] },
+    { "id": "shell", "name": "App shell and widgets", "zone": "ui", "purpose": "The page, the navigation, drawers, dialogs and shared widgets.", "include": ["src/renderer/**"] },
+
+    { "id": "screenshot-tools", "name": "Screenshot tooling", "zone": "tooling", "purpose": "Simulated data and views for UI screenshots.", "include": ["scripts/screenshot/**", "scripts/screenshot.js"] },
+    { "id": "scripts", "name": "Build and dev scripts", "zone": "tooling", "purpose": "Packaging, docs, the CLI runner, ratchets and checks.", "include": ["scripts/**", "supabase/**", "/*"] },
+
+    { "id": "skills", "name": "Skills", "zone": "library", "purpose": "The bundled skills agents get, with their rules and references.", "include": ["skills/**"] },
+    { "id": "workflows", "name": "Workflows and pipelines", "zone": "library", "purpose": "The bundled workflow YAML and saved pipelines.", "include": ["workflows/**", "pipelines/**"] }
+  ],
+  "landmarks": [
+    { "path": "src/main.js", "label": "Electron main process" },
+    { "path": "src/server/index.js", "label": "Engine server" },
+    { "path": "src/service/index.js", "label": "Service: every channel" },
+    { "path": "src/engine/workflow.js", "label": "WorkflowRun" },
+    { "path": "src/roadmap.js", "label": "Roadmap" },
+    { "path": "src/renderer/app.js", "label": "Renderer shell" },
+    { "path": "src/renderer/index.html", "label": "The app page" },
+    { "path": "scripts/run.js", "label": "CLI runner" },
+    { "path": "workflows/ai-development-local-hero.yaml", "label": "Default development workflow" }
+  ],
+  "ports": [
+    { "id": "claude", "name": "Claude Code CLI", "via": ["src/shared/providers/claude.js"] },
+    { "id": "codex", "name": "Codex CLI", "via": ["src/shared/providers/codex.js"] },
+    { "id": "grok", "name": "Grok Build", "via": ["src/shared/providers/grok.js"] },
+    { "id": "github", "name": "GitHub", "via": ["src/shared/platforms/github.js"] },
+    { "id": "gitlab", "name": "GitLab", "via": ["src/shared/platforms/gitlab.js"] },
+    { "id": "git", "name": "Git", "via": ["src/engine/worktree.js", "src/engine/run/checkout.js"] },
+    { "id": "supabase", "name": "Supabase (accounts)", "via": ["src/auth.js", "src/auth-config.js"] }
+  ],
+  "evidence": ["AGENTS.md", "package.json", "src/renderer/index.html", "scripts/layers.js", "docs/agents/engine.md", "the header comments of src/engine/run/*.js and src/shared/**"]
+}

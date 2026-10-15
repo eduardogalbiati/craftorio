@@ -58,12 +58,32 @@ List the issues that must **not run in parallel**, with the reason:
 - they edit the same files (name them), so parallel runs conflict at the merge;
 - one is a **repo-wide refactor or reformat** (moves or reformats files every feature touches): it
   runs alone, with no other run open, in its own stage;
-- one depends on the other being merged first.
+- one depends on the other being merged first;
+- they add scenarios to the same `.feature` file, or tests to the same test file (its step
+  definitions too): shared test files conflict at the merge like shared source files, and the
+  developer may not resolve a conflict that needs new test lines. Name the file in `files`.
 
 Past merge conflicts in the finished runs are evidence: files that conflicted before will again.
 Shared hot spots count as the same file: README sections, the shared stylesheet, central
 registries and lists. Code split by folder (one folder per screen, per service area, per test
 area) is what lets issues in different folders run in parallel.
+
+### The conflict map
+
+The report's **Conflict map** lists the files most finished runs changed (with how many runs, and
+how many merge conflicts named them) and the single lines several runs changed (an import or export
+line with many names, an inline list), each as `file:line`. Rows marked "hot" are changed by more
+than half of the last 20 runs. It is evidence from git, read-only: a wrong guess only changes the
+plan's order.
+
+- Two groups expected to touch the same hot file or hot line go to **different stages**, or into
+  **one group** when they belong together. Never put them in parallel in one stage.
+- Each conflict you report names the hot file that causes it in its `files`.
+- List every hot spot under `decongest`: the file (and `line` for a hot line), its `runs` and `of`
+  from the map, and a fix in the repository's own terms: one item per line and sorted for a shared
+  line (`npm run lint:lists` where the project has it), a per-feature file plus a generated
+  aggregate for a shared list, a split by screen or module for a large file. The owner files a
+  suggestion as an issue with one click; you never change or file anything.
 
 ## Order the work
 
@@ -152,6 +172,11 @@ give the reason in `mode_reason` (one sentence, shown under the item in the Road
 An issue too vague to implement without guessing (no acceptance criteria, no expected behaviour,
 several readings) goes to `enrich` with what is missing, instead of into a group.
 
+An issue with a screen whose criteria only list the sections to show is too vague too: enrich it
+with its hierarchy, what leads the screen (its one 5-second message), the text budget of its cards
+(a one-line title, at most two lines before "more") and what goes behind "more" or an ⓘ (caveats,
+commands, expert details). A screen built from a list of sections prints them all at once.
+
 ## Split what is too big
 
 Big issues are where runs fail or cost the most: an issue of 14 tasks went through three review
@@ -204,6 +229,8 @@ group is risky for another reason (an unknown area, a migration, a flaky test su
 - Use only issue numbers and workflow files from the report; suggest the inputs that matter
   (`mode` with its `mode_reason`, see above).
 - The summary is short Markdown in English: the recommendation first, then the reasons.
+- Times in the owner's time zone: the prompt's "The owner's time" names it and the local time now;
+  the report's stamps (`…Z`) are UTC, convert them before you quote one.
 - Keep each group's `reason` and `mode_reason` short: one or two sentences each, shown on the
   proposal card. Markdown is allowed in a reason: **bold** for the key point (e.g. "**Same
   screen**: both change the roadmap card"), `code` for a file; no headings, no lists.

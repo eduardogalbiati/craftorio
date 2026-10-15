@@ -38,6 +38,8 @@
 
 /* sessions table */
 .an-sessions .an-title { max-width: 420px; }
+/* #304: why a scope-affected suite round ran its files, one line, the whole list on hover */
+.an-sessions .an-suite-why { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .an-sessions .an-title > span:last-of-type { display: inline-block; max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
 .an-sessions th.an-sort { cursor: pointer; user-select: none; }
 .an-sessions th.an-sort:hover, .an-sessions th.an-sort.active { color: var(--text); }

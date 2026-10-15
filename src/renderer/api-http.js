@@ -2,7 +2,8 @@
 // manifest (src/service/manifest.js), fetched from the engine server (GET /api/manifest) and
 // called over its HTTP + WebSocket API (src/server). In the desktop app the preload has already
 // defined window.api and this file does nothing. Nothing here lists channels: only the few methods
-// the browser does its own way (below) are named.
+// the browser does its own way (below) are named. On each connection it compares the engine's
+// contract (GET /api/version) with the manifest's and shows a reload banner when they differ (#339).
 // load: early (app.js calls window.api as it loads)
 (() => {
   if (window.api) return;
@@ -19,17 +20,52 @@
     return body.result;
   }
 
-  // Synchronous on purpose: the page's scripts use window.api as soon as they run.
+  // Synchronous on purpose: the page's scripts use window.api as soon as they run. → { result, contract }
   function fetchManifest() {
     const xhr = new XMLHttpRequest();
     xhr.open('GET', '/api/manifest', false);
     xhr.withCredentials = true;
     try {
       xhr.send();
-      return xhr.status === 200 ? JSON.parse(xhr.responseText).result || [] : [];
+      const body = xhr.status === 200 ? JSON.parse(xhr.responseText) : {};
+      return { result: body.result || [], contract: body.contract || null };
     } catch {
-      return [];
+      return { result: [], contract: null };
     }
+  }
+  // the interface this page was built for: the contract of the manifest window.api comes from (#339)
+  const manifest = fetchManifest();
+
+  // Version handshake (#339): on every connection, GET /api/version; an engine speaking another
+  // contract than this page's window.api gets a banner offering a reload (one at a time).
+  function showVersionSkew(engine) {
+    if (document.querySelector('[data-testid="version-skew-banner"]')) return;
+    const box = document.createElement('div');
+    box.className = 'code-banner version-skew-banner';
+    box.setAttribute('role', 'alert');
+    box.setAttribute('data-testid', 'version-skew-banner');
+    const text = document.createElement('span');
+    text.textContent = `This engine runs another version (engine ${engine.app}, interface ${engine.contract}): reload to get its interface`;
+    const reload = document.createElement('button');
+    reload.className = 'btn sm primary';
+    reload.type = 'button';
+    reload.setAttribute('data-testid', 'version-skew-reload');
+    reload.textContent = 'Reload';
+    reload.addEventListener('click', () => location.reload());
+    box.append(text, reload);
+    document.body.appendChild(box);
+  }
+  async function checkVersion() {
+    if (!manifest.contract) return;
+    try {
+      const res = await fetch('/api/version', { credentials: 'same-origin' });
+      if (!res.ok) return;
+      const engine = await res.json();
+      if (engine?.contract == null) return;
+      if (String(engine.contract) !== manifest.contract) showVersionSkew(engine);
+      // back on an engine with this page's contract: nothing to reload any more
+      else document.querySelector('[data-testid="version-skew-banner"]')?.remove();
+    } catch { /* the engine is unreachable: the next connection checks again */ }
   }
 
   // Pushed channels (run:event, term:data, term:exit, auth:changed) and fire-and-forget messages.
@@ -46,6 +82,7 @@
       while (outbox.length && socket.readyState === WebSocket.OPEN) socket.send(outbox.shift());
       if (dropped) for (const cb of reconnected) cb();
       dropped = false;
+      checkVersion();
     };
     socket.onmessage = (m) => {
       let msg;
@@ -110,9 +147,11 @@
 
   const api = {
     platform: 'browser',
+    // the ↗ buttons open a window on the desktop app's machine only (#318)
+    externalTerminal: { available: false, reason: 'External terminal windows are only available in the desktop app.' },
     onReconnect: (cb) => { reconnected.add(cb); return () => reconnected.delete(cb); },
   };
-  for (const entry of fetchManifest()) {
+  for (const entry of manifest.result) {
     if (entry.method) api[entry.method] = method(entry);
   }
   window.api = api;

@@ -10,6 +10,12 @@
 //   agent-editor-robot   the agent editor's robot preview
 //   agents-card-robot    the robot of an Analytics › Agents card (agents-card-<id>, analytics-agents.steps.js)
 // The editor's title is a heading; its prompt a textbox named "Prompt …"; it closes with "Cancel".
+// #309, inside the editor (#agent-modal), each colour row `.ag-color[data-color]` (body: "Main
+// color", shell: "Shell", visor: "Visor", glow: "Glow") holds:
+//   agent-color-hex        the text field of the colour, #RRGGBB in upper case
+//   agent-color-custom     the custom swatch, selected (class active or aria-pressed) for a typed colour
+//   agent-color-hex-error  the message of an invalid hex
+// The preview (agent-editor-robot) is painted with the colour: its data-color, or the hex in its svg.
 
 const { expect } = require('@playwright/test');
 const { When, Then } = require('./fixtures');
@@ -90,4 +96,60 @@ Then('the card robots of the workflow agents {string} and {string} of {string} l
     return (await robot.innerHTML()).replace(/\b(id|filter|fill|clip-path|mask)="url\(#[^)]*\)"/g, '').replace(/\bid="[^"]*"/g, '');
   };
   expect(await markup(k1), `${k1} and ${k2} draw the same robot`).not.toEqual(await markup(k2));
+});
+
+// ---- a custom colour typed as a hex (#309) -------------------------------------------------------------
+
+const COLOR_ROWS = { 'Main color': 'body', Shell: 'shell', Visor: 'visor', Glow: 'glow' };
+const editor = (page) => page.locator('#agent-modal');
+// the editor's card (the form), the key screen of the look: not the overlay around it
+const editorCard = (page) => editor(page).locator('#agent-form');
+const colorRow = (page, label) => {
+  const key = COLOR_ROWS[label];
+  expect(key, `a known colour row (${Object.keys(COLOR_ROWS).join(', ')})`).toBeTruthy();
+  return editor(page).locator(`.ag-color[data-color="${key}"]`);
+};
+const hexField = (page, label) => colorRow(page, label).getByTestId('agent-color-hex');
+
+// typed and committed (Tab), as a person leaves the field
+When('I type {string} in the {string} colour field', async ({ e2e }, hex, label) => {
+  const field = hexField(e2e.window, label);
+  await expect(field).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await field.fill(hex);
+  await field.press('Tab');
+});
+
+Then('the {string} colour field shows {string}', async ({ e2e }, label, hex) => {
+  await expect(hexField(e2e.window, label)).toHaveValue(hex);
+});
+
+Then('the {string} custom colour swatch is selected', async ({ e2e }, label) => {
+  const swatch = colorRow(e2e.window, label).getByTestId('agent-color-custom');
+  await expect(swatch).toBeVisible();
+  await expect.poll(() => swatch.evaluate((el) => el.classList.contains('active') || el.getAttribute('aria-pressed') === 'true'),
+    { message: `the ${label} custom swatch is selected` }).toBe(true);
+});
+
+Then('the {string} colour field warns', async ({ e2e }, label) => {
+  await expect(colorRow(e2e.window, label).getByTestId('agent-color-hex-error')).toHaveText(/\S/);
+});
+
+Then('the agent editor\'s robot preview is painted {string}', async ({ e2e }, color) => {
+  const robot = editorRobot(e2e.window);
+  await expect(robot).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect.poll(() => robot.evaluate((el, hex) => (el.getAttribute('data-color') || '').toUpperCase() === hex
+    || el.innerHTML.toUpperCase().includes(hex), color.toUpperCase()), { message: `the robot preview is painted ${color}` }).toBe(true);
+});
+
+When('I save the agent editor', async ({ e2e }) => {
+  const page = e2e.window;
+  await editor(page).getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(editorRobot(page)).toBeHidden();
+});
+
+// modelled on "the board looks like the baseline" (backlog.steps.js): the config's toHaveScreenshot
+Then('the look modal looks like the baseline {string}', async ({ e2e }, name) => {
+  const card = editorCard(e2e.window);
+  await expect(card).toBeVisible();
+  await expect(card).toHaveScreenshot(name);
 });

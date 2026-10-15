@@ -1,7 +1,7 @@
 ---
 name: code-review
 description: Reviews a diff/branch on three separate axes - correctness (bugs, security, tests), spec (does it do what the task asked) and standards (repo conventions plus market best practices) - applying per-language rules from rules/<language>.md. Use whenever you review code changes.
-summary: "Correctness, spec and standards axes, severities, `rules/` per language (JS/TS, Python, Go, Java/Kotlin, C#, SQL, Shell/CI) and `rules/smells.md`"
+summary: "Correctness, spec and standards axes, severities, `rules/` per language (JS/TS, Python, Go, Java/Kotlin, C#, Rust, SQL, Shell/CI) and `rules/smells.md`"
 used_by: "reviewer"
 ---
 
@@ -28,6 +28,11 @@ In this order: the task/summary given in your prompt; issue references in commit
 (`#123`, `Closes #45`, GitLab `!67`); spec or PRD files under `docs/`, `specs/` matching the
 branch or feature. No spec found → skip the spec axis and say so.
 
+When the issue names a **finding bundle** (a `findings/<timestamp>/` folder), it is part of the
+spec. Read `note.md` and `marks.json`: each numbered pin names the element (`data-testid`, view,
+tab, ids) the fix must change. Check that the diff touches the module behind each pin. Check that
+a check reproduces the finding: it fails without the change and passes with it.
+
 ## 3. Load the rules
 
 - Detect the languages from the changed files' extensions and **read the rules file for each**
@@ -43,6 +48,7 @@ branch or feature. No spec found → skip the spec axis and say so.
 | `.go` | `rules/go.md` |
 | `.java` `.kt` `.kts` | `rules/java-kotlin.md` |
 | `.cs` | `rules/csharp.md` |
+| `.rs` | `rules/rust.md` |
 | `.sql`, migrations, queries in strings | `rules/sql.md` |
 | `.sh` `.bash` `.ps1`, `Dockerfile`, CI files (`.github/workflows/*.yml`, `.gitlab-ci.yml`) | `rules/shell-ci.md` |
 
@@ -91,13 +97,35 @@ Quote the requirement line for each finding:
   it) or **judgement call** (a smell or preference). Judgement calls are `minor` at most.
 - Skip anything the linter/formatter/type checker already enforces.
 
+### Reuse pass
+
+The costly duplication is rarely copied lines: it is the same rule or the same mapping written
+again in another place, which then drifts. For each new function, constant or mapping table in
+the diff, search the repository for an existing one before the verdict:
+- by **name** (and obvious synonyms: `CLI_BY_TYPE`, `cliForProvider`, `providerCli`);
+- by the **literal values** it maps or lists (`grep` for two or three of its keys or values
+  together, e.g. `'claude-code'` and `'codex-cli'`);
+- by the **rule** it computes (the condition or formula: a cost correction, a "current stage", a
+  status derived from the same fields).
+
+When you find one:
+- A rule or mapping table that already exists elsewhere is a `major` finding (axis `standards`, a
+  hard violation, not a judgement call): name both places (file and line), say which one to keep
+  and which helper to call, or where to move the shared one when neither is reachable (export it,
+  or a small module next to the data it reads).
+- Plain copied lines (the same few statements, no shared rule or table) stay `minor`.
+- When it is unclear whether the two compute the same rule, record your assumption in the finding
+  and pick the lower severity; never stop to wait for an answer.
+
+No match: no finding. Say in your summary that the reuse pass found nothing.
+
 ## 5. Severity and verdict
 
 | Severity | When | Examples |
 |---|---|---|
 | `blocker` | must not reach production at all | exploitable vulnerability, data loss/corruption, crash on the main path, secret in the diff, broken build |
-| `major` | real bug or concrete risk, fix before merging | plausible edge case that breaks, swallowed error, contract break without migration, feature without tests, likely race, required spec item missing or wrong |
-| `minor` | worth fixing, does not block | missing test for a secondary case, confusing name, small duplication, judgement-call smell, scope creep |
+| `major` | real bug or concrete risk, fix before merging | plausible edge case that breaks, swallowed error, contract break without migration, feature without tests, likely race, required spec item missing or wrong, a rule or mapping table that already exists elsewhere (reuse pass) |
+| `minor` | worth fixing, does not block | missing test for a secondary case, confusing name, small duplication of copied lines, judgement-call smell, scope creep |
 | `nit` | preference/aesthetics | formatting the linter does not cover, import order, comment wording |
 
 - `changes_requested` **only** if there is at least one `blocker` or `major`; otherwise
@@ -121,5 +149,6 @@ Quote the requirement line for each finding:
 
 ## Done when
 
-Every changed file was read, every language's rules file was read, and each axis has either
-findings or an explicit "no findings".
+Every changed file was read, every language's rules file was read, each axis has either
+findings or an explicit "no findings", and the reuse pass searched for every new function,
+constant and mapping table.

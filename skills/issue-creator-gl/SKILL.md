@@ -35,7 +35,8 @@ paths, no `;`/`&&`/pipes, no files: long descriptions go inline with `--descript
    creating (the issue-tracker's review gate): create exactly those that are still missing, once,
    `glab label create --repo <r> --name <name> --color "#<hex>"`.
 4. **Create**: `glab issue create --repo <r> --title "<title>" --label <label> --description "<body>" --yes`.
-   It prints the issue URL.
+   It prints the issue URL. A description with a product-wide "Decision (owner)" line has the
+   Docs task "record the decision in `docs/agents/decisions.md`" (see `issue-writing`).
 5. **Link**: reference related issues in the description (`#<iid>`); when a new issue splits or
    follows up another, add a note on the other one with the new link.
 

@@ -25,8 +25,9 @@ function fmtDur(ms) {
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), r = s % 60;
   return h ? `${h}h${String(m).padStart(2, '0')}m` : m ? `${m}m${String(r).padStart(2, '0')}s` : `${r}s`;
 }
-const timeOf = (iso) => new Date(iso).toLocaleTimeString('en-US');
-const dateOf = (iso) => new Date(iso).toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short' });
+// in the workspace's time zone (#273, time-zone.js); TimeZone.titleOf names the zone for a tooltip
+const timeOf = (iso) => new Date(iso).toLocaleTimeString('en-US', { timeZone: TimeZone.current() });
+const dateOf = (iso) => new Date(iso).toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short', timeZone: TimeZone.current() });
 const USAGE_SCOPE_KEY = 'multiagent.usageScope';
 const RUN_VIEW_KEY = 'multiagent.runView';
 // A channel or method the running main process (or server) doesn't have: the code on disk is newer
@@ -74,7 +75,7 @@ const state = {
   art: { runs: null, error: null, projectId: "", q: "", showSim: false, sel: null, doc: null, mode: "rendered", reveal: null },
   sup: { runId: null, question: '', loading: false, result: null, error: null, recMsgs: {}, watch: null, watchError: null }, // supervisor panel
   pv: null,           // project detail view: { id, project, runs, error, filter, showSim, expanded, msgs }
-  wr: { runs: null, error: null, filter: 'all', showSim: false, q: '', expanded: new Set(), msgs: new Map() }, // Workflows > Runs
+  wr: { runs: null, error: null, filter: 'all', showSim: false, q: '', workflow: '', expanded: new Set(), msgs: new Map() }, // Workflows > Runs
   usageScope: (() => { try { return localStorage.getItem(USAGE_SCOPE_KEY) === 'machine' ? 'machine' : 'orchestrator'; } catch { return 'orchestrator'; } })(),
   // how runs open: 'details' (the Run screen) or 'chat' (the run chat), the last one the owner picked
   runView: (() => { try { return localStorage.getItem(RUN_VIEW_KEY) === 'chat' ? 'chat' : 'details'; } catch { return 'details'; } })(),
@@ -164,6 +165,7 @@ window.openPastRun = openPastRun;
 async function init() {
   // top bar
   $('#btn-stop').onclick = stopRun;
+  $('#btn-pause').onclick = pauseRun;
   $('#btn-open-dir').onclick = () => api.openRunDir(state.run?.id);
   $('#btn-quick-start').onclick = () => openDrawer();
   $('#run-meta').onclick = () => state.run && selectRun(state.run.id);
@@ -188,6 +190,8 @@ async function init() {
     if ($('#sup-drawer').classList.contains('open')) return closeSupervisor();
     if (!$('#budget-modal').classList.contains('hidden')) return closeModal('#budget-modal');
     if (!$('#project-modal').classList.contains('hidden')) return closeModal('#project-modal');
+    // the Setup (#319): Esc is its Skip, which asks first (once: not while that question shows)
+    if (window.Setup?.isOpen()) return $('#confirm-modal').classList.contains('hidden') ? window.Setup.skip() : undefined;
     if (!$('#skill-modal').classList.contains('hidden')) return closeModal('#skill-modal');
     if (!$('#agent-modal').classList.contains('hidden')) return closeModal('#agent-modal');
     if (!$('#wb-skills-modal').classList.contains('hidden')) return $('#btn-wb-skills-cancel').click();
@@ -219,10 +223,12 @@ async function init() {
   initTerminalDock();
   initFullTextPopover();
   setInterval(renderTicking, 1000);
-  loadUsage();
+  setInterval(tickRunLists, 60e3); // #320: the run lists' Next turn minutes (run-list.js)
+  const askSlowReads = deferSlowReads(10000); // #389: once Home is drawn (usage-widget.js)
 
   state.ws = await api.getWorkspace();
   state.settings = await api.getSettings();
+  TimeZone.notify(); // #273: what was drawn before the settings arrived redraws in the saved zone
   const appInfo = await api.appInfo();
   state.simulationOnly = !!appInfo.simulationOnly;
   $('#sim-only-badge').classList.toggle('hidden', !state.simulationOnly);
@@ -234,13 +240,15 @@ async function init() {
   initCodeBanner();
   initKeepAwake();
   renderDashboard();
+  askSlowReads();
   // a Run App copy opens on the screen the change is about (#119)
   if (viewRegistry.has(appInfo.startView)) showView(appInfo.startView);
 
-  // only a missing CLI is worth a line on the Start drawer: the warning before a real run fails
-  const env = await api.checkEnv();
-  $('#env-status').innerHTML = ['claude', 'codex'].filter((k) => !env[k]).map((k) =>
-    `<span class="missing">✗ ${k} not found in PATH (use simulation mode)</span>`).join('');
+  // #319: a new workspace opens the first-run Setup once (under the sign-in screen while it shows);
+  // `=== false`: a workspace whose settings say nothing (an old one, a test double) never does
+  if (state.settings.setupDone === false) window.Setup.open();
+  // the Start drawer lists what the chosen workflow lacks (start-drawer.js renderEnvStatus)
+  loadCliStatus();
 }
 
 // The runs in progress and the gates they wait at, from the engine (runs:active): read when the
@@ -266,6 +274,8 @@ async function loadActiveRuns() {
       hydrateRun(a.runId);
     }
     if (Array.isArray(a.gates)) v.approvals = new Map(a.gates.map((g) => [g.approval_id, { type: 'approval.requested', ...g, run_id: a.runId }]));
+    // #368: pausing after the current turn, as the engine says (a reloaded window included)
+    if (v.run && a.pause !== undefined) v.run.pause = a.pause;
   }
   for (const [runId, v] of state.runs) {
     if (live.has(runId) || v.run?.status !== 'running' || hydrating.has(runId)) continue;
@@ -316,6 +326,8 @@ function shownRunId() {
 // After the current task: the screens set the run they show right after switching to it.
 let notifyContextTimer = null;
 function reportNotifyContext() {
+  // the Agents window (#263) never speaks for the main window's screen
+  if (window.AgentsWindow?.isWindowPage?.()) return;
   if (notifyContextTimer) return;
   notifyContextTimer = setTimeout(() => {
     notifyContextTimer = null;
@@ -405,23 +417,9 @@ function renderWorkspacePaths() {
   $('#workflows-dir').textContent = ws.workflows;
 }
 
-const runSessionStatus = (st) => ({ running: 'active', success: 'success', failed: 'failed', interrupted: 'failed', cancelled: 'cancelled' })[st] || 'idle';
+const runSessionStatus = (st) => ({ running: 'active', success: 'success', failed: 'failed', interrupted: 'failed', cancelled: 'cancelled', paused: 'cancelled' })[st] || 'idle';
 // a run's status as people read it (#266, StatusPill): "Running (simulation)", "Succeeded", "Idle" without a run
 const statusLabel = (r) => `${StatusPill.statusLabel(r?.status || 'idle')}${r?.status === 'running' && r.mock ? ' (simulation)' : ''}`;
-
-// Stops the run shown in the top bar (only that one).
-async function stopRun() {
-  const r = state.run;
-  if (r?.status !== 'running') return;
-  // a run past a human gate holds work the owner already approved: always ask (#112)
-  const passed = ((await api.listActiveRuns().catch(() => [])) || []).find((x) => x.runId === r.id)?.passedGates || [];
-  const why = passed.length ? `It has already passed the human gate${passed.length > 1 ? 's' : ''} ${passed.join(', ')}: a new run would redo that work. ` : '';
-  // its `type: workflow` steps' child runs in progress stop with it: always ask (#175)
-  const kids = (r.childRuns || []).filter((c) => c.run_id && c.status === 'running');
-  const children = kids.length ? `Its ${kids.length} child run${kids.length > 1 ? 's' : ''} in progress (${kids.map((c) => c.label || c.run_id).join(', ')}) will be stopped too; resuming this run resumes them. ` : '';
-  if ((state.settings.confirmStop || passed.length || kids.length) && !(await confirmDialog('Stop workflow', `${why}${children}Running sessions of ${runLabel(r)} will be closed. Stop this run?`, 'Stop'))) return;
-  api.stopRun(r.id);
-}
 
 // ---------------------------------------------------------------------------
 // Sidebar: commits merged locally (local workflows) and not pushed yet, over every project, from
@@ -539,7 +537,7 @@ function runInfo(x) {
   const project = state.projects.find((p) => p.id === (x.project_id || x.projectId)) || state.projects.find((p) => Object.values(inputs).includes(p.folder));
   return {
     id: x.run_id || x.runId, startedAt: Date.parse(x.ts || x.startedAt) || Date.now(), mock: !!x.mock, workflow: x.workflow,
-    version: x.version, inputs, issues: issuesOfRun(x), project: project?.name || null,
+    version: x.version, inputs, issues: issuesOfRun(x), project: project?.name || null, projectId: project?.id || null,
     // agent key → name: the YAML's display (#245), the Agents menu's own names winning
     agentNames: x.display?.agents || x.agent_names ? { ...x.display?.agents, ...x.agent_names } : null,
     stepNames: x.display?.steps || null, // step id → name (#245)
@@ -577,6 +575,23 @@ function pruneRuns() {
   }
 }
 
+// The supervisor's decision on a step: the orchestrator's line, and a toast while live.
+function onSupervisorDecision(v, ev) {
+  const target = ev.action === 'goto' && ev.goto ? ` ${ev.goto}` : '';
+  orch(ev, `◆ supervisor → ${ev.action}${target}${ev.cause_class ? ` [${ev.cause_class}]` : ''} — ${ev.explanation || ''}${ev.note ? ` (${ev.note})` : ''}`, 'supervisor');
+  if (!replaying) showToast(`◆ Supervisor on "${ev.step_id}"${liveRuns().length > 1 ? ` (${runLabel(v.run)})` : ''}: ${SUP_ACTIONS[ev.action] || ev.action}`, ev.explanation, ev.run_id);
+}
+
+// #368: run.pausing / run.pause_cancelled → the run's pause (the Run screen's pause line) and the orchestrator's line.
+function onPauseEvent(v, ev) {
+  const pausing = ev.type === 'run.pausing';
+  if (v.run) v.run.pause = pausing ? { state: 'pausing', step: ev.step_id, agents: ev.agents, command: ev.command, at: ev.ts } : null;
+  orch(ev, pausing ? `pausing after the current turn${ev.step_id ? ` (${ev.step_id})` : ''}` : 'pause cancelled: the run goes on', 'transition');
+}
+
+// #368: where a paused run stopped and whose turn is next (its Resume continues there); null for any other end.
+const finishedPause = (ev) => (ev.status === 'paused' && ev.paused ? { state: 'paused', ...ev.paused } : null);
+
 function onEvent(ev) {
   if (ev.type === 'workflow.started' || ev.type === 'workflow.finished') reportNotifyContext();
   if (!replaying) scheduleActiveSync();
@@ -588,23 +603,13 @@ function onEvent(ev) {
   }
   v.events.push(ev);
   const sess = ev.session_id ? v.sessions.get(ev.session_id) : null;
-  // #233 (as src/run-costs.js reads past runs): a run recorded before per-turn costs stored, for each
-  // resumed Claude turn, the CLI session's cumulative total; its turn's own cost is the difference
-  // with the previous turn of the same CLI session, and the session's snapshot counted the rest twice
-  const pastTurnCost = () => {
-    const recorded = Number(ev.cost_usd) || 0;
-    if (v.run?.costPerTurn || (ev.session?.provider || sess.provider) !== 'claude') return ev.cost_usd;
-    const cli = ev.session?.provider_session_id || null;
-    const prev = sess.cliLast;
-    sess.cliLast = { cli, total: recorded };
-    if (!prev || !cli || prev.cli !== cli || recorded < prev.total) return ev.cost_usd;
-    sess.overcount = (sess.overcount || 0) + prev.total;
-    return recorded - prev.total;
-  };
-  const withSnapshot = () => {
-    Object.assign(sess, ev.session);
-    if (sess.overcount) sess.cost_usd = Math.max(0, (Number(sess.cost_usd) || 0) - sess.overcount);
-  };
+  // #350: a run recorded before per-turn costs (#233) is read through the run record's upgrade
+  // (src/shared/run-record.js), as the services read past runs: the events so far, upgraded, end with
+  // this one (a turn's own cost, its session's corrected snapshot) and what it stands for (an old
+  // `attempt N/M failed` log line: the stopped attempt after it)
+  const upgraded = () => (v.run?.costPerTurn ? [ev]
+    : RunRecord.upgradeRunRecord({ events: v.events.filter((e) => e.type !== 'session.stream') }).events.slice(-2));
+  const withSnapshot = () => { Object.assign(sess, upgraded().at(-1).session); };
 
   switch (ev.type) {
     case 'workflow.started':
@@ -617,6 +622,12 @@ function onEvent(ev) {
       if (!replaying && (!isRunLive(state.runId) || state.runId === ev.run_id)) state.runId = ev.run_id;
       orch(ev, `workflow "${ev.workflow}" started ${ev.mock ? '(simulation)' : ''}`);
       pruneRuns();
+      break;
+
+    // #368: pausing after the current turn (the Run screen's pause line), or the pause taken back
+    case 'run.pausing':
+    case 'run.pause_cancelled':
+      onPauseEvent(v, ev);
       break;
 
     // the chain edited while the run goes (#134): the Run screen's chain banner
@@ -643,6 +654,10 @@ function onEvent(ev) {
       v.run.status = ev.status;
       v.run.finishedAt = Date.parse(ev.ts);
       v.run.error = ev.error || null;
+      v.run.pause = finishedPause(ev);
+      // #396: the run went on without a green suite (views/run/run.js "Not tested green")
+      v.run.tested = ev.summary?.tested || null;
+      v.run.testedFailures = ev.summary?.tested_failures || null;
       // what the chain did is read again once the service acted on it (#134, views/run/run.js)
       v.chainLoaded = false;
       v.steps.forEach((s) => { if (s.status !== 'pending') s.status = 'done'; });
@@ -688,9 +703,9 @@ function onEvent(ev) {
 
     case 'session.message_received':
       if (sess) {
-        const cost = pastTurnCost();
-        getTurn(sess, ev.turn).result = { usage: ev.usage, cost, duration: ev.duration_ms };
-        withSnapshot();
+        const own = upgraded().at(-1);
+        getTurn(sess, ev.turn).result = { usage: ev.usage, cost: own.cost_usd, duration: ev.duration_ms };
+        Object.assign(sess, own.session);
         orch(ev, `← ${ev.session_id} replied in ${fmtDur(ev.duration_ms)}`);
       }
       if (v.run?.status === 'running' && !replaying) loadUsageThrottled();
@@ -698,6 +713,11 @@ function onEvent(ev) {
 
     // #233: an attempt stopped before its result: its estimated cost is in the session's snapshot
     case 'session.attempt_stopped':
+      if (sess) withSnapshot();
+      break;
+
+    // #320: the snapshot after a persistent agent's whole turn: its note saved, its cache state
+    case 'session.updated':
       if (sess) withSnapshot();
       break;
 
@@ -793,10 +813,9 @@ function onEvent(ev) {
     case 'log': {
       orch(ev, ev.message, ev.level);
       // #233: a run recorded before costs were estimated: its agent's stopped attempt cost was never
-      // recorded, unless it failed before the CLI ran (src/run-costs.js's ATTEMPT_FAILED and NOT_STARTED)
-      const failed = !v.run?.costPerTurn && ev.level === 'error' && /^\[([^\]]+)\] attempt \d+\/\d+ failed: (.*)$/.exec(String(ev.message || ''));
-      const paid = failed && !/not found in PATH|Working directory does not exist|Provider ".*" is not defined/.test(failed[2]);
-      const owner = paid && [...v.sessions.values()].reverse().find((s) => s.agent === failed[1]);
+      // recorded (the upgrade's stopped attempt after the line)
+      const stopped = ev.level === 'error' && upgraded().find((e) => e.type === 'session.attempt_stopped' && e.ts === ev.ts);
+      const owner = stopped && v.sessions.get(stopped.session_id);
       if (owner) owner.costNotRecorded = true;
       break;
     }
@@ -805,12 +824,9 @@ function onEvent(ev) {
       orch(ev, `◆ supervisor called on ${ev.step_id}: ${ev.error || 'step failed'}`, 'supervisor');
       break;
 
-    case 'supervisor.decision': {
-      const target = ev.action === 'goto' && ev.goto ? ` ${ev.goto}` : '';
-      orch(ev, `◆ supervisor → ${ev.action}${target}${ev.cause_class ? ` [${ev.cause_class}]` : ''} — ${ev.explanation || ''}${ev.note ? ` (${ev.note})` : ''}`, 'supervisor');
-      if (!replaying) showToast(`◆ Supervisor on "${ev.step_id}"${liveRuns().length > 1 ? ` (${runLabel(v.run)})` : ''}: ${SUP_ACTIONS[ev.action] || ev.action}`, ev.explanation, ev.run_id);
+    case 'supervisor.decision':
+      onSupervisorDecision(v, ev);
       break;
-    }
   }
   // the run's row in the runs lists follows its steps from here, without a reload
   if (v.trail?.apply(ev) && !replaying) renderRunListsSoon();
@@ -880,7 +896,8 @@ function renderHeader() {
   const t = totals();
   $('#kpi-tokens').textContent = `${fmtNum(t.input + t.cache_read)} / ${fmtNum(t.output)}`;
   $('#kpi-reasoning').textContent = fmtNum(t.reasoning);
-  $('#kpi-cost').textContent = `$${t.cost.toFixed(4)}`;
+  // #233: marked when part of it is estimated or was not recorded (run-list.js sessionsCostMarks)
+  $('#kpi-cost').innerHTML = `$${t.cost.toFixed(4)}${sessionsCostMarks([...state.sessions.values()])}`;
   // several runs in progress: their total next to the selected run's numbers
   const live = liveRuns();
   const others = live.length > 1 || (live.length && !isRunLive(state.runId));
@@ -890,18 +907,17 @@ function renderHeader() {
     $('#kpi-all-value').textContent = `${live.length} · $${all.cost.toFixed(4)}`;
     $('#kpi-all').title = `${live.length} runs in progress: ${fmtNum(all.tokens)} tokens, $${all.cost.toFixed(4)} in total`;
   }
-  $('#btn-stop').disabled = st !== 'running';
-  $('#btn-stop').title = st === 'running' ? `Stop ${runLabel(r)} (only this run)` : '';
+  renderRunControls(r); // Stop and Pause (run-controls.js)
   const blocked = oneRunAtATime();
   setStartDisabled(blocked || !state.wf || !!state.wf.error);
   $('#btn-start').textContent = blocked ? 'A workflow is already running' : state.pipeline ? 'Start pipeline' : 'Start workflow';
   if (state.view === 'dashboard') renderDashboard();
 }
 
-// The runs the sidebar lists under Run: in progress, or failed/interrupted (they need attention:
+// The runs the sidebar lists under Run: in progress, or failed/interrupted/paused (they need attention:
 // resume, supervisor, and are otherwise unreachable here), or waiting at a gate. A run that
 // finished leaves the list, even when it is the one shown in the top bar.
-const navRunsList = () => [...state.runs.values()].filter((v) => v.run && (['running', 'failed', 'interrupted'].includes(v.run.status) || v.approvals.size));
+const navRunsList = () => [...state.runs.values()].filter((v) => v.run && (['running', 'failed', 'interrupted', 'paused'].includes(v.run.status) || v.approvals.size));
 // The Run item's dot (#142): what is in progress across runs, not the run shown in the top bar.
 // A gate wins (it needs the owner), then a running run, then a failed/interrupted one still listed.
 function navRunState(list) {

@@ -8,6 +8,11 @@ used_by: "builder"
 
 # Build and audit: Python
 
+**Test workers (#367)**: a run gets `MULTIAGENT_TEST_WORKERS` (and `MULTIAGENT_E2E_WORKERS`) in its
+environment, the workers this machine gives each run so parallel runs do not overload it. Read it
+once (`printenv MULTIAGENT_TEST_WORKERS`) and pass the number to the runner you call: a test run: pytest-xdist `-n <n>`.
+Unset: leave the runner's default.
+
 ## Environment
 
 `uv.lock` → `uv sync` / prefix `uv run` · `poetry.lock` → `poetry install` / `poetry run` ·

@@ -7,7 +7,7 @@
 // one), which Clear keeps; usageRuns counts the chat in Usage and the monthly budgets.
 //
 // Each question carries the screen the person is on ("Builder, editing workflow X"), so requests need
-// not repeat it. The supervisor reads the app's data through its read-only MCP tools
+// not repeat it, and (#273, `timeZone()`) the owner's zone and local time. The supervisor reads the app's data through its read-only MCP tools
 // (src/supervisor-tools.js, served by src/supervisor-mcp.js over src/supervisor-bridge.js) and has no
 // built-in tool: no file reads, no commands, so no access to the repositories' code. It never crosses a
 // human gate and never prescribes code fixes (it routes them to the workflow's agents).
@@ -26,6 +26,7 @@ const path = require('path');
 const agentInbox = require('./agent-inbox');
 const agentsUsage = require('./agents-usage');
 const { mockSteps, partialText } = require('./chat-progress');
+const TimeZone = require('./time-zone');
 
 // the kinds another agent may ask the Supervisor for (#240)
 const REQUEST_KINDS = [
@@ -90,14 +91,15 @@ function usageTurns(dir, opts) {
 }
 
 /** #280: the chat's spend as summary-like runs, one per day (usage.computeUsage's `extraRuns`, like the Oracle's). */
-function usageRuns(dir) {
-  return agentsUsage.dayRuns(usageTurns(dir), { id: 'supervisor-chat', workflow: 'Supervisor chat' });
+function usageRuns(dir, timeZone = 'UTC') {
+  return agentsUsage.dayRuns(usageTurns(dir), { id: 'supervisor-chat', workflow: 'Supervisor chat', timeZone });
 }
 
-/** The text sent for one question: the screen first, then the question. */
-function questionText(text, screen) {
+/** The text sent for one question: the owner's local time (#273, when the zone is given), the screen, then the question. */
+function questionText(text, screen, timeZone = null) {
   const s = String(screen || '').trim();
-  return s ? `[Screen] ${s}\n\n${text}` : text;
+  const t = timeZone ? `[Time] ${TimeZone.nowLine(timeZone)}\n\n` : '';
+  return `${t}${s ? `[Screen] ${s}\n\n${text}` : text}`;
 }
 
 /**
@@ -105,7 +107,7 @@ function questionText(text, screen) {
  * `tools()` the read-only tools; `bridge` the loopback bridge (src/supervisor-bridge.js);
  * `mcpCommand()` how to start src/supervisor-mcp.js ({ command, args, env }).
  */
-function createSupervisorChat({ dir, tools, bridge, mcpCommand, skillsDirs, resolveCommand, refuseReal }) {
+function createSupervisorChat({ dir, tools, bridge, mcpCommand, skillsDirs, resolveCommand, refuseReal, timeZone = () => null }) {
   let busy = false;
   const files = () => ({ log: path.join(dir(), 'chat.jsonl'), state: path.join(dir(), 'chat.json') });
 
@@ -151,7 +153,7 @@ function createSupervisorChat({ dir, tools, bridge, mcpCommand, skillsDirs, reso
     const { providerArgs, dedupeFlags } = require('./engine/capabilities');
     const { PROVIDERS } = require('./workflow-builder');
     const { resolveSkill } = require('./skills');
-    const provider = Object.values(PROVIDERS).find((p) => p.type === 'claude-code');
+    const provider = PROVIDERS.claude;
     if (!resolveCommand(provider.command)) throw new Error(`The supervisor needs ${provider.command}, which is not installed.`);
     const { url, token } = await bridge.start();
     const mcp = mcpCommand();
@@ -226,7 +228,7 @@ function createSupervisorChat({ dir, tools, bridge, mcpCommand, skillsDirs, reso
             message = post({ role: 'supervisor', text, simulated: true, costUsd: 0 });
           } else {
             const m = String(model || state().model || DEFAULT_MODEL);
-            const res = await realTurn(questionText(q, screen), m, images, { onItem: seen, signal });
+            const res = await realTurn(questionText(q, screen, timeZone()), m, images, { onItem: seen, signal });
             message = post({ role: 'supervisor', text: String(res.text || '').trim() || '(no answer)', model: m, costUsd: res.costUsd ?? null });
           }
         } catch (e) {

@@ -52,7 +52,41 @@ The button's badge counts the answers that arrived while the conversation was ou
 - **Night watch**: before you leave, turn it on with an end time. Until then the Oracle fixes what
   stops the roadmap without asking (retry or skip a failed item, regroup or reorder planned items,
   refresh issue text, restore a default, restart the dispatch), notifies each action and posts a
-  summary with Undo when it ends. Turning it off stops at once. Gates stay yours.
+  summary with Undo when it ends. Turning it off stops at once. Gates stay yours. With "Skip an
+  item" allowed, a roadmap run that waits at a human gate for 15 minutes (Settings › Oracle, "Move
+  on past a gate after") while nothing else of its roadmap runs is moved past (#395): the next stage
+  starts, the gate keeps waiting for you, and a notification names it. Without that permission the
+  gate is only reported to you.
+- **Move on** (#395): an item whose run waits at a human gate has "Move on" on its roadmap card (and
+  the stage menu has "Move on from this stage"): the item is parked, the next stage starts without
+  its change, and the gate stays yours to answer. Answered later, the item ends done or failed;
+  it never pauses the roadmap after the fact.
+- **Limits tonight** (#337): the turn-on form's "Limits tonight" group expands every run limit for
+  the night, so no run waits on a limit sized for the day. One switch, "Expand all limits", with a
+  multiplier (×1.5, ×2 by default, ×3); "Customize" opens one row per limit with its day value:
+  context, cost and duration per run, agent turn timeouts (each workflow's own values × a factor)
+  and the nightly budget (raised for that night only). Off: "Runs keep each workflow's limits"; on:
+  one line, e.g. "×2 tonight: context 80M, cost US$ 240, duration 16h, turns ×2; nightly budget
+  US$ 150"; no nightly budget: a warning that nothing caps tonight's spending. While the watch is on
+  the screen shows the limits in force and they can be changed. Runs in progress get a raise at their
+  next check, and keep the highest limit they were granted after the watch ends; runs that start
+  afterwards get the day limits. A `context_limit` gate already open stays open for you (with a note).
+  Never relaxed: a workflow without a limit, the provider monthly budgets, the memory guard. Only you
+  set them: the Oracle has no permission over them, and Self-healing never expands limits. The night
+  log records each change (`oracle.limits`); the morning summary lists each run that went past a day
+  limit ("#262: context 58M of 80M tonight (day limit 40M), US$ 61 of US$ 240") and the spending
+  above the day limits.
+- **Step regressions** (#335): after each real run that ends while the Night watch or Self-healing
+  is on, each workflow step is compared with its own history in the same class (provider, model and
+  effort): the median cost per complexity point and the median minutes of its last 3 successful
+  runs against the baseline, the median of its runs before them (at least 5; fewer: "not measurable
+  yet"). More than 30% above (thresholds in `src/step-regressions.js` REGRESSION_DEFAULTS) is a
+  `regression` finding, logged once per step and class with the baseline, the recent figures and
+  the run ids, and again only after the step recovers. Home's morning card lists each one led by the
+  step and the rise ("test: +42% cost over 3 runs") with links to its runs. Simulated runs never
+  count, and a step moved to another model starts a new class instead of regressing. Report only:
+  it never pauses the roadmap, changes a model or effort, wakes the Oracle or answers a gate; the
+  roadmap's budget cap stays the only automatic stop.
 - **Self-healing** (Settings › Execution › Oracle, off by default): the same watch, day and night,
   with no end time. While it is on, an action whose permission you checked ("What it may do alone":
   the Night watch's checklist, one list for both) runs alone by day exactly as at night, with its

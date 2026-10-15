@@ -14,12 +14,13 @@ const runs = require('../../runs');
 const evidence = require('../../evidence');
 const { artifactIndex, runsOfArtifact } = require('../../run-artifacts');
 const { folderMatcher } = require('../common');
+const { pathKey } = require('../../platform-paths');
 
 const MAX_ARTIFACT_BYTES = 5 * 1024 * 1024;
 const IMAGE_TYPES = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp' };
 // with a search, the files of each matching run sent with the list (the rest: artifacts:list { runId, q })
 const SEARCH_PREVIEW = 20;
-const norm = (x) => (process.platform === 'win32' ? path.resolve(x).toLowerCase() : path.resolve(x));
+const norm = (x) => pathKey(x);
 
 module.exports = (ctx) => {
   const liveIds = () => new Set([...ctx.active.entries()].filter(([, run]) => run.status === 'running').map(([id]) => id));

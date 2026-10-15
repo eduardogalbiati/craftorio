@@ -529,14 +529,44 @@ test('backlog: the refresh banner counts merges since the last refresh only once
     finishedAt: new Date(Date.now() - 1.9 * 3600e3).toISOString(),
   });
 
+  // #389: the merges are counted by an async git call: a read never waits for it, a later one has it
   let data = api['backlog:get']({ projectId: p.id });
   assert.equal(data.refresh.hoursAgo, 2);
+  for (const deadline = Date.now() + 10000; data.refresh.merges == null && Date.now() < deadline;) {
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    data = api['backlog:get']({ projectId: p.id });
+  }
   assert.equal(data.refresh.merges, 2); // both of the repo's commits were made after the last refresh started
   assert.equal(data.refresh.due, true);
 
   data = api['backlog:dismiss-refresh']({ projectId: p.id });
   assert.equal(data.refresh.dismissed, true);
   assert.equal(data.refresh.due, false);
+});
+
+test('backlog: the async merge count pushes backlog:changed for the banner, and the next read has the count (#389)', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  const repo = gitRepo(t);
+  const p = await api['projects:create']({ name: 'demo', folder: repo.dir });
+  api['settings:set']({ backlogRefreshHours: 1 });
+  fs.mkdirSync(ws.backlog, { recursive: true });
+  fs.writeFileSync(path.join(ws.backlog, `${p.id}.json`), JSON.stringify({ projectId: p.id, platform: 'github', repo: 'https://github.com/o/r', issues: [] }));
+  writeRefreshRun(ws, {
+    runId: '20260101-000000-refresh0003', projectId: p.id,
+    startedAt: new Date(Date.now() - 2 * 3600e3).toISOString(),
+    finishedAt: new Date(Date.now() - 1.9 * 3600e3).toISOString(),
+  });
+  const events = [];
+  service.events.on('backlog:changed', (e) => events.push(e));
+
+  assert.equal(api['backlog:get']({ projectId: p.id }).refresh.merges ?? null, null); // not counted yet
+  await until(() => events.some((e) => e.file === 'refresh'));
+  const pushed = events.filter((e) => e.file === 'refresh');
+  assert.equal(pushed.length, 1);
+  assert.equal(pushed[0].projectId, p.id);
+  assert.equal(typeof pushed[0].watching, 'boolean');
+  assert.equal(api['backlog:get']({ projectId: p.id }).refresh.merges, 2); // no poll needed after the push
 });
 
 test('backlog: afterBacklogRefresh syncs the project only for a real (non-mock) finished run of backlog-refresh.yaml with a projectId', async (t) => {

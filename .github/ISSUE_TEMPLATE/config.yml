@@ -1,0 +1,6 @@
+# Blank issues stay allowed: the app's own workflows create issues with --body.
+blank_issues_enabled: true
+contact_links:
+  - name: Report a vulnerability
+    url: https://github.com/eduardogalbiati/multiagent-orchestrator/security/advisories/new
+    about: Report security issues privately, never in a public issue.

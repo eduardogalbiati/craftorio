@@ -8,6 +8,11 @@ used_by: "test writer"
 
 # Unit tests: JavaScript / TypeScript
 
+**Test workers (#367)**: a run gets `MULTIAGENT_TEST_WORKERS` (and `MULTIAGENT_E2E_WORKERS`) in its
+environment, the workers this machine gives each run so parallel runs do not overload it. Read it
+once (`printenv MULTIAGENT_TEST_WORKERS`) and pass the number to the runner you call: Jest `--maxWorkers=<n>`, Vitest `--maxWorkers=<n>`, node:test `--test-concurrency=<n>`, Mocha `--parallel --jobs <n>`.
+Unset: leave the runner's default.
+
 ## Framework and commands (never switch frameworks)
 
 | Signal in the repository | Framework | Whole suite | One file / test |
@@ -59,6 +64,12 @@ used_by: "test writer"
   never at the top (`const load = () => require('../src/x');` then `const { f } = load();` in the
   test; ESM: `const { f } = await import('../src/x.js');` inside an async test). A top-level
   `require` of a missing module crashes the whole file, which the red check sends back.
+- Whole simulated runs (a workflow run end to end with the mock provider) are the expensive tests:
+  write one only for a new transition, step type or gate; a schema, a rendered prompt or a
+  transition condition gets a cheaper test (load the definition, render the prompt, evaluate the
+  condition). In this orchestrator the rule and the inventory are in `docs/agents/testing.md`
+  ("Whole simulated runs"): a whole run goes to `test/slow/`, one workflow and theme per file, and a
+  helper module (`test/*.js` that is not `*.test.js`) never calls `test()` or `describe()` at load.
 - Compare primitives, never a DOM node, a `vm` sandbox object or a cross-realm array (see
   testing-principles): `assert.equal(el === null, true)` instead of `assert.equal(el, null)`,
   `assert.deepEqual(Array.from(list), [...])` instead of `deepEqual(list, ...)`.

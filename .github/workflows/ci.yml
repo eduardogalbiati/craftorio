@@ -1,9 +1,10 @@
 name: CI
 
-# Actions minutes are a monthly quota (private repo: Windows counts x2, macOS x10), so CI runs only
-# what a change needs (scripts/ci-plan.js): PRs on ubuntu + windows, macOS when a platform-sensitive
+# Standard GitHub-hosted runners are free for public repositories; CI still runs only what a change
+# needs, so it stays fast (scripts/ci-plan.js): PRs on ubuntu + windows, macOS when a platform-sensitive
 # path changes or the PR has the `ci:macos` label (applies from the next push, or re-run it), weekly
-# on main, and on manual runs. Docs-only PRs run no tests.
+# on main, and on manual runs. Docs-only PRs run no tests. A PR from a fork gets the same tests but
+# records no commit status (its token is read-only): the report steps run only for this repository.
 on:
   pull_request:
     branches: [main]
@@ -35,7 +36,7 @@ jobs:
       # A new run (a push or a re-run of the same commit) first clears an older success, so preview
       # and deploy never skip tests on a commit whose latest CI run has not passed.
       - name: Mark the PR head as being tested
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         env:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/ci-plan.js report "${{ github.event.pull_request.head.sha }}" "${{ github.sha }}" pending
@@ -71,6 +72,20 @@ jobs:
       # node-pty's install script is approved in package.json (allowScripts): prebuilt binaries on
       # Windows and macOS, a node-gyp build on Linux
       - run: npm ci
+      # The cargo workspace of the native sidecars (native/, #341): checked on every OS; npm test then
+      # builds multiagent-mcp in release and runs the MCP cases against it (CI never skips them)
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: native
+      - name: Rust format
+        run: cargo fmt --manifest-path native/Cargo.toml --all -- --check
+      - name: Rust lints
+        run: cargo clippy --manifest-path native/Cargo.toml --locked --all-targets -- -D warnings
+      - name: Rust tests
+        run: cargo test --manifest-path native/Cargo.toml --locked
       - name: Syntax check
         run: for f in $(git ls-files '*.js'); do node --check "$f" || exit 1; done
       # README tables and index.html's generated script/style lists match their sources (#152)
@@ -78,23 +93,34 @@ jobs:
         run: node scripts/docs.js --check
       - name: Tests (unit + mock flow)
         run: npm test
+      # Linux has no display: the UI steps below run under xvfb-run. Ubuntu 24.04's AppArmor refuses the
+      # unprivileged user namespaces Chromium's sandbox needs (the packaged AppImage turns the sandbox
+      # off itself, scripts/release-assets.js): allow them on the runner.
+      - name: Display for the UI tests (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          command -v xvfb-run || (sudo apt-get update && sudo apt-get install -y xvfb)
+          if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0; fi
       # scripts/screenshot.js (the test step's UI screenshots): every view opens in simulation and the
-      # app quits by itself. Needs the Electron binary and a display: Windows only.
+      # app quits by itself. Needs the Electron binary and a display: Windows, and Linux under xvfb-run.
       - name: UI screenshots (every view, simulation)
-        if: runner.os == 'Windows'
+        if: runner.os != 'macOS'
         env:
           MULTIAGENT_UI_TESTS: "1"
-        run: node node_modules/electron/install.js && node --test test/screenshot.test.js
+        run: node node_modules/electron/install.js && ${{ runner.os == 'Linux' && 'xvfb-run -a ' || '' }}node --test test/screenshot.test.js
       # The Playwright + playwright-bdd E2E suite's critical journeys (#222): the real app with
       # _electron on a simulated demo workspace, real assertions; a failure keeps its trace and screenshot.
+      # Same two lanes as locally (#365, playwright.config.js), @visual one at a time. The behaviour
+      # lane's workers are left to auto (#366, MULTIAGENT_E2E_WORKERS unset): sized from the runner's
+      # threads and free memory, 1 on the hosted 4-vCPU runners; the log's "E2E: ..." line says it.
       - name: E2E smoke (Playwright, @smoke)
-        if: runner.os == 'Windows'
-        run: npm run test:e2e -- --grep "@smoke"
+        if: runner.os != 'macOS'
+        run: ${{ runner.os == 'Linux' && 'xvfb-run -a ' || '' }}npm run test:e2e -- --grep "@smoke"
       - name: E2E results and failure traces
-        if: failure() && runner.os == 'Windows'
+        if: failure() && runner.os != 'macOS'
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-results
+          name: e2e-results-${{ runner.os }}
           path: .test-output/e2e/
           if-no-files-found: ignore
       - name: Production vulnerabilities
@@ -126,7 +152,7 @@ jobs:
       # Written whatever the verdict (the `plan` job marked it pending), so a failing re-run of the
       # same commit replaces an older success.
       - name: Record the result on the PR head
-        if: always() && github.event_name == 'pull_request'
+        if: always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         env:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/ci-plan.js report "${{ github.event.pull_request.head.sha }}" "${{ github.sha }}" "${{ steps.verdict.outcome == 'success' && 'success' || 'failure' }}"

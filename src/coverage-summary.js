@@ -6,6 +6,7 @@
 //   lines start with "ℹ ", TAP lines with "# "; folders are rows of their own, files indented under
 //   them) → { totals: { lines, branches, functions }, files: [{ file, lines, branches, functions,
 //   uncovered }] } (files: the changed ones found, in changedFiles' order), or null without a report;
+//   several tables (scripts/test.js's two runs, #402) merge: each number the better of theirs;
 // - renderCoverageSummary(summary): the markdown of the artifact.
 const PREFIX = /^(?:ℹ|#) ?/;
 
@@ -15,12 +16,8 @@ const num = (s) => {
 };
 const norm = (p) => String(p || '').replace(/\\/g, '/').replace(/^\.\//, '');
 
-function parseNodeCoverage(text, { changedFiles = [] } = {}) {
-  const lines = String(text || '').split(/\r?\n/).map((l) => l.replace(PREFIX, ''));
-  const start = lines.findIndex((l) => /^\s*start of coverage report/.test(l));
-  if (start < 0) return null;
-  const end = lines.findIndex((l, i) => i > start && /^\s*end of coverage report/.test(l));
-  const rows = lines.slice(start + 1, end < 0 ? undefined : end);
+// One coverage table's rows → { totals, byFile }
+function parseTable(rows) {
   let totals = null;
   const byFile = new Map();
   const stack = []; // the folders above the current row, by depth
@@ -41,6 +38,42 @@ function parseNodeCoverage(text, { changedFiles = [] } = {}) {
     if (lineP == null && branchP == null && funcP == null) { stack[depth] = name; continue; }
     const file = [...stack.slice(0, depth).filter(Boolean), name].join('/');
     byFile.set(file, { file, lines: lineP, branches: branchP, functions: funcP, uncovered });
+  }
+  return { totals, byFile };
+}
+
+// The better of two percentages (null: not measured)
+const best = (a, b) => (a == null ? b : b == null ? a : Math.max(a, b));
+
+function parseNodeCoverage(text, { changedFiles = [] } = {}) {
+  const lines = String(text || '').split(/\r?\n/).map((l) => l.replace(PREFIX, ''));
+  // scripts/test.js may run two node --test processes (#402: one per test budget), one table each
+  const tables = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (!/^\s*start of coverage report/.test(lines[i])) continue;
+    const end = lines.findIndex((l, j) => j > i && /^\s*end of coverage report/.test(l));
+    tables.push(parseTable(lines.slice(i + 1, end < 0 ? undefined : end)));
+    if (end < 0) break;
+    i = end;
+  }
+  if (!tables.length) return null;
+  // Several tables: the percentages only, not the lines behind them, so each number is the better of
+  // the tables' (a lower bound of the union's coverage), the uncovered lines from the best-covered one
+  let totals = null;
+  const byFile = new Map();
+  for (const t of tables) {
+    if (t.totals) totals = totals ? { lines: best(totals.lines, t.totals.lines), branches: best(totals.branches, t.totals.branches), functions: best(totals.functions, t.totals.functions) } : t.totals;
+    for (const [file, row] of t.byFile) {
+      const had = byFile.get(file);
+      if (!had) { byFile.set(file, row); continue; }
+      byFile.set(file, {
+        file,
+        lines: best(had.lines, row.lines),
+        branches: best(had.branches, row.branches),
+        functions: best(had.functions, row.functions),
+        uncovered: (row.lines ?? -1) > (had.lines ?? -1) ? row.uncovered : had.uncovered,
+      });
+    }
   }
   if (!totals && !byFile.size) return null;
   const files = [];

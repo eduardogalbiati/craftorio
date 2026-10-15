@@ -9,13 +9,17 @@ const path = require('path');
 const { resolveCommand } = require('../../engine/providers');
 const simulation = require('../../engine/simulation');
 const projects = require('../../projects');
+const registry = require('../../shared/providers');
 const skills = require('../../skills');
 const supervisor = require('../../supervisor');
 const notifier = require('../../notifications');
 const { Terminals } = require('../../terminals');
 const { SCOPE_HINT } = require('../../actions-usage');
 const { followSession } = require('../../session-tail');
-const { installCommands } = require('../../install-commands');
+const {
+  installCommands,
+  signInCommands,
+} = require('../../install-commands');
 const {
   BUNDLED_SKILLS_DIR,
   cliEnv,
@@ -45,11 +49,8 @@ module.exports = (ctx) => {
     const cmd = resolveCommand(cfg.provider.command || 'claude');
     if (!cmd) throw new Error(`The supervisor needs ${cfg.provider.command}, which is not installed.`);
     const first = `You are the supervisor of the multi-agent workflow run in this folder. Read ${path.join(skill.path, 'SKILL.md')} (your method) and supervisor/context.md (the run report); events.jsonl, sessions/ and the other files have the details. Then explain briefly what happened in this run and wait for my questions. Do not change any file.`;
-    const args = {
-      'claude-code': ['--model', cfg.model, '--permission-mode', 'plan', '--add-dir', skill.path, first],
-      'codex-cli': ['-m', cfg.model, '-s', 'read-only', first],
-      'grok-cli': ['-m', cfg.model, '--tools', 'read_file,list_dir,grep', first],
-    }[cfg.provider.type] || [first];
+    // read-only: the CLI's own plan mode, sandbox or tool list (its adapter's readOnlyChatArgs)
+    const args = registry.byType(cfg.provider.type)?.readOnlyChatArgs?.({ model: cfg.model, skillDir: skill.path, prompt: first }) || [first];
     return { title: `supervisor · ${path.basename(runDir)}`, cwd: runDir, file: cmd.file, args, env: cliEnv() };
   }
 
@@ -79,16 +80,19 @@ module.exports = (ctx) => {
     return { title: path.basename(dir), cwd: dir, file: win ? 'cmd.exe' : process.env.SHELL || '/bin/sh', args: [], env: cliEnv() };
   }
 
-  // A command the app suggests (#147: an install command, gh's billing scope) in a shell in the
-  // workspace folder; the shell stays open afterwards to show the result or finish a login. Any
-  // other command is refused: the play buttons only send these fixed strings.
-  function commandSpec(command, platform = process.platform) {
-    const allowed = [...Object.values(installCommands(platform)), SCOPE_HINT].filter(Boolean);
+  // A command the app suggests (#147: an install command, gh's billing scope; #319: a CLI's sign-in)
+  // in a shell in the workspace folder; the shell stays open afterwards to show the result or finish
+  // a login. Any other command is refused: the play buttons only send these fixed strings (#398: the
+  // same Homebrew-aware list as the hints; `opts.brew` overrides the lookup). One env for the whole
+  // terminal, with the folders detection searched (#397), so the shell left open finds the CLI too.
+  function commandSpec(command, platform = process.platform, opts = {}) {
+    const allowed = [...Object.values(installCommands(platform, opts)), ...Object.values(signInCommands()), SCOPE_HINT].filter(Boolean);
     if (!allowed.includes(command)) throw new Error('Only the commands the app suggests can run in a command terminal.');
     const cwd = ctx.ws.root || os.homedir();
-    if (platform === 'win32') return { title: command, cwd, file: 'cmd.exe', args: `/s /k "${command}"`, env: cliEnv() };
+    const env = cliEnv(platform);
+    if (platform === 'win32') return { title: command, cwd, file: 'cmd.exe', args: `/s /k "${command}"`, env };
     const shell = process.env.SHELL || '/bin/sh';
-    return { title: command, cwd, file: shell, args: ['-c', `${command}; exec '${shell}'`], env: cliEnv() };
+    return { title: command, cwd, file: shell, args: ['-c', `${command}; exec '${shell}'`], env };
   }
 
   function openTerminal({ kind, runId, sessionId, cols, rows, ...opts }) {

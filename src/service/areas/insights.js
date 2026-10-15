@@ -16,7 +16,7 @@ const { resolveCommand } = require('../../engine/providers');
 const simulation = require('../../engine/simulation');
 const night = require('../../night-watch');
 const occupancy = require('../../occupancy');
-const poCalibration = require('../../renderer/po-calibration');
+const poCalibration = require('../../shared/po-calibration');
 const productOwner = require('../../product-owner');
 const projects = require('../../projects');
 const repoPerformance = require('../../repo-performance');
@@ -25,8 +25,11 @@ const {
   readOwner,
 } = require('../../run-owner');
 const runAnalysisLib = require('../../run-analysis');
+const { readRunRecord } = require('../../run-record');
 const runs = require('../../runs');
 const supervisor = require('../../supervisor');
+const TimeZone = require('../../time-zone');
+const workspace = require('../../workspace');
 const { BUNDLED_SKILLS_DIR } = require('../common');
 
 const DAY = 864e5;
@@ -119,7 +122,9 @@ module.exports = (ctx) => {
   async function occupancySnapshot({ days = 30, summary = false } = {}) {
     const now = Date.now();
     const span = summary ? 1 : Math.min(90, Math.max(1, Number(days) || 30));
-    const key = `${span} ${summary}`;
+    // #273: the days (and the nights below) are the owner's local ones
+    const { timeZone } = workspace.readSettings(ctx.ws);
+    const key = `${span} ${summary} ${timeZone}`;
     if (snapshotCache?.key === key && now - snapshotCache.at < CACHE_MS) return snapshotCache.value;
     const from = now - Math.max(span, 1) * DAY;
     // the summary reads one day; the tab's cards always need the last 30 days
@@ -128,7 +133,7 @@ module.exports = (ctx) => {
     const appSessions = sessions.length ? sessions : null;
     const log = night.readNightLog(oracleDir());
     const nights = night.nightsOf(log).filter((n) => Date.parse(n.endedAt || n.until) >= from);
-    const at = (d) => occupancy.occupancyOf({ runs: facts, from: now - d * DAY, to: now, now, appSessions, nights, log });
+    const at = (d) => occupancy.occupancyOf({ runs: facts, from: now - d * DAY, to: now, now, appSessions, nights, log, timeZone });
     const last24h = at(1);
     // the app wrote its heartbeat log only since this version: before, "app closed" is unknown
     const partialSince = appSessions && Date.parse(appSessions[0].start) > from ? appSessions[0].start : null;
@@ -138,7 +143,7 @@ module.exports = (ctx) => {
       return value;
     }
     const lines = await linesOf(facts);
-    const long = occupancy.occupancyOf({ runs: facts, from, to: now, now, appSessions, nights, log, lines });
+    const long = occupancy.occupancyOf({ runs: facts, from, to: now, now, appSessions, nights, log, lines, timeZone });
     const week = span >= 7 ? at(7) : last24h;
     const month = span === 30 ? long : at(30);
     const usage = (() => { try { return fs.readFileSync(path.join(oracleDir(), 'usage.jsonl'), 'utf8').split('\n').map((l) => { try { return l ? JSON.parse(l) : null; } catch { return null; } }).filter(Boolean); } catch { return []; } })();
@@ -151,10 +156,10 @@ module.exports = (ctx) => {
     });
     // the nights without the watch (00:00-08:00 local of each day no watch covered), so its gain shows
     for (const d of long.days) {
-      const start = Date.parse(`${d.day}T00:00:00`);
+      const start = TimeZone.startOfDayKey(d.day, timeZone);
       const end = start + 8 * 36e5;
       if (end > now || nights.some((n) => Date.parse(n.startedAt) < end && Date.parse(n.endedAt || n.until) > start)) continue;
-      const o = occupancy.occupancyOf({ runs: facts, from: start, to: end, now, appSessions });
+      const o = occupancy.occupancyOf({ runs: facts, from: start, to: end, now, appSessions, timeZone });
       nightRows.push({ startedAt: new Date(start).toISOString(), window: o.window, occupancy: o.occupancy, incidents: null, actions: null, hoursSaved: null, costUsd: o.costUsd, watch: false });
     }
     nightRows.sort((a, b) => String(b.startedAt).localeCompare(String(a.startedAt)));
@@ -184,12 +189,14 @@ module.exports = (ctx) => {
   function figuresOf(runId) {
     const dir = ctx.runFolder ? ctx.runFolder(runId) : path.join(ctx.ws.runs, runId);
     const sigOf = (f) => { try { const st = fs.statSync(path.join(dir, f)); return `${st.size}:${st.mtimeMs}`; } catch { return '-'; } };
-    // costs-per-turn: figures cached before #233 counted resumed Claude turns twice
-    const sig = `${sigOf('events.jsonl')} ${sigOf('summary.json')} costs-per-turn`;
+    // run-record: figures cached before #350 read older runs' shapes on their own (#233, #277)
+    const sig = `${sigOf('events.jsonl')} ${sigOf('summary.json')} run-record`;
     const cached = ctx.store?.runFigures?.(runId, sig);
     if (cached) return cached;
-    const summary = readJson(path.join(dir, 'summary.json')) || {};
-    const figures = { ...runAnalysisLib.runFigures({ summary, events: runs.runEvents(dir) }) };
+    // the run record in the current shape, without the streamed CLI output (as runs.runEvents)
+    const record = readRunRecord(dir);
+    const summary = record.summary || {};
+    const figures = { ...runAnalysisLib.runFigures({ summary: record.summary, events: record.events.filter((e) => e.type !== 'session.stream') }) };
     figures.runId = figures.runId || runId;
     const info = runs.readRun(ctx.ws.runs, runId);
     if (info) Object.assign(figures, { title: info.title || figures.title, projectId: info.projectId, workflow: figures.workflow || info.workflow });

@@ -6,14 +6,18 @@
 
 const fs = require('fs');
 const path = require('path');
-const { loadWorkflow } = require('../../engine/workflow');
+const {
+  loadWorkflow,
+  render,
+} = require('../../engine/workflow');
 const capabilities = require('../../engine/capabilities');
 const workflows = require('../../workflows');
 const builder = require('../../workflow-builder');
 const skills = require('../../skills');
 const { BUNDLED_WORKFLOWS_DIR } = require('../common');
 const { bundleStatus, restoreBundled } = require('../../seed');
-const { mergeOf } = require('../../renderer/default-workflow');
+const { mergeOf } = require('../../shared/default-workflow');
+const { workflowRequirements } = require('../../workflow-requirements');
 
 module.exports = (ctx) => {
   const { host } = ctx;
@@ -33,6 +37,12 @@ module.exports = (ctx) => {
           const wf = loadWorkflow(path.join(ws.workflows, file));
           // the visual builder opens it only when it draws everything the workflow uses
           const drawn = builder.fromWorkflow(wf).problems;
+          // #262: an agent's provider / model / effort with the inputs' defaults (they can be templates over them)
+          const defaults = Object.fromEntries(Object.entries(wf.inputs || {}).filter(([, d]) => d?.default !== undefined).map(([k, d]) => [k, d.default]));
+          const resolve = (v) => {
+            if (typeof v !== 'string' || !v.includes('{{')) return v ?? null;
+            try { return render(v, { inputs: defaults }).trim(); } catch { return null; }
+          };
           return {
             file,
             ...origin,
@@ -50,6 +60,8 @@ module.exports = (ctx) => {
             outputs: wf.outputs || {},
             // how its work lands (#195): local (no push), remote (a branch and a PR/MR) or none
             merge: mergeOf(wf),
+            // #319: the CLIs it needs with its default inputs ({ clis, forge }), for Setup and Start
+            requirements: workflowRequirements(wf),
             // #282: the stations of the roadmap card's pipeline (RunProgress.workflowStations)
             groups: (wf.groups || []).map((g) => ({ name: g.name, steps: g.steps || [] })),
             agents: Object.fromEntries(Object.entries(wf.agents).map(([k, a]) => {
@@ -61,8 +73,14 @@ module.exports = (ctx) => {
                 ...(a.color ? { color: String(a.color) } : {}),
                 // #245: the name the screens show instead of its key
                 ...(a.display ? { display: a.display } : {}),
+                // #262: what it runs on by default (templates resolved with the inputs' defaults), the
+                // Start drawer's Agents section; fallbacks: its own or `defaults`' chain
+                runs_on: { provider: resolve(a.provider), model: resolve(a.model), effort: resolve(a.effort) || '' },
+                ...(Array.isArray(d.fallbacks) ? { fallbacks: d.fallbacks } : {}),
               }];
             })),
+            // #262: the providers an agent can be moved to for one run (name → CLI type)
+            providers: Object.fromEntries(Object.entries(wf.providers || {}).map(([k, p]) => [k, p?.type || null])),
             steps: wf.steps.map((s) => ({
               id: s.id,
               ...(s.display ? { display: s.display } : {}), // #245

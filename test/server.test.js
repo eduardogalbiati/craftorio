@@ -87,6 +87,24 @@ test('unknown channels, wrong methods, bad bodies and channel errors', async (t)
   assert.deepEqual([err.status, err.json.error], [500, 'Project not found: missing']);
 });
 
+// #333: a channel that refuses bad input answers a client error (4xx) with its message, not a 500,
+// and the server keeps serving the next request.
+test('#333 a channel that refuses bad input answers 4xx with the message, and the server keeps serving', async (t) => {
+  const { base } = await start(t);
+  for (const runId of ['../../outside', null, 42, 'x'.repeat(1024 * 1024)]) {
+    const label = typeof runId === 'string' ? runId.slice(0, 20) : String(runId);
+    const res = await callApi(base, 'runs:events', { runId });
+    assert.ok(res.status >= 400 && res.status < 500, `runId ${label}: status ${res.status}, expected 4xx`);
+    assert.equal(typeof res.json?.error, 'string', `runId ${label}: an { error } body`);
+    assert.match(res.json.error, /run/i, `runId ${label}: the message names the problem: ${res.json.error.slice(0, 200)}`);
+    assert.doesNotMatch(res.json.error, /Cannot read propert|Cannot destructure|is not a function|The "\w+" argument must be/);
+  }
+  const info = await callApi(base, 'app:info');
+  assert.deepEqual([info.status, info.json.result.version], [200, '1.2.3']);
+  const list = await callApi(base, 'projects:list');
+  assert.deepEqual([list.status, list.json], [200, { result: [] }]);
+});
+
 // #130: a pasted image (up to 10 MB) travels as base64, about 1/3 bigger; MAX_BODY (15 MB) was
 // raised from the previous 5 MB limit to fit it. Over the limit, readJson's `req.destroy()` tears
 // down the socket before the 413 response can flush (the same pre-existing mechanism as the old
@@ -281,6 +299,14 @@ test('GET /api/manifest lists every channel, and the desktop and browser clients
   assert.deepEqual(preloadMethods, browserMethods);
 });
 
+// #318: the ↗ buttons open a window on the desktop app's machine only: the browser client reports
+// the external terminal unavailable, with a reason the disabled button shows as its tooltip.
+test('the browser client reports the external terminal unavailable, with a reason', () => {
+  const { externalTerminal } = loadApiHttpApi([]);
+  assert.equal(externalTerminal.available, false);
+  assert.match(externalTerminal.reason, /desktop app/);
+});
+
 test('a channel manifest declaring the same channel twice is refused', () => {
   const { declarations } = require('../src/service/manifest');
   assert.throws(() => declarations([{ channel: 'x:y', method: 'a' }, { channel: 'x:y', method: 'b' }]), /x:y is declared twice/);
@@ -300,4 +326,33 @@ test('manifest: keepAwake:state is desktop-only, keepAwake:changed is a pushed e
   const browser = loadApiHttpApi(declarations(DESKTOP));
   assert.equal(typeof browser.keepAwakeState, 'function');
   await assert.rejects(browser.keepAwakeState(), /Keeping the computer awake is only available in the desktop app\./);
+});
+
+// #338: the arguments are checked against the channel's schema before its code runs; over HTTP a
+// refused call is a 400 that names the parameter and the rule, and the server keeps serving.
+test('#338 a call whose arguments break the channel schema answers 400 naming the parameter and the rule', async (t) => {
+  const { base } = await start(t);
+  const runId = '20261013-000930-076152f0';
+  const long = await callApi(base, 'runs:setTitle', { runId, title: 'x'.repeat(201) });
+  assert.equal(long.status, 400);
+  assert.match(long.json?.error || '', /title: at most 200 characters/);
+  const wrongType = await callApi(base, 'runs:setTitle', { runId, title: 42 });
+  assert.equal(wrongType.status, 400);
+  assert.match(wrongType.json?.error || '', /title/);
+  const list = await callApi(base, 'projects:list');
+  assert.deepEqual([list.status, list.json], [200, { result: [] }]);
+});
+
+test('#338 GET /api/manifest publishes each entry\'s schema', async (t) => {
+  const { base } = await start(t);
+  const res = await request(base, { path: '/api/manifest', headers: bearer });
+  assert.equal(res.status, 200);
+  const entry = res.json.result.find((e) => e.channel === 'runs:setTitle');
+  assert.ok(entry?.schema, 'runs:setTitle has no schema in the published manifest');
+  assert.equal(entry.schema.params.type, 'object');
+  assert.equal(entry.schema.params.properties.title.type, 'string');
+  assert.equal(entry.schema.params.properties.title.maxLength, 200);
+  assert.ok(entry.schema.params.properties.runId, 'the run id is described');
+  assert.equal('result' in entry.schema, true);
+  assert.equal('fn' in entry, false);
 });

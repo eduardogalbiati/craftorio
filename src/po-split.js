@@ -275,10 +275,11 @@ const childLabels = (parent, complexity) => [
 /**
  * Files a checked split (checkSplit) on the owner's click: the children, then the parent (umbrella
  * task list, or a comment and closed). dir: where each text sent is kept. epicList: the cache's epics
- * (children of a parent in an epic join it). Returns { preview, commands, children: [{ number, url,
+ * (children of a parent in an epic join it). timeZone (#273): the owner's zone, the umbrella's
+ * "## Update" day. Returns { preview, commands, children: [{ number, url,
  * title, tasks, stage }], parent: { number, action }, skippedLabels?, epicError? }.
  */
-async function fileSplit({ platform, repo, parent, split, dir, preview = false, epicList = [], exec = backlog.execCli }) {
+async function fileSplit({ platform, repo, parent, split, dir, preview = false, epicList = [], timeZone = null, exec = backlog.execCli }) {
   const commands = [];
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   const send = async (cmd, file, text) => {
@@ -308,7 +309,7 @@ async function fileSplit({ platform, repo, parent, split, dir, preview = false, 
   } else {
     const addition = `Split into:\n\n${children.map((c, i) => `- [ ] ${refs[i]} ${c.title}`).join('\n')}\n\nThis issue is now an umbrella: it is done when its children are.`;
     const original = preview ? parent.body : (await backlog.fetchIssue({ platform, repo, number: parent.number, exec })).body;
-    const text = backlog.issueAppendBody({ original, addition });
+    const text = backlog.issueAppendBody({ original, addition, timeZone });
     const file = path.join(dir, `${stamp}-split-${parent.number}-umbrella.md`);
     await send(backlog.issueSaveCommand({ platform, repo, number: parent.number, mode: 'replace', file, text }), file, text);
   }

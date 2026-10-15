@@ -1,16 +1,22 @@
 // The run list shared by Projects › Project (views/project/) and Workflows › Runs
 // (views/workflows/): filter chips, one row per run (status, title, PR, duration, tokens, cost,
-// progress strip) and, expanded, its actions and agent sessions (tokens and cost per session, a
-// total row). Also the progress strip of a row (runProgressStrip: the groups a run visited, with
-// their agents' robots) and renderRunListsSoon (run events). Uses app.js globals ($, esc, state,
-// fmtDur, fmtNum, dateOf, runTitleHtml, prBadge…), fmtTok / fmtUsd (usage-widget.js), termAction
-// (term-dock.js), canResume (resume-dialog.js), WATCH_TITLE (supervisor-drawer.js), openArtifactsAt.
+// progress strip) and, expanded, its actions, its agent sessions (tokens and cost per session, a
+// total row) and two columns (#289): Artifacts, with the Details tab's filter (ArtifactsPanel:
+// Produced / Show all, category and kind chips, "n of m", the step as a label per file), and
+// Repository (the branch and its base, a state badge, the totals, the run's commits newest first,
+// "Review changes" and a click on a commit opening DiffViewer). Also the progress strip of a row
+// (runProgressStrip: the groups a run visited, with their agents' robots) and renderRunListsSoon
+// (run events). Uses app.js globals ($, esc, state, fmtDur, fmtNum, dateOf, timeOf, runTitleHtml,
+// prBadge, runPr…), fmtTok / fmtUsd (usage-widget.js), termAction (term-dock.js), canResume
+// (resume-dialog.js), WATCH_TITLE (supervisor-drawer.js), openArtifactsAt, ArtifactsPanel, DiffViewer.
 //
 // The lists come in pages from the service (#200: runs:list / projects:runs with { offset, limit,
-// filter, showSim, q, upTo }): the filter chips, "Show simulated" and the search ask the service
-// again, the next page loads when the "Loading more…" row scrolls into view (loadRunListPage), and a
-// row's artifacts load when it opens (artifacts:list { runId }), grouped by step, ART_PAGE at a time.
-// A run event updates its own row (refreshRunRow: runs:list { ids }).
+// filter, showSim, q, workflow, upTo }): the filter chips, "Show simulated", the search and the
+// workflow filter (#310, a `#<prefix>-run-workflow` select; Workflows › Runs) ask the service again, the next page loads when the "Loading more…" row scrolls into view (loadRunListPage), and a
+// row's artifacts (artifacts:list { runId }, ART_PAGE at a time) and changes (run:diff, the commits
+// and the files' counts, never a file's contents) load when it opens; the filter is per card and
+// goes back to Produced when the card is reopened. A run event updates its own row (refreshRunRow:
+// runs:list { ids }); a running run's commits are read again when its row refreshes.
 
 // The filter chips; the service filters and counts (src/service/areas/run-lists.js RUN_FILTERS).
 const RUN_FILTERS = [
@@ -28,7 +34,7 @@ const ART_PAGE = 50;
 // failed or a newer load replaced it.
 async function loadRunListPage(rl, fetchPage, mode = 'reset') {
   const seq = (rl.seq = (rl.seq || 0) + 1);
-  const opts = { filter: rl.filter || 'all', showSim: !!rl.showSim, q: rl.q || '', offset: 0, limit: RUN_PAGE };
+  const opts = { filter: rl.filter || 'all', showSim: !!rl.showSim, q: rl.q || '', workflow: rl.workflow || '', offset: 0, limit: RUN_PAGE };
   if (mode === 'more') opts.offset = rl.nextOffset || 0;
   if (mode === 'refresh') opts.limit = Math.max(RUN_PAGE, rl.nextOffset || 0);
   if (mode === 'reset' && rl.upTo) opts.upTo = rl.upTo;
@@ -42,6 +48,7 @@ async function loadRunListPage(rl, fetchPage, mode = 'reset') {
       rl.runs = [...(rl.runs || []), ...got.filter((r) => !have.has(r.runId))];
     } else rl.runs = got;
     rl.counts = res.counts || null;
+    rl.workflows = res.workflows || [];
     rl.hiddenSim = res.hiddenSim || 0;
     rl.hasMore = !!res.hasMore;
     rl.nextOffset = res.nextOffset || 0;
@@ -69,6 +76,17 @@ function renderRunList(rl, { prefix, box: boxSel, empty, start, rerender, reload
   filters.innerHTML = RUN_FILTERS.map(([id, label]) =>
     `<button type="button" class="chip ${rl.filter === id ? 'active' : ''}" data-filter="${id}" ${id === 'failed' ? 'title="Failed, cancelled or interrupted"' : ''}>${label} <span class="muted">${rl.counts ? rl.counts[id] ?? 0 : ''}</span></button>`).join('');
   filters.querySelectorAll('[data-filter]').forEach((b) => (b.onclick = () => { rl.filter = b.dataset.filter; rerender(); reload(); }));
+  // the workflow filter (#310, a list that has one): the workflows with runs, named as the rows name them;
+  // the picked one stays an option when it has none
+  const wfSelect = $(`#${prefix}-run-workflow`);
+  if (wfSelect) {
+    const list = [...(rl.workflows || [])];
+    if (rl.workflow && !list.some((w) => w.workflow === rl.workflow)) list.push({ workflow: rl.workflow, count: 0 });
+    const label = (file) => stepName(String(file).replace(/\.ya?ml$/i, ''));
+    wfSelect.innerHTML = `<option value="">All workflows</option>${list.map((w) =>
+      `<option value="${esc(w.workflow)}" title="${esc(w.workflow)}"${w.workflow === rl.workflow ? ' selected' : ''}>${esc(label(w.workflow))} (${w.count})</option>`).join('')}`;
+    wfSelect.value = rl.workflow || '';
+  }
 
   const box = $(boxSel);
   // a run's title being edited stays until it is saved or cancelled (which renders again)
@@ -80,14 +98,14 @@ function renderRunList(rl, { prefix, box: boxSel, empty, start, rerender, reload
   }
   const hiddenSim = rl.hiddenSim || 0;
   const simNote = hiddenSim ? `<p class="muted small">${hiddenSim} simulated run${hiddenSim > 1 ? 's' : ''} hidden.</p>` : '';
-  if (!rl.runs.length && !rl.counts?.all && !rl.q) {
+  if (!rl.runs.length && !rl.counts?.all && !rl.q && !rl.workflow) {
     box.innerHTML = `<div class="empty-state"><b>${esc(empty)}</b>${simNote}<button class="btn primary" data-empty-start>Start workflow</button></div>`;
     box.querySelector('[data-empty-start]').onclick = start;
     return;
   }
   const runs = rl.runs;
-  // the open rows' artifacts load (again when their count changed) before the rows are drawn
-  for (const r of runs) if (rl.expanded.has(r.runId)) ensureRunArtifacts(rl, r, rerender);
+  // the open rows' artifacts (again when their count changed) and changes load before the rows are drawn
+  for (const r of runs) if (rl.expanded.has(r.runId)) { ensureRunArtifacts(rl, r, rerender); ensureRunRepo(rl, r, rerender); }
   const more = !rl.hasMore ? '' : rl.moreError
     ? `<div class="pr-more" data-more><span class="error small">Could not load more runs: ${esc(rl.moreError)}</span> <button type="button" class="btn sm ghost" data-more-retry>Retry</button></div>`
     : '<div class="pr-more muted small" data-more>Loading more…</div>';
@@ -102,9 +120,23 @@ function renderRunList(rl, { prefix, box: boxSel, empty, start, rerender, reload
   }
   box.querySelector('[data-more-retry]')?.addEventListener('click', () => { rl.moreError = null; rerender(); loadMore(); });
 
+  // #384: "Resumed → …" opens the run that resumed this one (not the row's sessions)
+  box.querySelectorAll('[data-testid="run-resumed-link"]').forEach((a) => (a.onclick = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const r = rl.runs.find((x) => x.runId === a.closest('.pr-run').dataset.run);
+    showRun(a.dataset.run, { workflow: r?.workflow });
+  }));
   box.querySelectorAll('.pr-row').forEach((row) => (row.onclick = () => {
     const id = row.closest('.pr-run').dataset.run;
-    rl.expanded.has(id) ? rl.expanded.delete(id) : rl.expanded.add(id);
+    if (rl.expanded.has(id)) {
+      rl.expanded.delete(id);
+      // a reopened card starts on Produced and its first pages again (#289)
+      const e = rl.arts?.get(id);
+      if (e) { e.filter = null; e.shown = ART_PAGE; }
+      const p = rl.repo?.get(id);
+      if (p) p.shown = REPO_PAGE;
+    } else rl.expanded.add(id);
     rerender();
   }));
   box.querySelectorAll('[data-art-more]').forEach((b) => (b.onclick = () => {
@@ -115,6 +147,30 @@ function renderRunList(rl, { prefix, box: boxSel, empty, start, rerender, reload
   box.querySelectorAll('[data-art-retry]').forEach((b) => (b.onclick = () => {
     rl.arts?.delete(b.closest('.pr-run').dataset.run);
     rerender();
+  }));
+  // #289: the Artifacts column's filter (the Details tab's switch and chips), per card
+  box.querySelectorAll('.pr-arts [data-artifact-filter], .pr-arts [data-artifact-category], .pr-arts [data-artifact-kind]').forEach((b) => (b.onclick = () => {
+    const e = rl.arts?.get(b.closest('.pr-run').dataset.run);
+    if (e && ArtifactsPanel.onFilterClick(artifactFilter(e), b)) { e.shown = ART_PAGE; rerender(); }
+  }));
+  box.querySelectorAll('[data-art-show-all]').forEach((b) => (b.onclick = () => {
+    const e = rl.arts?.get(b.closest('.pr-run').dataset.run);
+    if (e) { artifactFilter(e).show = 'all'; rerender(); }
+  }));
+  // #289: the Repository column
+  box.querySelectorAll('[data-repo-retry]').forEach((b) => (b.onclick = () => {
+    rl.repo?.delete(b.closest('.pr-run').dataset.run);
+    rerender();
+  }));
+  box.querySelectorAll('[data-repo-more]').forEach((b) => (b.onclick = () => {
+    const e = rl.repo?.get(b.closest('.pr-run').dataset.run);
+    if (e) e.shown += REPO_PAGE;
+    rerender();
+  }));
+  box.querySelectorAll('[data-repo-review], .pr-commit[data-sha]').forEach((b) => (b.onclick = () => {
+    const r = rl.runs.find((x) => x.runId === b.closest('.pr-run').dataset.run);
+    if (!r || !window.DiffViewer) return;
+    window.DiffViewer.open({ runId: r.runId, title: runDiffTitle(r), ...(b.dataset.sha ? { commit: b.dataset.sha } : {}) });
   }));
   box.querySelectorAll('[data-run-act]').forEach((b) => (b.onclick = () => {
     const r = rl.runs.find((x) => x.runId === b.closest('.pr-run').dataset.run);
@@ -190,12 +246,12 @@ function runListRow(r, pv) {
   return `
     <div class="pr-run ${open ? 'open' : ''}${r.nested ? ' pr-child' : ''}" data-testid="run-list-row" data-run="${esc(r.runId)}"${r.nested ? ` style="--nest:${r.nested}"` : ''}>
       <div class="pr-row" title="${open ? 'Hide' : 'Show'} sessions">
-        ${StatusPill.statusPill(r.status)}
+        ${StatusPill.runPill(r.status, r.resumedBy)}
         <div class="pr-main">
-          <div><b>${runTitleHtml(r)}</b> ${prBadge(r)} <span class="muted small" title="${esc(`Workflow: ${r.workflow || r.file || ''}`)}">${esc(stepName(String(r.workflow || r.file || 'workflow').replace(/\.ya?ml$/i, '')))}${r.version ? ` v${esc(r.version)}` : ''}</span>${r.mock ? ' <span class="badge p-mock">Simulated</span>' : ''}${r.current ? ' <span class="badge live">this window</span>' : ''}${r.runningElsewhere ? ' <span class="badge" title="Another app process on this workspace runs it: stop or resume it there">another window</span>' : ''}${r.retryOf ? ` <span class="badge" title="Started by a retry of the same roadmap item: the two runs do the same work">retry of ${esc(String(r.retryOf).slice(9))}</span>` : ''}${issueFallbackBadge(r)}${r.chain && window.ChainModel ? ` ${ChainModel.chainBadgesHtml(r.chain)}` : ''}${childRunBadges(r)}${!pv.id && r.project ? ` <span class="badge" title="project">${esc(r.project.name)}</span>` : ''}</div>
+          <div><b>${runTitleHtml(r)}</b>${StatusPill.resumedLink(r.resumedBy)}${prBadge(r)} <span class="muted small" title="${esc(`Workflow: ${r.workflow || r.file || ''}`)}">${esc(stepName(String(r.workflow || r.file || 'workflow').replace(/\.ya?ml$/i, '')))}${r.version ? ` v${esc(r.version)}` : ''}</span>${r.mock ? ' <span class="badge p-mock">Simulated</span>' : ''}${r.current ? ' <span class="badge live">this window</span>' : ''}${r.runningElsewhere ? ' <span class="badge" title="Another app process on this workspace runs it: stop or resume it there">another window</span>' : ''}${r.retryOf ? ` <span class="badge" title="Started by a retry of the same roadmap item: the two runs do the same work">retry of ${esc(String(r.retryOf).slice(9))}</span>` : ''}${issueFallbackBadge(r)}${r.chain && window.ChainModel ? ` ${ChainModel.chainBadgesHtml(r.chain)}` : ''}${childRunBadges(r)}${!pv.id && r.project ? ` <span class="badge" title="project">${esc(r.project.name)}</span>` : ''}</div>
           <div class="muted small pr-task" title="${esc(task)}">${esc(firstLine || 'No task')}</div>
         </div>
-        <span class="pr-meta"><label>started</label>${r.startedAt ? esc(dateOf(r.startedAt)) : '—'}</span>
+        <span class="pr-meta"><label>started</label>${r.startedAt ? `<span data-testid="run-list-started"${typeof TimeZone !== 'undefined' ? ` title="${esc(TimeZone.titleOf(r.startedAt, TimeZone.current()))}"` : ''}>${esc(dateOf(r.startedAt))}</span>` : '—'}</span>
         <span class="pr-meta"><label>duration</label>${fmtDur(dur)}</span>
         <span class="pr-meta"><label>tokens</label>${fmtTok(r.tokens?.total)}</span>
         <span class="pr-meta"><label>cost</label>${fmtUsd(r.costUsd)}${r.childrenCostUsd ? ` <span class="muted small" title="What its child runs cost (their own children included), not in its cost">+ ${fmtUsd(r.childrenCostUsd)} child runs</span>` : ''}</span>
@@ -228,18 +284,18 @@ function projectRunBody(r, pv) {
     </div>
     ${r.error ? `<pre class="pr-error">${esc(r.error)}</pre>` : ''}
     ${runTaskBlock(r)}
-    ${runArtifactsBlock(r, pv)}
     ${sessions.length ? `<table class="u-table pr-sessions">
-      <thead><tr><th>Agent</th><th>Provider · model</th><th>Status</th><th class="num">Turns</th><th class="num">Tokens</th><th class="num">Cost</th><th></th></tr></thead>
+      <thead><tr><th>Agent</th><th>Provider · model</th><th>Status</th><th class="num">Turns</th><th class="num">Tokens</th><th class="num">Cost</th><th>Next turn</th><th></th></tr></thead>
       <tbody>${[...sessions].sort((a, b) => isOrchSession(b) - isOrchSession(a)).map((s) => {
         const m = pv.msgs.get(`${r.runId}:${s.id}`);
         return `<tr data-session="${esc(s.id)}" data-agent="${esc(s.agent)}" data-testid="run-session-card">
           <td><b title="${esc(s.agent)}">${esc(agentLabel(s.agent, r.agentNames))}</b> <span class="muted small mono">${esc(s.id)}</span></td>
-          <td><span class="badge p-${esc(s.provider)}">${esc(s.provider)}</span> <span class="mono small">${esc(s.model || '')}</span></td>
+          <td>${sessionProviderCell(s)}</td>
           <td><span class="status st-${esc(s.status)}" data-status="${esc(s.status)}"><span class="status-dot"></span>${esc(StatusPill.statusLabel(s.status))}</span></td>
           <td class="num mono">${fmtNum(s.turns)}</td>
           ${tokensCell(s.tokens)}
           ${sessionCostCell(s)}
+          ${nextTurnCell(s)}
           <td class="pr-term">
             <span class="small ${m?.error ? 'error' : 'muted'}" data-term-msg>${esc(m?.text || '')}</span>
             ${termButtons('live', isOrchSession(s) ? 'Follow the orchestrator log in a terminal' : '')}
@@ -249,6 +305,7 @@ function projectRunBody(r, pv) {
       }).join('')}</tbody>
       ${sessionsTotalRow(sessions)}
     </table>` : '<p class="muted small">No agent sessions in this run.</p>'}
+    ${runColumnsBlock(r, pv)}
   </div>`;
 }
 
@@ -268,7 +325,8 @@ function ensureRunArtifacts(rl, r, rerender) {
 }
 
 // Artifacts by the step that saved them (in their order), then the run folder's other files and the
-// project copies: [[label, files]].
+// project copies: [[label, files]]. The expanded card groups by category since #289 (the step is a
+// label on the row): no caller here any more; kept as the step grouping its tests read from this file.
 function groupArtifacts(files) {
   const groups = new Map();
   for (const f of files) {
@@ -279,27 +337,131 @@ function groupArtifacts(files) {
   return [...groups].sort((a, b) => last.indexOf(a[0]) - last.indexOf(b[0]));
 }
 
-function runArtifactsBlock(r, pv) {
-  if (!r.artifactCount) return '';
-  const e = pv.arts?.get(r.runId);
-  const head = `<div class="pr-arts-head">Artifacts <span class="muted">${r.artifactCount}</span>${r.imageCount ? ` <span class="badge" title="Images, e.g. the evidence step's screenshots">${r.imageCount} image${r.imageCount === 1 ? '' : 's'}</span>` : ''}</div>`;
-  if (!e || e.status === 'loading') return `<div class="pr-arts">${head}<p class="muted small">Loading…</p></div>`;
-  if (e.status === 'error') return `<div class="pr-arts">${head}<p class="error small">Could not load the artifacts: ${esc(e.error)} <button type="button" class="btn sm ghost" data-art-retry>Retry</button></p></div>`;
-  const shown = e.files.slice(0, e.shown);
-  const left = e.files.length - shown.length;
-  return `<div class="pr-arts">${head}
-    ${groupArtifacts(shown).map(([label, files]) => `<div class="pr-arts-group">
-      <div class="pr-arts-step muted small"><span class="${label === 'Other files' || label === 'Project copies' ? '' : 'mono'}">${esc(label)}</span> <span>${files.length}</span></div>
-      <div class="pr-arts-list">${files.map((a) => `
-        <button class="pr-art ${a.exists ? '' : 'missing'}" data-art="${esc(a.path)}" title="${esc(a.path)}">
-          ${artKindIcon(a.kind)}<span class="pr-art-name">${esc(a.name)}</span>
-          ${a.location === 'external' ? '<span class="badge">project copy</span>' : ''}${a.exists ? '' : '<span class="muted small">deleted</span>'}
-          <span class="muted small">${esc(fmtSize(a.size))}</span>
-        </button>`).join('')}</div>
-    </div>`).join('')}
-    ${left > 0 ? `<button type="button" class="btn sm ghost pr-arts-more" data-art-more>Show ${Math.min(left, ART_PAGE)} more${left > ART_PAGE ? ` <span class="muted">(${left} left)</span>` : ''}</button>` : ''}
-  </div>`;
+// ---- the expanded card's two columns (#289) ------------------------------------------------------
+// Artifacts (the Details tab's filter: Produced / Show all, category and kind chips, from
+// ArtifactsPanel) and Repository (the run's branch, its state, its commits from run:diff, Review
+// changes). Side by side when the card is at least 900px wide (a container query), stacked below.
+const REPO_PAGE = 5;
+const artifactFilter = (e) => (e.filter || (e.filter = ArtifactsPanel.newFilter()));
+const countBy = (files, fn) => files.reduce((acc, f) => { acc[fn(f)] = (acc[fn(f)] || 0) + 1; return acc; }, {});
+const newestFirst = (a, b) => String(b.mtime || '').localeCompare(String(a.mtime || ''));
+const shortSha = (sha) => String(sha || '').slice(0, 7);
+
+function runColumnsBlock(r, pv) {
+  const arts = runArtifactsColumn(r, pv);
+  return `<div class="pr-cols${arts ? '' : ' pr-cols-one'}">${arts}${runRepositoryColumn(r, pv)}</div>`;
 }
+
+// The Artifacts column: '' when the run has no file (the Repository column takes the width).
+function runArtifactsColumn(r, pv) {
+  const e = pv.arts?.get(r.runId);
+  if (!r.artifactCount && !e?.files?.length) return '';
+  if (e?.status === 'ok' && !e.files.length) return '';
+  const head = (n, m) => `<div class="pr-arts-head">Artifacts${n == null ? '' : ` <span class="muted">${n} of ${m}</span>`}</div>`;
+  const wrap = (html) => `<div class="pr-arts pr-col" data-testid="run-card-artifacts">${html}</div>`;
+  if (!e || e.status === 'loading') return wrap(`${head()}<p class="muted small">Loading…</p>`);
+  if (e.status === 'error') return wrap(`${head()}<p class="error small">Could not load the artifacts: ${esc(e.error)} <button type="button" class="btn sm ghost" data-art-retry>Retry</button></p>`);
+  const AP = ArtifactsPanel;
+  const f = artifactFilter(e);
+  const listed = AP.filterFiles(e.files, { show: 'all', category: null, kind: null }); // every file but the internal ones
+  const inView = AP.filterFiles(e.files, f, { ignoreCategory: true });
+  const files = AP.filterFiles(e.files, f);
+  const counts = countBy(inView, AP.categoryOf);
+  const kinds = countBy(AP.filterFiles(e.files, { ...f, kind: null }, { ignoreCategory: true }), AP.chipKindOf);
+  const shown = files.slice(0, e.shown);
+  const left = files.length - shown.length;
+  const filters = `<div data-testid="run-card-artifact-filter">${AP.filtersHtml(f, counts, kinds)}</div>`;
+  if (!files.length) {
+    const nothing = f.show === 'produced' && !f.category && !f.kind;
+    return wrap(`${head(0, listed.length)}${filters}<div class="pr-arts-empty">
+      <b>${nothing ? 'Nothing produced yet' : 'Nothing matches this filter'}</b>
+      ${nothing ? `<p class="muted small">Its handoff notes, decision log and logs are behind Show all.</p><button type="button" class="btn sm ghost" data-art-show-all>Show all (${listed.length})</button>` : '<p class="muted small">Choose another chip.</p>'}
+    </div>`);
+  }
+  const sections = AP.CATEGORIES.map(([id, label]) => {
+    const list = shown.filter((x) => AP.categoryOf(x) === id).sort(newestFirst);
+    return list.length ? `<div class="pr-arts-cat" data-category="${id}"><div class="pr-arts-cat-head muted small">${esc(label)} <span>${list.length}</span></div>
+      <div class="pr-arts-list">${list.map(artifactRowHtml).join('')}</div></div>` : '';
+  }).join('');
+  return wrap(`${head(files.length, listed.length)}${filters}${sections}
+    ${left > 0 ? `<button type="button" class="btn sm ghost pr-arts-more" data-art-more>Show ${Math.min(left, ART_PAGE)} more${left > ART_PAGE ? ` <span class="muted">(${left} left)</span>` : ''}</button>` : ''}`);
+}
+
+// One file row: its kind, its name, the step that saved it (a small label), its size.
+function artifactRowHtml(a) {
+  return `<button type="button" class="pr-art ${a.exists ? '' : 'missing'}" data-testid="run-card-artifact" data-art="${esc(a.path)}" title="${esc(a.path)}">
+    ${artKindIcon(a.kind)}<span class="pr-art-name">${esc(a.name)}</span>
+    ${a.step ? `<span class="pr-art-step mono muted small" title="The step that saved it">${esc(a.step)}</span>` : ''}
+    ${a.location === 'external' ? '<span class="badge">project copy</span>' : ''}${a.exists ? '' : '<span class="muted small">deleted</span>'}
+    <span class="muted small">${esc(fmtSize(a.size))}</span>
+  </button>`;
+}
+
+// The Repository column: what the run did to the code, from run:diff (the same data the diff viewer
+// lists its commits from; no file contents).
+function runRepositoryColumn(r, pv) {
+  const e = pv.repo?.get(r.runId);
+  const wrap = (html, { reviewable = false, why = '' } = {}) => `<div class="pr-repo pr-col" data-testid="run-card-repository">
+    <div class="pr-arts-head pr-repo-head">Repository <button type="button" class="btn sm" data-testid="run-card-review-changes" data-repo-review${reviewable ? '' : ' disabled'} title="${esc(reviewable ? 'The changed files and the commits of this run, in the changes viewer' : why)}">Review changes</button></div>
+    ${html}</div>`;
+  if (r.mock) return wrap('<p class="muted small">Simulated: nothing was committed.</p>', { why: 'A simulated run commits nothing.' });
+  if (!e || e.status === 'loading') return wrap('<p class="muted small">Loading…</p>', { why: 'Loading the run\'s changes…' });
+  if (e.status === 'error') return wrap(`<p class="error small">Could not load the changes: ${esc(e.error)} <button type="button" class="btn sm ghost" data-repo-retry>Retry</button></p>`, { why: `The run's changes could not be read: ${e.error}` });
+  const d = e.data;
+  const commits = d.commits || [];
+  const files = d.files || [];
+  if (d.simulated) return wrap('<p class="muted small">Simulated: nothing was committed.</p>', { why: 'A simulated run commits nothing.' });
+  if (d.unavailable && !commits.length) {
+    const gone = !!d.branchGone || /\bgone\b/i.test(d.unavailable);
+    return wrap(`${repoBranchHtml(r, d)}<p class="muted small">${gone ? 'The branch is gone: nothing is left to compare.' : esc(d.unavailable)}</p>`, { reviewable: files.length > 0, why: 'This run has no changes to show.' });
+  }
+  if (!commits.length) return wrap(`${repoBranchHtml(r, d)}<p class="muted small">This run made no commits.</p>`, { reviewable: files.length > 0, why: 'This run made no commits.' });
+  const added = files.reduce((n, f) => n + (f.added || 0), 0);
+  const deleted = files.reduce((n, f) => n + (f.deleted || 0), 0);
+  const shown = commits.slice(0, e.shown);
+  const left = commits.length - shown.length;
+  const when = (iso) => { const t = Date.parse(iso); return Number.isFinite(t) ? timeOf(iso).replace(/:\d\d (AM|PM)$/, ' $1') : ''; };
+  return wrap(`${repoBranchHtml(r, d)}
+    <div class="muted small pr-repo-totals" data-testid="run-card-repo-totals">${commits.length} commit${commits.length === 1 ? '' : 's'} · ${files.length} file${files.length === 1 ? '' : 's'} · <span class="pr-add">+${added}</span> <span class="pr-del">−${deleted}</span></div>
+    <ul class="pr-commits" data-testid="run-card-commits" aria-label="Commits of this run, newest first">${shown.map((c) => `
+      <li><button type="button" class="pr-commit" data-testid="run-card-commit" data-sha="${esc(c.sha)}" aria-label="${esc(`${c.short || shortSha(c.sha)} ${c.subject}`)}" title="${esc(`${c.subject}\n${c.author || ''} · ${c.date ? dateOf(c.date) : ''}`)}">
+        <span class="mono pr-commit-sha">${esc(c.short || shortSha(c.sha))}</span><span class="pr-commit-subject">${esc(c.subject)}</span><span class="muted small pr-commit-time">${esc(when(c.date))}</span>
+      </button></li>`).join('')}</ul>
+    ${left > 0 ? `<button type="button" class="btn sm ghost" data-testid="run-card-commits-more" data-repo-more>Show ${Math.min(left, REPO_PAGE)} more${left > REPO_PAGE ? ` <span class="muted">(${left} left)</span>` : ''}</button>` : ''}`, { reviewable: true });
+}
+
+// The branch (mono), its base and the state badge: merged (the PR), pushed (the PR link), merged
+// locally at its merge commit, or not merged.
+function repoBranchHtml(r, d) {
+  const pr = runPr(r);
+  const merge = r.localMerge || r.summary?.local_merge;
+  const branch = d.branch || merge?.branch || r.branch || '';
+  const base = d.base || merge?.base || r.base || '';
+  const state = pr?.state === 'merged' ? `<span class="badge st-success" data-testid="run-card-repo-state">Merged${pr.number ? ` · #${esc(String(pr.number))}` : ''}</span>`
+    : pr?.url ? `<a class="badge" data-testid="run-card-repo-state" href="${esc(pr.url)}" target="_blank" rel="noopener" title="Pushed: its pull request">Pushed · ${esc(pr.number ? `#${pr.number}` : 'PR')}</a>`
+    : merge?.commit ? `<span class="badge st-success" data-testid="run-card-repo-state" title="Merged into ${esc(merge.base || base || 'the base')} on this machine">Merged locally at <span class="mono">${esc(shortSha(merge.commit))}</span></span>`
+    : (d.commits || []).length ? '<span class="badge" data-testid="run-card-repo-state">Not merged</span>' : '';
+  return `<div class="pr-repo-branch"><span class="mono" data-testid="run-card-repo-branch" title="${esc(branch ? 'The run\'s branch' : 'The run\'s branch is not recorded')}">${esc(branch || 'branch not recorded')}</span>${base ? ` <span class="muted small">← ${esc(base)}</span>` : ''} ${state}</div>`;
+}
+
+// An open row's changes (#289): run:diff once, as a summary (the commits, the changed files' counts;
+// no patch is computed or sent), again for a run in progress when its row was refreshed by a run
+// event; the entry { status: loading | ok | error, data, error, shown, pending } lives in rl.repo.
+function ensureRunRepo(rl, r, rerender) {
+  if (r.mock) return;
+  const repo = rl.repo || (rl.repo = new Map());
+  const cur = repo.get(r.runId);
+  const stale = cur?.status === 'ok' && r.status === 'running' && cur.item !== r && Date.now() - cur.at > 5000;
+  if (cur && (cur.pending || cur.status === 'error' || !stale)) return;
+  const entry = { status: cur?.status === 'ok' ? 'ok' : 'loading', data: cur?.data || null, error: null, shown: cur?.shown || REPO_PAGE, pending: true, item: r, at: Date.now() };
+  repo.set(r.runId, entry);
+  Promise.resolve().then(() => api.runDiff(r.runId, null, null, true))
+    .then((d) => { entry.data = d || { commits: [], files: [] }; entry.status = 'ok'; }, (e) => { entry.status = 'error'; entry.error = errMsg(e); })
+    .finally(() => { entry.pending = false; entry.at = Date.now(); if (repo.get(r.runId) === entry) rerender(); });
+}
+
+// The title the changes viewer shows for a run (its first task line).
+const runDiffTitle = (r) => String(r.task || r.runId || '').split('\n')[0].slice(0, 80);
 
 // A run event updates that run's row (#200): the row again from the service (runs:list { ids }), at
 // most once a second per run, in whichever list has it loaded; the full reloads are throttled apart.
@@ -335,16 +497,48 @@ function tokensCell(t) {
 function costMarks(estimatedUsd, notRecorded) {
   return `${estimatedUsd > 0 ? ` <span class="badge" title="${esc(`${fmtUsd(estimatedUsd)} of it estimated from the model calls of attempts stopped before their result`)}">estimated</span>` : ''}${notRecorded ? ' <span class="badge warn" title="An attempt stopped before its result: its cost was not recorded">cost not recorded</span>' : ''}`;
 }
+// The Run screen's top-bar cost (app.js renderHeader): the run's sessions' marks after the total.
+function sessionsCostMarks(sessions) {
+  const estimated = sessions.reduce((a, s) => a + (Number(s.estimated_cost_usd) || 0), 0);
+  return costMarks(estimated, sessions.some((s) => s.cost_not_recorded || s.costNotRecorded));
+}
+// #262: the provider and model that answered (a simulated session shows its workflow provider) and,
+// for the session an agent fell back to, the provider · model it left and why.
+const providerModel = (entry) => String(entry || '').replace(':', ' · ');
+function sessionProviderCell(s) {
+  const provider = s.simulates || s.provider;
+  const fb = s.fallbackFrom;
+  return `<span class="badge p-${esc(provider)}"${s.simulates ? ' title="Simulated: no model was called"' : ''}>${esc(provider)}</span> <span class="mono small">${esc(s.model || '')}</span>${fb
+    ? `<div class="pr-fallback small" data-testid="run-session-fallback" title="${esc(fb.reason || '')}"><span class="badge warn">fallback</span> from <span class="mono">${esc(providerModel(fb.from))}</span>: ${esc(String(fb.reason || '').slice(0, 80))}</div>` : ''}`;
+}
+// #369: a session on a model the installed Claude Code does not know (estimate: the snapshot's
+// cost_estimate): its cost estimated from tokens, or none with no price for the model; the CLI's own
+// figure (at another model's rates) only on hover. The one note for the run lists and the Run screen.
+function costEstimateNote(estimate) {
+  if (!estimate) return '';
+  const model = estimate.model || 'the model';
+  const why = `Claude Code${estimate.cli_version ? ` ${estimate.cli_version}` : ''} does not know ${model}: it priced the turns at another model's rates (${fmtUsd(estimate.cli_cost_usd)}). Update it with \`claude update\`.`;
+  return estimate.source === 'unknown'
+    ? ` <span class="badge warn" data-testid="session-cost-note" title="${esc(`${why} Add a price for ${model} in Usage › Prices.`)}">no price for ${esc(model)}</span>`
+    : ` <span class="badge" data-testid="session-cost-note" title="${esc(why)}">estimated from tokens</span>`;
+}
 // Tokens with no cost: a model with no price (Codex, unpriced models), not a free session.
 function sessionCostCell(s) {
-  if (!s.costUsd && s.tokens?.total && s.provider !== 'mock' && !s.costNotRecorded) return '<td class="num mono muted" title="No price for this model: see Usage › Prices">—</td>';
-  return `<td class="num mono">${fmtUsd(s.costUsd)}${costMarks(s.costEstimatedUsd, s.costNotRecorded)}</td>`;
+  if (s.costEstimate?.source === 'unknown') return `<td class="num mono muted" data-testid="session-cost">—${costEstimateNote(s.costEstimate)}</td>`;
+  if (!s.costUsd && s.tokens?.total && s.provider !== 'mock' && !s.costNotRecorded) return '<td class="num mono muted" data-testid="session-cost" title="No price for this model: see Usage › Prices">—</td>';
+  return `<td class="num mono" data-testid="session-cost">${fmtUsd(s.costUsd)}${costMarks(s.costEstimatedUsd, s.costNotRecorded)}${costEstimateNote(s.costEstimate)}</td>`;
 }
 function sessionsTotalRow(sessions) {
   const sum = (f) => sessions.reduce((a, s) => a + (f(s) || 0), 0);
   const tokens = Object.fromEntries([...TOKEN_PARTS.map(([k]) => [k, sum((s) => s.tokens?.[k])]), ['total', sum((s) => s.tokens?.total)]]);
   return `<tfoot><tr class="pr-total"><td colspan="3">Total</td><td class="num mono">${fmtNum(sum((s) => s.turns))}</td>
-    ${tokensCell(tokens)}<td class="num mono" data-testid="run-total-cost">${fmtUsd(sum((s) => s.costUsd))}${costMarks(sum((s) => s.costEstimatedUsd), sessions.some((s) => s.costNotRecorded))}</td><td></td></tr></tfoot>`;
+    ${tokensCell(tokens)}<td class="num mono" data-testid="run-total-cost">${fmtUsd(sum((s) => s.costUsd))}${costMarks(sum((s) => s.costEstimatedUsd), sessions.some((s) => s.costNotRecorded))}</td><td></td><td></td></tr></tfoot>`;
+}
+// #320: how the session's next turn starts (src/renderer/session-cache.js): the text leads, the
+// colour follows (warm green, cold orange); — for a closed session. Run screen too (views/run/run.js).
+function nextTurnCell(s, now = Date.now()) {
+  const t = SessionCache.currentTurn(s, now);
+  return `<td class="next-turn small"${t ? ` data-next-turn="${esc(t.kind)}"` : ''} data-testid="session-next-turn" title="${esc(SessionCache.turnTitle(t))}">${esc(SessionCache.turnText(t, now))}</td>`;
 }
 
 function runTaskBlock(r) {
@@ -361,6 +555,10 @@ function renderRunListsSoon() {
     if (workflowRunsVisible() && state.wr.runs) renderWorkflowRuns();
     if (state.view === 'project' && state.pv?.runs) renderProjectView();
   });
+}
+// #320: the Next turn column's minutes left move on: the lists again (app.js, once a minute) while a run is expanded
+function tickRunLists() {
+  if ([state.wr, state.pv].some((rl) => rl?.expanded?.size)) renderRunListsSoon();
 }
 
 // Robot SVGs are large: one per provider/model/colour/state, reused. A workflow agent with a look
@@ -449,6 +647,7 @@ function runProgressStrip(r) {
 // (.rm-steps) are placed in the window as they show (position: fixed, so no scrolling container
 // clips them), next to what opened them, moved left or flipped up when there is no room; long lines
 // wrap within their max width (style.css). Without this (before the first hover) the CSS places them.
+// select.js places its search list with it too (#383).
 const POP_EDGE = 6;
 function placePopover(pop, anchor, { gap = 4, alignRight = false } = {}) {
   if (!pop || !anchor || !pop.getClientRects().length) return;

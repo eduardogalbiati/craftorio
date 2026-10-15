@@ -11,7 +11,7 @@
   const $c = (sel) => document.querySelector(sel);
   const { RunChatModel, splitAnswer, providerType } = window.RunChatModel;
   const md = (t) => (typeof markdownHtml === 'function' ? markdownHtml(t) : `<pre>${esc(t)}</pre>`);
-  const clock = (ts) => new Date(ts || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const clock = (ts) => new Date(ts || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: TimeZone.current() });
   const fmtK = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n || 0));
   const fmtSecs = (ms) => (ms >= 60000 ? `${Math.floor(ms / 60000)}m ${String(Math.round((ms % 60000) / 1000)).padStart(2, '0')}s` : `${Math.round((ms || 0) / 1000)}s`);
   const DOING = { thinking: 'is thinking', reading: 'is using a tool', writing: 'is writing' };
@@ -43,10 +43,11 @@
   const avatar = (who) => `<span class="duo-robot still" aria-hidden="true">${robot(who, 'idle', { bubble: false })}</span>`;
 
   // The hover card of an agent: provider, model and effort as recorded in the run, its session mode and turn.
-  const PROVIDERS = { 'claude-code': 'Claude', 'codex-cli': 'Codex', 'grok-cli': 'Grok', 'gemini-cli': 'Gemini' };
+  // the CLI's short name ("Claude"), from the provider registry through run-chat-model.js
+  const PROVIDERS = { shortName: providerType.short };
   const MODES = { persistent: 'persistent session', ephemeral: 'new session every turn', handoff: 'new session with a handoff note' };
   function cardLines(who) {
-    const provider = `${PROVIDERS[providerType(who.provider, who.model)] || who.provider || 'Unknown provider'}${who.provider === 'mock' ? ' (simulated)' : ''}`;
+    const provider = `${PROVIDERS.shortName(who.provider, who.model) || who.provider || 'Unknown provider'}${who.provider === 'mock' ? ' (simulated)' : ''}`;
     const first = [provider, who.model ? Robots.plaqueFor(who.model) : '', who.effort ? `effort ${who.effort}` : ''].filter(Boolean).join(' · ');
     const second = [MODES[who.mode] || '', who.turn ? `turn ${who.turn}` : ''].filter(Boolean).join(' · ');
     return [first, second].filter(Boolean);
@@ -57,7 +58,12 @@
       <span class="rc-card" role="tooltip">${lines.map((l) => `<span>${esc(l)}</span>`).join('')}<span class="mono muted">${esc(who.agent)}</span></span>`;
   }
   // #245: a step by its readable name, its id in the tooltip
-  const stepName = (stepId) => (stepId ? chat.model.stepName(stepId) : '');
+  // (a run recorded without them: its workflow's own `display` names, as the Run screen's progress)
+  const workflowStepNames = () => {
+    const wf = (state.workflows || []).find((w) => w && (w.file === chat.model.run?.workflow || w.name === chat.model.run?.workflow));
+    return wf ? Object.fromEntries((wf.steps || []).filter((s) => s.display).map((s) => [s.id, s.display])) : null;
+  };
+  const stepName = (stepId) => (!stepId ? '' : chat.model.run?.stepNames ? chat.model.stepName(stepId) : displayName(stepId, workflowStepNames()));
   const stepTag = (stepId, visit, sub) => `<span class="rc-step" data-testid="run-chat-step" title="${esc(`Step ${stepId || ''}`.trim())}">${esc(stepName(stepId))}${sub ? ` · ${esc(sub)}` : ''}${visit > 1 ? ` · visit ${visit}` : ''}</span>`;
 
   // ---------------------------------------------------------------- items → HTML
@@ -87,18 +93,52 @@
     const ctx = it.context?.peak ? ` · context ${it.fresh ? 'fresh ' : ''}${fmtK(it.context.start)} → ${fmtK(it.context.peak)}` : '';
     const foot = it.durationMs ? `${fmtK(it.tokensIn)} in / ${fmtK(it.tokensOut)} out${ctx} · $${it.cost.toFixed(2)} · ${fmtSecs(it.durationMs)}` : '';
     return `<div class="rc-msg rc-${it.side === 'right' ? 'right' : 'left'}" data-item="${it.id}"${colorStyle(it.agent)}>${agentAvatar(it)}<div class="duo-bubble">
-      <div class="duo-meta"><b class="rc-name" title="${esc(it.agent)}">${esc(nameOf(it.agent))}</b>${isSupervisor(it.agent) ? '' : AgentColors.roleChip(it.agent, agentDef(it.agent))}${it.model ? `<span class="tag">${esc(it.model)}</span>` : ''}${stepTag(it.stepId, it.visit, it.sub)}<span class="time">${clock(it.ts)}</span></div>
+      <div class="duo-meta"><b class="rc-name" title="${esc(it.agent)}">${esc(nameOf(it.agent))}</b>${isSupervisor(it.agent) ? '' : AgentColors.roleChip(it.agent, agentDef(it.agent))}${it.model ? turnModelTag(it) : ''}${stepTag(it.stepId, it.visit, it.sub)}<span class="time">${clock(it.ts)}</span></div>
       <div class="rc-body md">${body}</div>${extras.join('')}${foot ? `<div class="duo-foot">${esc(foot)}</div>` : ''}</div></div>`;
+  }
+  // #262: the provider and the model that answered the turn (a simulated one: its workflow provider)
+  function turnModelTag(it) {
+    const provider = it.simulates || (it.provider === 'mock' ? '' : it.provider);
+    return `<span class="tag" data-testid="run-chat-turn-model" data-step="${esc(it.stepId || '')}"${it.simulates ? ' title="Simulated: no model was called"' : ''}>${esc([provider, it.model].filter(Boolean).join(' · '))}</span>`;
+  }
+  // #262: an agent's provider out of credits (or past its usage limit): the turn moved on to the next one
+  const fallbackEntry = (entry) => String(entry || '').replace(':', ' · ');
+  function fallbackHtml(it) {
+    return `<div class="rc-sys warn" data-item="${it.id}" data-testid="run-chat-fallback" title="${esc(it.reason)}"><span><b>${esc(nameOf(it.agent))}</b> fell back in ${stepTag(it.stepId, it.visit, it.sub)}: <span class="mono">${esc(fallbackEntry(it.from))}</span> → <span class="mono">${esc(fallbackEntry(it.to))}</span> · ${esc(it.reason.slice(0, 160))}</span><time>${clock(it.ts)}</time></div>`;
+  }
+
+  // #288: a run whose events never ended (no workflow.finished) and that no app runs any more: the
+  // app closed while it ran or waited at a gate. Nothing waits for an answer; Resume goes on.
+  // A run another app window runs (runningElsewhere, #112) is neither: its gates are answered there.
+  const interrupted = () => !chat.live && !chat.loading && !chat.elsewhere && chat.model.run.status === 'running';
+  const elsewhereHtml = () => `<div class="duo-note plain rc-interrupted" data-testid="runchat-elsewhere-note"><span><b data-status="running">Running in another app window</b> (${esc(chat.elsewhere.host || 'this computer')}): follow it and answer its gates there</span></div>`;
+  // where it stopped: the gate left waiting, else the step it was at
+  const stoppedStep = () => chat.model.pendingGates().at(-1)?.stepId || chat.model.run.stepId || null;
+  const resumeButton = () => `<button type="button" class="btn sm primary" data-testid="runchat-resume" data-resume-at="${esc(stoppedStep() || '')}" title="Resume the run where it stopped (Resume from step…, that step chosen)">Resume</button>`;
+  // the chat's last message while the run is interrupted (drawn by draw, after the items)
+  function interruptedHtml() {
+    const r = chat.model.run;
+    const at = stoppedStep();
+    const spent = r.lastTs && r.startedAt ? Date.parse(r.lastTs) - Date.parse(r.startedAt) : 0;
+    return `<div class="duo-note failed rc-interrupted" data-testid="runchat-interrupted-note"><span><b data-status="interrupted">Interrupted at <span title="${esc(at || '')}">${esc(at ? stepName(at) : 'its first step')}</span></b> (the app closed) · $${(r.cost || 0).toFixed(2)} · ${fmtSecs(spent)}</span>
+      ${resumeButton()}<button type="button" class="link-btn small" data-resume title="Start a new run from another step of this one, keeping the previous outputs (no supervisor call)">Resume from step…</button></div>`;
   }
 
   function gateHtml(it) {
     const off = !chat.live || it.resolved || it.closed ? ' disabled' : '';
+    // #288: a gate an interrupted run left waiting: nobody can take the answer, resuming brings it back
+    const waits = !chat.live && !it.resolved && !it.closed;
+    const stale = waits && !chat.elsewhere;
+    const away = waits && !!chat.elsewhere;
+    const why = away ? 'The run waits in another app window: answer this gate there' : 'The run was interrupted: resume it to answer this gate';
     // with "Accept and save to issue #n" when the run is about an issue (gateChoices in app.js, #125)
     const choices = typeof gateChoices === 'function' ? gateChoices({ choices: it.choices, save_to_issue: it.saveToIssue }) : it.choices;
     const buttons = choices.map((c, i) => {
       const chosen = it.resolved && String(c.id) === it.resolved.choice && (c.intent || null) === (it.resolved.intent || null);
-      return `<button type="button" class="btn sm ${!it.resolved && i === 0 ? 'primary' : ''}${chosen ? ' chosen' : ''}" data-approval="${esc(it.approvalId)}" data-choice="${esc(c.id)}"${c.intent ? ` data-intent="${esc(c.intent)}" title="${esc(c.title)}"` : ''}${c.feedback_required ? ' data-needs-text="1"' : ''}${off}>${esc(c.label)}</button>`;
+      const title = waits ? why : c.intent ? c.title : '';
+      return `<button type="button" class="btn sm ${!it.resolved && i === 0 ? 'primary' : ''}${chosen ? ' chosen' : ''}" data-approval="${esc(it.approvalId)}" data-choice="${esc(c.id)}"${c.intent ? ` data-intent="${esc(c.intent)}"` : ''}${title ? ` title="${esc(title)}"` : ''}${c.feedback_required ? ' data-needs-text="1"' : ''}${off}>${esc(c.label)}</button>`;
     }).join('')
+      + (stale ? resumeButton() : '')
       // #183: "Interact with Oracle" at the end of the row
       + (window.GateOracle?.gateOracleButtonHtml({ approval_id: it.approvalId, run_id: chat.runId, step_id: it.stepId }) || '');
     // Run App / Open the worktree (app.js), only while the gate waits in the live run
@@ -106,13 +146,17 @@
     const tools = open && typeof gateToolsHtml === 'function' ? gateToolsHtml(it, { runId: chat.runId }) : '';
     const field = it.feedback && !it.resolved && !it.closed ? `<label class="duo-ask-label">${esc(it.feedback.label || 'Instructions (optional)')}</label>
       <textarea class="duo-ask-text" rows="2" placeholder="${esc(it.feedback.placeholder || '')}"${off}></textarea>` : '';
-    const state = it.resolved ? '' : it.closed ? '<p class="muted small">The run ended before an answer.</p>' : chat.live ? '' : '<p class="muted small">Waiting for an answer.</p>';
+    const state = it.resolved ? '' : it.closed ? '<p class="muted small">The run ended before an answer.</p>'
+      : stale ? '<p class="muted small" data-testid="runchat-gate-interrupted">This gate was waiting when the run was interrupted (the app closed). Resuming the run brings it back.</p>'
+        : away ? '<p class="muted small" data-testid="runchat-gate-elsewhere">This gate waits in another app window: answer it there.</p>' : '';
     // every gate's summary card (#213), the long message in its Details; a gate that tries the change
     // (#108) also gets the run's Artifacts panel on the right while it waits
-    const full = `<div class="rc-body md">${md(it.message)}</div>`;
+    // a report (#290: the release summary) leads the message, rendered on its own
+    const parts = window.gateReportParts?.(it) || { reportHtml: '', message: it.message };
+    const full = `${parts.reportHtml}<div class="rc-body md">${md(parts.message)}</div>`;
     const card = it.brief?.headline ? window.gateCardHtml?.(chat.runId, open ? it : { ...it, runApp: false, localPreview: null }, full)
       : open ? window.gateBriefHtml?.(chat.runId, it, full) : '';
-    const help = !it.resolved && !it.closed ? window.gateButtonsHelpHtml?.(it) || '' : '';
+    const help = !it.resolved && !it.closed && !waits ?window.gateButtonsHelpHtml?.(it) || '' : '';
     const side = open && typeof gateSideHtml === 'function' ? gateSideHtml(it, chat.runId) : '';
     const main = `<div class="duo-meta"><b>Human gate</b>${stepTag(it.stepId)}<span class="time">${clock(it.ts)}</span></div>
       ${card || full}${tools}${field}<div class="row gate-choices">${buttons}</div>${help}${state}`;
@@ -129,7 +173,11 @@
       <div class="rc-group-body"></div></div>`;
   }
 
-  const SUP_WHAT = { retry: 'Asked for a new attempt.', fix_output: 'Fixed the answer so the run can continue.', ask_human: 'Needs you: see the gate below.', fail: 'Could not recover this step.' };
+  // #396: the end's pill of a run that went on without a green suite (the event's summary, else its row's `tested`)
+  const testedPill = (it) => ((it.tested || chat.tested) === 'not green'
+    ? ' <span class="pill pill-warn" data-testid="runchat-tested" title="The run reached the build without a green suite: see its suite step">Not tested green</span>' : '');
+
+  const SUP_WHAT = { retry:'Asked for a new attempt.', fix_output: 'Fixed the answer so the run can continue.', ask_human: 'Needs you: see the gate below.', fail: 'Could not recover this step.' };
   function itemHtml(it) {
     switch (it.kind) {
       case 'start': {
@@ -142,10 +190,11 @@
           </div></div>${it.resumedFrom ? `<div class="duo-note plain"><span>Resumed from ${esc(it.resumedFrom.run_id)} at <span title="${esc(it.resumedFrom.step)}">${esc(stepName(it.resumedFrom.step))}</span></span></div>` : ''}${issue ? `<div class="duo-note plain"><span>${issue}</span></div>` : ''}</div>`;
       }
       case 'turn': return turnHtml(it);
+      case 'fallback': return fallbackHtml(it);
       case 'group': return groupHtml(it);
       case 'gate': return gateHtml(it);
       case 'system': return `<div class="rc-sys ${it.level}" data-item="${it.id}"><span>${esc(it.text)}</span><time>${clock(it.ts)}</time></div>`;
-      case 'fail': return `<div class="rc-sys error" data-item="${it.id}"><span title="${esc(it.stepId)}">${esc(stepName(it.stepId))} failed: ${esc(it.text.slice(0, 400))}</span><time>${clock(it.ts)}</time></div>`;
+      case 'fail': return `<div class="rc-sys error" data-testid="run-chat-fail" data-item="${it.id}"><span title="${esc(it.stepId)}">${esc(stepName(it.stepId))} failed: ${esc(it.text.slice(0, 400))}</span><time>${clock(it.ts)}</time></div>`;
       case 'reply': return `<div class="duo-msg user reply" data-item="${it.id}"><div class="duo-bubble">
         <div class="duo-meta"><b>${it.by === 'user' ? 'You' : esc(it.by)}</b>${stepTag(it.stepId)}<span class="time">${clock(it.ts)}</span></div>
         <p><b>${esc(it.label)}</b></p>${it.feedback ? `<p class="duo-msg-text">${esc(it.feedback)}</p>` : ''}</div></div>`;
@@ -155,7 +204,9 @@
         ${SUP_WHAT[it.action] ? `<p class="muted small">${SUP_WHAT[it.action]}</p>` : ''}</div></div>`;
       case 'end': {
         const ok = it.status === 'success';
-        return `<div class="duo-note ${ok ? 'done' : 'failed'}" data-item="${it.id}"><span><b data-status="${esc(it.status)}">${ok ? 'Done' : esc(StatusPill.statusLabel(it.status))}</b>${!ok && it.error ? ` · ${esc(it.error.slice(0, 240))}` : ''} · $${(it.cost || 0).toFixed(2)} · ${fmtSecs(it.durationMs)}</span>
+        const tested = testedPill(it);
+        // #384: the run that resumed this one (its row's resumedBy, read when a past run opens)
+        return `<div class="duo-note ${ok ? 'done' : 'failed'}" data-item="${it.id}" data-testid="run-chat-finished"><span><b data-status="${esc(it.status)}">${ok ? 'Done' : esc(StatusPill.statusLabel(it.status))}</b>${tested}${!ok && it.error ? ` · ${esc(it.error.slice(0, 240))}` : ''} · $${(it.cost || 0).toFixed(2)} · ${fmtSecs(it.durationMs)}${StatusPill.resumedLink(chat.resumedBy)}</span>
           <button type="button" class="link-btn small" data-resume title="Start a new run from a step of this one, keeping the previous outputs (no supervisor call)">Resume from step…</button></div>`;
       }
       default: return '';
@@ -181,6 +232,11 @@
       const parent = it.parent && box.querySelector(`[data-item="${it.parent}"] .rc-group-body`);
       (parent || box).insertAdjacentHTML('beforeend', html);
     }
+    // an interrupted run's note stays the last message (#288)
+    box.querySelector('[data-testid="runchat-interrupted-note"]')?.remove();
+    box.querySelector('[data-testid="runchat-elsewhere-note"]')?.remove();
+    if (interrupted()) box.insertAdjacentHTML('beforeend', interruptedHtml());
+    else if (chat.elsewhere && !chat.live && chat.model.run.status === 'running') box.insertAdjacentHTML('beforeend', elsewhereHtml());
     // a gate's Artifacts panel and Run App state (app.js)
     window.mountGateSides?.(box);
     window.paintGateApps?.();
@@ -217,7 +273,7 @@
     if (!$c('#rc-title .run-title-input')) $c('#rc-title').innerHTML = r.id
       ? `<b>${window.runTitleHtml ? runTitleHtml(run) : esc(r.workflow)}</b> ${window.runPrBadge ? runPrBadge(run) : ''} <span class="muted small">${esc(r.workflow)}</span>${r.mock ? ' <span class="badge p-mock">Simulated</span>' : ''}${r.chain && window.ChainModel ? ` ${ChainModel.chainBadgesHtml(r.chain)}` : ''} <span class="muted small mono">${esc(r.id)}</span>`
       : `<span class="muted mono">${esc(chat.runId || '')}</span>`;
-    const status = chat.loading ? 'loading' : r.status === 'running' && !chat.live ? 'interrupted' : r.status || 'unknown';
+    const status = chat.loading ? 'loading' : r.status === 'running' && !chat.live && !chat.elsewhere ? 'interrupted' : r.status || 'unknown';
     const waiting = chat.live && chat.model.pendingGates().length;
     const pill = $c('#rc-status');
     pill.className = `pill pill-${waiting ? 'warn' : status}`;
@@ -228,7 +284,7 @@
   }
 
   function reset(runId) {
-    chat = { model: new RunChatModel(), runId, live: false, follow: chat.follow, loading: true, buffer: [] };
+    chat = { model: new RunChatModel(), runId, live: false, elsewhere: null, follow: chat.follow, loading: true, buffer: [] };
     $c('#rc-messages').innerHTML = '';
     $c('#rc-typing').innerHTML = '';
     delete $c('#rc-typing').dataset.key;
@@ -261,6 +317,18 @@
     chat.buffer = [];
     chat.loading = false;
     chat.live = chat.live && chat.model.run.status === 'running';
+    // a past run's row: a run without an end that this window does not run is interrupted, or alive in
+    // another app window (its row's runningElsewhere, #112; unreadable, it reads as interrupted); an
+    // ended run may have been resumed by a later run (#384)
+    if (!chat.live) {
+      try {
+        const [row] = (await api.listRuns?.({ ids: [runId] }))?.runs || [];
+        if (chat.runId !== runId) return;
+        if (chat.model.run.status === 'running') chat.elsewhere = row?.status === 'running' && row.runningElsewhere || null;
+        chat.resumedBy = row?.resumedBy || null;
+        chat.tested = row?.tested || null;
+      } catch { /* the run list could not be read */ }
+    }
     draw(ids);
     // live or past, a run opens at its latest message (where the outcome is)
     toLatest();
@@ -305,6 +373,10 @@
   function init() {
     if (!$c('#view-runchat')) return;
     $c('#rc-messages').addEventListener('click', (e) => {
+      const resumed = e.target.closest('[data-testid="run-resumed-link"]');
+      if (resumed) { e.preventDefault(); window.showRun?.(resumed.dataset.run); return; }
+      const at = e.target.closest('[data-resume-at]');
+      if (at) { window.openResumeDialog?.(chat.runId, at.dataset.resumeAt ? { step: at.dataset.resumeAt } : {}); return; }
       if (e.target.closest('[data-resume]')) { window.openResumeDialog?.(chat.runId); return; }
       if (e.target.closest('[data-gate-tool]')) { if (chat.live) onGateTool(e, chat.runId); return; }
       const b = e.target.closest('button[data-approval]');

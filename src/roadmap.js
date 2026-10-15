@@ -1,3 +1,4 @@
+// @ts-check
 // Backlog roadmap (#106): an ordered plan of runs per project, in
 // <workspace>/backlog/<project id>.roadmap.json, next to the queue (src/backlog.js). Stages run one
 // after the other; the items of a stage (each one run: a workflow with one issue or a group, the
@@ -13,7 +14,8 @@
 // Owner's "Build a roadmap" answer (#105) as planned stages; only Start (`state: running`) runs them.
 // Run this stage (#141, `scope: { stage: <id> }`): only that stage's items start, in any order; when
 // they are all finished the roadmap pauses ("Stage N done") with the scope cleared, so Start then
-// runs the whole roadmap from its first unfinished stage.
+// runs the whole roadmap from its first unfinished stage. The bar's "Pause after this stage" (#391,
+// `pauseAfterStage`) sets the same scope on the current stage, with `pauseAfter: true`.
 // The items' issue texts are read-only copies (#168): each sync refreshes the items not started yet
 // (`refreshCopies`), and the service reads the issues again right before a start (an item whose
 // issues are all closed then is skipped, `skipClosed`).
@@ -33,25 +35,44 @@
 // otherwise leaves the line held or failed and pauses the roadmap there (`holdRelease`,
 // `releaseHold`); Resume checks the release again. A roadmap running one stage (`scope`) and a
 // roadmap without cut lines never wait.
+// Stale edits (#287): every write reads and writes the file in one synchronous step (`updateRoadmap`),
+// so the service's writers never interleave; `readRoadmapAt` gives back the stages a screen read, by
+// their `updatedAt`, for a save based on that read (src/roadmap-merge.js).
+// Rules and writes (#349): the rules (the states, what is finished, the current stage, which owner
+// action applies) are src/shared/roadmap-model.js, pure and shared with the screens; this module is
+// the only writer of a roadmap's `state`, `pausedBy`, `scope` and item statuses (other modules ask
+// it: `pauseRoadmap`, `finishRoadmap`).
+// Move on (#395): an item whose run waits at a human gate is parked (`itemAction` park, or the stage's
+// `parkStage`): it counts as finished, the next stage starts and the run keeps waiting at its gate,
+// the owner's to answer. Answered later, the item takes the run's outcome (done, or failed without
+// pausing the roadmap). A later stage's runs start without the parked change.
 // Screen: src/renderer/views/backlog/backlog-roadmap.js; channels: src/service/channels/roadmap.js.
 
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { itemIssues, withSyncedText } = require('./backlog');
-const { normalizeThen } = require('./renderer/chain-model');
-const { isArchived } = require('./renderer/views/backlog/backlog-archive');
+const { itemIssues, withSyncedText } = require('./issues');
+const { normalizeThen } = require('./shared/chain-model');
+const { isArchived } = require('./shared/backlog-archive');
+const {
+  allowedActions,
+  atGate,
+  currentStage,
+  isFinished,
+  ITEM_STATES,
+  pendingRelease,
+  STATES,
+} = require('./shared/roadmap-model');
 const { writeJsonSafe } = require('./state-file');
 
-// planned: edited, never started by itself · running · paused (a failure, the owner, a proposal) · done
-const STATES = ['done', 'paused', 'planned', 'running'];
-const ITEM_STATES = ['done', 'failed', 'planned', 'running', 'skipped'];
-const FINISHED = new Set(['done', 'skipped']);
+/** @typedef {import('./shared/types').Roadmap} Roadmap */
+/** @typedef {((runId: string) => any) | null} Alive `alive(runId)`: as for `runIsAlive` */
 
 // #205: a test-batch item tests the issues the items before it implemented
 const testsLater = (item) => path.basename(String(item?.workflow || '')) === 'test-batch.yaml';
 
 const roadmapFile = (dir, projectId) => path.join(dir, `${path.basename(String(projectId))}.roadmap.json`);
+/** @returns {Roadmap} */
 const emptyRoadmap = () => ({ state: 'planned', simulated: false, error: null, pausedBy: null, scope: null, stages: [], updatedAt: null });
 const newId = (prefix) => `${prefix}-${crypto.randomBytes(4).toString('hex')}`;
 
@@ -61,11 +82,35 @@ const newId = (prefix) => `${prefix}-${crypto.randomBytes(4).toString('hex')}`;
 const normalizeItem = (x) => (!x || typeof x !== 'object' || (Array.isArray(x.issues) && x.issues.length) || !x.number ? x : { ...x, issues: itemIssues(x) });
 const normalizeStages = (stages) => (Array.isArray(stages) ? stages.map((s) => (s && Array.isArray(s.items) ? { ...s, items: s.items.map(normalizeItem) } : s)) : stages);
 
+// #287: the stages of each roadmap file as recently read or written, by `updatedAt` (in memory, the
+// last SEEN_MAX per file): an edit based on an older read is merged against what it read
+// (src/roadmap-merge.js). `updatedAt` only grows, so two writes in the same millisecond differ.
+const SEEN_MAX = 50;
+const seen = new Map(); // file → Map(updatedAt → stages as JSON)
+const newest = new Map(); // file → the latest updatedAt seen, in ms
+function remember(file, at, stages) {
+  if (!at) return;
+  newest.set(file, Math.max(newest.get(file) || 0, Date.parse(at) || 0));
+  let known = seen.get(file);
+  if (!known) seen.set(file, (known = new Map()));
+  if (known.has(at)) return;
+  known.set(at, JSON.stringify(stages || []));
+  if (known.size > SEEN_MAX) known.delete(known.keys().next().value);
+}
+
 function readRoadmap(dir, projectId) {
   try {
-    const r = { ...emptyRoadmap(), ...JSON.parse(fs.readFileSync(roadmapFile(dir, projectId), 'utf8')) };
+    const file = roadmapFile(dir, projectId);
+    const r = { ...emptyRoadmap(), ...JSON.parse(fs.readFileSync(file, 'utf8')) };
+    remember(file, r.updatedAt, r.stages);
     return { ...r, stages: normalizeStages(r.stages) };
   } catch { return emptyRoadmap(); }
+}
+
+/** #287: the stages of the roadmap as they were at `updatedAt` (read or written by this process), or null. */
+function readRoadmapAt(dir, projectId, updatedAt) {
+  const text = seen.get(roadmapFile(dir, projectId))?.get(String(updatedAt || ''));
+  return text ? normalizeStages(JSON.parse(text)) : null;
 }
 
 // What a roadmap file must look like (#112: a write that breaks it is refused, src/state-file.js).
@@ -94,10 +139,11 @@ function roadmapProblem(r) {
 function persisted(roadmap) {
   return {
     ...roadmap,
-    stages: normalizeStages(roadmap.stages || []).map((s) => ({
+    // a stage's `pause` (#368: its pause line) is the screen's too
+    stages: normalizeStages(roadmap.stages || []).map(({ pause: _p, ...s }) => ({
       ...s,
       // `waiting` and `run` (#194: its progress for the card) are the screen's, never stored
-      items: (s.items || []).map(({ waiting: _w, run: _r, ...x }) => (FINISHED.has(x.status) ? x : { ...x, status: 'planned', error: x.runId ? null : x.error || null })),
+      items: (s.items || []).map(({ waiting: _w, run: _r, ...x }) => (isFinished(x) ? x : { ...x, status: 'planned', error: x.runId ? null : x.error || null })),
     })),
   };
 }
@@ -106,13 +152,26 @@ const runFailure = (runId, run) => `Run ${runId} ${run.status === 'success' ? 'f
   : `${run.status === 'interrupted' ? 'was interrupted' : run.status}${run.error ? `: ${String(run.error).slice(0, 200)}` : ''}`}`;
 
 // An item's status from its run: running (a live run, in this process or another one, `waiting` at
-// a gate), done (it merged), failed (it ended otherwise, or it could not start), else as stored.
+// a gate), paused (#368: its run paused after its current turn, never a failure), done (it merged),
+// failed (it ended otherwise, or it could not start), else as stored.
+// #395: a parked item stays parked while its run waits (or was interrupted, or paused); once its gate
+// is answered it takes the run's outcome: done when it merged, else failed, still marked `parked` so
+// it never holds its stage or pauses the roadmap (src/shared/roadmap-model.js isFinished).
 function itemStatus(item, runOf) {
-  if (FINISHED.has(item.status)) return { status: item.status, error: item.error || null };
+  if (item.status === 'parked') {
+    const parked = item.parked || { at: null, gate: null };
+    const run = item.runId ? runOf(item.runId) : null;
+    if (!run) return { status: 'failed', error: `Run ${item.runId} no longer exists.`, parked };
+    if (['interrupted', 'paused', 'pending', 'running'].includes(run.status)) return { status: 'parked', error: null, parked };
+    if (run.status === 'success' && run.merged) return { status: 'done', error: null, parked };
+    return { status: 'failed', error: runFailure(item.runId, run), parked };
+  }
+  if (isFinished(item)) return { status: item.status, error: item.error || null };
   if (!item.runId) return item.error ? { status: 'failed', error: item.error } : { status: 'planned', error: null };
   const run = runOf(item.runId);
   if (!run) return { status: 'failed', error: `Run ${item.runId} no longer exists.` };
   if (['pending', 'running'].includes(run.status)) return { status: 'running', error: null, ...(run.waiting ? { waiting: true } : {}) };
+  if (run.status === 'paused') return { status: 'paused', error: null };
   if (run.status === 'success' && run.merged) return { status: 'done', error: null };
   return { status: 'failed', error: runFailure(item.runId, run) };
 }
@@ -126,12 +185,16 @@ function withStatus(roadmap, runOf) {
 }
 
 // Whether an item's run is alive: `alive(runId)` from the service, else (no service: a stored file
-// written before #112) its stored status.
-const runIsAlive = (item, alive) => (alive ? !!item.runId && !FINISHED.has(item.status) && !!alive(item.runId) : item.status === 'running');
+// written before #112) its stored status. A parked item's run (#395) still waits at its gate.
+const runIsAlive = (item, alive) => (alive ? !!item.runId && (!isFinished(item) || item.status === 'parked') && !!alive(item.runId) : ['parked', 'running'].includes(item.status));
 
 function writeRoadmap(dir, projectId, roadmap) {
-  const out = { ...persisted(roadmap), updatedAt: new Date().toISOString() };
-  return writeJsonSafe(roadmapFile(dir, projectId), out, { validate: roadmapProblem });
+  const file = roadmapFile(dir, projectId);
+  const last = Math.max(newest.get(file) || 0, Date.parse(roadmap?.updatedAt) || 0);
+  const out = { ...persisted(roadmap), updatedAt: new Date(Math.max(Date.now(), last + 1)).toISOString() };
+  const written = writeJsonSafe(file, out, { validate: roadmapProblem });
+  remember(file, out.updatedAt, out.stages);
+  return written;
 }
 
 const updateRoadmap = (dir, projectId, fn) => writeRoadmap(dir, projectId, fn(readRoadmap(dir, projectId)) || readRoadmap(dir, projectId));
@@ -146,15 +209,18 @@ function roadmapProjects(dir) {
   try { return fs.readdirSync(dir).filter((f) => f.endsWith('.roadmap.json')).map((f) => f.slice(0, -'.roadmap.json'.length)); } catch { return []; }
 }
 
-const allItems = (roadmap) => (roadmap.stages || []).flatMap((s) => s.items || []);
-const findItem = (roadmap, itemId) => allItems(roadmap).find((x) => x.id === itemId) || null;
-const findStage = (roadmap, stageId) => (roadmap.stages || []).find((s) => s.id === stageId) || null;
+/** @param {Roadmap} roadmap */
+const allItems = (roadmap) => roadmap.stages.flatMap((s) => s.items);
 /**
- * Index of the stage in progress: the first enabled one with an item not done or skipped (-1: none
- * left). A disabled stage (#284: `disabled: true`, the owner's switch on the Roadmap screen) is
- * skipped by the automation: it stays in the list and nothing of it starts while the roadmap runs.
+ * @param {Roadmap} roadmap
+ * @param {string} itemId
  */
-const currentStage = (roadmap) => (roadmap.stages || []).findIndex((s) => !s.disabled && (s.items || []).some((x) => !FINISHED.has(x.status)));
+const findItem = (roadmap, itemId) => allItems(roadmap).find((x) => x.id === itemId) || null;
+/**
+ * @param {Roadmap} roadmap
+ * @param {string} stageId
+ */
+const findStage = (roadmap, stageId) => roadmap.stages.find((s) => s.id === stageId) || null;
 
 // One issue of an item, from a number, an issue of the synced backlog or an item's issue.
 function issueOf(ref, known) {
@@ -177,7 +243,7 @@ function refreshCopies(dir, projectId, issues) {
   if (!fs.existsSync(roadmapFile(dir, projectId))) return false;
   const known = new Map((issues || []).map((i) => [i.number, i]));
   const refresh = (x) => {
-    if (FINISHED.has(x.status) || x.runId) return x;
+    if (isFinished(x) || x.runId) return x;
     const list = itemIssues(x).map((i) => withSyncedText(i, known.get(i.number)));
     return { ...x, ...list[0], issues: list };
   };
@@ -213,12 +279,24 @@ function cleanItem(raw, known, previous) {
   const then = normalizeThen(raw.then);
   // the Product Owner's Cost choices (#205), shown on the card
   const cost = raw.cost && typeof raw.cost === 'object' ? raw.cost : old?.cost || null;
+  // #262: the provider / model / effort per agent chosen for the item's run (its Edit's Agents)
+  const agentOverrides = raw.agentOverrides && typeof raw.agentOverrides === 'object' && Object.keys(raw.agentOverrides).length ? raw.agentOverrides : null;
   return {
     id: old ? old.id : newId('item'), workflow, workflowName: raw.workflowName || old?.workflowName || workflow,
     inputs: raw.inputs && typeof raw.inputs === 'object' ? raw.inputs : {}, mock: !!raw.mock,
     ...(reason ? { reason } : {}), ...(modeReason ? { modeReason } : {}), ...(origin ? { origin } : {}), ...(then ? { then } : {}), ...(cost ? { cost } : {}),
+    ...(agentOverrides ? { agentOverrides } : {}),
     ...issues[0], issues,
+    ...runState(state),
+  };
+}
+
+// The run-related fields an edited item keeps from the stored one (cleanItem)
+function runState(state) {
+  return {
     status: ITEM_STATES.includes(state.status) ? state.status : 'planned', runId: state.runId || null, runs: state.runs || [], error: state.error || null,
+    // #395: where the roadmap moved on past the item's gate
+    ...(state.parked ? { parked: state.parked } : {}),
   };
 }
 
@@ -227,7 +305,7 @@ function assertUnique(stages) {
   const seen = new Map();
   for (const [n, stage] of stages.entries()) {
     for (const item of stage.items) {
-      if (FINISHED.has(item.status) || testsLater(item)) continue;
+      if (isFinished(item) || testsLater(item)) continue;
       for (const i of itemIssues(item)) {
         if (seen.has(i.number)) throw new Error(`Issue #${i.number} is in two roadmap items (stages ${seen.get(i.number)} and ${n + 1}): keep it in one.`);
         seen.set(i.number, n + 1);
@@ -252,6 +330,8 @@ const DISABLE_BUSY = 'An item of this stage is running: wait for it, or stop its
  * Validated stages from the UI or a proposal: [{ id?, name?, note?, release?: { name }, items: [...] }].
  * Empty stages are dropped. `known`: the synced backlog's issues (titles, URLs, bodies); `previous`:
  * the roadmap edited; `alive(runId)`: as for `runIsAlive` (the file stores a running item as planned).
+ * @param {any} stages
+ * @param {{ issues?: any[] | null, previous?: Roadmap | null, alive?: Alive }} [options]
  */
 function cleanStages(stages, { issues = [], previous = null, alive = null } = {}) {
   const known = new Map((issues || []).map((i) => [i.number, i]));
@@ -278,7 +358,13 @@ function cleanStages(stages, { issues = [], previous = null, alive = null } = {}
   return out;
 }
 
-/** Replaces the stages (reorder, move an issue, add/remove items, edit inputs). The state is kept. */
+/**
+ * Replaces the stages (reorder, move an issue, add/remove items, edit inputs). The state is kept.
+ * @param {string} dir
+ * @param {string} projectId
+ * @param {any} stages
+ * @param {{ issues?: any[] | null, alive?: Alive }} [options]
+ */
 function saveStages(dir, projectId, stages, { issues, alive = null } = {}) {
   return updateRoadmap(dir, projectId, (r) => {
     const next = { ...r, stages: cleanStages(stages, { issues, previous: r, alive }) };
@@ -309,7 +395,7 @@ function restoreStages(dir, projectId, change, { alive = null } = {}) {
 
 // The issue numbers of the items not finished yet.
 function plannedNumbers(roadmap) {
-  return new Set(allItems(roadmap).filter((x) => !FINISHED.has(x.status) && !testsLater(x)).flatMap((x) => itemIssues(x).map((i) => i.number)));
+  return new Set(allItems(roadmap).filter((x) => !isFinished(x) && !testsLater(x)).flatMap((x) => itemIssues(x).map((i) => i.number)));
 }
 
 /**
@@ -318,7 +404,10 @@ function plannedNumbers(roadmap) {
  * roadmap already plans (listed in `dropped`). It never starts by itself: a running roadmap is paused
  * so the owner reviews the new stages and presses Start. `keepRunning` (a live roadmap's refill, #164):
  * the state is kept, so a running roadmap goes on with the new stages.
+ * @param {string} dir
+ * @param {string} projectId
  * @param {{ stages: object[], note?: string } | object[]} proposal
+ * @param {{ replace?: boolean, issues?: any[] | null, alive?: Alive, keepRunning?: boolean }} [options]
  */
 function propose(dir, projectId, proposal, { replace = false, issues = [], alive = null, keepRunning = false } = {}) {
   // #238: archived issues are left out of a proposal; the rest of it is kept
@@ -364,7 +453,7 @@ function dropIssues(dir, projectId, numbers, { alive = null } = {}) {
     stages: r.stages.map((s) => ({
       ...s,
       items: s.items.flatMap((x) => {
-        if (FINISHED.has(x.status) || runIsAlive(x, alive)) return [x];
+        if (isFinished(x) || runIsAlive(x, alive)) return [x];
         const left = itemIssues(x).filter((i) => !out.has(i.number));
         if (left.length === itemIssues(x).length) return [x];
         const { issues: _old, ...rest } = x;
@@ -387,13 +476,19 @@ function fromQueue(queueItems, name = 'From the queue') {
 // pause (nothing new starts, runs in progress go on), stop (back to a plan). `stage` (a stage id, with
 // running): run only that stage (#141); a start without it runs the whole roadmap, a pause keeps the scope.
 // Stop also turns a live roadmap off (#164): a plan never refills itself.
+/**
+ * @param {string} dir
+ * @param {string} projectId
+ * @param {string} state
+ * @param {{ simulated?: boolean, stage?: string | null }} [options]
+ */
 function setState(dir, projectId, state, { simulated, stage = null } = {}) {
   if (!STATES.includes(state)) throw new Error(`Unknown roadmap state: ${state}`);
   return updateRoadmap(dir, projectId, (r) => {
     if (state === 'running' && !r.stages.length) throw new Error('The roadmap has no stage: add items first.');
     let scope = state === 'paused' ? r.scope || null : null;
     const s = state === 'running' && stage ? r.stages.find((x) => x.id === stage) : null;
-    const over = !s || !s.items.some((x) => !FINISHED.has(x.status));
+    const over = !s || !s.items.some((x) => !isFinished(x));
     // #237: a Resume of a scope whose stage is over (or gone) drops it and runs the whole roadmap
     if (state === 'running' && stage && !(over && r.scope?.stage === stage)) {
       if (!s) throw new Error('This stage is no longer in the roadmap.');
@@ -402,7 +497,7 @@ function setState(dir, projectId, state, { simulated, stage = null } = {}) {
       scope = { stage: s.id };
     }
     return {
-      ...r, state, scope, error: null, pausedBy: null, budget: null, ...(r.releaseHold ? { releaseHold: null } : {}), ...(simulated !== undefined ? { simulated: !!simulated } : {}), ...(state === 'planned' && r.live ? { live: false } : {}),
+      ...r, state, scope, error: null, pausedBy: null, budget: null, ...(r.pausedStage ? { pausedStage: null, pausedAt: null } : {}), ...(r.releaseHold ? { releaseHold: null } : {}), ...(simulated !== undefined ? { simulated: !!simulated } : {}), ...(state === 'planned' && r.live ? { live: false } : {}),
     };
   });
 }
@@ -421,11 +516,15 @@ function setLive(dir, projectId, on, { by = 'owner', now = new Date() } = {}) {
 // On the item that paused the roadmap, the roadmap goes on (the owner decided what to do with it).
 // `alive(runId)`: whether a process (this one or another app) still runs it (#112): a retry then
 // would start the same work twice, so it is refused (and a skip: stop the run first).
-function itemAction(dir, projectId, itemId, action, { alive = null } = {}) {
-  if (!['retry', 'skip'].includes(action)) throw new Error(`Unknown roadmap item action: ${action}`);
+// park (#395, "Move on"): the item's run waits at a human gate (`runOf(runId).waiting`, as advance's
+// env, with the gate's name in `gate`): the item is parked (finished for its stage) and the run is
+// left as it is, still waiting at the same gate for the owner.
+function itemAction(dir, projectId, itemId, action, { alive = null, runOf = null, now = new Date() } = {}) {
+  if (!['park', 'retry', 'skip'].includes(action)) throw new Error(`Unknown roadmap item action: ${action}`);
   return updateRoadmap(dir, projectId, (r) => {
     const item = findItem(r, itemId);
     if (!item) throw new Error('This roadmap item no longer exists.');
+    if (action === 'park') return parkItems(r, new Set([itemId]), gateOf(item, runOf), now);
     if (runIsAlive(item, alive)) {
       throw new Error(action === 'retry' && item.runId ? `Run ${item.runId} is still running.` : 'Its run is in progress: stop the run first.');
     }
@@ -433,8 +532,56 @@ function itemAction(dir, projectId, itemId, action, { alive = null } = {}) {
     const unblocked = r.pausedBy === itemId;
     return {
       ...r, ...(unblocked ? { pausedBy: null, error: null, state: r.state === 'paused' ? 'running' : r.state } : {}),
-      stages: r.stages.map((s) => ({ ...s, items: s.items.map((x) => (x.id === itemId ? { ...x, status, runId: action === 'retry' ? null : x.runId, error: action === 'skip' ? 'Skipped by the owner.' : null } : x)) })),
+      // a retried item runs again from its stage: it is no longer parked (#395)
+      stages: r.stages.map((s) => ({ ...s, items: s.items.map((x) => (x.id === itemId ? { ...(action === 'retry' ? unparked(x) : x), status, runId: action === 'retry' ? null : x.runId, error: action === 'skip' ? 'Skipped by the owner.' : null } : x)) })),
     };
+  });
+}
+
+const unparked = ({ parked: _p, ...x }) => x;
+
+// #395: the gate an item's run waits at ({ gate }: its name, or null), or an error saying why it cannot move on
+function gateOf(item, runOf) {
+  if (item.status === 'parked') throw new Error('This item is already parked: its run waits at its gate for you.');
+  const run = !isFinished(item) && item.runId && runOf ? runOf(item.runId) : null;
+  if (!run?.waiting) throw new Error('Only an item whose run waits at a human gate can move on: this one is not at a gate.');
+  return { gate: run.gate || null };
+}
+
+// #395: the items `ids` parked (their gates named in `gates`: id → { gate }, or one { gate } for a
+// single item) and the items `skip` skipped; a roadmap paused by one of them goes on.
+function parkItems(r, ids, gates, now, skip = new Set()) {
+  const unblocked = ids.has(r.pausedBy) || skip.has(r.pausedBy);
+  const gateFor = (id) => (gates instanceof Map ? gates.get(id) : gates)?.gate || null;
+  return {
+    ...r, ...(unblocked ? { pausedBy: null, error: null, state: r.state === 'paused' ? 'running' : r.state } : {}),
+    stages: r.stages.map((s) => ({
+      ...s,
+      items: s.items.map((x) => (ids.has(x.id) ? { ...x, status: 'parked', error: null, parked: { at: now.toISOString(), gate: gateFor(x.id) } }
+        : skip.has(x.id) ? { ...x, status: 'skipped', error: 'Skipped: the owner moved on from the stage.' } : x)),
+    })),
+  };
+}
+
+/**
+ * #395: a stage's "Move on from this stage": its items whose run waits at a human gate are parked, its
+ * planned items not started are skipped, so the next stage starts. Refused (nothing written) while an
+ * item of the stage runs an agent turn or a command: the reason points to "Pause after current step".
+ * `runOf` as advance's env (`waiting` at a gate, `gate` its name). Nothing answers, stops or closes a gate.
+ */
+function parkStage(dir, projectId, stageId, { runOf, now = new Date() }) {
+  return updateRoadmap(dir, projectId, (r) => {
+    const run = (x) => (x.runId && !isFinished(x) ? runOf(x.runId) : null);
+    // the items as the screen sees them: an interrupted run still at its gate is `run.atGate`
+    const view = withStatus(r, runOf);
+    const seen = { ...view, stages: view.stages.map((s) => ({ ...s, items: s.items.map((x) => ({ ...x, run: { atGate: !!run(findItem(r, x.id))?.waiting } })) })) };
+    const stage = seen.stages.find((s) => s.id === stageId);
+    if (!stage) throw new Error('This stage is no longer in the roadmap.');
+    const may = allowedActions(seen, stage).parkStage;
+    if (!may.allowed) throw new Error(may.reason);
+    const gates = new Map(stage.items.filter(atGate).map((x) => [x.id, { gate: run(findItem(r, x.id))?.gate || null }]));
+    const skip = new Set(stage.items.filter((x) => x.status === 'planned' && !x.runId).map((x) => x.id));
+    return parkItems(r, new Set(gates.keys()), gates, now, skip);
   });
 }
 
@@ -452,7 +599,8 @@ function adoptResumed(dir, projectId, oldRunId, newRunId) {
   if (!item) return null;
   return updateRoadmap(dir, projectId, (cur) => ({
     ...cur, ...(cur.pausedBy === item.id ? { state: 'running', pausedBy: null, error: null } : {}),
-    stages: cur.stages.map((s) => ({ ...s, items: s.items.map((x) => (x.id === item.id ? { ...x, status: 'planned', runId: newRunId, runs: [...(x.runs || []), newRunId], error: null } : x)) })),
+    // a parked item (#395) stays parked: its resumed run waits at its gate again, the roadmap moved on
+    stages: cur.stages.map((s) => ({ ...s, items: s.items.map((x) => (x.id === item.id ? { ...x, status: x.status === 'parked' ? 'parked' : 'planned', runId: newRunId, runs: [...(x.runs || []), newRunId], error: null } : x)) })),
   }));
 }
 
@@ -467,14 +615,6 @@ function mergedPullRequest(runDir) {
       return ev.exit_code === 0 && !ev.skipped && /\b(gh\s+pr|glab\s+mr)\s+merge\b/.test(ev.command || '');
     } catch { return false; }
   });
-}
-
-// The first cut line (#260) the roadmap reached and whose release has not shipped: a stage with a
-// `release` before stage `at` (every stage when `at` < 0: the roadmap is over), all finished by then.
-function pendingRelease(r, at) {
-  const reached = at < 0 ? r.stages : r.stages.slice(0, at);
-  // a disabled stage (#284) is skipped, its cut line with it
-  return reached.find((s) => !s.disabled && s.release && s.release.status !== 'shipped') || null;
 }
 
 /** Records what the release run did on a stage's cut line (#260): `patch` = { status, runId, ... }; null when the line is gone. */
@@ -512,26 +652,76 @@ function holdRelease(dir, projectId, stageId, status, message) {
   }));
 }
 
+/** The roadmap paused with `message`, no item to blame (pure; a refill that failed, src/live-roadmap.js). */
+const pauseRoadmap = (r, message) => ({ ...r, state: 'paused', pausedBy: null, error: message });
+
+/**
+ * #368: the stage's "Pause after current step" (#391's name): the roadmap pauses at that stage (`pausedStage`,
+ * `pausedAt`), no item to blame and no failure named; the service pauses the stage's runs after
+ * their current turn. Start / Resume (setState) clears it.
+ */
+function pauseStage(dir, projectId, stageId, { now = new Date() } = {}) {
+  return updateRoadmap(dir, projectId, (r) => {
+    const at = r.stages.findIndex((s) => s.id === stageId);
+    if (at < 0) throw new Error('This stage is no longer in the roadmap.');
+    const message = `${stageName(r, at)} paused after the current step: Resume continues its runs where they stopped, then starts the next items.`;
+    return { ...pauseRoadmap(r, message), pausedStage: stageId, pausedAt: now.toISOString() };
+  });
+}
+
+/**
+ * #391: the roadmap bar's "Pause after this stage": a running roadmap keeps running its current stage
+ * (every item still starts) and pauses with "Stage N done" when it is over, as #141's scope does
+ * (`scope: { stage, pauseAfter: true }`, so the screen tells it from "Run this stage"). A stage run on
+ * its own already stops after it; a roadmap held by a cut line's release, or with no stage left,
+ * pauses now. `cancelPause` takes it back: the whole roadmap runs again.
+ */
+function pauseAfterStage(dir, projectId) {
+  return updateRoadmap(dir, projectId, (r) => {
+    if (r.state !== 'running') throw new Error('The roadmap is not running.');
+    if (r.scope) return null;
+    const at = currentStage(r);
+    if (at < 0 || pendingRelease(r, at)) return pauseRoadmap(r, null);
+    return { ...r, scope: { stage: r.stages[at].id, pauseAfter: true } };
+  });
+}
+function cancelPause(dir, projectId) {
+  return updateRoadmap(dir, projectId, (r) => (r.scope?.pauseAfter ? { ...r, scope: null } : null));
+}
+
+/** #368: the pause line of the stage a roadmap paused at ({ state: 'paused', at, runs }: its paused items), else null (pure). */
+function stagePauseLine(r, stage) {
+  if (r.state !== 'paused' || r.pausedStage !== stage.id) return null;
+  return { state: 'paused', at: r.pausedAt || null, runs: stage.items.filter((x) => x.status === 'paused').length };
+}
+/** The roadmap ended: done, the scope and the pause cleared (pure). */
+const finishRoadmap = (r) => ({ ...r, state: 'done', error: null, pausedBy: null, scope: null });
+
 const refs = (item) => itemIssues(item).map((i) => `#${i.number}`).join(', ');
 const stageName = (r, at) => r.stages[at].name || `Stage ${at + 1}`;
 
 // One stage's step: its items whose issues are all closed are skipped, a failure pauses the roadmap,
 // else the items to start; null when every item is finished.
-function stageStep(r, at, { closed, canStart }) {
+function stageStep(r, at, { closed, canStart, now }) {
   const stage = r.stages[at];
   for (const item of stage.items) {
     if (item.status === 'planned' && !testsLater(item) && itemIssues(item).every((i) => closed(i.number, item))) {
       Object.assign(item, { status: 'skipped', error: 'Every issue is closed.' });
     }
   }
-  const failed = stage.items.find((x) => x.status === 'failed');
+  // a parked item that failed later (#395) never pauses the roadmap: it counts as finished
+  const failed = stage.items.find((x) => x.status === 'failed' && !isFinished(x));
   if (failed) {
     return {
       roadmap: { ...r, state: 'paused', pausedBy: failed.id, error: `${stageName(r, at)}: ${refs(failed)} failed. Resume its run, retry or skip the item, or stop the roadmap. ${failed.error || ''}`.trim() },
       start: [],
     };
   }
-  if (stage.items.every((x) => FINISHED.has(x.status))) return null;
+  if (stage.items.every((x) => isFinished(x))) return null;
+  // #368: what is left of the stage is runs the owner paused: the roadmap waits at it, paused, for Resume
+  if (!stage.items.some((x) => ['planned', 'running'].includes(x.status))) {
+    return { roadmap: { ...pauseRoadmap(r, `${stageName(r, at)}: its runs are paused. Resume continues them where they stopped.`), pausedStage: stage.id, pausedAt: r.pausedAt || now().toISOString() }, start: [] };
+  }
   return { roadmap: r, start: stage.items.filter((x) => x.status === 'planned' && canStart(x)) };
 }
 
@@ -540,30 +730,35 @@ function stageStep(r, at, { closed, canStart }) {
  * a failure, moves to the next stage when every item is done or skipped, and lists the items to start.
  * A roadmap running one stage (`scope`, #141) only works on that stage, and pauses when it is over.
  * @param {object} roadmap
- * @param {{ runOf: (runId) => ({ status, waiting?, merged? } | null), closed?: (number, item) => boolean, canStart?: (item) => boolean }} env
+ * @param {{ runOf: (runId) => ({ status, waiting?, merged? } | null), closed?: (number, item) => boolean, canStart?: (item) => boolean, now?: () => Date }} env
+ * (now: the clock of a stage pause's `pausedAt`, #368)
  * A live roadmap (#164) whose last stage ends stays running and asks for a refill (`refill: true`):
  * the caller adds the next stages, or ends it (src/live-roadmap.js applyRefill).
  * A cut line (#260) the roadmap reached and whose release has not shipped holds everything after it:
  * nothing starts and the caller is asked for the release run (`release: { stage, name }`).
  * @returns {{ roadmap: object, start: object[], refill?: true, release?: { stage: string, name: string } }} the items to start (still `planned`: the caller marks them)
  */
-function advance(roadmap, { runOf, closed = () => false, canStart = () => true }) {
+function advance(roadmap, { runOf, closed = () => false, canStart = () => true, now = () => new Date() }) {
   // Statuses follow the runs whatever the roadmap state (#112): `runOf` reports a run another live
   // process owns as running, so an item is never failed while its run is alive; and a roadmap paused
   // by an item whose run is alive again (resumed, or judged by another app process) goes on.
   let r = withStatus(roadmap, runOf);
   const blocker = r.pausedBy && findItem(r, r.pausedBy);
   if (blocker?.status === 'running') r = { ...r, pausedBy: null, error: null, state: r.state === 'paused' ? 'running' : r.state };
-  const finished = { ...r, state: 'done', error: null, pausedBy: null, scope: null };
+  const finished = finishRoadmap(r);
   const scopeOver = (at) => {
-    if (currentStage(r) < 0) return { roadmap: finished, start: [] };
-    return { roadmap: { ...r, state: 'paused', pausedBy: null, scope: null, error: `${stageName(r, at)} done. The other stages are still planned: Start runs the roadmap from its first unfinished stage.` }, start: [] };
+    // #391: a pause after the last stage still pauses when a refill (#164) or a release (#260) would come next
+    const more = r.scope?.pauseAfter && (r.live || pendingRelease(r, -1));
+    if (currentStage(r) < 0 && !more) return { roadmap: finished, start: [] };
+    // #391: a pause after the stage names it by its number, as the bar's "Pausing after stage N" did
+    const name = r.scope?.pauseAfter ? `Stage ${at + 1} done${r.stages[at].name ? ` (${r.stages[at].name})` : ''}` : `${stageName(r, at)} done`;
+    return { roadmap: { ...r, state: 'paused', pausedBy: null, scope: null, error: `${name}. The other stages are still planned: Start runs the roadmap from its first unfinished stage.` }, start: [] };
   };
   // #237: a scope whose stage ended while the roadmap was paused goes as it does while running
   if (r.state === 'paused' && r.scope && !r.pausedBy) {
     const at = r.stages.findIndex((s) => s.id === r.scope.stage);
     if (at < 0) return { roadmap: { ...r, scope: null }, start: [] };
-    if (r.stages[at].items.every((x) => FINISHED.has(x.status))) return scopeOver(at);
+    if (r.stages[at].items.every((x) => isFinished(x))) return scopeOver(at);
   }
   // only starting new items (and pausing on a failure) waits for a running roadmap
   if (r.state !== 'running') return { roadmap: r, start: [] };
@@ -572,7 +767,7 @@ function advance(roadmap, { runOf, closed = () => false, canStart = () => true }
     if (at < 0) return { roadmap: { ...r, state: 'paused', pausedBy: null, scope: null, error: 'The stage run on its own is no longer in the roadmap: press Start to run the roadmap.' }, start: [] };
     // #284: disabled meanwhile (a file edited outside the app): nothing of it starts
     if (r.stages[at].disabled) return { roadmap: { ...r, state: 'paused', pausedBy: null, scope: null, error: 'The stage run on its own is disabled: enable it, or press Start to run the roadmap.' }, start: [] };
-    const step = stageStep(r, at, { closed, canStart });
+    const step = stageStep(r, at, { closed, canStart, now });
     if (step) return step;
     return scopeOver(at);
   }
@@ -581,7 +776,7 @@ function advance(roadmap, { runOf, closed = () => false, canStart = () => true }
     const line = pendingRelease(r, at);
     if (line) return { roadmap: r, start: [], release: { stage: line.id, name: line.release.name } };
     if (at < 0) return r.live ? { roadmap: r, start: [], refill: true } : { roadmap: finished, start: [] };
-    const step = stageStep(r, at, { closed, canStart });
+    const step = stageStep(r, at, { closed, canStart, now });
     if (step) return step;
   }
 }
@@ -602,7 +797,7 @@ function markStarted(dir, projectId, itemId, { runId = null, error = null }) {
 // #206: the budget cap pauses a running roadmap before its next start (`budget`: { period, spentUsd,
 // limitUsd, nextUsd, stageUsd }, the message in `error`); the runs in progress go on.
 function budgetPause(dir, projectId, budget, message) {
-  return updateRoadmap(dir, projectId, (r) => (r.state !== 'running' ? null : { ...r, state: 'paused', pausedBy: null, error: message, budget }));
+  return updateRoadmap(dir, projectId, (r) => (r.state !== 'running' ? null : { ...pauseRoadmap(r, message), budget }));
 }
 
 // "Resume anyway" (#206): the roadmap runs again and ignores the cap for the period `key` (src/budget.js waiverKey).
@@ -633,12 +828,14 @@ module.exports = {
   adoptResumed,
   advance,
   budgetPause,
+  cancelPause,
   cleanStages,
   clearRoadmap,
   currentStage,
   dropIssues,
   findItem,
   findStage,
+  finishRoadmap,
   fromQueue,
   holdRelease,
   issueStages,
@@ -646,9 +843,14 @@ module.exports = {
   markStarted,
   mergedPullRequest,
   normalizeItem,
+  parkStage,
+  pauseAfterStage,
+  pauseRoadmap,
+  pauseStage,
   persisted,
   propose,
   readRoadmap,
+  readRoadmapAt,
   refreshCopies,
   restoreStages,
   roadmapProjects,
@@ -657,6 +859,7 @@ module.exports = {
   setRelease,
   setState,
   skipClosed,
+  stagePauseLine,
   takeRelease,
   testsLater,
   updateRoadmap,

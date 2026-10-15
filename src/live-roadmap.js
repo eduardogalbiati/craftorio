@@ -16,6 +16,11 @@
 // backlog.js (the banner).
 
 const { itemIssues } = require('./backlog');
+const roadmaps = require('./roadmap');
+const {
+  itemRuns,
+  unfinishedItems,
+} = require('./shared/roadmap-model');
 
 const DEFAULTS = { complexityCap: 2, maxStages: 3, dailyBudgetUsd: 50, refreshFirst: true };
 const DAY_MS = 24 * 3600e3;
@@ -121,7 +126,7 @@ function refillStages(answer, { allowed, maxStages = DEFAULTS.maxStages, maxGrou
 function spentToday({ roadmap, runCost, now = new Date() }) {
   const since = Math.max(now.getTime() - DAY_MS, Date.parse(roadmap?.liveSince) || 0);
   const refills = (roadmap?.liveRefills || []).filter((x) => Date.parse(x.at) >= since).reduce((a, x) => a + (Number(x.costUsd) || 0), 0);
-  const ids = new Set((roadmap?.stages || []).flatMap((s) => (s.items || []).flatMap((x) => [...(x.runs || []), ...(x.runId ? [x.runId] : [])])));
+  const ids = new Set((roadmap?.stages || []).flatMap((s) => (s.items || []).flatMap(itemRuns)));
   let used = 0;
   for (const id of ids) {
     const r = runCost(id);
@@ -148,10 +153,10 @@ function applyRefill(roadmap, { status, at = new Date().toISOString(), added = 0
   const liveRefills = [...(roadmap.liveRefills || []), ...(costUsd ? [{ at, costUsd }] : [])].filter((x) => Date.parse(x.at) >= cutoff);
   const r = { ...roadmap, liveRefill: { status, at, added, costUsd, message }, liveRefills };
   // a disabled stage (#284) is not work left: a live roadmap with only such stages left ends like an empty one
-  const left = (r.stages || []).some((s) => !s.disabled && (s.items || []).some((x) => !['done', 'skipped'].includes(x.status)));
+  const left = unfinishedItems(r).length > 0;
   if (status === 'refilling' || status === 'added' || left || r.state !== 'running') return r;
-  if (status === 'failed') return { ...r, state: 'paused', pausedBy: null, error: message };
-  return { ...r, state: 'done', error: null, pausedBy: null, scope: null };
+  // #349: src/roadmap.js writes the state
+  return status === 'failed' ? roadmaps.pauseRoadmap(r, message) : roadmaps.finishRoadmap(r);
 }
 
 module.exports = {

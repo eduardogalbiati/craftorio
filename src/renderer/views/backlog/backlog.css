@@ -307,12 +307,31 @@ input[type=text].rm-name:hover { border-color: var(--border); }
 input[type=text].rm-name:focus { border-color: var(--accent); background: var(--panel-2); }
 input[type=text].rm-note { max-width: 520px; }
 .rm-note-text { margin: 0; overflow-wrap: anywhere; }
+/* #368: a stage paused (or pausing) after the current turn: the yellow of a paused pill */
+.rm-stage-pause { margin: 0; padding: 4px 8px; border-radius: 6px; color: var(--yellow); background: rgba(250,204,21,.08); border: 1px solid rgba(250,204,21,.3); overflow-wrap: anywhere; }
 /* #260: a cut line after a stage ("Release here"): a dashed rule on both sides of its label */
 .rm-cut { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; color: var(--accent); }
 .rm-cut::before, .rm-cut::after { content: ""; flex: 1 1 24px; border-top: 2px dashed currentColor; opacity: .6; }
 .rm-cut-label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; }
 .rm-cut-name { color: var(--text); min-width: 0; overflow-wrap: anywhere; }
 .rm-cut.shipped { color: var(--muted); }
+/* #291: a release, stage-like but its own look (accent border, a diamond, no number), then its dashed version line */
+.rm-release { border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--border)); border-left: 4px solid var(--accent); border-radius: 10px; padding: 10px 12px; background: color-mix(in srgb, var(--accent) 6%, var(--panel)); min-width: 0; }
+.rm-release:focus-visible, .rm-release-line:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.rm-release.is-waiting { border-left-color: var(--amber, var(--accent)); }
+.rm-release.is-failed { border-left-color: var(--red); }
+.rm-release-card { display: grid; gap: 6px; min-width: 0; }
+.rm-release-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.rm-release-icon { color: var(--accent); }
+.rm-release-name { min-width: 0; overflow-wrap: anywhere; }
+.rm-release-stations { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; font-size: 12px; }
+.rm-release-station { border: 1px solid var(--border); border-radius: 999px; padding: 2px 8px; color: var(--muted); }
+.rm-release-station.visited { color: var(--text); }
+.rm-release-station.current { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.rm-release-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; font-size: 12px; color: var(--accent); padding: 2px 0; border-bottom: 2px dashed color-mix(in srgb, var(--accent) 60%, transparent); }
+.rm-release-line.is-shipped { color: var(--muted); }
+.rm-release-line-text { min-width: 0; overflow-wrap: anywhere; }
+.rm-release-pick { display: inline-flex; align-items: center; gap: 6px; }
 .badge.bl-released { color: var(--green); background: color-mix(in srgb, var(--green) 12%, var(--panel)); border-color: color-mix(in srgb, var(--green) 45%, transparent); }
 .rm-items { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
 .rm-item { border: 1px solid var(--border); border-radius: 8px; padding: 12px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; min-width: 0; }
@@ -347,6 +366,8 @@ input[type=text].rm-note { max-width: 520px; }
 .rm-title { color: var(--text); font-weight: 600; text-decoration: none; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 a.rm-title:hover { text-decoration: underline; }
 .rm-issues-foot { font-size: 11px; }
+/* #375: "Show on the map" on an item card and an issue card, a small action under the titles */
+.rm-map, .bl-card-map { justify-self: start; font-size: 11px; }
 /* cost and time: a line each (label, value, "of ≈ estimate", the verdict at the right), a 3px bar under it */
 .rm-meters { background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; display: grid; gap: 8px; min-width: 0; }
 .rm-meter { display: grid; gap: 4px; min-width: 0; }
@@ -409,6 +430,9 @@ a.rm-title:hover { text-decoration: underline; }
 .rm-meta > .rm-input { max-width: min(100%, 320px); }
 /* the other inputs read as "Label: value" pairs, not as one more row of badges */
 .rm-meta > .wi-pill { border-color: transparent; background: none; padding-left: 0; color: var(--text); font-family: inherit; font-size: 12px; }
+/* #384: the item's earlier runs (a resumed or retried run), each opening its run */
+.rm-run-history { display: flex; align-items: center; gap: 4px 8px; flex-wrap: wrap; min-width: 0; }
+.rm-run-history-entry { display: inline-flex; align-items: center; gap: 4px; }
 /* the pipeline: one station per stage of the workflow, always visible */
 .rm-pipe { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; min-width: 0; border-left: 1px solid var(--border); padding-left: 16px; }
 .rm-pipe-none { align-self: stretch; }
@@ -514,6 +538,11 @@ select.po-wf { width: auto; max-width: 220px; padding: 3px 6px; font-size: 12px;
 .rm-form .rm-add .row input { max-width: 180px; }
 .rm-form > .link-btn { justify-self: start; }
 .rm-form-actions { display: flex; align-items: center; gap: 8px; }
+/* #287: a save refused because its item is gone: the reason, the values typed (read-only), Dismiss */
+.rm-conflict { border: 1px solid var(--yellow); border-radius: 8px; background: var(--panel-2); padding: 10px 12px; margin: 8px 0; display: grid; gap: 6px; }
+.rm-conflict p { margin: 0; }
+.rm-conflict fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.rm-conflict-actions { display: flex; justify-content: flex-end; }
 .rm-import textarea { width: 100%; }
 /* Live roadmap (#164): a burnt, muted red (not an alarm red); its tokens in one place for the themes */
 .bl-live, .rm-live { --live-bg: rgba(176, 74, 52, .13); --live-border: rgba(190, 92, 70, .5); --live-text: #e7b3a5; --live-dot: #e5484d; }
@@ -541,6 +570,8 @@ select.po-wf { width: auto; max-width: 220px; padding: 3px 6px; font-size: 12px;
 .bl-menu [role="menuitem"]:hover:not(:disabled), .bl-menu [role="menuitem"]:focus-visible { background: var(--panel-2); }
 .bl-menu [role="menuitem"]:disabled { color: var(--muted); cursor: not-allowed; }
 .bl-menu-why { margin: 2px 8px 4px; white-space: normal; }
+/* #391: the roadmap bar's Pause menu: each entry's hint on the line under its label */
+.rm-pause-menu .bl-menu-why { display: block; margin: 2px 0 0; }
 .bl-state.archived { background: var(--muted); }
 /* the menu sits at the right end of a list row and in the top right corner of a kanban card */
 .bl-actions { justify-self: end; display: inline-flex; }

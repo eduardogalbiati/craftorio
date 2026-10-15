@@ -8,7 +8,7 @@
 const fs = require('fs');
 const path = require('path');
 const { loadWorkflow } = require('../../engine/workflow');
-const chain = require('../../renderer/chain-model');
+const chain = require('../../shared/chain-model');
 const pipelines = require('../../pipelines');
 const runs = require('../../runs');
 

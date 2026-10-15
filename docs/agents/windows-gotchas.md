@@ -37,7 +37,7 @@ Use `canonicalPath`/`samePath` from `src/engine/worktree.js`.
   é muito pequeno para que esta operação seja concluída` / "The paging file is too small for this
   operation to complete", `spawnSync git UNKNOWN`, exit code 3221225794 (0xC0000142, a DLL that could
   not initialize), and waits that time out. A suite round that fails while the guard recorded an
-  incident reruns by itself (engine.md, "Memory guard").
+  incident reruns by itself (engine/agents-and-steps.md, "Memory guard").
 - A failing `assert` serialises both operands: a fake DOM node or a `vm` sandbox drags the whole
   graph into the message (the #274 cause). Compare primitives (`skills/testing-principles`).
 
@@ -47,7 +47,13 @@ Use `canonicalPath`/`samePath` from `src/engine/worktree.js`.
   `NODE_OPTIONS`/`--inspect`, only loads `app.asar` and refuses a modified one (integrity check);
   DevTools off and `--remote-debugging-port` exits when `app.isPackaged`. So the packaged app can't
   spawn itself as node: anything that must run as a node child ships unpacked (`asar.unpack`) and
-  runs under the system `node` (e.g. the external live terminal).
+  runs under the system `node` (e.g. the external live terminal). The supervisor's MCP server is
+  the exception since #341: the Rust `multiagent-mcp.exe` in `resources/bin/` needs no node.
+- Rust on Windows (#341) builds with the **MSVC** toolchain: `link.exe` comes from the Visual Studio
+  Build Tools ("Desktop development with C++"). `cargo build` failing with "link.exe not found" (or
+  Git Bash's `/usr/bin/link` picked instead) means those tools are missing; the GNU toolchain is not
+  used. A running `multiagent-mcp.exe` (a live Supervisor or Oracle session) locks
+  `native/target/release/`: cargo then fails with "Access is denied" until that session ends.
 - The packaged `.exe` returns immediately to the shell; its stdout doesn't show in Git Bash/PowerShell.
 - Orphan test processes can lock `build/` (EBUSY/ENOTEMPTY): find them by command line before
   rebuilding, and never kill the owner's running app (`electron.exe .`).

@@ -14,19 +14,25 @@
 //     oracle.escalated  { target, recommendation, reason, actionId? }   left for the owner (a gate, a refused action)
 //     oracle.blocked    { actionId, kind, target, reason: permission | content | loop }   an action it could not take alone
 //     oracle.undone     { action_id }                     the owner undid an action
+//     oracle.limits     { multiplier, values, by, at }    the owner set tonight's limits (#337, src/night-limits.js)
+//     oracle.parked     { target, runId, projectId, gate, waitedMs }   #395: it moved the roadmap on past an item
+//                       waiting at a human gate (the skip permission, gateDecision); the gate still waits for the owner
 // Every metric (nightMetrics) is computed from that log and the runs' events.jsonl; nothing is
 // estimated, except "hours saved", which is labelled as an estimate.
 // Self-healing (#278, settings.oracle.selfHealing): the same watch with no end time. Its detectors
 // (detectSelfHealing: memory, cost-gap, environment, repeat) are pure functions over the runs' events;
 // its report is per UTC day (selfHealingDays → nightMetrics, selfHealingMetrics).
+// Step regressions (#335, regressionFindings): over the run list, not the events; report only.
 
 const fs = require('fs');
 const path = require('path');
+const { unfinishedItems } = require('./shared/roadmap-model');
+const { regressionLine, stepRegressions } = require('./step-regressions');
 
 // What the Oracle may do without asking, each with what it does and its undo. Defaults: retry and refresh.
 const PERMISSIONS = [
   { id: 'retry', label: 'Retry a failed roadmap item', does: 'Plans the failed item again: a new run starts from its workflow.', undo: 'Undo puts the roadmap file back; the new run is kept.', default: true },
-  { id: 'skip', label: 'Skip an item', does: 'The item counts as finished and the roadmap goes on to the next one.', undo: 'Undo puts the roadmap file back: the item is planned again.', default: false },
+  { id: 'skip', label: 'Skip an item', does: 'The item counts as finished and the roadmap goes on to the next one. Also Move on past an item whose run waited at a human gate for a while (#395): the gate stays yours.', undo: 'Undo puts the roadmap file back: the item is planned again.', default: false },
   { id: 'regroup', label: 'Regroup or reorder planned items', does: 'Moves planned items between stages or changes their order (validated before it is written).', undo: 'Undo puts the roadmap file back.', default: false },
   { id: 'fresh-start', label: 'Start from scratch over kept work', does: 'Retries an item whose earlier run kept unmerged work (#170), in a new run.', undo: 'Undo puts the roadmap file back; the kept work stays in its branch.', default: false },
   { id: 'refresh', label: 'Refresh issue text and planned-item copies', does: 'Replaces an issue\'s stale description, so planned items read the current text (#161, #168).', undo: 'Undo writes the previous description back.', default: true },
@@ -45,6 +51,8 @@ const NEVER_ALLOWED = [
   { id: 'delete-data', label: 'Delete data' },
   { id: 'paid-calls', label: 'Start paid calls outside the plan' },
   { id: 'push', label: 'Push' },
+  // #368: a run the owner paused waits for the owner
+  { id: 'resume-paused', label: 'Resume a paused run' },
 ];
 
 // The anomalies the watch detects (oracle.detected kind).
@@ -60,13 +68,17 @@ const INCIDENT_KINDS = {
   // #276: the engine's memory guard stopped a run's process or held a suite / run for low memory;
   // the engine already acted, the watch only records it
   memory: 'Process stopped or run held for memory',
+  // #335: a step's recent median cost or minutes above its baseline (src/step-regressions.js); report only
+  regression: 'Step cost or time regressed',
   // #278: the same command failing or stopped REPEAT_TIMES times in one step of a run
   repeat: 'Same command failing repeatedly',
   'roadmap-empty': 'Roadmap empty',
   'roadmap-paused': 'Roadmap paused or in error',
   stalled: 'Stalled run',
 };
-const LOG_TYPES = ['oracle.action', 'oracle.blocked', 'oracle.detected', 'oracle.escalated', 'oracle.undone', 'oracle.watch'];
+const LOG_TYPES = ['oracle.action', 'oracle.blocked', 'oracle.detected', 'oracle.escalated', 'oracle.limits', 'oracle.parked', 'oracle.undone', 'oracle.watch'];
+// #395: a roadmap run waiting at a human gate this long (settings.oracle.parkAfterMinutes) is moved past
+const PARK_AFTER_MINUTES = 15;
 const STALL_LOGS = new Set(['agent_idle', 'loop_blocked', 'stall']);
 // a low-memory hold (memory.hold) longer than this is an incident
 const MEMORY_HOLD_MS = 5 * 60e3;
@@ -95,7 +107,8 @@ const ms = (t) => (t ? Date.parse(t) : NaN);
 function permissionOf(kind, params = {}) {
   const p = params && typeof params === 'object' ? params : {};
   switch (kind) {
-    case 'roadmap.item': return p.action === 'skip' ? 'skip' : p.fresh ? 'fresh-start' : 'retry';
+    // #395: Move on (park) needs the skip permission: the roadmap goes on, the gate stays the owner's
+    case 'roadmap.item': return ['park', 'skip'].includes(p.action) ? 'skip' : p.fresh ? 'fresh-start' : 'retry';
     case 'roadmap.skip': return 'skip';
     case 'roadmap.add': return 'append';
     case 'roadmap.move': return 'regroup';
@@ -109,6 +122,21 @@ function permissionOf(kind, params = {}) {
     case 'issue.file': return 'file-issue';
     default: return null;
   }
+}
+
+/**
+ * #395: what the watch does about a roadmap run waiting at a human gate since `waitingSince`:
+ * 'park' (Move on: the skip permission allowed, the wait reached settings.oracle.parkAfterMinutes,
+ * default 15, and no other run of the roadmap still going), 'escalate' (no skip permission: left to the
+ * owner, as before) or 'wait'. It never answers the gate.
+ */
+function gateDecision({ waitingSince, now = Date.now(), allowed = [], othersRunning = false, settings = {} }) {
+  if (!allowed.includes('skip')) return 'escalate';
+  const minutes = Number(settings?.oracle?.parkAfterMinutes);
+  const after = (Number.isFinite(minutes) && minutes >= 0 ? minutes : PARK_AFTER_MINUTES) * 60e3;
+  const since = ms(waitingSince);
+  if (othersRunning || !Number.isFinite(since) || Number(now) - since < after) return 'wait';
+  return 'park';
 }
 
 /** The owner's checklist: { allowed, updatedAt, defaults } (the defaults until it is saved). */
@@ -172,13 +200,11 @@ function incidentOf(ev) {
   }
 }
 
-// a disabled stage (#284) is skipped by the automation (src/roadmap.js currentStage): its items are not work left
-const unfinished = (r) => (r.stages || []).filter((s) => !s.disabled).flatMap((s) => s.items || []).filter((x) => !['done', 'skipped'].includes(x.status));
-
 /**
  * The roadmap anomalies of the moment: `roadmaps` [{ projectId, roadmap }] (the files), `active`
  * [{ projectId }] the runs in progress. → [{ kind, projectId }]: a paused roadmap (or one with an
  * error), a running roadmap with items left and no run of its project, or nothing left anywhere.
+ * A disabled stage's items (#284) are not work left (src/shared/roadmap-model.js unfinishedItems).
  */
 function roadmapIncidents(roadmaps = [], active = []) {
   const out = [];
@@ -186,9 +212,9 @@ function roadmapIncidents(roadmaps = [], active = []) {
   for (const { projectId, roadmap: r } of roadmaps) {
     if (!r) continue;
     if (r.state === 'paused' || r.error) out.push({ kind: 'roadmap-paused', projectId });
-    else if (r.state === 'running' && unfinished(r).length && !busy.has(projectId)) out.push({ kind: 'dispatch-idle', projectId });
+    else if (r.state === 'running' && unfinishedItems(r).length && !busy.has(projectId)) out.push({ kind: 'dispatch-idle', projectId });
   }
-  const left = roadmaps.some(({ roadmap: r }) => r && ['paused', 'running'].includes(r.state) && unfinished(r).length);
+  const left = roadmaps.some(({ roadmap: r }) => r && ['paused', 'running'].includes(r.state) && unfinishedItems(r).length);
   if (!active.length && !left) out.push({ kind: 'roadmap-empty', projectId: null });
   return out;
 }
@@ -329,8 +355,10 @@ function detectSelfHealing(runs = []) {
         default:
       }
     }
-    // a CLI that reports no cost (cost_usd null: Codex) has no cost to lose: only a recorded 0 counts
+    // a CLI that reports no cost (cost_usd null: Codex) has no cost to lose: only a recorded 0 counts;
+    // a turn the app priced itself (cost_source tokens / unknown, #369) is below the CLI's usage on purpose
     const gaps = mock ? [] : turns.filter((ev) => {
+      if (ev.cost_source) return false;
       const cost = Number(ev.cost_usd) || 0;
       return (ev.cost_usd != null && cost === 0 && tokensOf(ev.usage) > 0) || (usageUsd.get(`${ev.session_id} ${ev.turn}`) || 0) > cost + 1e-9;
     });
@@ -351,6 +379,30 @@ function detectSelfHealing(runs = []) {
     found.set('environment', f);
   }
   return [...byRun.values()].flatMap((run) => [...run.found.values()].sort((a, b) => (a.kind < b.kind ? -1 : 1)).map((f) => ({ ...f, projectId: run.projectId })));
+}
+
+/**
+ * The regression detector (#335), next to detectSelfHealing but over the run list (src/runs.js
+ * listRuns rows, not events): one { kind: 'regression', key, runId (the newest recent run), since,
+ * evidence: { workflow, step, class, baseline, recent, regressed, line } } per regressed step and class
+ * (src/step-regressions.js) whose key is not in `flagged`, so a step is reported once until it
+ * recovers. Report only: a finding carries no action and no proposal.
+ */
+function regressionFindings(runs, { issues = [], prices = {}, thresholds = {}, flagged = [] } = {}) {
+  const seen = new Set(flagged || []);
+  const byId = new Map((runs || []).map((r) => [r.runId, r]));
+  return stepRegressions(runs, { issues, prices, thresholds, flagged })
+    .filter((e) => e.status === 'regressed' && !seen.has(e.key))
+    .map((e) => {
+      const newest = byId.get(e.recent.runIds[0]);
+      return {
+        kind: 'regression',
+        key: e.key,
+        runId: newest?.runId || null,
+        since: newest?.finishedAt || newest?.startedAt || null,
+        evidence: { workflow: e.workflow, step: e.step, class: e.class, baseline: e.baseline, recent: e.recent, regressed: e.regressed, line: regressionLine(e) },
+      };
+    });
 }
 
 /**
@@ -408,7 +460,7 @@ function selfHealingSummary(d) {
 
 /** A run's facts from its events:{ runId, projectId, start, end, status, cost, issues, progress, gates }. */
 function runFacts(runId, events) {
-  const f = { runId, projectId: null, start: null, end: null, status: 'running', cost: 0, issues: 0, progress: [], gates: [], mock: false };
+  const f = { runId, projectId: null, start: null, end: null, status: 'running', cost: 0, issues: 0, progress: [], gates: [], mock: false, label: runId, context: 0, turnsCost: 0, limits: null };
   const gates = new Map();
   for (const e of events) {
     const t = ms(e.ts);
@@ -417,16 +469,34 @@ function runFacts(runId, events) {
       f.start ??= t;
       f.projectId = e.project_id || f.projectId;
       f.issues = Array.isArray(e.issues) ? e.issues.length : f.issues;
+      const n = (Array.isArray(e.issues) ? e.issues[0] : e.issue)?.number;
+      if (n) f.label = `#${n}`;
       f.mock = !!e.mock;
     } else if (e.type === 'workflow.finished') {
       f.end = t;
       f.status = e.status || 'failed';
       f.cost = Number(e.summary?.cost_usd) || 0;
-    } else if (e.type === 'approval.requested') gates.set(e.approval_id, { requested: t, resolved: null, by: null });
+    } else if (e.type === 'session.message_received') {
+      // #337: the context read and the cost so far (the morning summary's runs past a day limit)
+      const u = e.usage || {};
+      f.context += (u.input || 0) + (u.cache_read || 0) + (u.cache_write || 0);
+      f.turnsCost += Number(e.cost_usd) || 0;
+    } else if (e.type === 'limits.expanded') f.limits = { day: e.day || {}, tonight: e.limits || {}, at: t };
+    else if (e.type === 'approval.requested') gates.set(e.approval_id, { requested: t, resolved: null, by: null });
     else if (e.type === 'approval.resolved' && gates.has(e.approval_id) && !e.withdrawn) Object.assign(gates.get(e.approval_id), { resolved: t, by: e.by || null });
   }
   f.gates = [...gates.values()];
   return f;
+}
+
+/**
+ * #337: the runs (runFacts) granted expanded limits during [from, to] (ISO), as src/night-limits.js
+ * pastDayLimits takes them: [{ label, used: { context, cost }, day, tonight }].
+ */
+function expandedRuns(facts, from, to) {
+  const [a, b] = [ms(from), ms(to)];
+  return (facts || []).filter((f) => f.limits && f.limits.at >= a && f.limits.at <= b)
+    .map((f) => ({ label: f.label, used: { context: f.context, cost: f.cost || f.turnsCost }, day: f.limits.day, tonight: f.limits.tonight }));
 }
 
 const quantile = (list, q) => {
@@ -520,7 +590,8 @@ function nightMetrics({ night, log = [], runs = [], usage = [], now = Date.now()
   const ttr = resumed.map((i) => i.resumedAt - i.detectedAt);
 
   // idle hours by cause: W minus the active time, each moment given to its first cause
-  const blocked = incidents.filter((i) => i.kind !== 'roadmap-empty').map((i) => clip([i.since, i.resumedAt ?? w1]));
+  // a step regression is report only (its run already finished): it blocks nothing
+  const blocked = incidents.filter((i) => i.kind !== 'roadmap-empty' && i.kind !== 'regression').map((i) => clip([i.since, i.resumedAt ?? w1]));
   const empty = incidents.filter((i) => i.kind === 'roadmap-empty').map((i) => clip([i.since, i.resumedAt ?? w1]));
   const cuts = [...new Set([w0, w1, ...[...active, ...gateIntervals, ...blocked, ...empty].flat()].filter((t) => t >= w0 && t <= w1))].sort((a, b) => a - b);
   const idle = { noWork: 0, blocked: 0, gate: 0, other: 0 };
@@ -614,8 +685,12 @@ function nightMetrics({ night, log = [], runs = [], usage = [], now = Date.now()
   };
 }
 
-/** The morning summary's lines (the notification and the Dashboard card): what ran, what the watch did, what waits, safety. */
-function morningSummary(m, { proposed = 0 } = {}) {
+/**
+ * The morning summary's lines (the notification and the Dashboard card): what ran, what the watch did,
+ * what waits, safety, and one line per step regression (#335 `regressions`: regressionFindings).
+ * #337 `limits`: src/night-limits.js pastDayLimits, the runs past a day limit and the spending above them.
+ */
+function morningSummary(m, { proposed = 0, regressions = [], limits = null } = {}) {
   const pct = (x) => (x == null ? '—' : `${Math.round(x * 100)}%`);
   const s = m.safety;
   return {
@@ -626,6 +701,11 @@ function morningSummary(m, { proposed = 0 } = {}) {
       ? `Safety alarm: ${s.gatesCrossed} gate(s) crossed, ${s.neverActions} never-allowed action(s).`
       : `Safety: no gate crossed, nothing pushed, closed or deleted; ${s.blockedOutsidePermissions} action(s) outside your permissions blocked, ${s.contentRefused} instruction(s) from content refused.`,
     alarm: s.alarm,
+    regressions: (regressions || []).map((f) => f.evidence?.line || regressionLine(f.evidence || f)),
+    // the runs behind each line (its recent window, newest first): the card's links
+    regressionRuns: (regressions || []).map((f) => [...((f.evidence || f).recent?.runIds || [])]),
+    limits: [...(limits?.lines || [])],
+    overDayUsd: limits?.overDayUsd || 0,
   };
 }
 
@@ -635,6 +715,8 @@ module.exports = {
   covers,
   DEFAULT_PERMISSIONS,
   detectSelfHealing,
+  expandedRuns,
+  gateDecision,
   INCIDENT_KINDS,
   incidentOf,
   LOG_TYPES,
@@ -644,11 +726,13 @@ module.exports = {
   NEVER_ALLOWED,
   nightMetrics,
   nightsOf,
+  PARK_AFTER_MINUTES,
   permissionOf,
   PERMISSIONS,
   PROGRESS_EVENTS,
   readNightLog,
   readPermissions,
+  regressionFindings,
   RESOLVE_WINDOW_MS,
   roadmapIncidents,
   runFacts,

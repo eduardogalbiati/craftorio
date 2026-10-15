@@ -12,12 +12,15 @@
 // gets a branch (run/<run id>), uncommitted changes become a WIP commit naming the run, then the
 // folder goes. "Resume from step" recreates the folder from the branch. cleanupWorktrees (at start
 // and periodically) does the same for runs that ended in an earlier app session.
+// Before each suite and E2E round of a local workflow (#403, syncWithBase), the branch is rebased onto
+// the local base when the base moved, so a fix that landed there meanwhile reaches the run.
 
 const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
 const { unlinkDeps } = require('./deps-cache');
 const { ownerAlive, readOwner } = require('../run-owner');
+const { samePath: platformSamePath } = require('../platform-paths');
 
 const FETCH_TIMEOUT_MS = 60e3;
 const GIT_TIMEOUT_MS = 120e3;
@@ -62,17 +65,12 @@ function canonicalPath(p) {
   }
 }
 
-// Windows file systems are case-insensitive, and so is macOS's default (APFS/HFS+
-// case-insensitive): compare without case there. On a case-sensitive macOS volume two folders
-// that differ only by case would compare equal; run folders never do.
-const CASE_INSENSITIVE = process.platform === 'win32' || process.platform === 'darwin';
-
-/** True when `a` and `b` are the same folder (see canonicalPath). */
-const samePath = (a, b) => {
-  const x = canonicalPath(a);
-  const y = canonicalPath(b);
-  return CASE_INSENSITIVE ? x.toLowerCase() === y.toLowerCase() : x === y;
-};
+/**
+ * True when `a` and `b` are the same folder (see canonicalPath), with the app's one rule for case
+ * (src/platform-paths.js: case-insensitive on Windows and macOS). On a case-sensitive macOS volume
+ * two folders that differ only by case would compare equal; run folders never do.
+ */
+const samePath = (a, b) => platformSamePath(canonicalPath(a), canonicalPath(b));
 
 /** Top-level folder (canonical) of the repository that contains `dir`, or null if it is not in a git repository. */
 async function repoRoot(dir) {
@@ -287,6 +285,29 @@ async function identityArgs(repo) {
   return email ? [] : ['-c', 'user.name=Multiagent Orchestrator', '-c', 'user.email=orchestrator@localhost'];
 }
 
+// A rebase stopped half-way (a conflict) leaves one of these folders in the worktree's git dir
+async function rebaseInProgress(dir) {
+  for (const name of ['rebase-merge', 'rebase-apply']) {
+    const p = await tryGit(['rev-parse', '--git-path', name], dir);
+    if (p && fs.existsSync(path.resolve(dir, p))) return true;
+  }
+  return false;
+}
+
+// Rebases the worktree's HEAD onto <ref> (mergeLocally, syncWithBase #403). A failure lists the
+// unmerged files (none: not a conflict) and aborts a rebase left in progress → { ok, files, error
+// (git's first line), aborted (false: the worktree is still mid-rebase) }
+async function rebaseOnto(dir, ref, root) {
+  try {
+    await git([...(await identityArgs(root)), 'rebase', ref], dir);
+    return { ok: true, files: [], error: null, aborted: true };
+  } catch (e) {
+    const files = String(await tryGit(['diff', '--name-only', '--diff-filter=U'], dir) || '').split('\n').filter(Boolean);
+    if (await rebaseInProgress(dir)) await tryGit(['rebase', '--abort'], dir);
+    return { ok: false, files, error: String(e.message).split('\n')[0], aborted: !(await rebaseInProgress(dir)) };
+  }
+}
+
 /**
  * Merges the run's branch into the local base branch, without GitHub/GitLab and without pushing
  * (orchestrator.worktree.remote: false + a transition with `merge: local`).
@@ -312,15 +333,12 @@ async function mergeLocally({ repo, dir, base, log = () => {} }) {
   let rebased = false;
   if (!(await git(['merge-base', '--is-ancestor', base, branch], root).then(() => true, () => false))) {
     log('info', `local merge: ${base} moved since ${branch} started; rebasing ${branch} onto it`);
-    try {
-      await git([...(await identityArgs(root)), 'rebase', base], dir);
-      rebased = true;
-    } catch (e) {
-      const files = (await tryGit(['diff', '--name-only', '--diff-filter=U'], dir)) || '';
-      await tryGit(['rebase', '--abort'], dir);
-      const list = files.split('\n').filter(Boolean);
+    const r = await rebaseOnto(dir, base, root);
+    if (!r.ok) {
+      const list = r.files;
       throw new Error(`local merge: ${branch} conflicts with the local ${base}${list.length ? ` in ${list.join(', ')}` : ''}. The branch was left as it was; resolve the conflict on it and merge again.`);
     }
+    rebased = true;
   }
   const commit = await git(['rev-parse', `refs/heads/${branch}`], root);
   const checkout = (await listWorktrees(root)).find((w) => w.branch === base);
@@ -335,6 +353,46 @@ async function mergeLocally({ repo, dir, base, log = () => {} }) {
   }
   log('info', `local merge: ${base} fast-forwarded to ${branch} (${commit.slice(0, 8)})${checkout ? ` in ${checkout.dir}` : ''}; nothing pushed`);
   return { branch, base, commit, checkout: checkout?.dir || null, rebased };
+}
+
+/**
+ * Brings the local base into the run's branch before a suite or E2E round (#403): when the local
+ * <base> moved past the branch's fork point, the worktree's HEAD (its branch, or the detached HEAD)
+ * is rebased onto it, as mergeLocally does at the end. A conflict aborts the rebase and leaves the
+ * branch as it was; uncommitted changes to tracked files or a rebase that fails for another reason (a
+ * locked file, a hook) skip it; a rebase that cannot be aborted is `blocked` (a half-rebased tree is
+ * never tested). The base is never modified, nothing is fetched or pushed.
+ * @returns {Promise<object|null>} null without a git repository or a local base; else { moved,
+ *   conflict, files, skipped, blocked, base, base_commit (the base commit the HEAD now sits on), from, to,
+ *   count, commits: ['<sha> <subject>', ...] (the base commits brought in, or that did not apply) }
+ */
+async function syncWithBase({ repo, dir, base }) {
+  const root = await repoRoot(repo);
+  const ref = `refs/heads/${base}`;
+  if (!root || !base || !(await refExists(root, ref))) return null;
+  const from = await git(['rev-parse', 'HEAD'], dir);
+  const tip = await git(['rev-parse', ref], root);
+  const result = { moved: false, conflict: false, files: [], skipped: null, blocked: null, base, base_commit: tip, from, to: from, count: 0, commits: [] };
+  if ((await currentBranch(dir)) === base) return result;
+  if (await git(['merge-base', '--is-ancestor', ref, 'HEAD'], dir).then(() => true, () => false)) return result;
+  result.base_commit = await tryGit(['merge-base', ref, 'HEAD'], dir);
+  result.count = Number(await tryGit(['rev-list', '--count', `HEAD..${ref}`], dir)) || 0;
+  result.commits = String(await tryGit(['log', '--max-count=10', '--format=%h %s', `HEAD..${ref}`], dir) || '').split('\n').filter(Boolean);
+  if (await tryGit(['status', '--porcelain', '--untracked-files=no'], dir)) {
+    result.skipped = 'the worktree has uncommitted changes';
+    return result;
+  }
+  const r = await rebaseOnto(dir, ref, root);
+  if (!r.ok) {
+    if (!r.aborted) result.blocked = `the rebase onto ${base} failed (${r.error}) and could not be aborted: the worktree ${dir} is mid-rebase; run \`git rebase --abort\` there, then resume`;
+    else if (r.files.length) { result.conflict = true; result.files = r.files; }
+    else result.skipped = `the rebase failed: ${r.error}`;
+    return result;
+  }
+  result.moved = true;
+  result.base_commit = tip;
+  result.to = await git(['rev-parse', 'HEAD'], dir);
+  return result;
 }
 
 // The run's scratch workspace (<run>/scratch, #120) goes with its worktree; the run's logs/ and
@@ -371,12 +429,13 @@ function openGate(runDir) {
 }
 
 // What the cleanup may do with a run folder: { exists, live, endedAt, status }. live: no summary.json and
-// either an owner process alive (this one or another app process, #112) or a human gate waiting.
+// either an owner process alive (this one or another app process, #112) or a human gate waiting; or a
+// run that ended paused (#368): Resume continues in its folder, so it stays as it is.
 function runState(runDir) {
   if (!fs.existsSync(runDir)) return { exists: false, live: false, endedAt: 0 };
   const summary = readJson(path.join(runDir, 'summary.json'));
   const endedAt = Date.parse(summary?.finished_at || '') || mtime(path.join(runDir, 'events.jsonl'));
-  if (summary) return { exists: true, live: false, endedAt, status: summary.status || null };
+  if (summary) return { exists: true, live: summary.status === 'paused', endedAt, status: summary.status || null };
   return { exists: true, live: ownerAlive(readOwner(runDir)) || openGate(runDir), endedAt, status: null };
 }
 
@@ -384,24 +443,51 @@ function runState(runDir) {
 // a resumed run reuses the folder named after the run it resumes, whose own run folder has ended
 // (claimed from its workflow.started already, before its worktree.ready).
 function liveWorktrees(runsDir, worktreesDir) {
+  return worktreeRuns(runsDir, worktreesDir, { liveOnly: true }).flatMap((r) => r.dirs);
+}
+
+// #406: the worktree folders each run works or worked in, [{ runId, dirs, live }] (live as in
+// liveWorktrees). A run without summary.json from its events, an ended one from its summary. `since`:
+// only the runs whose id (it starts with the run's start time) is not older; `liveOnly`: live runs only.
+// An ended run's dirs are cached by its summary.json path and mtime (the stray check reads them every minute).
+const endedDirs = new Map();
+function worktreeRuns(runsDir, worktreesDir, { since = '', liveOnly = false } = {}) {
   let names = [];
-  try { names = fs.readdirSync(runsDir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name); } catch { names = []; }
-  const dirs = [];
+  try { names = fs.readdirSync(runsDir, { withFileTypes: true }).filter((d) => d.isDirectory() && d.name >= since).map((d) => d.name); } catch { names = []; }
+  const resumedDir = (from) => from?.run_id && path.join(worktreesDir, String(from.run_id));
+  const runs = [];
   for (const name of names) {
     const runDir = path.join(runsDir, name);
-    if (fs.existsSync(path.join(runDir, 'summary.json')) || !runState(runDir).live) continue;
+    const summaryFile = path.join(runDir, 'summary.json');
+    if (fs.existsSync(summaryFile)) {
+      if (liveOnly) continue;
+      const at = mtime(summaryFile);
+      let cached = endedDirs.get(summaryFile);
+      if (!cached || cached.at !== at) {
+        const summary = readJson(summaryFile);
+        // the engine's summary has no resumed_from: a resumed run's worktree.dir is the reused folder
+        cached = { at, dirs: [summary?.worktree?.dir, summary?.worktree?.work_dir].filter(Boolean) };
+        endedDirs.set(summaryFile, cached);
+      }
+      runs.push({ runId: name, live: false, dirs: cached.dirs });
+      continue;
+    }
+    const live = runState(runDir).live;
+    if (liveOnly && !live) continue;
     let text = '';
     try { text = fs.readFileSync(path.join(runDir, 'events.jsonl'), 'utf8'); } catch { continue; }
+    const dirs = [];
     for (const line of text.split('\n')) {
       if (!line.includes('"worktree.ready"') && !line.includes('"resumed_from"')) continue;
       try {
         const ev = JSON.parse(line);
         if (ev.type === 'worktree.ready') dirs.push(ev.dir, ev.work_dir);
-        else if (ev.type === 'workflow.started' && ev.resumed_from?.run_id) dirs.push(path.join(worktreesDir, ev.resumed_from.run_id));
+        else if (ev.type === 'workflow.started') dirs.push(resumedDir(ev.resumed_from));
       } catch { /* a line being written */ }
     }
+    runs.push({ runId: name, live, dirs: dirs.filter(Boolean) });
   }
-  return dirs.filter(Boolean);
+  return runs;
 }
 
 // Records a worktree the cleanup removed in its run (events.jsonl, and summary.json when there).
@@ -483,4 +569,6 @@ module.exports = {
   removeScratch,
   restoreWork,
   retireWorktree,
+  syncWithBase,
+  worktreeRuns,
 };

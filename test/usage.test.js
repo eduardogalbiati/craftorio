@@ -99,6 +99,23 @@ test('concurrent runs share the budgets: the engine counts the other runs, prefl
   assert.equal(budget.claude.usedUsd, 0.5); // the baseline is not changed
 });
 
+test('withPeerUsage (#369): a peer turn with no known price counts the CLI\'s figure toward the budget', () => {
+  const budget = { claude: { limitUsd: 1, usedUsd: 0.5, usedTokens: 0, blockOnLimit: true } };
+  const peers = [{ provider: 'claude', model: 'claude-unknown-9', tokens: { input: 10 }, costUsd: 0, cliOnlyUsd: 0.185 }];
+  const merged = usage.withPeerUsage(budget, peers);
+  assert.ok(Math.abs(merged.claude.usedUsd - 0.685) < 1e-9, `usedUsd ${merged.claude.usedUsd}`);
+});
+
+test('checkBudget (#369): a peer run\'s CLI-only figure (no price for its model) can reach the monthly budget', () => {
+  const peers = [{ provider: 'claude', model: 'claude-unknown-9', tokens: { input: 10 }, costUsd: 0, cliOnlyUsd: 0.185 }];
+  const run = new WorkflowRun({
+    file: path.join(__dirname, 'fixtures', 'fanout.yaml'), inputs: {}, mock: true, runsDir: os.tmpdir(),
+    budget: { claude: { name: 'Claude Code', limitUsd: 0.6, usedUsd: 0.5, blockOnLimit: true } },
+    peerSessions: () => peers,
+  });
+  assert.throws(() => run.checkBudget('claude'), /Monthly budget for Claude Code reached/);
+});
+
 test('computeUsage providers (#147): claude/codex carry the play button\'s install command and note; Grok keeps its prose hint', (t) => {
   const dir = runsDir(t, []);
   const u = usage.computeUsage({ runsDir: dir, now: NOW });

@@ -37,3 +37,47 @@ Feature: Agents, how the agents look
     Then the card robot of the workflow agent "developer" of "ai-development-local-hero.yaml" is painted "#4C7DFF"
     And the card robot of the workflow agent "reviewer" of "ai-development-local-hero.yaml" is painted "#A06BFF"
     And the card robots of the workflow agents "developer" and "reviewer" of "ai-development-local-hero.yaml" look different
+
+  # #309: each colour row of the editor (Main color, Shell, Visor, Glow) takes any colour typed as a
+  # hex (#RRGGBB) in its field, next to the preset swatches and the "+" picker: the custom swatch is
+  # selected, the field shows the hex in upper case, the preview is painted with it, and Save keeps
+  # it. Assumes the uncustomised "Developer" of ai-development-local-hero (role colour #4C7DFF).
+  @issue-309
+  Scenario: A hex typed in the Main color field paints the preview and survives Save
+    Given the app is open in a 1400x900 window
+    When I open "Agents" in the sidebar
+    And I click "Customize look" on the workflow agent "developer" of "ai-development-local-hero.yaml"
+    And I type "#1a2b3c" in the "Main color" colour field
+    Then the "Main color" colour field shows "#1A2B3C"
+    And the "Main color" custom colour swatch is selected
+    And the agent editor's robot preview is painted "#1A2B3C"
+    When I save the agent editor
+    And I click "Customize look" on the workflow agent "developer" of "ai-development-local-hero.yaml"
+    Then the "Main color" colour field shows "#1A2B3C"
+    And the "Main color" custom colour swatch is selected
+
+  @issue-309
+  Scenario: An invalid hex warns and keeps the previous colour
+    Given the app is open in a 1400x900 window
+    When I open "Agents" in the sidebar
+    And I click "Customize look" on the workflow agent "developer" of "ai-development-local-hero.yaml"
+    Then the agent editor's robot preview is painted "#4C7DFF"
+    When I type "#GG00ZZ" in the "Main color" colour field
+    Then the "Main color" colour field warns
+    And the agent editor's robot preview is painted "#4C7DFF"
+
+  # The look modal with a custom colour, in both themes (features/__screenshots__, created on purpose
+  # with npm run test:e2e:update -- --grep @visual)
+  @issue-309 @visual
+  Scenario Outline: The look modal with a custom colour looks like its baseline in the <theme> theme
+    Given the app is open in the <theme> theme
+    When I open "Agents" in the sidebar
+    And I click "Customize look" on the workflow agent "developer" of "ai-development-local-hero.yaml"
+    And I type "#1A2B3C" in the "Main color" colour field
+    Then the "Main color" custom colour swatch is selected
+    And the look modal looks like the baseline "agent-look-modal-custom-<theme>.png"
+
+    Examples:
+      | theme |
+      | light |
+      | dark  |

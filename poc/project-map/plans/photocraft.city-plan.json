@@ -1,0 +1,74 @@
+{
+  "version": 1,
+  "project": "photocraft",
+  "summary": "An open-source native image editor in Rust (storytold/photocraft): a Cargo workspace of focused crates under crates/, with desktop, CLI and web apps under apps/. Assumption: tests that live next to the code as *_tests.rs files belong to the campus, not to their crate's district.",
+  "ignore": ["assets/**", "docs/**", "book/**", "contributors/**", ".github/**", "**/*.md", "**/*.png", "**/*.jpg", "**/*.svg", "**/*.sha256", "Cargo.lock"],
+  "zones": [
+    { "id": "foundations", "name": "Pixels, colour and the document", "kind": "infrastructure", "purpose": "Geometry, colour and colour management, raster buffers and the layered document model every other crate builds on." },
+    { "id": "imaging", "name": "Image processing", "kind": "industrial", "purpose": "Filters, painting, compositing, vector and text rendering, and the sandboxed plug-in filters." },
+    { "id": "engine", "name": "Editor engine", "kind": "industrial", "purpose": "The editor's commands, presets and state on top of every processing crate." },
+    { "id": "formats", "name": "File formats", "kind": "logistics", "purpose": "Reading and writing images and documents: codecs, PSD/PSB, camera raw, Affinity and the native bundle." },
+    { "id": "power", "name": "GPU", "kind": "power", "purpose": "GPU compositing and its WGSL shaders." },
+    { "id": "ui", "name": "Editor UI", "kind": "commercial", "purpose": "The egui editor: tool panels, dialogs, the canvas shell, translations and pen tablet input." },
+    { "id": "civic", "name": "Apps and automation", "kind": "civic", "purpose": "The desktop, CLI and web apps, and the MCP server that drives the engine." },
+    { "id": "workshop", "name": "Build and release", "kind": "workshop", "purpose": "xtask, packaging, perf and scorecard tooling, and the workspace configuration." },
+    { "id": "campus", "name": "Tests and examples", "kind": "campus", "purpose": "Unit tests next to the code, crate test suites, the test kit and examples." }
+  ],
+  "districts": [
+    { "id": "ui-tests", "name": "UI tests", "zone": "campus", "purpose": "The editor's *_tests.rs modules and tests.", "include": ["crates/ui-egui/src/**/*_tests.rs", "crates/ui-egui/tests/**"] },
+    { "id": "engine-tests", "name": "Engine tests", "zone": "campus", "purpose": "The engine's *_tests.rs modules and tests.", "include": ["crates/engine/src/**/*_tests.rs", "crates/engine/tests/**"] },
+    { "id": "crate-tests", "name": "Crate tests and test kit", "zone": "campus", "purpose": "Every other crate's tests and the shared test kit.", "include": ["**/*_tests.rs", "crates/*/tests/**", "crates/testkit/**"] },
+    { "id": "examples", "name": "Examples", "zone": "campus", "purpose": "Runnable examples of the crates and the workspace.", "include": ["**/examples/**", "examples/**"] },
+
+    { "id": "pixels", "name": "Geometry, colour and raster", "zone": "foundations", "purpose": "Points and transforms, colour types, ICC colour management and pixel buffers.", "include": ["crates/geom/**", "crates/color/**", "crates/cms/**", "crates/raster/**"] },
+    { "id": "document", "name": "Document model and operations", "zone": "foundations", "purpose": "Layers, masks and the operations over them.", "include": ["crates/doc/**", "crates/ops/**"] },
+
+    { "id": "filters", "name": "Filters and algorithms", "zone": "imaging", "purpose": "Tile-aware CPU filters: blur, sharpen, noise, distort, segmentation, matting.", "include": ["crates/algo/**"] },
+    { "id": "paint-compose", "name": "Painting and compositing", "zone": "imaging", "purpose": "Brushes and the layer compositor.", "include": ["crates/paint/**", "crates/compose/**"] },
+    { "id": "vector-text", "name": "Vector and text", "zone": "imaging", "purpose": "Vector paths, shapes and strokes; font database, shaping and text layers.", "include": ["crates/vector/**", "crates/text/**"] },
+    { "id": "plugins", "name": "Plug-in sandbox", "zone": "imaging", "purpose": "A resource-limited WebAssembly host for filter plug-ins.", "include": ["crates/plugins/**"] },
+
+    { "id": "commands", "name": "Editor commands", "zone": "engine", "purpose": "One module per command family (*_cmds).", "include": ["crates/engine/src/**/*_cmds.rs", "crates/engine/src/*_cmds/**"] },
+    { "id": "presets", "name": "Presets", "zone": "engine", "purpose": "Built-in presets.", "include": ["crates/engine/src/presets/**"] },
+    { "id": "engine-core", "name": "Engine core", "zone": "engine", "purpose": "The engine's state, history and the API the apps call.", "include": ["crates/engine/**"] },
+
+    { "id": "io", "name": "Import and export", "zone": "formats", "purpose": "Between photocraft documents and PSD/PSB, layered and flat formats.", "include": ["crates/io/**"] },
+    { "id": "codecs", "name": "Raster codecs", "zone": "formats", "purpose": "Depth- and metadata-preserving flat formats, and the optional HEIF decoder.", "include": ["crates/codecs/**", "crates/heif/**"] },
+    { "id": "psd", "name": "Photoshop PSD/PSB", "zone": "formats", "purpose": "A lossless reader and writer for PSD and PSB.", "include": ["crates/psd/**"] },
+    { "id": "raw", "name": "Camera raw", "zone": "formats", "purpose": "A clean-room raw decoder and developer.", "include": ["crates/raw/**"] },
+    { "id": "documents", "name": "Native and Affinity documents", "zone": "formats", "purpose": "The .pcraft bundle and the Affinity reader.", "include": ["crates/format/**", "crates/affinity/**"] },
+
+    { "id": "gpu", "name": "GPU compositing", "zone": "power", "purpose": "wgpu compositing and the WGSL shaders.", "include": ["crates/gpu/**", "**/*.wgsl"] },
+
+    { "id": "i18n", "name": "Translations", "zone": "ui", "purpose": "The editor's string tables per language.", "include": ["crates/ui-egui/src/i18n/**"] },
+    { "id": "tool-panels", "name": "Tool and layer panels", "zone": "ui", "purpose": "The *_ui modules: tool options, layer rows and styles.", "include": ["crates/ui-egui/src/**/*_ui.rs", "crates/ui-egui/src/*_ui/**", "crates/ui-egui/src/tool_cursor/**", "crates/ui-egui/src/layer_style/**"] },
+    { "id": "dialogs", "name": "Dialogs, pickers and menus", "zone": "ui", "purpose": "Modal dialogs, colour and file pickers, prompts and menus.", "include": ["crates/ui-egui/src/**/*dialog*.rs", "crates/ui-egui/src/**/*picker*.rs", "crates/ui-egui/src/**/*prompt*.rs", "crates/ui-egui/src/**/*menu*.rs"] },
+    { "id": "editor-shell", "name": "Editor shell and canvas", "zone": "ui", "purpose": "The app frame, canvas, views, widgets and shortcuts.", "include": ["crates/ui-egui/**"] },
+    { "id": "tablet", "name": "Pen tablet", "zone": "ui", "purpose": "Pressure, tilt and eraser input on macOS and X11.", "include": ["crates/tablet/**"] },
+
+    { "id": "desktop-app", "name": "Desktop app", "zone": "civic", "purpose": "The native editor's entry point.", "include": ["apps/photocraft/**"] },
+    { "id": "cli-web", "name": "CLI and web apps", "zone": "civic", "purpose": "Headless conversion and batch, and the browser runner.", "include": ["apps/photocraft-cli/**", "apps/photocraft-web/**"] },
+    { "id": "automation", "name": "Automation and MCP", "zone": "civic", "purpose": "An MCP server over the engine and a bridge to a running GUI.", "include": ["crates/automation/**"] },
+
+    { "id": "xtask", "name": "Build tasks", "zone": "workshop", "purpose": "xtask commands and the test corpora manifests.", "include": ["xtask/**"] },
+    { "id": "release", "name": "Packaging and release", "zone": "workshop", "purpose": "Installers, perf and scorecard checks, scripts and the workspace configuration.", "include": ["packaging/**", "perf/**", "scorecard/**", "scripts/**", ".cargo/**", ".config/**", "/*"] }
+  ],
+  "landmarks": [
+    { "path": "apps/photocraft/src/main.rs", "label": "Desktop app entry" },
+    { "path": "apps/photocraft-cli/src/main.rs", "label": "CLI entry" },
+    { "path": "apps/photocraft-web/src/main.rs", "label": "Web entry" },
+    { "path": "crates/engine/src/lib.rs", "label": "Engine API" },
+    { "path": "crates/doc/src/lib.rs", "label": "Document model" },
+    { "path": "crates/ui-egui/src/lib.rs", "label": "Editor UI root" },
+    { "path": "crates/automation/src/lib.rs", "label": "MCP server" },
+    { "path": "Cargo.toml", "label": "Workspace" }
+  ],
+  "ports": [
+    { "id": "mcp", "name": "MCP clients (AI agents)", "via": ["crates/automation/src/lib.rs"] },
+    { "id": "browser", "name": "Browser (WebGPU, WebGL2)", "via": ["apps/photocraft-web/src/main.rs"] },
+    { "id": "gpu-driver", "name": "GPU (wgpu)", "via": ["crates/gpu/src/lib.rs"] },
+    { "id": "tablet-os", "name": "Tablet drivers (AppKit, XInput2)", "via": ["crates/tablet/src/lib.rs"] },
+    { "id": "wasm", "name": "WebAssembly plug-ins", "via": ["crates/plugins/src/lib.rs"] }
+  ],
+  "evidence": ["Cargo.toml (workspace members)", "crates/*/Cargo.toml (descriptions and internal dependencies)", "AGENTS.md", "README.md", "the file-name patterns *_tests.rs, *_ui.rs, *_cmds.rs"]
+}

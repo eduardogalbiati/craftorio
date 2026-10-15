@@ -36,3 +36,34 @@ Feature: Releases
     Then the run is running
     And a gate card waits for my approval
     And the gate card offers "Ship" and "Hold"
+
+  # #290: a release run that needed a fix gets a "Release summary" step before the Ship gate. The
+  # simulated run is started with its unit suite red on the first round (the fix, then both suites
+  # green): see features/steps/releases.steps.js
+  @issue-290
+  Scenario: The Ship gate of a release that needed a fix shows the release summary first
+    Given the app is open
+    And a simulated release run "v1.0" whose unit suite was red once is open
+    Then a gate card waits for my approval
+    And the gate card shows the release summary with "Timeline", "The fixes", "Before you ship" and "Follow-ups"
+    And the release summary comes before "Not on origin yet" in the gate card
+    And the gate card offers "Ship" and "Hold"
+
+  @issue-290
+  Scenario: The release summary is one of the run's reports
+    Given the app is open
+    And a simulated release run "v1.0" whose unit suite was red once is open
+    And a gate card waits for my approval
+    When I open the run's Artifacts tab
+    And I filter the artifacts by "Reports"
+    Then the artifacts list "release-summary.md"
+
+  # Assumes the release history file of #260 (<workspace>/releases/<projectId>.json) and the release
+  # run's folder <workspace>/runs/<runId>/release-summary.md (see features/steps/releases.steps.js)
+  @issue-290
+  Scenario: The Releases screen links a shipped release to its release summary
+    Given the app is open
+    And the project shipped the release "v0.9" whose release run wrote a release summary
+    When I open "Releases" in the sidebar
+    And I open the release summary of the release "v0.9"
+    Then the release summary shows "Timeline", "The fixes", "Before you ship" and "Follow-ups"

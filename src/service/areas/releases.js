@@ -1,5 +1,6 @@
 // Service area: releases (#260, src/releases.js). A project's release history and its next release
-// for the Releases screen (`listReleases`, the owner's notes: `saveReleaseNotes`), the release run
+// for the Releases screen (`listReleases`, the owner's notes: `saveReleaseNotes`, a shipped release's
+// summary its release run wrote, #290: `readReleaseSummary`), the release run
 // (`startRelease`: the bundled release workflow with the history since the last release, started
 // from the screen or by a roadmap's cut line, `roadmapRelease`) and what a release run that ended
 // leaves (`afterRelease`): a shipped one is recorded in the history with its issues, runs, cost,
@@ -60,11 +61,75 @@ module.exports = (ctx) => {
     const live = [...ctx.active.values()].find((r) => r.projectId === project.id && isReleaseRun(r));
     return {
       projectId: project.id,
-      releases: [...history.releases].sort((a, b) => String(b.date || '').localeCompare(String(a.date || ''))),
+      // #290: `summary` when its release run wrote release-summary.md (readReleaseSummary reads it)
+      releases: [...history.releases].sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')))
+        .map((r) => (summaryFile(r) && fs.existsSync(summaryFile(r)) ? { ...r, summary: true } : r)),
       next: nextOf(project, list),
       line: waitingLine(project.id),
       run: live ? { runId: live.runId, mock: !!live.mock, waiting: live.approvals.size > 0 } : null,
     };
+  }
+
+  // #290: a release's summary, written by its release run (the last of its runs) in its folder
+  function summaryFile(release) {
+    const runId = [].concat(release?.runs || []).slice(-1)[0];
+    return typeof runId === 'string' && /^[\w-]+$/.test(runId) ? path.join(ctx.ws.runs, runId, 'release-summary.md') : null;
+  }
+
+  // → { version, runId, text }: the release summary of a shipped release (Releases screen)
+  function readReleaseSummary({ projectId, version } = {}) {
+    if (!projectId) throw new Error('No project.');
+    const release = releases.readReleases(ctx.ws.releases, idOf(projectId)).releases.find((r) => r.version === version);
+    if (!release) throw new Error(`No release ${version} in this project.`);
+    const file = summaryFile(release);
+    let text = null;
+    try { text = file && fs.readFileSync(file, 'utf8'); } catch { /* no summary */ }
+    if (!text) throw new Error(`The release run of ${version} left no release summary.`);
+    return { version, runId: path.basename(path.dirname(file)), text };
+  }
+
+  // A release run's stations on the Roadmap (#291): the rounds of each group of the release workflow
+  // and the one it is at (`station`), from its step trail.
+  const STATION_OF = { unit: 'unit', e2e: 'e2e', suite_blocked: 'e2e', fix: 'fix', regression_failed: 'fix', ship: 'ship', ship_failed: 'ship' };
+  function releaseStations(run) {
+    const stations = { unit: 0, e2e: 0, fix: 0, ship: 0 };
+    for (const e of run.progress || []) if (STATION_OF[e.step]) stations[STATION_OF[e.step]] += 1;
+    return { stations, station: STATION_OF[(run.progress || []).at(-1)?.step] || null };
+  }
+
+  // The releases the Roadmap draws (#291): the shipped ones of the history, each with its release run
+  // when the history holds one, and the release runs that did not ship since the last release (the
+  // newest per version: checking, waiting at Ship, on hold, failed; a simulated one that shipped),
+  // holding the next release's runs. `list`: the project's runs with their live state (the Backlog's).
+  // → { releases: [{ version, status, runId, mock, runs, date, tag, commit, issues, cost, tests,
+  //   startedAt, durationMs, runCost, stations, station }] }, or { error, releases: [] } when the
+  //   history cannot be read
+  function roadmapReleases(project, list) {
+    const { ws } = ctx;
+    if (!project) return { releases: [] };
+    const error = releases.historyError(ws.releases, project.id);
+    if (error) return { error, releases: [] };
+    const releaseRuns = list.filter(isReleaseRun);
+    const withRun = (x, run) => (run ? { ...x, runId: run.runId, mock: !!run.mock, startedAt: run.startedAt, durationMs: run.durationMs, runCost: run.costUsd, ...releaseStations(run) } : x);
+    const history = releases.readReleases(ws.releases, project.id).releases;
+    const shipped = history.map((h) => withRun({ ...h, status: 'shipped' }, releaseRuns.find((r) => (h.runs || []).includes(r.runId))));
+    const last = history.map((h) => String(h.date || '')).sort().at(-1) || '';
+    const versions = new Set(history.map((h) => h.version));
+    const STATUS = { success: 'shipped', cancelled: 'held' };
+    let next = null;
+    const pending = [];
+    for (const run of releaseRuns.filter((r) => String(r.startedAt || '') > last).sort((a, b) => String(b.startedAt).localeCompare(String(a.startedAt)))) {
+      // started without a version: an explicit label ("Release (no version)"), never the filter's 'next'
+      const version = String(run.inputs?.version || '').trim() || '(no version)';
+      if (versions.has(version)) continue;
+      versions.add(version);
+      next ??= nextOf(project, list.filter((r) => !isReleaseRun(r)));
+      // waiting: at its Ship gate, in this app or in another one (its trail's last step waits)
+      const waiting = run.waiting || run.progress?.at(-1)?.status === 'waiting';
+      const status = run.status === 'running' ? (waiting ? 'waiting' : 'checking') : STATUS[run.status] || 'failed';
+      pending.push(withRun({ version, status, runs: next.runs.map((r) => r.runId), issues: next.issues, cost: next.cost }, run));
+    }
+    return { releases: [...shipped, ...pending] };
   }
 
   function saveReleaseNotes({ projectId, notes }) {
@@ -241,7 +306,9 @@ module.exports = (ctx) => {
     afterRelease,
     listReleases,
     markReleasedIssues,
+    readReleaseSummary,
     roadmapRelease,
+    roadmapReleases,
     saveReleaseNotes,
     startRelease,
   };

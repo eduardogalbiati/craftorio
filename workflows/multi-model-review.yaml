@@ -67,7 +67,7 @@ providers:
 x-tools:
   readonly_git: &readonly_git [read, "bash:git diff", "bash:git log", "bash:git show", "bash:git grep", "bash:git rev-parse", "bash:git status"]
   # blast radius also runs one-liners (node -e, python -c) and tests to prove its safety fact
-  toolchains: &toolchains [read, bash:git, bash:npm, bash:npx, bash:node, bash:python, bash:python3, bash:py, bash:pytest, bash:uv, bash:go, bash:mvn, bash:./mvnw, bash:gradle, bash:./gradlew, bash:dotnet]
+  toolchains: &toolchains [read, bash:git, bash:npm, bash:npx, bash:node, bash:python, bash:python3, bash:py, bash:pytest, bash:uv, bash:go, bash:mvn, bash:./mvnw, bash:gradle, bash:./gradlew, bash:dotnet, bash:cargo]
 
 defaults:
   working_dir: "{{ inputs.repo_path }}"

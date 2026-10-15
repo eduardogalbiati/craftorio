@@ -29,6 +29,12 @@ flag is never passed twice (`dedupeFlags`, clap-based CLIs refuse repeats). `per
 from the bundled workflows: it was documentation only. The run log gets one
 `log` `kind: capabilities` line per agent with what was granted and what this CLI can't enforce.
 
+The development workflows' `&toolchains` anchor lists the commands of every supported language;
+the language skill says which one to use. Rust (#340) adds `bash:cargo`: `cargo test`, `cargo
+clippy`, `cargo fmt`, and the optional `cargo nextest` / `cargo audit` subcommands all go through
+it. The builder and the test writer need `cargo` (with clippy and rustfmt, as rustup installs
+them in `~/.cargo/bin`) on the PATH the app starts with; nothing else is installed by the run.
+
 ## Per CLI (verified with Claude Code 2.1.283, Codex CLI 0.157, Grok Build 1.0.41)
 
 | | Claude Code | Codex CLI | Grok Build |
@@ -41,6 +47,7 @@ from the bundled workflows: it was documentation only. The run log gets one
 | Sub-agents | `Agent` and `Task` (the tool's current and older name; `--tools` drops names the CLI doesn't know) only with `subagents: true`; the `capabilities:` log line says `subagents: Agent/Task tool offered` | n/a (the log line says `subagents: not offered by Codex`) | `--no-subagents` unless `subagents: true` |
 | MCP | `--mcp-config` with the declared servers + `mcp__<name>` allowed | declared servers only | not passed (noted in the log) |
 | Test files (`edits_tests: false`) | `--disallowedTools "Edit(<glob>) …"` over `tests_paths` (a bare name gets `**/`); Bash can still write them | not refused (noted) | not refused (noted) |
+| Request budget (`max_requests`, #302) | `--max-turns <n>` (unless the provider or `cli_args` set one); an `error_max_turns` result is a cut, wrapped up and continued (engine/sessions-and-handoff-notes.md) | **not enforceable** (noted in the `capabilities:` log line); the turn runs to its end | **not enforceable** (noted) |
 | Images (#129, **not yet confirmed with a real call**) | `--add-dir <attachments folder>` + `Read` added to a restricted `--tools` (read-only agents and the tool-less Supervisor chat included) + the "Attached images" block with the absolute paths | not enabled until a real call confirms it: the block with the paths only, plus the same warning as Grok. Once `codex exec --image` is confirmed, `IMAGE_INPUT['codex-cli'] = 'flag'` passes `--image=<file>` per image (the `=` form: `--image` takes several values and would swallow `resume` or the stdin `-`) | no known way: the block with the paths only, plus one `log` `kind: attachments_unsupported` warning per step and agent; the step does not fail |
 
 Images row: `src/engine/providers.js` (`IMAGE_INPUT`, `cliInvocation`). Limits, checked by
@@ -52,9 +59,18 @@ each with one small PNG and "Describe this image in one sentence", with a read-o
 agent; then update the row (and `IMAGE_INPUT` if Grok turns out to read images, e.g. with `read_file`).
 
 Whatever the CLI, the engine checks the turn's changes afterwards and sends a turn that touched
-test files back (see `edits_tests` in [engine.md](engine.md)). The `Edit(...)` deny rules were
+test files back (see `edits_tests` in [engine/agents-and-steps.md](engine/agents-and-steps.md)). The `Edit(...)` deny rules were
 not tried against a real Claude CLI yet (real calls cost money): if one is refused, the engine
 check still holds.
+
+**Project instructions (#331)**: the engine passes no instructions file of its own; each CLI loads
+the repository's from the worktree it runs in. This repository keeps them in `AGENTS.md`, and
+`CLAUDE.md` is the import line `@AGENTS.md`. Codex CLI reads `AGENTS.md` (git root down to its
+working directory). Claude Code reads `CLAUDE.md` and follows the import. Grok Build, per its
+README (`~/.grok/README.md`, section "AGENTS.md", 1.0.41), reads `Agents.md`, `Claude.md`,
+`AGENT.md` and `AGENTS.md` in every folder from the git root down to its working directory (10,000
+characters per file): it gets `AGENTS.md` too, plus the one-line `CLAUDE.md`, which it does not
+expand (harmless).
 
 `--bare` would isolate Claude further but only accepts API keys (no OAuth/subscription), so it is
 not used. Measured on this repo (first request of a Claude agent, Haiku, "reply OK"): **41.1k
@@ -99,9 +115,20 @@ trip per refusal (136 of 2,437 tool calls in 7 real runs, #96). The engine remov
   the command guide names the folder. The app's tools an agent runs (`npm run run`, `npm run
   screenshot`, the app, engine scripts) resolve to it with no flag. Without it, simulation only
   never resolves to the registered workspace (`resolveWorkspace` → OS temp).
+- **Test workers (#367)**: every run gets the machine profile's test workers per run
+  (`src/machine-profile.js`, Settings › Execution › Concurrent runs: auto from the machine, or the
+  owner's manual value) as `MULTIAGENT_TEST_WORKERS` and `MULTIAGENT_E2E_WORKERS` (the same number;
+  this repository's `playwright.config.js` reads the second one). `capabilities.agentEnv(scratch,
+  { testWorkers })` adds them to the agents' env (so their prefixes are allowed and the command guide
+  names them), `WorkflowRun` gets them from `testWorkers` (src/service/areas/runs.js), child runs
+  inherit them. The suite step and the orchestrator-run test requests set them in `suiteEnv` (never
+  an inherited value) and add `--workers=<n>` to a `playwright test` command / `--maxWorkers=<n>` to
+  a `jest` one that sets none (`suite-step.js withWorkers`). The test and build skills
+  (`unit-test-writer-*`, `e2e-test-writer-*`, `build-audit-*`) tell agents to pass the number to the
+  runner (`--workers`, `--maxWorkers`, `-n`…).
 - **`cd` into the worktree** and **writes outside it**: the engine creates `<run_dir>/logs`,
   `<run_dir>/scratch` and `<run_dir>/evidence` (`RUN_DIRS`; screenshots go to the step's round
-  folder `evidence/<step>/round-<n>`, see engine.md) for agents with commands, passes them with
+  folder `evidence/<step>/round-<n>`, see engine/evidence.md) for agents with commands, passes them with
   `--add-dir`, and adds a short
   "How to run commands" block to the agent's first turn (`commandGuide`, any CLI): run commands in
   the current folder, `git -C`/`npm --prefix` for another one, logs in `<run_dir>/logs`, never
@@ -122,6 +149,19 @@ Agents with `bash:gh` / `bash:glab` call them **bare, in the Bash tool, one comm
 that is the only form the allowlist accepts (no PowerShell tool, full or 8.3 paths, PATH edits,
 `&&` chains, body files: use `--body`; a pipe into an allowed utility such as `| head` is fine). Inside runs the engine refreshes PATH, so bare `gh` works.
 
+The app's own calls (the Backlog sync, issues, labels, PRs/MRs, epics, the Oracle's read tools, the
+probes and the PR states) are built by the **platform adapters** (#351): `src/shared/platforms/github.js`
+and `gitlab.js` hold each platform's identity (id `github`/`gitlab`, short id `gh`/`gl`, CLI, label),
+its request terms ("PR #" / "MR !"), a `{ cli, args }` builder per operation, the parsers of each
+command's JSON and the URL parsers. `src/shared/platforms/index.js` resolves either vocabulary
+(`resolvePlatform('gh') === resolvePlatform('github')`; the workflow input `git_platform` and the
+skill suffixes `-gh`/`-gl` use the short id). Code outside the adapters asks the adapter instead of
+branching on the platform: `test/platform-literals-351.test.js` fails on a `'github'`/`'gitlab'`/
+`'gh'`/`'gl'` literal elsewhere in `src/` (its listed exceptions may only shrink), and
+`test/platform-wire-351.test.js` holds the exact commands and parsed results per operation and
+platform. A new operation adds a builder (and a parser) to both adapters; a new forge adds an adapter
+with the same members and registers it in `index.js`.
+
 ## Read-only agents
 
 A Claude agent without `edit`/`write` can't Write/Edit, `mkdir`, redirect output or run heredocs
@@ -129,6 +169,10 @@ with braces+quotes in headless mode: each attempt is a denial that burns time. S
 read-only agents (verifier, builder, blaster, ci_pusher...) must use `git show <base>:<path>`,
 `git diff` and single `node -e` / `python -c` one-liners, never scratch files, stash or worktrees.
 `bash:git`/`bash:node` can still change the repo: read-only is a convention, not a sandbox.
+
+The **mapper** (AI Development's Warm Up step, #301; skill `code-mapping`) is read-only too:
+`tools: [read, bash:git]` with `subagents: true`, so it can fan out exploration sub-agents, and an
+ephemeral session. It answers `{ map, files }`; the developer's first turn starts from the map.
 
 ## Asking a person: only Grill me (#166)
 
@@ -165,7 +209,9 @@ points at the project holding the orchestrator's source (its `package.json` name
 read the app's code (the packaged app's is in app.asar). #184 adds: `run_analysis` (runs' cost and
 tokens by agent and step, review rounds, timeouts, invalid outputs, refused calls, merge conflicts,
 tool timeouts, the test writer's context, whole-suite starts; `src/oracle-run-analysis.js`, no
-model); `issues_search`, `issue_view` and `labels` (`src/oracle-platform.js`: gh / glab `issue
+model; #321: its `focus` `time`, `context`, `tools`, `cache` or `tests` reads the same run files
+for where the time, the context and the tool calls went, `src/oracle-run-focus.js`, also no model
+and read-only); `issues_search`, `issue_view` and `labels` (`src/oracle-platform.js`: gh / glab `issue
 list`, `issue view` and `label list` only, built by the app on the synced backlog's repository,
 never a command from the model); and the `checker` delegate (`src/oracle-check.js`): one test
 runner (node, npm test/run, pytest, go test, dotnet test, mvn...; nothing that fetches a package:
@@ -190,3 +236,15 @@ not allowed, or a fourth watch action on one item, `LOOP_CAP`; anything content 
 never in the Oracle's. Under the Night watch, what the owner runs or leaves waiting is in the night
 log. No inbox takes a kind that answers a human gate (`approval.*`, `gate.*`), whoever sends it. The Oracle's chat replies are in the owner's language, a deliberate exception
 to the English rule; everything it writes for the product is in English (skill `oracle`).
+
+## Outside sessions: the control channel (#336)
+
+A session outside the app (a Claude Code session working as Oracle or Product Owner on the
+workspace, a terminal) acts on the running app through the control endpoint, never by editing
+workspace files such as `backlog/<project>.roadmap.json`: an edited file races the screens (#287)
+and starts nothing. With Settings › Execution › "Allow outside sessions to control this app" on, the
+app writes `<workspace>/control/endpoint.json` (`url` on 127.0.0.1, `token`); `node scripts/ctl.js
+<channel> [json]` (or `curl` / `Invoke-RestMethod`) calls a channel of `src/control/allowlist.js`,
+and each call is logged in `control/calls.jsonl`. The allowlist never holds a channel that answers,
+skips or bypasses a human gate, nor `settings:set`; `confirmGate` is refused on any channel
+(`src/control/index.js`, docs/features/control-channel.md).

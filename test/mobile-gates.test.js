@@ -152,6 +152,15 @@ test('#226 a gate link opens that gate\'s page only; on another gate, or forged,
   assert.equal((await fetch(`${base}${gatePath(a)}`)).status, 403);
 });
 
+test('#320 the gate page says what Continue will re-read for each agent with an open session', async (t) => {
+  const { m, gates } = await setup(t, 1, WORKFLOW.replace('session: ephemeral', 'session: persistent'));
+  const html = await (await fetch(m.gateLink(gates[0].run_id, gates[0].approval_id))).text();
+  const line = /Continue:[^<]*/.exec(html)?.[0] || '';
+  assert.ok(line, 'the gate page has a Continue line');
+  assert.match(line, /resumes warm|every agent starts fresh or warm/, `the persistent agent's session was used just now: ${line}`);
+  assert.doesNotMatch(line, /cold/);
+});
+
 test('#226 a gate link expires after about 30 minutes: page and answer refused', async (t) => {
   const { api, m, base, clock, gates } = await setup(t);
   const [g] = gates;

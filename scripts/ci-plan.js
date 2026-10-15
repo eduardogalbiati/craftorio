@@ -1,5 +1,5 @@
-// GitHub Actions planning, to spend fewer Actions minutes (private repo: Windows minutes count x2,
-// macOS x10). Used by .github/workflows/*.yml; plain Node, no dependencies (runs before `npm ci`).
+// GitHub Actions planning, so CI runs only what a change needs and stays fast (standard runners are
+// free for public repositories). Used by .github/workflows/*.yml; plain Node, no dependencies (runs before `npm ci`).
 //   node scripts/ci-plan.js os                      # ci.yml: which OS runs `npm test` -> os=<json>
 //   node scripts/ci-plan.js report <head> <tested> <state>  # ci.yml: record pending (run starts),
 //                                                   #   success or failure (run ends) on the PR head
@@ -22,13 +22,15 @@ const PR_OS = ['ubuntu-latest', 'windows-latest'];
 const MACOS_LABEL = 'ci:macos';
 const TESTED_CONTEXT = 'ci/tested';
 
-// Changes that cannot break `npm test`. Not every .md: the tests read CLAUDE.md, docs/agents/*.md
-// (test/claude-md.test.js), the bundled skills (skills/**, seeded and parsed by the engine tests)
+// Changes that cannot break `npm test`. Not every .md: the tests read AGENTS.md, CLAUDE.md,
+// docs/agents/*.md (test/claude-md.test.js), the bundled skills (skills/**, seeded and parsed by the engine tests)
 // and the README's fragments (docs/screens/, docs/features/: test/docs.test.js checks the README's
-// generated sections against them).
+// generated sections against them). The cargo workspace (native/, #341) is code, its Markdown too:
+// CI checks the whole workspace (a crate may include its README as docs).
 function isDocsFile(file) {
   if (!file.toLowerCase().endsWith('.md')) return false;
-  if (file === 'CLAUDE.md' || file.startsWith('docs/agents/') || file.startsWith('skills/')) return false;
+  if (file === 'AGENTS.md' || file === 'CLAUDE.md' || file.startsWith('docs/agents/') || file.startsWith('skills/')) return false;
+  if (file.startsWith('native/')) return false;
   if (file.startsWith('docs/screens/') || file.startsWith('docs/features/')) return false;
   return true;
 }
@@ -39,7 +41,7 @@ const MACOS_PATHS = [
   'src/engine/worktree.js', 'src/engine/processes.js', 'src/terminals.js',
   'test/worktree.test.js', 'test/processes.test.js', 'test/terminals.test.js',
   'scripts/package.js', 'scripts/ci-plan.js', 'package.json', 'package-lock.json', '.nvmrc',
-  '.github/workflows/',
+  '.github/workflows/', 'native/',
 ];
 const isMacosFile = (file) => MACOS_PATHS.some((p) => (p.endsWith('/') ? file.startsWith(p) : file === p));
 

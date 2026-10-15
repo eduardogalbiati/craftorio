@@ -76,7 +76,7 @@ test('the pipeline strip shows each stage run status as its label, queued when i
   const had = Object.prototype.hasOwnProperty.call(globalThis, 'StatusPill');
   globalThis.StatusPill = require('../src/renderer/status-pill');
   try {
-    const chain = require('../src/renderer/chain-model');
+    const chain = require('../src/shared/chain-model');
     const html = chain.pipelineStagesHtml(
       { stages: [{ workflow: 'a.yaml' }, { workflow: 'b.yaml' }, { workflow: 'c.yaml' }] },
       { names: { 'a.yaml': 'Stage A', 'b.yaml': 'Stage B', 'c.yaml': 'Stage C' }, runs: [{ runId: 'r1', status: 'succeeded' }, { runId: 'r2', status: 'running' }, {}] },

@@ -39,8 +39,15 @@
     // for the one in flight, and the context of the one in flight
     context: null, queue: [], pendingRef: null,
   };
+  // the surfaces the conversation shows in: Home's dock, the drawer, and the Agents window's pane
+  // (#263, 'window': mounted by AgentsWindow when the Oracle is picked there)
   const SURFACES = ['dock', 'drawer'];
+  const WINDOW = 'window';
+  const ALL_SURFACES = [...SURFACES, WINDOW];
   const chats = {}; // each surface's shared chat (#274, agent-chat.js), mounted with it
+  const shownIn = (w) => (w === 'drawer' ? or.drawer : w === WINDOW ? or.window : onDashboard());
+  // the surface the owner talks in: the Agents window's pane when it shows the Oracle, else the drawer or Home's dock
+  const activeSurface = () => (or.window && chats[WINDOW] ? WINDOW : or.drawer || !onDashboard() ? 'drawer' : 'dock');
   const SUGGESTIONS = [
     'What happened overnight?',
     'Which runs failed this week, and why?',
@@ -50,7 +57,7 @@
   const attachmentCache = new Map(); // a stored image's name → data: URL (or a pending promise)
   const avatar = (cls = '') => `<span class="oracle-avatar ${cls}" aria-hidden="true">${Robots.svg('oracle', 'idle', { bubble: false, plaque: '' })}</span>`;
   const onDashboard = () => state.view === 'dashboard';
-  const inView = () => or.drawer || onDashboard();
+  const inView = () => or.drawer || onDashboard() || !!or.window;
   const view = () => M.chatView({ messages: or.messages, service: or.service, pending: or.pending, error: or.error, drafts: or.drafts, open: inView() });
   const money = (n) => `$${(Number(n) || 0).toFixed(2)}`;
   const screen = () => (window.supervisorScreenContext ? window.supervisorScreenContext() : state.view || '');
@@ -91,7 +98,7 @@
   }
   async function startNightWatch() {
     const f = or.nightForm;
-    const until = f.until ? new Date(f.until) : null;
+    const until = f.until ? new Date(TimeZone.parseInput(f.until, TimeZone.current())) : null;
     if (!until || !(until > new Date())) { or.nightForm = { ...f, error: 'Pick an end time in the future.' }; render(); return; }
     or.nightForm = { ...f, saving: true, error: null };
     render();
@@ -133,7 +140,7 @@
     if (or.pending) { if (q) { or.queue.push({ q, context: queued ? queued.context : or.context }); render(); } return; }
     if (!q || !view().chipsEnabled) return;
     nextQueued = queued || null;
-    chats[or.drawer || !onDashboard() ? 'drawer' : 'dock'].ask(q);
+    chats[activeSurface()].ask(q);
   }
   // The chat's send (#274; the box is already empty, a failure or a refusal gives the question back):
   // the question with the screen, the pasted images and the gate context (#183); w: the surface it came from
@@ -181,7 +188,7 @@
     or.memoryOpen = true;
     try { or.memory = M.editMemory(M.memoryForm((await api.oracleMemory()).text)); } catch (e) { or.memory = { ...M.editMemory(M.memoryForm('')), error: errMsg(e) }; }
     render();
-    document.querySelector(`#oracle-mem-${or.drawer ? 'drawer' : 'dock'}`)?.focus({ preventScroll: true });
+    document.querySelector(`#oracle-mem-${activeSurface()}`)?.focus({ preventScroll: true });
   }
   async function saveMemory() {
     or.memory = { ...or.memory, saving: true };
@@ -193,7 +200,7 @@
   function toggleImport(on) {
     or.memory = { ...or.memory, importing: on, importText: on ? or.memory.importText || '' : '', rev: (or.memory.rev || 0) + 1 };
     render();
-    if (on) document.querySelector(`#oracle-mem-import-${or.drawer ? 'drawer' : 'dock'}`)?.focus({ preventScroll: true });
+    if (on) document.querySelector(`#oracle-mem-import-${activeSurface()}`)?.focus({ preventScroll: true });
   }
   async function importMemory() {
     try {
@@ -208,7 +215,7 @@
   // ---- drafts and pasted images ------------------------------------------------------------
   function setDraftText(text) {
     or.drafts.text = text;
-    SURFACES.forEach((w) => { const el = $(`#oracle-q-${w}`); if (el && el.value !== text) el.value = text; });
+    ALL_SURFACES.forEach((w) => { const el = $(`#oracle-q-${w}`); if (el && el.value !== text) el.value = text; });
   }
   const readFile = (file) => new Promise((resolve, reject) => {
     const r = new FileReader();
@@ -231,9 +238,14 @@
   }
 
   // ---- links in the answers ----------------------------------------------------------------
+  // In the Agents window (#263) the page has no screens: a link's target goes to the main window,
+  // which runs the same function (AgentsWindow.onNavigate); in the main window toMain answers false.
+  const toMain = (name, target) => !!window.AgentsWindow?.toMainWindow?.(name, target);
   // #240: a request's line opens its owner's conversation at the request's card
   const OWNERS = { 'product-owner': 'Product Owner', supervisor: 'Supervisor' };
-  async function openRequest({ oracleOpenRequest: to, ref, project }) {
+  async function openRequest(link) {
+    const { oracleOpenRequest: to, ref, project } = link;
+    if (toMain('oracle:request', { oracleOpenRequest: to, ref, project })) return;
     closeDrawer();
     if (to === 'supervisor') window.openSupervisorChat?.();
     else {
@@ -244,6 +256,7 @@
     window.AgentRequest.reveal(ref);
   }
   function follow(target) {
+    if (toMain('oracle:follow', target)) return;
     if (target.kind === 'run') { closeDrawer(); selectRun(target.runId); }
     else if (target.kind === 'issue') {
       closeDrawer();
@@ -261,6 +274,23 @@
       openArtifactsAt({ projectId: '', path: target.path, mock: !!state.runs.get(target.runId)?.run?.mock });
     }
   }
+  // a run's own line (a watch, an action) and the Oracle's settings
+  function openRun(runId) {
+    if (toMain('oracle:run', runId)) return;
+    closeDrawer();
+    window.showRun(runId);
+  }
+  function openSettings() {
+    if (toMain('oracle:settings', null)) return;
+    closeDrawer();
+    showView('settings');
+    showSettingsTab('execution');
+    setTimeout(() => { $('#set-oracle-budget')?.focus({ preventScroll: true }); $('#set-oracle')?.scrollIntoView({ block: 'center' }); }, 100);
+  }
+  window.AgentsWindow?.onNavigate?.('oracle:follow', follow);
+  window.AgentsWindow?.onNavigate?.('oracle:request', openRequest);
+  window.AgentsWindow?.onNavigate?.('oracle:run', openRun);
+  window.AgentsWindow?.onNavigate?.('oracle:settings', openSettings);
   // run ids and #issues in the text become links; links and absolute paths get their target
   function decorate(box) {
     const walker = document.createTreeWalker(box, NodeFilter.SHOW_TEXT, { acceptNode: (n) => (n.parentElement.closest('a, pre') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT) });
@@ -306,7 +336,7 @@
   }
 
   // ---- rendering ---------------------------------------------------------------------------
-  const time = (t) => (t ? new Date(t).toLocaleString() : '');
+  const time = (t) => (t ? new Date(t).toLocaleString(undefined, { timeZone: TimeZone.current() }) : '');
   function thumbsHtml(names = []) {
     if (!names.length) return '';
     return `<div class="oracle-thumbs">${names.map((n) => {
@@ -498,8 +528,8 @@
     const where = screen();
     // a turn the Oracle answers on its own (the service is busy, no send here) runs since it was first seen
     if (!or.service?.busy) or.busySince = null; else if (!or.busySince) or.busySince = Date.now();
-    for (const w of SURFACES) {
-      if (w === 'drawer' ? !or.drawer : !onDashboard()) continue;
+    for (const w of ALL_SURFACES) {
+      if (!shownIn(w) || !chats[w]) continue;
       const chat = chats[w];
       chat.update({ messages: or.messages, turn: turnElsewhere(w) });
       const memBox = $(`#oracle-memory-${w}`);
@@ -549,6 +579,7 @@
     badge.title = `${v.unread} new answer${v.unread === 1 ? '' : 's'} from the Oracle`;
     markRead();
     window.GateOracle?.paint?.();
+    window.AgentsWindow?.changed?.();
   }
 
   // ---- the drawer and the dock -------------------------------------------------------------
@@ -585,6 +616,8 @@
     if (context?.question) Promise.resolve(loading).then(() => { if (or.loaded && or.context === context) ask(context.question); });
   }
 
+  // #263: the drawer's "Open in a window" (the Agents window on the Oracle; agents-window.js hides it in the browser UI)
+  const OPEN_WINDOW_BUTTON = '<button class="icon-btn" type="button" data-agents-window="oracle" data-testid="agent-chat-open-window" title="Open in a window (Ctrl+Shift+A)" aria-label="Open the Oracle in a window"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="14" height="14" rx="2" /><path d="M9 3h12v12M21 3l-9 9" /></svg></button>';
   const surfaceHtml = (w) => `
     <div class="drawer-head oracle-head">
       <div class="oracle-who">${avatar()}
@@ -598,7 +631,7 @@
         <button class="btn ghost sm" type="button" data-oracle-night title="Let the Oracle fix what stops the roadmap without asking, until a time you choose">Night watch</button>
         <button class="btn ghost sm" type="button" data-oracle-memory title="The owner's standing decisions, read at every session start">Memory</button>
         <button class="btn ghost sm" type="button" data-oracle-reset title="A new session from a handoff note; the conversation and the memory are kept">New session</button>
-        ${w === 'drawer' ? '<button id="btn-oracle-close" class="icon-btn" type="button" title="Close (Esc)"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg></button>' : ''}
+        ${w === WINDOW ? '' : OPEN_WINDOW_BUTTON}${w === 'drawer' ? '<button id="btn-oracle-close" class="icon-btn" type="button" title="Close (Esc)"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg></button>' : ''}
       </div>
     </div>
     <div id="oracle-chat-${w}" class="drawer-body svc-body oracle-body"></div>`;
@@ -607,6 +640,7 @@
   function mountChat(w) {
     const chat = window.AgentChat.create($(`#oracle-chat-${w}`), {
       agent: 'Oracle',
+      ...(w === WINDOW ? { agentId: 'oracle' } : {}),
       ids: { messages: `oracle-log-${w}`, input: `oracle-q-${w}` },
       classes: { messages: 'svc-log oracle-log', form: 'svc-form', input: 'svc-input oracle-input', send: 'oracle-send', live: 'oracle-live' },
       placeholder: 'Ask the Oracle… (Enter to send, Shift+Enter for a new line; paste a screenshot)',
@@ -637,6 +671,47 @@
     chats[w] = chat;
   }
 
+  // the head buttons of every surface (bound again when the window's surface is mounted, #263)
+  function bindOps() {
+    document.querySelectorAll('[data-oracle-reset]').forEach((b) => (b.onclick = reset));
+    document.querySelectorAll('[data-oracle-memory]').forEach((b) => (b.onclick = () => (or.memoryOpen && or.memory.editing ? null : openMemory())));
+    document.querySelectorAll('[data-oracle-night]').forEach((b) => (b.onclick = () => {
+      if (M.nightWatchView(or.service?.nightWatch).active) return;
+      or.nightForm = or.nightForm ? null : { until: M.defaultNightEnd(new Date(), TimeZone.current()), saving: false, error: null };
+      render();
+      if (or.nightForm) document.querySelector(`#oracle-night-until-${or.window ? WINDOW : or.drawer ? 'drawer' : 'dock'}`)?.focus({ preventScroll: true });
+    }));
+  }
+
+  // #263: the Oracle in the Agents window: the same conversation as a third surface in the pane
+  window.AgentsWindow?.register({
+    id: 'oracle',
+    name: 'Oracle',
+    order: 1,
+    color: '#1E3A8A',
+    avatar: () => Robots.svg('oracle', 'idle', { bubble: false, plaque: '' }),
+    mount(el) {
+      el.innerHTML = surfaceHtml(WINDOW);
+      mountChat(WINDOW);
+      bindOps();
+      or.window = true;
+      render();
+      if (!or.loaded) load();
+      setTimeout(() => $(`#oracle-q-${WINDOW}`)?.focus({ preventScroll: true }), 50);
+    },
+    unmount() {
+      or.window = false;
+      delete chats[WINDOW];
+    },
+    unread: () => view().unread,
+    busy: () => !!(or.pending || or.service?.busy),
+    header: () => ({
+      model: or.service?.model || window.oracleAgent?.model || '',
+      cost: or.messages.reduce((a, m) => a + (m.costUsd || 0), 0),
+      tokens: or.messages.some((m) => m.tokens != null) ? or.messages.reduce((a, m) => a + (Number(m.tokens) || 0), 0) : null,
+    }),
+  });
+
   registerView({
     id: 'oracle',
     modals: `
@@ -666,14 +741,13 @@
       $('#btn-oracle-close').onclick = closeDrawer;
       $('#oracle-backdrop').onclick = closeDrawer;
       document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && or.drawer) closeDrawer(); });
-      document.querySelectorAll('[data-oracle-reset]').forEach((b) => (b.onclick = reset));
-      document.querySelectorAll('[data-oracle-memory]').forEach((b) => (b.onclick = () => (or.memoryOpen && or.memory.editing ? null : openMemory())));
-      document.querySelectorAll('[data-oracle-night]').forEach((b) => (b.onclick = () => {
-        if (M.nightWatchView(or.service?.nightWatch).active) return;
-        or.nightForm = or.nightForm ? null : { until: M.defaultNightEnd(), saving: false, error: null };
+      bindOps();
+      // #273: the messages' times follow the chosen zone, in the surfaces not shown too (render skips
+      // them, and coming back to one does not redraw it)
+      TimeZone.onChange(() => {
+        for (const w of ALL_SURFACES) chats[w]?.update({ messages: or.messages, turn: turnElsewhere(w) });
         render();
-        if (or.nightForm) document.querySelector(`#oracle-night-until-${or.drawer ? 'drawer' : 'dock'}`)?.focus({ preventScroll: true });
-      }));
+      });
       document.addEventListener('input', (e) => {
         if (e.target.classList?.contains('oracle-mem-input')) or.memory = { ...or.memory, draft: e.target.value };
         if (e.target.classList?.contains('oracle-mem-import-input')) or.memory = { ...or.memory, importText: e.target.value };
@@ -686,9 +760,21 @@
       api.onOracleChanged?.(reloadSoon);
       // #180: the question in flight, as the service reports it
       api.onChatProgress?.((p) => {
-        if (p?.chat !== 'oracle' || !or.live) return;
+        if (p?.chat !== 'oracle') return;
+        // #263: a question sent from the other window: shown as a turn started elsewhere until its
+        // end, when oracle:changed reloads the conversation (reloadSoon)
+        let started = false;
+        if (!or.live) {
+          if (p.phase === 'end' || or.pending) return;
+          Object.assign(or, { pending: '…', pendingSince: Date.now(), liveIn: null, live: window.LiveTurn.create({ agent: 'Oracle' }), elsewhere: true });
+          started = true;
+        }
         window.LiveTurn.apply(or.live, p);
-        chats[or.liveIn]?.setLiveTurn(or.live);
+        // a turn started elsewhere has no surface of its own: every mounted chat shows its steps
+        for (const c of or.liveIn ? [chats[or.liveIn]] : Object.values(chats)) c?.setLiveTurn(or.live);
+        if (started) render();
+        // at its end the conversation is reloaded, then the questions queued here meanwhile are sent (sent)
+        if (p.phase === 'end' && or.elsewhere) { Object.assign(or, { pending: null, live: null, liveIn: null, elsewhere: false }); load().then(sent); }
       });
       document.addEventListener('click', (e) => {
         const t = e.target;
@@ -712,23 +798,16 @@
         const undoBtn = t.closest('[data-oracle-undo]');
         if (undoBtn) { undoAction(undoBtn.dataset.oracleUndo); return; }
         const runLink = t.closest('[data-oracle-open-run]');
-        if (runLink) { e.preventDefault(); closeDrawer(); window.showRun(runLink.dataset.oracleOpenRun); return; }
+        if (runLink) { e.preventDefault(); openRun(runLink.dataset.oracleOpenRun); return; }
         const requestLink = t.closest('[data-oracle-open-request]');
-        if (requestLink) { e.preventDefault(); openRequest(requestLink.dataset); return; }
+        if (requestLink) { e.preventDefault(); openRequest({ ...requestLink.dataset }); return; }
         const mute = t.closest('[data-oracle-mute]');
         if (mute) { setWatch(() => api.muteOracleRun({ runId: mute.dataset.oracleMute, on: mute.dataset.on === '1' })); return; }
         const unwatch = t.closest('[data-oracle-unwatch]');
         if (unwatch) { setWatch(() => api.oracleWatch({ ...JSON.parse(unwatch.dataset.oracleUnwatch), on: false })); return; }
         if (t.closest('[data-oracle-night-cancel]')) { or.nightForm = null; render(); return; }
         if (t.closest('[data-oracle-night-off]')) { stopNightWatch(); return; }
-        if (t.closest('[data-oracle-settings]')) {
-          e.preventDefault();
-          closeDrawer();
-          showView('settings');
-          showSettingsTab('execution');
-          setTimeout(() => { $('#set-oracle-budget')?.focus({ preventScroll: true }); $('#set-oracle')?.scrollIntoView({ block: 'center' }); }, 100);
-          return;
-        }
+        if (t.closest('[data-oracle-settings]')) { e.preventDefault(); openSettings(); return; }
         const link = t.closest('[data-oracle-link]');
         if (link) { e.preventDefault(); follow(JSON.parse(link.dataset.oracleLink)); return; }
         const copy = t.closest('[data-oracle-copy]');

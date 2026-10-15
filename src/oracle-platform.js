@@ -2,6 +2,9 @@
 // GitHub or GitLab repository, through gh / glab, read-only (list, view and label list only: the
 // commands are built here, never taken from the model). The repository and platform are the ones the
 // project's synced backlog uses (src/backlog.js cliTarget), else the project's repository URL.
+// The commands come from the platform's adapter (src/shared/platforms/, #351; GitHub when unset).
+
+const { platformOrDefault } = require('./shared/platforms');
 
 const ISSUE_STATES = ['all', 'closed', 'open'];
 const SEARCH_LIMIT = 30;
@@ -12,25 +15,19 @@ const MAX_BODY = 20000;
 function searchCommand({ platform, target, query, state = 'open' }) {
   const s = ISSUE_STATES.includes(state) ? state : 'open';
   const q = String(query || '').trim();
-  if (platform === 'gitlab') {
-    const flag = s === 'open' ? [] : [`--${s}`];
-    return { cli: 'glab', args: ['issue', 'list', '--repo', target, ...(q ? ['--search', q] : []), ...flag, '--per-page', String(SEARCH_LIMIT), '--output', 'json'] };
-  }
-  return { cli: 'gh', args: ['issue', 'list', '--repo', target, ...(q ? ['--search', q] : []), '--state', s, '--limit', String(SEARCH_LIMIT), '--json', 'number,title,state,labels,url,updatedAt'] };
+  return platformOrDefault(platform).searchCommand({ target, query: q, state: s, limit: SEARCH_LIMIT });
 }
 
 /** gh / glab arguments that read one issue with its body and labels. */
 function viewCommand({ platform, target, number }) {
   const n = String(Math.floor(Number(number)));
   if (!(Number(n) > 0)) throw new Error(`Not an issue number: ${number}`);
-  if (platform === 'gitlab') return { cli: 'glab', args: ['issue', 'view', n, '--repo', target, '--output', 'json'] };
-  return { cli: 'gh', args: ['issue', 'view', n, '--repo', target, '--json', 'number,title,state,body,labels,url,comments'] };
+  return platformOrDefault(platform).viewCommand(target, n);
 }
 
 /** gh / glab arguments that list a repository's labels. */
 function labelsCommand({ platform, target }) {
-  if (platform === 'gitlab') return { cli: 'glab', args: ['label', 'list', '--repo', target, '--per-page', String(LABEL_LIMIT), '--output', 'json'] };
-  return { cli: 'gh', args: ['label', 'list', '--repo', target, '--limit', String(LABEL_LIMIT), '--json', 'name,description'] };
+  return platformOrDefault(platform).labelsCommand(target, LABEL_LIMIT);
 }
 
 const labelNames = (labels) => (Array.isArray(labels) ? labels.map((l) => (typeof l === 'string' ? l : l?.name)).filter(Boolean) : []);

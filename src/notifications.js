@@ -5,7 +5,8 @@
 //   run      a workflow run changed status (started, waiting on a human gate, succeeded, failed,
 //            cancelled, interrupted); target = { runId, workflow }; or a push met a merge conflict
 //            (event `conflict`); target = { view: 'backlog', projectId }; or a live roadmap refilled
-//            itself or stopped refilling (#164, events refilled | empty | budget | failed)
+//            itself or stopped refilling (#164, events refilled | empty | budget | failed); or an agent's
+//            provider fell back to the next one of its chain (#262, event `fallback`)
 //   session  an AI CLI in a Sessions terminal stopped and waits for the user; target = { terminalId }
 //   po       the Backlog's Product Owner answered a question (#149); target = { view: 'backlog', projectId, openPO: true }
 //   oracle   the Oracle acted on its own under the owner's Night watch (#123); target = { openOracle: true };
@@ -49,6 +50,9 @@ function runNotice(ev, run = {}, { gateLink } = {}) {
     // #276: the memory guard stopped the same command a second time in a step (the engine sets notify once)
     case 'process.killed':
       return ev.notify ? notice('memory', `Process stopped again for memory: ${name()}`, `${ev.step_id || 'A step'} ran \`${ev.command_line}\` again and the memory guard stopped it again (${(ev.bytes / 1024 ** 3).toFixed(1)} GB, over the ${(ev.limit_bytes / 1024 ** 3).toFixed(1)} GB limit).`) : null;
+    // #262: an agent's provider ran out of credits or hit its usage limit; the turn moved on to the next one
+    case 'agent.fallback':
+      return notice('fallback', `Provider fell back: ${name()}`, `${ev.agent} fell back in ${ev.step_id || 'a turn'}: ${ev.from} → ${ev.to} (${clip(ev.reason, 120)}). The provider may be out of credits.`);
     default:
       return null;
   }
@@ -57,6 +61,17 @@ function runNotice(ev, run = {}, { gateLink } = {}) {
 // The notice for a run that died with the app (found at the next start).
 function interruptedNotice({ runId, workflow, project, mock, title }) {
   return runNotice({ type: 'workflow.finished', run_id: runId, status: 'interrupted', error: 'The app closed while the run was in progress. Resume it from the run screen.' }, { workflow, project, mock, title });
+}
+
+// The notice for a process of a finished run that keeps using CPU (#390, src/engine/memory-guard.js
+// strayProcesses): it names the run and the command; memory:stopStray stops it. Opens the run.
+function strayNotice({ pid, runId, commandLine, cpuShare } = {}) {
+  return {
+    kind: 'run', event: 'stray',
+    title: `A process of a finished run keeps using CPU: ${clip(runId || 'run', 60)}`,
+    body: clip(`PID ${pid}, ${Math.round((Number(cpuShare) || 0) * 100)}% of a core: ${commandLine || 'unknown command'}. Stop it with memory:stopStray, or end it in the Task Manager.`, 240),
+    target: { runId: runId || null },
+  };
 }
 
 // The notice for a CLI waiting in a Sessions terminal.
@@ -310,5 +325,6 @@ module.exports = {
   runNotice,
   sessionNotice,
   shouldNotify,
+  strayNotice,
   WaitDetector,
 };

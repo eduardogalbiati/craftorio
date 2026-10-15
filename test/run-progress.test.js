@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { StepTrail, trailOf, progressGroups, hydrationEvents, estimateProgress, typicalStepTimes } = require('../src/renderer/run-progress-model');
+const { StepTrail, trailOf, progressGroups, hydrationEvents, estimateProgress, typicalStepTimes } = require('../src/shared/run-progress-model');
 const runs = require('../src/runs');
 const { WorkflowRun } = require('../src/engine/workflow');
 const { Recorder } = require('../src/engine/recorder');
@@ -233,8 +233,7 @@ test('the engine records the groups and the step trail in summary.json', { timeo
     events.push(e);
     if (e.type === 'approval.requested') setImmediate(() => run.resolveApproval(e.approval_id, true));
   });
-  await run.start();
-  if (!rec.events.writableFinished) await new Promise((r) => rec.events.once('finish', r));
+  await run.start(); // the recorder writes events.jsonl synchronously (#262): complete here
   assert.equal(events.find((e) => e.type === 'workflow.finished').status, 'success');
   assert.deepEqual(events[0].groups, [{ name: 'Build', steps: ['one', 'two'] }]);
 

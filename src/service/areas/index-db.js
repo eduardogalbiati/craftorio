@@ -3,8 +3,14 @@
 // files, the notification center and the gate history excepted. What the engine emits is written
 // to it here: the run's row and its pending gates.
 
+const { releaseUsageIndex } = require('../../local-usage');
 const runs = require('../../runs');
 const { openStore } = require('../../store');
+
+// #389: the background rebuild of the run index starts once the window had time for its first reads,
+// and pauses between two runs so that what the screens ask for answers first
+const REBUILD_DELAY_MS = 3000;
+const REBUILD_PAUSE_MS = 20;
 
 module.exports = (ctx) => {
   let store = null;
@@ -24,11 +30,15 @@ module.exports = (ctx) => {
         });
       }
     } catch (e) { console.error('index.db gates:', e.message); }
-    // the run index catches up with runs/ (a new or rebuilt index reads every run once)
-    setTimeout(() => { if (ctx.ws) runs.listRunsAsync(ctx.ws.runs).catch((e) => console.error('run index:', e.message)); }, 0);
+    // the run index catches up with runs/ in the background (a new or rebuilt index, or a new
+    // READ_VERSION, reads every run once, one at a time: #389), after the window's first reads
+    setTimeout(() => {
+      if (ctx.ws) runs.rebuildIndexAsync(ctx.ws.runs, { pauseMs: REBUILD_PAUSE_MS }).catch((e) => console.error('run index:', e.message));
+    }, REBUILD_DELAY_MS).unref?.();
   }
 
   function closeIndex() {
+    releaseUsageIndex(); // #389: the usage worker's pending saves to this index are dropped first
     try { store?.close(); } catch { /* already closed */ }
     store = null;
   }

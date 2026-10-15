@@ -74,11 +74,19 @@ tool's own timeout, although the suite had passed in 3.
   are already set: never prefix a command with `VAR=value`.
 - Avoid shell expansions the CLI cannot check statically (`$VAR`, `$(...)`, `echo "exit=$?"`):
   they are refused too. Write paths out; the tool already reports the exit code.
-- Pipes and `;` chains are accepted only when every part is allowed (your toolchain commands and
-  simple utilities: `tail`, `head`, `grep`, `ls`, `cat`, `echo`, `wc`). When unsure, prefer **one
-  command per call**.
+- **One operation per Bash call**: pipes into read utilities (`tail`, `head`, `grep`, `wc`,
+  `awk`) are fine; `;`/`&&` chains are accepted only when every part is allowed, so when unsure,
+  run one command per call.
+- **No scripts inline**: never `sed -i`, never a heredoc (`cat > file <<'EOF'`, `node - <<'EOF'`),
+  never an inline `node -e "…{…}…"` or `awk '{…}'` program, never a `#` after a newline or a `$`
+  expansion inside a quoted argument: the CLI's parser refuses them. A script goes to a file under `<run_dir>/scratch`,
+  written with the `Write` tool, then `node <file>`.
+- **File tools for files**: `Read` instead of `cat`/`sed -n`, `Grep` instead of `grep -n`, `Glob`
+  instead of `ls`/`find`, `Edit` instead of `sed -i`, `Write` instead of `cat > file`. Bash stays
+  for git, npm, node and test runs.
 - After a refusal, rephrase it **once** into an allowed form (split it, drop the prefix or the
-  `cd`, move the log into the log folder); don't retry variants of the same command.
+  `cd`, move the script into a file, move the log into the log folder); never retry variants of
+  the refused call.
 
 ## Read-only agents
 

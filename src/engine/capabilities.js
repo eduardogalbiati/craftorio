@@ -16,24 +16,24 @@
 // docs/agents/capabilities.md; the gaps are logged once per agent in the run.
 
 const path = require('path');
+const { workerEnv } = require('../machine-profile');
+const registry = require('../shared/providers');
 
 const TOOL_RE =/^(read|edit|write|bash(:.+)?)$/;
 const KEYS = ['tools', 'web', 'mcp', 'subagents', 'screenshots'];
 
-// Codex features that reach outside the repository (desktop apps, browsers, plugins, memory).
-// `codex features list` keeps removed names as "removed", so these stay valid flags.
-const CODEX_FEATURES_OFF = ['plugins', 'apps', 'browser_use', 'computer_use', 'in_app_browser', 'image_generation', 'memories'];
-
-// Claude Code's sub-agent tool: named `Agent` by current versions, `Task` by older ones. --tools
-// keeps only the names it knows, so offering just `Task` could leave a newer CLI with no sub-agents.
-const CLAUDE_SUBAGENT_TOOLS = ['Agent', 'Task'];
+// Codex features turned off in isolation, and Claude Code's sub-agent tool names: their adapters'.
+const CODEX_FEATURES_OFF = registry.byId('codex').featuresOff;
+const CLAUDE_SUBAGENT_TOOLS = registry.byId('claude').subagentTools;
 
 // Shell utilities an agent with a command allowlist (bash:<command>) also runs without asking, so a
 // pipe or a `;` chain of allowed commands (`npm test; echo "exit=$?"`, `... | tail -3`) is not
 // refused headless, where nobody can approve it. Read-only: any agent with commands gets them.
-// `[` is `test` in its bracket form (`[ -f file ] && ...`).
+// `[` is `test` in its bracket form (`[ -f file ] && ...`). `awk` (#299): a filter in a pipe; its
+// programs with braces are refused by the CLI's parser anyway. `sed` stays out: `sed -i` writes.
 const READ_UTILITIES = [
   '[',
+  'awk',
   'basename',
   'cat',
   'cut',
@@ -85,9 +85,12 @@ const DEPS_DENIED_COMMANDS = [
 // The environment of an agent of a run: AGENT_ENV, plus the run's scratch workspace (#120) when it
 // has one ({ workspace, userData }, see WorkflowRun.scratchWorkspace), so `npm run run`, `npm run
 // screenshot` and the app started from the worktree never open the owner's workspace or user data.
-function agentEnv(scratch = null) {
-  if (!scratch) return { ...AGENT_ENV };
-  return { ...AGENT_ENV, MULTIAGENT_USER_DATA: scratch.userData, MULTIAGENT_WORKSPACE: scratch.workspace };
+// workers: { testWorkers } of the machine profile (#367): the test workers per run, passed to the
+// test runners as MULTIAGENT_TEST_WORKERS / MULTIAGENT_E2E_WORKERS (src/machine-profile.js workerEnv).
+function agentEnv(scratch = null, workers = null) {
+  const env = { ...AGENT_ENV, ...(workers?.testWorkers ? workerEnv(workers) : {}) };
+  if (!scratch) return env;
+  return { ...env, MULTIAGENT_USER_DATA: scratch.userData, MULTIAGENT_WORKSPACE: scratch.workspace };
 }
 
 // Flags that take no value: never passed twice (clap-based CLIs refuse a repeated flag).
@@ -153,6 +156,7 @@ const runDirs = (caps, runDir) => (caps && runDir && bashRules(caps).length ? RU
 // would ask about is refused, so this says how to run commands that are never asked about.
 // agentVars: the agent's environment (agentEnv); shotsDir: the folder of this step's round
 // (<run_dir>/evidence/<step>/round-<n>), else the evidence folder.
+/** @param {string | null} [shotsDir] */
 function commandGuide(caps, runDir, agentVars = AGENT_ENV, shotsDir = null) {
   if (!caps || !bashRules(caps).length) return '';
   const dirs = runDirs(caps, runDir);
@@ -167,7 +171,9 @@ function commandGuide(caps, runDir, agentVars = AGENT_ENV, shotsDir = null) {
     '- Avoid shell expansions the CLI cannot check (`$VAR`, `$(...)`, `$?`): write the value out; the tool already reports each command\'s exit code.',
     // screenshots: false (an agent that should not take any): only the logs' folder
     ...(logs ? [`- Write command logs to \`${logs}${path.sep}<name>.log\`${caps.screenshots === false ? '' : ` and screenshots to \`${shots}\` (as \`<issue>-<screen>-<state>.original.png\` / \`.modified.png\`)`}, never to /tmp, $TEMP or AppData (a gitignored folder of the working folder is fine too).`] : []),
-    '- Pipes and `;` chains are fine when every part is an allowed command or a simple utility (tail, head, grep, ls, cat, echo, wc, printenv; mkdir -p, mktemp and sort when you may write files). When unsure, run one command per call; after a refusal, rephrase it once into an allowed form instead of retrying variants.',
+    '- Pipes and `;` chains are fine when every part is an allowed command or a simple utility (tail, head, grep, awk, ls, cat, echo, wc, printenv; mkdir -p, mktemp and sort when you may write files). When unsure, run one command per call; after a refusal, rephrase it once into an allowed form instead of retrying variants.',
+    // #299: refused by the CLI's own parser whatever the allow list says
+    '- The CLI\'s parser also refuses a `#` after a newline or a `$` inside a quoted argument, a heredoc (`cat > file <<\'EOF\'`, `node - <<\'EOF\'`) and an inline script with braces and quotes (`node -e "...{...}..."`, `awk \'{...}\'`): write the script to a file with your file tool, then run `node <file>`.',
   ].join('\n');
 }
 
@@ -189,6 +195,18 @@ const claudePath = (p) => {
   return s.includes('/') ? s : `**/${s}`;
 };
 
+// What an adapter's isolationArgs reads the capabilities with (the adapters require nothing of the engine).
+const ADAPTER_LIB = {
+  bashRules,
+  claudeBashRules,
+  claudePath,
+  has,
+  readOnly,
+  runDirs,
+  toml,
+  writes,
+};
+
 /**
  * Flags for one turn. caps: normalized capabilities or null (the agent's cli_args only).
  * isolated: keep the user's CLI configuration out. mcpServers: the workflow's mcp_servers.
@@ -198,72 +216,19 @@ const claudePath = (p) => {
  * env: the agent's environment (agentEnv), accepted as a command prefix by Claude's allow rules.
  * denyCommands: command prefixes the agent may not run (DEPS_DENIED_COMMANDS); only Claude refuses them.
  * Returns { args, notes }: notes say what this CLI could not enforce (logged once per agent).
+ * @param {string} type
+ * @param {{ caps?: object | null, isolated?: boolean, mcpServers?: object, denyEdits?: string[], denyCommands?: string[], runDir?: string | null, env?: object }} [options]
  */
 function providerArgs(type, { caps = null, isolated = true, mcpServers = {}, denyEdits = [], denyCommands = [], runDir = null, env = AGENT_ENV } = {}) {
-  const args = [];
-  const notes = [];
   const mcp = caps ? pick(mcpServers, caps.mcp) : {};
-  switch (type) {
-    case 'claude-code': {
-      if (isolated) {
-        // no user settings (plugins, hooks, permission rules), no MCP servers but the declared ones,
-        // no Chrome integration, no skill listing (the engine injects the workflow's skills), no auto-memory
-        args.push('--strict-mcp-config', '--no-chrome', '--setting-sources', 'project,local', '--disable-slash-commands',
-          '--settings', JSON.stringify({ autoMemoryEnabled: false }));
-      }
-      if (caps && Object.keys(mcp).length) args.push('--mcp-config', JSON.stringify({ mcpServers: mcp }));
-      if (!caps) break;
-      // --tools: the only built-in tools offered (fewer definitions in context);
-      // --allowedTools: the ones that run without asking (nobody can answer in headless mode)
-      const offered = ['Read', 'Glob', 'Grep'];
-      const allowed = ['Read', 'Glob', 'Grep'];
-      if (has(caps, 'edit')) { offered.push('Edit', 'NotebookEdit'); allowed.push('Edit', 'NotebookEdit'); }
-      if (has(caps, 'write')) { offered.push('Write'); allowed.push('Write'); }
-      const bash = claudeBashRules(caps, env);
-      if (bash.length) { offered.push('Bash'); allowed.push(...bash); }
-      if (caps.web) { offered.push('WebSearch', 'WebFetch'); allowed.push('WebSearch', 'WebFetch'); }
-      if (caps.subagents) { offered.push(...CLAUDE_SUBAGENT_TOOLS); allowed.push(...CLAUDE_SUBAGENT_TOOLS); }
-      allowed.push(...Object.keys(mcp).map((n) => `mcp__${n}`));
-      args.push('--tools', offered.join(','), '--allowedTools', allowed.join(' '));
-      // deny rules win over allow rules; Edit(...) covers every built-in tool that edits files
-      const denied = [
-        ...(writes(caps) ? denyEdits.map((p) => `Edit(${claudePath(p)})`) : []),
-        ...(bash.length ? denyCommands.map((c) => `Bash(${c}:*)`) : []),
-      ];
-      if (denied.length) args.push('--disallowedTools', denied.join(' '));
-      // file edits (and mkdir/redirects) are refused headless without acceptEdits
-      if (writes(caps)) args.push('--permission-mode', 'acceptEdits');
-      for (const dir of runDirs(caps, runDir)) args.push('--add-dir', dir);
-      break;
-    }
-    case 'codex-cli': {
-      // one -c for every server: the workflow's declared ones replace the user's config.toml table
-      if (isolated || Object.keys(mcp).length) args.push('-c', `mcp_servers=${toml(mcp)}`);
-      if (isolated) for (const f of CODEX_FEATURES_OFF) args.push('--disable', f);
-      if (!caps) break;
-      args.push('-s', writes(caps) ? 'workspace-write' : 'read-only');
-      if (!caps.web) args.push('-c', 'web_search="disabled"');
-      if (bashRules(caps).some((t) => t !== 'bash')) notes.push('command allowlist (bash:<command>) not enforceable: the sandbox limits writes, not which commands run');
-      if (writes(caps) && bashRules(caps).length) notes.push('workspace-write sandbox: no network access for commands');
-      break;
-    }
-    case 'grok-cli': {
-      if (isolated) notes.push('grok has no flags to skip the user\'s MCP servers, skills or memory: only its tools are restricted');
-      if (caps && Object.keys(mcp).length) notes.push('workflow MCP servers are not passed to grok');
-      if (!caps) break;
-      if (readOnly(caps)) args.push('--tools', ['read_file', 'list_dir', 'grep', ...(caps.web ? ['web_search', 'web_fetch'] : [])].join(','));
-      else notes.push('only read-only tool sets are enforced for grok (edit/write/bash run with --always-approve)');
-      if (!caps.web) args.push('--disable-web-search');
-      if (!caps.subagents) args.push('--no-subagents');
-      // headless: nobody can answer its approval prompts
-      args.push('--always-approve');
-      break;
-    }
-    default:
-      break;
-  }
-  if (denyEdits.length && type !== 'claude-code' && (!caps || !readOnly(caps))) notes.push('test paths (edits_tests: false) are not refused by the tools: the engine checks the turn\'s changes');
-  if (denyCommands.length && type !== 'claude-code' && (!caps || bashRules(caps).length)) notes.push('`npm ci` on the shared node_modules is not refused by this CLI: the engine checks the cache entry after the turn');
+  const adapter = registry.byType(type);
+  // each CLI's own flags: its adapter's isolationArgs (src/shared/providers/<id>.js)
+  const { args, notes } = adapter?.isolationArgs
+    ? adapter.isolationArgs({ caps, isolated, mcp, denyEdits, denyCommands, runDir, env }, ADAPTER_LIB)
+    : { args: [], notes: [] };
+  const enforced = !!adapter?.enforcesDenyRules;
+  if (denyEdits.length && !enforced && (!caps || !readOnly(caps))) notes.push('test paths (edits_tests: false) are not refused by the tools: the engine checks the turn\'s changes');
+  if (denyCommands.length && !enforced && (!caps || bashRules(caps).length)) notes.push('`npm ci` on the shared node_modules is not refused by this CLI: the engine checks the cache entry after the turn');
   return { args, notes };
 }
 
@@ -286,8 +251,7 @@ function describe(caps, type) {
   const c = normalize(caps);
   const bash = bashRules(c).map((t) => (t === 'bash' ? '*' : t.slice(5)));
   const tools = [...c.tools.filter((t) => !t.startsWith('bash')), ...(bash.length ? [`bash: ${bash.join(' ')}`] : [])];
-  const subagents = type === 'claude-code' ? `subagents: ${CLAUDE_SUBAGENT_TOOLS.join('/')} tool offered`
-    : type === 'codex-cli' ? 'subagents: not offered by Codex' : 'subagents';
+  const subagents = registry.byType(type)?.subagentsNote || 'subagents';
   return [`tools: ${tools.join(', ') || 'none'}`, `web: ${c.web ? 'on' : 'off'}`, `mcp: ${c.mcp.join(', ') || 'none'}`, ...(c.subagents ? [subagents] : [])].join(' · ');
 }
 

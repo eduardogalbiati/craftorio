@@ -12,6 +12,7 @@ const { execFileSync } = require('child_process');
 const releases = require('../src/releases');
 const roadmaps = require('../src/roadmap');
 const { WorkflowRun, loadWorkflow } = require('../src/engine/workflow');
+const machineActions = require('../src/engine/machine-actions');
 process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
 
 // No user git config (identity, hooks, aliases), as on CI.
@@ -259,9 +260,12 @@ test('release.yaml: its suites never wave a failure through as failing on the ba
   const wf = loadWorkflow(path.join(__dirname, '..', 'workflows', 'release.yaml'));
   const suites = wf.steps.filter((s) => s.type === 'suite');
   assert.deepEqual(suites.map((s) => [s.id, s.base_check]), [['unit', false], ['e2e', false]]);
-  const skip = wf.steps[0].transitions.find((t) => /inputs\.e2e_suite == 'skip'/.test(t.when));
-  assert.equal(skip.goto, 'ship');
-  assert.ok(wf.steps[0].transitions.indexOf(skip) < wf.steps[0].transitions.findIndex((t) => t.goto === 'e2e'), 'checked before the transition to the E2E suite');
+  // #290: after a fix the green unit suite goes to the release summary first, else straight to ship
+  const unit = suites[0];
+  const skip = unit.transitions.find((t) => /inputs\.e2e_suite == 'skip'/.test(t.when) && t.goto === 'ship');
+  assert.ok(skip, 'a green unit suite with e2e_suite skip goes to ship');
+  assert.ok(unit.transitions.filter((t) => /inputs\.e2e_suite == 'skip'/.test(t.when)).every((t) => ['review', 'ship'].includes(t.goto)));
+  assert.ok(unit.transitions.indexOf(skip) < unit.transitions.findIndex((t) => t.goto === 'e2e'), 'checked before the transition to the E2E suite');
 });
 
 // shipGuard on a run built by hand (a real run cannot start in tests): who answered, and whether the
@@ -271,7 +275,9 @@ test('shipGuard: only the owner\'s answer ships, and never a local base that mov
   const run = new WorkflowRun({ file: workflowFile(t, SHIP_WORKFLOW(GATE())), inputs: { repo_path: f.repo }, mock: true, runsDir: tmp(t, 'ship-runs-') });
   const step = { id: 'ship' };
   run.shipGuard(step); // a simulation: nothing to guard
+  // a real run from here on (#353: the run's machine adapter says whether it is simulated)
   run.mock = false;
+  run.machine = machineActions.real();
   // the run's worktree: detached at the local main
   const wt = path.join(f.dir, 'wt');
   git(f.repo, 'worktree', 'add', '-q', '--detach', wt, 'main');

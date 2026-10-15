@@ -11,7 +11,8 @@ const TOOLCHAINS = ['bash:git', 'bash:npm'];
 
 // The read-only shell utilities every agent with a bash:<command> capability also gets (#96): no
 // refusal for a pipe or a `;` chain made of allowed commands, whatever the agent's own toolchain.
-const READ_BASH = ['[', 'basename', 'cat', 'cut', 'dirname', 'echo', 'grep', 'head', 'ls', 'printenv', 'pwd', 'tail', 'test', 'tr', 'wc'].map((u) => `Bash(${u}:*)`);
+// #299: read-only awk too (it writes nothing without a redirect); sed stays out (sed -i writes)
+const READ_BASH = ['[', 'awk', 'basename', 'cat', 'cut', 'dirname', 'echo', 'grep', 'head', 'ls', 'printenv', 'pwd', 'tail', 'test', 'tr', 'wc'].map((u) => `Bash(${u}:*)`);
 const WRITE_BASH = ['mkdir', 'mktemp', 'sort', 'uniq'].map((u) => `Bash(${u}:*)`);
 
 test('claude: capabilities become --tools (offered), --allowedTools (approved) and acceptEdits for writers', () => {
@@ -272,7 +273,9 @@ test('a real turn gets the capability and isolation flags, and its context is me
   assert.deepEqual(received.context, { start: 31000, peak: 41500 });
   assert.equal(received.handoff, '- Goal: fake');
   assert.ok(fs.existsSync(path.join(run.runDir, 'handoffs', 'work-v1-dev.md')));
-  assert.deepEqual(finished.summary.context.agents.dev.per_turn[0], { step: 'work', visit: 1, start: 31000, peak: 41500, tokens: 72520 });
+  // the turn's tokens are every model call it made, the sub-agent's included (#308): input
+  // 1000 + 90000 + 500, output 10 × 3 (above the result's 20), cache read 71000 (the result's, above the stream's)
+  assert.deepEqual(finished.summary.context.agents.dev.per_turn[0], { step: 'work', visit: 1, start: 31000, peak: 41500, tokens: 162530 });
 });
 
 test('Agent/Task tool calls are counted as sub-agent calls, per agent and per step; other tools and a step with none do not count (#160)', { timeout: 30000 }, async (t) => {

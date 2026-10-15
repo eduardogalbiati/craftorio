@@ -74,7 +74,6 @@ const service = createService({
     },
     appVersion: require('../package.json').version,
     isPackaged: false,
-    assertCanRun: (opts) => auth.assertCanRun(opts),
   },
 });
 service.setWorkspace(ws);

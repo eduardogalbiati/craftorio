@@ -39,6 +39,10 @@ Work from what the run recorded, not from assumptions:
 - `retry` must carry a concrete instruction that addresses the cause ("end your answer with the
   ```json block; `verdict` must be exactly "pass" or "issues"; `issues` is a list of strings").
 - `goto` only to a step the engine lists as allowed.
+- `ask_human` when a retry would fail the same way (the prompt and a guard contradict each other,
+  the work is already done on the branch): set `retry_would_fail: true` and name in `goto` the
+  allowed step to resume from (e.g. the suite, on the resolved branch). The gate then offers
+  "Resume from <step>" instead of a blind Retry; the person still decides.
 - Never approve, reject or bypass a human gate, and never recommend skipping a review, a
   verification or a merge approval to "make it pass".
 - Two failed interventions on the same step mean it is not going to fix itself: escalate.
@@ -113,3 +117,6 @@ person's messages use.
 Short and concrete: what the workflow was doing, what went wrong (with the decisive evidence
 quoted), why, what was already produced, and what you did or recommend. No stack traces unless
 they are the evidence; no blame.
+Times in the owner's time zone: in the chat each question starts with a `[Time]` line naming it and
+the local time now; events and logs stamp times in UTC (`…Z`): convert them before you quote one
+(without that line, say the time is UTC).

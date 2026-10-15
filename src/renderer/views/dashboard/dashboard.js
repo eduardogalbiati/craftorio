@@ -11,13 +11,14 @@
 //   yet (the Discovery board, #261) is left out;
 // - "What needs you": the gates waiting (their age, and the gate's phone page link while Phone gates
 //   is on, #226), the discovery cards whose thread ends with a question (the Inbox opens the card to
-//   answer it) and the roadmap's failed items, each with one button;
+//   answer it), the runs paused after their current turn (#368, Open run: its Resume) and the
+//   roadmap's failed items, each with one button;
 // - "Today": the real cost of the day and of the last night (the Night watch's window), the runs
 //   finished and failed, the 24/7 occupancy (#188) and the roadmap's next stage;
 // - a new workspace (no project, no run): how to start.
 // Registers itself with registerView (view-registry.js); uses viewRegistry and the globals of app.js and
 // the shared pieces ($, esc, state, dateOf, pendingGates, openGateOf, showRun, showView, openDrawer,
-// openProjectModal, issueRefs, displayName, fmtUsd, loadUsage).
+// openProjectModal, issueRefs, displayName, fmtUsd, usageBusy).
 // renderDashboard is also called by app.js (init, and renderHeader on run events): it paints from
 // what was read last (nothing is redrawn while it reads the same) and reads again at most every
 // HOME_REFRESH_MS (at once when Home opens or the header's project changes; every HOME_REFRESH_MS
@@ -41,7 +42,8 @@ const HOME_FAILED = ['failed', 'cancelled', 'interrupted'];
 const HOME_ACTIONS = ['data-home-run', 'data-home-card', 'data-home-roadmap', 'data-home-act', 'data-stage'];
 // asked: the project of the last read started (undefined: none yet); data: what the last read answered
 // html: what the overview shows now
-const homeView = { seq: 0, at: 0, asked: undefined, data: null, morning: null, html: null };
+// occupancy: the 24/7 summary (#389: undefined until its first answer, null without figures)
+const homeView = { seq: 0, at: 0, asked: undefined, data: null, morning: null, html: null, occupancy: undefined };
 
 const homeProject = () => window.CurrentProject?.get() || null;
 // the roadmap's items, each with its stage's number (1-based) and name
@@ -63,8 +65,14 @@ async function loadHome() {
   homeView.at = Date.now();
   homeView.asked = projectId;
   const read = async (fn) => { try { return await fn(); } catch { return null; } };
-  // (the top bar's usage, read once at start: "Today" waits for its first answer)
-  const [inbox, cards, waiting, backlog, releases, active, runs, occupancy] = await Promise.all([
+  // #389: the slow reads never hold the overview back: the 24/7 occupancy paints when it answers
+  // (busy until its first answer), "Cost today" when the top bar's usage does (usage-widget.js)
+  read(() => api.getOccupancy({ summary: true })).then((o) => {
+    if (seq !== homeView.seq) return;
+    homeView.occupancy = o || null;
+    paintHome();
+  });
+  const [inbox, cards, waiting, backlog, releases, active, runs] = await Promise.all([
     read(() => projectId && api.listDiscoveryCards(projectId, 'inbox')),
     read(() => projectId && viewRegistry.has('discovery') && api.listDiscoveryCards(projectId)),
     read(() => projectId && api.listDiscoveryWaiting(projectId)),
@@ -73,12 +81,10 @@ async function loadHome() {
     read(() => api.listActiveRuns()),
     // simulated runs count only where nothing else can run (simulation-only mode)
     read(() => api.listRuns({ limit: HOME_RUNS, showSim: !!state.simulationOnly })),
-    read(() => api.getOccupancy({ summary: true })),
-    read(() => state.usage || loadUsage()),
   ]);
   if (seq !== homeView.seq) return; // a newer read (the project changed) answers instead
   homeView.data = {
-    projectId, backlog: backlog || null, releases: releases || null, occupancy: occupancy || null,
+    projectId, backlog: backlog || null, releases: releases || null,
     inbox: homeList(inbox), cards: homeList(cards), waiting: homeList(waiting), active: homeList(active), runs: homeList(runs?.runs || runs),
   };
   paintHome();
@@ -139,23 +145,29 @@ function homeNeeds(d) {
   const failed = items.filter((x) => x.status === 'failed').map((x) => ({
     kind: 'failed-item', stage: x.stage, title: homeItemTitle(x), detail: x.error || `Roadmap · ${x.stageName}`,
   }));
+  // #368: the runs paused after their current turn wait for the owner's Resume (nothing else resumes them)
+  const paused = d.runs.filter((r) => r.status === 'paused').map((r) => ({
+    kind: 'paused-run', runId: r.runId, since: r.finishedAt || null,
+    title: r.title || (r.workflow ? name(r.workflow) : r.runId), detail: 'Paused after its current turn: Resume continues it where it stopped',
+  }));
   // the discovery cards whose thread ends with a question (e.g. a grill-me question); a card that left
   // the Inbox needs the Discovery board (#261) to be answered
   const questions = d.waiting.filter((c) => viewRegistry.has(c.column === 'inbox' ? 'inbox' : 'discovery')).map((c) => ({
     kind: 'card', cardId: c.id, since: c.question?.ts || null,
     title: c.title || 'Discovery card', detail: [c.question?.author, c.question?.text].filter(Boolean).join(': '),
   }));
-  return [...gates, ...elsewhere, ...questions, ...failed];
+  return [...gates, ...elsewhere, ...questions, ...paused, ...failed];
 }
 
 const HOME_NEED_BADGES = {
   gate: '<span class="badge warn">Gate</span>',
   card: '<span class="badge warn">Question</span>',
   'failed-item': '<span class="pill pill-failed">Failed</span>',
+  'paused-run': StatusPill.statusPill('paused'),
 };
 // the one button of a "What needs you" row
 function homeNeedButton(n) {
-  if (n.kind === 'gate') return `<button type="button" class="btn sm primary" data-home-run="${esc(n.runId)}">Open run</button>`;
+  if (n.kind === 'gate' || n.kind === 'paused-run') return `<button type="button" class="btn sm primary" data-home-run="${esc(n.runId)}">Open run</button>`;
   if (n.kind === 'card') return `<button type="button" class="btn sm primary" data-home-card="${esc(n.cardId)}">Answer</button>`;
   return `<button type="button" class="btn sm" data-home-roadmap="${n.stage}">Open roadmap</button>`;
 }
@@ -192,7 +204,7 @@ function homeNeedsHtml(d) {
 }
 
 function homeTodayHtml(d) {
-  const start = new Date().setHours(0, 0, 0, 0);
+  const start = TimeZone.startOfDay(Date.now(), TimeZone.current()); // #273: the owner's local today
   const today = (iso) => Date.parse(iso) >= start;
   const finished = d.runs.filter((r) => r.status === 'success' && today(r.finishedAt)).length;
   const failed = d.runs.filter((r) => HOME_FAILED.includes(r.status) && today(r.finishedAt || r.startedAt)).length;
@@ -204,20 +216,26 @@ function homeTodayHtml(d) {
   const night = sp?.night ? ['Cost tonight', usd(sp.night), 'Spent by real runs since the Night watch started']
     : w ? ['Cost last night', fmtUsd(d.runs.filter(inNight).reduce((a, r) => a + (Number(r.costUsd) || 0), 0)), 'Cost of the real runs started during the last Night watch']
       : ['Cost last night', '—', 'No Night watch ended recently'];
-  const o = d.occupancy;
-  const occupancy = o && !o.empty ? `${Math.round((Number(o.occupancy) || 0) * 100)}%` : '—';
+  // undefined: not answered yet (#389: shown as loading), null: no figures
+  const o = homeView.occupancy;
+  const occupancyBusy = o === undefined;
+  const occupancy = occupancyBusy ? '…' : o && !o.empty ? `${Math.round((Number(o.occupancy) || 0) * 100)}%` : '—';
+  const occupancyTitle = occupancyBusy ? 'Reading the last 24 h…' : o && !o.empty ? window.OccupancyChip?.chipModel(o).tooltip || '' : 'No runs yet: start one to measure';
+  const costBusy = usageBusy();
   const stages = d.backlog?.roadmap?.stages || [];
-  const next = stages.findIndex((s) => !s.disabled && (s.items || []).some((x) => !['done', 'skipped'].includes(x.status)));
+  const next = RoadmapModel.currentStage({ stages });
   const nextName = next < 0 ? '' : stages[next].name || `Stage ${next + 1}`;
-  const stat = (label, value, title) => `<div class="u-stat" title="${esc(title)}"><label>${esc(label)}</label><b>${value}</b></div>`;
+  // `attrs`: a test id and, while its figure loads, aria-busy
+  const stat = (label, value, title, attrs = '') => `<div class="u-stat" title="${esc(title)}"${attrs}><label>${esc(label)}</label><b>${value}</b></div>`;
+  const busy = (on) => (on ? ' aria-busy="true"' : '');
   return `<section class="home-block" data-testid="home-today" aria-label="Today">
     <h2 class="home-title">Today</h2>
     <div class="home-stats">
-      ${stat('Cost today', esc(usd(sp?.day)), 'Spent today by real runs (live runs included)')}
+      ${stat('Cost today', esc(costBusy ? '…' : usd(sp?.day)), costBusy ? 'Reading the usage…' : 'Spent today by real runs (live runs included)', ` data-testid="home-cost-today"${busy(costBusy)}`)}
       ${stat(night[0], esc(night[1]), night[2])}
       ${stat('Runs finished', finished, 'Runs that succeeded today')}
       ${stat('Runs failed', failed, 'Runs that failed, were cancelled or were interrupted today')}
-      ${stat('24/7 occupancy', occupancy, o && !o.empty ? window.OccupancyChip?.chipModel(o).tooltip || '' : 'No runs yet: start one to measure')}
+      ${stat('24/7 occupancy', occupancy, occupancyTitle, ` data-testid="home-occupancy"${busy(occupancyBusy)}`)}
       ${stat('Next roadmap stage', nextName ? `<button type="button" class="link-btn home-next" data-home-roadmap="${next + 1}" title="${esc(`Stage ${next + 1} of ${stages.length}: ${nextName}. Open the roadmap`)}">${esc(nextName)}</button>` : '—', nextName ? 'The first stage with work left' : 'No roadmap stage with work left')}
     </div>
   </section>`;
@@ -283,7 +301,7 @@ function openHomeStage(id) {
   if (stage.view === 'workflows') {
     // the runs in progress of the header's project (the search matches its name), simulated ones included
     state.workflowsTab = 'runs';
-    Object.assign(state.wr, { filter: 'running', showSim: true, q: state.projects.find((p) => p.id === homeProject())?.name || '' });
+    Object.assign(state.wr, { filter: 'running', showSim: true, workflow: '', q: state.projects.find((p) => p.id === homeProject())?.name || '' });
   }
   showView(stage.view);
 }

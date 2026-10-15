@@ -3,7 +3,7 @@
 // - result: result.md, the run's summary (src/result-summary.js);
 // - screenshots: evidence captures (evidence/<step>/round-<n>/, legacy screenshots/), any image;
 // - tests: e2e/ (scenarios, results JSON, Playwright traces), coverage/, test results files;
-// - reports: reports/, *report*.md, a document a step saved (file.saved) that fits nowhere else;
+// - reports: reports/, *report*.md, release-summary.md, a document a step saved (file.saved) that fits nowhere else;
 // - process: handoff notes, decisions.tsv, the agents' logs, the evidence manifest, anything else
 //   of the run folder;
 // - internal: scratch/ (the run's seeded workspace, #201; a file an agent saved there on purpose is
@@ -47,7 +47,8 @@ function categoryOf(p, event) {
   if (/^(handoffs|logs)\//i.test(rel) || /^decisions\.tsv$/i.test(rel) || /\.log$/i.test(base) || /^evidence\/manifest\.json$/i.test(rel)) return 'process';
   if (/^(e2e|coverage|test-results)\//i.test(rel) || /(^|[-_.])(test-results|coverage|junit)[-_.]/i.test(base) || /\.trace\.zip$/i.test(base)) return 'tests';
   if (/^(evidence|screenshots)\//i.test(rel) || IMAGE.test(base)) return 'screenshots';
-  if (/^reports\//i.test(rel) || /report/i.test(base)) return 'reports';
+  // release-summary.md: the release run's summary for its Ship gate (#290)
+  if (/^reports\//i.test(rel) || /report/i.test(base) || /^release-summary\.md$/i.test(rel)) return 'reports';
   // a file a step saved on purpose is something the run produced; the rest is the run's own bookkeeping
   return event === 'file.saved' ? 'reports' : 'process';
 }

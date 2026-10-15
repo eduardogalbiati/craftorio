@@ -22,121 +22,44 @@
 // issues, refreshed by each sync (`refreshQueuedCopies`) and read again right before a run starts
 // (`freshIssues`, with the cache as a recorded fallback when the platform cannot be read).
 // Archive (#238): `archiveIssues` closes issues as not planned with the `archived` label (guards:
-// src/renderer/views/backlog/backlog-archive.js), `restoreIssues` reopens them.
+// src/shared/backlog-archive.js), `restoreIssues` reopens them.
+// The platform CLI helpers and the issue copies live in src/issues.js (re-exported here, #345).
 // Screen: src/renderer/views/backlog/backlog.js; channels: src/service/channels/backlog.js.
 
 const fs = require('fs');
 const path = require('path');
-const { resolveCommand } = require('./engine/providers');
-const { execShim } = require('./shell');
+const { readEpics } = require('./epics');
+const {
+  DEFAULT_PLATFORM,
+  MAX_ISSUES,
+  PLATFORMS,
+  adapterOf,
+  cliTarget,
+  commandDisplay,
+  execCli,
+  fetchIssue,
+  fetchIssues,
+  issueCreateCommand,
+  issueFields,
+  itemIssues,
+  parseRepoUrl,
+  platformOfHost,
+  repoLabels,
+  runCommand,
+  taskProgress,
+  withSyncedText,
+} = require('./issues');
+const { refreshCopies } = require('./roadmap');
 const { writeJsonSafe } = require('./state-file');
 const { storeFor } = require('./store');
-const { ARCHIVED_LABEL, archiveBlockReason } = require('./renderer/views/backlog/backlog-archive');
+const TimeZone = require('./time-zone');
+const { ARCHIVED_LABEL, archiveBlockReason } = require('./shared/backlog-archive');
 
-const PLATFORMS = {
-  github: { label: 'GitHub', cli: 'gh', host: 'github.com' },
-  gitlab: { label: 'GitLab', cli: 'glab', host: 'gitlab.com' },
-  bitbucket: { label: 'Bitbucket', cli: null, host: 'bitbucket.org' },
-};
-const DEFAULT_PLATFORM = 'github';
-const MAX_ISSUES = 300;
 // the workflow of Write & Review: its runs enrich an issue's text, they do not implement it
 const ENRICH_WORKFLOW = 'writer-reviewer';
 // the issue tracker (#81) files issues, it does not implement them: its runs never link to an issue
 // they mention (e.g. "related to #41"); its "create and queue" choice queues the issues it filed
 const ISSUE_TRACKER_WORKFLOW = 'issue-tracker';
-
-/**
- * https://host/owner/repo(.git), ssh://git@host/owner/repo.git, git@host:owner/repo.git
- * → { host, path: 'owner/repo' } (GitLab paths may have subgroups), or null.
- */
-function parseRepoUrl(url) {
-  const s = String(url || '').trim().replace(/[?#].*$/, '');
-  const m = s.match(/^(?:https?|ssh|git):\/\/(?:[^@/]+@)?([^/:]+)(?::\d+)?\/(.+)$/i) || s.match(/^[\w.-]+@([\w.-]+):(.+)$/);
-  if (!m) return null;
-  const repoPath = m[2].replace(/\/+$/, '').replace(/\.git$/i, '');
-  if (!repoPath.includes('/')) return null;
-  return { host: m[1].toLowerCase(), path: repoPath };
-}
-
-// The platform a well-known host belongs to (self-hosted hosts: unknown).
-const platformOfHost = (host) => Object.keys(PLATFORMS).find((p) => PLATFORMS[p].host === host) || null;
-
-// Progress of the markdown task list in an issue body ("- [ ]" / "- [x]").
-function taskProgress(body) {
-  const boxes = String(body || '').match(/^\s*[-*+] \[[ xX]\]/gm) || [];
-  return { done: boxes.filter((b) => /\[[xX]\]/.test(b)).length, total: boxes.length };
-}
-
-function normalizeGithub(raw) {
-  return raw.map((i) => ({
-    number: i.number,
-    title: i.title,
-    state: String(i.state).toLowerCase() === 'open' ? 'open' : 'closed',
-    labels: (i.labels || []).map((l) => ({ name: l.name, color: l.color ? `#${l.color}` : null })),
-    url: i.url,
-    author: i.author?.login || null,
-    assignees: (i.assignees || []).map((a) => a.login),
-    body: i.body || '',
-    tasks: taskProgress(i.body),
-    createdAt: i.createdAt,
-    updatedAt: i.updatedAt,
-  }));
-}
-
-function normalizeGitlab(raw) {
-  return raw.map((i) => ({
-    number: i.iid,
-    title: i.title,
-    state: i.state === 'opened' ? 'open' : 'closed',
-    labels: (i.labels || []).map((name) => ({ name: typeof name === 'string' ? name : name.name, color: name.color || null })),
-    url: i.web_url,
-    author: i.author?.username || null,
-    assignees: (i.assignees || []).map((a) => a.username),
-    body: i.description || '',
-    tasks: taskProgress(i.description),
-    createdAt: i.created_at,
-    updatedAt: i.updated_at,
-    // a group epic (GitLab paid tiers): read by src/epics.js, not kept in the cache
-    ...(i.epic?.iid ? { groupEpic: { iid: i.epic.iid, title: i.epic.title || null, groupId: i.epic.group_id ?? null, url: i.epic.web_url || i.epic.url || null } } : {}),
-  }));
-}
-
-// Runs a platform CLI and resolves with its stdout.
-function execCli(cli, args) {
-  const r = resolveCommand(cli);
-  if (!r) return Promise.reject(new Error(`The ${cli} CLI is not installed (see Settings › Agents & CLIs).`));
-  return new Promise((resolve, reject) => {
-    execShim(r.file, args, { windowsHide: true, timeout: 60000, maxBuffer: 32 * 1024 * 1024 }, (err, stdout, stderr) => {
-      if (err) reject(new Error(`${cli} ${args.slice(0, 2).join(' ')} failed: ${String(stderr || err.message).trim()}`));
-      else resolve(stdout);
-    });
-  });
-}
-
-/**
- * Fetches every issue (open and closed, newest first, up to MAX_ISSUES) of a repository.
- * @param {{ platform: string, repo: string, exec?: (cli: string, args: string[]) => Promise<string> }} opts
- */
-async function fetchIssues({ platform, repo, exec = execCli }) {
-  const p = PLATFORMS[platform];
-  if (!p) throw new Error(`Unknown backlog platform: ${platform}`);
-  if (!p.cli) throw new Error(`${p.label} sync is not available yet. Pick GitHub or GitLab.`);
-  const parsed = parseRepoUrl(repo);
-  if (!parsed) throw new Error(`The project's repository is not a recognizable git URL: ${repo || '(none)'}`);
-  const owner = platformOfHost(parsed.host);
-  if (owner && owner !== platform) throw new Error(`The project's repository is on ${parsed.host}; pick ${PLATFORMS[owner].label} to sync it.`);
-
-  if (platform === 'github') {
-    const target = parsed.host === 'github.com' ? parsed.path : `${parsed.host}/${parsed.path}`;
-    const out = await exec('gh', ['issue', 'list', '--repo', target, '--state', 'all', '--limit', String(MAX_ISSUES),
-      '--json', 'number,title,state,labels,url,author,assignees,body,createdAt,updatedAt']);
-    return normalizeGithub(JSON.parse(out || '[]'));
-  }
-  const target = parsed.host === 'gitlab.com' ? parsed.path : `https://${parsed.host}/${parsed.path}`;
-  const out = await exec('glab', ['issue', 'list', '--repo', target, '--all', '--per-page', '100', '--output', 'json']);
-  return normalizeGitlab(JSON.parse(out || '[]'));
-}
 
 // ---- open pull/merge requests ----------------------------------------------------------------
 // An issue already has work in flight when an open PR/MR refers to it: GitHub's closing references,
@@ -168,31 +91,20 @@ function referencedIssues({ title = '', body = '', closing = [] }, issuesUrl) {
  */
 async function fetchOpenPullRequests({ platform, repo, exec = execCli }) {
   const parsed = parseRepoUrl(repo);
-  if (!parsed || !PLATFORMS[platform]?.cli) return [];
-  if (platform === 'github') {
-    const target = parsed.host === 'github.com' ? parsed.path : `${parsed.host}/${parsed.path}`;
-    const args = (fields) => ['pr', 'list', '--repo', target, '--state', 'open', '--limit', String(MAX_ISSUES), '--json', fields];
-    const fields = 'number,title,url,isDraft,body';
-    let out;
-    try {
-      out = await exec('gh', args(`${fields},closingIssuesReferences`));
-    } catch (e) {
-      // older gh versions do not know closingIssuesReferences: the text references still work
-      if (!/closingIssuesReferences/.test(e.message)) throw e;
-      out = await exec('gh', args(fields));
-    }
-    const issuesUrl = `https://${parsed.host}/${parsed.path}/issues/`;
-    return JSON.parse(out || '[]').map((p) => ({
-      number: p.number, title: p.title, url: p.url, draft: !!p.isDraft,
-      issues: referencedIssues({ title: p.title, body: p.body, closing: (p.closingIssuesReferences || []).map((i) => i.number) }, issuesUrl),
-    }));
+  const p = adapterOf(platform);
+  if (!parsed || !p) return [];
+  const target = p.cliTarget(parsed);
+  let out;
+  try {
+    out = await runCommand(exec, p.requestListCommand(target, MAX_ISSUES));
+  } catch (e) {
+    // older CLI versions do not know the closing references (gh's closingIssuesReferences): the text references still work
+    if (!p.olderCli(e.message)) throw e;
+    out = await runCommand(exec, p.requestListCommand(target, MAX_ISSUES, { closing: false }));
   }
-  const target = parsed.host === 'gitlab.com' ? parsed.path : `https://${parsed.host}/${parsed.path}`;
-  const out = await exec('glab', ['mr', 'list', '--repo', target, '--per-page', '100', '--output', 'json']);
-  const issuesUrl = `https://${parsed.host}/${parsed.path}/-/issues/`;
-  return JSON.parse(out || '[]').map((m) => ({
-    number: m.iid, title: m.title, url: m.web_url, draft: !!(m.draft || m.work_in_progress),
-    issues: referencedIssues({ title: m.title, body: m.description }, issuesUrl),
+  const issuesUrl = p.issuesUrl(parsed);
+  return p.parseRequests(out).map(({ number, title, url, draft, body, closing }) => ({
+    number, title, url, draft, issues: referencedIssues({ title, body, closing }, issuesUrl),
   }));
 }
 
@@ -224,7 +136,7 @@ async function syncBacklog({ dir, project, platform, exec }) {
     fetchOpenPullRequests({ platform, repo: project.repo, exec }).catch((e) => { pullRequestsError = e.message; return []; }),
   ]);
   // epics, like the PRs, never fail the sync: an error leaves a note (epicsError)
-  const { issues, epics, epicsError } = await require('./epics').readEpics({ platform, repo: project.repo, issues: attachPullRequests(fetched, prs), exec });
+  const { issues, epics, epicsError } = await readEpics({ platform, repo: project.repo, issues: attachPullRequests(fetched, prs), exec });
   issues.sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
   const data = { projectId: project.id, platform, repo: project.repo, syncedAt: new Date().toISOString(), pullRequestsError, issues, epics, epicsError };
   fs.mkdirSync(dir, { recursive: true });
@@ -233,7 +145,7 @@ async function syncBacklog({ dir, project, platform, exec }) {
   // a plan that cannot be written leaves the sync done
   try {
     refreshQueuedCopies(dir, project.id, issues);
-    require('./roadmap').refreshCopies(dir, project.id, issues);
+    refreshCopies(dir, project.id, issues);
   } catch (e) { console.error('planned issue copies:', e.message); }
   return data;
 }
@@ -383,13 +295,6 @@ function updateQueue(dir, projectId, fn) {
   return store ? store.transaction(apply) : apply();
 }
 
-// An item's copy of an issue (#168: read-only, refreshed by each sync and right before its run starts)
-const issueFields = (i) => ({
-  number: i.number, url: i.url, title: i.title, body: i.body || '', labels: i.labels || [], updatedAt: i.updatedAt || null,
-  knownPullRequests: i.knownPullRequests || [],
-});
-/** The issues of a queue item: its `issues` (a group), or the item itself. */
-const itemIssues = (item) => (Array.isArray(item.issues) && item.issues.length ? item.issues : [issueFields(item)]);
 // An item with these issues: a group while it has two or more, a single issue otherwise.
 function withIssues(item, issues) {
   const { issues: _old, ...rest } = item;
@@ -412,13 +317,14 @@ function queueStamp() {
  * @param {{ issues: { number, url, title, body, pullRequests? }[], workflow: string, workflowName?: string, inputs?: object, mock?: boolean, group?: boolean }} a
  */
 // then: what happens with each run's result when it finishes (#134, chain-model), given to its start
-function enqueue(dir, projectId, { issues, workflow, workflowName = null, inputs = {}, mock = false, group = false, then = null }) {
+// agentOverrides (#262): the provider / model / effort per agent chosen for these runs (run:start's)
+function enqueue(dir, projectId, { issues, workflow, workflowName = null, inputs = {}, mock = false, group = false, then = null, agentOverrides = null }) {
   return updateQueue(dir, projectId, (q) => {
     const have = new Set(q.items.flatMap((x) => itemIssues(x).map((i) => i.number)));
     const now = queueStamp();
     const fresh = issues.filter((i) => !have.has(i.number))
       .map((i) => issueFields({ ...i, knownPullRequests: (i.pullRequests || []).map((p) => p.url) }));
-    const base = { workflow, workflowName, inputs, mock: !!mock, addedAt: now, ...(then ? { then } : {}) };
+    const base = { workflow, workflowName, inputs, mock: !!mock, addedAt: now, ...(then ? { then } : {}), ...(agentOverrides && Object.keys(agentOverrides).length ? { agentOverrides } : {}) };
     const added = !fresh.length ? [] : group ? [withIssues(base, fresh)] : fresh.map((i) => withIssues(base, [i]));
     const numbers = new Set(fresh.map((x) => x.number));
     return {
@@ -541,16 +447,6 @@ const SAVE_MODES = ['replace', 'comment'];
 const ORIGINAL_SUMMARY = '<details><summary>Original description</summary>';
 const ORIGINAL_BLOCK = /\n*<details><summary>Original description<\/summary>\n\n([\s\S]*)\n\n<\/details>\s*$/;
 
-// The --repo value of gh/glab for a repository URL (same rules as fetchIssues).
-function cliTarget(platform, repo) {
-  const p = PLATFORMS[platform];
-  if (!p?.cli) throw new Error(`Saving to an issue needs GitHub or GitLab (the backlog's platform is ${p?.label || platform || 'not set'}).`);
-  const parsed = parseRepoUrl(repo);
-  if (!parsed) throw new Error(`The project's repository is not a recognizable git URL: ${repo || '(none)'}`);
-  if (platform === 'github') return parsed.host === 'github.com' ? parsed.path : `${parsed.host}/${parsed.path}`;
-  return parsed.host === 'gitlab.com' ? parsed.path : `https://${parsed.host}/${parsed.path}`;
-}
-
 /**
  * The text sent to the issue. `replace`: the document, then the original description in a collapsed
  * block (a description saved before keeps its first original, so saving again never nests blocks);
@@ -571,79 +467,28 @@ function issueSaveBody({ mode, document, original = '' }) {
 function issueSaveCommand({ platform, repo, number, mode, file, text }) {
   if (!SAVE_MODES.includes(mode)) throw new Error(`Unknown save mode: ${mode} (replace or comment).`);
   const target = cliTarget(platform, repo);
-  const n = String(Number(number));
-  let cli;
-  let args;
-  if (platform === 'github') {
-    cli = 'gh';
-    args = ['issue', mode === 'replace' ? 'edit' : 'comment', n, '--repo', target, '--body-file', file];
-  } else {
-    cli = 'glab';
-    args = mode === 'replace' ? ['issue', 'update', n, '--repo', target, '--description', text] : ['issue', 'note', n, '--repo', target, '--message', text];
-  }
-  const shown = args.map((a) => (a === text ? '<document>' : /\s/.test(a) ? `"${a}"` : a));
-  return { cli, args, display: `${cli} ${shown.join(' ')}` };
-}
-
-/**
- * The CLI call that files a new issue (the Product Owner's Create, #117): gh reads the body from
- * `file` (--body-file), glab takes it as an argument. { cli, args, display }.
- */
-function issueCreateCommand({ platform, repo, title, labels = [], file, text }) {
-  const target = cliTarget(platform, repo);
-  const t = String(title || '').trim();
-  if (!t) throw new Error('The issue has no title.');
-  let cli;
-  let args;
-  if (platform === 'github') {
-    cli = 'gh';
-    args = ['issue', 'create', '--repo', target, '--title', t, '--body-file', file, ...labels.flatMap((l) => ['--label', l])];
-  } else {
-    cli = 'glab';
-    args = ['issue', 'create', '--repo', target, '--title', t, '--description', text, ...(labels.length ? ['--label', labels.join(',')] : []), '--yes'];
-  }
-  const shown = args.map((a) => (a === text ? '<document>' : /\s/.test(a) ? `"${a}"` : a));
-  return { cli, args, display: `${cli} ${shown.join(' ')}` };
+  const c = adapterOf(platform).issueSaveCommand({ target, n: String(Number(number)), mode, file, text });
+  return { ...c, display: commandDisplay(c, text) };
 }
 
 /** The CLI call that closes issue `number` (a parent split into child issues, #124): { cli, args, display }. */
 function issueCloseCommand({ platform, repo, number }) {
   const target = cliTarget(platform, repo);
-  const n = String(Number(number));
-  const cli = platform === 'github' ? 'gh' : 'glab';
-  const args = platform === 'github' ? ['issue', 'close', n, '--repo', target, '--reason', 'not planned'] : ['issue', 'close', n, '--repo', target];
-  return { cli, args, display: `${cli} ${args.map((a) => (/\s/.test(a) ? `"${a}"` : a)).join(' ')}` };
+  const c = adapterOf(platform).issueCloseCommand(target, String(Number(number)));
+  return { ...c, display: commandDisplay(c) };
 }
 
 /**
  * A description with `addition` appended as a dated section ("## Update (YYYY-MM-DD)"), keeping
- * everything already there (the hand-made updates of #77, #96, #110, #112).
+ * everything already there (the hand-made updates of #77, #96, #110, #112). The date is the owner's
+ * local day (`timeZone`, settings.timeZone, #273; unset: the computer's).
  */
-function issueAppendBody({ original = '', addition, date = new Date() }) {
+function issueAppendBody({ original = '', addition, date = new Date(), timeZone = null }) {
   const current = String(original || '').replace(/\r\n/g, '\n').trimEnd();
   const add = String(addition || '').replace(/\r\n/g, '\n').trim();
   if (!add) throw new Error('Nothing to add to the issue.');
-  const section = `## Update (${date.toISOString().slice(0, 10)})\n\n${add}\n`;
+  const section = `## Update (${TimeZone.dayKey(date, timeZone)})\n\n${add}\n`;
   return current ? `${current}\n\n${section}` : section;
-}
-
-/** The repository's label names (GitHub), or null when unknown (GitLab creates missing labels itself). */
-async function repoLabels({ platform, repo, exec = execCli }) {
-  if (platform !== 'github') return null;
-  const out = await exec('gh', ['label', 'list', '--repo', cliTarget(platform, repo), '--limit', '500', '--json', 'name']);
-  return JSON.parse(out || '[]').map((l) => l.name);
-}
-
-/** One issue, read again from the platform (same shape as fetchIssues). */
-async function fetchIssue({ platform, repo, number, exec = execCli }) {
-  const target = cliTarget(platform, repo);
-  const n = String(Number(number));
-  if (platform === 'github') {
-    const out = await exec('gh', ['issue', 'view', n, '--repo', target, '--json', 'number,title,state,labels,url,author,assignees,body,createdAt,updatedAt']);
-    return normalizeGithub([JSON.parse(out)])[0];
-  }
-  const out = await exec('glab', ['issue', 'view', n, '--repo', target, '--output', 'json']);
-  return normalizeGitlab([JSON.parse(out)])[0];
 }
 
 /** Replaces one issue in a project's cache (its pull requests are kept); returns the cache, or null without one. */
@@ -673,21 +518,21 @@ function patchCachedIssue(dir, projectId, number, fn) {
 /** The CLI call that adds (`add`) or removes the `archived` label of issue `number`. */
 function archivedLabelCommand({ platform, repo, number, add }) {
   const target = cliTarget(platform, repo);
-  const n = String(Number(number));
-  if (platform === 'github') return { cli: 'gh', args: ['issue', 'edit', n, '--repo', target, add ? '--add-label' : '--remove-label', ARCHIVED_LABEL] };
-  return { cli: 'glab', args: ['issue', 'update', n, '--repo', target, add ? '--label' : '--unlabel', ARCHIVED_LABEL] };
+  return adapterOf(platform).issueLabelCommand({ target, n: String(Number(number)), label: ARCHIVED_LABEL, add });
 }
 
 /** The CLI call that reopens issue `number`. */
 function issueReopenCommand({ platform, repo, number }) {
-  return { cli: platform === 'github' ? 'gh' : 'glab', args: ['issue', 'reopen', String(Number(number)), '--repo', cliTarget(platform, repo)] };
+  const target = cliTarget(platform, repo);
+  return adapterOf(platform).issueReopenCommand(target, String(Number(number)));
 }
 
 // Creates the `archived` label (neutral grey) when the GitHub repository lacks it; GitLab creates it itself.
 async function ensureArchivedLabel({ platform, repo, exec }) {
   const labels = await repoLabels({ platform, repo, exec });
   if (!labels || labels.some((l) => sameLabel(l, ARCHIVED_LABEL))) return;
-  await exec('gh', ['label', 'create', ARCHIVED_LABEL, '--repo', cliTarget(platform, repo), '--color', ARCHIVED_COLOR, '--description', 'Archived from the Backlog: closed as not planned']);
+  const target = cliTarget(platform, repo);
+  await runCommand(exec, adapterOf(platform).labelCreateCommand({ target, name: ARCHIVED_LABEL, color: ARCHIVED_COLOR, description: 'Archived from the Backlog: closed as not planned' }));
 }
 
 // Runs `steps` in order; when one fails, runs the undo of the steps already done (best effort) and rethrows.
@@ -768,11 +613,6 @@ async function restoreIssues({ platform, repo, numbers, dir = null, projectId = 
 // (refreshQueuedCopies, roadmap.refreshCopies), and right before a run starts its issues are read
 // again from the platform (freshIssues). Nothing here writes to the platform.
 
-/** A copy of an issue with the text of `synced` (title, body, labels, updatedAt), or the copy when there is none. */
-function withSyncedText(copy, synced) {
-  if (!synced) return copy;
-  return { ...copy, url: synced.url || copy.url, title: synced.title, body: synced.body || '', labels: synced.labels || [], updatedAt: synced.updatedAt || null };
-}
 const copyChanged = (copy, synced) => JSON.stringify(withSyncedText(copy, synced)) !== JSON.stringify(copy);
 
 /**

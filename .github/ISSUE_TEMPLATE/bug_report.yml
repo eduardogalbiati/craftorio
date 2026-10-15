@@ -1,0 +1,56 @@
+name: Bug report
+description: Something does not work as described.
+labels: [bug]
+body:
+  - type: input
+    id: app-version
+    attributes:
+      label: App version
+      description: Settings shows it (or the commit, when running from source).
+      placeholder: 0.3.0
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: OS
+      description: Operating system and version.
+      placeholder: Windows 11 23H2
+    validations:
+      required: true
+  - type: textarea
+    id: cli-versions
+    attributes:
+      label: CLI versions
+      description: The agent CLIs involved and their versions (`claude --version`, `codex --version`, `grok --version`).
+      placeholder: |
+        claude 2.1.0
+        codex 0.50.0
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open ...
+        2. Click ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+      description: What happened instead; error messages and screenshots help.
+    validations:
+      required: true
+  - type: input
+    id: run-id
+    attributes:
+      label: Run id
+      description: When the bug happened in a run, its id (Run Details, or the run's folder name under runs/).
+      placeholder: 20261011-224740-ff3206f5

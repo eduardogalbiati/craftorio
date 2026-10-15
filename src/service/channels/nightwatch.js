@@ -14,13 +14,25 @@
 // Oracle with that evidence (ctx.oracleFindings, batched; in the wake-ups' scope only:
 // ctx.oracleFindingsScope). While a budget pauses the Oracle the findings are still logged and the owner gets one
 // notification. The report gains one window per Self-healing day (selfHealingDays).
+// Step regressions (#335): after each finished run, while a watch is active, a step whose recent cost
+// or minutes rose past its baseline (src/step-regressions.js) is logged once per step and class
+// (oracle.detected kind regression; the keys flagged until they recover in oracle/regressions.json).
+// Report only: it wakes no one and changes nothing. The morning card lists the current regressions
+// with the runs behind them.
+// Move on (#395): with the skip permission, a roadmap run waiting at a human gate for
+// settings.oracle.parkAfterMinutes while nothing else of its roadmap runs is parked (parkAtGates,
+// oracle.parked, a notification naming the gate); the gate stays the owner's.
+// Limits tonight (#337, src/night-limits.js): `nightwatch:limits` sets them for the Night watch in force
+// (never under Self-healing alone); the morning summary lists the runs that went past a day limit.
 
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
+const backlog = require('../../backlog');
 const actions = require('../../oracle-actions');
 const night = require('../../night-watch');
+const nightLimits = require('../../night-limits');
 const demo = require('../../night-watch-demo');
 const notifier = require('../../notifications');
 const projects = require('../../projects');
@@ -28,6 +40,26 @@ const roadmaps = require('../../roadmap');
 const runs = require('../../runs');
 const simulation = require('../../engine/simulation');
 const workspace = require('../../workspace');
+const { requireObject } = require('../common');
+const {
+  args,
+  listOf,
+  nullable,
+  NUMBER,
+  OBJECT,
+  oneOf,
+  shape,
+  STRING,
+} = require('../schemas');
+
+// the screen's state (see nightwatch:state below) and the report of the nights
+const STATE = shape({ watch: OBJECT, permissions: OBJECT, runs: OBJECT }, ['watch', 'permissions']);
+const REPORT = shape({ nights: listOf(OBJECT) }, ['nights']);
+// #337: tonight's limits, one of the documented alternatives (src/night-limits.js checks the values)
+const LIMITS = oneOf(
+  { type: 'object', required: ['multiplier'], properties: { multiplier: NUMBER } },
+  { type: 'object', required: ['values'], properties: { values: OBJECT } },
+);
 
 const TICK_MS = 60e3;
 const NIGHTS_SHOWN = 14;
@@ -42,6 +74,8 @@ const BUFFER_KEEP_MS = 2 * 3600e3;
 // a run first seen mid-way: its workflow.started is read from this much of the head of its events.jsonl
 const HEAD_BYTES = 256 * 1024;
 const FINDING_LINE_CHARS = 1500;
+// #335: the step regressions are checked this long after a run's workflow.finished
+const REGRESSION_DELAY_MS = 10e3;
 
 const shortstat = (repo, commit) => new Promise((resolve) => {
   execFile('git', ['-C', repo, 'diff', '--shortstat', `${commit}^1`, commit], { timeout: 15e3, windowsHide: true }, (err, out) => {
@@ -222,6 +256,52 @@ module.exports = (ctx) => {
   }
   const onInterrupted = (info) => onRunEvent({ type: 'run.interrupted', run_id: info?.runId, ts: new Date().toISOString() });
 
+  // ---- step regressions (#335) ---------------------------------------------------------------
+  const regressionsFile = () => path.join(dir(), 'regressions.json');
+  const readFlagged = () => {
+    try { return JSON.parse(fs.readFileSync(regressionsFile(), 'utf8')).flagged || []; } catch { return []; }
+  };
+  // the run list and what prices it (the issues' complexity labels, the settings' prices)
+  function regressionInputs() {
+    const issues = projects.listProjects(ctx.ws.projects).flatMap((p) => backlog.readBacklog(ctx.ws.backlog, p.id)?.issues || []);
+    return { list: runs.listRuns(ctx.ws.runs), opts: { issues, prices: settings().prices || {} } };
+  }
+  // every step regressed now (flagged or not): the morning card's lines
+  function currentRegressions() {
+    try {
+      const { list, opts } = regressionInputs();
+      return night.regressionFindings(list, opts);
+    } catch (e) { console.error('Step regressions:', e.message); return []; }
+  }
+  // after a run: a new regression is logged once; the flagged keys are the ones regressed now (a
+  // recovered step leaves the list, so its next rise is reported again)
+  function checkRegressions() {
+    try {
+      const { list, opts } = regressionInputs();
+      const flagged = readFlagged();
+      const fresh = night.regressionFindings(list, { ...opts, flagged });
+      const byId = new Map(list.map((r) => [r.runId, r]));
+      for (const f of fresh) detect({ kind: 'regression', runId: f.runId, projectId: byId.get(f.runId)?.projectId || null, since: f.since, key: `regression ${f.key}`, evidence: f.evidence });
+      const now = night.regressionFindings(list, opts).map((f) => f.key).sort();
+      // a recovered step's incident closes, so its next rise in the same watch is detected again
+      for (const key of flagged) if (!now.includes(key)) open.delete(`regression ${key}`);
+      if (JSON.stringify(now) !== JSON.stringify([...flagged].sort())) fs.writeFileSync(regressionsFile(), `${JSON.stringify({ flagged: now, updatedAt: new Date().toISOString() }, null, 2)}\n`);
+    } catch (e) { console.error('Step regressions:', e.message); }
+  }
+  // checked a little after the run's end, once its summary.json (what listRuns reads) is written
+  function onRunFinished(ev) {
+    if (ev?.type !== 'workflow.finished' || !ctx.ws) return;
+    const t = setTimeout(() => {
+      try { if (ctx.ws && watch().active) checkRegressions(); } catch (e) { console.error('Step regressions:', e.message); }
+    }, REGRESSION_DELAY_MS);
+    t.unref?.();
+  }
+  // the summary with the current regressions, as morningSummary words them (a line and its runs each)
+  const withRegressions = (summary) => {
+    const found = currentRegressions();
+    return { ...summary, regressions: found.map((f) => f.evidence.line), regressionRuns: found.map((f) => f.evidence.recent.runIds) };
+  };
+
   // the last run's end: when a roadmap went idle or empty
   function lastEnd() {
     let t = null;
@@ -256,7 +336,38 @@ module.exports = (ctx) => {
       for (const s of night.stalledRuns(active, lastProgress, { floor: watchingSince })) {
         detect({ kind: 'stalled', runId: s.runId, projectId: s.projectId, since: floor(s.since), key: `stalled ${s.runId}` });
       }
+      parkAtGates(files, active);
     } catch (e) { console.error('Night watch check:', e.message); }
+  }
+
+  // #395: a running roadmap's item whose run has waited at a human gate for parkAfterMinutes, with
+  // nothing else of that roadmap running, is moved past (Move on) when the skip permission allows it:
+  // the gate keeps waiting for the owner, who gets a phone notification naming it. Without the
+  // permission the gate was escalated when it was asked (onRunEvent); the watch never answers it.
+  function parkAtGates(files, active) {
+    const allowed = night.readPermissions(dir()).allowed;
+    const byRun = new Map(active.map((r) => [r.runId, r]));
+    for (const { projectId, roadmap } of files) {
+      if (roadmap.state !== 'running') continue;
+      const items = roadmap.stages.flatMap((s) => s.items).filter((x) => x.runId && byRun.has(x.runId) && x.status !== 'parked');
+      for (const item of items) {
+        const run = byRun.get(item.runId);
+        const gate = run.waiting ? run.gates[0] : null;
+        if (!gate) continue;
+        const othersRunning = items.some((x) => x !== item && !byRun.get(x.runId).waiting);
+        const decision = night.gateDecision({ waitingSince: gate.requested_at, now: Date.now(), allowed, othersRunning, settings: settings() });
+        if (decision !== 'park') continue;
+        const name = run.display?.steps?.[gate.step_id] || gate.step_id;
+        Promise.resolve(ctx.parkItem({ projectId, itemId: item.id })).then(() => {
+          night.logNight(dir(), 'oracle.parked', { target: `${projectId}/${item.id}`, runId: item.runId, projectId, gate: name, waitedMs: Date.now() - Date.parse(gate.requested_at) });
+          ctx.notify?.({
+            kind: 'oracle', event: 'acted', title: `Night watch moved on past "${name}"`,
+            body: `Run ${item.runId} still waits at the gate "${name}" for you; the roadmap went on to its next stage.${gate.phoneUrl ? ` Answer it: ${gate.phoneUrl}` : ''}`,
+            target: { view: 'roadmap', projectId },
+          }, { projectId });
+        }, (e) => console.error('Night watch move on:', item.runId, e.message));
+      }
+    }
   }
 
   // ---- the metrics ---------------------------------------------------------------------------
@@ -320,7 +431,9 @@ module.exports = (ctx) => {
     for (const n of nights.reverse()) {
       const m = night.nightMetrics({ night: n, log, runs: facts, usage });
       m.unblocked.lines = await unblockedLines(m.unblocked.runs);
-      const summary = night.morningSummary(m, { proposed: waiting });
+      // #337: the runs past a day limit under tonight's expanded limits
+      const limits = n.selfHealing ? null : nightLimits.pastDayLimits(night.expandedRuns(facts, m.window.from, m.window.to));
+      const summary = night.morningSummary(m, { proposed: waiting, limits });
       if (n.selfHealing) {
         m.window.selfHealing = true;
         m.selfHealing = night.selfHealingMetrics({ log, usage, day: n.day });
@@ -347,7 +460,27 @@ module.exports = (ctx) => {
       runs: { active: active.length, waiting: active.filter((r) => r.waiting).length },
       loopCap: night.LOOP_CAP,
       simulation: simulation.simulationOnly(),
+      // #337: the day values the screen shows, and tonight's settings in force (null by day)
+      limits: { day: nightLimits.dayReference(ctx.ws.workflows, settings()), tonight: nightLimits.tonightLimits(dir()) },
     };
+  }
+
+  // #337: the owner sets tonight's limits during a Night watch with an end time: saved and logged
+  // (oracle.limits), the nightly budget raised for that night only (budget.raised), every live run
+  // told (a context_limit gate already open stays open, with a note). Never the Oracle.
+  function setLimits(limits) {
+    const saved = nightLimits.saveNightLimits(dir(), limits, { by: 'the owner' });
+    const s = settings();
+    const nightly = Number(s.budget?.nightlyUsd) || 0;
+    const raisedUsd = saved.values ? Number(saved.values.budget) || 0 : nightly * (saved.multiplier || 1);
+    if (raisedUsd > nightly) {
+      workspace.writeSettings(ctx.ws, { budget: { ...(s.budget || {}), raised: { ...(s.budget?.raised || {}), night: saved.night, nightlyUsd: Math.round(raisedUsd * 100) / 100 } } });
+      ctx.events.emit('settings:changed', workspace.readSettings(ctx.ws));
+    }
+    for (const run of ctx.active?.values() || []) {
+      try { run.noteLimitsRaised?.(); } catch (e) { console.error('Night watch limits:', e.message); }
+    }
+    return state();
   }
 
   /**
@@ -362,10 +495,11 @@ module.exports = (ctx) => {
     const last = [night.nightsOf(log).at(-1), night.selfHealingDays(log).filter((d) => endOf(d) <= now).at(-1)].filter(recent).sort((a, b) => endOf(a) - endOf(b)).at(-1);
     if (!last) return null;
     const m = windowOf(await report(), last.startedAt);
-    return m ? { window: m.window, summary: m.summary } : null;
+    return m ? { window: m.window, summary: withRegressions(m.summary) } : null;
   }
 
   ctx.events.on('run:event', onRunEvent);
+  ctx.events.on('run:event', onRunFinished);
   ctx.events.on('run:interrupted', onInterrupted);
   ctx.events.on('settings:changed', syncSelfHealing);
   ctx.events.on('nightwatch:ended', async (w) => {
@@ -380,23 +514,29 @@ module.exports = (ctx) => {
   timer.unref?.();
 
   return [
-    // { oracle, watch: { on, until (null under Self-healing), startedAt, by, active, selfHealing }, permissions: { catalog, never, allowed, updatedAt, defaults }, runs: { active, waiting }, loopCap, simulation }
-    { channel: 'nightwatch:state', method: 'nightWatchState', fn: () => state() },
+    // { oracle, watch: { on, until (null under Self-healing), startedAt, by, active, selfHealing }, permissions: { catalog, never, allowed, updatedAt, defaults }, runs: { active, waiting }, loopCap, simulation,
+    //   limits: { day: { context, cost, duration, budget }, tonight: { multiplier } | { values } | null } (#337) }
+    { channel: 'nightwatch:state', method: 'nightWatchState', schema: { result: STATE }, fn: () => state() },
     // { nights: [metrics + summary], newest first; baseline }
-    { channel: 'nightwatch:report', method: 'nightWatchReport', fn: () => report() },
+    { channel: 'nightwatch:report', method: 'nightWatchReport', schema: { result: REPORT }, fn: () => report() },
     // the last night's summary for the Dashboard (less than 18 h after it ended), or null
-    { channel: 'nightwatch:morning', method: 'nightWatchMorning', fn: () => morning() },
+    { channel: 'nightwatch:morning', method: 'nightWatchMorning', schema: { result: nullable(shape({ window: OBJECT }, ['window'])) }, fn: () => morning() },
     // the owner's checklist: [permission id] → state (a never-allowed permission is refused)
     {
       channel: 'nightwatch:permissions',
       method: 'saveNightWatchPermissions',
       params: ['allowed'],
+      schema: { params: args({ allowed: listOf(STRING) }, ['allowed']), result: STATE },
       fn: ({ allowed }) => { night.savePermissions(dir(), allowed); return state(); },
     },
+    // #337: tonight's limits { multiplier } (1.5, 2 or 3) or { values: { context, cost, duration, turns, budget } } → state
+    // (refused without a Night watch with an end time: Self-healing never expands limits)
+    { channel: 'nightwatch:limits', method: 'setNightWatchLimits', params: 'limits', schema: { params: LIMITS, result: STATE }, fn: (limits) => setLimits(requireObject(limits, 'limits')) },
     // simulated mode: replays two demo nights into the workspace (src/night-watch-demo.js) → report
     {
       channel: 'nightwatch:replay',
       method: 'replayNightWatch',
+      schema: { result: REPORT },
       fn: async () => {
         if (!simulation.simulationOnly()) throw new Error('Replaying a sample night writes demo runs: only in simulated mode.');
         const projectId = projects.listProjects(ctx.ws.projects)[0]?.id || 'demo-app';

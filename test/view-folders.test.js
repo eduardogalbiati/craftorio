@@ -80,10 +80,9 @@ test('index.html: no <section class="view"> markup is left; every screen registe
   assert.doesNotMatch(indexHtml, /<section[^>]*class="view/);
 });
 
-test('app.js is the shell only: well under 1,000 lines, its header naming the shared pieces moved into their own file', () => {
+// app.js's 1,000-line cap is the rule of every source file (#334, file-size-ratchet-334.test.js).
+test('app.js is the shell only: its header naming the shared pieces moved into their own file', () => {
   const appSrc = fs.readFileSync(path.join(rendererDir, 'app.js'), 'utf8');
-  const lines = appSrc.split('\n').length;
-  assert.ok(lines < 1000, `app.js has grown to ${lines} lines`);
   const header = appSrc.slice(0, appSrc.indexOf('\nconst $ ='));
   for (const shared of ['start-drawer.js', 'gate-panel.js', 'resume-dialog.js', 'supervisor-drawer.js', 'term-dock.js']) {
     assert.match(header, new RegExp(shared.replace('.', '\\.')), `app.js's header does not name ${shared}`);

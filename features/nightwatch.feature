@@ -89,3 +89,72 @@ Feature: Night watch
     Then the "Apply merged fixes to this app" switch is disabled
     And applying merged fixes to the app says "no project of this workspace is this app's repository"
     And applying merged fixes to the app names no source
+
+  # #335: the morning summary flags a step whose cost or minutes regress against its own history:
+  # baseline = median of its older successful real runs (same workflow, step, provider/model/effort),
+  # regression = median of its last 3 runs above the baseline by more than 30%; fewer than 5 runs of a
+  # class cannot be measured and simulated runs never count. It only reports.
+  @issue-335
+  Scenario: A step whose cost rose over its last 3 runs is flagged in the morning summary with links to those runs
+    Given the app is open
+    And the Night watch ended 2 hours ago
+    And the step "test" cost US$ 1.00 in each of 6 finished runs on "claude-sonnet-5-5", then US$ 1.50 in each of the last 3 on "claude-sonnet-5-5"
+    When I reload the app
+    And I open "Home" in the sidebar
+    Then the morning summary flags "test: +50% cost over 3 runs"
+    And the regression of "test" links to its last 3 runs
+    When I open the newest run behind the regression of "test"
+    Then the run screen shows the run "rg-test-9"
+
+  @issue-335
+  Scenario: Simulated runs never count, so a rise in simulated runs is not flagged
+    Given the app is open
+    And the Night watch ended 2 hours ago
+    And the step "test" cost US$ 1.00 in each of 6 simulated runs on "claude-sonnet-5-5", then US$ 1.50 in each of the last 3 on "claude-sonnet-5-5"
+    When I reload the app
+    And I open "Home" in the sidebar
+    Then the morning summary is shown
+    And the morning summary flags no regression
+
+  @issue-335
+  Scenario: A step that moved to another model is not flagged while the new model has too few runs to measure
+    Given the app is open
+    And the Night watch ended 2 hours ago
+    And the step "test" cost US$ 1.00 in each of 6 finished runs on "claude-sonnet-5-5", then US$ 1.50 in each of the last 3 on "claude-opus-5-5"
+    When I reload the app
+    And I open "Home" in the sidebar
+    Then the morning summary is shown
+    And the morning summary flags no regression
+
+  # #337: the turn-on form's "Limits tonight" group. One switch, "Expand all limits", with a
+  # multiplier (×1.5, ×2 by default, ×3) scales every run's limits for the night (context, cost and
+  # duration per run, agent turn timeouts); the nightly budget (Settings › Budget) caps the night's
+  # spending. The demo workspace sets no nightly budget (settings.budget.nightlyUsd is null).
+  @issue-337
+  Scenario: Expanding all limits ×2 shows the doubled limits and keeps them while the watch is on
+    Given the app is open
+    When I open "Night watch" in the sidebar
+    And I start turning the Night watch on
+    And I expand all limits to "×2"
+    Then the limits tonight say "×2 tonight"
+    And the limits tonight say "turns ×2"
+    When I confirm turning the Night watch on
+    Then the Night watch shows the active limits "×2"
+
+  @issue-337
+  Scenario: With "Expand all limits" off, runs keep each workflow's limits
+    Given the app is open
+    When I open "Night watch" in the sidebar
+    And I start turning the Night watch on
+    Then the limits switch "Expand all limits" is off
+    And the limits tonight say "Runs keep each workflow's limits"
+    And the limits tonight do not say "tonight:"
+
+  @issue-337
+  Scenario: Without a nightly budget the limits warn that nothing caps tonight's spending
+    Given the app is open
+    When I open "Night watch" in the sidebar
+    And I start turning the Night watch on
+    And I expand all limits to "×2"
+    Then the limits tonight warn "No nightly budget: nothing caps tonight's spending"
+    And the limits tonight do not say "nightly budget US$"

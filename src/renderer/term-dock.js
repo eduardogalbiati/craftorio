@@ -7,12 +7,15 @@
 
 const CLI_TITLE = "Open the provider CLI resuming this conversation. Messages you send there become part of the agent's conversation.";
 
-// "Live terminal" / "Open in CLI" (embedded in the dock) + "↗" (external window).
+// "Live terminal" / "Open in CLI" (embedded in the dock) + "↗" (external window). The ↗ button is
+// disabled with the reason when the app found no terminal window to open (#318, api.externalTerminal).
 function termButtons(kind, title, blocked = '') {
   const label = kind === 'live' ? 'Live terminal' : 'Open in CLI';
   const t = blocked || title || (kind === 'cli' ? CLI_TITLE : 'Follow this session live in a terminal');
   const dis = blocked ? 'disabled' : '';
-  return `<span class="term-btns"><button class="btn sm ghost" data-term="${kind}" ${dis} title="${esc(t)}">${label}</button><button class="btn sm ghost term-ext" data-term="${kind}" data-ext="1" ${dis} title="${esc(blocked || `${label} in an external window`)}">↗</button></span>`;
+  const ext = api.externalTerminal || { available: true };
+  const extBlocked = blocked || (ext.available ? '' : ext.reason || 'No terminal window available');
+  return `<span class="term-btns"><button class="btn sm ghost" data-term="${kind}" ${dis} title="${esc(t)}">${label}</button><button class="btn sm ghost term-ext" data-term="${kind}" data-ext="1" ${extBlocked ? 'disabled' : ''} title="${esc(extBlocked || `${label} in an external window`)}">↗</button></span>`;
 }
 
 // Runs a terminal button: embedded tab or external window. Returns the inline message.

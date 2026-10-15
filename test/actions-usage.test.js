@@ -73,6 +73,28 @@ test('getActionsUsage: without the user scope it says how to grant it', async ()
   assert.equal(u.hint, 'gh auth refresh -s user');
 });
 
+// #273: Oct 31 22:00 in Sao Paulo is Nov 1 01:00Z; the month follows the owner's zone (owner decision)
+const LOCAL_OCT_31 = new Date('2026-11-01T01:00:00Z');
+
+test('#273 summarizeActionsUsage: at Oct 31 22:00 local (Nov 1 01:00Z) the month is still October and it resets on Nov 1', () => {
+  const s = summarizeActionsUsage({ usageItems: [item('Actions Linux', 7, { date: '2026-10-31T00:00:00Z' })] }, { now: LOCAL_OCT_31, timeZone: 'America/Sao_Paulo' });
+  assert.equal(s.resetsOn, '2026-11-01');
+  assert.equal(s.usedMinutes, 7);
+  const utc = summarizeActionsUsage({}, { now: LOCAL_OCT_31, timeZone: 'UTC' });
+  assert.equal(utc.resetsOn, '2026-12-01');
+});
+
+test('#273 getActionsUsage: at Oct 31 22:00 local (Nov 1 01:00Z) it queries October, and the cache does not answer for another zone', async () => {
+  const calls = [];
+  const exec = async (cli, args) => {
+    calls.push([cli, ...args].join(' '));
+    return JSON.stringify({ usageItems: [] });
+  };
+  await getActionsUsage({ exec, now: LOCAL_OCT_31, owner: 'tz-273', force: true, timeZone: 'America/Sao_Paulo' });
+  await getActionsUsage({ exec, now: LOCAL_OCT_31, owner: 'tz-273', timeZone: 'UTC' });
+  assert.deepEqual(calls, ['gh api users/tz-273/settings/billing/usage?year=2026&month=10', 'gh api users/tz-273/settings/billing/usage?year=2026&month=11']);
+});
+
 test('getActionsUsage: answers from its cache for ten minutes', async () => {
   let n = 0;
   const exec = async () => { n++; return JSON.stringify({ usageItems: [item('Actions Linux', n)] }); };

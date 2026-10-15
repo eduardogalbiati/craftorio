@@ -14,6 +14,7 @@
 // from the branch in the same commit. Prints the comment body, then `comment: posted` when posted.
 // --cleanup (run by the workflow when the PR/MR merges or closes) only removes that PR/MR's folder
 // and those of other PRs/MRs no longer open; it always exits 0.
+// publishFiles (a module function, no CLI) stores an issue's images on the same branch (#361).
 
 const fs = require('fs');
 const os = require('os');
@@ -186,6 +187,28 @@ function publish({ platform, prUrl, dir, cwd = process.cwd(), remote = 'origin',
 }
 
 /**
+ * Commits images to `<branch>:<folder>/` and pushes it, with no comment and no pruning (a non-numeric
+ * folder is never pruned): an issue's images, e.g. a finding's marked screenshot (#361, findings/<id>).
+ * repoUrl: the repository's web URL. Returns { commit, urls } (urls: file → the URL that renders it).
+ */
+function publishFiles({ platform, repoUrl, folder, files, cwd = process.cwd(), remote = 'origin', branch = 'pr-screenshots' }) {
+  if (!['gh', 'gl'].includes(platform)) throw new Error('--platform takes gh or gl');
+  const u = new URL(String(repoUrl));
+  const target = { host: u.host, project: u.pathname.replace(/^\/+|\/+$/g, '').replace(/\.git$/, '') };
+  const r = updateBranch({ cwd, remote, branch }, ({ git }) => {
+    const stored = new Map();
+    for (const file of files) {
+      const rel = `${folder}/${storedName(resolver(cwd)(file))}`;
+      const blob = git(['hash-object', '-w', '--no-filters', '--', file]);
+      git(['update-index', '--add', '--cacheinfo', `100644,${blob},${rel}`]);
+      stored.set(file, rel);
+    }
+    return { message: `Images for ${folder}`, stored };
+  });
+  return { commit: r.commit, urls: Object.fromEntries([...r.stored].map(([file, rel]) => [file, fileUrl(platform, target, branch, rel)])) };
+}
+
+/**
  * Run when a PR/MR merges or closes: removes its folder (and those of other PRs/MRs no longer open)
  * from the branch. No branch or nothing to remove: no commit. Returns { commit, removed }.
  */
@@ -238,4 +261,4 @@ if (require.main === module && process.argv.includes('--cleanup')) {
   }
 }
 
-module.exports = { publish, cleanup, parsePrUrl, fileUrl, commentBody, parseArgs };
+module.exports = { publish, publishFiles, cleanup, parsePrUrl, fileUrl, commentBody, parseArgs };

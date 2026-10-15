@@ -17,7 +17,7 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 const AgentColors = require('../src/renderer/agent-colors.js');
-const { displayName } = require('../src/renderer/display-name.js');
+const { displayName } = require('../src/shared/display-name.js');
 
 const R = path.join(__dirname, '..', 'src', 'renderer');
 const read = (...p) => fs.readFileSync(path.join(R, ...p), 'utf8');
@@ -92,7 +92,7 @@ function loadRunList({ now = NOW } = {}) {
   vm.createContext(sandbox);
   const setNow = installClock(sandbox, now);
   evalStatusPill(sandbox);
-  vm.runInContext(read('run-progress-model.js'), sandbox);
+  vm.runInContext(read('..', 'shared', 'run-progress-model.js'), sandbox);
   vm.runInContext(read('run-list.js'), sandbox);
   sandbox.PERSON = vm.runInContext('PERSON_SVG', sandbox);
   sandbox.ENGINE = vm.runInContext('ENGINE_SVG', sandbox);
@@ -148,8 +148,9 @@ function loadRoadmap({ listWorkflows, now = NOW, runTitle } = {}) {
   // the run-list sandbox's clock follows too (its chips may read the time)
   const both = (ms) => { setNow(ms); rl.setNow(ms); };
   evalStatusPill(sandbox);
-  vm.runInContext(read('run-progress-model.js'), sandbox);
-  vm.runInContext(read('default-workflow.js'), sandbox);
+  vm.runInContext(read('..', 'shared', 'run-progress-model.js'), sandbox);
+  vm.runInContext(read('..', 'shared', 'default-workflow.js'), sandbox);
+  vm.runInContext(read('..', 'shared', 'roadmap-model.js'), sandbox); // the real RoadmapModel (#349)
   vm.runInContext(read('workflow-inputs.js'), sandbox);
   if (exists('estimates.js')) vm.runInContext(read('estimates.js'), sandbox);
   vm.runInContext(read('views', 'backlog', 'backlog-roadmap.js'), sandbox);

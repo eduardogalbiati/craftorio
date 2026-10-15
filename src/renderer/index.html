@@ -9,14 +9,18 @@
   <!-- generated:styles -->
   <link rel="stylesheet" href="style.css" />
   <link rel="stylesheet" href="agent-chat.css" />
+  <link rel="stylesheet" href="agents-window.css" />
   <link rel="stylesheet" href="chat.css" />
   <link rel="stylesheet" href="diff-viewer.css" />
+  <link rel="stylesheet" href="findings.css" />
   <link rel="stylesheet" href="live-turn.css" />
   <link rel="stylesheet" href="notification-center.css" />
   <link rel="stylesheet" href="occupancy-chip.css" />
   <link rel="stylesheet" href="paste-image.css" />
   <link rel="stylesheet" href="po-calibration.css" />
+  <link rel="stylesheet" href="project-city.css" />
   <link rel="stylesheet" href="run3d.css" />
+  <link rel="stylesheet" href="setup.css" />
   <link rel="stylesheet" href="voice.css" />
   <link rel="stylesheet" href="workflow-inputs.css" />
   <link rel="stylesheet" href="views/agents/agents.css" />
@@ -31,6 +35,8 @@
   <link rel="stylesheet" href="views/inbox/inbox.css" />
   <link rel="stylesheet" href="views/nightwatch/nightwatch.css" />
   <link rel="stylesheet" href="views/oracle/oracle.css" />
+  <link rel="stylesheet" href="views/project/project-city-agents.css" />
+  <link rel="stylesheet" href="views/project/project-city-impact.css" />
   <link rel="stylesheet" href="views/project/project.css" />
   <link rel="stylesheet" href="views/releases/releases.css" />
   <link rel="stylesheet" href="views/run/run.css" />
@@ -56,14 +62,14 @@
     </label>
     <button id="run-meta" class="run-meta" type="button" title="View the current run">
       <span id="run-status" class="pill pill-idle" data-testid="run-status" data-status="idle">Idle</span>
-      <span id="run-id" class="muted mono"></span>
+      <span id="run-id" class="muted mono" data-testid="run-id"></span>
     </button>
     <div class="kpis">
       <div class="kpi"><label>Time</label><b id="kpi-time">—</b></div>
       <div class="kpi"><label>Sessions</label><b id="kpi-sessions">0</b></div>
       <div class="kpi"><label>Tokens in / out</label><b id="kpi-tokens">0 / 0</b></div>
       <div class="kpi"><label>Reasoning</label><b id="kpi-reasoning">0</b></div>
-      <div class="kpi"><label>Cost</label><b id="kpi-cost">$0.00</b></div>
+      <div class="kpi"><label>Cost</label><b id="kpi-cost" data-testid="run-total-cost">$0.00</b></div>
       <div id="kpi-all" class="kpi kpi-all hidden"><label>All runs</label><b id="kpi-all-value"></b></div>
     </div>
     <div class="actions">
@@ -73,7 +79,7 @@
         <span class="occ-text mono">24/7 · —</span>
       </button>
       <div class="usage-wrap">
-        <button id="usage-widget" class="btn ghost usage-widget" type="button" title="Usage this month" aria-haspopup="dialog" aria-expanded="false">
+        <button id="usage-widget" class="btn ghost usage-widget" type="button" title="Usage this month" aria-haspopup="dialog" aria-expanded="false" aria-busy="true" data-testid="usage-widget">
           <span id="usage-widget-dot" class="u-dot"></span>
           <span id="usage-widget-text" class="mono">—</span>
           <span id="usage-widget-scope" class="u-scope hidden">machine</span>
@@ -93,20 +99,21 @@
           <line x1="10" y1="14" x2="21" y2="3" />
         </svg>
       </button>
+      <!-- #368: the run ends paused once its agents finish their current turn (app.js pauseRun); #391 the owner's words: "step" -->
+      <button id="btn-pause" class="btn ghost hidden" type="button" data-testid="run-pause" title="The agents finish their current turn, then no step starts after them; Resume continues">Pause after current step</button>
       <button id="btn-stop" class="btn danger" disabled>Stop</button>
       <button id="btn-quick-start" class="btn primary btn-icon" data-testid="quick-start" title="Start a workflow (opens the side panel)">
         <svg class="icon" width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l12-7.5a1 1 0 0 0 0-1.72l-12-7.5A1 1 0 0 0 7 4.5z" /></svg>
         Start
       </button>
       <div class="account-wrap hidden" id="account-wrap">
-        <button id="account-btn" class="btn ghost account-btn" type="button" aria-haspopup="dialog" aria-expanded="false">
+        <button id="account-btn" class="btn ghost account-btn" type="button" aria-haspopup="dialog" aria-expanded="false" data-testid="account-chip">
           <span id="account-avatar" class="account-avatar" aria-hidden="true"></span>
-          <span id="account-trial" class="pill"></span>
+          <span id="account-chip-name" class="account-chip-name"></span>
         </button>
         <div id="account-pop" class="account-pop hidden" role="dialog" aria-label="Account">
           <b id="account-name"></b>
           <div id="account-email" class="muted small"></div>
-          <p id="account-plan" class="small"></p>
           <button id="btn-sign-out" class="btn ghost sm" type="button">Sign out</button>
         </div>
       </div>
@@ -273,11 +280,11 @@
   </section>
 
   <!-- ================= Sign-in ================= -->
-  <div id="login-screen" class="login-screen hidden">
+  <div id="login-screen" class="login-screen hidden" data-testid="login-screen">
     <div class="login-card">
       <div class="brand">Multiagent <span>Orchestrator</span></div>
       <h3>Sign in</h3>
-      <p class="muted">New accounts start with a 7-day free trial. No credit card needed.</p>
+      <p class="muted">Create a free account. It only tells us how many people use the app.</p>
       <div id="login-providers" class="login-providers"></div>
       <div id="login-waiting" class="login-waiting hidden">
         <span class="muted small">Finish signing in in your browser…</span>
@@ -325,25 +332,57 @@
   <script src="../../node_modules/dompurify/dist/purify.js"></script>
   <!-- Generated by `npm run docs` (see the stylesheets above): never edit by hand. -->
   <!-- generated:scripts -->
+  <script src="../shared/platforms/github.js"></script>
+  <script src="../shared/platforms/gitlab.js"></script>
+  <script src="../shared/platforms/index.js"></script>
+  <script src="../shared/providers/claude.js"></script>
+  <script src="../shared/providers/codex.js"></script>
+  <script src="../shared/providers/grok.js"></script>
+  <script src="../shared/providers/mock.js"></script>
+  <script src="../shared/providers/usage.js"></script>
+  <script src="../shared/providers/index.js"></script>
+  <script src="../shared/architecture-facts-view.js"></script>
+  <script src="../shared/architecture-model.js"></script>
+  <script src="../shared/backlog-archive.js"></script>
+  <script src="../shared/chain-model.js"></script>
+  <script src="../shared/city-agents.js"></script>
+  <script src="../shared/city-connections.js"></script>
+  <script src="../shared/city-impact.js"></script>
+  <script src="../shared/city-layout.js"></script>
+  <script src="../shared/city-model.js"></script>
+  <script src="../shared/code-complexity.js"></script>
+  <script src="../shared/default-workflow.js"></script>
+  <script src="../shared/display-name.js"></script>
+  <script src="../shared/findings-model.js"></script>
+  <script src="../shared/globs.js"></script>
+  <script src="../shared/json-schema.js"></script>
+  <script src="../shared/po-calibration.js"></script>
+  <script src="../shared/roadmap-model.js"></script>
+  <script src="../shared/run-progress-model.js"></script>
+  <script src="../shared/run-record.js"></script>
+  <script src="../shared/session-cache.js"></script>
+  <script src="../shared/setup-model.js"></script>
+  <script src="../shared/time-zone.js"></script>
+  <script src="../shared/types.js"></script>
   <script src="api-http.js"></script>
-  <script src="default-workflow.js"></script>
-  <script src="display-name.js"></script>
+  <script src="date-range.js"></script>
   <script src="nav-groups.js"></script>
-  <script src="po-calibration.js"></script>
   <script src="run-badges.js"></script>
-  <script src="run-progress-model.js"></script>
+  <script src="select-search.js"></script>
+  <script src="select.js"></script>
   <script src="status-pill.js"></script>
   <script src="view-registry.js"></script>
   <script src="app.js"></script>
   <script src="account.js"></script>
   <script src="agent-chat.js"></script>
   <script src="agent-colors.js"></script>
+  <script src="agent-overrides.js"></script>
   <script src="agent-request.js"></script>
+  <script src="agents-window.js"></script>
   <script src="alerts.js"></script>
   <script src="artifact-menu.js"></script>
   <script src="artifact-render.js"></script>
   <script src="artifacts-panel.js"></script>
-  <script src="chain-model.js"></script>
   <script src="chain-picker.js"></script>
   <script src="chat-models.js"></script>
   <script src="code-banner.js"></script>
@@ -352,6 +391,7 @@
   <script src="diff-viewer-model.js"></script>
   <script src="diff-viewer.js"></script>
   <script src="estimates.js"></script>
+  <script src="findings.js"></script>
   <script src="gate-oracle.js"></script>
   <script src="gate-panel.js"></script>
   <script src="image-sequence.js"></script>
@@ -364,12 +404,14 @@
   <script src="occupancy-chip.js"></script>
   <script src="resume-dialog.js"></script>
   <script src="robots.js"></script>
+  <script src="run-controls.js"></script>
   <script src="run-list.js"></script>
   <script src="run-meta.js"></script>
   <script src="run3d-model.js"></script>
   <script src="run3d-replay.js"></script>
   <script src="run3d-theme.js"></script>
   <script src="run3d.js"></script>
+  <script src="setup.js"></script>
   <script src="start-drawer.js"></script>
   <script src="supervisor-drawer.js"></script>
   <script src="term-dock.js"></script>
@@ -386,7 +428,6 @@
   <script src="views/arena/arena-shuffle.js"></script>
   <script src="views/arena/arena.js"></script>
   <script src="views/artifacts/artifacts.js"></script>
-  <script src="views/backlog/backlog-archive.js"></script>
   <script src="views/backlog/backlog-epics.js"></script>
   <script src="views/backlog/backlog-labels.js"></script>
   <script src="views/backlog/backlog-po-proposals.js"></script>
@@ -403,7 +444,16 @@
   <script src="views/nightwatch/nightwatch.js"></script>
   <script src="views/oracle/oracle-chat-model.js"></script>
   <script src="views/oracle/oracle.js"></script>
+  <script src="views/project/project-architecture.js"></script>
+  <script src="views/project/project-city-agents.js"></script>
+  <script src="views/project/project-city-cards.js"></script>
+  <script src="views/project/project-city-connections.js"></script>
+  <script src="views/project/project-city-impact.js"></script>
+  <script src="views/project/project-city-notes.js"></script>
+  <script src="views/project/project-city.js"></script>
+  <script src="views/project/project-conflict-map.js"></script>
   <script src="views/project/project.js"></script>
+  <script src="views/projects/projects.js"></script>
   <script src="views/releases/releases.js"></script>
   <script src="views/run/run.js"></script>
   <script src="views/runchat/run-chat-model.js"></script>
@@ -411,7 +461,6 @@
   <script src="views/sessions/sessions.js"></script>
   <script src="views/settings/settings-phone.js"></script>
   <script src="views/settings/settings.js"></script>
-  <script src="views/projects/projects.js"></script>
   <script src="views/skills/skills.js"></script>
   <script src="views/supervisor/supervisor.js"></script>
   <script src="views/usage/usage.js"></script>

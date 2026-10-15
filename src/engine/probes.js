@@ -13,20 +13,25 @@
 //                 the check right before a merge (`check:` on a gate, `precheck:` on a transition)
 // The engine decides what each state means (poll again, finish the step, or call the agent).
 
-const { resolveCommand } = require('./providers');
+const {
+  homebrewInstalled,
+  resolveCommand,
+} = require('./providers');
+const { installHint } = require('../install-commands');
 const { execShim } = require('../shell');
+const github = require('../shared/platforms/github');
+const gitlab = require('../shared/platforms/gitlab');
+const { PLATFORMS, findPlatform, resolvePlatform } = require('../shared/platforms');
 
 const PROBES = ['pr_checks', 'pr_changes', 'workflow_run', 'pr_mergeable'];
 
-// URL (agent output) → { platform, host, repo, kind: 'pr' | 'run', id }, or null.
-// GitHub: https://host/owner/repo/pull/12, https://host/owner/repo/actions/runs/123[/job/4]
-// GitLab: https://host/group/sub/project/-/merge_requests/12, .../-/pipelines/123
+// URL (agent output) → { platform (the short id: gh | gl), host, repo, kind: 'pr' | 'run', id }, or null.
+// The URL forms are the adapters' parseTargetUrl (src/shared/platforms/).
 function parseTarget(url) {
-  const u = String(url ?? '').trim();
-  let m = /^https:\/\/([A-Za-z0-9.-]+(?::\d+)?)\/([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)\/(pull|actions\/runs)\/(\d+)(?:[/?#].*)?$/.exec(u);
-  if (m) return { platform: 'gh', host: m[1], repo: m[2], kind: m[3] === 'pull' ? 'pr' : 'run', id: +m[4] };
-  m = /^https:\/\/([A-Za-z0-9.-]+(?::\d+)?)\/([A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)+)\/-\/(merge_requests|pipelines)\/(\d+)(?:[/?#].*)?$/.exec(u);
-  if (m) return { platform: 'gl', host: m[1], repo: m[2], kind: m[3] === 'merge_requests' ? 'pr' : 'run', id: +m[4] };
+  for (const p of PLATFORMS) {
+    const t = p.parseTargetUrl(url);
+    if (t) return { platform: p.short, ...t };
+  }
   return null;
 }
 
@@ -132,7 +137,12 @@ function glPipelineState(p) {
 
 // ---- running the CLIs ----------------------------------------------------------------------------
 function run(cmd, args, { cwd, signal, timeout = 60000 }) {
-  const { file } = resolveCommand(cmd);
+  const resolved = resolveCommand(cmd);
+  if (!resolved) {
+    const hint = installHint(cmd, process.platform, { brew: homebrewInstalled() });
+    return Promise.reject(new Error(`${cmd} is not installed${hint ? ` (${hint})` : ''}.`));
+  }
+  const { file } = resolved;
   return new Promise((resolve, reject) => {
     execShim(file, args, { cwd, signal, timeout, windowsHide: true, env: process.env, maxBuffer: 16 * 1024 * 1024 }, (err, stdout, stderr) => {
       if (err) return reject(new Error(`${cmd} ${args.slice(0, 3).join(' ')}: ${String(stderr || err.message).trim().slice(0, 300)}`));
@@ -147,7 +157,8 @@ const GH_PR_FIELDS = 'state,mergeable,mergeStateStatus,headRefOid,statusCheckRol
 // exhausted (`quota(owner)` answers the message), none will run before the month resets, so the
 // state becomes `quota_exhausted`. A quota that cannot be read changes nothing.
 async function withQuota(result, t, quota) {
-  if (!quota || t.platform !== 'gh' || t.host !== 'github.com' || !['none', 'failed'].includes(result.state)) return result;
+  const p = findPlatform(t.platform);
+  if (!quota || !p?.actionsQuota || t.host !== p.host || !['none', 'failed'].includes(result.state)) return result;
   let message = null;
   try { message = await quota(t.repo.split('/')[0]); } catch { /* unknown quota */ }
   return message ? { ...result, state: 'quota_exhausted', detail: message } : result;
@@ -160,23 +171,24 @@ async function runProbe({ probe, target, cwd, signal, quota }) {
   const t = parseTarget(target);
   const wantsPr = probe !== 'workflow_run';
   if (!t || (t.kind === 'pr') !== wantsPr) throw new Error(`${probe}: ${JSON.stringify(String(target ?? ''))} is not a ${wantsPr ? 'pull/merge request' : 'CI run or pipeline'} URL`);
-  const opts = { cwd, signal };
-  if (t.platform === 'gh') {
-    const repo = `${t.host}/${t.repo}`;
-    if (t.kind === 'run') return ghRunState(await run('gh', ['run', 'view', String(t.id), '--repo', repo, '--json', 'status,conclusion,url,name'], opts));
-    const fields = probe === 'pr_changes' ? `${GH_PR_FIELDS},reviewDecision,comments,reviews` : GH_PR_FIELDS;
-    const pr = await run('gh', ['pr', 'view', String(t.id), '--repo', repo, '--json', fields], opts);
+  const p = resolvePlatform(t.platform);
+  const read = (c) => run(c.cli, c.args, { cwd, signal });
+  if (t.kind === 'run') return RUN_STATES[p.id](await read(p.runViewCommand(t)));
+  const fields = probe === 'pr_changes' ? `${GH_PR_FIELDS},reviewDecision,comments,reviews` : GH_PR_FIELDS;
+  return REQUEST_PROBES[p.id](await read(p.requestViewCommand(t, fields)), { probe, t, quota });
+}
+
+// a CI run's JSON → { state, detail }, per platform
+const RUN_STATES = { [github.id]: ghRunState, [gitlab.id]: glPipelineState };
+// a request's JSON → the probe's result, per platform
+const REQUEST_PROBES = {
+  [github.id]: (pr, { probe, t, quota }) => {
     const state = ghPrState(pr);
     if (probe === 'pr_mergeable') return mergeableState(state, { mergeState: pr.mergeStateStatus });
     return probe === 'pr_checks' ? withQuota(state, t, quota) : state;
-  }
-  const repo = `https://${t.host}/${t.repo}`;
-  if (t.kind === 'run') {
-    return glPipelineState(await run('glab', ['api', `projects/${encodeURIComponent(t.repo)}/pipelines/${t.id}`, '--hostname', t.host], opts));
-  }
-  const mr = await run('glab', ['mr', 'view', String(t.id), '--repo', repo, '--output', 'json'], opts);
-  return probe === 'pr_mergeable' ? mergeableState(glMrState(mr), { glStatus: mr.detailed_merge_status }) : glMrState(mr);
-}
+  },
+  [gitlab.id]: (mr, { probe }) => (probe === 'pr_mergeable' ? mergeableState(glMrState(mr), { glStatus: mr.detailed_merge_status }) : glMrState(mr)),
+};
 
 module.exports = {
   ghPrState,

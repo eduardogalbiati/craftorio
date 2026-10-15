@@ -1,0 +1,26 @@
+{
+  "issue": "#347",
+  "title": "A diff adds a second provider mapping table next to an existing one",
+  "diff": "diff --git a/src/cost-labels.js b/src/cost-labels.js\nnew file mode 100644\n--- /dev/null\n+++ b/src/cost-labels.js\n@@ -0,0 +1,9 @@\n+// Cost labels per provider for the run summary.\n+\n+const CLI_FOR_PROVIDER = { 'claude-code': 'claude', 'codex-cli': 'codex', 'grok-cli': 'grok' };\n+\n+function costLabel(type, usd) {\n+  return `${CLI_FOR_PROVIDER[type] || type}: $${usd.toFixed(2)}`;\n+}\n+\n+module.exports = { costLabel };\n",
+  "existing": {
+    "file": "src/shared/providers/index.js",
+    "evidence": "const byType = (type) => ADAPTERS.find((a) => a.type === type) || null;"
+  },
+  "expectedFinding": {
+    "axis": "standards",
+    "severity": "major",
+    "file": "src/cost-labels.js",
+    "paths": ["src/cost-labels.js", "src/shared/providers/index.js"],
+    "description": "CLI_FOR_PROVIDER in src/cost-labels.js maps provider types to CLI names, the mapping the provider registry src/shared/providers/index.js already holds (byType(type).cli): call the registry instead of adding a second table."
+  },
+  "skillRules": [
+    "reuse",
+    "before the verdict",
+    "search the repository",
+    "mapping table",
+    "literal values",
+    "major",
+    "both places",
+    "which helper to call|where to move"
+  ]
+}

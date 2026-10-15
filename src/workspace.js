@@ -18,6 +18,8 @@ const path = require('path');
 const { execFile, execFileSync } = require('child_process');
 const { resolveCommand } = require('./engine/providers');
 const { simulationOnly } = require('./engine/simulation');
+const TimeZone = require('./time-zone');
+const { DEFAULT_PLATFORM } = require('./shared/platforms');
 
 const DEFAULT_NAME = 'multiagent-workspace';
 const REG_KEY = 'HKCU\\Software\\MultiagentOrchestrator';
@@ -166,7 +168,7 @@ const DEFAULT_SETTINGS = {
   lastProject: null,
   lastWorkflow: null,
   // where the Backlog screen syncs issues from by default: github | gitlab | bitbucket
-  backlogPlatform: 'github',
+  backlogPlatform: DEFAULT_PLATFORM,
   // the most issues the Backlog sends as one run (one branch, one PR/MR)
   backlogMaxGroup: 5,
   // the Backlog suggests a Backlog Refresh run when the last one is older than this (#161); 0 = off
@@ -181,11 +183,19 @@ const DEFAULT_SETTINGS = {
   // several workflows at the same time (Settings › Execution); disabled = one run at a time.
   // perProject: null = no limit per project; simulations count toward the limits only if countSimulations.
   concurrentRuns: { enabled: false, max: 2, perProject: null, countSimulations: false },
+  // Machine profile (#367, src/machine-profile.js): 'auto' sizes the concurrent runs' maximum and the
+  // test workers per run from this machine; 'manual' keeps { concurrentRuns, testWorkers } as set
+  machineProfile: { mode: 'auto' },
   // Memory guard (#276, src/engine/memory-guard.js): a real run's process over limitPercent of the RAM
   // is stopped; suites and new runs wait while less than floorPercent is free (0 = no hold)
   memoryGuard: { enabled: true, limitPercent: 25, floorPercent: 10 },
   // Keep awake (#162, src/keep-awake.js): no sleep while runs, a roadmap or a queue have work to do
   keepAwake: false,
+  // Control channel (#336, src/control): outside sessions drive this app through a loopback endpoint
+  controlChannel: false,
+  // Findings button (#361, src/renderer/findings.js): shown in a packaged app (and in screenshot
+  // captures) only when on; the app run from source always shows it
+  findingsButton: false,
   // the top bar's 24/7 chip (#188, src/renderer/occupancy-chip.js): the last 24 h occupancy
   showOccupancyChip: true,
   // warn when an agent shows no output for this long while a command it started is waiting; 0 = off
@@ -199,10 +209,17 @@ const DEFAULT_SETTINGS = {
   // (tokens) past which its next turn starts a new session from a handoff note; what wakes it (#123,
   // src/oracle-wake.js): wakeScope all | watched | off, wakeOn the event kinds; selfHealing (#278):
   // its watch stays on day and night, with no end time (src/oracle-actions.js watchState); appUpdate
-  // (#279, needs selfHealing): apply merged fixes to this app after a roadmap stage ends (src/app-update.js)
-  oracle: { dailyBudgetUsd: 20, compactAtTokens: 150000, wakeScope: 'all', wakeOn: ['finished', 'gate', 'interrupted', 'invalid', 'limit', 'merge', 'stall'], selfHealing: false, appUpdate: false },
+  // (#279, needs selfHealing): apply merged fixes to this app after a roadmap stage ends (src/app-update.js);
+  // parkAfterMinutes (#395): the watch moves on past a roadmap run waiting this long at a human gate (skip permission)
+  oracle: { dailyBudgetUsd: 20, compactAtTokens: 150000, wakeScope: 'all', wakeOn: ['finished', 'gate', 'interrupted', 'invalid', 'limit', 'merge', 'stall'], selfHealing: false, appUpdate: false, parkAfterMinutes: 15 },
   // USD per 1M tokens, for CLIs that do not report cost: { model: { input, output, cache_read } }
   prices: {},
+  // #262: per provider, the ordered fallback chain of an agent whose workflow declares none:
+  // { <provider>: { fallbacks: ['<provider>:<model>', ...] } } (a turn out of credits moves on to the next)
+  providers: {},
+  // #262: limits that follow the model an agent runs on: { <model id>: { timeout_factor?, max_total_cost_usd? } }
+  // (the workflow's own `models` win per model)
+  models: {},
   // GitHub Actions quota minutes included per month (GitHub Free: 2,000), see src/actions-usage.js
   actionsIncludedMinutes: 2000,
   // voice input (src/speech.js): the whisper.cpp CLI (a name in PATH or a path), the model (an id
@@ -210,17 +227,51 @@ const DEFAULT_SETTINGS = {
   voiceCommand: 'whisper-cli',
   voiceModel: 'small',
   voiceLanguage: 'pt',
+  // the first-run Setup (#319, src/renderer/setup.js): done once Finish or Skip is pressed; a
+  // settings.json written before Setup existed reads true (readSettings), so current users skip it
+  setupDone: false,
+  // workflow ids (file names without .yaml) the Setup's Workflows step left unpicked: not offered by
+  // Start (Home's Run a workflow opens it), shown again by Workflows › Definitions › Show in Start
+  hiddenWorkflows: [],
+  // the owner's IANA time zone (#273, src/time-zone.js): screens, day/week/month cuts, the agents'
+  // replies and the daily resets use it; null = this computer's (readSettings fills it in, unsaved)
+  timeZone: null,
 };
 
+// settings.json as saved: null when there is none, {} when it is not valid JSON
+function savedSettings(ws) {
+  let text;
+  try { text = fs.readFileSync(ws.settings, 'utf8'); } catch { return null; }
+  try { const saved = JSON.parse(text); return saved && typeof saved === 'object' && !Array.isArray(saved) ? saved : {}; } catch { return {}; }
+}
+
 function readSettings(ws) {
-  try { return { ...DEFAULT_SETTINGS, ...JSON.parse(fs.readFileSync(ws.settings, 'utf8')) }; } catch { return { ...DEFAULT_SETTINGS }; }
+  const saved = savedSettings(ws);
+  if (!saved) return { ...DEFAULT_SETTINGS, hiddenWorkflows: [], timeZone: TimeZone.systemZone() };
+  // a maximum of concurrent runs raised by hand before the machine profile existed (#367) stays the
+  // owner's: manual, never replaced by the machine's proposal
+  const legacyMax = !saved.machineProfile && Number.isFinite(saved.concurrentRuns?.max) && saved.concurrentRuns.max !== DEFAULT_SETTINGS.concurrentRuns.max;
+  const machineProfile = legacyMax ? { mode: 'manual', concurrentRuns: saved.concurrentRuns.max } : saved.machineProfile || DEFAULT_SETTINGS.machineProfile;
+  // an existing settings.json without setupDone: a workspace in use before Setup existed (#319)
+  return { ...DEFAULT_SETTINGS, hiddenWorkflows: [], setupDone: true, ...saved, machineProfile, timeZone: saved.timeZone || TimeZone.systemZone() };
 }
 
 function writeSettings(ws, patch) {
+  if (patch?.timeZone && TimeZone.zoneOf(patch.timeZone) !== patch.timeZone) throw new Error(`Unknown time zone: ${patch.timeZone} (an IANA name, e.g. America/Sao_Paulo).`);
+  const saved = savedSettings(ws);
   const next = { ...readSettings(ws), ...patch };
   for (const k of Object.keys(next)) if (!(k in DEFAULT_SETTINGS)) delete next[k];
+  // a maximum of concurrent runs written without the machine profile's mode is the owner's (#367)
+  if (Number.isFinite(patch?.concurrentRuns?.max) && !('machineProfile' in patch)) {
+    next.machineProfile = { ...next.machineProfile, mode: 'manual', concurrentRuns: patch.concurrentRuns.max };
+  }
+  // the computer's zone is not saved until one is chosen (#273): the workspace follows the computer
+  if (!(patch && patch.timeZone) && !(saved && saved.timeZone)) next.timeZone = null;
+  // setupDone is written once known (#319: the Setup saves false when it opens, true at Finish or
+  // Skip); a first write without it (a seeded or scripted workspace) leaves it out, so it reads as set up
+  if (!(saved && 'setupDone' in saved) && !(patch && 'setupDone' in patch)) delete next.setupDone;
   fs.writeFileSync(ws.settings, JSON.stringify(next, null, 2));
-  return next;
+  return { setupDone: true, ...next };
 }
 
 // ---------------------------------------------------------------------------

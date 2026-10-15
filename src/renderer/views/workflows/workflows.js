@@ -209,6 +209,10 @@ function workflowCard(w) {
     return `<button class="link-btn" data-goto-pipe="${esc(p.file)}" title="${esc(`${p.name}: ${role}`)}">${esc(p.name)}</button> <span class="muted">(${role})</span>`;
   }).join(', ');
   const builderTip = w.origin !== 'custom' ? 'See it in the visual builder (read-only: clone it to change it)' : w.builder ? 'Edit it in the visual builder' : 'See it in the visual builder: its agents and prompts can be changed there, its steps stay as they are';
+  // #319: what it needs beyond Claude Code and Git, and whether Start offers it (the Setup hides the unpicked ones)
+  const model = typeof SetupModel === 'undefined' ? null : SetupModel;
+  const needs = (model ? model.requirementBadges(w.requirements) : []).map((b) => `<span class="badge" title="The CLIs it needs, with its default inputs">${esc(b)}</span>`).join('');
+  const shown = !model || !(state.settings?.hiddenWorkflows || []).includes(model.workflowId(w.file));
   return `
     <article class="wf-card${w.origin === 'custom' ? ' custom' : ''}" data-file="${esc(w.file)}" tabindex="-1">
       <div class="wf-card-head">
@@ -220,12 +224,13 @@ function workflowCard(w) {
       </div>
       <p class="muted small wf-desc" title="${esc(w.error ? `Error: ${w.error}` : w.description || '')}">${esc(w.error ? `Error: ${w.error}` : w.description || '')}</p>
       ${(w.warnings || []).map((m) => `<p class="small warn-text wf-warning" role="status" data-testid="workflow-warning">Warning: ${esc(m)}</p>`).join('')}
-      ${modes || outputs ? `<div class="wf-tags">${modes}${outputs}</div>` : ''}
+      ${modes || outputs || needs ? `<div class="wf-tags">${modes}${outputs}${needs}</div>` : ''}
       ${(w.steps || []).length ? `<button class="wf-flow steps-mini" data-flow aria-expanded="${open}" title="${open ? 'Hide the steps' : 'Show every step'}"><span class="badge">${w.steps.length} step${w.steps.length === 1 ? '' : 's'}</span>${stepFlow(w)}<span class="wf-flow-caret" aria-hidden="true">${open ? '▴' : '▾'}</span></button>` : ''}
       ${open ? `<ol class="wf-steps">${stepList(w)}</ol>` : ''}
       ${used ? `<p class="small wf-used"><span class="muted">Used in</span> ${used}</p>` : ''}
       <div class="row wf-actions">
         ${w.restorable ? '<button class="btn ghost sm" data-restore title="Move your edited copy to the trash and use the default bundled with the app">Restore default</button>' : ''}
+        <label class="wf-show-start small" title="Off: Start does not offer it (nothing is deleted)"><label class="switch"><input type="checkbox" data-show-start data-testid="workflow-show-in-start" aria-label="Show in Start: ${esc(w.name)}" ${shown ? 'checked' : ''} /><span></span></label>Show in Start</label>
         <span class="spacer"></span>
         <button class="btn ghost sm" data-builder ${w.error ? 'disabled' : ''} title="${esc(builderTip)}">Open in builder</button>
         <button class="btn primary sm" data-run ${w.error ? 'disabled' : ''}>Run</button>
@@ -270,6 +275,17 @@ function wireWorkflowDefinitions(box) {
   const focus = (el) => { if (!el) return; el.scrollIntoView({ block: 'center', behavior: 'smooth' }); el.focus({ preventScroll: true }); el.classList.add('hl'); setTimeout(() => el.classList.remove('hl'), 1500); };
   box.querySelectorAll('[data-run]').forEach((b) => (b.onclick = () => openDrawer({ workflow: cardOf(b) })));
   box.querySelectorAll('[data-builder]').forEach((b) => (b.onclick = () => window.openInBuilder?.(cardOf(b))));
+  // #319: Show in Start, the way back from the Setup's Workflows step (settings.hiddenWorkflows)
+  box.querySelectorAll('[data-show-start]').forEach((b) => (b.onchange = async () => {
+    const id = SetupModel.workflowId(cardOf(b));
+    const hidden = (state.settings.hiddenWorkflows || []).filter((x) => x !== id);
+    try {
+      state.settings = await api.setSettings({ hiddenWorkflows: b.checked ? hidden : [...hidden, id] });
+    } catch (e) {
+      b.checked = !b.checked;
+      showToast('Could not save', errMsg(e));
+    }
+  }));
   box.querySelectorAll('[data-flow]').forEach((b) => (b.onclick = () => {
     const file = cardOf(b);
     if (!wfDefs.open.delete(file)) wfDefs.open.add(file);
@@ -326,7 +342,7 @@ function stepList(w) {
         <div class="wf-step-head" title="${esc(s.id)}"><b>${esc(wfReadable(s.id, s))}</b>
           ${s.agents ? '<span class="badge">parallel</span>' : ''}${s.goal ? '<span class="badge">/goal</span>' : ''}${s.loop ? '<span class="badge">/loop</span>' : ''}
           ${skillNames.map((k) => `<span class="badge" title="skill">⚡ ${esc(k.replace(/\{\{\s*inputs\.(\w+)\s*\}\}/g, '‹$1›'))}</span>`).join('')}</div>
-        <div class="muted small">${human ? 'human approval' : s.type === 'screenshots' ? 'screenshots (no agent)' : s.type === 'suite' ? 'test suite (no agent)' : s.type === 'test_ids' ? 'test id check (no agent)' : s.type === 'workflow' ? `runs ${esc(s.workflow || 'a workflow')}${s.foreach ? ` for each item${s.max_parallel ? `, ${esc(String(s.max_parallel))} at a time` : ''}` : ''}` : who}</div>
+        <div class="muted small">${human ? 'human approval' : s.type === 'screenshots' ? 'screenshots (no agent)' : s.type === 'suite' ? 'test suite (no agent)' : s.type === 'test_ids' ? 'test id check (no agent)' : s.type === 'check' ? 'rule checks (no agent)' : s.type === 'release_version' ? 'release version (no agent)' : s.type === 'project_map' ? 'project map (no agent)' :s.type === 'workflow' ? `runs ${esc(s.workflow || 'a workflow')}${s.foreach ? ` for each item${s.max_parallel ? `, ${esc(String(s.max_parallel))} at a time` : ''}` : ''}` : who}</div>
         ${others.length ? `<div class="wf-step-next small">↳ ${others.map((n) => `<span title="${esc(n)}">${esc(wfReadable(n, w.steps.find((x) => x.id === n)))}</span>`).join(', ')}</div>` : ''}
       </div>
     </li>`;
@@ -353,6 +369,7 @@ function showRunInList(runId) {
   state.wr.filter = 'all';
   state.wr.showSim = true;
   state.wr.q = '';
+  state.wr.workflow = '';
   state.wr.upTo = runId;
   state.wr.expanded.add(runId);
   showView('workflows');
@@ -419,6 +436,8 @@ registerView({
               <button type="button" role="tab" id="wf-tab-artifacts" aria-selected="false" title="The files the runs produced: a run's artifacts and the list of every run's">Artifacts</button>
             </div>
             <div id="workflow-run-filters" class="chips"></div>
+            <!-- #310: the runs of one workflow (run-list.js fills it) -->
+            <select id="workflow-run-workflow" data-testid="runs-workflow-filter" aria-label="Workflow" title="Show the runs of one workflow"></select>
             <span class="spacer"></span>
             <input type="text" id="workflow-run-search" class="pr-search" placeholder="Search runs" aria-label="Search runs" spellcheck="false" />
             <label class="check small"><input type="checkbox" id="workflow-show-sim" /><span>Show simulated</span></label>
@@ -496,6 +515,8 @@ registerView({
     $('#wf-tab-artifacts').onclick = () => showView('artifacts');
     $('#btn-workflow-runs-refresh').onclick = () => loadWorkflowRuns();
     $('#workflow-show-sim').onchange = (e) => { state.wr.showSim = e.target.checked; loadWorkflowRuns(); };
+    // #310: kept in state.wr for the session, never saved
+    $('#workflow-run-workflow').onchange = (e) => { state.wr.workflow = e.target.value; renderWorkflowRuns(); loadWorkflowRuns(); };
     let wrSearchTimer = null;
     $('#workflow-run-search').oninput = (e) => {
       clearTimeout(wrSearchTimer);

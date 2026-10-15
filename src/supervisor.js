@@ -20,6 +20,7 @@
 const fs = require('fs');
 const path = require('path');
 const yaml = require('js-yaml');
+const registry = require('./shared/providers');
 
 // The app is English-only (#94, #121): the supervisor's words reach the person and decisions.tsv, and
 // its instructions reach the agents, so the language is pinned instead of following the task's.
@@ -36,6 +37,9 @@ const DECISION_SCHEMA = {
     instruction: { type: 'string' },
     output: {},
     goto: { type: 'string' },
+    // #380: with ask_human, a retry would fail the same way (e.g. the prompt and a guard contradict
+    // each other): the gate offers `goto` (a way forward) instead of Retry
+    retry_would_fail: { type: 'boolean' },
   },
 };
 
@@ -72,6 +76,7 @@ const actionSchema = (recover) => ({
 // run go on as planned. `step` is limited to the agent steps the run already went through, `route`
 // to the gate's own answers. At a gate, `recommend` (one of `answers`: approve / reject or a choice
 // id), `recommendation` (why, one line) and `options` (up to 3) are what the person's card shows (#213).
+/** @param {{ actions: string[], steps?: string[], routes?: string[], answers?: string[] }} options */
 const onCallSchema = ({ actions, steps = [], routes = [], answers = [] }) => ({
   type: 'object',
   required: ['explanation', 'action'],
@@ -162,7 +167,7 @@ function decisionPrompt({ wf, step, error, answer, allowed, events, previous, ha
     `- fix_output: put in \`output\` the step's output rebuilt ONLY from the agent's answer above; it must validate against the step's output_schema${step.agents ? ' (not available for parallel steps)' : ''}.`,
     '- retry: run the step again; `instruction` is added to the agent\'s prompt.',
     `- goto: continue at one of these steps: ${allowed.length ? allowed.join(', ') : '(none)'}.`,
-    '- ask_human: stop and ask the person (explain what they need to decide or change).',
+    '- ask_human: stop and ask the person (explain what they need to decide or change). When a retry would fail the same way (e.g. the prompt and a guard contradict each other), set `retry_would_fail: true` and put in `goto` the step of the list above to resume from: the person is offered that instead of a retry.',
     '- fail: end the run.',
     WRITE_ENGLISH,
   ].filter(Boolean).join('\n');
@@ -238,7 +243,7 @@ function onCallPrompt({ wf, step, gate, signals, retryStep, steps, history, prev
     running
       ? '- user_action: only the person can unblock it (a process to stop, a permission to grant, a login): put the exact command or step in `user_action`; the person is told while the step keeps running.'
       : '- user_action: the fix is outside the run\'s permissions (a process to stop, a permission to grant, a login): put the exact command or step the person must take in `user_action`; the person is asked with it.',
-    'Rules: never prescribe a code fix and never edit code; a problem in the code goes back to the workflow\'s agents (retry/resume) with the evidence and your hypotheses in `instruction`. A problem in how an agent works (refused commands, a wrong tool, a wait that never ends) gets a concrete instruction (e.g. call `gh` directly in the Bash tool).',
+    'Rules: never prescribe a code fix and never edit code; a problem in the code goes back to the workflow\'s agents (retry/resume) with the evidence and your hypotheses in `instruction`. A problem in how an agent works (refused commands, a wrong tool, a wait that never ends) gets a concrete instruction (e.g. call the gh CLI directly in the Bash tool).',
     WRITE_ENGLISH,
   ].filter(Boolean).join('\n');
 }
@@ -264,10 +269,23 @@ function runReport(runDir, { workflowsDir } = {}) {
   } catch { /* workflow file gone */ }
   const answers = {};
   const handoffs = {}; // latest handoff note per agent
+  // #308: per agent, its turns' tokens (usage: the whole turn) and the sub-agents' share of them
+  const sessionAgent = {};
+  const perAgent = {};
+  const tokensOf = (u) => ['input', 'output', 'cache_read', 'cache_write'].reduce((s, k) => s + (Number(u?.[k]) || 0), 0);
   for (const ev of events) {
+    if (ev.type === 'session.opened' && ev.session?.agent) sessionAgent[ev.session_id] = ev.session.agent;
     if (ev.type === 'session.message_received' && ev.step_id) (answers[ev.step_id] ??= []).push(ev.text);
+    if (ev.type === 'session.message_received') {
+      const a = (perAgent[ev.session?.agent || sessionAgent[ev.session_id] || ev.step_id || 'agent'] ??= { turns: 0, tokens: 0, subCalls: 0, subTokens: 0 });
+      a.turns += 1;
+      a.tokens += tokensOf(ev.usage);
+      a.subCalls += Number(ev.subagents?.calls) || 0;
+      a.subTokens += tokensOf(ev.subagents?.usage);
+    }
     if (ev.type === 'handoff.saved' && ev.agent) handoffs[ev.agent] = ev;
   }
+  const agentLines = Object.entries(perAgent).map(([agent, a]) => `- ${agent}: ${a.turns} turn${a.turns === 1 ? '' : 's'}, ${a.tokens} tokens${a.subCalls ? ` (of which sub-agents: ${a.subCalls} call${a.subCalls === 1 ? '' : 's'}, ${a.subTokens} tokens)` : ''}`);
   const failing = finished?.status === 'failed' ? [...events].reverse().find((e) => e.type === 'step.started')?.step_id : null;
   let files = [];
   try { files = require('./runs').runArtifacts(runDir).map((a) => `- ${a.rel}${a.step ? ` (${a.step})` : ''}${a.exists ? '' : ' [deleted]'}`); } catch { /* no artifacts */ }
@@ -278,6 +296,7 @@ function runReport(runDir, { workflowsDir } = {}) {
     `\n## Inputs\n${Object.entries(started.inputs || {}).map(([k, v]) => `- ${k}: ${clip(v, 600)}`).join('\n')}`,
     steps ? `\n## Workflow steps\n${steps}` : '',
     `\n## Timeline\n${timeline(events, 150)}`,
+    agentLines.length ? `\n## Tokens per agent (every model call of its turns; sub-agents included in the turns recorded since #308)\n${agentLines.join('\n')}` : '',
     Object.keys(handoffs).length ? `\n## Handoff notes (each agent's own summary at the end of its latest turn: read them before the transcripts)\n${Object.values(handoffs).map((h) => `### ${h.agent} (step ${h.step_id}, visit ${h.visit})\n${clip(h.note, 2500)}`).join('\n\n')}` : '',
     failing && answers[failing] ? `\n## Answers of the step that was running (${failing}), every attempt\n${answers[failing].slice(-4).map((a, i, all) => `### Attempt ${answers[failing].length - all.length + i + 1}\n${tail(a, 6000)}`).join('\n\n')}` : '',
     files.length ? `\n## Files produced (in this folder)\n${files.join('\n')}` : '',
@@ -311,6 +330,8 @@ function resumeSpec(runDir, fromStep) {
   const sessions = {};
   const handoffs = {};
   const cliTotals = {};
+  // #262: the run's agent overrides, then the fallbacks its agents took
+  const agentOverrides = { ...(started.agent_overrides || {}) };
   let worktree = null; // the run's git worktree (worktree.ready / .kept / .removed): the resume continues there
   // its `type: workflow` steps' child runs (#175): a resume reuses the ones that succeeded and resumes the others
   const childRuns = new Map(); // run id -> { run_id, step_id, index?, label, status }
@@ -323,12 +344,15 @@ function resumeSpec(runDir, fromStep) {
     if (ev.session?.provider_session_id && ev.session.cli_total_cost_usd != null) cliTotals[ev.session.provider_session_id] = ev.session.cli_total_cost_usd;
     if (/^worktree\./.test(ev.type) && ev.dir) worktree = { dir: ev.dir, branch: ev.branch || worktree?.branch || null };
     if (ev.type === 'handoff.saved' && ev.agent && ev.note) handoffs[ev.agent] = { text: ev.note, step: ev.step_id, visit: ev.visit, path: ev.path };
+    // #262: an agent that fell back stays on its fallback (its conversation is there)
+    const to = ev.type === 'agent.fallback' && ev.agent && /^([^:]+):(.+)$/.exec(String(ev.to || ''));
+    if (to) agentOverrides[ev.agent] = { ...agentOverrides[ev.agent], provider: to[1], model: to[2] };
   }
   // attachments: the images attached to inputs (#129), the previous run's copies (the new run copies them again)
   return { runId: path.basename(runDir), file: started.file, inputs: started.inputs || {}, attachments: started.attachments || null, mock: !!started.mock, projectId: started.project_id || null,
     // runs recorded before groups have a single `issue`
     issues: started.issues || (started.issue ? [started.issue] : null), personas: started.personas || null, fromStep, steps, sessions, cliTotals, handoffs, worktree,
-    childRuns: [...childRuns.values()] };
+    childRuns: [...childRuns.values()], agentOverrides: Object.keys(agentOverrides).length ? agentOverrides : null };
 }
 
 /**
@@ -359,7 +383,8 @@ function supervisorConfig(runDir, workflowsDir) {
   const provider = wf.providers?.[providerName] || DEFAULT_PROVIDER;
   return { started, wf, provider, providerName, model: orch.supervisor?.model || orch.model || DEFAULT_MODEL };
 }
-const DEFAULT_PROVIDER = { type: 'claude-code', command: 'claude', args: ['-p', '--output-format', 'stream-json', '--verbose', '--model', '{{ model }}'], skill_args: ['--add-dir', '{{ skill_dir }}'] };
+// Claude Code's workflow definition (its adapter's), without effort or resume arguments
+const DEFAULT_PROVIDER = (({ type, command, args, skill_args }) => ({ type, command, args, skill_args }))(registry.byId('claude').definition);
 const DEFAULT_MODEL = 'claude-sonnet-5';
 
 
@@ -371,7 +396,8 @@ const DEFAULT_MODEL = 'claude-sonnet-5';
  * @returns { analysis, artifactPath, model, costUsd, steps }
  */
 async function analyzeRun({ runDir, question, workflowsDir, skillsDirs, resolveCommand, attachments = [] }) {
-  const { extractJson, validateSchema, render } = require('./engine/workflow');
+  const { extractJson, validateSchema } = require('./engine/run/outputs');
+  const { render } = require('./engine/run/templates');
   const { runTurn, storeAttachments } = require('./engine/providers');
   const images = storeAttachments(attachments, path.join(runDir, 'supervisor', 'attachments'));
   const { resolveSkill, skillPrompt } = require('./skills');
@@ -451,7 +477,8 @@ function sessionsReportMarkdown(r, { from, to, scope, model } = {}) {
  * @returns { report, reportPath, markdown, model, costUsd }
  */
 async function analyzeSessions({ report, from, to, scope, question, reportsDir, skillsDirs, resolveCommand, mock = false, provider: forced, model: forcedModel, attachments = [] }) {
-  const { extractJson, validateSchema, render } = require('./engine/workflow');
+  const { extractJson, validateSchema } = require('./engine/run/outputs');
+  const { render } = require('./engine/run/templates');
   const { runTurn, storeAttachments } = require('./engine/providers');
   const images = storeAttachments(attachments, path.join(reportsDir, 'attachments'));
   const { resolveSkill, skillPrompt } = require('./skills');

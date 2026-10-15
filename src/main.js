@@ -20,18 +20,34 @@ const {
   Notification,
   powerSaveBlocker,
   safeStorage,
+  screen,
   session,
   shell,
+  systemPreferences,
 } = require('electron');
+const { createAgentsWindow } = require('./agents-window');
+const { resolveCommand } = require('./engine/providers');
+const {
+  externalTerminal,
+  NO_TERMINAL,
+  terminalLaunch,
+} = require('./external-terminal');
+const { pathKey } = require('./platform-paths');
 const workspace = require('./workspace');
 const localPreview = require('./local-preview');
 const runOwner = require('./run-owner');
 const { allowPermission } = require('./permissions');
 const { createService } = require('./service');
+const { createControlChannel } = require('./control');
+const { nativeBinaryPath } = require('./native-bin');
 const { authChannels } = require('./service/manifest');
 const { createAuth, fileStorage } = require('./auth');
 const authConfig = require('./auth-config');
 const { createKeepAwake } = require('./keep-awake');
+const mainLog = require('./main-log');
+
+// the last lines of this process's console, for a finding's context (#361)
+mainLog.capture();
 
 // The packaged app doesn't accept Chromium's remote debugging switches (the Node inspector is
 // already disabled by a fuse, see scripts/package.js)
@@ -80,7 +96,7 @@ let workspaceLock = null;
 
 let win = null;
 
-// ---- account (sign-in and free trial) --------------------------------------------------------
+// ---- account (sign-in; it only counts the people using the app) ------------------------------
 // The session is machine- and OS-user-specific, so it lives in the app's user data folder
 // (%APPDATA%), not in the workspace, encrypted with the OS (DPAPI on Windows).
 // Created once the app is ready: safeStorage can't decrypt before that, and the Supabase client
@@ -101,8 +117,9 @@ function createAccount() {
       decrypt: (b) => (safeStorage.isEncryptionAvailable() ? safeStorage.decryptString(b) : b.toString('utf8')),
     }),
     openExternal: (url) => shell.openExternal(url),
+    appVersion: app.getVersion(),
   });
-  auth.onChange((s) => { if (win && !win.isDestroyed()) win.webContents.send('auth:changed', s); });
+  auth.onChange((s) => broadcast('auth:changed', s));
 }
 
 const service = createService({
@@ -110,8 +127,9 @@ const service = createService({
     trashItem: (p) => shell.trashItem(p),
     appVersion: app.getVersion(),
     isPackaged: app.isPackaged,
-    assertCanRun: (opts) => auth.assertCanRun(opts),
     userDataDir: app.getPath('userData'),
+    // #318: the microphone permission asked on macOS before recording (src/mic-permission.js)
+    systemPreferences,
     // #279: Self-healing applies merged fixes to this app folder, then restarts it
     appDir: app.getAppPath(),
     relaunch: () => restartApp(),
@@ -135,16 +153,39 @@ for (const { channel, fn } of authChannels(account)) if (channel) ipcMain.handle
 
 // ---- IPC transport ------------------------------------------------------------------
 for (const [channel, fn] of Object.entries(service.api)) ipcMain.handle(channel, (_e, arg) => fn(arg));
-for (const [channel, fn] of Object.entries(service.notifications)) ipcMain.on(channel, (_e, arg) => fn(arg));
+// a fire-and-forget channel has no reply to carry a refusal: logged, like the server's (#333)
+for (const [channel, fn] of Object.entries(service.notifications)) {
+  ipcMain.on(channel, (_e, arg) => { try { fn(arg); } catch (e) { console.error(`${channel}:`, e.message); } });
+}
 // what the preload builds window.api from, asked once when the window loads (sync: the page's
 // scripts use window.api right away); also when the window's code is recorded (#83)
 ipcMain.on('api:manifest', (e) => {
   service.code.markLoaded();
   e.returnValue = service.manifest;
 });
-for (const channel of ['backlog:changed', 'chat:progress', 'notifications:changed','oracle:changed', 'run:event', 'run:meta', 'supervisor:watch', 'term:data', 'term:exit']) {
-  service.events.on(channel, (payload) => { if (win && !win.isDestroyed()) win.webContents.send(channel, payload); });
+// pushed to the main window and to the Agents window (#263) when it is open
+function broadcast(channel, payload) {
+  for (const w of [win, agentsWindow?.current()]) if (w && !w.isDestroyed()) w.webContents.send(channel, payload);
 }
+for (const channel of ['backlog:changed', 'chat:progress', 'notifications:changed','oracle:changed', 'run:event', 'run:meta', 'supervisor:watch', 'term:data', 'term:exit']) {
+  service.events.on(channel, (payload) => broadcast(channel, payload));
+}
+
+// ---- the Agents window (#263, src/agents-window.js) -----------------------------------------
+// Created once the workspace is known (its state file lives there); opened from the drawers'
+// "Open in a window" buttons and Ctrl+Shift+A (agents-window:open), told which agent the window
+// shows (agents-window:agent) so it reopens there. A link in its chats to a screen of the app
+// (agents-window:navigate) is relayed to the main window (main-window:navigate), brought to the front.
+let agentsWindow = null;
+ipcMain.handle('agents-window:open', (_e, arg) => { agentsWindow?.open(arg || {}); });
+ipcMain.on('agents-window:agent', (_e, arg) => agentsWindow?.setAgent(arg?.agent));
+ipcMain.on('agents-window:navigate', (_e, arg) => {
+  if (!win || win.isDestroyed()) return;
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+  win.webContents.send('main-window:navigate', arg || {});
+});
 
 // ---- keep awake (#162) -----------------------------------------------------------------
 // The app that runs the work (#112) holds the blocker, only while the setting is on and there is
@@ -154,7 +195,7 @@ const keepAwake = createKeepAwake({
   blocker: powerSaveBlocker,
   enabled: () => { const ws = service.workspace(); return !!ws && !!workspace.readSettings(ws).keepAwake; },
   readWork: () => service.pendingWork(),
-  onChange: (s) => { if (win && !win.isDestroyed()) win.webContents.send('keepAwake:changed', s); },
+  onChange: (s) => broadcast('keepAwake:changed', s),
 });
 let keepAwakeTimer = null;
 function checkKeepAwake() {
@@ -164,6 +205,14 @@ function checkKeepAwake() {
 service.events.on('run:event', checkKeepAwake);
 service.events.on('settings:changed', () => keepAwake.update());
 ipcMain.handle('keepAwake:state', () => keepAwake.update());
+
+// ---- control channel (#336) ------------------------------------------------------------
+// Outside sessions drive this app through its own channels (src/control): opened and closed with
+// the setting, closed on quit; the Settings screen shows its port and endpoint file.
+const control = createControlChannel({ service, ctlPath: nativeBinaryPath('multiagent-ctl', { isPackaged: app.isPackaged }) });
+const updateControl = () => control.update().then((s) => { broadcast('control:changed', s); return s; });
+service.events.on('settings:changed', () => { updateControl().catch((e) => console.error('control channel:', e.message)); });
+ipcMain.handle('control:state', () => updateControl());
 
 // ---- desktop notifications -------------------------------------------------------------
 // The service decides what deserves one (settings, what the window shows); clicking it brings the
@@ -264,6 +313,8 @@ function createWindow() {
     minHeight: 700,
     backgroundColor: '#0e1014',
     title: 'Multiagent Orchestrator',
+    // Linux takes the window icon from here (Windows and macOS from the packaged executable)
+    ...(process.platform === 'linux' && { icon: path.join(APP_DIR, 'assets', 'icon.png') }),
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -285,14 +336,29 @@ function createWindow() {
   win.loadFile(APP_PAGE);
   // a run that died with the app last time, once the window can open it
   win.webContents.once('did-finish-load', () => service.notifyInterruptedRun());
+  // the Agents window goes with the main one (#263)
+  win.on('closed', () => { const aw = agentsWindow?.current(); if (aw) aw.close(); });
+  // Packaged-app smoke (scripts/smoke-package.js, the release jobs): in simulation only, the app
+  // writes MULTIAGENT_SMOKE_FILE a few seconds after its page loads and quits by itself
+  const smokeFile = process.env.MULTIAGENT_SIMULATION_ONLY === '1' && process.env.MULTIAGENT_SMOKE_FILE;
+  if (smokeFile) {
+    win.webContents.once('did-fail-load', (_e, code, desc) => { console.error(`Smoke: the page did not load: ${desc} (${code})`); app.exit(1); });
+    win.webContents.once('render-process-gone', (_e, details) => { console.error(`Smoke: the page crashed: ${details.reason}`); app.exit(1); });
+    win.webContents.once('did-finish-load', () => setTimeout(() => {
+      fs.writeFileSync(smokeFile, `loaded ${win.webContents.getURL()}\n`);
+      app.quit();
+    }, 3000));
+  }
 }
 
 // ---- desktop-only actions ----------------------------------------------------------------
 ipcMain.handle('path:open', (_e, p) => {
-  const norm = (x) => { const r = path.resolve(x); return process.platform === 'win32' ? r.toLowerCase() : r; };
-  if (!service.openableFolders().some((dir) => norm(p) === norm(dir) || norm(p).startsWith(norm(dir) + path.sep))) throw new Error('Path is outside the workspace.');
+  if (!service.openableFolders().some((dir) => pathKey(p) === pathKey(dir) || pathKey(p).startsWith(pathKey(dir) + path.sep))) throw new Error('Path is outside the workspace.');
   return shell.openPath(p);
 });
+
+// the window's real pixels for the Findings button (#361): a PNG data URL
+ipcMain.handle('window:capture', async (e) => (await e.sender.capturePage()).toDataURL());
 
 ipcMain.handle('dialog:pickFolder', async () => {
   const r = await dialog.showOpenDialog(win, { properties: ['openDirectory', 'createDirectory'], defaultPath: service.workspace().projects });
@@ -303,6 +369,8 @@ ipcMain.handle('workspace:change', async () => {
   if (service.isRunning()) throw new Error('Cannot change the workspace while workflows are running.');
   const dir = await pickWorkspaceDir(win);
   if (dir) service.setWorkspace(workspace.setupWorkspace(dir));
+  // the endpoint follows the workspace (its own setting, its own control/ folder)
+  if (dir) await updateControl().catch((e) => console.error('control channel:', e.message));
   return service.workspace();
 });
 
@@ -357,17 +425,19 @@ ipcMain.handle('clipboard:writeFile', async (_e, { path: file }) => {
   return true;
 });
 
-// External console window (Windows) for a session: its live log or its CLI conversation.
-const q = (a) => `"${String(a).replace(/"/g, '""')}"`;
+// External terminal window for a session: its live log or its CLI conversation. The window per OS
+// (cmd on Windows, Terminal.app on macOS, the first terminal installed on Linux) comes from
+// src/external-terminal.js; without one the renderer keeps the ↗ button disabled (#318).
+const terminalHost = () => ({ exists: (name) => !!resolveCommand(name) });
 function openConsole({ title, cwd, file, args, env }) {
-  if (process.platform !== 'win32') throw new Error('Opening a terminal is only supported on Windows for now.');
-  const cmdline = [file, ...args].map(q).join(' ');
-  // start "<title>" /D "<cwd>" cmd /k "<command line>": a new console that stays open on exit
-  const child = spawn('cmd.exe', ['/d', '/s', '/c', `start ${q(title)} /D ${q(cwd)} cmd /k "${cmdline}"`], {
-    windowsVerbatimArguments: true, detached: true, stdio: 'ignore', env,
-  });
+  const launch = terminalLaunch({ ...terminalHost(), title, cwd, file, args, childEnv: env });
+  if (!launch) throw new Error(NO_TERMINAL);
+  const child = spawn(launch.file, launch.args, { ...launch.options, detached: true, stdio: 'ignore' });
+  child.on('error', () => {});
   child.unref();
 }
+
+ipcMain.on('terminal:external-sync', (e) => { e.returnValue = externalTerminal(terminalHost()); });
 
 ipcMain.handle('session:terminal', (_e, { sessionId, mode, runId }) => {
   openConsole(service.terminalSpec(runId, sessionId, mode));
@@ -390,6 +460,7 @@ function restartApp() {
     service.shutdown();
     // app.exit skips will-quit: the new process takes the workspace lock (and holds its own blocker)
     keepAwake.stop();
+    control.stop();
     workspaceLock?.release();
     app.relaunch();
     app.exit(0);
@@ -405,8 +476,10 @@ app.whenReady().then(async () => {
   const ws = found && await claimWorkspace(found);
   if (!ws) return app.quit();
   service.setWorkspace(ws);
+  agentsWindow = createAgentsWindow({ BrowserWindow, screen, statePath: path.join(ws.root, 'agents-window.json'), dirname: __dirname, devTools: !app.isPackaged });
   keepAwake.update();
   setInterval(() => keepAwake.update(), 15 * 1000).unref();
+  updateControl().catch((e) => console.error('control channel:', e.message));
   restrictPermissions(session.defaultSession);
   createWindow();
   // ended runs' worktrees and scratch (#202, #201): at start, then every 30 minutes (a folder a
@@ -414,18 +487,20 @@ app.whenReady().then(async () => {
   service.cleanupWorktrees().catch((e) => console.error('worktree cleanup:', e));
   setInterval(() => service.cleanupWorktrees().catch((e) => console.error('worktree cleanup:', e)), 30 * 60 * 1000).unref();
   service.clearPastedImages();
-  // the trial can end while the app is open
-  const checkAccount = () => auth.refresh().catch((e) => console.error('account:', e.message));
-  checkAccount();
-  setInterval(checkAccount, 60 * 60 * 1000).unref();
+  // #315: the account records "last seen" at start, then once a day while the app stays open
+  const touchAccount = () => auth.refresh().catch((e) => console.error('account:', e.message));
+  touchAccount();
+  setInterval(touchAccount, 24 * 60 * 60 * 1000).unref();
 });
 app.on('window-all-closed', () => {
   service.shutdown();
   keepAwake.stop();
+  control.stop();
   app.quit();
 });
 app.on('will-quit', () => {
   keepAwake.stop();
+  control.stop();
   workspaceLock?.release();
 });
 // a second copy started on the same user data folder: this window comes forward (#112)

@@ -69,9 +69,11 @@ test('package.json has @playwright/test and playwright-bdd as dev dependencies a
   assert.match(p.scripts?.['test:e2e'] || '', /bddgen|playwright/, 'scripts["test:e2e"] runs playwright-bdd / playwright');
 });
 
-test('the Playwright config runs the feature files one at a time, keeps traces, videos and screenshots of failures and writes JSON results', async () => {
+test('the Playwright config runs the visual lane one at a time, keeps traces, videos and screenshots of failures and writes JSON results', async () => {
   const config = await loadConfig();
-  assert.equal(config.workers, 1, 'one Electron at a time (the machine slot, #199)');
+  // #365: the behaviour lane runs in parallel; the @visual lane keeps one Electron at a time (the machine slot, #199)
+  const visual = (config.projects || []).find((p) => p.name === 'visual');
+  assert.equal(visual?.workers, 1, 'the visual lane runs one Electron at a time (the machine slot, #199)');
   const use = config.use || {};
   assert.match(String(use.trace), /retain-on-failure|on-first-retry|^on$/, 'a trace is kept for a failing scenario');
   assert.match(String(use.video?.mode ?? use.video), /retain-on-failure|on-first-retry|^on$/, 'a video is kept for a failing scenario');
@@ -120,9 +122,10 @@ test('feature files live in features/, every scenario is tagged @issue-<n>', () 
   for (const s of scenarios) assert.ok(s.steps.length > 0, `${s.file}: "${s.name}" has steps`);
 });
 
-test('5 to 10 critical journeys are tagged @smoke: the app opens, a mock run reaches a gate, the gate card, Backlog Board, Roadmap, Settings', () => {
+// #319 adds the first-run Setup journey (fresh workspace → Setup → Skip → Home) as the 11th.
+test('5 to 11 critical journeys are tagged @smoke: the app opens, a mock run reaches a gate, the gate card, Backlog Board, Roadmap, Settings, Setup', () => {
   const smoke = allScenarios().filter((s) => s.tags.includes('@smoke'));
-  assert.ok(smoke.length >= 5 && smoke.length <= 10, `5 to 10 @smoke scenarios (got ${smoke.length})`);
+  assert.ok(smoke.length >= 5 && smoke.length <= 11, `5 to 11 @smoke scenarios (got ${smoke.length})`);
   const text = smoke.map((s) => [s.name, ...s.steps].join('\n')).join('\n');
   for (const topic of [/gate/i, /backlog/i, /roadmap/i, /settings/i, /run/i]) assert.match(text, topic, `a @smoke journey about ${topic}`);
 });

@@ -68,3 +68,14 @@ test('audio:transcribe reports a missing CLI without crashing the service', asyn
 
   await assert.rejects(service.api['audio:transcribe']({ audio: TINY_WAV }), /not installed/);
 });
+
+// #318: the renderer asks for the microphone (macOS) before recording, through 'voice:mic-access'
+// (method micAccess, { ok, error? }). A host without Electron's systemPreferences (the engine
+// server, a browser) never blocks recording.
+test('the manifest declares voice:mic-access as micAccess; without systemPreferences on the host it is ok', async (t) => {
+  const { service } = makeService(t);
+  const byChannel = Object.fromEntries(service.manifest.filter((e) => e.channel).map((e) => [e.channel, e.method]));
+  assert.equal(byChannel['voice:mic-access'], 'micAccess');
+  const r = await service.api['voice:mic-access']();
+  assert.equal(r.ok, true);
+});

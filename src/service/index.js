@@ -25,7 +25,6 @@
 //   trashItem(path)  moves a file to the trash (skills and workflows are never hard-deleted)
 //   appVersion       shown in Settings
 //   isPackaged       the packaged app can't run itself as node (see terminalSpec)
-//   assertCanRun({ mock })  optional; throws when the account may not start or resume a run
 //   readPrJson(cmd, args)   optional; replaces the gh/glab call that reads a run's PR (tests, UI checks)
 //   userDataDir      optional; the app's user data folder, where speech models live (src/speech.js)
 //   appDir           optional; the app folder Self-healing updates (#279, areas/app-update.js)
@@ -37,7 +36,16 @@ const { EventEmitter } = require('events');
 const pastedImages = require('../pasted-images');
 const projects = require('../projects');
 const { createCodeVersion } = require('../code-version');
-const { BUNDLED_SKILLS_DIR, BUNDLED_WORKFLOWS_DIR } = require('./common');
+const {
+  BUNDLED_SKILLS_DIR,
+  BUNDLED_WORKFLOWS_DIR,
+  requireArgs,
+} = require('./common');
+const {
+  checkParams,
+  checkResult,
+  contractHash,
+} = require('./contract');
 const {
   authChannels,
   declarations,
@@ -67,12 +75,29 @@ function createService({ host }) {
   const ctx = loadAreas({ host, events, code, BUNDLED_SKILLS_DIR });
 
   const entries = loadChannels(ctx);
-  // Every channel needs an open workspace (checked once here instead of in each handler).
-  const withWorkspace = (fn) => (arg) => { ctx.workspaceDir(); return fn(arg); };
-  const api = Object.fromEntries(entries.filter((e) => e.channel).map((e) => [e.channel, withWorkspace(e.fn)]));
-  const notifications = Object.fromEntries(entries.filter((e) => e.send).map((e) => [e.send, e.fn]));
+  // Every channel needs an open workspace, and a channel with named params an object argument whose
+  // runId, projectId and cardId are file names (#333, requireArgs in src/service/common.js): checked
+  // once here instead of in each handler. #338: then the argument is checked against the entry's
+  // schema.params (src/service/contract.js), so fn never sees one its schema refuses; under the test
+  // runner, the result against schema.result. Each call is recorded for a finding's context (#361,
+  // areas/findings.js). An async handler's channel answers every error as a rejected promise, its
+  // argument's included (#371), still checked synchronously.
+  const checked = (e, arg) => checkParams(e, requireArgs(arg, e.params));
+  const isAsync = (fn) => fn.constructor.name === 'AsyncFunction';
+  const guarded = (e) => (arg) => {
+    try {
+      return ctx.recordCall(e.channel, () => { ctx.workspaceDir(); return checkResult(e, e.fn(checked(e, arg))); });
+    } catch (err) {
+      if (isAsync(e.fn)) return Promise.reject(err);
+      throw err;
+    }
+  };
+  const api = Object.fromEntries(entries.filter((e) => e.channel).map((e) => [e.channel, guarded(e)]));
+  const notifications = Object.fromEntries(entries.filter((e) => e.send).map((e) => [e.send, (arg) => e.fn(checked(e, arg))]));
   // what window.api is built from (src/preload.js, src/renderer/api-http.js), desktop and account included
   const manifest = declarations([...entries, ...DESKTOP, ...authChannels(null)]);
+  // its contract (#339), which app:version answers
+  ctx.contract = contractHash(manifest);
 
   return {
     api,

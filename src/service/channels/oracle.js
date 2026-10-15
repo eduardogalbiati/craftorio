@@ -32,6 +32,7 @@ const actions = require('../../oracle-actions');
 const agentInbox = require('../../agent-inbox');
 const agents = require('../../agents');
 const backlog = require('../../backlog');
+const merge = require('../../roadmap-merge');
 const night = require('../../night-watch');
 const notifier = require('../../notifications');
 const oracle = require('../../oracle');
@@ -49,6 +50,31 @@ const { createWake } = require('../../oracle-wake');
 const { oracleTools } = require('../../oracle-tools');
 const { resolveCommand } = require('../../engine/providers');
 const { stopProcessesIn } = require('../../engine/processes');
+const { requireObject } = require('../common');
+const {
+  ANY,
+  args,
+  BOOL,
+  FLAG,
+  listOf,
+  MESSAGES,
+  nullable,
+  NUMBER,
+  OBJECT,
+  OPTIONS,
+  orNone,
+  PROJECT_ID,
+  REQUEST_ANSWER,
+  RUN_ID,
+  shape,
+  STRING,
+  TOOL_LIST,
+} = require('../schemas');
+
+// an action card's id; what the chat answers after a change (its messages and the Oracle's state)
+const ACTION_ID = { type: ['string', 'integer'], description: 'An action card\'s id.' };
+const ON_ACTION = args({ actionId: ACTION_ID, mock: FLAG }, ['actionId']);
+const CHAT = shape({ messages: MESSAGES, state: OBJECT }, ['messages']);
 
 const ELSEWHERE_MS = 60e3;
 const DELEGATE_TEXT = 8000;
@@ -182,19 +208,26 @@ module.exports = (ctx) => {
         const kept = ids(a.params.stages).map((list, i) => list.filter((x) => (ids(before)[i] || []).includes(x)));
         if (ids(before).some((list, i) => JSON.stringify(list) !== JSON.stringify(kept[i] || []))) throw new Error('An append may only add items: a planned item moved or disappeared. Nothing was saved.');
       }
-      const backup = snapshotRoadmap(a, id);
       // #284: `disabled` is the owner's switch: whatever the Oracle sends, the stored value is kept
-      const stages = (a.params.stages || []).map((s) => { const { disabled, ...rest } = s || {}; return rest; });
-      roadmaps.saveStages(ctx.ws.backlog, id, stages, { issues: synced(id), alive: ctx.runAlive });
+      const sent = (a.params.stages || []).map((s) => { const { disabled, ...rest } = s || {}; return rest; });
+      // #287 base: the roadmap's updatedAt the stages were built from (the Product Owner's move): a
+      // roadmap written since gets only what this edit changed, or nothing with the reason
+      const base = a.params.base || null;
+      const edit = merge.onStored({ stored: roadmaps.readRoadmap(ctx.ws.backlog, id), stages: sent, base, read: base ? roadmaps.readRoadmapAt(ctx.ws.backlog, id, base) : null });
+      if (!edit.ok) throw new Error(edit.reason);
+      const backup = snapshotRoadmap(a, id);
+      roadmaps.saveStages(ctx.ws.backlog, id, edit.stages, { issues: synced(id), alive: ctx.runAlive });
       await ctx.dispatchRoadmaps();
       return { text: `The roadmap of ${id} was saved (validated, ${a.params.stages.length} stage(s)).`, backup };
     },
     'run.resume': async (a, { mock }) => {
+      ctx.refusePausedResume(a.params.runId);
       const out = await ctx.resumeRun({ runId: a.params.runId, step: a.params.step, instruction: a.params.instruction || null, mock });
       return { text: `Resumed from ${a.params.step}: run ${out.runId}.` };
     },
     'run.retry': async (a, { mock }) => {
       const step = retryStep(a.params);
+      ctx.refusePausedResume(a.params.runId);
       const out = await ctx.resumeRun({ runId: a.params.runId, step, mock });
       return { text: `Retried from ${step}: run ${out.runId}.` };
     },
@@ -350,8 +383,8 @@ module.exports = (ctx) => {
       defaultWorkflow: settings.defaultWorkflow, // #195
       folder: p.folder, agent: agents.readAgent(ctx.ws.agents, agents.PRODUCT_OWNER_ID),
       skillsDirs: [ctx.ws.skills, ctx.BUNDLED_SKILLS_DIR], resolveCommand,
-      budget: sim ? null : usage.withPeerUsage(usage.budgetBaseline({ runsDir: ctx.ws.runs, settings, extraRuns: ctx.agentUsageRuns() }), productOwner.monthUsage(ctx.ws.backlog), settings.prices),
-      mock: sim, mode,
+      budget: sim ? null : usage.withPeerUsage(usage.budgetBaseline({ runsDir: ctx.ws.runs, settings, extraRuns: ctx.agentUsageRuns() }), productOwner.monthUsage(ctx.ws.backlog, new Date(), settings.timeZone), settings.prices),
+      mock: sim, mode, timeZone: settings.timeZone,
     });
     const m = out.message || {};
     const draft = m.issue?.draft;
@@ -370,7 +403,8 @@ module.exports = (ctx) => {
       if (e.type === 'session.opened') where.set(e.session_id, { agent: e.session?.agent, step: e.session?.step_id });
       if (e.type === 'session.message_sent' && where.has(e.session_id)) where.get(e.session_id).step = e.step_id || where.get(e.session_id).step;
       if (e.type !== 'session.stream') continue;
-      if (e.item?.kind === 'tool_result') { failed++; continue; }
+      // #321: only a result that failed (the activity view keeps the results with is_error)
+      if (e.item?.kind === 'tool_result') { if (e.item.is_error) failed++; continue; }
       if (e.item?.kind !== 'tool_call') continue;
       calls.set(e.item.name, (calls.get(e.item.name) || 0) + 1);
       const s = where.get(e.session_id) || {};
@@ -465,7 +499,7 @@ module.exports = (ctx) => {
         budget: () => {
           const settings = workspace.readSettings(ctx.ws);
           const base = usage.budgetBaseline({ runsDir: ctx.ws.runs, settings, extraRuns: ctx.agentUsageRuns() });
-          return usage.withPeerUsage(base, productOwner.monthUsage(ctx.ws.backlog), settings.prices);
+          return usage.withPeerUsage(base, productOwner.monthUsage(ctx.ws.backlog, new Date(), settings.timeZone), settings.prices);
         },
         perform, restore,
         notify: (n) => ctx.notify?.(notifier.oracleNotice(n)),
@@ -532,7 +566,12 @@ module.exports = (ctx) => {
       channel: 'oracle:ask',
       method: 'askOracle',
       params: 'opts',
-      fn: async (opts = {}) => {
+      schema: {
+        params: args({ question: STRING, screen: ANY, images: nullable(listOf(OBJECT)), context: ANY, mock: FLAG, mockContextTokens: nullable(NUMBER) }),
+        result: shape({ message: nullable(OBJECT), messages: MESSAGES, state: OBJECT, refused: ANY }, ['messages']),
+      },
+      fn: async (arg) => {
+        const opts = requireObject(arg, 'options');
         const mock = simulated(opts);
         // #180: its progress is pushed on chat:progress; chat:cancel ('oracle') stops it
         const turn = ctx.chatTurns.start('oracle');
@@ -546,28 +585,51 @@ module.exports = (ctx) => {
       },
     },
     // the owner's "Do it" on an action card (#123): performs exactly that card, once → { ok, text, messages, state }
-    { channel: 'oracle:act', method: 'oracleAct', params: 'opts', fn: ({ actionId, mock } = {}) => get().act(actionId, { mock: simulated({ mock }) }) },
+    {
+      channel: 'oracle:act',
+      method: 'oracleAct',
+      params: 'opts',
+      schema: { params: ON_ACTION, result: shape({ ok: BOOL, text: ANY, messages: MESSAGES, state: OBJECT }, ['ok']) },
+      fn: (arg) => { const { actionId, mock } = requireObject(arg, 'options'); return get().act(actionId, { mock: simulated({ mock }) }); },
+    },
     // a pasted image of the conversation (its file name in a user message's attachments) → data: URL or null
-    { channel: 'oracle:attachment', method: 'oracleAttachment', params: 'name', fn: (name) => get().attachment(name) },
+    { channel: 'oracle:attachment', method: 'oracleAttachment', params: 'name', schema: { params: STRING, result: nullable(STRING) }, fn: (name) => get().attachment(name) },
     // asks another agent (product-owner, issue-draft, supervisor, analyzer, checker) → { to, text, costUsd, error, ref }; recorded in the chat
     {
       channel: 'oracle:delegate',
       method: 'oracleDelegate',
       params: 'opts',
-      fn: ({ mock, ...input } = {}) => delegate(input, { mock }),
+      // { to, question, ... } as the delegate tool sends it; the agent checks the rest
+      schema: { params: args({ to: STRING, mock: FLAG }), result: shape({ to: STRING, text: ANY, costUsd: NUMBER, error: ANY, ref: ANY }) },
+      fn: (arg) => {
+        const { mock, ...input } = requireObject(arg, 'options');
+        return delegate(input, { mock });
+      },
     },
-    { channel: 'oracle:dismiss', method: 'oracleDismiss', params: 'opts', fn: ({ actionId } = {}) => get().dismiss(actionId) },
-    { channel: 'oracle:history', method: 'oracleHistory', fn: () => get().history() },
+    { channel: 'oracle:dismiss', method: 'oracleDismiss', params: 'opts', schema: { params: ON_ACTION, result: CHAT }, fn: (arg) => get().dismiss(requireObject(arg, 'options').actionId) },
+    { channel: 'oracle:history', method: 'oracleHistory', schema: { result: MESSAGES }, fn: () => get().history() },
     // #184: { text (pasted, e.g. a Claude Code memory index), base (the draft; default the saved memory) } →
     // { text }: the draft with the pasted decisions added; nothing is saved (the owner saves it)
-    { channel: 'oracle:importMemory', method: 'importOracleMemory', params: 'opts', fn: (opts) => get().importMemory(opts || {}) },
+    {
+      channel: 'oracle:importMemory',
+      method: 'importOracleMemory',
+      params: 'opts',
+      schema: { params: { type: ['object', 'null'], properties: { text: STRING, base: nullable(STRING) } }, result: shape({ text: STRING }, ['text']) },
+      fn: (opts) => get().importMemory(opts || {}),
+    },
     // the owner read the conversation up to { at } (default now) → { readAt }: the unread badge counts after it
-    { channel: 'oracle:markRead', method: 'markOracleRead', params: 'opts', fn: (opts) => get().markRead(opts?.at) },
-    { channel: 'oracle:memory', method: 'oracleMemory', fn: () => get().memory() },
+    { channel: 'oracle:markRead', method: 'markOracleRead', params: 'opts', schema: { params: { type: ['object', 'null'], properties: { at: ANY } }, result: shape({ readAt: ANY }) }, fn: (opts) => get().markRead(opts?.at) },
+    { channel: 'oracle:memory', method: 'oracleMemory', schema: { result: shape({ text: STRING, updatedAt: nullable(STRING) }, ['text']) }, fn: () => get().memory() },
     // mutes (on) or unmutes one run's wake-ups → the wake-up state
-    { channel: 'oracle:mute', method: 'muteOracleRun', params: 'opts', fn: ({ runId, on } = {}) => wake.mute(runId, on !== false) },
+    {
+      channel: 'oracle:mute',
+      method: 'muteOracleRun',
+      params: 'opts',
+      schema: { params: args({ runId: RUN_ID, on: FLAG }, ['runId']), result: OBJECT },
+      fn: (arg) => { const { runId, on } = requireObject(arg, 'options'); return wake.mute(runId, on !== false); },
+    },
     // the Night watch: { on, until (ISO, at most 24 h ahead), from (the screen it was turned on from) } → { nightWatch, messages, state }
-    { channel: 'oracle:nightWatch', method: 'setOracleNightWatch', params: 'opts', fn: ({ on, until, from } = {}) => get().setNightWatch({ on, until, by: nightBy(from) }) },
+    { channel: 'oracle:nightWatch', method: 'setOracleNightWatch', params: 'opts', schema: { params: args({ on: FLAG, until: nullable(STRING), from: nullable(STRING) }), result: OBJECT }, fn: (arg) => { const { on, until, from } = requireObject(arg, 'options'); return get().setNightWatch({ on, until, by: nightBy(from) }); } },
     // the owner proposes a card themselves (or a check): { kind, params, why } → { id, status, ... };
     // #241: a card requested by the Oracle or by content, of a kind an owner holds, goes to that owner's
     // inbox → { routed, to, kind, ok, text, ... }
@@ -575,24 +637,45 @@ module.exports = (ctx) => {
       channel: 'oracle:propose',
       method: 'oracleProposeAction',
       params: 'opts',
-      fn: async (input = {}) => withState(await proposeOrRoute(input, { fromOracle: input.requestedBy !== 'owner' })),
+      // params: the card kind's own (src/oracle-actions.js checks them per kind)
+      schema: { params: args({ kind: STRING, params: ANY, why: ANY, requestedBy: nullable(STRING) }, ['kind']), result: OBJECT },
+      fn: async (arg) => {
+        const input = requireObject(arg, 'options');
+        return withState(await proposeOrRoute(input, { fromOracle: input.requestedBy !== 'owner' }));
+      },
     },
     // #241: the request_agent tool's function: { to: 'po' | 'supervisor', kind, params, reason, projectId?, requestedBy?, mock } →
     // { ok, text, costUsd, error?, pending? } (pending: a card waits for the owner's click in the owner's chat)
-    { channel: 'oracle:requestAgent', method: 'oracleRequestAgent', params: 'opts', fn: (input = {}) => requestAgent(input) },
+    {
+      channel: 'oracle:requestAgent',
+      method: 'oracleRequestAgent',
+      params: 'opts',
+      // params: the request kind's own (the receiving agent checks them per kind)
+      schema: {
+        params: args({ to: STRING, kind: STRING, params: ANY, reason: ANY, projectId: orNone(PROJECT_ID), requestedBy: nullable(STRING), mock: FLAG }),
+        result: REQUEST_ANSWER,
+      },
+      fn: (arg) => requestAgent(requireObject(arg, 'options')),
+    },
     // a new session from a handoff note; the messages and the memory are kept
-    { channel: 'oracle:reset', method: 'resetOracle', params: 'opts', fn: (opts) => get().reset({ mock: simulated(opts) }) },
-    { channel: 'oracle:saveMemory', method: 'saveOracleMemory', params: 'text', fn: (text) => get().saveMemory(text) },
+    { channel: 'oracle:reset', method: 'resetOracle', params: 'opts', schema: { params: OPTIONS, result: CHAT }, fn: (opts) => get().reset({ mock: simulated(opts) }) },
+    { channel: 'oracle:saveMemory', method: 'saveOracleMemory', params: 'text', schema: { params: STRING, result: OBJECT }, fn: (text) => get().saveMemory(text) },
     // { busy, paused, today, owner, model, effort, contextTokens, compactAtTokens, nightWatch, ... }
-    { channel: 'oracle:state', method: 'oracleState', fn: () => get().state() },
-    { channel: 'oracle:tools', method: 'listOracleTools', fn: () => tools.map(({ name, description }) => ({ name, description })) },
-    { channel: 'oracle:undo', method: 'oracleUndo', params: 'opts', fn: ({ actionId } = {}) => get().undo(actionId) },
+    { channel: 'oracle:state', method: 'oracleState', schema: { result: OBJECT }, fn: () => get().state() },
+    { channel: 'oracle:tools', method: 'listOracleTools', schema: { result: TOOL_LIST }, fn: () => tools.map(({ name, description }) => ({ name, description })) },
+    { channel: 'oracle:undo', method: 'oracleUndo', params: 'opts', schema: { params: ON_ACTION, result: CHAT }, fn: (arg) => get().undo(requireObject(arg, 'options').actionId) },
     // watch a run ({ runId }) or a project's roadmap ({ projectId }) until it ends; on: false stops
-    { channel: 'oracle:watch', method: 'oracleWatch', params: 'opts', fn: (input) => wake.watch(input || {}) },
+    {
+      channel: 'oracle:watch',
+      method: 'oracleWatch',
+      params: 'opts',
+      schema: { params: { type: ['object', 'null'], properties: { runId: orNone(RUN_ID), projectId: orNone(PROJECT_ID), on: FLAG } }, result: OBJECT },
+      fn: (input) => wake.watch(input || {}),
+    },
     // the batch waiting for the wake-up window now (the owner's "wake now", checks) → the wake's answer or null
-    { channel: 'oracle:wakeNow', method: 'wakeOracleNow', fn: () => wake.flush() },
+    { channel: 'oracle:wakeNow', method: 'wakeOracleNow', schema: { result: nullable(OBJECT) }, fn: () => wake.flush() },
     // { muted, watching, wakeScope, wakeOn, pending }
-    { channel: 'oracle:wakeState', method: 'oracleWakeState', fn: () => ({ ...wake.state(), pending: wake.pending() }) },
+    { channel: 'oracle:wakeState', method: 'oracleWakeState', schema: { result: OBJECT }, fn: () => ({ ...wake.state(), pending: wake.pending() }) },
     // a message was added to the conversation (a wake-up, a card, a result): { id, role, kind }
     { event: 'oracle:changed', method: 'onOracleChanged' },
   ];

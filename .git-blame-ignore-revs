@@ -1,0 +1,10 @@
+# Mass changes that touched many files without changing behaviour (moves, layout).
+# Honoured by `git blame` (git config blame.ignoreRevsFile .git-blame-ignore-revs) and by the
+# churn of `node scripts/code-health.js --hotspots` (#344). Full hashes, one per line.
+
+# Renderer: move ten list and editor screens into views/<screen>/
+08a6d593c80fc698c5cab07f3b33e61e0274910b
+# Renderer: move the run screens into views/<screen>/, app.js is the shell
+0ee1b53348068fe2306a63a4f0d86e1ff7ec65b2
+# Test suite layout (#305, #306): whole runs moved to test/slow/
+e7e5ff8a14b49a2a5756eef98ec6aeafd017f879

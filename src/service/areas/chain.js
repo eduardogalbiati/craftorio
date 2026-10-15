@@ -12,7 +12,8 @@
 const path = require('path');
 const { loadWorkflow } = require('../../engine/workflow');
 const simulation = require('../../engine/simulation');
-const chain = require('../../renderer/chain-model');
+const chain = require('../../shared/chain-model');
+const { platformOrDefault } = require('../../shared/platforms');
 const agents = require('../../agents');
 const backlog = require('../../backlog');
 const live = require('../../live-roadmap');
@@ -32,8 +33,13 @@ module.exports = (ctx) => {
   // runs whose chain is being carried out (a resume clicked twice acts once)
   const acting = new Set();
 
+  // every change of a chain's state is pushed as 'run:chain' { run_id, state, reason?, nextRunId? }:
+  // the Discovery board's automations follow a pipeline from stage to stage with it (#259)
   const write = (runDir, patch) => {
-    try { return runs.writeChain(runDir, patch); } catch (e) { console.error('chain.json:', e.message); return null; }
+    let out = null;
+    try { out = runs.writeChain(runDir, patch); } catch (e) { console.error('chain.json:', e.message); }
+    try { ctx.events.emit('run:chain', { run_id: path.basename(runDir), ...patch }); } catch (e) { console.error('run:chain:', e.message); }
+    return out;
   };
 
   // The run's start and every change of its `then` (a gate choice, the owner's edit) go to chain.json.
@@ -126,7 +132,7 @@ module.exports = (ctx) => {
       return null;
     }
     const project = projects.readProject(ws.projects, prev.projectId);
-    const platform = prev.inputs.git_platform === 'gl' ? 'gitlab' : 'github';
+    const platform = platformOrDefault(prev.inputs.git_platform).id;
     await backlog.syncBacklog({ dir: ws.backlog, project, platform });
     for (const batch of batches) {
       await ctx.assignWorkflow({ projectId: project.id, numbers: batch.numbers, workflow: then.workflow, inputs: then.inputs || {}, mock: false, group: batch.group });
@@ -176,7 +182,8 @@ module.exports = (ctx) => {
       skillsDirs: [ws.skills, ctx.BUNDLED_SKILLS_DIR],
       resolveCommand,
       // as po:ask: its own and the Oracle's calls count in the monthly budget (a blocking one refuses)
-      budget: simulated ? null : usage.withPeerUsage(usage.budgetBaseline({ runsDir: ws.runs, settings, extraRuns: ctx.agentUsageRuns() }), productOwner.monthUsage(ws.backlog), settings.prices),
+      budget: simulated ? null : usage.withPeerUsage(usage.budgetBaseline({ runsDir: ws.runs, settings, extraRuns: ctx.agentUsageRuns() }), productOwner.monthUsage(ws.backlog, new Date(), settings.timeZone), settings.prices),
+      timeZone: settings.timeZone, // #273
       mock: simulated,
       mode: 'plan',
       selection: numbers,

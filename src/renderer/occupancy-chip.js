@@ -34,8 +34,17 @@
     const chip = el();
     if (!chip) return;
     if (!shown()) { chip.classList.add('hidden'); return; }
+    // #389: read after the first paint; until the first answer the chip shows that it is loading
+    if (!chip.dataset.loaded) {
+      chip.classList.remove('hidden');
+      chip.setAttribute('aria-busy', 'true');
+      chip.querySelector('.occ-text').textContent = '24/7 · …';
+      chip.title = 'Reading the last 24 h…';
+    }
     try {
       const o = await api.getOccupancy({ summary: true });
+      chip.dataset.loaded = '1';
+      chip.removeAttribute('aria-busy');
       if (o.empty) {
         chip.classList.remove('hidden');
         chip.dataset.level = 'none';
@@ -52,7 +61,7 @@
       chip.querySelector('.occ-dot').dataset.dot = m.dot;
       chip.title = m.tooltip;
       chip.setAttribute('aria-label', `${m.text}, ${m.tooltip}. Open the 24/7 tab of Analytics`);
-    } catch { chip.classList.add('hidden'); /* no workspace yet: checked again next minute */ }
+    } catch { chip.removeAttribute('aria-busy'); chip.classList.add('hidden'); /* no workspace yet: checked again next minute */ }
   }
   const soon = () => { clearTimeout(pending); pending = setTimeout(refresh, 800); };
 
@@ -68,8 +77,8 @@
       if (!e.target.checked) chip.classList.add('hidden');
       setTimeout(refresh, 500);
     });
+    // the first read: app.js's init calls refresh once Home is drawn (#389)
     timer = setInterval(refresh, REFRESH_MS);
-    setTimeout(refresh, 1500);
   }
   root.OccupancyChip.refresh = refresh;
   root.OccupancyChip.stop = () => clearInterval(timer);

@@ -14,7 +14,7 @@ function ncAgo(iso) {
   if (s < 60) return 'just now';
   if (s < 3600) return `${Math.floor(s / 60)} min ago`;
   if (s < 86400) return `${Math.floor(s / 3600)} h ago`;
-  return new Date(iso).toLocaleDateString();
+  return new Date(iso).toLocaleDateString(undefined, { timeZone: TimeZone.current() });
 }
 
 function renderNotificationCount(unread) {
@@ -31,7 +31,7 @@ async function renderNotificationPanel() {
     const { items, unread } = await api.listNotifications(100);
     renderNotificationCount(unread);
     list.innerHTML = items.length ? items.map((n) => `
-      <button type="button" class="nc-item${n.readAt ? '' : ' unread'}" data-id="${n.id}">
+      <button type="button" class="nc-item${n.readAt ? '' : ' unread'}" data-id="${n.id}" data-testid="notification-item">
         <span class="nc-dot" aria-hidden="true"></span>
         <span class="nc-text">
           <b>${esc(n.title)}</b>

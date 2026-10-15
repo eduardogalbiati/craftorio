@@ -18,7 +18,7 @@
 #
 # 1. e2e:     a suite step (#177, #222: no agent, no tokens): the orchestrator runs the project's E2E
 #             command (`e2e_command`, this app: `npm run test:e2e`, Playwright + playwright-bdd with
-#             one Electron at a time) in its own worktree of the LOCAL base; the whole output goes to
+#             two lanes, #365) in its own worktree of the LOCAL base; the whole output goes to
 #             logs/suite-<n>.log, the runner writes its JSON results and keeps the traces and
 #             screenshots of the failed scenarios.
 # 2. heal:    only for a red scenario: the E2E runner reads the log, the JSON results and the traces,
@@ -33,8 +33,9 @@
 #    local). Green with nothing changed: the run ends and records the tested commit as the last
 #    green E2E (`refs/multiagent/e2e-last-green` in the repository, a local ref: never pushed,
 #    never a tag).
-# Never pushes, tags or publishes, and never crosses a human gate. The app's E2E launches take the
-# machine's screenshot slot (one Electron at a time); on Windows the window stays off-screen.
+# Never pushes, tags or publishes, and never crosses a human gate. The app's @visual launches take the
+# machine's screenshot slot, one at a time; the behaviour scenarios run in parallel without it (#365);
+# on Windows the window stays off-screen.
 # Start it by hand from Workflows, from the Backlog (any issue: its scenarios are in the suite) or
 # as a roadmap item.
 # =============================================================================
@@ -77,10 +78,11 @@ inputs:
   language:
     label: "Language"
     type: string
-    enum: [js, python, go, java, csharp]
+    enum: [js, python, go, java, csharp, rust]
     default: js
-    options: { js: JavaScript, python: Python, go: Go, java: Java, csharp: "C#" }
-    description: The project's main language, for its E2E framework and commands.
+    multiple: true
+    options: { js: JavaScript, python: Python, go: Go, java: Java, csharp: "C#", rust: Rust }
+    description: The project's languages, main one first, for its E2E framework and commands. A repository that mixes several (e.g. JavaScript and Rust) takes them all; a run loads the skills of the languages whose files it changed.
   base_branch:
     label: "Base branch"
     type: string
@@ -115,9 +117,12 @@ providers:
 
 x-tools:
   # every supported language toolchain: the language skill says which one to use
-  toolchains: &toolchains [bash:git, bash:npm, bash:npx, bash:node, bash:pnpm, bash:yarn, bash:python, bash:python3, bash:py, bash:pip, bash:pytest, bash:uv, bash:poetry, bash:behave, bash:robot, bash:go, bash:mvn, bash:./mvnw, bash:mvnw.cmd, bash:gradle, bash:./gradlew, bash:gradlew.bat, bash:dotnet]
+  toolchains: &toolchains [bash:git, bash:npm, bash:npx, bash:node, bash:pnpm, bash:yarn, bash:python, bash:python3, bash:py, bash:pip, bash:pytest, bash:uv, bash:poetry, bash:behave, bash:robot, bash:go, bash:mvn, bash:./mvnw, bash:mvnw.cmd, bash:gradle, bash:./gradlew, bash:gradlew.bat, bash:dotnet, bash:cargo]
 
 defaults:
+  # #320: a persistent agent idle past its prompt cache's lifetime (Claude on a subscription: 1 h,
+  # minus a margin) continues in a fresh session from its handoff note; an agent's own value wins
+  fresh_after_idle: 55m
   # the run's own git worktree of the local base
   working_dir: "{{ worktree_dir }}"
   timeout: 30m

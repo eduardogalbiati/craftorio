@@ -45,7 +45,7 @@ function loadRunList() {
   sandbox.window = sandbox;
   vm.createContext(sandbox);
   vm.runInContext(read('status-pill.js'), sandbox);
-  vm.runInContext(read('run-progress-model.js'), sandbox);
+  vm.runInContext(read('..', 'shared', 'run-progress-model.js'), sandbox);
   vm.runInContext(read('run-list.js'), sandbox);
   // PERSON_SVG / ENGINE_SVG are top-level consts: script-scoped, read through the context
   sandbox.PERSON = vm.runInContext('PERSON_SVG', sandbox);
@@ -89,8 +89,9 @@ function loadRoadmap() {
   sandbox.window.showRun = () => {};
   vm.createContext(sandbox);
   vm.runInContext(read('status-pill.js'), sandbox);
-  vm.runInContext(read('run-progress-model.js'), sandbox);
-  vm.runInContext(read('default-workflow.js'), sandbox);
+  vm.runInContext(read('..', 'shared', 'run-progress-model.js'), sandbox);
+  vm.runInContext(read('..', 'shared', 'default-workflow.js'), sandbox);
+  vm.runInContext(read('..', 'shared', 'roadmap-model.js'), sandbox); // the real RoadmapModel (#349)
   vm.runInContext(read('workflow-inputs.js'), sandbox);
   if (fs.existsSync(path.join(R, 'estimates.js'))) vm.runInContext(read('estimates.js'), sandbox);
   vm.runInContext(read('views', 'backlog', 'backlog-roadmap.js'), sandbox);

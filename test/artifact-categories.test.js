@@ -58,6 +58,10 @@ test('categorizeArtifact: evidence captures (original and modified) are screensh
   assert.equal(cat('reports/verification.md'), 'reports');
 });
 
+test('categorizeArtifact: a release run\'s release-summary.md is a report (#290)', () => {
+  assert.equal(cat('release-summary.md'), 'reports');
+});
+
 test('categorizeArtifact: kind is image, markdown, json, log or other from the extension', () => {
   const kind = (p) => load().categorizeArtifact({ path: p }).kind;
   assert.equal(kind('evidence/developer/round-1/161-backlog-refresh-now.modified.png'), 'image');

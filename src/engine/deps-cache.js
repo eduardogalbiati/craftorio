@@ -26,7 +26,8 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
-const { killTree, resolveCommand } = require('./providers');
+const { killTree, OWN_GROUP, resolveCommand } = require('./providers');
+const { samePath: platformSamePath } = require('../platform-paths');
 const { runShim } = require('../shell');
 
 // First match wins (npm uses npm-shrinkwrap.json over package-lock.json)
@@ -75,12 +76,11 @@ function linkTarget(p) {
 }
 
 function samePath(a, b) {
-  const norm = (p) => {
-    let r = path.resolve(p);
-    try { r = fs.realpathSync.native(r); } catch { /* missing: as given */ }
-    return process.platform === 'win32' ? r.toLowerCase() : r;
+  const real = (p) => {
+    const r = path.resolve(p);
+    try { return fs.realpathSync.native(r); } catch { return r; /* missing: as given */ }
   };
-  return norm(a) === norm(b);
+  return platformSamePath(real(a), real(b));
 }
 
 /**
@@ -111,7 +111,7 @@ function runCommand(cmd, args, { cwd, env, timeoutMs = INSTALL_TIMEOUT_MS, signa
   return new Promise((resolve) => {
     let child;
     try {
-      child = runShim(exe.file, args, { cwd, env: childEnv, windowsHide: true });
+      child = runShim(exe.file, args, { cwd, env: childEnv, windowsHide: true, ...OWN_GROUP });
     } catch (e) {
       resolve({ code: null, output: e.message, timedOut: false });
       return;

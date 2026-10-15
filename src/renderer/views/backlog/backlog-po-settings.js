@@ -9,7 +9,7 @@
 // backlog-po.js's ask and cleared once sent). Hidden in Register an issue (no planning there).
 // The Cost chip (#po-cost-chip, #205) works the same way for the Cost step (costOverride).
 // Uses app.js globals (esc, errMsg) and window.ChatModels (chat-models.js).
-// load: after po-calibration.js views/backlog/backlog.js (the slider; the drawer's markup)
+// load: after views/backlog/backlog.js (the drawer's markup; the slider, src/shared/po-calibration.js, loads first)
 /* global api, PoCalibration */
 (() => {
   const PRODUCT_OWNER = 'product-owner';
@@ -69,7 +69,7 @@
     $s('#po-set-calibration-box').innerHTML = PoCalibration.sliderHtml({ id: 'po-set-calibration', value: saved() });
     $s('#po-set-cost-box').innerHTML = PoCalibration.cost.sliderHtml({ id: 'po-set-cost', value: savedCost() });
     $s('#po-set-model').value = a.model || '';
-    $s('#po-set-model-list').innerHTML = (window.ChatModels?.PROVIDERS['claude-code']?.models || []).map((m) => `<option value="${esc(m)}"></option>`).join('');
+    $s('#po-set-model-list').innerHTML = (window.ChatModels?.models?.('claude') || []).map((m) => `<option value="${esc(m)}"></option>`).join('');
     renderEffort(a.effort || 'high');
     if (agent()) status('Applies to the next answer.');
     $s('#po-set-calibration')?.focus({ preventScroll: true });

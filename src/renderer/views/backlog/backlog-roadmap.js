@@ -24,6 +24,11 @@
 // the reason, while the roadmap runs or on a disabled stage), Release here, Run earlier / later, the note. A Product Owner proposal (#105, JSON) is added or replaces the
 // roadmap as planned; the plain queue's items can be moved in. Every edit saves the whole list of
 // stages (api.saveRoadmap); the service keeps each item's runs by id.
+// #287: every save sends the roadmap's `updatedAt` the screen read; when the roadmap was written
+// elsewhere since, the service applies only this edit, or refuses it (`conflict`): the screen shows
+// the reason and the stored roadmap, the Edit form stays open with the values typed (`kept`), or,
+// when its item is gone, those values show in the "Not saved" box (`lost`, roadmap-save-conflict).
+// `changedElsewhere` words what changed for the open form's notice (backlog.js staleNotice).
 // "Group by epic" (#138, shown when the backlog has epics) lists the items under their issues' epics,
 // each with its stage and the epic's items done.
 // Live roadmap (#164): a box under the last stage with its switch (on only while running: turning it
@@ -88,7 +93,7 @@
 // Rendered into #bl-list by backlog.js (mode 'roadmap'), which passes `ctx`
 // ({ projectId, setData, render, setError, setShowAll, setSince, setEpic, showRoadmap }). Uses app.js globals (esc, state, errMsg, devMode, confirmDialog,
 // fmtDur, agentLabel, scheduleRender, showToast), run-list.js's (progressAvatar, robotAvatar, PERSON_SVG, ENGINE_SVG),
-// choiceDialog (kept-work-dialog.js), RunProgress, StatusPill, DefaultWorkflow and GateOracle.
+// choiceDialog (kept-work-dialog.js), RoadmapModel, RunProgress, StatusPill, DefaultWorkflow and GateOracle.
 /* global api */
 (() => {
   const ICON = {
@@ -99,12 +104,13 @@
     stop: '<svg class="icon" data-icon="stop" viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2" fill="currentColor"/></svg>',
   };
   const COMPLEXITY = /^complexity\s*[:=/-]?\s*(\d+)/i;
-  // an item's issues: its `issues` list, or (an item stored before #163) the item itself as one issue
-  const refs = (x) => (x.issues?.length ? x.issues : x.number ? [{ number: x.number, url: x.url, title: x.title, body: x.body, knownPullRequests: x.knownPullRequests }] : []);
-  const editable = (x) => x.status === 'planned' || x.status === 'failed';
+  // an item's issues (RoadmapModel.itemIssues: an item stored before #163 is its own one issue)
+  const refs = (x) => RoadmapModel.itemIssues(x);
+  const may = (r, stage, x) => RoadmapModel.allowedActions(r, stage, x); // #349: the model decides the buttons
+  const editable = (x) => may(null, null, x).edit.allowed;
   // #237: the stage run on its own (#141), or -1 when there is none or it is over (no unfinished item,
   // or no longer in the roadmap): such a scope is dropped by the engine, a Resume runs the roadmap
-  const scopedStage = (r) => (r.scope ? r.stages.findIndex((s) => s.id === r.scope.stage && !s.disabled && s.items.some((x) => x.status !== 'done' && x.status !== 'skipped')) : -1);
+  const scopedStage = (r) => RoadmapModel.scopedStage(r);
   const clone = (stages) => JSON.parse(JSON.stringify(stages || []));
   // inputs the Backlog fills itself when the run starts (as backlog.js's skipInput): never edited here
   const skipInput = (k, def) => k === 'task' || k === 'issue' || k === 'issues' || def.type === 'run' || ((def.type || 'string') === 'string' && /path|dir/i.test(k));
@@ -129,8 +135,8 @@
   }
   // #196: Retry / Skip on a failed run and on a refused start (the item that paused the roadmap, or an
   // error without a run, e.g. kept work of an ended run), never while its run is alive
-  const refusedStart = (x) => !x.runId && !!x.error && x.status !== 'skipped' && x.status !== 'done';
-  const retryable = (x, r) => x.status === 'failed' || (x.status !== 'running' && (r?.pausedBy === x.id || refusedStart(x)));
+  const refusedStart = (x) => RoadmapModel.refusedStart(x);
+  const retryable = (x, r) => may(r, null, x).retry.allowed;
   // #271: "Ask the Oracle about this failure" on an item whose run failed, was interrupted or stopped,
   // or that could not start; never on a planned (no ended run), running, waiting or done one. The
   // button and what it asks are the gate button's code (gate-oracle.js, looked up when drawn).
@@ -139,6 +145,10 @@
   const askOracleHtml = (x) => (askable(x) && window.GateOracle?.failureButtonHtml ? window.GateOracle.failureButtonHtml(x, 'data-rm-ask-oracle data-testid="roadmap-ask-oracle"') : '');
   // #269: the bar's ⋮ menu (open or not) and its entries: a new action is a line here, the bar stays
   let menuOpen = false;
+  // #391: the bar's Pause menu (after this stage, or now) and the "Pausing after stage" badge with its Cancel pause
+  let pauseOpen = false;
+  const pauseHtml = (r) => `<span class="bl-menu-wrap rm-pause-wrap"><button class="btn sm btn-icon warn-ghost" type="button" data-rm="pause" title="Pause after this stage, or now" aria-haspopup="menu" aria-expanded="${pauseOpen}">${ICON.pause}Pause</button>${pauseOpen ? `<div class="bl-menu rm-menu rm-pause-menu" role="menu" data-testid="roadmap-pause-menu" aria-label="Pause the roadmap">${RoadmapModel.pauseChoices(r).map((c) => `<button type="button" role="menuitem" data-rm="pause-${c.after}" data-testid="roadmap-pause-${c.after === 'stage' ? 'after-stage' : 'now'}" title="${esc(c.hint)}">${esc(c.label)}<span class="bl-menu-why small muted">${esc(c.hint)}</span></button>`).join('')}</div>` : ''}</span>`;
+  const pausingHtml = (r, at = RoadmapModel.pausingAfterStage(r)) => (at < 0 ? '' : `<span class="badge warn" data-testid="roadmap-pausing-badge">Pausing after stage ${at + 1}</span> <button class="btn sm ghost" type="button" data-rm="cancel-pause" data-testid="roadmap-cancel-pause" title="Take the pause back: the roadmap goes on to the next stage">Cancel pause</button>`);
   const MENU = [
     { id: 'clear', label: 'Clear', title: 'Remove every stage (asks first; runs in progress go on)', show: (r) => r.stages.length > 0 },
     { id: 'versions', label: 'Restore an earlier version…', title: 'The roadmap as it was before each of your last edits', show: () => true },
@@ -146,6 +156,8 @@
   let editing = null; // the item whose Edit form is open
   let adding = false; // its "add input" name + value pair is shown
   let noteEditing = null; // the stage whose note is being edited
+  let kept = null; // #287: the values of an Edit form whose save was refused ({ id, inputs, mock })
+  let lost = null; // #287: a refused edit whose item is gone ({ item, reason }), its values shown apart
   // #138: the items grouped by their issues' epics instead of by stage (remembered)
   const BY_EPIC_KEY = 'multiagent.roadmapByEpic';
   let byEpic = (() => { try { return localStorage.getItem(BY_EPIC_KEY) === '1'; } catch { return false; } })();
@@ -309,7 +321,9 @@
   // The Edit form: the workflow's inputs (but the mode, which has its toggle) drawn by WorkflowInputs
   // (#116: human labels, pills / switches, show_if against the item's mode); inputs the workflow
   // does not define (added with "add input") as text.
-  function formHtml(x) {
+  function formHtml(raw) {
+    // #287: a refused save keeps what the owner typed, not the stored values
+    const x = kept?.id === raw.id ? { ...raw, inputs: kept.inputs, mock: kept.mock } : raw;
     const defs = inputDefs(x);
     const fields = Object.fromEntries(Object.entries(defs).filter(([k, def]) => k !== 'mode' && !skipInput(k, def || {})));
     for (const k of Object.keys(x.inputs || {})) if (k !== 'mode' && !defs[k]) fields[k] = {};
@@ -323,10 +337,17 @@
     const add = adding
       ? `<div class="field rm-add"><label>New input</label><div class="row"><input type="text" data-rm-newname placeholder="name" aria-label="New input name" autofocus /><input type="text" data-rm-newvalue placeholder="value" aria-label="New input value" /></div></div>`
       : '<button class="link-btn small" type="button" data-rm-addinput>+ add input</button>';
+    // #262: each agent's provider / model / effort for this item's run, folded unless one was changed
+    const wfDef = workflows?.get(x.workflow);
+    const changed = Object.keys(x.agentOverrides || {}).length;
+    const agents = wfDef && window.AgentOverrides
+      ? `<details class="rm-agents"${changed ? ' open' : ''}><summary class="small">Agents${changed ? ` · ${changed} changed for this run` : ''}</summary>${AgentOverrides.html(wfDef, { prefix: `rm-ao-${x.id}`, values: x.agentOverrides, hideLegend: true })}</details>`
+      : '';
     return `
       <div class="rm-form" role="group" aria-label="Edit the inputs of this item"${WorkflowInputs.scopeAttrs({ mode })}>
         <div class="rm-form-grid wi-grid">${grid}</div>
         ${add}
+        ${agents}
         <div class="rm-chain" data-rm-chain="${esc(x.id)}"></div>
         <div class="rm-form-actions">
           <label class="check small dev-only"><input type="checkbox" data-rm-field-mock${x.mock ? ' checked' : ''} /><span>Simulation</span></label>
@@ -352,40 +373,10 @@
   }
 
   // ---- the run's timer (#272): its working time in the time line, against the item's time estimate ----
-  const toMs = (ts) => { const t = Date.parse(ts || ''); return Number.isFinite(t) ? t : null; };
-  const pad2 = (n) => String(n).padStart(2, '0');
-  // "23:41", "1:05:12"
-  function clockText(ms) {
-    const s = Math.floor(Math.max(0, ms) / 1000);
-    const h = Math.floor(s / 3600);
-    return `${h ? `${h}:${pad2(Math.floor((s % 3600) / 60))}` : Math.floor(s / 60)}:${pad2(s % 60)}`;
-  }
-  // within the estimate, up to 130% of it, beyond; neutral without an estimate
-  function timerTone(ms, minutes) {
-    if (!(minutes > 0)) return 'neutral';
-    const ratio = ms / (minutes * 60000);
-    return ratio < 1 ? 'ok' : ratio <= 1.3 ? 'warn' : 'over';
-  }
-  /**
-   * How long a run has worked, gate waits left out as #215 counts them (a finished human gate's
-   * duration, and the time since the gate it waits at started): → { ms, since }, or null when the run
-   * has no start. `since`: the instant the timer counts from while it ticks (the run's start moved by
-   * its gate waits); null while it is paused at a gate or frozen at the run's end.
-   */
-  function runClock(run, now = Date.now()) {
-    const start = toMs(run.startedAt) ?? toMs(run.progress?.[0]?.ts);
-    const active = run.status === 'running' || run.status === 'pending';
-    const end = active ? now : toMs(run.finishedAt);
-    if (start == null || end == null) return null;
-    let gates = 0;
-    let paused = false;
-    for (const e of run.progress || []) {
-      if (e.type !== 'human_approval' && e.status !== 'waiting') continue;
-      if (e.status !== 'waiting' && e.status !== 'running') gates += e.durationMs || 0;
-      else if (active && toMs(e.ts) != null) { gates += Math.max(0, now - toMs(e.ts)); paused = true; }
-    }
-    return { ms: Math.max(0, end - start - gates), since: active && !paused ? start + gates : null };
-  }
+  // the clock ("23:41"), its tone against the estimate and the run's working time: RunProgress
+  const clockText = (ms) => RunProgress.clockText(ms);
+  const timerTone = (ms, minutes) => RunProgress.timerTone(ms, minutes);
+  const runClock = (run) => RunProgress.runClock(run);
   // "23 min of ≈ 22 min (estimate from 30 past runs)"
   function timeAgainst(ms, e) {
     const spent = mins(Math.floor(ms / 60000));
@@ -511,9 +502,29 @@
       // refused before any run: nothing to open, the error is the tooltip (and under the card)
       : refused ? StatusPill.statusPill('failed_to_start', { title: x.error, className: 'rm-state' })
         : StatusPill.statusPill(x.waiting ? 'waiting' : x.status, { title: gate, className: 'rm-state' });
-    const fail = `${retryable(x, r) ? `<button class="btn sm primary" type="button" data-rm-item="retry" title="${refused ? 'Start it again: when an ended run kept work for its issues, you choose to resume that run or start from scratch' : 'Run it again (a new run)'}">Retry</button><button class="btn sm ghost" type="button" data-rm-item="skip" title="Count it as finished: the roadmap goes on">Skip</button>` : ''}${askOracleHtml(x)}`;
+    // #288: an item whose run ended without finishing (interrupted, failed, cancelled) resumes that run
+    const resume = retryable(x, r) && x.runId && ['interrupted', 'failed', 'cancelled'].includes(x.run?.status)
+      ? `<button class="btn sm ghost" type="button" data-rm-resume="${esc(x.runId)}" data-testid="roadmap-item-resume" title="Resume its run ${esc(x.runId)} from a step (where it stopped is preselected), keeping its work">Resume run</button>` : '';
+    // #395: Move on past an item whose run waits at a human gate (the gate stays the owner's)
+    const moveOn = may(r, null, x).park.allowed ? `<button class="btn sm ghost" type="button" data-rm-item="park" data-testid="roadmap-item-move-on" title="The next stage starts without this change; its run keeps waiting at its gate for you">Move on</button>` : '';
+    const fail = `${moveOn}${retryable(x, r) ? `<button class="btn sm primary" type="button" data-rm-item="retry" title="${refused ? 'Start it again: when an ended run kept work for its issues, you choose to resume that run or start over' : 'Run it again (a new run)'}">Retry</button><button class="btn sm ghost" type="button" data-rm-item="skip" title="Count it as finished: the roadmap goes on">Skip</button>${resume}` : ''}${askOracleHtml(x)}`;
     const move = locked ? '' : `<button class="btn sm ghost" type="button" data-rm-move="up" title="Earlier in the stage (or into the previous stage)" aria-label="Earlier in the stage"${n === 0 && s === 0 ? ' disabled' : ''}>↑</button><button class="btn sm ghost" type="button" data-rm-move="down" title="Later in the stage (or into the next stage)" aria-label="Later in the stage">↓</button><button class="link-btn small" type="button" data-rm-remove title="Take this item out of the roadmap">Remove</button>`;
-    return `<div class="rm-status" data-testid="roadmap-status">${state}${fail ? `<div class="rm-fail-actions">${fail}</div>` : ''}${move ? `<div class="rm-actions">${move}</div>` : ''}</div>`;
+    return `<div class="rm-status" data-testid="roadmap-status">${state}${parkedHtml(x)}${fail ? `<div class="rm-fail-actions">${fail}</div>` : ''}${move ? `<div class="rm-actions">${move}</div>` : ''}</div>`;
+  }
+
+  // #395: a parked item's line, "Parked at <gate>": it opens the run at its gate (backlog.js: any
+  // [data-run]); a run interrupted there (a closed app) is resumed first, as the gate card says
+  function parkedHtml(x) {
+    if (x.status !== 'parked' || !x.runId) return '';
+    const gate = x.parked?.gate || x.run?.gate || 'its gate';
+    const interrupted = x.run?.status === 'interrupted';
+    const tip = interrupted ? `Its run ${x.runId} was interrupted at this gate: open it and Resume it first, then answer the gate` : `Open the run ${x.runId} at its gate: the gate is still yours to answer`;
+    return `<button class="link-btn small rm-parked" type="button" data-testid="roadmap-item-parked" data-run="${esc(x.runId)}" data-workflow="${esc(x.workflowName || '')}" title="${esc(tip)}">Parked at ${esc(gate)}${interrupted ? ' · resume its run first' : ''}</button>`;
+  }
+  // #395: the bar's count of the items the roadmap moved past while their runs wait at a gate
+  function parkedBadgeHtml(r) {
+    const n = r.stages.flatMap((s) => s.items).filter((x) => x.status === 'parked').length;
+    return n ? ` <span class="badge warn" data-testid="roadmap-parked-count" title="The roadmap moved on past these items: their runs still wait at their gates for you (each card's &quot;Parked at …&quot; opens it)">${n} parked at a gate</span>` : '';
   }
 
   // ---- the pipeline (#282): the workflow's stations, always visible in the Workflow band -----------------
@@ -614,9 +625,19 @@
             <div class="rm-wf-head"><span class="rm-eyebrow">Workflow</span>${head}${x.runId ? '' : '<span class="spacer"></span>'}${edit}</div>
             ${modeHtml(x, locked)}
             <div class="rm-meta">${meta}</div>
+            ${runHistoryHtml(x)}
           </div>
           ${pipelineHtml(x, v)}
         </div>`;
+  }
+
+  // #384: the item's earlier runs (a run resumed, a retry), oldest first: each opens its run (backlog.js:
+  // any [data-run]); `runHistory` ({ runId, status }) from the service, else its `runs` without a status
+  function runHistoryHtml(x) {
+    const earlier = x.runHistory || RoadmapModel.earlierRuns(x).map((runId) => ({ runId, status: null }));
+    if (!earlier.length) return '';
+    const entry = (h) => `<button class="link-btn small rm-run-history-entry" type="button" data-testid="roadmap-run-history-entry" data-run="${esc(h.runId)}" data-workflow="${esc(x.workflowName || '')}" title="${esc(`Open the earlier run ${h.runId}`)}"><span class="mono">${esc(String(h.runId).slice(9))}</span>${h.status ? ` ${StatusPill.statusPill(h.status)}` : ''}</button>`;
+    return `<div class="rm-run-history muted small" data-testid="roadmap-run-history"><span class="rm-eyebrow">Earlier runs</span>${earlier.map(entry).join('')}</div>`;
   }
 
   // The item card (#282), three bands: 1. its issues (what leads: the titles, then "4 issues ·
@@ -642,12 +663,12 @@
     return `
       <div class="rm-item rm-${esc(status)}" data-testid="roadmap-item"${status === 'planned' ? '' : ` data-status="${esc(status)}"`} data-item="${esc(x.id)}" data-stage="${s}"${locked || open ? '' : ' draggable="true" data-drag-item'}>
         <div class="rm-item-top">
-          <div class="rm-issues"><ul class="rm-titles">${titles}</ul>${foot}</div>
+          <div class="rm-issues"><ul class="rm-titles">${titles}</ul>${foot}<button type="button" class="link-btn small rm-map" data-rm-map-item="${esc(x.id)}" data-testid="show-on-map" title="Open the project city with the files this item is expected to change">Show on the map</button></div>
           ${metersHtml(x, x.status === 'running' || !!x.waiting, v?.clock)}
           ${statusHtml(x, s, n, r, locked, v)}
         </div>${workflowHtml(x, locked, open, v)}
         ${reasonHtml(x)}
-        ${x.error ? `<div class="small rm-error ${x.status === 'failed' || refused ? 'error' : 'muted'}">${esc(x.error)}${refused && x.status !== 'skipped'
+        ${x.error ? `<div class="small rm-error ${x.status === 'failed' || refused ? 'error' : 'muted'}">${esc(x.error)}${refused
     ? '<div class="rm-error-hint muted">Retry starts it again: when an ended run kept work for its issues, you choose to resume that run or start from scratch. Skip counts it as finished.</div>' : ''}</div>` : ''}
         ${open ? formHtml(x) : ''}
       </div>`;
@@ -671,20 +692,25 @@
   // An entry that cannot be used stays in the menu, off (aria-disabled, so the keyboard still reaches
   // it), with its reason in its tooltip and on the line under it.
   let stageMenu = null; // the id of the stage whose menu is open
+  let moveOnWhy = null; // #395: the id of the stage whose refused "Move on from this stage" was clicked
   function stageMenuHtml(stage, s, count, r, done) {
     const open = stageMenu === stage.id;
     const button = `<button class="btn sm ghost rm-menu-btn" type="button" data-rm-stage-menu="${esc(stage.id)}" data-testid="roadmap-stage-menu" aria-label="Stage actions" title="Stage actions" aria-haspopup="menu" aria-expanded="${open}">⋮</button>`;
     if (!open) return `<span class="bl-menu-wrap rm-stage-menu-wrap">${button}</span>`;
     const off = !!stage.disabled;
-    const busy = stage.items.some((x) => x.status === 'running');
-    const runnable = !off && r.state !== 'running' && stage.items.some((x) => x.status === 'planned');
-    const runWhy = off ? 'This stage is disabled: enable it first' : r.state === 'running' ? 'The roadmap is running: pause or stop it first' : runnable ? '' : 'No planned item in this stage';
+    const acts = may(r, stage); // with a stage, start is "Run this stage" (#141)
     const entry = (attrs, label, title, why = '') => `<button type="button" role="menuitem" ${attrs} title="${esc(why || title)}"${why ? ' aria-disabled="true"' : ''}>${label}</button>${why ? `<div class="bl-menu-why small muted">${esc(why)}</div>` : ''}`;
+    // #395: refused (a turn runs), "Move on from this stage" still answers a click: it says why under it (moveOnWhy)
+    const moveOn = (why) => `<button type="button" role="menuitem" data-rm-park-stage data-testid="roadmap-stage-move-on"${why ? ' data-refused="true"' : ''} title="${esc(why || 'Park its items waiting at a gate (the gates keep waiting for you) and skip its planned items: the next stage starts')}">Move on from this stage</button>${why && moveOnWhy === stage.id ? `<div class="bl-menu-why small muted" role="alert" data-testid="roadmap-move-on-refused">${esc(why)}</div>` : ''}`;
     const entries = [
       // #284: a finished stage has nothing left to hold back (a disabled one can always be enabled)
       off ? entry('data-rm-toggle-stage data-testid="roadmap-stage-toggle" aria-pressed="true"', 'Enable', 'Run this stage with the roadmap again, in its turn')
-        : done ? '' : entry('data-rm-toggle-stage data-testid="roadmap-stage-toggle" aria-pressed="false"', 'Disable', 'Skip this stage while the roadmap runs; it stays in the list', busy ? 'An item of this stage is running: wait for it, or stop its run' : ''),
-      entry('data-rm-run-stage', '<span aria-hidden="true">▶ </span>Run this stage', 'Run only this stage\'s items; the roadmap pauses when they are done', runWhy),
+        : done ? '' : entry('data-rm-toggle-stage data-testid="roadmap-stage-toggle" aria-pressed="false"', 'Disable', 'Skip this stage while the roadmap runs; it stays in the list', acts.disable.reason),
+      entry('data-rm-run-stage', '<span aria-hidden="true">▶ </span>Run this stage', 'Run only this stage\'s items; the roadmap pauses when they are done', acts.start.reason),
+      // #368: nothing is cut: its agents finish their turns, then its runs and the roadmap pause
+      done ? '' : entry('data-rm-pause-stage data-testid="roadmap-stage-pause"', 'Pause after current step', 'Its runs stop once their agents finish the current turn and no step starts after them; Resume continues them where they stopped', acts.pauseStage.reason),
+      // #395: its items at a gate are parked (their gates stay yours), its planned ones skipped; the next stage starts
+      done ? '' : moveOn(acts.parkStage.reason),
       stage.release?.name ? '' : entry('data-rm-release="add"', '<span aria-hidden="true">✂ </span>Release here', 'Draw a cut line after this stage: when the roadmap reaches it, the whole unit and E2E suites run and you Ship or Hold; the stages below wait for it'),
       entry('data-rm-stage="up"', '<span aria-hidden="true">↑ </span>Run earlier', 'Run this stage earlier', s === 0 ? 'It is the first stage' : ''),
       entry('data-rm-stage="down"', '<span aria-hidden="true">↓ </span>Run later', 'Run this stage later', s === count - 1 ? 'It is the last stage' : ''),
@@ -702,7 +728,7 @@
   // `stage.disabled`) is skipped while the roadmap runs: still listed in its place, dimmed, with a
   // "Disabled" badge, never the current one.
   function stageHtml(stage, s, count, current, byNumber, scoped, r, shown) {
-    const done = stage.items.every(finished);
+    const done = !RoadmapModel.hasUnfinished(stage);
     const off = !!stage.disabled;
     const { items, folded, open, cut = Infinity } = shown;
     const card = (x) => itemHtml(x, s, stage.items.indexOf(x), byNumber, r);
@@ -714,6 +740,8 @@
     const note = noteOpen
       ? `<input type="text" class="rm-note small" data-rm-note value="${esc(stage.note || '')}" placeholder="Why this order" aria-label="Stage note" autofocus />`
       : stage.note ? `<p class="rm-note-text small muted">${esc(stage.note)} <button class="link-btn small" type="button" data-rm-addnote>edit</button></p>` : '';
+    // #368: paused after the current turn (the service's stage.pause): waiting for a turn, or paused since
+    const pause = stage.pause ? `<p class="rm-stage-pause small" data-testid="roadmap-stage-pause-state" data-state="${esc(stage.pause.state)}">${esc(RunProgress.pauseLabel(stage.pause))}</p>` : '';
     const stateBadge = s === scoped ? `<span class="badge ${r.state === 'running' ? 'live' : 'warn'}">${r.state === 'running' ? 'Running this stage only' : 'This stage only · paused'}</span>`
       : s === current ? '<span class="badge live">current</span>' : done ? '<span class="badge" data-status="done">Done</span>' : '';
     const offBadge = off ? '<span class="badge warn rm-disabled-badge" data-testid="roadmap-stage-disabled" title="Skipped while the roadmap runs; it stays in the list. Enable it in the stage\'s ⋮ menu to run it">Disabled</span>' : '';
@@ -724,10 +752,10 @@
           <input type="text" class="rm-name" data-rm-name value="${esc(stage.name)}" placeholder="Name (optional)" aria-label="Stage name" />
           ${offBadge}${stateBadge}
           ${stage.items.length > 1 ? stageCostHtml(stage, done) : ''}
-          <span class="spacer"></span>
+          <span class="spacer"></span><button type="button" class="btn sm ghost" data-rm-map-stage="${s}" data-testid="show-stage-on-map" title="Colour each item of this stage on the project city; a building two items would change is red">Show the stage on the map</button>
           ${stageMenuHtml(stage, s, count, r, done)}
         </div>
-        ${note}
+        ${pause}${note}
         <div class="rm-items">${cards}</div>
       </section>`;
   }
@@ -780,33 +808,117 @@
     });
   }
 
-  // ---- what the Roadmap shows (#217, #268): Planned | All, the date range, the epic filter, in pages ------
-  const finished = (x) => x.status === 'done' || x.status === 'skipped';
-  const DAY_MS = 24 * 60 * 60 * 1000;
-  // the date ranges: [id, the option, in the header's count, its length in ms (null: no limit)]
-  const SINCE = [
-    ['24h', 'Last 24 hours', 'last 24 hours', DAY_MS],
-    ['2d', 'Last 2 days', 'last 2 days', 2 * DAY_MS],
-    ['3d', 'Last 3 days', 'last 3 days', 3 * DAY_MS],
-    ['1w', 'Last week', 'last week', 7 * DAY_MS],
-    ['15d', 'Last 15 days', 'last 15 days', 15 * DAY_MS],
-    ['1m', 'Last month', 'last month', 30 * DAY_MS],
-    ['total', 'Total', 'all time', null],
-  ];
-  // An item's last activity: the latest of when it joined the roadmap (`origin`), its run's start and
-  // its run's end; a run in progress is active now. An item without any date is in every range.
-  function inRange(x, v, now) {
-    if (v.rangeMs == null || x.status === 'running' || x.waiting) return true;
-    const at = [x.origin, x.run?.startedAt, x.run?.finishedAt].map(toMs).filter((t) => t != null);
-    return !at.length || Math.max(...at) >= now - v.rangeMs;
+  // ---- releases on the Roadmap (#291): a block after its stage, a dashed version line, a filter ------
+  // A release looks like a stage with a single card, its release run, but is not one: no number, no
+  // menu, no drop target, nothing stored in the roadmap. `data.releases` (backlog.js, the service's
+  // roadmapReleases): { releases: [{ version, status, runId (the release run), mock, runs (run ids in
+  // the release), date, tag, commit, issues, cost, tests, startedAt, durationMs, runCost, stations:
+  // { unit, e2e, fix, ship } (rounds), station (where the run is) }] }, or { error } when the history
+  // could not be read. A cut line whose release run started (`stage.release.runId`) places its
+  // release (named like the line) and its row gives way to the block.
+  // a release's state: [badge tone, label, what it means, what the stages after its cut line wait for]
+  const RELEASE_BLOCK = {
+    checking: ['live', 'Checking', 'Its release run checks the whole unit and E2E suites', 'the stages below wait for the check'],
+    waiting: ['warn', 'Waiting for you', 'Its Ship gate waits for you: open the run to Ship or Hold', 'the stages below wait for Ship'],
+    shipped: ['', 'Shipped', 'Pushed and tagged', ''],
+    held: ['warn', 'On hold', 'Its release run ended without shipping', 'the stages below wait: resume its run from its Ship gate, or Resume the roadmap'],
+    failed: ['error', 'Failed', 'Its release run failed', 'the stages below wait: open the run, then Resume the roadmap to check the release again'],
+  };
+  // the release workflow's stations (workflows/release.yaml)
+  const RELEASE_STATIONS = [['unit', 'Unit tests'], ['e2e', 'E2E scenarios'], ['fix', 'Fix'], ['ship', 'Ship']];
+  // an item's runs (RoadmapModel.itemRuns); where each release goes and the filter's choice: RoadmapModel.releaseView
+  const itemRuns = (x) => RoadmapModel.itemRuns(x);
+  // #273: the owner's zone (time-zone.js; a page without it: the computer's)
+  const zone = () => (typeof TimeZone !== 'undefined' ? TimeZone.current() : undefined);
+  const shortDate = (at) => {
+    const d = new Date(at);
+    return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: zone() });
+  };
+
+  // The head's count while a release is chosen: its stages and runs shown, the runs of the release the
+  // roadmap does not have (runs started elsewhere), a link to the release on the Releases screen.
+  function releaseCountHtml(r, rv, vis) {
+    const stages = vis.filter((x) => x.items.length).length;
+    const shown = new Set(vis.flatMap((x) => x.items).flatMap(itemRuns).filter((id) => rv.runs.has(id)));
+    const inRoadmap = new Set(r.stages.flatMap((s) => s.items).flatMap(itemRuns));
+    const outside = rv.chosen ? (rv.chosen.runs || []).filter((id) => id !== rv.chosen.runId && !inRoadmap.has(id)).length : 0;
+    const name = rv.chosen ? `Release ${rv.chosen.version}` : 'Next release';
+    const rest = outside ? `; ${plural(outside, 'run')} of this release ${outside === 1 ? 'is' : 'are'} not in the roadmap` : '';
+    return `<span class="small muted rm-count" data-testid="roadmap-count">${esc(name)}: ${plural(stages, 'stage')} · ${plural(shown.size, 'run')}${rest}${rv.chosen?.status === 'shipped' && !rv.chosen.mock ? ' <button class="link-btn small" type="button" data-rm-open-releases title="The release on the Releases screen">Open in Releases</button>' : ''}</span>`;
   }
+
+  // The filter row's Releases select: All, Next release, each shipped release newest first; not drawn
+  // without any release; disabled with the reason when the history could not be read.
+  function releaseFilterHtml(data, rv) {
+    const attrs = 'data-rm-release-filter data-testid="roadmap-release-filter" aria-label="Releases"';
+    if (data?.releases?.error) return `<select class="rm-release-filter" ${attrs} title="${esc(`The releases could not be read: ${data.releases.error}`)}" disabled><option>Releases could not be read</option></select>`;
+    if (!rv.list.length) return '';
+    const shipped = rv.list.filter((x) => x.status === 'shipped' && x.date).sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    const options = [['', 'All'], ['next', 'Next release (not shipped)'], ...shipped.map((x) => [x.version, `${x.version} · ${shortDate(x.date)}`])];
+    return `<label class="rm-release-pick small"><span class="muted">Release</span><select class="rm-release-filter${rv.choice ? ' active' : ''}" ${attrs} title="Show the stages and items whose runs are in a release">${options.map(([id, label]) =>
+      `<option value="${esc(id)}"${id === rv.choice ? ' selected' : ''}>${esc(label)}</option>`).join('')}</select></label>`;
+  }
+
+  // The release block: its state, its release run's stations with their rounds, its time, cost and
+  // fixes, "Open run" (at the Ship gate, the gate waits there: nothing here answers it).
+  function releaseBlockHtml(x) {
+    const [tone, label, help] = RELEASE_BLOCK[x.status] || RELEASE_BLOCK.checking;
+    const name = `Release ${x.version}`;
+    const going = x.status === 'checking' || x.status === 'waiting';
+    const rounds = x.stations || {};
+    const stations = x.runId ? `<ol class="rm-release-stations" aria-label="The release run's stations">${RELEASE_STATIONS.map(([id, text]) => {
+      const n = Number(rounds[id]) || 0;
+      const here = going && x.station === id;
+      return `<li class="rm-release-station${n ? ' visited' : ''}${here ? ' current' : ''}"${here ? ' aria-current="step"' : ''}>${esc(text)}${n > 1 ? ` <span class="muted">×${n}</span>` : ''}${here && x.status === 'waiting' ? ' · waits for you' : ''}</li>`;
+    }).join('')}</ol>` : '';
+    const fixes = Number(rounds.fix) || 0;
+    const tests = ['unit', 'e2e'].map((k) => x.tests?.[k]).every((t) => !t) ? ''
+      : [['unit', 'Unit'], ['e2e', 'E2E']].filter(([k]) => x.tests?.[k]).map(([k, t]) => `${t} ${x.tests[k].passed ?? 0} passed${x.tests[k].failed ? `, ${x.tests[k].failed} failed` : ''}`).join(' · ');
+    const facts = [x.durationMs ? mins(Math.max(1, Math.round(x.durationMs / 60000))) : '', x.runCost != null ? money(x.runCost) : '', fixes ? `${fixes} fix${fixes === 1 ? '' : 'es'}` : '', tests].filter(Boolean).join(' · ');
+    return `
+      <section class="rm-release is-${esc(x.status)}" data-testid="roadmap-release-block" data-release="${esc(x.version)}" role="group" tabindex="0" aria-label="${esc(`${name}, ${label}`)}">
+        <div class="rm-release-card" data-testid="roadmap-release-card" title="${esc(help)}">
+          <div class="rm-release-head">
+            <span class="rm-release-icon" aria-hidden="true">◆</span><b class="rm-release-name">${esc(name)}</b>
+            ${x.mock ? '<span class="badge p-mock">Simulated</span>' : ''}<span class="badge ${tone}" data-status="${esc(x.status)}">${esc(label)}</span>
+            <span class="spacer"></span>
+            ${x.runId ? `<button class="btn sm ${x.status === 'waiting' ? 'primary' : 'ghost'}" type="button" data-rm-release-run="${esc(x.runId)}" title="${esc(x.status === 'waiting' ? 'Open the release run at its Ship gate' : `Open the release run ${x.runId}`)}">Open run</button>` : ''}
+          </div>
+          ${stations}
+          ${facts ? `<div class="small muted rm-release-facts">${esc(facts)}</div>` : ''}
+        </div>
+      </section>`;
+  }
+
+  // The dashed line after the block: shipped, the version, when, its issues, runs and cost, the tag and
+  // short commit, a link to the Releases screen; not shipped, the version, its state and what the
+  // stages after its cut line wait for.
+  function releaseLineHtml(x) {
+    const [, label, , waits] = RELEASE_BLOCK[x.status] || RELEASE_BLOCK.checking;
+    const shipped = x.status === 'shipped';
+    const when = shipped && x.date ? `shipped ${shortDate(x.date)}, ${clock(x.date)}` : shipped ? 'shipped' : '';
+    const tag = x.tag ? `tag ${x.tag}${x.commit ? ` (${String(x.commit).slice(0, 7)})` : ''}` : '';
+    const parts = shipped
+      ? [x.version, when, plural((x.issues || []).length, 'issue'), plural((x.runs || []).length, 'run'), x.cost != null ? money(x.cost) : '', tag]
+      : [x.version, label, x.cut ? waits : ''];
+    return `
+      <div class="rm-release-line is-${esc(x.status)}" data-testid="roadmap-release-line" tabindex="0" aria-label="${esc(`Release ${x.version}: ${parts.filter(Boolean).slice(1).join(', ')}`)}">
+        <span class="rm-release-line-text">${parts.filter(Boolean).map(esc).join(' · ')}</span>
+        ${shipped && x.mock !== true ? '<button class="link-btn small" type="button" data-rm-open-releases title="The release\'s notes, issues and runs on the Releases screen">Open in Releases</button>' : ''}
+      </div>`;
+  }
+  const releaseHtml = (x) => releaseBlockHtml(x) + releaseLineHtml(x);
+
+  // ---- what the Roadmap shows (#217, #268): Planned | All, the date range, the epic filter, in pages ------
+  // a parked item (#395) still needs the owner at its gate: it stays with the open work
+  const finished = (x) => RoadmapModel.isFinished(x) && x.status !== 'parked';
+  // the date ranges (RoadmapModel.SINCE) and an item's last activity in one (RoadmapModel.inRange)
+  const inRange = (x, v, now) => RoadmapModel.inRange(x, v.rangeMs, now);
   // #267: the stages whose "+n done" chip is unfolded, by stage id (kept across the re-reads of the file)
   const unfolded = new Set();
   const stageKey = (stage, s) => String(stage.id || `#${s}`);
-  // #268: the pages drawn of the current view (`key`): `more` pages after the first, `earlier` before it
-  const PAGE_STAGES = 15;
-  const PAGE_ITEMS = 60;
-  const LEAD_STAGES = 2; // the first page starts this many stages before the current one
+  // #268: the pages drawn of the current view (`key`): `more` pages after the first, `earlier` before
+  // it; RoadmapModel.pageOf cuts the visible stages into them
   let pages = { key: '', more: 0, earlier: 0, fresh: false };
   /** The next page (the "Loading…" row came near the screen); the owner redraws. */
   function loadMore() {
@@ -824,14 +936,15 @@
   /**
    * The stages the view shows: [{ stage, s (its real index), items (the ones drawn, in order), folded
    * (Planned: its finished items of the date range, under the "+n done" chip), open (the chip is
-   * unfolded: they are drawn too) }]. `v`: { epic, showAll, rangeMs }.
+   * unfolded: they are drawn too) }]. `v`: { epic, showAll, rangeMs, runs }; `runs` (#291: a release
+   * chosen, its run ids): only the items with a run in it, finished or not, and the stages that have one.
    */
   function visibleStages(r, v, byNumber, now) {
     const out = [];
     r.stages.forEach((stage, s) => {
-      if (!stage.items.length && !v.epic) { out.push({ stage, s, items: [], folded: [], open: false }); return; }
-      const mine = stage.items.filter((x) => inEpic(x, v.epic, byNumber));
-      if (v.showAll) {
+      if (!stage.items.length && !v.epic && !v.runs) { out.push({ stage, s, items: [], folded: [], open: false }); return; }
+      const mine = stage.items.filter((x) => inEpic(x, v.epic, byNumber) && (!v.runs || itemRuns(x).some((id) => v.runs.has(id))));
+      if (v.showAll || v.runs) {
         const items = mine.filter((x) => inRange(x, v, now));
         if (items.length) out.push({ stage, s, items, folded: [], open: false });
         return;
@@ -844,30 +957,6 @@
       if (items.length) out.push({ stage, s, items, folded, open: unfolded.has(key) });
     });
     return out;
-  }
-  const cardCount = (x) => x.items.length + (x.open ? x.folded.length : 0);
-  /**
-   * The page of the visible stages to draw: from LEAD_STAGES before the current stage (so it is in
-   * the first page however long the finished history is), PAGE_STAGES stages or PAGE_ITEMS cards per
-   * page (a longer stage is cut: `cut`, its first cards). → { drawn, earlier (visible stages above
-   * the page), more (something is left below it) }
-   */
-  function pageOf(list, current) {
-    const at = Math.max(0, list.findIndex((x) => x.s >= current));
-    const base = Math.max(0, at - LEAD_STAGES);
-    const start = Math.max(0, base - pages.earlier * PAGE_STAGES);
-    let stagesLeft = PAGE_STAGES * (1 + pages.more);
-    let cardsLeft = PAGE_ITEMS * (1 + pages.more);
-    const drawn = list.slice(start, base);
-    let more = false;
-    for (let k = base; k < list.length && !more; k++) {
-      const cards = cardCount(list[k]);
-      if (stagesLeft <= 0 || cardsLeft <= 0) more = true;
-      else if (cards > cardsLeft) { drawn.push({ ...list[k], cut: cardsLeft }); more = true; } else drawn.push(list[k]);
-      stagesLeft -= 1;
-      cardsLeft -= cards;
-    }
-    return { drawn, earlier: start, more };
   }
   // After backlog.js drew the view: the "Loading…" row asks for the next page when it comes near the
   // screen (as the runs list's does), never while the owner edits (`ownerBusy`: a field with the
@@ -894,7 +983,7 @@
   // ---- Live roadmap (#164, src/live-roadmap.js) ----------------------------------------------------
   const clock = (at) => {
     const d = new Date(at);
-    return Number.isNaN(d.getTime()) ? '' : `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    return Number.isNaN(d.getTime()) ? '' : d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: zone() });
   };
   const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
   // the last refill in a few words: [text, tone] (tone: '' | 'warn' | 'error')
@@ -964,19 +1053,23 @@
    */
   function html(data, rerender, view = {}) {
     loadWorkflows(rerender);
+    const { SINCE, cardCount } = RoadmapModel;
     const [since, , sinceText, rangeMs] = SINCE.find(([id]) => id === view.since) || SINCE[0];
-    const v = { epic: view.epic || '', showAll: !!view.showAll, since, rangeMs };
-    const key = `${view.project || ''}|${v.showAll ? 'all' : 'planned'}|${since}|${v.epic}`;
-    if (pages.key !== key) pages = { key, more: 0, earlier: 0, fresh: true };
     const r = data?.roadmap || { state: 'planned', stages: [] };
+    // #291: the releases, and the one the Releases filter chose
+    const rv = RoadmapModel.releaseView(r, data, view.release || '');
+    const v = { epic: view.epic || '', showAll: !!view.showAll, since, rangeMs, runs: rv.runs };
+    const key = `${view.project || ''}|${v.showAll ? 'all' : 'planned'}|${since}|${v.epic}|${rv.choice}`;
+    if (pages.key !== key) pages = { key, more: 0, earlier: 0, fresh: true };
     const q = data?.queue?.items || [];
     const byNumber = new Map((data?.issues || []).map((i) => [i.number, i]));
     // a stage run on its own (#141) is the one in progress; the others keep their planned look
     const scoped = scopedStage(r);
-    // #284: a disabled stage is skipped (src/roadmap.js currentStage): never the current one, counted apart
-    const current = scoped >= 0 ? scoped : r.stages.findIndex((s) => !s.disabled && s.items.some((x) => x.status !== 'done' && x.status !== 'skipped'));
+    // #284: a disabled stage is skipped (RoadmapModel.currentStage): never the current one, counted apart
+    const current = scoped >= 0 ? scoped : RoadmapModel.currentStage(r);
     const offStages = r.stages.filter((s) => s.disabled);
-    const offOpen = offStages.filter((s) => !s.items.every(finished));
+    const offOpen = offStages.filter(RoadmapModel.hasUnfinished);
+    const acts = may(r);
     const leftOut = r.state === 'done' && offOpen.length
       ? `<span class="small muted" data-testid="roadmap-left-out">Done. ${plural(offOpen.length, 'disabled stage')} ${offOpen.length === 1 ? 'was' : 'were'} left out: enable ${offOpen.length === 1 ? 'it' : 'them'} in ${offOpen.length === 1 ? 'its' : 'their'} ⋮ menu, then Start.</span>` : '';
     // #269: the state is a dot before the title (blue and pulsing while running, amber paused, red
@@ -987,23 +1080,24 @@
     const stateLabel = pausedByFailure ? 'Paused by a failure' : StatusPill.statusLabel(r.state);
     const dotTitle = `${stateLabel}${r.simulated ? ' · simulated' : ''}`;
     const dot = `<span class="rm-state-dot is-${dotState}" data-testid="roadmap-state-dot" data-state="${pausedByFailure ? 'paused-failed' : dotState}" role="img" aria-label="${esc(dotTitle)}" title="${esc(dotTitle)}"><span class="sr-only">${esc(stateLabel)}</span></span>`;
-    const scopeBadge = scoped >= 0
+    const scopeBadge = pausingHtml(r) || (scoped >= 0
       ? `<span class="badge ${r.state === 'running' ? 'live' : r.state === 'paused' ? 'warn' : ''}" data-status="${esc(r.state)}">${esc(StatusPill.statusLabel(r.state))} · stage ${scoped + 1} only${r.simulated ? ' · simulated' : ''}</span>`
-      : r.simulated ? '<span class="badge p-mock">Simulated</span>' : '';
+      : r.simulated ? '<span class="badge p-mock">Simulated</span>' : '');
     // a pause that is not an item's failure (the budget cap, a stage run on its own that ended, a
     // release on hold) keeps its line here; a failure is the page's error alert (#270, alerts())
     const note = r.error && !pausedByFailure ? `<span class="${r.state === 'paused' ? 'warn-text' : 'error'} small">${esc(r.error)}${r.state === 'paused' && r.budget ? ` <button class="btn sm primary" type="button" data-rm="budget-raise" title="${esc(`The ${r.budget.period === 'night' ? 'night' : 'daily'} budget becomes what is spent plus the next stage, for ${r.budget.period === 'night' ? 'tonight' : 'today'} only; the roadmap goes on`)}">Raise for ${r.budget.period === 'night' ? 'tonight' : 'today'}</button> <button class="btn sm ghost" type="button" data-rm="budget-resume" title="${esc(`This roadmap ignores the budget until ${r.budget.period === 'night' ? 'the night' : 'the day'} ends; the budget stays as it is`)}">Resume anyway</button>` : ''}</span>` : '';
+    const parked = parkedBadgeHtml(r);
     const menuItems = MENU.filter((m) => m.show(r));
     const menu = `<span class="bl-menu-wrap rm-menu-wrap"><button class="btn sm ghost rm-menu-btn" type="button" data-rm-menu data-testid="roadmap-menu-button" aria-label="Roadmap actions" title="More actions" aria-haspopup="menu" aria-expanded="${menuOpen}">⋮</button>${menuOpen ? `<div class="bl-menu rm-menu" role="menu" data-testid="roadmap-menu" aria-label="Roadmap actions">${menuItems.map((m) => `<button type="button" role="menuitem" data-rm="${m.id}" title="${esc(m.title)}">${esc(m.label)}</button>`).join('')}</div>` : ''}</span>`;
     const bar = `
       <div class="bl-queue rm-bar" data-testid="roadmap-bar">
-        <span class="rm-bar-title">${dot}<b>Roadmap</b> ${scopeBadge} ${r.stages.length} stage${r.stages.length === 1 ? '' : 's'}${offStages.length ? `, ${offStages.length} disabled` : ''}</span>
+        <span class="rm-bar-title">${dot}<b>Roadmap</b> ${scopeBadge} ${r.stages.length} stage${r.stages.length === 1 ? '' : 's'}${offStages.length ? `, ${offStages.length} disabled` : ''}${parked}</span>
         ${note}${leftOut}
         <span class="spacer"></span>
-        ${r.state !== 'running' && r.stages.length ? `<label class="check small dev-only"><input type="checkbox" id="rm-simulate"${state.simulationOnly || r.simulated ? ' checked' : ''} /><span>Simulated</span></label>
-          <button class="btn sm primary" type="button" data-rm="start"${scoped >= 0 && r.state === 'paused' ? ` title="Resume stage ${scoped + 1} only"` : ''}>${r.state === 'paused' ? 'Resume' : 'Start'}</button>` : ''}
-        ${r.state === 'running' ? `<button class="btn sm btn-icon warn-ghost" type="button" data-rm="pause" title="Nothing new starts; runs in progress go on">${ICON.pause}Pause</button>` : ''}
-        ${r.state === 'running' || r.state === 'paused' ? `<button class="btn sm btn-icon ghost danger" type="button" data-rm="stop" title="Back to a plan: nothing starts until Start (asks first)">${ICON.stop}Stop</button>` : ''}
+        ${acts.start.allowed || acts.resume.allowed ? `<label class="check small dev-only"><input type="checkbox" id="rm-simulate"${state.simulationOnly || r.simulated ? ' checked' : ''} /><span>Simulated</span></label>
+          <button class="btn sm primary" type="button" data-rm="start"${scoped >= 0 && acts.resume.allowed ? ` title="Resume stage ${scoped + 1} only"` : ''}>${acts.resume.allowed ? 'Resume' : 'Start'}</button>` : ''}
+        ${acts.pause.allowed ? pauseHtml(r) : ''}
+        ${acts.stop.allowed ? `<button class="btn sm btn-icon ghost danger" type="button" data-rm="stop" title="Back to a plan: nothing starts until Start (asks first)">${ICON.stop}Stop</button>` : ''}
         ${menu}
       </div>`;
     const queued = q.length ? `
@@ -1035,22 +1129,36 @@
     const offItems = offStages.flatMap((s) => s.items).length;
     const shownItems = vis.reduce((a, x) => a + (x.stage.disabled ? 0 : cardCount(x)), 0);
     const epicName = v.epic === NO_EPIC ? 'with no epic' : `in epic ${epics.find((e) => e.id === v.epic)?.title || v.epic}`;
-    const count = r.stages.length ? `<span class="small muted rm-count" data-testid="roadmap-count"${v.epic ? ` title="${esc(`Items ${epicName}`)}"` : ''}>${shownItems} of ${allItems.length} item${allItems.length === 1 ? '' : 's'} · ${sinceText}${offItems ? ` · ${plural(offStages.length, 'disabled stage')} apart (${plural(offItems, 'item')})` : ''}</span>` : '';
-    const nothing = `<div class="empty-state"><b>No ${v.showAll ? '' : 'open '}roadmap items${v.showAll && rangeMs ? ` in the ${sinceText}` : ''}${v.epic ? ` ${esc(epicName)}` : ''}.</b>
+    const count = !r.stages.length ? ''
+      : rv.choice ? releaseCountHtml(r, rv, vis)
+        : `<span class="small muted rm-count" data-testid="roadmap-count"${v.epic ? ` title="${esc(`Items ${epicName}`)}"` : ''}>${shownItems} of ${allItems.length} item${allItems.length === 1 ? '' : 's'} · ${sinceText}${offItems ? ` · ${plural(offStages.length, 'disabled stage')} apart (${plural(offItems, 'item')})` : ''}</span>`;
+    // #291: with a release chosen Planned | All does not apply, the date range does
+    const nothing = rv.choice ? `<div class="empty-state" data-testid="roadmap-release-empty"><b>No stage of this release${rangeMs ? ` in the ${sinceText}` : ''}${v.epic ? ` ${esc(epicName)}` : ''}.</b>
+      <p class="muted">${rangeMs ? 'The date range hides the release\'s runs.' : 'Pick another epic.'}</p>${rangeMs ? '<button class="btn sm ghost" type="button" data-rm-all-time>Show all time</button>' : ''}</div>`
+      : `<div class="empty-state"><b>No ${v.showAll ? '' : 'open '}roadmap items${v.showAll && rangeMs ? ` in the ${sinceText}` : ''}${v.epic ? ` ${esc(epicName)}` : ''}.</b>
       <p class="muted">${v.showAll ? 'Pick a longer date range, or another epic.' : 'Done and skipped items are under All.'}</p>${v.showAll ? '' : '<button class="btn sm ghost" type="button" data-rm-view="all">Show all items</button>'}</div>`;
     // the page to draw; #260: each drawn stage with its cut line; a hidden (finished) stage's line
     // still shows while its release has not shipped (between the drawn stages, and beyond them when
     // the page reaches that end of the roadmap)
-    const page = pageOf(vis, current);
+    const page = RoadmapModel.pageOf(vis, current, pages);
     const drawn = new Map(page.drawn.map((x) => [x.s, x]));
-    const from = page.earlier ? page.drawn[0].s : 0;
+    const from = page.earlier ? page.drawn[0]?.s ?? 0 : 0;
     const to = page.more ? page.drawn.at(-1).s : r.stages.length - 1;
+    // #291: a release block (and its version line) after its stage, in place of its cut line once its
+    // release run started; with a release chosen, no other line, and its block last when its stage is
+    // not drawn (or it has none)
+    const cutLine = (stage, s) => (rv.choice || rv.list.some((x) => x.cut && x.at === s) ? '' : cutLineHtml(stage, s));
+    const placed = (x) => x.at >= 0 && (!rv.choice || drawn.has(x.at));
+    const blocksAfter = (s) => rv.shown.filter((x) => placed(x) && x.at === s).map(releaseHtml).join('');
     const staged = r.stages.map((stage, s) => {
       if (s < from || s > to) return '';
       const x = drawn.get(s);
-      if (x) return stageHtml(stage, s, r.stages.length, current, byNumber, scoped, r, x) + cutLineHtml(stage, s);
-      return !v.epic && stage.release?.status !== 'shipped' ? cutLineHtml(stage, s) : '';
-    }).join('');
+      if (x) return stageHtml(stage, s, r.stages.length, current, byNumber, scoped, r, x) + cutLine(stage, s) + blocksAfter(s);
+      return (!v.epic && stage.release?.status !== 'shipped' ? cutLine(stage, s) : '') + blocksAfter(s);
+    }).join('') + (rv.choice ? rv.shown.filter((x) => !placed(x)).map(releaseHtml).join('') : '')
+      // #291: the release's block is always drawn, so the empty state goes next to it when the date
+      // range or the epic hides every stage of the release
+      + (rv.choice && !page.drawn.length && (rangeMs || v.epic) ? nothing : '');
     const earlier = page.earlier ? `<button class="link-btn small rm-earlier" type="button" data-rm-earlier title="Draw the stages before these">↑ ${plural(page.earlier, 'earlier stage')}</button>` : '';
     const loadingRow = page.more ? '<div class="rm-loading small muted" role="status" data-rm-load-more data-testid="roadmap-loading">Loading…</div>' : '';
     const stages = !r.stages.length
@@ -1065,8 +1173,46 @@
     const epicSelect = options.length ? `<select class="rm-epic${v.epic ? ' active' : ''}" data-rm-epic aria-label="Epic" title="Show the items of one epic, or those in no epic"><option value="">All epics</option>${options.map((o) =>
       `<option value="${esc(o.id)}"${o.id === v.epic ? ' selected' : ''}>${esc(o.title)} (${o.count})</option>`).join('')}</select>` : '';
     // (`view.synced`: the Board toolbar's "Synced … from GitHub", which is hidden on this screen)
-    const filters = epicSelect || viewSeg || sinceSelect || toggle ? `<div class="rm-filters" data-testid="filter-row">${epicSelect}${viewSeg}${sinceSelect}${toggle}${view.synced ? `<span class="spacer"></span><span class="muted small">${esc(view.synced)}</span>` : ''}</div>` : '';
-    return `<div class="rm">${filters}${bar.replace('<span class="spacer"></span>', `${count}<span class="spacer"></span>`)}${queued}${stages}${liveHtml}${importBox}</div>`;
+    const relSelect = r.stages.length ? releaseFilterHtml(data, rv) : '';
+    const filters = epicSelect || viewSeg || sinceSelect || relSelect || toggle ? `<div class="rm-filters" data-testid="filter-row">${epicSelect}${viewSeg}${sinceSelect}${relSelect}${toggle}${view.synced ? `<span class="spacer"></span><span class="muted small">${esc(view.synced)}</span>` : ''}</div>` : '';
+    // #354: the files and lines most runs change (#150) moved to the project's Conflict map tab: a link under the stages
+    const cmapHtml = window.ProjectConflictMap ? window.ProjectConflictMap.linkHtml() : '';
+    return `<div class="rm">${filters}${bar.replace('<span class="spacer"></span>', `${count}<span class="spacer"></span>`)}${lostHtml()}${queued}${stages}${liveHtml}${cmapHtml}${importBox}</div>`;
+  }
+
+  // #287: a save refused because its item (or its stage) was removed elsewhere: the reason and the
+  // values the owner typed, read-only, so the item can be planned again with them; Dismiss closes it
+  function lostHtml() {
+    if (!lost) return '';
+    const x = lost.item;
+    const defs = inputDefs(x);
+    const fields = Object.fromEntries(Object.entries(defs).filter(([k, def]) => k !== 'mode' && !skipInput(k, def || {})));
+    for (const k of Object.keys(x.inputs || {})) if (k !== 'mode' && !defs[k]) fields[k] = {};
+    const grid = Object.keys(fields).length
+      ? WorkflowInputs.formHtml(fields, { values: x.inputs || {}, context: { mode: x.inputs?.mode ?? defs.mode?.default }, id: (k) => `rm-lost-${k}` })
+      : '';
+    return `<div class="rm-conflict" role="alert" data-testid="roadmap-save-conflict">
+      <p>${esc(lost.reason)}</p>
+      ${grid ? `<p class="small muted">The values of your edit of ${esc(numbers(x))}, to plan it again:</p><fieldset class="rm-form-grid wi-grid" disabled>${grid}</fieldset>` : ''}
+      <div class="rm-conflict-actions"><button class="btn sm ghost" type="button" data-rm-conflict-dismiss>Dismiss</button></div>
+    </div>`;
+  }
+
+  // #287: what changed in the roadmap between two reads, for the open Edit form's notice ("1 item
+  // updated elsewhere"); '' when its stages and items did not change (a run's progress only)
+  function changedElsewhere(before, after) {
+    const items = (r) => new Map((r?.stages || []).flatMap((s) => (s.items || []).map((x) => [x.id, { s: s.id, x }])));
+    const content = ({ s, x }) => JSON.stringify([s, x.workflow, x.inputs || {}, !!x.mock, x.then || null, refs(x).map((i) => i.number)]);
+    const head = (s) => JSON.stringify([s.name || '', s.note || '', s.release?.name || '', !!s.disabled]);
+    const [was, now] = [items(before), items(after)];
+    const added = [...now.keys()].filter((id) => !was.has(id)).length;
+    const removed = [...was.keys()].filter((id) => !now.has(id)).length;
+    const updated = [...now.keys()].filter((id) => was.has(id) && content(was.get(id)) !== content(now.get(id))).length;
+    const stagesBefore = new Map((before?.stages || []).map((s) => [s.id, s]));
+    const stages = (after?.stages || []).filter((s) => stagesBefore.has(s.id) && head(stagesBefore.get(s.id)) !== head(s)).length;
+    const parts = [[added, 'added'], [removed, 'removed'], [updated, 'updated']].filter(([n]) => n).map(([n, what]) => `${plural(n, 'item')} ${what}`);
+    if (stages) parts.push(`${plural(stages, 'stage')} changed`);
+    return parts.length ? `${parts.join(', ')} elsewhere` : '';
   }
 
   // #270: a pause by an item (its run failed, or its start was refused: "Could not start #14: …")
@@ -1081,7 +1227,10 @@
     if (!failedPause(r) || !r.error) return [];
     const item = r.stages.flatMap((s) => s.items).find((x) => x.id === r.pausedBy);
     const act = (action) => async () => {
-      try { await itemAction(ctx, r.pausedBy, action); } catch (err) { failed(ctx, 'edit', err); }
+      try {
+        if (action === 'park') await moveOn(ctx, item);
+        else await itemAction(ctx, r.pausedBy, action);
+      } catch (err) { failed(ctx, 'edit', err); }
       ctx.render();
     };
     return [{
@@ -1091,6 +1240,10 @@
       text: r.error,
       dismissible: false,
       actions: [
+        // #395: its run waits at a gate (interrupted there by a closed app): the roadmap may go on without it
+        ...(item && may(r, null, item).park.allowed ? [
+          { label: 'Move on', title: 'The next stage starts without this change; its run keeps waiting at its gate for you', onClick: act('park') },
+        ] : []),
         ...(item && retryable(item, r) ? [
           { label: 'Retry', primary: true, title: 'Start the item that paused the roadmap again', onClick: act('retry') },
           { label: 'Skip', title: 'Count it as finished: the roadmap goes on', onClick: act('skip') },
@@ -1198,6 +1351,11 @@
     item.inputs = inputs;
     const mock = form.querySelector('[data-rm-field-mock]');
     if (mock) item.mock = mock.checked;
+    // #262: only what differs from the workflow's agents
+    if (window.AgentOverrides && form.querySelector('[data-ao-agent]')) {
+      const agentOverrides = AgentOverrides.read(form);
+      if (Object.keys(agentOverrides).length) item.agentOverrides = agentOverrides; else delete item.agentOverrides;
+    }
     if (chainPicker) {
       const then = chainPicker.value();
       if (then) item.then = then; else delete item.then;
@@ -1227,13 +1385,30 @@
   // `edit` (#281): { label, detail?, quiet? }: what the edit did, in the roadmap's words: the line of
   // the version kept before it (src/roadmap-history.js) and the title of its toast with Undo (not for a
   // `quiet` one: a mode, an input, a note, a cut line set).
-  async function save(ctx, stages, edit = null) {
+  // #287 `r`: the roadmap the edit was made on (its updatedAt is the save's base); `edit.form`: the
+  // item with the Edit form's values, kept when the save is refused
+  async function save(ctx, r, stages, edit = null) {
     try {
-      const out = await (edit ? api.saveRoadmap(ctx.projectId, stages, edit.label) : api.saveRoadmap(ctx.projectId, stages));
+      const out = await api.saveRoadmap(ctx.projectId, stages, edit?.label || null, r?.updatedAt || null);
       ctx.setData(out);
-      if (edit && !edit.quiet) undoToast(ctx, out, edit.label, edit.detail);
+      if (out?.conflict) refused(ctx, out, edit?.form);
+      else if (edit && !edit.quiet) undoToast(ctx, out, edit.label, edit.detail);
     } catch (e) { failed(ctx, 'save', e); }
     ctx.render();
+  }
+  // #287: a save the service refused (the roadmap changed elsewhere in a way the edit cannot be
+  // applied to): the screen shows the stored roadmap (set by save) and the reason; the Edit form
+  // stays open with the values typed, or they show in the "Not saved" box when its item is gone
+  function refused(ctx, out, item) {
+    const reason = out.conflict.reason || 'The roadmap changed elsewhere: nothing was saved.';
+    const stays = item && (out.roadmap?.stages || []).some((s) => (s.items || []).some((x) => x.id === item.id));
+    lost = item && !stays ? { item, reason } : null;
+    if (lost) return;
+    if (item) {
+      editing = item.id;
+      kept = { id: item.id, inputs: item.inputs, mock: item.mock };
+    }
+    ctx.setError(reason);
   }
 
   // #195: before a start (Start, Resume, Run this stage; `scope`: a stage id), the items still to run
@@ -1258,9 +1433,40 @@
     const ids = new Set(items.map((x) => x.id));
     const stages = clone(r.stages);
     for (const x of stages.flatMap((st) => st.items)) if (ids.has(x.id)) Object.assign(x, { workflow: def.file, workflowName: def.name });
-    const out = await api.saveRoadmap(ctx.projectId, stages);
+    const out = await api.saveRoadmap(ctx.projectId, stages, null, r.updatedAt || null);
     ctx.setData(out);
+    // #287: refused (the roadmap changed elsewhere): nothing starts, the reason shows
+    if (out?.conflict) { refused(ctx, out); return null; }
     return out?.roadmap || r;
+  }
+
+  // The bar's Pause (#391: its menu, after the stage or now; Cancel pause takes it back) and Stop (#269: asks first); true: done
+  async function pauseAct(ctx, act) {
+    if (act === 'pause') {
+      [pauseOpen, menuOpen] = [!pauseOpen, false];
+      ctx.render();
+      focusMenu(pauseOpen ? '[role="menuitem"]' : '[data-rm="pause"]', '.rm-pause-wrap');
+      return true;
+    }
+    if (act === 'stop' && !await confirmDialog('Stop the roadmap', 'The roadmap goes back to a plan: nothing new starts until you press Start. Runs in progress go on.', 'Stop')) return true;
+    const id = ctx.projectId;
+    pauseOpen = false;
+    ctx.setData(await (act === 'stop' ? api.pauseRoadmap(id, true) : act === 'cancel-pause' ? api.cancelRoadmapPause(id) : api.pauseRoadmap(id, false, act === 'pause-now' ? 'now' : 'stage')));
+  }
+
+  // The stage menu's Pause after current step (#368): one click, nothing is lost; its pause line says what it waits for.
+  async function pauseStage(ctx, stages, target) {
+    const stage = stages[locate(stages, target).s];
+    if (stage) ctx.setData(await api.pauseRoadmapStage(ctx.projectId, stage.id));
+  }
+
+  // #284: Disable / Enable a stage: skipped while the roadmap runs; saved at once, Undo in its toast
+  async function toggleStage(ctx, r, stages, target) {
+    const { s } = locate(stages, target);
+    if (!stages[s]) return;
+    const off = !stages[s].disabled;
+    stages[s].disabled = off; // always sent: a save that does not mention it keeps what is stored
+    await save(ctx, r, stages, { label: `${off ? 'Disabled' : 'Enabled'} stage ${s + 1}`, detail: off ? 'The roadmap skips it while it runs; it keeps its place.' : 'It runs in its turn again.' });
   }
 
   // Run this stage (#141): only stage `s`'s items start, with Start's simulated choice and real-run
@@ -1268,7 +1474,7 @@
   async function runStage(ctx, r, s) {
     const stage = r.stages[s];
     if (!stage) return;
-    const earlier = r.stages.slice(0, s).map((x, n) => (!x.disabled && x.items.some((i) => i.status !== 'done' && i.status !== 'skipped') ? n : -1)).filter((n) => n >= 0);
+    const earlier = r.stages.slice(0, s).map((x, n) => (RoadmapModel.isOpen(x) ? n : -1)).filter((n) => n >= 0);
     if (earlier.length && !await confirmDialog(`Run stage ${s + 1} out of order`, `${stagesText(earlier)} ${earlier.length > 1 ? 'are' : 'is'} not done: ${earlier.length > 1 ? 'their' : 'its'} issues may conflict with this stage's. They stay planned.`, 'Run this stage')) return;
     if (!await checkPushes(ctx, r, stage.id)) return;
     const simulated = !!document.querySelector('#rm-simulate')?.checked && devMode();
@@ -1304,30 +1510,51 @@
       out = await api.roadmapItem(ctx.projectId, itemId, action, true);
     }
     ctx.setData(out);
+    return out;
+  }
+
+  // #395 Move on (the card's button, the paused roadmap's alert): asks first, then parks the item; its
+  // gate keeps waiting for the owner, and Undo in the toast puts it back in its stage
+  async function moveOn(ctx, x) {
+    if (!x) return;
+    const gate = x.run?.gate ? ` ("${brief(x.run.gate, 60)}")` : '';
+    if (!await confirmDialog(`Move on past ${numbers(x)}`, `The next stage starts without the parked change: its run keeps waiting at its gate${gate} for you, and nothing answers it. When you answer it later, the item ends done or failed.`, 'Move on')) return;
+    const out = await itemAction(ctx, x.id, 'park');
+    undoToast(ctx, out, `Moved on past ${numbers(x)}`, 'Its run still waits at its gate for you.');
+  }
+
+  // #395 the stage menu's "Move on from this stage": asks first; refused (with the reason) while a turn runs
+  async function moveOnStage(ctx, stages, target) {
+    const { s } = locate(stages, target);
+    const stage = stages[s];
+    if (!stage) return;
+    if (!await confirmDialog(`Move on from ${stageName(stage, s)}`, 'Its items waiting at a gate are parked (their gates keep waiting for you) and its planned items are skipped: the next stage starts without the parked changes.', 'Move on')) return;
+    const out = await api.parkRoadmapStage(ctx.projectId, stage.id);
+    ctx.setData(out);
+    undoToast(ctx, out, `Moved on from ${stageName(stage, s)}`, 'Its runs at a gate still wait for you.');
   }
 
   // ---- the ⋮ menus (#269 the bar's, #282 a stage's) and the earlier versions (#281) ----------------------
-  const focusMenu = (sel) => document.querySelector(`#bl-list .rm-menu-wrap ${sel}`)?.focus({ preventScroll: true });
+  const focusMenu = (sel, wrap = '.rm-menu-wrap') => document.querySelector(`#bl-list ${wrap} ${sel}`)?.focus({ preventScroll: true });
   // the open menu of the stage `id`: its button (`[data-rm-stage-menu]`) or its first entry gets the focus
   const focusStageMenu = (id, sel) => [...(document.querySelectorAll?.('#bl-list [data-rm-stage-menu]') || [])]
     .find((b) => b.dataset.rmStageMenu === id)?.closest('.rm-stage-menu-wrap')?.querySelector(sel)?.focus({ preventScroll: true });
   /** Closes the open ⋮ menu, the bar's or a stage's (a click elsewhere on the page); true when one was open. */
   function closeMenu() {
-    const was = menuOpen || stageMenu != null;
-    menuOpen = false;
-    stageMenu = null;
+    const was = menuOpen || pauseOpen || stageMenu != null;
+    [menuOpen, pauseOpen, stageMenu, moveOnWhy] = [false, false, null, null];
     return was;
   }
   /** Keys of the open ⋮ menu: Escape closes it (the focus goes back to its button), the arrows move between its entries. True when the key was the menu's. */
   function onKeyDown(e, ctx) {
-    if (!menuOpen && stageMenu == null) return false;
-    const stage = stageMenu;
+    if (!menuOpen && !pauseOpen && stageMenu == null) return false;
+    const [stage, pause] = [stageMenu, pauseOpen];
     if (e.key === 'Escape') {
       e.preventDefault?.();
       closeMenu();
       ctx.render();
       if (stage != null) focusStageMenu(stage, '[data-rm-stage-menu]');
-      else focusMenu('[data-rm-menu]');
+      else focusMenu(...(pause ? ['[data-rm="pause"]', '.rm-pause-wrap'] : ['[data-rm-menu]']));
       return true;
     }
     if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return false;
@@ -1363,7 +1590,7 @@
   // "Restore an earlier version…" (#281, the #rm-versions-modal dialog of backlog.js): the roadmap as it
   // was before each of the last edits, newest first; Restore follows Undo's rule (the service refuses
   // with the reason) and can itself be undone from its toast.
-  const timeOf = (iso) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? '' : d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }); };
+  const timeOf = (iso) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? '' : d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: zone() }); };
   async function openVersions(ctx) {
     const q = (sel) => document.querySelector(sel);
     const modal = q('#rm-versions-modal');
@@ -1399,34 +1626,41 @@
     };
   }
 
-  // The owner's buttons; true when the click was the roadmap's. A click outside the ⋮ menu closes it.
+  // The owner's buttons; true when the click was the roadmap's. A click outside the ⋮ or Pause menu (#391) closes it.
   async function onClick(e, ctx, data) {
     // a menu entry that is off says why (its tooltip, the line under it): nothing to do, its menu stays
     if (e.target.closest('[role="menuitem"][aria-disabled="true"]')) return true;
-    const closing = menuOpen && !e.target.closest('.rm-menu-wrap');
-    if (closing) menuOpen = false;
+    // #395: a refused "Move on from this stage" keeps its menu open and says why under it
+    if (stageMenu != null && e.target.closest('[data-rm-park-stage][data-refused]')) {
+      moveOnWhy = stageMenu;
+      ctx.render();
+      focusStageMenu(stageMenu, '[data-rm-park-stage]');
+      return true;
+    }
+    const closing = (menuOpen && !e.target.closest('.rm-menu-wrap')) || (pauseOpen && !e.target.closest('.rm-pause-wrap'));
+    if (closing) menuOpen = pauseOpen = false;
     // #282: a stage's menu closes on any click but its own button's: hidden at once (the click's
     // action may open a dialog), not redrawn, so the clicked control stays in the page (a checkbox
     // still gets its change, an entry still finds its stage); the redraw follows the action
     const closingStage = stageMenu != null && !e.target.closest('[data-rm-stage-menu]');
     if (closingStage) {
-      stageMenu = null;
+      stageMenu = moveOnWhy = null;
       const open = document.querySelector('#bl-list .rm-stage-menu');
-      if (open) {
-        open.hidden = true;
-        open.previousElementSibling?.setAttribute('aria-expanded', 'false');
-      }
+      if (open) open.hidden = true;
+      open?.previousElementSibling?.setAttribute('aria-expanded', 'false');
     }
     const mine = await clicked(e, ctx, data);
     if (closing) ctx.render();
     return mine;
   }
   async function clicked(e, ctx, data) {
+    // #354: the Conflict map link opens the project's page on its tab (drawn with or without a roadmap)
+    if (window.ProjectConflictMap?.onLinkClick(e)) return true;
     const r = data?.roadmap;
     if (!r) return false;
     // #269: the ⋮ button opens its menu (the first entry gets the focus) or closes it
     if (e.target.closest('[data-rm-menu]')) {
-      menuOpen = !menuOpen;
+      [menuOpen, pauseOpen] = [!menuOpen, false];
       ctx.render();
       focusMenu(menuOpen ? '[role="menuitem"]' : '[data-rm-menu]');
       return true;
@@ -1436,7 +1670,8 @@
     if (stageBtn) {
       const id = stageBtn.dataset.rmStageMenu;
       stageMenu = stageMenu === id ? null : id;
-      menuOpen = false;
+      moveOnWhy = null;
+      menuOpen = pauseOpen = false;
       ctx.render();
       focusStageMenu(id, stageMenu ? '[role="menuitem"]' : '[data-rm-stage-menu]');
       return true;
@@ -1450,9 +1685,11 @@
       if (item) window.GateOracle?.askAboutFailure({ item, roadmap: r, stage, project: ctx.projectId, run: state.runs?.get?.(item.runId)?.run || null });
       return true;
     }
-    // #268: the Planned | All switch (and the empty state's "Show all items")
-    const viewBtn = e.target.closest('[data-rm-view]');
-    if (viewBtn) { ctx.setShowAll?.(viewBtn.dataset.rmView === 'all'); return true; }
+    // #268: the Planned | All switch (and the empty state's "Show all items"); #375: an item's or a stage's footprint on the project city
+    const viewBtn = e.target.closest('[data-rm-view]'), onMap = e.target.closest('[data-rm-map-item], [data-rm-map-stage]');
+    if (viewBtn) { ctx.setShowAll?.(viewBtn.dataset.rmView === 'all'); return true; } if (onMap) { window.ProjectCityImpact?.fromRoadmap(ctx.projectId, r, data.issues, onMap.dataset); return true; }
+    // #291: a release's empty state (its runs older than the date range): all time
+    if (e.target.closest('[data-rm-all-time]')) { ctx.setSince?.('total'); return true; }
     // #267: a stage's "+n done" chip unfolds its finished items, that stage only
     const doneChip = e.target.closest('[data-rm-done]');
     if (doneChip) {
@@ -1485,9 +1722,14 @@
     // #270 and calls showItem itself; a `data-rm-goto` element inside the Roadmap still works)
     const goto = e.target.closest('[data-rm-goto]');
     if (goto) { showItem(goto.dataset.rmGoto); return true; }
-    // #260: a cut line's release run
+    // #260: a cut line's release run (#291: the release block's Open run)
     const releaseRun = e.target.closest('[data-rm-release-run]');
     if (releaseRun) { window.showRun(releaseRun.dataset.rmReleaseRun); return true; }
+    // #291: a shipped release on the Releases screen
+    if (e.target.closest('[data-rm-open-releases]')) { showView('releases'); return true; }
+    // #288: an item's ended run, resumed from a step (Resume from step…, resume-dialog.js)
+    const resumeBtn = e.target.closest('[data-rm-resume]');
+    if (resumeBtn) { if (typeof openResumeDialog === 'function') openResumeDialog(resumeBtn.dataset.rmResume); return true; }
     const act = e.target.closest('[data-rm]')?.dataset.rm;
     const stages = clone(r.stages);
     try {
@@ -1509,14 +1751,16 @@
         ctx.setData(await api.startRoadmap(ctx.projectId, simulated, scope));
       } else if (e.target.closest('[data-rm-run-stage]')) {
         await runStage(ctx, r, locate(stages, e.target).s);
+      } else if (e.target.closest('[data-rm-pause-stage]')) {
+        await pauseStage(ctx, stages, e.target);
+      } else if (e.target.closest('[data-rm-park-stage]')) {
+        await moveOnStage(ctx, stages, e.target);
       } else if (act === 'budget-raise' || act === 'budget-resume') {
         // #206: the budget cap paused it; real runs start again (they cost money)
         if (act === 'budget-resume' && !await confirmDialog('Resume anyway', 'The roadmap goes on past the budget until the day (or the night) ends. Its items run as real runs and cost money.', 'Resume')) return true;
         ctx.setData(await api.roadmapBudget(ctx.projectId, act === 'budget-raise' ? 'raise' : 'resume'));
-      } else if (act === 'pause' || act === 'stop') {
-        // #269: Stop asks first (the roadmap goes back to a plan); Pause is one click away from Resume
-        if (act === 'stop' && !await confirmDialog('Stop the roadmap', 'The roadmap goes back to a plan: nothing new starts until you press Start. Runs in progress go on.', 'Stop')) return true;
-        ctx.setData(await api.pauseRoadmap(ctx.projectId, act === 'stop'));
+      } else if (/^(pause|pause-stage|pause-now|cancel-pause|stop)$/.test(act)) {
+        if (await pauseAct(ctx, act)) return true;
       } else if (act === 'clear') {
         menuOpen = false;
         ctx.render();
@@ -1543,23 +1787,29 @@
         if (act === 'replace') undoToast(ctx, out, 'Replaced the roadmap', `${plural(r.stages.length, 'stage')} gave way to the proposal.`);
       } else if (e.target.closest('[data-rm-item]')) {
         const box = e.target.closest('[data-item]');
-        await itemAction(ctx, box.dataset.item, e.target.closest('[data-rm-item]').dataset.rmItem);
+        const action = e.target.closest('[data-rm-item]').dataset.rmItem;
+        if (action === 'park') await moveOn(ctx, r.stages.flatMap((s) => s.items).find((x) => x.id === box.dataset.item));
+        else await itemAction(ctx, box.dataset.item, action);
       } else if (e.target.closest('[data-rm-mode]')) {
         // the mode toggle: saved at once, on planned and failed items only
         const { s, n } = locate(stages, e.target);
         const item = stages[s]?.items[n];
         if (!item || !editable(item)) return true;
         item.inputs = { ...item.inputs, mode: e.target.closest('[data-rm-mode]').dataset.rmMode };
-        await save(ctx, stages, { label: `Changed the mode of ${numbers(item)}`, quiet: true });
+        await save(ctx, r, stages, { label: `Changed the mode of ${numbers(item)}`, quiet: true });
         return true;
       } else if (e.target.closest('[data-rm-edit]')) {
         editing = e.target.closest('[data-item]').dataset.item;
         adding = false;
+        kept = null;
       } else if (e.target.closest('[data-rm-cancel]')) {
         editing = null;
         adding = false;
+        kept = null;
       } else if (e.target.closest('[data-rm-addinput]')) {
         adding = true;
+      } else if (e.target.closest('[data-rm-conflict-dismiss]')) {
+        lost = null;
       } else if (e.target.closest('[data-rm-save]')) {
         const { s, n } = locate(stages, e.target);
         const item = stages[s]?.items[n];
@@ -1567,7 +1817,9 @@
         applyForm(item, e.target.closest('.rm-form'));
         editing = null;
         adding = false;
-        await save(ctx, stages, { label: `Edited the inputs of ${numbers(item)}`, quiet: true });
+        kept = null;
+        lost = null;
+        await save(ctx, r, stages, { label: `Edited the inputs of ${numbers(item)}`, quiet: true, form: item });
         return true;
       } else if (e.target.closest('[data-rm-release]')) {
         // #260: a cut line after the stage: named in the dialog (add, rename) or removed, saved at once
@@ -1579,21 +1831,16 @@
           const name = stage.release?.name || '';
           if (!await confirmDialog('Remove the cut line', `The stages after it no longer wait for the release ${name}. Nothing is pushed either way.`, 'Remove')) return true;
           delete stage.release;
-          await save(ctx, stages, { label: `Removed the cut line ${name}`.trim(), detail: 'The stages after it no longer wait for that release.' });
+          await save(ctx, r, stages, { label: `Removed the cut line ${name}`.trim(), detail: 'The stages after it no longer wait for that release.' });
         } else {
           const name = await cutLineDialog(stage.release?.name || '');
           if (!name) return true;
           stage.release = { name };
-          await save(ctx, stages, { label: `Set the cut line ${name}`, quiet: true });
+          await save(ctx, r, stages, { label: `Set the cut line ${name}`, quiet: true });
         }
         return true;
       } else if (e.target.closest('[data-rm-toggle-stage]')) {
-        // #284: a disabled stage is skipped while the roadmap runs; saved at once, Undo in its toast
-        const { s } = locate(stages, e.target);
-        if (!stages[s]) return true;
-        const off = !stages[s].disabled;
-        stages[s].disabled = off; // always sent: a save that does not mention it keeps what is stored
-        await save(ctx, stages, { label: `${off ? 'Disabled' : 'Enabled'} stage ${s + 1}`, detail: off ? 'The roadmap skips it while it runs; it keeps its place.' : 'It runs in its turn again.' });
+        await toggleStage(ctx, r, stages, e.target);
         return true;
       } else if (e.target.closest('[data-rm-addnote]')) {
         noteEditing = r.stages[locate(stages, e.target).s]?.id ?? null;
@@ -1603,21 +1850,21 @@
         const t = s + (up ? -1 : 1);
         if (!stages[t]) return true;
         [stages[s], stages[t]] = [stages[t], stages[s]];
-        await save(ctx, stages, { label: `Moved stage ${s + 1} ${up ? 'up' : 'down'}`, detail: `It is stage ${t + 1} now.` });
+        await save(ctx, r, stages, { label: `Moved stage ${s + 1} ${up ? 'up' : 'down'}`, detail: `It is stage ${t + 1} now.` });
         return true;
       } else if (e.target.closest('[data-rm-move]')) {
         const { s, n } = locate(stages, e.target);
         const up = e.target.closest('[data-rm-move]').dataset.rmMove === 'up';
         const what = stages[s]?.items[n] ? numbers(stages[s].items[n]) : 'an item';
         moveItem(stages, s, n, up ? -1 : 1);
-        await save(ctx, stages, { label: `Moved ${what} ${up ? 'up' : 'down'}` });
+        await save(ctx, r, stages, { label: `Moved ${what} ${up ? 'up' : 'down'}` });
         return true;
       } else if (e.target.closest('[data-rm-remove]')) {
         const { s, n } = locate(stages, e.target);
         const [gone] = stages[s].items.splice(n, 1);
         // its stage goes with its last item (the service drops empty stages): the toast says so
         const detail = stages[s].items.length ? '' : `Its ${stageName(stages[s], s)} went too.`;
-        await save(ctx, stages, { label: `Removed ${gone ? numbers(gone) : 'an item'} from the roadmap`, detail });
+        await save(ctx, r, stages, { label: `Removed ${gone ? numbers(gone) : 'an item'} from the roadmap`, detail });
         return true;
       } else {
         return false;
@@ -1655,6 +1902,11 @@
       ctx.setEpic?.(el.value);
       return true;
     }
+    // #291: the Releases filter (remembered by backlog.js with the others)
+    if (el.matches('[data-rm-release-filter]')) {
+      ctx.setRelease?.(el.value);
+      return true;
+    }
     if (!r || !el.closest('.rm-stage')) return false;
     const name = el.matches('[data-rm-name]');
     if (!name && !el.matches('[data-rm-note]')) return false;
@@ -1664,7 +1916,7 @@
       const before = stages[s].name || '';
       if (name) stages[s].name = el.value;
       else { stages[s].note = el.value; noteEditing = null; }
-      await save(ctx, stages, name
+      await save(ctx, r, stages, name
         ? { label: `Renamed stage ${s + 1}`, detail: `${before ? `"${brief(before)}"` : 'No name'} → ${el.value.trim() ? `"${brief(el.value.trim())}"` : 'no name'}` }
         : { label: `Changed the note of stage ${s + 1}`, quiet: true });
     } catch (err) {
@@ -1758,7 +2010,7 @@
         stages[t].items.splice(at < 0 ? stages[t].items.length : at, 0, item);
         label = `Moved ${numbers(item)} ${s === t ? `within stage ${t + 1}` : `to stage ${t + 1}`}`;
       }
-      await save(ctx, stages, { label });
+      await save(ctx, r, stages, { label });
     } catch (err) {
       failed(ctx, 'drop', err);
       ctx.render();
@@ -1767,24 +2019,29 @@
 
   /** A new stage at the end with the assign dialog's issues: one item (group) or one per issue; `reason`/`modeReason`/`origin`: the Product Owner's. */
   // then: the items' chain (#134), from the Assign dialog's "When it finishes"
-  async function addStage(ctx, data, { issues: asked, workflow, workflowName, inputs, mock, group, reason, modeReason, origin, then, cost }) {
+  async function addStage(ctx, data, { issues: asked, workflow, workflowName, inputs, mock, group, reason, modeReason, origin, then, cost, agentOverrides }) {
     // #253: an epic groups issues, it is never planned as work
     const issues = asked.filter((i) => !i?.isEpic);
     if (!issues.length) return;
     const stages = clone(data?.roadmap?.stages);
-    const why = { ...(reason ? { reason } : {}), ...(modeReason ? { modeReason } : {}), ...(origin ? { origin } : {}), ...(then ? { then } : {}), ...(cost ? { cost } : {}) };
+    const why = { ...(reason ? { reason } : {}), ...(modeReason ? { modeReason } : {}), ...(origin ? { origin } : {}), ...(then ? { then } : {}), ...(cost ? { cost } : {}),
+      // #262: the provider / model / effort per agent chosen in the Assign dialog
+      ...(agentOverrides && Object.keys(agentOverrides).length ? { agentOverrides } : {}) };
     const items = group ? [{ workflow, workflowName, inputs, mock, issues, ...why }] : issues.map((n) => ({ workflow, workflowName, inputs, mock, issues: [n], ...why }));
     stages.push({ name: '', note: '', items });
-    ctx.setData(await api.saveRoadmap(ctx.projectId, stages, `Added ${issues.map((i) => `#${i.number}`).join(', ')} to the roadmap`));
+    const out = await api.saveRoadmap(ctx.projectId, stages, `Added ${issues.map((i) => `#${i.number}`).join(', ')} to the roadmap`, data?.roadmap?.updatedAt || null);
+    ctx.setData(out);
+    if (out?.conflict) refused(ctx, out);
   }
 
   // #204: a live reload waits while the owner drags, edits an item or a stage's note, or has a ⋮ menu
   // open (#282: a redraw would take the focus from its entries); Reload in the Edit form's "The
   // roadmap changed" notice closes the form (its values were not saved).
-  const busy = () => !!(dragging || editing || noteEditing || menuOpen || stageMenu != null);
+  const busy = () => !!(dragging || editing || noteEditing || menuOpen || pauseOpen || stageMenu != null);
   function closeEdit() {
     editing = null;
     adding = false;
+    kept = null;
     noteEditing = null;
   }
 
@@ -1793,6 +2050,7 @@
     alerts,
     badge,
     busy,
+    changedElsewhere,
     closeEdit,
     closeMenu,
     dropProblem,

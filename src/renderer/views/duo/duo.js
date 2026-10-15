@@ -17,7 +17,7 @@
   const WORKFLOW = 'writer-reviewer';
   const FILE = 'writer-reviewer.yaml';
 
-  const { PROVIDERS, EFFORTS } = window.ChatModels;
+  const { PROVIDERS, EFFORTS, typeOf } = window.ChatModels;
   const BY_KEY = Object.fromEntries(Object.entries(PROVIDERS).map(([id, p]) => [p.key, id]));
   // Simulation scenarios (developer mode): what the simulated agents answer, as the engine's
   // mockSequences ({ field: [value per visit] }; invalid_answers: { step: n } = first n answers invalid).
@@ -32,8 +32,8 @@
   const saved = (() => { try { return JSON.parse(localStorage.getItem(LS) || '{}'); } catch { return {}; } })();
   // Setup of the two user-chosen roles; the supervisor is internal (fixed in the workflow, never shown).
   const config = {
-    writer: { provider: 'claude-code', model: 'claude-opus-5-5', effort: 'high', ...saved.writer },
-    reviewer: { provider: 'codex-cli', model: 'gpt-6-luna', effort: 'high', ...saved.reviewer },
+    writer: { provider: typeOf('claude-opus-5-5'), model: 'claude-opus-5-5', effort: 'high', ...saved.writer },
+    reviewer: { provider: typeOf('gpt-6-luna'), model: 'gpt-6-luna', effort: 'high', ...saved.reviewer },
     supervisor: { internal: true },
   };
   const NAMES = { writer: 'Writer', reviewer: 'Reviewer', supervisor: 'Supervisor' };
@@ -271,7 +271,7 @@
   }
 
   function clock(ts) {
-    return new Date(ts || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return new Date(ts || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: TimeZone.current() });
   }
   const fmtK = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n || 0));
   const fmtDur = (ms) => (ms >= 60000 ? `${Math.floor(ms / 60000)}m ${String(Math.round((ms % 60000) / 1000)).padStart(2, '0')}s` : `${Math.round((ms || 0) / 1000)}s`);
@@ -384,8 +384,8 @@
   function onStarted(ev) {
     const i = ev.inputs || {};
     roles = {
-      writer: { provider: BY_KEY[i.writer_provider] || 'claude-code', model: i.writer_model || '', effort: i.writer_effort || '' },
-      reviewer: { provider: BY_KEY[i.reviewer_provider] || 'codex-cli', model: i.reviewer_model || '', effort: i.reviewer_effort || '' },
+      writer: { provider: BY_KEY[i.writer_provider] || typeOf('claude'), model: i.writer_model || '', effort: i.writer_effort || '' },
+      reviewer: { provider: BY_KEY[i.reviewer_provider] || typeOf('codex'), model: i.reviewer_model || '', effort: i.reviewer_effort || '' },
       supervisor: { internal: true },
     };
     // the issue it enriches (started from the Backlog): its accepted document can be saved to it

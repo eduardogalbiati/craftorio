@@ -1,0 +1,53 @@
+# Test fixture (#403): a run's suite and E2E rounds test its change on top of the current local
+# base. work → gate → suite (unit) → e2e (a second suite step) → developer (the next agent turn,
+# told when the branch moved). The gate lets a test stop the run and resume it from `suite`.
+apiVersion: multiagent/v1
+kind: Workflow
+metadata:
+  name: fixture-suite-base-sync
+inputs:
+  repo_path: { type: string, required: true }
+  base_branch: { type: string, default: main }
+orchestrator:
+  worktree:
+    repo: "{{ inputs.repo_path }}"
+    base: "{{ inputs.base_branch }}"
+    remote: false
+defaults:
+  working_dir: "{{ worktree_dir }}"
+agents:
+  developer: { provider: claude, model: m, session: ephemeral }
+steps:
+  - id: work
+    agent: developer
+    prompt: "work in {{ worktree_dir }}"
+  - id: checkpoint
+    type: human_approval
+    message: "Approve: run the suite. Reject: stop the run as failed."
+    transitions:
+      - when: "approved"
+        goto: suite
+      - when: "rejected"
+        goto: end
+        status: failed
+  - id: suite
+    type: suite
+    command: "npm test"
+    transitions:
+      - when: "output.status == 'pass'"
+        goto: e2e
+      - when: "true"
+        goto: end
+        status: failed
+  - id: e2e
+    type: suite
+    command: "npm run test:e2e"
+    transitions:
+      - when: "output.status == 'pass'"
+        goto: after_suite
+      - when: "true"
+        goto: end
+        status: failed
+  - id: after_suite
+    agent: developer
+    prompt: "go on in {{ worktree_dir }}"

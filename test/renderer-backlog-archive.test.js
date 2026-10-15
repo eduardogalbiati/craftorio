@@ -1,7 +1,7 @@
 // #238: archive issues from the Backlog screen. Acceptance tests, written before the code.
 //
 // Seams this file expects:
-// 1. A new plain-logic module, no DOM: src/renderer/views/backlog/backlog-archive.js
+// 1. A new plain-logic module, no DOM: src/shared/backlog-archive.js (moved from views/backlog/, #345)
 //    (Browser: window.BacklogArchive, loaded by src/renderer/index.html; Node: module.exports, like
 //    backlog-labels.js; the service may require it too, as src/roadmap.js requires chain-model):
 //      ARCHIVED_LABEL                         'archived'
@@ -29,8 +29,9 @@ const src = fs.readFileSync(path.join(VIEW, 'backlog.js'), 'utf8');
 const indexHtml = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'index.html'), 'utf8');
 
 function loadArchive() {
-  const file = path.join(VIEW, 'backlog-archive.js');
-  assert.ok(fs.existsSync(file), 'src/renderer/views/backlog/backlog-archive.js exists');
+  // moved to src/shared/ with the other pure modules both sides use (#345)
+  const file = path.join(__dirname, '..', 'src', 'shared', 'backlog-archive.js');
+  assert.ok(fs.existsSync(file), 'src/shared/backlog-archive.js exists');
   return require(file);
 }
 
@@ -102,8 +103,8 @@ test('backlog-archive: deprioritizedIssues lists the open issues still labelled 
 
 // ---- the screen (source seams) ----------------------------------------------------------------------
 
-test('index.html loads backlog-archive.js with the other Backlog helpers', () => {
-  assert.match(indexHtml, /<script src="views\/backlog\/backlog-archive\.js"><\/script>/);
+test('index.html loads backlog-archive.js with the other shared modules', () => {
+  assert.match(indexHtml, /<script src="\.\.\/shared\/backlog-archive\.js"><\/script>/);
 });
 
 test('selection bar: an "Archive (n)" button next to Send to Product Owner and Clear selection, shown with the selection', () => {
@@ -168,7 +169,8 @@ test('the ⋯ menu holds Enrich in Write & Review above Archive; rows and cards 
 });
 
 test('choosing Enrich closes the menu, then opens Write & Review for the issue', () => {
-  const handler = /const enrich = e\.target\.closest\('\[data-enrich\]'\);\s*\n\s*if \(enrich\) \{([^\n]*)\}/.exec(src)?.[1] || '';
+  // #375 shares these lines with the Show on the map dispatch (the file's line budget)
+  const handler = /const enrich = e\.target\.closest\('\[data-enrich\]'\)[\s\S]*?if \(enrich\) \{([^\n}]*)\}/.exec(src)?.[1] || '';
   assert.ok(handler, 'the Enrich click handler is found');
   assert.match(handler, /bl\.menu = null/);
   assert.match(handler, /enrichIssue\(Number\(enrich\.dataset\.enrich\)\)/);

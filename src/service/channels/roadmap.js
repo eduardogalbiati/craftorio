@@ -11,8 +11,29 @@
 const path = require('path');
 const backlog = require('../../backlog');
 const history = require('../../roadmap-history');
+const merge = require('../../roadmap-merge');
 const roadmaps = require('../../roadmap');
 const undo = require('../../roadmap-undo');
+const RoadmapModel = require('../../shared/roadmap-model');
+const { requireText } = require('../common');
+const {
+  ANY,
+  args,
+  BACKLOG,
+  FLAG,
+  listOf,
+  nullable,
+  OBJECT,
+  PROJECT_ID,
+  shape,
+  STRING,
+  text,
+} = require('../schemas');
+
+// most roadmap channels answer the project's Backlog (its `roadmap` is what the screen shows)
+const ON_PROJECT = args({ projectId: PROJECT_ID }, ['projectId']);
+const ACTION = text(40);
+const ITEM_ID = { type: ['string', 'number'], description: 'A roadmap item or edit id.' };
 
 module.exports = (ctx) => {
   const project = (projectId) => path.basename(String(projectId));
@@ -30,13 +51,15 @@ module.exports = (ctx) => {
   // After an owner edit: the version before it is kept and the edit becomes the one to undo
   // (`undoable: false`: kept only, e.g. the queue moved in, which Undo could not give back).
   // → { id, label } for the screen's toast, or null when there is nothing to undo.
-  function edited(id, before, label, { undoable = true } = {}) {
+  // `paused` (#399, a stage pause, which changes the roadmap's state only): recorded although the
+  // stages did not change; its Undo resumes the roadmap as it ran before ({ stage, simulated, scope }).
+  function edited(id, before, label, { undoable = true, paused = null } = {}) {
     const after = stagesOf(id);
-    if (JSON.stringify(before) === JSON.stringify(after)) return null;
+    if (!paused && JSON.stringify(before) === JSON.stringify(after)) return null;
     keep(id, before, label);
     if (!undoable) return null;
     edits += 1;
-    const edit = { id: `${Date.now()}-${edits}`, ...undo.recordEdit(before, after, label) };
+    const edit = { id: `${Date.now()}-${edits}`, ...undo.recordEdit(before, after, label), ...(paused ? { paused } : {}) };
     lastEdit.set(id, edit);
     return { id: edit.id, label: edit.label };
   }
@@ -53,21 +76,36 @@ module.exports = (ctx) => {
     if (!out.ok) throw new Error(out.reason);
     return out.stages;
   }, { alive: ctx.runAlive });
+  // #399 Undo of a stage pause: the Resume button (roadmap:start), with the roadmap's mode and scope
+  // from before the pause; refused when the roadmap no longer waits at that stage
+  const resumePaused = async (id, edit) => {
+    const r = roadmaps.readRoadmap(ctx.ws.backlog, id);
+    if (r.state !== 'paused' || r.pausedStage !== edit.paused.stage) throw new Error('The roadmap no longer waits at this stage: nothing to resume.');
+    await ctx.startRoadmap({ projectId: id, simulated: edit.paused.simulated, stage: edit.paused.scope });
+  };
   return [
-    { channel: 'roadmap:get', method: 'getRoadmap', params: ['projectId'], fn: ({ projectId }) => ctx.roadmapView(project(projectId)) },
+    { channel: 'roadmap:get', method: 'getRoadmap', params: ['projectId'], schema: { params: ON_PROJECT, result: OBJECT }, fn: ({ projectId }) => ctx.roadmapView(project(projectId)) },
     // the edited stages ([{ id?, name, note, items: [{ id?, workflow, inputs, mock, issues }] }]); runs are kept by item id;
-    // label: what the edit did, in the roadmap's words (the history's line and the toast's title)
+    // label: what the edit did, in the roadmap's words (the history's line and the toast's title).
+    // #287 base: the roadmap's updatedAt the screen read. When the roadmap was written since, only what
+    // the edit changed is applied to the stored stages (src/roadmap-merge.js); an edit that cannot be
+    // applied saves nothing and answers the Backlog with `conflict: { reason }`. The read, the merge and
+    // the write happen in one synchronous step: two writers never interleave.
     {
       channel: 'roadmap:save',
       method: 'saveRoadmap',
-      params: ['projectId', 'stages', 'label'],
-      fn: async ({ projectId, stages, label }) => {
+      params: ['projectId', 'stages', 'label', 'base'],
+      schema: { params: args({ projectId: PROJECT_ID, stages: listOf(OBJECT), label: nullable(text(500)), base: ANY }, ['projectId', 'stages']), result: OBJECT },
+      fn: async ({ projectId, stages, label, base }) => {
         const id = project(projectId);
-        const before = stagesOf(id);
-        roadmaps.saveStages(ctx.ws.backlog, id, stages, { issues: synced(projectId), alive: ctx.runAlive });
-        const edit = edited(id, before, String(label || 'Edited the roadmap'));
+        const stored = roadmaps.readRoadmap(ctx.ws.backlog, id);
+        const edit = merge.onStored({ stored, stages, base, read: base ? roadmaps.readRoadmapAt(ctx.ws.backlog, id, base) : null });
+        if (!edit.ok) return { ...current(projectId), conflict: { reason: edit.reason } };
+        const before = stored.stages;
+        roadmaps.saveStages(ctx.ws.backlog, id, edit.stages, { issues: synced(projectId), alive: ctx.runAlive });
+        const done = edited(id, before, String(label || 'Edited the roadmap'));
         await ctx.dispatchRoadmaps();
-        return withEdit(projectId, edit);
+        return withEdit(projectId, done);
       },
     },
     // #281 Undo: the last edit taken back (what it removed returns, what it moved or renamed goes
@@ -76,12 +114,14 @@ module.exports = (ctx) => {
       channel: 'roadmap:undo',
       method: 'undoRoadmap',
       params: ['projectId', 'editId'],
+      schema: { params: args({ projectId: PROJECT_ID, editId: ITEM_ID }, ['projectId']), result: BACKLOG },
       fn: async ({ projectId, editId }) => {
         const id = project(projectId);
         const edit = lastEdit.get(id);
         if (!edit || edit.id !== String(editId)) throw new Error('Only the last edit can be undone here: use "Restore an earlier version…" in the roadmap\'s ⋮ menu.');
         const before = stagesOf(id);
-        putBack(id, (stages) => undo.undoEdit(stages, edit));
+        if (edit.paused) await resumePaused(id, edit);
+        else putBack(id, (stages) => undo.undoEdit(stages, edit));
         lastEdit.delete(id);
         keep(id, before, `Undid: ${edit.label}`);
         await ctx.dispatchRoadmaps();
@@ -89,11 +129,18 @@ module.exports = (ctx) => {
       },
     },
     // #281 the kept versions, newest first ([{ id, at, label }]: the roadmap as it was before `label`)
-    { channel: 'roadmap:versions', method: 'roadmapVersions', params: ['projectId'], fn: ({ projectId }) => history.listVersions(workspace(), project(projectId)) },
+    {
+      channel: 'roadmap:versions',
+      method: 'roadmapVersions',
+      params: ['projectId'],
+      schema: { params: ON_PROJECT, result: listOf(shape({ id: STRING, at: STRING, label: STRING }, ['id'])) },
+      fn: ({ projectId }) => history.listVersions(workspace(), project(projectId)),
+    },
     {
       channel: 'roadmap:restore-version',
       method: 'restoreRoadmapVersion',
       params: ['projectId', 'versionId'],
+      schema: { params: args({ projectId: PROJECT_ID, versionId: ITEM_ID }, ['projectId']), result: OBJECT },
       fn: async ({ projectId, versionId }) => {
         const id = project(projectId);
         const before = stagesOf(id);
@@ -109,6 +156,7 @@ module.exports = (ctx) => {
       channel: 'roadmap:propose',
       method: 'proposeRoadmap',
       params: ['projectId', 'proposal', 'replace'],
+      schema: { params: args({ projectId: PROJECT_ID, proposal: ANY, replace: FLAG }, ['projectId']), result: OBJECT },
       fn: ({ projectId, proposal, replace }) => {
         const before = stagesOf(project(projectId));
         const { dropped } = roadmaps.propose(ctx.ws.backlog, project(projectId), proposal, { replace: !!replace, issues: synced(projectId), alive: ctx.runAlive });
@@ -121,6 +169,7 @@ module.exports = (ctx) => {
       channel: 'roadmap:from-queue',
       method: 'roadmapFromQueue',
       params: ['projectId'],
+      schema: { params: ON_PROJECT, result: BACKLOG },
       fn: ({ projectId }) => {
         const id = project(projectId);
         const queue = backlog.readQueue(ctx.ws.backlog, id);
@@ -138,16 +187,74 @@ module.exports = (ctx) => {
       channel: 'roadmap:start',
       method: 'startRoadmap',
       params: ['projectId', 'simulated', 'stage'],
+      schema: { params: args({ projectId: PROJECT_ID, simulated: FLAG, stage: nullable(STRING) }, ['projectId']), result: nullable(OBJECT) },
       fn: ({ projectId, simulated, stage }) => ctx.startRoadmap({ projectId, simulated: !!simulated, stage: stage || null }),
     },
-    // pause: nothing new starts (runs in progress go on); stop: back to a plan
+    // pause: nothing new starts (runs in progress go on); stop: back to a plan. #391 after: 'stage'
+    // lets the current stage finish (its items still start), then pauses with "Stage N done"; 'now'
+    // (the default, also for the budget cap, the update cycle and the control channel) pauses at once
     {
       channel: 'roadmap:pause',
       method: 'pauseRoadmap',
-      params: ['projectId', 'stop'],
-      fn: ({ projectId, stop }) => {
-        roadmaps.setState(ctx.ws.backlog, project(projectId), stop ? 'planned' : 'paused');
+      params: ['projectId', 'stop', 'after'],
+      schema: { params: args({ projectId: PROJECT_ID, stop: FLAG, after: nullable({ type: 'string', enum: ['stage', 'now'], description: 'stage: the current stage finishes, then the roadmap pauses; now: nothing new starts. Default: now.' }) }, ['projectId']), result: BACKLOG },
+      fn: ({ projectId, stop, after }) => {
+        if (after != null && !['stage', 'now'].includes(after)) throw new Error(`Unknown pause: ${after} (stage or now).`);
+        if (!stop && after === 'stage') roadmaps.pauseAfterStage(ctx.ws.backlog, project(projectId));
+        else roadmaps.setState(ctx.ws.backlog, project(projectId), stop ? 'planned' : 'paused');
         return current(projectId);
+      },
+    },
+    // #391: Cancel pause takes back a "Pause after this stage": the whole roadmap runs again
+    {
+      channel: 'roadmap:cancel-pause',
+      method: 'cancelRoadmapPause',
+      params: ['projectId'],
+      schema: { params: ON_PROJECT, result: BACKLOG },
+      fn: async ({ projectId }) => {
+        roadmaps.cancelPause(ctx.ws.backlog, project(projectId));
+        await ctx.dispatchRoadmaps();
+        return current(projectId);
+      },
+    },
+    // #368: a stage's "Pause after current turn": its runs pause after their current turn and the
+    // roadmap pauses at the stage (areas/roadmap.js pauseStage); Resume (roadmap:start) continues them.
+    // #399: a line in the roadmap history and an edit in the answer, as Move on (the control channel);
+    // its Undo (roadmap:undo) resumes the roadmap as Resume does
+    {
+      channel: 'roadmap:pause-stage',
+      method: 'pauseRoadmapStage',
+      params: ['projectId', 'stageId'],
+      schema: { params: args({ projectId: PROJECT_ID, stageId: text(200) }, ['projectId', 'stageId']), result: BACKLOG },
+      fn: async ({ projectId, stageId }) => {
+        const id = project(projectId);
+        const r = roadmaps.readRoadmap(ctx.ws.backlog, id);
+        const before = r.stages;
+        const at = before.findIndex((s) => s.id === String(stageId));
+        const out = await ctx.pauseStage({ projectId, stageId: requireText(stageId, 'stage id', 200) });
+        const name = at >= 0 ? before[at].name || `stage ${at + 1}` : 'a stage';
+        // the screen's Resume rule: a #391 "Pause after this stage" scope resumes the whole roadmap
+        const scoped = RoadmapModel.scopedStage(r);
+        const paused = { stage: String(stageId), simulated: !!r.simulated, scope: scoped >= 0 ? r.stages[scoped].id : null };
+        const edit = edited(id, before, `Paused ${name} after the current step`, { paused });
+        return { ...out, ...(edit ? { edit } : {}) };
+      },
+    },
+    // #395: a stage's "Move on from this stage": its items waiting at a human gate are parked (their
+    // gates stay the owner's), its planned items not started skipped, and the next stage starts;
+    // refused while one of its items runs an agent turn or a command ("Pause after current step")
+    {
+      channel: 'roadmap:park-stage',
+      method: 'parkRoadmapStage',
+      params: ['projectId', 'stageId'],
+      schema: { params: args({ projectId: PROJECT_ID, stageId: text(200) }, ['projectId', 'stageId']), result: BACKLOG },
+      fn: async ({ projectId, stageId }) => {
+        const id = project(projectId);
+        const before = stagesOf(id);
+        const at = before.findIndex((s) => s.id === String(stageId));
+        await ctx.parkStage({ projectId: id, stageId: requireText(stageId, 'stage id', 200) });
+        const name = at >= 0 ? before[at].name || `stage ${at + 1}` : 'a stage';
+        return withEdit(projectId, edited(id, before, `Moved on from ${name}`));
       },
     },
     // A roadmap paused by the budget cap (#206, areas/budget.js): raise (the cap for today or tonight
@@ -157,8 +264,9 @@ module.exports = (ctx) => {
       channel: 'roadmap:budget',
       method: 'roadmapBudget',
       params: ['projectId', 'action'],
+      schema: { params: args({ projectId: PROJECT_ID, action: ACTION }, ['projectId']), result: BACKLOG },
       fn: async ({ projectId, action }) => {
-        await ctx.budgetAction({ projectId: project(projectId), action: String(action) });
+        await ctx.budgetAction({ projectId: project(projectId), action: requireText(action, 'budget action', 40) });
         return current(projectId);
       },
     },
@@ -168,6 +276,7 @@ module.exports = (ctx) => {
       channel: 'roadmap:live',
       method: 'setRoadmapLive',
       params: ['projectId', 'on'],
+      schema: { params: args({ projectId: PROJECT_ID, on: FLAG }, ['projectId']), result: BACKLOG },
       fn: async ({ projectId, on }) => {
         roadmaps.setLive(ctx.ws.backlog, project(projectId), !!on, { by: 'owner' });
         await ctx.dispatchRoadmaps();
@@ -178,6 +287,7 @@ module.exports = (ctx) => {
       channel: 'roadmap:clear',
       method: 'clearRoadmap',
       params: ['projectId'],
+      schema: { params: ON_PROJECT, result: OBJECT },
       fn: ({ projectId }) => {
         const before = stagesOf(project(projectId));
         roadmaps.clearRoadmap(ctx.ws.backlog, project(projectId));
@@ -193,9 +303,18 @@ module.exports = (ctx) => {
       channel: 'roadmap:item',
       method: 'roadmapItem',
       params: ['projectId', 'itemId', 'action', 'confirmed'],
+      schema: { params: args({ projectId: PROJECT_ID, itemId: ITEM_ID, action: ACTION, confirmed: FLAG }, ['projectId']), result: BACKLOG },
       fn: async ({ projectId, itemId, action, confirmed }) => {
+        requireText(action, 'roadmap item action', 40);
         const id = project(projectId);
         const item = roadmaps.findItem(roadmaps.readRoadmap(ctx.ws.backlog, id), String(itemId));
+        // #395 Move on: an owner edit (kept in the history, Undo takes it back); the run keeps its gate
+        if (action === 'park') {
+          const before = stagesOf(id);
+          await ctx.parkItem({ projectId: id, itemId });
+          const refs = item ? backlog.itemIssues(item).map((i) => `#${i.number}`).join(', ') : 'an item';
+          return withEdit(projectId, edited(id, before, `Moved on past ${refs} at its gate`));
+        }
         if (action === 'retry' && item && !(item.runId && ctx.runAlive(item.runId))) {
           if (!confirmed) {
             const issues = backlog.itemIssues(item);

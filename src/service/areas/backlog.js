@@ -11,15 +11,14 @@ const workspace = require('../../workspace');
 const projects = require('../../projects');
 const backlog = require('../../backlog');
 const refreshes = require('../../backlog-refresh');
-const { gitOut } = require('../common');
+const { git } = require('../../engine/worktree');
 const epics = require('../../epics');
 const roadmaps = require('../../roadmap');
-const { normalizeThen } = require('../../renderer/chain-model');
+const { normalizeThen } = require('../../shared/chain-model');
+const { platformOrDefault, requestRef } = require('../../shared/platforms');
 const runs = require('../../runs');
 
 module.exports = (ctx) => {
-  const { host } = ctx;
-
   // A synced backlog with each issue's runs and place in the queue (computed on every read: runs
   // come and go), plus the queue itself.
   function withIssueRuns(data) {
@@ -35,7 +34,7 @@ module.exports = (ctx) => {
     const queue = backlog.readQueue(ws.backlog, data.projectId);
     const local = backlog.readLocal(ws.backlog, data.projectId);
     // the roadmap, each item with its run's live state, and each issue's stage ("Roadmap: stage 2")
-    const roadmap = ctx.roadmapView(data.projectId, live);
+    const roadmap = ctx.roadmapView(data.projectId, live, data.issues);
     const stages = roadmaps.issueStages(roadmap);
     const refresh = refreshBanner(project, live, local);
     const refreshed = new Set(refresh.refreshed);
@@ -47,7 +46,11 @@ module.exports = (ctx) => {
       .map((i) => (cards.has(i.number) ? { ...i, discoveryCard: cards.get(i.number) } : i))
       .map((i) => (stages.has(i.number) ? { ...i, roadmap: stages.get(i.number) } : i))
       .map((i) => (refreshed.has(i.number) && i.state === 'open' ? { ...i, refreshed: true } : i));
-    return { ...data, queue, local, roadmap, refresh, autoPush: !!project?.autoPush, autoEpic: !!project?.autoEpic, issues };
+    // #291: the releases the Roadmap draws (its release blocks and Releases filter)
+    const releases = ctx.roadmapReleases(project, live);
+    // #150: the saved conflict map, shown beside the Roadmap (null until a plan or a merge builds it)
+    const conflictMap = ctx.savedConflictMap(data.projectId);
+    return { ...data, queue, local, roadmap, refresh, autoPush: !!project?.autoPush, autoEpic: !!project?.autoEpic, issues, releases, conflictMap };
   }
 
   // The Backlog Refresh banner (#161, src/backlog-refresh.js): the merges on the base since the
@@ -58,14 +61,33 @@ module.exports = (ctx) => {
     const hours = workspace.readSettings(ws).backlogRefreshHours;
     const { last } = refreshes.refreshRuns(list);
     const stale = last && Number(hours) > 0 && Date.now() - Date.parse(last.startedAt) >= Number(hours) * 3600e3;
-    const count = stale && project?.folder
-      ? gitOut(project.folder, ['rev-list', '--count', '--first-parent', `--since=${last.startedAt}`, local?.base || 'HEAD', '--'])
-      : null;
+    const count = stale && project?.folder ? mergeCount(project, last.startedAt, local?.base || 'HEAD') : null;
     const state = refreshes.refreshState({
       runs: list, intervalHours: hours, merges: count == null ? null : Number(count), dismissedOn: project ? refreshes.readDismissed(ws.backlog, project.id) : null,
     });
     const refreshed = last ? refreshes.refreshedIssues(path.join(ws.runs, last.runId), last.finishedAt) : [];
     return { ...state, base: local?.base || null, refreshed };
+  }
+
+  // The merges on `base` since `since` (#389): counted by an async git call and kept for
+  // MERGE_COUNT_MS, so a Backlog read never waits for git; null until the first count is known.
+  // A count that changed pushes backlog:changed (file 'refresh'), so the screen reads the banner again.
+  const MERGE_COUNT_MS = 5 * 60e3;
+  const mergeCounts = new Map(); // "<folder>|<since>|<base>" → { count, at, pending }
+  function mergeCount(project, since, base) {
+    const folder = project.folder;
+    const key = `${folder}|${since}|${base}`;
+    const hit = mergeCounts.get(key);
+    if (!hit?.pending && (!hit || Date.now() - hit.at >= MERGE_COUNT_MS)) {
+      const entry = { count: hit?.count ?? null, at: hit?.at || 0, pending: true };
+      mergeCounts.set(key, entry);
+      git(['rev-list', '--count', '--first-parent', `--since=${since}`, base, '--'], folder, { timeout: 10000 }).catch(() => null).then((out) => {
+        const before = entry.count;
+        Object.assign(entry, { count: out, at: Date.now(), pending: false });
+        if (out !== before) ctx.events?.emit('backlog:changed', { projectId: project.id, file: 'refresh', watching: !!ctx.backlogWatching?.() });
+      });
+    }
+    return mergeCounts.get(key).count;
   }
 
   // A Backlog Refresh run ended (#161): the Backlog syncs the project, so the edited and closed
@@ -74,7 +96,7 @@ module.exports = (ctx) => {
     if (!refreshes.isRefreshRun({ file: run.file }) || !run.projectId || run.mock) return;
     const { ws } = ctx;
     const project = projects.readProject(ws.projects, run.projectId);
-    const platform = backlog.readBacklog(ws.backlog, project.id)?.platform || (run.inputs?.git_platform === 'gl' ? 'gitlab' : 'github');
+    const platform = backlog.readBacklog(ws.backlog, project.id)?.platform || platformOrDefault(run.inputs?.git_platform).id;
     await backlog.syncBacklog({ dir: ws.backlog, project, platform });
   }
 
@@ -86,7 +108,7 @@ module.exports = (ctx) => {
   // then: what happens with each run's result when it finishes (#134, chain-model normalizeThen).
   // pipeline: a saved pipeline's file (#135): its first workflow (with its fixed inputs under the
   // owner's) receives the issues and the rest of the pipeline is each run's then.
-  async function assignWorkflow({ projectId, numbers, workflow, inputs, mock, group = false, allowKeptWork = false, then = null, pipeline = null }) {
+  async function assignWorkflow({ projectId, numbers, workflow, inputs, mock, group = false, allowKeptWork = false, then = null, pipeline = null, agentOverrides = null }) {
     if (pipeline) {
       const first = ctx.pipelineAssign(pipeline);
       ({ workflow, then } = first);
@@ -107,9 +129,9 @@ module.exports = (ctx) => {
     if (!wf.inputs?.task) throw new Error(`Workflow ${wf.metadata?.name || file} has no task input to receive the issue.`);
     if (!mock) {
       simulation.refuseReal('real runs from the Backlog');
-      await host.assertCanRun?.({ mock: false });
     }
-    backlog.enqueue(ws.backlog, project.id, { issues, workflow: file, workflowName: wf.metadata?.name || file, inputs: inputs || {}, mock: !!mock, group: !!group, then: chained });
+    // a pipeline's first stage keeps its workflow's agents (#262: the overrides were chosen for `workflow`)
+    backlog.enqueue(ws.backlog, project.id, { issues, workflow: file, workflowName: wf.metadata?.name || file, inputs: inputs || {}, mock: !!mock, group: !!group, then: chained, agentOverrides: pipeline ? null : agentOverrides });
     if (allowKeptWork) allowQueuedKeptWork(project.id, issues);
     // an issue belongs to one plan: assigned here (the screen asked first), it leaves the roadmap's items not started
     roadmaps.dropIssues(ws.backlog, project.id, issues.map((i) => i.number), { alive: ctx.runAlive });
@@ -126,7 +148,7 @@ module.exports = (ctx) => {
     if (!plan || !run.projectId || run.mock) return;
     const project = projects.readProject(ws.projects, run.projectId);
     if (!project?.autoEpic) return;
-    const platform = run.inputs.git_platform === 'gl' ? 'gitlab' : 'github';
+    const platform = platformOrDefault(run.inputs.git_platform).id;
     const synced = await backlog.syncBacklog({ dir: ws.backlog, project, platform });
     const list = synced?.epics || backlog.readBacklog(ws.backlog, project.id)?.epics || [];
     if (!list.some((e) => e.id === plan.epic)) return;
@@ -173,7 +195,7 @@ module.exports = (ctx) => {
             if (prs.length) {
               for (const n of new Set(prs.map((p) => p.issue ?? item.number))) {
                 const mine = prs.filter((p) => (p.issue ?? item.number) === n);
-                backlog.skipQueued(ws.backlog, projectId, n, `open ${mine.map((p) => `${platform === 'gitlab' ? 'MR !' : 'PR #'}${p.number}`).join(', ')} since it was queued`);
+                backlog.skipQueued(ws.backlog, projectId, n, `open ${mine.map((p) => requestRef(platform, p.number)).join(', ')} since it was queued`);
               }
               continue;
             }
@@ -195,6 +217,7 @@ module.exports = (ctx) => {
             projectId, issues: backlog.recordedIssues(read), notices: warnings.map((message) => ({ level: 'warn', message })),
             allowKeptWork: keys.some((k) => keptWorkAllowed.has(k)),
             then: item.then || null,
+            agentOverrides: item.agentOverrides || null,
           });
           for (const k of keys) keptWorkAllowed.delete(k);
           backlog.unqueue(ws.backlog, projectId, item.number, { cancelGroup: true });

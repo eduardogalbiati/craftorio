@@ -8,7 +8,9 @@
 // a timeout or a crash end up in the output (`errors`, `reason`, `message`), and the run goes on to
 // the next step (the developer_check gate, which says what failed). Nothing is retried by an agent.
 // Output: { kind: 'screenshots', folder, round, dir, taken, screens, screenshots, errors, new_elements,
-// reason, message }. new_elements (#185): screens whose original side failed only because a --click /
+// axe_findings, reason, message }. axe_findings (#387, src/engine/ui-review-checks.js): the axe-core and
+// native-control findings of each modified side (the `<name>.<side>.checks.json` the capture writes),
+// a baseline when the original side has them too; the ui_reviewer's prompt lists them. new_elements (#185): screens whose original side failed only because a --click /
 // context / paste selector matched nothing ("screenshot: nothing matches <selector>") while the
 // modified side was taken: an element the change adds, counted apart in the message, not an error.
 // Each capture waits for the machine-wide screenshot slot (#199): one Electron screenshot at a time.
@@ -16,8 +18,9 @@
 const fs = require('fs');
 const path = require('path');
 const evidence = require('../evidence');
-const { killTree, resolveCommand } = require('./providers');
+const { killTree, OWN_GROUP, resolveCommand } = require('./providers');
 const { runShim } = require('../shell');
+const { readChecks, screenChecks } = require('./ui-review-checks');
 const {
   acquireSlot,
   SCREENSHOT_SLOT,
@@ -76,7 +79,7 @@ function runShot({ cwd, args, env, timeoutMs, signal, onSpawn }) {
   return new Promise((resolve) => {
     let child;
     try {
-      child = runShim(npm.file, argv, { cwd, env: childEnv, windowsHide: true });
+      child = runShim(npm.file, argv, { cwd, env: childEnv, windowsHide: true, ...OWN_GROUP });
     } catch (e) {
       resolve({ code: null, output: e.message, timedOut: false });
       return;
@@ -117,6 +120,14 @@ async function withSlot({ signal, onSlotWait, slot }, fn) {
   try { return await fn(held.token); } finally { held.release(); }
 }
 
+// #387: the deterministic checks of a screen's modified side (none when it was not taken), baselines
+// from its original side
+function screenAxeFindings(dir, name, modified) {
+  const checked = modified ? readChecks(path.join(dir, `${name}.modified.png`)) : null;
+  if (!checked) return [];
+  return screenChecks({ modified: checked, original: readChecks(path.join(dir, `${name}.original.png`)), screen: `${name}.modified.png` });
+}
+
 // entries: the developer's list; cwd: the worktree; base: the ref of the "original" side (none: modified
 // only); env: the agents' environment (simulation only, scratch workspace); run: runShot (replaceable);
 // slot: acquireSlot (replaceable); onSlotWait(holder): a capture waits for another run's screenshot;
@@ -125,7 +136,7 @@ async function captureScreenshots({ entries, cwd, runDir, folder, round, base, e
   const dir = runDir ? evidence.roundDir(runDir, folder, round) : null;
   const out = {
     kind: 'screenshots', folder, round, dir: dir ? path.relative(runDir, dir).split(path.sep).join('/') : null,
-    taken: 0, screens: 0, screenshots: [], errors: [], new_elements: [], reason: null, message: '',
+    taken: 0, screens: 0, screenshots: [], errors: [], new_elements: [], axe_findings: [], reason: null, message: '',
   };
   const finish = () => {
     if (!out.taken && !out.reason) out.reason = `every capture failed (${out.errors[0]?.name}: ${out.errors[0]?.error})`;
@@ -181,6 +192,7 @@ async function captureScreenshots({ entries, cwd, runDir, folder, round, base, e
       if (r.code === 2 || signal?.aborted) break;
     }
     if (shot) out.screens++;
+    out.axe_findings.push(...screenAxeFindings(dir, e.name, modified));
     if (signal?.aborted) break;
   }
   return finish();

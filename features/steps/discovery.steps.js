@@ -380,3 +380,87 @@ Then('the Discovery card {string} opens read-only', async ({ e2e }, title) => {
   await expect(detail.getByTestId('discovery-commit')).toHaveCount(0);
   await expect(detail.getByTestId('card-move')).toHaveCount(0);
 });
+
+// ---- #259: column automations (on_enter pipelines, mode ask / on / off; ask by default) -------------
+// Assumes these data-testids (the developer adds them):
+//   discovery-column-automation              a column's automation button (in its discovery-column)
+//   discovery-automation-dialog              its settings dialog (role=dialog): the pipeline name and
+//   discovery-automation-mode                the mode <select> (values ask, on, off; labels "Ask me",
+//                                            "On", "Off"); a change is saved at once, Escape closes it
+//   discovery-automation-proposal            after a move into an "ask" column: the proposal dialog
+//                                            (role=dialog) with the pipeline name and a cost estimate
+//   discovery-automation-run                 its button that starts the (simulated) run; Escape
+//                                            dismisses the proposal
+//   discovery-card-automation                a card's automation status ("Running" while it runs)
+
+const automationDialog = (page) => page.getByTestId('discovery-automation-dialog');
+const automationProposal = (page) => page.getByTestId('discovery-automation-proposal');
+const MODE_LABELS = ['Ask me', 'On', 'Off'];
+
+async function openAutomationSettings(page, colTitle) {
+  await column(page, colTitle).getByTestId('discovery-column-automation').click();
+  const dialog = automationDialog(page);
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toHaveRole('dialog');
+}
+
+When('I open the automation settings of the Discovery column {string}', async ({ e2e }, colTitle) => {
+  await openAutomationSettings(e2e.window, colTitle);
+});
+
+When('I set the automation of the Discovery column {string} to {string}', async ({ e2e }, colTitle, label) => {
+  const page = e2e.window;
+  await openAutomationSettings(page, colTitle);
+  await automationDialog(page).getByTestId('discovery-automation-mode').selectOption({ label });
+  await page.keyboard.press('Escape');
+  await expect(automationDialog(page)).toBeHidden();
+  // the mode is kept: the reopened settings show it
+  await openAutomationSettings(page, colTitle);
+  const mode = automationDialog(page).getByTestId('discovery-automation-mode');
+  await expect(mode.locator('option:checked')).toHaveText(label);
+  await page.keyboard.press('Escape');
+  await expect(automationDialog(page)).toBeHidden();
+});
+
+Then('the automation settings show the pipeline {string} in mode {string}', async ({ e2e }, pipeline, label) => {
+  const dialog = automationDialog(e2e.window);
+  await expect(dialog).toContainText(pipeline);
+  await expect(dialog.getByTestId('discovery-automation-mode').locator('option:checked')).toHaveText(label);
+});
+
+Then('the automation mode offers {string}, {string} and {string}', async ({ e2e }, a, b, c) => {
+  const options = automationDialog(e2e.window).getByTestId('discovery-automation-mode').getByRole('option');
+  await expect(options).toHaveText([a, b, c]);
+  expect([a, b, c].sort()).toEqual([...MODE_LABELS].sort());
+});
+
+Then('the move proposes running {string} on the card, with a cost estimate', async ({ e2e }, pipeline) => {
+  const proposal = automationProposal(e2e.window);
+  await expect(proposal).toBeVisible();
+  await expect(proposal).toHaveRole('dialog');
+  await expect(proposal).toContainText(pipeline);
+  // the estimate is a cost: a currency amount (simulated runs still estimate)
+  await expect(proposal).toContainText(/\$\s?\d/);
+  await expect(proposal.getByTestId('discovery-automation-run')).toBeEnabled();
+});
+
+When('I run the proposed automation', async ({ e2e }) => {
+  const proposal = automationProposal(e2e.window);
+  await proposal.getByTestId('discovery-automation-run').click();
+  await expect(proposal).toBeHidden();
+});
+
+Then('no automation is proposed', async ({ e2e }) => {
+  // the proposal dialog stays in the page, hidden; only a shown one has a role in the accessibility tree
+  await expect(e2e.window.getByRole('dialog', { name: /^Run the automation/ })).toHaveCount(0);
+});
+
+Then('the Discovery card {string} shows its automation {string}', async ({ e2e }, title, status) => {
+  await expect(boardCard(e2e.window, title).getByTestId('discovery-card-automation')).toContainText(status);
+});
+
+Then('the Discovery card {string} shows no automation', async ({ e2e }, title) => {
+  const card = boardCard(e2e.window, title);
+  await expect(card).toBeVisible();
+  await expect(card.getByTestId('discovery-card-automation')).toHaveCount(0);
+});

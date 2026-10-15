@@ -16,8 +16,8 @@
 // (src/service/channels/roadmap.js) and src/roadmap-history.js.
 
 const { testsLater } = require('./roadmap');
+const { isFinished } = require('./shared/roadmap-model');
 
-const FINISHED = new Set(['done', 'skipped']);
 const clone = (v) => JSON.parse(JSON.stringify(v ?? null));
 const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 const issuesOf = (x) => (x.issues?.length ? x.issues : x.number ? [x] : []);
@@ -55,8 +55,13 @@ function undoEdit(currentStages, edit) {
     // removed by the edit: back as it was; removed since: it stays out
     if (!cur) { if (after && then.has(old.id)) return null; changed.add(old.id); return clone(old); }
     if (untouchable(cur)) return cur;
-    if (after && same(content(old), content(then.get(old.id) || {}))) return cur;
-    const out = { ...clone(content(old)), status: cur.status, runId: cur.runId, runs: cur.runs, error: cur.error };
+    // #395: a skip the edit made (Move on from a stage) and still in place is taken back with it
+    const unskipped = !!after && cur.status === 'skipped' && then.get(old.id)?.status === 'skipped' && old.status !== 'skipped';
+    if (after && !unskipped && same(content(old), content(then.get(old.id) || {}))) return cur;
+    // #395: a Move on taken back: the item waits at its gate again as the stage's (its run untouched)
+    const unparked = cur.status === 'parked' && old.status !== 'parked';
+    const out = { ...clone(content(old)), status: unparked || unskipped ? old.status : cur.status, runId: cur.runId, runs: cur.runs, error: unskipped ? old.error : cur.error, ...(cur.parked && !unparked ? { parked: cur.parked } : {}) };
+    if (out.error === undefined) delete out.error;
     if (!same(out, cur)) changed.add(old.id);
     return out;
   }
@@ -88,7 +93,7 @@ function undoEdit(currentStages, edit) {
   }
 
   // an issue belongs to one unfinished item (src/roadmap.js assertUnique)
-  const open = (x) => !FINISHED.has(x.status) && !testsLater(x);
+  const open = (x) => !isFinished(x) && !testsLater(x);
   for (const [n, stage] of stages.entries()) {
     for (const x of stage.items.filter(open)) {
       for (const [m, other] of stages.entries()) {

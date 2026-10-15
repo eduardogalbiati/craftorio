@@ -144,7 +144,7 @@ test('normalizeAnswer keeps only known issue numbers and workflow files, and fil
   assert.deepEqual(out.conflicts[0].issues, [1, 2]);
 
   assert.deepEqual(out.enrich.map((e) => e.issue), [3]);
-  assert.equal(out.enrich[0].link, 'https://github.com/eduardogalbiati/multiagent-orchestrator/issues/103');
+  // where the enrich link points is covered by test/open-source.test.js (#314)
 });
 
 // ---- #195: a group's unknown workflow falls back to the default development workflow -------------
@@ -592,6 +592,41 @@ test('callAgent (plan mode) states the calibration and its parameters in the pro
     folder, skillsDirs, resolveCommand: () => 'claude', agent: { model: 'claude-opus-5-5', effort: 'high' }, mock: false, mode: 'issue',
   });
   assert.doesNotMatch(prompts[0], /## Calibration:/);
+});
+
+test('#273 the Product Owner\'s turn has a "The owner\'s time" section with the zone only when a zone is given (runTurn stubbed: no real CLI is started)', async (t) => {
+  const providers = require('../src/engine/providers');
+  const original = providers.runTurn;
+  t.after(() => { providers.runTurn = original; });
+  const prompts = [];
+  providers.runTurn = async ({ prompt }) => { prompts.push(prompt); return { text: '```json\n{"summary":"ok","groups":[],"conflicts":[],"enrich":[]}\n```', costUsd: 0, usage: {} }; };
+  const common = {
+    projectId: 'demo', question: 'Analyze the backlog', data: { projectId: 'demo', issues: ISSUES },
+    workflows: [{ file: 'software-development.yaml', name: 'x' }], folder: path.join(__dirname, '..'), skillsDirs: [path.join(__dirname, '..', 'skills')],
+    resolveCommand: () => 'claude', agent: { model: 'claude-opus-5-5', effort: 'high' }, mock: false,
+  };
+  await productOwner.ask({ ...common, backlogDir: tmp(t), timeZone: 'Asia/Tokyo' });
+  assert.match(prompts[0], /## The owner's time/);
+  assert.match(prompts[0], /Asia\/Tokyo/);
+  await productOwner.ask({ ...common, backlogDir: tmp(t) });
+  assert.doesNotMatch(prompts[1], /## The owner's time/);
+});
+
+test('#273 filing "Add to #n" dates its "## Update" section in the owner\'s zone, the same day the drawer shows', async (t) => {
+  const dir = tmp(t);
+  const runsDir = tmp(t);
+  const issues = [{ number: 110, state: 'open', title: 'Some existing issue', body: 'Original body.\n' }];
+  const asked = await productOwner.ask({
+    backlogDir: dir, projectId: 'demo', runsDir, question: 'Add this to #110: also make it work in the run chat', data: emptyBacklog(issues), mock: true, mode: 'issue',
+  });
+  const draft = productOwner.currentDraft(asked.messages);
+  // 2026-10-04 16:00Z is already Oct 5 in Tokyo (UTC+9), still Oct 4 in UTC and in Sao Paulo
+  t.mock.timers.enable({ apis: ['Date'], now: Date.parse('2026-10-04T16:00:00Z') });
+  const res = await productOwner.fileDraft({
+    backlogDir: dir, projectId: 'demo', runsDir, at: draft.message.ts, action: 'append', number: 110, preview: true, timeZone: 'Asia/Tokyo',
+    platform: 'github', repo: 'https://github.com/example/repo', cached: { body: issues[0].body, url: 'https://github.com/example/repo/issues/110' },
+  });
+  assert.match(res.body, /## Update \(2026-10-05\)/);
 });
 
 test('sizeGroup warns at a complexity known to hit the context limit, and at a lower one for several issues', () => {

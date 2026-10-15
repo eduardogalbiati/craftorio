@@ -128,3 +128,131 @@ Then('the gate card offers {string} and {string}', async ({ e2e }, a, b) => {
   const card = e2e.window.getByTestId('run-gate').first();
   for (const name of [a, b]) await expect(card.getByTestId('run-gate-choice').filter({ hasText: new RegExp(`^\\s*${escapeRe(name)}\\s*$`) })).toBeEnabled();
 });
+
+// ---- the release summary (#290) -----------------------------------------------------------------
+
+const SUMMARY_TIMEOUT = 120000;
+const gateCard = (page) => page.getByTestId('run-gate').first();
+
+// A simulated release run whose unit suite is red on its first round (the fix, then both suites
+// green), started the way the Start panel starts one (window.api.startRun, channel run:start) with
+// the engine's simulation scenario mockSequences.suite (the Start panel has no such choice), then
+// shown on the Run screen (window.showRun, as the Start panel does for the run it started).
+Given('a simulated release run {string} whose unit suite was red once is open', async ({ e2e }, version) => {
+  const page = e2e.window;
+  const project = e2e.project;
+  const res = await page.evaluate(async ({ version, projectId, folder }) => {
+    try {
+      const out = await window.api.startRun({
+        file: 'release.yaml', mock: true, projectId,
+        inputs: { task: `Release ${version}`, version, repo_path: folder },
+        mockSequences: { suite: { unit: ['fail', 'pass'] } },
+      });
+      return { runId: out?.runId || null, answer: out };
+    } catch (e) { return { thrown: String(e?.message || e) }; }
+  }, { version, projectId: project.id, folder: project.folder || project.repo });
+  expect(res.thrown, 'window.api.startRun rejected').toBeFalsy();
+  expect(res.runId, `the release run started (${JSON.stringify(res.answer)})`).toBeTruthy();
+  await page.evaluate((runId) => window.showRun(runId, { running: true }), res.runId);
+});
+
+// The summary (data-testid release-summary) rendered as Markdown: a verdict line first, then the
+// sections as headings in this order, the Timeline as a table. On the gate card it is in the
+// message, which may sit in the card's collapsed Details.
+async function expectReleaseSummary(summary, sections) {
+  await expect(summary).toBeVisible({ timeout: SUMMARY_TIMEOUT });
+  // the sections in this order (a title heading of its own may come first)
+  const named = async () => (await summary.getByRole('heading').allInnerTexts()).map((t) => t.trim())
+    .filter((t) => sections.some((s) => t.startsWith(s)));
+  await expect.poll(named, { message: 'the release summary\'s sections, in order' }).toEqual(sections);
+  await expect(summary.getByRole('table').first(), 'the Timeline table').toBeVisible();
+  const text = (await summary.innerText()).trim();
+  const verdict = text.slice(0, text.indexOf(sections[0])).trim();
+  expect(verdict, 'a verdict line before the first section').not.toBe('');
+}
+
+Then('the gate card shows the release summary with {string}, {string}, {string} and {string}', async ({ e2e }, a, b, c, d) => {
+  const card = gateCard(e2e.window);
+  const summary = card.getByTestId('release-summary');
+  await expect(summary).toBeAttached({ timeout: SUMMARY_TIMEOUT });
+  if (!(await summary.isVisible())) await card.getByText('Details', { exact: true }).click();
+  await expectReleaseSummary(summary, [a, b, c, d]);
+});
+
+// the summary leads the gate's message: it comes before the commits not on origin yet
+Then('the release summary comes before {string} in the gate card', async ({ e2e }, text) => {
+  const card = gateCard(e2e.window);
+  await expect(card).toContainText(text, { timeout: SUMMARY_TIMEOUT });
+  const order = await card.evaluate((el, needle) => {
+    const summary = el.querySelector('[data-testid="release-summary"]');
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    let node = walker.nextNode();
+    while (node && !node.textContent.includes(needle)) node = walker.nextNode();
+    if (!summary || !node) return { summary: !!summary, text: !!node };
+    return { summary: true, text: true, before: !!(summary.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING) && !summary.contains(node) };
+  }, text);
+  expect(order.summary, 'the gate card has the release summary').toBe(true);
+  expect(order.text, `the gate card reads "${text}"`).toBe(true);
+  expect(order.before, `the release summary comes before "${text}"`).toBe(true);
+});
+
+// Assumption (the developer decides the link's source): a shipped release's `runs` names its release
+// run, whose folder holds release-summary.md; the release history is the file of #260
+// (<workspace>/releases/<projectId>.json). Written into the scratch workspace, then the app reloads.
+const RELEASE_RUN = '20260110-170000-rel00290';
+const SUMMARY_MD = [
+  'Ready to ship: both suites are green on the local main after 1 fix round.',
+  '',
+  '## Timeline',
+  '',
+  '| Round | Unit | E2E | Fix |',
+  '| --- | --- | --- | --- |',
+  '| 1 | red (1 failure) | not run | the workflow loader |',
+  '| 2 | green | green | |',
+  '',
+  '## The fixes',
+  '',
+  '- The workflow loader read the YAML examples before they merged (#8).',
+  '',
+  '## Before you ship',
+  '',
+  '- Read the diff of the fix on the release branch.',
+  '',
+  '## Follow-ups',
+  '',
+  '- A unit test for the loader with the examples folder missing.',
+  '',
+].join('\n');
+
+Given('the project shipped the release {string} whose release run wrote a release summary', async ({ e2e }, version) => {
+  const ws = path.join(e2e.scratch, 'workspace');
+  const runDir = path.join(ws, 'runs', RELEASE_RUN);
+  fs.mkdirSync(runDir, { recursive: true });
+  fs.writeFileSync(path.join(runDir, 'release-summary.md'), SUMMARY_MD);
+  fs.writeFileSync(path.join(runDir, 'summary.json'), JSON.stringify({
+    run_id: RELEASE_RUN, workflow: 'release.yaml', workflow_name: 'Release', status: 'completed', mock: false,
+    project_id: e2e.project.id, started_at: '2026-01-10T17:00:00.000Z', finished_at: '2026-01-10T18:00:00.000Z',
+    inputs: { version },
+  }, null, 2));
+  const dir = path.join(ws, 'releases');
+  fs.mkdirSync(dir, { recursive: true });
+  const release = {
+    version, date: '2026-01-10T18:00:00.000Z', issues: [{ number: 8, title: 'Document the workflow YAML' }], runs: [RELEASE_RUN],
+    cost: 6.84, tests: { unit: { passed: 412, failed: 0 }, e2e: { passed: 37, failed: 0 } },
+    notes: `${version}: the loader fix.`, status: 'shipped',
+  };
+  fs.writeFileSync(path.join(dir, `${e2e.project.id}.json`), JSON.stringify({ releases: [release] }, null, 2));
+  await e2e.window.reload();
+  await e2e.window.waitForLoadState('domcontentloaded');
+});
+
+// the release's row links its summary (data-testid release-summary-link)
+When('I open the release summary of the release {string}', async ({ e2e }, version) => {
+  const row = e2e.window.getByTestId('release-row').filter({ hasText: version });
+  await expect(row).toHaveCount(1);
+  await row.getByTestId('release-summary-link').click();
+});
+
+Then('the release summary shows {string}, {string}, {string} and {string}', async ({ e2e }, a, b, c, d) => {
+  await expectReleaseSummary(e2e.window.getByTestId('release-summary').filter({ visible: true }).first(), [a, b, c, d]);
+});

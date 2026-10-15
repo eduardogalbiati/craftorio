@@ -11,19 +11,16 @@
   const md = (t) => (typeof markdownHtml === 'function' ? markdownHtml(t) : `<pre>${esc(t)}</pre>`);
   const WORKFLOW = 'ai-arena';
   const FILE = 'ai-arena.yaml';
-  const { PROVIDERS, EFFORTS } = window.ChatModels;
+  const { PROVIDERS, EFFORTS, typeOf } = window.ChatModels;
   const BY_KEY = Object.fromEntries(Object.entries(PROVIDERS).map(([id, p]) => [p.key, id]));
   const MIN = 2;
   const MAX = 5;
   const SLOT_COLORS = ['var(--ar-c1)', 'var(--ar-c2)', 'var(--ar-c3)', 'var(--ar-c4)', 'var(--ar-c5)'];
+  // A contender on a model, with its CLI's provider type.
+  const contender = (model) => ({ provider: typeOf(model), model, effort: 'high' });
   // The workflow's defaults (contender_1 … contender_4; the 5th slot is off).
-  const DEFAULTS = [
-    { provider: 'claude-code', model: 'claude-opus-5-5', effort: 'high' },
-    { provider: 'claude-code', model: 'claude-sonnet-5-5', effort: 'high' },
-    { provider: 'codex-cli', model: 'gpt-6-luna', effort: 'high' },
-    { provider: 'grok-cli', model: 'grok-4.7', effort: 'high' },
-  ];
-  const EXTRA = { provider: 'claude-code', model: 'claude-haiku-4-5', effort: 'high' };
+  const DEFAULTS = ['claude-opus-5-5', 'claude-sonnet-5-5', 'gpt-6-luna', 'grok-4.7'].map(contender);
+  const EXTRA = contender('claude-haiku-4-5');
   // Simulation scenarios (developer mode), as the engine's mockSequences.
   const SCENARIOS = {
     happy: { label: 'The verifier passes the first synthesis', seq: {} },
@@ -41,14 +38,14 @@
   if (setup.contenders.length < MIN) setup.contenders = DEFAULTS.map((c) => ({ ...c }));
 
   // A model id's CLI when the run does not say it (e.g. runs of older ai-arena versions).
-  const providerOfModel = (m = '') => (/claude/i.test(m) ? 'claude-code' : /grok/i.test(m) ? 'grok-cli' : /gpt|codex|^o\d/i.test(m) ? 'codex-cli' : '');
+  const providerOfModel = (m = '') => (PROVIDERS[typeOf(m)] ? typeOf(m) : '');
 
   // ---------------------------------------------------------------- roles and robots
   // roles: agent name → { kind, name, color, side, provider, model, effort, internal }
   let roles = {};
   const INTERNAL = () => ({
-    synthesizer: { kind: 'synthesizer', name: 'Synthesizer', color: 'var(--ar-synth)', side: 'right', provider: 'claude-code', model: 'claude-opus-5-5' },
-    verifier: { kind: 'verifier', name: 'Verifier', color: 'var(--ar-verify)', side: 'right', provider: 'codex-cli', model: 'gpt-6-luna' },
+    synthesizer: { kind: 'synthesizer', name: 'Synthesizer', color: 'var(--ar-synth)', side: 'right', provider: typeOf('claude-opus-5-5'), model: 'claude-opus-5-5' },
+    verifier: { kind: 'verifier', name: 'Verifier', color: 'var(--ar-verify)', side: 'right', provider: typeOf('gpt-6-luna'), model: 'gpt-6-luna' },
     supervisor: { kind: 'supervisor', name: 'Supervisor', color: 'var(--supervisor)', side: 'left', internal: true },
   });
   const contenders = () => Object.keys(roles).filter((r) => roles[r].kind === 'contender');
@@ -297,7 +294,7 @@
     renderBoard();
   }
 
-  const clock = (ts) => new Date(ts || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const clock = (ts) => new Date(ts || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: TimeZone.current() });
   const fmtK = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n || 0));
   const fmtDur = (ms) => (ms >= 60000 ? `${Math.floor(ms / 60000)}m ${String(Math.round((ms % 60000) / 1000)).padStart(2, '0')}s` : `${Math.round((ms || 0) / 1000)}s`);
   const words = (t) => String(t || '').split(/\s+/).filter(Boolean).length;
@@ -424,7 +421,7 @@
       ...contenders().filter((r) => chat.proposals[r] != null).map((r) => ({ id: `p:${r}`, role: r, label: roles[r].name })),
       ...chat.finals.map((_, i) => ({ id: `f:${i}`, role: 'synthesizer', label: `Final v${i + 1}` })),
     ];
-    $a('#arena-doc-tabs').innerHTML = tabs.map((t) => `<button type="button" ${styleOf(t.role)} class="${t.id === chat.docTab ? 'active' : ''}" data-tab="${esc(t.id)}">${esc(t.label)}</button>`).join('');
+    $a('#arena-doc-tabs').innerHTML = tabs.map((t) => `<button type="button" ${styleOf(t.role)} class="${t.id === chat.docTab ? 'active' : ''}" data-tab="${esc(t.id)}" title="${esc(t.label)}">${esc(t.label)}</button>`).join('');
     const [kind, key] = String(chat.docTab || '').split(/:(.*)/);
     const text = kind === 'p' ? chat.proposals[key] : kind === 'f' ? chat.finals[+key] : kind === 'a' ? chat.attachments[+key]?.text : null;
     $a('#arena-doc-body').innerHTML = text == null ? '<p class="muted">No proposal yet.</p>' : md(text);
@@ -443,9 +440,9 @@
     $a('#arena-board').innerHTML = !list.length ? '<p class="muted small">No contenders yet.</p>' : list.map((r) => {
       const v = avg(r);
       const n = chat.scores[r]?.length || 0;
-      return `<div class="ar-board-row${v != null && v === best ? ' best' : ''}" ${styleOf(r)} title="${n} score${n === 1 ? '' : 's'} from the other models">
-        <span class="name">${esc(roles[r].name)}</span><span class="bar"><i style="width:${v == null ? 0 : Math.min(100, v * 10)}%"></i></span>
-        <span class="val">${v == null ? '—' : v.toFixed(1)}</span></div>`;
+      return `<div class="ar-board-row${v != null && v === best ? ' best' : ''}" ${styleOf(r)} title="${n} score${n === 1 ? '' : 's'} from the other models" data-testid="arena-score-row">
+        <span class="name" data-testid="arena-score-name">${esc(roles[r].name)}</span><span class="bar" data-testid="arena-score-bar"><i style="width:${v == null ? 0 : Math.min(100, v * 10)}%"></i></span>
+        <span class="val" data-testid="arena-score-value">${v == null ? '—' : v.toFixed(1)}</span></div>`;
     }).join('') + (chat.peer ? '' : '<p class="muted small">Peer review is off for this run.</p>');
   }
 
@@ -970,17 +967,17 @@
             <div id="arena-messages" class="duo-messages"></div>
           </div>
 
-          <aside class="duo-side">
-            <section class="duo-doc">
+          <aside class="duo-side ar-side" data-testid="arena-side">
+            <section class="duo-doc" data-testid="arena-doc-section">
               <div class="duo-side-head"><h2>Documents</h2></div>
-              <div id="arena-doc-tabs" class="ar-doc-tabs"></div>
+              <div id="arena-doc-tabs" class="ar-doc-tabs" data-testid="arena-doc-tabs"></div>
               <article id="arena-doc-body" class="duo-doc-body md md-compact">No proposal yet.</article>
             </section>
-            <section class="ar-board-panel">
+            <section class="ar-board-panel" data-testid="arena-scores-section">
               <div class="duo-side-head"><h2>Peer scores</h2><span class="muted small">average, 0–10</span></div>
               <div id="arena-board" class="ar-board"></div>
             </section>
-            <section class="duo-super-panel">
+            <section class="duo-super-panel" data-testid="arena-supervisor-section">
               <div class="duo-side-head">
                 <h2>Supervisor</h2>
                 <span id="arena-super-state" class="pill pill-running">watching</span>

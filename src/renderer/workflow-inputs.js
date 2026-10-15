@@ -3,7 +3,9 @@
 // - `label` (else one derived from the key: base_branch → "Base branch"; a slug is never shown) and
 //   `options` ({ value: label }, e.g. js → JavaScript; else derived from the value);
 // - the control follows the input: a yes/no (`type: boolean`, or an enum of "false"/"true") is a
-//   switch; an enum of up to 5 short values is a row of pills (.seg); a longer enum a select; a
+//   switch; an enum with `multiple: true` (#340, language "js,rust") a row of toggles (role group /
+//   checkbox, the value comma-separated, the first chosen first, at least one kept on); an enum of
+//   up to 5 short values is a row of pills (.seg); a longer enum a select; a
 //   number a short box; a `*branch` input a text box with the project's local branches; text a box;
 // - `show_if` ("mode == 'validated'"; `inputs.` optional, ==, !=, and, or, not, parentheses): the
 //   field is hidden while it is false. A hidden input keeps its value (read() still returns it);
@@ -55,7 +57,8 @@
       const def = defs[k] || {};
       const atDefault = def.default != null && String(def.default) === String(v);
       if (atDefault && !defaults) return '';
-      const value = isBoolean(def) || typeof v === 'boolean' ? (truthy(v) ? 'On' : 'Off') : optionLabel(def, v);
+      const value = isBoolean(def) || typeof v === 'boolean' ? (truthy(v) ? 'On' : 'Off')
+        : def.multiple ? listOf(v).map((x) => optionLabel(def, x)).join(' + ') : optionLabel(def, v);
       const tip = `${k}: ${v}${atDefault ? ' (the workflow default)' : ''}${def.description ? `\n${def.description}` : ''}`;
       return `<span class="badge wi-pill${atDefault ? ' wi-pill-default' : ''}" data-testid="input-pill" data-wi-pill="${esc(k)}" title="${esc(tip)}">${esc(label(k, def))}: ${esc(value)}</span>`;
     }).join('');
@@ -63,9 +66,13 @@
   const isBoolean = (def = {}) => def.type === 'boolean' || (Array.isArray(def.enum) && def.enum.length === 2 && def.enum.map(String).sort().join() === 'false,true');
   const truthy = (v) => !['', 'false', '0', 'no', 'off', 'undefined', 'null'].includes(String(v ?? '').trim().toLowerCase());
 
-  /** The control of an input: switch | pills | select | number | branch | run | textarea | text. */
+  /** The items of a multi-value input's value: "rust, js" → ['rust', 'js']. */
+  const listOf = (v) => [...new Set(String(v ?? '').split(',').map((x) => x.trim()).filter(Boolean))];
+
+  /** The control of an input: switch | multi | pills | select | number | branch | run | textarea | text. */
   function kind(key, def = {}) {
     if (isBoolean(def)) return 'switch';
+    if (Array.isArray(def.enum) && def.multiple) return 'multi';
     if (Array.isArray(def.enum)) {
       const short = def.enum.length <= MAX_PILLS && def.enum.every((v) => optionLabel(def, v).length <= MAX_PILL_LABEL);
       return short ? 'pills' : 'select';
@@ -151,6 +158,13 @@
         const on = String(o) === String(val);
         return `<button type="button" role="radio" data-wi-pill="${esc(o)}" class="${on ? 'active' : ''}" aria-checked="${on}" title="${esc(optionLabel(def, o))}"${af && n === 0 ? ' autofocus' : ''}>${esc(optionLabel(def, o))}</button>`;
       }).join('')}</span><input type="hidden" ${ctl} value="${esc(val)}" />`;
+    } else if (k === 'multi') {
+      // several values (#340, language "js,rust"): one toggle per value, the first chosen is the main one
+      const chosen = listOf(val);
+      control = `<span class="seg wi-pills wi-multi" role="group" aria-label="${esc(label(key, def))}">${def.enum.map((o, n) => {
+        const on = chosen.includes(String(o));
+        return `<button type="button" role="checkbox" data-wi-pill="${esc(o)}" class="${on ? 'active' : ''}" aria-checked="${on}" title="${esc(optionLabel(def, o))}"${af && n === 0 ? ' autofocus' : ''}>${esc(optionLabel(def, o))}</button>`;
+      }).join('')}</span><input type="hidden" ${ctl} data-wi-multi="1" value="${esc(chosen.join(','))}" />`;
     } else if (k === 'select') {
       control = `<select ${ctl}${af}>${def.enum.map((o) => `<option value="${esc(o)}"${String(o) === String(val) ? ' selected' : ''}>${esc(optionLabel(def, o))}</option>`).join('')}</select>`;
     } else if (k === 'run') {
@@ -165,7 +179,7 @@
       control = `<input type="text" ${ctl} class="wi-compact" value="${esc(val)}"${af} />`;
     }
     const showIf = def.show_if ? ` data-wi-show-if="${esc(def.show_if)}"${evalCondition(def.show_if, context) ? '' : ' hidden'}` : '';
-    const forAttr = k === 'pills' ? '' : ` for="${esc(id)}"`;
+    const forAttr = k === 'pills' || k === 'multi' ? '' : ` for="${esc(id)}"`;
     const help = def.description ? `<div class="hint">${esc(def.description)}</div>` : '';
     return `<div class="field wi-field wi-kind-${k}" data-wi-key="${esc(key)}"${showIf}>`
       + `<label id="${esc(id)}-label"${forAttr}>${esc(label(key, def))}${def.required ? ' <span class="req">*</span>' : ''}<span class="wi-note"></span></label>`
@@ -218,8 +232,9 @@
     else el.value = String(value);
     const field = el.closest('.wi-field');
     if (field) {
+      const chosen = el.dataset.wiMulti ? listOf(el.value) : [el.value];
       for (const b of field.querySelectorAll('[data-wi-pill]')) {
-        const on = b.dataset.wiPill === el.value;
+        const on = chosen.includes(b.dataset.wiPill);
         b.classList.toggle('active', on);
         b.setAttribute('aria-checked', String(on));
       }
@@ -264,9 +279,13 @@
       const field = rootEl.querySelector(`.wi-field[data-wi-key="${cssEsc(k)}"]`);
       const el = field?.querySelector('[data-wi-input]');
       if (!el) continue;
-      if (k === 'language' && h.language && (def?.enum || []).map(String).includes(h.language)) {
-        if (!field.dataset.wiTouched && !keep.includes(k)) set(rootEl, k, h.language, { touched: false });
-        note(field, el.value === h.language ? 'detected' : '', "Detected from the project's files");
+      // several detected languages ("rust,js", #340): all of them for a multi-value input, else the main one
+      const known = (def?.enum || []).map(String);
+      const detected = listOf(h.language).filter((l) => known.includes(l));
+      const hint = def?.multiple ? detected.join(',') : detected[0];
+      if (k === 'language' && hint) {
+        if (!field.dataset.wiTouched && !keep.includes(k)) set(rootEl, k, hint, { touched: false });
+        note(field, el.value === hint ? 'detected' : '', "Detected from the project's files");
       }
       if (kind(k, def || {}) === 'branch') {
         const list = field.querySelector('datalist');
@@ -284,7 +303,13 @@
       const field = b?.closest('.wi-field');
       const input = field?.querySelector('[data-wi-input]');
       if (!input) return;
-      set(field, input.dataset.wiInput, b.dataset.wiPill);
+      if (input.dataset.wiMulti) {
+        // a toggle adds its value at the end (the main one stays first); the last one stays on
+        const chosen = listOf(input.value);
+        const next = chosen.includes(b.dataset.wiPill) ? chosen.filter((v) => v !== b.dataset.wiPill) : [...chosen, b.dataset.wiPill];
+        if (!next.length) return;
+        set(field, input.dataset.wiInput, next.join(','));
+      } else set(field, input.dataset.wiInput, b.dataset.wiPill);
       input.dispatchEvent(new Event('change', { bubbles: true }));
     });
     document.addEventListener('change', (e) => {

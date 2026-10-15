@@ -372,9 +372,12 @@ ${flip(v.overlay || '')}
     return v;
   }
 
+  // The robot of a provider type: its adapter's (window.Providers, src/shared/providers/); a provider
+  // without one (simulated, unknown, or no registry loaded) gets the robot of its model's maker.
+  const MAKERS = [[/^claude-/i, 'claude'], [/^(gpt-|o\d)/i, 'gpt'], [/^grok-/i, 'grok']];
   function variantFor(provider, model = '') {
-    if (/gemini/i.test(model) || provider === 'gemini-cli') return 'gemini';
-    return { 'claude-code': 'claude', 'codex-cli': 'gpt', 'grok-cli': 'grok' }[provider] || 'vanilla';
+    if (/gemini/i.test(model)) return 'gemini';
+    return (provider && window.Providers?.resolve(provider)?.robot) || MAKERS.find(([re]) => re.test(model || ''))?.[1] || 'vanilla';
   }
 
   // Name plate text for a model id: "claude-opus-5-5" → "Opus 5.5", "gpt-6-luna" → "GPT-6 Luna".

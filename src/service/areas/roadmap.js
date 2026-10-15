@@ -6,6 +6,8 @@
 // project's past runs) and each item with a run its real cost; a real start that would pass the
 // budget cap (areas/budget.js) pauses the roadmap instead (budgetStop) and notifies the owner.
 // Cut lines (#260): a roadmap that reached one starts its release run (areas/releases.js roadmapRelease).
+// Move on (#395): parkItem / parkStage park the items whose runs wait at a human gate (`gateRun`: the
+// gate's step name, also for a run interrupted there) and dispatch; nothing answers the gate.
 
 const path = require('path');
 const { loadWorkflow } = require('../../engine/workflow');
@@ -17,10 +19,11 @@ const budget = require('../../budget');
 const costEstimate = require('../../cost-estimate');
 const roadmaps = require('../../roadmap');
 const runs = require('../../runs');
-const RunProgress = require('../../renderer/run-progress-model');
+const RoadmapModel = require('../../shared/roadmap-model');
+const RunProgress = require('../../shared/run-progress-model');
+const { clientError } = require('../common');
 
 module.exports = (ctx) => {
-  const { host } = ctx;
   // a call while one is going runs again right after it (a run that ends meanwhile is never missed)
   let roadmapBusy = false;
   let roadmapAgain = false;
@@ -34,10 +37,20 @@ module.exports = (ctx) => {
   // trail, groups, state and the typical step times of its workflow's past runs, for the card's ring).
   // A paused roadmap shows what the scheduler will settle (#237: a stage run on its own that finished
   // while paused, e.g. after an edit of the file the scheduler has not seen, shows "Stage N done").
-  function roadmapView(projectId, list = []) {
-    const stored = roadmaps.readRoadmap(ctx.ws.backlog, path.basename(String(projectId)));
-    const roadmap = stored.state === 'paused' ? roadmaps.advance(stored, { runOf: roadmapRun, canStart: () => false }).roadmap : roadmaps.withStatus(stored, roadmapRun);
+  // `issues`: the backlog's issues when the caller has read them already (the Backlog, #389)
+  function roadmapView(projectId, list = [], issues = null) {
+    // #384: each run read once per draw (an item's run, its resume chain, its earlier runs)
+    const found = new Map();
+    const find = (runId) => (found.has(runId) ? found.get(runId) : found.set(runId, findRun(runId)).get(runId));
+    const runOfItem = (runId) => roadmapRun(runId, find);
+    const read = roadmaps.readRoadmap(ctx.ws.backlog, path.basename(String(projectId)));
+    const stored = { ...read, stages: read.stages.map((s) => ({ ...s, items: s.items.map((x) => resumedItem(x, find)) })) };
+    const roadmap = stored.state === 'paused' ? roadmaps.advance(stored, { runOf: runOfItem, canStart: () => false }).roadmap : roadmaps.withStatus(stored, runOfItem);
     const byId = new Map(list.map((r) => [r.runId, r]));
+    // a run the caller did not list (roadmap:get lists none): its index row
+    const runOf = (runId) => byId.get(runId) || find(runId);
+    // #384: the item's earlier runs, oldest first, with their status
+    const runHistory = (x) => RoadmapModel.earlierRuns(x).map((id) => ({ runId: id, status: runOf(id)?.status || null }));
     // past runs of the same workflow file, simulated with simulated and real with real
     const history = new Map();
     const typical = (file, mock) => {
@@ -46,7 +59,7 @@ module.exports = (ctx) => {
       return history.get(key);
     };
     const runView = (x) => {
-      const r = byId.get(x.runId);
+      const r = runOf(x.runId);
       if (!r) return null;
       const live = ctx.active.get(x.runId);
       const progress = live?.trail?.steps || r.progress || [];
@@ -55,26 +68,46 @@ module.exports = (ctx) => {
       const { times, runs: count } = typical(r.file, r.mock);
       // gate: the "What happened" line of the gate a live run waits at (#213), for the waiting badge
       const gate = live?.pendingGates?.()[0]?.brief?.headline || null;
+      // #395: the gate the run waits at (live, or interrupted there by a closed app), by its step's name
+      const atGate = gateOf(x.runId, find);
       return {
-        status: r.status, mock: !!r.mock, startedAt: r.startedAt || null, finishedAt: r.finishedAt || null, waiting, gate,
+        status: r.status, mock: !!r.mock, startedAt: r.startedAt || null, finishedAt: r.finishedAt || null, waiting, gate, atGate,
         progress, groups: r.groups || [], agentNames: r.agentNames || null, stepNames: r.stepNames || null, workflow: r.workflow || null, error: r.error || null,
         stepTimes: times, history: count,
       };
     };
     const prices = workspace.readSettings(ctx.ws).prices || {};
     // the backlog's issues: their complexity:n labels scale each item's estimate (#215)
-    const issues = backlog.readBacklog(ctx.ws.backlog, path.basename(String(projectId)))?.issues || [];
+    const known = issues || backlog.readBacklog(ctx.ws.backlog, path.basename(String(projectId)))?.issues || [];
     return costEstimate.withEstimates({
       ...roadmap,
       stages: roadmap.stages.map((s) => ({
         ...s,
+        // #368: the stage's pause line ({ state: 'pausing' | 'paused', ... }), on the stage it paused at
+        pause: stagePause(roadmap, s),
         items: s.items.map((x) => {
           const run = x.runId ? runView(x) : null;
           const waiting = x.status === 'running' && (byId.get(x.runId)?.waiting || run?.waiting);
-          return { ...x, ...(waiting ? { waiting: true } : {}), ...(run ? { run } : {}) };
+          const earlier = runHistory(x);
+          return { ...x, ...(waiting ? { waiting: true } : {}), ...(run ? { run } : {}), ...(earlier.length ? { runHistory: earlier } : {}) };
         }),
       })),
-    }, list, { issues, prices });
+    }, list, { issues: known, prices });
+  }
+
+  // #384: an item whose run was resumed (#250) shows the run that resumed it (the latest of the chain),
+  // the earlier ones in its `runs`, also when its file still names the earlier run (adoptResumed, #100,
+  // records it when the resume starts); a done or skipped item keeps its run, a parked one (#395) follows it
+  const findRun = (runId) => runs.findRun(ctx.ws.runs, runId);
+  function resumedItem(x, find = findRun) {
+    if (!x.runId || (RoadmapModel.isFinished(x) && x.status !== 'parked')) return x;
+    const chain = [];
+    while (chain.length < 20) {
+      const next = find(chain.at(-1) || x.runId)?.resumedBy?.runId;
+      if (!next || next === x.runId || chain.includes(next)) break;
+      chain.push(next);
+    }
+    return chain.length ? { ...x, runId: chain.at(-1), runs: [...new Set([...(x.runs || []), x.runId, ...chain])], error: null } : x;
   }
 
   // #206: whether the budget cap stops this start: the roadmap pauses with the stage's estimate
@@ -118,12 +151,61 @@ module.exports = (ctx) => {
   // a local merge, a PR/MR merge action, or a simulation that succeeded (simulations never merge);
   // a run of a workflow that never merges (`metadata.merges: false`, e.g. backlog-refresh, #161)
   // counts as merged when it succeeds.
-  function roadmapRun(runId) {
+  function roadmapRun(runId, find = findRun) {
     const live = runId && ctx.active.get(runId);
     if (live) return { status: 'running', waiting: live.approvals.size > 0 };
-    const r = runId ? runs.readRun(ctx.ws.runs, runId) : null;
+    // its index row when current (#389: no events.jsonl parsed per item and per read)
+    const r = runId ? find(runId) : null;
     if (!r) return null;
     return { status: r.status, error: r.error, merged: r.status === 'success' && (r.mock || !!r.localMerge || roadmaps.mergedPullRequest(r.runDir) || neverMerges(r.file)) };
+  }
+
+  // #395: roadmapRun, with `waiting` and `gate` (the step's name) when the run waits at a human gate:
+  // live, or interrupted there (a closed app; its trail's last step waits), so Move on can park it
+  function gateRun(runId, find = findRun) {
+    const base = roadmapRun(runId, find);
+    const gate = base && gateOf(runId, find);
+    return gate ? { ...base, waiting: true, gate } : base;
+  }
+  // the name of the human gate a run waits at, or null (cheap: no events.jsonl read, #389)
+  function gateOf(runId, find = findRun) {
+    const live = runId && ctx.active.get(runId);
+    if (live) {
+      const open = live.pendingGates?.()[0];
+      return open ? live.displayNames?.().steps?.[open.step_id] || open.step_id : null;
+    }
+    const r = runId ? find(runId) : null;
+    const last = r?.status === 'interrupted' ? r.progress?.at(-1) : null;
+    if (last?.status !== 'waiting') return null;
+    const step = last.step || '';
+    return r.stepNames?.[step] || step || 'its gate';
+  }
+
+  // #395 Move on: the item parked, or the stage's items at a gate parked and its planned ones skipped
+  // (refused while a turn of the stage runs); the runs keep waiting at their gates, then the next stage starts
+  async function parkItem({ projectId, itemId }) {
+    const id = path.basename(String(projectId));
+    try {
+      roadmaps.itemAction(ctx.ws.backlog, id, String(itemId), 'park', { alive: ctx.runAlive, runOf: (runId) => gateRun(runId) });
+    } catch (e) { throw clientError(e.message); }
+    await dispatchRoadmaps();
+  }
+  async function parkStage({ projectId, stageId }) {
+    const id = path.basename(String(projectId));
+    try {
+      roadmaps.parkStage(ctx.ws.backlog, id, String(stageId), { runOf: (runId) => gateRun(runId) });
+    } catch (e) { throw clientError(e.message); }
+    await dispatchRoadmaps();
+  }
+
+  // #395: whether a run is a parked item's (the roadmap moved on past it): while it waits at its gate
+  // it holds no run slot (areas/runs.js slotProblem), so the next stage can start
+  function parkedRun(runId, projectId) {
+    if (!ctx.ws || !runId || !projectId) return false;
+    try {
+      const r = roadmaps.readRoadmap(ctx.ws.backlog, path.basename(String(projectId)));
+      return r.stages.some((s) => s.items.some((x) => x.runId === runId && x.status === 'parked'));
+    } catch { return false; }
   }
 
   function neverMerges(file) {
@@ -159,7 +241,7 @@ module.exports = (ctx) => {
     }
     if (roadmap.state === 'done' && before.state === 'running') {
       // #284: a disabled stage with work left was skipped, not done: the notice says so
-      const off = roadmap.stages.filter((s) => s.disabled && s.items.some((x) => !['done', 'skipped'].includes(x.status))).length;
+      const off = roadmap.stages.filter((s) => s.disabled && RoadmapModel.hasUnfinished(s)).length;
       ctx.notify({ kind: 'run', event: 'succeeded', title: 'Roadmap finished', body: off ? `Every enabled stage of ${projectId} is done; ${off} disabled stage${off === 1 ? ' was' : 's were'} left out.` : `Every stage of ${projectId} is done.` });
     }
     // #279: a stage that ended may update the app (areas/app-update.js): its cycle paused every
@@ -201,6 +283,7 @@ module.exports = (ctx) => {
           projectId, issues: backlog.recordedIssues(open), notices: warnings.map((message) => ({ level: 'warn', message })),
           allowKeptWork: keptWorkAllowed.has(`${projectId}:${item.id}`),
           then: item.then || null,
+          agentOverrides: item.agentOverrides || null,
         });
         keptWorkAllowed.delete(`${projectId}:${item.id}`);
         roadmaps.markStarted(ws.backlog, projectId, item.id, { runId: started.runId });
@@ -215,10 +298,9 @@ module.exports = (ctx) => {
   // The stage that ended in this step (with a real item), as the event of the app update's trigger
   // (the only one since #285); true when its cycle started.
   function appUpdateStarted(before, roadmap, mockOf) {
-    const finished = (x) => ['done', 'skipped'].includes(x.status);
-    const at = roadmaps.currentStage(before);
+    const at = RoadmapModel.currentStage(before);
     const stage = at >= 0 ? roadmap.stages.find((s) => s.id === before.stages[at].id) : null;
-    return !!stage && stage.items.some((x) => !mockOf(x)) && stage.items.every(finished) && ctx.appUpdateEvent({ type: 'stage-done' });
+    return !!stage && stage.items.some((x) => !mockOf(x)) && !RoadmapModel.hasUnfinished(stage) && ctx.appUpdateEvent({ type: 'stage-done' });
   }
 
   // Start: a roadmap with real items is refused in simulation-only mode (automated checks), like assignments.
@@ -229,18 +311,66 @@ module.exports = (ctx) => {
     const r = roadmaps.readRoadmap(ws.backlog, id);
     const stages = stage ? r.stages.filter((s) => s.id === stage) : r.stages;
     // a disabled stage (#284) starts nothing: its real items do not make this start a real one
-    if (!simulated && stages.some((s) => !s.disabled && s.items.some((x) => !x.mock && !['done', 'skipped'].includes(x.status)))) {
+    if (!simulated && RoadmapModel.unfinishedItems({ stages }).some((x) => !x.mock)) {
       simulation.refuseReal('real runs from a roadmap');
-      await host.assertCanRun?.({ mock: false });
     }
+    // #368: the paused runs first, where they paused (each takes its item's place, adoptResumed), then the new items
+    await resumePausedItems(id, stages, !!simulated);
     roadmaps.setState(ws.backlog, id, 'running', { simulated: !!simulated, stage: stage ? String(stage) : null });
     await dispatchRoadmaps();
     return ctx.withIssueRuns(backlog.readBacklog(ws.backlog, id));
   }
 
+  // The owner's Resume or Start continues every item of the enabled `stages` whose run ended paused
+  // (#368), as a simulation when the roadmap runs as one; a run that cannot resume (no free slot, a
+  // refused real run) keeps its item paused and the owner is told why.
+  async function resumePausedItems(projectId, stages, simulated) {
+    const enabled = stages.filter((s) => !s.disabled);
+    const paused = roadmaps.withStatus({ stages: enabled }, roadmapRun).stages.flatMap((s) => s.items).filter((x) => x.status === 'paused');
+    for (const item of paused) {
+      try {
+        await ctx.resumeRun({ runId: item.runId, mock: simulated || !!item.mock });
+      } catch (e) {
+        ctx.notify({ kind: 'run', event: 'failed', title: 'Paused run not resumed', body: `Run ${item.runId}: ${e.message}`.slice(0, 180), target: { view: 'roadmap', projectId } }, { projectId });
+      }
+    }
+  }
+
+  // #368: a stage's "Pause after current turn": the roadmap pauses at the stage (no new item starts)
+  // and each run of the stage in progress in this app pauses after its current turn (a run at a gate
+  // at once, the gate unanswered). A run another app window owns goes on: it is paused there.
+  function pauseStage({ projectId, stageId }) {
+    const id = path.basename(String(projectId));
+    const r = roadmaps.withStatus(roadmaps.readRoadmap(ctx.ws.backlog, id), roadmapRun);
+    const stage = r.stages.find((s) => s.id === stageId);
+    if (!stage) throw clientError('This stage is no longer in the roadmap.');
+    const may = RoadmapModel.allowedActions(r, stage).pauseStage;
+    if (!may.allowed) throw clientError(may.reason);
+    roadmaps.pauseStage(ctx.ws.backlog, id, stage.id);
+    for (const x of stage.items) {
+      const run = x.runId && ctx.active.get(x.runId);
+      // a run stopping meanwhile refuses the pause: the others still pause
+      try { if (run && ['pending', 'running'].includes(run.status)) run.pause(); } catch (e) { console.error('roadmap stage pause:', x.runId, e.message); }
+    }
+    return ctx.withIssueRuns(backlog.readBacklog(ctx.ws.backlog, id));
+  }
+
+  // A stage the roadmap paused at (#368), as the screen shows it: pausing while one of its runs still
+  // finishes its turn (that run's pauseState), else paused since `at`; null for any other stage.
+  function stagePause(r, stage) {
+    const line = roadmaps.stagePauseLine(r, stage);
+    if (!line) return null;
+    const live = stage.items.map((x) => x.runId && ctx.active.get(x.runId)).find((run) => run?.pausing);
+    return live ? live.pauseState() : line;
+  }
+
   return {
     allowKeptWork,
     dispatchRoadmaps,
+    parkItem,
+    parkStage,
+    parkedRun,
+    pauseStage,
     roadmapView,
     startRoadmap,
   };

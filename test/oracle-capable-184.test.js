@@ -561,6 +561,8 @@ test('docs: the README says what the Oracle knows and can do; capabilities.md li
   for (const id of KNOWLEDGE_SKILLS) assert.ok(oracleSection.includes(id), `the README's Oracle section names ${id}`);
   assert.match(oracleSection, /run_analysis/);
   assert.match(oracleSection, /issues_search/);
-  const caps = fs.readFileSync(path.join(ROOT, 'docs', 'agents', 'capabilities.md'), 'utf8');
-  for (const tool of ['run_analysis', 'issues_search', 'issue_view', 'labels', 'checker']) assert.ok(caps.includes(tool), `capabilities.md names ${tool}`);
+  // the capabilities list lives in scripts/doc-rules.js, shared with `npm run check` (#404)
+  const { checkOracleCapabilities, ORACLE_TOOLS } = require('../scripts/doc-rules');
+  assert.deepEqual([...ORACLE_TOOLS].sort(), ['checker', 'issue_view', 'issues_search', 'labels', 'run_analysis']);
+  assert.deepEqual(checkOracleCapabilities(ROOT).map((p) => p.message), []);
 });

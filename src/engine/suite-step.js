@@ -9,7 +9,7 @@
 // writer's pre-existing failures, #101) are reported apart and never fail the step.
 // The step tells pre-existing failures apart by itself (#211): when tests fail, it runs only their
 // test files in the base checkout (`base()`, the run's <run_id>-base worktree), same command filtered
-// to those files (`filteredCommand`: npm/pnpm/yarn test, pytest, node --test), log
+// to those files (`filteredCommand`: npm/pnpm/yarn test or run <script>, pytest, node --test), log
 // logs/suite-<round>-base.log. A test failing there too is pre-existing (`preexisting_failures` in the
 // output: the engine adds them to the run's list and to the workspace's failing-on-main.json); files
 // the base does not have are the run's. The base's result per file is cached by base commit + file
@@ -22,21 +22,41 @@
 // <run>/locks), so a test never waits for the machine-wide screenshot slot held by other runs. The
 // log starts with what the child gets (parallelism, the variables removed). Without a step
 // `timeout`, the timeout comes from the project's recent suite durations (<workspace>/cache/
-// suite-durations.json: 3× the median, at least 10 min; 30 min with no history); a timeout names the
-// test files still running.
+// suite-durations.json: 3× the median, at least 10 min; 30 min with no history; never under the
+// largest per-test budget plus a margin, #402 test-timeouts.js); a timeout names the test files still
+// running.
+// A timed-out round is checked like a failure (#396, `rerunAlone`): each file still running reruns
+// alone on the branch, then, when it hangs there too, alone on the base, each run with its own timeout
+// (3× the file's recent alone runs, at least 2 min; 5 min without history), logs
+// suite-<round>-alone-<n>[-base].log. A file that finishes alone on the branch, or hangs or fails on
+// the base too, is a failure outside the change with its reason; one that hangs only on the branch is
+// classified like any failure. The failures of the files that had finished are kept. Without the
+// still-running files (or a command that cannot take files) it stays one "(the whole suite)" failure.
+// In or outside the change (#396): every counted failure gets `class` (in the change | outside the
+// change) and `class_reason` from the import graph (affected-tests.js classifyFailures, changedFiles();
+// without changedFiles, no class); `in_change` / `outside_change` count them, for a workflow's policy
+// on a suite red only outside the change.
 // Output: { kind: 'suite', status: pass | fail | blocked, round, command, log, exit_code, duration_ms,
-// timed_out, timeout_ms, running, failures, preexisting, preexisting_failures, base_check, reason,
-// message }. `blocked`: the suite could not run (no worktree, no command found, the command not found).
+// timed_out, timeout_ms, running, alone, failures, preexisting, preexisting_failures, base_check,
+// in_change, outside_change, reason, message }. `blocked`: the suite could not run (no worktree, no
+// command found, the command not found, or #400 the shell refused the command line: the log's last
+// line is a refusal of SHELL_REFUSALS and the log holds no test result, reason quoting that line).
 // It never throws and never calls the supervisor: the transitions route the result (back to the test
 // writer or the developer, or a gate).
 // Simulation (`mock`): nothing is run; `mockResult` (mockSequences.suite: { <step>: [per visit] },
 // default pass) is pass | fail | preexisting (only the run's pre-existing failures fail: a pass) |
 // base (the failures fail on the simulated base too: a pass) | mixed (2 failures, one on the base:
-// a fail with 1 failure) | blocked, and a simulated log is written.
+// a fail with 1 failure) | outside (#396: a failure in test/simulated-outside.test.js, outside the
+// change, passing on the simulated base: a fail) | blocked, and a simulated log is written. A
+// simulated failure is in the change, except those of test/simulated-outside.test.js.
 // `isFullSuiteCommand` tells the engine an agent started the whole suite itself (a warn, #177).
 // Affected tests (#212): with `files`, only those test files run (`scope: files`, the step's
 // `scope: affected` rounds and agents' test requests, see src/engine/affected-tests.js); the output
 // says which files and why (`selection`), and `passed` / `failed` are the runner's counts.
+// The command line has a limit (#400, COMMAND_LINE_LIMITS: cmd.exe 8,191 characters, Linux 128 KiB,
+// macOS 256 KiB, minus a margin): a filtered command over it (wrappers included) runs the whole
+// suite instead (`selection.why` and the message say so), and the base check of too many files is
+// skipped with that reason. A timed-out file reruns alone, always short enough.
 // Agent mode (#219): the suite gets MULTIAGENT_AGENT_MODE=1 and MULTIAGENT_TEST_HUMAN_LOG (<log>.human.log);
 // a runner that knows them (this project's scripts/test.js) prints one failures-only JSON line,
 // which `parseFailures` / `parseCounts` read before any text format (`human_log`, `file_counts`).
@@ -46,20 +66,47 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
+const { classifyFailures, IN_CHANGE, OUTSIDE_CHANGE } = require('./affected-tests');
 const { parseAgentReport } = require('./agent-test-report');
 const { parseNodeCoverage, renderCoverageSummary } = require('../coverage-summary');
-const { processTreeCommands } = require('./processes');
-const { killTree } = require('./providers');
+const {
+  processTreeCommands,
+  stopProcessesIn,
+} = require('./processes');
+const { killTree, OWN_GROUP } = require('./providers');
+const { MAX_TEST_TIMEOUT_MS } = require('./test-timeouts');
+const { workerEnv } = require('../machine-profile');
 
 const SUITE_TIMEOUT_MS = 30 * 60e3;
 const MIN_TIMEOUT_MS = 10 * 60e3;
 const MAX_TIMEOUT_MS = 3 * 60 * 60e3;
 const TIMEOUT_FACTOR = 3;
+// the step's timeout stays this much above the largest per-test budget (#402)
+const BACKSTOP_MARGIN_MS = 2 * 60e3;
 const HISTORY = 10;
 const MAX_FAILURES = 30;
 const ERROR_LINES = 3;
 const MOCK_BASE_FILE = 'test/simulated-base.test.js';
+const MOCK_OUTSIDE_FILE = 'test/simulated-outside.test.js';
 const SELECTION_LINES = 20;
+// a test file rerun alone after a timed-out round (#396)
+const MIN_FILE_TIMEOUT_MS = 2 * 60e3;
+const FILE_TIMEOUT_MS = 5 * 60e3;
+// The longest command line per platform (#400): cmd.exe takes 8,191 characters (spawn wraps the
+// command in `cmd.exe /d /s /c "…"`, hence the margin); `sh -c` gets it as one argument, at most
+// MAX_ARG_STRLEN (128 KiB) on Linux; macOS's ARG_MAX (1 MiB) also holds the environment.
+const COMMAND_LINE_LIMITS = {
+  darwin: { name: 'macOS', chars: 256 * 1024 },
+  linux: { name: 'Linux', chars: 128 * 1024 },
+  win32: { name: 'Windows', chars: 8191 },
+};
+const COMMAND_LINE_MARGIN = 100;
+// what a shell prints when it refuses a command line (#400): no test ran
+const SHELL_REFUSALS = [
+  /argument list too long/i,
+  /command line is too long/i,
+  /linha de comando muito longa/i,
+];
 
 const exists = (dir, f) => { try { return fs.existsSync(path.join(dir, f)); } catch { return false; } };
 const someFile = (dir, re) => { try { return fs.readdirSync(dir).some((f) => re.test(f)); } catch { return false; } };
@@ -232,9 +279,10 @@ function isFullSuiteCommand(cmd, suiteCommand) {
 // would share, an inherited screenshot slot); inspector flags are cut from NODE_OPTIONS (node --test
 // runs one file at a time under an inspector). Set: MULTIAGENT_SIMULATION_ONLY=1, MULTIAGENT_AGENT_MODE=1
 // (#219: a runner that knows it prints the failures-only JSON, src/engine/agent-test-report.js) and,
-// with locksDir, MULTIAGENT_LOCKS_DIR (the suite's own screenshot slot). → { env, removed: [names] }
+// with locksDir, MULTIAGENT_LOCKS_DIR (the suite's own screenshot slot); with testWorkers, the run's
+// test workers (#367, src/machine-profile.js workerEnv), never an inherited value. → { env, removed: [names] }
 const DROP_ENV = /^(ELECTRON_|CHROME_CRASHPAD|NPM_|CLAUDECODE$|NODE_TEST_CONTEXT$|VSCODE_INSPECTOR_OPTIONS$|MULTIAGENT_)/i;
-function suiteEnv(env = {}, { locksDir } = {}) {
+function suiteEnv(env = {}, { locksDir, testWorkers } = {}) {
   const out = {};
   const removed = [];
   for (const [k, v] of Object.entries(env)) {
@@ -251,7 +299,20 @@ function suiteEnv(env = {}, { locksDir } = {}) {
   out.MULTIAGENT_SIMULATION_ONLY = '1';
   out.MULTIAGENT_AGENT_MODE = '1';
   if (locksDir) out.MULTIAGENT_LOCKS_DIR = locksDir;
-  return { env: out, removed: removed.filter((k) => !/^MULTIAGENT_(SIMULATION_ONLY|AGENT_MODE|LOCKS_DIR)$/i.test(k)).sort() };
+  if (testWorkers) Object.assign(out, workerEnv({ testWorkers }));
+  const replaced = (k) => /^MULTIAGENT_(SIMULATION_ONLY|AGENT_MODE|LOCKS_DIR)$/i.test(k) || (!!testWorkers && /^MULTIAGENT_(TEST|E2E)_WORKERS$/i.test(k));
+  return { env: out, removed: removed.filter((k) => !replaced(k)).sort() };
+}
+
+// The suite's command with the run's test workers (#367) when it calls a runner that takes them
+// directly and does not set them already: `playwright test` → --workers, `jest` → --maxWorkers.
+// Anything else (npm test, pytest, go test…) gets them through the environment only.
+function withWorkers(command, testWorkers) {
+  const cmd = String(command || '');
+  if (!testWorkers || /\s&&\s|\|\||[;|]/.test(cmd)) return cmd;
+  if (/\bplaywright\s+test\b/.test(cmd) && !/\s(--workers|-j)\b/.test(cmd)) return `${cmd} --workers=${testWorkers}`;
+  if (/(^|[\s/\\])jest(\.js)?(\s|$)/.test(cmd) && !/\s(--maxWorkers|-w|--runInBand|-i)\b/.test(cmd)) return `${cmd} --maxWorkers=${testWorkers}`;
+  return cmd;
 }
 
 // The test files a list of processes runs, one per process (a runner listing many files is not one):
@@ -269,7 +330,11 @@ function runningTestFiles(procs, cwd) {
 // Runs `command` in a shell in cwd, its whole output into logFile → { code, timedOut, error, running };
 // running: on a timeout, the test files still running. Never rejects.
 // onSpawn(pid): the shell's process, for the memory guard (#276).
-function runCommand({ command, cwd, env, timeoutMs, signal, logFile, onSpawn }) {
+// It leaves nothing behind (#390): once the command has ended, timed out or been stopped, what its
+// process group still holds is stopped and, unless `sweep` is false (a folder the run does not own),
+// every process still running from cwd (src/engine/processes.js: test workers orphaned when their
+// runner ended, which taskkill /T can no longer find from the dead shell), named in the log.
+function runCommand({ command, cwd, env, timeoutMs, signal, logFile, onSpawn, sweep = true }) {
   const childEnv = { ...env };
   // the engine may run inside Electron as node: the suite's own Electron children must not
   delete childEnv.ELECTRON_RUN_AS_NODE;
@@ -278,7 +343,7 @@ function runCommand({ command, cwd, env, timeoutMs, signal, logFile, onSpawn }) 
     const out = fs.createWriteStream(logFile, { flags: 'a' });
     let child;
     try {
-      child = spawn(command, { cwd, env: childEnv, shell: true, windowsHide: true });
+      child = spawn(command, { cwd, env: childEnv, shell: true, windowsHide: true, ...OWN_GROUP });
     } catch (e) {
       out.end(`${e.message}\n`);
       resolve({ code: null, timedOut: false, error: e.message });
@@ -297,12 +362,17 @@ function runCommand({ command, cwd, env, timeoutMs, signal, logFile, onSpawn }) 
     }, timeoutMs);
     signal?.addEventListener('abort', stop, { once: true });
     let finished = false;
-    const done = (code, err) => {
+    const done = async (code, err) => {
       if (finished) return;
       finished = true;
       clearTimeout(timer);
       signal?.removeEventListener('abort', stop);
-      out.end(err ? `\n${err.message}\n` : '', () => resolve({ code, timedOut, error: err?.message || null, running }));
+      // the group outlives its leader while a member runs (never on Windows: a dead pid may be reused)
+      if (process.platform !== 'win32') killTree(child);
+      const left = sweep ? await stopProcessesIn(cwd).catch(() => []) : [];
+      const named = left.map((p) => `pid ${p.pid}${p.stopped ? '' : ` (not stopped: ${p.error})`}: ${p.cmd || p.exe || '?'}`);
+      const note = named.length ? `\nStopped ${named.length} process(es) the command left running in ${cwd}:\n${named.join('\n')}\n` : '';
+      out.end(`${err ? `\n${err.message}\n` : ''}${note}`, () => resolve({ code, timedOut, error: err?.message || null, running }));
     };
     child.on('error', (e) => done(null, e));
     child.on('close', (code) => done(code));
@@ -325,6 +395,9 @@ function mockSuite(result, preexisting) {
   // the simulated base fails the tests of MOCK_BASE_FILE only (checkOnBase)
   const onBase = `test at ${MOCK_BASE_FILE}:7:3\n✖ simulated failure already on the base (2.4ms)\n  AssertionError [ERR_ASSERTION]: fails on main too\n`;
   if (result === 'base') return { code: 1, text: `✖ failing tests:\n\n${onBase}\nℹ pass 41\nℹ fail 1\n` };
+  if (result === 'outside') {
+    return { code: 1, text: `✖ failing tests:\n\ntest at ${MOCK_OUTSIDE_FILE}:9:3\n✖ simulated failure outside the change (2.2ms)\n  AssertionError [ERR_ASSERTION]: a flaky test the change does not reach\n\nℹ pass 41\nℹ fail 1\n` };
+  }
   if (result === 'mixed') {
     return { code: 1, text: `✖ failing tests:\n\ntest at test/simulated.test.js:12:3\n✖ simulated failing test (3.1ms)\n  AssertionError [ERR_ASSERTION]: simulated failure\n\n${onBase}\nℹ pass 40\nℹ fail 2\n` };
   }
@@ -332,13 +405,16 @@ function mockSuite(result, preexisting) {
 }
 
 // The step's timeout from the project's recent suite durations (ms): TIMEOUT_FACTOR × their median,
-// between MIN_TIMEOUT_MS and MAX_TIMEOUT_MS; `fallback` without history.
-function suiteTimeout(durations, fallback = SUITE_TIMEOUT_MS) {
+// between `min` (MIN_TIMEOUT_MS) and MAX_TIMEOUT_MS; `fallback` without history.
+// A backstop (#402): never under the largest per-test budget plus BACKSTOP_MARGIN_MS, so a hung test
+// fails by name (its own budget) before the step's timeout could kill the whole round. #396's alone
+// rerun of one file passes `floor` 0: its own timeouts are unchanged.
+function suiteTimeout(durations, fallback = SUITE_TIMEOUT_MS, min = MIN_TIMEOUT_MS, floor = MAX_TEST_TIMEOUT_MS + BACKSTOP_MARGIN_MS) {
   const d = (durations || []).filter((x) => Number.isFinite(x) && x > 0).sort((a, b) => a - b);
-  if (!d.length) return fallback;
+  if (!d.length) return Math.max(floor, fallback);
   const mid = d.length >> 1;
   const median = d.length % 2 ? d[mid] : (d[mid - 1] + d[mid]) / 2;
-  return Math.round(Math.min(MAX_TIMEOUT_MS, Math.max(MIN_TIMEOUT_MS, TIMEOUT_FACTOR * median)));
+  return Math.round(Math.min(MAX_TIMEOUT_MS, Math.max(floor, min, TIMEOUT_FACTOR * median)));
 }
 
 const readJson = (file) => { try { return JSON.parse(fs.readFileSync(file, 'utf8')) || {}; } catch { return {}; } };
@@ -362,15 +438,71 @@ function recordDuration(history, ms) {
 }
 
 // The suite's command restricted to `files`, or null when it cannot be: npm/pnpm/yarn test (the
-// files after `--`, the project's runner gets them), pytest, node --test without files of its own.
+// files after `--`, the project's runner gets them), a package script without arguments of its own
+// (#324: `npm run test:e2e -- <feature files>` reaches `playwright test` after `bddgen`; pnpm and
+// yarn pass them on without `--`), pytest, node --test without files of its own.
 function filteredCommand(command, files) {
   const c = String(command || '').trim();
   if (!c || !files.length) return null;
   const list = files.map((f) => (/[\s"&|<>^()]/.test(f) ? `"${f}"` : f)).join(' ');
   if (/^(npm|pnpm|yarn)( run)? (test|t)$/.test(c)) return `${c} -- ${list}`;
+  if (/^npm run(-script)? [\w:.-]+$/.test(c)) return `${c} -- ${list}`;
+  if (/^(pnpm|yarn)( run)? [\w:.-]+$/.test(c)) return `${c} ${list}`;
   if (/^((uv|poetry) run )?(python3? -m )?pytest\b/.test(c)) return `${c} ${list}`;
   if (/^node\b.*\s--test\b/.test(c) && !new RegExp(TEST_FILE.source).test(c)) return `${c} ${list}`;
   return null;
+}
+
+// Whether a command fits the platform's command line (#400), with COMMAND_LINE_MARGIN to spare.
+const commandLineOf = (platform) => COMMAND_LINE_LIMITS[platform] || COMMAND_LINE_LIMITS.linux;
+const fitsCommandLine = (command, platform = process.platform) => String(command || '').length <= commandLineOf(platform).chars - COMMAND_LINE_MARGIN;
+// Why `n` test files cannot go on the command (#400), e.g. "319 test files would put the command
+// over the Windows command-line limit of 8,191 characters"
+function overCommandLine(n, platform = process.platform) {
+  const { name, chars } = commandLineOf(platform);
+  return `${plural(n, 'test file')} would put the command over the ${name} command-line limit of ${chars.toLocaleString('en-US')} characters`;
+}
+
+// Why the base check cannot run `files` on its own command line, or null: the command cannot take
+// single files, or (#400) too many of them for the platform's command line.
+function baseFilesSkip(command, files, platform) {
+  const filtered = filteredCommand(command, files);
+  if (!filtered) return `\`${command}\` cannot run single test files`;
+  return fitsCommandLine(filtered, platform) ? null : `${overCommandLine(files.length, platform)}: not checked on the base`;
+}
+
+// Narrows a suite round to `files` (#212): out.scope and out.command when the filtered command fits
+// the command line with its coverage and workers wrappers (#400), else the whole suite runs and
+// out.selection.why says why. → { measure, tooLong }: whether the round measures the whole suite's
+// duration, and why its files did not fit (null when they did).
+function narrowToFiles(out, { files, mock, coverage, cwd, testWorkers, platform, log }) {
+  const filtered = filteredCommand(out.command, files);
+  if (!filtered) {
+    if (out.selection) out.selection = { ...out.selection, why: `${out.selection.why}; \`${out.command}\` cannot run single test files: the whole suite ran` };
+    return { measure: true, tooLong: null };
+  }
+  // #400: measured as it will run, with the coverage and workers wrappers
+  const wrapped = mock ? filtered : withWorkers(coverage ? coverageCommand(filtered, cwd) : filtered, testWorkers);
+  if (fitsCommandLine(wrapped, platform)) {
+    out.scope = 'files';
+    out.command = filtered;
+    return { measure: false, tooLong: null };
+  }
+  const tooLong = overCommandLine(files.length, platform);
+  out.selection = { ...(out.selection || { files }), why: `${out.selection?.why ? `${out.selection.why}; ` : ''}${tooLong}: the whole suite ran` };
+  log('warn', `suite: ${tooLong}: the whole suite runs`);
+  return { measure: true, tooLong };
+}
+
+// #400: why the shell refused the command line (its last log line) when no test ran, or null: not a
+// failure an agent can fix.
+function shellRefusal(r, text, report, cwd) {
+  if (r.code === 0 || r.timedOut || report) return null;
+  const last = clean(text).split(/\r?\n/).map((l) => l.trim()).filter(Boolean).pop() || '';
+  if (!SHELL_REFUSALS.some((re) => re.test(last))) return null;
+  const counts = parseCounts(text);
+  if (counts.passed != null || counts.failed != null || parseFailures(text, { cwd }).length) return null;
+  return `the shell refused the command, no test ran (exit ${r.code ?? '?'}): ${last}`;
 }
 
 // Base results cached per base commit + file: <cacheDir>/<commit>.json, { <file>: { failing: [test names], at } }
@@ -379,8 +511,9 @@ const sameFile = (a, b) => String(a || '').split(/[\\/]/).pop() === String(b || 
 
 // Which of `failures` also fail on the base (#211): their test files run in the base checkout (cached
 // per commit + file). → { onBase: [failure], info: { status: done | skipped, commit, files, cached,
-// ran, log, reason } }; never throws.
-async function checkOnBase({ command, failures, base, mock, env, timeoutMs, signal, run = runCommand, logFile, runDir, cacheDir, log = () => {} }) {
+// ran, log, reason } }; never throws. Too many files for the platform's command line (#400): skipped,
+// like a command that cannot run single files.
+async function checkOnBase({ command, failures, base, mock, env, timeoutMs, signal, run = runCommand, logFile, runDir, cacheDir, log = () => {}, platform = process.platform }) {
   const info = { status: 'skipped', commit: null, files: [], cached: [], ran: [], log: null, reason: null };
   const files = [...new Set(failures.map((f) => f.file).filter(Boolean))].sort();
   info.files = files;
@@ -390,7 +523,8 @@ async function checkOnBase({ command, failures, base, mock, env, timeoutMs, sign
     return { onBase: failures.filter((f) => f.file === MOCK_BASE_FILE), info };
   }
   if (typeof base !== 'function') { info.reason = 'the run has no base checkout'; return { onBase: [], info }; }
-  if (!filteredCommand(command, files)) { info.reason = `\`${command}\` cannot run single test files`; return { onBase: [], info }; }
+  info.reason = baseFilesSkip(command, files, platform);
+  if (info.reason) return { onBase: [], info };
   let b = null;
   try { b = await base(); } catch (e) { info.reason = `the base checkout could not be prepared: ${e.message}`; return { onBase: [], info }; }
   if (!b?.dir || !fs.existsSync(b.dir)) { info.reason = 'the run has no base checkout'; return { onBase: [], info }; }
@@ -506,6 +640,114 @@ function saveCoverage(text, runDir, changedFiles) {
   return { ...summary.totals, files: summary.files.length, path: rel };
 }
 
+// runCommand's optional arguments, only when they differ from its defaults
+const optionalRunArgs = ({ onSpawn, sweep }) => ({ ...(onSpawn ? { onSpawn } : {}), ...(sweep ? {} : { sweep: false }) });
+
+// One test file run alone (#396), its log written whole → { status: pass | fail | hang, ms, timeout_ms,
+// failures, log }; never throws.
+async function runFileAlone({ command, file, cwd, where, env, timeoutMs, signal, run, logFile, runDir, cmdArgs = {} }) {
+  const cmd = filteredCommand(command, [file]);
+  fs.mkdirSync(path.dirname(logFile), { recursive: true });
+  fs.writeFileSync(logFile, `$ ${cmd}\n# ${file} alone ${where} (${cwd}), timeout ${Math.round(timeoutMs / 60e3)} min: it was still running when the round timed out\n`);
+  const t0 = Date.now();
+  const r = await run({ command: cmd, cwd, env: env ? { ...env, MULTIAGENT_TEST_HUMAN_LOG: humanLog(logFile) } : env, timeoutMs, signal, logFile, ...cmdArgs });
+  const ms = Date.now() - t0;
+  let text = '';
+  try { text = fs.readFileSync(logFile, 'utf8'); } catch { /* no log */ }
+  const status = r.timedOut ? 'hang' : r.code === 0 ? 'pass' : 'fail';
+  const failures = status === 'fail' ? parseFailures(text, { cwd }) : [];
+  if (status === 'fail' && !failures.length) failures.push({ test: '(unrecognized failure)', file, error: `exit ${r.code ?? '?'}${r.error ? `: ${r.error}` : ''} when run alone` });
+  return { status, ms, timeout_ms: timeoutMs, failures, log: runDir ? path.relative(runDir, logFile).split(path.sep).join('/') : logFile };
+}
+
+// A timed-out round (#396): each file still running reruns alone on the branch and, when it hangs
+// there too, alone on the base. → { failures (of the files that failed alone on the branch), entries
+// (one per file: outside the change with its reason, or a hang to classify), files: [{ file, branch,
+// base }] }. history: { file, project } (the files' alone durations, their timeouts).
+async function rerunAlone({ files, command, cwd, env, base, signal, run, runDir, stem, history, log, cmdArgs }) {
+  const out = { failures: [], entries: [], files: [] };
+  const sec = (ms) => `${(ms / 1e3).toFixed(1)} s`;
+  const min = (ms) => `${Math.round(ms / 60e3)} min`;
+  let b;
+  const baseDir = async () => {
+    if (b !== undefined) return b;
+    b = null;
+    if (typeof base !== 'function') return b;
+    try { const r = await base(); if (r?.dir && fs.existsSync(r.dir)) b = r; } catch { /* reported as no base */ }
+    return b;
+  };
+  for (const [i, file] of files.entries()) {
+    if (signal?.aborted) break;
+    const hist = history?.file && history.project ? { file: history.file, key: `${history.project}\n${file} (alone)` } : null;
+    const timeoutMs = suiteTimeout(suiteDurations(hist), FILE_TIMEOUT_MS, MIN_FILE_TIMEOUT_MS, 0);
+    const logFile = path.join(runDir, 'logs', `${stem}-alone-${i + 1}.log`);
+    log('info', `suite: ${file} was still running when the round timed out: rerunning it alone (log ${path.basename(logFile)})`);
+    const onBranch = await runFileAlone({ command, file, cwd, where: 'on the branch', env, timeoutMs, signal, run, logFile, runDir, cmdArgs });
+    const record = { file, branch: onBranch, base: null };
+    out.files.push(record);
+    if (onBranch.status !== 'hang') {
+      recordDuration(hist, onBranch.ms);
+      out.failures.push(...onBranch.failures.map((f) => ({ ...f, file: f.file || file })));
+      const how = onBranch.status === 'pass' ? 'passes' : 'finishes (failing, its failures are listed apart)';
+      out.entries.push({ test: '(timed out in the whole suite)', file, error: `${how} alone on the branch in ${sec(onBranch.ms)}: it hung only in the whole suite`, class: OUTSIDE_CHANGE, class_reason: `finishes alone on the branch (${onBranch.status === 'pass' ? 'passes' : 'fails'})` });
+      continue;
+    }
+    const hang = `hangs alone on the branch too (timed out after ${min(timeoutMs)})`;
+    const b2 = await baseDir();
+    const why = !b2 ? 'the run has no base checkout' : !exists(b2.dir, file) ? 'the base does not have it' : null;
+    if (why || signal?.aborted) {
+      out.entries.push({ test: '(timed out)', file, error: `${hang}; not checked on the base: ${why || 'cancelled'}` });
+      continue;
+    }
+    const at = b2.commit ? ` (${String(b2.commit).slice(0, 8)})` : '';
+    const onBase = await runFileAlone({ command, file, cwd: b2.dir, where: `in the base checkout${at}`, env, timeoutMs, signal, run, logFile: path.join(runDir, 'logs', `${stem}-alone-${i + 1}-base.log`), runDir });
+    record.base = onBase;
+    if (onBase.status === 'pass') {
+      out.entries.push({ test: '(timed out)', file, error: `${hang} and passes alone on the base${at} in ${sec(onBase.ms)}` });
+    } else {
+      const reason = onBase.status === 'hang' ? `hangs alone on the base too${at}` : `fails alone on the base too${at}`;
+      out.entries.push({ test: '(timed out)', file, error: `${hang}; ${reason}${onBase.failures[0] ? `: ${onBase.failures[0].test}` : ''}`, class: OUTSIDE_CHANGE, class_reason: reason });
+    }
+  }
+  return out;
+}
+
+// The counted failures with their class (#396): in mock runs the simulated import graph (every
+// simulated test file reaches the change but MOCK_OUTSIDE_FILE), else classifyFailures from cwd and
+// the run's changed files (when they cannot be listed, every failure counts as in the change).
+function classify(failures, { mock, cwd, changedFiles }) {
+  if (mock) {
+    return failures.map((f) => (f.class ? f : f.file === MOCK_OUTSIDE_FILE
+      ? { ...f, class: OUTSIDE_CHANGE, class_reason: '(simulated) reaches none of the changed files' }
+      : { ...f, class: IN_CHANGE, class_reason: '(simulated) imports src/simulated.js' }));
+  }
+  let changed = null;
+  try { changed = typeof changedFiles === 'function' ? changedFiles() : changedFiles; } catch { changed = null; }
+  return classifyFailures({ root: cwd, changed: Array.isArray(changed) ? changed : null, failures });
+}
+
+// runSuite's failures with their class and `in_change` / `outside_change` (#396), when the caller
+// gives the run's changed files (the engine does).
+function classifyOutput(out, { mock, cwd, changedFiles }) {
+  if (!out.failures.length || changedFiles == null) return;
+  out.failures = classify(out.failures, { mock, cwd, changedFiles });
+  out.in_change = out.failures.filter((f) => f.class === IN_CHANGE).length;
+  out.outside_change = out.failures.length - out.in_change;
+}
+
+// A timed-out round of runSuite (#396): the files still running rerun alone on the branch (and on the
+// base); `out.alone` lists them and their failures join out.failures (out.preexisting when the run
+// knows them) → rerunAlone's result, or null when there is nothing to rerun.
+async function rerunTimedOut(out, { preexisting, signal, logName, round, ...args }) {
+  if (!out.timed_out || !out.running.length || !filteredCommand(out.command, out.running) || signal?.aborted) return null;
+  const alone = await rerunAlone({ ...args, files: out.running, command: out.command, signal, stem: logName || `suite-${round}` });
+  out.alone = alone.files.map((r) => ({ file: r.file, branch: r.branch.status, base: r.base?.status || null, timeout_ms: r.branch.timeout_ms, log: r.branch.log, base_log: r.base?.log || null }));
+  const known = alone.failures.filter((f) => preexisting.some((p) => sameTest(f, p)));
+  out.preexisting.push(...known);
+  out.failures.push(...alone.failures.filter((f) => !known.includes(f)));
+  return alone;
+}
+
 // command: rendered (empty: detected); cwd: the worktree; runDir: the run folder (log under logs/);
 // round: the step's visit; env: the engine's environment (suiteEnv cleans it);
 // preexisting: the run's known pre-existing failures [{ test, file, reason }]; mockResult: see above;
@@ -521,17 +763,25 @@ function saveCoverage(text, runDir, changedFiles) {
 // has node's coverage report, <run_dir>/coverage/coverage-summary.md (the totals and the changed files',
 // changedFiles(): the files the run changed) is written and `coverage` added to the output.
 // onSpawn(pid): the command's process, watched by the memory guard (#276).
-async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = 'pass', preexisting = [], signal, timeoutMs, history, base, baseCacheDir, run = runCommand, log = () => {}, files = null, selection = null, logName = null, coverage = false, changedFiles = null, onSpawn = null }) {
+// testWorkers (#367): the run's test workers per run, in the env and on the command (withWorkers).
+// sweep (#390): false when cwd is not a folder the run owns (no worktree): runCommand then stops only
+// the command's own tree, not every process running from cwd.
+// platform (#400): whose command-line limit the filtered command (with its wrappers) must fit, else
+// the whole suite runs and `selection.why` and the message say why.
+// baseCommit (#403): the base commit the round tests on, named in the log's header.
+async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = 'pass', preexisting = [], signal, timeoutMs, history, base, baseCacheDir, run = runCommand, log = () => {}, files = null, selection = null, logName = null, coverage = false, changedFiles = null, onSpawn = null, testWorkers = null, sweep = true, platform = process.platform, baseCommit = null }) {
   const logFile = runDir ? path.join(runDir, 'logs', `${logName || `suite-${round}`}.log`) : null;
   const out = {
     kind: 'suite', status: 'blocked', round, scope: 'full', command: null, log: logFile ? path.relative(runDir, logFile).split(path.sep).join('/') : null,
     exit_code: null, duration_ms: 0, timed_out: false, timeout_ms: null, running: [], passed: null, failed: null, failures: [], preexisting: [], preexisting_failures: [], base_check: null, selection, reason: null, message: '',
   };
-  const what = () => (out.scope === 'files' ? `The selected tests (${plural(out.selection?.files?.length ?? files.length, 'test file')})` : 'The suite');
+  let tooLong = null;
+  const what = () => (out.scope === 'files' ? `The selected tests (${plural(out.selection?.files?.length ?? files.length, 'test file')})` : tooLong ? `The whole suite (${tooLong})` : 'The suite');
   const finish = () => {
     const pre = out.preexisting.length ? ` (${plural(out.preexisting.length, 'pre-existing failure')} not counted: they fail on the base too)` : '';
+    const classes = out.in_change != null ? ` (${[out.in_change ? `${out.in_change} ${IN_CHANGE}` : '', out.outside_change ? `${out.outside_change} ${OUTSIDE_CHANGE}` : ''].filter(Boolean).join(', ')})` : '';
     out.message = out.status === 'pass' ? `${what()} passed in round ${round}${out.command ? ` (\`${out.command}\`)` : ''}${pre}.`
-      : out.status === 'fail' ? `${what()} failed in round ${round} (\`${out.command}\`): ${plural(out.failures.length, 'failing test')}${out.timed_out ? ', timed out' : ''}${pre}. Log: ${out.log}`
+      : out.status === 'fail' ? `${what()} failed in round ${round} (\`${out.command}\`): ${plural(out.failures.length, 'failing test')}${classes}${out.timed_out ? ', timed out' : ''}${pre}. Log: ${out.log}`
         : `The suite could not run: ${out.reason}`;
     return out;
   };
@@ -551,21 +801,20 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
       out.message = `No test file to run in round ${round}: ${selection?.why || 'none selected'}.`;
       return out;
     }
-    const filtered = filteredCommand(out.command, files);
-    if (filtered) { out.scope = 'files'; out.command = filtered; measure = false; }
-    else if (out.selection) out.selection = { ...out.selection, why: `${out.selection.why}; \`${out.command}\` cannot run single test files: the whole suite ran` };
+    ({ measure, tooLong } = narrowToFiles(out, { files, mock, coverage, cwd, testWorkers, platform, log }));
   }
-  if (coverage && !mock) out.command = coverageCommand(out.command, cwd);
+  if (!mock) out.command = withWorkers(coverage ? coverageCommand(out.command, cwd) : out.command, testWorkers);
   const recent = mock ? [] : suiteDurations(hist);
   out.timeout_ms = timeoutMs || suiteTimeout(recent);
   const timeoutWhy = timeoutMs ? 'the step\'s timeout' : recent.length ? `${TIMEOUT_FACTOR}× the median of the last ${plural(recent.length, 'suite run')}` : 'the default, no suite run measured yet';
-  const childEnv = mock ? null : suiteEnv(env || process.env, { locksDir: path.join(runDir, 'locks') });
+  const childEnv = mock ? null : suiteEnv(env || process.env, { locksDir: path.join(runDir, 'locks'), testWorkers });
   if (logFile) {
     fs.mkdirSync(path.dirname(logFile), { recursive: true });
     // what the suite gets, so a slow round can be compared with a shell (#210)
     const about = mock ? '' : `# engine: os.availableParallelism()=${os.availableParallelism()}, cpus=${os.cpus().length}; timeout ${Math.round(out.timeout_ms / 60e3)} min (${timeoutWhy})\n`
       + `# env: removed ${childEnv.removed.join(', ') || 'nothing'}; set MULTIAGENT_SIMULATION_ONLY=1, MULTIAGENT_AGENT_MODE=1, MULTIAGENT_LOCKS_DIR=${childEnv.env.MULTIAGENT_LOCKS_DIR}, MULTIAGENT_TEST_HUMAN_LOG=${humanLog(logFile)}\n`;
-    fs.writeFileSync(logFile, `$ ${out.command}${mock ? '   (simulated: nothing was run)' : ''}\n${about}`);
+    const onBase = baseCommit ? `# base: tested on top of ${baseCommit}\n` : '';
+    fs.writeFileSync(logFile, `$ ${out.command}${mock ? '   (simulated: nothing was run)' : ''}\n${about}${onBase}`);
   }
   const t0 = Date.now();
   let text = '';
@@ -577,7 +826,7 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
     if (logFile) fs.appendFileSync(logFile, text);
   } else {
     log('info', `suite: ${out.command} (round ${round}, timeout ${Math.round(out.timeout_ms / 60e3)} min, log ${out.log})`);
-    const r = await run({ command: out.command, cwd, env: { ...childEnv.env, MULTIAGENT_TEST_HUMAN_LOG: humanLog(logFile) }, timeoutMs: out.timeout_ms, signal, logFile, ...(onSpawn ? { onSpawn } : {}) });
+    const r = await run({ command: out.command, cwd, env: { ...childEnv.env, MULTIAGENT_TEST_HUMAN_LOG: humanLog(logFile) }, timeoutMs: out.timeout_ms, signal, logFile, ...optionalRunArgs({ onSpawn, sweep }) });
     out.exit_code = r.code;
     out.timed_out = r.timedOut;
     out.running = r.running || [];
@@ -593,6 +842,8 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
       out.duration_ms = Date.now() - t0;
       return finish();
     }
+    out.reason = shellRefusal(r, text, report, cwd);
+    if (out.reason) { out.duration_ms = Date.now() - t0; return finish(); }
   }
   out.duration_ms = Date.now() - t0;
   // a run that ended (not cut by the timeout, not cancelled) measures the suite for the next timeouts
@@ -607,12 +858,16 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
   const failures = parseFailures(text, { cwd });
   out.preexisting = failures.filter((f) => preexisting.some((p) => sameTest(f, p)));
   out.failures = failures.filter((f) => !out.preexisting.includes(f));
+  // a timed-out round (#396): the files still running, rerun alone on the branch (and on the base)
+  const alone = await rerunTimedOut(out, {
+    preexisting, cwd, env: childEnv?.env, base, signal, run, runDir, logName, round, history, log, cmdArgs: optionalRunArgs({ onSpawn, sweep }),
+  });
   // the failures the run does not know yet: do they fail on the base too? (#211)
-  if (!out.timed_out && out.failures.length && (base || mock) && !signal?.aborted) {
+  if (out.failures.length && (base || mock) && !signal?.aborted) {
     const { onBase, info } = await checkOnBase({
       command: out.command, failures: out.failures, base, mock, signal, run,
       env: childEnv ? { ...childEnv.env, MULTIAGENT_TEST_HUMAN_LOG: humanLog(path.join(runDir, 'logs', `suite-${round}-base.log`)) } : undefined, timeoutMs: out.timeout_ms,
-      logFile: logFile ? path.join(runDir, 'logs', `suite-${round}-base.log`) : null, runDir, cacheDir: baseCacheDir, log,
+      logFile: logFile ? path.join(runDir, 'logs', `suite-${round}-base.log`) : null, runDir, cacheDir: baseCacheDir, log, platform,
     });
     out.base_check = info;
     if (onBase.length) {
@@ -622,7 +877,8 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
       out.preexisting_failures = onBase.map((f) => ({ test: f.test, file: f.file, reason: `fails on the base too${where}: ${String(f.error || '').split('\n')[0]}`.replace(/: $/, '') }));
     }
   }
-  if (out.timed_out) {
+  if (alone) out.failures.push(...alone.entries);
+  else if (out.timed_out) {
     const still = out.running.length ? ` Still running: ${out.running.join(', ')}.` : '';
     out.failures.push({ test: '(the whole suite)', file: '', error: `timed out after ${Math.round(out.timeout_ms / 60e3)} min (${timeoutWhy}): a test hangs or the suite is too slow.${still}` });
   } else if (!failures.length) {
@@ -630,8 +886,30 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
     const tail = clean(text).split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(-ERROR_LINES).join('\n');
     out.failures.push({ test: '(unrecognized failure)', file: '', error: `exit ${out.exit_code ?? '?'}${tail ? `: ${tail}` : ''}`.slice(0, 400) });
   }
+  classifyOutput(out, { mock, cwd, changedFiles });
   out.status = out.failures.length ? 'fail' : 'pass';
   return finish();
+}
+
+// How one round of a suite step ran (#324), e.g. "focused on 2 files: 12 scenarios (12 passed, 0
+// failed), 1.5 min; then whole: 193 scenarios (193 passed, 0 failed), 44.0 min" or "whole: …",
+// with the commit the round tested (#364, "; at abc1234") and, for a focused round that completed
+// without a whole rerun, the whole run its result rests on; '' when the output is not a suite's.
+function suiteScope(output, noun = 'test') {
+  if (output?.kind !== 'suite') return '';
+  const part = (o, what) => {
+    const counts = o.passed == null && o.failed == null ? `${noun}s unknown` : `${plural((o.passed || 0) + (o.failed || 0), noun)} (${o.passed || 0} passed, ${o.failed || 0} failed)`;
+    return `${what}: ${counts}, ${(Number(o.duration_ms || 0) / 60e3).toFixed(1)} min`;
+  };
+  const focused = (files) => `focused on ${plural((files || []).length, 'file')}`;
+  const short = (sha) => String(sha).slice(0, 7);
+  let text = output.whole_run?.commit
+    ? `${part(output.affected || output, focused(output.affected?.files || output.selection?.files))}; no whole rerun, round ${output.whole_run.round}'s whole run (${short(output.whole_run.commit)}) stands for the other files`
+    : output.affected
+      ? `${part(output.affected, focused(output.affected.files))}; then ${part(output, 'whole')}`
+      : part(output, output.scope === 'files' ? focused(output.selection?.files) : 'whole');
+  if (output.commit) text += `; at ${short(output.commit)}`;
+  return text;
 }
 
 // A suite output for a prompt or a gate's message: the result, the log and one line per failing
@@ -648,7 +926,7 @@ function suiteMessage(output) {
     if ((sel.files || []).length > SELECTION_LINES) lines.push(`- … and ${sel.files.length - SELECTION_LINES} more`);
   } else if (sel?.why) lines.push(`Whole suite: ${sel.why}`);
   if (output.failures?.length) lines.push('Failures:');
-  for (const f of output.failures || []) lines.push(`- ${f.test}${f.file ? ` (${f.file}${f.line ? `:${f.line}` : ''})` : ''}${f.error ? `: ${String(f.error).split('\n')[0]}` : ''}${f.trace ? ` [trace: ${f.trace}]` : ''}`);
+  for (const f of output.failures || []) lines.push(`- ${f.test}${f.file ? ` (${f.file}${f.line ? `:${f.line}` : ''})` : ''}${f.error ? `: ${String(f.error).split('\n')[0]}` : ''}${f.trace ? ` [trace: ${f.trace}]` : ''}${f.class ? ` [${f.class}: ${f.class_reason}]` : ''}`);
   if (output.human_log && output.failures?.length) lines.push(`Human-readable report (read only the lines you need): ${output.human_log}`);
   if (output.preexisting?.length) {
     lines.push('Also failing on the base (reported, not chased):');
@@ -706,5 +984,7 @@ module.exports = {
   SUITE_TIMEOUT_MS,
   suiteEnv,
   suiteMessage,
+  suiteScope,
   suiteTimeout,
+  withWorkers,
 };

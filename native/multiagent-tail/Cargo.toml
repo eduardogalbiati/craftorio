@@ -1,0 +1,19 @@
+[package]
+name = "multiagent-tail"
+version = "1.0.0"
+description = "The external live terminal's follower: prints a session's or a run's log as it grows, like src/session-tail.js"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+jiff = "0.2"
+serde_json = { workspace = true, features = ["preserve_order"] }
+
+# turns on the console's ANSI colours on conhost (Windows Terminal has them on already)
+[target.'cfg(windows)'.dependencies]
+anstyle-query = "1"
+
+[lints]
+workspace = true

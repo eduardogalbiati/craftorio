@@ -14,48 +14,25 @@
 // Session: { provider, id, title, cwd, model, createdAt, updatedAt, headless }
 
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
+const { cliConfigDirs, cliSessionDirs } = require('./cli-config-dirs');
+const registry = require('./shared/providers');
 
 const HEAD_BYTES = 512 * 1024;
 const TAIL_BYTES = 256 * 1024;
 const TITLE_MAX = 120;
 const cache = new Map(); // file -> { key, session }
 
-// The interactive CLIs: what the Sessions screen can start or reopen.
-const CLI_PROVIDERS = {
-  claude: {
-    name: 'Claude Code', command: 'claude',
-    models: ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-fable-5-1', 'claude-haiku-4-5'],
-    efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
-    newArgs: ({ model, effort }) => [...(model ? ['--model', model] : []), ...(effort ? ['--effort', effort] : [])],
-    resumeArgs: (id) => ['--resume', id],
-  },
-  codex: {
-    name: 'Codex CLI', command: 'codex',
-    models: ['gpt-6-luna'],
-    efforts: ['low', 'medium', 'high', 'xhigh'],
-    // --no-daemon: the terminal owns its Codex process. Through the shared background server the
-    // conversation would outlive the terminal (and the server can refuse a WinGet install:
-    // "the CLI package does not match this platform or executable").
-    newArgs: ({ model, effort }) => ['--no-daemon', ...(model ? ['-m', model] : []), ...(effort ? ['-c', `model_reasoning_effort=${effort}`] : [])],
-    resumeArgs: (id) => ['resume', '--no-daemon', id],
-  },
-  grok: {
-    name: 'Grok Build', command: 'grok',
-    models: ['grok-4.7'],
-    efforts: ['low', 'medium', 'high', 'xhigh'],
-    newArgs: ({ model, effort }) => [...(model ? ['-m', model] : []), ...(effort ? ['--reasoning-effort', effort] : [])],
-    resumeArgs: (id) => ['--resume', id],
-  },
-};
+// The interactive CLIs: what the Sessions screen can start or reopen (from their adapters,
+// src/shared/providers/: models, efforts, newArgs, interactiveResumeArgs, modelsCache).
+const CLI_PROVIDERS = Object.fromEntries(registry.clis().map((a) => [a.id, {
+  name: a.label, command: a.cli, models: a.models, efforts: a.efforts,
+  newArgs: a.newArgs, resumeArgs: a.interactiveResumeArgs, modelsCache: a.modelsCache || null,
+}]));
 
 // The models each CLI offers this account, from the list the CLI itself caches (refreshed whenever
-// it runs), in the CLI's own order: [{ id, name, efforts, defaultEffort }]. Claude Code keeps no
-// such list, and a missing cache falls back to CLI_PROVIDERS' models.
-//   Codex  ~/.codex/models_cache.json  models[]: slug, display_name, visibility ('list' = shown),
-//          priority, supported_reasoning_levels[].effort, default_reasoning_level
-//   Grok   ~/.grok/models_cache.json   models{}: info.id, name, hidden, reasoning_efforts[].value, reasoning_effort
+// it runs; its adapter's modelsCache reads it), in the CLI's own order: [{ id, name, efforts,
+// defaultEffort }]. Claude Code keeps no such list, and a missing cache falls back to CLI_PROVIDERS' models.
 const EFFORT_ORDER = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'];
 const byEffort = (list) => [...list].sort((a, b) => (EFFORT_ORDER.indexOf(a) + 1 || 99) - (EFFORT_ORDER.indexOf(b) + 1 || 99));
 
@@ -64,23 +41,16 @@ function cachedModels(provider, home) {
 }
 
 function rawCachedModels(provider, home) {
-  const read = (rel) => { try { return JSON.parse(fs.readFileSync(path.join(home, rel), 'utf8')); } catch { return null; } };
-  if (provider === 'codex') {
-    const c = read('.codex/models_cache.json');
-    return (c?.models || []).filter((m) => m.slug && m.visibility !== 'hide')
-      .sort((a, b) => (a.priority ?? 99) - (b.priority ?? 99))
-      .map((m) => ({ id: m.slug, name: m.display_name || m.slug, efforts: (m.supported_reasoning_levels || []).map((l) => l.effort).filter(Boolean), defaultEffort: m.default_reasoning_level || null }));
-  }
-  if (provider === 'grok') {
-    const c = read('.grok/models_cache.json');
-    return Object.values(c?.models || {}).map((m) => m.info || {}).filter((i) => i.id && !i.hidden)
-      .map((i) => ({ id: i.id, name: i.name || i.id, efforts: (i.reasoning_efforts || []).map((e) => e.value).filter(Boolean), defaultEffort: i.reasoning_effort || null }));
-  }
-  return [];
+  const cache = CLI_PROVIDERS[provider]?.modelsCache;
+  if (!cache) return [];
+  const cfg = cliConfigDirs(home);
+  let c = null;
+  try { c = JSON.parse(fs.readFileSync(path.join(cfg[provider], cache.file), 'utf8')); } catch { /* no cache yet */ }
+  return cache.models(c);
 }
 
 /** The models a provider's CLI offers (see cachedModels), else the built-in list. */
-function providerModels(provider, { home = os.homedir() } = {}) {
+function providerModels(provider, { home } = {}) {
   const p = CLI_PROVIDERS[provider];
   const cached = cachedModels(provider, home);
   if (cached.length) return cached;
@@ -215,14 +185,10 @@ function cached(file, parse) {
 const dirs = (dir) => { try { return fs.readdirSync(dir, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => path.join(dir, e.name)); } catch { return []; } };
 const files = (dir, match) => { try { return fs.readdirSync(dir, { withFileTypes: true }).filter((e) => e.isFile() && match(e.name)).map((e) => path.join(dir, e.name)); } catch { return []; } };
 
-const SOURCES = (home) => ({
-  claude: path.join(home, '.claude', 'projects'),
-  codex: path.join(home, '.codex', 'sessions'),
-  grok: path.join(home, '.grok', 'sessions'),
-});
+const SOURCES = (home) => cliSessionDirs(cliConfigDirs(home));
 
 /** Every session the CLIs recorded on this machine, most recently active first. */
-function listCliSessions({ home = os.homedir() } = {}) {
+function listCliSessions({ home } = {}) {
   const src = SOURCES(home);
   const out = [];
   // <project>/<id>.jsonl only: the <id>/ folders next to them hold subagent transcripts

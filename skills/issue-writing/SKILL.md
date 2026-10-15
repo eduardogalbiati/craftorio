@@ -48,6 +48,7 @@ prefixes, no trailing period.
 - [ ] ...
 - [ ] **Tests**: <what proves it: unit/integration test, the scenario, what it asserts>.
 - [ ] **Docs**: <README/docs sections that change>, when user-facing or architectural.
+      With a product-wide decision line: "record the decision in `docs/agents/decisions.md`".
 
 Related: #<n> (<why>), #<n>.
 ```
@@ -69,6 +70,11 @@ Related: #<n> (<why>), #<n>.
 - Include a **measure** task when the issue claims a gain (tokens, time, cost): before/after on
   one real case.
 - Order tasks by dependency; the last ones are tests, docs and measurement.
+- A **product-wide "Decision (owner)" line** (a rule for the whole product, not one screen's
+  layout) gets a Docs task "record the decision in `docs/agents/decisions.md`" (date, decision,
+  why, issue; newest first), so the run that implements the issue adds the entry, or replaces the
+  one it changes. Use the repository's own decisions log when it keeps one elsewhere; skip the
+  task when it keeps none.
 
 ## UI acceptance criteria (any issue that touches a screen)
 
@@ -76,8 +82,13 @@ What a screen does is not enough: a view can reorder, move and edit everything i
 be hard to use. For each screen, dialog or component the issue adds or changes, add tasks that say
 **how** it looks and is used:
 
-- **What leads**: the primary information of each element (an issue's title, not a file name),
-  what is secondary, and how long text is cut (ellipsis, full text on hover).
+- **What leads**: the screen's one message (what a person gets from it in five seconds), the
+  primary information of each element (an issue's title, not a file name), what is secondary, and
+  how long text is cut (ellipsis, full text on hover).
+- **The hierarchy, not only the content**: listing the sections to show is not enough. Say the
+  text budget (a card: a one-line title and at most two lines before "more"), which numbers are
+  shown as bars, scores or chips, and what sits behind "more" or an ⓘ (caveats, commands, raw
+  lists only experts need).
 - **Which controls**: a select or segmented toggle for a fixed list, a checkbox or switch for a
   flag, a badge for a state, text only for free values; where each edit happens (inline, an Edit
   form with Save/Cancel, a toggle saved at once).

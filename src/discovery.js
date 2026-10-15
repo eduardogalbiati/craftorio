@@ -12,6 +12,7 @@
 //       attachments/              any file, original names, deduplicated
 //       conversation.jsonl        the card's thread, one JSON entry per line
 //     archive/<card id>/          discarded or merged cards (same layout, card.archived says why)
+//     imports/<batch>/            an import's cards while it is written (#322, importCards)
 // The Discovery board (#257): the columns Inbox, Triage, Shape, Define, Ready, a WIP limit on Shape
 // and Define (setWip; a move past it is never refused here: the screen asks), a card's place within
 // its column (moveCard's `index`), and the document's history: versions/ also gets the document a
@@ -34,6 +35,17 @@
 // longer change; only links.release, the release that shipped its issues, is still written): new
 // learning is a new card whose links.from names it (createCard's `from`). COMMIT_BAR (85) is the
 // clarity a commit needs: Grill me interviews a Ready card up to it, also past a lower bar of its own.
+// Column automations (#259): a board column may declare `on_enter`, what a card's move into it may
+// start: a saved pipeline or a workflow (`pipeline` / `workflow`: the file, `inputs` rendered from
+// the card with {{ card.title }}, {{ card.document }}, {{ card.acceptance }}, {{ card.attachments }},
+// {{ card.type }}, {{ card.document_skill }}: renderAutomationInputs) or the clarity check (`check:
+// 'clarity'`, no run). `mode` is 'ask' (the screen proposes it; the default), 'on' (it starts) or
+// 'off' (setColumnAutomation). Shape offers AI Arena → Write & Review on the card's document, Ready
+// the clarity check; a column stored without on_enter takes the default's. The service starts the
+// run and records it on the card: card.json's `automation` { state: 'running' | 'done' | 'failed',
+// runId, name, column, costUsd?, startedAt, endedAt? } (markAutomation), and the result comes back
+// like a run's (recordAutomation: the document as a version automation-<column>, a thread entry
+// { kind: 'automation', runId, costUsd }). An automation never moves or commits a card.
 // Every file is written whole (temp file + rename, src/state-file.js); the thread is appended one
 // line at a time. Project ids, card ids and attachment names are checked before any path is built:
 // nothing outside a card's folder is read or written. Used by the discovery: channels
@@ -57,6 +69,28 @@ const BOARD_COLUMNS = [
   { id: 'ready', title: 'Ready', wip: null },
 ];
 const COLUMNS = BOARD_COLUMNS.map((c) => c.id);
+// a column automation's modes (#259): proposed to the owner, started at once, or nothing
+const AUTOMATION_MODES = ['ask', 'on', 'off'];
+// the prompt the Shape automation gives the first stage (AI Arena's task), rendered from the card
+const SHAPE_TASK = [
+  'Shape this discovery card into a clear document. Keep its intent and every fact it states; ground what you add in the project\'s files and mark assumptions and open questions as such.',
+  'Card: {{ card.title }}',
+  '<document>\n{{ card.document }}\n</document>',
+  '<acceptance_criteria>\n{{ card.acceptance }}\n</acceptance_criteria>',
+].join('\n\n');
+// the default `on_enter` of the columns (#259): what a move into them may start
+const ON_ENTER = {
+  shape: {
+    pipeline: 'ai-arena-write-review.yaml', name: 'AI Arena → Write & Review', mode: 'ask',
+    inputs: { task: SHAPE_TASK, attachments: '{{ card.attachments }}', document_skill: '{{ card.document_skill }}' },
+  },
+  ready: { check: 'clarity', name: 'Clarity check', mode: 'ask' },
+};
+// the document type Write & Review and the AI Arena shape a card into ({{ card.document_skill }})
+const DOC_SKILL = { rfc: 'rfc-writing' };
+const DEFAULT_DOC_SKILL = 'prd-writing';
+// text attachments rendered into {{ card.attachments }}, at most this many bytes in all
+const MAX_ATTACHMENTS_TEXT = 200 * 1024;
 // where a committed card is (#258): off the board, in the Committed list, for good
 const COMMITTED = 'committed';
 // the clarity a Ready card needs to be committed (the owner's decision, 2026-10-04): not the
@@ -153,7 +187,28 @@ function readBoard(dir, projectId) {
   for (const c of BOARD_COLUMNS) if (!columns.some((x) => x.id === c.id)) columns.push({ ...c });
   const order = {};
   for (const c of columns) order[c.id] = Array.isArray(board?.order?.[c.id]) ? board.order[c.id].filter((id) => CARD_ID.test(id)) : [];
-  return { columns: columns.map((c) => ({ ...c, wip: c.wip ?? null })), order, clarity: clarity.claritySettings(board?.clarity) };
+  // a column's automation (#259): the default's, under what board.json stores of it (the owner's
+  // mode, or a whole automation of their own on a column without a default)
+  const withAutomation = (c) => {
+    const stored = c.on_enter && typeof c.on_enter === 'object' ? c.on_enter : null;
+    const auto = ON_ENTER[c.id] || stored ? { ...(ON_ENTER[c.id] || {}), ...(stored || {}) } : null;
+    return auto ? { ...c, on_enter: { ...auto, mode: AUTOMATION_MODES.includes(auto.mode) ? auto.mode : 'ask' } } : c;
+  };
+  return { columns: columns.map((c) => withAutomation({ ...c, wip: c.wip ?? null })), order, clarity: clarity.claritySettings(board?.clarity) };
+}
+
+// Writes board.json: of a column's automation only what differs from the default stays (the owner's
+// mode), so a later default (another pipeline, another prompt) reaches every board.
+function writeBoard(dir, projectId, board) {
+  const columns = board.columns.map((c) => {
+    const def = ON_ENTER[c.id];
+    if (!def || !c.on_enter) return c;
+    const own = Object.fromEntries(Object.entries(c.on_enter).filter(([k, v]) => JSON.stringify(v) !== JSON.stringify(def[k])));
+    const rest = { ...c };
+    delete rest.on_enter;
+    return Object.keys(own).length ? { ...rest, on_enter: own } : rest;
+  });
+  writeJson(path.join(ensureProject(dir, projectId), 'board.json'), { ...board, columns });
 }
 
 // Takes the card off every column, then puts it in `column`: first (a new card), at `index` among
@@ -168,7 +223,7 @@ function placeOnBoard(dir, projectId, id, column, { first = false, index } = {})
     else if (Number.isInteger(index) && index >= 0 && index < list.length) list.splice(index, 0, id);
     else list.push(id);
   }
-  writeJson(path.join(ensureProject(dir, projectId), 'board.json'), board);
+  writeBoard(dir, projectId, board);
 }
 
 /**
@@ -181,7 +236,23 @@ function setWip(dir, projectId, column, limit) {
   if (!col) throw new Error(`Unknown column: ${column}`);
   if (!Number.isInteger(limit) || limit < 1) throw new Error(`A WIP limit is a whole number from 1: ${limit}`);
   col.wip = limit;
-  writeJson(path.join(ensureProject(dir, projectId), 'board.json'), board);
+  writeBoard(dir, projectId, board);
+  return board;
+}
+
+/**
+ * Sets a column automation's mode (#259): 'ask' (proposed on each move into the column), 'on'
+ * (started at once) or 'off'. The pipeline and its inputs stay as they are. Returns the board.
+ * Refuses a mode outside those, an unknown column and a column without an automation.
+ */
+function setColumnAutomation(dir, projectId, column, { mode } = {}) {
+  const board = readBoard(dir, projectId);
+  const col = board.columns.find((c) => c.id === column);
+  if (!col) throw new Error(`Unknown column: ${column}`);
+  if (!col.on_enter) throw new Error(`${col.title} has no automation to set.`);
+  if (!AUTOMATION_MODES.includes(mode)) throw new Error(`An automation is ask, on or off: ${mode}`);
+  col.on_enter = { ...col.on_enter, mode };
+  writeBoard(dir, projectId, board);
   return board;
 }
 
@@ -207,7 +278,7 @@ function setClarityBar(dir, projectId, { bar, byKind, night } = {}) {
     if (checked.start !== night?.start || checked.end !== night?.end) throw new Error('A night is { start, end } as HH:MM, e.g. 23:00 to 08:00.');
     board.clarity.night = checked;
   }
-  writeJson(path.join(ensureProject(dir, projectId), 'board.json'), board);
+  writeBoard(dir, projectId, board);
   return board;
 }
 
@@ -414,16 +485,21 @@ function passClarityBar(dir, projectId, card, { by, force, reason }) {
   card.clarity = { ...card.clarity, override: { score, bar, reason: why.slice(0, 500), by: String(by || 'owner'), ts: now() } };
 }
 
-/** Snapshots document.md as versions/<iso ts>-<reason>.md (a column move, a merge, an agent output). Returns the file name. */
-function snapshotVersion(dir, projectId, id, reason) {
-  const folder = existingCard(dir, projectId, id);
+// Writes `text` as versions/<iso ts>-<reason>.md of the card's folder and returns the file name.
+function saveVersion(folder, reason, text) {
   const label = String(reason || 'snapshot').replace(/[^\w-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'snapshot';
   const stamp = now().replace(/[:.]/g, '-');
   let name = `${stamp}-${label}.md`;
   // a second snapshot for the same reason in the same millisecond never replaces the first
   for (let n = 2; fs.existsSync(path.join(folder, 'versions', name)); n++) name = `${stamp}-${label}-${n}.md`;
-  writeFileAtomic(path.join(folder, 'versions', name), readText(path.join(folder, 'document.md')));
+  writeFileAtomic(path.join(folder, 'versions', name), text);
   return name;
+}
+
+/** Snapshots document.md as versions/<iso ts>-<reason>.md (a column move, a merge, an agent output). Returns the file name. */
+function snapshotVersion(dir, projectId, id, reason) {
+  const folder = existingCard(dir, projectId, id);
+  return saveVersion(folder, reason, readText(path.join(folder, 'document.md')));
 }
 
 /**
@@ -564,6 +640,105 @@ function recordResult(dir, projectId, id, { source, text, runId = null, by = 'ow
     kind: 'result', source, runId: runId ? String(runId) : null, author: String(by || 'owner'), version,
     text: `${RESULT_SOURCES[source]} finished: its result is the document now (version ${version}).`,
   });
+  return load(folder);
+}
+
+// ---- column automations (#259) --------------------------------------------------------------------
+
+// The text attachments of a card as the AI Arena's `attachments` input reads them, images and large
+// files left out: "===== Attached file: <name> =====" then the text, MAX_ATTACHMENTS_TEXT in all.
+function attachmentsText(folder, names) {
+  const parts = [];
+  let left = MAX_ATTACHMENTS_TEXT;
+  for (const name of names) {
+    const file = path.join(folder, 'attachments', name);
+    let buf;
+    try {
+      if (fs.statSync(file).size > left) continue; // never read a large file to skip it
+      buf = fs.readFileSync(file);
+    } catch { continue; }
+    if (sniffImage(buf) || buf.includes(0)) continue;
+    parts.push(`===== Attached file: ${name} =====\n${buf.toString('utf8')}`);
+    left -= buf.length;
+  }
+  return parts.join('\n\n');
+}
+
+/**
+ * An automation's inputs rendered from the card: each `{{ card.<field> }}` in the given values becomes
+ * the card's title, document, acceptance, type, document_skill (prd-writing, or rfc-writing for an
+ * RFC) or attachments (the text ones); an unknown field renders empty.
+ */
+function renderAutomationInputs(dir, projectId, id, inputs = {}) {
+  const folder = existingCard(dir, projectId, id);
+  const card = load(folder);
+  const fields = {
+    acceptance: String(card.acceptance || ''),
+    document: String(card.document || ''),
+    document_skill: DOC_SKILL[card.type] || DEFAULT_DOC_SKILL,
+    title: String(card.title || ''),
+    type: String(card.type || ''),
+  };
+  const field = (name) => (name === 'attachments' ? attachmentsText(folder, card.attachments || []) : fields[name] ?? '');
+  const out = {};
+  for (const [k, v] of Object.entries(inputs || {})) {
+    out[k] = typeof v === 'string' ? v.replace(/\{\{\s*card\.(\w+)\s*\}\}/g, (_, name) => field(name)) : v;
+  }
+  return out;
+}
+
+const documentHash = (text) => crypto.createHash('sha1').update(String(text ?? '')).digest('hex');
+
+/**
+ * Records the automation running on the card (#259), `{ runId, name, column }` → card.automation
+ * { state: 'running', …, startedAt, document: a hash of the document it started from }; `null`
+ * takes the record away. Returns the card.
+ */
+function markAutomation(dir, projectId, id, automation) {
+  const folder = editableCard(dir, projectId, id);
+  const card = load(folder);
+  if (automation === null) delete card.automation;
+  else {
+    if (!automation || typeof automation !== 'object') throw new Error('An automation is an object or null.');
+    card.automation = { state: 'running', startedAt: now(), document: documentHash(card.document), ...automation };
+  }
+  saveCard(folder, card);
+  return load(folder);
+}
+
+/**
+ * The automation's run ended (#259): a successful `text` becomes the document, kept as the version
+ * automation-<column> (the document it replaces is kept too); a document edited since the
+ * automation started is left alone, the result is only kept as that version. The thread gets
+ * { kind: 'automation', name, column, runId, costUsd, status, version, applied } and
+ * card.automation ends ('done' or 'failed'). Returns the card.
+ */
+function recordAutomation(dir, projectId, id, { runId = null, name, column, status = 'success', text = '', costUsd = 0 } = {}) {
+  const folder = editableCard(dir, projectId, id);
+  const label = String(name || 'Automation');
+  const result = status === 'success' && !!String(text ?? '').trim();
+  const before = load(folder);
+  const edited = !!before.automation?.document && before.automation.document !== documentHash(before.document);
+  let version = null;
+  if (result && !edited) {
+    keepDocument(dir, projectId, id, 'before-automation');
+    writeFileAtomic(path.join(folder, 'document.md'), String(text));
+    version = snapshotVersion(dir, projectId, id, `automation-${column || 'result'}`);
+    rescore(folder);
+  } else if (result) {
+    version = saveVersion(folder, `automation-${column || 'result'}`, String(text));
+  }
+  const cost = Number.isFinite(Number(costUsd)) ? Number(costUsd) : 0;
+  appendConversation(dir, projectId, id, {
+    kind: 'automation', name: label, column: column || null, runId: runId ? String(runId) : null, costUsd: cost, status, author: 'automation', version, applied: result && !edited,
+    text: result && !edited ? `${label} finished: its result is the document now (version ${version}).`
+      : result ? `${label} finished: the document was edited meanwhile, so its result is kept as the version ${version} (restore it to use it).`
+        : status === 'success' ? `${label} finished without a document: the card is unchanged.` : `${label} ended ${status}: the card is unchanged.`,
+  });
+  const card = load(folder);
+  card.automation = { ...(card.automation || {}), state: status === 'success' ? 'done' : 'failed', runId: runId ? String(runId) : null, name: label, column: column || null, costUsd: cost, endedAt: now() };
+  delete card.automation.document;
+  saveCard(folder, card);
   return load(folder);
 }
 
@@ -723,6 +898,15 @@ function grillCard(dir, projectId, id) {
 }
 
 /**
+ * Whether Grill me has something to ask the card: under its bar, with an open point of the rubric
+ * left (#259: a clarity check entering a column proposes nothing otherwise).
+ */
+function grillHasQuestion(dir, projectId, id) {
+  const card = readCard(dir, projectId, id);
+  return (card.clarity?.score ?? 0) < grillBar(dir, projectId, card) && !!clarity.nextQuestion(card);
+}
+
+/**
  * The person's answer to the waiting question: written into the card (its acceptance criteria, or
  * a section of its document, kept as a version first), noted in the thread, and the card is scored
  * again. Then the next question, or the end of the interview. → { card, bar, question }
@@ -806,22 +990,155 @@ function mergeCard(dir, projectId, fromId, intoId, { by = 'owner' } = {}) {
   return readCard(dir, projectId, intoId);
 }
 
+// ---- imports (#322) -------------------------------------------------------------------------------
+// A document imported into the Inbox (src/discovery-import.js) becomes its cards all or none: they
+// are written whole under imports/<batch>/ (never listed), then commit.json says the batch is
+// complete, and only then they move into cards/ and onto the board. A batch without commit.json was
+// cut before it was complete and is dropped; one with it is finished (finishImports, also after the
+// app closed mid-way). The batch's name holds the writing process's pid: a batch another live
+// process is still writing is left alone.
+
+const importsDir = (dir, projectId) => path.join(projectDir(dir, projectId), 'imports');
+
+function processAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  if (pid === process.pid) return true;
+  try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; }
+}
+
+// Moves a complete batch's cards into cards/ (in its order, first in their column), writes the merged
+// cards' new text, then removes the batch. Each step can run again: a batch cut while being
+// finished is finished by the next call.
+function finishBatch(dir, projectId, batch) {
+  const { ids = [], merges = [], column = 'inbox', by = 'import' } = JSON.parse(fs.readFileSync(path.join(batch, 'commit.json'), 'utf8'));
+  for (const id of ids) {
+    const staged = path.join(batch, 'cards', id);
+    if (fs.existsSync(staged)) renameWithRetry(staged, cardDir(dir, projectId, id));
+  }
+  for (const m of merges) {
+    if (!fs.existsSync(path.join(cardDir(dir, projectId, m.id), 'card.json'))) continue; // archived meanwhile
+    if (readCard(dir, projectId, m.id).column === COMMITTED) continue; // committed meanwhile: kept as it was
+    snapshotVersion(dir, projectId, m.id, 'import');
+    updateCard(dir, projectId, m.id, { document: m.document, acceptance: m.acceptance });
+    appendConversation(dir, projectId, m.id, { kind: 'import', author: by, text: m.note });
+  }
+  const board = readBoard(dir, projectId);
+  const moved = ids.filter((id) => fs.existsSync(path.join(cardDir(dir, projectId, id), 'card.json')));
+  for (const c of Object.keys(board.order)) board.order[c] = board.order[c].filter((x) => !moved.includes(x));
+  board.order[column] = [...moved, ...(board.order[column] || [])];
+  writeBoard(dir, projectId, board);
+  fs.rmSync(batch, { recursive: true, force: true });
+}
+
+/**
+ * Ends the imports a previous session left (#322): a complete batch is finished, an incomplete one
+ * is dropped, a batch a live process is still writing is left. Returns the number of batches finished.
+ */
+function finishImports(dir, projectId) {
+  let names = [];
+  try { names = fs.readdirSync(importsDir(dir, projectId)); } catch { return 0; }
+  let finished = 0;
+  for (const name of names) {
+    const batch = path.join(importsDir(dir, projectId), name);
+    const complete = fs.existsSync(path.join(batch, 'commit.json'));
+    if (complete) { finishBatch(dir, projectId, batch); finished++; }
+    else if (!processAlive(Number(name.split('-').pop()))) fs.rmSync(batch, { recursive: true, force: true });
+  }
+  return finished;
+}
+
+/**
+ * Creates several cards at once, all or none (#322): `cards` [{ title, text, acceptance }]
+ * in the order they take at the top of `column` (the Inbox); `merges` [{ id, document, acceptance,
+ * note }] the new text of existing cards (a version is kept first, `note` goes to their thread);
+ * `file` { name, data: Buffer } attached to every new card (written once, hard-linked into each
+ * card when the disk allows it); `history` { by, source } the entry each new card starts with;
+ * `note` its first thread entry. Throws, writing nothing, when one card is invalid.
+ * Returns { created: [cards], merged: [ids] }.
+ */
+function importCards(dir, projectId, { cards = [], merges = [], file = null, author = 'owner', type = 'idea', column = 'inbox', history = {}, note = '' } = {}) {
+  checkType(type);
+  for (const m of merges) editableCard(dir, projectId, m.id);
+  if (file && file.data.length > MAX_ATTACHMENT_BYTES) throw new Error(`Attachment too large: ${mb(file.data.length)}, the limit is ${mb(MAX_ATTACHMENT_BYTES)}`);
+  const titles = cards.map((c) => checkTitle(c.title));
+  finishImports(dir, projectId);
+  checkColumn(dir, projectId, column);
+  const base = path.join(ensureProject(dir, projectId), 'imports');
+  const batch = path.join(base, `${Date.now()}-${crypto.randomBytes(2).toString('hex')}-${process.pid}`);
+  const ids = [];
+  try {
+    fs.mkdirSync(path.join(batch, 'cards'), { recursive: true });
+    const stored = file ? fileName(file.name) || 'import.txt' : null;
+    const source = file ? path.join(batch, stored) : null;
+    if (file) writeFileAtomic(source, file.data);
+    const ts = now();
+    cards.forEach((c, i) => {
+      // a millisecond older per card: the lists (newest first) show them in the given order too
+      const created = new Date(Date.parse(ts) - i).toISOString();
+      const d = new Date(created);
+      const day = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+      let id;
+      do id = `${day}-${crypto.randomBytes(2).toString('hex')}`;
+      while (ids.includes(id) || fs.existsSync(cardDir(dir, projectId, id)) || fs.existsSync(cardDir(dir, projectId, id, 'archive')));
+      ids.push(id);
+      const folder = path.join(batch, 'cards', id);
+      fs.mkdirSync(folder);
+      const text = String(c.text ?? '');
+      const acceptance = String(c.acceptance ?? '');
+      writeFileAtomic(path.join(folder, 'document.md'), text);
+      writeFileAtomic(path.join(folder, 'acceptance.md'), acceptance);
+      writeFileAtomic(path.join(folder, 'conversation.jsonl'), note ? `${JSON.stringify({ ts, kind: 'import', author: String(history.by || 'import'), text: note })}\n` : '');
+      if (file) {
+        fs.mkdirSync(path.join(folder, 'attachments'));
+        const to = path.join(folder, 'attachments', stored);
+        try { fs.linkSync(source, to); } catch { fs.copyFileSync(source, to); }
+      }
+      writeJson(path.join(folder, 'card.json'), {
+        id,
+        title: titles[i],
+        type,
+        column,
+        author: String(author || 'owner'),
+        created,
+        updated: created,
+        tags: [],
+        clarity: scored({ type, document: text, acceptance }),
+        estimate: { usd: null, minutes: null },
+        links: { issues: [], release: null },
+        history: [{ ts, from: null, to: column, by: String(history.by || 'import'), ...(history.source ? { source: String(history.source) } : {}) }],
+      });
+    });
+    writeJson(path.join(batch, 'commit.json'), { ids, merges, column, by: String(history.by || 'import') });
+  } catch (e) {
+    fs.rmSync(batch, { recursive: true, force: true });
+    throw e;
+  }
+  // complete: from here the import happens, now or (cut) on the next finishImports
+  finishBatch(dir, projectId, batch);
+  return { created: ids.map((id) => readCard(dir, projectId, id)), merged: merges.map((m) => m.id) };
+}
+
 module.exports = {
   addAttachment,
   answerGrill,
   appendConversation,
   archiveCard,
+  AUTOMATION_MODES,
   COLUMNS,
   COMMIT_BAR,
   COMMITTED,
   createCard,
   filedDir,
+  finishImports,
   grillCard,
+  grillHasQuestion,
+  importCards,
   issueCards,
   listArchived,
   listCards,
   listVersions,
   listWaiting,
+  markAutomation,
   markCommitted,
   MAX_ATTACHMENT_BYTES,
   mergeCard,
@@ -832,11 +1149,14 @@ module.exports = {
   readConversation,
   readVersion,
   readyForecast,
+  recordAutomation,
   recordResult,
   removeAttachment,
+  renderAutomationInputs,
   restoreCard,
   restoreVersion,
   setClarityBar,
+  setColumnAutomation,
   setWip,
   snapshotVersion,
   TYPES,

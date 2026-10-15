@@ -1,6 +1,7 @@
 # Open ideas / backlog
 
-Read this when planning new work, to avoid redoing a discussion.
+Read this when planning new work, to avoid redoing a discussion. Ideas the owner already decided
+(built or ruled out) are in [decisions.md](decisions.md), not here.
 
 - Dynamic model roles: role → provider/model map with fallbacks when a CLI is missing or over
   budget (discussed, not built; the owner accepted requiring all three CLIs for now). Portable
@@ -30,3 +31,6 @@ Read this when planning new work, to avoid redoing a discussion.
   costs, so the two can disagree. Next: move the estimates onto `runFigures`.
 - 24/7 meter (#188): a paused roadmap or a stall counts as blocked only inside a Night watch window
   (from its incident log); outside it, nothing records the pause, so that time counts as no work.
+- Untested production files (#306): the follow-ups (one issue each, not filed yet) and the map's
+  blind spot for the service loader are listed in [testing.md](testing.md), "Production files no
+  test reaches".

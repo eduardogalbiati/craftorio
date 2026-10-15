@@ -153,7 +153,9 @@ test('loadWorkflow: protect_files, files, expect and test_map are checked, with 
   assert.throws(load('', suiteStep('    files: 5')), /Step "t": files must be a file list/);
   assert.throws(load('', suiteStep('    files: "{{ steps.a.output.tests_added }}"', '    scope: affected')), /Step "t": files and scope cannot be combined/);
   assert.throws(load('', suiteStep('    expect: red')), /Step "t": expect must be "red", with files/);
-  assert.throws(load('', suiteStep('    files: [test/a.test.js]', '    expect: green')), /Step "t": expect must be "red", with files/);
+  // #355: green is the green check of tests that pin the current behaviour
+  assert.throws(load('', suiteStep('    files: [test/a.test.js]', '    expect: blue')), /Step "t": expect must be "red", with files/);
+  assert.doesNotThrow(load('', suiteStep('    files: [test/a.test.js]', '    expect: green')));
 
   assert.doesNotThrow(load(', protect_files: ["test/acceptance.test.js"]', agentStep));
   assert.doesNotThrow(load('', [...agentStep, '    protect_files: "{{ steps.acceptance_tests.output.tests_added }}"', '    test_map: true']));

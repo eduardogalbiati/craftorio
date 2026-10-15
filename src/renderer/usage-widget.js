@@ -33,6 +33,22 @@ function monthLabel(ym) {
   return y && m ? new Date(y, m - 1, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' }) : 'this month';
 }
 
+// #389: first paint first: the usage and the 24/7 chip (slow reads) are asked once Home is drawn
+// (call the returned function), their widgets show that they are loading meanwhile; asked anyway
+// after `ms` if init() fails before that.
+function deferSlowReads(ms) {
+  let asked = false;
+  const ask = () => {
+    clearTimeout(fallback);
+    if (asked) return;
+    asked = true;
+    loadUsage();
+    window.OccupancyChip?.refresh?.();
+  };
+  const fallback = setTimeout(ask, ms);
+  return ask;
+}
+
 let usageLoading = null;
 let usageLastLoad = 0;
 let usageTimer = null;
@@ -51,8 +67,13 @@ function loadUsage() {
     if (scope !== state.usageScope) return loadUsage(); // scope changed while loading
     renderUsageAll();
   })();
+  if (usageBusy()) $('#usage-widget')?.setAttribute('aria-busy', 'true');
   return usageLoading;
 }
+
+// #389: true while the usage is read and nothing of this scope is on screen yet (the widget and
+// Home's "Cost today" show their loading state; the app reads it after the first paint)
+const usageBusy = () => !!usageLoading && (!state.usage || usageStale());
 
 function setUsageScope(scope) {
   if (scope !== 'machine') scope = 'orchestrator';
@@ -87,11 +108,13 @@ function renderUsageAll() {
   renderUsageWidget();
   if (!$('#usage-pop').classList.contains('hidden')) renderUsagePopover();
   if (state.view === 'usage') renderUsage();
+  if (state.view === 'dashboard') paintHome(); // Home's "Cost today"
 }
 
 function renderUsageWidget() {
   const u = state.usage;
   const btn = $('#usage-widget');
+  btn.setAttribute('aria-busy', String(usageBusy()));
   btn.classList.toggle('unavailable', !u && !!state.usageError);
   if (!u) {
     $('#usage-widget-text').textContent = state.usageError ? 'Usage unavailable' : '—';

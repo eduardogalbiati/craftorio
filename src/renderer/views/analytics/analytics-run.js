@@ -176,6 +176,9 @@
       label: name(a.agent), chip: chip(a.agent), sub: `${fmtTok(a.totalTokens)} · ${a.usdPerMTokens == null ? '—' : `${fmtUsd(a.usdPerMTokens)}/M`}`,
       title: `${name(a.agent)} (${a.agent}): ${Object.keys(TOKEN_LABELS).map((k) => `${TOKEN_LABELS[k]} ${fmtNum(a.tokens[k])}`).join(', ')}; effective ${a.usdPerMTokens == null ? '—' : fmtUsd(a.usdPerMTokens)} per million tokens`,
       parts: Object.keys(TOKEN_LABELS).map((k) => ({ value: a.tokens[k], color: TOKEN_COLORS[k], title: `${TOKEN_LABELS[k]}: ${fmtNum(a.tokens[k])}` })),
+      // #308: the sub-agents' share, already counted in the agent's tokens
+      marks: a.subagents ? ` <span class="muted small" data-testid="an-agent-subagents">· of which sub-agents: ${fmtNum(a.subagents.calls)} call${a.subagents.calls === 1 ? '' : 's'}, ${fmtTok(a.subagents.tokens)} tokens</span>` : '',
+      testid: 'an-agent-tokens',
     })), { stacked: true });
     return `<div class="an-grid">
         <div class="card an-card"><h3>Time per agent <span class="muted small">(active, then waiting on tools)</span></h3>${time}</div>
@@ -190,8 +193,17 @@
     const steps = f.steps.length ? `<table class="u-table an-sessions"><thead><tr><th>Step</th><th>Agent</th><th class="num">Visits</th><th class="num">Duration</th></tr></thead><tbody>
       ${f.steps.map((s) => `<tr><td title="${esc(s.step)}">${esc(readable(s.step, f.stepNames))}</td><td>${s.agent ? `<span class="an-agent" title="${esc(s.agent)}"><i style="background:${colorOf(s.agent)}"></i>${esc(readable(s.agent, f.agentNames))}</span>` : '<span class="muted">orchestrator</span>'}</td><td class="num">${s.visits}</td><td class="num">${fmtDur(s.durationMs)}</td></tr>`).join('')}</tbody></table>`
       : '<p class="muted small an-empty">No step recorded.</p>';
-    const suite = f.suiteRounds.length ? `<table class="u-table an-sessions"><thead><tr><th class="num">Round</th><th>Result</th><th class="num">Duration</th><th class="num">Failures</th><th class="num">Pre-existing</th></tr></thead><tbody>
-      ${f.suiteRounds.map((r) => `<tr><td class="num">${r.round}</td><td><span class="badge ${r.status === 'pass' ? 'cat-monitor' : 'warn'}">${esc(r.status || '—')}</span></td><td class="num">${fmtDur(r.durationMs)}</td><td class="num">${r.failures}</td><td class="num">${r.preexisting}</td></tr>`).join('')}</tbody></table>`
+    // #304: a round of a `scope: affected` suite: what it ran, and why each file was selected
+    // (a red check's round runs the files its step lists: every reason is "listed by <step>")
+    const listed = (sel) => Object.values(sel.reasons || {}).length > 0 && Object.values(sel.reasons).every((why) => /^listed by /.test(why));
+    const scopeOf = (r) => (!r.selection ? (r.scope === 'files' ? 'Files' : 'Whole suite') : r.selection.mode === 'all' ? 'Whole suite' : listed(r.selection) ? 'Listed tests' : r.affected && r.scope === 'full' ? 'Affected, then whole suite' : 'Affected');
+    const whyOf = (r) => {
+      if (!r.selection) return '';
+      const reasons = Object.entries(r.selection.reasons || {}).map(([file, why]) => `${file}: ${why}`).join('; ');
+      return reasons || r.selection.why || '';
+    };
+    const suite = f.suiteRounds.length ? `<table class="u-table an-sessions"><thead><tr><th class="num">Round</th><th>Result</th><th>Scope</th><th class="num">Duration</th><th class="num">Failures</th><th class="num">Pre-existing</th></tr></thead><tbody>
+      ${f.suiteRounds.map((r) => `<tr data-testid="an-suite-round"><td class="num">${r.round}</td><td><span class="badge ${r.status === 'pass' ? 'cat-monitor' : 'warn'}">${esc(r.status || '—')}</span></td><td class="an-title"><span class="badge" title="${esc(r.selection?.why || '')}">${esc(scopeOf(r))}</span>${whyOf(r) ? `<div class="muted small an-suite-why" title="${esc(whyOf(r))}">${esc(whyOf(r))}</div>` : ''}</td><td class="num">${fmtDur(r.durationMs)}</td><td class="num">${r.failures}</td><td class="num">${r.preexisting}</td></tr>`).join('')}</tbody></table>`
       : '<p class="muted small an-empty">No suite round in this run.</p>';
     const tools = f.slowestTools.length ? `<table class="u-table an-sessions"><thead><tr><th>Command</th><th>Agent</th><th class="num">Time</th></tr></thead><tbody>
       ${f.slowestTools.map((t) => `<tr><td class="an-title"><code class="an-file" title="${esc(t.command)}">${esc(t.command)}</code></td><td${t.agent ? ` title="${esc(t.agent)}"` : ''}>${esc(t.agent ? readable(t.agent, f.agentNames) : '—')}</td><td class="num">${fmtDur(t.durationMs)}</td></tr>`).join('')}</tbody></table>`

@@ -9,12 +9,52 @@
 // localPreview:save stores the gate's config as the project's (and optionally in the repository's
 // .multiagent/local-preview.yaml); localPreview:suggest is what a folder runs with (Projects › Add).
 
+const {
+  args,
+  BOOL,
+  FLAG,
+  GATE_ID,
+  INT,
+  listOf,
+  nullable,
+  OBJECT,
+  RUN_ID,
+  shape,
+  STRING,
+} = require('../schemas');
+
+const AT_GATE = args({ runId: RUN_ID, approvalId: nullable(GATE_ID) }, ['runId']);
+// a one-off or saved command config ({ command, install, url, ... }), checked by src/local-preview.js
+const CONFIG = nullable(OBJECT);
+
 module.exports = (ctx) => [
-  { channel: 'gate:changes', method: 'gateChanges', params: ['runId', 'approvalId'], fn: (opts) => ctx.gateChanges(opts) },
-  { channel: 'localPreview:info', method: 'localPreviewInfo', params: ['runId', 'approvalId'], fn: (opts) => ctx.runAppInfo(opts) },
-  { channel: 'localPreview:start', method: 'startLocalPreview', params: ['runId', 'approvalId', 'realWorkspace', 'cols', 'rows', 'config', 'confirm'], fn: (opts) => ctx.startLocalPreview(opts) },
-  { channel: 'localPreview:stop', method: 'stopLocalPreview', params: ['runId'], fn: ({ runId }) => ctx.stopLocalPreview({ runId }) },
-  { channel: 'localPreview:list', method: 'listLocalPreviews', fn: () => ctx.listLocalPreviews() },
-  { channel: 'localPreview:save', method: 'saveLocalPreview', params: ['runId', 'approvalId', 'config', 'writeRepoFile'], fn: (opts) => ctx.saveLocalPreview(opts) },
-  { channel: 'localPreview:suggest', method: 'suggestLocalPreview', params: ['dir'], fn: (opts) => ctx.suggestLocalPreview(opts) },
+  {
+    channel: 'gate:changes',
+    method: 'gateChanges',
+    params: ['runId', 'approvalId'],
+    schema: { params: AT_GATE, result: listOf(shape({ file: STRING, added: nullable(INT), deleted: nullable(INT) }, ['file'])) },
+    fn: (opts) => ctx.gateChanges(opts),
+  },
+  { channel: 'localPreview:info', method: 'localPreviewInfo', params: ['runId', 'approvalId'], schema: { params: AT_GATE, result: OBJECT }, fn: (opts) => ctx.runAppInfo(opts) },
+  {
+    channel: 'localPreview:start',
+    method: 'startLocalPreview',
+    params: ['runId', 'approvalId', 'realWorkspace', 'cols', 'rows', 'config', 'confirm'],
+    schema: {
+      params: args({ runId: RUN_ID, approvalId: nullable(GATE_ID), realWorkspace: FLAG, cols: nullable(INT), rows: nullable(INT), config: CONFIG, confirm: FLAG }, ['runId']),
+      result: shape({ id: STRING, title: STRING, url: nullable(STRING), cwd: STRING }, ['id']),
+    },
+    fn: (opts) => ctx.startLocalPreview(opts),
+  },
+  { channel: 'localPreview:stop', method: 'stopLocalPreview', params: ['runId'], schema: { params: args({ runId: RUN_ID }, ['runId']), result: BOOL }, fn: ({ runId }) => ctx.stopLocalPreview({ runId }) },
+  { channel: 'localPreview:list', method: 'listLocalPreviews', schema: { result: listOf(OBJECT) }, fn: () => ctx.listLocalPreviews() },
+  {
+    channel: 'localPreview:save',
+    method: 'saveLocalPreview',
+    params: ['runId', 'approvalId', 'config', 'writeRepoFile'],
+    schema: { params: args({ runId: RUN_ID, approvalId: nullable(GATE_ID), config: CONFIG, writeRepoFile: FLAG }, ['runId']), result: shape({ project: OBJECT, config: OBJECT, file: nullable(STRING) }) },
+    fn: (opts) => ctx.saveLocalPreview(opts),
+  },
+  // dir: a folder of this machine (Projects › Add) → its suggested command, or null
+  { channel: 'localPreview:suggest', method: 'suggestLocalPreview', params: ['dir'], schema: { params: args({ dir: STRING }), result: nullable(OBJECT) }, fn: (opts) => ctx.suggestLocalPreview(opts) },
 ];

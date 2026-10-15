@@ -93,6 +93,7 @@
 # Language and platform:
 #   - `language` picks unit-test-writer-<language> and e2e-test-writer-<language> (test writer)
 #     and build-audit-<language> (builder).
+#     Several languages ("js,rust", #340): the skills of each language whose files the run changed.
 #   - `git_platform` picks ci-pipeline-<platform>, pr-babysitter-<platform> and
 #     deploy-<platform> (gh = GitHub/gh CLI, gl = GitLab/glab CLI).
 #   The YAML keeps the contract (who, when, output schema, transitions); the skills
@@ -133,14 +134,15 @@ inputs:
     required: true
     description: Local repository path or git URL (cloned into <workspace>/repos). Needs a GitHub or GitLab remote.
   # Picks the unit-test-writer-<language>, e2e-test-writer-<language> and build-audit-<language> skills. The app prefills it
-  # from the project's files (package.json, pyproject.toml, go.mod, pom.xml, *.csproj).
+  # from the project's files (package.json, pyproject.toml, go.mod, pom.xml, *.csproj, Cargo.toml; every one found, main first).
   language:
     label: "Language"
     type: string
-    enum: [js, python, go, java, csharp]
+    enum: [js, python, go, java, csharp, rust]
     default: js
-    options: { js: JavaScript, python: Python, go: Go, java: Java, csharp: "C#" }
-    description: The project's main language, for its tests and build checks.
+    multiple: true
+    options: { js: JavaScript, python: Python, go: Go, java: Java, csharp: "C#", rust: Rust }
+    description: The project's languages, main one first, for its tests and build checks. A repository that mixes several (e.g. JavaScript and Rust) takes them all; a run loads the skills of the languages whose files it changed.
   # gh = GitHub (gh CLI), gl = GitLab (glab CLI): picks the ci-pipeline, pr-babysitter and deploy skills.
   git_platform:
     type: string
@@ -236,13 +238,16 @@ providers:
 # Allowed commands, shared by the agents below (YAML anchors, used in capabilities.tools).
 x-tools:
   # every supported language toolchain: the language skill says which one to use
-  toolchains: &toolchains [bash:git, bash:npm, bash:npx, bash:node, bash:pnpm, bash:yarn, bash:python, bash:python3, bash:py, bash:pip, bash:pytest, bash:uv, bash:poetry, bash:pip-audit, bash:osv-scanner, bash:go, bash:govulncheck, bash:mvn, bash:./mvnw, bash:mvnw.cmd, bash:gradle, bash:./gradlew, bash:gradlew.bat, bash:dotnet]
+  toolchains: &toolchains [bash:git, bash:npm, bash:npx, bash:node, bash:pnpm, bash:yarn, bash:python, bash:python3, bash:py, bash:pip, bash:pytest, bash:uv, bash:poetry, bash:pip-audit, bash:osv-scanner, bash:go, bash:govulncheck, bash:mvn, bash:./mvnw, bash:mvnw.cmd, bash:gradle, bash:./gradlew, bash:gradlew.bat, bash:dotnet, bash:cargo]
   # gh / glab: called bare, in the Bash tool, one command per call. That is the only form this
   # allowlist accepts: no PowerShell, no full or 8.3 paths, no PATH edits, no ;/&&/pipes, no body
   # files (use --body). The engine refreshes PATH, so bare gh works inside runs.
   vcs: &vcs [bash:git, bash:gh, bash:glab]
 
 defaults:
+  # #320: a persistent agent idle past its prompt cache's lifetime (Claude on a subscription: 1 h,
+  # minus a margin) continues in a fresh session from its handoff note; an agent's own value wins
+  fresh_after_idle: 55m
   # the run's own git worktree (orchestrator.worktree), or repo_path when it is not a git repo
   working_dir: "{{ worktree_dir }}"
   # one agent turn: 30m, plus 10m per extra issue of a grouped run, at most 60m (#101)

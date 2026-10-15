@@ -66,7 +66,7 @@ test('inputValueCell: a value over 200 characters gets a hover popover (data-ful
 });
 
 test('inputValueCell: a Windows path gets the start-ellipsis class, keeping its end (the folder name) readable', () => {
-  const cell = inputValueCell('C:\\Users\\Eduardo\\multiagent-workspace\\worktrees\\20260930-082114-65af9824');
+  const cell = inputValueCell('C:\\Users\\dev\\multiagent-workspace\\worktrees\\20260930-082114-65af9824');
   assert.match(cell, /class="kv-path"/);
   assert.match(cell, /<bdi>/);
 });

@@ -11,7 +11,19 @@
 //   card-accept, card-merge, card-discard    the opened card's triage actions
 //   discard-reason, discard-confirm          the reason box and its confirm button when discarding
 // The fresh simulated workspace starts with an empty Inbox.
+// #322, importing a backlog document (.md/.txt, picked, dropped or pasted) for the header's project:
+//   inbox-import                             the Import button: it opens the import panel (not the
+//                                            native file dialog), which holds the file input
+//   inbox-import-file                        the panel's <input type="file"> (driven by setInputFiles)
+//   inbox-import-preview                     the preview of the items found (nothing written yet)
+//   inbox-import-item                        a preview row; its title is in its text
+//   inbox-import-criteria                    a row's number of acceptance criteria (its `- [ ]` lines)
+//   inbox-import-confirm, inbox-import-cancel  the preview's confirm and cancel buttons
+//   inbox-import-message                     why there is nothing to import (empty/unreadable file)
+// The imported document is written to the scenario's scratch folder (outside the workspace).
 
+const fs = require('fs');
+const path = require('path');
 const { expect } = require('@playwright/test');
 const { Given, When, Then } = require('./fixtures');
 
@@ -87,4 +99,70 @@ When('I discard the opened card with the reason {string}', async ({ e2e }, reaso
   await card.getByTestId('card-discard').click();
   await e2e.window.getByTestId('discard-reason').fill(reason);
   await e2e.window.getByTestId('discard-confirm').click();
+});
+
+// #322: Import a document from the scratch folder through the import panel's file input
+const importPreview = (page) => page.getByTestId('inbox-import-preview');
+const importItems = (page) => importPreview(page).getByTestId('inbox-import-item');
+
+async function importFile(e2e, name, content) {
+  const dir = path.join(e2e.scratch, 'import');
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, name);
+  fs.writeFileSync(file, content);
+  await e2e.window.getByTestId('inbox-import').click();
+  await e2e.window.getByTestId('inbox-import-file').setInputFiles(file);
+}
+
+When('I import into the Inbox the file {string} with the content:', async ({ e2e }, name, content) => {
+  await importFile(e2e, name, content);
+});
+
+When('I import into the Inbox the empty file {string}', async ({ e2e }, name) => {
+  await importFile(e2e, name, '');
+});
+
+Then('the import preview lists {int} items', async ({ e2e }, n) => {
+  await expect(importPreview(e2e.window)).toBeVisible();
+  await expect(importItems(e2e.window)).toHaveCount(n);
+});
+
+Then('the import preview item {string} shows {int} criteria', async ({ e2e }, title, n) => {
+  const item = importItems(e2e.window).filter({ hasText: title });
+  await expect(item).toHaveCount(1);
+  await expect(item.getByTestId('inbox-import-criteria')).toContainText(new RegExp(`\\b${n}\\b`));
+});
+
+When('I confirm the import', async ({ e2e }) => {
+  await importPreview(e2e.window).getByTestId('inbox-import-confirm').click();
+});
+
+When('I cancel the import', async ({ e2e }) => {
+  await importPreview(e2e.window).getByTestId('inbox-import-cancel').click();
+});
+
+Then('the import preview is closed', async ({ e2e }) => {
+  await expect(importPreview(e2e.window)).toHaveCount(0);
+});
+
+Then('the Inbox shows these cards in this order:', async ({ e2e }, table) => {
+  const titles = table.raw().map((row) => row[0].trim());
+  const cards = inboxCards(e2e.window);
+  for (const title of titles) await expect(cards.filter({ hasText: title })).toHaveCount(1);
+  // the imported cards keep the document's order in the list (other cards may sit around them)
+  const texts = await cards.allInnerTexts();
+  const positions = titles.map((title) => texts.findIndex((text) => text.includes(title)));
+  expect(positions).toEqual([...positions].sort((a, b) => a - b));
+});
+
+Then('the import says the document is empty', async ({ e2e }) => {
+  await expect(e2e.window.getByTestId('inbox-import-message')).toContainText(/empty/i);
+});
+
+Then('the import offers no item to create', async ({ e2e }) => {
+  const page = e2e.window;
+  await expect(page.getByTestId('inbox-import-item')).toHaveCount(0);
+  // no confirm to press: absent, or present but disabled
+  const confirm = page.getByTestId('inbox-import-confirm');
+  if (await confirm.count()) await expect(confirm).toBeDisabled();
 });

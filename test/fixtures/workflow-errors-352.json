@@ -1,0 +1,788 @@
+[
+  {
+    "name": "a valid workflow",
+    "kind": "valid",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": null
+  },
+  {
+    "name": "no steps",
+    "kind": "required",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\n",
+    "error": "Workflow has no \"steps\"."
+  },
+  {
+    "name": "an empty step list",
+    "kind": "required",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps: []\n",
+    "error": "Workflow has no \"steps\"."
+  },
+  {
+    "name": "no agents",
+    "kind": "required",
+    "yaml": "steps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Workflow has no \"agents\"."
+  },
+  {
+    "name": "models: a list",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\nmodels:\n  - x\n",
+    "error": "models must map a model id to its limits."
+  },
+  {
+    "name": "models: an unknown limit",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\nmodels:\n  gpt-x:\n    speed: 2\n",
+    "error": "models.gpt-x: unknown limit \"speed\" (timeout_factor, max_total_cost_usd)."
+  },
+  {
+    "name": "models: a limit that is not positive",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\nmodels:\n  gpt-x:\n    timeout_factor: 0\n",
+    "error": "models.gpt-x.timeout_factor must be a positive number."
+  },
+  {
+    "name": "defaults: session unknown",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\ndefaults:\n  session: forever\n",
+    "error": "defaults: session must be one of persistent, ephemeral, handoff."
+  },
+  {
+    "name": "agent: session unknown",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n    session: forever\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Agent \"dev\": session must be one of persistent, ephemeral, handoff."
+  },
+  {
+    "name": "agent: max_context not a token count",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n    max_context: lots\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Agent \"dev\": max_context must be a token count such as 150k."
+  },
+  {
+    "name": "agent: max_context as a template",
+    "kind": "template",
+    "yaml": "agents:\n  dev:\n    provider: mock\n    max_context: '{{ inputs.ctx }}'\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": null
+  },
+  {
+    "name": "agent: max_requests not a number",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n    max_requests: many\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Agent \"dev\": max_requests must be a whole number of model requests such as 40."
+  },
+  {
+    "name": "agent: max_requests as a template",
+    "kind": "template",
+    "yaml": "agents:\n  dev:\n    provider: mock\n    max_requests: '{{ inputs.n }}'\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": null
+  },
+  {
+    "name": "defaults: max_requests zero",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\ndefaults:\n  max_requests: 0\n",
+    "error": "defaults: max_requests must be a whole number of model requests such as 40."
+  },
+  {
+    "name": "agent: fresh_after_idle not a duration",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n    fresh_after_idle: soon\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Agent \"dev\": fresh_after_idle must be a duration such as 55m."
+  },
+  {
+    "name": "agent: persona not random",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n    persona: fixed\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Agent \"dev\": persona must be \"random\"."
+  },
+  {
+    "name": "agent: edits_tests not a boolean",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n    edits_tests: 'yes'\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Agent \"dev\": edits_tests must be true or false."
+  },
+  {
+    "name": "agent: protect_files not a file list",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n    protect_files: 5\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Agent \"dev\": protect_files must be a file list: a template or a list of paths."
+  },
+  {
+    "name": "agent: display empty",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n    display: ''\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Agent \"dev\": display must be a name of 1 to 40 characters."
+  },
+  {
+    "name": "agent: display too long",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n    display: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Agent \"dev\": display must be a name of 1 to 40 characters."
+  },
+  {
+    "name": "agent: fallbacks not a list",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n    fallbacks: codex:gpt\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Agent \"dev\": fallbacks must be a list of \"<provider>:<model>\" entries."
+  },
+  {
+    "name": "agent: fallbacks entry without a provider",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n    fallbacks:\n      - gpt\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Agent \"dev\": fallbacks entry \"gpt\" must be \"<provider>:<model>\", e.g. \"codex:gpt-6-luna\"."
+  },
+  {
+    "name": "agent: fallbacks entry with an unknown provider",
+    "kind": "reference",
+    "yaml": "agents:\n  dev:\n    provider: mock\n    fallbacks:\n      - codex:gpt\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\nproviders:\n  claude: {}\n",
+    "error": "Agent \"dev\": fallbacks entry \"codex:gpt\" names provider \"codex\", which the workflow's providers do not define."
+  },
+  {
+    "name": "the defaults are checked before the agents",
+    "kind": "order",
+    "yaml": "agents:\n  dev:\n    provider: mock\n    persona: 'y'\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\ndefaults:\n  session: x\n",
+    "error": "defaults: session must be one of persistent, ephemeral, handoff."
+  },
+  {
+    "name": "step: display not a text",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n    display: 5\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"build\": display must be a name of 1 to 40 characters."
+  },
+  {
+    "name": "step: edits_tests not a boolean",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n    edits_tests: 'no'\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"build\": edits_tests must be true or false."
+  },
+  {
+    "name": "step: protect_files not a file list",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n    protect_files:\n      a: 1\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"build\": protect_files must be a file list: a template or a list of paths."
+  },
+  {
+    "name": "step: protect_files on a human_approval step",
+    "kind": "applies-to",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n    protect_files:\n      - a.js\n",
+    "error": "Step \"gate\": protect_files is only valid on an agent step."
+  },
+  {
+    "name": "step: protect_files on a suite step",
+    "kind": "applies-to",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - transitions:\n      - goto: gate\n    id: suite\n    type: suite\n    protect_files: a.js\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"suite\": protect_files is only valid on an agent step."
+  },
+  {
+    "name": "step: test_map not a boolean",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n    test_map: 'yes'\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"build\": test_map must be true or false, on an agent step."
+  },
+  {
+    "name": "step: test_map on a human_approval step",
+    "kind": "applies-to",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n    test_map: true\n",
+    "error": "Step \"gate\": test_map must be true or false, on an agent step."
+  },
+  {
+    "name": "screenshots step with an agent",
+    "kind": "applies-to",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - transitions:\n      - goto: gate\n    id: shots\n    type: screenshots\n    agent: dev\n    from: build\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"shots\": a screenshots step has no agent."
+  },
+  {
+    "name": "screenshots step with an unknown from",
+    "kind": "reference",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - transitions:\n      - goto: gate\n    id: shots\n    type: screenshots\n    from: nowhere\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"shots\": from must be the step whose output lists the screenshots."
+  },
+  {
+    "name": "screenshots step: folder not a plain name",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - transitions:\n      - goto: gate\n    id: shots\n    type: screenshots\n    from: build\n    folder: a/b\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"shots\": folder must be a plain folder name (e.g. developer)."
+  },
+  {
+    "name": "screenshots step: timeout not a duration",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - transitions:\n      - goto: gate\n    id: shots\n    type: screenshots\n    from: build\n    timeout: soon\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"shots\": timeout must be a duration such as 3m."
+  },
+  {
+    "name": "screenshots step: timeout as a template is refused",
+    "kind": "template",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - transitions:\n      - goto: gate\n    id: shots\n    type: screenshots\n    from: build\n    timeout: '{{ inputs.t }}'\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"shots\": timeout must be a duration such as 3m."
+  },
+  {
+    "name": "suite step with an agent",
+    "kind": "applies-to",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - transitions:\n      - goto: gate\n    id: suite\n    type: suite\n    agent: dev\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"suite\": a suite step has no agent."
+  },
+  {
+    "name": "suite step with fan-out agents",
+    "kind": "applies-to",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - transitions:\n      - goto: gate\n    id: suite\n    type: suite\n    agents:\n      - dev\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"suite\": a suite step has no agent."
+  },
+  {
+    "name": "suite step: command not a string",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - transitions:\n      - goto: gate\n    id: suite\n    type: suite\n    command: 5\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"suite\": command must be a string (a template; empty = found from the project's files)."
+  },
+  {
+    "name": "suite step: timeout not a duration",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - transitions:\n      - goto: gate\n    id: suite\n    type: suite\n    timeout: soon\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"suite\": timeout must be a duration such as 30m."
+  },
+  {
+    "name": "suite step: timeout as a template",
+    "kind": "template",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - transitions:\n      - goto: gate\n    id: suite\n    type: suite\n    timeout: '{{ inputs.t }}'\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": null
+  },
+  {
+    "name": "suite step: scope unknown",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - transitions:\n      - goto: gate\n    id: suite\n    type: suite\n    scope: some\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"suite\": scope must be affected, failed or full."
+  },
+  {
+    "name": "suite step: scope as a template",
+    "kind": "template",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - transitions:\n      - goto: gate\n    id: suite\n    type: suite\n    scope: '{{ inputs.scope }}'\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": null
+  },
+  {
+    "name": "suite step: files not a file list",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - transitions:\n      - goto: gate\n    id: suite\n    type: suite\n    files: 5\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"suite\": files must be a file list: a template or a list of paths."
+  },
+  {
+    "name": "suite step: files and scope together",
+    "kind": "cross-field",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - transitions:\n      - goto: gate\n    id: suite\n    type: suite\n    files: a.js\n    scope: full\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"suite\": files and scope cannot be combined."
+  },
+  {
+    "name": "suite step: expect not red",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - transitions:\n      - goto: gate\n    id: suite\n    type: suite\n    files: a.js\n    expect: blue\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"suite\": expect must be \"red\", with files (the red check of tests written before the code), or \"green\" (the green check of tests that pin the current behaviour)."
+  },
+  {
+    "name": "suite step: expect red without files",
+    "kind": "cross-field",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - transitions:\n      - goto: gate\n    id: suite\n    type: suite\n    expect: red\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"suite\": expect must be \"red\", with files (the red check of tests written before the code), or \"green\" (the green check of tests that pin the current behaviour)."
+  },
+  {
+    "name": "test_ids step with an agent",
+    "kind": "applies-to",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - transitions:\n      - goto: gate\n    id: ids\n    type: test_ids\n    agent: dev\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"ids\": a test_ids step has no agent."
+  },
+  {
+    "name": "test_ids step: steps empty",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - transitions:\n      - goto: gate\n    id: ids\n    type: test_ids\n    steps: ' '\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"ids\": steps must be a repository-relative folder (a template)."
+  },
+  {
+    "name": "test_ids step: renderer not a text",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - transitions:\n      - goto: gate\n    id: ids\n    type: test_ids\n    renderer: 5\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"ids\": renderer must be a repository-relative folder (a template)."
+  },
+  {
+    "name": "release_version step with an agent",
+    "kind": "applies-to",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - transitions:\n      - goto: gate\n    id: ver\n    type: release_version\n    agents:\n      - dev\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"ver\": a release_version step has no agent."
+  },
+  {
+    "name": "release_version step: version not a string",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - transitions:\n      - goto: gate\n    id: ver\n    type: release_version\n    version: 1.2\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"ver\": version must be a string (a template)."
+  },
+  {
+    "name": "release_version step: branch not a string",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - transitions:\n      - goto: gate\n    id: ver\n    type: release_version\n    branch: true\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"ver\": branch must be a string (a template)."
+  },
+  {
+    "name": "agent step: agents an empty list",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    prompt: Build it.\n    transitions:\n      - goto: gate\n    agents: []\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"build\": agents must be a non-empty list."
+  },
+  {
+    "name": "agent step: agents not a list",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    prompt: Build it.\n    transitions:\n      - goto: gate\n    agents: dev\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"build\": agents must be a non-empty list."
+  },
+  {
+    "name": "agent step: fan-out with a goal",
+    "kind": "cross-field",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    prompt: Build it.\n    transitions:\n      - goto: gate\n    agents:\n      - dev\n      - rev\n    goal:\n      until: x\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"build\": goal is not supported on a fan-out step (agents)."
+  },
+  {
+    "name": "agent step: unknown agent",
+    "kind": "reference",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: ghost\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"build\" references unknown agent \"ghost\"."
+  },
+  {
+    "name": "agent step: one unknown agent of a fan-out",
+    "kind": "reference",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    prompt: Build it.\n    transitions:\n      - goto: gate\n    agents:\n      - dev\n      - ghost\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"build\" references unknown agent \"ghost\"."
+  },
+  {
+    "name": "goal without until",
+    "kind": "required",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n    goal:\n      max: 3\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"build\": goal requires \"until\"."
+  },
+  {
+    "name": "wait on a step without a loop",
+    "kind": "applies-to",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n    wait:\n      probe: pr_checks\n      target: x\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"build\": wait is only valid on a single-agent step with a loop."
+  },
+  {
+    "name": "wait on a human_approval step",
+    "kind": "applies-to",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n    wait:\n      probe: pr_checks\n      target: x\n",
+    "error": "Step \"gate\": wait is only valid on a single-agent step with a loop."
+  },
+  {
+    "name": "wait: unknown probe",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n    loop:\n      max: 3\n    wait:\n      probe: ping\n      target: x\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"build\": wait.probe must be one of pr_checks, pr_changes, workflow_run, pr_mergeable."
+  },
+  {
+    "name": "wait: no target",
+    "kind": "required",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n    loop:\n      max: 3\n    wait:\n      probe: pr_checks\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"build\": wait requires \"target\" (the PR/MR or CI run URL)."
+  },
+  {
+    "name": "wait: output on pr_changes",
+    "kind": "applies-to",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n    loop:\n      max: 3\n    wait:\n      probe: pr_changes\n      target: x\n      output:\n        a: b\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"build\": wait.output must be a map of output fields, and only applies to the pr_checks and workflow_run probes."
+  },
+  {
+    "name": "wait: infra_output a list",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n    loop:\n      max: 3\n    wait:\n      probe: pr_checks\n      target: x\n      infra_output:\n        - a\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"build\": wait.infra_output must be a map of output fields, and only applies to the pr_checks and workflow_run probes."
+  },
+  {
+    "name": "wait: grace not a duration",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n    loop:\n      max: 3\n    wait:\n      probe: pr_checks\n      target: x\n      grace: later\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"build\": wait.grace must be a duration such as 10m."
+  },
+  {
+    "name": "choices on an agent step",
+    "kind": "applies-to",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n    choices:\n      - id: a\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"build\": choices is only valid for human_approval."
+  },
+  {
+    "name": "full_suite not warn",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n    full_suite: error\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"build\": full_suite must be \"warn\", on an agent step (a whole-suite command its agent starts is noted, #177)."
+  },
+  {
+    "name": "full_suite on a human_approval step",
+    "kind": "applies-to",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n    full_suite: warn\n",
+    "error": "Step \"gate\": full_suite must be \"warn\", on an agent step (a whole-suite command its agent starts is noted, #177)."
+  },
+  {
+    "name": "commit_tests false",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n    commit_tests: false\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"build\": commit_tests must be true, on a single-agent step (the orchestrator commits the test files its agent left uncommitted, #209)."
+  },
+  {
+    "name": "commit_tests on a fan-out step",
+    "kind": "applies-to",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    prompt: Build it.\n    transitions:\n      - goto: gate\n    agents:\n      - dev\n      - rev\n    commit_tests: true\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"build\": commit_tests must be true, on a single-agent step (the orchestrator commits the test files its agent left uncommitted, #209)."
+  },
+  {
+    "name": "commit_tests on a suite step",
+    "kind": "applies-to",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - transitions:\n      - goto: gate\n    id: suite\n    type: suite\n    commit_tests: true\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"suite\": commit_tests must be true, on a single-agent step (the orchestrator commits the test files its agent left uncommitted, #209)."
+  },
+  {
+    "name": "base_worktree without orchestrator.worktree",
+    "kind": "cross-field",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n    base_worktree: true\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"build\": base_worktree must be true or false, on an agent step of a workflow with orchestrator.worktree."
+  },
+  {
+    "name": "base_worktree not a boolean",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n    base_worktree: 'yes'\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\norchestrator:\n  worktree: true\n",
+    "error": "Step \"build\": base_worktree must be true or false, on an agent step of a workflow with orchestrator.worktree."
+  },
+  {
+    "name": "local_preview on an agent step",
+    "kind": "applies-to",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n    local_preview: true\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"build\": local_preview must be true or false, on a human_approval step."
+  },
+  {
+    "name": "local_preview not a boolean",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n    local_preview: 'yes'\n",
+    "error": "Step \"gate\": local_preview must be true or false, on a human_approval step."
+  },
+  {
+    "name": "diff_base on an agent step",
+    "kind": "applies-to",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n    diff_base: origin/main\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"build\": diff_base must be a ref (e.g. \"origin/{{ inputs.base_branch }}\"), on a human_approval step."
+  },
+  {
+    "name": "diff_base blank",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n    diff_base: '  '\n",
+    "error": "Step \"gate\": diff_base must be a ref (e.g. \"origin/{{ inputs.base_branch }}\"), on a human_approval step."
+  },
+  {
+    "name": "save_to_issue not one of the choices",
+    "kind": "reference",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n    choices:\n      - id: accept\n    save_to_issue: other\n",
+    "error": "Step \"gate\": save_to_issue must be the id of one of the step's choices (e.g. accept), on a human_approval step."
+  },
+  {
+    "name": "save_to_issue on an agent step",
+    "kind": "applies-to",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n    save_to_issue: accept\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"build\": save_to_issue must be the id of one of the step's choices (e.g. accept), on a human_approval step."
+  },
+  {
+    "name": "a choice with feedback_required and no feedback",
+    "kind": "cross-field",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n    choices:\n      - id: redo\n        feedback_required: true\n",
+    "error": "Step \"gate\": a choice with feedback_required needs the step's feedback field."
+  },
+  {
+    "name": "summary on an agent step",
+    "kind": "applies-to",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n    summary: x\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"build\": summary must be a text (a template), on a human_approval step."
+  },
+  {
+    "name": "recommend not a text",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n    recommend: 5\n",
+    "error": "Step \"gate\": recommend must be a text (a template), on a human_approval step."
+  },
+  {
+    "name": "approve_label on a gate with choices",
+    "kind": "cross-field",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n    choices:\n      - id: a\n    approve_label: 'Yes'\n",
+    "error": "Step \"gate\": approve_label is for an Approve / Reject gate; a gate with choices sets each choice's label and help."
+  },
+  {
+    "name": "reject_help on an agent step",
+    "kind": "applies-to",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n    reject_help: x\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"build\": reject_help must be a text (a template), on a human_approval step."
+  },
+  {
+    "name": "a choice's help not a text",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n    choices:\n      - id: a\n        help: 5\n",
+    "error": "Step \"gate\": a choice's help must be a text."
+  },
+  {
+    "name": "a choice's then unknown",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n    choices:\n      - id: a\n        then: explode\n",
+    "error": "Step \"gate\": choice \"a\": then must be an object with an action."
+  },
+  {
+    "name": "kind unknown",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n    kind: urgent\n",
+    "error": "Step \"gate\": kind must be one of decision, escalation, on a human_approval step."
+  },
+  {
+    "name": "kind on an agent step",
+    "kind": "applies-to",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n    kind: decision\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"build\": kind must be one of decision, escalation, on a human_approval step."
+  },
+  {
+    "name": "an escalation with a check",
+    "kind": "cross-field",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n    kind: escalation\n    check:\n      probe: pr_checks\n      target: x\n",
+    "error": "Step \"gate\": a gate with check (a merge) is a decision, not an escalation."
+  },
+  {
+    "name": "check on an agent step",
+    "kind": "applies-to",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n    check:\n      probe: pr_checks\n      target: x\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"build\": check is only valid for human_approval."
+  },
+  {
+    "name": "check without a probe",
+    "kind": "required",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n    check:\n      target: x\n",
+    "error": "Step \"gate\": check needs a probe (pr_checks, pr_changes, workflow_run, pr_mergeable) and a target."
+  },
+  {
+    "name": "check: on_fail unknown",
+    "kind": "reference",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n    check:\n      probe: pr_checks\n      target: x\n      on_fail: ghost\n",
+    "error": "Step \"gate\" points to unknown step \"ghost\"."
+  },
+  {
+    "name": "check: recover without on_fail",
+    "kind": "cross-field",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n    check:\n      probe: pr_checks\n      target: x\n      recover:\n        - build\n",
+    "error": "Step \"gate\": check.recover needs a failure route (on_error / on_fail) for when the supervisor does not recover."
+  },
+  {
+    "name": "check: recover empty",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n    check:\n      probe: pr_checks\n      target: x\n      on_fail: build\n      recover: []\n",
+    "error": "Step \"gate\": check.recover must be a non-empty list of steps."
+  },
+  {
+    "name": "check: recover names a gate",
+    "kind": "reference",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n    check:\n      probe: pr_checks\n      target: x\n      on_fail: build\n      recover:\n        - gate\n",
+    "error": "Step \"gate\": check.recover must list agent steps (\"gate\" is not one)."
+  },
+  {
+    "name": "stall without fields",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n    stall:\n      same_output_fields: []\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"build\": stall.same_output_fields must be a non-empty list of output field names."
+  },
+  {
+    "name": "stall names a field outside the output_schema",
+    "kind": "reference",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n    stall:\n      same_output_fields:\n        - ghost\n    output_schema:\n      type: object\n      properties:\n        a:\n          type: string\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"build\": stall.same_output_fields names \"ghost\", which is not in its output_schema."
+  },
+  {
+    "name": "transition: precheck true without check",
+    "kind": "cross-field",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n        precheck: true\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"build\": precheck: true reuses the step's check, which it does not have."
+  },
+  {
+    "name": "transition: precheck without a target",
+    "kind": "required",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n        precheck:\n          probe: pr_checks\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"build\": precheck needs a probe (pr_checks, pr_changes, workflow_run, pr_mergeable) and a target."
+  },
+  {
+    "name": "transition: recover without on_error",
+    "kind": "cross-field",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n        recover:\n          - build\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"build\": transition.recover needs a failure route (on_error / on_fail) for when the supervisor does not recover."
+  },
+  {
+    "name": "transition: set a list",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n        set:\n          - a\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"build\": transition set must be a map of run variables."
+  },
+  {
+    "name": "transition: goto unknown",
+    "kind": "reference",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: ghost\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"build\" points to unknown step \"ghost\"."
+  },
+  {
+    "name": "transition: on_error unknown",
+    "kind": "reference",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n        on_error: ghost\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"build\" points to unknown step \"ghost\"."
+  },
+  {
+    "name": "step on_error unknown, seen through a transition",
+    "kind": "reference",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n    on_error: ghost\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"build\" points to unknown step \"ghost\"."
+  },
+  {
+    "name": "transition: status unknown",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - goto: end\n        status: ok\n",
+    "error": "Step \"gate\": transition status must be one of success, failed, cancelled."
+  },
+  {
+    "name": "transition: status without end",
+    "kind": "cross-field",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n        status: failed\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"build\": a transition status only applies when the transition ends the run (goto: end or on_exhausted: end)."
+  },
+  {
+    "name": "transition: merge not local",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - goto: end\n        merge: remote\n",
+    "error": "Step \"gate\": transition merge must be \"local\"."
+  },
+  {
+    "name": "transition: merge local without a worktree",
+    "kind": "cross-field",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - goto: end\n        merge: local\n",
+    "error": "Step \"gate\": merge: local needs orchestrator.worktree (the run's branch lives in its worktree)."
+  },
+  {
+    "name": "transition: ship without a tag",
+    "kind": "required",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - goto: end\n        ship: {}\n",
+    "error": "Step \"gate\": transition ship needs a tag (ship: { tag: \"{{ inputs.version }}\" })."
+  },
+  {
+    "name": "transition: ship on an escalation gate",
+    "kind": "applies-to",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - goto: end\n        ship:\n          tag: v1\n    kind: escalation\n",
+    "error": "Step \"gate\": ship belongs to a human gate nobody else answers (type: human_approval, no kind: escalation, no timeout)."
+  },
+  {
+    "name": "transition: ship without a worktree",
+    "kind": "cross-field",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - goto: end\n        ship:\n          tag: v1\n",
+    "error": "Step \"gate\": ship needs orchestrator.worktree (the repository and its base branch)."
+  },
+  {
+    "name": "orchestrator: max_total_context not a token count",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\norchestrator:\n  limits:\n    max_total_context: big\n",
+    "error": "orchestrator.limits.max_total_context must be a token count such as 20M."
+  },
+  {
+    "name": "orchestrator: max_total_context as a template",
+    "kind": "template",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\norchestrator:\n  limits:\n    max_total_context: '{{ inputs.ctx }}'\n",
+    "error": null
+  },
+  {
+    "name": "orchestrator: local_preview without a command",
+    "kind": "required",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\norchestrator:\n  local_preview:\n    port: 3000\n",
+    "error": "orchestrator.local_preview needs a command (e.g. \"npm start\")."
+  },
+  {
+    "name": "orchestrator: supervisor.on_call not a boolean",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\norchestrator:\n  supervisor:\n    on_call: 'yes'\n",
+    "error": "orchestrator.supervisor.on_call must be true or false."
+  },
+  {
+    "name": "orchestrator: supervisor.max_cost_usd negative",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\norchestrator:\n  supervisor:\n    max_cost_usd: -1\n",
+    "error": "orchestrator.supervisor.max_cost_usd must be a number of US$ (0 or more)."
+  },
+  {
+    "name": "orchestrator: supervisor.stall.slow_factor a text",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\norchestrator:\n  supervisor:\n    stall:\n      slow_factor: x\n",
+    "error": "orchestrator.supervisor.stall.slow_factor must be a number (0 = off)."
+  },
+  {
+    "name": "groups: not a list",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\ngroups: 5\n",
+    "error": "groups must be a list of { name, steps }."
+  },
+  {
+    "name": "groups: an unknown step",
+    "kind": "reference",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\ngroups:\n  - name: g\n    steps:\n      - ghost\n",
+    "error": "Group \"g\" references unknown step \"ghost\"."
+  },
+  {
+    "name": "outputs: not a map",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\noutputs: 5\n",
+    "error": "outputs must be a map of output names to { type, description, value }."
+  },
+  {
+    "name": "agents are checked before steps",
+    "kind": "order",
+    "yaml": "agents:\n  dev:\n    provider: mock\n    persona: x\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n    edits_tests: 'no'\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Agent \"dev\": persona must be \"random\"."
+  },
+  {
+    "name": "steps are checked in order",
+    "kind": "order",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n    display: ''\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n    kind: urgent\n",
+    "error": "Step \"build\": display must be a name of 1 to 40 characters."
+  },
+  {
+    "name": "a step: edits_tests before protect_files",
+    "kind": "order",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n    edits_tests: x\n    protect_files:\n      - a.js\n",
+    "error": "Step \"gate\": edits_tests must be true or false."
+  },
+  {
+    "name": "a step: unknown agent before goal",
+    "kind": "order",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: ghost\n    prompt: Build it.\n    transitions:\n      - goto: gate\n    goal: {}\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"build\" references unknown agent \"ghost\"."
+  },
+  {
+    "name": "a step: choices before full_suite",
+    "kind": "order",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n    choices:\n      - id: a\n    full_suite: x\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"build\": choices is only valid for human_approval."
+  },
+  {
+    "name": "steps before orchestrator",
+    "kind": "order",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n    kind: x\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\norchestrator:\n  supervisor:\n    on_call: x\n",
+    "error": "Step \"build\": kind must be one of decision, escalation, on a human_approval step."
+  },
+  {
+    "name": "wait: null on a looping step",
+    "kind": "required",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n    loop:\n      max: 3\n    wait: null\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"build\": wait.probe must be one of pr_checks, pr_changes, workflow_run, pr_mergeable."
+  },
+  {
+    "name": "stall: null",
+    "kind": "type",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n    stall: null\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Step \"build\": stall.same_output_fields must be a non-empty list of output field names."
+  },
+  {
+    "name": "transition: ship a text",
+    "kind": "required",
+    "yaml": "agents:\n  dev:\n    provider: mock\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - goto: end\n        ship: v1\n",
+    "error": "Step \"gate\": transition ship needs a tag (ship: { tag: \"{{ inputs.version }}\" })."
+  },
+  {
+    "name": "agent: max_context a list holding a template is refused (#352 change)",
+    "kind": "template",
+    "yaml": "agents:\n  dev:\n    provider: mock\n    max_context:\n      - '{{ inputs.ctx }}'\n  rev:\n    provider: mock\nsteps:\n  - id: build\n    agent: dev\n    prompt: Build it.\n    transitions:\n      - goto: gate\n  - id: gate\n    type: human_approval\n    transitions:\n      - when: approved\n        goto: end\n",
+    "error": "Agent \"dev\": max_context must be a token count such as 150k."
+  }
+]

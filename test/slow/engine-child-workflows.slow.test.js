@@ -232,3 +232,44 @@ steps:
   const finished = events.find((e) => e.type === 'workflow.finished');
   assert.equal(finished.status, 'success', finished.error);
 });
+
+test('type: workflow step: a child run gets the parent run\'s test workers in its agents\' environment (#367)', async (t) => {
+  const promptOf = async (testWorkers) => {
+    const { dir, file } = tempWorkflow(t, `apiVersion: multiagent/v1
+kind: Workflow
+metadata: { name: parent-workers }
+agents:
+  a: { provider: claude, model: m, session: ephemeral }
+steps:
+  - id: child
+    type: workflow
+    workflow: child-workers.yaml
+`);
+    fs.writeFileSync(path.join(dir, 'child-workers.yaml'), `apiVersion: multiagent/v1
+kind: Workflow
+metadata: { name: child-workers }
+agents:
+  dev: { provider: claude, model: m, session: ephemeral, capabilities: { tools: [read, bash:npm] } }
+steps:
+  - { id: work, agent: dev, prompt: "Run the tests." }
+`);
+    const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
+    t.after(() => fs.rmSync(runsDir, { recursive: true, force: true }));
+    const run = new WorkflowRun({ file, inputs: {}, mock: true, runsDir, ...(testWorkers ? { testWorkers } : {}) });
+    const childEvents = [];
+    run.on('child', (c) => c.on('event', (ev) => childEvents.push(ev)));
+    const events = [];
+    run.on('event', (ev) => events.push(ev));
+    await run.start();
+    const finished = events.find((e) => e.type === 'workflow.finished');
+    assert.equal(finished.status, 'success', finished.error);
+    // the command guide of the child agent's prompt names the variables set in its environment
+    const sent = childEvents.find((e) => e.type === 'session.message_sent' && e.step_id === 'work');
+    assert.equal(typeof sent?.prompt, 'string', 'the child agent got a prompt');
+    return sent.prompt;
+  };
+  const prompt = await promptOf(3);
+  assert.match(prompt, /MULTIAGENT_TEST_WORKERS=3/);
+  assert.match(prompt, /MULTIAGENT_E2E_WORKERS=3/);
+  assert.doesNotMatch(await promptOf(null), /MULTIAGENT_TEST_WORKERS=/);
+});

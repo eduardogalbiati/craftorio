@@ -13,6 +13,10 @@
 // `params` is the argument shape: absent = no argument; a string = the first argument as is; an
 // array of names = an object built from the positional arguments, where `...name` spreads that
 // argument (an object) into it. `desktop` (desktop-only entries): what the browser says it can't do.
+// `schema` (#338, the service's entries): `{ params, result }` in JSON Schema, plain JSON published
+// with the manifest. `params` describes the argument fn receives (for named params, the object built
+// from them); the service refuses a call that breaks it before fn runs, and the tests check what fn
+// answers against `result` (src/service/contract.js). Shared definitions: src/service/schemas.js.
 
 const fs = require('fs');
 const path = require('path');
@@ -41,9 +45,23 @@ const DESKTOP = [
   // Keep awake (#162, src/keep-awake.js): the blocker's state, re-checked; pushed when it changes
   { channel: 'keepAwake:state', method: 'keepAwakeState', desktop: 'Keeping the computer awake' },
   { event: 'keepAwake:changed', method: 'onKeepAwakeChange' },
+  // Control channel (#336, src/control): { enabled, url, port, file, error, ctlPath }, re-checked; pushed when it changes
+  { channel: 'control:state', method: 'controlChannelState', desktop: 'The control channel for outside sessions' },
+  { event: 'control:changed', method: 'onControlChannelChange' },
+  // The Agents window (#263, src/agents-window.js): open it on an agent ({ agent }), tell it which
+  // agent it shows (remembered for the next open), and the main process asking it to switch
+  { channel: 'agents-window:open', method: 'openAgentsWindow', params: 'options', desktop: 'The Agents window' },
+  { send: 'agents-window:agent', method: 'setAgentsWindowAgent', params: 'options', desktop: 'The Agents window' },
+  { event: 'agents-window:show', method: 'onAgentsWindowShow' },
+  // a link in the window's chats (a run, an issue, a file, a request) opens its screen in the main
+  // window: the window sends the target, main relays it to the main window (AgentsWindow.onNavigate)
+  { send: 'agents-window:navigate', method: 'navigateMainWindow', params: 'target', desktop: 'The Agents window' },
+  { event: 'main-window:navigate', method: 'onMainWindowNavigate' },
+  // the Findings button (#361): the calling window's capture, a PNG data URL
+  { channel: 'window:capture', method: 'captureWindow', desktop: 'Capturing the window' },
 ];
 
-// Account: sign-in with an OAuth provider (system browser) and the free trial. Declared even when
+// Account: sign-in with an OAuth provider (system browser); it only counts users. Declared even when
 // there is no account module (the server without one), so window.api always has the methods.
 function authChannels(auth) {
   return [

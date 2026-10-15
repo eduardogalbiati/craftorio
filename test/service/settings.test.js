@@ -14,7 +14,9 @@ function loadSettingsArea(resolveCommand) {
   const originalProviders = require.cache[providersPath];
   const originalArea = require.cache[areaPath];
   delete require.cache[areaPath];
-  require.cache[providersPath] = { id: providersPath, filename: providersPath, loaded: true, exports: { resolveCommand } };
+  // #389: the area resolves the CLIs with resolveCommandAsync (same answer, never blocking)
+  const resolveCommandAsync = async (cmd) => resolveCommand(cmd);
+  require.cache[providersPath] = { id: providersPath, filename: providersPath, loaded: true, exports: { resolveCommand, resolveCommandAsync } };
   try {
     return require(areaPath)();
   } finally {

@@ -6,9 +6,10 @@
 // MULTIAGENT_SIMULATION_ONLY=1 (the engine refuses real runs, real providers and CLI terminals),
 // sign-in off, HOME/USERPROFILE/APPDATA inside the scratch folder (no CLI session or account of this
 // machine shows). Electron is never started as plain Node: ELECTRON_RUN_AS_NODE is removed.
-// One Electron at a time on the machine (#199): each launch takes the machine-wide screenshot slot
-// (src/engine/machine-slot.js, in machineSlotDir: not the suite step's own MULTIAGENT_LOCKS_DIR,
-// so a release run waits for other runs' captures) and frees it on close. close() removes the scratch folder.
+// A launch with slot: true (the visual lane, #365) takes the machine-wide screenshot slot (#199,
+// src/engine/machine-slot.js, in machineSlotDir: not the suite step's own MULTIAGENT_LOCKS_DIR,
+// so a release run waits for other runs' captures) and frees it on close; the behaviour lane's
+// launches (slot: false) never wait for it. close() removes the scratch folder.
 
 const fs = require('fs');
 const os = require('os');
@@ -16,6 +17,7 @@ const path = require('path');
 const { _electron: electron } = require('@playwright/test');
 const demo = require('../../scripts/screenshot');
 const machineSlot = require('../../src/engine/machine-slot');
+const { shiftClock } = require('./fixed-clock');
 
 const root = path.join(__dirname, '..', '..');
 const src = (m) => require(path.join(root, 'src', m));
@@ -43,8 +45,10 @@ async function seedWorkspace(wsDir) {
   return { ws, project };
 }
 
-// The launched app's environment: simulation only, the scratch workspace, no Node mode
-function appEnv(scratch, { theme, size }) {
+// The launched app's environment: simulation only, the scratch workspace, no Node mode.
+// mockDelayScale: the simulated turns' speed (default 0.02: a turn in well under a second; #368's
+// pause scenarios use a larger one so an agent's turn lasts long enough to be paused during it)
+function appEnv(scratch, { theme, size, now, mockDelayScale = 0.02 }) {
   const home = path.join(scratch, 'home');
   for (const d of [home, path.join(home, 'AppData'), path.join(scratch, 'user-data')]) fs.mkdirSync(d, { recursive: true });
   const env = {
@@ -53,14 +57,24 @@ function appEnv(scratch, { theme, size }) {
     MULTIAGENT_AUTH: 'off',
     MULTIAGENT_WORKSPACE: path.join(scratch, 'workspace'),
     MULTIAGENT_USER_DATA: path.join(scratch, 'user-data'),
-    MULTIAGENT_MOCK_DELAY_SCALE: '0.02',
+    MULTIAGENT_MOCK_DELAY_SCALE: String(mockDelayScale),
     MULTIAGENT_E2E_THEME: theme,
     MULTIAGENT_E2E_SIZE: size,
     HOME: home, USERPROFILE: home, APPDATA: path.join(home, 'AppData'),
     GH_CONFIG_DIR: path.join(home, 'gh'), GLAB_CONFIG_DIR: path.join(home, 'glab'),
   };
   delete env.ELECTRON_RUN_AS_NODE;
+  if (now != null) env.MULTIAGENT_E2E_NOW = String(now);
+  else delete env.MULTIAGENT_E2E_NOW;
   return env;
+}
+
+// The machine's screenshot slot (#199) when take is set, else a no-op holder (#365) → { release }
+async function screenshotSlot(take) {
+  if (!take) return { release() {} };
+  return machineSlot.acquireSlot('screenshot', {
+    dir: machineSlot.machineSlotDir(), holder: 'e2e', onWait: (h) => console.log(`e2e: waiting for the screenshot slot (pid ${h?.pid ?? '?'})`),
+  });
 }
 
 function removeScratch(dir) {
@@ -69,13 +83,16 @@ function removeScratch(dir) {
 
 /**
  * Launches the app on a fresh demo workspace → { app, window, project, scratch, close }.
- * theme: light | dark; size: WxH. No recordVideo: with Electron 44 it stalls the window before
- * its page loads (the trace's screencast is the scenario's video, features/steps/fixtures.js).
+ * theme: light | dark; size: WxH; empty: true leaves the workspace folder unseeded (a first start:
+ * no settings.json, no project; project is null, #319); now: a fixed clock (ms, #362,
+ * features/support/fixed-clock.js) for the seed and the app's main process, the real one without it.
+ * mockDelayScale: MULTIAGENT_MOCK_DELAY_SCALE for the app (default 0.02).
+ * slot: hold the machine's screenshot slot while the app is open (#365: the visual lane).
+ * No recordVideo: with Electron 44 it stalls the window before its page loads (the trace's
+ * screencast is the scenario's video, features/steps/fixtures.js).
  */
-async function launchApp({ theme = 'light', size = '1400x900' } = {}) {
-  const slot = await machineSlot.acquireSlot('screenshot', {
-    dir: machineSlot.machineSlotDir(), holder: 'e2e', onWait: (h) => console.log(`e2e: waiting for the screenshot slot (pid ${h?.pid ?? '?'})`),
-  });
+async function launchApp({ theme = 'light', size = '1400x900', empty = false, now = null, mockDelayScale, slot: takeSlot = true } = {}) {
+  const slot = await screenshotSlot(takeSlot);
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'multiagent-e2e-'));
   let app = null;
   const close = async () => {
@@ -84,12 +101,16 @@ async function launchApp({ theme = 'light', size = '1400x900' } = {}) {
     removeScratch(scratch);
   };
   try {
-    const { project } = await seedWorkspace(path.join(scratch, 'workspace'));
+    let project = null;
+    if (!empty) {
+      const restore = now != null ? shiftClock(now) : () => {};
+      try { ({ project } = await seedWorkspace(path.join(scratch, 'workspace'))); } finally { restore(); }
+    }
     app = await electron.launch({
       executablePath: require('electron'),
       args: [path.join(__dirname, 'electron-main.js')],
       cwd: root,
-      env: appEnv(scratch, { theme, size }),
+      env: appEnv(scratch, { theme, size, now, mockDelayScale }),
       timeout: 60000,
     });
     const window = await app.firstWindow();
@@ -103,5 +124,6 @@ async function launchApp({ theme = 'light', size = '1400x900' } = {}) {
 
 module.exports = {
   launchApp,
+  screenshotSlot,
   seedWorkspace,
 };

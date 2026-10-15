@@ -7,7 +7,9 @@
 // base come from the open gate (approvalId, its work_dir and diff_base) or else from the run's
 // worktree.ready event (once an ended run's folder is gone, its branch in the repository, #202),
 // never from the caller. A simulated run, or one without a worktree, gets the
-// files the developer reported instead (simulated / unavailable), not an error.
+// files the developer reported instead (simulated / unavailable), not an error. #289: once the branch
+// is deleted too, the commits come from its local merge commit (worktree.merged) while it exists, else
+// `branchGone`; `summary` skips the patches (the run card's Repository column).
 
 const fs = require('fs');
 const path = require('path');
@@ -67,12 +69,32 @@ module.exports = (ctx) => {
     const ready = events.find((e) => e.type === 'worktree.ready');
     const name = String(ready?.base || '').replace(/^origin\//, '');
     const bases = [ready?.base, name, ready?.commit].filter(Boolean);
-    if (ready?.dir && fs.existsSync(ready.dir)) return { events, dir: ready.dir, head: 'HEAD', bases };
+    const ref = String(ready?.ref || '').replace(/^refs\/heads\//, '') || null;
+    if (ready?.dir && fs.existsSync(ready.dir)) return { events, dir: ready.dir, head: 'HEAD', bases, branch: ref };
     // #202: an ended run's folder is gone, its branch keeps the work: read it in the repository
-    const branch = [...events].reverse().find((e) => e.type === 'worktree.removed' && e.branch)?.branch;
-    if (ready?.repo && branch && !branch.startsWith('-') && fs.existsSync(ready.repo)) return { events, dir: ready.repo, head: `refs/heads/${branch}`, bases };
-    return { events, problem: 'This run has no git worktree left to compare.' };
+    const removed = [...events].reverse().find((e) => e.type === 'worktree.removed' && e.branch);
+    const branch = removed?.branch || null;
+    const inRepo = ready?.repo && fs.existsSync(ready.repo);
+    if (removed?.branch_deleted) {
+      // #289: the branch deleted after a local merge: its commits live on the base, read from the merge
+      // commit (worktree.merged) down to the base commit the run started from (ready.commit first: the
+      // base's name now points at the merge itself)
+      const merged = [...events].reverse().find((e) => e.type === 'worktree.merged' && e.commit);
+      if (merged && inRepo) {
+        // resolveRange puts the base's tip right before the merge first (base_commit, recorded by the
+        // engine, or the base's reflog): after a rebase, ready.commit is below the commits the base
+        // gained meanwhile, which are not the run's
+        const mergedBase = String(merged.base || '').replace(/^origin\//, '') || name;
+        const bases = [ready.commit, ready.base, name].filter(Boolean);
+        return { events, dir: ready.repo, head: String(merged.commit), bases, branch, mergedRef: true, mergeCommit: String(merged.commit), mergedBase, baseCommit: merged.base_commit ? String(merged.base_commit) : null };
+      }
+      // nothing merged: a state, not a git error
+      return { events, branch, branchGone: true, problem: branchGoneProblem(branch) };
+    }
+    if (inRepo && branch && !branch.startsWith('-')) return { events, dir: ready.repo, head: `refs/heads/${branch}`, bases, branch, branchRef: true };
+    return { events, branch: branch || ref, problem: 'This run has no git worktree left to compare.' };
   }
+  const branchGoneProblem = (branch) => `The branch ${branch} of this run is gone: nothing is left to compare.`;
 
   // The merge base of the branch head with the first base that resolves.
   async function mergeBase(dir, bases, head) {
@@ -82,6 +104,17 @@ module.exports = (ctx) => {
       if (mb && mb.trim()) return { base: String(b), mergeBase: mb.trim() };
     }
     throw new Error(`None of the run's base refs resolves in its worktree (${bases.join(', ')}).`);
+  }
+
+  // #289: the base's tip before the local merge that moved it to mergeCommit, from the base's reflog
+  // (the entry right before the one whose new value is the merge commit); null when the reflog does
+  // not have it (expired, the base rewritten). Runs merged before the engine recorded base_commit.
+  async function preMergeTip(dir, base, mergeCommit) {
+    if (!base || base.startsWith('-')) return null;
+    const out = await gitOrNull(dir, ['reflog', 'show', '--format=%H', `refs/heads/${base}`, '--']);
+    const tips = String(out || '').split('\n').map((l) => l.trim()).filter(Boolean);
+    const at = tips.lastIndexOf(mergeCommit);
+    return at >= 0 && at + 1 < tips.length ? tips[at + 1] : null;
   }
 
   async function branchCommits(dir, mb, head) {
@@ -94,8 +127,23 @@ module.exports = (ctx) => {
 
   // The two refs compared: the whole branch, or one of its commits against its parent.
   async function resolveRange(opts) {
-    const src = diffSource(opts);
+    let src = diffSource(opts);
     if (src.simulated || src.problem) return src;
+    // #289: a branch deleted by hand while the events say it was kept
+    if (src.branchRef && !(await gitOrNull(src.dir, ['rev-parse', '--verify', '--quiet', src.head]))) {
+      return { ...src, branchGone: true, problem: branchGoneProblem(src.branch) };
+    }
+    if (src.mergedRef) {
+      // #289: the merge commit itself gone (the base rewritten): the branch is gone for good
+      if (!(await gitOrNull(src.dir, ['rev-parse', '--verify', '--quiet', `${src.head}^{commit}`]))) return { ...src, branchGone: true, problem: branchGoneProblem(src.branch) };
+      // a true merge commit: the branch is its second parent; a fast-forward (the engine's local merge): the commit itself
+      const second = await gitOrNull(src.dir, ['rev-parse', '--verify', '--quiet', `${src.head}^2`]);
+      if (second?.trim()) src = { ...src, head: second.trim() };
+      // the base's tip right before the merge leads: base_commit (recorded by the engine) or, for a run
+      // merged before the engine recorded it, the base's reflog; then the commit the run started from
+      const tip = src.baseCommit || await preMergeTip(src.dir, src.mergedBase, src.mergeCommit);
+      if (tip) src = { ...src, bases: [tip, ...src.bases.filter((b) => b !== tip)] };
+    }
     const { base, mergeBase: mb } = await mergeBase(src.dir, src.bases, src.head || 'HEAD');
     const commits = await branchCommits(src.dir, mb, src.head || 'HEAD');
     let from = mb;
@@ -138,17 +186,20 @@ module.exports = (ctx) => {
     return out.split(/^(?=diff --git )/m).filter((p) => p.startsWith('diff --git '));
   }
 
-  // opts: { runId, approvalId?, commit? }
+  // opts: { runId, approvalId?, commit?, summary? }; summary (#289, the expanded run card): the commits
+  // and the files with their counts only, every patch null (no `git diff` of the contents).
   async function runDiff(opts = {}) {
     const r = await resolveRange(opts);
     if (r.simulated || r.problem) {
-      return { simulated: !!r.simulated, unavailable: r.problem || null, base: null, commits: [], commit: null, files: reportedFiles(r.events) };
+      // branchGone (#289): the run's branch was deleted, a state the run card names (not a git error)
+      return { simulated: !!r.simulated, unavailable: r.problem || null, branchGone: !!r.branchGone, base: null, branch: r.branch || null, commits: [], commit: null, files: reportedFiles(r.events) };
     }
     const files = await changedFiles(r.dir, r.from, r.to);
-    const all = await patches(r.dir, r.from, r.to);
+    const all = opts.summary ? [] : await patches(r.dir, r.from, r.to);
     const aligned = all.length === files.length;
     return {
-      simulated: false, unavailable: null, base: r.base, mergeBase: r.mergeBase, commits: r.commits, commit: r.commit?.sha || null,
+      // #289: `branch` names the run's branch for the expanded run card's Repository column
+      simulated: false, unavailable: null, branchGone: false, base: r.base, branch: r.branch || null, mergeBase: r.mergeBase, commits: r.commits, commit: r.commit?.sha || null,
       files: files.map((f, i) => {
         const image = !!IMAGE_TYPES[path.extname(f.file).toLowerCase()];
         const patch = aligned ? all[i] : null;

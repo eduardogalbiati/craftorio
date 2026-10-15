@@ -138,6 +138,9 @@ x-tools:
   read_only: &read_only { tools: [read], web: false }
 
 defaults:
+  # #320: a persistent agent idle past its prompt cache's lifetime (Claude on a subscription: 1 h,
+  # minus a margin) continues in a fresh session from its handoff note; an agent's own value wins
+  fresh_after_idle: 55m
   # no working_dir: agents run in the run folder
   timeout: 20m
   # the writer and the reviewer keep their conversation (continuity is the point of the loop), but

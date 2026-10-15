@@ -9,6 +9,34 @@ const simulation = require('../../engine/simulation');
 const projects = require('../../projects');
 const runs = require('../../runs');
 const workspace = require('../../workspace');
+const { clientError, requireId } = require('../common');
+const {
+  ANY,
+  args,
+  BACKLOG,
+  BOOL,
+  described,
+  FLAG,
+  ISSUE_NUMBER,
+  listOf,
+  nullable,
+  OBJECT,
+  orNone,
+  PIPELINE_FILE,
+  PROJECT_ID,
+  RUN_ID,
+  shape,
+  STARTED,
+  STRING,
+  WORKFLOW_FILE,
+} = require('../schemas');
+
+const ON_PROJECT = args({ projectId: PROJECT_ID }, ['projectId']);
+// a local push's answer: { pushed?, rejected?, conflict?, files?, error?, commits?, issues?, local, backlog }
+const PUSHED = shape({ local: nullable(OBJECT), backlog: BACKLOG });
+const NUMBERS = listOf(ISSUE_NUMBER);
+// archive and restore: one result per issue, and the Backlog after them
+const PER_ISSUE = shape({ results: listOf(shape({ number: ISSUE_NUMBER, ok: BOOL, error: ANY }, ['ok'])), backlog: BACKLOG }, ['results']);
 
 module.exports = (ctx) => {
   const project = (projectId) => path.basename(String(projectId));
@@ -25,12 +53,13 @@ module.exports = (ctx) => {
     };
   };
   return [
-    { channel: 'backlog:get', method: 'getBacklog', params: ['projectId'], fn: ({ projectId }) => current(projectId) },
+    { channel: 'backlog:get', method: 'getBacklog', params: ['projectId'], schema: { params: ON_PROJECT, result: BACKLOG }, fn: ({ projectId }) => current(projectId) },
     // the Backlog Refresh banner's "Dismiss for today" (#161, src/backlog-refresh.js)
     {
       channel: 'backlog:dismiss-refresh',
       method: 'dismissBacklogRefresh',
       params: ['projectId'],
+      schema: { params: ON_PROJECT, result: BACKLOG },
       fn: ({ projectId }) => {
         refreshes.dismiss(ctx.ws.backlog, project(projectId));
         return current(project(projectId));
@@ -41,6 +70,7 @@ module.exports = (ctx) => {
       channel: 'backlog:sync',
       method: 'syncBacklog',
       params: ['projectId', 'platform'],
+      schema: { params: args({ projectId: PROJECT_ID, platform: nullable(STRING) }, ['projectId']), result: BACKLOG },
       fn: async ({ projectId, platform }) => {
         const [data] = await Promise.all([
           backlog.syncBacklog({
@@ -59,21 +89,24 @@ module.exports = (ctx) => {
       channel: 'backlog:local',
       method: 'checkLocal',
       params: ['projectId'],
+      schema: { params: ON_PROJECT, result: PUSHED },
       fn: async ({ projectId }) => ({ local: await ctx.refreshLocal(projectId), backlog: current(projectId) }),
     },
-    { channel: 'backlog:push', method: 'pushLocal', params: ['projectId'], fn: ({ projectId }) => ctx.pushProject({ projectId }) },
-    { channel: 'backlog:update-push', method: 'updateAndPushLocal', params: ['projectId'], fn: ({ projectId }) => ctx.pushProject({ projectId, update: true }) },
+    { channel: 'backlog:push', method: 'pushLocal', params: ['projectId'], schema: { params: ON_PROJECT, result: PUSHED }, fn: ({ projectId }) => ctx.pushProject({ projectId }) },
+    { channel: 'backlog:update-push', method: 'updateAndPushLocal', params: ['projectId'], schema: { params: ON_PROJECT, result: PUSHED }, fn: ({ projectId }) => ctx.pushProject({ projectId, update: true }) },
     // A conflict of Update and push handed to a run of the local workflow (returns { runId, runDir }).
     {
       channel: 'backlog:resolve-push',
       method: 'resolvePushConflict',
       params: ['projectId', 'files', 'mock'],
+      schema: { params: args({ projectId: PROJECT_ID, files: nullable(listOf(STRING)), mock: FLAG }, ['projectId']), result: STARTED },
       fn: ({ projectId, files, mock }) => ctx.resolvePushConflict({ projectId, files, mock }),
     },
     {
       channel: 'backlog:auto-push',
       method: 'setAutoPush',
       params: ['projectId', 'on'],
+      schema: { params: args({ projectId: PROJECT_ID, on: FLAG }, ['projectId']), result: OBJECT },
       fn: ({ projectId, on }) => projects.updateProject(ctx.ws.projects, project(projectId), { autoPush: !!on }),
     },
     // #138: a new issue the Product Owner registers joins the epic it clearly matches (no extra click)
@@ -81,13 +114,14 @@ module.exports = (ctx) => {
       channel: 'backlog:auto-epic',
       method: 'setAutoEpic',
       params: ['projectId', 'on'],
+      schema: { params: args({ projectId: PROJECT_ID, on: FLAG }, ['projectId']), result: OBJECT },
       fn: ({ projectId, on }) => projects.updateProject(ctx.ws.projects, project(projectId), { autoEpic: !!on }),
     },
-    { channel: 'backlog:unpushed', method: 'listUnpushed', fn: () => ctx.unpushedProjects() },
+    { channel: 'backlog:unpushed', method: 'listUnpushed', schema: { result: listOf(OBJECT) }, fn: () => ctx.unpushedProjects() },
     // #204: a backlog/ file changed ({ projectId, file, watching }, areas/backlog-watch.js); watching:
     // false = the watcher failed, the screen polls while visible
     { event: 'backlog:changed', method: 'onBacklogChanged' },
-    { channel: 'backlog:watching', method: 'backlogWatching', fn: () => ctx.backlogWatching() },
+    { channel: 'backlog:watching', method: 'backlogWatching', schema: { result: BOOL }, fn: () => ctx.backlogWatching() },
     // Assign a workflow to issues: they are queued and start while there are free run slots (see dispatchQueue).
     // When an ended run kept work for them, the answer is the kept-work question { confirm, kept, runId }
     // (nothing queued) until `confirmed` (#170: Start from scratch).
@@ -95,9 +129,27 @@ module.exports = (ctx) => {
       channel: 'backlog:assign',
       method: 'assignWorkflow',
       // then: what happens with each run's result when it finishes (#134); pipeline: a saved
-      // pipeline's file (#135), whose first workflow and chain replace `workflow` and `then`
-      params: ['projectId', 'numbers', 'workflow', 'inputs', 'mock', 'group', 'confirmed', 'then', 'pipeline'],
+      // pipeline's file (#135), whose first workflow and chain replace `workflow` and `then`;
+      // agentOverrides: each run's provider / model / effort per agent (#262, run:start's)
+      params: ['projectId', 'numbers', 'workflow', 'inputs', 'mock', 'group', 'confirmed', 'then', 'pipeline', 'agentOverrides'],
+      schema: {
+        params: args({
+          projectId: PROJECT_ID,
+          numbers: NUMBERS,
+          workflow: orNone(WORKFLOW_FILE),
+          inputs: nullable(OBJECT),
+          mock: FLAG,
+          group: ANY,
+          confirmed: FLAG,
+          then: ANY,
+          pipeline: orNone(PIPELINE_FILE),
+          agentOverrides: nullable(OBJECT),
+        }, ['projectId']),
+        result: described(BACKLOG, 'The Backlog with the issues queued, or the kept-work question { confirm, kept, runId } (nothing queued).'),
+      },
       fn: ({ confirmed, ...opts }) => {
+        if (opts.numbers != null && !Array.isArray(opts.numbers)) throw clientError('Invalid issue numbers: expected a list.');
+        if (opts.pipeline != null && opts.pipeline !== '') requireId(opts.pipeline, 'pipeline file');
         const kept = confirmed ? null : ctx.keptWorkForIssues(opts.numbers);
         if (kept) return { confirm: kept.text, kept, runId: kept.runId };
         return ctx.assignWorkflow({ ...opts, allowKeptWork: !!confirmed });
@@ -111,6 +163,7 @@ module.exports = (ctx) => {
       channel: 'backlog:save-doc',
       method: 'saveDocToIssue',
       params: ['runId', 'mode', 'preview'],
+      schema: { params: args({ runId: RUN_ID, mode: { enum: ['replace', 'comment'] }, preview: FLAG }, ['runId']), result: shape({ backlog: BACKLOG }) },
       fn: async ({ runId, mode, preview }) => {
         const run = runs.readRun(ctx.ws.runs, path.basename(String(runId)));
         if (!run) throw new Error(`Run not found: ${runId}`);
@@ -137,6 +190,7 @@ module.exports = (ctx) => {
       channel: 'backlog:archive',
       method: 'archiveIssues',
       params: ['projectId', 'numbers'],
+      schema: { params: args({ projectId: PROJECT_ID, numbers: NUMBERS, simulate: FLAG }, ['projectId']), result: PER_ISSUE },
       fn: async ({ projectId, numbers, simulate }) => {
         const id = project(projectId);
         const { results } = await backlog.archiveIssues({ ...platformTarget(id, simulate), numbers, issues: current(id)?.issues || [], dir: ctx.ws.backlog, projectId: id });
@@ -147,6 +201,7 @@ module.exports = (ctx) => {
       channel: 'backlog:restore',
       method: 'restoreIssues',
       params: ['projectId', 'numbers'],
+      schema: { params: args({ projectId: PROJECT_ID, numbers: NUMBERS, simulate: FLAG }, ['projectId']), result: PER_ISSUE },
       fn: async ({ projectId, numbers, simulate }) => {
         const id = project(projectId);
         const { results } = await backlog.restoreIssues({ ...platformTarget(id, simulate), numbers, dir: ctx.ws.backlog, projectId: id });
@@ -158,6 +213,7 @@ module.exports = (ctx) => {
       channel: 'backlog:unqueue',
       method: 'unqueueIssue',
       params: ['projectId', 'number', 'cancelGroup'],
+      schema: { params: args({ projectId: PROJECT_ID, number: ISSUE_NUMBER, cancelGroup: FLAG }, ['projectId']), result: BACKLOG },
       fn: async ({ projectId, number, cancelGroup }) => {
         backlog.unqueue(ctx.ws.backlog, project(projectId), Number(number), { cancelGroup: !!cancelGroup });
         return current(projectId);
@@ -169,6 +225,7 @@ module.exports = (ctx) => {
       channel: 'backlog:pause',
       method: 'pauseQueue',
       params: ['projectId', 'paused', 'confirmed'],
+      schema: { params: args({ projectId: PROJECT_ID, paused: FLAG, confirmed: FLAG }, ['projectId']), result: BACKLOG },
       fn: async ({ projectId, paused, confirmed }) => {
         const head = paused ? null : backlog.readQueue(ctx.ws.backlog, project(projectId)).items[0];
         if (head) {

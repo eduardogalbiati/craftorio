@@ -19,6 +19,7 @@ const {
   total,
   union,
 } = require('./night-watch');
+const TimeZone = require('./time-zone');
 
 const HOUR = 36e5;
 const GAP_MIN = 15;
@@ -32,10 +33,6 @@ const HINTS = {
 };
 
 const ms = (t) => (typeof t === 'number' ? t : Date.parse(t || ''));
-const pad = (n) => String(n).padStart(2, '0');
-const localDay = (t) => { const d = new Date(t); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
-const startOfLocalDay = (t) => { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); };
-const nextLocalDay = (t) => { const d = new Date(startOfLocalDay(t)); d.setDate(d.getDate() + 1); return d.getTime(); };
 const emptyIdle = () => Object.fromEntries(CAUSES.map((c) => [c, 0]));
 
 // The time of `segments` ({ a, b, cause }, cause 'active' or an idle cause) inside the intervals `within`.
@@ -62,9 +59,10 @@ const hoursOf = (m) => {
  * `from`/`to` the window (ISO or ms, `to` capped at `now`); `appSessions` [{ start, end }] the times
  * the app ran (null: unknown, no "app closed" time); `nights` [{ startedAt, until, endedAt }] the
  * Night watch windows; `log` the Night watch log (its incidents say "blocked" or "no work");
- * `lines` run id → lines changed (for the cost per 100 lines).
+ * `lines` run id → lines changed (for the cost per 100 lines); `timeZone` the owner's zone
+ * (settings.timeZone, #273; unset: the computer's), where its days start.
  */
-function occupancyOf({ runs = [], from, to, now = Date.now(), appSessions = null, nights = [], log = [], lines = {} }) {
+function occupancyOf({ runs = [], from, to, now = Date.now(), appSessions = null, nights = [], log = [], lines = {}, timeZone = null }) {
   const w0 = ms(from);
   const w1 = Math.max(w0, Math.min(ms(to), now));
   const span = w1 - w0;
@@ -124,17 +122,21 @@ function occupancyOf({ runs = [], from, to, now = Date.now(), appSessions = null
 
   // the owner's local days, hour by hour
   const days = [];
-  for (let d = startOfLocalDay(w0); d < w1; d = nextLocalDay(d)) {
-    const e = nextLocalDay(d);
+  for (let d = TimeZone.startOfDay(w0, timeZone); d < w1; d = TimeZone.nextDay(d, timeZone)) {
+    const e = TimeZone.nextDay(d, timeZone);
     const m = measure(segments, [[Math.max(d, w0), Math.min(e, w1)]].filter(([a, b]) => b > a));
-    const hours = [];
+    // one slot per local hour of the clock: a 23-hour day leaves its skipped hour empty, a 25-hour day
+    // adds its repeated hour to the same slot
+    const slots = Array.from({ length: 24 }, () => ({ active: 0, span: 0 }));
     for (let h = d; h < e; h += HOUR) {
       const hm = measure(segments, [[Math.max(h, w0), Math.min(h + HOUR, w1)]].filter(([a, b]) => b > a));
-      hours.push(hm.span ? hm.active / hm.span : null);
+      const slot = slots[Number(TimeZone.formatTime(h, timeZone).slice(0, 2)) % 24];
+      slot.active += hm.active;
+      slot.span += hm.span;
     }
     const inDay = (t) => t >= d && t < e;
     days.push({
-      day: localDay(d), ...hoursOf(m), hourly: hours.slice(0, 24), partial: d < w0 || e > w1,
+      day: TimeZone.dayKey(d, timeZone), ...hoursOf(m), hourly: slots.map((s) => (s.span ? s.active / s.span : null)), partial: d < w0 || e > w1,
       costUsd: facts.filter((f) => inDay(f.start)).reduce((s, f) => s + f.cost, 0),
       issues: facts.filter((f) => f.end != null && f.status === 'success' && inDay(f.end)).reduce((s, f) => s + f.issues, 0),
     });

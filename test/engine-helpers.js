@@ -1,11 +1,10 @@
-const test = require('node:test');
-const assert = require('node:assert/strict');
+// Shared by the engine test files: mock runs of the bundled workflows and of small fixtures, and the
+// child-workflow YAMLs. Exports functions and constants only: a test registered here would run
+// again in every file requiring it (#305, guarded by test/test-suite-layout-305-306.test.js).
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { WorkflowRun, loadWorkflow, extractJson, validateSchema, evalExpr, render } = require('../src/engine/workflow');
-const evidence = require('../src/evidence');
-
+const { WorkflowRun } = require('../src/engine/workflow');
 
 const root = path.join(__dirname, '..');
 async function runLoopBlocked(t, mockSequences) {
@@ -194,22 +193,4 @@ steps:
     type: human_approval
     message: "ok?"
 `;
-// ---- #203: unit_tests x e2e_tests -----------------------------------------------------------
-
-for (const unit_tests of ['write_and_run', 'run_existing', 'off']) {
-  for (const e2e_tests of ['off', 'write', 'write_and_run']) {
-    const testVisited = e2e_tests !== 'off' || unit_tests === 'write_and_run';
-    const suiteVisited = unit_tests !== 'off';
-    test(`software-development: unit_tests=${unit_tests} x e2e_tests=${e2e_tests}: test visited=${testVisited}, suite visited=${suiteVisited}`, { timeout: 120000 }, async () => {
-      const { finished } = await runSoftwareDevelopment({
-        inputs: { unit_tests, e2e_tests },
-        mockSequences: { verdict: ['approved'], preview_status: ['success'], tests_status: ['pass'], suite: { suite: ['pass'] } },
-      });
-      assert.equal(finished.status, 'success', finished.error);
-      assert.equal(finished.summary.steps.test.visits > 0, testVisited, 'test step');
-      assert.equal(finished.summary.steps.suite.visits > 0, suiteVisited, 'suite step');
-    });
-  }
-}
-
 module.exports = { root, retro, runLoopBlocked, runConditionalAction, runSoftwareDevelopment, GROUP, runsWith, runWriterReviewer, arenaRun, backlogRefreshRun, tempWorkflow, runWith, until, CHILD_ECHO_YAML, CHILD_FAIL_YAML, CHILD_GATE_YAML };

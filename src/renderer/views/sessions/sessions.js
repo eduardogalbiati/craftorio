@@ -82,17 +82,18 @@
     const h = Math.round(m / 60);
     if (h < 24) return `${h}h`;
     const d = Math.round(h / 24);
-    return d < 7 ? `${d}d` : new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return d < 7 ? `${d}d` : new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: TimeZone.current() });
   }
 
+  // #273: the owner's local days
   function dayGroup(iso) {
     const d = new Date(iso);
-    const start = new Date(); start.setHours(0, 0, 0, 0);
+    const start = TimeZone.startOfDay(Date.now(), TimeZone.current());
     const diff = Math.floor((start - d) / 86400000) + 1;
     if (d >= start) return 'Today';
     if (diff <= 1) return 'Yesterday';
     if (diff < 7) return 'This week';
-    return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: TimeZone.current() });
   }
 
   const folderName = (p) => (p ? String(p).split(/[\\/]/).filter(Boolean).pop() || p : '');

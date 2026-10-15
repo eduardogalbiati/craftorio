@@ -111,3 +111,21 @@ test('withEstimates (#215): a stage carries the real total cost of its items\' r
   const stage = costEstimate.withEstimates(roadmap, [...history(), a, b]).stages[0];
   assert.equal(stage.actualUsd, 22.21);
 });
+
+test('withEstimates (#346): a stage mixing items with and without an estimate sums the known ones and counts the missing', () => {
+  const roadmap = { state: 'planned', stages: [{ id: 's1', name: '', items: [
+    { id: 'a', status: 'planned', workflow: WF, inputs: {}, issues: [{ number: 1, labels: [{ name: 'complexity:3' }] }] },
+    { id: 'new', status: 'planned', workflow: 'never-ran.yaml', inputs: {}, issues: [] },
+    { id: 'b', status: 'planned', workflow: WF, inputs: {}, issues: [{ number: 2, labels: [{ name: 'complexity:6' }] }] },
+  ] }] };
+  const [stage] = costEstimate.withEstimates(roadmap, history()).stages;
+  assert.equal(stage.items[1].estimate, null);
+  assert.deepEqual(stage.estimate, { usd: 12, minutes: 180, items: 2, missing: 1, runs: 3 });
+  assert.equal('actualUsd' in stage, false, 'no item ran');
+});
+
+test('withEstimates (#346): a stage whose items have no estimate has none, and an empty roadmap stays empty', () => {
+  const roadmap = { state: 'planned', stages: [{ id: 's1', name: '', items: [{ id: 'x', status: 'planned', workflow: 'never-ran.yaml', inputs: {}, issues: [] }] }] };
+  assert.equal(costEstimate.withEstimates(roadmap, history()).stages[0].estimate, null);
+  assert.deepEqual(costEstimate.withEstimates({ state: 'planned', stages: [] }, history()).stages, []);
+});

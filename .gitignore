@@ -2,10 +2,18 @@ node_modules/
 runs/
 dist/
 build/
+# cargo's output (native/, #341); Cargo.lock is committed
+native/target/
+# release files (scripts/release-assets.js writes them to the current folder)
+/MultiagentOrchestrator-*.zip
+/MultiagentOrchestrator-*.tar.gz
+/MultiagentOrchestrator-*.AppImage
 .env
 .env.*
 # derived docs (npm run docs; rebuilt by prepare/prestart/pretest/prebuild): never committed, never conflicts
+docs/agents/channels.md
 docs/agents/code-map.md
+docs/agents/engine/field-reference.md
 docs/agents/test-map.md
 # the run's 3D view, one bundle (scripts/build-3d.js; rebuilt by prepare/prestart/prebuild, packed into the app)
 generated/

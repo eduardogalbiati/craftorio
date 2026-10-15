@@ -87,20 +87,45 @@ function resolveSkill(dirs, id) {
   for (const dir of dirs.filter(Boolean)) {
     if (fs.existsSync(skillFile(dir, safe))) {
       const skill = readSkill(dir, safe);
-      return { ...skill, files: supportFiles(skill.path) };
+      // `reads: [code-review]` (#300): folders of other skills this one points to, read, not injected
+      const reads = (Array.isArray(skill.meta.reads) ? skill.meta.reads : []).map(String).flatMap((r) => {
+        const found = dirs.filter(Boolean).find((d) => fs.existsSync(skillFile(d, path.basename(r))));
+        return found ? [{ name: r, path: path.join(found, path.basename(r)) }] : [];
+      });
+      return { ...skill, files: supportFiles(skill.path), reads };
     }
   }
   throw new Error(`Skill not found: "${id}" (searched in ${dirs.filter(Boolean).join(', ')})`);
 }
 
+// `role_sections: [test_writer]` (#300): a "## Test writer: ..." or "## 2. Test writer: ..." section
+// (up to the next "## ") reaches only the agent of that name; "## Evidence and UI reviewer: ..." (#387)
+// reaches both; without a reader every section stays.
+const sectionRoles = (part) => {
+  const m = part.match(/^## (?:\d+\.\s*)?([A-Za-z][A-Za-z ]*):/);
+  return m ? m[1].trim().toLowerCase().split(/\s+and\s+/).map((r) => r.replace(/\s+/g, '_')) : [];
+};
+function readerBody(skill, reader) {
+  const roles = Array.isArray(skill.meta?.role_sections) ? skill.meta.role_sections.map(String) : [];
+  if (!roles.length || typeof reader !== 'string' || !reader) return skill.body; // also `.map(skillPrompt)`'s index
+  return skill.body.split(/^(?=## )/m).filter((part) => {
+    const addressed = sectionRoles(part).filter((r) => roles.includes(r));
+    return !addressed.length || addressed.includes(reader);
+  }).join('');
+}
+
 // Block injected into the agent's prompt. The body goes inline; the support files
 // are listed with absolute paths so the agent reads only the relevant ones
 // (e.g. the rules for the diff's language), like Claude Code does with skills.
-function skillPrompt(skill) {
+// reader: the agent's name, for the skill's role_sections.
+function skillPrompt(skill, reader = null) {
   const files = skill.files.length
     ? `\n\nSkill support files (read the ones relevant to the task):\n${skill.files.map((f) => `- ${path.join(skill.path, f)}`).join('\n')}`
     : '';
-  return `<skill name="${skill.name}" dir="${skill.path}">\n${skill.body.trim()}${files}\n</skill>`;
+  const reads = skill.reads?.length
+    ? `\n\nFolders of the skills it reads:\n${skill.reads.map((r) => `- ${r.name}: ${r.path}`).join('\n')}`
+    : '';
+  return `<skill name="${skill.name}" dir="${skill.path}">\n${readerBody(skill, reader).trim()}${files}${reads}\n</skill>`;
 }
 
 // Skills bundled with the app are seeded into the workspace (src/seed.js): copied once, untouched

@@ -15,6 +15,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const TimeZone = require('./time-zone');
 
 const AGENTS = ['oracle', 'product-owner', 'supervisor'];
 const TOKEN_KINDS = ['input', 'output', 'cache_read', 'cache_write'];
@@ -52,14 +53,15 @@ const noTokens = () => Object.fromEntries(TOKEN_KINDS.map((k) => [k, 0]));
 const addTokens = (sum, tokens) => { for (const k of TOKEN_KINDS) sum[k] += Number(tokens?.[k]) || 0; return sum; };
 
 /**
- * An agent's spend as summary-like runs, one per UTC day (usage.computeUsage's `extraRuns`): it is in
- * no run folder, and counts in Usage and the monthly budgets like the runs.
+ * An agent's spend as summary-like runs, one per local day (settings.timeZone, #273; default UTC)
+ * (usage.computeUsage's `extraRuns`): it is in no run folder, and counts in Usage and the monthly
+ * budgets like the runs.
  */
-function dayRuns(lines, { id, workflow }) {
+function dayRuns(lines, { id, workflow, timeZone = 'UTC' }) {
   const days = new Map();
   for (const u of lines) {
     if (!u.ts) continue;
-    const day = String(u.ts).slice(0, 10);
+    const day = TimeZone.dayKey(u.ts, timeZone);
     if (!days.has(day)) days.set(day, { run_id: `${id}-${day}`, workflow, started_at: u.ts, status: 'succeeded', sessions: [] });
     days.get(day).sessions.push({ provider: u.provider || 'claude', model: u.model, tokens: u.tokens || {}, cost_usd: costOf(u), provider_session_id: u.sessionId || null, turns: 1 });
   }
@@ -88,16 +90,17 @@ function sessionsOf(agent, turns) {
   return list;
 }
 
-// One agent in a range of UTC days (inclusive): what happened after `to` is not looked at, so the
+// One agent in a range of local days (inclusive): what happened after `to` is not looked at, so the
 // last session of the range is open.
-function agentUsage(agent, lines, { from, to }) {
+function agentUsage(agent, lines, { from, to, timeZone = 'UTC' }) {
+  const dayOf = (u) => TimeZone.dayKey(u.ts, timeZone);
   const turns = lines
-    .filter((u) => u?.ts && (!from || String(u.ts).slice(0, 10) >= from) && (!to || String(u.ts).slice(0, 10) <= to))
+    .filter((u) => u?.ts && (!from || dayOf(u) >= from) && (!to || dayOf(u) <= to))
     .sort((a, b) => String(a.ts).localeCompare(String(b.ts)));
   const sessions = sessionsOf(agent, turns);
   const days = new Map();
   for (const u of turns) {
-    const day = String(u.ts).slice(0, 10);
+    const day = dayOf(u);
     if (!days.has(day)) days.set(day, { day, costUsd: 0, tokens: noTokens() });
     const d = days.get(day);
     d.costUsd = usd(d.costUsd + costOf(u));
@@ -119,14 +122,14 @@ function agentUsage(agent, lines, { from, to }) {
 
 /**
  * Analytics' Agents tab: { oracle, productOwner, supervisor } (each agent's usage lines), from/to
- * (UTC days, inclusive) → { from, to, agents: { oracle | 'product-owner' | supervisor: { totals:
+ * (local days in `timeZone`, default UTC, inclusive) → { from, to, agents: { oracle | 'product-owner' | supervisor: { totals:
  * { costUsd, tokens, turns, sessions, turnsWithoutTokens, projects? (Product Owner), wakeUps?, questions? (Oracle) },
  * days: [{ day, costUsd, tokens }], sessions: [{ agent, sessionId, start, startReason, turns,
  * contextAtEnd, costUsd, tokens (null: not recorded), end, endReason }] } } }.
  */
-function agentsAnalytics({ oracle = [], productOwner = [], supervisor = [], from = null, to = null } = {}) {
+function agentsAnalytics({ oracle = [], productOwner = [], supervisor = [], from = null, to = null, timeZone = 'UTC' } = {}) {
   const lines = { oracle, 'product-owner': productOwner, supervisor };
-  return { from, to, agents: Object.fromEntries(AGENTS.map((id) => [id, agentUsage(id, lines[id], { from, to })])) };
+  return { from, to, agents: Object.fromEntries(AGENTS.map((id) => [id, agentUsage(id, lines[id], { from, to, timeZone })])) };
 }
 
 module.exports = {

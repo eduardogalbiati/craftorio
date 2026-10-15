@@ -3,7 +3,10 @@
 // count (#268), the live run timer and a fix round (#272), no "Update the app after this" switch (#279),
 // the bar's state dot, icons, ⋮ menu and filter row (#269), "Ask the Oracle about this failure" (#271),
 // Undo a removal and earlier versions (#281), the item card's bands, Workflow band, pipeline and the
-// stage actions menu (#282), disabling a stage (#284), no "Update the app after this" control (#285), on the demo roadmap (scripts/screenshot.js
+// stage actions menu (#282), disabling a stage (#284), no "Update the app after this" control (#285),
+// the shipped releases' blocks, version lines and Releases filter (#291), the bar's Pause menu ("Pause
+// after this stage" / "Pause now", the pausing badge and Cancel pause, #391), "Move on" past an item at
+// a human gate, its parked card and "Move on from this stage" (#395), on the demo roadmap (scripts/screenshot.js
 // demoRoadmap / demoRoadmapRuns). Locators are roles and data-testid only (skills/ui-conventions).
 //
 // What the screens expose (the renderer's contract for these steps):
@@ -816,4 +819,337 @@ Then('no roadmap item shows an {string} control', async ({ e2e }, name) => {
   await expect(items.getByRole('checkbox', { name, exact: true })).toHaveCount(0);
   await expect(items.getByRole('switch', { name, exact: true })).toHaveCount(0);
   await expect(items.getByText(name, { exact: true })).toHaveCount(0);
+});
+
+// ---- #291: the shipped releases on the Roadmap ---------------------------------------------------------
+// What the screen exposes (the renderer's contract for these steps):
+// - data-testid="roadmap-release-block": a shipped release's block, headed "Release <version>",
+//   holding the roadmap-stage sections whose runs shipped in it;
+// - data-testid="roadmap-release-card": the block's card (the version, its issues, date, cost);
+// - data-testid="roadmap-release-line": the dashed version line that closes the block, reading the
+//   shipped version;
+// - data-testid="roadmap-release-filter": the filter row's Releases filter (a <select> named
+//   "Releases", or a button opening a menu of the releases).
+// Assumption: the head's count is roadmap-count, which names the chosen release and counts its stages.
+
+const releaseRe = (version) => new RegExp(`${escapeRe(version)}(?![\\w.])`);
+const releaseBlock = (page, version) => page.getByTestId('roadmap-release-block').filter({ hasText: new RegExp(`Release ${releaseRe(version).source}`) }).first();
+
+// A shipped release in the project's history (<workspace>/releases/<projectId>.json, src/releases.js,
+// as scripts/screenshot.js demoReleases writes it), holding the runs of stage n's done items (stage n
+// as the roadmap numbers it: the demo's stage 1 "Stability first", stage 2 "Tonight"). Added to the
+// releases already there; the app reloads to read it.
+Given('the project shipped the release {string} with the done runs of stage {int}', async ({ e2e }, version, n) => {
+  const roadmap = JSON.parse(fs.readFileSync(roadmapFile(e2e), 'utf8'));
+  const target = roadmap.stages[n - 1];
+  expect(target, `the demo roadmap's stage ${n}`).toBeTruthy();
+  const done = target.items.filter((x) => x.status === 'done' && (x.runs?.length || x.runId));
+  expect(done.length, `done items with runs in stage ${n}`).toBeGreaterThan(0);
+  const runs = [...new Set(done.flatMap((x) => (x.runs?.length ? x.runs : [x.runId])))];
+  const issues = done.flatMap((x) => (x.issues?.length ? x.issues : [x])).map((i) => ({ number: i.number, title: i.title }));
+  const dir = path.join(e2e.scratch, 'workspace', 'releases');
+  const file = path.join(dir, `${e2e.project.id}.json`);
+  fs.mkdirSync(dir, { recursive: true });
+  const history = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : { releases: [], next: { notes: '' } };
+  history.releases.push({
+    version, tag: version, date: new Date().toISOString(), base: 'main', issues, runs, cost: 4.2,
+    tests: { unit: { status: 'pass', passed: 412, failed: 0 }, e2e: { status: 'pass', passed: 37, failed: 0 } },
+    notes: `# ${version}`, status: 'shipped',
+  });
+  fs.writeFileSync(file, JSON.stringify(history, null, 2));
+  await e2e.window.reload();
+  await e2e.window.waitForLoadState('domcontentloaded');
+});
+
+// The release block is not a stage (#291): it sits after the last stage that has a run in the
+// release, so the last real stage before it in the reading order is stage n.
+Then('the roadmap shows the block {string} right after stage {int}', async ({ e2e }, title, n) => {
+  const block = releaseBlock(e2e.window, title.replace(/^Release\s+/, ''));
+  await expect(block).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(block).toContainText(title);
+  await expect(block.getByTestId('roadmap-stage')).toHaveCount(0);
+  const before = await block.evaluate((el) => {
+    const stages = Array.from(document.querySelectorAll('[data-testid="roadmap-stage"]'))
+      .filter((s) => s.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING);
+    const last = stages[stages.length - 1];
+    return last ? last.textContent : '';
+  });
+  expect(before, `the stage before the release block "${title}"`).toMatch(new RegExp(`\\bStage ${n}\\b`));
+});
+
+Then('the release block {string} shows its release card', async ({ e2e }, version) => {
+  const card = releaseBlock(e2e.window, version).getByTestId('roadmap-release-card');
+  await expect(card).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(card).toContainText(releaseRe(version));
+});
+
+// dashed: the line itself, or its ::before / ::after, draws a dashed border
+Then('a dashed version line reads {string}', async ({ e2e }, version) => {
+  const line = e2e.window.getByTestId('roadmap-release-line').filter({ hasText: releaseRe(version) }).first();
+  await expect(line).toBeVisible({ timeout: LOAD_TIMEOUT });
+  const dashed = await line.evaluate((el) => [null, '::before', '::after'].some((pseudo) => {
+    const s = getComputedStyle(el, pseudo);
+    return ['borderTopStyle', 'borderBottomStyle', 'borderLeftStyle', 'borderRightStyle', 'outlineStyle'].some((k) => s[k] === 'dashed');
+  }));
+  expect(dashed, `the version line "${version}" is dashed`).toBe(true);
+});
+
+When('I choose the release {string} in the Releases filter', async ({ e2e }, version) => {
+  const page = e2e.window;
+  const filter = page.getByTestId('roadmap-release-filter').filter({ visible: true }).first();
+  await expect(filter).toBeVisible({ timeout: LOAD_TIMEOUT });
+  const re = releaseRe(version);
+  if (await filter.evaluate((el) => el.tagName === 'SELECT')) {
+    const value = await filter.locator('option').evaluateAll((opts, source) => opts.find((o) => new RegExp(source).test(o.textContent))?.value ?? null, re.source);
+    expect(value, `the Releases filter offers "${version}"`).not.toBeNull();
+    await filter.selectOption(value);
+  } else {
+    await filter.click();
+    await page.getByRole('menuitemradio', { name: re }).or(page.getByRole('menuitem', { name: re })).or(page.getByRole('option', { name: re })).first().click();
+  }
+});
+
+Then('the roadmap shows only stage {int}', async ({ e2e }, n) => {
+  const shown = e2e.window.getByTestId('roadmap-stage').filter({ visible: true });
+  await expect(shown).toHaveCount(1, { timeout: LOAD_TIMEOUT });
+  await expect(shown.first()).toContainText(new RegExp(`\\bStage ${n}\\b`));
+});
+
+Then('the roadmap header counts {int} stage(s) for the release {string}', async ({ e2e }, n, version) => {
+  const head = header(e2e.window);
+  await expect(head).toContainText(releaseRe(version), { timeout: LOAD_TIMEOUT });
+  await expect(head).toContainText(new RegExp(`\\b${n} stages?\\b`));
+});
+
+// ---- #391: the bar's Pause menu, "Pause after this stage" and "Pause now" ---------------------------
+// What the screen exposes (new for #391):
+// - the bar's "Pause" button (accessible name "Pause", as #269) opens a menu, data-testid=
+//   "roadmap-pause-menu" (role="menu") with two role="menuitem" entries, each with its one-line hint:
+//   data-testid="roadmap-pause-after-stage" ("Pause after this stage", first, the default; hint "The
+//   items of stage N still start and finish; the next stage waits") and data-testid="roadmap-pause-now"
+//   ("Pause now"; hint "Nothing new starts; runs in progress go on").
+// - while the stage finishes: data-testid="roadmap-pausing-badge" in the bar ("Pausing after stage N")
+//   and data-testid="roadmap-cancel-pause", a button "Cancel pause" in the bar.
+// - once the stage is over the roadmap is paused (state dot data-state="paused") and the bar reads
+//   "Stage N done" (as #237).
+// A simulated local-hero run takes some 20 to 60 s at mock delay scale 1; the slowest wait here is two
+// runs back to back (A, then B or C).
+
+const RUN_TIMEOUT = 240000;
+const pauseMenu = (page) => page.getByTestId('roadmap-pause-menu').filter({ visible: true }).first();
+const pauseEntry = (page, label) => pauseMenu(page).getByRole('menuitem').filter({ hasText: label }).first();
+const PAUSE_ENTRIES = { 'Pause after this stage': 'roadmap-pause-after-stage', 'Pause now': 'roadmap-pause-now' };
+const pausingBadge = (page) => rmBar(page).getByTestId('roadmap-pausing-badge');
+
+Given('the app is open with simulated turns of a few seconds', async ({ e2e }) => {
+  await e2e.open({ mockDelayScale: 1 });
+});
+
+// The demo roadmap's stages replaced by two planned stages (issues #3911…#3913, made up: the runs are
+// simulated), the roadmap paused with nothing to settle, so the bar offers Resume; Concurrent runs
+// off: one run at a time, simulations included (src/service/areas/runs.js concurrency()).
+Given('the roadmap has two planned stages, items A and B in stage 1 and item C in stage 2, one run at a time', async ({ e2e }) => {
+  editRoadmap(e2e, (r) => {
+    const model = r.stages.flatMap((s) => s.items).find((x) => x.workflow === 'software-development-local-hero.yaml');
+    expect(model, 'a software-development-local-hero item in the demo roadmap').toBeTruthy();
+    const item = (letter, number) => {
+      const issue = { number, url: `https://github.com/example/demo-app/issues/${number}`, title: `Pause item ${letter}`, body: `A small change (${letter}) for the pause scenarios.`, knownPullRequests: [] };
+      const base = JSON.parse(JSON.stringify(model));
+      for (const k of ['issues', 'reason', 'modeReason', 'origin', 'cost']) delete base[k];
+      return {
+        ...base, id: `pause-item-${letter.toLowerCase()}`, ...issue, mock: true,
+        inputs: { language: 'js', mode: 'auto', screenshots: 'off' }, status: 'planned', runId: null, runs: [], error: null,
+      };
+    };
+    Object.assign(r, {
+      state: 'paused', simulated: true, pausedBy: null, error: null, scope: null, budget: null, live: false,
+      stages: [
+        { id: 'stage-pause-1', name: 'Pause batch', note: '', items: [item('A', 3911), item('B', 3912)] },
+        { id: 'stage-pause-2', name: 'After the pause', note: '', items: [item('C', 3913)] },
+      ],
+    });
+  });
+  const file = path.join(e2e.scratch, 'workspace', 'settings.json');
+  const settings = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
+  fs.writeFileSync(file, JSON.stringify({ ...settings, concurrentRuns: { ...(settings.concurrentRuns || {}), enabled: false } }, null, 2));
+});
+
+// started: the card left "planned" and links its run
+Then('the roadmap item {string} has started', async ({ e2e }, title) => {
+  const item = roadmapItem(e2e.window, title);
+  await expect(item.getByTestId('run-chip')).toHaveAttribute('data-run', /\S/, { timeout: RUN_TIMEOUT });
+  await expect(item).not.toHaveClass(/\brm-planned\b/);
+});
+
+// a planned card has no data-status attribute: the renderer marks it with the rm-planned class only
+Then('the roadmap item {string} has not started', async ({ e2e }, title) => {
+  const item = roadmapItem(e2e.window, title);
+  await expect(item).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(item).toHaveClass(/\brm-planned\b/);
+  await expect(item.getByTestId('run-chip')).toHaveCount(0);
+});
+
+Then('the roadmap item {string} is done', async ({ e2e }, title) => {
+  await expect(roadmapItem(e2e.window, title)).toHaveAttribute('data-status', 'done', { timeout: RUN_TIMEOUT });
+});
+
+Then('the pause menu offers {string} first, with the hint {string}', async ({ e2e }, label, hint) => {
+  const page = e2e.window;
+  await expect(pauseMenu(page)).toBeVisible();
+  await expect(rmBar(page).getByRole('button', { name: 'Pause', exact: true })).toHaveAttribute('aria-expanded', 'true');
+  const first = pauseMenu(page).getByRole('menuitem').first();
+  await expect(first).toHaveAttribute('data-testid', PAUSE_ENTRIES[label]);
+  await expect(first).toContainText(label);
+  await expect(first).toContainText(hint);
+});
+
+Then('the pause menu offers {string}, with the hint {string}', async ({ e2e }, label, hint) => {
+  const entry = pauseEntry(e2e.window, label);
+  await expect(entry).toBeVisible();
+  await expect(entry).toHaveAttribute('data-testid', PAUSE_ENTRIES[label]);
+  await expect(entry).toContainText(hint);
+});
+
+When('I choose {string} in the pause menu', async ({ e2e }, label) => {
+  const page = e2e.window;
+  await expect(pauseMenu(page)).toBeVisible();
+  await pauseEntry(page, label).click();
+  await expect(page.getByTestId('roadmap-pause-menu').filter({ visible: true })).toHaveCount(0);
+});
+
+Then('the roadmap bar shows the badge {string} with a {string} button', async ({ e2e }, text, button) => {
+  const page = e2e.window;
+  await expect(pausingBadge(page)).toHaveText(text, { timeout: LOAD_TIMEOUT });
+  const cancel = rmBar(page).getByTestId('roadmap-cancel-pause');
+  await expect(cancel).toHaveAccessibleName(button);
+  await expect(cancel).toBeEnabled();
+});
+
+Then('the roadmap bar shows no pausing badge', async ({ e2e }) => {
+  const page = e2e.window;
+  await expect(pausingBadge(page)).toHaveCount(0, { timeout: LOAD_TIMEOUT });
+  await expect(rmBar(page).getByTestId('roadmap-cancel-pause')).toHaveCount(0);
+});
+
+// the stage is over: the roadmap is paused (not failed) and says which stage is done
+Then('the roadmap pauses with {string}', async ({ e2e }, text) => {
+  const page = e2e.window;
+  await expect(stateDot(page)).toHaveAttribute('data-state', 'paused', { timeout: RUN_TIMEOUT });
+  await expect(rmBar(page)).toContainText(text);
+});
+
+// ---- #395: move on past an item waiting at a human gate ---------------------------------------------
+// What the screen exposes (new for #395):
+// - data-testid="roadmap-item-move-on": a button "Move on" on the card of an item whose run waits at
+//   a human gate (and in the paused roadmap's alert); a click asks first (confirm-modal: the next stage
+//   starts without the parked change, a "Move on" button).
+// - a parked item's card: data-status="parked" on its roadmap-item, and data-testid="roadmap-item-parked",
+//   "Parked at <gate>", a link (or button) that opens the run at its gate.
+// - data-testid="roadmap-parked-count" in the roadmap bar: "N parked at a gate" (absent when none).
+// - data-testid="roadmap-stage-move-on": the stage menu's "Move on from this stage" entry.
+// - data-testid="roadmap-move-on-refused": the refusal (a toast, an alert or the dialog's text) while an
+//   item of the stage has an agent turn running, naming "Pause after current step".
+
+const parkedLine = (page, title) => roadmapItem(page, title).getByTestId('roadmap-item-parked');
+const parkedCount = (page) => rmBar(page).getByTestId('roadmap-parked-count');
+
+// The demo roadmap's stages replaced by two planned stages (issues #3951 and #3953, made up: the runs
+// are simulated): "Gate item A" in Validated mode (it stops at "Developer check"), "Gate item C" in
+// Automatic mode; the roadmap paused with nothing to settle, so the bar offers Resume.
+Given('the roadmap has two planned stages, item A in Validated mode in stage 1 and item C in stage 2', async ({ e2e }) => {
+  editRoadmap(e2e, (r) => {
+    const model = r.stages.flatMap((s) => s.items).find((x) => x.workflow === 'software-development-local-hero.yaml');
+    expect(model, 'a software-development-local-hero item in the demo roadmap').toBeTruthy();
+    const item = (letter, number, mode) => {
+      const issue = { number, url: `https://github.com/example/demo-app/issues/${number}`, title: `Gate item ${letter}`, body: `A small change (${letter}) for the move-on scenarios.`, knownPullRequests: [] };
+      const base = JSON.parse(JSON.stringify(model));
+      for (const k of ['issues', 'reason', 'modeReason', 'origin', 'cost']) delete base[k];
+      return {
+        ...base, id: `gate-item-${letter.toLowerCase()}`, ...issue, mock: true,
+        inputs: { language: 'js', mode, screenshots: 'off' }, status: 'planned', runId: null, runs: [], error: null,
+      };
+    };
+    Object.assign(r, {
+      state: 'paused', simulated: true, pausedBy: null, error: null, scope: null, budget: null, live: false,
+      stages: [
+        { id: 'stage-gate-1', name: 'Gate batch', note: '', items: [item('A', 3951, 'validated')] },
+        { id: 'stage-gate-2', name: 'After the gate', note: '', items: [item('C', 3953, 'auto')] },
+      ],
+    });
+  });
+});
+
+Then('the roadmap item {string} waits at a human gate', async ({ e2e }, title) => {
+  const item = roadmapItem(e2e.window, title);
+  await expect(item).toHaveAttribute('data-status', 'waiting', { timeout: RUN_TIMEOUT });
+  await expect(item.getByTestId('run-chip')).toHaveAttribute('data-run', /\S/);
+});
+
+Then('the roadmap item {string} offers {string} on its card', async ({ e2e }, title, name) => {
+  const button = roadmapItem(e2e.window, title).getByRole('button', { name, exact: true });
+  await expect(button).toBeEnabled({ timeout: LOAD_TIMEOUT });
+  if (name === 'Move on') await expect(button).toHaveAttribute('data-testid', 'roadmap-item-move-on');
+});
+
+Then('the confirm dialog says the next stage starts without the parked change', async ({ e2e }) => {
+  const dialog = e2e.window.getByTestId('confirm-modal');
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText(/without/i);
+  await expect(dialog).toContainText(/parked/i);
+});
+
+When('I press {string} in the confirm dialog', async ({ e2e }, name) => {
+  const dialog = e2e.window.getByTestId('confirm-modal');
+  await dialog.getByRole('button', { name, exact: true }).click();
+  await expect(dialog).toBeHidden();
+});
+
+Then('the roadmap item {string} is parked at {string}', async ({ e2e }, title, gate) => {
+  const item = roadmapItem(e2e.window, title);
+  await expect(item).toHaveAttribute('data-status', 'parked', { timeout: LOAD_TIMEOUT });
+  await expect(parkedLine(e2e.window, title)).toHaveText(new RegExp(`Parked at ${escapeRe(gate)}`));
+  await expect(item.getByRole('button', { name: 'Move on', exact: true })).toHaveCount(0);
+});
+
+Then('the roadmap item {string} is not parked', async ({ e2e }, title) => {
+  const item = roadmapItem(e2e.window, title);
+  await expect(item).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(item).not.toHaveAttribute('data-status', 'parked');
+  await expect(parkedLine(e2e.window, title)).toHaveCount(0);
+});
+
+Then('the roadmap bar counts {string}', async ({ e2e }, text) => {
+  await expect(parkedCount(e2e.window)).toHaveText(text, { timeout: LOAD_TIMEOUT });
+});
+
+Then('the roadmap bar shows no parked count', async ({ e2e }) => {
+  await expect(parkedCount(e2e.window)).toHaveCount(0, { timeout: LOAD_TIMEOUT });
+});
+
+// the card's "Parked at <gate>" line is a link to the run, at its gate
+When('I open the gate of the parked roadmap item {string}', async ({ e2e }, title) => {
+  const line = parkedLine(e2e.window, title);
+  await expect(line).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await line.scrollIntoViewIfNeeded();
+  // the line itself is the link, or it holds one
+  const inner = line.getByRole('link').or(line.getByRole('button')).first();
+  if (await inner.count()) await inner.click();
+  else await line.click();
+});
+
+When('I choose {string} on the gate card', async ({ e2e }, name) => {
+  const card = e2e.window.getByTestId('run-gate').first();
+  await card.getByTestId('run-gate-choice').filter({ hasText: new RegExp(`^\\s*${escapeRe(name)}\\s*$`) }).click();
+  await expect(card.getByTestId('run-gate-choice').first()).toBeHidden({ timeout: LOAD_TIMEOUT });
+});
+
+Then('the stage actions menu entry {string} moves on from the stage', async ({ e2e }, name) => {
+  await expect(stageMenu(e2e.window).getByRole('menuitem', { name, exact: true })).toHaveAttribute('data-testid', 'roadmap-stage-move-on');
+});
+
+Then('the roadmap refuses to move on while an agent turn is running, pointing to {string}', async ({ e2e }, action) => {
+  const refusal = e2e.window.getByTestId('roadmap-move-on-refused').filter({ visible: true }).first();
+  await expect(refusal).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(refusal).toContainText(/agent turn/i);
+  await expect(refusal).toContainText(action);
 });

@@ -48,8 +48,9 @@
 // closeModal, devMode, wantsSimulation, openGateOf, openNextGate, selectRun, confirmDialog).
 /* global api */
 (() => {
-  // Must match PLATFORMS in src/backlog.js (soon = no sync yet).
-  const PLATFORMS = { github: { label: 'GitHub' }, gitlab: { label: 'GitLab' }, bitbucket: { label: 'Bitbucket', soon: true } };
+  // The platform adapters (src/shared/platforms/, #351; platformOf: GitHub's when unknown) plus Bitbucket (soon = no sync yet), as in src/issues.js.
+  const { DEFAULT_PLATFORM, platformOrDefault: platformOf, requestRef } = window.Platforms;
+  const PLATFORMS = { ...Object.fromEntries(window.Platforms.PLATFORMS.map((p) => [p.id, { label: p.label }])), bitbucket: { label: 'Bitbucket', soon: true } };
   window.BACKLOG_PLATFORMS = PLATFORMS;
   const MODE_KEY = 'multiagent.backlogMode';
   // #217: the Board tab's last view (list or kanban) and the Roadmap's Show all (#268: its Planned |
@@ -57,6 +58,7 @@
   const BOARD_KEY = 'multiagent.backlogBoard';
   const SHOW_ALL_KEY = 'multiagent.roadmapShowAll';
   const SINCE_KEY = 'multiagent.roadmapSince';
+  const RELEASE_KEY = 'multiagent.roadmapRelease'; // #291: the Releases filter ('' all, 'next', a version)
   const WORKFLOW_KEY = 'multiagent.backlogWorkflow';
   const LABELS_KEY = 'multiagent.backlogLabels.'; // + project id
   const SORT_KEY = 'multiagent.backlogSort';
@@ -83,6 +85,8 @@
     board: load(BOARD_KEY) === 'kanban' || (load(BOARD_KEY) == null && load(MODE_KEY) === 'kanban') ? 'kanban' : 'list',
     showAll: load(SHOW_ALL_KEY) === '1',
     since: load(SINCE_KEY) || '',
+    release: load(RELEASE_KEY) || '',
+    latest: null, // #287: the Backlog read while the owner is busy, newer than what is shown (backlogChanged)
   };
   // #217: the page tab of a mode (Board: list / kanban); 'roadmap' is the Roadmap screen's (#254)
   const tabOf = (mode) => (mode === 'roadmap' || mode === 'epics' ? mode : 'board');
@@ -172,7 +176,7 @@
     bl.epic = '';
     if (!id) { render(); return; }
     try { setData(await api.getBacklog(id)); } catch (e) { bl.error = errMsg(e); }
-    bl.platform = bl.data?.platform || state.settings.backlogPlatform || 'github';
+    bl.platform = bl.data?.platform || state.settings.backlogPlatform || DEFAULT_PLATFORM;
     render();
     // the stage openStage was asked for before this read
     const stage = stageToShow;
@@ -291,7 +295,8 @@
   async function liveReload() {
     if (!visible() || document.hidden) return;
     if (ownerBusy()) {
-      if (!pendingReload && !(await backlogChanged())) return;
+      // read each time (#287): the notice says what changed since the form opened
+      if (!(await backlogChanged()) && !pendingReload) return;
       staleNotice();
       pendingReload ??= setInterval(() => { if (!ownerBusy()) { clearInterval(pendingReload); pendingReload = null; liveReload(); } }, 1000);
       return;
@@ -301,22 +306,35 @@
     await reload();
     if (view && top != null) view.scrollTop = top;
   }
+  // whether the Backlog now differs from what is shown (kept in bl.latest for the notice)
   async function backlogChanged() {
     const id = bl.projectId;
     if (!id) return false;
     try {
       const data = await api.getBacklog(id);
-      return !!data && bl.projectId === id && dataKey(id, data) !== shownData;
+      const changed = !!data && bl.projectId === id && dataKey(id, data) !== shownData;
+      bl.latest = changed ? data : null;
+      return changed;
     } catch { return false; }
   }
-  // the open Edit form tells the owner the file changed under it; Reload drops the unsaved values
+  // the open Edit form tells the owner the file changed under it, and what changed (#287: "1 item
+  // updated elsewhere", against what is shown, updated on each change); Save applies only the form's
+  // edit to the roadmap as it is now; Reload drops the unsaved values
   function staleNotice() {
     const form = $b('#view-backlog .rm-form');
-    if (!form || form.querySelector('[data-bl-stale]')) return;
+    if (!form) return;
+    const what = bl.latest ? window.BacklogRoadmap?.changedElsewhere?.(bl.data?.roadmap, bl.latest.roadmap) || '' : '';
+    const text = `The roadmap changed${what ? `: ${what}` : ''}.`;
+    const shown = form.querySelector('[data-bl-stale]');
+    if (shown) {
+      if (bl.latest) shown.querySelector('[data-bl-stale-text]').textContent = text;
+      return;
+    }
     const p = document.createElement('p');
     p.className = 'small muted bl-stale';
     p.dataset.blStale = '';
-    p.innerHTML = 'The roadmap changed. <button type="button" class="link-btn small" data-bl-stale-reload>Reload</button>';
+    // (the text is counts and fixed words only, never data from the files)
+    p.innerHTML = `<span data-bl-stale-text data-testid="roadmap-changed-notice" role="status">${text}</span> <button type="button" class="link-btn small" data-bl-stale-reload>Reload</button>`;
     p.querySelector('button').addEventListener('click', () => {
       window.BacklogRoadmap?.closeEdit();
       document.activeElement?.blur?.();
@@ -352,7 +370,7 @@
   // the owner writes the request and starts it. The issue shows here after the next sync.
   function newIssue() {
     if (!project()?.repo) return;
-    openDrawer({ workflow: ISSUE_TRACKER, project: bl.projectId, inputs: { git_platform: bl.platform === 'gitlab' ? 'gl' : 'gh' } });
+    openDrawer({ workflow: ISSUE_TRACKER, project: bl.projectId, inputs: { git_platform: platformOf(bl.platform).short } });
   }
 
   // "Review approval" opens its run, where the gate is answered (the run chat, or the Run screen's
@@ -390,6 +408,12 @@
     const box = $b('#assign-inputs');
     box.innerHTML = WorkflowInputs.formHtml(defs, { values: saved, id: (k) => `ai-${k}`, attrs: (k) => `data-input="${esc(k)}"` });
     $b('#assign-settings').classList.toggle('hidden', !Object.keys(defs).length);
+    // #262: each agent's provider / model / effort for these runs; a pipeline keeps its workflows'
+    const agentsBox = $b('#assign-agents-list');
+    if (agentsBox) {
+      agentsBox.innerHTML = !pipe && wf && window.AgentOverrides ? AgentOverrides.html(wf, { prefix: 'assign-ao', hideLegend: true }) : '';
+      $b('#assign-agents').classList.toggle('hidden', !agentsBox.innerHTML);
+    }
     WorkflowInputs.applyHints(box, defs, bl.projectId, { keep: Object.keys(saved) });
     for (const [k, v] of Object.entries(pipe?.stages[0].inputs || {})) if (defs[k]) WorkflowInputs.set(box, k, v);
     assignChain().refresh();
@@ -414,9 +438,14 @@
   }));
   // The values to send: the YAML values (an enum's value, a switch as true/false).
   const assignInputs = () => WorkflowInputs.read($b('#assign-inputs'));
+  // #262: the Agents section's choices, only what differs from the workflow (null when none)
+  const assignAgentOverrides = () => {
+    const o = window.AgentOverrides?.read($b('#assign-agents-list')) || {};
+    return Object.keys(o).length ? o : null;
+  };
 
   // Selected issues that already have work in flight: an open PR/MR, or a run in progress or waiting.
-  const prName = (p) => `${bl.data?.platform === 'gitlab' ? 'MR !' : 'PR #'}${p.number}`;
+  const prName = (p) => requestRef(bl.data?.platform, p.number);
   function inFlight(i) {
     const why = (i.pullRequests || []).map((p) => `open ${prName(p)}${p.draft ? ' (draft)' : ''}`);
     const r = i.runs?.[0];
@@ -460,7 +489,7 @@
     $b('#btn-assign-ok').textContent = `${mock ? 'Simulate' : 'Start'} ${runs} run${plural}`;
     const note = $b('#assign-note');
     note.className = `small ${n && !tooMany ? 'muted' : 'warn-text'}`;
-    const what = group ? `${n} issues → 1 run, 1 ${bl.data?.platform === 'gitlab' ? 'MR' : 'PR'} closing ${numbers.map((x) => `#${x}`).join(', ')}.` : '';
+    const what = group ? `${n} issues → 1 run, 1 ${platformOf(bl.data?.platform).request.short} closing ${numbers.map((x) => `#${x}`).join(', ')}.` : '';
     note.textContent = !n ? 'Nothing to start: every selected issue is skipped.'
       : tooMany ? `One run takes at most ${maxGroup()} issues (Settings › General › Backlog): select fewer or send them as separate runs.`
         : mock ? `${what ? `${what} ` : ''}${runs} simulated run${plural}: no CLI is called and nothing is spent.`
@@ -579,13 +608,15 @@
       // a pipeline's chain is the service's (pipeline: its file), not the dialog's "When it finishes"
       const then = pipe ? null : assignChain().value();
       const pipeline = pipe?.file || null;
-      let data = await api.assignWorkflow(bl.projectId, numbers, workflow, inputs, mock, grouped(), false, then, pipeline);
+      // #262: each run's provider / model / effort per agent (a pipeline keeps its workflows')
+      const agentOverrides = pipe ? null : assignAgentOverrides();
+      let data = await api.assignWorkflow(bl.projectId, numbers, workflow, inputs, mock, grouped(), false, then, pipeline, agentOverrides);
       // an ended run kept work for these issues (#170): resume that run, or start from scratch
       if (data?.kept) {
         const kept = await keptWorkDialog(data.kept);
         if (kept === 'resume') closeModal('#assign-modal');
         if (kept !== 'scratch') return;
-        data = await api.assignWorkflow(bl.projectId, numbers, workflow, inputs, mock, grouped(), true, then, pipeline);
+        data = await api.assignWorkflow(bl.projectId, numbers, workflow, inputs, mock, grouped(), true, then, pipeline, agentOverrides);
       }
       save(WORKFLOW_KEY, choice);
       bl.selected.clear();
@@ -613,6 +644,7 @@
       const wf = bl.workflows.find((w) => w.file === workflow);
       await window.BacklogRoadmap.addStage(roadmapCtx(), bl.data, {
         issues, workflow, workflowName: wf?.name || workflow, inputs, mock: wantsSimulation($b('#assign-mock')), group: grouped(), then: assignChain().value(),
+        agentOverrides: assignAgentOverrides(),
       });
       save(WORKFLOW_KEY, workflow);
       bl.selected.clear();
@@ -634,6 +666,7 @@
     // #217, #268: the Roadmap's Planned | All switch (All when on) and its date range (remembered)
     setShowAll: (on) => { bl.showAll = !!on; save(SHOW_ALL_KEY, bl.showAll ? '1' : ''); render(); },
     setSince: (id) => { bl.since = String(id || ''); save(SINCE_KEY, bl.since); render(); },
+    setRelease: (id) => { bl.release = String(id || ''); save(RELEASE_KEY, bl.release); render(); },
   });
 
   // An issue of a queued group: remove it from the group (the others still go as one run) or
@@ -650,8 +683,9 @@
     });
   }
 
+  const issueOf = (number) => (bl.data?.issues || []).find((i) => i.number === number); // the loaded issue numbered `number`
   async function removeQueued(number) {
-    const issue = (bl.data?.issues || []).find((i) => i.number === number);
+    const issue = issueOf(number);
     let cancelGroup = false;
     if (issue?.queued?.groupedWith?.length) {
       const how = await askUnqueue(issue);
@@ -727,9 +761,8 @@
   // The Epics view (#138): each epic with its progress and members, then the issues in no epic.
   function renderEpics(issues) {
     const epics = bl.data?.epics || [];
-    const platform = bl.data?.platform === 'gitlab' ? 'GitLab: a group epic, or an issue labelled epic whose members carry epic::<name>' : 'GitHub: an issue labelled epic, whose sub-issues are its members';
     const bar = `<div class="bl-queue bl-epics-bar">
-        <span><b>Epics</b> <span class="muted small">${epics.length} · ${esc(platform)}</span></span>
+        <span><b>Epics</b> <span class="muted small">${epics.length} · ${esc(platformOf(bl.data?.platform).epicHelp)}</span></span>
         ${bl.data?.epicsError ? `<span class="warn-text small" title="${esc(bl.data.epicsError)}">members could not be read: last known</span>` : ''}
         <span class="spacer"></span>
         <label class="check small" title="A new issue the Product Owner registers joins the existing epic it clearly matches, with no extra click. Creating an epic always asks."><input type="checkbox" data-auto-epic${bl.data?.autoEpic ? ' checked' : ''} /><span>Auto-place new issues</span></label>
@@ -848,7 +881,7 @@
     return `<span class="bl-menu-wrap">
         <button class="btn sm ghost" type="button" data-menu="${i.number}" data-testid="backlog-issue-menu" aria-haspopup="menu" aria-expanded="${open}" aria-label="Actions for #${i.number}" title="Actions">⋯</button>
         ${open ? `<div class="bl-menu" role="menu" aria-label="Actions for #${i.number}">
-          <button type="button" role="menuitem" data-enrich="${i.number}" data-testid="backlog-enrich" title="Enrich this issue in Write & Review (e.g. into a fuller issue or an RFC), then save the result back to it">Enrich in Write &amp; Review</button>
+          <button type="button" role="menuitem" data-enrich="${i.number}" data-testid="backlog-enrich" title="Enrich this issue in Write & Review (e.g. into a fuller issue or an RFC), then save the result back to it">Enrich in Write &amp; Review</button><button type="button" role="menuitem" data-show-map="${i.number}" data-testid="show-on-map" title="Open the project city with the files this issue is expected to change (#375)">Show on the map</button>
           <button type="button" role="menuitem" data-archive="${i.number}" data-testid="backlog-archive"${why ? ' disabled' : ''} title="${esc(why || 'Close it as not planned on the platform and label it archived')}">Archive</button>
           ${why ? `<p class="muted small bl-menu-why">${esc(why)}</p>` : ''}
         </div>` : ''}
@@ -882,7 +915,7 @@
         ${open ? `
         <div class="pr-body">
           <div class="muted small">Opened by ${esc(i.author || 'unknown')} on ${esc(dateOf(i.createdAt))}${i.assignees.length ? ` · assigned to ${esc(i.assignees.join(', '))}` : ''}</div>
-          ${i.pullRequests?.length ? `<div class="bl-prs"><span class="muted small">Open ${bl.data?.platform === 'gitlab' ? 'MRs' : 'PRs'}</span>${i.pullRequests.map((p) => `<span class="small">${prBadges({ pullRequests: [p] })} ${esc(p.title)}</span>`).join('')}</div>` : ''}
+          ${i.pullRequests?.length ? `<div class="bl-prs"><span class="muted small">Open ${platformOf(bl.data?.platform).request.short}s</span>${i.pullRequests.map((p) => `<span class="small">${prBadges({ pullRequests: [p] })} ${esc(p.title)}</span>`).join('')}</div>` : ''}
           ${i.runs?.length ? `<div class="bl-runs"><span class="muted small">Runs</span>${i.runs.map(runLink).join('')}</div>` : ''}
           <div class="md bl-md">${i.body.trim() ? markdownHtml(i.body) : '<p class="muted">No description.</p>'}</div>
           <div class="row"><a class="btn sm ghost" href="${esc(i.url)}" target="_blank" rel="noopener">Open on ${esc(host)}</a></div>
@@ -894,7 +927,7 @@
     <div class="bl-card${bl.selected.has(i.number) ? ' selected' : ''}" data-n="${i.number}">
       <div class="bl-card-head">${checkbox(i)}<span class="bl-num mono">#${i.number}</span><a class="bl-card-title" href="${esc(i.url)}" target="_blank" rel="noopener" title="Open on ${esc(PLATFORMS[bl.data?.platform]?.label || 'the platform')}">${esc(i.title)}</a>${issueMenu(i)}</div>
       <div class="bl-labels">${refreshedBadge(i)}${discoveryBadge(i)}${epicBadge(i)}${triage(i)}${labels(i)}</div>
-      ${tasks(i)}
+      ${tasks(i)}<button type="button" class="btn sm ghost bl-card-map" data-show-map="${i.number}" data-testid="show-on-map" title="Open the project city with the files this issue is expected to change">Show on the map</button>
       ${prBadges(i) || status(i) ? `<div class="bl-card-run">${prBadges(i)}${status(i)}</div>` : ''}
     </div>`;
 
@@ -1035,7 +1068,7 @@
   // base and `since` = the last refresh's start (the owner presses Start; developer mode starts it simulated).
   function refreshNow() {
     const r = bl.data?.refresh;
-    const inputs = { git_platform: bl.platform === 'gitlab' ? 'gl' : 'gh' };
+    const inputs = { git_platform: platformOf(bl.platform).short };
     if (r?.base) inputs.base_branch = r.base;
     if (r?.since) inputs.since = r.since;
     openDrawer({ workflow: REFRESH, project: bl.projectId, inputs });
@@ -1203,7 +1236,7 @@
     $b('#bl-toolbar').classList.toggle('hidden', roadmap);
     const plat = $b('#bl-platform');
     plat.innerHTML = Object.entries(PLATFORMS).map(([id, p]) => `<option value="${id}">${esc(p.label)}${p.soon ? ' (soon)' : ''}</option>`).join('');
-    plat.value = bl.platform || state.settings.backlogPlatform || 'github';
+    plat.value = bl.platform || state.settings.backlogPlatform || DEFAULT_PLATFORM;
 
     const p = project();
     const btn = $b('#btn-bl-sync');
@@ -1259,7 +1292,7 @@
     for (const id of ['#bl-search', '#bl-label-active']) $b(id).classList.toggle('hidden', tab === 'roadmap');
     if (tab === 'roadmap') $b('#bl-labels-wrap').classList.add('hidden');
     $b('#bl-synced').textContent = bl.syncing ? 'Syncing…' : bl.data ? `Synced ${dateOf(bl.data.syncedAt)} from ${PLATFORMS[bl.data.platform]?.label || bl.data.platform}` : '';
-    const prError = bl.data?.pullRequestsError ? `Open ${bl.data.platform === 'gitlab' ? 'MRs' : 'PRs'} could not be read: ${bl.data.pullRequestsError}` : '';
+    const prError = bl.data?.pullRequestsError ? `Open ${platformOf(bl.data.platform).request.short}s could not be read: ${bl.data.pullRequestsError}` : '';
     $b('#bl-error').textContent = bl.error || prError;
     // (#269: an empty error line takes no room between the alerts, the filter row and the list)
     $b('#bl-error').classList.toggle('hidden', !(bl.error || prError));
@@ -1269,15 +1302,15 @@
 
     const list = $b('#bl-list');
     if (!bl.projects.length) {
-      list.innerHTML = '<div class="empty-state"><b>No projects yet</b><p class="muted">Create a project with a repository (New project… in the header, or Settings › Projects) to see its issues here.</p></div>';
+      list.innerHTML = '<div class="empty-state"><b>No projects yet</b><p class="muted">Create a project with a repository (New project… in the header, or Projects in the menu) to see its issues here.</p></div>';
     } else if (!p?.repo) {
-      list.innerHTML = '<div class="empty-state"><b>This project has no repository</b><p class="muted">Add a repository URL to the project in Settings › Projects to sync its issues, or choose another project in the header.</p></div>';
+      list.innerHTML = '<div class="empty-state"><b>This project has no repository</b><p class="muted">Add a repository URL to the project in Projects (Edit) to sync its issues, or choose another project in the header.</p></div>';
     } else if (PLATFORMS[bl.platform]?.soon) {
       list.innerHTML = `<div class="empty-state"><b>${esc(PLATFORMS[bl.platform].label)} sync is not available yet</b><p class="muted">Pick GitHub or GitLab.</p></div>`;
     } else if (!bl.data) {
       list.innerHTML = bl.syncing ? '<p class="muted">Loading issues…</p>' : '<p class="muted">Not synced yet.</p>';
     } else {
-      list.innerHTML = bl.mode === 'roadmap' ? window.BacklogRoadmap.html(bl.data, render, { epic: bl.epic, epicOptions: epicChoices(board), showAll: bl.showAll, since: bl.since, project: bl.projectId, synced: $b('#bl-synced').textContent }) :bl.mode === 'epics' ? renderEpics(issues) : bl.mode === 'kanban' ? renderKanban(board) : renderList(board);
+      list.innerHTML = bl.mode === 'roadmap' ? window.BacklogRoadmap.html(bl.data, render, { epic: bl.epic, epicOptions: epicChoices(board), showAll: bl.showAll, since: bl.since, release: bl.release, project: bl.projectId, synced: $b('#bl-synced').textContent }) :bl.mode === 'epics' ? renderEpics(issues) : bl.mode === 'kanban' ? renderKanban(board) : renderList(board);
       // the open item's "When it finishes" (#134); the next page when its "Loading…" row comes near (#268)
       if (bl.mode === 'roadmap') {
         window.BacklogRoadmap.mountChain(bl.data);
@@ -1322,6 +1355,7 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h3M11 7h9M4 17h9M17 17h3" /><circle cx="9" cy="7" r="2" /><circle cx="15" cy="17" r="2" /></svg>
           </button>
           <button id="btn-po-clear" class="btn sm ghost" type="button" title="Forget this project's conversation">Clear</button>
+          <button class="icon-btn" type="button" data-agents-window="product-owner" data-testid="agent-chat-open-window" title="Open in a window (Ctrl+Shift+A)" aria-label="Open the Product Owner in a window"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="14" height="14" rx="2" /><path d="M9 3h12v12M21 3l-9 9" /></svg></button>
           <button id="btn-po-close" class="icon-btn" title="Close (Esc)">
             <svg viewBox="0 0 24 24" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg>
           </button>
@@ -1529,8 +1563,8 @@
       if (gate) { openGate(gate); return; }
       const out = e.target.closest('[data-unqueue]');
       if (out) { await removeQueued(Number(out.dataset.unqueue)); return; }
-      const enrich = e.target.closest('[data-enrich]');
-      if (enrich) { bl.menu = null; render(); enrichIssue(Number(enrich.dataset.enrich)); return; }
+      const enrich = e.target.closest('[data-enrich]'), onMap = e.target.closest('[data-show-map]'); // #375: the issue's impact preview on its project's city
+      if (onMap) { bl.menu = null; window.ProjectCityImpact?.showIssue(bl.projectId, issueOf(Number(onMap.dataset.showMap))); return; } if (enrich) { bl.menu = null; render(); enrichIssue(Number(enrich.dataset.enrich)); return; }
       // #238: an issue's actions menu, its Archive, and Restore
       const menu = e.target.closest('[data-menu]');
       if (menu) { bl.menu = bl.menu === Number(menu.dataset.menu) ? null : Number(menu.dataset.menu); render(); return; }
@@ -1538,8 +1572,7 @@
       if (arch) { bl.menu = null; render(); if (!arch.disabled) await archive([Number(arch.dataset.archive)]); return; }
       const back = e.target.closest('[data-restore]');
       if (back) { await restore(Number(back.dataset.restore)); return; }
-      if (e.target.closest('.bl-menu')) return;
-      if (e.target.closest('a')) return;
+      if (e.target.closest('.bl-menu, a')) return;
       const row = e.target.closest('[data-act="toggle"]');
       if (!row) return;
       const n = Number(row.closest('.bl-issue').dataset.n);
@@ -1683,6 +1716,7 @@
           <legend>Settings</legend>
           <div id="assign-inputs" class="wi-grid" data-wi-scope></div>
         </fieldset>
+        <details id="assign-agents" class="adv hidden"><summary>Agents</summary><div id="assign-agents-list"></div></details>
         <div id="assign-chain"></div>
         <div id="assign-pipeline" class="drawer-pipeline hidden"></div>
         <label class="check dev-only"><input type="checkbox" id="assign-mock" /><span>Simulation (no CLI is called, nothing is spent)</span></label>

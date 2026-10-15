@@ -1,7 +1,8 @@
 // #254 Menu by the flow: the sidebar in groups (Plan & Design, Code & Build, Workflows, AI) built from
 // the views' own `nav` entries, Home at the top, Night watch and Settings at the end; a group
 // collapses (remembered); Roadmap is a screen of its own (Code & Build › Roadmap); the Workflows tabs
-// are menu items; Projects lives inside Settings.
+// are menu items. Projects lived inside Settings until #354 brought it back to the menu (Code & Build,
+// before Backlog: test/renderer-projects-354.test.js).
 // The grouping rule is src/renderer/nav-groups.js (pure, no DOM: window.NavGroups in the page,
 // module.exports in Node), required inside each test so this file loads before it exists. The views
 // are the real page (test/renderer-app-harness.js loads index.html's scripts in a vm sandbox).
@@ -50,7 +51,7 @@ test('the menu built from the real views: Home, Plan & Design, Code & Build, Wor
   const expected = [
     'Home',
     '[plan]', 'Write & Review', 'AI Arena',
-    '[code]', 'Backlog', 'Roadmap', 'Sessions',
+    '[code]', 'Projects', 'Backlog', 'Roadmap', 'Sessions',
     '[workflows]', 'Definitions', 'Runs', 'Builder', 'Pipelines',
     '[ai]', 'Agents', 'Skills', 'Usage',
     'Night watch',
@@ -61,10 +62,10 @@ test('the menu built from the real views: Home, Plan & Design, Code & Build, Wor
   assert.deepEqual(got, expected);
 });
 
-test('no menu entry is left for the Dashboard (now Home), the Supervisor (now a drawer), Projects (inside Settings) or Artifacts (a tab of Runs)', () => {
+test('no menu entry is left for the Dashboard (now Home), the Supervisor (now a drawer) or Artifacts (a tab of Runs)', () => {
   const app = loadApp();
   const labels = navEntries(app.defs).map((e) => text(e.label));
-  for (const gone of ['Dashboard', 'Supervisor', 'Projects', 'Artifacts']) {
+  for (const gone of ['Dashboard', 'Supervisor', 'Artifacts']) {
     assert.ok(!labels.includes(gone), `"${gone}" is still a menu entry: ${labels.join(', ')}`);
   }
   const home = navEntries(app.defs).find((e) => text(e.label) === 'Home');
@@ -159,11 +160,6 @@ test('Roadmap is a screen of its own, and the links that opened the Backlog\'s R
   assert.equal(app.state().view, 'roadmap');
 });
 
-test('Settings has a Projects tab (Settings › Projects)', () => {
-  const app = loadApp();
-  assert.match(app.defs.get('settings').markup, /data-stab="projects"/);
-});
-
 // a group's element in the sidebar, its title button and its items' box
 function navGroup(app, id) {
   const el = app.created.find((e) => e.dataset.group === id && e.classList.contains('nav-group'));
@@ -198,22 +194,4 @@ test('a group folded in a previous window is drawn folded', () => {
   assert.equal(ai.title.getAttribute('aria-expanded'), 'false');
   assert.equal(ai.items.classList.contains('hidden'), true);
   assert.equal(navGroup(app, 'code').items.classList.contains('hidden'), false);
-});
-
-test('showView(\'projects\') (an older link) lands on Settings › Projects and reads the projects once', async () => {
-  const app = loadApp({
-    api: {
-      listProjects: async () => [{ id: 'p1', name: 'Project One' }],
-      // Settings draws its other pages too (the CLIs, the voice CLI's status)
-      envDetails: async () => [],
-      speechStatus: async () => ({ path: null, command: 'whisper', installHint: 'pip install whisper', models: [], model: 'base', languages: ['en'], language: 'en' }),
-    },
-  });
-  await app.boot();
-  const before = app.callsTo('listProjects').length;
-  app.run("showView('projects')");
-  await app.settle(10);
-  assert.equal(app.state().view, 'settings');
-  assert.equal(app.run('settingsTab'), 'projects');
-  assert.equal(app.callsTo('listProjects').length - before, 1);
 });

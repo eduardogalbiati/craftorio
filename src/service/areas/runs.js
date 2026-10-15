@@ -14,7 +14,11 @@ const {
 const { Recorder } = require('../../engine/recorder');
 const { resolveCommand } = require('../../engine/providers');
 const simulation = require('../../engine/simulation');
-const { cleanupWorktrees } = require('../../engine/worktree');
+const {
+  cleanupWorktrees,
+  samePath,
+  worktreeRuns,
+} = require('../../engine/worktree');
 const {
   configureMemoryGuard,
   memoryProblem,
@@ -27,12 +31,14 @@ const backlog = require('../../backlog');
 const roadmaps = require('../../roadmap');
 const agents = require('../../agents');
 const usage = require('../../usage');
+const sessionCache = require('../../session-cache');
 const actionsUsage = require('../../actions-usage');
-const { readLocalUsage } = require('../../local-usage');
 const runs = require('../../runs');
 const runOwner = require('../../run-owner');
 const runPr = require('../../run-pr');
 const notifier = require('../../notifications');
+const nightLimits = require('../../night-limits');
+const machineProfile = require('../../machine-profile');
 const { num } = require('../common');
 
 // how often a child run waiting for a slot of Settings › Execution checks again (#175)
@@ -40,8 +46,13 @@ const SLOT_POLL_MS = 1000;
 // how often a start refused for low memory (#276) checks whether memory recovered
 const MEMORY_RETRY_MS = 30e3;
 
+// #262: Settings' providers.<name>.fallbacks as the WorkflowRun `fallbacks` option ({ <provider>: [entries] })
+const settingsFallbacks = (settings) => Object.fromEntries(Object.entries(settings.providers || {})
+  .filter(([, p]) => Array.isArray(p?.fallbacks) && p.fallbacks.length)
+  .map(([name, p]) => [name, p.fallbacks.map(String)]));
+
 module.exports = (ctx) => {
-  const { host, events } = ctx;
+  const { events } = ctx;
   const active = new Map();
   // Starts under way (between the limit check and the run entering `active`): counted like runs.
   const reserved = new Set();
@@ -55,6 +66,8 @@ module.exports = (ctx) => {
     for (const t of dispatchTimers) clearTimeout(t);
     dispatchTimers.clear();
     if (memoryRetry) { clearInterval(memoryRetry); memoryRetry = null; }
+    // the stray check (#390) runs again with the next workspace
+    sharedMemoryGuard()?.watchStrays(null);
   }
 
   // ---- memory guard (#276) --------------------------------------------------------------
@@ -90,6 +103,49 @@ module.exports = (ctx) => {
     return why;
   }
 
+  // #390: the guard also flags a process under a finished run's worktree that keeps using CPU. Its
+  // runs are the folders of worktrees/ (<runId> and <runId>-base); each stray is a notification,
+  // memory:stopStray stops it. Started with the workspace (strays of an earlier app session too),
+  // never in automated checks. #406: a folder is live while any run uses it, here or in another app
+  // process (a run resumed into an earlier run's worktree too), and a stray under it is named with
+  // the last run that used it (run ids start with their start time).
+  function watchStrayProcesses() {
+    if (simulation.simulationOnly() || !ctx.ws) return;
+    const guard = applyMemorySettings();
+    if (!guard) return;
+    const runsOfWorktrees = () => {
+      let names = [];
+      try { names = fs.readdirSync(ctx.ws.worktrees, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name); } catch { return []; }
+      if (!names.length) return [];
+      const ids = names.map((name) => name.replace(/-base$/, ''));
+      // a run using a worktree started after the run it is named after
+      const since = ids.reduce((a, b) => (a && a < b ? a : b), '');
+      const used = worktreeRuns(ctx.ws.runs, ctx.ws.worktrees, { since });
+      const inUse = activeWorktreeDirs();
+      return names.map((name, i) => {
+        const id = ids[i];
+        const main = path.join(ctx.ws.worktrees, id);
+        const users = used.filter((r) => r.dirs.some((d) => samePath(d, main)));
+        const live = active.has(id) || runAlive(id) || inUse.some((d) => samePath(d, main)) || users.some((r) => r.live);
+        return { id: [id, ...users.map((r) => r.runId)].sort().pop(), worktree: path.join(ctx.ws.worktrees, name), live };
+      });
+    };
+    guard.watchStrays({
+      runs: runsOfWorktrees,
+      onStray: (s) => {
+        console.warn(`memory guard: process ${s.pid} of finished run ${s.runId} keeps using CPU: ${s.commandLine}`);
+        ctx.notify(notifier.strayNotice(s));
+      },
+    });
+  }
+  const strayGuard = () => {
+    const guard = sharedMemoryGuard();
+    if (!guard) throw new Error('The memory guard is off (Settings › Execution): it watches no process.');
+    return guard;
+  };
+  const strayProcesses = () => sharedMemoryGuard()?.strayProcesses() || [];
+  const stopStray = (pid) => strayGuard().stopStray(pid);
+
   // The runs in progress are written down until they end: still there at the next start = they
   // died with the app. The file holds a list (one object in older versions).
   const marked = new Map(); // run id -> { runId, workflow, project, mock }
@@ -118,15 +174,18 @@ module.exports = (ctx) => {
   const isRunning = () => active.size > 0 || reserved.size > 0;
   // The run in progress with this id; without an id, the only one in progress (older callers).
   const liveRun = (runId) => (runId ? active.get(String(runId)) : active.size === 1 ? [...active.values()][0] : null) || null;
-  const usageOf = (run) => [...run.sessions.values()].map((s) => ({ provider: s.provider, model: s.model, tokens: s.tokens, costUsd: s.costUsd }));
+  const usageOf = (run) => [...run.sessions.values()].map((s) => ({ provider: s.provider, model: s.model, tokens: s.tokens, costUsd: s.costUsd, cliOnlyUsd: s.cliOnlyUsd || 0 }));
 
   // ---- concurrent runs ------------------------------------------------------------------
   // Settings › Execution › Concurrent runs. Disabled: one run at a time, simulations included.
+  // The maximum is the machine profile's (#367): this machine's proposal in auto, the owner's in manual.
   function concurrency() {
-    const c = { ...workspace.DEFAULT_SETTINGS.concurrentRuns, ...(workspace.readSettings(ctx.ws).concurrentRuns || {}) };
+    const settings = workspace.readSettings(ctx.ws);
+    const c = { ...workspace.DEFAULT_SETTINGS.concurrentRuns, ...(settings.concurrentRuns || {}) };
     if (!c.enabled) return { enabled: false, max: 1, perProject: null, countSimulations: true };
+    const max = machineProfile.resolveLimits(settings, machineProfile.readMachine()).concurrentRuns;
     return {
-      enabled: true, max: Math.max(1, Math.floor(num(c.max) || 1)),
+      enabled: true, max: Math.max(1, Math.floor(num(max) || 1)),
       perProject: num(c.perProject) ? Math.max(1, Math.floor(num(c.perProject))) : null, countSimulations: !!c.countSimulations,
     };
   }
@@ -143,7 +202,9 @@ module.exports = (ctx) => {
     const ancestors = new Set();
     for (let id = parentRunId; id && !ancestors.has(id); id = parentOf(active.get(id))) ancestors.add(id);
     const lends = (r) => !!r.runId && (ancestors.has(r.runId) || all.some((x) => parentOf(x) === r.runId));
-    const taken = all.filter((r) => (c.countSimulations || !r.mock) && !lends(r));
+    // #395: a parked roadmap item's run waiting at its gate holds no slot (the roadmap moved on past it)
+    const parked = (r) => r.approvals?.size > 0 && !!ctx.parkedRun?.(r.runId, r.projectId);
+    const taken = all.filter((r) => (c.countSimulations || !r.mock) && !lends(r) && !parked(r));
     if (taken.length >= c.max) {
       return c.enabled ? `${taken.length} of ${c.max} runs in progress: wait for one to finish, or raise the limit in Settings › Execution.` : 'A workflow is already running.';
     }
@@ -187,11 +248,15 @@ module.exports = (ctx) => {
         runId: r.runId, workflow: r.wf.metadata?.name || path.basename(r.file), file: path.basename(r.file), mock: r.mock,
         projectId: r.projectId, issues: r.issues, startedAt: r.startedAt ? new Date(r.startedAt).toISOString() : null,
         status: r.status, waiting: gates.length, gates, inputs: r.inputs, agent_names: r.agentNames(), display: r.displayNames(),
+        // #368: pausing after the current turn ({ state: 'pausing', step, agents?, command?, at }), else null
+        pause: r.pauseState(),
         ...ctx.liveTitle(r), pr: ctx.withPrState(r.pr, r.mock), passedGates: passedGates(r),
         // what happens with its result when it finishes, and the run whose chain started it (#134)
         chain: r.then || r.from ? { then: r.then, from: r.from, state: r.then ? 'waiting' : undefined } : null,
         // `type: workflow` steps (#174): the run that started this one, the runs this one started
         parentRun: r.parent || null, childRuns: r.childRuns.length ? r.childRuns : null,
+        // #320: what Continue at a gate will re-read, per agent (the phone page's gate line)
+        ...(gates.length && r.sessions ? { nextTurns: sessionCache.agentNextTurns([...r.sessions.values()].map((s) => r.snapshot(s))) } : {}),
       };
     });
   }
@@ -209,7 +274,9 @@ module.exports = (ctx) => {
   // free, waits for one instead of failing; signal: the parent's abort signal (stops that wait);
   // onSlotWait: (why) => void, called once when it has to wait
   // onFinished: (workflow.finished event) => void, called when the run ends (the parent's step waits on it)
-  async function startWorkflowRun({ file, inputs, mock, mockSequences = null, resume = null, projectId: forcedProject = null, issues = null, allowKeptWork = false, notices: startNotices = [], attachments = null, then = null, from = null, parent = null, onFinished = null, signal = null, onSlotWait = null }) {
+  // agentOverrides: { <agent>: { provider?, model?, effort? } } this run's choice per agent (#262, WorkflowRun);
+  // every run also gets Settings' fallback chains per provider and limits per model (settingsFallbacks)
+  async function startWorkflowRun({ file, inputs, mock, mockSequences = null, resume = null, projectId: forcedProject = null, issues = null, allowKeptWork = false, notices: startNotices = [], attachments = null, then = null, from = null, parent = null, onFinished = null, signal = null, onSlotWait = null, agentOverrides = null }) {
     // simulation-only (automated checks): a real run is refused, never turned into a simulation
     if (!mock) simulation.refuseReal('a real run');
     // the same issues never get a second live run, from this app or another one (#112): resume that run instead
@@ -244,7 +311,6 @@ module.exports = (ctx) => {
     }
     let run;
     try {
-      await host.assertCanRun?.({ mock: !!mock });
       // repo_path can be a git URL: clones (or updates) it into <workspace>/repos.
       if (workspace.isGitUrl(inputs?.repo_path)) {
         inputs = { ...inputs, repo_path: (await workspace.cloneRepo(inputs.repo_path, ws.repos)).dir };
@@ -267,9 +333,10 @@ module.exports = (ctx) => {
       }
       // budgets that count usage outside the orchestrator need the CLIs' own logs
       const needsLocal = Object.values(settings.budgets || {}).some((b) => b?.countOutside);
+      const local = needsLocal ? await ctx.localUsage() : null;
       const baselineAt = Date.now();
       // the Oracle's spend (in no run folder) counts too
-      const budget = usage.budgetBaseline({ runsDir: ws.runs, settings, local: needsLocal ? readLocalUsage() : null, extraRuns: ctx.agentUsageRuns() });
+      const budget = usage.budgetBaseline({ runsDir: ws.runs, settings, local, extraRuns: ctx.agentUsageRuns() });
       const wfFile = ctx.workflowPath(file);
       const notices = [...(startNotices || [])];
       if (wfFile.fallback) {
@@ -283,6 +350,11 @@ module.exports = (ctx) => {
         // Run locally at gates: the project's override of the workflow's orchestrator.local_preview
         localPreview: project?.localPreview?.command ? project.localPreview : null,
         budget, prices: settings.prices, projectId, issues, resume, attachments, mockSequences: mock ? mockSequences : null, then, from,
+        agentOverrides, fallbacks: settingsFallbacks(settings), models: settings.models || {},
+        // #337: tonight's limits, read at each check (a raise reaches the run at its next one)
+        nightLimits: () => nightLimits.tonightLimits(ws.oracle || path.join(ws.root, 'oracle')),
+        // #367: the machine profile's test workers per run (auto from this machine, or the owner's)
+        testWorkers: machineProfile.resolveLimits(settings, machineProfile.readMachine()).testWorkers,
         // `type: workflow` steps (#174): each child is a normal run of this service, linked to this one
         parent, startChild: (spec) => startChildRun(run, spec),
         // simulation runs never touch git: the agents are mocked and work in the repository folder
@@ -293,7 +365,9 @@ module.exports = (ctx) => {
         // `persona: random` agents become one of the user's agents (Agents menu)
         personas: agents.listAgents(ws.agents).filter((a) => !a.system && !a.error),
         // CI waiting on a PR whose account ran out of Actions minutes reports it instead of waiting
-        actionsQuota: async (owner) => actionsUsage.quotaExhausted(await actionsUsage.getActionsUsage({ owner, includedMinutes: +settings.actionsIncludedMinutes || 0 })),
+        actionsQuota: async (owner) => actionsUsage.quotaExhausted(await actionsUsage.getActionsUsage({ owner, includedMinutes: +settings.actionsIncludedMinutes || 0, timeZone: settings.timeZone })),
+        // #381: the project map's analyze step runs the Oracle's architecture analysis with the service's Oracle
+        architectureOracle: () => ({ oracle: ctx.oracleService(), agent: agents.readAgent(ws.agents, agents.ORACLE_ID) }),
       });
       if (!mock) {
         // the runs in progress have not written their usage to disk yet
@@ -350,6 +424,8 @@ module.exports = (ctx) => {
         ctx.afterBacklogRefresh(run).catch((e) => console.error('backlog refresh sync:', e.message));
         // a release run (#260): a shipped release is recorded and its cut line lets the roadmap go on
         ctx.afterRelease(run, ev).catch((e) => console.error('release:', e.message));
+        // a merged run changes the conflict map the Product Owner plans with (#150)
+        ctx.afterRunConflictMap(run, ev).catch((e) => console.error('conflict map:', e.message));
         // a roadmap's next items first (its stage may be over), then the plain queue; a shutdown
         // cancels it (#186: it would run after the workspace was closed, e.g. a test's removed one)
         const dispatch = setTimeout(() => {
@@ -405,19 +481,24 @@ module.exports = (ctx) => {
     let started = null;
     if (old && old.status !== 'running') {
       try {
-        const o = ctx.resumeOptions({ runId: old.runId });
-        const at = o.steps.find((s) => s.id === o.suggested);
-        const fromStep = at?.blockedBy || o.suggested;
+        // a child paused with its parent (#368) continues where it paused
+        const o = old.status === 'paused' ? null : ctx.resumeOptions({ runId: old.runId });
+        const at = o?.steps.find((s) => s.id === o.suggested);
+        const fromStep = o ? at?.blockedBy || o.suggested : old.paused?.step;
         if (!fromStep) throw new Error('no step to resume from');
         child.notices = [{ level: 'info', message: `Child run of ${parentRun.runId} (${step}), resuming ${old.runId} from ${fromStep}.` }];
-        started = { ...(await ctx.resumeRun({ runId: old.runId, step: fromStep, mock: parentRun.mock }, child)), resumedFrom: old.runId };
+        started = { ...(await ctx.resumeRun({ runId: old.runId, step: o ? fromStep : undefined, mock: parentRun.mock }, child)), resumedFrom: old.runId };
       } catch (e) {
         if (signal?.aborted) throw e;
         parentRun.emitEvent('log', { level: 'warn', step_id: parent.step_id, message: `${parent.step_id}: child run ${old.runId} could not be resumed (${e.message}); starting it again.` });
       }
     }
     started ||= await startWorkflowRun({ file, inputs, mock: parentRun.mock, projectId: parentRun.projectId, ...child });
-    return { runId: started.runId, finished, stop: () => active.get(started.runId)?.stop(), ...(started.resumedFrom ? { resumedFrom: started.resumedFrom } : {}) };
+    return {
+      runId: started.runId, finished, stop: () => active.get(started.runId)?.stop(),
+      pause: () => active.get(started.runId)?.pause(), cancelPause: () => active.get(started.runId)?.cancelPause(),
+      ...(started.resumedFrom ? { resumedFrom: started.resumedFrom } : {}),
+    };
   }
 
   // Provider config of a run's workflow: the live one, or the workflow file named in its events.
@@ -468,11 +549,13 @@ module.exports = (ctx) => {
     cleaning ??= cleanupPass().finally(() => { cleaning = null; });
     return cleaning;
   };
+  // the worktree folders the runs of `active` use (a resumed run's is the earlier run's, #406)
+  const activeWorktreeDirs = () => [...active.values()].flatMap((r) => [r.worktree?.dir, r.resume?.worktree?.dir, path.join(ctx.ws.worktrees, r.runId), path.join(ctx.ws.worktrees, `${r.runId}-base`)]).filter(Boolean);
   const cleanupPass = async () => {
     if (!ctx.ws) return [];
     const removed = await cleanupWorktrees({
       worktreesDir: ctx.ws.worktrees, runsDir: ctx.ws.runs,
-      active: () => [...active.values()].flatMap((r) => [r.worktree?.dir, r.resume?.worktree?.dir, path.join(ctx.ws.worktrees, r.runId), path.join(ctx.ws.worktrees, `${r.runId}-base`)]).filter(Boolean),
+      active: activeWorktreeDirs,
     });
     try { pruneDepsCache({ cacheDir: path.join(ctx.ws.cache, 'deps') }); } catch (e) { console.error('dependency cache cleanup:', e.message); }
     return removed;
@@ -495,5 +578,8 @@ module.exports = (ctx) => {
     slotProblem,
     startWorkflowRun,
     stopDispatchTimers,
+    stopStray,
+    strayProcesses,
+    watchStrayProcesses,
   };
 };

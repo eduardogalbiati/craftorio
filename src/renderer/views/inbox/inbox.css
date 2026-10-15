@@ -40,4 +40,27 @@
 .inbox-note { display: flex; align-items: flex-end; gap: 8px; }
 .inbox-note textarea { flex: 1; min-height: 44px; }
 
+/* Import… (#322): the panel with the document's source, then the preview of its items */
+.inbox-import { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; max-width: 820px; margin-bottom: 16px; display: flex; flex-direction: column; gap: 10px; }
+.inbox-import.dropping { outline: 2px dashed var(--accent); outline-offset: -4px; }
+.inbox-import-preview { display: flex; flex-direction: column; gap: 10px; }
+.inbox-import-head { display: flex; align-items: center; gap: 10px; }
+.inbox-import-head h2 { margin: 0; font-size: 15px; font-weight: 700; color: var(--text); text-transform: none; letter-spacing: 0; }
+.inbox-import .error:empty { display: none; }
+.inbox-import p { margin: 0; }
+.inbox-import-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 60vh; overflow: auto; }
+.inbox-import-item { display: flex; align-items: flex-start; gap: 10px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel-2); }
+.inbox-import-item.skipped { opacity: .55; }
+.inbox-import-num { flex: none; width: 22px; padding-top: 6px; text-align: right; }
+.inbox-import-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.inbox-import-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; padding-top: 4px; }
+.inbox-import-rename { gap: 6px; }
+.inbox-import-rename input { flex: 1; min-width: 0; }
+.inbox-import-lines { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inbox-import-dup { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12px; }
+.inbox-import-dup select, .inbox-import-pick select { width: auto; max-width: 320px; }
+.inbox-import-pick { gap: 6px; }
+.inbox-import-actions { flex: none; gap: 4px; }
+.badge.inbox-import-clear { color: var(--green); }
+
 @media (max-width: 1000px) { .inbox-layout.with-detail { grid-template-columns: minmax(0, 1fr); } }

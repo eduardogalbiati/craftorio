@@ -32,6 +32,7 @@ const path = require('path');
 const backlog = require('./backlog');
 const discovery = require('./discovery');
 const poSplit = require('./po-split');
+const { platformOrDefault } = require('./shared/platforms');
 
 const { COMMIT_BAR } = discovery;
 const MAX_ISSUES = 8;
@@ -261,7 +262,7 @@ function simulatedExec({ backlogDir, projectId, platform, repo }) {
     const file = flag(args, '--body-file');
     const body = file ? fs.readFileSync(file, 'utf8') : String(flag(args, '--description') ?? '');
     const base = String(data.repo || repo || '').replace(/\.git$/i, '').replace(/\/+$/, '');
-    const url = `${base}${platform === 'gitlab' ? '/-' : ''}/issues/${number}`;
+    const url = platformOrDefault(platform).issueUrl(base, number);
     const now = new Date().toISOString();
     data.issues = [
       { number, title: flag(args, '--title'), state: 'open', labels: flags(args, '--label').flatMap((l) => l.split(',')).map((name) => ({ name, color: null })), url, author: null, assignees: [], body, tasks: backlog.taskProgress(body), createdAt: now, updatedAt: now, pullRequests: [] },

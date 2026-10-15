@@ -29,4 +29,4 @@ the Run screen links both ways. Its gates wait for you, and so does the parent.
   first. Resuming the parent from that step reuses the children that succeeded and resumes the
   others from where they stopped (gates still ask again), instead of starting them from scratch.
 
-Engine details: [docs/agents/engine.md](docs/agents/engine.md#a-workflow-as-a-step-type-workflow-174).
+Engine details: [docs/agents/engine/workflow-step.md](docs/agents/engine/workflow-step.md).

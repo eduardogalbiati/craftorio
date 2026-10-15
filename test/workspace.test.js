@@ -104,9 +104,9 @@ test('isGitUrl tells URLs apart from local paths', () => {
 });
 
 test('repoNameFromUrl uses owner-repo', () => {
-  assert.equal(repoNameFromUrl('https://github.com/Cazeh/multiagent.git'), 'Cazeh-multiagent');
-  assert.equal(repoNameFromUrl('git@github.com:Cazeh/multiagent.git'), 'Cazeh-multiagent');
-  assert.equal(repoNameFromUrl('https://github.com/Cazeh/multiagent/'), 'Cazeh-multiagent');
+  assert.equal(repoNameFromUrl('https://github.com/octo/demo.git'), 'octo-demo');
+  assert.equal(repoNameFromUrl('git@github.com:octo/demo.git'), 'octo-demo');
+  assert.equal(repoNameFromUrl('https://github.com/octo/demo/'), 'octo-demo');
 });
 
 test('cloneRepo clones the first time and only fetches afterwards', async (t) => {

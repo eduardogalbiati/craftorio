@@ -1,10 +1,11 @@
 // What the app knows about a project for a workflow's inputs (#116), so the input forms (the
-// renderer's workflow-inputs.js) can prefill them: the main language, detected from the project's
-// files (go.mod → go, pom.xml / build.gradle → java, *.csproj / *.sln → csharp, pyproject.toml /
-// requirements.txt / setup.py → python, package.json → js; the first match in that order, so a
-// tooling package.json does not hide the real language), and its local branches with the default
-// one (origin's HEAD, else main / master, else the checked-out branch) for `base_branch`.
-// Values are the workflows' enum values (`language: [js, python, go, java, csharp]`).
+// renderer's workflow-inputs.js) can prefill them: the languages, detected from the project's
+// files (go.mod → go, pom.xml / build.gradle → java, *.csproj / *.sln → csharp, Cargo.toml → rust,
+// pyproject.toml / requirements.txt / setup.py → python, package.json → js). Every language found,
+// main one first, in that order (so a tooling package.json does not hide the real language), as
+// one comma-separated value ("rust,js", #340: the `language` input takes several); and its local
+// branches with the default one (origin's HEAD, else main / master, else the checked-out branch)
+// for `base_branch`. Values are the workflows' enum values (`language: [js, python, go, java, csharp, rust]`).
 
 const fs = require('fs');
 const path = require('path');
@@ -14,15 +15,16 @@ const LANGUAGES = [
   ['go', (names) => names.includes('go.mod')],
   ['java', (names) => names.some((n) => ['pom.xml', 'build.gradle', 'build.gradle.kts'].includes(n))],
   ['csharp', (names) => names.some((n) => /\.(csproj|sln)$/i.test(n))],
+  ['rust', (names) => names.includes('Cargo.toml')],
   ['python', (names) => names.some((n) => ['pyproject.toml', 'requirements.txt', 'setup.py', 'Pipfile'].includes(n))],
   ['js', (names) => names.includes('package.json')],
 ];
 
-/** The project's main language from the files at its root (null when none says). */
+/** The project's languages from the files at its root, main one first ("go,js"; null when none says). */
 function detectLanguage(folder) {
   let names;
   try { names = fs.readdirSync(folder); } catch { return null; }
-  return LANGUAGES.find(([, has]) => has(names))?.[0] || null;
+  return LANGUAGES.filter(([, has]) => has(names)).map(([lang]) => lang).join(',') || null;
 }
 
 /** The local branches of `folder` and its default branch; empty when it is not a git repository. */

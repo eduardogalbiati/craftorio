@@ -4,9 +4,11 @@
 // - orchestrator: the runs' sessions (summary.json), enriched with the metrics the CLIs recorded
 //   for the same provider session (tool calls, prompts, files...) when their transcripts exist;
 // - machine: every session the CLIs recorded on this machine (src/local-usage.js).
-// Days are UTC days, like Usage. A session's metrics are those of the whole session, even when it
-// only partly falls in the range; its tokens and cost are only those in the range.
+// Days are the owner's local days (settings.timeZone, #273; UTC when no zone is given), like Usage.
+// A session's metrics are those of the whole session, even when it only partly falls in the range;
+// its tokens and cost are only those in the range.
 
+const TimeZone = require('./time-zone');
 const {
   providerId,
   PROVIDERS,
@@ -21,12 +23,13 @@ const DEFAULT_DAYS = 30;
 const MAX_DAYS = 366;
 const MAX_SESSIONS = 300;
 
+// calendar math on day keys ('YYYY-MM-DD' parses as UTC midnight); an instant's day goes through TimeZone
 const dayKey = (d) => new Date(d).toISOString().slice(0, 10);
 const isDay = (s) => /^\d{4}-\d{2}-\d{2}$/.test(String(s || '')) && Number.isFinite(Date.parse(s));
 
-/** { from, to, days[] } for the asked range: default the last 30 days up to today, capped at a year. */
-function dateRange({ from, to, now = new Date() } = {}) {
-  let end = isDay(to) ? to : dayKey(now);
+/** { from, to, days[] } for the asked range: default the last 30 days up to the local today, capped at a year. */
+function dateRange({ from, to, now = new Date(), timeZone = 'UTC' } = {}) {
+  let end = isDay(to) ? to : TimeZone.dayKey(now, timeZone);
   let start = isDay(from) ? from : dayKey(Date.parse(end) - (DEFAULT_DAYS - 1) * DAY);
   if (start > end) [start, end] = [end, start];
   if ((Date.parse(end) - Date.parse(start)) / DAY >= MAX_DAYS) start = dayKey(Date.parse(end) - (MAX_DAYS - 1) * DAY);
@@ -82,16 +85,18 @@ function sessionIntent(prompt, tools, agent) {
 /**
  * @param runsDir    <workspace>/runs
  * @param local      readLocalUsage() result (needed by the machine scope; enriches the orchestrator one)
- * @param settings   workspace settings ({ prices })
+ * @param settings   workspace settings ({ prices, timeZone })
  * @param projects   [{ id, name }]
  * @param projectOf  (cwd) => { id, name } | null: the project a folder belongs to
  * @param scope      'orchestrator' (default) or 'machine'
- * @param from, to   'YYYY-MM-DD' (inclusive); default the last 30 days
+ * @param from, to   'YYYY-MM-DD' (inclusive, local days); default the last 30 days
  */
 function computeAnalytics({ runsDir, local = null, settings = {}, projects = [], projectOf = () => null, scope = 'orchestrator', from, to, now = new Date() }) {
   const prices = settings.prices || {};
-  const range = dateRange({ from, to, now });
-  const inRange = (ts) => !!ts && Number.isFinite(Date.parse(ts)) && dayKey(ts) >= range.from && dayKey(ts) <= range.to;
+  const timeZone = settings.timeZone || 'UTC';
+  const localDay = (ts) => TimeZone.dayKey(ts, timeZone);
+  const range = dateRange({ from, to, now, timeZone });
+  const inRange = (ts) => !!ts && Number.isFinite(Date.parse(ts)) && localDay(ts) >= range.from && localDay(ts) <= range.to;
   const machine = scope === 'machine' && !!local;
   const localSessions = local?.sessions || new Map();
   const projectName = new Map(projects.map((p) => [p.id, p.name]));
@@ -125,13 +130,14 @@ function computeAnalytics({ runsDir, local = null, settings = {}, projects = [],
     else s.costUsd += cost;
   }
 
+  // in the current shape (#350): every summary lists its sessions, with each turn's own cost
   const runs = readRuns(runsDir);
   const outcomes = { total: 0, byStatus: {}, durationMs: 0, waitingMs: 0, supervisorTurns: 0 };
   const orchIds = new Map(); // provider session id -> { runId, agent, step }
   const orchCost = new Map(); // provider session id -> { cost, tokens }: the CLI's records carry no cost for Claude Code
   for (const run of runs) {
     const started = run.started_at || run.startedAt;
-    for (const s of run.sessions || []) {
+    for (const s of run.sessions) {
       if (!s.provider_session_id) continue;
       orchIds.set(s.provider_session_id, { runId: run.run_id, workflow: run.workflow, agent: s.agent, step: s.step_id });
       const c = orchCost.get(s.provider_session_id) || orchCost.set(s.provider_session_id, { cost: 0, tokens: 0, priced: true }).get(s.provider_session_id);
@@ -146,12 +152,12 @@ function computeAnalytics({ runsDir, local = null, settings = {}, projects = [],
     outcomes.durationMs += run.duration_ms || 0;
     outcomes.waitingMs += run.timing?.waiting_ms || 0;
     const project = run.project_id ? { id: run.project_id, name: projectName.get(run.project_id) || run.project_id } : null;
-    for (const s of run.sessions || []) {
+    for (const s of run.sessions) {
       const id = providerId(s.provider);
       if (!id) continue; // orchestrator / mock
       if (s.agent === 'supervisor' || s.step_id === 'supervisor') outcomes.supervisorTurns += s.turns || 0;
       if (machine) continue; // the machine scope counts the CLIs' own records
-      const day = dayKey(s.opened_at || started);
+      const day = localDay(s.opened_at || started);
       const key = `${id}:${s.provider_session_id || `${run.run_id}/${s.id}`}`;
       const m = s.provider_session_id ? localSessions.get(`${id}:${s.provider_session_id}`) : null;
       add({
@@ -172,7 +178,7 @@ function computeAnalytics({ runsDir, local = null, settings = {}, projects = [],
       const cost = orch?.priced && orch.tokens ? (orch.cost * totalTokens(r.tokens)) / orch.tokens
         : sessionCost({ cost_usd: r.costUsd, model: r.model, tokens: r.tokens }, prices);
       add({
-        provider: r.provider, model: r.model, day: dayKey(r.ts), project, tokens: r.tokens, cost, key,
+        provider: r.provider, model: r.model, day: localDay(r.ts), project, tokens: r.tokens, cost, key,
         row: sessionRow({ provider: r.provider, id: r.sessionId, model: r.model, project, m, run: orchIds.get(r.sessionId) || null }),
       });
     }

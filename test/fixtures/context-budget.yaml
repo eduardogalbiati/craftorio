@@ -1,0 +1,28 @@
+# Test fixture (#302): a request budget per turn. The developer runs in handoff sessions with
+# max_requests; mockSequences.request_budget: { develop: n } makes the first n turns of the develop
+# step (wrap-up requests not counted) end on that budget, as `claude -p --max-turns` does
+# (a `result` of subtype error_max_turns).
+apiVersion: multiagent/v1
+kind: Workflow
+metadata:
+  name: fixture-context-budget
+providers:
+  claude: { type: claude-code, command: claude, args: ["-p"] }
+agents:
+  developer:
+    provider: claude
+    model: mock-model
+    session: handoff
+    max_requests: 40
+    system_prompt: "You are the developer."
+    capabilities: { tools: [read, edit, write, bash:git] }
+steps:
+  - id: develop
+    agent: developer
+    supervise: false
+    prompt: "Implement the task."
+    output_schema:
+      type: object
+      required: [summary]
+      properties:
+        summary: { type: string }

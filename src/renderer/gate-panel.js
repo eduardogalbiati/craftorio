@@ -111,7 +111,11 @@ function gateAnswers(g) {
 // g: the gate record, its event or a run chat gate (brief); fullHtml: the message as the screen shows it.
 function gateCardHtml(runId, g, fullHtml) {
   const b = g.brief;
-  if (!b?.headline) return gateBriefHtml(runId, g, fullHtml);
+  const turns = gateNextTurnsHtml(runId, g);
+  if (!b?.headline) {
+    const brief = gateBriefHtml(runId, g, fullHtml);
+    return brief || turns ? `${brief || fullHtml}${turns}` : '';
+  }
   const md = (t) => (typeof markdownHtml === 'function' ? markdownHtml(t) : `<pre>${esc(t)}</pre>`);
   const rec = b.recommendation;
   const recHtml = rec && (rec.label || rec.reason) ? `<p class="gate-card-rec"><b>Recommended${rec.source === 'supervisor' ? ' by the supervisor' : ''}:</b>
@@ -119,10 +123,44 @@ function gateCardHtml(runId, g, fullHtml) {
   const options = b.options?.length ? `<ol class="gate-card-options small">${b.options.map((o) => `<li>${esc(o)}</li>`).join('')}</ol>` : '';
   const action = b.user_action ? `<p class="gate-card-action small"><b>Only you can do this:</b> ${esc(b.user_action)}</p>` : '';
   const scenarios = gateTriesChange(g) ? gateScenariosHtml(runId, g) : '';
-  return `<div class="gate-card"><p class="gate-card-what">${esc(b.headline)}</p>${b.body ? `<div class="gate-card-status md">${md(b.body)}</div>` : ''}${recHtml}${options}${action}${scenarios}
+  return `<div class="gate-card"><p class="gate-card-what">${esc(b.headline)}</p>${b.body ? `<div class="gate-card-status md">${md(b.body)}</div>` : ''}${recHtml}${options}${action}${turns}${scenarios}
     <details class="run-gate-full"><summary class="small">Details</summary>${fullHtml}</details></div>`;
 }
 window.gateCardHtml = gateCardHtml;
+
+// #320: what Continue will re-read, one entry per agent with an open session (session-cache.js
+// agentNextTurns: a handoff agent's closed session with its note counts as fresh): "Continue:
+// developer fresh from note ~20K · reviewer resumes cold ~140K ≈ $0.70". Information only: it never
+// answers or changes the gate. '' for an answered gate or a run whose sessions this screen lacks.
+function gateNextTurnsHtml(runId, g) {
+  const run = state.runs.get(runId);
+  if (!run?.sessions || g.resolved || g.closed) return '';
+  const now = Date.now();
+  const turns = SessionCache.agentNextTurns([...run.sessions.values()], now);
+  const names = run.run?.agentNames;
+  const entries = turns.map(({ agent, turn }) => `<span class="next-turn" data-next-turn="${esc(turn.kind)}" title="${esc(SessionCache.turnTitle(turn))}">${esc(agentLabel(agent, names))} ${esc(SessionCache.gateTurnText(turn))}</span>`);
+  const lead = SessionCache.continueLead(turns);
+  const cold = turns.filter((x) => x.turn.cost_usd > 0);
+  const usd = cold.reduce((a, x) => a + x.turn.cost_usd, 0);
+  return `<p class="gate-next-turns small" data-testid="gate-next-turns"><b>Continue:</b> ${[lead && esc(lead), ...entries].filter(Boolean).join(' · ')}${cold.length > 1 ? ` (≈ $${usd.toFixed(2)} in all)` : ''}</p>`;
+}
+window.gateNextTurnsHtml = gateNextTurnsHtml;
+
+// A gate's report (#290: the release run's summary at its Ship gate), which the engine puts first in
+// the message: rendered as Markdown on its own, then the rest of the message.
+// g: the gate record, its event or a run chat gate (report, message) → { reportHtml, message }
+function gateReportParts(g) {
+  const message = String(g.message || '');
+  const report = String(g.report || '');
+  if (!report) return { reportHtml: '', message };
+  const html = typeof markdownHtml === 'function' ? markdownHtml(report) : `<pre>${esc(report)}</pre>`;
+  return {
+    // the only gate report today is the release summary: its test id names it
+    reportHtml: `<div class="gate-report md" data-testid="release-summary">${html}</div>`,
+    message: message.startsWith(report) ? message.slice(report.length).trim() : message,
+  };
+}
+window.gateReportParts = gateReportParts;
 
 // What each button does (#213), under the buttons: one line per answer that has a help text.
 function gateButtonsHelpHtml(g) {

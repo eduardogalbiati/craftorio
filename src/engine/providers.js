@@ -1,4 +1,5 @@
-// Adapters that open/resume sessions for each provider and normalize the events.
+// Runs one turn on a provider: spawns its CLI (or the simulation) and normalizes the events with the
+// adapter's stream parser. What differs per CLI lives in its adapter (src/shared/providers/, #348).
 //
 // Each turn = 1 headless process:
 //   claude -p --output-format stream-json ...   (prompt via stdin)
@@ -8,7 +9,12 @@
 // Normalized items emitted via onItem():
 //   { kind: 'spawn' | 'session' | 'thinking' | 'text' | 'tool_call' | 'tool_result' | 'usage' | 'stderr' | 'raw', ... }
 
-const { spawn, execSync } = require('child_process');
+const {
+  execFile,
+  execSync,
+  spawn,
+  spawnSync,
+} = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const crypto = require('crypto');
@@ -17,8 +23,9 @@ const readline = require('readline');
 const { refuseReal } = require('./simulation');
 const { AGENT_ENV } = require('./capabilities');
 const { runShim } = require('../shell');
-
-const emptyUsage = () => ({ input: 0, output: 0, cache_read: 0, cache_write: 0, reasoning: 0 });
+const { setBrewLookup } = require('../install-commands');
+const registry = require('../shared/providers');
+const { emptyUsage } = require('../shared/providers/usage');
 
 function sleep(ms, signal) {
   return new Promise((resolve, reject) => {
@@ -36,48 +43,123 @@ function sleep(ms, signal) {
 // Programs installed after the terminal/app was opened only show up in the
 // registry PATH. We re-read HKCU/HKLM and append the missing entries.
 let pathRefreshed = false;
-function refreshWindowsPath() {
-  if (process.platform !== 'win32' || pathRefreshed) return;
-  pathRefreshed = true;
-  const read = (key) => {
-    try {
-      const out = execSync(`reg query "${key}" /v Path`, { encoding: 'utf8', windowsHide: true });
-      const m = /Path\s+REG_(?:EXPAND_)?SZ\s+(.*)/i.exec(out);
-      return m ? m[1].trim() : '';
-    } catch { return ''; }
-  };
+const PATH_KEYS = ['HKCU\\Environment', 'HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment'];
+const regPath = (out) => { const m = /Path\s+REG_(?:EXPAND_)?SZ\s+(.*)/i.exec(String(out || '')); return m ? m[1].trim() : ''; };
+function mergeRegistryPaths(values) {
   const expand = (s) => s.replace(/%([^%]+)%/g, (_, v) => process.env[v] ?? `%${v}%`);
   const current = (process.env.PATH || '').split(path.delimiter).filter(Boolean);
   const seen = new Set(current.map((p) => p.toLowerCase().replace(/\\+$/, '')));
-  const extra = [read('HKCU\\Environment'), read('HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment')]
+  const extra = values
     .join(';').split(';').map((p) => expand(p.trim())).filter(Boolean)
     .filter((p) => { const k = p.toLowerCase().replace(/\\+$/, ''); if (seen.has(k)) return false; seen.add(k); return true; });
   if (extra.length) process.env.PATH = [...current, ...extra].join(path.delimiter);
 }
+function refreshWindowsPath() {
+  if (process.platform !== 'win32' || pathRefreshed) return;
+  pathRefreshed = true;
+  const read = (key) => {
+    try { return regPath(execSync(`reg query "${key}" /v Path`, { encoding: 'utf8', windowsHide: true })); } catch { return ''; }
+  };
+  mergeRegistryPaths(PATH_KEYS.map(read));
+}
+// refreshWindowsPath without blocking the process (#389)
+let pathRefreshing = null;
+function refreshWindowsPathAsync() {
+  if (process.platform !== 'win32' || pathRefreshed) return Promise.resolve();
+  pathRefreshing ??= Promise.all(PATH_KEYS.map((key) => new Promise((resolve) => {
+    execFile('reg', ['query', key, '/v', 'Path'], { encoding: 'utf8', windowsHide: true }, (err, out) => resolve(err ? '' : regPath(out)));
+  }))).then((values) => {
+    if (pathRefreshed) return;
+    pathRefreshed = true;
+    mergeRegistryPaths(values);
+  });
+  return pathRefreshing;
+}
 
+// macOS and Linux (#316): an app opened from Finder or the Dock inherits PATH=/usr/bin:/bin:...,
+// without Homebrew, ~/.local/bin, nvm... Once per process, the login shell's PATH goes first and
+// the process's own entries follow. A shell that fails, hangs (3 s) or prints no PATH changes
+// nothing. Its stdout goes to a file, not a pipe: a child the shell leaves behind would
+// keep a pipe open past the timeout. SIGKILL: an interactive bash or zsh ignores SIGTERM.
+// fish expands "$PATH" with spaces, so it joins the list with colons itself.
+let loginPathMerged = false;
+function mergeLoginShellPath() {
+  if (process.platform === 'win32' || loginPathMerged) return;
+  loginPathMerged = true;
+  const shell = process.env.SHELL && fs.existsSync(process.env.SHELL) ? process.env.SHELL : '/bin/sh';
+  const mark = '__MULTIAGENT_PATH__';
+  let dir;
+  let out = '';
+  try {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'login-path-'));
+    const file = path.join(dir, 'out');
+    const fd = fs.openSync(file, 'w');
+    try {
+      const value = path.basename(shell) === 'fish' ? '(string join : $PATH)' : '"$PATH"';
+      spawnSync(shell, ['-ilc', `printf '${mark}%s${mark}' ${value}`], {
+        stdio: ['ignore', fd, 'ignore'], timeout: 3000, killSignal: 'SIGKILL', windowsHide: true,
+      });
+    } finally { fs.closeSync(fd); }
+    out = fs.readFileSync(file, 'utf8');
+  } catch { /* no shell: PATH stays as it was */ }
+  if (dir) fs.rmSync(dir, { recursive: true, force: true });
+  // The marked PATH's absolute folders, else a last line made only of absolute folders (a shell
+  // that ignores -c); anything else is noise.
+  const m = new RegExp(`${mark}(.*?)${mark}`, 's').exec(out);
+  const entries = (m ? m[1] : out.trim().split('\n').pop() || '').split(path.delimiter).filter(Boolean);
+  const login = m ? entries.filter((p) => path.isAbsolute(p)) : entries.every((p) => path.isAbsolute(p)) ? entries : [];
+  if (!login.length) return;
+  const current = (process.env.PATH || '').split(path.delimiter).filter(Boolean);
+  process.env.PATH = [...new Set([...login, ...current])].join(path.delimiter);
+}
+
+// The folders the CLIs install to that are often missing from PATH (macOS and Linux).
+function knownPosixDirs() {
+  const home = os.homedir();
+  const dirs = [path.join(home, '.local', 'bin'), path.join(home, '.grok', 'bin'), path.join(home, '.npm-global', 'bin')];
+  try {
+    const m = /^\s*prefix\s*=\s*(.+?)\s*$/m.exec(fs.readFileSync(path.join(home, '.npmrc'), 'utf8'));
+    if (m) dirs.push(path.join(m[1].replace(/^~(?=$|\/)/, home), 'bin'));
+  } catch { /* no ~/.npmrc */ }
+  return [...dirs, '/opt/homebrew/bin', '/usr/local/bin'];
+}
+
+function isExecutableFile(p) {
+  try {
+    if (!fs.statSync(p).isFile()) return false;
+    fs.accessSync(p, fs.constants.X_OK);
+    return true;
+  } catch { return false; }
+}
+
+function resolvePosixCommand(cmd) {
+  if (cmd.includes('/')) return isExecutableFile(cmd) ? { file: path.resolve(cmd), shell: false } : null;
+  mergeLoginShellPath();
+  const dirs = [...(process.env.PATH || '').split(path.delimiter).filter(Boolean), ...knownPosixDirs()];
+  for (const dir of dirs) {
+    const p = path.resolve(dir, cmd);
+    if (isExecutableFile(p)) return { file: p, shell: false };
+  }
+  return null;
+}
+
+// The program to spawn for `cmd`: { file, shell }, or null when it is not installed (every OS).
 function resolveCommand(cmd) {
-  if (process.platform !== 'win32') return { file: cmd, shell: false };
+  if (process.platform !== 'win32') return resolvePosixCommand(cmd);
   if (path.isAbsolute(cmd) && fs.existsSync(cmd)) return { file: cmd, shell: /\.(cmd|bat)$/i.test(cmd) };
 
   refreshWindowsPath();
-  const home = process.env.USERPROFILE || '';
-  const dirs = [
-    ...(process.env.PATH || '').split(path.delimiter),
-    path.join(home, '.local', 'bin'),
-    path.join(process.env.APPDATA || '', 'npm'),
-  ].filter(Boolean);
-
   // 1) <cmd>.exe  2) binary with a platform suffix (e.g. winget installs
   // codex-x86_64-pc-windows-msvc.exe without an alias)  3) .cmd/.bat shims
   const exact = (ext) => (dir) => { const p = path.join(dir, cmd + ext); return fs.existsSync(p) ? p : null; };
   const suffixed = (dir) => {
     try {
-      const f = fs.readdirSync(dir).find((n) => n.toLowerCase().startsWith(`${cmd}-`) && /-windows-[a-z]+\.exe$/i.test(n));
+      const f = fs.readdirSync(dir).find(suffixedName(cmd));
       return f ? path.join(dir, f) : null;
     } catch { return null; }
   };
   for (const [finder, shell] of [[exact('.exe'), false], [suffixed, false], [exact('.cmd'), true], [exact('.bat'), true]]) {
-    for (const dir of dirs) {
+    for (const dir of windowsDirs()) {
       const p = finder(dir);
       if (p) return { file: p, shell };
     }
@@ -85,235 +167,110 @@ function resolveCommand(cmd) {
   return null;
 }
 
+// The folders the CLIs install to that are often missing from PATH (Windows).
+const windowsExtraDirs = () => [
+  path.join(process.env.USERPROFILE || '', '.local', 'bin'),
+  path.join(process.env.APPDATA || '', 'npm'),
+];
+const windowsDirs = () => [...(process.env.PATH || '').split(path.delimiter), ...windowsExtraDirs()].filter(Boolean);
+
+// #397: the folders the lookup searches beyond PATH that exist now, read again on every launch (a
+// folder an installer creates after the app started counts).
+function cliDirs(platform = process.platform) {
+  return (platform === 'win32' ? windowsExtraDirs() : knownPosixDirs()).filter((d) => path.isAbsolute(d) && fs.existsSync(d));
+}
+
+// #397: a spawn env whose PATH is its own entries first, in order, then the missing cliDirs(), so a
+// terminal, an agent and their children find the CLI detection found. One PATH key whatever its case
+// (`Path` on Windows); Windows compares folders case-insensitively, like mergeRegistryPaths.
+function withCliPath(env, platform = process.platform) {
+  const key = Object.keys(env).find((k) => k.toUpperCase() === 'PATH') || 'PATH';
+  const norm = platform === 'win32' ? (p) => p.toLowerCase().replace(/[\\/]+$/, '') : (p) => p;
+  const current = String(env[key] || '').split(path.delimiter).filter(Boolean);
+  const seen = new Set(current.map(norm));
+  const extra = cliDirs(platform).filter((d) => { const k = norm(d); if (seen.has(k)) return false; seen.add(k); return true; });
+  return extra.length ? { ...env, [key]: [...current, ...extra].join(path.delimiter) } : env;
+}
+const suffixedName = (cmd) => (n) => n.toLowerCase().startsWith(`${cmd}-`) && /-windows-[a-z]+\.exe$/i.test(n);
+
+// Whether Homebrew is installed (#398), for src/install-commands.js's brew commands: macOS only, so
+// no PATH lookup elsewhere. Also install-commands' lookup for a call without `brew` (#401).
+const homebrewInstalled = (platform = process.platform) => platform === 'darwin' && !!resolveCommand('brew');
+setBrewLookup(() => homebrewInstalled());
+
+// resolveCommand without blocking the process (#389: listing every PATH folder for a CLI that is not
+// installed took seconds on Windows), same answer: the folders are read in parallel, async.
+async function resolveCommandAsync(cmd) {
+  if (process.platform !== 'win32' || path.isAbsolute(cmd)) return resolveCommand(cmd);
+  await refreshWindowsPathAsync();
+  const dirs = windowsDirs();
+  const exists = (p) => fs.promises.access(p).then(() => p, () => null);
+  const exact = (ext) => (dir) => exists(path.join(dir, cmd + ext));
+  const suffixed = (dir) => fs.promises.readdir(dir).then((names) => {
+    const f = names.find(suffixedName(cmd));
+    return f ? path.join(dir, f) : null;
+  }, () => null);
+  for (const [finder, shell] of [[exact('.exe'), false], [suffixed, false], [exact('.cmd'), true], [exact('.bat'), true]]) {
+    const p = (await Promise.all(dirs.map(finder))).find(Boolean);
+    if (p) return { file: p, shell };
+  }
+  return null;
+}
+
+// The child and every descendant. macOS and Linux (#318): a child spawned with `detached: true`
+// leads its own process group, so the group gets SIGTERM, then SIGKILL after a short grace (a
+// grandchild that ignores SIGTERM, an interactive shell). A child that is not a group leader
+// falls back to signalling the child alone. OWN_GROUP goes into the spawn options of every process
+// killTree may stop (CLI turns, suites, screenshots, installs); on Windows `detached` would open a
+// console, and taskkill /T already finds the tree.
+const OWN_GROUP = { detached: process.platform !== 'win32' };
+const KILL_GRACE_MS = 2000;
 function killTree(child) {
   if (!child.pid) return;
   if (process.platform === 'win32') {
     spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true });
-  } else {
-    child.kill('SIGTERM');
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Parsers
-// ---------------------------------------------------------------------------
-// Tokens in one request's context window (Anthropic-style usage: new + cached input).
-const contextTokens = (u) => (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0);
-
-// #233: on a resumed session (`--resume`), the `result` event's `total_cost_usd` is the whole CLI
-// session's cost so far (its `usage` is the turn's own): the turn costs the difference with the
-// session's previous total, kept here per CLI session id. The engine records the last total in the
-// session's snapshot (cli_total_cost_usd) and seeds it back with seedClaudeTotal when a resumed run
-// continues the CLI session after the app restarted.
-const claudeTotals = new Map();
-
-function seedClaudeTotal(sessionId, totalUsd) {
-  if (sessionId && totalUsd > 0 && !(claudeTotals.get(sessionId) >= totalUsd)) claudeTotals.set(sessionId, totalUsd);
-}
-
-// The tokens of a turn's distinct model calls (Claude Code repeats a message's usage on each of its
-// content blocks): what a turn killed before its `result` still paid for, priced by the engine.
-function addStreamUsage(acc, id, u) {
-  acc.seenCalls ??= new Set();
-  if (id && acc.seenCalls.has(id)) return;
-  if (id) acc.seenCalls.add(id);
-  acc.modelCalls = (acc.modelCalls || 0) + 1;
-  acc.streamUsage ??= emptyUsage();
-  acc.streamUsage.input += u.input_tokens || 0;
-  acc.streamUsage.output += u.output_tokens || 0;
-  acc.streamUsage.cache_read += u.cache_read_input_tokens || 0;
-  acc.streamUsage.cache_write += u.cache_creation_input_tokens || 0;
-}
-
-function parseClaude(ev, emit, acc) {
-  switch (ev.type) {
-    case 'system':
-      if (ev.subtype === 'init') {
-        acc.providerSessionId = ev.session_id;
-        emit({ kind: 'session', sessionId: ev.session_id, model: ev.model });
-      }
-      break;
-    case 'assistant':
-      // each model request's context window (the main conversation's, not a sub-agent's)
-      if (ev.message?.usage && !ev.parent_tool_use_id) emit({ kind: 'context', tokens: contextTokens(ev.message.usage) });
-      // a sub-agent's model calls are paid too
-      if (ev.message?.usage) addStreamUsage(acc, ev.message.id, ev.message.usage);
-      for (const b of ev.message?.content || []) {
-        // Claude Code may omit the thinking content (it only sends the signature)
-        if (b.type === 'thinking') { if (b.thinking) emit({ kind: 'thinking', text: b.thinking }); }
-        else if (b.type === 'redacted_thinking') emit({ kind: 'thinking', text: '(thinking omitted by the provider)' });
-        else if (b.type === 'text') { acc.lastText = b.text; emit({ kind: 'text', text: b.text }); }
-        else if (b.type === 'tool_use') emit({ kind: 'tool_call', id: b.id, name: b.name, input: b.input });
-      }
-      break;
-    case 'user':
-      for (const b of ev.message?.content || []) {
-        if (b.type === 'tool_result') {
-          const out = Array.isArray(b.content) ? b.content.map((c) => c.text || '').join('\n') : String(b.content ?? '');
-          emit({ kind: 'tool_result', id: b.tool_use_id, output: out.slice(0, 4000), is_error: !!b.is_error });
-        }
-      }
-      break;
-    // #277: a turn that used sub-agents ends with 2 to 4 `result` events one ms apart, all carrying
-    // the same (or a growing) session total_cost_usd. The turn costs the highest total seen in the
-    // turn minus the session's total before the turn, so a later event never lowers it. Their usages
-    // overlap (the total does not grow with the later, smaller ones: their tokens were already paid),
-    // so the turn's tokens are the largest of each field, not a sum. The raw `result` events of such
-    // a turn are kept in the run as `raw` stream items, to check this rule against a real stream.
-    case 'result': {
-      const u = ev.usage || {};
-      acc.text = ev.result ?? acc.lastText ?? '';
-      const usage = {
-        input: u.input_tokens || 0,
-        output: u.output_tokens || 0,
-        cache_read: u.cache_read_input_tokens || 0,
-        cache_write: u.cache_creation_input_tokens || 0,
-        reasoning: 0, // the Anthropic API counts thinking inside output_tokens
-      };
-      acc.results = (acc.results || 0) + 1;
-      const first = acc.results === 1;
-      acc.usage = first || !acc.usage ? usage : Object.fromEntries(Object.keys(usage).map((k) => [k, Math.max(usage[k], acc.usage[k] || 0)]));
-      if (ev.session_id) acc.providerSessionId = ev.session_id;
-      if (first) acc.firstResult = ev;
-      else {
-        if (acc.results === 2) emit({ kind: 'raw', event: acc.firstResult });
-        emit({ kind: 'raw', event: ev });
-      }
-      if (first) acc.costUsd = null;
-      if (ev.total_cost_usd != null) {
-        const sid = acc.providerSessionId;
-        if (acc.turnTotalBefore == null) acc.turnTotalBefore = (sid && claudeTotals.get(sid)) || 0;
-        const before = acc.turnTotalBefore;
-        const total = Math.max(ev.total_cost_usd, acc.cliTotalCostUsd ?? 0);
-        // a total below the previous one is a new count (a forked session): taken whole
-        acc.costUsd = total >= before ? +(total - before).toFixed(6) : total;
-        if (sid) claudeTotals.set(sid, total);
-        acc.cliTotalCostUsd = total;
-      }
-      if (ev.is_error) acc.error = `Claude returned an error: ${ev.subtype} ${ev.result || ''}`;
-      emit({ kind: 'usage', usage: acc.usage, costUsd: acc.costUsd });
-      break;
-    }
-    default:
-      emit({ kind: 'raw', event: ev });
-  }
-}
-
-function parseCodex(ev, emit, acc) {
-  switch (ev.type) {
-    case 'thread.started':
-      acc.providerSessionId = ev.thread_id;
-      emit({ kind: 'session', sessionId: ev.thread_id });
-      break;
-    case 'item.completed': {
-      const it = ev.item || {};
-      switch (it.type) {
-        case 'reasoning': if (it.text) emit({ kind: 'thinking', text: it.text }); break;
-        case 'agent_message': acc.text = it.text; emit({ kind: 'text', text: it.text }); break;
-        case 'command_execution':
-          emit({ kind: 'tool_call', id: it.id, name: 'shell', input: { command: it.command } });
-          emit({ kind: 'tool_result', id: it.id, output: String(it.aggregated_output ?? '').slice(0, 4000), is_error: it.exit_code ? true : false });
-          break;
-        case 'file_change': emit({ kind: 'tool_call', id: it.id, name: 'file_change', input: it.changes }); break;
-        case 'mcp_tool_call': emit({ kind: 'tool_call', id: it.id, name: `${it.server}.${it.tool}`, input: it.arguments }); break;
-        case 'web_search': emit({ kind: 'tool_call', id: it.id, name: 'web_search', input: { query: it.query } }); break;
-        case 'error': emit({ kind: 'stderr', text: it.message }); break;
-        default: emit({ kind: 'raw', event: ev });
-      }
-      break;
-    }
-    // #233: per turn (summed here over the turn's `turn.completed` events); Codex reports no cost,
-    // the engine prices its tokens. Not streamed per model call: a killed Codex turn leaves nothing.
-    case 'turn.completed': {
-      const u = ev.usage || {};
-      acc.usage = acc.usage || emptyUsage();
-      // OpenAI's input_tokens already includes cached ones; split them to avoid double counting
-      acc.usage.input += (u.input_tokens || 0) - (u.cached_input_tokens || 0);
-      acc.usage.cache_read += u.cached_input_tokens || 0;
-      acc.usage.output += u.output_tokens || 0;
-      acc.usage.reasoning += u.reasoning_output_tokens || 0;
-      emit({ kind: 'usage', usage: acc.usage, costUsd: null });
-      break;
-    }
-    case 'turn.failed':
-      acc.error = ev.error?.message || 'turn.failed';
-      break;
-    case 'error':
-      acc.error = ev.message || 'codex error';
-      break;
-    case 'turn.started':
-    case 'item.started':
-    case 'item.updated':
-      break;
-    default:
-      emit({ kind: 'raw', event: ev });
-  }
-}
-
-// Grok Build (`grok --output-format streaming-json`): thinking and text arrive as
-// token deltas, tools as tool_call / tool_call_update, and a final `end` event carries
-// the session id, usage and cost. Deltas are buffered into one item per block.
-function flushGrok(emit, acc) {
-  if (acc.buf?.text) emit({ kind: acc.buf.kind, text: acc.buf.text });
-  acc.buf = null;
-}
-
-function parseGrok(ev, emit, acc) {
-  const delta = ev.type === 'thought' ? 'thinking' : ev.type === 'text' ? 'text' : null;
-  if (delta) {
-    if (acc.buf && acc.buf.kind !== delta) flushGrok(emit, acc);
-    acc.buf ??= { kind: delta, text: '' };
-    acc.buf.text += ev.data ?? '';
-    if (delta === 'text') acc.segment = (acc.segment || '') + (ev.data ?? '');
     return;
   }
-  flushGrok(emit, acc);
-  switch (ev.type) {
-    case 'tool_call':
-      acc.segment = ''; // the final answer is the text after the last tool call
-      emit({ kind: 'tool_call', id: ev.toolCallId, name: ev.toolName || ev.title, input: ev.rawInput });
-      break;
-    case 'tool_call_update':
-      if (ev.status === 'completed' || ev.status === 'failed') {
-        const out = typeof ev.rawOutput === 'string' ? ev.rawOutput : JSON.stringify(ev.rawOutput ?? ev.content ?? '');
-        emit({ kind: 'tool_result', id: ev.toolCallId, output: String(out).slice(0, 4000), is_error: ev.status === 'failed' });
-      }
-      break;
-    // #233: `total_cost_usd` taken as the turn's own: not checked against a resumed real session
-    // yet (no recorded multi-turn Grok session); if it proves cumulative, do as parseClaude does.
-    case 'end': {
-      const u = ev.usage || {};
-      acc.text = acc.segment ?? acc.lastText ?? '';
-      acc.costUsd = ev.total_cost_usd ?? null;
-      acc.usage = {
-        input: u.input_tokens || 0,
-        output: u.output_tokens || 0,
-        cache_read: u.cache_read_input_tokens || 0,
-        cache_write: u.cache_creation_input_tokens || 0,
-        reasoning: u.reasoning_tokens || 0, // already included in output
-      };
-      if (ev.sessionId) {
-        acc.providerSessionId = ev.sessionId;
-        emit({ kind: 'session', sessionId: ev.sessionId });
-      }
-      emit({ kind: 'usage', usage: acc.usage, costUsd: acc.costUsd });
-      break;
-    }
-    case 'error':
-      acc.error = `Grok returned an error: ${ev.message || 'unknown'}`;
-      break;
-    case 'usage': {           // per-call usage (the context of that request); the totals come in `end`
-      const tokens = contextTokens(ev.usage || ev);
-      if (tokens) emit({ kind: 'context', tokens });
-      break;
-    }
-    case 'available_commands':
-      break;
-    default:
-      emit({ kind: 'raw', event: ev });
-  }
+  const signal = (sig) => {
+    try { process.kill(-child.pid, sig); return; } catch { /* not a group leader, or already gone */ }
+    try { child.kill(sig); } catch { /* already gone */ }
+  };
+  signal('SIGTERM');
+  setTimeout(() => signal('SIGKILL'), KILL_GRACE_MS).unref();
 }
-parseGrok.flush = flushGrok;
+
+// ---------------------------------------------------------------------------
+// Parsers: each CLI adapter's own (src/shared/providers/<id>.js `parse`), named here for the tests
+// and the callers that read one turn's stream.
+// ---------------------------------------------------------------------------
+const parseClaude = registry.byId('claude').parse;
+const parseCodex = registry.byId('codex').parse;
+const parseGrok = registry.byId('grok').parse;
+
+// #233: the CLI session total a resumed Claude session continues from (src/shared/providers/claude.js).
+function seedClaudeTotal(sessionId, totalUsd) {
+  registry.byId('claude').seedTotal(sessionId, totalUsd);
+}
+
+// The parsed turn runCli resolves with (the engine records it in session.message_received). #308:
+// `usage` is the whole turn; usage_main (the main conversation), subagents and model_calls only when
+// the CLI reports them (Claude), never zeros for the others.
+function turnResult(acc) {
+  return {
+    text: acc.text || acc.lastText,
+    usage: acc.usage || emptyUsage(),
+    ...(acc.usageMain ? { usage_main: acc.usageMain } : {}),
+    ...(acc.subagents ? { subagents: acc.subagents } : {}),
+    ...(acc.modelCalls ? { model_calls: acc.modelCalls } : {}),
+    costUsd: acc.costUsd,
+    ...(acc.cliTotalCostUsd != null ? { cliTotalCostUsd: acc.cliTotalCostUsd } : {}),
+    // #369: { model, cliVersion }: the CLI did not know the model, costUsd is its figure at another model's rates
+    ...(acc.unrecognized ? { unrecognized: acc.unrecognized } : {}),
+    providerSessionId: acc.providerSessionId,
+    // #302: the turn ended on its request budget, after `requests` model requests
+    ...(acc.cut ? { cut: true, requests: acc.cut.requests } : {}),
+  };
+}
 
 // ---------------------------------------------------------------------------
 // CLI runner
@@ -334,11 +291,11 @@ function gitConfigEnv(env, settings) {
 // ---------------------------------------------------------------------------
 // Image attachments (#129): image files a turn hands to the CLI next to its prompt. Callers store
 // them in the workspace first (a run's attachments/ folder, a conversation's folder); runTurn checks
-// them before anything is spawned. How each CLI opens them (IMAGE_INPUT):
+// them before anything is spawned. How each CLI opens them (its adapter's `imageInput`):
 //   read: Claude Code reads them with its Read tool: their folders go with --add-dir, Read is offered
 //   flag: attached to the message with --image=<file> (the `=` form: --image takes several values,
 //         a separate one would swallow `resume` or the `-` stdin argument). Meant for Codex CLI, off
-//         until a real `codex exec --image` call confirms it: then add 'codex-cli': 'flag' below
+//         until a real `codex exec --image` call confirms it: then set it in its adapter
 //   none: no confirmed way (Codex CLI for now, Grok Build): the prompt still lists the paths; the
 //         caller warns (imageInput)
 // Every provider gets the "Attached images" block with the absolute paths.
@@ -351,10 +308,9 @@ const IMAGE_TYPES = {
   '.webp': 'webp',
 };
 const ATTACHMENT_LIMITS = { count: 10, bytes: 10 * 1024 * 1024 };
-const IMAGE_INPUT = { 'claude-code': 'read', mock: 'record' };
 
 // How a provider type opens attached images: 'read', 'flag', 'record' (mock) or null (it cannot).
-const imageInput = (type) => IMAGE_INPUT[type] || null;
+const imageInput = (type) => registry.byType(type)?.imageInput || null;
 
 // The image format of a file's first bytes, or null.
 function sniffImage(buf) {
@@ -468,7 +424,7 @@ function runCli(opts, parser) {
 
   onItem({ kind: 'spawn', command: resolved.file, args, cwd });
 
-  const env = { ...process.env };
+  const env = withCliPath({ ...process.env }); // #397: the agent and its children (gh, npm shims' node) find what detection found
   delete env.CLAUDECODE; // avoids the "nested session" block if the app is launched from inside Claude Code
   Object.assign(env, gitConfigEnv(env, { 'rerere.enabled': 'true' }));
   // agents' own checks never start real runs, and need no `VAR=value` prefix (refused by allowlists);
@@ -478,7 +434,7 @@ function runCli(opts, parser) {
   if (promptFile) fs.writeFileSync(promptFile, prompt);
 
   return new Promise((resolve, reject) => {
-    const child = runShim(resolved.file, args, { cwd, env, windowsHide: true });
+    const child = runShim(resolved.file, args, { cwd, env, windowsHide: true, ...OWN_GROUP });
     // the CLI's process (the memory guard watches its tree, #276); shim: a .cmd/.bat wrapper whose
     // child is the CLI itself
     if (child.pid) opts.onSpawn?.({ pid: child.pid, shim: !!resolved.shell });
@@ -513,16 +469,13 @@ function runCli(opts, parser) {
     child.on('error', (e) => finish(e));
     child.on('close', (code) => {
       parser.flush?.(onItem, acc);
+      // #369: what the CLI said on stderr about the turn (Claude: a model it does not know)
+      parser.stderr?.(stderr, acc);
+      // a --max-turns of the agent's own args (not its max_requests): the attempt fails, as before #302
+      if (acc.cut && !opts.hint?.maxRequests) acc.error ||= 'Claude returned an error: error_max_turns (the --max-turns of its args)';
       if (acc.error) return finish(new Error(acc.error));
-      if (code !== 0 && !acc.text) return finish(new Error(`Process exited with code ${code}. ${stderr.slice(-800)}`));
-      finish(null, {
-        text: acc.text || acc.lastText,
-        usage: acc.usage || emptyUsage(),
-        costUsd: acc.costUsd,
-        ...(acc.cliTotalCostUsd != null ? { cliTotalCostUsd: acc.cliTotalCostUsd } : {}),
-        providerSessionId: acc.providerSessionId,
-        exitCode: code,
-      });
+      if (code !== 0 && !acc.text && !acc.cut) return finish(new Error(`Process exited with code ${code}. ${stderr.slice(-800)}`));
+      finish(null, { ...turnResult(acc), exitCode: code });
     });
 
     child.stdin.end(promptFile ? '' : prompt);
@@ -549,6 +502,34 @@ function mockString(key) {
     message: 'Simulated draft: I covered the request and applied the latest notes.',
     document: '# Simulated document\n\n## Summary\n\nThis draft was written by the mock provider.\n\n## Details\n\n- First point\n- Second point\n',
     text: 'Simulated note on the draft.',
+    // the release run's review (#290): the sections the Ship gate and release-summary.md show
+    release_summary: [
+      'Simulated: both suites are green after 2 unit rounds, 1 E2E round and 1 fix, in 12 minutes for US$ 0.84.',
+      '',
+      '## Timeline',
+      '',
+      '| # | Step | Result | Time | Cost |',
+      '| --- | --- | --- | --- | --- |',
+      '| 1 | Unit tests | red: 1 failure in test/engine.test.js | 3 min | |',
+      '| 2 | Fix the regression | a6f3c21: the workflow loader | 5 min | US$ 0.84 |',
+      '| 3 | Unit tests | green | 3 min | |',
+      '| 4 | E2E scenarios | green | 1 min | |',
+      '',
+      '## The fixes',
+      '',
+      '- **a6f3c21** (src/engine/workflow.js, +4 −1): the loader read the examples before they merged. A regression of #8 by #12.',
+      '',
+      '## Before you ship',
+      '',
+      '- The diff to read: 1 file, 5 lines. Ship merges the fix, pushes the local main and tags the release.',
+      '- The release\'s version does not match package.json: check the tag.',
+      '',
+      '## Follow-ups',
+      '',
+      '- Add a unit test for the loader without the examples folder (the fix\'s test_notes).',
+      '',
+      'Read before shipping: the version against package.json.',
+    ].join('\n'),
     explanation: 'The answer did not have the fields this step requires, so the run could not use it. I asked for it again with the expected format.',
     instruction: 'Answer only with the JSON object the step asks for, with every required field.',
     item: 'Simulated part of the goal',
@@ -608,6 +589,11 @@ function mockScenarios(h, statuses = []) {
   ];
 }
 
+// The lists empty in a simulated answer: preexisting_failures and ui_findings unless their sequence
+// asks for one, the ui_reviewer's dismissed deterministic findings (#387) always
+const EMPTY_UNLESS_ASKED = ['preexisting_failures', 'ui_findings'];
+const mockEmptyList = (key, h) => key === 'dismissed' || (EMPTY_UNLESS_ASKED.includes(key) && !h.sequences?.[key]);
+
 // h.sequences (WorkflowRun's mockSequences) overrides the defaults per field
 function mockValue(s, key, h) {
   if (s.enum) {
@@ -639,8 +625,10 @@ function mockValue(s, key, h) {
     // sequences.left_out_not_mine: true: the developer also declares the issue's Tests and Measure tasks (#173)
     // sequences.ui_findings: true: the ui_reviewer (code_review, #151) returns a (blocking) UI finding
     case 'array': {
-      if (key === 'preexisting_failures' && !h.sequences?.preexisting_failures) return [];
-      if (key === 'ui_findings' && !h.sequences?.ui_findings) return [];
+      if (mockEmptyList(key, h)) return [];
+      // sequences.files_changed: [[...files of visit 1], ...] (#340: the languages a run changed)
+      const files = key === 'files_changed' && h.sequences?.files_changed;
+      if (Array.isArray(files) && files.length) return [...files[Math.min(h.visit - 1, files.length - 1)]];
       // the developer's screens to capture (#144): one valid entry of the screenshot command
       if (key === 'screenshots' && s.items?.properties?.args) return [{ name: '144-dashboard-default', caption: 'The dashboard (simulated)', args: ['--view', 'dashboard'] }];
       if (key === 'scenarios' && s.items?.properties?.status) return mockScenarios(h, s.items.properties.status.enum || []);
@@ -664,6 +652,24 @@ function mockValue(s, key, h) {
   }
 }
 
+// The project map's cartographer (#372) without mockSequences.city_plan: one district that takes
+// every file, so the plan passes the validation of any repository
+const MOCK_CITY_PLAN = {
+  version: 1, project: 'simulated', summary: 'A simulated plan: every file in one district.', ignore: [],
+  zones: [{ id: 'core', name: 'Core', kind: 'industrial', purpose: 'Every file of the project (simulated).' }],
+  districts: [{ id: 'everything', name: 'Everything', zone: 'core', purpose: 'Every file (simulated).', include: ['*'], exclude: [] }],
+  landmarks: [], ports: [], evidence: [],
+};
+
+// A schema's mock answer; its `city_plan` (#372) is mockSequences.city_plan[visit - 1] (the last
+// one repeats), else MOCK_CITY_PLAN
+function mockAnswer(h) {
+  const out = mockValue(h.schema, '', h);
+  if (!out || typeof out !== 'object' || !('city_plan' in out)) return out;
+  const plans = Array.isArray(h.sequences?.city_plan) && h.sequences.city_plan.length ? h.sequences.city_plan : [MOCK_CITY_PLAN];
+  return { ...out, city_plan: structuredClone(plans[Math.min(h.visit - 1, plans.length - 1)]) };
+}
+
 // Simulated context window: grows with each turn of the same conversation (30k more per turn),
 // so max_context and handoff sessions can be exercised deterministically.
 const mockTurns = new Map();
@@ -679,6 +685,14 @@ async function runMock({ providerSessionId, model, hint, signal, onItem, attempt
 
   onItem({ kind: 'session', sessionId: sid, model });
   onItem({ kind: 'context', tokens: start });
+  // sequences.usage_limits: ['<provider>' | '<provider>:<model>', ...] (#262): every turn of an agent on a
+  // listed provider (hint.provider, the agent's own, not `mock`) or provider:model answers with that
+  // CLI's usage-limit message (hint.providerType), as a real CLI out of credits does
+  const limits = hint?.sequences?.usage_limits;
+  if (Array.isArray(limits) && hint.provider && (limits.includes(hint.provider) || limits.includes(`${hint.provider}:${model}`))) {
+    await d(200);
+    throw new Error(registry.byType(hint.providerType)?.usageLimitMessage || `${hint.provider}: usage limit reached`);
+  }
   // the follow-up that asks only for the handoff note
   if (hint?.handoffOnly) {
     await d(300);
@@ -723,8 +737,17 @@ async function runMock({ providerSessionId, model, hint, signal, onItem, attempt
     throw Object.assign(new Error(`Timed out after ${Math.round((timeoutMs || 0) / 1000)}s`), { partial: { usage, costUsd: null, modelCalls: 2 } });
   }
   await d(800);
+  // sequences.request_budget: { stepId: n }: the first n turns of that step (wrap-up requests not
+  // counted) end on the agent's request budget (hint.maxRequests) without an answer, as
+  // claude -p --max-turns does (#302)
+  if (hint?.maxRequests && hint.call <= (hint.sequences?.request_budget?.[hint.stepId] || 0)) {
+    onItem({ kind: 'context', tokens: start + 40000 });
+    const usage = { input: 1500, output: 400, cache_read: hint.maxRequests * start, cache_write: 0, reasoning: 0 };
+    onItem({ kind: 'usage', usage, costUsd: 0.05 });
+    return { text: '', cut: true, requests: hint.maxRequests, usage, costUsd: 0.05, providerSessionId: sid, exitCode: 0 };
+  }
 
-  const out = hint?.schema ? mockValue(hint.schema, '', hint) : null;
+  const out = hint?.schema ? mockAnswer(hint) : null;
   // sequences.invalid_answers: { stepId: n }: the first n answers of that step miss the required fields
   const invalid = out && hint.call <= (hint.sequences?.invalid_answers?.[hint.stepId] || 0);
   let text = invalid
@@ -751,13 +774,9 @@ async function runMock({ providerSessionId, model, hint, signal, onItem, attempt
 async function runTurn(opts) {
   if (opts.provider.type !== 'mock') refuseReal(`the ${opts.provider.type} provider`);
   opts = { ...opts, attachments: checkAttachments(opts.attachments) };
-  switch (opts.provider.type) {
-    case 'mock': return runMock(opts);
-    case 'claude-code': return runCli(opts, parseClaude);
-    case 'codex-cli': return runCli(opts, parseCodex);
-    case 'grok-cli': return runCli(opts, parseGrok);
-    default: throw new Error(`Unknown provider: ${opts.provider.type}`);
-  }
+  const adapter = registry.byType(opts.provider.type);
+  if (!adapter) throw new Error(`Unknown provider: ${opts.provider.type}`);
+  return adapter.cli ? runCli(opts, adapter.parse) : runMock(opts);
 }
 
 // A tool call refused by the agent's allowlist (cli_args) rather than a command that ran and
@@ -780,25 +799,42 @@ function isRetryable(err) {
   return !/"status":\s*4\d\d|invalid_request|not supported|not found|does not exist/i.test(String(err?.message || err));
 }
 
+// #262: a provider out of credits or past its usage limit: retrying on it is pointless, the agent
+// moves on to the next entry of its fallback chain. The messages every CLI may print, plus the
+// CLI's own (`type`: its adapter's quotaPattern, e.g. Claude Code "5-hour limit reached ∙ resets 3pm").
+const QUOTA_COMMON = /usage limit|credit balance is too low|insufficient[_ ](?:quota|credits?)|quota exceeded|exceeded your (?:current )?quota|out of credits/i;
+function isQuotaError(type, message) {
+  const text = String(message?.message ?? message ?? '');
+  return QUOTA_COMMON.test(text) || !!registry.byType(type)?.quotaPattern?.test(text);
+}
+
 module.exports = {
   ATTACHMENT_LIMITS,
   checkAttachments,
+  cliDirs,
   cliInvocation,
   emptyUsage,
   gitConfigEnv,
+  homebrewInstalled,
   imageInput,
   isImagePath,
   isPermissionDenial,
+  isQuotaError,
   isRetryable,
   isToolTimeout,
   killTree,
+  OWN_GROUP,
   parseClaude,
+  parseCodex,
   parseGrok,
   refreshWindowsPath,
   resolveCommand,
+  resolveCommandAsync,
   runTurn,
   seedClaudeTotal,
   sleep,
   sniffImage,
   storeAttachments,
+  turnResult,
+  withCliPath,
 };

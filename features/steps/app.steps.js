@@ -11,6 +11,7 @@
 const fs = require('fs');
 const path = require('path');
 const { expect } = require('@playwright/test');
+const { VISUAL_NOW } = require('../support/fixed-clock');
 const { Given, When, Then } = require('./fixtures');
 
 const root = path.join(__dirname, '..', '..');
@@ -28,8 +29,9 @@ Given('the app is open', async ({ e2e }) => {
   await e2e.open();
 });
 
+// the visual scenarios' opening: they render at a fixed clock, never the real one (#362)
 Given('the app is open in the {word} theme', async ({ e2e }, theme) => {
-  await e2e.open({ theme });
+  await e2e.open({ theme, now: VISUAL_NOW });
 });
 
 When('I open {string} in the sidebar', async ({ e2e }, name) => {

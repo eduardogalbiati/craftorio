@@ -1,0 +1,1403 @@
+{
+  "github: list issues": {
+    "calls": [
+      [
+        "gh",
+        "issue",
+        "list",
+        "--repo",
+        "o/r",
+        "--state",
+        "all",
+        "--limit",
+        "300",
+        "--json",
+        "number,title,state,labels,url,author,assignees,body,createdAt,updatedAt"
+      ]
+    ],
+    "result": [
+      {
+        "number": 12,
+        "title": "Fix the login",
+        "state": "open",
+        "labels": [
+          {
+            "name": "bug",
+            "color": "#d73a4a"
+          }
+        ],
+        "url": "https://github.com/o/r/issues/12",
+        "author": "ana",
+        "assignees": [
+          "bo"
+        ],
+        "body": "- [x] one\n- [ ] two",
+        "tasks": {
+          "done": 1,
+          "total": 2
+        },
+        "createdAt": "2026-01-02T00:00:00Z",
+        "updatedAt": "2026-01-03T00:00:00Z"
+      }
+    ]
+  },
+  "github: list issues (self-hosted)": {
+    "calls": [
+      [
+        "gh",
+        "issue",
+        "list",
+        "--repo",
+        "ghe.example.com/o/r",
+        "--state",
+        "all",
+        "--limit",
+        "300",
+        "--json",
+        "number,title,state,labels,url,author,assignees,body,createdAt,updatedAt"
+      ]
+    ],
+    "result": []
+  },
+  "gitlab: list issues": {
+    "calls": [
+      [
+        "glab",
+        "issue",
+        "list",
+        "--repo",
+        "g/sub/p",
+        "--all",
+        "--per-page",
+        "100",
+        "--output",
+        "json"
+      ]
+    ],
+    "result": [
+      {
+        "number": 7,
+        "title": "Fix the export",
+        "state": "open",
+        "labels": [
+          {
+            "name": "bug",
+            "color": null
+          },
+          {
+            "name": "epic::export",
+            "color": null
+          }
+        ],
+        "url": "https://gitlab.com/g/sub/p/-/issues/7",
+        "author": "ana",
+        "assignees": [
+          "bo"
+        ],
+        "body": "- [ ] one",
+        "tasks": {
+          "done": 0,
+          "total": 1
+        },
+        "createdAt": "2026-01-02T00:00:00Z",
+        "updatedAt": "2026-01-03T00:00:00Z",
+        "groupEpic": {
+          "iid": 3,
+          "title": "Group epic",
+          "groupId": 44,
+          "url": "https://gitlab.com/groups/g/-/epics/3"
+        }
+      }
+    ]
+  },
+  "gitlab: list issues (self-hosted)": {
+    "calls": [
+      [
+        "glab",
+        "issue",
+        "list",
+        "--repo",
+        "https://git.example.com/g/p",
+        "--all",
+        "--per-page",
+        "100",
+        "--output",
+        "json"
+      ]
+    ],
+    "result": []
+  },
+  "github: list issues of a GitLab repository": {
+    "calls": [],
+    "result": {
+      "error": "The project's repository is on gitlab.com; pick GitLab to sync it."
+    }
+  },
+  "github: view an issue": {
+    "calls": [
+      [
+        "gh",
+        "issue",
+        "view",
+        "12",
+        "--repo",
+        "o/r",
+        "--json",
+        "number,title,state,labels,url,author,assignees,body,createdAt,updatedAt"
+      ]
+    ],
+    "result": {
+      "number": 12,
+      "title": "Fix the login",
+      "state": "open",
+      "labels": [
+        {
+          "name": "bug",
+          "color": "#d73a4a"
+        }
+      ],
+      "url": "https://github.com/o/r/issues/12",
+      "author": "ana",
+      "assignees": [
+        "bo"
+      ],
+      "body": "- [x] one\n- [ ] two",
+      "tasks": {
+        "done": 1,
+        "total": 2
+      },
+      "createdAt": "2026-01-02T00:00:00Z",
+      "updatedAt": "2026-01-03T00:00:00Z"
+    }
+  },
+  "gitlab: view an issue": {
+    "calls": [
+      [
+        "glab",
+        "issue",
+        "view",
+        "7",
+        "--repo",
+        "g/sub/p",
+        "--output",
+        "json"
+      ]
+    ],
+    "result": {
+      "number": 7,
+      "title": "Fix the export",
+      "state": "open",
+      "labels": [
+        {
+          "name": "bug",
+          "color": null
+        },
+        {
+          "name": "epic::export",
+          "color": null
+        }
+      ],
+      "url": "https://gitlab.com/g/sub/p/-/issues/7",
+      "author": "ana",
+      "assignees": [
+        "bo"
+      ],
+      "body": "- [ ] one",
+      "tasks": {
+        "done": 0,
+        "total": 1
+      },
+      "createdAt": "2026-01-02T00:00:00Z",
+      "updatedAt": "2026-01-03T00:00:00Z",
+      "groupEpic": {
+        "iid": 3,
+        "title": "Group epic",
+        "groupId": 44,
+        "url": "https://gitlab.com/groups/g/-/epics/3"
+      }
+    }
+  },
+  "github: cli target": {
+    "calls": [],
+    "result": [
+      "o/r",
+      "ghe.example.com/o/r"
+    ]
+  },
+  "gitlab: cli target": {
+    "calls": [],
+    "result": [
+      "g/sub/p",
+      "https://git.example.com/g/p"
+    ]
+  },
+  "github: create an issue": {
+    "calls": [],
+    "result": {
+      "cli": "gh",
+      "args": [
+        "issue",
+        "create",
+        "--repo",
+        "o/r",
+        "--title",
+        "New one",
+        "--body-file",
+        "body.md",
+        "--label",
+        "a",
+        "--label",
+        "b"
+      ],
+      "display": "gh issue create --repo o/r --title \"New one\" --body-file body.md --label a --label b"
+    }
+  },
+  "gitlab: create an issue": {
+    "calls": [],
+    "result": {
+      "cli": "glab",
+      "args": [
+        "issue",
+        "create",
+        "--repo",
+        "g/sub/p",
+        "--title",
+        "New one",
+        "--description",
+        "The body",
+        "--label",
+        "a,b",
+        "--yes"
+      ],
+      "display": "glab issue create --repo g/sub/p --title \"New one\" --description <document> --label a,b --yes"
+    }
+  },
+  "github: replace an issue body": {
+    "calls": [],
+    "result": {
+      "cli": "gh",
+      "args": [
+        "issue",
+        "edit",
+        "12",
+        "--repo",
+        "o/r",
+        "--body-file",
+        "doc.md"
+      ],
+      "display": "gh issue edit 12 --repo o/r --body-file doc.md"
+    }
+  },
+  "github: comment on an issue": {
+    "calls": [],
+    "result": {
+      "cli": "gh",
+      "args": [
+        "issue",
+        "comment",
+        "12",
+        "--repo",
+        "o/r",
+        "--body-file",
+        "doc.md"
+      ],
+      "display": "gh issue comment 12 --repo o/r --body-file doc.md"
+    }
+  },
+  "gitlab: replace an issue body": {
+    "calls": [],
+    "result": {
+      "cli": "glab",
+      "args": [
+        "issue",
+        "update",
+        "7",
+        "--repo",
+        "g/sub/p",
+        "--description",
+        "The doc"
+      ],
+      "display": "glab issue update 7 --repo g/sub/p --description <document>"
+    }
+  },
+  "gitlab: comment on an issue": {
+    "calls": [],
+    "result": {
+      "cli": "glab",
+      "args": [
+        "issue",
+        "note",
+        "7",
+        "--repo",
+        "g/sub/p",
+        "--message",
+        "The doc"
+      ],
+      "display": "glab issue note 7 --repo g/sub/p --message <document>"
+    }
+  },
+  "github: close an issue": {
+    "calls": [],
+    "result": {
+      "cli": "gh",
+      "args": [
+        "issue",
+        "close",
+        "12",
+        "--repo",
+        "o/r",
+        "--reason",
+        "not planned"
+      ],
+      "display": "gh issue close 12 --repo o/r --reason \"not planned\""
+    }
+  },
+  "gitlab: close an issue": {
+    "calls": [],
+    "result": {
+      "cli": "glab",
+      "args": [
+        "issue",
+        "close",
+        "7",
+        "--repo",
+        "g/sub/p"
+      ],
+      "display": "glab issue close 7 --repo g/sub/p"
+    }
+  },
+  "github: archive an issue (close, label)": {
+    "calls": [
+      [
+        "gh",
+        "label",
+        "list",
+        "--repo",
+        "o/r",
+        "--limit",
+        "500",
+        "--json",
+        "name"
+      ],
+      [
+        "gh",
+        "label",
+        "create",
+        "archived",
+        "--repo",
+        "o/r",
+        "--color",
+        "ededed",
+        "--description",
+        "Archived from the Backlog: closed as not planned"
+      ],
+      [
+        "gh",
+        "issue",
+        "close",
+        "12",
+        "--repo",
+        "o/r",
+        "--reason",
+        "not planned"
+      ],
+      [
+        "gh",
+        "issue",
+        "edit",
+        "12",
+        "--repo",
+        "o/r",
+        "--add-label",
+        "archived"
+      ]
+    ],
+    "result": {
+      "results": [
+        {
+          "number": 12,
+          "ok": true
+        }
+      ]
+    }
+  },
+  "gitlab: archive an issue (close, label)": {
+    "calls": [
+      [
+        "glab",
+        "issue",
+        "close",
+        "7",
+        "--repo",
+        "g/sub/p"
+      ],
+      [
+        "glab",
+        "issue",
+        "update",
+        "7",
+        "--repo",
+        "g/sub/p",
+        "--label",
+        "archived"
+      ]
+    ],
+    "result": {
+      "results": [
+        {
+          "number": 7,
+          "ok": true
+        }
+      ]
+    }
+  },
+  "github: archive undone when labelling fails (reopen)": {
+    "calls": [
+      [
+        "gh",
+        "label",
+        "list",
+        "--repo",
+        "o/r",
+        "--limit",
+        "500",
+        "--json",
+        "name"
+      ],
+      [
+        "gh",
+        "issue",
+        "close",
+        "12",
+        "--repo",
+        "o/r",
+        "--reason",
+        "not planned"
+      ],
+      [
+        "gh",
+        "issue",
+        "edit",
+        "12",
+        "--repo",
+        "o/r",
+        "--add-label",
+        "archived"
+      ],
+      [
+        "gh",
+        "issue",
+        "reopen",
+        "12",
+        "--repo",
+        "o/r"
+      ]
+    ],
+    "result": {
+      "results": [
+        {
+          "number": 12,
+          "ok": false,
+          "error": "label refused"
+        }
+      ]
+    }
+  },
+  "github: restore an issue (reopen, unlabel)": {
+    "calls": [
+      [
+        "gh",
+        "issue",
+        "reopen",
+        "12",
+        "--repo",
+        "o/r"
+      ],
+      [
+        "gh",
+        "issue",
+        "edit",
+        "12",
+        "--repo",
+        "o/r",
+        "--remove-label",
+        "archived"
+      ]
+    ],
+    "result": {
+      "results": [
+        {
+          "number": 12,
+          "ok": true
+        }
+      ]
+    }
+  },
+  "gitlab: restore an issue (reopen, unlabel)": {
+    "calls": [
+      [
+        "glab",
+        "issue",
+        "reopen",
+        "7",
+        "--repo",
+        "g/sub/p"
+      ],
+      [
+        "glab",
+        "issue",
+        "update",
+        "7",
+        "--repo",
+        "g/sub/p",
+        "--unlabel",
+        "archived"
+      ]
+    ],
+    "result": {
+      "results": [
+        {
+          "number": 7,
+          "ok": true
+        }
+      ]
+    }
+  },
+  "github: archive confirmation": {
+    "calls": [],
+    "result": "Close #12, #13 as not planned on GitHub and label them archived?"
+  },
+  "gitlab: archive confirmation": {
+    "calls": [],
+    "result": "Close #7 on GitLab and label it archived?"
+  },
+  "github: read labels": {
+    "calls": [
+      [
+        "gh",
+        "label",
+        "list",
+        "--repo",
+        "o/r",
+        "--limit",
+        "500",
+        "--json",
+        "name"
+      ]
+    ],
+    "result": [
+      "bug",
+      "epic"
+    ]
+  },
+  "gitlab: read labels": {
+    "calls": [],
+    "result": null
+  },
+  "github: list open pull requests": {
+    "calls": [
+      [
+        "gh",
+        "pr",
+        "list",
+        "--repo",
+        "o/r",
+        "--state",
+        "open",
+        "--limit",
+        "300",
+        "--json",
+        "number,title,url,isDraft,body,closingIssuesReferences"
+      ]
+    ],
+    "result": [
+      {
+        "number": 40,
+        "title": "Fix the login (#12)",
+        "url": "https://github.com/o/r/pull/40",
+        "draft": false,
+        "issues": [
+          12,
+          13
+        ]
+      },
+      {
+        "number": 41,
+        "title": "WIP",
+        "url": "https://github.com/o/r/pull/41",
+        "draft": true,
+        "issues": []
+      }
+    ]
+  },
+  "github: list open pull requests (old gh)": {
+    "calls": [
+      [
+        "gh",
+        "pr",
+        "list",
+        "--repo",
+        "ghe.example.com/o/r",
+        "--state",
+        "open",
+        "--limit",
+        "300",
+        "--json",
+        "number,title,url,isDraft,body,closingIssuesReferences"
+      ],
+      [
+        "gh",
+        "pr",
+        "list",
+        "--repo",
+        "ghe.example.com/o/r",
+        "--state",
+        "open",
+        "--limit",
+        "300",
+        "--json",
+        "number,title,url,isDraft,body"
+      ]
+    ],
+    "result": [
+      {
+        "number": 40,
+        "title": "Fix the login (#12)",
+        "url": "https://github.com/o/r/pull/40",
+        "draft": false,
+        "issues": [
+          12,
+          13
+        ]
+      },
+      {
+        "number": 41,
+        "title": "WIP",
+        "url": "https://github.com/o/r/pull/41",
+        "draft": true,
+        "issues": []
+      }
+    ]
+  },
+  "gitlab: list open merge requests": {
+    "calls": [
+      [
+        "glab",
+        "mr",
+        "list",
+        "--repo",
+        "g/sub/p",
+        "--per-page",
+        "100",
+        "--output",
+        "json"
+      ]
+    ],
+    "result": [
+      {
+        "number": 8,
+        "title": "Fix the export",
+        "url": "https://gitlab.com/g/sub/p/-/merge_requests/8",
+        "draft": false,
+        "issues": [
+          7
+        ]
+      },
+      {
+        "number": 10,
+        "title": "Draft: more",
+        "url": "https://gitlab.com/g/sub/p/-/merge_requests/10",
+        "draft": true,
+        "issues": []
+      }
+    ]
+  },
+  "gitlab: list open merge requests (self-hosted)": {
+    "calls": [
+      [
+        "glab",
+        "mr",
+        "list",
+        "--repo",
+        "https://git.example.com/g/p",
+        "--per-page",
+        "100",
+        "--output",
+        "json"
+      ]
+    ],
+    "result": []
+  },
+  "github: view a pull request": {
+    "calls": [
+      [
+        "gh",
+        "pr",
+        "view",
+        "40",
+        "--repo",
+        "github.com/o/r",
+        "--json",
+        "state,isDraft,mergeable,mergeStateStatus,statusCheckRollup"
+      ]
+    ],
+    "result": {
+      "state": "ready",
+      "detail": "ready to merge (all 1 checks passed)"
+    }
+  },
+  "gitlab: view a merge request": {
+    "calls": [
+      [
+        "glab",
+        "mr",
+        "view",
+        "8",
+        "--repo",
+        "https://gitlab.com/g/sub/p",
+        "--output",
+        "json"
+      ]
+    ],
+    "result": {
+      "state": "ready",
+      "detail": "ready to merge (pipeline success)"
+    }
+  },
+  "github: parse request and run URLs": {
+    "calls": [],
+    "result": [
+      {
+        "platform": "gh",
+        "host": "github.com",
+        "repo": "o/r",
+        "kind": "pr",
+        "id": 40
+      },
+      {
+        "platform": "gh",
+        "host": "ghe.example.com",
+        "repo": "o/r",
+        "kind": "run",
+        "id": 99
+      },
+      null
+    ]
+  },
+  "gitlab: parse request and pipeline URLs": {
+    "calls": [],
+    "result": [
+      {
+        "platform": "gl",
+        "host": "gitlab.com",
+        "repo": "g/sub/p",
+        "kind": "pr",
+        "id": 8
+      },
+      {
+        "platform": "gl",
+        "host": "git.example.com:8443",
+        "repo": "g/p",
+        "kind": "run",
+        "id": 5
+      }
+    ]
+  },
+  "github: typed epics": {
+    "calls": [
+      [
+        "gh",
+        "api",
+        "--paginate",
+        "repos/o/r/issues?state=all&per_page=100",
+        "--jq",
+        ".[] | select(((.type.name // \"\") | ascii_downcase) == \"epic\") | .number"
+      ]
+    ],
+    "result": [
+      5,
+      9
+    ]
+  },
+  "github: typed epics (self-hosted)": {
+    "calls": [
+      [
+        "gh",
+        "api",
+        "--hostname",
+        "ghe.example.com",
+        "--paginate",
+        "repos/o/r/issues?state=all&per_page=100",
+        "--jq",
+        ".[] | select(((.type.name // \"\") | ascii_downcase) == \"epic\") | .number"
+      ]
+    ],
+    "result": []
+  },
+  "github: read epics (sub-issues)": {
+    "calls": [
+      [
+        "gh",
+        "api",
+        "--paginate",
+        "repos/o/r/issues?state=all&per_page=100",
+        "--jq",
+        ".[] | select(((.type.name // \"\") | ascii_downcase) == \"epic\") | .number"
+      ],
+      [
+        "gh",
+        "api",
+        "repos/o/r/issues/5/sub_issues?per_page=100"
+      ]
+    ],
+    "result": {
+      "issues": [
+        {
+          "number": 5,
+          "title": "The epic",
+          "url": "https://github.com/o/r/issues/5",
+          "state": "open",
+          "labels": [
+            {
+              "name": "epic"
+            }
+          ],
+          "isEpic": true
+        },
+        {
+          "number": 12,
+          "title": "Fix",
+          "url": "https://github.com/o/r/issues/12",
+          "state": "open",
+          "labels": [],
+          "epic": "#5"
+        }
+      ],
+      "epics": [
+        {
+          "id": "#5",
+          "number": 5,
+          "kind": "issue",
+          "title": "The epic",
+          "url": "https://github.com/o/r/issues/5",
+          "state": "open",
+          "members": [
+            12
+          ],
+          "progress": {
+            "open": 1,
+            "closed": 0,
+            "total": 1
+          }
+        }
+      ],
+      "epicsError": null
+    }
+  },
+  "gitlab: read epics (group epics and labels)": {
+    "calls": [],
+    "result": {
+      "issues": [
+        {
+          "number": 7,
+          "title": "Fix the export",
+          "state": "open",
+          "labels": [
+            {
+              "name": "bug",
+              "color": null
+            },
+            {
+              "name": "epic::export",
+              "color": null
+            }
+          ],
+          "url": "https://gitlab.com/g/sub/p/-/issues/7",
+          "author": "ana",
+          "assignees": [
+            "bo"
+          ],
+          "body": "- [ ] one",
+          "tasks": {
+            "done": 0,
+            "total": 1
+          },
+          "createdAt": "2026-01-02T00:00:00Z",
+          "updatedAt": "2026-01-03T00:00:00Z",
+          "epic": "&3"
+        },
+        {
+          "number": 9,
+          "title": "Export",
+          "state": "open",
+          "labels": [
+            {
+              "name": "epic",
+              "color": null
+            },
+            {
+              "name": "epic::export",
+              "color": null
+            }
+          ],
+          "url": "https://gitlab.com/g/sub/p/-/issues/9",
+          "author": "ana",
+          "assignees": [
+            "bo"
+          ],
+          "body": "- [ ] one",
+          "tasks": {
+            "done": 0,
+            "total": 1
+          },
+          "createdAt": "2026-01-02T00:00:00Z",
+          "updatedAt": "2026-01-03T00:00:00Z",
+          "isEpic": true
+        }
+      ],
+      "epics": [
+        {
+          "id": "&3",
+          "number": null,
+          "iid": 3,
+          "groupId": 44,
+          "kind": "group",
+          "title": "Group epic",
+          "url": "https://gitlab.com/groups/g/-/epics/3",
+          "state": "open",
+          "members": [
+            7
+          ],
+          "progress": {
+            "open": 1,
+            "closed": 0,
+            "total": 1
+          }
+        },
+        {
+          "id": "#9",
+          "number": 9,
+          "kind": "label",
+          "slug": "export",
+          "title": "Export",
+          "url": "https://gitlab.com/g/sub/p/-/issues/9",
+          "state": "open",
+          "members": [
+            7
+          ],
+          "progress": {
+            "open": 1,
+            "closed": 0,
+            "total": 1
+          }
+        }
+      ],
+      "epicsError": null
+    }
+  },
+  "github: new epic with members (preview)": {
+    "calls": [],
+    "result": {
+      "preview": true,
+      "commands": [
+        "gh label create epic --repo ghe.example.com/o/r --color 5319E7 --description \"An epic: its sub-issues are its members\" --force",
+        "gh issue create --repo ghe.example.com/o/r --title Speed --body-file <time>-epic-speed.md --label epic",
+        "gh api --hostname ghe.example.com repos/o/r/issues/12 --jq .id",
+        "gh api --hostname ghe.example.com --method POST repos/o/r/issues/<epic>/sub_issues -F \"sub_issue_id=<id of #12>\" -F replace_parent=true",
+        "gh api --hostname ghe.example.com repos/o/r/issues/13 --jq .id",
+        "gh api --hostname ghe.example.com --method POST repos/o/r/issues/<epic>/sub_issues -F \"sub_issue_id=<id of #13>\" -F replace_parent=true"
+      ],
+      "epic": {
+        "id": "#?",
+        "number": null,
+        "title": "Speed",
+        "url": null,
+        "kind": "issue"
+      },
+      "linked": [
+        12,
+        13
+      ]
+    }
+  },
+  "github: new epic with members": {
+    "calls": [
+      [
+        "gh",
+        "label",
+        "list",
+        "--repo",
+        "o/r",
+        "--limit",
+        "500",
+        "--json",
+        "name"
+      ],
+      [
+        "gh",
+        "label",
+        "create",
+        "epic",
+        "--repo",
+        "o/r",
+        "--color",
+        "5319E7",
+        "--description",
+        "An epic: its sub-issues are its members",
+        "--force"
+      ],
+      [
+        "gh",
+        "issue",
+        "create",
+        "--repo",
+        "o/r",
+        "--title",
+        "Speed",
+        "--body-file",
+        "<time>-epic-speed.md",
+        "--label",
+        "epic"
+      ],
+      [
+        "gh",
+        "api",
+        "repos/o/r/issues/12",
+        "--jq",
+        ".id"
+      ],
+      [
+        "gh",
+        "api",
+        "--method",
+        "POST",
+        "repos/o/r/issues/77/sub_issues",
+        "-F",
+        "sub_issue_id=1012",
+        "-F",
+        "replace_parent=true"
+      ]
+    ],
+    "result": {
+      "preview": false,
+      "commands": [
+        "gh label create epic --repo o/r --color 5319E7 --description \"An epic: its sub-issues are its members\" --force",
+        "gh issue create --repo o/r --title Speed --body-file <time>-epic-speed.md --label epic",
+        "gh api repos/o/r/issues/12 --jq .id",
+        "gh api --method POST repos/o/r/issues/77/sub_issues -F sub_issue_id=1012 -F replace_parent=true"
+      ],
+      "epic": {
+        "id": "#77",
+        "number": 77,
+        "title": "Speed",
+        "url": "https://github.com/o/r/issues/77",
+        "kind": "issue"
+      },
+      "linked": [
+        12
+      ]
+    }
+  },
+  "gitlab: new label epic with members (preview)": {
+    "calls": [],
+    "result": {
+      "preview": true,
+      "commands": [
+        "glab issue create --repo g/sub/p --title Speed --description <document> --label epic,epic::speed --yes",
+        "glab issue update 7 --repo g/sub/p --label epic::speed"
+      ],
+      "epic": {
+        "id": "#?",
+        "number": null,
+        "title": "Speed",
+        "url": null,
+        "kind": "label"
+      },
+      "linked": [
+        7
+      ]
+    }
+  },
+  "gitlab: new group epic with members": {
+    "calls": [
+      [
+        "glab",
+        "api",
+        "--hostname",
+        "git.example.com",
+        "--method",
+        "POST",
+        "groups/44/epics",
+        "-f",
+        "title=Speed",
+        "-f",
+        "description=Filed by the Product Owner (#138).\n"
+      ],
+      [
+        "glab",
+        "api",
+        "--hostname",
+        "git.example.com",
+        "projects/g%2Fp/issues/7"
+      ],
+      [
+        "glab",
+        "api",
+        "--hostname",
+        "git.example.com",
+        "--method",
+        "POST",
+        "groups/44/epics/4/issues/7007"
+      ]
+    ],
+    "result": {
+      "preview": false,
+      "commands": [
+        "glab api --hostname git.example.com --method POST groups/44/epics -f title=Speed -f <document>",
+        "glab api --hostname git.example.com projects/g%2Fp/issues/7",
+        "glab api --hostname git.example.com --method POST groups/44/epics/4/issues/7007"
+      ],
+      "epic": {
+        "id": "&4",
+        "number": null,
+        "title": "Speed",
+        "url": "https://gitlab.com/groups/g/-/epics/4",
+        "kind": "group"
+      },
+      "linked": [
+        7
+      ]
+    }
+  },
+  "gitlab: existing label epic, new member": {
+    "calls": [
+      [
+        "glab",
+        "issue",
+        "update",
+        "7",
+        "--repo",
+        "g/sub/p",
+        "--label",
+        "epic::export"
+      ]
+    ],
+    "result": {
+      "preview": false,
+      "commands": [
+        "glab issue update 7 --repo g/sub/p --label epic::export"
+      ],
+      "epic": {
+        "id": "#9",
+        "number": 9,
+        "title": "Export",
+        "kind": "label"
+      },
+      "linked": [
+        7
+      ]
+    }
+  },
+  "github: search issues": {
+    "calls": [],
+    "result": [
+      {
+        "cli": "gh",
+        "args": [
+          "issue",
+          "list",
+          "--repo",
+          "o/r",
+          "--search",
+          "login",
+          "--state",
+          "all",
+          "--limit",
+          "30",
+          "--json",
+          "number,title,state,labels,url,updatedAt"
+        ]
+      },
+      {
+        "cli": "gh",
+        "args": [
+          "issue",
+          "list",
+          "--repo",
+          "o/r",
+          "--state",
+          "open",
+          "--limit",
+          "30",
+          "--json",
+          "number,title,state,labels,url,updatedAt"
+        ]
+      }
+    ]
+  },
+  "gitlab: search issues": {
+    "calls": [],
+    "result": [
+      {
+        "cli": "glab",
+        "args": [
+          "issue",
+          "list",
+          "--repo",
+          "g/sub/p",
+          "--search",
+          "export",
+          "--closed",
+          "--per-page",
+          "30",
+          "--output",
+          "json"
+        ]
+      },
+      {
+        "cli": "glab",
+        "args": [
+          "issue",
+          "list",
+          "--repo",
+          "g/sub/p",
+          "--per-page",
+          "30",
+          "--output",
+          "json"
+        ]
+      }
+    ]
+  },
+  "github: oracle view an issue": {
+    "calls": [],
+    "result": {
+      "cli": "gh",
+      "args": [
+        "issue",
+        "view",
+        "12",
+        "--repo",
+        "o/r",
+        "--json",
+        "number,title,state,body,labels,url,comments"
+      ]
+    }
+  },
+  "gitlab: oracle view an issue": {
+    "calls": [],
+    "result": {
+      "cli": "glab",
+      "args": [
+        "issue",
+        "view",
+        "7",
+        "--repo",
+        "g/sub/p",
+        "--output",
+        "json"
+      ]
+    }
+  },
+  "github: oracle labels": {
+    "calls": [],
+    "result": {
+      "cli": "gh",
+      "args": [
+        "label",
+        "list",
+        "--repo",
+        "o/r",
+        "--limit",
+        "200",
+        "--json",
+        "name,description"
+      ]
+    }
+  },
+  "gitlab: oracle labels": {
+    "calls": [],
+    "result": {
+      "cli": "glab",
+      "args": [
+        "label",
+        "list",
+        "--repo",
+        "g/sub/p",
+        "--per-page",
+        "200",
+        "--output",
+        "json"
+      ]
+    }
+  },
+  "github: oracle parses search, view and labels": {
+    "calls": [],
+    "result": [
+      [
+        {
+          "number": 12,
+          "title": "Fix the login",
+          "state": "OPEN",
+          "labels": [
+            "bug"
+          ],
+          "url": "https://github.com/o/r/issues/12"
+        }
+      ],
+      {
+        "number": 12,
+        "title": "Fix the login",
+        "state": "OPEN",
+        "labels": [
+          "bug"
+        ],
+        "url": "https://github.com/o/r/issues/12",
+        "body": "- [x] one\n- [ ] two",
+        "comments": 2
+      },
+      [
+        {
+          "name": "bug",
+          "description": "A bug"
+        },
+        {
+          "name": "epic"
+        }
+      ]
+    ]
+  },
+  "gitlab: oracle parses search, view and labels": {
+    "calls": [],
+    "result": [
+      [
+        {
+          "number": 7,
+          "title": "Fix the export",
+          "state": "opened",
+          "labels": [
+            "bug",
+            "epic::export"
+          ],
+          "url": "https://gitlab.com/g/sub/p/-/issues/7"
+        }
+      ],
+      {
+        "number": 7,
+        "title": "Fix the export",
+        "state": "opened",
+        "labels": [
+          "bug",
+          "epic::export"
+        ],
+        "url": "https://gitlab.com/g/sub/p/-/issues/7",
+        "body": "- [ ] one"
+      },
+      [
+        {
+          "name": "bug"
+        }
+      ]
+    ]
+  }
+}

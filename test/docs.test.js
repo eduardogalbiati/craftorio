@@ -64,15 +64,14 @@ test('the generated code map adds one row per view folder, listing only its .js/
   assert.doesNotMatch(map, /readme\.md/);
 });
 
-// A temporary copy of only what the generator reads (skills/, docs/screens/, README.md): editing
-// one skill's summary there must not touch the real repository's files.
+// A temporary copy of only what the generator reads (skills/, docs/, README.md): editing one
+// skill's summary there must not touch the real repository's files. All of docs/ (#248, #251):
+// the README fragments and the engine topics are generator inputs too.
 function tmpDocsRoot(t) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'docs-root-'));
   t.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
   fs.cpSync(path.join(root, 'skills'), path.join(tmp, 'skills'), { recursive: true });
-  fs.mkdirSync(path.join(tmp, 'docs'));
-  fs.cpSync(path.join(root, 'docs', 'screens'), path.join(tmp, 'docs', 'screens'), { recursive: true });
-  fs.cpSync(path.join(root, 'docs', 'features'), path.join(tmp, 'docs', 'features'), { recursive: true });
+  fs.cpSync(path.join(root, 'docs'), path.join(tmp, 'docs'), { recursive: true });
   fs.copyFileSync(path.join(root, 'README.md'), path.join(tmp, 'README.md'));
   return tmp;
 }
@@ -394,4 +393,19 @@ test('main(--check): reports index.html as stale when a generated line is missin
     '  <script src="extra.js"></script>\n  <!-- /generated:scripts -->',
   ));
   assert.equal(main(['--check'], tmp), 1);
+});
+
+// #338: the channel reference, generated from the app's manifest and its schemas (derived like the
+// code map: rebuilt by --derived, gitignored).
+test('#338 main(--derived) writes docs/agents/channels.md: each channel with its arguments and result', (t) => {
+  const tmp = tmpFullRoot(t);
+  assert.equal(main(['--derived'], tmp), 0);
+  const file = path.join(tmp, 'docs', 'agents', 'channels.md');
+  assert.equal(fs.existsSync(file), true, 'no channel reference written');
+  const ref = read(file);
+  for (const channel of ['runs:setTitle', 'runs:events', 'roadmap:get', 'projects:list']) assert.match(ref, new RegExp(channel), channel);
+  const setTitle = ref.slice(ref.indexOf('runs:setTitle'), ref.indexOf('runs:setTitle') + 1500);
+  assert.match(setTitle, /title/);
+  assert.match(setTitle, /200/, 'the title limit is in the reference');
+  assert.match(read(path.join(root, '.gitignore')), /^docs\/agents\/channels\.md$/m);
 });

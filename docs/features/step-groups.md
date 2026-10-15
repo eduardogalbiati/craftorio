@@ -15,7 +15,7 @@ groups:                        # optional; the graph ignores it (transitions sti
     steps: [test, test_failed, build, build_failed, evidence, verify_change, verify_failed]
 ```
 
-- Each run in the runs lists (Workflows › Runs, Settings › Projects › Project) shows the groups it has
+- Each run in the runs lists (Workflows › Runs, Projects › a project) shows the groups it has
   visited so far, in order: the robot of each agent that worked there (a person for a human gate;
   hover for step, agent, provider/model, duration and cost), the group name and its state: ✓ done,
   the step running, "waiting for you" at a gate, ✕ and the step where the run failed. Coming back

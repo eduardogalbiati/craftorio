@@ -115,3 +115,36 @@ Then('the cost per day legend shows {string}, {string} and {string}', async ({ e
   await expect(legend).toBeVisible({ timeout: 30000 });
   for (const name of [a, b, c]) await expect(legend).toContainText(name);
 });
+
+// ---- the date range (#383) ------------------------------------------------------------------------------
+// Analytics' From/To pair is the design-system date-range control: data-testid="analytics-date-range"
+// around it, its fields date inputs (value YYYY-MM-DD) data-testid="date-range-from" / "date-range-to",
+// its presets buttons named "Last 24 h", "Last 7 days", "Last 30 days", "All". Dates are days in the
+// owner's time zone (Settings › General › Time zone).
+
+const dateRange = (page) => page.getByTestId('analytics-date-range');
+
+// today in `zone` (YYYY-MM-DD), and the calendar day `days` before it
+function dayInZone(zone, daysBefore = 0) {
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  const [y, m, d] = today.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d - daysBefore)).toISOString().slice(0, 10);
+}
+
+When('I pick the {string} preset of the Analytics date range', async ({ e2e }, name) => {
+  const range = dateRange(e2e.window);
+  await expect(range).toBeVisible({ timeout: 30000 });
+  await range.getByRole('button', { name, exact: true }).click();
+});
+
+Then('the Analytics date range runs from {int} days before today to today in the time zone {string}', async ({ e2e }, days, zone) => {
+  const range = dateRange(e2e.window);
+  await expect(range.getByTestId('date-range-from')).toHaveValue(dayInZone(zone, days), { timeout: 30000 });
+  await expect(range.getByTestId('date-range-to')).toHaveValue(dayInZone(zone), { timeout: 30000 });
+});
+
+Then('the Analytics date range\'s From and To are empty', async ({ e2e }) => {
+  const range = dateRange(e2e.window);
+  await expect(range.getByTestId('date-range-from')).toHaveValue('', { timeout: 30000 });
+  await expect(range.getByTestId('date-range-to')).toHaveValue('', { timeout: 30000 });
+});

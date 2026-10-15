@@ -24,6 +24,8 @@ const drawerChoice = () => (state.pipeline ? `${PIPE}${state.pipeline.file}` : s
 async function openDrawer({ category = null, workflow = null, project = null, inputs = null, pipeline = null } = {}) {
   state.category = category;
   state.pendingProject = project;
+  // a workflow asked for by name is listed even when the Setup hid it from Start (#319)
+  state.drawerForced = workflow;
   [state.workflows, state.projects, state.settings, state.pipelines] = await Promise.all([
     api.listWorkflows(), api.listProjects(), api.getSettings(),
     (api.listPipelines ? api.listPipelines() : Promise.resolve([])).catch(() => []),
@@ -75,8 +77,11 @@ function renderDrawerCategories() {
 // The pipelines that can start here: loaded without error, their first workflow in the list.
 const startablePipelines = () => (state.pipelines || []).filter((p) => !p.error && state.workflows.some((w) => w.file === p.stages[0]?.workflow && !w.error));
 
+// #319: the workflows the first-run Setup left unpicked (settings.hiddenWorkflows) are not offered
+const hiddenFromStart = (w) => typeof SetupModel !== 'undefined' && (state.settings?.hiddenWorkflows || []).includes(SetupModel.workflowId(w.file)) && w.file !== state.drawerForced;
+
 function renderWorkflowOptions(preferred) {
-  const list = state.workflows.filter((w) => !state.category || w.category === state.category);
+  const list = state.workflows.filter((w) => (!state.category || w.category === state.category) && !hiddenFromStart(w));
   const pipes = startablePipelines().filter((p) => !state.category || p.category === state.category);
   const sel = $('#wf-select');
   sel.disabled = !list.length && !pipes.length;
@@ -88,13 +93,17 @@ function renderWorkflowOptions(preferred) {
     state.wf = null;
     state.pipeline = null;
     $('#drawer-pipeline').classList.add('hidden');
-    $('#wf-desc').textContent = state.category
+    const hidden = state.workflows.some((w) => (!state.category || w.category === state.category) && hiddenFromStart(w));
+    $('#wf-desc').textContent = hidden
+      ? `Every ${state.category ? `${CATEGORIES[state.category]} ` : ''}workflow is hidden from Start: Workflows › Definitions › Show in Start brings one back.`
+      : state.category
       ? `No ${CATEGORIES[state.category]} workflows yet. Add a .yaml with "category: ${state.category}" to workflows/.`
       : 'No .yaml files found in workflows/.';
     $('#wf-steps-mini').innerHTML = '';
     $('#inputs-form').innerHTML = '';
     $('#adv-form').innerHTML = '';
     $('#wf-agents').innerHTML = '';
+    $('#env-status').innerHTML = '';
     state.mainKey = null;
     setStartDisabled(true);
     return;
@@ -130,11 +139,10 @@ function selectWorkflow(file) {
   $('#wf-desc').textContent = pipeline ? pipeline.description || '' : wf.error ? `Error: ${wf.error}` : [wf.description || '', ...(wf.warnings || []).map((m) => `Warning: ${m}.`)].filter(Boolean).join(' ');
   $('#wf-steps-mini').innerHTML = (wf.steps || []).map((s) =>
     `<span class="step-chip ${s.type === 'human_approval' ? 'human' : ''}" title="${esc(`${s.id}${s.type === 'human_approval' ? ' (human approval)' : s.agent ? ` · ${s.agent}` : ''}`)}">${esc(s.display || (typeof displayName === 'function' ? displayName(s.id) : s.id))}</span>`).join('<span class="arrow">›</span>');
-  // what each agent may use (capabilities) and how its conversation is kept (session)
-  $('#wf-agents').innerHTML = Object.entries(wf.agents || {}).map(([name, a]) => `<div class="agent-row">
-      <div class="agent-row-main"><span>${esc(name)}</span><span class="model">${esc(a.provider)} · ${esc(a.model)}</span></div>
-      <div class="agent-caps">${esc([`session: ${a.session || 'persistent'}${a.max_context && (a.session || 'persistent') === 'persistent' ? ` (max ${a.max_context})` : ''}`, a.capabilities, a.isolated === false ? 'not isolated' : ''].filter(Boolean).join(' · '))}</div>
-    </div>`).join('');
+  // #262: each agent's provider, model and effort for this run (the workflow's as defaults, never
+  // remembered), with what it may use (capabilities) and how its conversation is kept (session);
+  // a pipeline's stages keep their workflows' agents
+  $('#wf-agents').innerHTML = pipeline ? '' : window.AgentOverrides?.html(wf, { prefix: 'start-ao' }) || '';
 
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem(`${LS_KEY}.${wf.file}`) || '{}'); } catch { /* ignore */ }
@@ -171,6 +179,44 @@ function selectWorkflow(file) {
   setStartDisabled(!!wf.error || oneRunAtATime());
   drawerChain().refresh();
   renderDrawerPipeline();
+  window.renderEnvStatus?.(); // through window: the drawer's unit tests load selectWorkflow on its own
+}
+
+// #319: each CLI's state ('ready' | 'signed-out' | 'missing'), from env:details (Settings and the
+// Setup refresh it too), and the tools themselves for their install and sign-in commands.
+function setCliStates(tools) {
+  state.cliTools = tools || [];
+  state.cliStates = Object.fromEntries(state.cliTools.map((t) => [t.id, SetupModel.statusBadge(t).state]));
+  if (state.wf) renderEnvStatus();
+}
+
+async function loadCliStatus() {
+  try { setCliStates(await api.envDetails()); } catch { /* the drawer shows no CLI line */ }
+  return state.cliTools || [];
+}
+
+// The Start drawer's line under the inputs: the chosen workflow's requirement badges ("Needs Codex")
+// and only what this computer lacks for it, with its install or sign-in command.
+function renderEnvStatus() {
+  const box = $('#env-status');
+  const reqs = state.wf?.requirements;
+  if (!reqs || typeof SetupModel === 'undefined') { box.innerHTML = ''; return; }
+  const badges = SetupModel.requirementBadges(reqs).map((b) => `<span class="badge">${esc(b)}</span>`).join('');
+  const missing = state.cliStates ? SetupModel.missingRequirements(reqs, state.cliStates) : [];
+  const tool = (id) => (state.cliTools || []).find((t) => t.id === id);
+  const action = (t) => {
+    if (!t || !canRunCommands()) return '';
+    if (!t.path) return t.installCommand ? commandHint(t.installCommand) : '';
+    return t.signInCommand ? commandHint(t.signInCommand, { signIn: true }) : '';
+  };
+  const lines = missing.map((id) => {
+    if (id === 'forge') return '<span class="missing">✗ Needs the GitHub CLI or the GitLab CLI, signed in</span>';
+    const t = tool(id);
+    const why = state.cliStates[id] === 'signed-out' ? 'not signed in' : 'not installed';
+    return `<span class="missing">✗ ${esc(SetupModel.toolName(id))}: ${why}</span>${action(t)}`;
+  });
+  if (lines.length) lines.push(`<span class="muted">${devMode() ? 'Simulation runs it without them.' : 'A real run of this workflow fails at Start without them.'}</span>`);
+  box.innerHTML = [badges, ...lines].filter(Boolean).join('');
 }
 
 // The drawer's "When it finishes" (#134), mounted once; it follows the chosen workflow.
@@ -253,9 +299,11 @@ async function startRun({ keepOpen = false } = {}) {
   try {
     const mock = wantsSimulation($('#mock-toggle'));
     const attachments = await pastedImages();
+    // #262: this run's provider / model / effort per agent (only what differs from the workflow)
+    const agentOverrides = window.AgentOverrides?.read($('#wf-agents')) || {};
     const { runId } = state.pipeline
       ? await api.runPipeline(state.pipeline.file, inputs, mock, project?.id || null)
-      : await api.startRun({ file: wf.file, inputs, mock, then: drawerChain().value(), ...(attachments ? { attachments } : {}) });
+      : await api.startRun({ file: wf.file, inputs, mock, then: drawerChain().value(), ...(attachments ? { attachments } : {}), ...(Object.keys(agentOverrides).length ? { agentOverrides } : {}) });
     state.settings = await api.setSettings({ lastWorkflow: wf.file, lastProject: project?.id || null });
     const view = state.runs.get(runId);
     if (view?.run && project) view.run.project = project.name;

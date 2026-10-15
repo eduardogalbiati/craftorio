@@ -2,7 +2,7 @@
 // Run screen (Run Details): the run shown in the top bar, its failure banner, its chain banner (#134:
 // renderChainBanner), the gates it waits at
 // (gate cards: renderRunGates, onRunGateClick; what a gate offers is gate-panel.js), its summary
-// (inputs, supervisor, watch, resume, Save to issue, Review changes: the diff viewer, #118), its
+// (inputs, supervisor, watch, resume, the run that resumed it: #384, Save to issue, Review changes: the diff viewer, #118), its
 // steps by group, its sessions and the Session / Events / Artifacts tabs. No sidebar entry of its own: the Run item and the runs menu
 // belong to the shell (app.js), which also keeps the run state it draws (state.runs, onEvent,
 // hydrateRun) and calls renderRunScreen() from render() while it shows. Registers itself with
@@ -30,7 +30,9 @@ function renderRunGates() {
       + (window.GateOracle?.gateOracleButtonHtml(g) || '');
     const field = g.feedback ? `<label class="duo-ask-label">${esc(g.feedback.label || 'Instructions (optional)')}</label>
       <textarea class="duo-ask-text run-gate-feedback" rows="3" placeholder="${esc(g.feedback.placeholder || '')}"></textarea>` : '';
-    const message = `<pre class="run-gate-message" data-testid="run-gate-message">${esc(g.message || '')}</pre>`;
+    // a report (#290: the release summary) leads, as Markdown, above the rest of the message
+    const parts = typeof gateReportParts === 'function' ? gateReportParts(g) : { reportHtml: '', message: g.message || '' };
+    const message = `${parts.reportHtml}<pre class="run-gate-message" data-testid="run-gate-message">${esc(parts.message)}</pre>`;
     const main = `<div class="run-gate-head"><b>Approval required</b><span class="muted small mono">${esc(`${v.run ? `${runLabel(v.run)} · ` : ''}step: ${g.step_id}`)}</span></div>
       ${gateCardHtml(g.run_id, g, message) || message}${gateToolsHtml(g)}${field}<div class="row gate-choices run-gate-actions">${buttons}</div>${gateButtonsHelpHtml(g)}`;
     const side = gateSideHtml(g);
@@ -110,6 +112,7 @@ function runArtifactsPanel() {
 // What render() draws while the Run screen shows.
 function renderRunScreen() {
   renderRunBanner();
+  renderPauseBanner();
   renderChainBanner();
   renderRunGates();
   renderRunSummary();
@@ -138,6 +141,52 @@ function testsPlanHtml(plan) {
   return `<div class="small run-tests-plan">${plan.map((p) => `<span class="badge${p.value === 'off' ? ' warn' : ''}" title="${esc(`${p.label}: ${p.value_label} (${p.source})${p.value === 'off' ? ': nothing of it is tested in this run' : ''}`)}">${esc(p.label)}: ${esc(p.value_label)}</span>`).join(' ')}</div>`;
 }
 
+// #396: a run that went on to the build without a green suite (the owner's policy on a suite red
+// only outside the change, or Continue at the test gate), as a warn badge; its failures and their
+// class on hover. '' for a run tested green or without a suite.
+function testedPillHtml(r) {
+  if (r.tested !== 'not green') return '';
+  const fails = (r.testedFailures || []).map((f) => `${f.test}${f.file ? ` (${f.file})` : ''}${f.class ? `: ${f.class}` : ''}`);
+  const title = `The run reached the build without a green suite.${fails.length ? `\n${fails.join('\n')}` : ''}`;
+  return ` <span class="badge warn" data-testid="run-tested-pill" title="${esc(title)}">Not tested green</span>`;
+}
+
+// #304: a suite step with `scope: affected`, its latest round as a card: the scope (the affected test
+// files, then the whole suite once), why each file ran (output.selection) and the logs. '' when no
+// suite step of the run selected its files. A step that runs the files it lists (the red check: every
+// reason is "listed by <step>") reads "Listed tests", not the change's affected set.
+const SUITE_REASONS_SHOWN = 6;
+function suiteCardsHtml(runId, stepNames) {
+  const last = new Map();
+  for (const e of state.runs.get(runId)?.events || []) {
+    if (e.type === 'step.finished' && e.output?.kind === 'suite' && e.output.selection) last.set(e.step_id, e.output);
+  }
+  return [...last].map(([stepId, out]) => {
+    const sel = out.selection;
+    const listed = Object.values(sel.reasons || {}).length > 0 && Object.values(sel.reasons).every((why) => /^listed by /.test(why));
+    const scope = sel.mode === 'all' ? 'Whole suite' : listed ? 'Listed tests' : out.affected && out.scope === 'full' ? 'Affected tests, then the whole suite' : 'Affected tests only';
+    const reasons = Object.entries(sel.reasons || {});
+    const more = reasons.length - SUITE_REASONS_SHOWN;
+    const list = reasons.length
+      ? `<ul>${reasons.slice(0, SUITE_REASONS_SHOWN).map(([f, why]) => `<li><span class="mono" title="${esc(f)}">${esc(f)}</span>: ${esc(why)}</li>`).join('')}${more > 0 ? `<li class="muted">and ${more} more</li>` : ''}</ul>`
+      : '';
+    const logBtn = (log, label, testid) => (log ? `<button type="button" class="link-btn small" data-testid="${testid}" data-suite-log="${esc(log)}" title="${esc(log)}">${label}</button>` : '');
+    const affectedLog = out.affected ? out.affected.log : out.scope === 'files' ? out.log : '';
+    return `<div class="run-suite-card" data-testid="run-suite-card">
+      <div><b title="${esc(stepId)}">${esc(agentLabel(stepId, stepNames))}</b> <span class="badge" data-testid="run-suite-scope" title="${esc(sel.why || '')}">${esc(scope)}</span>${out.round ? ` <span class="muted small">round ${esc(out.round)}</span>` : ''}</div>
+      <div class="small run-suite-selection" data-testid="run-suite-selection">${list}${sel.why ? `<div class="muted">${esc(sel.why)}</div>` : ''}</div>
+      <div class="row">${logBtn(affectedLog, listed ? 'Listed tests\' log' : 'Affected tests\' log', 'run-suite-affected-log')}${out.affected && out.scope === 'full' ? logBtn(out.log, 'Whole suite\'s log', 'run-suite-full-log') : ''}</div>
+    </div>`;
+  }).join('');
+}
+
+// Opens a log of the run (a path relative to its folder); a run recorded without its folder opens the folder.
+function openRunLog(runId, rel) {
+  const runDir = state.runs.get(runId)?.events?.find((e) => e.type === 'workflow.started')?.run_dir || '';
+  const opened = runDir ? api.openPath(`${runDir.replace(/[\\/]+$/, '')}/${rel}`) : api.openRunDir(runId);
+  Promise.resolve(opened).catch((e) => showToast('Could not open the log', errMsg(e)));
+}
+
 // The run's scratch workspace (#201: its agents' checks, not artifacts), read at most every 15 s
 // per run: runId → { info: { dir, files, bytes } | null, at }. Shown only while it exists.
 const scratchOfRun = new Map();
@@ -158,11 +207,26 @@ function scratchHtml(runId) {
     + `Scratch workspace (${esc(s.files)} file${s.files === 1 ? '' : 's'}, ${esc(fmtSize(s.bytes))}) <button class="btn sm ghost" id="btn-run-scratch">Open folder</button></div>`;
 }
 
+// #384: the run that resumed an ended run (its row's resumedBy, runs:list { ids }), read at most every
+// 15 s per run: runId → { by: { runId, status } | null, at }. A running run is not asked.
+const resumedOfRun = new Map();
+function askResumed(r) {
+  if (!r.id || r.status === 'running') return;
+  const cur = resumedOfRun.get(r.id);
+  if (cur && (cur.pending || Date.now() - cur.at < 15000)) return;
+  resumedOfRun.set(r.id, { ...(cur || { by: null }), pending: true, at: Date.now() });
+  Promise.resolve().then(() => api.listRuns({ ids: [r.id] })).then((d) => d?.runs?.[0]?.resumedBy || null, () => cur?.by || null).then((by) => {
+    resumedOfRun.set(r.id, { by, at: Date.now() });
+    if (state.run?.id === r.id && state.view === 'run') renderRunSummary();
+  });
+}
+
 function renderRunSummary() {
   const r = state.run;
   if (!r) return;
   askPrStates([r]);
   askScratch(r.id);
+  askResumed(r);
   const all = Object.entries(r.inputs || {}).filter(([, v]) => v !== undefined && v !== null && v !== '' && !(Array.isArray(v) && !v.length));
   // #216: the choices (enum and yes/no inputs) as the shared pills, with their labels; the rest
   // (task, paths, numbers) as key / value
@@ -174,12 +238,13 @@ function renderRunSummary() {
   const saveIssue = r.workflow === 'writer-reviewer' && r.status === 'success' && window.openDuoSaveToIssue ? (issuesOfRun(r)[0] || null) : null;
   // its title (editable) and PR first, the workflow under it (#84); a past run opened from disk is read-only
   const html = `
-    <div class="run-summary-name"><b>${runTitleHtml(r)}</b> ${prBadge(r)}</div>
+    <div class="run-summary-name"><b>${runTitleHtml(r)}</b>${StatusPill.resumedLink(resumedOfRun.get(r.id)?.by)} ${prBadge(r)}${testedPillHtml(r)}</div>
     <div class="small muted">${esc(r.workflow || '')}${r.version ? ` v${esc(r.version)}` : ''}${selectedView().past ? ' · <span title="Opened from its recorded events: nothing here can change it">read-only</span>' : ''}</div>
     ${r.project ? `<div class="small">Project: <b>${esc(r.project)}</b></div>` : ''}
     ${(r.issueSaves || []).map((s) => `<div class="small" title="The accepted document was saved to the issue (Save to issue, Write & Review)">Saved to issue: <a href="${esc(s.commentUrl || s.url)}" target="_blank" rel="noopener">#${esc(s.number)}</a> · ${s.mode === 'comment' ? 'as a comment' : 'description replaced'} · ${esc(new Date(s.at).toLocaleString('en-US'))}</div>`).join('')}
     ${r.gateWaitMs ? `<div class="small" title="Time the run waited for your answers at its human gates: no agent works (or costs) meanwhile">Waiting for you at gates: <b>${esc(fmtDur(r.gateWaitMs))}</b></div>` : ''}
     ${testsPlanHtml(r.testsPlan)}
+    ${suiteCardsHtml(r.id, r.stepNames)}
     ${scratchHtml(r.id)}
     ${pills ? `<div class="run-input-pills">${pills}</div>` : ''}
     <dl class="kv run-inputs">${inputs.map(([k, v]) => `<dt title="${esc(k)}">${esc(k)}</dt>${inputValueCell(v)}`).join('')}</dl>
@@ -192,6 +257,7 @@ function renderRunSummary() {
       ${hasChanges(r.id) ? '<button class="btn sm ghost" id="btn-run-diff" title="The files this run changed on its branch, file by file, split or unified">Review changes</button>' : ''}
       ${saveIssue ? `<button class="btn sm ghost" id="btn-run-save-issue" title="Save the accepted document to its issue (preview first, then confirm)">Save to issue #${esc(saveIssue.number)}…</button>` : ''}
       <button class="btn sm ghost" id="btn-run-analytics" title="Its timeline, cost and tokens per agent, compared with its workflow's runs (Analytics › Run, #228)">Open in Analytics</button>
+      ${replayMapHtml(r)}
     </div>`;
   // rendered on every event: rebuilt only when it changes, so a hover popover over an input stays open
   const box = $('#run-summary');
@@ -204,11 +270,24 @@ function renderRunSummary() {
   $('#btn-run-sup').onclick = () => openSupervisorForCurrent();
   if ($('#btn-run-watch')) $('#btn-run-watch').onclick = () => openSupervisorForCurrent({ watch: true });
   if ($('#btn-run-resume')) $('#btn-run-resume').onclick = () => openResumeDialog(r.id);
+  box.querySelectorAll('[data-testid="run-resumed-link"]').forEach((a) => (a.onclick = (e) => { e.preventDefault(); showRun(a.dataset.run); }));
+  box.querySelectorAll('[data-suite-log]').forEach((b) => (b.onclick = () => openRunLog(r.id, b.dataset.suiteLog)));
   if ($('#btn-run-scratch')) $('#btn-run-scratch').onclick = () => api.openPath(scratchOfRun.get(r.id)?.info?.dir).catch((e) => showToast('Could not open the folder', errMsg(e)));
   if ($('#btn-run-diff')) $('#btn-run-diff').onclick = () => DiffViewer.open({ runId: r.id, title: r.title || r.workflow || '' });
   $('#btn-run-analytics').onclick = () => window.openAnalytics?.({ tab: 'run', runId: r.id });
+  mountReplayMap(r);
   if ($('#btn-run-save-issue')) {
     $('#btn-run-save-issue').onclick = () => window.openDuoSaveToIssue({ runId: r.id, issue: saveIssue, mock: !!r.mock, docSkill: r.inputs?.document_skill || '' });
+  }
+
+  // Replay on the map (#374): a finished run of a project plays its agents' files over the city
+  function replayMapHtml(run) {
+    if (!run.projectId || run.status === 'running' || !window.ProjectCityAgents) return '';
+    return '<button class="btn sm ghost" id="btn-run-replay-map" data-testid="run-replay-map" title="Play the files this run\'s agents read and changed over its project\'s city (#374)">Replay on the map</button>';
+  }
+
+  function mountReplayMap(run) {
+    if ($('#btn-run-replay-map')) $('#btn-run-replay-map').onclick = () => ProjectCityAgents.replay(run.projectId, run.id);
   }
 }
 
@@ -325,6 +404,59 @@ function pipelineRunOf(r, pipe) {
   return got?.info || null;
 }
 
+// #368: the run's pause line, while it pauses after the current turn (who or what it waits for, and
+// Cancel pause) and once it paused (where, whose turn comes next, when, and Resume, which continues
+// there). RunProgress.pauseLabel says it; `r.pause` comes from runs:active and the run's events.
+function renderPauseBanner() {
+  const r = selectedView().run;
+  const box = $('#run-pause-banner');
+  const p = r && ((r.status === 'running' && r.pause?.state === 'pausing') || (r.status === 'paused' && r.pause)) ? r.pause : null;
+  box.classList.toggle('hidden', !p);
+  const key = JSON.stringify([r?.id, p]);
+  if (box.dataset.key === key) return;
+  box.dataset.key = key;
+  if (!p) { box.innerHTML = ''; return; }
+  const action = p.state === 'pausing'
+    ? '<button type="button" class="btn sm ghost" data-pause-act="cancel" data-testid="run-cancel-pause" title="Take the pause back: the run goes on after the current turn">Cancel pause</button>'
+    : '<button type="button" class="btn sm primary" data-pause-act="resume" data-testid="run-resume" title="Continue this run where it paused: no finished turn runs again">Resume</button>';
+  box.innerHTML = `<div class="run-pause-state" data-testid="run-pause-state" data-state="${esc(p.state)}"><span class="run-pause-text">${esc(RunProgress.pauseLabel(p))}</span>${action}</div>`;
+}
+
+async function onPauseBannerClick(e) {
+  const b = e.target.closest('[data-pause-act]');
+  const r = selectedView().run;
+  if (!b || !r) return;
+  b.disabled = true;
+  try {
+    if (b.dataset.pauseAct === 'cancel') {
+      await api.cancelPauseRun(r.id);
+      r.pause = null;
+      scheduleRender();
+    } else {
+      await resumePausedRun(r);
+    }
+  } catch (err) {
+    showToast(b.dataset.pauseAct === 'cancel' ? 'Could not cancel the pause' : 'Could not resume the run', errMsg(err));
+  } finally {
+    b.disabled = false;
+  }
+}
+
+// Resume of a paused run: where it continues and what each agent's next turn re-reads (#320: a
+// prompt cache that expired meanwhile shows the first turn's extra cost, cold_resume_usd), then the
+// new run from that point.
+async function resumePausedRun(r) {
+  let o = null;
+  try { o = await api.resumeOptions(r.id); } catch { /* the line without the turns */ }
+  const at = o?.paused ? RunProgress.pauseLabel({ state: 'paused', ...o.paused }) : RunProgress.pauseLabel(r.pause);
+  const turns = o?.paused?.turns || [];
+  const names = { ...(r.display?.agents || {}), ...(r.agentNames || {}) };
+  const cont = turns.length ? ` ${SessionCache.continueText(turns, (a) => names[a] || a)}.` : '';
+  if (!(await confirmDialog('Resume the paused run', `${at}. Resume continues there: no finished turn runs again.${cont}`, 'Resume'))) return;
+  const { runId } = await api.resumeRun(r.id);
+  showRun(runId, { running: true });
+}
+
 function renderChainBanner() {
   const v = selectedView();
   const r = v.run;
@@ -378,7 +510,7 @@ function renderChainBanner() {
   const draft = chainUi.pipeDraft?.runId === r.id ? chainUi.pipeDraft : { name: then ? `${r.workflow || 'Run'} → ${ChainModel.thenLabel(then)}` : '', category: 'build', description: '' };
   const pipeForm = savingPipe ? `<div class="chain-banner-edit pipe-save-form">
       <div class="field"><label for="pipe-save-name">Name</label><input type="text" id="pipe-save-name" value="${esc(draft.name)}" spellcheck="false" /></div>
-      <div class="field"><label for="pipe-save-category">Category</label><select id="pipe-save-category">${PIPE_CATEGORIES.map(([v, l]) => `<option value="${v}"${v === draft.category ? ' selected' : ''}>${l}</option>`).join('')}</select></div>
+      <div class="field"><label for="pipe-save-category">Category</label>${window.Select.markup('id="pipe-save-category"', PIPE_CATEGORIES, draft.category)}</div>
       <div class="field pipe-save-desc"><label for="pipe-save-description">Description</label><input type="text" id="pipe-save-description" value="${esc(draft.description)}" placeholder="What the pipeline does (shown when you start it)" /></div>
       <p class="muted small">Saved in the workspace's pipelines folder: this run's workflow, then each step of its chain with its mapping. Start it from the Start drawer or Workflows › Definitions.</p>
     </div>` : '';
@@ -480,7 +612,7 @@ function renderSteps() {
   const item = (s) => `
     <li class="${s.status}">
       <span class="dot"></span>
-      <span><span title="${esc(s.id)}">${esc(agentLabel(s.id, v.run?.stepNames))}</span><br><span class="kind"${s.agent ? ` title="${esc(s.agent)}"` : ''}>${s.type === 'human_approval' ? 'human approval' : s.type === 'screenshots' ? 'screenshots (no agent)' : s.type === 'suite' ? 'test suite (no agent)' : s.type === 'test_ids' ? 'test id check (no agent)' : s.type === 'workflow' ? 'child workflow runs' : esc(agentLabel(s.agent, v.run?.agentNames))}</span></span>
+      <span><span title="${esc(s.id)}">${esc(agentLabel(s.id, v.run?.stepNames))}</span><br><span class="kind"${s.agent ? ` title="${esc(s.agent)}"` : ''}>${s.type === 'human_approval' ? 'human approval' : s.type === 'screenshots' ? 'screenshots (no agent)' : s.type === 'suite' ? 'test suite (no agent)' : s.type === 'test_ids' ? 'test id check (no agent)' : s.type === 'check' ? 'rule checks (no agent)' : s.type === 'release_version' ? 'release version (no agent)' : s.type === 'project_map' ? 'project map (no agent)' :s.type === 'workflow' ? 'child workflow runs' : esc(agentLabel(s.agent, v.run?.agentNames))}</span></span>
       <span class="visits">${s.visits ? '×' + s.visits : ''}</span>
     </li>`;
   // in the workflow's step order: a group where its first shown step is
@@ -527,7 +659,7 @@ function renderSessions() {
     const isOrch = s.id === 'orchestrator';
     const t = s.tokens || {};
     return `
-    <div class="session-card ${isOrch ? '' : 'child'} ${state.selected === s.id ? 'selected' : ''}" data-id="${esc(s.id)}">
+    <div class="session-card ${isOrch ? '' : 'child'} ${state.selected === s.id ? 'selected' : ''}" data-id="${esc(s.id)}" data-agent="${esc(s.agent)}" data-testid="run-session-card">
       <div class="sc-head">
         <span class="name" title="${esc(s.agent)}">${esc(agentLabel(s.agent, selectedView()?.run?.agentNames))}</span>
         <span class="id">${esc(s.id)}</span>
@@ -547,7 +679,8 @@ function renderSessions() {
         <div class="metric" title="What its child runs cost (their own children included), not in its total cost"><label>child runs cost</label><b>${fmtCost(childRunsCost(state.run))}</b></div>` : ''}` : `
         <div class="metric"><label>active</label><b>${fmtDur(s.active_ms)}</b></div>
         <div class="metric"><label>in / out</label><b>${fmtNum((t.input || 0) + (t.cache_read || 0))} / ${fmtNum(t.output)}</b></div>
-        <div class="metric"><label>cost</label><b>${fmtCost(s.cost_usd)}${marks(Number(s.estimated_cost_usd) || 0, notRecorded([s]))}</b></div>`}
+        <div class="metric"><label>cost</label><b data-testid="session-cost">${s.cost_estimate?.source === 'unknown' ? '—' : fmtCost(s.cost_usd)}${marks(Number(s.estimated_cost_usd) || 0, notRecorded([s]))}${costEstimateNote(s.cost_estimate)}</b></div>
+        ${nextTurnMetric(s)}`}
       </div>
     </div>`;
   }).join('');
@@ -555,6 +688,12 @@ function renderSessions() {
     state.selected = el.dataset.id;
     if (state.tab !== 'detail') switchTab('detail'); else scheduleRender();
   }));
+}
+
+// #320: how the session's next turn starts (session-cache.js), like the run lists' Next turn column
+function nextTurnMetric(s) {
+  const t = SessionCache.currentTurn(s);
+  return `<div class="metric next-turn"${t ? ` data-next-turn="${esc(t.kind)}"` : ''} data-testid="session-next-turn" title="${esc(SessionCache.turnTitle(t))}"><label>next turn</label><b>${esc(SessionCache.turnText(t))}</b></div>`;
 }
 
 function detailsBlock(key, cls, label, body) {
@@ -664,6 +803,7 @@ registerView({
   markup: `
       <section id="view-run" class="view hidden">
         <div id="run-fail-banner" class="fail-banner hidden"></div>
+        <div id="run-pause-banner" class="run-pause-banner hidden" aria-live="polite"></div>
         <div id="run-chain" class="chain-banner hidden" aria-live="polite"></div>
         <div id="run-gates" class="run-gates hidden" aria-live="polite"></div>
         <div class="run-modebar">
@@ -681,7 +821,7 @@ registerView({
             </section>
             <section>
               <h2>Steps</h2>
-              <div id="steps" class="step-groups"></div>
+              <div id="steps" class="step-groups" data-testid="run-steps"></div>
             </section>
           </aside>
 
@@ -708,6 +848,7 @@ registerView({
       </section>`,
   mount() {
     $('#run-gates').onclick = onRunGateClick;
+    $('#run-pause-banner').onclick = onPauseBannerClick;
     $('#run-chain').onclick = onChainBannerClick;
     document.querySelectorAll('.tab[data-tab]').forEach((t) => (t.onclick = () => switchTab(t.dataset.tab)));
     $('#tab-detail').addEventListener('toggle', (e) => {

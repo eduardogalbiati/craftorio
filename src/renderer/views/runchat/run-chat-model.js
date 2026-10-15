@@ -5,14 +5,23 @@
 // Browser: window.RunChatModel; Node: module.exports.
 (function (root) {
   // A session's provider is the workflow's provider key (claude, codex, grok) or its type; in a
-  // simulation it is "mock", so the model name tells which CLI it stands for.
-  const PROVIDER_TYPES = { claude: 'claude-code', codex: 'codex-cli', grok: 'grok-cli', gemini: 'gemini-cli' };
-  const MODEL_TYPES = [[/^claude-/, 'claude-code'], [/^(gpt-|o\d)/, 'codex-cli'], [/^grok-/, 'grok-cli'], [/^gemini-/, 'gemini-cli']];
+  // simulation it is "mock", so the model name tells which CLI it stands for (the provider registry,
+  // src/shared/providers/, resolves both).
+  const registry = typeof module === 'object' && module.exports ? require('../../../shared/providers') : root.Providers;
+  // the CLI adapter named by an id, a type or a CLI name (a model name is not a provider), else null
+  const cliNamed = (key) => {
+    const a = registry.resolve(key);
+    return a?.cli && [a.id, a.type, a.cli].includes(key) ? a : null;
+  };
+  const cliOf = (provider, model) => {
+    const byModel = registry.resolve(model);
+    return cliNamed(provider) || (byModel?.cli ? byModel : null);
+  };
   function providerType(provider, model = '') {
-    if (PROVIDER_TYPES[provider]) return PROVIDER_TYPES[provider];
-    if (Object.values(PROVIDER_TYPES).includes(provider)) return provider;
-    return MODEL_TYPES.find(([re]) => re.test(model || ''))?.[1] || provider || '';
+    return cliOf(provider, model)?.type || provider || '';
   }
+  // The CLI's short name for a hover card ("Claude"), '' when the session is on no known CLI.
+  providerType.short = (provider, model = '') => cliOf(provider, model)?.short || '';
   const baseStep = (id) => String(id || '').split(':')[0];
   const subStep = (id) => String(id || '').split(':')[1] || null;
   const MAX_ACTIVITY = 200; // per turn
@@ -39,10 +48,11 @@
     return { prose: prose.trim(), json, decisions };
   }
 
-  const displayName = typeof module === 'object' && module.exports ? require('../../display-name.js').displayName : root.displayName;
+  const displayName = typeof module === 'object' && module.exports ? require('../../../shared/display-name.js').displayName : root.displayName;
   // what the run chat shows about a session's agent (the hover card): recorded in the events,
   // so a replayed run shows what was actually used
-  const sessionInfo = (s) => ({ agent: s.agent, provider: s.provider, model: s.model, effort: s.effort || null, mode: s.mode || null });
+  // simulates (#262): a simulated session's workflow provider (provider is `mock`)
+  const sessionInfo = (s) => ({ agent: s.agent, provider: s.provider, model: s.model, effort: s.effort || null, mode: s.mode || null, simulates: s.simulates || null });
 
   const clip = (s, n = MAX_TEXT) => (s.length > n ? `${s.slice(0, n)}…` : s);
   const brief = (v) => clip(typeof v === 'string' ? v : JSON.stringify(v ?? ''), 600);
@@ -116,6 +126,8 @@
       }
       const fn = HANDLERS[ev.type];
       if (fn) fn.call(this, ev);
+      // its latest event: the time so far of a run that ended without workflow.finished (#288)
+      if (ev.ts) this.run.lastTs = ev.ts;
       return this.touched;
     }
   }
@@ -194,7 +206,7 @@
       const u = ev.usage || {};
       const group = !sub ? this.groups.get(stepId) : null;
       this.add({
-        kind: 'turn', ts: ev.ts, sessionId: ev.session_id, turn: ev.turn, agent: s.agent || '?', provider: s.provider,
+        kind: 'turn', ts: ev.ts, sessionId: ev.session_id, turn: ev.turn, agent: s.agent || '?', provider: s.provider, simulates: s.simulates || null,
         model: s.model || '', effort: s.effort || null, mode: s.mode || null, side: this.sideOf(s.agent || '?'), stepId, sub, visit: this.visits[stepId] || 1, text: String(ev.text || ''), activity: t.activity,
         tokensIn: (u.input || 0) + (u.cache_read || 0) + (u.cache_write || 0), tokensOut: u.output || 0,
         cost: ev.cost_usd || 0, durationMs: ev.duration_ms || 0, parent: group?.id,
@@ -209,6 +221,7 @@
 
     'step.started'(ev) {
       this.visits[ev.step_id] = ev.visit || 1;
+      this.run.stepId = ev.step_id; // the step it is at (where an interrupted run stopped, #288)
       const agents = String(ev.agent || '').split(' · ').filter(Boolean);
       if (agents.length > 1) {
         for (const a of agents) this.sideOf(a); // a fan-out's agents get their sides in the step's order
@@ -262,6 +275,8 @@
         // the summary card (#213): { headline, body, recommendation, options, user_action } and an
         // Approve / Reject gate's labels and help
         brief: ev.brief || null, approve: ev.approve || null, reject: ev.reject || null,
+        // the Markdown report that leads the message (#290: the release summary), '' without one
+        report: ev.report || '',
         // Run locally ({ install, command, url }), the folder to open and the diff's base ref, when the gate offers them
         localPreview: ev.local_preview || null, workDir: ev.work_dir || null, diffBase: ev.diff_base || null,
         // Run App without a config (#108): the step has local_preview: true
@@ -327,6 +342,12 @@
 
     'limit.exceeded'(ev) { this.system(ev, 'error', `Limit exceeded: ${ev.limit}`); },
 
+    // #262: an agent's provider was out of credits: its turn moved on to the next provider · model
+    'agent.fallback'(ev) {
+      const stepId = baseStep(ev.step_id);
+      this.add({ kind: 'fallback', ts: ev.ts, agent: ev.agent || '?', stepId, sub: subStep(ev.step_id), visit: this.visits[stepId] || 1, from: String(ev.from || ''), to: String(ev.to || ''), reason: String(ev.reason || '') });
+    },
+
     // #276: the memory guard stopped a process of the run
     'process.killed'(ev) { this.system(ev, 'warn', ev.message || `The memory guard stopped ${ev.command_line}`); },
 
@@ -342,7 +363,8 @@
       // a fan-out that threw (too few agents answered) gets no step.finished
       for (const group of this.groups.values()) { Object.assign(group, { done: true, error: ev.status !== 'success' }); this.touch(group); }
       this.groups.clear();
-      this.add({ kind: 'end', ts: ev.ts, status: ev.status, error: String(ev.error || ''), cost: s.cost_usd ?? this.run.cost, durationMs: s.duration_ms || 0 });
+      // tested (#396): 'not green' when the run went on without a green suite
+      this.add({ kind: 'end', ts: ev.ts, status: ev.status, error: String(ev.error || ''), cost: s.cost_usd ?? this.run.cost, durationMs: s.duration_ms || 0, tested: s.tested || null });
     },
   };
 

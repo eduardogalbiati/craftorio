@@ -19,7 +19,19 @@ order: 150.2
 - **Run analysis**: `run_analysis` (run ids, or the runs since a date) gives per run and in total
   the cost and tokens by agent and step, review rounds, timeouts, invalid outputs, refused calls,
   merge conflicts, commands cut by a tool timeout, the test writer's turns × context and cache
-  re-read, and the whole-suite starts with their durations. Free: no model.
+  re-read, and the whole-suite starts with their durations. Free: no model. Its `focus` (#321)
+  answers other questions on the same runs: `cost` (the default, the figures above); `time`
+  (minutes and visits per step, tool vs model time, the slowest tool calls, gaps over 3 min, the
+  gates' owner time); `context` (one agent's turns, the developer by default: requests, mean and
+  peak context, the read above 100K/150K/200K, the main turn's growth by tool kind); `tools` (calls
+  by tool and Bash kind, re-read files, edits, sub-agents, failed calls by cause, test commands);
+  `cache` (the turns that resumed a session after its prompt cache expired, their cost); `tests`
+  (the suite log's time per test file, two runs compared, E2E vs unit time in the test step);
+  `regressions` (#335, over all the real successful runs, not a run list: each workflow step whose
+  median cost per complexity point or minutes over its last 3 runs is more than 30% above its
+  baseline, the median of its runs before them with the same provider, model and effort; with the
+  baseline vs recent figures and the run ids behind both. A class with fewer than 5 baseline runs
+  is not measurable yet; simulated runs never count).
 - **Platform**: `issues_search`, `issue_view` and `labels` read a project's issues and labels
   through gh / glab, read-only. An issue card uses existing labels and says whether a duplicate
   was searched.

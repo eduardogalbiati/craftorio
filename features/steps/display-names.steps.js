@@ -51,10 +51,21 @@ Given('the running demo run {string} has moved on to the step {string}', async (
   fs.appendFileSync(file, `${added.map((e) => JSON.stringify(e)).join('\n')}\n`);
 });
 
-// Workflows › Runs (the sidebar's Runs, in the Workflows group, opens it): its search keeps the matching runs
+// Workflows › Runs (the sidebar's Runs, in the Workflows group, opens it): its search keeps the matching runs.
+// #362: the step returns once the debounced search has reloaded the list: the rows shown before the
+// search are marked, and it waits until every visible row is a new one that matches the query (the
+// matching row is already visible before the reload, which replaces it a moment later).
 When('I search the runs for {string}', async ({ e2e }, text) => {
   const page = e2e.window;
+  // simulated runs are hidden until "Show simulated" is ticked: the search has to find them too
+  const showSim = page.getByRole('checkbox', { name: 'Show simulated', exact: true }).filter({ visible: true }).first();
+  await showSim.check();
+  await page.evaluate(() => document.querySelectorAll('[data-testid="run-list-row"]').forEach((r) => r.setAttribute('data-e2e-stale', '')));
   await page.getByRole('textbox', { name: 'Search runs', exact: true }).filter({ visible: true }).first().fill(text);
+  await page.waitForFunction((needle) => {
+    const rows = [...document.querySelectorAll('[data-testid="run-list-row"]')].filter((r) => r.checkVisibility());
+    return rows.length > 0 && rows.every((r) => !r.hasAttribute('data-e2e-stale') && `${r.dataset.run} ${r.textContent}`.toLowerCase().includes(needle));
+  }, text.toLowerCase(), { timeout: LOAD_TIMEOUT });
   // the row shows its task and title, not the run id: the id is its data-run attribute
   await expect(page.locator(`[data-testid="run-list-row"][data-run$="${text}"]`).filter({ visible: true }).first()).toBeVisible({ timeout: LOAD_TIMEOUT });
 });

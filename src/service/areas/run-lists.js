@@ -5,8 +5,8 @@
 //
 // The lists come in pages (#200): newest first, the runs in progress (live, or waiting at a gate)
 // always in the first page, a run's child runs (#174) in the same page as their parent. The filter
-// chips, "Show simulated" and the search apply here, over every run, and the counts are of every
-// run; `upTo` extends the page to a run (a deep link to an older run); `ids` answers just those rows
+// chips, "Show simulated", the search and the workflow filter (#310: the recorded workflow file)
+// apply here, over every run, and the counts are of every run of the picked workflow; `upTo` extends the page to a run (a deep link to an older run); `ids` answers just those rows
 // (a run event updates its row). Listing is asynchronous (runs.listRunsAsync, the artifact index).
 
 const runs = require('../../runs');
@@ -67,6 +67,8 @@ module.exports = (ctx) => {
       artifactCount: arts.count,
       imageCount: arts.images,
       status: current ? 'running' : r.status,
+      // #384: the run that resumed this one, its status as this process sees it
+      resumedBy: r.resumedBy ? { ...r.resumedBy, status: statusOf(r.resumedBy) } : null,
       current,
       retryOf,
       passedGates: current ? ctx.passedGates(run) : [],
@@ -87,13 +89,27 @@ module.exports = (ctx) => {
     return [r.title, r.task, r.workflow, r.runId, project?.name, ...issues].filter(Boolean).join('\n').toLowerCase();
   }
 
-  // One page of `all` (newest first): { page: [{ r, project }], total, nextOffset, hasMore, counts, hiddenSim }.
-  // opts: { offset, limit (none: every run), filter, showSim (false: no simulated run), q, upTo }
+  // The workflow a run belongs to (#310): the file it ran, as recorded, even when renamed or deleted since.
+  const workflowOf = (r) => r.file || r.workflow || '';
+
+  // One page of `all` (newest first): { page: [{ r, project }], total, nextOffset, hasMore, counts, hiddenSim, workflows }.
+  // opts: { offset, limit (none: every run), filter, showSim (false: no simulated run), q, workflow
+  // (a recorded workflow file; empty: every workflow), upTo }. `workflows`: [{ workflow, count }] of
+  // the runs "Show simulated" keeps, whichever workflow is picked (the filter's options, #310).
   function pageOf(all, opts = {}, projectFor = () => undefined) {
     const q = String(opts.q || '').trim().toLowerCase();
-    const items = all.map((r) => ({ r, status: statusOf(r), project: projectFor(r) }));
+    const workflow = String(opts.workflow || '');
+    const every = all.map((r) => ({ r, status: statusOf(r), project: projectFor(r) }));
+    const items = workflow ? every.filter((x) => workflowOf(x.r) === workflow) : every;
     // the lists' "Show simulated" off: showSim false; unset (the supervisor's list_runs): every run
     const real = opts.showSim === false ? items.filter((x) => !x.r.mock) : items;
+    const perWorkflow = new Map();
+    for (const x of every) {
+      if (opts.showSim === false && x.r.mock) continue;
+      const key = workflowOf(x.r);
+      if (key) perWorkflow.set(key, (perWorkflow.get(key) || 0) + 1);
+    }
+    const workflows = [...perWorkflow].map(([file, count]) => ({ workflow: file, count })).sort((a, b) => a.workflow.localeCompare(b.workflow));
     const found = q ? real.filter((x) => searchText(x.r, x.project).includes(q)) : real;
     const counts = Object.fromEntries(Object.entries(RUN_FILTERS).map(([id, fn]) => [id, found.filter((x) => fn(x.status)).length]));
     const fn = RUN_FILTERS[opts.filter] || RUN_FILTERS.all;
@@ -133,6 +149,7 @@ module.exports = (ctx) => {
       hasMore: end < ordered.length,
       counts,
       hiddenSim: items.length - real.length,
+      workflows,
     };
   }
 

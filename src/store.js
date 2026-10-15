@@ -26,6 +26,10 @@
 //   notifications  every notice (run started/finished/failed, gate waiting, CLI session waiting, push
 //                  merge conflict...),
 //                  for the notification center; kept notificationRetentionDays days (settings).
+//   usage_files    the local-usage scan's state of each CLI transcript (#389, src/local-usage.js): its
+//                  size + mtime key, how far it was read, its records (as rows) and its sessions'
+//                  folded times and recent ids (encodeEntry). Written in small batches by the scan's
+//                  worker thread (src/local-usage-worker.js) through its own connection; rebuildable.
 //
 // `openStore(ws)` opens (or reopens) the store of a workspace layout; `storeFor(dir)` finds the open
 // store whose runs or backlog folder is `dir`, so src/runs.js and src/backlog.js use it when the
@@ -33,6 +37,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { pathKey } = require('./platform-paths');
 
 // loaded on first use: a process that never opens a store (scripts/run.js, unit tests) never loads it
 let sqlite = null;
@@ -80,13 +85,11 @@ const MIGRATIONS = [
    CREATE TABLE artifact_paths (path TEXT NOT NULL, run_id TEXT NOT NULL, PRIMARY KEY (path, run_id));
    CREATE INDEX artifact_paths_run ON artifact_paths(run_id);`,
   `CREATE TABLE run_figures (run_id TEXT PRIMARY KEY, sig TEXT NOT NULL, figures TEXT NOT NULL);`,
+  `CREATE TABLE usage_files (file TEXT PRIMARY KEY, key TEXT NOT NULL, state TEXT NOT NULL);`,
 ];
 
 const open = new Map(); // workspace root → store
-const norm = (p) => {
-  const r = path.resolve(String(p));
-  return process.platform === 'win32' ? r.toLowerCase() : r;
-};
+const norm = (p) => pathKey(String(p));
 const json = (v) => (v === undefined ? null : JSON.stringify(v));
 const parse = (s, fallback = null) => {
   if (s == null) return fallback;
@@ -183,6 +186,14 @@ function openStore(ws) {
     runEntry(runId) {
       const r = db.prepare('SELECT run_id, sig, info FROM runs WHERE run_id = ?').get(String(runId));
       return r ? runRow(r) : null;
+    },
+    /** The ids of every indexed run (no `info` parsed). */
+    runIds() {
+      return new Set(db.prepare('SELECT run_id FROM runs').all().map((r) => r.run_id));
+    },
+    /** The latest indexed run that resumed `runId` (its workflow.started resumed_from, #384), or null. */
+    runResumedBy(runId) {
+      return db.prepare('SELECT run_id FROM runs WHERE resumed_from = ? ORDER BY started_at DESC LIMIT 1').get(String(runId))?.run_id ?? null;
     },
     deleteRuns(ids) {
       const del = db.prepare('DELETE FROM runs WHERE run_id = ?');

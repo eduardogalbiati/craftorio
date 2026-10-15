@@ -8,9 +8,10 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const RunProgress = require('../src/renderer/run-progress-model');
+const RunProgress = require('../src/shared/run-progress-model');
 const RunBadges = require('../src/renderer/run-badges');
-const ChainModel = require('../src/renderer/chain-model'); // #134: runInfo reads a run's chain through it
+const ChainModel = require('../src/shared/chain-model'); // #134: runInfo reads a run's chain through it
+const RunRecord = require('../src/shared/run-record'); // #350: onEvent upgrades a past run's events through it
 
 // run titles, issues and PRs moved into run-meta.js: both files are searched
 const src = ['app.js', 'run-meta.js'].map((f) => fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', f), 'utf8')).join('\n');
@@ -35,6 +36,10 @@ const PATTERNS = {
   pruneRuns: /function pruneRuns\(\) \{[\s\S]*?\n\}/,
   hydrateBlock: /const hydrating = new Map\(\);[\s\S]*?\nasync function hydrateRun\(runId\) \{[\s\S]*?\n\}/,
   onEvent: /function onEvent\(ev\) \{[\s\S]*?\n\}/,
+  // onEvent's helpers (#368: the run's pause; the supervisor's decision)
+  onSupervisorDecision: /function onSupervisorDecision\(v, ev\) \{[\s\S]*?\n\}/,
+  onPauseEvent: /function onPauseEvent\(v, ev\) \{[\s\S]*?\n\}/,
+  finishedPause: /const finishedPause = [^\n]+;/,
   orch: /function orch\(ev, text, level = ''\) \{[\s\S]*?\n\}/,
   PROJECT_REFRESH_EVENTS: /const PROJECT_REFRESH_EVENTS = new Set\(\[[^\]]+\]\);/,
   RUN_ROW_EVENTS: /const RUN_ROW_EVENTS = new Set\(\[[^\]]+\]\);/,
@@ -60,6 +65,7 @@ function loadHelpers({ api = {}, view = 'dashboard' } = {}) {
     RunProgress,
     RunBadges,
     ChainModel,
+    RunRecord,
     showToast: (...args) => calls.showToast.push(args),
     loadUsage: () => { calls.loadUsage += 1; },
     loadUsageThrottled: () => { calls.loadUsageThrottled += 1; },

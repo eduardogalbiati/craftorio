@@ -41,7 +41,7 @@ process.on('unhandledRejection', (e) => { current?.errors.push(e); });
 function pageScripts() {
   const html = fs.readFileSync(path.join(RENDERER, 'index.html'), 'utf8');
   return [...html.matchAll(/<script src="([^"]+)"><\/script>/g)].map((m) => m[1])
-    .filter((src) => !src.startsWith('../') && src !== 'api-http.js');
+    .filter((src) => !src.startsWith('../../') && src !== 'api-http.js');
 }
 
 function makeStorage(initial = {}) {

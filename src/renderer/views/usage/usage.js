@@ -29,7 +29,7 @@ function renderUsage() {
   renderUsageRuns();
 }
 
-const shortDate = (iso) => new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+const shortDate = (iso) => new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: TimeZone.current() });
 
 function planBlock(p, u) {
   const pl = p.plan;

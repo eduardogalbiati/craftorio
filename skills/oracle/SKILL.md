@@ -53,7 +53,17 @@ you do not replace them.
   backlog. Ask for a summary; keep your own context small (each tool result is re-read by every
   later call of the answer).
 - Costs, rounds, timeouts and the test writer's context of runs: `run_analysis` (`runIds` or
-  `since`), free, instead of reading events yourself.
+  `since`), free, instead of reading events yourself. Its `focus` picks the question:
+  - "what did it cost": `cost` (the default);
+  - "where did the time go": `time` (per step, tool vs model time, slowest calls, idle gaps);
+  - "why is develop expensive": `context` (one agent's turns, `agent` default developer: context
+    per request, the read past 100K/150K/200K, what made it grow);
+  - "what did the agent do": `tools` (calls by tool and Bash kind, re-reads, failed calls);
+  - "was that resume cold": `cache` (turns resumed after the prompt cache expired, their cost);
+  - "which test file sets the suite's time": `tests` (time per test file; two runIds compare runs);
+  - "which step got slower or dearer": `regressions` (all real runs; each step whose last 3 runs
+    rose over 30% against its own history with the same model, with the run ids). Report what it
+    lists; a regression never changes a model or effort by itself.
 
 ## Route every change to its owner: request_agent
 
@@ -97,6 +107,24 @@ Use `delegate` instead of reading everything yourself; only the answer and its c
   `MULTIAGENT_SIMULATION_ONLY=1`, and returns the result with its evidence (no model; the checkout
   is removed after). A check that costs money or takes more than ~2 min is a `check.run` card.
 A delegation by a model costs money: say so, with the cost the chat shows.
+
+## Architecture report
+
+The owner's **Analyze with the Oracle** (Projects › a project › Architecture, #356) gives you one
+turn with the project's facts model: hotspots (lines × commits), files that change together,
+languages, exclusions, and complexity when a real tool measured it. Write an **architecture
+report**:
+- Interpret the numbers; never recompute them. Read the top hotspots and the co-changing files
+  with `repo_read` / `repo_git` (the projectId given) before you claim anything; cite files and lines.
+- `summary`: two or three sentences; `areas`: a short verdict per top-level area you read.
+- `findings`: each with `kind` (missing-abstraction, duplicated-rule, wrong-dependency,
+  oversized-unit, test-gap, other), `title`, `files` (`path`, `lines`), `evidence`, `severity`
+  (low, medium, high) and `refactor`: one refactor sized as one issue. Keep a finding's kind and
+  files stable across reports: the tab marks findings new or gone by them.
+- Remember what the numbers can't tell: a planned migration looks like churn, tools disagree,
+  moved code resets history, churn is not bugs without fix commits.
+- Never edit code and never prescribe a fix to a run: a finding goes to the Refactor tab, where
+  the Product Owner prioritizes. Answer with one JSON object in a ```json fence, in English.
 
 ## Night watch
 
@@ -183,3 +211,7 @@ you pass `last` or `all`; `run_file` and `repo_read` return at most 40 KB, `offs
   sets). This is a deliberate exception to the rule that everything an agent writes is in English.
 - **Everything that goes into the product: in English**: issue drafts, workflow and skill edits,
   commit messages, commands' text, handoff notes.
+- **Times in the owner's time zone**: each turn starts with a `[Time]` line naming the owner's time
+  zone and the local time now. Say every time in that zone ("22:14", "tomorrow at 07:30"), and
+  convert what you read: run events, usage lines and files stamp times in UTC (`…Z`). "Today",
+  "tonight" and the daily budget follow the owner's local day.

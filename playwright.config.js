@@ -9,16 +9,33 @@
 //   npm run test:e2e -- --grep @smoke        the critical journeys (a few minutes)
 //   npm run test:e2e:update -- --grep @visual   rewrite the visual baselines (on purpose only)
 //
-// One Electron at a time (workers: 1; each launch also takes the machine's screenshot slot, #199).
+// Two lanes (#365), two Playwright projects:
+//   behaviour   every scenario that is neither @visual nor @serial, in E2E_WORKERS workers, fully
+//               parallel; it never takes the screenshot slot.
+//   visual      the @visual scenarios (and any @serial one), one at a time; each launch takes the
+//               machine's screenshot slot (#199), so a run capturing screenshots elsewhere on the
+//               machine still makes this lane wait.
+// E2E_WORKERS (#366): MULTIAGENT_E2E_WORKERS unset or `auto` sizes it from the machine's threads and
+// free memory, clamp(1, 4, min(floor(threads / 8), floor((freeGB - 4) / 1.5))); the constants and the
+// measurements behind them are in scripts/e2e-workers.js. A number N (>= 1) forces N; an invalid value
+// falls back to auto with a warning. The suite prints its choice at start, e.g.
+// "E2E: 2 workers (auto: 20 threads, 11.2 GB free)".
+// MULTIAGENT_E2E_WORKERS=1 gives back the old one-Electron-at-a-time suite. Shared state checked for
+// the parallel lane: each scenario has its own scratch workspace, user-data and HOME; servers listen
+// on port 0 (the phone gates fall back to it when their port is taken); the OS clipboard is used by
+// one scenario only (control-channel.feature). A scenario that shares state with another one gets
+// @serial, with the reason in a comment above it.
 // A failed scenario keeps its trace, video and screenshot (features/steps/fixtures.js applies `use`
 // to the Electron window) under .test-output/e2e/artifacts/, and the results go to
 // .test-output/e2e/results.json (the e2e-release workflow's suite step reads them).
 // Visual baselines: features/__screenshots__/<name>-<platform>.png, committed; a difference over
 // maxDiffPixelRatio fails with the expected / actual / diff images attached.
 
+const os = require('os');
 const path = require('path');
 const { defineConfig } = require('@playwright/test');
 const { defineBddConfig } = require('playwright-bdd');
+const { e2eWorkers } = require('./scripts/e2e-workers');
 
 const testDir = defineBddConfig({
   features: 'features/**/*.feature',
@@ -26,11 +43,26 @@ const testDir = defineBddConfig({
   outputDir: '.features-gen',
 });
 
+// the behaviour lane's workers, also the whole run's pool (the visual lane uses one of them)
+const choice = e2eWorkers({ value: process.env.MULTIAGENT_E2E_WORKERS, threads: os.availableParallelism(), freeBytes: os.freemem() });
+// Playwright loads this file again in each worker process: the choice is printed by the runner only
+if (process.env.TEST_WORKER_INDEX === undefined) {
+  if (choice.warning) console.warn(choice.warning);
+  console.log(choice.line);
+}
+const E2E_WORKERS = choice.workers;
+const SERIAL = /@visual|@serial/;
+
 module.exports = defineConfig({
   testDir,
-  workers: 1,
+  workers: E2E_WORKERS,
   fullyParallel: false,
   retries: 0,
+  projects: [
+    { name: 'behaviour', grepInvert: SERIAL, workers: E2E_WORKERS, fullyParallel: true },
+    // features/steps/fixtures.js takes the screenshot slot for this lane's launches only
+    { name: 'visual', grep: SERIAL, workers: 1, fullyParallel: false, metadata: { screenshotSlot: true } },
+  ],
   // a scenario's own budget: the app's start plus a simulated run up to its first gate
   timeout: 180000,
   outputDir: path.join('.test-output', 'e2e', 'artifacts'),

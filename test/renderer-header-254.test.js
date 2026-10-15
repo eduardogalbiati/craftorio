@@ -196,7 +196,7 @@ test('the first project, created from the header with none before, becomes the a
   assert.equal(app.run('window.CurrentProject.get()'), 'first');
 });
 
-test('a project created from Settings › Projects does not change the app\'s project', async () => {
+test('a project created from the Projects screen does not change the app\'s project', async () => {
   let projects = [...PROJECTS];
   const app = page({
     storage: { 'multiagent.currentProject': 'p1' },

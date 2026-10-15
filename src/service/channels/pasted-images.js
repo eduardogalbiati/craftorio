@@ -4,6 +4,13 @@
 // or delete inside <workspace>/attachments/pending/.
 
 const pastedImages = require('../../pasted-images');
+const {
+  args,
+  BOOL,
+  NUMBER,
+  shape,
+  STRING,
+} = require('../schemas');
 
 module.exports = (ctx) => [
   // { data (base64), name (the chip's label) } → { name, path, size }
@@ -11,6 +18,7 @@ module.exports = (ctx) => [
     channel: 'clipboard:saveImage',
     method: 'clipboardSaveImage',
     params: ['data', 'name'],
+    schema: { params: args({ data: STRING, name: STRING }), result: shape({ name: STRING, path: STRING, size: NUMBER }, ['path']) },
     fn: ({ data, name }) => pastedImages.saveImage(pastedImages.pendingDir(ctx.ws), { data, name }),
   },
   // a chip removed before its field was submitted: deletes its staged file
@@ -18,6 +26,7 @@ module.exports = (ctx) => [
     channel: 'clipboard:discardImage',
     method: 'clipboardDiscardImage',
     params: ['path'],
+    schema: { params: args({ path: STRING }), result: BOOL },
     fn: ({ path }) => pastedImages.discardImage(pastedImages.pendingDir(ctx.ws), path),
   },
 ];

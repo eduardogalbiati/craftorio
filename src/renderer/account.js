@@ -1,7 +1,8 @@
 /* global api */
-// Account: the sign-in screen and the trial chip in the top bar (initAccount, from app.js's init()).
+// Account: the sign-in screen and the account chip in the top bar (initAccount, from app.js's init()).
+// The account gates nothing: it only counts the people using the app (#315, src/auth.js).
 
-// Account: sign-in screen and the trial chip in the top bar
+// Account: sign-in screen and the account chip (name or email) in the top bar
 function initAccount() {
   $('#account-btn').onclick = () => {
     const open = $('#account-pop').classList.toggle('hidden') === false;
@@ -29,19 +30,10 @@ async function signIn(provider) {
   }
 }
 
-function trialLabel(ent) {
-  if (!ent) return { text: '…', cls: 'pill-idle' };
-  if (ent.error) return { text: 'Account unavailable', cls: 'pill-trial-ended' };
-  if (ent.plan === 'pro') return { text: 'Pro', cls: 'pill-pro' };
-  if (!ent.active) return { text: 'Trial ended', cls: 'pill-trial-ended' };
-  const days = ent.daysLeft === 1 ? '1 day' : `${ent.daysLeft} days`;
-  return { text: `Trial · ${days} left`, cls: ent.daysLeft <= 2 ? 'pill-trial-low' : 'pill-trial' };
-}
-
 function renderAccount(s) {
   if (!s) return;
   state.account = s;
-  // sign-in screen: when runs need an account and nobody is signed in
+  // sign-in screen: when the app asks for an account and nobody is signed in
   const needsLogin = s.required && !s.user;
   $('#login-screen').classList.toggle('hidden', !needsLogin);
   $('#login-waiting').classList.toggle('hidden', !s.signingIn);
@@ -52,17 +44,10 @@ function renderAccount(s) {
   // top bar chip
   $('#account-wrap').classList.toggle('hidden', !s.user);
   if (!s.user) return;
-  const ent = s.entitlement;
-  const label = trialLabel(ent);
-  $('#account-avatar').textContent = (s.user.name || s.user.email || '?').trim()[0].toUpperCase();
-  $('#account-trial').textContent = label.text;
-  $('#account-trial').className = `pill ${label.cls}`;
+  const shown = s.user.name || s.user.email || 'Signed in';
+  $('#account-avatar').textContent = shown.trim()[0].toUpperCase();
+  $('#account-chip-name').textContent = shown;
   $('#account-btn').title = s.user.email || '';
-  $('#account-name').textContent = s.user.name || s.user.email || 'Signed in';
+  $('#account-name').textContent = shown;
   $('#account-email').textContent = s.user.name ? s.user.email || '' : '';
-  $('#account-plan').textContent = !ent ? 'Checking your subscription…'
-    : ent.error ? ent.error
-    : ent.plan === 'pro' ? 'Pro plan.'
-    : ent.active ? `Free trial until ${new Date(ent.trialEndsAt).toLocaleString()}.${ent.offline ? ' (offline: last check)' : ''}`
-    : 'Your free trial has ended. You can still browse your projects, runs and artifacts; simulations still run.';
 }

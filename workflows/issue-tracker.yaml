@@ -120,6 +120,9 @@ x-tools:
   vcs_only: &vcs_only { tools: [bash:gh, bash:glab], web: false }
 
 defaults:
+  # #320: a persistent agent idle past its prompt cache's lifetime (Claude on a subscription: 1 h,
+  # minus a margin) continues in a fresh session from its handoff note; an agent's own value wins
+  fresh_after_idle: 55m
   working_dir: "{{ inputs.project_path }}"
   timeout: 20m
   max_context: 150k

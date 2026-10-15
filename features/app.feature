@@ -27,3 +27,26 @@ Feature: The app opens
     Then no failed app update banner shows
     When I reload the app
     Then no failed app update banner shows
+
+  # #389: the app froze for minutes at startup. Home draws from the index before any slow read, and
+  # the app answers right away. Assumption: "promptly" is 3 seconds from the window's page loading
+  # (the launch of Electron itself is not counted).
+  @issue-389
+  Scenario: Home is shown promptly when the app opens and I can move on at once
+    Given the app is open
+    Then Home shows its overview within 3 seconds
+    And Home is on its "Overview" tab
+    When I open "Backlog" in the sidebar
+    Then the Backlog screen is shown within 3 seconds
+
+  # #389: the usage widget and the 24/7 chip load after the first paint, with a loading state meanwhile.
+  # Assumption: the loading state is aria-busy="true" on the widget; with the demo workspace's data the
+  # loading may already be over when it is checked, so the first check accepts either state.
+  @issue-389
+  Scenario: The usage widget and the 24/7 chip load after Home, showing a loading state meanwhile
+    Given the app is open
+    Then Home shows its overview within 3 seconds
+    And the top bar's "usage widget" shows that it is loading or its figures
+    And the top bar's "24/7 chip" shows that it is loading or its figures
+    And the top bar's "usage widget" then shows its figures
+    And the top bar's "24/7 chip" then shows its figures

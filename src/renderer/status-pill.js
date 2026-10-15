@@ -21,11 +21,14 @@
     in_progress: ['running', 'In progress'],
     interrupted: ['interrupted', 'Interrupted'],
     local: ['success', 'Merged locally'],
+    // #395: a roadmap item moved past while its run waits at a human gate
+    parked: ['cancelled', 'Parked at a gate'],
     paused: ['cancelled', 'Paused'],
     pending: ['idle', 'Pending'],
     planned: ['idle', 'Planned'],
     queued: ['idle', 'Queued'],
     released: ['success', 'Released'],
+    resumed: ['idle', 'Resumed'],
     running: ['running', 'Running'],
     simulated: ['idle', 'Simulated'],
     skipped: ['interrupted', 'Skipped'],
@@ -59,7 +62,25 @@
     return `<span class="${cls}" ${attrs}${tip} data-testid="status-label">${label}</span>`;
   }
 
+  // #384: a run that a later run resumed (#250, `resumedBy: { runId, status }` from the run lists).
+  // runPill: a run that had not succeeded (failed, cancelled, interrupted…) reads "Resumed" (neutral),
+  // how it ended on hover; one that succeeded keeps its own pill. resumedLink: "Resumed → succeeded"
+  // (the resumer's status), linking the run that resumed it (data-run: its id). The run lists, the Run
+  // screen and the Chat draw it.
+  const RESUMED_ENDS = new Set(['cancelled', 'failed', 'failed_to_start', 'interrupted', 'stopped']);
+  function runPill(status, resumedBy, opts = {}) {
+    if (!resumedBy?.runId || !RESUMED_ENDS.has(idOf(status))) return statusPill(status, opts);
+    return statusPill('resumed', { ...opts, title: statusLabel(status) });
+  }
+
+  function resumedLink(resumedBy) {
+    if (!resumedBy?.runId) return '';
+    return ` <a href="#" class="badge" role="link" data-testid="run-resumed-link" data-run="${esc(resumedBy.runId)}" title="${esc(`Resumed as run ${resumedBy.runId}: open it`)}">Resumed → ${esc(statusLabel(resumedBy.status).toLowerCase())}</a>`;
+  }
+
   const api = {
+    resumedLink,
+    runPill,
     statusLabel,
     statusPill,
   };

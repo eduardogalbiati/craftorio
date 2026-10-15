@@ -6,22 +6,28 @@
 //   are ignored) plus the sessions of the run in progress;
 // - machine: everything the CLIs recorded on this machine (src/local-usage.js), including use
 //   outside the orchestrator. The orchestrator's part is found by provider session id. Cost is what the CLI reported
-// (Claude Code and Grok do), otherwise an estimate from the per-model prices in settings
-// (Codex does not report cost). Budgets live in settings.json and are enforced by the
+// (Claude Code and Grok do), otherwise an estimate from the per-model prices in settings, else the
+// adapter's price table (Codex does not report cost; #369: a Claude turn on a model the CLI does not know). Budgets live in settings.json and are enforced by the
 // engine before each agent turn.
 
 const fs = require('fs');
 const path = require('path');
 const { installCommand } = require('./install-commands');
+const { readRunSummary } = require('./run-record');
 const { runSummaries } = require('./runs');
+const registry = require('./shared/providers');
+const { cacheWriteUsd } = require('./session-cache');
+const TimeZone = require('./time-zone');
 
-// installCommand: what the Usage screen's play button runs (#147); installNote: what to do after it
-const PROVIDERS = [
-  { id: 'claude', type: 'claude-code', command: 'claude', name: 'Claude Code', costReported: true, installCommand: installCommand('claude'), installNote: 'then run `claude` once to log in' },
-  { id: 'codex', type: 'codex-cli', command: 'codex', name: 'Codex CLI', costReported: false, installCommand: installCommand('codex'), installNote: 'then `codex login`' },
-  { id: 'grok', type: 'grok-cli', command: 'grok', name: 'Grok Build', costReported: true, installCommand: null, installNote: 'then `grok login`', installHint: 'install Grok Build from x.ai (then `grok login`)' },
-];
-for (const p of PROVIDERS) p.installHint = p.installHint || `${p.installCommand}   (${p.installNote})`;
+// The CLIs, from their adapters (src/shared/providers/). installCommand: what the Usage screen's play
+// button runs (#147); installNote: what to do after it
+const PROVIDERS = registry.clis().map((a) => {
+  const install = installCommand(a.id);
+  return {
+    id: a.id, type: a.type, command: a.cli, name: a.label, costReported: a.costReported,
+    installCommand: install, installNote: a.installNote, installHint: a.installHint || `${install}   (${a.installNote})`,
+  };
+});
 const WARN_AT = 0.8;
 
 const TOKEN_KEYS = ['input', 'output', 'cache_read', 'cache_write', 'reasoning'];
@@ -36,13 +42,27 @@ function providerId(p) {
   return hit ? hit.id : null;
 }
 
-/** USD for a session: the reported cost, else an estimate from prices, else null. */
+// A model's price (US$ per million tokens): settings.prices, else the price table of a CLI adapter (#369)
+function priceOf(model, prices = {}) {
+  return prices[model] || registry.clis().find((a) => a.prices?.[model])?.prices[model] || null;
+}
+
+// What tokens cost at `price`: input, output, cache reads, and cache writes at the cache's lifetime
+// (src/session-cache.js cacheWriteUsd: 1.25× input for 5 minutes, 2× for an hour, unless the price sets it)
+function tokensCost(t = {}, price, lifetimeMs) {
+  const base = (t.input || 0) * (price.input || 0) + (t.output || 0) * (price.output || 0) + (t.cache_read || 0) * (price.cache_read ?? price.input ?? 0);
+  return base / 1e6 + (cacheWriteUsd(t.cache_write, price, lifetimeMs) || 0);
+}
+
+/**
+ * USD for a session: the reported cost, else an estimate from prices, else null. #369: a session the
+ * CLI priced at another model's rates and the app has no price for counts the CLI's figure.
+ */
 function sessionCost(session, prices = {}) {
   if (session.cost_usd) return session.cost_usd;
-  const price = prices[session.model];
-  if (!price) return null;
-  const t = session.tokens || {};
-  return ((t.input || 0) * (price.input || 0) + (t.output || 0) * (price.output || 0) + (t.cache_read || 0) * (price.cache_read ?? price.input ?? 0)) / 1e6;
+  const price = priceOf(session.model, prices);
+  if (!price) return session.cost_estimate?.source === 'unknown' ? (session.cost_estimate.cli_cost_usd ?? null) : null;
+  return tokensCost(session.tokens || {}, price, session.cache_lifetime_ms);
 }
 
 function addSession(tot, session, prices) {
@@ -56,24 +76,20 @@ function addSession(tot, session, prices) {
   else tot.costUsd += cost;
 }
 
-// From the run index when the service has it open (src/store.js), else the summary.json files.
+// From the run index when the service has it open (src/store.js), else the summary.json files; in
+// the current shape both ways (#350, src/run-record.js).
 function readRuns(runsDir) {
   const indexed = runSummaries(runsDir, { mock: false });
   if (indexed) return indexed;
   let dirs = [];
   try { dirs = fs.readdirSync(runsDir); } catch { return []; }
-  const runs = [];
-  for (const d of dirs) {
-    try {
-      const s = JSON.parse(fs.readFileSync(path.join(runsDir, d, 'summary.json'), 'utf8'));
-      if (!s.mock) runs.push(s);
-    } catch { /* running, crashed or not a run folder */ }
-  }
-  return runs;
+  // null: running, crashed or not a run folder
+  return dirs.map((d) => readRunSummary(path.join(runsDir, d))).filter((s) => s && !s.mock);
 }
 
-const monthKey = (d) => new Date(d).toISOString().slice(0, 7);
-const dayKey = (d) => new Date(d).toISOString().slice(0, 10);
+// the owner's local month and day (settings.timeZone, #273; UTC when no zone is given)
+const monthKey = (d, tz = 'UTC') => TimeZone.monthKey(d, tz);
+const dayKey = (d, tz = 'UTC') => TimeZone.dayKey(d, tz);
 
 const recordAsSession = (r) => ({ provider: r.provider, model: r.model, tokens: r.tokens, cost_usd: r.costUsd, turns: 1 });
 
@@ -81,7 +97,7 @@ const recordAsSession = (r) => ({ provider: r.provider, model: r.model, tokens: 
  * @param scope       'orchestrator' (default) or 'machine' (needs `local`)
  * @param local       readLocalUsage() result, for the machine scope and countOutside budgets
  * @param runsDir     <workspace>/runs
- * @param settings    workspace settings ({ budgets, prices })
+ * @param settings    workspace settings ({ budgets, prices, timeZone })
  * @param live        optional summary-like object of a run in progress ({ run_id, workflow, started_at, sessions }),
  *                    or a list of them (concurrent runs)
  * @param installed   { claude: bool, codex: bool, grok: bool }
@@ -91,8 +107,9 @@ const recordAsSession = (r) => ({ provider: r.provider, model: r.model, tokens: 
 function computeUsage({ runsDir, settings = {}, live = null, installed = {}, now = new Date(), scope = 'orchestrator', local = null, extraRuns = [] }) {
   const prices = settings.prices || {};
   const budgets = settings.budgets || {};
-  const month = monthKey(now);
-  const today = dayKey(now);
+  const tz = settings.timeZone || 'UTC';
+  const month = monthKey(now, tz);
+  const today = dayKey(now, tz);
   const lives = [].concat(live || []);
   const liveIds = new Set(lives.map((l) => l.run_id));
   const runs = readRuns(runsDir).filter((r) => !liveIds.has(r.run_id));
@@ -107,8 +124,8 @@ function computeUsage({ runsDir, settings = {}, live = null, installed = {}, now
   for (const run of runs) {
     const started = run.started_at || run.startedAt;
     if (!started) continue;
-    const inMonth = monthKey(started) === month;
-    const inToday = dayKey(started) === today;
+    const inMonth = monthKey(started, tz) === month;
+    const inToday = dayKey(started, tz) === today;
     const row = { runId: run.run_id, workflow: run.workflow, startedAt: started, status: run.status, tokens: 0, costUsd: 0, byProvider: {} };
     const seen = { month: new Set(), today: new Set() };
     for (const s of run.sessions || []) {
@@ -153,8 +170,8 @@ function computeUsage({ runsDir, settings = {}, live = null, installed = {}, now
       const inOrch = r.sessionId && orchSessionIds.has(r.sessionId);
       const session = recordAsSession(inOrch ? { ...r, costUsd: 0 } : r); // orchestrator cost is added below
       const buckets = [];
-      if (monthKey(r.ts) === month) buckets.push(m.month, (m.models[r.model] ??= emptyTotals()));
-      if (dayKey(r.ts) === today) buckets.push(m.today);
+      if (monthKey(r.ts, tz) === month) buckets.push(m.month, (m.models[r.model] ??= emptyTotals()));
+      if (dayKey(r.ts, tz) === today) buckets.push(m.today);
       for (const b of buckets) {
         addSession(b, session, prices);
         if (inOrch) b.unpricedTokens -= totalTokens(r.tokens); // priced by the orchestrator's own numbers
@@ -229,14 +246,15 @@ function budgetBaseline({ runsDir, settings = {}, now = new Date(), local = null
 /**
  * The budget state with the usage of other runs in progress added (their sessions are not on disk
  * yet): what a new run's preflight checks against.
- * @param sessions [{ provider, model, tokens, costUsd }]
+ * @param sessions [{ provider, model, tokens, costUsd, cliOnlyUsd }] (cliOnlyUsd: the CLI's figure of
+ *   turns with no known price, #369, counted like the run's own)
  */
 function withPeerUsage(budget, sessions, prices = {}) {
   const out = Object.fromEntries(Object.entries(budget || {}).map(([id, b]) => [id, { ...b }]));
   for (const s of sessions || []) {
     const b = out[providerId(s.provider)];
     if (!b) continue;
-    b.usedUsd = (b.usedUsd || 0) + (sessionCost({ cost_usd: s.costUsd, model: s.model, tokens: s.tokens }, prices) || 0);
+    b.usedUsd = (b.usedUsd || 0) + (sessionCost({ cost_usd: s.costUsd + (s.cliOnlyUsd || 0), model: s.model, tokens: s.tokens }, prices) || 0);
     b.usedTokens = (b.usedTokens || 0) + totalTokens(s.tokens);
   }
   return out;
@@ -277,10 +295,12 @@ module.exports = {
   budgetBaseline,
   computeUsage,
   preflight,
+  priceOf,
   providerId,
   PROVIDERS,
   readRuns,
   sessionCost,
+  tokensCost,
   totalTokens,
   WARN_AT,
   withPeerUsage,

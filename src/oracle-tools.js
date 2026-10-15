@@ -12,7 +12,8 @@
 // it routes the change to the Product Owner's or the Supervisor's inbox; propose_action keeps only the
 // Oracle's own kinds (ORACLE_KINDS: a check, stopping a stray process).
 // #184: run_analysis (runs' cost by agent and step, rounds, timeouts, the test writer's context:
-// src/oracle-run-analysis.js), issues_search / issue_view / labels (gh / glab read commands built in
+// src/oracle-run-analysis.js; #321: its focuses time, context, tools, cache and tests in
+// src/oracle-run-focus.js; #335: regressions, over the whole run list), issues_search / issue_view / labels (gh / glab read commands built in
 // src/oracle-platform.js, run with ctx.execCli or backlog.execCli) and the checker delegate.
 // Nothing else here writes: git runs without a pager, external diff or optional locks, every option
 // that writes or starts a program is refused (refusedGitArg), and every path stays in its folder.
@@ -34,6 +35,13 @@ const {
   briefOf,
   totalOf,
 } = require('./oracle-run-analysis');
+const {
+  focusAnswer,
+  focusBrief,
+  FOCUSES,
+  regressionsAnswer,
+} = require('./oracle-run-focus');
+const { readRunRecord } = require('./run-record');
 const { bundleStatus } = require('./seed');
 const { readEvents } = require('./supervisor');
 const { callTool, supervisorTools } = require('./supervisor-tools');
@@ -165,6 +173,38 @@ function oracleTools(ctx, hooks = {}) {
       .slice(-MAX_ANALYZED)
       .map((r) => r.dir);
   };
+  // #321: the tests focus reads a run's newest suite log and its checkout's test/**/*.test.js: the
+  // run's worktree, else (removed when the run ended) the project's checkout; cache: per repo, one call
+  const suiteFiles = (dir, summary, cache) => {
+    const logDir = path.join(dir, 'logs');
+    let logs = [];
+    try {
+      const newest = fs.readdirSync(logDir).filter((f) => /^tests-.*\.log$/.test(f))
+        .map((name) => ({ name, mtime: fs.statSync(path.join(logDir, name)).mtimeMs }))
+        .sort((a, b) => a.mtime - b.mtime || a.name.localeCompare(b.name))
+        .at(-1);
+      if (newest) logs = [{ name: newest.name, text: fs.readFileSync(path.join(logDir, newest.name), 'utf8') }];
+    } catch { /* no logs folder */ }
+    if (!logs.length) return { logs, testFiles: {} };
+    const worktree = summary?.worktree;
+    const ownCheckout = worktree?.dir && !worktree.removed && fs.existsSync(worktree.dir);
+    const repo = ownCheckout ? worktree.dir : summary?.inputs?.project_path;
+    const testsFrom = ownCheckout ? 'worktree' : 'project';
+    if (!repo) return { logs, testFiles: {}, testsFrom };
+    if (!cache.has(repo)) {
+      const testFiles = {};
+      const walk = (rel) => {
+        for (const d of fs.readdirSync(path.join(repo, rel), { withFileTypes: true })) {
+          const child = `${rel}/${d.name}`;
+          if (d.isDirectory() && d.name !== 'node_modules' && !d.name.startsWith('.')) walk(child);
+          else if (d.isFile() && d.name.endsWith('.test.js')) testFiles[child] = fs.readFileSync(path.join(repo, child), 'utf8');
+        }
+      };
+      try { walk('test'); } catch { /* the checkout is gone */ }
+      cache.set(repo, testFiles);
+    }
+    return { logs, testFiles: cache.get(repo), testsFrom };
+  };
   return [
     ...supervisorTools(ctx),
     {
@@ -266,10 +306,47 @@ function oracleTools(ctx, hooks = {}) {
     },
     {
       name: 'run_analysis',
-      description: `Where runs' time and money went (no model, free): per run and in total, cost and tokens by agent and by step, review rounds, attempts timed out, invalid outputs, refused tool calls, merge conflicts, commands cut by a tool timeout, the test writer's turns, peak context and cache re-read, and the whole-suite starts with their durations. runIds: the runs; or since (ISO date): the runs started from then (default: the last 24 h); at most ${MAX_ANALYZED} runs.`,
-      inputSchema: obj({ runIds: { type: 'array', items: { type: 'string' }, description: 'The run ids' }, since: str('ISO date: the runs started from then') }),
+      description: [
+        `Where runs' time, money, context and tool calls went (no model, free, read-only), per run and in total. runIds: the runs; or since (ISO date): the runs started from then (default: the last 24 h); at most ${MAX_ANALYZED} runs. focus (default cost):`,
+        '- cost: cost and tokens by agent and by step, review rounds, attempts timed out, invalid outputs, refused tool calls, merge conflicts, commands cut by a tool timeout, the test writer\'s turns, peak context and cache re-read, the whole-suite starts with their durations.',
+        '- time: minutes and visits per step (open steps too), tool time vs model time, the 5 slowest tool calls, gaps over 3 min with no event, active vs waiting and the gates\' owner time.',
+        '- context: one agent\'s turns (agent, default developer): requests, tool calls, mean and peak context, the read above 100K/150K/200K, the main turn\'s curve and its growth by tool kind.',
+        '- tools: per agent and step, calls by tool and by Bash kind, re-read files, searches, edits, sub-agents, failed calls by cause, the test commands with their durations.',
+        '- cache: the turns that resumed a session past its prompt cache lifetime (cold): cache written, cost, share of all turns.',
+        '- tests: the suite logs\' time per test file and slowest tests, two runIds compared (the tests both ran), the test step\'s time on E2E vs unit tests.',
+        '- regressions: over all the real successful runs (runIds and since ignored), each workflow step whose median cost per complexity point or minutes over its last 3 runs is over 30% above its baseline with the same provider, model and effort: the baseline vs recent medians and the run ids behind both. Report only.',
+      ].join('\n'),
+      inputSchema: obj({
+        runIds: { type: 'array', items: { type: 'string' }, description: 'The run ids' },
+        since: str('ISO date: the runs started from then'),
+        focus: { type: 'string', enum: FOCUSES, description: 'What to analyze: cost (default), time, context, tools, cache, tests or regressions' },
+        agent: str('The context focus: the agent whose turns to read (default developer)'),
+      }),
       run: (input = {}) => {
-        const list = analyzedRuns(input).map((dir) => analyzeRun(path.basename(dir), readJson(path.join(dir, 'summary.json')), readEvents(dir)));
+        const focus = input.focus || 'cost';
+        if (focus === 'regressions') {
+          const orNull = (read) => { try { return read(); } catch { return null; } };
+          const issues = projects.listProjects(ws().projects).flatMap((p) => orNull(() => backlog.readBacklog(ws().backlog, p.id))?.issues || []);
+          const prices = orNull(() => require('./workspace').readSettings(ws()).prices) || {};
+          return JSON.stringify(regressionsAnswer(runs.listRuns(ws().runs), { issues, prices }));
+        }
+        if (focus !== 'cost') {
+          const testFilesByRepo = new Map();
+          const items = analyzedRuns(input).map((dir) => {
+            const summary = readJson(path.join(dir, 'summary.json'));
+            return { runId: path.basename(dir), summary, events: readEvents(dir), ...(focus === 'tests' ? suiteFiles(dir, summary, testFilesByRepo) : {}) };
+          });
+          const answer = focusAnswer(focus, items, input.agent ? { agent: String(input.agent) } : {});
+          const full = JSON.stringify(answer);
+          if (Buffer.byteLength(full) <= MAX_FILE_BYTES) return full;
+          // #244: a long answer stays in the context: each run keeps its counts and the largest entries of its lists
+          const briefs = [3, 1, 0].map((top) => JSON.stringify({ ...focusBrief(focus, answer, top), note: `Per run: ${top ? `only the ${top} largest entries of each list` : 'the lists are left out'} (the counts and the total are whole); ask for fewer runIds, or one run, for the details.` }));
+          return briefs.find((b) => Buffer.byteLength(b) <= MAX_FILE_BYTES) || briefs[briefs.length - 1];
+        }
+        const list = analyzedRuns(input).map((dir) => {
+          const { summary, events } = readRunRecord(dir);
+          return analyzeRun(path.basename(dir), summary, events);
+        });
         const total = totalOf(list);
         const full = JSON.stringify({ runs: list, total });
         if (full.length <= MAX_FILE_BYTES) return full;

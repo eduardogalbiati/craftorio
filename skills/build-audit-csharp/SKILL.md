@@ -8,6 +8,11 @@ used_by: "builder"
 
 # Build and audit: C# / .NET
 
+**Test workers (#367)**: a run gets `MULTIAGENT_TEST_WORKERS` (and `MULTIAGENT_E2E_WORKERS`) in its
+environment, the workers this machine gives each run so parallel runs do not overload it. Read it
+once (`printenv MULTIAGENT_TEST_WORKERS`) and pass the number to the runner you call: `dotnet build -m:<n>`, `dotnet test -- RunConfiguration.MaxCpuCount=<n>`.
+Unset: leave the runner's default.
+
 ## Build
 
 No test suite here (`dotnet test`): the test writer already ran it, and CI runs it on every platform.

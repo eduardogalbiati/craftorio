@@ -8,6 +8,7 @@
 // (`gh auth refresh -s user`). Without it the monitor is simply unavailable.
 
 const { execCli } = require('./backlog');
+const TimeZone = require('./time-zone');
 const { WARN_AT } = require('./usage');
 
 const DEFAULT_INCLUDED_MINUTES = 2000;
@@ -22,18 +23,19 @@ function multiplier(sku) {
   return 1;
 }
 
-// First day of the next month (UTC), when the included minutes reset.
-const resetDate = (now) => new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toISOString().slice(0, 10);
+// First day of the next local month (settings.timeZone, #273), when the included minutes reset.
+const resetDate = (now, timeZone) => TimeZone.dayKey(TimeZone.nextMonth(now, timeZone), timeZone);
 
 /**
  * The month's Actions minutes from a billing usage response.
  * @param body            GET /users/{user}/settings/billing/usage ({ usageItems: [...] })
  * @param includedMinutes the plan's included quota minutes (settings.actionsIncludedMinutes)
+ * @param timeZone        the owner's zone (settings.timeZone): the month is the local one; default UTC
  * @returns { month, usedMinutes (quota minutes, multipliers applied), realMinutes, includedMinutes,
  *            pct, status: ok | warn | over, grossUsd, netUsd, resetsOn, skus: [{ sku, minutes, multiplier }] }
  */
-function summarizeActionsUsage(body, { includedMinutes = DEFAULT_INCLUDED_MINUTES, now = new Date() } = {}) {
-  const month = now.toISOString().slice(0, 7);
+function summarizeActionsUsage(body, { includedMinutes = DEFAULT_INCLUDED_MINUTES, now = new Date(), timeZone = 'UTC' } = {}) {
+  const month = TimeZone.monthKey(now, timeZone);
   const bySku = new Map();
   let grossUsd = 0, netUsd = 0;
   for (const item of body?.usageItems || []) {
@@ -51,7 +53,7 @@ function summarizeActionsUsage(body, { includedMinutes = DEFAULT_INCLUDED_MINUTE
   return {
     month, usedMinutes, realMinutes, includedMinutes, pct,
     status: pct == null ? 'ok' : pct >= 1 ? 'over' : pct >= WARN_AT ? 'warn' : 'ok',
-    grossUsd, netUsd, resetsOn: resetDate(now), skus,
+    grossUsd, netUsd, resetsOn: resetDate(now, timeZone), skus,
   };
 }
 
@@ -70,22 +72,22 @@ const cache = new Map(); // owner ('' = the gh user) -> { at, value }
  * @param exec   (cli, args) => Promise<stdout> (tests)
  * @returns the summary with `login`, or { error, hint? } when it cannot be read
  */
-async function getActionsUsage({ owner = '', includedMinutes = DEFAULT_INCLUDED_MINUTES, exec = execCli, now = new Date(), force = false } = {}) {
+async function getActionsUsage({ owner = '', includedMinutes = DEFAULT_INCLUDED_MINUTES, exec = execCli, now = new Date(), force = false, timeZone = 'UTC' } = {}) {
   const hit = cache.get(owner);
-  if (!force && hit && now - hit.at < CACHE_MS && hit.value.includedMinutes === includedMinutes) return hit.value;
+  if (!force && hit && now - hit.at < CACHE_MS && hit.value.includedMinutes === includedMinutes && hit.timeZone === timeZone) return hit.value;
   let value;
   try {
     const login = owner || String(await exec('gh', ['api', 'user', '--jq', '.login'])).trim();
-    const y = now.getUTCFullYear(), m = now.getUTCMonth() + 1;
+    const [y, m] = TimeZone.monthKey(now, timeZone).split('-').map(Number);
     const body = JSON.parse(await exec('gh', ['api', `users/${login}/settings/billing/usage?year=${y}&month=${m}`]));
-    value = { login, ...summarizeActionsUsage(body, { includedMinutes, now }) };
+    value = { login, ...summarizeActionsUsage(body, { includedMinutes, now, timeZone }) };
   } catch (e) {
     const msg = String(e.message || e).split('\n')[0];
     value = /scope|40[34]|not accessible|Not Found/i.test(msg)
       ? { error: 'GitHub billing usage needs the gh "user" scope', hint: SCOPE_HINT, includedMinutes }
       : { error: msg, includedMinutes };
   }
-  cache.set(owner, { at: now, value });
+  cache.set(owner, { at: now, value, timeZone });
   return value;
 }
 

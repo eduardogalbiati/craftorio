@@ -3,7 +3,7 @@
 // parameters, the prompt section they produce, and the per-question phrase an owner's question may ask for.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const calibration = require('../src/renderer/po-calibration');
+const calibration = require('../src/shared/po-calibration');
 
 test('clamp keeps an integer 1..5, and falls back (default 2) otherwise', () => {
   assert.equal(calibration.clamp(1), 1);

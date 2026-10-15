@@ -28,7 +28,7 @@
   function agentDesk(id) {
     return {
       id, kind: 'agent', brief: '', context: true, access: 'read',
-      agent: { source: 'custom', agentId: null, name: '', appearance: null, provider: 'claude', model: PROVIDERS['claude-code'].models[0], effort: 'default', system_prompt: '', skills: [] },
+      agent: { source: 'custom', agentId: null, name: '', appearance: null, provider: 'claude', model: ChatModels.models('claude')[0], effort: 'default', system_prompt: '', skills: [] },
     };
   }
   const freeId = (base) => {
@@ -131,7 +131,7 @@
   // The agent's fields (who it is, skills, CLI, model, effort), shared by desks and AI gates.
   function agentFields(a, { sources, name = null, sharedWith = [] }) {
     const t = a.templated || {};
-    const type = TYPE_OF[a.provider] || 'claude-code';
+    const type = TYPE_OF[a.provider] || ChatModels.typeOf('claude');
     const models = [...new Set([...(PROVIDERS[type]?.models || []), a.model].filter(Boolean))];
     return `
         <div class="field"><label>Agent${name ? ` <span class="muted mono">${esc(name)}</span>` : ''}${a.optional ? ' <span class="badge">optional</span>' : ''}</label>

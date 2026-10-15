@@ -10,8 +10,7 @@
 .an-project-shown { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; margin-bottom: 12px; }
 .an-project-shown .an-project-summary { padding-bottom: 0; }
 
-/* a file's recommendation */
-.an-files .an-rec-cell { min-width: 280px; max-width: 460px; }
+/* a file's recommendation (#354: in the project's Conflict map tab, views/project/project-conflict-map.js) */
 .an-rec { display: flex; flex-direction: column; gap: 3px; font-size: 12px; }
 .an-rec .badge { align-self: flex-start; }
 .an-rec-actions { margin-top: 2px; }
@@ -45,9 +44,20 @@
 .an-occ-note { margin: 6px 0 10px; }
 .an-heat { display: flex; flex-direction: column; gap: 2px; }
 .an-heat-row { display: grid; grid-template-columns: 52px repeat(24, 1fr); gap: 2px; align-items: center; }
-.an-heat-row i { height: 12px; border-radius: 2px; background: var(--green); }
+/* #275: five levels, more is more. The app's theme is dark, so a stronger hour is a brighter green
+   (on a light theme it would be a darker one: same classes, other mixes); an hour without data is a
+   hatched outline, not a faint cell. The legend reuses the same classes for its swatches. */
+.an-heat-cell { display: block; height: 12px; border-radius: 2px; background: color-mix(in srgb, var(--green) 10%, var(--panel-2)); }
+.an-heat-l1 { background: color-mix(in srgb, var(--green) 32%, var(--panel-2)); }
+.an-heat-l2 { background: color-mix(in srgb, var(--green) 55%, var(--panel-2)); }
+.an-heat-l3 { background: color-mix(in srgb, var(--green) 78%, var(--panel-2)); }
+.an-heat-l4 { background: var(--green); }
+.an-heat-nodata { background: repeating-linear-gradient(135deg, var(--border) 0 1px, transparent 1px 4px); box-shadow: inset 0 0 0 1px var(--border); }
 .an-heat-axis em { font-size: 10px; color: var(--muted); font-style: normal; }
-.an-heat-day { color: var(--muted); }
+.an-heat-day { color: var(--muted); white-space: nowrap; }
+.an-heat-legend .an-heat-cell { display: inline-block; margin-right: 2px; }
+.an-heat-legend .an-heat-scale .an-heat-cell:last-of-type { margin-right: 5px; }
+.an-heat-legend .an-heat-nodata { margin-right: 5px; }
 .an-idle-cell { min-width: 160px; }
 .an-trend { fill: none; stroke: var(--accent); stroke-width: 2; vector-effect: non-scaling-stroke; }
 .an-trend-dot { fill: var(--accent); }

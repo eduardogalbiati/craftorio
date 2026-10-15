@@ -8,6 +8,11 @@ used_by: "test writer, E2E runner"
 
 # E2E scenarios: Go
 
+**Test workers (#367)**: a run gets `MULTIAGENT_TEST_WORKERS` (and `MULTIAGENT_E2E_WORKERS`) in its
+environment, the workers this machine gives each run so parallel runs do not overload it. Read it
+once (`printenv MULTIAGENT_TEST_WORKERS`) and pass the number to the runner you call: `go test -p <n>`.
+Unset: leave the runner's default.
+
 ## Framework and commands (never switch frameworks)
 
 | Signal in the repository | Framework | Feature folder | Release run (one file, or by tag) |

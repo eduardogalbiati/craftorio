@@ -91,7 +91,8 @@ module.exports = (ctx) => {
       skillsDirs: [ws.skills, ctx.BUNDLED_SKILLS_DIR],
       resolveCommand,
       // as po:ask: its own and the Oracle's calls count in the monthly budget (a blocking one refuses)
-      budget: simulated ? null : usage.withPeerUsage(usage.budgetBaseline({ runsDir: ws.runs, settings, extraRuns: ctx.agentUsageRuns() }), productOwner.monthUsage(ws.backlog), settings.prices),
+      budget: simulated ? null : usage.withPeerUsage(usage.budgetBaseline({ runsDir: ws.runs, settings, extraRuns: ctx.agentUsageRuns() }), productOwner.monthUsage(ws.backlog, new Date(), settings.timeZone), settings.prices),
+      timeZone: settings.timeZone, // #273
       mock: simulated,
       mode: 'plan',
       selection: picks.map((i) => i.number),

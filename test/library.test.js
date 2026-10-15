@@ -23,7 +23,9 @@ test('setupWorkspace creates projects/ and skills/', (t) => {
 
 test('settings: defaults, merge and dropping unknown keys', (t) => {
   const ws = setupWorkspace(path.join(tmp(t), 'w'), { store: memStore() });
-  assert.deepEqual(readSettings(ws), DEFAULT_SETTINGS);
+  // #273: an unset time zone reads as this computer's (DEFAULT_SETTINGS keeps null, unsaved)
+  const systemZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  assert.deepEqual(readSettings(ws), { ...DEFAULT_SETTINGS, timeZone: systemZone });
   const s = writeSettings(ws, { developerMode: true, junk: 1 });
   assert.equal(s.developerMode, true);
   assert.equal('junk' in readSettings(ws), false);
@@ -237,9 +239,9 @@ test('every templated skill in the workflows resolves for every enum input value
 test('language and platform skill families are complete', () => {
   const ids = skills.listSkills(path.join(__dirname, '..', 'skills')).map((s) => s.id);
   const families = {
-    'unit-test-writer': ['js', 'python', 'go', 'java', 'csharp'],
-    'e2e-test-writer': ['js', 'python', 'go', 'java', 'csharp'],
-    'build-audit': ['js', 'python', 'go', 'java', 'csharp'],
+    'unit-test-writer': ['js', 'python', 'go', 'java', 'csharp', 'rust'],
+    'e2e-test-writer': ['js', 'python', 'go', 'java', 'csharp', 'rust'],
+    'build-audit': ['js', 'python', 'go', 'java', 'csharp', 'rust'],
     'ci-pipeline': ['gh', 'gl'],
     'pr-babysitter': ['gh', 'gl'],
     'pr-screenshots': ['gh', 'gl'],

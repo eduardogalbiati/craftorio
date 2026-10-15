@@ -6,7 +6,8 @@
 // the run in progress in this window).
 //
 // Each run also has a display title and the PR it opened (#84, src/run-pr.js): the owner's title is
-// in runs/<id>/meta.json, and a resumed run inherits both from the run it resumes.
+// in runs/<id>/meta.json, and a resumed run inherits both from the run it resumes. The other way
+// (#384), a run that a later run resumed carries `resumedBy: { runId, status }`, derived as it is listed.
 //
 // With the service's index open (src/store.js) listRuns reads unchanged runs from it (`indexRun`,
 // `rebuildIndex`, `runSummaries` for Usage and Analytics); deleting index.db loses nothing.
@@ -14,19 +15,19 @@
 
 const fs = require('fs');
 const path = require('path');
-const { trailOf } = require('./renderer/run-progress-model');
+const { trailOf } = require('./shared/run-progress-model');
 const { defaultTitle, prOfEvents, readMeta } = require('./run-pr');
 const { ownerAlive, readOwner } = require('./run-owner');
 const { storeFor } = require('./store');
+const { pathKey } = require('./platform-paths');
 const {
   artifactEntry,
   kindOf,
   listed,
   walkFiles,
 } = require('./run-artifacts');
-const { correctSessions, needsEvents, runCosts } = require('./run-costs');
-
-const SESSION_EVENTS = new Set(['session.attempt_stopped', 'session.closed', 'session.message_received', 'session.opened']);
+const { readRunSummary } = require('./run-record');
+const { sessionsOfEvents, upgradeRunRecord } = require('./shared/run-record');
 
 // The saves of a run's document to its issue (written by backlog.saveRunToIssue), oldest first.
 function readIssueSaves(dir) {
@@ -66,11 +67,9 @@ function fromEvents(file) {
   if (hit?.key === key) return hit;
   const all = readEvents(file);
   const events = all.filter((e) => e.type !== 'session.stream');
-  const byId = new Map();
-  for (const ev of events) {
-    if (SESSION_EVENTS.has(ev.type) && ev.session) byId.set(ev.session_id, { ...ev.session, status: ev.type === 'session.closed' ? ev.status : ev.session.status });
-    else if (ev.type === 'session.status' && byId.has(ev.session_id)) byId.get(ev.session_id).status = ev.status;
-  }
+  // the sessions' latest snapshots in the current shape (#350: each turn's own cost, #233, #277 from
+  // the turns' usage items)
+  const upgraded = upgradeRunRecord({ events: all.filter((e) => e.type !== 'session.stream' || e.item?.kind === 'usage') }).events;
   const merged = events.findLast((e) => e.type === 'worktree.merged');
   const localMerge = merged ? { branch: merged.branch, base: merged.base, commit: merged.commit } : null;
   // the supervisor's latest recovery from a failed merge/action ("went back to develop at 00:10 because ...")
@@ -81,11 +80,10 @@ function fromEvents(file) {
     if (ev.type === 'workflow.child_started') children.set(ev.child_run_id, { run_id: ev.child_run_id, step_id: ev.step_id, ...(ev.index !== undefined ? { index: ev.index } : {}), workflow: ev.workflow, status: 'running' });
     else if (ev.type === 'workflow.child_finished' && children.has(ev.child_run_id)) Object.assign(children.get(ev.child_run_id), { status: ev.status, ...(ev.cost_usd !== undefined ? { cost_usd: ev.cost_usd } : {}) });
   }
-  // #233: a run recorded before per-turn costs counted each resumed Claude turn's whole session;
-  // #277: a multi-result turn's cost is in its `usage` stream items
-  const costs = runCosts(all.filter((e) => e.type !== 'session.stream' || e.item?.kind === 'usage'));
   // the PR the run opened (#84): the latest step output with pr_url / pr_number
-  const out = { key, sessions: correctSessions([...byId.values()], costs), costs, progress: trailOf(events), localMerge, recovery, pr: prOfEvents(events), childRuns: [...children.values()] };
+  // the error of its end (#389: a listing reads a failed run's events once while they do not change)
+  const error = events.findLast((e) => e.type === 'workflow.finished')?.error || null;
+  const out = { key, sessions: sessionsOfEvents(upgraded), progress: trailOf(events), localMerge, recovery, pr: prOfEvents(events), childRuns: [...children.values()], error };
   derived.set(file, out);
   return out;
 }
@@ -141,12 +139,12 @@ const firstText = (inputs) => {
   return typeof v === 'string' ? v : null;
 };
 
-// The issues recorded in workflow.started / summary.json: `issues`, or the single `issue` of runs
-// recorded before a run could implement several; null when there are none.
-function issuesOf(rec) {
-  if (Array.isArray(rec?.issues) && rec.issues.length) return rec.issues;
-  return rec?.issue ? [rec.issue] : null;
-}
+// The issues recorded in an upgraded workflow.started / summary.json; null when there are none.
+const issuesOf = (rec) => (rec?.issues?.length ? rec.issues : null);
+
+// #396: { tested: 'not green' when the run went on without a green suite, testedFailures: [{ step,
+// test, file, class, class_reason }] of the red suite steps } (null: tested green, or no suite)
+const testedOf = (summary) => ({ tested: summary?.tested || null, testedFailures: summary?.tested_failures || null });
 
 // A run without summary.json (#112): "running" while its owner (runs/<id>/owner.json, src/run-owner.js)
 // is alive, in this process or another one; "interrupted" only once the owner is gone.
@@ -159,9 +157,10 @@ function liveStatus(dir) {
 /** One run folder → RunInfo base (sessions as engine snapshots), or null if it is not a run. */
 function readRun(runsDir, runId) {
   const dir = path.join(runsDir, runId);
-  const started = firstEvent(path.join(dir, 'events.jsonl'));
-  let summary = null;
-  try { summary = JSON.parse(fs.readFileSync(path.join(dir, 'summary.json'), 'utf8')); } catch { /* not finished */ }
+  const first = firstEvent(path.join(dir, 'events.jsonl'));
+  // in the current shape (#350): an older summary is upgraded with its events; null: not finished
+  const started = first && upgradeRunRecord({ events: [first] }).events[0];
+  const summary = readRunSummary(dir);
   if (!summary && started?.type !== 'workflow.started') return null;
 
   let sessions;
@@ -170,9 +169,7 @@ function readRun(runsDir, runId) {
   let error = null;
   let progress;
   if (summary) {
-    sessions = summary.sessions || [];
-    // #233: costs of a run recorded before per-turn costs, read corrected from its events
-    if (needsEvents(summary)) sessions = correctSessions(sessions, fromEvents(path.join(dir, 'events.jsonl')).costs);
+    sessions = summary.sessions;
     status = summary.status;
     finishedAt = summary.finished_at;
     // runs recorded before summary.progress existed
@@ -181,10 +178,7 @@ function readRun(runsDir, runId) {
     ({ sessions, progress } = fromEvents(path.join(dir, 'events.jsonl')));
     status = liveStatus(dir).status;
   }
-  if (summary && summary.status !== 'success') {
-    const last = readEvents(path.join(dir, 'events.jsonl')).reverse().find((e) => e.type === 'workflow.finished');
-    error = last?.error || null;
-  }
+  if (summary && summary.status !== 'success') error = fromEvents(path.join(dir, 'events.jsonl')).error ?? null;
   // what a `merge: local` put on the local base (summaries before local_merge: from the events)
   const localMerge = summary && summary.local_merge !== undefined ? summary.local_merge
     : summary?.status === 'success' && summary.worktree?.repo ? fromEvents(path.join(dir, 'events.jsonl')).localMerge : null;
@@ -230,10 +224,13 @@ function readRun(runsDir, runId) {
     // #203: [{ input, label, value, value_label, source: 'workflow default' | 'chosen for this run' }]
     // of the development workflows' unit_tests / e2e_tests (null: a workflow without them)
     testsPlan: summary?.tests_plan || started?.tests_plan || null,
+    ...testedOf(summary),
     // `type: workflow` steps (#174): { run_id, workflow, step_id, index?, depth } of the run that started
     // this one, and [{ run_id, step_id, index?, workflow, status, cost_usd }] of the runs this one started (null: none)
     parentRun: summary?.parent_run || started?.parent_run || null,
     childRuns: childRuns?.length ? childRuns : null,
+    // #368: a paused run's { step, next, at }: where Resume continues (null: not paused)
+    paused: summary?.status === 'paused' ? summary.paused || null : null,
     // what those child runs cost (#175, their own children included; not in costUsd), 0 without any
     childrenCostUsd: summary?.children_cost_usd ?? (childRuns || []).reduce((a, c) => a + (+c.cost_usd || 0), 0),
     recovery: fromEvents(path.join(dir, 'events.jsonl')).recovery,
@@ -258,15 +255,17 @@ function readRun(runsDir, runId) {
 // a run whose files changed since it was indexed (signature below), or that has no row, is read
 // again and its row replaced; rows of deleted folders go. The files stay the source of truth.
 const SIG_FILES = ['events.jsonl', 'summary.json', 'meta.json', 'issue-saves.json', 'chain.json'];
-// how a row is read: a new reading (#233: corrected past costs) reads every run again once
-const READ_VERSION = 'costs-per-turn';
+// how a row is read: a new reading (#233: corrected past costs; #350: the upgraded run record, its
+// summary indexed upgraded) reads every run again once
+const READ_VERSION = 'run-record';
 function runSignature(dir) {
   return `${SIG_FILES.map((f) => {
     try { const st = fs.statSync(path.join(dir, f)); return `${st.mtimeMs}:${st.size}`; } catch { return '-'; }
   }).join('|')}|${READ_VERSION}`;
 }
 
-const readSummaryText = (dir) => { try { return fs.readFileSync(path.join(dir, 'summary.json'), 'utf8'); } catch { return null; } };
+// summary.json as the index keeps it (Usage, Analytics): in the current shape (#350)
+const indexedSummary = (dir) => { const s = readRunSummary(dir); return s ? JSON.stringify(s) : null; };
 
 // Reads one run folder into the index; returns its RunInfo (null when it is not a run).
 const readAt = new Map(); // run id → when indexRunIn last read it
@@ -274,7 +273,7 @@ function indexRunIn(store, runsDir, runId) {
   const dir = path.join(runsDir, runId);
   const sig = runSignature(dir);
   const info = readRun(runsDir, runId);
-  if (info) store.putRun(info, sig, readSummaryText(dir));
+  if (info) store.putRun(info, sig, indexedSummary(dir));
   readAt.set(runId, Date.now());
   return info;
 }
@@ -293,10 +292,15 @@ function listedRow(runsDir, id, info) {
 const LIVE_REREAD_MS = 20000;
 const onlyEventsChanged = (a, b) => String(a).split('|').slice(1).join('|') === String(b).split('|').slice(1).join('|');
 
+// A row read by an older READ_VERSION from the same files (#389): the listings serve it as it is and
+// rebuildIndexAsync reads it again in the background, instead of reading every run at start.
+const filesOf = (sig) => String(sig).replace(/\|[^|]*$/, '');
+const olderReading = (rowSig, sig) => rowSig !== sig && filesOf(rowSig) === filesOf(sig);
+
 // The row of a run when it is current (or a live run's recent one), else null: the run is read again.
 function currentRow(runsDir, id, row, sig, live) {
   if (!row?.info) return null;
-  if (row.sig === sig) return listedRow(runsDir, id, row.info);
+  if (row.sig === sig || olderReading(row.sig, sig)) return listedRow(runsDir, id, row.info);
   if (live?.has(id) && onlyEventsChanged(row.sig, sig) && Date.now() - (readAt.get(id) || 0) < LIVE_REREAD_MS) return listedRow(runsDir, id, row.info);
   return null;
 }
@@ -330,17 +334,66 @@ async function listRunsAsync(runsDir, { live } = {}) {
     const gone = [...rows.keys()].filter((id) => !present.has(id));
     if (gone.length) store.deleteRuns(gone);
   }
-  return list.filter(Boolean).sort((a, b) => String(b.startedAt).localeCompare(String(a.startedAt)));
+  return withResumedBy(list.filter(Boolean).sort((a, b) => String(b.startedAt).localeCompare(String(a.startedAt))));
 }
 
-/** One run as the lists show it (its index row when current, else read from its folder), null: not a run. */
-function findRun(runsDir, runId, { live } = {}) {
-  const id = path.basename(String(runId || ''));
-  if (!id || id === '.' || id === '..') return null;
+// #384: the run that resumed a run (the latest whose workflow.started resumed_from names it) and its
+// status, as `resumedBy: { runId, status }`. Derived at listing time from the resumed runs' own
+// resumedFrom, never cached in a row: a run's files do not change when a later run resumes it.
+const resumeLink = (r) => ({ runId: r.runId, status: r.status });
+function withResumedBy(list) {
+  const latest = new Map(); // resumed run id → the latest run that resumed it
+  for (const r of list) {
+    const prev = r.resumedFrom && latest.get(r.resumedFrom);
+    if (r.resumedFrom && (!prev || String(r.startedAt) > String(prev.startedAt))) latest.set(r.resumedFrom, r);
+  }
+  if (!latest.size) return list;
+  return list.map((r) => (latest.has(r.runId) ? { ...r, resumedBy: resumeLink(latest.get(r.runId)) } : r));
+}
+
+function findOne(runsDir, id, live) {
   const store = storeFor(runsDir);
   const row = currentRow(runsDir, id, store?.runEntry(id), runSignature(path.join(runsDir, id)), live);
   if (row) return row;
   return store ? indexRunIn(store, runsDir, id) : readRun(runsDir, id);
+}
+
+// The id of the run that resumed `info` (the index's resumed_from column). A run that could have been
+// resumed and has no resumer indexed first indexes the folders newer than it that the index does not
+// have yet (run ids start with their start time; a resume starts after the run it resumes), at most
+// once every 2 s per runs folder while no folder was added to it: a roadmap draw asks it for each
+// failed item.
+const RESUMED_DONE = new Set(['pending', 'running', 'success']);
+const FRESH_SCAN_MS = 2000;
+const freshScans = new Map(); // runs folder → { at, mtimeMs } of its last comparison with the index
+function resumerOf(store, runsDir, info) {
+  const found = store.runResumedBy(info.runId);
+  if (found || RESUMED_DONE.has(info.status)) return found;
+  let mtimeMs = 0;
+  try { mtimeMs = fs.statSync(runsDir).mtimeMs; } catch { return null; }
+  const last = freshScans.get(runsDir);
+  if (last && last.mtimeMs === mtimeMs && Date.now() - last.at < FRESH_SCAN_MS) return null;
+  freshScans.set(runsDir, { at: Date.now(), mtimeMs });
+  let names = [];
+  try { names = fs.readdirSync(runsDir); } catch { return null; }
+  const indexed = store.runIds();
+  const fresh = names.filter((n) => n > info.runId && !indexed.has(n));
+  for (const n of fresh) indexRunIn(store, runsDir, n);
+  return fresh.length ? store.runResumedBy(info.runId) : null;
+}
+
+/**
+ * One run as the lists show it (its index row when current, else read from its folder), null: not a
+ * run. With the index open it also carries `resumedBy` (#384), from the index's resumed_from column.
+ */
+function findRun(runsDir, runId, { live } = {}) {
+  const id = path.basename(String(runId || ''));
+  if (!id || id === '.' || id === '..') return null;
+  const info = findOne(runsDir, id, live);
+  const store = info && storeFor(runsDir);
+  const by = store && resumerOf(store, runsDir, info);
+  const resumer = by && findOne(runsDir, by, live);
+  return resumer ? { ...info, resumedBy: resumeLink(resumer) } : info;
 }
 
 /** Re-reads one run into the index (the service calls it as the run's events are written). */
@@ -357,6 +410,35 @@ function rebuildIndex(runsDir) {
   return listRuns(runsDir).length;
 }
 
+/**
+ * Brings the index up to date without blocking the process (#389): the runs read by an older
+ * READ_VERSION, changed or not indexed yet are read again one at a time, letting other work in after
+ * each. Resolves to how many runs it read again. The service starts it once the workspace is open,
+ * with `pauseMs` between two runs: the reads the screens ask for meanwhile go first.
+ */
+async function rebuildIndexAsync(runsDir, { pauseMs = 0 } = {}) {
+  const pause = () => (pauseMs > 0 ? new Promise((resolve) => setTimeout(resolve, pauseMs)) : nextTick());
+  const store = storeFor(runsDir);
+  if (!store) return 0;
+  let ids = [];
+  try { ids = await fs.promises.readdir(runsDir); } catch { return 0; }
+  let count = 0;
+  for (const id of ids) {
+    if (storeFor(runsDir) !== store) return count; // the workspace was closed or changed meanwhile
+    const sig = await statSignature(path.join(runsDir, id));
+    if (storeFor(runsDir) !== store) return count;
+    const row = store.runEntry(id);
+    if (row?.info && row.sig === sig) continue;
+    if (indexRunIn(store, runsDir, id)) count++;
+    await pause();
+  }
+  if (storeFor(runsDir) !== store) return count;
+  const present = new Set(ids);
+  const gone = [...store.runEntries().keys()].filter((id) => !present.has(id) && !fs.existsSync(path.join(runsDir, id)));
+  if (gone.length) store.deleteRuns(gone);
+  return count;
+}
+
 function listRuns(runsDir) {
   let ids = [];
   try { ids = fs.readdirSync(runsDir); } catch { return []; }
@@ -367,14 +449,15 @@ function listRuns(runsDir) {
     const rows = store.runEntries();
     list = store.transaction(() => ids.map((id) => {
       const row = rows.get(id);
-      if (!row?.info || row.sig !== runSignature(path.join(runsDir, id))) return indexRunIn(store, runsDir, id);
+      const sig = runSignature(path.join(runsDir, id));
+      if (!row?.info || (row.sig !== sig && !olderReading(row.sig, sig))) return indexRunIn(store, runsDir, id);
       return listedRow(runsDir, id, row.info);
     }));
     const present = new Set(ids);
     const gone = [...rows.keys()].filter((id) => !present.has(id));
     if (gone.length) store.deleteRuns(gone);
   }
-  return list.filter(Boolean).sort((a, b) => String(b.startedAt).localeCompare(String(a.startedAt)));
+  return withResumedBy(list.filter(Boolean).sort((a, b) => String(b.startedAt).localeCompare(String(a.startedAt))));
 }
 
 /** summary.json of every finished run (`mock: false`: real runs only), from the index when it is open. */
@@ -385,10 +468,7 @@ function runSummaries(runsDir, { mock } = {}) {
   return store.runSummaries({ mock });
 }
 
-const normPath = (p) => {
-  const r = path.resolve(String(p));
-  return process.platform === 'win32' ? r.toLowerCase() : r;
-};
+const normPath = (p) => pathKey(String(p));
 
 /**
  * Runs of a project: recorded with its id, or (older runs) whose folder inputs (repo_path,
@@ -502,6 +582,7 @@ module.exports = {
   readChain,
   readRun,
   rebuildIndex,
+  rebuildIndexAsync,
   runArtifacts,
   runEvents,
   runPr,

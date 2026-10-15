@@ -397,3 +397,169 @@ Feature: Roadmap statuses, done items, filters and run timers
     And I open "Backlog" in the sidebar
     And I open the Roadmap
     Then no roadmap item shows an "Update the app after this" control
+
+  # ---- #291: the shipped releases on the Roadmap ------------------------------------------------------
+  # The demo workspace has no release history: the scenarios add shipped releases holding the runs of a
+  # stage's done items (stage 1 "Stability first": #11, months old; stage 2 "Tonight": #9 and #12, a few
+  # hours ago). Assumption: the Releases filter shows a release's stages whatever the date filter; the
+  # scenario still sets "Total" first, since stage 1's run is months old.
+
+  @issue-291
+  Scenario: A shipped release shows as a "Release" block closed by a dashed line with its version
+    Given the app is open
+    And the project shipped the release "v0.9.1" with the done runs of stage 2
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    Then the roadmap shows the block "Release v0.9.1" right after stage 2
+    And the release block "v0.9.1" shows its release card
+    And a dashed version line reads "v0.9.1"
+
+  @issue-291
+  Scenario: Choosing a release in the Releases filter shows only its stages, counted in the head
+    Given the app is open
+    And the project shipped the release "v0.9" with the done runs of stage 1
+    And the project shipped the release "v0.9.1" with the done runs of stage 2
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    And I set the roadmap's date filter to "Total"
+    And I choose the release "v0.9" in the Releases filter
+    Then the roadmap shows only stage 1
+    And the roadmap header counts 1 stage for the release "v0.9"
+
+  # ---- #368: pause a stage after the current agent turn ---------------------------------------------
+  # The roadmap is set running as a simulation (its refused item skipped). Stage 2's runs are seeded,
+  # with no live agent turn to wait for, so the stage ends paused once the pause is asked.
+
+  @issue-368
+  # #391 renamed the stage menu's entry "Pause after current turn" to "Pause after current step".
+  Scenario: Pausing a stage after the current step shows it paused, not failed, with no Retry or Skip on its items
+    Given the app is open
+    And the roadmap is running as a simulation
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    And I open the stage actions menu of stage 2
+    Then the stage actions menu entry "Pause after current step" pauses the stage
+    When I choose "Pause after current step" in the stage actions menu
+    Then stage 2 is shown as paused, not failed
+    And the roadmap bar shows "Paused"
+    And the roadmap item "Keyboard focus is lost after closing a dialog" is not shown as failed
+    And the roadmap item "Keyboard focus is lost after closing a dialog" offers neither Retry nor Skip
+
+  # ---- #391: the bar's Pause menu: "Pause after this stage" or "Pause now" ------------------------------
+  # The demo roadmap is replaced by two planned stages of simulated software-development-local-hero
+  # items in Automatic mode (no gate): stage 1 holds "Pause item A" and "Pause item B", stage 2 holds
+  # "Pause item C". One run at a time (Concurrent runs off), so B waits for a free slot while A runs.
+  # Simulated turns of a few seconds (mock delay scale 1) keep a run going well past the clicks that
+  # ask for the pause.
+
+  @issue-391
+  Scenario: Pause after this stage lets the waiting item of the stage start, then stops before the next stage
+    Given the app is open with simulated turns of a few seconds
+    And the roadmap has two planned stages, items A and B in stage 1 and item C in stage 2, one run at a time
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    And I switch the roadmap to "All"
+    And I resume the roadmap as a simulation
+    Then the roadmap item "Pause item A" has started
+    And the roadmap item "Pause item B" has not started
+    When I click "Pause" on the roadmap bar
+    Then the pause menu offers "Pause after this stage" first, with the hint "The items of stage 1 still start and finish; the next stage waits"
+    And the pause menu offers "Pause now", with the hint "Nothing new starts; runs in progress go on"
+    When I choose "Pause after this stage" in the pause menu
+    Then the roadmap bar shows the badge "Pausing after stage 1" with a "Cancel pause" button
+    And the roadmap item "Pause item B" has started
+    And the roadmap pauses with "Stage 1 done"
+    And the roadmap item "Pause item A" is done
+    And the roadmap item "Pause item B" is done
+    And the roadmap item "Pause item C" has not started
+    And the roadmap bar shows no pausing badge
+
+  @issue-391
+  Scenario: Cancel pause takes the badge away and the roadmap goes on to the next stage
+    Given the app is open with simulated turns of a few seconds
+    And the roadmap has two planned stages, items A and B in stage 1 and item C in stage 2, one run at a time
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    And I switch the roadmap to "All"
+    And I resume the roadmap as a simulation
+    Then the roadmap item "Pause item A" has started
+    When I click "Pause" on the roadmap bar
+    And I choose "Pause after this stage" in the pause menu
+    Then the roadmap bar shows the badge "Pausing after stage 1" with a "Cancel pause" button
+    When I click "Cancel pause" on the roadmap bar
+    Then the roadmap bar shows no pausing badge
+    And the roadmap bar's state dot is "running" and reads "Running"
+    And the roadmap item "Pause item C" has started
+
+  @issue-391
+  Scenario: Pause now starts nothing new while the run in progress goes on, and Resume continues
+    Given the app is open with simulated turns of a few seconds
+    And the roadmap has two planned stages, items A and B in stage 1 and item C in stage 2, one run at a time
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    And I switch the roadmap to "All"
+    And I resume the roadmap as a simulation
+    Then the roadmap item "Pause item A" has started
+    And the roadmap item "Pause item B" has not started
+    When I click "Pause" on the roadmap bar
+    And I choose "Pause now" in the pause menu
+    Then the roadmap bar's state dot is "paused" and reads "Paused"
+    And the roadmap bar shows no pausing badge
+    And the roadmap item "Pause item A" is done
+    And the roadmap item "Pause item B" has not started
+    When I resume the roadmap as a simulation
+    Then the roadmap item "Pause item B" has started
+
+  # ---- #395: move on past an item waiting at a human gate --------------------------------------------
+  # The demo roadmap is replaced by two planned stages of simulated software-development-local-hero
+  # items: stage 1 holds "Gate item A" in Validated mode (its run stops at the owner's "Developer
+  # check" gate), stage 2 holds "Gate item C" in Automatic mode (no gate). Moving on parks A: its stage
+  # counts it finished and stage 2 starts, while A's run keeps waiting at the same gate, still the
+  # owner's to answer. Assumption: the parked card names the gate by its step's display name
+  # ("Developer check") and its "Parked at …" line opens the run at that gate.
+
+  @issue-395
+  Scenario: Moving on past an item at a gate starts the next stage, the gate stays mine, and Approve ends the item done
+    Given the app is open
+    And the roadmap has two planned stages, item A in Validated mode in stage 1 and item C in stage 2
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    And I switch the roadmap to "All"
+    And I resume the roadmap as a simulation
+    Then the roadmap item "Gate item A" waits at a human gate
+    And the roadmap item "Gate item C" has not started
+    And the roadmap item "Gate item A" offers "Move on" on its card
+    When I click "Move on" on the roadmap item "Gate item A"
+    Then the confirm dialog says the next stage starts without the parked change
+    When I press "Move on" in the confirm dialog
+    Then the roadmap item "Gate item A" is parked at "Developer check"
+    And the roadmap bar counts "1 parked at a gate"
+    And the roadmap item "Gate item C" has started
+    When I open the gate of the parked roadmap item "Gate item A"
+    Then a gate card waits for my approval
+    And the gate card offers "Approve: go on to the code review" and "Stop the run (branch kept to resume)"
+    When I choose "Approve: go on to the code review" on the gate card
+    And I open "Backlog" in the sidebar
+    And I open the Roadmap
+    And I switch the roadmap to "All"
+    Then the roadmap item "Gate item A" is done
+    And the roadmap bar shows no parked count
+
+  # "Move on from this stage" is refused while an item of the stage has an agent turn running: the
+  # #391 setup (simulated turns of a few seconds, one run at a time) keeps "Pause item A" in a turn.
+
+  @issue-395
+  Scenario: Moving on from a stage is refused while an agent turn runs, pointing to "Pause after current step"
+    Given the app is open with simulated turns of a few seconds
+    And the roadmap has two planned stages, items A and B in stage 1 and item C in stage 2, one run at a time
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    And I switch the roadmap to "All"
+    And I resume the roadmap as a simulation
+    Then the roadmap item "Pause item A" has started
+    When I open the stage actions menu of stage 1
+    Then the stage actions menu entry "Move on from this stage" moves on from the stage
+    When I choose "Move on from this stage" in the stage actions menu
+    Then the roadmap refuses to move on while an agent turn is running, pointing to "Pause after current step"
+    And the roadmap item "Pause item A" is not parked
+    And the roadmap item "Pause item C" has not started

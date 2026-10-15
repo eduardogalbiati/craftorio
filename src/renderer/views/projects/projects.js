@@ -1,10 +1,10 @@
 /* global api */
-// Projects, inside Settings (#254: Settings › Projects, no menu entry of its own): the project cards
-// (Start workflow, Open folder, Edit, Remove; a click opens the project's page, views/project/) and
-// the New / Edit project dialog with its Local preview fields and the run command detected in the
-// folder (#115). The dialog is also opened from the Start drawer (app.js) and the header's project
-// selector (current-project.js), so openProjectModal stays a global; showProjects opens the tab.
-// load: after views/settings/settings.js (the cards go into its Projects page)
+// Projects (#354: back in the menu, Code & Build before Backlog; it was a page of Settings since
+// #254): the project cards (Start workflow, Open folder, Edit, Remove; a click opens the project's
+// page, views/project/) with Open folder and New project in the header, and the New / Edit project
+// dialog with its Local preview fields and the run command detected in the folder (#115). The dialog
+// is also opened from the Start drawer (app.js) and the header's project selector
+// (current-project.js), so openProjectModal stays a global; showProjects opens the screen.
 // Registers itself with registerView (view-registry.js); uses app.js globals ($, esc, state, api,
 // errMsg, openModal, closeModal, confirmDialog, openDrawer, renderProjectOptions, runAppCommandHtml).
 
@@ -18,7 +18,7 @@ async function refreshProjects() {
     return;
   }
   box.innerHTML = state.projects.map((p) => `
-    <div class="card clickable" data-id="${esc(p.id)}" title="View the runs of this project">
+    <div class="card clickable" data-testid="project-card" data-id="${esc(p.id)}" title="Open this project: its runs, conflict map, architecture and refactors">
       <div class="card-head">
         <span class="card-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></svg></span>
         <b class="card-title">${esc(p.name)}</b>
@@ -37,26 +37,31 @@ async function refreshProjects() {
         <button class="btn sm ghost danger" data-act="remove">Remove</button>
       </div>
     </div>`).join('');
-  box.querySelectorAll('[data-act]').forEach((b) => (b.onclick = async () => {
-    const p = state.projects.find((x) => x.id === b.closest('.card').dataset.id);
-    if (b.dataset.act === 'run') openDrawer({ project: p.id });
-    if (b.dataset.act === 'open') api.openPath(p.folder);
-    if (b.dataset.act === 'edit') openProjectModal(p);
-    if (b.dataset.act === 'remove' && await confirmDialog('Remove project', `Remove "${p.name}" from the list? The folder ${p.folder} is not deleted.`, 'Remove')) {
-      await api.removeProject(p.id);
-      refreshProjects();
-    }
-  }));
-  box.querySelectorAll('.card').forEach((c) => (c.onclick = (e) => {
-    if (e.target.closest('button, a, input, [data-act]')) return;
-    openProjectView(c.dataset.id);
-  }));
 }
 
-// Settings › Projects: where the links to the Projects screen lead (a project's page, a Run App copy)
+// One delegated listener for the cards (they are drawn again on each refresh): a button acts, a
+// click elsewhere on a card opens the project's page
+async function onProjectsClick(e) {
+  const act = e.target.closest('[data-act]');
+  const card = e.target.closest('[data-testid="project-card"]') || act?.closest('[data-testid="project-card"]');
+  const p = card && state.projects.find((x) => x.id === card.dataset.id);
+  if (!p) return;
+  if (!act) {
+    if (!e.target.closest('button, a, input')) openProjectView(p.id);
+    return;
+  }
+  if (act.dataset.act === 'run') openDrawer({ project: p.id });
+  if (act.dataset.act === 'open') api.openPath(p.folder);
+  if (act.dataset.act === 'edit') openProjectModal(p);
+  if (act.dataset.act === 'remove' && await confirmDialog('Remove project', `Remove "${p.name}" from the list? The folder ${p.folder} is not deleted.`, 'Remove')) {
+    await api.removeProject(p.id);
+    refreshProjects();
+  }
+}
+
+// The Projects screen: where the links to the projects lead (a project's page, a Run App copy)
 function showProjects() {
-  showSettingsTab('projects');
-  if (state.view !== 'settings') showView('settings');
+  showView('projects');
 }
 
 let editingProject = null;
@@ -133,7 +138,7 @@ async function saveProject(e) {
     window.CurrentProject.refresh();
     if (projectFromDrawer) renderProjectOptions(p.id);
     if (projectFromHeader) showView(state.view);
-    else if (state.view === 'settings') refreshProjects();
+    else if (state.view === 'projects') refreshProjects();
   } catch (err) {
     $('#pj-error').textContent = errMsg(err);
   } finally {
@@ -144,6 +149,21 @@ async function saveProject(e) {
 
 registerView({
   id: 'projects',
+  nav: { label: 'Projects', order: 38, group: 'code', title: 'Your projects: each one\'s runs, conflict map, architecture and refactors', icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></svg>' },
+  markup: `
+      <section id="view-projects" class="view hidden" data-testid="projects-screen">
+        <div class="page-head">
+          <div>
+            <h1>Projects</h1>
+            <p class="muted small">Each project points to a local folder and, optionally, a git repository. Stored in <span id="projects-dir" class="mono"></span></p>
+          </div>
+          <div class="row">
+            <button id="btn-projects-folder" class="btn ghost nowrap" type="button">Open folder</button>
+            <button id="btn-new-project" class="btn primary nowrap" type="button">New project</button>
+          </div>
+        </div>
+        <div id="projects-list" class="card-grid"></div>
+      </section>`,
   modals: `
   <div id="project-modal" class="modal hidden">
     <form id="project-form" class="modal-card wide">
@@ -187,25 +207,12 @@ registerView({
     </form>
   </div>`,
   mount() {
-    // the page of Settings › Projects (settings.js has its tab and its empty page)
-    $('#settings-projects').innerHTML = `
-              <div class="page-head">
-                <div>
-                  <h2 class="settings-title">Projects</h2>
-                  <p class="muted small">Each project points to a local folder and, optionally, a git repository. Stored in <span id="projects-dir" class="mono"></span></p>
-                </div>
-                <div class="row">
-                  <button id="btn-projects-folder" class="btn ghost nowrap">Open folder</button>
-                  <button id="btn-new-project" class="btn primary nowrap">New project</button>
-                </div>
-              </div>
-              <div id="projects-list" class="card-grid"></div>`;
+    $('#projects-list').onclick = onProjectsClick;
     $('#btn-new-project').onclick = () => openProjectModal(null);
     $('#btn-projects-folder').onclick = () => api.openPath(state.ws.projects);
     $('#project-form').onsubmit = saveProject;
     $('#btn-pj-cancel').onclick = () => closeModal('#project-modal');
     $('#btn-pj-pick').onclick = async () => { const d = await api.pickFolder(); if (d) { $('#pj-folder').value = d; detectProjectRun(); } };
   },
-  // showView('projects') (an older link, a Run App copy's start screen) lands on Settings › Projects
-  show: showProjects,
+  show: refreshProjects,
 });
