@@ -223,6 +223,39 @@ for (const refusal of ['The command line is too long.', 'Linha de comando muito 
   });
 }
 
+test('#400 linux: a suite log that ends with "Argument list too long" and no test result is blocked', async (t) => {
+  const s = setup(t);
+  const run = async ({ logFile }) => {
+    fs.appendFileSync(logFile, '/bin/sh: 1: npm: Argument list too long\n');
+    return { code: 126, timedOut: false, error: null };
+  };
+  const out = await runSuite({ command: 'npm test', cwd: s.cwd, runDir: s.runDir, round: 1, run, platform: 'linux' });
+  assert.equal(out.status, 'blocked');
+  assert.equal(out.failures.length, 0);
+  assert.match(String(out.reason), /Argument list too long/);
+});
+
+test('#400 a refusal line in a log that also has test results stays a failure (tests ran)', async (t) => {
+  const s = setup(t);
+  const run = async ({ logFile }) => {
+    fs.appendFileSync(logFile, '✖ failing tests:\n\ntest at test/a.test.js:3:1\n✖ a test (1ms)\n  Error: a test broke\n\nℹ tests 2\nℹ pass 1\nℹ fail 1\nThe command line is too long.\n');
+    return { code: 1, timedOut: false, error: null };
+  };
+  const out = await runSuite({ command: 'npm test', cwd: s.cwd, runDir: s.runDir, round: 1, run, platform: 'win32' });
+  assert.equal(out.status, 'fail');
+  assert.ok(out.failures.some((f) => f.test === 'a test'), JSON.stringify(out.failures));
+});
+
+test('#400 win32: the suite output of an over-limit round prints the whole-suite line with the limit', async (t) => {
+  const s = setup(t);
+  const { run } = passingRun();
+  const files = longSelection(319);
+  const out = await runSuite({ command: 'npm test', cwd: s.cwd, runDir: s.runDir, round: 1, run, files, selection: selectionOf(files), platform: 'win32' });
+  const line = suiteMessage(out).split('\n').find((l) => /whole suite/i.test(l) && /command[- ]line limit/i.test(l));
+  assert.ok(line, `a line says the whole suite ran because of the limit: ${suiteMessage(out)}`);
+  assert.match(line, /Windows/);
+});
+
 test('#400 a red round with test results in the log is still a failure', async (t) => {
   const s = setup(t);
   const run = async ({ logFile }) => {
