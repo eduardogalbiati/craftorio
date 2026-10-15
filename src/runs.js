@@ -362,7 +362,8 @@ function resumerOf(store, runsDir, info) {
   if (found || RESUMED_DONE.has(info.status)) return found;
   let names = [];
   try { names = fs.readdirSync(runsDir); } catch { return null; }
-  const fresh = names.filter((n) => n > info.runId && !store.runEntry(n));
+  const indexed = store.runIds();
+  const fresh = names.filter((n) => n > info.runId && !indexed.has(n));
   for (const n of fresh) indexRunIn(store, runsDir, n);
   return fresh.length ? store.runResumedBy(info.runId) : null;
 }

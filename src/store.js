@@ -187,6 +187,10 @@ function openStore(ws) {
       const r = db.prepare('SELECT run_id, sig, info FROM runs WHERE run_id = ?').get(String(runId));
       return r ? runRow(r) : null;
     },
+    /** The ids of every indexed run (no `info` parsed). */
+    runIds() {
+      return new Set(db.prepare('SELECT run_id FROM runs').all().map((r) => r.run_id));
+    },
     /** The latest indexed run that resumed `runId` (its workflow.started resumed_from, #384), or null. */
     runResumedBy(runId) {
       return db.prepare('SELECT run_id FROM runs WHERE resumed_from = ? ORDER BY started_at DESC LIMIT 1').get(String(runId))?.run_id ?? null;
