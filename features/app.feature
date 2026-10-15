@@ -31,7 +31,7 @@ Feature: The app opens
   # #389: the app froze for minutes at startup. Home draws from the index before any slow read, and
   # the app answers right away. Assumption: "promptly" is 3 seconds from the window's page loading
   # (the launch of Electron itself is not counted).
-  @issue-389 @smoke
+  @issue-389
   Scenario: Home is shown promptly when the app opens and I can move on at once
     Given the app is open
     Then Home shows its overview within 3 seconds
