@@ -220,7 +220,7 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     And the Architecture tab says how to measure it with "pip install lizard", which needs Python
     And the Architecture hotspot table shows the complexity of "tools/export.py" as not measured, not zero
 
-  @issue-386 @smoke
+  @issue-386
   Scenario: The Facts view leads with a one-row summary and keeps its caveats behind a button
     Given the app is open
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and a saved architecture report with high, medium and low findings
