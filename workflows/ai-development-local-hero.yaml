@@ -984,9 +984,9 @@ steps:
       without them.
       {% endif %}
       Before your final answer, run the project's check command (`{{ inputs.check_command or 'npm run check' }}`
-      when the project has one: its rule checks, about a minute), in the foreground with its output
-      in a log, fix what it reports and commit. Record the result in `checks` (`checks: pass` or the
-      findings left). The orchestrator runs it again after your commit and sends failures back here.
+      when it has one; no check command: say so) in the foreground, output in a log, fix what it
+      reports and commit. Record the result in `checks` (`checks: pass` or the findings left). The
+      orchestrator runs it again after your commit and sends failures back here.
       Your turn ends at green acceptance tests and a commit: answer once the ```run-tests block
       passes and the change is committed. The code_review step reviews your diff next, in its own
       session: never start a sub-agent to review your diff.

@@ -64,15 +64,6 @@ tool's own timeout, although the suite had passed in 3.
 - If you must pipe, make the suite's failure count: `set -o pipefail` (bash), `$LASTEXITCODE`
   right after the command (PowerShell).
 
-## 4. The project's check command, before your final answer
-
-A project may have a fast command for its own rule checks (lint, layers, file sizes, docs, types):
-the workflow's `check_command` input, or the `check` script of its `package.json` (`npm run check`).
-A developer runs it once before the final answer, like a focused test file (foreground, a sized
-timeout, the output in the log folder), fixes what it reports and commits. The answer records the
-result (`checks: pass`, or the findings left and why). Each finding the check would have shown
-otherwise costs a whole suite round. No check command: say so and skip it.
-
 ## Unattended runs: commands nobody can approve
 
 - A command the CLI would ask about is **refused**, not approved later: nobody is there to answer.
