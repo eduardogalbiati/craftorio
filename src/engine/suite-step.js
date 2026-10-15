@@ -537,6 +537,9 @@ function saveCoverage(text, runDir, changedFiles) {
   return { ...summary.totals, files: summary.files.length, path: rel };
 }
 
+// runCommand's optional arguments, only when they differ from its defaults
+const optionalRunArgs = ({ onSpawn, sweep }) => ({ ...(onSpawn ? { onSpawn } : {}), ...(sweep ? {} : { sweep: false }) });
+
 // command: rendered (empty: detected); cwd: the worktree; runDir: the run folder (log under logs/);
 // round: the step's visit; env: the engine's environment (suiteEnv cleans it);
 // preexisting: the run's known pre-existing failures [{ test, file, reason }]; mockResult: see above;
@@ -611,7 +614,7 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
     if (logFile) fs.appendFileSync(logFile, text);
   } else {
     log('info', `suite: ${out.command} (round ${round}, timeout ${Math.round(out.timeout_ms / 60e3)} min, log ${out.log})`);
-    const r = await run({ command: out.command, cwd, env: { ...childEnv.env, MULTIAGENT_TEST_HUMAN_LOG: humanLog(logFile) }, timeoutMs: out.timeout_ms, signal, logFile, ...(onSpawn ? { onSpawn } : {}), ...(sweep ? {} : { sweep: false }) });
+    const r = await run({ command: out.command, cwd, env: { ...childEnv.env, MULTIAGENT_TEST_HUMAN_LOG: humanLog(logFile) }, timeoutMs: out.timeout_ms, signal, logFile, ...optionalRunArgs({ onSpawn, sweep }) });
     out.exit_code = r.code;
     out.timed_out = r.timedOut;
     out.running = r.running || [];

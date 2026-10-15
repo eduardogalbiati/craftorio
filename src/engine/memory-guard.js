@@ -199,6 +199,20 @@ function killProcess(pid, descendants = []) {
  * @param {Function} [o.onStray]   (stray) => void: once per newly flagged stray
  * @param {number} [o.strayIntervalMs] sampling period of the stray check
  */
+// subtreeOf(procs)(pid): the descendants of pid in the sample, breadth first
+function subtreeOf(procs) {
+  const children = new Map();
+  for (const p of procs) if (p.ppid !== p.pid) children.set(p.ppid, [...(children.get(p.ppid) || []), p]);
+  return (pid) => {
+    const out = [];
+    const seen = new Set([pid]);
+    for (let queue = [pid]; queue.length;) {
+      for (const c of children.get(queue.shift()) || []) if (!seen.has(c.pid)) { seen.add(c.pid); out.push(c); queue.push(c.pid); }
+    }
+    return out;
+  };
+}
+
 function createMemoryGuard({ limitBytes, floorBytes, intervalMs = 5000, sampler, freeMemory, kill = killProcess, now = Date.now, runs = null, onStray = null, strayIntervalMs = STRAY_INTERVAL_MS } = {}) {
   const total = os.totalmem();
   let limit = limitBytes ?? Math.round(total * 0.25);
@@ -264,34 +278,31 @@ function createMemoryGuard({ limitBytes, floorBytes, intervalMs = 5000, sampler,
     return found.filter((s) => !flagged.has(s.ppid));
   }
 
+  const warnUnsampled = (e) => {
+    for (const w of watches) {
+      if (w.warned) continue;
+      w.warned = true;
+      w.onLog?.({ level: 'warn', message: `The memory guard is off for this step: the processes could not be sampled (${e?.message || e}).` });
+    }
+  };
+
+  function checkStrays(procs, subtree) {
+    strays = findStrays(procs, now());
+    lastSubtree = subtree;
+    for (const s of strays) if (!notified.has(s.pid)) { notified.add(s.pid); try { onStray?.({ ...s }); } catch { /* the listener's problem */ } }
+  }
+
   async function pass() {
     if (!watches.size && !runs) return;
     let procs;
     try {
       procs = await sample();
     } catch (e) {
-      for (const w of watches) {
-        if (w.warned) continue;
-        w.warned = true;
-        w.onLog?.({ level: 'warn', message: `The memory guard is off for this step: the processes could not be sampled (${e?.message || e}).` });
-      }
+      warnUnsampled(e);
       return;
     }
-    const children = new Map();
-    for (const p of procs) if (p.ppid !== p.pid) children.set(p.ppid, [...(children.get(p.ppid) || []), p]);
-    const subtree = (pid) => {
-      const out = [];
-      const seen = new Set([pid]);
-      for (let queue = [pid]; queue.length;) {
-        for (const c of children.get(queue.shift()) || []) if (!seen.has(c.pid)) { seen.add(c.pid); out.push(c); queue.push(c.pid); }
-      }
-      return out;
-    };
-    if (runs) {
-      strays = findStrays(procs, now());
-      lastSubtree = subtree;
-      for (const s of strays) if (!notified.has(s.pid)) { notified.add(s.pid); try { onStray?.({ ...s }); } catch { /* the listener's problem */ } }
-    }
+    const subtree = subtreeOf(procs);
+    if (runs) checkStrays(procs, subtree);
     const stopped = new Set();
     for (const w of [...watches]) {
       if (!watches.has(w)) continue;
