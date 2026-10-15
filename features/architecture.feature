@@ -198,6 +198,40 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     When I follow the city's link to the Conflict map
     Then the project tab "Conflict map" is selected
 
+  # The demo project "demo-app" has no git repository and no city plan, so the issue's project is the
+  # seeded "billing-service" (src/billing.js in the district Billing of the zone Backend,
+  # tools/export.py in Export of Tooling) with its own synced backlog and roadmap.
+  @issue-375
+  Scenario: "Show on the map" on a Backlog issue opens the city with the issue's expected footprint
+    Given the app is open
+    And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
+    And the backlog of "billing-service" has the open issue "Change the discount rule" whose body cites "src/billing.js", "tools/export.py" and "src/refunds.js"
+    When I open "Backlog" in the sidebar
+    And I choose the project "billing-service" in the header
+    And I open the Board as a list
+    And I click "Show on the map" on the Backlog issue "Change the discount rule"
+    Then the Architecture tab shows the project city
+    And the city impact header names the issue "Change the discount rule"
+    And the city impact header counts 2 files, in the districts "Billing" and "Export" and the zones "Backend" and "Tooling"
+    And the city impact header gives the share of the files in the Danger Zone as a percentage
+    And the city lists "src/refunds.js" apart as a new file expected in "Billing"
+
+  @issue-375
+  Scenario: "Show the stage on the map" colours the stage's items and marks a building both would change as a conflict
+    Given the app is open
+    And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
+    And the backlog of "billing-service" has the open issue "Change the discount rule" whose body cites "src/billing.js"
+    And the backlog of "billing-service" has the open issue "Round the export totals" whose body cites "src/billing.js" and "tools/export.py"
+    And the roadmap of "billing-service" has the planned stage "Billing fixes" with the items "Change the discount rule" and "Round the export totals"
+    When I open "Backlog" in the sidebar
+    And I choose the project "billing-service" in the header
+    And I open the Roadmap
+    And I click "Show the stage on the map" on the roadmap stage "Billing fixes"
+    Then the Architecture tab shows the project city
+    And the city legend lists "Change the discount rule" and "Round the export totals"
+    And the city marks "src/billing.js" as a conflict of the stage
+    And the city does not mark "tools/export.py" as a conflict of the stage
+
   @issue-385
   Scenario: Without lizard the JavaScript file still has a measured complexity
     Given the complexity tool lizard is not installed on this machine

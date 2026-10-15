@@ -33,6 +33,12 @@
 //   heartbeat this process keeps fresh; its events: workflow.started (project_id), worktree.ready
 //   (a worktree folder in the scratch folder), step.started, session.opened, then session.stream
 //   with an Edit tool call on <worktree>/<file>.
+// - An issue's impact preview (#375): data-testid="show-on-map" ("Show on the map") on a Backlog
+//   issue row (or in its ⋯ menu) and on a roadmap item; "show-stage-on-map" ("Show the stage on the
+//   map") on a roadmap stage. Both open the project's City view with "city-impact-header" (the issue,
+//   "<n> files" with the district and zone names, the Danger Zone share in %), the predicted files
+//   the repository lacks as list items "<path> … new file, expected in <district>", the stage's
+//   items in "project-city-legend" and "city-impact-conflicts" (the paths two items would change).
 // - Complexity per language (#385): the hotspot table has a "Complexity" column whenever one file is
 //   measured (JavaScript/TypeScript always, inside the app), a measured file shows a whole number, a
 //   file not measured shows no number (never 0); data-testid="architecture-measure-note": which
@@ -518,6 +524,134 @@ Then('the city is back inside the tab', async ({ e2e }) => {
   const viewport = e2e.window.viewportSize() || await e2e.window.evaluate(() => ({ width: window.innerWidth, height: window.innerHeight }));
   const box = await city.boundingBox();
   expect(box.width, 'narrower than the window (the sidebar shows)').toBeLessThan(viewport.width - 100);
+});
+
+// ---------- an issue's impact preview on the city (#375) ----------
+// The project's synced backlog (<workspace>/backlog/<id>.json, the shape the app's sync writes) gets
+// open issues whose bodies cite files; its roadmap (<id>.roadmap.json) a planned stage of those issues.
+
+function projectOf(e2e, name) {
+  const projects = require(path.join(root, 'src', 'projects'));
+  const project = projects.listProjects(path.join(e2e.scratch, 'workspace', 'projects')).find((p) => p.name === name);
+  if (!project) throw new Error(`no project "${name}" in the scratch workspace`);
+  return project;
+}
+
+const backlogDir = (e2e) => path.join(e2e.scratch, 'workspace', 'backlog');
+const repoOf = (name) => `https://github.com/example/${name}`;
+
+async function addCitingIssue(e2e, name, title, files) {
+  const { taskProgress } = require(path.join(root, 'src', 'backlog'));
+  const project = projectOf(e2e, name);
+  const file = path.join(backlogDir(e2e), `${project.id}.json`);
+  const repo = repoOf(name);
+  fs.mkdirSync(backlogDir(e2e), { recursive: true });
+  if (!project.repo) require(path.join(root, 'src', 'projects')).updateProject(path.join(e2e.scratch, 'workspace', 'projects'), project.id, { repo });
+  const data = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8'))
+    : { projectId: project.id, platform: 'github', repo, syncedAt: new Date().toISOString(), issues: [], epics: [], epicsError: null };
+  const number = data.issues.reduce((n, i) => Math.max(n, i.number), 0) + 1;
+  const body = `Files to change:\n${files.map((f) => `- \`${f}\``).join('\n')}\n`;
+  const now = new Date().toISOString();
+  data.issues.push({ number, title, state: 'open', labels: [], body, url: `${repo}/issues/${number}`, author: 'octocat', assignees: [], tasks: taskProgress(body), createdAt: now, updatedAt: now });
+  fs.writeFileSync(file, JSON.stringify(data, null, 2));
+  await e2e.window.reload();
+  await e2e.window.waitForLoadState('domcontentloaded');
+}
+
+Given('the backlog of {string} has the open issue {string} whose body cites {string}', async ({ e2e }, name, title, a) => {
+  await addCitingIssue(e2e, name, title, [a]);
+});
+
+Given('the backlog of {string} has the open issue {string} whose body cites {string} and {string}', async ({ e2e }, name, title, a, b) => {
+  await addCitingIssue(e2e, name, title, [a, b]);
+});
+
+Given('the backlog of {string} has the open issue {string} whose body cites {string}, {string} and {string}', async ({ e2e }, name, title, a, b, c) => {
+  await addCitingIssue(e2e, name, title, [a, b, c]);
+});
+
+// A planned roadmap (nothing starts) of one stage whose items are the backlog's issues of these titles
+Given('the roadmap of {string} has the planned stage {string} with the items {string} and {string}', async ({ e2e }, name, stageName, a, b) => {
+  const project = projectOf(e2e, name);
+  const backlog = JSON.parse(fs.readFileSync(path.join(backlogDir(e2e), `${project.id}.json`), 'utf8'));
+  const item = (title, n) => {
+    const i = backlog.issues.find((x) => x.title === title);
+    if (!i) throw new Error(`no issue "${title}" in the backlog of "${name}"`);
+    return {
+      id: `item-375-${n}`, workflow: 'software-development.yaml', workflowName: 'software-development', inputs: { language: 'js', mode: 'auto' }, mock: false,
+      number: i.number, url: i.url, title: i.title, body: i.body, knownPullRequests: [], status: 'planned', runId: null, runs: [], error: null,
+    };
+  };
+  const roadmap = {
+    state: 'planned', simulated: false, error: null, pausedBy: null, updatedAt: new Date().toISOString(),
+    stages: [{ id: 'stage-375', name: stageName, note: 'Both change the billing rules (simulated data).', items: [item(a, 1), item(b, 2)] }],
+  };
+  fs.writeFileSync(path.join(backlogDir(e2e), `${project.id}.roadmap.json`), JSON.stringify(roadmap, null, 2));
+  await e2e.window.reload();
+  await e2e.window.waitForLoadState('domcontentloaded');
+});
+
+// The button is on the issue's row, or in its ⋯ actions menu
+When('I click {string} on the Backlog issue {string}', async ({ e2e }, label, title) => {
+  const row = e2e.window.getByTestId('backlog-list').getByTestId('backlog-issue').filter({ hasText: title }).first();
+  await expect(row).toBeVisible({ timeout: LOAD_TIMEOUT });
+  const button = row.getByTestId('show-on-map');
+  if (!(await button.isVisible())) await row.getByTestId('backlog-issue-menu').click();
+  await expect(button).toBeVisible();
+  await expect(button).toHaveText(new RegExp(`^\\s*${escapeRe(label)}\\s*$`));
+  await button.click();
+});
+
+When('I click {string} on the roadmap stage {string}', async ({ e2e }, label, stageName) => {
+  const stage = e2e.window.getByTestId('roadmap-stage').filter({ hasText: stageName }).first();
+  await expect(stage).toBeVisible({ timeout: LOAD_TIMEOUT });
+  const button = stage.getByTestId('show-stage-on-map');
+  await expect(button).toBeVisible();
+  await expect(button).toHaveText(new RegExp(`^\\s*${escapeRe(label)}\\s*$`));
+  await button.click();
+});
+
+const impactHeader = (page) => byId(page, 'city-impact-header');
+
+Then('the city impact header names the issue {string}', async ({ e2e }, title) => {
+  const header = impactHeader(e2e.window);
+  await expect(header).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(header).toContainText(title, { timeout: LOAD_TIMEOUT });
+});
+
+// the counts are of the buildings the repository has; a predicted file it lacks is listed apart
+Then('the city impact header counts {int} files, in the districts {string} and {string} and the zones {string} and {string}', async ({ e2e }, files, d1, d2, z1, z2) => {
+  const header = impactHeader(e2e.window);
+  await expect(header).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(header, `the header's ${files} files`).toContainText(new RegExp(`\\b${files}\\s+files?\\b`, 'i'), { timeout: LOAD_TIMEOUT });
+  for (const name of [d1, d2, z1, z2]) await expect(header, `the header's "${name}"`).toContainText(name);
+});
+
+Then('the city impact header gives the share of the files in the Danger Zone as a percentage', async ({ e2e }) => {
+  const header = impactHeader(e2e.window);
+  await expect(header).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(header).toContainText(/Danger Zone/i);
+  await expect(header).toContainText(/\b\d{1,3}(\.\d+)?\s*%/);
+});
+
+Then('the city lists {string} apart as a new file expected in {string}', async ({ e2e }, file, district) => {
+  const entry = visible(tab(e2e.window).getByRole('listitem').filter({ hasText: file })
+    .filter({ hasText: new RegExp(`new file, expected in ${escapeRe(district)}`, 'i') })).first();
+  await expect(entry).toBeVisible({ timeout: LOAD_TIMEOUT });
+});
+
+const impactConflicts = (page) => byId(page, 'city-impact-conflicts');
+
+Then('the city marks {string} as a conflict of the stage', async ({ e2e }, file) => {
+  const conflicts = impactConflicts(e2e.window);
+  await expect(conflicts).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(conflicts).toContainText(file, { timeout: LOAD_TIMEOUT });
+});
+
+Then('the city does not mark {string} as a conflict of the stage', async ({ e2e }, file) => {
+  const conflicts = impactConflicts(e2e.window);
+  await expect(conflicts).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(conflicts).not.toContainText(file);
 });
 
 // ---------- complexity per language (#385) ----------
