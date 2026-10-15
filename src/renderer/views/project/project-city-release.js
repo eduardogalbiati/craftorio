@@ -46,7 +46,7 @@
     const { project = '', from = null, to = null, header = {}, tags = [], issues = [], issue = null } = view || {};
     const counts = header.counts || {};
     const chips = ['added', 'changed', 'renamed', 'removed'].filter((s) => counts[s] > 0)
-      .map((s) => `<span class="pcr-count" data-testid="city-release-count-${s}">${dot(statusColour()[s])}${counts[s]} ${s}</span>`).join('');
+      .map((s) => `<span class="pcr-count" data-testid="city-release-count-${s}">${dot(statusColour()[s])}${counts[s]} ${s}</span>`).join(' ');
     return `<div class="pci-header" data-testid="city-release-header">
       <div class="pci-title"><span title="${esc(project)}">${esc(project)}</span></div>
       ${pickerMarkup(tags, from, to)}
