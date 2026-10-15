@@ -196,7 +196,12 @@ const methods = {
       + ' turn, e.g. the acceptance tests your code must pass):\n' + files.map((f) => `- ${f}`).join('\n') + '\n'
       + `Put them back as they were before your turn (\`git checkout ${head} -- <file>\` for a changed or deleted file)`
       + ' and commit, keeping your other changes; make the code pass them instead. If one contradicts the task,'
-      + ' say why in your answer (the reviewer decides). Then answer again in full, in the format you were asked for.';
+      + ' say why in your answer (the reviewer decides).'
+      // #380: after a rebase, the file must combine both sides: checking out the old head would drop the base's side
+      + ' If you rebased or merged and resolved a conflict in one of them, keep only lines of the two sides'
+      + ' (the branch\'s and the base\'s versions, dropping none either side added) instead, or answer the'
+      + ' conflict as one that needs new test lines when the step lets you hand it over.'
+      + ' Then answer again in full, in the format you were asked for.';
     const def = { ...(this.wf.defaults || {}), ...this.wf.agents[agentName] };
     if ((def.session || 'persistent') === 'persistent') return fix;
     return `${prompt}\n\n---\nYou already answered this task:\n<previous_answer>\n${String(previous).slice(-20000)}\n</previous_answer>\n\n${fix}`;
