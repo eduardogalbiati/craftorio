@@ -1,0 +1,24 @@
+/* An issue's impact preview on the project city (#375, project-city-impact.js): its card, top centre
+   over the city, and its rows in the city's legend, with the run's 3D view classes (run3d.css
+   .r3d-card, .r3d-dot). */
+.pc-city .pci { position: absolute; top: 78px; left: 50%; transform: translateX(-50%); width: min(380px, calc(100% - 24px)); max-height: 45%; overflow: auto; padding: 10px 12px; font-size: 12px; color: var(--r3d-ink-2); z-index: 2; }
+.pc-city .pci.hidden { display: none; }
+.pci-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.pci-head > b { font-size: 11px; letter-spacing: .5px; text-transform: uppercase; color: var(--r3d-muted); }
+.pci-header { display: grid; gap: 6px; }
+.pci-title { display: flex; gap: 6px; min-width: 0; font-size: 13px; color: var(--r3d-ink); }
+.pci-title b { font-family: var(--mono); flex: none; }
+.pci-title span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pci-total { margin: 0; }
+.pci-counts { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px; }
+.pci-counts li { display: flex; gap: 6px; padding: 2px 8px; border-radius: 999px; background: var(--r3d-hover); max-width: 100%; }
+.pci-counts li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pci-new, .pci-conflicts ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.pci-new li, .pci-conflicts li { display: flex; gap: 6px; min-width: 0; }
+.pci-new code, .pci-conflicts code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pci-cmp { display: grid; gap: 4px; padding-top: 6px; border-top: 1px solid var(--r3d-card-line); }
+.pci-cmp span { display: flex; align-items: center; gap: 6px; }
+.pci-rate { color: var(--r3d-ink); }
+.pci-conflicts { display: grid; gap: 4px; padding: 8px 10px; border-radius: 9px; background: color-mix(in srgb, #d7263d 14%, var(--r3d-card)); }
+.pci-conflicts > b { color: #d7263d; }
+.pci-legend { margin-top: 8px; }

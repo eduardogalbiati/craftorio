@@ -663,7 +663,7 @@
     return `
       <div class="rm-item rm-${esc(status)}" data-testid="roadmap-item"${status === 'planned' ? '' : ` data-status="${esc(status)}"`} data-item="${esc(x.id)}" data-stage="${s}"${locked || open ? '' : ' draggable="true" data-drag-item'}>
         <div class="rm-item-top">
-          <div class="rm-issues"><ul class="rm-titles">${titles}</ul>${foot}</div>
+          <div class="rm-issues"><ul class="rm-titles">${titles}</ul>${foot}<button type="button" class="link-btn small rm-map" data-rm-map-item="${esc(x.id)}" data-testid="show-on-map" title="Open the project city with the files this item is expected to change">Show on the map</button></div>
           ${metersHtml(x, x.status === 'running' || !!x.waiting, v?.clock)}
           ${statusHtml(x, s, n, r, locked, v)}
         </div>${workflowHtml(x, locked, open, v)}
@@ -752,7 +752,7 @@
           <input type="text" class="rm-name" data-rm-name value="${esc(stage.name)}" placeholder="Name (optional)" aria-label="Stage name" />
           ${offBadge}${stateBadge}
           ${stage.items.length > 1 ? stageCostHtml(stage, done) : ''}
-          <span class="spacer"></span>
+          <span class="spacer"></span><button type="button" class="btn sm ghost" data-rm-map-stage="${s}" data-testid="show-stage-on-map" title="Colour each item of this stage on the project city; a building two items would change is red">Show the stage on the map</button>
           ${stageMenuHtml(stage, s, count, r, done)}
         </div>
         ${pause}${note}
@@ -1685,9 +1685,9 @@
       if (item) window.GateOracle?.askAboutFailure({ item, roadmap: r, stage, project: ctx.projectId, run: state.runs?.get?.(item.runId)?.run || null });
       return true;
     }
-    // #268: the Planned | All switch (and the empty state's "Show all items")
-    const viewBtn = e.target.closest('[data-rm-view]');
-    if (viewBtn) { ctx.setShowAll?.(viewBtn.dataset.rmView === 'all'); return true; }
+    // #268: the Planned | All switch (and the empty state's "Show all items"); #375: an item's or a stage's footprint on the project city
+    const viewBtn = e.target.closest('[data-rm-view]'), onMap = e.target.closest('[data-rm-map-item], [data-rm-map-stage]');
+    if (viewBtn) { ctx.setShowAll?.(viewBtn.dataset.rmView === 'all'); return true; } if (onMap) { window.ProjectCityImpact?.fromRoadmap(ctx.projectId, r, data.issues, onMap.dataset); return true; }
     // #291: a release's empty state (its runs older than the date range): all time
     if (e.target.closest('[data-rm-all-time]')) { ctx.setSince?.('total'); return true; }
     // #267: a stage's "+n done" chip unfolds its finished items, that stage only

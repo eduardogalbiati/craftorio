@@ -164,6 +164,23 @@ const demoCityAgents = (projectId) => ({
   collisions: [{ path: 'src/billing.js', runs: ['20261013-100000-c1ty0001', '20261013-101500-c1ty0002'] }],
 });
 
+// #375: an open issue's impact preview (its body cites two city files, `file:line` and a plain path,
+// and a file the city does not have yet, expected in Views; the Product Owner's saved group adds an
+// engine file), and a roadmap stage of two items that would both change src/billing.js (simulated data)
+const DEMO_IMPACT_ISSUE = {
+  number: 412, title: 'Apply the loyalty discount to the invoice totals', runs: [],
+  body: 'The discount rule lives in `src/billing.js:42`; the totals come from src/engine/part-3.js.\nAdd the badge in `src/renderer/views/part-new.js`.',
+};
+const DEMO_IMPACT_PO = [{ role: 'po', answer: { summary: 'One group.', groups: [{ issues: [412], workflow: 'software-development.yaml', reason: 'Billing rules.', files: ['src/billing.js', 'src/engine/part-0.js'] }], conflicts: [], enrich: [] } }];
+const DEMO_IMPACT_STAGE = {
+  name: 'Billing fixes',
+  items: [
+    { id: 'it-412', number: 412, title: 'Apply the loyalty discount', body: 'Change `src/billing.js` and `src/engine/part-0.js`.' },
+    { id: 'it-413', number: 413, title: 'Round the export totals', body: 'Round in `src/billing.js`, document it in `docs/guides/guide-1.md`.' },
+    { id: 'it-414', number: 414, title: 'Faster invoice list', body: 'Paginate `src/renderer/views/part-1.js`.' },
+  ],
+};
+
 const LARGE_PLAN = path.join('poc', 'project-map', 'plans', 'multiagent-orchestrator.city-plan.json');
 
 // #387: --mode large, the Architecture tab at a real scale: the latest report holds the 60 findings of
@@ -203,7 +220,7 @@ function seedArchitecture(args, ws, project, { appDir, projects }) {
     require('../../../src/oracle-architecture').writePlan(path.join(ws.root, 'architecture'), project.id, plan, '2026-10-01T09:00:00.000Z');
     return;
   }
-  const city = args.mode === 'city' || args.mode === 'city-agents';
+  const city = ['city', 'city-agents', 'city-issue', 'city-stage'].includes(args.mode);
   const commits = args.mode === 'empty' ? [] : city ? CITY_COMMITS : ARCH_COMMITS;
   const head = demoArchitectureRepo(project.folder, commits);
   if (head && args.mode !== 'never') demoArchitectureReports(ws, project.id, { commit: head, date: '2026-09-15T10:00:00Z' });
@@ -234,7 +251,7 @@ function seed({ appDir, args, projects, ws, project }) {
 
 const open = ({ js, project }) => js(`openProjectView(${JSON.stringify(project.id)})`);
 
-async function afterOpen({ args, click }) {
+async function afterOpen({ args, click, js }) {
   if (!args.tab) return;
   // the tab's first read never ends: its loading state stays on screen
   if (args.tab === 'conflicts' && args.mode === 'loading') {
@@ -255,9 +272,19 @@ async function afterOpen({ args, click }) {
     ipcMain.removeHandler('architecture:agents');
     ipcMain.handle('architecture:agents', (_e, arg) => demoCityAgents(arg && arg.projectId));
   }
+  // #375: the Product Owner's saved answers hold the issue's group (read, never asked)
+  if (args.tab === 'architecture' && args.mode === 'city-issue') {
+    const { ipcMain } = require('electron');
+    ipcMain.removeHandler('po:history');
+    ipcMain.handle('po:history', () => DEMO_IMPACT_PO);
+  }
   await click(`[data-pv-tab="${args.tab}"]`);
   if (args.tab === 'architecture' && analysis) await click('[data-testid="architecture-analyze"]');
-  if (args.tab === 'architecture' && ['city', 'city-agents', 'city-large'].includes(args.mode)) await click('[data-testid="architecture-mode-city"]');
+  if (args.tab === 'architecture' && ['city', 'city-agents', 'city-issue', 'city-large', 'city-stage'].includes(args.mode)) await click('[data-testid="architecture-mode-city"]');
+  // #375: "Show on the map" of an issue, "Show the stage on the map" of a roadmap stage
+  const pid = '(window.ProjectCity.current() || {}).projectId || state.projectId';
+  if (args.tab === 'architecture' && args.mode === 'city-issue') await js(`ProjectCityImpact.showIssue(${pid}, ${JSON.stringify(DEMO_IMPACT_ISSUE)})`);
+  if (args.tab === 'architecture' && args.mode === 'city-stage') await js(`ProjectCityImpact.showStage(${pid}, ${JSON.stringify(DEMO_IMPACT_STAGE)})`);
 }
 
 module.exports = {

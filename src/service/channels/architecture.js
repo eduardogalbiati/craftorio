@@ -245,6 +245,31 @@ module.exports = (ctx) => {
       },
     },
     {
+      channel: 'architecture:impact',
+      method: 'architectureImpact',
+      params: ['...opts'],
+      schema: {
+        params: args({ projectId: PROJECT_ID, record: shape({ issue: INT, hitRate: HIT_RATE, run: STRING }, ['issue', 'hitRate', 'run']) }, ['projectId']),
+        result: IMPACT,
+      },
+      fn: ({ projectId, record = null }) => {
+        const p = projectOf(projectId);
+        const file = path.join(root(), p.id, IMPACT_HISTORY);
+        let history = {};
+        try {
+          history = JSON.parse(fs.readFileSync(file, 'utf8')) || {};
+        } catch (e) {
+          if (e.code !== 'ENOENT') throw e;
+        }
+        if (record) {
+          history = recordHitRate(history, record.issue, { hitRate: record.hitRate, ts: new Date().toISOString(), run: record.run });
+          fs.mkdirSync(path.dirname(file), { recursive: true });
+          fs.writeFileSync(file, JSON.stringify(history, null, 2) + '\n');
+        }
+        return { plan: arch.readPlan(root(), p.id).plan || null, history };
+      },
+    },
+    {
       channel: 'architecture:savePlan',
       method: 'saveCityPlan',
       params: ['projectId', 'plan'],

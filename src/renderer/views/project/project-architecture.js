@@ -445,6 +445,8 @@
     c.agents ||= (window.CityAgents && window.ProjectCityAgents?.attach(c.city, { projectId: c.id })) || null;
     // #382: the most connected files, a click pins their arcs (views/project/project-city-connections.js)
     c.connections ||= (window.CityConnections && window.ProjectCityConnections?.attach(c.city)) || null;
+    // #375: an issue's or a stage's expected footprint on its city (views/project/project-city-impact.js)
+    c.impact ||= (window.CityImpact && window.ProjectCityImpact?.attach(c.city, { projectId: c.id })) || null;
     if (!c.box.contains(c.city.el)) {
       c.box.innerHTML = `<div data-testid="architecture" class="arch-city-mode"><div class="row arch-mode-row">${modeSwitch()}</div><div data-arch-city-slot></div></div>`;
       c.box.querySelector('[data-arch-city-slot]').appendChild(c.city.el);

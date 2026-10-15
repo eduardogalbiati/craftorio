@@ -29,6 +29,8 @@
 //                      architecture --mode map-refresh: a saved city plan that covers part of the files, #372;
 //                      architecture --mode city: the project city of #373, a demo repository with a city plan;
 //                      architecture --mode city-agents: that city with two simulated runs in progress on it, #374;
+//                      architecture --mode city-issue: that city with an issue's impact preview (cited, the Product Owner's, a new file), #375;
+//                      architecture --mode city-stage: that city with a roadmap stage's footprint (two items sharing a file), #375;
 //                      architecture --mode city-large: the city of this repository itself with the POC's plan, #382;
 //                      architecture --mode large: a latest report of the shared large-project fixture, 60 findings, #387;
 //                      architecture --mode facts-large: the Facts view of this repository itself with those 60 findings on its own files, #386);

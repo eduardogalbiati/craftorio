@@ -880,7 +880,7 @@
     return `<span class="bl-menu-wrap">
         <button class="btn sm ghost" type="button" data-menu="${i.number}" data-testid="backlog-issue-menu" aria-haspopup="menu" aria-expanded="${open}" aria-label="Actions for #${i.number}" title="Actions">⋯</button>
         ${open ? `<div class="bl-menu" role="menu" aria-label="Actions for #${i.number}">
-          <button type="button" role="menuitem" data-enrich="${i.number}" data-testid="backlog-enrich" title="Enrich this issue in Write & Review (e.g. into a fuller issue or an RFC), then save the result back to it">Enrich in Write &amp; Review</button>
+          <button type="button" role="menuitem" data-enrich="${i.number}" data-testid="backlog-enrich" title="Enrich this issue in Write & Review (e.g. into a fuller issue or an RFC), then save the result back to it">Enrich in Write &amp; Review</button><button type="button" role="menuitem" data-show-map="${i.number}" data-testid="show-on-map" title="Open the project city with the files this issue is expected to change (#375)">Show on the map</button>
           <button type="button" role="menuitem" data-archive="${i.number}" data-testid="backlog-archive"${why ? ' disabled' : ''} title="${esc(why || 'Close it as not planned on the platform and label it archived')}">Archive</button>
           ${why ? `<p class="muted small bl-menu-why">${esc(why)}</p>` : ''}
         </div>` : ''}
@@ -926,7 +926,7 @@
     <div class="bl-card${bl.selected.has(i.number) ? ' selected' : ''}" data-n="${i.number}">
       <div class="bl-card-head">${checkbox(i)}<span class="bl-num mono">#${i.number}</span><a class="bl-card-title" href="${esc(i.url)}" target="_blank" rel="noopener" title="Open on ${esc(PLATFORMS[bl.data?.platform]?.label || 'the platform')}">${esc(i.title)}</a>${issueMenu(i)}</div>
       <div class="bl-labels">${refreshedBadge(i)}${discoveryBadge(i)}${epicBadge(i)}${triage(i)}${labels(i)}</div>
-      ${tasks(i)}
+      ${tasks(i)}<button type="button" class="btn sm ghost bl-card-map" data-show-map="${i.number}" data-testid="show-on-map" title="Open the project city with the files this issue is expected to change">Show on the map</button>
       ${prBadges(i) || status(i) ? `<div class="bl-card-run">${prBadges(i)}${status(i)}</div>` : ''}
     </div>`;
 
@@ -1562,8 +1562,8 @@
       if (gate) { openGate(gate); return; }
       const out = e.target.closest('[data-unqueue]');
       if (out) { await removeQueued(Number(out.dataset.unqueue)); return; }
-      const enrich = e.target.closest('[data-enrich]');
-      if (enrich) { bl.menu = null; render(); enrichIssue(Number(enrich.dataset.enrich)); return; }
+      const enrich = e.target.closest('[data-enrich]'), onMap = e.target.closest('[data-show-map]'); // #375: the issue's impact preview on its project's city
+      if (onMap) { bl.menu = null; window.ProjectCityImpact?.showIssue(bl.projectId, (bl.data?.issues || []).find((x) => x.number === Number(onMap.dataset.showMap))); return; } if (enrich) { bl.menu = null; render(); enrichIssue(Number(enrich.dataset.enrich)); return; }
       // #238: an issue's actions menu, its Archive, and Restore
       const menu = e.target.closest('[data-menu]');
       if (menu) { bl.menu = bl.menu === Number(menu.dataset.menu) ? null : Number(menu.dataset.menu); render(); return; }

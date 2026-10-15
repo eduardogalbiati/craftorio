@@ -366,6 +366,8 @@ input[type=text].rm-note { max-width: 520px; }
 .rm-title { color: var(--text); font-weight: 600; text-decoration: none; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 a.rm-title:hover { text-decoration: underline; }
 .rm-issues-foot { font-size: 11px; }
+/* #375: "Show on the map" on an item card and an issue card, a small action under the titles */
+.rm-map, .bl-card-map { justify-self: start; font-size: 11px; }
 /* cost and time: a line each (label, value, "of ≈ estimate", the verdict at the right), a 3px bar under it */
 .rm-meters { background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; display: grid; gap: 8px; min-width: 0; }
 .rm-meter { display: grid; gap: 4px; min-width: 0; }
