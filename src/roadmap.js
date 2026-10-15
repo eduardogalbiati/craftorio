@@ -609,7 +609,7 @@ function pauseAfterStage(dir, projectId) {
     if (r.state !== 'running') throw new Error('The roadmap is not running.');
     if (r.scope) return null;
     const at = currentStage(r);
-    if (at < 0 || pendingRelease(r, at)) return { ...r, state: 'paused', error: null, pausedBy: null };
+    if (at < 0 || pendingRelease(r, at)) return pauseRoadmap(r, null);
     return { ...r, scope: { stage: r.stages[at].id, pauseAfter: true } };
   });
 }
