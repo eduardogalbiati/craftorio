@@ -80,8 +80,7 @@ const FOLDERS = [
   ['docs/agents/', 'These topic docs, indexed by `AGENTS.md` (`CLAUDE.md` imports it; `test/claude-md.test.js` keeps the index small and its links valid).'],
   ['docs/agents/engine/', 'One file per engine topic (`# <Title>`, a summary line, the notes): `docs/agents/engine.md` is their generated index.'],
   ['docs/readme/', 'One file per hand-written README section, in file-name order: `README.md` is assembled from them (generated blocks kept as empty markers).'],
-  ['supabase/migrations/', '`accounts` table (sign-up, last seen, app version, OS) and `touch_account()`; `waitlist` table (RLS, no policies) written only through `join_waitlist()`, and `newsletter` through `join_newsletter()` (anon may execute; duplicate emails ignored). Applied by pasting into the Supabase SQL editor.'],
-  ['site/', 'Waitlist landing page (Portuguese copy, first market Brazil): static `index.html` + `styles.css` + `main.js`, no build; the form calls `join_waitlist` with the publishable key. `img/` (not committed) holds the feature videos, recorded from the step files in `recordings/`. `24x7/` is the build-in-public site in Portuguese and English (the 24x7 factory as a diary, its chapters as posts, a newsletter through `join_newsletter`): `build.js` writes its pages from `home.<lang>.html`, `post.html`, `chapters.json` and `posts/<nn>.<lang>.md`, using the same `img/`. Not packaged into the app.'],
+  ['supabase/migrations/', '`accounts` table (sign-up, last seen, app version, OS) and `touch_account()`. Applied by pasting into the Supabase SQL editor.'],
 ];
 
 const posix = (p) => p.split(path.sep).join('/');

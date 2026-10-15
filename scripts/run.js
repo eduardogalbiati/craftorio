@@ -1,14 +1,12 @@
 // Runs a workflow from the terminal (without Electron).
 //
 //   node scripts/run.js --task "..." [--repo <path>] [--file <yaml>] [--mock] [--auto-approve] [--input key=value]
-//                       [--attach key=<image file>] [--mock-sequences <json>]
+//                       [--attach key=<image file>]
 //
 // --attach: an image attached to an input (#129; repeat it for several), e.g. --attach task=C:/shots/bug.png.
 // --file: an absolute path is used as is; a name or relative path is looked up in <workspace>/workflows
 // first, then in the workflows bundled with the app (workflows/ in this repository).
 // --auto-approve approves every human gate (use with care outside mock mode).
-// --mock-sequences: a simulation scenario for the mock provider (WorkflowRun's mockSequences, e.g.
-//   '{"invalid_answers":{"verify_change":2}}' makes that step fail and calls the supervisor); ignored without --mock.
 // Exits with code 0 if the workflow succeeds, 1 otherwise.
 
 const path = require('path');
@@ -23,7 +21,7 @@ const { seedSkills } = require('../src/skills');
 const root = path.join(__dirname, '..');
 
 function parseArgs(argv) {
-  const a = { inputs: {}, attachments: {}, mock: false, autoApprove: false, file: 'software-development.yaml', mockSequences: null };
+  const a = { inputs: {}, attachments: {}, mock: false, autoApprove: false, file: 'software-development.yaml' };
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i];
     const next = () => argv[++i];
@@ -34,7 +32,6 @@ function parseArgs(argv) {
     else if (k === '--repo') a.inputs.repo_path = next();
     else if (k === '--input') { const [key, ...v] = next().split('='); a.inputs[key] = v.join('='); }
     else if (k === '--attach') { const [key, ...v] = next().split('='); (a.attachments[key] ??= []).push(v.join('=')); }
-    else if (k === '--mock-sequences') a.mockSequences = JSON.parse(next());
     else throw new Error(`Unknown argument: ${k}`);
   }
   a.inputs.repo_path ??= root;
@@ -60,7 +57,6 @@ const run = new WorkflowRun({
   inputs: args.inputs,
   attachments: args.attachments,
   mock: args.mock,
-  mockSequences: args.mock ? args.mockSequences : null,
   runsDir: ws.runs,
   skillsDirs: [ws.skills],
   budget,
