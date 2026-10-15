@@ -232,6 +232,24 @@ test('#399 workflows:restore through the endpoint is refused for a copy with a h
   assert.ok(logged && logged.error, 'the refusal is logged in calls.jsonl');
 });
 
+test('#399 workflows:restore through the endpoint names each human gate the copy added when there are several', async (t) => {
+  const { service, trashed } = makeService(t);
+  editCopy(service, (text) => {
+    const doc = yaml.load(text);
+    doc.steps.push({ id: 'owner_gate_one', type: 'human_approval', message: 'One?' });
+    doc.steps.push({ id: 'owner_gate_two', type: 'human_approval', message: 'Two?' });
+    return yaml.dump(doc, { lineWidth: -1 });
+  });
+  const call = await openChannel(t, service);
+
+  const res = await call('workflows:restore', BUNDLED);
+  assert.equal(res.status, 403, res.text);
+  const error = String(res.json && res.json.error);
+  assert.match(error, /owner_gate_one/);
+  assert.match(error, /owner_gate_two/);
+  assert.deepEqual(trashed, []);
+});
+
 test('#399 workflows:restore through the endpoint, for a copy without an extra gate, works as the app\'s Restore: old copy to the trash, copy marked default', async (t) => {
   const { service, api, trashed } = makeService(t);
   const file = editCopy(service, (text) => `${text}\n# edited by the owner\n`);
