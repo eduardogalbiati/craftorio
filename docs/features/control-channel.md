@@ -16,8 +16,8 @@ and the file's path.
 - Only an allowlist of channels answers (`src/control/allowlist.js`): reading runs, events,
   roadmaps, the backlog and settings (`runs:list`, `runs:active`, `runs:events`, `roadmap:get`,
   `roadmap:versions`, `backlog:get`, `settings:get`, `projects:list`, `workflows:list`) and the
-  roadmap actions (`roadmap:save`, `roadmap:pause`, `roadmap:start`, `roadmap:item`,
-  `roadmap:undo`). Anything else gets `403` naming the channel; a missing or wrong token gets
+  roadmap actions (`roadmap:save`, `roadmap:pause`, `roadmap:cancel-pause`, `roadmap:start`,
+  `roadmap:item`, `roadmap:undo`). Anything else gets `403` naming the channel; a missing or wrong token gets
   `401`; a request from a web page (another origin) gets `403`.
 - **Human gates stay closed**: no gate channel is reachable (`approval:resolve`, `phonegates:*`),
   any argument `confirmGate` is refused, and settings are read-only from outside.
@@ -62,7 +62,7 @@ taken back with `roadmap:undo` (`{ projectId, editId }` from the save's answer).
 
 | `tools/roadmap` | Channel calls |
 |---|---|
-| `pause` | `roadmap:pause` `{ projectId }` (`stop: true`: back to a plan) |
+| `pause` | `roadmap:pause` `{ projectId }` (`stop: true`: back to a plan; #391 `after: 'stage'`: the current stage finishes first, `roadmap:cancel-pause` takes it back; nothing passed or `'now'`: at once) |
 | `resume` | `roadmap:start` `{ projectId }`: dispatches at once |
 | `new-stage` | `roadmap:get`, then `roadmap:save` with a new stage `{ name, items: [] }` appended to `stages` |
 | `new-stage-at` | `roadmap:get`, then `roadmap:save` with the new stage inserted at its index |

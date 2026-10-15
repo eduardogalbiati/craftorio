@@ -7,6 +7,7 @@
 const CHANNELS = new Set([
   'backlog:get',
   'projects:list',
+  'roadmap:cancel-pause',
   'roadmap:get',
   'roadmap:item',
   'roadmap:pause',

@@ -75,7 +75,9 @@
 //                      set (the same budget, not reached: the top bar's "$X / $60 today")
 //   --roadmap <state>  backlog: more states of the roadmap card (#282, #284): states (the running run
 //                      in a fix round, back in Develop after its review; the stage "Reports and
-//                      health" disabled; the last stage's item simulated)
+//                      health" disabled; the last stage's item simulated) | pausing (#391: running,
+//                      simulated, "Pausing after stage 2" with Cancel pause; --click "[data-rm=pause]"
+//                      opens the Pause menu)
 //   --po <state>       backlog: the Product Owner's drawer open with its live turn (#180): working (the
 //                      activity line, timer, Stop and the last steps) | writing (the answer as it is
 //                      written, its JSON block hidden) | stopped (an answer stopped by the owner) |

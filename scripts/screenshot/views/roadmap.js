@@ -51,11 +51,14 @@ function demoRoadmap(ws, projectId, live = 'off', budget = null, more = null) {
   });
   // without --live: a stage "Tonight" with a running, a waiting and a failed run (#194: the progress
   // rings) and a start refused for kept work that paused the roadmap (#196: Retry / Skip)
-  const tonight = live === 'off' ? demoRoadmapRuns(ws, projectId, { fixRound: states }) : null;
+  // #391 (--roadmap pausing): no "Tonight" stage; the roadmap runs (simulated) and pauses after stage 2
+  const pausing = more === 'pausing';
+  const tonight = live === 'off' && !pausing ? demoRoadmapRuns(ws, projectId, { fixRound: states }) : null;
   const refused = 'Could not start #14: #14 already has work from a cancelled run, 20260119-221000-demo0014 (3 commits on its branch). Choose with Retry on the roadmap item, Resume on the queue or Start on the issue.';
   fs.writeFileSync(path.join(ws.backlog, `${projectId}.roadmap.json`), JSON.stringify({
     state: 'planned', simulated: false, error: null, pausedBy: null, updatedAt: new Date().toISOString(), ...liveFields,
     ...(tonight ? { state: 'paused', pausedBy: 'item-7', error: refused } : {}),
+    ...(pausing ? { state: 'running', simulated: true, scope: { stage: 'stage-2', pauseAfter: true } } : {}),
     ...(budget === 'paused' ? { state: 'paused', pausedBy: null, error: 'Budget reached: $58.40 of $60 today; next stage ≈ $24.60. Raise for today, or resume anyway.', budget: { period: 'day', spentUsd: 58.4, limitUsd: 60, nextUsd: 12.3, stageUsd: 24.6, at: new Date().toISOString() } } : {}),
     stages: [
       { id: 'stage-1', name: 'Stability first', note: 'The rename crash blocks the rest.', items: [item('item-1', 'software-development-local-hero.yaml', [11], { status: 'done', runId: '20260118-120000-demo0011', runs: ['20260118-120000-demo0011'] })] },

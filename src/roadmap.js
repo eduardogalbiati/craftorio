@@ -14,7 +14,8 @@
 // Owner's "Build a roadmap" answer (#105) as planned stages; only Start (`state: running`) runs them.
 // Run this stage (#141, `scope: { stage: <id> }`): only that stage's items start, in any order; when
 // they are all finished the roadmap pauses ("Stage N done") with the scope cleared, so Start then
-// runs the whole roadmap from its first unfinished stage.
+// runs the whole roadmap from its first unfinished stage. The bar's "Pause after this stage" (#391,
+// `pauseAfterStage`) sets the same scope on the current stage, with `pauseAfter: true`.
 // The items' issue texts are read-only copies (#168): each sync refreshes the items not started yet
 // (`refreshCopies`), and the service reads the issues again right before a start (an item whose
 // issues are all closed then is skipped, `skipClosed`).
@@ -583,7 +584,7 @@ function holdRelease(dir, projectId, stageId, status, message) {
 const pauseRoadmap = (r, message) => ({ ...r, state: 'paused', pausedBy: null, error: message });
 
 /**
- * #368: the stage's "Pause after current turn": the roadmap pauses at that stage (`pausedStage`,
+ * #368: the stage's "Pause after current step" (#391's name): the roadmap pauses at that stage (`pausedStage`,
  * `pausedAt`), no item to blame and no failure named; the service pauses the stage's runs after
  * their current turn. Start / Resume (setState) clears it.
  */
@@ -591,9 +592,29 @@ function pauseStage(dir, projectId, stageId, { now = new Date() } = {}) {
   return updateRoadmap(dir, projectId, (r) => {
     const at = r.stages.findIndex((s) => s.id === stageId);
     if (at < 0) throw new Error('This stage is no longer in the roadmap.');
-    const message = `${stageName(r, at)} paused after the current turn: Resume continues its runs where they stopped, then starts the next items.`;
+    const message = `${stageName(r, at)} paused after the current step: Resume continues its runs where they stopped, then starts the next items.`;
     return { ...pauseRoadmap(r, message), pausedStage: stageId, pausedAt: now.toISOString() };
   });
+}
+
+/**
+ * #391: the roadmap bar's "Pause after this stage": a running roadmap keeps running its current stage
+ * (every item still starts) and pauses with "Stage N done" when it is over, as #141's scope does
+ * (`scope: { stage, pauseAfter: true }`, so the screen tells it from "Run this stage"). A stage run on
+ * its own already stops after it; a roadmap held by a cut line's release, or with no stage left,
+ * pauses now. `cancelPause` takes it back: the whole roadmap runs again.
+ */
+function pauseAfterStage(dir, projectId) {
+  return updateRoadmap(dir, projectId, (r) => {
+    if (r.state !== 'running') throw new Error('The roadmap is not running.');
+    if (r.scope) return null;
+    const at = currentStage(r);
+    if (at < 0 || pendingRelease(r, at)) return { ...r, state: 'paused', error: null, pausedBy: null };
+    return { ...r, scope: { stage: r.stages[at].id, pauseAfter: true } };
+  });
+}
+function cancelPause(dir, projectId) {
+  return updateRoadmap(dir, projectId, (r) => (r.scope?.pauseAfter ? { ...r, scope: null } : null));
 }
 
 /** #368: the pause line of the stage a roadmap paused at ({ state: 'paused', at, runs }: its paused items), else null (pure). */
@@ -653,8 +674,12 @@ function advance(roadmap, { runOf, closed = () => false, canStart = () => true, 
   if (blocker?.status === 'running') r = { ...r, pausedBy: null, error: null, state: r.state === 'paused' ? 'running' : r.state };
   const finished = finishRoadmap(r);
   const scopeOver = (at) => {
-    if (currentStage(r) < 0) return { roadmap: finished, start: [] };
-    return { roadmap: { ...r, state: 'paused', pausedBy: null, scope: null, error: `${stageName(r, at)} done. The other stages are still planned: Start runs the roadmap from its first unfinished stage.` }, start: [] };
+    // #391: a pause after the last stage still pauses when a refill (#164) or a release (#260) would come next
+    const more = r.scope?.pauseAfter && (r.live || pendingRelease(r, -1));
+    if (currentStage(r) < 0 && !more) return { roadmap: finished, start: [] };
+    // #391: a pause after the stage names it by its number, as the bar's "Pausing after stage N" did
+    const name = r.scope?.pauseAfter ? `Stage ${at + 1} done${r.stages[at].name ? ` (${r.stages[at].name})` : ''}` : `${stageName(r, at)} done`;
+    return { roadmap: { ...r, state: 'paused', pausedBy: null, scope: null, error: `${name}. The other stages are still planned: Start runs the roadmap from its first unfinished stage.` }, start: [] };
   };
   // #237: a scope whose stage ended while the roadmap was paused goes as it does while running
   if (r.state === 'paused' && r.scope && !r.pausedBy) {
@@ -730,6 +755,7 @@ module.exports = {
   adoptResumed,
   advance,
   budgetPause,
+  cancelPause,
   cleanStages,
   clearRoadmap,
   currentStage,
@@ -744,6 +770,7 @@ module.exports = {
   markStarted,
   mergedPullRequest,
   normalizeItem,
+  pauseAfterStage,
   pauseRoadmap,
   pauseStage,
   persisted,

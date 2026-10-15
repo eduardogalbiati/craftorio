@@ -179,14 +179,30 @@ module.exports = (ctx) => {
       schema: { params: args({ projectId: PROJECT_ID, simulated: FLAG, stage: nullable(STRING) }, ['projectId']), result: nullable(OBJECT) },
       fn: ({ projectId, simulated, stage }) => ctx.startRoadmap({ projectId, simulated: !!simulated, stage: stage || null }),
     },
-    // pause: nothing new starts (runs in progress go on); stop: back to a plan
+    // pause: nothing new starts (runs in progress go on); stop: back to a plan. #391 after: 'stage'
+    // lets the current stage finish (its items still start), then pauses with "Stage N done"; 'now'
+    // (the default, also for the budget cap, the update cycle and the control channel) pauses at once
     {
       channel: 'roadmap:pause',
       method: 'pauseRoadmap',
-      params: ['projectId', 'stop'],
-      schema: { params: args({ projectId: PROJECT_ID, stop: FLAG }, ['projectId']), result: BACKLOG },
-      fn: ({ projectId, stop }) => {
-        roadmaps.setState(ctx.ws.backlog, project(projectId), stop ? 'planned' : 'paused');
+      params: ['projectId', 'stop', 'after'],
+      schema: { params: args({ projectId: PROJECT_ID, stop: FLAG, after: nullable({ type: 'string', enum: ['stage', 'now'], description: 'stage: the current stage finishes, then the roadmap pauses; now: nothing new starts. Default: now.' }) }, ['projectId']), result: BACKLOG },
+      fn: ({ projectId, stop, after }) => {
+        if (after != null && !['stage', 'now'].includes(after)) throw new Error(`Unknown pause: ${after} (stage or now).`);
+        if (!stop && after === 'stage') roadmaps.pauseAfterStage(ctx.ws.backlog, project(projectId));
+        else roadmaps.setState(ctx.ws.backlog, project(projectId), stop ? 'planned' : 'paused');
+        return current(projectId);
+      },
+    },
+    // #391: Cancel pause takes back a "Pause after this stage": the whole roadmap runs again
+    {
+      channel: 'roadmap:cancel-pause',
+      method: 'cancelRoadmapPause',
+      params: ['projectId'],
+      schema: { params: ON_PROJECT, result: BACKLOG },
+      fn: async ({ projectId }) => {
+        roadmaps.cancelPause(ctx.ws.backlog, project(projectId));
+        await ctx.dispatchRoadmaps();
         return current(projectId);
       },
     },

@@ -565,6 +565,8 @@ select.po-wf { width: auto; max-width: 220px; padding: 3px 6px; font-size: 12px;
 .bl-menu [role="menuitem"]:hover:not(:disabled), .bl-menu [role="menuitem"]:focus-visible { background: var(--panel-2); }
 .bl-menu [role="menuitem"]:disabled { color: var(--muted); cursor: not-allowed; }
 .bl-menu-why { margin: 2px 8px 4px; white-space: normal; }
+/* #391: the roadmap bar's Pause menu: each entry's hint on the line under its label */
+.rm-pause-menu .bl-menu-why { display: block; margin: 2px 0 0; }
 .bl-state.archived { background: var(--muted); }
 /* the menu sits at the right end of a list row and in the top right corner of a kanban card */
 .bl-actions { justify-self: end; display: inline-flex; }

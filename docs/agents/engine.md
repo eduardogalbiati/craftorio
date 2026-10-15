@@ -13,6 +13,7 @@ Which field is valid where, its type and the loader's message: [the field refere
 - [Gates, loops and how a run ends](engine/gates-and-run-end.md): Human gates (feedback, choices, summaries), the supervisor, refused tool calls, waits, how a run ends and ships, and the bundled workflows' rules for several issues.
 - [Providers](engine/providers.md): Turn timeouts, per-run agent overrides, fallback chains, limits per model, retries and other provider details.
 - [Resume from a step](engine/resume.md): Resuming a run from a step: what the new run keeps, the service channels behind the dialog, and why a human gate always asks again.
+- [Roadmap pauses (#141, #368, #391)](engine/roadmap-pauses.md): The three ways to pause a roadmap, where each one is written and when each one stops.
 - [The engine's modules by area (#250)](engine/run-modules.md): Which file owns which part of a run: `src/engine/workflow.js` keeps the run loop, one module per area in `src/engine/run/` holds the rest, so an engine change touches one module.
 - [Saved pipelines (#135)](engine/saved-pipelines.md): Saved pipelines (`<workspace>/pipelines/*.yaml`): their shape, how they are checked, and how they run as a chain.
 - [Sessions and handoff notes](engine/sessions-and-handoff-notes.md): Session modes (persistent, ephemeral, handoff), handoff notes, context and request limits, the prompt cache, turn metrics and costs, idle agents.

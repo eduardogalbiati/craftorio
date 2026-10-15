@@ -8,7 +8,7 @@
 // reason, when it is refused, is what the screen shows on the disabled control):
 //   start, resume, pause, stop   the roadmap's (with a stage, start is "Run this stage", #141)
 //   disable, enable              the stage's switch (#284)
-//   pauseStage                   the stage's "Pause after current turn" (#368): its runs and the roadmap
+//   pauseStage                   the stage's "Pause after current step" (#368): its runs and the roadmap
 //   edit, move                   the item's editor, drag and ↑/↓/Remove (only planned or failed items)
 //   retry, skip                  the item that failed or could not start (#196), never a paused one
 // Any load order: read only when a screen draws.
@@ -42,7 +42,19 @@
    * #237: the stage run on its own (#141, `scope`), or -1 when there is none or it is over (disabled,
    * no unfinished item, or no longer in the roadmap): such a scope is dropped, a Resume runs the roadmap.
    */
-  const scopedStage = (roadmap) => (roadmap?.scope ? stagesOf(roadmap).findIndex((s) => s.id === roadmap.scope.stage && isOpen(s)) : -1);
+  const scopeIndex = (roadmap) => (roadmap?.scope ? stagesOf(roadmap).findIndex((s) => s.id === roadmap.scope.stage && isOpen(s)) : -1);
+  // #391: a "Pause after this stage" (`scope.pauseAfter`) is not a stage run on its own
+  const scopedStage = (roadmap) => (roadmap?.scope?.pauseAfter ? -1 : scopeIndex(roadmap));
+  /** #391: the stage a running roadmap pauses after (the bar's "Pausing after stage N"), -1 when none. */
+  const pausingAfterStage = (roadmap) => (roadmap?.state === 'running' && roadmap.scope?.pauseAfter ? scopeIndex(roadmap) : -1);
+  /** #391: the roadmap bar's two pauses, the default first ([{ after, label, hint }]; the stage in progress named). */
+  function pauseChoices(roadmap) {
+    const at = scopeIndex(roadmap) >= 0 ? scopeIndex(roadmap) : currentStage(roadmap);
+    return [
+      { after: 'stage', label: 'Pause after this stage', hint: at >= 0 ? `The items of stage ${at + 1} still start and finish; the next stage waits` : 'No stage is in progress: the roadmap pauses now' },
+      { after: 'now', label: 'Pause now', hint: 'Nothing new starts; runs in progress go on' },
+    ];
+  }
 
   /** The items still to finish in the enabled stages, in order (a disabled stage's are not work left). */
   const unfinishedItems = (roadmap) => stagesOf(roadmap).filter((s) => !s.disabled).flatMap(itemsOf).filter((x) => !isFinished(x));
@@ -135,6 +147,8 @@
     hasUnfinished,
     isFinished,
     isOpen,
+    pauseChoices,
+    pausingAfterStage,
     refusedStart,
     scopedStage,
     stageProgress,

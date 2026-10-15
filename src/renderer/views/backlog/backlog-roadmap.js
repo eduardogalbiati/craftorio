@@ -145,6 +145,7 @@
   const askOracleHtml = (x) => (askable(x) && window.GateOracle?.failureButtonHtml ? window.GateOracle.failureButtonHtml(x, 'data-rm-ask-oracle data-testid="roadmap-ask-oracle"') : '');
   // #269: the bar's ⋮ menu (open or not) and its entries: a new action is a line here, the bar stays
   let menuOpen = false;
+  let pauseOpen = false; // #391: the bar's Pause menu (after this stage, or now; RoadmapModel.pauseChoices)
   const MENU = [
     { id: 'clear', label: 'Clear', title: 'Remove every stage (asks first; runs in progress go on)', show: (r) => r.stages.length > 0 },
     { id: 'versions', label: 'Restore an earlier version…', title: 'The roadmap as it was before each of your last edits', show: () => true },
@@ -675,7 +676,7 @@
         : done ? '' : entry('data-rm-toggle-stage data-testid="roadmap-stage-toggle" aria-pressed="false"', 'Disable', 'Skip this stage while the roadmap runs; it stays in the list', acts.disable.reason),
       entry('data-rm-run-stage', '<span aria-hidden="true">▶ </span>Run this stage', 'Run only this stage\'s items; the roadmap pauses when they are done', acts.start.reason),
       // #368: nothing is cut: its agents finish their turns, then its runs and the roadmap pause
-      done ? '' : entry('data-rm-pause-stage data-testid="roadmap-stage-pause"', 'Pause after current turn', 'Its runs stop once their agents finish the current turn and nothing new starts; Resume continues them where they stopped', acts.pauseStage.reason),
+      done ? '' : entry('data-rm-pause-stage data-testid="roadmap-stage-pause"', 'Pause after current step', 'Its runs stop once their agents finish the current turn and no step starts after them; Resume continues them where they stopped', acts.pauseStage.reason),
       stage.release?.name ? '' : entry('data-rm-release="add"', '<span aria-hidden="true">✂ </span>Release here', 'Draw a cut line after this stage: when the roadmap reaches it, the whole unit and E2E suites run and you Ship or Hold; the stages below wait for it'),
       entry('data-rm-stage="up"', '<span aria-hidden="true">↑ </span>Run earlier', 'Run this stage earlier', s === 0 ? 'It is the first stage' : ''),
       entry('data-rm-stage="down"', '<span aria-hidden="true">↓ </span>Run later', 'Run this stage later', s === count - 1 ? 'It is the last stage' : ''),
@@ -1118,7 +1119,9 @@
     const stateLabel = pausedByFailure ? 'Paused by a failure' : StatusPill.statusLabel(r.state);
     const dotTitle = `${stateLabel}${r.simulated ? ' · simulated' : ''}`;
     const dot = `<span class="rm-state-dot is-${dotState}" data-testid="roadmap-state-dot" data-state="${pausedByFailure ? 'paused-failed' : dotState}" role="img" aria-label="${esc(dotTitle)}" title="${esc(dotTitle)}"><span class="sr-only">${esc(stateLabel)}</span></span>`;
-    const scopeBadge = scoped >= 0
+    const pausing = RoadmapModel.pausingAfterStage(r); // #391: the stage finishes, then the roadmap pauses
+    const scopeBadge = pausing >= 0 ? `<span class="badge warn" data-testid="roadmap-pausing-badge">Pausing after stage ${pausing + 1}</span> <button class="btn sm ghost" type="button" data-rm="cancel-pause" data-testid="roadmap-cancel-pause" title="Take the pause back: the roadmap goes on to the next stage">Cancel pause</button>`
+      : scoped >= 0
       ? `<span class="badge ${r.state === 'running' ? 'live' : r.state === 'paused' ? 'warn' : ''}" data-status="${esc(r.state)}">${esc(StatusPill.statusLabel(r.state))} · stage ${scoped + 1} only${r.simulated ? ' · simulated' : ''}</span>`
       : r.simulated ? '<span class="badge p-mock">Simulated</span>' : '';
     // a pause that is not an item's failure (the budget cap, a stage run on its own that ended, a
@@ -1133,7 +1136,7 @@
         <span class="spacer"></span>
         ${acts.start.allowed || acts.resume.allowed ? `<label class="check small dev-only"><input type="checkbox" id="rm-simulate"${state.simulationOnly || r.simulated ? ' checked' : ''} /><span>Simulated</span></label>
           <button class="btn sm primary" type="button" data-rm="start"${scoped >= 0 && acts.resume.allowed ? ` title="Resume stage ${scoped + 1} only"` : ''}>${acts.resume.allowed ? 'Resume' : 'Start'}</button>` : ''}
-        ${acts.pause.allowed ? `<button class="btn sm btn-icon warn-ghost" type="button" data-rm="pause" title="Nothing new starts; runs in progress go on">${ICON.pause}Pause</button>` : ''}
+        ${acts.pause.allowed ? `<span class="bl-menu-wrap rm-pause-wrap"><button class="btn sm btn-icon warn-ghost" type="button" data-rm="pause" title="Pause after this stage, or now" aria-haspopup="menu" aria-expanded="${pauseOpen}">${ICON.pause}Pause</button>${pauseOpen ? `<div class="bl-menu rm-menu rm-pause-menu" role="menu" data-testid="roadmap-pause-menu" aria-label="Pause the roadmap">${RoadmapModel.pauseChoices(r).map((c) => `<button type="button" role="menuitem" data-rm="pause-${c.after}" data-testid="roadmap-pause-${c.after === 'stage' ? 'after-stage' : 'now'}" title="${esc(c.hint)}">${esc(c.label)}<span class="bl-menu-why small muted">${esc(c.hint)}</span></button>`).join('')}</div>` : ''}</span>` : ''}
         ${acts.stop.allowed ? `<button class="btn sm btn-icon ghost danger" type="button" data-rm="stop" title="Back to a plan: nothing starts until Start (asks first)">${ICON.stop}Stop</button>` : ''}
         ${menu}
       </div>`;
@@ -1536,20 +1539,21 @@
     .find((b) => b.dataset.rmStageMenu === id)?.closest('.rm-stage-menu-wrap')?.querySelector(sel)?.focus({ preventScroll: true });
   /** Closes the open ⋮ menu, the bar's or a stage's (a click elsewhere on the page); true when one was open. */
   function closeMenu() {
-    const was = menuOpen || stageMenu != null;
-    menuOpen = false;
+    const was = menuOpen || pauseOpen || stageMenu != null;
+    menuOpen = pauseOpen = false;
     stageMenu = null;
     return was;
   }
   /** Keys of the open ⋮ menu: Escape closes it (the focus goes back to its button), the arrows move between its entries. True when the key was the menu's. */
   function onKeyDown(e, ctx) {
-    if (!menuOpen && stageMenu == null) return false;
-    const stage = stageMenu;
+    if (!menuOpen && !pauseOpen && stageMenu == null) return false;
+    const [stage, pause] = [stageMenu, pauseOpen];
     if (e.key === 'Escape') {
       e.preventDefault?.();
       closeMenu();
       ctx.render();
       if (stage != null) focusStageMenu(stage, '[data-rm-stage-menu]');
+      else if (pause) document.querySelector('#bl-list .rm-pause-wrap [data-rm="pause"]')?.focus({ preventScroll: true });
       else focusMenu('[data-rm-menu]');
       return true;
     }
@@ -1622,12 +1626,13 @@
     };
   }
 
-  // The owner's buttons; true when the click was the roadmap's. A click outside the ⋮ menu closes it.
+  // The owner's buttons; true when the click was the roadmap's. A click outside the ⋮ menu (or the
+  // Pause menu, #391: one of the two open at a time) closes it.
   async function onClick(e, ctx, data) {
     // a menu entry that is off says why (its tooltip, the line under it): nothing to do, its menu stays
     if (e.target.closest('[role="menuitem"][aria-disabled="true"]')) return true;
-    const closing = menuOpen && !e.target.closest('.rm-menu-wrap');
-    if (closing) menuOpen = false;
+    const closing = (menuOpen && !e.target.closest('.rm-menu-wrap')) || (pauseOpen && !e.target.closest('.rm-pause-wrap'));
+    if (closing) menuOpen = pauseOpen = false;
     // #282: a stage's menu closes on any click but its own button's: hidden at once (the click's
     // action may open a dialog), not redrawn, so the clicked control stays in the page (a checkbox
     // still gets its change, an entry still finds its stage); the redraw follows the action
@@ -1651,7 +1656,7 @@
     if (!r) return false;
     // #269: the ⋮ button opens its menu (the first entry gets the focus) or closes it
     if (e.target.closest('[data-rm-menu]')) {
-      menuOpen = !menuOpen;
+      [menuOpen, pauseOpen] = [!menuOpen, false];
       ctx.render();
       focusMenu(menuOpen ? '[role="menuitem"]' : '[data-rm-menu]');
       return true;
@@ -1661,7 +1666,7 @@
     if (stageBtn) {
       const id = stageBtn.dataset.rmStageMenu;
       stageMenu = stageMenu === id ? null : id;
-      menuOpen = false;
+      menuOpen = pauseOpen = false;
       ctx.render();
       focusStageMenu(id, stageMenu ? '[role="menuitem"]' : '[data-rm-stage-menu]');
       return true;
@@ -1747,10 +1752,16 @@
         // #206: the budget cap paused it; real runs start again (they cost money)
         if (act === 'budget-resume' && !await confirmDialog('Resume anyway', 'The roadmap goes on past the budget until the day (or the night) ends. Its items run as real runs and cost money.', 'Resume')) return true;
         ctx.setData(await api.roadmapBudget(ctx.projectId, act === 'budget-raise' ? 'raise' : 'resume'));
-      } else if (act === 'pause' || act === 'stop') {
-        // #269: Stop asks first (the roadmap goes back to a plan); Pause is one click away from Resume
-        if (act === 'stop' && !await confirmDialog('Stop the roadmap', 'The roadmap goes back to a plan: nothing new starts until you press Start. Runs in progress go on.', 'Stop')) return true;
-        ctx.setData(await api.pauseRoadmap(ctx.projectId, act === 'stop'));
+      } else if (act === 'pause') {
+        // #391: Pause opens its menu; an entry pauses after the current stage or now, Cancel pause takes it back
+        [pauseOpen, menuOpen] = [!pauseOpen, false];
+      } else if (act === 'pause-stage' || act === 'pause-now' || act === 'cancel-pause') {
+        pauseOpen = false;
+        ctx.setData(await (act === 'cancel-pause' ? api.cancelRoadmapPause(ctx.projectId) : api.pauseRoadmap(ctx.projectId, false, act === 'pause-now' ? 'now' : 'stage')));
+      } else if (act === 'stop') {
+        // #269: Stop asks first (the roadmap goes back to a plan); Pause is two clicks away from Resume
+        if (!await confirmDialog('Stop the roadmap', 'The roadmap goes back to a plan: nothing new starts until you press Start. Runs in progress go on.', 'Stop')) return true;
+        ctx.setData(await api.pauseRoadmap(ctx.projectId, true));
       } else if (act === 'clear') {
         menuOpen = false;
         ctx.render();
@@ -2025,7 +2036,7 @@
   // #204: a live reload waits while the owner drags, edits an item or a stage's note, or has a ⋮ menu
   // open (#282: a redraw would take the focus from its entries); Reload in the Edit form's "The
   // roadmap changed" notice closes the form (its values were not saved).
-  const busy = () => !!(dragging || editing || noteEditing || menuOpen || stageMenu != null);
+  const busy = () => !!(dragging || editing || noteEditing || menuOpen || pauseOpen || stageMenu != null);
   function closeEdit() {
     editing = null;
     adding = false;

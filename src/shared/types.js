@@ -241,7 +241,7 @@
  * @property {boolean} simulated
  * @property {string | null} error
  * @property {string | null} pausedBy
- * @property {{ stage: string } | null} scope
+ * @property {{ stage: string, pauseAfter?: boolean } | null} scope (#141 a stage run on its own; #391 pauseAfter: the bar's "Pause after this stage")
  * @property {RoadmapStage[]} stages
  * @property {string | null} updatedAt set by every write (null: no file yet)
  * @property {boolean} [live]

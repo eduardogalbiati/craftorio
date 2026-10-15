@@ -382,7 +382,7 @@
     const at = toMs(pause.at);
     // in the owner's time zone (#273, time-zone.js; in node, the computer's)
     const when = at == null ? '' : ` · ${new Date(at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short', timeZone: typeof TimeZone !== 'undefined' ? TimeZone.current() : undefined })}`;
-    if (!pause.step) return `Paused after the current turn${pause.runs ? ` (${pause.runs} run${pause.runs === 1 ? '' : 's'} paused)` : ''}${when}`;
+    if (!pause.step) return `Paused after the current step${pause.runs ? ` (${pause.runs} run${pause.runs === 1 ? '' : 's'} paused)` : ''}${when}`;
     return `Paused at ${pause.step}, next: ${pause.next || 'the next step'}'s turn${when}`;
   }
 
