@@ -169,7 +169,8 @@ test('the ⋯ menu holds Enrich in Write & Review above Archive; rows and cards 
 });
 
 test('choosing Enrich closes the menu, then opens Write & Review for the issue', () => {
-  const handler = /const enrich = e\.target\.closest\('\[data-enrich\]'\);\s*\n\s*if \(enrich\) \{([^\n]*)\}/.exec(src)?.[1] || '';
+  // #375 shares these lines with the Show on the map dispatch (the file's line budget)
+  const handler = /const enrich = e\.target\.closest\('\[data-enrich\]'\)[\s\S]*?if \(enrich\) \{([^\n}]*)\}/.exec(src)?.[1] || '';
   assert.ok(handler, 'the Enrich click handler is found');
   assert.match(handler, /bl\.menu = null/);
   assert.match(handler, /enrichIssue\(Number\(enrich\.dataset\.enrich\)\)/);
