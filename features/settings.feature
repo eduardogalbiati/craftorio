@@ -151,3 +151,14 @@ Feature: Settings
     And I search the runs for "tzt00273"
     Then the run "tzt00273" shows it started at "10:14"
     And the run "tzt00273"'s start time names the time zone "Asia/Tokyo" in its tooltip
+
+  # #383: a design-system select with more than 10 options opens a list with a search box
+  # (data-testid="select-search", role="searchbox"); typing filters the listed options (role="option")
+  @issue-383
+  Scenario: The time zone list has a search box that narrows the zones offered
+    Given the app is open
+    When I open "Settings" in the sidebar
+    And I open the "General" settings tab
+    And I search the time zone list for "Tokyo"
+    Then the time zone list shows "Asia/Tokyo"
+    And the time zone list hides "Europe/London"

@@ -47,6 +47,28 @@ Then('the time zone is {string}', async ({ e2e }, zone) => {
   await expect(timeZoneSelect(e2e.window)).toHaveValue(zone, { timeout: LOAD_TIMEOUT });
 });
 
+// #383: the select is a design-system control; with more than 10 options its open list (a visible
+// role="listbox") starts with a search box (data-testid="select-search", role="searchbox")
+const openList = (page) => page.getByRole('listbox').filter({ visible: true });
+
+When('I search the time zone list for {string}', async ({ e2e }, text) => {
+  const page = e2e.window;
+  await expect(timeZoneSelect(page)).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await timeZoneSelect(page).click();
+  const search = page.getByTestId('select-search').filter({ visible: true });
+  await expect(search).toHaveRole('searchbox');
+  await search.fill(text);
+});
+
+Then('the time zone list shows {string}', async ({ e2e }, zone) => {
+  await expect(openList(e2e.window).getByRole('option', { name: zone })).toBeVisible();
+});
+
+Then('the time zone list hides {string}', async ({ e2e }, zone) => {
+  await expect(openList(e2e.window)).toBeVisible();
+  await expect(openList(e2e.window).getByRole('option', { name: zone }).filter({ visible: true })).toHaveCount(0);
+});
+
 Then('the workspace settings keep the time zone {string}', async ({ e2e }, zone) => {
   const file = path.join(e2e.scratch, 'workspace', 'settings.json');
   await expect.poll(() => {

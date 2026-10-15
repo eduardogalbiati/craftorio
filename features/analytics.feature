@@ -98,3 +98,25 @@ Feature: Analytics, what the work costs
     When I open the "Analytics" tab of Home
     And I open the "24/7" Analytics tab
     Then the hours heatmap looks like the baseline "analytics-hours-heatmap-dark.png"
+
+  # #383: Analytics' From/To pair is the design-system date range (data-testid="analytics-date-range",
+  # fields date-range-from / date-range-to) with the presets "Last 24 h", "Last 7 days",
+  # "Last 30 days" and "All"; its days are the owner's time zone's. Pacific/Kiritimati (UTC+14) is a
+  # day ahead of most computers for part of the day, when a range in the computer's zone fails.
+  @issue-383
+  Scenario: The "Last 7 days" preset fills From and To with the last 7 days in the owner's time zone
+    Given the app is open
+    When I open "Settings" in the sidebar
+    And I open the "General" settings tab
+    And I choose the time zone "Pacific/Kiritimati"
+    And I open the "Analytics" tab of Home
+    And I pick the "Last 7 days" preset of the Analytics date range
+    Then the Analytics date range runs from 7 days before today to today in the time zone "Pacific/Kiritimati"
+
+  @issue-383
+  Scenario: The "All" preset empties From and To
+    Given the app is open
+    When I open the "Analytics" tab of Home
+    And I pick the "Last 7 days" preset of the Analytics date range
+    And I pick the "All" preset of the Analytics date range
+    Then the Analytics date range's From and To are empty
