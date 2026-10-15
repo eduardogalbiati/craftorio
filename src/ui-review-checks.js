@@ -47,7 +47,7 @@ function axeFindings(results, { screen = '', changed = true } = {}) {
   return out;
 }
 
-const NATIVE_RE = /<(select)\b([^>]*)>|<input\b([^>]*\btype\s*=\s*["']?(date|datetime-local)\b[^>]*)>/gi;
+const NATIVE_RE = /<(select)\b([^>]*)>|<input\b([^>]*\stype\s*=\s*["']?(date|datetime-local)\b[^>]*)>/gi;
 const attr = (attrs, name) => (attrs.match(new RegExp(`\\b${name}\\s*=\\s*["']([^"']*)["']`, 'i')) || [])[1];
 
 // a bare <select>, <input type="date"> or <input type="datetime-local"> in a screen's markup: each
@@ -78,12 +78,17 @@ function nativeControlFindings(html, { screen = '', changed = true } = {}) {
 }
 
 // Both checks of one screen: `modified` and `original` are { axe, html } of its two sides (original
-// optional). A finding the original side has too (same rule and element) is a baseline.
+// optional: a screen the change adds). An axe node (same rule and target) or a native control the
+// original side has too is a baseline; a rule's new nodes stay the change's finding.
 function screenChecks({ modified = {}, original = null, screen = '' } = {}) {
-  const found = [...axeFindings(modified.axe, { screen }), ...nativeControlFindings(modified.html, { screen })];
-  if (!original) return found;
-  const before = new Set([...axeFindings(original.axe), ...nativeControlFindings(original.html)].map((f) => `${f.rule} ${f.element}`));
-  return found.map((f) => (before.has(`${f.rule} ${f.element}`) ? { ...f, baseline: true, blocking: false } : f));
+  const known = new Set((original?.axe?.violations || []).flatMap((v) => (v.nodes || []).map((n) => `${v.id} ${targetOf(n)}`)));
+  const split = (keep) => ({ violations: (modified.axe?.violations || []).map((v) => ({ ...v, nodes: (v.nodes || []).filter((n) => known.has(`${v.id} ${targetOf(n)}`) === keep) })) });
+  const controls = new Set(nativeControlFindings(original?.html).map((f) => f.element));
+  return [
+    ...axeFindings(split(false), { screen }),
+    ...axeFindings(split(true), { screen, changed: false }),
+    ...nativeControlFindings(modified.html, { screen }).map((f) => (controls.has(f.element) ? { ...f, baseline: true } : f)),
+  ];
 }
 
 // `<name>.<side>.png` → `<name>.<side>.checks.json`, the checks the screenshot pass writes beside it

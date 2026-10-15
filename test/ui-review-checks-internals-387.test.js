@@ -62,8 +62,20 @@ test('#387 captureScreenshots: the checks of each modified side reach axe_findin
   const slot = async () => ({ token: 't', release() {} });
   const out = await captureScreenshots({ entries: [{ name: '387-facts-default', caption: 'c', args: ['--view', 'project'] }], cwd, runDir: root, folder: 'developer', round: 1, base: 'main', env: {}, run, slot });
   assert.equal(out.taken, 2);
-  assert.deepEqual(out.axe_findings.map((f) => [f.element, f.baseline]), [['.old', true], ['.new', false]]);
+  assert.deepEqual(out.axe_findings.map((f) => [f.element, f.baseline]), [['.new', false], ['.old', true]]);
   assert.equal(out.axe_findings[0].screenshot, '387-facts-default.modified.png');
+});
+
+test('#387 screenChecks: a rule\'s nodes are split, the original side\'s ones a baseline', () => {
+  const two = { id: 'color-contrast', impact: 'serious', help: 'Contrast', nodes: [{ target: ['.old'] }, { target: ['.new'] }] };
+  const found = screenChecks({ modified: { axe: { violations: [two] } }, original: { axe: { violations: [contrast('.old')] } }, screen: 's.png' });
+  assert.deepEqual(found.map((f) => [f.element, f.baseline, f.blocking]), [['.new', false, true], ['.old', true, false]]);
+});
+
+test('#387 nativeControlFindings: a data-type attribute is not a date field', () => {
+  const { nativeControlFindings } = require('../src/ui-review-checks');
+  assert.deepEqual(nativeControlFindings('<input data-type="date" type="text">'), []);
+  assert.equal(nativeControlFindings('<input data-testid="from" type=date>')[0].element, 'input[type=date][data-testid=from]');
 });
 
 test('#387 stepOutputSchema: the step\'s schema without an extension, merged with one', () => {
