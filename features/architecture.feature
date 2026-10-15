@@ -19,6 +19,10 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
   events.jsonl: "<agent> · <step>" on the building the agent last changed, a building two runs in
   progress change marked as a collision risk with a link to the Conflict map, and "No agent is
   working on this project" when none runs. Runs of other projects are not shown.
+  Complexity (#385): JavaScript and TypeScript are measured inside the app, with no tool to install;
+  other languages need lizard. Without it the tab names the languages not measured and how to
+  install the tool (`pip install lizard`, which needs Python); a file not measured never shows zero.
+  These scenarios are skipped on a machine where lizard is installed.
 
   @issue-356
   Scenario: A project whose folder is not a git repository has no facts and nothing to analyse
@@ -189,3 +193,25 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     And the city marks "src/billing.js" as a collision risk with a link to the Conflict map
     When I follow the city's link to the Conflict map
     Then the project tab "Conflict map" is selected
+
+  @issue-385
+  Scenario: Without lizard the JavaScript file still has a measured complexity
+    Given the complexity tool lizard is not installed on this machine
+    And the app is open
+    And the workspace has a git project "billing-service" with a JavaScript and a Python file and no architecture report
+    When I open "Projects" in the sidebar
+    And I open the project "billing-service" from the Projects screen
+    And I open the "Architecture" project tab
+    Then the Architecture hotspot table shows a measured complexity for "src/billing.js"
+
+  @issue-385
+  Scenario: Without lizard the tab names the language not measured and how to install the tool, never a zero
+    Given the complexity tool lizard is not installed on this machine
+    And the app is open
+    And the workspace has a git project "billing-service" with a JavaScript and a Python file and no architecture report
+    When I open "Projects" in the sidebar
+    And I open the project "billing-service" from the Projects screen
+    And I open the "Architecture" project tab
+    Then the Architecture tab lists "Python" as the only language whose complexity is not measured
+    And the Architecture tab says how to measure it with "pip install lizard", which needs Python
+    And the Architecture hotspot table shows the complexity of "tools/export.py" as not measured, not zero

@@ -33,6 +33,12 @@
 //   heartbeat this process keeps fresh; its events: workflow.started (project_id), worktree.ready
 //   (a worktree folder in the scratch folder), step.started, session.opened, then session.stream
 //   with an Edit tool call on <worktree>/<file>.
+// - Complexity per language (#385): the hotspot table has a "Complexity" column whenever one file is
+//   measured (JavaScript/TypeScript always, inside the app), a measured file shows a whole number, a
+//   file not measured shows no number (never 0); data-testid="architecture-measure-note": which
+//   languages are not measured and how to install the tool ("pip install lizard", needs Python), one
+//   data-testid="architecture-unmeasured-language" per language, its text the language's name. The
+//   #385 scenarios skip themselves when lizard is on this machine (they describe a machine without it).
 //
 // The git project is seeded in the scenario's scratch folder after the app opened (like app.steps.js's
 // second project): a repository on main with a .js and a .py file and three commits, the project
@@ -469,6 +475,52 @@ Then('the city is back inside the tab', async ({ e2e }) => {
   const viewport = e2e.window.viewportSize() || await e2e.window.evaluate(() => ({ width: window.innerWidth, height: window.innerHeight }));
   const box = await city.boundingBox();
   expect(box.width, 'narrower than the window (the sidebar shows)').toBeLessThan(viewport.width - 100);
+});
+
+// ---------- complexity per language (#385) ----------
+
+// a precondition, not the app: these scenarios describe a machine without lizard (CI, a fresh PC)
+Given('the complexity tool lizard is not installed on this machine', async ({ $test }) => {
+  const { resolveCommand } = require(path.join(root, 'src', 'engine', 'providers'));
+  $test.skip(Boolean(resolveCommand('lizard')), 'lizard is installed on this machine: the scenario describes a machine without it');
+});
+
+// the cell of the hotspot table's `column` on the row of `file`
+async function hotspotCell(page, file, column) {
+  const table = byId(page, 'architecture-hotspots');
+  await expect(table).toBeVisible({ timeout: LOAD_TIMEOUT });
+  const header = table.getByRole('columnheader', { name: column, exact: true });
+  await expect(header, `the hotspot table's "${column}" column`).toBeVisible({ timeout: LOAD_TIMEOUT });
+  const index = (await table.getByRole('columnheader').allInnerTexts()).findIndex((t) => t.trim() === column);
+  const row = table.getByRole('row').filter({ hasText: file }).first();
+  await expect(row, `the hotspot table's row of "${file}"`).toBeVisible();
+  return row.getByRole('cell').nth(index);
+}
+
+Then('the Architecture hotspot table shows a measured complexity for {string}', async ({ e2e }, file) => {
+  const cell = await hotspotCell(e2e.window, file, 'Complexity');
+  await expect(cell).toHaveText(/^\s*\d+\s*$/, { timeout: LOAD_TIMEOUT });
+  // a file with a function has a cyclomatic complexity of at least 1
+  expect(Number((await cell.innerText()).trim()), `the complexity of "${file}"`).toBeGreaterThan(0);
+});
+
+Then('the Architecture hotspot table shows the complexity of {string} as not measured, not zero', async ({ e2e }, file) => {
+  const cell = await hotspotCell(e2e.window, file, 'Complexity');
+  await expect(cell).toBeVisible();
+  await expect(cell, `the complexity of "${file}" is not a number`).not.toHaveText(/^\s*\d+(\.\d+)?\s*$/);
+});
+
+Then('the Architecture tab lists {string} as the only language whose complexity is not measured', async ({ e2e }, language) => {
+  const note = byId(e2e.window, 'architecture-measure-note');
+  await expect(note).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(note.getByTestId('architecture-unmeasured-language')).toHaveText([new RegExp(`^\\s*${escapeRe(language)}\\s*$`, 'i')]);
+});
+
+Then('the Architecture tab says how to measure it with {string}, which needs Python', async ({ e2e }, command) => {
+  const note = byId(e2e.window, 'architecture-measure-note');
+  await expect(note).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(note).toContainText(command);
+  await expect(note).toContainText(/needs?\s+Python|requires?\s+Python|Python\s+is\s+(needed|required)/i);
 });
 
 Then('the Architecture tab advises refreshing the map', async ({ e2e }) => {
