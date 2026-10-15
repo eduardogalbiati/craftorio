@@ -44,6 +44,7 @@ function renderSummary(run, { cityAgents = true } = {}) {
     issuesOfRun: () => [],
     runTitleHtml: (r) => String(r.title || r.id),
     prBadge: () => '',
+    testedPillHtml: () => '', // #396: the "Not tested green" pill (none here)
     selectedView: () => ({ past: false, events: [] }),
     fmtDur: (ms) => `${ms} ms`,
     testsPlanHtml: () => '',
