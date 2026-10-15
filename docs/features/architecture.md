@@ -25,7 +25,9 @@ with `scripts/code-health.js --hotspots`), cached per commit. The project's own 
 (complexity, coverage, duplication in its CI) is listed as measured, pending or missing: missing
 evidence is never shown as clean.
 
-**Analyze with the Oracle** (its estimate, ≈ US$ from the last analyses, on the button) runs one
+**Analyze this project** (#381: the tab's one action, its combined estimate on the button, ≈ US$
+from the project map's past real runs and the last analyses, "no estimate yet" before the first)
+starts one run: the project map (the city plan, no gate) and then the Oracle's analysis, one
 Oracle turn in its daily budget: it reads the top hotspots and the co-change pairs with its
 read-only repository tools and writes a report in English: a summary, a verdict per area, and
 findings (kind, files with lines, evidence, severity, one refactor sized as one issue). It never

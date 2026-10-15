@@ -206,12 +206,13 @@ async function afterOpen({ args, click }) {
     ipcMain.removeHandler('analytics:performance');
     ipcMain.handle('analytics:performance', () => new Promise(() => {}));
   }
-  // #356: the analysis never ends (its progress stays on screen) or fails with the Oracle's error
-  const analysis = { analyzing: () => new Promise(() => {}), error: () => { throw new Error('The Oracle\'s answer is not a valid architecture report: report.summary: required.'); } }[args.mode];
+  // #356, #381: "Analyze this project" starts a run that never ends (its state stays on screen) or
+  // fails to start with the Oracle's error
+  const analysis = { analyzing: () => ({ runId: '20261013-215046-bc771765' }), error: () => { throw new Error('The Oracle refused the analysis: the daily budget is reached (US$ 5.00 of US$ 5.00).'); } }[args.mode];
   if (args.tab === 'architecture' && analysis) {
     const { ipcMain } = require('electron');
-    ipcMain.removeHandler('architecture:analyze');
-    ipcMain.handle('architecture:analyze', analysis);
+    ipcMain.removeHandler('run:start');
+    ipcMain.handle('run:start', analysis);
   }
   if (args.tab === 'architecture' && args.mode === 'city-agents') {
     const { ipcMain } = require('electron');

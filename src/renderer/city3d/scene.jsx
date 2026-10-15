@@ -171,17 +171,20 @@ function Ground({ layout, T, level, store }) {
 
 // ---------- buildings ----------
 
-// the colour of every building and ledge: the paint (colour by, overlay), the pinned focus dimming
-// the rest by `dim` (0..1, the fade), a hovered building's connections lightened
-function paintBuildings({ body, band }, layout, ledges, paint, focus, hoverLit, dim, T) {
-  if (!body) return;
-  const colourOf = (i) => {
+/** The colour of every building: the paint (colour by, the overlay's greying), the pinned `focus` dimming the rest by `dim` (0..1, the fade), a hovered building's connections (`hoverLit`) lightened; nothing else changes with the hover. */
+export function buildingColours(layout, paint, { focus = null, hoverLit = null, dim = 0, T }) {
+  return layout.buildings.map((_, i) => {
     let c = paint.greyed?.[i] ? T.dim : paint.colours?.[i] || T.muted;
     if (focus && dim > 0 && !focus.lit.has(i)) c = mix(c, T.dim, DIM * dim);
     else if (hoverLit && hoverLit.has(i)) c = mix(c, T.ink, LIT);
     return c;
-  };
-  const colours = layout.buildings.map((_, i) => colourOf(i));
+  });
+}
+
+// the colour of every building and ledge, see buildingColours
+function paintBuildings({ body, band }, layout, ledges, paint, focus, hoverLit, dim, T) {
+  if (!body) return;
+  const colours = buildingColours(layout, paint, { focus, hoverLit, dim, T });
   colours.forEach((c, i) => body.setColorAt(i, tint.set(c)));
   if (body.instanceColor) body.instanceColor.needsUpdate = true;
   if (band) {
@@ -523,15 +526,32 @@ function Rig({ layout, store, T }) {
     const ratio = camera.position.distanceTo(controls.target) / home.distance;
     const level = ratio > LOD_LABELS ? 0 : ratio > LOD_DETAIL ? 1 : 2;
     if (level !== store.get().level) store.set({ level });
-    // the floating tags follow their anchors
+    // the floating tags follow their anchors; one that would overlap another already placed moves up
+    // until it is clear (the POC's placeTags), the lowest on screen placed first
     camera.updateMatrixWorld();
+    const shown = [];
     for (const [id, el] of store.tagEls) {
       const a = store.tagAnchors.get(id);
       if (!a) continue;
       v.copy(a).project(camera);
-      const behind = v.z > 1;
-      el.style.visibility = behind ? 'hidden' : '';
-      el.style.transform = `translate(${((v.x * 0.5 + 0.5) * size.width).toFixed(1)}px,${((-v.y * 0.5 + 0.5) * size.height - 6).toFixed(1)}px) translate(-50%,-100%)`;
+      const visible = v.z < 1 && Math.abs(v.x) < 1.1 && Math.abs(v.y) < 1.1;
+      el.style.visibility = visible ? '' : 'hidden';
+      if (visible) shown.push({ el, x: (v.x * 0.5 + 0.5) * size.width, y: (-v.y * 0.5 + 0.5) * size.height - 6 });
+    }
+    shown.sort((a, b) => b.y - a.y);
+    const placed = [];
+    for (const s of shown) {
+      const w = s.el.offsetWidth || 120, h = (s.el.offsetHeight || 22) + 4;
+      const r = { x0: s.x - w / 2, x1: s.x + w / 2, y1: s.y, y0: s.y - h };
+      for (let i = 0; i < 12; i++) {
+        const hit = placed.find((p) => r.x0 < p.x1 && r.x1 > p.x0 && r.y0 < p.y1 && r.y1 > p.y0);
+        if (!hit) break;
+        const dy = r.y1 - hit.y0;
+        r.y0 -= dy;
+        r.y1 -= dy;
+      }
+      placed.push(r);
+      s.el.style.transform = `translate(${s.x.toFixed(1)}px,${r.y1.toFixed(1)}px) translate(-50%,-100%)`;
     }
     // the measures: the time to the first frame, the frame rate while the camera moves
     const now = performance.now();

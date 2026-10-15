@@ -8,16 +8,15 @@
 //   coverage and the commit; a search that flies to a file, a district or a zone; "Colour by"
 //   (Quadrant, the default when a tool measured the complexity, Zone otherwise, Churn) with its
 //   legend; the Tests toggle; the dark / light toggle shared with the run's 3D view (Run3DTheme);
-// - the notes under it: no plan (the folders as districts, "Map this project" and its estimate,
-//   the Oracle's per-analysis estimate of architecture:estimate), a stale plan (the unmatched share
-//   and "Refresh the map"), the plan's validation problems, the edges not read, the aggregation of
-//   small files over 5,000;
+//   Expand (#381): the city over the whole window (the `expanded` class), Close or Esc brings it
+//   back, the camera where it was;
+// - the notes under it (project-city-notes.js): no plan or a stale plan, each with the tab's one
+//   action "Analyze this project" (#381: the map and the Oracle's analysis as one run, `onAnalyze`,
+//   its combined estimate next to it) and its state, the plan's problems, the edges not read;
 // - the hover card of a building, a district or a zone, the card a click pins (a building's has
-//   "Open in Facts", its hotspot row), the camera buttons (zoom, home);
+//   "Open in Facts", its hotspot row; project-city-cards.js), the camera buttons (zoom, home);
 // - the states: the facts still loading, not a git repository, no commits, an error with Retry.
-// "Map this project" and "Refresh the map" start the plan workflow of #372 when it registers
-// window.ProjectCityPlan.start(projectId); until then they are disabled and say why.
-// The overlay API, for the city epic's next modules (they add their own files, not code here):
+// The overlay API, for the city epic's modules (they add their own files, not code here):
 //   ProjectCity.overlay(name, { highlight: { path: colour }, markers: [path | { path, colour, label }] } | null)
 //     sets or removes a named layer; the layers merge (later names win a file's colour) and the
 //     buildings no layer highlights are greyed (city-layout.js applyOverlay);
@@ -25,14 +24,18 @@
 //   ProjectCity.current() → { projectId, layout } of the city on screen (null when none);
 //   ProjectCity.stats() → { firstFrameMs, fps }: the time to the first frame and the frame rate
 //   while the camera moves (for the PR's measures).
+//   A created city also has `model`, `setPins(paths)` (#382: the files whose connections stay drawn,
+//   the connections panel's, project-city-connections.js) and `onLayout(fn)` (called after a new
+//   layout; returns the unsubscribe).
 // Uses app.js globals at call time: api, esc, errMsg. Browser: window.ProjectCity.
 (() => {
   const BUNDLE = '../../generated/project-city.js';
   const MISSING = 'The City view is not built: run `npm run build:3d` (or `npm install`) and reload. The Facts view has the same numbers, as tables.';
-  const STALE_COVERAGE = 0.9; // under this share of matched files, the plan is older than the code
   const ZOOM_IN = 0.72, ZOOM_OUT = 1.38;
   const COLOUR_LABEL = { quadrant: 'Quadrant', zone: 'Zone', churn: 'Churn' };
   const ICON_CITY = '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="1" y="7" width="4" height="8" rx="1"/><rect x="6" y="2" width="4" height="13" rx="1"/><rect x="11" y="5" width="4" height="10" rx="1"/></svg>';
+  const ICON_EXPAND = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 2.5h4v4M13.5 2.5 9 7M6.5 13.5h-4v-4M2.5 13.5 7 9"/></svg>';
+  const ICON_CLOSE = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M3 3l10 10M13 3 3 13"/></svg>';
   let bundle = null; // the bundle's load, once
   let gl = null; // why WebGL cannot draw here ('' = it can), checked once
   let shown = null; // the city on screen (the overlay API's)
@@ -40,8 +43,6 @@
 
   const plural = (n, unit) => `${n} ${n === 1 ? unit.replace(/s$/, '') : unit}`;
   const pct = (x) => `${Math.round(x * 100)}%`;
-  const base = (p) => String(p).split('/').pop();
-  const dir = (p) => String(p).split('/').slice(0, -1).join('/') || '(root)';
   const theme = () => window.Run3DTheme?.load() || 'dark';
 
   function webglProblem() {
@@ -81,8 +82,8 @@
     return { highlight, markers };
   }
 
-  /** A City view for project `projectId`: { el, update({ facts, estimate }), reload(), destroy(), flyTo(name), refreshOverlay() }. */
-  function create({ projectId, name = '', onOpenFacts = () => {} }) {
+  /** A City view for project `projectId`: { el, update({ facts, estimate, analysis }), reload(), destroy(), flyTo(name), refreshOverlay(), setPins(paths), onLayout(fn) }. */
+  function create({ projectId, name = '', onOpenFacts = () => {}, onAnalyze = null }) {
     const el = document.createElement('div');
     el.className = 'r3d pc-city';
     el.setAttribute('data-testid', 'project-city');
@@ -91,17 +92,18 @@
     const stage = el.querySelector('[data-pc-stage]');
     const hud = el.querySelector('[data-pc-hud]');
     const c = {
-      projectId, name, el, answer: null, loading: false, error: null, facts: null, estimate: null,
+      projectId, name, el, answer: null, loading: false, error: null, facts: null, estimate: null, analysis: null,
       colour: null, tests: true, theme: el.dataset.theme, layout: null, legend: [], handle: null, drawn: null,
-      pinned: null, hover: null, seq: 0, destroyed: false,
+      pinned: null, hover: null, pins: [], expanded: false, seq: 0, destroyed: false,
     };
+    const listeners = new Set(); // onLayout's
 
     // ---------- data ----------
 
     async function load() {
       const seq = ++c.seq;
       Object.assign(c, { loading: true, error: null });
-      render();
+      if (!c.layout) render(); // a reload keeps the city on screen until the new one is laid out
       try {
         const answer = await api.architectureCity(projectId);
         if (c.destroyed || seq !== c.seq) return;
@@ -127,6 +129,7 @@
       c.pinned = null;
       render();
       draw();
+      for (const fn of listeners) { try { fn(c.layout); } catch (e) { console.error(e); } }
     }
 
     // the buildings' colours (colour by, then the overlay) and the legend
@@ -160,7 +163,7 @@
       const painted = paint();
       renderLegend();
       if (c.handle) {
-        if (c.drawn !== c.layout) c.handle.update({ layout: c.layout, ...painted, tests: c.tests });
+        if (c.drawn !== c.layout) c.handle.update({ layout: c.layout, ...painted, tests: c.tests, pins: c.pins });
         else c.handle.update(painted);
         c.drawn = c.layout;
         return;
@@ -176,7 +179,7 @@
       stage.innerHTML = '';
       try {
         c.handle = ProjectCityScene.mount(stage, {
-          layout: c.layout, ...paint(), tests: c.tests, theme: c.theme, relationsOf,
+          layout: c.layout, ...paint(), tests: c.tests, pins: c.pins, theme: c.theme, relationsOf,
           onHover: (t) => { c.hover = t; renderHover(); },
           onPick: (t) => { c.pinned = t; renderDetail(); },
         });
@@ -210,47 +213,18 @@
         <datalist id="pc-targets-${esc(projectId)}">${targets.map((t) => `<option value="${esc(t)}"></option>`).join('')}</datalist>
         <label class="r3d-chip"><span>Colour by</span><select data-pc-colour aria-label="Colour by" data-testid="project-city-colour">${options}</select></label>
         <label class="r3d-chip" title="Show or hide the test files (smaller and lower buildings)"><input type="checkbox" data-pc-tests data-testid="project-city-tests" ${c.tests ? 'checked' : ''} /> Tests</label>
-        <button type="button" class="r3d-close r3d-theme" data-pc-theme data-testid="project-city-theme" aria-label="${light ? 'Dark theme' : 'Light theme'}" title="${light ? 'Switch to the dark theme' : 'Switch to the light theme'} (the run's 3D view follows)">${light ? '☾' : '☀'}</button>
+        <button type="button" class="r3d-close" data-pc-theme data-testid="project-city-theme" aria-label="${light ? 'Dark theme' : 'Light theme'}" title="${light ? 'Switch to the dark theme' : 'Switch to the light theme'} (the run's 3D view follows)">${light ? '☾' : '☀'}</button>
+        <button type="button" class="r3d-close r3d-theme" data-pc-expand data-testid="project-city-expand" aria-pressed="${c.expanded}" aria-label="${c.expanded ? 'Close the full screen' : 'Expand to the whole window'}" title="${c.expanded ? 'Back into the tab (Esc)' : 'Expand the city over the whole window'}">${c.expanded ? ICON_CLOSE : ICON_EXPAND}</button>
       </div>`;
     }
 
-    function planButton(label, testid) {
-      const ready = typeof window.ProjectCityPlan?.start === 'function';
-      return `<button type="button" class="r3d-primary inline" data-pc-map data-testid="${testid}" ${ready ? '' : 'disabled'} title="${ready ? 'Start the plan workflow: an agent reads the project and writes its city plan' : 'The plan workflow (#372) is not in this version yet'}">${label}</button>`;
-    }
-
-    function notesHtml(model, validation) {
-      const notes = [];
-      if (model.grouping !== 'plan') {
-        const e = c.estimate;
-        const estimate = e ? `<span class="pc-estimate" title="The mean real cost of the last ${plural(e.basis, 'architecture analyses')}: one Oracle turn">≈ US$ ${Number(e.usd).toFixed(2)}</span>` : '<span class="muted">No estimate yet: the first real analysis shows its cost.</span>';
-        notes.push(`<div class="r3d-card pc-note" data-testid="project-city-no-plan"><b>No city plan yet</b><p>The districts are the folders. A plan names the zones, the districts, the landmarks and the ports the project talks to.</p>
-          <div class="pc-actions">${planButton('Map this project', 'project-city-map')}${estimate}</div></div>`);
-      } else if ((validation?.coverage ?? 1) < STALE_COVERAGE) {
-        notes.push(`<div class="r3d-card pc-note warn" data-testid="project-city-stale"><b>The plan is older than the code</b><p>${pct(1 - validation.coverage)} of the files (${validation.drawn - validation.matched} of ${validation.drawn}) match no district: they stand in the Outskirts.</p>
-          <div class="pc-actions">${planButton('Refresh the map', 'project-city-refresh-map')}</div></div>`);
-      }
-      const v = validation || {};
-      const problems = [
-        ...(v.schemaErrors || []).map((s) => `The plan: ${s}`),
-        ...(v.unknownZones || []).map((u) => `District ${u.district} names an unknown zone ${u.zone}: drawn in the Outskirts.`),
-        ...(v.duplicateIds || []).map((id) => `The id ${id} is used twice.`),
-        ...(v.missingPaths || []).map((p) => `${p} is not in the repository at this commit (a landmark or a port's file).`),
-        ...(v.emptyDistricts || []).map((id) => `District ${id} has no file.`),
-      ];
-      if (model.grouping === 'plan' && problems.length) {
-        notes.push(`<div class="r3d-card pc-note warn" data-testid="project-city-problems"><b>${plural(problems.length, 'problems')} in the city plan</b><ul>${problems.map((p) => `<li>${esc(p)}</li>`).join('')}</ul></div>`);
-      }
-      const notRead = typeof model.edges === 'string' ? [model.edges] : model.edgesNotRead || [];
-      if (notRead.length) notes.push(`<div class="r3d-card pc-note" data-testid="project-city-edges"><b>Arcs</b> ${esc(notRead.join(', '))}: hovering those files draws no arc.</div>`);
-      if (c.layout.aggregated) notes.push(`<div class="r3d-card pc-note" data-testid="project-city-aggregated"><b>Over 5,000 files</b> ${esc(c.layout.note)}</div>`);
-      return notes.length ? `<div class="pc-notes">${notes.join('')}</div>` : '';
-    }
+    // the notes under the header (project-city-notes.js): the action (#381), its state, the plan's problems
+    const notesHtml = (model, validation) => window.ProjectCityNotes?.html({ model, validation, layout: c.layout, analysis: c.analysis, ready: typeof onAnalyze === 'function' }) || '';
 
     function renderLegend() {
       const box = hud.querySelector('[data-testid="project-city-legend"]');
       if (!box) return;
-      box.innerHTML = `<b>${esc(COLOUR_LABEL[c.colour] || '')}</b><ul>${c.legend.map((l) => `<li><i class="r3d-dot" style="--c:${esc(l.colour)}"></i>${esc(l.label)}</li>`).join('')}</ul>`;
+      box.innerHTML = `<b>${esc(COLOUR_LABEL[c.colour] || '')}</b><ul>${c.legend.map((l) => `<li><i class="r3d-dot" style="--c:${esc(l.colour)}"></i>${esc(l.label)}${l.sub ? `<small>${esc(l.sub)}</small>` : ''}</li>`).join('')}</ul>`;
     }
 
     const stateMessage = (testid, title, text) => stageMessage(`<p><b>${esc(title)}</b></p><p>${esc(text)}</p>`, { testid });
@@ -258,7 +232,7 @@
     function render() {
       if (c.destroyed) return;
       const a = c.answer;
-      if (!c.layout) {
+      if (!c.layout || !a) {
         hud.innerHTML = '';
         if (c.error) stageMessage(`<p>Could not read the city: ${esc(c.error)}</p><button type="button" class="r3d-primary inline" data-pc-retry>Retry</button>`, { alert: true, testid: 'project-city-error' });
         else if (c.loading || !a) stageMessage('<p>Reading the facts and laying out the city…</p><span class="r3d-bar open"><i></i></span>', { testid: 'project-city-loading' });
@@ -285,54 +259,8 @@
 
     // ---------- the cards ----------
 
-    const row = (label, value) => `<dt>${esc(label)}</dt><dd title="${esc(value)}">${esc(value)}</dd>`;
-
-    function cardHtml(t, pinned) {
-      const L = c.layout;
-      if (t.kind === 'building') {
-        const i = L.buildings.findIndex((x) => x.path === t.id);
-        const b = L.buildings[i];
-        if (!b) return '';
-        const colour = paintColour(i);
-        if (b.aggregate) {
-          return `<div class="r3d-d-head"><div><div class="r3d-kind">Small files</div><h3>${plural(b.aggregate, 'files')}</h3><p>${esc(districtName(b.district))}</p></div></div>
-            <dl class="r3d-rows">${row('Lines', b.lines.toLocaleString('en-US'))}${row('Most commits', String(b.churn))}</dl>
-            <div class="r3d-note">Over 5,000 files the smallest are drawn as one block per district.</div>`;
-        }
-        const rel = CityLayout.neighbours(L, b.path);
-        const edges = typeof c.answer.model.edges === 'string' ? c.answer.model.edges : null;
-        const measured = b.complexity != null;
-        const status = b.quadrant || (measured ? '' : 'Complexity not measured');
-        return `<div class="r3d-d-head"><div><div class="r3d-kind">${b.landmark ? `Landmark · ${esc(b.landmark)}` : b.test ? 'Test file' : 'File'}</div><h3 title="${esc(b.path)}">${esc(base(b.path))}</h3><p class="r3d-mono" title="${esc(b.path)}">${esc(dir(b.path))}</p></div></div>
-          ${status ? `<div class="r3d-d-status"><span class="r3d-pill" style="--c:${esc(colour)}">${esc(status)}</span></div>` : ''}
-          <dl class="r3d-rows">${row('Lines', b.lines.toLocaleString('en-US'))}${row('Commits', String(b.churn))}
-            ${measured ? `${row('Complexity', String(b.complexity))}${row('Worst function', String(b.worst ?? '—'))}${row('Functions', String(b.functions ?? '—'))}` : ''}
-            ${row('District', districtName(b.district))}${row('Zone', zoneName(b.zone))}
-            ${edges ? row('Arcs', edges) : `${row('Requires', plural(rel.requires.length, 'files'))}${row('Required by', plural(rel.requiredBy.length, 'files'))}`}
-            ${b.lastChange ? row('Last change', String(b.lastChange).slice(0, 10)) : ''}</dl>
-          ${pinned ? '<button type="button" class="r3d-primary" data-pc-open-facts data-testid="project-city-open-facts">Open in Facts</button>' : ''}`;
-      }
-      if (t.kind === 'district') {
-        const d = L.districts.find((x) => x.id === t.id);
-        if (!d) return '';
-        const rel = CityLayout.districtNeighbours(L, d.id);
-        const deps = rel.requires.length || rel.requiredBy.length ? `${row('Depends on', plural(rel.requires.length, 'districts'))}${row('Used by', plural(rel.requiredBy.length, 'districts'))}` : '';
-        return `<div class="r3d-d-head"><div><div class="r3d-kind">District</div><h3 title="${esc(d.name)}">${esc(d.name)}</h3><p>${esc(zoneName(d.zone))}</p></div></div>
-          <dl class="r3d-rows">${row('Files', String(d.files))}${row('Lines', d.lines.toLocaleString('en-US'))}${deps}</dl>
-          ${d.purpose ? `<div class="r3d-note">${esc(d.purpose)}</div>` : ''}`;
-      }
-      const z = L.zones.find((x) => x.id === t.id);
-      if (!z) return '';
-      return `<div class="r3d-d-head"><div><div class="r3d-kind">Zone · ${esc(z.kind)}</div><h3 title="${esc(z.name)}">${esc(z.name)}</h3></div></div>
-        <dl class="r3d-rows">${row('Districts', String(L.districts.filter((d) => d.zone === z.id).length))}${row('Files', String(z.files))}${row('Lines', z.lines.toLocaleString('en-US'))}</dl>
-        ${z.purpose ? `<div class="r3d-note">${esc(z.purpose)}</div>` : ''}`;
-    }
-
-    const districtName = (id) => c.layout.districts.find((d) => d.id === id)?.name || id;
-    const zoneName = (id) => c.layout.zones.find((z) => z.id === id)?.name || id;
-    function paintColour(i) {
-      try { return CityLayout.colourBy(c.layout, c.colour, { light: c.theme === 'light' }).colours[i]; } catch { return ''; }
-    }
+    // the hover and detail cards (project-city-cards.js)
+    const cardHtml = (target, pinned) => window.ProjectCityCards?.html({ layout: c.layout, model: c.answer.model, colour: c.colour, light: c.theme === 'light', target, pinned }) || '';
 
     function renderHover() {
       const box = hud.querySelector('[data-pc-hover]');
@@ -388,6 +316,24 @@
       renderLegend();
     }
 
+    // #381: the city over the whole window; Esc or Close brings it back (the scene follows its box)
+    const onKey = (e) => { if (e.key === 'Escape' && c.expanded) { e.stopPropagation(); setExpanded(false); } };
+    function setExpanded(on) {
+      if (c.expanded === on) return;
+      c.expanded = on;
+      el.classList.toggle('expanded', on);
+      if (on) document.addEventListener('keydown', onKey, true);
+      else document.removeEventListener('keydown', onKey, true);
+      const btn = hud.querySelector('[data-pc-expand]');
+      if (btn) {
+        btn.setAttribute('aria-pressed', String(on));
+        btn.setAttribute('aria-label', on ? 'Close the full screen' : 'Expand to the whole window');
+        btn.title = on ? 'Back into the tab (Esc)' : 'Expand the city over the whole window';
+        btn.innerHTML = on ? ICON_CLOSE : ICON_EXPAND;
+      }
+      window.dispatchEvent(new Event('resize'));
+    }
+
     el.addEventListener('click', (e) => {
       const t = e.target;
       if (t.closest('[data-pc-facts]')) onOpenFacts(null);
@@ -397,7 +343,8 @@
       else if (t.closest('[data-pc-home]')) c.handle?.home();
       else if (t.closest('[data-pc-zoom]')) c.handle?.zoom(t.closest('[data-pc-zoom]').dataset.pcZoom === 'in' ? ZOOM_IN : ZOOM_OUT);
       else if (t.closest('[data-pc-theme]')) setTheme(c.theme === 'light' ? 'dark' : 'light');
-      else if (t.closest('[data-pc-map]')) window.ProjectCityPlan?.start?.(projectId);
+      else if (t.closest('[data-pc-expand]')) setExpanded(!c.expanded);
+      else if (t.closest('[data-pc-analyze]')) onAnalyze?.(projectId);
     });
     el.addEventListener('change', (e) => {
       const t = e.target;
@@ -416,30 +363,43 @@
       }
     });
 
+    const sameAnalysis = (a, b) => JSON.stringify(a || null) === JSON.stringify(b || null);
+
     const self = {
       el,
       get projectId() { return projectId; },
       get layout() { return c.layout; },
-      /** The tab's facts and estimate (the quadrants, the Danger Zone count, the plan's estimate); reads the city the first time. */
-      update({ facts, estimate } = {}) {
+      get model() { return c.answer?.model || null; },
+      get expanded() { return c.expanded; },
+      /** The tab's facts, estimate and analysis state (the quadrants, the Danger Zone count, the action's estimate and its run); reads the city the first time. */
+      update({ facts, estimate, analysis } = {}) {
         const factsChanged = facts !== undefined && facts !== c.facts;
         const estimateChanged = estimate !== undefined && estimate !== c.estimate;
+        const analysisChanged = analysis !== undefined && !sameAnalysis(analysis, c.analysis);
         if (facts !== undefined) c.facts = facts;
         if (estimate !== undefined) c.estimate = estimate;
+        if (analysis !== undefined) c.analysis = analysis;
         shown = self;
         if (!c.answer && !c.loading && !c.error) { load(); return; }
         if (factsChanged && c.answer?.model) relayout();
-        // the tab re-renders on each poll tick: keep the drawn HUD (the search's text, the hover card)
-        else if (factsChanged || estimateChanged || !hud.innerHTML) render();
+        // the tab re-renders on each event: keep the drawn HUD (the search's text, the hover card)
+        else if (factsChanged || estimateChanged || analysisChanged || !hud.innerHTML) render();
       },
-      /** Reads the city again (after a refresh of the facts). */
+      /** Reads the city again (after a refresh of the facts, or a run that saved a plan). */
       reload() { c.answer = null; load(); },
       flyTo,
       /** Repaints after a change of the overlay's layers. */
       refreshOverlay() { if (c.handle && c.layout) c.handle.update(paint()); },
+      /** #382: the files whose connections stay drawn (the connections panel's pins). */
+      setPins(paths) { c.pins = [...(paths || [])]; c.handle?.update({ pins: c.pins }); },
+      /** Calls `fn(layout)` after every new layout; returns the unsubscribe. */
+      onLayout(fn) { listeners.add(fn); return () => listeners.delete(fn); },
+      expand: setExpanded,
       stats: () => c.handle?.stats() || null,
       destroy() {
         c.destroyed = true;
+        setExpanded(false);
+        listeners.clear();
         if (shown === self) shown = null;
         try { c.handle?.unmount(); } catch { /* the scene failed already: nothing left to release */ }
         c.handle = null;

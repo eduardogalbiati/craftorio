@@ -8,6 +8,17 @@ appears once, in its latest form, naming what it replaced. The hard rules of
 [AGENTS.md](../../AGENTS.md) are not repeated here. This is not the `decision-log` skill (a run's
 own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
 
+- **2026-10-13** (#381, #382): one click analyses a project: "Analyze this project" in the
+  Architecture tab runs the project map (the city plan) and the Oracle's analysis together, as one
+  run of `project-map.yaml`, with its combined estimate shown first and no human gate (validated
+  mode, from Workflows, keeps a gate that shows the plan's districts and validation); the tab
+  follows the run and the city can be expanded to the whole window. The city has to look like the
+  approved proof of concept (`poc/project-city.html`) at the real scale of this repository: its
+  layout and geometry are ported, never re-derived from a description, and the owner can pin a
+  file's connections from a list of the most connected files; hovering never greys the city.
+  Replaces #372's gate for every run. Why: the owner's first test found two buttons for one intent,
+  a gate that showed nothing to validate, a tab stuck on "running" after the run had finished, and a
+  city of stacked squares in place of the POC he had approved.
 - **2026-10-13** (#371, #372): the project city is on the roadmap, built from the proof of concept
   (PR #370, `poc/embed-city.js` and its two plans at 100% coverage); groma.md is not used. The city
   is one deterministic model (`src/shared/city-model.js`) from #356's facts and a city plan, drawn
