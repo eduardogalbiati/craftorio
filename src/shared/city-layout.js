@@ -1,57 +1,81 @@
-// The layout of the project city (#373): where each zone, district, building and port of #371's
-// city model (src/shared/city-model.js buildCity → model) stands on the ground, as plain numbers
-// the 3D scene (src/renderer/city3d/) draws. Pure and deterministic: no I/O, clock or randomness.
-// Rects are { x, z, w, d } on the ground (x..x+w by z..z+d); y is up.
-// - squarify(items [{ id, weight }], rect { x, y, w, h }) → [{ id, x, y, w, h }]: the squarified
-//   treemap (Bruls, Huizing, van Wijk), one cell per item with a weight > 0, areas proportional to
-//   the weights, filling the rect.
-// - layoutCity(model, { quadrants }) → { zones, districts, buildings, avenues, landmarks, ports,
-//   edges, bounds, aggregated, note }: zones as strips in the model's (the plan's) order with an
-//   AVENUE between them, each a treemap of its districts with a STREET between them; buildings
-//   shelf-packed inside their district, the footprint growing with the lines, the height with the
-//   complexity, floors from the function count and an antenna from the worst function; ports in a
-//   row past the city's far edge. Over MAX_BUILDINGS drawn files the smallest are drawn as one
-//   block per district (`aggregated`, `note`). `quadrants` ({ path: quadrant }, from the facts)
-//   colours by quadrant.
-// - COLOUR_BY, defaultColourBy(model), colourBy(layout, mode, { light }) → { colours, legend }.
-// - The overlay API the city epic's next issues build on: applyOverlay(layout, { highlight
-//   { path: colour }, markers [path] }) greys every building not highlighted and puts each marker
-//   on its building's roof; flyTarget(layout, name) is the point to fly to for a file, a district
-//   or a zone (null when unknown); findTargets(layout, query) feeds the search.
+// The layout of the project city (#373, the proof of concept's layout ported in #382): where each
+// zone, district, building and port of #371's city model (src/shared/city-model.js buildCity → model)
+// stands on the ground, as plain numbers the 3D scene (src/renderer/city3d/) draws. Pure and
+// deterministic: no I/O, clock or randomness. Rects are { x, z, w, d } on the ground (x..x+w by
+// z..z+d); y is up; the camera's home view looks from the south-east (+x, +z).
+// The rules and their constants are poc/project-city.html's (phase 3, PR #379, the look the owner
+// approved on this repository), copied, not re-derived:
+// - the city is a rectangle of CITY_ASPECT whose area is the drawn files' weight × UNIT_AREA (the
+//   POC's 360 × 240 city on this repository; a smaller project shrinks the roads, sidewalks and name
+//   strips with it, down to SCALE_MIN, so the proportions stay); the zones fill it as strips in the plan's order
+//   (stripLayout, from the south edge northward), an AVENUE between them; an outskirts zone (the
+//   unmatched files) is a block outside the east edge;
+// - inside a zone, the districts are a squarified treemap (squarify) of their weight, a STREET
+//   between their raised plates, the zone's name in a strip along its south (or east) edge;
+// - inside a district plate, a SIDEWALK, the district's name in a strip, and the buildings as a
+//   treemap of the files' weight ((lines + 15)^0.85, campus files half) filling FILL of the plate,
+//   each cell inset by a GAP (gapOf) so streets show between buildings;
+// - a building's height is H_MIN + H_K × √complexity (√(lines × the measured complexity per line,
+//   PER_LINE_DEFAULT when nothing is measured; campus files lower), heightOf; its ledges come from
+//   the functions (the lines otherwise), at most LEDGES_MAX spaced along the height (ledgesOf); a
+//   mast of ANTENNA_K × the worst function from ANTENNA_MIN;
+// - ports are docks outside the city edge nearest their files, spread along it (layoutPorts).
+// Over MAX_BUILDINGS drawn files the smallest are drawn as one block per district (`aggregated`,
+// `note`). `quadrants` ({ path: quadrant }, from the facts) colours by quadrant.
+// - layoutCity(model, { quadrants }) → { zones, districts, buildings, avenues, ring, landmarks,
+//   ports, edges, bounds, aggregated, note, avenueWidth, scale }.
+// - squarify(items [{ id, weight }], rect { x, y, w, h }) → [{ id, x, y, w, h }]; stripLayout(items,
+//   rect) → [{ y0, y1, cells }], the order kept.
+// - COLOUR_BY, defaultColourBy(model), colourBy(layout, mode, { light }) → { colours, legend }: by
+//   quadrant (campus files quieter), by zone (a tint per zone kind) or by churn (a heat ramp).
+// - The overlay API the city epic's modules build on: applyOverlay(layout, { highlight { path:
+//   colour }, markers [path] }) greys every building not highlighted and puts each marker on its
+//   building's roof; flyTarget(layout, name) is the point to fly to for a file, a district or a zone
+//   (null when unknown); findTargets(layout, query) feeds the search.
 // - neighbours(layout, path) / districtNeighbours(layout, id): what a file or a district requires
 //   and what requires it (the hover's arcs), from the model's edges.
 // Browser: window.CityLayout; Node: module.exports.
 (function (root) {
-  const AVENUE = 7;
-  const STREET = 2;
-  const PAD = 0.8; // a district's kerb, around its buildings
-  const GAP = 0.6; // between two buildings
-  const LABEL = 1.6; // the deepest strip a district's name takes on its plate
-  const SLACK = 1.35; // room left in a district beyond its buildings' footprints
+  // ---------- the proof of concept's constants ----------
+  const CITY_ASPECT = 1.5; // the city rectangle's width over its depth
+  const UNIT_AREA = 1.18; // ground area per unit of weight: the POC's fixed 360 × 240 city, on this repository's drawn files
+  const POC_CITY_W = 360, SCALE_MIN = 0.2; // the POC's width; the roads and strips below scale with the city's width over it, never under SCALE_MIN
+  const AVENUE = 16, SIDEWALK_AV = 2.6; // between zones: an avenue, with a sidewalk along each zone
+  const STREET = 6, SIDEWALK = 1.4, GAP = 0.8; // between districts: a street; inside a plate: a sidewalk; between buildings: a gap
+  const LABEL_H = 8, ZONE_LABEL_H = 11; // the strips for the district and zone names
+  const ZONE_FLOOR = 0.05, DISTRICT_FLOOR = 0.06, FILL = 0.72; // minimum shares (a plaza fills the rest); the buildings' share of a plate
+  const CAMPUS_WEIGHT = 0.5, CAMPUS_HEIGHT = 0.5; // campus files (tests): smaller footprints, lower buildings
+  const H_MIN = 1.0, H_K = 1.25, PER_LINE_DEFAULT = 0.12; // height = H_MIN + H_K × √complexity; complexity per line when nothing is measured
+  const FLOOR_CAP = 40, FLOOR_LINES = 45, FLOOR_CAP_UNMEASURED = 12; // floors: the functions, or lines / FLOOR_LINES
+  const LEDGES_MAX = 6; // ledges drawn on a building at most (#382: a few, never one per floor)
+  const ANTENNA_K = 0.25, ANTENNA_MIN = 8; // mast height = ANTENNA_K × the worst function, from ANTENNA_MIN
+  const PORT_OFF = AVENUE * 0.9, PORT_SPACING = 22; // docks: outside the edge, apart along it
+  const OUTSKIRTS_MIN = 28;
   const MAX_BUILDINGS = 5000;
-  const PORT_MARGIN = 14;
-  const ASPECT = 1.6; // the city's width over its depth
-  const STRIP = 3; // a zone's depth over its width, at most
-  const EMPTY_DISTRICT = 16; // the ground of a district without files, so the plan's district still shows
+  // text widths without a canvas: bold text at LABEL_FONT of the strip's height, the count after it at SUB_FONT of that
+  const CHAR_W = 0.56, LABEL_FONT = 0.6, SUB_FONT = 0.78, LABEL_PAD = 0.7;
   const COLOUR_BY = ['quadrant', 'zone', 'churn'];
   // the buildings' colours in the run's two 3D themes (run3d-theme.js), as the proof of concept has
   // them: the quadrants on the state colours, in ArchitectureModel.QUADRANTS' order (Danger Zone
-  // failed, Cowboy Code changes, Fertile Ground running, Healthy Closure done), the churn ramp, and
-  // one colour per zone in plan order
+  // failed, Cowboy Code changes, Fertile Ground running, Healthy Closure done), campus files quieter,
+  // the churn ramp, and a tint per zone kind
   const PALETTES = {
     dark: {
       quadrant: ['#f87171', '#facc15', '#7c9cff', '#4ade80'],
       none: '#6f788c',
-      zone: ['#8db4e2', '#c47a63', '#7fb08f', '#cda76b', '#c9b58f', '#a4abb8', '#ae8a5a', '#b49cff', '#cdbe9c', '#8a95ab'],
+      campus: '#3e4659',
+      kind: { civic: '#c9b58f', commercial: '#8db4e2', industrial: '#c47a63', infrastructure: '#a4abb8', logistics: '#cda76b', power: '#8a95ab', workshop: '#ae8a5a', library: '#cdbe9c', campus: '#7fb08f', outskirts: '#9a958d' },
       churn: ['#2a3040', '#facc15', '#fb923c', '#f87171'],
     },
     light: {
       quadrant: ['#EA4E4B', '#E39A12', '#4C6FFF', '#1FAE6E'],
       none: '#A7B0C2',
-      zone: ['#8DB4E2', '#C47A63', '#9CC594', '#CDA76B', '#D8C7A4', '#A4ABB8', '#AE8A5A', '#7C5CFF', '#CDBE9C', '#717C90'],
+      campus: '#D5DAE5',
+      kind: { civic: '#D8C7A4', commercial: '#8DB4E2', industrial: '#C47A63', infrastructure: '#A4ABB8', logistics: '#CDA76B', power: '#717C90', workshop: '#AE8A5A', library: '#CDBE9C', campus: '#9CC594', outskirts: '#C9C2B8' },
       churn: ['#E9ECF2', '#F6D55C', '#F0883E', '#D7263D'],
     },
   };
+  const OUTSKIRTS_ZONE = { id: 'outskirts', kind: 'outskirts', name: 'Outskirts', purpose: 'Drawn files no district rule matched.' };
   // the facts' quadrants and the product's test-file patterns, resolved at call time (in the browser
   // src/shared/globs.js loads after this file)
   const node = typeof module === 'object' && module.exports;
@@ -74,8 +98,14 @@
   const sum = (xs, f) => xs.reduce((s, x) => s + f(x), 0);
   const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
   const arr = (x) => (Array.isArray(x) ? x : []);
+  // ground rects: the treemaps work in { x, y, w, h } (y south), the scene reads { x, z, w, d }
+  const insetRect = (r, m) => ({ x: r.x + m, y: r.y + m, w: Math.max(0, r.w - 2 * m), h: Math.max(0, r.h - 2 * m) });
+  // an inset that leaves at least half of a small rect (the POC's cities are wide enough never to need it)
+  const insetCapped = (r, m) => insetRect(r, Math.min(m, r.w / 4, r.h / 4));
+  const toXZ = (r) => ({ x: r.x, z: r.y, w: r.w, d: r.h });
+  const labelXZ = (l) => (l ? { x: l.x, z: l.y, w: l.w, d: l.h, vertical: !!l.vertical } : null);
 
-  // ---------- the treemap ----------
+  // ---------- the treemaps ----------
 
   /** The squarified treemap of `items` in `rect`: [{ id, x, y, w, h }], heaviest first. */
   function squarify(items, rect) {
@@ -131,19 +161,61 @@
     return out;
   }
 
+  /** The strip treemap, the order kept: strips from the south edge of `rect` (y + h) northward, the items left to right. */
+  function stripLayout(items, rect) {
+    const list = arr(items).map((it) => ({ id: it.id, weight: Math.max(0, Number(it.weight) || 0) }));
+    const total = sum(list, (it) => it.weight);
+    if (!list.length || !(total > 0) || !(rect.w > 0) || !(rect.h > 0)) return [];
+    const scale = (rect.w * rect.h) / total;
+    const area = (it) => it.weight * scale;
+    // the mean aspect ratio of a strip of area `a` across the rect's width
+    const aspect = (strip, a) => {
+      const h = a / rect.w;
+      return sum(strip, (it) => { const w = area(it) / h; return Math.max(w / h, h / w); }) / strip.length;
+    };
+    const strips = [];
+    let y = rect.y + rect.h, strip = [], stripArea = 0;
+    const flush = () => {
+      const h = stripArea / rect.w;
+      let x = rect.x;
+      const cells = strip.map((it) => { const w = area(it) / h; const cell = { id: it.id, x, y: y - h, w, h }; x += w; return cell; });
+      strips.push({ y0: y - h, y1: y, cells });
+      y -= h; strip = []; stripArea = 0;
+    };
+    for (const it of list) {
+      const a = area(it);
+      if (strip.length && aspect(strip, stripArea) < aspect([...strip, it], stripArea + a)) flush();
+      strip.push(it); stripArea += a;
+    }
+    if (strip.length) flush();
+    return strips;
+  }
+
   // ---------- buildings ----------
 
-  // the proof of concept's rules (poc/project-city.html): height = H_MIN + H_K × √complexity (√(lines ×
-  // PER_LINE) when nothing measured it), floors from the functions (lines / FLOOR_LINES otherwise), a
-  // mast of ANTENNA_K × the worst function from ANTENNA_MIN; test files smaller and lower (a campus)
-  const H_MIN = 1, H_K = 1.25, PER_LINE = 0.12;
-  const FLOOR_CAP = 40, FLOOR_LINES = 45, FLOOR_CAP_UNMEASURED = 12;
-  const ANTENNA_K = 0.25, ANTENNA_MIN = 8;
-  const CAMPUS_SIZE = 0.7, CAMPUS_HEIGHT = 0.5;
-  const footprint = (b) => clamp(0.9 + 0.13 * Math.sqrt(Math.max(0, b.lines || 0)), 0.9, 7) * (isTest(b.path) ? CAMPUS_SIZE : 1);
-  const heightOf = (b) => Math.min(60, H_MIN + H_K * Math.sqrt(b.complexity != null ? b.complexity : (b.lines || 0) * PER_LINE)) * (isTest(b.path) ? CAMPUS_HEIGHT : 1);
-  const floorsOf = (b) => (b.functions != null ? Math.min(b.functions, FLOOR_CAP) : Math.min(Math.floor((b.lines || 0) / FLOOR_LINES), FLOOR_CAP_UNMEASURED));
+  /** The complexity a line carries, measured over the files a tool measured (PER_LINE_DEFAULT when none). */
+  function perLineOf(buildings) {
+    const measured = arr(buildings).filter((b) => b.complexity != null);
+    const lines = sum(measured, (b) => b.lines || 0);
+    return measured.length && lines > 0 ? sum(measured, (b) => b.complexity) / lines : PER_LINE_DEFAULT;
+  }
+  /** A building's height: H_MIN + H_K × √complexity (the lines × `perLine` when nothing is measured; a campus file lower). */
+  function heightOf(b, { perLine = PER_LINE_DEFAULT, campus = false } = {}) {
+    const c = b.complexity != null ? b.complexity : (b.lines || 0) * perLine * (campus ? CAMPUS_HEIGHT : 1);
+    return H_MIN + H_K * Math.sqrt(Math.max(0, c));
+  }
+  /** A file's weight on the ground: (lines + 15)^0.85, half for a campus file. */
+  const weightOf = (b, campus) => Math.pow((b.lines || 0) + 15, 0.85) * (campus ? CAMPUS_WEIGHT : 1);
+  /** The floors a building has: its functions (capped), or its lines / FLOOR_LINES when nothing measured them. */
+  const floorsOf = (b) => (b.functions != null ? Math.min(FLOOR_CAP, b.functions) : Math.min(FLOOR_CAP_UNMEASURED, Math.round((b.lines || 0) / FLOOR_LINES)));
+  /** The ledges drawn on a building: one less than its floors, at most LEDGES_MAX. */
+  const ledgesOf = (b) => clamp(floorsOf(b) - 1, 0, LEDGES_MAX);
   const antennaOf = (b) => (b.worst != null && b.worst >= ANTENNA_MIN ? ANTENNA_K * b.worst : 0);
+  /** The gap around a building inside its cell of w × d: GAP, less in a small cell. */
+  const gapOf = (w, d, gap = GAP) => Math.min(gap, w * 0.22, d * 0.22);
+  // the width of a name (bold) and a count after it (smaller) in a strip `hUnits` deep, in ground units
+  const textUnits = (text, hUnits, scale = 1) => String(text == null ? '' : text).length * CHAR_W * LABEL_FONT * hUnits * scale;
+  const labelWidth = (text, sub, hUnits) => textUnits(text, hUnits) + textUnits(sub, hUnits, SUB_FONT) + LABEL_PAD;
 
   // Over MAX_BUILDINGS files: the largest stay, the rest become one block per district
   function aggregate(buildings, districtIds) {
@@ -171,144 +243,204 @@
     };
   }
 
-  // Shelf-packs a district's buildings inside `inner`, scaled down when they do not fit
-  function pack(list, inner) {
-    const sorted = [...list].sort((a, b) => b.side - a.side || byString(a.path, b.path));
-    let x = 0, z = 0, rowD = 0, extent = 0;
-    const at = [];
-    for (const b of sorted) {
-      if (x > 0 && x + b.side > inner.w) { z += rowD + GAP; x = 0; rowD = 0; }
-      at.push({ b, x, z });
-      extent = Math.max(extent, x + b.side);
-      x += b.side + GAP;
-      rowD = Math.max(rowD, b.side);
+  // A name's strip along the south edge of `block` (the east edge when the block is much taller than
+  // wide, so the camera from the south-east reads it past the towers), and the room left for what it
+  // names: { label, inner }. The strip may run `over` past the block, onto the street or the avenue.
+  function nameStrip(block, name, sub, depth, tall, over, pad) {
+    const vertical = block.h > block.w * tall;
+    const lh = Math.min(depth, (vertical ? block.w : block.h) * 0.3);
+    const need = labelWidth(name, sub, lh), room = (vertical ? block.h : block.w) - 2 * pad;
+    const len = Math.min(Math.max(need, room), room + over);
+    if (vertical) {
+      return {
+        label: { x: block.x + block.w - pad - lh, y: block.y + (block.h - len) / 2, w: lh, h: len, vertical },
+        inner: { x: block.x + pad, y: block.y + pad, w: block.w - 2 * pad - lh, h: block.h - 2 * pad },
+      };
     }
-    const depth = z + rowD;
-    const s = Math.min(1, extent ? inner.w / extent : 1, depth ? inner.d / depth : 1);
-    const ox = inner.x + (inner.w - extent * s) / 2;
-    const oz = inner.z + (inner.d - depth * s) / 2;
-    return at.map(({ b, x: bx, z: bz }) => ({ b, x: ox + bx * s, z: oz + bz * s, side: b.side * s }));
+    return {
+      label: { x: block.x + (block.w - len) / 2, y: block.y + block.h - lh, w: len, h: lh, vertical },
+      inner: { x: block.x + pad, y: block.y + pad, w: block.w - 2 * pad, h: block.h - lh - pad },
+    };
   }
 
-  // a cell shrunk by half a street on each side (less when the cell is narrow)
-  const inset = (r, by) => {
-    const ix = Math.min(by, r.w / 4), iz = Math.min(by, r.d / 4);
-    return { x: r.x + ix, z: r.z + iz, w: r.w - 2 * ix, d: r.d - 2 * iz };
-  };
+  // A district plate's inside: the sidewalk, the name strip and the buildings' treemap, filling FILL
+  // of the plate's share (`unit` ground area per unit of weight); returns the buildings' rects.
+  function layoutDistrict(g, unit, m) {
+    const block = insetCapped(g.cell, m.street / 2);
+    let { label, inner } = nameStrip(block, g.d.name, `  ${g.items.length}`, m.labelH, 1.25, m.street * 1.5, m.sidewalk);
+    if (inner.w <= 0.5 * m.k || inner.h <= 0.5 * m.k) { // a plate too small for its sidewalk and name: the buildings take it whole
+      inner = insetCapped(block, m.sidewalk);
+      label = null;
+    }
+    const want = g.weight * unit * FILL;
+    if (inner.w * inner.h > want) {
+      const s = Math.sqrt(want / (inner.w * inner.h));
+      inner = { ...inner, w: inner.w * s, h: inner.h * s };
+    }
+    const cells = squarify(g.items.map((it) => ({ id: it.b.path, weight: it.weight })), inner);
+    const byPath = Object.fromEntries(g.items.map((it) => [it.b.path, it]));
+    const placed = cells.map((cell) => {
+      const gap = gapOf(cell.w, cell.h, m.gap);
+      const r = insetRect(cell, gap);
+      return { it: byPath[cell.id], x: r.x, z: r.y, w: r.w, d: r.h };
+    });
+    return { block, label, placed };
+  }
+
+  /** Ports as docks outside the city edge nearest their files, spread apart along it. */
+  function layoutPorts(portsIn, at, bounds, m) {
+    const docks = [];
+    for (const p of portsIn) {
+      const via = arr(p.via).filter((v) => at[v]);
+      if (!via.length) continue;
+      const centre = (b) => ({ x: b.x + b.w / 2, z: b.z + b.d / 2 });
+      const cx = sum(via, (v) => centre(at[v]).x) / via.length, cz = sum(via, (v) => centre(at[v]).z) / via.length;
+      const dists = { S: bounds.y + bounds.h - cz, N: cz - bounds.y, E: bounds.x + bounds.w - cx, W: cx - bounds.x };
+      const edge = Object.keys(dists).sort((a, b) => dists[a] - dists[b] || byString(a, b))[0];
+      docks.push({ id: p.id, name: p.name, via, edge, t: edge === 'S' || edge === 'N' ? cx : cz });
+    }
+    for (const edge of ['S', 'N', 'E', 'W']) {
+      const row = docks.filter((d) => d.edge === edge).sort((a, b) => a.t - b.t || byString(a.id, b.id));
+      for (let i = 1; i < row.length; i++) row[i].t = Math.max(row[i].t, row[i - 1].t + m.portSpacing);
+      for (const d of row) {
+        d.along = edge === 'S' || edge === 'N'; // the dock lies along the edge
+        d.x = d.along ? d.t : edge === 'E' ? bounds.x + bounds.w + m.portOff : bounds.x - m.portOff;
+        d.z = edge === 'S' ? bounds.y + bounds.h + m.portOff : edge === 'N' ? bounds.y - m.portOff : d.t;
+        d.y = 0;
+        delete d.t;
+      }
+    }
+    return docks;
+  }
 
   /** The city on the ground: see the header. */
   function layoutCity(model, { quadrants = {} } = {}) {
     const zonesIn = arr(model && model.zones);
     const districtsIn = arr(model && model.districts);
-    const zoneIds = new Set(zonesIn.map((z) => z.id));
-    const districtZone = Object.fromEntries(districtsIn.map((d) => [d.id, zoneIds.has(d.zone) ? d.zone : null]));
+    const zoneById = Object.fromEntries(zonesIn.map((z) => [z.id, z]));
+    const districtById = Object.fromEntries(districtsIn.map((d) => [d.id, d]));
+    // a district whose zone the plan does not name is drawn in the Outskirts
+    const zoneOf = (d) => (d && zoneById[d.zone] ? d.zone : OUTSKIRTS_ZONE.id);
     const { buildings: drawn, aggregated, note } = aggregate(arr(model && model.buildings), districtsIn.map((d) => d.id));
-    const sized = drawn.map((b) => ({ ...b, side: footprint(b) }));
-    const byDistrict = {};
-    for (const b of sized) (byDistrict[b.district] || (byDistrict[b.district] = [])).push(b);
-    // each district's weight: its buildings' footprints with their gaps and slack, plus its street
-    const need = (id) => {
-      const list = byDistrict[id] || [];
-      const area = list.length ? sum(list, (b) => (b.side + GAP) ** 2) * SLACK : EMPTY_DISTRICT;
-      return (Math.sqrt(area) + 2 * PAD + STREET + LABEL) ** 2;
-    };
-    const zoneList = zonesIn.map((z, index) => {
-      const ds = districtsIn.filter((d) => districtZone[d.id] === z.id);
-      const maxSide = Math.max(0, ...ds.flatMap((d) => (byDistrict[d.id] || []).map((b) => b.side)));
-      return { z, index, ds, area: sum(ds, (d) => need(d.id)), minW: maxSide + 2 * PAD + STREET + 1 };
-    }).filter((x) => x.ds.length);
-    // each zone a strip along x from the near boulevard, STRIP times deeper than wide at most and the
-    // city's depth D at most; D is the one that gives the city its ASPECT (a bisection: the width
-    // falls as D grows), or the deepest the strips allow
-    const avenues = AVENUE * Math.max(0, zoneList.length - 1);
-    const sizeAt = (D) => zoneList.map((x) => {
-      const d = Math.min(D, Math.max(Math.sqrt(STRIP * x.area), x.minW));
-      return { d, w: Math.max(x.area / d, x.minW) };
-    });
-    const widthAt = (D) => sum(sizeAt(D), (s) => s.w) + avenues;
-    let lo = 4, hi = 4 + 4 * Math.sqrt(sum(zoneList, (x) => x.area));
-    for (let i = 0; i < 60; i++) {
-      const mid = (lo + hi) / 2;
-      if (widthAt(mid) / mid > ASPECT) lo = mid; else hi = mid;
+    const kindOf = (b) => { const d = districtById[b.district]; const z = zoneById[zoneOf(d)]; return z ? z.kind : OUTSKIRTS_ZONE.kind; };
+    const campus = (b) => kindOf(b) === 'campus' || isTest(b.path);
+    const perLine = perLineOf(drawn);
+    // the districts with files, grouped, each with its weight
+    const groups = new Map();
+    for (const b of drawn) {
+      const d = districtById[b.district] || { id: b.district, name: b.district, zone: OUTSKIRTS_ZONE.id, purpose: '' };
+      const g = groups.get(d.id) || groups.set(d.id, { d, items: [], weight: 0 }).get(d.id);
+      const weight = weightOf(b, campus(b));
+      g.items.push({ b, weight });
+      g.weight += weight;
     }
-    const sizes = sizeAt(hi);
-    const depth = Math.max(8, ...sizes.map((s) => s.d));
-    const zones = [];
-    const districts = [];
-    const buildings = [];
-    const roads = [];
-    let cx = 0;
-    zoneList.forEach(({ z, index, ds }, k) => {
-      const { w, d: zd } = sizes[k];
-      if (zones.length) { // as deep as the deeper of the two zones it runs between
-        const along = Math.max(zd, sizes[k - 1].d);
-        roads.push({ axis: 'z', x: cx, z: depth - along, w: AVENUE, d: along });
-        cx += AVENUE;
-      }
-      // along the boulevard at z = depth, the one the home view looks from (the zone names are there)
-      const rect = { x: cx, z: depth - zd, w, d: zd };
-      const files = sum(ds, (d) => (byDistrict[d.id] || []).length);
-      zones.push({ ...rect, files, id: z.id, index, kind: z.kind, lines: sum(ds, (d) => sum(byDistrict[d.id] || [], (b) => b.lines)), name: z.name, purpose: z.purpose || '' });
-      const cells = squarify(ds.map((d) => ({ id: d.id, weight: need(d.id) })), { x: rect.x, y: rect.z, w: rect.w, h: rect.d });
-      for (const cell of cells) {
-        const d = ds.find((x) => x.id === cell.id);
-        const r = inset({ x: cell.x, z: cell.y, w: cell.w, d: cell.h }, STREET / 2);
-        const list = byDistrict[d.id] || [];
-        // the district's name on the ground, in a strip along its edge facing the home view (z + d);
-        // the buildings behind it
-        const inner = inset(r, PAD);
-        const labelD = Math.min(LABEL, inner.d * 0.18);
-        const label = { x: inner.x, z: inner.z + inner.d - labelD, w: inner.w, d: labelD };
-        districts.push({ ...r, empty: !list.length, files: list.length, id: d.id, label, lines: sum(list, (b) => b.lines), name: d.name, purpose: d.purpose || '', zone: z.id });
-        for (const p of pack(list, { x: inner.x, z: inner.z, w: inner.w, d: inner.d - labelD })) {
-          const b = p.b;
+    const orphans = [...groups.values()].filter((g) => !zoneById[g.d.zone]);
+    const zoneList = zonesIn.some((z) => z.id === OUTSKIRTS_ZONE.id) || !orphans.length ? zonesIn : [...zonesIn, OUTSKIRTS_ZONE];
+    const zoneGroups = zoneList.map((z, index) => ({
+      z, index,
+      districts: [...districtsIn.filter((d) => zoneOf(d) === z.id && groups.has(d.id)).map((d) => groups.get(d.id)), ...(z.id === OUTSKIRTS_ZONE.id ? orphans.filter((g) => !districtById[g.d.id]) : [])],
+    })).filter((zg) => zg.districts.length);
+    for (const zg of zoneGroups) zg.weight = sum(zg.districts, (g) => g.weight);
+    let inner = zoneGroups.filter((zg) => zg.z.kind !== 'outskirts');
+    let outskirts = zoneGroups.find((zg) => zg.z.kind === 'outskirts') || null;
+    if (!inner.length && outskirts) { inner = [outskirts]; outskirts = null; }
+    // the city rectangle: the zones' weight at the POC's density, in its aspect
+    const total = sum(inner, (zg) => zg.weight);
+    for (const zg of inner) zg.wBlock = Math.max(zg.weight, total * ZONE_FLOOR);
+    const totalBlock = Math.max(1e-9, sum(inner, (zg) => zg.wBlock));
+    const cityW = Math.max(POC_CITY_W * SCALE_MIN, Math.sqrt(totalBlock * UNIT_AREA * CITY_ASPECT));
+    const cityH = cityW / CITY_ASPECT;
+    // the POC's road, sidewalk and strip sizes, scaled down with a city narrower than the POC's
+    const k = clamp(cityW / POC_CITY_W, SCALE_MIN, 1);
+    const m = { k, avenue: AVENUE * k, street: STREET * k, sidewalk: SIDEWALK * k, labelH: LABEL_H * k, zoneLabelH: ZONE_LABEL_H * k, gap: GAP * k, portOff: PORT_OFF * k, portSpacing: PORT_SPACING * k };
+    const rect = { x: -cityW / 2, y: -cityH / 2, w: cityW, h: cityH };
+    const unit = (rect.w * rect.h) / totalBlock;
+    const strips = stripLayout(inner.map((zg) => ({ id: zg.z.id, weight: zg.wBlock })), rect);
+    const cellOf = Object.fromEntries(strips.flatMap((s) => s.cells).map((c) => [c.id, c]));
+    for (const zg of inner) zg.cell = cellOf[zg.z.id] || { x: rect.x, y: rect.y, w: rect.w, h: rect.h };
+    let city = { ...rect };
+    if (outskirts) { // a block outside the east edge
+      const side = Math.min(cityH, Math.max(OUTSKIRTS_MIN * k, Math.sqrt(outskirts.weight * unit * 1.6) + m.street + m.zoneLabelH));
+      outskirts.cell = { x: rect.x + rect.w, y: rect.y + rect.h - side, w: side, h: side };
+      city = { x: rect.x, y: rect.y, w: rect.w + side, h: rect.h };
+    }
+    // the avenues' centre lines: between the strips, and between the zones of a strip
+    const avenues = [];
+    strips.forEach((s, i) => {
+      if (i) avenues.push({ axis: 'x', x: rect.x, z: s.y1, length: rect.w });
+      s.cells.forEach((c, j) => { if (j) avenues.push({ axis: 'z', x: c.x, z: s.y0, length: s.y1 - s.y0 }); });
+    });
+    const zones = [], districts = [], buildings = [];
+    for (const zg of [...inner, ...(outskirts ? [outskirts] : [])]) {
+      const block = insetCapped(zg.cell, m.avenue / 2);
+      const { label } = nameStrip(block, zg.z.name, `  ${zg.z.kind}`, m.zoneLabelH, 1.3, m.avenue * 1.4, m.sidewalk);
+      // the districts' room: the block less half a street, and the name's strip
+      const strip = Math.min(m.zoneLabelH, (label.vertical ? block.w : block.h) * 0.3);
+      const dRect = label.vertical
+        ? insetCapped({ x: block.x, y: block.y, w: block.w - strip, h: block.h }, m.street / 2)
+        : insetCapped({ x: block.x, y: block.y, w: block.w, h: block.h - strip }, m.street / 2);
+      const dTotal = sum(zg.districts, (g) => g.weight);
+      for (const g of zg.districts) g.wBlock = Math.max(g.weight, dTotal * DISTRICT_FLOOR);
+      const dCells = squarify(zg.districts.map((g) => ({ id: g.d.id, weight: g.wBlock })), dRect);
+      const dUnit = Math.min(unit, (dRect.w * dRect.h) / Math.max(1e-9, sum(zg.districts, (g) => g.wBlock)));
+      const files = sum(zg.districts, (g) => g.items.length);
+      const lines = sum(zg.districts, (g) => sum(g.items, (it) => it.b.lines || 0));
+      zones.push({ ...toXZ(block), cell: toXZ(zg.cell), files, id: zg.z.id, index: zg.index, kind: zg.z.kind, label: labelXZ(label), lines, name: zg.z.name, purpose: zg.z.purpose || '' });
+      for (const cell of dCells) {
+        const g = zg.districts.find((x) => x.d.id === cell.id);
+        g.cell = cell;
+        const { block: plate, label: dLabel, placed } = layoutDistrict(g, dUnit, m);
+        districts.push({
+          ...toXZ(plate), cell: toXZ(cell), empty: false, files: g.items.length, id: g.d.id, label: labelXZ(dLabel),
+          lines: sum(g.items, (it) => it.b.lines || 0), name: g.d.name, purpose: g.d.purpose || '', zone: zg.z.id,
+        });
+        for (const p of placed) {
+          const b = p.it.b;
+          const isCampus = campus(b);
           buildings.push({
             aggregate: b.aggregate || 0,
             antenna: antennaOf(b),
             churn: b.churn || 0,
             complexity: b.complexity ?? null,
-            d: p.side,
-            district: d.id,
+            d: p.d,
+            district: g.d.id,
             floors: floorsOf(b),
             functions: b.functions ?? null,
-            h: heightOf(b),
+            h: heightOf(b, { perLine, campus: isCampus }),
             landmark: null,
             lastChange: b.lastChange || null,
+            ledges: ledgesOf(b),
             lines: b.lines || 0,
             path: b.path,
             quadrant: quadrants[b.path] || null,
-            test: isTest(b.path),
-            w: p.side,
+            test: isCampus,
+            w: p.w,
             worst: b.worst ?? null,
             x: p.x,
             z: p.z,
-            zone: z.id,
+            zone: zg.z.id,
           });
         }
       }
-      cx += w;
-    });
-    const width = cx;
-    // the boulevard along the near edge joins the avenues
-    if (zones.length) roads.push({ axis: 'x', x: -AVENUE, z: depth, w: width + 2 * AVENUE, d: AVENUE });
+    }
     const at = Object.fromEntries(buildings.map((b) => [b.path, b]));
     const landmarks = arr(model && model.landmarks).filter((l) => at[l.path]).map((l) => {
       at[l.path].landmark = l.label;
       const b = at[l.path];
       return { label: l.label, path: l.path, x: b.x + b.w / 2, y: b.h + b.antenna, z: b.z + b.d / 2 };
     });
-    const portsIn = arr(model && model.ports);
-    // past the far boulevard, behind the city as the home view sees it
-    const portZ = -AVENUE - PORT_MARGIN;
-    const ports = portsIn.map((p, i) => ({
-      id: p.id, name: p.name, via: arr(p.via).filter((v) => at[v]),
-      x: portsIn.length === 1 ? width / 2 : (width * (i + 0.5)) / portsIn.length, y: 0, z: portZ,
-    }));
-    const bounds = { maxX: width + AVENUE, maxZ: depth + AVENUE, minX: -AVENUE, minZ: ports.length ? portZ - 6 : -AVENUE };
+    const ports = layoutPorts(arr(model && model.ports), at, city, m);
+    // the ring road around the city, and the bounds (the ports' docks included)
+    const ring = toXZ(insetRect(city, -m.avenue / 2));
+    const bounds = { maxX: ring.x + ring.w, maxZ: ring.z + ring.d, minX: ring.x, minZ: ring.z };
+    for (const p of ports) {
+      bounds.minX = Math.min(bounds.minX, p.x - 9 * k); bounds.maxX = Math.max(bounds.maxX, p.x + 9 * k);
+      bounds.minZ = Math.min(bounds.minZ, p.z - 9 * k); bounds.maxZ = Math.max(bounds.maxZ, p.z + 9 * k);
+    }
     bounds.centerX = (bounds.minX + bounds.maxX) / 2;
     bounds.centerZ = (bounds.minZ + bounds.maxZ) / 2;
     bounds.size = Math.max(bounds.maxX - bounds.minX, bounds.maxZ - bounds.minZ);
-    return { aggregated, avenueWidth: AVENUE, avenues: roads, bounds, buildings, districts, edges: Array.isArray(model && model.edges) ? model.edges : [], landmarks, note, ports, zones };
+    return { aggregated, avenueWidth: m.avenue, avenues, bounds, buildings, districts, edges: Array.isArray(model && model.edges) ? model.edges : [], landmarks, note, ports, ring, scale: k, zones };
   }
 
   // ---------- colour by ----------
@@ -333,8 +465,9 @@
     const pal = light ? PALETTES.light : PALETTES.dark;
     const buildings = layout.buildings;
     if (mode === 'zone') {
-      const of = Object.fromEntries(layout.zones.map((z) => [z.id, pal.zone[z.index % pal.zone.length]]));
-      return { colours: buildings.map((b) => of[b.zone] || pal.none), legend: layout.zones.map((z) => ({ colour: of[z.id], label: z.name })) };
+      const tint = (kind) => pal.kind[kind] || pal.kind.outskirts;
+      const of = Object.fromEntries(layout.zones.map((z) => [z.id, tint(z.kind)]));
+      return { colours: buildings.map((b) => of[b.zone] || pal.none), legend: layout.zones.map((z) => ({ colour: of[z.id], label: z.name, sub: z.kind })) };
     }
     if (mode === 'churn') {
       const max = Math.max(1, ...buildings.map((b) => b.churn));
@@ -347,8 +480,8 @@
     const names = quadrantNames();
     const of = Object.fromEntries(names.map((q, i) => [q, pal.quadrant[i % pal.quadrant.length]]));
     return {
-      colours: buildings.map((b) => of[b.quadrant] || pal.none),
-      legend: [...names.map((q) => ({ colour: of[q], label: q })), { colour: pal.none, label: 'Not measured' }],
+      colours: buildings.map((b) => of[b.quadrant] || (b.test ? pal.campus : pal.none)),
+      legend: [...names.map((q) => ({ colour: of[q], label: q })), { colour: pal.none, label: 'Not measured' }, { colour: pal.campus, label: 'Tests', sub: 'no complexity, shown lower' }],
     };
   }
 
@@ -372,8 +505,8 @@
   /** Where the camera flies for a file, a district or a zone (by id or name): { kind, id, x, y, z, distance } or null. */
   function flyTarget(layout, name) {
     const b = layout.buildings.find((x) => x.path === name);
-    if (b) return { distance: clamp(b.h * 3 + 20, 24, 90), id: b.path, kind: 'building', x: b.x + b.w / 2, y: b.h / 2, z: b.z + b.d / 2 };
-    const area = (kind, r) => ({ distance: clamp(Math.max(r.w, r.d) * 1.6, 30, 400), id: r.id, kind, x: r.x + r.w / 2, y: 0, z: r.z + r.d / 2 });
+    if (b) return { distance: clamp(Math.max(b.w, b.d, b.h) * 5, 30, 160), id: b.path, kind: 'building', x: b.x + b.w / 2, y: b.h / 2, z: b.z + b.d / 2 };
+    const area = (kind, r) => ({ distance: clamp(Math.max(r.w, r.d) * 1.8, 30, 600), id: r.id, kind, x: r.x + r.w / 2, y: 0, z: r.z + r.d / 2 });
     const d = layout.districts.find((x) => x.id === name) || layout.districts.find((x) => x.name === name);
     if (d) return area('district', d);
     const z = layout.zones.find((x) => x.id === name) || layout.zones.find((x) => x.name === name);
@@ -413,14 +546,23 @@
     colourBy,
     defaultColourBy,
     districtNeighbours,
+    FILL,
     findTargets,
     flyTarget,
+    GAP,
+    gapOf,
+    heightOf,
     isTest,
     layoutCity,
+    LEDGES_MAX,
+    ledgesOf,
     MAX_BUILDINGS,
     neighbours,
+    perLineOf,
     squarify,
     STREET,
+    stripLayout,
+    weightOf,
   };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.CityLayout = api;

@@ -1,9 +1,11 @@
-// The project city's scene colours (#373), in the run's two 3D themes: what the run's floor has
-// (sky, floor, pad, lane, wall cap, shadow, lights, accent, ink, mast) comes from
-// src/renderer/run3d-theme.js (window.Run3DTheme, loaded by the app before this bundle), so the
-// city and the run's floor read as one product; the rest is the city's own, from the proof of
-// concept (poc/project-city.html): the docks, plinths and beacons, and per zone kind a ground, a
-// district plate and a label ink. The buildings' colours are src/shared/city-layout.js colourBy.
+// The project city's scene colours (#373, the proof of concept's in #382), in the run's two 3D
+// themes: what the run's floor has (sky, floor, pad, lane, wall cap, shadow, lights, accent, ink,
+// mast, the state colours) comes from src/renderer/run3d-theme.js (window.Run3DTheme, loaded by
+// the app before this bundle), so the city and the run's floor read as one product; the rest is
+// the city's own, copied from poc/project-city.html THEMES: the dim of the buildings outside a
+// pinned file's connections, the lane dashes, the docks, halls, plinths and beacons, and per zone
+// kind a ground, a district plate and a label ink. The buildings' colours are
+// src/shared/city-layout.js colourBy (the same POC palette).
 const CITY = {
   dark: {
     dim: '#242a37', dash: '#3a4357', dock: '#2b3247', hall: '#3d4766', plinth: '#343c52', beacon: '#7c9cff', danger: '#f87171', marker: '#facc15',
@@ -45,8 +47,9 @@ export function cityTheme(name) {
   return {
     ...own,
     name: run.name,
+    dark: run.name === 'dark',
     sky: run.sky, floor: run.floor, pad: run.pad, lane: run.lane, wallCap: run.wallCap, shadow: run.shadow, light: run.light,
-    accent: run.accent, ink: run.ink, muted: run.muted, mast: run.machine.mast,
+    accent: run.accent, ink: run.ink, muted: run.muted, mast: run.machine.mast, status: run.status,
     kind: (kind) => own.kinds[kind] || own.kinds.outskirts,
   };
 }
