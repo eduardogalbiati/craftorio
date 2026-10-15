@@ -67,3 +67,40 @@ Feature: Releases
     When I open "Releases" in the sidebar
     And I open the release summary of the release "v0.9"
     Then the release summary shows "Timeline", "The fixes", "Before you ship" and "Follow-ups"
+
+  # #376: a release on the project city. A real git repository tagged 1.1.0, 1.1.1 and 1.1.2: 1.1.2
+  # adds one file (#12), removes one and changes one (#13); see features/steps/release-city.steps.js
+  @issue-376
+  Scenario: "Show on the map" on a release shows the city with what the release changed
+    Given the app is open
+    And the workspace has a git project "shop" tagged "1.1.0", "1.1.1" and "1.1.2" that shipped the release "1.1.2" with the issues "#12" and "#13"
+    When I open "Releases" in the sidebar
+    And I choose the project "shop" in the header
+    And I click "Show on the map" on the release "1.1.2"
+    Then the Architecture tab shows the project city
+    And the city release header compares "1.1.1" to "1.1.2"
+    And the city release header counts 1 added, 1 changed and 1 removed
+    And the city release counts are given by the zone "Core" and the district "Sources"
+    And the city offers "Save image" for the release
+
+  @issue-376
+  Scenario: Filtering a release by issue counts only that issue's files
+    Given the app is open
+    And the workspace has a git project "shop" tagged "1.1.0", "1.1.1" and "1.1.2" that shipped the release "1.1.2" with the issues "#12" and "#13"
+    When I open "Releases" in the sidebar
+    And I choose the project "shop" in the header
+    And I click "Show on the map" on the release "1.1.2"
+    And I pick the issue "#12" in the release's issue filter
+    Then the city release header compares "1.1.1" to "1.1.2"
+    And the city release header counts 1 added, 0 changed and 0 removed
+
+  @issue-376
+  Scenario: Picking an earlier tag compares any two releases on the city
+    Given the app is open
+    And the workspace has a git project "shop" tagged "1.1.0", "1.1.1" and "1.1.2" that shipped the release "1.1.2" with the issues "#12" and "#13"
+    When I open "Releases" in the sidebar
+    And I choose the project "shop" in the header
+    And I click "Show on the map" on the release "1.1.2"
+    And I pick "1.1.0" as the earlier tag of the release comparison
+    Then the city release header compares "1.1.0" to "1.1.2"
+    And the city release header counts 2 added, 0 changed and 0 removed
