@@ -30,7 +30,8 @@ test('the log is seeded with the three standing decisions of the issue', () => {
   const find = (re) => list.find((e) => re.test(e.text));
   const tests = find(/#47\b/);
   assert.ok(tests, 'no entry for #47');
-  assert.equal(tests.date, '2026-09-29');
+  // its own entry, or folded into a later one that keeps its date (#360: the log is capped at 16)
+  assert.ok(tests.date === '2026-09-29' || /#47 of 2026-09-29/.test(tests.text), `the #47 entry lost its date (${tests.date})`);
   assert.ok(/test writer/i.test(tests.text), 'the #47 entry does not name the test writer');
   const writeAndRun = find(/write_and_run/);
   assert.ok(writeAndRun, 'no entry for unit and E2E tests write_and_run by default');
