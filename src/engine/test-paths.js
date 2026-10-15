@@ -94,7 +94,9 @@ async function snapshot(dir, patterns = TESTS_PATHS) {
   }
   const head = await git(['rev-parse', '--verify', 'HEAD'], root);
   const isTest = testMatcher(patterns);
-  return { root, head, patterns, dirty: await workingBlobs(root, (await localChanges(root)).filter(isTest)) };
+  // inside a rebase HEAD sits on the base: keep the branch's side, the turn may finish the rebase
+  const rebaseHead = await rebaseOrigHead(root);
+  return { root, head, rebaseHead, patterns, dirty: await workingBlobs(root, (await localChanges(root)).filter(isTest)) };
 }
 
 // Test files the turn changed since `snap` (sorted). `bases`: refs whose commits are not the
@@ -115,8 +117,9 @@ async function changedTestFiles(snap, { bases = [] } = {}) {
   const changed = files.filter((f) => now[f] !== before[f]);
   const unmerged = new Set(lines(await git([...G, 'diff', '--name-only', '--diff-filter=U'], root)));
   const out = [];
-  // inside a rebase HEAD sits on the base: the branch's side is the rebase's original head
-  const branchHead = (await rebaseOrigHead(root)) || head;
+  // inside a rebase HEAD sits on the base: the branch's side is the rebase's original head, the one
+  // in progress now or, when the turn finished it (`rebase --continue`), the one at the snapshot
+  const branchHead = (await rebaseOrigHead(root)) || snap.rebaseHead || head;
   for (const f of changed) {
     // #380: a conflict the turn's rebase left for someone else (git wrote the markers, not the agent)
     if (unmerged.has(f)) continue;
