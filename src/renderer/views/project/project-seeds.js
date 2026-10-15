@@ -20,7 +20,9 @@
     const t = Date.parse(iso);
     return Number.isFinite(t) ? new Date(t).toLocaleString() : String(d || '');
   };
-  const costText = (r) => (r.simulated ? 'simulated' : r.source === 'tool' || r.costUsd === 0 ? 'free' : r.costUsd == null ? 'cost unknown' : fmtUsd(r.costUsd));
+  // the page in standards mode with the CSP first (the page's own doctype dropped: one after content is ignored)
+  const framed = (html) => `<!doctype html>${RESULT_CSP}${String(html).replace(/^\s*<!doctype[^>]*>/i, '')}`;
+  const costText =(r) => (r.simulated ? 'simulated' : r.source === 'tool' || r.costUsd === 0 ? 'free' : r.costUsd == null ? 'cost unknown' : fmtUsd(r.costUsd));
 
   // the row's status: [text, badge class]
   function statusOf(row) {
@@ -72,7 +74,7 @@
     if (!o.html) return '<p class="small muted" role="status">Opening the result…</p>';
     return `<div class="seed-result" data-testid="seed-result">
       <div class="row arch-finding-head"><b>${esc(o.name)}</b><span class="muted small">${esc(shortDate(o.date))}</span><span class="spacer"></span><button type="button" class="btn sm ghost" data-seed-close>Close</button></div>
-      <iframe class="seed-frame" data-testid="seed-frame" title="${esc(o.name)} result" sandbox="" referrerpolicy="no-referrer" srcdoc="${esc(RESULT_CSP + o.html)}"></iframe>
+      <iframe class="seed-frame" data-testid="seed-frame" title="${esc(o.name)} result" sandbox="" referrerpolicy="no-referrer" srcdoc="${esc(framed(o.html))}"></iframe>
     </div>`;
   }
 
@@ -83,14 +85,32 @@
       : !cur.rows ? '<p class="small muted" role="status">Loading the seeds…</p>'
         : !cur.rows.length ? '<div class="empty-state"><b>No analysis seed</b><p class="muted">Add one under the workspace\'s seeds/ folder (seeds/&lt;name&gt;/seed.md).</p></div>'
           : `<ul class="arch-findings">${cur.rows.map(rowHtml).join('')}</ul>`;
+    // the tool command being typed survives a re-render
+    const draft = cur.editing ? cur.box.querySelector(`[data-seed-tool-input="${cur.editing}"]`)?.value : undefined;
     cur.box.innerHTML = `<section class="seeds" data-testid="seeds-section" aria-label="Seeds">
       <h3 class="arch-sub">Seeds <span class="muted small">analyses the Oracle runs read-only on this project</span></h3>
       ${body}
       ${frameHtml()}
     </section>`;
+    const input = draft != null && cur.box.querySelector(`[data-seed-tool-input="${cur.editing}"]`);
+    if (input) input.value = draft;
   }
 
-  async function load() {
+  // a poll's update: only the status badges and Run buttons (an open result or a typed command stays);
+  // the whole section when a row is missing
+  function patchRows() {
+    for (const row of cur.rows || []) {
+      const badge = cur.box.querySelector(`[data-testid="seed-status-${row.id}"]`);
+      const btn = cur.box.querySelector(`[data-seed-run="${row.id}"]`);
+      if (!badge || !btn) { render(); return; }
+      const [status, cls] = statusOf(row);
+      badge.textContent = status;
+      badge.className = `badge ${cls}`.trim();
+      btn.disabled = cur.running.has(row.id) || !!row.running;
+    }
+  }
+
+  async function load({ patch = false } = {}) {
     const c = cur;
     try {
       const rows = await api.listSeeds({ projectId: c.id });
@@ -101,7 +121,8 @@
       if (cur !== c) return;
       c.error = errMsg(e);
     }
-    render();
+    if (patch && !c.error) patchRows();
+    else render();
   }
 
   // while a seed runs, the list is read again for the Oracle's progress
@@ -111,7 +132,7 @@
     c.timer = setTimeout(async () => {
       c.timer = null;
       if (cur !== c || !c.running.size) return;
-      await load();
+      await load({ patch: true });
       poll();
     }, POLL_MS);
   }

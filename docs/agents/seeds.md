@@ -33,9 +33,8 @@ script, no network.
 
 A seed reads the network only as it declares, and each read is a command builder and a parser in
 both platform adapters (`src/shared/platforms/`), exposed through `src/oracle-platform.js`. The CI's
-recent runs: `ciRunsCommand` / `parseCiRuns` (`ciRunsCommand` / `ciRunsResult` there). They are not
-an Oracle MCP tool yet: the Oracle reads CI timings from the repository's workflow files and says
-the run timings are missing unless the project's tool provides them.
+recent runs: `ciRunsCommand` / `parseCiRuns` (`ciRunsCommand` / `ciRunsResult` there), read by the
+Oracle's read-only `ci_runs` tool (`src/oracle-tools.js`) with the project's own CLI auth.
 
 ## As a tool
 

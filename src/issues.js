@@ -1,6 +1,6 @@
 // Issues as the git platform gives them (#345: moved down from src/backlog.js so src/epics.js and
 // src/roadmap.js no longer require the backlog, which requires them; src/backlog.js re-exports all).
-// - PLATFORMS, parseRepoUrl, platformOfHost, cliTarget: a repository URL read for gh (GitHub) / glab (GitLab);
+// - PLATFORMS, parseRepoUrl, platformOfHost, cliTarget (cliTargetOrName: an owner/name too): a repository URL read for gh (GitHub) / glab (GitLab);
 // - execCli: runs a platform CLI; fetchIssues / fetchIssue: the issues, normalized (taskProgress);
 // - issueCreateCommand, repoLabels: filing an issue (the Product Owner's Create, the epics);
 // - issueFields, itemIssues, withSyncedText: the read-only copies queue and roadmap items keep (#168).
@@ -94,6 +94,14 @@ function cliTarget(platform, repo) {
   return p.cliTarget(parsed);
 }
 
+// The --repo value for a repository URL, or an owner/name already (base health, seed tools)
+function cliTargetOrName(platform, repo) {
+  try { return cliTarget(platform, repo); } catch (e) {
+    if (adapterOf(platform) && /^[^\s/]+\/\S+$/.test(String(repo || ''))) return String(repo);
+    throw e;
+  }
+}
+
 // The command as shown in a preview: `text` (a document passed as an argument) replaced.
 const commandDisplay = ({ cli, args }, text) => `${cli} ${args.map((a) => (a === text ? '<document>' : /\s/.test(a) ? `"${a}"` : a)).join(' ')}`;
 
@@ -141,6 +149,7 @@ function withSyncedText(copy, synced) {
 module.exports = {
   adapterOf,
   cliTarget,
+  cliTargetOrName,
   commandDisplay,
   DEFAULT_PLATFORM,
   execCli,

@@ -41,14 +41,6 @@ const LOG_TAIL_LINES = 60;
 const short = (c) => String(c || '').slice(0, 12) || 'unknown';
 const stamp = (at) => String(at).replace(/[:.]/g, '-');
 
-// gh/glab's --repo value: a repository URL, or an owner/name already
-function targetOf(platform, repo) {
-  try { return issues.cliTarget(platform, repo); } catch (e) {
-    if (issues.adapterOf(platform) && /^[^\s/]+\/\S+$/.test(String(repo || ''))) return String(repo);
-    throw e;
-  }
-}
-
 function issueBody(entry, { commit, lastGreen, logFile, logText, runId }) {
   const tail = String(logText || '').split(/\r?\n/).slice(-LOG_TAIL_LINES).join('\n').trim();
   return [
@@ -71,7 +63,7 @@ function issueBody(entry, { commit, lastGreen, logFile, logText, runId }) {
 // Files the entry's bug issue, or updates the one it has (a comment) → { url, action, test }
 async function fileIssue(ws, projectId, entry, { platform, repo, exec, ...ctx }) {
   const p = issues.adapterOf(platform);
-  const target = targetOf(platform, repo);
+  const target = issues.cliTargetOrName(platform, repo);
   const at = new Date().toISOString();
   const dir = path.join(storeDir(ws), slug(projectId));
   fs.mkdirSync(dir, { recursive: true });

@@ -29,7 +29,7 @@ const escHtml = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)
 function seedPrompt({ project, seed }) {
   return [
     `Run the analysis seed "${seed.id}" on the project "${project.name || project.id}" (projectId "${project.id}", folder ${project.folder}).`,
-    'Work read-only: read the repository with your repo_read and repo_git tools (this projectId). Never edit a file, never run a build, a test or a CI job, never cross a human gate. Use only the network reads the seed declares in its needs.',
+    'Work read-only: read the repository with your repo_read and repo_git tools (this projectId). Never edit a file, never run a build, a test or a CI job, never cross a human gate. Use only the network reads the seed declares in its needs (the CI\'s recent runs: your ci_runs tool).',
     'Never copy a secret, a token, a password or an environment value into the result.',
     '',
     '<seed>',

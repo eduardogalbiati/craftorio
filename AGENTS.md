@@ -49,16 +49,17 @@ npx electron scripts/smoke.js <out.png>   # UI smoke test: mock run + screenshot
 npm run screenshot -- --view backlog --mode kanban --out <dir>   # one screen, simulated data
 ```
 
-## Topic docs (read the one that matches your task)
+## Topic docs (read the one for your task)
 
-- [code-map.md](docs/agents/code-map.md), [test-map.md](docs/agents/test-map.md), [channels.md](docs/agents/channels.md): file roles, tests, channel schemas; to add a channel/screen/skill (`npm run docs`, gitignored).
+- [code-map.md](docs/agents/code-map.md), [test-map.md](docs/agents/test-map.md), [channels.md](docs/agents/channels.md): file roles, tests, channel schemas (`npm run docs`, gitignored).
 - [docs/agents/decisions.md](docs/agents/decisions.md): the owner's decisions. Read before changing behaviour an earlier decision set.
 - [docs/agents/engine.md](docs/agents/engine.md): workflow YAML, sessions and handoff notes, gates, how a run ends, templates. Read before changing the engine or a workflow.
 - [docs/agents/capabilities.md](docs/agents/capabilities.md): agents' tools, isolation per CLI, `gh`/`glab`, read-only agents. Read before changing an agent's tools or a read-only skill.
 - [docs/agents/worktrees.md](docs/agents/worktrees.md): per-run worktrees, branch gotchas. Read before touching worktrees, merges or branches.
 - [docs/agents/storage.md](docs/agents/storage.md): files vs the SQLite index. Read before touching runs, queues, gates or notifications.
 - [docs/agents/testing.md](docs/agents/testing.md): CI, machine-independent tests, mock provider, real CLIs. Read before writing tests.
-- [docs/agents/windows-gotchas.md](docs/agents/windows-gotchas.md): line endings, paths, node-pty, the exe, EBUSY. Read before scripted edits, paths, terminals or packaging.
-- [docs/agents/environment.md](docs/agents/environment.md): Node/npm/Electron versions, installed CLIs, workspace layout. Read before installing or upgrading.
+- [docs/agents/windows-gotchas.md](docs/agents/windows-gotchas.md): line endings, paths, node-pty, the exe, EBUSY. Read before scripted edits, terminals or packaging.
+- [docs/agents/environment.md](docs/agents/environment.md): Node/npm/Electron, CLIs, workspace layout. Read before installing or upgrading.
 - [docs/agents/renderer.md](docs/agents/renderer.md): the UI and how to check it. Read before changing `src/renderer/`.
 - [docs/agents/backlog.md](docs/agents/backlog.md): open ideas. Read when planning new work.
+- [seeds.md](docs/agents/seeds.md): writing an analysis seed.

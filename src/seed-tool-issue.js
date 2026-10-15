@@ -19,14 +19,6 @@ const LABEL = 'analysis-tool';
 const LABEL_COLOR = '5319e7';
 const LABEL_TEXT = 'An analysis seed built as a deterministic tool (#360)';
 
-// gh/glab's --repo value: a repository URL, or an owner/name already
-function targetOf(platform, repo) {
-  try { return issues.cliTarget(platform, repo); } catch (e) {
-    if (issues.adapterOf(platform) && /^[^\s/]+\/\S+$/.test(String(repo || ''))) return String(repo);
-    throw e;
-  }
-}
-
 // The seed's VERIFY section to the end (its steps and its "tell me" list)
 const verifyOf = (body) => {
   const s = String(body || '');
@@ -70,7 +62,7 @@ async function fileToolIssue({ project, seed, platform, repo, exec, preview, dir
   if (preview) return { preview: true, url: null, title, body };
   const p = issues.adapterOf(platform);
   if (!p) throw new Error(`Unknown platform: ${platform}`);
-  const target = targetOf(platform, repo);
+  const target = issues.cliTargetOrName(platform, repo);
   let labels = [LABEL];
   if (p.readsLabels) {
     const l = p.labelListCommand(target);

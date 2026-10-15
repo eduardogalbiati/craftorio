@@ -211,8 +211,8 @@ tokens by agent and step, review rounds, timeouts, invalid outputs, refused call
 tool timeouts, the test writer's context, whole-suite starts; `src/oracle-run-analysis.js`, no
 model; #321: its `focus` `time`, `context`, `tools`, `cache` or `tests` reads the same run files
 for where the time, the context and the tool calls went, `src/oracle-run-focus.js`, also no model
-and read-only); `issues_search`, `issue_view` and `labels` (`src/oracle-platform.js`: gh / glab `issue
-list`, `issue view` and `label list` only, built by the app on the synced backlog's repository,
+and read-only); `issues_search`, `issue_view`, `labels` and `ci_runs` (#360) (`src/oracle-platform.js`: gh / glab `issue
+list`, `issue view`, `label list` and `run list` / `ci list` only, built by the app on the synced backlog's repository,
 never a command from the model); and the `checker` delegate (`src/oracle-check.js`): one test
 runner (node, npm test/run, pytest, go test, dotnet test, mvn...; nothing that fetches a package:
 no npx, npm exec, go run, pip) with plain arguments, no shell syntax or inline code, on a detached scratch worktree under `<workspace>/oracle/checks/` removed afterwards, with
