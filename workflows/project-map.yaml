@@ -56,6 +56,7 @@ inputs:
     type: string
     enum: [auto, validated]
     default: auto
+    options: { auto: Automatic, validated: Validated }
     description: "Automatic: the validated plan is saved and the analysis follows. Validated: the run shows the plan at a gate and saves it only when you approve."
   analyze:
     label: "Analyse with the Oracle"

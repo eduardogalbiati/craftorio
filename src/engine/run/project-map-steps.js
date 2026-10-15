@@ -62,7 +62,7 @@ const methods = {
     }
     if (step.action === 'analyze') {
       const svc = typeof this.architectureOracle === 'function' ? this.architectureOracle() : null;
-      const output = await projectMap.analyzeMap({ ...place, mock: this.mock, oracle: svc?.oracle || null, agent: svc?.agent || null });
+      const output = await projectMap.analyzeMap({ ...place, mock: this.machine.simulated, oracle: svc?.oracle || null, agent: svc?.agent || null });
       log('info', `the Oracle's analysis of ${place.projectId} is saved: ${output.findings} finding(s)${output.simulated ? ', simulated' : output.cost_usd != null ? `, US$ ${Number(output.cost_usd).toFixed(2)}` : ''}.`);
       return output;
     }

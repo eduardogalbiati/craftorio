@@ -88,12 +88,6 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   local data is a read-only replica: the sync updates it, the app re-reads an issue right before a
   run starts, and issue changes are never made locally. Why: planned items kept stale copies, so an
   issue edited after planning ran with its old text.
-- **2026-10-01** (#111, #98): UI changes are specified, built with the shared components, captured
-  in every state and reviewed for how they look and are used, not only for what they do; a
-  requirement of an issue is never dropped silently, and a review is not spent on work the
-  developer already declared missing (it goes back to develop). Why: a run passed every step and
-  merged a screen the owner then found hard to use, and a declared gap still went to code review,
-  which failed on exactly that gap.
 - **2026-09-29** (#47): only the test writer writes, edits or deletes tests; the developer changes
   production code only. Why: overlapping test responsibilities made one run pay for the full suite
   up to four times.

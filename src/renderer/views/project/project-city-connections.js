@@ -66,7 +66,7 @@
       const list = el.querySelector('[data-testid="city-connections-list"]');
       const rows = CityConnections.rank(city.layout, { query });
       if (list && rows.length) list.innerHTML = rows.map(rowHtml).join('');
-      else draw(), el.querySelector('[data-pcc-query]')?.focus();
+      else draw(), el.querySelector('[data-pcc-query]')?.focus({ preventScroll: true });
     });
     // a new layout: the pins it lacks go, the rest stay drawn
     const off = city.onLayout(() => {

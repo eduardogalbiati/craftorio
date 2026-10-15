@@ -313,19 +313,17 @@
     return docks;
   }
 
-  /** The city on the ground: see the header. */
-  function layoutCity(model, { quadrants = {} } = {}) {
+  // The drawn files grouped by district and the districts by zone, in the plan's order, each with its
+  // weight on the ground: { zoneGroups: [{ z, index, districts: [{ d, items: [{ b, weight }], weight }], weight }],
+  // campus(b) }. A district the plan does not name, or whose zone it does not name, goes to the Outskirts.
+  function groupByZone(model, drawn) {
     const zonesIn = arr(model && model.zones);
     const districtsIn = arr(model && model.districts);
     const zoneById = Object.fromEntries(zonesIn.map((z) => [z.id, z]));
     const districtById = Object.fromEntries(districtsIn.map((d) => [d.id, d]));
-    // a district whose zone the plan does not name is drawn in the Outskirts
     const zoneOf = (d) => (d && zoneById[d.zone] ? d.zone : OUTSKIRTS_ZONE.id);
-    const { buildings: drawn, aggregated, note } = aggregate(arr(model && model.buildings), districtsIn.map((d) => d.id));
     const kindOf = (b) => { const d = districtById[b.district]; const z = zoneById[zoneOf(d)]; return z ? z.kind : OUTSKIRTS_ZONE.kind; };
     const campus = (b) => kindOf(b) === 'campus' || isTest(b.path);
-    const perLine = perLineOf(drawn);
-    // the districts with files, grouped, each with its weight
     const groups = new Map();
     for (const b of drawn) {
       const d = districtById[b.district] || { id: b.district, name: b.district, zone: OUTSKIRTS_ZONE.id, purpose: '' };
@@ -341,6 +339,46 @@
       districts: [...districtsIn.filter((d) => zoneOf(d) === z.id && groups.has(d.id)).map((d) => groups.get(d.id)), ...(z.id === OUTSKIRTS_ZONE.id ? orphans.filter((g) => !districtById[g.d.id]) : [])],
     })).filter((zg) => zg.districts.length);
     for (const zg of zoneGroups) zg.weight = sum(zg.districts, (g) => g.weight);
+    return { zoneGroups, campus };
+  }
+
+  // A zone laid out inside its cell: its block, name strip, the districts' treemap (squarify, a
+  // DISTRICT_FLOOR share each at least) and their plates with the buildings (layoutDistrict)
+  function layoutZone(zg, m, unit, place) {
+    const block = insetCapped(zg.cell, m.avenue / 2);
+    const { label } = nameStrip(block, zg.z.name, `  ${zg.z.kind}`, m.zoneLabelH, 1.3, m.avenue * 1.4, m.sidewalk);
+    // the districts' room: the block less half a street, and the name's strip
+    const strip = Math.min(m.zoneLabelH, (label.vertical ? block.w : block.h) * 0.3);
+    const dRect = label.vertical
+      ? insetCapped({ x: block.x, y: block.y, w: block.w - strip, h: block.h }, m.street / 2)
+      : insetCapped({ x: block.x, y: block.y, w: block.w, h: block.h - strip }, m.street / 2);
+    const dTotal = sum(zg.districts, (g) => g.weight);
+    for (const g of zg.districts) g.wBlock = Math.max(g.weight, dTotal * DISTRICT_FLOOR);
+    const dCells = squarify(zg.districts.map((g) => ({ id: g.d.id, weight: g.wBlock })), dRect);
+    const dUnit = Math.min(unit, (dRect.w * dRect.h) / Math.max(1e-9, sum(zg.districts, (g) => g.wBlock)));
+    const files = sum(zg.districts, (g) => g.items.length);
+    const lines = sum(zg.districts, (g) => sum(g.items, (it) => it.b.lines || 0));
+    const zone = { ...toXZ(block), cell: toXZ(zg.cell), files, id: zg.z.id, index: zg.index, kind: zg.z.kind, label: labelXZ(label), lines, name: zg.z.name, purpose: zg.z.purpose || '' };
+    const districts = [], buildings = [];
+    for (const cell of dCells) {
+      const g = zg.districts.find((x) => x.d.id === cell.id);
+      g.cell = cell;
+      const { block: plate, label: dLabel, placed } = layoutDistrict(g, dUnit, m);
+      districts.push({
+        ...toXZ(plate), cell: toXZ(cell), empty: false, files: g.items.length, id: g.d.id, label: labelXZ(dLabel),
+        lines: sum(g.items, (it) => it.b.lines || 0), name: g.d.name, purpose: g.d.purpose || '', zone: zg.z.id,
+      });
+      for (const p of placed) buildings.push(place(p, g.d.id, zg.z.id));
+    }
+    return { zone, districts, buildings };
+  }
+
+  /** The city on the ground: see the header. */
+  function layoutCity(model, { quadrants = {} } = {}) {
+    const districtsIn = arr(model && model.districts);
+    const { buildings: drawn, aggregated, note } = aggregate(arr(model && model.buildings), districtsIn.map((d) => d.id));
+    const { zoneGroups, campus } = groupByZone(model, drawn);
+    const perLine = perLineOf(drawn);
     let inner = zoneGroups.filter((zg) => zg.z.kind !== 'outskirts');
     let outskirts = zoneGroups.find((zg) => zg.z.kind === 'outskirts') || null;
     if (!inner.length && outskirts) { inner = [outskirts]; outskirts = null; }
@@ -370,58 +408,23 @@
       if (i) avenues.push({ axis: 'x', x: rect.x, z: s.y1, length: rect.w });
       s.cells.forEach((c, j) => { if (j) avenues.push({ axis: 'z', x: c.x, z: s.y0, length: s.y1 - s.y0 }); });
     });
+    // a placed building, with everything the scene and the cards read
+    const place = (p, district, zone) => {
+      const b = p.it.b;
+      const isCampus = campus(b);
+      return {
+        aggregate: b.aggregate || 0, antenna: antennaOf(b), churn: b.churn || 0, complexity: b.complexity ?? null, d: p.d, district,
+        floors: floorsOf(b), functions: b.functions ?? null, h: heightOf(b, { perLine, campus: isCampus }), landmark: null,
+        lastChange: b.lastChange || null, ledges: ledgesOf(b), lines: b.lines || 0, path: b.path, quadrant: quadrants[b.path] || null,
+        test: isCampus, w: p.w, worst: b.worst ?? null, x: p.x, z: p.z, zone,
+      };
+    };
     const zones = [], districts = [], buildings = [];
     for (const zg of [...inner, ...(outskirts ? [outskirts] : [])]) {
-      const block = insetCapped(zg.cell, m.avenue / 2);
-      const { label } = nameStrip(block, zg.z.name, `  ${zg.z.kind}`, m.zoneLabelH, 1.3, m.avenue * 1.4, m.sidewalk);
-      // the districts' room: the block less half a street, and the name's strip
-      const strip = Math.min(m.zoneLabelH, (label.vertical ? block.w : block.h) * 0.3);
-      const dRect = label.vertical
-        ? insetCapped({ x: block.x, y: block.y, w: block.w - strip, h: block.h }, m.street / 2)
-        : insetCapped({ x: block.x, y: block.y, w: block.w, h: block.h - strip }, m.street / 2);
-      const dTotal = sum(zg.districts, (g) => g.weight);
-      for (const g of zg.districts) g.wBlock = Math.max(g.weight, dTotal * DISTRICT_FLOOR);
-      const dCells = squarify(zg.districts.map((g) => ({ id: g.d.id, weight: g.wBlock })), dRect);
-      const dUnit = Math.min(unit, (dRect.w * dRect.h) / Math.max(1e-9, sum(zg.districts, (g) => g.wBlock)));
-      const files = sum(zg.districts, (g) => g.items.length);
-      const lines = sum(zg.districts, (g) => sum(g.items, (it) => it.b.lines || 0));
-      zones.push({ ...toXZ(block), cell: toXZ(zg.cell), files, id: zg.z.id, index: zg.index, kind: zg.z.kind, label: labelXZ(label), lines, name: zg.z.name, purpose: zg.z.purpose || '' });
-      for (const cell of dCells) {
-        const g = zg.districts.find((x) => x.d.id === cell.id);
-        g.cell = cell;
-        const { block: plate, label: dLabel, placed } = layoutDistrict(g, dUnit, m);
-        districts.push({
-          ...toXZ(plate), cell: toXZ(cell), empty: false, files: g.items.length, id: g.d.id, label: labelXZ(dLabel),
-          lines: sum(g.items, (it) => it.b.lines || 0), name: g.d.name, purpose: g.d.purpose || '', zone: zg.z.id,
-        });
-        for (const p of placed) {
-          const b = p.it.b;
-          const isCampus = campus(b);
-          buildings.push({
-            aggregate: b.aggregate || 0,
-            antenna: antennaOf(b),
-            churn: b.churn || 0,
-            complexity: b.complexity ?? null,
-            d: p.d,
-            district: g.d.id,
-            floors: floorsOf(b),
-            functions: b.functions ?? null,
-            h: heightOf(b, { perLine, campus: isCampus }),
-            landmark: null,
-            lastChange: b.lastChange || null,
-            ledges: ledgesOf(b),
-            lines: b.lines || 0,
-            path: b.path,
-            quadrant: quadrants[b.path] || null,
-            test: isCampus,
-            w: p.w,
-            worst: b.worst ?? null,
-            x: p.x,
-            z: p.z,
-            zone: zg.z.id,
-          });
-        }
-      }
+      const out = layoutZone(zg, m, unit, place);
+      zones.push(out.zone);
+      districts.push(...out.districts);
+      buildings.push(...out.buildings);
     }
     const at = Object.fromEntries(buildings.map((b) => [b.path, b]));
     const landmarks = arr(model && model.landmarks).filter((l) => at[l.path]).map((l) => {
