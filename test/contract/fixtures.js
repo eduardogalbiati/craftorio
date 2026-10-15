@@ -194,6 +194,8 @@ module.exports = {
   'releases:list': { arg: {}, invalid: BAD_PROJECT },
   'releases:notes': { setup: project, arg: ({ projectId }) => ({ projectId, notes: 'Contract notes.' }), invalid: BAD_PROJECT },
   'roadmap:clear': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
+  // #391: a roadmap without a pending pause returns the backlog unchanged
+  'roadmap:cancel-pause': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   'roadmap:get': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   'roadmap:live': { setup: project, arg: ({ projectId }) => ({ projectId, on: false }), invalid: BAD_PROJECT },
   'roadmap:pause': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },

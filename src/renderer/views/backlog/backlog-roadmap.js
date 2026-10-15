@@ -1533,7 +1533,7 @@
   }
 
   // ---- the ⋮ menus (#269 the bar's, #282 a stage's) and the earlier versions (#281) ----------------------
-  const focusMenu = (sel) => document.querySelector(`#bl-list .rm-menu-wrap ${sel}`)?.focus({ preventScroll: true });
+  const focusMenu = (sel, wrap = '.rm-menu-wrap') => document.querySelector(`#bl-list ${wrap} ${sel}`)?.focus({ preventScroll: true });
   // the open menu of the stage `id`: its button (`[data-rm-stage-menu]`) or its first entry gets the focus
   const focusStageMenu = (id, sel) => [...(document.querySelectorAll?.('#bl-list [data-rm-stage-menu]') || [])]
     .find((b) => b.dataset.rmStageMenu === id)?.closest('.rm-stage-menu-wrap')?.querySelector(sel)?.focus({ preventScroll: true });
@@ -1553,8 +1553,7 @@
       closeMenu();
       ctx.render();
       if (stage != null) focusStageMenu(stage, '[data-rm-stage-menu]');
-      else if (pause) document.querySelector('#bl-list .rm-pause-wrap [data-rm="pause"]')?.focus({ preventScroll: true });
-      else focusMenu('[data-rm-menu]');
+      else focusMenu(...(pause ? ['[data-rm="pause"]', '.rm-pause-wrap'] : ['[data-rm-menu]']));
       return true;
     }
     if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return false;
@@ -1626,8 +1625,7 @@
     };
   }
 
-  // The owner's buttons; true when the click was the roadmap's. A click outside the ⋮ menu (or the
-  // Pause menu, #391: one of the two open at a time) closes it.
+  // The owner's buttons; true when the click was the roadmap's. A click outside the ⋮ or Pause menu (#391) closes it.
   async function onClick(e, ctx, data) {
     // a menu entry that is off says why (its tooltip, the line under it): nothing to do, its menu stays
     if (e.target.closest('[role="menuitem"][aria-disabled="true"]')) return true;
@@ -1753,8 +1751,11 @@
         if (act === 'budget-resume' && !await confirmDialog('Resume anyway', 'The roadmap goes on past the budget until the day (or the night) ends. Its items run as real runs and cost money.', 'Resume')) return true;
         ctx.setData(await api.roadmapBudget(ctx.projectId, act === 'budget-raise' ? 'raise' : 'resume'));
       } else if (act === 'pause') {
-        // #391: Pause opens its menu; an entry pauses after the current stage or now, Cancel pause takes it back
+        // #391: Pause opens its menu (the first entry gets the focus, as the ⋮ menu's); an entry pauses after the stage or now
         [pauseOpen, menuOpen] = [!pauseOpen, false];
+        ctx.render();
+        focusMenu(pauseOpen ? '[role="menuitem"]' : '[data-rm="pause"]', '.rm-pause-wrap');
+        return true;
       } else if (act === 'pause-stage' || act === 'pause-now' || act === 'cancel-pause') {
         pauseOpen = false;
         ctx.setData(await (act === 'cancel-pause' ? api.cancelRoadmapPause(ctx.projectId) : api.pauseRoadmap(ctx.projectId, false, act === 'pause-now' ? 'now' : 'stage')));

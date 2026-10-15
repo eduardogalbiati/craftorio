@@ -47,11 +47,23 @@
   const scopedStage = (roadmap) => (roadmap?.scope?.pauseAfter ? -1 : scopeIndex(roadmap));
   /** #391: the stage a running roadmap pauses after (the bar's "Pausing after stage N"), -1 when none. */
   const pausingAfterStage = (roadmap) => (roadmap?.state === 'running' && roadmap.scope?.pauseAfter ? scopeIndex(roadmap) : -1);
+  /**
+   * The first cut line (#260) the roadmap reached and whose release has not shipped: a stage with a
+   * `release` before stage `at` (every stage when `at` < 0: the roadmap is over), all finished by then.
+   */
+  function pendingRelease(roadmap, at) {
+    const stages = stagesOf(roadmap);
+    const reached = at < 0 ? stages : stages.slice(0, at);
+    // a disabled stage (#284) is skipped, its cut line with it
+    return reached.find((s) => !s.disabled && s.release && s.release.status !== 'shipped') || null;
+  }
   /** #391: the roadmap bar's two pauses, the default first ([{ after, label, hint }]; the stage in progress named). */
   function pauseChoices(roadmap) {
     const at = scopeIndex(roadmap) >= 0 ? scopeIndex(roadmap) : currentStage(roadmap);
+    // a cut line held before the stage: "after this stage" pauses at once (src/roadmap.js pauseAfterStage)
+    const now = at < 0 || pendingRelease(roadmap, at);
     return [
-      { after: 'stage', label: 'Pause after this stage', hint: at >= 0 ? `The items of stage ${at + 1} still start and finish; the next stage waits` : 'No stage is in progress: the roadmap pauses now' },
+      { after: 'stage', label: 'Pause after this stage', hint: !now ?`The items of stage ${at + 1} still start and finish; the next stage waits` : 'No stage is in progress: the roadmap pauses now' },
       { after: 'now', label: 'Pause now', hint: 'Nothing new starts; runs in progress go on' },
     ];
   }
@@ -149,6 +161,7 @@
     isOpen,
     pauseChoices,
     pausingAfterStage,
+    pendingRelease,
     refusedStart,
     scopedStage,
     stageProgress,

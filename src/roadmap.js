@@ -54,6 +54,7 @@ const {
   currentStage,
   isFinished,
   ITEM_STATES,
+  pendingRelease,
   STATES,
 } = require('./shared/roadmap-model');
 const { writeJsonSafe } = require('./state-file');
@@ -535,14 +536,6 @@ function mergedPullRequest(runDir) {
       return ev.exit_code === 0 && !ev.skipped && /\b(gh\s+pr|glab\s+mr)\s+merge\b/.test(ev.command || '');
     } catch { return false; }
   });
-}
-
-// The first cut line (#260) the roadmap reached and whose release has not shipped: a stage with a
-// `release` before stage `at` (every stage when `at` < 0: the roadmap is over), all finished by then.
-function pendingRelease(r, at) {
-  const reached = at < 0 ? r.stages : r.stages.slice(0, at);
-  // a disabled stage (#284) is skipped, its cut line with it
-  return reached.find((s) => !s.disabled && s.release && s.release.status !== 'shipped') || null;
 }
 
 /** Records what the release run did on a stage's cut line (#260): `patch` = { status, runId, ... }; null when the line is gone. */
