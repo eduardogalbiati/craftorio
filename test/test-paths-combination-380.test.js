@@ -84,3 +84,24 @@ test('#380 changedTestFiles: a snapshot taken inside the rebase compares with th
   git(dir, 'add', FILE);
   assert.deepEqual(await check(snap), []);
 });
+
+// A second resolve_merge visit (after the test writer's turn, or a later commit of the branch that
+// conflicts again) starts inside the rebase and ends with `git rebase --continue`: the rebase's
+// original head is gone by the check, and the branch's side must still be the branch's.
+test('#380 changedTestFiles: a snapshot taken inside the rebase accepts a pure combination committed with rebase --continue', async (t) => {
+  const { dir } = await conflicting(t);
+  const snap = await testPaths.snapshot(dir, [FILE]);
+  fs.writeFileSync(path.join(dir, FILE), BASE + MAIN_SIDE + BRANCH_SIDE);
+  git(dir, 'add', FILE);
+  git(dir, 'rebase', '--continue');
+  assert.deepEqual(await check(snap), []);
+});
+
+test('#380 changedTestFiles: a snapshot taken inside the rebase still refuses a new line committed with rebase --continue', async (t) => {
+  const { dir } = await conflicting(t);
+  const snap = await testPaths.snapshot(dir, [FILE]);
+  fs.writeFileSync(path.join(dir, FILE), BASE + MAIN_SIDE + BRANCH_SIDE + '    And a step neither side wrote\n');
+  git(dir, 'add', FILE);
+  git(dir, 'rebase', '--continue');
+  assert.deepEqual(await check(snap), [FILE]);
+});
