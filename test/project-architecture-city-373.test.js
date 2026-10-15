@@ -16,7 +16,7 @@ const { buildModel } = require('../src/shared/architecture-model');
 
 const ROOT = path.join(__dirname, '..');
 const RENDERER = path.join(ROOT, 'src', 'renderer');
-const SHARED = ['globs.js', 'json-schema.js', 'architecture-model.js', 'city-model.js', 'city-layout.js'];
+const SHARED = ['globs.js', 'json-schema.js', 'architecture-model.js', 'architecture-facts-view.js', 'city-model.js', 'city-layout.js'];
 
 // ---------- fixture facts and city ----------
 

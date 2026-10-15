@@ -1,12 +1,19 @@
-// A project's Architecture tab (#356). What leads is the latest Oracle report (or the one picked):
-// its summary, the verdict per area, the findings marked new / kept (and the gone ones), each with
-// "Send to Refactor" (architecture:sendToRefactor, a proposal of the Refactor tab). Then the git
-// facts (architecture:facts, numbers from src/shared/architecture-model.js): the hotspot table
-// (file, lines, commits, rank, top co-changing file; complexity, worst function and quadrant when a
-// real parser or tool measured them, "—" for a file not measured, never 0), the note naming the
-// code languages not measured and how to install lizard (#385), the Danger Zone scatter and its formula, the monthly frames, the
-// languages, the exclusions (editable, architecture:setExclude), the mass changes, the commit,
-// window and shallow clone, the project's own quality gate, and what the numbers cannot tell.
+// A project's Architecture tab (#356), written for a human reader (#386, the pure parts in
+// src/shared/architecture-facts-view.js): a lead row answers "how is this project?" (the report's
+// verdict in one line, the top 3 risks with their 0-100 score, the Danger Zone count, the languages
+// as GitHub's bar and legend). Then the latest Oracle report (or the one picked): its summary (three
+// lines at most), the verdict per area as chips, the findings ranked by score, one line each (score
+// on a bar coloured by severity, target, one sentence, new / kept) with "Read more" for the evidence
+// and the refactor, filters by severity and new / kept with their counts, "Send to Refactor" per
+// finding and "Send all to Refactor" for the ones shown (architecture:sendToRefactor, a proposal of
+// the Refactor tab), the gone ones folded. Then the git facts (architecture:facts, numbers from
+// src/shared/architecture-model.js), titled with an ⓘ that opens what the numbers cannot tell: the
+// commit, window, mass changes and shallow clone, the project's own quality gate as one row of
+// chips, the exclusions in one line (editable, architecture:setExclude), the complexity in one line
+// whose "How to measure" names the code languages not measured and how to install lizard (#385),
+// the hotspot table (file, lines, commits, rank, top co-changing file; complexity, worst function
+// and quadrant when a real parser or tool measured them, "—" for a file not measured, never 0), the
+// Danger Zone scatter, its formula and the monthly frames on demand.
 // Controls: the report picker, the From / To range and the mass-change toggle. States: not a git
 // repository, no commits in the range, never analysed, a report (with "N runs since this analysis")
 // and an error with its message.
@@ -178,20 +185,57 @@
     }
   }
 
-  function findingHtml(f, i) {
-    const files = (f.files || []).map((x) => `<span class="mono" title="${esc(x.path)}">${esc(x.lines ? `${x.path}:${x.lines}` : x.path)}</span>`).join(', ');
+  // ---------- the report, for a human reader (#386: ArchitectureFactsView, src/shared/architecture-facts-view.js) ----------
+
+  const dangerZone = () => cur.facts?.model?.danger_zone || [];
+  const ranked = () => ArchitectureFactsView.rankFindings(cur.view?.findings || [], dangerZone());
+  const shownFindings = () => ArchitectureFactsView.filterFindings(ranked(), cur.filter);
+  const severityClass = (s) => (['high', 'medium', 'low'].includes(s) ? `sev-${s}` : 'sev-low');
+  const target = (f) => {
+    const files = f.files || [];
+    return files.length ? `${files[0].path}${files.length > 1 ? ` +${files.length - 1}` : ''}` : f.kind || '';
+  };
+  const findingSummary = (f) => ArchitectureFactsView.firstSentence(f.title || f.evidence || f.kind);
+
+  // a finding: one line (its score on a bar coloured by its severity, its target, one sentence,
+  // new / kept), "Read more" opens the evidence and the refactor
+  function findingHtml(f, key) {
     const gone = f.status === 'gone';
-    const send = gone ? '' : f.sent ?'<span class="badge" data-testid="architecture-send-refactor">Sent to Refactor</span>'
-      : `<button type="button" class="btn sm" data-testid="architecture-send-refactor" data-arch-send="${i}">Send to Refactor</button>`;
-    return `<li class="arch-finding${gone ? ' arch-gone' : ''}" data-testid="${gone ? 'architecture-finding-gone' : 'architecture-finding'}">
-      <div class="row arch-finding-head"><b>${esc(f.title || f.kind)}</b>
-        <span class="badge${f.status === 'new' ? ' live' : ''}">${esc(f.status || '')}</span>
-        <span class="badge${f.severity === 'high' ? ' warn' : ''}">${esc(f.severity)}</span>
-        <span class="badge mono">${esc(f.kind)}</span><span class="spacer"></span>${send}</div>
-      <div class="small">${files}</div>
-      <div class="small muted">${esc(f.evidence)}</div>
-      <div class="small"><b>Refactor:</b> ${esc(f.refactor)}</div>
+    const open = cur.expanded.has(key);
+    const send = gone ? '' : f.sent ? '<span class="badge" data-testid="architecture-send-refactor">Sent to Refactor</span>'
+      : `<button type="button" class="btn sm" data-testid="architecture-send-refactor" data-arch-send="${f.index}">Send to Refactor</button>`;
+    const files = (f.files || []).map((x) => `<span class="mono" title="${esc(x.path)}">${esc(x.lines ? `${x.path}:${x.lines}` : x.path)}</span>`).join(', ');
+    return `<li class="arch-finding arch-row ${severityClass(f.severity)}${gone ? ' arch-gone' : ''}" data-testid="${gone ? 'architecture-finding-gone' : 'architecture-finding'}">
+      <span class="arch-score" data-testid="architecture-finding-score" title="${esc(`${f.severity || 'no'} severity. ${ArchitectureFactsView.SCORE_FORMULA}`)}">${f.score}</span>
+      <div class="arch-finding-body">
+        <div class="arch-finding-line"><span class="mono arch-target" title="${esc((f.files || []).map((x) => x.path).join(', '))}">${esc(target(f))}</span>
+          <span class="arch-finding-summary" data-testid="architecture-finding-summary" title="${esc(f.title || '')}">${esc(findingSummary(f))}</span>
+          <span class="badge${f.status === 'new' ? ' live' : ''}">${esc(f.status || '')}</span>
+          <button type="button" class="link-btn" data-testid="architecture-finding-more" data-arch-more="${esc(key)}" aria-expanded="${open}">${open ? 'Read less' : 'Read more'}</button>${send}</div>
+        <div class="arch-finding-details small${open ? '' : ' hidden'}" data-testid="architecture-finding-details">
+          <div class="row"><span class="badge${f.severity === 'high' ? ' warn' : ''}">${esc(f.severity)}</span><span class="badge mono">${esc(f.kind)}</span>${files}</div>
+          <p class="muted">${esc(f.evidence)}</p>
+          <p><b>Refactor:</b> ${esc(f.refactor)}</p>
+        </div>
+      </div>
     </li>`;
+  }
+
+  // the filters by severity and by new / kept, with their counts, and "Send all to Refactor"
+  function findingsToolbarHtml(all) {
+    const counts = ArchitectureFactsView.findingCounts(all);
+    const b = (dim, key, n) => {
+      const on = key === 'all' ? !cur.filter.severity && !cur.filter.status : cur.filter[dim] === key;
+      return `<button type="button" class="${on ? 'active' : ''}" data-arch-filter="${dim}:${key}" data-testid="architecture-filter-${key}" aria-pressed="${on}">${key === 'all' ? 'All' : key.charAt(0).toUpperCase() + key.slice(1)} <span class="muted">${n}</span></button>`;
+    };
+    const unsent = shownFindings().filter((f) => !f.sent).length;
+    const title = unsent ? `Sends the ${plural(unsent, 'findings')} shown and not sent yet to the Refactor tab` : 'Every finding shown was sent to the Refactor tab already';
+    return `<div class="row arch-toolbar">
+      <div class="seg" role="group" aria-label="Filter by severity">${b('', 'all', all.length)}${['high', 'medium', 'low'].map((k) => b('severity', k, counts.severity[k])).join('')}</div>
+      <div class="seg" role="group" aria-label="Filter by new or kept">${['new', 'kept'].map((k) => b('status', k, counts.status[k])).join('')}</div>
+      <span class="spacer"></span>
+      <button type="button" class="btn sm" data-testid="architecture-send-all" data-arch-send-all ${unsent && !cur.sending ? '' : 'disabled'} title="${esc(title)}">Send all to Refactor</button>
+    </div>`;
   }
 
   function reportMeta(saved, view) {
@@ -204,15 +248,54 @@
   function reportHtml() {
     const view = cur.view;
     const saved = view.report;
-    const areas = (saved.report.areas || []).map((a) => `<li><b>${esc(a.area)}</b>: ${esc(a.verdict)}</li>`).join('');
-    const findings = view.findings.map((f, i) => findingHtml(f, i)).join('') || '<li class="muted">No finding.</li>';
-    const gone = view.gone.length ? `<h4 class="arch-sub">Gone since the previous report</h4><ul class="arch-findings">${view.gone.map((f) => findingHtml(f, -1)).join('')}</ul>` : '';
+    const areas = (saved.report.areas || []).map((a) => `<span class="arch-area-chip" title="${esc(`${a.area}: ${a.verdict}`)}"><b>${esc(a.area)}</b> ${esc(a.verdict)}</span>`).join('');
+    const all = ranked();
+    const shown = shownFindings();
+    const findings = shown.map((f) => findingHtml(f, `f${f.index}`)).join('') || `<li class="muted">${all.length ? 'No finding matches the filter.' : 'No finding.'}</li>`;
+    const goneList = ArchitectureFactsView.rankFindings(view.gone, dangerZone());
+    const gone = goneList.length ? `<details class="arch-gone-list"><summary class="small muted">Gone since the previous report (${goneList.length})</summary><ul class="arch-findings">${goneList.map((f) => findingHtml(f, `g${f.index}`)).join('')}</ul></details>` : '';
     return `<section class="card arch-report" data-testid="architecture-report">
       ${reportMeta(saved, view)}
-      <p class="arch-summary" data-testid="architecture-report-summary">${esc(saved.report.summary)}</p>
-      ${areas ? `<ul class="arch-areas small">${areas}</ul>` : ''}
+      <p class="arch-summary" data-testid="architecture-report-summary" title="${esc(saved.report.summary)}">${esc(saved.report.summary)}</p>
+      ${areas ? `<div class="row arch-areas small">${areas}</div>` : ''}
+      ${findingsToolbarHtml(all)}
       <ul class="arch-findings" data-testid="architecture-findings">${findings}</ul>
       ${gone}
+    </section>`;
+  }
+
+  // ---------- the lead row (#386): the verdict, the top 3 risks, the Danger Zone count, the languages ----------
+
+  function languagesHtml(languages) {
+    const shares = ArchitectureFactsView.languageShares(languages);
+    if (!shares.length) return '<p class="small muted">No code counted.</p>';
+    const tip = (s) => `${fmtNum(s.lines)} lines${s.others?.length ? ` (${s.others.join(', ')})` : ''}`;
+    const segments = shares.map((s) => `<span class="arch-lang-seg" data-testid="architecture-language-segment" style="width:${s.percent}%;background-color:${s.color}" title="${esc(`${s.language} ${s.percent}%`)}"></span>`).join('');
+    const legend = shares.map((s) => `<li data-testid="architecture-language-entry" title="${esc(tip(s))}"><span class="arch-lang-dot" style="background-color:${s.color}"></span><span>${esc(s.language)}</span> <span class="muted">${s.percent}%</span></li>`).join('');
+    return `<div class="arch-lang-bar" data-testid="architecture-languages-bar" role="img" aria-label="${esc(`Languages: ${shares.map((s) => `${s.language} ${s.percent}%`).join(', ')}`)}">${segments}</div>
+      <ul class="arch-lang-legend small" data-testid="architecture-language-legend">${legend}</ul>`;
+  }
+
+  function verdictHtml() {
+    const summary = cur.view?.report?.report?.summary;
+    if (!summary) return '<p class="arch-verdict muted" data-testid="architecture-verdict">Not analysed yet: "Analyze this project" asks the Oracle for a verdict.</p>';
+    return `<p class="arch-verdict" data-testid="architecture-verdict" title="${esc(summary)}">${esc(ArchitectureFactsView.firstSentence(summary))}</p>`;
+  }
+
+  function overviewHtml(model) {
+    const cards = ranked().slice(0, 3).map((f) => `<div class="arch-risk-card ${severityClass(f.severity)}" data-testid="architecture-risk-card" title="${esc(f.title || '')}">
+      <span class="arch-score" data-testid="architecture-risk-score" title="${esc(ArchitectureFactsView.SCORE_FORMULA)}">${f.score}</span>
+      <div class="arch-risk-text"><span class="arch-risk-title">${esc(findingSummary(f))}</span><span class="mono small muted">${esc(target(f))}</span></div></div>`).join('');
+    const measured = model?.complexity?.status === 'measured';
+    const count = measured ? `<b class="arch-ov-num">${fmtNum(model.danger_zone.length)}</b> <span class="small muted">files in the Danger Zone</span>`
+      : '<b class="arch-ov-num">—</b> <span class="small muted">Danger Zone: complexity not measured</span>';
+    return `<section class="arch-overview" data-testid="architecture-overview">
+      ${verdictHtml()}
+      <div class="arch-ov-row">
+        <div class="arch-risks">${cards || '<p class="small muted">No risk yet: the report\'s findings show here.</p>'}</div>
+        ${model ? `<div class="card arch-ov-tile" data-testid="architecture-danger-count" title="Files both complex and changing often (above both medians)">${count}</div>
+        <div class="card arch-ov-tile arch-ov-langs">${languagesHtml(model.languages)}</div>` : ''}
+      </div>
     </section>`;
   }
 
@@ -261,47 +344,53 @@
     const y = (r) => 200 - 180 * (maxU ? Math.log1p(r.complexity) / maxU : 0);
     const dots = rows.map((r) => `<circle cx="${x(r).toFixed(1)}" cy="${y(r).toFixed(1)}" r="4" class="${r.quadrant === 'Danger Zone' ? 'arch-dot-danger' : 'arch-dot'}"><title>${esc(`${r.file}: complexity ${r.complexity}, ${r.commits} commits, ${r.quadrant}`)}</title></circle>`).join('');
     const frames = (model.frames || []).filter((f) => f.entered.length || f.left.length).map((f) => `<li><b>${esc(f.month)}</b> ${f.entered.length ? `entered: ${f.entered.map((n) => `<span class="mono">${esc(n)}</span>`).join(', ')}` : ''}${f.left.length ? ` left: ${f.left.map((n) => `<span class="mono">${esc(n)}</span>`).join(', ')}` : ''}</li>`).join('');
-    return `<h3 class="arch-sub">Quadrants (${esc(model.complexity.metric)} complexity from ${esc(model.complexity.tool)})</h3>
+    return `<h3 class="arch-sub" title="${esc(`${model.complexity.metric} complexity from ${model.complexity.tool}`)}">Quadrants</h3>
       <svg class="arch-scatter" viewBox="0 0 400 220" role="img" aria-label="Commits against complexity, log1p axes"><line x1="20" y1="200" x2="390" y2="200" class="arch-axis"/><line x1="20" y1="10" x2="20" y2="200" class="arch-axis"/>${dots}<text x="390" y="214" text-anchor="end" class="arch-label">commits →</text><text x="24" y="16" class="arch-label">complexity ↑</text></svg>
-      <p class="small muted">Split at the medians: Danger Zone (complex and changing), Cowboy Code (complex, rarely touched), Fertile Ground (simple, changing), Healthy Closure (simple, stable). The Danger Zone ranks by <span class="mono">score = √(u² + v²)</span>, u = log1p(complexity) / its maximum, v = log1p(commits) / its maximum.</p>
-      ${frames ? `<p class="small muted">Monthly frames: files that entered or left the Danger Zone. Each frame uses the churn up to that month and today's complexity, so a move reflects churn alone.</p>
-      <ul class="small arch-frames" data-testid="architecture-frames">${frames}</ul>` : ''}`;
+      <details class="small muted"><summary>How the quadrants are computed</summary><p>Split at the medians: Danger Zone (complex and changing), Cowboy Code (complex, rarely touched), Fertile Ground (simple, changing), Healthy Closure (simple, stable). The Danger Zone ranks by <span class="mono">score = √(u² + v²)</span>, u = log1p(complexity) / its maximum, v = log1p(commits) / its maximum.</p></details>
+      ${frames ? `<details class="small"><summary class="muted">Monthly frames: files that entered or left the Danger Zone</summary><p class="muted">Each frame uses the churn up to that month and today's complexity, so a move reflects churn alone.</p>
+      <ul class="small arch-frames" data-testid="architecture-frames">${frames}</ul></details>` : ''}`;
   }
 
-  function complexityNote(c) {
-    if (c.status === 'measured') return `Complexity: ${esc(c.metric)} from ${esc(c.tool)}${c.check?.longest?.length ? ` (longest functions: ${c.check.longest.map((f) => `${esc(f.file)} ${esc(f.name)} ${f.length} lines → ${f.complexity}`).join('; ')})` : ''}.`;
-    const why = c.status === 'failed' ? `the tool's check failed: ${esc(c.reason)}` : esc(c.reason);
-    // the languages not measured and their tools are in the measure note
-    const needs = c.unmeasured?.length ? '' : ` It needs ${esc((c.needed || []).join(', '))};`;
-    return `Complexity not measured (${why}).${needs} Churn and size are shown meanwhile, never a guess.`;
+  // the languages measured: those with a file a parser or tool measured
+  function complexityText(model) {
+    const measured = new Set(model.files.filter((r) => r.complexity != null).map((r) => r.language));
+    return ArchitectureFactsView.complexityLine(model.complexity, model.languages.filter((l) => measured.has(l.language)));
   }
 
-  // The code languages no file of which is measured, and how to measure them (#385): JavaScript and
-  // TypeScript are measured inside the app, the others need lizard (which needs Python)
-  function measureNoteHtml(c) {
-    if (!c.unmeasured?.length) return '';
+  // The complexity note in one line (#386); the code languages no file of which is measured and how
+  // to measure them (#385: JavaScript and TypeScript are measured inside the app, the others need
+  // lizard, which needs Python) open from "How to measure"
+  function complexityHtml(model) {
+    const c = model.complexity;
+    const line = esc(complexityText(model));
+    const title = esc(c.status === 'measured' ? `${c.metric} complexity from ${c.tool}` : `${c.reason || 'not measured'}: churn and size are shown meanwhile, never a guess`);
+    if (!c.unmeasured?.length) return `<p class="small muted" data-testid="architecture-complexity" title="${title}">${line}</p>`;
     const names = c.unmeasured.map((l) => `<span class="badge" data-testid="architecture-unmeasured-language">${esc(l)}</span>`).join(' ');
     const how = c.install
       ? `To measure them, install lizard: <span class="mono">${esc(c.install)}</span> (lizard needs Python).`
       : `They need ${esc((c.needed || []).join(', ') || 'lizard')}${c.reason ? ` (${esc(c.reason)})` : ''}.`;
-    return `<p class="small muted" data-testid="architecture-measure-note">Complexity not measured for ${names}: their files show no complexity, never 0. ${how}</p>`;
+    return `<details class="small muted arch-measure" data-testid="architecture-measure-note"><summary title="${title}"><span data-testid="architecture-complexity">${line}</span> · <span class="link-btn">How to measure</span></summary>
+      <p>Complexity not measured for ${names}: their files show no complexity, never 0. ${how}</p></details>`;
   }
 
+  const EXCLUDED_LABELS = { build: 'build output', generated: 'generated', lock: 'lock files', project: 'your patterns', tests: 'tests', vendored: 'vendored' };
+
   function excludeHtml(model) {
-    const groups = Object.entries(model.excluded).filter(([, n]) => n).map(([g, n]) => `<span class="badge">${esc(g)} ${n}</span>`).join(' ') || '<span class="muted">none</span>';
+    const groups = Object.entries(model.excluded).filter(([, n]) => n).map(([g, n]) => `${esc(EXCLUDED_LABELS[g] || g)} ${fmtNum(n)}`).join(' · ') || 'nothing';
     const list = cur.facts.exclude || [];
     if (cur.editing) {
       return `<div class="card arch-edit" data-testid="architecture-exclude-form"><label class="field">Excluded paths, one pattern per line<textarea rows="4" data-arch-exclude-text spellcheck="false">${esc(list.join('\n'))}</textarea></label>
         <p class="hint">Gitignore-style patterns (docs/**, *.generated.ts). Lock files, build output, tests, vendored and linguist-generated files are excluded already.</p>
         <div class="row"><button type="button" class="btn primary" data-arch-exclude-save>Save</button><button type="button" class="btn ghost" data-arch-exclude-cancel>Cancel</button></div></div>`;
     }
-    return `<div class="small">Excluded: ${groups} <button type="button" class="link-btn" data-arch-exclude-edit data-testid="architecture-exclude-edit">${list.length ? `Edit the project's list (${list.length})` : 'Exclude more paths'}</button></div>`;
+    return `<p class="small muted arch-excluded">Excluded: ${groups} <button type="button" class="link-btn" data-arch-exclude-edit data-testid="architecture-exclude-edit">${list.length ? `Edit the project's list (${list.length})` : 'Exclude more paths'}</button></p>`;
   }
 
+  // the project's own quality gate as one row of chips (#386): measured ✓ with its value, pending or missing
   function gateHtml(gate) {
-    if (!gate?.length) return '';
-    const badge = { measured: 'live', pending: 'warn', missing: 'warn' };
-    return `<h3 class="arch-sub">The project's own quality gate</h3><ul class="small arch-gate" data-testid="architecture-gate">${gate.map((g) => `<li><b>${esc(g.name)}</b> <span class="badge ${badge[g.state]}">${esc(g.state)}</span> ${g.value ? esc(g.value) : ''} <span class="muted">${esc(g.source || 'not configured: no evidence, not clean')}</span></li>`).join('')}</ul>`;
+    if (!Array.isArray(gate)) return '';
+    const chips = ArchitectureFactsView.qualityGateRow(gate).map((c) => `<span class="badge arch-gate-chip gate-${c.state}" data-testid="architecture-gate-chip" title="${esc(c.title)}">${esc(c.label)}</span>`).join('');
+    return `<div class="row arch-gate" data-testid="architecture-gate"><span class="small muted">Quality gate</span>${chips}</div>`;
   }
 
   function factsHtml() {
@@ -311,17 +400,17 @@
     const window = model.window.since || model.window.until ? `${esc(day(model.window.since) || 'the start')} to ${esc(day(model.window.until) || 'now')}` : 'the whole history';
     return `<div class="arch-facts" data-testid="architecture-facts">
       <p class="small muted">${esc(model.branch)} at <span class="mono">${esc(short(model.head?.commit))}</span> (${esc(day(model.head?.date))}) · ${window} · ${plural(model.commits, 'commits')} · ${mass}${model.shallow ? ' · <span class="badge warn">shallow clone: history cut</span>' : ''}</p>
-      <p class="small">${model.languages.map((l) => `<span class="badge">${esc(l.language)} ${fmtNum(l.lines)}</span>`).join(' ')}</p>
+      ${gateHtml(f.gate)}
       ${excludeHtml(model)}
-      <p class="small muted">${complexityNote(model.complexity)}</p>
-      ${measureNoteHtml(model.complexity)}
+      ${complexityHtml(model)}
       ${hotspotsHtml(model)}
       ${model.complexity.status === 'measured' ? scatterHtml(model) : ''}
-      ${gateHtml(f.gate)}
     </div>`;
   }
 
-  const limitsHtml = () => `<details class="arch-limits small" data-testid="architecture-limits" open><summary><b>What the numbers can't tell</b></summary><ul>${LIMITS.map((l) => `<li>${esc(l)}</li>`).join('')}</ul></details>`;
+  // the facts' title with an ⓘ that opens what the numbers can't tell (#386: not printed on the page)
+  const factsHeadHtml = () => `<h3 class="arch-sub arch-facts-title">Facts <button type="button" class="icon-btn arch-info" data-testid="architecture-caveats" data-arch-caveats aria-expanded="${!!cur.caveats}" aria-label="ⓘ What the numbers can't tell" title="What the numbers can't tell">ⓘ</button></h3>
+    <div class="card arch-limits small${cur.caveats ? '' : ' hidden'}" data-testid="architecture-limits"><b>What the numbers can't tell</b><ul>${LIMITS.map((l) => `<li>${esc(l)}</li>`).join('')}</ul></div>`;
 
   function bodyHtml() {
     if (cur.loadError) return `<div class="usage-unavailable" role="alert" data-testid="architecture-state-error">Could not read the facts: ${esc(cur.loadError)}</div>`;
@@ -330,7 +419,9 @@
       return `<div class="empty-state" data-testid="architecture-state-not-git"><b>Not a git repository</b><p class="muted">The project folder is not a git repository: there are no commits to read and nothing to analyse. Point the project to a git checkout to see its hotspots.</p></div>`;
     }
     const noCommits = cur.facts.state === 'no-commits' ? '<div class="empty-state" data-testid="architecture-state-no-commits"><b>No commits in this range</b><p class="muted">Widen the From / To range: churn counts the commits of the default branch inside it.</p></div>' : '';
-    return `${actionHtml()}${controlsHtml()}${stateHtml()}${noCommits}${cur.facts.model ? factsHtml() : ''}${limitsHtml()}`;
+    const model = cur.facts.model;
+    const lead = model || cur.view?.report ? overviewHtml(model) : '';
+    return `${actionHtml()}${controlsHtml()}${lead}${stateHtml()}${noCommits}${factsHeadHtml()}${model ? factsHtml() : ''}`;
   }
 
   function render() {
@@ -409,6 +500,43 @@
     if (cur === c) render();
   }
 
+  // "Send all to Refactor" (#386): the findings shown (the filter's) not sent yet, one after the other
+  async function sendAll() {
+    const c = cur;
+    const reportId = c?.view?.report?.id;
+    if (!reportId || c.sending) return;
+    const list = shownFindings().filter((f) => !f.sent);
+    c.sending = true;
+    render();
+    let sent = 0;
+    for (const f of list) {
+      try {
+        await api.sendFindingToRefactor(c.id, reportId, f.index);
+      } catch (e) {
+        c.error = errMsg(e);
+        break;
+      }
+      if (c.view.findings[f.index]) c.view.findings[f.index].sent = true;
+      sent++;
+    }
+    c.sending = false;
+    showToast(sent ? `Sent ${plural(sent, 'findings')} to the Refactor tab` : 'No finding sent: every finding shown was sent already');
+    if (cur === c) render();
+  }
+
+  // a filter button: "all" clears both, another toggles its own
+  function setFilter(spec) {
+    const [dim, key] = spec.split(':');
+    if (key === 'all') cur.filter = { severity: null, status: null };
+    else cur.filter[dim] = cur.filter[dim] === key ? null : key;
+    render();
+  }
+
+  function toggleMore(key) {
+    if (!cur.expanded.delete(key)) cur.expanded.add(key);
+    render();
+  }
+
   async function saveExclude() {
     const c = cur;
     const text = c.box.querySelector('[data-arch-exclude-text]')?.value || '';
@@ -429,7 +557,8 @@
       cur?.agents?.destroy();
       cur?.city?.destroy(); // another project: the previous city gives its WebGL context back
       cur = { id, box, facts: null, view: null, reports: [], estimate: null, error: null, loadError: null, loading: false, reportId: null, since: '', until: '', includeMass: true, editing: false, seq: 0,
-        cityMap: null, mapEstimate: null, mapStarting: false, mapRun: null, mapStep: null, city: null, agents: null, connections: null, focusFile: null };
+        cityMap: null, mapEstimate: null, mapStarting: false, mapRun: null, mapStep: null, city: null, agents: null, connections: null, focusFile: null,
+        filter: { severity: null, status: null }, expanded: new Set(), caveats: false, sending: false };
     }
     cur.box = box;
     if (!cur.facts && !cur.loading && !cur.loadError) load();
@@ -442,6 +571,12 @@
     if (view) return () => { if (view.dataset.archMode !== mode) { cur.focusFile = null; setMode(view.dataset.archMode); } };
     const send = e.target.closest('[data-arch-send]');
     if (send) return () => sendToRefactor(+send.dataset.archSend);
+    if (e.target.closest('[data-arch-send-all]')) return sendAll;
+    const filter = e.target.closest('[data-arch-filter]');
+    if (filter) return () => setFilter(filter.dataset.archFilter);
+    const more = e.target.closest('[data-arch-more]');
+    if (more) return () => toggleMore(more.dataset.archMore);
+    if (e.target.closest('[data-arch-caveats]')) return () => { cur.caveats = !cur.caveats; render(); };
     if (e.target.closest('[data-arch-analyze]')) return analyze;
     if (e.target.closest('[data-arch-refresh]')) return () => load(true);
     if (e.target.closest('[data-arch-exclude-edit]')) return () => { cur.editing = true; render(); };
@@ -466,7 +601,10 @@
     if (t.matches('[data-arch-since]')) cur.since = t.value;
     else if (t.matches('[data-arch-until]')) cur.until = t.value;
     else if (t.matches('[data-arch-mass]')) cur.includeMass = t.checked;
-    else if (t.matches('[data-arch-report]')) cur.reportId = t.value || null;
+    else if (t.matches('[data-arch-report]')) {
+      cur.reportId = t.value || null;
+      cur.expanded.clear();
+    }
     else return false;
     load();
     return true;

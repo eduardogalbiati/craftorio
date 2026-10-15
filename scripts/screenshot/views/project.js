@@ -22,6 +22,9 @@
 // drew, so the two can be compared side by side. Its facts come from the checkout's git history.
 // #387: --mode large is the Architecture tab with a latest report of production-like volume (the
 // 60 findings and seven areas of the shared largeProjectFixture, helpers.js).
+// #386: --mode facts-large is the Facts view at a real scale: the project is this repository itself
+// (about 1,400 files, its languages and Danger Zone from the checkout's git history) with those 60
+// findings moved onto its largest source files, so their scores use its Danger Zone.
 
 const { execFileSync } = require('child_process');
 const fs = require('fs');
@@ -165,19 +168,35 @@ const LARGE_PLAN = path.join('poc', 'project-map', 'plans', 'multiagent-orchestr
 
 // #387: --mode large, the Architecture tab at a real scale: the latest report holds the 60 findings of
 // the shared large-project fixture (scripts/screenshot/helpers.js), over its seven areas
-function demoLargeReport(ws, projectId, head) {
+function demoLargeReport(ws, projectId, head, targets = null) {
   const { files, findings } = largeProjectFixture();
   const areas = [...new Set(files.map((f) => f.path.split('/').slice(0, 2).join('/')))]
     .map((area) => ({ area, verdict: `${files.filter((f) => f.path.startsWith(`${area}/`)).length} files; ${findings.filter((x) => x.files[0].path.startsWith(`${area}/`)).length} findings.` }));
+  // #386: the findings on the project's own files (its Danger Zone scores them)
+  const placed = targets ? findings.map((f, i) => ({ ...f, files: [{ ...f.files[0], path: targets[i % targets.length] }] })) : findings;
   const id = '2026-10-10T09-00-00-000Z';
+  fs.mkdirSync(path.join(ws.root, 'architecture', projectId), { recursive: true });
   fs.writeFileSync(path.join(ws.root, 'architecture', projectId, `${id}.json`), JSON.stringify({
     id, date: '2026-10-10T09:00:00.000Z', project_id: projectId, head, costUsd: 1.84, tokens: { input: 64000, output: 9800 }, simulated: false,
-    report: { summary: `${files.length} files in ${areas.length} areas; the engine and the views carry most of the findings.`, areas, findings },
+    report: { summary: `${files.length} files in ${areas.length} areas; the engine and the views carry most of the findings.`, areas, findings: placed },
   }, null, 2));
+}
+
+// #386: the checkout's largest JavaScript files under src/, the likeliest Danger Zone
+function largestSourceFiles(dir, count) {
+  const listed = execFileSync('git', ['-C', dir, 'ls-files', 'src'], { encoding: 'utf8' }).split('\n').filter((f) => f.endsWith('.js'));
+  const size = (f) => { try { return fs.statSync(path.join(dir, f)).size; } catch { return 0; } };
+  return listed.map((f) => [f, size(f)]).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, count).map(([f]) => f);
 }
 
 function seedArchitecture(args, ws, project, { appDir, projects }) {
   if (args.mode === 'not-git') return;
+  if (args.mode === 'facts-large') { // #386: this repository, with the 60 findings on its own files
+    projects.updateProject(ws.projects, project.id, { folder: appDir });
+    const commit = execFileSync('git', ['-C', appDir, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+    demoLargeReport(ws, project.id, { commit, date: '2026-10-10T09:00:00Z' }, largestSourceFiles(appDir, 40));
+    return;
+  }
   if (args.mode === 'city-large') { // #382: this repository, with the POC's plan
     projects.updateProject(ws.projects, project.id, { folder: appDir });
     const plan = JSON.parse(fs.readFileSync(path.join(appDir, LARGE_PLAN), 'utf8'));
@@ -243,7 +262,7 @@ async function afterOpen({ args, click }) {
 
 module.exports = {
   afterOpen,
-  modes: ['analyzing', 'city', 'city-agents', 'city-large', 'empty', 'error', 'large', 'loading', 'map-refresh', 'never', 'no-runs', 'not-git'],
+  modes: ['analyzing', 'city', 'city-agents', 'city-large', 'empty', 'error', 'facts-large', 'large', 'loading', 'map-refresh', 'never', 'no-runs', 'not-git'],
   open,
   run: true,
   seed,

@@ -50,7 +50,7 @@ function loadWindow({ estimate = null, mapEstimate = null, plan = null, startRun
   Object.assign(sandbox, { window: sandbox, document: dom.document }, dom.classes);
   dom.classes.Element.prototype.getContext = () => null;
   vm.createContext(sandbox);
-  for (const f of ['globs.js', 'json-schema.js', 'architecture-model.js', 'city-model.js', 'city-layout.js']) {
+  for (const f of ['globs.js', 'json-schema.js', 'architecture-model.js', 'architecture-facts-view.js', 'city-model.js', 'city-layout.js']) {
     vm.runInContext(fs.readFileSync(path.join(ROOT, 'src', 'shared', f), 'utf8'), sandbox, { filename: f });
   }
   for (const f of ['project-city-notes.js', 'project-city-cards.js', 'project-city.js', 'project-architecture.js']) {

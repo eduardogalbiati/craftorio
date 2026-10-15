@@ -30,7 +30,8 @@
 //                      architecture --mode city: the project city of #373, a demo repository with a city plan;
 //                      architecture --mode city-agents: that city with two simulated runs in progress on it, #374;
 //                      architecture --mode city-large: the city of this repository itself with the POC's plan, #382;
-//                      architecture --mode large: a latest report of the shared large-project fixture, 60 findings, #387);
+//                      architecture --mode large: a latest report of the shared large-project fixture, 60 findings, #387;
+//                      architecture --mode facts-large: the Facts view of this repository itself with those 60 findings on its own files, #386);
 //                      analytics: usage | performance | run | occupancy | agents (performance: a demo git repository and a
 //                      marker; run: AI Development runs, the newest shown; occupancy: 30 days of runs and nights;
 //                      agents: four weeks of the Oracle's, the Product Owner's and the Supervisor chat's turns, #280)
