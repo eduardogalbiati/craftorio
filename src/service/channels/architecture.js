@@ -18,6 +18,10 @@
 // files (git, in the run's worktree), and the files two runs change (src/shared/city-agents.js); with
 // a runId, also every file touch of that run of the project ("Replay on the map"). It never starts
 // a run, answers a gate or calls a model.
+// An issue's impact preview (#375): architecture:impact gives the City view's impact overlay the
+// saved city plan (where a new file is expected) and the hit rates kept per issue
+// (<workspace>/architecture/<project id>/impact-history.json, CityImpact.recordHitRate); with
+// `record`, it first keeps an issue's hit rate for a run, stamped now. No model call.
 
 const fs = require('fs');
 const path = require('path');
@@ -31,6 +35,7 @@ const simulation = require('../../engine/simulation');
 const { localChanges } = require('../../engine/test-paths');
 const { readEvents } = require('../../supervisor');
 const cityAgents = require('../../shared/city-agents');
+const { recordHitRate } = require('../../shared/city-impact');
 const { validateSchema } = require('../../json-schema');
 const {
   CITY_PLAN_SCHEMA,
@@ -66,6 +71,11 @@ const AGENTS = shape({
   collisions: listOf(shape({ path: STRING, runs: listOf(STRING) }, ['path', 'runs'])),
   replay: shape({ runId: STRING, touches: listOf(TOUCH) }, ['runId', 'touches']),
 }, ['projectId', 'runs', 'collisions']);
+// #375: an issue's hit rate for one run, and what the impact overlay reads
+const HIT_RATE = { type: 'number', minimum: 0, maximum: 1 };
+const HIT = shape({ hitRate: HIT_RATE, ts: STRING, run: STRING }, ['hitRate', 'ts', 'run']);
+const IMPACT = shape({ plan: nullable(OBJECT), history: { type: 'object', additionalProperties: listOf(HIT) } }, ['plan', 'history']);
+const IMPACT_HISTORY = 'impact-history.json';
 // the project map workflow (#372): its run writes the project's city plan
 const PROJECT_MAP_WORKFLOW = 'project-map.yaml';
 const PROGRESS_TEXT = 160;
