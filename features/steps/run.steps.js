@@ -1,7 +1,8 @@
 // Steps of features/run.feature (#222): the Start panel, a simulated run of the demo project, its
 // gate card; the "Developer effort" field next to "Developer model" (#286); the chat of a run
 // interrupted at a gate (#288: the note "Interrupted at <step>" and its Resume button); AI
-// Development's Warm Up step (#301) and its affected suite's card and run report (#304). Locators are
+// Development's Warm Up step (#301), its affected suite's card and run report (#304), and the "Not
+// tested green" pill of a run built without a green suite (#396). Locators are
 // roles and data-testid only (skills/ui-conventions).
 
 const fs = require('fs');
@@ -346,7 +347,8 @@ const AI_DEV = 'ai-development-local-hero';
 // and the given files), days back, written like scripts/screenshot.js demoRoadmapRuns. `steps`:
 // (at) => the events between workflow.started and workflow.finished. The run list reads the runs
 // folder when the screen opens, so no reload is needed.
-function seedAiDevRun(e2e, suffix, task, steps, files = {}) {
+// `summary`: extra fields of summary.json (#396: `tested`)
+function seedAiDevRun(e2e, suffix, task, steps, files = {}, summary = {}) {
   const min = 6e4;
   const start = Date.now() - 2 * 864e5;
   const runId = `${new Date(start).toISOString().slice(0, 10).replace(/-/g, '')}-101500-${suffix}`;
@@ -366,7 +368,7 @@ function seedAiDevRun(e2e, suffix, task, steps, files = {}) {
   const all = {
     'events.jsonl': `${events.map((e) => JSON.stringify(e)).join('\n')}\n`,
     'summary.json': JSON.stringify({
-      run_id: runId, workflow: AI_DEV, project_id: projectId, mock: true, inputs: { task }, status: 'success', started_at: at(0), finished_at: at(end), duration_ms: end * min, sessions: [],
+      run_id: runId, workflow: AI_DEV, project_id: projectId, mock: true, inputs: { task }, status: 'success', started_at: at(0), finished_at: at(end), duration_ms: end * min, sessions: [], ...summary,
     }, null, 2),
     ...files,
   };
@@ -514,4 +516,60 @@ Then('the run report\'s suite round shows that the affected tests ran', async ({
 
 Then('the run report\'s suite round explains the selection with {string}', async ({ e2e }, why) => {
   await expect(suiteRound(e2e.window)).toContainText(why, { timeout: LOAD_TIMEOUT });
+});
+
+// ---- #396: a run that reached the build without a green suite ------------------------------------
+// The policy input suite_red_outside_change (ask | continue, default ask; label "Suite red outside
+// the change", pills "Ask" and "Continue") is drawn like any enum input (a radiogroup): the Start
+// panel's steps above check it. A run that reached the build without a green suite (the policy, or
+// the owner's Continue at test_failed) records summary.json `tested: "not green"` with its failures
+// and their class; the Run screen shows a pill "Not tested green" (data-testid run-tested-pill, NEW)
+// and the run chat's summary says it too (data-testid runchat-tested, NEW).
+// The run "-red00396" is seeded finished: its suite was red on a test outside the change (round 1),
+// the policy was continue, the build ran and passed, the run succeeded.
+Given('the demo project has a finished AI Development run {string} that reached the build with the suite red outside the change', async ({ e2e }, suffix) => {
+  const task = `A run built with a red suite (${suffix})`;
+  const failures = [{ test: 'roadmap sorts items by priority', file: 'test/legacy-sort.test.js', class: 'outside the change' }];
+  seedAiDevRun(e2e, suffix, task, (at) => [
+    ...agentTurn(at, 1, 20, 'develop', 'developer', 'Done.'),
+    { ts: at(20), type: 'step.finished', step_id: 'develop', duration_ms: 19 * 6e4, output: { summary: 'Implemented the task.' } },
+    { ts: at(21), type: 'step.started', step_id: 'suite', step_type: 'suite', visit: 1 },
+    {
+      ts: at(25),
+      type: 'step.finished',
+      step_id: 'suite',
+      duration_ms: 4 * 6e4,
+      output: {
+        kind: 'suite', status: 'fail', round: 1, scope: 'full', command: 'npm test', log: 'logs/suite-1-full.log', exit_code: 1, duration_ms: 3 * 6e4, passed: 411, failed: 1, failures, preexisting: [],
+        message: 'The suite failed in round 1 (`npm test`): 1 failure, outside the change.',
+      },
+    },
+    { ts: at(25), type: 'step.transition', from: 'suite', to: 'build', when: "inputs.suite_red_outside_change == 'continue'" },
+    { ts: at(26), type: 'step.started', step_id: 'build', step_type: 'build', visit: 1 },
+    { ts: at(30), type: 'step.finished', step_id: 'build', duration_ms: 4 * 6e4, output: { status: 'pass', message: 'The build passed.' } },
+  ], { 'logs/suite-1-full.log': '$ npm test   (simulated: nothing was run)\n' }, {
+    inputs: { task, suite_red_outside_change: 'continue' },
+    tested: 'not green',
+    tested_failures: failures,
+  });
+});
+
+Then('the run shows a {string} pill', async ({ e2e }, text) => {
+  const pill = visibleTestId(e2e.window, 'run-tested-pill');
+  await expect(pill).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(pill).toContainText(text);
+});
+
+// checked once the Run screen has drawn the run's suite card (the run is loaded)
+Then('the run shows no {string} pill', async ({ e2e }, text) => {
+  const page = e2e.window;
+  await expect(page.getByTestId('run-suite-card').filter({ visible: true }).first()).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(page.getByTestId('run-tested-pill').filter({ visible: true })).toHaveCount(0);
+  await expect(page.getByText(text, { exact: true }).filter({ visible: true })).toHaveCount(0);
+});
+
+Then('the run chat\'s summary says {string}', async ({ e2e }, text) => {
+  const line = visibleTestId(e2e.window, 'runchat-tested');
+  await expect(line).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(line).toContainText(text);
 });

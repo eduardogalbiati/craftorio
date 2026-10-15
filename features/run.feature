@@ -297,3 +297,39 @@ Feature: Runs and gates
     Then the run no longer says it is pausing
     And the run offers "Pause after current step" again
     And the run goes on past the current turn without pausing
+
+  # ---- #396: a suite red only outside the change ----------------------------------------------------
+  # A new owner policy input of AI Development (local hero), "Suite red outside the change" (Ask |
+  # Continue, default Ask): with Continue, a suite red only outside the change goes to the build without
+  # the test_failed gate. A run that reached the build without a green suite records it in its summary
+  # and shows a "Not tested green" pill. The run "-red00396" is seeded finished that way (the policy was
+  # Continue); the run "-sui00304" (#304) is a green one.
+
+  @issue-396
+  Scenario: The Start panel of AI Development (local hero) offers the suite policy, Ask by default
+    Given the app is open
+    When I open the Start panel
+    And I choose the workflow "ai-development-local-hero" in the Start panel
+    Then the field "Suite red outside the change" offers "Ask"
+    And the field "Suite red outside the change" offers "Continue"
+    And "Ask" is selected for "Suite red outside the change"
+
+  @issue-396
+  Scenario: A run that reached the build without a green suite shows "Not tested green"
+    Given the app is open
+    And the demo project has a finished AI Development run "red00396" that reached the build with the suite red outside the change
+    When I open "Runs" in the sidebar
+    And I search the runs for "red00396"
+    And I view the run "red00396" from the list
+    Then the run shows a "Not tested green" pill
+    When I switch the run to its chat
+    Then the run chat's summary says "Not tested green"
+
+  @issue-396
+  Scenario: A run whose suite was green shows no "Not tested green" pill
+    Given the app is open
+    And the demo project has a finished AI Development run "sui00304" whose suite ran the affected tests, then the whole suite
+    When I open "Runs" in the sidebar
+    And I search the runs for "sui00304"
+    And I view the run "sui00304" from the list
+    Then the run shows no "Not tested green" pill
