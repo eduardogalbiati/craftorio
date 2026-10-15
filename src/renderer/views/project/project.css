@@ -94,3 +94,22 @@
 /* #373: the "Facts | City" switch, and the hotspot row a City card opened */
 .arch-mode-row { margin-bottom: 10px; }
 .arch-focus td { background: color-mix(in srgb, var(--accent, #7c9cff) 16%, transparent); }
+/* #357: the Refactor tab (views/project/project-refactor.js) */
+.rf-tab { display: grid; gap: 12px; }
+.rf-head, .rf-cadence, .rf-filters, .rf-actions, .rf-dismiss-form { gap: 8px; flex-wrap: wrap; align-items: center; }
+.rf-filters .chips { margin-bottom: 0; }
+.rf-cadence { border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 12px; background: var(--panel); }
+.rf-every { width: 64px; }
+.rf-good { color: var(--green); }
+.rf-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.rf-row { display: flex; gap: 12px; border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 12px; background: var(--panel); }
+.rf-rank { flex: none; min-width: 32px; font-size: 16px; font-weight: 600; font-family: var(--mono); color: var(--accent); }
+.rf-body { flex: 1; min-width: 0; display: grid; gap: 4px; }
+.rf-line { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.rf-line .badge { flex: none; }
+.rf-title, .rf-target { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rf-reason { flex: 1; min-width: 200px; }
+.rf-add { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; background: var(--panel-2); }
+.rf-add-grid { display: grid; grid-template-columns: 1fr 2fr; gap: 12px; }
+.rf-add textarea, .rf-add input { width: 100%; box-sizing: border-box; }
+.rf-center { justify-content: center; gap: 8px; margin-top: 12px; }

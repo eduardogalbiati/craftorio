@@ -33,7 +33,6 @@
 // the project's runs in progress (#374, views/project/project-city-agents.js); openCity(id) opens
 // the tab on the City view (a run's "Replay on the map", a release's "Show on the map", #376:
 // views/project/project-city-release.js).
-// Also the Refactor tab's proposal list (showRefactor, refactor:proposals).
 // Drawn into the box project.js gives it (show), its clicks and changes routed from the project
 // page's listeners (onClick, onChange). Uses app.js globals at call time: api, esc, errMsg, fmtNum,
 // fmtUsd (usage-widget.js), showToast, state (projects, simulationOnly). Browser: window.ProjectArchitecture.
@@ -616,17 +615,6 @@
     return true;
   }
 
-  /** The Refactor tab's proposals of project `id` in `box` (the tab's empty state stays when there is none). */
-  async function showRefactor(id, box, empty) {
-    let list = [];
-    try { list = (await api.refactorProposals(id)) || []; } catch (e) { box.innerHTML = `<div class="usage-unavailable" role="alert">Could not read the proposals: ${esc(errMsg(e))}</div>`; return; }
-    if (empty) empty.classList.toggle('hidden', list.length > 0);
-    box.innerHTML = list.length ? `<h3 class="arch-sub">Proposals</h3><ul class="arch-findings" data-testid="refactor-proposals">${list.map((p) => `<li class="arch-finding" data-testid="refactor-proposal">
-      <div class="row arch-finding-head"><b>${esc(p.title)}</b><span class="badge">${esc(p.source)}</span><span class="badge${p.severity === 'high' ? ' warn' : ''}">${esc(p.severity || '')}</span><span class="badge mono">${esc(p.kind || '')}</span></div>
-      <div class="small">${(p.files || []).map((x) => `<span class="mono">${esc(x.path)}</span>`).join(', ')}</div>
-      <div class="small"><b>Refactor:</b> ${esc(p.refactor || '')}</div></li>`).join('')}</ul>` : '';
-  }
-
   // the runs' events reach the tab whatever screen started the run
   if (typeof api !== 'undefined' && typeof api.onEvent === 'function') api.onEvent(onRunEvent);
 
@@ -636,6 +624,5 @@
     onRunEvent,
     openCity,
     show,
-    showRefactor,
   };
 })();

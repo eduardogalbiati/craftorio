@@ -36,6 +36,11 @@
 // (stale: commits since its run), two seeds never run and dependency-map with a tool (runs free); open
 // the result with --click "[data-testid=seed-open-churn-complexity]". --mode seeds-running and
 // seeds-error click Run on quality-gate-report (seeds:run never answers, or fails).
+// #357: the Refactor tab (refactor) on the Architecture demo: five proposals ranked by the Product
+// Owner (one filed and planned, one done that left the Danger Zone, one not improved, one dismissed:
+// --click "[data-testid=refactor-filter-dismissed]"), the cadence on with "next in 4 runs". Its states,
+// --mode: never (no Architecture report), empty (a report, no proposal), prioritizing
+// (refactor:prioritize never answers) and error (it fails), the last two after a click on prioritize.
 
 const { execFileSync } = require('child_process');
 const fs = require('fs');
@@ -295,12 +300,46 @@ function seedArchitecture(args, ws, project, { appDir, projects }) {
   }
 }
 
+// #357: the Refactor tab's proposals on the Architecture demo (the roadmap's #10 planned, #11 done),
+// the Product Owner's ranking and the cadence on with 6 of its runs counted ("next in 4 runs")
+function demoRefactor(ws, projectId) {
+  const runs = require('../../../src/runs');
+  const cadence = require('../../../src/refactor-cadence');
+  const dir = path.join(ws.root, 'refactor', projectId);
+  const at = (days) => new Date(Date.now() - days * 864e5).toISOString();
+  const arch = (id, f, extra) => ({ id, source: 'architecture', key: `demo:${id}`, reportId: 'demo-report-2', kind: f.kind, title: f.title, files: f.files, evidence: f.evidence, severity: f.severity, refactor: f.refactor, createdAt: at(20), status: 'proposed', ...extra });
+  const owner = (id, target, improvement, extra) => ({ id, source: 'owner', key: `demo:${id}`, title: improvement, target, improvement, evidence: 'Hotspot rank 2, in the Danger Zone since July.', files: [target], createdAt: at(12), status: 'proposed', ...extra });
+  const proposals = [
+    arch('architecture-demo-1', DUPLICATED, { rank: 1, complexity: 2, rankReason: 'Highest Danger Zone score, and no unfinished roadmap item touches its files.', issue: 10, before: { quadrant: 'danger-zone', score: 82, file: 'src/billing.js', at: at(2) } }),
+    arch('architecture-demo-2', finding('god-module', 'Billing module holds 120 rate constants and the discount rule', [{ path: 'src/billing.js' }], 'high', 'The file grew in each of its 5 commits; 120 constants sit next to the rule.', 'Move the rates to a data file the rule reads.'), { rank: 2, complexity: 3, rankReason: 'Same hotspot as #1: after it, to avoid a conflict in src/billing.js.' }),
+    owner('owner-demo-3', 'src/api.js', 'Split the request parsing out of the API handlers', { rank: 3, complexity: 1, rankReason: 'Small and isolated: a cheap win on a busy file.', issue: 11, before: { quadrant: 'danger-zone', score: 64, file: 'src/api.js', at: at(9) }, outcome: { leftDangerZone: true, scoreDrop: 33, improved: true, after: { quadrant: 'healthy', score: 31 }, at: at(8) } }),
+    owner('owner-demo-4', 'tools/export.py', 'Give the export one entry point per format with a very long title that is cut at the edge of the row', { rank: 4, complexity: 4, rankReason: 'Low churn: little value until the export changes again.', issue: 21, before: { quadrant: 'danger-zone', score: 58, file: 'tools/export.py', at: at(30) }, outcome: { leftDangerZone: false, scoreDrop: 0, improved: false, after: { quadrant: 'danger-zone', score: 58 }, at: at(28) } }),
+    arch('architecture-demo-5', finding('naming', 'Export constants shout', [{ path: 'tools/export.py' }], 'low', 'RATE_0 to RATE_29 in upper case.', 'Rename them in snake case.'), { status: 'dismissed', dismissReason: 'Generated code, never edited by hand', dismissedAt: at(3) }),
+  ];
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'proposals.json'), JSON.stringify({ proposals }, null, 2));
+  const ranking = proposals.filter((p) => p.rank).map((p) => ({ id: p.id, rank: p.rank, reason: p.rankReason, complexity: p.complexity }));
+  fs.writeFileSync(path.join(dir, 'ranking.json'), JSON.stringify({ at: at(1), costUsd: 0.18, ranking }, null, 2));
+  // the cadence counts from the 7th latest real run: 6 counted, "next in 4 runs"
+  const project = { id: projectId };
+  const list = runs.listRuns(ws.runs);
+  const ends = list.filter((r) => r.projectId === projectId && !r.mock && r.finishedAt).map((r) => r.finishedAt).sort().reverse();
+  const since = ends[6] || null;
+  const every = Math.min(cadence.CADENCE_MAX, Math.max(cadence.CADENCE_MIN, cadence.countedRuns(list, project, since) + 4));
+  fs.writeFileSync(path.join(dir, 'cadence.json'), JSON.stringify({ on: true, every, since }, null, 2));
+}
+
 function seed({ appDir, args, projects, ws, project }) {
   demoLocalMerge(ws, project.id);
   demoRoadmap(ws, project.id, args.live, args.budget, args.roadmap);
   demoChildRuns(ws, project.id);
   demoRunHistory(ws, project.id);
   if (args.tab === 'architecture') return seedArchitecture(args, ws, project, { appDir, projects });
+  if (args.tab === 'refactor') {
+    seedArchitecture({ mode: args.mode === 'never' ? 'never' : null }, ws, project, { appDir, projects });
+    if (args.mode !== 'never' && args.mode !== 'empty') demoRefactor(ws, project.id);
+    return;
+  }
   if (args.tab !== 'conflicts' || args.mode === 'not-git') return;
   if (args.mode === 'no-runs') {
     const git = (a) => execFileSync('git', ['-C', project.folder, ...a], { stdio: 'pipe' });
@@ -364,7 +403,15 @@ async function afterOpen({ args, click, js, project }) {
     ipcMain.handle('po:history', () => DEMO_IMPACT_PO);
   }
   const seedRun = args.tab === 'architecture' && stubSeedRun(args.mode);
+  // #357: "Ask the Product Owner to prioritize" never answers (its state stays on screen) or fails
+  const ranking = { prioritizing: () => new Promise(() => {}), error: () => { throw new Error('The Product Owner refused the ranking: the daily budget is reached (US$ 5.00 of US$ 5.00).'); } }[args.mode];
+  if (args.tab === 'refactor' && ranking) {
+    const { ipcMain } = require('electron');
+    ipcMain.removeHandler('refactor:prioritize');
+    ipcMain.handle('refactor:prioritize', ranking);
+  }
   await click(`[data-pv-tab="${args.tab}"]`);
+  if (args.tab === 'refactor' && ranking) await click('[data-testid="refactor-prioritize"]');
   if (args.tab === 'architecture' && analysis) await click('[data-testid="architecture-analyze"]');
   if (args.tab === 'architecture' && args.mode?.startsWith('seeds')) await showSeeds({ click, js, seedRun });
   if (args.tab === 'architecture' && ['city', 'city-agents', 'city-issue', 'city-large', 'city-release', 'city-stage'].includes(args.mode)) await click('[data-testid="architecture-mode-city"]');
@@ -378,7 +425,7 @@ async function afterOpen({ args, click, js, project }) {
 
 module.exports = {
   afterOpen,
-  modes: ['analyzing', 'city', 'city-agents', 'city-issue', 'city-large', 'city-release', 'city-stage', 'empty', 'error', 'facts-large', 'large', 'loading', 'map-refresh', 'never', 'no-runs', 'not-git', 'seeds', 'seeds-error', 'seeds-running'],
+  modes: ['analyzing', 'city', 'city-agents', 'city-issue', 'city-large', 'city-release', 'city-stage', 'empty', 'error', 'facts-large', 'large', 'loading', 'map-refresh', 'never', 'no-runs', 'not-git', 'prioritizing', 'seeds', 'seeds-error', 'seeds-running'],
   open,
   run: true,
   seed,

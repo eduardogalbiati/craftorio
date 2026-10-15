@@ -3,8 +3,9 @@
 // repository and unpushed commits, and its runs in the shared run list, run-list.js: paged with an
 // infinite scroll, filters and search answered by the service, #200), Conflict map
 // (project-conflict-map.js), Architecture (project-architecture.js, #356, with the Seeds section
-// below it, project-seeds.js, #360) and Refactor (an empty
-// state until #357, with the proposals sent from the Architecture tab). The selected tab is remembered per project. The page is the header's project: opening
+// below it, project-seeds.js, #360) and Refactor
+// (project-refactor.js, #357: the proposals ranked by the Product Owner and the cadence). The
+// selected tab is remembered per project. The page is the header's project: opening
 // one makes it the app's project, and choosing another in the header switches the page to it.
 // No sidebar entry of its own: Projects stays lit (`menu`).
 // openProjectView (the Projects cards, the Conflict map links, scripts/screenshot.js) and
@@ -94,7 +95,7 @@ function renderProjectView() {
     window.ProjectArchitecture?.show(pv.id, $('#project-architecture'));
     window.ProjectSeeds?.show(pv.id, $('#project-seeds'));
   }
-  if (pv.tab === 'refactor') window.ProjectArchitecture?.showRefactor(pv.id, $('#project-refactor-proposals'), $('#project-panel-refactor [data-testid="project-refactor-empty"]'));
+  if (pv.tab === 'refactor') window.ProjectRefactor?.show(pv.id, $('#project-refactor'));
   if (pv.tab !== 'overview') return;
   $('#project-info').innerHTML = `
     <dl class="kv">
@@ -118,7 +119,7 @@ function onProjectPageClick(e) {
     renderProjectView();
     return;
   }
-  if (!window.ProjectArchitecture?.onClick(e) && !window.ProjectSeeds?.onClick(e)) window.ProjectConflictMap?.onClick(e);
+  if (!window.ProjectArchitecture?.onClick(e) && !window.ProjectSeeds?.onClick(e) && !window.ProjectRefactor?.onClick(e)) window.ProjectConflictMap?.onClick(e);
 }
 
 registerView({
@@ -149,14 +150,13 @@ registerView({
           <div id="project-seeds"></div>
         </div>
         <div id="project-panel-refactor" class="hidden" role="tabpanel" aria-label="Refactor">
-          <div class="empty-state" data-testid="project-refactor-empty"><b>Refactor: coming soon</b><p class="muted">This tab will hold the prioritized refactors of the project, added to the roadmap every few runs.</p></div>
-          <div id="project-refactor-proposals"></div>
+          <div id="project-refactor"></div>
         </div>
       </section>`,
   mount() {
     $('#btn-project-back').onclick = () => showProjects();
     $('#view-project').addEventListener('click', onProjectPageClick);
-    $('#view-project').addEventListener('change', (e) => window.ProjectArchitecture?.onChange(e) || window.ProjectConflictMap?.onChange(e));
+    $('#view-project').addEventListener('change', (e) => window.ProjectArchitecture?.onChange(e) || window.ProjectRefactor?.onChange(e) || window.ProjectConflictMap?.onChange(e));
     // a Conflict map row opens from the keyboard too
     $('#view-project').addEventListener('keydown', (e) => {
       if ((e.key === 'Enter' || e.key === ' ') && e.target.closest('[data-pcm-row]')) { e.preventDefault(); window.ProjectConflictMap?.onClick(e); }

@@ -1394,6 +1394,35 @@ costs about $0.3-1.5 and 5-10 minutes of Electron time per run.
 To measure: compare $/run and $/issue over a week at Economy with the baseline of 2026-10-01/02
 (~$11.7-11.9 per run, the test step about half of it), from the runs' `summary.json` or Usage.
 
+### The Refactor tab
+
+Refactors land regularly without planning each one by hand (#357). **Projects › a project ›
+Refactor** lists the project's refactor proposals: a finding sent from the Architecture tab, or one
+the owner writes there (target, expected improvement, evidence). Saved in
+`<workspace>/refactor/<project>/` (`proposals.json`, `ranking.json`, `cadence.json`).
+
+- **Ask the Product Owner to prioritize**: one read-only Product Owner turn orders the open proposals
+  by value against risk and cost: the Danger Zone score of the target (the Architecture tab's facts),
+  the hotspots, the conflict map, and the roadmap's unfinished items (a proposal on files such an
+  item will change goes later). Each proposal gets a rank, a one-line reason and `complexity:1-5`,
+  checked against its JSON Schema and saved with the date and cost. In simulation the answer is the
+  simulated one (no model call).
+- **File as issue**: files the proposal in the project's tracker with the `refactor` label (created
+  first when missing on GitHub; GitLab creates it on filing) and names the Refactor workflow. The row
+  then shows the issue, whether it is open, and its roadmap item's status.
+- **Add to roadmap now**: one item on the Refactor workflow, placed by the Product Owner's rules
+  (the earliest stage that shares no file with it, never before an item it conflicts with).
+- **Dismiss** asks a reason; dismissed proposals stay under the **Dismissed** filter.
+- **The cadence** "Add a refactor to the roadmap every X runs" (off by default, X from 3 to 50):
+  after every X finished real runs of the project, the top ranked proposal that has an issue and no
+  unfinished roadmap item joins the roadmap the same way. With none ready, nothing is added and the
+  tab says "Nothing ready to add: prioritize or file a proposal". The item counts in the budget cap
+  like any other, and nothing answers a gate.
+- **Success on the map**: when a refactor joins the roadmap its target's quadrant and Danger Zone
+  score are kept with the proposal; after its run the row says whether it left the Danger Zone or how
+  much its score dropped, and marks a target that did not improve. The header counts the files that
+  left the Danger Zone through refactor runs in the last 30 and 90 days.
+
 ### Roadmap cost estimates and the spending budget
 
 **Estimates before running** (#206, `src/cost-estimate.js`). Each roadmap item shows "≈ $X" and each
