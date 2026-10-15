@@ -6,7 +6,8 @@
 // the run in progress in this window).
 //
 // Each run also has a display title and the PR it opened (#84, src/run-pr.js): the owner's title is
-// in runs/<id>/meta.json, and a resumed run inherits both from the run it resumes.
+// in runs/<id>/meta.json, and a resumed run inherits both from the run it resumes. The other way
+// (#384), a run that a later run resumed carries `resumedBy: { runId, status }`, derived as it is listed.
 //
 // With the service's index open (src/store.js) listRuns reads unchanged runs from it (`indexRun`,
 // `rebuildIndex`, `runSummaries` for Usage and Analytics); deleting index.db loses nothing.
@@ -328,17 +329,56 @@ async function listRunsAsync(runsDir, { live } = {}) {
     const gone = [...rows.keys()].filter((id) => !present.has(id));
     if (gone.length) store.deleteRuns(gone);
   }
-  return list.filter(Boolean).sort((a, b) => String(b.startedAt).localeCompare(String(a.startedAt)));
+  return withResumedBy(list.filter(Boolean).sort((a, b) => String(b.startedAt).localeCompare(String(a.startedAt))));
 }
 
-/** One run as the lists show it (its index row when current, else read from its folder), null: not a run. */
-function findRun(runsDir, runId, { live } = {}) {
-  const id = path.basename(String(runId || ''));
-  if (!id || id === '.' || id === '..') return null;
+// #384: the run that resumed a run (the latest whose workflow.started resumed_from names it) and its
+// status, as `resumedBy: { runId, status }`. Derived at listing time from the resumed runs' own
+// resumedFrom, never cached in a row: a run's files do not change when a later run resumes it.
+const resumeLink = (r) => ({ runId: r.runId, status: r.status });
+function withResumedBy(list) {
+  const latest = new Map(); // resumed run id → the latest run that resumed it
+  for (const r of list) {
+    const prev = r.resumedFrom && latest.get(r.resumedFrom);
+    if (r.resumedFrom && (!prev || String(r.startedAt) > String(prev.startedAt))) latest.set(r.resumedFrom, r);
+  }
+  if (!latest.size) return list;
+  return list.map((r) => (latest.has(r.runId) ? { ...r, resumedBy: resumeLink(latest.get(r.runId)) } : r));
+}
+
+function findOne(runsDir, id, live) {
   const store = storeFor(runsDir);
   const row = currentRow(runsDir, id, store?.runEntry(id), runSignature(path.join(runsDir, id)), live);
   if (row) return row;
   return store ? indexRunIn(store, runsDir, id) : readRun(runsDir, id);
+}
+
+// The id of the run that resumed `info` (the index's resumed_from column). A run that could have been
+// resumed and has no resumer indexed first indexes the folders newer than it that the index does not
+// have yet (run ids start with their start time; a resume starts after the run it resumes).
+const RESUMED_DONE = new Set(['pending', 'running', 'success']);
+function resumerOf(store, runsDir, info) {
+  const found = store.runResumedBy(info.runId);
+  if (found || RESUMED_DONE.has(info.status)) return found;
+  let names = [];
+  try { names = fs.readdirSync(runsDir); } catch { return null; }
+  const fresh = names.filter((n) => n > info.runId && !store.runEntry(n));
+  for (const n of fresh) indexRunIn(store, runsDir, n);
+  return fresh.length ? store.runResumedBy(info.runId) : null;
+}
+
+/**
+ * One run as the lists show it (its index row when current, else read from its folder), null: not a
+ * run. With the index open it also carries `resumedBy` (#384), from the index's resumed_from column.
+ */
+function findRun(runsDir, runId, { live } = {}) {
+  const id = path.basename(String(runId || ''));
+  if (!id || id === '.' || id === '..') return null;
+  const info = findOne(runsDir, id, live);
+  const store = info && storeFor(runsDir);
+  const by = store && resumerOf(store, runsDir, info);
+  const resumer = by && findOne(runsDir, by, live);
+  return resumer ? { ...info, resumedBy: resumeLink(resumer) } : info;
 }
 
 /** Re-reads one run into the index (the service calls it as the run's events are written). */
@@ -402,7 +442,7 @@ function listRuns(runsDir) {
     const gone = [...rows.keys()].filter((id) => !present.has(id));
     if (gone.length) store.deleteRuns(gone);
   }
-  return list.filter(Boolean).sort((a, b) => String(b.startedAt).localeCompare(String(a.startedAt)));
+  return withResumedBy(list.filter(Boolean).sort((a, b) => String(b.startedAt).localeCompare(String(a.startedAt))));
 }
 
 /** summary.json of every finished run (`mock: false`: real runs only), from the index when it is open. */

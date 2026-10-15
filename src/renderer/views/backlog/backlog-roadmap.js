@@ -609,9 +609,19 @@
             <div class="rm-wf-head"><span class="rm-eyebrow">Workflow</span>${head}${x.runId ? '' : '<span class="spacer"></span>'}${edit}</div>
             ${modeHtml(x, locked)}
             <div class="rm-meta">${meta}</div>
+            ${runHistoryHtml(x)}
           </div>
           ${pipelineHtml(x, v)}
         </div>`;
+  }
+
+  // #384: the item's earlier runs (a run resumed, a retry), oldest first: each opens its run (backlog.js:
+  // any [data-run]); `runHistory` ({ runId, status }) from the service, else its `runs` without a status
+  function runHistoryHtml(x) {
+    const earlier = x.runHistory || RoadmapModel.earlierRuns(x).map((runId) => ({ runId, status: null }));
+    if (!earlier.length) return '';
+    const entry = (h) => `<button class="link-btn small rm-run-history-entry" type="button" data-testid="roadmap-run-history-entry" data-run="${esc(h.runId)}" data-workflow="${esc(x.workflowName || '')}" title="${esc(`Open the earlier run ${h.runId}`)}"><span class="mono">${esc(String(h.runId).slice(9))}</span>${h.status ? ` ${StatusPill.statusPill(h.status)}` : ''}</button>`;
+    return `<div class="rm-run-history muted small" data-testid="roadmap-run-history"><span class="rm-eyebrow">Earlier runs</span>${earlier.map(entry).join('')}</div>`;
   }
 
   // The item card (#282), three bands: 1. its issues (what leads: the titles, then "4 issues ·
@@ -795,47 +805,14 @@
   };
   // the release workflow's stations (workflows/release.yaml)
   const RELEASE_STATIONS = [['unit', 'Unit tests'], ['e2e', 'E2E scenarios'], ['fix', 'Fix'], ['ship', 'Ship']];
-  const itemRuns = (x) => [...(x.runs || []), x.runId].filter(Boolean);
+  // an item's runs (RoadmapModel.itemRuns); where each release goes and the filter's choice: RoadmapModel.releaseView
+  const itemRuns = (x) => RoadmapModel.itemRuns(x);
   // #273: the owner's zone (time-zone.js; a page without it: the computer's)
   const zone = () => (typeof TimeZone !== 'undefined' ? TimeZone.current() : undefined);
   const shortDate = (at) => {
     const d = new Date(at);
     return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: zone() });
   };
-
-  // The releases the Roadmap knows, each with `at`: the stage it follows (its cut line's, else the last
-  // stage with a run in it; -1: none) and `cut` (it has a cut line).
-  function roadmapReleases(r, data) {
-    const list = (data?.releases?.releases || []).filter((x) => x?.version).map((x) => ({ ...x, cut: false, at: -1 }));
-    r.stages.forEach((stage, s) => {
-      const line = stage.release;
-      const x = line?.runId && list.find((y) => y.version === line.name);
-      if (!x) return;
-      x.runId = x.runId || line.runId;
-      x.cut = true;
-      x.at = s;
-    });
-    for (const x of list.filter((y) => !y.cut)) {
-      const runs = new Set(x.runs || []);
-      x.at = r.stages.findLastIndex((stage) => stage.items.some((i) => itemRuns(i).some((id) => runs.has(id))));
-    }
-    return list;
-  }
-
-  // The Releases filter's choice (`view.release`: '' all, 'next' the next release, else a version):
-  // { list, choice, shown (the releases drawn), runs (the run ids a chosen release narrows to, null: all), chosen }
-  function releaseView(r, data, wanted) {
-    const list = roadmapReleases(r, data);
-    const chosen = wanted && wanted !== 'next' ? list.find((x) => x.version === wanted) || null : null;
-    const choice = chosen ? wanted : wanted === 'next' && list.length ? 'next' : '';
-    if (!choice) return { list, choice, shown: list.filter((x) => x.at >= 0), runs: null, chosen: null };
-    if (chosen) return { list, choice, shown: [chosen], runs: new Set(chosen.runs || []), chosen };
-    // what merged since the last release: the done items' runs no shipped release holds
-    const shipped = new Set(list.filter((x) => x.status === 'shipped').flatMap((x) => x.runs || []));
-    const pending = list.filter((x) => x.status !== 'shipped');
-    const runs = new Set([...r.stages.flatMap((s) => s.items).filter((i) => i.status === 'done').flatMap(itemRuns).filter((id) => !shipped.has(id)), ...pending.flatMap((x) => x.runs || [])]);
-    return { list, choice, shown: pending, runs, chosen: null };
-  }
 
   // The head's count while a release is chosen: its stages and runs shown, the runs of the release the
   // roadmap does not have (runs started elsewhere), a link to the release on the Releases screen.
@@ -1099,7 +1076,7 @@
     const [since, , sinceText, rangeMs] = SINCE.find(([id]) => id === view.since) || SINCE[0];
     const r = data?.roadmap || { state: 'planned', stages: [] };
     // #291: the releases, and the one the Releases filter chose
-    const rv = releaseView(r, data, view.release || '');
+    const rv = RoadmapModel.releaseView(r, data, view.release || '');
     const v = { epic: view.epic || '', showAll: !!view.showAll, since, rangeMs, runs: rv.runs };
     const key = `${view.project || ''}|${v.showAll ? 'all' : 'planned'}|${since}|${v.epic}|${rv.choice}`;
     if (pages.key !== key) pages = { key, more: 0, earlier: 0, fresh: true };

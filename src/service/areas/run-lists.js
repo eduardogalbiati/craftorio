@@ -67,6 +67,8 @@ module.exports = (ctx) => {
       artifactCount: arts.count,
       imageCount: arts.images,
       status: current ? 'running' : r.status,
+      // #384: the run that resumed this one, its status as this process sees it
+      resumedBy: r.resumedBy ? { ...r.resumedBy, status: statusOf(r.resumedBy) } : null,
       current,
       retryOf,
       passedGates: current ? ctx.passedGates(run) : [],

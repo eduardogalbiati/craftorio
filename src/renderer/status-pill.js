@@ -26,6 +26,7 @@
     planned: ['idle', 'Planned'],
     queued: ['idle', 'Queued'],
     released: ['success', 'Released'],
+    resumed: ['idle', 'Resumed'],
     running: ['running', 'Running'],
     simulated: ['idle', 'Simulated'],
     skipped: ['interrupted', 'Skipped'],

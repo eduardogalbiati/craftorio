@@ -149,6 +149,48 @@
     return { ...roadmapActions(roadmap, stage), ...stageActions(roadmap, stage), ...itemActions(roadmap, item) };
   }
 
+  /** Every run of an item: its earlier ones (`runs`), then the one that holds its status (`runId`). */
+  const itemRuns = (x) => [...(x.runs || []), x.runId].filter(Boolean);
+  /** #384: an item's earlier runs (a resumed or retried run), oldest first: its runs but the one that holds its status. */
+  const earlierRuns = (x) => (x?.runId ? [...new Set(x.runs || [])].filter((id) => id !== x.runId) : []);
+
+  // The releases the Roadmap knows (#291; `data.releases`: the service's roadmapReleases), each with
+  // `at`: the stage it follows (its cut line's, else the last stage with a run in it; -1: none) and
+  // `cut` (it has a cut line).
+  function roadmapReleases(r, data) {
+    const list = (data?.releases?.releases || []).filter((x) => x?.version).map((x) => ({ ...x, cut: false, at: -1 }));
+    r.stages.forEach((stage, s) => {
+      const line = stage.release;
+      const x = line?.runId && list.find((y) => y.version === line.name);
+      if (!x) return;
+      x.runId = x.runId || line.runId;
+      x.cut = true;
+      x.at = s;
+    });
+    for (const x of list.filter((y) => !y.cut)) {
+      const runs = new Set(x.runs || []);
+      x.at = r.stages.findLastIndex((stage) => stage.items.some((i) => itemRuns(i).some((id) => runs.has(id))));
+    }
+    return list;
+  }
+
+  /**
+   * The Roadmap's Releases filter's choice (`wanted`: '' all, 'next' the next release, else a version):
+   * { list, choice, shown (the releases drawn), runs (the run ids a chosen release narrows to, null: all), chosen }
+   */
+  function releaseView(r, data, wanted) {
+    const list = roadmapReleases(r, data);
+    const chosen = wanted && wanted !== 'next' ? list.find((x) => x.version === wanted) || null : null;
+    const choice = chosen ? wanted : wanted === 'next' && list.length ? 'next' : '';
+    if (!choice) return { list, choice, shown: list.filter((x) => x.at >= 0), runs: null, chosen: null };
+    if (chosen) return { list, choice, shown: [chosen], runs: new Set(chosen.runs || []), chosen };
+    // what merged since the last release: the done items' runs no shipped release holds
+    const shipped = new Set(list.filter((x) => x.status === 'shipped').flatMap((x) => x.runs || []));
+    const pending = list.filter((x) => x.status !== 'shipped');
+    const runs = new Set([...r.stages.flatMap((s) => s.items).filter((i) => i.status === 'done').flatMap(itemRuns).filter((id) => !shipped.has(id)), ...pending.flatMap((x) => x.runs || [])]);
+    return { list, choice, shown: pending, runs, chosen: null };
+  }
+
   const api = {
     ACTIONS,
     FINISHED,
@@ -156,13 +198,16 @@
     STATES,
     allowedActions,
     currentStage,
+    earlierRuns,
     hasUnfinished,
     isFinished,
     isOpen,
+    itemRuns,
     pauseChoices,
     pausingAfterStage,
     pendingRelease,
     refusedStart,
+    releaseView,
     scopedStage,
     stageProgress,
     unfinishedItems,

@@ -63,7 +63,7 @@ function demoRoadmap(ws, projectId, live = 'off', budget = null, more = null) {
     stages: [
       { id: 'stage-1', name: 'Stability first', note: 'The rename crash blocks the rest.', items: [item('item-1', 'software-development-local-hero.yaml', [11], { status: 'done', runId: '20260118-120000-demo0011', runs: ['20260118-120000-demo0011'] })] },
       ...(tonight ? [{ id: 'stage-tonight', name: 'Tonight', note: 'Three runs at once, then the refused start waits for your answer.', items: [
-        item('item-4', 'software-development-local-hero.yaml', [16], { runId: tonight.running, runs: [tonight.running] }),
+        item('item-4', 'software-development-local-hero.yaml', [16], { runId: tonight.running, runs: [tonight.resumed, tonight.running] }),
         item('item-5', 'software-development-local-hero.yaml', [15], { runId: tonight.waiting, runs: [tonight.waiting], inputs: { language: 'js', mode: 'validated' } }),
         item('item-6', 'software-development-local-hero.yaml', [13], { runId: tonight.failed, runs: [tonight.failed] }),
         item('item-7', 'software-development-local-hero.yaml', [14], { error: refused.replace(/^Could not start #14: /, '') }),
@@ -120,9 +120,10 @@ function demoRoadmapRuns(ws, projectId, { fixRound = false } = {}) {
   const PATH = [['develop', 38], ['developer_screenshots', 2], ['code_review', 11], ['human_review', 9], ['test', 18], ['suite', 4], ['build', 6], ['evidence', 7], ['verify_change', 5]];
   const min = 6e4;
   const ev = (ts, type, extra = {}) => ({ ts: new Date(ts).toISOString(), type, ...extra });
-  // the events of the steps run so far; the last one `last`: running, waiting (a gate) or failed
-  const events = (start, steps, last) => {
-    const out = [ev(start, 'workflow.started', { workflow, file, project_id: projectId, mock: false, groups, inputs: { task: 'Demo roadmap run' } })];
+  // the events of the steps run so far; the last one `last`: running, waiting (a gate) or failed;
+  // `resumedFrom`: { run_id, step } of the run it resumes (#250)
+  const events = (start, steps, last, resumedFrom = null) => {
+    const out = [ev(start, 'workflow.started', { workflow, file, project_id: projectId, mock: false, groups, inputs: { task: 'Demo roadmap run' }, ...(resumedFrom ? { resumed_from: resumedFrom } : {}) })];
     let t = start + 1e3;
     steps.forEach(([step, m], n) => {
       const [agent, model] = AGENT[step] || [];
@@ -191,8 +192,15 @@ function demoRoadmapRuns(ws, projectId, { fixRound = false } = {}) {
   const running = `${stamp(52)}-230500-run00016`;
   const waiting = `${stamp(95)}-221500-run00015`;
   const failed = `${stamp(190)}-204000-run00013`;
+  // #384: the running one resumes (from develop) an earlier run of #16 that failed in its tests: that
+  // run's row reads "Resumed → running", the item's card lists it under its earlier runs
+  const resumed = `${stamp(160)}-212000-run10016`;
+  const before = events(now - 160 * min, [['develop', 40], ['developer_screenshots', 2], ['code_review', 9], ['test', 20]], 'failed');
+  write(resumed, [...before.lines, ev(before.end, 'workflow.finished', { status: 'failed', error: 'The suite failed: 3 tests in test/report.test.js' })], {
+    status: 'failed', error: 'The suite failed: 3 tests in test/report.test.js', started_at: new Date(now - 160 * min).toISOString(), finished_at: new Date(before.end).toISOString(), duration_ms: before.end - (now - 160 * min),
+  });
   // in code review for 6 minutes
-  write(running, events(now - 52 * min, fixRound ? [['develop', 30], ['developer_screenshots', 2], ['code_review', 11], ['develop', 9]] : [['develop', 44], ['developer_screenshots', 2], ['code_review', 6]], 'running').lines, null, true);
+  write(running, events(now - 52 * min, fixRound ? [['develop', 30], ['developer_screenshots', 2], ['code_review', 11], ['develop', 9]] : [['develop', 44], ['developer_screenshots', 2], ['code_review', 6]], 'running', { run_id: resumed, step: 'develop' }).lines, null, true);
   // at the developer's gate of the Validated mode (#282: the pipeline's "Your check" station)
   write(waiting, events(now - 95 * min, [['develop', 41], ['developer_screenshots', 2], ['developer_check', 0]], 'waiting').lines, null, true);
   // failed in its tests (a review → developer loop before)
@@ -206,7 +214,7 @@ function demoRoadmapRuns(ws, projectId, { fixRound = false } = {}) {
   demoCostRuns(ws, projectId);
   demoCacheRun(ws, projectId);
   demoArtifactRuns(ws, projectId);
-  return { running, waiting, failed, better, worse };
+  return { running, resumed, waiting, failed, better, worse };
 }
 
 // #320: a run stopped at its Developer check gate (`-cch00320`, no summary: read from its events)

@@ -120,6 +120,13 @@ function renderRunList(rl, { prefix, box: boxSel, empty, start, rerender, reload
   }
   box.querySelector('[data-more-retry]')?.addEventListener('click', () => { rl.moreError = null; rerender(); loadMore(); });
 
+  // #384: "Resumed → …" opens the run that resumed this one (not the row's sessions)
+  box.querySelectorAll('[data-testid="run-resumed-link"]').forEach((a) => (a.onclick = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const r = rl.runs.find((x) => x.runId === a.closest('.pr-run').dataset.run);
+    showRun(a.dataset.run, { workflow: r?.workflow });
+  }));
   box.querySelectorAll('.pr-row').forEach((row) => (row.onclick = () => {
     const id = row.closest('.pr-run').dataset.run;
     if (rl.expanded.has(id)) {
@@ -231,6 +238,14 @@ function childRunBadges(r) {
   return parent + children;
 }
 
+// #384: a run that a later run resumed (#250) reads "Resumed" (neutral) instead of how it ended, and
+// links the run that resumed it with that run's status ("Resumed → succeeded").
+function resumedLink(r) {
+  const by = r.resumedBy;
+  if (!by?.runId) return '';
+  return ` <a href="#" class="badge" role="link" data-testid="run-resumed-link" data-run="${esc(by.runId)}" title="${esc(`Resumed as run ${by.runId}: open it`)}">Resumed → ${esc(StatusPill.statusLabel(by.status).toLowerCase())}</a>`;
+}
+
 function runListRow(r, pv) {
   const open = pv.expanded.has(r.runId);
   const task = String(r.task || '').trim();
@@ -239,9 +254,9 @@ function runListRow(r, pv) {
   return `
     <div class="pr-run ${open ? 'open' : ''}${r.nested ? ' pr-child' : ''}" data-testid="run-list-row" data-run="${esc(r.runId)}"${r.nested ? ` style="--nest:${r.nested}"` : ''}>
       <div class="pr-row" title="${open ? 'Hide' : 'Show'} sessions">
-        ${StatusPill.statusPill(r.status)}
+        ${StatusPill.statusPill(r.resumedBy?.runId ? 'resumed' : r.status, r.resumedBy?.runId ? { title: StatusPill.statusLabel(r.status) } : {})}
         <div class="pr-main">
-          <div><b>${runTitleHtml(r)}</b> ${prBadge(r)} <span class="muted small" title="${esc(`Workflow: ${r.workflow || r.file || ''}`)}">${esc(stepName(String(r.workflow || r.file || 'workflow').replace(/\.ya?ml$/i, '')))}${r.version ? ` v${esc(r.version)}` : ''}</span>${r.mock ? ' <span class="badge p-mock">Simulated</span>' : ''}${r.current ? ' <span class="badge live">this window</span>' : ''}${r.runningElsewhere ? ' <span class="badge" title="Another app process on this workspace runs it: stop or resume it there">another window</span>' : ''}${r.retryOf ? ` <span class="badge" title="Started by a retry of the same roadmap item: the two runs do the same work">retry of ${esc(String(r.retryOf).slice(9))}</span>` : ''}${issueFallbackBadge(r)}${r.chain && window.ChainModel ? ` ${ChainModel.chainBadgesHtml(r.chain)}` : ''}${childRunBadges(r)}${!pv.id && r.project ? ` <span class="badge" title="project">${esc(r.project.name)}</span>` : ''}</div>
+          <div><b>${runTitleHtml(r)}</b>${resumedLink(r)} ${prBadge(r)} <span class="muted small" title="${esc(`Workflow: ${r.workflow || r.file || ''}`)}">${esc(stepName(String(r.workflow || r.file || 'workflow').replace(/\.ya?ml$/i, '')))}${r.version ? ` v${esc(r.version)}` : ''}</span>${r.mock ? ' <span class="badge p-mock">Simulated</span>' : ''}${r.current ? ' <span class="badge live">this window</span>' : ''}${r.runningElsewhere ? ' <span class="badge" title="Another app process on this workspace runs it: stop or resume it there">another window</span>' : ''}${r.retryOf ? ` <span class="badge" title="Started by a retry of the same roadmap item: the two runs do the same work">retry of ${esc(String(r.retryOf).slice(9))}</span>` : ''}${issueFallbackBadge(r)}${r.chain && window.ChainModel ? ` ${ChainModel.chainBadgesHtml(r.chain)}` : ''}${childRunBadges(r)}${!pv.id && r.project ? ` <span class="badge" title="project">${esc(r.project.name)}</span>` : ''}</div>
           <div class="muted small pr-task" title="${esc(task)}">${esc(firstLine || 'No task')}</div>
         </div>
         <span class="pr-meta"><label>started</label>${r.startedAt ? `<span data-testid="run-list-started"${typeof TimeZone !== 'undefined' ? ` title="${esc(TimeZone.titleOf(r.startedAt, TimeZone.current()))}"` : ''}>${esc(dateOf(r.startedAt))}</span>` : '—'}</span>

@@ -37,9 +37,14 @@ module.exports = (ctx) => {
   // while paused, e.g. after an edit of the file the scheduler has not seen, shows "Stage N done").
   // `issues`: the backlog's issues when the caller has read them already (the Backlog, #389)
   function roadmapView(projectId, list = [], issues = null) {
-    const stored = roadmaps.readRoadmap(ctx.ws.backlog, path.basename(String(projectId)));
+    const read = roadmaps.readRoadmap(ctx.ws.backlog, path.basename(String(projectId)));
+    const stored = { ...read, stages: read.stages.map((s) => ({ ...s, items: s.items.map(resumedItem) })) };
     const roadmap = stored.state === 'paused' ? roadmaps.advance(stored, { runOf: roadmapRun, canStart: () => false }).roadmap : roadmaps.withStatus(stored, roadmapRun);
     const byId = new Map(list.map((r) => [r.runId, r]));
+    // a run the caller did not list (roadmap:get lists none): its index row
+    const runOf = (runId) => byId.get(runId) || runs.findRun(ctx.ws.runs, runId);
+    // #384: the item's earlier runs, oldest first, with their status
+    const runHistory = (x) => RoadmapModel.earlierRuns(x).map((id) => ({ runId: id, status: runOf(id)?.status || null }));
     // past runs of the same workflow file, simulated with simulated and real with real
     const history = new Map();
     const typical = (file, mock) => {
@@ -48,7 +53,7 @@ module.exports = (ctx) => {
       return history.get(key);
     };
     const runView = (x) => {
-      const r = byId.get(x.runId);
+      const r = runOf(x.runId);
       if (!r) return null;
       const live = ctx.active.get(x.runId);
       const progress = live?.trail?.steps || r.progress || [];
@@ -75,10 +80,25 @@ module.exports = (ctx) => {
         items: s.items.map((x) => {
           const run = x.runId ? runView(x) : null;
           const waiting = x.status === 'running' && (byId.get(x.runId)?.waiting || run?.waiting);
-          return { ...x, ...(waiting ? { waiting: true } : {}), ...(run ? { run } : {}) };
+          const earlier = runHistory(x);
+          return { ...x, ...(waiting ? { waiting: true } : {}), ...(run ? { run } : {}), ...(earlier.length ? { runHistory: earlier } : {}) };
         }),
       })),
     }, list, { issues: known, prices });
+  }
+
+  // #384: an item whose run was resumed (#250) shows the run that resumed it (the latest of the chain),
+  // the earlier ones in its `runs`, also when its file still names the earlier run (adoptResumed, #100,
+  // records it when the resume starts); a done or skipped item keeps its run
+  function resumedItem(x) {
+    if (!x.runId || RoadmapModel.isFinished(x)) return x;
+    const chain = [];
+    while (chain.length < 20) {
+      const next = runs.findRun(ctx.ws.runs, chain.at(-1) || x.runId)?.resumedBy?.runId;
+      if (!next || next === x.runId || chain.includes(next)) break;
+      chain.push(next);
+    }
+    return chain.length ? { ...x, runId: chain.at(-1), runs: [...new Set([...(x.runs || []), x.runId, ...chain])], error: null } : x;
   }
 
   // #206: whether the budget cap stops this start: the roadmap pauses with the stage's estimate

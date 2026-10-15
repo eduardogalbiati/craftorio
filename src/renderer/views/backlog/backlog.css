@@ -428,6 +428,9 @@ a.rm-title:hover { text-decoration: underline; }
 .rm-meta > .rm-input { max-width: min(100%, 320px); }
 /* the other inputs read as "Label: value" pairs, not as one more row of badges */
 .rm-meta > .wi-pill { border-color: transparent; background: none; padding-left: 0; color: var(--text); font-family: inherit; font-size: 12px; }
+/* #384: the item's earlier runs (a resumed or retried run), each opening its run */
+.rm-run-history { display: flex; align-items: center; gap: 4px 8px; flex-wrap: wrap; min-width: 0; }
+.rm-run-history-entry { display: inline-flex; align-items: center; gap: 4px; }
 /* the pipeline: one station per stage of the workflow, always visible */
 .rm-pipe { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; min-width: 0; border-left: 1px solid var(--border); padding-left: 16px; }
 .rm-pipe-none { align-self: stretch; }
