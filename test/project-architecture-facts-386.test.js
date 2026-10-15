@@ -82,20 +82,25 @@ function reportView(findings, sentSet) {
 
 // ---------- the harness of test/project-architecture-action-381.test.js ----------
 
-function loadWindow({ model = makeModel(), findings = FINDINGS, gate = GATE } = {}) {
-  const calls = { send: [] };
+// failSendAt: the call number (0-based) of sendFindingToRefactor that rejects; noReport: never analysed
+function loadWindow({ model = makeModel(), findings = FINDINGS, gate = GATE, reports = [], failSendAt = -1, noReport = false } = {}) {
+  const calls = { send: [], report: [] };
   const toasts = [];
   const sentSet = new Set();
   const api = {
     architectureFacts: async () => ({ state: 'ok', model: JSON.parse(JSON.stringify(model)), exclude: [], gate: JSON.parse(JSON.stringify(gate)) }),
-    architectureReport: async () => JSON.parse(JSON.stringify(reportView(findings, sentSet))),
-    listArchitectureReports: async () => [],
+    architectureReport: async (projectId, opts) => {
+      calls.report.push(opts?.reportId ?? null);
+      return noReport ? { report: null, findings: [], gone: [], runsSince: 0 } : JSON.parse(JSON.stringify(reportView(findings, sentSet)));
+    },
+    listArchitectureReports: async () => JSON.parse(JSON.stringify(reports)),
     architectureEstimate: async () => ({ estimate: null }),
     architectureCity: async () => ({ state: 'not-git', model: null, validation: null }),
     chainEstimate: async () => null,
     startRun: async () => ({ runId: 'run-1' }),
     sendFindingToRefactor: async (projectId, reportId, index) => {
       calls.send.push({ projectId, reportId, index });
+      if (calls.send.length - 1 === failSendAt) throw new Error('the Refactor store is locked');
       sentSet.add(index);
       return { proposal: { title: findings[index]?.title || 'x' } };
     },
@@ -302,6 +307,87 @@ test('#386 "Send all" with a filter sends the filtered findings only', async () 
   await settle();
   assert.deepEqual(w.calls.send.map((c) => c.index), [1], 'the one high finding not sent yet');
   assert.ok(w.toasts.some((t) => /\b1\b/.test(t) && /finding/i.test(t)), JSON.stringify(w.toasts));
+});
+
+test('#386 "Send all" stops at the first failed send: the toast counts what went, the error shows, the sent ones keep their mark', async () => {
+  const w = await open({ failSendAt: 2 });
+  w.click(q(w.box, 'architecture-send-all'));
+  await settle();
+  await settle();
+  assert.equal(w.calls.send.length, 3, 'two sends, then the failed one, then nothing more');
+  assert.ok(w.toasts.some((t) => /\b2\b/.test(t) && /finding/i.test(t)), `a toast says 2 went: ${JSON.stringify(w.toasts)}`);
+  assert.ok(visibleText(w.box).includes('the Refactor store is locked'), 'the error is shown');
+  const marks = qa(w.box, 'architecture-send-refactor').filter((el) => text(el) === 'Sent to Refactor').length;
+  assert.equal(marks, 3, 'the one sent before and the two sent now');
+  assert.ok(!q(w.box, 'architecture-send-all').disabled, 'two findings are left to send');
+});
+
+test('#386 clicking an active filter turns it off, "All" clears both filters', async () => {
+  const count = (box) => shownFindings(box).length;
+  const w = await open();
+  w.click(q(w.box, 'architecture-filter-high'));
+  await settle();
+  assert.equal(count(w.box), 2);
+  w.click(q(w.box, 'architecture-filter-high'));
+  await settle();
+  assert.equal(count(w.box), 5, 'the high filter is off again');
+  w.click(q(w.box, 'architecture-filter-high'));
+  await settle();
+  w.click(q(w.box, 'architecture-filter-kept'));
+  await settle();
+  assert.equal(count(w.box), 1, 'high and kept: src/rates.js only');
+  assert.ok(text(shownFindings(w.box)[0]).includes('src/rates.js'));
+  const all = q(w.box, 'architecture-filter-all');
+  assert.ok(all, 'the All button');
+  w.click(all);
+  await settle();
+  assert.equal(count(w.box), 5, 'both filters cleared');
+  assert.equal(q(w.box, 'architecture-filter-all').getAttribute('aria-pressed'), 'true');
+  assert.equal(q(w.box, 'architecture-filter-high').getAttribute('aria-pressed'), 'false');
+  assert.equal(q(w.box, 'architecture-filter-kept').getAttribute('aria-pressed'), 'false');
+});
+
+test('#386 another report from the picker closes every open "Read more" and keeps the filter', async () => {
+  const reports = [{ id: 'r1', date: '2026-10-10T13:00:00Z', findings: 5, simulated: true }, { id: 'r0', date: '2026-10-01T13:00:00Z', findings: 4, simulated: true }];
+  const w = await open({ reports });
+  w.click(q(findingOf(w.box, 'src/report.js'), 'architecture-finding-more'));
+  await settle();
+  w.click(q(w.box, 'architecture-filter-high'));
+  await settle();
+  assert.ok(shown(q(findingOf(w.box, 'src/report.js'), 'architecture-finding-details'), w.box), 'opened before the switch');
+  const picker = q(w.box, 'architecture-report-picker');
+  assert.ok(picker, 'the report picker');
+  picker.value = 'r0';
+  assert.equal(w.PA.onChange({ target: picker }), true);
+  await settle();
+  assert.equal(w.calls.report.at(-1), 'r0', 'the picked report is read');
+  assert.equal(shownFindings(w.box).length, 2, 'the high filter stays');
+  const row = findingOf(w.box, 'src/report.js');
+  assert.equal(shown(q(row, 'architecture-finding-details'), row), false, 'the details are closed');
+});
+
+test('#386 a finding with no files shows its kind as target and scores from its severity alone', async () => {
+  const { findingScore } = loadView();
+  const findings = [{ kind: 'missing-tests', title: 'Rate tables have no tests', severity: 'high', status: 'new', sent: false, files: [], evidence: 'No test file.', refactor: 'Add tests.' }];
+  const w = await open({ findings });
+  const rows = qa(w.box, 'architecture-finding');
+  assert.equal(rows.length, 1);
+  assert.ok(text(rows[0]).includes('missing-tests'), `the kind as target: ${text(rows[0])}`);
+  assert.equal(scoreOf(rows[0]), findingScore({ severity: 'high', files: [] }, []), 'the score of its severity alone');
+});
+
+test('#386 the lead row before any report and without complexity: no risk card, a verdict placeholder, "—" for the Danger Zone', async () => {
+  const model = makeModel();
+  model.complexity = { status: 'missing', reason: 'lizard is not installed', install: 'pip install lizard', unmeasured: [], needed: ['lizard'] };
+  model.danger_zone = [];
+  const w = await open({ model, noReport: true });
+  const overview = q(w.box, 'architecture-overview');
+  assert.ok(overview, 'the lead row is there');
+  assert.ok(text(q(overview, 'architecture-verdict')).length > 0, 'a placeholder verdict');
+  assert.equal(qa(overview, 'architecture-risk-card').length, 0);
+  assert.ok(text(q(overview, 'architecture-danger-count')).includes('—'), text(q(overview, 'architecture-danger-count')));
+  assert.equal(/\b0\b/.test(text(q(overview, 'architecture-danger-count'))), false, 'never 0 when not measured');
+  assert.ok(q(overview, 'architecture-languages-bar'), 'the languages come from git, with no report');
 });
 
 // ---------- languages, exclusions, complexity ----------

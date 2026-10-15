@@ -248,6 +248,17 @@ test('#386 complexityLine: nothing measured (no tool, or its check failed) is st
   }
 });
 
+// src/architecture-facts.js: 'missing' also when lizard is there but the checkout is not at the analysed commit
+test('#386 complexityLine: not measured because of the checkout says so, never "no tool found"', () => {
+  const { complexityLine } = load();
+  const line = complexityLine({ status: 'missing', reason: 'the checkout is not at the default branch\'s commit: complexity is measured on the files on disk' }, LANGS);
+  assert.ok(line.startsWith('Complexity:') && /not measured/.test(line), line);
+  assert.equal(/no tool/i.test(line), false, `lizard is installed: ${line}`);
+  assert.match(line, /checkout/i, line);
+  assert.equal(/\n/.test(line), false);
+  assert.ok(line.length < 120, `${line.length} characters: ${line}`);
+});
+
 // ---------- the quality gate row ----------
 
 // as src/architecture-facts.js qualityGate builds it: [{ name, state, source, value }]
