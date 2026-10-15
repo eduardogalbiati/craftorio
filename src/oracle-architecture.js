@@ -280,6 +280,7 @@ module.exports = {
   KINDS,
   listReports,
   mockReport,
+  parseAnswer,
   readPlan,
   readSettings,
   REPORT_SCHEMA,

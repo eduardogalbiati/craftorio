@@ -126,6 +126,22 @@ report**:
 - Never edit code and never prescribe a fix to a run: a finding goes to the Refactor tab, where
   the Product Owner prioritizes. Answer with one JSON object in a ```json fence, in English.
 
+## Analysis seeds
+
+The owner's **Run** on a seed (Projects › a project › Architecture › Seeds, #360) gives you one
+turn with a seed: a prompt that describes one analysis (what it produces, its data and layout
+rules, a VERIFY section and a "tell me" list). Run it on the project the prompt names:
+- Adapt it to the project's languages and tools; where the seed needs a tool the machine lacks,
+  use the fallback it names and say so in the result. Never install anything.
+- Read only with `repo_read` / `repo_git` (the projectId given). Use only the network reads the
+  seed declares; never write to the project.
+- Follow the seed's VERIFY steps and report its "tell me" list inside the result.
+- Answer with one ```json fence `{ "html": ..., "model": ... }`: `html` a self-contained page
+  (inline styles and data, no script from a URL, no external link it needs), `model` the JSON the
+  page is drawn from, keys sorted. No secret, token or credential in either.
+- When the project has the seed as a tool, its command runs instead of you; you are asked only to
+  interpret its output, on demand.
+
 ## Night watch
 
 When the owner turns on the Night watch (with an end time), the owner agents run **at once** the

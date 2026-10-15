@@ -1,12 +1,13 @@
 // Service area: the open workspace ({ root, runs, repos, projects, skills, workflows, worktrees,
-// settings }, see src/workspace.js). Opening one seeds the bundled skills and workflows, opens its
-// index, pauses the Backlog queues and lets started roadmaps continue. `ctx.ws` is read at call
+// settings }, see src/workspace.js). Opening one seeds the bundled skills, workflows, pipelines and
+// analysis seeds (#360), opens its index, pauses the Backlog queues and lets started roadmaps continue. `ctx.ws` is read at call
 // time: it changes with the workspace.
 
 const fs = require('fs');
 const path = require('path');
 const backlog = require('../../backlog');
 const pipelines = require('../../pipelines');
+const seeds = require('../../seeds');
 const skills = require('../../skills');
 const workflows = require('../../workflows');
 const { BUNDLED_SKILLS_DIR, BUNDLED_WORKFLOWS_DIR } = require('../common');
@@ -24,6 +25,7 @@ module.exports = (ctx) => {
     try { skills.seedSkills(BUNDLED_SKILLS_DIR, ws.skills); } catch (e) { console.error('skill seeding:', e); }
     try { workflows.seedWorkflows(BUNDLED_WORKFLOWS_DIR, ws.workflows); } catch (e) { console.error('workflow seeding:', e); }
     try { pipelines.seedPipelines(pipelines.BUNDLED_PIPELINES_DIR, ws.pipelines); } catch (e) { console.error('pipeline seeding:', e); }
+    try { seeds.seedSeeds(seeds.BUNDLED_SEEDS_DIR, ws.seeds); } catch (e) { console.error('analysis seed seeding:', e); }
   }
 
   function setWorkspace(next) {

@@ -32,6 +32,10 @@
 // #386: --mode facts-large is the Facts view at a real scale: the project is this repository itself
 // (about 1,400 files, its languages and Danger Zone from the checkout's git history) with those 60
 // findings moved onto its largest source files, so their scores use its Danger Zone.
+// #360: --mode seeds is the Architecture tab scrolled to its Seeds section: churn-complexity's result
+// (stale: commits since its run), two seeds never run and dependency-map with a tool (runs free); open
+// the result with --click "[data-testid=seed-open-churn-complexity]". --mode seeds-running and
+// seeds-error click Run on quality-gate-report (seeds:run never answers, or fails).
 
 const { execFileSync } = require('child_process');
 const fs = require('fs');
@@ -236,6 +240,32 @@ function largestSourceFiles(dir, count) {
   return listed.map((f) => [f, size(f)]).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, count).map(([f]) => f);
 }
 
+// #360: a churn-complexity result run on the first demo commit (so the seed is stale by the commits
+// since), the first two seeds never run, and dependency-map available as the project's tool
+const DEMO_SEED_FILES = [['src/billing.js', 9, 14], ['src/api.js', 6, 5], ['tools/export.py', 3, 4], ['README.md', 2, 1]];
+function demoSeedResult() {
+  const max = { churn: 10, complexity: 15 };
+  const dots = DEMO_SEED_FILES.map(([file, churn, complexity]) => {
+    const x = 40 + (churn / max.churn) * 320;
+    const y = 220 - (complexity / max.complexity) * 190;
+    return `<circle cx="${x}" cy="${y}" r="7" fill="${churn > 5 && complexity > 5 ? '#e5484d' : '#4c8bf5'}"/><text x="${x + 10}" y="${y + 4}">${file}</text>`;
+  }).join('');
+  const rows = DEMO_SEED_FILES.map(([f, c, x]) => `<tr><td>${f}</td><td>${c}</td><td>${x}</td></tr>`).join('');
+  const html = `<!doctype html><html><head><meta charset="utf-8"><style>body{font:13px system-ui,sans-serif;margin:16px;color:#1d2433}svg text{font-size:11px}table{border-collapse:collapse;margin-top:12px}td,th{padding:4px 10px;border-bottom:1px solid #dde}</style></head><body><h2>Churn against complexity</h2><p>4 files measured at the latest commit; 1 in the Danger Zone (src/billing.js).</p><svg width="480" height="250"><line x1="40" y1="220" x2="460" y2="220" stroke="#889"/><line x1="40" y1="20" x2="40" y2="220" stroke="#889"/><text x="400" y="240">commits</text><text x="4" y="16">complexity</text>${dots}</svg><table><tr><th>File</th><th>Commits</th><th>Complexity</th></tr>${rows}</table></body></html>`;
+  const model = { files: DEMO_SEED_FILES.map(([file, churn, complexity]) => ({ churn, complexity, file })), measured: 'indentation depth (no complexity tool installed)' };
+  return { html, model };
+}
+
+function demoSeeds(ws, project, firstCommit) {
+  const date = '2026-10-12T09-30-00-000Z';
+  const dir = path.join(ws.root, 'architecture', project.id, 'seeds', 'churn-complexity', date);
+  const { html, model } = demoSeedResult();
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'result.html'), html);
+  fs.writeFileSync(path.join(dir, 'model.json'), JSON.stringify(model, null, 2));
+  fs.writeFileSync(path.join(dir, 'run.json'), JSON.stringify({ source: 'oracle', costUsd: 0.38, tokens: { input: 21000, output: 4200 }, simulated: false, head: firstCommit, date, at: '2026-10-12T09:30:00.000Z', seed: 'churn-complexity', project_id: project.id, report: null }, null, 2));
+}
+
 function seedArchitecture(args, ws, project, { appDir, projects }) {
   if (args.mode === 'not-git') return;
   if (args.mode === 'facts-large') { // #386: this repository, with the 60 findings on its own files
@@ -258,6 +288,11 @@ function seedArchitecture(args, ws, project, { appDir, projects }) {
   if (head && args.mode === 'large') demoLargeReport(ws, project.id, { commit: head, date: '2026-09-15T10:00:00Z' });
   if (args.mode === 'map-refresh') demoCityPlan(ws, project.id);
   if (city) require('../../../src/oracle-architecture').writePlan(path.join(ws.root, 'architecture'), project.id, CITY_PLAN, '2026-10-01T09:00:00.000Z');
+  if (head && args.mode?.startsWith('seeds')) {
+    const first = execFileSync('git', ['-C', project.folder, 'rev-list', '--max-parents=0', 'HEAD'], { encoding: 'utf8' }).trim().split('\n')[0];
+    demoSeeds(ws, project, first);
+    projects.updateProject(ws.projects, project.id, { seedTools: { 'dependency-map': 'node tools/dependency-map.js --json' } });
+  }
 }
 
 function seed({ appDir, args, projects, ws, project }) {
@@ -281,6 +316,25 @@ function seed({ appDir, args, projects, ws, project }) {
 }
 
 const open = ({ js, project }) => js(`openProjectView(${JSON.stringify(project.id)})`);
+
+// #360: a seed's run that never ends, or fails with the Oracle's error
+function stubSeedRun(mode) {
+  const seedRun = { 'seeds-running': () => new Promise(() => {}), 'seeds-error': () => { throw new Error('The Oracle\'s answer has no JSON block: nothing was saved.'); } }[mode];
+  if (!seedRun) return false;
+  const { ipcMain } = require('electron');
+  ipcMain.removeHandler('seeds:run');
+  ipcMain.handle('seeds:run', seedRun);
+  return true;
+}
+
+// #360: the Seeds section in view; a stubbed run starts with the estimate's confirm accepted
+async function showSeeds({ click, js, seedRun }) {
+  if (seedRun) {
+    await js('window.confirm = () => true');
+    await click('[data-testid="seed-run-quality-gate-report"]');
+  }
+  await js('document.querySelector(\'[data-testid="seeds-section"]\')?.scrollIntoView()');
+}
 
 async function afterOpen({ args, click, js, project }) {
   if (!args.tab) return;
@@ -309,8 +363,10 @@ async function afterOpen({ args, click, js, project }) {
     ipcMain.removeHandler('po:history');
     ipcMain.handle('po:history', () => DEMO_IMPACT_PO);
   }
+  const seedRun = args.tab === 'architecture' && stubSeedRun(args.mode);
   await click(`[data-pv-tab="${args.tab}"]`);
   if (args.tab === 'architecture' && analysis) await click('[data-testid="architecture-analyze"]');
+  if (args.tab === 'architecture' && args.mode?.startsWith('seeds')) await showSeeds({ click, js, seedRun });
   if (args.tab === 'architecture' && ['city', 'city-agents', 'city-issue', 'city-large', 'city-release', 'city-stage'].includes(args.mode)) await click('[data-testid="architecture-mode-city"]');
   // #375: "Show on the map" of an issue, "Show the stage on the map" of a roadmap stage
   const pid = JSON.stringify(project.id);
@@ -322,7 +378,7 @@ async function afterOpen({ args, click, js, project }) {
 
 module.exports = {
   afterOpen,
-  modes: ['analyzing', 'city', 'city-agents', 'city-issue', 'city-large', 'city-release', 'city-stage', 'empty', 'error', 'facts-large', 'large', 'loading', 'map-refresh', 'never', 'no-runs', 'not-git'],
+  modes: ['analyzing', 'city', 'city-agents', 'city-issue', 'city-large', 'city-release', 'city-stage', 'empty', 'error', 'facts-large', 'large', 'loading', 'map-refresh', 'never', 'no-runs', 'not-git', 'seeds', 'seeds-error', 'seeds-running'],
   open,
   run: true,
   seed,

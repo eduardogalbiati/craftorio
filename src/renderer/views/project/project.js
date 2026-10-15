@@ -2,7 +2,8 @@
 // A project's page (Projects › a project, #354): its name, then the tabs Overview (its folder,
 // repository and unpushed commits, and its runs in the shared run list, run-list.js: paged with an
 // infinite scroll, filters and search answered by the service, #200), Conflict map
-// (project-conflict-map.js), Architecture (project-architecture.js, #356) and Refactor (an empty
+// (project-conflict-map.js), Architecture (project-architecture.js, #356, with the Seeds section
+// below it, project-seeds.js, #360) and Refactor (an empty
 // state until #357, with the proposals sent from the Architecture tab). The selected tab is remembered per project. The page is the header's project: opening
 // one makes it the app's project, and choosing another in the header switches the page to it.
 // No sidebar entry of its own: Projects stays lit (`menu`).
@@ -89,7 +90,10 @@ function renderProjectView() {
     `<button type="button" class="tab${pv.tab === id ? ' active' : ''}" role="tab" data-pv-tab="${id}" aria-selected="${pv.tab === id}" aria-controls="project-panel-${id}">${label}</button>`).join('');
   for (const [id] of PV_TABS) $(`#project-panel-${id}`).classList.toggle('hidden', pv.tab !== id);
   if (pv.tab === 'conflicts') window.ProjectConflictMap?.show(pv.id, $('#project-conflicts'));
-  if (pv.tab === 'architecture') window.ProjectArchitecture?.show(pv.id, $('#project-architecture'));
+  if (pv.tab === 'architecture') {
+    window.ProjectArchitecture?.show(pv.id, $('#project-architecture'));
+    window.ProjectSeeds?.show(pv.id, $('#project-seeds'));
+  }
   if (pv.tab === 'refactor') window.ProjectArchitecture?.showRefactor(pv.id, $('#project-refactor-proposals'), $('#project-panel-refactor [data-testid="project-refactor-empty"]'));
   if (pv.tab !== 'overview') return;
   $('#project-info').innerHTML = `
@@ -114,7 +118,7 @@ function onProjectPageClick(e) {
     renderProjectView();
     return;
   }
-  if (!window.ProjectArchitecture?.onClick(e)) window.ProjectConflictMap?.onClick(e);
+  if (!window.ProjectArchitecture?.onClick(e) && !window.ProjectSeeds?.onClick(e)) window.ProjectConflictMap?.onClick(e);
 }
 
 registerView({
@@ -142,6 +146,7 @@ registerView({
         </div>
         <div id="project-panel-architecture" class="hidden" role="tabpanel" aria-label="Architecture" data-testid="project-architecture">
           <div id="project-architecture"></div>
+          <div id="project-seeds"></div>
         </div>
         <div id="project-panel-refactor" class="hidden" role="tabpanel" aria-label="Refactor">
           <div class="empty-state" data-testid="project-refactor-empty"><b>Refactor: coming soon</b><p class="muted">This tab will hold the prioritized refactors of the project, added to the roadmap every few runs.</p></div>

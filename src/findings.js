@@ -247,5 +247,7 @@ module.exports = {
   issueOf,
   listFindings,
   markFiling,
+  redact,
   saveFinding,
+  scrub,
 };

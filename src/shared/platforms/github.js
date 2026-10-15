@@ -96,6 +96,13 @@
     searchCommand: ({ target, query, state, limit }) => cmd(['issue', 'list', '--repo', target, ...(query ? ['--search', query] : []), '--state', state, '--limit', String(limit), '--json', 'number,title,state,labels,url,updatedAt']),
     viewCommand: (target, n) => cmd(['issue', 'view', n, '--repo', target, '--json', 'number,title,state,body,labels,url,comments']),
     labelsCommand: (target, limit) => cmd(['label', 'list', '--repo', target, '--limit', String(limit), '--json', 'name,description']),
+    // the CI's recent runs, read by an analysis seed that declares the need (#360)
+    ciRunsCommand: ({ target, limit }) => cmd(['run', 'list', '--repo', target, '--limit', String(limit || 20), '--json', 'databaseId,name,status,conclusion,createdAt,updatedAt,url']),
+    parseCiRuns: (text) => {
+      let list;
+      try { list = JSON.parse(String(text || '')); } catch { return []; }
+      return Array.isArray(list) ? list.map((r) => ({ id: r.databaseId, name: r.name, status: r.status, conclusion: r.conclusion || null, createdAt: r.createdAt, updatedAt: r.updatedAt, url: r.url })) : [];
+    },
 
     // ---- URLs
     // https://host/owner/repo/issues/12 → { host, repo, number }, or null

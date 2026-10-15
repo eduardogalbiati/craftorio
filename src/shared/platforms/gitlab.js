@@ -79,6 +79,13 @@
     searchCommand: ({ target, query, state, limit }) => cmd(['issue', 'list', '--repo', target, ...(query ? ['--search', query] : []), ...(state === 'open' ? [] : [`--${state}`]), '--per-page', String(limit), '--output', 'json']),
     viewCommand: (target, n) => cmd(['issue', 'view', n, '--repo', target, '--output', 'json']),
     labelsCommand: (target, limit) => cmd(['label', 'list', '--repo', target, '--per-page', String(limit), '--output', 'json']),
+    // the CI's recent pipelines, read by an analysis seed that declares the need (#360)
+    ciRunsCommand: ({ target, limit }) => cmd(['api', `projects/${encodeURIComponent(target)}/pipelines?per_page=${Number(limit) || 20}`]),
+    parseCiRuns: (text) => {
+      let list;
+      try { list = JSON.parse(String(text || '')); } catch { return []; }
+      return Array.isArray(list) ? list.map((p) => ({ id: p.id, name: p.ref || null, status: p.status, conclusion: null, createdAt: p.created_at, updatedAt: p.updated_at, url: p.web_url })) : [];
+    },
 
     // ---- URLs
     // https://host/group/sub/project/-/issues/7 → { host, repo, number }, or null

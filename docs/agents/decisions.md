@@ -71,6 +71,18 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   the owner resumes a paused run (never the Night watch, the Oracle or the supervisor). Why: Stop cut
   the turn in progress and Pause on the roadmap let the runs in progress go on, so updating the app,
   the CLIs or the issues meant waiting for the runs or losing work.
+- **2026-10-13** (#360): analyses beyond the Architecture tab's fixed one are **analysis seeds**:
+  prompts adapted from Kent Beck's ToolSeeds (MIT), bundled in `seeds/<name>/seed.md` and seeded
+  into the workspace like skills. The Oracle runs a seed read-only on any project, in one turn of its
+  daily budget, after the cost estimate; the result (a self-contained HTML page and a JSON model,
+  scrubbed of secrets) is saved under `architecture/<project id>/seeds/` and shown in a sandboxed
+  frame with no network. **Make it a tool** files an issue in the project's tracker (the Product
+  Owner plans it like any item) to build the seed as a deterministic tool, following
+  `promptToDeterministicTool`; once its command is recorded in the project's settings, running the
+  seed runs that command, with no model cost. A seed uses only the network reads it declares, each
+  a builder and parser in both platform adapters. Why: projects differ in languages, CI and quality
+  gates, so a fixed analysis misses what matters or needs a tool the machine lacks; a seed that
+  proves useful should become free and repeatable.
 
 - **2026-10-13** (#356): a project's Architecture tab works for any language. The deterministic
   facts (lines, churn, hotspots, co-change, languages) are computed by the app from git, through a
@@ -112,12 +124,11 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   (#238, replacing the retired `deprioritized` label). Why: planned items kept stale copies, so an
   issue edited after planning ran with its old text; there was no way to put an issue aside, and
   the Product Owner kept proposing unwanted ideas.
-- **2026-10-03** (#222, #211): tests are run and judged by the machine, never by a model. E2E
-  tests stay on Playwright + BDD (`playwright-bdd`), run deterministically; an LLM only writes and
-  repairs them. Which test failures are the run's (and which were already on the base) is decided
-  by the orchestrator (failing tests rerun on the base), never by an agent. Why: the old E2E tests
-  asserted little and the release run paid a model to run the suite, and failures already on main
-  made every round fail and the run looped.
-- **2026-09-29** (#47): only the test writer writes, edits or deletes tests; the developer changes
-  production code only. Why: overlapping test responsibilities made one run pay for the full suite
-  up to four times.
+- **2026-10-03** (#222, #211, and #47 of 2026-09-29): tests are run and judged by the machine,
+  never by a model. E2E tests stay on Playwright + BDD (`playwright-bdd`), run deterministically;
+  an LLM only writes and repairs them. Which test failures are the run's (and which were already on
+  the base) is decided by the orchestrator (failing tests rerun on the base), never by an agent.
+  Only the test writer writes, edits or deletes tests; the developer changes production code only.
+  Why: the old E2E tests asserted little and the release run paid a model to run the suite,
+  failures already on main made every round fail and the run looped, and overlapping test
+  responsibilities made one run pay for the full suite up to four times.

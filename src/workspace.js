@@ -109,6 +109,8 @@ function layout(root) {
     repos: path.join(root, 'repos'),
     projects: path.join(root, 'projects'),
     skills: path.join(root, 'skills'),
+    // analysis seeds, one folder each with its seed.md (bundled defaults are seeded here, see src/seeds.js, #360)
+    seeds: path.join(root, 'seeds'),
     // user-defined agents, one JSON file each (see src/agents.js)
     agents: path.join(root, 'agents'),
     // editable workflow YAML files (bundled defaults are seeded here, see src/workflows.js)
