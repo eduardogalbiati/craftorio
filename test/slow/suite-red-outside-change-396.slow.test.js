@@ -6,7 +6,8 @@
 // The simulated suite: mockSequences.suite.suite `outside` = a failing test in a file outside the
 // change whose base rerun passes (assumed name of the new simulated result); `fail` = the failing
 // test/simulated.test.js, which the simulated import graph puts in the change (machine-actions.js).
-// The definition test (the input, its default) is in test/suite-red-outside-change-396.test.js.
+// The definition test (the input, its default) is in test/suite-red-outside-change-396.test.js; the
+// routing and classification edges are in test/suite-outside-change-396.test.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -87,7 +88,19 @@ test('#396 local hero, policy continue: a suite red only outside the change goes
   assert.match(verify, /outside the change/, 'the verify prompt gets the failures with their class');
 });
 
-test('#396 local hero, policy continue: a failure in the change still opens test_failed; the owner\'s Continue is recorded as not tested green', { timeout: 120000 }, async (t) => {
+test('#396 local hero, policy continue with the issue\'s scenarios on: a suite red only outside the change goes through e2e to build, still not tested green; tested_failures names the suite\'s failures only', { timeout: 120000 }, async (t) => {
+  const { transitions, gates, summary, finished } = await runLocalHero(t, { suite: ['outside'], inputs: { suite_red_outside_change: 'continue', e2e_tests: 'write_and_run' } });
+  assert.equal(finished.status, 'success', finished.error);
+  assert.equal(summary.steps.acceptance_tests.output.e2e_scope, 'scenarios', 'the simulated acceptance tests wrote scenarios');
+  assert.ok(transitions.includes('suite>e2e'), `the suite goes on to e2e: ${transitions.join(', ')}`);
+  assert.ok(!gates.includes('test_failed'), `test_failed never opens: gates ${gates.join(', ')}`);
+  assert.equal(summary.tested, 'not green', 'a green e2e after the policy does not clear not tested green');
+  assert.ok(summary.tested_failures.length > 0, 'the suite\'s failures are recorded');
+  assert.deepEqual([...new Set(summary.tested_failures.map((f) => f.step))], ['suite'], `only the suite step's failures (not red_check's expected red): ${JSON.stringify(summary.tested_failures)}`);
+  assert.ok(summary.tested_failures.every((f) => f.class === 'outside the change'), JSON.stringify(summary.tested_failures));
+});
+
+test('#396 local hero, policy continue: a failure in the change still opens test_failed;the owner\'s Continue is recorded as not tested green', { timeout: 120000 }, async (t) => {
   const { transitions, gates, summary, finished } = await runLocalHero(t, { suite: ['fail'], inputs: { suite_red_outside_change: 'continue' } });
   assert.ok(summary.steps.suite.output.failures.some((f) => f.class === 'in the change'), JSON.stringify(summary.steps.suite.output.failures));
   assert.ok(gates.includes('test_failed'), `test_failed opens for a failure in the change: gates ${gates.join(', ')}`);
