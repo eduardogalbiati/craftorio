@@ -14,13 +14,17 @@
 // - the camera (CameraRig): a fixed isometric-like angle easing to a goal (the run, or what is
 //   selected); dragging, right-dragging or the wheel hands it to the user (MapControls);
 // - the floating tags' positions (TagProjector: DOM nodes moved every frame, no React render).
+// The scene is drawn on demand (#388, the Canvas' frameloop): a frame is drawn when React changes a
+// prop, when what the frames read changes (DemandLoop: sceneKey), while the run is in motion
+// (DemandLoop: inMotion) and while a move eases out (the camera, the cart driving, a barrier lifting);
+// otherwise the animations stand still.
 import { forwardRef, useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useFrame, useThree } from '@react-three/fiber';
 import { MapControls } from 'three/addons/controls/MapControls.js';
 import {
-  agentDef, entityPos, geoOf, lanePoint, rbox, rig, robotStateOf, STATUS, svgTexture,
-  TAG_LIFT, tagEls, textTexture, canvasTexture, fitText, useModel, useTheme, view, VIEW_DIR, wrapText,
+  agentDef, entityPos, geoOf, inMotion, lanePoint, rbox, rig, robotStateOf, sceneKey, STATUS, svgTexture,
+  TAG_LIFT, tagEls, textTexture, canvasTexture, fitText, useModel, usePlayer, useTheme, view, VIEW_DIR, wrapText,
 } from './view.js';
 
 const U = 0.01; // robots.js draws in units of 1/100 of ours
@@ -270,9 +274,11 @@ function Gate({ st, selected, onSelect }) {
     for (let i = 0; i < 6; i++) { g.beginPath(); g.moveTo(i * 48 + 8, h); g.lineTo(i * 48 + 24, 0); g.lineTo(i * 48 + 44, 0); g.lineTo(i * 48 + 28, h); g.fill(); }
   });
   const sign = textTexture([{ text: 'HUMAN APPROVAL', size: 40, y: 40, color: '#2A1E08' }], 520, 76);
+  const invalidate = useThree((s) => s.invalidate);
   useFrame(({ clock }, dt) => {
     const open = status === 'done' ? -1.32 : 0;
     bar.current.rotation.x += (open - bar.current.rotation.x) * (1 - Math.exp(-dt * 4));
+    if (Math.abs(open - bar.current.rotation.x) > 1e-3) invalidate(); // the barrier still moves
     const m = lamp.current.material, c = status === 'waiting' ? '#FFB020' : status === 'done' || status === 'failed' ? T.status[status] : T.status.pending;
     m.color.set(c); m.emissive.set(c);
     m.emissiveIntensity = status === 'waiting' ? 0.8 + 0.6 * Math.sin(clock.elapsedTime * 6) : status === 'pending' ? 0.05 : 0.9;
@@ -336,13 +342,14 @@ function Courier({ selected, onSelect }) {
   const ref = useRef(), box = useRef(), T = useTheme(), K = T.cart;
   const pos = useMemo(() => new THREE.Vector3(), []);
   const cart = useRef(null);
+  const invalidate = useThree((s) => s.invalidate);
   useFrame(({ clock }, dt) => {
     const player = view.player, m = player.model, layout = m.layout(), goal = m.cartGoal(layout);
     if (cart.current?.epoch !== player.epoch) cart.current = { d: goal, dir: cart.current?.dir || 1, reached: Math.max(goal, m.farthest(layout)), epoch: player.epoch };
     const c = cart.current;
     const left = goal - c.d, step = Math.max(7, Math.abs(left) * 2.6) * Math.min(dt, 0.1);
     rig.cartMoving = Math.abs(left) > 0.02;
-    if (rig.cartMoving) { c.dir = Math.sign(left); c.d = Math.abs(left) <= step ? goal : c.d + c.dir * step; }
+    if (rig.cartMoving) { c.dir = Math.sign(left); c.d = Math.abs(left) <= step ? goal : c.d + c.dir * step; invalidate(); }
     c.reached = Math.max(c.reached, c.d);
     rig.cartD = c.d;
     rig.reached = c.reached;
@@ -493,15 +500,18 @@ export function followRunTarget(out) {
 // card, so the selected station's robot stays in the free part of the window.
 const SHIFT = 160;
 function CameraRig() {
-  const { camera, gl, size } = useThree();
+  const { camera, gl, size, invalidate } = useThree();
   const controls = useMemo(() => {
     const c = new MapControls(camera, gl.domElement);
     Object.assign(c, { enableDamping: true, dampingFactor: 0.12, minDistance: 9, maxDistance: 130, minPolarAngle: 0.35, maxPolarAngle: 1.2, zoomSpeed: 0.8 });
     const layout = view.model.layout(), center = geoOf(layout).center;
     c.target.copy(center);
     camera.position.copy(center).addScaledVector(VIEW_DIR, layout.overview);
+    // a drag, the wheel, the damping and the rig's easing move the camera: each move draws the next
+    // frame (update() tells 'change' while the camera still moves), so the camera stops when it settles
+    c.addEventListener('change', () => invalidate());
     return c;
-  }, [camera, gl]);
+  }, [camera, gl, invalidate]);
   useEffect(() => {
     const el = gl.domElement;
     let down = null;
@@ -570,6 +580,19 @@ function TagProjector() {
   return null;
 }
 
+// What asks for frames besides React's props: one frame when what the frames read changes (sceneKey)
+// or the loop comes back (frameloop 'never' → 'demand' when the window shows again), every frame
+// while the run is in motion (inMotion).
+function DemandLoop() {
+  const invalidate = useThree((s) => s.invalidate);
+  const frameloop = useThree((s) => s.frameloop);
+  const moving = usePlayer(inMotion);
+  const key = usePlayer(sceneKey);
+  useEffect(() => { invalidate(); }, [invalidate, frameloop, moving, key]);
+  useFrame(() => { if (moving) invalidate(); });
+  return null;
+}
+
 const STATION = { agent: Station, machine: Machine, gate: Gate };
 /** The whole scene: lights, camera, floor, stations, supervisor, cart and the tags' projector. */
 export function Scene({ shown, onSelect }) {
@@ -591,6 +614,7 @@ export function Scene({ shown, onSelect }) {
       <Supervisor selected={shown === 'supervisor'} onSelect={onSelect} />
       <Courier selected={shown === 'item'} onSelect={onSelect} />
       <TagProjector />
+      <DemandLoop />
     </group>
   );
 }

@@ -14,7 +14,8 @@
 // click, so the app's start does not change. The buttons are disabled, with the reason in their
 // tooltip, when WebGL is not available or the bundle is missing (checked when the app is idle).
 // Close (its button or Esc) unmounts the scene: the WebGL context, textures, geometries, the clock
-// and the run:event listener are released. Exposes window.Run3D = { open(runId), close(), isOpen() }.
+// and the run:event listener are released. While the window is hidden or minimised the scene stops
+// drawing (its Canvas' loop is 'never', run3d/main.jsx) and the HUD's clock skips its ticks (#388). Exposes window.Run3D = { open(runId), close(), isOpen() }.
 (() => {
   const BUNDLE = '../../generated/run3d-scene.js';
   const MISSING = 'The 3D view is not built: run `npm run build:3d` (or `npm install`) and reload.';
@@ -146,7 +147,8 @@
       message(`The 3D view could not open: ${errMsg(e)}`, { error: true });
       return;
     }
-    session.timer = setInterval(() => player.notify(), TICK_MS);
+    // nothing to tick while the window is hidden or minimised (the scene stops its loop then, #388)
+    session.timer = setInterval(() => { if (!document.hidden) player.notify(); }, TICK_MS);
   }
 
   function close() {

@@ -4,7 +4,8 @@
 // elements) when it closes, so nothing of a closed view stays in memory.
 // - the player (src/renderer/run3d-replay.js, a Run3DPlayer the overlay feeds) and the model it shows
 //   (`view.model`: the run as it is now, or the replayed moment), with useModel, its hook; nowMs and
-//   robotStateOf read the shown moment, so a replay is drawn like a live run;
+//   robotStateOf read the shown moment, so a replay is drawn like a live run; inMotion and sceneKey
+//   say when the scene, drawn on demand (#388), keeps drawing or draws one frame;
 // - the theme (src/renderer/run3d-theme.js): `view.theme` is its palette, useTheme its hook, setTheme
 //   switches (the run's state and the camera stay; the textures drawn for the theme left are freed);
 // - the agents' looks: their colour (AgentColors) and robot variant (Robots, by provider and model);
@@ -12,6 +13,7 @@
 // - the camera rig's goals (rig) and the floating tags' elements (tagEls);
 // - cached geometries and textures (rbox, svgTexture, canvasTexture, textTexture).
 import { useSyncExternalStore } from 'react';
+import { invalidate } from '@react-three/fiber';
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 
@@ -78,6 +80,21 @@ export const wallMs = () => view.clock || Date.now();
 export const nowMs = () => view.player.now(wallMs());
 /** The robot state of "<station>:<agent>" or "supervisor" at the shown moment. */
 export const robotStateOf = (key) => view.player.robotState(key, wallMs());
+/**
+ * The scene keeps drawing (#388): time moves on screen (a live run, a playing replay) and someone is
+ * at work (a step running, the supervisor on a step). A run that waits for the owner, a paused replay
+ * and a finished run are still: the scene draws only when what it shows changes.
+ */
+export function inMotion(player) {
+  if (!player?.moving) return false;
+  const m = player.model;
+  return !!m.sup.target || Object.values(m.state).some((s) => s.status === 'running');
+}
+/** What the scene's frames read outside React's props (the cart's goal, the camera's target, the LEDs): a change draws a frame. */
+export function sceneKey(player) {
+  const m = player.model, layout = m.layout();
+  return `${player.epoch}|${m.cartGoal(layout)}|${m.farthest(layout)}|${m.finished}|${!!m.merged}|${m.activeId}`;
+}
 /** A state's colour in the theme. */
 export const statusColor = (status) => view.theme.status[status] || view.theme.status.pending;
 
@@ -178,7 +195,8 @@ export function svgTexture(svg, w, h) {
   canvas.width = w; canvas.height = h;
   const tex = finish(new THREE.CanvasTexture(canvas));
   const img = new Image();
-  img.onload = () => { canvas.getContext('2d').drawImage(img, 0, 0, w, h); tex.needsUpdate = true; };
+  // the scene draws on demand (#388): a picture that arrives after the last frame asks for one
+  img.onload = () => { canvas.getContext('2d').drawImage(img, 0, 0, w, h); tex.needsUpdate = true; invalidate(); };
   img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
   texCache.set(svg, { tex, theme: null });
   return tex;
