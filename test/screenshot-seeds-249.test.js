@@ -5,6 +5,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
@@ -61,21 +62,18 @@ test('every seed module loads under plain Node, without Electron', () => {
   assert.deepEqual(failed, []);
 });
 
+// #394: the throwaway view lives in a folder of its own, never in scripts/screenshot/views/, which
+// test/screenshot.test.js loads in parallel; the runner's loadViews(dir) discovers it there
 test('a new seed module is a new --view without editing scripts/screenshot.js', (t) => {
   const name = 'zz-acceptance-249';
-  const createdDir = !fs.existsSync(SEEDS_DIR);
-  fs.mkdirSync(SEEDS_DIR, { recursive: true });
-  const file = path.join(SEEDS_DIR, `${name}.js`);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'views-249-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   // assumption: a seed module with no exports is a view with no tabs, modes or demo data
-  fs.writeFileSync(file, '// a throwaway view of test/screenshot-seeds-249.test.js\nmodule.exports = {};\n');
-  t.after(() => {
-    fs.rmSync(file, { force: true });
-    if (createdDir) fs.rmSync(path.join(ROOT, 'scripts', 'screenshot'), { recursive: true, force: true });
-    loadRunner();
-  });
-  const { VIEWS, parseArgs } = loadRunner();
-  assert.equal(Object.prototype.hasOwnProperty.call(VIEWS, name), true);
-  assert.equal(parseArgs(['--view', name]).view, name);
+  fs.writeFileSync(path.join(dir, `${name}.js`), '// a throwaway view of test/screenshot-seeds-249.test.js\nmodule.exports = {};\n');
+  const { loadViews, parseArgs } = loadRunner();
+  const views = loadViews(dir);
+  assert.equal(Object.prototype.hasOwnProperty.call(views, name), true);
+  assert.equal(parseArgs(['--view', name], views).view, name);
 });
 
 test('scripts/screenshot.js keeps only the shared runner: no per-view seeding left in it', () => {
