@@ -78,18 +78,15 @@
     }
   }
 
+  // sized here (the select's width, as tall as the larger free side allows), placed by the app's
+  // popover rule (run-list.js placePopover: under the select, flipped above it, kept in the window)
   function place() {
     const r = open.sel.getBoundingClientRect();
     const box = open.box;
-    const width = Math.max(r.width, 220);
-    box.style.width = `${width}px`;
-    box.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - width - 8))}px`;
-    const below = window.innerHeight - r.bottom - 8;
-    const above = r.top - 8;
-    const up = below < 240 && above > below;
-    box.style.maxHeight = `${Math.max(120, Math.min(360, up ? above - 4 : below - 4))}px`;
-    box.style.top = up ? '' : `${r.bottom + 4}px`;
-    box.style.bottom = up ? `${window.innerHeight - r.top + 4}px` : '';
+    const vh = document.documentElement.clientHeight;
+    box.style.width = `${Math.max(r.width, 220)}px`;
+    box.style.maxHeight = `${Math.max(120, Math.min(360, Math.max(vh - r.bottom, r.top) - 14))}px`;
+    root.placePopover?.(box, open.sel);
   }
 
   function filter() {

@@ -9,6 +9,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { listFiles: walk } = require('./file-size-ratchet');
 
 const ROOT = path.join(__dirname, '..');
 const DIR = 'src/renderer';
@@ -22,7 +23,7 @@ const KINDS = {
 const BASELINE = {
   'src/renderer/agent-overrides.js': { select: 2 },
   'src/renderer/chain-picker.js': { select: 4 },
-  'src/renderer/date-range.js': { date: 2 },
+  'src/renderer/date-range.js': { date: 1 },
   'src/renderer/diff-viewer.js': { select: 1 },
   'src/renderer/gate-panel.js': { select: 1 },
   'src/renderer/index.html': { select: 4 },
@@ -59,16 +60,7 @@ function countBareControls(src) {
   return out;
 }
 
-function listFiles(root, dir) {
-  const abs = path.join(root, dir);
-  if (!fs.existsSync(abs)) return [];
-  return fs.readdirSync(abs, { withFileTypes: true }).flatMap((e) => {
-    if (e.name === 'node_modules') return [];
-    const rel = `${dir}/${e.name}`;
-    if (e.isDirectory()) return listFiles(root, rel);
-    return /\.(js|html)$/.test(e.name) ? [rel] : [];
-  });
-}
+const listFiles = (root, dir) => walk(root, dir, /\.(js|html)$/);
 
 // [{ file, kind, count, allowed, message }], sorted by file.
 function checkBareControls({ root = ROOT, baseline = BASELINE } = {}) {

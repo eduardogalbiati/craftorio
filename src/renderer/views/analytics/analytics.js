@@ -27,8 +27,9 @@
   const saved = (() => { try { return JSON.parse(localStorage.getItem(LS) || '{}'); } catch { return {}; } })();
   const ax = {
     scope: saved.scope === 'machine' ? 'machine' : 'orchestrator',
-    // #383: a DateRange preset ('24h', '7d', '30d', 'all'); null = custom from/to (the older `days` reads as its preset)
-    preset: ['24h', '7d', '30d', 'all'].includes(saved.preset) ? saved.preset : saved.days === 7 ? '7d' : '30d',
+    // #383: a DateRange preset id (DateRange.PRESETS); null = custom from/to. The older `days` reads as
+    // its preset: 7 as '7d', anything else (the dropped 90 days too) as '30d'.
+    preset: (window.DateRange?.PRESETS || []).some((p) => p.id === saved.preset) ? saved.preset : saved.days === 7 ? '7d' : '30d',
     from: null, to: null,
     data: null, error: null, loading: false,
     report: null, reportError: null, analyzing: false,

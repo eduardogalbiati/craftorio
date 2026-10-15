@@ -34,14 +34,15 @@ function countLines(text) {
   return s.split('\n').length - (s.endsWith('\n') ? 1 : 0);
 }
 
-function listFiles(root, dir) {
+// Files under root/dir (paths from root, with /) whose name matches `match`; also used by bare-controls.js.
+function listFiles(root, dir, match = /\.js$/) {
   const abs = path.join(root, dir);
   if (!fs.existsSync(abs)) return [];
   return fs.readdirSync(abs, { withFileTypes: true }).flatMap((e) => {
     if (e.name === 'node_modules') return [];
     const rel = `${dir}/${e.name}`;
-    if (e.isDirectory()) return listFiles(root, rel);
-    return e.name.endsWith('.js') ? [rel] : [];
+    if (e.isDirectory()) return listFiles(root, rel, match);
+    return match.test(e.name) ? [rel] : [];
   });
 }
 

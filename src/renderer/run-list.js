@@ -647,6 +647,7 @@ function runProgressStrip(r) {
 // (.rm-steps) are placed in the window as they show (position: fixed, so no scrolling container
 // clips them), next to what opened them, moved left or flipped up when there is no room; long lines
 // wrap within their max width (style.css). Without this (before the first hover) the CSS places them.
+// select.js places its search list with it too (#383).
 const POP_EDGE = 6;
 function placePopover(pop, anchor, { gap = 4, alignRight = false } = {}) {
   if (!pop || !anchor || !pop.getClientRects().length) return;
