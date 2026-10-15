@@ -126,6 +126,18 @@ test('#375 citedPaths: no body cites nothing', () => {
   assert.deepEqual(plain(citedPaths('Just prose, nothing to touch.')), []);
 });
 
+test('#375 citedPaths: a markdown link to a file cites the path in its text', () => {
+  const { citedPaths } = load();
+  assert.deepEqual(plain(citedPaths('See [src/a.js](https://github.com/o/r/blob/main/src/a.js) first')), ['src/a.js']);
+  assert.deepEqual(plain(citedPaths('[`src/b.js:12`](https://github.com/o/r/blob/main/src/b.js#L12), then [the docs](docs/x.md)')), ['src/b.js']);
+});
+
+test('#375 citedPaths: a markdown image cites nothing', () => {
+  const { citedPaths } = load();
+  assert.deepEqual(plain(citedPaths('Before: ![the city](https://github.com/o/r/assets/1/shot.png)')), []);
+  assert.deepEqual(plain(citedPaths('![diagram](docs/img/city.png)')), []);
+});
+
 // ---------- a small real city (#371's model, #373's layout) ----------
 
 const hash = '01'.repeat(20);
@@ -337,6 +349,28 @@ test('#375 stageFootprint: one item, an item with no files, or a file listed twi
   assert.equal(typeof empty.colours.e, 'string');
   assert.deepEqual(empty.highlight, { 'src/b.js': empty.colours.f });
   assert.deepEqual(plain(stageFootprint([])), { colours: {}, highlight: {}, conflicts: [] });
+});
+
+test('#375 stageFootprint: the conflict red is the agents overlay\'s collision red (#374)', () => {
+  const { CONFLICT_COLOUR } = load();
+  assert.equal(CONFLICT_COLOUR, require('../src/shared/city-agents.js').COLLISION_COLOUR);
+});
+
+test('#375 stageFootprint: works in the browser, loaded after city-agents.js', () => {
+  const sandbox = { console };
+  sandbox.window = sandbox;
+  vm.createContext(sandbox);
+  for (const f of ['city-agents.js', 'city-impact.js']) {
+    vm.runInContext(fs.readFileSync(path.join(root, 'src', 'shared', f), 'utf8'), sandbox, { filename: f });
+  }
+  const out = plain(sandbox.window.CityImpact.stageFootprint([
+    { id: 'it-b', files: ['src/y.js'] },
+    { id: 'it-a', files: ['src/x.js', 'src/y.js'] },
+  ]));
+  assert.deepEqual(out.conflicts, [{ path: 'src/y.js', items: ['it-a', 'it-b'] }]);
+  assert.equal(out.highlight['src/y.js'], sandbox.window.CityAgents.COLLISION_COLOUR);
+  assert.equal(out.highlight['src/x.js'], out.colours['it-a']);
+  assert.equal(sandbox.window.CityImpact.CONFLICT_COLOUR, '#d7263d');
 });
 
 // ---------- predictedVsActual ----------

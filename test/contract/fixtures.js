@@ -109,6 +109,8 @@ module.exports = {
   'architecture:agents': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   'architecture:savePlan': { setup: project, arg: ({ projectId }) => ({ projectId, plan: { version: 1, project: 'contract', summary: 'A contract plan.', ignore: [], zones: [{ id: 'core', name: 'Core', kind: 'civic', purpose: 'x' }], districts: [{ id: 'all', name: 'All', zone: 'core', purpose: 'x', include: ['**'], exclude: [] }], landmarks: [], ports: [], evidence: [] } }), invalid: { arg: { projectId: 'p', plan: 'not a plan' } } },
   'architecture:estimate': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
+  // #375: a fresh project has no plan and no hit rate yet (no record: the suite writes nothing)
+  'architecture:impact': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   'architecture:facts': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   'architecture:report': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   'architecture:reports': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },

@@ -311,3 +311,24 @@ test('the renderer loads the model before the Roadmap and Dashboard views', () =
   assert.ok(at('../shared/roadmap-model.js') < at('views/backlog/backlog-roadmap.js'));
   assert.ok(at('../shared/roadmap-model.js') < at('views/dashboard/dashboard.js'));
 });
+
+// #375: an item's issues, shared by the Roadmap's refs and the city's impact preview
+test('itemIssues: an item with issues gives its issues list', () => {
+  const { itemIssues } = load();
+  const issues = [{ number: 4, title: 'Four', url: 'u4', body: 'b4' }, { number: 7, title: 'Seven' }];
+  assert.deepEqual(JSON.parse(JSON.stringify(itemIssues({ id: 'i1', number: 4, issues }))), issues);
+});
+
+test('itemIssues: an item stored before #163 (a number, no issues list) is its own single issue', () => {
+  const { itemIssues } = load();
+  const out = JSON.parse(JSON.stringify(itemIssues({ id: 'old', number: 12, url: 'https://x/12', title: 'Old item', body: 'Edit `src/a.js`' })));
+  assert.deepEqual(out, [{ number: 12, url: 'https://x/12', title: 'Old item', body: 'Edit `src/a.js`' }]);
+  assert.deepEqual(JSON.parse(JSON.stringify(itemIssues({ id: 'old', number: 12, title: 'Old item', issues: [] }))).map((i) => i.number), [12]);
+});
+
+test('itemIssues: an item with neither issues nor a number, or no item, has no issue', () => {
+  const { itemIssues } = load();
+  assert.deepEqual(itemIssues({ id: 'empty', title: 'Nothing' }), []);
+  assert.deepEqual(itemIssues(null), []);
+  assert.deepEqual(itemIssues(undefined), []);
+});
