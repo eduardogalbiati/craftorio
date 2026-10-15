@@ -39,6 +39,18 @@
 //   languages are not measured and how to install the tool ("pip install lizard", needs Python), one
 //   data-testid="architecture-unmeasured-language" per language, its text the language's name. The
 //   #385 scenarios skip themselves when lizard is on this machine (they describe a machine without it).
+// - The Facts view for a human reader (#386): the lead row data-testid="architecture-overview" holds
+//   "architecture-verdict" (one line), up to 3 "architecture-risk-card" (each an
+//   "architecture-risk-score", 0-100), "architecture-danger-count" and "architecture-languages-bar"
+//   (segments "architecture-language-segment") with its legend "architecture-language-legend"
+//   ("architecture-language-entry", text like "JavaScript 74.3%"). Each "architecture-finding" shows
+//   "architecture-finding-score" and "architecture-finding-summary"; its "architecture-finding-details"
+//   (evidence, refactor) stay hidden until its "Read more" button "architecture-finding-more".
+//   Filters "architecture-filter-high|medium|low|new|kept" (buttons with counts);
+//   "architecture-send-all" ("Send all to Refactor") skips findings already sent, its toast says how
+//   many went ("Sent 3 findings to the Refactor tab"). The quality gate "architecture-gate" is one row
+//   of "architecture-gate-chip"; "architecture-limits" is hidden until the ⓘ button
+//   "architecture-caveats" is clicked.
 //
 // The git project is seeded in the scenario's scratch folder after the app opened (like app.steps.js's
 // second project): a repository on main with a .js and a .py file and three commits, the project
@@ -93,8 +105,34 @@ function seedRepo(folder) {
   return { commit: git(folder, ['rev-parse', 'HEAD']), date: '2026-09-15T10:00:00Z' };
 }
 
+// #386: a report with findings of each severity: two high, one medium, one low
+const SEVERITY_FINDINGS = [
+  {
+    kind: 'duplicated-rule', title: FINDING, severity: 'high',
+    files: [{ path: 'src/billing.js', lines: '1-3' }, { path: 'tools/export.py', lines: '1-2' }],
+    evidence: 'Both files apply 10% off above 100.', refactor: 'Keep the rule in one module the export calls.',
+  },
+  {
+    kind: 'hotspot', title: 'Billing module changes in every commit', severity: 'high',
+    files: [{ path: 'src/billing.js' }],
+    evidence: 'src/billing.js changed in all three commits.', refactor: 'Split the rates out of the discount logic.',
+  },
+  {
+    kind: 'magic-number', title: 'Rates are bare constants', severity: 'medium',
+    files: [{ path: 'src/billing.js', lines: '4-33' }],
+    evidence: 'Thirty rate constants with no name for what they mean.', refactor: 'Read the rates from one table.',
+  },
+  {
+    kind: 'naming', title: 'Export constants shout', severity: 'low',
+    files: [{ path: 'tools/export.py', lines: '3-10' }],
+    evidence: 'RATE_0 to RATE_7 repeat the billing rates.', refactor: 'Import the rates from the billing table.',
+  },
+];
+const HIGH_TITLES = SEVERITY_FINDINGS.filter((f) => f.severity === 'high').map((f) => f.title);
+const OTHER_TITLES = SEVERITY_FINDINGS.filter((f) => f.severity !== 'high').map((f) => f.title);
+
 // The saved report architecture:analyze writes (contract-356 §3), dated a minute ago
-function savedReport(projectId, head) {
+function savedReport(projectId, head, findings = null) {
   const date = new Date(Date.now() - 60000).toISOString();
   const id = date.replace(/[:.]/g, '-');
   return {
@@ -103,7 +141,7 @@ function savedReport(projectId, head) {
     report: {
       summary: SUMMARY,
       areas: [{ area: 'src', verdict: 'The API holds the billing rules.' }, { area: 'tools', verdict: 'The export repeats one of them.' }],
-      findings: [{
+      findings: findings || [{
         kind: 'duplicated-rule', title: FINDING, severity: 'medium',
         files: [{ path: 'src/billing.js', lines: '1-3' }, { path: 'tools/export.py', lines: '1-2' }],
         evidence: 'Both files apply 10% off above 100.', refactor: 'Keep the rule in one module the export calls.',
@@ -132,7 +170,7 @@ const CITY_PLAN = {
   ],
 };
 
-async function seedGitProject(e2e, name, { withReport = false, planFolders = null, withPlan = false } = {}) {
+async function seedGitProject(e2e, name, { withReport = false, findings = null, planFolders = null, withPlan = false } = {}) {
   const workspace = require(path.join(root, 'src', 'workspace'));
   const projects = require(path.join(root, 'src', 'projects'));
   const arch = require(path.join(root, 'src', 'oracle-architecture'));
@@ -142,7 +180,7 @@ async function seedGitProject(e2e, name, { withReport = false, planFolders = nul
   const project = await projects.createProject(ws.projects, { name, folder, description: 'A git project (simulated data)' });
   const dir = path.join(ws.root, 'architecture', project.id);
   if (withReport) {
-    const report = savedReport(project.id, head);
+    const report = savedReport(project.id, head, findings);
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, `${report.id}.json`), JSON.stringify(report, null, 2));
   }
@@ -157,6 +195,11 @@ async function seedGitProject(e2e, name, { withReport = false, planFolders = nul
 
 Given('the workspace has a git project {string} with a JavaScript and a Python file and a saved architecture report', async ({ e2e }, name) => {
   await seedGitProject(e2e, name, { withReport: true });
+});
+
+// #386: the same project and report, its findings two high, one medium and one low
+Given('the workspace has a git project {string} with a JavaScript and a Python file and a saved architecture report with high, medium and low findings', async ({ e2e }, name) => {
+  await seedGitProject(e2e, name, { withReport: true, findings: SEVERITY_FINDINGS });
 });
 
 Given('the workspace has a git project {string} with a JavaScript and a Python file and no architecture report', async ({ e2e }, name) => {
@@ -534,4 +577,151 @@ Then('the Architecture tab advises refreshing the map', async ({ e2e }) => {
 Then('the Architecture tab does not advise refreshing the map', async ({ e2e }) => {
   await expect(analyzeButton(e2e.window)).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(visible(tab(e2e.window).getByTestId('architecture-map-refresh-advised'))).toHaveCount(0);
+});
+
+// ---------- the Facts view for a human reader (#386) ----------
+
+const overview = (page) => byId(page, 'architecture-overview');
+const findingRow = (page, title) => visible(tab(page).getByTestId('architecture-finding')).filter({ hasText: title }).first();
+
+Then('the Architecture tab leads with a one-line verdict above the findings', async ({ e2e }) => {
+  const page = e2e.window;
+  const lead = overview(page);
+  await expect(lead).toBeVisible({ timeout: LOAD_TIMEOUT });
+  const verdict = lead.getByTestId('architecture-verdict');
+  await expect(verdict).toBeVisible();
+  await expect(verdict).not.toBeEmpty();
+  expect((await verdict.innerText()).trim(), 'the verdict is one line').not.toMatch(/\n/);
+  const findings = byId(page, 'architecture-findings');
+  await expect(findings).toBeVisible({ timeout: LOAD_TIMEOUT });
+  expect((await findings.boundingBox()).y, 'the findings come below the summary row').toBeGreaterThan((await lead.boundingBox()).y);
+});
+
+Then('the summary shows at most 3 risk cards, each with a score from 0 to 100', async ({ e2e }) => {
+  const cards = visible(overview(e2e.window).getByTestId('architecture-risk-card'));
+  await expect(cards.first()).toBeVisible({ timeout: LOAD_TIMEOUT });
+  const n = await cards.count();
+  expect(n, 'risk cards in the summary').toBeLessThanOrEqual(3);
+  for (let i = 0; i < n; i += 1) {
+    const score = cards.nth(i).getByTestId('architecture-risk-score');
+    await expect(score).toBeVisible();
+    const value = Number(((await score.innerText()).match(/\d+(\.\d+)?/) || [])[0]);
+    expect(value, `the score of risk card ${i + 1}`).toBeGreaterThanOrEqual(0);
+    expect(value, `the score of risk card ${i + 1}`).toBeLessThanOrEqual(100);
+  }
+});
+
+Then('the summary shows how many files are in the Danger Zone', async ({ e2e }) => {
+  const count = visible(overview(e2e.window).getByTestId('architecture-danger-count')).first();
+  await expect(count).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(count).toContainText(/\d/);
+});
+
+Then('the summary shows a languages bar whose legend gives {string} and {string} in percent', async ({ e2e }, a, b) => {
+  const lead = overview(e2e.window);
+  const bar = visible(lead.getByTestId('architecture-languages-bar')).first();
+  await expect(bar).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(bar.getByTestId('architecture-language-segment')).toHaveCount(2);
+  const legend = visible(lead.getByTestId('architecture-language-legend')).first();
+  await expect(legend).toBeVisible();
+  for (const language of [a, b]) {
+    const entry = legend.getByTestId('architecture-language-entry').filter({ hasText: language });
+    await expect(entry, `the legend's "${language}"`).toHaveCount(1);
+    await expect(entry).toHaveText(new RegExp(`${escapeRe(language)}\\s*\\d+(\\.\\d+)?\\s*%`));
+  }
+});
+
+Then('the Architecture tab keeps what the numbers cannot tell out of sight', async ({ e2e }) => {
+  await expect(byId(e2e.window, 'architecture-caveats')).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(visible(tab(e2e.window).getByTestId('architecture-limits'))).toHaveCount(0);
+});
+
+When('I open the caveats of the Architecture tab', async ({ e2e }) => {
+  const button = byId(e2e.window, 'architecture-caveats');
+  await expect(button).toHaveRole('button');
+  await button.click();
+});
+
+Then('the Architecture tab shows what the numbers cannot tell', async ({ e2e }) => {
+  const limits = byId(e2e.window, 'architecture-limits');
+  await expect(limits).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(limits).not.toBeEmpty();
+});
+
+Then('the finding {string} shows a score and a one-line summary', async ({ e2e }, title) => {
+  const row = findingRow(e2e.window, title);
+  await expect(row).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(row.getByTestId('architecture-finding-score')).toContainText(/\d/);
+  const summary = row.getByTestId('architecture-finding-summary');
+  await expect(summary).toBeVisible();
+  await expect(summary).not.toBeEmpty();
+  expect((await summary.innerText()).trim(), 'the summary is one line').not.toMatch(/\n/);
+});
+
+Then('the details of the finding {string} are hidden', async ({ e2e }, title) => {
+  const row = findingRow(e2e.window, title);
+  await expect(row).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(visible(row.getByTestId('architecture-finding-details'))).toHaveCount(0);
+});
+
+When('I click {string} on the finding {string}', async ({ e2e }, label, title) => {
+  const more = findingRow(e2e.window, title).getByTestId('architecture-finding-more');
+  await expect(more).toHaveRole('button');
+  await expect(more).toHaveAccessibleName(new RegExp(escapeRe(label), 'i'));
+  await more.click();
+});
+
+Then('the details of the finding {string} show its evidence and its refactor', async ({ e2e }, title) => {
+  const finding = SEVERITY_FINDINGS.find((f) => f.title === title);
+  const details = findingRow(e2e.window, title).getByTestId('architecture-finding-details');
+  await expect(details).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(details).toContainText(finding.evidence);
+  await expect(details).toContainText(finding.refactor);
+});
+
+When('I filter the findings by {string} severity', async ({ e2e }, severity) => {
+  const filter = byId(e2e.window, `architecture-filter-${severity.toLowerCase()}`);
+  await expect(filter).toHaveRole('button');
+  await filter.click();
+});
+
+Then('the Architecture tab lists only the 2 high-severity findings', async ({ e2e }) => {
+  const page = e2e.window;
+  await expect(byId(page, 'architecture-filter-high'), 'the "high" filter counts its findings').toContainText(/\b2\b/);
+  await expect(visible(tab(page).getByTestId('architecture-finding'))).toHaveCount(HIGH_TITLES.length, { timeout: LOAD_TIMEOUT });
+  for (const title of HIGH_TITLES) await expect(findingRow(page, title), `the high finding "${title}"`).toBeVisible();
+  for (const title of OTHER_TITLES) await expect(visible(tab(page).getByTestId('architecture-finding')).filter({ hasText: title }), `"${title}" is filtered out`).toHaveCount(0);
+});
+
+When('I send the finding {string} to Refactor', async ({ e2e }, title) => {
+  const send = findingRow(e2e.window, title).getByTestId('architecture-send-refactor');
+  await expect(send).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await send.click();
+  await expect(send).toContainText(/sent to refactor/i, { timeout: LOAD_TIMEOUT });
+});
+
+When('I send all the findings to Refactor', async ({ e2e }) => {
+  const button = byId(e2e.window, 'architecture-send-all');
+  await expect(button).toHaveRole('button');
+  await expect(button).toHaveAccessibleName(/send all to refactor/i);
+  await button.click();
+});
+
+Then('every finding of the Architecture tab is marked sent to Refactor', async ({ e2e }) => {
+  const rows = visible(tab(e2e.window).getByTestId('architecture-finding'));
+  await expect(rows).toHaveCount(SEVERITY_FINDINGS.length, { timeout: LOAD_TIMEOUT });
+  for (let i = 0; i < SEVERITY_FINDINGS.length; i += 1) {
+    await expect(rows.nth(i).getByTestId('architecture-send-refactor')).toContainText(/sent to refactor/i, { timeout: LOAD_TIMEOUT });
+  }
+});
+
+// the Refactor tab's proposals, read from the scratch workspace (<workspace>/refactor/<id>/proposals.json)
+Then('the Refactor tab of {string} has {int} proposals from the Architecture tab', async ({ e2e }, name, count) => {
+  const projects = require(path.join(root, 'src', 'projects'));
+  const { listProposals } = require(path.join(root, 'src', 'refactor-proposals'));
+  const wsDir = path.join(e2e.scratch, 'workspace');
+  const project = projects.listProjects(path.join(wsDir, 'projects')).find((p) => p.name === name);
+  expect(project, `the project "${name}"`).toBeTruthy();
+  await expect.poll(() => listProposals(path.join(wsDir, 'refactor'), project.id).filter((p) => p.source === 'architecture').length, { timeout: LOAD_TIMEOUT })
+    .toBe(count);
 });

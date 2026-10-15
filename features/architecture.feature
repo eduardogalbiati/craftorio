@@ -23,6 +23,10 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
   other languages need lizard. Without it the tab names the languages not measured and how to
   install the tool (`pip install lizard`, which needs Python); a file not measured never shows zero.
   These scenarios are skipped on a machine where lizard is installed.
+  The Facts view reads for a human (#386): a one-row summary first (a one-line verdict, up to 3 risk
+  cards with a 0-100 score, the Danger Zone count, a languages bar with percentages), each finding one
+  line with a score and its details behind "Read more", filters by severity, "Send all to Refactor"
+  that skips findings already sent, and the caveats behind an ⓘ button.
 
   @issue-356
   Scenario: A project whose folder is not a git repository has no facts and nothing to analyse
@@ -215,3 +219,45 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     Then the Architecture tab lists "Python" as the only language whose complexity is not measured
     And the Architecture tab says how to measure it with "pip install lizard", which needs Python
     And the Architecture hotspot table shows the complexity of "tools/export.py" as not measured, not zero
+
+  @issue-386 @smoke
+  Scenario: The Facts view leads with a one-row summary and keeps its caveats behind a button
+    Given the app is open
+    And the workspace has a git project "billing-service" with a JavaScript and a Python file and a saved architecture report with high, medium and low findings
+    When I open "Projects" in the sidebar
+    And I open the project "billing-service" from the Projects screen
+    And I open the "Architecture" project tab
+    Then the Architecture tab leads with a one-line verdict above the findings
+    And the summary shows at most 3 risk cards, each with a score from 0 to 100
+    And the summary shows how many files are in the Danger Zone
+    And the summary shows a languages bar whose legend gives "JavaScript" and "Python" in percent
+    And the Architecture tab keeps what the numbers cannot tell out of sight
+    When I open the caveats of the Architecture tab
+    Then the Architecture tab shows what the numbers cannot tell
+
+  @issue-386
+  Scenario: A finding shows one line and opens its details on demand
+    Given the app is open
+    And the workspace has a git project "billing-service" with a JavaScript and a Python file and a saved architecture report with high, medium and low findings
+    When I open "Projects" in the sidebar
+    And I open the project "billing-service" from the Projects screen
+    And I open the "Architecture" project tab
+    Then the finding "Discount rule duplicated in the API and the export" shows a score and a one-line summary
+    And the details of the finding "Discount rule duplicated in the API and the export" are hidden
+    When I click "Read more" on the finding "Discount rule duplicated in the API and the export"
+    Then the details of the finding "Discount rule duplicated in the API and the export" show its evidence and its refactor
+    When I filter the findings by "high" severity
+    Then the Architecture tab lists only the 2 high-severity findings
+
+  @issue-386
+  Scenario: Send all to Refactor sends only the findings not sent yet
+    Given the app is open
+    And the workspace has a git project "billing-service" with a JavaScript and a Python file and a saved architecture report with high, medium and low findings
+    When I open "Projects" in the sidebar
+    And I open the project "billing-service" from the Projects screen
+    And I open the "Architecture" project tab
+    And I send the finding "Billing module changes in every commit" to Refactor
+    And I send all the findings to Refactor
+    Then the toast says "Sent 3 findings to the Refactor tab"
+    And every finding of the Architecture tab is marked sent to Refactor
+    And the Refactor tab of "billing-service" has 4 proposals from the Architecture tab
