@@ -4,7 +4,8 @@
 // view on the city as it was at the previous release (architecture:release: the tree and the facts at
 // `from`, the current plan's rules; src/release-city.js), with what the release added in green, what
 // it changed on a ramp by the lines changed, renamed files on their old building and removed files
-// marked as ghosts, the rest grey (src/shared/city-release.js). A card (data-testid="city-release")
+// marked as ghosts (a ghost-coloured marker labelled "removed" on the base building: #373's overlay
+// API has highlights and markers, no outline mode), the rest grey (src/shared/city-release.js). A card (data-testid="city-release")
 // holds the header (headerMarkup: the counts by status, district and zone, the two-tag picker, the
 // filter by issue through the commits that name it) and "Save image": a PNG of the city with the
 // project, the release and the counts in a caption, for release notes. Close draws the project's
@@ -17,27 +18,30 @@
   const handles = new Set();
   let pending = null; // { projectId, to, from }: the release asked from the Releases screen or a run
 
-  const dot = (colour) => `<i class="r3d-dot" style="--c:${esc(colour)}"></i>`;
-  const countsHtml = (list, testid, label) => (list.length
-    ? `<ul class="pci-counts" aria-label="${esc(label)}">${list.map((d) => `<li data-testid="${testid}"><span title="${esc(d.name)}">${esc(d.name)}</span> <strong>${d.count}</strong></li>`).join('')}</ul>` : '');
+  const dot = (colour) => ProjectCityCards.dot(colour);
+  const countsHtml = (list, testid, label) => ProjectCityCards.countsHtml(list, testid, label);
   const options = (values, selected) => values.map((v) => `<option value="${esc(v)}" ${String(v) === String(selected) ? 'selected' : ''}>${esc(v)}</option>`).join('');
   // the status chips: each count with its colour on the map
   const statusColour = () => ({ added: CityRelease.ADDED_COLOUR, changed: CityRelease.CHANGE_RAMP[CityRelease.CHANGE_RAMP.length - 1], removed: GHOST, renamed: CityRelease.CHANGE_RAMP[1] });
+
+  /** The two-tag picker; a commit typed elsewhere (a project without tags) stays selectable. */
+  function pickerMarkup(tags, from, to) {
+    const refs = [...tags, ...[to, from].filter((r) => r && !tags.includes(r))];
+    return `<div class="pcr-picker">
+        <label class="r3d-chip"><span>From</span><select data-pcr-from data-testid="city-release-from" aria-label="The previous release">${options(refs, from)}</select></label>
+        <label class="r3d-chip"><span>To</span><select data-pcr-to data-testid="city-release-to" aria-label="The release">${options(refs, to)}</select></label>
+      </div>`;
+  }
 
   /** The release's header: the project, the two-tag picker, the counts by status, district and zone, the issue filter, Save image. */
   function headerMarkup(view) {
     const { project = '', from = null, to = null, header = {}, tags = [], issues = [], issue = null } = view || {};
     const counts = header.counts || {};
-    // a commit typed elsewhere (a project without tags) stays selectable
-    const refs = [...tags, ...[to, from].filter((r) => r && !tags.includes(r))];
     const chips = ['added', 'changed', 'renamed', 'removed'].filter((s) => counts[s] > 0)
       .map((s) => `<span class="pcr-count" data-testid="city-release-count-${s}">${dot(statusColour()[s])}${counts[s]} ${s}</span>`).join('');
     return `<div class="pci-header" data-testid="city-release-header">
       <div class="pci-title"><span title="${esc(project)}">${esc(project)}</span></div>
-      <div class="pcr-picker">
-        <label class="r3d-chip"><span>From</span><select data-pcr-from data-testid="city-release-from" aria-label="The previous release">${options(refs, from)}</select></label>
-        <label class="r3d-chip"><span>To</span><select data-pcr-to data-testid="city-release-to" aria-label="The release">${options(refs, to)}</select></label>
-      </div>
+      ${pickerMarkup(tags, from, to)}
       <p class="pcr-counts">${chips || '<span class="muted">No file changed</span>'}</p>
       ${countsHtml(header.districts || [], 'city-release-district', 'By district')}
       ${countsHtml(header.zones || [], 'city-release-zone', 'By zone')}
@@ -135,7 +139,12 @@
       const head = `<div class="pci-head"><b>${title}</b><button type="button" class="link-btn" data-pcr-close data-testid="city-release-close">Close</button></div>`;
       if (error) { el.innerHTML = `${head}<p class="small" role="alert">Could not read the release: ${esc(error)}</p>`; return; }
       if (!data) { el.innerHTML = `${head}<p class="muted small">Reading the release and the city at the previous tag…</p>`; return; }
-      if (data.state !== 'ok') { el.innerHTML = `${head}<p class="small" role="alert">${esc(stateText(data))}</p>`; return; }
+      if (data.state !== 'ok') {
+        // two tags or commits or more: another pair can still be picked
+        const tags = data.tags || [];
+        el.innerHTML = `${head}<p class="small" role="alert">${esc(stateText(data))}</p>${tags.length > 1 ? pickerMarkup(tags, data.from, data.to) : ''}`;
+        return;
+      }
       if (!city.layout || city.model !== applied) { el.innerHTML = `${head}<p class="muted small">Laying out the city at ${esc(data.from)}…</p>`; return; }
       const list = changes();
       const overlay = CityRelease.releaseOverlay(list);
@@ -146,7 +155,7 @@
     }
 
     function stateText(d) {
-      if (d.state === 'first-release') return `${d.to || 'This release'} is the first tag: there is no previous release to compare with. Pick an earlier commit.`;
+      if (d.state === 'first-release') return `${d.to || 'This release'} is the first tag: there is no previous release to compare with.${(d.tags || []).length > 1 ? ' Pick a later release below.' : ''}`;
       if (d.state === 'no-history') return 'The project has no commit to compare.';
       if (d.state === 'not-git') return 'The project folder is not a git repository.';
       if (d.state === 'unknown-ref') return `Git does not know ${d.from} or ${d.to} in this repository.`;

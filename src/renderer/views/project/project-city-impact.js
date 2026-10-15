@@ -25,9 +25,8 @@
 
   const pct = (x) => `${Math.round((x || 0) * 100)}%`;
   const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
-  const dot = (colour) => `<i class="r3d-dot" style="--c:${esc(colour)}"></i>`;
-  const countsHtml = (list, testid, label) => (list.length
-    ? `<ul class="pci-counts" aria-label="${esc(label)}">${list.map((d) => `<li data-testid="${testid}"><span title="${esc(d.name)}">${esc(d.name)}</span> <strong>${d.count}</strong></li>`).join('')}</ul>` : '');
+  const dot = (colour) => ProjectCityCards.dot(colour);
+  const countsHtml = (list, testid, label) => ProjectCityCards.countsHtml(list, testid, label);
 
   /** The issue preview's header: the issue, the counts by district and zone, the Danger Zone share, the new files, predicted vs actual. */
   function headerMarkup(preview) {

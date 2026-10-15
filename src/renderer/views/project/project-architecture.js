@@ -559,6 +559,8 @@
     if (cur?.id !== id) {
       cur?.connections?.destroy();
       cur?.agents?.destroy();
+      cur?.impact?.destroy();
+      cur?.release?.destroy();
       cur?.city?.destroy(); // another project: the previous city gives its WebGL context back
       cur = { id, box, facts: null, view: null, reports: [], estimate: null, error: null, loadError: null, loading: false, reportId: null, since: '', until: '', includeMass: true, editing: false, seq: 0,
         cityMap: null, mapEstimate: null, mapStarting: false, mapRun: null, mapStep: null, city: null, agents: null, connections: null, focusFile: null,

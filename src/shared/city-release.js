@@ -17,6 +17,8 @@
   const node = typeof module === 'object' && module.exports;
   // the plan's first-match rule (#371), resolved at call time: in the browser city-model.js may load later
   const cityModel = () => (node ? require('./city-model') : root.CityModel);
+  // the header's district and zone counting rule (#375), shared with the impact overlay, at call time
+  const cityImpact = () => (node ? require('./city-impact') : root.CityImpact);
 
   const ADDED_COLOUR = '#3fb68b';
   const CHANGE_RAMP = ['#f6d58e', '#f2a541', '#e8743b', '#d9480f'];
@@ -133,28 +135,12 @@
     return model;
   }
 
-  const counted = (counts, names) => [...counts.entries()]
-    .map(([id, count]) => ({ id, name: names.get(id) || id, count }))
-    .sort((a, b) => b.count - a.count || byString(a.id, b.id));
-
-  /** The changes counted by status, and by district and zone over the buildings the layout draws. */
+  /** The changes counted by status, and by district and zone over the buildings the layout draws (CityImpact's rule). */
   function releaseHeader(layout, changes) {
     const counts = Object.fromEntries(STATUSES.map((s) => [s, 0]));
-    const buildings = new Map(arr(layout && layout.buildings).map((b) => [b.path, b]));
-    const districtNames = new Map(arr(layout && layout.districts).map((d) => [d.id, d.name]));
-    const districtZone = new Map(arr(layout && layout.districts).map((d) => [d.id, d.zone]));
-    const zoneNames = new Map(arr(layout && layout.zones).map((z) => [z.id, z.name]));
-    const districts = new Map();
-    const zones = new Map();
-    for (const c of arr(changes)) {
-      if (c.status in counts) counts[c.status]++;
-      const b = buildings.get(drawnPath(c));
-      if (!b) continue;
-      const zone = b.zone || districtZone.get(b.district);
-      districts.set(b.district, (districts.get(b.district) || 0) + 1);
-      if (zone) zones.set(zone, (zones.get(zone) || 0) + 1);
-    }
-    return { counts, districts: counted(districts, districtNames), zones: counted(zones, zoneNames) };
+    for (const c of arr(changes)) if (c.status in counts) counts[c.status]++;
+    const { districts, zones } = cityImpact().countByDistrict(layout, arr(changes).map(drawnPath));
+    return { counts, districts, zones };
   }
 
   /** The non-zero counts as '<n> added', in status order. */

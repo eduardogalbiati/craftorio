@@ -296,7 +296,14 @@ function renderRunSummary() {
 
   function mountReplayMap(run) {
     if ($('#btn-run-replay-map')) $('#btn-run-replay-map').onclick = () => ProjectCityAgents.replay(run.projectId, run.id);
-    if ($('#btn-run-release-map')) $('#btn-run-release-map').onclick = () => ProjectCityRelease.showRelease(run.projectId, { to: String(run.inputs.version) });
+    if ($('#btn-run-release-map')) $('#btn-run-release-map').onclick = () => showReleaseOf(run);
+  }
+
+  // the tag Ship wrote (tagName: "Sprint 12: beta" is tagged Sprint-12-beta), from the release that lists this run; else the version
+  async function showReleaseOf(run) {
+    const data = await api.listReleases(run.projectId).catch(() => null);
+    const release = (data?.releases || []).find((r) => [].concat(r.runs || []).includes(run.id));
+    ProjectCityRelease.showRelease(run.projectId, { to: String(release?.tag || run.inputs.version) });
   }
 }
 

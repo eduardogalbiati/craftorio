@@ -11,6 +11,8 @@
 //   (CityModel.applyPlan, #371's glob rules).
 // - SOURCE_COLOURS, overlayOf(preview) → { highlight }: each expected building in the colour of its
 //   strongest source (changed > po > cited), for ProjectCity.overlay.
+// - countByDistrict(layout, paths) → { total, districts, zones }: the paths that are buildings of the
+//   layout counted by district and zone (also the release header's counts, src/shared/city-release.js).
 // - impactHeader(layout, paths, { quadrants }) → { total, districts, zones, dangerShare }: the counts
 //   over the buildings of the layout and the share of them in the Danger Zone.
 // - stageFootprint(items [{ id, files }]) → { colours, highlight, conflicts }: each item its colour, a
@@ -128,8 +130,8 @@
     .map(([id, count]) => ({ id, name: names.get(id) || id, count }))
     .sort((a, b) => b.count - a.count || byString(a.id, b.id));
 
-  /** The expected buildings counted by district and zone, and the share of them in the Danger Zone. */
-  function impactHeader(layout, paths, { quadrants = {} } = {}) {
+  /** Each path that is a building of the layout counted by district and zone (once per path given), by count desc then id. */
+  function countByDistrict(layout, paths) {
     const buildings = new Map(arr(layout && layout.buildings).map((b) => [b.path, b]));
     const districtNames = new Map(arr(layout && layout.districts).map((d) => [d.id, d.name]));
     const districtZone = new Map(arr(layout && layout.districts).map((d) => [d.id, d.zone]));
@@ -137,17 +139,24 @@
     const districts = new Map();
     const zones = new Map();
     let total = 0;
-    let danger = 0;
-    for (const p of uniqueSorted(arr(paths).map(clean))) {
+    for (const p of arr(paths).map(clean)) {
       const b = buildings.get(p);
       if (!b) continue;
       total++;
       const zone = b.zone || districtZone.get(b.district);
       districts.set(b.district, (districts.get(b.district) || 0) + 1);
       if (zone) zones.set(zone, (zones.get(zone) || 0) + 1);
-      if ((quadrants || {})[p] === DANGER) danger++;
     }
-    return { total, districts: counted(districts, districtNames), zones: counted(zones, zoneNames), dangerShare: total ? danger / total : 0 };
+    return { total, districts: counted(districts, districtNames), zones: counted(zones, zoneNames) };
+  }
+
+  /** The expected buildings counted by district and zone, and the share of them in the Danger Zone. */
+  function impactHeader(layout, paths, { quadrants = {} } = {}) {
+    const unique = uniqueSorted(arr(paths).map(clean));
+    const { total, districts, zones } = countByDistrict(layout, unique);
+    const drawn = new Set(arr(layout && layout.buildings).map((b) => b.path));
+    const danger = unique.filter((p) => drawn.has(p) && (quadrants || {})[p] === DANGER).length;
+    return { total, districts, zones, dangerShare: total ? danger / total : 0 };
   }
 
   // ---------- a stage's footprint ----------
@@ -198,6 +207,7 @@
     citedPaths,
     // CityAgents.COLLISION_COLOUR, read when asked: in the browser city-agents.js may load later
     get CONFLICT_COLOUR() { return conflictColour(); },
+    countByDistrict,
     expectedFiles,
     impactHeader,
     overlayOf,
