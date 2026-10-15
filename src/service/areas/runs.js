@@ -315,6 +315,8 @@ module.exports = (ctx) => {
         personas: agents.listAgents(ws.agents).filter((a) => !a.system && !a.error),
         // CI waiting on a PR whose account ran out of Actions minutes reports it instead of waiting
         actionsQuota: async (owner) => actionsUsage.quotaExhausted(await actionsUsage.getActionsUsage({ owner, includedMinutes: +settings.actionsIncludedMinutes || 0, timeZone: settings.timeZone })),
+        // #381: the project map's analyze step runs the Oracle's architecture analysis with the service's Oracle
+        architectureOracle: () => ({ oracle: ctx.oracleService(), agent: agents.readAgent(ws.agents, agents.ORACLE_ID) }),
       });
       if (!mock) {
         // the runs in progress have not written their usage to disk yet

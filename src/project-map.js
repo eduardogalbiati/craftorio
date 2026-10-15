@@ -10,12 +10,17 @@
 //   with the coverage (before and after on a refresh), the districts added and removed, the problems
 //   and the unmatched files.
 // - save: the plan written as architecture:savePlan writes it (the replaced one to city-plan-history/).
-// No model call anywhere: the cartographer's turn is the workflow's plan step.
+// - analyze (#381): the Oracle's architecture analysis of the project, run and saved as
+//   architecture:analyze runs and saves it (src/oracle-architecture.js analyze / saveReport), with the
+//   Oracle and its agent the service gives the run; a simulation saves the simulated report.
+// No other model call: the cartographer's turn is the workflow's plan step.
 
 'use strict';
 
+const path = require('path');
 const arch = require('./oracle-architecture');
 const facts = require('./architecture-facts');
+const projects = require('./projects');
 const { git } = require('./engine/worktree');
 const { validateSchema } = require('./json-schema');
 const {
@@ -178,7 +183,30 @@ function saveMap({ archRoot, projectId, plan }) {
   return arch.writePlan(archRoot, projectId, plan, new Date().toISOString());
 }
 
+/**
+ * The analyze step (#381): the Oracle's architecture analysis of the project, saved as
+ * architecture:analyze saves it → { report_id, date, findings, summary, cost_usd, simulated }.
+ * `oracle` / `agent`: the service's Oracle ({ oneTurn, budgetRefusal }) and its agent; a simulation
+ * (`mock`) needs neither and saves the simulated report; a real run without them fails, as does one
+ * the Oracle refuses (its budget), with the reason.
+ * @param {{ folder: string, archRoot: string, projectId: string, mock: boolean, oracle: any, agent: any, onItem?: Function }} where
+ */
+async function analyzeMap({ folder, archRoot, projectId, mock, oracle, agent, onItem = null }) {
+  if (!mock && !oracle) throw new Error('The Oracle is not available to this run: the analysis needs the app service.');
+  const exclude = arch.readSettings(archRoot, projectId).exclude;
+  const { state, model } = await facts.readFacts(folder, { exclude });
+  if (state !== 'ok') throw notGit(folder, state);
+  let project = { id: projectId, name: projectId };
+  try { project = projects.readProject(path.join(path.dirname(archRoot), 'projects'), projectId); } catch { /* the id names it */ }
+  const out = await arch.analyze({ project, model, mock: !!mock, oracle, agent, onItem });
+  if (out.refused) throw new Error(`The Oracle refused the analysis: ${out.refused.text}`);
+  const date = new Date().toISOString();
+  const saved = arch.saveReport(archRoot, projectId, { date, head: model.head, branch: model.branch, costUsd: out.costUsd, tokens: out.tokens, simulated: out.simulated, report: out.report });
+  return { cost_usd: out.costUsd, date, findings: (out.report.findings || []).length, report_id: saved.id, simulated: out.simulated, summary: out.report.summary };
+}
+
 module.exports = {
+  analyzeMap,
   manifestsOf,
   mapFacts,
   saveMap,

@@ -12,9 +12,13 @@
 //     `plan`     (agent `cartographer`, skill `project-map`): answers the plan, nothing else;
 //     `validate` (no agent): #371's validator on the plan; output `ok` (boolean). Not ok → back to
 //                `plan` (with the report), at most 2 times (`max_visits: 2` or `loop.max_iterations: 2`),
-//                then the run fails with the report. ok → `gate`;
-//     `gate`     (`type: human_approval`): shows the plan, the validation and the city screenshot;
-//     `save`     (no agent, not a gate): saves the plan as architecture:savePlan does.
+//                then the run fails with the report. ok → `save` (#381: no gate by default), or
+//                `gate` when the input `mode` is `validated`;
+//     `gate`     (`type: human_approval`, validated mode): shows the plan's zones and districts
+//                and the validation;
+//     `save`     (no agent, not a gate): saves the plan as architecture:savePlan does;
+//     `analyze`  (no agent, #381): the Oracle's architecture analysis after the plan is saved, unless
+//                the boolean input `analyze` is off.
 // - The cartographer is read-only on the project: its capabilities' tools are a subset of
 //   [read, bash:git] (no edit, no write, no other command); the engine writes the plan file from its
 //   answer (the plan step's output), so the only file the agent produces is the plan.
@@ -119,18 +123,18 @@ test('#372 project-map workflow: the bundled workflow loads and is named project
   assert.equal(wf.metadata.name, 'project-map');
 });
 
-test('#372 project-map workflow: steps facts → plan → validate → gate → save, facts first', () => {
+test('#372 project-map workflow: steps facts → plan → validate → gate → save → analyze, facts first', () => {
   const wf = loadWf();
   const ids = wf.steps.map((s) => s.id);
   assert.equal(ids[0], 'facts');
-  const order = ['facts', 'plan', 'validate', 'gate', 'save'].map((id) => ids.indexOf(id));
+  const order = ['facts', 'plan', 'validate', 'gate', 'save', 'analyze'].map((id) => ids.indexOf(id));
   assert.equal(order.includes(-1), false, `every step present in ${ids.join(', ')}`);
   assert.equal(order.join(), [...order].sort((a, b) => a - b).join(), `in order: ${ids.join(', ')}`);
 });
 
-test('#372 project-map workflow: facts, validate and save are machine steps; plan is the cartographer\'s turn', () => {
+test('#372 project-map workflow: facts, validate, save and analyze are machine steps; plan is the cartographer\'s turn', () => {
   const wf = loadWf();
-  for (const id of ['facts', 'validate', 'save']) {
+  for (const id of ['facts', 'validate', 'save', 'analyze']) {
     const s = stepOf(wf, id);
     assert.equal(s.agent ?? null, null, `${id} has no agent`);
     assert.equal(s.agents ?? null, null, `${id} has no agents`);
@@ -140,7 +144,7 @@ test('#372 project-map workflow: facts, validate and save are machine steps; pla
   assert.equal(stepOf(wf, 'plan').agent, 'cartographer');
 });
 
-test('#372 project-map workflow: a failed validation goes back to plan at most 2 times; a passing one goes to the gate', () => {
+test('#372 project-map workflow: a failed validation goes back to plan at most 2 times; a passing one is saved (#381: no gate by default)', () => {
   const v = stepOf(loadWf(), 'validate');
   const failing = v.transitions.find((tr) => evalExpr(tr.when, scope({ ok: false, problems: ['coverage 25%'] })));
   assert.ok(failing, 'a transition for a failed validation');
@@ -148,28 +152,53 @@ test('#372 project-map workflow: a failed validation goes back to plan at most 2
   assert.equal(Number(capOf(failing)), 2, 'at most 2 rounds back to plan');
   assert.ok(failing.on_exhausted, 'a target once the rounds are used up');
   assert.notEqual(failing.on_exhausted, 'gate', 'an invalid plan never reaches the gate');
-  const passing = v.transitions.find((tr) => evalExpr(tr.when, scope({ ok: true, problems: [] })));
-  assert.equal(passing.goto, 'gate');
+  const passing = v.transitions.find((tr) => evalExpr(tr.when, { ...scope({ ok: true, problems: [] }), inputs: { mode: 'auto' } }));
+  assert.equal(passing.goto, 'save');
+  const validated = v.transitions.find((tr) => evalExpr(tr.when, { ...scope({ ok: true, problems: [] }), inputs: { mode: 'validated' } }));
+  assert.equal(validated.goto, 'gate', 'validated mode shows the plan first');
 });
 
-test('#372 project-map workflow: the gate is a human gate showing the plan, the validation and the city screenshot', () => {
+test('#381 project-map workflow: the mode input is auto by default, validated on demand; the analysis is on by default', () => {
+  const wf = loadWf();
+  assert.equal(wf.inputs.mode.default, 'auto');
+  assert.deepEqual([...wf.inputs.mode.enum].sort(), ['auto', 'validated']);
+  assert.equal(wf.inputs.analyze.type, 'boolean');
+  assert.equal(wf.inputs.analyze.default, true);
+});
+
+test('#372 project-map workflow: the gate is a human gate showing the plan\'s zones and districts and the validation, in its summary too', () => {
   const gate = stepOf(loadWf(), 'gate');
   assert.equal(gate.type, 'human_approval');
   const text = JSON.stringify(gate);
   assert.match(text, /steps\.validate/, 'the validation');
-  assert.match(text, /plan/i, 'the plan');
-  assert.match(text, /screenshot/i, 'the city screenshot');
+  assert.match(text, /plan\.districts/, 'the districts');
+  assert.match(text, /plan\.zones/, 'the zones');
+  assert.match(String(gate.summary || ''), /coverage/, 'the summary says the coverage');
+  assert.match(String(gate.summary || ''), /zones/, 'the summary names the zones');
 });
 
-test('#372 project-map workflow: approving the gate saves; nothing else leads to save', () => {
+test('#372 project-map workflow: a valid plan (validate) or the approved gate saves; nothing else leads to save', () => {
   const wf = loadWf();
-  const into = wf.steps.filter((s) => JSON.stringify(s.transitions || []).includes('"goto":"save"')).map((s) => s.id);
-  assert.deepEqual(into, ['gate'], `steps that go to save: ${into.join(', ')}`);
+  const into = wf.steps.filter((s) => JSON.stringify(s.transitions || []).includes('"goto":"save"')).map((s) => s.id).sort();
+  assert.deepEqual(into, ['gate', 'validate'], `steps that go to save: ${into.join(', ')}`);
   const gate = stepOf(wf, 'gate');
   // a plain approve/reject gate, or the first of its choices
   const first = (gate.choices || [])[0]?.id ?? null;
   const approved = gate.transitions.find((tr) => evalExpr(tr.when, { ...scope({}), approved: true, rejected: false, choice: first }));
   assert.equal(approved.goto, 'save');
+});
+
+test('#381 project-map workflow: save goes to the Oracle\'s analysis (a project_map step, action analyze), or ends when the analysis is off', () => {
+  const wf = loadWf();
+  const save = stepOf(wf, 'save');
+  const on = save.transitions.find((tr) => evalExpr(tr.when, { ...scope({}), inputs: { analyze: true } }));
+  assert.equal(on.goto, 'analyze');
+  const off = save.transitions.find((tr) => evalExpr(tr.when, { ...scope({}), inputs: { analyze: false } }));
+  assert.equal(off.goto, 'end');
+  const analyze = stepOf(wf, 'analyze');
+  assert.equal(analyze.type, 'project_map');
+  assert.equal(analyze.action, 'analyze');
+  assert.equal(analyze.transitions[0].goto, 'end');
 });
 
 test('#372 project-map workflow: the cartographer is read-only on the project (read, at most git)', () => {

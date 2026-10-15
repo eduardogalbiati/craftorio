@@ -55,8 +55,8 @@ const MACHINE_STEP_TYPES = [
 // Human gates (#41): `decision` (default) is a choice only the person makes (scope, merge, publish);
 // `escalation` is a problem the supervisor on call tries to solve before the person is asked.
 const GATE_KINDS = ['decision', 'escalation'];
-// `type: project_map` (#372): what the step does (src/engine/run/project-map-steps.js)
-const PROJECT_MAP_ACTIONS = ['facts', 'validate', 'save', 'fail'];
+// `type: project_map` (#372, analyze #381): what the step does (src/engine/run/project-map-steps.js)
+const PROJECT_MAP_ACTIONS = ['facts', 'validate', 'save', 'analyze', 'fail'];
 const DISPLAY_MAX = 40;
 
 // The value types of the table: name → check of a value that is set (a template is checked before)

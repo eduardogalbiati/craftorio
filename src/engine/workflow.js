@@ -149,12 +149,16 @@ class WorkflowRun extends EventEmitter {
   //   (src/night-limits.js tonightLimits; see effectiveLimits in src/engine/run/costs.js).
   // testWorkers (#367): the machine profile's test workers per run (src/machine-profile.js), given to
   //   the agents and the suite as MULTIAGENT_TEST_WORKERS / MULTIAGENT_E2E_WORKERS; null = not set.
-  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issues, issue, resume, worktreesDir, mockSequences, notices, stopProcesses, probe, actionsQuota, peerSessions, idleWarnMs, personas, localPreview, attachments, then, from, parent, startChild, memoryGuard, agentOverrides, fallbacks, models, nightLimits, testWorkers, machine }) {
+  // architectureOracle (#381): () => { oracle, agent }, the service's Oracle ({ oneTurn, budgetRefusal }
+  //   of src/oracle.js) and its agent, for a `type: project_map` step's analyze action
+  //   (src/engine/run/project-map-steps.js); null = no Oracle (a simulation needs none).
+  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issues, issue, resume, worktreesDir, mockSequences, notices, stopProcesses, probe, actionsQuota, peerSessions, idleWarnMs, personas, localPreview, attachments, then, from, parent, startChild, memoryGuard, agentOverrides, fallbacks, models, nightLimits, testWorkers, machine, architectureOracle }) {
     super();
     refreshWindowsPath(); // actions (e.g. gh pr merge) need the refreshed PATH
     this.file = file;
     this.wf = loadWorkflow(file);
     this.mock = !!mock;
+    this.architectureOracle = typeof architectureOracle === 'function' ? architectureOracle : null;
     this.mockSequences = mockSequences || null;
     this.machine = runMachine(machine, this.mock, this.mockSequences);
     this.notices = notices || [];
