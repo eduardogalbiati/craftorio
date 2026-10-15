@@ -360,8 +360,9 @@ agents:
       - "{% if inputs.e2e_tests != 'off' %}{{ steps.acceptance_tests.output.e2e_files }}{% endif %}"
     # bug-diagnosis: fixes delegated after failures; merge-conflict-resolver: resolve_merge;
     # long-commands: installs, builds and focused checks in the foreground; ui-conventions: changes
-    # that touch a screen (shared components, controls, the states to capture)
-    skills: [long-commands, bug-diagnosis, merge-conflict-resolver, context-economy, decision-log, ui-conventions]
+    # that touch a screen (shared components, controls, the states to capture, the design plan);
+    # design-system (#387): the tokens it builds with, the ones the ui_reviewer checks against
+    skills: [long-commands, bug-diagnosis, merge-conflict-resolver, context-economy, decision-log, ui-conventions, design-system]
     system_prompt: |
       You are a senior software engineer. Make small, cohesive changes to the production code
       that follow the architecture and conventions of the existing code.
@@ -1244,6 +1245,28 @@ steps:
       failed capture, or no screen listed), review the diff of the styles and markup instead:
       `git diff {{ inputs.base_branch }}...{{ steps.develop.output.branch }} -- src/renderer/`.
       Judge only what the change touched, never the rest of the app, and never the code's logic.
+      For each screenshot (or each changed screen, without screenshots), go through the fixed
+      checklist of ui-conventions and mark each item pass or fail with one line of evidence:
+      the 5-second test (the one message the screen gives and what leads; none, or buried, is
+      blocking), the text budget (a one-line title and at most two lines before "more"), numbers
+      as visuals, nothing printed by default that only experts need, one primary action per area,
+      native controls themed, targets of at least 24 x 24 px, full screen for canvas and map views,
+      empty, loading and error states in the evidence, nothing cut or overlapping; then the design
+      items: copy, motion, decoration, focus and the minimum window size (a breach:
+      `convention: ui-conventions: design`). Write each screen in `screens`: `screenshot`,
+      `message` (its 5-second message), `weakness` (its biggest weakness: there always is one) and
+      `checklist` (`item`, `pass`, `evidence`), also when you approve with no finding.
+      For a data-heavy screen (lists, reports, charts, the city), say whether the evidence shows
+      production-like volume (the large-project fixture): with only small data, set
+      `small_data: true` on the screen and add a non-blocking UI finding asking for the real-scale state.
+      {% if shots and (shots.axe_findings or []) | length %}
+      The deterministic checks ran before you (axe-core `color-contrast` and `target-size` on each
+      captured state, the native-control scan; `baseline: true` = the original side has it too,
+      never blocking). Keep each one in `ui_findings`, or dismiss it in `dismissed` with a written
+      `reason` (a false positive, a screen the change did not touch); a finding you neither keep nor
+      dismiss with a reason is a review left unfinished:
+      {{ shots.axe_findings | to_yaml }}
+      {% endif %}
       List each problem in `ui_findings` (`element`, `problem`, `convention`: the rule of either skill
       it breaks, `screenshot`: the file it shows in, `blocking`: true when it makes the screen hard
       to read or use, false for polish); an empty list when there is none.
@@ -1321,6 +1344,49 @@ steps:
               convention: { type: string }
               screenshot: { type: string }
               blocking:   { type: boolean }
+              # a deterministic check's finding (#387, src/ui-review-checks.js): its rule (axe's
+              # id or native-control), where it came from (axe, markup), and a baseline (the
+              # original side has it too: a ratchet, never blocking)
+              rule:       { type: string }
+              source:     { type: string }
+              baseline:   { type: boolean }
+    # the ui_reviewer's own answer (#387): no rubber-stamp approval, every screen gets its
+    # 5-second message, its biggest weakness and each checklist item pass/fail with one line of
+    # evidence; the deterministic findings it drops go to `dismissed` with a reason
+    agent_output_schema:
+      ui_reviewer:
+        required: [screens]
+        properties:
+          screens:
+            type: array
+            minItems: 1
+            items:
+              type: object
+              required: [screenshot, message, weakness, checklist]
+              properties:
+                screenshot: { type: string, minLength: 1 }
+                message:    { type: string, minLength: 1 }
+                weakness:   { type: string, minLength: 1 }
+                small_data: { type: boolean }
+                checklist:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [item, pass, evidence]
+                    properties:
+                      item:     { type: string, minLength: 1 }
+                      pass:     { type: boolean }
+                      evidence: { type: string, minLength: 1 }
+          dismissed:
+            type: array
+            items:
+              type: object
+              required: [element, reason]
+              properties:
+                rule:    { type: string }
+                element: { type: string }
+                reason:  { type: string, minLength: 1 }
     transitions:
       # code findings, with the blocking UI findings when there are, go back to develop in one turn;
       # the UI is sent back once (vars.ui_review_returned), like evidence did before #151;

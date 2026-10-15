@@ -425,7 +425,30 @@ which the software-development developer and evidence agents load (#111). The de
 (colours, spacing scale, typography, radius, alignment grid, from the `:root` block of
 `style.css`) are in the separate [`design-system`](../../skills/design-system/SKILL.md) skill (#151);
 ai-development-local-hero's `ui_reviewer` reviews the screenshots against both. A token added or
-changed in `style.css` goes into that skill too. In this app:
+changed in `style.css` goes into that skill too.
+
+How a screen is built and reviewed (#387):
+- **Build**: ai-development-local-hero's developer loads both skills (`ui-conventions` and
+  `design-system`): every colour, gap, size and radius comes from the `:root` tokens. The design
+  section of `ui-conventions` (adapted from Anthropic's `frontend-design`, credited in
+  `THIRD_PARTY_NOTICES.md`; the tokens always win) sets the copy, motion, decoration and quality
+  floor rules; its developer-only part, *plan before the markup* (`role_sections`), asks for a short
+  plan per new screen in the decision log: the 5-second message, what leads, the type roles and
+  token colours, a text wireframe.
+- **Capture**: `scripts/screenshot.js` runs the deterministic checks on each captured state
+  (`scripts/screenshot/checks.js`): axe-core's `color-contrast` and `target-size` rules and the
+  visible native controls (a bare `<select>`, date or datetime-local field), into
+  `<name>.<side>.checks.json` beside the PNG. The screenshots step turns them into `axe_findings`
+  (`src/ui-review-checks.js`): a finding the original side has too is a baseline (a ratchet), never
+  blocking. A data-heavy screen adds a real-scale state from the shared `largeProjectFixture`
+  (`scripts/screenshot/helpers.js`; e.g. `--view project --tab architecture --mode large`).
+- **Review**: the `ui_reviewer` gets the `axe_findings` in its prompt and keeps each one in
+  `ui_findings` or dismisses it with a written reason (`dismissed`). Per screenshot it marks every
+  item of the readability checklist and the design items pass or fail with one line of evidence,
+  and writes the screen's 5-second message and its biggest weakness (`screens`, required by its
+  `agent_output_schema`: no "approved, 0 findings" without them).
+
+In this app:
 
 - **Reuse what `style.css` has**: `.btn` (`.primary`, `.ghost`, `.sm`; `.ghost.danger` red for a
   destructive action, `.warn-ghost` amber for one that holds work back, `.btn-icon` with an icon before

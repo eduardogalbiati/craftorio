@@ -600,6 +600,8 @@ function mockValue(s, key, h) {
     case 'array': {
       if (key === 'preexisting_failures' && !h.sequences?.preexisting_failures) return [];
       if (key === 'ui_findings' && !h.sequences?.ui_findings) return [];
+      // the ui_reviewer's dismissed deterministic findings (#387): none in a simulated review
+      if (key === 'dismissed') return [];
       // sequences.files_changed: [[...files of visit 1], ...] (#340: the languages a run changed)
       const files = key === 'files_changed' && h.sequences?.files_changed;
       if (Array.isArray(files) && files.length) return [...files[Math.min(h.visit - 1, files.length - 1)]];

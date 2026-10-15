@@ -8,6 +8,14 @@ appears once, in its latest form, naming what it replaced. The hard rules of
 [AGENTS.md](../../AGENTS.md) are not repeated here. This is not the `decision-log` skill (a run's
 own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
 
+- **2026-10-14** (#387): the UI review must catch screens that are not made for a human to read
+  (2026-10-13), so the developer builds with `design-system` beside `ui-conventions`, whose design
+  section is adapted from Anthropic's `frontend-design` (the app's tokens always win), and the UI
+  reviewer's rubric has the same items: a pass/fail line of evidence per item and per screenshot,
+  the 5-second message and the biggest weakness even on an approval, and the axe-core findings
+  kept or dismissed with a reason. The UI reviewer's model stays the workflow's default
+  (Sonnet) until the owner has the cost of the UI review on the last 10 UI items and decides
+  whether UI-heavy items get a stronger one.
 - **2026-10-13** (#381, #382): one click analyses a project: "Analyze this project" in the
   Architecture tab runs the project map (the city plan) and the Oracle's analysis together, as one
   run of `project-map.yaml`, with its combined estimate shown first and no human gate (validated

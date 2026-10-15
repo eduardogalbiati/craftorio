@@ -82,8 +82,13 @@ What a screen does is not enough: a view can reorder, move and edit everything i
 be hard to use. For each screen, dialog or component the issue adds or changes, add tasks that say
 **how** it looks and is used:
 
-- **What leads**: the primary information of each element (an issue's title, not a file name),
-  what is secondary, and how long text is cut (ellipsis, full text on hover).
+- **What leads**: the screen's one message (what a person gets from it in five seconds), the
+  primary information of each element (an issue's title, not a file name), what is secondary, and
+  how long text is cut (ellipsis, full text on hover).
+- **The hierarchy, not only the content**: listing the sections to show is not enough. Say the
+  text budget (a card: a one-line title and at most two lines before "more"), which numbers are
+  shown as bars, scores or chips, and what sits behind "more" or an ⓘ (caveats, commands, raw
+  lists only experts need).
 - **Which controls**: a select or segmented toggle for a fixed list, a checkbox or switch for a
   flag, a badge for a state, text only for free values; where each edit happens (inline, an Edit
   form with Save/Cancel, a toggle saved at once).

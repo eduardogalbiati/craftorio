@@ -1,7 +1,7 @@
 // The one JSON Schema validator (#338): step outputs (src/engine/run/outputs.js), the channels'
 // arguments and results (src/service/contract.js) and the city plan (src/shared/city-model.js, #371).
 // A small subset, the keywords the app uses: type (one or a list; 'null' included), enum, required,
-// properties, additionalProperties (false or a schema), items, minLength/maxLength, pattern,
+// properties, additionalProperties (false or a schema), items, minItems (#387), minLength/maxLength, pattern,
 // minimum/maximum, oneOf. A `title` names the value in a pattern's refusal ("runId: not a valid run
 // id"); other keywords (description, ...) are ignored. validateSchema(value, schema, path) returns
 // the errors as '<path>: <rule>' strings, empty when the value matches; an absent (undefined)
@@ -68,6 +68,7 @@
         }
       }
     }
+    if (Array.isArray(v) && s.minItems != null && v.length < s.minItems) errs.push(`${label(p)}: at least ${s.minItems} item${s.minItems === 1 ? '' : 's'}`);
     if (Array.isArray(v) && s.items) v.forEach((x, i) => validateSchema(x, s.items, `${p}[${i}]`, errs));
     if (Array.isArray(s.oneOf)) {
       const matching = s.oneOf.filter((alt) => !validateSchema(v, alt, p).length).length;

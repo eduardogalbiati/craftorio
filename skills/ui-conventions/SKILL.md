@@ -1,10 +1,11 @@
 ---
 name: ui-conventions
-description: How a screen change is built, captured and checked for how it looks and is used, not only for what it does - reuse the project's shared components, controls that follow the data, state as badges, the primary information first, explicit Save/Cancel; the interaction states to capture; and the visual review of the screenshots (ui_findings). Use when a change touches a screen, a dialog, a component or styles.
-summary: "UI changes: shared components, controls that follow the data, states to capture, and the visual review of the screenshots (ui_findings)"
+description: How a screen change is built, captured and checked for how it looks and is used, not only for what it does - reuse the project's shared components, controls that follow the data, state as badges, the primary information first, explicit Save/Cancel; a readability checklist (the 5-second test, a text budget, themed native controls, 24 px targets); a design section (copy, motion, decoration, quality floor) with a plan before the markup for the developer; the interaction states to capture; and the visual review of the screenshots (ui_findings, a pass/fail line per checklist item). Use when a change touches a screen, a dialog, a component or styles.
+summary: "UI changes: shared components, controls that follow the data, a readability checklist, a design section, states to capture, and the visual review of the screenshots (ui_findings)"
 used_by: "developer (software-development workflows, when the change touches the UI); evidence (the visual review); ui_reviewer (ai-development-local-hero, with design-system)"
-# "## Developer: ..." reaches only the developer agent's prompt (#300)
-role_sections: [developer]
+# "## Developer: ..." reaches only the developer agent's prompt (#300); "## Evidence and UI
+# reviewer: ..." only the evidence and ui_reviewer agents' (#387)
+role_sections: [developer, evidence, ui_reviewer]
 ---
 
 # UI conventions
@@ -46,6 +47,40 @@ screen; they are skipped for changes without UI. You run unattended: record a de
   screen's own words ("Removed #279 from the roadmap"), and Undo says why when it can no longer be
   done; it never undoes more than that one action.
 
+## Readability checklist (the developer builds to it, the reviewer marks it)
+
+1. **The 5-second test**: the one message the screen gives, and what leads; none or buried: blocking.
+2. **A text budget**: a card shows a one-line title and at most two lines before "more".
+3. **Numbers as visuals**: bars, scores and coloured chips, not sentences or raw lists.
+4. **Nothing printed by default that only experts need**: caveats and commands behind ⓘ or "more".
+5. **One primary action per area.**
+6. **Native controls themed**: no bare `<select>`, `<input type="date">` or `datetime-local`
+   opening in the system's light colours, no unstyled checkbox.
+7. **Targets a person can hit**: controls of at least 24 × 24 px (WCAG 2.5.8).
+8. **Full screen** for canvas and map views (the city, the 3D run view).
+9. **Empty, loading and error states** in the evidence for a screen that has them.
+10. **Nothing cut, overlapping or out of its box**, with real-scale data too.
+
+## Design (adapted from Anthropic's frontend-design; the tokens win)
+
+The tokens always win (`design-system`, section 1): no new palette, typeface or per-screen style.
+- **Copy**: plain, active, sentence case for labels, buttons and messages. An error says what
+  happened and how to fix it; an empty state, what to do next; nothing apologetic or vague. The
+  tokens' uppercase titles and badges stay.
+- **Motion**: only in answer to a user action, one orchestrated moment per screen at most,
+  `prefers-reduced-motion` respected (3D views too); a hover never makes a canvas flash.
+- **Decoration earns its place**: no gradient, shadow, rule, numbering or hover effect without
+  information; numbering only for a real sequence.
+- **Quality floor**: every control shows its focus (`--focus-ring`) and is keyboard reachable; at
+  the window's minimum size nothing overlaps or is cut.
+
+## Developer: plan before the markup
+
+Per new or reshaped screen, before any markup, a short plan in the decision log: the 5-second
+message and what leads, the type roles and token colours, a text wireframe (`score bar | top 5,
+worst first | more ▸ caveats`). Check it against the checklist, the design rules and weak defaults
+(every section open, numbers as sentences, a native control), then code.
+
 ## Developer: build, log, plan the capture
 
 - Before writing markup, find the closest existing screen and the shared components it uses.
@@ -59,18 +94,33 @@ screen; they are skipped for changes without UI. You run unattended: record a de
   every edit form, menu, empty state and error state the change adds, each with how to reach it
   (e.g. the screenshot command's `--click <css selector>`, a tab, a mode). Keep it to the states
   that change; at most 4 beyond the default view.
+- A data-heavy screen (lists, reports, charts, the city) adds a real-scale state from the shared
+  `largeProjectFixture` (`scripts/screenshot/helpers.js`).
 
-## Evidence: capture the states, then review them
+## Evidence and UI reviewer: capture the states, then review them
 
 - Capture what the plan lists (the default view original and modified, plus each listed state
   modified only), with the project's screenshot command and its click option, into your round
   folder (`evidence_dir`) as `<issue>-<screen>-<state>.original.png` / `.modified.png`. Look at
   each PNG once.
-- Review every UI screenshot against the Conventions section and return `ui_findings`, one per problem:
+- Review every UI screenshot against the Conventions, the readability checklist and the design
+  rules. Per screenshot, even on an approval (`screens` when the output has it): `message`, its
+  5-second message; `weakness`, its biggest weakness (there always is one); `checklist`, each
+  checklist item and design rule (copy, motion, decoration, quality floor) pass or fail with one
+  line of evidence. Only small data on a data-heavy screen: `small_data: true` and a non-blocking
+  finding asking for the real-scale state.
+- The deterministic checks run first (axe-core `color-contrast` and `target-size`, the
+  native-control scan): each of their findings stays in `ui_findings` unless dismissed with a
+  written reason. One the original side has too is a baseline, never blocking.
+- **Not taken from frontend-design**, so never a finding: its palettes and typefaces, and the
+  avoid-list items the tokens prescribe (uppercase 11 px titles and badges, `--mono` data, one
+  `--radius`).
+- Return `ui_findings`, one per problem:
   - `element`: what you look at ("the item's mode", "the Edit form's language field");
   - `problem`: what is wrong, concretely ("free-text box for an enum", "label widths differ, the
     boxes don't line up", "file name in bold, the issue titles only in tooltips");
-  - `convention`: the rule of the Conventions section it breaks;
+  - `convention`: the rule it breaks (`ui-conventions: <rule>`; a design rule:
+    `ui-conventions: design`);
   - `screenshot`: the file it shows in;
   - `blocking`: true when it makes the screen hard to read or use (a wrong control for the data,
     the primary information hidden, a form without Save/Cancel, a broken layout, a missing state
@@ -84,4 +134,5 @@ screen; they are skipped for changes without UI. You run unattended: record a de
 
 - the change uses the shared components and its controls follow the data;
 - the evidence shows the default view and every state the change adds, with realistic data;
-- every UI screenshot was reviewed and its findings are in `ui_findings` (empty when none).
+- every UI screenshot was reviewed: its findings in `ui_findings` (empty when none), its message,
+  its weakness and each checklist item pass or fail with its evidence.

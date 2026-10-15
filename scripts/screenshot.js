@@ -1,5 +1,7 @@
 // UI screenshots for tests and PRs: opens one screen of the app with simulated data, saves a PNG and
 // quits by itself. The caller only chooses what to show; it never writes its own Electron script.
+// Beside each PNG it writes `<name>.checks.json` (#387, scripts/screenshot/checks.js): axe-core's
+// color-contrast and target-size results and the visible native controls, for the UI review.
 //
 //   npx electron scripts/screenshot.js --view <view> [options]      (or: npm run screenshot -- ...)
 //
@@ -27,7 +29,8 @@
 //                      architecture --mode map-refresh: a saved city plan that covers part of the files, #372;
 //                      architecture --mode city: the project city of #373, a demo repository with a city plan;
 //                      architecture --mode city-agents: that city with two simulated runs in progress on it, #374;
-//                      architecture --mode city-large: the city of this repository itself with the POC's plan, #382);
+//                      architecture --mode city-large: the city of this repository itself with the POC's plan, #382;
+//                      architecture --mode large: a latest report of the shared large-project fixture, 60 findings, #387);
 //                      analytics: usage | performance | run | occupancy | agents (performance: a demo git repository and a
 //                      marker; run: AI Development runs, the newest shown; occupancy: 30 days of runs and nights;
 //                      agents: four weeks of the Oracle's, the Product Owner's and the Supervisor chat's turns, #280)
@@ -149,6 +152,7 @@ const {
   demoMissingClis,
   simulateChannels,
 } = require('./screenshot/channels');
+const { writeChecks } = require('./screenshot/checks');
 const { DEMO_REPO, demoBacklog } = require('./screenshot/helpers');
 const { demoOracle, ORACLE_STATES } = require('./screenshot/oracle');
 
@@ -479,6 +483,8 @@ function main() {
     const file = path.join(out, fileName(args));
     fs.writeFileSync(file, (await grab(win)).toPNG());
     console.log(`screenshot: ${file}`);
+    // #387: axe-core and the native-control scan on the same state, beside the PNG
+    await writeChecks(win.webContents, file);
     if (args.caption) {
       recordShot(out, { file, caption: args.caption, commit: sha || gitHead(repo) });
       console.log(`manifest: ${evidence.manifestPath(runOfRound(out))}`);

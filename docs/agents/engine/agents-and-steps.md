@@ -15,11 +15,17 @@ fields (references between steps, agents, transitions, groups) are the named rul
   `test_writer`, the others get the skill without it; `reads: [code-review]` (#300) grants read access to
   that skill's folder and lists it, without injecting its text (no bundled skill uses it since #303 removed the develop step's self-review).
 - `agents: [a, b]` on a step = parallel fan-out → `{ results, succeeded, failed }`, `min_success`.
+  `agent_output_schema: { <agent>: { properties, required } }` (#387) extends the step's
+  `output_schema` for one agent (`stepOutputSchema` in run/outputs.js): code_review's `ui_reviewer`
+  must add `screens` (per screenshot: the 5-second message, the biggest weakness, each checklist
+  item pass/fail with its evidence) and may add `dismissed` (deterministic findings dropped, each
+  with a reason).
   `agent_when: { <agent>: <expr> }` (#151) leaves an agent out of a visit when its expression is
   false (output `skipped`, `min_success` capped at the agents that run); `required_agents: [a]`
   fails the step when one of them did not respond, whatever `min_success` says (`runFanOut`).
   ai-development-local-hero's `code_review` is a parallel fan-out of the `reviewer` and the
-  `ui_reviewer` (read-only, Sonnet, skills `ui-conventions` + `design-system`): `min_success: 1`,
+  `ui_reviewer` (read-only, Sonnet, skills `ui-conventions` + `design-system`; the developer loads
+  the same two since #387, to build with the tokens and the design section): `min_success: 1`,
   `required_agents: [reviewer]` (a failed UI Reviewer never blocks the run), the `ui_reviewer`
   only on a round whose UI change was just captured by `developer_screenshots` (which runs after
   `develop` in every mode for a UI change: screenshots listed or files under `src/renderer/`).

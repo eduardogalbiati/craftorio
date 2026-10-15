@@ -1,8 +1,9 @@
 # Third-party notices
 
 Multiagent Orchestrator is released under the MIT License (see [LICENSE](LICENSE)). Some of its
-bundled skills and workflows are adapted from other MIT-licensed projects. The MIT License asks
-that their copyright notice and permission notice travel with the code, so they are listed here.
+bundled skills and workflows are adapted from other open-source projects, under the MIT License or
+the Apache License 2.0. Both ask that the source's notice travel with the adapted work, so each
+source is listed here with its license.
 
 Libraries installed through npm keep their own licenses in `node_modules`; they are not listed here.
 
@@ -58,6 +59,20 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+## Adapted sources (Apache 2.0)
+
+### anthropics/skills: frontend-design
+
+- Source: https://github.com/anthropics/skills (`skills/frontend-design`)
+- Copyright Anthropic, PBC
+- License: Apache License, Version 2.0 (https://www.apache.org/licenses/LICENSE-2.0)
+- Used by:
+  - skills: `ui-conventions` (the design section: plan before the markup, copy, motion,
+    decoration, quality floor), rewritten in this project's words and adapted to its design
+    tokens; no text is copied.
+- Changes: the source's palettes, typefaces and the parts of its avoid-list that this app's tokens
+  prescribe (uppercase 11 px titles and badges, `--mono` data, one `--radius`) were left out.
 
 ## References (structure only, no notice needed)
 

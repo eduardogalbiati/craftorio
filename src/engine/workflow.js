@@ -48,6 +48,7 @@ const {
   methods: outputsMethods,
   parseTestRequest,
   repeatKey,
+  stepOutputSchema,
   takeHandoff,
   validateSchema,
 } = require('./run/outputs');
@@ -647,7 +648,7 @@ class WorkflowRun extends EventEmitter {
 
   async runAgentStep(step, st, agentName) {
     const visit = st.visits;
-    const schema = step.output_schema;
+    const schema = stepOutputSchema(step, agentName);
     // evidence_dir: where this visit's screenshots go (#146), <run_dir>/evidence/<step>/round-<visit>
     const scope = { ...this.ctx, iteration: st.iteration, delegate_result: st.delegate_result, agent: agentName, evidence_dir: evidence.roundDir(this.runDir, step.id, visit) };
     // `test_map: true` (#219): the code → tests map of the agent's checkout, as {{ test_map }}
@@ -850,6 +851,7 @@ module.exports = {
   parseTokens,
   render,
   repeatKey,
+  stepOutputSchema,
   takeHandoff,
   validateSchema,
   WorkflowRun,

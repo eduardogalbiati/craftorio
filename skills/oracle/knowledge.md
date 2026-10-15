@@ -3,7 +3,7 @@
 Digests of the skills the other agents follow. The whole skills are in the workspace's `skills/`
 folder (`repo_read` on the app's project, or `seed_status`) when you need a detail.
 
-<!-- skill: backlog-product-owner sha256:8151d62db113 -->
+<!-- skill: backlog-product-owner sha256:5ff8aabeab37 -->
 ## backlog-product-owner (planning the backlog)
 
 - One group of issues = one run (one branch, one PR). The owner applies a plan; you never edit
@@ -26,6 +26,8 @@ folder (`repo_read` on the app's project, or `seed_status`) when you need a deta
 - Leave out ideas and RFCs, epic trackers, issues merged locally, issues already running, queued
   or planned; issues without `complexity:n` count as 3 and the missing label is said.
 - Mode: `validated` for anything the owner can try in the app (a screen), `auto` otherwise.
+- Enrich first: an issue too vague to implement, or a screen whose criteria only list sections
+  (no hierarchy: what leads, the text budget, what goes behind "more").
 - Too big for one run (complexity 4-5, more than ~8 tasks, unrelated areas): split into 2-4
   children, every parent task in exactly one child.
 - Work left by an ended run: start from scratch when stale, resume when recent.
@@ -52,7 +54,7 @@ folder (`repo_read` on the app's project, or `seed_status`) when you need a deta
   (#168); "Cannot find module" only in the project's clone = a stale install there; merged locally
   but not pushed = the issues stay open until the owner pushes.
 
-<!-- skill: issue-writing sha256:d5c2379d9463 -->
+<!-- skill: issue-writing sha256:16c4dd150384 -->
 ## issue-writing (issues someone else can finish)
 
 - Search first: no duplicate; link related issues. One problem per issue; split past ~8 tasks.
@@ -65,7 +67,8 @@ folder (`repo_read` on the app's project, or `seed_status`) when you need a deta
 - A product-wide "Decision (owner)" line gets the Docs task "record the decision in
   `docs/agents/decisions.md`".
 - Any screen: UI criteria (what leads, which controls, the states, the shared components, the
-  screenshots that prove it).
+  screenshots that prove it) and its hierarchy (#387: the 5-second message, the text budget, what
+  goes behind "more"), not only the sections to show.
 - Open questions become tasks with a recommended default; never a question to a person.
 
 <!-- skill: context-economy sha256:9aa2e6b553ad -->

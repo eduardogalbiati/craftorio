@@ -2,7 +2,8 @@
 // E2E suite's demo workspace through scripts/screenshot.js: the demo project's repository, issues and
 // epics (demoBacklog), a run's events written as the engine writes them (writeEvents: each with its
 // run_id and seq), a git repository of demo commits (gitRepo), a solid-colour PNG, the project
-// folder's package.json and the demo screenshots of a simulated run (demoEvidence). Plain Node: no
+// folder's package.json, the demo screenshots of a simulated run (demoEvidence) and a project at
+// production scale (largeProjectFixture, #387: 1,000+ files, 50+ findings, 300+ runs). Plain Node: no
 // Electron needed (demoEvidence takes the capture page's grab()).
 
 const fs = require('fs');
@@ -134,12 +135,63 @@ function writeDemoPackage(folder) {
   fs.writeFileSync(path.join(folder, 'package.json'), JSON.stringify({ name: 'demo-app', private: true, scripts: { start: 'node server.js' } }, null, 2));
 }
 
+// #387: a project at production scale, the same on every call (a seeded generator, no clock): 1,200
+// files in nested folders of four languages, 60 findings of the architecture report's shape
+// ({ kind, title, files, severity, evidence, refactor }) and 320 runs of every status. A seed of a
+// data-heavy screen (lists, reports, charts, the city) uses it for its real-scale state, where
+// density and layout problems show (the 31-file demo hides them).
+const LARGE_AREAS = [
+  ['src/engine', 'js', 260], ['src/renderer/views', 'js', 300], ['src/service', 'ts', 180], ['tools/analysis', 'py', 140],
+  ['services/billing', 'go', 120], ['docs/guides', 'md', 110], ['test', 'js', 90],
+];
+const LARGE_KINDS = ['duplicated-rule', 'oversized-unit', 'test-gap', 'layer-breach', 'dead-code', 'cyclic-dependency'];
+const LARGE_STATUSES = ['success', 'success', 'success', 'failed', 'cancelled', 'interrupted', 'success', 'waiting'];
+function largeProjectFixture() {
+  let s = 387;
+  const rand = (n) => { s = (s * 1103515245 + 12345) % 2147483648; return s % n; };
+  const files = LARGE_AREAS.flatMap(([dir, ext, count]) => Array.from({ length: count }, (_, i) => ({
+    path: `${dir}/${['core', 'io', 'model', 'view', 'util'][i % 5]}/${dir.split('/').pop()}-part-${i}.${ext}`,
+    language: { js: 'JavaScript', ts: 'TypeScript', py: 'Python', go: 'Go', md: 'Markdown' }[ext],
+    lines: 20 + rand(900),
+    commits: 1 + rand(60),
+  })));
+  const findings = Array.from({ length: 60 }, (_, i) => {
+    const kind = LARGE_KINDS[i % LARGE_KINDS.length];
+    const a = files[rand(files.length)];
+    const b = files[rand(files.length)];
+    return {
+      kind,
+      title: `${kind.replace(/-/g, ' ')} in ${a.path.split('/').pop()}${i % 7 === 0 ? `, a long title that runs past one line to show how the card cuts it (${i + 1})` : ''}`,
+      files: [{ path: a.path, lines: `1-${a.lines}` }, ...(i % 3 ? [] : [{ path: b.path, lines: `1-${b.lines}` }])],
+      severity: ['high', 'medium', 'low'][rand(3)],
+      evidence: `${a.lines} lines, changed in ${a.commits} commits; ${1 + rand(9)} other files change with it.`,
+      refactor: `Move the ${kind.replace(/-/g, ' ')} out of ${a.path.split('/').pop()} into its own module.`,
+    };
+  });
+  const day = Date.UTC(2026, 9, 14, 23);
+  const runs = Array.from({ length: 320 }, (_, i) => {
+    const started = new Date(day - i * 3 * 3600000 - rand(3600000));
+    const minutes = 5 + rand(180);
+    const stamp = started.toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15);
+    return {
+      id: `${stamp}-l${String(i).padStart(7, '0')}`,
+      workflow: ['ai-development-local-hero', 'software-development', 'refactor'][i % 3],
+      status: LARGE_STATUSES[rand(LARGE_STATUSES.length)],
+      started_at: started.toISOString(),
+      finished_at: new Date(started.getTime() + minutes * 60000).toISOString(),
+      cost_usd: Math.round(rand(2500)) / 100,
+    };
+  });
+  return { project: 'large-demo-app', files, findings, runs };
+}
+
 module.exports = {
   DEMO_ISSUES,
   DEMO_REPO,
   demoBacklog,
   demoEvidence,
   gitRepo,
+  largeProjectFixture,
   solidPng,
   writeDemoPackage,
   writeEvents,

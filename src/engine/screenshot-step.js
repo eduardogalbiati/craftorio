@@ -8,7 +8,9 @@
 // a timeout or a crash end up in the output (`errors`, `reason`, `message`), and the run goes on to
 // the next step (the developer_check gate, which says what failed). Nothing is retried by an agent.
 // Output: { kind: 'screenshots', folder, round, dir, taken, screens, screenshots, errors, new_elements,
-// reason, message }. new_elements (#185): screens whose original side failed only because a --click /
+// axe_findings, reason, message }. axe_findings (#387, src/ui-review-checks.js): the axe-core and
+// native-control findings of each modified side (the `<name>.<side>.checks.json` the capture writes),
+// a baseline when the original side has them too; the ui_reviewer's prompt lists them. new_elements (#185): screens whose original side failed only because a --click /
 // context / paste selector matched nothing ("screenshot: nothing matches <selector>") while the
 // modified side was taken: an element the change adds, counted apart in the message, not an error.
 // Each capture waits for the machine-wide screenshot slot (#199): one Electron screenshot at a time.
@@ -18,6 +20,7 @@ const path = require('path');
 const evidence = require('../evidence');
 const { killTree, OWN_GROUP, resolveCommand } = require('./providers');
 const { runShim } = require('../shell');
+const { readChecks, screenChecks } = require('../ui-review-checks');
 const {
   acquireSlot,
   SCREENSHOT_SLOT,
@@ -125,7 +128,7 @@ async function captureScreenshots({ entries, cwd, runDir, folder, round, base, e
   const dir = runDir ? evidence.roundDir(runDir, folder, round) : null;
   const out = {
     kind: 'screenshots', folder, round, dir: dir ? path.relative(runDir, dir).split(path.sep).join('/') : null,
-    taken: 0, screens: 0, screenshots: [], errors: [], new_elements: [], reason: null, message: '',
+    taken: 0, screens: 0, screenshots: [], errors: [], new_elements: [], axe_findings: [], reason: null, message: '',
   };
   const finish = () => {
     if (!out.taken && !out.reason) out.reason = `every capture failed (${out.errors[0]?.name}: ${out.errors[0]?.error})`;
@@ -181,6 +184,9 @@ async function captureScreenshots({ entries, cwd, runDir, folder, round, base, e
       if (r.code === 2 || signal?.aborted) break;
     }
     if (shot) out.screens++;
+    // #387: the deterministic checks of the modified side, baselines from the original side
+    const checked = modified ? readChecks(path.join(dir, `${e.name}.modified.png`)) : null;
+    if (checked) out.axe_findings.push(...screenChecks({ modified: checked, original: readChecks(path.join(dir, `${e.name}.original.png`)), screen: `${e.name}.modified.png` }));
     if (signal?.aborted) break;
   }
   return finish();

@@ -99,17 +99,18 @@ function resolveSkill(dirs, id) {
 }
 
 // `role_sections: [test_writer]` (#300): a "## Test writer: ..." or "## 2. Test writer: ..." section
-// (up to the next "## ") reaches only the agent of that name; without a reader every section stays.
-const sectionRole = (part) => {
+// (up to the next "## ") reaches only the agent of that name; "## Evidence and UI reviewer: ..." (#387)
+// reaches both; without a reader every section stays.
+const sectionRoles = (part) => {
   const m = part.match(/^## (?:\d+\.\s*)?([A-Za-z][A-Za-z ]*):/);
-  return m ? m[1].trim().toLowerCase().replace(/\s+/g, '_') : null;
+  return m ? m[1].trim().toLowerCase().split(/\s+and\s+/).map((r) => r.replace(/\s+/g, '_')) : [];
 };
 function readerBody(skill, reader) {
   const roles = Array.isArray(skill.meta?.role_sections) ? skill.meta.role_sections.map(String) : [];
   if (!roles.length || typeof reader !== 'string' || !reader) return skill.body; // also `.map(skillPrompt)`'s index
   return skill.body.split(/^(?=## )/m).filter((part) => {
-    const role = sectionRole(part);
-    return !role || !roles.includes(role) || role === reader;
+    const addressed = sectionRoles(part).filter((r) => roles.includes(r));
+    return !addressed.length || addressed.includes(reader);
   }).join('');
 }
 

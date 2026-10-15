@@ -2,7 +2,8 @@
 // Step outputs and their validation (#250, from src/engine/workflow.js): `extractJson` reads the
 // ```json block of an answer, `validateSchema` (src/json-schema.js) checks it against the step's `output` schema (the
 // retry prompt `retryPrompt` asks for a fix), `parseTestRequest` reads a ```run-tests block,
-// `takeHandoff` splits the answer from its ```handoff note; the repeat keys of an output the stall
+// `takeHandoff` splits the answer from its ```handoff note; `stepOutputSchema` gives one agent's
+// schema (a fan-out agent's `agent_output_schema` extension, #387); the repeat keys of an output the stall
 // check compares (`decisionKey`, `answeredKey`, `repeatKey`).
 // Methods: the run's declared `outputs:` (`computeOutputs`, #134), `save_as` files (`saveOutput`),
 // `preexisting_failures` reported by a step (#101) and the decision log `decisions.tsv`
@@ -44,6 +45,21 @@ function parseTestRequest(text) {
 
 // the shared validator (#338, src/json-schema.js): its paths start at `output`
 const { validateSchema } = require('../../json-schema');
+
+// The schema one agent of a step answers with (#387): the step's `output_schema`, extended for a
+// fan-out agent by `agent_output_schema: { <agent>: { properties, required } }` (its properties
+// added, its required fields appended). The ui_reviewer of code_review adds its per-screen lines.
+function stepOutputSchema(step, agentName) {
+  const base = step?.output_schema;
+  const extra = agentName ? step?.agent_output_schema?.[agentName] : null;
+  if (!base || !extra) return base;
+  return {
+    ...base,
+    ...extra,
+    properties: { ...(base.properties || {}), ...(extra.properties || {}) },
+    required: [...new Set([...(base.required || []), ...(extra.required || [])])],
+  };
+}
 
 // What the transitions decide on: enum, boolean and number fields of the schema (not the
 // free text, which an LLM rewords on every call). Without a schema, the whole answer.
@@ -230,6 +246,7 @@ module.exports = {
   methods,
   parseTestRequest,
   repeatKey,
+  stepOutputSchema,
   takeHandoff,
   validateSchema,
 };

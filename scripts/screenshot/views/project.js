@@ -20,10 +20,13 @@
 // (the checkout the screenshot runs from, about 1,400 drawn files) with the proof of concept's city
 // plan (poc/project-map/plans/multiagent-orchestrator.city-plan.json), the one the POC's overview
 // drew, so the two can be compared side by side. Its facts come from the checkout's git history.
+// #387: --mode large is the Architecture tab with a latest report of production-like volume (the
+// 60 findings and seven areas of the shared largeProjectFixture, helpers.js).
 
 const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const { largeProjectFixture } = require('../helpers');
 const { demoPerformanceRuns } = require('./analytics');
 const { demoConflictMap } = require('./backlog');
 const { demoLocalMerge } = require('./releases');
@@ -160,6 +163,19 @@ const demoCityAgents = (projectId) => ({
 
 const LARGE_PLAN = path.join('poc', 'project-map', 'plans', 'multiagent-orchestrator.city-plan.json');
 
+// #387: --mode large, the Architecture tab at a real scale: the latest report holds the 60 findings of
+// the shared large-project fixture (scripts/screenshot/helpers.js), over its seven areas
+function demoLargeReport(ws, projectId, head) {
+  const { files, findings } = largeProjectFixture();
+  const areas = [...new Set(files.map((f) => f.path.split('/').slice(0, 2).join('/')))]
+    .map((area) => ({ area, verdict: `${files.filter((f) => f.path.startsWith(`${area}/`)).length} files; ${findings.filter((x) => x.files[0].path.startsWith(`${area}/`)).length} findings.` }));
+  const id = '2026-10-10T09-00-00-000Z';
+  fs.writeFileSync(path.join(ws.root, 'architecture', projectId, `${id}.json`), JSON.stringify({
+    id, date: '2026-10-10T09:00:00.000Z', project_id: projectId, head, costUsd: 1.84, tokens: { input: 64000, output: 9800 }, simulated: false,
+    report: { summary: `${files.length} files in ${areas.length} areas; the engine and the views carry most of the findings.`, areas, findings },
+  }, null, 2));
+}
+
 function seedArchitecture(args, ws, project, { appDir, projects }) {
   if (args.mode === 'not-git') return;
   if (args.mode === 'city-large') { // #382: this repository, with the POC's plan
@@ -172,6 +188,7 @@ function seedArchitecture(args, ws, project, { appDir, projects }) {
   const commits = args.mode === 'empty' ? [] : city ? CITY_COMMITS : ARCH_COMMITS;
   const head = demoArchitectureRepo(project.folder, commits);
   if (head && args.mode !== 'never') demoArchitectureReports(ws, project.id, { commit: head, date: '2026-09-15T10:00:00Z' });
+  if (head && args.mode === 'large') demoLargeReport(ws, project.id, { commit: head, date: '2026-09-15T10:00:00Z' });
   if (args.mode === 'map-refresh') demoCityPlan(ws, project.id);
   if (city) require('../../../src/oracle-architecture').writePlan(path.join(ws.root, 'architecture'), project.id, CITY_PLAN, '2026-10-01T09:00:00.000Z');
 }
@@ -226,7 +243,7 @@ async function afterOpen({ args, click }) {
 
 module.exports = {
   afterOpen,
-  modes: ['analyzing', 'city', 'city-agents', 'city-large', 'empty', 'error', 'loading', 'map-refresh', 'never', 'no-runs', 'not-git'],
+  modes: ['analyzing', 'city', 'city-agents', 'city-large', 'empty', 'error', 'large', 'loading', 'map-refresh', 'never', 'no-runs', 'not-git'],
   open,
   run: true,
   seed,

@@ -953,7 +953,7 @@ What is shared by a family lives in a suffix-less skill referenced with `uses:`.
 | `deploy-{gh,gl}` | deployer | Preview and production deploy tracking and cleanup |
 | `design-doc-writing` | arena, Write & Review (`document_skill`) | Design doc (after Google's practice): context, goals/non-goals, design with trade-offs, alternatives, failure modes, cross-cutting concerns, rollout, rubric |
 | `design-sketch` | arena (`document_skill: design-sketch`) | Usage-first design: usage snippets, types and signatures, trade-offs, alternatives, design red-flag screen, rubric |
-| `design-system` | ui_reviewer (ai-development-local-hero, code_review fan-out) | UI changes: the app's design tokens (colours, spacing, typography, alignment) from src/renderer/style.css |
+| `design-system` | developer (ai-development-local-hero: builds with the tokens); ui_reviewer (ai-development-local-hero, code_review fan-out: checks against them) | UI changes: the app's design tokens (colours, spacing, typography, alignment) from src/renderer/style.css, to build with and to review against |
 | `e2e-scenarios` | via `uses` | User-visible changes only, at most 3 scenarios per issue reusing existing steps; development runs write and parse-check them (pending); the release workflow runs them all; per-scenario status with reason |
 | `e2e-test-writer-{js,python,go,java,csharp,rust}` | test writer, E2E runner | E2E/BDD framework detection, feature folder, the parse check of a development run and the release run's commands |
 | `implementation-evidence` | evidence | Evidence by kind of change (screenshots, HTTP request/response, CLI output, logs), local and simulated only, one list per issue |
@@ -976,7 +976,7 @@ What is shared by a family lives in a suffix-less skill referenced with `uses:`.
 | `run-supervisor` | the AI supervisor (a failed step, or on demand) | Plain-words account of a run, root cause from its logs, a safe recovery (fix the output, retry with an instruction, go to an allowed step, resume, or hand over to a human) |
 | `test-plan-writing` | arena (`document_skill`) | Test plan (after ISO/IEC/IEEE 29119-3): risk-based approach, traceability to requirements, entry/exit criteria, environment and data, rubric |
 | `testing-principles` | via `uses` | Seams first, no tautological or implementation-coupled tests, mocks only at boundaries, red before green for bug fixes, each suite run once, pre-existing failures reported instead of chased |
-| `ui-conventions` | developer (software-development workflows, when the change touches the UI); evidence (the visual review); ui_reviewer (ai-development-local-hero, with design-system) | UI changes: shared components, controls that follow the data, states to capture, and the visual review of the screenshots (ui_findings) |
+| `ui-conventions` | developer (software-development workflows, when the change touches the UI); evidence (the visual review); ui_reviewer (ai-development-local-hero, with design-system) | UI changes: shared components, controls that follow the data, a readability checklist, a design section, states to capture, and the visual review of the screenshots (ui_findings) |
 | `unit-test-writer-{js,python,go,java,csharp,rust}` | test writer | Framework detection, commands, idioms per language |
 <!-- /generated:skills -->
 

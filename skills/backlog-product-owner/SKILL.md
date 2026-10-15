@@ -172,6 +172,11 @@ give the reason in `mode_reason` (one sentence, shown under the item in the Road
 An issue too vague to implement without guessing (no acceptance criteria, no expected behaviour,
 several readings) goes to `enrich` with what is missing, instead of into a group.
 
+An issue with a screen whose criteria only list the sections to show is too vague too: enrich it
+with its hierarchy, what leads the screen (its one 5-second message), the text budget of its cards
+(a one-line title, at most two lines before "more") and what goes behind "more" or an ⓘ (caveats,
+commands, expert details). A screen built from a list of sections prints them all at once.
+
 ## Split what is too big
 
 Big issues are where runs fail or cost the most: an issue of 14 tasks went through three review
