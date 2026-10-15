@@ -23,7 +23,9 @@ orchestrator:
   - `fix_output`: rebuild the output from the agent's answer, accepted only if it matches the step's schema;
   - `retry`: run the step again with an instruction added to the agent's prompt;
   - `goto`: continue at one of the step's own targets (never a human gate);
-  - `ask_human`: an approval with the explanation (retry with the suggestion / stop);
+  - `ask_human`: an approval with the explanation (retry with the suggestion / stop); when the
+    supervisor says a retry would fail the same way (`retry_would_fail`), the gate offers
+    "Resume from <step>" at the step it names instead of Retry, and still waits for the person;
   - `fail`: fall back to `on_error`, or end the run.
   It shows up as a `supervisor` session, and its decisions in the orchestrator log
   (`supervisor.decision` events).

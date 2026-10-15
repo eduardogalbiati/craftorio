@@ -23,11 +23,11 @@ function commit(dir, message, text) {
 }
 
 // `feat` and main both appended a scenario to FILE; `feat` is checked out and its snapshot taken
-async function conflicting(t) {
+async function conflicting(t, base = BASE) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'paths-380-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5 }));
   git(dir, 'init', '-q');
-  commit(dir, 'base', BASE);
+  commit(dir, 'base', base);
   git(dir, 'switch', '-q', '-c', 'feat');
   commit(dir, 'branch', BASE + BRANCH_SIDE);
   git(dir, 'switch', '-q', 'main');
@@ -58,5 +58,29 @@ test('#380 changedTestFiles: a pure combination in the other order is accepted',
   fs.writeFileSync(path.join(dir, FILE), BASE + BRANCH_SIDE + MAIN_SIDE);
   git(dir, 'add', FILE);
   git(dir, 'rebase', '--continue');
+  assert.deepEqual(await check(snap), []);
+});
+
+test('#380 changedTestFiles: a resolution that drops a line both sides kept from the base is still a change', async (t) => {
+  const { dir, snap } = await conflicting(t);
+  fs.writeFileSync(path.join(dir, FILE), (BASE + MAIN_SIDE + BRANCH_SIDE).replace('    Given one\n', ''));
+  git(dir, 'add', FILE);
+  git(dir, 'rebase', '--continue');
+  assert.deepEqual(await check(snap), [FILE]);
+});
+
+test('#380 changedTestFiles: a base without a trailing newline does not refuse a pure combination', async (t) => {
+  const { dir, snap } = await conflicting(t, BASE.trimEnd());
+  fs.writeFileSync(path.join(dir, FILE), BASE + MAIN_SIDE + BRANCH_SIDE);
+  git(dir, 'add', FILE);
+  git(dir, 'rebase', '--continue');
+  assert.deepEqual(await check(snap), []);
+});
+
+test('#380 changedTestFiles: a snapshot taken inside the rebase compares with the rebase\'s original head', async (t) => {
+  const { dir } = await conflicting(t);
+  const snap = await testPaths.snapshot(dir, [FILE]);
+  fs.writeFileSync(path.join(dir, FILE), BASE + MAIN_SIDE + BRANCH_SIDE);
+  git(dir, 'add', FILE);
   assert.deepEqual(await check(snap), []);
 });

@@ -666,6 +666,9 @@ function backlogReport({ data, activeRuns = [], history = [], workflows = [], qu
   return out.join('\n\n');
 }
 
+// a feature file (Gherkin scenarios) named in an issue's text, e.g. features/architecture.feature
+const FEATURE_FILE = /(?:[\w.-]+\/)*[\w.-]+\.feature\b/g;
+
 /**
  * The simulated answer: groups of to-do issues that share a label (complexity at most the calibration's per group),
  * the issues that look like a repo-wide refactor kept apart from the others, and the issues with a
@@ -744,9 +747,6 @@ function mockAnswer({ data, question = '', selection = [], calibration = poCalib
     enrich: todo.filter((i) => String(i.body || '').trim().length < 120).map((i) => ({ issue: i.number, reason: 'The description is too short to implement without guessing.' })),
   };
 }
-
-// a feature file (Gherkin scenarios) named in an issue's text, e.g. features/architecture.feature
-const FEATURE_FILE = /(?:[\w.-]+\/)*[\w.-]+\.feature\b/g;
 
 // #150 (simulated): a group whose issues name a hot file another group of its stage names moves to the
 // next stage without it; each move is a conflict naming the shared hot files. Mutates `planned`.

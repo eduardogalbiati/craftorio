@@ -115,24 +115,38 @@ async function changedTestFiles(snap, { bases = [] } = {}) {
   const changed = files.filter((f) => now[f] !== before[f]);
   const unmerged = new Set(lines(await git([...G, 'diff', '--name-only', '--diff-filter=U'], root)));
   const out = [];
+  // inside a rebase HEAD sits on the base: the branch's side is the rebase's original head
+  const branchHead = (await rebaseOrigHead(root)) || head;
   for (const f of changed) {
     // #380: a conflict the turn's rebase left for someone else (git wrote the markers, not the agent)
     if (unmerged.has(f)) continue;
-    if (now[f] && !(f in snap.dirty) && await combinesBothSides(root, head, exclude, f)) continue;
+    if (now[f] && await combinesBothSides(root, branchHead, exclude, f)) continue;
     out.push(f);
   }
   return out.sort();
 }
 
-const splitLines = (text) => String(text).split('\n').map((l) => l.replace(/\r$/, ''));
+// The commit a rebase in progress started from, or null when no rebase is in progress.
+async function rebaseOrigHead(root) {
+  for (const dir of ['rebase-merge', 'rebase-apply']) {
+    const file = path.resolve(root, await git(['rev-parse', '--git-path', `${dir}/orig-head`], root).catch(() => ''));
+    const sha = (await fs.promises.readFile(file, 'utf8').catch(() => '')).trim();
+    if (sha && await git(['rev-parse', '--verify', '--quiet', `${sha}^{commit}`], root).catch(() => null)) return sha;
+  }
+  return null;
+}
+
+// empty lines are ignored: a trailing newline added or dropped by one side is not a test line
+const splitLines = (text) => String(text).split('\n').map((l) => l.replace(/\r$/, '')).filter((l) => l.trim());
 const blobLines = async (root, blob) => (blob ? splitLines(await git(['cat-file', '-p', blob], root)) : []);
 
 // #380: true when the file in the working tree only combines the branch's version (at `head`) with a
 // base's version, as a merge or rebase resolution does: the file changed on both sides since their
-// merge base, every line of the result comes from one side, and every line either side added is kept
-// (so neither a new test line nor a dropped one passes). Checked against each base ref in turn.
+// merge base, every line of the result comes from one side, every line either side added is kept and
+// every line both sides kept is kept (so neither a new test line nor a dropped one passes). Checked
+// against each base ref in turn. Duplicated and moved lines are not seen (a set comparison).
 async function combinesBothSides(root, head, bases, file) {
-  const result = new Set(splitLines((await fs.promises.readFile(path.join(root, file), 'utf8')).trim()));
+  const result = new Set(splitLines(await fs.promises.readFile(path.join(root, file), 'utf8')));
   for (const base of bases) {
     const fork = await git(['merge-base', head, base], root).catch(() => null);
     if (!fork) continue;
@@ -141,8 +155,9 @@ async function combinesBothSides(root, head, bases, file) {
     const [m, t, o] = await Promise.all([mine, theirs, old].map((b) => blobLines(root, b)));
     const sides = new Set([...m, ...t]);
     const kept = new Set(o);
-    const added = [...sides].filter((l) => !kept.has(l));
-    if ([...result].every((l) => sides.has(l)) && added.every((l) => result.has(l))) return true;
+    const [myLines, theirLines] = [new Set(m), new Set(t)];
+    const required = [...sides].filter((l) => !kept.has(l) || (myLines.has(l) && theirLines.has(l)));
+    if ([...result].every((l) => sides.has(l)) && required.every((l) => result.has(l))) return true;
   }
   return false;
 }
