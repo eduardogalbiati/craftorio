@@ -257,7 +257,7 @@
     const at = (sel) => e.target.closest(sel);
     if (at('[data-rf-prioritize]')) return prioritize;
     if (at('[data-rf-open-architecture]')) return () => openProjectView(cur.id, { tab: 'architecture' });
-    if (at('[data-rf-add]')) return () => { Object.assign(cur, { adding: true, error: null }); render(); cur.box.querySelector('[data-rf-add-target]')?.focus(); };
+    if (at('[data-rf-add]')) return () => { Object.assign(cur, { adding: true, error: null }); render(); cur.box.querySelector('[data-rf-add-target]')?.focus({ preventScroll: true }); };
     if (at('[data-rf-add-cancel]')) return () => { Object.assign(cur, { adding: false, error: null }); render(); };
     if (at('[data-rf-add-save]')) return saveProposal;
     const filter = at('[data-rf-filter]');
@@ -270,7 +270,7 @@
     if (confirm) return () => dismiss(confirm.dataset.rfDismissConfirm);
     if (at('[data-rf-dismiss-cancel]')) return () => { Object.assign(cur, { dismissing: null, error: null }); render(); };
     const ask = at('[data-rf-dismiss]');
-    if (ask) return () => { Object.assign(cur, { dismissing: ask.dataset.rfDismiss, error: null }); render(); cur.box.querySelector('[data-rf-reason]')?.focus(); };
+    if (ask) return () => { Object.assign(cur, { dismissing: ask.dataset.rfDismiss, error: null }); render(); cur.box.querySelector('[data-rf-reason]')?.focus({ preventScroll: true }); };
     return null;
   }
 
