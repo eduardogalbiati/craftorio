@@ -162,3 +162,11 @@ Feature: Settings
     And I search the time zone list for "Tokyo"
     Then the time zone list shows "Asia/Tokyo"
     And the time zone list hides "Europe/London"
+
+  # #405: Settings › Execution's red-base choice (data-testid="base-check-on-red"), setting baseCheck.onRed
+  @issue-405
+  Scenario: Settings › Execution offers what happens when the base goes red, issue + fix item by default
+    Given the app is open
+    When I open "Settings" in the sidebar
+    And I open the "Execution" settings tab
+    Then the red-base choice offers "Off", "Issue only" and "Issue + fix item", with "Issue + fix item" selected
