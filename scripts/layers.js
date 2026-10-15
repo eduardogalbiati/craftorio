@@ -32,6 +32,7 @@ const ENGINE_ROOT_UTILITIES = [
   'src/run-owner.js',
   'src/session-cache.js',
   'src/shell.js',
+  'src/state-file.js',
 ];
 
 // area -> the areas it may require (its own included) and what it holds. A file's area: areaOf.

@@ -13,7 +13,8 @@
 //   insertFrontStage). It never pushes, never answers a gate and never touches a running item.
 // - knownFailures: what the Roadmap shows ("N known failures on the base", backlog:get baseFailures).
 // Store: <workspace>/backlog/base-health/<project id>.json ({ failures, lastGreen }); the logs and
-// issue bodies next to it, in <project id>/. Wired by src/service/areas/base-health.js.
+// issue bodies next to it, in <project id>/ (the store itself: src/engine/base-health-store.js, so
+// the engine records a run's failures without this module). Wired by src/service/areas/base-health.js.
 
 const fs = require('fs');
 const path = require('path');
@@ -22,66 +23,23 @@ const roadmaps = require('./roadmap');
 const { LOCAL } = require('./shared/default-workflow');
 const { prepareBaseWorktree, removeWorktree } = require('./engine/worktree');
 const { suiteEnv } = require('./engine/suite-step');
-const { writeJsonSafe } = require('./state-file');
+const {
+  addSightings,
+  HISTORY,
+  knownFailures,
+  readStore,
+  slug,
+  storeDir,
+  upsert,
+  withStore,
+  writeStore,
+} = require('./engine/base-health-store');
 
 const ON_RED = ['off', 'issue', 'fix'];
-// sightings of a pre-existing failure that file its issue
-const RUNS_FOR_ISSUE = 2;
 const LOG_TAIL_LINES = 60;
-const HISTORY = 20;
 
-const slug = (s) => path.basename(String(s || '')).replace(/[^\w.-]+/g, '-');
-const storeDir = (ws) => path.join(ws, 'backlog', 'base-health');
-const storeFile = (ws, projectId) => path.join(storeDir(ws), `${slug(projectId)}.json`);
-const keyOf = (f) => `${f.file || ''}\n${f.test || ''}`;
 const short = (c) => String(c || '').slice(0, 12) || 'unknown';
 const stamp = (at) => String(at).replace(/[:.]/g, '-');
-
-function readStore(ws, projectId) {
-  try {
-    const s = JSON.parse(fs.readFileSync(storeFile(ws, projectId), 'utf8'));
-    return { failures: Array.isArray(s.failures) ? s.failures : [], lastGreen: s.lastGreen || null };
-  } catch { return { failures: [], lastGreen: null }; }
-}
-const writeStore = (ws, projectId, store) => writeJsonSafe(storeFile(ws, projectId), store, {
-  validate: (s) => (Array.isArray(s?.failures) ? null : 'failures is not a list'),
-});
-
-/** The project's tests failing on its base now: [{ test, file, first_seen, last_seen, runs, issue }]. */
-function knownFailures(ws, projectId) {
-  return readStore(ws, projectId).failures.filter((f) => !f.fixed_at).map((f) => ({ ...f, runs: [...(f.runs || [])], issue: f.issue || null }));
-}
-
-// One update of a project's store at a time (a run's record and a check may end together)
-const locks = new Map();
-function withStore(ws, projectId, fn) {
-  const key = storeFile(ws, projectId);
-  const next = (locks.get(key) || Promise.resolve()).then(() => fn());
-  locks.set(key, next.catch(() => {}));
-  return next;
-}
-
-// The failure's entry in the store, added when new; a fixed one is failing again (its issue is
-// reopened, its first red commit is this one). `commit`: the base commit it is red at.
-function upsert(store, f, at, commit) {
-  let entry = store.failures.find((x) => keyOf(x) === keyOf(f));
-  if (!entry) {
-    entry = { test: String(f.test || ''), file: String(f.file || ''), first_seen: at, last_seen: at, runs: [], issue: null };
-    store.failures.push(entry);
-  }
-  if (entry.fixed_at) {
-    if (entry.issue) entry.reopen = true;
-    delete entry.first_red_commit;
-    delete entry.fixed_at;
-  }
-  entry.last_seen = at;
-  if (commit) {
-    entry.last_commit = commit;
-    entry.first_red_commit ||= commit;
-  }
-  if (f.reason || f.error) entry.reason = String(f.reason || f.error).slice(0, 400);
-  return entry;
-}
 
 // gh/glab's --repo value: a repository URL, or an owner/name already
 function targetOf(platform, repo) {
@@ -178,7 +136,7 @@ async function report(ws, projectId, entries, opts) {
 /**
  * A run's pre-existing failures (the suite step's preexisting_failures): recorded, and an issue filed
  * once two runs saw a failure (updated by every later sighting). Without exec/platform/repo: record
- * only (the engine's suite step, src/engine/machine-actions.js); the service's call for the same run
+ * only (the engine's suite step records through src/engine/base-health-store.js recordSightings); the service's call for the same run
  * then files what is due (`reported`: the runs whose sighting went to the issue already).
  * @param {string} ws the workspace root
  * @param {{ projectId: string, runId?: string, commit?: string, failures: object[], at?: string,
@@ -189,14 +147,7 @@ function recordPreexisting(ws, opts) {
   if (!projectId || !failures.length) return Promise.resolve({ issues: [], fixItem: null });
   return withStore(ws, projectId, async () => {
     const store = readStore(ws, projectId);
-    const due = [];
-    for (const f of failures) {
-      const entry = upsert(store, f, at, commit);
-      if (!runId) continue;
-      if (!entry.runs.includes(runId)) entry.runs = [...entry.runs, runId].slice(-HISTORY);
-      if ((entry.reported || []).includes(runId)) continue;
-      if (entry.issue || entry.runs.length >= RUNS_FOR_ISSUE) due.push(entry);
-    }
+    const due = addSightings(store, { runId, commit, failures, at });
     writeStore(ws, projectId, store);
     if (!canReport(opts)) return { issues: [], fixItem: null };
     for (const entry of due) entry.reported = [...(entry.reported || []), runId].slice(-HISTORY);
