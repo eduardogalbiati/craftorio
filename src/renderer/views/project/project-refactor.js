@@ -277,11 +277,9 @@
 
   /** A click inside the tab; true when it was the tab's. */
   function onClick(e) {
-    if (!cur?.box?.contains(e.target)) return false;
-    const action = clickAction(e);
-    if (!action) return false;
-    action();
-    return true;
+    const action = cur?.box?.contains(e.target) ? clickAction(e) : null;
+    if (action) action();
+    return !!action;
   }
 
   /** The cadence switch or its number of runs; true when it was the tab's. */

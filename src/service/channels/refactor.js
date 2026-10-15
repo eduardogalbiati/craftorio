@@ -35,7 +35,6 @@ const { clientError, requireId } = require('../common');
 const {
   args,
   BOOL,
-  FLAG,
   INT,
   listOf,
   nullable,
@@ -49,6 +48,7 @@ const {
 const WORKFLOW = 'refactor.yaml';
 const WORKFLOW_NAME = 'refactor';
 const LABEL = 'refactor';
+const OPTIONAL_FLAG = nullable(BOOL);
 const LABEL_COLOR = '0E8A16';
 // a run's summary.json (what listRuns reads) is written right after its workflow.finished event
 const AFTER_RUN_MS = 1500;
@@ -313,14 +313,14 @@ module.exports = (ctx) => {
       channel: 'refactor:prioritize',
       method: 'prioritizeRefactors',
       params: ['projectId', '...opts'],
-      schema: { params: args({ projectId: PROJECT_ID, mock: FLAG }, ['projectId']), result: RANKING },
+      schema: { params: args({ projectId: PROJECT_ID, mock: OPTIONAL_FLAG }, ['projectId']), result: RANKING },
       fn: prioritize,
     },
     {
       channel: 'refactor:file',
       method: 'fileRefactorIssue',
       params: ['projectId', 'id', '...opts'],
-      schema: { params: ON_PROPOSAL({ preview: FLAG }), result: shape({ preview: BOOL, command: STRING, body: STRING, proposal: PROPOSAL }, ['preview', 'proposal']) },
+      schema: { params: ON_PROPOSAL({ preview: OPTIONAL_FLAG }), result: shape({ preview: BOOL, command: STRING, body: STRING, proposal: PROPOSAL }, ['preview', 'proposal']) },
       fn: fileIssue,
     },
     {
