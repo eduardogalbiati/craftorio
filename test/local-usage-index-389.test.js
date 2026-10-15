@@ -68,3 +68,32 @@ test('readLocalUsageAsync with the workspace index saves each transcript\'s entr
     } finally { db.close(); }
   } finally { store.close(); }
 });
+
+test('a save the busy index refuses stays pending and is saved by a later scan (#389)', { timeout: 90000 }, async (t) => {
+  const { root, home } = seed(t);
+  const ws = { root, runs: path.join(root, 'runs'), backlog: path.join(root, 'backlog'), index: path.join(root, 'index.db') };
+  const store = openStore(ws);
+  const { DatabaseSync } = require('node:sqlite');
+  const holder = new DatabaseSync(store.path); // another writer holding the index (a long main-process transaction)
+  const count = () => {
+    const db = new DatabaseSync(store.path);
+    try { return db.prepare('SELECT COUNT(*) AS n FROM usage_files').get().n; } finally { db.close(); }
+  };
+  let held = false;
+  try {
+    holder.exec('BEGIN IMMEDIATE');
+    held = true;
+    const out = await readLocalUsageAsync({ home, index: store.path });
+    assert.equal(out.records.length, 2, 'the scan answers although the index is busy');
+    await readLocalUsageAsync({ home, index: store.path }); // answered once the first save gave up
+    assert.equal(count(), 0, 'nothing was saved while the index was held');
+    holder.exec('ROLLBACK');
+    held = false;
+    await readLocalUsageAsync({ home, index: store.path }); // the second scan's save has run by now
+    assert.equal(count(), 1, 'the unchanged transcript\'s pending entry was saved by a later scan');
+  } finally {
+    if (held) holder.exec('ROLLBACK');
+    holder.close();
+    store.close();
+  }
+});
