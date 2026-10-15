@@ -402,6 +402,11 @@ module.exports = (ctx) => {
         ctx.stopLocalPreview({ runId: run.runId, reason: ev.type === 'approval.resolved' ? 'the gate was answered' : 'the run ended' });
       }
       if (ev.type === 'worktree.merged') ctx.afterLocalMerge(run, ev).catch((e) => console.error('after local merge:', e));
+      // #405: pre-existing failures are tracked, and a merge starts the base check (areas/base-health.js)
+      try {
+        if (ev.type === 'step.finished') ctx.afterStepFinished(run, ev)?.catch((e) => console.error('base health:', e.message));
+        if (ev.type === 'worktree.merged') ctx.afterBaseMerge(run, ev);
+      } catch (e) { console.error('base health:', e.message); }
       if (ev.type === 'workflow.started' || ev.type === 'run.then') ctx.recordChain(run, ev);
       events.emit('run:event', ev);
       if (ev.type === 'workflow.started') markActiveRun(run.runId, runInfo);

@@ -189,6 +189,9 @@ const DEFAULT_SETTINGS = {
   // Memory guard (#276, src/engine/memory-guard.js): a real run's process over limitPercent of the RAM
   // is stopped; suites and new runs wait while less than floorPercent is free (0 = no hold)
   memoryGuard: { enabled: true, limitPercent: 25, floorPercent: 10 },
+  // Main stays green (#405, src/base-health.js): what a red test on the base files: 'off', 'issue'
+  // (a bug issue only) or 'fix' (the issue and a fix item at the front of the roadmap)
+  baseCheck: { onRed: 'fix' },
   // Keep awake (#162, src/keep-awake.js): no sleep while runs, a roadmap or a queue have work to do
   keepAwake: false,
   // Control channel (#336, src/control): outside sessions drive this app through a loopback endpoint

@@ -1,5 +1,5 @@
 // The Roadmap screen (#106; Code & Build › Roadmap since #254, drawn by backlog.js): a project's ordered stages of runs (src/roadmap.js), each stage started
-// when the previous one has finished and merged. The item card reads in three bands (#282). 1: its
+// when the previous one has finished and merged; the bar names the base's known failures (#405, src/base-health.js). The item card reads in three bands (#282). 1: its
 // issues' titles (what leads: a list, one line per issue, linked, #110; under it "4 issues ·
 // complexity 9", the total of their `complexity:n` labels) | cost and time (one line each: the
 // estimate, or the real value against it with a verdict and a bar; the time of a run at work is its
@@ -1092,7 +1092,7 @@
     const bar = `
       <div class="bl-queue rm-bar" data-testid="roadmap-bar">
         <span class="rm-bar-title">${dot}<b>Roadmap</b> ${scopeBadge} ${r.stages.length} stage${r.stages.length === 1 ? '' : 's'}${offStages.length ? `, ${offStages.length} disabled` : ''}${parked}</span>
-        ${note}${leftOut}
+        ${note}${leftOut}${data?.baseFailures?.length ? `<details class="small rm-base-failures" data-testid="base-failures"><summary><span class="warn-text">${plural(data.baseFailures.length, 'known failure')} on the base</span> <span class="link-btn" data-testid="base-failures-link">Details</span></summary><ul>${data.baseFailures.map((f) => `<li><span class="mono">${esc(f.test)}</span> · <span class="muted" title="${esc(f.file)}">${esc(f.file)}</span>${f.issue?.url ? ` · <a href="${esc(f.issue.url)}" target="_blank" rel="noopener">${esc(f.issue.number ? `#${f.issue.number}` : 'issue')}</a>` : ''}</li>`).join('')}</ul></details>` : ''}
         <span class="spacer"></span>
         ${acts.start.allowed || acts.resume.allowed ? `<label class="check small dev-only"><input type="checkbox" id="rm-simulate"${state.simulationOnly || r.simulated ? ' checked' : ''} /><span>Simulated</span></label>
           <button class="btn sm primary" type="button" data-rm="start"${scoped >= 0 && acts.resume.allowed ? ` title="Resume stage ${scoped + 1} only"` : ''}>${acts.resume.allowed ? 'Resume' : 'Start'}</button>` : ''}

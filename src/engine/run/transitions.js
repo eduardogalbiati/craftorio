@@ -424,7 +424,8 @@ const methods = {
       this.emitEvent('action.executed', { command: 'merge: local', skipped: true, output: r.output });
       return;
     }
-    this.emitEvent('worktree.merged', { branch: r.branch, base: r.base, commit: r.commit, checkout: r.checkout, rebased: r.rebased, base_commit: baseCommit });
+    // tested: 'not green' when the run merges a change its suite did not pass (#396): the base check runs at once (#405)
+    this.emitEvent('worktree.merged', { branch: r.branch, base: r.base, commit: r.commit, checkout: r.checkout, rebased: r.rebased, base_commit: baseCommit, tested: this.ctx.vars?.tested || null });
     this.ctx.local_merge = r;
   },
 
