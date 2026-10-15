@@ -47,6 +47,10 @@ touches everything briefly.
   `C:\Users\Eduardo\multiagent-workspace\runs\<run>\summary.json` (`started_at`, `steps`, `timing`,
   `local_merge`; skip `"mock": true`), roadmap backups in `multiagent-workspace\backlog\`, and the
   orchestrator's `git log`. Times are BRT (UTC-3).
+- On another machine, all of these (the Diário's files, run summaries, roadmap backups, the
+  `marketing/` drafts and posts, the git log) are copied in the Google Drive folder
+  `Meu Drive/fabrica-24x7-fontes` (`G:\Meu Drive\fabrica-24x7-fontes`); its `README.md` maps each
+  folder to its original, and its `refresh.mjs` updates the copies on the machine with the originals.
 - **Published chapters are fixed**: never change their text, only their references to other chapters.
   When the data contradicts a published chapter, the new chapter follows the published one. The owner
   allows moving dates and times for the story's sake ("não precisa ser exatamente fiel"); numbers stay
