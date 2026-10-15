@@ -216,3 +216,91 @@ test('#385 the Facts tab names the languages not measured and how to measure the
   assert.ok(py.length > 5, 'the complexity columns are shown');
   assert.equal(py.slice(5).includes('0'), false, `tools/x.py's complexity is not shown as 0: ${JSON.stringify(py)}`);
 });
+
+test('#385 the note names lizard when no tool is listed and lizard gives no install command, never "They need ."', async (t) => {
+  const { model } = await readFixtureFacts(t);
+  const copy = JSON.parse(JSON.stringify(model));
+  Object.assign(copy.complexity, { install: null, needed: [], reason: null });
+  const w = loadTab(copy);
+  w.PA.show('p1', w.box);
+  await settle();
+  const note = text(w.box.querySelector('[data-testid="architecture-measure-note"]'));
+  assert.match(note, /Python/);
+  assert.match(note, /They need lizard\./);
+  assert.equal(note.includes('They need .'), false, note);
+});
+
+// lizard "installed": resolveCommand finds it, and the external process (child_process.execFile, the
+// system boundary) answers with `csv`; src/architecture-facts.js loaded afresh, restored afterwards
+function factsWithFakeLizard(t, csv) {
+  const providers = require('../src/engine/providers');
+  const cp = require('child_process');
+  const { resolveCommand } = providers;
+  const { execFile } = cp;
+  const FAKE = 'C:/fake/lizard.exe';
+  providers.resolveCommand = (cmd, ...rest) => (/^lizard/i.test(String(cmd)) ? { file: FAKE } : resolveCommand(cmd, ...rest));
+  cp.execFile = (file, args, opts, cb) => {
+    if (file !== FAKE) return execFile(file, args, opts, cb);
+    setImmediate(() => cb(null, csv, ''));
+    return null;
+  };
+  const id = require.resolve('../src/architecture-facts');
+  delete require.cache[id];
+  const facts = require('../src/architecture-facts');
+  t.after(() => {
+    providers.resolveCommand = resolveCommand;
+    cp.execFile = execFile;
+    delete require.cache[id];
+  });
+  return facts;
+}
+
+// A TypeScript enum: Node's type stripping refuses it, so the app cannot measure the file
+const E_TS = [
+  'export enum Mode { A, B }',
+  'export function mode(x: number): Mode {',
+  '  if (x > 0) return Mode.A;',
+  '  return x < 0 ? Mode.B : Mode.A;',
+  '}',
+  '',
+].join('\n');
+
+test('#385 lizard keeps its numbers for a TypeScript file the app cannot parse; the app\'s numbers win for the files it measured', async (t) => {
+  const dir = makeRepo();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(dir, 'src', 'e.ts'), E_TS);
+  execFileSync('git', ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.com', '-c', 'core.autocrlf=false', 'add', '-A'], { cwd: dir, windowsHide: true, stdio: 'pipe' });
+  execFileSync('git', ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.com', 'commit', '-q', '-m', 'enum'], { cwd: dir, windowsHide: true, stdio: 'pipe' });
+  // lizard --csv: NLOC, CCN, token, PARAM, length, location, file, function, long name, start, end
+  const csv = [
+    '4,3,30,1,4,"mode@2-5@./src/e.ts","./src/e.ts","mode","mode( x : number)",2,5',
+    '3,99,20,2,3,"check@1-4@./src/a.js","./src/a.js","check","check( a , b)",1,4',
+    '4,2,15,1,4,"odd@1-4@./tools/x.py","./tools/x.py","odd","odd( n)",1,4',
+    '',
+  ].join('\n');
+  const { readFacts } = factsWithFakeLizard(t, csv);
+  const { state, model } = await readFacts(dir, { refresh: true });
+  assert.equal(state, 'ok');
+  assert.deepEqual(row(model, 'src/e.ts'), { complexity: 3, worst: 3, functions: 1 });
+  assert.deepEqual(row(model, 'tools/x.py'), { complexity: 2, worst: 2, functions: 1 });
+  // the app measured src/a.js: lizard's 99 is not added to it
+  assert.deepEqual(row(model, 'src/a.js'), { complexity: 7, worst: 4, functions: 2 });
+});
+
+test('#385 Electron\'s own Node measures TypeScript with the shared core (the packaged app\'s runtime)', (t) => {
+  let electron;
+  try { electron = require('electron'); } catch { electron = null; }
+  if (typeof electron !== 'string' || !fs.existsSync(electron)) return t.skip('the Electron binary is not installed');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arch385-electron-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const script = path.join(dir, 'measure.js');
+  fs.writeFileSync(script, [
+    `const { measureSource } = require(${JSON.stringify(path.join(ROOT, 'src', 'shared', 'code-complexity.js'))});`,
+    `const fns = measureSource(${JSON.stringify(C_TS)}, { file: 'src/c.ts' });`,
+    'process.stdout.write(JSON.stringify(fns.map((f) => ({ name: f.name, line: f.line, complexity: f.complexity }))));',
+    '',
+  ].join('\n'));
+  const env = { ...process.env, ELECTRON_RUN_AS_NODE: '1' };
+  const out = execFileSync(electron, [script], { env, encoding: 'utf8', windowsHide: true, timeout: 60000 });
+  assert.deepEqual(JSON.parse(out), [{ name: 'size', line: 2, complexity: 2 }]);
+});
