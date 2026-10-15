@@ -22,6 +22,10 @@
 // saved city plan (where a new file is expected) and the hit rates kept per issue
 // (<workspace>/architecture/<project id>/impact-history.json, CityImpact.recordHitRate); with
 // `record`, it first keeps an issue's hit rate for a run, stamped now. No model call.
+// A release on the city (#376): architecture:release gives the City view's release overlay the city at
+// `from` (the previous tag by default), what changed up to `to` (the newest tag by default) and the
+// release's commits (src/release-city.js), the tags for the two-tag picker (the latest commits when
+// the project has no tag) and the saved plan (where an added file is drawn). Read-only git, no model call.
 
 const fs = require('fs');
 const path = require('path');
@@ -31,6 +35,7 @@ const facts = require('../../architecture-facts');
 const projects = require('../../projects');
 const proposals = require('../../refactor-proposals');
 const runs = require('../../runs');
+const releaseCity = require('../../release-city');
 const simulation = require('../../engine/simulation');
 const { localChanges } = require('../../engine/test-paths');
 const { readEvents } = require('../../supervisor');
@@ -76,6 +81,11 @@ const HIT_RATE = { type: 'number', minimum: 0, maximum: 1 };
 const HIT = shape({ hitRate: HIT_RATE, ts: STRING, run: STRING }, ['hitRate', 'ts', 'run']);
 const IMPACT = shape({ plan: nullable(OBJECT), history: { type: 'object', additionalProperties: listOf(HIT) }, error: nullable(STRING) }, ['plan', 'history']);
 const IMPACT_HISTORY = 'impact-history.json';
+// #376: a release on the city
+const RELEASE = shape({
+  state: STRING, from: nullable(STRING), to: nullable(STRING), base: nullable(OBJECT), changes: listOf(OBJECT), commits: listOf(OBJECT),
+  tags: listOf(STRING), tagless: { type: 'boolean' }, plan: nullable(OBJECT), error: nullable(STRING),
+}, ['state', 'from', 'to', 'changes', 'commits', 'tags']);
 // the project map workflow (#372): its run writes the project's city plan
 const PROJECT_MAP_WORKFLOW = 'project-map.yaml';
 const PROGRESS_TEXT = 160;
@@ -275,6 +285,24 @@ module.exports = (ctx) => {
           fs.writeFileSync(file, JSON.stringify(history, null, 2) + '\n');
         }
         return { plan, history, error: null };
+      },
+    },
+    {
+      channel: 'architecture:release',
+      method: 'architectureRelease',
+      params: ['...opts'],
+      schema: { params: args({ projectId: PROJECT_ID, from: nullable(STRING), to: nullable(STRING) }, ['projectId']), result: RELEASE },
+      fn: async ({ projectId, from = null, to = null }) => {
+        const p = projectOf(projectId);
+        const plan = arch.readPlan(root(), p.id).plan || null;
+        const tags = await releaseCity.listTags(p.folder);
+        // a project without tags picks two commits (#376): the latest ones stand in for the tags
+        const picks = tags.length ? tags : await releaseCity.recentCommits(p.folder);
+        const target = to || picks[0] || null;
+        const base = from || (tags.length ? await releaseCity.previousTag(p.folder, target) : picks[picks.indexOf(target) + 1]) || null;
+        if (!target || !base) return { state: tags.length ? 'first-release' : 'no-history', from: base, to: target, base: null, changes: [], commits: [], tags: picks, tagless: !tags.length, plan, error: null };
+        const out = await releaseCity.readReleaseCity(p.folder, { from: base, to: target, plan, exclude: arch.readSettings(root(), p.id).exclude });
+        return { ...out, tags: picks, tagless: !tags.length, plan, error: out.error || null };
       },
     },
     {

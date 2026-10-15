@@ -20,6 +20,9 @@
 // files its body cites, the Product Owner's group, a new file expected in a district, the header with
 // the counts and the Danger Zone share); --mode city-stage shows a roadmap stage's footprint ("Show the
 // stage on the map": each item its colour, a building two items would change in red).
+// #376: --mode city-release is that city at release 1.1.1 in grey with release 1.1.2 in colour ("Show
+// on the map" of a release: a new file, changes on the ramp, a removed guide, a renamed script, the
+// header with the two-tag picker and the issue filter).
 // #382: --mode city-large is the City view at a real scale: the project is this repository itself
 // (the checkout the screenshot runs from, about 1,400 drawn files) with the proof of concept's city
 // plan (poc/project-map/plans/multiagent-orchestrator.city-plan.json), the one the POC's overview
@@ -185,6 +188,29 @@ const DEMO_IMPACT_STAGE = {
   ],
 };
 
+// #376: release 1.1.2 after 1.1.1 (the city's head) on simulated data: a new view (#21), the engine
+// and billing changed by a few and many lines (#22), a guide removed and a script renamed (#23)
+const RELEASE_COMMITS = [
+  ['2026-10-06', 'Add the invoice view (#21)', { 'src/renderer/views/invoice.js': cityFile(9) }],
+  ['2026-10-07', 'Faster engine, partner prices (#22)', { 'src/engine/part-2.js': cityFile(14), 'src/engine/part-5.js': cityFile(6), 'src/billing.js': jsBody(220) }],
+];
+function demoReleaseCity(folder) {
+  const git = (a, date) => execFileSync('git', ['-C', folder, '-c', 'user.name=Demo', '-c', 'user.email=demo@example.com', '-c', 'core.autocrlf=false', '-c', 'tag.gpgSign=false', ...a], { stdio: 'pipe', env: { ...process.env, ...(date ? { GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date } : {}) } });
+  git(['tag', '1.1.1']);
+  for (const [day, message, files] of RELEASE_COMMITS) {
+    for (const [rel, text] of Object.entries(files)) {
+      fs.mkdirSync(path.dirname(path.join(folder, rel)), { recursive: true });
+      fs.writeFileSync(path.join(folder, rel), text);
+    }
+    git(['add', '-A']);
+    git(['commit', '-q', '-m', message], `${day}T10:00:00Z`);
+  }
+  git(['rm', '-q', 'docs/guides/guide-5.md']);
+  git(['mv', 'scripts/build/part-1.js', 'scripts/build/bundle.js']);
+  git(['commit', '-q', '-m', 'Drop the old guide, name the bundle script (#23)'], '2026-10-08T10:00:00Z');
+  git(['tag', '1.1.2']);
+}
+
 const LARGE_PLAN = path.join('poc', 'project-map', 'plans', 'multiagent-orchestrator.city-plan.json');
 
 // #387: --mode large, the Architecture tab at a real scale: the latest report holds the 60 findings of
@@ -224,9 +250,10 @@ function seedArchitecture(args, ws, project, { appDir, projects }) {
     require('../../../src/oracle-architecture').writePlan(path.join(ws.root, 'architecture'), project.id, plan, '2026-10-01T09:00:00.000Z');
     return;
   }
-  const city = ['city', 'city-agents', 'city-issue', 'city-stage'].includes(args.mode);
+  const city = ['city', 'city-agents', 'city-issue', 'city-release', 'city-stage'].includes(args.mode);
   const commits = args.mode === 'empty' ? [] : city ? CITY_COMMITS : ARCH_COMMITS;
   const head = demoArchitectureRepo(project.folder, commits);
+  if (args.mode === 'city-release') demoReleaseCity(project.folder);
   if (head && args.mode !== 'never') demoArchitectureReports(ws, project.id, { commit: head, date: '2026-09-15T10:00:00Z' });
   if (head && args.mode === 'large') demoLargeReport(ws, project.id, { commit: head, date: '2026-09-15T10:00:00Z' });
   if (args.mode === 'map-refresh') demoCityPlan(ws, project.id);
@@ -284,16 +311,18 @@ async function afterOpen({ args, click, js, project }) {
   }
   await click(`[data-pv-tab="${args.tab}"]`);
   if (args.tab === 'architecture' && analysis) await click('[data-testid="architecture-analyze"]');
-  if (args.tab === 'architecture' && ['city', 'city-agents', 'city-issue', 'city-large', 'city-stage'].includes(args.mode)) await click('[data-testid="architecture-mode-city"]');
+  if (args.tab === 'architecture' && ['city', 'city-agents', 'city-issue', 'city-large', 'city-release', 'city-stage'].includes(args.mode)) await click('[data-testid="architecture-mode-city"]');
   // #375: "Show on the map" of an issue, "Show the stage on the map" of a roadmap stage
   const pid = JSON.stringify(project.id);
   if (args.tab === 'architecture' && args.mode === 'city-issue') await js(`ProjectCityImpact.showIssue(${pid}, ${JSON.stringify(DEMO_IMPACT_ISSUE)})`);
   if (args.tab === 'architecture' && args.mode === 'city-stage') await js(`ProjectCityImpact.showStage(${pid}, ${JSON.stringify(DEMO_IMPACT_STAGE)})`);
+  // #376: "Show on the map" of release 1.1.2
+  if (args.tab === 'architecture' && args.mode === 'city-release') await js(`ProjectCityRelease.showRelease(${pid}, { from: '1.1.1', to: '1.1.2' })`);
 }
 
 module.exports = {
   afterOpen,
-  modes: ['analyzing', 'city', 'city-agents', 'city-issue', 'city-large', 'city-stage', 'empty', 'error', 'facts-large', 'large', 'loading', 'map-refresh', 'never', 'no-runs', 'not-git'],
+  modes: ['analyzing', 'city', 'city-agents', 'city-issue', 'city-large', 'city-release', 'city-stage', 'empty', 'error', 'facts-large', 'large', 'loading', 'map-refresh', 'never', 'no-runs', 'not-git'],
   open,
   run: true,
   seed,

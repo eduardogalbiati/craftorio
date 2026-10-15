@@ -111,6 +111,8 @@ module.exports = {
   'architecture:estimate': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   // #375: a fresh project has no plan and no hit rate yet (no record: the suite writes nothing)
   'architecture:impact': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
+  // #376: a plain folder has no tag and no commit: no release to draw
+  'architecture:release': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   'architecture:facts': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   'architecture:report': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   'architecture:reports': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },

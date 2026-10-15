@@ -32,6 +32,7 @@
 //                      architecture --mode city-issue: that city with an issue's impact preview (cited, the Product Owner's, a new file), #375;
 //                      architecture --mode city-stage: that city with a roadmap stage's footprint (two items sharing a file), #375;
 //                      architecture --mode city-large: the city of this repository itself with the POC's plan, #382;
+//                      architecture --mode city-release: that city at release 1.1.1 in grey, release 1.1.2 in colour, #376;
 //                      architecture --mode large: a latest report of the shared large-project fixture, 60 findings, #387;
 //                      architecture --mode facts-large: the Facts view of this repository itself with those 60 findings on its own files, #386);
 //                      analytics: usage | performance | run | occupancy | agents (performance: a demo git repository and a

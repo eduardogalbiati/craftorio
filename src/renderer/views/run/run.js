@@ -2,7 +2,8 @@
 // Run screen (Run Details): the run shown in the top bar, its failure banner, its chain banner (#134:
 // renderChainBanner), the gates it waits at
 // (gate cards: renderRunGates, onRunGateClick; what a gate offers is gate-panel.js), its summary
-// (inputs, supervisor, watch, resume, the run that resumed it: #384, Save to issue, Review changes: the diff viewer, #118), its
+// (inputs, supervisor, watch, resume, the run that resumed it: #384, Save to issue, Review changes: the diff viewer, #118,
+// a shipped release run's "Show on the map": #376, views/project/project-city-release.js), its
 // steps by group, its sessions and the Session / Events / Artifacts tabs. No sidebar entry of its own: the Run item and the runs menu
 // belong to the shell (app.js), which also keeps the run state it draws (state.runs, onEvent,
 // hydrateRun) and calls renderRunScreen() from render() while it shows. Registers itself with
@@ -257,7 +258,7 @@ function renderRunSummary() {
       ${hasChanges(r.id) ? '<button class="btn sm ghost" id="btn-run-diff" title="The files this run changed on its branch, file by file, split or unified">Review changes</button>' : ''}
       ${saveIssue ? `<button class="btn sm ghost" id="btn-run-save-issue" title="Save the accepted document to its issue (preview first, then confirm)">Save to issue #${esc(saveIssue.number)}…</button>` : ''}
       <button class="btn sm ghost" id="btn-run-analytics" title="Its timeline, cost and tokens per agent, compared with its workflow's runs (Analytics › Run, #228)">Open in Analytics</button>
-      ${replayMapHtml(r)}
+      ${replayMapHtml(r)}${releaseMapHtml(r)}
     </div>`;
   // rendered on every event: rebuilt only when it changes, so a hover popover over an input stays open
   const box = $('#run-summary');
@@ -286,8 +287,16 @@ function renderRunSummary() {
     return '<button class="btn sm ghost" id="btn-run-replay-map" data-testid="run-replay-map" title="Play the files this run\'s agents read and changed over its project\'s city (#374)">Replay on the map</button>';
   }
 
+  // #376: a shipped release run (workflows/release.yaml) shows its release on the city, the previous tag in grey
+  function releaseMapHtml(run) {
+    const shipped = run.projectId && run.status === 'success' && run.inputs?.version && /(^|[\\/])release\.yaml$/.test(String(run.file || ''));
+    if (!shipped || !window.ProjectCityRelease) return '';
+    return `<button class="btn sm ghost" id="btn-run-release-map" data-testid="run-release-map" title="The project city at the previous release in grey, what ${esc(run.inputs.version)} changed in colour (#376)">Show on the map</button>`;
+  }
+
   function mountReplayMap(run) {
     if ($('#btn-run-replay-map')) $('#btn-run-replay-map').onclick = () => ProjectCityAgents.replay(run.projectId, run.id);
+    if ($('#btn-run-release-map')) $('#btn-run-release-map').onclick = () => ProjectCityRelease.showRelease(run.projectId, { to: String(run.inputs.version) });
   }
 }
 

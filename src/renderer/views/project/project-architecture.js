@@ -31,7 +31,8 @@
 // #382: its connections panel, views/project/project-city-connections.js); a building's "Open in
 // Facts" comes back here with its hotspot row marked and scrolled to. The city carries the agents of
 // the project's runs in progress (#374, views/project/project-city-agents.js); openCity(id) opens
-// the tab on the City view (a run's "Replay on the map").
+// the tab on the City view (a run's "Replay on the map", a release's "Show on the map", #376:
+// views/project/project-city-release.js).
 // Also the Refactor tab's proposal list (showRefactor, refactor:proposals).
 // Drawn into the box project.js gives it (show), its clicks and changes routed from the project
 // page's listeners (onClick, onChange). Uses app.js globals at call time: api, esc, errMsg, fmtNum,
@@ -447,6 +448,8 @@
     c.connections ||= (window.CityConnections && window.ProjectCityConnections?.attach(c.city)) || null;
     // #375: an issue's or a stage's expected footprint on its city (views/project/project-city-impact.js)
     c.impact ||= (window.CityImpact && window.ProjectCityImpact?.attach(c.city, { projectId: c.id })) || null;
+    // #376: a release on its city, the previous release in grey (views/project/project-city-release.js)
+    c.release ||= (window.CityRelease && window.ProjectCityRelease?.attach(c.city, { projectId: c.id })) || null;
     if (!c.box.contains(c.city.el)) {
       c.box.innerHTML = `<div data-testid="architecture" class="arch-city-mode"><div class="row arch-mode-row">${modeSwitch()}</div><div data-arch-city-slot></div></div>`;
       c.box.querySelector('[data-arch-city-slot]').appendChild(c.city.el);
