@@ -147,6 +147,20 @@ function liveStatus(dir) {
   return { status: 'running', elsewhere: owner.pid === process.pid ? null : { pid: owner.pid, host: owner.host } };
 }
 
+// The error of a finished run's workflow.finished event, kept per events file signature (#389): a
+// listing reads a failed run's whole events.jsonl only once while it does not change.
+const errorCache = new Map(); // events file → { sig, error }
+function finishedError(file) {
+  let sig = '-';
+  try { const st = fs.statSync(file); sig = `${st.mtimeMs}:${st.size}`; } catch { /* no events */ }
+  const hit = errorCache.get(file);
+  if (hit && hit.sig === sig) return hit.error;
+  const last = readEvents(file).reverse().find((e) => e.type === 'workflow.finished');
+  const error = last?.error || null;
+  errorCache.set(file, { sig, error });
+  return error;
+}
+
 /** One run folder → RunInfo base (sessions as engine snapshots), or null if it is not a run. */
 function readRun(runsDir, runId) {
   const dir = path.join(runsDir, runId);
@@ -171,10 +185,7 @@ function readRun(runsDir, runId) {
     ({ sessions, progress } = fromEvents(path.join(dir, 'events.jsonl')));
     status = liveStatus(dir).status;
   }
-  if (summary && summary.status !== 'success') {
-    const last = readEvents(path.join(dir, 'events.jsonl')).reverse().find((e) => e.type === 'workflow.finished');
-    error = last?.error || null;
-  }
+  if (summary && summary.status !== 'success') error = finishedError(path.join(dir, 'events.jsonl'));
   // what a `merge: local` put on the local base (summaries before local_merge: from the events)
   const localMerge = summary && summary.local_merge !== undefined ? summary.local_merge
     : summary?.status === 'success' && summary.worktree?.repo ? fromEvents(path.join(dir, 'events.jsonl')).localMerge : null;
@@ -287,10 +298,15 @@ function listedRow(runsDir, id, info) {
 const LIVE_REREAD_MS = 20000;
 const onlyEventsChanged = (a, b) => String(a).split('|').slice(1).join('|') === String(b).split('|').slice(1).join('|');
 
+// A row read by an older READ_VERSION from the same files (#389): the listings serve it as it is and
+// rebuildIndexAsync reads it again in the background, instead of reading every run at start.
+const filesOf = (sig) => String(sig).replace(/\|[^|]*$/, '');
+const olderReading = (rowSig, sig) => rowSig !== sig && filesOf(rowSig) === filesOf(sig);
+
 // The row of a run when it is current (or a live run's recent one), else null: the run is read again.
 function currentRow(runsDir, id, row, sig, live) {
   if (!row?.info) return null;
-  if (row.sig === sig) return listedRow(runsDir, id, row.info);
+  if (row.sig === sig || olderReading(row.sig, sig)) return listedRow(runsDir, id, row.info);
   if (live?.has(id) && onlyEventsChanged(row.sig, sig) && Date.now() - (readAt.get(id) || 0) < LIVE_REREAD_MS) return listedRow(runsDir, id, row.info);
   return null;
 }
@@ -351,6 +367,34 @@ function rebuildIndex(runsDir) {
   return listRuns(runsDir).length;
 }
 
+/**
+ * Brings the index up to date without blocking the process (#389): the runs read by an older
+ * READ_VERSION, changed or not indexed yet are read again one at a time, letting other work in after
+ * each. Resolves to how many runs it read again. The service starts it once the workspace is open,
+ * with `pauseMs` between two runs: the reads the screens ask for meanwhile go first.
+ */
+async function rebuildIndexAsync(runsDir, { pauseMs = 0 } = {}) {
+  const pause = () => (pauseMs > 0 ? new Promise((resolve) => setTimeout(resolve, pauseMs)) : nextTick());
+  const store = storeFor(runsDir);
+  if (!store) return 0;
+  let ids = [];
+  try { ids = await fs.promises.readdir(runsDir); } catch { return 0; }
+  let count = 0;
+  for (const id of ids) {
+    if (storeFor(runsDir) !== store) return count; // the workspace was closed or changed meanwhile
+    const sig = await statSignature(path.join(runsDir, id));
+    if (storeFor(runsDir) !== store) return count;
+    const row = store.runEntry(id);
+    if (row?.info && row.sig === sig) continue;
+    if (indexRunIn(store, runsDir, id)) count++;
+    await pause();
+  }
+  const present = new Set(ids);
+  const gone = [...store.runEntries().keys()].filter((id) => !present.has(id));
+  if (gone.length) store.deleteRuns(gone);
+  return count;
+}
+
 function listRuns(runsDir) {
   let ids = [];
   try { ids = fs.readdirSync(runsDir); } catch { return []; }
@@ -361,7 +405,8 @@ function listRuns(runsDir) {
     const rows = store.runEntries();
     list = store.transaction(() => ids.map((id) => {
       const row = rows.get(id);
-      if (!row?.info || row.sig !== runSignature(path.join(runsDir, id))) return indexRunIn(store, runsDir, id);
+      const sig = runSignature(path.join(runsDir, id));
+      if (!row?.info || (row.sig !== sig && !olderReading(row.sig, sig))) return indexRunIn(store, runsDir, id);
       return listedRow(runsDir, id, row.info);
     }));
     const present = new Set(ids);
@@ -493,6 +538,7 @@ module.exports = {
   readChain,
   readRun,
   rebuildIndex,
+  rebuildIndexAsync,
   runArtifacts,
   runEvents,
   runPr,

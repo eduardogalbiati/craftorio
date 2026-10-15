@@ -26,6 +26,9 @@
 //   notifications  every notice (run started/finished/failed, gate waiting, CLI session waiting, push
 //                  merge conflict...),
 //                  for the notification center; kept notificationRetentionDays days (settings).
+//   usage_files    the local-usage scan's state of each CLI transcript (#389, src/local-usage.js): its
+//                  size + mtime key, how far it was read and its parsed records. Written by the scan's
+//                  worker thread (src/local-usage-worker.js) through its own connection; rebuildable.
 //
 // `openStore(ws)` opens (or reopens) the store of a workspace layout; `storeFor(dir)` finds the open
 // store whose runs or backlog folder is `dir`, so src/runs.js and src/backlog.js use it when the
@@ -81,6 +84,7 @@ const MIGRATIONS = [
    CREATE TABLE artifact_paths (path TEXT NOT NULL, run_id TEXT NOT NULL, PRIMARY KEY (path, run_id));
    CREATE INDEX artifact_paths_run ON artifact_paths(run_id);`,
   `CREATE TABLE run_figures (run_id TEXT PRIMARY KEY, sig TEXT NOT NULL, figures TEXT NOT NULL);`,
+  `CREATE TABLE usage_files (file TEXT PRIMARY KEY, key TEXT NOT NULL, state TEXT NOT NULL);`,
 ];
 
 const open = new Map(); // workspace root → store

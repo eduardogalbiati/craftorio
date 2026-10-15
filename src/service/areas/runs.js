@@ -29,7 +29,6 @@ const agents = require('../../agents');
 const usage = require('../../usage');
 const sessionCache = require('../../session-cache');
 const actionsUsage = require('../../actions-usage');
-const { readLocalUsage } = require('../../local-usage');
 const runs = require('../../runs');
 const runOwner = require('../../run-owner');
 const runPr = require('../../run-pr');
@@ -319,7 +318,7 @@ module.exports = (ctx) => {
       const needsLocal = Object.values(settings.budgets || {}).some((b) => b?.countOutside);
       const baselineAt = Date.now();
       // the Oracle's spend (in no run folder) counts too
-      const budget = usage.budgetBaseline({ runsDir: ws.runs, settings, local: needsLocal ? readLocalUsage() : null, extraRuns: ctx.agentUsageRuns() });
+      const budget = usage.budgetBaseline({ runsDir: ws.runs, settings, local: needsLocal ? await ctx.localUsage() : null, extraRuns: ctx.agentUsageRuns() });
       const wfFile = ctx.workflowPath(file);
       const notices = [...(startNotices || [])];
       if (wfFile.fallback) {

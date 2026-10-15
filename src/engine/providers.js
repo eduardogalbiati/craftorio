@@ -9,7 +9,12 @@
 // Normalized items emitted via onItem():
 //   { kind: 'spawn' | 'session' | 'thinking' | 'text' | 'tool_call' | 'tool_result' | 'usage' | 'stderr' | 'raw', ... }
 
-const { spawn, spawnSync, execSync } = require('child_process');
+const {
+  execFile,
+  execSync,
+  spawn,
+  spawnSync,
+} = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const crypto = require('crypto');
@@ -37,23 +42,37 @@ function sleep(ms, signal) {
 // Programs installed after the terminal/app was opened only show up in the
 // registry PATH. We re-read HKCU/HKLM and append the missing entries.
 let pathRefreshed = false;
+const PATH_KEYS = ['HKCU\\Environment', 'HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment'];
+const regPath = (out) => { const m = /Path\s+REG_(?:EXPAND_)?SZ\s+(.*)/i.exec(String(out || '')); return m ? m[1].trim() : ''; };
+function mergeRegistryPaths(values) {
+  const expand = (s) => s.replace(/%([^%]+)%/g, (_, v) => process.env[v] ?? `%${v}%`);
+  const current = (process.env.PATH || '').split(path.delimiter).filter(Boolean);
+  const seen = new Set(current.map((p) => p.toLowerCase().replace(/\\+$/, '')));
+  const extra = values
+    .join(';').split(';').map((p) => expand(p.trim())).filter(Boolean)
+    .filter((p) => { const k = p.toLowerCase().replace(/\\+$/, ''); if (seen.has(k)) return false; seen.add(k); return true; });
+  if (extra.length) process.env.PATH = [...current, ...extra].join(path.delimiter);
+}
 function refreshWindowsPath() {
   if (process.platform !== 'win32' || pathRefreshed) return;
   pathRefreshed = true;
   const read = (key) => {
-    try {
-      const out = execSync(`reg query "${key}" /v Path`, { encoding: 'utf8', windowsHide: true });
-      const m = /Path\s+REG_(?:EXPAND_)?SZ\s+(.*)/i.exec(out);
-      return m ? m[1].trim() : '';
-    } catch { return ''; }
+    try { return regPath(execSync(`reg query "${key}" /v Path`, { encoding: 'utf8', windowsHide: true })); } catch { return ''; }
   };
-  const expand = (s) => s.replace(/%([^%]+)%/g, (_, v) => process.env[v] ?? `%${v}%`);
-  const current = (process.env.PATH || '').split(path.delimiter).filter(Boolean);
-  const seen = new Set(current.map((p) => p.toLowerCase().replace(/\\+$/, '')));
-  const extra = [read('HKCU\\Environment'), read('HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment')]
-    .join(';').split(';').map((p) => expand(p.trim())).filter(Boolean)
-    .filter((p) => { const k = p.toLowerCase().replace(/\\+$/, ''); if (seen.has(k)) return false; seen.add(k); return true; });
-  if (extra.length) process.env.PATH = [...current, ...extra].join(path.delimiter);
+  mergeRegistryPaths(PATH_KEYS.map(read));
+}
+// refreshWindowsPath without blocking the process (#389)
+let pathRefreshing = null;
+function refreshWindowsPathAsync() {
+  if (process.platform !== 'win32' || pathRefreshed) return Promise.resolve();
+  pathRefreshing ??= Promise.all(PATH_KEYS.map((key) => new Promise((resolve) => {
+    execFile('reg', ['query', key, '/v', 'Path'], { encoding: 'utf8', windowsHide: true }, (err, out) => resolve(err ? '' : regPath(out)));
+  }))).then((values) => {
+    if (pathRefreshed) return;
+    pathRefreshed = true;
+    mergeRegistryPaths(values);
+  });
+  return pathRefreshing;
 }
 
 // macOS and Linux (#316): an app opened from Finder or the Dock inherits PATH=/usr/bin:/bin:...,
@@ -129,27 +148,49 @@ function resolveCommand(cmd) {
   if (path.isAbsolute(cmd) && fs.existsSync(cmd)) return { file: cmd, shell: /\.(cmd|bat)$/i.test(cmd) };
 
   refreshWindowsPath();
-  const home = process.env.USERPROFILE || '';
-  const dirs = [
-    ...(process.env.PATH || '').split(path.delimiter),
-    path.join(home, '.local', 'bin'),
-    path.join(process.env.APPDATA || '', 'npm'),
-  ].filter(Boolean);
-
   // 1) <cmd>.exe  2) binary with a platform suffix (e.g. winget installs
   // codex-x86_64-pc-windows-msvc.exe without an alias)  3) .cmd/.bat shims
   const exact = (ext) => (dir) => { const p = path.join(dir, cmd + ext); return fs.existsSync(p) ? p : null; };
   const suffixed = (dir) => {
     try {
-      const f = fs.readdirSync(dir).find((n) => n.toLowerCase().startsWith(`${cmd}-`) && /-windows-[a-z]+\.exe$/i.test(n));
+      const f = fs.readdirSync(dir).find(suffixedName(cmd));
       return f ? path.join(dir, f) : null;
     } catch { return null; }
   };
   for (const [finder, shell] of [[exact('.exe'), false], [suffixed, false], [exact('.cmd'), true], [exact('.bat'), true]]) {
-    for (const dir of dirs) {
+    for (const dir of windowsDirs()) {
       const p = finder(dir);
       if (p) return { file: p, shell };
     }
+  }
+  return null;
+}
+
+const windowsDirs = () => {
+  const home = process.env.USERPROFILE || '';
+  return [
+    ...(process.env.PATH || '').split(path.delimiter),
+    path.join(home, '.local', 'bin'),
+    path.join(process.env.APPDATA || '', 'npm'),
+  ].filter(Boolean);
+};
+const suffixedName = (cmd) => (n) => n.toLowerCase().startsWith(`${cmd}-`) && /-windows-[a-z]+\.exe$/i.test(n);
+
+// resolveCommand without blocking the process (#389: listing every PATH folder for a CLI that is not
+// installed took seconds on Windows), same answer: the folders are read in parallel, async.
+async function resolveCommandAsync(cmd) {
+  if (process.platform !== 'win32' || path.isAbsolute(cmd)) return resolveCommand(cmd);
+  await refreshWindowsPathAsync();
+  const dirs = windowsDirs();
+  const exists = (p) => fs.promises.access(p).then(() => p, () => null);
+  const exact = (ext) => (dir) => exists(path.join(dir, cmd + ext));
+  const suffixed = (dir) => fs.promises.readdir(dir).then((names) => {
+    const f = names.find(suffixedName(cmd));
+    return f ? path.join(dir, f) : null;
+  }, () => null);
+  for (const [finder, shell] of [[exact('.exe'), false], [suffixed, false], [exact('.cmd'), true], [exact('.bat'), true]]) {
+    const p = (await Promise.all(dirs.map(finder))).find(Boolean);
+    if (p) return { file: p, shell };
   }
   return null;
 }
@@ -760,6 +801,7 @@ module.exports = {
   parseGrok,
   refreshWindowsPath,
   resolveCommand,
+  resolveCommandAsync,
   runTurn,
   seedClaudeTotal,
   sleep,

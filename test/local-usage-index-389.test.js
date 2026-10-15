@@ -1,0 +1,69 @@
+// #389 internals: the local-usage scan's per-file entries survive an app start through the workspace's
+// index (usage_files, src/store.js), and a scan from entries read back parses nothing again.
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { decodeEntry, encodeEntry, readLocalUsageAsync, scanLocalUsage } = require('../src/local-usage');
+const { openStore } = require('../src/store');
+
+const jl = (...objs) => objs.map((o) => JSON.stringify(o)).join('\n') + '\n';
+const msg = (id) => ({
+  type: 'assistant', sessionId: 's1', requestId: `r-${id}`, timestamp: '2026-09-27T09:00:00Z',
+  message: { id: `m-${id}`, model: 'claude-opus-5-5', content: [{ type: 'tool_use', id: `t-${id}`, name: 'Edit', input: { file_path: 'a.js', old_string: 'x', new_string: 'y' } }], usage: { input_tokens: 3, output_tokens: 4 } },
+});
+
+function seed(t) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lu-index-389-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const home = path.join(root, 'home');
+  const dir = path.join(home, '.claude', 'projects', 'p');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'a.jsonl'), jl({ type: 'user', sessionId: 's1', message: { content: 'hello' } }, msg(1), msg(1), msg(2)));
+  return { root, home, dir };
+}
+
+test('entries encoded for the index and read back are used as they are: nothing is parsed again', (t) => {
+  const { home } = seed(t);
+  const states = new Map();
+  const first = scanLocalUsage({ home, states });
+  assert.equal(first.records.length, 2);
+  assert.equal(first.changed.length, 1);
+
+  const restored = new Map([...states].map(([f, e]) => [f, decodeEntry(encodeEntry(e))]));
+  const again = scanLocalUsage({ home, states: restored });
+  assert.equal(again.scan.parsedFiles, 0);
+  assert.equal(again.records.length, 2);
+  assert.deepEqual([...again.sessions.values()][0].files, ['a.js'], 'the session metrics (a Set inside) come back');
+});
+
+test('a transcript that shrank is read again from the start; one being written counts only its complete lines', (t) => {
+  const { home, dir } = seed(t);
+  const file = path.join(dir, 'a.jsonl');
+  const states = new Map();
+  scanLocalUsage({ home, states });
+  fs.appendFileSync(file, '{"type":"assistant","sessionId":"s1"'); // a line still being written
+  assert.equal(scanLocalUsage({ home, states }).records.length, 2);
+  fs.writeFileSync(file, jl(msg(9)));
+  const out = scanLocalUsage({ home, states });
+  assert.equal(out.records.length, 1);
+  assert.equal(out.records[0].tokens.input, 3);
+});
+
+test('readLocalUsageAsync with the workspace index saves each transcript\'s entry in usage_files', async (t) => {
+  const { root, home } = seed(t);
+  const ws = { root, runs: path.join(root, 'runs'), backlog: path.join(root, 'backlog'), index: path.join(root, 'index.db') };
+  const store = openStore(ws);
+  try {
+    const out = await readLocalUsageAsync({ home, index: store.path });
+    assert.equal(out.records.length, 2);
+    const { DatabaseSync } = require('node:sqlite');
+    const db = new DatabaseSync(store.path);
+    try {
+      const rows = db.prepare('SELECT file, key FROM usage_files').all();
+      assert.equal(rows.length, 1);
+      assert.match(rows[0].file, /a\.jsonl$/);
+    } finally { db.close(); }
+  } finally { store.close(); }
+});

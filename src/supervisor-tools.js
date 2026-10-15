@@ -110,7 +110,7 @@ function supervisorTools(ctx) {
       name: 'get_usage',
       description: 'Tokens and cost this month per provider, the budgets and the recent runs.',
       inputSchema: obj({ scope: { type: 'string', enum: ['orchestrator', 'machine'], description: 'orchestrator (default): the app\'s runs; machine: every CLI session on this machine' } }),
-      run: ({ scope } = {}) => json(ctx.usageSnapshot(scope === 'machine' ? 'machine' : 'orchestrator')),
+      run: async ({ scope } = {}) => json(await ctx.usageSnapshot(scope === 'machine' ? 'machine' : 'orchestrator')),
     },
     {
       name: 'get_analytics',
@@ -120,7 +120,7 @@ function supervisorTools(ctx) {
         to: str('Last day, YYYY-MM-DD'),
         scope: { type: 'string', enum: ['orchestrator', 'machine'] },
       }),
-      run: ({ from, to, scope } = {}) => analytics.analyticsReport(ctx.analyticsSnapshot({ from, to, scope })),
+      run: async ({ from, to, scope } = {}) => analytics.analyticsReport(await ctx.analyticsSnapshot({ from, to, scope })),
     },
   ];
 }

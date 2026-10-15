@@ -35,7 +35,8 @@ module.exports = (ctx) => {
   // trail, groups, state and the typical step times of its workflow's past runs, for the card's ring).
   // A paused roadmap shows what the scheduler will settle (#237: a stage run on its own that finished
   // while paused, e.g. after an edit of the file the scheduler has not seen, shows "Stage N done").
-  function roadmapView(projectId, list = []) {
+  // `issues`: the backlog's issues when the caller has read them already (the Backlog, #389)
+  function roadmapView(projectId, list = [], issues = null) {
     const stored = roadmaps.readRoadmap(ctx.ws.backlog, path.basename(String(projectId)));
     const roadmap = stored.state === 'paused' ? roadmaps.advance(stored, { runOf: roadmapRun, canStart: () => false }).roadmap : roadmaps.withStatus(stored, roadmapRun);
     const byId = new Map(list.map((r) => [r.runId, r]));
@@ -64,7 +65,7 @@ module.exports = (ctx) => {
     };
     const prices = workspace.readSettings(ctx.ws).prices || {};
     // the backlog's issues: their complexity:n labels scale each item's estimate (#215)
-    const issues = backlog.readBacklog(ctx.ws.backlog, path.basename(String(projectId)))?.issues || [];
+    const known = issues || backlog.readBacklog(ctx.ws.backlog, path.basename(String(projectId)))?.issues || [];
     return costEstimate.withEstimates({
       ...roadmap,
       stages: roadmap.stages.map((s) => ({
@@ -77,7 +78,7 @@ module.exports = (ctx) => {
           return { ...x, ...(waiting ? { waiting: true } : {}), ...(run ? { run } : {}) };
         }),
       })),
-    }, list, { issues, prices });
+    }, list, { issues: known, prices });
   }
 
   // #206: whether the budget cap stops this start: the roadmap pauses with the stage's estimate
@@ -124,7 +125,8 @@ module.exports = (ctx) => {
   function roadmapRun(runId) {
     const live = runId && ctx.active.get(runId);
     if (live) return { status: 'running', waiting: live.approvals.size > 0 };
-    const r = runId ? runs.readRun(ctx.ws.runs, runId) : null;
+    // its index row when current (#389: no events.jsonl parsed per item and per read)
+    const r = runId ? runs.findRun(ctx.ws.runs, runId) : null;
     if (!r) return null;
     return { status: r.status, error: r.error, merged: r.status === 'success' && (r.mock || !!r.localMerge || roadmaps.mergedPullRequest(r.runDir) || neverMerges(r.file)) };
   }

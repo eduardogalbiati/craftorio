@@ -51,8 +51,13 @@ function loadUsage() {
     if (scope !== state.usageScope) return loadUsage(); // scope changed while loading
     renderUsageAll();
   })();
+  if (usageBusy()) $('#usage-widget')?.setAttribute('aria-busy', 'true');
   return usageLoading;
 }
+
+// #389: true while the usage is read and nothing of this scope is on screen yet (the widget and
+// Home's "Cost today" show their loading state; the app reads it after the first paint)
+const usageBusy = () => !!usageLoading && (!state.usage || usageStale());
 
 function setUsageScope(scope) {
   if (scope !== 'machine') scope = 'orchestrator';
@@ -87,11 +92,13 @@ function renderUsageAll() {
   renderUsageWidget();
   if (!$('#usage-pop').classList.contains('hidden')) renderUsagePopover();
   if (state.view === 'usage') renderUsage();
+  if (state.view === 'dashboard') paintHome(); // Home's "Cost today"
 }
 
 function renderUsageWidget() {
   const u = state.usage;
   const btn = $('#usage-widget');
+  btn.setAttribute('aria-busy', String(usageBusy()));
   btn.classList.toggle('unavailable', !u && !!state.usageError);
   if (!u) {
     $('#usage-widget-text').textContent = state.usageError ? 'Usage unavailable' : '—';

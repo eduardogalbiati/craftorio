@@ -5,7 +5,10 @@
 // `agentUsageRuns` is the spend that is in no run folder, for Usage and every monthly budget check.
 
 const path = require('path');
-const { resolveCommand } = require('../../engine/providers');
+const {
+  resolveCommand,
+  resolveCommandAsync,
+} = require('../../engine/providers');
 const simulation = require('../../engine/simulation');
 const workspace = require('../../workspace');
 const projects = require('../../projects');
@@ -18,7 +21,10 @@ const supervisorChat = require('../../supervisor-chat');
 const repoPerformance = require('../../repo-performance');
 const roadmap = require('../../roadmap');
 const runs = require('../../runs');
-const { readLocalUsage } = require('../../local-usage');
+const {
+  computeUsageAsync,
+  readLocalUsageAsync,
+} = require('../../local-usage');
 const { storeFor } = require('../../store');
 const supervisor = require('../../supervisor');
 const {
@@ -56,13 +62,20 @@ module.exports = (ctx) => {
     return out;
   }
 
-  function usageSnapshot(scope = 'orchestrator') {
+  // #389: the CLIs' transcripts are scanned in a worker thread, incrementally, with each file's state
+  // kept in the workspace's index: the main process never blocks on them
+  const localUsage = () => readLocalUsageAsync({ index: storeFor(ctx.ws.runs)?.path });
+
+  // the totals are computed in the usage worker (#389), from the run folders and the CLIs' transcripts
+  async function usageSnapshot(scope = 'orchestrator') {
+    const found = await Promise.all(usage.PROVIDERS.map((p) => resolveCommandAsync(p.command)));
     const live = [...ctx.active.values()].filter((r) => r.status === 'running' && !r.mock).map((r) => ({
       run_id: r.runId, workflow: r.wf.metadata?.name, started_at: new Date(r.startedAt).toISOString(), sessions: [...r.sessions.values()].map((x) => r.snapshot(x)),
     }));
-    const installed = Object.fromEntries(usage.PROVIDERS.map((p) => [p.id, !!resolveCommand(p.command)]));
-    const local = scope === 'machine' ? readLocalUsage() : null;
-    const out = usage.computeUsage({ runsDir: ctx.ws.runs, settings: workspace.readSettings(ctx.ws), live, installed, scope, local, extraRuns: agentUsageRuns() });
+    const installed = Object.fromEntries(usage.PROVIDERS.map((p, i) => [p.id, !!found[i]]));
+    const out = await computeUsageAsync({
+      runsDir: ctx.ws.runs, settings: workspace.readSettings(ctx.ws), live, installed, scope, extraRuns: agentUsageRuns(), index: storeFor(ctx.ws.runs)?.path,
+    });
     // #206: today's (or tonight's) spending against the budget, for the top bar ("$38 / $60 today")
     let spending = null;
     try { spending = ctx.budgetNow(); } catch (e) { console.error('budget:', e); }
@@ -70,7 +83,8 @@ module.exports = (ctx) => {
   }
 
   // The CLIs' transcripts are read in both scopes: they add tool calls, prompts, files... to run sessions.
-  function analyticsSnapshot({ scope, from, to } = {}) {
+  async function analyticsSnapshot({ scope, from, to } = {}) {
+    const local = await localUsage();
     const within = folderMatcher();
     const projectList = projects.listProjects(ctx.ws.projects);
     const projectOf = (cwd) => {
@@ -78,7 +92,7 @@ module.exports = (ctx) => {
       return p ? { id: p.id, name: p.name } : null;
     };
     return analytics.computeAnalytics({
-      runsDir: ctx.ws.runs, local: readLocalUsage(), settings: workspace.readSettings(ctx.ws), projects: projectList, projectOf,
+      runsDir: ctx.ws.runs, local, settings: workspace.readSettings(ctx.ws), projects: projectList, projectOf,
       scope: scope === 'machine' ? 'machine' : 'orchestrator', from, to,
     });
   }
@@ -114,7 +128,7 @@ module.exports = (ctx) => {
   // attachments: images for the question (#129)
   async function analyzeAnalytics({ scope, from, to, question, mock, attachments } = {}) {
     if (!mock) simulation.refuseReal('the supervisor\'s CLI (claude)');
-    const a = analyticsSnapshot({ scope, from, to });
+    const a = await analyticsSnapshot({ scope, from, to });
     return supervisor.analyzeSessions({
       report: analytics.analyticsReport(a), from: a.from, to: a.to, scope: a.scope, question, mock: !!mock,
       attachments: Array.isArray(attachments) ? attachments : [],
@@ -148,6 +162,7 @@ module.exports = (ctx) => {
     agentUsageRuns,
     analyticsSnapshot,
     analyzeAnalytics,
+    localUsage,
     repositoryPerformance,
     setBudget,
     setPrice,

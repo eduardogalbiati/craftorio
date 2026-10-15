@@ -11,7 +11,7 @@ const workspace = require('../../workspace');
 const projects = require('../../projects');
 const backlog = require('../../backlog');
 const refreshes = require('../../backlog-refresh');
-const { gitOut } = require('../common');
+const { gitOutAsync } = require('../common');
 const epics = require('../../epics');
 const roadmaps = require('../../roadmap');
 const { normalizeThen } = require('../../shared/chain-model');
@@ -34,7 +34,7 @@ module.exports = (ctx) => {
     const queue = backlog.readQueue(ws.backlog, data.projectId);
     const local = backlog.readLocal(ws.backlog, data.projectId);
     // the roadmap, each item with its run's live state, and each issue's stage ("Roadmap: stage 2")
-    const roadmap = ctx.roadmapView(data.projectId, live);
+    const roadmap = ctx.roadmapView(data.projectId, live, data.issues);
     const stages = roadmaps.issueStages(roadmap);
     const refresh = refreshBanner(project, live, local);
     const refreshed = new Set(refresh.refreshed);
@@ -61,14 +61,30 @@ module.exports = (ctx) => {
     const hours = workspace.readSettings(ws).backlogRefreshHours;
     const { last } = refreshes.refreshRuns(list);
     const stale = last && Number(hours) > 0 && Date.now() - Date.parse(last.startedAt) >= Number(hours) * 3600e3;
-    const count = stale && project?.folder
-      ? gitOut(project.folder, ['rev-list', '--count', '--first-parent', `--since=${last.startedAt}`, local?.base || 'HEAD', '--'])
-      : null;
+    const count = stale && project?.folder ? mergeCount(project.folder, last.startedAt, local?.base || 'HEAD') : null;
     const state = refreshes.refreshState({
       runs: list, intervalHours: hours, merges: count == null ? null : Number(count), dismissedOn: project ? refreshes.readDismissed(ws.backlog, project.id) : null,
     });
     const refreshed = last ? refreshes.refreshedIssues(path.join(ws.runs, last.runId), last.finishedAt) : [];
     return { ...state, base: local?.base || null, refreshed };
+  }
+
+  // The merges on `base` since `since` (#389): counted by an async git call and kept for
+  // MERGE_COUNT_MS, so a Backlog read never waits for git; null until the first count is known
+  // (the banner shows from the next read).
+  const MERGE_COUNT_MS = 5 * 60e3;
+  const mergeCounts = new Map(); // "<folder>|<since>|<base>" → { count, at, pending }
+  function mergeCount(folder, since, base) {
+    const key = `${folder}|${since}|${base}`;
+    const hit = mergeCounts.get(key);
+    if (!hit?.pending && (!hit || Date.now() - hit.at >= MERGE_COUNT_MS)) {
+      const entry = { count: hit?.count ?? null, at: hit?.at || 0, pending: true };
+      mergeCounts.set(key, entry);
+      gitOutAsync(folder, ['rev-list', '--count', '--first-parent', `--since=${since}`, base, '--']).then((out) => {
+        Object.assign(entry, { count: out, at: Date.now(), pending: false });
+      });
+    }
+    return mergeCounts.get(key).count;
   }
 
   // A Backlog Refresh run ended (#161): the Backlog syncs the project, so the edited and closed

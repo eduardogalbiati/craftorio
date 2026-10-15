@@ -529,8 +529,13 @@ test('backlog: the refresh banner counts merges since the last refresh only once
     finishedAt: new Date(Date.now() - 1.9 * 3600e3).toISOString(),
   });
 
+  // #389: the merges are counted by an async git call: a read never waits for it, a later one has it
   let data = api['backlog:get']({ projectId: p.id });
   assert.equal(data.refresh.hoursAgo, 2);
+  for (const deadline = Date.now() + 10000; data.refresh.merges == null && Date.now() < deadline;) {
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    data = api['backlog:get']({ projectId: p.id });
+  }
   assert.equal(data.refresh.merges, 2); // both of the repo's commits were made after the last refresh started
   assert.equal(data.refresh.due, true);
 

@@ -14,12 +14,15 @@
 //
 // Each reader also returns per-session metrics (Analytics screen), `null` where the format does not
 // record them: see newMetrics() below.
+//
+// #389: the scan is incremental (each transcript is read only from where the last scan stopped) and
+// the service runs it in a worker thread (readLocalUsageAsync, src/local-usage-worker.js), so the main
+// process never blocks on the CLIs' gigabytes of transcripts.
 
 const fs = require('fs');
 const path = require('path');
 const { cliConfigDirs, cliSessionDirs } = require('./cli-config-dirs');
-
-const cache = new Map(); // file -> { key, records, plan, sessions }
+const { workerClient } = require('./worker-client');
 
 // A pause longer than this between two messages is idle time (the person was away), not active time.
 const IDLE_GAP_MS = 5 * 60e3;
@@ -88,20 +91,6 @@ function walk(dir, match, out = []) {
   return out;
 }
 
-// Parses each file once per (mtime, size).
-function cached(file, parse) {
-  let st;
-  try { st = fs.statSync(file); } catch { return { records: [] }; }
-  const key = `${st.mtimeMs}:${st.size}`;
-  const hit = cache.get(file);
-  if (hit && hit.key === key) return hit;
-  let val;
-  try { val = parse(fs.readFileSync(file, 'utf8'), file); } catch { val = { records: [] }; }
-  const entry = { key, ...val };
-  cache.set(file, entry);
-  return entry;
-}
-
 const lines = (text) => text.split('\n').map((l) => { try { return l ? JSON.parse(l) : null; } catch { return null; } }).filter(Boolean);
 const tokens = (input, output, cacheRead, cacheWrite, reasoning) => ({
   input: Math.max(0, input || 0), output: output || 0, cache_read: cacheRead || 0, cache_write: cacheWrite || 0, reasoning: reasoning || 0,
@@ -110,26 +99,31 @@ const tokens = (input, output, cacheRead, cacheWrite, reasoning) => ({
 // Claude Code: user lines carry the prompts and the tool results (is_error), assistant lines the
 // tool_use blocks and usage; compactions are `compact_boundary` system lines (older versions: a user
 // line with isCompactSummary); an interrupt is the "[Request interrupted by user" user text.
+// The parser keeps its state between chunks (#389): the lines appended to a transcript are fed to
+// the same state, and the result is the same as parsing the whole file at once.
+const claudeState = () => ({
+  kind: 'claude', seen: new Set(), records: [], metrics: new Map(), toolIds: new Set(), turnIds: new Set(), boundaries: 0, compactSummaries: 0,
+});
 function parseClaude(text) {
-  const seen = new Set();
-  const records = [];
-  const metrics = new Map(); // sessionId -> metrics
-  const toolIds = new Set();
-  const turnIds = new Set();
-  let boundaries = 0, compactSummaries = 0;
+  const s = claudeState();
+  feedClaude(s, text);
+  return claudeResult(s);
+}
+function feedClaude(s, text) {
+  const { seen, records, metrics, toolIds, turnIds } = s;
   for (const j of lines(text)) {
     if (!j.sessionId) continue;
     let m = metrics.get(j.sessionId);
     if (!m) metrics.set(j.sessionId, (m = newMetrics('claude', j.sessionId)));
     m.cwd ??= j.cwd || null;
     if (/^sdk/.test(j.entrypoint || '')) m.headless = true;
-    if (j.type === 'system' && j.subtype === 'compact_boundary') boundaries++;
+    if (j.type === 'system' && j.subtype === 'compact_boundary') s.boundaries++;
     if (j.type !== 'user' && j.type !== 'assistant') continue;
     if (!j.isSidechain) m.sidechain = false;
     if (j.timestamp) m.times.push(j.timestamp);
     const content = j.message?.content;
     if (j.type === 'user') {
-      if (j.isCompactSummary) { compactSummaries++; continue; }
+      if (j.isCompactSummary) { s.compactSummaries++; continue; }
       for (const r of Array.isArray(content) ? content : []) {
         if (r?.type !== 'tool_result' || !r.is_error) continue;
         m.failedToolCalls++;
@@ -170,30 +164,37 @@ function parseClaude(text) {
       costUsd: typeof j.costUSD === 'number' ? j.costUSD : null,
     });
   }
+}
+function claudeResult(s) {
   // a file is one conversation: its compactions go to its (first) session
-  const first = metrics.values().next().value;
-  if (first) first.compactions = Math.max(boundaries, compactSummaries);
-  return { records, sessions: [...metrics.values()].map(finishMetrics) };
+  const first = s.metrics.values().next().value;
+  if (first) first.compactions = Math.max(s.boundaries, s.compactSummaries);
+  return { records: s.records, sessions: [...s.metrics.values()].map(finishMetrics) };
 }
 
 // Codex: tool calls are response_item function_call / custom_tool_call / local_shell_call (apply_patch
 // carries the diff), prompts are user_message events, interrupts turn_aborted, compactions `compacted`.
-function parseCodex(text) {
-  const records = [];
-  let sessionId = null;
-  let model = null;
-  let plan = null;
+function codexState() {
   const m = newMetrics('codex', null);
   m.sidechain = false;
   m.permissionDenials = null; // not recorded
+  return { kind: 'codex', records: [], sessionId: null, model: null, plan: null, m };
+}
+function parseCodex(text) {
+  const s = codexState();
+  feedCodex(s, text);
+  return codexResult(s);
+}
+function feedCodex(s, text) {
+  const { records, m } = s;
   for (const j of lines(text)) {
     const p = j.payload || {};
     if (j.timestamp) m.times.push(j.timestamp);
     if (j.type === 'session_meta') {
-      sessionId = p.id || p.session_id || sessionId;
+      s.sessionId = p.id || p.session_id || s.sessionId;
       m.cwd ??= p.cwd || null;
       if (p.source === 'exec' || /exec/.test(p.originator || '')) m.headless = true;
-    } else if (j.type === 'turn_context' && p.model) model = p.model;
+    } else if (j.type === 'turn_context' && p.model) s.model = p.model;
     else if (j.type === 'compacted' || (j.type === 'event_msg' && p.type === 'context_compacted')) m.compactions++;
     else if (j.type === 'response_item' && /^(function_call|custom_tool_call|local_shell_call)$/.test(p.type)) {
       const name = p.type === 'local_shell_call' ? 'shell' : p.name;
@@ -218,17 +219,19 @@ function parseCodex(text) {
         m.assistantTurns++;
         m.peakContext = Math.max(m.peakContext, u.input_tokens || 0);
         records.push({
-          provider: 'codex', sessionId, model: model || 'codex', ts: j.timestamp,
+          provider: 'codex', sessionId: s.sessionId, model: s.model || 'codex', ts: j.timestamp,
           tokens: tokens((u.input_tokens || 0) - cachedIn, u.output_tokens, cachedIn, u.cache_write_input_tokens, u.reasoning_output_tokens),
           costUsd: null,
         });
       }
-      if (p.rate_limits) plan = { ts: j.timestamp, ...p.rate_limits };
+      if (p.rate_limits) s.plan = { ts: j.timestamp, ...p.rate_limits };
     }
   }
-  m.sessionId = sessionId;
-  m.model = model;
-  return { records, plan, sessions: sessionId ? [finishMetrics(m)] : [] };
+}
+function codexResult(s) {
+  s.m.sessionId = s.sessionId;
+  s.m.model = s.model;
+  return { records: s.records, plan: s.plan, sessions: s.sessionId ? [finishMetrics(s.m)] : [] };
 }
 
 // Grok: usage.json has turns only (no prompts or tool calls); the cwd is in summary.json next to it.
@@ -301,42 +304,167 @@ function codexPlan(raw) {
 
 const SOURCES = (home) => cliSessionDirs(cliConfigDirs(home));
 
+// ---- incremental scan (#389) -------------------------------------------------------------------
+// Each transcript keeps an entry between scans: { kind, key: "<mtimeMs>:<size>", offset, state, result }.
+// An unchanged key is not read; a JSONL transcript that grew is read from `offset` (the end of the last
+// complete line read) and fed to its kept parser state; a smaller one is read again from the start.
+// Grok's usage.json is rewritten in place: read whole when its key changes.
+const NEW_STATE = { claude: claudeState, codex: codexState };
+const FEED = { claude: feedClaude, codex: feedCodex };
+const RESULT = { claude: claudeResult, codex: codexResult };
+
+// Reads `file` from entry.offset to `size` and feeds its complete lines; returns the bytes read.
+function readAppended(file, entry, size) {
+  const length = size - entry.offset;
+  if (length <= 0) return 0;
+  const buf = Buffer.alloc(length);
+  const fd = fs.openSync(file, 'r');
+  let got = 0;
+  try {
+    while (got < length) {
+      const n = fs.readSync(fd, buf, got, length - got, entry.offset + got);
+      if (!n) break;
+      got += n;
+    }
+  } finally { fs.closeSync(fd); }
+  let end = buf.lastIndexOf(0x0a, got - 1) + 1;
+  let text = buf.toString('utf8', 0, end);
+  // a last line without its newline counts once it is complete JSON (a line being written is not)
+  if (end < got) {
+    const tail = buf.toString('utf8', end, got);
+    try { JSON.parse(tail); text += tail; end = got; } catch { /* still being written */ }
+  }
+  FEED[entry.kind](entry.state, text);
+  entry.offset += end;
+  return got;
+}
+
+// The entry of `file` after this scan, and how many bytes were read for it (0: `prev` as it was).
+function scanFile(file, kind, prev) {
+  let st;
+  try { st = fs.statSync(file); } catch { return null; }
+  const key = `${st.mtimeMs}:${st.size}`;
+  if (prev && prev.key === key) return { entry: prev, bytes: 0 };
+  if (kind === 'grok') {
+    let result;
+    try { result = parseGrok(fs.readFileSync(file, 'utf8'), file); } catch { result = { records: [] }; }
+    return { entry: { kind, key, result }, bytes: st.size };
+  }
+  const fresh = !prev || prev.kind !== kind || st.size < prev.offset;
+  const entry = fresh ? { kind, key, offset: 0, state: NEW_STATE[kind]() } : { ...prev, key };
+  let bytes = 0;
+  try { bytes = readAppended(file, entry, st.size); } catch { /* unreadable now: kept as it was */ }
+  entry.result = RESULT[kind](entry.state);
+  return { entry, bytes };
+}
+
 /**
- * All usage records the CLIs wrote on this machine, plus Codex plan limits, plus the metrics of each
- * session (`sessions`, keyed "<provider>:<sessionId>").
+ * One scan of the CLIs' transcripts over the kept entries (`states`: file → entry, updated in place).
+ * Returns readLocalUsage's result plus `scan` ({ files, parsedFiles, bytesParsed }), and `changed`
+ * (the files whose entry changed) and `gone` (the files no longer there) for the index.
  */
-function readLocalUsage({ home } = {}) {
+function scanLocalUsage({ home, states = new Map() } = {}) {
   const src = SOURCES(home);
   const records = [];
   const sessions = new Map();
   const found = { claude: false, codex: false, grok: false };
-  const add = (r) => {
-    records.push(...r.records);
-    for (const m of r.sessions || []) {
-      const key = `${m.provider}:${m.sessionId}`;
-      sessions.set(key, mergeMetrics(sessions.get(key), m));
+  const scan = { files: 0, parsedFiles: 0, bytesParsed: 0 };
+  const present = new Set();
+  const changed = [];
+  let latestPlan = null;
+  const each = (kind, files) => {
+    for (const f of files) {
+      found[kind] = true;
+      scan.files++;
+      present.add(f);
+      const prev = states.get(f);
+      const r = scanFile(f, kind, prev);
+      if (!r) continue;
+      if (r.entry !== prev) { states.set(f, r.entry); changed.push(f); }
+      if (r.bytes) { scan.parsedFiles++; scan.bytesParsed += r.bytes; }
+      const res = r.entry.result;
+      for (const x of res.records) records.push(x);
+      for (const m of res.sessions || []) {
+        const k = `${m.provider}:${m.sessionId}`;
+        sessions.set(k, mergeMetrics(sessions.get(k), m));
+      }
+      if (res.plan && (!latestPlan || String(res.plan.ts) > String(latestPlan.ts))) latestPlan = res.plan;
     }
   };
-  for (const f of walk(src.claude, (n) => n.endsWith('.jsonl'))) { found.claude = true; add(cached(f, parseClaude)); }
-  let latestPlan = null;
-  for (const f of walk(src.codex, (n) => n.startsWith('rollout-') && n.endsWith('.jsonl'))) {
-    found.codex = true;
-    const r = cached(f, parseCodex);
-    add(r);
-    if (r.plan && (!latestPlan || String(r.plan.ts) > String(latestPlan.ts))) latestPlan = r.plan;
+  each('claude', walk(src.claude, (n) => n.endsWith('.jsonl')));
+  each('codex', walk(src.codex, (n) => n.startsWith('rollout-') && n.endsWith('.jsonl')));
+  each('grok', walk(src.grok, (n) => n === 'usage.json'));
+  const gone = [...states.keys()].filter((f) => !present.has(f) && [src.claude, src.codex, src.grok].some((d) => d && f.startsWith(d)));
+  for (const f of gone) states.delete(f);
+  return { records, sessions, plans: { codex: codexPlan(latestPlan) }, found, sources: src, scan, changed, gone };
+}
+
+// An entry as JSON for the index (Sets and Maps kept; a parser's result is rebuilt from its state), and back.
+const encodeEntry = ({ result, ...entry }) => JSON.stringify(entry.state ? entry : { ...entry, result },
+  (k, v) => (v instanceof Set ? { $set: [...v] } : v instanceof Map ? { $map: [...v] } : v));
+function decodeEntry(text) {
+  const entry = JSON.parse(text, (k, v) => (v && Array.isArray(v.$set) ? new Set(v.$set) : v && Array.isArray(v.$map) ? new Map(v.$map) : v));
+  if (entry.state) entry.result = RESULT[entry.kind](entry.state);
+  return entry;
+}
+
+const syncStates = new Map(); // file → entry, for readLocalUsage in this thread
+
+/**
+ * All usage records the CLIs wrote on this machine, plus Codex plan limits, plus the metrics of each
+ * session (`sessions`, keyed "<provider>:<sessionId>"). Synchronous, in the calling thread: the
+ * service uses readLocalUsageAsync.
+ */
+function readLocalUsage({ home } = {}) {
+  const { changed, gone, ...out } = scanLocalUsage({ home, states: syncStates });
+  return out;
+}
+
+// ---- the usage worker (#389) ---------------------------------------------------------------------
+// One worker thread per process (src/local-usage-worker.js) keeps the entries between calls and,
+// given the workspace's index.db (`index`), loads and saves them in its usage_files table. If it
+// cannot start, the work runs in the calling thread.
+const usageWorker = workerClient(path.join(__dirname, 'local-usage-worker.js'));
+function inUsageWorker(message, fallback) {
+  try { return usageWorker(message); } catch (e) {
+    console.error('usage worker:', e.message);
+    return Promise.resolve().then(fallback);
   }
-  for (const f of walk(src.grok, (n) => n === 'usage.json')) { found.grok = true; add(cached(f, parseGrok)); }
-  return { records, sessions, plans: { codex: codexPlan(latestPlan) }, found, sources: src };
+}
+
+/**
+ * readLocalUsage off the calling thread (#389): resolves to its result plus `scan`
+ * ({ files, parsedFiles, bytesParsed }: what this call read). `index`: the workspace's index.db,
+ * where the per-file entries are kept between app starts.
+ */
+function readLocalUsageAsync({ home, index } = {}) {
+  return inUsageWorker({ op: 'scan', home, index: index || null }, () => readLocalUsage({ home }));
+}
+
+/**
+ * src/usage.js computeUsage(opts) in the usage worker (#389): the machine scope's records never
+ * cross to the calling thread, only the totals. The runs are read from runs/ (the index is the
+ * service's), `local` from the worker's own scan of `home`'s transcripts.
+ */
+function computeUsageAsync({ home, index, ...opts }) {
+  return inUsageWorker({ op: 'usage', home, index: index || null, opts }, () => require('./usage').computeUsage({
+    ...opts, local: opts.scope === 'machine' ? readLocalUsage({ home }) : null,
+  }));
 }
 
 module.exports = {
   codexPlan,
+  computeUsageAsync,
+  decodeEntry,
+  encodeEntry,
   IDLE_GAP_MS,
   mergeMetrics,
   parseClaude,
   parseCodex,
   parseGrok,
   readLocalUsage,
+  readLocalUsageAsync,
+  scanLocalUsage,
   TOOL_KINDS,
   toolKind,
 };

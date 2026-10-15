@@ -18,7 +18,7 @@
 // - a new workspace (no project, no run): how to start.
 // Registers itself with registerView (view-registry.js); uses viewRegistry and the globals of app.js and
 // the shared pieces ($, esc, state, dateOf, pendingGates, openGateOf, showRun, showView, openDrawer,
-// openProjectModal, issueRefs, displayName, fmtUsd, loadUsage).
+// openProjectModal, issueRefs, displayName, fmtUsd, usageBusy).
 // renderDashboard is also called by app.js (init, and renderHeader on run events): it paints from
 // what was read last (nothing is redrawn while it reads the same) and reads again at most every
 // HOME_REFRESH_MS (at once when Home opens or the header's project changes; every HOME_REFRESH_MS
@@ -42,7 +42,8 @@ const HOME_FAILED = ['failed', 'cancelled', 'interrupted'];
 const HOME_ACTIONS = ['data-home-run', 'data-home-card', 'data-home-roadmap', 'data-home-act', 'data-stage'];
 // asked: the project of the last read started (undefined: none yet); data: what the last read answered
 // html: what the overview shows now
-const homeView = { seq: 0, at: 0, asked: undefined, data: null, morning: null, html: null };
+// occupancy: the 24/7 summary (#389: undefined until its first answer, null without figures)
+const homeView = { seq: 0, at: 0, asked: undefined, data: null, morning: null, html: null, occupancy: undefined };
 
 const homeProject = () => window.CurrentProject?.get() || null;
 // the roadmap's items, each with its stage's number (1-based) and name
@@ -64,8 +65,14 @@ async function loadHome() {
   homeView.at = Date.now();
   homeView.asked = projectId;
   const read = async (fn) => { try { return await fn(); } catch { return null; } };
-  // (the top bar's usage, read once at start: "Today" waits for its first answer)
-  const [inbox, cards, waiting, backlog, releases, active, runs, occupancy] = await Promise.all([
+  // #389: the slow reads never hold the overview back: the 24/7 occupancy paints when it answers
+  // (busy until its first answer), "Cost today" when the top bar's usage does (usage-widget.js)
+  read(() => api.getOccupancy({ summary: true })).then((o) => {
+    if (seq !== homeView.seq) return;
+    homeView.occupancy = o || null;
+    paintHome();
+  });
+  const [inbox, cards, waiting, backlog, releases, active, runs] = await Promise.all([
     read(() => projectId && api.listDiscoveryCards(projectId, 'inbox')),
     read(() => projectId && viewRegistry.has('discovery') && api.listDiscoveryCards(projectId)),
     read(() => projectId && api.listDiscoveryWaiting(projectId)),
@@ -74,12 +81,10 @@ async function loadHome() {
     read(() => api.listActiveRuns()),
     // simulated runs count only where nothing else can run (simulation-only mode)
     read(() => api.listRuns({ limit: HOME_RUNS, showSim: !!state.simulationOnly })),
-    read(() => api.getOccupancy({ summary: true })),
-    read(() => state.usage || loadUsage()),
   ]);
   if (seq !== homeView.seq) return; // a newer read (the project changed) answers instead
   homeView.data = {
-    projectId, backlog: backlog || null, releases: releases || null, occupancy: occupancy || null,
+    projectId, backlog: backlog || null, releases: releases || null,
     inbox: homeList(inbox), cards: homeList(cards), waiting: homeList(waiting), active: homeList(active), runs: homeList(runs?.runs || runs),
   };
   paintHome();
@@ -211,20 +216,26 @@ function homeTodayHtml(d) {
   const night = sp?.night ? ['Cost tonight', usd(sp.night), 'Spent by real runs since the Night watch started']
     : w ? ['Cost last night', fmtUsd(d.runs.filter(inNight).reduce((a, r) => a + (Number(r.costUsd) || 0), 0)), 'Cost of the real runs started during the last Night watch']
       : ['Cost last night', '—', 'No Night watch ended recently'];
-  const o = d.occupancy;
-  const occupancy = o && !o.empty ? `${Math.round((Number(o.occupancy) || 0) * 100)}%` : '—';
+  // undefined: not answered yet (#389: shown as loading), null: no figures
+  const o = homeView.occupancy;
+  const occupancyBusy = o === undefined;
+  const occupancy = occupancyBusy ? '…' : o && !o.empty ? `${Math.round((Number(o.occupancy) || 0) * 100)}%` : '—';
+  const occupancyTitle = occupancyBusy ? 'Reading the last 24 h…' : o && !o.empty ? window.OccupancyChip?.chipModel(o).tooltip || '' : 'No runs yet: start one to measure';
+  const costBusy = usageBusy();
   const stages = d.backlog?.roadmap?.stages || [];
   const next = RoadmapModel.currentStage({ stages });
   const nextName = next < 0 ? '' : stages[next].name || `Stage ${next + 1}`;
-  const stat = (label, value, title) => `<div class="u-stat" title="${esc(title)}"><label>${esc(label)}</label><b>${value}</b></div>`;
+  // `attrs`: a test id and, while its figure loads, aria-busy
+  const stat = (label, value, title, attrs = '') => `<div class="u-stat" title="${esc(title)}"${attrs}><label>${esc(label)}</label><b>${value}</b></div>`;
+  const busy = (on) => (on ? ' aria-busy="true"' : '');
   return `<section class="home-block" data-testid="home-today" aria-label="Today">
     <h2 class="home-title">Today</h2>
     <div class="home-stats">
-      ${stat('Cost today', esc(usd(sp?.day)), 'Spent today by real runs (live runs included)')}
+      ${stat('Cost today', esc(costBusy ? '…' : usd(sp?.day)), costBusy ? 'Reading the usage…' : 'Spent today by real runs (live runs included)', ` data-testid="home-cost-today"${busy(costBusy)}`)}
       ${stat(night[0], esc(night[1]), night[2])}
       ${stat('Runs finished', finished, 'Runs that succeeded today')}
       ${stat('Runs failed', failed, 'Runs that failed, were cancelled or were interrupted today')}
-      ${stat('24/7 occupancy', occupancy, o && !o.empty ? window.OccupancyChip?.chipModel(o).tooltip || '' : 'No runs yet: start one to measure')}
+      ${stat('24/7 occupancy', occupancy, occupancyTitle, ` data-testid="home-occupancy"${busy(occupancyBusy)}`)}
       ${stat('Next roadmap stage', nextName ? `<button type="button" class="link-btn home-next" data-home-roadmap="${next + 1}" title="${esc(`Stage ${next + 1} of ${stages.length}: ${nextName}. Open the roadmap`)}">${esc(nextName)}</button>` : '—', nextName ? 'The first stage with work left' : 'No roadmap stage with work left')}
     </div>
   </section>`;

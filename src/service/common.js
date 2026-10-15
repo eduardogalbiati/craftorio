@@ -3,7 +3,7 @@
 // matching) and the child-process calls they make (a tool's output, a git query).
 
 const path = require('path');
-const { execFileSync } = require('child_process');
+const { execFile, execFileSync } = require('child_process');
 const { resolveCommand } = require('../engine/providers');
 const { canonicalPath } = require('../engine/worktree');
 const { execShim } = require('../shell');
@@ -11,6 +11,7 @@ const registry = require('../shared/providers');
 const sessionCache = require('../session-cache');
 const usage = require('../usage');
 const workflows = require('../workflows');
+const { workerClient } = require('../worker-client');
 
 const SRC = path.join(__dirname, '..');
 const ROOT = path.join(SRC, '..');
@@ -23,17 +24,25 @@ const resumeArgsOf = (type) => registry.byType(type)?.resumeArgs || null;
 const q = (a) => `"${String(a).replace(/"/g, '""')}"`;
 const num = (v) => (v === '' || v == null || !Number.isFinite(+v) || +v <= 0 ? null : +v);
 
-// Details for the Settings screen: path, version and (gh) authentication of each CLI.
+// Details for the Settings screen: path, version and (gh) authentication of each CLI. Started from
+// a worker thread (#389, src/tool-worker.js): starting a CLI can block the starting thread for
+// seconds on Windows; here, if the worker cannot start.
+const toolWorker = workerClient(path.join(SRC, 'tool-worker.js'));
 function runTool(file, args) {
-  return new Promise((resolve) => {
-    execShim(file, args, { windowsHide: true, timeout: 15000 }, (err, stdout, stderr) =>
-      resolve({ ok: !err, out: `${stdout || ''}${stderr || ''}`.trim() }));
+  const opts = { windowsHide: true, timeout: 15000, env: { ...process.env } };
+  const here = () => new Promise((resolve) => {
+    execShim(file, args, opts, (err, stdout, stderr) => resolve({ ok: !err, out: `${stdout || ''}${stderr || ''}`.trim() }));
   });
+  try { return toolWorker({ file, args, opts }).catch(here); } catch { return here(); }
 }
 
 const gitOut = (cwd, args) => {
   try { return execFileSync('git', args, { cwd, encoding: 'utf8', windowsHide: true, timeout: 10000, stdio: ['ignore', 'pipe', 'ignore'] }).trim(); } catch { return null; }
 };
+// gitOut without blocking the process (#389): resolves to the output, null on any failure
+const gitOutAsync = (cwd, args) => new Promise((resolve) => {
+  execFile('git', args, { cwd, encoding: 'utf8', windowsHide: true, timeout: 10000 }, (err, stdout) => resolve(err ? null : String(stdout).trim()));
+});
 
 // A session in the same shape whether it comes from the live engine or from a run on disk.
 // tokens: the breakdown plus `total` (as on the Usage screen), or null when the session has none.
@@ -183,6 +192,7 @@ module.exports = {
   cliReason,
   folderMatcher,
   gitOut,
+  gitOutAsync,
   num,
   q,
   requireArgs,

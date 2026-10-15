@@ -11,6 +11,7 @@
 'use strict';
 
 const fs = require('fs');
+const path = require('path');
 const yaml = require('js-yaml');
 const capabilities = require('../capabilities');
 const { PROBES } = require('../probes');
@@ -249,8 +250,21 @@ const WORKFLOW_CHECKS = resolveChecks('', [
   groups, outputs,
 ]);
 
-function loadWorkflow(file) {
+// #389: the parsed YAML of each file, kept while its mtime and size do not change (the Backlog and
+// the roadmap load the same workflows many times); every call checks and hands out its own copy
+const parsedCache = new Map(); // file → { key, wf }
+function parseWorkflowFile(file) {
+  let key = null;
+  try { const st = fs.statSync(file); key = `${st.mtimeMs}:${st.size}`; } catch { /* readFileSync says why */ }
+  const hit = key && parsedCache.get(path.resolve(file));
+  if (hit && hit.key === key) return structuredClone(hit.wf);
   const wf = yaml.load(fs.readFileSync(file, 'utf8'));
+  if (key) parsedCache.set(path.resolve(file), { key, wf: structuredClone(wf) });
+  return wf;
+}
+
+function loadWorkflow(file) {
+  const wf = parseWorkflowFile(file);
   const root = wf || {};
   runChecks(WORKFLOW_CHECKS, root, { prefix: '', wf: root, file, mcpServers: root.mcp_servers || {} });
   // #286: problems that do not stop a run, shown on the workflow's screen (not enumerable, so

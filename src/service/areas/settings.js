@@ -3,7 +3,7 @@
 // (src/install-commands.js) or sign in (#319). Claude Code's sign-in is read from its credentials
 // (src/claude-auth.js), never by running it; a failed probe returns its last output lines (`output`).
 
-const { resolveCommand } = require('../../engine/providers');
+const { resolveCommandAsync } = require('../../engine/providers');
 const {
   claudeAccount,
   claudeSignedIn,
@@ -30,7 +30,7 @@ const TOOLS = [
 module.exports = () => {
   function envDetails() {
     return Promise.all(TOOLS.map(async (t) => {
-      const r = resolveCommand(t.id);
+      const r = await resolveCommandAsync(t.id); // #389: never blocks the main process
       const signInCommand = signInCommands()[t.id] || null;
       if (!r) return { id: t.id, name: t.name, path: null, connected: false, installCommand: installCommand(t.id), installHint: installHint(t.id), signInCommand };
       const v = await runTool(r.file, t.args);
