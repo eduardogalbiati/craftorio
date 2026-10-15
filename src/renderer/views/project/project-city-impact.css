@@ -7,7 +7,7 @@
 .pci-head > b { font-size: 11px; letter-spacing: .5px; text-transform: uppercase; color: var(--r3d-muted); }
 .pci-header { display: grid; gap: 6px; }
 .pci-title { display: flex; gap: 6px; min-width: 0; font-size: 13px; color: var(--r3d-ink); }
-.pci-title b { font-family: var(--mono); flex: none; }
+.pci-title strong { font-family: var(--mono); flex: none; }
 .pci-title span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pci-total { margin: 0; }
 .pci-counts { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px; }

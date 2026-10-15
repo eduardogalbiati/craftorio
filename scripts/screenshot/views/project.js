@@ -16,6 +16,10 @@
 // #374: --mode city-agents is that city with two simulated runs in progress on it (architecture:agents
 // answers demoCityAgents): agents on a roof and at a door, a crane, the trails, a new building and a
 // collision risk.
+// #375: --mode city-issue is that city with an open issue's impact preview ("Show on the map": the
+// files its body cites, the Product Owner's group, a new file expected in a district, the header with
+// the counts and the Danger Zone share); --mode city-stage shows a roadmap stage's footprint ("Show the
+// stage on the map": each item its colour, a building two items would change in red).
 // #382: --mode city-large is the City view at a real scale: the project is this repository itself
 // (the checkout the screenshot runs from, about 1,400 drawn files) with the proof of concept's city
 // plan (poc/project-map/plans/multiagent-orchestrator.city-plan.json), the one the POC's overview
@@ -251,7 +255,7 @@ function seed({ appDir, args, projects, ws, project }) {
 
 const open = ({ js, project }) => js(`openProjectView(${JSON.stringify(project.id)})`);
 
-async function afterOpen({ args, click, js }) {
+async function afterOpen({ args, click, js, project }) {
   if (!args.tab) return;
   // the tab's first read never ends: its loading state stays on screen
   if (args.tab === 'conflicts' && args.mode === 'loading') {
@@ -282,14 +286,14 @@ async function afterOpen({ args, click, js }) {
   if (args.tab === 'architecture' && analysis) await click('[data-testid="architecture-analyze"]');
   if (args.tab === 'architecture' && ['city', 'city-agents', 'city-issue', 'city-large', 'city-stage'].includes(args.mode)) await click('[data-testid="architecture-mode-city"]');
   // #375: "Show on the map" of an issue, "Show the stage on the map" of a roadmap stage
-  const pid = '(window.ProjectCity.current() || {}).projectId || state.projectId';
+  const pid = JSON.stringify(project.id);
   if (args.tab === 'architecture' && args.mode === 'city-issue') await js(`ProjectCityImpact.showIssue(${pid}, ${JSON.stringify(DEMO_IMPACT_ISSUE)})`);
   if (args.tab === 'architecture' && args.mode === 'city-stage') await js(`ProjectCityImpact.showStage(${pid}, ${JSON.stringify(DEMO_IMPACT_STAGE)})`);
 }
 
 module.exports = {
   afterOpen,
-  modes: ['analyzing', 'city', 'city-agents', 'city-large', 'empty', 'error', 'facts-large', 'large', 'loading', 'map-refresh', 'never', 'no-runs', 'not-git'],
+  modes: ['analyzing', 'city', 'city-agents', 'city-issue', 'city-large', 'city-stage', 'empty', 'error', 'facts-large', 'large', 'loading', 'map-refresh', 'never', 'no-runs', 'not-git'],
   open,
   run: true,
   seed,

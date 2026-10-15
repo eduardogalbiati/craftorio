@@ -27,19 +27,19 @@
   const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
   const dot = (colour) => `<i class="r3d-dot" style="--c:${esc(colour)}"></i>`;
   const countsHtml = (list, testid, label) => (list.length
-    ? `<ul class="pci-counts" aria-label="${esc(label)}">${list.map((d) => `<li data-testid="${testid}"><span title="${esc(d.name)}">${esc(d.name)}</span> <b>${d.count}</b></li>`).join('')}</ul>` : '');
+    ? `<ul class="pci-counts" aria-label="${esc(label)}">${list.map((d) => `<li data-testid="${testid}"><span title="${esc(d.name)}">${esc(d.name)}</span> <strong>${d.count}</strong></li>`).join('')}</ul>` : '');
 
   /** The issue preview's header: the issue, the counts by district and zone, the Danger Zone share, the new files, predicted vs actual. */
   function headerMarkup(preview) {
     const { issue = {}, header = {}, newFiles = [], comparison = null } = preview || {};
     const total = header.total || 0;
     const cmp = comparison ? `<div class="pci-cmp" data-testid="city-impact-comparison">
-        <b class="pci-rate">${comparison.hitRate == null ? 'Nothing was predicted' : `${pct(comparison.hitRate)} hit rate`}</b>
+        <strong class="pci-rate">${comparison.hitRate == null ? 'Nothing was predicted' : `${pct(comparison.hitRate)} hit rate`}</strong>
         ${SETS.map((s) => `<span data-testid="city-impact-${s.key}">${dot(s.colour)}${(comparison[s.key] || []).length} ${s.label}</span>`).join('')}
         ${preview.history && preview.history.length > 1 ? `<small class="muted">Earlier runs: ${preview.history.slice(0, -1).map((h) => pct(h.hitRate)).join(', ')}</small>` : ''}
       </div>` : '';
     return `<div class="pci-header" data-testid="city-impact-header">
-      <div class="pci-title"><b>#${esc(issue.number)}</b> <span title="${esc(issue.title)}">${esc(issue.title)}</span></div>
+      <div class="pci-title"><strong>#${esc(issue.number)}</strong> <span title="${esc(issue.title)}">${esc(issue.title)}</span></div>
       <p class="pci-total">${plural(total, 'file')} on the map · <span data-testid="city-impact-danger">${pct(header.dangerShare)} in the Danger Zone</span></p>
       ${countsHtml(header.districts || [], 'city-impact-district', 'By district')}
       ${countsHtml(header.zones || [], 'city-impact-zone', 'By zone')}
@@ -54,7 +54,7 @@
       ? `<ul>${view.conflicts.map((c) => `<li><code title="${esc(c.path)}">${esc(c.path)}</code> <small class="muted">${esc(c.items.map((id) => view.titles[id] || id).join(' · '))}</small></li>`).join('')}</ul>`
       : '<p class="muted small">No building is changed by two items.</p>';
     return `<div class="pci-header" data-testid="city-impact-stage">
-      <div class="pci-title"><b>Stage</b> <span title="${esc(view.name)}">${esc(view.name)}</span></div>
+      <div class="pci-title"><strong>Stage</strong> <span title="${esc(view.name)}">${esc(view.name)}</span></div>
       <p class="pci-total">${plural(view.items.length, 'item')} · ${plural(view.total, 'file')} on the map</p>
       <div class="pci-conflicts" data-testid="city-impact-conflicts" role="status"><b>Changed by two items</b>${conflicts}</div>
     </div>`;
