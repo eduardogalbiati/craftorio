@@ -12,6 +12,8 @@
 // gets a branch (run/<run id>), uncommitted changes become a WIP commit naming the run, then the
 // folder goes. "Resume from step" recreates the folder from the branch. cleanupWorktrees (at start
 // and periodically) does the same for runs that ended in an earlier app session.
+// Before each suite and E2E round of a local workflow (#403, syncWithBase), the branch is rebased onto
+// the local base when the base moved, so a fix that landed there meanwhile reaches the run.
 
 const fs = require('fs');
 const path = require('path');
@@ -333,6 +335,46 @@ async function mergeLocally({ repo, dir, base, log = () => {} }) {
   return { branch, base, commit, checkout: checkout?.dir || null, rebased };
 }
 
+/**
+ * Brings the local base into the run's branch before a suite or E2E round (#403): when the local
+ * <base> moved past the branch's fork point, the worktree's HEAD (its branch, or the detached HEAD)
+ * is rebased onto it, as mergeLocally does at the end. A conflict aborts the rebase and leaves the
+ * branch as it was; uncommitted changes to tracked files skip it. The base is never modified, nothing
+ * is fetched or pushed.
+ * @returns {Promise<object|null>} null without a git repository or a local base; else { moved,
+ *   conflict, files, skipped, base, base_commit (the base commit the HEAD now sits on), from, to,
+ *   count, commits: ['<sha> <subject>', ...] (the base commits brought in, or that did not apply) }
+ */
+async function syncWithBase({ repo, dir, base }) {
+  const root = await repoRoot(repo);
+  const ref = `refs/heads/${base}`;
+  if (!root || !base || !(await refExists(root, ref))) return null;
+  const from = await git(['rev-parse', 'HEAD'], dir);
+  const tip = await git(['rev-parse', ref], root);
+  const result = { moved: false, conflict: false, files: [], skipped: null, base, base_commit: tip, from, to: from, count: 0, commits: [] };
+  if ((await currentBranch(dir)) === base) return result;
+  if (await git(['merge-base', '--is-ancestor', ref, 'HEAD'], dir).then(() => true, () => false)) return result;
+  result.base_commit = await tryGit(['merge-base', ref, 'HEAD'], dir);
+  result.count = Number(await tryGit(['rev-list', '--count', `HEAD..${ref}`], dir)) || 0;
+  result.commits = String(await tryGit(['log', '--max-count=10', '--format=%h %s', `HEAD..${ref}`], dir) || '').split('\n').filter(Boolean);
+  if (await tryGit(['status', '--porcelain', '--untracked-files=no'], dir)) {
+    result.skipped = 'the worktree has uncommitted changes';
+    return result;
+  }
+  try {
+    await git([...(await identityArgs(root)), 'rebase', ref], dir);
+  } catch {
+    result.files = String(await tryGit(['diff', '--name-only', '--diff-filter=U'], dir) || '').split('\n').filter(Boolean);
+    await tryGit(['rebase', '--abort'], dir);
+    result.conflict = true;
+    return result;
+  }
+  result.moved = true;
+  result.base_commit = tip;
+  result.to = await git(['rev-parse', 'HEAD'], dir);
+  return result;
+}
+
 // The run's scratch workspace (<run>/scratch, #120) goes with its worktree; the run's logs/ and
 // evidence/ (its screenshots, #146) stay. A folder still locked (a program left running) is left for the
 // next cleanup. true when it was removed.
@@ -507,5 +549,6 @@ module.exports = {
   removeScratch,
   restoreWork,
   retireWorktree,
+  syncWithBase,
   worktreeRuns,
 };

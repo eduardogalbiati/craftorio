@@ -22,8 +22,9 @@
 // <run>/locks), so a test never waits for the machine-wide screenshot slot held by other runs. The
 // log starts with what the child gets (parallelism, the variables removed). Without a step
 // `timeout`, the timeout comes from the project's recent suite durations (<workspace>/cache/
-// suite-durations.json: 3× the median, at least 10 min; 30 min with no history); a timeout names the
-// test files still running.
+// suite-durations.json: 3× the median, at least 10 min; 30 min with no history; never under the
+// largest per-test budget plus a margin, #402 test-timeouts.js); a timeout names the test files still
+// running.
 // A timed-out round is checked like a failure (#396, `rerunAlone`): each file still running reruns
 // alone on the branch, then, when it hangs there too, alone on the base, each run with its own timeout
 // (3× the file's recent alone runs, at least 2 min; 5 min without history), logs
@@ -73,12 +74,15 @@ const {
   stopProcessesIn,
 } = require('./processes');
 const { killTree, OWN_GROUP } = require('./providers');
+const { MAX_TEST_TIMEOUT_MS } = require('./test-timeouts');
 const { workerEnv } = require('../machine-profile');
 
 const SUITE_TIMEOUT_MS = 30 * 60e3;
 const MIN_TIMEOUT_MS = 10 * 60e3;
 const MAX_TIMEOUT_MS = 3 * 60 * 60e3;
 const TIMEOUT_FACTOR = 3;
+// the step's timeout stays this much above the largest per-test budget (#402)
+const BACKSTOP_MARGIN_MS = 2 * 60e3;
 const HISTORY = 10;
 const MAX_FAILURES = 30;
 const ERROR_LINES = 3;
@@ -402,12 +406,15 @@ function mockSuite(result, preexisting) {
 
 // The step's timeout from the project's recent suite durations (ms): TIMEOUT_FACTOR × their median,
 // between `min` (MIN_TIMEOUT_MS) and MAX_TIMEOUT_MS; `fallback` without history.
-function suiteTimeout(durations, fallback = SUITE_TIMEOUT_MS, min = MIN_TIMEOUT_MS) {
+// A backstop (#402): never under the largest per-test budget plus BACKSTOP_MARGIN_MS, so a hung test
+// fails by name (its own budget) before the step's timeout could kill the whole round. #396's alone
+// rerun of one file passes `floor` 0: its own timeouts are unchanged.
+function suiteTimeout(durations, fallback = SUITE_TIMEOUT_MS, min = MIN_TIMEOUT_MS, floor = MAX_TEST_TIMEOUT_MS + BACKSTOP_MARGIN_MS) {
   const d = (durations || []).filter((x) => Number.isFinite(x) && x > 0).sort((a, b) => a - b);
-  if (!d.length) return fallback;
+  if (!d.length) return Math.max(floor, fallback);
   const mid = d.length >> 1;
   const median = d.length % 2 ? d[mid] : (d[mid - 1] + d[mid]) / 2;
-  return Math.round(Math.min(MAX_TIMEOUT_MS, Math.max(min, TIMEOUT_FACTOR * median)));
+  return Math.round(Math.min(MAX_TIMEOUT_MS, Math.max(floor, min, TIMEOUT_FACTOR * median)));
 }
 
 const readJson = (file) => { try { return JSON.parse(fs.readFileSync(file, 'utf8')) || {}; } catch { return {}; } };
@@ -672,7 +679,7 @@ async function rerunAlone({ files, command, cwd, env, base, signal, run, runDir,
   for (const [i, file] of files.entries()) {
     if (signal?.aborted) break;
     const hist = history?.file && history.project ? { file: history.file, key: `${history.project}\n${file} (alone)` } : null;
-    const timeoutMs = suiteTimeout(suiteDurations(hist), FILE_TIMEOUT_MS, MIN_FILE_TIMEOUT_MS);
+    const timeoutMs = suiteTimeout(suiteDurations(hist), FILE_TIMEOUT_MS, MIN_FILE_TIMEOUT_MS, 0);
     const logFile = path.join(runDir, 'logs', `${stem}-alone-${i + 1}.log`);
     log('info', `suite: ${file} was still running when the round timed out: rerunning it alone (log ${path.basename(logFile)})`);
     const onBranch = await runFileAlone({ command, file, cwd, where: 'on the branch', env, timeoutMs, signal, run, logFile, runDir, cmdArgs });

@@ -2,7 +2,8 @@
 // The run's checkout (#250, from src/engine/workflow.js): the per-run git worktree and its branch
 // (`setupWorktree` / `finishWorktree`: removed or retired, the worktree summary, HEAD and branch),
 // its dependencies from the shared cache (`prepareDeps`, `depsGuide`), the base worktree a suite
-// compares against (`setupBaseWorktree`, `suiteBase`, `baseRefs`), the scratch workspace (#120)
+// compares against (`setupBaseWorktree`, `suiteBase`, `baseRefs`), the base brought into the branch
+// before a suite round (`bringBaseIn`, #403), the scratch workspace (#120)
 // and the processes agents leave running in it (`stopWorktreeProcesses`).
 // The git operations themselves are src/engine/worktree.js.
 
@@ -19,6 +20,7 @@ const {
   removeWorktree,
   restoreWork,
   retireWorktree,
+  syncWithBase,
 } = require('../worktree');
 const capabilities = require('../capabilities');
 const depsCache = require('../deps-cache');
@@ -262,6 +264,38 @@ const methods = {
   baseRefs() {
     const base = this.worktree?.base || render(this.wf.orchestrator?.worktree?.base || '', this.ctx).trim();
     return base ? [`refs/heads/${base}`, `refs/remotes/origin/${base}`] : [];
+  },
+
+  // #403: before a suite or E2E round of a local workflow (worktree.remote: false), the local base is
+  // brought into the run's branch when it moved (worktree.js syncWithBase, real git in a simulation
+  // too), so the round tests the change on top of the current base; a resumed run gets it before its
+  // first round the same way. Skipped for `base_check: false` (the worktree is the base) and for a
+  // remote workflow (its branch may be pushed: rebasing it would rewrite a pushed history). A log line
+  // only when the base moved or did not apply; the next agent turn is told (baseSyncNote). null:
+  // nothing checked.
+  async bringBaseIn(step) {
+    const wt = this.worktree;
+    if (!wt?.dir || !wt.base || wt.remote !== false || step.base_check === false) return null;
+    let sync;
+    try {
+      sync = await syncWithBase({ repo: wt.repo, dir: wt.workDir || wt.dir, base: wt.base });
+    } catch (e) {
+      this.emitEvent('log', { level: 'warn', kind: 'base_sync', step_id: step.id, message: `${step.id}: could not bring ${wt.base} into the branch (${e.message.split('\n')[0]}): tested as it is` });
+      return null;
+    }
+    if (!sync) return null;
+    const tip = sync.base_commit ? sync.base_commit.slice(0, 7) : '?';
+    const list = sync.commits.length ? `: ${sync.commits.join('; ')}${sync.count > sync.commits.length ? ` (and ${sync.count - sync.commits.length} more)` : ''}` : '';
+    if (sync.moved) {
+      this.emitEvent('log', { level: 'info', kind: 'base_sync', step_id: step.id, message: `${step.id}: brought ${wt.base} (${tip}) into the branch: ${sync.count} commit(s)${list}` });
+      const note = `Before the ${step.id} round the orchestrator rebased the branch onto ${wt.base} (${tip}), which had moved: it got ${sync.count} commit(s)${list}. Your earlier commits now sit on top of them.`;
+      this.baseSyncNote = this.baseSyncNote ? `${this.baseSyncNote}\n${note}` : note;
+    } else if (sync.conflict || sync.skipped) {
+      const why = sync.conflict ? `it conflicts with the branch${sync.files.length ? ` in ${sync.files.join(', ')}` : ''}` : sync.skipped;
+      sync.note = `${wt.base} moved (${sync.count} commit(s)) but was not brought in: ${why}. The branch was tested as it is; ${sync.conflict ? 'the conflict is left to the final merge (resolve_merge).' : 'commit the changes to get the base in the next round.'}`;
+      this.emitEvent('log', { level: 'warn', kind: 'base_sync', step_id: step.id, message: `${step.id}: ${sync.conflict ? 'base conflict: ' : ''}${sync.note}` });
+    }
+    return sync;
   },
 };
 

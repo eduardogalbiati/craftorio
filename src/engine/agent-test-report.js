@@ -13,6 +13,8 @@
 // set for every agent and suite it starts) or an agent CLI's marker (CLAUDECODE, CODEX_SANDBOX, ...)
 // means an agent. `reporter` is the node:test custom reporter (scripts/test-reporter-agent.js loads
 // it); `parseAgentReport(text)` finds the JSON line in a suite's output (suite-step.js parseFailures).
+// A test that ran out of its budget (#402, node's testTimeoutFailure) is a failure like any other,
+// its error "test timed out after N s".
 
 const path = require('path');
 const util = require('util');
@@ -73,6 +75,8 @@ function failureOf(data, cwd) {
     error: firstLines(cause.message || err.message || String(cause)),
     kind: ownName ? 'file' : 'test',
   };
+  // node says "test timed out after 90000ms": in seconds, how long the test ran (#402)
+  if (err.failureType === 'testTimeoutFailure') out.error = out.error.replace(/timed out after (\d+)\s*ms/, (_, ms) => `timed out after ${Math.round(Number(ms) / 1000)} s`);
   if (cause && typeof cause === 'object' && 'expected' in cause && 'actual' in cause) {
     out.expected = show(cause.expected);
     out.actual = show(cause.actual);

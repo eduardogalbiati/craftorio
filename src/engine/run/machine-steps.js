@@ -151,6 +151,8 @@ const methods = {
   // (#211: those failing there too become the run's pre-existing failures and go to the workspace's
   // failing-on-main.json). Without a step `timeout`, the timeout comes from the project's recent suite
   // durations (cache/suite-durations.json). Simulation: mockSequences.suite: { <step>: [...] }.
+  // #403: each round of a local workflow first brings the moved local base into the branch
+  // (bringBaseIn); the output's `base_commit` is the base commit it tested on.
   // `scope: affected` (#212): each visit runs only the affected test files (affectedSelection: the
   // import graph since the base, plus the files that failed in an earlier round); when they pass and
   // the whole suite has not passed yet in this run, the whole suite runs right after (log
@@ -231,6 +233,8 @@ const methods = {
     const scope = step.scope ? render(String(step.scope), this.ctx).trim() : 'full';
     // an environment rerun logs next to the round's own log
     const env = reruns ? `-env${reruns > 1 ? `-${reruns}` : ''}` : '';
+    // #403: the change on top of the current local base (checkout.js bringBaseIn), before the tree is taken
+    const sync = await this.bringBaseIn(step);
     // #364: what this round tests, taken before it runs (output.commit, output.clean)
     const tested = testedTree(this.ctx.worktree_dir);
     const once = async (extra = {}) => {
@@ -298,6 +302,10 @@ const methods = {
       output = await once();
     }
     Object.assign(output, tested);
+    if (sync) {
+      output.base_commit = sync.base_commit;
+      if (sync.note) output.message = `${output.message} ${sync.note}`;
+    }
     if (output.status !== 'blocked' && output.scope !== 'files' && !output.whole_run) this.suiteRuns.engine++;
     if (output.status === 'pass' && output.scope !== 'files' && step.files === undefined) this.fullSuitePassed = true;
     // the files that failed come back in the next round's affected set

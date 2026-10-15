@@ -671,6 +671,12 @@ class WorkflowRun extends EventEmitter {
       prompt += `\n\n---\n${this.restoredWorkNote}`;
       if (!step.agents) this.restoredWorkNote = null;
     }
+    // #403: a suite round rebased the branch onto the moved base: the next single-agent turn is told
+    // (a fan-out, e.g. reviewers, sees it and leaves it for that turn)
+    if (this.baseSyncNote) {
+      prompt += `\n\n---\n${this.baseSyncNote}`;
+      if (!step.agents) this.baseSyncNote = null;
+    }
     if (!step.agents) st.delegate_result = null; // consumed (in a fan-out, after all of them)
     // step skills go in the prompt itself; the name can be a template ("{{ inputs.document_skill }}")
     const skills = this.loadSkills(this.skillNames(step.skills || [], scope));
