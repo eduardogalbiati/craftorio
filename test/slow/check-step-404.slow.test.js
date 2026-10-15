@@ -62,7 +62,14 @@ function fix(repo) {
 
 const ownText = (prompt) => String(prompt || '').replace(/<skill name="[^"]*"[\s\S]*?<\/skill>/g, '');
 
-async function runLocalHero(t, { repoOptions, inputs = {}, onTurn } = {}) {
+// the developer's commit that breaks the planted rule again (a later round)
+function unfix(repo) {
+  git(repo, 'rm', '-q', 'src/fixed.txt');
+  git(repo, 'commit', '-q', '-m', 'develop: break the planted rule again');
+}
+
+// `answers: { stepId: [choice, ...] }`: the owner's choice per visit of a gate (default: the first one)
+async function runLocalHero(t, { repoOptions, inputs = {}, onTurn, answers = {}, mockSequences = {} } = {}) {
   assert.ok(checkStep, 'workflows/ai-development-local-hero.yaml has no agent-less step running {{ inputs.check_command }}');
   const repo = makeRepo(t, repoOptions);
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'check-step-runs-'));
@@ -72,13 +79,18 @@ async function runLocalHero(t, { repoOptions, inputs = {}, onTurn } = {}) {
     inputs: { task: 'Add the feature', repo_path: repo, unit_tests: 'run_existing', e2e_tests: 'off', ...inputs },
     mock: true,
     runsDir,
-    mockSequences: { verdict: ['approved'], suite: { red_check: ['fail'], suite: ['pass'] } },
+    mockSequences: { verdict: ['approved'], suite: { red_check: ['fail'], suite: ['pass'] }, ...mockSequences },
   });
   const events = [];
+  const answered = {};
   let turn = 0;
   run.on('event', (ev) => {
     events.push(ev);
-    if (ev.type === 'approval.requested') setImmediate(() => run.resolveApproval(ev.approval_id, ev.choices[0].id, 'user', undefined));
+    if (ev.type === 'approval.requested') {
+      const n = (answered[ev.step_id] = (answered[ev.step_id] || 0) + 1);
+      const choice = (answers[ev.step_id] || [])[n - 1] || ev.choices[0].id;
+      setImmediate(() => run.resolveApproval(ev.approval_id, choice, 'user', undefined));
+    }
     if (ev.type === 'session.message_sent' && ev.step_id === 'develop' && onTurn) onTurn(repo, ++turn);
   });
   await run.start();
@@ -119,4 +131,31 @@ test('#404 run: a project without a check command skips the step and does not re
   assert.ok(transitions.some((x) => x.endsWith('>code_review')), 'the run reaches the review');
   const done = events.find((e) => e.type === 'step.finished' && e.step_id === CHECK);
   if (done) assert.match(JSON.stringify(done.output || {}), /skip/i, 'a visited check step notes that it was skipped');
+});
+
+// Tests added after the change (the step is rule_check, its gate check_failed)
+
+test('#404 run: stopping at check_failed ends the run as failed, without a review', { timeout: 180000 }, async (t) => {
+  const { transitions, finished } = await runLocalHero(t, { answers: { check_failed: ['stop'] } });
+  assert.ok(transitions.includes(`${CHECK}>check_failed`), `the check reaches its gate (got ${transitions.join(', ')})`);
+  assert.equal(finished.status, 'failed');
+  assert.ok(!transitions.some((x) => x.endsWith('>code_review')), `no review after stop (got ${transitions.join(', ')})`);
+});
+
+test('#404 run: a pass gives the next review round its two returns again', { timeout: 180000 }, async (t) => {
+  // round 1: two failing checks, fixed on the third turn; the review asks for changes; the fourth
+  // turn breaks the rule again and the fifth fixes it
+  const onTurn = (repo, n) => (n === 3 || n === 5 ? fix(repo) : n === 4 ? unfix(repo) : null);
+  const { events, transitions, finished } = await runLocalHero(t, { onTurn, mockSequences: { verdict: ['changes_requested', 'approved'] } });
+  assert.equal(finished.status, 'success', finished.error);
+  assert.equal(transitions.filter((x) => x === `${CHECK}>develop`).length, 3, `two returns in round 1, one in round 2 (got ${transitions.join(', ')})`);
+  assert.ok(!events.some((e) => e.type === 'approval.requested' && e.step_id === 'check_failed'), 'the gate is never asked');
+});
+
+test('#404 run: in validated mode the rule checks run before the owner tries the change', { timeout: 180000 }, async (t) => {
+  const { transitions, finished } = await runLocalHero(t, { inputs: { mode: 'validated', screenshots: 'off' }, onTurn: (repo, n) => n === 1 && fix(repo) });
+  assert.ok(finished, 'the run ends');
+  const toGate = transitions.indexOf('rule_check>developer_check');
+  assert.ok(toGate >= 0, `rule_check goes on to developer_check (got ${transitions.join(', ')})`);
+  assert.ok(transitions.slice(0, toGate).includes('develop>rule_check'), 'right after develop');
 });
