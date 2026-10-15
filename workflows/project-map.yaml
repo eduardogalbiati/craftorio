@@ -1,8 +1,10 @@
 # =============================================================================
-# Workflow: Project map (#372): an agent writes the project's city plan, validated by rules
+# Workflow: Project map (#372, #381): an agent writes the project's city plan, validated by rules,
+# then the Oracle analyses the project, as one run
 # -----------------------------------------------------------------------------
-#   facts ─► plan ─► validate ──ok──► gate ──approved──► save
-#              ▲         │                 └─rejected─► end (nothing saved)
+#   facts ─► plan ─► validate ──ok──► save ──► analyze ──► end        (mode: auto, the default)
+#              ▲         │     └─ok, mode validated─► gate ──approved──► save
+#              │         │                                 └─rejected─► end (nothing saved)
 #              └─────────┘ not ok: back with the report, at most 2 times; then invalid (run failed)
 #
 # A deterministic scan cannot say what a project's areas are for; placing every file with a model is
@@ -16,10 +18,14 @@
 #   3. validate (no agent): #371's validator (schema, duplicate ids, unknown zones, 95% coverage). A
 #      refresh keeps the saved plan's zone and district ids and the names the owner saw, takes the new
 #      rules and adds districts (CityModel.refreshPlan).
-#   4. gate (human): the plan, the validation (on a refresh: districts added and removed, coverage
-#      before and after) and, once the city view exists (#373), the city screenshot.
+#   4. gate (human, only with inputs.mode validated, #381): the plan's zones and districts, the
+#      validation (on a refresh: districts added and removed, coverage before and after).
 #   5. save (no agent): written as architecture:savePlan writes it (the replaced plan is kept).
-# Started only on a click in the project's Architecture tab ("Map this project" / "Refresh the map").
+#   6. analyze (no agent, unless inputs.analyze is off, #381): the Oracle's architecture analysis of
+#      the project (its hotspots and co-changing files), saved as architecture:analyze saves it, in
+#      the Oracle's daily budget; a refusal fails the run with the reason (the plan stays saved).
+# Started by "Analyze this project" in the project's Architecture tab (one click, its estimate next to
+# it, no gate), or by hand from Workflows, where validated mode asks before the plan is saved.
 # =============================================================================
 
 apiVersion: multiagent/v1
@@ -27,8 +33,8 @@ kind: Workflow
 
 metadata:
   name: project-map
-  version: 0.1.0
-  description: "The project's city plan for the Architecture tab: the cartographer reads the repository (read-only) and writes zones, districts, landmarks and ports as path rules; the plan is validated by rules (95% of the files must match a district, back to the cartographer at most twice), shown at a gate and saved. A refresh keeps the ids and the names the owner saw."
+  version: 0.2.0
+  description: "The project's city plan and the Oracle's architecture analysis, as one run: the cartographer reads the repository (read-only) and writes zones, districts, landmarks and ports as path rules; the plan is validated by rules (95% of the files must match a district, back to the cartographer at most twice) and saved (validated mode shows it at a gate first); then the Oracle analyses the project's hotspots. A refresh keeps the ids and the names the owner saw."
   tags: [architecture, map, read-only]
   # Dashboard category: plan (Plan & Design), build (Code & Build) or monitor (Monitor & Improve).
   category: plan
@@ -45,6 +51,18 @@ inputs:
     type: string
     default: ""
     description: "The project whose plan is written (set by the Architecture tab); empty: the run's project, found from the repository."
+  mode:
+    label: "Mode"
+    type: string
+    enum: [auto, validated]
+    default: auto
+    options: { auto: Automatic, validated: Validated }
+    description: "Automatic: the validated plan is saved and the analysis follows. Validated: the run shows the plan at a gate and saves it only when you approve."
+  analyze:
+    label: "Analyse with the Oracle"
+    type: boolean
+    default: true
+    description: "After the plan is saved, the Oracle analyses the project's hotspots and writes its report (one Oracle turn in its daily budget)."
 
 # -----------------------------------------------------------------------------
 providers:
@@ -101,6 +119,8 @@ groups:
     steps: [plan, validate, invalid]
   - name: Review
     steps: [gate, save]
+  - name: Analysis
+    steps: [analyze]
 
 # -----------------------------------------------------------------------------
 steps:
@@ -160,15 +180,18 @@ steps:
       - when: "true"
         goto: validate
 
-  # #371's validator on the plan (a refresh keeps the saved plan's ids and names)
+  # #371's validator on the plan (a refresh keeps the saved plan's ids and names); a valid plan is
+  # saved at once, or shown at the gate first in validated mode (#381)
   - id: validate
     display: Validation
     type: project_map
     action: validate
     from: plan
     transitions:
-      - when: "output.ok"
+      - when: "output.ok and inputs.mode == 'validated'"
         goto: gate
+      - when: "output.ok"
+        goto: save
       - when: "not output.ok"
         goto: plan
         max_visits: 2
@@ -185,10 +208,14 @@ steps:
         goto: end
         status: failed
 
+  # validated mode only: the plan's zones and districts and its validation, before anything is saved
   - id: gate
     display: Review the plan
     type: human_approval
-    summary: "{% if steps.validate.output.refresh %}A refresh of the saved city plan{% else %}A new city plan{% endif %}: coverage {{ (steps.validate.output.coverage * 100) | round(1) }}%."
+    summary: |
+      {% if steps.validate.output.refresh %}A refresh of the saved city plan{% else %}A new city plan{% endif %}: coverage {{ (steps.validate.output.coverage * 100) | round(1) }}%, {{ steps.validate.output.plan.zones | length }} zones, {{ steps.validate.output.plan.districts | length }} districts.
+      {% for z in steps.validate.output.plan.zones %}{% if loop.index <= 5 %}- {{ z.name }} ({{ z.kind }})
+      {% endif %}{% endfor %}
     report: "{{ steps.validate.output.report }}"
     message: |
       {% if steps.validate.output.refresh %}A refresh of the saved city plan{% else %}A new city plan{% endif %} for {{ steps.validate.output.plan.project }}: {{ steps.validate.output.plan.summary }}
@@ -199,12 +226,12 @@ steps:
       Districts, the first whose rules match a file wins:
       {% for d in steps.validate.output.plan.districts %}- {{ d.name }} (`{{ d.id }}`, zone `{{ d.zone }}`): {{ d.include | join(', ') }}{% if d.exclude and d.exclude | length %}, except {{ d.exclude | join(', ') }}{% endif %}
       {% endfor %}
-      The whole plan is project-map/plan.json in the run folder. The city screenshot shows here once
-      the city view exists (#373).
+      The whole plan is project-map/plan.json in the run folder; once saved, the project's
+      Architecture tab draws it as the City view (the plan's districts as plates, a building per file).
     approve_label: Save the plan
-    approve_help: "Saves it as the project's city plan (the plan it replaces is kept in city-plan-history/)."
+    approve_help: "Saves it as the project's city plan (the plan it replaces is kept in city-plan-history/); the Oracle's analysis follows."
     reject_label: Discard
-    reject_help: "Ends the run; the saved plan does not change."
+    reject_help: "Ends the run; the saved plan does not change and nothing is analysed."
     transitions:
       - when: "approved"
         goto: save
@@ -217,6 +244,17 @@ steps:
     type: project_map
     action: save
     from: validate
+    transitions:
+      - when: "inputs.analyze"
+        goto: analyze
+      - when: "true"
+        goto: end
+
+  # #381: the Oracle's architecture analysis, saved as architecture:analyze saves it
+  - id: analyze
+    display: Oracle analysis
+    type: project_map
+    action: analyze
     transitions:
       - when: "true"
         goto: end

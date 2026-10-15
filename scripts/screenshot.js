@@ -26,7 +26,8 @@
 //                      project: overview | conflicts | architecture | refactor (conflicts --mode loading | no-runs | not-git;
 //                      architecture --mode map-refresh: a saved city plan that covers part of the files, #372;
 //                      architecture --mode city: the project city of #373, a demo repository with a city plan;
-//                      architecture --mode city-agents: that city with two simulated runs in progress on it, #374);
+//                      architecture --mode city-agents: that city with two simulated runs in progress on it, #374;
+//                      architecture --mode city-large: the city of this repository itself with the POC's plan, #382);
 //                      analytics: usage | performance | run | occupancy | agents (performance: a demo git repository and a
 //                      marker; run: AI Development runs, the newest shown; occupancy: 30 days of runs and nights;
 //                      agents: four weeks of the Oracle's, the Product Owner's and the Supervisor chat's turns, #280)

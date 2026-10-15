@@ -1,18 +1,20 @@
 Feature: A project's Architecture tab tells the owner where the code hurts and what to refactor first
   The Architecture tab of a project's page (Projects › <project> › Architecture) shows facts read
   from git (a hotspot table: file, lines, commits, rank, top co-changing file) and what those numbers
-  cannot tell. "Analyze with the Oracle" shows its cost estimate (≈ US$) and saves a report: a
-  summary, findings marked new or gone since the previous report, each with "Send to Refactor".
-  The tab says when the folder is not a git repository, when the range has no commits, when the
-  project was never analysed, while an analysis runs, how many runs finished since the analysis, and
-  when the analysis failed. The app runs in simulation: an analysis is simulated, never a real model.
-  The demo project "demo-app" (features/support/app.js) is a plain folder, not a git repository.
-  "Map this project" (no map yet) and "Refresh the map" (a saved map) show the estimate of the
-  project map workflow first and start it only once confirmed; the tab advises a refresh, without
-  starting one, when more than 5% of the drawn files match no district or a new top-level folder appears.
+  cannot tell. One action, "Analyze this project" (#381), shows its cost estimate (≈ US$, or "no
+  estimate yet" before the first real run) and starts one run with no gate: the cartographer maps
+  the project into a city plan, then the Oracle analyses it and saves a report: a summary, findings
+  marked new or gone since the previous report, each with "Send to Refactor". The tab follows the
+  run ("Analyzing this project" with its step) and shows the report when it ends. It says when the
+  folder is not a git repository, when the range has no commits, when the project was never
+  analysed, how many runs finished since the analysis, and when the analysis failed. The app runs in
+  simulation: the run is simulated, never a real model. The demo project "demo-app"
+  (features/support/app.js) is a plain folder, not a git repository. The tab advises a refresh of
+  the map, without starting one, when more than 5% of the drawn files match no district or a new
+  top-level folder appears.
   A "Facts | City" switch shows the project as a 3D city instead (#373), remembered per window: a
   header with the project, files, zones and districts, "Colour by" with its legend, and without a
-  city plan the folders as districts with a "Map this project" action and its estimate.
+  city plan the folders as districts with the same "Analyze this project" action and its estimate.
   The City view shows the agents of the project's runs in progress (#374), read from their
   events.jsonl: "<agent> · <step>" on the building the agent last changed, a building two runs in
   progress change marked as a collision risk with a link to the Conflict map, and "No agent is
@@ -26,7 +28,7 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     And I open the "Architecture" project tab
     Then the project tab "Architecture" is selected
     And the Architecture tab says the project folder is not a git repository
-    And the Architecture tab offers no "Analyze with the Oracle" button
+    And the Architecture tab offers no "Analyze this project" button
 
   @issue-356
   Scenario: A saved report leads the tab, its findings marked new, above the git hotspots
@@ -39,47 +41,47 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     And the Architecture tab lists the finding "Discount rule duplicated in the API and the export" marked "new" with a "Send to Refactor" control
     And the Architecture hotspot table lists "src/billing.js" and "tools/export.py" below the report summary
     And the Architecture tab says what the numbers cannot tell
-    And the "Analyze with the Oracle" button shows a cost estimate in US$
+    And the "Analyze this project" button shows a cost estimate in US$
 
-  @issue-356
-  Scenario: Analyzing a never-analysed project with the Oracle shows a report
+  @issue-356 @issue-381
+  Scenario: Analyzing a never-analysed project starts one run and shows its report when it ends
     Given the app is open
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and no architecture report
     When I open "Projects" in the sidebar
     And I open the project "billing-service" from the Projects screen
     And I open the "Architecture" project tab
     Then the Architecture tab says the project was never analysed
-    And the Architecture tab offers the "Analyze with the Oracle" button
-    When I click "Analyze with the Oracle" on the Architecture tab
+    And the Architecture tab offers the "Analyze this project" button
+    When I click "Analyze this project" on the Architecture tab
+    Then a project map run has started
+    And the Architecture tab shows the analysis running
     Then the Architecture tab shows a report summary
+    And the Architecture tab no longer shows the analysis running
 
-  @issue-372
-  Scenario: "Map this project" shows its estimate first and starts the project map only once confirmed
+  @issue-372 @issue-381
+  Scenario: "Analyze this project" shows its estimate and starts the project map run with no confirmation and no gate
     Given the app is open
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and no project map
     When I open "Projects" in the sidebar
     And I open the project "billing-service" from the Projects screen
     And I open the "Architecture" project tab
-    Then the Architecture tab offers the "Map this project" map button
-    When I click the "Map this project" map button
-    Then the Architecture tab shows the estimate of the project map before starting it
+    Then the Architecture tab offers the "Analyze this project" button
+    And the "Analyze this project" button shows its cost estimate or says there is none yet
     And no project map run has started
-    When I confirm the project map
+    When I click "Analyze this project" on the Architecture tab
     Then a project map run has started
+    And the project map run waits at no gate
 
   @issue-372
-  Scenario: A project with a saved map offers "Refresh the map" with its estimate, and cancelling starts nothing
+  Scenario: A project with a saved map offers the same action and starts nothing on its own
     Given the app is open
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and a project map that covers both files
     When I open "Projects" in the sidebar
     And I open the project "billing-service" from the Projects screen
     And I open the "Architecture" project tab
-    Then the Architecture tab offers the "Refresh the map" map button
+    Then the Architecture tab offers the "Analyze this project" button
     And the Architecture tab does not advise refreshing the map
-    When I click the "Refresh the map" map button
-    Then the Architecture tab shows the estimate of the project map before starting it
-    When I cancel the project map
-    Then no project map run has started
+    And no project map run has started
 
   @issue-372
   Scenario: The tab advises refreshing the map when files match no district and a new top-level folder appears
@@ -89,7 +91,7 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     And I open the project "billing-service" from the Projects screen
     And I open the "Architecture" project tab
     Then the Architecture tab advises refreshing the map
-    And the Architecture tab offers the "Refresh the map" map button
+    And the Architecture tab offers the "Analyze this project" button
     And no project map run has started
 
   @issue-373
@@ -119,8 +121,8 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     Then the Architecture tab shows the project city
     And the "City" view of the Architecture tab is the one selected
 
-  @issue-373
-  Scenario: A project without a city plan shows its folders as a city and offers to map it
+  @issue-373 @issue-381
+  Scenario: A project without a city plan shows its folders as a city and offers to analyze it
     Given the app is open
     And the workspace has a git project "billing-service" with a JavaScript and a Python file and a saved architecture report
     When I open "Projects" in the sidebar
@@ -129,7 +131,21 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     And I switch the Architecture tab to "City"
     Then the Architecture tab shows the project city
     And the city header counts 2 files
-    And the city offers "Map this project" with a cost estimate in US$
+    And the city offers "Analyze this project" with a cost estimate in US$
+
+  @issue-381
+  Scenario: The city expands over the whole window and comes back with Esc
+    Given the app is open
+    And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
+    When I open "Projects" in the sidebar
+    And I open the project "billing-service" from the Projects screen
+    And I open the "Architecture" project tab
+    And I switch the Architecture tab to "City"
+    Then the Architecture tab shows the project city
+    When I expand the city
+    Then the city covers the whole window
+    When I press Escape on the city
+    Then the city is back inside the tab
 
   @issue-374
   Scenario: With no run in progress the city says no agent is working on the project

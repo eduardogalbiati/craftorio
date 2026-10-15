@@ -16,6 +16,10 @@
 // #374: --mode city-agents is that city with two simulated runs in progress on it (architecture:agents
 // answers demoCityAgents): agents on a roof and at a door, a crane, the trails, a new building and a
 // collision risk.
+// #382: --mode city-large is the City view at a real scale: the project is this repository itself
+// (the checkout the screenshot runs from, about 1,400 drawn files) with the proof of concept's city
+// plan (poc/project-map/plans/multiagent-orchestrator.city-plan.json), the one the POC's overview
+// drew, so the two can be compared side by side. Its facts come from the checkout's git history.
 
 const { execFileSync } = require('child_process');
 const fs = require('fs');
@@ -154,8 +158,16 @@ const demoCityAgents = (projectId) => ({
   collisions: [{ path: 'src/billing.js', runs: ['20261013-100000-c1ty0001', '20261013-101500-c1ty0002'] }],
 });
 
-function seedArchitecture(args, ws, project) {
+const LARGE_PLAN = path.join('poc', 'project-map', 'plans', 'multiagent-orchestrator.city-plan.json');
+
+function seedArchitecture(args, ws, project, { appDir, projects }) {
   if (args.mode === 'not-git') return;
+  if (args.mode === 'city-large') { // #382: this repository, with the POC's plan
+    projects.updateProject(ws.projects, project.id, { folder: appDir });
+    const plan = JSON.parse(fs.readFileSync(path.join(appDir, LARGE_PLAN), 'utf8'));
+    require('../../../src/oracle-architecture').writePlan(path.join(ws.root, 'architecture'), project.id, plan, '2026-10-01T09:00:00.000Z');
+    return;
+  }
   const city = args.mode === 'city' || args.mode === 'city-agents';
   const commits = args.mode === 'empty' ? [] : city ? CITY_COMMITS : ARCH_COMMITS;
   const head = demoArchitectureRepo(project.folder, commits);
@@ -164,12 +176,12 @@ function seedArchitecture(args, ws, project) {
   if (city) require('../../../src/oracle-architecture').writePlan(path.join(ws.root, 'architecture'), project.id, CITY_PLAN, '2026-10-01T09:00:00.000Z');
 }
 
-function seed({ args, ws, project }) {
+function seed({ appDir, args, projects, ws, project }) {
   demoLocalMerge(ws, project.id);
   demoRoadmap(ws, project.id, args.live, args.budget, args.roadmap);
   demoChildRuns(ws, project.id);
   demoRunHistory(ws, project.id);
-  if (args.tab === 'architecture') return seedArchitecture(args, ws, project);
+  if (args.tab === 'architecture') return seedArchitecture(args, ws, project, { appDir, projects });
   if (args.tab !== 'conflicts' || args.mode === 'not-git') return;
   if (args.mode === 'no-runs') {
     const git = (a) => execFileSync('git', ['-C', project.folder, ...a], { stdio: 'pipe' });
@@ -194,12 +206,13 @@ async function afterOpen({ args, click }) {
     ipcMain.removeHandler('analytics:performance');
     ipcMain.handle('analytics:performance', () => new Promise(() => {}));
   }
-  // #356: the analysis never ends (its progress stays on screen) or fails with the Oracle's error
-  const analysis = { analyzing: () => new Promise(() => {}), error: () => { throw new Error('The Oracle\'s answer is not a valid architecture report: report.summary: required.'); } }[args.mode];
+  // #356, #381: "Analyze this project" starts a run that never ends (its state stays on screen) or
+  // fails to start with the Oracle's error
+  const analysis = { analyzing: () => ({ runId: '20261013-215046-bc771765' }), error: () => { throw new Error('The Oracle refused the analysis: the daily budget is reached (US$ 5.00 of US$ 5.00).'); } }[args.mode];
   if (args.tab === 'architecture' && analysis) {
     const { ipcMain } = require('electron');
-    ipcMain.removeHandler('architecture:analyze');
-    ipcMain.handle('architecture:analyze', analysis);
+    ipcMain.removeHandler('run:start');
+    ipcMain.handle('run:start', analysis);
   }
   if (args.tab === 'architecture' && args.mode === 'city-agents') {
     const { ipcMain } = require('electron');
@@ -208,12 +221,12 @@ async function afterOpen({ args, click }) {
   }
   await click(`[data-pv-tab="${args.tab}"]`);
   if (args.tab === 'architecture' && analysis) await click('[data-testid="architecture-analyze"]');
-  if (args.tab === 'architecture' && (args.mode === 'city' || args.mode === 'city-agents')) await click('[data-testid="architecture-mode-city"]');
+  if (args.tab === 'architecture' && ['city', 'city-agents', 'city-large'].includes(args.mode)) await click('[data-testid="architecture-mode-city"]');
 }
 
 module.exports = {
   afterOpen,
-  modes: ['analyzing', 'city', 'city-agents', 'empty', 'error', 'loading', 'map-refresh', 'never', 'no-runs', 'not-git'],
+  modes: ['analyzing', 'city', 'city-agents', 'city-large', 'empty', 'error', 'loading', 'map-refresh', 'never', 'no-runs', 'not-git'],
   open,
   run: true,
   seed,

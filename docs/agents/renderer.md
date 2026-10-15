@@ -250,10 +250,14 @@ Read this before changing anything in `src/renderer/`.
   `npm run build:3d` after changing a `.jsx`. The same script builds the **project city** (#373):
   `src/renderer/city3d/*` → `generated/project-city.js` (`window.ProjectCityScene`), loaded by the
   Architecture tab's City view (`views/project/project-city.js`, whose HUD is plain DOM with the
-  `r3d-*` classes, placed by `project-city.css`). Its layout is pure (`src/shared/city-layout.js`,
-  Node-tested); the scene draws it with instancing (`city3d/geometry.js`: rounded corners at any
-  instance scale) and the run's theme, lights and materials. Capture it with
-  `npm run screenshot -- --view project --tab architecture --mode city`.
+  `r3d-*` classes, placed by `project-city.css`; its notes, cards and connections panel in their own
+  files next to it). Its layout is pure (`src/shared/city-layout.js`, Node-tested) and, like the
+  scene's geometry, a port of the approved proof of concept `poc/project-city.html` (#382: the POC
+  is the source of truth for the look; copy its rules and constants, never re-derive them from a
+  description); the scene draws it with instancing (`city3d/geometry.js`) and the run's theme,
+  lights and materials. Capture it with `npm run screenshot -- --view project --tab architecture
+  --mode city` (a 31-file demo) and `--mode city-large` (this repository with the POC's plan, the
+  real scale: compare it with the POC rendered at the same size before touching the look).
   - **Themes** (`run3d-theme.js`): dark by default, the app's own tokens (a test compares its
     palette with `style.css` `:root`), or the light palette of the approved proof of concept
     (`poc/run-3d.html`). The HUD's colours are `--r3d-*` variables under `.r3d` /

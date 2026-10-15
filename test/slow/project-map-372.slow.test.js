@@ -1,7 +1,9 @@
 // #372: whole simulated runs of the Project map workflow (workflows/project-map.yaml): facts →
-// plan (the mock cartographer) → validate → gate → save, on a git repository in a temp folder and a
-// temp workspace. The cheaper checks are in test/project-map-372.test.js (the contract is in its
-// header). The workflow is loaded inside each run (tests first).
+// plan (the mock cartographer) → validate → save → analyze (#381: no gate in the default auto mode,
+// the Oracle's simulated report saved after the plan; the gate only in validated mode), on a git
+// repository in a temp folder and a temp workspace. The cheaper checks are in
+// test/project-map-372.test.js (the contract is in its header). The workflow is loaded inside each
+// run (tests first).
 //
 // Contract assumed by these runs (besides the header of test/project-map-372.test.js):
 // - The run is started for a project: WorkflowRun's `projectId` (also given as the input
@@ -84,7 +86,7 @@ const INVALID = plan({
 
 // A mock run recorded as the app records it. Gates are approved (first choice), or rejected (last
 // choice) when `reject` is true. `savedPlan`: the project's plan before the run (a refresh).
-async function runMap(t, { mockSequences = {}, savedPlan = null, reject = false } = {}) {
+async function runMap(t, { mockSequences = {}, savedPlan = null, reject = false, inputs = {} } = {}) {
   const repo = makeRepo(t);
   const ws = tmp(t, 'project-map-ws-');
   const runsDir = path.join(ws, 'runs');
@@ -97,7 +99,7 @@ async function runMap(t, { mockSequences = {}, savedPlan = null, reject = false 
   }
   const run = new WorkflowRun({
     file: WORKFLOW,
-    inputs: { repo_path: repo, project_id: project.id },
+    inputs: { repo_path: repo, project_id: project.id, ...inputs },
     mock: true,
     runsDir,
     projectId: project.id,
@@ -128,16 +130,54 @@ async function runMap(t, { mockSequences = {}, savedPlan = null, reject = false 
 const ids = (xs) => xs.map((x) => x.id).sort().join(',');
 const count = (xs, x) => xs.filter((y) => y === x).length;
 
-test('#372 project map: a valid plan goes facts → plan → validate → gate → save, and the plan is saved', { timeout: 120000 }, async (t) => {
+test('#381 project map: a valid plan goes facts → plan → validate → save → analyze with no gate, the plan and the report are saved', { timeout: 120000 }, async (t) => {
   const r = await runMap(t, { mockSequences: { city_plan: [VALID] } });
   assert.equal(r.finished.status, 'success', r.finished.error);
-  for (const tr of ['facts>plan', 'plan>validate', 'validate>gate', 'gate>save']) assert.ok(r.transitions.includes(tr), `${tr} in ${r.transitions.join(', ')}`);
+  for (const tr of ['facts>plan', 'plan>validate', 'validate>save', 'save>analyze', 'analyze>end']) assert.ok(r.transitions.includes(tr), `${tr} in ${r.transitions.join(', ')}`);
   assert.equal(r.visits('plan'), 1, 'one plan round');
-  assert.equal(r.gates.length, 1, 'one gate: the plan\'s');
+  assert.equal(r.gates.length, 0, 'no gate in auto mode');
+  assert.equal(r.visits('gate'), 0);
   assert.ok(fs.existsSync(r.savedFile), 'architecture/<project>/city-plan.json');
   const saved = r.saved();
   assert.equal(saved.project, 'fixture');
   assert.equal(ids(saved.districts), 'docs,engine,tests,views');
+  // the Oracle's report, simulated (no model), saved next to the plan as architecture:analyze saves it
+  const reports = fs.readdirSync(r.archDir).filter((f) => f.endsWith('.json') && f !== 'city-plan.json');
+  assert.equal(reports.length, 1, `one report in ${fs.readdirSync(r.archDir).join(', ')}`);
+  const report = JSON.parse(fs.readFileSync(path.join(r.archDir, reports[0]), 'utf8'));
+  assert.equal(report.simulated, true);
+  assert.ok(report.report && typeof report.report.summary === 'string', 'a report with a summary');
+  const out = r.outputOf('analyze');
+  assert.equal(out.simulated, true);
+  assert.equal(out.report_id, report.id);
+});
+
+test('#381 project map: validated mode shows the plan at a gate before it is saved; approved, the analysis follows', { timeout: 120000 }, async (t) => {
+  const r = await runMap(t, { mockSequences: { city_plan: [VALID] }, inputs: { mode: 'validated' } });
+  assert.equal(r.finished.status, 'success', r.finished.error);
+  for (const tr of ['validate>gate', 'gate>save', 'save>analyze']) assert.ok(r.transitions.includes(tr), `${tr} in ${r.transitions.join(', ')}`);
+  assert.equal(r.gates.length, 1, 'one gate: the plan\'s');
+  const [gate] = r.gates;
+  const shown = `${gate.message || ''}\n${gate.report || ''}\n${JSON.stringify(gate.brief || {})}`;
+  for (const name of ['Engine', 'Views', 'Tests', 'Docs']) assert.ok(shown.includes(name), `the district ${name} is shown`);
+  assert.match(shown, /coverage/i, 'the validation');
+  assert.ok(fs.existsSync(r.savedFile), 'the plan is saved once approved');
+});
+
+test('#381 project map: validated mode, rejected: nothing is saved and nothing is analysed', { timeout: 120000 }, async (t) => {
+  const r = await runMap(t, { mockSequences: { city_plan: [VALID] }, inputs: { mode: 'validated' }, reject: true });
+  assert.equal(r.finished.status, 'cancelled', r.transitions.join(', '));
+  assert.equal(r.visits('save'), 0);
+  assert.equal(r.visits('analyze'), 0);
+  assert.equal(fs.existsSync(r.savedFile), false, 'nothing saved');
+});
+
+test('#381 project map: with the analysis off the run ends after the plan is saved', { timeout: 120000 }, async (t) => {
+  const r = await runMap(t, { mockSequences: { city_plan: [VALID] }, inputs: { analyze: false } });
+  assert.equal(r.finished.status, 'success', r.finished.error);
+  assert.ok(r.transitions.includes('save>end'), r.transitions.join(', '));
+  assert.equal(r.visits('analyze'), 0);
+  assert.deepEqual(fs.readdirSync(r.archDir).filter((f) => f.endsWith('.json')), ['city-plan.json'], 'the plan only');
 });
 
 test('#372 project map: the facts step counts the tree by folder and finds the manifests', { timeout: 120000 }, async (t) => {
@@ -157,7 +197,7 @@ test('#372 project map: a plan that fails the validation takes one more round wi
   assert.equal(count(r.transitions, 'validate>plan'), 1, r.transitions.join(', '));
   assert.equal(r.visits('plan'), 2);
   assert.equal(r.visits('validate'), 2);
-  assert.ok(r.transitions.includes('validate>gate'));
+  assert.ok(r.transitions.includes('validate>save'));
   // the second round is told why: the coverage and an unmatched file
   const second = r.promptsOf('plan')[1] || '';
   assert.match(second, /coverage/i);
@@ -216,8 +256,8 @@ test('#372 project map: a refresh starts from the current plan, keeps its ids an
   assert.equal(fs.readdirSync(path.join(r.archDir, 'city-plan-history')).length, 1);
 });
 
-test('#372 project map: the refresh gate shows the districts added and the coverage before and after', { timeout: 120000 }, async (t) => {
-  const r = await runMap(t, { savedPlan: CURRENT, mockSequences: { city_plan: [PROPOSED] } });
+test('#372 project map: the refresh gate (validated mode) shows the districts added and the coverage before and after', { timeout: 120000 }, async (t) => {
+  const r = await runMap(t, { savedPlan: CURRENT, mockSequences: { city_plan: [PROPOSED] }, inputs: { mode: 'validated' } });
   assert.equal(r.finished.status, 'success', r.finished.error);
   assert.equal(r.gates.length, 1);
   const shown = `${r.gates[0].message || ''}\n${r.gates[0].report || ''}`;

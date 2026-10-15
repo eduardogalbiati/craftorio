@@ -212,15 +212,33 @@ test('#373 squarify: six equal weights in a square give cells no longer than 3:1
 
 const PLAN_ZONES = PLAN.zones.map((z) => z.id);
 
-test('#373 layoutCity: zones come in plan order as strips along one axis, with an avenue between them', () => {
+// #382: the zones fill the city rectangle as the proof of concept's strips (stripLayout, the plan's
+// order kept, from the south edge northward), an avenue between any two of them
+test('#373 layoutCity: zones come in plan order, each with an area, an avenue between any two of them', () => {
   const layout = load().layoutCity(planModel());
   const zones = layout.zones.filter((z) => PLAN_ZONES.includes(z.id));
   assert.deepEqual(zones.map((z) => z.id), PLAN_ZONES);
   for (const z of layout.zones) assert.ok(z.w > 0 && z.d > 0, `${z.id} has an area`);
-  const alongX = zones.every((z, i) => i === 0 || zones[i - 1].x + zones[i - 1].w < z.x - EPS);
-  const alongZ = zones.every((z, i) => i === 0 || zones[i - 1].z + zones[i - 1].d < z.z - EPS);
-  assert.ok(alongX || alongZ, `consecutive zones are apart along one axis: ${JSON.stringify(zones)}`);
-  for (const [a, b] of pairs(layout.zones)) assert.equal(overlaps(a, b), false, `zones ${a.id} and ${b.id} overlap`);
+  assert.ok(layout.avenueWidth > 0, 'an avenue width');
+  const gap = (a, b) => Math.max(b.x - (a.x + a.w), a.x - (b.x + b.w), b.z - (a.z + a.d), a.z - (b.z + b.d));
+  for (const [a, b] of pairs(layout.zones)) {
+    assert.equal(overlaps(a, b), false, `zones ${a.id} and ${b.id} overlap`);
+    assert.ok(gap(a, b) >= layout.avenueWidth - EPS, `an avenue between ${a.id} and ${b.id}: ${gap(a, b)} vs ${layout.avenueWidth}`);
+  }
+});
+
+test('#382 stripLayout: strips from the south edge northward, the order kept, the cells filling the rect', () => {
+  const { stripLayout } = load();
+  const items = ['a', 'b', 'c', 'd', 'e'].map((id, i) => ({ id, weight: 5 - i }));
+  const strips = stripLayout(items, RECT);
+  const cells = strips.flatMap((s) => s.cells);
+  assert.deepEqual(cells.map((c) => c.id), ['a', 'b', 'c', 'd', 'e'], 'the order is kept');
+  assert.ok(strips.length >= 2, `${strips.length} strips`);
+  assert.ok(near(strips[0].y1, RECT.y + RECT.h), 'the first strip lies on the south edge');
+  for (let i = 1; i < strips.length; i++) assert.ok(near(strips[i].y1, strips[i - 1].y0), `strip ${i} sits north of strip ${i - 1}`);
+  assert.ok(near(cells.reduce((s, c) => s + c.w * c.h, 0), RECT.w * RECT.h), 'the cells fill the rect');
+  for (const [a, b] of pairs(cells)) assert.equal(cellOverlaps(a, b), false, `${a.id} overlaps ${b.id}`);
+  assert.deepEqual(stripLayout([], RECT), []);
 });
 
 test('#373 layoutCity: each zone carries its kind', () => {

@@ -8,6 +8,17 @@ appears once, in its latest form, naming what it replaced. The hard rules of
 [AGENTS.md](../../AGENTS.md) are not repeated here. This is not the `decision-log` skill (a run's
 own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
 
+- **2026-10-13** (#381, #382): one click analyses a project: "Analyze this project" in the
+  Architecture tab runs the project map (the city plan) and the Oracle's analysis together, as one
+  run of `project-map.yaml`, with its combined estimate shown first and no human gate (validated
+  mode, from Workflows, keeps a gate that shows the plan's districts and validation); the tab
+  follows the run and the city can be expanded to the whole window. The city has to look like the
+  approved proof of concept (`poc/project-city.html`) at the real scale of this repository: its
+  layout and geometry are ported, never re-derived from a description, and the owner can pin a
+  file's connections from a list of the most connected files; hovering never greys the city.
+  Replaces #372's gate for every run. Why: the owner's first test found two buttons for one intent,
+  a gate that showed nothing to validate, a tab stuck on "running" after the run had finished, and a
+  city of stacked squares in place of the POC he had approved.
 - **2026-10-13** (#371, #372): the project city is on the roadmap, built from the proof of concept
   (PR #370, `poc/embed-city.js` and its two plans at 100% coverage); groma.md is not used. The city
   is one deterministic model (`src/shared/city-model.js`) from #356's facts and a city plan, drawn
@@ -77,12 +88,6 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   local data is a read-only replica: the sync updates it, the app re-reads an issue right before a
   run starts, and issue changes are never made locally. Why: planned items kept stale copies, so an
   issue edited after planning ran with its old text.
-- **2026-10-01** (#111, #98): UI changes are specified, built with the shared components, captured
-  in every state and reviewed for how they look and are used, not only for what they do; a
-  requirement of an issue is never dropped silently, and a review is not spent on work the
-  developer already declared missing (it goes back to develop). Why: a run passed every step and
-  merged a screen the owner then found hard to use, and a declared gap still went to code review,
-  which failed on exactly that gap.
 - **2026-09-29** (#47): only the test writer writes, edits or deletes tests; the developer changes
   production code only. Why: overlapping test responsibilities made one run pay for the full suite
   up to four times.

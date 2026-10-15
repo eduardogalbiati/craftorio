@@ -9,6 +9,10 @@
 //   refresh keeps the saved plan's ids and names); output { ok, problems, plan, report, ... },
 //   written to project-map/plan.json and validation.md;
 // - save: the plan the `from` step validated, saved as architecture:savePlan saves it;
+// - analyze (#381): the Oracle's architecture analysis of the project (src/oracle-architecture.js,
+//   saved as architecture:analyze saves it), the one model call of the workflow besides the
+//   cartographer's: the Oracle comes from the run's `architectureOracle` option (the service's
+//   Oracle and its agent; a simulation writes the simulated report, a real run without it fails);
 // - fail: ends the run failed with the `from` step's validation report.
 // The project: the run's projectId (or the input project_id); its folder: the input repo_path; its
 // plans: <workspace>/architecture/<project id>/ (the workspace: the runs folder's parent).
@@ -55,6 +59,12 @@ const methods = {
       const output = projectMap.saveMap({ ...place, plan: from?.plan });
       log('info', `the city plan of ${place.projectId} is saved${output.history ? ` (the previous one: city-plan-history/${output.history})` : ''}.`);
       return { saved: true, ...output };
+    }
+    if (step.action === 'analyze') {
+      const svc = typeof this.architectureOracle === 'function' ? this.architectureOracle() : null;
+      const output = await projectMap.analyzeMap({ ...place, mock: this.machine.simulated, oracle: svc?.oracle || null, agent: svc?.agent || null });
+      log('info', `the Oracle's analysis of ${place.projectId} is saved: ${output.findings} finding(s)${output.simulated ? ', simulated' : output.cost_usd != null ? `, US$ ${Number(output.cost_usd).toFixed(2)}` : ''}.`);
+      return output;
     }
     throw new Error(`The city plan did not pass the validation after ${this.ctx.steps[step.from]?.visits || 0} round(s); nothing was saved.\n\n${from?.report || '(no validation report)'}`);
   },

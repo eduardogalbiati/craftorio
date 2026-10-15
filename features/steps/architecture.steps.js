@@ -1,29 +1,29 @@
-// Steps of features/architecture.feature (#356): a project's Architecture tab, its git facts (the
-// hotspot table), "Analyze with the Oracle" with its cost estimate, a saved report (summary,
-// findings marked new/gone, "Send to Refactor"), and its states. Locators are roles and data-testid
-// only (skills/ui-conventions).
+// Steps of features/architecture.feature (#356, #381): a project's Architecture tab, its git facts
+// (the hotspot table), the one action "Analyze this project" with its cost estimate (the project map
+// run with the Oracle's analysis as its last step, no gate), a saved report (summary, findings marked
+// new/gone, "Send to Refactor"), and its states. Locators are roles and data-testid only
+// (skills/ui-conventions).
 //
 // What the tab exposes (the renderer's contract for these steps, src/renderer/views/project/):
 // - #project-panel-architecture holds the tab; data-testid="architecture-state-not-git" /
 //   "architecture-state-never" / ...: the tab's states;
-// - data-testid="architecture-analyze": the "Analyze with the Oracle" button, its text or title has
-//   the estimate "≈ US$";
+// - data-testid="architecture-analyze": the "Analyze this project" button, its text or title has
+//   the estimate "≈ US$" (or "no estimate yet" before the first real run); a click starts the run
+//   at once (run:start, project-map.yaml), seen in the scratch workspace's runs/ folder (its records
+//   name the project-map workflow); "architecture-analyzing": the run in progress with its step,
+//   gone once it ends; "architecture-map-refresh-advised": the refresh advice (> 5% of the drawn
+//   files match no district, or a new top-level folder), which starts nothing;
 // - data-testid="architecture-report-summary", "architecture-findings" (rows "architecture-finding",
 //   each with its "new"/"gone" mark and its "architecture-send-refactor" control);
 // - data-testid="architecture-hotspots": the hotspot table; "architecture-limits": what the numbers
 //   cannot tell.
-// - The project map (#372): data-testid="architecture-map": the "Map this project" (no saved plan) /
-//   "Refresh the map" (a saved plan) button; "architecture-map-confirm": the confirmation it opens,
-//   with "architecture-map-estimate" (≈ US$, or why there is no estimate yet),
-//   "architecture-map-start" and "architecture-map-cancel"; "architecture-map-running": a project
-//   map run in progress; "architecture-map-refresh-advised": the refresh advice (> 5% of the drawn
-//   files match no district, or a new top-level folder). A started run is seen in the scratch
-//   workspace's runs/ folder (its records name the project-map workflow).
 // - The project city (#373): the "Facts | City" switch, buttons data-testid="architecture-mode-facts"
 //   / "architecture-mode-city" named "Facts" / "City" with aria-pressed; data-testid="project-city"
 //   (a canvas inside), "project-city-header" (project, "<n> files", "<n> zones", "<n> districts"),
 //   the select labelled "Colour by" and its legend "project-city-legend"; without a plan
-//   "project-city-no-plan" holds the "Map this project" button and its "≈ US$" estimate.
+//   "project-city-no-plan" holds the "Analyze this project" button and its "≈ US$" estimate;
+//   "project-city-expand" (#381) expands the city over the whole window (the `expanded` class on
+//   "project-city", aria-pressed) and closes it again, as Esc does.
 // - The agents on the city (#374): data-testid="city-agents", the agents HUD of the City view ("No
 //   agent is working on this project" with no run in progress of the project); one
 //   data-testid="city-agent" per agent, its text "<agent> · <step>"; data-testid="city-collision" per
@@ -55,7 +55,7 @@ const tab = (page) => projectPage(page).locator('#project-panel-architecture');
 const byId = (page, id) => visible(tab(page).getByTestId(id)).first();
 const analyzeButton = (page) => tab(page).getByTestId('architecture-analyze');
 const cityModeButton = (page, mode) => visible(tab(page).getByTestId(`architecture-mode-${mode.toLowerCase()}`)).first();
-const mapButton = (page) => visible(tab(page).getByTestId('architecture-map')).first();
+const cityBox = (page) => visible(tab(page).getByTestId('project-city')).first();
 
 const SUMMARY = 'Billing rules are split between the API and the export script.';
 const FINDING = 'Discount rule duplicated in the API and the export';
@@ -406,50 +406,69 @@ function projectMapRuns(e2e) {
   }));
 }
 
-Then('the Architecture tab offers the {string} map button', async ({ e2e }, label) => {
-  const button = mapButton(e2e.window);
+// #381: the estimate is on the button (≈ US$ from past real runs), or the button says there is none yet
+Then('the {string} button shows its cost estimate or says there is none yet', async ({ e2e }, label) => {
+  const button = analyzeButton(e2e.window);
   await expect(button).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(button).toContainText(new RegExp(escapeRe(label), 'i'));
   await expect(button).toBeEnabled();
+  await expect.poll(async () => `${await button.innerText()} ${(await button.getAttribute('title')) || ''}`, { timeout: LOAD_TIMEOUT })
+    .toMatch(/≈\s*US\$\s*\d|no estimate yet/i);
 });
 
-When('I click the {string} map button', async ({ e2e }, label) => {
-  const button = mapButton(e2e.window);
-  await expect(button).toContainText(new RegExp(escapeRe(label), 'i'), { timeout: LOAD_TIMEOUT });
-  await button.click();
+Then('the Architecture tab shows the analysis running', async ({ e2e }) => {
+  const running = byId(e2e.window, 'architecture-analyzing');
+  await expect(running).toBeVisible({ timeout: ANALYSIS_TIMEOUT });
+  await expect(running).toContainText(/Analyzing this project/i);
 });
 
-// the confirmation holds the estimate (≈ US$, or why there is none yet) and its Start / Cancel buttons
-Then('the Architecture tab shows the estimate of the project map before starting it', async ({ e2e }) => {
-  const confirm = byId(e2e.window, 'architecture-map-confirm');
-  await expect(confirm).toBeVisible({ timeout: LOAD_TIMEOUT });
-  const estimate = confirm.getByTestId('architecture-map-estimate');
-  await expect(estimate).toBeVisible();
-  await expect(estimate).toContainText(/US\$|cost/i);
-  await expect(confirm.getByTestId('architecture-map-start')).toBeEnabled();
-  await expect(confirm.getByTestId('architecture-map-cancel')).toBeEnabled();
-});
-
-When('I confirm the project map', async ({ e2e }) => {
-  await byId(e2e.window, 'architecture-map-confirm').getByTestId('architecture-map-start').click();
-});
-
-When('I cancel the project map', async ({ e2e }) => {
-  const confirm = byId(e2e.window, 'architecture-map-confirm');
-  await confirm.getByTestId('architecture-map-cancel').click();
-  await expect(visible(tab(e2e.window).getByTestId('architecture-map-confirm'))).toHaveCount(0);
+Then('the Architecture tab no longer shows the analysis running', async ({ e2e }) => {
+  await expect(visible(tab(e2e.window).getByTestId('architecture-analyzing'))).toHaveCount(0, { timeout: ANALYSIS_TIMEOUT });
 });
 
 Then('no project map run has started', async ({ e2e }) => {
   // give a run that was wrongly started time to write its folder
   await e2e.window.waitForTimeout(1500);
-  await expect(visible(tab(e2e.window).getByTestId('architecture-map-running'))).toHaveCount(0);
+  await expect(visible(tab(e2e.window).getByTestId('architecture-analyzing'))).toHaveCount(0);
   expect(projectMapRuns(e2e), 'project map runs in the workspace').toEqual([]);
 });
 
 Then('a project map run has started', async ({ e2e }) => {
   await expect.poll(() => projectMapRuns(e2e).length, { timeout: ANALYSIS_TIMEOUT, message: 'a project map run in the workspace' }).toBeGreaterThan(0);
-  await expect(visible(tab(e2e.window).getByTestId('architecture-map-confirm'))).toHaveCount(0);
+});
+
+// #381: no gate by default: the run's records never ask for an approval
+Then('the project map run waits at no gate', async ({ e2e }) => {
+  const runsDir = path.join(e2e.scratch, 'workspace', 'runs');
+  await expect.poll(() => projectMapRuns(e2e).some((id) => { try { return /"workflow\.finished"/.test(fs.readFileSync(path.join(runsDir, id, 'events.jsonl'), 'utf8')); } catch { return false; } }), { timeout: ANALYSIS_TIMEOUT, message: 'the project map run ends' }).toBe(true);
+  for (const id of projectMapRuns(e2e)) {
+    expect(fs.readFileSync(path.join(runsDir, id, 'events.jsonl'), 'utf8'), `run ${id} asks for an approval`).not.toMatch(/"approval\.requested"/);
+  }
+});
+
+When('I expand the city', async ({ e2e }) => {
+  await byId(e2e.window, 'project-city-expand').click();
+});
+
+Then('the city covers the whole window', async ({ e2e }) => {
+  const city = cityBox(e2e.window);
+  await expect(city).toHaveClass(/\bexpanded\b/, { timeout: LOAD_TIMEOUT });
+  const viewport = e2e.window.viewportSize() || await e2e.window.evaluate(() => ({ width: window.innerWidth, height: window.innerHeight }));
+  const box = await city.boundingBox();
+  expect(box.width, 'as wide as the window').toBeGreaterThanOrEqual(viewport.width - 2);
+  expect(box.height, 'as tall as the window').toBeGreaterThanOrEqual(viewport.height - 2);
+});
+
+When('I press Escape on the city', async ({ e2e }) => {
+  await e2e.window.keyboard.press('Escape');
+});
+
+Then('the city is back inside the tab', async ({ e2e }) => {
+  const city = cityBox(e2e.window);
+  await expect(city).not.toHaveClass(/\bexpanded\b/, { timeout: LOAD_TIMEOUT });
+  const viewport = e2e.window.viewportSize() || await e2e.window.evaluate(() => ({ width: window.innerWidth, height: window.innerHeight }));
+  const box = await city.boundingBox();
+  expect(box.width, 'narrower than the window (the sidebar shows)').toBeLessThan(viewport.width - 100);
 });
 
 Then('the Architecture tab advises refreshing the map', async ({ e2e }) => {
@@ -459,6 +478,6 @@ Then('the Architecture tab advises refreshing the map', async ({ e2e }) => {
 });
 
 Then('the Architecture tab does not advise refreshing the map', async ({ e2e }) => {
-  await expect(mapButton(e2e.window)).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(analyzeButton(e2e.window)).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(visible(tab(e2e.window).getByTestId('architecture-map-refresh-advised'))).toHaveCount(0);
 });

@@ -6,28 +6,31 @@
 // real tool measured them), the Danger Zone scatter and its formula, the monthly frames, the
 // languages, the exclusions (editable, architecture:setExclude), the mass changes, the commit,
 // window and shallow clone, the project's own quality gate, and what the numbers cannot tell.
-// Controls: "Analyze with the Oracle" with its estimate (architecture:estimate, "≈ US$ X"), the
-// report picker, the From / To range and the mass-change toggle. States: not a git repository, no
-// commits in the range, never analysed, analysing (the Oracle turn's progress, polled), a report
-// (with "N runs since this analysis") and an error with its message.
-// The project map (#372, workflows/project-map.yaml, architecture:city): "Map this project" (no saved
-// city plan) or "Refresh the map" (a saved one) opens a confirmation with its estimate (chain:estimate
-// from past real runs) and Start / Cancel; only Start starts the run (run:start, a simulation when the
-// app runs simulations only), then the tab shows it running. The advice to refresh (more than 5% of
-// the drawn files match no district, or a new top-level folder) never starts anything.
+// Controls: the report picker, the From / To range and the mass-change toggle. States: not a git
+// repository, no commits in the range, never analysed, a report (with "N runs since this analysis")
+// and an error with its message.
+// One action (#381, workflows/project-map.yaml): "Analyze this project" starts the project map run
+// (run:start, a simulation when the app runs simulations only) with the Oracle's analysis as its
+// last step, no gate; its combined estimate stands next to it (chain:estimate for the map from past
+// real runs, architecture:estimate for the Oracle's turn; "no estimate yet" before the first real
+// run). The tab follows the run through run:event: "Analyzing this project" with the step while it
+// runs, then the city and the report read again when it ends, or its error. A run started elsewhere
+// (Workflows) for this project shows the same way. The advice to refresh (more than 5% of the drawn
+// files match no district, or a new top-level folder) never starts anything.
 // A "Facts | City" switch leads the tab (#373), remembered per window (sessionStorage MODE_KEY): City
 // shows the project as a 3D city in place of all the above (views/project/project-city.js, one per
-// project on screen, kept while the tab switches back and forth); a building's "Open in Facts"
-// comes back here with its hotspot row marked and scrolled to. The city carries the agents of the
-// project's runs in progress (#374, views/project/project-city-agents.js); openCity(id) opens the
-// tab on the City view (a run's "Replay on the map").
+// project on screen, kept while the tab switches back and forth, with the same action and run state;
+// #382: its connections panel, views/project/project-city-connections.js); a building's "Open in
+// Facts" comes back here with its hotspot row marked and scrolled to. The city carries the agents of
+// the project's runs in progress (#374, views/project/project-city-agents.js); openCity(id) opens
+// the tab on the City view (a run's "Replay on the map").
 // Also the Refactor tab's proposal list (showRefactor, refactor:proposals).
 // Drawn into the box project.js gives it (show), its clicks and changes routed from the project
 // page's listeners (onClick, onChange). Uses app.js globals at call time: api, esc, errMsg, fmtNum,
 // fmtUsd (usage-widget.js), showToast, state (projects, simulationOnly). Browser: window.ProjectArchitecture.
 (() => {
-  const POLL_MS = 1500;
   const MAP_WORKFLOW = 'project-map.yaml';
+  const MAP_NAME = 'project-map';
   const TABLE_ROWS = 40;
   const STALE_RUNS = 5;
   const LIMITS = [
@@ -36,12 +39,16 @@
     'Code moved between files resets both metrics: the new file starts with no history and the old one disappears.',
     'Churn says nothing about bugs unless it is joined with fix commits: a busy file is not a buggy file.',
   ];
+  // what the run is doing, by its step (workflows/project-map.yaml)
+  const STEP_LABELS = {
+    facts: 'reading the repository', plan: 'the cartographer writes the city plan', validate: 'validating the plan', invalid: 'the plan failed its validation',
+    gate: 'the plan waits for your review', save: 'saving the plan', analyze: 'the Oracle analyses the hotspots',
+  };
   const MODE_KEY = 'multiagent.architecture.view';
-  // the project on screen: { id, box, facts, view, reports, estimate, error, loadError, loading, analyzing, progress, reportId, since, until, includeMass, editing, seq,
-  // cityMap, mapEstimate, mapConfirm, mapStarting, mapRun, mapError (the project map, #372: cityMap is architecture:city's answer),
-  // city, focusFile (the City view, #373: city is its ProjectCity) }
+  // the project on screen: { id, box, facts, view, reports, estimate, error, loadError, loading, reportId, since, until, includeMass, editing, seq,
+  // cityMap, mapEstimate, mapStarting, mapRun, mapStep (the project map run, #372/#381: cityMap is architecture:city's answer),
+  // city, agents, connections, focusFile (the City view, #373: city is its ProjectCity) }
   let cur = null;
-  let poll = null;
   let mode = loadMode(); // 'facts' | 'city', for every project of this window
 
   function loadMode() {
@@ -72,34 +79,22 @@
   const plural = (n, unit) => `${n} ${n === 1 ? unit.replace(/s$/, '') : unit}`;
   const day = (iso) => String(iso || '').slice(0, 10);
   const short = (sha) => String(sha || '').slice(0, 10);
+  const stepLabel = (id) => STEP_LABELS[id] || (id ? `step ${id}` : 'starting the run');
 
-  function analyzeButton() {
-    const e = cur.estimate;
-    const estimate = e ? `≈ US$ ${Number(e.usd).toFixed(2)}` : '';
-    const title = e ? `${estimate}, from the last ${plural(e.basis, 'analyses')}: one Oracle turn in its daily budget` : 'No real analysis yet: the first one shows its real cost. One Oracle turn in its daily budget.';
-    return `<button type="button" class="btn primary" data-testid="architecture-analyze" data-arch-analyze ${cur.analyzing ? 'disabled' : ''} title="${esc(title)}">${cur.analyzing ? 'Analyzing…' : 'Analyze with the Oracle'}${estimate ? ` <span class="arch-estimate">${esc(estimate)}</span>` : ''}</button>`;
-  }
+  // ---------- the one action (#381) ----------
 
-  function controlsHtml() {
-    const reports = cur.reports || [];
-    const picker = reports.length ? `<label class="an-date small muted">Report <select data-arch-report data-testid="architecture-report-picker">${reports.map((r) => `<option value="${esc(r.id)}" ${r.id === (cur.view?.report?.id) ? 'selected' : ''}>${esc(day(r.date))} · ${plural(r.findings, 'findings')}${r.simulated ? ' (simulated)' : ''}</option>`).join('')}</select></label>` : '';
-    return `<div class="row pcm-controls" data-testid="architecture-controls">
-      ${analyzeButton()}
-      ${picker}
-      <label class="an-date small muted">From <input type="date" data-arch-since value="${esc(cur.since || '')}" /></label>
-      <label class="an-date small muted">To <input type="date" data-arch-until value="${esc(cur.until || '')}" /></label>
-      <label class="check small" title="Commits that touched more than 25% of the files (a reformat, a rename): counted unless unchecked"><input type="checkbox" data-arch-mass ${cur.includeMass ? 'checked' : ''} /><span>Count mass changes</span></label>
-      <button type="button" class="btn" data-arch-refresh ${cur.loading ? 'disabled' : ''}>Refresh</button>
-    </div>`;
-  }
-
-  // ---------- the project map (#372) ----------
-
-  function mapEstimateText() {
-    const item = cur.mapEstimate?.items?.[0];
-    const simulated = state.simulationOnly ? ' This app runs simulations only: no model is called.' : '';
-    if (item?.basis) return `≈ US$ ${Number(item.costUsd).toFixed(2)}, ~${item.minutes} min (estimate from ${plural(item.basis, 'past runs')}).${simulated}`;
-    return `No cost estimate yet: no real project map run to estimate from. One cartographer turn, up to three when its plan fails the validation.${simulated}`;
+  // the combined estimate: the map's (past real runs) plus the Oracle's turn (past real analyses)
+  function estimateInfo() {
+    const map = cur.mapEstimate?.items?.[0];
+    const oracle = cur.estimate;
+    const simulated = typeof state !== 'undefined' && state.simulationOnly ? ' This app runs simulations only: no model is called.' : '';
+    const parts = [];
+    let usd = 0;
+    if (map?.basis) { usd += Number(map.costUsd) || 0; parts.push(`the map ≈ US$ ${(Number(map.costUsd) || 0).toFixed(2)} (from ${plural(map.basis, 'past runs')}, ~${map.minutes} min)`); }
+    if (oracle) { usd += Number(oracle.usd) || 0; parts.push(`the Oracle's analysis ≈ US$ ${Number(oracle.usd).toFixed(2)} (from the last ${plural(oracle.basis, 'analyses')})`); }
+    if (!parts.length) return { known: false, text: 'no estimate yet', title: `No cost estimate yet: the first real run shows its cost. One cartographer turn (up to three when its plan fails the validation), then one Oracle turn in its daily budget.${simulated}` };
+    const missing = !map?.basis ? '; the map has no estimate yet (no real run)' : !oracle ? '; the Oracle\'s analysis has no estimate yet (no real analysis)' : '';
+    return { known: true, text: `≈ US$ ${usd.toFixed(2)}`, title: `${parts.join('; ')}${missing}.${simulated}` };
   }
 
   function mapAdviceHtml(r) {
@@ -108,56 +103,78 @@
       r.unmatchedShare > 0.05 ? `${Math.round(r.unmatchedShare * 100)}% of the drawn files match no district` : '',
       r.newFolders.length ? `new top-level ${r.newFolders.length === 1 ? 'folder' : 'folders'}: ${r.newFolders.join(', ')}` : '',
     ].filter(Boolean).join('; ');
-    return `<p class="small" role="status" data-testid="architecture-map-refresh-advised"><span class="badge warn">Refresh advised</span> ${esc(why)}. "Refresh the map" asks the cartographer for new rules; nothing starts on its own.</p>`;
+    return `<p class="small" role="status" data-testid="architecture-map-refresh-advised"><span class="badge warn">Refresh advised</span> ${esc(why)}. "Analyze this project" asks the cartographer for new rules (the names you saw stay); nothing starts on its own.</p>`;
   }
 
-  function mapConfirmHtml(label) {
-    if (!cur.mapConfirm) return '';
-    const error = cur.mapError ? `<div class="usage-unavailable" role="alert">${esc(cur.mapError)}</div>` : '';
-    return `<div class="card arch-edit" role="dialog" aria-label="${esc(label)}" data-testid="architecture-map-confirm">
-      <p class="small"><b>${esc(label)}</b>: the cartographer reads the repository (read-only) and writes the city plan; it is validated by rules and shown at a gate before anything is saved.</p>
-      <p class="small" data-testid="architecture-map-estimate">${esc(mapEstimateText())}</p>
-      ${error}
-      <div class="row"><button type="button" class="btn primary" data-arch-map-start data-testid="architecture-map-start" ${cur.mapStarting ? 'disabled' : ''}>${cur.mapStarting ? 'Starting…' : 'Start'}</button><button type="button" class="btn ghost" data-arch-map-cancel data-testid="architecture-map-cancel">Cancel</button></div>
-    </div>`;
-  }
-
-  function mapHtml() {
+  function actionHtml() {
     const city = cur.cityMap;
-    if (!city || city.state !== 'ok') return '';
-    const hasPlan = city.model?.grouping === 'plan';
-    const label = hasPlan ? 'Refresh the map' : 'Map this project';
-    const plan = hasPlan
-      ? `City plan: ${plural(city.model.districts.length, 'districts')}, ${Math.floor((city.validation?.coverage || 0) * 1000) / 10}% of the drawn files in a district.`
-      : 'No city plan yet: the city groups the files by folder.';
-    const running = cur.mapRun ? `<span class="badge live" role="status" data-testid="architecture-map-running" title="${esc(cur.mapRun)}">Project map running: its plan waits at its gate</span>` : '';
-    return `<section class="arch-map" data-testid="architecture-map-panel">
-      <div class="row"><button type="button" class="btn" data-arch-map data-testid="architecture-map" ${cur.mapRun || cur.mapConfirm ? 'disabled' : ''}>${label}</button>${running}<span class="small muted">${esc(plan)}</span></div>
-      ${mapAdviceHtml(city.refresh)}
-      ${mapConfirmHtml(label)}
+    const hasPlan = city?.model?.grouping === 'plan';
+    const planText = !city || city.state !== 'ok' ? ''
+      : hasPlan ? `City plan: ${plural(city.model.districts.length, 'districts')}, ${Math.floor((city.validation?.coverage || 0) * 1000) / 10}% of the drawn files in a district.`
+        : 'No city plan yet: the city groups the files by folder.';
+    const e = estimateInfo();
+    const running = !!cur.mapRun;
+    const label = cur.mapStarting ? 'Starting…' : running ? 'Analyzing…' : 'Analyze this project';
+    const title = running ? `Run ${cur.mapRun}: ${stepLabel(cur.mapStep)}` : `One run: the cartographer maps the project${hasPlan ? ' (a refresh keeps the names you saw)' : ''}, then the Oracle analyses its hotspots. ${e.title}`;
+    const progress = running ? `<p class="small" role="status" data-testid="architecture-analyzing" title="${esc(cur.mapRun)}"><span class="badge live">Analyzing this project</span> ${esc(stepLabel(cur.mapStep))}…</p>` : '';
+    const error = cur.error ? `<div class="usage-unavailable" role="alert" data-testid="architecture-state-error">The analysis failed: ${esc(cur.error)}</div>` : '';
+    return `<section class="arch-action" data-testid="architecture-action">
+      <div class="row">
+        <button type="button" class="btn primary" data-testid="architecture-analyze" data-arch-analyze ${running || cur.mapStarting ? 'disabled' : ''} title="${esc(title)}">${label} <span class="arch-estimate" data-testid="architecture-estimate">${esc(e.text)}</span></button>
+        <span class="small muted">${esc(planText)}</span>
+      </div>
+      ${progress}${error}${mapAdviceHtml(city?.refresh)}
     </section>`;
   }
 
-  async function startMap() {
+  // the City view's copy of the action's state
+  const analysisState = () => {
+    const e = estimateInfo();
+    return { running: !!cur.mapRun, step: cur.mapRun ? stepLabel(cur.mapStep) : null, error: cur.error || null, estimate: e.text, estimateTitle: e.title };
+  };
+
+  async function analyze() {
     const c = cur;
-    if (!c || c.mapStarting) return;
+    if (!c || c.mapStarting || c.mapRun) return;
     const folder = state.projects.find((p) => p.id === c.id)?.folder;
     if (!folder) {
-      c.mapError = 'The project has no folder: there is nothing to map.';
+      c.error = 'The project has no folder: there is nothing to analyse.';
       render();
       return;
     }
-    Object.assign(c, { mapStarting: true, mapError: null });
+    Object.assign(c, { mapStarting: true, error: null });
     render();
     try {
-      const out = await api.startRun({ file: MAP_WORKFLOW, inputs: { repo_path: folder, project_id: c.id }, mock: !!state.simulationOnly, projectId: c.id });
-      Object.assign(c, { mapRun: out?.runId || null, mapConfirm: false });
-      showToast('Project map started: its plan waits for you at its gate');
+      const out = await api.startRun({ file: MAP_WORKFLOW, inputs: { repo_path: folder, project_id: c.id, mode: 'auto', analyze: true }, mock: !!state.simulationOnly, projectId: c.id });
+      if (!out?.runId) throw new Error(out?.error || 'the run did not start');
+      Object.assign(c, { mapRun: out.runId, mapStep: null });
+      showToast('Analyzing this project: the cartographer maps it, then the Oracle analyses it');
     } catch (e) {
-      c.mapError = errMsg(e);
+      c.error = errMsg(e);
     }
     c.mapStarting = false;
     if (cur === c) render();
+  }
+
+  // the run's events (run:event): the step shown while it runs; when it ends, the city and the
+  // report are read again, or its error shown
+  function onRunEvent(ev) {
+    const c = cur;
+    if (!c || !ev) return;
+    if (ev.type === 'workflow.started' && !c.mapRun && ev.project_id === c.id && ev.workflow === MAP_NAME) {
+      Object.assign(c, { mapRun: ev.run_id, mapStep: null, error: null });
+      render();
+      return;
+    }
+    if (!c.mapRun || ev.run_id !== c.mapRun) return;
+    if (ev.type === 'step.started') {
+      c.mapStep = ev.step_id;
+      render();
+    } else if (ev.type === 'workflow.finished') {
+      Object.assign(c, { mapRun: null, mapStep: null, error: ev.status === 'success' ? null : ev.error || `the run ended ${ev.status}` });
+      c.city?.reload();
+      load();
+    }
   }
 
   function findingHtml(f, i) {
@@ -198,14 +215,21 @@
     </section>`;
   }
 
+  function controlsHtml() {
+    const reports = cur.reports || [];
+    const picker = reports.length ? `<label class="an-date small muted">Report <select data-arch-report data-testid="architecture-report-picker">${reports.map((r) => `<option value="${esc(r.id)}" ${r.id === (cur.view?.report?.id) ? 'selected' : ''}>${esc(day(r.date))} · ${plural(r.findings, 'findings')}${r.simulated ? ' (simulated)' : ''}</option>`).join('')}</select></label>` : '';
+    return `<div class="row pcm-controls" data-testid="architecture-controls">
+      ${picker}
+      <label class="an-date small muted">From <input type="date" data-arch-since value="${esc(cur.since || '')}" /></label>
+      <label class="an-date small muted">To <input type="date" data-arch-until value="${esc(cur.until || '')}" /></label>
+      <label class="check small" title="Commits that touched more than 25% of the files (a reformat, a rename): counted unless unchecked"><input type="checkbox" data-arch-mass ${cur.includeMass ? 'checked' : ''} /><span>Count mass changes</span></label>
+      <button type="button" class="btn" data-arch-refresh ${cur.loading ? 'disabled' : ''}>Refresh</button>
+    </div>`;
+  }
+
   function stateHtml() {
-    if (cur.analyzing) {
-      const p = cur.progress;
-      return `<div class="card arch-report" role="status" data-testid="architecture-state-analyzing">The Oracle is reading the hotspots and the files that change together…${p ? ` <span class="muted small">${plural(p.items, 'steps')}${p.last ? `: ${esc(p.last)}` : ''}</span>` : ''}</div>`;
-    }
-    const error = cur.error ? `<div class="usage-unavailable" role="alert" data-testid="architecture-state-error">The analysis failed: ${esc(cur.error)}</div>` : '';
-    if (cur.view?.report) return `${error}${reportHtml()}`;
-    return `${error}<div class="empty-state" data-testid="architecture-state-never"><b>Never analysed</b><p class="muted">The facts below come from git, no model. "Analyze with the Oracle" reads the top hotspots and the files that change together with its read-only tools and writes a report: a summary, a verdict per area, and findings you can send to the Refactor tab.</p></div>`;
+    if (cur.view?.report) return reportHtml();
+    return '<div class="empty-state" data-testid="architecture-state-never"><b>Never analysed</b><p class="muted">The facts below come from git, no model. "Analyze this project" maps the project into zones and districts (the City view) and has the Oracle read the top hotspots and the files that change together with its read-only tools and write a report: a summary, a verdict per area, and findings you can send to the Refactor tab.</p></div>';
   }
 
   function complexityCells(r, measured) {
@@ -291,7 +315,7 @@
       return `<div class="empty-state" data-testid="architecture-state-not-git"><b>Not a git repository</b><p class="muted">The project folder is not a git repository: there are no commits to read and nothing to analyse. Point the project to a git checkout to see its hotspots.</p></div>`;
     }
     const noCommits = cur.facts.state === 'no-commits' ? '<div class="empty-state" data-testid="architecture-state-no-commits"><b>No commits in this range</b><p class="muted">Widen the From / To range: churn counts the commits of the default branch inside it.</p></div>' : '';
-    return `${controlsHtml()}${stateHtml()}${mapHtml()}${noCommits}${cur.facts.model ? factsHtml() : ''}${limitsHtml()}`;
+    return `${actionHtml()}${controlsHtml()}${stateHtml()}${noCommits}${cur.facts.model ? factsHtml() : ''}${limitsHtml()}`;
   }
 
   function render() {
@@ -311,14 +335,16 @@
       c.box.innerHTML = `<div data-testid="architecture"><div class="row arch-mode-row">${modeSwitch()}</div><div class="usage-unavailable" role="alert">The City view did not load: the Facts view has the same numbers.</div></div>`;
       return;
     }
-    c.city ||= ProjectCity.create({ projectId: c.id, name: projectName(c.id), onOpenFacts: (file) => { if (cur === c) { c.focusFile = file; setMode('facts'); } } });
+    c.city ||= ProjectCity.create({ projectId: c.id, name: projectName(c.id), onOpenFacts: (file) => { if (cur === c) { c.focusFile = file; setMode('facts'); } }, onAnalyze: () => { if (cur === c) analyze(); } });
     // #374: the agents of the project's runs in progress on its city (views/project/project-city-agents.js)
     c.agents ||= (window.CityAgents && window.ProjectCityAgents?.attach(c.city, { projectId: c.id })) || null;
+    // #382: the most connected files, a click pins their arcs (views/project/project-city-connections.js)
+    c.connections ||= (window.CityConnections && window.ProjectCityConnections?.attach(c.city)) || null;
     if (!c.box.contains(c.city.el)) {
       c.box.innerHTML = `<div data-testid="architecture" class="arch-city-mode"><div class="row arch-mode-row">${modeSwitch()}</div><div data-arch-city-slot></div></div>`;
       c.box.querySelector('[data-arch-city-slot]').appendChild(c.city.el);
     }
-    c.city.update({ facts: c.facts, estimate: c.estimate });
+    c.city.update({ facts: c.facts, estimate: c.estimate, analysis: analysisState() });
   }
 
   const range = () => ({ since: cur.since ? `${cur.since}T00:00:00Z` : null, until: cur.until ? `${cur.until}T23:59:59Z` : null, includeMass: cur.includeMass });
@@ -347,36 +373,11 @@
     c.estimate = value(estimate)?.estimate || null;
     c.cityMap = value(city);
     c.mapEstimate = value(mapEstimate);
-    c.mapRun = c.cityMap?.mapRun || null;
+    // the run in progress, as the service sees it (a run started before this window opened too)
+    if (!c.mapRun && c.cityMap?.mapRun) c.mapRun = c.cityMap.mapRun;
     // a refresh of the facts rebuilds the city (#371): the City view reads it again
     if (refresh) c.city?.reload();
     render();
-  }
-
-  function stopPoll() {
-    if (poll) clearInterval(poll);
-    poll = null;
-  }
-
-  async function analyze() {
-    const c = cur;
-    if (!c || c.analyzing) return;
-    Object.assign(c, { analyzing: true, error: null, progress: null });
-    render();
-    stopPoll();
-    poll = setInterval(async () => {
-      try { const v = await api.architectureReport(c.id, {}); if (cur === c && c.analyzing) { c.progress = v.running; render(); } } catch { /* the next tick tries again */ }
-    }, POLL_MS);
-    try {
-      const out = await api.analyzeArchitecture(c.id, range());
-      if (out?.refused) c.error = out.refused.text;
-      c.reportId = null;
-    } catch (e) {
-      c.error = errMsg(e);
-    }
-    stopPoll();
-    c.analyzing = false;
-    if (cur === c) load();
   }
 
   async function sendToRefactor(index) {
@@ -409,11 +410,11 @@
   /** Draws the tab of project `id` into `box`: read on the first show of a project, kept until Refresh. */
   function show(id, box) {
     if (cur?.id !== id) {
-      stopPoll();
+      cur?.connections?.destroy();
       cur?.agents?.destroy();
       cur?.city?.destroy(); // another project: the previous city gives its WebGL context back
-      cur = { id, box, facts: null, view: null, reports: [], estimate: null, error: null, loadError: null, loading: false, analyzing: false, progress: null, reportId: null, since: '', until: '', includeMass: true, editing: false, seq: 0,
-        cityMap: null, mapEstimate: null, mapConfirm: false, mapStarting: false, mapRun: null, mapError: null, city: null, agents: null, focusFile: null };
+      cur = { id, box, facts: null, view: null, reports: [], estimate: null, error: null, loadError: null, loading: false, reportId: null, since: '', until: '', includeMass: true, editing: false, seq: 0,
+        cityMap: null, mapEstimate: null, mapStarting: false, mapRun: null, mapStep: null, city: null, agents: null, connections: null, focusFile: null };
     }
     cur.box = box;
     if (!cur.facts && !cur.loading && !cur.loadError) load();
@@ -431,9 +432,6 @@
     if (e.target.closest('[data-arch-exclude-edit]')) return () => { cur.editing = true; render(); };
     if (e.target.closest('[data-arch-exclude-cancel]')) return () => { cur.editing = false; render(); };
     if (e.target.closest('[data-arch-exclude-save]')) return saveExclude;
-    if (e.target.closest('[data-arch-map]')) return () => { Object.assign(cur, { mapConfirm: true, mapError: null }); render(); };
-    if (e.target.closest('[data-arch-map-start]')) return startMap;
-    if (e.target.closest('[data-arch-map-cancel]')) return () => { cur.mapConfirm = false; render(); };
     return null;
   }
 
@@ -470,9 +468,13 @@
       <div class="small"><b>Refactor:</b> ${esc(p.refactor || '')}</div></li>`).join('')}</ul>` : '';
   }
 
+  // the runs' events reach the tab whatever screen started the run
+  if (typeof api !== 'undefined' && typeof api.onEvent === 'function') api.onEvent(onRunEvent);
+
   window.ProjectArchitecture = {
     onChange,
     onClick,
+    onRunEvent,
     openCity,
     show,
     showRefactor,

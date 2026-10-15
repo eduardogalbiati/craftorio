@@ -61,6 +61,7 @@ function load(agentsAnswer) {
   for (const f of ['globs.js', 'json-schema.js', 'architecture-model.js', 'city-model.js', 'city-layout.js', 'city-agents.js']) {
     vm.runInContext(fs.readFileSync(path.join(ROOT, 'src', 'shared', f), 'utf8'), sandbox, { filename: f });
   }
+  for (const f of ['project-city-notes.js', 'project-city-cards.js']) vm.runInContext(fs.readFileSync(path.join(path.dirname(CITY), f), 'utf8'), sandbox, { filename: f });
   vm.runInContext(fs.readFileSync(CITY, 'utf8'), sandbox, { filename: 'project-city.js' });
   const overlay = sandbox.ProjectCity.overlay;
   sandbox.ProjectCity.overlay = (name, spec) => { calls.overlay.push({ name: String(name), spec: spec ? JSON.parse(JSON.stringify(spec)) : null }); return overlay(name, spec); };

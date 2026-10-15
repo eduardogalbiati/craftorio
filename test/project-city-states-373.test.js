@@ -44,7 +44,10 @@ function load(answer) {
   for (const f of ['globs.js', 'json-schema.js', 'architecture-model.js', 'city-model.js', 'city-layout.js']) {
     vm.runInContext(fs.readFileSync(path.join(ROOT, 'src', 'shared', f), 'utf8'), sandbox);
   }
-  vm.runInContext(fs.readFileSync(path.join(ROOT, 'src', 'renderer', 'views', 'project', 'project-city.js'), 'utf8'), sandbox);
+  // the view and its two helper modules (#381/#382: the notes and the cards have their own files)
+  for (const f of ['project-city-notes.js', 'project-city-cards.js', 'project-city.js']) {
+    vm.runInContext(fs.readFileSync(path.join(ROOT, 'src', 'renderer', 'views', 'project', f), 'utf8'), sandbox, { filename: f });
+  }
   return sandbox;
 }
 
@@ -52,11 +55,11 @@ const settle = async () => { for (let i = 0; i < 10; i++) await new Promise((r) 
 const q = (el, id) => el.querySelector(`[data-testid="${id}"]`);
 const text = (el) => String(el?.textContent ?? '').replace(/\s+/g, ' ').trim();
 
-async function open(answer, { estimate = null } = {}) {
+async function open(answer, { estimate = null, analysis = null } = {}) {
   const w = load(answer);
-  const city = w.ProjectCity.create({ projectId: 'p1', name: 'fixture-app' });
+  const city = w.ProjectCity.create({ projectId: 'p1', name: 'fixture-app', onAnalyze: () => {} });
   w.document.body.appendChild(city.el);
-  city.update({ facts: { state: 'ok', model: facts() }, estimate });
+  city.update({ facts: { state: 'ok', model: facts() }, estimate, analysis });
   return { w, city };
 }
 
@@ -75,24 +78,41 @@ test('#373 City states: not a git repository, and an error with Retry', async ()
   assert.ok(failed.el.querySelector('[data-pc-retry]'), 'a Retry button');
 });
 
-test('#373 City states: no plan shows the folders, "Map this project" and its estimate', async () => {
-  const { city } = await open({ state: 'ok', ...buildCity({ plan: null, facts: facts() }) }, { estimate: { usd: 0.42, basis: 3 } });
+test('#373 City states: no plan shows the folders and the tab\'s one action, "Analyze this project", with its estimate (#381)', async () => {
+  const { city } = await open({ state: 'ok', ...buildCity({ plan: null, facts: facts() }) }, { estimate: { usd: 0.42, basis: 3 }, analysis: { running: false, step: null, error: null, estimate: '≈ US$ 0.42', estimateTitle: 'the Oracle\'s analysis' } });
   await settle();
   const header = text(q(city.el, 'project-city-header'));
   assert.match(header, /fixture-app/);
   assert.match(header, /\b5 files\b/);
   assert.match(header, /no plan/);
   const note = q(city.el, 'project-city-no-plan');
-  assert.match(text(note), /Map this project/);
+  assert.match(text(note), /Analyze this project/);
   assert.match(text(note), /≈ US\$ 0\.42/);
+  assert.equal(q(city.el, 'project-city-analyze').disabled, false, 'the action works (onAnalyze given)');
   assert.match(text(city.el), /WebGL/, 'and no WebGL here');
+});
+
+test('#381 City states: the action follows the run (running with its step, then its error), and the city reads the saved plan again', async () => {
+  const { city, w } = await open({ state: 'ok', ...buildCity({ plan: null, facts: facts() }) }, { analysis: { running: true, step: 'the cartographer writes the city plan', error: null, estimate: 'no estimate yet' } });
+  await settle();
+  assert.match(text(q(city.el, 'project-city-analyzing')), /Analyzing this project.*cartographer writes the city plan/);
+  assert.equal(q(city.el, 'project-city-analyze'), null, 'no second start while it runs');
+  city.update({ analysis: { running: false, step: null, error: 'the Oracle refused: daily budget', estimate: 'no estimate yet' } });
+  assert.match(text(q(city.el, 'project-city-analysis-error')), /daily budget/);
+  assert.ok(q(city.el, 'project-city-analyze'), 'Analyze again');
+  // a run that saved a plan: reload reads architecture:city again (the plan's districts, not the folders)
+  w.api.architectureCity = async () => ({ state: 'ok', ...buildCity({ plan: { ...PLAN, districts: [PLAN.districts[0]], zones: [PLAN.zones[0]] }, facts: facts() }) });
+  city.reload();
+  await settle();
+  assert.equal(q(city.el, 'project-city-no-plan'), null, 'no "No city plan yet" once the plan is saved');
+  assert.match(text(q(city.el, 'project-city-header')), /plan covers/);
 });
 
 test('#373 City states: a stale plan, its problems and the edges not read', async () => {
   const { city } = await open({ state: 'ok', ...buildCity({ plan: PLAN, facts: facts() }) });
   await settle();
   assert.match(text(q(city.el, 'project-city-stale')), /40% of the files \(2 of 5\)/);
-  assert.ok(q(city.el, 'project-city-refresh-map'), 'Refresh the map');
+  assert.ok(q(city.el, 'project-city-analyze'), 'Analyze this project (a refresh of the map)');
   const problems = text(q(city.el, 'project-city-problems'));
   assert.match(problems, /District lost names an unknown zone nowhere/);
   assert.match(problems, /District lost has no file/);
@@ -115,7 +135,8 @@ test('#373 City: an update with the same facts and estimate keeps the HUD, a new
   city.update({ facts: same, estimate });
   assert.equal(q(city.el, 'project-city-search') === search, true, 'the same search box (the HUD was not redrawn)');
   assert.equal(q(city.el, 'project-city-search').value, 'src/engine', 'the typed text survives the poll');
-  city.update({ facts: same, estimate: { usd: 0.9, basis: 4 } });
+  // #381: the action's estimate is the tab's combined one (the map and the Oracle's turn)
+  city.update({ facts: same, estimate, analysis: { running: false, step: null, error: null, estimate: '≈ US$ 0.90', estimateTitle: 'the map and the analysis' } });
   assert.match(text(q(city.el, 'project-city-no-plan')), /≈ US\$ 0\.90/);
   city.destroy();
 });

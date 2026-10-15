@@ -1,17 +1,19 @@
 // The project city's 3D view (#373), the bundle's entry (scripts/build-3d.js → generated/project-city.js):
 // defines window.ProjectCityScene, which the City view of the Architecture tab
 // (src/renderer/views/project/project-city.js) calls once the bundle has loaded. The HUD (header,
-// legend, cards, controls) is that classic script's; the bundle draws the city and reports what the
-// pointer is on.
-//   ProjectCityScene.mount(element, { layout, paint, markers, tests, theme, relationsOf, onHover, onPick }) → handle
+// legend, cards, controls, the connections panel) is that classic script's; the bundle draws the
+// city and reports what the pointer is on.
+//   ProjectCityScene.mount(element, { layout, paint, markers, tests, pins, theme, relationsOf, onHover, onPick }) → handle
 //   - layout: src/shared/city-layout.js layoutCity; paint: { colours: [hex], greyed: [bool] } per
 //     building (colourBy, then applyOverlay); markers: applyOverlay's; tests: draw the test files;
-//     theme: 'dark' | 'light' (run3d-theme.js); relationsOf(kind, id) → { requires, requiredBy }
-//     (city-layout.js neighbours / districtNeighbours); onHover({ kind, id, x, y } | null) with the
-//     pointer's client position; onPick({ kind, id } | null) on a click (null: the empty sky).
-//   - handle: update(patch of the same keys), pin(target | null), flyTo(flyTarget), home(),
-//     zoom(factor), stats() → { firstFrameMs, fps } (the time to the first frame, the frame rate
-//     while the camera moves), unmount() (React Three Fiber gives the WebGL context back).
+//     pins: the file paths whose connections stay drawn (#382, the connections panel); theme: 'dark'
+//     | 'light' (run3d-theme.js); relationsOf(kind, id) → { requires, requiredBy } (city-layout.js
+//     neighbours / districtNeighbours); onHover({ kind, id, x, y } | null) with the pointer's client
+//     position; onPick({ kind, id } | null) on a click (null: the empty sky).
+//   - handle: update(patch of the same keys; a new layout drops the hover and the pinned card, the
+//     pins stay), pin(target | null) (the card's target), flyTo(flyTarget), home(), zoom(factor),
+//     stats() → { firstFrameMs, fps } (the time to the first frame, the frame rate while the camera
+//     moves), unmount() (React Three Fiber gives the WebGL context back).
 import { Component } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Canvas } from '@react-three/fiber';
@@ -38,12 +40,12 @@ function Tags({ store }) {
       {layout.landmarks.map((l) => (
         <button type="button" key={`landmark:${l.path}`} ref={ref(`landmark:${l.path}`)} className="r3d-tag live" title={l.path}
           onClick={() => store.pick('building', l.path)}>
-          <i className="r3d-dot" />{l.label}
+          <i className="r3d-dot" />{l.label} <span>{l.path.split('/').pop()}</span>
         </button>
       ))}
       {layout.ports.map((p) => (
-        <div key={`port:${p.id}`} ref={ref(`port:${p.id}`)} className="r3d-tag dim" title={`Talks to: ${p.via.join(', ')}`}>
-          <i className="r3d-dot" />{p.name} <span>port</span>
+        <div key={`port:${p.id}`} ref={ref(`port:${p.id}`)} className="r3d-tag sel" title={`Talks to: ${p.via.join(', ')}`}>
+          <i className="r3d-dot" />{p.name} <span>{p.via.length} {p.via.length === 1 ? 'file' : 'files'}</span>
         </div>
       ))}
     </div>
@@ -71,12 +73,13 @@ function App({ store }) {
 
 const same = (a, b) => a?.kind === b?.kind && a?.id === b?.id;
 
-function mount(element, { layout, paint, markers = [], tests = true, theme, relationsOf, onHover, onPick }) {
-  const store = createStore({ layout, layoutKey: 1, paint, markers, tests, theme: cityTheme(theme), level: 0, hover: null, pinned: null, glError: '' });
+function mount(element, { layout, paint, markers = [], tests = true, pins = [], theme, relationsOf, onHover, onPick }) {
+  const store = createStore({ layout, layoutKey: 1, paint, markers, tests, pins: [...pins], theme: cityTheme(theme), level: 0, hover: null, pinned: null, glError: '' });
   Object.assign(store, {
     tagEls: new Map(),
     tagAnchors: new Map(),
     rig: null,
+    lastFocus: null,
     invalidate: () => {},
     stats: { mountedAt: performance.now(), firstFrameMs: null, fps: null },
     relationsOf: relationsOf || (() => ({ requires: [], requiredBy: [] })),
@@ -97,6 +100,7 @@ function mount(element, { layout, paint, markers = [], tests = true, theme, rela
     update(patch) {
       const next = { ...patch };
       if (patch.theme) next.theme = cityTheme(patch.theme);
+      if (patch.pins) next.pins = [...patch.pins];
       if (patch.layout && patch.layout !== store.get().layout) Object.assign(next, { layoutKey: store.get().layoutKey + 1, hover: null, pinned: null });
       store.set(next);
     },
