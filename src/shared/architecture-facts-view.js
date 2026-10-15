@@ -124,7 +124,10 @@
     const c = complexity || {};
     const unmeasured = c.unmeasured || [];
     if (c.status !== 'measured') {
-      const why = c.status === 'failed' ? "the tool's check failed" : 'no tool found';
+      // 'missing' also means lizard is there but the checkout is off the analysed commit: name the reason's head
+      const reason = String(c.reason || '').split(':')[0].trim();
+      const why = c.status === 'failed' ? "the tool's check failed"
+        : reason && reason.length <= 60 ? reason : 'no tool found';
       return `Complexity: not measured${unmeasured.length ? ` for ${names(unmeasured)}` : ''} (${why})`;
     }
     const measured = (languages || []).map((l) => l.language).filter((l) => l && !unmeasured.includes(l));
