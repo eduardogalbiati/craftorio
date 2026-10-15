@@ -5,7 +5,8 @@
 // Undo a removal and earlier versions (#281), the item card's bands, Workflow band, pipeline and the
 // stage actions menu (#282), disabling a stage (#284), no "Update the app after this" control (#285),
 // the shipped releases' blocks, version lines and Releases filter (#291), the bar's Pause menu ("Pause
-// after this stage" / "Pause now", the pausing badge and Cancel pause, #391), on the demo roadmap (scripts/screenshot.js
+// after this stage" / "Pause now", the pausing badge and Cancel pause, #391), "Move on" past an item at
+// a human gate, its parked card and "Move on from this stage" (#395), on the demo roadmap (scripts/screenshot.js
 // demoRoadmap / demoRoadmapRuns). Locators are roles and data-testid only (skills/ui-conventions).
 //
 // What the screens expose (the renderer's contract for these steps):
@@ -1035,4 +1036,120 @@ Then('the roadmap pauses with {string}', async ({ e2e }, text) => {
   const page = e2e.window;
   await expect(stateDot(page)).toHaveAttribute('data-state', 'paused', { timeout: RUN_TIMEOUT });
   await expect(rmBar(page)).toContainText(text);
+});
+
+// ---- #395: move on past an item waiting at a human gate ---------------------------------------------
+// What the screen exposes (new for #395):
+// - data-testid="roadmap-item-move-on": a button "Move on" on the card of an item whose run waits at
+//   a human gate (and in the paused roadmap's alert); a click asks first (confirm-modal: the next stage
+//   starts without the parked change, a "Move on" button).
+// - a parked item's card: data-status="parked" on its roadmap-item, and data-testid="roadmap-item-parked",
+//   "Parked at <gate>", a link (or button) that opens the run at its gate.
+// - data-testid="roadmap-parked-count" in the roadmap bar: "N parked at a gate" (absent when none).
+// - data-testid="roadmap-stage-move-on": the stage menu's "Move on from this stage" entry.
+// - data-testid="roadmap-move-on-refused": the refusal (a toast, an alert or the dialog's text) while an
+//   item of the stage has an agent turn running, naming "Pause after current step".
+
+const parkedLine = (page, title) => roadmapItem(page, title).getByTestId('roadmap-item-parked');
+const parkedCount = (page) => rmBar(page).getByTestId('roadmap-parked-count');
+
+// The demo roadmap's stages replaced by two planned stages (issues #3951 and #3953, made up: the runs
+// are simulated): "Gate item A" in Validated mode (it stops at "Developer check"), "Gate item C" in
+// Automatic mode; the roadmap paused with nothing to settle, so the bar offers Resume.
+Given('the roadmap has two planned stages, item A in Validated mode in stage 1 and item C in stage 2', async ({ e2e }) => {
+  editRoadmap(e2e, (r) => {
+    const model = r.stages.flatMap((s) => s.items).find((x) => x.workflow === 'software-development-local-hero.yaml');
+    expect(model, 'a software-development-local-hero item in the demo roadmap').toBeTruthy();
+    const item = (letter, number, mode) => {
+      const issue = { number, url: `https://github.com/example/demo-app/issues/${number}`, title: `Gate item ${letter}`, body: `A small change (${letter}) for the move-on scenarios.`, knownPullRequests: [] };
+      const base = JSON.parse(JSON.stringify(model));
+      for (const k of ['issues', 'reason', 'modeReason', 'origin', 'cost']) delete base[k];
+      return {
+        ...base, id: `gate-item-${letter.toLowerCase()}`, ...issue, mock: true,
+        inputs: { language: 'js', mode, screenshots: 'off' }, status: 'planned', runId: null, runs: [], error: null,
+      };
+    };
+    Object.assign(r, {
+      state: 'paused', simulated: true, pausedBy: null, error: null, scope: null, budget: null, live: false,
+      stages: [
+        { id: 'stage-gate-1', name: 'Gate batch', note: '', items: [item('A', 3951, 'validated')] },
+        { id: 'stage-gate-2', name: 'After the gate', note: '', items: [item('C', 3953, 'auto')] },
+      ],
+    });
+  });
+});
+
+Then('the roadmap item {string} waits at a human gate', async ({ e2e }, title) => {
+  const item = roadmapItem(e2e.window, title);
+  await expect(item).toHaveAttribute('data-status', 'waiting', { timeout: RUN_TIMEOUT });
+  await expect(item.getByTestId('run-chip')).toHaveAttribute('data-run', /\S/);
+});
+
+Then('the roadmap item {string} offers {string} on its card', async ({ e2e }, title, name) => {
+  const button = roadmapItem(e2e.window, title).getByRole('button', { name, exact: true });
+  await expect(button).toBeEnabled({ timeout: LOAD_TIMEOUT });
+  if (name === 'Move on') await expect(button).toHaveAttribute('data-testid', 'roadmap-item-move-on');
+});
+
+Then('the confirm dialog says the next stage starts without the parked change', async ({ e2e }) => {
+  const dialog = e2e.window.getByTestId('confirm-modal');
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText(/without/i);
+  await expect(dialog).toContainText(/parked/i);
+});
+
+When('I press {string} in the confirm dialog', async ({ e2e }, name) => {
+  const dialog = e2e.window.getByTestId('confirm-modal');
+  await dialog.getByRole('button', { name, exact: true }).click();
+  await expect(dialog).toBeHidden();
+});
+
+Then('the roadmap item {string} is parked at {string}', async ({ e2e }, title, gate) => {
+  const item = roadmapItem(e2e.window, title);
+  await expect(item).toHaveAttribute('data-status', 'parked', { timeout: LOAD_TIMEOUT });
+  await expect(parkedLine(e2e.window, title)).toHaveText(new RegExp(`Parked at ${escapeRe(gate)}`));
+  await expect(item.getByRole('button', { name: 'Move on', exact: true })).toHaveCount(0);
+});
+
+Then('the roadmap item {string} is not parked', async ({ e2e }, title) => {
+  const item = roadmapItem(e2e.window, title);
+  await expect(item).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(item).not.toHaveAttribute('data-status', 'parked');
+  await expect(parkedLine(e2e.window, title)).toHaveCount(0);
+});
+
+Then('the roadmap bar counts {string}', async ({ e2e }, text) => {
+  await expect(parkedCount(e2e.window)).toHaveText(text, { timeout: LOAD_TIMEOUT });
+});
+
+Then('the roadmap bar shows no parked count', async ({ e2e }) => {
+  await expect(parkedCount(e2e.window)).toHaveCount(0, { timeout: LOAD_TIMEOUT });
+});
+
+// the card's "Parked at <gate>" line is a link to the run, at its gate
+When('I open the gate of the parked roadmap item {string}', async ({ e2e }, title) => {
+  const line = parkedLine(e2e.window, title);
+  await expect(line).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await line.scrollIntoViewIfNeeded();
+  // the line itself is the link, or it holds one
+  const inner = line.getByRole('link').or(line.getByRole('button')).first();
+  if (await inner.count()) await inner.click();
+  else await line.click();
+});
+
+When('I choose {string} on the gate card', async ({ e2e }, name) => {
+  const card = e2e.window.getByTestId('run-gate').first();
+  await card.getByTestId('run-gate-choice').filter({ hasText: new RegExp(`^\\s*${escapeRe(name)}\\s*$`) }).click();
+  await expect(card.getByTestId('run-gate-choice').first()).toBeHidden({ timeout: LOAD_TIMEOUT });
+});
+
+Then('the stage actions menu entry {string} moves on from the stage', async ({ e2e }, name) => {
+  await expect(stageMenu(e2e.window).getByRole('menuitem', { name, exact: true })).toHaveAttribute('data-testid', 'roadmap-stage-move-on');
+});
+
+Then('the roadmap refuses to move on while an agent turn is running, pointing to {string}', async ({ e2e }, action) => {
+  const refusal = e2e.window.getByTestId('roadmap-move-on-refused').filter({ visible: true }).first();
+  await expect(refusal).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(refusal).toContainText(/agent turn/i);
+  await expect(refusal).toContainText(action);
 });

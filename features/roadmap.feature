@@ -509,3 +509,57 @@ Feature: Roadmap statuses, done items, filters and run timers
     And the roadmap item "Pause item B" has not started
     When I resume the roadmap as a simulation
     Then the roadmap item "Pause item B" has started
+
+  # ---- #395: move on past an item waiting at a human gate --------------------------------------------
+  # The demo roadmap is replaced by two planned stages of simulated software-development-local-hero
+  # items: stage 1 holds "Gate item A" in Validated mode (its run stops at the owner's "Developer
+  # check" gate), stage 2 holds "Gate item C" in Automatic mode (no gate). Moving on parks A: its stage
+  # counts it finished and stage 2 starts, while A's run keeps waiting at the same gate, still the
+  # owner's to answer. Assumption: the parked card names the gate by its step's display name
+  # ("Developer check") and its "Parked at …" line opens the run at that gate.
+
+  @issue-395
+  Scenario: Moving on past an item at a gate starts the next stage, the gate stays mine, and Approve ends the item done
+    Given the app is open
+    And the roadmap has two planned stages, item A in Validated mode in stage 1 and item C in stage 2
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    And I switch the roadmap to "All"
+    And I resume the roadmap as a simulation
+    Then the roadmap item "Gate item A" waits at a human gate
+    And the roadmap item "Gate item C" has not started
+    And the roadmap item "Gate item A" offers "Move on" on its card
+    When I click "Move on" on the roadmap item "Gate item A"
+    Then the confirm dialog says the next stage starts without the parked change
+    When I press "Move on" in the confirm dialog
+    Then the roadmap item "Gate item A" is parked at "Developer check"
+    And the roadmap bar counts "1 parked at a gate"
+    And the roadmap item "Gate item C" has started
+    When I open the gate of the parked roadmap item "Gate item A"
+    Then a gate card waits for my approval
+    And the gate card offers "Approve: go on to the code review" and "Stop the run (branch kept to resume)"
+    When I choose "Approve: go on to the code review" on the gate card
+    And I open "Backlog" in the sidebar
+    And I open the Roadmap
+    And I switch the roadmap to "All"
+    Then the roadmap item "Gate item A" is done
+    And the roadmap bar shows no parked count
+
+  # "Move on from this stage" is refused while an item of the stage has an agent turn running: the
+  # #391 setup (simulated turns of a few seconds, one run at a time) keeps "Pause item A" in a turn.
+
+  @issue-395
+  Scenario: Moving on from a stage is refused while an agent turn runs, pointing to "Pause after current step"
+    Given the app is open with simulated turns of a few seconds
+    And the roadmap has two planned stages, items A and B in stage 1 and item C in stage 2, one run at a time
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    And I switch the roadmap to "All"
+    And I resume the roadmap as a simulation
+    Then the roadmap item "Pause item A" has started
+    When I open the stage actions menu of stage 1
+    Then the stage actions menu entry "Move on from this stage" moves on from the stage
+    When I choose "Move on from this stage" in the stage actions menu
+    Then the roadmap refuses to move on while an agent turn is running, pointing to "Pause after current step"
+    And the roadmap item "Pause item A" is not parked
+    And the roadmap item "Pause item C" has not started
