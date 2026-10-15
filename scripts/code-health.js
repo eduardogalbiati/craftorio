@@ -127,7 +127,6 @@ const COMPLEXITY_EXCEPTIONS = {
   'src/service/areas/resume.js:keptWorkQuestion': 29,
   'src/service/areas/roadmap.js:advanceRoadmap': 36,
   'src/service/areas/runs.js:startWorkflowRun': 41,
-  'src/service/areas/runs.js:startWorkflowRun/on(event) callback': 26,
   'src/session-tail.js:print': 29,
   'src/session-tail.js:printOrchestrator': 45,
   'src/shared/json-schema.js:validateSchema': 39,

@@ -233,6 +233,35 @@ module.exports = (ctx) => {
     finishedPeers = finishedPeers.filter((f) => f.finishedAt >= oldest); // none left when nothing runs
   }
 
+  // What follows a run's end (its workflow.finished event): the next issues waiting in a Backlog
+  // queue start once this run is over; a queued issue whose run failed pauses its queue (a failure
+  // that repeats would otherwise burn through it)
+  function afterRunFinished(run, ev) {
+    if (run.issues && run.projectId && ev.status === 'failed' && !run.mock) {
+      try { backlog.setPaused(ctx.ws.backlog, run.projectId, true, `${run.issues.map((i) => `#${i.number}`).join(', ')} failed: resume to start the next issues.`); } catch (e) { console.error('backlog queue:', e); }
+    }
+    // the epic first (the chain may sync the backlog), then what the run's chain starts (#134)
+    ctx.placeFiledInEpic(run, ev).catch((e) => console.error('issue tracker epic:', e.message))
+      .then(() => ctx.continueChain(run, ev)).catch((e) => console.error('run chain:', e.message));
+    // a Backlog Refresh run edited or closed issues: the Backlog syncs the project (#161)
+    ctx.afterBacklogRefresh(run).catch((e) => console.error('backlog refresh sync:', e.message));
+    // a release run (#260): a shipped release is recorded and its cut line lets the roadmap go on
+    ctx.afterRelease(run, ev).catch((e) => console.error('release:', e.message));
+    // #405: a base check deferred while this release run held the base runs now
+    try { ctx.afterBaseReleased(run); } catch (e) { console.error('base health:', e.message); }
+    // a merged run changes the conflict map the Product Owner plans with (#150)
+    ctx.afterRunConflictMap(run, ev).catch((e) => console.error('conflict map:', e.message));
+    // a roadmap's next items first (its stage may be over), then the plain queue; a shutdown
+    // cancels it (#186: it would run after the workspace was closed, e.g. a test's removed one)
+    const dispatch = setTimeout(() => {
+      dispatchTimers.delete(dispatch);
+      if (!ctx.ws) return;
+      Promise.resolve().then(() => ctx.dispatchRoadmaps()).catch((e) => console.error('roadmap dispatch:', e))
+        .then(() => ctx.dispatchQueue()).catch((e) => console.error('backlog dispatch:', e));
+    }, 1000);
+    dispatchTimers.add(dispatch);
+  }
+
   // What the UI shows of each run in progress (the Run menu list). `gates` are the gates the run
   // waits at (approval_id, step_id, message, choices, feedback, requested_at): the sidebar, the
   // Backlog and a reloaded window all read them here, never only from the events they saw live.
@@ -416,33 +445,7 @@ module.exports = (ctx) => {
       }
       // a gate's notice carries its phone page link while Phone gates is on (#226)
       ctx.notify(notifier.runNotice(ev, runInfo, { gateLink: ctx.phoneGateLink() }), { projectId: run.projectId, issue: run.issues?.map((i) => `#${i.number}`).join(', ') || null });
-      // the next issues waiting in a Backlog queue start once this run is over; a queued issue whose
-      // run failed pauses its queue (a failure that repeats would otherwise burn through it)
-      if (ev.type === 'workflow.finished') {
-        if (run.issues && run.projectId && ev.status === 'failed' && !run.mock) {
-          try { backlog.setPaused(ctx.ws.backlog, run.projectId, true, `${run.issues.map((i) => `#${i.number}`).join(', ')} failed: resume to start the next issues.`); } catch (e) { console.error('backlog queue:', e); }
-        }
-        // the epic first (the chain may sync the backlog), then what the run's chain starts (#134)
-        ctx.placeFiledInEpic(run, ev).catch((e) => console.error('issue tracker epic:', e.message))
-          .then(() => ctx.continueChain(run, ev)).catch((e) => console.error('run chain:', e.message));
-        // a Backlog Refresh run edited or closed issues: the Backlog syncs the project (#161)
-        ctx.afterBacklogRefresh(run).catch((e) => console.error('backlog refresh sync:', e.message));
-        // a release run (#260): a shipped release is recorded and its cut line lets the roadmap go on
-        ctx.afterRelease(run, ev).catch((e) => console.error('release:', e.message));
-        // #405: a base check deferred while this release run held the base runs now
-        try { ctx.afterBaseReleased(run); } catch (e) { console.error('base health:', e.message); }
-        // a merged run changes the conflict map the Product Owner plans with (#150)
-        ctx.afterRunConflictMap(run, ev).catch((e) => console.error('conflict map:', e.message));
-        // a roadmap's next items first (its stage may be over), then the plain queue; a shutdown
-        // cancels it (#186: it would run after the workspace was closed, e.g. a test's removed one)
-        const dispatch = setTimeout(() => {
-          dispatchTimers.delete(dispatch);
-          if (!ctx.ws) return;
-          Promise.resolve().then(() => ctx.dispatchRoadmaps()).catch((e) => console.error('roadmap dispatch:', e))
-            .then(() => ctx.dispatchQueue()).catch((e) => console.error('backlog dispatch:', e));
-        }, 1000);
-        dispatchTimers.add(dispatch);
-      }
+      if (ev.type === 'workflow.finished') afterRunFinished(run, ev);
     });
     // a failed roadmap item's run resumed from a step (#100): the new run takes its place
     if (resume?.runId && run.projectId) {

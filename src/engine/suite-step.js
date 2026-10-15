@@ -729,6 +729,16 @@ async function rerunTimedOut(out, { preexisting, signal, logName, round, ...args
   return alone;
 }
 
+// The suite log's header: the command, and what the suite gets, so a slow round can be compared with
+// a shell (#210), and the base commit the round tests on (#403).
+function writeLogHeader(logFile, out, { mock, childEnv, timeoutWhy, baseCommit }) {
+  fs.mkdirSync(path.dirname(logFile), { recursive: true });
+  const about = mock ? '' : `# engine: os.availableParallelism()=${os.availableParallelism()}, cpus=${os.cpus().length}; timeout ${Math.round(out.timeout_ms / 60e3)} min (${timeoutWhy})\n`
+    + `# env: removed ${childEnv.removed.join(', ') || 'nothing'}; set MULTIAGENT_SIMULATION_ONLY=1, MULTIAGENT_AGENT_MODE=1, MULTIAGENT_LOCKS_DIR=${childEnv.env.MULTIAGENT_LOCKS_DIR}, MULTIAGENT_TEST_HUMAN_LOG=${humanLog(logFile)}\n`;
+  const onBase = baseCommit ? `# base: tested on top of ${baseCommit}\n` : '';
+  fs.writeFileSync(logFile, `$ ${out.command}${mock ? '   (simulated: nothing was run)' : ''}\n${about}${onBase}`);
+}
+
 // command: rendered (empty: detected); cwd: the worktree; runDir: the run folder (log under logs/);
 // round: the step's visit; env: the engine's environment (suiteEnv cleans it);
 // preexisting: the run's known pre-existing failures [{ test, file, reason }]; mockResult: see above;
@@ -789,14 +799,7 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
   out.timeout_ms = timeoutMs || suiteTimeout(recent);
   const timeoutWhy = timeoutMs ? 'the step\'s timeout' : recent.length ? `${TIMEOUT_FACTOR}× the median of the last ${plural(recent.length, 'suite run')}` : 'the default, no suite run measured yet';
   const childEnv = mock ? null : suiteEnv(env || process.env, { locksDir: path.join(runDir, 'locks'), testWorkers });
-  if (logFile) {
-    fs.mkdirSync(path.dirname(logFile), { recursive: true });
-    // what the suite gets, so a slow round can be compared with a shell (#210)
-    const about = mock ? '' : `# engine: os.availableParallelism()=${os.availableParallelism()}, cpus=${os.cpus().length}; timeout ${Math.round(out.timeout_ms / 60e3)} min (${timeoutWhy})\n`
-      + `# env: removed ${childEnv.removed.join(', ') || 'nothing'}; set MULTIAGENT_SIMULATION_ONLY=1, MULTIAGENT_AGENT_MODE=1, MULTIAGENT_LOCKS_DIR=${childEnv.env.MULTIAGENT_LOCKS_DIR}, MULTIAGENT_TEST_HUMAN_LOG=${humanLog(logFile)}\n`;
-    const onBase = baseCommit ? `# base: tested on top of ${baseCommit}\n` : '';
-    fs.writeFileSync(logFile, `$ ${out.command}${mock ? '   (simulated: nothing was run)' : ''}\n${about}${onBase}`);
-  }
+  if (logFile) writeLogHeader(logFile, out, { mock, childEnv, timeoutWhy, baseCommit });
   const t0 = Date.now();
   let text = '';
   if (mock) {
