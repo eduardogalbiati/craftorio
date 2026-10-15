@@ -569,7 +569,7 @@ async function runFileAlone({ command, file, cwd, where, env, timeoutMs, signal,
   fs.mkdirSync(path.dirname(logFile), { recursive: true });
   fs.writeFileSync(logFile, `$ ${cmd}\n# ${file} alone ${where} (${cwd}), timeout ${Math.round(timeoutMs / 60e3)} min: it was still running when the round timed out\n`);
   const t0 = Date.now();
-  const r = await run({ command: cmd, cwd, env, timeoutMs, signal, logFile, ...cmdArgs });
+  const r = await run({ command: cmd, cwd, env: env ? { ...env, MULTIAGENT_TEST_HUMAN_LOG: humanLog(logFile) } : env, timeoutMs, signal, logFile, ...cmdArgs });
   const ms = Date.now() - t0;
   let text = '';
   try { text = fs.readFileSync(logFile, 'utf8'); } catch { /* no log */ }
