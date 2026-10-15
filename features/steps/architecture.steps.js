@@ -491,7 +491,9 @@ async function hotspotCell(page, file, column) {
   await expect(table).toBeVisible({ timeout: LOAD_TIMEOUT });
   const header = table.getByRole('columnheader', { name: column, exact: true });
   await expect(header, `the hotspot table's "${column}" column`).toBeVisible({ timeout: LOAD_TIMEOUT });
-  const index = (await table.getByRole('columnheader').allInnerTexts()).findIndex((t) => t.trim() === column);
+  // textContent, not innerText: the table headers are CSS uppercase, so innerText reads "COMPLEXITY"
+  const index = (await table.getByRole('columnheader').allTextContents()).findIndex((t) => t.trim() === column);
+  expect(index, `the hotspot table's "${column}" column index`).toBeGreaterThanOrEqual(0);
   const row = table.getByRole('row').filter({ hasText: file }).first();
   await expect(row, `the hotspot table's row of "${file}"`).toBeVisible();
   return row.getByRole('cell').nth(index);
