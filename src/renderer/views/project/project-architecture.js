@@ -283,7 +283,7 @@
     const names = c.unmeasured.map((l) => `<span class="badge" data-testid="architecture-unmeasured-language">${esc(l)}</span>`).join(' ');
     const how = c.install
       ? `To measure them, install lizard: <span class="mono">${esc(c.install)}</span> (lizard needs Python).`
-      : `They need ${esc((c.needed || []).join(', '))}${c.reason ? ` (${esc(c.reason)})` : ''}.`;
+      : `They need ${esc((c.needed || []).join(', ') || 'lizard')}${c.reason ? ` (${esc(c.reason)})` : ''}.`;
     return `<p class="small muted" data-testid="architecture-measure-note">Complexity not measured for ${names}: their files show no complexity, never 0. ${how}</p>`;
   }
 

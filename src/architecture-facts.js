@@ -192,7 +192,9 @@ async function measureInApp(folder, commit, files) {
 async function measureComplexity(folder, commit, files) {
   const [own, lizard] = await Promise.all([measureInApp(folder, commit, files), measureLizard(folder, commit)]);
   if (!own.files.length) return lizard;
-  const others = lizard.functions ? lizard.functions.filter((f) => !measures(f.file)) : [];
+  // lizard keeps the files the app did not measure (other languages, and JS/TS it could not parse)
+  const ownFiles = new Set(own.files);
+  const others = lizard.functions ? lizard.functions.filter((f) => !ownFiles.has(f.file)) : [];
   const functions = [...own.functions, ...others];
   const tool = lizard.functions ? 'the app (JavaScript, TypeScript) and lizard' : 'the app (JavaScript, TypeScript)';
   return { tool, metric: 'cyclomatic', functions, files: own.files, check: checkComplexity(functions), reason: lizard.reason || null, install: lizard.install || null };

@@ -236,7 +236,7 @@ in the next 5 real runs (baseline 5.5 min per visit) are the owner's to record h
 ## Code health (#344)
 
 `scripts/code-health.js` measures every function under `src/` and `scripts/` with a real parser
-(`acorn`, a pinned dev dependency): lines, cyclomatic complexity (1 + each `if`, `else if`,
+(`acorn`, a pinned dependency: the app measures JavaScript with it too, #385): lines, cyclomatic complexity (1 + each `if`, `else if`,
 ternary, `&&`, `||`, `??`, `case`, `catch` and loop; a nested function counts on its own), max
 nesting and parameter count. `test/code-health-344.test.js` holds both ratchets; the line ratchet
 above stays as it is.
