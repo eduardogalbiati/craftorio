@@ -116,6 +116,7 @@ module.exports = (ctx) => {
     const runsOfWorktrees = () => {
       let names = [];
       try { names = fs.readdirSync(ctx.ws.worktrees, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name); } catch { return []; }
+      if (!names.length) return [];
       const ids = names.map((name) => name.replace(/-base$/, ''));
       // a run using a worktree started after the run it is named after
       const since = ids.reduce((a, b) => (a && a < b ? a : b), '');

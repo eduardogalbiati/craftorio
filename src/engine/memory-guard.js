@@ -387,7 +387,8 @@ function createMemoryGuard({ limitBytes, floorBytes, intervalMs = 5000, sampler,
       if (!s) throw new Error(`Process ${pid} is not a stray process of a finished run`);
       const list = runs?.() || [];
       if (list.some((r) => r.id === s.runId && r.live)) throw new Error(`Process ${pid} belongs to run ${s.runId}, which is running`);
-      const user = list.find((r) => r.live && r.worktree && commandMentions(s.commandLine, r.worktree));
+      // the stray's own folder first: its command line was cut when it was recorded
+      const user = list.find((r) => r.live && r.worktree && (r.worktree === s.worktree || commandMentions(s.commandLine, r.worktree)));
       if (user) throw new Error(`Process ${pid} runs in the worktree of run ${user.id}, which is running`);
       await kill(s.pid, lastSubtree(s.pid).map((c) => c.pid));
       strays = strays.filter((x) => x !== s);

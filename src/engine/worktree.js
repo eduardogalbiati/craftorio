@@ -387,17 +387,27 @@ function liveWorktrees(runsDir, worktreesDir) {
 // #406: the worktree folders each run works or worked in, [{ runId, dirs, live }] (live as in
 // liveWorktrees). A run without summary.json from its events, an ended one from its summary. `since`:
 // only the runs whose id (it starts with the run's start time) is not older; `liveOnly`: live runs only.
+// An ended run's dirs are cached by its summary.json path and mtime (the stray check reads them every minute).
+const endedDirs = new Map();
 function worktreeRuns(runsDir, worktreesDir, { since = '', liveOnly = false } = {}) {
   let names = [];
   try { names = fs.readdirSync(runsDir, { withFileTypes: true }).filter((d) => d.isDirectory() && d.name >= since).map((d) => d.name); } catch { names = []; }
+  const resumedDir = (from) => from?.run_id && path.join(worktreesDir, String(from.run_id));
   const runs = [];
   for (const name of names) {
     const runDir = path.join(runsDir, name);
-    const resumedDir = (from) => from?.run_id && path.join(worktreesDir, String(from.run_id));
-    if (fs.existsSync(path.join(runDir, 'summary.json'))) {
+    const summaryFile = path.join(runDir, 'summary.json');
+    if (fs.existsSync(summaryFile)) {
       if (liveOnly) continue;
-      const summary = readJson(path.join(runDir, 'summary.json'));
-      runs.push({ runId: name, live: false, dirs: [summary?.worktree?.dir, summary?.worktree?.work_dir, resumedDir(summary?.resumed_from)].filter(Boolean) });
+      const at = mtime(summaryFile);
+      let cached = endedDirs.get(summaryFile);
+      if (!cached || cached.at !== at) {
+        const summary = readJson(summaryFile);
+        // the engine's summary has no resumed_from: a resumed run's worktree.dir is the reused folder
+        cached = { at, dirs: [summary?.worktree?.dir, summary?.worktree?.work_dir].filter(Boolean) };
+        endedDirs.set(summaryFile, cached);
+      }
+      runs.push({ runId: name, live: false, dirs: cached.dirs });
       continue;
     }
     const live = runState(runDir).live;
