@@ -9,19 +9,9 @@ const path = require('path');
 
 const root = path.join(__dirname, '..');
 const read = (rel) => fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n');
-
-// An entry starts on a heading, list item or table row whose first text is its ISO date
-// (`## 2026-10-11 ...`, `- **2026-10-11**: ...`, `| 2026-10-11 | ...`) and runs to the next one.
-const ENTRY = /^\s*(?:#{2,4}\s+|[-*]\s+|\|\s*)[*_]*(\d{4}-\d{2}-\d{2})/;
-function entries() {
-  const out = [];
-  for (const line of read('docs/agents/decisions.md').split('\n')) {
-    const m = line.match(ENTRY);
-    if (m) out.push({ date: m[1], text: line });
-    else if (out.length) out[out.length - 1].text += `\n${line}`;
-  }
-  return out;
-}
+// the rules live in scripts/doc-rules.js, shared with `npm run check` (#404)
+const { checkDecisions, decisionEntries } = require('../scripts/doc-rules');
+const entries = () => decisionEntries(root);
 
 test('docs/agents/decisions.md lists at most about 15 entries, newest first', () => {
   const list = entries();
@@ -32,13 +22,7 @@ test('docs/agents/decisions.md lists at most about 15 entries, newest first', ()
 });
 
 test('every decision names its issue(s) and why', () => {
-  const text = read('docs/agents/decisions.md');
-  // a table carries the why in its own column; otherwise each entry says why
-  const whyColumn = /^\|.*\bwhy\b.*\|/im.test(text);
-  for (const e of entries()) {
-    assert.ok(/#\d+/.test(e.text), `no issue in the entry of ${e.date}`);
-    if (!whyColumn) assert.ok(/\bwhy\b|because/i.test(e.text), `no why in the entry of ${e.date}`);
-  }
+  assert.deepEqual(checkDecisions(root).map((p) => p.message), []);
 });
 
 test('the log is seeded with the three standing decisions of the issue', () => {

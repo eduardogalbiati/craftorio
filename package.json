@@ -18,6 +18,7 @@
     "node": ">=24"
   },
   "scripts": {
+    "check": "node scripts/check.js",
     "docs": "node scripts/docs.js",
     "lint:lists": "node scripts/lint-lists.js",
     "prepare": "node scripts/docs.js --derived && node scripts/build-3d.js",

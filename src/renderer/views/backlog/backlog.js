@@ -683,8 +683,9 @@
     });
   }
 
+  const issueOf = (number) => (bl.data?.issues || []).find((i) => i.number === number); // the loaded issue numbered `number`
   async function removeQueued(number) {
-    const issue = (bl.data?.issues || []).find((i) => i.number === number);
+    const issue = issueOf(number);
     let cancelGroup = false;
     if (issue?.queued?.groupedWith?.length) {
       const how = await askUnqueue(issue);
@@ -1563,7 +1564,7 @@
       const out = e.target.closest('[data-unqueue]');
       if (out) { await removeQueued(Number(out.dataset.unqueue)); return; }
       const enrich = e.target.closest('[data-enrich]'), onMap = e.target.closest('[data-show-map]'); // #375: the issue's impact preview on its project's city
-      if (onMap) { bl.menu = null; window.ProjectCityImpact?.showIssue(bl.projectId, (bl.data?.issues || []).find((x) => x.number === Number(onMap.dataset.showMap))); return; } if (enrich) { bl.menu = null; render(); enrichIssue(Number(enrich.dataset.enrich)); return; }
+      if (onMap) { bl.menu = null; window.ProjectCityImpact?.showIssue(bl.projectId, issueOf(Number(onMap.dataset.showMap))); return; } if (enrich) { bl.menu = null; render(); enrichIssue(Number(enrich.dataset.enrich)); return; }
       // #238: an issue's actions menu, its Archive, and Restore
       const menu = e.target.closest('[data-menu]');
       if (menu) { bl.menu = bl.menu === Number(menu.dataset.menu) ? null : Number(menu.dataset.menu); render(); return; }
@@ -1571,8 +1572,7 @@
       if (arch) { bl.menu = null; render(); if (!arch.disabled) await archive([Number(arch.dataset.archive)]); return; }
       const back = e.target.closest('[data-restore]');
       if (back) { await restore(Number(back.dataset.restore)); return; }
-      if (e.target.closest('.bl-menu')) return;
-      if (e.target.closest('a')) return;
+      if (e.target.closest('.bl-menu, a')) return;
       const row = e.target.closest('[data-act="toggle"]');
       if (!row) return;
       const n = Number(row.closest('.bl-issue').dataset.n);

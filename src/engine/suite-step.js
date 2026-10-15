@@ -456,6 +456,48 @@ function overCommandLine(n, platform = process.platform) {
   return `${plural(n, 'test file')} would put the command over the ${name} command-line limit of ${chars.toLocaleString('en-US')} characters`;
 }
 
+// Why the base check cannot run `files` on its own command line, or null: the command cannot take
+// single files, or (#400) too many of them for the platform's command line.
+function baseFilesSkip(command, files, platform) {
+  const filtered = filteredCommand(command, files);
+  if (!filtered) return `\`${command}\` cannot run single test files`;
+  return fitsCommandLine(filtered, platform) ? null : `${overCommandLine(files.length, platform)}: not checked on the base`;
+}
+
+// Narrows a suite round to `files` (#212): out.scope and out.command when the filtered command fits
+// the command line with its coverage and workers wrappers (#400), else the whole suite runs and
+// out.selection.why says why. → { measure, tooLong }: whether the round measures the whole suite's
+// duration, and why its files did not fit (null when they did).
+function narrowToFiles(out, { files, mock, coverage, cwd, testWorkers, platform, log }) {
+  const filtered = filteredCommand(out.command, files);
+  if (!filtered) {
+    if (out.selection) out.selection = { ...out.selection, why: `${out.selection.why}; \`${out.command}\` cannot run single test files: the whole suite ran` };
+    return { measure: true, tooLong: null };
+  }
+  // #400: measured as it will run, with the coverage and workers wrappers
+  const wrapped = mock ? filtered : withWorkers(coverage ? coverageCommand(filtered, cwd) : filtered, testWorkers);
+  if (fitsCommandLine(wrapped, platform)) {
+    out.scope = 'files';
+    out.command = filtered;
+    return { measure: false, tooLong: null };
+  }
+  const tooLong = overCommandLine(files.length, platform);
+  out.selection = { ...(out.selection || { files }), why: `${out.selection?.why ? `${out.selection.why}; ` : ''}${tooLong}: the whole suite ran` };
+  log('warn', `suite: ${tooLong}: the whole suite runs`);
+  return { measure: true, tooLong };
+}
+
+// #400: why the shell refused the command line (its last log line) when no test ran, or null: not a
+// failure an agent can fix.
+function shellRefusal(r, text, report, cwd) {
+  if (r.code === 0 || r.timedOut || report) return null;
+  const last = clean(text).split(/\r?\n/).map((l) => l.trim()).filter(Boolean).pop() || '';
+  if (!SHELL_REFUSALS.some((re) => re.test(last))) return null;
+  const counts = parseCounts(text);
+  if (counts.passed != null || counts.failed != null || parseFailures(text, { cwd }).length) return null;
+  return `the shell refused the command, no test ran (exit ${r.code ?? '?'}): ${last}`;
+}
+
 // Base results cached per base commit + file: <cacheDir>/<commit>.json, { <file>: { failing: [test names], at } }
 const baseCacheFile = (cacheDir, commit) => (cacheDir && commit ? path.join(cacheDir, `${String(commit).replace(/[^\w.-]/g, '')}.json`) : null);
 const sameFile = (a, b) => String(a || '').split(/[\\/]/).pop() === String(b || '').split(/[\\/]/).pop();
@@ -474,8 +516,8 @@ async function checkOnBase({ command, failures, base, mock, env, timeoutMs, sign
     return { onBase: failures.filter((f) => f.file === MOCK_BASE_FILE), info };
   }
   if (typeof base !== 'function') { info.reason = 'the run has no base checkout'; return { onBase: [], info }; }
-  if (!filteredCommand(command, files)) { info.reason = `\`${command}\` cannot run single test files`; return { onBase: [], info }; }
-  if (!fitsCommandLine(filteredCommand(command, files), platform)) { info.reason = `${overCommandLine(files.length, platform)}: not checked on the base`; return { onBase: [], info }; }
+  info.reason = baseFilesSkip(command, files, platform);
+  if (info.reason) return { onBase: [], info };
   let b = null;
   try { b = await base(); } catch (e) { info.reason = `the base checkout could not be prepared: ${e.message}`; return { onBase: [], info }; }
   if (!b?.dir || !fs.existsSync(b.dir)) { info.reason = 'the run has no base checkout'; return { onBase: [], info }; }
@@ -751,15 +793,7 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
       out.message = `No test file to run in round ${round}: ${selection?.why || 'none selected'}.`;
       return out;
     }
-    const filtered = filteredCommand(out.command, files);
-    // #400: measured as it will run, with the coverage and workers wrappers
-    const wrapped = filtered && !mock ? withWorkers(coverage ? coverageCommand(filtered, cwd) : filtered, testWorkers) : filtered;
-    if (filtered && fitsCommandLine(wrapped, platform)) { out.scope = 'files'; out.command = filtered; measure = false; }
-    else if (filtered) {
-      tooLong = overCommandLine(files.length, platform);
-      out.selection = { ...(out.selection || { files }), why: `${out.selection?.why ? `${out.selection.why}; ` : ''}${tooLong}: the whole suite ran` };
-      log('warn', `suite: ${tooLong}: the whole suite runs`);
-    } else if (out.selection) out.selection = { ...out.selection, why: `${out.selection.why}; \`${out.command}\` cannot run single test files: the whole suite ran` };
+    ({ measure, tooLong } = narrowToFiles(out, { files, mock, coverage, cwd, testWorkers, platform, log }));
   }
   if (!mock) out.command = withWorkers(coverage ? coverageCommand(out.command, cwd) : out.command, testWorkers);
   const recent = mock ? [] : suiteDurations(hist);
@@ -799,14 +833,8 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
       out.duration_ms = Date.now() - t0;
       return finish();
     }
-    // #400: the shell refused the command line, no test ran: not a failure an agent can fix
-    const last = clean(text).split(/\r?\n/).map((l) => l.trim()).filter(Boolean).pop() || '';
-    const counts = parseCounts(text);
-    if (r.code !== 0 && !r.timedOut && !report && SHELL_REFUSALS.some((re) => re.test(last)) && counts.passed == null && counts.failed == null && !parseFailures(text, { cwd }).length) {
-      out.reason = `the shell refused the command, no test ran (exit ${r.code ?? '?'}): ${last}`;
-      out.duration_ms = Date.now() - t0;
-      return finish();
-    }
+    out.reason = shellRefusal(r, text, report, cwd);
+    if (out.reason) { out.duration_ms = Date.now() - t0; return finish(); }
   }
   out.duration_ms = Date.now() - t0;
   // a run that ended (not cut by the timeout, not cancelled) measures the suite for the next timeouts

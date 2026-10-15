@@ -68,7 +68,7 @@ const COMPLEXITY_EXCEPTIONS = {
   'src/engine/screenshot-step.js:captureScreenshots': 34,
   'src/engine/suite-step.js:checkOnBase': 27,
   'src/engine/suite-step.js:parseFailures': 51,
-  'src/engine/suite-step.js:runSuite': 73,
+  'src/engine/suite-step.js:runSuite': 71,
   'src/engine/workflow.js:constructor': 47,
   'src/engine/workflow.js:runStep': 46,
   'src/engine/worktree.js:cleanupWorktrees': 28,

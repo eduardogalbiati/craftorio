@@ -485,23 +485,29 @@ function channelReference() {
   return `${lines.join('\n')}\n`;
 }
 
-function main(argv = process.argv.slice(2), root = ROOT) {
-  const check = argv.includes('--check');
-  const derivedOnly = argv.includes('--derived');
-  const hasIndex = fs.existsSync(path.join(root, INDEX_HTML));
+// the problems `--check` reports (also run by npm run check, scripts/check.js)
+function checkDocs(root = ROOT) {
   const problems = [];
   const engine = engineIndex(root);
-  if (check) {
-    const current = (rel) => (fs.existsSync(path.join(root, rel)) ? read(root, rel) : null);
-    if (buildReadme(root) !== current('README.md')) problems.push('README.md is out of date with docs/readme/: run `npm run docs` and commit it.');
-    if (engine !== null && engine !== current(ENGINE_INDEX)) problems.push('docs/agents/engine.md is out of date with docs/agents/engine/: run `npm run docs` and commit it.');
-    if (hasIndex) {
-      const html = read(root, INDEX_HTML);
-      try {
-        if (renderIndexHtml(html, root) !== html) problems.push('src/renderer/index.html\'s script and style lists are out of date: run `npm run docs` and commit it.');
-      } catch (err) { problems.push(err.message); }
-    }
-    for (const f of missingHeaders(root)) problems.push(`${f} has no header comment (the code map is built from it).`);
+  const current = (rel) => (fs.existsSync(path.join(root, rel)) ? read(root, rel) : null);
+  if (buildReadme(root) !== current('README.md')) problems.push('README.md is out of date with docs/readme/: run `npm run docs` and commit it.');
+  if (engine !== null && engine !== current(ENGINE_INDEX)) problems.push('docs/agents/engine.md is out of date with docs/agents/engine/: run `npm run docs` and commit it.');
+  if (fs.existsSync(path.join(root, INDEX_HTML))) {
+    const html = read(root, INDEX_HTML);
+    try {
+      if (renderIndexHtml(html, root) !== html) problems.push('src/renderer/index.html\'s script and style lists are out of date: run `npm run docs` and commit it.');
+    } catch (err) { problems.push(err.message); }
+  }
+  for (const f of missingHeaders(root)) problems.push(`${f} has no header comment (the code map is built from it).`);
+  return problems;
+}
+
+function main(argv = process.argv.slice(2), root = ROOT) {
+  const derivedOnly = argv.includes('--derived');
+  const hasIndex = fs.existsSync(path.join(root, INDEX_HTML));
+  const engine = engineIndex(root);
+  if (argv.includes('--check')) {
+    const problems = checkDocs(root);
     for (const p of problems) console.error(p);
     return problems.length ? 1 : 0;
   }
@@ -527,6 +533,7 @@ module.exports = {
   assembleReadme,
   buildReadme,
   channelReference,
+  checkDocs,
   codeMap,
   engineIndex,
   engineTopics,

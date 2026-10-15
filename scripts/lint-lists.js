@@ -23,12 +23,12 @@ const sorted = (items) => [...items].sort((a, b) => nameOf(a).localeCompare(name
 // only plain names and `key: name` / `name: alias` items are rewritten (no calls or literals)
 const simple = (item) => /^[\w$]+(\s*:\s*[\w$.]+)?$/.test(item.trim());
 
-function listFiles(dir) {
-  const abs = path.join(ROOT, dir);
+function listFiles(root, dir) {
+  const abs = path.join(root, dir);
   if (!fs.existsSync(abs)) return [];
   return fs.readdirSync(abs, { withFileTypes: true }).flatMap((e) => {
     const rel = path.join(dir, e.name);
-    if (e.isDirectory()) return listFiles(rel);
+    if (e.isDirectory()) return listFiles(root, rel);
     return e.name.endsWith('.js') ? [rel] : [];
   });
 }
@@ -70,24 +70,28 @@ function lintText(text) {
   return { problems, fixed: out.join(eol) };
 }
 
+// [{ file, line, message, text, fixed }] for every list that breaks the rule under root (npm run check)
+function lintFiles(root = ROOT) {
+  return DIRS.flatMap((dir) => listFiles(root, dir)).sort().flatMap((rel) => {
+    const text = fs.readFileSync(path.join(root, rel), 'utf8');
+    const { problems, fixed } = lintText(text);
+    const file = rel.split(path.sep).join('/');
+    return problems.map((p) => ({ file, line: p.line, message: `${file}:${p.line}: ${p.message}`, text, fixed }));
+  });
+}
+
 function main(argv = process.argv.slice(2)) {
   const fix = argv.includes('--fix');
-  let count = 0;
-  for (const rel of DIRS.flatMap(listFiles).sort()) {
-    const file = path.join(ROOT, rel);
-    const text = fs.readFileSync(file, 'utf8');
-    const { problems, fixed } = lintText(text);
-    if (!problems.length) continue;
-    count += problems.length;
-    for (const p of problems) console.log(`${rel.split(path.sep).join('/')}:${p.line}: ${p.message}${fix ? ' (fixed)' : ''}`);
-    if (fix && fixed !== text) fs.writeFileSync(file, fixed);
-  }
-  return count && !fix ? 1 : 0;
+  const problems = lintFiles();
+  for (const p of problems) console.log(`${p.message}${fix ? ' (fixed)' : ''}`);
+  if (fix) for (const p of problems) if (p.fixed !== p.text) fs.writeFileSync(path.join(ROOT, p.file), p.fixed);
+  return problems.length && !fix ? 1 : 0;
 }
 
 if (require.main === module) process.exit(main());
 
 module.exports = {
+  lintFiles,
   lintText,
   main,
 };
