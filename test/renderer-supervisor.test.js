@@ -35,7 +35,7 @@ function loadBuilderContext() {
   return sandbox;
 }
 
-function loadAnalyticsContext() {
+function loadAnalyticsContext(saved = {}, win = {}) {
   const DAY = /const DAY = [^\n]+;/.exec(analyticsSrc)?.[0];
   const ax = /const ax = \{[\s\S]*?\n  \};/.exec(analyticsSrc)?.[0];
   const today = /const today = \(\) => [^\n]+;/.exec(analyticsSrc)?.[0];
@@ -45,9 +45,9 @@ function loadAnalyticsContext() {
   for (const [name, code] of Object.entries({ DAY, ax, today, daysBack, range, analyticsContext })) {
     assert.ok(code, `${name} not found in analytics.js: the source moved`);
   }
-  const sandbox = { window: {} };
+  const sandbox = { window: win };
   vm.createContext(sandbox);
-  vm.runInContext(`const saved = {};\n${DAY}\n${ax}\n${today}\n${daysBack}\n${range}\n${analyticsContext}\nthis.ax = ax; this.analyticsContext = window.analyticsContext;`, sandbox);
+  vm.runInContext(`const saved = ${JSON.stringify(saved)};\n${DAY}\n${ax}\n${today}\n${daysBack}\n${range}\n${analyticsContext}\nthis.ax = ax; this.analyticsContext = window.analyticsContext;`, sandbox);
   return sandbox;
 }
 
@@ -72,6 +72,26 @@ test('analyticsContext: the quick range (days) and a custom from/to both show, w
   sandbox.ax.from = '2026-09-01';
   sandbox.ax.to = '2026-09-30';
   assert.equal(sandbox.analyticsContext(), 'range 2026-09-01 to 2026-09-30, every CLI session on this machine');
+});
+
+test('#383 Analytics reads a saved date-range preset, and the older saved days as their preset', () => {
+  const DateRange = require('../src/renderer/date-range.js');
+  const presetOf = (saved) => loadAnalyticsContext(saved, { DateRange }).ax.preset;
+  for (const id of ['24h', '7d', '30d', 'all']) assert.equal(presetOf({ preset: id }), id);
+  assert.equal(presetOf({ days: 7 }), '7d');
+  assert.equal(presetOf({ days: 30 }), '30d');
+  assert.equal(presetOf({ days: 90 }), '30d', 'the dropped 90 days reads as the longest preset with a range');
+  assert.equal(presetOf({ preset: '90d', days: 7 }), '7d', 'an unknown preset falls back to the saved days');
+  assert.equal(presetOf({ preset: 'nope' }), '30d');
+  assert.equal(presetOf({}), '30d');
+});
+
+test('#383 Analytics with a preset gives the supervisor that preset\'s range', () => {
+  const DateRange = require('../src/renderer/date-range.js');
+  const sandbox = loadAnalyticsContext({ preset: '7d' }, { DateRange });
+  const [, from, to] = /^range (\d{4}-\d{2}-\d{2}) to (\d{4}-\d{2}-\d{2}), /.exec(sandbox.analyticsContext()) || [];
+  assert.ok(from && to, sandbox.analyticsContext());
+  assert.equal((Date.parse(to) - Date.parse(from)) / 864e5, 7);
 });
 
 test('supervisorScreenContext: Analytics includes window.analyticsContext()', () => {
