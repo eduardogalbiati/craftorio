@@ -287,6 +287,13 @@ function cleanItem(raw, known, previous) {
     ...(reason ? { reason } : {}), ...(modeReason ? { modeReason } : {}), ...(origin ? { origin } : {}), ...(then ? { then } : {}), ...(cost ? { cost } : {}),
     ...(agentOverrides ? { agentOverrides } : {}),
     ...issues[0], issues,
+    ...runState(state),
+  };
+}
+
+// The run-related fields an edited item keeps from the stored one (cleanItem)
+function runState(state) {
+  return {
     status: ITEM_STATES.includes(state.status) ? state.status : 'planned', runId: state.runId || null, runs: state.runs || [], error: state.error || null,
     // #395: where the roadmap moved on past the item's gate
     ...(state.parked ? { parked: state.parked } : {}),

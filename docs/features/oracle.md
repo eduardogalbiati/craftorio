@@ -52,7 +52,15 @@ The button's badge counts the answers that arrived while the conversation was ou
 - **Night watch**: before you leave, turn it on with an end time. Until then the Oracle fixes what
   stops the roadmap without asking (retry or skip a failed item, regroup or reorder planned items,
   refresh issue text, restore a default, restart the dispatch), notifies each action and posts a
-  summary with Undo when it ends. Turning it off stops at once. Gates stay yours.
+  summary with Undo when it ends. Turning it off stops at once. Gates stay yours. With "Skip an
+  item" allowed, a roadmap run that waits at a human gate for 15 minutes (Settings › Oracle, "Move
+  on past a gate after") while nothing else of its roadmap runs is moved past (#395): the next stage
+  starts, the gate keeps waiting for you, and a notification names it. Without that permission the
+  gate is only reported to you.
+- **Move on** (#395): an item whose run waits at a human gate has "Move on" on its roadmap card (and
+  the stage menu has "Move on from this stage"): the item is parked, the next stage starts without
+  its change, and the gate stays yours to answer. Answered later, the item ends done or failed;
+  it never pauses the roadmap after the fact.
 - **Limits tonight** (#337): the turn-on form's "Limits tonight" group expands every run limit for
   the night, so no run waits on a limit sized for the day. One switch, "Expand all limits", with a
   multiplier (×1.5, ×2 by default, ×3); "Customize" opens one row per limit with its day value:

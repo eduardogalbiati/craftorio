@@ -13,6 +13,7 @@
 //   retry, skip                  the item that failed or could not start (#196), never a paused one
 //   park                         the item's "Move on" (#395): its run waits at a human gate, the roadmap goes on
 //   parkStage                    the stage's "Move on from this stage" (#395): parks its items at a gate, skips the planned
+// The Roadmap view's rules: releaseView, the date ranges (SINCE, inRange) and its pages (pageOf).
 // Any load order: read only when a screen draws.
 /** An item's status, ITEM_STATES as a type (#346): the file stores planned, done, parked or skipped.
  * @typedef {'done' | 'failed' | 'parked' | 'paused' | 'planned' | 'running' | 'skipped'} RoadmapItemStatus */
@@ -213,19 +214,72 @@
     return { list, choice, shown: pending, runs, chosen: null };
   }
 
+  // ---- what the Roadmap view shows (#217, #268; moved from backlog-roadmap.js, #395) ----
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  // the date ranges: [id, the option, in the header's count, its length in ms (null: no limit)]
+  const SINCE = [
+    ['24h', 'Last 24 hours', 'last 24 hours', DAY_MS],
+    ['2d', 'Last 2 days', 'last 2 days', 2 * DAY_MS],
+    ['3d', 'Last 3 days', 'last 3 days', 3 * DAY_MS],
+    ['1w', 'Last week', 'last week', 7 * DAY_MS],
+    ['15d', 'Last 15 days', 'last 15 days', 15 * DAY_MS],
+    ['1m', 'Last month', 'last month', 30 * DAY_MS],
+    ['total', 'Total', 'all time', null],
+  ];
+  const toMs = (ts) => { const t = Date.parse(ts || ''); return Number.isFinite(t) ? t : null; };
+  // An item's last activity: the latest of when it joined the roadmap (`origin`), its run's start and
+  // its run's end; a run in progress is active now. An item without any date is in every range.
+  function inRange(x, rangeMs, now) {
+    if (rangeMs == null || x.status === 'running' || x.waiting) return true;
+    const at = [x.origin, x.run?.startedAt, x.run?.finishedAt].map(toMs).filter((t) => t != null);
+    return !at.length || Math.max(...at) >= now - rangeMs;
+  }
+  // the cards a visible stage draws (its folded items only when its "+n done" chip is unfolded)
+  const cardCount = (x) => x.items.length + (x.open ? x.folded.length : 0);
+  const PAGE_STAGES = 15;
+  const PAGE_ITEMS = 60;
+  const LEAD_STAGES = 2; // the first page starts this many stages before the current one
+  /**
+   * The page of the visible stages to draw: from LEAD_STAGES before the current stage (so it is in
+   * the first page however long the finished history is), PAGE_STAGES stages or PAGE_ITEMS cards per
+   * page (a longer stage is cut: `cut`, its first cards). `pages`: { more, earlier } pages drawn
+   * around the first. → { drawn, earlier (visible stages above the page), more (something is left below it) }
+   */
+  function pageOf(list, current, pages) {
+    const at = Math.max(0, list.findIndex((x) => x.s >= current));
+    const base = Math.max(0, at - LEAD_STAGES);
+    const start = Math.max(0, base - pages.earlier * PAGE_STAGES);
+    let stagesLeft = PAGE_STAGES * (1 + pages.more);
+    let cardsLeft = PAGE_ITEMS * (1 + pages.more);
+    const drawn = list.slice(start, base);
+    let more = false;
+    for (let k = base; k < list.length && !more; k++) {
+      const cards = cardCount(list[k]);
+      if (stagesLeft <= 0 || cardsLeft <= 0) more = true;
+      else if (cards > cardsLeft) { drawn.push({ ...list[k], cut: cardsLeft }); more = true; } else drawn.push(list[k]);
+      stagesLeft -= 1;
+      cardsLeft -= cards;
+    }
+    return { drawn, earlier: start, more };
+  }
+
   const api = {
     ACTIONS,
     FINISHED,
     ITEM_STATES,
+    SINCE,
     STATES,
     allowedActions,
     atGate,
+    cardCount,
     currentStage,
     earlierRuns,
     hasUnfinished,
+    inRange,
     isFinished,
     isOpen,
     itemRuns,
+    pageOf,
     pauseChoices,
     pausingAfterStage,
     pendingRelease,

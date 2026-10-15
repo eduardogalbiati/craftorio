@@ -96,19 +96,19 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   in prompts, retries and context, never by lowering test inputs. Replaces #199's "E2E scenarios
   run only at release time". Why: the tests are why the app works (#222), so savings go where they
   do not lower what is tested.
-- **2026-10-03** (#238): archiving an issue closes it on the git platform (GitHub: "not planned")
-  with an `archived` label; restoring reopens it. It replaces the retired `deprioritized` label.
-  Why: there was no way to put an issue aside, and the Product Owner kept proposing unwanted ideas.
+- **2026-10-03** (#238, #168): the git platform (GitHub) is the only source of truth for issues
+  (#168, 2026-10-02). The local data is a read-only replica: the sync updates it, the app re-reads
+  an issue right before a run starts, and issue changes are never made locally. Archiving an issue
+  closes it on the platform (GitHub: "not planned") with an `archived` label; restoring reopens it
+  (#238, replacing the retired `deprioritized` label). Why: planned items kept stale copies, so an
+  issue edited after planning ran with its old text; there was no way to put an issue aside, and
+  the Product Owner kept proposing unwanted ideas.
 - **2026-10-03** (#222, #211): tests are run and judged by the machine, never by a model. E2E
   tests stay on Playwright + BDD (`playwright-bdd`), run deterministically; an LLM only writes and
   repairs them. Which test failures are the run's (and which were already on the base) is decided
   by the orchestrator (failing tests rerun on the base), never by an agent. Why: the old E2E tests
   asserted little and the release run paid a model to run the suite, and failures already on main
   made every round fail and the run looped.
-- **2026-10-02** (#168): the git platform (GitHub) is the only source of truth for issues. The
-  local data is a read-only replica: the sync updates it, the app re-reads an issue right before a
-  run starts, and issue changes are never made locally. Why: planned items kept stale copies, so an
-  issue edited after planning ran with its old text.
 - **2026-09-29** (#47): only the test writer writes, edits or deletes tests; the developer changes
   production code only. Why: overlapping test responsibilities made one run pay for the full suite
   up to four times.

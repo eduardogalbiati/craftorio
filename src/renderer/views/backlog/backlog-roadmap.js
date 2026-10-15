@@ -373,7 +373,6 @@
   }
 
   // ---- the run's timer (#272): its working time in the time line, against the item's time estimate ----
-  const toMs = (ts) => { const t = Date.parse(ts || ''); return Number.isFinite(t) ? t : null; };
   // the clock ("23:41"), its tone against the estimate and the run's working time: RunProgress
   const clockText = (ms) => RunProgress.clockText(ms);
   const timerTone = (ms, minutes) => RunProgress.timerTone(ms, minutes);
@@ -521,6 +520,11 @@
     const interrupted = x.run?.status === 'interrupted';
     const tip = interrupted ? `Its run ${x.runId} was interrupted at this gate: open it and Resume it first, then answer the gate` : `Open the run ${x.runId} at its gate: the gate is still yours to answer`;
     return `<button class="link-btn small rm-parked" type="button" data-testid="roadmap-item-parked" data-run="${esc(x.runId)}" data-workflow="${esc(x.workflowName || '')}" title="${esc(tip)}">Parked at ${esc(gate)}${interrupted ? ' · resume its run first' : ''}</button>`;
+  }
+  // #395: the bar's count of the items the roadmap moved past while their runs wait at a gate
+  function parkedBadgeHtml(r) {
+    const n = r.stages.flatMap((s) => s.items).filter((x) => x.status === 'parked').length;
+    return n ? ` <span class="badge warn" data-testid="roadmap-parked-count" title="The roadmap moved on past these items: their runs still wait at their gates for you (each card's &quot;Parked at …&quot; opens it)">${n} parked at a gate</span>` : '';
   }
 
   // ---- the pipeline (#282): the workflow's stations, always visible in the Workflow band -----------------
@@ -906,31 +910,13 @@
   // ---- what the Roadmap shows (#217, #268): Planned | All, the date range, the epic filter, in pages ------
   // a parked item (#395) still needs the owner at its gate: it stays with the open work
   const finished = (x) => RoadmapModel.isFinished(x) && x.status !== 'parked';
-  const DAY_MS = 24 * 60 * 60 * 1000;
-  // the date ranges: [id, the option, in the header's count, its length in ms (null: no limit)]
-  const SINCE = [
-    ['24h', 'Last 24 hours', 'last 24 hours', DAY_MS],
-    ['2d', 'Last 2 days', 'last 2 days', 2 * DAY_MS],
-    ['3d', 'Last 3 days', 'last 3 days', 3 * DAY_MS],
-    ['1w', 'Last week', 'last week', 7 * DAY_MS],
-    ['15d', 'Last 15 days', 'last 15 days', 15 * DAY_MS],
-    ['1m', 'Last month', 'last month', 30 * DAY_MS],
-    ['total', 'Total', 'all time', null],
-  ];
-  // An item's last activity: the latest of when it joined the roadmap (`origin`), its run's start and
-  // its run's end; a run in progress is active now. An item without any date is in every range.
-  function inRange(x, v, now) {
-    if (v.rangeMs == null || x.status === 'running' || x.waiting) return true;
-    const at = [x.origin, x.run?.startedAt, x.run?.finishedAt].map(toMs).filter((t) => t != null);
-    return !at.length || Math.max(...at) >= now - v.rangeMs;
-  }
+  // the date ranges (RoadmapModel.SINCE) and an item's last activity in one (RoadmapModel.inRange)
+  const inRange = (x, v, now) => RoadmapModel.inRange(x, v.rangeMs, now);
   // #267: the stages whose "+n done" chip is unfolded, by stage id (kept across the re-reads of the file)
   const unfolded = new Set();
   const stageKey = (stage, s) => String(stage.id || `#${s}`);
-  // #268: the pages drawn of the current view (`key`): `more` pages after the first, `earlier` before it
-  const PAGE_STAGES = 15;
-  const PAGE_ITEMS = 60;
-  const LEAD_STAGES = 2; // the first page starts this many stages before the current one
+  // #268: the pages drawn of the current view (`key`): `more` pages after the first, `earlier` before
+  // it; RoadmapModel.pageOf cuts the visible stages into them
   let pages = { key: '', more: 0, earlier: 0, fresh: false };
   /** The next page (the "Loading…" row came near the screen); the owner redraws. */
   function loadMore() {
@@ -969,30 +955,6 @@
       if (items.length) out.push({ stage, s, items, folded, open: unfolded.has(key) });
     });
     return out;
-  }
-  const cardCount = (x) => x.items.length + (x.open ? x.folded.length : 0);
-  /**
-   * The page of the visible stages to draw: from LEAD_STAGES before the current stage (so it is in
-   * the first page however long the finished history is), PAGE_STAGES stages or PAGE_ITEMS cards per
-   * page (a longer stage is cut: `cut`, its first cards). → { drawn, earlier (visible stages above
-   * the page), more (something is left below it) }
-   */
-  function pageOf(list, current) {
-    const at = Math.max(0, list.findIndex((x) => x.s >= current));
-    const base = Math.max(0, at - LEAD_STAGES);
-    const start = Math.max(0, base - pages.earlier * PAGE_STAGES);
-    let stagesLeft = PAGE_STAGES * (1 + pages.more);
-    let cardsLeft = PAGE_ITEMS * (1 + pages.more);
-    const drawn = list.slice(start, base);
-    let more = false;
-    for (let k = base; k < list.length && !more; k++) {
-      const cards = cardCount(list[k]);
-      if (stagesLeft <= 0 || cardsLeft <= 0) more = true;
-      else if (cards > cardsLeft) { drawn.push({ ...list[k], cut: cardsLeft }); more = true; } else drawn.push(list[k]);
-      stagesLeft -= 1;
-      cardsLeft -= cards;
-    }
-    return { drawn, earlier: start, more };
   }
   // After backlog.js drew the view: the "Loading…" row asks for the next page when it comes near the
   // screen (as the runs list's does), never while the owner edits (`ownerBusy`: a field with the
@@ -1089,6 +1051,7 @@
    */
   function html(data, rerender, view = {}) {
     loadWorkflows(rerender);
+    const { SINCE, cardCount } = RoadmapModel;
     const [since, , sinceText, rangeMs] = SINCE.find(([id]) => id === view.since) || SINCE[0];
     const r = data?.roadmap || { state: 'planned', stages: [] };
     // #291: the releases, and the one the Releases filter chose
@@ -1121,9 +1084,7 @@
     // a pause that is not an item's failure (the budget cap, a stage run on its own that ended, a
     // release on hold) keeps its line here; a failure is the page's error alert (#270, alerts())
     const note = r.error && !pausedByFailure ? `<span class="${r.state === 'paused' ? 'warn-text' : 'error'} small">${esc(r.error)}${r.state === 'paused' && r.budget ? ` <button class="btn sm primary" type="button" data-rm="budget-raise" title="${esc(`The ${r.budget.period === 'night' ? 'night' : 'daily'} budget becomes what is spent plus the next stage, for ${r.budget.period === 'night' ? 'tonight' : 'today'} only; the roadmap goes on`)}">Raise for ${r.budget.period === 'night' ? 'tonight' : 'today'}</button> <button class="btn sm ghost" type="button" data-rm="budget-resume" title="${esc(`This roadmap ignores the budget until ${r.budget.period === 'night' ? 'the night' : 'the day'} ends; the budget stays as it is`)}">Resume anyway</button>` : ''}</span>` : '';
-    // #395: the items the roadmap moved past while their runs wait at a gate (each still the owner's)
-    const parkedCount = r.stages.flatMap((s) => s.items).filter((x) => x.status === 'parked').length;
-    const parked = parkedCount ? ` <span class="badge warn" data-testid="roadmap-parked-count" title="The roadmap moved on past these items: their runs still wait at their gates for you (each card's &quot;Parked at …&quot; opens it)">${parkedCount} parked at a gate</span>` : '';
+    const parked = parkedBadgeHtml(r);
     const menuItems = MENU.filter((m) => m.show(r));
     const menu = `<span class="bl-menu-wrap rm-menu-wrap"><button class="btn sm ghost rm-menu-btn" type="button" data-rm-menu data-testid="roadmap-menu-button" aria-label="Roadmap actions" title="More actions" aria-haspopup="menu" aria-expanded="${menuOpen}">⋮</button>${menuOpen ? `<div class="bl-menu rm-menu" role="menu" data-testid="roadmap-menu" aria-label="Roadmap actions">${menuItems.map((m) => `<button type="button" role="menuitem" data-rm="${m.id}" title="${esc(m.title)}">${esc(m.label)}</button>`).join('')}</div>` : ''}</span>`;
     const bar = `
@@ -1177,7 +1138,7 @@
     // the page to draw; #260: each drawn stage with its cut line; a hidden (finished) stage's line
     // still shows while its release has not shipped (between the drawn stages, and beyond them when
     // the page reaches that end of the roadmap)
-    const page = pageOf(vis, current);
+    const page = RoadmapModel.pageOf(vis, current, pages);
     const drawn = new Map(page.drawn.map((x) => [x.s, x]));
     const from = page.earlier ? page.drawn[0]?.s ?? 0 : 0;
     const to = page.more ? page.drawn.at(-1).s : r.stages.length - 1;
