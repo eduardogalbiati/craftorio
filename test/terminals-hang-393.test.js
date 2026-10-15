@@ -1,7 +1,9 @@
-// #393: test/terminals.test.js hung the full suite past its timeout. Each of its tests has its own
-// timeout (a stuck pty fails that test with its name), the file exits on its own without
-// --test-force-exit, and a closed terminal (pty or virtual) leaves no handle that keeps the process
-// alive. Every child here is started with a kill timeout, so this file cannot hang either.
+// #393: test/terminals.test.js hung the full suite past its timeout. Cause found: the pty test ended
+// right after killing its pseudoterminal, before node-pty reported the exit, and the suite's
+// --test-force-exit then hung the file's process in its exit on Windows (about half the runs; the
+// tests themselves had passed). Each test of the file has its own timeout, the file ends with and
+// without --test-force-exit, and a closed terminal (pty or virtual) leaves no handle that keeps the
+// process alive. Every child here is started with a kill timeout, so this file cannot hang either.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -51,6 +53,16 @@ test('test/terminals.test.js passes and exits on its own within 30 s, without --
   assert.equal(r.timedOut, false, `the file was still running after 90 s:\n${r.out}`);
   assert.equal(r.status, 0, r.out);
   assert.ok(r.ms < 30000, `the file took ${r.ms} ms`);
+});
+
+// the suite runs each file with --test-force-exit: before #393 the pty test's process hung in that
+// exit in about half the runs (the pty killed, its exit not yet reported by node-pty)
+test('test/terminals.test.js run as the suite does (--test-force-exit) ends within 30 s, 5 times in a row', { timeout: 240000 }, () => {
+  for (let i = 1; i <= 5; i++) {
+    const r = runNode(['--test', '--test-force-exit', '--test-reporter=dot', FILE], 30000);
+    assert.equal(r.timedOut, false, `run ${i} was still running after 30 s:\n${r.out}`);
+    assert.equal(r.status, 0, `run ${i}:\n${r.out}`);
+  }
 });
 
 test('a process that kills its pseudoterminal exits on its own: no pty handle is left open', { timeout: 60000 }, () => {

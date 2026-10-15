@@ -72,11 +72,15 @@ test('killing a pseudoterminal ends the programs it started too', TIMEOUT, async
   const script = "const c=require('child_process').spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore',detached:true});console.log('CHILD='+c.pid);setInterval(()=>{},1000)";
   let out = '';
   let child = null;
+  let exited = false;
   const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
-  const sink = new Terminals((channel, p) => { if (channel === 'term:data') out += p.data; });
+  const sink = new Terminals((channel, p) => { if (channel === 'term:data') out += p.data; if (channel === 'term:exit') exited = true; });
   t.after(() => sink.killAll());
   // the detached child outlives a failed assertion: never leave it running
   t.after(() => { if (child && alive(child)) { try { process.kill(child, 'SIGKILL'); } catch { /* gone */ } } });
+  // #393: the pseudoconsole is closed only once node-pty reports the exit; a process that exits
+  // before (the suite's --test-force-exit right after the last test) hung in its exit on Windows
+  t.after(() => until(() => exited, 10000));
   const { id } = sink.open({ title: 'tree', file: process.execPath, args: ['-e', script], cwd: process.cwd(), env: process.env });
   await until(() => (child = Number((/CHILD=(\d+)/.exec(out) || [])[1]) || null));
   assert.ok(child, `the child started (output: ${JSON.stringify(out)})`);
