@@ -250,16 +250,17 @@ const WORKFLOW_CHECKS = resolveChecks('', [
   groups, outputs,
 ]);
 
-// #389: the parsed YAML of each file, kept while its mtime and size do not change (the Backlog and
-// the roadmap load the same workflows many times); every call checks and hands out its own copy
-const parsedCache = new Map(); // file → { key, wf }
+// #389: the parsed YAML of each file, kept while its text does not change (the Backlog and the
+// roadmap load the same workflows many times); every call checks and hands out its own copy.
+// Keyed on the text, not mtime + size (#407): a rewrite of the same length within the clock's
+// resolution kept the old parse
+const parsedCache = new Map(); // file → { text, wf }
 function parseWorkflowFile(file) {
-  let key = null;
-  try { const st = fs.statSync(file); key = `${st.mtimeMs}:${st.size}`; } catch { /* readFileSync says why */ }
-  const hit = key && parsedCache.get(path.resolve(file));
-  if (hit && hit.key === key) return structuredClone(hit.wf);
-  const wf = yaml.load(fs.readFileSync(file, 'utf8'));
-  if (key) parsedCache.set(path.resolve(file), { key, wf: structuredClone(wf) });
+  const text = fs.readFileSync(file, 'utf8');
+  const hit = parsedCache.get(path.resolve(file));
+  if (hit && hit.text === text) return structuredClone(hit.wf);
+  const wf = yaml.load(text);
+  parsedCache.set(path.resolve(file), { text, wf: structuredClone(wf) });
   return wf;
 }
 
