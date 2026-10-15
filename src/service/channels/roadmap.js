@@ -50,15 +50,15 @@ module.exports = (ctx) => {
   // After an owner edit: the version before it is kept and the edit becomes the one to undo
   // (`undoable: false`: kept only, e.g. the queue moved in, which Undo could not give back).
   // → { id, label } for the screen's toast, or null when there is nothing to undo.
-  // `always`: kept and recorded even when the stages did not change (#399: a stage pause changes the
-  // roadmap's state only; the history still says it happened).
-  function edited(id, before, label, { undoable = true, always = false } = {}) {
+  // `paused` (#399, a stage pause, which changes the roadmap's state only): recorded although the
+  // stages did not change; its Undo resumes the roadmap as it ran before ({ stage, simulated, scope }).
+  function edited(id, before, label, { undoable = true, paused = null } = {}) {
     const after = stagesOf(id);
-    if (!always && JSON.stringify(before) === JSON.stringify(after)) return null;
+    if (!paused && JSON.stringify(before) === JSON.stringify(after)) return null;
     keep(id, before, label);
     if (!undoable) return null;
     edits += 1;
-    const edit = { id: `${Date.now()}-${edits}`, ...undo.recordEdit(before, after, label) };
+    const edit = { id: `${Date.now()}-${edits}`, ...undo.recordEdit(before, after, label), ...(paused ? { paused } : {}) };
     lastEdit.set(id, edit);
     return { id: edit.id, label: edit.label };
   }
@@ -75,6 +75,13 @@ module.exports = (ctx) => {
     if (!out.ok) throw new Error(out.reason);
     return out.stages;
   }, { alive: ctx.runAlive });
+  // #399 Undo of a stage pause: the Resume button (roadmap:start), with the roadmap's mode and scope
+  // from before the pause; refused when the roadmap no longer waits at that stage
+  const resumePaused = async (id, edit) => {
+    const r = roadmaps.readRoadmap(ctx.ws.backlog, id);
+    if (r.state !== 'paused' || r.pausedStage !== edit.paused.stage) throw new Error('The roadmap no longer waits at this stage: nothing to resume.');
+    await ctx.startRoadmap({ projectId: id, simulated: edit.paused.simulated, stage: edit.paused.scope });
+  };
   return [
     { channel: 'roadmap:get', method: 'getRoadmap', params: ['projectId'], schema: { params: ON_PROJECT, result: OBJECT }, fn: ({ projectId }) => ctx.roadmapView(project(projectId)) },
     // the edited stages ([{ id?, name, note, items: [{ id?, workflow, inputs, mock, issues }] }]); runs are kept by item id;
@@ -112,7 +119,8 @@ module.exports = (ctx) => {
         const edit = lastEdit.get(id);
         if (!edit || edit.id !== String(editId)) throw new Error('Only the last edit can be undone here: use "Restore an earlier version…" in the roadmap\'s ⋮ menu.');
         const before = stagesOf(id);
-        putBack(id, (stages) => undo.undoEdit(stages, edit));
+        if (edit.paused) await resumePaused(id, edit);
+        else putBack(id, (stages) => undo.undoEdit(stages, edit));
         lastEdit.delete(id);
         keep(id, before, `Undid: ${edit.label}`);
         await ctx.dispatchRoadmaps();
@@ -210,7 +218,8 @@ module.exports = (ctx) => {
     },
     // #368: a stage's "Pause after current turn": its runs pause after their current turn and the
     // roadmap pauses at the stage (areas/roadmap.js pauseStage); Resume (roadmap:start) continues them.
-    // #399: a line in the roadmap history and an edit in the answer, as Move on (the control channel)
+    // #399: a line in the roadmap history and an edit in the answer, as Move on (the control channel);
+    // its Undo (roadmap:undo) resumes the roadmap as Resume does
     {
       channel: 'roadmap:pause-stage',
       method: 'pauseRoadmapStage',
@@ -218,11 +227,13 @@ module.exports = (ctx) => {
       schema: { params: args({ projectId: PROJECT_ID, stageId: text(200) }, ['projectId', 'stageId']), result: BACKLOG },
       fn: async ({ projectId, stageId }) => {
         const id = project(projectId);
-        const before = stagesOf(id);
+        const r = roadmaps.readRoadmap(ctx.ws.backlog, id);
+        const before = r.stages;
         const at = before.findIndex((s) => s.id === String(stageId));
         const out = await ctx.pauseStage({ projectId, stageId: requireText(stageId, 'stage id', 200) });
         const name = at >= 0 ? before[at].name || `stage ${at + 1}` : 'a stage';
-        const edit = edited(id, before, `Paused ${name} after the current step`, { always: true });
+        const paused = { stage: String(stageId), simulated: !!r.simulated, scope: r.scope?.stage || null };
+        const edit = edited(id, before, `Paused ${name} after the current step`, { paused });
         return { ...out, ...(edit ? { edit } : {}) };
       },
     },

@@ -11,7 +11,7 @@
 // - runs:resume without confirmGate: areas/resume.js refuses a resume that would go past a gate the
 //   previous run decided, and confirmGate is refused on every channel (GATE_ARGS).
 // - workflows:restore: refused through this channel when the workspace copy has a human gate its
-//   bundled default lacks (restoreGuard in src/control/index.js); the app's Restore button is not.
+//   bundled default lacks (GUARDS['workflows:restore'] in src/control/index.js); the app's Restore button is not.
 // - runs:resumeOptions, notifications:list, gates:interrupted, nightwatch:state, nightwatch:report
 //   and usage:get only read.
 // Left out on purpose: run:stop (at a gate, stopping the run is one of the gate's answers);
