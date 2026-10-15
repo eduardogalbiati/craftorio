@@ -3,7 +3,7 @@
 // matching) and the child-process calls they make (a tool's output, a git query).
 
 const path = require('path');
-const { execFile, execFileSync } = require('child_process');
+const { execFileSync } = require('child_process');
 const { resolveCommand } = require('../engine/providers');
 const { canonicalPath } = require('../engine/worktree');
 const { execShim } = require('../shell');
@@ -39,11 +39,6 @@ function runTool(file, args) {
 const gitOut = (cwd, args) => {
   try { return execFileSync('git', args, { cwd, encoding: 'utf8', windowsHide: true, timeout: 10000, stdio: ['ignore', 'pipe', 'ignore'] }).trim(); } catch { return null; }
 };
-// gitOut without blocking the process (#389): resolves to the output, null on any failure
-const gitOutAsync = (cwd, args) => new Promise((resolve) => {
-  execFile('git', args, { cwd, encoding: 'utf8', windowsHide: true, timeout: 10000 }, (err, stdout) => resolve(err ? null : String(stdout).trim()));
-});
-
 // A session in the same shape whether it comes from the live engine or from a run on disk.
 // tokens: the breakdown plus `total` (as on the Usage screen), or null when the session has none.
 function sessionView(x, live) {
@@ -192,7 +187,6 @@ module.exports = {
   cliReason,
   folderMatcher,
   gitOut,
-  gitOutAsync,
   num,
   q,
   requireArgs,

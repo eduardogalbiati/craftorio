@@ -80,7 +80,9 @@ function fromEvents(file) {
     else if (ev.type === 'workflow.child_finished' && children.has(ev.child_run_id)) Object.assign(children.get(ev.child_run_id), { status: ev.status, ...(ev.cost_usd !== undefined ? { cost_usd: ev.cost_usd } : {}) });
   }
   // the PR the run opened (#84): the latest step output with pr_url / pr_number
-  const out = { key, sessions: sessionsOfEvents(upgraded), progress: trailOf(events), localMerge, recovery, pr: prOfEvents(events), childRuns: [...children.values()] };
+  // the error of its end (#389: a listing reads a failed run's events once while they do not change)
+  const error = events.findLast((e) => e.type === 'workflow.finished')?.error || null;
+  const out = { key, sessions: sessionsOfEvents(upgraded), progress: trailOf(events), localMerge, recovery, pr: prOfEvents(events), childRuns: [...children.values()], error };
   derived.set(file, out);
   return out;
 }
@@ -147,20 +149,6 @@ function liveStatus(dir) {
   return { status: 'running', elsewhere: owner.pid === process.pid ? null : { pid: owner.pid, host: owner.host } };
 }
 
-// The error of a finished run's workflow.finished event, kept per events file signature (#389): a
-// listing reads a failed run's whole events.jsonl only once while it does not change.
-const errorCache = new Map(); // events file → { sig, error }
-function finishedError(file) {
-  let sig = '-';
-  try { const st = fs.statSync(file); sig = `${st.mtimeMs}:${st.size}`; } catch { /* no events */ }
-  const hit = errorCache.get(file);
-  if (hit && hit.sig === sig) return hit.error;
-  const last = readEvents(file).reverse().find((e) => e.type === 'workflow.finished');
-  const error = last?.error || null;
-  errorCache.set(file, { sig, error });
-  return error;
-}
-
 /** One run folder → RunInfo base (sessions as engine snapshots), or null if it is not a run. */
 function readRun(runsDir, runId) {
   const dir = path.join(runsDir, runId);
@@ -185,7 +173,7 @@ function readRun(runsDir, runId) {
     ({ sessions, progress } = fromEvents(path.join(dir, 'events.jsonl')));
     status = liveStatus(dir).status;
   }
-  if (summary && summary.status !== 'success') error = finishedError(path.join(dir, 'events.jsonl'));
+  if (summary && summary.status !== 'success') error = fromEvents(path.join(dir, 'events.jsonl')).error ?? null;
   // what a `merge: local` put on the local base (summaries before local_merge: from the events)
   const localMerge = summary && summary.local_merge !== undefined ? summary.local_merge
     : summary?.status === 'success' && summary.worktree?.repo ? fromEvents(path.join(dir, 'events.jsonl')).localMerge : null;
@@ -389,8 +377,9 @@ async function rebuildIndexAsync(runsDir, { pauseMs = 0 } = {}) {
     if (indexRunIn(store, runsDir, id)) count++;
     await pause();
   }
+  if (storeFor(runsDir) !== store) return count;
   const present = new Set(ids);
-  const gone = [...store.runEntries().keys()].filter((id) => !present.has(id));
+  const gone = [...store.runEntries().keys()].filter((id) => !present.has(id) && !fs.existsSync(path.join(runsDir, id)));
   if (gone.length) store.deleteRuns(gone);
   return count;
 }

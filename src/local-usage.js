@@ -22,6 +22,7 @@
 const fs = require('fs');
 const path = require('path');
 const { cliConfigDirs, cliSessionDirs } = require('./cli-config-dirs');
+const { pathKey } = require('./platform-paths');
 const { workerClient } = require('./worker-client');
 
 // A pause longer than this between two messages is idle time (the person was away), not active time.
@@ -353,7 +354,11 @@ function scanFile(file, kind, prev) {
   const fresh = !prev || prev.kind !== kind || st.size < prev.offset;
   const entry = fresh ? { kind, key, offset: 0, state: NEW_STATE[kind]() } : { ...prev, key };
   let bytes = 0;
-  try { bytes = readAppended(file, entry, st.size); } catch { /* unreadable now: kept as it was */ }
+  try { bytes = readAppended(file, entry, st.size); } catch {
+    // unreadable now: read again at the next scan (a fresh entry starts over then)
+    if (prev && !fresh) return { entry: prev, bytes: 0 };
+    entry.key = null;
+  }
   entry.result = RESULT[kind](entry.state);
   return { entry, bytes };
 }
@@ -394,7 +399,9 @@ function scanLocalUsage({ home, states = new Map() } = {}) {
   each('claude', walk(src.claude, (n) => n.endsWith('.jsonl')));
   each('codex', walk(src.codex, (n) => n.startsWith('rollout-') && n.endsWith('.jsonl')));
   each('grok', walk(src.grok, (n) => n === 'usage.json'));
-  const gone = [...states.keys()].filter((f) => !present.has(f) && [src.claude, src.codex, src.grok].some((d) => d && f.startsWith(d)));
+  // the entries of this scan's folders whose file is gone (other homes' entries stay)
+  const under = (f, d) => d && pathKey(f).startsWith(pathKey(d) + path.sep);
+  const gone = [...states.keys()].filter((f) => !present.has(f) && [src.claude, src.codex, src.grok].some((d) => under(f, d)));
   for (const f of gone) states.delete(f);
   return { records, sessions, plans: { codex: codexPlan(latestPlan) }, found, sources: src, scan, changed, gone };
 }
@@ -426,10 +433,11 @@ function readLocalUsage({ home } = {}) {
 // cannot start, the work runs in the calling thread.
 const usageWorker = workerClient(path.join(__dirname, 'local-usage-worker.js'));
 function inUsageWorker(message, fallback) {
-  try { return usageWorker(message); } catch (e) {
+  const here = (e) => {
     console.error('usage worker:', e.message);
-    return Promise.resolve().then(fallback);
-  }
+    return fallback();
+  };
+  try { return usageWorker(message).catch(here); } catch (e) { return Promise.resolve(e).then(here); }
 }
 
 /**

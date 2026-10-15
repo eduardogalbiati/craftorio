@@ -316,9 +316,10 @@ module.exports = (ctx) => {
       }
       // budgets that count usage outside the orchestrator need the CLIs' own logs
       const needsLocal = Object.values(settings.budgets || {}).some((b) => b?.countOutside);
+      const local = needsLocal ? await ctx.localUsage() : null;
       const baselineAt = Date.now();
       // the Oracle's spend (in no run folder) counts too
-      const budget = usage.budgetBaseline({ runsDir: ws.runs, settings, local: needsLocal ? await ctx.localUsage() : null, extraRuns: ctx.agentUsageRuns() });
+      const budget = usage.budgetBaseline({ runsDir: ws.runs, settings, local, extraRuns: ctx.agentUsageRuns() });
       const wfFile = ctx.workflowPath(file);
       const notices = [...(startNotices || [])];
       if (wfFile.fallback) {

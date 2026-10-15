@@ -42,7 +42,12 @@ function workerClient(file) {
     return new Promise((resolve, reject) => {
       pending.set(id, { resolve, reject });
       w.ref();
-      w.postMessage({ ...message, id });
+      try { w.postMessage({ ...message, id }); } catch (e) {
+        // a message that cannot be copied (DataCloneError): nothing waits for an answer
+        pending.delete(id);
+        if (!pending.size) w.unref();
+        reject(e);
+      }
     });
   };
 }

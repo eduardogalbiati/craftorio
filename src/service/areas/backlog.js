@@ -11,7 +11,7 @@ const workspace = require('../../workspace');
 const projects = require('../../projects');
 const backlog = require('../../backlog');
 const refreshes = require('../../backlog-refresh');
-const { gitOutAsync } = require('../common');
+const { git } = require('../../engine/worktree');
 const epics = require('../../epics');
 const roadmaps = require('../../roadmap');
 const { normalizeThen } = require('../../shared/chain-model');
@@ -80,7 +80,7 @@ module.exports = (ctx) => {
     if (!hit?.pending && (!hit || Date.now() - hit.at >= MERGE_COUNT_MS)) {
       const entry = { count: hit?.count ?? null, at: hit?.at || 0, pending: true };
       mergeCounts.set(key, entry);
-      gitOutAsync(folder, ['rev-list', '--count', '--first-parent', `--since=${since}`, base, '--']).then((out) => {
+      git(['rev-list', '--count', '--first-parent', `--since=${since}`, base, '--'], folder, { timeout: 10000 }).catch(() => null).then((out) => {
         Object.assign(entry, { count: out, at: Date.now(), pending: false });
       });
     }
