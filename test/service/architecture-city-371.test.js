@@ -181,7 +181,7 @@ function installFailingLizard(t) {
 test('#371 architecture:city after architecture:facts with refresh shows the refreshed facts', async (t) => {
   const { api, projectId } = await setup(t, JS_FILES);
   const before = await call(api, 'architecture:facts', { projectId });
-  if (before.model.complexity.status === 'measured') return t.skip('a real lizard is installed on this machine');
+  if (before.model.complexity.status === 'measured') return t.skip('the fixture is already measured (in-app JavaScript measure, #385, or a real lizard)');
   await call(api, 'architecture:city', { projectId });
   installFailingLizard(t);
   const refreshed = await call(api, 'architecture:facts', { projectId, refresh: true });
