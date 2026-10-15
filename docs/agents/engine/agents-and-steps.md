@@ -213,9 +213,11 @@ fields (references between steps, agents, transitions, groups) are the named rul
   in a mock run too (a local, free check, like the test id step). Output `{ kind: 'check', status:
   pass | fail | skipped, command, findings, message, round }`: `findings` are the command's last 40
   lines, `skipped` when there is no checkout or no command. ai-development-local-hero runs it as
-  `rule_check` after each develop commit (input `check_command`): a failure goes back to develop with
-  the findings at most twice per review round (`vars.check_returns`), then to the `check_failed`
-  gate; a pass or a skip takes develop's own routes.
+  `rule_check` after each develop commit (input `check_command`), the last agent-less step before
+  the owner's gate or the review; the routes into it test `worktree_dir | check_command(...)` (the
+  template filter), so a project without a check command never visits it. A failure goes back to
+  develop with the findings at most twice per review round (`vars.check_returns`), then to the
+  `check_failed` gate; a pass goes to `developer_check` (validated mode) or the review.
 - **Ask for changes through the test writer (#247)**: in ai-development-local-hero, `developer_check`'s
   `changes` goes to `acceptance_tests` (`vars.criteria_triage`), whose prompt quotes the owner's request
   and asks for a triage: `criteria_changed: false` → develop; `true` → `red_check` on `tests_changed`

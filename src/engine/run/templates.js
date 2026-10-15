@@ -2,7 +2,7 @@
 // Templates and expressions of a run (#250, from src/engine/workflow.js): the nunjucks environment
 // (`render`, autoescape off) with the filters the workflows use (`to_yaml`, `to_json`, `shuffle(seed)`,
 // `clamp(lo, hi)`, `github_repo`, `pr_url`, `git_commits`, `git_log_stat`, `git_tags`, `project_version`,
-// `filed_issues`, `developer_gaps`, `e2e_scenarios`, `suite_failures`, `missing_test_ids`, `issue_numbers`,
+// `filed_issues`, `developer_gaps`, `e2e_scenarios`, `suite_failures`, `missing_test_ids`, `check_command`, `issue_numbers`,
 // `issue_lines`, `one_line`, `suite_lines`), `evalExpr` for `when:` conditions, and `testsPlan` (the
 // unit/E2E test inputs as the templates read them). Pure: no run state.
 
@@ -14,6 +14,7 @@ const crypto = require('crypto');
 const { execFileSync } = require('child_process');
 const yaml = require('js-yaml');
 const nunjucks = require('nunjucks');
+const checkStep = require('../check-step');
 const gateSummary = require('../gate-summary');
 const scenarios = require('../scenarios');
 const suiteStep = require('../suite-step');
@@ -134,6 +135,15 @@ tpl.addFilter('missing_test_ids', (dir, steps, renderer) => {
   try {
     return testIds.missingTestIdLines(testIds.missingTestIds(String(dir), { steps: steps || undefined, renderer: renderer || undefined }));
   } catch { return ''; }
+});
+
+// The project's check command of a checkout (#404, src/engine/check-step.js): the given one (the
+// check_command input), else `npm run check` when its package.json has a `check` script; '' when
+// none or without a folder, so a route to the check step is skipped.
+//   when: "worktree_dir | check_command(inputs.check_command)"
+tpl.addFilter('check_command', (dir, command) => {
+  if (!dir || !fs.existsSync(String(dir))) return '';
+  return checkStep.checkCommand(String(dir), command) || '';
 });
 
 // The numbers of the run's issues (#223: their BDD tags @issue-<n>), from `issue` and `issues` (URLs

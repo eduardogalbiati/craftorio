@@ -21,7 +21,8 @@
 #     (`protect_files` on the developer: a turn that changes one is refused, as edits_tests: false
 #     does for all tests), while the developer may add its own internal tests (`edits_tests: true`).
 #     code_review still checks the acceptance files are unchanged (`git diff`), as a second line.
-#   - rule_check (no agent, #404): after each develop commit the orchestrator runs the project's
+#   - rule_check (no agent, #404): after each develop commit (after the test-id check and the
+#     screenshots, before the owner's gate or the review) the orchestrator runs the project's
 #     rule checks (`check_command`, or the `check` script of its package.json; none: skipped). A
 #     failure goes back to develop with the findings, at most twice per review round, then to the
 #     owner at check_failed; never to the test writer. The suite still runs every test after it.
@@ -1051,13 +1052,34 @@ steps:
         set: { gaps_returned: "yes" }
       - when: "output.left_out | developer_gaps | length"
         goto: requirements_left_out
-      # #404: every commit goes through the project's rule checks first (rule_check, no model
-      # call); it then takes develop's routes after a commit (test ids, validation, screenshots, review)
-      - when: "output.committed"
+      # #246: scenarios written first: their test ids are checked right after each commit
+      # (testid_check, no model call); it then takes the routes below
+      - when: "output.committed and inputs.e2e_tests != 'off' and steps.acceptance_tests.output and steps.acceptance_tests.output.e2e_scope == 'scenarios'"
+        goto: testid_check
+      # an issue of the group could not be done: the owner decides (once) whether the run goes on without it
+      - when: "output.committed and inputs.issues | length > 1 and not steps.issue_not_done.output and (output.issues or []) | rejectattr('done') | list | length"
+        goto: issue_not_done
+      # validated mode: the owner tries the first implementation and every round they asked for
+      # (vars.owner_validated is "yes" once they approved; a review fix round goes on without them,
+      # unless validate_every_round)
+      - when: "inputs.mode == 'validated' and output.committed and (vars.owner_validated != 'yes' or inputs.validate_every_round) and inputs.screenshots != 'off'"
+        goto: developer_screenshots
+      # #151: a committed UI change (screens to capture, or files under src/renderer/) is captured
+      # right after develop in every mode too, for the ui_reviewer in code_review (a UI fix round
+      # included); a change without UI skips it
+      - when: "output.committed and inputs.screenshots != 'off' and ((output.screenshots or []) | length or 'src/renderer/' in ((output.files_changed or []) | join(' ') | replace('\\\\', '/')))"
+        goto: developer_screenshots
+      # #404: the project's rule checks before the owner's gate or the review (rule_check, no model
+      # call); a project without a check command goes on as before
+      - when: "output.committed and worktree_dir | check_command(inputs.check_command)"
         goto: rule_check
+      - when: "inputs.mode == 'validated' and output.committed and (vars.owner_validated != 'yes' or inputs.validate_every_round)"
+        goto: developer_check
       # the review findings needed no production change (e.g. they ask for tests, which the test
       # writer owns): the reviewer gets the answer; a disagreement ends at human_review, never in a loop
       - when: "output.no_change and steps.code_review.output"
+        goto: code_review
+      - when: "output.committed"
         goto: code_review
       - when: "true"
         goto: develop
@@ -1066,10 +1088,12 @@ steps:
 
   # #404: the project's rule checks (lint, layers, file sizes, code health, docs, types...), run by
   # the orchestrator after each develop commit (no agent, no model call, about a minute): the
-  # check_command input, or `npm run check` when the project's package.json has a `check` script;
-  # a project without one skips the step (a note in the output). Findings go back to the developer,
-  # at most twice per review round (a pass resets the count), then to the owner at check_failed;
-  # never to the test writer. The suite still runs every test, the rule tests included.
+  # check_command input, or `npm run check` when the project's package.json has a `check` script.
+  # It is the last agent-less step after develop (after testid_check and the screenshots), just
+  # before the owner's gate or the review; a project without a check command never reaches it.
+  # Findings go back to the developer, at most twice per review round (a pass resets the count),
+  # then to the owner at check_failed; never to the test writer. The suite still runs every test,
+  # the rule tests included.
   - id: rule_check
     display: Rule checks
     type: check
@@ -1081,30 +1105,10 @@ steps:
       # rounds used up: the owner decides (a goto, not on_exhausted: no supervisor wake-up first)
       - when: "output.status == 'fail'"
         goto: check_failed
-      # then develop's own routes after a commit (its output is steps.develop.output here)
-      # #246: scenarios written first: their test ids are checked right after each commit
-      - when: "inputs.e2e_tests != 'off' and steps.acceptance_tests.output and steps.acceptance_tests.output.e2e_scope == 'scenarios'"
-        goto: testid_check
-        set: &checks_passed { check_returns: "0" }
-      # an issue of the group could not be done: the owner decides (once) whether the run goes on without it
-      - when: "inputs.issues | length > 1 and not steps.issue_not_done.output and (steps.develop.output.issues or []) | rejectattr('done') | list | length"
-        goto: issue_not_done
-        set: *checks_passed
-      # validated mode: the owner tries the first implementation and every round they asked for
-      # (vars.owner_validated is "yes" once they approved; a review fix round goes on without them,
-      # unless validate_every_round)
-      - when: "(inputs.mode == 'validated' and (vars.owner_validated != 'yes' or inputs.validate_every_round)) and inputs.screenshots == 'off'"
-        goto: developer_check
-        set: *checks_passed
+      # passed (or skipped): the owner's gate in validated mode, else the review
       - when: "inputs.mode == 'validated' and (vars.owner_validated != 'yes' or inputs.validate_every_round)"
-        goto: developer_screenshots
-        set: *checks_passed
-      # #151: a committed UI change (screens to capture, or files under src/renderer/) is captured
-      # right after develop in every mode too, for the ui_reviewer in code_review (a UI fix round
-      # included); a change without UI skips it
-      - when: "inputs.screenshots != 'off' and ((steps.develop.output.screenshots or []) | length or 'src/renderer/' in ((steps.develop.output.files_changed or []) | join(' ') | replace('\\\\', '/')))"
-        goto: developer_screenshots
-        set: *checks_passed
+        goto: developer_check
+        set: &checks_passed { check_returns: "0" }
       - when: "true"
         goto: code_review
         set: *checks_passed
@@ -1126,12 +1130,15 @@ steps:
       # then develop's own routes after a commit (its output is steps.develop.output here)
       - when: "inputs.issues | length > 1 and not steps.issue_not_done.output and (steps.develop.output.issues or []) | rejectattr('done') | list | length"
         goto: issue_not_done
-      - when: "(inputs.mode == 'validated' and (vars.owner_validated != 'yes' or inputs.validate_every_round)) and inputs.screenshots == 'off'"
-        goto: developer_check
-      - when: "inputs.mode == 'validated' and (vars.owner_validated != 'yes' or inputs.validate_every_round)"
+      - when: "inputs.mode == 'validated' and (vars.owner_validated != 'yes' or inputs.validate_every_round) and inputs.screenshots != 'off'"
         goto: developer_screenshots
       - when: "inputs.screenshots != 'off' and ((steps.develop.output.screenshots or []) | length or 'src/renderer/' in ((steps.develop.output.files_changed or []) | join(' ') | replace('\\\\', '/')))"
         goto: developer_screenshots
+      # #404: the project's rule checks before the owner's gate or the review
+      - when: "worktree_dir | check_command(inputs.check_command)"
+        goto: rule_check
+      - when: "inputs.mode == 'validated' and (vars.owner_validated != 'yes' or inputs.validate_every_round)"
+        goto: developer_check
       - when: "true"
         goto: code_review
 
@@ -1147,6 +1154,9 @@ steps:
     folder: developer
     base: "{{ inputs.base_branch }}"
     transitions:
+      # #404: the project's rule checks before the owner's gate or the review
+      - when: "worktree_dir | check_command(inputs.check_command)"
+        goto: rule_check
       # validated mode: the owner's gate first (the same rounds as develop's transitions)
       - when: "inputs.mode == 'validated' and (vars.owner_validated != 'yes' or inputs.validate_every_round)"
         goto: developer_check
@@ -1263,13 +1273,16 @@ steps:
       - { id: continue, label: "Continue without them", help: "The run goes on with the issues that are done; the others stay open." }
       - { id: stop,     label: "Stop the run as failed (branch kept to resume)", help: "Ends the run as failed; nothing is merged and its branch keeps the work to resume it." }
     transitions:
-      - when: "(choice == 'continue' and inputs.mode == 'validated' and vars.owner_validated != 'yes') and inputs.screenshots == 'off'"
-        goto: developer_check
-      - when: "choice == 'continue' and inputs.mode == 'validated' and vars.owner_validated != 'yes'"
+      - when: "choice == 'continue' and inputs.mode == 'validated' and vars.owner_validated != 'yes' and inputs.screenshots != 'off'"
         goto: developer_screenshots
       # #151: a UI change is captured for the ui_reviewer, as in develop's transitions
       - when: "choice == 'continue' and inputs.screenshots != 'off' and ((steps.develop.output.screenshots or []) | length or 'src/renderer/' in ((steps.develop.output.files_changed or []) | join(' ') | replace('\\\\', '/')))"
         goto: developer_screenshots
+      # #404: the project's rule checks before the owner's gate or the review
+      - when: "choice == 'continue' and worktree_dir | check_command(inputs.check_command)"
+        goto: rule_check
+      - when: "choice == 'continue' and inputs.mode == 'validated' and vars.owner_validated != 'yes'"
+        goto: developer_check
       - when: "choice == 'continue'"
         goto: code_review
       - when: "choice == 'stop'"
@@ -1812,8 +1825,8 @@ steps:
         goto: e2e
 
   # #404: the project's rule checks still fail after the developer's rounds (rule_check). A human
-  # gate (a decision: neither the supervisor nor a retry answers it). Continue takes develop's
-  # routes after a commit; the suite's rule tests still report what is left.
+  # gate (a decision: neither the supervisor nor a retry answers it). Continue takes rule_check's
+  # routes after a pass; the suite's rule tests still report what is left.
   - id: check_failed
     type: human_approval
     summary: |
@@ -1831,21 +1844,9 @@ steps:
       - when: "choice == 'stop'"
         goto: end
         status: failed
-      # continue: develop's routes after a commit, as rule_check takes them
-      - when: "inputs.e2e_tests != 'off' and steps.acceptance_tests.output and steps.acceptance_tests.output.e2e_scope == 'scenarios'"
-        goto: testid_check
-        set: *checks_passed
-      - when: "inputs.issues | length > 1 and not steps.issue_not_done.output and (steps.develop.output.issues or []) | rejectattr('done') | list | length"
-        goto: issue_not_done
-        set: *checks_passed
-      - when: "(inputs.mode == 'validated' and (vars.owner_validated != 'yes' or inputs.validate_every_round)) and inputs.screenshots == 'off'"
-        goto: developer_check
-        set: *checks_passed
+      # continue: rule_check's routes after a pass
       - when: "inputs.mode == 'validated' and (vars.owner_validated != 'yes' or inputs.validate_every_round)"
-        goto: developer_screenshots
-        set: *checks_passed
-      - when: "inputs.screenshots != 'off' and ((steps.develop.output.screenshots or []) | length or 'src/renderer/' in ((steps.develop.output.files_changed or []) | join(' ') | replace('\\\\', '/')))"
-        goto: developer_screenshots
+        goto: developer_check
         set: *checks_passed
       - when: "true"
         goto: code_review
