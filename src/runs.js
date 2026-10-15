@@ -142,6 +142,10 @@ const firstText = (inputs) => {
 // The issues recorded in an upgraded workflow.started / summary.json; null when there are none.
 const issuesOf = (rec) => (rec?.issues?.length ? rec.issues : null);
 
+// #396: { tested: 'not green' when the run went on without a green suite, testedFailures: [{ step,
+// test, file, class, class_reason }] of the red suite steps } (null: tested green, or no suite)
+const testedOf = (summary) => ({ tested: summary?.tested || null, testedFailures: summary?.tested_failures || null });
+
 // A run without summary.json (#112): "running" while its owner (runs/<id>/owner.json, src/run-owner.js)
 // is alive, in this process or another one; "interrupted" only once the owner is gone.
 function liveStatus(dir) {
@@ -220,10 +224,7 @@ function readRun(runsDir, runId) {
     // #203: [{ input, label, value, value_label, source: 'workflow default' | 'chosen for this run' }]
     // of the development workflows' unit_tests / e2e_tests (null: a workflow without them)
     testsPlan: summary?.tests_plan || started?.tests_plan || null,
-    // #396: 'not green' when the run went on without a green suite, with [{ step, test, file, class,
-    // class_reason }] of the red suite steps (null: tested green, or no suite)
-    tested: summary?.tested || null,
-    testedFailures: summary?.tested_failures || null,
+    ...testedOf(summary),
     // `type: workflow` steps (#174): { run_id, workflow, step_id, index?, depth } of the run that started
     // this one, and [{ run_id, step_id, index?, workflow, status, cost_usd }] of the runs this one started (null: none)
     parentRun: summary?.parent_run || started?.parent_run || null,

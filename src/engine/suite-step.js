@@ -645,6 +645,28 @@ function classify(failures, { mock, cwd, changedFiles }) {
   return classifyFailures({ root: cwd, changed: Array.isArray(changed) ? changed : null, failures });
 }
 
+// runSuite's failures with their class and `in_change` / `outside_change` (#396), when the caller
+// gives the run's changed files (the engine does).
+function classifyOutput(out, { mock, cwd, changedFiles }) {
+  if (!out.failures.length || changedFiles == null) return;
+  out.failures = classify(out.failures, { mock, cwd, changedFiles });
+  out.in_change = out.failures.filter((f) => f.class === IN_CHANGE).length;
+  out.outside_change = out.failures.length - out.in_change;
+}
+
+// A timed-out round of runSuite (#396): the files still running rerun alone on the branch (and on the
+// base); `out.alone` lists them and their failures join out.failures (out.preexisting when the run
+// knows them) → rerunAlone's result, or null when there is nothing to rerun.
+async function rerunTimedOut(out, { preexisting, signal, logName, round, ...args }) {
+  if (!out.timed_out || !out.running.length || !filteredCommand(out.command, out.running) || signal?.aborted) return null;
+  const alone = await rerunAlone({ ...args, files: out.running, command: out.command, signal, stem: logName || `suite-${round}` });
+  out.alone = alone.files.map((r) => ({ file: r.file, branch: r.branch.status, base: r.base?.status || null, timeout_ms: r.branch.timeout_ms, log: r.branch.log, base_log: r.base?.log || null }));
+  const known = alone.failures.filter((f) => preexisting.some((p) => sameTest(f, p)));
+  out.preexisting.push(...known);
+  out.failures.push(...alone.failures.filter((f) => !known.includes(f)));
+  return alone;
+}
+
 // command: rendered (empty: detected); cwd: the worktree; runDir: the run folder (log under logs/);
 // round: the step's visit; env: the engine's environment (suiteEnv cleans it);
 // preexisting: the run's known pre-existing failures [{ test, file, reason }]; mockResult: see above;
@@ -751,18 +773,9 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
   out.preexisting = failures.filter((f) => preexisting.some((p) => sameTest(f, p)));
   out.failures = failures.filter((f) => !out.preexisting.includes(f));
   // a timed-out round (#396): the files still running, rerun alone on the branch (and on the base)
-  const alone = out.timed_out && out.running.length && filteredCommand(out.command, out.running) && !signal?.aborted
-    ? await rerunAlone({
-      files: out.running, command: out.command, cwd, env: childEnv?.env, base, signal, run, runDir, stem: logName || `suite-${round}`,
-      history: history?.file && history.project ? history : null, log, cmdArgs: optionalRunArgs({ onSpawn, sweep }),
-    })
-    : null;
-  if (alone) {
-    out.alone = alone.files.map((r) => ({ file: r.file, branch: r.branch.status, base: r.base?.status || null, timeout_ms: r.branch.timeout_ms, log: r.branch.log, base_log: r.base?.log || null }));
-    const known = alone.failures.filter((f) => preexisting.some((p) => sameTest(f, p)));
-    out.preexisting.push(...known);
-    out.failures.push(...alone.failures.filter((f) => !known.includes(f)));
-  }
+  const alone = await rerunTimedOut(out, {
+    preexisting, cwd, env: childEnv?.env, base, signal, run, runDir, logName, round, history, log, cmdArgs: optionalRunArgs({ onSpawn, sweep }),
+  });
   // the failures the run does not know yet: do they fail on the base too? (#211)
   if (out.failures.length && (base || mock) && !signal?.aborted) {
     const { onBase, info } = await checkOnBase({
@@ -787,12 +800,7 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
     const tail = clean(text).split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(-ERROR_LINES).join('\n');
     out.failures.push({ test: '(unrecognized failure)', file: '', error: `exit ${out.exit_code ?? '?'}${tail ? `: ${tail}` : ''}`.slice(0, 400) });
   }
-  // in or outside the change (#396), when the caller gives the run's changed files (the engine does)
-  if (out.failures.length && changedFiles != null) {
-    out.failures = classify(out.failures, { mock, cwd, changedFiles });
-    out.in_change = out.failures.filter((f) => f.class === IN_CHANGE).length;
-    out.outside_change = out.failures.length - out.in_change;
-  }
+  classifyOutput(out, { mock, cwd, changedFiles });
   out.status = out.failures.length ? 'fail' : 'pass';
   return finish();
 }

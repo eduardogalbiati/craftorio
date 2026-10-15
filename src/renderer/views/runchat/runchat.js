@@ -173,7 +173,11 @@
       <div class="rc-group-body"></div></div>`;
   }
 
-  const SUP_WHAT = { retry: 'Asked for a new attempt.', fix_output: 'Fixed the answer so the run can continue.', ask_human: 'Needs you: see the gate below.', fail: 'Could not recover this step.' };
+  // #396: the end's pill of a run that went on without a green suite (the event's summary, else its row's `tested`)
+  const testedPill = (it) => ((it.tested || chat.tested) === 'not green'
+    ? ' <span class="pill pill-warn" data-testid="runchat-tested" title="The run reached the build without a green suite: see its suite step">Not tested green</span>' : '');
+
+  const SUP_WHAT = { retry:'Asked for a new attempt.', fix_output: 'Fixed the answer so the run can continue.', ask_human: 'Needs you: see the gate below.', fail: 'Could not recover this step.' };
   function itemHtml(it) {
     switch (it.kind) {
       case 'start': {
@@ -200,9 +204,7 @@
         ${SUP_WHAT[it.action] ? `<p class="muted small">${SUP_WHAT[it.action]}</p>` : ''}</div></div>`;
       case 'end': {
         const ok = it.status === 'success';
-        // #396: a run that went on without a green suite (the event's summary, else its row's `tested`)
-        const tested = (it.tested || chat.tested) === 'not green'
-          ? ' <span class="pill pill-warn" data-testid="runchat-tested" title="The run reached the build without a green suite: see its suite step">Not tested green</span>' : '';
+        const tested = testedPill(it);
         // #384: the run that resumed this one (its row's resumedBy, read when a past run opens)
         return `<div class="duo-note ${ok ? 'done' : 'failed'}" data-item="${it.id}" data-testid="run-chat-finished"><span><b data-status="${esc(it.status)}">${ok ? 'Done' : esc(StatusPill.statusLabel(it.status))}</b>${tested}${!ok && it.error ? ` · ${esc(it.error.slice(0, 240))}` : ''} · $${(it.cost || 0).toFixed(2)} · ${fmtSecs(it.durationMs)}${StatusPill.resumedLink(chat.resumedBy)}</span>
           <button type="button" class="link-btn small" data-resume title="Start a new run from a step of this one, keeping the previous outputs (no supervisor call)">Resume from step…</button></div>`;

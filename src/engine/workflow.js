@@ -102,6 +102,9 @@ const runWorkers = (testWorkers) => (Number.isInteger(testWorkers) && testWorker
 const testedFailures = (steps) => Object.entries(steps)
   .filter(([, s]) => s?.output?.kind === 'suite' && s.output.status === 'fail')
   .flatMap(([id, s]) => (s.output.failures || []).map((f) => ({ step: id, test: f.test, file: f.file || '', class: f.class || null, class_reason: f.class_reason || null })));
+// #396: summary.json's { tested, tested_failures } of a run that went on without a green suite (a
+// transition's `set: { tested: "not green" }`: the owner's policy or Continue at the gate), else {}
+const testedSummary = (ctx) => (ctx.vars?.tested ? { tested: ctx.vars.tested, tested_failures: testedFailures(ctx.steps) } : {});
 
 class WorkflowRun extends EventEmitter {
   // budget: { [provider id]: { name, limitUsd, limitTokens, blockOnLimit, usedUsd, usedTokens } }
@@ -790,9 +793,8 @@ class WorkflowRun extends EventEmitter {
       // by the engine's suite steps and by the agents' own commands (the measure of the change)
       ...(this.testsPlan.length ? { tests_plan: this.testsPlan } : {}),
       ...(Object.values(this.suiteRuns).some(Boolean) ? { suite_runs: this.suiteRuns } : {}),
-      // #396: a run that went on without a green suite (a transition's `set: { tested: "not green" }`:
-      // the owner's policy or Continue at the gate), with the red suite steps' failures and their class
-      ...(this.ctx.vars?.tested ? { tested: this.ctx.vars.tested, tested_failures: testedFailures(this.ctx.steps) } : {}),
+      // #396: a run that went on without a green suite, with the red suite steps' failures and their class
+      ...testedSummary(this.ctx),
       // #209: test files the engine committed for the test writer; #178: commands cut by the tool's timeout
       ...(this.testsAutocommitted.length ? { tests_autocommitted: this.testsAutocommitted } : {}),
       ...(this.toolTimeouts ? { tool_timeouts: this.toolTimeouts } : {}),

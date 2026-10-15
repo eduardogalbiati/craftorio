@@ -97,9 +97,6 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   by the orchestrator (failing tests rerun on the base), never by an agent. Why: the old E2E tests
   asserted little and the release run paid a model to run the suite, and failures already on main
   made every round fail and the run looped.
-- **2026-10-02** (#202): an ended run keeps its branch, not its worktree folder; Resume recreates
-  the folder. Why: 13 worktrees of ended runs took about 8.3 GB, and their commits were already on
-  their branches.
 - **2026-10-02** (#168): the git platform (GitHub) is the only source of truth for issues. The
   local data is a read-only replica: the sync updates it, the app re-reads an issue right before a
   run starts, and issue changes are never made locally. Why: planned items kept stale copies, so an
