@@ -22,7 +22,7 @@ function loadOracleSettings({ oracle } = {}) {
   assert.ok(render && save, 'renderOracleSettings/saveOracleSettings not found in settings.js: the source moved');
 
   const setSettingsCalls = [];
-  const els = { '#set-oracle-budget': input(), '#set-oracle-compact': input() };
+  const els = { '#set-oracle-budget': input(), '#set-oracle-compact': input(), '#set-oracle-park': input() };
   const sandbox = {
     $: (sel) => els[sel] || null,
     state: { settings: { oracle } },
@@ -99,4 +99,36 @@ test('saveOracleSettings: a compaction value below 10000 keeps the previous valu
   els2['#set-oracle-compact'].value = '5000000';
   await save2();
   assert.equal(calls2[0].oracle.compactAtTokens, 1000000);
+});
+
+// #395: the Night watch's Move on wait (minutes a roadmap run waits at a gate before the watch moves on)
+test('#395 renderOracleSettings: fills the Move on wait from settings, 15 when it is missing', () => {
+  const a = loadOracleSettings({ oracle: { dailyBudgetUsd: 20, compactAtTokens: 150000, parkAfterMinutes: 30 } });
+  a.renderOracleSettings();
+  assert.equal(a.els['#set-oracle-park'].value, '30');
+  const b = loadOracleSettings({ oracle: undefined });
+  b.renderOracleSettings();
+  assert.equal(b.els['#set-oracle-park'].value, '15');
+});
+
+test('#395 saveOracleSettings: the Move on wait saves whole minutes, clamped to 1440', async () => {
+  for (const [typed, saved] of [['45', 45], ['7.9', 7], ['1', 1], ['2000', 1440]]) {
+    const { saveOracleSettings, els, setSettingsCalls } = loadOracleSettings({ oracle: { dailyBudgetUsd: 20, compactAtTokens: 150000, parkAfterMinutes: 15 } });
+    els['#set-oracle-budget'].value = '20';
+    els['#set-oracle-compact'].value = '150000';
+    els['#set-oracle-park'].value = typed;
+    await saveOracleSettings();
+    assert.equal(setSettingsCalls[0].oracle.parkAfterMinutes, saved, `Move on wait input: ${JSON.stringify(typed)}`);
+  }
+});
+
+test('#395 saveOracleSettings: an empty, zero, negative or non-numeric Move on wait keeps the saved value', async () => {
+  for (const bad of ['', '0', '-3', 'abc']) {
+    const { saveOracleSettings, els, setSettingsCalls } = loadOracleSettings({ oracle: { dailyBudgetUsd: 20, compactAtTokens: 150000, parkAfterMinutes: 25 } });
+    els['#set-oracle-budget'].value = '20';
+    els['#set-oracle-compact'].value = '150000';
+    els['#set-oracle-park'].value = bad;
+    await saveOracleSettings();
+    assert.equal(setSettingsCalls[0].oracle.parkAfterMinutes, 25, `Move on wait input: ${JSON.stringify(bad)}`);
+  }
 });
