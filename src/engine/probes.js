@@ -13,7 +13,10 @@
 //                 the check right before a merge (`check:` on a gate, `precheck:` on a transition)
 // The engine decides what each state means (poll again, finish the step, or call the agent).
 
-const { resolveCommand } = require('./providers');
+const {
+  homebrewInstalled,
+  resolveCommand,
+} = require('./providers');
 const { installHint } = require('../install-commands');
 const { execShim } = require('../shell');
 const github = require('../shared/platforms/github');
@@ -136,7 +139,7 @@ function glPipelineState(p) {
 function run(cmd, args, { cwd, signal, timeout = 60000 }) {
   const resolved = resolveCommand(cmd);
   if (!resolved) {
-    const hint = installHint(cmd);
+    const hint = installHint(cmd, process.platform, { brew: homebrewInstalled() });
     return Promise.reject(new Error(`${cmd} is not installed${hint ? ` (${hint})` : ''}.`));
   }
   const { file } = resolved;

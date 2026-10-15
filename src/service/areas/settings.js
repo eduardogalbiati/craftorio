@@ -28,11 +28,13 @@ const TOOLS = [
 ];
 
 module.exports = () => {
-  function envDetails() {
+  async function envDetails() {
+    // #398: the brew commands only with Homebrew (looked up on macOS only)
+    const opts = { brew: process.platform === 'darwin' && !!(await resolveCommandAsync('brew')) };
     return Promise.all(TOOLS.map(async (t) => {
       const r = await resolveCommandAsync(t.id); // #389: never blocks the main process
       const signInCommand = signInCommands()[t.id] || null;
-      if (!r) return { id: t.id, name: t.name, path: null, connected: false, installCommand: installCommand(t.id), installHint: installHint(t.id), signInCommand };
+      if (!r) return { id: t.id, name: t.name, path: null, connected: false, installCommand: installCommand(t.id, process.platform, opts), installHint: installHint(t.id, process.platform, opts), signInCommand };
       const v = await runTool(r.file, t.args);
       const out = { id: t.id, name: t.name, path: r.file, version: v.ok ? v.out.split(/\r?\n/)[0] : null, connected: v.ok, auth: !!(t.auth || (t.signedIn && v.ok)), signInCommand };
       if (!v.ok) out.output = lastLines(v.out);

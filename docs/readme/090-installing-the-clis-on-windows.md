@@ -26,3 +26,15 @@ the app also asks your login shell (`$SHELL -ilc`, 3 s at most) for its PATH and
 A CLI found nowhere shows as not installed, with its install hint (Homebrew on macOS, the distro
 package or the official script on Linux). Claude Code's `CLAUDE_CONFIG_DIR` and Codex's
 `CODEX_HOME` are honoured for sessions, usage and folder trust.
+
+Every program the app starts (the Install and Sign in terminals, Sessions, shells, the supervisor
+chat, agent turns and what they run, such as an agent's `gh`) gets those extra folders on its
+PATH too, after your own PATH and only the ones that exist, checked again on each launch: a CLI
+that Install puts in `~/.local/bin` signs in right away, without restarting the app. On Windows
+the same holds for `~\.local\bin` and `%APPDATA%\npm`.
+
+On macOS the one-click installs of `gh`, `git`, `glab` and `whisper-cli` use Homebrew, and Setup
+offers them only when it finds `brew`. Without Homebrew (https://brew.sh), Setup says so and
+shows the alternative: the GitHub CLI's macOS installer from https://cli.github.com, the GitLab
+CLI from its releases page (https://gitlab.com/gitlab-org/cli/-/releases), and git through
+`xcode-select --install` (Apple's Command Line Tools); `whisper-cli` needs Homebrew.

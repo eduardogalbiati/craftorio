@@ -23,6 +23,7 @@ const readline = require('readline');
 const { refuseReal } = require('./simulation');
 const { AGENT_ENV } = require('./capabilities');
 const { runShim } = require('../shell');
+const { setBrewLookup } = require('../install-commands');
 const registry = require('../shared/providers');
 const { emptyUsage } = require('../shared/providers/usage');
 
@@ -191,6 +192,11 @@ function withCliPath(env, platform = process.platform) {
   return extra.length ? { ...env, [key]: [...current, ...extra].join(path.delimiter) } : env;
 }
 const suffixedName = (cmd) => (n) => n.toLowerCase().startsWith(`${cmd}-`) && /-windows-[a-z]+\.exe$/i.test(n);
+
+// Whether Homebrew is installed (#398), for src/install-commands.js's brew commands: macOS only, so
+// no PATH lookup elsewhere. Also install-commands' lookup for a call without `brew` (#401).
+const homebrewInstalled = (platform = process.platform) => platform === 'darwin' && !!resolveCommand('brew');
+setBrewLookup(() => homebrewInstalled());
 
 // resolveCommand without blocking the process (#389: listing every PATH folder for a CLI that is not
 // installed took seconds on Windows), same answer: the folders are read in parallel, async.
@@ -809,6 +815,7 @@ module.exports = {
   cliInvocation,
   emptyUsage,
   gitConfigEnv,
+  homebrewInstalled,
   imageInput,
   isImagePath,
   isPermissionDenial,

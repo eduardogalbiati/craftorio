@@ -6,14 +6,21 @@
 // manager (#316): gh, git and glab get prose that names the distro package instead of a command.
 // macOS (#398): the brew commands only when `brew` resolves; without Homebrew, git installs with
 // Apple's Command Line Tools and gh, glab and whisper-cli get the prose of MAC_NO_BREW_TEXT.
+// A utility (#401): it never requires the engine. Whether Homebrew is installed comes from the
+// callers that resolve commands (`{ brew }`); without it, from the lookup src/engine/providers.js
+// registers when it loads (`setBrewLookup`), else no Homebrew.
 
-const { resolveCommand } = require('./engine/providers');
+let brewLookup = () => false;
+// #401: how a call without `brew` learns whether Homebrew is installed
+function setBrewLookup(fn) {
+  brewLookup = typeof fn === 'function' ? fn : () => false;
+}
 
 // `brew`: whether Homebrew is installed (macOS only); looked up when not given.
 function installCommands(platform = process.platform, { brew } = {}) {
   const win = platform === 'win32';
   const mac = platform === 'darwin';
-  const withBrew = mac && (brew ?? !!resolveCommand('brew'));
+  const withBrew = mac && (brew ?? !!brewLookup());
   const brewOr = (cmd, fallback = null) => (withBrew ? cmd : fallback);
   return {
     claude: win ? 'powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://claude.ai/install.ps1 | iex"' : 'curl -fsSL https://claude.ai/install.sh | bash',
@@ -72,5 +79,6 @@ module.exports = {
   installCommand,
   installCommands,
   installHint,
+  setBrewLookup,
   signInCommands,
 };
