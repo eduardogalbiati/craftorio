@@ -5,7 +5,8 @@
 // app quitting, closes the port and deletes the file.
 //   POST /api/<channel>   Authorization: Bearer <token>, body { "arg": ... }  ->  as src/server/index.js
 // Only the channels of src/control/allowlist.js are answered (others: 403 naming the channel); no
-// argument may cross a human gate (confirmGate). Every call is appended to control/calls.jsonl.
+// argument may cross a human gate (confirmGate), and GUARDS refuse what would remove one (#399:
+// workflows:restore of a copy with a gate its default lacks). Every call is appended to control/calls.jsonl.
 // The calls go to the running app's own service: actions dispatch as from the screen, and no second
 // engine opens the workspace (#112). Two reads for the client (#342), with the token, not logged:
 //   GET /api/version    ->  { version }: CONTROL_VERSION, the client refuses another one (exit 3)
@@ -19,6 +20,7 @@ const http = require('http');
 const path = require('path');
 const workspace = require('../workspace');
 const { nativeBinaryPath } = require('../native-bin');
+const { addedGates, BUNDLED_WORKFLOWS_DIR } = require('../workflows');
 const { CHANNELS, GATE_ARGS } = require('./allowlist');
 const {
   bearer,
@@ -31,6 +33,17 @@ const {
 } = require('../server');
 
 const SUMMARY_CHARS = 200;
+
+// Refusals only outside sessions get, per channel (#399): the reason, or null to go on.
+// workflows:restore never removes a human gate the owner added to a workspace copy.
+const GUARDS = {
+  'workflows:restore': (service, file) => {
+    const ws = service.workspace();
+    const gates = ws ? addedGates(BUNDLED_WORKFLOWS_DIR, ws.workflows, file) : [];
+    if (!gates.length) return null;
+    return `the copy of ${path.basename(String(file || ''))} has human gates its default lacks (${gates.join(', ')}): a restore would remove them, outside sessions never do. Restore it from the app.`;
+  },
+};
 
 // The version of this HTTP contract (routes, bodies, exit codes the client relies on). Bump it with
 // CONTROL_VERSION in native/multiagent-ctl/src/main.rs when either changes incompatibly.
@@ -119,6 +132,8 @@ function createControlChannel({ service, ctlPath = nativeBinaryPath('multiagent-
         }
         const gateArg = body.arg && typeof body.arg === 'object' ? GATE_ARGS.find((k) => body.arg[k] != null && body.arg[k] !== false) : null;
         if (gateArg) throw new HttpError(403, `${channel}: ${gateArg} is refused, outside sessions never cross a human gate.`);
+        const refusal = GUARDS[channel]?.(service, body.arg);
+        if (refusal) throw new HttpError(403, `${channel}: ${refusal}`);
         const result = await callChannel(service.api[channel], body.arg);
         answer(result.status, result.body);
       } catch (e) {

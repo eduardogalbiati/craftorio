@@ -38,7 +38,8 @@
 // Output: { kind: 'suite', status: pass | fail | blocked, round, command, log, exit_code, duration_ms,
 // timed_out, timeout_ms, running, alone, failures, preexisting, preexisting_failures, base_check,
 // in_change, outside_change, reason, message }. `blocked`: the suite could not run (no worktree, no
-// command found, the command not found).
+// command found, the command not found, or #400 the shell refused the command line: the log's last
+// line is a refusal of SHELL_REFUSALS and the log holds no test result, reason quoting that line).
 // It never throws and never calls the supervisor: the transitions route the result (back to the test
 // writer or the developer, or a gate).
 // Simulation (`mock`): nothing is run; `mockResult` (mockSequences.suite: { <step>: [per visit] },
@@ -51,6 +52,10 @@
 // Affected tests (#212): with `files`, only those test files run (`scope: files`, the step's
 // `scope: affected` rounds and agents' test requests, see src/engine/affected-tests.js); the output
 // says which files and why (`selection`), and `passed` / `failed` are the runner's counts.
+// The command line has a limit (#400, COMMAND_LINE_LIMITS: cmd.exe 8,191 characters, Linux 128 KiB,
+// macOS 256 KiB, minus a margin): a filtered command over it (wrappers included) runs the whole
+// suite instead (`selection.why` and the message say so), and the base check of too many files is
+// skipped with that reason. A timed-out file reruns alone, always short enough.
 // Agent mode (#219): the suite gets MULTIAGENT_AGENT_MODE=1 and MULTIAGENT_TEST_HUMAN_LOG (<log>.human.log);
 // a runner that knows them (this project's scripts/test.js) prints one failures-only JSON line,
 // which `parseFailures` / `parseCounts` read before any text format (`human_log`, `file_counts`).
@@ -83,6 +88,21 @@ const SELECTION_LINES = 20;
 // a test file rerun alone after a timed-out round (#396)
 const MIN_FILE_TIMEOUT_MS = 2 * 60e3;
 const FILE_TIMEOUT_MS = 5 * 60e3;
+// The longest command line per platform (#400): cmd.exe takes 8,191 characters (spawn wraps the
+// command in `cmd.exe /d /s /c "…"`, hence the margin); `sh -c` gets it as one argument, at most
+// MAX_ARG_STRLEN (128 KiB) on Linux; macOS's ARG_MAX (1 MiB) also holds the environment.
+const COMMAND_LINE_LIMITS = {
+  darwin: { name: 'macOS', chars: 256 * 1024 },
+  linux: { name: 'Linux', chars: 128 * 1024 },
+  win32: { name: 'Windows', chars: 8191 },
+};
+const COMMAND_LINE_MARGIN = 100;
+// what a shell prints when it refuses a command line (#400): no test ran
+const SHELL_REFUSALS = [
+  /argument list too long/i,
+  /command line is too long/i,
+  /linha de comando muito longa/i,
+];
 
 const exists = (dir, f) => { try { return fs.existsSync(path.join(dir, f)); } catch { return false; } };
 const someFile = (dir, re) => { try { return fs.readdirSync(dir).some((f) => re.test(f)); } catch { return false; } };
@@ -426,14 +446,25 @@ function filteredCommand(command, files) {
   return null;
 }
 
+// Whether a command fits the platform's command line (#400), with COMMAND_LINE_MARGIN to spare.
+const commandLineOf = (platform) => COMMAND_LINE_LIMITS[platform] || COMMAND_LINE_LIMITS.linux;
+const fitsCommandLine = (command, platform = process.platform) => String(command || '').length <= commandLineOf(platform).chars - COMMAND_LINE_MARGIN;
+// Why `n` test files cannot go on the command (#400), e.g. "319 test files would put the command
+// over the Windows command-line limit of 8,191 characters"
+function overCommandLine(n, platform = process.platform) {
+  const { name, chars } = commandLineOf(platform);
+  return `${plural(n, 'test file')} would put the command over the ${name} command-line limit of ${chars.toLocaleString('en-US')} characters`;
+}
+
 // Base results cached per base commit + file: <cacheDir>/<commit>.json, { <file>: { failing: [test names], at } }
 const baseCacheFile = (cacheDir, commit) => (cacheDir && commit ? path.join(cacheDir, `${String(commit).replace(/[^\w.-]/g, '')}.json`) : null);
 const sameFile = (a, b) => String(a || '').split(/[\\/]/).pop() === String(b || '').split(/[\\/]/).pop();
 
 // Which of `failures` also fail on the base (#211): their test files run in the base checkout (cached
 // per commit + file). → { onBase: [failure], info: { status: done | skipped, commit, files, cached,
-// ran, log, reason } }; never throws.
-async function checkOnBase({ command, failures, base, mock, env, timeoutMs, signal, run = runCommand, logFile, runDir, cacheDir, log = () => {} }) {
+// ran, log, reason } }; never throws. Too many files for the platform's command line (#400): skipped,
+// like a command that cannot run single files.
+async function checkOnBase({ command, failures, base, mock, env, timeoutMs, signal, run = runCommand, logFile, runDir, cacheDir, log = () => {}, platform = process.platform }) {
   const info = { status: 'skipped', commit: null, files: [], cached: [], ran: [], log: null, reason: null };
   const files = [...new Set(failures.map((f) => f.file).filter(Boolean))].sort();
   info.files = files;
@@ -444,6 +475,7 @@ async function checkOnBase({ command, failures, base, mock, env, timeoutMs, sign
   }
   if (typeof base !== 'function') { info.reason = 'the run has no base checkout'; return { onBase: [], info }; }
   if (!filteredCommand(command, files)) { info.reason = `\`${command}\` cannot run single test files`; return { onBase: [], info }; }
+  if (!fitsCommandLine(filteredCommand(command, files), platform)) { info.reason = `${overCommandLine(files.length, platform)}: not checked on the base`; return { onBase: [], info }; }
   let b = null;
   try { b = await base(); } catch (e) { info.reason = `the base checkout could not be prepared: ${e.message}`; return { onBase: [], info }; }
   if (!b?.dir || !fs.existsSync(b.dir)) { info.reason = 'the run has no base checkout'; return { onBase: [], info }; }
@@ -685,13 +717,16 @@ async function rerunTimedOut(out, { preexisting, signal, logName, round, ...args
 // testWorkers (#367): the run's test workers per run, in the env and on the command (withWorkers).
 // sweep (#390): false when cwd is not a folder the run owns (no worktree): runCommand then stops only
 // the command's own tree, not every process running from cwd.
-async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = 'pass', preexisting = [], signal, timeoutMs, history, base, baseCacheDir, run = runCommand, log = () => {}, files = null, selection = null, logName = null, coverage = false, changedFiles = null, onSpawn = null, testWorkers = null, sweep = true }) {
+// platform (#400): whose command-line limit the filtered command (with its wrappers) must fit, else
+// the whole suite runs and `selection.why` and the message say why.
+async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = 'pass', preexisting = [], signal, timeoutMs, history, base, baseCacheDir, run = runCommand, log = () => {}, files = null, selection = null, logName = null, coverage = false, changedFiles = null, onSpawn = null, testWorkers = null, sweep = true, platform = process.platform }) {
   const logFile = runDir ? path.join(runDir, 'logs', `${logName || `suite-${round}`}.log`) : null;
   const out = {
     kind: 'suite', status: 'blocked', round, scope: 'full', command: null, log: logFile ? path.relative(runDir, logFile).split(path.sep).join('/') : null,
     exit_code: null, duration_ms: 0, timed_out: false, timeout_ms: null, running: [], passed: null, failed: null, failures: [], preexisting: [], preexisting_failures: [], base_check: null, selection, reason: null, message: '',
   };
-  const what = () => (out.scope === 'files' ? `The selected tests (${plural(out.selection?.files?.length ?? files.length, 'test file')})` : 'The suite');
+  let tooLong = null;
+  const what = () => (out.scope === 'files' ? `The selected tests (${plural(out.selection?.files?.length ?? files.length, 'test file')})` : tooLong ? `The whole suite (${tooLong})` : 'The suite');
   const finish = () => {
     const pre = out.preexisting.length ? ` (${plural(out.preexisting.length, 'pre-existing failure')} not counted: they fail on the base too)` : '';
     const classes = out.in_change != null ? ` (${[out.in_change ? `${out.in_change} ${IN_CHANGE}` : '', out.outside_change ? `${out.outside_change} ${OUTSIDE_CHANGE}` : ''].filter(Boolean).join(', ')})` : '';
@@ -717,8 +752,14 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
       return out;
     }
     const filtered = filteredCommand(out.command, files);
-    if (filtered) { out.scope = 'files'; out.command = filtered; measure = false; }
-    else if (out.selection) out.selection = { ...out.selection, why: `${out.selection.why}; \`${out.command}\` cannot run single test files: the whole suite ran` };
+    // #400: measured as it will run, with the coverage and workers wrappers
+    const wrapped = filtered && !mock ? withWorkers(coverage ? coverageCommand(filtered, cwd) : filtered, testWorkers) : filtered;
+    if (filtered && fitsCommandLine(wrapped, platform)) { out.scope = 'files'; out.command = filtered; measure = false; }
+    else if (filtered) {
+      tooLong = overCommandLine(files.length, platform);
+      out.selection = { ...(out.selection || { files }), why: `${out.selection?.why ? `${out.selection.why}; ` : ''}${tooLong}: the whole suite ran` };
+      log('warn', `suite: ${tooLong}: the whole suite runs`);
+    } else if (out.selection) out.selection = { ...out.selection, why: `${out.selection.why}; \`${out.command}\` cannot run single test files: the whole suite ran` };
   }
   if (!mock) out.command = withWorkers(coverage ? coverageCommand(out.command, cwd) : out.command, testWorkers);
   const recent = mock ? [] : suiteDurations(hist);
@@ -758,6 +799,14 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
       out.duration_ms = Date.now() - t0;
       return finish();
     }
+    // #400: the shell refused the command line, no test ran: not a failure an agent can fix
+    const last = clean(text).split(/\r?\n/).map((l) => l.trim()).filter(Boolean).pop() || '';
+    const counts = parseCounts(text);
+    if (r.code !== 0 && !r.timedOut && !report && SHELL_REFUSALS.some((re) => re.test(last)) && counts.passed == null && counts.failed == null && !parseFailures(text, { cwd }).length) {
+      out.reason = `the shell refused the command, no test ran (exit ${r.code ?? '?'}): ${last}`;
+      out.duration_ms = Date.now() - t0;
+      return finish();
+    }
   }
   out.duration_ms = Date.now() - t0;
   // a run that ended (not cut by the timeout, not cancelled) measures the suite for the next timeouts
@@ -781,7 +830,7 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
     const { onBase, info } = await checkOnBase({
       command: out.command, failures: out.failures, base, mock, signal, run,
       env: childEnv ? { ...childEnv.env, MULTIAGENT_TEST_HUMAN_LOG: humanLog(path.join(runDir, 'logs', `suite-${round}-base.log`)) } : undefined, timeoutMs: out.timeout_ms,
-      logFile: logFile ? path.join(runDir, 'logs', `suite-${round}-base.log`) : null, runDir, cacheDir: baseCacheDir, log,
+      logFile: logFile ? path.join(runDir, 'logs', `suite-${round}-base.log`) : null, runDir, cacheDir: baseCacheDir, log, platform,
     });
     out.base_check = info;
     if (onBase.length) {

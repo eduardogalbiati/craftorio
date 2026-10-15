@@ -146,3 +146,50 @@ test('installCommands (#398): the Homebrew flag changes nothing on Linux and Win
     if (cmd) assert.doesNotMatch(cmd, /\bbrew\b/);
   }
 });
+
+// #401: install-commands.js is a utility and never looks Homebrew up itself; a call without `brew`
+// asks the lookup the engine registers (setBrewLookup), else assumes no Homebrew. This file does not
+// load the engine, so no lookup is registered unless a test sets one (and resets it).
+const { setBrewLookup } = require('../src/install-commands');
+
+function withLookup(t, answer) {
+  const asked = [];
+  setBrewLookup(() => { asked.push(true); return answer; });
+  t.after(() => setBrewLookup(null));
+  return asked;
+}
+
+test('installCommands (#401): without a registered lookup and without `brew`, macOS gets no brew command', () => {
+  setBrewLookup(null);
+  const mac = installCommands('darwin');
+  assert.equal(mac.gh, null);
+  assert.equal(mac.git, 'xcode-select --install');
+  assert.equal(installHint('gh', 'darwin'), installHint('gh', 'darwin', NO_BREW));
+});
+
+test('installCommands (#401): a call without `brew` follows the registered lookup on macOS', (t) => {
+  withLookup(t, true);
+  assert.equal(installCommand('gh', 'darwin'), 'brew install gh');
+  assert.equal(installHint('whisper-cli', 'darwin'), 'brew install whisper-cpp');
+  setBrewLookup(() => false);
+  assert.equal(installCommand('gh', 'darwin'), null);
+  assert.equal(installHint('gh', 'darwin'), installHint('gh', 'darwin', NO_BREW));
+});
+
+test('installCommands (#401): an explicit `brew` wins over the registered lookup', (t) => {
+  withLookup(t, true);
+  assert.equal(installCommand('gh', 'darwin', NO_BREW), null);
+  setBrewLookup(() => false);
+  assert.equal(installCommand('gh', 'darwin', WITH_BREW), 'brew install gh');
+});
+
+test('installCommand (#401): tools that never install with Homebrew do not consult the lookup', (t) => {
+  const asked = withLookup(t, true);
+  for (const id of ['claude', 'codex', 'grok']) installCommand(id, 'darwin');
+  assert.equal(asked.length, 0);
+});
+
+test('installCommands (#401): a registered lookup that says yes changes nothing on Linux and Windows', (t) => {
+  withLookup(t, true);
+  for (const platform of ['linux', 'win32']) assert.deepEqual(installCommands(platform), installCommands(platform, NO_BREW), platform);
+});

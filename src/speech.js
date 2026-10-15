@@ -8,7 +8,10 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const https = require('https');
-const { resolveCommand } = require('./engine/providers');
+const {
+  homebrewInstalled,
+  resolveCommand,
+} = require('./engine/providers');
 const {
   installCommand,
   installHint,
@@ -31,7 +34,7 @@ const TIMEOUT_MS = 3 * 60 * 1000;
 // macOS: install-commands' hint, per call (#398: brew install whisper-cpp only with Homebrew)
 const installHintFor = () => (process.platform === 'win32'
   ? 'download whisper-bin-x64.zip from https://github.com/ggml-org/whisper.cpp/releases, unzip it and add the folder to PATH (or set the path of whisper-cli.exe in Settings › General › Voice input)'
-  : process.platform === 'darwin' ? installHint(DEFAULT_COMMAND) : 'build whisper.cpp (https://github.com/ggml-org/whisper.cpp) and put whisper-cli in PATH');
+  : process.platform === 'darwin' ? installHint(DEFAULT_COMMAND, 'darwin', { brew: homebrewInstalled('darwin') }) : 'build whisper.cpp (https://github.com/ggml-org/whisper.cpp) and put whisper-cli in PATH');
 
 // Where downloaded models live: <user data>/speech-models. `dataDir` is the app's user data folder
 // (Electron's userData); without one (the engine server, tests) the OS's per-user app data folder
@@ -67,7 +70,7 @@ function status(settings, dataDir) {
     path: resolved ? resolved.file : null,
     installHint: installHintFor(),
     // the command run by the play button (#147), only for the default CLI
-    installCommand: command === DEFAULT_COMMAND ? installCommand(DEFAULT_COMMAND) : null,
+    installCommand: command === DEFAULT_COMMAND ? installCommand(DEFAULT_COMMAND, process.platform, { brew: homebrewInstalled() }) : null,
     modelsDir: modelsDir(dataDir),
     model: settings.voiceModel,
     modelReady: fs.existsSync(modelPath(settings.voiceModel, dataDir)),
