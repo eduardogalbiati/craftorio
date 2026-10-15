@@ -17,7 +17,8 @@
 // measurement is repeated (expect.poll) until one whole window has no frame, within 20 s: a view
 // whose loop never stops never gets there. "Keeps drawing" asks for at least 10 frames in 2 s.
 //
-// The window is minimised and restored in the main process (BrowserWindow.minimize / restore).
+// The window is minimised and restored in the main process (BrowserWindow.minimize / restore), and
+// the page is told it is hidden / visible (see setPageHidden: the harness keeps it visible).
 
 const { expect } = require('@playwright/test');
 const { When, Then } = require('./fixtures');
@@ -126,12 +127,29 @@ Then('no 3D canvas remains', async ({ e2e }) => {
   await expect(page.locator('[data-testid="run3d"] canvas')).toHaveCount(0);
 });
 
+// The harness keeps the page visible while minimised (features/support/electron-main.js disables
+// native window occlusion and renderer backgrounding), so the page is told it is hidden: document's
+// own hidden / visibilityState are shadowed and 'visibilitychange' is dispatched, as Chromium does.
+// Restoring removes the shadows (the prototype's getters answer again) and dispatches it again.
+const setPageHidden = (page, hidden) => page.evaluate((h) => {
+  if (h) {
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+  } else {
+    delete document.hidden;
+    delete document.visibilityState;
+  }
+  document.dispatchEvent(new Event('visibilitychange'));
+}, hidden);
+
 When('I minimise the app\'s window', async ({ e2e }) => {
   await setWindow(e2e, 'minimize');
+  await setPageHidden(e2e.window, true);
   await expect.poll(() => e2e.window.evaluate(() => document.visibilityState), { timeout: LOAD_TIMEOUT }).toBe('hidden');
 });
 
 When('I restore the app\'s window', async ({ e2e }) => {
   await setWindow(e2e, 'restore');
+  await setPageHidden(e2e.window, false);
   await expect.poll(() => e2e.window.evaluate(() => document.visibilityState), { timeout: LOAD_TIMEOUT }).toBe('visible');
 });
