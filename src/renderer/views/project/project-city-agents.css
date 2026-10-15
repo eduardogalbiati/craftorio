@@ -13,8 +13,8 @@
 .pca-who { display: grid; min-width: 0; flex: 1; }
 .pca-who b { color: var(--r3d-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pca-who small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pca-collision { margin-top: 8px; padding: 8px 10px; border-radius: 9px; background: color-mix(in srgb, #d7263d 14%, var(--r3d-card)); display: grid; gap: 2px; }
-.pca-collision b { color: #d7263d; }
+.pca-collision { margin-top: 8px; padding: 8px 10px; border-radius: 9px; background: color-mix(in srgb, var(--r3d-red) 14%, var(--r3d-card)); display: grid; gap: 2px; }
+.pca-collision b { color: var(--r3d-red); }
 .pca-collision code, .pca-new code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pca-collision .pcm-link { margin: 4px 0 0; }
 .pca-new { margin: 8px 0 0; display: flex; flex-wrap: wrap; gap: 4px 6px; }

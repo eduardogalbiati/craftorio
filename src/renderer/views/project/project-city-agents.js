@@ -16,7 +16,6 @@
 (() => {
   const POLL_MS = 5000;
   const LAYER = 'agents';
-  const COLLISION = '#d7263d';
   const CRANE = '#f2a541';
   const TICK_MS = 100;
   // a replay plays the run in about a minute at 1×, whatever its length
@@ -37,7 +36,7 @@
   function layerOf(scene) {
     const highlight = {};
     for (const t of scene.trails) for (const p of t.paths) highlight[p] = t.colour;
-    for (const c of scene.collisions) highlight[c.path] = COLLISION;
+    for (const c of scene.collisions) highlight[c.path] = CityAgents.COLLISION_COLOUR;
     const markers = [
       ...scene.robots.map((r) => ({ colour: r.colour, label: r.label, path: r.path })),
       ...scene.cranes.map((p) => ({ colour: CRANE, label: 'Uncommitted changes', path: p })),

@@ -263,6 +263,12 @@
     return { drawn, earlier: start, more };
   }
 
+  /** An item's issues: its `issues` list, or (an item stored before #163) the item itself as one issue. */
+  function itemIssues(x) {
+    if (x?.issues?.length) return x.issues;
+    return x?.number ? [{ number: x.number, url: x.url, title: x.title, body: x.body, knownPullRequests: x.knownPullRequests }] : [];
+  }
+
   const api = {
     ACTIONS,
     FINISHED,
@@ -278,6 +284,7 @@
     inRange,
     isFinished,
     isOpen,
+    itemIssues,
     itemRuns,
     pageOf,
     pauseChoices,

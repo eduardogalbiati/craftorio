@@ -14,7 +14,8 @@
 // - impactHeader(layout, paths, { quadrants }) → { total, districts, zones, dangerShare }: the counts
 //   over the buildings of the layout and the share of them in the Danger Zone.
 // - stageFootprint(items [{ id, files }]) → { colours, highlight, conflicts }: each item its colour, a
-//   building two items would change in CONFLICT_COLOUR (#150: the items of one stage share no files).
+//   building two items would change in CONFLICT_COLOUR (#150: the items of one stage share no files),
+//   both from src/shared/city-agents.js (collisions, COLLISION_COLOUR), as the agents' collisions (#374).
 // - predictedVsActual(predicted, changed) → { hit, missed, unexpected, hitRate }.
 // - recordHitRate(history, issue, { hitRate, ts, run }) → a new history, one entry per run, ts order.
 // Browser: window.CityImpact; Node: module.exports.
@@ -22,13 +23,14 @@
   const node = typeof module === 'object' && module.exports;
   // the plan's first-match rule (#371), resolved at call time: in the browser city-model.js loads after this file
   const cityModel = () => (node ? require('./city-model') : root.CityModel);
+  // #150's rule "a path two sets or more change" and its red, the ones the agents on the city draw (#374), at call time
+  const cityAgents = () => (node ? require('./city-agents') : root.CityAgents);
+  const conflictColour = () => cityAgents().COLLISION_COLOUR;
 
   const SOURCES = ['changed', 'cited', 'po'];
   // the strongest source first: what a run really changed, then the Product Owner's group, then the body
   const STRENGTH = ['changed', 'po', 'cited'];
   const SOURCE_COLOURS = { cited: '#4c9be8', po: '#9b6ef3', changed: '#3fb68b' };
-  // the collision red of the agents on the city (#374)
-  const CONFLICT_COLOUR = '#d7263d';
   const ITEM_COLOURS = ['#4c9be8', '#3fb68b', '#f2a541', '#9b6ef3', '#2ec4b6', '#c3d350', '#5c7cfa', '#a1887f'];
   const DANGER = 'Danger Zone';
 
@@ -39,6 +41,8 @@
 
   // ---------- the paths an issue body cites ----------
 
+  // a markdown link keeps its text: [src/a.js](https://…/src/a.js) cites src/a.js
+  const LINK_RE = /\[([^\]\n]+)\]\([^)\s]*\)?/g;
   const URL_RE = /\b(?:https?:\/\/|www\.)[^\s`]+/gi;
   const GLOB_RE = /[*?{}[\]]/;
   const NAME = '[\\w.@+-]+';
@@ -64,7 +68,7 @@
   /** The repository-relative paths an issue body cites, sorted and unique. */
   function citedPaths(body) {
     if (typeof body !== 'string' || !body) return [];
-    const text = body.replace(URL_RE, ' ');
+    const text = body.replace(LINK_RE, ' $1 ').replace(URL_RE, ' ');
     const out = [];
     const take = (s, quoted) => {
       for (const token of s.split(/\s+/)) {
@@ -151,20 +155,15 @@
   /** Each item of a stage in its own colour; a building two items or more would change is a conflict, in red. */
   function stageFootprint(items) {
     const colours = {};
-    const owners = new Map();
-    arr(items).forEach((item, i) => {
+    const sets = arr(items).map((item, i) => {
       colours[item.id] = ITEM_COLOURS[i % ITEM_COLOURS.length];
-      for (const p of new Set(arr(item.files).map(clean).filter(Boolean))) {
-        if (!owners.has(p)) owners.set(p, []);
-        owners.get(p).push(item.id);
-      }
+      return { id: item.id, changed: arr(item.files).map(clean).filter(Boolean) };
     });
+    const conflicts = cityAgents().collisions(sets).map((c) => ({ path: c.path, items: uniqueSorted(c.runs.map(String)) }));
+    const shared = new Set(conflicts.map((c) => c.path));
     const highlight = {};
-    const conflicts = [];
-    for (const p of [...owners.keys()].sort(byString)) {
-      const ids = owners.get(p);
-      highlight[p] = ids.length > 1 ? CONFLICT_COLOUR : colours[ids[0]];
-      if (ids.length > 1) conflicts.push({ path: p, items: uniqueSorted(ids.map(String)) });
+    for (const s of sets) {
+      for (const p of s.changed) highlight[p] = shared.has(p) ? conflictColour() : colours[s.id];
     }
     return { colours, highlight, conflicts };
   }
@@ -197,7 +196,8 @@
 
   const api = {
     citedPaths,
-    CONFLICT_COLOUR,
+    // CityAgents.COLLISION_COLOUR, read when asked: in the browser city-agents.js may load later
+    get CONFLICT_COLOUR() { return conflictColour(); },
     expectedFiles,
     impactHeader,
     overlayOf,

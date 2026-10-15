@@ -9,7 +9,8 @@
 // - extractTouches(events, { worktree }) → [{ session_id, agent, step, tool, kind, path, ts }];
 //   lastTouches(touches) → each session's last one; trailOf(touches, n) → the last n changed paths;
 //   closedSessions(events) → the sessions whose agents no longer work (shown only while open).
-// - collisions(runs [{ id, changed }]) → [{ path, runs }]: a path two runs or more change.
+// - collisions(runs [{ id, changed }]) → [{ path, runs }]: a path two runs or more change, drawn in
+//   COLLISION_COLOUR (the stage footprint of #375 uses both).
 // - placeAgents(layout, agents) → { robots, cranes, building, trails, collisions }: a changing agent
 //   on its building's roof, a reading one at its door, a file the city lacks as a building under
 //   construction in the district sharing its longest folder prefix.
@@ -21,6 +22,8 @@
   const READ = { Grep: 'path', Read: 'file_path' };
   const TRAIL = 10;
   const SPEEDS = [1, 2, 4, 8, 16];
+  // a building two runs (or two items of a roadmap stage, #375) would change
+  const COLLISION_COLOUR = '#d7263d';
   const arr = (x) => (Array.isArray(x) ? x : []);
   const slashes = (s) => String(s).replace(/\\/g, '/').replace(/\/{2,}/g, '/');
   const isAbsolute = (s) => /^[A-Za-z]:\//.test(s) || s.startsWith('/');
@@ -222,6 +225,7 @@
     CHANGE_TOOLS: Object.keys(CHANGE),
     CityReplay,
     closedSessions,
+    COLLISION_COLOUR,
     collisions,
     districtFor,
     extractTouches,

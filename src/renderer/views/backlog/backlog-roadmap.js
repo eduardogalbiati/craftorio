@@ -104,8 +104,8 @@
     stop: '<svg class="icon" data-icon="stop" viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2" fill="currentColor"/></svg>',
   };
   const COMPLEXITY = /^complexity\s*[:=/-]?\s*(\d+)/i;
-  // an item's issues: its `issues` list, or (an item stored before #163) the item itself as one issue
-  const refs = (x) => (x.issues?.length ? x.issues : x.number ? [{ number: x.number, url: x.url, title: x.title, body: x.body, knownPullRequests: x.knownPullRequests }] : []);
+  // an item's issues (RoadmapModel.itemIssues: an item stored before #163 is its own one issue)
+  const refs = (x) => RoadmapModel.itemIssues(x);
   const may = (r, stage, x) => RoadmapModel.allowedActions(r, stage, x); // #349: the model decides the buttons
   const editable = (x) => may(null, null, x).edit.allowed;
   // #237: the stage run on its own (#141), or -1 when there is none or it is over (no unfinished item,

@@ -74,7 +74,7 @@ const AGENTS = shape({
 // #375: an issue's hit rate for one run, and what the impact overlay reads
 const HIT_RATE = { type: 'number', minimum: 0, maximum: 1 };
 const HIT = shape({ hitRate: HIT_RATE, ts: STRING, run: STRING }, ['hitRate', 'ts', 'run']);
-const IMPACT = shape({ plan: nullable(OBJECT), history: { type: 'object', additionalProperties: listOf(HIT) } }, ['plan', 'history']);
+const IMPACT = shape({ plan: nullable(OBJECT), history: { type: 'object', additionalProperties: listOf(HIT) }, error: nullable(STRING) }, ['plan', 'history']);
 const IMPACT_HISTORY = 'impact-history.json';
 // the project map workflow (#372): its run writes the project's city plan
 const PROJECT_MAP_WORKFLOW = 'project-map.yaml';
@@ -256,17 +256,25 @@ module.exports = (ctx) => {
         const p = projectOf(projectId);
         const file = path.join(root(), p.id, IMPACT_HISTORY);
         let history = {};
+        let error = null;
         try {
           history = JSON.parse(fs.readFileSync(file, 'utf8')) || {};
         } catch (e) {
-          if (e.code !== 'ENOENT') throw e;
+          // an unreadable history (a truncated write, a hand edit) degrades like readPlan: the preview still shows
+          if (e.code !== 'ENOENT') {
+            error = `Could not read ${IMPACT_HISTORY}: ${e.message}`;
+            console.error(`architecture:impact: ${file}: ${e.message}`);
+          }
         }
+        const plan = arch.readPlan(root(), p.id).plan || null;
+        // never overwrite a history that could not be read
+        if (error) return { plan, history: {}, error };
         if (record) {
           history = recordHitRate(history, record.issue, { hitRate: record.hitRate, ts: new Date().toISOString(), run: record.run });
           fs.mkdirSync(path.dirname(file), { recursive: true });
           fs.writeFileSync(file, JSON.stringify(history, null, 2) + '\n');
         }
-        return { plan: arch.readPlan(root(), p.id).plan || null, history };
+        return { plan, history, error: null };
       },
     },
     {

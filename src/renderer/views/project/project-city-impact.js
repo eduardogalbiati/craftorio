@@ -186,9 +186,11 @@
         if (destroyed || mine !== seq) return;
         data = { plan: impact?.plan || null, history: impact?.history || {}, conversation, ...ran };
         draw();
-        // the hit rate, kept per issue so the prediction can be judged over time
+        // the hit rate, kept per issue so the prediction can be judged over time: once per run, not per view
+        // (an unreadable history is never rewritten: the channel refuses it)
         const rate = req.issue ? compare(req.issue)?.hitRate ?? null : null;
-        if (rate == null) return;
+        if (rate == null || impact?.error) return;
+        if ((data.history[String(req.issue.number)] || []).some((h) => h.run === data.run)) return;
         const kept = await api.architectureImpact({ projectId, record: { issue: req.issue.number, hitRate: rate, run: data.run } }).catch(() => null);
         if (kept && !destroyed && mine === seq) { data.history = kept.history; draw(); }
       } catch (e) {
@@ -237,7 +239,7 @@
 
   // a roadmap item as one preview: its issues (the backlog's copy has the body and the runs), their titles and bodies joined
   function itemOf(x, issues) {
-    const refs = (x.issues?.length ? x.issues : x.number ? [x] : []).map((i) => ({ ...i, ...(issues || []).find((b) => b.number === i.number) }));
+    const refs = RoadmapModel.itemIssues(x).map((i) => ({ ...i, ...(issues || []).find((b) => b.number === i.number) }));
     const first = refs[0] || {};
     return { id: x.id, number: first.number, title: refs.map((i) => i.title || `#${i.number}`).join(' + '), body: refs.map((i) => i.body || '').join('\n'), runs: first.runs };
   }

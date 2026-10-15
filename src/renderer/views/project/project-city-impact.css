@@ -19,6 +19,6 @@
 .pci-cmp { display: grid; gap: 4px; padding-top: 6px; border-top: 1px solid var(--r3d-card-line); }
 .pci-cmp span { display: flex; align-items: center; gap: 6px; }
 .pci-rate { color: var(--r3d-ink); }
-.pci-conflicts { display: grid; gap: 4px; padding: 8px 10px; border-radius: 9px; background: color-mix(in srgb, #d7263d 14%, var(--r3d-card)); }
-.pci-conflicts > b { color: #d7263d; }
+.pci-conflicts { display: grid; gap: 4px; padding: 8px 10px; border-radius: 9px; background: color-mix(in srgb, var(--r3d-red) 14%, var(--r3d-card)); }
+.pci-conflicts > b { color: var(--r3d-red); }
 .pci-legend { margin-top: 8px; }
