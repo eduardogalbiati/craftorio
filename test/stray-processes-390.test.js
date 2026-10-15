@@ -15,7 +15,9 @@ const SELF_DESTRUCT_MS = 60000;
 
 function tempWorktree(t) {
   const base = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'stray-390-')));
-  t.after(() => fs.rmSync(base, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }));
+  // best effort: under a loaded suite Windows may keep the folder locked a while after its processes
+  // are gone (the tests check that they are gone); a leftover temp folder is not this test's subject
+  t.after(() => { try { fs.rmSync(base, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }); } catch { /* left in the temp folder */ } });
   const wt = path.join(base, 'worktrees', 'run-390');
   fs.mkdirSync(wt, { recursive: true });
   return { base, wt };
