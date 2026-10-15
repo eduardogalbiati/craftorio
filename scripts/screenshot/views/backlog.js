@@ -3,8 +3,8 @@
 // (views/roadmap.js) and its Conflict map (#150; #354: drawn on the project's page, the Roadmap links
 // to it; demoConflictMap, also on views/project.js), the release run of --release (#291), the Product
 // Owner's conversation, a Backlog Refresh run, the committed cards (views/discovery.js), an issue
-// enriched by Write & Review (demoEnrichRun, also on Artifacts and Duo) and the project's
-// package.json. Opens the Backlog, or the Roadmap screen in its roadmap mode (views/roadmap.js).
+// enriched by Write & Review (demoEnrichRun, also on Artifacts and Duo), the tests known to fail on
+// the base (#405, demoBaseFailures) and the project's package.json. Opens the Backlog, or the Roadmap screen in its roadmap mode (views/roadmap.js).
 
 const fs = require('fs');
 const path = require('path');
@@ -177,11 +177,27 @@ function demoBacklogRefresh(ws, folder, projectId) {
   }
 }
 
+// #405: two tests known to fail on the base (src/base-health.js store), one with its bug issue
+function demoBaseFailures(ws, projectId) {
+  const dir = path.join(ws.backlog, 'base-health');
+  const at = (h) => new Date(Date.now() - h * 3600e3).toISOString();
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, `${projectId}.json`), JSON.stringify({
+    lastGreen: { commit: 'a1b2c3d4e5f6', at: at(14) },
+    failures: [
+      { test: 'splits a long run into resumable parts', file: 'test/slow/engine-run-split-250.slow.test.js', first_seen: at(13), last_seen: at(1), runs: ['20261015-011200-aa11', '20261015-093000-bb22'], issue: { number: 412, url: `${DEMO_REPO}/issues/412` } },
+      { test: 'rule names stay sorted', file: 'test/workflow-rules-352.test.js', first_seen: at(3), last_seen: at(3), runs: ['20261015-113000-cc33'], issue: null },
+    ],
+  }, null, 2));
+}
+
 function seed({ args, ws, project }) {
   demoLocalMerge(ws, project.id);
   // #260: the "Released" badge on the issues the history shipped
   demoReleases(ws, project.id);
   demoRoadmap(ws, project.id, args.live, args.budget, args.roadmap);
+  // #405: the Roadmap's "known failures on the base" line
+  demoBaseFailures(ws, project.id);
   // #150: the Roadmap's Conflict map
   demoConflictMap(ws, project.id);
   // #291: the release v0.10 of the roadmap's cut line, in a state (needs the history: Backlog only)
