@@ -381,24 +381,41 @@ function runState(runDir) {
 // a resumed run reuses the folder named after the run it resumes, whose own run folder has ended
 // (claimed from its workflow.started already, before its worktree.ready).
 function liveWorktrees(runsDir, worktreesDir) {
+  return worktreeRuns(runsDir, worktreesDir, { liveOnly: true }).flatMap((r) => r.dirs);
+}
+
+// #406: the worktree folders each run works or worked in, [{ runId, dirs, live }] (live as in
+// liveWorktrees). A run without summary.json from its events, an ended one from its summary. `since`:
+// only the runs whose id (it starts with the run's start time) is not older; `liveOnly`: live runs only.
+function worktreeRuns(runsDir, worktreesDir, { since = '', liveOnly = false } = {}) {
   let names = [];
-  try { names = fs.readdirSync(runsDir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name); } catch { names = []; }
-  const dirs = [];
+  try { names = fs.readdirSync(runsDir, { withFileTypes: true }).filter((d) => d.isDirectory() && d.name >= since).map((d) => d.name); } catch { names = []; }
+  const runs = [];
   for (const name of names) {
     const runDir = path.join(runsDir, name);
-    if (fs.existsSync(path.join(runDir, 'summary.json')) || !runState(runDir).live) continue;
+    const resumedDir = (from) => from?.run_id && path.join(worktreesDir, String(from.run_id));
+    if (fs.existsSync(path.join(runDir, 'summary.json'))) {
+      if (liveOnly) continue;
+      const summary = readJson(path.join(runDir, 'summary.json'));
+      runs.push({ runId: name, live: false, dirs: [summary?.worktree?.dir, summary?.worktree?.work_dir, resumedDir(summary?.resumed_from)].filter(Boolean) });
+      continue;
+    }
+    const live = runState(runDir).live;
+    if (liveOnly && !live) continue;
     let text = '';
     try { text = fs.readFileSync(path.join(runDir, 'events.jsonl'), 'utf8'); } catch { continue; }
+    const dirs = [];
     for (const line of text.split('\n')) {
       if (!line.includes('"worktree.ready"') && !line.includes('"resumed_from"')) continue;
       try {
         const ev = JSON.parse(line);
         if (ev.type === 'worktree.ready') dirs.push(ev.dir, ev.work_dir);
-        else if (ev.type === 'workflow.started' && ev.resumed_from?.run_id) dirs.push(path.join(worktreesDir, ev.resumed_from.run_id));
+        else if (ev.type === 'workflow.started') dirs.push(resumedDir(ev.resumed_from));
       } catch { /* a line being written */ }
     }
+    runs.push({ runId: name, live, dirs: dirs.filter(Boolean) });
   }
-  return dirs.filter(Boolean);
+  return runs;
 }
 
 // Records a worktree the cleanup removed in its run (events.jsonl, and summary.json when there).
@@ -480,4 +497,5 @@ module.exports = {
   removeScratch,
   restoreWork,
   retireWorktree,
+  worktreeRuns,
 };

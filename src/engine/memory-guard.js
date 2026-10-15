@@ -25,7 +25,8 @@
 // a process whose command line names a file of a finished run's worktree and that used at least half
 // a core between two samples is a stray (strayProcesses, onStray once per process), named with its
 // run and command. Only the owner stops one (stopStray, with its children): the guard never does on
-// its own, and never offers a live run's process. The app's guard gets its runs from the service
+// its own, and never offers a live run's process: a worktree any live entry names spares its
+// processes, whatever run they were flagged for (#406: a run resumed into it). The app's guard gets its runs from the service
 // (watchStrays, src/service/areas/runs.js): a notification per stray, memory:stopStray stops it.
 
 const fs = require('fs');
@@ -270,8 +271,10 @@ function createMemoryGuard({ limitBytes, floorBytes, intervalMs = 5000, sampler,
     const found = [];
     for (const p of procs) {
       if (!busy.has(p.pid) || p.pid === process.pid) continue;
-      const run = list.find((r) => r.worktree && commandMentions(p.commandLine, r.worktree));
-      if (!run || run.live) continue;
+      // #406: several runs may name one worktree (a run resumed into it): any live one spares it
+      const runsOf = list.filter((r) => r.worktree && commandMentions(p.commandLine, r.worktree));
+      const run = runsOf.find((r) => !r.live);
+      if (!run || runsOf.some((r) => r.live)) continue;
       found.push({ pid: p.pid, ppid: p.ppid, runId: run.id, worktree: run.worktree, commandLine: cut(p.commandLine), bytes: p.bytes, cpuShare: Math.round(busy.get(p.pid) * 100) / 100 });
     }
     const flagged = new Set(found.map((s) => s.pid));
@@ -375,11 +378,17 @@ function createMemoryGuard({ limitBytes, floorBytes, intervalMs = 5000, sampler,
     async strayProcesses() {
       return strays.map((s) => ({ ...s }));
     },
-    /** Stops a flagged stray with its children; throws for any other process or when its run is live again. */
+    /**
+     * Stops a flagged stray with its children; throws for any other process, when its run is live
+     * again or when a live run works in its worktree now (#406: a run resumed into it).
+     */
     async stopStray(pid) {
       const s = strays.find((x) => x.pid === Number(pid));
       if (!s) throw new Error(`Process ${pid} is not a stray process of a finished run`);
-      if ((runs?.() || []).some((r) => r.id === s.runId && r.live)) throw new Error(`Process ${pid} belongs to run ${s.runId}, which is running`);
+      const list = runs?.() || [];
+      if (list.some((r) => r.id === s.runId && r.live)) throw new Error(`Process ${pid} belongs to run ${s.runId}, which is running`);
+      const user = list.find((r) => r.live && r.worktree && commandMentions(s.commandLine, r.worktree));
+      if (user) throw new Error(`Process ${pid} runs in the worktree of run ${user.id}, which is running`);
       await kill(s.pid, lastSubtree(s.pid).map((c) => c.pid));
       strays = strays.filter((x) => x !== s);
       return { pid: s.pid, runId: s.runId, commandLine: s.commandLine };

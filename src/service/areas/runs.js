@@ -14,7 +14,11 @@ const {
 const { Recorder } = require('../../engine/recorder');
 const { resolveCommand } = require('../../engine/providers');
 const simulation = require('../../engine/simulation');
-const { cleanupWorktrees } = require('../../engine/worktree');
+const {
+  cleanupWorktrees,
+  samePath,
+  worktreeRuns,
+} = require('../../engine/worktree');
 const {
   configureMemoryGuard,
   memoryProblem,
@@ -100,9 +104,11 @@ module.exports = (ctx) => {
   }
 
   // #390: the guard also flags a process under a finished run's worktree that keeps using CPU. Its
-  // runs are the folders of worktrees/ (<runId> and <runId>-base), live while the run is in progress
-  // here or in another app process; each stray is a notification, memory:stopStray stops it. Started
-  // with the workspace (strays of an earlier app session too), never in automated checks.
+  // runs are the folders of worktrees/ (<runId> and <runId>-base); each stray is a notification,
+  // memory:stopStray stops it. Started with the workspace (strays of an earlier app session too),
+  // never in automated checks. #406: a folder is live while any run uses it, here or in another app
+  // process (a run resumed into an earlier run's worktree too), and a stray under it is named with
+  // the last run that used it (run ids start with their start time).
   function watchStrayProcesses() {
     if (simulation.simulationOnly() || !ctx.ws) return;
     const guard = applyMemorySettings();
@@ -110,9 +116,17 @@ module.exports = (ctx) => {
     const runsOfWorktrees = () => {
       let names = [];
       try { names = fs.readdirSync(ctx.ws.worktrees, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name); } catch { return []; }
-      return names.map((name) => {
-        const id = name.replace(/-base$/, '');
-        return { id, worktree: path.join(ctx.ws.worktrees, name), live: active.has(id) || runAlive(id) };
+      const ids = names.map((name) => name.replace(/-base$/, ''));
+      // a run using a worktree started after the run it is named after
+      const since = ids.reduce((a, b) => (a && a < b ? a : b), '');
+      const used = worktreeRuns(ctx.ws.runs, ctx.ws.worktrees, { since });
+      const inUse = activeWorktreeDirs();
+      return names.map((name, i) => {
+        const id = ids[i];
+        const main = path.join(ctx.ws.worktrees, id);
+        const users = used.filter((r) => r.dirs.some((d) => samePath(d, main)));
+        const live = active.has(id) || runAlive(id) || inUse.some((d) => samePath(d, main)) || users.some((r) => r.live);
+        return { id: [id, ...users.map((r) => r.runId)].sort().pop(), worktree: path.join(ctx.ws.worktrees, name), live };
       });
     };
     guard.watchStrays({
@@ -534,11 +548,13 @@ module.exports = (ctx) => {
     cleaning ??= cleanupPass().finally(() => { cleaning = null; });
     return cleaning;
   };
+  // the worktree folders the runs of `active` use (a resumed run's is the earlier run's, #406)
+  const activeWorktreeDirs = () => [...active.values()].flatMap((r) => [r.worktree?.dir, r.resume?.worktree?.dir, path.join(ctx.ws.worktrees, r.runId), path.join(ctx.ws.worktrees, `${r.runId}-base`)]).filter(Boolean);
   const cleanupPass = async () => {
     if (!ctx.ws) return [];
     const removed = await cleanupWorktrees({
       worktreesDir: ctx.ws.worktrees, runsDir: ctx.ws.runs,
-      active: () => [...active.values()].flatMap((r) => [r.worktree?.dir, r.resume?.worktree?.dir, path.join(ctx.ws.worktrees, r.runId), path.join(ctx.ws.worktrees, `${r.runId}-base`)]).filter(Boolean),
+      active: activeWorktreeDirs,
     });
     try { pruneDepsCache({ cacheDir: path.join(ctx.ws.cache, 'deps') }); } catch (e) { console.error('dependency cache cleanup:', e.message); }
     return removed;
