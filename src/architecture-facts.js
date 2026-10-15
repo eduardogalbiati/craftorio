@@ -5,9 +5,12 @@
 // .git-blame-ignore-revs and .gitattributes at that commit, and whether the clone is shallow. The
 // numbers come from the pure core (src/shared/architecture-model.js buildModel), cached per commit,
 // window, exclude list and mass-change toggle.
-// Complexity only from a real tool (lizard, the fallback for any language, when the machine has
-// it) and only when the checkout is at that commit; its output is checked (core checkComplexity)
-// and a failed check is shown, never hidden. Without a tool the model names the tools needed.
+// Complexity only from a real parser or tool: JavaScript and TypeScript inside the app (#385), at
+// that commit (`git cat-file --batch`), with scripts/code-health.js's core
+// (src/shared/code-complexity.js), no tool to install; the other languages from lizard when the
+// machine has it and the checkout is at that commit; lizard's output is checked (core
+// checkComplexity) and a failed check is shown, never hidden. The model names the code languages
+// not measured, the tools they need and how to install lizard (`pip install lizard`).
 // The project's own quality gate (complexity, coverage, duplication in its CI or package.json) is
 // listed with each input measured (its own report found), pending (configured, no report) or
 // missing; missing evidence is never shown as clean.
@@ -21,18 +24,29 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
-const { execFile } = require('child_process');
+const {
+  execFile,
+  spawn,
+} = require('child_process');
 const {
   buildModel,
   checkComplexity,
   DEFAULT_EXCLUDES,
+  globRe,
   parseIgnoreRevs,
 } = require('./shared/architecture-model');
 const { buildCity } = require('./shared/city-model');
+const {
+  measures,
+  measureSource,
+} = require('./shared/code-complexity');
 const { resolveCommand } = require('./engine/providers');
 
 const GIT_TIMEOUT_MS = 120e3;
 const TOOL_TIMEOUT_MS = 300e3;
+// a larger JavaScript file is a bundle, not code written by hand
+const MAX_SOURCE_BYTES = 1 << 20;
+const LIZARD_INSTALL = 'pip install lizard';
 const MAX_BUFFER = 1 << 28;
 const CACHE_SIZE = 20;
 const DEFAULT_BRANCHES = ['main', 'master'];
@@ -113,10 +127,75 @@ function parseLizard(text) {
   return functions;
 }
 
-// { tool, metric, functions, check } measured at the checkout, or { status, reason } (missing / failed)
-async function measureComplexity(folder, commit) {
+// { path: text } of `paths` at `commit`, in one `git cat-file --batch`; a missing or too large
+// file is left out (and so not measured)
+function readBlobs(folder, commit, paths) {
+  if (!paths.length) return Promise.resolve({});
+  return new Promise((resolve) => {
+    const child = spawn('git', ['cat-file', '--batch'], { cwd: folder, windowsHide: true, stdio: ['pipe', 'pipe', 'ignore'] });
+    const chunks = [];
+    const timer = setTimeout(() => child.kill(), GIT_TIMEOUT_MS);
+    child.stdout.on('data', (chunk) => chunks.push(chunk));
+    child.on('error', () => resolve({}));
+    child.on('close', () => {
+      clearTimeout(timer);
+      resolve(parseBlobs(Buffer.concat(chunks), paths));
+    });
+    child.stdin.on('error', () => {});
+    child.stdin.end(paths.map((p) => `${commit}:${p}\n`).join(''));
+  });
+}
+
+// `git cat-file --batch` output: per path `<sha> blob <size>\n<bytes>\n` or `<name> missing\n`
+function parseBlobs(buffer, paths) {
+  const texts = {};
+  let at = 0;
+  for (const p of paths) {
+    const eol = buffer.indexOf(10, at);
+    if (eol < 0) break;
+    const [, type, size] = buffer.toString('utf8', at, eol).split(' ');
+    at = eol + 1;
+    if (type !== 'blob') continue;
+    if (Number(size) <= MAX_SOURCE_BYTES) texts[p] = buffer.toString('utf8', at, at + Number(size));
+    at += Number(size) + 1;
+  }
+  return texts;
+}
+
+// JavaScript and TypeScript measured inside the app at `commit` (#385), with code-health.js's core:
+// { functions, files (the paths measured, with or without a function) }; a file that does not
+// parse is not measured
+async function measureInApp(folder, commit, files) {
+  const skipped = [...DEFAULT_EXCLUDES.build, ...DEFAULT_EXCLUDES.vendored].map(globRe);
+  const paths = files.map((f) => f.path).filter((p) => measures(p) && !skipped.some((re) => re.test(p)));
+  const functions = [];
+  const measured = [];
+  for (const [file, text] of Object.entries(await readBlobs(folder, commit, paths))) {
+    try {
+      for (const f of measureSource(text, { file })) functions.push({ file, name: f.name, line: f.line, complexity: f.complexity, length: f.lines });
+      measured.push(file);
+    } catch { /* not measured */ }
+  }
+  return { functions, files: measured };
+}
+
+// The app's own measure (JavaScript, TypeScript) and lizard's for the other languages: { tool,
+// metric, functions, files, check, reason, install } (reason / install: why lizard did not measure
+// the other languages, and how to install it), or lizard's own result when the app measured nothing
+async function measureComplexity(folder, commit, files) {
+  const [own, lizard] = await Promise.all([measureInApp(folder, commit, files), measureLizard(folder, commit)]);
+  if (!own.files.length) return lizard;
+  const others = lizard.functions ? lizard.functions.filter((f) => !measures(f.file)) : [];
+  const functions = [...own.functions, ...others];
+  const tool = lizard.functions ? 'the app (JavaScript, TypeScript) and lizard' : 'the app (JavaScript, TypeScript)';
+  return { tool, metric: 'cyclomatic', functions, files: own.files, check: checkComplexity(functions), reason: lizard.reason || null, install: lizard.install || null };
+}
+
+// lizard's { tool, metric, functions, check } measured at the checkout, or { status, reason,
+// install } (missing / failed)
+async function measureLizard(folder, commit) {
   const lizard = resolveCommand('lizard');
-  if (!lizard) return { status: 'missing', reason: 'lizard is not installed (pip install lizard)' };
+  if (!lizard) return { status: 'missing', reason: 'lizard is not installed', install: LIZARD_INSTALL };
   const checkedOut = (await tryGit(folder, ['rev-parse', 'HEAD']) || '').trim();
   if (checkedOut !== commit) return { status: 'missing', reason: 'the checkout is not at the default branch\'s commit: complexity is measured on the files on disk' };
   const skip = [...DEFAULT_EXCLUDES.build, ...DEFAULT_EXCLUDES.vendored].filter((p) => p.endsWith('/')).flatMap((p) => ['-x', `./${p}*`]);
@@ -198,7 +277,7 @@ async function readsAt(folder, commit, commitKey) {
     showAt(folder, commit, '.git-blame-ignore-revs'),
     showAt(folder, commit, '.gitattributes'),
   ]);
-  const [complexity, gate] = await Promise.all([measureComplexity(folder, commit), qualityGate(folder, commit, files)]);
+  const [complexity, gate] = await Promise.all([measureComplexity(folder, commit, files), qualityGate(folder, commit, files)]);
   const reads = { date: date.trim(), gate, sources: { shallow: String(shallow).trim() === 'true', files, log, ignoreRevs: parseIgnoreRevs(revs), attributes, complexity } };
   if (files.length) {
     readsCache.set(commitKey, reads);

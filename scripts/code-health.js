@@ -1,9 +1,8 @@
 // Code health (issue #344): measures every function under src/ and scripts/ with a real JS parser
-// (acorn, a pinned dev dependency): its lines, cyclomatic complexity (1 + each `if`, `else if`,
-// ternary, `&&`, `||`, `??`, `case`, `catch` and loop), max nesting and parameter count. A nested
-// function is measured on its own. Functions are named after their binding (declaration, variable,
-// method, property, assignment); a callback is named after the call it is passed to, prefixed by
-// its enclosing function (`register/on callback`); a repeated name in a file gets ` #2`, ` #3`.
+// (acorn, a pinned runtime dependency): its lines, cyclomatic complexity (1 + each `if`, `else if`,
+// ternary, `&&`, `||`, `??`, `case`, `catch` and loop), max nesting and parameter count. The
+// measure and the function names are the shared core's (src/shared/code-complexity.js, #385), so
+// the Architecture facts give the same numbers.
 // Two ratchets sit next to #334's line ratchet (scripts/file-size-ratchet.js):
 // - complexity: no function above MAX_COMPLEXITY; COMPLEXITY_EXCEPTIONS lists the ones above it
 //   when the rule came, with their value: a listed function may not grow, and one that drops to
@@ -29,7 +28,6 @@
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
-const acorn = require('acorn');
 const { DIRS, listFiles } = require('./file-size-ratchet');
 const {
   byHotness,
@@ -43,12 +41,12 @@ const {
   sortKeys,
   walkHistory,
 } = require('../src/shared/architecture-model');
+const { measureSource } = require('../src/shared/code-complexity');
 
 const ROOT = path.join(__dirname, '..');
 const MAX_COMPLEXITY = 25;
 const MIN_DUPLICATE_LINES = 8;
 const HOW_TO = 'docs/agents/testing.md ("Code health")';
-const ANONYMOUS = '(anonymous)';
 
 // '<file>:<function name>' -> its complexity when listed; only lower it
 const COMPLEXITY_EXCEPTIONS = {
@@ -169,134 +167,9 @@ const DUPLICATION_BASELINE = {
 
 // ---------- the metric ----------
 
-const PARSE_OPTIONS = { ecmaVersion: 'latest', locations: true, allowHashBang: true, allowReturnOutsideFunction: true, allowAwaitOutsideFunction: true, allowImportExportEverywhere: true };
-
-function parse(code, file) {
-  try {
-    return acorn.parse(code, { ...PARSE_OPTIONS, sourceType: 'module' });
-  } catch {
-    try {
-      return acorn.parse(code, { ...PARSE_OPTIONS, sourceType: 'script' });
-    } catch (err) {
-      throw new Error(`${file}: cannot parse (${err.message})`);
-    }
-  }
-}
-
-const FUNCTIONS = new Set(['ArrowFunctionExpression', 'FunctionDeclaration', 'FunctionExpression']);
-const BRANCHES = new Set(['CatchClause', 'ConditionalExpression', 'DoWhileStatement', 'ForInStatement', 'ForOfStatement', 'ForStatement', 'IfStatement', 'LogicalExpression', 'WhileStatement']);
-// the children of a node that sit one nesting level deeper
-const NESTED_BODIES = {
-  DoWhileStatement: ['body'],
-  ForInStatement: ['body'],
-  ForOfStatement: ['body'],
-  ForStatement: ['body'],
-  IfStatement: ['consequent', 'alternate'],
-  SwitchStatement: ['cases'],
-  TryStatement: ['block', 'handler', 'finalizer'],
-  WhileStatement: ['body'],
-};
-const NOT_CHILDREN = new Set(['end', 'loc', 'range', 'start', 'type']);
-
-function* children(node) {
-  for (const key of Object.keys(node)) {
-    if (NOT_CHILDREN.has(key)) continue;
-    const value = node[key];
-    const list = Array.isArray(value) ? value : [value];
-    for (const child of list) if (child && typeof child.type === 'string') yield [key, child];
-  }
-}
-
-function branchPoints(node) {
-  if (node.type === 'SwitchCase') return node.test ? 1 : 0;
-  return BRANCHES.has(node.type) ? 1 : 0;
-}
-
-// `else if` stays at its `if`'s level; the bodies of an if, a loop, a switch or a try go one deeper.
-function childDepth(node, key, child, depth) {
-  const bodies = NESTED_BODIES[node.type];
-  if (!bodies || !bodies.includes(key)) return depth;
-  if (key === 'alternate' && child.type === 'IfStatement') return depth;
-  return depth + 1;
-}
-
-function keyName(key, computed) {
-  if (!key || computed) return null;
-  if (key.type === 'Identifier') return key.name;
-  if (key.type === 'PrivateIdentifier') return `#${key.name}`;
-  return key.type === 'Literal' ? String(key.value) : null;
-}
-
-// `name('label')` when a call's first argument is a string: `$('#save').onclick`, `on('exit', …)`.
-function labelled(name, call) {
-  const first = call && call.arguments && call.arguments[0];
-  return name && first && first.type === 'Literal' && typeof first.value === 'string' ? `${name}(${first.value.slice(0, 40)})` : name;
-}
-
-function assignedName(left) {
-  if (left.type === 'Identifier') return left.name;
-  if (left.type !== 'MemberExpression') return null;
-  return labelled(keyName(left.property, left.computed), left.object.type === 'CallExpression' ? left.object : null);
-}
-
-function calleeName(call) {
-  const { callee } = call;
-  if (callee.type === 'Identifier') return labelled(callee.name, call);
-  return callee.type === 'MemberExpression' ? labelled(keyName(callee.property, callee.computed), call) : null;
-}
-
-// The name a function is known by, and whether it is a binding (vs. a callback or anonymous).
-function bindingName(node, parent) {
-  if (node.id) return node.id.name;
-  switch (parent && parent.type) {
-    case 'VariableDeclarator': return parent.id.type === 'Identifier' ? parent.id.name : null;
-    case 'MethodDefinition':
-    case 'Property':
-    case 'PropertyDefinition': return keyName(parent.key, parent.computed);
-    case 'AssignmentExpression': return assignedName(parent.left);
-    case 'ExportDefaultDeclaration': return 'default';
-    default: return null;
-  }
-}
-
-function functionName(node, parent, outer) {
-  const bound = bindingName(node, parent);
-  if (bound) return bound;
-  const call = parent && (parent.type === 'CallExpression' || parent.type === 'NewExpression') && parent.callee !== node ? calleeName(parent) : null;
-  const name = call ? `${call} callback` : ANONYMOUS;
-  return outer ? `${outer}/${name}` : name;
-}
-
-// Walks one function's own code: branch points and nesting; nested functions go to `state.inner`.
-function walk(node, parent, depth, state) {
-  if (FUNCTIONS.has(node.type) && node !== state.fn) {
-    state.inner.push({ node, name: functionName(node, parent, state.name) });
-    return;
-  }
-  state.complexity += branchPoints(node);
-  state.nesting = Math.max(state.nesting, depth);
-  for (const [key, child] of children(node)) walk(child, node, childDepth(node, key, child, depth), state);
-}
-
+// The measure is the shared core's (src/shared/code-complexity.js, #385), the Architecture facts' too
 // [{ name, file, line, lines, complexity, nesting, params }] for every function of a source text.
-function analyzeSource(code, file) {
-  const queue = [];
-  walk(parse(code, file), null, 0, { fn: null, name: null, inner: queue, complexity: 0, nesting: 0 });
-  const measured = [];
-  while (queue.length) {
-    const { node, name } = queue.shift();
-    const state = { fn: node, name, inner: queue, complexity: 1, nesting: 0 };
-    walk(node, null, 0, state);
-    const { start, end } = node.loc;
-    measured.push({ at: node.start, name, file, line: start.line, lines: end.line - start.line + 1, complexity: state.complexity, nesting: state.nesting, params: node.params.length });
-  }
-  const seen = new Map();
-  return measured.sort((a, b) => a.at - b.at).map(({ at, ...f }) => {
-    const n = (seen.get(f.name) || 0) + 1;
-    seen.set(f.name, n);
-    return n === 1 ? f : { ...f, name: `${f.name} #${n}` };
-  });
-}
+const analyzeSource = (code, file) => measureSource(code, { file });
 
 const sourceFiles = (root) => DIRS.flatMap((d) => listFiles(root, d)).sort();
 const readSource = (root, file) => fs.readFileSync(path.join(root, ...file.split('/')), 'utf8');

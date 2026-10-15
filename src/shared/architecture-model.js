@@ -7,7 +7,8 @@
 // the sources the service reads at the default branch's commit (src/architecture-facts.js) and
 // gives lines, churn, hotspots (lines × commits), co-change pairs, languages, exclusions (per
 // group), mass changes (> 25% of the files, kept unless includeMass is false), complexity per file
-// (total, worst function and function count, only from a real tool) and the monthly Danger Zone frames. Keys sorted,
+// (total, worst function and function count, only from a real parser or tool; the code languages
+// none measured are named, #385) and the monthly Danger Zone frames. Keys sorted,
 // dates from the commits only. Browser: window.ArchitectureModel; Node: module.exports.
 (function (root) {
   const QUADRANTS = ['Danger Zone', 'Cowboy Code', 'Fertile Ground', 'Healthy Closure'];
@@ -37,14 +38,22 @@
     '.ts': 'TypeScript', '.tsx': 'TypeScript', '.mts': 'TypeScript', '.cts': 'TypeScript', '.vue': 'Vue', '.yaml': 'YAML', '.yml': 'YAML',
   };
 
-  // The tool that would measure a language's complexity (cyclomatic)
+  // The tool that would measure a language's complexity (cyclomatic); JavaScript and TypeScript
+  // need none: the app measures them itself (src/shared/code-complexity.js, #385)
   const COMPLEXITY_TOOLS = {
+    C: 'lizard',
+    'C#': 'lizard',
+    'C++': 'lizard',
     Go: 'gocyclo',
-    JavaScript: 'eslint (complexity rule)',
+    Java: 'lizard',
+    Kotlin: 'lizard',
+    PHP: 'lizard',
     Python: 'radon or lizard',
+    Ruby: 'lizard',
     Rust: 'clippy or rust-code-analysis',
-    TypeScript: 'eslint (complexity rule) or the TypeScript compiler API',
+    Swift: 'lizard',
   };
+  const MEASURED_IN_APP = ['JavaScript', 'TypeScript'];
   const ANY_LANGUAGE_TOOL = 'lizard (any other language)';
 
   // `{a => b}/c` or `a => b` (a --numstat rename) → [old, new]
@@ -263,14 +272,24 @@
     return [...by.values()].sort((a, b) => b.lines - a.lines || a.language.localeCompare(b.language));
   }
 
-  // { status: 'measured', tool, metric, check } or { status: 'missing' | 'failed', needed, reason }
-  function complexityStatus(input, languages) {
-    if (input && Array.isArray(input.functions)) {
-      return { status: 'measured', tool: input.tool || null, metric: input.metric || 'cyclomatic', functions: input.functions.length, check: input.check || null };
+  // { status: 'measured', tool, metric, check } or { status: 'missing' | 'failed', reason }; both
+  // with { unmeasured: [the code languages no file of which is measured], needed: [their tools],
+  // reason (why), install (the command that installs the missing tool, or null) } (#385)
+  function complexityStatus(input, rows) {
+    const measured = input && Array.isArray(input.functions);
+    const code = (language) => MEASURED_IN_APP.includes(language) || language in COMPLEXITY_TOOLS;
+    const languages = new Set(rows.filter((r) => code(r.language)).map((r) => r.language));
+    for (const r of rows) if (r.complexity !== null) languages.delete(r.language);
+    const unmeasured = [...languages].sort();
+    const tools = unmeasured.map((l) => COMPLEXITY_TOOLS[l]).filter(Boolean);
+    const needed = [...new Set(measured ? tools : [...tools, ANY_LANGUAGE_TOOL])];
+    const install = (input && input.install) || null;
+    const why = (input && input.reason) || null;
+    if (measured) {
+      return { status: 'measured', tool: input.tool || null, metric: input.metric || 'cyclomatic', functions: input.functions.length, check: input.check || null, unmeasured, needed, reason: unmeasured.length ? why : null, install: unmeasured.length ? install : null };
     }
-    const needed = [...new Set([...languages.map((l) => COMPLEXITY_TOOLS[l.language]).filter(Boolean), ANY_LANGUAGE_TOOL])];
     const status = input && input.status === 'failed' ? 'failed' : 'missing';
-    return { status, needed, reason: (input && input.reason) || 'no complexity tool found on this machine' };
+    return { status, needed, unmeasured, reason: why || 'no complexity tool found on this machine', install };
   }
 
   // The three longest functions and what looks wrong in a tool's output (a failed check is shown)
@@ -310,8 +329,10 @@
     return frames;
   }
 
-  function measuredRows(rows, functions) {
-    const own = new Map();
+  // The rows of the measured files: a file with functions, or one the tool read without finding a
+  // function (`files`: 0, as scripts/code-health.js counts it); any other file stays null
+  function measuredRows(rows, functions, files) {
+    const own = new Map((files || []).map((file) => [file, []]));
     for (const f of functions) {
       const list = own.get(f.file) || [];
       list.push(f);
@@ -369,15 +390,15 @@
       if (top) r.co_change = { file: top.a === r.file ? top.b : top.a, share: top.share };
     }
     const languages = languageLines(rows);
-    const complexity = complexityStatus(sources.complexity, languages);
     let frames = [];
     let danger_zone = [];
-    if (complexity.status === 'measured') {
-      const measured = measuredRows(rows, sources.complexity.functions);
+    if (sources.complexity && Array.isArray(sources.complexity.functions)) {
+      const measured = measuredRows(rows, sources.complexity.functions, sources.complexity.files);
       placeQuadrants(measured);
       danger_zone = measured.filter((r) => r.quadrant === QUADRANTS[0]).sort(byHotness).map((r) => ({ file: r.file, score: r.score }));
       frames = dangerFrames(measured, counted);
     }
+    const complexity = complexityStatus(sources.complexity, rows);
     return sortKeys({
       branch: sources.branch || null,
       commits: counted.length,

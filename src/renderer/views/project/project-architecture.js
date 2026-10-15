@@ -3,7 +3,8 @@
 // "Send to Refactor" (architecture:sendToRefactor, a proposal of the Refactor tab). Then the git
 // facts (architecture:facts, numbers from src/shared/architecture-model.js): the hotspot table
 // (file, lines, commits, rank, top co-changing file; complexity, worst function and quadrant when a
-// real tool measured them), the Danger Zone scatter and its formula, the monthly frames, the
+// real parser or tool measured them, "—" for a file not measured, never 0), the note naming the
+// code languages not measured and how to install lizard (#385), the Danger Zone scatter and its formula, the monthly frames, the
 // languages, the exclusions (editable, architecture:setExclude), the mass changes, the commit,
 // window and shallow clone, the project's own quality gate, and what the numbers cannot tell.
 // Controls: the report picker, the From / To range and the mass-change toggle. States: not a git
@@ -270,7 +271,20 @@
   function complexityNote(c) {
     if (c.status === 'measured') return `Complexity: ${esc(c.metric)} from ${esc(c.tool)}${c.check?.longest?.length ? ` (longest functions: ${c.check.longest.map((f) => `${esc(f.file)} ${esc(f.name)} ${f.length} lines → ${f.complexity}`).join('; ')})` : ''}.`;
     const why = c.status === 'failed' ? `the tool's check failed: ${esc(c.reason)}` : esc(c.reason);
-    return `Complexity not measured (${why}). It needs ${esc((c.needed || []).join(', '))}; churn and size are shown meanwhile, never a guess.`;
+    // the languages not measured and their tools are in the measure note
+    const needs = c.unmeasured?.length ? '' : ` It needs ${esc((c.needed || []).join(', '))};`;
+    return `Complexity not measured (${why}).${needs} Churn and size are shown meanwhile, never a guess.`;
+  }
+
+  // The code languages no file of which is measured, and how to measure them (#385): JavaScript and
+  // TypeScript are measured inside the app, the others need lizard (which needs Python)
+  function measureNoteHtml(c) {
+    if (!c.unmeasured?.length) return '';
+    const names = c.unmeasured.map((l) => `<span class="badge" data-testid="architecture-unmeasured-language">${esc(l)}</span>`).join(' ');
+    const how = c.install
+      ? `To measure them, install lizard: <span class="mono">${esc(c.install)}</span> (lizard needs Python).`
+      : `They need ${esc((c.needed || []).join(', '))}${c.reason ? ` (${esc(c.reason)})` : ''}.`;
+    return `<p class="small muted" data-testid="architecture-measure-note">Complexity not measured for ${names}: their files show no complexity, never 0. ${how}</p>`;
   }
 
   function excludeHtml(model) {
@@ -300,6 +314,7 @@
       <p class="small">${model.languages.map((l) => `<span class="badge">${esc(l.language)} ${fmtNum(l.lines)}</span>`).join(' ')}</p>
       ${excludeHtml(model)}
       <p class="small muted">${complexityNote(model.complexity)}</p>
+      ${measureNoteHtml(model.complexity)}
       ${hotspotsHtml(model)}
       ${model.complexity.status === 'measured' ? scatterHtml(model) : ''}
       ${gateHtml(f.gate)}

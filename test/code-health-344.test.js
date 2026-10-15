@@ -79,12 +79,13 @@ const fileRow = (report, file) => report.files.find((f) => f.file === file);
 
 // ---------- the parser and the metric ----------
 
-test('#344 the parser is a pinned dev dependency and the script does not load Playwright', () => {
+// #385: the app measures JavaScript with the same parser, so it ships as a runtime dependency
+test('#344 the parser is a pinned runtime dependency and the script does not load Playwright', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-  const dev = pkg.devDependencies || {};
-  const parser = ['@babel/parser', 'acorn'].find((p) => p in dev);
-  assert.ok(parser, 'package.json devDependencies has @babel/parser or acorn');
-  assert.match(dev[parser], /^\d+\.\d+\.\d+$/, `${parser} is pinned to an exact version`);
+  const deps = pkg.dependencies || {};
+  const parser = ['@babel/parser', 'acorn'].find((p) => p in deps);
+  assert.ok(parser, 'package.json dependencies has @babel/parser or acorn');
+  assert.match(deps[parser], /^\d+\.\d+\.\d+$/, `${parser} is pinned to an exact version`);
   assert.equal(/playwright/i.test(fs.readFileSync(SCRIPT, 'utf8')), false, 'scripts/code-health.js never imports Playwright');
 });
 

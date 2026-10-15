@@ -1210,9 +1210,15 @@ branch), merges skipped, the creating commit not counted, renames followed,
 mass changes (counted by default, with a toggle). Lock files, build output, tests, vendored code and
 `.gitattributes`' `linguist-generated` / `linguist-vendored` files are excluded, with a count per
 group, plus an editable list per project. The commit, the window (From / To) and a shallow clone are
-shown. Complexity per function comes only from a real tool (lizard when the machine has it, checked
-before use); without one the tab names the tool needed and shows churn and size only. With it, each
-file has its total complexity and its worst function, sits in a quadrant (Danger Zone, Cowboy Code,
+shown. Complexity per function comes only from a real parser or tool, never a guess (#385):
+JavaScript and TypeScript are measured inside the app, with no tool to install and no Python, read
+at the facts' commit with the same parser and rules as `scripts/code-health.js` (acorn; one core,
+`src/shared/code-complexity.js`, so both give the same numbers; TypeScript's types are stripped
+first, so `enum`, `namespace` and JSX files are not measured). The other languages (Python, Go,
+Rust, Java, C#, C/C++, Kotlin, PHP, Ruby, Swift) come from lizard when the machine has it and the
+checkout is at that commit, its output checked before use. Without it, the tab names the languages
+not measured and how to measure them (`pip install lizard`, which needs Python); their files show no
+complexity ("—"), never 0, and churn and size only. Each measured file has its total complexity and its worst function, sits in a quadrant (Danger Zone, Cowboy Code,
 Fertile Ground, Healthy Closure, split at the medians on `log1p` axes), the Danger Zone ranks by
 `sqrt(u² + v²)` with each axis normalized by its maximum, and monthly frames list the files that
 entered or left it. The numbers come from a pure core (`src/shared/architecture-model.js`, shared
@@ -1241,7 +1247,7 @@ infrastructure, logistics, power, workshop, library, campus), the districts with
 `exclude` path globs, the landmarks, the ports and the files not drawn (`ignore`). Each drawn file
 is a building in the first district whose rules match it (a pattern without a slash matches at any
 depth, a leading `/` anchors to the root); the unmatched ones go to the **Outskirts** district. A
-building carries its lines, churn, last change and, only when a real tool measured them, its
+building carries its lines, churn, last change and, only when a real parser or tool measured them, its
 complexity, worst function and function count ("not measured" otherwise). Without a plan the
 districts come from folders: top-level folders are zones, their subfolders districts, a subfolder
 under 3 files folds into its parent. Dependency edges are read at the facts' commit: between files
