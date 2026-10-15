@@ -46,6 +46,7 @@ const GIT_TIMEOUT_MS = 120e3;
 const TOOL_TIMEOUT_MS = 300e3;
 // a larger JavaScript file is a bundle, not code written by hand
 const MAX_SOURCE_BYTES = 1 << 20;
+const PARSE_BATCH = 25;
 const LIZARD_INSTALL = 'pip install lizard';
 const MAX_BUFFER = 1 << 28;
 const CACHE_SIZE = 20;
@@ -136,7 +137,10 @@ function readBlobs(folder, commit, paths) {
     const chunks = [];
     const timer = setTimeout(() => child.kill(), GIT_TIMEOUT_MS);
     child.stdout.on('data', (chunk) => chunks.push(chunk));
-    child.on('error', () => resolve({}));
+    child.on('error', () => {
+      clearTimeout(timer);
+      resolve({});
+    });
     child.on('close', () => {
       clearTimeout(timer);
       resolve(parseBlobs(Buffer.concat(chunks), paths));
@@ -170,7 +174,10 @@ async function measureInApp(folder, commit, files) {
   const paths = files.map((f) => f.path).filter((p) => measures(p) && !skipped.some((re) => re.test(p)));
   const functions = [];
   const measured = [];
+  let parsed = 0;
   for (const [file, text] of Object.entries(await readBlobs(folder, commit, paths))) {
+    // the parse is synchronous: let the app's other work run between batches of files
+    if (++parsed % PARSE_BATCH === 0) await new Promise((resolve) => setImmediate(resolve));
     try {
       for (const f of measureSource(text, { file })) functions.push({ file, name: f.name, line: f.line, complexity: f.complexity, length: f.lines });
       measured.push(file);
