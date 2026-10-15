@@ -123,59 +123,69 @@ function parseClaude(text) {
   return claudeResult(s);
 }
 function feedClaude(s, text) {
-  const { seen, records, metrics, toolIds, turnIds } = s;
   for (const j of lines(text)) {
     if (!j.sessionId) continue;
-    let m = metrics.get(j.sessionId);
-    if (!m) metrics.set(j.sessionId, (m = newMetrics('claude', j.sessionId)));
-    m.cwd ??= j.cwd || null;
-    if (/^sdk/.test(j.entrypoint || '')) m.headless = true;
+    const m = claudeSession(s, j);
     if (j.type === 'system' && j.subtype === 'compact_boundary') s.boundaries++;
     if (j.type !== 'user' && j.type !== 'assistant') continue;
     if (!j.isSidechain) m.sidechain = false;
     if (j.timestamp) m.times.push(j.timestamp);
-    const content = j.message?.content;
-    if (j.type === 'user') {
-      if (j.isCompactSummary) { s.compactSummaries++; continue; }
-      for (const r of Array.isArray(content) ? content : []) {
-        if (r?.type !== 'tool_result' || !r.is_error) continue;
-        m.failedToolCalls++;
-        if (/doesn't want to proceed|was rejected|permission/i.test(textOf(r.content) || String(r.content || ''))) m.permissionDenials++;
-      }
-      const t = textOf(content);
-      if (/^\[Request interrupted by user/.test(t)) m.interrupts++;
-      else if (!j.isMeta && !j.toolUseResult && isTypedPrompt(t)) {
-        m.userPrompts++;
-        if (!j.isSidechain) m.firstPrompt ??= clip(t, 300);
-      }
-      continue;
-    }
-    if (j.message?.model && j.message.model !== '<synthetic>') m.model ??= j.message.model;
-    if (j.message?.id && !turnIds.has(j.message.id)) { turnIds.add(j.message.id); m.assistantTurns++; }
-    for (const c of Array.isArray(content) ? content : []) {
-      if (c?.type !== 'tool_use' || toolIds.has(c.id)) continue;
-      toolIds.add(c.id);
-      m.toolCalls[toolKind(c.name)]++;
-      const input = c.input || {};
-      const file = input.file_path || input.notebook_path;
-      if (toolKind(c.name) === 'edit' && file) m.files.add(file);
-      if (typeof input.content === 'string') m.linesAdded += countLines(input.content); // Write
-      for (const e of [input, ...(Array.isArray(input.edits) ? input.edits : [])]) { // Edit, MultiEdit
-        m.linesAdded += countLines(e.new_string);
-        m.linesRemoved += countLines(e.old_string);
-      }
-    }
-    const u = j.message?.usage;
-    if (!u) continue;
-    m.peakContext = Math.max(m.peakContext, (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0));
-    const id = `${j.message.id}:${j.requestId}`;
-    if (seen.has(id)) continue;
-    seen.add(id);
-    records.push({
-      provider: 'claude', sessionId: j.sessionId, model: j.message.model, ts: j.timestamp,
-      tokens: tokens(u.input_tokens, u.output_tokens, u.cache_read_input_tokens, u.cache_creation_input_tokens, u.output_tokens_details?.thinking_tokens),
-      costUsd: typeof j.costUSD === 'number' ? j.costUSD : null,
-    });
+    if (j.type === 'user') claudeUser(s, m, j);
+    else claudeAssistant(s, m, j);
+  }
+}
+function claudeSession(s, j) {
+  let m = s.metrics.get(j.sessionId);
+  if (!m) s.metrics.set(j.sessionId, (m = newMetrics('claude', j.sessionId)));
+  m.cwd ??= j.cwd || null;
+  if (/^sdk/.test(j.entrypoint || '')) m.headless = true;
+  return m;
+}
+function claudeUser(s, m, j) {
+  if (j.isCompactSummary) { s.compactSummaries++; return; }
+  const content = j.message?.content;
+  for (const r of Array.isArray(content) ? content : []) {
+    if (r?.type !== 'tool_result' || !r.is_error) continue;
+    m.failedToolCalls++;
+    if (/doesn't want to proceed|was rejected|permission/i.test(textOf(r.content) || String(r.content || ''))) m.permissionDenials++;
+  }
+  const t = textOf(content);
+  if (/^\[Request interrupted by user/.test(t)) m.interrupts++;
+  else if (!j.isMeta && !j.toolUseResult && isTypedPrompt(t)) {
+    m.userPrompts++;
+    if (!j.isSidechain) m.firstPrompt ??= clip(t, 300);
+  }
+}
+function claudeAssistant(s, m, j) {
+  const msg = j.message || {};
+  if (msg.model && msg.model !== '<synthetic>') m.model ??= msg.model;
+  if (msg.id && !s.turnIds.has(msg.id)) { s.turnIds.add(msg.id); m.assistantTurns++; }
+  for (const c of Array.isArray(msg.content) ? msg.content : []) {
+    if (c?.type !== 'tool_use' || s.toolIds.has(c.id)) continue;
+    s.toolIds.add(c.id);
+    claudeToolUse(m, c);
+  }
+  const u = msg.usage;
+  if (!u) return;
+  m.peakContext = Math.max(m.peakContext, (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0));
+  const id = `${msg.id}:${j.requestId}`;
+  if (s.seen.has(id)) return;
+  s.seen.add(id);
+  s.records.push({
+    provider: 'claude', sessionId: j.sessionId, model: msg.model, ts: j.timestamp,
+    tokens: tokens(u.input_tokens, u.output_tokens, u.cache_read_input_tokens, u.cache_creation_input_tokens, u.output_tokens_details?.thinking_tokens),
+    costUsd: typeof j.costUSD === 'number' ? j.costUSD : null,
+  });
+}
+function claudeToolUse(m, c) {
+  m.toolCalls[toolKind(c.name)]++;
+  const input = c.input || {};
+  const file = input.file_path || input.notebook_path;
+  if (toolKind(c.name) === 'edit' && file) m.files.add(file);
+  if (typeof input.content === 'string') m.linesAdded += countLines(input.content); // Write
+  for (const e of [input, ...(Array.isArray(input.edits) ? input.edits : [])]) { // Edit, MultiEdit
+    m.linesAdded += countLines(e.new_string);
+    m.linesRemoved += countLines(e.old_string);
   }
 }
 function claudeResult(s) {
@@ -199,46 +209,55 @@ function parseCodex(text) {
   return codexResult(s);
 }
 function feedCodex(s, text) {
-  const { records, m } = s;
   for (const j of lines(text)) {
     const p = j.payload || {};
-    if (j.timestamp) m.times.push(j.timestamp);
-    if (j.type === 'session_meta') {
-      s.sessionId = p.id || p.session_id || s.sessionId;
-      m.cwd ??= p.cwd || null;
-      if (p.source === 'exec' || /exec/.test(p.originator || '')) m.headless = true;
-    } else if (j.type === 'turn_context' && p.model) s.model = p.model;
-    else if (j.type === 'compacted' || (j.type === 'event_msg' && p.type === 'context_compacted')) m.compactions++;
-    else if (j.type === 'response_item' && /^(function_call|custom_tool_call|local_shell_call)$/.test(p.type)) {
-      const name = p.type === 'local_shell_call' ? 'shell' : p.name;
-      let args = p.input ?? p.arguments ?? p.action;
-      if (typeof args === 'string') { try { args = JSON.parse(args); } catch { /* a raw patch */ } }
-      const cmd = Array.isArray(args?.command) ? args.command : null;
-      const patch = /apply_patch/.test(name || '') ? (typeof args === 'string' ? args : args?.input) : cmd?.some((x) => /apply_patch/.test(x)) ? cmd[cmd.length - 1] : null;
-      m.toolCalls[patch != null ? 'edit' : toolKind(name)]++;
-      if (patch != null) patchStats(m, patch);
-    } else if (j.type === 'response_item' && p.type === 'function_call_output') {
-      let out = p.output;
-      if (typeof out === 'string') { try { out = JSON.parse(out); } catch { out = null; } }
-      if (out?.metadata?.exit_code) m.failedToolCalls++;
-    } else if (j.type === 'event_msg' && p.type === 'user_message') {
-      const t = String(p.message || '');
-      if (!/^\s*<environment_context>/.test(t)) { m.userPrompts++; m.firstPrompt ??= clip(t, 300); }
-    } else if (j.type === 'event_msg' && p.type === 'turn_aborted') m.interrupts++;
-    else if (j.type === 'event_msg' && p.type === 'token_count') {
-      const u = p.info?.last_token_usage;
-      if (u) {
-        const cachedIn = u.cached_input_tokens || 0;
-        m.assistantTurns++;
-        m.peakContext = Math.max(m.peakContext, u.input_tokens || 0);
-        records.push({
-          provider: 'codex', sessionId: s.sessionId, model: s.model || 'codex', ts: j.timestamp,
-          tokens: tokens((u.input_tokens || 0) - cachedIn, u.output_tokens, cachedIn, u.cache_write_input_tokens, u.reasoning_output_tokens),
-          costUsd: null,
-        });
-      }
-      if (p.rate_limits) s.plan = { ts: j.timestamp, ...p.rate_limits };
+    if (j.timestamp) s.m.times.push(j.timestamp);
+    if (j.type === 'session_meta') codexMeta(s, p);
+    else if (j.type === 'turn_context' && p.model) s.model = p.model;
+    else if (j.type === 'compacted' || (j.type === 'event_msg' && p.type === 'context_compacted')) s.m.compactions++;
+    else if (j.type === 'response_item') codexResponseItem(s.m, p);
+    else if (j.type === 'event_msg') codexEvent(s, j, p);
+  }
+}
+function codexMeta(s, p) {
+  s.sessionId = p.id || p.session_id || s.sessionId;
+  s.m.cwd ??= p.cwd || null;
+  if (p.source === 'exec' || /exec/.test(p.originator || '')) s.m.headless = true;
+}
+function codexResponseItem(m, p) {
+  if (/^(function_call|custom_tool_call|local_shell_call)$/.test(p.type)) {
+    const name = p.type === 'local_shell_call' ? 'shell' : p.name;
+    let args = p.input ?? p.arguments ?? p.action;
+    if (typeof args === 'string') { try { args = JSON.parse(args); } catch { /* a raw patch */ } }
+    const cmd = Array.isArray(args?.command) ? args.command : null;
+    const patch = /apply_patch/.test(name || '') ? (typeof args === 'string' ? args : args?.input) : cmd?.some((x) => /apply_patch/.test(x)) ? cmd[cmd.length - 1] : null;
+    m.toolCalls[patch != null ? 'edit' : toolKind(name)]++;
+    if (patch != null) patchStats(m, patch);
+  } else if (p.type === 'function_call_output') {
+    let out = p.output;
+    if (typeof out === 'string') { try { out = JSON.parse(out); } catch { out = null; } }
+    if (out?.metadata?.exit_code) m.failedToolCalls++;
+  }
+}
+function codexEvent(s, j, p) {
+  const { m } = s;
+  if (p.type === 'user_message') {
+    const t = String(p.message || '');
+    if (!/^\s*<environment_context>/.test(t)) { m.userPrompts++; m.firstPrompt ??= clip(t, 300); }
+  } else if (p.type === 'turn_aborted') m.interrupts++;
+  else if (p.type === 'token_count') {
+    const u = p.info?.last_token_usage;
+    if (u) {
+      const cachedIn = u.cached_input_tokens || 0;
+      m.assistantTurns++;
+      m.peakContext = Math.max(m.peakContext, u.input_tokens || 0);
+      s.records.push({
+        provider: 'codex', sessionId: s.sessionId, model: s.model || 'codex', ts: j.timestamp,
+        tokens: tokens((u.input_tokens || 0) - cachedIn, u.output_tokens, cachedIn, u.cache_write_input_tokens, u.reasoning_output_tokens),
+        costUsd: null,
+      });
     }
+    if (p.rate_limits) s.plan = { ts: j.timestamp, ...p.rate_limits };
   }
 }
 function codexResult(s) {
@@ -470,14 +489,29 @@ function readLocalUsage({ home } = {}) {
 // given the workspace's index.db (`index`), loads and saves them in its usage_files table. If it
 // cannot start (or stops), the work runs in the calling thread; an error of the work itself is
 // rethrown (running it again here would only block this thread to fail the same way).
-const usageWorker = workerClient(path.join(__dirname, 'local-usage-worker.js'));
+// Shared with the worker: [GEN] counts the index releases (a message of an older generation no
+// longer touches the index), [BUSY] is 1 while the worker holds a connection to it.
+const usageControl = new Int32Array(new SharedArrayBuffer(8));
+const usageWorker = workerClient(path.join(__dirname, 'local-usage-worker.js'), { workerData: { control: usageControl } });
 function inUsageWorker(message, fallback) {
   const here = (e) => {
     if (e.answered) throw e;
     console.error('usage worker:', e.message);
     return fallback();
   };
-  try { return usageWorker(message).catch(here); } catch (e) { return Promise.resolve(e).then(here); }
+  const gen = Atomics.load(usageControl, 0);
+  try { return usageWorker({ ...message, gen }).catch(here); } catch (e) { return Promise.resolve(e).then(here); }
+}
+
+/**
+ * Before the service closes the workspace's index (shutdown, a workspace switch): the usage worker
+ * drops the saves still pending for it and this waits (blocking, at most `timeoutMs`) until it no
+ * longer holds a connection, so the workspace folder can be removed or moved (Windows) (#389).
+ */
+function releaseUsageIndex(timeoutMs = 10000) {
+  Atomics.add(usageControl, 0, 1);
+  const end = Date.now() + timeoutMs;
+  while (Atomics.load(usageControl, 1) === 1 && Date.now() < end) Atomics.wait(usageControl, 1, 1, end - Date.now());
 }
 
 /**
@@ -512,6 +546,7 @@ module.exports = {
   parseGrok,
   readLocalUsage,
   readLocalUsageAsync,
+  releaseUsageIndex,
   scanLocalUsage,
   TOOL_KINDS,
   toolKind,

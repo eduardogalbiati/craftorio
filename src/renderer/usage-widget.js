@@ -33,6 +33,22 @@ function monthLabel(ym) {
   return y && m ? new Date(y, m - 1, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' }) : 'this month';
 }
 
+// #389: first paint first: the usage and the 24/7 chip (slow reads) are asked once Home is drawn
+// (call the returned function), their widgets show that they are loading meanwhile; asked anyway
+// after `ms` if init() fails before that.
+function deferSlowReads(ms) {
+  let asked = false;
+  const ask = () => {
+    clearTimeout(fallback);
+    if (asked) return;
+    asked = true;
+    loadUsage();
+    window.OccupancyChip?.refresh?.();
+  };
+  const fallback = setTimeout(ask, ms);
+  return ask;
+}
+
 let usageLoading = null;
 let usageLastLoad = 0;
 let usageTimer = null;

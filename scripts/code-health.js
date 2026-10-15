@@ -76,8 +76,6 @@ const COMPLEXITY_EXCEPTIONS = {
   'src/engine/worktree.js:cleanupWorktrees': 28,
   'src/epics.js:applyEpic': 42,
   'src/evidence.js:buildManifest': 34,
-  'src/local-usage.js:parseClaude': 49,
-  'src/local-usage.js:parseCodex': 50,
   'src/mobile-gates.js:handle': 38,
   'src/night-watch.js:detectSelfHealing': 51,
   'src/night-watch.js:nightMetrics/map callback #4': 26,

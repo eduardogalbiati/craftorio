@@ -8,8 +8,8 @@
 
 const { Worker } = require('worker_threads');
 
-/** call(message) → Promise of the worker's result for it. */
-function workerClient(file) {
+/** call(message) → Promise of the worker's result for it. `workerData`: given to each worker started. */
+function workerClient(file, { workerData } = {}) {
   let worker = null;
   let nextId = 0;
   const pending = new Map(); // id → { resolve, reject }
@@ -21,7 +21,7 @@ function workerClient(file) {
 
   function start() {
     if (worker) return worker;
-    const w = new Worker(`require(${JSON.stringify(file)});`, { eval: true });
+    const w = new Worker(`require(${JSON.stringify(file)});`, { eval: true, workerData });
     w.on('message', ({ id, result, error }) => {
       const p = pending.get(id);
       pending.delete(id);

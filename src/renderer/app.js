@@ -224,16 +224,7 @@ async function init() {
   initFullTextPopover();
   setInterval(renderTicking, 1000);
   setInterval(tickRunLists, 60e3); // #320: the run lists' Next turn minutes (run-list.js)
-  // #389: first paint first: the usage and the 24/7 chip (slow reads) are asked once Home is drawn,
-  // their widgets show that they are loading meanwhile; asked anyway if a read below fails
-  let slowAsked = false;
-  const askSlowReads = () => {
-    if (slowAsked) return;
-    slowAsked = true;
-    loadUsage();
-    window.OccupancyChip?.refresh?.();
-  };
-  const slowFallback = setTimeout(askSlowReads, 10000);
+  const askSlowReads = deferSlowReads(10000); // #389: once Home is drawn (usage-widget.js)
 
   state.ws = await api.getWorkspace();
   state.settings = await api.getSettings();
@@ -249,7 +240,6 @@ async function init() {
   initCodeBanner();
   initKeepAwake();
   renderDashboard();
-  clearTimeout(slowFallback);
   askSlowReads();
   // a Run App copy opens on the screen the change is about (#119)
   if (viewRegistry.has(appInfo.startView)) showView(appInfo.startView);
