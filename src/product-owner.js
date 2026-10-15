@@ -81,6 +81,7 @@ const discoveryCommit = require('./discovery-commit');
 const epics = require('./epics');
 const poCalibration = require('./shared/po-calibration');
 const poSplit = require('./po-split');
+const { separateSharedFiles } = require('./po-hot-files');
 const { mockSteps, partialText } = require('./chat-progress');
 const { hotSpots, loadConflictMap, readConflictMap } = require('./conflict-map');
 const { conflictsOf } = require('./repo-performance');
@@ -666,9 +667,6 @@ function backlogReport({ data, activeRuns = [], history = [], workflows = [], qu
   return out.join('\n\n');
 }
 
-// a feature file (Gherkin scenarios) named in an issue's text, e.g. features/architecture.feature
-const FEATURE_FILE = /(?:[\w.-]+\/)*[\w.-]+\.feature\b/g;
-
 /**
  * The simulated answer: groups of to-do issues that share a label (complexity at most the calibration's per group),
  * the issues that look like a repo-wide refactor kept apart from the others, and the issues with a
@@ -725,11 +723,7 @@ function mockAnswer({ data, question = '', selection = [], calibration = poCalib
     ...groups.map((g, n) => group(g, refactor.length + Math.floor(n / perStage) + 1)),
   ];
   const spots = conflictMap ? hotSpots(conflictMap) : [];
-  const hotFiles = [...new Set(spots.map((s) => s.file))];
-  const hotConflicts = separateHotFiles(planned, hotFiles, todo);
-  // #380: two runs of a stage adding scenarios to one feature file conflict in it, as on a hot file
-  const featureFiles = [...new Set(todo.flatMap((i) => `${i.title || ''}\n${i.body || ''}`.match(FEATURE_FILE) || []))].filter((f) => !hotFiles.includes(f));
-  hotConflicts.push(...separateHotFiles(planned, featureFiles, todo, 'a feature file both add scenarios to'));
+  const hotConflicts = separateSharedFiles(planned, [...new Set(spots.map((s) => s.file))], todo);
   return {
     summary: [
       `**Simulated answer** (developer or simulated mode: no model was called)${question ? ` to: “${clip(question, 120)}”` : ''}. Planned for ${cost == null ? poCalibration.label(calibration) : poCalibration.plannedFor(calibration, cost)}.`,
@@ -746,30 +740,6 @@ function mockAnswer({ data, question = '', selection = [], calibration = poCalib
     decongest: spots.map((s) => ({ file: s.file, ...(s.kind === 'line' ? { line: s.line } : {}), fix: s.fix, runs: s.runs, of: s.of })),
     enrich: todo.filter((i) => String(i.body || '').trim().length < 120).map((i) => ({ issue: i.number, reason: 'The description is too short to implement without guessing.' })),
   };
-}
-
-// #150 (simulated): a group whose issues name a hot file another group of its stage names moves to the
-// next stage without it; each move is a conflict naming the shared hot files. Mutates `planned`.
-// `what`: what the shared files are, for the reason (#380: also the feature files both add scenarios to).
-function separateHotFiles(planned, hotFiles, issues, what = 'a hot file of the conflict map') {
-  const conflicts = [];
-  if (!hotFiles.length) return conflicts;
-  const textOf = (nums) => nums.map((n) => issues.find((i) => i.number === n)).map((i) => `${i?.title || ''}\n${i?.body || ''}`).join('\n');
-  const byStage = new Map();
-  for (const g of planned) {
-    const files = hotFiles.filter((f) => textOf(g.issues).includes(f));
-    if (!files.length) continue;
-    g.files = [...new Set([...g.files, ...files])];
-    for (;;) {
-      const clash = (byStage.get(g.stage) || []).find((o) => o.files.some((f) => files.includes(f)));
-      if (!clash) break;
-      const shared = clash.files.filter((f) => files.includes(f));
-      conflicts.push({ issues: [...clash.group.issues, ...g.issues], reason: `Both touch ${shared.join(', ')}, ${what}: run them in different stages (simulated).`, files: shared });
-      g.stage += 1;
-    }
-    byStage.set(g.stage, [...(byStage.get(g.stage) || []), { group: g, files }]);
-  }
-  return conflicts;
 }
 
 // The simulated epics section: an open issue without an epic joins the epic whose members share its

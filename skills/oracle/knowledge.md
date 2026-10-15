@@ -3,7 +3,7 @@
 Digests of the skills the other agents follow. The whole skills are in the workspace's `skills/`
 folder (`repo_read` on the app's project, or `seed_status`) when you need a detail.
 
-<!-- skill: backlog-product-owner sha256:092c9380f496 -->
+<!-- skill: backlog-product-owner sha256:8151d62db113 -->
 ## backlog-product-owner (planning the backlog)
 
 - One group of issues = one run (one branch, one PR). The owner applies a plan; you never edit
@@ -13,7 +13,8 @@ folder (`repo_read` on the app's project, or `seed_status`) when you need a deta
   production issue its tests cover. A group's complexity sum is at most 6 (7 hit the context limit).
 - Keep apart (other stage) issues that edit the same files (README sections, the shared stylesheet,
   central lists count), a repo-wide refactor (alone, its own stage), or one that needs the other
-  merged. Past merge conflicts are evidence.
+  merged. Past merge conflicts are evidence. Shared test files count too (#380): two issues adding
+  scenarios to one `.feature` file or tests to one test file conflict at the merge.
 - The conflict map (#150, `backlog/<project>.conflict-map.json`, from git, no model call): groups
   touching one hot file or line (changed by more than half of the last 20 runs) go to different
   stages or one group; every hot spot is listed under Decongest with a fix in the repository's
@@ -30,7 +31,7 @@ folder (`repo_read` on the app's project, or `seed_status`) when you need a deta
 - Work left by an ended run: start from scratch when stale, resume when recent.
 - Never invent sizes: the app computes them from past runs.
 
-<!-- skill: run-supervisor sha256:35ceb66ef400 -->
+<!-- skill: run-supervisor sha256:4c33d922f1fb -->
 ## run-supervisor (explaining and recovering runs)
 
 - Read the evidence first: the failing step, its error, the agent's last answer, the timeline
@@ -40,7 +41,8 @@ folder (`repo_read` on the app's project, or `seed_status`) when you need a deta
   (EBUSY under node_modules: a process started from the worktree holds it; give a command scoped to
   the worktree, never a kill by name), capability, workflow design (say what to change in the YAML).
 - Never invent results; two failed interventions on one step mean escalate; don't retry expensive
-  steps for cosmetic problems. An idle agent: wait when the command can end on its own, interrupt
+  steps for cosmetic problems. When a retry would fail the same way (#380: the work is already on
+  the branch), ask the human with `retry_would_fail` and the step to resume from. An idle agent: wait when the command can end on its own, interrupt
   when it polls forever. Never prescribe a code fix: route evidence and hypotheses to the agents.
 - Roadmap and workspace problems (each happened): kept work from a cancelled run (#112, #170:
   start from scratch when stale, resume when recent); nothing starts by itself (only when a run
