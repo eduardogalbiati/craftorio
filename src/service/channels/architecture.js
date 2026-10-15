@@ -5,7 +5,7 @@
 // (<workspace>/architecture/<project id>/, the latest with its findings marked new or gone, the
 // project's real finished runs since), the cost estimate from the last real analyses, the
 // project's exclude list, and "Send to Refactor": a finding becomes a proposal of the Refactor tab
-// (src/refactor-proposals.js, refactor:proposals).
+// (src/refactor-proposals.js; the Refactor tab's channels are src/service/channels/refactor.js).
 // The project city (#371): architecture:city is the facts grouped by the saved city plan (folder
 // districts without one) with its edges and validation (src/architecture-facts.js readCity, core
 // src/shared/city-model.js); architecture:savePlan checks a plan against CITY_PLAN_SCHEMA and saves
@@ -363,13 +363,6 @@ module.exports = (ctx) => {
       params: ['projectId', 'reportId', 'findingIndex'],
       schema: { params: args({ projectId: PROJECT_ID, reportId: STRING, findingIndex: INT }, ['projectId', 'reportId', 'findingIndex']), result: shape({ proposal: OBJECT }, ['proposal']) },
       fn: sendToRefactor,
-    },
-    {
-      channel: 'refactor:proposals',
-      method: 'refactorProposals',
-      params: ['projectId'],
-      schema: { params: args({ projectId: PROJECT_ID }, ['projectId']), result: listOf(OBJECT) },
-      fn: ({ projectId }) => proposals.listProposals(refactorRoot(), projectOf(projectId).id),
     },
   ];
 };

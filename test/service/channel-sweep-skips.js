@@ -44,6 +44,7 @@ module.exports = [
   { channel: 'phonegates:check', reason: 'HTTP requests to the phone page and its public URL (network)' },
   { channel: 'phonegates:configure', reason: 'starts or restarts the phone page web server (a listening port)' },
   { channel: 'phonegates:pair', reason: 'turns the phone page web server on (a listening port)' },
+  { channel: 'refactor:file', reason: 'files an issue and creates the refactor label with gh/glab' },
   { channel: 'releases:start', reason: 'creates and pushes a release tag' },
   { channel: 'runs:prState', reason: "reads a run's PR with gh/glab (network)" },
   { channel: 'usage:actions', reason: 'reads CI usage with gh api (network)' },
