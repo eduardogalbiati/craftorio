@@ -304,8 +304,7 @@
     const picker = reports.length ? `<label class="an-date small muted">Report <select data-arch-report data-testid="architecture-report-picker">${reports.map((r) => `<option value="${esc(r.id)}" ${r.id === (cur.view?.report?.id) ? 'selected' : ''}>${esc(day(r.date))} · ${plural(r.findings, 'findings')}${r.simulated ? ' (simulated)' : ''}</option>`).join('')}</select></label>` : '';
     return `<div class="row pcm-controls" data-testid="architecture-controls">
       ${picker}
-      <label class="an-date small muted">From <input type="date" data-arch-since value="${esc(cur.since || '')}" /></label>
-      <label class="an-date small muted">To <input type="date" data-arch-until value="${esc(cur.until || '')}" /></label>
+      ${window.DateRange.fields({ testid: 'architecture-date-range', from: cur.since || '', to: cur.until || '', fromAttrs: 'data-arch-since', toAttrs: 'data-arch-until' })}
       <label class="check small" title="Commits that touched more than 25% of the files (a reformat, a rename): counted unless unchecked"><input type="checkbox" data-arch-mass ${cur.includeMass ? 'checked' : ''} /><span>Count mass changes</span></label>
       <button type="button" class="btn" data-arch-refresh ${cur.loading ? 'disabled' : ''}>Refresh</button>
     </div>`;

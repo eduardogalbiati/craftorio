@@ -75,8 +75,7 @@
     const day = (n) => `<button type="button" class="${view.days === n ? 'active' : ''}" data-pcm-days="${n}" aria-pressed="${view.days === n}">${n} days</button>`;
     return `<div class="row pcm-controls" data-testid="project-conflict-controls">
       <div class="seg sm" role="group" aria-label="Quick range">${day(7)}${day(30)}${day(90)}</div>
-      <label class="an-date small muted">From <input type="date" data-pcm-from value="${esc(r.from)}" /></label>
-      <label class="an-date small muted">To <input type="date" data-pcm-to value="${esc(r.to)}" /></label>
+      ${window.DateRange.fields({ testid: 'conflict-map-date-range', from: r.from, to: r.to, fromAttrs: 'data-pcm-from', toAttrs: 'data-pcm-to' })}
       <label class="an-date small muted" title="A date (YYYY-MM-DD) or a commit of the repository: the range's numbers are split into before and after it">Before/after <input type="text" class="an-marker" data-pcm-marker value="${esc(view.marker)}" placeholder="date or commit" /></label>
       <button type="button" class="btn" data-pcm-refresh ${cur?.loading ? 'disabled' : ''}>Refresh</button>
       ${over ? `<button type="button" class="btn" data-pcm-plan data-testid="pcm-plan" ${cur.planning ? 'disabled' : ''} title="The supervisor suggests a plan for the ${over} file(s) over ${pct(cur.perf.sharedLimit)} (a real model call: it asks first)">${cur.planning ? 'Asking…' : 'Ask for a plan'}</button>` : ''}

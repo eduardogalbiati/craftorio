@@ -617,7 +617,7 @@ registerView({
                 </div>
                 <div class="s-row">
                   <div class="s-label"><b>Time zone</b><span>Times on every screen, where days, nights and months start (Analytics, Usage, budgets, the Oracle's daily limit) and the times the agents report. Until one is chosen: this computer's.</span><span id="set-time-zone-now" class="muted small"></span></div>
-                  <div class="s-ctrl"><select id="set-time-zone" aria-label="Time zone" data-testid="settings-time-zone"></select></div>
+                  <div class="s-ctrl">${window.Select.markup('id="set-time-zone" aria-label="Time zone" data-testid="settings-time-zone"')}</div>
                 </div>
               </div>
               <p id="ws-error" class="error small"></p>

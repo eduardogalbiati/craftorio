@@ -27,7 +27,8 @@
   const saved = (() => { try { return JSON.parse(localStorage.getItem(LS) || '{}'); } catch { return {}; } })();
   const ax = {
     scope: saved.scope === 'machine' ? 'machine' : 'orchestrator',
-    days: saved.days || 30, // quick range; null = custom from/to
+    // #383: a DateRange preset ('24h', '7d', '30d', 'all'); null = custom from/to (the older `days` reads as its preset)
+    preset: ['24h', '7d', '30d', 'all'].includes(saved.preset) ? saved.preset : saved.days === 7 ? '7d' : '30d',
     from: null, to: null,
     data: null, error: null, loading: false,
     report: null, reportError: null, analyzing: false,
@@ -40,7 +41,7 @@
   };
   const persist = () => {
     try {
-      localStorage.setItem(LS, JSON.stringify({ scope: ax.scope, days: ax.days, tab: ax.tab, marker: ax.marker }));
+      localStorage.setItem(LS, JSON.stringify({ scope: ax.scope, preset: ax.preset, tab: ax.tab, marker: ax.marker }));
     } catch { /* ignore */ }
   };
   // #273: the owner's local days (time-zone.js; without it, UTC days)
@@ -49,9 +50,24 @@
   const pct = (x) => (x == null ? '—' : `${Math.round(x * 100)}%`);
   const val = (x, f = fmtNum) => (x == null ? '—' : f(x));
 
+  // the range asked for: All is the longest one the service reads (a year, src/analytics.js dateRange)
   function range() {
-    if (ax.days) return { from: daysBack(ax.days), to: today() };
+    if (ax.preset === 'all') return { from: daysBack(365), to: today() };
+    const preset = ax.preset && window.DateRange?.presetRange(ax.preset, new Date(), window.TimeZone ? window.TimeZone.current() : 'UTC');
+    if (preset) return preset;
     return { from: ax.from || daysBack(30), to: ax.to || today() };
+  }
+  // the From / To fields: All shows no range
+  const shownRange = () => (ax.preset === 'all' ? { from: '', to: '' } : range());
+  const rangeText = (r) => (ax.preset === 'all' ? 'all dates (the last year at most)' : `${r.from} to ${r.to}`);
+  function renderRange() {
+    const s = shownRange();
+    document.querySelectorAll('#view-analytics [data-date-preset]').forEach((b) => {
+      b.classList.toggle('active', b.dataset.datePreset === ax.preset);
+      b.setAttribute('aria-pressed', String(b.dataset.datePreset === ax.preset));
+    });
+    $a('#an-from').value = s.from;
+    $a('#an-to').value = s.to;
   }
 
   async function load() {
@@ -110,30 +126,23 @@
     document.querySelectorAll('#view-analytics .an-perf-only').forEach((el) => el.classList.toggle('hidden', !perf));
     document.querySelectorAll('#view-analytics .an-range').forEach((el) => el.classList.toggle('hidden', !!extra && !extra.usesRange));
     if (extra) {
-      if (extra.usesRange) {
-        document.querySelectorAll('#view-analytics [data-an-days]').forEach((b) => b.classList.toggle('active', +b.dataset.anDays === ax.days));
-        $a('#an-from').value = r.from;
-        $a('#an-to').value = r.to;
-      }
+      if (extra.usesRange) renderRange();
       $a('#an-sub').textContent = extra.sub();
       return;
     }
     if (perf) {
       if (document.activeElement !== $a('#an-marker')) $a('#an-marker').value = ax.marker;
-      $a('#an-from').value = r.from;
-      $a('#an-to').value = r.to;
+      renderRange();
       $a('#an-refresh').disabled = ax.perfLoading;
-      $a('#an-sub').textContent = `Files runs collide on and merge conflicts${ax.perf?.project ? ` in ${ax.perf.project.name}` : ''}, ${r.from} to ${r.to}${ax.perfLoading ? ' — loading…' : ''}`;
+      $a('#an-sub').textContent = `Files runs collide on and merge conflicts${ax.perf?.project ? ` in ${ax.perf.project.name}` : ''}, ${rangeText(r)}${ax.perfLoading ? ' — loading…' : ''}`;
       return;
     }
     document.querySelectorAll('#view-analytics [data-an-scope]').forEach((b) => b.classList.toggle('active', b.dataset.anScope === ax.scope));
-    document.querySelectorAll('#view-analytics [data-an-days]').forEach((b) => b.classList.toggle('active', +b.dataset.anDays === ax.days));
-    $a('#an-from').value = r.from;
-    $a('#an-to').value = r.to;
+    renderRange();
     $a('#an-refresh').disabled = ax.loading;
     $a('#an-analyze').disabled = ax.analyzing || !ax.data;
     $a('#an-analyze').textContent = ax.analyzing ? 'Analyzing…' : 'Ask the supervisor';
-    $a('#an-sub').textContent = `${ax.scope === 'machine' ? 'Every Claude Code, Codex and Grok session on this machine' : 'The sessions of the orchestrator\'s runs'}, ${r.from} to ${r.to}${ax.loading ? ' — loading…' : ''}`;
+    $a('#an-sub').textContent = `${ax.scope === 'machine' ? 'Every Claude Code, Codex and Grok session on this machine' : 'The sessions of the orchestrator\'s runs'}, ${rangeText(r)}${ax.loading ? ' — loading…' : ''}`;
   }
 
   // ---- charts ---------------------------------------------------------------------------
@@ -356,7 +365,7 @@
     view.dataset.wired = '1';
     view.addEventListener('click', (e) => {
       const scope = e.target.closest('[data-an-scope]');
-      const days = e.target.closest('[data-an-days]');
+      const preset = e.target.closest('[data-date-preset]');
       const sort = e.target.closest('[data-an-sort]');
       const tab = e.target.closest('[data-an-tab]');
       const run = e.target.closest('[data-an-run]');
@@ -364,7 +373,7 @@
       if (tab && tab.dataset.anTab !== ax.tab) { ax.tab = tab.dataset.anTab; persist(); render(); load(); }
       if (run) window.showRun(run.dataset.anRun, { workflow: run.dataset.workflow || undefined });
       if (scope) { ax.scope = scope.dataset.anScope; ax.report = null; persist(); load(); }
-      if (days) { ax.days = +days.dataset.anDays; ax.report = null; persist(); load(); }
+      if (preset) { ax.preset = preset.dataset.datePreset; ax.report = null; persist(); load(); }
       if (sort && ax.data) {
         ax.sortKey = sort.dataset.anSort;
         const wrap = $a('.an-sessions')?.parentElement;
@@ -372,7 +381,7 @@
       }
     });
     const onDate = () => {
-      ax.days = null;
+      ax.preset = null;
       ax.from = $a('#an-from').value || null;
       ax.to = $a('#an-to').value || null;
       ax.report = null;
@@ -400,9 +409,7 @@
           </div>
           <div class="row an-controls">
             <div class="seg an-usage-only" role="group" aria-label="Analytics scope"><button type="button" data-an-scope="orchestrator">Orchestrator</button><button type="button" data-an-scope="machine">This machine</button></div>
-            <div class="seg sm an-range" role="group" aria-label="Quick range"><button type="button" data-an-days="7">7 days</button><button type="button" data-an-days="30">30 days</button><button type="button" data-an-days="90">90 days</button></div>
-            <label class="an-date small muted an-range">From <input type="date" id="an-from" /></label>
-            <label class="an-date small muted an-range">To <input type="date" id="an-to" /></label>
+            <div class="an-range">${window.DateRange.fields({ testid: 'analytics-date-range', fromAttrs: 'id="an-from"', toAttrs: 'id="an-to"', presets: true })}</div>
             <label class="an-date small muted an-perf-only hidden" title="A date (YYYY-MM-DD) or a commit of the repository: every number is split into before and after it">Before/after <input type="text" id="an-marker" class="an-marker" placeholder="date or commit" /></label>
             <button class="btn" id="an-refresh" type="button">Refresh</button>
             <button class="btn primary an-usage-only" id="an-analyze" type="button" title="The supervisor writes a report on these sessions (a real model call)">Ask the supervisor</button>

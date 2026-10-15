@@ -478,6 +478,22 @@ In this app:
   language and branches with `.applyHints`. Add `.wi-grid` to the container for aligned labels.
   Elsewhere, an enum is a select or a `.seg` toggle and a flag a switch or a checkbox. Short values
   never get a full-width box.
+- **Selects, dates and checkboxes (#383)**: `style.css` sets `color-scheme: dark` on `:root`
+  (`light` under `.r3d[data-theme="light"]`), so native pickers and scrollbars follow the theme.
+  Every `select` is the customizable select (`appearance: base-select`): the same height and radius
+  as the text inputs, a chevron, its list (`::picker(select)`) on `--panel` with the chosen option
+  marked; keyboard, ARIA, disabled options and groups stay native, and so do `.value`, `change` and
+  the E2E `selectOption` steps. `select.js` adds a search list (`data-testid="select-search"`,
+  `role="listbox"`) to a select with more than 10 options (`select-search.js`), and
+  `Select.markup(attrs, options, value)` builds a select's markup. A date range is
+  `DateRange.fields({ testid, from, to, fromAttrs, toAttrs, presets })` (`date-range.js`: From / To
+  inputs `date-range-from` / `date-range-to`, the presets Last 24 h, 7 days, 30 days and All in the
+  owner's time zone via `DateRange.presetRange`). Date and datetime-local inputs share the base input
+  rule. Checkboxes and radios are `--check-size` (18px; 16px in `.small` and the compact toggles).
+  **No new bare control**: a `<select` tag, `type="date"` or `type="datetime-local"` written in a
+  renderer file fails `test/bare-controls-383.test.js` (`scripts/bare-controls.js`, run it with
+  `node scripts/bare-controls.js`); the files that had some when it landed are its `BASELINE`, whose
+  counts may only go down. Use `Select.markup` and `DateRange.fields` instead.
 - **What leads**: titles (issue, run, project) are the headline; workflow files, ids and run ids
   are small badges or links with the full value in `title`. Long titles ellipsize.
 - **Edits**: several fields → an Edit form with Save / Cancel; one obvious choice (a mode) → a

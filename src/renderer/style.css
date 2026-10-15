@@ -1,6 +1,8 @@
 /* The base styles: every other stylesheet builds on them and overrides some of their rules.
    load: early */
 :root {
+  /* #383: native parts (a date's calendar, a select's list, scrollbars) in the dark theme */
+  color-scheme: dark;
   --bg: #0e1014;
   --panel: #151820;
   --panel-2: #1b1f29;
@@ -20,7 +22,7 @@
   /* focus ring shared by buttons, switches, checkboxes and radios */
   --focus-ring: 2px solid var(--accent);
   /* checkboxes and radios (a smaller size where the text is .small) */
-  --check-size: 16px;
+  --check-size: 18px;
   --check-radius: 4px;
   --check-border: #3a4150;
   --check-border-hover: var(--muted);
@@ -319,7 +321,7 @@ input[type=checkbox]:disabled, input[type=radio]:disabled { cursor: default; opa
 input[type=checkbox]:disabled:checked, input[type=radio]:disabled:checked { background: var(--muted); border-color: var(--muted); color: var(--bg); }
 label:has(> input[type=checkbox]:disabled, > input[type=radio]:disabled) { cursor: default; }
 /* small labels (toolbars, filters) get a box that lines up with their text */
-.small, .duo-switch, .sx-toggle, .ag-skill { --check-size: 14px; --check-radius: 3px; }
+.small, .duo-switch, .sx-toggle, .ag-skill { --check-size: 16px; --check-radius: 3px; }
 
 .switch { position: relative; width: 36px; height: 20px; flex: none; cursor: pointer; }
 .switch input { opacity: 0; width: 0; height: 0; position: absolute; }
@@ -382,12 +384,50 @@ label:has(> input[type=checkbox]:disabled, > input[type=radio]:disabled) { curso
 .adv[open] > summary::before { content: "▾ "; }
 .adv[open] > summary { margin-bottom: 10px; }
 
-select, input[type=text], input[type=number], textarea {
+select, input[type=text], input[type=number], input[type=date], input[type=datetime-local], textarea {
   width: 100%; background: var(--panel-2); color: var(--text);
   border: 1px solid var(--border); border-radius: 8px; padding: 7px 9px; font: inherit;
 }
 textarea { resize: vertical; min-height: 70px; }
 select:focus, input:focus, textarea:focus { outline: none; border-color: var(--accent); }
+/* #383: the app's select (select.js): the customizable select, its list on the panel colour, the chosen
+   option marked; keyboard, ARIA, disabled options and groups stay native */
+select { appearance: base-select; display: inline-flex; align-items: center; gap: 6px; min-width: 0; white-space: nowrap; overflow: hidden; cursor: pointer; text-align: start; }
+select:hover:not(:disabled) { border-color: var(--check-border-hover); }
+select:disabled { opacity: .5; cursor: not-allowed; }
+select::picker-icon { color: var(--muted); font-size: 11px; margin-inline-start: auto; transition: rotate .15s; }
+select:open::picker-icon { rotate: 180deg; }
+select::picker(select) {
+  appearance: base-select; background: var(--panel); color: var(--text); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 4px; margin-block: 4px; box-shadow: 0 12px 32px rgba(0,0,0,.45);
+  max-height: min(360px, 60vh); overflow: auto; position-try-fallbacks: flip-block;
+}
+select option { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; font-size: 13px; color: var(--text); cursor: pointer; }
+select option::checkmark { color: var(--accent); }
+select option:hover, select option:focus-visible { background: var(--panel-2); outline: none; }
+select option:checked { background: rgba(124,156,255,.14); color: var(--text); }
+select option:disabled { color: var(--muted); opacity: .6; cursor: default; }
+select optgroup { font-size: 11px; font-weight: 600; color: var(--muted); padding: 6px 8px 2px; }
+input[type=date], input[type=datetime-local] { font-family: var(--mono); font-size: 12px; }
+input[type=date]::-webkit-calendar-picker-indicator, input[type=datetime-local]::-webkit-calendar-picker-indicator { cursor: pointer; opacity: .7; }
+/* #383: select.js's list for a select of more than 10 options: a search box on top */
+.sel-popover {
+  position: fixed; inset: auto; margin: 0; z-index: 1000; display: flex; flex-direction: column; gap: 4px;
+  background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 4px; box-shadow: 0 12px 32px rgba(0,0,0,.45); overflow: hidden;
+}
+.sel-popover .sel-search { width: 100%; flex: none; }
+.sel-list { overflow: auto; min-height: 0; }
+.sel-option { padding: 6px 8px; border-radius: 6px; font-size: 13px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sel-option.active { background: var(--panel-2); }
+.sel-option[aria-selected="true"] { color: var(--accent); }
+.sel-option[aria-disabled="true"] { color: var(--muted); opacity: .6; cursor: default; }
+.sel-group-label { padding: 6px 8px 2px; font-size: 11px; font-weight: 600; color: var(--muted); }
+.sel-empty { padding: 6px 8px; }
+/* #383: the date-range control (date-range.js): presets, then From and To */
+.date-range { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.date-range-field { display: inline-flex; align-items: center; gap: 6px; }
+.date-range-field input { width: auto; padding: 4px 6px; }
 
 .field { margin-bottom: 12px; }
 .field > label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 4px; }

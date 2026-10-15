@@ -98,6 +98,7 @@ function loadWindow() {
     if (fs.existsSync(file)) { try { run(file); } catch { /* a Node-only core: the tab does without it */ } }
   }
   for (const file of cityScripts()) run(file);
+  run(path.join(RENDERER, 'date-range.js'));
   run(path.join(RENDERER, 'views', 'project', 'project-architecture.js'));
   dom.document.addEventListener('click', (e) => sandbox.ProjectArchitecture.onClick(e));
   const newBox = () => {

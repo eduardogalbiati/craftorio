@@ -68,7 +68,7 @@ test('analyticsContext: the quick range (days) and a custom from/to both show, w
   assert.match(quick, /^range \d{4}-\d{2}-\d{2} to \d{4}-\d{2}-\d{2}, the orchestrator's runs$/);
 
   sandbox.ax.scope = 'machine';
-  sandbox.ax.days = null;
+  sandbox.ax.preset = null;
   sandbox.ax.from = '2026-09-01';
   sandbox.ax.to = '2026-09-30';
   assert.equal(sandbox.analyticsContext(), 'range 2026-09-01 to 2026-09-30, every CLI session on this machine');

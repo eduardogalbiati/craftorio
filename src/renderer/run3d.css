@@ -36,6 +36,12 @@
   color-scheme: light;
 }
 .r3d *, .r3d *::before, .r3d *::after { box-sizing: border-box; }
+/* issue 383: a HUD select's list (style.css's select) in the view's light or dark theme */
+.r3d select::picker(select) { background: var(--r3d-tint); color: var(--r3d-ink); border-color: var(--r3d-line); box-shadow: var(--r3d-shadow); }
+.r3d select option { color: var(--r3d-ink); }
+.r3d select option:hover, .r3d select option:focus-visible { background: var(--r3d-hover); }
+.r3d select option:checked { background: var(--r3d-accent-soft); }
+.r3d select option::checkmark { color: var(--r3d-accent); }
 .r3d button { font: inherit; color: inherit; cursor: pointer; border: 0; background: none; padding: 0; }
 /* clip, not hidden: never a scroll container, so focusing or scrolling a card into view cannot shift the HUD */
 .r3d-root, .r3d-app { position: absolute; inset: 0; overflow: clip; }
