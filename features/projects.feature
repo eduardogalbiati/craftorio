@@ -38,10 +38,12 @@ Feature: Projects, a screen of the menu with a page per project
     Then the project page of "demo-app" is open
     And the project tab "Conflict map" is selected
 
-  @issue-354
-  Scenario: The Refactor tab says what it will hold
+  @issue-354 @issue-357
+  Scenario: The Refactor tab of a project with no Architecture report leads to the Architecture tab
     Given the app is open
     When I open "Projects" in the sidebar
     And I open the project "demo-app" from the Projects screen
     And I open the "Refactor" project tab
-    Then the project tab "Refactor" shows an empty state mentioning "refactor"
+    Then the Refactor tab says the project has no Architecture report yet
+    When I open the Architecture tab from the Refactor tab
+    Then the project tab "Architecture" is selected
