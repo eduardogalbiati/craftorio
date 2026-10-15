@@ -2,7 +2,8 @@
 // usage scan (src/local-usage-worker.js) and the CLI probes (src/tool-worker.js). The worker is
 // started on the first request and kept for the next ones; it never keeps the process alive while
 // no request waits. Protocol: the request goes as { id, ...message }, the worker answers
-// { id, result } or { id, error }. The worker is started from source text (eval), so that it also
+// { id, result } or { id, error } (rejected with `answered: true`, unlike a worker that failed to
+// start or stopped). The worker is started from source text (eval), so that it also
 // loads from the packaged app.asar.
 
 const { Worker } = require('worker_threads');
@@ -26,7 +27,7 @@ function workerClient(file) {
       pending.delete(id);
       if (!pending.size) w.unref();
       if (!p) return;
-      if (error) p.reject(new Error(error));
+      if (error) p.reject(Object.assign(new Error(error), { answered: true })); // the work itself failed
       else p.resolve(result);
     });
     w.on('error', (e) => { if (worker === w) worker = null; failAll(e); });

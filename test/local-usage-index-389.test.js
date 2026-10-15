@@ -58,6 +58,7 @@ test('readLocalUsageAsync with the workspace index saves each transcript\'s entr
   try {
     const out = await readLocalUsageAsync({ home, index: store.path });
     assert.equal(out.records.length, 2);
+    await readLocalUsageAsync({ home, index: store.path }); // answered once the first call's entries are saved
     const { DatabaseSync } = require('node:sqlite');
     const db = new DatabaseSync(store.path);
     try {

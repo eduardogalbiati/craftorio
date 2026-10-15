@@ -61,7 +61,7 @@ module.exports = (ctx) => {
     const hours = workspace.readSettings(ws).backlogRefreshHours;
     const { last } = refreshes.refreshRuns(list);
     const stale = last && Number(hours) > 0 && Date.now() - Date.parse(last.startedAt) >= Number(hours) * 3600e3;
-    const count = stale && project?.folder ? mergeCount(project.folder, last.startedAt, local?.base || 'HEAD') : null;
+    const count = stale && project?.folder ? mergeCount(project, last.startedAt, local?.base || 'HEAD') : null;
     const state = refreshes.refreshState({
       runs: list, intervalHours: hours, merges: count == null ? null : Number(count), dismissedOn: project ? refreshes.readDismissed(ws.backlog, project.id) : null,
     });
@@ -70,18 +70,21 @@ module.exports = (ctx) => {
   }
 
   // The merges on `base` since `since` (#389): counted by an async git call and kept for
-  // MERGE_COUNT_MS, so a Backlog read never waits for git; null until the first count is known
-  // (the banner shows from the next read).
+  // MERGE_COUNT_MS, so a Backlog read never waits for git; null until the first count is known.
+  // A count that changed pushes backlog:changed (file 'refresh'), so the screen reads the banner again.
   const MERGE_COUNT_MS = 5 * 60e3;
   const mergeCounts = new Map(); // "<folder>|<since>|<base>" → { count, at, pending }
-  function mergeCount(folder, since, base) {
+  function mergeCount(project, since, base) {
+    const folder = project.folder;
     const key = `${folder}|${since}|${base}`;
     const hit = mergeCounts.get(key);
     if (!hit?.pending && (!hit || Date.now() - hit.at >= MERGE_COUNT_MS)) {
       const entry = { count: hit?.count ?? null, at: hit?.at || 0, pending: true };
       mergeCounts.set(key, entry);
       git(['rev-list', '--count', '--first-parent', `--since=${since}`, base, '--'], folder, { timeout: 10000 }).catch(() => null).then((out) => {
+        const before = entry.count;
         Object.assign(entry, { count: out, at: Date.now(), pending: false });
+        if (out !== before) ctx.events?.emit('backlog:changed', { projectId: project.id, file: 'refresh', watching: !!ctx.backlogWatching?.() });
       });
     }
     return mergeCounts.get(key).count;

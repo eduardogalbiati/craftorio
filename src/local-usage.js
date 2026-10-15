@@ -53,15 +53,27 @@ function newMetrics(provider, sessionId) {
   };
 }
 
-function finishMetrics(m) {
+// The span and active time of m.times, continued from m.fold ({ first, last, active }: the times an
+// index entry folded, #389). A time before the folded span's end counts as inside it.
+function foldTimes(m) {
   const t = m.times.map((x) => Date.parse(x)).filter(Number.isFinite).sort((a, b) => a - b);
-  let active = 0;
-  for (let i = 1; i < t.length; i++) if (t[i] - t[i - 1] <= IDLE_GAP_MS) active += t[i] - t[i - 1];
-  const { times, files, ...rest } = m;
+  let { first = null, last = null, active = 0 } = m.fold || {};
+  for (const x of t) {
+    if (last == null) { first = last = x; continue; }
+    if (x < last) { first = Math.min(first, x); continue; }
+    if (x - last <= IDLE_GAP_MS) active += x - last;
+    last = x;
+  }
+  return { first, last, active };
+}
+
+function finishMetrics(m) {
+  const { first, last, active } = foldTimes(m);
+  const { times, fold, files, ...rest } = m;
   return {
     ...rest, files: [...files],
-    firstTs: t.length ? new Date(t[0]).toISOString() : null, lastTs: t.length ? new Date(t[t.length - 1]).toISOString() : null,
-    durationMs: t.length ? t[t.length - 1] - t[0] : 0, activeMs: active,
+    firstTs: first == null ? null : new Date(first).toISOString(), lastTs: last == null ? null : new Date(last).toISOString(),
+    durationMs: first == null ? 0 : last - first, activeMs: active,
   };
 }
 
@@ -385,7 +397,7 @@ function scanLocalUsage({ home, states = new Map() } = {}) {
       const prev = states.get(f);
       const r = scanFile(f, kind, prev);
       if (!r) continue;
-      if (r.entry !== prev) { states.set(f, r.entry); changed.push(f); }
+      if (r.entry !== prev) { states.set(f, r.entry); if (r.entry.key) changed.push(f); } // no key: unreadable, not saved
       if (r.bytes) { scan.parsedFiles++; scan.bytesParsed += r.bytes; }
       const res = r.entry.result;
       for (const x of res.records) records.push(x);
@@ -406,12 +418,38 @@ function scanLocalUsage({ home, states = new Map() } = {}) {
   return { records, sessions, plans: { codex: codexPlan(latestPlan) }, found, sources: src, scan, changed, gone };
 }
 
-// An entry as JSON for the index (Sets and Maps kept; a parser's result is rebuilt from its state), and back.
-const encodeEntry = ({ result, ...entry }) => JSON.stringify(entry.state ? entry : { ...entry, result },
-  (k, v) => (v instanceof Set ? { $set: [...v] } : v instanceof Map ? { $map: [...v] } : v));
+// An entry as compact JSON for the index, and back (a parser's result is rebuilt from its state):
+// records as rows, each session's times folded into { first, last, active }, and only the last
+// RECENT_IDS ids of each dedup set (a message's repeated chunks and tool calls are adjacent lines).
+const ENTRY_VERSION = 2;
+const RECENT_IDS = 1000;
+const recent = (set) => [...set].slice(-RECENT_IDS);
+const packRecords = (rs) => rs.map((r) => [r.sessionId, r.model, r.ts, r.tokens.input, r.tokens.output, r.tokens.cache_read, r.tokens.cache_write, r.tokens.reasoning, r.costUsd]);
+const unpackRecords = (provider, rows) => rows.map(([sessionId, model, ts, input, output, cache_read, cache_write, reasoning, costUsd]) => ({
+  provider, sessionId, model, ts, tokens: { input, output, cache_read, cache_write, reasoning }, costUsd,
+}));
+const packMetrics = (m) => ({ ...m, times: [], fold: foldTimes(m), files: [...m.files] });
+const unpackMetrics = (m) => ({ ...m, files: new Set(m.files) });
+function packState(s) {
+  const out = { ...s, records: packRecords(s.records) };
+  if (s.kind !== 'claude') return { ...out, m: packMetrics(s.m) };
+  return { ...out, seen: recent(s.seen), toolIds: recent(s.toolIds), turnIds: recent(s.turnIds), metrics: [...s.metrics].map(([k, m]) => [k, packMetrics(m)]) };
+}
+function unpackState(s) {
+  const out = { ...s, records: unpackRecords(s.kind, s.records) };
+  if (s.kind !== 'claude') return { ...out, m: unpackMetrics(s.m) };
+  return { ...out, seen: new Set(s.seen), toolIds: new Set(s.toolIds), turnIds: new Set(s.turnIds), metrics: new Map(s.metrics.map(([k, m]) => [k, unpackMetrics(m)])) };
+}
+function encodeEntry({ result, ...entry }) {
+  const packed = entry.state ? { ...entry, state: packState(entry.state) } : { ...entry, result: { ...result, records: packRecords(result.records) } };
+  return JSON.stringify({ v: ENTRY_VERSION, ...packed });
+}
 function decodeEntry(text) {
-  const entry = JSON.parse(text, (k, v) => (v && Array.isArray(v.$set) ? new Set(v.$set) : v && Array.isArray(v.$map) ? new Map(v.$map) : v));
-  if (entry.state) entry.result = RESULT[entry.kind](entry.state);
+  const { v, ...entry } = JSON.parse(text);
+  if (v !== ENTRY_VERSION) throw new Error('an older entry');
+  if (!entry.state) return { ...entry, result: { ...entry.result, records: unpackRecords(entry.kind, entry.result.records) } };
+  entry.state = unpackState(entry.state);
+  entry.result = RESULT[entry.kind](entry.state);
   return entry;
 }
 
@@ -430,10 +468,12 @@ function readLocalUsage({ home } = {}) {
 // ---- the usage worker (#389) ---------------------------------------------------------------------
 // One worker thread per process (src/local-usage-worker.js) keeps the entries between calls and,
 // given the workspace's index.db (`index`), loads and saves them in its usage_files table. If it
-// cannot start, the work runs in the calling thread.
+// cannot start (or stops), the work runs in the calling thread; an error of the work itself is
+// rethrown (running it again here would only block this thread to fail the same way).
 const usageWorker = workerClient(path.join(__dirname, 'local-usage-worker.js'));
 function inUsageWorker(message, fallback) {
   const here = (e) => {
+    if (e.answered) throw e;
     console.error('usage worker:', e.message);
     return fallback();
   };

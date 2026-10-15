@@ -1,8 +1,9 @@
 // The worker thread of readLocalUsageAsync (src/local-usage.js, #389): runs the incremental scan of
 // the CLIs' transcripts off the main process and keeps each file's entry between calls. Given the
 // workspace's index.db, it loads the entries from its usage_files table once (the first scan after an
-// app start reads only what changed since the last one) and saves the entries a scan changed, through
-// a node:sqlite connection of its own opened for each scan (the service's handle keeps its own).
+// app start reads only what changed since the last one) and, after answering, saves the entries a scan
+// changed (compact, src/local-usage.js encodeEntry) in small transactions, through a node:sqlite
+// connection of its own opened for each save (the service's handle keeps its own).
 //
 // It also computes the Usage screen's totals (src/usage.js computeUsage, op 'usage'), so the records
 // of the machine scope never cross to the main process.
@@ -42,44 +43,76 @@ function openIndex(index) {
   }
 }
 
-function save(d, changed, gone) {
-  if (!changed.length && !gone.length) return;
+// The files whose entry is not saved yet (a batch that failed is tried again at the next scan).
+const unsaved = new Set();
+const removed = new Set();
+const BATCH = 50;
+const BUSY_RETRIES = 3;
+const pause = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+
+// Saves the unsaved entries in small transactions, pausing between them, so the service's own writes
+// to the index (the run listing, the background rebuild) never wait long for this worker. A busy
+// index is tried again a few times; a batch that still fails stays unsaved.
+function save(d) {
   const put = d.prepare(`INSERT INTO usage_files (file, key, state) VALUES (?, ?, ?)
     ON CONFLICT(file) DO UPDATE SET key = excluded.key, state = excluded.state`);
   const del = d.prepare('DELETE FROM usage_files WHERE file = ?');
-  d.exec('BEGIN IMMEDIATE');
-  try {
-    for (const f of changed) { const e = states.get(f); if (e) put.run(f, e.key, encodeEntry(e)); }
-    for (const f of gone) del.run(f);
-    d.exec('COMMIT');
-  } catch (e) {
-    try { d.exec('ROLLBACK'); } catch { /* already rolled back */ }
-    throw e;
+  const work = [...[...removed].map((f) => ['del', f]), ...[...unsaved].map((f) => ['put', f])];
+  for (let i = 0; i < work.length; i += BATCH) {
+    if (i) pause(20);
+    const batch = work.slice(i, i + BATCH);
+    for (let attempt = 1; ; attempt++) {
+      try {
+        d.exec('BEGIN IMMEDIATE');
+      } catch (e) {
+        if (attempt < BUSY_RETRIES && /busy|locked/i.test(e.message)) { pause(200); continue; }
+        throw e;
+      }
+      try {
+        for (const [op, f] of batch) {
+          const e = states.get(f);
+          if (op === 'del') del.run(f);
+          else if (e?.key) put.run(f, e.key, encodeEntry(e));
+        }
+        d.exec('COMMIT');
+        break;
+      } catch (e) {
+        try { d.exec('ROLLBACK'); } catch { /* already rolled back */ }
+        throw e;
+      }
+    }
+    for (const [op, f] of batch) (op === 'del' ? removed : unsaved).delete(f);
   }
 }
 
-// One incremental scan of `home`'s transcripts, its entries saved in the index.
+// One incremental scan of `home`'s transcripts; `persist()` then saves its entries in the index.
 function scan(home, index) {
-  const d = openIndex(index);
-  try {
-    const { changed, gone, ...out } = scanLocalUsage({ home, states });
-    if (d) {
-      try { save(d, changed, gone); } catch (e) { console.error('local usage index:', e.message); }
+  openIndex(index)?.close(); // the first scan loads the saved entries, so it reads only what changed since
+  const { changed, gone, ...out } = scanLocalUsage({ home, states });
+  for (const f of changed) { unsaved.add(f); removed.delete(f); }
+  for (const f of gone) { removed.add(f); unsaved.delete(f); }
+  const persist = () => {
+    if (!unsaved.size && !removed.size) return;
+    const d = openIndex(index);
+    if (!d) return;
+    try { save(d); } catch (e) { console.error('local usage index:', e.message); } finally {
+      try { d.close(); } catch { /* already closed */ }
     }
-    return out;
-  } finally {
-    try { d?.close(); } catch { /* already closed */ }
-  }
+  };
+  return { out, persist };
 }
 
 parentPort.on('message', ({ id, op, home, index, opts }) => {
+  let persist = null;
   try {
-    // 'usage': src/usage.js computeUsage here, with the scan when the scope needs it (only the totals go back)
-    const result = op === 'usage'
-      ? require('./usage').computeUsage({ ...opts, local: opts.scope === 'machine' ? scan(home, index) : null })
-      : scan(home, index);
+    let local = null;
+    if (op !== 'usage' || opts.scope === 'machine') ({ out: local, persist } = scan(home, index));
+    // 'usage': src/usage.js computeUsage here (only the totals go back)
+    const result = op === 'usage' ? require('./usage').computeUsage({ ...opts, local }) : local;
     parentPort.postMessage({ id, result });
   } catch (e) {
     parentPort.postMessage({ id, error: e.message || String(e) });
   }
+  // after the answer: the caller does not wait for the index
+  persist?.();
 });

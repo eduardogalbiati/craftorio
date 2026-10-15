@@ -27,7 +27,8 @@
 //                  merge conflict...),
 //                  for the notification center; kept notificationRetentionDays days (settings).
 //   usage_files    the local-usage scan's state of each CLI transcript (#389, src/local-usage.js): its
-//                  size + mtime key, how far it was read and its parsed records. Written by the scan's
+//                  size + mtime key, how far it was read, its records (as rows) and its sessions'
+//                  folded times and recent ids (encodeEntry). Written in small batches by the scan's
 //                  worker thread (src/local-usage-worker.js) through its own connection; rebuildable.
 //
 // `openStore(ws)` opens (or reopens) the store of a workspace layout; `storeFor(dir)` finds the open
