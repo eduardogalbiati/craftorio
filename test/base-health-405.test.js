@@ -165,6 +165,8 @@ test('#405 runBaseCheck: a merge leaving a test red files one issue (test, commi
   assert.equal(g.status, 'green');
   const now = commit(f.repo, 'b.txt', 'b\n', 'merge cart');
   const originRefs = git(f.origin, 'for-each-ref');
+  // the running item as stored (#112: an item with a run is stored 'planned', its status comes from the run)
+  const runningBefore = JSON.stringify(readStages(ws)[0].items[0]);
 
   const r = await runBaseCheck(ws, { ...checkArgs(f), runSuite: red, exec: fx.exec });
   assert.equal(r.status, 'red');
@@ -189,7 +191,7 @@ test('#405 runBaseCheck: a merge leaving a test red files one issue (test, commi
   const urls = [fix.url, ...(fix.issues || []).map((i) => i?.url)];
   assert.ok(urls.includes(c.url), 'the fix item points to the filed issue');
   assert.equal(stages[1].id, 's1');
-  assert.equal(stages[1].items[0].status, 'running');
+  assert.equal(JSON.stringify(stages[1].items[0]), runningBefore, 'the running item is untouched');
   assert.equal(stages[1].items[0].runId, 'r1');
   assert.equal(stages[2].id, 's2');
 
@@ -324,4 +326,67 @@ test('#405 runBaseCheck runs the suite on a clean checkout of the base tip, in s
   assert.equal(seen.untracked, false);
   assert.equal(seen.sim, '1');
   assert.equal(r.commit, tip);
+});
+
+// ---- review round 1: reopen, record-only sightings ----------------------------------------------
+
+test('#405 a test red again after a green check reopens its issue and gets a new fix item once the old one is done', async (t) => {
+  const ws = tmpWs(t);
+  const f = fixture(t, 'canonical');
+  writeRoadmapFixture(ws);
+  const { runBaseCheck, knownFailures } = load();
+  const { updateRoadmap } = loadRoadmap();
+  const fx = fakeExec();
+  await runBaseCheck(ws, { ...checkArgs(f), runSuite: red, exec: fx.exec });
+  const url = fx.creates()[0]?.url;
+  assert.ok(url);
+  // the fix item merged, the base went green: the test is no longer a known failure
+  updateRoadmap(path.join(ws, 'backlog'), PROJECT, (r) => ({ ...r, stages: r.stages.map((s) => ({ ...s, items: s.items.map((x) => (x.inputs?.mode === 'auto' ? { ...x, status: 'done' } : x)) })) }));
+  commit(f.repo, 'fix.txt', 'fixed\n', 'fix cart');
+  assert.equal((await runBaseCheck(ws, { ...checkArgs(f), runSuite: green, exec: fx.exec })).status, 'green');
+  assert.equal(knownFailures(ws, PROJECT).length, 0);
+
+  commit(f.repo, 'again.txt', 'again\n', 'break cart again');
+  const r = await runBaseCheck(ws, { ...checkArgs(f), runSuite: red, exec: fx.exec });
+  assert.equal(r.status, 'red');
+  assert.equal(fx.creates().length, 1, 'no second issue');
+  assert.ok(fx.calls.some((c) => c.args.includes('reopen') && c.args.includes('501')), 'the issue is reopened');
+  assert.equal(r.issues[0].url, url);
+  assert.equal(knownFailures(ws, PROJECT).length, 1);
+  const fixes = fixItems(readStages(ws));
+  assert.equal(fixes.length, 2, 'a new fix item next to the done one');
+  assert.equal(fixes.filter((x) => x.status !== 'done').length, 1);
+});
+
+test('#405 record-only sightings (no exec) never file; the same run reported with exec files once, never twice', async (t) => {
+  const ws = tmpWs(t);
+  const { recordPreexisting, knownFailures } = load();
+  const fx = fakeExec();
+  const base = { projectId: PROJECT, commit: 'abc1234', failures: [{ test: RED.test, file: RED.file, reason: 'fails on base' }] };
+  // the engine's record (no exec): two runs, nothing filed
+  await recordPreexisting(ws, { ...base, runId: 'run-1' });
+  await recordPreexisting(ws, { ...base, runId: 'run-2' });
+  assert.deepEqual([...knownFailures(ws, PROJECT)[0].runs], ['run-1', 'run-2']);
+  assert.equal(knownFailures(ws, PROJECT)[0].issue ?? null, null);
+  // the service's call for the same run files the issue that is due
+  const withExec = { ...base, runId: 'run-2', onRed: 'fix', platform: 'github', repo: 'o/r', exec: fx.exec };
+  await recordPreexisting(ws, withExec);
+  assert.equal(fx.creates().length, 1);
+  const after = fx.calls.length;
+  await recordPreexisting(ws, withExec);
+  assert.equal(fx.calls.length, after, 'the same run is not reported twice');
+  assert.deepEqual([...knownFailures(ws, PROJECT)[0].runs], ['run-1', 'run-2']);
+});
+
+test('#405 the engine\'s real machine records a run\'s pre-existing failures in the project\'s store, without filing', async (t) => {
+  const ws = tmpWs(t);
+  const { knownFailures } = load();
+  const machine = require('../src/engine/machine-actions').real();
+  const info = { projectId: PROJECT, commit: 'abc1234', failures: [{ test: RED.test, file: RED.file, reason: 'fails on base' }] };
+  await machine.noteFailingOnMain(ws, { ...info, runId: 'run-1' });
+  await machine.noteFailingOnMain(ws, { ...info, runId: 'run-2' });
+  const known = knownFailures(ws, PROJECT);
+  assert.equal(known.length, 1);
+  assert.deepEqual([...known[0].runs], ['run-1', 'run-2']);
+  assert.equal(known[0].issue ?? null, null, 'nothing filed by the engine');
 });
