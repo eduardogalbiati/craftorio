@@ -210,6 +210,40 @@ test('#406 after the resumed run ends, a leftover process under the -base folder
   assert.deepEqual(await strayList(guard), [[4242, RESUMED]]);
 });
 
+// ---- a chain resumed twice (C from B from A, all in worktrees/A) -----------------------------------
+
+const AGAIN = '20261015-150000-c0ffee00';
+
+test('#406 a run resumed twice: while the second resume lives, its processes in the first run\'s worktree are not strays', async (t) => {
+  const { ws, wt, notices, check } = setup(t);
+  writeRun(ws.runs, RESUMED, { status: 'failed', worktree: wt, resumedFrom: FINISHED, startMs: T0 + 5400e3 });
+  writeRun(ws.runs, AGAIN, { status: 'running', worktree: wt, resumedFrom: RESUMED, startMs: T0 + 12000e3, alive: true });
+  const { guard, busyTick } = check(suiteUnder(wt));
+  await busyTick();
+  assert.deepEqual(await strayList(guard), []);
+  assert.equal(notices.length, 0, 'no notification');
+});
+
+test('#406 a run resumed twice: after the second resume ends, a leftover process is named with it', async (t) => {
+  const { ws, wt, notices, check } = setup(t);
+  writeRun(ws.runs, RESUMED, { status: 'failed', worktree: wt, resumedFrom: FINISHED, startMs: T0 + 5400e3 });
+  writeRun(ws.runs, AGAIN, { status: 'success', worktree: wt, resumedFrom: RESUMED, startMs: T0 + 12000e3 });
+  const { guard, busyTick } = check(suiteUnder(wt));
+  await busyTick();
+  assert.deepEqual(await strayList(guard), [[4242, AGAIN]]);
+  assert.deepEqual(notices.map((n) => n.target), [{ runId: AGAIN }]);
+});
+
+test('#406 a run that worked in its own worktree is not taken as the last user of another run\'s folder', async (t) => {
+  const { ws, wt, check } = setup(t);
+  const other = path.join(ws.worktrees, AGAIN);
+  fs.mkdirSync(other, { recursive: true });
+  writeRun(ws.runs, AGAIN, { status: 'success', worktree: other, startMs: T0 + 12000e3 });
+  const { guard, busyTick } = check(suiteUnder(wt));
+  await busyTick();
+  assert.deepEqual(await strayList(guard), [[4242, FINISHED]]);
+});
+
 // ---- what must not change -------------------------------------------------------------------------
 
 test('#406 a worktree nobody resumed: a busy process left under it is flagged once with its own run', async (t) => {
