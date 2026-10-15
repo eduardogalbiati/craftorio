@@ -172,12 +172,14 @@ const AGENTS_WINDOW_AGENTS = ['oracle', 'product-owner', 'supervisor'];
 //                    { args, click, grab, js, pause, project, run, runDirs, win }
 //   afterOpen(page)  then sets what is on the screen (a tab, a mode, a drawer), after the --oracle states
 const VIEWS_DIR = path.join(__dirname, 'screenshot', 'views');
-const VIEWS = Object.fromEntries(fs.readdirSync(VIEWS_DIR).filter((f) => f.endsWith('.js')).sort()
-  .map((f) => [f.slice(0, -3), require(path.join(VIEWS_DIR, f))]));
+// #394: the seed modules of a folder, keyed by view name (a test passes a folder of its own)
+const loadViews = (dir) => Object.fromEntries(fs.readdirSync(dir).filter((f) => f.endsWith('.js')).sort()
+  .map((f) => [f.slice(0, -3), require(path.join(dir, f))]));
+const VIEWS = loadViews(VIEWS_DIR);
 const THEMES = ['dark', 'light', 'system'];
 const KEEP_AWAKE = ['off', 'idle', 'active', 'error'];
 
-function parseArgs(argv) {
+function parseArgs(argv, views = VIEWS) {
   const a = { view: 'dashboard', tab: null, mode: null, run: 'mock', workflow: 'software-development.yaml', clicks: [], contexts: [], presses: [], keys: [], pastes: [], inputs: {}, stopAt: null, keepAwake: null, theme: null, size: [1400, 900], ref: null, out: null, name: null, side: null, caption: null, wait: null, timeout: 90000, demoShots: true };
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i];
@@ -242,17 +244,17 @@ function parseArgs(argv) {
   }
   // #263: the Agents window on an agent, captured instead of the main window (--size sizes it too)
   if (a.agentsWindow && !AGENTS_WINDOW_AGENTS.includes(a.agentsWindow)) throw new Error(`--agents-window takes ${AGENTS_WINDOW_AGENTS.join(' | ')}`);
-  let v = VIEWS[a.view];
-  if (!v) throw new Error(`Unknown view: ${a.view}. Views: ${Object.keys(VIEWS).join(', ')}`);
+  let v = views[a.view];
+  if (!v) throw new Error(`Unknown view: ${a.view}. Views: ${Object.keys(views).join(', ')}`);
   if (a.tab && !v.tabs?.includes(a.tab)) throw new Error(`--tab ${a.tab} does not apply to ${a.view}${v.tabs ? ` (tabs: ${v.tabs.join(', ')})` : ''}`);
   if (a.mode && !v.modes?.includes(a.mode)) throw new Error(`--mode ${a.mode} does not apply to ${a.view}${v.modes ? ` (modes: ${v.modes.join(', ')})` : ''}`);
   // a view drawn as another one in a mode (#254: the Roadmap screen, the Backlog in its roadmap mode)
-  if (v.alias) { Object.assign(a, v.alias); v = VIEWS[a.view]; }
+  if (v.alias) { Object.assign(a, v.alias); v = views[a.view]; }
   if (a.theme && !THEMES.includes(a.theme)) throw new Error(`--theme takes ${THEMES.join(' | ')}`);
   if (a.keepAwake && !KEEP_AWAKE.includes(a.keepAwake)) throw new Error(`--keep-awake takes ${KEEP_AWAKE.join(' | ')}`);
   if (a.oracle && !ORACLE_STATES.includes(a.oracle)) throw new Error(`--oracle takes ${ORACLE_STATES.join(' | ')}`);
   // the options a view takes on its own (its seed module's `options`), only on that view
-  for (const [name, view] of Object.entries(VIEWS)) {
+  for (const [name, view] of Object.entries(views)) {
     for (const [option, values] of Object.entries(view.options || {})) {
       if (a[option] == null) continue;
       if (!values.includes(a[option])) throw new Error(`--${option} takes ${values.join(' | ')}`);
@@ -621,6 +623,7 @@ module.exports = {
   demoLocalMerge,
   demoRoadmap,
   fileName,
+  loadViews,
   parseArgs,
   recordShot,
   simulateChannels,
