@@ -131,3 +131,125 @@ test('registerView: a view with no mount does not throw', () => {
   const registerView = load(dom);
   assert.doesNotThrow(() => registerView({ id: 'x', markup: '<section></section>' }));
 });
+
+// #329 the interface language: screens whose markup is a function are drawn again (redrawMarkup),
+// and the menu's texts come from the catalog by key (relabelNav). A DOM stub with sections that can be
+// replaced in place, and nav buttons with a label span.
+function makeLanguageDom() {
+  const sections = []; // { id, hidden, html, removed }
+  const sectionOf = (html) => {
+    const id = (html.match(/id="([^"]+)"/) || [])[1];
+    const cls = (html.match(/class="([^"]*)"/) || [])[1] || '';
+    const el = {
+      id,
+      html,
+      hidden: cls.split(/\s+/).includes('hidden'),
+      classList: {
+        contains: (c) => c === 'hidden' && el.hidden,
+        toggle: (c, on) => { if (c === 'hidden') el.hidden = on === undefined ? !el.hidden : Boolean(on); },
+      },
+      insertAdjacentHTML(_pos, markup) { sections.splice(sections.indexOf(el) + 1, 0, sectionOf(markup)); },
+      remove() { sections.splice(sections.indexOf(el), 1); },
+    };
+    return el;
+  };
+  const buttons = [];
+  const menu = {
+    querySelectorAll: () => [],
+    insertBefore(node) { buttons.push(node); return node; },
+  };
+  const document = {
+    querySelector(sel) {
+      if (sel === 'main.content') return { insertAdjacentHTML: (_pos, markup) => sections.push(sectionOf(markup)) };
+      if (sel === 'nav.sidebar .sidebar-menu') return menu;
+      if (sel.startsWith('.nav-group')) return null;
+      throw new Error(`unsupported selector: ${sel}`);
+    },
+    querySelectorAll(sel) {
+      if (sel === '.nav-item[data-view]') return buttons;
+      throw new Error(`unsupported selector: ${sel}`);
+    },
+    getElementById: (id) => sections.find((s) => s.id === id) || null,
+    createElement(tag) {
+      const span = { innerHTML: '' };
+      const btn = {
+        tagName: tag, className: '', dataset: {}, _innerHTML: '',
+        get innerHTML() { return this._innerHTML; },
+        set innerHTML(v) { this._innerHTML = v; span.innerHTML = (v.match(/<span>(.*)<\/span>/) || [])[1] || ''; },
+        querySelector: () => span,
+        span,
+      };
+      return btn;
+    },
+    body: { insertAdjacentHTML() {} },
+  };
+  return { document, sections, buttons };
+}
+
+function loadWithLanguage(dom, catalog) {
+  const sandbox = {
+    document: dom.document,
+    I18n: { t: (key) => catalog.current[key] ?? key },
+    NavGroups: { GROUPS: [] },
+  };
+  sandbox.window = sandbox;
+  vm.createContext(sandbox);
+  vm.runInContext(src, sandbox);
+  return sandbox;
+}
+
+test('#329 redrawMarkup: a screen whose markup is a function is drawn again in the new text, mounted again, and shown when it was showing', () => {
+  const dom = makeLanguageDom();
+  const catalog = { current: { title: 'General' } };
+  const w = loadWithLanguage(dom, catalog);
+  const calls = { mount: 0, show: 0 };
+  w.registerView({
+    id: 'settings',
+    markup: () => `<section id="view-settings" class="view hidden"><h1>${catalog.current.title}</h1></section>`,
+    mount() { calls.mount += 1; },
+    show() { calls.show += 1; },
+  });
+  dom.document.getElementById('view-settings').classList.toggle('hidden', false); // showView opened it
+  catalog.current = { title: 'Geral' };
+  w.ViewRegistry.redrawMarkup();
+  const el = dom.document.getElementById('view-settings');
+  assert.equal(dom.sections.filter((s) => s.id === 'view-settings').length, 1, 'the old section is replaced, not duplicated');
+  assert.equal(el.html.includes('<h1>Geral</h1>'), true);
+  assert.equal(el.hidden, false, 'it still shows');
+  assert.deepEqual(calls, { mount: 2, show: 1 });
+});
+
+test('#329 redrawMarkup: a hidden screen stays hidden and is not shown; a screen with fixed markup is left alone', () => {
+  const dom = makeLanguageDom();
+  const catalog = { current: { title: 'Agents' } };
+  const w = loadWithLanguage(dom, catalog);
+  const calls = { hiddenMount: 0, hiddenShow: 0, fixedMount: 0 };
+  w.registerView({
+    id: 'agents',
+    markup: () => `<section id="view-agents" class="view hidden">${catalog.current.title}</section>`,
+    mount() { calls.hiddenMount += 1; },
+    show() { calls.hiddenShow += 1; },
+  });
+  w.registerView({ id: 'fixed', markup: '<section id="view-fixed" class="view hidden">Fixed</section>', mount() { calls.fixedMount += 1; } });
+  catalog.current = { title: 'Agentes' };
+  w.ViewRegistry.redrawMarkup();
+  const agents = dom.document.getElementById('view-agents');
+  assert.equal(agents.html.includes('Agentes'), true);
+  assert.equal(agents.hidden, true);
+  assert.equal(dom.document.getElementById('view-fixed').html.includes('Fixed'), true);
+  assert.deepEqual(calls, { hiddenMount: 2, hiddenShow: 0, fixedMount: 1 });
+});
+
+test('#329 the menu label comes from the catalog key nav.<id>, else the entry\'s own text; relabelNav repaints it', () => {
+  const dom = makeLanguageDom();
+  const catalog = { current: { 'nav.settings': 'Settings' } };
+  const w = loadWithLanguage(dom, catalog);
+  w.registerView({ id: 'settings', nav: { label: 'Settings', order: 110 } });
+  w.registerView({ id: 'usage', nav: { label: 'Usage', order: 90 } });
+  const label = (id) => dom.buttons.find((b) => b.dataset.view === id).span.innerHTML;
+  assert.equal(label('settings'), 'Settings');
+  catalog.current = { 'nav.settings': 'Configurações' };
+  w.ViewRegistry.relabelNav();
+  assert.equal(label('settings'), 'Configurações');
+  assert.equal(label('usage'), 'Usage', 'a view without a catalog key keeps its English label');
+});
