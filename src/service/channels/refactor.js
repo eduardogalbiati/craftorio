@@ -35,7 +35,9 @@ const { clientError, requireId } = require('../common');
 const {
   args,
   BOOL,
+  FLAG,
   INT,
+  ISSUE_NUMBER,
   listOf,
   nullable,
   NUMBER,
@@ -43,19 +45,19 @@ const {
   PROJECT_ID,
   shape,
   STRING,
+  text: textOf,
 } = require('../schemas');
 
 const WORKFLOW = 'refactor.yaml';
 const WORKFLOW_NAME = 'refactor';
 const LABEL = 'refactor';
-const OPTIONAL_FLAG = nullable(BOOL);
 const LABEL_COLOR = '0E8A16';
 // a run's summary.json (what listRuns reads) is written right after its workflow.finished event
 const AFTER_RUN_MS = 1500;
 
 const ON_PROJECT = args({ projectId: PROJECT_ID }, ['projectId']);
 const ON_PROPOSAL = (more = {}, required = []) => args({ projectId: PROJECT_ID, id: STRING, ...more }, ['projectId', 'id', ...required]);
-const PROPOSAL = shape({ id: STRING, status: STRING, source: STRING }, ['id', 'status']);
+const PROPOSAL = shape({ id: STRING, status: STRING, source: STRING, issue: ISSUE_NUMBER }, ['id', 'status']);
 const CADENCE = shape({
   on: BOOL, every: INT, since: nullable(STRING), nextIn: INT, ready: BOOL, rankedAt: nullable(STRING), rankCostUsd: nullable(NUMBER),
   left30: INT, left90: INT,
@@ -316,7 +318,7 @@ module.exports = (ctx) => {
       channel: 'refactor:dismiss',
       method: 'dismissRefactorProposal',
       params: ['projectId', 'id', 'reason'],
-      schema: { params: ON_PROPOSAL({ reason: STRING }, ['reason']), result: PROPOSAL },
+      schema: { params: ON_PROPOSAL({ reason: textOf(2000,'Why the proposal is dismissed (kept on the proposal).') }, ['reason']), result: PROPOSAL },
       fn: ({ projectId, id, reason }) => {
         const p = projectOf(projectId);
         proposalOf(p, id);
@@ -327,14 +329,14 @@ module.exports = (ctx) => {
       channel: 'refactor:prioritize',
       method: 'prioritizeRefactors',
       params: ['projectId', '...opts'],
-      schema: { params: args({ projectId: PROJECT_ID, mock: OPTIONAL_FLAG }, ['projectId']), result: RANKING },
+      schema: { params: args({ projectId: PROJECT_ID, mock: FLAG }, ['projectId']), result: RANKING },
       fn: prioritize,
     },
     {
       channel: 'refactor:file',
       method: 'fileRefactorIssue',
       params: ['projectId', 'id', '...opts'],
-      schema: { params: ON_PROPOSAL({ preview: OPTIONAL_FLAG }), result: shape({ preview: BOOL, command: STRING, body: STRING, proposal: PROPOSAL }, ['preview', 'proposal']) },
+      schema: { params: ON_PROPOSAL({ preview: FLAG }), result: shape({ preview: BOOL, command: STRING, body: STRING, proposal: PROPOSAL }, ['preview', 'proposal']) },
       fn: fileIssue,
     },
     {

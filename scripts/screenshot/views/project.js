@@ -375,52 +375,52 @@ async function showSeeds({ click, js, seedRun }) {
   await js('document.querySelector(\'[data-testid="seeds-section"]\')?.scrollIntoView()');
 }
 
+function stubChannel(channel, handler) {
+  const { ipcMain } = require('electron');
+  ipcMain.removeHandler(channel);
+  ipcMain.handle(channel, handler);
+}
+
+// The Architecture tab's modes: the stubs before the tab opens, then the clicks once it is open
+function stubArchitecture(mode) {
+  // #356, #381: "Analyze this project" starts a run that never ends (its state stays on screen) or
+  // fails to start with the Oracle's error
+  const analysis = { analyzing: () => ({ runId: '20261013-215046-bc771765' }), error: () => { throw new Error('The Oracle refused the analysis: the daily budget is reached (US$ 5.00 of US$ 5.00).'); } }[mode];
+  if (analysis) stubChannel('run:start', analysis);
+  if (mode === 'city-agents') stubChannel('architecture:agents', (_e, arg) => demoCityAgents(arg && arg.projectId));
+  // #375: the Product Owner's saved answers hold the issue's group (read, never asked)
+  if (mode === 'city-issue') stubChannel('po:history', () => DEMO_IMPACT_PO);
+  return { analysis: Boolean(analysis), seedRun: stubSeedRun(mode) };
+}
+
+async function showArchitecture({ mode, click, js, project, analysis, seedRun }) {
+  if (analysis) await click('[data-testid="architecture-analyze"]');
+  if (mode?.startsWith('seeds')) await showSeeds({ click, js, seedRun });
+  if (['city', 'city-agents', 'city-issue', 'city-large', 'city-release', 'city-stage'].includes(mode)) await click('[data-testid="architecture-mode-city"]');
+  // #375: "Show on the map" of an issue, "Show the stage on the map" of a roadmap stage
+  const pid = JSON.stringify(project.id);
+  if (mode === 'city-issue') await js(`ProjectCityImpact.showIssue(${pid}, ${JSON.stringify(DEMO_IMPACT_ISSUE)})`);
+  if (mode === 'city-stage') await js(`ProjectCityImpact.showStage(${pid}, ${JSON.stringify(DEMO_IMPACT_STAGE)})`);
+  // #376: "Show on the map" of release 1.1.2
+  if (mode === 'city-release') await js(`ProjectCityRelease.showRelease(${pid}, { from: '1.1.1', to: '1.1.2' })`);
+}
+
+// #357: "Ask the Product Owner to prioritize" never answers (its state stays on screen) or fails
+function stubRefactor(mode) {
+  const ranking = { prioritizing: () => new Promise(() => {}), error: () => { throw new Error('The Product Owner refused the ranking: the daily budget is reached (US$ 5.00 of US$ 5.00).'); } }[mode];
+  if (ranking) stubChannel('refactor:prioritize', ranking);
+  return Boolean(ranking);
+}
+
 async function afterOpen({ args, click, js, project }) {
   if (!args.tab) return;
   // the tab's first read never ends: its loading state stays on screen
-  if (args.tab === 'conflicts' && args.mode === 'loading') {
-    const { ipcMain } = require('electron');
-    ipcMain.removeHandler('analytics:performance');
-    ipcMain.handle('analytics:performance', () => new Promise(() => {}));
-  }
-  // #356, #381: "Analyze this project" starts a run that never ends (its state stays on screen) or
-  // fails to start with the Oracle's error
-  const analysis = { analyzing: () => ({ runId: '20261013-215046-bc771765' }), error: () => { throw new Error('The Oracle refused the analysis: the daily budget is reached (US$ 5.00 of US$ 5.00).'); } }[args.mode];
-  if (args.tab === 'architecture' && analysis) {
-    const { ipcMain } = require('electron');
-    ipcMain.removeHandler('run:start');
-    ipcMain.handle('run:start', analysis);
-  }
-  if (args.tab === 'architecture' && args.mode === 'city-agents') {
-    const { ipcMain } = require('electron');
-    ipcMain.removeHandler('architecture:agents');
-    ipcMain.handle('architecture:agents', (_e, arg) => demoCityAgents(arg && arg.projectId));
-  }
-  // #375: the Product Owner's saved answers hold the issue's group (read, never asked)
-  if (args.tab === 'architecture' && args.mode === 'city-issue') {
-    const { ipcMain } = require('electron');
-    ipcMain.removeHandler('po:history');
-    ipcMain.handle('po:history', () => DEMO_IMPACT_PO);
-  }
-  const seedRun = args.tab === 'architecture' && stubSeedRun(args.mode);
-  // #357: "Ask the Product Owner to prioritize" never answers (its state stays on screen) or fails
-  const ranking = { prioritizing: () => new Promise(() => {}), error: () => { throw new Error('The Product Owner refused the ranking: the daily budget is reached (US$ 5.00 of US$ 5.00).'); } }[args.mode];
-  if (args.tab === 'refactor' && ranking) {
-    const { ipcMain } = require('electron');
-    ipcMain.removeHandler('refactor:prioritize');
-    ipcMain.handle('refactor:prioritize', ranking);
-  }
+  if (args.tab === 'conflicts' && args.mode === 'loading') stubChannel('analytics:performance', () => new Promise(() => {}));
+  const architecture = args.tab === 'architecture' && stubArchitecture(args.mode);
+  const ranking = args.tab === 'refactor' && stubRefactor(args.mode);
   await click(`[data-pv-tab="${args.tab}"]`);
-  if (args.tab === 'refactor' && ranking) await click('[data-testid="refactor-prioritize"]');
-  if (args.tab === 'architecture' && analysis) await click('[data-testid="architecture-analyze"]');
-  if (args.tab === 'architecture' && args.mode?.startsWith('seeds')) await showSeeds({ click, js, seedRun });
-  if (args.tab === 'architecture' && ['city', 'city-agents', 'city-issue', 'city-large', 'city-release', 'city-stage'].includes(args.mode)) await click('[data-testid="architecture-mode-city"]');
-  // #375: "Show on the map" of an issue, "Show the stage on the map" of a roadmap stage
-  const pid = JSON.stringify(project.id);
-  if (args.tab === 'architecture' && args.mode === 'city-issue') await js(`ProjectCityImpact.showIssue(${pid}, ${JSON.stringify(DEMO_IMPACT_ISSUE)})`);
-  if (args.tab === 'architecture' && args.mode === 'city-stage') await js(`ProjectCityImpact.showStage(${pid}, ${JSON.stringify(DEMO_IMPACT_STAGE)})`);
-  // #376: "Show on the map" of release 1.1.2
-  if (args.tab === 'architecture' && args.mode === 'city-release') await js(`ProjectCityRelease.showRelease(${pid}, { from: '1.1.1', to: '1.1.2' })`);
+  if (ranking) await click('[data-testid="refactor-prioritize"]');
+  if (architecture) await showArchitecture({ mode: args.mode, click, js, project, ...architecture });
 }
 
 module.exports = {
