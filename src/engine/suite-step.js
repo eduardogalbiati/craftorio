@@ -280,9 +280,10 @@ function isFullSuiteCommand(cmd, suiteCommand) {
 // runs one file at a time under an inspector). Set: MULTIAGENT_SIMULATION_ONLY=1, MULTIAGENT_AGENT_MODE=1
 // (#219: a runner that knows it prints the failures-only JSON, src/engine/agent-test-report.js) and,
 // with locksDir, MULTIAGENT_LOCKS_DIR (the suite's own screenshot slot); with testWorkers, the run's
-// test workers (#367, src/machine-profile.js workerEnv), never an inherited value. → { env, removed: [names] }
+// test workers (#367, src/machine-profile.js workerEnv), never an inherited value; with tmpDir, TMP,
+// TEMP and TMPDIR (#414: the run's temp folder over the user's). → { env, removed: [names] }
 const DROP_ENV = /^(ELECTRON_|CHROME_CRASHPAD|NPM_|CLAUDECODE$|NODE_TEST_CONTEXT$|VSCODE_INSPECTOR_OPTIONS$|MULTIAGENT_)/i;
-function suiteEnv(env = {}, { locksDir, testWorkers } = {}) {
+function suiteEnv(env = {}, { locksDir, testWorkers, tmpDir } = {}) {
   const out = {};
   const removed = [];
   for (const [k, v] of Object.entries(env)) {
@@ -300,6 +301,7 @@ function suiteEnv(env = {}, { locksDir, testWorkers } = {}) {
   out.MULTIAGENT_AGENT_MODE = '1';
   if (locksDir) out.MULTIAGENT_LOCKS_DIR = locksDir;
   if (testWorkers) Object.assign(out, workerEnv({ testWorkers }));
+  if (tmpDir) Object.assign(out, { TMP: tmpDir, TEMP: tmpDir, TMPDIR: tmpDir });
   const replaced = (k) => /^MULTIAGENT_(SIMULATION_ONLY|AGENT_MODE|LOCKS_DIR)$/i.test(k) || (!!testWorkers && /^MULTIAGENT_(TEST|E2E)_WORKERS$/i.test(k));
   return { env: out, removed: removed.filter((k) => !replaced(k)).sort() };
 }
@@ -798,7 +800,10 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
   const recent = mock ? [] : suiteDurations(hist);
   out.timeout_ms = timeoutMs || suiteTimeout(recent);
   const timeoutWhy = timeoutMs ? 'the step\'s timeout' : recent.length ? `${TIMEOUT_FACTOR}× the median of the last ${plural(recent.length, 'suite run')}` : 'the default, no suite run measured yet';
-  const childEnv = mock ? null : suiteEnv(env || process.env, { locksDir: path.join(runDir, 'locks'), testWorkers });
+  // #414: the suite's temp files go to the run's temp folder, removed when the run ends
+  const tmpDir = mock ? null : path.join(runDir, 'tmp');
+  if (tmpDir) fs.mkdirSync(tmpDir, { recursive: true });
+  const childEnv = mock ? null : suiteEnv(env || process.env, { locksDir: path.join(runDir, 'locks'), testWorkers, tmpDir });
   if (logFile) writeLogHeader(logFile, out, { mock, childEnv, timeoutWhy, baseCommit });
   const t0 = Date.now();
   let text = '';

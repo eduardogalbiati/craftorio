@@ -22,9 +22,10 @@ const { pathKey } = require('./platform-paths');
 const { storeFor } = require('./store');
 
 const INTERNAL = new Set(['events.jsonl', 'meta.json', 'summary.json']);
-// top-level folders that are not the run's output: its sessions, and the scratch workspace of its
+// top-level folders that are not the run's output: its sessions, the scratch workspace of its
 // agents' checks (#120, #201; a file an agent saved there on purpose is listed from its file.saved)
-const SKIPPED_DIRS = new Set(['scratch', 'sessions']);
+// and its temp folder (#414: what its tests leave)
+const SKIPPED_DIRS = new Set(['scratch', 'sessions', 'tmp']);
 const KINDS = { '.md': 'markdown', '.markdown': 'markdown', '.json': 'json', '.jsonl': 'json', '.tsv': 'table', '.csv': 'table', '.txt': 'text', '.log': 'text', '.yaml': 'text', '.yml': 'text', '.html': 'text', '.patch': 'text', '.diff': 'text', '.png': 'image', '.jpg': 'image', '.jpeg': 'image', '.gif': 'image', '.webp': 'image' };
 const kindOf = (file) => KINDS[path.extname(file).toLowerCase()] || 'other';
 const normPath = (p) => pathKey(String(p));
@@ -34,7 +35,7 @@ const READ_CHUNK = 1024 * 1024;
 const CACHE_VERSION = 'v2';
 const STAT_BATCH = 64;
 
-/** The files of a run folder (relative paths), without sessions/, scratch/ and the run's own logs (sync). */
+/** The files of a run folder (relative paths), without sessions/, scratch/, tmp/ and the run's own logs (sync). */
 function walkFiles(dir, rel = '') {
   let entries = [];
   try { entries = fs.readdirSync(path.join(dir, rel), { withFileTypes: true }); } catch { return []; }

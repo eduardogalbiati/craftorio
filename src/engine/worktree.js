@@ -404,6 +404,14 @@ function removeScratch(runDir) {
   try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3 }); return true; } catch { return false; }
 }
 
+// The run's temp folder (<run>/tmp, TMP/TEMP/TMPDIR of its processes, #414) goes when the run ends,
+// like its scratch workspace. A folder still locked is left for the next cleanup. true when removed.
+function removeRunTmp(runDir) {
+  const dir = path.join(runDir, 'tmp');
+  if (!fs.existsSync(dir)) return false;
+  try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3 }); return true; } catch { return false; }
+}
+
 // A folder younger than this that git does not know may be a worktree being created right now.
 const ORPHAN_AGE_MS = 3600e3;
 // How long the scratch workspace of an ended run without a worktree folder stays (#201).
@@ -508,8 +516,8 @@ function recordRemoved(runDir, { dir, branch, wipCommit }) {
  * worktree.ready: a resumed run works in the folder of the run it resumes). The worktree of any other run (succeeded,
  * failed, cancelled, interrupted) goes, its work kept on its branch (retireWorktree); the branch is
  * never deleted here. Folders git does not know (e.g. shots-*) go once older than an hour. A folder
- * a process still holds (EBUSY) stays for the next cleanup. The scratch of an ended run without a
- * worktree folder goes `scratchDays` after the run ended.
+ * a process still holds (EBUSY) stays for the next cleanup. The scratch and the temp folder (#414)
+ * of an ended run go with its worktree, or `scratchDays` after the run ended without a worktree folder.
  * @returns {Promise<string[]>} removed folders
  */
 async function cleanupWorktrees({ worktreesDir, runsDir, active = [], scratchDays = SCRATCH_DAYS, log = () => {} }) {
@@ -545,27 +553,38 @@ async function cleanupWorktrees({ worktreesDir, runsDir, active = [], scratchDay
       log('warn', `worktree: could not clean up ${dir}: ${e.message.split('\n')[0]}`);
     }
     if (fs.existsSync(dir)) continue; // locked by a process: the worktree and its scratch stay for the next cleanup
-    if (!baseOf) removeScratch(runDir);
+    if (!baseOf) {
+      removeScratch(runDir);
+      removeRunTmp(runDir);
+    }
     removed.push(dir);
     log('info', `worktree: removed ${dir}`);
   }
-  // #201: the scratch workspace of an ended run whose worktree folder is already gone
+  removeEndedRunFolders({ worktreesDir, runsDir, scratchDays, log });
+  return removed;
+}
+
+// #201, #414: the scratch workspace and the temp folder of an ended run whose worktree folder is
+// already gone, `scratchDays` after it ended (a live run or one waiting at a gate keeps them).
+function removeEndedRunFolders({ worktreesDir, runsDir, scratchDays, log }) {
   let runNames = [];
   try { runNames = fs.readdirSync(runsDir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name); } catch { runNames = []; }
   for (const name of runNames) {
     const runDir = path.join(runsDir, name);
-    if (!fs.existsSync(path.join(runDir, 'scratch')) || fs.existsSync(path.join(worktreesDir, name))) continue;
+    const left = ['scratch', 'tmp'].some((d) => fs.existsSync(path.join(runDir, d)));
+    if (!left || fs.existsSync(path.join(worktreesDir, name))) continue;
     const run = runState(runDir);
     if (run.live || Date.now() - run.endedAt < scratchDays * 864e5) continue;
     if (removeScratch(runDir)) log('info', `worktree: removed the scratch workspace of ended run ${name}`);
+    if (removeRunTmp(runDir)) log('info', `worktree: removed the temp folder of ended run ${name}`);
   }
-  return removed;
 }
 
 module.exports = {
   prepareWorktree, removeWorktree, mergeLocally, cleanupWorktrees, listWorktrees, isMerged, repoRoot, currentBranch, samePath, canonicalPath,
   git, identityArgs, FETCH_TIMEOUT_MS,
   prepareBaseWorktree,
+  removeRunTmp,
   removeScratch,
   restoreWork,
   retireWorktree,

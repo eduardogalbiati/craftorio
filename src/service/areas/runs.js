@@ -108,27 +108,33 @@ module.exports = (ctx) => {
   // memory:stopStray stops it. Started with the workspace (strays of an earlier app session too),
   // never in automated checks. #406: a folder is live while any run uses it, here or in another app
   // process (a run resumed into an earlier run's worktree too), and a stray under it is named with
-  // the last run that used it (run ids start with their start time).
+  // the last run that used it (run ids start with their start time). #414: a run's temp folder
+  // (runs/<id>/tmp, where its tests write) is one more folder of run <id>, live while that run is.
   function watchStrayProcesses() {
     if (simulation.simulationOnly() || !ctx.ws) return;
     const guard = applyMemorySettings();
     if (!guard) return;
+    const subdirs = (dir) => { try { return fs.readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name); } catch { return []; } };
     const runsOfWorktrees = () => {
-      let names = [];
-      try { names = fs.readdirSync(ctx.ws.worktrees, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name); } catch { return []; }
-      if (!names.length) return [];
+      const names = subdirs(ctx.ws.worktrees);
+      const tmpIds = subdirs(ctx.ws.runs).filter((id) => fs.existsSync(path.join(ctx.ws.runs, id, 'tmp')));
+      if (!names.length && !tmpIds.length) return [];
       const ids = names.map((name) => name.replace(/-base$/, ''));
       // a run using a worktree started after the run it is named after
-      const since = ids.reduce((a, b) => (a && a < b ? a : b), '');
+      const since = [...ids, ...tmpIds].reduce((a, b) => (a && a < b ? a : b), '');
       const used = worktreeRuns(ctx.ws.runs, ctx.ws.worktrees, { since });
       const inUse = activeWorktreeDirs();
-      return names.map((name, i) => {
+      const worktrees = names.map((name, i) => {
         const id = ids[i];
         const main = path.join(ctx.ws.worktrees, id);
         const users = used.filter((r) => r.dirs.some((d) => samePath(d, main)));
         const live = active.has(id) || runAlive(id) || inUse.some((d) => samePath(d, main)) || users.some((r) => r.live);
         return { id: [id, ...users.map((r) => r.runId)].sort().pop(), worktree: path.join(ctx.ws.worktrees, name), live };
       });
+      const tmps = tmpIds.map((id) => ({
+        id, worktree: path.join(ctx.ws.runs, id, 'tmp'), live: active.has(id) || runAlive(id) || used.some((r) => r.runId === id && r.live),
+      }));
+      return [...worktrees, ...tmps];
     };
     guard.watchStrays({
       runs: runsOfWorktrees,

@@ -71,7 +71,6 @@ const COMPLEXITY_EXCEPTIONS = {
   'src/engine/suite-step.js:runSuite': 71,
   'src/engine/workflow.js:constructor': 47,
   'src/engine/workflow.js:runStep': 46,
-  'src/engine/worktree.js:cleanupWorktrees': 28,
   'src/epics.js:applyEpic': 42,
   'src/evidence.js:buildManifest': 34,
   'src/mobile-gates.js:handle': 38,

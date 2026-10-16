@@ -1785,11 +1785,16 @@ defaults:
   the branch is kept.
 - **Failed, cancelled or interrupted**: the branch keeps the work, not the folder. A detached
   worktree gets a branch (run/<run id>), anything uncommitted becomes a WIP commit naming the run,
-  then the folder and the run's scratch are removed (the branch never is). **Resume** from a step
+  then the folder, the run's scratch and its temp folder are removed (the branch never is). **Resume** from a step
   recreates the folder, at the same path, from the run's branch (so resumed CLI sessions keep their
   working directory) and gives the WIP back as uncommitted work. The app cleans up the folders of
   ended runs at start and every 30 minutes; a run in progress, live in another app window or waiting
   at a human gate keeps its folder.
+- **Temp folder and antivirus**: every process of a run (the agents' CLIs, the suite and e2e
+  steps) gets `TMP`, `TEMP` and `TMPDIR` pointing to `runs/<id>/tmp`, removed when the run ends
+  (any end but paused). So everything a run writes, the tests' temp files included, is inside the
+  workspace: exclude the workspace folder from your antivirus (Windows Defender: Virus & threat
+  protection › Exclusions) to keep parallel suites from saturating the CPU.
 - The path, branch and outcome are in `summary.json` (`worktree`) and in the `worktree.ready`,
   `worktree.kept` and `worktree.removed` events. Sessions record their `cwd`; a session terminal of
   a removed worktree opens in the repository folder instead.

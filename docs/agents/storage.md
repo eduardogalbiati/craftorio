@@ -8,7 +8,8 @@ Read this before touching run listings, the Backlog queue, pending gates, notifi
 - `runs/<id>/` (`events.jsonl`, `summary.json`, `meta.json`, `sessions/`, `handoffs/`, `decisions.tsv`,
   `evidence/<step>/round-<n>/` screenshots with `evidence/manifest.json`, see engine/evidence.md,
   `attachments/<input>/` and `attachments/<gate>-feedback/` images given to agents (#129),
-  `supervisor/attachments/` the images of questions about the run),
+  `supervisor/attachments/` the images of questions about the run, `tmp/` the temp folder of its
+  agents' and suites' tests, #414, removed when the run ends),
   `backlog/<project>.json`, `projects/`, `agents/`, `skills/`, `workflows/`, `pipelines/` (#135), `settings.json`,
   `active-run.json`: plain files, readable by the owner, agents and the supervisor, and portable.
 - `runs/po-<project>-<stamp>/`: a Product Owner issue thread (#117: `conversation.jsonl`,
