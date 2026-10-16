@@ -85,6 +85,14 @@ test('--keep-awake takes off, idle, active or error; anything else is refused', 
   assert.throws(() => parseArgs(['--view', 'workflows', '--keep-awake', 'nope']), /--keep-awake takes off \| idle \| active \| error/);
 });
 
+// #329: --lang <code>, the interface language of the capture (a language with a catalog, src/shared/i18n/).
+test('--lang takes a language with a catalog; an unknown one is refused', () => {
+  assert.equal(parseArgs(['--view', 'settings', '--lang', 'pt-BR']).lang, 'pt-BR');
+  assert.equal(parseArgs(['--view', 'settings', '--lang', 'en']).lang, 'en');
+  assert.throws(() => parseArgs(['--view', 'settings', '--lang', 'xx']), /--lang/);
+  assert.match(usage(), /--lang/);
+});
+
 // #180: --po working | writing | stopped | failed, the Product Owner's drawer with its live turn.
 test('--po takes working, writing, stopped or failed, and only applies to --view backlog', () => {
   assert.equal(parseArgs(['--view', 'backlog']).po, undefined);

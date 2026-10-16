@@ -210,6 +210,47 @@ Feature: Settings
     And I open the "General" settings tab
     Then the "Issues" language is "Español"
 
+  # #329: the same group gets an "Interface" select (aria-label "Interface", the same in both
+  # catalogs) listing the languages with a catalog. E2E runs in English (the computer's language is
+  # not read in E2E, or is English). A change re-renders the window at once: no reload between the
+  # choice and the checks. Portuguese labels: Settings → "Configurações", General → "Geral"
+  @issue-329
+  Scenario: The Interface language is English in E2E, from the languages that have a catalog
+    Given the app is open
+    When I open "Settings" in the sidebar
+    And I open the "General" settings tab
+    Then the "Interface" language is "English"
+    And the "Interface" language list offers "English, Português (Brasil)"
+
+  @issue-329
+  Scenario: Choosing Português (Brasil) for the interface translates the sidebar and Settings at once, and is kept
+    Given the app is open
+    When I open "Settings" in the sidebar
+    And I open the "General" settings tab
+    And I choose "Português (Brasil)" as the "Interface" language
+    Then the sidebar offers "Configurações"
+    And the sidebar no longer offers "Settings"
+    And Settings offers the "Geral" tab
+    And Settings no longer offers the "General" tab
+    When I reload the app
+    And I open "Configurações" in the sidebar
+    Then Settings offers the "Geral" tab
+    And the "Interface" language is "Português (Brasil)"
+
+  @issue-329
+  Scenario: Switching the interface back to English restores the English text at once
+    Given the app is open
+    When I open "Settings" in the sidebar
+    And I open the "General" settings tab
+    And I choose "Português (Brasil)" as the "Interface" language
+    Then Settings offers the "Geral" tab
+    When I choose "English" as the "Interface" language
+    Then the sidebar offers "Settings"
+    And the sidebar no longer offers "Configurações"
+    And Settings offers the "General" tab
+    And Settings no longer offers the "Geral" tab
+    And the "Interface" language is "English"
+
   # #405: Settings › Execution's red-base choice (data-testid="base-check-on-red"), setting baseCheck.onRed
   @issue-405
   Scenario: Settings › Execution offers what happens when the base goes red, issue + fix item by default
