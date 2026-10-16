@@ -262,7 +262,7 @@ function parseWorkflowFile(file) {
   try { st = fs.statSync(file); } catch { /* readFileSync says why */ }
   const key = st && `${st.mtimeMs}:${st.size}`;
   const hit = key && parsedCache.get(path.resolve(file));
-  if (hit && hit.key === key && hit.readAt - st.mtimeMs > RACY_MS) return structuredClone(hit.wf);
+  if (st && hit && hit.key === key && hit.readAt - st.mtimeMs > RACY_MS) return structuredClone(hit.wf);
   const readAt = Date.now();
   const text = fs.readFileSync(file, 'utf8');
   if (hit && hit.key === key && hit.text === text) {
