@@ -291,6 +291,9 @@ Given('the demo project has a run {string} interrupted at the gate {string}', as
 When('I open the chat of the run {string} from the list', async ({ e2e }, fragment) => {
   const page = e2e.window;
   await rowButton(page, fragment, 'Open run');
+  // a past run is rebuilt from its events: its workflow (which picks the AI Arena / Write & Review chat
+  // screens) is known only once it has loaded
+  await expect.poll(() => page.evaluate((f) => (typeof state === 'object' && state.view === 'run' && String(state.run?.id || '').endsWith(f) && state.run?.workflow) || null, fragment), { timeout: LOAD_TIMEOUT }).toBeTruthy();
   await page.getByRole('group', { name: 'Run view', exact: true }).filter({ visible: true }).first()
     .getByRole('button', { name: 'Chat', exact: true }).click({ timeout: LOAD_TIMEOUT });
 });

@@ -52,8 +52,9 @@ Feature: The expanded run card
     And I review the run card's changes
     Then the changes viewer opens
 
-  # #409: the card's actions are only "◆ Send to supervisor" and "Open run" (plus "Resume from step…"
-  # on a resumable run: res00225 succeeded, so not here); Open run opens the Run screen on Details
+  # #409: the card's actions are only "◆ Send to supervisor" and "Open run", after "Resume from step…"
+  # on a resumable run (res00225 is a finished run this window does not follow: resumable, like any
+  # finished one); Open run opens the Run screen on Details
   @issue-409
   Scenario: An expanded run offers only Send to supervisor and Open run, and Open run shows its details
     Given the app is open
@@ -61,7 +62,7 @@ Feature: The expanded run card
     When I open "Runs" in the sidebar
     And I search the runs for "res00225"
     And I expand the run "res00225" in the list
-    Then the run card's actions are "Send to supervisor" and "Open run"
+    Then the run card's actions are "Resume from step…", "Send to supervisor" and "Open run"
     And the run card offers none of "Open logs", "Ask the supervisor", "Watch with the supervisor", "Open chat", "View run" and "Open in Analytics"
     When I click the run card's "Open run"
     Then the Run screen shows the run "res00225" on its Details tab

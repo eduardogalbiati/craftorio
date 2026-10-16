@@ -142,11 +142,11 @@ Then('the changes viewer opens', async ({ e2e }) => {
 const actions = (page) => page.getByTestId('run-card-actions').filter({ visible: true }).first();
 const actionName = (name) => new RegExp(`^(◆\\s*)?${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`);
 
-Then('the run card\'s actions are {string} and {string}', async ({ e2e }, a, b) => {
+Then('the run card\'s actions are {string}, {string} and {string}', async ({ e2e }, a, b, c) => {
   const box = actions(e2e.window);
   await expect(box).toBeVisible({ timeout: LOAD_TIMEOUT });
   const names = (await box.getByRole('button').filter({ visible: true }).allInnerTexts()).map((t) => t.replace(/^◆\s*/, '').trim());
-  expect(names).toEqual([a, b]);
+  expect(names.join(' | ')).toBe([a, b, c].join(' | '));
 });
 
 Then('the run card offers none of {string}, {string}, {string}, {string}, {string} and {string}', async ({ e2e }, a, b, c, d, e, f) => {
