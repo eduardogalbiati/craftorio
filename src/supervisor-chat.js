@@ -95,11 +95,27 @@ function usageRuns(dir, timeZone = 'UTC') {
   return agentsUsage.dayRuns(usageTurns(dir), { id: 'supervisor-chat', workflow: 'Supervisor chat', timeZone });
 }
 
-/** The text sent for one question: the owner's local time (#273, when the zone is given), the screen, then the question. */
-function questionText(text, screen, timeZone = null) {
+/**
+ * The text sent for one question: the owner's local time (#273, when the zone is given), the screen,
+ * the run a run card attached (#409), then the question.
+ */
+function questionText(text, screen, timeZone = null, run = null) {
   const s = String(screen || '').trim();
   const t = timeZone ? `[Time] ${TimeZone.nowLine(timeZone)}\n\n` : '';
-  return `${t}${s ? `[Screen] ${s}\n\n${text}` : text}`;
+  const r = runLine(run);
+  return `${t}${s ? `[Screen] ${s}\n\n` : ''}${r ? `[Run] ${r}\n\n` : ''}${text}`;
+}
+
+/** #409: an attached run in one line: id (workflow), status, error, issues; '' without a run id. */
+function runLine(run) {
+  if (!run || typeof run !== 'object' || !run.runId) return '';
+  const issues = Array.isArray(run.issues) ? run.issues.map((i) => i?.number).filter((n) => n != null) : [];
+  return [
+    `${run.runId}${run.workflow ? ` (${run.workflow})` : ''}`,
+    run.status ? String(run.status) : '',
+    run.error ? `error: ${String(run.error).split('\n')[0].slice(0, 300)}` : '',
+    issues.length ? `issues: ${issues.map((n) => `#${n}`).join(', ')}` : '',
+  ].filter(Boolean).join(', ');
 }
 
 /**
@@ -207,7 +223,7 @@ function createSupervisorChat({ dir, tools, bridge, mcpCommand, skillsDirs, reso
      * #180: `onItem` gets the turn's items as they arrive (a simulated turn streams fake steps);
      * `signal` stops it: the prose written so far is posted as the answer, marked `stopped`.
      */
-    async ask({ question, screen, mock, model, attachments = [], onItem = null, signal = null } = {}) {
+    async ask({ question, screen, mock, model, attachments = [], run = null, onItem = null, signal = null } = {}) {
       const q = String(question || '').trim();
       if (!q) throw new Error('Type a message for the supervisor.');
       if (busy) throw new Error('The supervisor is still answering the previous message.');
@@ -215,7 +231,8 @@ function createSupervisorChat({ dir, tools, bridge, mcpCommand, skillsDirs, reso
       const images = storeAttachments(attachments, path.join(dir(), 'attachments'));
       busy = true;
       try {
-        post({ role: 'user', text: q, screen: String(screen || '').trim() || null, ...(images.length ? { attachments: images } : {}) });
+        const attachedRun = runLine(run) ? { runId: String(run.runId), workflow: run.workflow || null, status: run.status || null } : null;
+        post({ role: 'user', text: q, screen: String(screen || '').trim() || null, ...(images.length ? { attachments: images } : {}), ...(attachedRun ? { run: attachedRun } : {}) });
         let message;
         // #180: the prose written so far, kept when the turn fails or is stopped
         const written = [];
@@ -228,7 +245,7 @@ function createSupervisorChat({ dir, tools, bridge, mcpCommand, skillsDirs, reso
             message = post({ role: 'supervisor', text, simulated: true, costUsd: 0 });
           } else {
             const m = String(model || state().model || DEFAULT_MODEL);
-            const res = await realTurn(questionText(q, screen, timeZone()), m, images, { onItem: seen, signal });
+            const res = await realTurn(questionText(q, screen, timeZone(), run), m, images, { onItem: seen, signal });
             message = post({ role: 'supervisor', text: String(res.text || '').trim() || '(no answer)', model: m, costUsd: res.costUsd ?? null });
           }
         } catch (e) {

@@ -125,13 +125,14 @@ module.exports = (ctx) => {
     },
     { channel: 'supervisor:watchState', method: 'watchState', params: 'runId', schema: { params: RUN_ID, result: OBJECT }, fn: (runId) => watches.state(runId) },
     { event: 'supervisor:watch', method: 'onWatch' },
-    // The app-wide chat (the drawer opened from Workflows): { question, screen, mock, model }.
-    // `mock` and MULTIAGENT_SIMULATION_ONLY answer from the simulated supervisor (no model call).
+    // The app-wide chat (the drawer opened from Workflows): { question, screen, mock, model, run }
+    // (#409 run: the run a run card's Send to supervisor attached). `mock` and
+    // MULTIAGENT_SIMULATION_ONLY answer from the simulated supervisor (no model call).
     {
       channel: 'supervisor:chat',
       method: 'askSupervisorChat',
       params: 'opts',
-      schema: { params: { type: ['object', 'null'], properties: { question: STRING, screen: ANY, mock: FLAG, model: nullable(STRING) } }, result: CHAT_ANSWER },
+      schema: { params: { type: ['object', 'null'], properties: { question: STRING, screen: ANY, mock: FLAG, model: nullable(STRING), run: ANY } }, result: CHAT_ANSWER },
       fn: async (opts) => {
         // #180: its progress is pushed on chat:progress; chat:cancel ('supervisor') stops it
         const turn = ctx.chatTurns.start('supervisor');

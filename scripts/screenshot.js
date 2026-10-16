@@ -12,7 +12,7 @@
 //                      "Today" on demo data; its Analytics tab: --view analytics; home-empty: Home in a
 //                      new workspace, no project and no run: how to start); projects: the Projects screen; roadmap: the
 //                      same as backlog --mode roadmap; the Supervisor's drawer: --view workflows --click
-//                      "#btn-wf-supervisor"; a folded menu group: --click ".nav-group[data-group=workflows]
+//                      "[data-testid=supervisor-fab]"; a folded menu group: --click ".nav-group[data-group=workflows]
 //                      .nav-group-title"; oracle: Settings with the Oracle's drawer open from its
 //                      header button; Home shows its docked panel; nightwatch (#172): two
 //                      replayed nights, src/night-watch-demo.js, also Home's morning

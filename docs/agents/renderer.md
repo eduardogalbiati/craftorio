@@ -40,7 +40,7 @@ Read this before changing anything in `src/renderer/`.
     (the Product Owner drawer, put inside `.shell` like the other drawers; `backlog-po.js` wires it as it loads, so
     its header says `load: after views/backlog/backlog.js`) and `backlog.css`;
   - `views/artifacts/`: the Artifacts screen, a tab of Workflows › Runs (#254: no menu entry, its `menu` keeps Runs lit; `openArtifactsAt` stays a global deep link);
-  - `views/workflows/`: `workflows.js` (Definitions, Runs, Pipelines, the screen's tablist and its menu entries, the Supervisor button, the deep links
+  - `views/workflows/`: `workflows.js` (Definitions, Runs, Pipelines, the screen's tablist and its menu entries, the Supervisor's round button at the bottom right of every tab (#409), the deep links
     `showRunInList` / `showWorkflowDefinition`), `builder.js` + `builder.css` (Builder and its two dialogs);
   - `views/run/`: Run Details (no sidebar entry: the Run item and the runs menu are the shell's): the
     failure banner, the gate cards (`renderRunGates`), the summary, the steps, the sessions and the tabs;
@@ -142,12 +142,12 @@ Read this before changing anything in `src/renderer/`.
   ends with `runchat-elsewhere-note`, its gate says to answer it there, and no Resume.
 - **How a run is opened**: one global run view, `state.runView` (`'details' | 'chat'`, saved in
   localStorage `multiagent.runView`). Every way of opening a run (sidebar Run menu, toasts,
-  notifications, "View run", Backlog run links, the gate badge, a resume) goes through
+  notifications, a run card's "Open run", Backlog run links, the gate badge, a resume) goes through
   `selectRun(runId)` / `showRun(runId, { workflow, running })` in `app.js`, which open that run's
   chat (Write & Review and AI Arena: their own screens) or its Run screen (a run this window does
   not follow: loaded from disk by `openPastRun`). Only the explicit
   switches change the choice (`setRunView`): the Run screen's Chat button, the chat's Details
-  button and "Open chat". A chat always opens at its latest message ("Jump to latest" while
+  button and a run card's "Open run" (#409: always the Details). A chat always opens at its latest message ("Jump to latest" while
   scrolled up).
 - Check changes by looking at screenshots: `npm run screenshot -- --view <view> [--tab|--mode|--click]
   --out <dir>` opens one screen with demo data and quits by itself (`--ref origin/main` for the

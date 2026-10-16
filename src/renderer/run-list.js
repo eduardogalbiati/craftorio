@@ -6,9 +6,12 @@
 // Repository (the branch and its base, a state badge, the totals, the run's commits newest first,
 // "Review changes" and a click on a commit opening DiffViewer). Also the progress strip of a row
 // (runProgressStrip: the groups a run visited, with their agents' robots) and renderRunListsSoon
-// (run events). Uses app.js globals ($, esc, state, fmtDur, fmtNum, dateOf, timeOf, runTitleHtml,
-// prBadge, runPr…), fmtTok / fmtUsd (usage-widget.js), termAction (term-dock.js), canResume
-// (resume-dialog.js), WATCH_TITLE (supervisor-drawer.js), openArtifactsAt, ArtifactsPanel, DiffViewer.
+// (run events). An expanded card's action row (#409): the run id at the left, then at the right
+// Resume from step… (resumable runs), ◆ Send to supervisor (the Supervisor's chat with the run
+// attached, disabled while it answers) and Open run (the Run screen, always on its Details).
+// Uses app.js globals ($, esc, state, fmtDur, fmtNum, dateOf, timeOf, runTitleHtml, prBadge, runPr,
+// setRunView, showRun…), fmtTok / fmtUsd (usage-widget.js), termAction (term-dock.js), canResume
+// (resume-dialog.js), openSupervisorChat (views/supervisor/), openArtifactsAt, ArtifactsPanel, DiffViewer.
 //
 // The lists come in pages from the service (#200: runs:list / projects:runs with { offset, limit,
 // filter, showSim, q, workflow, upTo }): the filter chips, "Show simulated", the search and the
@@ -174,16 +177,13 @@ function renderRunList(rl, { prefix, box: boxSel, empty, start, rerender, reload
   }));
   box.querySelectorAll('[data-run-act]').forEach((b) => (b.onclick = () => {
     const r = rl.runs.find((x) => x.runId === b.closest('.pr-run').dataset.run);
-    if (b.dataset.runAct === 'logs') api.openPath(r.runDir);
-    // the Run screen shows the selected run: select this one, not whichever run was on screen
-    if (b.dataset.runAct === 'view') showRun(r.runId, { workflow: r.workflow });
-    // "Open chat" switches to the chat explicitly, and the chat becomes the remembered view
-    if (b.dataset.runAct === 'chat') { setRunView('chat'); window.openRunChat?.({ runId: r.runId, workflow: r.workflow, running: r.current && r.status === 'running' }); }
-    if (b.dataset.runAct === 'sup' || b.dataset.runAct === 'watch') {
-      openSupervisor({ runId: r.runId, workflow: r.workflow, status: r.status, error: r.error, mock: r.mock, issues: issuesOfRun(r) }, { watch: b.dataset.runAct === 'watch' });
+    // #409: Open run selects this run on the Run screen, always on its Details (not the remembered view)
+    if (b.dataset.runAct === 'open') { setRunView('details'); showRun(r.runId, { workflow: r.workflow }); }
+    // #409: the Supervisor's chat with this run attached; nothing is sent until the person sends
+    if (b.dataset.runAct === 'send-sup') {
+      window.openSupervisorChat?.({ run: { runId: r.runId, workflow: r.workflow, status: r.status, error: r.error, mock: r.mock, issues: issuesOfRun(r) } });
     }
     if (b.dataset.runAct === 'resume') openResumeDialog(r.runId);
-    if (b.dataset.runAct === 'analytics') window.openAnalytics?.({ tab: 'run', runId: r.runId });
   }));
   box.querySelectorAll('[data-art]').forEach((b) => (b.onclick = () => {
     const r = rl.runs.find((x) => x.runId === b.closest('.pr-run').dataset.run);
@@ -262,25 +262,28 @@ function runListRow(r, pv) {
     </div>`;
 }
 
-const CHAT_TITLES = {
-  'writer-reviewer': 'See the writer, reviewer and supervisor conversation',
-  'ai-arena': 'See the contenders, the synthesis and the supervisor as a chat',
-  'issue-tracker': 'See the analysis and the draft as a chat, and answer the review there',
-};
+// The card's Send to supervisor (#409): its label and title, busy while the Supervisor answers
+// (views/supervisor/ syncs the shown buttons when that changes).
+function sendToSupervisorHtml(busy) {
+  return busy ? 'Supervisor is answering…' : '<span class="sup-mark">◆</span> Send to supervisor';
+}
+function sendToSupervisorTitle(busy) {
+  return busy ? 'Supervisor is answering: wait for the answer' : 'Open the Supervisor\'s chat with this run attached: nothing is sent until you write and send';
+}
 
 function projectRunBody(r, pv) {
   const sessions = r.sessions || [];
+  const busy = !!window.supervisorChatBusy?.();
+  // #409: the run id at the left, two actions at the right (Resume before them on a resumable run)
   return `<div class="pr-body">
     <div class="row">
-      <button class="btn sm ghost" data-run-act="logs">Open logs</button>
-      <button class="btn sm ghost sup-btn" data-run-act="sup"><span class="sup-mark">◆</span> Ask the supervisor</button>
-      ${r.current && r.status === 'running' ? `<button class="btn sm ghost sup-btn" data-run-act="watch" title="${WATCH_TITLE}"><span class="sup-mark">◆</span> Watch with the supervisor</button>` : ''}
-      ${canResume(r) ? '<button class="btn sm ghost" data-run-act="resume" title="Start a new run from a step of this one, keeping the previous outputs (no supervisor call)">Resume from step…</button>' : ''}
-      <button class="btn sm" data-run-act="chat" title="${esc(CHAT_TITLES[r.workflow] || 'See the agents, the orchestrator and the human gates as a chat')}">Open chat</button>
-      <button class="btn sm" data-run-act="view" title="${r.current || state.runs.has(r.runId) ? 'Open its Run screen' : 'Open its Run screen, rebuilt from its recorded events (read-only)'}">View run</button>
-      <button class="btn sm ghost" data-run-act="analytics" title="Its timeline, cost and tokens per agent, compared with its workflow's runs (Analytics › Run)">Open in Analytics</button>
-      <span class="spacer"></span>
       <span class="muted small mono" data-testid="run-id">${esc(r.runId)}</span>
+      <span class="spacer"></span>
+      <div class="row" data-testid="run-card-actions">
+        ${canResume(r) ? '<button class="btn sm ghost" data-run-act="resume" title="Start a new run from a step of this one, keeping the previous outputs (no supervisor call)">Resume from step…</button>' : ''}
+        <button class="btn sm ghost sup-btn" data-run-act="send-sup" title="${esc(sendToSupervisorTitle(busy))}"${busy ? ' disabled' : ''}>${sendToSupervisorHtml(busy)}</button>
+        <button class="btn sm" data-run-act="open" title="${r.current || state.runs.has(r.runId) ? 'Open its Run screen (Details)' : 'Open its Run screen (Details), rebuilt from its recorded events (read-only)'}">Open run</button>
+      </div>
     </div>
     ${r.error ? `<pre class="pr-error">${esc(r.error)}</pre>` : ''}
     ${runTaskBlock(r)}
