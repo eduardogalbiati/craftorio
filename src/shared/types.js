@@ -133,7 +133,7 @@
  * @typedef {EventEnvelope & { type: 'worktree.removed', dir: string, removed: boolean, branch: string | null, branch_deleted: boolean, wip_commit?: string, by?: 'cleanup' }} WorktreeRemovedEvent
  * @typedef {EventEnvelope & { type: 'worktree.kept', dir: string, branch: string | null }} WorktreeKeptEvent
  * @typedef {EventEnvelope & { type: 'worktree.processes_stopped', dir: string, after: any, processes: { pid: number, exe: string, cwd: string, reason: string, stopped: boolean, error: any }[] }} WorktreeProcessesStoppedEvent
- * @typedef {EventEnvelope & { type: 'limit.exceeded', limit: string, value: number, current?: number, children?: number, paused?: boolean }} LimitExceededEvent
+ * @typedef {EventEnvelope & { type: 'limit.exceeded', limit: string, value: number, current?: number, children?: number, paused?: boolean, worked_ms?: number, gate_wait_ms?: number }} LimitExceededEvent
  * @typedef {EventEnvelope & { type: 'limits.expanded', day: string, limits: object }} LimitsExpandedEvent
  * @typedef {EventEnvelope & { type: 'budget.exceeded', provider: string, usd: number, tokens: number, limit_usd: number | null, limit_tokens: number | null, blocked: boolean }} BudgetExceededEvent
  * @typedef {EventEnvelope & { type: 'approval.requested', approval_id: string, step_id: string, message: string, choices: object[] | null, feedback: object | null, brief: any, approve?: { label: string, help: string }, reject?: { label: string, help: string }, report?: string, work_dir?: string, run_app?: true, local_preview?: object, diff_base?: string, supervisor?: object, save_to_issue?: { choice: string, issue: object } }} ApprovalRequestedEvent

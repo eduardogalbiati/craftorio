@@ -293,6 +293,7 @@ class WorkflowRun extends EventEmitter {
     this.localPreview = localPreview || this.wf.orchestrator?.local_preview || null;
     this.ctx.local_preview = this.localPreview;
     this.gateWaits = {}; // gate step id -> { waits, wait_ms } (summary.timing.gates): owner time, not agent time
+    this.gateClock = { total: 0, since: null }; // ms with a gate open, not counted by max_total_duration (#416)
     this.preexisting = []; // [{ step, test, file, reason }] (notePreexistingFailures)
     this.stalls = []; // last stall signals [{ step, kind, detail, ts }] (recordStall), for the supervisor on call
     this.liveTurns = new Map(); // step id -> Set of stop(decision) of its running turns (a slow step's interrupt)

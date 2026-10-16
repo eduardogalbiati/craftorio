@@ -1,6 +1,7 @@
 // @ts-check
 // Costs, limits and budgets (#250, from src/engine/workflow.js): the run's `max_total_duration` and
-// `max_total_cost_usd` checked before every step (`checkLimits`, children included), the limits per
+// `max_total_cost_usd` checked before every step (`checkLimits`, children included; the duration
+// counts the work, the time waiting for the owner at gates excluded: `gateClockMs`, #416), the limits per
 // model (`modelLimits`, #262), the monthly budget per provider over this run and its peers
 // (`checkBudget`), the `max_total_context` pause gate (`contextGate`), the supervisor's and the
 // children's spend, the price of a turn on a model Claude Code does not know (`priceUnrecognizedTurn`,
@@ -35,10 +36,14 @@ const methods = {
     const lim = this.wf.orchestrator?.limits || {};
     const day = this.dayLimits();
     const maxDur = this.effectiveLimits().duration;
-    if (maxDur && Date.now() - this.startedAt > maxDur) {
-      const value = maxDur === day.duration ? lim.max_total_duration : `${+(maxDur / 3600e3).toFixed(1)}h`;
-      this.emitEvent('limit.exceeded', { limit: 'max_total_duration', value });
-      throw new Error(`Maximum duration exceeded (${value}).`);
+    // #416: the limit measures the work, not the time waiting for the owner at gates
+    const gateWaitMs = this.gateClockMs();
+    const worked = Date.now() - this.startedAt - gateWaitMs;
+    if (maxDur && worked > maxDur) {
+      const hours = (ms) => `${+(ms / 3600e3).toFixed(1)}h`;
+      const value = maxDur === day.duration ? lim.max_total_duration : hours(maxDur);
+      this.emitEvent('limit.exceeded', { limit: 'max_total_duration', value, worked_ms: worked, gate_wait_ms: gateWaitMs });
+      throw new Error(`Maximum duration exceeded (worked ${hours(worked)} of ${value}).`);
     }
     // its child runs' cost counts too (#175)
     const children = this.childrenCostUsd();
@@ -219,6 +224,23 @@ const methods = {
     for (const s of Object.values(this.stepTiming)) for (const k of Object.keys(total)) total[k] += s[k];
     const gateWaitMs = Object.values(this.gateWaits).reduce((a, g) => a + g.wait_ms, 0);
     return { steps: this.stepTiming, ...total, gates: this.gateWaits, gate_wait_ms: gateWaitMs };
+  },
+
+  // #416: the time this run waited for the owner with at least one gate open (gates open together
+  // count once), the gate open now included: what max_total_duration does not count
+  gateClockMs() {
+    const c = this.gateClock;
+    return c ? c.total + (c.since == null ? 0 : Date.now() - c.since) : 0;
+  },
+
+  // Starts or stops the gate clock after a gate opens or closes (#416)
+  syncGateClock() {
+    const c = (this.gateClock ??= { total: 0, since: null });
+    if (this.approvals.size && c.since == null) c.since = Date.now();
+    else if (!this.approvals.size && c.since != null) {
+      c.total += Date.now() - c.since;
+      c.since = null;
+    }
   },
 
   // Per run and per agent: context at the start of each turn, its peak, tokens, and the tokens spent
