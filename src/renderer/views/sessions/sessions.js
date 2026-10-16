@@ -123,7 +123,7 @@
   function itemHtml({ provider, title, sub, time, open, exited, active, sessionAttr, rename, close }) {
     const pencil = rename ? `<button type="button" class="icon-btn sx-item-rename" ${rename} title="${t('sessions.rename')}" aria-label="${t('sessions.rename')}">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></svg></button>` : '';
-    const trash = close ? `<button type="button" class="icon-btn sx-item-close" data-close-tab="${esc(close)}" title="${exited ? 'Close' : 'End session'}" aria-label="${exited ? 'Close' : 'End session'}">
+    const trash = close ? `<button type="button" class="icon-btn sx-item-close" data-close-tab="${esc(close)}" title="${t(exited ? 'common.close' : 'sessions.end_session')}" aria-label="${t(exited ? 'common.close' : 'sessions.end_session')}">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18" /><path d="M8 6V4h8v2" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /></svg></button>` : '';
     return `<div class="sx-item ${active ? 'active' : ''}" role="listitem" tabindex="0" ${sessionAttr}>
       ${badge(provider)}
@@ -222,9 +222,9 @@
     $s('#sx-term-title').textContent = t.title;
     $s('#sx-term-meta').textContent = t.meta;
     $s('#btn-sx-restart').classList.toggle('hidden', !t.exited);
-    $s('#btn-sx-close').textContent = t.exited ? 'Close' : 'End session';
+    $s('#btn-sx-close').textContent = I18n.t(t.exited ? 'common.close' : 'sessions.end_session');
     $s('#btn-sx-rename').disabled = false;
-    $s('#btn-sx-rename').title = t.kind === 'cli-new' ? 'Rename this terminal: the CLI session gets the name once it is recorded (after your first message)' : 'Rename this session';
+    $s('#btn-sx-rename').title = I18n.t(t.kind === 'cli-new' ? 'sessions.rename_terminal_help' : 'sessions.rename_this_session');
   }
 
   function activate(tab) {
@@ -385,7 +385,7 @@
   async function endTab(tab) {
     if (!tab) return;
     if (tab.id && !tab.exited) {
-      const ok = await confirmDialog('End session?', `"${tab.title}": the CLI and everything it started are closed. The conversation stays recorded, so you can reopen it from the list.`, 'End session');
+      const ok = await confirmDialog(t('sessions.end_session_q'), t('sessions.end_session_detail', { title: tab.title }), t('sessions.end_session'));
       if (!ok || !sx.tabs.includes(tab)) return;
     }
     closeTab(tab);

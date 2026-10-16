@@ -279,6 +279,7 @@
     label: calibration.label,
     MAX,
     MIN,
+    nameOf: calibration.nameOf,
     params: calibration.params,
     plannedFor,
     promptSection,
