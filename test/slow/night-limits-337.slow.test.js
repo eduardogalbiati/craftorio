@@ -109,5 +109,6 @@ test('#337 a simulated night: with every limit ×2 a run reads past 40M of conte
   const report = await api.nightWatchReport();
   const lines = report.nights[0]?.summary?.limits || [];
   assert.equal(lines.length, 1, JSON.stringify(lines));
-  assert.match(lines[0], /context \d+M of 80M tonight \(day limit 40M\)/);
+  // 3 turns × 20M plus the mock's own random usage (#417): 60M or 60.1M
+  assert.match(lines[0], /context \d+(\.\d)?M of 80M tonight \(day limit 40M\)/);
 });
