@@ -10,7 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const { expect } = require('@playwright/test');
 const { Given, When, Then } = require('./fixtures');
-const { openStartPanel, runScreenStatus, runTab } = require('../support/run-screen');
+const { openStartPanel, runScreenStatus } = require('../support/run-screen');
 
 // a simulated run of software-development reaches its first gate in well under a minute
 const GATE_TIMEOUT = 120000;
@@ -320,8 +320,8 @@ When('I open the chat of the run {string} from the list', async ({ e2e }, fragme
   // a past run is rebuilt from its events: its workflow (which picks the AI Arena / Write & Review chat
   // screens) is known only once it has loaded
   await expect.poll(() => page.evaluate((f) => (typeof state === 'object' && state.view === 'run' && String(state.run?.id || '').endsWith(f) && state.run?.workflow) || null, fragment), { timeout: LOAD_TIMEOUT }).toBeTruthy();
-  // #410: the Run screen's Chat / Details / 3D tabs (tablist "Run view")
-  await runTab(page, 'Chat').click({ timeout: LOAD_TIMEOUT });
+  await page.getByRole('group', { name: 'Run view', exact: true }).filter({ visible: true }).first()
+    .getByRole('button', { name: 'Chat', exact: true }).click({ timeout: LOAD_TIMEOUT });
 });
 
 Then('the run chat notes {string}', async ({ e2e }, text) => {
