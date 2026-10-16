@@ -1,9 +1,10 @@
-// The top bar's Stop and Pause (#368) for the run it shows: stopRun, pauseRun (its buttons' clicks,
-// wired by app.js's init) and renderRunControls (their state, from app.js's renderHeader). Moved
-// out of app.js; uses app.js globals (api, state, confirmDialog, errMsg, scheduleRender,
-// selectedView, showToast) and runLabel (run-meta.js), all read when called, never as it loads.
+// The Run screen tab row's Stop and Pause (#368, #412) for the run it shows: stopRun, pauseRun (its
+// buttons' clicks, wired by run.js's mount) and renderRunControls (their state, from renderRunScreen);
+// stopRuns, the roadmap stage menu's Stop (#412). Moved out of app.js; uses app.js globals (api,
+// state, confirmDialog, errMsg, scheduleRender, selectedView, showToast) and runLabel (run-meta.js),
+// all read when called, never as it loads.
 
-// Stops the run shown in the top bar (only that one).
+// Stops the run the Run screen shows (only that one).
 async function stopRun() {
   const r = state.run;
   if (r?.status !== 'running') return;
@@ -17,7 +18,17 @@ async function stopRun() {
   api.stopRun(r.id);
 }
 
-// #368: pauses the run shown in the top bar after its current turn: its agents finish their turns
+// #412: stops several runs (a roadmap stage's live runs), naming them first; false when not confirmed.
+// The engine marks each cancelled item failed and pauses the roadmap (Resume / Retry / Skip).
+async function stopRuns(runIds, what) {
+  if (!runIds.length) return false;
+  const many = runIds.length > 1;
+  if (!(await confirmDialog(`Stop ${what}`, `${many ? `Its ${runIds.length} runs` : 'Its run'} in progress (${runIds.join(', ')}) will be stopped and ${many ? 'their' : 'its'} running sessions closed. No gate is answered.`, 'Stop'))) return false;
+  for (const id of runIds) await api.stopRun(id).catch((e) => showToast('Could not stop the run', `${id}: ${errMsg(e)}`));
+  return true;
+}
+
+// #368: pauses the run the Run screen shows after its current turn: its agents finish their turns
 // (a step command its run), nothing new starts, then it ends paused; the Run screen's pause line
 // says what it waits for and offers Cancel pause. Nothing is lost, so it never asks first.
 async function pauseRun() {
@@ -33,12 +44,12 @@ async function pauseRun() {
 }
 
 // Stop while the run goes; Pause (#368) while it goes and is not pausing already (the Run screen's
-// pause line then has Cancel pause), never on a past run's view.
+// pause line then has Cancel pause); neither on a past run's view (#412: hidden, not disabled).
 function renderRunControls(r) {
-  const running = r?.status === 'running';
-  $('#btn-stop').disabled = !running;
+  const running = r?.status === 'running' && !selectedView().past;
+  $('#btn-stop').classList.toggle('hidden', !running);
   $('#btn-stop').title = running ? `Stop ${runLabel(r)} (only this run)` : '';
-  const pausable = running && !r.pause && !selectedView().past;
+  const pausable = running && !r.pause;
   $('#btn-pause').classList.toggle('hidden', !pausable);
   $('#btn-pause').title = pausable ? `Pause ${runLabel(r)} once its agents finish their current turn: nothing is cut, Resume continues there` : '';
 }

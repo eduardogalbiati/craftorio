@@ -1,7 +1,7 @@
 /* Run screen (run.js): its layout, the failure banner, the gate cards above the steps, the summary,
-   the steps by group, the session cards and the Session / Events / Artifacts tabs. The gate cards
+   the steps by group, the session cards and the Artifacts / Session / Events tabs. The gate cards
    and the gate panel the run chat shares (.run-gate*, .gate-tools, Run App) and the Artifacts
-   panel (.ap-*) stay in style.css; the Chat / Details toggle is .run-modebar. */
+   panel (.ap-*) stay in style.css; so does the tab row the run chat shares (.run-tab-row, #410). */
 #view-run { padding: 0; overflow: hidden; }
 /* ---------- run ---------- */
 .run-layout {
@@ -151,5 +151,5 @@
 .run-gates { flex: none; display: flex; flex-direction: column; gap: 8px; padding: 10px 16px; background: rgba(250,204,21,.06); border-bottom: 1px solid rgba(250,204,21,.35); }
 .tab-count { margin-left: 4px; padding: 0 6px; border-radius: 9px; background: var(--panel-2); color: var(--muted); font-size: 11px; font-weight: 600; }
 .run-gate-actions { flex-wrap: wrap; gap: 8px; }
-/* Run screen: Chat / Details */
-.run-modebar { display: flex; align-items: center; gap: 10px; padding: 8px 16px 0; }
+/* #410: the tab row's actions, on the right; they wrap on a narrow window, never scroll it sideways */
+.run-actions { margin-left: auto; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px 8px; min-width: 0; padding: 6px 0; }

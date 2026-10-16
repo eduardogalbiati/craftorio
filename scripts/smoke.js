@@ -191,7 +191,7 @@ app.on('browser-window-created', (_e, win) => {
     await js(`(async () => {
       const p = await api.createProject({ name: 'multiagent', folder: ${repo} });
       await api.setSettings({ developerMode: true, lastWorkflow: 'software-development.yaml' });
-      document.querySelector('#btn-quick-start').click();
+      openDrawer(); // #412: Start left the top bar
       await new Promise((r) => setTimeout(r, 500));
       document.querySelector('#project-select').value = p.id;
       document.querySelector('#in-task').value = 'Add a /health endpoint';
@@ -209,7 +209,7 @@ app.on('browser-window-created', (_e, win) => {
       fs.mkdirSync(path.dirname(path.resolve(out)), { recursive: true });
       fs.writeFileSync(out, img.toPNG());
       console.log('screenshot:', out);
-      console.log('status:', await js(`document.querySelector('#run-status').textContent`), '| error:', await js(`document.querySelector('#start-error').textContent`));
+      console.log('status:', await js(`document.querySelector('[data-testid=run-screen-status]').textContent`), '| error:', await js(`document.querySelector('#start-error').textContent`));
       const real = realSessions();
       if (real.length) { console.error('smoke: sessions that were not simulated:', real); app.exit(1); return; }
       console.log('sessions: all simulated (mock)');

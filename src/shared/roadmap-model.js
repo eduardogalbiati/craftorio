@@ -114,7 +114,7 @@
   }
 
   function stageActions(r, stage) {
-    if (!stage) return { disable: no('No stage given.'), enable: no('No stage given.'), parkStage: no('No stage given.'), pauseStage: no('No stage given.') };
+    if (!stage) return { disable: no('No stage given.'), enable: no('No stage given.'), parkStage: no('No stage given.'), pauseStage: no('No stage given.'), stopStage: no('No stage given.') };
     const busy = itemsOf(stage).some((x) => x.status === 'running');
     // #395: its items at a gate are parked and its planned ones not started skipped; never while a turn runs
     const parkStage = () => {
@@ -136,6 +136,8 @@
       enable: stage.disabled ? yes() : no('This stage is already enabled.'),
       parkStage: parkStage(),
       pauseStage: pauseStage(),
+      // #412: Stop cancels its runs in progress (the roadmap pauses on them, Resume / Retry / Skip)
+      stopStage: busy ? yes() : no('No run of this stage is in progress.'),
     };
   }
 

@@ -1,10 +1,12 @@
 /* global api */
-// Run screen (Run Details): the run shown in the top bar, its failure banner, its chain banner (#134:
-// renderChainBanner), the gates it waits at
+// Run screen (Run Details): its first row is the tab row (#410: the Chat | Details | 3D tabs, the
+// run's status and id, its actions on the right with "+ When it finishes…", then Pause and Stop, #412:
+// renderRunTabRow, renderRunSummary), then the run's failure banner, its chain banner below the row
+// (#134: renderChainBanner, only when there is a chain, its editor or linked runs), the gates it waits at
 // (gate cards: renderRunGates, onRunGateClick; what a gate offers is gate-panel.js), its summary
 // (inputs, supervisor, watch, resume, the run that resumed it: #384, Save to issue, Review changes: the diff viewer, #118,
 // a shipped release run's "Show on the map": #376, views/project/project-city-release.js), its
-// steps by group, its sessions and the Session / Events / Artifacts tabs. No sidebar entry of its own: the Run item and the runs menu
+// steps by group, its sessions and the Artifacts / Session / Events tabs (a run opens on Artifacts, #410). No sidebar entry of its own: the Run item and the runs menu
 // belong to the shell (app.js), which also keeps the run state it draws (state.runs, onEvent,
 // hydrateRun) and calls renderRunScreen() from render() while it shows. Registers itself with
 // registerView (view-registry.js); uses app.js globals ($, esc, state, api, selectedView…).
@@ -91,7 +93,7 @@ function focusRunGate() {
 
 function switchTab(tab) {
   state.tab = tab;
-  document.querySelectorAll('.tab[data-tab]').forEach((t) => t.classList.toggle('active', t.dataset.tab === tab));
+  document.querySelectorAll('.tab[data-tab]').forEach((t) => { t.classList.toggle('active', t.dataset.tab === tab); t.setAttribute('aria-selected', String(t.dataset.tab === tab)); });
   $('#tab-detail').classList.toggle('hidden', tab !== 'detail');
   $('#tab-events').classList.toggle('hidden', tab !== 'events');
   $('#tab-artifacts').classList.toggle('hidden', tab !== 'artifacts');
@@ -112,6 +114,7 @@ function runArtifactsPanel() {
 
 // What render() draws while the Run screen shows.
 function renderRunScreen() {
+  renderRunTabRow();
   renderRunBanner();
   renderPauseBanner();
   renderChainBanner();
@@ -123,6 +126,18 @@ function renderRunScreen() {
   runArtifactsPanel()?.setRun(state.runId);
   if (state.tab === 'detail') renderDetail();
   else if (state.tab === 'events') renderEvents();
+}
+
+// The tab row's status pill and id (#412: they left the top bar), its Stop and Pause (run-controls.js).
+function renderRunTabRow() {
+  const r = state.run;
+  const pill = $('#run-screen-status');
+  const st = r?.status || 'idle';
+  pill.className = `pill pill-${st}`;
+  pill.dataset.status = st;
+  pill.textContent = statusLabel(r);
+  $('#run-screen-id').textContent = r?.id || '';
+  renderRunControls(r);
 }
 
 function liveDuration(s) {
@@ -250,35 +265,44 @@ function renderRunSummary() {
     ${pills ? `<div class="run-input-pills">${pills}</div>` : ''}
     <dl class="kv run-inputs">${inputs.map(([k, v]) => `<dt title="${esc(k)}">${esc(k)}</dt>${inputValueCell(v)}`).join('')}</dl>
     ${inputImagesHtml()}
-    ${window.gateScenariosHtml ? window.gateScenariosHtml(r.id) : ''}
-    <div class="row">
+    ${window.gateScenariosHtml ? window.gateScenariosHtml(r.id) : ''}`;
+  // #410: the run's actions sit on the tab row, on the right; "+ When it finishes…" first while it goes without a chain
+  const chainLink = r.status === 'running' && !r.chain?.then && !selectedView().past
+    ? '<button type="button" class="link-btn small" data-chain="edit" title="Start a workflow when this run succeeds (#134)">+ When it finishes…</button>' : '';
+  const actionsHtml = `${chainLink}
       <button class="btn sm ghost sup-btn" id="btn-run-sup" title="Ask the AI supervisor to explain this run and suggest how to continue"><span class="sup-mark">◆</span> Ask the supervisor</button>
       ${r.status === 'running' ? `<button class="btn sm ghost sup-btn" id="btn-run-watch" title="${WATCH_TITLE}"><span class="sup-mark">◆</span> Watch</button>` : ''}
       ${canResume(r) ? '<button class="btn sm ghost" id="btn-run-resume" title="Start a new run from a step of this one, keeping the previous outputs (no supervisor call)">Resume from step…</button>' : ''}
       ${hasChanges(r.id) ? '<button class="btn sm ghost" id="btn-run-diff" title="The files this run changed on its branch, file by file, split or unified">Review changes</button>' : ''}
       ${saveIssue ? `<button class="btn sm ghost" id="btn-run-save-issue" title="Save the accepted document to its issue (preview first, then confirm)">Save to issue #${esc(saveIssue.number)}…</button>` : ''}
       <button class="btn sm ghost" id="btn-run-analytics" title="Its timeline, cost and tokens per agent, compared with its workflow's runs (Analytics › Run, #228)">Open in Analytics</button>
-      ${replayMapHtml(r)}${releaseMapHtml(r)}
-    </div>`;
+      ${replayMapHtml(r)}${releaseMapHtml(r)}`;
   // rendered on every event: rebuilt only when it changes, so a hover popover over an input stays open
   const box = $('#run-summary');
+  const row = $('#run-actions');
+  // keyed on the run too: its handlers hold that run
+  if (row._html !== `${r.id}\n${actionsHtml}`) { row._html = `${r.id}\n${actionsHtml}`; row.innerHTML = actionsHtml; mountRunActions(); }
   if (box._html === html || box.querySelector('.run-title-input') === document.activeElement) return;
   box._html = html;
   box.innerHTML = html;
   mountInputImages(box);
   // the test writer's E2E scenarios (#143): local-hero has no merge approval to show them at
   if (window.mountGateScenarios) window.mountGateScenarios(box);
-  $('#btn-run-sup').onclick = () => openSupervisorForCurrent();
-  if ($('#btn-run-watch')) $('#btn-run-watch').onclick = () => openSupervisorForCurrent({ watch: true });
-  if ($('#btn-run-resume')) $('#btn-run-resume').onclick = () => openResumeDialog(r.id);
   box.querySelectorAll('[data-testid="run-resumed-link"]').forEach((a) => (a.onclick = (e) => { e.preventDefault(); showRun(a.dataset.run); }));
   box.querySelectorAll('[data-suite-log]').forEach((b) => (b.onclick = () => openRunLog(r.id, b.dataset.suiteLog)));
   if ($('#btn-run-scratch')) $('#btn-run-scratch').onclick = () => api.openPath(scratchOfRun.get(r.id)?.info?.dir).catch((e) => showToast('Could not open the folder', errMsg(e)));
-  if ($('#btn-run-diff')) $('#btn-run-diff').onclick = () => DiffViewer.open({ runId: r.id, title: r.title || r.workflow || '' });
-  $('#btn-run-analytics').onclick = () => window.openAnalytics?.({ tab: 'run', runId: r.id });
-  mountReplayMap(r);
-  if ($('#btn-run-save-issue')) {
-    $('#btn-run-save-issue').onclick = () => window.openDuoSaveToIssue({ runId: r.id, issue: saveIssue, mock: !!r.mock, docSkill: r.inputs?.document_skill || '' });
+
+  // the tab row's buttons: the same ids and handlers as when they sat in the Workflow panel
+  function mountRunActions() {
+    $('#btn-run-sup').onclick = () => openSupervisorForCurrent();
+    if ($('#btn-run-watch')) $('#btn-run-watch').onclick = () => openSupervisorForCurrent({ watch: true });
+    if ($('#btn-run-resume')) $('#btn-run-resume').onclick = () => openResumeDialog(r.id);
+    if ($('#btn-run-diff')) $('#btn-run-diff').onclick = () => DiffViewer.open({ runId: r.id, title: r.title || r.workflow || '' });
+    $('#btn-run-analytics').onclick = () => window.openAnalytics?.({ tab: 'run', runId: r.id });
+    mountReplayMap(r);
+    if ($('#btn-run-save-issue')) {
+      $('#btn-run-save-issue').onclick = () => window.openDuoSaveToIssue({ runId: r.id, issue: saveIssue, mock: !!r.mock, docSkill: r.inputs?.document_skill || '' });
+    }
   }
 
   // Replay on the map (#374): a finished run of a project plays its agents' files over the city
@@ -488,7 +512,8 @@ function renderChainBanner() {
   const editing = chainUi.editing === r.id;
   const savingPipe = chainUi.savingPipe === r.id;
   const family = r.parentRun?.run_id || r.childRuns?.length;
-  const show = !!(c?.then || c?.from) || editing || running || !!family;
+  // #410: a live run without a chain shows none ("+ When it finishes…" is on the tab row)
+  const show = !!(c?.then || c?.from) || editing || savingPipe || !!family;
   box.classList.toggle('hidden', !show);
   if (!show) return;
   const pipe = c ? ChainModel.pipelineOf(c, r.id) : null;
@@ -509,7 +534,7 @@ function renderChainBanner() {
   } else if (savingPipe) {
     actions = `${btn('cancel-pipe', 'Cancel')}${btn('save-pipe', 'Save pipeline', 'primary')}`;
   } else if (running) {
-    actions = then ? `${btn('edit', 'Edit')}${btn('clear', 'Cancel chain')}` : '<button type="button" class="link-btn small" data-chain="edit">+ When it finishes…</button>';
+    actions = then ? `${btn('edit', 'Edit')}${btn('clear', 'Cancel chain')}` : '';
     if (then) text = 'Starts only if this run succeeds. Its gates still wait for you.';
   } else if (then && c.state === 'paused') {
     actions = `${btn('drop', 'Drop chain')}${btn('edit', 'Edit')}${btn('resume', 'Resume chain', 'primary')}`;
@@ -818,17 +843,23 @@ registerView({
   id: 'run',
   markup: `
       <section id="view-run" class="view hidden">
+        <div class="run-tab-row" data-testid="run-tab-row">
+          <div class="tabs" role="tablist" aria-label="Run view">
+            <button id="run-mode-chat" class="tab" type="button" role="tab" aria-selected="false" title="Follow this run as a chat">Chat</button>
+            <button class="tab active" type="button" role="tab" aria-selected="true">Details</button>
+            <button id="run-mode-3d" class="tab" type="button" role="tab" aria-selected="false" data-run3d="run" data-testid="run-3d" title="Show this run in 3D">3D</button>
+          </div>
+          <span id="run-screen-status" class="pill pill-idle" data-testid="run-screen-status" data-status="idle">Idle</span>
+          <span id="run-screen-id" class="muted mono small" data-testid="run-screen-id"></span>
+          <div id="run-actions" class="run-actions"></div>
+          <!-- #368: the run ends paused once its agents finish their current turn (run-controls.js pauseRun); #391 the owner's words: "step" -->
+          <button id="btn-pause" class="btn ghost sm hidden" type="button" data-testid="run-pause" title="The agents finish their current turn, then no step starts after them; Resume continues">Pause after current step</button>
+          <button id="btn-stop" class="btn danger sm hidden" type="button" data-testid="run-stop">Stop</button>
+        </div>
         <div id="run-fail-banner" class="fail-banner hidden"></div>
         <div id="run-pause-banner" class="run-pause-banner hidden" aria-live="polite"></div>
-        <div id="run-chain" class="chain-banner hidden" aria-live="polite"></div>
+        <div id="run-chain" class="chain-banner hidden" aria-live="polite" data-testid="run-chain-banner"></div>
         <div id="run-gates" class="run-gates hidden" aria-live="polite"></div>
-        <div class="run-modebar">
-          <div class="seg sm" role="group" aria-label="Run view">
-            <button id="run-mode-chat" type="button" title="Follow this run as a chat">Chat</button>
-            <button type="button" class="active" aria-pressed="true">Details</button>
-          </div>
-          <button id="run-mode-3d" class="btn ghost sm" type="button" data-run3d="run" data-testid="run-3d" title="Show this run in 3D">3D</button>
-        </div>
         <div class="run-layout">
           <aside class="panel config">
             <section>
@@ -844,21 +875,21 @@ registerView({
           <section class="panel sessions-panel">
             <h2>Sessions</h2>
             <div id="sessions" class="sessions">
-              <p class="empty muted">No sessions yet. Click <b>Start</b> at the top to pick a workflow.</p>
+              <p class="empty muted">No sessions yet. Start a workflow from Home, Projects or Workflows › Definitions.</p>
             </div>
           </section>
 
           <section class="panel detail-panel">
-            <div class="tabs">
-              <button class="tab active" data-tab="detail">Session</button>
-              <button class="tab" data-tab="events">Events</button>
-              <button class="tab" data-tab="artifacts" data-testid="run-tab-artifacts" title="The files this run produced">Artifacts <span id="tab-artifacts-count" class="tab-count hidden"></span></button>
+            <div class="tabs" role="tablist" aria-label="Run details">
+              <button class="tab active" type="button" role="tab" aria-selected="true" data-tab="artifacts" data-testid="run-tab-artifacts" title="The files this run produced">Artifacts <span id="tab-artifacts-count" class="tab-count hidden"></span></button>
+              <button class="tab" type="button" role="tab" aria-selected="false" data-tab="detail">Session</button>
+              <button class="tab" type="button" role="tab" aria-selected="false" data-tab="events">Events</button>
             </div>
-            <div id="tab-detail" class="tab-body">
+            <div id="tab-detail" class="tab-body hidden">
               <p class="empty muted">Select a session to see prompts, thinking, tool calls and output.</p>
             </div>
             <div id="tab-events" class="tab-body hidden"></div>
-            <div id="tab-artifacts" class="tab-body hidden"></div>
+            <div id="tab-artifacts" class="tab-body"></div>
           </section>
         </div>
       </section>`,
@@ -866,6 +897,10 @@ registerView({
     $('#run-gates').onclick = onRunGateClick;
     $('#run-pause-banner').onclick = onPauseBannerClick;
     $('#run-chain').onclick = onChainBannerClick;
+    // #410: the tab row's "+ When it finishes…" opens the same chain editor; #412 Stop and Pause
+    $('#run-actions').onclick = onChainBannerClick;
+    $('#btn-stop').onclick = stopRun;
+    $('#btn-pause').onclick = pauseRun;
     document.querySelectorAll('.tab[data-tab]').forEach((t) => (t.onclick = () => switchTab(t.dataset.tab)));
     $('#tab-detail').addEventListener('toggle', (e) => {
       const key = e.target.dataset?.key;

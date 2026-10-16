@@ -110,7 +110,7 @@
 //   --paste <css>      then pastes a demo screenshot into this prompt field (repeatable, #130): the
 //                      chip row under it, saved in the scratch workspace like a real Ctrl+V; e.g. the
 //                      Start drawer on issue-tracker: --view dashboard --workflow issue-tracker.yaml
-//                      --click "#btn-quick-start" --paste "#in-request" --paste "#in-request"
+//                      --click "[data-home-act=run]" --paste "#in-request" --paste "#in-request"
 //   --paste-big <css>  the same with a 12 MB image: the red "Image too large" chip
 //                      (--workflow on a view other than run: the workflow the Start drawer opens on)
 //   --theme <t>        dark | light | system: the theme Electron reports (prefers-color-scheme)

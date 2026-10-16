@@ -88,10 +88,7 @@ body:not(.dev-mode) .dev-only { display: none !important; }
   padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; text-transform: uppercase; white-space: nowrap;
   color: var(--orange); border: 1px solid currentColor;
 }
-.run-meta { display: flex; align-items: center; gap: 8px; }
-.kpis { display: flex; flex-wrap: wrap; gap: 4px 22px; margin-left: auto; min-width: 0; }
-.kpi label { display: block; font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
-.kpi b { font-family: var(--mono); font-size: 14px; font-weight: 600; }
+/* #412: the 24/7 chip and the usage right after the Project select (the run KPIs left the bar) */
 .actions { display: flex; flex-wrap: wrap; gap: 8px; }
 /* #254: the bar's own content wraps at the left (#208); the Oracle's button and the notifications
    bell stay at the top right whatever wraps */
@@ -111,7 +108,7 @@ body:not(.dev-mode) .dev-only { display: none !important; }
 .pill-running { background: rgba(124,156,255,.15); color: var(--accent); border-color: rgba(124,156,255,.35); }
 .pill-success { background: rgba(74,222,128,.12); color: var(--green); border-color: rgba(74,222,128,.3); }
 .pill-failed { background: rgba(248,113,113,.12); color: var(--red); border-color: rgba(248,113,113,.3); }
-/* .pill-paused (#368): the header's pill of a paused run, StatusPill's colour for paused */
+/* .pill-paused (#368): the Run screen's pill of a paused run (#412), StatusPill's colour for paused */
 .pill-cancelled, .pill-paused { background: rgba(250,204,21,.12); color: var(--yellow); border-color: rgba(250,204,21,.3); }
 
 .btn {
@@ -145,9 +142,6 @@ body:not(.dev-mode) .dev-only { display: none !important; }
 .cmd-hint .cmd-run svg { width: 14px; height: 14px; fill: currentColor; stroke-width: 1.5; stroke-linejoin: round; }
 .s-label .cmd-hint { margin-top: 4px; }
 .s-label .cmd-hint code { margin-top: 0; }
-.run-meta { background: none; border: 1px solid transparent; border-radius: 8px; padding: 3px 6px; color: inherit; font: inherit; cursor: default; }
-.run-meta.clickable { cursor: pointer; }
-.run-meta.clickable:hover { border-color: var(--border); }
 
 /* ---------- shell: sidebar + content + right drawer ---------- */
 .shell { flex: 1; min-height: 0; display: flex; position: relative; overflow: clip; }
@@ -500,7 +494,6 @@ input[type=date]::-webkit-calendar-picker-indicator, input[type=datetime-local]:
 .rp-sep, .rp-skip { color: var(--muted); font-size: 12px; align-self: center; margin-bottom: 14px; }
 .rp-skip { font-family: var(--mono); font-size: 11px; }
 
-.kpi-all b { color: var(--muted); }
 input.s-num { width: 90px; }
 /* a value out of its range (Settings › Execution › Memory guard, #276): not saved */
 input.s-num.invalid { border-color: var(--red); outline-color: var(--red); }
@@ -532,6 +525,12 @@ input.s-num.invalid { border-color: var(--red); outline-color: var(--red); }
 .tab { background: none; border: none; color: var(--muted); padding: 10px 16px; cursor: pointer; font: inherit; font-weight: 600; border-bottom: 2px solid transparent; }
 .tab.active { color: var(--text); border-bottom-color: var(--accent); }
 .tabs.page-tabs { background: none; margin-bottom: 16px; }
+/* #410: the Run screen's and the run chat's first row (Chat | Details | 3D, then the run's
+   actions): the tabs at the same place in both; the row wraps on a narrow window */
+.run-tab-row { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; min-width: 0; padding: 0 16px; background: var(--panel); border-bottom: 1px solid var(--border); }
+.run-tab-row > .tabs { align-self: flex-start; background: none; border-bottom: none; }
+.run-tab-row > .tabs .tab:disabled { opacity: .45; cursor: not-allowed; }
+.run-tab-row > .tabs .tab:focus-visible { outline: var(--focus-ring); outline-offset: -2px; }
 
 .kv { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; font-size: 12px; margin-top: 8px; }
 .kv dt { color: var(--muted); }
@@ -1085,7 +1084,8 @@ body.resizing-dock .term-body { pointer-events: none; }
 .account-btn { display: inline-flex; align-items: center; gap: 8px; padding: 4px 8px; }
 .account-avatar { width: 24px; height: 24px; border-radius: 50%; background: var(--panel-2); border: 1px solid var(--border); display: grid; place-items: center; font-size: 11px; font-weight: 700; color: var(--accent); }
 .account-pop {
-  position: absolute; top: calc(100% + 8px); right: 0; z-index: 20; width: 280px; padding: 14px;
+  /* #412: the account ends the bar, so the pop-up opens from the right edge, inside the window */
+  position: absolute; top: calc(100% + 8px); right: 0; z-index: 20; width: 280px; max-width: calc(100vw - 32px); padding: 14px;
   background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 12px 32px rgba(0,0,0,.4);
 }
 .account-pop #btn-sign-out { margin-top: 12px; }
