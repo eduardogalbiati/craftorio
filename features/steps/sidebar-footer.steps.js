@@ -11,6 +11,8 @@
 //   capped (about half the window); past it only #nav-runs scrolls inside the footer.
 // The window's height is set at launch (Given the app is open in a WxH window, backlog.steps.js).
 
+const fs = require('fs');
+const path = require('path');
 const { expect } = require('@playwright/test');
 const { VISUAL_NOW } = require('../support/fixed-clock');
 const { Given, When, Then } = require('./fixtures');
@@ -34,6 +36,16 @@ const rowBoxes = async (page) => {
 // the visual scenarios' opening at a given window size: a fixed clock (#362) and a theme
 Given('the app is open in a {int}x{int} window in the {word} theme', async ({ e2e }, w, h, theme) => {
   await e2e.open({ size: `${w}x${h}`, theme, now: VISUAL_NOW });
+});
+
+// Concurrent runs is off by default (src/workspace.js): written into settings.json (as roadmap.steps.js
+// does), then the page reloads so the renderer reads it; simulations hold no slot (countSimulations off)
+Given('concurrent runs are on', async ({ e2e }) => {
+  const file = path.join(e2e.scratch, 'workspace', 'settings.json');
+  const settings = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
+  fs.writeFileSync(file, JSON.stringify({ ...settings, concurrentRuns: { ...(settings.concurrentRuns || {}), enabled: true, countSimulations: false } }, null, 2));
+  await e2e.window.reload();
+  await e2e.window.waitForLoadState('domcontentloaded');
 });
 
 // opens every collapsed menu group (a group's title is a button with aria-expanded)

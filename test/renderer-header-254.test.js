@@ -73,7 +73,9 @@ test('the notifications bell in the header opens the notification centre', async
 test('the Oracle button is no longer added to the sidebar: it sits in the header', async () => {
   const app = page();
   await app.boot();
-  const sidebarNodes = app.el('nav.sidebar').appended;
+  // #411: the sidebar's entries go to its menu part (nav.sidebar .sidebar-menu), so every sidebar node counts
+  const sidebarNodes = [...app.elements.entries()].filter(([sel]) => /sidebar/.test(sel)).flatMap(([, el]) => el.appended || []);
+  assert.ok(sidebarNodes.length > 0, 'nothing was placed in the sidebar: the check would prove nothing');
   assert.ok(!sidebarNodes.some((n) => n.id === 'nav-oracle'), 'the Oracle button is still appended to the sidebar');
   const inHeaderMarkup = /id="nav-oracle"/.test(between(html(), '<header class="topbar">', '</header>'));
   const addedToHeader = [...app.elements.entries()].some(([sel, el]) => /topbar|header/.test(sel) && el.appended.some((n) => n.id === 'nav-oracle'));

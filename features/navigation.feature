@@ -80,10 +80,12 @@ Feature: Menu by the flow
     Then the Supervisor chat opens as a drawer on the right
 
   # Two simulated runs: the first waits at its gate, the second is paused after its current step (a
-  # listed run with no gate, so the sidebar shows two runs and one gate, steadily)
+  # listed run with no gate, so the sidebar shows two runs and one gate, steadily); Concurrent runs is
+  # turned on first, as it is off by default
   @issue-411
   Scenario: In a short window with every group open, the runs stay in view, pinned under the menu
     Given the app is open in a 1400x600 window
+    And concurrent runs are on
     When I start a simulated run with the task "Add a /health endpoint"
     Then a gate card waits for my approval
     When I start a simulated run with the task "Write the changelog"
@@ -98,6 +100,7 @@ Feature: Menu by the flow
   @issue-411
   Scenario: Scrolling the menu to its end reaches Settings and leaves the runs where they are
     Given the app is open in a 1400x600 window
+    And concurrent runs are on
     When I start a simulated run with the task "Add a /health endpoint"
     Then a gate card waits for my approval
     When I start a simulated run with the task "Write the changelog"
@@ -114,6 +117,7 @@ Feature: Menu by the flow
   @issue-411 @visual
   Scenario: The sidebar of a short window with two runs and one gate looks like its baseline
     Given the app is open in a 1400x600 window in the light theme
+    And concurrent runs are on
     When I start a simulated run with the task "Add a /health endpoint"
     Then a gate card waits for my approval
     When I start a simulated run with the task "Write the changelog"
