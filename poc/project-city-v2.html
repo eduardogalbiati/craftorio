@@ -11,9 +11,15 @@
   stable, the complexity tier adds articulation (setbacks, a corner tower, rooftop plant), the quadrant
   adds its props (Danger Zone plant, Cowboy Code water tower, Fertile Ground crane, Healthy Closure
   roof garden), and the walls get windows at a real floor height, lit by churn (see `partsOf`). A
-  "Showroom" button lays the models side by side. Around them: trees and lamps on the sidewalks
-  (`propsOf`), cars driving the avenues with their lights (`makeTraffic`, `drive`), a bloom pass over
-  the lights (the "Glow" button) and a vignette. The model is loaded from project-city-v2.data.js
+  "Showroom" button lays the models side by side. The facade follows the zone kind (`FACADES`: a
+  glass curtain in the commercial zone, tall windows between pilasters in the civic one...), every
+  building has a touch of its own tone, the tall ones get a band every six floors, a canopy over the
+  entrance, a helipad or a spire on the top tiers. Around them: a sidewalk around every district
+  plate, a lawn strip with trees and a bench in front of the buildings (`PLAZA`), trees and lamps on
+  the avenues' sidewalks and lamps on the street corners (`propsOf`), crosswalks at the crossings,
+  cars driving the avenues with their lights (`makeTraffic`, `drive`), water around the city with the
+  ports as piers, a bloom pass over the lights (the "Glow" button) and a vignette. Big data and prose
+  files (`DATA_LANGS`) are low halls rather than grey towers. The model is loaded from project-city-v2.data.js
   (a classic script, so this page stays readable); everything else below is the first proof of concept.
 
   The first proof of concept: a repository as a 3D city (three.js), one file, no build step. It is drawn like
@@ -236,7 +242,7 @@ const THEMES = {
     accent: '#7c9cff', ink: '#e6e8ee', muted: '#8a91a3', mast: '#596079',
     status: { pending: '#6f788c', running: '#7c9cff', done: '#4ade80', changes: '#facc15', failed: '#f87171' },
     quadrant: { 'Danger Zone': '#f87171', 'Cowboy Code': '#facc15', 'Fertile Ground': '#7c9cff', 'Healthy Closure': '#4ade80' },
-    unmeasured: '#6f788c', campus: '#3e4659', dim: '#242a37', dash: '#3a4357', dock: '#2b3247', hall: '#3d4766', plinth: '#343c52', beacon: '#7c9cff', garden: '#4f9c74', night: 1.0,
+    unmeasured: '#6f788c', campus: '#3e4659', dim: '#242a37', dash: '#3a4357', dock: '#2b3247', hall: '#3d4766', plinth: '#343c52', beacon: '#7c9cff', garden: '#4f9c74', lawn: '#2c4a38', water: '#17233b', night: 1.0,
     churn: ['#2a3040', '#facc15', '#fb923c', '#f87171'],
     kinds: { // grounds a step above the floor (#181c26), plates a step above the pad (#242a39), as run3d's floor / pad / wall steps
       civic: { ground: '#2b2d34', block: '#3b3e47', tint: '#c9b58f', ink: '#dad5c7' },
@@ -257,7 +263,7 @@ const THEMES = {
     accent: '#4C6FFF', ink: '#1B2233', muted: '#7A859C', mast: '#12141A',
     status: { pending: '#A7B0C2', running: '#4C6FFF', done: '#1FAE6E', changes: '#E39A12', failed: '#EA4E4B' },
     quadrant: { 'Danger Zone': '#EA4E4B', 'Cowboy Code': '#E39A12', 'Fertile Ground': '#4C6FFF', 'Healthy Closure': '#1FAE6E' },
-    unmeasured: '#A7B0C2', campus: '#D5DAE5', dim: '#E2E6EE', dash: '#F4F6FA', dock: '#2B3350', hall: '#5E6E8C', plinth: '#FFFFFF', beacon: '#4C6FFF', garden: '#86D2AC', night: 0.12,
+    unmeasured: '#A7B0C2', campus: '#D5DAE5', dim: '#E2E6EE', dash: '#F4F6FA', dock: '#2B3350', hall: '#5E6E8C', plinth: '#FFFFFF', beacon: '#4C6FFF', garden: '#86D2AC', lawn: '#BFDCAA', water: '#B9D0EC', night: 0.12,
     churn: ['#E9ECF2', '#F6D55C', '#F0883E', '#D7263D'],
     kinds: {
       civic: { ground: '#D3CEC2', block: '#F1EEE7', tint: '#D8C7A4', ink: '#5A5244' },
@@ -295,6 +301,7 @@ const SIDEWALK_TOP = 0.22, ZONE_TOP = 0.55, PLATE_TOP = 0.95, Y0 = PLATE_TOP;
 const ROUND = 0.07;                          // the rounding of a building body, a share of its size (one instanced geometry for all)
 const FLOOR_H = 0.9, WIN_PITCH = 0.72;       // the windows: a real floor height and a column pitch (world units), so size reads as scale
 const COMPLEX_RATIO = 3;                     // a footprint this many times its district's median footprint becomes a complex (wings)
+const PLAZA = 0.14;                          // the share of a plate's depth given to a lawn strip in front of the buildings (3 to 7 units)
 const QUADRANT_WHY = { 'Danger Zone': 'complex and changes a lot', 'Cowboy Code': 'complex, rarely touched', 'Fertile Ground': 'simple, changes a lot', 'Healthy Closure': 'simple and quiet' };
 
 const $ = (id) => document.getElementById(id);
@@ -405,6 +412,13 @@ function layoutDistrict(g, unit) {
   }
   const want = g.w * unit * FILL;
   if (g.inner.w * g.inner.h > want) { const s = Math.sqrt(want / (g.inner.w * g.inner.h)); g.inner.w *= s; g.inner.h *= s; }
+  // a plaza strip (a lawn with trees and a bench) between the buildings and the label, on the plates with room
+  g.lawns = [];
+  if ((vertical ? g.inner.w : g.inner.h) > 12) {
+    const plaza = Math.min(7, Math.max(3, (vertical ? g.inner.w : g.inner.h) * PLAZA));
+    if (vertical) { g.lawns.push({ x: g.inner.x + g.inner.w - plaza + 0.8, y: g.inner.y, w: plaza - 0.8, h: g.inner.h }); g.inner.w -= plaza; }
+    else { g.lawns.push({ x: g.inner.x, y: g.inner.y + g.inner.h - plaza + 0.8, w: g.inner.w, h: plaza - 0.8 }); g.inner.h -= plaza; }
+  }
   squarify(g.items, g.inner);
   const areas = g.items.map((it) => it.rect.w * it.rect.h).sort((a, b) => a - b);
   g.medianArea = areas[Math.floor(areas.length / 2)] || 0;
@@ -571,35 +585,37 @@ function windowMaterial() {
   mat.onBeforeCompile = (sh) => {
     sh.uniforms.uNight = winUniforms.uNight;
     sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute vec4 aWin; varying vec4 vWin; varying vec3 vLocal; varying vec3 vSize; varying vec3 vNrm;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWin = aWin; vSize = vec3(length(instanceMatrix[0].xyz), length(instanceMatrix[1].xyz), length(instanceMatrix[2].xyz)); vLocal = position * vSize; vNrm = normal;');
+      .replace('#include <common>', '#include <common>\nattribute vec4 aWin; attribute vec4 aStyle; varying vec4 vWin; varying vec4 vStyle; varying vec3 vLocal; varying vec3 vSize; varying vec3 vNrm;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWin = aWin; vStyle = aStyle; vSize = vec3(length(instanceMatrix[0].xyz), length(instanceMatrix[1].xyz), length(instanceMatrix[2].xyz)); vLocal = position * vSize; vNrm = normal;');
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>
-uniform float uNight; varying vec4 vWin; varying vec3 vLocal; varying vec3 vSize; varying vec3 vNrm;
+uniform float uNight; varying vec4 vWin; varying vec4 vStyle; varying vec3 vLocal; varying vec3 vSize; varying vec3 vNrm;
 float hash3(vec3 p) { p = fract(p * 0.1031); p += dot(p, p.yzx + 33.33); return fract((p.x + p.y) * p.z); }`)
       .replace('#include <color_fragment>', `#include <color_fragment>
 vec3 winGlow = vec3(0.0);
 diffuseColor.rgb *= 0.72 + 0.28 * smoothstep(0.0, 2.4, vLocal.y);
 if (vWin.x > 0.5 && abs(vNrm.y) < 0.4) {
+  // the facade style (aStyle): column pitch, window width and height shares, glass tint (dark to cool blue)
+  float pitch = ${P} * vStyle.x, ww = vStyle.y * 0.5, wh = vStyle.z * 0.5;
   bool onX = abs(vNrm.x) > 0.5;
   float fw = onX ? vSize.z : vSize.x;
   float u = (onX ? vLocal.z : vLocal.x) + fw * 0.5;
-  float cols = floor((fw - 0.3) / ${P});
-  float mu = (fw - cols * ${P}) * 0.5;
+  float cols = floor((fw - 0.3) / pitch);
+  float mu = (fw - cols * pitch) * 0.5;
   float floors = floor((vSize.y - 0.3) / ${F});
-  float cu = (u - mu) / ${P}, cy = vLocal.y / ${F};
+  float cu = (u - mu) / pitch, cy = vLocal.y / ${F};
   // from far away a cell covers a pixel or two: the windows fade into the wall's average, no speckle
   float px = fwidth(cu) + fwidth(cy);
   float fade = 1.0 - smoothstep(0.18, 0.55, px);
   if (cols >= 1.0 && cu >= 0.0 && cu < cols && cy >= 0.0 && cy < floors && fade > 0.0) {
     vec2 cell = vec2(fract(cu), fract(cy));
     bool door = floor(cy) < 0.5 && vWin.w > 1.6;
-    bool inWin = door ? (cell.x > 0.3 && cell.x < 0.7 && cell.y < 0.82) : (cell.x > 0.21 && cell.x < 0.79 && cell.y > 0.3 && cell.y < 0.78);
+    bool inWin = door ? (cell.x > 0.3 && cell.x < 0.7 && cell.y < 0.82) : (abs(cell.x - 0.5) < ww && abs(cell.y - 0.55) < wh);
     if (inWin) {
       float side = onX ? sign(vNrm.x) : 2.0 + sign(vNrm.z);
       float rnd = hash3(vec3(floor(cu), floor(cy), vWin.y * 97.0 + side));
       float lit = door ? 0.0 : step(1.0 - vWin.z, rnd);
-      vec3 glass = mix(diffuseColor.rgb * 0.3, vec3(0.06, 0.08, 0.12), 0.55);
+      vec3 glass = mix(mix(diffuseColor.rgb * 0.3, vec3(0.06, 0.08, 0.12), 0.55), vec3(0.16, 0.24, 0.38), vStyle.w * 0.8);
       diffuseColor.rgb = mix(diffuseColor.rgb, glass, fade);
       winGlow = fade * lit * uNight * mix(vec3(1.0, 0.78, 0.5), vec3(0.72, 0.84, 1.0), step(0.82, rnd)) * (0.7 + 0.4 * hash3(vec3(rnd, side, 1.0)));
     }
@@ -609,6 +625,20 @@ if (vWin.x > 0.5 && abs(vNrm.y) < 0.4) {
   };
   return mat;
 }
+// the facades per zone kind: column pitch (times WIN_PITCH), window width and height shares of a cell, glass tint (0 dark, 1 cool blue)
+const FACADES = {
+  civic: [1.3, 0.42, 0.64, 0.2],          // tall narrow windows between pilasters
+  commercial: [0.85, 0.82, 0.62, 0.9],    // a glass curtain
+  industrial: [1.1, 0.58, 0.42, 0.3],     // small windows
+  infrastructure: [1.0, 0.56, 0.5, 0.5],
+  logistics: [1.4, 0.5, 0.4, 0.3],
+  power: [1.2, 0.5, 0.36, 0.4],
+  workshop: [1.0, 0.62, 0.5, 0.35],
+  library: [1.5, 0.4, 0.72, 0.15],        // tall windows, far apart
+  campus: [1.0, 0.6, 0.5, 0.6],
+  outskirts: [1.0, 0.58, 0.48, 0.3],
+};
+const facadeOf = (b) => FACADES[(zoneById.get(b.zone) || {}).kind] || FACADES.outskirts;
 const std = (o) => () => new THREE.MeshStandardMaterial({ roughness: 0.7, ...o });
 // the part kinds: a geometry and a material each; `detail` kinds hide from far away
 const KINDS = {
@@ -658,7 +688,12 @@ function partsOf(it) {
   const add = (g, x, y, z, w, h, d, role, o = {}) => { const p = { g, x, y, z, w, h, d, role, ry: o.ry || 0, win: !!o.win }; parts.push(p); return p; };
   const pick = (arr) => arr[Math.floor(r() * arr.length)], sign = () => (r() < 0.5 ? -1 : 1);
   const trim = (x, y, z, w, d, t = 0.16) => add('box', x, y, z, w + 0.14, t, d + 0.14, 'trim');
+  // a band every six floors on the tall bodies of the articulated tiers, a canopy over the entrance on the street side
+  const bands = (x, y, z, w, h, d) => { if (tier >= 1 && h > 8) for (let k = FLOOR_H * 6; k < h - 1.5; k += FLOOR_H * 6) trim(x, y + k, z, w, d, 0.1); };
+  const canopy = (x, z, w, d, dz = 1) => { if (Math.min(w, d) > 2.5) add('box', x, FLOOR_H * 0.95, z + dz * (d / 2 + 0.3), Math.min(w * 0.45, 2.4), 0.12, 0.8, 'trim'); };
   const kind = it.kind = archetypeOf(it);
+  it.tint = (hashOf(`${b.path}:tint`) % 100) / 100;
+  it.antenna = b.worst != null && b.worst >= ANTENNA_MIN ? ANTENNA_K * b.worst : 0;
   const roofs = []; // the flat roofs props can stand on, the main one first: { x, z, w, d, y }
   let top = H;
   if (kind === 'shed') {
@@ -689,9 +724,11 @@ function partsOf(it) {
   } else if (kind === 'tower') {
     const n = Math.min(4, 2 + tier), shares = [0.42, 0.28, 0.18, 0.12].slice(0, n), sum = shares.reduce((s, x) => s + x, 0);
     let y = 0, w = W, d = D, x = 0, z = 0;
+    canopy(0, 0, W, D);
     for (let i = 0; i < n; i++) {
       const h = (H * shares[i]) / sum;
       add('box', x, y, z, w, h, d, 'body', { win: true });
+      if (i === 0) bands(x, y, z, w, h, d);
       trim(x, y + h, z, w, d, i === n - 1 ? 0.24 : 0.14);
       if (i < n - 1) { // the next segment steps back, on a random side or centred
         const nw = w * (0.72 + r() * 0.16), nd = d * (0.72 + r() * 0.16), sx = pick([-1, 0, 1]), sz = pick([-1, 0, 1]);
@@ -702,10 +739,11 @@ function partsOf(it) {
     y += 0.24;
     if (tier >= 2) { add('box', x, y, z, w * 0.55, 0.5, d * 0.55, 'trim'); y += 0.5; w *= 0.55; d *= 0.55; } // a crown
     roofs.push({ x, z, w, d, y }); top = y;
+    if (tier >= 3 && !it.antenna) { const sh = 2.5 + H * 0.08; add('cone', x, y, z, 0.9, sh, 0.9, 'metal'); top = y + sh; } // a spire
   } else if (kind === 'complex') { // the main block in a corner, a wing along each of its sides, a garden in the free corner, skybridges
     const cx = sign(), cz = sign(), gap = Math.max(0.6, side * 0.07);
     const mw = W * (0.5 + r() * 0.1), md = D * (0.5 + r() * 0.1), mx = (cx * (W - mw)) / 2, mz = (cz * (D - md)) / 2;
-    add('box', mx, 0, mz, mw, H, md, 'body', { win: true }); trim(mx, H, mz, mw, md, 0.2);
+    add('box', mx, 0, mz, mw, H, md, 'body', { win: true }); trim(mx, H, mz, mw, md, 0.2); bands(mx, 0, mz, mw, H, md); canopy(mx, mz, mw, md, cz);
     roofs.push({ x: mx, z: mz, w: mw, d: md, y: H + 0.2 }); top = H + 0.2;
     const w1 = W - mw - gap, h1 = H * (0.38 + r() * 0.17), x1 = (-cx * (W - w1)) / 2;
     add('box', x1, 0, mz, w1, h1, md, 'body', { win: true }); trim(x1, h1, mz, w1, md);
@@ -723,7 +761,7 @@ function partsOf(it) {
     const podium = H > 6 && side > 3, ph = podium ? Math.min(1.6, H * 0.18) : 0, inset = podium ? Math.min(0.5, side * 0.08) : 0;
     if (podium) { add('box', 0, 0, 0, W, ph, D, 'body', { win: true }); trim(0, ph, 0, W, D, 0.14); }
     add('box', 0, ph, 0, W - 2 * inset, H - ph, D - 2 * inset, 'body', { win: true });
-    trim(0, H, 0, W - 2 * inset, D - 2 * inset, 0.18);
+    trim(0, H, 0, W - 2 * inset, D - 2 * inset, 0.18); bands(0, ph, 0, W - 2 * inset, H - ph, D - 2 * inset); canopy(0, 0, W, D);
     roofs.push({ x: 0, z: 0, w: W - 2 * inset, d: D - 2 * inset, y: H + 0.18 }); top = H + 0.18;
     if (tier >= 2 && side > 4) { // a corner tower rising over the block
       const tw = side * 0.42, th = H * (0.25 + 0.1 * tier), tx = sign() * (W / 2 - tw / 2 - inset), tz = sign() * (D / 2 - tw / 2 - inset);
@@ -735,6 +773,7 @@ function partsOf(it) {
   const main = roofs[0];
   const place = (roof, w, d) => ({ x: roof.x + (r() - 0.5) * Math.max(0, roof.w - w - 0.5), z: roof.z + (r() - 0.5) * Math.max(0, roof.d - d - 0.5) });
   if (main && Math.min(main.w, main.d) > 2) {
+    if (Math.min(main.w, main.d) > 7 && tier >= 2) { const p = place(main, 3.2, 3.2); add('cyl', p.x, main.y, p.z, 3.0, 0.08, 3.0, 'trim'); add('cyl', p.x, main.y + 0.08, p.z, 2.2, 0.05, 2.2, 'metal'); } // a helipad
     const units = Math.min(4, Math.round((b.functions != null ? b.functions : b.loc / FLOOR_LINES) / 14));
     for (let i = 0; i < units; i++) { const s = 0.5 + r() * 0.5, p = place(main, s, s); add('box', p.x, main.y, p.z, s, s * 0.7, s * 0.8, 'metal'); }
     if (b.quadrant === 'Danger Zone') { // a plant: tanks, a chimney (a warning light over the limit), pipes down a facade
@@ -765,10 +804,9 @@ function partsOf(it) {
     }
   }
   // the mast: as tall as the worst function, its cap red over the limit
-  it.antenna = b.worst != null && b.worst >= ANTENNA_MIN ? ANTENNA_K * b.worst : 0;
   if (it.antenna) {
     const m = main || { x: 0, z: 0, y: top };
-    add('mast', m.x, m.y, m.z, 1, it.antenna, 1, 'metal'); add('cap', m.x, m.y + it.antenna, m.z, 1, 1, 1, b.worst > COMPLEXITY_LIMIT ? 'warn' : 'cap');
+    add('mast', m.x, m.y, m.z, 0.7, it.antenna, 0.7, 'metal'); add('cap', m.x, m.y + it.antenna, m.z, 0.85, 0.85, 0.85, b.worst > COMPLEXITY_LIMIT ? 'warn' : 'cap');
     top = Math.max(top, m.y + it.antenna + 0.4);
   }
   it.top = top; it.parts = parts;
@@ -778,15 +816,29 @@ function partsOf(it) {
 function propsOf(l) {
   const out = [], r = rngOf(7), dark = T.name === 'dark';
   const lampC = dark ? '#ffd9a0' : '#eef1f7', trunk = dark ? '#3b3129' : '#6b5b4b';
-  const tree = (x, z) => {
-    const s = 1.2 + r() * 0.9;
-    out.push({ g: 'cyl', x, y: SIDEWALK_TOP, z, w: 0.22, h: 0.7 + s * 0.3, d: 0.22, colour: trunk });
-    out.push({ g: 'green', x, y: SIDEWALK_TOP + 0.5 + s * 0.3, z, w: s, h: s * 0.95, d: s, colour: mix(T.garden, '#000000', r() * 0.25) });
+  const tree = (x, z, y = SIDEWALK_TOP, k = 1) => {
+    const s = (1.2 + r() * 0.9) * k;
+    out.push({ g: 'cyl', x, y, z, w: 0.22 * k, h: 0.7 + s * 0.3, d: 0.22 * k, colour: trunk });
+    out.push({ g: 'green', x, y: y + 0.5 + s * 0.3, z, w: s, h: s * 0.95, d: s, colour: mix(T.garden, '#000000', r() * 0.25) });
   };
-  const lamp = (x, z) => {
-    out.push({ g: 'mast', x, y: SIDEWALK_TOP, z, w: 1, h: 3.4, d: 1, colour: T.mast });
-    out.push({ g: 'light', x, y: SIDEWALK_TOP + 3.55, z, w: 0.34, h: 0.34, d: 0.34, colour: lampC });
+  const lamp = (x, z, y = SIDEWALK_TOP, h = 3.4) => {
+    out.push({ g: 'mast', x, y, z, w: 1, h, d: 1, colour: T.mast });
+    out.push({ g: 'light', x, y: y + h + 0.15, z, w: 0.34, h: 0.34, d: 0.34, colour: lampC });
   };
+  // the district streets: a lamp at each corner of the sidewalk; the lawns: trees and a bench
+  for (const g of l.districts) {
+    const s = inset(g.rect, STREET / 2 - 0.65);
+    if (s.w > 8 && s.h > 8) for (const [x, z] of [[s.x, s.y], [s.x + s.w, s.y], [s.x, s.y + s.h], [s.x + s.w, s.y + s.h]]) lamp(x, z, ZONE_TOP + 0.14, 2.6);
+    for (const lawn of g.lawns || []) {
+      const placed = [], want = Math.min(6, Math.floor((lawn.w * lawn.h) / 18));
+      for (let tries = 0; placed.length < want && tries < 40; tries++) {
+        const x = lawn.x + 0.9 + r() * Math.max(0, lawn.w - 1.8), z = lawn.y + 0.9 + r() * Math.max(0, lawn.h - 1.8);
+        if (placed.some((p) => Math.hypot(p.x - x, p.z - z) < 2.4)) continue;
+        placed.push({ x, z }); tree(x, z, PLATE_TOP + 0.15, 0.7);
+      }
+      if (lawn.w > 4 && lawn.h > 2.5) out.push({ g: 'box', x: lawn.x + 1.2 + r() * (lawn.w - 2.4), y: PLATE_TOP + 0.15, z: lawn.y + lawn.h - 0.6, w: 1.3, h: 0.3, d: 0.4, colour: T.plinth }); // a bench on the south edge
+    }
+  }
   for (const zg of l.zones) {
     const s = inset(zg.rect, AVENUE / 2 - SIDEWALK_AV / 2); // the middle of the sidewalk ring
     const edges = [[s.x, s.y, s.x + s.w, s.y], [s.x, s.y + s.h, s.x + s.w, s.y + s.h], [s.x, s.y, s.x, s.y + s.h], [s.x + s.w, s.y, s.x + s.w, s.y + s.h]];
@@ -924,6 +976,7 @@ function paint() {
   const c = new THREE.Color(), dark = T.name === 'dark';
   for (const it of layout.buildings) {
     let col = override ? override[it.b.path] || T.dim : colorOf(it.b);
+    col = mix(col, it.tint < 0.5 ? '#000000' : '#ffffff', Math.abs(it.tint - 0.5) * 0.22); // a touch of its own tone, so neighbours differ
     if (focusSet && !focusSet.has(it.index)) col = mix(col, T.dim, 0.8);
     // the roles of a building's parts, derived from its colour
     const roles = { body: col, trim: mix(col, '#000000', dark ? 0.3 : 0.2), roof: mix(col, dark ? '#0e1014' : '#ffffff', 0.42), metal: T.mast, glass: mix(col, T.accent, 0.55), green: T.garden, warn: T.status.failed, amber: T.status.changes, cap: T.status.pending };
@@ -937,8 +990,10 @@ function paint() {
 function build(l) {
   layout = l;
   city.clear(); blockMeshes = []; zoneMeshes = []; districtLabels = []; tags = []; beacons = []; tagLayer.innerHTML = '';
-  const b = l.bounds, margin = 44;
-  city.add(slab({ x: b.x - margin, y: b.y - margin, w: b.w + 2 * margin, h: b.h + 2 * margin }, 0, 0.5, 7, new THREE.MeshStandardMaterial({ color: T.floor, roughness: 0.95 })));
+  const b = l.bounds, quay = 14, shore = 170;
+  // the water around the city (the ports' docks stand over it) and the ground: a quay past the ring road
+  city.add(slab({ x: b.x - shore, y: b.y - shore, w: b.w + 2 * shore, h: b.h + 2 * shore }, -0.18, 0.4, 14, new THREE.MeshStandardMaterial({ color: T.water, roughness: 0.22, metalness: 0.15 })));
+  city.add(slab({ x: b.x - quay, y: b.y - quay, w: b.w + 2 * quay, h: b.h + 2 * quay }, 0, 0.6, 4, new THREE.MeshStandardMaterial({ color: T.floor, roughness: 0.95 })));
   // the roads: the avenues and the ring road around the city, in the lane colour, a thin slab on the floor
   city.add(slab(inset(b, -AVENUE / 2), 0.06, 0.12, 2.5, new THREE.MeshStandardMaterial({ color: T.lane, roughness: 0.95 })));
   // quiet lane markings on the avenues
@@ -947,6 +1002,14 @@ function build(l) {
     const horizontal = a.y0 === a.y1, len = horizontal ? a.x1 - a.x0 : a.y1 - a.y0;
     for (let t = 6; t < len - 4; t += 11) dashes.push(horizontal ? { x: a.x0 + t + 1.75, z: a.y0, w: 3.5, d: 0.45 } : { x: a.x0, z: a.y0 + t + 1.75, w: 0.45, d: 3.5 });
   }
+  // crosswalks: zebra stripes on every approach of an avenue crossing, and where an avenue meets the ring road
+  const zebra = (x, z, horizontal) => { for (let k = -4; k <= 4; k++) dashes.push(horizontal ? { x, z: z + k * 1.2, w: 1.5, d: 0.6 } : { x: x + k * 1.2, z, w: 0.6, d: 1.5 }); };
+  const hs = l.avenues.filter((a) => a.y0 === a.y1), vs = l.avenues.filter((a) => a.x0 === a.x1);
+  for (const a of hs) {
+    zebra(a.x0 + 2.2, a.y0, true); zebra(a.x1 - 2.2, a.y0, true);
+    for (const v of vs) if (v.y0 < a.y0 && a.y0 < v.y1 && a.x0 < v.x0 && v.x0 < a.x1) { zebra(v.x0 - 9.5, a.y0, true); zebra(v.x0 + 9.5, a.y0, true); zebra(v.x0, a.y0 - 9.5, false); zebra(v.x0, a.y0 + 9.5, false); }
+  }
+  for (const v of vs) for (const end of [v.y0, v.y1]) if (!hs.some((a) => Math.abs(a.y0 - end) < 1)) zebra(v.x0, end + (end === v.y0 ? 2.2 : -2.2), false); else zebra(v.x0, end + (end === v.y0 ? 9.5 : -9.5), false);
   if (dashes.length) {
     const dm = new THREE.InstancedMesh(flat, new THREE.MeshBasicMaterial({ color: T.dash, transparent: true, opacity: 0.55 }), dashes.length);
     const m = new THREE.Matrix4(), q = new THREE.Quaternion();
@@ -963,9 +1026,12 @@ function build(l) {
     lab.rotation.set(-Math.PI / 2, 0, L.vertical ? Math.PI / 2 : 0); // vertical: reads south to north
     lab.position.set(L.x + L.w / 2, ZONE_TOP + 0.03, L.y + L.h / 2);
     city.add(lab);
+    const padMat = new THREE.MeshStandardMaterial({ color: T.pad, roughness: 0.9 }), lawnMat = new THREE.MeshStandardMaterial({ color: T.lawn, roughness: 1 });
     for (const g of zg.districts) {
+      city.add(slab(inset(g.rect, STREET / 2 - 1.3), ZONE_TOP + 0.14, 0.24, 0.8, padMat)); // the sidewalk around the plate
       const plate = slab(g.block, PLATE_TOP, PLATE_TOP - ZONE_TOP + 0.1, 1.0, new THREE.MeshStandardMaterial({ color: k.block, roughness: 0.85 }));
       plate.userData.district = g; city.add(plate); blockMeshes.push(plate);
+      for (const lawn of g.lawns || []) city.add(slab(lawn, PLATE_TOP + 0.05, 0.1, 0.3, lawnMat));
       const D = g.label, dlen = D.vertical ? D.h : D.w, dthick = D.vertical ? D.w : D.h;
       if (dlen > 2 && dthick > 1) {
         const dl = new THREE.Mesh(new THREE.PlaneGeometry(dlen, dthick), new THREE.MeshBasicMaterial({ map: labelTexture(g.d.name, `  ${g.d.files}`, dlen, dthick, mix(k.ink, T.name === 'dark' ? '#ffffff' : '#000000', 0.2)), transparent: true, depthWrite: false, toneMapped: false }));
@@ -993,16 +1059,16 @@ function build(l) {
     kinds[k] = im; city.add(im);
   }
   boxOwner = new Int32Array(Math.max(1, counts.box));
-  const win = new Float32Array(Math.max(1, counts.box) * 4);
+  const win = new Float32Array(Math.max(1, counts.box) * 4), style = new Float32Array(Math.max(1, counts.box) * 4);
   const fill = {}; for (const k in kinds) fill[k] = 0;
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), pos = new THREE.Vector3(), scl = new THREE.Vector3();
   for (const it of l.buildings) {
-    const lit = isCampus(it.b) ? 0.05 : 0.1 + 0.6 * (Math.log1p(it.b.churn || 0) / Math.log1p(MAX_CHURN));
+    const lit = isCampus(it.b) ? 0.05 : 0.1 + 0.6 * (Math.log1p(it.b.churn || 0) / Math.log1p(MAX_CHURN)), facade = facadeOf(it.b);
     for (const p of it.parts) {
       const i = (p.i = fill[p.g]++);
       m.compose(pos.set(it.x + p.x, Y0 + p.y, it.z + p.z), q.setFromEuler(e.set(0, p.ry, 0)), scl.set(Math.max(0.03, p.w), Math.max(0.03, p.h), Math.max(0.03, p.d)));
       kinds[p.g].setMatrixAt(i, m);
-      if (p.g === 'box') { boxOwner[i] = it.index; win.set([p.win ? 1 : 0, (hashOf(`${it.b.path}:${i}`) % 1000) / 1000, lit, p.h], i * 4); }
+      if (p.g === 'box') { boxOwner[i] = it.index; win.set([p.win ? 1 : 0, (hashOf(`${it.b.path}:${i}`) % 1000) / 1000, lit, p.h], i * 4); style.set(facade, i * 4); }
     }
   }
   const pc = new THREE.Color();
@@ -1012,6 +1078,7 @@ function build(l) {
     if (p.g === 'box') { boxOwner[i] = -1; win.set([0, 0, 0, 0], i * 4); }
   }
   boxGeo.setAttribute('aWin', new THREE.InstancedBufferAttribute(win, 4));
+  boxGeo.setAttribute('aStyle', new THREE.InstancedBufferAttribute(style, 4));
   for (const k in kinds) { kinds[k].instanceMatrix.needsUpdate = true; }
   kinds.box.computeBoundingSphere();
   makeTraffic(l);
