@@ -9,7 +9,9 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 
-const settingsSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'views', 'settings', 'settings.js'), 'utf8');
+// #329: the markup lives in settings-markup.js, its texts in the catalog (the sandboxes get t)
+const { settingsSource, t } = require('./settings-source-329');
+const settingsSrc = settingsSource();
 const defaultWorkflowSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'shared', 'default-workflow.js'), 'utf8');
 
 function makeEl() {
@@ -28,7 +30,7 @@ function loadSettingsMarkup({ envDetails, speechStatus } = {}) {
   const els = new Map();
   const $ = (sel) => { if (!els.has(sel)) els.set(sel, makeEl()); return els.get(sel); };
   const sandbox = {
-    $, esc: (s) => String(s ?? ''),
+    $, t, esc: (s) => String(s ?? ''),
     commandHint: (cmd) => `<PLAY:${cmd}>`,
     errMsg: (e) => String(e?.message || e),
     VOICE_LANGUAGES: {},
@@ -52,7 +54,7 @@ function loadSettingsMarkup({ envDetails, speechStatus } = {}) {
 function loadDefaultWorkflow({ workflows, defaultWorkflow } = {}) {
   const els = new Map();
   const $ = (sel) => { if (!els.has(sel)) els.set(sel, makeEl()); return els.get(sel); };
-  const sandbox = { $, esc: (s) => String(s ?? ''), state: { workflows: workflows || [], settings: { defaultWorkflow: defaultWorkflow ?? null } } };
+  const sandbox = { $, t, esc: (s) => String(s ?? ''), state: { workflows: workflows || [], settings: { defaultWorkflow: defaultWorkflow ?? null } } };
   sandbox.window = sandbox;
   vm.createContext(sandbox);
   vm.runInContext(defaultWorkflowSrc, sandbox); // the real DefaultWorkflow module (#195), not reimplemented
@@ -157,7 +159,7 @@ function loadControlChannel({ platform = 'win32', state = null } = {}) {
   const $ = (sel) => { if (!els.has(sel)) els.set(sel, makeEl()); return els.get(sel); };
   const box = { disabled: false };
   const sandbox = {
-    $, errMsg: (e) => String(e?.message || e),
+    $, t, errMsg: (e) => String(e?.message || e),
     document: { querySelector: (sel) => (sel === '[data-setting="controlChannel"]' ? box : null) },
     api: { platform, controlChannelState: async () => state },
   };

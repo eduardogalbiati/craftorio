@@ -181,6 +181,7 @@ function renderedControlChannel(state) {
   const $ = (sel) => { if (!els.has(sel)) els.set(sel, makeEl()); return els.get(sel); };
   const sandbox = {
     $, esc: (s) => String(s ?? ''), errMsg: (e) => String(e?.message || e),
+    t: require('./settings-source-329').t, // #329: the row's texts come from the catalog
     document: { querySelector: () => ({ disabled: false }) },
     api: { platform: 'win32', controlChannelState: async () => state },
   };

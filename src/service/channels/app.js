@@ -146,6 +146,8 @@ module.exports = (ctx) => [
       return next;
     },
   },
+  // the saved settings, pushed to every window: the interface language redraws them (#329)
+  { event: 'settings:changed', method: 'onSettingsChanged' },
   {
     channel: 'workspace:get',
     method: 'getWorkspace',

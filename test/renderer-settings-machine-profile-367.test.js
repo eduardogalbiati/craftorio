@@ -16,7 +16,8 @@ const fs = require('fs');
 const path = require('path');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', ...p), 'utf8');
-const settings = read('views', 'settings', 'settings.js');
+// #329: the markup lives in settings-markup.js, its texts in the catalog
+const settings = require('./settings-source-329').settingsSource();
 const setup = read('setup.js');
 
 const SETTINGS_TESTIDS = [

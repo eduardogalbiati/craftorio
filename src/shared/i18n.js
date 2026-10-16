@@ -12,8 +12,9 @@
 // - formatNumber(n, lang?, options?), formatPercent(ratio, lang?), formatCost(usd, lang?, digits = 2):
 //   the language's separators; costs stay in US$ ('US$ 6,48' in Portuguese, '$6.48' in English);
 // - onChange(fn) / notify(): open screens redraw when the language changes (interface-language.js).
-// Browser: window.I18n, the catalogs read once with a sync request next to this file (file:// and the
-// server alike); Node: module.exports, the catalogs read from disk.
+// Browser: window.I18n and window.t, the catalogs read once with a sync request next to this file
+// (file:// and the server alike), the first language from localStorage 'interfaceLanguage' else
+// navigator.language; Node: module.exports, the catalogs read from disk.
 (function (root) {
   const node = typeof module === 'object' && module.exports;
   const ENGLISH = 'en';
@@ -111,5 +112,13 @@
     t,
   };
   if (node) module.exports = api;
-  else root.I18n = api;
+  else {
+    root.I18n = api;
+    root.t = t; // the renderer's templates call t directly
+    // the first paint: the language the page last showed, else the computer's (interface-language.js
+    // applies the saved setting once the settings are loaded)
+    let cached = null;
+    try { cached = root.localStorage?.getItem('interfaceLanguage'); } catch { /* no storage */ }
+    setLanguage(resolveLanguage(cached, root.navigator?.language));
+  }
 })(typeof window !== 'undefined' ? window : globalThis);
