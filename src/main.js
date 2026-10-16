@@ -1,6 +1,8 @@
 // Electron main process: the window, the workspace dialog, desktop-only actions (native dialogs,
 // clipboard, opening files and folders, external console windows) and the IPC transport to the
-// engine service (src/service), which holds everything else.
+// engine service (src/service), which holds everything else. With a remote engine set (Settings ›
+// Execution › Engine, src/engine-connection.js) the process runs no engine and opens no workspace:
+// its window shows the engine another computer serves (src/engine-connection-window.js).
 
 const path = require('path');
 const os = require('os');
@@ -41,6 +43,9 @@ const { createService } = require('./service');
 const { createControlChannel } = require('./control');
 const { nativeBinaryPath } = require('./native-bin');
 const { authChannels } = require('./service/manifest');
+const { contractHash } = require('./service/contract');
+const engineConnection = require('./engine-connection');
+const { createEngineConnection } = require('./engine-connection-window');
 const { createAuth, fileStorage } = require('./auth');
 const authConfig = require('./auth-config');
 const { createKeepAwake } = require('./keep-awake');
@@ -305,17 +310,55 @@ function restrictPermissions(ses) {
     allowPermission(permission, { ...details, requestingUrl: details?.requestingUrl || wc?.getURL() }, APP_PAGE));
 }
 
+// the main window's frame, the remote engine's window too
+const WINDOW = {
+  width: 1500,
+  height: 950,
+  minWidth: 1100,
+  minHeight: 700,
+  backgroundColor: '#0e1014',
+  title: 'Multiagent Orchestrator',
+  // Linux takes the window icon from here (Windows and macOS from the packaged executable)
+  ...(process.platform === 'linux' && { icon: path.join(APP_DIR, 'assets', 'icon.png') }),
+  autoHideMenuBar: true,
+};
+
+// ---- the engine connection (src/engine-connection.js, src/engine-connection-window.js) --------
+// Per machine, in the user data folder (never the workspace), the token encrypted with the OS: this
+// computer runs the engine (the default), or the window shows an engine another computer serves
+// (`npm run serve`). Read once the app is ready (safeStorage); switching restarts the app.
+const connectionFile = () => path.join(app.getPath('userData'), engineConnection.FILE);
+const connectionStore = {
+  read: () => engineConnection.readConnection(connectionFile(), { decrypt: (b) => safeStorage.decryptString(b) }),
+  write: (c) => engineConnection.writeConnection(connectionFile(), c, {
+    encrypt: safeStorage.isEncryptionAvailable() ? (s) => safeStorage.encryptString(s) : null,
+  }),
+};
+let remoteMode = false;
+let connection = null;
+// Settings › Execution › Engine › Change… (local mode; the remote engine's page opens it by itself)
+ipcMain.handle('engine:openConnection', () => { connection?.openPage(); return true; });
+
+function createConnection(mode) {
+  connection = createEngineConnection({
+    BrowserWindow, ipcMain, shell, session,
+    dirname: __dirname,
+    store: connectionStore,
+    version: { app: app.getVersion(), contract: contractHash(service.manifest) },
+    mode,
+    windowOptions: WINDOW,
+    mainWindow: () => win,
+    // runs in progress here refuse the switch (src/service/areas/runs.js), before anything is saved
+    prepareRestart: () => { if (!remoteMode) service.prepareRestart({ interruptRuns: false }); },
+    relaunch: () => (remoteMode ? setImmediate(() => { app.relaunch(); app.exit(0); }) : restartApp()),
+    devTools: !app.isPackaged,
+    env: process.env,
+  });
+}
+
 function createWindow() {
   win = new BrowserWindow({
-    width: 1500,
-    height: 950,
-    minWidth: 1100,
-    minHeight: 700,
-    backgroundColor: '#0e1014',
-    title: 'Multiagent Orchestrator',
-    // Linux takes the window icon from here (Windows and macOS from the packaged executable)
-    ...(process.platform === 'linux' && { icon: path.join(APP_DIR, 'assets', 'icon.png') }),
-    autoHideMenuBar: true,
+    ...WINDOW,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -471,6 +514,16 @@ function restartApp() {
 if (process.platform === 'win32') app.setAppUserModelId(app.isPackaged ? 'MultiagentOrchestrator' : process.execPath);
 
 app.whenReady().then(async () => {
+  restrictPermissions(session.defaultSession);
+  const engine = engineConnection.decideMode({ connection: connectionStore.read(), env: process.env });
+  remoteMode = engine.mode === 'remote';
+  createConnection(engine.mode);
+  // a remote engine: no workspace, no lock, no account, no keep-awake, control channel or cleanup here
+  if (remoteMode) {
+    console.log(`Engine: remote, ${engine.url || engine.address} (this app runs no engine of its own).`);
+    return connection.startRemote(engine);
+  }
+  if (engine.reason) console.log(`Engine: this computer (${engine.reason}).`);
   createAccount();
   const found = await ensureWorkspace();
   const ws = found && await claimWorkspace(found);
@@ -480,7 +533,6 @@ app.whenReady().then(async () => {
   keepAwake.update();
   setInterval(() => keepAwake.update(), 15 * 1000).unref();
   updateControl().catch((e) => console.error('control channel:', e.message));
-  restrictPermissions(session.defaultSession);
   createWindow();
   // ended runs' worktrees and scratch (#202, #201): at start, then every 30 minutes (a folder a
   // process held is retried)
@@ -493,20 +545,23 @@ app.whenReady().then(async () => {
   setInterval(touchAccount, 24 * 60 * 60 * 1000).unref();
 });
 app.on('window-all-closed', () => {
+  if (remoteMode) return app.quit();
   service.shutdown();
   keepAwake.stop();
   control.stop();
   app.quit();
 });
 app.on('will-quit', () => {
+  if (remoteMode) return;
   keepAwake.stop();
   control.stop();
   workspaceLock?.release();
 });
 // a second copy started on the same user data folder: this window comes forward (#112)
 app.on('second-instance', () => {
-  if (!win || win.isDestroyed()) return;
-  if (win.isMinimized()) win.restore();
-  win.show();
-  win.focus();
+  const w = win && !win.isDestroyed() ? win : connection?.window();
+  if (!w) return;
+  if (w.isMinimized()) w.restore();
+  w.show();
+  w.focus();
 });

@@ -1,0 +1,224 @@
+// The desktop app's windows for the engine connection (rules in src/engine-connection.js): in remote
+// mode the main window is the remote engine's page, and the connection page
+// (src/renderer/connection/, preload src/engine-connection-preload.js) sets where the engine runs.
+// Pure of Electron, like src/agents-window.js: createEngineConnection({ BrowserWindow, ipcMain, shell,
+// session, dirname, store, version, ... }) → { startRemote(decision), openPage(), window() }.
+//
+// - The remote window loads `<url>/?token=<token>` with no preload (remote content: context
+//   isolation, no Node, sandboxed) in its own session (PARTITION): only the engine's origin loads in
+//   it, other http(s) links open in the system browser, and the engine's page asks for the
+//   connection page by opening CONNECTION_PATH (Settings › Execution › Engine, api-http.js).
+// - The engine is tested (GET /api/version) before its window opens; an engine that cannot be
+//   reached, a refused token or a page that does not load replaces the window with the connection
+//   page and the reason (Retry / Change the address / Use this computer), so the app is never locked out.
+// - The page's channels (engine-connection:*) answer only the page's own window. The token never
+//   goes to a page: the page gets connectionView. Saving tests first, then writes the setting and
+//   restarts the app (relaunch): switching mode is always a restart.
+
+const path = require('path');
+const conn = require('./engine-connection');
+
+const PAGE_SIZE = { width: 640, height: 700 };
+
+/**
+ * @param store       { read() → connection, write(connection) } (the setting in the user data folder)
+ * @param version     { app, contract } of this app (the connection test compares the contracts)
+ * @param mode        'local' | 'remote': where this process's engine runs
+ * @param windowOptions  the main window's size, colour and icon (the remote window uses them)
+ * @param mainWindow  () → the local main window (the page opens over it), in local mode
+ * @param prepareRestart  () → throws when the app cannot restart now (runs in progress here)
+ * @param relaunch    () → restarts the app
+ * @param env         the process environment decideMode reads (MULTIAGENT_ENGINE, MULTIAGENT_SIMULATION_ONLY)
+ */
+function createEngineConnection({
+  BrowserWindow, ipcMain, shell, session, dirname, store, version, mode,
+  windowOptions = {}, mainWindow = () => null, prepareRestart = () => {}, relaunch,
+  fetch: fetchImpl = globalThis.fetch, devTools = false, env = {},
+}) {
+  let remoteWin = null;
+  let page = null;
+  let failure = null; // why the remote engine's window is not shown: { reason, message, url }
+  let sessionReady = false;
+  const live = (w) => (w && !w.isDestroyed() ? w : null);
+  const test = (address, token) => conn.testConnection({ address, token, fetch: fetchImpl, localContract: version.contract });
+
+  // ---- the connection page ----------------------------------------------------------------
+  function openPage() {
+    const open = live(page);
+    if (open) {
+      open.webContents.send('engine-connection:changed');
+      if (open.isMinimized()) open.restore();
+      open.focus();
+      return open;
+    }
+    // over the window it was asked from; on its own when the engine's window failed
+    const parent = failure ? null : live(remoteWin) || live(mainWindow());
+    page = new BrowserWindow({
+      ...PAGE_SIZE,
+      minWidth: 520,
+      minHeight: 560,
+      ...(parent ? { parent, modal: true } : {}),
+      backgroundColor: windowOptions.backgroundColor || '#0e1014',
+      title: 'Engine connection · Multiagent Orchestrator',
+      ...(windowOptions.icon ? { icon: windowOptions.icon } : {}),
+      autoHideMenuBar: true,
+      webPreferences: {
+        preload: path.join(dirname, 'engine-connection-preload.js'),
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true,
+        devTools,
+      },
+    });
+    page.webContents.setWindowOpenHandler(({ url }) => {
+      if (/^https?:\/\//i.test(url)) shell.openExternal(url);
+      return { action: 'deny' };
+    });
+    page.webContents.on('will-navigate', (e) => e.preventDefault());
+    page.loadFile(path.join(dirname, 'renderer', 'connection', 'connection.html'));
+    return page;
+  }
+
+  // the remote engine's window goes, the connection page says why (created first: the app keeps a window)
+  function fail(why) {
+    failure = why;
+    const old = live(remoteWin);
+    remoteWin = null;
+    live(page)?.destroy();
+    page = null;
+    openPage();
+    old?.destroy();
+  }
+
+  // ---- the remote engine's window ---------------------------------------------------------
+  function prepareSession(origin) {
+    const ses = session.fromPartition(conn.PARTITION);
+    if (!sessionReady) {
+      ses.setUserAgent(`${ses.getUserAgent()} ${conn.CLIENT_MARK}`);
+      sessionReady = true;
+    }
+    ses.setPermissionRequestHandler((_wc, permission, callback, details) => callback(conn.allowRemotePermission(permission, details?.requestingUrl, origin)));
+    ses.setPermissionCheckHandler((wc, permission, requestingOrigin) => conn.allowRemotePermission(permission, requestingOrigin || wc?.getURL(), origin));
+  }
+
+  // what a link or a navigation of the remote window does (conn.routeUrl): true when it stays
+  function follow(url, origin) {
+    const where = conn.routeUrl(url, origin);
+    if (where === 'connection') openPage();
+    else if (where === 'external') shell.openExternal(url);
+    return where === 'stay';
+  }
+
+  function openRemoteWindow(d) {
+    const origin = new URL(d.url).origin;
+    prepareSession(origin);
+    const title = `Multiagent Orchestrator · engine on ${d.host}`;
+    const w = new BrowserWindow({
+      ...windowOptions,
+      title,
+      webPreferences: { partition: conn.PARTITION, contextIsolation: true, nodeIntegration: false, sandbox: true, devTools },
+    });
+    remoteWin = w;
+    failure = null;
+    // the title says which engine this window shows, whatever the page calls itself
+    w.on('page-title-updated', (e) => e.preventDefault());
+    w.webContents.setWindowOpenHandler(({ url }) => {
+      follow(url, origin);
+      return { action: 'deny' };
+    });
+    w.webContents.on('will-navigate', (e, url) => { if (!follow(url, origin)) e.preventDefault(); });
+    // a redirect leaving the engine's origin goes no further (the server only redirects to itself)
+    w.webContents.on('will-redirect', (e, url) => { if (conn.routeUrl(url, origin) !== 'stay') e.preventDefault(); });
+    w.webContents.on('did-fail-load', (_e, code, desc, _url, isMainFrame) => {
+      // -3: a navigation replaced by another one (a redirect, a reload), not a failure
+      if (isMainFrame && code !== -3 && remoteWin === w) fail({ reason: 'unreachable', url: d.url, message: `The engine's page did not load from ${d.host}: ${desc} (${code}).` });
+    });
+    w.webContents.on('did-navigate', (_e, _url, status) => {
+      if (status >= 400 && remoteWin === w) {
+        fail({ reason: status === 401 ? 'token' : 'http', url: d.url, status, message: status === 401 ? `${d.host} refused the token: copy MULTIAGENT_SERVER_TOKEN from the engine's computer again.` : `${d.host} answered HTTP ${status}.` });
+      }
+    });
+    w.on('closed', () => { if (remoteWin === w) remoteWin = null; });
+    w.loadURL(conn.startUrl(d.url, d.token));
+    return w;
+  }
+
+  // Remote mode at start (and Retry): test the engine, then show its window or the page with why not.
+  async function startRemote(decision) {
+    if (decision.error) return fail({ reason: 'setting', url: decision.url || null, message: decision.error });
+    const t = await test(decision.url, decision.token);
+    if (!t.ok) return fail({ reason: t.reason, url: decision.url, message: t.message });
+    return openRemoteWindow(decision);
+  }
+
+  // ---- the page's channels ----------------------------------------------------------------
+  const fromPage = (e) => !!live(page) && e.sender === page.webContents;
+  const handle = (channel, fn) => ipcMain.handle(channel, (e, arg) => {
+    if (!fromPage(e)) throw new Error('Only the engine connection page can use this channel.');
+    return fn(arg || {});
+  });
+
+  handle('engine-connection:state', () => {
+    const saved = store.read();
+    return {
+      mode,
+      saved: conn.connectionView(saved),
+      failure,
+      app: version.app,
+      // the engine this window shows, in remote mode
+      remoteHost: mode === 'remote' && !failure ? conn.parseAddress(saved.address).host || null : null,
+    };
+  });
+
+  // a blank token tests with the saved one (the page never holds it)
+  handle('engine-connection:test', ({ address, token }) => test(address, String(token || '').trim() || store.read().token));
+
+  handle('engine-connection:save', async ({ mode: want, address, token }) => {
+    const saved = store.read();
+    if (want !== 'remote') {
+      // the address and token stay saved, for the next switch
+      if (mode === 'local') {
+        if (saved.mode === 'remote') store.write({ ...saved, mode: 'local' });
+        return { saved: true, restarting: false, message: 'This computer runs the engine.' };
+      }
+      prepareRestart();
+      store.write({ ...saved, mode: 'local' });
+      relaunch();
+      return { saved: true, restarting: true };
+    }
+    const parsed = conn.parseAddress(address);
+    const tok = String(token || parsed.token || '').trim() || saved.token;
+    const t = await test(address, tok);
+    if (!t.ok) return { saved: false, test: t };
+    // runs in progress on this computer: refused before anything is written
+    prepareRestart();
+    store.write({ mode: 'remote', address: t.url, token: tok });
+    relaunch();
+    return { saved: true, restarting: true, test: t };
+  });
+
+  handle('engine-connection:retry', async () => {
+    failure = null;
+    const p = live(page);
+    const decision = conn.decideMode({ connection: store.read(), env });
+    if (decision.mode !== 'remote') { relaunch(); return { ok: true }; }
+    const t = decision.error ? null : await test(decision.url, decision.token);
+    if (decision.error || !t.ok) {
+      failure = { reason: decision.error ? 'setting' : t.reason, url: decision.url || null, message: decision.error || t.message };
+      return { ok: false, failure };
+    }
+    openRemoteWindow(decision);
+    p?.destroy();
+    if (page === p) page = null;
+    return { ok: true };
+  });
+
+  return {
+    startRemote,
+    openPage,
+    // the window to bring forward (a second copy of the app was started)
+    window: () => live(remoteWin) || live(page),
+  };
+}
+
+module.exports = { createEngineConnection };
