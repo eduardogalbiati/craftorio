@@ -52,6 +52,14 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   not this setting. Why: an owner who works in another language
   read English summaries and documents, and a repository's issues are not always in the owner's
   chat language; the output contract keeps the keys in English so #94 does not come back.
+  The interface language (#329, #330, of 2026-10-12) is a setting too (Settings › General ›
+  Language › Interface), separate from these two: until one is chosen it follows the computer's
+  language when it has a catalog, else English. Its text lives in `src/shared/i18n/<lang>.json`
+  (English the source, a missing key shows the English text) behind one `t()`
+  (`src/shared/i18n.js`); dates, numbers and percentages follow it, costs stay in US$ with the
+  language's separators; user content, workflow YAML texts, skills, agents' messages, engine errors
+  and logs are never translated. Why: an owner who works in another language read an English-only
+  app, and logs and errors must stay searchable and reportable.
 - **2026-10-13** (#357, #378): refactor proposals (Architecture findings or the owner's) are prioritized
   by the Product Owner (rank, reason, complexity; the Danger Zone score as value, the conflict map
   and the roadmap's unfinished items as risk), and a cadence, off by default, adds the top ranked one

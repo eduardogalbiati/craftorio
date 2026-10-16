@@ -17,8 +17,10 @@
 // toast.js (the toast's countdown and its action).
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-const fmtNum = (n) => (n || 0).toLocaleString('en-US');
-const fmtCost = (n) => (n == null ? '—' : `$${Number(n).toFixed(4)}`);
+// numbers, costs and dates in the interface language (#329, shared/i18n.js); English stays en-US
+const uiLocale = () => { const l = window.I18n?.getLanguage(); return !l || l === 'en' ? 'en-US' : l; };
+const fmtNum = (n) => (n || 0).toLocaleString(uiLocale());
+const fmtCost = (n) => (n == null ? '—' : uiLocale() === 'en-US' ? `$${Number(n).toFixed(4)}` : window.I18n.formatCost(n, uiLocale(), 4));
 function fmtDur(ms) {
   if (ms == null) return '—';
   const s = Math.floor(ms / 1000);
@@ -26,8 +28,8 @@ function fmtDur(ms) {
   return h ? `${h}h${String(m).padStart(2, '0')}m` : m ? `${m}m${String(r).padStart(2, '0')}s` : `${r}s`;
 }
 // in the workspace's time zone (#273, time-zone.js); TimeZone.titleOf names the zone for a tooltip
-const timeOf = (iso) => new Date(iso).toLocaleTimeString('en-US', { timeZone: TimeZone.current() });
-const dateOf = (iso) => new Date(iso).toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short', timeZone: TimeZone.current() });
+const timeOf = (iso) => new Date(iso).toLocaleTimeString(uiLocale(), { timeZone: TimeZone.current() });
+const dateOf = (iso) => new Date(iso).toLocaleString(uiLocale(), { dateStyle: 'short', timeStyle: 'short', timeZone: TimeZone.current() });
 const USAGE_SCOPE_KEY = 'multiagent.usageScope';
 const RUN_VIEW_KEY = 'multiagent.runView';
 // A channel or method the running main process (or server) doesn't have: the code on disk is newer
