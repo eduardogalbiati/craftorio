@@ -65,6 +65,7 @@ const { methods: supervisionMethods } = require('./run/supervision');
 const { methods: checkoutMethods } = require('./run/checkout');
 const { methods: machineStepsMethods } = require('./run/machine-steps');
 const { methods: projectMapStepsMethods } = require('./run/project-map-steps');
+const { methods: refactorProposalsStepsMethods } = require('./run/refactor-proposals-steps');
 const { methods: testRequestsMethods } = require('./run/test-requests');
 const { methods: resumeMethods, pausedError } = require('./run/resume');
 const { methods: setupMethods } = require('./run/setup');
@@ -72,12 +73,14 @@ const { methods: setupMethods } = require('./run/setup');
 const stepAgentLabel = (s) => (s.agents ? s.agents.join(' · ') : s.agent || null);
 
 // The machine steps whose output is all there is (no worktree processes, no supervisor): type → method.
-// project_map (#372): the project map's facts, validation and save; release_version (#325): never
+// project_map (#372): the project map's facts, validation and save; refactor_proposals (#378): the
+// Refactor proposals workflow's facts, proposals, ranking and filing; release_version (#325): never
 // fails the run, the output says what was written; test_ids (#246): the missing test ids; check
 // (#404): the project's rule checks (its command sweeps what it leaves running)
 const PLAIN_MACHINE_STEPS = {
   check: 'runCheckStep',
   project_map: 'runProjectMapStep',
+  refactor_proposals: 'runRefactorProposalsStep',
   release_version: 'runReleaseVersionStep',
   test_ids: 'runTestIdsStep',
 };
@@ -162,13 +165,17 @@ class WorkflowRun extends EventEmitter {
   // architectureOracle (#381): () => { oracle, agent }, the service's Oracle ({ oneTurn, budgetRefusal }
   //   of src/oracle.js) and its agent, for a `type: project_map` step's analyze action
   //   (src/engine/run/project-map-steps.js); null = no Oracle (a simulation needs none).
-  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issues, issue, resume, worktreesDir, mockSequences, notices, stopProcesses, probe, actionsQuota, peerSessions, idleWarnMs, personas, localPreview, attachments, then, from, parent, startChild, memoryGuard, agentOverrides, fallbacks, models, nightLimits, testWorkers, machine, architectureOracle }) {
+  // refactorPriorityOptions (#378): (projectId) => the Product Owner's turn options (refactor:prioritize's),
+  //   for a `type: refactor_proposals` step's prioritize action (src/engine/run/refactor-proposals-steps.js);
+  //   null = no Product Owner (a simulation needs none).
+  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issues, issue, resume, worktreesDir, mockSequences, notices, stopProcesses, probe, actionsQuota, peerSessions, idleWarnMs, personas, localPreview, attachments, then, from, parent, startChild, memoryGuard, agentOverrides, fallbacks, models, nightLimits, testWorkers, machine, architectureOracle, refactorPriorityOptions }) {
     super();
     refreshWindowsPath(); // actions (e.g. gh pr merge) need the refreshed PATH
     this.file = file;
     this.wf = loadWorkflow(file);
     this.mock = !!mock;
     this.architectureOracle = typeof architectureOracle === 'function' ? architectureOracle : null;
+    this.refactorPriorityOptions = typeof refactorPriorityOptions === 'function' ? refactorPriorityOptions : null;
     this.mockSequences = mockSequences || null;
     this.machine = runMachine(machine, this.mock, this.mockSequences);
     this.notices = notices || [];
@@ -852,6 +859,7 @@ mixin(
   checkoutMethods,
   machineStepsMethods,
   projectMapStepsMethods,
+  refactorProposalsStepsMethods,
   testRequestsMethods,
   resumeMethods,
   setupMethods,

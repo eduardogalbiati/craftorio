@@ -65,6 +65,7 @@ const EXCEPTIONS = [
   { from: 'src/engine/run/costs.js', to: 'src/night-limits.js', reason: 'the night\'s cost and run limits (#337) are checked at each turn; night-limits.js also reads the night watch\'s log and the run loader' },
   { from: 'src/engine/run/costs.js', to: 'src/usage.js', reason: 'the cost limits read the usage ledger of earlier runs (usage.js reads the runs list)' },
   { from: 'src/engine/run/project-map-steps.js', to: 'src/project-map.js', reason: 'the project map\'s machine steps (#372) read the project\'s city with its git facts (src/architecture-facts.js readCity) and save its plan in the workspace (src/oracle-architecture.js writePlan), as the Architecture tab\'s channels do' },
+  { from: 'src/engine/run/refactor-proposals-steps.js', to: 'src/refactor-proposals-run.js', reason: 'the Refactor proposals workflow\'s machine steps (#378) read the architecture facts and write the Refactor tab\'s proposals, ranking and issues in the workspace, as the Refactor tab\'s channels do' },
   { from: 'src/engine/run/sessions.js', to: 'src/skills.js', reason: 'a turn\'s prompt resolves its skills in the workspace and the project (skills.js reads the projects)' },
   { from: 'src/engine/run/sessions.js', to: 'src/usage.js', reason: 'totalTokens of the usage module counts a session\'s tokens' },
   { from: 'src/engine/run/setup.js', to: 'src/skills.js', reason: 'a run leaves out the agents\' skills that no longer exist (resolveSkill)' },

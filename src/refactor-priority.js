@@ -101,7 +101,7 @@ async function prioritize({ proposals, unfinished = [], dangerScores = {}, hotSp
   productOwner.checkBudget(budget);
   const res = await runPriorityTurn({ data: report({ proposals, unfinished, dangerScores, hotSpots }), folder, agent, skillsDirs, resolveCommand });
   productOwner.recordUsage(backlogDir, { projectId, model: agent.model, tokens: res.usage, costUsd: res.costUsd || 0, sessionId: res.providerSessionId || null });
-  const { extractJson } = require('./engine/workflow');
+  const { extractJson } = require('./engine/run/outputs');
   let errs;
   let raw = null;
   try { raw = extractJson(res.text); errs = validatePriority(raw); } catch (e) { errs = [e.message]; }
@@ -112,7 +112,7 @@ async function prioritize({ proposals, unfinished = [], dangerScores = {}, hotSp
 // One read-only Claude Code turn, as product-owner.js callAgent runs them
 async function runPriorityTurn({ data, folder, agent, skillsDirs, resolveCommand }) {
   const fs = require('fs');
-  const { render } = require('./engine/workflow');
+  const { render } = require('./engine/run/templates');
   const { runTurn } = require('./engine/providers');
   const { resolveSkill, skillPrompt } = require('./skills');
   const { providerArgs, normalize, dedupeFlags } = require('./engine/capabilities');

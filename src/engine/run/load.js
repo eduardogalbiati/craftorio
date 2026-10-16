@@ -88,9 +88,11 @@ const stepCapabilities = (s, ctx) => capabilities.validate(s.capabilities, `Step
 function screenshotsFrom(s, ctx) {
   if (s.type === 'screenshots' && !ctx.ids.has(s.from)) fail(ctx, 'from must be the step whose output lists the screenshots.');
 }
-// `type: project_map` (#372): every action but facts and analyze reads the output of its `from` step
+// `type: project_map` (#372): every action but facts and analyze reads the output of its `from` step;
+// `type: refactor_proposals` (#378): every action but facts
 function projectMapFrom(s, ctx) {
-  if (s.type === 'project_map' && !['facts', 'analyze'].includes(s.action) && !ctx.ids.has(s.from)) fail(ctx, `from must be the step whose output the ${s.action} action reads.`);
+  const reads = (s.type === 'project_map' && !['facts', 'analyze'].includes(s.action)) || (s.type === 'refactor_proposals' && s.action !== 'facts');
+  if (reads && !ctx.ids.has(s.from)) fail(ctx, `from must be the step whose output the ${s.action} action reads.`);
 }
 function filesWithoutScope(s, ctx) {
   if (s.type === 'suite' && s.files !== undefined && s.scope !== undefined) fail(ctx, 'files and scope cannot be combined.');
