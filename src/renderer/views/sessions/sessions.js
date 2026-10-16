@@ -156,7 +156,7 @@
     else if (!sx.sessions) parts.push(`<p class="muted small sx-pad">${t('sessions.reading_the_sessions')}</p>`);
     else {
       const list = filtered();
-      if (!list.length) parts.push(`<p class="muted small sx-pad">${sx.sessions.length ? 'No session matches.' : 'No Claude Code, Codex or Grok sessions on this machine yet.'}</p>`);
+      if (!list.length) parts.push(`<p class="muted small sx-pad">${sx.sessions.length ? t('sessions.no_session_matches') : t('sessions.no_claude_code_codex_or_grok')}</p>`);
       let group = null;
       for (const s of list.slice(0, 300)) {
         const g = dayGroup(s.updatedAt);
@@ -304,7 +304,7 @@
     input.className = 'sx-title-input';
     input.value = current;
     input.placeholder = 'Empty = the default title';
-    input.setAttribute('aria-label', 'Session title');
+    input.setAttribute('aria-label', t('sessions.session_title'));
     el.replaceWith(input);
     sx.editing = true;
     input.focus({ preventScroll: true });
@@ -447,7 +447,7 @@
     const p = sx.providers.find((x) => x.id === f.provider) || { models: [], efforts: [] };
     $s('#sx-providers').innerHTML = sx.providers.map((x) => `
       <button type="button" class="sx-provider ${x.id === f.provider ? 'active' : ''}" data-provider="${esc(x.id)}" role="radio" aria-checked="${x.id === f.provider}" ${x.installed ? '' : 'disabled'}>
-        ${badge(x.id)}<span><b>${esc(x.name)}</b><span class="muted small">${x.installed ? `${x.models.length} model${x.models.length === 1 ? '' : 's'}` : 'not installed'}</span></span>
+        ${badge(x.id)}<span><b>${esc(x.name)}</b><span class="muted small">${x.installed ? `${x.models.length} model${x.models.length === 1 ? '' : 's'}` : t('sessions.not_installed')}</span></span>
       </button>`).join('');
     $s('#sx-providers').querySelectorAll('[data-provider]').forEach((b) => (b.onclick = () => {
       f.provider = b.dataset.provider;
@@ -467,11 +467,11 @@
     const model = p.models.find((m) => m.id === f.model);
     const efforts = model?.efforts?.length ? model.efforts : p.efforts;
     if (f.effort && !efforts.includes(f.effort)) f.effort = '';
-    $s('#sx-model-hint').textContent = f.custom ? 'Any model id the CLI accepts.' : !f.model ? 'The model the CLI picks by default.' : model?.defaultEffort ? `Default effort: ${model.defaultEffort}.` : '';
+    $s('#sx-model-hint').textContent = f.custom ? t('sessions.any_model_id_the_cli_accepts') : !f.model ? t('sessions.the_model_the_cli_picks_by') : model?.defaultEffort ? t('sessions.default_effort_defaulteffort', { defaultEffort: model.defaultEffort }) : '';
     $s('#sx-efforts').innerHTML = ['', ...efforts].map((e) => `<button type="button" data-effort="${esc(e)}" class="${e === f.effort ? 'active' : ''}">${esc(e || 'default')}</button>`).join('');
     $s('#sx-efforts').querySelectorAll('[data-effort]').forEach((b) => (b.onclick = () => { f.effort = b.dataset.effort; renderForm(); }));
     const project = (state.projects || []).find((x) => x.id === $s('#sx-project').value);
-    $s('#sx-folder').placeholder = project?.folder || 'Your home folder';
+    $s('#sx-folder').placeholder = project?.folder || t('sessions.your_home_folder');
     $s('#btn-sx-start').disabled = !sx.providers.find((x) => x.id === f.provider)?.installed;
   }
 
@@ -488,7 +488,7 @@
     const where = project?.name || folderName(folder) || 'home';
     const tab = createTab({
       key: `new:${++sx.seq}`, kind: 'cli-new', provider: f.provider, model: f.model,
-      title: `New ${provider?.name || f.provider} session · ${where}`,
+      title: t('sessions.new_value_session_where', { value: provider?.name || f.provider, where }),
       meta: [f.model || 'default model', f.effort && `effort ${f.effort}`].filter(Boolean).join(' · '),
       opts: { provider: f.provider, model: f.model || null, effort: f.effort || null, projectId: f.projectId || null, folder: folder || null },
     });

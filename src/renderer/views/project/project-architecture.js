@@ -100,7 +100,7 @@
     let usd = 0;
     if (map?.basis) { usd += Number(map.costUsd) || 0; parts.push(`the map ≈ US$ ${(Number(map.costUsd) || 0).toFixed(2)} (from ${plural(map.basis, 'past runs')}, ~${map.minutes} min)`); }
     if (oracle) { usd += Number(oracle.usd) || 0; parts.push(`the Oracle's analysis ≈ US$ ${Number(oracle.usd).toFixed(2)} (from the last ${plural(oracle.basis, 'analyses')})`); }
-    if (!parts.length) return { known: false, text: 'no estimate yet', title: `No cost estimate yet: the first real run shows its cost. One cartographer turn (up to three when its plan fails the validation), then one Oracle turn in its daily budget.${simulated}` };
+    if (!parts.length) return { known: false, text: 'no estimate yet', title: t('project_architecture.no_cost_estimate_yet_the_first', { simulated }) };
     const missing = !map?.basis ? '; the map has no estimate yet (no real run)' : !oracle ? '; the Oracle\'s analysis has no estimate yet (no real analysis)' : '';
     return { known: true, text: `≈ US$ ${usd.toFixed(2)}`, title: `${parts.join('; ')}${missing}.${simulated}` };
   }
@@ -156,7 +156,7 @@
       const out = await api.startRun({ file: MAP_WORKFLOW, inputs: { repo_path: folder, project_id: c.id, mode: 'auto', analyze: true }, mock: !!state.simulationOnly, projectId: c.id });
       if (!out?.runId) throw new Error(out?.error || 'the run did not start');
       Object.assign(c, { mapRun: out.runId, mapStep: null });
-      showToast('Analyzing this project: the cartographer maps it, then the Oracle analyses it');
+      showToast(t('project_architecture.analyzing_this_project_the_cartographer_maps'));
     } catch (e) {
       c.error = errMsg(e);
     }
@@ -212,7 +212,7 @@
         <div class="arch-finding-line"><span class="mono arch-target" title="${esc(filePaths(f))}">${esc(target(f))}</span>
           <span class="arch-finding-summary" data-testid="architecture-finding-summary" title="${esc(f.title || '')}">${esc(findingSummary(f))}</span>
           <span class="badge${f.status === 'new' ? ' live' : ''}">${esc(f.status || '')}</span>
-          <button type="button" class="link-btn" data-testid="architecture-finding-more" data-arch-more="${esc(key)}" aria-expanded="${open}">${open ? 'Read less' : 'Read more'}</button>${send}</div>
+          <button type="button" class="link-btn" data-testid="architecture-finding-more" data-arch-more="${esc(key)}" aria-expanded="${open}">${open ? t('project_architecture.read_less') : t('project_architecture.read_more')}</button>${send}</div>
         <div class="arch-finding-details small${open ? '' : ' hidden'}" data-testid="architecture-finding-details">
           <div class="row"><span class="badge${f.severity === 'high' ? ' warn' : ''}">${esc(f.severity)}</span><span class="badge mono">${esc(f.kind)}</span>${files}</div>
           <p class="muted">${esc(f.evidence)}</p>
@@ -227,7 +227,7 @@
     const counts = ArchitectureFactsView.findingCounts(all);
     const b = (dim, key, n) => {
       const on = key === 'all' ? !cur.filter.severity && !cur.filter.status : cur.filter[dim] === key;
-      return `<button type="button" class="${on ? 'active' : ''}" data-arch-filter="${dim}:${key}" data-testid="architecture-filter-${key}" aria-pressed="${on}">${key === 'all' ? 'All' : key.charAt(0).toUpperCase() + key.slice(1)} <span class="muted">${n}</span></button>`;
+      return `<button type="button" class="${on ? 'active' : ''}" data-arch-filter="${dim}:${key}" data-testid="architecture-filter-${key}" aria-pressed="${on}">${key === 'all' ? t('project_architecture.all') : key.charAt(0).toUpperCase() + key.slice(1)} <span class="muted">${n}</span></button>`;
     };
     const unsent = shownFindings().filter((f) => !f.sent).length;
     const title = unsent ? `Sends the ${plural(unsent, 'findings')} shown and not sent yet to the Refactor tab` : 'Every finding shown was sent to the Refactor tab already';
@@ -252,7 +252,7 @@
     const areas = (saved.report.areas || []).map((a) => `<span class="arch-area-chip" title="${esc(`${a.area}: ${a.verdict}`)}"><b>${esc(a.area)}</b> ${esc(a.verdict)}</span>`).join('');
     const all = ranked();
     const shown = shownFindings();
-    const findings = shown.map((f) => findingHtml(f, `f${f.index}`)).join('') || `<li class="muted">${all.length ? 'No finding matches the filter.' : 'No finding.'}</li>`;
+    const findings = shown.map((f) => findingHtml(f, `f${f.index}`)).join('') || `<li class="muted">${all.length ? t('project_architecture.no_finding_matches_the_filter') : t('project_architecture.no_finding')}</li>`;
     const goneList = ArchitectureFactsView.rankFindings(view.gone, dangerZone());
     const gone = goneList.length ? `<details class="arch-gone-list"><summary class="small muted">${t('project_architecture.gone_since_the_previous_report_length', { length: goneList.length })}</summary><ul class="arch-findings">${goneList.map((f) => findingHtml(f, `g${f.index}`)).join('')}</ul></details>` : '';
     return `<section class="card arch-report" data-testid="architecture-report">
@@ -342,9 +342,9 @@
     const maxV = Math.max(0, ...rows.map((r) => Math.log1p(r.commits)));
     const x = (r) => 20 + 360 * (maxV ? Math.log1p(r.commits) / maxV : 0);
     const y = (r) => 200 - 180 * (maxU ? Math.log1p(r.complexity) / maxU : 0);
-    const dots = rows.map((r) => `<circle cx="${x(r).toFixed(1)}" cy="${y(r).toFixed(1)}" r="4" class="${r.quadrant === 'Danger Zone' ? 'arch-dot-danger' : 'arch-dot'}"><title>${esc(`${r.file}: complexity ${r.complexity}, ${r.commits} commits, ${r.quadrant}`)}</title></circle>`).join('');
+    const dots = rows.map((r) => `<circle cx="${x(r).toFixed(1)}" cy="${y(r).toFixed(1)}" r="4" class="${r.quadrant === 'Danger Zone' ? 'arch-dot-danger' : 'arch-dot'}"><title>${esc(t('project_architecture.file_complexity_complexity_commits_commits_quadr', { file: r.file, complexity: r.complexity, commits: r.commits, quadrant: r.quadrant }))}</title></circle>`).join('');
     const frames = (model.frames || []).filter((f) => f.entered.length || f.left.length).map((f) => `<li><b>${esc(f.month)}</b> ${f.entered.length ? `entered: ${f.entered.map((n) => `<span class="mono">${esc(n)}</span>`).join(', ')}` : ''}${f.left.length ? ` left: ${f.left.map((n) => `<span class="mono">${esc(n)}</span>`).join(', ')}` : ''}</li>`).join('');
-    return `<h3 class="arch-sub" title="${esc(`${model.complexity.metric} complexity from ${model.complexity.tool}`)}">${t('project_architecture.quadrants')}</h3>
+    return `<h3 class="arch-sub" title="${esc(t('project_architecture.metric_complexity_from_tool', { metric: model.complexity.metric, tool: model.complexity.tool }))}">${t('project_architecture.quadrants')}</h3>
       <svg class="arch-scatter" viewBox="0 0 400 220" role="img" aria-label="${t('project_architecture.commits_against_complexity_log1p_axes')}"><line x1="20" y1="200" x2="390" y2="200" class="arch-axis"/><line x1="20" y1="10" x2="20" y2="200" class="arch-axis"/>${dots}<text x="390" y="214" text-anchor="end" class="arch-label">${t('project_architecture.commits_2')}</text><text x="24" y="16" class="arch-label">${t('project_architecture.complexity_2')}</text></svg>
       <details class="small muted"><summary>${t('project_architecture.how_the_quadrants_are_computed')}</summary><p>${t('project_architecture.split_at_the_medians_danger_zone')} <span class="mono">${t('project_architecture.score_u_v')}</span>${t('project_architecture.u_log1p_complexity_its_maximum_v')}</p></details>
       ${frames ? `<details class="small"><summary class="muted">${t('project_architecture.monthly_frames_files_that_entered_or')}</summary><p class="muted">${t('project_architecture.each_frame_uses_the_churn_up')}</p>
@@ -383,7 +383,7 @@
         <p class="hint">${t('project_architecture.gitignore_style_patterns_docs_generated_ts')}</p>
         <div class="row"><button type="button" class="btn primary" data-arch-exclude-save>${t('common.save')}</button><button type="button" class="btn ghost" data-arch-exclude-cancel>${t('common.cancel')}</button></div></div>`;
     }
-    return `<p class="small muted arch-excluded">${t('project_architecture.excluded')} ${groups} <button type="button" class="link-btn" data-arch-exclude-edit data-testid="architecture-exclude-edit">${list.length ? `Edit the project's list (${list.length})` : 'Exclude more paths'}</button></p>`;
+    return `<p class="small muted arch-excluded">${t('project_architecture.excluded')} ${groups} <button type="button" class="link-btn" data-arch-exclude-edit data-testid="architecture-exclude-edit">${list.length ? t('project_architecture.edit_the_project_s_list_length', { length: list.length }) : t('project_architecture.exclude_more_paths')}</button></p>`;
   }
 
   // the project's own quality gate as one row of chips (#386): measured ✓ with its value, pending or missing
@@ -497,7 +497,7 @@
     try {
       const { proposal } = await api.sendFindingToRefactor(c.id, reportId, index);
       if (c.view.findings[index]) c.view.findings[index].sent = true;
-      showToast(`Sent "${proposal.title}" to the Refactor tab`);
+      showToast(t('project_architecture.sent_title_to_the_refactor_tab', { title: proposal.title }));
     } catch (e) {
       c.error = errMsg(e);
     }
@@ -524,7 +524,7 @@
       sent++;
     }
     c.sending = false;
-    showToast(sent ? `Sent ${plural(sent, 'findings')} to the Refactor tab` : 'No finding sent: every finding shown was sent already');
+    showToast(sent ? t('project_architecture.sent_sent_to_the_refactor_tab', { sent: plural(sent, 'findings') }) : t('project_architecture.no_finding_sent_every_finding_shown'));
     if (cur === c) render();
   }
 

@@ -6,6 +6,7 @@
 // No DOM here: backlog.js draws the select, the badges and the Epics view; a test feeds it issues.
 // Browser: window.BacklogEpics; Node: module.exports.
 (function (root) {
+  const t = (...a) => (typeof module === 'object' && module.exports ? require('../../../shared/i18n') : root.I18n)?.t(...a) ?? a[0];
   const NONE = 'none';
 
   /** True when the issue passes the epic filter. */
@@ -23,7 +24,7 @@
     const list = shown || [];
     return [
       ...(epics || []).map((e) => ({ id: e.id, title: e.title, count: list.filter((i) => i.epic === e.id).length })),
-      { id: NONE, title: 'No epic', count: list.filter((i) => matchesEpic(i, NONE)).length },
+      { id: NONE, title: t('backlog_epics.no_epic'), count: list.filter((i) => matchesEpic(i, NONE)).length },
     ];
   }
 

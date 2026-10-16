@@ -22,6 +22,7 @@
 // #216) on the cards that list them.
 // Browser: window.WorkflowInputs (pills and show_if wired once on the document); Node: module.exports.
 (function (root) {
+  const t = (...a) => (typeof module === 'object' && module.exports ? require('../shared/i18n') : root.I18n)?.t(...a) ?? a[0];
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
   const cssEsc = (s) => (typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(s) : String(s).replace(/["\\]/g, '\\$&'));
   const MAX_PILLS = 5;

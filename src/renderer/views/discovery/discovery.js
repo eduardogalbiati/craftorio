@@ -185,12 +185,12 @@
           <div class="dsc-card-meta muted small">
             <span class="badge dsc-type" data-testid="discovery-card-type">${esc(c.type)}</span>
             <span data-testid="discovery-card-age" title="${t('discovery.in_value_since_c', { value: esc(columnOf(c.column)?.title || c.column), c: esc(dateOf(since(c))) })}">${esc(age(since(c)))}</span>
-            ${score != null ? `<span class="badge${score < bar ? ' warn' : ''}" data-testid="clarity-badge" title="${esc(score < bar ? `Needs grilling: below the clarity bar of ${bar}%` : `At or above the clarity bar of ${bar}%`)}"><span data-testid="discovery-card-clarity">${t('discovery.clarity_score', { score: esc(score) })}</span></span>` : ''}
-            ${override ? `<span class="badge warn" data-testid="clarity-override" title="${esc(`Moved to Ready below the clarity bar: ${override.reason}`)}">${t('discovery.moved_anyway')}</span>` : ''}
-            ${c.automation?.state === 'running' ? `<span class="badge live dsc-auto-badge" data-testid="discovery-card-automation" title="${esc(`${c.automation.name || 'The automation'} is running (run ${c.automation.runId || '…'}): its result comes back to the card`)}">${t('discovery.running')}</span>` : ''}
+            ${score != null ? `<span class="badge${score < bar ? ' warn' : ''}" data-testid="clarity-badge" title="${esc(score < bar ? t('discovery.needs_grilling_below_the_clarity_bar', { bar }) : t('discovery.at_or_above_the_clarity_bar', { bar }))}"><span data-testid="discovery-card-clarity">${t('discovery.clarity_score', { score: esc(score) })}</span></span>` : ''}
+            ${override ? `<span class="badge warn" data-testid="clarity-override" title="${esc(t('discovery.moved_to_ready_below_the_clarity', { reason: override.reason }))}">${t('discovery.moved_anyway')}</span>` : ''}
+            ${c.automation?.state === 'running' ? `<span class="badge live dsc-auto-badge" data-testid="discovery-card-automation" title="${esc(t('discovery.value_is_running_run_value2_its', { value: c.automation.name || 'The automation', value2: c.automation.runId || '…' }))}">${t('discovery.running')}</span>` : ''}
             ${estimate ? `<span data-testid="discovery-card-estimate" title="${t('discovery.estimate')}">${esc(estimate)}</span>` : ''}
             <span class="inbox-card-files" data-testid="discovery-card-attachments" title="${esc(plural(files, 'attachment'))}">${parts().CLIP} ${files}</span>
-            <span class="inbox-card-files" data-testid="discovery-card-thread" title="${esc(`${notes} in the thread`)}">${THREAD} ${notes}</span>
+            <span class="inbox-card-files" data-testid="discovery-card-thread" title="${esc(t('discovery.notes_in_the_thread', { notes }))}">${THREAD} ${notes}</span>
           </div>
           <span class="bl-menu-wrap dsc-move">
             <button type="button" class="btn sm ghost" data-testid="card-move" data-move-menu="${esc(c.id)}" aria-haspopup="menu" aria-expanded="${menu}" title="${t('discovery.move_this_card_to_another_column')}">${t('discovery.move_to')}</button>
@@ -219,7 +219,7 @@
     const kinds = Object.entries(s.byKind || {}).map(([k, v]) => `${k} ${v}%`).join(', ');
     return `
         <div class="dsc-forecast">
-          <span data-testid="ready-forecast" title="${esc(`${plural(f.count, 'card')} in Ready at or above the clarity bar; a night is ${f.nightHours} h`)}"><b>${esc(head)}</b> <span class="muted">(${esc(detail)})</span></span>
+          <span data-testid="ready-forecast" title="${esc(t('discovery.count_in_ready_at_or_above', { count: plural(f.count, 'card'), nightHours: f.nightHours }))}"><b>${esc(head)}</b> <span class="muted">(${esc(detail)})</span></span>
           <span class="muted small" data-testid="clarity-bar-summary">${t('discovery.clarity_bar_bar_value_night_start', { bar: esc(s.bar), value: kinds ? ` (${esc(kinds)})` : '', start: esc(s.night.start) })} ${esc(s.night.end)}</span>
           <span class="spacer"></span>
           <button type="button" class="btn sm ghost" data-testid="clarity-settings" data-clarity-settings title="${t('discovery.change_the_clarity_bar_a_bar')}">${t('discovery.bar_and_night')}</button>
@@ -233,7 +233,7 @@
     const over = c.wip != null && n > c.wip;
     const count = c.wip == null
       ? `<span class="badge dsc-count" data-testid="discovery-column-count" title="${esc(plural(n, 'card'))}">${n}</span>`
-      : `<span class="badge dsc-count${over ? ' warn' : ''}" data-testid="discovery-column-count" title="${esc(`${plural(n, 'card')}, WIP limit ${c.wip}${over ? ': over the limit' : ''}`)}">${n} / ${esc(c.wip)}</span>
+      : `<span class="badge dsc-count${over ? ' warn' : ''}" data-testid="discovery-column-count" title="${esc(t('discovery.n_wip_limit_wip_value', { n: plural(n, 'card'), wip: c.wip, value: over ? ': over the limit' : '' }))}">${n} / ${esc(c.wip)}</span>
           <button type="button" class="icon-btn dsc-wip-edit" data-testid="discovery-wip-edit" data-column="${esc(c.id)}" aria-label="${t('discovery.change_the_wip_limit_of_title', { title: esc(c.title) })}" title="${t('discovery.change_the_wip_limit')}">${PENCIL}</button>`;
     const editor = `<span class="dsc-wip-form">
           <span class="muted small">${n} /</span>
@@ -242,7 +242,7 @@
     // the column's automation (#259): its mode on the button, the rest in its settings
     const auto = c.on_enter;
     const mode = auto ? (AUTOMATION_MODES[auto.mode] ? auto.mode : 'ask') : null;
-    const automation = !auto ? '' : `<button type="button" class="btn sm ghost dsc-auto-btn" data-testid="discovery-column-automation" data-column="${esc(c.id)}" data-mode="${esc(mode)}" aria-label="${esc(`Automation of ${c.title}: ${auto.name || auto.pipeline || auto.workflow || 'automation'}, ${AUTOMATION_MODES[mode]}`)}" title="${esc(`Entering ${c.title} ${mode === 'off' ? 'runs nothing' : mode === 'on' ? 'runs' : 'proposes'} ${auto.name || auto.pipeline || auto.workflow || 'an automation'}${mode === 'off' ? ` (${auto.name || 'the automation'} is off)` : ''}: change it`)}">${BOLT}<span class="dsc-auto-mode">${t('discovery.automation')} ${esc(AUTOMATION_MODES[mode])}</span></button>`;
+    const automation = !auto ? '' : `<button type="button" class="btn sm ghost dsc-auto-btn" data-testid="discovery-column-automation" data-column="${esc(c.id)}" data-mode="${esc(mode)}" aria-label="${esc(t('discovery.automation_of_title_value_value2', { title: c.title, value: auto.name || auto.pipeline || auto.workflow || 'automation', value2: AUTOMATION_MODES[mode] }))}" title="${esc(`Entering ${c.title} ${mode === 'off' ? 'runs nothing' : mode === 'on' ? 'runs' : 'proposes'} ${auto.name || auto.pipeline || auto.workflow || 'an automation'}${mode === 'off' ? ` (${auto.name || 'the automation'} is off)` : ''}: change it`)}">${BOLT}<span class="dsc-auto-mode">${t('discovery.automation')} ${esc(AUTOMATION_MODES[mode])}</span></button>`;
     return `
       <section class="dsc-col" data-testid="discovery-column" data-column="${esc(c.id)}" data-drop="${esc(c.id)}"${over ? ' data-over-wip="true"' : ''} style="grid-column:${i + 1}" aria-label="${esc(c.title)}">
         <header class="dsc-col-head">
@@ -357,7 +357,7 @@
       const why = [];
       if (col.wip != null && n >= col.wip) why.push(`${col.title} is at its WIP limit (${n} / ${col.wip}).`);
       if (!isFast(card) && skipsShape(card.column, column)) why.push('This card skips Shape: only bugs and hotfixes take the fast lane.');
-      if (why.length && !(await confirmDialog(`Move to ${col.title}`, `${why.join(' ')} Move "${card.title}" there anyway?`, 'Move anyway'))) return;
+      if (why.length && !(await confirmDialog(t('discovery.move_to_title', { title: col.title }), t('discovery.value_move_title_there_anyway', { value: why.join(' '), title: card.title }), t('discovery.move_anyway')))) return;
     }
     if (projectId !== dv.projectId) return; // another project was chosen while the question was open
     Object.assign(dv, { error: '', refused: null });
@@ -382,8 +382,8 @@
     if (!a || !a.status) return;
     const where = columnOf(column)?.title || column;
     if (a.status === 'proposed') openProposal({ id, title, column, projectId, kind: a.kind, name: a.name, estimate: a.estimate, error: a.error });
-    else if (a.status === 'running') showToast(`${a.name || 'The automation'} started`, `On "${title}", entering ${where}. Its result comes back to the card.`, a.runId || null);
-    else if (a.status === 'done') showToast(`${a.name || 'The automation'} done`, a.question ? `A question waits for you in the thread of "${title}".` : `On "${title}", entering ${where}.`);
+    else if (a.status === 'running') showToast(`${a.name || 'The automation'} started`, t('discovery.on_title_entering_where_its_result', { title, where }), a.runId || null);
+    else if (a.status === 'done') showToast(`${a.name || 'The automation'} done`, a.question ? t('discovery.a_question_waits_for_you_in', { title }) : t('discovery.on_title_entering_where', { title, where }));
     else if (a.status === 'failed') {
       dv.error = `${a.name || 'The automation'} could not start on "${title}": ${a.error || 'unknown error'}`;
       render();
@@ -405,12 +405,12 @@
   function openProposal(p) {
     dv.proposal = p;
     const where = columnOf(p.column)?.title || p.column;
-    $('#dsc-proposal-title').textContent = `Run the automation of ${where}?`;
-    $('#dsc-proposal-what').textContent = `${p.name || 'The automation'} on "${p.title}", which entered ${where}.`;
+    $('#dsc-proposal-title').textContent = t('discovery.run_the_automation_of_where', { where });
+    $('#dsc-proposal-what').textContent = t('discovery.value_on_title_which_entered_where', { value: p.name || 'The automation', title: p.title, where });
     $('#dsc-proposal-estimate').textContent = estimateLine(p.estimate);
     $('#dsc-proposal-hint').textContent = p.kind === 'check'
-      ? 'It asks the card\'s next open point in its thread, one question at a time; each answer is yours and is written into the card. No model, no run.'
-      : 'Its result becomes a new version of the card\'s document, with the run and its cost in the thread. Every gate of the run waits for you; the card never moves by itself.';
+      ? t('discovery.it_asks_the_card_s_next')
+      : t('discovery.its_result_becomes_a_new_version');
     $('#dsc-proposal-error').textContent = p.error || '';
     $('#btn-dsc-proposal-run').disabled = !!p.error;
     openModal('#dsc-proposal-modal');
@@ -432,8 +432,8 @@
       const out = await api.runDiscoveryAutomation(p.projectId, p.id, p.column);
       closeProposal();
       const where = columnOf(p.column)?.title || p.column;
-      if (out?.runId) showToast(`${out.name || p.name || 'The automation'} started`, `On "${p.title}", entering ${where}. Its result comes back to the card.`, out.runId);
-      else showToast(`${out?.name || p.name || 'The automation'} done`, out?.question ? `A question waits for you in the thread of "${p.title}".` : `On "${p.title}".`);
+      if (out?.runId) showToast(`${out.name || p.name || 'The automation'} started`, t('discovery.on_title_entering_where_its_result', { title: p.title, where }), out.runId);
+      else showToast(`${out?.name || p.name || 'The automation'} done`, out?.question ? t('discovery.a_question_waits_for_you_in', { title: p.title }) : t('discovery.on_title', { title: p.title }));
     } catch (err) {
       $('#dsc-proposal-error').textContent = errMsg(err);
       $('#btn-dsc-proposal-run').disabled = false;
@@ -455,7 +455,7 @@
     const file = auto.pipeline || auto.workflow || '';
     const what = auto.check ? `Entering ${col.title} runs the clarity check: it asks the card's open points in its thread, one question at a time, each answer yours. No model, no run.`
       : `Entering ${col.title} runs ${auto.name || file}${file && auto.name ? ` (${file})` : ''}, a ${auto.pipeline ? 'pipeline' : 'workflow'} on the card's document. Its result becomes a new version of the document, with the run and its cost in the thread.`;
-    $('#dsc-automation-title').textContent = `Automation of ${col.title}`;
+    $('#dsc-automation-title').textContent = t('discovery.automation_of_title', { title: col.title });
     $('#dsc-automation-what').textContent = what;
     $('#dsc-automation-mode').value = AUTOMATION_MODES[auto.mode] ? auto.mode : 'ask';
     $('#dsc-automation-error').textContent = '';
@@ -900,7 +900,7 @@
       <div class="inbox-section-head">
         <h3>${t('discovery.clarity')}</h3>
         ${score == null ? `<span class="badge">${t('discovery.not_scored')}</span>` : `<span class="badge${below ? ' warn' : ''}">${esc(score)}%</span>`}
-        <span class="muted small">${below ? `needs grilling: the bar is ${esc(bar)}%` : uncommittable ? `at the bar of ${esc(bar)}%, but a commit needs ${commit().BAR}%` : `at or above the bar of ${esc(bar)}%`}</span>
+        <span class="muted small">${below ? t('discovery.needs_grilling_the_bar_is_bar', { bar: esc(bar) }) : uncommittable ? t('discovery.at_the_bar_of_bar_but', { bar: esc(bar), BAR: commit().BAR }) : t('discovery.at_or_above_the_bar_of', { bar: esc(bar) })}</span>
         ${(below || uncommittable) && !readOnly() ? `<button type="button" class="btn sm" data-testid="card-grill-me" data-detail="grill" title="${t('discovery.an_interview_in_this_thread_one')}">${t('discovery.grill_me')}</button>` : ''}
       </div>
       ${score != null && (by || ts) ? `<p class="muted small" data-testid="clarity-scored">${t('discovery.scored_by')} <b>${esc(by || 'unknown')}</b> ${when(ts)}</p>` : ''}
@@ -968,9 +968,9 @@
         </div>
       </div>`;
     const note = $('#dsc-note');
-    note.placeholder = q ? 'Your answer (Enter sends)' : 'Add a note (Enter sends)';
-    note.setAttribute('aria-label', q ? 'Answer the question' : 'Add a note');
-    $('#dsc-note-send').textContent = q ? 'Answer' : 'Add note';
+    note.placeholder = q ? t('discovery.your_answer_enter_sends') : t('discovery.add_a_note_enter_sends');
+    note.setAttribute('aria-label', q ? t('discovery.answer_the_question') : t('discovery.add_a_note'));
+    $('#dsc-note-send').textContent = q ? t('discovery.answer') : t('discovery.add_note');
   }
 
   // What a version is, from its reason (snapshotVersion's label in its file name).
@@ -995,7 +995,7 @@
           <span class="dsc-version-label" title="${esc(v.name)}">${esc(versionLabel(v.reason))}</span>
           <span class="muted small" title="${esc(dateOf(v.ts))}">${esc(ncAgo(v.ts))}</span>
           <span class="spacer"></span>
-          <button type="button" class="btn sm ghost" data-testid="card-version-open" data-detail="version-open" data-name="${esc(v.name)}" aria-expanded="${shown}">${shown ? 'Close' : 'Open'}</button>
+          <button type="button" class="btn sm ghost" data-testid="card-version-open" data-detail="version-open" data-name="${esc(v.name)}" aria-expanded="${shown}">${shown ? t('common.close') : t('discovery.open')}</button>
           <button type="button" class="btn sm ghost" data-testid="card-version-restore" data-detail="version-restore" data-name="${esc(v.name)}" title="${t('discovery.make_this_version_the_document_again')}">${t('discovery.restore')}</button>
         </div>
         ${shown ? `<article class="md md-compact inbox-doc dsc-version-text" data-testid="card-version-text">${dv.viewing.text.trim() ? markdownHtml(dv.viewing.text) : `<p class="muted small">${t('discovery.an_empty_document')}</p>`}</article>` : ''}
@@ -1114,7 +1114,7 @@
 
   async function removeAttachment(name) {
     const id = dv.open.id;
-    if (!(await confirmDialog('Remove attachment', `Delete "${name}" from this card?`, 'Remove'))) return;
+    if (!(await confirmDialog(t('discovery.remove_attachment'), t('discovery.delete_name_from_this_card', { name }), t('discovery.remove')))) return;
     try {
       await api.removeDiscoveryAttachment(dv.openProject, id, name);
       dv.previews.delete(`${id}/${name}`);
@@ -1198,7 +1198,7 @@
       done: (out, problems) => {
         const filed = (out.issues || []).map((i) => `#${i.number}`).join(', ');
         const planned = out.roadmap && !problems.some((p) => /roadmap/.test(p));
-        showToast(`Committed "${out.card?.title || ''}" to the backlog`, [`Filed ${filed}${out.simulated ? ' (simulated)' : ''}${planned ? ', planned in the roadmap' : ''}.`, ...problems].join(' '));
+        showToast(t('discovery.committed_value_to_the_backlog', { value: out.card?.title || '' }), [`Filed ${filed}${out.simulated ? ' (simulated)' : ''}${planned ? ', planned in the roadmap' : ''}.`, ...problems].join(' '));
         if (dv.open?.id === out.card?.id) closeCard();
         refresh();
       },
@@ -1211,7 +1211,7 @@
     if (!from) return;
     try {
       const card = await api.createDiscoveryCard(dv.openProject, `Learned from: ${from.title}`.slice(0, 200), '', 'idea', from.id);
-      showToast('New card in the Inbox', `Linked to the committed card "${from.title}".`);
+      showToast(t('discovery.new_card_in_the_inbox'), t('discovery.linked_to_the_committed_card_title', { title: from.title }));
       closeCard();
       await window.InboxActions?.openCard(card.id);
     } catch (e) { detailError(errMsg(e)); }
@@ -1292,7 +1292,7 @@
     const request = [
       `Shape this discovery card into ${what}. Keep its intent and every fact it states; ground what you add in the project's files and mark assumptions and open questions as such.`,
       `Card: ${c.title}`,
-      `<document>\n${String(c.document || '').trim() || '(no document yet)'}\n</document>`,
+      `<document>\n${String(c.document || '').trim() || t('discovery.no_document_yet')}\n</document>`,
       ...(String(c.acceptance || '').trim() ? [`<acceptance_criteria>\n${c.acceptance.trim()}\n</acceptance_criteria>`] : []),
     ].join('\n');
     const card = { projectId: dv.openProject, cardId: c.id, title: c.title };

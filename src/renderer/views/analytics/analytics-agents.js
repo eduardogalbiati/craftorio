@@ -80,7 +80,7 @@
     const cost = Number(t.costUsd) || 0;
     const tk = t.tokens || {};
     const on = gx.filter === g.id;
-    return `<button type="button" class="card ag-card${on ? ' active' : ''}" data-ag-card="${g.id}" data-testid="${g.testid}" aria-pressed="${on}" title="${on ? 'Show every agent\'s sessions' : `Show only the ${esc(g.name)}'s sessions`}">
+    return `<button type="button" class="card ag-card${on ? ' active' : ''}" data-ag-card="${g.id}" data-testid="${g.testid}" aria-pressed="${on}" title="${on ? I18n.t('analytics_agents.show_every_agent_s_sessions') : I18n.t('analytics_agents.show_only_the_name_s_sessions', { name: esc(g.name) })}">
       ${head(g, 'done')}
       <span class="ag-line ag-main"><b data-testid="agents-card-cost">${fmtUsd(cost)}</b> ${I18n.t('analytics_agents.tk_tokens', { tk: fmtTok(sumTokens(tk)) })}</span>
       <span class="ag-line muted small">${I18n.t('analytics_agents.input_input_output_output_cache_read', { input: fmtTok(tk.input), output: fmtTok(tk.output), cache_read: fmtTok(tk.cache_read) })} ${fmtTok(tk.cache_write)}</span>

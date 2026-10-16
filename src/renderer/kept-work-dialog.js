@@ -79,7 +79,7 @@ async function keptWorkDialog(kept) {
   const details = Array.isArray(kept.details) ? kept.details : kept.details ? [kept.details] : [];
   const id = await choiceDialog(kept.title, kept.message, kept.choices, {
     details,
-    link: { label: 'choose another step…', testid: 'kept-work-choose-step', onClick: () => window.openResumeDialog?.(kept.runId) },
+    link: { label: t('kept_work_dialog.choose_another_step'), testid: 'kept-work-choose-step', onClick: () => window.openResumeDialog?.(kept.runId) },
   });
   if (id !== 'resume') return id;
   if (!kept.stoppedAt) { window.openResumeDialog?.(kept.runId); return id; }
@@ -97,7 +97,7 @@ async function keptWorkDialog(kept) {
     showRun(runId, { running: true });
   } catch (e) {
     // refused (e.g. the run is active again): the dialog says why and offers the other steps
-    showToast('Could not resume the run', errMsg(e));
+    showToast(t('kept_work_dialog.could_not_resume_the_run'), errMsg(e));
     window.openResumeDialog?.(kept.runId, { step: kept.stoppedAt });
   }
   return id;

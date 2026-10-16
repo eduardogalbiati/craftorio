@@ -56,12 +56,12 @@
   function cards(o) {
     const g = o.cards.week.longestGap;
     return `<div class="an-totals" data-testid="an-occ-cards">
-      ${stat('Last 24 h', occ(o.cards.day.occupancy), `${hours(o.cards.day.activeHours)} active of ${hours(o.cards.day.hours)}`)}
-      ${stat('7 days', occ(o.cards.week.occupancy), `${hours(o.cards.week.activeHours)} active of ${hours(o.cards.week.hours)}`)}
-      ${stat('30 days', occ(o.cards.month.occupancy), `${hours(o.cards.month.activeHours)} active of ${hours(o.cards.month.hours)}`)}
-      ${stat('Active streak', o.streakMinutes ? fmtDur(o.streakMinutes * 60e3) : '—', o.running ? 'A run is active now' : `Idle now for ${fmtDur(o.idleNowMinutes * 60e3)}`)}
-      ${stat('Longest idle gap (week)', g ? `${fmtDur(g.minutes * 60e3)} <span class="muted small">${esc(CAUSE_LABEL[g.cause] || g.cause)}</span>` : '—', g ? `${dateOf(g.from)} → ${dateOf(g.to)}` : '')}
-      ${stat('Runs at once', `${o.avgConcurrent == null ? '—' : (Math.round(o.avgConcurrent * 10) / 10).toFixed(1)} <span class="muted small">${t('analytics_occupancy.avg_peak')} ${fmtNum(o.peakConcurrent)}</span>`, 'Average while at least one run is active, and the peak')}
+      ${stat(t('analytics_occupancy.last_24_h'), occ(o.cards.day.occupancy), t('analytics_occupancy.activehours_active_of_hours', { activeHours: hours(o.cards.day.activeHours), hours: hours(o.cards.day.hours) }))}
+      ${stat(t('analytics_occupancy.n7_days'), occ(o.cards.week.occupancy), t('analytics_occupancy.activehours_active_of_hours', { activeHours: hours(o.cards.week.activeHours), hours: hours(o.cards.week.hours) }))}
+      ${stat(t('analytics_occupancy.n30_days'), occ(o.cards.month.occupancy), t('analytics_occupancy.activehours_active_of_hours', { activeHours: hours(o.cards.month.activeHours), hours: hours(o.cards.month.hours) }))}
+      ${stat(t('analytics_occupancy.active_streak'), o.streakMinutes ? fmtDur(o.streakMinutes * 60e3) : '—', o.running ? t('analytics_occupancy.a_run_is_active_now') : t('analytics_occupancy.idle_now_for_value', { value: fmtDur(o.idleNowMinutes * 60e3) }))}
+      ${stat(t('analytics_occupancy.longest_idle_gap_week'), g ? `${fmtDur(g.minutes * 60e3)} <span class="muted small">${esc(CAUSE_LABEL[g.cause] || g.cause)}</span>` : '—', g ? `${dateOf(g.from)} → ${dateOf(g.to)}` : '')}
+      ${stat(t('analytics_occupancy.runs_at_once'), `${o.avgConcurrent == null ? '—' : (Math.round(o.avgConcurrent * 10) / 10).toFixed(1)} <span class="muted small">${t('analytics_occupancy.avg_peak')} ${fmtNum(o.peakConcurrent)}</span>`, t('analytics_occupancy.average_while_at_least_one_run'))}
     </div>`;
   }
 
@@ -76,9 +76,9 @@
       const parts = [['active', d.activeHours, ACTIVE], ...CAUSES.map(([k, , c]) => [k, d.idleHours[k], c])].map(([k, v, c]) => {
         const h = (v / 24) * H;
         y -= h;
-        return v > 0 ? `<rect x="${(i * bw + 2).toFixed(1)}" y="${y.toFixed(1)}" width="${Math.max(1, bw - 4).toFixed(1)}" height="${h.toFixed(1)}" style="fill:${c}"><title>${esc(fmtDay(d.day, true))} · ${esc(k === 'active' ? 'Active' : CAUSE_LABEL[k])}: ${hours(v)}</title></rect>` : '';
+        return v > 0 ? `<rect x="${(i * bw + 2).toFixed(1)}" y="${y.toFixed(1)}" width="${Math.max(1, bw - 4).toFixed(1)}" height="${h.toFixed(1)}" style="fill:${c}"><title>${esc(fmtDay(d.day, true))} · ${esc(k === 'active' ? t('analytics_occupancy.active') : CAUSE_LABEL[k])}: ${hours(v)}</title></rect>` : '';
       }).join('');
-      return `<g>${parts}<rect x="${(i * bw).toFixed(1)}" y="0" width="${bw.toFixed(1)}" height="${H}" class="an-hit"><title>${esc(fmtDay(d.day, true))}${t('analytics_occupancy.occupancy_active_activehours_of_span', { occupancy: pct(d.occupancy), activeHours: hours(d.activeHours), span: hours(span) })}${d.partial ? ', partial day' : ''}</title></rect></g>`;
+      return `<g>${parts}<rect x="${(i * bw).toFixed(1)}" y="0" width="${bw.toFixed(1)}" height="${H}" class="an-hit"><title>${esc(fmtDay(d.day, true))}${t('analytics_occupancy.occupancy_active_activehours_of_span', { occupancy: pct(d.occupancy), activeHours: hours(d.activeHours), span: hours(span) })}${d.partial ? t('analytics_occupancy.partial_day') : ''}</title></rect></g>`;
     }).join('');
     const every = Math.ceil(days.length / 10);
     const labels = days.map((d, i) => (i % every === 0 ? `<span style="left:${((i + 0.5) / days.length) * 100}%">${esc(fmtDay(d.day))}</span>` : '')).join('');
@@ -88,7 +88,7 @@
   // a 24-hour strip per day, newest first: the share of each local hour with a run active, as one of
   // five levels (more is more); a hatched cell when the hour was not measured (before the log, or ahead)
   function heatCell(day, h, v) {
-    if (v == null) return `<i class="an-heat-cell an-heat-nodata" title="${esc(`${fmtDay(day, true)}, ${hh(h)}–${hh(h + 1)} · no data`)}"></i>`;
+    if (v == null) return `<i class="an-heat-cell an-heat-nodata" title="${esc(t('analytics_occupancy.day_h_value_no_data', { day: fmtDay(day, true), h: hh(h), value: hh(h + 1) }))}"></i>`;
     const title = `${fmtDay(day, true)}, ${hh(h)}–${hh(h + 1)} · ${Math.round(v * 60)} min active (${pct(v)})`;
     return `<i class="an-heat-cell an-heat-l${heatLevel(v)}" title="${esc(title)}"></i>`;
   }
@@ -146,9 +146,9 @@
       return `<td class="num">${per(s.activeHours)}</td><td class="num">${per(s.issues)}</td><td class="num">${per(s.lines, 100)}</td>`;
     };
     return `<div class="an-totals">
-        ${stat('Cost per active hour', c.perActiveHour == null ? '—' : fmtUsd(c.perActiveHour), `${fmtUsd(o.costUsd)} over ${hours(o.activeHours)} active`)}
-        ${stat('Cost per delivered issue', c.perIssue == null ? '—' : fmtUsd(c.perIssue), `${fmtNum(o.issues)} issue(s) delivered`)}
-        ${stat('Cost per 100 lines', c.per100Lines == null ? '—' : fmtUsd(c.per100Lines), o.lines ? `${fmtNum(o.lines)} lines changed by the local merges` : 'No local merge with lines in this range')}
+        ${stat(t('analytics_occupancy.cost_per_active_hour'), c.perActiveHour == null ? '—' : fmtUsd(c.perActiveHour), t('analytics_occupancy.costusd_over_activehours_active', { costUsd: fmtUsd(o.costUsd), activeHours: hours(o.activeHours) }))}
+        ${stat(t('analytics_occupancy.cost_per_delivered_issue'), c.perIssue == null ? '—' : fmtUsd(c.perIssue), t('analytics_occupancy.issues_issue_s_delivered', { issues: fmtNum(o.issues) }))}
+        ${stat(t('analytics_occupancy.cost_per_100_lines'), c.per100Lines == null ? '—' : fmtUsd(c.per100Lines), o.lines ? t('analytics_occupancy.lines_lines_changed_by_the_local', { lines: fmtNum(o.lines) }) : t('analytics_occupancy.no_local_merge_with_lines_in'))}
       </div>
       <div class="card table-wrap"><table class="u-table an-sessions"><thead><tr><th></th><th class="num">${t('analytics_occupancy.per_active_hour')}</th><th class="num">${t('analytics_occupancy.per_issue')}</th><th class="num">${t('analytics_occupancy.per_100_lines')}</th></tr></thead><tbody>
         <tr><td>${t('analytics_occupancy.under_the_night_watch')}</td>${side(o.nightWatch.inside)}</tr><tr><td>${t('analytics_occupancy.outside_it')}</td>${side(o.nightWatch.outside)}</tr></tbody></table></div>

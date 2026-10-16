@@ -6,6 +6,7 @@
 // Refreshed on workflow.started / workflow.finished and every minute (channel analytics:occupancy
 // with `summary: true`). Browser: window.OccupancyChip; Node: module.exports (chipModel, tested).
 (function (root) {
+  const t = (...a) => (typeof module === 'object' && module.exports ? require('../shared/i18n') : root.I18n)?.t(...a) ?? a[0];
   const REFRESH_MS = 60e3;
 
   /** { text, level: green | amber | red, dot: pulse | grey, tooltip } of the last 24 h figures. */
@@ -14,7 +15,7 @@
     const level = pct >= 90 ? 'green' : pct >= 60 ? 'amber' : 'red';
     const hours = Math.round((Number(activeHours) || 0) * 10) / 10;
     const idle = running ? 'a run is active now' : `idle now ${fmtIdle(idleNowMinutes)}`;
-    return { text: `24/7 · ${pct}%`, level, dot: running ? 'pulse' : 'grey', tooltip: `last 24 h: ${hours} h active; ${idle}` };
+    return { text: `24/7 · ${pct}%`, level, dot: running ? 'pulse' : 'grey', tooltip: t('occupancy_chip.last_24_h_hours_h_active', { hours, idle }) };
   }
   function fmtIdle(minutes) {
     const m = Math.max(0, Math.round(Number(minutes) || 0));
@@ -39,7 +40,7 @@
       chip.classList.remove('hidden');
       chip.setAttribute('aria-busy', 'true');
       chip.querySelector('.occ-text').textContent = '24/7 · …';
-      chip.title = 'Reading the last 24 h…';
+      chip.title = t('occupancy_chip.reading_the_last_24_h');
     }
     try {
       const o = await api.getOccupancy({ summary: true });
@@ -50,8 +51,8 @@
         chip.dataset.level = 'none';
         chip.querySelector('.occ-text').textContent = '24/7 · —';
         chip.querySelector('.occ-dot').dataset.dot = 'grey';
-        chip.title = 'No runs yet: start one to measure';
-        chip.setAttribute('aria-label', '24/7 meter: no runs yet');
+        chip.title = t('occupancy_chip.no_runs_yet_start_one_to');
+        chip.setAttribute('aria-label', t('occupancy_chip.n24_7_meter_no_runs_yet'));
         return;
       }
       const m = chipModel(o);
@@ -60,7 +61,7 @@
       chip.querySelector('.occ-text').textContent = m.text;
       chip.querySelector('.occ-dot').dataset.dot = m.dot;
       chip.title = m.tooltip;
-      chip.setAttribute('aria-label', `${m.text}, ${m.tooltip}. Open the 24/7 tab of Analytics`);
+      chip.setAttribute('aria-label', t('occupancy_chip.text_tooltip_open_the_24_7', { text: m.text, tooltip: m.tooltip }));
     } catch { chip.removeAttribute('aria-busy'); chip.classList.add('hidden'); /* no workspace yet: checked again next minute */ }
   }
   const soon = () => { clearTimeout(pending); pending = setTimeout(refresh, 800); };

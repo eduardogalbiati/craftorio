@@ -92,7 +92,7 @@
           <label class="switch" title="${I18n.t('nightwatch.expand_every_run_limit_while_the')}"><input type="checkbox" id="nw-limits-expand" data-testid="nw-limits-expand" aria-label="${I18n.t('nightwatch.expand_all_limits')}"${l.expand ? ' checked' : ''}${saving ? ' disabled' : ''} /><span></span></label>
           <span>${I18n.t('nightwatch.expand_all_limits')}</span>
           ${l.expand && !l.custom ? multiplierSelect(l.multiplier) : ''}
-          ${l.expand ? `<button type="button" class="link-btn" id="nw-limits-customize" data-testid="nw-limits-customize">${l.custom ? 'Use a multiplier' : 'Customize'}</button>` : ''}
+          ${l.expand ? `<button type="button" class="link-btn" id="nw-limits-customize" data-testid="nw-limits-customize">${l.custom ? I18n.t('nightwatch.use_a_multiplier') : I18n.t('nightwatch.customize')}</button>` : ''}
         </div>
         <div class="muted small nw-limits-line" data-testid="nw-limits-summary">${esc(limitsSummary(day, t))}</div>
         ${l.expand && !day.budget ? `<p class="warn-text small nw-limits-warning" data-testid="nw-limits-warning">${I18n.t('nightwatch.no_nightly_budget_nothing_caps_tonight')}</p>` : ''}
@@ -190,16 +190,16 @@
     const standing = healing(w);
     const watching = `watching ${s.runs.active} run${s.runs.active === 1 ? '' : 's'}${s.runs.waiting ? `, ${s.runs.waiting} at a gate` : ''}`;
     const switchTitle = standing ? 'Self-healing keeps the watch on: turn it off in Settings › Execution › Oracle' : w.active ? 'Turn the Night watch off' : 'Turn the Night watch on (an end time is required)';
-    const headline = standing ? `<b data-testid="nightwatch-self-healing">${t('nightwatch.self_healing_is_on')}</b>` : `<b>${w.active ? `On until ${esc(hm(w.until))}` : 'Off'}</b>`;
+    const headline = standing ? `<b data-testid="nightwatch-self-healing">${t('nightwatch.self_healing_is_on')}</b>` : `<b>${w.active ? t('nightwatch.on_until_until', { until: esc(hm(w.until)) }) : t('nightwatch.off')}</b>`;
     const head = `<div class="row nw-switch-row">
         <label class="switch" title="${switchTitle}"><input type="checkbox" id="nw-switch" data-testid="nightwatch-switch" aria-label="${t('nightwatch.night_watch')}"${w.active || f ? ' checked' : ''}${nw.busy || standing ? ' disabled' : ''} /><span></span></label>
         <div class="nw-switch-state">
           <div class="row nw-headline">${headline}${w.active ? `<span class="badge live">${t('nightwatch.watching')}</span>` : ''}</div>
           <div class="muted small">${standing
-            ? `Day and night, with no end time${w.startedAt ? `, since ${esc(dateOf(w.startedAt))}` : ''} · ${watching} · <button type="button" class="link-btn" id="nw-open-settings" title="${t('nightwatch.self_healing_is_a_switch_in')}">${t('nightwatch.turn_it_off_in_settings')}</button>`
+            ? `Day and night, with no end time${w.startedAt ? t('nightwatch.since_startedat', { startedAt: esc(dateOf(w.startedAt)) }) : ''} · ${watching} · <button type="button" class="link-btn" id="nw-open-settings" title="${t('nightwatch.self_healing_is_a_switch_in')}">${t('nightwatch.turn_it_off_in_settings')}</button>`
             : w.active
-              ? `Turned on by ${esc(w.by || 'the owner')} at ${esc(hm(w.startedAt))} · ${watching}`
-              : w.startedAt ? `Last on ${esc(dateOf(w.startedAt))}${w.by ? ` by ${esc(w.by)}` : ''}` : 'Never turned on in this workspace'}</div>
+              ? t('nightwatch.turned_on_by_value_at_startedat', { value: esc(w.by || 'the owner'), startedAt: esc(hm(w.startedAt)), watching })
+              : w.startedAt ? `Last on ${esc(dateOf(w.startedAt))}${w.by ? ` by ${esc(w.by)}` : ''}` : t('nightwatch.never_turned_on_in_this_workspace')}</div>
         </div>
       </div>${w.active && !standing && s.limits ? activeLimitsHtml(s.limits) : ''}`;
     const form = f ? `<form class="nw-form" id="nw-form">
@@ -243,24 +243,24 @@
     const sh = m.selfHealing;
     const title = sh ? `Self-healing · ${m.window.ongoing ? 'today so far' : 'day'}` : m.window.ongoing ? 'Tonight so far' : 'Night';
     return `<div class="card nw-card">
-      <div class="row nw-card-head"><h3>${title} · ${esc(day(m.window.from))} ${esc(hm(m.window.from))} → ${esc(hm(m.window.to))}</h3><span class="muted small">${hours(m.window.hours)} · ${sh ? `the UTC day ${esc(sh.day)}` : `turned on by ${esc(m.window.by || 'the owner')}`}</span></div>
+      <div class="row nw-card-head"><h3>${title} · ${esc(day(m.window.from))} ${esc(hm(m.window.from))} → ${esc(hm(m.window.to))}</h3><span class="muted small">${hours(m.window.hours)} · ${sh ? t('nightwatch.the_utc_day_day', { day: esc(sh.day) }) : t('nightwatch.turned_on_by_value', { value: esc(m.window.by || 'the owner') })}</span></div>
       ${s.alarm ? `<div class="nw-alarm" role="alert"><b>${t('nightwatch.safety_alarm')}</b> ${esc(m.summary.safety)}</div>` : ''}
       ${sh ? `<div class="an-totals nw-totals" data-testid="nw-self-healing-day">
-        ${stat('Detected', String(sh.detected), 'what the watch and its detectors found that day')}
-        ${stat('Repaired alone', String(sh.repaired), 'actions the Oracle took without asking, under your permissions, that did not fail')}
-        ${stat('Waiting for you', String(sh.waiting), 'left for you: outside the permissions, asked by content, past the loop cap, or a human gate')}
-        ${stat('Oracle cost', usd(sh.costUsd), `${sh.tokens.toLocaleString('en-US')} tokens that day`)}
+        ${stat(t('nightwatch.detected'), String(sh.detected), t('nightwatch.what_the_watch_and_its_detectors'))}
+        ${stat(t('nightwatch.repaired_alone'), String(sh.repaired), t('nightwatch.actions_the_oracle_took_without_asking'))}
+        ${stat(t('nightwatch.waiting_for_you'), String(sh.waiting), t('nightwatch.left_for_you_outside_the_permissions'))}
+        ${stat(t('nightwatch.oracle_cost'), usd(sh.costUsd), t('nightwatch.value_tokens_that_day', { value: sh.tokens.toLocaleString('en-US') }))}
       </div>` : ''}
       <div class="an-totals nw-totals">
-        ${stat('Incidents', String(m.incidents.count))}
-        ${stat('Autonomy', pct(m.autonomy), 'actions the watch took without asking / incidents (can pass 100% when one incident needed several actions)')}
-        ${stat('Escalated', pct(m.escalation), 'incidents left for you with a recommendation / incidents')}
-        ${stat('Resolved', pct(m.resolution), 'resolved without a person: the item progressed again within 30 min of the action and did not fail')}
-        ${stat('TTD median', dur(m.ttd.median), `time to detect: p90 ${dur(m.ttd.p90)} (the human reference: ${dur(nw.report.baseline.ttdMs)})`)}
-        ${stat('TTR median', dur(m.ttr.median), `time to resume after detection, whoever unblocked it: p90 ${dur(m.ttr.p90)} (the human reference: ${dur(nw.report.baseline.ttrMs)})`)}
-        ${stat('Hours saved (est.)', hours(m.hoursSaved), 'Estimate: without the watch, each block would last until the owner wakes up (the end of the window)')}
-        ${stat('Watch cost', usd(m.cost.watchUsd), `${m.cost.watchTokens.toLocaleString('en-US')} tokens; ${usd(m.cost.perResolved)} per resolved incident; the runs cost ${usd(m.cost.runsUsd)} that night`)}
-        ${stat('Safety', s.alarm ? 'ALARM' : 'OK', m.summary.safety, s.alarm ? 'nw-bad' : 'nw-good')}
+        ${stat(t('nightwatch.incidents'), String(m.incidents.count))}
+        ${stat(t('nightwatch.autonomy'), pct(m.autonomy), t('nightwatch.actions_the_watch_took_without_asking'))}
+        ${stat(t('nightwatch.escalated'), pct(m.escalation), t('nightwatch.incidents_left_for_you_with_a'))}
+        ${stat(t('nightwatch.resolved'), pct(m.resolution), t('nightwatch.resolved_without_a_person_the_item'))}
+        ${stat(t('nightwatch.ttd_median'), dur(m.ttd.median), t('nightwatch.time_to_detect_p90_p90_the', { p90: dur(m.ttd.p90), ttdMs: dur(nw.report.baseline.ttdMs) }))}
+        ${stat(t('nightwatch.ttr_median'), dur(m.ttr.median), t('nightwatch.time_to_resume_after_detection_whoever', { p90: dur(m.ttr.p90), ttrMs: dur(nw.report.baseline.ttrMs) }))}
+        ${stat(t('nightwatch.hours_saved_est'), hours(m.hoursSaved), t('nightwatch.estimate_without_the_watch_each_block'))}
+        ${stat(t('nightwatch.watch_cost'), usd(m.cost.watchUsd), t('nightwatch.value_tokens_perresolved_per_resolved_incident', { value: m.cost.watchTokens.toLocaleString('en-US'), perResolved: usd(m.cost.perResolved), runsUsd: usd(m.cost.runsUsd) }))}
+        ${stat(t('nightwatch.safety'), s.alarm ? 'ALARM' : 'OK', m.summary.safety, s.alarm ? 'nw-bad' : 'nw-good')}
       </div>
       <div class="u-breakdown nw-facts">
         <span>${t('nightwatch.by_kind')} ${kinds}</span>
@@ -268,7 +268,7 @@
         <span>${t('nightwatch.occupancy')} <b>${pct(m.yield.occupancy)}</b> ${t('nightwatch.without_the_watch_occupancywithoutwatch', { occupancyWithoutWatch: pct(m.yield.occupancyWithoutWatch) })}</span>
         <span>${t('nightwatch.issues_delivered')} <b>${m.yield.issues}</b></span>
         <span>${t('nightwatch.unblocked')} <b>${m.unblocked.issues}</b> ${t('nightwatch.issue_s_value_lines', { value: m.unblocked.lines == null ? '—' : m.unblocked.lines.toLocaleString('en-US') })} ${usd(m.unblocked.usd)}</span>
-        <span>${t('nightwatch.gates')} <b>${m.gates.count}</b>${t('nightwatch.waited')} ${dur(m.gates.waitMs)}${m.gates.count ? ' (schedule gated items in the day)' : ''}</span>
+        <span>${t('nightwatch.gates')} <b>${m.gates.count}</b>${t('nightwatch.waited')} ${dur(m.gates.waitMs)}${m.gates.count ? t('nightwatch.schedule_gated_items_in_the_day') : ''}</span>
         <span>${t('nightwatch.precision')} <b>${pct(m.precision)}</b> ${t('nightwatch.undone_undone_worse_ended_worse', { undone: m.actions.undone, worse: m.actions.worse })}</span>
         <span>${t('nightwatch.false_alarms')} <b>${pct(m.falseAlarms)}</b></span>
         <span>${t('nightwatch.loops')} <b>${m.loops.length}</b>${m.loops.length ? ` (${m.loops.map((l) => `${esc(l.target)} ×${l.count}`).join(', ')})` : ''}</span>
@@ -316,7 +316,7 @@
     : a.from ? `<button class="btn ghost sm" type="button" data-nw-app-back="${esc(a.from)}" data-testid="app-update-back" title="${t('nightwatch.the_same_cycle_as_the_update')}">${t('nightwatch.go_back_to')} ${esc(String(a.from).slice(0, 7))}</button>` : ''}</td>
       </tr>`).join('');
     return `<div class="card nw-card">
-      <div class="row nw-card-head"><h3>${t('nightwatch.actions')}</h3><span class="muted small">${m.actions.auto} ${t('nightwatch.without_asking')}${m.actions.undone ? `, ${m.actions.undone} undone` : ''}</span></div>
+      <div class="row nw-card-head"><h3>${t('nightwatch.actions')}</h3><span class="muted small">${m.actions.auto} ${t('nightwatch.without_asking')}${m.actions.undone ? t('nightwatch.undone_undone', { undone: m.actions.undone }) : ''}</span></div>
       ${rows ? `<table class="u-table nw-actions"><thead><tr><th>${t('nightwatch.time')}</th><th>${t('nightwatch.action')}</th><th>${t('nightwatch.permission')}</th><th>${t('nightwatch.backup')}</th><th>${t('nightwatch.result')}</th><th></th></tr></thead><tbody>${rows}</tbody></table>` : `<p class="muted small">${t('nightwatch.the_watch_took_no_action_this')}</p>`}
     </div>`;
   }
@@ -362,7 +362,7 @@
     sw.onchange = async () => {
       if (nw.state.watch?.active) {
         sw.checked = true;
-        if (!await confirmDialog('Turn the Night watch off', 'The Oracle stops acting without asking at once; its summary is posted.', 'Turn off')) return;
+        if (!await confirmDialog(t('nightwatch.turn_the_night_watch_off'), t('nightwatch.the_oracle_stops_acting_without_asking'), t('nightwatch.turn_off'))) return;
         nw.busy = true;
         try { await api.setOracleNightWatch({ on: false, from: 'the Night watch screen' }); } catch (e) { nw.error = errMsg(e); }
         nw.busy = false;
@@ -415,7 +415,7 @@
     }
     document.querySelectorAll('[data-nw-undo]').forEach((b) => {
       b.onclick = async () => {
-        if (!await confirmDialog('Undo this action', 'The backup taken before the action is put back.', 'Undo')) return;
+        if (!await confirmDialog(t('nightwatch.undo_this_action'), t('nightwatch.the_backup_taken_before_the_action'), t('common.undo'))) return;
         try { await api.oracleUndo({ actionId: b.dataset.nwUndo }); nw.error = null; } catch (e) { nw.error = errMsg(e); }
         await load();
       };
@@ -423,7 +423,7 @@
     document.querySelectorAll('[data-nw-app-back]').forEach((b) => {
       b.onclick = async () => {
         const to = b.dataset.nwAppBack;
-        if (!await confirmDialog(`Go back to ${to.slice(0, 7)}`, 'The roadmap pauses, the runs in progress finish, the app folder goes back to that commit and the app restarts.', 'Go back')) return;
+        if (!await confirmDialog(t('nightwatch.go_back_to_value', { value: to.slice(0, 7) }), t('nightwatch.the_roadmap_pauses_the_runs_in'), t('nightwatch.go_back'))) return;
         try { await api.appUpdateBack(to); nw.error = null; } catch (e) { nw.error = errMsg(e); }
         await load();
       };
@@ -450,7 +450,7 @@
     if (!m) { box.innerHTML = ''; return null; }
     const s = m.summary;
     // #278: a Self-healing day leads with its line (detected, repaired alone, waiting, cost with tokens)
-    box.innerHTML = `<div class="dash-gates-title"><b>☾ ${m.window.selfHealing ? 'Self-healing' : 'Night watch'} · ${esc(hm(m.window.from))} → ${esc(hm(m.window.to))}</b>${s.alarm ? ` <span class="pill pill-failed">${t('nightwatch.safety_alarm_2')}</span>` : ''}</div>
+    box.innerHTML = `<div class="dash-gates-title"><b>☾ ${m.window.selfHealing ? t('nightwatch.self_healing') : t('nightwatch.night_watch')} · ${esc(hm(m.window.from))} → ${esc(hm(m.window.to))}</b>${s.alarm ? ` <span class="pill pill-failed">${t('nightwatch.safety_alarm_2')}</span>` : ''}</div>
       <div class="nw-dash-lines small">${s.selfHealing ? `<div data-testid="dash-self-healing">${esc(s.selfHealing)}</div>` : ''}<div>${esc(s.ran)}</div><div>${esc(s.did)}</div><div>${esc(s.waits)}</div><div class="${s.alarm ? 'error' : 'muted'}">${esc(s.safety)}</div>${regressionLines(s)}${limitLines(s)}</div>
       <div class="row"><span class="spacer"></span><button class="btn sm ghost" type="button" id="dash-nw-open">${t('nightwatch.open_night_watch')}</button></div>`;
     $('#dash-nw-open').onclick = () => showView('nightwatch');
@@ -470,7 +470,7 @@
   // spent above the day cost limits
   function limitLines(s) {
     if (!s.limits?.length) return '';
-    return `${s.limits.map((line) => `<div class="nw-past-limit" data-testid="nw-past-limit">${esc(line)} <span class="badge warn">${t('nightwatch.past_a_day_limit')}</span></div>`).join('')}${s.overDayUsd ? `<div class="muted" data-testid="nw-over-day">${esc(`Spent above the day limits: ${dollars(s.overDayUsd)}`)}</div>` : ''}`;
+    return `${s.limits.map((line) => `<div class="nw-past-limit" data-testid="nw-past-limit">${esc(line)} <span class="badge warn">${t('nightwatch.past_a_day_limit')}</span></div>`).join('')}${s.overDayUsd ? `<div class="muted" data-testid="nw-over-day">${esc(t('nightwatch.spent_above_the_day_limits_overdayusd', { overDayUsd: dollars(s.overDayUsd) }))}</div>` : ''}`;
   }
   // opens the view on the night that started at `startedAt` (ISO)
   function openNight(startedAt) {

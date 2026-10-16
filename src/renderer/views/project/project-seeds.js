@@ -55,8 +55,8 @@
         <button type="button" class="btn sm ghost" data-seed-make-tool="${id}" data-testid="seed-make-tool-${id}">${t('project_seeds.make_it_a_tool')}</button>
       </div>
       <div class="small muted seed-summary" title="${esc(row.summary)}">${esc(row.summary)}</div>
-      <div class="small muted">${row.lastRun ? `Last run ${esc(shortDate(row.lastRun.date))} · ${esc(costText(row.lastRun))}` : `Cost: ${esc(row.cost || 'one Oracle turn')}`}
-        · <button type="button" class="link-btn" data-seed-tool-edit="${id}" data-testid="seed-tool-edit-${id}">${row.tool ? `Tool: <span class="mono">${esc(row.tool)}</span>` : 'Tool command'}</button></div>
+      <div class="small muted">${row.lastRun ? t('project_seeds.last_run_date_lastrun', { date: esc(shortDate(row.lastRun.date)), lastRun: esc(costText(row.lastRun)) }) : t('project_seeds.cost_value', { value: esc(row.cost || 'one Oracle turn') })}
+        · <button type="button" class="link-btn" data-seed-tool-edit="${id}" data-testid="seed-tool-edit-${id}">${row.tool ? `Tool: <span class="mono">${esc(row.tool)}</span>` : t('project_seeds.tool_command')}</button></div>
       ${editing ? `<div class="seed-tool-edit" data-testid="seed-tool-form-${id}">
         <label class="small" for="seed-tool-input-${id}">${t('project_seeds.the_command_that_prints_the_seed')}</label>
         <input type="text" id="seed-tool-input-${id}" class="mono" data-seed-tool-input="${id}" value="${esc(row.tool || '')}" spellcheck="false" placeholder="${t('project_seeds.node_tools_id_js_json', { id })}" />
@@ -143,7 +143,7 @@
     const c = cur;
     if (c.running.has(seedId)) return;
     let estimate = null;
-    try { estimate = await api.seedEstimate({ projectId: c.id, seedId }); } catch (e) { showToast(`Could not estimate the seed's cost: ${errMsg(e)}`); return; }
+    try { estimate = await api.seedEstimate({ projectId: c.id, seedId }); } catch (e) { showToast(t('project_seeds.could_not_estimate_the_seed_s', { e: errMsg(e) })); return; }
     // a real model call costs money: say how much first (a tool or a simulated run is free)
     if (!estimate?.free && !state.simulationOnly) {
       const cost = estimate?.costUsd != null ? `about ${fmtUsd(estimate.costUsd)}` : 'an unknown amount (no earlier run)';
@@ -217,7 +217,7 @@
     try {
       const out = await api.setSeedTool({ projectId: c.id, seedId, command: String(input?.value || '').trim() || null });
       c.editing = null;
-      showToast(out?.tool ? `The seed ${seedId} now runs ${out.tool}` : `The seed ${seedId} runs the Oracle again`);
+      showToast(out?.tool ? t('project_seeds.the_seed_seedid_now_runs_tool', { seedId, tool: out.tool }) : t('project_seeds.the_seed_seedid_runs_the_oracle', { seedId }));
       await load();
     } catch (e) {
       c.notes.set(seedId, `Could not save the tool command: ${esc(errMsg(e))}`);

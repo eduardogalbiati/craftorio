@@ -78,7 +78,7 @@
       ${window.DateRange.fields({ testid: 'conflict-map-date-range', from: r.from, to: r.to, fromAttrs: 'data-pcm-from', toAttrs: 'data-pcm-to' })}
       <label class="an-date small muted" title="${t('project_conflict_map.a_date_yyyy_mm_dd_or')}">${t('project_conflict_map.before_after')} <input type="text" class="an-marker" data-pcm-marker value="${esc(view.marker)}" placeholder="${t('project_conflict_map.date_or_commit')}" /></label>
       <button type="button" class="btn" data-pcm-refresh ${cur?.loading ? 'disabled' : ''}>${t('project_conflict_map.refresh')}</button>
-      ${over ? `<button type="button" class="btn" data-pcm-plan data-testid="pcm-plan" ${cur.planning ? 'disabled' : ''} title="${t('project_conflict_map.the_supervisor_suggests_a_plan_for', { over, sharedLimit: pct(cur.perf.sharedLimit) })}">${cur.planning ? 'Asking…' : 'Ask for a plan'}</button>` : ''}
+      ${over ? `<button type="button" class="btn" data-pcm-plan data-testid="pcm-plan" ${cur.planning ? 'disabled' : ''} title="${t('project_conflict_map.the_supervisor_suggests_a_plan_for', { over, sharedLimit: pct(cur.perf.sharedLimit) })}">${cur.planning ? t('project_conflict_map.asking') : t('project_conflict_map.ask_for_a_plan')}</button>` : ''}
     </div>`;
   }
 
@@ -148,7 +148,7 @@
       return `${notGit}${mapNote}${p.project.isGit === false ? '' : `<div class="empty-state" data-testid="conflict-map-empty"><b>${t('project_conflict_map.no_runs_with_commits_on_this')}</b><p class="muted">${t('project_conflict_map.runs_count_once_their_work_is')}</p></div>`}`;
     }
     const of = `${p.empty ? 'No run with commits in this range: the counts are the saved conflict map\'s' : `Of ${plural(p.runsWithCommits, 'runs with commits')}, ${esc(p.from)} to ${esc(p.to)}; each run counts once per file`}`;
-    return `${notGit}${mapNote}<p class="muted small">${of}${cur.map?.runs ? ` · the conflict map covers the last ${plural(cur.map.runs, cur.map.source === 'git' ? 'commits of the branch' : 'finished runs')}` : ''}</p>
+    return `${notGit}${mapNote}<p class="muted small">${of}${cur.map?.runs ? t('project_conflict_map.the_conflict_map_covers_the_last', { runs: plural(cur.map.runs, cur.map.source === 'git' ? 'commits of the branch' : 'finished runs') }) : ''}</p>
       <div id="pcm-plan-box">${planHtml()}</div>
       <div class="card table-wrap">${tableHtml(rows, p.sharedLimit)}</div>`;
   }

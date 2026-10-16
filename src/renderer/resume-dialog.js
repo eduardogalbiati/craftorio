@@ -116,7 +116,7 @@ async function openResumeDialog(runId, opts = {}) {
   yes.onclick = async () => {
     yes.disabled = true;
     msg.className = 'small muted';
-    msg.textContent = 'Starting…';
+    msg.textContent = t('resume_dialog.starting');
     try {
       const confirmGate = gateBox()?.checked ? gateBox().dataset.gate : undefined;
       // images pasted into the instruction (#130), for the first resumed step

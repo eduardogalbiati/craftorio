@@ -71,7 +71,7 @@
     button.type = 'button';
     button.className = 'nav-item nav-findings hidden';
     button.dataset.testid = 'findings-button';
-    button.title = `Findings: freeze this view, mark what is wrong, save or file it (${M.SHORTCUT})`;
+    button.title = t('findings.findings_freeze_this_view_mark_what', { SHORTCUT: M.SHORTCUT });
     button.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="2.5" /><line x1="12" y1="1.5" x2="12" y2="5" /><line x1="12" y1="19" x2="12" y2="22.5" /><line x1="1.5" y1="12" x2="5" y2="12" /><line x1="19" y1="12" x2="22.5" y2="12" /></svg><span>${t('findings.findings')}</span>`;
     // not a screen of the sidebar: app.js's navigation never sees this click
     button.addEventListener('click', (e) => { e.stopPropagation(); open(); });
@@ -121,7 +121,7 @@
     el.dataset.testid = 'findings-overlay';
     el.setAttribute('role', 'dialog');
     el.setAttribute('aria-modal', 'true');
-    el.setAttribute('aria-label', 'Findings');
+    el.setAttribute('aria-label', t('findings.findings'));
     el.innerHTML = `
       <div class="fd-bar" data-testid="findings-toolbar" role="toolbar" aria-label="${t('findings.marking_tools')}">
         <div class="seg sm fd-tools">${TOOLS.map(([k, label]) => `<button type="button" data-fd-tool="${k}" data-testid="findings-tool-${k}" aria-pressed="false">${label}</button>`).join('')}</div>
@@ -435,7 +435,7 @@
     if (cur.saved) return cur.saved;
     const mine = cur;
     busy(true);
-    setStatus('busy', 'Saving…');
+    setStatus('busy', t('findings.saving'));
     try {
       const { image, marked } = await pictures();
       const marks = JSON.parse(JSON.stringify(mine.marks));
@@ -443,10 +443,10 @@
       const saved = await api.saveFinding({ image, marked, marks, note, context: mine.context });
       mine.saved = saved;
       if (cur !== mine) return saved;
-      setStatus('saved', `Saved to findings/${saved.id}`, `<button type="button" class="btn sm ghost" data-fd-open="${esc(saved.dir)}">${t('findings.open_folder')}</button>`);
+      setStatus('saved', t('findings.saved_to_findings_id', { id: saved.id }), `<button type="button" class="btn sm ghost" data-fd-open="${esc(saved.dir)}">${t('findings.open_folder')}</button>`);
       return saved;
     } catch (e) {
-      if (cur === mine) setStatus('error', `Not saved: ${errMsg(e)}`);
+      if (cur === mine) setStatus('error', t('findings.not_saved_e', { e: errMsg(e) }));
       throw e;
     } finally {
       if (cur === mine) busy(false);
@@ -471,17 +471,17 @@
     }
     const projectId = await projectOf();
     if (cur !== mine) return;
-    if (!projectId) { setStatus('error', 'Saved, not filed: pick a project first (the Product Owner files the issue in its repository).'); return; }
+    if (!projectId) { setStatus('error', t('findings.saved_not_filed_pick_a_project')); return; }
     busy(true);
-    setStatus('busy', 'Sending it to the Product Owner…');
+    setStatus('busy', t('findings.sending_it_to_the_product_owner'));
     try {
       const out = await api.fileFinding(saved.id, projectId);
       if (cur !== mine) return;
-      if (!out.ok) setStatus('error', `Saved, not filed: ${out.error || out.text || 'the Product Owner refused it'}`);
-      else if (out.status === 'sent') setStatus('sent', 'Sent to the Product Owner: it waits for your click in its drawer.');
-      else setStatus('filed', 'Filed', out.issueUrl ? ` <a href="${esc(out.issueUrl)}" target="_blank" rel="noopener">${esc(out.issueUrl)}</a>` : ` <span class="muted">${esc(cut(String(out.text || ''), 120))}</span>`);
+      if (!out.ok) setStatus('error', t('findings.saved_not_filed_value', { value: out.error || out.text || 'the Product Owner refused it' }));
+      else if (out.status === 'sent') setStatus('sent', t('findings.sent_to_the_product_owner_it'));
+      else setStatus('filed', t('findings.filed'), out.issueUrl ? ` <a href="${esc(out.issueUrl)}" target="_blank" rel="noopener">${esc(out.issueUrl)}</a>` : ` <span class="muted">${esc(cut(String(out.text || ''), 120))}</span>`);
     } catch (e) {
-      if (cur === mine) setStatus('error', `Saved, not filed: ${errMsg(e)}`);
+      if (cur === mine) setStatus('error', t('findings.saved_not_filed_e', { e: errMsg(e) }));
     } finally {
       if (cur === mine) busy(false);
     }
@@ -501,7 +501,7 @@
     el.dataset.empty = 'No findings yet: the Findings button saves them here.';
     el.innerHTML = list.map((f) => `
       <li class="fd-item" data-testid="settings-finding">
-        <span class="fd-item-note" title="${esc(f.note || '')}">${esc(f.note || '(no note)')}</span>
+        <span class="fd-item-note" title="${esc(f.note || '')}">${esc(f.note || t('findings.no_note'))}</span>
         <span class="badge fd-badge-${esc(f.status)}">${esc(STATUS[f.status] || f.status)}</span>
         ${f.issueUrl ? `<a class="small" href="${esc(f.issueUrl)}" target="_blank" rel="noopener">${t('findings.issue')}</a>` : ''}
         <span class="muted small mono" title="${esc(f.dir)}">${esc(f.id)}</span>

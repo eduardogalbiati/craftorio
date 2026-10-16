@@ -142,7 +142,7 @@
     renderRange();
     $a('#an-refresh').disabled = ax.loading;
     $a('#an-analyze').disabled = ax.analyzing || !ax.data;
-    $a('#an-analyze').textContent = ax.analyzing ? 'Analyzing…' : 'Ask the supervisor';
+    $a('#an-analyze').textContent = ax.analyzing ? t('analytics.analyzing') : t('analytics.ask_the_supervisor');
     $a('#an-sub').textContent = `${ax.scope === 'machine' ? 'Every Claude Code, Codex and Grok session on this machine' : 'The sessions of the orchestrator\'s runs'}, ${rangeText(r)}${ax.loading ? ' — loading…' : ''}`;
   }
 
@@ -203,12 +203,12 @@
     body.innerHTML = `
       ${missing ? `<div class="usage-unavailable">${I18n.t('analytics.no_cli_transcripts_found_on_this')}</div>` : ''}
       <div class="an-totals">
-        ${stat('Tokens', fmtTok(t.tokens.total), `${fmtNum(t.tokens.total)} tokens: input ${fmtNum(t.tokens.input)}, output ${fmtNum(t.tokens.output)}, cache read ${fmtNum(t.tokens.cache_read)}, cache write ${fmtNum(t.tokens.cache_write)}`)}
-        ${stat('Cost', fmtUsd(t.costUsd), t.unpricedTokens ? `${fmtNum(t.unpricedTokens)} tokens have no price (set per-model prices in Usage)` : '')}
-        ${stat('Sessions', fmtNum(t.sessions))}
-        ${stat('Cache hit rate', pct(t.cacheHitRate), 'cache read / (input + cache read + cache write)')}
-        ${stat('Active time', fmtDur(m.activeMs), `wall-clock ${fmtDur(m.durationMs)}; pauses over 5 minutes are idle time`)}
-        ${stat('Tool calls', val(m.toolCalls), m.toolCalls == null ? 'Recorded in the CLIs\' transcripts, which these sessions do not have on this machine' : '')}
+        ${stat(I18n.t('analytics.tokens'), fmtTok(t.tokens.total), I18n.t('analytics.total_tokens_input_input_output_output', { total: fmtNum(t.tokens.total), input: fmtNum(t.tokens.input), output: fmtNum(t.tokens.output), cache_read: fmtNum(t.tokens.cache_read), cache_write: fmtNum(t.tokens.cache_write) }))}
+        ${stat(I18n.t('analytics.cost'), fmtUsd(t.costUsd), t.unpricedTokens ? I18n.t('analytics.unpricedtokens_tokens_have_no_price_set', { unpricedTokens: fmtNum(t.unpricedTokens) }) : '')}
+        ${stat(I18n.t('analytics.sessions'), fmtNum(t.sessions))}
+        ${stat(I18n.t('analytics.cache_hit_rate'), pct(t.cacheHitRate), I18n.t('analytics.cache_read_input_cache_read_cache'))}
+        ${stat(I18n.t('analytics.active_time'), fmtDur(m.activeMs), I18n.t('analytics.wall_clock_durationms_pauses_over_5', { durationMs: fmtDur(m.durationMs) }))}
+        ${stat(I18n.t('analytics.tool_calls'), val(m.toolCalls), m.toolCalls == null ? I18n.t('analytics.recorded_in_the_clis_transcripts_which') : '')}
       </div>
       ${t.unpricedTokens ? `<p class="muted small an-note">${fmtTok(t.unpricedTokens)} ${I18n.t('analytics.tokens_have_no_cost_the_cli')}</p>` : ''}
       <div class="card an-card"><div class="row an-card-head"><h3>${I18n.t('analytics.tokens_per_day')}</h3><div class="an-legend">${Object.entries(PROVIDER_LABEL).map(([k, v]) => `<span><i style="background:${PROVIDER_COLOR[k]}"></i>${v}</span>`).join('')}</div></div>${dayChart(a.byDay)}</div>
@@ -224,7 +224,7 @@
           <span>${I18n.t('analytics.prompts')} <b>${val(m.userPrompts)}</b></span><span>${I18n.t('analytics.assistant_turns')} <b>${val(m.assistantTurns)}</b></span>
           <span>${I18n.t('analytics.files_touched')} <b>${val(m.filesTouched)}</b></span><span>${I18n.t('analytics.lines')} <b>${m.linesAdded == null ? '—' : `+${fmtNum(m.linesAdded)} −${fmtNum(m.linesRemoved)}`}</b></span>
           <span>${I18n.t('analytics.avg_session')} <b>${fmtDur(m.avgDurationMs)}</b> ${I18n.t('analytics.active')} <b>${fmtDur(m.avgActiveMs)}</b>)</span><span>${I18n.t('analytics.peak_context')} <b>${val(m.peakContext, fmtTok)}</b></span></div>
-          <h4 class="small muted">${I18n.t('analytics.complexity')}${m.avgComplexity != null ? ` (average ${Math.round(m.avgComplexity)}/100)` : ''}</h4>${stack(m.complexity, { low: 'var(--green)', medium: 'var(--yellow)', high: 'var(--red)' })}</div>
+          <h4 class="small muted">${I18n.t('analytics.complexity')}${m.avgComplexity != null ? I18n.t('analytics.average_avgcomplexity_100', { avgComplexity: Math.round(m.avgComplexity) }) : ''}</h4>${stack(m.complexity, { low: 'var(--green)', medium: 'var(--yellow)', high: 'var(--red)' })}</div>
         <div class="card an-card"><h3>${I18n.t('analytics.session_types')} <span class="muted small" title="${I18n.t('analytics.from_the_first_prompt_and_the')}">${I18n.t('analytics.heuristic')}</span></h3>${stack(m.intents, { coding: 'var(--green)', debugging: 'var(--red)', review: 'var(--purple)', docs: 'var(--yellow)', research: 'var(--accent)', other: 'var(--muted)' })}
           ${a.runs.total ? `<h4 class="small muted">${I18n.t('analytics.runs')}</h4><div class="u-breakdown an-facts"><span>${I18n.t('analytics.runs_2')} <b>${a.runs.total}</b></span>${Object.entries(a.runs.byStatus).map(([k, v]) => `<span>${esc(k)} <b>${v}</b></span>`).join('')}<span>${I18n.t('analytics.waiting')} <b>${fmtDur(a.runs.waitingMs)}</b></span><span>${I18n.t('analytics.supervisor_turns')} <b>${a.runs.supervisorTurns}</b></span></div>` : ''}</div>
       </div>
@@ -246,7 +246,7 @@
     return `<table class="u-table an-sessions"><thead><tr><th>${t('analytics.session')}</th><th>${t('analytics.project')}</th>${th('start', t('analytics.start'))}${th('active', t('analytics.active'))}<th class="num">${t('analytics.prompts_2')}</th>${th('tools', t('analytics.tools'))}<th class="num">${t('analytics.files')}</th>${th('tokens', t('analytics.tokens'))}<th class="num">${t('analytics.cache')}</th>${th('cost', t('analytics.cost'))}${th('complexity', t('analytics.complexity'))}</tr></thead><tbody>
       ${rows.map((s) => `<tr>
         <td class="an-title"><span class="pill" style="color:${PROVIDER_COLOR[s.provider]}">${esc(PROVIDER_LABEL[s.provider] || s.provider)}</span> <span title="${esc(s.title || s.id || '')}">${esc(s.title || (s.run ? `${s.run.workflow || 'run'} · ${s.run.agent || ''}` : s.id || '—'))}</span>
-          <div class="muted small">${esc(s.model || '')} · ${esc(s.intent)}${s.run ? ` · run ${esc(s.run.runId)}` : ''}</div></td>
+          <div class="muted small">${esc(s.model || '')} · ${esc(s.intent)}${s.run ? t('analytics.run_runid', { runId: esc(s.run.runId) }) : ''}</div></td>
         <td>${esc(s.project || '—')}</td>
         <td class="num nowrap">${s.start ? esc(dateOf(s.start)) : '—'}</td>
         <td class="num nowrap" title="${t('analytics.wall_clock_durationms', { durationMs: esc(fmtDur(s.durationMs)) })}">${fmtDur(s.activeMs)}</td>
@@ -325,7 +325,7 @@
       const d = a != null && b != null ? a - b : null;
       const cls = d && lower != null ? ((d < 0) === lower ? ' an-better' : ' an-worse') : '';
       const diff = d == null ? '—' : f === pct ? `${d > 0 ? '+' : ''}${Math.round(d * 100)} pts` : `${d > 0 ? '+' : ''}${fmtNum(d)}`;
-      return `<tr><td>${esc(label === 'Files edited by more than the limit' ? `Files edited by more than ${pct(limit)} of the runs` : label)}</td><td class="num">${b == null ? '—' : f(b)}</td><td class="num">${a == null ? '—' : f(a)}</td><td class="num${cls}">${diff}</td></tr>`;
+      return `<tr><td>${esc(label === 'Files edited by more than the limit' ? t('analytics.files_edited_by_more_than_limit', { limit: pct(limit) }) : label)}</td><td class="num">${b == null ? '—' : f(b)}</td><td class="num">${a == null ? '—' : f(a)}</td><td class="num${cls}">${diff}</td></tr>`;
     }).join('');
     return `<div class="card table-wrap an-compare"><table class="u-table"><thead><tr><th>${t('analytics.split_at_value', { value: esc(c.commit ? `${c.marker} (${c.commit.slice(0, 8)})` : c.marker) })} ${esc(dateOf(c.at))}</th><th class="num">${t('analytics.before')}</th><th class="num">${t('analytics.after')}</th><th class="num">${t('analytics.difference')}</th></tr></thead><tbody>${rows}</tbody></table></div>`;
   }
@@ -346,12 +346,12 @@
     }
     body.innerHTML = `${head}${notGit}
       <div class="an-totals">
-        ${stat('Runs', fmtNum(p.runs), `${p.runsWithCommits} with commits on ${p.project.name}`)}
-        ${stat('Busiest file', p.topFile ? pct(p.topFile.share) : '—', p.topFile ? `${p.topFile.file}: edited by ${pct(p.topFile.share)} of the runs with commits` : '')}
-        ${stat(`Files over ${pct(p.sharedLimit)}`, fmtNum(p.filesOverLimit), `Files edited by more than ${pct(p.sharedLimit)} of the runs with commits (the epic's target: none)`)}
-        ${stat('Runs that hit a conflict', `${pct(p.conflictShare)} <span class="muted small">(${p.conflictRuns})</span>`, 'Went through the conflict step (resolve_merge / resolve_conflict) or a failed gh pr merge / glab mr merge')}
-        ${stat('Their share of the cost', pct(p.conflictCostShare), `${fmtUsd(p.costUsd)} in total`)}
-        ${stat('Peak of runs at once', fmtNum(p.peak))}
+        ${stat(t('analytics.runs'), fmtNum(p.runs), t('analytics.runswithcommits_with_commits_on_name', { runsWithCommits: p.runsWithCommits, name: p.project.name }))}
+        ${stat(t('analytics.busiest_file'), p.topFile ? pct(p.topFile.share) : '—', p.topFile ? t('analytics.file_edited_by_share_of_the', { file: p.topFile.file, share: pct(p.topFile.share) }) : '')}
+        ${stat(t('analytics.files_over_sharedlimit', { sharedLimit: pct(p.sharedLimit) }), fmtNum(p.filesOverLimit), t('analytics.files_edited_by_more_than_sharedlimit', { sharedLimit: pct(p.sharedLimit) }))}
+        ${stat(t('analytics.runs_that_hit_a_conflict'), `${pct(p.conflictShare)} <span class="muted small">(${p.conflictRuns})</span>`, t('analytics.went_through_the_conflict_step_resolve'))}
+        ${stat(t('analytics.their_share_of_the_cost'), pct(p.conflictCostShare), t('analytics.costusd_in_total', { costUsd: fmtUsd(p.costUsd) }))}
+        ${stat(t('analytics.peak_of_runs_at_once'), fmtNum(p.peak))}
       </div>
       ${compareCard(p.compare, p.sharedLimit)}
       ${link}

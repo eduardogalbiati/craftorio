@@ -28,7 +28,7 @@
   function paintButtons() {
     for (const b of buttons()) {
       b.disabled = !!unavailable;
-      b.title = unavailable || b.dataset.title || 'Show this run in 3D';
+      b.title = unavailable || b.dataset.title || t('run3d.show_this_run_in_3d');
     }
   }
   function markUnavailable(reason) {
@@ -98,7 +98,7 @@
     el.tabIndex = -1;
     el.setAttribute('role', 'dialog');
     el.setAttribute('aria-modal', 'true');
-    el.setAttribute('aria-label', 'Run in 3D');
+    el.setAttribute('aria-label', t('run3d.run_in_3d'));
     el.dataset.testid = 'run3d';
     el.dataset.theme = Run3DTheme.load();
     el.innerHTML = '<div class="r3d-root"></div>';

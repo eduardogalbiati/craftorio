@@ -14,7 +14,7 @@ async function stopRun() {
   // its `type: workflow` steps' child runs in progress stop with it: always ask (#175)
   const kids = (r.childRuns || []).filter((c) => c.run_id && c.status === 'running');
   const children = kids.length ? `Its ${kids.length} child run${kids.length > 1 ? 's' : ''} in progress (${kids.map((c) => c.label || c.run_id).join(', ')}) will be stopped too; resuming this run resumes them. ` : '';
-  if ((state.settings.confirmStop || passed.length || kids.length) && !(await confirmDialog('Stop workflow', `${why}${children}Running sessions of ${runLabel(r)} will be closed. Stop this run?`, 'Stop'))) return;
+  if ((state.settings.confirmStop || passed.length || kids.length) && !(await confirmDialog(t('run_controls.stop_workflow'), t('run_controls.why_children_running_sessions_of_r', { why, children, r: runLabel(r) }), t('run_controls.stop')))) return;
   api.stopRun(r.id);
 }
 
@@ -23,8 +23,8 @@ async function stopRun() {
 async function stopRuns(runIds, what) {
   if (!runIds.length) return false;
   const many = runIds.length > 1;
-  if (!(await confirmDialog(`Stop ${what}`, `${many ? `Its ${runIds.length} runs` : 'Its run'} in progress (${runIds.join(', ')}) will be stopped and ${many ? 'their' : 'its'} running sessions closed. No gate is answered.`, 'Stop'))) return false;
-  for (const id of runIds) await api.stopRun(id).catch((e) => showToast('Could not stop the run', `${id}: ${errMsg(e)}`));
+  if (!(await confirmDialog(t('run_controls.stop_what', { what }), `${many ? `Its ${runIds.length} runs` : 'Its run'} in progress (${runIds.join(', ')}) will be stopped and ${many ? 'their' : 'its'} running sessions closed. No gate is answered.`, t('run_controls.stop')))) return false;
+  for (const id of runIds) await api.stopRun(id).catch((e) => showToast(t('run_controls.could_not_stop_the_run'), `${id}: ${errMsg(e)}`));
   return true;
 }
 
@@ -39,7 +39,7 @@ async function pauseRun() {
     if (r.status === 'running' && !r.pause) r.pause = { state: 'pausing', at: new Date().toISOString() };
     scheduleRender();
   } catch (e) {
-    showToast('Could not pause the run', errMsg(e));
+    showToast(t('run_controls.could_not_pause_the_run'), errMsg(e));
   }
 }
 
@@ -48,8 +48,8 @@ async function pauseRun() {
 function renderRunControls(r) {
   const running = r?.status === 'running' && !selectedView().past;
   $('#btn-stop').classList.toggle('hidden', !running);
-  $('#btn-stop').title = running ? `Stop ${runLabel(r)} (only this run)` : '';
+  $('#btn-stop').title = running ? t('run_controls.stop_r_only_this_run', { r: runLabel(r) }) : '';
   const pausable = running && !r.pause;
   $('#btn-pause').classList.toggle('hidden', !pausable);
-  $('#btn-pause').title = pausable ? `Pause ${runLabel(r)} once its agents finish their current turn: nothing is cut, Resume continues there` : '';
+  $('#btn-pause').title = pausable ? t('run_controls.pause_r_once_its_agents_finish', { r: runLabel(r) }) : '';
 }

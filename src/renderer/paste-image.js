@@ -14,6 +14,7 @@
 // it. Pure helpers (pastedFiles, checkImage, formatSize) are exported for the tests.
 // load: after voice.js
 (function (root) {
+  const t = (...a) => (typeof module === 'object' && module.exports ? require('../shared/i18n') : root.I18n)?.t(...a) ?? a[0];
   // the limits of a turn's attachments (src/engine/providers.js ATTACHMENT_LIMITS)
   const LIMITS = { count: 10, bytes: 10 * 1024 * 1024 };
   const TYPES = { 'image/gif': 'gif', 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
@@ -133,7 +134,7 @@
     const shown = ta._paste.items.filter((i) => i.dataUrl && i.status !== 'error');
     const index = shown.findIndex((i) => i.id === id);
     // every pasted image of the field, one item each (#182)
-    if (index >= 0 && root.ImageViewer) root.ImageViewer.open({ title: 'Pasted images', items: shown.map((i) => ({ title: i.name || 'Pasted image', images: [{ src: i.dataUrl, label: i.name }] })), index });
+    if (index >= 0 && root.ImageViewer) root.ImageViewer.open({ title: t('paste_image.pasted_images'), items: shown.map((i) => ({ title: i.name || t('paste_image.pasted_image'), images: [{ src: i.dataUrl, label: i.name }] })), index });
   }
 
   // ---- what the screens that submit a field call ----------------------------------------------

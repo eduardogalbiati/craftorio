@@ -33,7 +33,7 @@
     const { issue = {}, header = {}, newFiles = [], comparison = null } = preview || {};
     const total = header.total || 0;
     const cmp = comparison ? `<div class="pci-cmp" data-testid="city-impact-comparison">
-        <strong class="pci-rate">${comparison.hitRate == null ? 'Nothing was predicted' : `${pct(comparison.hitRate)} hit rate`}</strong>
+        <strong class="pci-rate">${comparison.hitRate == null ? t('project_city_impact.nothing_was_predicted') : t('project_city_impact.hitrate_hit_rate', { hitRate: pct(comparison.hitRate) })}</strong>
         ${SETS.map((s) => `<span data-testid="city-impact-${s.key}">${dot(s.colour)}${(comparison[s.key] || []).length} ${s.label}</span>`).join('')}
         ${preview.history && preview.history.length > 1 ? `<small class="muted">${t('project_city_impact.earlier_runs')} ${preview.history.slice(0, -1).map((h) => pct(h.hitRate)).join(', ')}</small>` : ''}
       </div>` : '';
@@ -142,7 +142,7 @@
       const items = (stage.items || []).map((it, i) => ({ id: String(it.id || it.number || i), title: it.title || `#${it.number}`, files: pathsOf(expected(it)) }));
       const foot = CityImpact.stageFootprint(items);
       const titles = Object.fromEntries(items.map((it) => [it.id, it.title]));
-      legend = [...items.map((it) => ({ colour: foot.colours[it.id], label: it.title })), ...(foot.conflicts.length ? [{ colour: CityImpact.CONFLICT_COLOUR, label: 'Changed by two items' }] : [])];
+      legend = [...items.map((it) => ({ colour: foot.colours[it.id], label: it.title })), ...(foot.conflicts.length ? [{ colour: CityImpact.CONFLICT_COLOUR, label: t('project_city_impact.changed_by_two_items') }] : [])];
       const onMap = new Set((layout()?.buildings || []).map((b) => b.path));
       const total = Object.keys(foot.highlight).filter((p) => onMap.has(p)).length;
       return { html: stageMarkup({ name: stage.name || '', items, conflicts: foot.conflicts, titles, total }), highlight: foot.highlight };
@@ -160,7 +160,7 @@
         return;
       }
       const close = `<button type="button" class="link-btn" data-pci-close data-testid="city-impact-close">${t('common.close')}</button>`;
-      const head = `<div class="pci-head"><b>${request.stage ? 'Stage footprint' : 'Impact preview'}</b>${close}</div>`;
+      const head = `<div class="pci-head"><b>${request.stage ? t('project_city_impact.stage_footprint') : t('project_city_impact.impact_preview')}</b>${close}</div>`;
       if (error) { el.innerHTML = `${head}<p class="small" role="alert">${t('project_city_impact.could_not_read_the_preview')} ${esc(error)}</p>`; return; }
       if (!data || !layout()) { el.innerHTML = `${head}<p class="muted small">${t('project_city_impact.reading_the_issue_s_expected_files')}</p>`; return; }
       const view = request.stage ? stageView() : issueView();

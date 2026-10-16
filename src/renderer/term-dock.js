@@ -15,7 +15,7 @@ function termButtons(kind, title, blocked = '') {
   const dis = blocked ? 'disabled' : '';
   const ext = api.externalTerminal || { available: true };
   const extBlocked = blocked || (ext.available ? '' : ext.reason || 'No terminal window available');
-  return `<span class="term-btns"><button class="btn sm ghost" data-term="${kind}" ${dis} title="${esc(t)}">${label}</button><button class="btn sm ghost term-ext" data-term="${kind}" data-ext="1" ${extBlocked ? 'disabled' : ''} title="${esc(extBlocked || `${label} in an external window`)}">↗</button></span>`;
+  return `<span class="term-btns"><button class="btn sm ghost" data-term="${kind}" ${dis} title="${esc(t)}">${label}</button><button class="btn sm ghost term-ext" data-term="${kind}" data-ext="1" ${extBlocked ? 'disabled' : ''} title="${esc(extBlocked || I18n.t('term_dock.label_in_an_external_window', { label }))}">↗</button></span>`;
 }
 
 // Runs a terminal button: embedded tab or external window. Returns the inline message.
@@ -101,7 +101,7 @@ function setDockHeight(h, persist) {
 function setDockCollapsed(c) {
   dock.collapsed = c;
   $('#term-dock').classList.toggle('collapsed', c);
-  $('#btn-term-collapse').title = c ? 'Expand the terminal panel' : 'Collapse the terminal panel';
+  $('#btn-term-collapse').title = c ? t('term_dock.expand_the_terminal_panel') : t('term_dock.collapse_the_terminal_panel');
   setDockHeight(dock.height, false);
   if (!c) requestAnimationFrame(() => { fitActive(); dock.active?.term.focus(); });
 }
@@ -244,7 +244,7 @@ async function copyFromTerm(tab) {
   if (!text) return;
   tab.term.clearSelection();
   const flash = tab.flash || flashTermMsg;
-  try { await api.clipboardWrite(text); flash('Copied.'); } catch (e) { flash(errMsg(e), true); }
+  try { await api.clipboardWrite(text); flash(t('term_dock.copied')); } catch (e) { flash(errMsg(e), true); }
 }
 
 async function pasteIntoTerm(tab) {
@@ -334,7 +334,7 @@ async function popOutActive() {
   if (!t) return;
   try {
     await api.openSessionTerminal(t.sessionId, t.kind, t.runId);
-    flashTermMsg('Opened in an external window.');
+    flashTermMsg(I18n.t('term_dock.opened_in_an_external_window'));
   } catch (e) {
     flashTermMsg(errMsg(e), true);
   }

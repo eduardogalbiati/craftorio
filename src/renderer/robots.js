@@ -138,7 +138,7 @@
     // A mirrored robot counter-flips its text and emblems so they still read the right way.
     const unflip = v.mirror ? 'scale(-1,1)' : '';
     if (v.name && !v.noBase)
-      s += `<text transform="${base.L}${v.mirror ? ' translate(150,0) scale(-1,1)' : ''}" x="75" y="12" font-family="Arial Black,Arial,sans-serif" font-weight="900" font-size="10" fill="${lighten(v.base, .55)}" text-anchor="middle" letter-spacing="2">${v.name.toUpperCase()}</text>`;
+      s += `<text transform="${base.L}${v.mirror ? t('robots.translate_150_0_scale_1_1') : ''}" x="75" y="12" font-family="Arial Black,Arial,sans-serif" font-weight="900" font-size="10" fill="${lighten(v.base, .55)}" text-anchor="middle" letter-spacing="2">${v.name.toUpperCase()}</text>`;
     const o = { outline: ol, shade: v.shade };
     s += box(48, 78, 16, 22, 22, 28, v.limb, o).svg;
     s += box(80, 78, 16, 22, 22, 28, v.limb, o).svg;

@@ -17,6 +17,7 @@
 // Browser: window.Select; Node: module.exports.
 // load: early (the screens' panels are built with it as they load)
 (function (root) {
+  const t = (...a) => (typeof module === 'object' && module.exports ? require('../shared/i18n') : root.I18n)?.t(...a) ?? a[0];
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
   function optionHtml(o, value) {
@@ -127,18 +128,18 @@
     search.type = 'search';
     search.className = 'sel-search';
     search.dataset.testid = 'select-search';
-    search.placeholder = 'Search';
-    search.setAttribute('aria-label', `Search ${sel.getAttribute('aria-label') || 'the options'}`);
+    search.placeholder = t('select.search');
+    search.setAttribute('aria-label', t('select.search_value', { value: sel.getAttribute('aria-label') || 'the options' }));
     search.setAttribute('aria-controls', 'sel-listbox');
     search.autocomplete = 'off';
     const list = document.createElement('div');
     list.className = 'sel-list';
     list.id = 'sel-listbox';
     list.setAttribute('role', 'listbox');
-    list.setAttribute('aria-label', sel.getAttribute('aria-label') || 'Options');
+    list.setAttribute('aria-label', sel.getAttribute('aria-label') || t('select.options'));
     const empty = document.createElement('div');
     empty.className = 'sel-empty small muted';
-    empty.textContent = 'No option matches the search.';
+    empty.textContent = t('select.no_option_matches_the_search');
     empty.hidden = true;
     box.append(search, list, empty);
     buildList(sel, list);

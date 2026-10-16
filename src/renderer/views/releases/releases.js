@@ -28,7 +28,7 @@
     const failed = Number(o.failed) || 0;
     const ok = o.status ? o.status === 'pass' : !failed;
     const counts = o.passed != null ? ` ${esc(o.passed)} passed${failed ? `, ${failed} failed` : ''}` : '';
-    return `<span class="badge ${ok ? 'rel-pass' : 'warn'}" title="${esc(`${name} suite: ${ok ? 'green' : 'red'} when the release shipped`)}">${name} <span aria-hidden="true">${ok ? '✔' : '✖'}</span>${counts}</span>`;
+    return `<span class="badge ${ok ? 'rel-pass' : 'warn'}" title="${esc(I18n.t('releases.name_suite_value_when_the_release', { name, value: ok ? 'green' : 'red' }))}">${name} <span aria-hidden="true">${ok ? '✔' : '✖'}</span>${counts}</span>`;
   }
 
   // The next release: what it holds, its notes (editable until Ship) and the start of its release run.
@@ -38,7 +38,7 @@
     const what = [plural(n.issues?.length || 0, 'issue'), `${plural(Number(n.commits) || 0, 'commit')} not pushed`, plural(count(n.runs), 'run'), ...(n.cost ? [usd(n.cost)] : [])];
     const version = n.version || d.line?.name || '';
     const going = d.run
-      ? `<span class="badge live">${d.run.waiting ? 'waiting for your Ship' : 'release run in progress'}${d.run.mock ? ' · simulated' : ''}</span>
+      ? `<span class="badge live">${d.run.waiting ? t('releases.waiting_for_your_ship') : t('releases.release_run_in_progress')}${d.run.mock ? t('releases.simulated_2') : ''}</span>
           <button class="btn sm" type="button" data-rel-run="${esc(d.run.runId)}">${t('releases.open_the_run')}</button>`
       : `<label class="check small dev-only" title="${t('releases.developer_mode_the_run_is_simulated')}"><input type="checkbox" id="rel-simulate"${state.simulationOnly ? ' checked' : ''} /><span>${t('releases.simulated')}</span></label>
           <button class="btn sm primary" type="button" data-rel-start title="${t('releases.runs_the_whole_unit_suite_and')}">${t('releases.run_the_release_checks')}</button>`;
@@ -141,7 +141,7 @@
   async function start() {
     const simulated = !!$('#rel-simulate')?.checked && devMode();
     const version = $('#rel-version').value.trim();
-    if (!simulated && !await confirmDialog('Run the release checks', 'The whole unit suite and the whole E2E suite run on the local base, with no agent while they are green; a red suite calls the developer, which uses your CLI subscription and costs money. Nothing is pushed until you choose Ship at its gate.', 'Run')) return;
+    if (!simulated && !await confirmDialog(t('releases.run_the_release_checks'), t('releases.the_whole_unit_suite_and_the'), t('releases.run'))) return;
     try {
       const { runId } = await api.startRelease(rel.projectId, version, simulated);
       window.showRun(runId);

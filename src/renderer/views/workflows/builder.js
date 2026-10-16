@@ -60,7 +60,7 @@
     $('#wb-description').value = b.spec.description;
     $('#wb-category').value = b.spec.category;
     for (const sel of ['#wb-name', '#wb-description', '#wb-category']) $(sel).disabled = !editable();
-    $('#wb-file').textContent = b.file ? b.file : 'new workflow (not saved yet)';
+    $('#wb-file').textContent = b.file ? b.file : t('builder.new_workflow_not_saved_yet');
     $('#wb-dirty').classList.toggle('hidden', !b.dirty);
     $('#wb-save').classList.toggle('hidden', !editable());
     $('#wb-clone').classList.toggle('hidden', !b.file);
@@ -69,8 +69,8 @@
     const banner = $('#wb-banner');
     const why = b.problems.length ? ` Not drawn by the builder yet: ${b.problems.slice(0, 4).join(', ')}${b.problems.length > 4 ? ` and ${b.problems.length - 4} more` : ''}.` : '';
     banner.textContent = b.mode === 'readonly'
-      ? `Bundled with the app: read-only. Clone it to make your own copy you can change.${why}`
-      : b.mode === 'fixed' ? `You can change its agents and prompts here; its steps, loops and branches are edited in the YAML.${why}` : '';
+      ? t('builder.bundled_with_the_app_read_only', { why })
+      : b.mode === 'fixed' ? t('builder.you_can_change_its_agents_and', { why }) : '';
     banner.classList.toggle('hidden', b.mode === 'full');
     renderOpenList();
     renderCanvas();
@@ -107,7 +107,7 @@
     const text = (x) => (x.kind === 'gate' ? x.message : x.brief) || '';
     $('#wb-canvas').innerHTML = `<div class="wb-endpoint" title="${t('builder.the_run_starts_here')}">${t('builder.start')}</div>` + steps.map((s, i) => `
       ${slot(i)}
-      <button type="button" class="wb-desk${i === b.sel ? ' active' : ''}${s.kind === 'gate' ? ` gate ${s.reviewer === 'ai' ? 'gate-ai' : 'gate-human'}` : ''}" data-i="${i}" title="${esc(s.kind === 'gate' ? (s.reviewer === 'ai' ? 'AI check: an agent approves or sends the work back' : 'Human approval: a person approves or rejects') : 'Agent desk')}">
+      <button type="button" class="wb-desk${i === b.sel ? ' active' : ''}${s.kind === 'gate' ? ` gate ${s.reviewer === 'ai' ? 'gate-ai' : 'gate-human'}` : ''}" data-i="${i}" title="${esc(s.kind === 'gate' ? (s.reviewer === 'ai' ? t('builder.ai_check_an_agent_approves_or') : t('builder.human_approval_a_person_approves_or')) : t('builder.agent_desk'))}">
         <span class="wb-art">${deskSvg(s)}</span>
         <span class="wb-info">
           <span class="wb-cap"><b title="${esc(s.id)}">${esc(s.display || readable(s.id))}</b>${back(s)}</span>
@@ -140,10 +140,10 @@
         ${b.spec.fixed && name ? displayField('wb-agent-display', 'Agent display name', a.display, name) : ''}
         ${a.source === 'agent' ? `<div class="field"><label>${I18n.t('builder.imported_agent')}</label>
           <div class="wb-imported">${a.agentId ? `<span class="wb-imported-avatar" aria-hidden="true">${Robots.svg(robotOf(a), 'idle', { bubble: false, plaque: '' })}</span><b>${esc(a.name || a.agentId)}</b>` : `<span class="muted small">${I18n.t('builder.none_yet')}</span>`}
-            <span class="spacer"></span><button type="button" class="btn ghost sm" id="wb-agent-btn">${a.agentId ? 'Change…' : 'Choose an agent…'}</button></div>
+            <span class="spacer"></span><button type="button" class="btn ghost sm" id="wb-agent-btn">${a.agentId ? I18n.t('builder.change') : I18n.t('builder.choose_an_agent')}</button></div>
           <div class="hint">${I18n.t('builder.its_look_prompt_and_skills_were')}</div></div>` : ''}
         ${a.source === 'random' ? `<p class="muted small">${I18n.t('builder.one_of_your_agents_agents_menu')}</p>` : ''}
-        <div class="field"><label for="wb-system">${a.source === 'random' ? 'Extra instructions (optional)' : 'Who the agent is (its prompt)'}</label>
+        <div class="field"><label for="wb-system">${a.source === 'random' ? I18n.t('builder.extra_instructions_optional') : I18n.t('builder.who_the_agent_is_its_prompt')}</label>
           <textarea id="wb-system" rows="4" placeholder="${I18n.t('builder.e_g_you_are_a_senior')}">${esc(a.system_prompt)}</textarea></div>
         <div class="field"><label>${I18n.t('builder.skills')}</label>
           <div class="wb-skills">${(a.skills || []).map((k) => `<span class="badge mono">${esc(k)}</span>`).join('') || `<span class="muted small">${I18n.t('builder.none')}</span>`}</div>
@@ -153,7 +153,7 @@
           ${t.provider ? '' : `<div class="field"><label for="wb-provider">${I18n.t('builder.cli')}</label><select id="wb-provider">${Object.values(PROVIDERS).map((p) => opt(p.key, p.label, a.provider)).join('')}</select></div>`}
           ${t.model ? '' : `<div class="field"><label for="wb-model">${I18n.t('builder.model')}</label><select id="wb-model">${models.map((m) => opt(m, m, a.model)).join('')}</select></div>`}
         </div>`}
-        ${t.effort ? fixedText('Effort', t.effort) : `<div class="field"><label>${I18n.t('builder.effort')}</label><div class="seg sm" id="wb-effort">${EFFORTS.map((e) => `<button type="button" data-effort="${e}" class="${(a.effort || 'default') === e ? 'active' : ''}" title="${e === 'default' ? 'The CLI\'s own default: no effort flag' : ''}">${e}</button>`).join('')}</div></div>`}`;
+        ${t.effort ? fixedText('Effort', t.effort) : `<div class="field"><label>${I18n.t('builder.effort')}</label><div class="seg sm" id="wb-effort">${EFFORTS.map((e) => `<button type="button" data-effort="${e}" class="${(a.effort || 'default') === e ? 'active' : ''}" title="${e === 'default' ? I18n.t('builder.the_cli_s_own_default_no') : ''}">${e}</button>`).join('')}</div></div>`}`;
   }
   function bindAgentFields(a) {
     const box = $('#wb-panel');
@@ -203,12 +203,12 @@
       const ai = s.reviewer === 'ai';
       const targets = b.spec.steps.slice(0, i).filter((x) => x.kind === 'agent');
       const who = structural() ? `<div class="field"><label>${t('builder.who_approves')}</label><div class="seg sm" id="wb-reviewer">${[['human', 'A person'], ['ai', 'An AI agent']].map(([k, l]) => `<button type="button" data-reviewer="${k}" class="${(s.reviewer || 'human') === k ? 'active' : ''}">${l}</button>`).join('')}</div></div>` : '';
-      box.innerHTML = `<h3>${ai ? 'AI check' : 'Human approval'}</h3>
+      box.innerHTML = `<h3>${ai ? t('builder.ai_check') : t('builder.human_approval')}</h3>
         <p class="muted small">${ai
-          ? 'An agent checks the previous desk\'s answer against your criteria and answers approved or not, with notes. It runs on its own: no one is asked.'
-          : 'The run waits here until a person approves. Nothing automatic crosses it, the supervisor included.'}</p>
+          ? t('builder.an_agent_checks_the_previous_desk')
+          : t('builder.the_run_waits_here_until_a')}</p>
         ${idField}${flow}${who}
-        <div class="field"><label for="wb-message">${ai ? 'What the agent checks (its criteria)' : 'What the approver should check'}</label><textarea id="wb-message" rows="5" placeholder="${ai ? 'e.g. The change has tests for the new behavior and no TODOs are left.' : ''}">${esc(s.message)}</textarea></div>
+        <div class="field"><label for="wb-message">${ai ? t('builder.what_the_agent_checks_its_criteria') : t('builder.what_the_approver_should_check')}</label><textarea id="wb-message" rows="5" placeholder="${ai ? t('builder.e_g_the_change_has_tests') : ''}">${esc(s.message)}</textarea></div>
         ${structural() ? `<div class="field"><label for="wb-reject">${t('builder.if_rejected')}</label><select id="wb-reject">${opt('stop', ai ? 'Stop the run (failed)' : 'Stop the run (cancelled)', s.onReject)}${targets.map((t) => opt(t.id, `Send back to "${t.id}" with the ${ai ? 'agent\'s' : 'approver\'s'} notes`, s.onReject)).join('')}</select></div>` : ''}
         ${ai && structural() && s.onReject && s.onReject !== 'stop' ? `<div class="field"><label for="wb-rounds">${t('builder.rounds')}</label><input type="number" id="wb-rounds" min="1" max="20" value="${esc(s.maxRounds ?? 3)}" />
           <div class="hint">${t('builder.how_many_times_it_can_send')}</div></div>` : ''}
@@ -232,7 +232,7 @@
       const sharedWith = b.spec.fixed ? b.spec.steps.filter((x) => x !== s && x.agentNames?.includes(name)).map((x) => x.id) : [];
       box.innerHTML = `<h3>${t('builder.desk_2')}</h3>
         ${idField}${flow}
-        <div class="field"><label for="wb-brief">${structural() ? 'What the agent does in this step' : 'Step prompt'}</label><textarea id="wb-brief" rows="${structural() ? 4 : 8}" class="${structural() ? '' : 'mono small'}" placeholder="${t('builder.e_g_read_the_task_and')}">${esc(s.brief)}</textarea>
+        <div class="field"><label for="wb-brief">${structural() ? t('builder.what_the_agent_does_in_this') : t('builder.step_prompt')}</label><textarea id="wb-brief" rows="${structural() ? 4 : 8}" class="${structural() ? '' : t('builder.mono_small')}" placeholder="${t('builder.e_g_read_the_task_and')}">${esc(s.brief)}</textarea>
           ${structural() ? `<label class="check small wb-ctx"><input type="checkbox" id="wb-context" ${s.context !== false ? 'checked' : ''} /><span>${t('builder.also_give_it_the_run_s')}</span></label>` : ''}</div>
         ${s.agentNames?.length > 1 ? `<div class="field"><label for="wb-pick">${t('builder.agent_length_in_parallel', { length: s.agentNames.length })}</label><select id="wb-pick">${s.agentNames.map((n, k) => opt(String(k), n, String(s.pick || 0))).join('')}</select></div>` : ''}
         ${agentFields(a, { sources, name, sharedWith })}
@@ -307,8 +307,8 @@
         <label class="ag-skill${picked.has(s.id) ? ' on' : ''}">
           <input type="checkbox" data-skill="${esc(s.id)}"${picked.has(s.id) ? ' checked' : ''} />
           <span class="ag-skill-text"><span class="ag-skill-name"><b class="mono">${esc(s.name)}</b>${s.missing ? `<span class="badge warn">${s.id.includes('{{') ? 'template' : 'missing'}</span>` : ''}</span>
-            <span class="muted small">${esc(s.missing ? (s.id.includes('{{') ? 'Chosen from the run\'s inputs.' : 'Not in the workspace.') : s.description || '')}</span></span>
-        </label>`).join('') : `<p class="muted small">${all.length ? 'No skill matches the filter.' : 'No skills in the workspace yet (Skills menu).'}</p>`;
+            <span class="muted small">${esc(s.missing ? (s.id.includes('{{') ? t('builder.chosen_from_the_run_s_inputs') : t('builder.not_in_the_workspace')) : s.description || '')}</span></span>
+        </label>`).join('') : `<p class="muted small">${all.length ? t('builder.no_skill_matches_the_filter') : t('builder.no_skills_in_the_workspace_yet')}</p>`;
     };
     $('#wb-skill-search').value = '';
     $('#wb-skill-search').oninput = (e) => { q = e.target.value.trim().toLowerCase(); draw(); };
@@ -373,7 +373,7 @@
 
   // ---------- open / new / save / clone ----------
   async function leaveOk() {
-    return !b.dirty || confirmDialog('Unsaved changes', 'Discard the changes to this workflow?', 'Discard');
+    return !b.dirty || confirmDialog(t('builder.unsaved_changes'), t('builder.discard_the_changes_to_this_workflow'), t('builder.discard'));
   }
 
   async function startNew() {
@@ -389,7 +389,7 @@
       Object.assign(b, { file: r.file, mode: r.mode, problems: r.problems || [], spec: r.spec, sel: 0, dirty: false });
       render();
     } catch (e) {
-      showToast('Cannot open in the builder', errMsg(e));
+      showToast(t('builder.cannot_open_in_the_builder'), errMsg(e));
       renderOpenList();
     }
   }
@@ -406,7 +406,7 @@
       b.dirty = false;
       state.workflows = await api.listWorkflows();
       render();
-      showToast('Workflow saved', `${r.file} in the workflows folder`);
+      showToast(t('builder.workflow_saved'), t('builder.file_in_the_workflows_folder', { file: r.file }));
       return true;
     } catch (e) {
       $('#wb-error').textContent = errMsg(e);
@@ -422,7 +422,7 @@
       const r = await api.cloneWorkflow(b.file);
       state.workflows = await api.listWorkflows();
       await open(r.file, { force: true });
-      showToast('Workflow cloned', `${r.file}: your own copy, you can change it`);
+      showToast(t('builder.workflow_cloned'), t('builder.file_your_own_copy_you_can', { file: r.file }));
     } catch (e) {
       $('#wb-error').textContent = errMsg(e);
     }

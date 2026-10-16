@@ -122,8 +122,8 @@
     const err = $a('#arena-error');
     err.textContent = '';
     const inputs = readSetup();
-    if (!inputs.task) { err.textContent = 'Write the request first.'; return; }
-    if (setup.contenders.length < MIN) { err.textContent = `Pick at least ${MIN} models.`; return; }
+    if (!inputs.task) { err.textContent = t('arena.write_the_request_first'); return; }
+    if (setup.contenders.length < MIN) { err.textContent = t('arena.pick_at_least_min_models', { MIN }); return; }
     // simulation only in developer mode (the checkbox is hidden otherwise); checked without it fails
     let mock;
     try { mock = wantsSimulation($a('#arena-mock')); } catch (e) { err.textContent = e.message; return; }
@@ -165,10 +165,10 @@
     const sel = $a('#arena-project');
     const current = sel.value || saved.project || '';
     sel.innerHTML = `<option value="">${t('arena.no_project_the_request_only')}</option>` + projects.map((p) =>
-      `<option value="${esc(p.id)}"${p.exists ? '' : ' disabled'}${p.id === current && p.exists ? ' selected' : ''}>${esc(p.name)}${p.exists ? '' : ' (folder missing)'}</option>`).join('');
+      `<option value="${esc(p.id)}"${p.exists ? '' : ' disabled'}${p.id === current && p.exists ? ' selected' : ''}>${esc(p.name)}${p.exists ? '' : t('arena.folder_missing')}</option>`).join('');
     const hint = () => {
       const p = projects.find((x) => x.id === sel.value);
-      $a('#arena-project-hint').textContent = p ? `${p.folder}: read-only for the models; the final document stays in the run folder (workspace).` : 'The models read its files (read-only); the final document stays in the run folder (workspace).';
+      $a('#arena-project-hint').textContent = p ? t('arena.folder_read_only_for_the_models', { folder: p.folder }) : t('arena.the_models_read_its_files_read_2');
     };
     sel.onchange = hint;
     hint();
@@ -258,7 +258,7 @@
       if (i >= 0) attachments[i] = item; else attachments.push(item);
     }
     renderAttachments();
-    if (problems.length) err.textContent = `Not attached: ${problems.join('; ')}.`;
+    if (problems.length) err.textContent = t('arena.not_attached_value', { value: problems.join('; ') });
   }
   const attachmentsInput = () => attachments.map((a) => `${ATTACH_HEAD(a.name)}\n${a.text.trim()}`).join('\n\n');
   // the run's attachments input back into { name, text } (chat and replays)
@@ -285,8 +285,8 @@
     $a('#arena-checks').innerHTML = '';
     $a('#arena-cast').innerHTML = '';
     $a('#arena-interventions').textContent = '0/6';
-    $a('#arena-chat-title').textContent = 'AI Arena';
-    $a('#arena-chat-status').textContent = live ? 'starting…' : 'loading…';
+    $a('#arena-chat-title').textContent = t('arena.ai_arena');
+    $a('#arena-chat-status').textContent = live ? t('arena.starting') : t('arena.loading');
     $a('#arena-stop').classList.toggle('hidden', !live);
     setSuperPill('watch', 'watching');
     renderPhases();
@@ -314,7 +314,7 @@
       `<span class="duo-cast" title="${esc(roles[r].name)}"><span class="duo-robot head" data-arena-cast="${esc(r)}"></span><span data-arena-cast-state="${esc(r)}">${t('arena.idle')}</span></span>`).join('');
     Object.keys(roles).forEach((r) => setCast(r, roles[r].state || 'idle', true));
     const n = contenders().length;
-    $a('#arena-chat-title').textContent = n ? `AI Arena · ${n} models` : 'AI Arena';
+    $a('#arena-chat-title').textContent = n ? t('arena.ai_arena_n_models', { n }) : t('arena.ai_arena');
   }
 
   function setCast(role, st, force) {
@@ -419,7 +419,7 @@
     const tabs = [
       ...chat.attachments.map((a, i) => ({ id: `a:${i}`, role: null, label: `📎 ${a.name}` })),
       ...contenders().filter((r) => chat.proposals[r] != null).map((r) => ({ id: `p:${r}`, role: r, label: roles[r].name })),
-      ...chat.finals.map((_, i) => ({ id: `f:${i}`, role: 'synthesizer', label: `Final v${i + 1}` })),
+      ...chat.finals.map((_, i) => ({ id: `f:${i}`, role: 'synthesizer', label: t('arena.final_v_value', { value: i + 1 }) })),
     ];
     $a('#arena-doc-tabs').innerHTML = tabs.map((t) => `<button type="button" ${styleOf(t.role)} class="${t.id === chat.docTab ? 'active' : ''}" data-tab="${esc(t.id)}" title="${esc(t.label)}">${esc(t.label)}</button>`).join('');
     const [kind, key] = String(chat.docTab || '').split(/:(.*)/);
@@ -524,7 +524,7 @@
     if (id === 'compete') note(`<b>${t('arena.compete')}</b> ${t('arena.length_models_write_their_own_proposal', { length: agents.length })}`);
     if (id === 'critique') {
       const map = chat.order.map((a, k) => `${k + 1} = ${esc(roles[a]?.name || a)}`).join(', ');
-      note(`<b>${t('arena.blind_critique')}</b> ${t('arena.each_model_scores_the_others_proposals')}${map ? ` (only you know: ${map})` : ''}`);
+      note(`<b>${t('arena.blind_critique')}</b> ${t('arena.each_model_scores_the_others_proposals')}${map ? t('arena.only_you_know_map', { map }) : ''}`);
     }
     if (id === 'synthesize' && ev.visit > 1) note(`<b>${t('arena.new_synthesis')}</b> · v${ev.visit}`);
     agents.forEach((a) => setWorking(a, id === 'compete' ? 'thinking' : 'reading'));
@@ -672,7 +672,7 @@
       chat.finals.push(String(o.text || ''));
       const v = chat.finals.length;
       showDoc(`f:${v - 1}`);
-      message('synthesizer', `<p class="duo-msg-text">${v === 1 ? 'I merged the proposals: the best one is the base, with the best ideas of the others grafted in (see the appendix for what came from where).' : 'Here is the new version.'}</p>
+      message('synthesizer', `<p class="duo-msg-text">${v === 1 ? t('arena.i_merged_the_proposals_the_best') : t('arena.here_is_the_new_version')}</p>
         ${docCard('synthesizer', `f:${v - 1}`, `final.md · v${v}`, o.text)}`, ev.ts, 'synthesize:synthesizer');
       addCheck('ok', `Final document v${v}`);
     }
@@ -682,7 +682,7 @@
       setCast('verifier', pass ? 'done' : 'idle');
       const issues = (o.issues || []).map((x) => `<li>${esc(typeof x === 'string' ? x : JSON.stringify(x))}</li>`).join('');
       message('verifier', `${pass ? `<div class="duo-ready">${t('arena.pass')}</div>` : `<div class="duo-not-ready">${t('arena.issues_found')}</div>`}
-        ${!pass && issues ? `<ul class="ar-issues">${issues}</ul>` : ''}<p class="muted small">${pass ? 'The final document is consistent with the skill and the proposals.' : 'The synthesizer fixes them once; what is still open goes to you.'}</p>`, ev.ts, 'verify:verifier');
+        ${!pass && issues ? `<ul class="ar-issues">${issues}</ul>` : ''}<p class="muted small">${pass ? t('arena.the_final_document_is_consistent_with') : t('arena.the_synthesizer_fixes_them_once_what')}</p>`, ev.ts, 'verify:verifier');
       addCheck(pass ? 'ok' : 'warn', pass ? 'Verifier: pass' : `Verifier: ${(o.issues || []).length} issue(s)`);
     }
   }
@@ -695,13 +695,13 @@
     renderWorking();
     Object.keys(roles).forEach((r) => setCast(r, 'waiting'));
     const off = chat.live ? '' : ' disabled';
-    const choices = ev.choices || [{ id: true, label: 'Approve' }, { id: false, label: 'Reject' }];
+    const choices = ev.choices || [{ id: true, label: t('arena.approve') }, { id: false, label: t('arena.reject') }];
     const buttons = choices.map((c, i) => `<button type="button" class="btn sm ${i === 0 ? 'primary' : ''}" data-approval="${esc(ev.approval_id)}" data-choice="${esc(c.id)}"${off}>${esc(c.label)}</button>`).join('');
     const field = ev.feedback ? `<label class="duo-ask-label">${esc(ev.feedback.label)}</label>
       <textarea class="duo-ask-text" rows="2" placeholder="${esc(ev.feedback.placeholder)}"${off}></textarea>` : '';
     chat.labels = Object.fromEntries(choices.map((c) => [String(c.id), c.label]));
     message('supervisor', `<div class="duo-ask" data-gate="${esc(ev.approval_id)}"><p class="duo-msg-text">${esc(ev.message)}</p>${field}<div class="row">${buttons}</div></div>`, ev.ts);
-    $a('#arena-chat-status').textContent = 'The supervisor is waiting for you';
+    $a('#arena-chat-status').textContent = t('arena.the_supervisor_is_waiting_for_you');
     if (chat.live) document.querySelector(`#arena-messages [data-gate="${ev.approval_id}"] textarea`)?.focus({ preventScroll: true });
   }
 
@@ -737,12 +737,12 @@
       Object.keys(roles).forEach((r) => setCast(r, 'done'));
       setSuperPill('success', 'done');
       addCheck('ok', 'Run finished');
-      $a('#arena-chat-status').textContent = 'Finished';
+      $a('#arena-chat-status').textContent = t('arena.finished');
     } else {
       note(`<b>${esc(ev.status)}</b> · ${esc(String(ev.error || '').slice(0, 220))} · ${cost} · ${dur}`, 'failed');
       setSuperPill(ev.status === 'cancelled' ? 'cancelled' : 'failed', ev.status);
       addCheck('warn', `Run ${ev.status}`);
-      $a('#arena-chat-status').textContent = ev.status === 'cancelled' ? 'Cancelled' : 'Failed';
+      $a('#arena-chat-status').textContent = ev.status === 'cancelled' ? t('arena.cancelled') : t('arena.failed_2');
     }
   }
 
@@ -781,7 +781,7 @@
     chat.running = chat.live;
     $a('#arena-stop').classList.toggle('hidden', !chat.live);
     renderWorking();
-    if (!finished && !chat.live) $a('#arena-chat-status').textContent = 'Interrupted';
+    if (!finished && !chat.live) $a('#arena-chat-status').textContent = t('arena.interrupted');
     if (!chat.live) $a('#arena-messages').scrollTop = 0;
   }
   window.openArenaRun = openRun;

@@ -47,7 +47,7 @@ const homeView = { seq: 0, at: 0, asked: undefined, data: null, morning: null, h
 
 const homeProject = () => window.CurrentProject?.get() || null;
 // the roadmap's items, each with its stage's number (1-based) and name
-const homeItems = (d) => (d.backlog?.roadmap?.stages || []).flatMap((s, n) => (s.items || []).map((x) => ({ ...x, stage: n + 1, stageName: s.name || `Stage ${n + 1}` })));
+const homeItems = (d) => (d.backlog?.roadmap?.stages || []).flatMap((s, n) => (s.items || []).map((x) => ({ ...x, stage: n + 1, stageName: s.name || t('dashboard.stage_n', { n: n + 1 }) })));
 const homeList = (v) => (Array.isArray(v) ? v : []);
 // "40 min", "1 h 30 min", "2 d 3 h": by the minute, so a waiting gate does not redraw the list every second
 function homeAge(iso) {
@@ -140,21 +140,21 @@ function homeNeeds(d) {
   // the roadmap's runs waiting at a gate in another app: opened there, shown here
   const elsewhere = items.filter((x) => x.status === 'running' && x.waiting && x.runId && !mine.has(x.runId)).map((x) => ({
     kind: 'gate', runId: x.runId, since: x.run?.progress?.at(-1)?.ts || x.run?.startedAt || null, phoneUrl: null,
-    title: homeItemTitle(x), detail: x.run?.gate || `Roadmap · ${x.stageName}`,
+    title: homeItemTitle(x), detail: x.run?.gate || t('dashboard.roadmap_stagename', { stageName: x.stageName }),
   }));
   const failed = items.filter((x) => x.status === 'failed').map((x) => ({
-    kind: 'failed-item', stage: x.stage, title: homeItemTitle(x), detail: x.error || `Roadmap · ${x.stageName}`,
+    kind: 'failed-item', stage: x.stage, title: homeItemTitle(x), detail: x.error || t('dashboard.roadmap_stagename', { stageName: x.stageName }),
   }));
   // #368: the runs paused after their current turn wait for the owner's Resume (nothing else resumes them)
   const paused = d.runs.filter((r) => r.status === 'paused').map((r) => ({
     kind: 'paused-run', runId: r.runId, since: r.finishedAt || null,
-    title: r.title || (r.workflow ? name(r.workflow) : r.runId), detail: 'Paused after its current turn: Resume continues it where it stopped',
+    title: r.title || (r.workflow ? name(r.workflow) : r.runId), detail: t('dashboard.paused_after_its_current_turn_resume'),
   }));
   // the discovery cards whose thread ends with a question (e.g. a grill-me question); a card that left
   // the Inbox needs the Discovery board (#261) to be answered
   const questions = d.waiting.filter((c) => viewRegistry.has(c.column === 'inbox' ? 'inbox' : 'discovery')).map((c) => ({
     kind: 'card', cardId: c.id, since: c.question?.ts || null,
-    title: c.title || 'Discovery card', detail: [c.question?.author, c.question?.text].filter(Boolean).join(': '),
+    title: c.title || t('dashboard.discovery_card'), detail: [c.question?.author, c.question?.text].filter(Boolean).join(': '),
   }));
   return [...gates, ...elsewhere, ...questions, ...paused, ...failed];
 }
@@ -175,8 +175,8 @@ function homeNeedButton(n) {
 function homeStripHtml(d) {
   const counts = homeCounts(d);
   const project = state.projects.find((p) => p.id === d.projectId);
-  const stages = HOME_STAGES.filter((s) => viewRegistry.has(s.view)).map((s) => `<div class="home-stage" data-testid="home-flow-stage" data-stage="${s.id}" title="${esc(`${s.label}: ${s.hint}`)}">
-      <button type="button" class="home-count" data-testid="home-flow-count" data-stage="${s.id}" aria-label="${esc(`${s.label}: ${counts[s.id]}. Open it`)}">${counts[s.id]}</button>
+  const stages = HOME_STAGES.filter((s) => viewRegistry.has(s.view)).map((s) => ({ ...s, label: t(`dashboard.stage_${s.id}`), hint: t(`dashboard.stage_${s.id}_hint`) })).map((s) => `<div class="home-stage" data-testid="home-flow-stage" data-stage="${s.id}" title="${esc(`${s.label}: ${s.hint}`)}">
+      <button type="button" class="home-count" data-testid="home-flow-count" data-stage="${s.id}" aria-label="${esc(t('dashboard.label_value_open_it', { label: s.label, value: counts[s.id] }))}">${counts[s.id]}</button>
       <span class="home-stage-label">${esc(s.label)}</span>
     </div>`);
   return `<section class="home-block" aria-label="${t('dashboard.flow')}">
@@ -213,30 +213,30 @@ function homeTodayHtml(d) {
   // the night: tonight's while the Night watch is on, else the real runs started in the last one's window
   const w = homeView.morning?.window;
   const inNight = (r) => !r.mock && Date.parse(r.startedAt) >= Date.parse(w.from) && Date.parse(r.startedAt) <= Date.parse(w.to);
-  const night = sp?.night ? ['Cost tonight', usd(sp.night), 'Spent by real runs since the Night watch started']
-    : w ? ['Cost last night', fmtUsd(d.runs.filter(inNight).reduce((a, r) => a + (Number(r.costUsd) || 0), 0)), 'Cost of the real runs started during the last Night watch']
-      : ['Cost last night', '—', 'No Night watch ended recently'];
+  const night = sp?.night ? [t('dashboard.cost_tonight'), usd(sp.night), t('dashboard.spent_by_real_runs_since_the_night')]
+    : w ? [t('dashboard.cost_last_night'), fmtUsd(d.runs.filter(inNight).reduce((a, r) => a + (Number(r.costUsd) || 0), 0)), t('dashboard.cost_of_the_real_runs_started_during')]
+      : [t('dashboard.cost_last_night'), '—', t('dashboard.no_night_watch_ended_recently')];
   // undefined: not answered yet (#389: shown as loading), null: no figures
   const o = homeView.occupancy;
   const occupancyBusy = o === undefined;
   const occupancy = occupancyBusy ? '…' : o && !o.empty ? `${Math.round((Number(o.occupancy) || 0) * 100)}%` : '—';
-  const occupancyTitle = occupancyBusy ? 'Reading the last 24 h…' : o && !o.empty ? window.OccupancyChip?.chipModel(o).tooltip || '' : 'No runs yet: start one to measure';
+  const occupancyTitle = occupancyBusy ? t('occupancy_chip.reading_the_last_24_h') : o && !o.empty ? window.OccupancyChip?.chipModel(o).tooltip || '' : t('occupancy_chip.no_runs_yet_start_one_to');
   const costBusy = usageBusy();
   const stages = d.backlog?.roadmap?.stages || [];
   const next = RoadmapModel.currentStage({ stages });
-  const nextName = next < 0 ? '' : stages[next].name || `Stage ${next + 1}`;
+  const nextName = next < 0 ? '' : stages[next].name || t('dashboard.stage_n', { n: next + 1 });
   // `attrs`: a test id and, while its figure loads, aria-busy
   const stat = (label, value, title, attrs = '') => `<div class="u-stat" title="${esc(title)}"${attrs}><label>${esc(label)}</label><b>${value}</b></div>`;
   const busy = (on) => (on ? ' aria-busy="true"' : '');
   return `<section class="home-block" data-testid="home-today" aria-label="${t('dashboard.today')}">
     <h2 class="home-title">${t('dashboard.today')}</h2>
     <div class="home-stats">
-      ${stat('Cost today', esc(costBusy ? '…' : usd(sp?.day)), costBusy ? 'Reading the usage…' : 'Spent today by real runs (live runs included)', ` data-testid="home-cost-today"${busy(costBusy)}`)}
+      ${stat(t('dashboard.cost_today'), esc(costBusy ? '…' : usd(sp?.day)), costBusy ? t('dashboard.reading_the_usage') : t('dashboard.spent_today_by_real_runs_live'), ` data-testid="home-cost-today"${busy(costBusy)}`)}
       ${stat(night[0], esc(night[1]), night[2])}
-      ${stat('Runs finished', finished, 'Runs that succeeded today')}
-      ${stat('Runs failed', failed, 'Runs that failed, were cancelled or were interrupted today')}
-      ${stat('24/7 occupancy', occupancy, occupancyTitle, ` data-testid="home-occupancy"${busy(occupancyBusy)}`)}
-      ${stat('Next roadmap stage', nextName ? `<button type="button" class="link-btn home-next" data-home-roadmap="${next + 1}" title="${esc(`Stage ${next + 1} of ${stages.length}: ${nextName}. Open the roadmap`)}">${esc(nextName)}</button>` : '—', nextName ? 'The first stage with work left' : 'No roadmap stage with work left')}
+      ${stat(t('dashboard.runs_finished'), finished, t('dashboard.runs_that_succeeded_today'))}
+      ${stat(t('dashboard.runs_failed'), failed, t('dashboard.runs_that_failed_were_cancelled_or'))}
+      ${stat(t('dashboard.n24_7_occupancy'), occupancy, occupancyTitle, ` data-testid="home-occupancy"${busy(occupancyBusy)}`)}
+      ${stat(t('dashboard.next_roadmap_stage'), nextName ? `<button type="button" class="link-btn home-next" data-home-roadmap="${next + 1}" title="${esc(t('dashboard.stage_value_of_length_nextname_open', { value: next + 1, length: stages.length, nextName }))}">${esc(nextName)}</button>` : '—', nextName ? t('dashboard.the_first_stage_with_work_left') : t('dashboard.no_roadmap_stage_with_work_left'))}
     </div>
   </section>`;
 }

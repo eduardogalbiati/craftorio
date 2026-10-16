@@ -70,7 +70,7 @@ function editRunTitle(btn) {
   const input = document.createElement('input');
   input.className = 'run-title-input';
   input.value = meta.customTitle || box.querySelector('.run-title-text').textContent;
-  input.placeholder = 'Default title';
+  input.placeholder = t('run_meta.default_title');
   box.replaceChildren(input);
   input.focus({ preventScroll: true });
   input.select();
@@ -81,7 +81,7 @@ function editRunTitle(btn) {
     const value = input.value.trim();
     input.remove(); // every place draws the title again below
     if (save) {
-      try { onRunMeta(await api.setRunTitle(runId, value)); } catch (e) { showToast('Could not rename the run', errMsg(e)); }
+      try { onRunMeta(await api.setRunTitle(runId, value)); } catch (e) { showToast(t('run_meta.could_not_rename_the_run'), errMsg(e)); }
     }
     $('#run-summary')._html = null; // drawn again even when nothing changed (Esc)
     window.runChatRefreshHead?.();

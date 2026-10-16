@@ -63,7 +63,7 @@
         <ul class="po-tasks small">${c.tasks.map((k) => `<li data-testid="po-split-task" title="${esc(taskPlain(text(k)))}"><span class="muted mono">${k}.</span> ${taskHtml(text(k))}</li>`).join('')}</ul>
         ${c.reason ? `<div class="small muted">${esc(c.reason)}</div>` : ''}
       </li>`).join('')}</ol>
-      <div class="small"><span class="muted">${t('backlog_po_proposals.then_issue', { issue: s.issue })}</span> ${p.parent === 'close' ? 'closed in favour of its children, with a comment linking them' : 'an umbrella, with a task list linking its children'}</div>`;
+      <div class="small"><span class="muted">${t('backlog_po_proposals.then_issue', { issue: s.issue })}</span> ${p.parent === 'close' ? t('backlog_po_proposals.closed_in_favour_of_its_children') : t('backlog_po_proposals.an_umbrella_with_a_task_list')}</div>`;
   }
 
   function editHtml(s, e) {
@@ -154,8 +154,8 @@
     const key = splitKey(msg, s);
     const p = current(msg, s);
     const simulated = devMode();
-    if (!simulated && !await confirmDialog(`Split #${s.issue} into ${p.children.length} issues`,
-      `${p.children.length} new issues are filed on the project's repository, each with its tasks and #${s.issue}'s context; then #${s.issue} ${p.parent === 'close' ? 'gets a comment linking them and is closed' : 'gets a task list linking them'}.`, 'Split')) return;
+    if (!simulated && !await confirmDialog(t('backlog_po_proposals.split_issue_into_length_issues', { issue: s.issue, length: p.children.length }),
+      t('backlog_po_proposals.length_new_issues_are_filed_on', { length: p.children.length, issue: s.issue, issue2: s.issue, value: p.parent === 'close' ? 'gets a comment linking them and is closed' : 'gets a task list linking them' }), t('backlog_po_proposals.split'))) return;
     busy = true;
     notes.delete(key);
     ctx.render();

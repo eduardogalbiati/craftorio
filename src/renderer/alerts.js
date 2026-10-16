@@ -11,6 +11,7 @@
 // (`Alerts.mount(box).set(list)`; docs/agents/renderer.md, "Page alerts").
 // Browser: window.Alerts; Node: module.exports (test/renderer-alerts-270.test.js).
 (function (root) {
+  const t = (...a) => (typeof module === 'object' && module.exports ? require('../shared/i18n') : root.I18n)?.t(...a) ?? a[0];
   const LEVELS = ['error', 'warning', 'info'];
   const ICON = {
     error: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 7.5v5.5M12 16.5v.2" /></svg>',

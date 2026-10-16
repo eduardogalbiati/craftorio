@@ -113,7 +113,7 @@ function renderArtifacts() {
   if (sel.value !== a.projectId) a.projectId = '';
   $('#art-search').value = a.q;
   $('#art-show-sim').checked = a.showSim;
-  $('#art-error').textContent = a.error ? `Could not load artifacts: ${a.error}` : '';
+  $('#art-error').textContent = a.error ? t('artifacts.could_not_load_artifacts_error', { error: a.error }) : '';
   renderArtifactList();
   renderArtifactViewer();
 }
@@ -158,9 +158,9 @@ function artFilesHtml(e) {
   const groups = ArtifactsPanel.CATEGORIES.map(([id, label]) => [label, shown.filter((f) => ArtifactsPanel.categoryOf(f) === id)]).filter(([, list]) => list.length);
   const body = groups.length
     ? groups.map(([label, list]) => `<div class="art-step muted" data-testid="artifact-category-title">${esc(label)} · ${list.length}</div>${list.map((f) => artFileHtml(e.evidence ? { ...f, caption: ArtifactsPanel.captionOf(e.evidence, f.path) } : f)).join('')}`).join('')
-    : `<p class="muted small art-pad">${filter.show === 'produced' && !filter.category && !filter.kind ? 'Nothing produced: Show all lists the handoff notes, decisions and logs.' : 'Nothing matches this filter.'}</p>`;
+    : `<p class="muted small art-pad">${filter.show === 'produced' && !filter.category && !filter.kind ? t('artifacts.nothing_produced_show_all_lists_the') : t('artifacts.nothing_matches_this_filter')}</p>`;
   return `<div class="art-files" data-testid="artifact-list">${ArtifactsPanel.filtersHtml(filter, count(all, ArtifactsPanel.categoryOf), count(ArtifactsPanel.filterFiles(e.files, { ...filter, kind: null }, { ignoreCategory: true }), kindOfChip))}${body}`
-    + (left > 0 ? `<button type="button" class="btn sm ghost art-more" data-art-more ${e.pending ? 'disabled' : ''}>${e.pending ? 'Loading…' : `Show ${Math.min(left, ART_PAGE)} more${left > ART_PAGE ? ` <span class="muted">${t('artifacts.left_left', { left })}</span>` : ''}`}</button>` : '')
+    + (left > 0 ? `<button type="button" class="btn sm ghost art-more" data-art-more ${e.pending ? 'disabled' : ''}>${e.pending ? t('artifacts.loading') : `Show ${Math.min(left, ART_PAGE)} more${left > ART_PAGE ? ` <span class="muted">${t('artifacts.left_left', { left })}</span>` : ''}`}</button>` : '')
     + '</div>';
 }
 
@@ -173,7 +173,7 @@ function renderArtifactList() {
   const filtered = !!(a.loadedQ || a.projectId);
   if (!runs.length) {
     paintArtToggleAll([], false);
-    box.innerHTML = `<div class="art-pad muted small">${filtered ? 'No artifacts match these filters.' : 'No run has produced documents or files yet.'}${hiddenSim ? `<br>${hiddenSim} ${t('artifacts.simulated_run_value_hidden', { value: hiddenSim > 1 ? 's' : '' })}` : ''}</div>`;
+    box.innerHTML = `<div class="art-pad muted small">${filtered ? t('artifacts.no_artifacts_match_these_filters') : t('artifacts.no_run_has_produced_documents_or')}${hiddenSim ? `<br>${hiddenSim} ${t('artifacts.simulated_run_value_hidden', { value: hiddenSim > 1 ? 's' : '' })}` : ''}</div>`;
     return;
   }
   if (a.reveal && runs.some((r) => r.runId === a.reveal)) { setArtGroupOpen(a.reveal, true); a.reveal = null; }
@@ -186,7 +186,7 @@ function renderArtifactList() {
     <div class="art-run ${open ? 'open' : ''}" data-run="${esc(r.runId)}">
       <button class="art-run-head" title="${esc(r.task || '')}" aria-expanded="${open}">
         <div class="row"><span class="art-chev" aria-hidden="true">${open ? '▾' : '▸'}</span><b class="art-run-name">${esc(r.workflow || 'workflow')}</b>${StatusPill.statusPill(r.status)}${r.mock ? `<span class="badge p-mock">${t('artifacts.simulated')}</span>` : ''}</div>
-        <div class="muted small art-run-sub">${r.project ? `${esc(r.project.name)} · ` : ''}${r.startedAt ? esc(dateOf(r.startedAt)) : ''} · ${files}${r.imageCount ? ` · ${r.imageCount} image${r.imageCount === 1 ? '' : 's'}` : ''}</div>
+        <div class="muted small art-run-sub">${r.project ? `${esc(r.project.name)} · ` : ''}${r.startedAt ? esc(dateOf(r.startedAt)) : ''} · ${files}${r.imageCount ? t('artifacts.imagecount_image_value', { imageCount: r.imageCount, value: r.imageCount === 1 ? '' : 's' }) : ''}</div>
       </button>
       ${open ? artFilesHtml(a.files.get(r.runId)) : ''}
     </div>`;
@@ -231,8 +231,8 @@ function paintArtToggleAll(runs, searching) {
   const anyOpen = runs.some((r, i) => artGroupOpen(r.runId, i === 0));
   const label = anyOpen ? 'Collapse all' : 'Expand all';
   b.disabled = searching;
-  b.title = searching ? 'Groups are open while searching' : anyOpen ? 'Close every run group' : 'Open every run group';
-  b.setAttribute('aria-label', `${label} run groups`);
+  b.title = searching ? t('artifacts.groups_are_open_while_searching') : anyOpen ? t('artifacts.close_every_run_group') : t('artifacts.open_every_run_group');
+  b.setAttribute('aria-label', t('artifacts.label_run_groups', { label }));
   b.setAttribute('aria-pressed', String(!anyOpen)); // pressed: everything is collapsed
   b.querySelector('span').textContent = label;
   b.querySelector('polyline').setAttribute('points', anyOpen ? '18 15 12 9 6 15' : '6 9 12 15 18 9');
@@ -334,7 +334,7 @@ function renderArtifactViewer() {
     try {
       if (b.dataset.artAct === 'open') { const err = await api.openArtifact(d.path); if (err) throw new Error(err); }
       if (b.dataset.artAct === 'reveal') await api.openArtifact(d.path, true);
-      if (b.dataset.artAct === 'copy') { await api.clipboardWrite(d.path); msg.textContent = 'Path copied.'; }
+      if (b.dataset.artAct === 'copy') { await api.clipboardWrite(d.path); msg.textContent = t('artifacts.path_copied'); }
     } catch (e) {
       msg.textContent = errMsg(e);
     }

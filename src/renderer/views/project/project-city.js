@@ -172,7 +172,7 @@
       try {
         await loadBundle();
       } catch (e) {
-        if (!c.destroyed) stageMessage(`<p>${esc(e.message === MISSING ? MISSING : `The City view could not load: ${errMsg(e)}`)}</p>${toFacts}`, { alert: true });
+        if (!c.destroyed) stageMessage(`<p>${esc(e.message === MISSING ? MISSING : t('project_city.the_city_view_could_not_load', { e: errMsg(e) }))}</p>${toFacts}`, { alert: true });
         return;
       }
       if (c.destroyed || c.handle || !c.layout) return;
@@ -213,8 +213,8 @@
         <datalist id="pc-targets-${esc(projectId)}">${targets.map((t) => `<option value="${esc(t)}"></option>`).join('')}</datalist>
         <label class="r3d-chip"><span>${t('project_city.colour_by')}</span><select data-pc-colour aria-label="${t('project_city.colour_by')}" data-testid="project-city-colour">${options}</select></label>
         <label class="r3d-chip" title="${t('project_city.show_or_hide_the_test_files')}"><input type="checkbox" data-pc-tests data-testid="project-city-tests" ${c.tests ? 'checked' : ''} /> ${t('project_city.tests')}</label>
-        <button type="button" class="r3d-close" data-pc-theme data-testid="project-city-theme" aria-label="${light ? 'Dark theme' : 'Light theme'}" title="${t('project_city.value_the_run_s_3d_view', { value: light ? 'Switch to the dark theme' : 'Switch to the light theme' })}">${light ? '☾' : '☀'}</button>
-        <button type="button" class="r3d-close r3d-theme" data-pc-expand data-testid="project-city-expand" aria-pressed="${c.expanded}" aria-label="${c.expanded ? 'Close the full screen' : 'Expand to the whole window'}" title="${c.expanded ? 'Back into the tab (Esc)' : 'Expand the city over the whole window'}">${c.expanded ? ICON_CLOSE : ICON_EXPAND}</button>
+        <button type="button" class="r3d-close" data-pc-theme data-testid="project-city-theme" aria-label="${light ? t('project_city.dark_theme') : t('project_city.light_theme')}" title="${t('project_city.value_the_run_s_3d_view', { value: light ? 'Switch to the dark theme' : 'Switch to the light theme' })}">${light ? '☾' : '☀'}</button>
+        <button type="button" class="r3d-close r3d-theme" data-pc-expand data-testid="project-city-expand" aria-pressed="${c.expanded}" aria-label="${c.expanded ? t('project_city.close_the_full_screen') : t('project_city.expand_to_the_whole_window')}" title="${c.expanded ? t('project_city.back_into_the_tab_esc') : t('project_city.expand_the_city_over_the_whole')}">${c.expanded ? ICON_CLOSE : ICON_EXPAND}</button>
       </div>`;
     }
 
@@ -327,8 +327,8 @@
       const btn = hud.querySelector('[data-pc-expand]');
       if (btn) {
         btn.setAttribute('aria-pressed', String(on));
-        btn.setAttribute('aria-label', on ? 'Close the full screen' : 'Expand to the whole window');
-        btn.title = on ? 'Back into the tab (Esc)' : 'Expand the city over the whole window';
+        btn.setAttribute('aria-label', on ? t('project_city.close_the_full_screen') : t('project_city.expand_to_the_whole_window'));
+        btn.title = on ? t('project_city.back_into_the_tab_esc') : t('project_city.expand_the_city_over_the_whole');
         btn.innerHTML = on ? ICON_CLOSE : ICON_EXPAND;
       }
       window.dispatchEvent(new Event('resize'));
@@ -359,7 +359,7 @@
       } else if (t.matches('[data-pc-search]')) {
         const found = !t.value.trim() || flyTo(t.value.trim());
         t.setAttribute('aria-invalid', String(!found));
-        t.title = found ? '' : `No file, district or zone named "${t.value.trim()}"`;
+        t.title = found ? '' : I18n.t('project_city.no_file_district_or_zone_named', { value: t.value.trim() });
       }
     });
 

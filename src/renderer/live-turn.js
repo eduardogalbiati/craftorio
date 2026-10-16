@@ -12,6 +12,7 @@
 // app.js's esc and markdownHtml); a view re-renders it on each event and on its own 1 s ticker.
 // Browser: window.LiveTurn; Node: module.exports.
 (function (root) {
+  const t = (...a) => (typeof module === 'object' && module.exports ? require('../shared/i18n') : root.I18n)?.t(...a) ?? a[0];
   const STALE_MS = 60e3;
   // the steps listed under the activity line (the count says how many there were)
   const SHOWN_STEPS = 5;

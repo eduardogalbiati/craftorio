@@ -83,7 +83,7 @@ function gateBriefHtml(runId, g, fullHtml) {
   if (!out && !scenarios) return '';
   const first = (s) => String(s || '').trim().split(/(?<=[.!?])\s+|\n/)[0];
   const ref = (u) => { const m = /\/(?:issues|pull|merge_requests)\/(\d+)/.exec(String(u)); return m ? `#${m[1]}` : String(u); };
-  const issues = (out?.issues || []).map((i) => `<li class="${i.done ? 'ok' : 'not'}"><span class="gate-issue-state">${i.done ? '✔ done' : '✖ not done'}</span>
+  const issues = (out?.issues || []).map((i) => `<li class="${i.done ? 'ok' : 'not'}"><span class="gate-issue-state">${i.done ? t('gate_panel.done') : t('gate_panel.not_done')}</span>
     <b title="${esc(i.issue)}">${esc(ref(i.issue))}</b> ${esc(first(i.summary))}</li>`).join('');
   return `<div class="run-gate-brief">${out?.summary ? `<p>${esc(first(out.summary))}</p>` : ''}${issues ? `<ul class="gate-issues">${issues}</ul>` : ''}${scenarios}
     <details class="run-gate-full"><summary class="small">${t('gate_panel.full_message')}</summary>${fullHtml}</details></div>`;
@@ -96,8 +96,8 @@ window.gateBriefHtml = gateBriefHtml;
 function gateAnswers(g) {
   if (g.approve || g.reject || !g.choices) {
     return [
-      { id: true, key: 'approve', label: g.approve?.label || 'Approve', help: g.approve?.help || '' },
-      { id: false, key: 'reject', label: g.reject?.label || 'Reject', help: g.reject?.help || '' },
+      { id: true, key: 'approve', label: g.approve?.label || t('gate_panel.approve'), help: g.approve?.help || '' },
+      { id: false, key: 'reject', label: g.reject?.label || t('gate_panel.reject'), help: g.reject?.help || '' },
     ];
   }
   return g.choices.map((c) => ({ ...c, key: String(c.id), help: c.help || '' }));
@@ -142,7 +142,7 @@ function gateNextTurnsHtml(runId, g) {
   const lead = SessionCache.continueLead(turns);
   const cold = turns.filter((x) => x.turn.cost_usd > 0);
   const usd = cold.reduce((a, x) => a + x.turn.cost_usd, 0);
-  return `<p class="gate-next-turns small" data-testid="gate-next-turns"><b>${t('gate_panel.continue')}</b> ${[lead && esc(lead), ...entries].filter(Boolean).join(' · ')}${cold.length > 1 ? ` (≈ $${usd.toFixed(2)} in all)` : ''}</p>`;
+  return `<p class="gate-next-turns small" data-testid="gate-next-turns"><b>${t('gate_panel.continue')}</b> ${[lead && esc(lead), ...entries].filter(Boolean).join(' · ')}${cold.length > 1 ? t('gate_panel.value_in_all', { value: usd.toFixed(2) }) : ''}</p>`;
 }
 window.gateNextTurnsHtml = gateNextTurnsHtml;
 
@@ -269,13 +269,13 @@ window.mountGateScenarios = mountGateScenarios;
 // about an issue (#125) also offers "Accept and save to issue #n", right after the choice it
 // answers: the same choice with intent save_to_issue (the Save to issue preview opens when the run ends).
 function gateChoices(gate) {
-  const choices = gate.choices || [{ id: true, label: gate.approve?.label || 'Approve' }, { id: false, label: gate.reject?.label || 'Reject' }];
+  const choices = gate.choices || [{ id: true, label: gate.approve?.label || t('gate_panel.approve') }, { id: false, label: gate.reject?.label || t('gate_panel.reject') }];
   const save = gate.save_to_issue;
   const at = save?.issue ? choices.findIndex((c) => String(c.id) === String(save.choice)) : -1;
   if (at < 0) return choices;
   const extra = {
-    id: save.choice, intent: 'save_to_issue', label: `Accept and save to issue #${save.issue.number}`,
-    title: `Accepts the document, then previews the change to issue #${save.issue.number} when the run ends: nothing is sent before you confirm`,
+    id: save.choice, intent: 'save_to_issue', label: t('gate_panel.accept_and_save_to_issue_number', { number: save.issue.number }),
+    title: t('gate_panel.accepts_the_document_then_previews_the', { number: save.issue.number }),
   };
   return [...choices.slice(0, at + 1), extra, ...choices.slice(at + 1)];
 }
@@ -296,15 +296,15 @@ function gateToolsHtml(g, { disabled = false, runId = g.run_id || g.runId || '' 
   const off = disabled ? ' disabled' : '';
   const how = lp ? `${lp.install ? `${lp.install} (when dependencies are missing or the lockfile changed), then ` : ''}${lp.command}` : '';
   const runApp = !!lp || (!!(g.run_app || g.runApp) && !!dir);
-  const run = runApp ? `<button type="button" class="btn sm" data-gate-tool="preview" title="${esc(lp ? `${how} in ${dir}. Runs in simulation only, on a scratch copy of your workspace.` : 'Asks once: the command the repository declares (.multiagent/local-preview.yaml) or one detected from the worktree, saved as the project\'s Local preview.')}"${off}>${esc(runAppLabel(lp))}</button>
+  const run = runApp ? `<button type="button" class="btn sm" data-gate-tool="preview" title="${esc(lp ? t('gate_panel.how_in_dir_runs_in_simulation', { how, dir }) : t('gate_panel.asks_once_the_command_the_repository'))}"${off}>${esc(runAppLabel(lp))}</button>
     <span class="gate-app-state" data-gate-app-state></span>
     <button type="button" class="btn sm ghost hidden" data-gate-tool="stop" title="${t('gate_panel.stop_this_run_s_app')}"${off}>${t('gate_panel.stop')}</button>
     <button type="button" class="btn sm ghost hidden" data-gate-tool="app-term" title="${t('gate_panel.show_or_hide_the_app_s')}"${off}>${t('gate_panel.terminal')}</button>
-    <a class="small${lp?.url ? '' : ' hidden'}" data-gate-app-url href="${esc(lp?.url || '#')}" target="_blank" rel="noopener">${t('gate_panel.open')} ${esc(lp?.url || 'URL')}</a>
+    <a class="small${lp?.url ? '' : ' hidden'}" data-gate-app-url href="${esc(lp?.url || '#')}" target="_blank" rel="noopener">${t('gate_panel.open')} ${esc(lp?.url || t('gate_panel.url'))}</a>
     <label class="muted small" title="${t('gate_panel.the_copy_uses_your_real_workspace')}"><input type="checkbox" data-gate-real${off}> ${t('gate_panel.real_workspace')}</label>` : '';
   const open = dir ? `<button type="button" class="btn sm ghost" data-gate-tool="folder" title="${esc(dir)}"${off}>${t('gate_panel.open_the_worktree')}</button>
     <button type="button" class="btn sm ghost" data-gate-tool="shell" title="${t('gate_panel.a_terminal_in_dir', { dir: esc(dir) })}"${off}>${t('gate_panel.terminal_there')}</button>` : '';
-  const diff = base ? `<button type="button" class="btn sm ghost" data-gate-tool="diff" title="${esc(`Review the branch's changes since ${base} file by file, split or unified (git diff ${base}...HEAD in the worktree)`)}"${off}>${t('gate_panel.show_the_diff')}</button>` : '';
+  const diff = base ? `<button type="button" class="btn sm ghost" data-gate-tool="diff" title="${esc(t('gate_panel.review_the_branch_s_changes_since', { base, base2: base }))}"${off}>${t('gate_panel.show_the_diff')}</button>` : '';
   const more = runApp ? '<div class="gate-app-error error small hidden" data-gate-app-error></div><div class="gate-app-setup hidden" data-gate-setup></div>' : '';
   return `<div class="row gate-tools" data-dir="${esc(dir || '')}" data-approval="${esc(g.approval_id || g.approvalId)}" data-run="${esc(runId)}">${run}${diff}${open}${more}</div>`;
 }
@@ -325,7 +325,7 @@ function paintGateApps() {
     box.querySelector('[data-gate-tool="stop"]')?.classList.toggle('hidden', status !== 'running');
     box.querySelector('[data-gate-tool="app-term"]')?.classList.toggle('hidden', !status || !dock.tabs.some((t) => t.key === `preview:${box.dataset.run}:${box.dataset.approval}`));
     const link = box.querySelector('[data-gate-app-url]');
-    if (link && p?.url && status) { link.href = p.url; link.textContent = `Open ${p.url}`; link.classList.remove('hidden'); }
+    if (link && p?.url && status) { link.href = p.url; link.textContent = t('gate_panel.open_url', { url: p.url }); link.classList.remove('hidden'); }
     const err = box.querySelector('[data-gate-app-error]');
     if (err) { err.textContent = status === 'failed' ? p.error || '' : ''; err.classList.toggle('hidden', !(status === 'failed' && p.error)); }
   });
@@ -364,7 +364,7 @@ function runAppInstallHtml(info) {
   const s = info.install;
   if (!s || s.state === 'none') return '';
   const [head, ...why] = String(s.text).split(': ');
-  return `<span class="badge${s.state === 'will-run' ? ' warn' : ''}">${s.state === 'will-run' ? 'install will run' : 'install skipped'}</span> <span class="muted small">${esc(why.join(': ') || head)}</span>`;
+  return `<span class="badge${s.state === 'will-run' ? ' warn' : ''}">${s.state === 'will-run' ? t('gate_panel.install_will_run') : t('gate_panel.install_skipped')}</span> <span class="muted small">${esc(why.join(': ') || head)}</span>`;
 }
 
 // Run App's fields (Edit, or nothing found): install / command / URL / folder, saved as the
@@ -372,17 +372,17 @@ function runAppInstallHtml(info) {
 function runAppSetupHtml(info, cfg = {}) {
   const input = (k, label, ph, hint = '') => `<label class="small">${label}<input data-setup="${k}" value="${esc(cfg[k] || '')}" placeholder="${esc(ph)}" spellcheck="false">${hint ? `<span class="hint">${hint}</span>` : ''}</label>`;
   const found = cfg.from ? `From ${esc(cfg.from)}.` : info.suggestion || info.config ? '' : 'Nothing found in the worktree: write how to run it.';
-  return `<div class="muted small">${found} ${info.project ? `Saving makes it the Run App of <b>${esc(info.project.name)}</b> ${t('gate_panel.projects_local_preview_the_next_gates')}` : 'This run has no project: it runs this time only.'}</div>
+  return `<div class="muted small">${found} ${info.project ? `Saving makes it the Run App of <b>${esc(info.project.name)}</b> ${t('gate_panel.projects_local_preview_the_next_gates')}` : t('gate_panel.this_run_has_no_project_it')}</div>
     ${input('install', 'Install (only when dependencies are missing or the lockfile changed)', 'npm ci (optional)', runAppInstallHtml(info))}
     ${input('command', 'Command', 'npm start')}
     ${input('url', 'URL (optional)', 'http://localhost:3000')}
     ${input('cwd', 'Folder (optional, a monorepo\'s app)', 'apps/web')}
     ${info.project ? `<label class="small gate-app-check"><input type="checkbox" data-setup-repo> ${t('gate_panel.also_write_it_to')} <code>${t('gate_panel.multiagent_local_preview_yaml')}</code> ${t('gate_panel.a_change_you_commit')}</label>` : ''}
-    <div class="row"><button type="button" class="btn sm primary" data-gate-tool="app-save">${info.project ? 'Save as this project\'s Run App and start' : 'Run'}</button><button type="button" class="btn sm ghost" data-gate-tool="app-cancel">${t('common.cancel')}</button></div>`;
+    <div class="row"><button type="button" class="btn sm primary" data-gate-tool="app-save">${info.project ? t('gate_panel.save_as_this_project_s_run') : t('gate_panel.run')}</button><button type="button" class="btn sm ghost" data-gate-tool="app-cancel">${t('common.cancel')}</button></div>`;
 }
 
 // After Save (#119): said once, so the owner knows what the next Run App does.
-const runAppSavedToast = (cfg) => showToast('Saved as this project\'s Run App', `Next time Run App starts ${cfg.command} directly.`);
+const runAppSavedToast = (cfg) => showToast(t('gate_panel.saved_as_this_project_s_run'), t('gate_panel.next_time_run_app_starts_command', { command: cfg.command }));
 
 // Shows the popover in one of its two forms; Esc closes it.
 function showRunAppSetup(setup, info, cfg, mode) {
@@ -401,9 +401,9 @@ function showRunAppSetup(setup, info, cfg, mode) {
 // confirm: the owner clicked Run on the confirmation of a command not confirmed for the project yet
 async function startRunApp(box, runId, approval, config = null, confirm = false) {
   const real = !!box.querySelector('[data-gate-real]')?.checked;
-  if (real && !(await confirmDialog('Run on your real workspace?', 'The local copy will use your REAL workspace (projects, runs, settings) instead of a scratch copy. It stays in simulation only, but anything it writes lands in your workspace.', 'Run on it'))) return;
+  if (real && !(await confirmDialog(t('gate_panel.run_on_your_real_workspace'), t('gate_panel.the_local_copy_will_use_your'), t('gate_panel.run_on_it')))) return;
   try {
-    await openTerminal({ kind: 'preview', runId, sessionId: approval, label: 'Run App', open: (cols, rows) => api.startLocalPreview(runId, approval, real, cols, rows, config, confirm) });
+    await openTerminal({ kind: 'preview', runId, sessionId: approval, label: t('gate_panel.run_app'), open: (cols, rows) => api.startLocalPreview(runId, approval, real, cols, rows, config, confirm) });
   } catch (err) {
     setRunPreview(runId, { status: 'failed', approval, error: errMsg(err) });
     throw err;
@@ -413,7 +413,7 @@ async function startRunApp(box, runId, approval, config = null, confirm = false)
 
 function toggleGateTerminal(runId, approval) {
   const tab = dock.tabs.find((t) => t.key === `preview:${runId}:${approval}`);
-  if (!tab) { showToast('No terminal', 'Run App has not started here yet.'); return; }
+  if (!tab) { showToast(t('gate_panel.no_terminal'), t('gate_panel.run_app_has_not_started_here')); return; }
   const shown = !$('#term-dock').classList.contains('hidden') && !dock.collapsed && dock.active === tab;
   if (shown) setDockCollapsed(true);
   else { showDock(); activateTab(tab); }
@@ -428,11 +428,11 @@ async function onGateTool(e, runId) {
   try {
     if (b.dataset.gateTool === 'folder') await api.openPath(dir);
     else if (b.dataset.gateTool === 'shell') {
-      await openTerminal({ kind: 'shell', runId, sessionId: dir, label: 'Worktree', open: (cols, rows) => api.termOpen({ kind: 'shell', folder: dir, cols, rows }) });
+      await openTerminal({ kind: 'shell', runId, sessionId: dir, label: t('gate_panel.worktree'), open: (cols, rows) => api.termOpen({ kind: 'shell', folder: dir, cols, rows }) });
     } else if (b.dataset.gateTool === 'diff') {
       DiffViewer.open({ runId, approvalId: approval });
     } else if (b.dataset.gateTool === 'stop') {
-      if (!await api.stopLocalPreview(runId)) showToast('No local preview', 'This run has no local preview running.');
+      if (!await api.stopLocalPreview(runId)) showToast(t('gate_panel.no_local_preview'), t('gate_panel.this_run_has_no_local_preview'));
     } else if (b.dataset.gateTool === 'app-term') {
       toggleGateTerminal(runId, approval);
     } else if (b.dataset.gateTool === 'app-cancel') {
@@ -453,11 +453,11 @@ async function onGateTool(e, runId) {
     } else if (b.dataset.gateTool === 'app-save') {
       const val = (k) => setup.querySelector(`[data-setup="${k}"]`)?.value.trim() || '';
       const cfg = { install: val('install') || null, command: val('command'), url: val('url') || null, cwd: val('cwd') || null, env: setup._cfg?.env };
-      if (!cfg.command) { showToast('Write the command first', 'Run App runs that command in the worktree.'); setup.querySelector('[data-setup="command"]')?.focus({ preventScroll: true }); return; }
+      if (!cfg.command) { showToast(t('gate_panel.write_the_command_first'), t('gate_panel.run_app_runs_that_command_in')); setup.querySelector('[data-setup="command"]')?.focus({ preventScroll: true }); return; }
       const writeRepo = !!setup.querySelector('[data-setup-repo]')?.checked;
       if (setup.dataset.project) {
         const saved = await api.saveLocalPreview(runId, approval, cfg, writeRepo);
-        if (saved?.file) showToast('Wrote the run command', `${saved.file}: commit it so everyone gets one-click Run App.`);
+        if (saved?.file) showToast(t('gate_panel.wrote_the_run_command'), t('gate_panel.file_commit_it_so_everyone_gets', { file: saved.file }));
         else runAppSavedToast(cfg);
       }
       setup.classList.add('hidden');
@@ -467,7 +467,7 @@ async function onGateTool(e, runId) {
       await startRunApp(box, runId, approval, setup.dataset.project ? null : cfg, true);
     } else if (b.dataset.gateTool === 'preview') {
       const info = (await api.localPreviewInfo(runId, approval)) || {};
-      if (info.repoError) showToast('Could not read the run command file', info.repoError);
+      if (info.repoError) showToast(t('gate_panel.could_not_read_the_run_command'), info.repoError);
       if (info.config && info.confirmed) {
         b.textContent = runAppLabel(info.config);
         await startRunApp(box, runId, approval);
@@ -478,6 +478,6 @@ async function onGateTool(e, runId) {
       showRunAppSetup(setup, info, cfg || {}, cfg ? 'confirm' : 'edit');
     }
   } catch (err) {
-    showToast('Could not do it', errMsg(err));
+    showToast(t('gate_panel.could_not_do_it'), errMsg(err));
   }
 }

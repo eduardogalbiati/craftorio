@@ -27,7 +27,7 @@ function renderKeepAwake() {
   const nav = $('#nav-keep-awake');
   if (nav) {
     nav.classList.toggle('hidden', !(available && on && s?.holding));
-    nav.title = s?.holding ? `Keep awake: ${s.label.replace(/^Active: /, '')}. The display may still turn off.` : '';
+    nav.title = s?.holding ? t('keep_awake.keep_awake_value_the_display_may', { value: s.label.replace(/^Active: /, '') }) : '';
   }
 }
 

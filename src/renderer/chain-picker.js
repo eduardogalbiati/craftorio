@@ -117,7 +117,7 @@
         try {
           const est = await api.chainEstimate(src.file, value());
           const names = est.items.map((i) => i.workflow.replace(/\.ya?ml$/i, '')).join(' → ');
-          box.textContent = `Runs: ${names}${est.productOwner ? ' → Product Owner (roadmap proposal)' : ''}. Estimate from past runs, not a quote: ${est.text}`;
+          box.textContent = t('chain_picker.runs_names_value_estimate_from_past', { names, value: est.productOwner ? ' → Product Owner (roadmap proposal)' : '', text: est.text });
         } catch (e) { box.textContent = ''; }
       }, 250);
     }

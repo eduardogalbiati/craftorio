@@ -29,9 +29,9 @@ function renderRunGates() {
     // the choices, then "Interact with Oracle" at the end of the row (#183)
     const buttons = (g.choices
       ? gateChoices(g).map((c, i) => `<button type="button" class="btn sm ${i === 0 ? 'primary' : 'ghost'}" data-choice="${esc(c.id)}"${c.intent ? ` data-intent="${esc(c.intent)}" title="${esc(c.title)}"` : ''}${c.feedback_required ? ' data-needs-text="1"' : ''} data-testid="run-gate-choice">${esc(c.label)}</button>`).join('')
-      : `<button type="button" class="btn sm ghost" data-testid="run-gate-choice" data-answer="false">${esc(g.reject?.label || 'Reject')}</button><button type="button" class="btn sm primary" data-testid="run-gate-choice" data-answer="true">${esc(g.approve?.label || 'Approve')}</button>`)
+      : `<button type="button" class="btn sm ghost" data-testid="run-gate-choice" data-answer="false">${esc(g.reject?.label || t('run.reject'))}</button><button type="button" class="btn sm primary" data-testid="run-gate-choice" data-answer="true">${esc(g.approve?.label || t('run.approve'))}</button>`)
       + (window.GateOracle?.gateOracleButtonHtml(g) || '');
-    const field = g.feedback ? `<label class="duo-ask-label">${esc(g.feedback.label || 'Instructions (optional)')}</label>
+    const field = g.feedback ? `<label class="duo-ask-label">${esc(g.feedback.label || t('run.instructions_optional'))}</label>
       <textarea class="duo-ask-text run-gate-feedback" rows="3" placeholder="${esc(g.feedback.placeholder || '')}"></textarea>` : '';
     // a report (#290: the release summary) leads, as Markdown, above the rest of the message
     const parts = typeof gateReportParts === 'function' ? gateReportParts(g) : { reportHtml: '', message: g.message || '' };
@@ -57,7 +57,7 @@ function onRunGateClick(e) {
   if (!card) return;
   const answer = b.dataset.choice !== undefined ? b.dataset.choice : b.dataset.answer === 'true';
   const text = card.querySelector('.run-gate-feedback');
-  if (b.dataset.needsText && !text?.value.trim()) { showToast('Write your request first', `"${b.textContent}" sends the text to the agent.`); text?.focus({ preventScroll: true }); return; }
+  if (b.dataset.needsText && !text?.value.trim()) { showToast(t('run.write_your_request_first'), t('run.textcontent_sends_the_text_to_the', { textContent: b.textContent })); text?.focus({ preventScroll: true }); return; }
   const buttons = card.querySelectorAll('button');
   buttons.forEach((x) => (x.disabled = true));
   const send = () => PasteImage.settle(text)
@@ -67,8 +67,8 @@ function onRunGateClick(e) {
       const extra = images.length ? [b.dataset.intent || null, images] : b.dataset.intent ? [b.dataset.intent] : [];
       return api.resolveApproval(card.dataset.approval, answer, text?.value || '', card.dataset.run, ...extra);
     })
-    .then((ok) => { if (ok === false) { buttons.forEach((x) => (x.disabled = false)); showToast('The gate did not accept the answer', 'It needs a text, or it was already answered.'); } })
-    .catch((err) => { buttons.forEach((x) => (x.disabled = false)); showToast('Could not answer the gate', errMsg(err)); });
+    .then((ok) => { if (ok === false) { buttons.forEach((x) => (x.disabled = false)); showToast(t('run.the_gate_did_not_accept_the'), t('run.it_needs_a_text_or_it')); } })
+    .catch((err) => { buttons.forEach((x) => (x.disabled = false)); showToast(t('run.could_not_answer_the_gate'), errMsg(err)); });
   // the answer opposite to the gate's recommendation asks once (#213); any other is sent at once
   // (data-recommend on the card: the recommended answer, approve / reject or a choice id)
   const key = typeof answer === 'boolean' ? (answer ? 'approve' : 'reject') : String(answer);
@@ -201,7 +201,7 @@ function suiteCardsHtml(runId, stepNames) {
 function openRunLog(runId, rel) {
   const runDir = state.runs.get(runId)?.events?.find((e) => e.type === 'workflow.started')?.run_dir || '';
   const opened = runDir ? api.openPath(`${runDir.replace(/[\\/]+$/, '')}/${rel}`) : api.openRunDir(runId);
-  Promise.resolve(opened).catch((e) => showToast('Could not open the log', errMsg(e)));
+  Promise.resolve(opened).catch((e) => showToast(t('run.could_not_open_the_log'), errMsg(e)));
 }
 
 // The run's scratch workspace (#201: its agents' checks, not artifacts), read at most every 15 s
@@ -258,7 +258,7 @@ function renderRunSummary() {
     <div class="run-summary-name"><b>${runTitleHtml(r)}</b>${StatusPill.resumedLink(resumedOfRun.get(r.id)?.by)} ${prBadge(r)}${testedPillHtml(r)}</div>
     <div class="small muted">${esc(r.workflow || '')}${r.version ? ` v${esc(r.version)}` : ''}${selectedView().past ? ` · <span title="${t('run.opened_from_its_recorded_events_nothing')}">${t('run.read_only')}</span>` : ''}</div>
     ${r.project ? `<div class="small">${t('run.project')} <b>${esc(r.project)}</b></div>` : ''}
-    ${(r.issueSaves || []).map((s) => `<div class="small" title="${t('run.the_accepted_document_was_saved_to')}">${t('run.saved_to_issue')} <a href="${esc(s.commentUrl || s.url)}" target="_blank" rel="noopener">#${esc(s.number)}</a> · ${s.mode === 'comment' ? 'as a comment' : 'description replaced'} · ${esc(new Date(s.at).toLocaleString('en-US'))}</div>`).join('')}
+    ${(r.issueSaves || []).map((s) => `<div class="small" title="${t('run.the_accepted_document_was_saved_to')}">${t('run.saved_to_issue')} <a href="${esc(s.commentUrl || s.url)}" target="_blank" rel="noopener">#${esc(s.number)}</a> · ${s.mode === 'comment' ? t('run.as_a_comment') : t('run.description_replaced')} · ${esc(new Date(s.at).toLocaleString('en-US'))}</div>`).join('')}
     ${r.gateWaitMs ? `<div class="small" title="${t('run.time_the_run_waited_for_your')}">${t('run.waiting_for_you_at_gates')} <b>${esc(fmtDur(r.gateWaitMs))}</b></div>` : ''}
     ${testsPlanHtml(r.testsPlan)}
     ${suiteCardsHtml(r.id, r.stepNames)}
@@ -291,7 +291,7 @@ function renderRunSummary() {
   if (window.mountGateScenarios) window.mountGateScenarios(box);
   box.querySelectorAll('[data-testid="run-resumed-link"]').forEach((a) => (a.onclick = (e) => { e.preventDefault(); showRun(a.dataset.run); }));
   box.querySelectorAll('[data-suite-log]').forEach((b) => (b.onclick = () => openRunLog(r.id, b.dataset.suiteLog)));
-  if ($('#btn-run-scratch')) $('#btn-run-scratch').onclick = () => api.openPath(scratchOfRun.get(r.id)?.info?.dir).catch((e) => showToast('Could not open the folder', errMsg(e)));
+  if ($('#btn-run-scratch')) $('#btn-run-scratch').onclick = () => api.openPath(scratchOfRun.get(r.id)?.info?.dir).catch((e) => showToast(t('run.could_not_open_the_folder'), errMsg(e)));
 
   // the tab row's buttons: the same ids and handlers as when they sat in the Workflow panel
   function mountRunActions() {
@@ -349,7 +349,7 @@ function mountInputImages(box) {
     try { const src = (await api.readArtifact(img.dataset.runImage))?.image; if (src) img.src = src; } catch { /* deleted since */ }
   });
   // every input image of the run, one item each (#182)
-  const open = (img) => ImageViewer.open({ title: 'Input images', items: imgs.map((i) => ({ title: i.alt || 'Input image', images: [{ file: i.dataset.runImage, src: i.getAttribute('src') || undefined, label: i.alt }] })), index: imgs.indexOf(img) });
+  const open = (img) => ImageViewer.open({ title: t('run.input_images'), items: imgs.map((i) => ({ title: i.alt || t('run.input_image'), images: [{ file: i.dataset.runImage, src: i.getAttribute('src') || undefined, label: i.alt }] })), index: imgs.indexOf(img) });
   const row = box.querySelector('.run-input-images');
   row.onclick = (e) => { const img = e.target.closest('[data-run-image]'); if (img) open(img); };
   row.onkeydown = (e) => { const img = e.target.closest('[data-run-image]'); if (img && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); open(img); } };
@@ -477,7 +477,7 @@ async function onPauseBannerClick(e) {
       await resumePausedRun(r);
     }
   } catch (err) {
-    showToast(b.dataset.pauseAct === 'cancel' ? 'Could not cancel the pause' : 'Could not resume the run', errMsg(err));
+    showToast(b.dataset.pauseAct === 'cancel' ? t('run.could_not_cancel_the_pause') : t('run.could_not_resume_the_run'), errMsg(err));
   } finally {
     b.disabled = false;
   }
@@ -493,7 +493,7 @@ async function resumePausedRun(r) {
   const turns = o?.paused?.turns || [];
   const names = { ...(r.display?.agents || {}), ...(r.agentNames || {}) };
   const cont = turns.length ? ` ${SessionCache.continueText(turns, (a) => names[a] || a)}.` : '';
-  if (!(await confirmDialog('Resume the paused run', `${at}. Resume continues there: no finished turn runs again.${cont}`, 'Resume'))) return;
+  if (!(await confirmDialog(t('run.resume_the_paused_run'), `${at}. Resume continues there: no finished turn runs again.${cont}`, t('run.resume')))) return;
   const { runId } = await api.resumeRun(r.id);
   showRun(runId, { running: true });
 }
@@ -558,7 +558,7 @@ function renderChainBanner() {
     </div>` : '';
   if (saved) text = `Saved as the pipeline "${saved.name}" (${saved.file}).`;
   box.innerHTML = `<div class="chain-banner-head">
-      <span class="chain-banner-title">${then || editing ? 'When it finishes' : !c?.from && family && !running ? 'Linked runs' : 'Chain'}</span>${badges}
+      <span class="chain-banner-title">${then || editing ? t('run.when_it_finishes_2') : !c?.from && family && !running ? t('run.linked_runs') : t('run.chain')}</span>${badges}
       ${text ? `<span class="muted small chain-banner-text" title="${esc(text)}">${esc(text)}</span>` : ''}
       <span class="spacer"></span>${savePipe}${actions}
     </div>
@@ -654,7 +654,7 @@ function renderSteps() {
   const item = (s) => `
     <li class="${s.status}">
       <span class="dot"></span>
-      <span><span title="${esc(s.id)}">${esc(agentLabel(s.id, v.run?.stepNames))}</span><br><span class="kind"${s.agent ? ` title="${esc(s.agent)}"` : ''}>${s.type === 'human_approval' ? 'human approval' : s.type === 'screenshots' ? 'screenshots (no agent)' : s.type === 'suite' ? 'test suite (no agent)' : s.type === 'test_ids' ? 'test id check (no agent)' : s.type === 'check' ? 'rule checks (no agent)' : s.type === 'release_version' ? 'release version (no agent)' : s.type === 'project_map' ? 'project map (no agent)' :s.type === 'workflow' ? 'child workflow runs' : esc(agentLabel(s.agent, v.run?.agentNames))}</span></span>
+      <span><span title="${esc(s.id)}">${esc(agentLabel(s.id, v.run?.stepNames))}</span><br><span class="kind"${s.agent ? ` title="${esc(s.agent)}"` : ''}>${s.type === 'human_approval' ? t('run.human_approval') : s.type === 'screenshots' ? t('run.screenshots_no_agent') : s.type === 'suite' ? t('run.test_suite_no_agent') : s.type === 'test_ids' ? t('run.test_id_check_no_agent') : s.type === 'check' ? t('run.rule_checks_no_agent') : s.type === 'release_version' ? t('run.release_version_no_agent') : s.type === 'project_map' ? t('run.project_map_no_agent') :s.type === 'workflow' ? t('run.child_workflow_runs') : esc(agentLabel(s.agent, v.run?.agentNames))}</span></span>
       <span class="visits">${s.visits ? '×' + s.visits : ''}</span>
     </li>`;
   // in the workflow's step order: a group where its first shown step is
@@ -676,7 +676,7 @@ function renderSteps() {
     </details>`;
   }).join('');
   const hidden = all.length - all.filter((s) => s.visits > 0).length;
-  const toggle = hidden ? `<button type="button" class="link-btn small" data-all-steps>${v.allSteps ? 'Hide the steps that did not run' : `Show all steps (${hidden} not run)`}</button>` : '';
+  const toggle = hidden ? `<button type="button" class="link-btn small" data-all-steps>${v.allSteps ? t('run.hide_the_steps_that_did_not') : t('run.show_all_steps_hidden_not_run', { hidden })}</button>` : '';
   const box = $('#steps');
   const out = (html || `<p class="muted small">${t('run.no_step_has_run_yet')}</p>`) + toggle;
   if (box.dataset.html === out) return;
@@ -798,7 +798,7 @@ function renderDetail() {
       <div class="turn">
         <div class="turn-head">
           <span class="t">${I18n.t('run.turn')} ${t.n}</span><span class="muted">${esc(t.stepId || '')}</span>
-          <span class="meta">${t.result ? `${fmtDur(t.result.duration)} · in ${fmtNum((t.result.usage?.input || 0) + (t.result.usage?.cache_read || 0))} · out ${fmtNum(t.result.usage?.output)} · ${fmtCost(t.result.cost)}` : 'in progress…'}</span>
+          <span class="meta">${t.result ? I18n.t('run.duration_in_value_out_output_cost', { duration: fmtDur(t.result.duration), value: fmtNum((t.result.usage?.input || 0) + (t.result.usage?.cache_read || 0)), output: fmtNum(t.result.usage?.output), cost: fmtCost(t.result.cost) }) : I18n.t('run.in_progress')}</span>
         </div>
         <div class="turn-body">
           ${t.prompt != null ? detailsBlock(`${s.id}:${t.n}:prompt`, 'prompt', 'prompt sent', t.prompt) : ''}

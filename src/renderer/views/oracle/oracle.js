@@ -93,7 +93,7 @@
   const doAction = (id) => cardAction(id, () => api.oracleAct({ actionId: id, mock: devMode() }));
   const dismissAction = (id) => cardAction(id, () => api.oracleDismiss({ actionId: id }));
   async function undoAction(id) {
-    if (!await confirmDialog('Undo this action', 'The backup taken before the action is put back.', 'Undo')) return;
+    if (!await confirmDialog(t('oracle.undo_this_action'), t('oracle.the_backup_taken_before_the_action'), t('common.undo'))) return;
     cardAction(id, () => api.oracleUndo({ actionId: id }));
   }
   async function startNightWatch() {
@@ -173,7 +173,7 @@
   }
 
   async function reset() {
-    if (!await confirmDialog('New session', 'The Oracle starts a new session from a handoff note it writes now. The conversation and its memory are kept.', 'New session')) return;
+    if (!await confirmDialog(t('oracle.new_session'), t('oracle.the_oracle_starts_a_new_session'), t('oracle.new_session'))) return;
     try {
       const out = await api.resetOracle({ mock: devMode() });
       or.messages = out.messages;
@@ -318,7 +318,7 @@
       if (t.kind === 'none' || t.kind === 'path') return;
       a.classList.add('oracle-link');
       a.dataset.oracleLink = JSON.stringify(t);
-      a.title = t.kind === 'run' ? `Open run ${t.runId}` : t.kind === 'issue' ? `Open #${t.number} in the Backlog` : `Open ${t.path} in Artifacts`;
+      a.title = t.kind === 'run' ? I18n.t('oracle.open_run_runid', { runId: t.runId }) : t.kind === 'issue' ? I18n.t('oracle.open_number_in_the_backlog', { number: t.number }) : I18n.t('oracle.open_path_in_artifacts', { path: t.path });
     });
     box.querySelectorAll('code').forEach((c) => {
       if (c.closest('a')) return;
@@ -326,11 +326,11 @@
       if (t.kind === 'file') {
         c.classList.add('oracle-link');
         c.dataset.oracleLink = JSON.stringify(t);
-        c.title = `Open ${t.path} in Artifacts`;
+        c.title = I18n.t('oracle.open_path_in_artifacts', { path: t.path });
       } else if (t.kind === 'path') {
         c.classList.add('oracle-path');
         c.dataset.oracleCopy = t.path;
-        c.title = `${t.path} (click to copy)`;
+        c.title = I18n.t('oracle.path_click_to_copy', { path: t.path });
       }
     });
   }
@@ -365,7 +365,7 @@
   function messageHtml(m, ref = '') {
     if (m.role === 'user') {
       loadAttachments(m.attachments);
-      return `<div class="sup-wmsg user"><div class="sup-wmsg-meta oracle-meta">${t('oracle.you')} ${esc(time(m.ts))}${m.screen ? ` · <span class="oracle-cut" title="${esc(m.screen)}">${esc(m.screen)}</span>` : ''}${m.unanswered ? ` · <span class="badge warn">${t('oracle.no_answer')}</span>` : ''}${m.refused ? ` · <span class="badge warn" title="${esc(m.refused.text || '')}">${t('oracle.not_sent')} ${m.refused.reason === 'daily-budget' ? 'daily budget' : 'monthly budget'}</span>` : ''}</div>${m.context?.label ? `<div class="oracle-cut small muted" title="${esc(m.context.label)}">${t('oracle.about')} ${esc(m.context.label)}</div>` : ''}<div class="oracle-text">${esc(m.text)}</div>${thumbsHtml(m.attachments)}</div>`;
+      return `<div class="sup-wmsg user"><div class="sup-wmsg-meta oracle-meta">${t('oracle.you')} ${esc(time(m.ts))}${m.screen ? ` · <span class="oracle-cut" title="${esc(m.screen)}">${esc(m.screen)}</span>` : ''}${m.unanswered ? ` · <span class="badge warn">${t('oracle.no_answer')}</span>` : ''}${m.refused ? ` · <span class="badge warn" title="${esc(m.refused.text || '')}">${t('oracle.not_sent')} ${m.refused.reason === 'daily-budget' ? t('oracle.daily_budget') : t('oracle.monthly_budget')}</span>` : ''}</div>${m.context?.label ? `<div class="oracle-cut small muted" title="${esc(m.context.label)}">${t('oracle.about')} ${esc(m.context.label)}</div>` : ''}<div class="oracle-text">${esc(m.text)}</div>${thumbsHtml(m.attachments)}</div>`;
     }
     if (m.kind === 'action' && m.action) return cardHtml(m);
     if (m.kind === 'delegation') {
@@ -381,7 +381,7 @@
     if (m.kind === 'wake') {
       const mutes = (m.runIds || []).map((id) => {
         const muted = (or.wake?.muted || []).includes(id);
-        return `<button class="btn ghost sm" type="button" data-oracle-mute="${esc(id)}" data-on="${muted ? '0' : '1'}" title="${muted ? 'Its events wake the Oracle again' : 'Its events no longer wake the Oracle'}">${muted ? 'Unmute' : 'Mute'} ${esc(id)}</button>`;
+        return `<button class="btn ghost sm" type="button" data-oracle-mute="${esc(id)}" data-on="${muted ? '0' : '1'}" title="${muted ? t('oracle.its_events_wake_the_oracle_again') : t('oracle.its_events_no_longer_wake_the')}">${muted ? t('oracle.unmute') : t('oracle.mute')} ${esc(id)}</button>`;
       }).join('');
       return `<div class="sup-wmsg system oracle-wake"><details class="oracle-fold"><summary><span class="sup-wmsg-meta">${esc(time(m.ts))}</span> ${esc(m.text)}</summary>
         <ul class="oracle-events small">${(m.events || []).map((l) => `<li>${esc(l)}</li>`).join('')}</ul>${mutes ? `<div class="row oracle-card-actions">${mutes}</div>` : ''}</details></div>`;
@@ -506,7 +506,7 @@
       ? `<span class="badge" data-testid="oracle-session-mode" title="${t('oracle.the_last_turn_started_a_new')}">${t('oracle.fresh_session')}</span>`
       : s.sessionMode === 'resumed'
         ? `<span class="badge" data-testid="oracle-session-mode" title="${t('oracle.the_last_turn_went_on_with')}">${t('oracle.resumed_session')}</span>` : '';
-    return `<span class="badge" data-testid="oracle-model" title="${esc(s.model)}${s.effort ? `, effort ${esc(s.effort)}` : ''}">${esc(Robots.plaqueFor(s.model))}</span> ${mode}`;
+    return `<span class="badge" data-testid="oracle-model" title="${esc(s.model)}${s.effort ? t('oracle.effort_effort', { effort: esc(s.effort) }) : ''}">${esc(Robots.plaqueFor(s.model))}</span> ${mode}`;
   }
   function footHtml(v) {
     const t = v.today;
@@ -563,7 +563,7 @@
         ? starters.map((q) => `<button class="chip" type="button" data-oracle-q="${esc(q)}"${startersOn ? '' : ' disabled'}>${esc(q)}</button>`).join('') : '';
       $(`#oracle-chips-${w}`).innerHTML = !starters && (v.state === 'empty' || (v.state === 'answering' && !or.messages.length))
         ? SUGGESTIONS.map((q) => `<button class="chip" type="button" data-oracle-q="${esc(q)}"${v.chipsEnabled ? '' : ' disabled'}>${esc(q)}</button>`).join('') : '';
-      $(`#oracle-thumbs-${w}`).innerHTML = v.attachments.map((i) => `<span class="oracle-thumb draft" title="${esc(i.name || 'Pasted image')}"><img src="${esc(i.dataUrl)}" alt="${t('oracle.pasted_image')}" /><button class="icon-btn" type="button" data-oracle-unpaste="${esc(i.id)}" title="${t('oracle.remove_this_image')}" aria-label="${t('oracle.remove_this_image')}"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg></button></span>`).join('');
+      $(`#oracle-thumbs-${w}`).innerHTML = v.attachments.map((i) => `<span class="oracle-thumb draft" title="${esc(i.name || t('oracle.pasted_image'))}"><img src="${esc(i.dataUrl)}" alt="${t('oracle.pasted_image')}" /><button class="icon-btn" type="button" data-oracle-unpaste="${esc(i.id)}" title="${t('oracle.remove_this_image')}" aria-label="${t('oracle.remove_this_image')}"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg></button></span>`).join('');
       chat.form.classList.toggle('hidden', v.state === 'unavailable');
       // Send and the text box follow the state (paused, unavailable, answering); the chips just redrawn get the busy lock
       chat.refresh();
@@ -576,7 +576,7 @@
     const badge = $('#nav-oracle-count');
     badge.textContent = String(v.unread);
     badge.classList.toggle('hidden', !v.unread);
-    badge.title = `${v.unread} new answer${v.unread === 1 ? '' : 's'} from the Oracle`;
+    badge.title = t('oracle.unread_new_answer_value_from_the', { unread: v.unread, value: v.unread === 1 ? '' : 's' });
     markRead();
     window.GateOracle?.paint?.();
     window.AgentsWindow?.changed?.();
@@ -643,7 +643,7 @@
       ...(w === WINDOW ? { agentId: 'oracle' } : {}),
       ids: { messages: `oracle-log-${w}`, input: `oracle-q-${w}` },
       classes: { messages: 'svc-log oracle-log', form: 'svc-form', input: 'svc-input oracle-input', send: 'oracle-send', live: 'oracle-live' },
-      placeholder: 'Ask the Oracle… (Enter to send, Shift+Enter for a new line; paste a screenshot)',
+      placeholder: t('oracle.ask_the_oracle_enter_to_send'),
       renderMessage: (m, i, all) => messageHtml(m, refAt(all, i)),
       emptyHtml,
       pendingHtml,
@@ -727,7 +727,7 @@
       btn.id = 'nav-oracle';
       btn.type = 'button';
       btn.className = 'btn ghost btn-icon nav-oracle';
-      btn.title = 'Talk to the Oracle (on Home: its panel)';
+      btn.title = t('oracle.talk_to_the_oracle_on_home');
       btn.innerHTML = `${avatar('nav')}<span>${t('oracle.oracle_2')}</span><span id="nav-oracle-count" class="nav-badge oracle-unread hidden"></span>`;
       btn.onclick = (e) => { e.stopPropagation(); if (or.drawer) closeDrawer(); else openDrawer(); };
       const corner = $('.topbar .header-right');
@@ -811,7 +811,7 @@
         const link = t.closest('[data-oracle-link]');
         if (link) { e.preventDefault(); follow(JSON.parse(link.dataset.oracleLink)); return; }
         const copy = t.closest('[data-oracle-copy]');
-        if (copy) { api.clipboardWrite(copy.dataset.oracleCopy).then(() => { copy.title = 'Copied'; }).catch(() => {}); return; }
+        if (copy) { api.clipboardWrite(copy.dataset.oracleCopy).then(() => { copy.title = I18n.t('oracle.copied'); }).catch(() => {}); return; }
         // any other link in an answer: not a navigation of the app's page
         const a = t.closest('.oracle-md a[href]');
         if (a && !a.target) e.preventDefault();

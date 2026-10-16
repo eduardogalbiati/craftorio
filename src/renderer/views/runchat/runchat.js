@@ -66,7 +66,7 @@
     return wf ? Object.fromEntries((wf.steps || []).filter((s) => s.display).map((s) => [s.id, s.display])) : null;
   };
   const stepName = (stepId) => (!stepId ? '' : chat.model.run?.stepNames ? chat.model.stepName(stepId) : displayName(stepId, workflowStepNames()));
-  const stepTag = (stepId, visit, sub) => `<span class="rc-step" data-testid="run-chat-step" title="${esc(`Step ${stepId || ''}`.trim())}">${esc(stepName(stepId))}${sub ? ` · ${esc(sub)}` : ''}${visit > 1 ? ` · visit ${visit}` : ''}</span>`;
+  const stepTag = (stepId, visit, sub) => `<span class="rc-step" data-testid="run-chat-step" title="${esc(`Step ${stepId || ''}`.trim())}">${esc(stepName(stepId))}${sub ? ` · ${esc(sub)}` : ''}${visit > 1 ? t('runchat.visit_visit', { visit }) : ''}</span>`;
 
   // ---------------------------------------------------------------- items → HTML
   function turnHtml(it) {
@@ -122,7 +122,7 @@
     const r = chat.model.run;
     const at = stoppedStep();
     const spent = r.lastTs && r.startedAt ? Date.parse(r.lastTs) - Date.parse(r.startedAt) : 0;
-    return `<div class="duo-note failed rc-interrupted" data-testid="runchat-interrupted-note"><span><b data-status="interrupted">${t('runchat.interrupted_at')} <span title="${esc(at || '')}">${esc(at ? stepName(at) : 'its first step')}</span></b> ${t('runchat.the_app_closed_value', { value: (r.cost || 0).toFixed(2) })} ${fmtSecs(spent)}</span>
+    return `<div class="duo-note failed rc-interrupted" data-testid="runchat-interrupted-note"><span><b data-status="interrupted">${t('runchat.interrupted_at')} <span title="${esc(at || '')}">${esc(at ? stepName(at) : t('runchat.its_first_step'))}</span></b> ${t('runchat.the_app_closed_value', { value: (r.cost || 0).toFixed(2) })} ${fmtSecs(spent)}</span>
       ${resumeButton()}<button type="button" class="link-btn small" data-resume title="${t('runchat.start_a_new_run_from_another')}">${t('runchat.resume_from_step')}</button></div>`;
   }
 
@@ -146,7 +146,7 @@
     // Run App / Open the worktree (app.js), only while the gate waits in the live run
     const open = chat.live && !it.resolved && !it.closed;
     const tools = open && typeof gateToolsHtml === 'function' ? gateToolsHtml(it, { runId: chat.runId }) : '';
-    const field = it.feedback && !it.resolved && !it.closed ? `<label class="duo-ask-label">${esc(it.feedback.label || 'Instructions (optional)')}</label>
+    const field = it.feedback && !it.resolved && !it.closed ? `<label class="duo-ask-label">${esc(it.feedback.label || t('runchat.instructions_optional'))}</label>
       <textarea class="duo-ask-text" rows="2" placeholder="${esc(it.feedback.placeholder || '')}"${off}></textarea>` : '';
     const state = it.resolved ? '' : it.closed ? `<p class="muted small">${t('runchat.the_run_ended_before_an_answer')}</p>`
       : stale ? `<p class="muted small" data-testid="runchat-gate-interrupted">${t('runchat.this_gate_was_waiting_when_the')}</p>`
@@ -198,7 +198,7 @@
       case 'system': return `<div class="rc-sys ${it.level}" data-item="${it.id}"><span>${esc(it.text)}</span><time>${clock(it.ts)}</time></div>`;
       case 'fail': return `<div class="rc-sys error" data-testid="run-chat-fail" data-item="${it.id}"><span title="${esc(it.stepId)}">${esc(stepName(it.stepId))} ${t('runchat.failed_2')} ${esc(it.text.slice(0, 400))}</span><time>${clock(it.ts)}</time></div>`;
       case 'reply': return `<div class="duo-msg user reply" data-item="${it.id}"><div class="duo-bubble">
-        <div class="duo-meta"><b>${it.by === 'user' ? 'You' : esc(it.by)}</b>${stepTag(it.stepId)}<span class="time">${clock(it.ts)}</span></div>
+        <div class="duo-meta"><b>${it.by === 'user' ? t('runchat.you') : esc(it.by)}</b>${stepTag(it.stepId)}<span class="time">${clock(it.ts)}</span></div>
         <p><b>${esc(it.label)}</b></p>${it.feedback ? `<p class="duo-msg-text">${esc(it.feedback)}</p>` : ''}</div></div>`;
       case 'supervisor': return `<div class="duo-msg supervisor" data-item="${it.id}">${avatar({ agent: 'supervisor' })}<div class="duo-bubble">
         <div class="duo-meta"><b>${t('runchat.supervisor')}</b>${stepTag(it.stepId)}<span class="tag">${esc(it.action)}${it.goto ? ` → ${esc(it.goto)}` : ''}${it.causeClass ? ` · ${esc(it.causeClass)}` : ''}</span><span class="time">${clock(it.ts)}</span></div>
@@ -208,7 +208,7 @@
         const ok = it.status === 'success';
         const tested = testedPill(it);
         // #384: the run that resumed this one (its row's resumedBy, read when a past run opens)
-        return `<div class="duo-note ${ok ? 'done' : 'failed'}" data-item="${it.id}" data-testid="run-chat-finished"><span><b data-status="${esc(it.status)}">${ok ? 'Done' : esc(StatusPill.statusLabel(it.status))}</b>${tested}${!ok && it.error ? ` · ${esc(it.error.slice(0, 240))}` : ''} · $${(it.cost || 0).toFixed(2)} · ${fmtSecs(it.durationMs)}${StatusPill.resumedLink(chat.resumedBy)}</span>
+        return `<div class="duo-note ${ok ? 'done' : 'failed'}" data-item="${it.id}" data-testid="run-chat-finished"><span><b data-status="${esc(it.status)}">${ok ? t('runchat.done') : esc(StatusPill.statusLabel(it.status))}</b>${tested}${!ok && it.error ? ` · ${esc(it.error.slice(0, 240))}` : ''} · $${(it.cost || 0).toFixed(2)} · ${fmtSecs(it.durationMs)}${StatusPill.resumedLink(chat.resumedBy)}</span>
           <button type="button" class="link-btn small" data-resume title="${t('runchat.start_a_new_run_from_a')}">${t('runchat.resume_from_step')}</button></div>`;
       }
       default: return '';
@@ -385,7 +385,7 @@
       if (!b || !chat.live || b.disabled) return;
       const v = b.dataset.choice;
       const text = b.closest('.duo-ask')?.querySelector('textarea')?.value || '';
-      if (b.dataset.needsText && !text.trim()) { showToast('Write your request first', `"${b.textContent}" sends the text to the agent.`); b.closest('.duo-ask')?.querySelector('textarea')?.focus({ preventScroll: true }); return; }
+      if (b.dataset.needsText && !text.trim()) { showToast(t('runchat.write_your_request_first'), t('runchat.textcontent_sends_the_text_to_the', { textContent: b.textContent })); b.closest('.duo-ask')?.querySelector('textarea')?.focus({ preventScroll: true }); return; }
       const buttons = b.closest('.duo-ask').querySelectorAll('button');
       buttons.forEach((x) => { x.disabled = true; });
       // the answer opposite to the gate's recommendation asks once (#213); images pasted into the feedback (#130) go with it

@@ -18,6 +18,7 @@
 // fillGateFeedback, failureContext, failureButtonHtml: tested in test/gate-oracle-183.test.js and
 // test/renderer-roadmap-ask-oracle-271.test.js).
 (function (root) {
+  const t = (...a) => (typeof module === 'object' && module.exports ? require('../shared/i18n') : root.I18n)?.t(...a) ?? a[0];
   const STARTERS = [
     'What was implemented, in plain words?',
     'Does it cover every task of the issue?',
@@ -110,7 +111,7 @@
     const waits = busy ?? live.busy;
     const thinks = !waits && (thinking ?? live.thinking);
     const tip = waits ? 'The Oracle is answering another question: yours waits in line' : title;
-    return `<button type="button" class="btn sm ghost gate-oracle" ${attrs} title="${escHtml(tip)}">${avatarHtml(thinks)}<span class="gate-oracle-label">${waits ? 'Oracle is answering…' : escHtml(label)}</span></button>`;
+    return `<button type="button" class="btn sm ghost gate-oracle" ${attrs} title="${escHtml(tip)}">${avatarHtml(thinks)}<span class="gate-oracle-label">${waits ? t('gate_oracle.oracle_is_answering') : escHtml(label)}</span></button>`;
   }
 
   /** The gate card's button: the Oracle's avatar and "Interact with Oracle" (busy: "Oracle is answering…"). */
@@ -118,8 +119,8 @@
     const id = gate.approval_id || gate.approvalId || '';
     return oracleButtonHtml({
       ref: refOf(id),
-      label: 'Interact with Oracle',
-      title: 'Discuss this gate with the Oracle before answering: what was built, what could break',
+      label: t('gate_oracle.interact_with_oracle'),
+      title: t('gate_oracle.discuss_this_gate_with_the_oracle'),
       attrs: `data-testid="gate-oracle" data-gate-oracle="${escHtml(id)}" data-run="${escHtml(gate.run_id || gate.runId || '')}" data-step="${escHtml(gate.step_id || gate.stepId || '')}"`,
       busy: opts.busy,
       thinking: opts.thinking,
@@ -168,15 +169,15 @@
     const what = item.run?.status === 'interrupted' ? 'interruption' : 'failure';
     return oracleButtonHtml({
       ref: failureRef(item),
-      label: `Ask the Oracle about this ${what}`,
-      title: 'Opens the Oracle beside the roadmap, already asking what happened to this item and what to do next',
+      label: t('gate_oracle.ask_the_oracle_about_this_what', { what }),
+      title: t('gate_oracle.opens_the_oracle_beside_the_roadmap'),
       attrs: `${attrs} data-oracle-ask="${escHtml(failureRef(item))}" data-oracle-what="${what}"`.trim(),
     });
   }
 
   /** Opens the Oracle's drawer on something on screen: its chip and starters; `question` is sent at once (queued while it answers another). */
   function ask({ chip, context, ref, starters = STARTERS, question = '', guide = GUIDE } = {}) {
-    if (!root.OracleChat?.openWith) { root.showToast?.('The Oracle is not available', 'Its chat did not load in this window.'); return false; }
+    if (!root.OracleChat?.openWith) { root.showToast?.(t('gate_oracle.the_oracle_is_not_available'), t('gate_oracle.its_chat_did_not_load_in')); return false; }
     root.OracleChat.openWith({ label: chip, ref, text: contextText(context, guide), starters, ...(question ? { question } : {}) });
     return true;
   }
@@ -247,7 +248,7 @@
   function useText(ref, text) {
     const approvalId = String(ref || '').replace(/^gate:/, '');
     const fill = () => {
-      if (!fillGateFeedback(cardOf(approvalId), text)) showToast('The gate has no feedback box to fill', 'It was answered, or it takes no text: copy the text instead.');
+      if (!fillGateFeedback(cardOf(approvalId), text)) showToast(t('gate_oracle.the_gate_has_no_feedback_box'), t('gate_oracle.it_was_answered_or_it_takes'));
     };
     if (cardOf(approvalId)) { fill(); return; }
     const runId = [...state.runs.entries()].find(([, v]) => v.approvals?.has?.(approvalId))?.[0];

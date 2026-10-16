@@ -124,8 +124,8 @@
     if (inbox.busy) return;
     const error = $('#inbox-capture-error');
     const title = String($('#inbox-title').value || '').trim();
-    if (!inbox.projectId) { error.textContent = 'Choose a project in the header first.'; return; }
-    if (!title) { error.textContent = 'Give the idea a title.'; $('#inbox-title').focus({ preventScroll: true }); return; }
+    if (!inbox.projectId) { error.textContent = t('inbox.choose_a_project_in_the_header_2'); return; }
+    if (!title) { error.textContent = t('inbox.give_the_idea_a_title'); $('#inbox-title').focus({ preventScroll: true }); return; }
     inbox.busy = true;
     $('#inbox-capture').disabled = true;
     error.textContent = '';
@@ -139,7 +139,7 @@
       $('#inbox-text').value = '';
       inbox.files = [];
       renderFiles();
-      if (failed.length) error.textContent = `Captured, but not attached: ${failed.join('; ')}`;
+      if (failed.length) error.textContent = t('inbox.captured_but_not_attached_value', { value: failed.join('; ') });
     } catch (e) {
       error.textContent = errMsg(e);
     } finally {
@@ -205,7 +205,7 @@
     const options = [['keep', 'Keep as a new card'], ['skip', 'Skip it'], ...(d.kind === 'card' ? [['merge', 'Merge into that card']] : [])];
     return `
       <span class="inbox-import-dup" data-testid="inbox-import-duplicate">
-        <span class="badge warn">${t('inbox.duplicate_of')} ${d.kind === 'card' ? 'a card' : 'an open issue'}</span> ${link}
+        <span class="badge warn">${t('inbox.duplicate_of')} ${d.kind === 'card' ? t('inbox.a_card') : t('inbox.an_open_issue')}</span> ${link}
         <select data-import-action="${i}" aria-label="${t('inbox.what_to_do_with_the_duplicate', { title: esc(d.title) })}">
           ${options.map(([v, label]) => `<option value="${v}"${actionOf(it) === v ? ' selected' : ''}>${label}</option>`).join('')}
         </select>
@@ -229,14 +229,14 @@
           <span class="inbox-card-meta muted small">
             <span class="badge" data-testid="inbox-import-criteria" title="${t('inbox.its_lines_the_card_s_acceptance')}">${n} ${n === 1 ? 'criterion' : 'criteria'}</span>
             ${clarityBadge(it.clarity)}
-            <span class="inbox-import-lines" title="${esc(it.text || '')}">${esc(firstLines(it.text)) || 'No text: a title only.'}</span>
+            <span class="inbox-import-lines" title="${esc(it.text || '')}">${esc(firstLines(it.text)) || t('inbox.no_text_a_title_only')}</span>
           </span>
           ${duplicateHtml(it, i)}
           ${pick ? `
           <div class="row inbox-import-pick" role="group" aria-label="${esc(IMPORT_EDITS[pick.op])}">
             <label class="small" for="inbox-import-target">${esc(IMPORT_EDITS[pick.op])}</label>
             <select id="inbox-import-target">${others.map(([o, k]) => `<option value="${k}">${k + 1}. ${esc(o.title)}</option>`).join('')}</select>
-            <button type="button" class="btn sm primary" data-import-op="apply" data-index="${i}">${pick.op === 'merge' ? 'Merge' : 'Nest'}</button>
+            <button type="button" class="btn sm primary" data-import-op="apply" data-index="${i}">${pick.op === 'merge' ? t('inbox.merge') : t('inbox.nest')}</button>
             <button type="button" class="btn sm ghost" data-import-op="unpick" data-index="${i}">${t('common.cancel')}</button>
           </div>` : ''}
         </div>
@@ -282,7 +282,7 @@
       <div data-testid="inbox-import-preview" class="inbox-import-preview">
         <div class="inbox-import-head">
           <h2>${t('inbox.preview_2')} ${esc(plural(st.items.length, 'item'))}</h2>
-          <span class="badge" title="${esc(st.name || 'pasted text')}">${esc(st.name || 'pasted')}</span>
+          <span class="badge" title="${esc(st.name || t('inbox.pasted_text'))}">${esc(st.name || 'pasted')}</span>
         </div>
         <p class="muted small">${esc(st.note)} ${t('inbox.nothing_is_written_yet_rename_drop')}</p>
         ${st.undo ? `<p class="small inbox-import-undo">${esc(st.undo.what)} <button type="button" class="link-btn small" data-import-op="undo">${t('common.undo')}</button></p>` : ''}
@@ -352,7 +352,7 @@
     const { create } = importCounts(st.items);
     let confirmLarge = false;
     if (create > MAX_IMPORT) {
-      if (!(await confirmDialog('Large import', `This import creates ${create} cards in the Inbox, more than ${MAX_IMPORT}. Create them all?`, `Create ${create} cards`))) return;
+      if (!(await confirmDialog(t('inbox.large_import'), t('inbox.this_import_creates_create_cards_in', { create, MAX_IMPORT }), t('inbox.create_create_cards', { create })))) return;
       confirmLarge = true;
     }
     const items = st.items.map((it) => ({ title: it.title, text: it.text, acceptance: it.acceptance, action: actionOf(it), ...(actionOf(it) === 'merge' ? { into: it.duplicate.id } : {}) }));
@@ -362,7 +362,7 @@
       const done = await api.importDiscoveryItems(inbox.projectId, items, st.name ? { name: st.name, text: st.text } : { pasted: true }, confirmLarge);
       closeImport();
       const parts = [`${plural(done.created.length, 'card')} created`, done.merged.length ? `${done.merged.length} merged` : '', done.skipped ? `${done.skipped} skipped` : ''].filter(Boolean);
-      showToast(`Imported ${st.name || 'the pasted text'}`, `${parts.join(', ')} in the Inbox.`);
+      showToast(t('inbox.imported_value', { value: st.name || 'the pasted text' }), t('inbox.value_in_the_inbox', { value: parts.join(', ') }));
     } catch (e) {
       st.busy = false;
       st.message = errMsg(e);
@@ -653,7 +653,7 @@
 
   async function removeAttachment(name) {
     const id = inbox.open.id;
-    if (!(await confirmDialog('Remove attachment', `Delete "${name}" from this card?`, 'Remove'))) return;
+    if (!(await confirmDialog(t('inbox.remove_attachment'), t('inbox.delete_name_from_this_card', { name }), t('inbox.remove')))) return;
     try {
       await api.removeDiscoveryAttachment(inbox.projectId, id, name);
       inbox.previews.delete(`${id}/${name}`);
@@ -693,7 +693,7 @@
 
   function openDiscard() {
     if (editBlocks()) return;
-    $('#inbox-discard-what').textContent = `"${inbox.open.title}" moves to the archive with this reason.`;
+    $('#inbox-discard-what').textContent = t('inbox.title_moves_to_the_archive_with', { title: inbox.open.title });
     $('#inbox-discard-reason').value = '';
     $('#inbox-discard-error').textContent = '';
     openModal('#inbox-discard-modal');
@@ -705,7 +705,7 @@
     const id = inbox.open?.id;
     if (!id) return closeModal('#inbox-discard-modal');
     const reason = String($('#inbox-discard-reason').value || '').trim();
-    if (!reason) { $('#inbox-discard-error').textContent = 'Say why the card is discarded.'; return undefined; }
+    if (!reason) { $('#inbox-discard-error').textContent = t('inbox.say_why_the_card_is_discarded'); return undefined; }
     return once(async () => {
       try {
         await api.archiveDiscoveryCard(inbox.projectId, id, reason);
@@ -723,9 +723,9 @@
     // (a committed card takes no merge, #258)
     try { others = (await api.listDiscoveryCards(inbox.projectId)).filter((c) => c.id !== id && c.column !== 'committed'); } catch (e) { return detailError(errMsg(e)); }
     if (inbox.open?.id !== id) return;
-    $('#inbox-merge-what').textContent = `The document and the attachments of "${inbox.open.title}" join the card chosen here; this card is archived with a link to it.`;
+    $('#inbox-merge-what').textContent = t('inbox.the_document_and_the_attachments_of', { title: inbox.open.title });
     $('#inbox-merge-target').innerHTML = others.map((c) => `<option value="${esc(c.id)}">${esc(c.title)} (${esc(c.column)})</option>`).join('');
-    $('#inbox-merge-error').textContent = others.length ? '' : 'There is no other card to merge into.';
+    $('#inbox-merge-error').textContent = others.length ? '' : t('inbox.there_is_no_other_card_to');
     $('#btn-inbox-merge').disabled = !others.length;
     openModal('#inbox-merge-modal');
     $('#inbox-merge-target').focus({ preventScroll: true });

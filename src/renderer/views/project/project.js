@@ -78,7 +78,7 @@ function renderProjectView() {
   const p = pv.project;
   $('#project-head').innerHTML = `
     <div class="pr-head-info">
-      <h1>${esc(p?.name || 'Project')}</h1>
+      <h1>${esc(p?.name || t('project.project'))}</h1>
       ${p?.description ? `<p class="muted">${esc(p.description)}</p>` : ''}
     </div>
     <div class="row">
@@ -99,12 +99,12 @@ function renderProjectView() {
   if (pv.tab !== 'overview') return;
   $('#project-info').innerHTML = `
     <dl class="kv">
-      <dt>${t('project.folder')}</dt><dd class="${p && !p.exists ? 'warn-text' : ''}">${esc(p?.folder || '—')}${p && !p.exists ? ' (not found)' : ''}</dd>
+      <dt>${t('project.folder')}</dt><dd class="${p && !p.exists ? 'warn-text' : ''}">${esc(p?.folder || '—')}${p && !p.exists ? t('project.not_found') : ''}</dd>
       <dt>${t('project.repository')}</dt><dd>${esc(p?.repo || '—')}</dd>
       ${pv.local?.ahead > 0 ? `<dt>${t('project.not_pushed')}</dt><dd class="warn-text">${pv.local.ahead} ${t('project.commit_value_on_the_local_base', { value: pv.local.ahead === 1 ? '' : 's', base: esc(pv.local.base), value2: pv.local.issues?.length ? ` (closes ${esc(pv.local.issues.map((n) => `#${n}`).join(', '))})` : '' })}</dd>` : ''}
     </dl>`;
   renderRunList(pv, {
-    prefix: 'project', box: '#project-runs', empty: 'No workflows have run in this project yet.',
+    prefix: 'project', box: '#project-runs', empty: t('project.no_workflows_have_run_in_this'),
     start: () => openDrawer({ project: pv.id }), rerender: renderProjectView,
     reload: () => loadProjectRuns(), loadMore: () => loadProjectRuns('more'),
   });

@@ -104,7 +104,7 @@
     const err = $d('#duo-error');
     err.textContent = '';
     const inputs = readSetup();
-    if (!inputs.prompt || !inputs.goal) { err.textContent = 'Write the prompt and the goal first.'; return; }
+    if (!inputs.prompt || !inputs.goal) { err.textContent = t('duo.write_the_prompt_and_the_goal'); return; }
     // simulation only in developer mode (the checkbox is hidden otherwise); checked without it fails
     let mock;
     try { mock = wantsSimulation($d('#duo-mock')); } catch (e) { err.textContent = e.message; return; }
@@ -156,10 +156,10 @@
     const sel = $d('#duo-project');
     const current = sel.value || saved.project || '';
     sel.innerHTML = `<option value="">${t('duo.no_project_prompt_and_goal_only')}</option>` + projects.map((p) =>
-      `<option value="${esc(p.id)}"${p.exists ? '' : ' disabled'}${p.id === current && p.exists ? ' selected' : ''}>${esc(p.name)}${p.exists ? '' : ' (folder missing)'}</option>`).join('');
+      `<option value="${esc(p.id)}"${p.exists ? '' : ' disabled'}${p.id === current && p.exists ? ' selected' : ''}>${esc(p.name)}${p.exists ? '' : t('duo.folder_missing')}</option>`).join('');
     const hint = () => {
       const p = projects.find((x) => x.id === sel.value);
-      $d('#duo-project-hint').textContent = p ? `${p.folder}: the writer and the reviewer read its files (read-only).` : 'The writer and the reviewer read its files (read-only) to ground the document.';
+      $d('#duo-project-hint').textContent = p ? t('duo.folder_the_writer_and_the_reviewer', { folder: p.folder }) : t('duo.the_writer_and_the_reviewer_read');
     };
     sel.onchange = hint;
     hint();
@@ -262,7 +262,7 @@
     $d('#duo-checks').innerHTML = '';
     $d('#duo-interventions').textContent = '0/6';
     $d('#duo-round').textContent = '0';
-    $d('#duo-chat-status').textContent = live ? 'starting…' : 'loading…';
+    $d('#duo-chat-status').textContent = live ? t('duo.starting') : t('duo.loading');
     $d('#duo-stop').classList.toggle('hidden', !live);
     setSuperPill('watch', 'watching');
     renderScores();
@@ -525,7 +525,7 @@
       <textarea class="duo-ask-text" rows="2" placeholder="${esc(ev.feedback.placeholder)}"${off}></textarea>` : '';
     chat.labels = Object.fromEntries(choices.map((c) => [c.intent ? `${c.id}:${c.intent}` : String(c.id), c.label]));
     message('supervisor', `<div class="duo-ask" data-gate="${esc(ev.approval_id)}"><p class="duo-msg-text">${esc(ev.message)}</p>${field}<div class="row gate-choices">${buttons}</div></div>`, ev.ts);
-    $d('#duo-chat-status').textContent = 'The supervisor is waiting for you';
+    $d('#duo-chat-status').textContent = t('duo.the_supervisor_is_waiting_for_you');
     if (chat.live) document.querySelector(`[data-gate="${ev.approval_id}"] textarea`)?.focus({ preventScroll: true });
   }
 
@@ -561,17 +561,17 @@
       ['writer', 'reviewer', 'supervisor'].forEach((r) => setCast(r, 'done'));
       setSuperPill('success', 'done');
       addCheck('ok', 'Run finished');
-      $d('#duo-chat-status').textContent = 'Finished';
+      $d('#duo-chat-status').textContent = t('duo.finished');
       // accepted and about an issue: Save to issue, now or later (a replayed run keeps it)
       if (chat.issue) {
         note(`<button type="button" class="btn sm primary" data-save-issue title="${t('duo.preview_it_then_confirm_it_changes', { value: chat.mock ? 'the platform (simulated run: preview only)' : 'GitHub/GitLab' })}">${t('duo.save_to_issue_number', { number: esc(chat.issue.number) })}</button>
-          <span class="muted small">${chat.mock ? 'simulated run: preview only, nothing is sent' : 'replace its description or add it as a comment; you confirm first'}</span>`, 'done duo-save-row');
+          <span class="muted small">${chat.mock ? t('duo.simulated_run_preview_only_nothing_is') : t('duo.replace_its_description_or_add_it')}</span>`, 'done duo-save-row');
       }
     } else {
       note(`<b>${esc(ev.status)}</b> · ${esc(String(ev.error || '').slice(0, 220))} · ${cost} · ${dur}`, 'failed');
       setSuperPill(ev.status === 'cancelled' ? 'cancelled' : 'failed', ev.status);
       addCheck('warn', `Run ${ev.status}`);
-      $d('#duo-chat-status').textContent = ev.status === 'cancelled' ? 'Cancelled' : 'Failed';
+      $d('#duo-chat-status').textContent = ev.status === 'cancelled' ? t('duo.cancelled') : t('duo.failed');
     }
   }
 
@@ -610,7 +610,7 @@
     chat.running = chat.live;
     $d('#duo-stop').classList.toggle('hidden', !chat.live);
     if (chat.live && ROLE_OF_STEP[chat.openStep]) setTyping(ROLE_OF_STEP[chat.openStep], 'thinking');
-    if (!finished && !chat.live) $d('#duo-chat-status').textContent = 'Interrupted';
+    if (!finished && !chat.live) $d('#duo-chat-status').textContent = t('duo.interrupted');
     if (!chat.live) $d('#duo-messages').scrollTop = 0;
   }
   window.openDuoRun = openRun;
@@ -650,14 +650,14 @@
     saveRun = { runId: target.runId, issue, mock: !!mock };
     const def = !docSkill || docSkill === DEFAULT_ISSUE_SKILL ? 'replace' : 'comment';
     document.querySelectorAll('input[name="duo-save-mode"]').forEach((r) => { r.checked = r.value === def; });
-    $d('#duo-save-title').textContent = `Save to issue #${issue.number}`;
+    $d('#duo-save-title').textContent = t('duo.save_to_issue_number_2', { number: issue.number });
     $d('#duo-save-issue').innerHTML = `<a href="${esc(issue.url)}" target="_blank" rel="noopener">#${esc(issue.number)}</a> ${esc(issue.title || '')}`;
     $d('#duo-save-note').textContent = mock
-      ? 'Simulated run: this is only a preview, nothing is sent to GitHub/GitLab.'
-      : 'Saving changes the issue on GitHub/GitLab with the platform CLI. The document also stays in the run folder.';
+      ? t('duo.simulated_run_this_is_only_a')
+      : t('duo.saving_changes_the_issue_on_github');
     $d('#btn-duo-save-ok').classList.toggle('hidden', !!mock);
     $d('#btn-duo-save-ok').disabled = false;
-    $d('#btn-duo-save-ok').textContent = `Save to issue #${issue.number}`;
+    $d('#btn-duo-save-ok').textContent = t('duo.save_to_issue_number_2', { number: issue.number });
     $d('#duo-save-command').textContent = '';
     $d('#duo-save-modal').classList.remove('hidden');
     previewSave();
@@ -676,17 +676,17 @@
       closeSave();
       if (chat.runId === runId) {
         const where = r.saved?.commentUrl || issue.url;
-        note(`Saved to issue <a href="${esc(where)}" target="_blank" rel="noopener">#${esc(issue.number)}</a> · ${r.mode === 'comment' ? 'as a comment' : 'description replaced (the original is kept at the end)'}${r.refreshError ? ` · the Backlog could not read it again: ${esc(r.refreshError)}` : ''}`, 'done');
+        note(`Saved to issue <a href="${esc(where)}" target="_blank" rel="noopener">#${esc(issue.number)}</a> · ${r.mode === 'comment' ? t('duo.as_a_comment') : t('duo.description_replaced_the_original_is_kept')}${r.refreshError ? t('duo.the_backlog_could_not_read_it', { refreshError: esc(r.refreshError) }) : ''}`, 'done');
         addCheck('ok', `Saved to issue #${issue.number} (${r.mode})`);
       } else if (typeof showToast === 'function') {
         // saved from the Run screen or Run Details (#125): Run Details lists it with the issue's link
-        showToast(`Saved to issue #${issue.number}`, r.mode === 'comment' ? 'As a comment.' : 'Description replaced (the original is kept at the end).', runId);
+        showToast(t('duo.saved_to_issue_number', { number: issue.number }), r.mode === 'comment' ? t('duo.as_a_comment_2') : t('duo.description_replaced_the_original_is_kept_2'), runId);
       }
       // the Backlog shows the new body, task progress and labels
       if (typeof window.refreshBacklog === 'function' && !$d('#view-backlog')?.classList.contains('hidden')) window.refreshBacklog();
     } catch (e) {
       // the CLI's message (no auth, issue closed or deleted, network); the document stays in the run folder
-      $d('#duo-save-error').textContent = `${cleanError(e)} The document is still in the run folder (document.md).`;
+      $d('#duo-save-error').textContent = t('duo.e_the_document_is_still_in', { e: cleanError(e) });
       ok.disabled = false;
     }
   }

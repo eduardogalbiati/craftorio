@@ -31,7 +31,7 @@
     el.className = 'dv';
     el.setAttribute('role', 'dialog');
     el.setAttribute('aria-modal', 'true');
-    el.setAttribute('aria-label', 'Changes');
+    el.setAttribute('aria-label', t('diff_viewer.changes'));
     el.innerHTML = `<div class="dv-card">
         <div class="dv-bar">
           <div class="dv-title"><b>${t('diff_viewer.changes')}</b>${opts.title ? ` <span class="dv-run" title="${esc(opts.title)}">${esc(opts.title)}</span>` : ''}<span class="dv-range muted small mono" data-dv-range></span></div>
@@ -133,7 +133,7 @@
     pick.value = cur.commit || '';
     const range = el.querySelector('[data-dv-range]');
     range.textContent = data?.base ? (cur.commit ? `commit ${cur.commit.slice(0, 7)}` : `${data.base}...HEAD`) : '';
-    range.title = data?.base ? (cur.commit ? 'Only this commit\'s changes, against its parent' : `git diff --find-renames ${data.base}...HEAD: the changes since the merge base with ${data.base}`) : '';
+    range.title = data?.base ? (cur.commit ? t('diff_viewer.only_this_commit_s_changes_against') : t('diff_viewer.git_diff_find_renames_base_head', { base: data.base, base2: data.base })) : '';
     const note = el.querySelector('[data-dv-note]');
     const why = data?.simulated ? 'Simulated: no diff. These are the files the developer reported.'
       : data?.unavailable ? `No diff: ${data.unavailable} These are the files the developer reported.` : '';
@@ -146,7 +146,7 @@
     const files = cur.data?.files || [];
     const n = files.filter((f) => cur.viewed.has(f.file)).length;
     const badge = cur.el.querySelector('[data-dv-viewed]');
-    badge.textContent = files.length ? `${n} of ${files.length} viewed` : '';
+    badge.textContent = files.length ? t('diff_viewer.n_of_length_viewed', { n, length: files.length }) : '';
     badge.classList.toggle('hidden', !files.length);
     badge.classList.toggle('ok', !!files.length && n === files.length);
   }
@@ -157,12 +157,12 @@
     const list = cur.el.querySelector('[data-dv-list]');
     const totals = cur.el.querySelector('[data-dv-totals]');
     if (!cur.data) {
-      list.innerHTML = `<p class="muted small dv-empty">${cur.error ? 'Could not load the files.' : 'Loading…'}</p>`;
+      list.innerHTML = `<p class="muted small dv-empty">${cur.error ? t('diff_viewer.could_not_load_the_files') : t('diff_viewer.loading')}</p>`;
       totals.textContent = '';
       return;
     }
     const groups = M.groupByFolder(visibleFiles());
-    list.innerHTML = groups.length ? groups.map((g) => `<div class="dv-folder small muted" title="${esc(g.folder || 'The repository\'s root')}">${esc(g.folder || '/')}</div>
+    list.innerHTML = groups.length ? groups.map((g) => `<div class="dv-folder small muted" title="${esc(g.folder || t('diff_viewer.the_repository_s_root'))}">${esc(g.folder || '/')}</div>
       ${g.files.map((f) => {
         const [icon, label] = M.fileIcon(f.status);
         const name = f.file.split('/').pop();
@@ -173,7 +173,7 @@
           <span class="dv-counts small mono">${counts(f)}</span>
           ${cur.viewed.has(f.file) ? `<span class="dv-seen" title="${t('diff_viewer.viewed')}">✓</span>` : ''}
         </div>`;
-      }).join('')}`).join('') : `<p class="muted small dv-empty">${cur.data.files.length ? 'No file matches the filter.' : 'No changed files.'}</p>`;
+      }).join('')}`).join('') : `<p class="muted small dv-empty">${cur.data.files.length ? t('diff_viewer.no_file_matches_the_filter') : t('diff_viewer.no_changed_files')}</p>`;
     const files = cur.data.files;
     const sum = (k) => files.reduce((s, f) => s + (f[k] || 0), 0);
     totals.innerHTML = files.length ? `${files.length} file${files.length === 1 ? '' : 's'}${files.some((f) => f.added != null) ? ` · ${counts({ added: sum('added'), deleted: sum('deleted') })}` : ''}` : '';
@@ -235,7 +235,7 @@
     }
     const f = fileOf(cur.selected);
     if (!f) {
-      main.innerHTML = `<div class="dv-msg muted">${cur.data.files.length ? 'Pick a file on the left.' : 'This branch changes no file.'}</div>`;
+      main.innerHTML = `<div class="dv-msg muted">${cur.data.files.length ? t('diff_viewer.pick_a_file_on_the_left') : t('diff_viewer.this_branch_changes_no_file')}</div>`;
       return;
     }
     const [icon, label] = M.fileIcon(f.status);

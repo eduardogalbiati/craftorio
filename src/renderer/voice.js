@@ -9,6 +9,7 @@
 // Pure helpers (encodeWav, insertText, formatElapsed) are exported for the tests; the DOM part
 // uses app.js globals when present (showToast, errMsg).
 (function (root) {
+  const t = (...a) => (typeof module === 'object' && module.exports ? require('../shared/i18n') : root.I18n)?.t(...a) ?? a[0];
   // fields where talking helps: supervisor questions, gate feedback, the Start drawer (task, issue
   // intake), Write & Review and Arena prompts, the Inbox capture box, the backlog PO question, the resume instruction
   const VOICE_FIELDS = [

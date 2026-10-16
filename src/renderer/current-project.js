@@ -6,6 +6,7 @@
 // Uses app.js globals at call time (esc, state, showView) and openProjectModal.
 // Browser: window.CurrentProject; Node: module.exports (pickDefault, for a test).
 (function (root) {
+  const t = (...a) => (typeof module === 'object' && module.exports ? require('../shared/i18n') : root.I18n)?.t(...a) ?? a[0];
   const KEY = 'multiagent.currentProject';
   const NEW = '__new__';
 

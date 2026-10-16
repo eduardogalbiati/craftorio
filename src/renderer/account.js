@@ -39,7 +39,7 @@ function renderAccount(s) {
   $('#login-waiting').classList.toggle('hidden', !s.signingIn);
   $('#login-providers').innerHTML = s.providers.map((p) => `<button class="btn ${p.enabled ? '' : 'ghost'}" type="button" data-provider="${esc(p.id)}" ${p.enabled && !s.signingIn ? '' : 'disabled'}>${t('account.continue_with')} ${esc(p.name)}${p.enabled ? '' : ` <span class="soon">${t('account.coming_soon')}</span>`}</button>`).join('');
   $('#login-providers').querySelectorAll('[data-provider]').forEach((b) => (b.onclick = () => signIn(b.dataset.provider)));
-  if (needsLogin && !s.configured) $('#login-error').textContent = 'Sign-in is not configured in this build.';
+  if (needsLogin && !s.configured) $('#login-error').textContent = t('account.sign_in_is_not_configured_in');
 
   // top bar chip
   $('#account-wrap').classList.toggle('hidden', !s.user);

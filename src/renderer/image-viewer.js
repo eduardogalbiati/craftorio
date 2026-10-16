@@ -46,7 +46,7 @@
     el.setAttribute('data-testid', 'image-viewer');
     el.setAttribute('role', 'dialog');
     el.setAttribute('aria-modal', 'true');
-    el.setAttribute('aria-label', opts.title || 'Image');
+    el.setAttribute('aria-label', opts.title || t('image_viewer.image'));
     el.innerHTML = `<div class="iv-bar">
         <div class="iv-title"><b data-testid="image-viewer-title"></b>${nav ? '<span class="badge iv-counter" data-testid="image-viewer-counter" aria-live="polite"></span>' : ''}<span class="iv-caption muted small"></span></div>
         <div class="iv-tabs-slot"></div>
@@ -114,7 +114,7 @@
     cur.item = index;
     const keyOf = (im) => (im.side === 'original' ? 'O' : im.side === 'modified' ? 'M' : '');
     cur.el.querySelector('.iv-tabs-slot').innerHTML = images.length > 1
-      ? `<div class="seg sm iv-tabs" role="tablist">${images.map((im, i) => `<button type="button" role="tab" data-iv-tab="${i}" title="${t('image_viewer.value_value2_space_to_switch', { value: esc(im.label || ''), value2: keyOf(im) ? `${keyOf(im)} or ` : '' })}">${esc(im.label || `Image ${i + 1}`)}</button>`).join('')}</div>`
+      ? `<div class="seg sm iv-tabs" role="tablist">${images.map((im, i) => `<button type="button" role="tab" data-iv-tab="${i}" title="${t('image_viewer.value_value2_space_to_switch', { value: esc(im.label || ''), value2: keyOf(im) ? `${keyOf(im)} or ` : '' })}">${esc(im.label || t('image_viewer.image_value', { value: i + 1 }))}</button>`).join('')}</div>`
       : '';
   }
 
@@ -137,7 +137,7 @@
     const load = ++cur.load;
     let src = im.src || null;
     if (!src && im.file) {
-      msg.textContent = 'Loading…';
+      msg.textContent = t('image_viewer.loading');
       msg.classList.remove('hidden');
       img.classList.add('hidden');
       src = await readSrc(im);
@@ -182,7 +182,7 @@
     if (!cur) return;
     const { img, msg } = parts();
     img.classList.add('hidden');
-    msg.textContent = 'Could not load the image';
+    msg.textContent = t('image_viewer.could_not_load_the_image');
     msg.classList.remove('hidden');
     cur.el.classList.add('iv-failed');
     cur.el.querySelector('.iv-pct').textContent = '';

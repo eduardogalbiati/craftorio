@@ -38,9 +38,9 @@
       : `A card is committed from ${BAR}% clarity: this one is at ${score}%. Close the gaps listed under Clarity (Grill me).`;
     return `
       <div class="row dsc-actions" role="group" aria-label="${t('discovery_commit.ready')}">
-        <button type="button" class="btn sm primary" data-testid="discovery-commit" data-detail="commit"${under ? ' disabled' : ''} title="${esc(under ? why : 'The Product Owner proposes the issues this card becomes; you edit and confirm before anything is filed')}">${t('discovery_commit.commit_to_the_backlog')}</button>
+        <button type="button" class="btn sm primary" data-testid="discovery-commit" data-detail="commit"${under ? ' disabled' : ''} title="${esc(under ? why : t('discovery_commit.the_product_owner_proposes_the_issues'))}">${t('discovery_commit.commit_to_the_backlog')}</button>
       </div>
-      <p class="muted small dsc-actions-hint" data-testid="discovery-commit-hint">${esc(under ? why : 'The card becomes one or more issues in the Backlog and leaves the board for the Committed list: it never comes back.')}</p>`;
+      <p class="muted small dsc-actions-hint" data-testid="discovery-commit-hint">${esc(under ? why : t('discovery_commit.the_card_becomes_one_or_more'))}</p>`;
   }
 
   // ---- delivery -----------------------------------------------------------------------------------
@@ -58,7 +58,7 @@
         <ul class="dsc-delivery-issues">${(d.issues || []).map((i) => `
           <li>
             ${i.url ? `<a class="mono" href="${esc(i.url)}" target="_blank" rel="noopener" title="${t('discovery_commit.open_the_issue')}">#${esc(i.number)}</a>` : `<span class="mono">#${esc(i.number)}</span>`}
-            <span class="dsc-delivery-title" title="${esc(i.title || '')}">${esc(i.title || 'not synced yet')}</span>
+            <span class="dsc-delivery-title" title="${esc(i.title || '')}">${esc(i.title || t('discovery_commit.not_synced_yet'))}</span>
             ${i.release ? pill('released', `Shipped in ${i.release}`) : pill(i.column)}
           </li>`).join('')}</ul>
       </div>`;
@@ -171,7 +171,7 @@
     const where = state.simulationOnly ? 'Simulation: they only join this workspace\'s backlog, nothing reaches GitHub or GitLab. The card then leaves the board for the Committed list and never comes back.'
       : preview ? 'Developer mode: File the issues only previews the commands. Nothing is filed and the card stays in Ready.'
         : 'They are filed on the project\'s repository. The card then leaves the board for the Committed list and never comes back.';
-    $('#dsc-commit-what').textContent = `"${card.title}" becomes issues in the Backlog, each with "From discovery card ${card.id}", its tasks and the card's document. ${where}`;
+    $('#dsc-commit-what').textContent = t('discovery_commit.title_becomes_issues_in_the_backlog', { title: card.title, id: card.id, where });
     $('#dsc-commit-error').textContent = '';
     $('#dsc-commit-roadmap').checked = false;
     renderDialog();
@@ -228,7 +228,7 @@
     const issues = readIssues();
     const error = $('#dsc-commit-error');
     const bad = issues.findIndex((i) => !i.title || !i.tasks.length);
-    if (bad >= 0) { error.textContent = `Issue ${bad + 1} needs ${issues[bad].title ? 'at least one task' : 'a title'}.`; return; }
+    if (bad >= 0) { error.textContent = t('discovery_commit.issue_value_needs_value2', { value: bad + 1, value2: issues[bad].title ? 'at least one task' : 'a title' }); return; }
     const { projectId, card, done, preview } = cm;
     const roadmap = $('#dsc-commit-roadmap').checked;
     Object.assign(cm, { issues, busy: true });

@@ -427,7 +427,7 @@
     const toRoadmap = $b('#btn-assign-roadmap');
     if (toRoadmap) {
       toRoadmap.disabled = !!pipe;
-      toRoadmap.title = pipe ? 'A roadmap stage runs one workflow: assign the pipeline instead' : 'Plan it instead: a new stage at the end of the roadmap, started with the roadmap';
+      toRoadmap.title = pipe ? t('backlog.a_roadmap_stage_runs_one_workflow') : t('backlog.plan_it_instead_a_new_stage');
     }
     updateAssignNote();
   }
@@ -490,8 +490,8 @@
     const note = $b('#assign-note');
     note.className = `small ${n && !tooMany ? 'muted' : 'warn-text'}`;
     const what = group ? `${n} issues → 1 run, 1 ${platformOf(bl.data?.platform).request.short} closing ${numbers.map((x) => `#${x}`).join(', ')}.` : '';
-    note.textContent = !n ? 'Nothing to start: every selected issue is skipped.'
-      : tooMany ? `One run takes at most ${maxGroup()} issues (Settings › General › Backlog): select fewer or send them as separate runs.`
+    note.textContent = !n ? t('backlog.nothing_to_start_every_selected_issue')
+      : tooMany ? t('backlog.one_run_takes_at_most_value', { value: maxGroup() })
         : mock ? `${what ? `${what} ` : ''}${runs} simulated run${plural}: no CLI is called and nothing is spent.`
           : `${what ? `${what} ` : ''}${runs} real run${plural}: ${runs > 1 ? 'they use' : 'it uses'} your CLI subscriptions. Human gates still wait for you.`;
   }
@@ -600,7 +600,7 @@
     const numbers = assignNumbers();
     if (!numbers.length) return;
     const inRoadmap = planned(numbers);
-    if (inRoadmap.length && !await confirmDialog('Already in the roadmap', `${inRoadmap.map((i) => `#${i.number} (stage ${i.roadmap.stage})`).join(', ')} ${inRoadmap.length > 1 ? 'are' : 'is'} planned in the roadmap. Assigning takes ${inRoadmap.length > 1 ? 'them' : 'it'} out of the roadmap and into the queue.`, 'Assign anyway')) return;
+    if (inRoadmap.length && !await confirmDialog(t('backlog.already_in_the_roadmap'), `${inRoadmap.map((i) => `#${i.number} (stage ${i.roadmap.stage})`).join(', ')} ${inRoadmap.length > 1 ? 'are' : 'is'} planned in the roadmap. Assigning takes ${inRoadmap.length > 1 ? 'them' : 'it'} out of the roadmap and into the queue.`, t('backlog.assign_anyway'))) return;
     const btn = $b('#btn-assign-ok');
     btn.disabled = true;
     try {
@@ -717,14 +717,14 @@
   const filtering = () => !!bl.q || bl.labels.length > 0 || !!bl.epic;
   const epicById = (id) => (bl.data?.epics || []).find((e) => e.id === id) || null;
   const noMatch = () => `<div class="empty-state"><b>${t('backlog.no_issues_match_the_filters')}</b>
-    <p class="muted">${bl.epic ? `Epic: ${esc(bl.epic === NO_EPIC ? 'No epic' : epicById(bl.epic)?.title || bl.epic)}. ` : ''}${bl.labels.length ? `Labels: ${esc(bl.labels.join(', '))}. ` : ''}${bl.q ? `Search: “${esc(bl.q)}”.` : ''}</p>
+    <p class="muted">${bl.epic ? t('backlog.epic_value', { value: esc(bl.epic === NO_EPIC ? 'No epic' : epicById(bl.epic)?.title || bl.epic) }) : ''}${bl.labels.length ? t('backlog.labels_value', { value: esc(bl.labels.join(', ')) }) : ''}${bl.q ? t('backlog.search_q', { q: esc(bl.q) }) : ''}</p>
     <button class="btn sm ghost" type="button" data-clear-filters>${t('backlog.clear_filters')}</button></div>`;
 
   const colorStyle = (color) => (color ? ` style="--lc:${esc(color)}"` : '');
   // A label chip toggles its label in the filter (`on` while selected).
   const labelChip = (l) => {
     const on = hasLabel(bl.labels, l.name);
-    return `<button class="bl-label${on ? ' on' : ''}" type="button" data-label="${esc(l.name)}" title="${on ? 'Remove from the label filter' : 'Filter by this label'}"${colorStyle(l.color)}>${esc(l.name)}</button>`;
+    return `<button class="bl-label${on ? ' on' : ''}" type="button" data-label="${esc(l.name)}" title="${on ? t('backlog.remove_from_the_label_filter') : t('backlog.filter_by_this_label')}"${colorStyle(l.color)}>${esc(l.name)}</button>`;
   };
   const labels = (i) => i.labels.map(labelChip).join('');
   // Impact and complexity from the triage labels, as two compact badges (none without the labels).
@@ -736,7 +736,7 @@
   // Its epic (#138) as a small badge that filters by it (an epic issue already shows its `epic` label).
   const epicBadge = (i) => {
     const e = i.epic && epicById(i.epic);
-    return e ? `<button class="badge bl-epic${bl.epic === e.id ? ' on' : ''}" type="button" data-epic-filter="${esc(e.id)}" title="${esc(`Epic ${e.id}: ${e.title}. Show only its issues`)}">${esc(e.title)}</button>` : '';
+    return e ? `<button class="badge bl-epic${bl.epic === e.id ? ' on' : ''}" type="button" data-epic-filter="${esc(e.id)}" title="${esc(t('backlog.epic_id_title_show_only_its', { id: e.id, title: e.title }))}">${esc(e.title)}</button>` : '';
   };
 
   // The epic filter (#138): every epic with how many issues the other filters show, then "No epic".
@@ -785,11 +785,11 @@
         <div class="bl-epic-head">
           <span class="bl-state ${e.state}"></span>
           ${e.url ? `<a class="bl-epic-title" href="${esc(e.url)}" target="_blank" rel="noopener" title="${esc(`${e.id} ${e.title}`)}">${esc(e.title)}</a>` : `<b class="bl-epic-title" title="${esc(e.title)}">${esc(e.title)}</b>`}
-          <span class="badge" title="${e.kind === 'group' ? 'A GitLab group epic' : 'The epic issue'}">${esc(e.id)}</span>
+          <span class="badge" title="${e.kind === 'group' ? t('backlog.a_gitlab_group_epic') : t('backlog.the_epic_issue')}">${esc(e.id)}</span>
           <span class="spacer"></span>
           <span class="bl-tasks" title="${t('backlog.done_of_total_members_done_closed', { done: p.done, total: p.total })}"><span class="bl-bar"><span style="width:${pct}%"></span></span><span class="mono small">${p.done}/${p.total}</span></span>
         </div>
-        <div class="small muted">${p.open} ${t('backlog.open_closed_closed_roadmapdone_done_in', { closed: p.closed, roadmapDone: p.roadmapDone })}${p.inRoadmap > p.roadmapDone ? ` · ${p.inRoadmap - p.roadmapDone} planned` : ''}</div>
+        <div class="small muted">${p.open} ${t('backlog.open_closed_closed_roadmapdone_done_in', { closed: p.closed, roadmapDone: p.roadmapDone })}${p.inRoadmap > p.roadmapDone ? t('backlog.value_planned', { value: p.inRoadmap - p.roadmapDone }) : ''}</div>
         ${e.members.length ? `<ul class="bl-epic-members">${e.members.map(member).join('')}</ul>` : `<p class="muted small">${t('backlog.no_members_yet')}</p>`}
         ${e.members.length ? `<button class="link-btn small" type="button" data-epic-filter="${esc(e.id)}">${t('backlog.show_its_issues_in_the_list')}</button>` : ''}
       </section>`;
@@ -809,7 +809,7 @@
     $b('#bl-labels-wrap').classList.toggle('hidden', !options.length);
     if (!options.length) bl.labelsOpen = false;
     const btn = $b('#btn-bl-labels');
-    btn.textContent = bl.labels.length ? `Labels (${bl.labels.length})` : 'Labels';
+    btn.textContent = bl.labels.length ? t('backlog.labels_length', { length: bl.labels.length }) : t('backlog.labels');
     btn.classList.toggle('primary', bl.labels.length > 0);
     btn.classList.toggle('ghost', !bl.labels.length);
     btn.setAttribute('aria-expanded', String(bl.labelsOpen));
@@ -833,7 +833,7 @@
       ${StatusPill.statusPill(r.status, { waiting: r.waiting })}<span>${esc(window.runTitle ? runTitle(r) : r.workflow || 'workflow')}</span>${window.runPrBadge ? runPrBadge(r, { compact: true }) : ''}${r.mock ? `<span class="badge p-mock">${t('backlog.simulated')}</span>` : ''}</button>`;
   // Open PRs/MRs that refer to the issue, each a link to it.
   const prBadges = (i) => (i.pullRequests || []).map((p) =>
-    `<a class="badge bl-pr${p.draft ? ' draft' : ''}" href="${esc(p.url)}" target="_blank" rel="noopener" title="${esc(`Open ${p.draft ? 'draft ' : ''}${prName(p)}: ${p.title}`)}">${esc(prName(p))}</a>`).join('');
+    `<a class="badge bl-pr${p.draft ? ' draft' : ''}" href="${esc(p.url)}" target="_blank" rel="noopener" title="${esc(t('backlog.open_value_p_title', { value: p.draft ? 'draft ' : '', p: prName(p), title: p.title }))}">${esc(prName(p))}</a>`).join('');
   // The other issues of the same run (a group sent as one run: one branch, one PR/MR).
   const groupBadge = (others) => (others?.length
     ? `<span class="badge bl-group" title="${t('backlog.one_run_one_branch_and_one')}">${t('backlog.grouped_with')} ${esc(others.map((n) => `#${n}`).join(', '))}</span>` : '');
@@ -851,7 +851,7 @@
     if (!r) return rm + e;
     const notPushed = i.column === 'local'
       ? `<span class="badge bl-notpushed" title="${t('backlog.merged_into_the_local_value_the', { value: esc(r.localMerge?.base || 'base') })}">${t('backlog.not_pushed')}</span>` : '';
-    const recovered = r.recovery ? `<span class="badge bl-recovered" title="${esc(`Supervisor: ${r.recovery}`)}">${t('backlog.sent_back_after_a_failed_merge')}</span>` : '';
+    const recovered = r.recovery ? `<span class="badge bl-recovered" title="${esc(t('backlog.supervisor_recovery', { recovery: r.recovery }))}">${t('backlog.sent_back_after_a_failed_merge')}</span>` : '';
     const watch = r.status === 'running' && isRunLive(r.runId)
       ? `<button class="btn sm ghost sup-btn" type="button" data-watch="${esc(r.runId)}" data-workflow="${esc(r.workflow || '')}" title="${t('backlog.the_supervisor_follows_this_run_and')}"><span class="sup-mark">◆</span> ${t('backlog.watch')}</button>` : '';
     return `${rm}${runLink(r)}${notPushed}${recovered}${groupBadge(r.groupedWith)}${r.waiting ? `<button class="btn sm primary" type="button" data-gate>${t('backlog.review_approval')}</button>` : ''}${watch}${e}`;
@@ -862,12 +862,12 @@
     const r = i.runs?.find((x) => x.enrich);
     if (!r || ['failed', 'cancelled', 'interrupted'].includes(r.status)) return '';
     const label = r.status === 'success' ? 'enriched' : 'being enriched';
-    return `<button class="badge bl-enrich" type="button" data-run="${esc(r.runId)}" data-workflow="${esc(r.workflow || '')}" title="${esc(`Write & Review run ${r.runId}${r.mock ? ' (simulated)' : ''}: open it`)}">${label}${r.mock ? ' · simulated' : ''}</button>`;
+    return `<button class="badge bl-enrich" type="button" data-run="${esc(r.runId)}" data-workflow="${esc(r.workflow || '')}" title="${esc(t('backlog.write_review_run_runid_value_open', { runId: r.runId, value: r.mock ? ' (simulated)' : '' }))}">${label}${r.mock ? t('backlog.simulated_2') : ''}</button>`;
   }
 
   // Updated by the last Backlog Refresh run (#161), for a day after it ended.
   const refreshedBadge = (i) => (i.refreshed
-    ? `<span class="badge bl-refreshed" title="${esc(`Paths, lines or tasks updated by the Backlog Refresh run ${bl.data?.refresh?.lastRun?.runId || ''}`)}">${t('backlog.refreshed')}</span>` : '');
+    ? `<span class="badge bl-refreshed" title="${esc(t('backlog.paths_lines_or_tasks_updated_by', { value: bl.data?.refresh?.lastRun?.runId || '' }))}">${t('backlog.refreshed')}</span>` : '');
 
   // The issue's actions (#238), at the right of a row and the top right of a card: an open issue has
   // a ⋯ menu with Enrich in Write & Review (#103: Write & Review prefilled with the issue, nothing
@@ -882,7 +882,7 @@
         <button class="btn sm ghost" type="button" data-menu="${i.number}" data-testid="backlog-issue-menu" aria-haspopup="menu" aria-expanded="${open}" aria-label="${t('backlog.actions_for_number', { number: i.number })}" title="${t('backlog.actions')}">⋯</button>
         ${open ? `<div class="bl-menu" role="menu" aria-label="${t('backlog.actions_for_number', { number: i.number })}">
           <button type="button" role="menuitem" data-enrich="${i.number}" data-testid="backlog-enrich" title="${t('backlog.enrich_this_issue_in_write_review')}">${t('backlog.enrich_in_write_review')}</button><button type="button" role="menuitem" data-show-map="${i.number}" data-testid="show-on-map" title="${t('backlog.open_the_project_city_with_the')}">${t('backlog.show_on_the_map')}</button>
-          <button type="button" role="menuitem" data-archive="${i.number}" data-testid="backlog-archive"${why ? ' disabled' : ''} title="${esc(why || 'Close it as not planned on the platform and label it archived')}">${t('backlog.archive')}</button>
+          <button type="button" role="menuitem" data-archive="${i.number}" data-testid="backlog-archive"${why ? ' disabled' : ''} title="${esc(why || t('backlog.close_it_as_not_planned_on'))}">${t('backlog.archive')}</button>
           ${why ? `<p class="muted small bl-menu-why">${esc(why)}</p>` : ''}
         </div>` : ''}
       </span>`;
@@ -891,7 +891,7 @@
   // Filed from a discovery card (#258, the service's `discoveryCard`): the card's title; a click opens
   // the card on the Discovery board, read-only.
   const discoveryBadge = (i) => (i.discoveryCard
-    ? `<button class="badge bl-discovery" type="button" data-testid="issue-discovery-card" data-discovery-card="${esc(i.discoveryCard.id)}" title="${esc(`Filed from the discovery card "${i.discoveryCard.title}": open it (read-only)`)}">${t('backlog.card')} ${esc(i.discoveryCard.title)}</button>` : '');
+    ? `<button class="badge bl-discovery" type="button" data-testid="issue-discovery-card" data-discovery-card="${esc(i.discoveryCard.id)}" title="${esc(t('backlog.filed_from_the_discovery_card_title', { title: i.discoveryCard.title }))}">${t('backlog.card')} ${esc(i.discoveryCard.title)}</button>` : '');
 
   function issueRow(i) {
     const open = bl.expanded.has(i.number);
@@ -901,7 +901,7 @@
       <div class="pr-run bl-issue${open ? ' open' : ''}${bl.selected.has(i.number) ? ' selected' : ''}" data-n="${i.number}" data-testid="backlog-issue">
         <div class="bl-row" data-act="toggle">
           <span class="bl-sel">${checkbox(i)}</span>
-          <span class="bl-state ${st}" title="${st === 'open' ? 'Open' : st === 'archived' ? 'Archived' : 'Closed'}"></span>
+          <span class="bl-state ${st}" title="${st === 'open' ? t('backlog.open') : st === 'archived' ? t('backlog.archived') : t('backlog.closed')}"></span>
           <span class="bl-num mono">#${i.number}</span>
           <div class="bl-main">
             <div class="bl-title">${esc(i.title)}</div>
@@ -914,7 +914,7 @@
         </div>
         ${open ? `
         <div class="pr-body">
-          <div class="muted small">${t('backlog.opened_by_value_on', { value: esc(i.author || 'unknown') })} ${esc(dateOf(i.createdAt))}${i.assignees.length ? ` · assigned to ${esc(i.assignees.join(', '))}` : ''}</div>
+          <div class="muted small">${t('backlog.opened_by_value_on', { value: esc(i.author || 'unknown') })} ${esc(dateOf(i.createdAt))}${i.assignees.length ? t('backlog.assigned_to_value', { value: esc(i.assignees.join(', ')) }) : ''}</div>
           ${i.pullRequests?.length ? `<div class="bl-prs"><span class="muted small">${t('backlog.open_short_s', { short: platformOf(bl.data?.platform).request.short })}</span>${i.pullRequests.map((p) => `<span class="small">${prBadges({ pullRequests: [p] })} ${esc(p.title)}</span>`).join('')}</div>` : ''}
           ${i.runs?.length ? `<div class="bl-runs"><span class="muted small">${t('backlog.runs')}</span>${i.runs.map(runLink).join('')}</div>` : ''}
           <div class="md bl-md">${i.body.trim() ? markdownHtml(i.body) : `<p class="muted">${t('backlog.no_description')}</p>`}</div>
@@ -964,7 +964,7 @@
       <span><b>${t('backlog.queue')}</b> ${mode} ${n ? `${n} run${n > 1 ? 's' : ''} waiting · next ${esc((q.items[0].issues || [q.items[0]]).map((x) => `#${x.number}`).join(', '))} (${esc(q.items[0].workflowName || q.items[0].workflow)})` : 'empty'}</span>
       ${skips}
       <span class="spacer"></span>
-      <button class="btn sm${q.paused ? ' primary' : ' ghost'}" type="button" data-pause="${q.paused ? 'off' : 'on'}">${q.paused ? 'Resume' : 'Pause'}</button>`;
+      <button class="btn sm${q.paused ? ' primary' : ' ghost'}" type="button" data-pause="${q.paused ? 'off' : 'on'}">${q.paused ? t('backlog.resume') : t('backlog.pause')}</button>`;
   }
 
   // Archive (#238): closes the issues as not planned on the platform and labels them archived, after a
@@ -975,7 +975,7 @@
     const blocked = issues.filter((i) => archiveBlockReason(i)).map((i) => `#${i.number}: ${archiveBlockReason(i)}`);
     const ok = issues.filter((i) => !archiveBlockReason(i)).map((i) => i.number);
     if (!ok.length) { bl.error = blocked.length ? `Not archived: ${blocked.join(' · ')}` : null; render(); return false; }
-    if (!await confirmDialog(`Archive ${ok.length === 1 ? 'issue' : `${ok.length} issues`}`, archiveConfirmText(ok, bl.data?.platform || bl.platform), 'Archive')) return false;
+    if (!await confirmDialog(`Archive ${ok.length === 1 ? 'issue' : `${ok.length} issues`}`, archiveConfirmText(ok, bl.data?.platform || bl.platform), t('backlog.archive'))) return false;
     try {
       const out = await api.archiveIssues(bl.projectId, ok);
       if (out.backlog) setData(out.backlog);
@@ -989,7 +989,7 @@
   // Restore (#238): reopens an archived issue and removes its label, after a confirm.
   async function restore(number) {
     const host = PLATFORMS[bl.data?.platform]?.label || 'the platform';
-    if (!await confirmDialog('Restore issue', `Reopen #${number} on ${host} and remove its archived label?`, 'Restore')) return;
+    if (!await confirmDialog(t('backlog.restore_issue'), t('backlog.reopen_number_on_host_and_remove', { number, host }), t('backlog.restore'))) return;
     try {
       const out = await api.restoreIssues(bl.projectId, [number]);
       if (out.backlog) setData(out.backlog);
@@ -1013,14 +1013,14 @@
       dismissible: false,
       actions: [
         {
-          label: `Archive (${list.length})`,
+          label: t('backlog.archive_length', { length: list.length }),
           primary: true,
           title: list.map((i) => `#${i.number} ${i.title}`).join('\n'),
           attrs: { 'data-testid': 'backlog-deprioritized-archive' },
           onClick: async () => { if (await archive(list.map((i) => i.number))) { save(deprioritizedKey(), '1'); render(); } },
         },
         // its click is handled on the alerts box (bind), where the dismissal is remembered
-        { label: 'Dismiss', attrs: { 'data-deprioritized-dismiss': '', 'data-testid': 'backlog-deprioritized-dismiss' } },
+        { label: t('common.dismiss'), attrs: { 'data-deprioritized-dismiss': '', 'data-testid': 'backlog-deprioritized-dismiss' } },
       ],
     }];
   }
@@ -1037,10 +1037,10 @@
       return [{
         id: `refreshing:${bl.projectId}`,
         level: 'info',
-        title: 'Refreshing the backlog…',
+        title: t('backlog.refreshing_the_backlog'),
         text: 'A Backlog Refresh run is in progress.',
         dismissible: true,
-        actions: [{ label: 'Open the run', onClick: () => openRun({ dataset: { run: r.running.runId, workflow: r.running.workflow || '' } }) }],
+        actions: [{ label: t('backlog.open_the_run'), onClick: () => openRun({ dataset: { run: r.running.runId, workflow: r.running.workflow || '' } }) }],
       }];
     }
     const when = r.lastRun ? `Backlog refreshed ${ago(r.hoursAgo)}${r.merges != null ? ` · ${r.merges} merge${r.merges === 1 ? '' : 's'} since` : ''}` : 'Backlog never refreshed';
@@ -1051,9 +1051,9 @@
       text: `Issues may cite moved files or tasks already done.${r.lastRun ? ` Last Backlog Refresh: run ${r.lastRun.runId}, ${dateOf(r.lastRun.startedAt)}.` : ''}`,
       dismissible: true,
       actions: [
-        { label: 'Refresh now', primary: true, title: 'Opens the Start panel for the Backlog Refresh workflow, prefilled; nothing starts until you press Start', attrs: { 'data-refresh-now': '' }, onClick: refreshNow },
+        { label: t('backlog.refresh_now'), primary: true, title: t('backlog.opens_the_start_panel_for_the'), attrs: { 'data-refresh-now': '' }, onClick: refreshNow },
         {
-          label: 'Dismiss for today',
+          label: t('backlog.dismiss_for_today'),
           attrs: { 'data-refresh-dismiss': '' },
           onClick: async () => {
             try { setData(await api.dismissBacklogRefresh(bl.projectId)); } catch (err) { bl.error = errMsg(err); }
@@ -1094,7 +1094,7 @@
       return [{
         id: `push:${bl.projectId}`,
         level: 'info',
-        title: 'Not pushed',
+        title: t('backlog.not_pushed_2'),
         text: [
           `${commits} on the local ${l.base}${l.issues?.length ? ` · closes ${issueRefs(l.issues)} when pushed` : ''}`,
           l.behind > 0 ? `origin/${l.base} has ${l.behind} new commit${l.behind === 1 ? '' : 's'}: the push updates first` : '',
@@ -1103,9 +1103,9 @@
         dismissible: true,
         actions: [
           {
-            label: 'Auto-push',
+            label: t('backlog.auto_push'),
             pressed: !!bl.data?.autoPush,
-            title: `Push the local ${l.base} after every successful local merge`,
+            title: t('backlog.push_the_local_base_after_every', { base: l.base }),
             attrs: { 'data-autopush': '' },
             onClick: async () => {
               const on = !bl.data?.autoPush;
@@ -1116,7 +1116,7 @@
               render();
             },
           },
-          { label: 'Push…', primary: true, attrs: { 'data-push': '' }, onClick: openPush },
+          { label: t('backlog.push_2'), primary: true, attrs: { 'data-push': '' }, onClick: openPush },
         ],
       }];
     }
@@ -1124,11 +1124,11 @@
     return [{
       id: `push-unknown:${bl.projectId}`,
       level: 'warning',
-      title: 'Push status unknown',
+      title: t('backlog.push_status_unknown'),
       text: l.error,
       dismissible: true,
       actions: [{
-        label: 'Check again',
+        label: t('backlog.check_again'),
         attrs: { 'data-check': '' },
         onClick: async () => {
           try {
@@ -1153,7 +1153,7 @@
     const q = bl.data?.queue;
     pageAlerts.set([
       ...(window.BacklogRoadmap?.alerts(bl.data, roadmapCtx(), { shown: onRoadmapTab() }) || []),
-      ...(q?.error ? [{ id: `queue:${bl.projectId}`, level: 'error', title: 'Queue', text: q.error, dismissible: false, actions: [] }] : []),
+      ...(q?.error ? [{ id: `queue:${bl.projectId}`, level: 'error', title: t('backlog.queue'), text: q.error, dismissible: false, actions: [] }] : []),
       ...refreshAlert(),
       ...deprioritizedAlert(),
       ...localAlert(),
@@ -1166,7 +1166,7 @@
     const l = bl.data?.local;
     if (!l?.ahead) return;
     const p = project();
-    $b('#push-title').textContent = `Push ${l.ahead} commit${l.ahead === 1 ? '' : 's'} to origin/${l.base}`;
+    $b('#push-title').textContent = t('backlog.push_ahead_commit_value_to_origin', { ahead: l.ahead, value: l.ahead === 1 ? '' : 's', base: l.base });
     $b('#push-message').textContent = `git push origin ${l.base} in ${l.repo || p?.folder || 'the project\'s repository'} (never forced).${l.issues?.length ? ` GitHub/GitLab closes ${issueRefs(l.issues)}.` : ''}`;
     $b('#push-commits').innerHTML = (l.commits || []).map((c) => `<li><span class="mono">${esc(c.sha.slice(0, 8))}</span> ${esc(c.subject)}${c.issues.length ? ` <span class="muted">${t('backlog.closes_issues', { issues: esc(issueRefs(c.issues)) })}</span>` : ''}</li>`).join('');
     $b('#push-error').textContent = '';
@@ -1182,7 +1182,7 @@
   async function doPush(update) {
     const btns = [$b('#btn-push-ok'), $b('#btn-push-update')];
     btns.forEach((b) => { b.disabled = true; });
-    $b('#push-error').textContent = update ? 'Updating from origin, then pushing…' : 'Pushing…';
+    $b('#push-error').textContent = update ? t('backlog.updating_from_origin_then_pushing') : t('backlog.pushing');
     try {
       const r = update ? await api.updateAndPushLocal(bl.projectId) : await api.pushLocal(bl.projectId);
       if (r.backlog) setData(r.backlog);
@@ -1191,14 +1191,14 @@
       if (r.pushed || (!r.rejected && !r.conflict && !r.local?.ahead)) { closeModal('#push-modal'); render(); return; }
       if (r.conflict) {
         // handed to a run of the local workflow (its developer resolves it, as in resolve_merge)
-        $b('#push-error').textContent = `${r.error} Resolve in a run starts the local workflow: its developer merges origin/${bl.data?.local?.base || ''} into the local commits and resolves ${r.files.join(', ')}; once reviewed, tested and merged locally, push again.`;
+        $b('#push-error').textContent = t('backlog.error_resolve_in_a_run_starts', { error: r.error, value: bl.data?.local?.base || '', value2: r.files.join(', ') });
         bl.conflictFiles = r.files;
         $b('#btn-push-update').classList.add('hidden');
         $b('#btn-push-ok').classList.add('hidden');
         $b('#btn-push-resolve').classList.remove('hidden');
         $b('#push-resolve-mock-wrap').classList.toggle('hidden', !devMode());
       } else if (r.rejected) {
-        $b('#push-error').textContent = `The push was rejected: origin moved since the last sync. Update and push rebases the local commits onto it first. (${r.error || ''})`;
+        $b('#push-error').textContent = t('backlog.the_push_was_rejected_origin_moved', { value: r.error || '' });
         $b('#btn-push-ok').classList.add('hidden');
         $b('#btn-push-update').classList.remove('hidden');
       }
@@ -1227,10 +1227,10 @@
   function render() {
     // #254: the Backlog screen (Board and Epics tabs) or the Roadmap screen, in the same section
     const roadmap = onRoadmapTab();
-    $b('#bl-title').textContent = roadmap ? 'Roadmap' : 'Backlog';
+    $b('#bl-title').textContent = roadmap ? t('backlog.roadmap') : t('backlog.backlog');
     $b('#bl-hint').textContent = roadmap
-      ? 'Ordered stages of runs: each stage starts when the previous one has finished and merged.'
-      : 'A project\'s issues, synced from its git platform.';
+      ? t('backlog.ordered_stages_of_runs_each_stage')
+      : t('backlog.a_project_s_issues_synced_from');
     $b('#bl-tabs').classList.toggle('hidden', roadmap);
     // #269: the Roadmap draws its own filter row (the epic with its view filters), above its bar
     $b('#bl-toolbar').classList.toggle('hidden', roadmap);
@@ -1241,7 +1241,7 @@
     const p = project();
     const btn = $b('#btn-bl-sync');
     btn.disabled = !p?.repo || bl.syncing || !!PLATFORMS[bl.platform]?.soon;
-    btn.textContent = bl.syncing ? 'Syncing…' : 'Sync';
+    btn.textContent = bl.syncing ? t('backlog.syncing') : t('backlog.sync');
     $b('#btn-bl-new-issue').disabled = !p?.repo || !!PLATFORMS[bl.platform]?.soon;
     $b('#bl-sort').value = bl.sort;
     $b('#bl-sort').classList.toggle('hidden', bl.mode === 'roadmap' || bl.mode === 'epics');
@@ -1262,20 +1262,20 @@
     $b('#bl-count').textContent = tab === 'board' && bl.data ? `${shownCount} issue${shownCount === 1 ? '' : 's'}` : '';
     const n = shownSelected().length;
     $b('#btn-bl-assign').classList.toggle('hidden', !n);
-    $b('#btn-bl-assign').textContent = `Assign workflow… (${n})`;
+    $b('#btn-bl-assign').textContent = t('backlog.assign_workflow_n', { n });
     // #169: busy while the Product Owner answers (backlog-po.js renderButton keeps it in step)
     $b('#btn-bl-send-po').classList.toggle('hidden', !n);
     $b('#btn-bl-send-po').dataset.n = String(n);
-    $b('#btn-bl-send-po').textContent = `Send to Product Owner (${n})`;
+    $b('#btn-bl-send-po').textContent = t('backlog.send_to_product_owner_n', { n });
     window.BacklogPO?.syncSendButton();
     // #238: disabled (with the reasons) when no selected issue can be archived
     $b('#btn-bl-archive').classList.toggle('hidden', !n);
-    $b('#btn-bl-archive').textContent = `Archive (${n})`;
+    $b('#btn-bl-archive').textContent = t('backlog.archive_n', { n });
     const blocked = (bl.data?.issues || []).filter((i) => shownSelected().includes(i.number) && archiveBlockReason(i));
     $b('#btn-bl-archive').disabled = !!n && blocked.length === n;
     $b('#btn-bl-archive').title = blocked.length
       ? blocked.map((i) => `#${i.number}: ${archiveBlockReason(i)}`).join('\n')
-      : 'Close the selected issues as not planned on the platform and label them archived (restorable from the Archived chip)';
+      : t('backlog.close_the_selected_issues_as_not');
     $b('#btn-bl-clear').classList.toggle('hidden', !n);
 
     const issues = bl.data?.issues || [];
@@ -1291,7 +1291,7 @@
     // (after renderLabelFilter, which shows the labels button whenever there are labels)
     for (const id of ['#bl-search', '#bl-label-active']) $b(id).classList.toggle('hidden', tab === 'roadmap');
     if (tab === 'roadmap') $b('#bl-labels-wrap').classList.add('hidden');
-    $b('#bl-synced').textContent = bl.syncing ? 'Syncing…' : bl.data ? `Synced ${dateOf(bl.data.syncedAt)} from ${PLATFORMS[bl.data.platform]?.label || bl.data.platform}` : '';
+    $b('#bl-synced').textContent = bl.syncing ? t('backlog.syncing') : bl.data ? t('backlog.synced_syncedat_from_value', { syncedAt: dateOf(bl.data.syncedAt), value: PLATFORMS[bl.data.platform]?.label || bl.data.platform }) : '';
     const prError = bl.data?.pullRequestsError ? `Open ${platformOf(bl.data.platform).request.short}s could not be read: ${bl.data.pullRequestsError}` : '';
     $b('#bl-error').textContent = bl.error || prError;
     // (#269: an empty error line takes no room between the alerts, the filter row and the list)

@@ -124,9 +124,9 @@
             </div>
             ${a.workflow ? `<p class="muted agent-facts mono">${esc(modelLine(a))} · ${esc(a.session)}</p>
             <p class="muted agent-facts" title="${t('agents.capabilities')}">${esc(a.capabilities || '')}</p>`
-              : `<p class="muted small clamp">${esc(a.error ? `Error: ${a.error}` : a.description || (a.prompt ? a.prompt.slice(0, 160) : 'No description.'))}</p>`}
+              : `<p class="muted small clamp">${esc(a.error ? t('agents.error_error', { error: a.error }) : a.description || (a.prompt ? a.prompt.slice(0, 160) : t('agents.no_description')))}</p>`}
             <div class="agent-skills">${(a.skills || []).slice(0, 4).map((s) =>
-              `<span class="agent-skill mono${fixed || skillIds.has(s) ? '' : ' missing'}" title="${fixed || skillIds.has(s) ? 'Skill' : 'This skill is not in the workspace'}">${esc(s)}</span>`).join('')}${
+              `<span class="agent-skill mono${fixed || skillIds.has(s) ? '' : ' missing'}" title="${fixed || skillIds.has(s) ? t('agents.skill') : t('agents.this_skill_is_not_in_the')}">${esc(s)}</span>`).join('')}${
               a.skills?.length > 4 ? `<span class="muted small">+${a.skills.length - 4}</span>` : ''}</div>
           </div>
         </div>
@@ -137,10 +137,10 @@
           <button class="btn sm ghost" data-act="open-workflow">${t('agents.open_in_workflow')}</button>
           <button class="btn sm ghost" data-act="duplicate">${t('agents.duplicate')}</button>
         </div>` : actions ? `<div class="card-actions">
-          <span class="muted small">${a.system ? (a.calibration ? `Look, model and planning · ${esc(a.model)}` : a.model ? `Look and model · ${esc(a.model)}` : 'Look only') : a.updatedAt ? `updated ${esc(dateOf(a.updatedAt))}` : ''}</span>
+          <span class="muted small">${a.system ? (a.calibration ? t('agents.look_model_and_planning_model', { model: esc(a.model) }) : a.model ? t('agents.look_and_model_model', { model: esc(a.model) }) : t('agents.look_only')) : a.updatedAt ? `updated ${esc(dateOf(a.updatedAt))}` : ''}</span>
           ${a.calibration ? `<span class="badge" title="${esc(PoCalibration.tooltip(a.calibration))}">${esc(PoCalibration.nameOf(a.calibration))}</span> <span class="badge" title="${esc(PoCalibration.cost.tooltip(a.cost))}">${esc(PoCalibration.cost.nameOf(a.cost))}</span>` : ''}
           <span class="spacer"></span>
-          <button class="btn sm ghost" data-act="edit">${a.system ? 'Customize' : 'Edit'}</button>
+          <button class="btn sm ghost" data-act="edit">${a.system ? t('agents.customize') : t('agents.edit')}</button>
           ${a.system ? '' : `<button class="btn sm ghost danger" data-act="remove">${t('agents.remove')}</button>`}
         </div>` : ''}
       </div>`;
@@ -206,12 +206,12 @@
       openAgentModal(agents.find((x) => x.id === created.id) || created);
     } catch (e) {
       if (!$a('#agent-modal').classList.contains('hidden')) $a('#ag-error').textContent = errMsg(e);
-      else showToast('Could not duplicate the agent', errMsg(e));
+      else showToast(t('agents.could_not_duplicate_the_agent'), errMsg(e));
     }
   }
 
   async function removeAgent(a) {
-    if (!(await confirmDialog('Remove agent', `Move the agent "${a.name}" to the trash?`, 'Remove'))) return false;
+    if (!(await confirmDialog(t('agents.remove_agent'), t('agents.move_the_agent_name_to_the', { name: a.name }), t('agents.remove')))) return false;
     try { await api.removeAgent(a.id); } catch (e) { $a('#ag-error').textContent = errMsg(e); return false; }
     refreshAgents();
     return true;
@@ -233,10 +233,10 @@
     ed.cost = a?.calibration ? a.cost || PoCalibration.cost.DEFAULT : null;
     const system = isReadOnly();
     const workflow = isWorkflow();
-    $a('#agent-modal-title').textContent = a ? (workflow ? `${a.name} · ${a.workflow.name}` : isSystem() ? `Customize the ${a.id === SUPERVISOR ? 'supervisor' : a.name}` : `Edit ${a.name}`) : 'New agent';
+    $a('#agent-modal-title').textContent = a ? (workflow ? `${a.name} · ${a.workflow.name}` : isSystem() ? t('agents.customize_the_value', { value: a.id === SUPERVISOR ? 'supervisor' : a.name }) : t('agents.edit_name', { name: a.name })) : t('agents.new_agent');
     $a('#ag-system-note').classList.toggle('hidden', !isSystem());
     $a('#ag-system-where').textContent = SHOWN_IN[a?.id] || '';
-    $a('#ag-system-can').textContent = CAN_CHANGE[a?.id] || 'how it looks';
+    $a('#ag-system-can').textContent = CAN_CHANGE[a?.id] || t('agents.how_it_looks');
     $a('#ag-model-hint').textContent = MODEL_HINT[a?.id] || '';
     $a('#ag-effort-hint').textContent = EFFORT_HINT;
     // #189: the Product Owner's Planning section
@@ -310,7 +310,7 @@
         <div class="ag-color-head" data-testid="agent-color-row-head"><b>${c.label}</b> <span class="muted">${c.hint}</span></div>
         <div class="ag-swatches">
           ${c.swatches.map((h) => `<button type="button" class="ag-swatch${h.toUpperCase() === hex ? ' active' : ''}" data-hex="${h}" style="background:${h}" title="${h}" aria-label="${c.label} ${h}"></button>`).join('')}
-          <label class="ag-custom${custom ? ' active' : ''}" title="${custom ? `Custom color ${hex}` : 'Any color'}"><input type="color" value="${hex.toLowerCase()}" aria-label="${t('agents.label_any_color', { label: c.label })}" /><span class="ag-custom-swatch${custom ? ' active' : ''}" data-testid="agent-color-custom" aria-pressed="${custom ? 'true' : 'false'}" style="${custom ? `background:${hex}` : ''}">${custom ? '' : '+'}</span></label>
+          <label class="ag-custom${custom ? ' active' : ''}" title="${custom ? t('agents.custom_color_hex', { hex }) : t('agents.any_color')}"><input type="color" value="${hex.toLowerCase()}" aria-label="${t('agents.label_any_color', { label: c.label })}" /><span class="ag-custom-swatch${custom ? ' active' : ''}" data-testid="agent-color-custom" aria-pressed="${custom ? 'true' : 'false'}" style="${custom ? `background:${hex}` : ''}">${custom ? '' : '+'}</span></label>
           <input type="text" class="ag-hex mono" data-testid="agent-color-hex" value="${hex}" maxlength="7" spellcheck="false" aria-label="${t('agents.label_hex', { label: c.label })}" aria-invalid="${error ? 'true' : 'false'}" placeholder="${t('agents.rrggbb')}" />
         </div>
         <div class="ag-hex-error small" data-testid="agent-color-hex-error" role="alert">${esc(error)}</div>
@@ -367,8 +367,8 @@
       <label class="ag-skill${ed.skills.has(s.id) ? ' on' : ''}">
         <input type="checkbox" data-skill="${esc(s.id)}"${ed.skills.has(s.id) ? ' checked' : ''} />
         <span class="ag-skill-text"><span class="ag-skill-name"><b class="mono">${esc(s.name)}</b>${s.missing ? `<span class="badge warn">${t('agents.missing')}</span>` : ''}</span>
-          <span class="muted small">${esc(s.missing ? 'Not in the workspace anymore.' : s.description || '')}</span></span>
-      </label>`).join('') : `<p class="muted small">${all.length ? 'No skill matches the filter.' : 'No skills in the workspace yet (Skills menu).'}</p>`;
+          <span class="muted small">${esc(s.missing ? t('agents.not_in_the_workspace_anymore') : s.description || '')}</span></span>
+      </label>`).join('') : `<p class="muted small">${all.length ? t('agents.no_skill_matches_the_filter') : t('agents.no_skills_in_the_workspace_yet')}</p>`;
   }
 
   async function saveAgent(e) {

@@ -53,8 +53,8 @@ async function restartApp() {
   try { runs = await api.listActiveRuns(); } catch { /* main still refuses with runs in progress */ }
   if (runs.length) {
     const lines = runs.map((r) => `• ${r.workflow} (${r.runId}): ${r.waiting ? 'waiting for approval' : runningStepsOf(r.runId) || 'in progress'}`);
-    const ok = await confirmDialog('Restart and interrupt runs?',
-      `${runs.length} run${runs.length > 1 ? 's' : ''} in progress will be interrupted:\n${lines.join('\n')}\n\nThe Backlog queues are paused. After the restart the interrupted runs are listed with Resume.`, 'Restart');
+    const ok = await confirmDialog(t('code_banner.restart_and_interrupt_runs'),
+      t('code_banner.length_run_value_in_progress_will', { length: runs.length, value: runs.length > 1 ? 's' : '', value2: lines.join('\n') }), t('code_banner.restart'));
     if (!ok) return;
   }
   try { localStorage.setItem(RESTART_KEY, JSON.stringify(runs.map((r) => ({ runId: r.runId, workflow: r.workflow })))); } catch { /* storage unavailable */ }
@@ -62,7 +62,7 @@ async function restartApp() {
     await api.relaunchApp(runs.length > 0);
   } catch (e) {
     try { localStorage.removeItem(RESTART_KEY); } catch { /* storage unavailable */ }
-    showToast('Restart refused', errMsg(e));
+    showToast(t('code_banner.restart_refused'), errMsg(e));
   }
 }
 
@@ -93,12 +93,12 @@ async function checkFailedAppUpdate() {
   if (!f) { box.innerHTML = ''; return; }
   const subjects = (f.subjects || []).slice(0, 5);
   box.innerHTML = `<div class="code-banner app-update-banner" role="alert" data-testid="app-update-failed-banner">
-    <span>${t('code_banner.the_app_update_to')} <b class="mono">${esc(String(f.to || '').slice(0, 7))}</b> ${t('code_banner.did_not_start_no_record_came')}${subjects.length ? ` It brought: ${subjects.map((s) => esc(s)).join('; ')}${f.subjects.length > subjects.length ? '; …' : ''}.` : ''}</span>
+    <span>${t('code_banner.the_app_update_to')} <b class="mono">${esc(String(f.to || '').slice(0, 7))}</b> ${t('code_banner.did_not_start_no_record_came')}${subjects.length ? t('code_banner.it_brought_value_value2', { value: subjects.map((s) => esc(s)).join('; '), value2: f.subjects.length > subjects.length ? '; …' : '' }) : ''}</span>
     <span>${t('code_banner.to_go_back_to')} <span class="mono">${esc(String(f.from || '').slice(0, 7))}</span>${t('code_banner.close_the_app_and_run')} <code class="mono">${esc(f.command)}</code>${t('code_banner.then_open_it_again')}</span>
     <button class="btn sm ghost" type="button" data-app-update="dismiss" title="${t('code_banner.deletes_the_update_s_record_the')}">${t('common.dismiss')}</button>
   </div>`;
   box.querySelector('[data-app-update="dismiss"]').onclick = async () => {
-    try { await api.dismissAppUpdate(); box.innerHTML = ''; } catch (e) { showToast('Could not dismiss', errMsg(e)); }
+    try { await api.dismissAppUpdate(); box.innerHTML = ''; } catch (e) { showToast(t('code_banner.could_not_dismiss'), errMsg(e)); }
   };
 }
 

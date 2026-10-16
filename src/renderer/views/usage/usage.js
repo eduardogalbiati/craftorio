@@ -9,13 +9,13 @@ function renderUsage() {
   const err = $('#usage-error');
   err.classList.toggle('hidden', !state.usageError);
   err.innerHTML = state.usageError
-    ? `<b>${t('usage.usage_unavailable')}</b>${u ? ' — showing the last loaded data.' : '.'} <span class="small">${esc(state.usageError)}</span>`
+    ? `<b>${t('usage.usage_unavailable')}</b>${u ? t('usage.showing_the_last_loaded_data') : '.'} <span class="small">${esc(state.usageError)}</span>`
     : '';
   $('#usage-extra').classList.toggle('hidden', !u);
   $('#usage-live').classList.toggle('hidden', !u?.live);
   $('#usage-sub').textContent = state.usageScope === 'machine'
-    ? 'Everything the Claude Code, Codex and Grok CLIs recorded on this machine, including use outside the orchestrator'
-    : "Tokens and cost of the orchestrator's runs";
+    ? t('usage.everything_the_claude_code_codex_and')
+    : t('usage.tokens_and_cost_of_the_orchestrator');
   $('#usage-cards').classList.toggle('stale', usageStale());
   if (!u) {
     $('#usage-cards').innerHTML = state.usageError ? '' : `<p class="muted">${t('usage.loading')}</p>`;
@@ -71,7 +71,7 @@ function providerCard(p, u) {
       <div class="card-head">
         <span class="card-icon p-${esc(p.id)}"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="5 16 10 11 5 6" /><line x1="12" y1="18" x2="19" y2="18" /></svg></span>
         <b class="card-title">${esc(p.name)}</b>
-        <span class="conn ${p.installed ? 'on' : 'off'}"><span class="conn-dot"></span>${p.installed ? 'Installed' : 'Not installed'}</span>
+        <span class="conn ${p.installed ? 'on' : 'off'}"><span class="conn-dot"></span>${p.installed ? I18n.t('usage.installed') : I18n.t('usage.not_installed')}</span>
         <span class="spacer"></span>
         ${meters.length ? `<span class="u-status st-${esc(p.status)}"><span class="u-dot st-${esc(p.status)}"></span>${esc(STATUS_TEXT[p.status] || p.status)}</span>` : ''}
       </div>
@@ -98,7 +98,7 @@ function providerCard(p, u) {
         <tbody>${models.map((x) => `<tr><td class="mono">${esc(x.model)}</td><td class="num mono">${fmtTok(x.month?.tokens?.total)}</td><td class="num mono">${fmtUsd(x.month?.costUsd)}</td></tr>`).join('')}</tbody>
       </table>` : `<p class="muted small">${I18n.t('usage.no_usage_this_month')}</p>`}
       <div class="card-actions">
-        <span class="muted small">${meters.length ? (b.blockOnLimit ? 'Runs are blocked at the limit.' : 'Warning only, runs are not blocked.') : 'No budget set.'}${meters.length && b.countOutside ? `<br>${I18n.t('usage.budget_counts_all_usage_on_this')}` : ''}</span>
+        <span class="muted small">${meters.length ? (b.blockOnLimit ? I18n.t('usage.runs_are_blocked_at_the_limit') : I18n.t('usage.warning_only_runs_are_not_blocked')) : I18n.t('usage.no_budget_set')}${meters.length && b.countOutside ? `<br>${I18n.t('usage.budget_counts_all_usage_on_this')}` : ''}</span>
         <span class="spacer"></span>
         <button class="btn sm ghost" data-budget="${esc(p.id)}">${I18n.t('usage.edit_budget')}</button>
       </div>
@@ -160,7 +160,7 @@ function openBudgetModal(id) {
   if (!p) return;
   budgetProvider = id;
   const b = p.budget || {};
-  $('#budget-modal-title').textContent = `Budget — ${p.name}`;
+  $('#budget-modal-title').textContent = t('usage.budget_name', { name: p.name });
   $('#bd-usd').value = b.monthlyUsd ?? '';
   $('#bd-tokens').value = b.monthlyTokens == null ? '' : parseAmount(fmtTok(b.monthlyTokens)) === b.monthlyTokens ? fmtTok(b.monthlyTokens) : b.monthlyTokens;
   $('#bd-block').checked = !!b.blockOnLimit;
@@ -201,7 +201,7 @@ function renderPrices() {
     <tr data-model="${esc(model)}">
       <td class="mono">${model == null ? `<input type="text" class="price-model" placeholder="${t('usage.model_name')}" />` : `${esc(model)}${prices[model] ? '' : ` <span class="badge warn">${t('usage.no_price')}</span>`}`}</td>
       ${PRICE_KEYS.map(([k]) => `<td class="num"><input type="text" inputmode="decimal" data-k="${k}" value="${esc(prices[model]?.[k] ?? '')}" placeholder="0.00" /></td>`).join('')}
-      <td class="num"><span class="price-msg small"></span><button class="btn sm ${model == null ? '' : 'ghost'}" data-save-price>${model == null ? 'Add' : 'Save'}</button></td>
+      <td class="num"><span class="price-msg small"></span><button class="btn sm ${model == null ? '' : 'ghost'}" data-save-price>${model == null ? t('usage.add') : t('common.save')}</button></td>
     </tr>`;
   $('#usage-prices').innerHTML = `<table class="u-table prices">
     <thead><tr><th>${t('usage.model')}</th>${PRICE_KEYS.map(([, l]) => `<th class="num">${l}</th>`).join('')}<th></th></tr></thead>
@@ -214,11 +214,11 @@ async function savePrice(tr) {
   const msg = tr.querySelector('.price-msg');
   const model = tr.dataset.model ?? tr.querySelector('.price-model')?.value.trim();
   msg.className = 'price-msg small';
-  if (!model) { msg.classList.add('error'); msg.textContent = 'Enter a model name.'; return; }
+  if (!model) { msg.classList.add('error'); msg.textContent = t('usage.enter_a_model_name'); return; }
   const price = {};
   for (const [k] of PRICE_KEYS) {
     const n = parseAmount(tr.querySelector(`[data-k="${k}"]`).value) ?? 0;
-    if (!Number.isFinite(n) || n < 0) { msg.classList.add('error'); msg.textContent = 'Invalid price.'; return; }
+    if (!Number.isFinite(n) || n < 0) { msg.classList.add('error'); msg.textContent = t('usage.invalid_price'); return; }
     price[k] = n;
   }
   try {
@@ -227,7 +227,7 @@ async function savePrice(tr) {
     renderUsageAll();
     renderPrices();
     const saved = [...$('#usage-prices').querySelectorAll('tr')].find((r) => r.dataset.model === model)?.querySelector('.price-msg');
-    if (saved) { saved.textContent = 'Saved'; setTimeout(() => (saved.textContent = ''), 2000); }
+    if (saved) { saved.textContent = t('usage.saved'); setTimeout(() => (saved.textContent = ''), 2000); }
   } catch (e) {
     msg.classList.add('error');
     msg.textContent = errMsg(e);

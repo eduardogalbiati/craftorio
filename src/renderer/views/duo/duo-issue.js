@@ -3,6 +3,7 @@
 // the inputs that prefill the screen from an issue ("Enrich in Write & Review": its title, number,
 // URL, labels and full body in the prompt). Pure, no DOM. Browser: window.DuoIssue; Node: module.exports.
 (function (root) {
+  const t = (...a) => (typeof module === 'object' && module.exports ? require('../../../shared/i18n') : root.I18n)?.t(...a) ?? a[0];
   const DOC_TYPES = [
     {
       skill: 'issue-writing',
@@ -54,7 +55,7 @@
       `Issue #${issue.number}: ${issue.title}`,
       `URL: ${issue.url}`,
       `Labels: ${labels.length ? labels.join(', ') : 'none'}`,
-      `<issue>\n${String(issue.body || '').trim() || '(no description)'}\n</issue>`,
+      `<issue>\n${String(issue.body || '').trim() || t('duo_issue.no_description')}\n</issue>`,
     ].join('\n');
   }
 

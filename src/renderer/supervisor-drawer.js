@@ -152,7 +152,7 @@ function renderWatch() {
   const effort = on ? w.effort || 'default' : p.effort;
   $('#sup-watch-effort').innerHTML = ['default', ...(window.ChatModels?.EFFORTS || [])]
     .map((e) => `<button type="button" data-effort="${e}" class="${e === effort ? 'active' : ''}"${on ? ' disabled' : ''}>${e}</button>`).join('');
-  $('#sup-watch-cost').textContent = w && (on || w.costUsd) ? `watch cost ${fmtCost(w.costUsd || 0)}` : '';
+  $('#sup-watch-cost').textContent = w && (on || w.costUsd) ? t('supervisor_drawer.watch_cost_value', { value: fmtCost(w.costUsd || 0) }) : '';
   $('#sup-watch-q').disabled = !on;
   $('#btn-sup-watch-ask').disabled = !on;
   const log = $('#sup-watch-log');
@@ -171,7 +171,7 @@ function renderSupervisor() {
   const sup = state.sup;
   $('#sup-run').innerHTML = `<span class="mono">${esc(sup.runId || '')}</span>${sup.workflow ? ` · ${esc(sup.workflow)}` : ''}${sup.issues?.length === 1 ? ` · <b>#${esc(sup.issues[0].number)}</b> ${esc(sup.issues[0].title || '')}` : sup.issues?.length ? ` · <b>${esc(issueRefs(sup))}</b>` : ''}${sup.status ? ` ${StatusPill.statusPill(sup.status)}` : ''}${sup.mock ? ` <span class="badge p-mock">${t('supervisor_drawer.simulated')}</span>` : ''}`;
   $('#btn-sup-analyze').disabled = sup.loading;
-  $('#btn-sup-analyze').textContent = sup.result ? 'Analyze again' : 'Analyze';
+  $('#btn-sup-analyze').textContent = sup.result ? t('supervisor_drawer.analyze_again') : t('supervisor_drawer.analyze');
   const box = $('#sup-result');
   if (sup.loading) {
     box.innerHTML = `<div class="sup-loading"><span class="spinner"></span><span>${t('supervisor_drawer.the_supervisor_is_reading_the_run_2')}</span></div>`;
@@ -217,7 +217,7 @@ function recCard(r, i, steps) {
     ctrl = `<p class="small muted sup-ins">${esc(r.instruction)}</p>`;
   }
   const tag = { resume: 'resume', rerun: 'run again', none: 'advice' }[r.action] || r.action;
-  return `<div class="sup-rec"><div class="sup-rec-head"><b>${esc(r.title || 'Recommendation')}</b><span class="badge">${esc(tag)}</span></div>${ctrl}</div>`;
+  return `<div class="sup-rec"><div class="sup-rec-head"><b>${esc(r.title || t('supervisor_drawer.recommendation'))}</b><span class="badge">${esc(tag)}</span></div>${ctrl}</div>`;
 }
 
 async function runRecommendation(i) {

@@ -527,7 +527,7 @@ async function hydrateRun(runId) {
   // the gates it still waits at say so, as when they were asked (the badge and gate card read v.approvals)
   const shown = (state.view === 'run' && state.runId === runId) || window.duoShowsRun?.(runId) || window.arenaShowsRun?.(runId) || window.runChatShowsRun?.(runId);
   if (!v.past && !shown) {
-    for (const g of v.approvals.values()) showToast(`Approval waiting: ${runLabel(v.run)}`, `Step ${agentLabel(g.step_id, v.run?.stepNames)}. Click to open its run.`, runId, g);
+    for (const g of v.approvals.values()) showToast(t('app.approval_waiting_run', { run: runLabel(v.run) }), t('app.step_step_id_click_to_open', { step_id: agentLabel(g.step_id, v.run?.stepNames) }), runId, g);
   }
   renderRunListsSoon();
   scheduleRender();
@@ -557,7 +557,7 @@ function openSaveAfterAccept(v) {
   const issue = v.run?.issues?.[0];
   if (!issue) return;
   if (v.run.status !== 'success') {
-    showToast(`Not saved to issue #${issue.number}`, `The run ended ${v.run.status}: the document was not accepted.`, v.run.id);
+    showToast(t('app.not_saved_to_issue_number', { number: issue.number }), t('app.the_run_ended_status_the_document', { status: v.run.status }), v.run.id);
     return;
   }
   if (typeof window.openDuoSaveToIssue !== 'function') return;
@@ -756,7 +756,7 @@ function onEvent(ev) {
       if (replaying || shown) break;
       if (!window.duoShowsRun?.(ev.run_id) && !window.arenaShowsRun?.(ev.run_id) && !window.runChatShowsRun?.(ev.run_id)) {
         // the gate's "What happened" line (#213)
-        showToast(`Approval waiting: ${runLabel(v.run)}`, `${ev.brief?.headline || `Step ${ev.step_id}.`} Click to open its run.`, ev.run_id, ev);
+        showToast(t('app.approval_waiting_run', { run: runLabel(v.run) }), `${ev.brief?.headline || `Step ${ev.step_id}.`} Click to open its run.`, ev.run_id, ev);
       }
       break;
     }
@@ -887,7 +887,7 @@ function renderHeader() {
   renderNavRuns();
   const blocked = oneRunAtATime();
   setStartDisabled(blocked || !state.wf || !!state.wf.error);
-  $('#btn-start').textContent = blocked ? 'A workflow is already running' : state.pipeline ? 'Start pipeline' : 'Start workflow';
+  $('#btn-start').textContent = blocked ? t('app.a_workflow_is_already_running') : state.pipeline ? t('app.start_pipeline') : t('app.start_workflow');
   if (state.view === 'dashboard') renderDashboard();
 }
 
@@ -905,7 +905,7 @@ function navRunState(list) {
   if (waiting) return { status: 'waiting', title: n(waiting, 'waiting for you') };
   if (running) return { status: 'active', title: n(running, 'in progress') };
   if (failed) return { status: 'failed', title: n(failed, 'failed or interrupted: open it to resume') };
-  return { status: 'idle', title: 'No run in progress' };
+  return { status: 'idle', title: t('app.no_run_in_progress') };
 }
 
 // The Run menu item and the runs listed under it (navRunsList), even a single one (#113): each
@@ -919,7 +919,7 @@ function renderNavRuns() {
   const badge = $('#nav-run-gates');
   badge.classList.toggle('hidden', !gates);
   badge.textContent = String(gates);
-  badge.title = `${gates} approval${gates === 1 ? '' : 's'} waiting: click to review`;
+  badge.title = t('app.gates_approval_value_waiting_click_to', { gates, value: gates === 1 ? '' : 's' });
   const list = navRunsList();
   askPrStates(list.map((v) => v.run));
   const sum = navRunState(list);
@@ -929,7 +929,7 @@ function renderNavRuns() {
   const count = $('#nav-run-count');
   count.classList.toggle('hidden', list.length < 2);
   count.textContent = String(list.length);
-  count.title = `${list.length} runs listed below`;
+  count.title = t('app.length_runs_listed_below', { length: list.length });
   const box = $('#nav-runs');
   box.classList.toggle('hidden', !list.length);
   if (!list.length) { box.innerHTML = ''; box.dataset.html = ''; return; }

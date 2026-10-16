@@ -121,7 +121,7 @@
   }
 
   async function clear() {
-    if (!await confirmDialog('New conversation', 'The supervisor forgets this conversation and its history is deleted.', 'Clear')) return;
+    if (!await confirmDialog(t('supervisor.new_conversation'), t('supervisor.the_supervisor_forgets_this_conversation_and'), t('supervisor.clear'))) return;
     try { sv.messages = await api.clearSupervisorChat(); } catch (e) { chat.setError(errMsg(e)); }
     render();
   }
@@ -157,7 +157,7 @@
     $('#svc-drawer').classList.toggle('full', on);
     $('#svc-side').classList.toggle('hidden', !on);
     const btn = $('#btn-svc-full');
-    btn.textContent = on ? 'Collapse' : 'Expand';
+    btn.textContent = on ? t('supervisor.collapse') : t('supervisor.expand');
     btn.setAttribute('aria-pressed', String(on));
     render();
     if (on && !sv.tools.length) api.supervisorTools().then((t) => { sv.tools = t; render(); }).catch(() => {});
@@ -222,7 +222,7 @@
     document.querySelectorAll('[data-testid="supervisor-fab"]').forEach((b) => {
       b.innerHTML = robot + (unread ? '<span class="status-dot" aria-hidden="true"></span>' : '');
       b.classList.toggle('st-waiting', unread);
-      b.setAttribute('aria-label', unread ? 'Supervisor: a new answer' : 'Supervisor');
+      b.setAttribute('aria-label', unread ? t('supervisor.supervisor_a_new_answer') : t('supervisor.supervisor'));
     });
   }
   window.renderSupervisorFab = renderFab;
@@ -242,7 +242,7 @@
   const chatOptions = (from) => ({
     agent: 'Supervisor',
     classes: { messages: 'svc-log', form: 'svc-form', input: 'svc-input', send: 'svc-send' },
-    placeholder: 'Ask the supervisor… (Enter to send, Shift+Enter for a new line)',
+    placeholder: t('supervisor.ask_the_supervisor_enter_to_send'),
     renderMessage: messageHtml,
     emptyHtml,
     send: sendFrom(from),

@@ -9,6 +9,7 @@
 // Browser: window.StatusPill; Node: module.exports.
 // load: early (app.js draws the header's and the sidebar's statuses with it)
 (function (root) {
+  const t = (...a) => (typeof module === 'object' && module.exports ? require('../shared/i18n') : root.I18n)?.t(...a) ?? a[0];
   // id → [pill colour (style.css .pill-<colour>), label]
   const STATUS = {
     cancelled: ['cancelled', 'Cancelled'],
@@ -45,7 +46,7 @@
 
   function statusLabel(status, { waiting = false } = {}) {
     const id = idOf(status, waiting);
-    if (STATUS[id]) return STATUS[id][1];
+    if (STATUS[id]) return t(`status_pill.status_${id}`);
     const words = id.replace(/[_-]+/g, ' ');
     return words.charAt(0).toUpperCase() + words.slice(1);
   }
@@ -75,7 +76,7 @@
 
   function resumedLink(resumedBy) {
     if (!resumedBy?.runId) return '';
-    return ` <a href="#" class="badge" role="link" data-testid="run-resumed-link" data-run="${esc(resumedBy.runId)}" title="${esc(`Resumed as run ${resumedBy.runId}: open it`)}">${t('status_pill.resumed')} ${esc(statusLabel(resumedBy.status).toLowerCase())}</a>`;
+    return ` <a href="#" class="badge" role="link" data-testid="run-resumed-link" data-run="${esc(resumedBy.runId)}" title="${esc(t('status_pill.resumed_as_run_runid_open_it', { runId: resumedBy.runId }))}">${t('status_pill.resumed')} ${esc(statusLabel(resumedBy.status).toLowerCase())}</a>`;
   }
 
   const api = {

@@ -113,7 +113,7 @@
     return `<li class="rf-row" data-testid="refactor-proposal">
       <span class="rf-rank" data-testid="refactor-proposal-rank" title="${t('project_refactor.rank')}">${p.rank ? `#${esc(p.rank)}` : '—'}</span>
       <div class="rf-body">
-        <div class="rf-line"><b class="rf-title" title="${esc(p.title || '')}">${esc(p.title || p.improvement || p.target || 'Proposal')}</b>
+        <div class="rf-line"><b class="rf-title" title="${esc(p.title || '')}">${esc(p.title || p.improvement || p.target || t('project_refactor.proposal'))}</b>
           ${p.complexity ? `<span class="badge" data-testid="refactor-proposal-complexity" title="${t('project_refactor.complexity_from_1_to_5')}">${t('project_refactor.complexity')} ${esc(p.complexity)}</span>` : ''}
           ${issueMarkup(p)}${outcomeMarkup(p)}</div>
         <div class="rf-line small"><span class="mono muted rf-target" title="${esc(files.join(', '))}">${esc(files.join(', ') || '—')}</span></div>
@@ -215,13 +215,13 @@
 
   const fileIssue = (id) => act(async (c) => {
     const out = await api.fileRefactorIssue(c.id, id, {});
-    if (out?.preview) showToast(`Simulation: the issue would be filed with ${out.command || 'the tracker\'s CLI'}`);
-    else if (out?.proposal?.issue) showToast(`Filed as #${out.proposal.issue}`);
+    if (out?.preview) showToast(t('project_refactor.simulation_the_issue_would_be_filed', { value: out.command || 'the tracker\'s CLI' }));
+    else if (out?.proposal?.issue) showToast(t('project_refactor.filed_as_issue', { issue: out.proposal.issue }));
   }, { busy: id });
 
   const addToRoadmap = (id) => act(async (c) => {
     const out = await api.addRefactorToRoadmap(c.id, id);
-    if (out?.proposal) showToast(`Added #${out.proposal.issue} to the roadmap, stage ${out.stage}`);
+    if (out?.proposal) showToast(t('project_refactor.added_issue_to_the_roadmap_stage', { issue: out.proposal.issue, stage: out.stage }));
   }, { busy: id });
 
   function dismiss(id) {
@@ -230,7 +230,7 @@
     cur.dismissing = null;
     act(async (c) => {
       const out = await api.dismissRefactorProposal(c.id, id, reason);
-      showToast(`Dismissed "${out?.title || 'the proposal'}"`);
+      showToast(t('project_refactor.dismissed_value', { value: out?.title || 'the proposal' }));
     });
   }
 

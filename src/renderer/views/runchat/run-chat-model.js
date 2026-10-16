@@ -4,6 +4,7 @@
 // (`agents: [...]`) grouped. No DOM here: runchat.js renders it, a test feeds it engine events.
 // Browser: window.RunChatModel; Node: module.exports.
 (function (root) {
+  const t = (...a) => (typeof module === 'object' && module.exports ? require('../../../shared/i18n') : root.I18n)?.t(...a) ?? a[0];
   // A session's provider is the workflow's provider key (claude, codex, grok) or its type; in a
   // simulation it is "mock", so the model name tells which CLI it stands for (the provider registry,
   // src/shared/providers/, resolves both).
@@ -271,7 +272,7 @@
     'approval.requested'(ev) {
       const gate = this.add({
         kind: 'gate', ts: ev.ts, approvalId: ev.approval_id, stepId: ev.step_id, message: String(ev.message || ''),
-        choices: ev.choices || [{ id: true, label: ev.approve?.label || 'Approve' }, { id: false, label: ev.reject?.label || 'Reject' }], feedback: ev.feedback || null,
+        choices: ev.choices || [{ id: true, label: ev.approve?.label || t('run_chat_model.approve') }, { id: false, label: ev.reject?.label || t('run_chat_model.reject') }], feedback: ev.feedback || null,
         // the summary card (#213): { headline, body, recommendation, options, user_action } and an
         // Approve / Reject gate's labels and help
         brief: ev.brief || null, approve: ev.approve || null, reject: ev.reject || null,

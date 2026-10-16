@@ -6,6 +6,7 @@
 // No DOM here: views/oracle/oracle.js renders it, a test feeds it plain objects.
 // Browser: window.OracleChatModel; Node: module.exports.
 (function (root) {
+  const t = (...a) => (typeof module === 'object' && module.exports ? require('../../../shared/i18n') : root.I18n)?.t(...a) ?? a[0];
   // src/oracle.js ATTACHMENT_LIMITS (the service checks them again)
   const LIMITS = Object.freeze({ maxBytes: 5 * 1048576, maxCount: 4 });
   const IMAGE_TYPES = ['image/gif', 'image/jpeg', 'image/png', 'image/webp'];
@@ -125,7 +126,7 @@
     const preview = !!action.result?.preview;
     return {
       status,
-      label: preview && status === 'done' ? 'Previewed' : label,
+      label: preview && status === 'done' ? t('oracle_chat_model.previewed') : label,
       pill: preview && status === 'done' ? 'idle' : pill,
       auto: !!action.result?.auto,
       fromContent: action.requestedBy === 'content',
@@ -147,7 +148,7 @@
   function nightWatchView(nw = null, { fmtTime = (t) => t } = {}) {
     const active = !!nw?.active;
     const selfHealing = active && !!nw.selfHealing;
-    return { active, selfHealing, until: active ? nw.until || null : null, label: selfHealing ? 'Self-healing is on' : active ? (nw.until ? `Night watch until ${fmtTime(nw.until)}` : 'Night watch on') : 'Night watch off' };
+    return { active, selfHealing, until: active ? nw.until || null : null, label: selfHealing ? t('oracle_chat_model.self_healing_is_on') : active ? (nw.until ? t('oracle_chat_model.night_watch_until_until', { until: fmtTime(nw.until) }) : t('oracle_chat_model.night_watch_on')) : t('oracle_chat_model.night_watch_off') };
   }
 
   /** The default end of a Night watch: the next 07:00 in the owner's zone (#273, time-zone.js; unset: the computer's), as a datetime-local value. */

@@ -39,17 +39,17 @@
     for (const c of scene.collisions) highlight[c.path] = CityAgents.COLLISION_COLOUR;
     const markers = [
       ...scene.robots.map((r) => ({ colour: r.colour, label: r.label, path: r.path })),
-      ...scene.cranes.map((p) => ({ colour: CRANE, label: 'Uncommitted changes', path: p })),
+      ...scene.cranes.map((p) => ({ colour: CRANE, label: t('project_city_agents.uncommitted_changes'), path: p })),
     ];
     return { highlight, markers };
   }
 
   function agentHtml(a, run) {
     const what = a.kind === 'change' ? 'changes' : 'reads';
-    return `<li><button type="button" class="pca-agent" data-testid="city-agent" data-pca-run="${esc(run.id)}" title="${esc(`Open its run · ${what} ${a.path}`)}">`
+    return `<li><button type="button" class="pca-agent" data-testid="city-agent" data-pca-run="${esc(run.id)}" title="${esc(t('project_city_agents.open_its_run_what_path', { what, path: a.path }))}">`
       + `<span class="pca-robot" aria-hidden="true">${robotOf(a, run.workflow)}</span>`
       + `<span class="pca-who"><b>${esc(`${a.agent || 'agent'} · ${a.step || '?'}`)}</b><small class="muted">${what} <code>${esc(a.path)}</code></small></span>`
-      + `<span class="r3d-dot" style="--c:${esc(run.colour)}" title="${esc(`Run ${run.id}`)}"></span></button></li>`;
+      + `<span class="r3d-dot" style="--c:${esc(run.colour)}" title="${esc(t('project_city_agents.run_id', { id: run.id }))}"></span></button></li>`;
   }
 
   // the card's body: agents, collision risks, buildings under construction, cranes
@@ -60,7 +60,7 @@
     const district = (id) => (window.ProjectCity?.current()?.layout?.districts || []).find((d) => d.id === id)?.name || id;
     return `${agents ? `<ul class="pca-list">${agents}</ul>` : `<p class="muted small">${t('project_city_agents.the_runs_in_progress_have_not')}</p>`}
       ${(data.collisions || []).map((c) => `<div class="pca-collision" data-testid="city-collision" role="alert"><b>${t('project_city_agents.collision_risk')}</b> <code title="${esc(c.path)}">${esc(c.path)}</code><small class="muted">${t('project_city_agents.changed_by_length_runs_in_progress', { length: c.runs.length })} ${c.runs.map((id) => esc(short(id))).join(', ')}</small>${window.ProjectConflictMap ? ProjectConflictMap.linkHtml(projectId) : ''}</div>`).join('')}
-      ${scene.building.length ? `<p class="small pca-new" data-testid="city-under-construction"><b>${t('project_city_agents.under_construction')}</b> ${scene.building.map((b) => `<code title="${esc(`A new file in ${district(b.district)}`)}">${esc(b.path)}</code>`).join(' ')}</p>` : ''}
+      ${scene.building.length ? `<p class="small pca-new" data-testid="city-under-construction"><b>${t('project_city_agents.under_construction')}</b> ${scene.building.map((b) => `<code title="${esc(t('project_city_agents.a_new_file_in_district', { district: district(b.district) }))}">${esc(b.path)}</code>`).join(' ')}</p>` : ''}
       ${scene.cranes.length ? `<p class="small muted">${scene.cranes.length} ${t('project_city_agents.building_value_with_uncommitted_changes_cranes', { value: scene.cranes.length === 1 ? '' : 's' })}</p>` : ''}`;
   }
 
@@ -100,14 +100,14 @@
       if (seek) {
         if (document.activeElement !== seek) seek.value = String(replay.player.time);
         el.querySelector('[data-pca-clock]').textContent = `${clock(replay.player.time / replay.scale)} / ${clock(replay.player.duration / replay.scale)}`;
-        el.querySelector('[data-pca-play]').textContent = replay.player.playing ? 'Pause' : 'Play';
+        el.querySelector('[data-pca-play]').textContent = replay.player.playing ? t('project_city_agents.pause') : t('project_city_agents.play');
         el.querySelector('.pca-body').innerHTML = bodyHtml(d, scene, projectId);
         return;
       }
       const head = replay
         ? `<div class="pca-head"><b>${t('project_city_agents.replay_of_run')} ${esc(short(replay.runId))}</b><button type="button" class="link-btn" data-pca-close data-testid="city-replay-close">${t('common.close')}</button></div>
           <div class="pca-replay">
-            <button type="button" class="btn sm" data-pca-play data-testid="city-replay-play">${replay.player.playing ? 'Pause' : 'Play'}</button>
+            <button type="button" class="btn sm" data-pca-play data-testid="city-replay-play">${replay.player.playing ? t('project_city_agents.pause') : t('project_city_agents.play')}</button>
             <input type="range" min="0" max="${replay.player.duration}" value="${replay.player.time}" data-pca-seek data-testid="city-replay-timeline" aria-label="${t('project_city_agents.replay_timeline')}">
             <select data-pca-speed data-testid="city-replay-speed" aria-label="${t('project_city_agents.replay_speed')}">${CityAgents.SPEEDS.map((s) => `<option value="${s}"${s === replay.player.speed ? ' selected' : ''}>${s}×</option>`).join('')}</select>
             <small class="muted" data-pca-clock>${clock(replay.player.time / replay.scale)} / ${clock(replay.player.duration / replay.scale)}</small>

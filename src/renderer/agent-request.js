@@ -25,11 +25,11 @@
 
   /** The state of a request card: its pill, and which of Do it / Dismiss / Undo it offers (#241). */
   function stateOf(msg, result) {
-    if (!result) return msg.pending ? { label: 'Waits for your click', pill: 'cancelled', canDo: true } : { label: 'Working', pill: 'running' };
-    if (result.dismissed) return { label: 'Dismissed', pill: 'idle' };
-    if (result.undone) return { label: 'Undone', pill: 'idle' };
-    if (result.error) return { label: 'Failed', pill: 'failed' };
-    return { label: 'Done', pill: 'success', canUndo: !!result.undo };
+    if (!result) return msg.pending ? { label: t('agent_request.waits_for_your_click'), pill: 'cancelled', canDo: true } : { label: t('agent_request.working'), pill: 'running' };
+    if (result.dismissed) return { label: t('agent_request.dismissed'), pill: 'idle' };
+    if (result.undone) return { label: t('agent_request.undone'), pill: 'idle' };
+    if (result.error) return { label: t('agent_request.failed'), pill: 'failed' };
+    return { label: t('agent_request.done'), pill: 'success', canUndo: !!result.undo };
   }
 
   /**
@@ -46,7 +46,7 @@
     const outcome = !result ? (msg.pending && msg.waits ? `<div class="small muted">${esc(msg.waits)}</div>` : '')
       : result.answer ? `<div class="small">${t('agent_request.answered_below')}</div>`
         : `<div class="md md-compact">${esc(result.text || '')}</div>`;
-    const cost = result ? `<div class="sup-wmsg-meta">${esc(usd(result.costUsd))} · ${result.model ? esc(result.model) : 'no model call'}</div>` : '';
+    const cost = result ? `<div class="sup-wmsg-meta">${esc(usd(result.costUsd))} · ${result.model ? esc(result.model) : t('agent_request.no_model_call')}</div>` : '';
     const back = r.from === 'oracle' ? ` · <a href="#" data-open-oracle-chat title="${t('agent_request.the_oracle_s_message_that_sent')}">${t('agent_request.oracle_s_chat')}</a>` : '';
     const buttons = !owner ? ''
       : st.canDo ? `<button class="btn primary sm" type="button" data-request-act="do" data-testid="request-do">${t('agent_request.do_it')}</button><button class="btn ghost sm" type="button" data-request-act="dismiss" data-testid="request-dismiss">${t('common.dismiss')}</button>`
@@ -73,7 +73,7 @@
     const pill = card.querySelector('[data-testid="request-state"]');
     if (pill) {
       pill.className = 'pill pill-running';
-      pill.textContent = ACTING[input.action] || 'Working';
+      pill.textContent = ACTING[input.action] || t('agent_request.working');
     }
     card.setAttribute('aria-busy', 'true');
     let out;

@@ -49,7 +49,7 @@ const workflowRunsVisible = () => state.view === 'workflows' && state.workflowsT
 // Every run, in the same list as Projects > Project.
 function renderWorkflowRuns() {
   renderRunList(state.wr, {
-    prefix: 'workflow', box: '#workflow-runs', empty: 'No workflows have run yet.',
+    prefix: 'workflow', box: '#workflow-runs', empty: t('workflows.no_workflows_have_run_yet'),
     start: () => openDrawer(), rerender: renderWorkflowRuns,
     reload: () => loadWorkflowRuns(), loadMore: () => loadWorkflowRuns('more'),
   });
@@ -190,7 +190,7 @@ function renderWorkflowDefinitions() {
 function stepFlow(w) {
   const steps = w.steps || [];
   const wfReadable = (id, def) => def?.display || (typeof displayName === 'function' ? displayName(id) : String(id || ''));
-  const chip = (s) => `<span class="step-chip ${s.type === 'human_approval' ? 'human' : ''}" title="${esc(s.type === 'human_approval' ? `${s.id} (human approval)` : s.id)}">${esc(wfReadable(s.id, s))}</span>`;
+  const chip = (s) => `<span class="step-chip ${s.type === 'human_approval' ? 'human' : ''}" title="${esc(s.type === 'human_approval' ? t('workflows.id_human_approval', { id: s.id }) : s.id)}">${esc(wfReadable(s.id, s))}</span>`;
   const shown = steps.length > 7 ? steps.slice(0, 6) : steps;
   return `${shown.map(chip).join('<span class="arrow">›</span>')}${shown.length < steps.length ? `<span class="muted small">${t('workflows.value_more', { value: steps.length - shown.length })}</span>` : ''}`;
 }
@@ -223,10 +223,10 @@ function workflowCard(w) {
         </div>
         ${avatars ? `<div class="wf-avs">${avatars}</div>` : ''}
       </div>
-      <p class="muted small wf-desc" title="${esc(w.error ? `Error: ${w.error}` : w.description || '')}">${esc(w.error ? `Error: ${w.error}` : w.description || '')}</p>
+      <p class="muted small wf-desc" title="${esc(w.error ? t('workflows.error_error', { error: w.error }) : w.description || '')}">${esc(w.error ? t('workflows.error_error', { error: w.error }) : w.description || '')}</p>
       ${(w.warnings || []).map((m) => `<p class="small warn-text wf-warning" role="status" data-testid="workflow-warning">${t('workflows.warning')} ${esc(m)}</p>`).join('')}
       ${modes || outputs || needs ? `<div class="wf-tags">${modes}${outputs}${needs}</div>` : ''}
-      ${(w.steps || []).length ? `<button class="wf-flow steps-mini" data-flow aria-expanded="${open}" title="${open ? 'Hide the steps' : 'Show every step'}"><span class="badge">${w.steps.length} ${t('workflows.step')}${w.steps.length === 1 ? '' : 's'}</span>${stepFlow(w)}<span class="wf-flow-caret" aria-hidden="true">${open ? '▴' : '▾'}</span></button>` : ''}
+      ${(w.steps || []).length ? `<button class="wf-flow steps-mini" data-flow aria-expanded="${open}" title="${open ? t('workflows.hide_the_steps') : t('workflows.show_every_step')}"><span class="badge">${w.steps.length} ${t('workflows.step')}${w.steps.length === 1 ? '' : 's'}</span>${stepFlow(w)}<span class="wf-flow-caret" aria-hidden="true">${open ? '▴' : '▾'}</span></button>` : ''}
       ${open ? `<ol class="wf-steps">${stepList(w)}</ol>` : ''}
       ${used ? `<p class="small wf-used"><span class="muted">${t('workflows.used_in')}</span> ${used}</p>` : ''}
       <div class="row wf-actions">
@@ -244,13 +244,13 @@ function workflowCard(w) {
 function pipelineCard(p) {
   const stages = p.stages.map((s, i) => {
     const w = s.workflow ? wfByFile(s.workflow) : null;
-    const map = Object.entries(s.map || {}).map(([input, output]) => `<span class="badge" title="${esc(`Output "${output}" of the previous workflow → input "${input}"`)}">${esc(output === '@run' ? 'the run' : output)} → ${esc(input)}</span>`).join('');
+    const map = Object.entries(s.map || {}).map(([input, output]) => `<span class="badge" title="${esc(t('workflows.output_output_of_the_previous_workflow', { output, input }))}">${esc(output === '@run' ? t('workflows.the_run') : output)} → ${esc(input)}</span>`).join('');
     const link = i ? `<div class="wf-link"><span class="wf-link-arrow" aria-hidden="true">→</span>${map}<span class="muted small">${t('workflows.on')} ${esc(s.on || s.when || 'success')}</span></div>` : '';
     if (s.target === 'product_owner') {
       return `${link}<span class="wf-stage wf-stage-target" data-testid="pipeline-stage" title="${t('workflows.the_product_owner_places_the_produced')}"><b>${t('workflows.product_owner')}</b><span class="badge">${t('workflows.roadmap')}</span></span>`;
     }
-    return `${link}<button class="wf-stage" data-testid="pipeline-stage" data-goto="${esc(s.workflow)}" title="${esc(w ? `${s.target === 'queue' ? 'The produced issues are queued for ' : ''}${w.name} (${s.workflow})` : `${s.workflow}: not in the workflows folder`)}">
-      <b>${s.target === 'queue' ? 'Queue: ' : ''}${esc(w?.name || s.workflow)}</b>
+    return `${link}<button class="wf-stage" data-testid="pipeline-stage" data-goto="${esc(s.workflow)}" title="${esc(w ? `${s.target === 'queue' ? 'The produced issues are queued for ' : ''}${w.name} (${s.workflow})` : t('workflows.workflow_not_in_the_workflows_folder', { workflow: s.workflow }))}">
+      <b>${s.target === 'queue' ? t('workflows.queue') : ''}${esc(w?.name || s.workflow)}</b>
       ${w ? `<span class="badge cat-${esc(wfSectionOf(w.category))}">${esc(wfSectionName(wfSectionOf(w.category)))}</span>` : `<span class="badge warn">${t('workflows.missing')}</span>`}
     </button>`;
   }).join('');
@@ -260,7 +260,7 @@ function pipelineCard(p) {
       <div class="wf-pipe-head">
         <span class="badge">${t('workflows.pipeline')}</span>
         <h3 title="${esc(p.name)}">${esc(p.name)}</h3>
-        <span class="muted small wf-desc" data-testid="pipeline-description" title="${esc(p.error ? `Error: ${p.error}` : p.description || '')}">${esc(p.error ? `Error: ${p.error}` : p.description || '')}</span>
+        <span class="muted small wf-desc" data-testid="pipeline-description" title="${esc(p.error ? t('workflows.error_error', { error: p.error }) : p.description || '')}">${esc(p.error ? t('workflows.error_error', { error: p.error }) : p.description || '')}</span>
         <span class="spacer"></span>
         ${p.origin ? originBadge(p) : ''}
         <span class="badge mono wf-file" title="${esc(p.file)}">${esc(p.file)}</span>
@@ -285,7 +285,7 @@ function wireWorkflowDefinitions(box) {
       state.settings = await api.setSettings({ hiddenWorkflows: b.checked ? hidden : [...hidden, id] });
     } catch (e) {
       b.checked = !b.checked;
-      showToast('Could not save', errMsg(e));
+      showToast(t('workflows.could_not_save'), errMsg(e));
     }
   }));
   box.querySelectorAll('[data-flow]').forEach((b) => (b.onclick = () => {
@@ -296,8 +296,8 @@ function wireWorkflowDefinitions(box) {
   }));
   box.querySelectorAll('[data-restore]').forEach((b) => (b.onclick = async () => {
     const file = cardOf(b);
-    if (!(await confirmDialog('Restore default', `Move your edited "${file}" to the trash and restore the default bundled with the app?`, 'Restore'))) return;
-    try { await api.restoreWorkflow(file); } catch (e) { showToast('Restore failed', e.message); }
+    if (!(await confirmDialog(t('workflows.restore_default'), t('workflows.move_your_edited_file_to_the', { file }), t('workflows.restore')))) return;
+    try { await api.restoreWorkflow(file); } catch (e) { showToast(t('workflows.restore_failed'), e.message); }
     refreshWorkflows();
   }));
   box.querySelectorAll('[data-goto-pipe]').forEach((b) => (b.onclick = () => focus(box.querySelector(`.wf-pipe[data-pipe="${CSS.escape(b.dataset.gotoPipe)}"]`))));
@@ -309,8 +309,8 @@ function wireWorkflowDefinitions(box) {
   }));
   box.querySelectorAll('[data-restore-pipe]').forEach((b) => (b.onclick = async () => {
     const file = b.closest('.wf-pipe').dataset.pipe;
-    if (!(await confirmDialog('Restore default', `Move your edited "${file}" to the trash and restore the pipeline bundled with the app?`, 'Restore'))) return;
-    try { await api.restorePipeline(file); } catch (e) { showToast('Restore failed', errMsg(e)); }
+    if (!(await confirmDialog(t('workflows.restore_default'), t('workflows.move_your_edited_file_to_the_2', { file }), t('workflows.restore')))) return;
+    try { await api.restorePipeline(file); } catch (e) { showToast(t('workflows.restore_failed'), errMsg(e)); }
     refreshWorkflows();
   }));
   // hovering a workflow lights up its pipelines, hovering a pipeline (or a "Used in" link) its workflows
@@ -344,7 +344,7 @@ function stepList(w) {
         <div class="wf-step-head" title="${esc(s.id)}"><b>${esc(wfReadable(s.id, s))}</b>
           ${s.agents ? `<span class="badge">${t('workflows.parallel')}</span>` : ''}${s.goal ? `<span class="badge">${t('workflows.goal')}</span>` : ''}${s.loop ? `<span class="badge">${t('workflows.loop')}</span>` : ''}
           ${skillNames.map((k) => `<span class="badge" title="${t('workflows.skill')}">⚡ ${esc(k.replace(/\{\{\s*inputs\.(\w+)\s*\}\}/g, '‹$1›'))}</span>`).join('')}</div>
-        <div class="muted small">${human ? 'human approval' : s.type === 'screenshots' ? 'screenshots (no agent)' : s.type === 'suite' ? 'test suite (no agent)' : s.type === 'test_ids' ? 'test id check (no agent)' : s.type === 'check' ? 'rule checks (no agent)' : s.type === 'release_version' ? 'release version (no agent)' : s.type === 'project_map' ? 'project map (no agent)' :s.type === 'workflow' ? `runs ${esc(s.workflow || 'a workflow')}${s.foreach ? ` for each item${s.max_parallel ? `, ${esc(String(s.max_parallel))} at a time` : ''}` : ''}` : who}</div>
+        <div class="muted small">${human ? t('workflows.human_approval') : s.type === 'screenshots' ? t('workflows.screenshots_no_agent') : s.type === 'suite' ? t('workflows.test_suite_no_agent') : s.type === 'test_ids' ? t('workflows.test_id_check_no_agent') : s.type === 'check' ? t('workflows.rule_checks_no_agent') : s.type === 'release_version' ? t('workflows.release_version_no_agent') : s.type === 'project_map' ? t('workflows.project_map_no_agent') :s.type === 'workflow' ? `runs ${esc(s.workflow || 'a workflow')}${s.foreach ? ` for each item${s.max_parallel ? `, ${esc(String(s.max_parallel))} at a time` : ''}` : ''}` : who}</div>
         ${others.length ? `<div class="wf-step-next small">↳ ${others.map((n) => `<span title="${esc(n)}">${esc(wfReadable(n, w.steps.find((x) => x.id === n)))}</span>`).join(', ')}</div>` : ''}
       </div>
     </li>`;

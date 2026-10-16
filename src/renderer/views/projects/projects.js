@@ -26,7 +26,7 @@ async function refreshProjects() {
       </div>
       ${p.description ? `<p class="muted small">${esc(p.description)}</p>` : ''}
       <dl class="kv">
-        <dt>${t('projects.folder')}</dt><dd class="${p.exists ? '' : 'warn-text'}">${esc(p.folder || '—')}${p.exists ? '' : ' (not found)'}</dd>
+        <dt>${t('projects.folder')}</dt><dd class="${p.exists ? '' : 'warn-text'}">${esc(p.folder || '—')}${p.exists ? '' : t('projects.not_found')}</dd>
         <dt>${t('projects.repository')}</dt><dd>${esc(p.repo || '—')}</dd>
       </dl>
       <div class="card-actions">
@@ -53,7 +53,7 @@ async function onProjectsClick(e) {
   if (act.dataset.act === 'run') openDrawer({ project: p.id });
   if (act.dataset.act === 'open') api.openPath(p.folder);
   if (act.dataset.act === 'edit') openProjectModal(p);
-  if (act.dataset.act === 'remove' && await confirmDialog('Remove project', `Remove "${p.name}" from the list? The folder ${p.folder} is not deleted.`, 'Remove')) {
+  if (act.dataset.act === 'remove' && await confirmDialog(t('projects.remove_project'), t('projects.remove_name_from_the_list_the', { name: p.name, folder: p.folder }), t('projects.remove'))) {
     await api.removeProject(p.id);
     refreshProjects();
   }
@@ -72,8 +72,8 @@ function openProjectModal(p, { fromDrawer = false, fromHeader = false } = {}) {
   editingProject = p;
   projectFromDrawer = fromDrawer;
   projectFromHeader = fromHeader;
-  $('#project-modal-title').textContent = p ? 'Edit project' : 'New project';
-  $('#btn-pj-save').textContent = p ? 'Save' : 'Create project';
+  $('#project-modal-title').textContent = p ? t('projects.edit_project') : t('projects.new_project');
+  $('#btn-pj-save').textContent = p ? t('common.save') : t('projects.create_project');
   $('#pj-name').value = p?.name || '';
   $('#pj-description').value = p?.description || '';
   $('#pj-repo').value = p?.repo || '';
@@ -128,7 +128,7 @@ async function saveProject(e) {
   $('#pj-error').textContent = '';
   btn.disabled = true;
   const label = btn.textContent;
-  if (!editingProject && data.repo) btn.textContent = 'Cloning…';
+  if (!editingProject && data.repo) btn.textContent = t('projects.cloning');
   try {
     const p = editingProject ? await api.updateProject(editingProject.id, data) : await api.createProject(data);
     closeModal('#project-modal');

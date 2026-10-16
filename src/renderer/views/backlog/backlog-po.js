@@ -114,7 +114,7 @@
     const b = $p('#btn-bl-po');
     b.innerHTML = avatar() + (unread ? '<span class="status-dot" aria-hidden="true"></span>' : '');
     b.classList.toggle('st-waiting', unread);
-    b.setAttribute('aria-label', unread ? 'Product Owner: a new answer' : 'Product Owner');
+    b.setAttribute('aria-label', unread ? t('backlog_po.product_owner_a_new_answer') : t('backlog_po.product_owner'));
     $p('#po-avatar').innerHTML = avatar(po.busy ? 'thinking' : 'idle');
     syncSendButton();
   }
@@ -124,8 +124,8 @@
     const b = $p('#btn-bl-send-po');
     if (!b) return;
     b.disabled = po.busy;
-    b.textContent = po.busy ? 'Product Owner is answering…' : `Send to Product Owner (${b.dataset.n || 0})`;
-    b.title = po.busy ? 'Product Owner is answering: wait for the answer' : 'Ask the Product Owner about the selected issues before planning them';
+    b.textContent = po.busy ? t('backlog_po.product_owner_is_answering') : t('backlog_po.send_to_product_owner_value', { value: b.dataset.n || 0 });
+    b.title = po.busy ? t('backlog_po.product_owner_is_answering_wait_for') : t('backlog_po.ask_the_product_owner_about_the');
   }
 
   // The conversation of `projectId`: another project's attachments not sent yet, messages and notes
@@ -647,7 +647,7 @@
     // #189: the calibration it planned with (marked when it was for this question only)
     // #205: and the Cost step ("Planned for Speed · Economy")
     const once = msg.calibrationOverride || msg.costOverride;
-    const calib = msg.calibration ? ` <span class="badge" title="${esc(`${once ? 'For this question only. ' : ''}${window.PoCalibration.tooltip(msg.calibration)}${msg.cost ? `\n\n${window.PoCalibration.cost.tooltip(msg.cost)}` : ''}`)}">${t('backlog_po.planned_for')} ${esc(window.PoCalibration.plannedFor(msg.calibration, msg.cost ?? null))}${once ? ' · this question' : ''}</span>` : '';
+    const calib = msg.calibration ? ` <span class="badge" title="${esc(`${once ? 'For this question only. ' : ''}${window.PoCalibration.tooltip(msg.calibration)}${msg.cost ? `\n\n${window.PoCalibration.cost.tooltip(msg.cost)}` : ''}`)}">${t('backlog_po.planned_for')} ${esc(window.PoCalibration.plannedFor(msg.calibration, msg.cost ?? null))}${once ? t('backlog_po.this_question') : ''}</span>` : '';
     const meta = `Product Owner · ${esc(time)}${msg.model ? ` · ${esc(msg.model)}` : ''} · ${esc(fmtCost(msg.costUsd || 0))}${calib}${msg.stopped ? ` <span class="badge warn" title="${t('backlog_po.you_stopped_this_turn_the_answer')}">${t('backlog_po.stopped')}</span>` : ''}`;
     return `<div class="sup-wmsg po-msg${msg.error ? ' error' : ''}" data-msg="${m}"><div class="sup-wmsg-meta">${meta}</div>
       <div class="md md-compact">${msg.error ? esc(msg.text) : markdownHtml(msg.text || '')}</div>
@@ -682,11 +682,11 @@
     // registering an issue uses the issue tracker's cheaper analysis model (ISSUE_AGENT in src/product-owner.js)
     const model = issueMode ? 'claude-sonnet-5 · medium' : `${agent?.model || 'claude-opus-5-5'}${agent?.effort && agent.effort !== 'default' ? ` · ${agent.effort}` : ''}`;
     // #235: what the drawer plans for, the project by its name
-    $p('#po-for').textContent = !po.projectId ? 'Choose a project in the Backlog first'
-      : issueMode ? `Registering an issue for ${projectName()}` : `Planning for ${projectName()} · ${workflowTitle(workflowOf(po.workflow), po.workflow)}`;
+    $p('#po-for').textContent = !po.projectId ? t('backlog_po.choose_a_project_in_the_backlog')
+      : issueMode ? t('backlog_po.registering_an_issue_for_value', { value: projectName() }) : t('backlog_po.planning_for_value_workflow', { value: projectName(), workflow: workflowTitle(workflowOf(po.workflow), po.workflow) });
     // cut with an ellipsis in a narrow drawer: the whole line on hover (no app tooltip there)
     $p('#po-for').title = $p('#po-for').textContent;
-    $p('#po-sub').textContent = simulated ? 'simulated (developer mode)' : model;
+    $p('#po-sub').textContent = simulated ? t('backlog_po.simulated_developer_mode') : model;
     const log = $p('#po-log');
     const top = log.scrollTop;
     const toEnd = scroll === 'end' || atEnd(log);
@@ -725,9 +725,9 @@
       return `<span class="badge po-file${closed ? ' closed' : ''}" title="${esc(tip)}"><span>#${n}</span> <span class="muted">${esc(i?.title || '')}</span><button type="button" data-po-unattach-issue="${n}" aria-label="${t('backlog_po.remove_n', { n })}"${po.busy ? ' disabled' : ''}>×</button></span>`;
     }).join('')}<button class="link-btn small" type="button" data-po-unattach-all${po.busy ? ' disabled' : ''} title="${t('backlog_po.ask_about_the_whole_backlog_again')}">${t('backlog_po.clear')}</button>` : '';
     $p('#po-question').placeholder = issueMode
-      ? (openDraftIndex() >= 0 ? 'What should change? Or "add this to #n"…' : 'Describe the issue in a few words (paste or drop screenshots)…')
-      : attached ? 'Ask about the attached issues…' : 'Ask about the backlog: which issues should go first?';
-    $p('#btn-po-ask').textContent = issueMode ? 'Send' : 'Ask';
+      ? (openDraftIndex() >= 0 ? t('backlog_po.what_should_change_or_add_this') : t('backlog_po.describe_the_issue_in_a_few'))
+      : attached ? t('backlog_po.ask_about_the_attached_issues') : t('backlog_po.ask_about_the_backlog_which_issues');
+    $p('#btn-po-ask').textContent = issueMode ? t('backlog_po.send') : t('backlog_po.ask');
     $p('#btn-po-clear').disabled = po.busy || !po.messages.length;
     // #189: the calibration chip (backlog-po-settings.js)
     window.BacklogPoSettings?.renderChip({ busy: po.busy, issueMode });
@@ -798,7 +798,7 @@
     if (!d || po.busy) return;
     const key = `decongest:${m}:${n}`;
     const simulated = devMode();
-    if (!simulated && !await confirmDialog(`File “Decongest ${d.line ? `${d.file}:${d.line}` : d.file}”`, 'An issue with this fix is filed on the project\'s repository. Nothing in the code changes.', 'File')) return;
+    if (!simulated && !await confirmDialog(`File “Decongest ${d.line ? `${d.file}:${d.line}` : d.file}”`, t('backlog_po.an_issue_with_this_fix_is'), t('backlog_po.file'))) return;
     Object.assign(po, { busy: true, error: null });
     po.notes[key] = null;
     render();
@@ -826,13 +826,13 @@
     const key = `draft:${m}`;
     if (act === 'revise') {
       setMode('issue');
-      $p('#po-question').placeholder = 'What should change in the draft?';
+      $p('#po-question').placeholder = t('backlog_po.what_should_change_in_the_draft');
       return;
     }
     const n = Number(el.dataset.n) || null;
     const simulated = devMode();
     if (act === 'discard') {
-      if (!await confirmDialog('Discard the draft', 'Nothing is filed. The conversation keeps it, marked as discarded.', 'Discard')) return;
+      if (!await confirmDialog(t('backlog_po.discard_the_draft'), t('backlog_po.nothing_is_filed_the_conversation_keeps'), t('backlog_po.discard'))) return;
       try { po.messages = await api.discardProductOwnerDraft(po.projectId, msg.ts); } catch (e) { po.notes[key] = { text: errMsg(e), error: true }; }
       render();
       return;
@@ -998,7 +998,7 @@
     log.addEventListener('change', onLogChange);
   };
   $p('#btn-po-clear').onclick = async () => {
-    if (!await confirmDialog('Clear the conversation', 'The Product Owner forgets this project\'s questions and answers (and the files attached to them).', 'Clear')) return;
+    if (!await confirmDialog(t('backlog_po.clear_the_conversation'), t('backlog_po.the_product_owner_forgets_this_project'), t('backlog_po.clear_2'))) return;
     try { po.messages = await api.clearProductOwner(po.projectId); Object.assign(po, { notes: {}, files: [], attached: [], extras: {} }); } catch (e) { po.error = errMsg(e); }
     render();
   };
@@ -1079,7 +1079,7 @@
         agentId: 'product-owner',
         ids: { messages: 'po-log-window', input: 'po-question-window' },
         classes: { messages: 'svc-log po-log', form: 'svc-form', input: 'svc-input', send: 'svc-send' },
-        placeholder: 'Ask the Product Owner… (Enter to send, Shift+Enter for a new line)',
+        placeholder: t('backlog_po.ask_the_product_owner_enter_to'),
       });
       bindLog(winChat.log);
       windowTries = 0;

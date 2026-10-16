@@ -33,9 +33,9 @@
   async function run(action, label) {
     try {
       const detail = await action();
-      showToast('Copied', detail || label);
+      showToast(t('artifact_menu.copied'), detail || label);
     } catch (e) {
-      showToast('Could not copy', errMsg(e));
+      showToast(t('artifact_menu.could_not_copy'), errMsg(e));
     }
   }
 

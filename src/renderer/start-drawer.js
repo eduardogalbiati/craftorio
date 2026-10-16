@@ -99,8 +99,8 @@ function renderWorkflowOptions(preferred) {
     $('#wf-desc').textContent = hidden
       ? `Every ${state.category ? `${CATEGORIES[state.category]} ` : ''}workflow is hidden from Start: Workflows › Definitions › Show in Start brings one back.`
       : state.category
-      ? `No ${CATEGORIES[state.category]} workflows yet. Add a .yaml with "category: ${state.category}" to workflows/.`
-      : 'No .yaml files found in workflows/.';
+      ? t('start_drawer.no_value_workflows_yet_add_a', { value: CATEGORIES[state.category], category: state.category })
+      : t('start_drawer.no_yaml_files_found_in_workflows');
     $('#wf-steps-mini').innerHTML = '';
     $('#inputs-form').innerHTML = '';
     $('#adv-form').innerHTML = '';
@@ -119,7 +119,7 @@ function renderWorkflowOptions(preferred) {
 function renderProjectOptions(preferred) {
   const sel = $('#project-select');
   sel.innerHTML = state.projects.length
-    ? `<option value="">${t('start_drawer.select_a_project')}</option>${state.projects.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}${p.exists ? '' : ' (folder not found)'}</option>`).join('')}`
+    ? `<option value="">${t('start_drawer.select_a_project')}</option>${state.projects.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}${p.exists ? '' : t('start_drawer.folder_not_found')}</option>`).join('')}`
     : `<option value="">${t('start_drawer.no_projects_click')}</option>`;
   if (state.projects.some((p) => p.id === preferred)) sel.value = preferred;
   renderProjectInfo();
@@ -144,13 +144,13 @@ function renderAnalysisEstimate() {
   const on = !state.pipeline && ANALYSIS_WORKFLOWS.includes(wf?.file) && !!api.architectureEstimate;
   el.classList.toggle('hidden', !on);
   if (!on) { el.textContent = ''; return; }
-  if (!projectId) { el.textContent = 'The analysis is a real model call: pick a project to see its estimate.'; return; }
-  el.textContent = 'Estimating the analysis…';
+  if (!projectId) { el.textContent = t('start_drawer.the_analysis_is_a_real_model'); return; }
+  el.textContent = t('start_drawer.estimating_the_analysis');
   api.architectureEstimate(projectId).then(({ estimate }) => {
     if (state.wf !== wf || $('#project-select').value !== projectId) return;
     el.textContent = estimate
-      ? `The analysis is a real model call: ≈ US$ ${Number(estimate.usd).toFixed(2)} (from the last ${estimate.basis} ${estimate.basis === 1 ? 'analysis' : 'analyses'} of this project), counted in the run's budget.`
-      : 'The analysis is a real model call: no estimate yet, the first real analysis of this project shows its cost.';
+      ? t('start_drawer.the_analysis_is_a_real_model_2', { value: Number(estimate.usd).toFixed(2), basis: estimate.basis, value2: estimate.basis === 1 ? 'analysis' : 'analyses' })
+      : t('start_drawer.the_analysis_is_a_real_model_3');
   }).catch(() => { el.textContent = ''; el.classList.add('hidden'); });
 }
 
@@ -160,8 +160,8 @@ function selectWorkflow(file) {
   state.pipeline = pipeline;
   const wf = state.workflows.find((w) => w.file === (pipeline ? pipeline.stages[0].workflow : file));
   state.wf = wf;
-  $('#drawer .drawer-title').textContent = pipeline ? 'Start pipeline' : 'Start workflow';
-  $('#wf-desc').textContent = pipeline ? pipeline.description || '' : wf.error ? `Error: ${wf.error}` : [wf.description || '', ...(wf.warnings || []).map((m) => `Warning: ${m}.`)].filter(Boolean).join(' ');
+  $('#drawer .drawer-title').textContent = pipeline ? t('start_drawer.start_pipeline') : t('start_drawer.start_workflow');
+  $('#wf-desc').textContent = pipeline ? pipeline.description || '' : wf.error ? t('start_drawer.error_error', { error: wf.error }) : [wf.description || '', ...(wf.warnings || []).map((m) => `Warning: ${m}.`)].filter(Boolean).join(' ');
   $('#wf-steps-mini').innerHTML = (wf.steps || []).map((s) =>
     `<span class="step-chip ${s.type === 'human_approval' ? 'human' : ''}" title="${esc(`${s.id}${s.type === 'human_approval' ? ' (human approval)' : s.agent ? ` · ${s.agent}` : ''}`)}">${esc(s.display || (typeof displayName === 'function' ? displayName(s.id) : s.id))}</span>`).join('<span class="arrow">›</span>');
   // #262: each agent's provider, model and effort for this run (the workflow's as defaults, never
@@ -241,7 +241,7 @@ function renderEnvStatus() {
     const why = state.cliStates[id] === 'signed-out' ? 'not signed in' : 'not installed';
     return `<span class="missing">✗ ${esc(SetupModel.toolName(id))}: ${why}</span>${action(t)}`;
   });
-  if (lines.length) lines.push(`<span class="muted">${devMode() ? 'Simulation runs it without them.' : 'A real run of this workflow fails at Start without them.'}</span>`);
+  if (lines.length) lines.push(`<span class="muted">${devMode() ? t('start_drawer.simulation_runs_it_without_them') : t('start_drawer.a_real_run_of_this_workflow')}</span>`);
   box.innerHTML = [badges, ...lines].filter(Boolean).join('');
 }
 
@@ -254,7 +254,7 @@ const drawerChain = () => (chainPicker ??= ChainPicker.mount($('#drawer-chain'),
 function renderDrawerPipeline() {
   const p = state.pipeline;
   const box = $('#drawer-pipeline');
-  if (!oneRunAtATime()) $('#btn-start').textContent = p ? 'Start pipeline' : 'Start workflow';
+  if (!oneRunAtATime()) $('#btn-start').textContent = p ? t('start_drawer.start_pipeline') : t('start_drawer.start_workflow');
   $('#drawer-chain').classList.toggle('hidden', !!p);
   box.classList.toggle('hidden', !p);
   if (!p) { box.innerHTML = ''; return; }
@@ -311,8 +311,8 @@ async function startRun({ keepOpen = false } = {}) {
   if (!wf) return;
   const project = state.projects.find((p) => p.id === $('#project-select').value);
   const pathKeys = Object.keys(wf.inputs || {}).filter(isPathInput);
-  if (pathKeys.some((k) => wf.inputs[k].required !== false) && !project) return ($('#start-error').textContent = 'Select a project: its folder is used as the workflow repository.');
-  if (project && !project.exists) return ($('#start-error').textContent = `The project folder does not exist: ${project.folder}`);
+  if (pathKeys.some((k) => wf.inputs[k].required !== false) && !project) return ($('#start-error').textContent = t('start_drawer.select_a_project_its_folder_is'));
+  if (project && !project.exists) return ($('#start-error').textContent = t('start_drawer.the_project_folder_does_not_exist', { folder: project.folder }));
 
   const inputs = readInputs();
   // the main field is not remembered: the next run starts from an empty task

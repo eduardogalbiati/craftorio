@@ -45,12 +45,12 @@
     box.setAttribute('role', 'alert');
     box.setAttribute('data-testid', 'version-skew-banner');
     const text = document.createElement('span');
-    text.textContent = `This engine runs another version (engine ${engine.app}, interface ${engine.contract}): reload to get its interface`;
+    text.textContent = t('api_http.this_engine_runs_another_version_engine', { app: engine.app, contract: engine.contract });
     const reload = document.createElement('button');
     reload.className = 'btn sm primary';
     reload.type = 'button';
     reload.setAttribute('data-testid', 'version-skew-reload');
-    reload.textContent = 'Reload';
+    reload.textContent = t('api_http.reload');
     reload.addEventListener('click', () => location.reload());
     box.append(text, reload);
     document.body.appendChild(box);

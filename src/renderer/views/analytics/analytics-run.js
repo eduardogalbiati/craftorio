@@ -60,7 +60,7 @@
       const cur = rx.runs.find((r) => r.runId === rx.runId);
       if (cur) list.unshift(cur);
     }
-    return list.length ? list.map((r) => `<option value="${esc(r.runId)}"${r.runId === rx.runId ? ' selected' : ''}>${esc(r.title)}${r.issues?.length ? ` · ${esc(issuesText(r.issues))}` : ''} · ${esc(r.workflow || '')} · ${r.startedAt ? esc(dateOf(r.startedAt)) : ''}${r.mock ? ' · simulated' : ''}</option>`).join('') : `<option value="">${t('analytics_run.no_run_matches')}</option>`;
+    return list.length ? list.map((r) => `<option value="${esc(r.runId)}"${r.runId === rx.runId ? ' selected' : ''}>${esc(r.title)}${r.issues?.length ? ` · ${esc(issuesText(r.issues))}` : ''} · ${esc(r.workflow || '')} · ${r.startedAt ? esc(dateOf(r.startedAt)) : ''}${r.mock ? t('analytics_run.simulated_2') : ''}</option>`).join('') : `<option value="">${t('analytics_run.no_run_matches')}</option>`;
   }
   function picker() {
     return `<div class="card an-project-pick an-run-pick">
@@ -88,12 +88,12 @@
           <div class="muted small"><span class="badge">${esc(f.workflow || '—')}</span> ${f.issues?.length ? esc(issuesText(f.issues)) : ''} · <span class="mono" title="${esc(f.runId)}">${esc(f.runId)}</span>${f.startedAt ? ` · ${esc(dateOf(f.startedAt))}` : ''}${f.mock ? ` · <span class="badge">${t('analytics_run.simulated')}</span>` : ''}</div></div>
           <div class="row"><span class="badge ${f.status === 'success' ? 'cat-monitor' : f.status === 'failed' ? 'warn' : ''}" data-status="${esc(f.status)}">${esc(StatusPill.statusLabel(f.status))}</span><button type="button" class="btn sm ghost" data-an-open-run="${esc(f.runId)}" data-workflow="${esc(f.file || '')}">${t('analytics_run.open_run')}</button></div></div>
         <div class="an-totals">
-          ${stat('Total cost', `${fmtUsd(f.costUsd)}${marksOf(f)}`, '', 'an-run-total-cost')}
-          ${stat('Cost per issue', fmt(f.costPerIssue, 'usd'))}
-          ${stat('Duration', fmtDur(f.durationMs))}
-          ${stat('Active', fmtDur(f.activeMs), 'The duration minus the time waiting for you at gates')}
-          ${stat('Waiting at gates', fmtDur(f.gateWaitMs), f.gates.map((g) => `${g.gate}: ${fmtDur(g.waitMs)}`).join(', '))}
-          ${stat('Suite rounds', fmtNum(f.suiteRounds.length))}
+          ${stat(t('analytics_run.total_cost'), `${fmtUsd(f.costUsd)}${marksOf(f)}`, '', 'an-run-total-cost')}
+          ${stat(t('analytics_run.cost_per_issue'), fmt(f.costPerIssue, 'usd'))}
+          ${stat(t('analytics_run.duration'), fmtDur(f.durationMs))}
+          ${stat(t('analytics_run.active'), fmtDur(f.activeMs), t('analytics_run.the_duration_minus_the_time_waiting'))}
+          ${stat(t('analytics_run.waiting_at_gates'), fmtDur(f.gateWaitMs), f.gates.map((g) => `${g.gate}: ${fmtDur(g.waitMs)}`).join(', '))}
+          ${stat(t('analytics_run.suite_rounds'), fmtNum(f.suiteRounds.length))}
         </div>
         ${comparison(f, cmp)}
       </div>`;
@@ -106,7 +106,7 @@
       const c = cmp.metrics[key];
       return `<tr><td>${esc(label)}</td><td class="num">${esc(fmt(f[key], kind))}</td><td class="num">${c ? esc(fmt(c.median, kind)) : '—'}</td><td class="num nowrap">${c ? `${esc(fmt(c.p25, kind))} – ${esc(fmt(c.p75, kind))}` : '—'}</td><td>${diffText(c, kind)}</td></tr>`;
     }).join('');
-    return `<h4 class="small muted" data-testid="an-run-compare">${t('analytics_run.compared_with_the_last_count_successful', { count: cmp.count })} ${esc(f.workflow || 'this workflow')}</h4>
+    return `<h4 class="small muted" data-testid="an-run-compare">${t('analytics_run.compared_with_the_last_count_successful', { count: cmp.count })} ${esc(f.workflow || t('analytics_run.this_workflow'))}</h4>
       <div class="table-wrap"><table class="u-table an-sessions"><thead><tr><th>${t('analytics_run.figure')}</th><th class="num">${t('analytics_run.this_run')}</th><th class="num">${t('analytics_run.median')}</th><th class="num">p25 – p75</th><th>${t('analytics_run.difference')}</th></tr></thead><tbody>${rows}</tbody></table></div>`;
   }
 
@@ -124,7 +124,7 @@
     const bars = f.timeline.map((b) => {
       const y = rows.indexOf(b.row) * RH + 4;
       const w = Math.max(2, x(b.to) - x(b.from));
-      return `<rect x="${x(b.from).toFixed(1)}" y="${y}" width="${w.toFixed(1)}" height="${RH - 8}" rx="3" style="fill:${colorOf(b.row)}"><title>${esc(readable(b.step, f.stepNames))} ${t('analytics_run.step_visit_visit', { step: esc(b.step), visit: b.visit })} ${esc(fmtDur(b.durationMs))}${b.costUsd ? ` · ${esc(fmtUsd(b.costUsd))}` : ''}${b.costEstimatedUsd ? ` (${esc(fmtUsd(b.costEstimatedUsd))} estimated)` : ''}${b.costNotRecorded ? ' · cost not recorded' : ''}</title></rect>
+      return `<rect x="${x(b.from).toFixed(1)}" y="${y}" width="${w.toFixed(1)}" height="${RH - 8}" rx="3" style="fill:${colorOf(b.row)}"><title>${esc(readable(b.step, f.stepNames))} ${t('analytics_run.step_visit_visit', { step: esc(b.step), visit: b.visit })} ${esc(fmtDur(b.durationMs))}${b.costUsd ? ` · ${esc(fmtUsd(b.costUsd))}` : ''}${b.costEstimatedUsd ? t('analytics_run.costestimatedusd_estimated', { costEstimatedUsd: esc(fmtUsd(b.costEstimatedUsd)) }) : ''}${b.costNotRecorded ? t('analytics_run.cost_not_recorded') : ''}</title></rect>
         ${w > 60 ? `<text x="${(x(b.from) + 4).toFixed(1)}" y="${y + RH / 2 + 1}" class="an-gantt-label">${esc(readable(b.step, f.stepNames))}</text>` : ''}`;
     }).join('');
     const gy = rows.length * RH + 4;
@@ -161,8 +161,8 @@
     const name = (a) => readable(a, f.agentNames);
     const chip = (a) => `<span class="an-agent"><i style="background:${colorOf(a)}"></i>${esc(name(a))}</span>`;
     const time = hbars(f.agents.map((a) => ({
-      label: name(a.agent), chip: chip(a.agent), sub: `${fmtDur(a.activeMs)} active · ${fmtDur(a.waitingMs)} on tools`, title: `${name(a.agent)} (${a.agent}): ${fmtDur(a.activeMs)} active, ${fmtDur(a.waitingMs)} waiting on tools`,
-      parts: [{ value: a.activeMs, color: colorOf(a.agent), title: `active ${fmtDur(a.activeMs)}` }, { value: a.waitingMs, color: 'var(--muted)', title: `waiting on tools ${fmtDur(a.waitingMs)}` }],
+      label: name(a.agent), chip: chip(a.agent), sub: `${fmtDur(a.activeMs)} active · ${fmtDur(a.waitingMs)} on tools`, title: t('analytics_run.agent_agent2_activems_active_waitingms_waiting', { agent: name(a.agent), agent2: a.agent, activeMs: fmtDur(a.activeMs), waitingMs: fmtDur(a.waitingMs) }),
+      parts: [{ value: a.activeMs, color: colorOf(a.agent), title: `active ${fmtDur(a.activeMs)}` }, { value: a.waitingMs, color: 'var(--muted)', title: t('analytics_run.waiting_on_tools_waitingms', { waitingMs: fmtDur(a.waitingMs) }) }],
     })), { stacked: true });
     const turns = hbars(f.agents.map((a) => ({ label: name(a.agent), title: `${name(a.agent)} (${a.agent})`, chip: chip(a.agent), value: a.turns, sub: `${fmtNum(a.turns)} turn${a.turns === 1 ? '' : 's'}`, color: colorOf(a.agent) })));
     const cost = hbars(f.agents.map((a) => {

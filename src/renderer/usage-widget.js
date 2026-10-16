@@ -117,7 +117,7 @@ function renderUsageWidget() {
   btn.setAttribute('aria-busy', String(usageBusy()));
   btn.classList.toggle('unavailable', !u && !!state.usageError);
   if (!u) {
-    $('#usage-widget-text').textContent = state.usageError ? 'Usage unavailable' : '—';
+    $('#usage-widget-text').textContent = state.usageError ? t('usage_widget.usage_unavailable') : '—';
     $('#usage-widget-dot').className = 'u-dot';
     $('#usage-widget-scope').classList.add('hidden');
     return;
@@ -125,10 +125,10 @@ function renderUsageWidget() {
   const m = u.totals?.month || {};
   const worst = worstStatus(u.providers);
   const machine = u.scope === 'machine';
-  $('#usage-widget-text').textContent = `${fmtTok(m.tokens?.total)} tok · ${fmtUsd(m.costUsd)}`;
+  $('#usage-widget-text').textContent = t('usage_widget.total_tok_costusd', { total: fmtTok(m.tokens?.total), costUsd: fmtUsd(m.costUsd) });
   $('#usage-widget-dot').className = `u-dot st-${worst}`;
   $('#usage-widget-scope').classList.toggle('hidden', !machine);
-  btn.title = `${machine ? 'All CLI usage on this machine' : 'Orchestrator usage'} in ${monthLabel(u.month)}: ${fmtNum(m.tokens?.total)} tokens, ${fmtUsd(m.costUsd)} — ${STATUS_TEXT[worst]}`;
+  btn.title = t('usage_widget.value_in_month_total_tokens_costusd', { value: machine ? 'All CLI usage on this machine' : 'Orchestrator usage', month: monthLabel(u.month), total: fmtNum(m.tokens?.total), costUsd: fmtUsd(m.costUsd), value2: STATUS_TEXT[worst] });
   renderSpending(u.spending);
 }
 
@@ -183,7 +183,7 @@ function renderUsagePopover() {
   const body = $('#usage-pop-body');
   body.classList.toggle('stale', usageStale());
   if (!u) {
-    body.innerHTML = `<p class="muted small up-empty">${state.usageError ? 'Usage unavailable' : 'Loading…'}</p>`;
+    body.innerHTML = `<p class="muted small up-empty">${state.usageError ? t('usage_widget.usage_unavailable') : t('usage_widget.loading')}</p>`;
     return;
   }
   body.innerHTML = (u.providers || []).map((p) => {
@@ -194,7 +194,7 @@ function renderUsagePopover() {
     return `<div class="up-row">
       <div class="up-line">
         <b>${esc(p.name)}</b>
-        <span class="u-inst ${p.installed ? 'on' : 'off'}">${p.installed ? 'installed' : 'not installed'}</span>
+        <span class="u-inst ${p.installed ? 'on' : 'off'}">${p.installed ? 'installed' : t('usage_widget.not_installed')}</span>
         ${planWorst(p) != null ? `<span class="u-plan-pct st-${pctStatus(planWorst(p) / 100)}" title="${t('usage_widget.most_used_plan_rate_limit_window')}">${t('usage_widget.plan_p', { p: Math.round(planWorst(p)) })}</span>` : ''}
         <span class="spacer"></span>
         <span class="mono small">${fmtTok(m.tokens?.total)} ${t('usage_widget.tok')} ${fmtUsd(m.costUsd)}</span>

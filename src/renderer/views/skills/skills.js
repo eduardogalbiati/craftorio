@@ -17,9 +17,9 @@ async function refreshSkills() {
         <span class="card-icon bolt"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z" /></svg></span>
         <b class="card-title mono">${esc(s.name)}</b>
       </div>
-      <p class="muted small clamp">${esc(s.error ? `Error: ${s.error}` : s.description || 'No description.')}</p>
+      <p class="muted small clamp">${esc(s.error ? t('skills.error_error', { error: s.error }) : s.description || t('skills.no_description'))}</p>
       <div class="card-actions">
-        <span class="muted small">${s.updatedAt ? `updated ${esc(dateOf(s.updatedAt))}` : ''}${s.files?.length ? ` · +${s.files.length} file(s)` : ''}</span>
+        <span class="muted small">${s.updatedAt ? `updated ${esc(dateOf(s.updatedAt))}` : ''}${s.files?.length ? t('skills.length_file_s', { length: s.files.length }) : ''}</span>
         <span class="spacer"></span>
         <button class="btn sm ghost" data-act="open">${t('skills.folder')}</button>
         <button class="btn sm ghost danger" data-act="remove">${t('skills.remove')}</button>
@@ -30,7 +30,7 @@ async function refreshSkills() {
     const act = e.target.closest('[data-act]')?.dataset.act;
     if (act === 'open') return api.openPath(s.path);
     if (act === 'remove') {
-      if (await confirmDialog('Remove skill', `Move the skill "${s.name}" to the trash?`, 'Remove')) { await api.removeSkill(s.id); refreshSkills(); }
+      if (await confirmDialog(t('skills.remove_skill'), t('skills.move_the_skill_name_to_the', { name: s.name }), t('skills.remove'))) { await api.removeSkill(s.id); refreshSkills(); }
       return;
     }
     openSkillModal(s);
@@ -40,7 +40,7 @@ async function refreshSkills() {
 let editingSkill = null;
 function openSkillModal(s) {
   editingSkill = s;
-  $('#skill-modal-title').textContent = s ? s.name : 'New skill';
+  $('#skill-modal-title').textContent = s ? s.name : t('skills.new_skill');
   $('#sk-name-field').classList.toggle('hidden', !!s);
   $('#sk-name').value = '';
   $('#sk-description').value = s?.description || '';
