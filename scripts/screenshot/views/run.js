@@ -19,7 +19,6 @@ async function open(page) {
     // argument: one with a colon makes Electron exit before this script runs
     await api.setSettings({ developerMode: true, lastWorkflow: ${JSON.stringify(args.pipeline ? `pipe:${args.pipeline}` : args.workflow)} });
     openDrawer(); // #412: Start left the top bar
-
     await new Promise((r) => setTimeout(r, 500));
     document.querySelector('#project-select').value = ${JSON.stringify(project.id)};
     document.querySelector('#in-task').value = 'Add a /health endpoint';

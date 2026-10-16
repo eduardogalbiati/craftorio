@@ -114,6 +114,7 @@ function runArtifactsPanel() {
 
 // What render() draws while the Run screen shows.
 function renderRunScreen() {
+  if ($('.tab[data-tab].active')?.dataset.tab !== state.tab) switchTab(state.tab); // another run opens on Artifacts (#410)
   renderRunTabRow();
   renderRunBanner();
   renderPauseBanner();

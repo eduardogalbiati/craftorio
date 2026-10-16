@@ -103,16 +103,12 @@ const isRunLive = (runId) => state.runs.get(runId)?.run?.status === 'running';
 const liveRuns = () => [...state.runs.values()].filter((v) => v.run?.status === 'running');
 const pendingGates = () => [...state.runs.values()].flatMap((v) => [...v.approvals.values()]);
 
-// Makes runId the run the Run screen shows; another run opens on its Artifacts tab (#410).
-function pickRun(runId) {
-  if (runId !== state.runId && state.tab !== 'artifacts' && typeof switchTab === 'function') switchTab('artifacts');
-  state.runId = runId;
-}
-
 // Makes a run the selected one and, with `open`, opens it in the remembered run view (showRun).
+// Another run opens on its Artifacts tab (#410; renderRunScreen syncs the tabs to state.tab).
 function selectRun(runId, { open = true } = {}) {
   if (!state.runs.has(runId)) return;
-  pickRun(runId);
+  if (runId !== state.runId) state.tab = 'artifacts';
+  state.runId = runId;
   if (open) showRun(runId);
   scheduleRender();
 }
@@ -129,7 +125,8 @@ function setRunView(view) {
 // not be here yet.
 function showRun(runId, { workflow, running } = {}) {
   const v = state.runs.get(runId);
-  if (v) pickRun(runId);
+  if (v && runId !== state.runId) state.tab = 'artifacts';
+  if (v) state.runId = runId;
   const live = running ?? isRunLive(runId);
   if (state.runView === 'chat' && window.openRunChat) {
     window.openRunChat({ runId, workflow: workflow || v?.run?.workflow, running: live });
@@ -152,7 +149,8 @@ async function openPastRun(runId) {
     v.run = { id: runId, status: 'loading', startedAt: Date.now(), workflow: null, inputs: {} };
     state.runs.set(runId, v);
   }
-  pickRun(runId);
+  if (runId !== state.runId) state.tab = 'artifacts';
+  state.runId = runId;
   showView('run');
   await hydrateRun(runId);
   const v = state.runs.get(runId);

@@ -108,7 +108,7 @@ Read this before changing anything in `src/renderer/`.
   (`node_modules`) stay hand-kept outside the markers. The CSP and the packaged app are unchanged:
   the page still lists plain files.
 - Several runs can be in progress: `state.runs` (run id → view: run, sessions, steps, log, gates) and
-  `state.runId` (the one the Run screen and the top bar show); `state.run`, `state.sessions`… read the
+  `state.runId` (the one the Run screen shows; #412: the top bar shows no run); `state.run`, `state.sessions`… read the
   selected one. Route anything run-specific by `ev.run_id` and pass the `runId` to `stopRun`,
   `resolveApproval` and the terminals. There is no approval dialog: a gate is answered inside its run
   (the run chats, or the gate card on its Run screen, `renderRunGates`); elsewhere the Run badge, a
@@ -146,9 +146,16 @@ Read this before changing anything in `src/renderer/`.
   `selectRun(runId)` / `showRun(runId, { workflow, running })` in `app.js`, which open that run's
   chat (Write & Review and AI Arena: their own screens) or its Run screen (a run this window does
   not follow: loaded from disk by `openPastRun`). Only the explicit
-  switches change the choice (`setRunView`): the Run screen's Chat button, the chat's Details
-  button and a run card's "Open run" (#409: always the Details). A chat always opens at its latest message ("Jump to latest" while
-  scrolled up).
+  switches change the choice (`setRunView`): the Run screen's Chat tab, the chat's Details
+  tab and a run card's "Open run" (#409: always the Details). A chat always opens at its latest
+  message ("Jump to latest" while scrolled up). Both screens start with the same tab row (#410, `data-testid="run-tab-row"`,
+  tablist "Run view": Chat | Details | 3D, at the same place so switching never moves it); on the
+  Run screen it also holds the status (`run-screen-status`), the id, the run's actions
+  (`#run-actions`, filled by `renderRunSummary`) and Pause / Stop (`run-controls.js`, #412). The
+  chain banner (`run-chain-banner`) sits below the row, only with a chain, its editor or linked
+  runs. Opening another run resets `state.tab` to `'artifacts'` (the Details' first tab).
+  The top bar (#412) holds no run: Project select, 24/7 chip, usage, then the Oracle, the bell and
+  the account at the right end.
 - Check changes by looking at screenshots: `npm run screenshot -- --view <view> [--tab|--mode|--click]
   --out <dir>` opens one screen with demo data and quits by itself (`--ref origin/main` for the
   "original"; usage at the top of `scripts/screenshot.js`). Each view is a seed module
