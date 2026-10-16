@@ -250,6 +250,29 @@ test('#405 runBaseCheck onRed \'issue\': files the issue, leaves the roadmap unt
   assert.equal(JSON.stringify(readStages(ws)), before);
 });
 
+// #413: the service resolves the default development workflow and passes it; the item runs it
+test('#413 the fix item runs the workflow it is given (recordPreexisting and runBaseCheck), mode auto, in the front stage', async (t) => {
+  const { recordPreexisting, runBaseCheck } = load();
+  const workflow = 'ai-development-local-hero.yaml';
+  const fx = fakeExec();
+  const ws1 = tmpWs(t);
+  writeRoadmapFixture(ws1);
+  const opts = { projectId: PROJECT, commit: 'abc1234', failures: [{ test: RED.test, file: RED.file, reason: 'x' }], onRed: 'fix', platform: 'github', repo: 'o/r', exec: fx.exec, workflow };
+  await recordPreexisting(ws1, { ...opts, runId: 'run-1' });
+  const out = await recordPreexisting(ws1, { ...opts, runId: 'run-2' });
+  assert.ok(out.fixItem, 'a fix item');
+  const first = readStages(ws1)[0];
+  assert.equal(first.name, 'Fix the base');
+  assert.deepEqual(first.items.map((i) => [i.workflow, i.inputs?.mode]), [[workflow, 'auto']]);
+
+  const ws2 = tmpWs(t);
+  writeRoadmapFixture(ws2);
+  const f = fixture(t, 'canonical');
+  const r = await runBaseCheck(ws2, { ...checkArgs(f), runSuite: red, exec: fx.exec, workflow });
+  assert.equal(r.status, 'red');
+  assert.deepEqual(readStages(ws2)[0].items.map((i) => [i.workflow, i.inputs?.mode]), [[workflow, 'auto']]);
+});
+
 test('#405 runBaseCheck onRed \'off\': no issue call, no roadmap change', async (t) => {
   const ws = tmpWs(t);
   const f = fixture(t, 'canonical');
