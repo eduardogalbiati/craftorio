@@ -1,6 +1,8 @@
 // The engine connection page (connection.html): this computer or a remote engine (address + token),
 // Test connection, then Save and restart; after a failure of the remote engine, why, with Retry,
-// Change the address and Use this computer. Talks only to window.connection
+// Change the address and Use this computer. Cancel (or Esc) closes it without changing anything;
+// when it is the app's only window (the engine failed) the button reads Quit and quits the app
+// (Esc does not: quitting is never one stray key). Talks only to window.connection
 // (src/engine-connection-preload.js); the saved token never comes back to the page (a blank token
 // field keeps it).
 (() => {
@@ -50,6 +52,8 @@
     $('.cn-failure').classList.toggle('hidden', !failed);
     $('#cn-failure-text').textContent = failed ? v.failure.message : '';
     $('#cn-now').textContent = nowText(v);
+    $('#cn-cancel').textContent = v.alone ? 'Quit' : 'Cancel';
+    $('#cn-cancel').title = v.alone ? 'Quit the app (this is its only window)' : 'Close without changing anything (Esc)';
     const mode = failed || v.saved.mode === 'remote' ? 'remote' : v.mode;
     document.querySelector(`input[name="cn-mode"][value="${mode}"]`).checked = true;
     $('#cn-address').value = v.saved.address || '';
@@ -124,6 +128,9 @@
   $('#cn-test').addEventListener('click', testNow);
   $('#cn-save').addEventListener('click', save);
   $('#cn-retry').addEventListener('click', retry);
+  const close = () => api.close().catch((e) => setResult(errText(e), 'error'));
+  $('#cn-cancel').addEventListener('click', close);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && view && !view.alone) close(); });
   $('#cn-change').addEventListener('click', () => {
     document.querySelector('input[name="cn-mode"][value="remote"]').checked = true;
     paintMode();

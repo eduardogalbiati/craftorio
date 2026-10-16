@@ -14,6 +14,9 @@
 // - The page's channels (engine-connection:*) answer only the page's own window. The token never
 //   goes to a page: the page gets connectionView. Saving tests first, then writes the setting and
 //   restarts the app (relaunch): switching mode is always a restart.
+// - The page always has the OS title bar and fits the screen. Its Cancel (Esc), or the window's X,
+//   closes it and changes nothing; when it is the app's only window (the engine failed) Cancel reads
+//   Quit and closing it quits the app, so the app is never left running without a window.
 
 const path = require('path');
 const conn = require('./engine-connection');
@@ -29,11 +32,13 @@ const PAGE_SIZE = { width: 640, height: 700 };
  * @param prepareRestart  () → throws when the app cannot restart now (runs in progress here)
  * @param relaunch    () → restarts the app
  * @param env         the process environment decideMode reads (MULTIAGENT_ENGINE, MULTIAGENT_SIMULATION_ONLY)
+ * @param screen      Electron's screen (optional): the page fits the display it opens on
+ * @param quit        () → quits the app (the page closed while it was the app's only window)
  */
 function createEngineConnection({
   BrowserWindow, ipcMain, shell, session, dirname, store, version, mode,
   windowOptions = {}, mainWindow = () => null, prepareRestart = () => {}, relaunch,
-  fetch: fetchImpl = globalThis.fetch, devTools = false, env = {},
+  fetch: fetchImpl = globalThis.fetch, devTools = false, env = {}, screen = null, quit = () => {},
 }) {
   let remoteWin = null;
   let page = null;
@@ -43,6 +48,19 @@ function createEngineConnection({
   const test = (address, token) => conn.testConnection({ address, token, fetch: fetchImpl, localContract: version.contract });
 
   // ---- the connection page ----------------------------------------------------------------
+  // the window the page opens over (modal), or null: on its own when the engine's window failed
+  const pageParent = () => (failure ? null : live(remoteWin) || live(mainWindow()));
+  // no other window of the app: the page's Cancel is Quit, and closing it quits the app
+  const pageAlone = () => !live(remoteWin) && !live(mainWindow());
+
+  // the page's size, within the screen it opens on (a small notebook screen keeps its title bar
+  // and its buttons in view; the page scrolls, its footer stays)
+  function pageBounds(parent) {
+    const area = (parent && screen?.getDisplayMatching?.(parent.getBounds())?.workArea) || screen?.getPrimaryDisplay?.()?.workArea;
+    if (!area) return { ...PAGE_SIZE };
+    return { width: Math.min(PAGE_SIZE.width, area.width - 24), height: Math.min(PAGE_SIZE.height, area.height - 24) };
+  }
+
   function openPage() {
     const open = live(page);
     if (open) {
@@ -51,13 +69,16 @@ function createEngineConnection({
       open.focus();
       return open;
     }
-    // over the window it was asked from; on its own when the engine's window failed
-    const parent = failure ? null : live(remoteWin) || live(mainWindow());
-    page = new BrowserWindow({
-      ...PAGE_SIZE,
-      minWidth: 520,
-      minHeight: 560,
+    const parent = pageParent();
+    const w = new BrowserWindow({
+      ...pageBounds(parent),
+      minWidth: 420,
+      minHeight: 360,
       ...(parent ? { parent, modal: true } : {}),
+      // always the OS title bar with its close button: closing is Cancel (Quit when it is alone)
+      frame: true,
+      closable: true,
+      resizable: true,
       backgroundColor: windowOptions.backgroundColor || '#0e1014',
       title: 'Engine connection · Multiagent Orchestrator',
       ...(windowOptions.icon ? { icon: windowOptions.icon } : {}),
@@ -70,13 +91,21 @@ function createEngineConnection({
         devTools,
       },
     });
-    page.webContents.setWindowOpenHandler(({ url }) => {
+    page = w;
+    w.webContents.setWindowOpenHandler(({ url }) => {
       if (/^https?:\/\//i.test(url)) shell.openExternal(url);
       return { action: 'deny' };
     });
-    page.webContents.on('will-navigate', (e) => e.preventDefault());
-    page.loadFile(path.join(dirname, 'renderer', 'connection', 'connection.html'));
-    return page;
+    w.webContents.on('will-navigate', (e) => e.preventDefault());
+    // the page closed by the user (X, Cancel, Quit): over a window nothing changes; alone, the app
+    // quits (never left running without a window). A page replaced by another one is not this.
+    w.on('closed', () => {
+      if (page !== w) return;
+      page = null;
+      if (pageAlone()) quit();
+    });
+    w.loadFile(path.join(dirname, 'renderer', 'connection', 'connection.html'));
+    return w;
   }
 
   // the remote engine's window goes, the connection page says why (created first: the app keeps a window)
@@ -84,8 +113,9 @@ function createEngineConnection({
     failure = why;
     const old = live(remoteWin);
     remoteWin = null;
-    live(page)?.destroy();
+    const replaced = live(page);
     page = null;
+    replaced?.destroy();
     openPage();
     old?.destroy();
   }
@@ -167,6 +197,8 @@ function createEngineConnection({
       app: version.app,
       // the engine this window shows, in remote mode
       remoteHost: mode === 'remote' && !failure ? conn.parseAddress(saved.address).host || null : null,
+      // the app's only window: its Cancel reads Quit
+      alone: pageAlone(),
     };
   });
 
@@ -208,9 +240,15 @@ function createEngineConnection({
       return { ok: false, failure };
     }
     openRemoteWindow(decision);
-    p?.destroy();
     if (page === p) page = null;
+    p?.destroy();
     return { ok: true };
+  });
+
+  // Cancel (over a window: nothing changes) or Quit (the page alone: the app quits, see openPage)
+  handle('engine-connection:close', () => {
+    live(page)?.close();
+    return { closed: true };
   });
 
   return {

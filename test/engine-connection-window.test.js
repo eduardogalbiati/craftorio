@@ -27,6 +27,9 @@ function fakeElectron() {
     loadFile(f) { this.loadedFile = f; }
     isDestroyed() { return this.destroyed; }
     destroy() { if (this.destroyed) return; this.destroyed = true; this.emit('closed'); }
+    // the window's X (or BrowserWindow.close()): closed like a destroy here
+    close() { this.destroy(); }
+    getBounds() { return { x: 0, y: 0, width: this.opts.width || 0, height: this.opts.height || 0 }; }
     isMinimized() { return false; }
     restore() {}
     focus() { this.focused = true; }
@@ -48,10 +51,11 @@ function fakeElectron() {
 const engineAnswer = (status, body) => async () => ({ status, ok: status === 200, json: async () => body });
 const ENGINE_OK = engineAnswer(200, { app: '9.9.9', contract: 'abc123' });
 
-function setup({ mode = 'remote', saved = { mode: 'remote', address: URL_, token: TOKEN }, fetch = ENGINE_OK, prepareRestart = () => {} } = {}) {
+function setup({ mode = 'remote', saved = { mode: 'remote', address: URL_, token: TOKEN }, fetch = ENGINE_OK, prepareRestart = () => {}, screen = null } = {}) {
   const e = fakeElectron();
   const store = { value: { ...saved }, writes: [], read() { return { ...this.value }; }, write(c) { this.writes.push(c); this.value = { ...c }; } };
   const relaunched = [];
+  const quits = [];
   const main = mode === 'local' ? new e.BrowserWindow({ main: true }) : null;
   const c = createEngineConnection({
     ...e,
@@ -63,13 +67,15 @@ function setup({ mode = 'remote', saved = { mode: 'remote', address: URL_, token
     mainWindow: () => main,
     prepareRestart,
     relaunch: () => relaunched.push(true),
+    quit: () => quits.push(true),
+    screen,
     fetch,
   });
   const pageOf = () => e.windows.find((w) => w.loadedFile && !w.destroyed);
   const remoteOf = () => e.windows.find((w) => w.loadedUrl && !w.destroyed);
   // calls a page channel as the page would (or as `sender`)
   const call = (channel, arg, sender = pageOf()?.webContents) => e.handlers.get(channel)({ sender }, arg);
-  return { e, c, store, relaunched, main, pageOf, remoteOf, call };
+  return { e, c, store, relaunched, quits, main, pageOf, remoteOf, call };
 }
 
 const decision = (over = {}) => ({ mode: 'remote', url: URL_, host: 'my-pc:7300', token: TOKEN, address: URL_, ...over });
@@ -194,6 +200,7 @@ test('Retry opens the engine\'s window when it answers again, and keeps the page
   assert.equal(r.ok, true);
   assert.ok(s.remoteOf());
   assert.equal(page.destroyed, true);
+  assert.deepEqual(s.quits, [], 'the page that made way for the engine\'s window does not quit the app');
 });
 
 test('the page\'s channels answer only the page, and never give the token back', async () => {
@@ -255,4 +262,82 @@ test('remote mode: Use this computer saves local mode (address and token kept fo
   assert.deepEqual([r.saved, r.restarting], [true, true]);
   assert.deepEqual(s.store.writes, [{ mode: 'local', address: URL_, token: TOKEN }]);
   assert.equal(s.relaunched.length, 1);
+});
+
+// ---- closing the page: Cancel, Esc (the page's), the window's X, Quit -------------------------
+
+test('opened from Settings over the app: Cancel closes the page and changes nothing', async () => {
+  const s = setup({ mode: 'local', saved: { mode: 'local', address: '', token: '' } });
+  s.c.openPage();
+  const page = s.pageOf();
+  assert.equal((await s.call('engine-connection:state')).alone, false, 'the button reads Cancel');
+  assert.deepEqual(await s.call('engine-connection:close'), { closed: true });
+  assert.equal(page.destroyed, true);
+  assert.equal(s.main.destroyed, false, 'the app stays');
+  assert.deepEqual([s.store.writes, s.relaunched, s.quits], [[], [], []]);
+  // and it opens again afterwards
+  assert.ok(s.c.openPage());
+  assert.notEqual(s.pageOf(), page);
+});
+
+test('opened from the remote engine\'s Settings: Cancel, or the window\'s X, closes the page and keeps the engine\'s window', async () => {
+  const s = setup();
+  await s.c.startRemote(decision());
+  const remote = s.remoteOf();
+  remote.webContents.openHandler({ url: `${URL_}${conn.CONNECTION_PATH}` });
+  assert.equal((await s.call('engine-connection:state')).alone, false);
+  await s.call('engine-connection:close');
+  assert.equal(s.pageOf(), undefined);
+  remote.webContents.openHandler({ url: `${URL_}${conn.CONNECTION_PATH}` });
+  s.pageOf().close(); // the X
+  assert.equal(s.pageOf(), undefined);
+  assert.equal(remote.destroyed, false);
+  assert.deepEqual([s.store.writes, s.relaunched, s.quits], [[], [], []]);
+});
+
+test('alone after the engine failed: the button reads Quit and quits the app; so does the window\'s X', async () => {
+  const down = async () => { throw Object.assign(new TypeError('fetch failed'), { cause: { code: 'ECONNREFUSED' } }); };
+  const s = setup({ fetch: down });
+  await s.c.startRemote(decision());
+  assert.equal((await s.call('engine-connection:state')).alone, true, 'the button reads Quit');
+  await s.call('engine-connection:close');
+  assert.equal(s.pageOf(), undefined);
+  assert.equal(s.quits.length, 1, 'never left running without a window');
+  assert.deepEqual([s.store.writes, s.relaunched], [[], []]);
+
+  const x = setup({ fetch: down });
+  await x.c.startRemote(decision());
+  x.pageOf().close();
+  assert.equal(x.quits.length, 1);
+});
+
+test('a page replaced by another one (the engine failed while Change… was open) does not quit the app', async () => {
+  const s = setup();
+  await s.c.startRemote(decision());
+  const remote = s.remoteOf();
+  remote.webContents.openHandler({ url: `${URL_}${conn.CONNECTION_PATH}` });
+  const before = s.pageOf();
+  remote.webContents.emit('did-navigate', {}, `${URL_}/`, 401);
+  assert.equal(before.destroyed, true);
+  assert.ok(s.pageOf(), 'the new page says why');
+  assert.equal((await s.call('engine-connection:state')).alone, true);
+  assert.deepEqual(s.quits, []);
+});
+
+test('the page always has the OS title bar with its close button, and fits a small screen', () => {
+  const area = { x: 0, y: 0, width: 1093, height: 614 };
+  const screen = { getPrimaryDisplay: () => ({ workArea: area }), getDisplayMatching: () => ({ workArea: area }) };
+  const s = setup({ mode: 'local', saved: { mode: 'local', address: '', token: '' }, screen });
+  s.c.openPage();
+  const o = s.pageOf().opts;
+  assert.equal(o.frame, true);
+  assert.equal(o.closable, true);
+  assert.equal(o.resizable, true);
+  assert.ok(o.height <= area.height - 24, `height ${o.height}`);
+  assert.ok(o.width <= area.width, `width ${o.width}`);
+  assert.ok(o.minHeight <= o.height && o.minWidth <= o.width, 'the minimum size fits too');
+  // without a screen to ask, the default size
+  const d = setup({ mode: 'local', saved: { mode: 'local', address: '', token: '' } });
+  d.c.openPage();
+  assert.deepEqual([d.pageOf().opts.width, d.pageOf().opts.height], [640, 700]);
 });

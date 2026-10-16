@@ -5,7 +5,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('connection', {
-  // { mode: 'local' | 'remote', saved: { mode, address, hasToken }, failure, app, remoteHost }
+  // { mode: 'local' | 'remote', saved: { mode, address, hasToken }, failure, app, remoteHost, alone }
   state: () => ipcRenderer.invoke('engine-connection:state'),
   // GET /api/version on the engine → { ok, app, contract, sameContract, message } or { ok: false, reason, message }
   test: (address, token) => ipcRenderer.invoke('engine-connection:test', { address, token }),
@@ -13,6 +13,8 @@ contextBridge.exposeInMainWorld('connection', {
   save: (mode, address, token) => ipcRenderer.invoke('engine-connection:save', { mode, address, token }),
   // remote mode, after a failure: tries the saved engine again → { ok, failure? }
   retry: () => ipcRenderer.invoke('engine-connection:retry'),
+  // Cancel: closes the page, nothing changed; Quit when it is the app's only window (state().alone)
+  close: () => ipcRenderer.invoke('engine-connection:close'),
   // the window was asked again (another "Change connection…"): the page reads its state again
   onChanged: (cb) => ipcRenderer.on('engine-connection:changed', () => cb()),
 });

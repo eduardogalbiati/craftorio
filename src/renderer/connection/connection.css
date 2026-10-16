@@ -1,6 +1,6 @@
 /* The engine connection page (connection.html): a single column on the app's tokens (../style.css). */
 .cn-body { overflow: auto; display: block; }
-.cn { max-width: 560px; margin: 0 auto; padding: 24px 24px 20px; }
+.cn { max-width: 560px; margin: 0 auto; padding: 24px 24px 0; }
 .cn-title { font-size: 18px; margin: 0 0 6px; }
 .cn-lead { margin: 0 0 16px; }
 .cn code { font-family: var(--mono); font-size: 12px; }
@@ -28,6 +28,11 @@
 .cn-result[data-kind="error"] { color: var(--red); }
 .cn-result[data-kind="busy"] { color: var(--muted); }
 
-.cn-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); }
+/* the footer stays in view while the page scrolls (a short window on a small screen) */
+.cn-foot {
+  position: sticky; bottom: 0; background: var(--bg);
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  margin-top: 18px; padding: 14px 0 16px; border-top: 1px solid var(--border);
+}
 .cn-foot p { margin: 0; }
-.cn-foot .btn { flex: none; }
+.cn-foot-actions { display: flex; gap: 8px; flex: none; }

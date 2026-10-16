@@ -53,7 +53,10 @@
 
     <div class="cn-foot">
       <p class="muted small" id="cn-foot-hint">Switching restarts the app.</p>
-      <button type="button" class="btn primary" id="cn-save" data-testid="engine-connection-save">Save and restart</button>
+      <div class="cn-foot-actions">
+        <button type="button" class="btn ghost" id="cn-cancel" data-testid="engine-connection-cancel" title="Close without changing anything (Esc)">Cancel</button>
+        <button type="button" class="btn primary" id="cn-save" data-testid="engine-connection-save">Save and restart</button>
+      </div>
     </div>
   </main>
   <script src="connection.js"></script>

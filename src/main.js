@@ -353,6 +353,9 @@ function createConnection(mode) {
     relaunch: () => (remoteMode ? setImmediate(() => { app.relaunch(); app.exit(0); }) : restartApp()),
     devTools: !app.isPackaged,
     env: process.env,
+    screen,
+    // the connection page closed while it was the only window (the remote engine failed)
+    quit: () => app.quit(),
   });
 }
 
