@@ -34,7 +34,8 @@ orchestrator:
   error and the PR/MR state and either sends the run back to one of those steps with an instruction
   (a known case, e.g. a conflict), recorded with where, when and why, or escalates to the `on_error`
   gate with its diagnosis. An action failure never ends the run without one or the other.
-- **On demand**, "Ask the supervisor" on any run (Run view, orchestrator, project view): it reads
+- **On demand**, "Ask the supervisor" on any run (Run view, orchestrator; a run card's **◆ Send to
+  supervisor** attaches the run to the Supervisor's chat instead, #409): it reads
   the run (timeline, every attempt of the failing step, artifacts), explains what happened and the
   root cause, and recommends actions: **resume** from a step (a new run that reuses the previous
   steps' outputs and the agents' conversations, with an instruction for that step), **rerun**, or

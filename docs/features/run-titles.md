@@ -20,7 +20,7 @@ order: 600
   `gh pr view` / `glab mr view` (no model call): every minute and on run events for the runs in
   progress, when a list shows them for finished runs (cached 5 minutes; merged and closed PRs are
   final). Simulated runs' PRs are not real and are not read.
-- **View run** opens any run in the Run screen, also one this window never saw: a finished run is
+- **Open run** (a run card, #409) opens any run in the Run screen on its Details tab, also one this window never saw: a finished run is
   rebuilt from its `events.jsonl`, read-only (no Stop, no gates). After a reload (Ctrl+R) or
   reopening the app, the runs in progress are rebuilt the same way, so their steps, sessions,
   orchestrator log and pending gates are all there.
