@@ -21,6 +21,7 @@ const capabilities = require('../capabilities');
 const suiteStep = require('../suite-step');
 const { IdleWatch } = require('../idle');
 const chain = require('../../shared/chain-model');
+const I18n = require('../../shared/i18n');
 const { render } = require('./templates');
 const { FALLBACK_ENTRY, parseDuration } = require('./load');
 const { takeHandoff } = require('./outputs');
@@ -122,7 +123,8 @@ const methods = {
         this.memoryStops.set(key, n);
         this.emitEvent('process.killed', {
           step_id: stepId, session, pid: ev.pid, command_line: ev.commandLine, bytes: ev.bytes, limit_bytes: ev.limitBytes, ...(n === 2 ? { notify: true } : {}),
-          message: `The memory guard stopped \`${ev.commandLine}\` (pid ${ev.pid}) at ${gib(ev.bytes)} GB: over the limit of ${gib(ev.limitBytes)} GB per process${n > 1 ? ` (stopped ${n} times in ${stepId})` : ''}.`,
+          // shown on screen: in the interface language (#330)
+          message: I18n.t('engine.memory_killed', { command: ev.commandLine, pid: ev.pid, used: gib(ev.bytes), limit: gib(ev.limitBytes), again: n > 1 ? I18n.t('engine.memory_killed_again', { count: n, step: stepId }) : '' }),
         });
         if (agentName) this.memoryNotes.set(agentName, [...(this.memoryNotes.get(agentName) || []), ev]);
         onStop?.(ev);

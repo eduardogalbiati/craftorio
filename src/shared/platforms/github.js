@@ -16,6 +16,8 @@
   const CLOSING_FIELD = 'closingIssuesReferences';
   const TYPED_EPICS = '.[] | select(((.type.name // "") | ascii_downcase) == "epic") | .number';
   const cmd = (args) => ({ cli: 'gh', args });
+  // the catalog's helper, at call time (in the browser i18n.js loads after this file)
+  const t = (...a) => (typeof module === 'object' && module.exports ? require('../i18n') : root.I18n)?.t(...a) ?? a[0];
 
   const github = {
     id: 'github',
@@ -25,7 +27,7 @@
     host: OWN_HOST,
     request: Object.freeze({ noun: 'pull request', short: 'PR', sign: '#' }),
     epics: 'sub-issues',
-    epicHelp: 'GitHub: an issue labelled epic, whose sub-issues are its members',
+    get epicHelp() { return t('platform.github.epic_help'); },
     // the repository's labels are read before one is used (GitLab creates a missing label itself)
     readsLabels: true,
     closeReason: 'not planned',

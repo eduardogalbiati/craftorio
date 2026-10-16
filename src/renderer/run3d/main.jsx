@@ -42,7 +42,7 @@ class SceneBoundary extends Component {
   constructor(props) { super(props); this.state = { error: null }; }
   static getDerivedStateFromError(error) { return { error }; }
   render() {
-    if (this.state.error) return <div className="r3d-message" role="alert">The 3D scene could not be drawn: {String(this.state.error.message || this.state.error)}</div>;
+    if (this.state.error) return <div className="r3d-message" role="alert" children={t('run3d.scene_failed', { error: String(this.state.error.message || this.state.error) })} />;
     return this.props.children;
   }
 }
@@ -118,6 +118,7 @@ function App({ canAnswer, onClose, onOpenGate }) {
 
   // a new goal for the camera rig draws the frames that ease to it (the scene draws on demand)
   const aim = (goal) => { Object.assign(rig, goal); invalidate(); };
+  const zoomIn = () => aim({ zoomBy: 0.78 }), zoomOut = () => aim({ zoomBy: 1.28 });
   const select = (id) => {
     setSel(id); setFollow(false);
     aim({ free: false, distGoal: id === 'item' ? 22 : 26, targetFn: (out) => entityPos(id, out, 1) });
@@ -136,18 +137,18 @@ function App({ canAnswer, onClose, onOpenGate }) {
   if (!hasFloor) {
     return (
       <div className="r3d-message">
-        <p>This run has no events yet: its floor appears when it starts.</p>
-        <button type="button" className="r3d-primary inline" onClick={onClose}>Close</button>
+        <p children={t('run3d.no_events_yet')} />
+        <button type="button" className="r3d-primary inline" onClick={onClose} children={t('common.close')} />
       </div>
     );
   }
   return (
     <div className="r3d-app">
       <div className="r3d-stage">
-        {glError ? <div className="r3d-message" role="alert">{glError}</div> : (
+        {glError ? <div className="r3d-message" role="alert" children={glError} /> : (
           <SceneBoundary>
             <Canvas frameloop={hidden ? 'never' : 'demand'} shadows flat dpr={[1, 2]} camera={{ fov: 30, near: 1, far: 500 }}
-              onCreated={({ gl }) => gl.domElement.addEventListener('webglcontextlost', () => setGlError('The WebGL context was lost: close the 3D view and open it again.'))}>
+              onCreated={({ gl }) => gl.domElement.addEventListener('webglcontextlost', () => setGlError(t('run3d.webgl_lost')))}>
               <color attach="background" args={[theme.sky]} />
               <Scene shown={shown} onSelect={select} />
             </Canvas>
@@ -158,12 +159,12 @@ function App({ canAnswer, onClose, onOpenGate }) {
       <div className="r3d-hud">
         <TopBar query={query} setQuery={setQuery} onClose={onClose} />
         <Kpis />
-        <div className="r3d-hint r3d-card">Drag to pan, right-drag to rotate, scroll to zoom</div>
-        <div className="r3d-zoom r3d-card" role="toolbar" aria-label="Camera">
-          <button type="button" title="Zoom in" aria-label="Zoom in" onClick={() => aim({ zoomBy: 0.78 })}><Icon name="plus" /></button>
-          <button type="button" title="Zoom out" aria-label="Zoom out" onClick={() => aim({ zoomBy: 1.28 })}><Icon name="minus" /></button>
-          <button type="button" title="Whole floor" aria-label="Whole floor" onClick={overview}><Icon name="home" /></button>
-          <button type="button" title="Follow the run" aria-label="Follow the run" aria-pressed={follow} className={follow ? 'on' : ''} onClick={followRun}><Icon name="follow" /></button>
+        <div className="r3d-hint r3d-card" children={t('run3d.camera_hint')} />
+        <div className="r3d-zoom r3d-card" role="toolbar" aria-label={t('run3d.camera')}>
+          <button type="button" title={t('run3d.zoom_in')} aria-label={t('run3d.zoom_in')} onClick={zoomIn}><Icon name="plus" /></button>
+          <button type="button" title={t('run3d.zoom_out')} aria-label={t('run3d.zoom_out')} onClick={zoomOut}><Icon name="minus" /></button>
+          <button type="button" title={t('run3d.whole_floor')} aria-label={t('run3d.whole_floor')} onClick={overview}><Icon name="home" /></button>
+          <button type="button" title={t('run3d.follow_the_run')} aria-label={t('run3d.follow_the_run')} aria-pressed={follow} className={follow ? 'on' : ''} onClick={followRun}><Icon name="follow" /></button>
         </div>
         <Detail shown={shown || 'item'} canAnswer={canAnswer} onOpenGate={onOpenGate} />
         <List shown={shown} onSelect={select} query={query} />

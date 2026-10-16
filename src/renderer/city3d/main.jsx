@@ -26,7 +26,7 @@ class SceneBoundary extends Component {
   constructor(props) { super(props); this.state = { error: null }; }
   static getDerivedStateFromError(error) { return { error }; }
   render() {
-    if (this.state.error) return <div className="r3d-message" role="alert">The city could not be drawn: {String(this.state.error.message || this.state.error)}. The Facts view has the same numbers.</div>;
+    if (this.state.error) return <div className="r3d-message" role="alert" children={t('city3d.scene_failed', { error: String(this.state.error.message || this.state.error) })} />;
     return this.props.children;
   }
 }
@@ -40,12 +40,14 @@ function Tags({ store }) {
       {layout.landmarks.map((l) => (
         <button type="button" key={`landmark:${l.path}`} ref={ref(`landmark:${l.path}`)} className="r3d-tag live" title={l.path}
           onClick={() => store.pick('building', l.path)}>
-          <i className="r3d-dot" />{l.label} <span>{l.path.split('/').pop()}</span>
+          <i className="r3d-dot" />
+          {l.label} <span children={l.path.split('/').pop()} />
         </button>
       ))}
       {layout.ports.map((p) => (
-        <div key={`port:${p.id}`} ref={ref(`port:${p.id}`)} className="r3d-tag sel" title={`Talks to: ${p.via.join(', ')}`}>
-          <i className="r3d-dot" />{p.name} <span>{p.via.length} {p.via.length === 1 ? 'file' : 'files'}</span>
+        <div key={`port:${p.id}`} ref={ref(`port:${p.id}`)} className="r3d-tag sel" title={t('city3d.talks_to', { files: p.via.join(', ') })}>
+          <i className="r3d-dot" />
+          {p.name} <span children={t('city3d.files', { count: p.via.length })} />
         </div>
       ))}
     </div>
@@ -56,11 +58,11 @@ function App({ store }) {
   const { theme: T, glError } = useStore(store);
   return (
     <>
-      {glError ? <div className="r3d-message" role="alert">{glError}</div> : (
+      {glError ? <div className="r3d-message" role="alert" children={glError} /> : (
         <SceneBoundary>
           <Canvas shadows flat dpr={[1, 2]} frameloop="demand" camera={{ fov: 30, near: 1, far: 4000 }}
             onPointerMissed={() => store.pick(null)}
-            onCreated={({ gl }) => gl.domElement.addEventListener('webglcontextlost', () => store.set({ glError: 'The WebGL context was lost: switch to the Facts and back to the City to draw it again.' }))}>
+            onCreated={({ gl }) => gl.domElement.addEventListener('webglcontextlost', () => store.set({ glError: t('city3d.webgl_lost') }))}>
             <color attach="background" args={[T.sky]} />
             <CityScene store={store} />
           </Canvas>

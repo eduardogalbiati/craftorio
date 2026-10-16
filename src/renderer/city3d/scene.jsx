@@ -40,6 +40,7 @@ const DIM = 0.8; // how far they go toward the theme's dim colour
 const LIT = 0.3; // how far a hovered building's connections go toward the ink
 const tmp = new THREE.Object3D();
 const tint = new THREE.Color();
+const noRaycast = () => null; // a mesh that never takes the pointer
 
 /** The distance of the home view: the whole city in a frame of `aspect` (width / height). */
 export function homeOf(bounds, aspect) {
@@ -148,7 +149,7 @@ function Ground({ layout, T, level, store }) {
       <mesh rotation-x={-Math.PI / 2} position={[b.centerX, -0.51, b.centerZ]} receiveShadow><circleGeometry args={[b.size * 2.5, 64]} /><shadowMaterial opacity={T.shadow.opacity} color={T.shadow.color} /></mesh>
       <Slab r={floor} top={0} thick={0.5} radius={7 * k} c={T.floor} castShadow={false} />
       <Slab r={layout.ring} top={0.06} thick={0.12} radius={2.5 * k} c={T.lane} castShadow={false} />
-      <instancedMesh ref={dashRef} args={[dashGeo, undefined, Math.max(1, dashes.length)]} count={dashes.length} position-y={0} raycast={() => null}>
+      <instancedMesh ref={dashRef} args={[dashGeo, undefined, Math.max(1, dashes.length)]} count={dashes.length} position-y={0} raycast={noRaycast}>
         <meshBasicMaterial color={T.dash} transparent opacity={0.55} />
       </instancedMesh>
       {layout.zones.map((z) => (
@@ -252,9 +253,9 @@ function Buildings({ layout, T, paint, tests, level, focus, hoverLit, store }) {
         onPointerMove={(e) => { e.stopPropagation(); store.hover('building', path(e), e.nativeEvent); }}
         onPointerOut={() => store.hover(null)}
         onClick={(e) => { e.stopPropagation(); if (e.delta <= 4) store.pick('building', path(e)); }} />
-      <instancedMesh ref={bandRef} args={[band[0], band[1], Math.max(1, ledges.length)]} count={ledges.length} visible={level >= 2} raycast={() => null} />
-      <instancedMesh ref={mastRef} args={[mast[0], mast[1], Math.max(1, masts.length)]} count={masts.length} visible={level >= 2} castShadow raycast={() => null} />
-      <instancedMesh ref={capRef} args={[cap[0], cap[1], Math.max(1, masts.length)]} count={masts.length} visible={level >= 2} raycast={() => null} />
+      <instancedMesh ref={bandRef} args={[band[0], band[1], Math.max(1, ledges.length)]} count={ledges.length} visible={level >= 2} raycast={noRaycast} />
+      <instancedMesh ref={mastRef} args={[mast[0], mast[1], Math.max(1, masts.length)]} count={masts.length} visible={level >= 2} castShadow raycast={noRaycast} />
+      <instancedMesh ref={capRef} args={[cap[0], cap[1], Math.max(1, masts.length)]} count={masts.length} visible={level >= 2} raycast={noRaycast} />
     </group>
   );
 }
@@ -268,7 +269,7 @@ function Halos({ layout, T, hover, pins }) {
   return (
     <group>
       {h && (
-        <mesh geometry={box} position={[h.x + h.w / 2, Y0 - 0.02, h.z + h.d / 2]} scale={[h.w + 0.7, h.h + 0.42, h.d + 0.7]} raycast={() => null}>
+        <mesh geometry={box} position={[h.x + h.w / 2, Y0 - 0.02, h.z + h.d / 2]} scale={[h.w + 0.7, h.h + 0.42, h.d + 0.7]} raycast={noRaycast}>
           <meshBasicMaterial color={T.ink} transparent opacity={0.18} depthWrite={false} />
         </mesh>
       )}
@@ -276,10 +277,10 @@ function Halos({ layout, T, hover, pins }) {
         const r = Math.max(b.w, b.d) / 2 + 1.6;
         return (
           <group key={b.path}>
-            <mesh geometry={box} position={[b.x + b.w / 2, Y0 - 0.02, b.z + b.d / 2]} scale={[b.w + 1, b.h + 0.6, b.d + 1]} raycast={() => null}>
+            <mesh geometry={box} position={[b.x + b.w / 2, Y0 - 0.02, b.z + b.d / 2]} scale={[b.w + 1, b.h + 0.6, b.d + 1]} raycast={noRaycast}>
               <meshBasicMaterial color={T.accent} transparent opacity={0.3} depthWrite={false} toneMapped={false} />
             </mesh>
-            <mesh geometry={ring} rotation-x={-Math.PI / 2} position={[b.x + b.w / 2, Y0 + 0.08, b.z + b.d / 2]} scale={[r, r, 1]} raycast={() => null}>
+            <mesh geometry={ring} rotation-x={-Math.PI / 2} position={[b.x + b.w / 2, Y0 + 0.08, b.z + b.d / 2]} scale={[r, r, 1]} raycast={noRaycast}>
               <meshBasicMaterial color={T.accent} transparent opacity={0.7} toneMapped={false} side={THREE.DoubleSide} />
             </mesh>
           </group>
@@ -300,7 +301,7 @@ function Landmarks({ layout, T }) {
     const px = b.x + b.w / 2 + b.w * 0.32, pz = b.z + b.d / 2 - b.d * 0.32, roof = Y0 + b.h, top = roof + b.antenna + 3;
     return (
       <group key={l.path}>
-        <Slab r={{ x: b.x - 1.3, z: b.z - 1.3, w: b.w + 2.6, d: b.d + 2.6 }} top={Y0 + 0.5} thick={0.5} radius={0.25} c={T.plinth} rough={0.8} raycast={() => null} />
+        <Slab r={{ x: b.x - 1.3, z: b.z - 1.3, w: b.w + 2.6, d: b.d + 2.6 }} top={Y0 + 0.5} thick={0.5} radius={0.25} c={T.plinth} rough={0.8} raycast={noRaycast} />
         <mesh geometry={pole} position={[px, roof, pz]} scale={[1.3, top - roof, 1.3]} castShadow><meshStandardMaterial color={T.mast} roughness={0.5} /></mesh>
         <mesh position={[px, top + 0.6, pz]} castShadow><sphereGeometry args={[1.0, 16, 12]} /><meshStandardMaterial color={T.beacon} emissive={T.beacon} emissiveIntensity={0.8} roughness={0.4} /></mesh>
       </group>
@@ -326,7 +327,7 @@ function Arcs({ segments, color, opacity = 0.85 }) {
   }, [segments]);
   if (!segments.length) return null;
   return (
-    <lineSegments geometry={geo} raycast={() => null} renderOrder={2}>
+    <lineSegments geometry={geo} raycast={noRaycast} renderOrder={2}>
       <lineBasicMaterial color={color} transparent opacity={opacity} depthWrite={false} toneMapped={false} />
     </lineSegments>
   );
@@ -383,7 +384,7 @@ function Markers({ markers, T }) {
     if (m.instanceColor) m.instanceColor.needsUpdate = true;
     m.computeBoundingSphere();
   }, [markers, T]);
-  return <instancedMesh ref={ref} args={[res[0], res[1], Math.max(1, markers.length)]} count={markers.length} raycast={() => null} />;
+  return <instancedMesh ref={ref} args={[res[0], res[1], Math.max(1, markers.length)]} count={markers.length} raycast={noRaycast} />;
 }
 
 // the arcs of one target (a building or a district) and the buildings it lights

@@ -5,7 +5,7 @@
 // window.InterfaceLanguage.apply(settings): resolves the language (settings.language.interface, else
 // the computer's when it has a catalog, else English), remembers it for the next first paint
 // (localStorage 'interfaceLanguage', read by i18n.js), paints index.html's static hooks
-// (data-i18n = the text, data-i18n-title, data-i18n-aria-label = catalog keys), and when the language
+// (data-i18n = the text, data-i18n-title, data-i18n-aria-label, data-i18n-placeholder = catalog keys), and when the language
 // changed: the menu's labels (view-registry.js relabelNav), the screens whose markup is a function
 // (redrawMarkup), the shell (app.js render), then I18n.notify() for the rest (the Setup, ...).
 // Every window follows the pushed 'settings:changed', so a change in one redraws the other too.
@@ -17,6 +17,7 @@
     for (const el of root.querySelectorAll('[data-i18n]')) el.textContent = t(el.dataset.i18n);
     for (const el of root.querySelectorAll('[data-i18n-title]')) el.title = t(el.dataset.i18nTitle);
     for (const el of root.querySelectorAll('[data-i18n-aria-label]')) el.setAttribute('aria-label', t(el.dataset.i18nAriaLabel));
+    for (const el of root.querySelectorAll('[data-i18n-placeholder]')) el.placeholder = t(el.dataset.i18nPlaceholder);
   }
 
   function apply(settings) {

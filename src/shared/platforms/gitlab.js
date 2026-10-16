@@ -8,6 +8,8 @@
 (function (root) {
   const OWN_HOST = 'gitlab.com';
   const cmd = (args) => ({ cli: 'glab', args });
+  // the catalog's helper, at call time (in the browser i18n.js loads after this file)
+  const t = (...a) => (typeof module === 'object' && module.exports ? require('../i18n') : root.I18n)?.t(...a) ?? a[0];
 
   const gitlab = {
     id: 'gitlab',
@@ -17,7 +19,7 @@
     host: OWN_HOST,
     request: Object.freeze({ noun: 'merge request', short: 'MR', sign: '!' }),
     epics: 'labels',
-    epicHelp: 'GitLab: a group epic, or an issue labelled epic whose members carry epic::<name>',
+    get epicHelp() { return t('platform.gitlab.epic_help'); },
     readsLabels: false,
     closeReason: null,
     actionsQuota: false,

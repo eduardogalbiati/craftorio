@@ -18,13 +18,15 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 
 // a state is never told by its colour alone: its label is always written (the colours: the theme's `status`)
+// (in the interface language: read when drawn)
+const label = (key) => ({ get label() { return t(key); } });
 export const STATUS = {
-  pending: { label: 'Queued' },
-  running: { label: 'Running' },
-  done: { label: 'Done' },
-  changes: { label: 'Changes requested' },
-  failed: { label: 'Failed' },
-  waiting: { label: 'Waiting for you' },
+  pending: label('run3d.status_queued'),
+  running: label('run3d.status_running'),
+  done: label('run3d.status_done'),
+  changes: label('run3d.status_changes'),
+  failed: label('run3d.status_failed'),
+  waiting: label('run3d.status_waiting'),
 };
 /** A provider's name ("Claude Code") from its id or type (the provider registry, window.Providers), or ''. */
 export const providerLabel = (provider) => (provider && window.Providers?.resolve(provider)?.label) || '';

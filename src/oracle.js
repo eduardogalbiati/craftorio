@@ -66,6 +66,7 @@ const actions = require('./oracle-actions');
 const agentsUsage = require('./agents-usage');
 const TimeZone = require('./time-zone');
 const Language = require('./shared/language');
+const I18n = require('./shared/i18n');
 const knowledge = require('./oracle-knowledge');
 const { mockSteps, partialText } = require('./chat-progress');
 const night = require('./night-watch');
@@ -236,7 +237,7 @@ function readOnlyArgs(server) {
 function monthlyBlock(budget) {
   const b = budget?.claude;
   if (b?.blockOnLimit && ((b.limitUsd && b.usedUsd >= b.limitUsd) || (b.limitTokens && b.usedTokens >= b.limitTokens))) {
-    return `${b.name || 'Claude Code'} already reached its monthly budget. Raise it in Usage to ask the Oracle.`;
+    return I18n.t('oracle.monthly_block', { name: b.name || 'Claude Code' }); // shown on screen: the interface language (#330)
   }
   return '';
 }

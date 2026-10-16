@@ -411,7 +411,9 @@ function Route({ layout }) {
           <mesh position={[g.mid.x, 0.012, g.mid.z]} rotation-y={g.alongX ? 0 : Math.PI / 2} receiveShadow>
             <boxGeometry args={[g.len + 0.9, 0.02, 0.9]} /><meshStandardMaterial color={T.lane} roughness={0.9} />
           </mesh>
-          <mesh ref={(m) => { done.current[i] = m; }} rotation-y={g.alongX ? 0 : Math.PI / 2}>
+          <mesh rotation-y={g.alongX ? 0 : Math.PI / 2} ref={(m) => {
+            done.current[i] = m;
+          }}>
             <boxGeometry args={[1, 0.02, 0.2]} /><meshBasicMaterial color={T.laneDone} toneMapped={false} />
           </mesh>
         </group>
@@ -473,7 +475,7 @@ function Floor({ layout }) {
         {[-0.75, 0.75].map((z) => <B key={z} p={[0, 1.25, z]} s={[1.0, 2.5, 1.1]} c={T.rack} r={0.07} rough={0.5} />)}
         <group ref={leds}>
           {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
-            <mesh key={i} position={[0.51, 0.55 + (i >> 1) * 0.5, (i % 2 ? 0.75 : -0.75)]} rotation-y={Math.PI / 2}>
+            <mesh key={i} position={[0.51, 0.55 + Math.floor(i / 2) * 0.5, (i % 2 ? 0.75 : -0.75)]} rotation-y={Math.PI / 2}>
               <planeGeometry args={[0.7, 0.09]} /><meshBasicMaterial color={T.led} transparent toneMapped={false} />
             </mesh>
           ))}
