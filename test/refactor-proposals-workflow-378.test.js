@@ -71,6 +71,18 @@ test('release-then-refactors pipeline: a release, then refactor proposals since 
   assert.match(p.description, /\$\s?\d|estimat/i, 'a cost estimate');
 });
 
+test('release-then-refactors pipeline: the refactor stage gets since from the release\'s previous_version and the release\'s folder as project_path', () => {
+  const chain = require('../src/shared/chain-model');
+  const p = loadPipeline(fs.readFileSync(PIPELINE, 'utf8'), 'release-then-refactors.yaml');
+  const then = pipelines.pipelineThen(p, 1);
+  assert.equal(then.workflow, 'refactor-proposals.yaml');
+  assert.equal(then.then?.action, 'product_owner', 'then the Product Owner places the filed issues');
+  const release = { inputs: { repo_path: 'C:/projects/app', version: '1.11.0' }, outputs: { version: '1.11.0', previous_version: 'v1.10.0', commit: 'abc1234', unit_status: 'pass', e2e_status: 'pass' } };
+  const inputs = chain.nextInputs(then, release, load().inputs);
+  assert.equal(inputs.since, 'v1.10.0');
+  assert.equal(inputs.project_path, 'C:/projects/app');
+});
+
 test('refactor proposals workflow: its issues feed a queue of the Refactor workflow', () => {
   const text = [
     'name: Refactor proposals then queue',
