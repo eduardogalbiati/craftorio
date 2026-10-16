@@ -72,6 +72,7 @@ async function renderSettings() {
     </div>`).join('');
   $('#set-ws-folders').querySelectorAll('[data-open]').forEach((b) => (b.onclick = () => api.openPath(b.dataset.open)));
   renderTimeZone();
+  window.LanguageSettings.render($('#set-language')); // #327, #328: settings-language.js
   window.Findings?.renderList($('#set-findings-list'));
   document.querySelectorAll('[data-setting]').forEach((el) => (el.checked = !!state.settings[el.dataset.setting]));
   const platform = $('#set-backlog-platform');
@@ -622,6 +623,7 @@ registerView({
                 </div>
               </div>
               <p id="ws-error" class="error small"></p>
+              <div id="set-language"></div>
               <h3 class="s-subtitle">Backlog</h3>
               <div class="s-group">
                 <div class="s-row">

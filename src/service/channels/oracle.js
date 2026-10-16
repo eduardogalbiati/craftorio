@@ -385,6 +385,7 @@ module.exports = (ctx) => {
       skillsDirs: [ctx.ws.skills, ctx.BUNDLED_SKILLS_DIR], resolveCommand,
       budget: sim ? null : usage.withPeerUsage(usage.budgetBaseline({ runsDir: ctx.ws.runs, settings, extraRuns: ctx.agentUsageRuns() }), productOwner.monthUsage(ctx.ws.backlog, new Date(), settings.timeZone), settings.prices),
       mock: sim, mode, timeZone: settings.timeZone,
+      language: settings.language, // #327, #328
     });
     const m = out.message || {};
     const draft = m.issue?.draft;

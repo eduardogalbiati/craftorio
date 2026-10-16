@@ -87,6 +87,7 @@ const { hotSpots, loadConflictMap, readConflictMap } = require('./conflict-map')
 const { conflictsOf } = require('./repo-performance');
 const { storeFor } = require('./store');
 const { readEvents } = require('./supervisor');
+const Language = require('./shared/language');
 const TimeZone = require('./time-zone');
 
 const MAX_REPORT = 60000;
@@ -216,7 +217,7 @@ const RULES = [
   'Shared test files count too: two groups of one stage that add scenarios to the same `.feature` file (or tests to the same test file) conflict in it at the merge, like a shared source file: put them in different stages or one group, and name that file in the conflict\'s `files`.',
   'Epics (`epics`): place each issue without an epic in an existing epic of its theme (`place`, the epic\'s id from the report); propose a new epic (a title, a one-paragraph goal, its member issues) when several issues share a theme and no epic exists; name epics to merge or split. Prefer grouping issues of the same epic in one run when they touch the same code.',
   'You never edit issues, never start runs and never answer a human gate: the owner applies a proposal with a click. Do not prescribe code changes.',
-  'Write in English. The summary is Markdown, short, and answers the question.',
+  'Write in the AI agents language the Language line names. The summary is Markdown, short, and answers the question.',
 ].join('\n');
 
 // #169: added to RULES when the owner attached issues from the Backlog
@@ -903,7 +904,7 @@ const ISSUE_RULES = [
   `The owner is here. When the request is ambiguous in a way that changes the issue, ask at most ${MAX_QUESTIONS} short questions in the whole thread (in \`questions\`) and leave the draft's title empty; otherwise draft at once and list your assumptions in \`assumptions\`. Each new message of the owner refines the current draft: always return the whole draft again.`,
   'When the owner asks to add to an existing issue ("add this to #110"), or an open issue already covers the request (`relation: duplicate`), set `existing_issue` to its number and write in `addition` only the new part (a short context and the new tasks as a checklist), keeping what the issue already says; otherwise 0 and "".',
   'Epic: when the new issue clearly belongs to an existing epic of the report\'s Epics section, set `draft.epic` to its id; otherwise "" (and, when several issues share its theme with no epic, say so in `reply`).',
-  'Language: answer the owner (`reply`, `questions`) in the language the owner writes in. The issue itself (title, body, labels, addition) is in English, the repository\'s language.',
+  'Language: answer the owner (`reply`, `questions`) in the AI agents language the Language line names, whatever language the owner writes in. The issue itself (title, body, addition) is in the issues language it names; label names, `#n` references and `- [ ]` checkboxes stay as they are, and existing issue text is never rewritten only to translate it.',
   'You never file, edit or comment on issues and never start runs: the owner files the draft with a click. Do not prescribe code fixes beyond what the issue needs.',
 ].join('\n');
 
@@ -1037,7 +1038,7 @@ function issueContext(messages) {
  * built from the owner's messages, the open issues sharing two title words as overlaps, and "add
  * this to #n" as an addition to that issue.
  */
-function mockIssueAnswer({ data, question = '', previous = [] }) {
+function mockIssueAnswer({ data, question = '', previous = [], headings: h = Language.issueHeadings() }) {
   const issues = data?.issues || [];
   const thread = issueThread(previous);
   const said = [...thread.filter((m) => m.role === 'user').map((m) => m.text), question].map((t) => String(t).trim()).filter(Boolean);
@@ -1065,9 +1066,9 @@ function mockIssueAnswer({ data, question = '', previous = [] }) {
       title,
       body: [
         '## Context', '', ...said.map((t) => `> ${t}`), '',
-        `Decision (owner): ${said[said.length - 1]}`, '',
-        '## Tasks', '', ...said.map((t) => `- [ ] ${t}`), '- [ ] Tests', '',
-        ...(close.length ? [`Related: ${close.map((i) => `#${i.number}`).join(', ')}`] : []),
+        `${h.decision} ${said[said.length - 1]}`, '',
+        h.tasks, '', ...said.map((t) => `- [ ] ${t}`), '- [ ] Tests', '',
+        ...(close.length ? [`${h.related} ${close.map((i) => `#${i.number}`).join(', ')}`] : []),
       ].join('\n'),
       labels: ['enhancement', 'impact:3', 'complexity:2'],
       related: close.map((i) => i.number),
@@ -1170,9 +1171,9 @@ function mockScenario(scenario, { data, question = '', previous = [], files = []
   };
 }
 
-// The body filed for a new issue: the draft, with its Related line when the body has none.
-const createBody = (draft) => (draft.related.length && !/^Related:/im.test(draft.body)
-  ? `${draft.body}\n\nRelated: ${draft.related.map((n) => `#${n}`).join(', ')}\n` : `${draft.body}\n`);
+// The body filed for a new issue: the draft, with its Related line (in any language, #328) when the body has none.
+const createBody = (draft, issuesLanguage) => (draft.related.length && !Language.relatedPattern().test(draft.body)
+  ? `${draft.body}\n\n${Language.issueHeadings(issuesLanguage).related} ${draft.related.map((n) => `#${n}`).join(', ')}\n` : `${draft.body}\n`);
 
 /**
  * Files the current draft on the owner's click and records it in the conversation.
@@ -1183,9 +1184,10 @@ const createBody = (draft) => (draft.related.length && !/^Related:/im.test(draft
  * The text sent is kept in the thread's folder (runsDir) under filed/.
  * placeEpic (#138): a new issue joins the draft's epic (`epicList`: the cache's epics) once filed.
  * timeZone (#273): the owner's zone (settings.timeZone), the day of an appended "## Update" section.
+ * issuesLanguage (#328): the issues language code, the Related line added and the epic's body line.
  * Returns { preview, action, command, body, filed, message, messages, skippedLabels? }.
  */
-async function fileDraft({ backlogDir, projectId, runsDir, at, action, number, preview, platform, repo, cached = null, placeEpic = false, epicList = [], timeZone = null, exec = backlog.execCli }) {
+async function fileDraft({ backlogDir, projectId, runsDir, at, action, number, preview, platform, repo, cached = null, placeEpic = false, epicList = [], timeZone = null, issuesLanguage = null, exec = backlog.execCli }) {
   if (!FILE_ACTIONS.includes(action)) throw new Error(`Unknown action: ${action} (${FILE_ACTIONS.join(', ')}).`);
   const messages = readConversation(backlogDir, projectId);
   const open = currentDraft(messages);
@@ -1202,7 +1204,7 @@ async function fileDraft({ backlogDir, projectId, runsDir, at, action, number, p
   let skippedLabels = [];
   if (action === 'create') {
     if (!issue.draft) throw new Error('There is no draft to file yet.');
-    body = createBody(issue.draft);
+    body = createBody(issue.draft, issuesLanguage);
     let labels = issue.draft.labels;
     // gh refuses a label the repository does not have: file without it and say so
     const names = preview ? null : await backlog.repoLabels({ platform, repo, exec });
@@ -1239,7 +1241,7 @@ async function fileDraft({ backlogDir, projectId, runsDir, at, action, number, p
     text = `Filed ${n ? `[#${n}](${url})` : url || 'the issue'}: ${issue.draft.title}.${skippedLabels.length ? ` Labels the repository does not have were left out: ${skippedLabels.join(', ')}.` : ''}`;
     if (epic && n) {
       try {
-        await epics.applyEpic({ platform, repo, epic: { id: epic.id }, issues: [n], epics: epicList, dir, exec });
+        await epics.applyEpic({ platform, repo, epic: { id: epic.id }, issues: [n], epics: epicList, dir, issuesLanguage, exec });
         filed.epic = epic.id;
         text += ` Placed in the epic ${epic.id} ${epic.title}.`;
       } catch (e) { text += ` It could not be placed in the epic ${epic.id}: ${e.message}`; }
@@ -1281,7 +1283,7 @@ const applyDir = (where, kind) => path.join(threadDir(where, `po-${path.basename
  * timeZone (#273): the owner's zone, the day of the umbrella's "## Update" section.
  * Returns fileSplit's result plus { message, messages }.
  */
-async function applySplit({ backlogDir, projectId, runsDir, at, split, preview, platform, repo, data, timeZone = null, exec = backlog.execCli }) {
+async function applySplit({ backlogDir, projectId, runsDir, at, split, preview, platform, repo, data, timeZone = null, issuesLanguage = null, exec = backlog.execCli }) {
   const messages = readConversation(backlogDir, projectId);
   const answer = planAnswer(messages, at);
   const number = Number(split?.issue);
@@ -1290,7 +1292,7 @@ async function applySplit({ backlogDir, projectId, runsDir, at, split, preview, 
   const parent = (data?.issues || []).find((i) => i.number === number);
   const checked = poSplit.checkSplit(split, parent);
   const res = await poSplit.fileSplit({
-    platform, repo, parent, split: checked, dir: applyDir({ backlogDir, projectId, runsDir }, `split-${number}`), preview, epicList: data?.epics || [], timeZone, exec,
+    platform, repo, parent, split: checked, dir: applyDir({ backlogDir, projectId, runsDir }, `split-${number}`), preview, epicList: data?.epics || [], timeZone, issuesLanguage, exec,
   });
   const refs = res.children.map((c) => (c.number ? `[#${c.number}](${c.url})` : c.title)).join(', ');
   const text = preview
@@ -1307,7 +1309,7 @@ async function applySplit({ backlogDir, projectId, runsDir, at, split, preview, 
  * key: which proposal ('create:<n>' or 'place:<epic id>'); epic: { id } or { title, goal }; issues: the members.
  * Returns applyEpic's result plus { message, messages }.
  */
-async function applyEpicProposal({ backlogDir, projectId, runsDir, at, key, epic, issues, preview, platform, repo, data, exec = backlog.execCli }) {
+async function applyEpicProposal({ backlogDir, projectId, runsDir, at, key, epic, issues, preview, platform, repo, data, issuesLanguage = null, exec = backlog.execCli }) {
   const messages = readConversation(backlogDir, projectId);
   planAnswer(messages, at);
   if (messages.some((m) => m.epicApplied && m.epicApplied.at === at && m.epicApplied.key === key && !m.epicApplied.preview)) throw new Error('This epic proposal was already applied.');
@@ -1315,7 +1317,7 @@ async function applyEpicProposal({ backlogDir, projectId, runsDir, at, key, epic
   const members = (issues || []).map(Number).filter((n) => known.has(n));
   if (!members.length && epic?.id) throw new Error('Pick the issues to place in the epic.');
   const res = await epics.applyEpic({
-    platform, repo, epic, issues: members, epics: data?.epics || [], dir: applyDir({ backlogDir, projectId, runsDir }, 'epic'), preview, exec,
+    platform, repo, epic, issues: members, epics: data?.epics || [], dir: applyDir({ backlogDir, projectId, runsDir }, 'epic'), preview, issuesLanguage, exec,
   });
   const ref = res.epic.url ? `[${res.epic.id}](${res.epic.url})` : res.epic.id;
   const text = preview
@@ -1424,7 +1426,7 @@ function checkBudget(budget) {
 // `workflow` / `inputs` (#235): the workflow the owner chose in the drawer and its options: every
 // group gets them (recorded on the messages: lastWorkflow); no Cost step where it does not apply.
 // `timeZone` (#273): the owner's zone (settings.timeZone): the turn's prompt names it and the local time.
-async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns, runs, workflows, folder, agent, skillsDirs, resolveCommand, budget, mock, mode = 'plan', attachments = [], selection = [], scenario = null, onItem = null, signal = null, calibration = null, defaultWorkflow = null, cost = null, prices = {}, workflow = null, inputs = null, request = null, timeZone = null }) {
+async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns, runs, workflows, folder, agent, skillsDirs, resolveCommand, budget, mock, mode = 'plan', attachments = [], selection = [], scenario = null, onItem = null, signal = null, calibration = null, defaultWorkflow = null, cost = null, prices = {}, workflow = null, inputs = null, request = null, timeZone = null, language = null }) {
   const q = String(question || '').trim();
   if (!q) throw new Error('Ask a question.');
   const byDefault = DefaultWorkflow.resolve(defaultWorkflow, (workflows || []).map((w) => w.file)).file;
@@ -1478,7 +1480,7 @@ async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns,
           analysis = `Simulated (scenario "${scenario}"): no model was called, no code was read.`;
         } else {
           // #150: the saved conflict map only (a simulated question builds nothing)
-          raw = issueMode ? mockIssueAnswer({ data, question: q, previous }) : mockAnswer({ data, question: q, selection: selected, calibration: level, workflow: chosen || byDefault, cost: costLevel, conflictMap: readConflictMap(backlogDir, projectId) });
+          raw = issueMode ? mockIssueAnswer({ data, question: q, previous, headings: Language.issueHeadings(language?.issues) }) : mockAnswer({ data, question: q, selection: selected, calibration: level, workflow: chosen || byDefault, cost: costLevel, conflictMap: readConflictMap(backlogDir, projectId) });
           analysis = 'Simulated: no model was called, no code was read.';
         }
       } catch (e) { failure = e; }
@@ -1498,7 +1500,7 @@ async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns,
       const conflictMap = issueMode ? null : await loadConflictMap({ backlogDir, projectId, runs, repo: folder, store: storeFor(runsDir) }).catch((e) => { console.error('conflict map:', e.message); return null; });
       const report = (issueMode ? issueReport : backlogReport)({ data, activeRuns, history, workflows, question: q, selection: selected, conflictMap, defaultWorkflow: byDefault, workflow: chosen });
       ({ raw, costUsd, model, invalid, tokens, sessionId, text: analysis } = await callAgent({
-        mode, question: q, report, previous, attachments: files, selection: selected, folder, agent: issueMode ? ISSUE_AGENT : agent, skillsDirs, resolveCommand, onItem: seen, signal, calibration: level, cost: costLevel, workflow: chosen, costOff, timeZone,
+        mode, question: q, report, previous, attachments: files, selection: selected, folder, agent: issueMode ? ISSUE_AGENT : agent, skillsDirs, resolveCommand, onItem: seen, signal, calibration: level, cost: costLevel, workflow: chosen, costOff, timeZone, language,
       }));
       recordUsage(backlogDir, { projectId, model, tokens, costUsd, sessionId });
     }
@@ -1555,7 +1557,7 @@ const COMMIT_RULES = [
   'You are the Product Owner of this project. A discovery card reached Ready and its owner commits it to the backlog: propose the issues it becomes, from the card below and, when you need to, from the project\'s code (your working directory, read-only: docs/agents/code-map.md, grep).',
   'One issue when one run can deliver the card; two or more when its parts can ship on their own, touch unrelated areas of the code or hold more than about eight tasks. List the issues in the order to deliver them.',
   'Each issue has a title written with the issue-writing skill, the card\'s acceptance criteria it takes as `tasks` (copied as written; every criterion in exactly one issue, none dropped or invented), its `complexity` (1 to 5), the `workflow` that implements it (a file of the Workflows list; the default unless the issue needs another) and, when the card is split, a one-line `reason`.',
-  'You never file issues and never start runs: the owner edits your proposal and files it with a click. Write in English.',
+  'You never file issues and never start runs: the owner edits your proposal and files it with a click. Write the issues in the issues language the Language line names (the criteria copied as written).',
 ].join('\n');
 
 function commitReport({ card, tasks, workflows, workflow }) {
@@ -1573,13 +1575,13 @@ function commitReport({ card, tasks, workflows, workflow }) {
  * `mock`: the rule-based proposal (no model call, no cost). The other options are ask's.
  * @returns {Promise<{ split: { issues: { title, tasks, complexity, workflow, reason }[] }, model: string, costUsd: number, invalid?: string }>}
  */
-async function proposeCommit({ backlogDir, projectId, card, workflows, defaultWorkflow = null, folder, agent, skillsDirs, resolveCommand, budget, mock }) {
+async function proposeCommit({ backlogDir, projectId, card, workflows, defaultWorkflow = null, folder, agent, skillsDirs, resolveCommand, budget, mock, language = null }) {
   const files = (workflows || []).map((w) => w.file);
   const workflow = DefaultWorkflow.resolve(defaultWorkflow, files).file;
   if (mock) return { split: discoveryCommit.proposeSplit(card, { workflow }), model: 'simulated', costUsd: 0 };
   checkBudget(budget);
   const report = commitReport({ card, tasks: discoveryCommit.cardTasks(card), workflows, workflow });
-  const { raw, costUsd, model, invalid, tokens, sessionId } = await callAgent({ mode: 'commit', report, folder, agent, skillsDirs, resolveCommand });
+  const { raw, costUsd, model, invalid, tokens, sessionId } = await callAgent({ mode: 'commit', report, folder, agent, skillsDirs, resolveCommand, language });
   recordUsage(backlogDir, { projectId, model, tokens, costUsd, sessionId });
   return { split: discoveryCommit.normalizeSplit(raw, card, { workflow, workflows: files }), model, costUsd, ...(invalid ? { invalid } : {}) };
 }
@@ -1619,7 +1621,7 @@ function lastWorkflow(backlogDir, projectId) {
   return null;
 }
 
-async function callAgent({ mode = 'plan', question = '', report, previous = [], attachments = [], selection = [], folder, agent, skillsDirs, resolveCommand, onItem = () => {}, signal = null, calibration = null, cost = null, workflow = null, costOff = false, timeZone = null }) {
+async function callAgent({ mode = 'plan', question = '', report, previous = [], attachments = [], selection = [], folder, agent, skillsDirs, resolveCommand, onItem = () => {}, signal = null, calibration = null, cost = null, workflow = null, costOff = false, timeZone = null, language = null }) {
   // the run modules, not engine/workflow: the engine reaches this module through refactor-priority (#378)
   const { extractJson, validateSchema } = require('./engine/run/outputs');
   const { render } = require('./engine/run/templates');
@@ -1652,6 +1654,7 @@ async function callAgent({ mode = 'plan', question = '', report, previous = [], 
     report,
     issueMode ? issueContext(previous) : planMode ? previousExchanges(previous) : '',
     timeZone ? `## The owner's time\n${TimeZone.nowLine(timeZone)}` : '',
+    Language.languageLine({ language }), // #327: once per turn, English when unset
     issueMode ? `## The owner's new message\n${question}` : planMode ? `## The owner's question\n${question}` : '',
     others.length ? `## Files the owner attached (read them)\n${others.map((f) => `- ${f}`).join('\n')}` : '',
     `\n---\nAt the end of your response you MUST include a \`\`\`json block with an object that validates against this JSON Schema:\n\`\`\`json\n${JSON.stringify(schema, null, 2)}\n\`\`\``,

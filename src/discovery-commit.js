@@ -31,6 +31,7 @@ const fs = require('fs');
 const path = require('path');
 const backlog = require('./backlog');
 const discovery = require('./discovery');
+const Language = require('./shared/language');
 const poSplit = require('./po-split');
 const { platformOrDefault } = require('./shared/platforms');
 
@@ -155,8 +156,9 @@ function checkSplit(split) {
 
 // ---- filing ------------------------------------------------------------------------------------------
 
-/** An issue's description: where it comes from, its tasks, the card's document as evidence, its siblings. */
-function issueBody({ card, issue, index, total, siblings = [] }) {
+/** An issue's description: where it comes from, its tasks, the card's document as evidence, its siblings (headings in issuesLanguage, #328). */
+function issueBody({ card, issue, index, total, siblings = [], issuesLanguage = null }) {
+  const h = Language.issueHeadings(issuesLanguage);
   const document = String(card.document || '').replace(/\r\n/g, '\n').trim();
   const clipped = document.length > EVIDENCE_CLIP ? `${document.slice(0, EVIDENCE_CLIP).trimEnd()}\n\n(cut: the card holds the rest)` : document;
   // the card's headings one level down, under "## From the card"
@@ -167,12 +169,12 @@ function issueBody({ card, issue, index, total, siblings = [] }) {
     '',
     `"${card.title}"${total > 1 ? `, part ${index + 1} of ${total}` : ''}.${score}`,
     '',
-    '## Tasks',
+    h.tasks,
     '',
     ...issue.tasks.map((t) => `- [ ] ${t}`),
-    ...(evidence ? ['', '## From the card', '', evidence] : []),
+    ...(evidence ? ['', h.fromCard, '', evidence] : []),
     // the issues filed before this one: the platform shows them the mention, so both sides link
-    ...(siblings.length ? ['', `Related: ${refs(siblings)} (same discovery card).`] : []),
+    ...(siblings.length ? ['', `${h.related} ${refs(siblings)} ${h.sameCard}`] : []),
     '',
   ].join('\n');
 }
@@ -188,10 +190,10 @@ const issueLabels = (card, issue) => [KINDS[['bug', 'hotfix'].includes(card.type
  * again would duplicate them): `failed` names the ones left.
  * `preview`: the same checks, then the commands it would run; nothing is filed or committed.
  * @param {{ dir: string, projectId: string, cardId: string, split: { issues: object[] }, platform: string, repo: string, exec?: Function, by?: string, preview?: boolean }} o
- *   dir: the workspace's discovery folder
+ *   dir: the workspace's discovery folder; issuesLanguage (#328): the issues' headings
  * @returns {Promise<{ issues: { number, url, title, tasks, complexity, workflow }[], card: object, skippedLabels?: string[], failed?: { title, error }[], preview?: true, commands?: string[] }>}
  */
-async function commitCard({ dir, projectId, cardId, split, platform, repo, exec = backlog.execCli, by = 'owner', preview = false }) {
+async function commitCard({ dir, projectId, cardId, split, platform, repo, exec = backlog.execCli, by = 'owner', preview = false, issuesLanguage = null }) {
   const card = discovery.readCard(dir, projectId, cardId);
   const check = checkCommit(card);
   if (!check.ok) throw new Error(check.reason);
@@ -200,7 +202,7 @@ async function commitCard({ dir, projectId, cardId, split, platform, repo, exec 
   const at = stamp();
   if (preview) {
     const commands = wanted.map((issue, index) => backlog.issueCreateCommand({
-      platform, repo, title: issue.title, labels: issueLabels(card, issue), file: path.join(folder, `${at}-issue-${index + 1}.md`), text: issueBody({ card, issue, index, total: wanted.length }),
+      platform, repo, title: issue.title, labels: issueLabels(card, issue), file: path.join(folder, `${at}-issue-${index + 1}.md`), text: issueBody({ card, issue, index, total: wanted.length, issuesLanguage }),
     }).display);
     return { preview: true, commands, issues: [], card };
   }
@@ -210,7 +212,7 @@ async function commitCard({ dir, projectId, cardId, split, platform, repo, exec 
   const failed = [];
   for (const [index, issue] of wanted.entries()) {
     if (failed.length) { failed.push({ title: issue.title, error: 'Not filed: an issue before it failed.' }); continue; }
-    const body = issueBody({ card, issue, index, total: wanted.length, siblings: issues.map((i) => i.number) });
+    const body = issueBody({ card, issue, index, total: wanted.length, siblings: issues.map((i) => i.number), issuesLanguage });
     let labels = issueLabels(card, issue);
     if (known) { labels.filter((l) => !known.includes(l)).forEach((l) => skipped.add(l)); labels = labels.filter((l) => known.includes(l)); }
     const file = path.join(folder, `${at}-issue-${index + 1}.md`);

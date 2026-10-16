@@ -15,6 +15,7 @@ const fs = require('fs');
 const path = require('path');
 const backlog = require('./backlog');
 const epics = require('./epics');
+const Language = require('./shared/language');
 
 const MAX_TASKS = 8;
 const MIN_CHILDREN = 2;
@@ -249,8 +250,8 @@ function parentContext(body) {
   return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
-/** A child's description: where it comes from, its tasks, then the parent's context. */
-function childBody({ parent, child, index, total }) {
+/** A child's description: where it comes from, its tasks, then the parent's context (headings: #328). */
+function childBody({ parent, child, index, total, headings = Language.issueHeadings() }) {
   const tasks = parentTasks(parent.body);
   const mine = child.tasks.map((k) => tasks[k - 1]).filter(Boolean);
   // the parent's headings one level down, under "## From #n"
@@ -258,10 +259,10 @@ function childBody({ parent, child, index, total }) {
   return [
     `Split from #${parent.number} (${parent.title}): part ${index + 1} of ${total}.${child.reason ? ` ${child.reason}` : ''}`,
     '',
-    '## Tasks',
+    headings.tasks,
     '',
     ...mine.map((t) => `- [${t.done ? 'x' : ' '}] ${t.text}`),
-    ...(context ? ['', `## From #${parent.number}`, '', context] : []),
+    ...(context ? ['', `${headings.fromIssue} #${parent.number}`, '', context] : []),
     '',
   ].join('\n');
 }
@@ -276,10 +277,10 @@ const childLabels = (parent, complexity) => [
  * Files a checked split (checkSplit) on the owner's click: the children, then the parent (umbrella
  * task list, or a comment and closed). dir: where each text sent is kept. epicList: the cache's epics
  * (children of a parent in an epic join it). timeZone (#273): the owner's zone, the umbrella's
- * "## Update" day. Returns { preview, commands, children: [{ number, url,
+ * "## Update" day. issuesLanguage (#328): the children's headings. Returns { preview, commands, children: [{ number, url,
  * title, tasks, stage }], parent: { number, action }, skippedLabels?, epicError? }.
  */
-async function fileSplit({ platform, repo, parent, split, dir, preview = false, epicList = [], timeZone = null, exec = backlog.execCli }) {
+async function fileSplit({ platform, repo, parent, split, dir, preview = false, epicList = [], timeZone = null, issuesLanguage = null, exec = backlog.execCli }) {
   const commands = [];
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   const send = async (cmd, file, text) => {
@@ -292,7 +293,7 @@ async function fileSplit({ platform, repo, parent, split, dir, preview = false, 
   const skipped = new Set();
   const children = [];
   for (const [i, child] of split.children.entries()) {
-    const body = childBody({ parent, child, index: i, total: split.children.length });
+    const body = childBody({ parent, child, index: i, total: split.children.length, headings: Language.issueHeadings(issuesLanguage) });
     let labels = childLabels(parent, child.complexity);
     if (known) { labels.filter((l) => !known.includes(l)).forEach((l) => skipped.add(l)); labels = labels.filter((l) => known.includes(l)); }
     const file = path.join(dir, `${stamp}-split-${parent.number}-${i + 1}.md`);
@@ -316,7 +317,7 @@ async function fileSplit({ platform, repo, parent, split, dir, preview = false, 
   let epicError = null;
   if (parent.epic && epicList.some((e) => e.id === parent.epic)) {
     try {
-      const res = await epics.applyEpic({ platform, repo, epic: { id: parent.epic }, issues: children.map((c) => c.number).filter(Boolean), epics: epicList, dir, preview, exec });
+      const res = await epics.applyEpic({ platform, repo, epic: { id: parent.epic }, issues: children.map((c) => c.number).filter(Boolean), epics: epicList, dir, preview, issuesLanguage, exec });
       commands.push(...res.commands);
     } catch (e) { epicError = e.message; }
   }

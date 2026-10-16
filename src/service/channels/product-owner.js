@@ -27,6 +27,7 @@ const path = require('path');
 const agents = require('../../agents');
 const backlog = require('../../backlog');
 const DefaultWorkflow = require('../../shared/default-workflow');
+const Language = require('../../shared/language');
 const notifier = require('../../notifications');
 const productOwner = require('../../product-owner');
 const projects = require('../../projects');
@@ -111,6 +112,7 @@ module.exports = (ctx) => {
       // #206: the prices of the estimates
       prices: settings.prices || {},
       timeZone: settings.timeZone, // #273: the owner's zone in the turn's prompt
+      language: settings.language, // #327, #328: the turn's [Language] line, the simulated draft's headings
     };
   };
   // a discovery card's commit proposal asks the same Product Owner (#258, src/service/channels/discovery.js)
@@ -312,6 +314,7 @@ module.exports = (ctx) => {
           cached: (t.data.issues || []).find((i) => i.number === Number(number)) || null,
           placeEpic: !!epic,
           timeZone: workspace.readSettings(ctx.ws).timeZone, // #273: the drawer previews the same day
+          issuesLanguage: Language.issuesLanguage(workspace.readSettings(ctx.ws)), // #328
           epicList: t.data.epics || [],
         });
         return resync(res, t);
@@ -341,6 +344,7 @@ module.exports = (ctx) => {
         const res = await productOwner.applySplit({
           backlogDir: ctx.ws.backlog, projectId: t.id, runsDir: ctx.ws.runs, at, split, preview: !!preview || simulation.simulationOnly(), platform: t.platform, repo: t.repo, data: t.data,
           timeZone: workspace.readSettings(ctx.ws).timeZone, // #273
+          issuesLanguage: Language.issuesLanguage(workspace.readSettings(ctx.ws)), // #328
         });
         return resync(res, t);
       },
@@ -354,6 +358,7 @@ module.exports = (ctx) => {
         const t = target(projectId);
         const res = await productOwner.applyEpicProposal({
           backlogDir: ctx.ws.backlog, projectId: t.id, runsDir: ctx.ws.runs, at, key, epic, issues, preview: !!preview || simulation.simulationOnly(), platform: t.platform, repo: t.repo, data: t.data,
+          issuesLanguage: Language.issuesLanguage(workspace.readSettings(ctx.ws)), // #328
         });
         return resync(res, t);
       },
