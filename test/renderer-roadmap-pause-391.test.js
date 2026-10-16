@@ -104,7 +104,10 @@ test('#391 stage menu: the stage\'s pause reads "Pause after current step"; its 
 // run-controls.js when it draws it); test/renderer-run-tabs-410.test.js checks where it shows
 test('#391 Run screen: the run\'s pause button reads "Pause after current step"', () => {
   const renderer = path.join(__dirname, '..', 'src', 'renderer');
-  const html = ['index.html', 'views/run/run.js', 'run-controls.js'].map((f) => fs.readFileSync(path.join(renderer, ...f.split('/')), 'utf8')).join('\n');
+  // the markup takes its text from the catalog (#330): read it with the English values in place
+  const en = JSON.parse(fs.readFileSync(path.join(renderer, '..', 'shared', 'i18n', 'en.json'), 'utf8'));
+  const html = ['index.html', 'views/run/run.js', 'run-controls.js'].map((f) => fs.readFileSync(path.join(renderer, ...f.split('/')), 'utf8')).join('\n')
+    .replace(/\$\{t\('([\w.]+)'\)\}/g, (m, k) => (k in en ? en[k] : m));
   const btn = H.findEl(html, (e) => e.name === 'button' && (e.attrs.id === 'btn-pause' || e.attrs['data-testid'] === 'run-pause'));
   assert.ok(btn, 'the run\'s pause button (#btn-pause or data-testid="run-pause") is on the Run screen');
   assert.equal(H.visibleText(btn.inner).trim(), 'Pause after current step');

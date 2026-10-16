@@ -155,7 +155,8 @@ test('render: Assign workflow… and Send to Product Owner (n) toggle together f
   assert.equal(en['backlog.assign_workflow_n'], 'Assign workflow… ({n})');
   assert.match(fn, /\$b\('#btn-bl-send-po'\)\.classList\.toggle\('hidden', !n\);/);
   assert.match(fn, /\$b\('#btn-bl-send-po'\)\.dataset\.n = String\(n\);/);
-  assert.match(fn, /\$b\('#btn-bl-send-po'\)\.textContent = `Send to Product Owner \(\$\{n\}\)`;/);
+  assert.match(fn, /\$b\('#btn-bl-send-po'\)\.textContent = t\('backlog\.send_to_product_owner_n', \{ n \}\);/);
+  assert.equal(en['backlog.send_to_product_owner_n'], 'Send to Product Owner ({n})');
   assert.match(fn, /window\.BacklogPO\?\.syncSendButton\(\);/); // backlog-po.js keeps it disabled while busy
 });
 

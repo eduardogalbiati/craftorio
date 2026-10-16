@@ -99,7 +99,7 @@ test('renderRunSummary: an empty array input is hidden entirely, not shown as a 
 });
 
 test('renderRunSummary: Review changes (#118) is shown only when hasChanges(r.id), and opens the diff viewer for this run', () => {
-  assert.match(runSrc, /hasChanges\(r\.id\) \? '<button class="btn sm ghost" id="btn-run-diff"/);
+  assert.match(runSrc, /hasChanges\(r\.id\) \? [`']<button class="btn sm ghost" id="btn-run-diff"/);
   assert.match(runSrc, /\$\('#btn-run-diff'\)\.onclick = \(\) => DiffViewer\.open\(\{ runId: r\.id/);
 });
 

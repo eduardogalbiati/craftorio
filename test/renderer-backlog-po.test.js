@@ -8,6 +8,7 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 const { withI18n } = require('./i18n-sandbox.js');
+const en = require('../src/shared/i18n/en.json');
 
 const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'views', 'backlog', 'backlog-po.js'), 'utf8');
 const defaultWorkflowSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'shared', 'default-workflow.js'), 'utf8');
@@ -81,8 +82,10 @@ test('groupHtml (#216): the reason, the mode reason and the warnings are rendere
   assert.match(src, /markdownHtml\([^)]*reason/);
   assert.match(src, /markdownHtml\([^)]*modeReason/);
   assert.match(src, /\$\{t\('backlog_po\.why'\)\}/);
-  assert.match(src, />\s*Files\s*</);
-  assert.match(src, />\s*Estimate\s*</);
+  assert.match(src, /<dt>\$\{t\('backlog_po\.files'\)\}<\/dt>/);
+  assert.equal(en['backlog_po.files'], 'Files');
+  assert.match(src, /<dt>\$\{t\('backlog_po\.estimate'\)\}<\/dt>/);
+  assert.equal(en['backlog_po.estimate'], 'Estimate');
   assert.match(src, /callout/); // the warnings
 });
 
@@ -207,7 +210,8 @@ test('groupHtml: an applied group is shown dimmed with its badge, Assign and Add
   assert.match(fn, /const off = done \? ` disabled title="\$\{esc\(appliedTitle\(st\)\)\}"` : '';/);
   assert.match(fn, /<button class="btn sm primary" type="button" data-po-act="assign"\$\{off \|\| ` title="\$\{t\('backlog_po\.open_the_assign_dialog_with_these'\)\}"`\}>\$\{t\('backlog_po\.assign'\)\}<\/button>/);
   assert.match(fn, /st\.kind === 'partly'/);
-  assert.match(fn, /Add the rest<\/button>/);
+  assert.match(fn, /\$\{t\('backlog_po\.add_the_rest'\)\}<\/button>/);
+  assert.equal(en['backlog_po.add_the_rest'], 'Add the rest');
   assert.match(fn, /\$\{appliedBadge\(st, already\)\}/);
 });
 
@@ -234,9 +238,13 @@ test('the drawer re-renders (keeping its scroll position, #148: render() itself 
 test('messageHtml (#189): a user message with a per-question override shows "for <Step>"; a po answer shows "Planned for <Step>", adding "· this question" when it was an override', () => {
   const fn = /function messageHtml\(msg, m\)[\s\S]*?\n  \}/.exec(src)[0];
   assert.match(fn, /const once = \[msg\.calibrationOverride \? window\.PoCalibration\.nameOf\(msg\.calibration\) : '', msg\.costOverride \? window\.PoCalibration\.cost\.nameOf\(msg\.cost\) : ''\]\.filter\(Boolean\)/);
-  assert.match(fn, /\.map\(\(name\) => ` · <span class="badge" title="For this question only: the saved setting is unchanged">for \$\{esc\(name\)\}<\/span>`\)\.join\(''\);/);
+  assert.match(fn, /\.map\(\(name\) => ` · <span class="badge" title="\$\{t\('backlog_po\.for_this_question_only_the_saved'\)\}">\$\{t\('backlog_po\.for'\)\} \$\{esc\(name\)\}<\/span>`\)\.join\(''\);/);
+  assert.equal(en['backlog_po.for_this_question_only_the_saved'], 'For this question only: the saved setting is unchanged');
+  assert.equal(en['backlog_po.for'], 'for');
   assert.match(fn, /const once = msg\.calibrationOverride \|\| msg\.costOverride;/);
-  assert.match(fn, /const calib = msg\.calibration \? ` <span class="badge" title="\$\{esc\(`\$\{once \? 'For this question only\. ' : ''\}\$\{window\.PoCalibration\.tooltip\(msg\.calibration\)\}\$\{msg\.cost \? `\\n\\n\$\{window\.PoCalibration\.cost\.tooltip\(msg\.cost\)\}` : ''\}`\)\}">Planned for \$\{esc\(window\.PoCalibration\.plannedFor\(msg\.calibration, msg\.cost \?\? null\)\)\}\$\{once \? ' · this question' : ''\}<\/span>` : '';/);
+  assert.match(fn, /const calib = msg\.calibration \? ` <span class="badge" title="\$\{esc\(`\$\{once \? 'For this question only\. ' : ''\}\$\{window\.PoCalibration\.tooltip\(msg\.calibration\)\}\$\{msg\.cost \? `\\n\\n\$\{window\.PoCalibration\.cost\.tooltip\(msg\.cost\)\}` : ''\}`\)\}">\$\{t\('backlog_po\.planned_for'\)\} \$\{esc\(window\.PoCalibration\.plannedFor\(msg\.calibration, msg\.cost \?\? null\)\)\}\$\{once \? t\('backlog_po\.this_question'\) : ''\}<\/span>` : '';/);
+  assert.equal(en['backlog_po.planned_for'], 'Planned for');
+  assert.equal(en['backlog_po.this_question'], ' · this question');
   assert.match(fn, /const meta = `Product Owner · \$\{esc\(time\)\}\$\{msg\.model \? ` · \$\{esc\(msg\.model\)\}` : ''\} · \$\{esc\(fmtCost\(msg\.costUsd \|\| 0\)\)\}\$\{calib\}/);
 });
 
@@ -244,14 +252,17 @@ test('sizeText marks the estimate as an estimate and warns when some complexitie
   const fn = /const sizeText = \(g\) => \{[\s\S]*?\n  \};/.exec(src)[0];
   assert.match(fn, /t\('backlog_po\.estimate_from_basis', \{ basis: esc\(g\.estimate\.basis\) \}\)/);
   assert.match(fn, /t\('backlog_po\.no_past_run_to_estimate_from'\)/);
-  assert.match(fn, /\(some guessed\)/);
+  assert.match(fn, /t\('backlog_po\.some_guessed'\)/);
+  assert.equal(en['backlog_po.some_guessed'], '(some guessed)');
 });
 
 test('answerHtml shows proposed runs, pairs not to run in parallel, and issues to enrich with a link to #103', () => {
   const fn = /function answerHtml\(a, m\)[\s\S]*?\n  \}/.exec(src)[0];
   assert.match(fn, /t\('backlog_po\.proposed_runs'\)/);
-  assert.match(fn, /Do not run in parallel/);
-  assert.match(fn, /Enrich first/);
+  assert.match(fn, /t\('backlog_po\.do_not_run_in_parallel'\)/);
+  assert.equal(en['backlog_po.do_not_run_in_parallel'], 'Do not run in parallel');
+  assert.match(fn, /t\('backlog_po\.enrich_first'\)/);
+  assert.equal(en['backlog_po.enrich_first'], 'Enrich first');
   assert.match(fn, /href="\$\{esc\(e\.link\)\}"/); // e.link: the #103 enrich-an-issue link, computed in src\/product-owner.js
   assert.match(fn, /data-po-act="roadmap-all"/);
 });
@@ -579,7 +590,8 @@ test('messageHtml: a user message shows its attached issues as badges, alongside
 test('render: a staged attachment\'s × is disabled while busy, titled that it was already sent with this turn; the files click handler also refuses to remove one while busy', () => {
   const render = /function render\(\{ scroll = 'keep' \} = \{\}\)[\s\S]*?\n  \}/.exec(src)[0];
   assert.match(render, /const sent = po\.busy \? ` disabled title="\$\{t\('backlog_po\.already_sent_with_this_question_you'\)\}"` : '';/);
-  assert.match(render, /data-po-unattach="\$\{n\}" aria-label="Remove \$\{esc\(f\.name\)\}"\$\{sent\}/);
+  assert.match(render, /data-po-unattach="\$\{n\}" aria-label="\$\{t\('backlog_po\.remove_name', \{ name: esc\(f\.name\) \}\)\}"\$\{sent\}/);
+  assert.equal(en['backlog_po.remove_name'], 'Remove {name}');
   const onclick = /\$p\('#po-files'\)\.onclick = \(e\) => \{[\s\S]*?\n  \};/.exec(src)[0];
   assert.match(onclick, /if \(b && !po\.busy\) \{ po\.files\.splice\(Number\(b\.dataset\.poUnattach\), 1\); render\(\); \}/);
 });

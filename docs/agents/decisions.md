@@ -53,7 +53,8 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   read English summaries and documents, and a repository's issues are not always in the owner's
   chat language; the output contract keeps the keys in English so #94 does not come back.
   The interface language (#329, #330, of 2026-10-12) is a setting too (Settings › General ›
-  Language › Interface), separate from these two: until one is chosen it follows the computer's
+  Language › Interface), separate from these two, and every screen follows it (#330: each view,
+  the shared renderer modules, the Agents window and the screen text of `src/shared/`); until one is chosen it follows the computer's
   language when it has a catalog, else English. Its text lives in `src/shared/i18n/<lang>.json`
   (English the source, a missing key shows the English text) behind one `t()`
   (`src/shared/i18n.js`); dates, numbers and percentages follow it, costs stay in US$ with the

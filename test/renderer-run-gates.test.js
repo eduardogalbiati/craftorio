@@ -28,8 +28,11 @@ test('renderRunGates: the gate card names the run (workflow/project/issue via ru
   const renderRunGates = /function renderRunGates\(\) \{[\s\S]*?\n\}/.exec(runSrc)[0];
   assert.match(renderRunGates, /runLabel\(v\.run\)/);
   assert.match(renderRunGates, /step: \$\{g\.step_id\}/);
-  assert.match(renderRunGates, /data-answer="false">\$\{esc\(g\.reject\?\.label \|\| 'Reject'\)\}/, 'the Reject button takes its label from the gate (#213), "Reject" by default');
-  assert.match(renderRunGates, /data-answer="true">\$\{esc\(g\.approve\?\.label \|\| 'Approve'\)\}/, 'the Approve button takes its label from the gate (#213), "Approve" by default');
+  assert.match(renderRunGates, /data-answer="false">\$\{esc\(g\.reject\?\.label \|\| t\('run\.reject'\)\)\}/, 'the Reject button takes its label from the gate (#213), "Reject" by default');
+  assert.match(renderRunGates, /data-answer="true">\$\{esc\(g\.approve\?\.label \|\| t\('run\.approve'\)\)\}/, 'the Approve button takes its label from the gate (#213), "Approve" by default');
+  const en = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'src', 'shared', 'i18n', 'en.json'), 'utf8'));
+  assert.equal(en['run.reject'], 'Reject');
+  assert.equal(en['run.approve'], 'Approve');
   assert.match(renderRunGates, /gateChoices\(g\)\.map/, 'a gate with choices offers them (plus save_to_issue, #125) instead of Approve/Reject');
   assert.match(renderRunGates, /run-gate-feedback/, 'the optional feedback field');
 });
