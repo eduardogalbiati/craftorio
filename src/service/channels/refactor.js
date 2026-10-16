@@ -2,9 +2,8 @@
 // Architecture tab or written by the owner, refactor:add), each with its issue's open state and its
 // roadmap item's status (planned, running, failed, done, skipped); the Product Owner's ranking
 // (src/refactor-priority.js: one read-only turn, simulated under `mock` or MULTIAGENT_SIMULATION_ONLY,
-// one at a time per project) saved on the proposals; Dismiss with a reason; "File as issue" (the
-// `refactor` label created first when the platform reads labels, as src/epics.js does for `epic`;
-// GitLab creates it on filing; a preview in simulation, never gh/glab); "Add to roadmap now" on the
+// one at a time per project) saved on the proposals; Dismiss with a reason; "File as issue"
+// (src/refactor-issues.js: the `refactor` label, a preview in simulation, never gh/glab); "Add to roadmap now" on the
 // Refactor workflow, placed by the Product Owner's rules (src/refactor-cadence.js placeRefactor) and
 // written through src/roadmap.js, the target's Danger Zone score kept on the proposal (`before`).
 // The cadence ("Add a refactor to the roadmap every X runs", <workspace>/refactor/<project id>/
@@ -26,10 +25,10 @@ const outcomes = require('../../refactor-outcome');
 const priority = require('../../refactor-priority');
 const projects = require('../../projects');
 const proposals = require('../../refactor-proposals');
+const refactorIssues = require('../../refactor-issues');
 const roadmaps = require('../../roadmap');
 const runs = require('../../runs');
 const simulation = require('../../engine/simulation');
-const { adapterOf, cliTarget } = require('../../issues');
 const { unfinishedItems } = require('../../shared/roadmap-model');
 const { clientError, requireId } = require('../common');
 const {
@@ -48,10 +47,8 @@ const {
   text: textOf,
 } = require('../schemas');
 
-const WORKFLOW = 'refactor.yaml';
+const { WORKFLOW } = refactorIssues;
 const WORKFLOW_NAME = 'refactor';
-const LABEL = 'refactor';
-const LABEL_COLOR = '0E8A16';
 // a run's summary.json (what listRuns reads) is written right after its workflow.finished event
 const AFTER_RUN_MS = 1500;
 
@@ -169,53 +166,17 @@ module.exports = (ctx) => {
     return { proposal: stored, stage: stage + 1 };
   }
 
-  // ---- the issue -------------------------------------------------------------------------------
-  // the issue's text, as the issue-writing skill lays it out (context, target, tasks, acceptance criteria)
-  function issueText(x) {
-    const files = filesOf(x);
-    const evidence = typeof x.evidence === 'string' ? x.evidence : (x.evidence || []).map((e) => (typeof e === 'string' ? e : JSON.stringify(e))).join('\n- ');
-    return [
-      '## Context', evidence ? `- ${evidence}` : 'Proposed on the Refactor tab.',
-      '## Target', files.map((f) => `- \`${f}\``).join('\n') || '- (none named)',
-      '## Expected improvement', x.refactor || x.improvement || x.title,
-      '## Tasks', '- [ ] Pin the current behaviour with tests before moving code\n- [ ] Make the change in small steps, the tests green after each',
-      '## Acceptance criteria', '- [ ] The behaviour is unchanged: the pinned tests pass\n- [ ] The target leaves the Danger Zone, or its score drops (Architecture tab)',
-      `Run it with the Refactor workflow (\`workflows/${WORKFLOW}\`).`,
-    ].join('\n\n');
-  }
-
-  async function ensureLabel({ platform, repo, run }) {
-    const a = adapterOf(platform);
-    if (!a?.readsLabels) return; // GitLab creates a missing label on filing
-    const known = await backlog.repoLabels({ platform, repo });
-    if ((known || []).some((n) => n.toLowerCase() === LABEL)) return;
-    const c = a.labelCreateCommand({ target: cliTarget(platform, repo), name: LABEL, color: LABEL_COLOR, description: 'A refactor with the behaviour pinned (the Refactor workflow)', force: true });
-    if (c) await run(c);
-  }
-
+  // ---- the issue (src/refactor-issues.js) ------------------------------------------------------
   async function fileIssue({ projectId, id, preview }) {
     const p = projectOf(projectId);
     const proposal = proposalOf(p, id);
     if (proposal.issue) throw clientError(`Already filed as #${proposal.issue}.`);
     const data = backlog.readBacklog(ctx.ws.backlog, p.id);
     if (!data) throw clientError('Sync the backlog first: the issue is filed in the synced repository.');
-    const platform = data.platform || backlog.DEFAULT_PLATFORM;
-    const repo = data.repo || p.repo;
-    const title = `Refactor: ${proposal.title || proposal.improvement || proposal.target}`.slice(0, 200);
-    const body = issueText(proposal);
-    const file = path.join(root(), path.basename(p.id), 'filed', `${new Date().toISOString().replace(/[:.]/g, '-')}-${proposal.id}.md`);
-    const command = asClient(() => backlog.issueCreateCommand({ platform, repo, title, labels: [LABEL], file, text: body }));
-    if (preview || simulation.simulationOnly()) return { preview: true, command: command.display, body, proposal };
-    const run = (c) => backlog.execCli(c.cli, c.args);
-    await ensureLabel({ platform, repo, run });
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, body);
-    const url = String(await run(command) || '').match(/https?:\/\/\S+/)?.[0] || null;
-    const number = Number(url?.match(/\/(\d+)\/?$/)?.[1]) || null;
-    if (!number) throw new Error(`The issue was filed but its number could not be read${url ? ` from ${url}` : ''}: sync the backlog and link it.`);
-    const stored = proposals.updateProposal(root(), p.id, proposal.id, { issue: number, issueUrl: url });
-    try { await backlog.syncBacklog({ dir: ctx.ws.backlog, project: p, platform }); } catch (e) { console.error('Refactor issue sync:', e.message); }
-    return { preview: false, command: command.display, body, proposal: stored };
+    const draft = asClient(() => refactorIssues.issueDraft({ root: root(), project: p, proposal, data }));
+    if (preview || simulation.simulationOnly()) return { preview: true, command: draft.command.display, body: draft.body, proposal };
+    const stored = await refactorIssues.createIssue({ root: root(), backlogDir: ctx.ws.backlog, project: p, proposal, draft });
+    return { preview: false, command: draft.command.display, body: draft.body, proposal: stored };
   }
 
   // ---- the ranking -------------------------------------------------------------------------------
@@ -244,6 +205,8 @@ module.exports = (ctx) => {
     const o = asClient(() => ctx.productOwnerAgentOptions(p.id, false));
     return { mock: false, backlogDir: o.backlogDir, projectId: p.id, folder: o.folder, agent: o.agent || agentsMod.readAgent(ctx.ws.agents, agentsMod.PRODUCT_OWNER_ID), skillsDirs: o.skillsDirs, resolveCommand: o.resolveCommand, budget: o.budget };
   }
+  // #378: the Refactor proposals workflow's prioritize step ranks with the same Product Owner (runs.js)
+  ctx.refactorPriorityOptions = (projectId) => realOptions(projectOf(projectId));
 
   // ---- after a run -------------------------------------------------------------------------------
   // a finished refactor run: the proposal of its issue gets the target's score after it

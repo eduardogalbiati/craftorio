@@ -17,6 +17,7 @@ const capabilities = require('../capabilities');
 const { PROBES } = require('../probes');
 const { validateWorkflowStep } = require('../workflow-step');
 const testPaths = require('../test-paths');
+const architectureReport = require('../../shared/architecture-report');
 const chain = require('../../shared/chain-model');
 const { render } = require('./templates');
 const {
@@ -167,6 +168,17 @@ function checkOnFail(s, ctx) {
 function checkRecover(s, ctx) {
   if (s.check !== undefined) recoverSteps(s.check.recover, s.check.on_fail, 'check', ctx);
 }
+// #378: `output_schema: <name>` is a schema the app defines once (the Oracle's architecture report),
+// replaced here by its copy, so a step answers what the app's own turn answers
+const NAMED_SCHEMAS = {
+  architecture_report: architectureReport.REPORT_SCHEMA,
+};
+function namedSchema(s, ctx) {
+  if (typeof s.output_schema !== 'string') return;
+  const schema = NAMED_SCHEMAS[s.output_schema];
+  if (!schema) fail(ctx, `output_schema "${s.output_schema}" is not a named schema (${Object.keys(NAMED_SCHEMAS).join(', ')}); write the schema inline.`);
+  s.output_schema = structuredClone(schema);
+}
 function stallFieldsInSchema(s, ctx) {
   const props = s.stall !== undefined && s.output_schema?.properties;
   const unknown = props && s.stall.same_output_fields.find((f) => !(f in props));
@@ -230,7 +242,7 @@ const TRANSITION_CHECKS = resolveChecks('steps[].transitions[].', [
   'ship.tag', shipOnHumanGate, shipNeedsWorktree,
 ]);
 const STEP_CHECKS = resolveChecks('steps[].', [
-  stepCapabilities, 'display', 'edits_tests', 'protect_files', 'test_map', 'agent', 'agents',
+  stepCapabilities, namedSchema, 'display', 'edits_tests', 'protect_files', 'test_map', 'agent', 'agents',
   // the step types without an agent, then the agent steps (one applies to a step)
   screenshotsFrom, 'folder', 'command', 'timeout', 'scope', 'files', filesWithoutScope, 'expect', expectWithFiles,
   childWorkflow, 'steps', 'renderer', 'version', 'dir', 'branch', 'action', projectMapFrom, fanOutGoal, knownAgents,

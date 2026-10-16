@@ -20,6 +20,7 @@
 // files), cached per facts read (a refresh rebuilds it) and plan hash. Used by src/service/channels/architecture.js.
 // opts.ref (#376, src/release-city.js): the facts and the city at any commit-ish (a release's previous
 // tag) instead of the default branch; an unknown ref is the state 'unknown-ref'.
+// changedSince (#378): the files changed between a tag or commit and the default branch's commit.
 
 'use strict';
 
@@ -346,7 +347,25 @@ async function readCity(folder, opts = {}) {
   return { state, ...cities.get(key) };
 }
 
+/**
+ * The files changed between `since` (a tag or a commit) and the default branch's commit (#378, the
+ * Refactor proposals workflow): { branch, head, files: [path] }, files null when `since` is unknown;
+ * null for a folder that is not a git repository or has no commit.
+ */
+async function changedSince(folder, since) {
+  if (!folder || !fs.existsSync(path.join(folder, '.git'))) return null;
+  const target = await defaultBranch(folder);
+  if (!target) return null;
+  const head = (await tryGit(folder, ['rev-parse', `${target.ref}^{commit}`]) || '').trim() || null;
+  if (!since) return { branch: target.branch, head, files: [] };
+  // a ref is never an option
+  if (String(since).startsWith('-')) return { branch: target.branch, head, files: null };
+  const out = await tryGit(folder, ['diff', '--name-only', '--no-renames', String(since), target.ref, '--']);
+  return { branch: target.branch, head, files: out == null ? null : out.split(/\r?\n/).map((l) => l.trim()).filter(Boolean) };
+}
+
 module.exports = {
+  changedSince,
   parseLizard,
   readCity,
   readFacts,

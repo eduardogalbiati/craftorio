@@ -278,11 +278,11 @@
  * (docs/agents/engine/field-reference.md).
  * @typedef {object} WorkflowStep
  * @property {string} id
- * @property {'agent' | 'check' | 'human_approval' | 'project_map' | 'release_version' | 'screenshots' | 'suite' | 'test_ids' | 'workflow'} [type] agent when missing
+ * @property {'agent' | 'check' | 'human_approval' | 'project_map' | 'refactor_proposals' | 'release_version' | 'screenshots' | 'suite' | 'test_ids' | 'workflow'} [type] agent when missing
  * @property {string} [agent]
  * @property {string[]} [agents]
  * @property {string} [prompt]
- * @property {object} [output_schema]
+ * @property {object} [output_schema] a named schema in the YAML (#378) is replaced by its object at load
  * @property {string | (string | { path: string, content?: string })[] | { path: string, content?: string }} [save_as]
  * @property {string[]} [skills]
  * @property {object} [capabilities]
