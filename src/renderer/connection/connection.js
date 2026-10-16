@@ -127,7 +127,7 @@
   $('#cn-change').addEventListener('click', () => {
     document.querySelector('input[name="cn-mode"][value="remote"]').checked = true;
     paintMode();
-    $('#cn-address').focus();
+    $('#cn-address').focus({ preventScroll: true });
     $('#cn-address').select();
   });
   $('#cn-local').addEventListener('click', () => {

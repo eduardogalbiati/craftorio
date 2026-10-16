@@ -133,3 +133,20 @@ The app runs on Windows, macOS and Linux. What differs per OS, and where:
 - **App data**: Electron's `userData` on every OS (speech models in `<userData>/speech-models`).
   Without Electron (`npm run serve`, tests) `src/speech.js` falls back to `%APPDATA%`,
   `~/Library/Application Support` or `$XDG_CONFIG_HOME`/`~/.config`, plus `multiagent-orchestrator`.
+
+## Remote engine (the app as a window onto `npm run serve`)
+
+- The setting is per machine: `<userData>/engine-connection.json` (`{ mode, address, token }`, the
+  token `{ encrypted }` with `safeStorage`, `{ plain }` without OS encryption), never in the
+  workspace. Rules in `src/engine-connection.js` (pure), windows in `src/engine-connection-window.js`,
+  the page in `src/renderer/connection/` with its own preload (`src/engine-connection-preload.js`).
+- `src/main.js` decides at `whenReady` (`decideMode`): remote mode creates no workspace, lock,
+  account, keep-awake, control channel or cleanup timer; the service is constructed but never gets a
+  workspace. `MULTIAGENT_ENGINE=local` forces local; under `MULTIAGENT_SIMULATION_ONLY=1` a remote
+  engine is used only on 127.0.0.1 (a check never drives an engine that can start real runs).
+- The remote window has no preload, `sandbox`, its own session (`persist:remote-engine`, user agent
+  marked `MultiagentRemoteClient`, clipboard permissions for the engine's origin only); the page
+  (`api-http.js`) reads the mark for `api.engineConnection` and opens the connection page by opening
+  `/__desktop__/engine-connection`, which the window catches.
+- Check it end to end with `npx electron scripts/smoke-remote.js <out-dir>` (a scratch
+  `npm run serve` on 127.0.0.1, simulation only, a scratch user data folder).

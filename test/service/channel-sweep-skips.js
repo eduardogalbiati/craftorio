@@ -18,6 +18,7 @@ module.exports = [
   { channel: 'clipboard:writeImage', reason: 'desktop only (src/main.js): the system clipboard' },
   { channel: 'control:state', reason: 'desktop only (src/main.js): the control channel endpoint (test/control-channel-336.test.js)' },
   { channel: 'dialog:pickFolder', reason: 'desktop only (src/main.js): a native dialog' },
+  { channel: 'engine:openConnection', reason: 'desktop only (src/main.js): opens the engine connection window (test/engine-connection-window.test.js)' },
   { channel: 'keepAwake:state', reason: 'desktop only (src/main.js): the power save blocker' },
   { channel: 'path:open', reason: 'desktop only (src/main.js): opens the file explorer' },
   { channel: 'run:openDir', reason: 'desktop only (src/main.js): opens the file explorer' },

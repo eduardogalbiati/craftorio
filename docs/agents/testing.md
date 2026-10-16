@@ -479,7 +479,10 @@ the simulated adapter gives every agent `{ type: 'mock' }`, its session records 
   every session was `mock`), the CI workflows and the tests' `makeService`/server helpers. A test
   that drives a real provider type at a fake CLI (`fake-claude.js`) lifts it for its duration.
 - UI checks run through `scripts/smoke.js` (or a script built the same way), never through a
-  hand-written script that launches `src/main` directly.
+  hand-written script that launches `src/main` directly. The remote engine (the app as a window onto
+  `npm run serve`) has `scripts/smoke-remote.js <out-dir>`: a scratch server on 127.0.0.1, the app in
+  remote mode on a scratch user data folder, its Settings, its connection page and the engine
+  stopping (see [environment.md](environment.md), "Remote engine").
 - In the UI, a checked Simulation box that can't apply (Developer mode off) fails the start with a
   message (`wantsSimulation` in app.js); it never silently starts a real run.
 - Real-model calls cost the owner's money: say so and keep them minimal (one call to validate).
