@@ -25,7 +25,7 @@
     if (st.override === saved()) st.override = null;
     const now = st.override ?? saved();
     // short labels (a small chip): the saved step is marked by a check, an override by the chip's colour
-    chip.innerHTML = PoCalibration.STEPS.map((s) => `<option value="${s.level}"${s.level === now ? ' selected' : ''}>${s.level === saved() ? '✓ ' : ''}${esc(s.name)}</option>`).join('');
+    chip.innerHTML = PoCalibration.STEPS.map((s) => `<option value="${s.level}"${s.level === now ? ' selected' : ''}>${s.level === saved() ? '✓ ' : ''}${esc(PoCalibration.nameOf(s.level))}</option>`).join('');
     chip.classList.toggle('override', st.override != null);
     chip.classList.toggle('hidden', issueMode);
     chip.disabled = busy;
@@ -38,7 +38,7 @@
     const chip = $s('#po-cost-chip');
     if (st.costOverride === savedCost()) st.costOverride = null;
     const now = st.costOverride ?? savedCost();
-    chip.innerHTML = PoCalibration.cost.STEPS.map((s) => `<option value="${s.level}"${s.level === now ? ' selected' : ''}>${s.level === savedCost() ? '✓ ' : ''}${esc(s.name)}</option>`).join('');
+    chip.innerHTML = PoCalibration.cost.STEPS.map((s) => `<option value="${s.level}"${s.level === now ? ' selected' : ''}>${s.level === savedCost() ? '✓ ' : ''}${esc(PoCalibration.cost.nameOf(s.level))}</option>`).join('');
     chip.classList.toggle('override', st.costOverride != null);
     chip.classList.toggle('hidden', issueMode);
     chip.disabled = busy;

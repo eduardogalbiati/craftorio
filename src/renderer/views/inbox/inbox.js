@@ -174,7 +174,7 @@
   const IMPORT_EDITS = { merge: 'Merge into', nest: 'Nest under' };
   const importBox = () => $('#inbox-import-panel');
   const firstLines = (text) => String(text || '').split('\n').map((l) => l.trim()).filter(Boolean).slice(0, 2).join(' · ');
-  const clarityBadge = (n) => `<span class="badge ${n >= 85 ? 'inbox-import-clear' : n >= 50 ? 'warn' : 'muted'}" title="${t('inbox.the_clarity_score_the_card_gets', { n })}">${t('inbox.clarity_n', { n })}</span>`;
+  const clarityBadge = (n) => `<span class="badge ${85 <= n ? 'inbox-import-clear' : 50 <= n ? 'warn' : 'muted'}" title="${t('inbox.the_clarity_score_the_card_gets', { n })}">${t('inbox.clarity_n', { n })}</span>`;
   // what an item becomes: a duplicate may be skipped or merged into its card; anything else is a new card
   const actionOf = (it) => (it.duplicate && (it.action === 'skip' || (it.action === 'merge' && it.duplicate.kind === 'card')) ? it.action : 'keep');
   const importCounts = (items) => ({

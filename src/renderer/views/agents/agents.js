@@ -138,7 +138,7 @@
           <button class="btn sm ghost" data-act="duplicate">${t('agents.duplicate')}</button>
         </div>` : actions ? `<div class="card-actions">
           <span class="muted small">${a.system ? (a.calibration ? `Look, model and planning · ${esc(a.model)}` : a.model ? `Look and model · ${esc(a.model)}` : 'Look only') : a.updatedAt ? `updated ${esc(dateOf(a.updatedAt))}` : ''}</span>
-          ${a.calibration ? `<span class="badge" title="${esc(PoCalibration.tooltip(a.calibration))}">${esc(PoCalibration.step(a.calibration).name)}</span> <span class="badge" title="${esc(PoCalibration.cost.tooltip(a.cost))}">${esc(PoCalibration.cost.step(a.cost).name)}</span>` : ''}
+          ${a.calibration ? `<span class="badge" title="${esc(PoCalibration.tooltip(a.calibration))}">${esc(PoCalibration.nameOf(a.calibration))}</span> <span class="badge" title="${esc(PoCalibration.cost.tooltip(a.cost))}">${esc(PoCalibration.cost.nameOf(a.cost))}</span>` : ''}
           <span class="spacer"></span>
           <button class="btn sm ghost" data-act="edit">${a.system ? 'Customize' : 'Edit'}</button>
           ${a.system ? '' : `<button class="btn sm ghost danger" data-act="remove">${t('agents.remove')}</button>`}

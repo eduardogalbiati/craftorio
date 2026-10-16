@@ -454,7 +454,7 @@ function costedGroups(groups, { level, costLevel, issues, history, workflows, ru
     // #235: a tests-first workflow's test inputs are not the Cost step's to set
     out = out.map((g) => (poCalibration.testsFirst((workflows || []).find((w) => w.file === g.workflow) || { file: g.workflow }) ? g : { ...g, ...costInputs(g, costStep, workflows) }));
     const base = level ? poCalibration.step(level) : { maxRuns: null };
-    out = calibrateGroups(out, { ...base, maxComplexity: cap, name: poCalibration.plannedFor(level ?? poCalibration.DEFAULT, costLevel) });
+    out = calibrateGroups(out, { ...base, maxComplexity: cap, name: poCalibration.plannedFor(level ?? poCalibration.DEFAULT, costLevel, 'en') });
     if (costStep.testBatch) out = testBatchStages(out, { issues, history, workflows });
   } else if (level) {
     out = calibrateGroups(out, poCalibration.step(level));
@@ -727,7 +727,7 @@ function mockAnswer({ data, question = '', selection = [], calibration = poCalib
   const hotConflicts = separateSharedFiles(planned, [...new Set(spots.map((s) => s.file))], todo);
   return {
     summary: [
-      `**Simulated answer** (developer or simulated mode: no model was called)${question ? ` to: “${clip(question, 120)}”` : ''}. Planned for ${cost == null ? poCalibration.label(calibration) : poCalibration.plannedFor(calibration, cost)}.`,
+      `**Simulated answer** (developer or simulated mode: no model was called)${question ? ` to: “${clip(question, 120)}”` : ''}. Planned for ${cost == null ? poCalibration.label(calibration, 'en') : poCalibration.plannedFor(calibration, cost, 'en')}.`,
       `${todo.length} ${attached.size ? 'attached ' : ''}issues to do:${groups.length + refactor.length} proposed run${groups.length + refactor.length === 1 ? '' : 's'}, grouped by epic, else by shared label (complexity ${step.maxComplexity} at most per run); repo-wide changes first and alone, then ${step.maxRuns ? `stages of at most ${step.maxRuns} runs` : 'one stage with every other run'}.`,
       `${splits.length ? `${splits.length} issue${splits.length > 1 ? 's are' : ' is'} too big for one run: see the proposed splits.` : 'No issue is too big for one run.'} ${epicPlan.place.length + epicPlan.create.length ? `Epics: ${epicPlan.place.length} issue${epicPlan.place.length === 1 ? '' : 's'} to place, ${epicPlan.create.length} epic${epicPlan.create.length === 1 ? '' : 's'} to create.` : ''}`.trim(),
     ].join('\n\n'),

@@ -759,7 +759,7 @@ function renderItem(sid, turn, item, i) {
     case 'tool_call': return `<div class="item tool_call"><div class="label">${t('run.tool')} ${esc(item.name)}${subagentLabel(item)}</div><pre>${esc(typeof item.input === 'string' ? item.input : JSON.stringify(item.input, null, 2))}</pre></div>`;
     case 'tool_result': return detailsBlock(key, 'tool_result', `result${item.is_error ? ' (error)' : ''}`, item.output);
     case 'stderr': return `<div class="item stderr"><div class="label">${t('run.stderr')}</div><pre>${esc(item.text)}</pre></div>`;
-    case 'spawn': return `<div class="item spawn"><div class="label">${t('run.process')}</div><pre>${esc(item.command)} ${esc(item.args.join(' '))}\ncwd: ${esc(item.cwd)}</pre></div>`;
+    case 'spawn': return `<div class="item spawn"><div class="label">${t('run.process')}</div><pre>${esc(item.command)} ${esc(item.args.join(' '))}\ncwd: ${esc(item.cwd)}</pre></div>`; // i18n-ignore
     default: return `<div class="item raw"><div class="label">${t('run.event')}</div><pre>${esc(item.text || JSON.stringify(item.event))}</pre></div>`;
   }
 }

@@ -80,36 +80,38 @@
     }),
   ]);
 
-  const UNIT_TESTS = { write_and_run: 'write and run', run_existing: 'run existing', off: 'off' };
-  const E2E_TESTS = { write: 'write', write_and_run: 'write and run', off: 'off' };
-  const SCREENSHOTS = { off: 'off', changed: 'changed screens only', all: 'all' };
-
   const escape = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const node = typeof module === 'object' && module.exports;
+  // the catalog's helper (#330), at call time: the screens show the steps in the interface language;
+  // the prompts (promptSection, costPromptSection, plannedFor's plan names) ask for 'en'
+  const t = (...a) => (node ? require('./i18n') : root.I18n)?.t(...a) ?? a[0];
 
   /**
-   * One slider axis: its steps (`level`, `name`, `summary`), the ends' names, its parameters as lines
-   * and the setting it saves. Both axes share the markup and the CSS (po-calibration.css).
+   * One slider axis: its steps (`level`, `name`, `summary`: the English the prompts state; the
+   * screens read `po.<setting>_<level>` and `po.<setting>_<level>_summary`), the ends' names, its
+   * parameters as lines and the setting it saves. Both axes share the markup and the CSS (po-calibration.css).
    */
   function makeAxis({ steps, fallback, ends, aria, group, paramsOf, setting }) {
     /** A saved or requested value as a step number (1..5); anything else is `fallback`. */
     function clamp(value, def = fallback) {
       const n = Number(value);
-      return Number.isInteger(n) && n >= MIN && n <= MAX ? n : def;
+      return Number.isInteger(n) && MIN <= n && n <= MAX ? n : def;
     }
     const step = (value) => steps[clamp(value) - 1];
-    /** The step's parameters as lines (the slider's details, the prompt's list). */
-    const params = (value) => paramsOf(step(value));
+    /** The step's name in `lang` (the interface language when omitted): "Speed". */
+    const nameOf = (value, lang) => t(`po.${setting}_${clamp(value)}`, null, lang);
+    const summaryOf = (value, lang) => t(`po.${setting}_${clamp(value)}_summary`, null, lang);
+    /** The step's parameters as lines (the slider's details, the prompt's list), in `lang`. */
+    const params = (value, lang) => paramsOf(step(value), (key, p) => t(key, p, lang));
     /** The slider's tooltip for one step: its name, what it prioritises and its numbers. */
-    function tooltip(value) {
-      const s = step(value);
-      return `${s.name} (${s.level}/${MAX}): ${s.summary}\n${params(value).map(([k, v]) => `${k}: ${v}`).join('\n')}`;
+    function tooltip(value, lang) {
+      return `${label(value, lang)}: ${summaryOf(value, lang)}\n${params(value, lang).map(([k, v]) => `${k}: ${v}`).join('\n')}`;
     }
     /** "Speed (1/5)" */
-    const label = (value) => `${step(value).name} (${clamp(value)}/${MAX})`;
+    const label = (value, lang) => `${nameOf(value, lang)} (${clamp(value)}/${MAX})`;
 
     function detailsHtml(value) {
-      const s = step(value);
-      return `<p class="small"><b>${escape(label(value))}</b>: ${escape(s.summary)}</p>
+      return `<p class="small"><b>${escape(label(value))}</b>: ${escape(summaryOf(value))}</p>
       <dl class="po-calib-params">${params(value).map(([k, x]) => `<dt>${escape(k)}</dt><dd>${escape(x)}</dd>`).join('')}</dl>`;
     }
 
@@ -121,10 +123,10 @@
     function sliderHtml({ id, value }) {
       const v = clamp(value);
       return `<div class="po-calib" data-po-calib="${escape(setting)}">
-      <div class="po-calib-ends"><b>${escape(ends[0])}</b><b>${escape(ends[1])}</b></div>
-      <input type="range" id="${escape(id)}" class="po-calib-range" min="${MIN}" max="${MAX}" step="1" value="${v}" aria-label="${escape(aria)}" aria-valuetext="${escape(label(v))}" title="${escape(tooltip(v))}" />
-      <div class="po-calib-ticks" role="group" aria-label="${escape(group)}">${steps.map((s) =>
-        `<button type="button" class="po-calib-tick${s.level === v ? ' active' : ''}" data-calib="${s.level}" data-tip="${escape(tooltip(s.level))}" aria-label="${escape(tooltip(s.level))}" aria-pressed="${s.level === v}">${escape(s.name)}</button>`).join('')}</div>
+      <div class="po-calib-ends"><b>${escape(t(ends[0]))}</b><b>${escape(t(ends[1]))}</b></div>
+      <input type="range" id="${escape(id)}" class="po-calib-range" min="${MIN}" max="${MAX}" step="1" value="${v}" aria-label="${escape(t(aria))}" aria-valuetext="${escape(label(v))}" title="${escape(tooltip(v))}" />
+      <div class="po-calib-ticks" role="group" aria-label="${escape(t(group))}">${steps.map((s) =>
+        `<button type="button" class="po-calib-tick${s.level === v ? ' active' : ''}" data-calib="${s.level}" data-tip="${escape(tooltip(s.level))}" aria-label="${escape(tooltip(s.level))}" aria-pressed="${s.level === v}">${escape(nameOf(s.level))}</button>`).join('')}</div>
       <div class="po-calib-details" aria-live="polite">${detailsHtml(v)}</div>
     </div>`;
     }
@@ -154,29 +156,31 @@
       box.addEventListener('click', (e) => { const b = e.target.closest('[data-calib]'); if (b) set(b.dataset.calib, true); });
     }
 
-    return { bindSlider, clamp, DEFAULT: fallback, detailsHtml, label, MAX, MIN, params, sliderHtml, step, STEPS: steps, syncSlider, tooltip };
+    return { bindSlider, clamp, DEFAULT: fallback, detailsHtml, label, MAX, MIN, nameOf, params, sliderHtml, step, STEPS: steps, syncSlider, tooltip };
   }
 
+  // the parameters' values: each step's in the catalog (po.calibration_<field>_<level>), the tables
+  // above keep the English for the code that reads a step
   const calibration = makeAxis({
-    steps: STEPS, fallback: DEFAULT, ends: ['Speed', 'Quality'], aria: 'Speed to Quality', group: 'Calibration steps', setting: 'calibration',
-    paramsOf: (s) => [
-      ['Parallel runs per stage', s.runs],
-      ['Max complexity per group', String(s.maxComplexity)],
-      ['UI issues mode', s.mode],
-      ['Placement', s.placement],
-      ['Review rounds', s.review],
+    steps: STEPS, fallback: DEFAULT, ends: ['po.speed', 'po.quality'], aria: 'po.speed_to_quality', group: 'po.calibration_steps', setting: 'calibration',
+    paramsOf: (s, tr) => [
+      [tr('po.parallel_runs'), tr(`po.calibration_runs_${s.level}`)],
+      [tr('po.max_complexity'), String(s.maxComplexity)],
+      [tr('po.ui_mode'), tr(`po.calibration_mode_${s.level}`)],
+      [tr('po.placement'), tr(`po.calibration_placement_${s.level}`)],
+      [tr('po.review_rounds'), tr(`po.calibration_review_${s.level}`)],
     ],
   });
 
   const cost = makeAxis({
-    steps: COST_STEPS, fallback: 3, ends: ['Economy', 'Generous'], aria: 'Economy to Generous', group: 'Cost steps', setting: 'cost',
-    paramsOf: (s) => [
-      ['Max complexity per group', `${s.maxComplexity}${s.level === 3 ? ' (or the Speed ↔ Quality step\'s)' : ''}`],
-      ['Grouping', s.pack ? 'issues of one area or files in one run, to pay the run overhead once' : 'as the Speed ↔ Quality step plans'],
-      ['Unit tests', `${UNIT_TESTS[s.unitTests]}${s.testBatch ? ', then a test-batch item after each stage' : ''}`],
-      ['E2E tests', E2E_TESTS[s.e2eTests]],
-      ['Screenshots', SCREENSHOTS[s.screenshots]],
-      ['Agents', s.cheapAgents ? 'cheaper models and a medium effort where the workflow has an input for it' : "the workflow's"],
+    steps: COST_STEPS, fallback: 3, ends: ['po.economy', 'po.generous'], aria: 'po.economy_to_generous', group: 'po.cost_steps', setting: 'cost',
+    paramsOf: (s, tr) => [
+      [tr('po.max_complexity'), s.level === 3 ? tr('po.cost_complexity_balanced', { n: s.maxComplexity }) : String(s.maxComplexity)],
+      [tr('po.grouping'), tr(s.pack ? 'po.cost_grouping_pack' : 'po.cost_grouping_plan')],
+      [tr('po.unit_tests'), tr(s.testBatch ? 'po.cost_unit_tests_batch' : 'po.cost_unit_tests', { value: tr(`po.unit_tests_${s.unitTests}`) })],
+      [tr('po.e2e_tests'), tr(`po.e2e_tests_${s.e2eTests}`)],
+      [tr('po.screenshots'), tr(`po.screenshots_${s.screenshots}`)],
+      [tr('po.agents'), tr(s.cheapAgents ? 'po.cost_agents_cheap' : 'po.cost_agents_workflow')],
     ],
   });
 
@@ -184,9 +188,9 @@
   function promptSection(value) {
     const s = calibration.step(value);
     return [
-      `## Calibration: ${calibration.label(value)}`,
+      `## Calibration: ${calibration.label(value, 'en')}`,
       `The owner calibrated the Product Owner between Speed (1) and Quality (5). Plan with these parameters; they replace the skill's defaults for the same points (parallel runs per stage, the group size, the mode of UI issues, the placement):`,
-      ...calibration.params(value).map(([k, v]) => `- ${k}: ${v}`),
+      ...calibration.params(value, 'en').map(([k, v]) => `- ${k}: ${v}`),
       `What this step prioritises: ${s.summary}`,
       `Start the summary by saying which calibration you planned with ("Planned for ${s.name}").`,
     ].join('\n');
@@ -205,9 +209,9 @@
   function costPromptSection(value, level = DEFAULT) {
     const s = cost.step(value);
     return [
-      `## Cost: ${cost.label(value)}`,
+      `## Cost: ${cost.label(value, 'en')}`,
       `The owner also set the cost between Economy (1) and Generous (5). When it disagrees with the calibration above, cost wins. Plan with these parameters:`,
-      ...cost.params(value).map(([k, v]) => `- ${k}: ${v}`),
+      ...cost.params(value, 'en').map(([k, v]) => `- ${k}: ${v}`),
       `- Largest group for this plan: complexity ${groupCap(level, value)}`,
       ...(s.pack ? ['Prefer grouping issues of the same area or files into one run over separate runs, and say it in the group\'s reason ("grouped to pay the run overhead once").'] : []),
       `The orchestrator sets the groups' test, screenshot and agent inputs from this step: do not set them yourself.`,
@@ -238,8 +242,8 @@
     return !!wf?.testsFirst || TESTS_FIRST.some((t) => [slug, name].some((s) => s === t || s.startsWith(`${t}-`)));
   }
 
-  /** "Speed · Economy": the plan's two steps, as each answer shows them. */
-  const plannedFor = (level, costLevel) => `${calibration.step(level).name}${costLevel == null ? '' : ` · ${cost.step(costLevel).name}`}`;
+  /** "Speed · Economy": the plan's two steps, as each answer shows them (in `lang`, the interface language when omitted). */
+  const plannedFor = (level, costLevel, lang) => `${calibration.nameOf(level, lang)}${costLevel == null ? '' : ` · ${cost.nameOf(costLevel, lang)}`}`;
 
   /**
    * A per-question calibration the owner wrote in the question ("plan this one for quality",

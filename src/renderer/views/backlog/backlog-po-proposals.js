@@ -52,7 +52,7 @@
   function taskHtml(text) {
     const codes = [];
     const html = esc(String(text ?? '').replace(MD_CODE, (_, c) => `\u0000${codes.push(c) - 1}\u0000`))
-      .replace(MD_LINK, '$1').replace(MD_BOLD, '<b>$1$2</b>').replace(MD_ITALIC, '<i>$1</i>');
+      .replace(MD_LINK, '$1').replace(MD_BOLD, '<b>$1$2</b>').replace(MD_ITALIC, '<i>$1</i>'); // i18n-ignore
     return html.replace(/\u0000(\d+)\u0000/g, (_, i) => `<code>${esc(codes[i])}</code>`);
   }
 

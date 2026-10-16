@@ -191,6 +191,7 @@
   const ranked = () => ArchitectureFactsView.rankFindings(cur.view?.findings || [], dangerZone());
   const shownFindings = () => ArchitectureFactsView.filterFindings(ranked(), cur.filter);
   const severityClass = (s) => (['high', 'medium', 'low'].includes(s) ? `sev-${s}` : 'sev-low');
+  const filePaths = (f) => (f.files || []).map((x) => x.path).join(', ');
   const target = (f) => {
     const files = f.files || [];
     return files.length ? `${files[0].path}${files.length > 1 ? ` +${files.length - 1}` : ''}` : f.kind || '';
@@ -208,7 +209,7 @@
     return `<li class="arch-finding arch-row ${severityClass(f.severity)}${gone ? ' arch-gone' : ''}" data-testid="${gone ? 'architecture-finding-gone' : 'architecture-finding'}">
       <span class="arch-score" data-testid="architecture-finding-score" title="${esc(`${f.severity || 'no'} severity. ${ArchitectureFactsView.SCORE_FORMULA}`)}">${f.score}</span>
       <div class="arch-finding-body">
-        <div class="arch-finding-line"><span class="mono arch-target" title="${esc((f.files || []).map((x) => x.path).join(', '))}">${esc(target(f))}</span>
+        <div class="arch-finding-line"><span class="mono arch-target" title="${esc(filePaths(f))}">${esc(target(f))}</span>
           <span class="arch-finding-summary" data-testid="architecture-finding-summary" title="${esc(f.title || '')}">${esc(findingSummary(f))}</span>
           <span class="badge${f.status === 'new' ? ' live' : ''}">${esc(f.status || '')}</span>
           <button type="button" class="link-btn" data-testid="architecture-finding-more" data-arch-more="${esc(key)}" aria-expanded="${open}">${open ? 'Read less' : 'Read more'}</button>${send}</div>
@@ -241,7 +242,7 @@
   function reportMeta(saved, view) {
     const cost = saved.simulated ? `<span class="badge p-mock">${t('project_architecture.simulated')}</span>` : saved.costUsd != null ? `<span class="badge" title="${t('project_architecture.the_real_cost_of_this_analysis')}">${esc(fmtUsd(saved.costUsd))}</span>` : '';
     const tokens = saved.tokens && Object.keys(saved.tokens).length ? `<span class="badge" title="${t('project_architecture.tokens_tokens', { tokens: esc(JSON.stringify(saved.tokens)) })}">${fmtNum(Object.values(saved.tokens).reduce((s, n) => s + (Number(n) || 0), 0))} ${t('project_architecture.tokens')}</span>` : '';
-    const since = view.runsSince ? `<span class="badge${view.runsSince >= STALE_RUNS ? ' warn' : ''}" data-testid="architecture-runs-since">${plural(view.runsSince, 'runs')} ${t('project_architecture.since_this_analysis')}</span>` : '';
+    const since = view.runsSince ? `<span class="badge${STALE_RUNS <= view.runsSince ? ' warn' : ''}" data-testid="architecture-runs-since">${plural(view.runsSince, 'runs')} ${t('project_architecture.since_this_analysis')}</span>` : '';
     return `<div class="row small muted arch-meta">${t('project_architecture.analysed_date_at', { date: esc(day(saved.date)) })} ${esc(short(saved.head?.commit))} ${cost}${tokens}${since}</div>`;
   }
 

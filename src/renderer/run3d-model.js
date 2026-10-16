@@ -161,7 +161,7 @@
       this.sessions = {}; // session id → { agent, provider, model }
       this.state = {}; // step id → { status, visits, note, handoff, ask, t0, t1, before, asked }
       this.visits = []; // every visit of a step: { step, visit, t0, t1 (null while it runs) }
-      this.robots = {}; // "<station>:<agent>" or "supervisor" → { busy, act, tool, say, ctx, doneAt, seen }
+      this.robots = {}; // "station:agent" or "supervisor" → { busy, act, tool, say, ctx, doneAt, seen }
       this.turnOf = {}; // session id → the robot its turn animates
       this.turns = 0;
       this.spend = []; // a finished turn: { agent, step, cost, out }

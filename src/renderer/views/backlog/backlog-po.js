@@ -640,7 +640,7 @@
     if (window.AgentRequest.inCard(msg)) return '';
     if (msg.role === 'user') {
       const files = [...(msg.issues || []).map(issueRef), ...(msg.attachments || []).map((f) => `<span class="badge" title="${esc(f)}">${esc(f.split(/[\\/]/).pop())}</span>`)].join(' ');
-      const once = [msg.calibrationOverride ? window.PoCalibration.step(msg.calibration).name : '', msg.costOverride ? window.PoCalibration.cost.step(msg.cost).name : ''].filter(Boolean)
+      const once = [msg.calibrationOverride ? window.PoCalibration.nameOf(msg.calibration) : '', msg.costOverride ? window.PoCalibration.cost.nameOf(msg.cost) : ''].filter(Boolean)
         .map((name) => ` · <span class="badge" title="${t('backlog_po.for_this_question_only_the_saved')}">${t('backlog_po.for')} ${esc(name)}</span>`).join('');
       return `<div class="sup-wmsg user" data-testid="po-message-you"><div class="sup-wmsg-meta">${t('backlog_po.you')} ${esc(time)}${once}</div><div>${esc(msg.text)}</div>${files ? `<div class="po-files">${files}</div>` : ''}</div>`;
     }

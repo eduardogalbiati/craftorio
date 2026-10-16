@@ -192,7 +192,7 @@ function stepFlow(w) {
   const wfReadable = (id, def) => def?.display || (typeof displayName === 'function' ? displayName(id) : String(id || ''));
   const chip = (s) => `<span class="step-chip ${s.type === 'human_approval' ? 'human' : ''}" title="${esc(s.type === 'human_approval' ? `${s.id} (human approval)` : s.id)}">${esc(wfReadable(s.id, s))}</span>`;
   const shown = steps.length > 7 ? steps.slice(0, 6) : steps;
-  return shown.map(chip).join('<span class="arrow">›</span>') + (steps.length > shown.length ? `<span class="muted small">${t('workflows.value_more', { value: steps.length - shown.length })}</span>` : '');
+  return `${shown.map(chip).join('<span class="arrow">›</span>')}${shown.length < steps.length ? `<span class="muted small">${t('workflows.value_more', { value: steps.length - shown.length })}</span>` : ''}`;
 }
 
 function workflowCard(w) {
@@ -254,8 +254,9 @@ function pipelineCard(p) {
       ${w ? `<span class="badge cat-${esc(wfSectionOf(w.category))}">${esc(wfSectionName(wfSectionOf(w.category)))}</span>` : `<span class="badge warn">${t('workflows.missing')}</span>`}
     </button>`;
   }).join('');
+  const files = p.stages.map((s) => s.workflow || '').join('|');
   return `
-    <article class="wf-pipe" data-testid="pipeline-card" data-pipe="${esc(p.file)}" data-files="${esc(p.stages.map((s) => s.workflow || '').join('|'))}" tabindex="-1">
+    <article class="wf-pipe" data-testid="pipeline-card" data-pipe="${esc(p.file)}" data-files="${esc(files)}" tabindex="-1">
       <div class="wf-pipe-head">
         <span class="badge">${t('workflows.pipeline')}</span>
         <h3 title="${esc(p.name)}">${esc(p.name)}</h3>

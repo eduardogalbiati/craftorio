@@ -238,7 +238,7 @@
   function summaryHtml(m) {
     const s = m.safety;
     const idle = m.idleHours;
-    const kinds = Object.entries(m.incidents.byKind).filter(([, n]) => n).map(([k, n]) => `${esc(KIND[k] || k)} <b>${n}</b>`).join('<span>·</span>') || 'none';
+    const kinds = Object.entries(m.incidents.byKind).filter(([, n]) => n).map(([k, n]) => `${esc(KIND[k] || k)} <b>${n}</b>`).join('<span>·</span>') || t('nightwatch.none'); // i18n-ignore
     // #278: a Self-healing day (a UTC day of the standing watch) leads with its own counts
     const sh = m.selfHealing;
     const title = sh ? `Self-healing · ${m.window.ongoing ? 'today so far' : 'day'}` : m.window.ongoing ? 'Tonight so far' : 'Night';

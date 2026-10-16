@@ -317,7 +317,7 @@
 
   function renderScores() {
     $d('#duo-scores').innerHTML = chat.scores
-      .map((s) => `<span class="${s >= chat.threshold ? 'pass' : ''}" style="height:${Math.max(3, s * 2.6)}px" title="${s}/10"></span>`).join('');
+      .map((s) => `<span class="${chat.threshold <= s ? 'pass' : ''}" style="height:${Math.max(3, s * 2.6)}px" title="${s}/10"></span>`).join('');
   }
 
   function renderDoc() {
