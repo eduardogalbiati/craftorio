@@ -36,7 +36,7 @@ function seedPrompt({ project, seed }) {
     String(seed.body || '').trim(),
     '</seed>',
     '',
-    'Answer in English with one JSON object in a ```json fence: { "html": the result page, "model": the JSON model the seed describes, "report": the seed\'s "tell me" list answered, as Markdown }.',
+    'Answer in the language the Language line names for documents (English when there is none) with one JSON object in a ```json fence: { "html": the result page, "model": the JSON model the seed describes, "report": the seed\'s "tell me" list answered, as Markdown }.',
     'The html is one self-contained page: inline CSS and SVG only, no script, no external URL (it is shown in a frame with no network).',
   ].join('\n');
 }

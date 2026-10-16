@@ -1,7 +1,7 @@
 // The Oracle's architecture analysis of a project (#356): one turn, outside its conversation, that
 // reads the facts model (src/shared/architecture-model.js: hotspots, co-change pairs, languages)
 // and checks the top hotspots with its read-only repository tools (repo_read, repo_git). It
-// answers a report in English, { summary, areas: [{ area, verdict }], findings: [{ kind, title,
+// answers a report in the agents language (#327: the [Language] line of oneTurn), { summary, areas: [{ area, verdict }], findings: [{ kind, title,
 // files: [{ path, lines }], evidence, severity, refactor }] }, checked against REPORT_SCHEMA
 // (src/shared/architecture-report.js, shared with the Refactor proposals workflow, #378) with
 // validateSchema (#338): an invalid answer is an error, never half a report. It never edits code
@@ -103,7 +103,7 @@ function analysisPrompt({ project, model }) {
     'Files that change together (share of the commits of either file):',
     ...(pairs.length ? pairs.map((p) => `- ${p.a} + ${p.b}: ${p.together} commits together (${Math.round(p.share * 100)}%)`) : ['- none']),
     '',
-    `Answer with one JSON object in a \`\`\`json fence, in English, matching this schema. kind is one of ${KINDS.join(', ')}; severity is one of ${SEVERITIES.join(', ')}; files give the lines ("12-40") your evidence points to.`,
+    `Answer with one JSON object in a \`\`\`json fence, its prose in the language the Language line names for documents (English when there is none), matching this schema. kind is one of ${KINDS.join(', ')}; severity is one of ${SEVERITIES.join(', ')}; files give the lines ("12-40") your evidence points to.`,
     JSON.stringify(REPORT_SCHEMA),
   ].join('\n');
 }

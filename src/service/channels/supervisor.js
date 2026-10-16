@@ -42,6 +42,7 @@ module.exports = (ctx) => {
   const watches = createWatches({
     events: ctx.events, liveRun: ctx.liveRun, runFolder: ctx.runFolder, workflowDirs: ctx.workflowDirs,
     skillsDirs: () => [ctx.ws.skills, ctx.BUNDLED_SKILLS_DIR], resolveCommand, notify: ctx.notify,
+    language: () => workspace.readSettings(ctx.ws).language, // #327: the [Language] line of each turn
   });
   const tools = supervisorTools(ctx);
   const chats = new Map(); // workspace root → its chat (the workspace can change)

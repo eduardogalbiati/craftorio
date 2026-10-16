@@ -186,7 +186,7 @@ module.exports = (ctx) => {
   // without the synced backlog: the ranking reads no issue
   function realOptions(p) {
     const o = asClient(() => ctx.productOwnerAgentOptions(p.id, false));
-    return { mock: false, backlogDir: o.backlogDir, projectId: p.id, folder: o.folder, agent: o.agent || agentsMod.readAgent(ctx.ws.agents, agentsMod.PRODUCT_OWNER_ID), skillsDirs: o.skillsDirs, resolveCommand: o.resolveCommand, budget: o.budget };
+    return { mock: false, backlogDir: o.backlogDir, projectId: p.id, folder: o.folder, agent: o.agent || agentsMod.readAgent(ctx.ws.agents, agentsMod.PRODUCT_OWNER_ID), skillsDirs: o.skillsDirs, resolveCommand: o.resolveCommand, budget: o.budget, language: o.language };
   }
   // #378: the Refactor proposals workflow's prioritize step ranks with the same Product Owner (runs.js)
   ctx.refactorPriorityOptions = (projectId) => realOptions(projectOf(projectId));

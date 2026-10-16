@@ -481,7 +481,7 @@ function sessionsReportMarkdown(r, { from, to, scope, model } = {}) {
  * @param attachments images for this question (#129), copied into <reportsDir>/attachments/
  * @returns { report, reportPath, markdown, model, costUsd }
  */
-async function analyzeSessions({ report, from, to, scope, question, reportsDir, skillsDirs, resolveCommand, mock = false, provider: forced, model: forcedModel, attachments = [] }) {
+async function analyzeSessions({ report, from, to, scope, question, reportsDir, skillsDirs, resolveCommand, mock = false, provider: forced, model: forcedModel, attachments = [], language = null }) {
   const { extractJson, validateSchema } = require('./engine/run/outputs');
   const { render } = require('./engine/run/templates');
   const { runTurn, storeAttachments } = require('./engine/providers');
@@ -491,9 +491,10 @@ async function analyzeSessions({ report, from, to, scope, question, reportsDir, 
   const schema = SESSIONS_REPORT_SCHEMA;
   const prompt = [
     skillPrompt(skill),
+    Language.languageLine({ language }), // #327
     'A person asks you, the orchestrator\'s supervisor, to analyze the AI coding sessions below (Claude Code, Codex CLI, Grok Build) over a date range.',
     'Explain what the sessions were used for (types such as coding, debugging, docs writing, research, review, with their share and examples), how complex they were, the patterns you see (cost, cache use, idle time, retries, failed tool calls, interruptions, compactions, projects) and concrete suggestions to use the agents and the workflows better.',
-    'Base every claim on the numbers and prompts below; say when the data is too thin. Do not prescribe code changes to the user\'s projects. Write in English, in Markdown.',
+    'Base every claim on the numbers and prompts below; say when the data is too thin. Do not prescribe code changes to the user\'s projects. Write in Markdown, in the language the Language line names for documents.',
     question ? `Their question: ${question}` : '',
     report,
     `\n---\nAt the end of your response you MUST include a \`\`\`json block with an object that validates against this JSON Schema:\n\`\`\`json\n${JSON.stringify(schema, null, 2)}\n\`\`\``,

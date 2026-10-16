@@ -51,7 +51,7 @@ function knowledgeDigest(oracleSkillDirs) {
 // The owner's standing decisions, written to oracle/memory.md on the first start only (a memory the
 // owner saved, even an emptied one, is never written again: src/oracle.js memory()).
 const SEED_MEMORY = `${[
-  '- Chat replies in the owner\'s language (Portuguese); everything that goes into the product is in English: UI, issues, skills, commits, handoff notes.',
+  '- Chat replies and product texts follow Settings › Language (the [Language] line of each turn), whatever the owner\'s language in a message: chat replies, handoff notes and documents in the AI agents language, issues and commits in the issues language; the source, the UI and the bundled skills stay English.',
   '- Issues that touch a screen carry UI criteria (what leads, controls, states, screenshots).',
   '- Only the test writer writes tests; the developer never edits the acceptance tests.',
   '- One app per workspace: close the old app before opening a new version on the same workspace.',

@@ -677,9 +677,10 @@ function createOracle({
     history,
     memory,
     state: status,
-    // #356: one turn outside the conversation (src/oracle-architecture.js), in the daily budget
+    // #356: one turn outside the conversation (src/oracle-architecture.js), in the daily budget;
+    // it starts with the [Language] line like a chat turn (#327)
     budgetRefusal: refusal,
-    oneTurn: realTurn,
+    oneTurn: (o) => realTurn({ ...o, prompt: `${Language.languageLine(settings())}\n\n${o.prompt}` }),
 
     /**
      * { question, screen, images, context, mock, mockContextTokens } → { message, messages, state }, or

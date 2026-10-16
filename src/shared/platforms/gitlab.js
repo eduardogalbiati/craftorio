@@ -18,7 +18,6 @@
     request: Object.freeze({ noun: 'merge request', short: 'MR', sign: '!' }),
     epics: 'labels',
     epicHelp: 'GitLab: a group epic, or an issue labelled epic whose members carry epic::<name>',
-    epicBody: 'Filed by the Product Owner (#138).',
     readsLabels: false,
     closeReason: null,
     actionsQuota: false,

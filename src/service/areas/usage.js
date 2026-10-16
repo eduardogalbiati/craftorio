@@ -135,6 +135,7 @@ module.exports = (ctx) => {
       report: analytics.analyticsReport(a), from: a.from, to: a.to, scope: a.scope, question, mock: !!mock,
       attachments: Array.isArray(attachments) ? attachments : [],
       reportsDir: ctx.ws.reports, skillsDirs: [ctx.ws.skills, BUNDLED_SKILLS_DIR], resolveCommand,
+      language: workspace.readSettings(ctx.ws).language, // #327
     });
   }
 

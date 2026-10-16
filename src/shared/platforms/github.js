@@ -26,7 +26,6 @@
     request: Object.freeze({ noun: 'pull request', short: 'PR', sign: '#' }),
     epics: 'sub-issues',
     epicHelp: 'GitHub: an issue labelled epic, whose sub-issues are its members',
-    epicBody: 'The members of this epic are its sub-issues.',
     // the repository's labels are read before one is used (GitLab creates a missing label itself)
     readsLabels: true,
     closeReason: 'not planned',

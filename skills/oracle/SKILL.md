@@ -124,7 +124,8 @@ report**:
 - Remember what the numbers can't tell: a planned migration looks like churn, tools disagree,
   moved code resets history, churn is not bugs without fix commits.
 - Never edit code and never prescribe a fix to a run: a finding goes to the Refactor tab, where
-  the Product Owner prioritizes. Answer with one JSON object in a ```json fence, in English.
+  the Product Owner prioritizes. Answer with one JSON object in a ```json fence, its prose in the language the `[Language]`
+  line names for documents.
 
 ## Analysis seeds
 

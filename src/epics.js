@@ -152,8 +152,8 @@ async function readEpics({ platform, repo, issues, exec = execCli }) {
 // The command as shown in a preview (long texts replaced).
 const display = (cli, args, text) => `${cli} ${args.map((a) => (text && a === text ? '<document>' : /\s/.test(a) ? `"${a}"` : a)).join(' ')}`;
 
-// A new epic's body line in the issues language (#328); the adapter's own line otherwise.
-const epicBodyLine = (p, platform, issuesLanguage) => Language.issueHeadings(issuesLanguage).epic[platform] || p.epicBody;
+// A new epic's body line in the issues language (#328), per platform (src/shared/language.js).
+const epicBodyLine = (p, issuesLanguage) => Language.issueHeadings(issuesLanguage).epic[p.id];
 
 /**
  * Creates an epic and/or places issues in it, on the owner's click.
@@ -183,7 +183,7 @@ async function applyEpic({ platform, repo, epic, issues = [], epics = [], dir, p
   let made = existing ? { id: existing.id, number: existing.number, title, url: existing.url, kind: existing.kind, slug: existing.slug, iid: existing.iid, groupId: existing.groupId } : null;
   if (!made) {
     const goal = String(epic?.goal || '').trim();
-    const body = `${goal ? `${goal}\n\n` : ''}${epicBodyLine(p, platform, issuesLanguage)}\n`;
+    const body = `${goal ? `${goal}\n\n` : ''}${epicBodyLine(p, issuesLanguage)}\n`;
     if (groupId) {
       const out = await run(p.groupEpicCreateCommand(t, groupId, title, body), `description=${body}`);
       const json = preview ? {} : JSON.parse(out || '{}');

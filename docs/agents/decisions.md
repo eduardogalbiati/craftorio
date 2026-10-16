@@ -45,9 +45,11 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   chat reply, step output, handoff note, decision log and generated document follows the AI agents
   language (default "Same as the interface", English until #329). Issues, PR/MR descriptions and
   commit messages follow a separate issues language (default English), and so do Findings' "File as
-  issue" and the epic body line (`epicBody`). JSON keys and enum values,
+  issue" and the epic body line (one place: `src/shared/language.js`). JSON keys and enum values,
   paths, branches, labels, `- [ ]`, `#n` and closing keywords never change; the source, the bundled
-  workflows and skills, logs and tests stay English. Why: an owner who works in another language
+  workflows and skills, logs and tests stay English. Grill me's questions come from the clarity
+  rubric (`src/clarity.js`, no model call): app text, so they follow the interface language (#329),
+  not this setting. Why: an owner who works in another language
   read English summaries and documents, and a repository's issues are not always in the owner's
   chat language; the output contract keeps the keys in English so #94 does not come back.
 - **2026-10-13** (#357, #378): refactor proposals (Architecture findings or the owner's) are prioritized

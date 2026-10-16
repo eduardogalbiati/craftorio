@@ -14,6 +14,7 @@
 const conflictMaps = require('./conflict-map');
 const proposalsStore = require('./refactor-proposals');
 const roadmaps = require('./roadmap');
+const Language = require('./shared/language');
 const { validateSchema } = require('./json-schema');
 const { filesOf, pathOf } = require('./refactor-cadence');
 const { unfinishedItems } = require('./shared/roadmap-model');
@@ -47,7 +48,7 @@ Order every open refactor proposal below by value against risk and cost, as in y
 - value: a higher Danger Zone score (churn x complexity) of its files comes first; a hot spot of the conflict map adds value;
 - risk: a proposal on files an unfinished roadmap item will change goes after the others (they would conflict, #150);
 - cost: complexity from 1 (a rename, an extraction) to 5 (a split across modules); at equal value the cheaper goes first.
-Give each proposal its id, a rank (1 is the first to do, no gaps), a one-line reason in English and its complexity. Read the code when a proposal is unclear; never change a file.`;
+Give each proposal its id, a rank (1 is the first to do, no gaps), a one-line reason in the language the Language line names for step outputs and its complexity. Read the code when a proposal is unclear; never change a file.`;
 
 /** The errors of an answer against PRIORITY_SCHEMA (empty when valid). */
 const validatePriority = (answer) => validateSchema(answer, PRIORITY_SCHEMA);
@@ -101,11 +102,11 @@ function report({ proposals, unfinished, dangerScores, hotSpots }) {
  * `mock`: mockPriority. Otherwise one read-only Claude Code turn in `folder`, recorded in the Product
  * Owner's usage; an answer that does not validate is refused with its errors (no ranking saved).
  */
-async function prioritize({ proposals, unfinished = [], dangerScores = {}, hotSpots = [], mock, backlogDir, projectId, folder, agent, skillsDirs, resolveCommand, budget }) {
+async function prioritize({ proposals, unfinished = [], dangerScores = {}, hotSpots = [], mock, backlogDir, projectId, folder, agent, skillsDirs, resolveCommand, budget, language = null }) {
   if (mock) return { ...mockPriority({ proposals, unfinished, dangerScores }), model: 'simulated', costUsd: 0 };
   const productOwner = require('./product-owner');
   productOwner.checkBudget(budget);
-  const res = await runPriorityTurn({ data: report({ proposals, unfinished, dangerScores, hotSpots }), folder, agent, skillsDirs, resolveCommand });
+  const res = await runPriorityTurn({ data: report({ proposals, unfinished, dangerScores, hotSpots }), folder, agent, skillsDirs, resolveCommand, language });
   productOwner.recordUsage(backlogDir, { projectId, model: agent.model, tokens: res.usage, costUsd: res.costUsd || 0, sessionId: res.providerSessionId || null });
   const { extractJson } = require('./engine/run/outputs');
   let errs;
@@ -153,7 +154,7 @@ async function rankProject({ refactorRoot, backlogDir, projectId, model, mock, o
 }
 
 // One read-only Claude Code turn, as product-owner.js callAgent runs them
-async function runPriorityTurn({ data, folder, agent, skillsDirs, resolveCommand }) {
+async function runPriorityTurn({ data, folder, agent, skillsDirs, resolveCommand, language }) {
   const fs = require('fs');
   const { render } = require('./engine/run/templates');
   const { runTurn } = require('./engine/providers');
@@ -168,6 +169,7 @@ async function runPriorityTurn({ data, folder, agent, skillsDirs, resolveCommand
   const extraArgs = dedupeFlags([...readOnly, ...skills.flatMap((skill) => (provider.skill_args || []).map((x) => render(x, { skill_dir: skill.path })))], provider.args || []);
   const prompt = [
     ...skills.map(skillPrompt),
+    Language.languageLine({ language }), // #327
     RULES,
     data,
     `\n---\nAt the end of your response you MUST include a \`\`\`json block with an object that validates against this JSON Schema:\n\`\`\`json\n${JSON.stringify(PRIORITY_SCHEMA, null, 2)}\n\`\`\``,

@@ -235,6 +235,7 @@ module.exports = (ctx) => {
       report, scope: 'orchestrator', mock: !!mock,
       question: question || 'Ignore the session analysis: plan how to stop parallel runs from colliding on the shared files above (the epic: features add files instead of editing shared ones). Per file, what to split, generate or move, in what order, and how a workflow or skill could keep it that way. Do not write the code.',
       reportsDir: ctx.ws.reports, skillsDirs: [ctx.ws.skills, BUNDLED_SKILLS_DIR], resolveCommand,
+      language: workspace.readSettings(ctx.ws).language, // #327
     });
   }
 
