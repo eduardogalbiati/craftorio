@@ -20,6 +20,7 @@ const fs = require('fs');
 const path = require('path');
 const { expect } = require('@playwright/test');
 const { Given, When, Then } = require('./fixtures');
+const { runTab } = require('../support/run-screen');
 
 const LOAD_TIMEOUT = 30000;
 
@@ -164,8 +165,8 @@ When('I click the run card\'s {string}', async ({ e2e }, name) => {
 
 Then('the Run screen shows the run {string} on its Details tab', async ({ e2e }, fragment) => {
   const page = e2e.window;
-  const modes = page.getByRole('group', { name: 'Run view', exact: true }).filter({ visible: true }).first();
-  await expect(modes.getByRole('button', { name: 'Details', exact: true })).toHaveAttribute('aria-pressed', 'true', { timeout: LOAD_TIMEOUT });
+  // #410: the Run screen's Chat / Details / 3D tabs (tablist "Run view")
+  await expect(runTab(page, 'Details')).toHaveAttribute('aria-selected', 'true', { timeout: LOAD_TIMEOUT });
   // the run in view (app.js shownRunId)
   await expect.poll(() => page.evaluate(() => (typeof shownRunId === 'function' ? shownRunId() : null)), { timeout: LOAD_TIMEOUT }).toMatch(new RegExp(`${fragment}$`));
 });
