@@ -437,7 +437,7 @@ module.exports = (ctx) => {
       else if (to === 'supervisor') {
         if (!runId) throw new Error('Say which run (runId) the supervisor should look at.');
         if (sim && !runMock(runId)) throw new Error('Simulation only: the supervisor would analyze a real run with a model.');
-        const res = await supervisor.analyzeRun({ runDir: ctx.runFolder(runId), question: q, workflowsDir: ctx.workflowDirs(), skillsDirs: [ctx.ws.skills, ctx.BUNDLED_SKILLS_DIR], resolveCommand });
+        const res = await supervisor.analyzeRun({ runDir: ctx.runFolder(runId), question: q, workflowsDir: ctx.workflowDirs(), skillsDirs: [ctx.ws.skills, ctx.BUNDLED_SKILLS_DIR], resolveCommand, language: workspace.readSettings(ctx.ws).language });
         const a = res.analysis || {};
         out = {
           text: [a.summary, a.root_cause && `Root cause: ${a.root_cause}`, ...(a.recommendations || []).map((r) => `- ${r.title}${r.action && r.action !== 'none' ? ` (${r.action}${r.step ? ` from ${r.step}` : ''})` : ''}`)].filter(Boolean).join('\n\n'),

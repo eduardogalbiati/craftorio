@@ -92,6 +92,7 @@ module.exports = (ctx) => {
       fn: ({ runId, question, attachments }) => supervisor.analyzeRun({
         runDir: ctx.runFolder(runId), question, workflowsDir: ctx.workflowDirs(), skillsDirs: [ctx.ws.skills, ctx.BUNDLED_SKILLS_DIR], resolveCommand,
         attachments: Array.isArray(attachments) ? attachments : [],
+        language: workspace.readSettings(ctx.ws).language, // #327
       }),
     },
     // resuming needs no supervisor: runs:resume is the channel; this one is kept for older clients

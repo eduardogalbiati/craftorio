@@ -400,7 +400,7 @@ const DEFAULT_MODEL = 'claude-sonnet-5';
  * supervisor/attachments/ and given to this question's turn only.
  * @returns { analysis, artifactPath, model, costUsd, steps }
  */
-async function analyzeRun({ runDir, question, workflowsDir, skillsDirs, resolveCommand, attachments = [] }) {
+async function analyzeRun({ runDir, question, workflowsDir, skillsDirs, resolveCommand, attachments = [], language = null }) {
   const { extractJson, validateSchema } = require('./engine/run/outputs');
   const { render } = require('./engine/run/templates');
   const { runTurn, storeAttachments } = require('./engine/providers');
@@ -414,7 +414,7 @@ async function analyzeRun({ runDir, question, workflowsDir, skillsDirs, resolveC
     'A person asks you, the run supervisor, about this workflow run. Explain what happened and recommend what to do next.',
     question ? `Their question: ${question}` : 'They want to know what happened and, if something went wrong, how to fix it.',
     'Recommendations can be: resume (continue the run from a step, reusing the previous outputs and agent conversations, with an instruction for that step), rerun (start again from the first step with the same inputs), or none (something the person must do, e.g. change an input or the workflow).',
-    `Write the summary and root cause in Markdown. ${WRITE_ENGLISH}`,
+    `Write the summary and root cause in Markdown. ${writeIn(language)}`,
     runReport(runDir, { workflowsDir }),
     `\n---\nAt the end of your response you MUST include a \`\`\`json block with an object that validates against this JSON Schema:\n\`\`\`json\n${JSON.stringify(schema, null, 2)}\n\`\`\``,
   ].join('\n\n');
