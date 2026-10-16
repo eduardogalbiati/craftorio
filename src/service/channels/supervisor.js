@@ -54,6 +54,8 @@ module.exports = (ctx) => {
         tools: () => tools, bridge, mcpCommand: () => mcpCommand(!!ctx.host?.isPackaged, resolveCommand),
         skillsDirs: () => [ctx.ws.skills, ctx.BUNDLED_SKILLS_DIR], resolveCommand, refuseReal: simulation.refuseReal,
         timeZone: () => workspace.readSettings(ctx.ws).timeZone,
+        // #327: Settings › Language, the [Language] line of each question
+        language: () => workspace.readSettings(ctx.ws).language,
       }));
     }
     return chats.get(root);

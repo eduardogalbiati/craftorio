@@ -245,6 +245,10 @@ const DEFAULT_SETTINGS = {
   // the owner's IANA time zone (#273, src/time-zone.js): screens, day/week/month cuts, the agents'
   // replies and the daily resets use it; null = this computer's (readSettings fills it in, unsaved)
   timeZone: null,
+  // the languages agents write in (#327, #328, src/shared/language.js): `agents` for chat replies, prose
+  // and documents ('interface' = Same as the interface, English until #329), `issues` for issues, PR/MR
+  // descriptions and commit messages
+  language: { agents: 'interface', issues: 'en' },
 };
 
 // settings.json as saved: null when there is none, {} when it is not valid JSON

@@ -388,6 +388,8 @@ module.exports = (ctx) => {
         agentOverrides, fallbacks: settingsFallbacks(settings), models: settings.models || {},
         // #337: tonight's limits, read at each check (a raise reaches the run at its next one)
         nightLimits: () => nightLimits.tonightLimits(ws.oracle || path.join(ws.root, 'oracle')),
+        // #327: Settings › Language, read at each turn (a change reaches the run at its next turn)
+        language: () => workspace.readSettings(ws).language,
         // #367: the machine profile's test workers per run (auto from this machine, or the owner's)
         testWorkers: machineProfile.resolveLimits(settings, machineProfile.readMachine()).testWorkers,
         // `type: workflow` steps (#174): each child is a normal run of this service, linked to this one

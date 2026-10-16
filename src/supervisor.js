@@ -21,10 +21,15 @@ const fs = require('fs');
 const path = require('path');
 const yaml = require('js-yaml');
 const registry = require('./shared/providers');
+const Language = require('./shared/language');
 
-// The app is English-only (#94, #121): the supervisor's words reach the person and decisions.tsv, and
-// its instructions reach the agents, so the language is pinned instead of following the task's.
+// The supervisor's words reach the person and decisions.tsv, and its instructions reach the agents, so
+// the language is pinned instead of following the task's (#94, #121): English, or the AI agents
+// language of Settings › Language when the engine gives it (#327: the [Language] line, then this).
 const WRITE_ENGLISH = 'Write your explanation, record, recommendation and instructions in English (the app\'s language), whatever language the task, the workflow or the person\'s messages use.';
+const writeIn = (language) => (language
+  ? `${Language.languageLine({ language })}\nWrite your explanation, record, recommendation and instructions in the language the Language line names for chat replies and prose, whatever language the task, the workflow or the person's messages use.`
+  : WRITE_ENGLISH);
 
 // Decision taken during a run. `retry` first: it is the mock provider's default.
 const DECISION_SCHEMA = {
@@ -151,7 +156,7 @@ function timelineLine(ev) {
 const timeline = (events, max = 80) => events.map(timelineLine).filter(Boolean).slice(-max).join('\n');
 
 /** Prompt for a decision on a failed step (engine-side). */
-function decisionPrompt({ wf, step, error, answer, allowed, events, previous, handoffs }) {
+function decisionPrompt({ wf, step, error, answer, allowed, events, previous, handoffs, language }) {
   const def = { ...step };
   const stepYaml = yaml.dump(def, { lineWidth: 120 }).trim();
   return [
@@ -169,12 +174,12 @@ function decisionPrompt({ wf, step, error, answer, allowed, events, previous, ha
     `- goto: continue at one of these steps: ${allowed.length ? allowed.join(', ') : '(none)'}.`,
     '- ask_human: stop and ask the person (explain what they need to decide or change). When a retry would fail the same way (e.g. the prompt and a guard contradict each other), set `retry_would_fail: true` and put in `goto` the step of the list above to resume from: the person is offered that instead of a retry.',
     '- fail: end the run.',
-    WRITE_ENGLISH,
+    writeIn(language),
   ].filter(Boolean).join('\n');
 }
 
 /** Prompt for a decision on a failed transition action or pre-merge check (engine-side). */
-function actionErrorPrompt({ wf, step, error, check, recover, gate, events, handoffs }) {
+function actionErrorPrompt({ wf, step, error, check, recover, gate, events, handoffs, language }) {
   return [
     `The action of a transition of the workflow "${wf.metadata?.name}" failed (step "${step.id}"). Decide where the run goes, following the run-supervisor skill.`,
     wf.metadata?.description ? `Workflow: ${wf.metadata.description}` : '',
@@ -185,12 +190,12 @@ function actionErrorPrompt({ wf, step, error, check, recover, gate, events, hand
     `\n## Your options (the engine validates them)`,
     `- goto: a case you recognize that the workflow's agents can fix (e.g. the PR/MR conflicts with its base because another change was merged meanwhile): go back to one of ${recover.join(', ')}; \`instruction\` is added to that step's prompt. Give the evidence (the error text, the PR/MR state), never a code fix. The change goes through its checks and the human approval again.`,
     `- escalate: an unknown case, or one no agent can fix (permissions, the platform down): the run stops at the gate "${gate}", where the person sees your \`explanation\` as the diagnosis.`,
-    WRITE_ENGLISH,
+    writeIn(language),
   ].filter(Boolean).join('\n');
 }
 
 /** Prompt for a decision on an agent that has been silent while a command waits (engine-side). */
-function idlePrompt({ wf, step, agent, idle, events, handoffs }) {
+function idlePrompt({ wf, step, agent, idle, events, handoffs, language }) {
   const minutes = Math.round(idle.idle_ms / 6e3) / 10;
   return [
     `An agent of the workflow "${wf.metadata?.name}" has produced no output for ${minutes} minutes while a command is waiting. Decide whether the engine should keep waiting or interrupt the agent's turn, following the run-supervisor skill.`,
@@ -201,7 +206,7 @@ function idlePrompt({ wf, step, agent, idle, events, handoffs }) {
     `\n## Your options`,
     '- wait: the command can plausibly still finish (a long build or test suite in the foreground prints nothing until it ends).',
     '- interrupt: the wait cannot end on its own (polling for a text that may never appear, a background job with no exit check, an interactive prompt); the engine stops this turn and runs the step again with `instruction` added to the agent\'s prompt. Describe the evidence and what to do instead (e.g. run the command in the foreground with a timeout and read its exit code); never prescribe a code fix.',
-    WRITE_ENGLISH,
+    writeIn(language),
   ].filter(Boolean).join('\n');
 }
 
@@ -212,7 +217,7 @@ function idlePrompt({ wf, step, agent, idle, events, handoffs }) {
  * gate.decision: a decision gate reached because a loop ran out (no `route`: only the person answers it).
  * running: the step is still running (a slow step): wait, interrupt its turn, or ask the person.
  */
-function onCallPrompt({ wf, step, gate, signals, retryStep, steps, history, previous, events, handoffs, limits, running }) {
+function onCallPrompt({ wf, step, gate, signals, retryStep, steps, history, previous, events, handoffs, limits, running, language }) {
   const routes = gate?.routes || [];
   let intro = `The engine detected that the step "${step.id}" of the workflow "${wf.metadata?.name}" may be stuck. You are the supervisor on call: decide whether the run goes on as planned or how to unblock it, following the run-supervisor skill.`;
   if (gate?.decision) intro = `The workflow "${wf.metadata?.name}" reached the human gate "${step.id}" because a loop ran out of iterations. It is a decision gate: only the person answers it, but you are the supervisor on call: if the evidence shows the agents can still solve the problem, send the run back to them first, following the run-supervisor skill. Otherwise the gate opens for the person with your diagnosis.`;
@@ -244,7 +249,7 @@ function onCallPrompt({ wf, step, gate, signals, retryStep, steps, history, prev
       ? '- user_action: only the person can unblock it (a process to stop, a permission to grant, a login): put the exact command or step in `user_action`; the person is told while the step keeps running.'
       : '- user_action: the fix is outside the run\'s permissions (a process to stop, a permission to grant, a login): put the exact command or step the person must take in `user_action`; the person is asked with it.',
     'Rules: never prescribe a code fix and never edit code; a problem in the code goes back to the workflow\'s agents (retry/resume) with the evidence and your hypotheses in `instruction`. A problem in how an agent works (refused commands, a wrong tool, a wait that never ends) gets a concrete instruction (e.g. call the gh CLI directly in the Bash tool).',
-    WRITE_ENGLISH,
+    writeIn(language),
   ].filter(Boolean).join('\n');
 }
 

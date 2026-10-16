@@ -27,6 +27,7 @@ const agentInbox = require('./agent-inbox');
 const agentsUsage = require('./agents-usage');
 const { mockSteps, partialText } = require('./chat-progress');
 const TimeZone = require('./time-zone');
+const Language = require('./shared/language');
 
 // the kinds another agent may ask the Supervisor for (#240)
 const REQUEST_KINDS = [
@@ -70,7 +71,7 @@ const RULES = [
   'You can explain and recommend; you cannot change anything yet. When the person asks for a change (a workflow, an agent, a skill, a project), say exactly what to change and where in the app to do it.',
   'Never approve, reject or answer a human gate: say that the gate waits for the person and what they should weigh. Never prescribe a code fix: say which step or agent of the workflow should handle it, with the evidence and your hypotheses.',
   'Starting a real run costs the person money: never suggest one without saying so.',
-  'Answer briefly, in plain language, in English.',
+  'Answer briefly, in plain language, in the language the Language line names for chat replies (English when there is none).',
 ].join('\n');
 
 const readJson = (file, fallback) => { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return fallback; } };
@@ -96,14 +97,16 @@ function usageRuns(dir, timeZone = 'UTC') {
 }
 
 /**
- * The text sent for one question: the owner's local time (#273, when the zone is given), the screen,
- * the run a run card attached (#409), then the question.
+ * The text sent for one question: the owner's local time (#273, when the zone is given), the agents
+ * language (#327, when Settings' language is given), the screen, the run a run card attached (#409),
+ * then the question.
  */
-function questionText(text, screen, timeZone = null, run = null) {
+function questionText(text, screen, timeZone = null, run = null, language = null) {
   const s = String(screen || '').trim();
   const t = timeZone ? `[Time] ${TimeZone.nowLine(timeZone)}\n\n` : '';
+  const l = language ? `${Language.languageLine({ language })}\n\n` : '';
   const r = runLine(run);
-  return `${t}${s ? `[Screen] ${s}\n\n` : ''}${r ? `[Run] ${r}\n\n` : ''}${text}`;
+  return `${t}${l}${s ? `[Screen] ${s}\n\n` : ''}${r ? `[Run] ${r}\n\n` : ''}${text}`;
 }
 
 /** #409: an attached run in one line: id (workflow), status, error, issues; '' without a run id. */
@@ -123,7 +126,7 @@ function runLine(run) {
  * `tools()` the read-only tools; `bridge` the loopback bridge (src/supervisor-bridge.js);
  * `mcpCommand()` how to start src/supervisor-mcp.js ({ command, args, env }).
  */
-function createSupervisorChat({ dir, tools, bridge, mcpCommand, skillsDirs, resolveCommand, refuseReal, timeZone = () => null }) {
+function createSupervisorChat({ dir, tools, bridge, mcpCommand, skillsDirs, resolveCommand, refuseReal, timeZone = () => null, language = () => null }) {
   let busy = false;
   const files = () => ({ log: path.join(dir(), 'chat.jsonl'), state: path.join(dir(), 'chat.json') });
 
@@ -245,7 +248,7 @@ function createSupervisorChat({ dir, tools, bridge, mcpCommand, skillsDirs, reso
             message = post({ role: 'supervisor', text, simulated: true, costUsd: 0 });
           } else {
             const m = String(model || state().model || DEFAULT_MODEL);
-            const res = await realTurn(questionText(q, screen, timeZone(), run), m, images, { onItem: seen, signal });
+            const res = await realTurn(questionText(q, screen, timeZone(), run, language()), m, images, { onItem: seen, signal });
             message = post({ role: 'supervisor', text: String(res.text || '').trim() || '(no answer)', model: m, costUsd: res.costUsd ?? null });
           }
         } catch (e) {

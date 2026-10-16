@@ -161,7 +161,7 @@ const methods = {
     const history = this.wf.steps.filter((s) => this.ctx.steps[s.id]?.visits > 0).map((s) => ({ step: s.id, visits: this.ctx.steps[s.id].visits, output: this.ctx.steps[s.id].output }));
     const limits = `Interventions left after this one: ${cfg.perStep - st.onCall.length - 1} on this step, ${cfg.total - this.supervisorUsed} in this run.`
       + (cfg.maxCost != null ? ` Your cost in this run so far: US$ ${this.supervisorCost().toFixed(2)} of US$ ${cfg.maxCost}.` : '');
-    const prompt = supervisor.onCallPrompt({ wf: this.wf, step, gate, signals, retryStep, steps, history, previous: st.onCall, events: this.recent, handoffs, limits, running });
+    const prompt = supervisor.onCallPrompt({ wf: this.wf, step, gate, signals, retryStep, steps, history, previous: st.onCall, events: this.recent, handoffs, limits, running, language: this.languageSetting() });
     const d = await this.askSupervisor(step, prompt, supervisor.onCallSchema({ actions, steps, routes: gate?.routes, answers: gate?.answers }), st.onCall.length + 1);
     if (d) st.onCall.push({ action: d.action, explanation: d.explanation });
     return d;
@@ -301,7 +301,7 @@ const methods = {
     st.actionChecks = (st.actionChecks || 0) + 1;
     this.emitEvent('supervisor.started', { step_id: step.id, kind: 'action_error', error: e.message });
     const handoffs = [...this.handoffNotes.entries()].map(([agent, n]) => ({ agent, ...n }));
-    const prompt = supervisor.actionErrorPrompt({ wf: this.wf, step, error: e.message, check: e.check, recover: route.recover, gate: route.on_error, events: this.recent, handoffs });
+    const prompt = supervisor.actionErrorPrompt({ wf: this.wf, step, error: e.message, check: e.check, recover: route.recover, gate: route.on_error, events: this.recent, handoffs, language: this.languageSetting() });
     const d = await this.askSupervisor(step, prompt, supervisor.actionSchema(route.recover), st.actionChecks);
     if (!d) return null;
     const back = d.action === 'goto' && route.recover.includes(d.goto);
@@ -372,7 +372,7 @@ const methods = {
     this.emitEvent('supervisor.started', { step_id: step.id, error: err.message });
     // the agents' own summaries of where they are, instead of their full transcripts
     const handoffs = (step.agents || [step.agent]).map((a) => this.handoffNotes.get(a) && { agent: a, ...this.handoffNotes.get(a) }).filter(Boolean);
-    const prompt = supervisor.decisionPrompt({ wf: this.wf, step, error: err.message, answer: st.lastAnswer, allowed, events: this.recent, previous: st.interventions, handoffs });
+    const prompt = supervisor.decisionPrompt({ wf: this.wf, step, error: err.message, answer: st.lastAnswer, allowed, events: this.recent, previous: st.interventions, handoffs, language: this.languageSetting() });
     const decision = await this.askSupervisor(step, prompt, supervisor.DECISION_SCHEMA, st.interventions.length + 1);
     if (!decision) return null;
     st.interventions.push({ action: decision.action, explanation: decision.explanation });
@@ -443,7 +443,7 @@ const methods = {
     st.idleChecks = (st.idleChecks || 0) + 1;
     this.emitEvent('supervisor.started', { step_id: step.id, kind: 'idle', error: `agent idle: ${stall.command}` });
     const handoffs = (step.agents || [step.agent]).map((a) => this.handoffNotes.get(a) && { agent: a, ...this.handoffNotes.get(a) }).filter(Boolean);
-    const prompt = supervisor.idlePrompt({ wf: this.wf, step, agent: agentName, idle: stall, events: this.recent, handoffs });
+    const prompt = supervisor.idlePrompt({ wf: this.wf, step, agent: agentName, idle: stall, events: this.recent, handoffs, language: this.languageSetting() });
     const decision = await this.askSupervisor(step, prompt, supervisor.IDLE_SCHEMA, st.idleChecks);
     if (!decision) return;
     const interrupted = decision.action === 'interrupt' && interrupt(decision, stall);

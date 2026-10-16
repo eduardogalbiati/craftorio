@@ -21,6 +21,7 @@ const capabilities = require('../capabilities');
 const evidence = require('../../evidence');
 const testPaths = require('../test-paths');
 const chain = require('../../shared/chain-model');
+const Language = require('../../shared/language');
 const registry = require('../../shared/providers');
 const { changedFiles } = require('../affected-tests');
 const {
@@ -60,13 +61,16 @@ const HANDOFF_INSTRUCTIONS = [
   '- Key files: path (what matters there)',
   '- Known problems: blockers, flaky things, what did not work',
   'The code is in git: point to files and commits instead of pasting code. The orchestrator removes this block from your answer.',
-  'Write the note in English, whatever language the project instructions or the conversation use.',
 ].join('\n');
+// #327: the note's language line follows the agents language (English: today's text)
+const handoffInstructions = (code) => `${HANDOFF_INSTRUCTIONS}\n${Language.handoffLanguage(code)}`;
+// #327: a turn's [Language] line, unless its prompt already carries it (the supervisor's prompts)
+const languagePart = (prompt, line) => (String(prompt).includes(line) ? [] : [line]);
 
 // Ends the prompt of a step with an output schema: project instructions (e.g. a CLAUDE.md asking for
-// another chat language) must not turn the final message into prose the engine cannot parse.
-const OUTPUT_LANGUAGE = 'Your final message must end with that JSON object, written in English (string values included), '
-  + 'whatever language the project instructions or the conversation use. A summary in prose does not replace it.';
+// another chat language) must not turn the final message into prose the engine cannot parse (#94).
+// The English text; another agents language keeps keys and enum values (Language.outputInstruction, #327).
+const OUTPUT_LANGUAGE = Language.outputInstruction('en');
 
 const HANDOFF_ONLY = 'Write only your ```handoff block now, following the format asked before (Goal, State, Done, Left, Decisions, Key files, Known problems; at most 250 words). Nothing else.';
 
@@ -257,6 +261,16 @@ const methods = {
     if (runDirs.includes(tmpDir)) this.machine.runTmp(this.runDir);
   },
 
+  // #327: the settings' language ({ agents, issues }) now, or null (English); read at each turn
+  languageSetting() {
+    return this.language?.() || null;
+  },
+
+  // #327: the AI agents' language code now ('en' when unset)
+  agentsLanguageCode() {
+    return Language.agentsLanguage({ language: this.languageSetting() });
+  },
+
   // opts.attachments: images for this turn ([{ name, path }] in the run folder, #129); a provider that
   // cannot open images still gets their paths, with one warning per step and agent.
   async agentTurn(agentName, prompt, turnOpts = {}) {
@@ -347,7 +361,10 @@ const methods = {
       parts.push(stops.map((s) => `The orchestrator stopped \`${s.commandLine}\` at ${gib(s.bytes)} GB for passing the memory limit`
         + ` (${gib(s.limitBytes)} GB per process). Do not run it again unchanged: find why it grows (e.g. a failing assertion that formats a huge object) or run a smaller part of it.`).join('\n'));
     }
-    parts.push(wantNote ? `${prompt}\n\n---\n${HANDOFF_INSTRUCTIONS}` : prompt);
+    // #327: the agents and issues languages, read at each turn (a change applies from the next one)
+    const language = this.languageSetting();
+    parts.push(...languagePart(prompt, Language.languageLine({ language })));
+    parts.push(wantNote ? `${prompt}\n\n---\n${handoffInstructions(Language.agentsLanguage({ language }))}` : prompt);
     const fullPrompt = parts.join('\n\n');
 
     // capabilities + isolation → this CLI's flags (see capabilities.js); cli_args still apply on top

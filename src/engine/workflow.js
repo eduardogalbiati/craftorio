@@ -33,7 +33,8 @@ const { sharedMemoryGuard } = require('./memory-guard');
 const machineActions = require('./machine-actions');
 const { StepTrail } = require('../shared/run-progress-model');
 const chain = require('../shared/chain-model');
-const { BUNDLED_SKILLS, methods: sessionsMethods, OUTPUT_LANGUAGE } = require('./run/sessions');
+const Language = require('../shared/language');
+const { BUNDLED_SKILLS, methods: sessionsMethods } = require('./run/sessions');
 const { evalExpr, render, testsPlan } = require('./run/templates');
 const {
   loadWorkflow,
@@ -170,12 +171,15 @@ class WorkflowRun extends EventEmitter {
   // refactorPriorityOptions (#378): (projectId) => the Product Owner's turn options (refactor:prioritize's),
   //   for a `type: refactor_proposals` step's prioritize action (src/engine/run/refactor-proposals-steps.js);
   //   null = no Product Owner (a simulation needs none).
-  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issues, issue, resume, worktreesDir, mockSequences, notices, stopProcesses, probe, actionsQuota, peerSessions, idleWarnMs, personas, localPreview, attachments, then, from, parent, startChild, memoryGuard, agentOverrides, fallbacks, models, nightLimits, testWorkers, machine, architectureOracle, refactorPriorityOptions }) {
+  // language (#327): () => the settings' language ({ agents, issues }) or null, called at each turn: every
+  //   turn's [Language] line and the output instruction follow it (src/shared/language.js); null = English.
+  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issues, issue, resume, worktreesDir, mockSequences, notices, stopProcesses, probe, actionsQuota, peerSessions, idleWarnMs, personas, localPreview, attachments, then, from, parent, startChild, memoryGuard, agentOverrides, fallbacks, models, nightLimits, testWorkers, machine, architectureOracle, refactorPriorityOptions, language }) {
     super();
     refreshWindowsPath(); // actions (e.g. gh pr merge) need the refreshed PATH
     this.file = file;
     this.wf = loadWorkflow(file);
     this.mock = !!mock;
+    this.language = functionOrNull(language);
     this.architectureOracle = functionOrNull(architectureOracle);
     this.refactorPriorityOptions = functionOrNull(refactorPriorityOptions);
     this.mockSequences = mockSequences || null;
@@ -697,7 +701,7 @@ class WorkflowRun extends EventEmitter {
     if (schema) {
       prompt += '\n\n---\nAt the end of your response you MUST include a ```json block with an object that validates against this JSON Schema:\n```json\n'
         + JSON.stringify(schema, null, 2) + '\n```\n'
-        + OUTPUT_LANGUAGE;
+        + Language.outputInstruction(this.agentsLanguageCode());
     }
     const hint = { stepId: step.id, visit, schema, agent: agentName, sequences: this.mockSequences };
     // images (#129): those of the inputs its prompt uses, and those of the last gate's feedback
