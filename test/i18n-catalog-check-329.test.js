@@ -11,6 +11,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+const { report, sourceFiles, untranslated } = require('./untranslated-text');
 
 const ROOT = path.join(__dirname, '..');
 const SRC = path.join(ROOT, 'src');
@@ -26,16 +27,6 @@ const PLURAL_CATEGORIES = ['zero', 'one', 'two', 'few', 'many', 'other'];
 const readJson = (file) => JSON.parse(fs.readFileSync(file, 'utf8'));
 const english = () => readJson(path.join(CATALOGS, 'en.json'));
 const rel = (file) => path.relative(ROOT, file).split(path.sep).join('/');
-
-function sourceFiles(dir, out = []) {
-  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
-    if (e.name === 'node_modules' || e.name === 'vendor') continue;
-    const p = path.join(dir, e.name);
-    if (e.isDirectory()) sourceFiles(p, out);
-    else if (/\.jsx?$/.test(e.name)) out.push(p);
-  }
-  return out;
-}
 
 // ---- (a) keys used in code ----------------------------------------------------------------------
 const KEY_CALL = /(?:\bI18n\.t|(?<![\w$.])t)\(\s*(['"`])([a-z][\w-]*(?:\.[\w-]+)+)\1/g;
@@ -95,36 +86,7 @@ test('#329 (b) a translation uses the same {placeholders} as its English text', 
 });
 
 // ---- (c) visible text outside t() in the moved files ---------------------------------------------
-const TAG_TEXT = /<\/?[a-z][a-z0-9-]*(?:\s[^<>]*)?\/?>([^<]*)/g;
-const ATTR = /\b(title|placeholder|aria-label|alt)="([^"]*)"/g;
-const LETTERS = /[A-Za-zÀ-ÿ]{2,}/;
-
-/** The text left once ${...} expressions, entities and anything after the template's end are dropped. */
-function visible(s) {
-  let out = String(s);
-  for (let prev = null; prev !== out;) { prev = out; out = out.replace(/\$\{[^{}]*\}/g, ''); }
-  const cut = out.search(/\$\{|`/); // an expression or a template that goes on past this point
-  if (cut >= 0) out = out.slice(0, cut);
-  return out.replace(/&(?:#\d+|#x[\da-f]+|\w+);/gi, '').trim();
-}
-
-/** Visible English outside t() in one file's source: ['file:line: "text"']. */
-function untranslated(src, name = 'file') {
-  const found = [];
-  src.split(/\r?\n/).forEach((line, i) => {
-    const trimmed = line.trim();
-    if (/\/\/\s*i18n-ignore\s*$/.test(line) || /^(\/\/|\/\*|\*)/.test(trimmed)) return;
-    for (const m of line.matchAll(TAG_TEXT)) {
-      const text = visible(m[1]);
-      if (LETTERS.test(text)) found.push(`${name}:${i + 1}: >${text}<`);
-    }
-    for (const m of line.matchAll(ATTR)) {
-      const text = visible(m[2]);
-      if (LETTERS.test(text)) found.push(`${name}:${i + 1}: ${m[1]}="${text}"`);
-    }
-  });
-  return found;
-}
+// the checker itself lives in test/untranslated-text.js (#330 runs it over the whole renderer)
 
 function movedFiles() {
   return MOVED_FILES.flatMap((p) => {
@@ -149,5 +111,5 @@ test('#329 (c) the files moved to the catalog show no visible text outside t()',
   const files = movedFiles();
   assert.ok(files.length >= 4, `moved files: ${files.map(rel).join(', ')}`);
   const found = files.flatMap((f) => untranslated(fs.readFileSync(f, 'utf8'), rel(f)));
-  assert.deepEqual(found, [], `visible text outside t() (move it to en.json, or end the line with // i18n-ignore):\n${found.slice(0, 40).join('\n')}${found.length > 40 ? `\n… ${found.length - 40} more` : ''}`);
+  assert.deepEqual(found, [], report(found));
 });
