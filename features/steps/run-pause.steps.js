@@ -3,12 +3,15 @@
 // (skills/ui-conventions).
 //
 // What the screens expose (the renderer's contract for these steps):
-// - Run screen: data-testid="run-pause", a button "Pause after current step" (#391) next to Stop.
+// - Run screen: data-testid="run-pause", a button "Pause after current step" (#391) next to Stop, on
+//   the Run screen's tab row since #410/#412 (no longer in the header).
 // - data-testid="run-pause-state": the run's pause line, data-state = pausing | paused. Pausing reads
 //   "Pausing: waiting for <agent> to finish its turn (<step>)" and holds data-testid="run-cancel-pause"
 //   (a button "Cancel pause"); paused reads "Paused at <step>, next: <agent>'s turn" and when.
-// - data-testid="run-status" (exists) has data-status="paused" and reads "Paused" once paused; the run
-//   list's status label (data-testid="status-label", #266) reads "Paused", data-status="paused".
+// - data-testid="run-screen-status" (the Run screen's tab row, #412: the header's run-status is gone)
+//   has data-status="paused" and reads "Paused" once paused; data-testid="run-screen-id" is the run's
+//   id there. The run list's status label (data-testid="status-label", #266) reads "Paused",
+//   data-status="paused".
 // - data-testid="run-resume": a button "Resume" on a paused run (continues from where it stopped; not
 //   the "Resume from step…" of a finished run).
 // - Roadmap: the stage actions menu (#282) has a menuitem "Pause after current step" (#391),
@@ -19,6 +22,7 @@
 
 const { expect } = require('@playwright/test');
 const { Given, When, Then } = require('./fixtures');
+const { runScreenStatus, runScreenId } = require('../support/run-screen');
 
 const SLOW_TURNS = 10;
 // a slow simulated turn ends in at most ~35 s; the next step starts right after it
@@ -42,13 +46,13 @@ Given('the app is open with slow simulated turns', async ({ e2e }) => {
 // an agent (not the orchestrator) is in the middle of its turn; remembers it and the running step
 When("an agent's turn of the run is under way", async ({ e2e }) => {
   const page = e2e.window;
-  await expect(page.getByTestId('run-status')).toHaveAttribute('data-status', 'running', { timeout: LOAD_TIMEOUT });
+  await expect(runScreenStatus(page)).toHaveAttribute('data-status', 'running', { timeout: LOAD_TIMEOUT });
   const card = workingCard(page).first();
   await expect(card).toBeVisible({ timeout: TURN_TIMEOUT });
   e2e.workingAgent = await card.getAttribute('data-agent');
   const running = await stepItems(page).evaluateAll((els) => els.filter((el) => el.classList.contains('running')).map((el) => el.innerText));
   e2e.workingStep = firstLine(running[0] || '');
-  e2e.runId = (await page.getByTestId('run-id').innerText()).trim();
+  e2e.runId = (await runScreenId(page).innerText()).trim();
 });
 
 When('I click "Pause after current step" on the run', async ({ e2e }) => {
@@ -66,7 +70,7 @@ Then('the run says it is pausing, waiting for the working agent to finish its tu
   await expect(line.getByTestId('run-cancel-pause')).toHaveAccessibleName('Cancel pause');
   await expect(line.getByTestId('run-cancel-pause')).toBeEnabled();
   // still running: the agent's turn is not cut
-  await expect(e2e.window.getByTestId('run-status')).not.toHaveAttribute('data-status', 'paused');
+  await expect(runScreenStatus(e2e.window)).not.toHaveAttribute('data-status', 'paused');
 });
 
 Then("the run shows where it paused and the next agent's turn", async ({ e2e }) => {
@@ -77,7 +81,7 @@ Then("the run shows where it paused and the next agent's turn", async ({ e2e }) 
 });
 
 Then('the run\'s status is {string} with the id {string}', async ({ e2e }, label, id) => {
-  const status = e2e.window.getByTestId('run-status');
+  const status = runScreenStatus(e2e.window);
   await expect(status).toHaveAttribute('data-status', id, { timeout: TURN_TIMEOUT });
   await expect(status).toHaveText(label);
 });
@@ -126,7 +130,7 @@ Then('the run goes on past the current turn without pausing', async ({ e2e }) =>
       .map((s) => ({ name: firstLine(s.text), cls: s.cls }));
     return steps.some((s) => /\b(running|waiting)\b/.test(s.cls) && s.name !== e2e.workingStep) ? 'went on' : steps.map((s) => `${s.name}:${s.cls}`).join(' | ');
   }, { timeout: TURN_TIMEOUT }).toBe('went on');
-  await expect(page.getByTestId('run-status')).not.toHaveAttribute('data-status', 'paused');
+  await expect(runScreenStatus(page)).not.toHaveAttribute('data-status', 'paused');
   await expect(page.getByTestId('run-pause-state').filter({ visible: true })).toHaveCount(0);
 });
 

@@ -14,6 +14,7 @@ const path = require('path');
 const { expect } = require('@playwright/test');
 const { VISUAL_NOW } = require('../support/fixed-clock');
 const { Given, When, Then } = require('./fixtures');
+const { LOAD_TIMEOUT, runScreenStatus, demoProjectCard, openProjects } = require('../support/run-screen');
 
 const root = path.join(__dirname, '..', '..');
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -53,13 +54,21 @@ Then('the sidebar does not offer {string}', async ({ e2e }, name) => {
   await expect(navItem(e2e.window, name)).toHaveCount(0);
 });
 
+// #412: the run's status is on the Run screen's tab row (run-screen-status), no longer in the header.
+// The status id (#266: the pill reads "Running", "Paused"…; its id stays in data-status). "idle": no
+// run is on screen, or the one shown is idle.
 Then('the run status shows {string}', async ({ e2e }, text) => {
-  // the status id (#266: the pill reads "Idle", "Running"…; its id stays in data-status)
-  await expect(e2e.window.getByTestId('run-status')).toHaveAttribute('data-status', text);
+  const page = e2e.window;
+  await expect(navItem(page, 'Home')).toBeVisible();
+  const shown = page.getByTestId('run-screen-status').filter({ visible: true });
+  if (text === 'idle' && !(await shown.count())) return;
+  await expect(runScreenStatus(page)).toHaveAttribute('data-status', text, { timeout: LOAD_TIMEOUT });
 });
 
+// #412: no Start in the header; the Start panel opens from Projects › a project's "Start workflow"
 Then('the Start a workflow button is enabled', async ({ e2e }) => {
-  await expect(e2e.window.getByTestId('quick-start')).toBeEnabled();
+  await openProjects(e2e);
+  await expect(demoProjectCard(e2e).getByRole('button', { name: 'Start workflow', exact: true })).toBeEnabled();
 });
 
 When('I open the {string} settings tab', async ({ e2e }, name) => {
@@ -232,6 +241,72 @@ Then('the notification centre is open', async ({ e2e }) => {
 
 Then('the header offers {string}', async ({ e2e }, name) => {
   await expect(header(e2e.window).getByRole('button', { name: entryName(name) })).toBeVisible();
+});
+
+// ---- the header without the run's controls (#412) -----------------------------------------------------
+// The header keeps: the project select (header-project), the 24/7 chip (occupancy-chip) and the usage
+// widget (usage-widget) right after it, the Oracle's button, the notifications bell, and the account chip
+// (account-chip) last at the right end. The run's status and id, its KPIs, Open logs, Start, Stop and
+// "Pause after current step" are gone from it (Stop and Pause are on the Run screen's tab row, #410).
+
+const HEADER_ITEMS = {
+  Project: (page) => projectSelect(page),
+  '24/7': (page) => header(page).getByTestId('occupancy-chip'),
+  Usage: (page) => header(page).getByTestId('usage-widget'),
+  Oracle: (page) => header(page).getByRole('button', { name: /^Oracle\b/ }),
+  Notifications: (page) => header(page).getByRole('button', { name: /^Notifications\b/ }),
+  Account: (page) => header(page).getByTestId('account-chip'),
+};
+
+// reading order: on the same row (vertical centres within the other's height) left to right, else top to bottom
+const comesAfter = (a, b) => {
+  const sameRow = Math.abs((a.y + a.height / 2) - (b.y + b.height / 2)) < Math.max(a.height, b.height) / 2;
+  return sameRow ? b.x >= a.x + a.width - 1 : b.y > a.y;
+};
+
+// | item |: Project, 24/7, Usage, Oracle, Notifications, Account
+Then('the header reads, left to right:', async ({ e2e }, table) => {
+  const page = e2e.window;
+  let prev = null;
+  for (const { item } of table.hashes()) {
+    const of = HEADER_ITEMS[item];
+    expect(of, `a known header item (${Object.keys(HEADER_ITEMS).join(', ')})`).toBeTruthy();
+    const el = of(page).first();
+    await expect(el, `the header's "${item}"`).toBeVisible({ timeout: LOAD_TIMEOUT });
+    const box = await el.boundingBox();
+    if (prev) expect(comesAfter(prev.box, box), `"${item}" comes after "${prev.item}" in the header`).toBe(true);
+    prev = { item, box };
+  }
+});
+
+// nothing the header shows lies to the right of the account chip
+Then('the account chip is at the right end of the header', async ({ e2e }) => {
+  const page = e2e.window;
+  const chip = HEADER_ITEMS.Account(page).first();
+  await expect(chip).toBeVisible({ timeout: LOAD_TIMEOUT });
+  const end = await chip.boundingBox();
+  const controls = header(page).locator('button, select, a, [role="button"]').filter({ visible: true });
+  for (const control of await controls.all()) {
+    const box = await control.boundingBox();
+    if (!box || (await control.getAttribute('data-testid')) === 'account-chip') continue;
+    const name = (await control.getAttribute('aria-label')) || (await control.innerText()).trim();
+    expect(box.x + box.width, `"${name}" ends before the account chip`).toBeLessThanOrEqual(end.x + end.width + 1);
+  }
+});
+
+Then('the header shows no run status, no run KPIs, and no Start, Stop, Pause after current step or Open logs button', async ({ e2e }) => {
+  const page = e2e.window;
+  const bar = header(page);
+  await expect(projectSelect(page)).toBeVisible();
+  for (const id of ['run-status', 'run-id', 'run-total-cost', 'quick-start', 'run-pause', 'run-stop']) {
+    await expect(bar.getByTestId(id), `the header's ${id}`).toHaveCount(0);
+  }
+  for (const name of ['Start', 'Stop', 'Pause after current step', 'Open logs']) {
+    await expect(bar.getByRole('button', { name, exact: true }).filter({ visible: true }), `the header's "${name}" button`).toHaveCount(0);
+  }
+  for (const kpi of ['Time', 'Sessions', 'Tokens in / out', 'Reasoning', 'Cost']) {
+    await expect(bar.getByText(kpi, { exact: true }).filter({ visible: true }), `the header's "${kpi}" KPI`).toHaveCount(0);
+  }
 });
 
 // ---- a failed app update (#279) -----------------------------------------------------------------------

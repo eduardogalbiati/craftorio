@@ -10,13 +10,14 @@ const fs = require('fs');
 const path = require('path');
 const { expect } = require('@playwright/test');
 const { Given, When, Then } = require('./fixtures');
+const { openStartPanel, runScreenStatus } = require('../support/run-screen');
 
 // a simulated run of software-development reaches its first gate in well under a minute
 const GATE_TIMEOUT = 120000;
 
+// #412: no Start in the header: the Start panel opens from Projects › the demo project's "Start workflow"
 When('I open the Start panel', async ({ e2e }) => {
-  await e2e.window.getByTestId('quick-start').click();
-  await expect(e2e.window.getByTestId('start-workflow')).toBeVisible();
+  await openStartPanel(e2e);
 });
 
 When('I pick {string} for {string}', async ({ e2e }, option, field) => {
@@ -34,14 +35,17 @@ Then('{string} is selected for {string}', async ({ e2e }, option, field) => {
 
 When('I start a simulated run with the task {string}', async ({ e2e }, task) => {
   const page = e2e.window;
-  if (!(await page.getByTestId('start-workflow').isVisible())) await page.getByTestId('quick-start').click();
+  await openStartPanel(e2e);
   await page.getByTestId('start-main-input').fill(task);
   await page.getByRole('checkbox', { name: /Simulation mode/ }).check();
   await page.getByTestId('start-workflow').click();
 });
 
+// #412: the run's status is on the Run screen's tab row
 Then('the run is running', async ({ e2e }) => {
-  await expect(e2e.window.getByTestId('run-status')).not.toHaveAttribute('data-status', 'idle', { timeout: 30000 });
+  const status = runScreenStatus(e2e.window);
+  await expect(status).toBeVisible({ timeout: 30000 });
+  await expect(status).not.toHaveAttribute('data-status', 'idle', { timeout: 30000 });
 });
 
 Then('a gate card waits for my approval', async ({ e2e }) => {
@@ -114,8 +118,11 @@ When('I open the run from Analytics', async ({ e2e }) => {
   await e2e.window.getByTestId('an-run-header').getByRole('button', { name: 'Open run', exact: true }).click();
 });
 
+// #412: no cost KPI in the header any more: the Run screen marks the estimated part on the cost of
+// the session it belongs to (data-testid session-cost, the same "estimated" badge)
 Then('the run\'s total cost is marked as estimated', async ({ e2e }) => {
-  await expect(e2e.window.getByTestId('run-total-cost')).toContainText(/estimated/i, { timeout: 30000 });
+  const costs = e2e.window.getByTestId('session-cost').filter({ visible: true });
+  await expect(costs.filter({ hasText: /estimated/i }).first()).toBeVisible({ timeout: 30000 });
 });
 
 Then('the run\'s {string} session shows {string}', async ({ e2e }, agent, text) => {
@@ -197,7 +204,7 @@ const visibleGroup = (page, name) => page.getByRole('radiogroup', { name, exact:
 
 When('I choose the workflow {string} in the Start panel', async ({ e2e }, name) => {
   const page = e2e.window;
-  if (!(await page.getByTestId('start-workflow').isVisible())) await page.getByTestId('quick-start').click();
+  await openStartPanel(e2e);
   await page.getByRole('combobox', { name: 'Workflow', exact: true }).selectOption(`${name}.yaml`);
 });
 

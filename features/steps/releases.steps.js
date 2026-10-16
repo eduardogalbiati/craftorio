@@ -7,6 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const { expect } = require('@playwright/test');
 const { Given, When, Then } = require('./fixtures');
+const { openStartPanel } = require('../support/run-screen');
 
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const stages = (page) => page.getByTestId('roadmap-stage');
@@ -114,7 +115,8 @@ Then('the next release\'s notes read {string}', async ({ e2e }, text) => {
 // name is "Release". The release workflow may have no main text input: filled only when shown.
 When('I start a simulated run of the workflow {string}', async ({ e2e }, file) => {
   const page = e2e.window;
-  if (!(await page.getByTestId('start-workflow').isVisible())) await page.getByTestId('quick-start').click();
+  // #412: no Start in the header: from Projects › the demo project's "Start workflow"
+  await openStartPanel(e2e);
   const select = page.getByRole('combobox', { name: 'Workflow', exact: true });
   await select.selectOption(file);
   await expect.poll(() => select.evaluate((el) => el.selectedOptions[0]?.textContent.trim())).toMatch(/^Release\b/);

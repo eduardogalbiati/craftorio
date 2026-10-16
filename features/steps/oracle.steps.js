@@ -10,6 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const { expect } = require('@playwright/test');
 const { Given, When, Then } = require('./fixtures');
+const { runTabRow, runScreenStatus } = require('../support/run-screen');
 
 // the Oracle's panel in view: the Dashboard's dock or the drawer (a closed drawer is aria-hidden and
 // the dock of a hidden Dashboard is not rendered, so only the open one matches)
@@ -85,14 +86,15 @@ When('I untick the Oracle wake-up {string}', async ({ e2e }, label) => {
   await expect(box).not.toBeChecked();
 });
 
-// the run of the gate card in view, stopped (confirmed in the "Stop workflow" dialog)
+// the run of the gate card in view, stopped (confirmed in the "Stop workflow" dialog). #412: Stop is
+// on the Run screen's tab row (run-tab-row › run-stop), the status there (run-screen-status)
 When('I stop the run', async ({ e2e }) => {
   const page = e2e.window;
   e2e.stoppedRunId = await page.getByTestId('run-gate').first().getAttribute('data-run');
   expect(e2e.stoppedRunId, 'the gate card names its run').toBeTruthy();
-  await page.getByRole('button', { name: 'Stop', exact: true }).click();
+  await runTabRow(page).getByRole('button', { name: 'Stop', exact: true }).click();
   await page.getByRole('dialog', { name: 'Stop workflow' }).getByRole('button', { name: 'Stop', exact: true }).click();
-  await expect(page.getByTestId('run-status')).toHaveText(/cancelled/i, { timeout: 30000 });
+  await expect(runScreenStatus(page)).toHaveText(/cancelled/i, { timeout: 30000 });
 });
 
 Then('the Oracle shows a notice for the run with the status {string} and its cost', async ({ e2e, $testInfo }, status) => {

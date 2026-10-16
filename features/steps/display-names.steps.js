@@ -70,11 +70,11 @@ When('I search the runs for {string}', async ({ e2e }, text) => {
   await expect(page.locator(`[data-testid="run-list-row"][data-run$="${text}"]`).filter({ visible: true }).first()).toBeVisible({ timeout: LOAD_TIMEOUT });
 });
 
-// the Run screen's Chat / Details switch
+// the Run screen's Chat / Details / 3D tabs (#410: a tablist "Run view" on the screen's first row)
 When('I switch the run to its chat', async ({ e2e }) => {
   const page = e2e.window;
-  await page.getByRole('group', { name: 'Run view', exact: true }).filter({ visible: true }).first()
-    .getByRole('button', { name: 'Chat', exact: true }).click();
+  await page.getByRole('tablist', { name: 'Run view', exact: true }).filter({ visible: true }).first()
+    .getByRole('tab', { name: 'Chat', exact: true }).click();
   await expect(region(page, 'run chat steps').filter({ visible: true }).first()).toBeVisible({ timeout: LOAD_TIMEOUT });
 });
 

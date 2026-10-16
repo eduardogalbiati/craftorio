@@ -17,7 +17,8 @@
 //   A running one pulses (a CSS animation on it or on its ::before dot, like the sidebar's blue dot).
 // - data-testid="run-chip": the kanban's run chip, on the roadmap card too: a button (status, the
 //   workflow's display name, the run's title) with data-run = the run id; a click opens the run.
-// - data-testid="run-id" on the Run screen's run id (index.html's #run-id).
+// - data-testid="run-screen-id" on the Run screen's run id, on its tab row (#412: the header's #run-id
+//   is gone; features/support/run-screen.js).
 // - data-testid="roadmap-done-chip": a stage's "+n done" / "Hide n done" button, aria-expanded.
 // - role group "Roadmap items" with the buttons "Planned" and "All" (aria-pressed).
 // - data-testid="roadmap-date-filter": a <select> (accessible name "Date range") with the 7 ranges.
@@ -30,6 +31,7 @@ const fs = require('fs');
 const path = require('path');
 const { expect } = require('@playwright/test');
 const { Given, When, Then } = require('./fixtures');
+const { runScreenId } = require('../support/run-screen');
 
 const LOAD_TIMEOUT = 30000;
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -152,7 +154,7 @@ When('I click the run chip of the roadmap item {string}', async ({ e2e }, title)
 });
 
 Then('the run screen shows the run {string}', async ({ e2e }, fragment) => {
-  await expect(e2e.window.getByTestId('run-id')).toContainText(fragment, { timeout: LOAD_TIMEOUT });
+  await expect(runScreenId(e2e.window)).toContainText(fragment, { timeout: LOAD_TIMEOUT });
 });
 
 Then('the roadmap item {string} shows the status {string}', async ({ e2e }, title, label) => {
