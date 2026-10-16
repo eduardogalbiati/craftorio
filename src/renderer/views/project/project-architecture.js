@@ -31,8 +31,8 @@
 // #382: its connections panel, views/project/project-city-connections.js); a building's "Open in
 // Facts" comes back here with its hotspot row marked and scrolled to. The city carries the agents of
 // the project's runs in progress (#374, views/project/project-city-agents.js); openCity(id) opens
-// the tab on the City view (a run's "Replay on the map").
-// Also the Refactor tab's proposal list (showRefactor, refactor:proposals).
+// the tab on the City view (a run's "Replay on the map", a release's "Show on the map", #376:
+// views/project/project-city-release.js).
 // Drawn into the box project.js gives it (show), its clicks and changes routed from the project
 // page's listeners (onClick, onChange). Uses app.js globals at call time: api, esc, errMsg, fmtNum,
 // fmtUsd (usage-widget.js), showToast, state (projects, simulationOnly). Browser: window.ProjectArchitecture.
@@ -447,6 +447,8 @@
     c.connections ||= (window.CityConnections && window.ProjectCityConnections?.attach(c.city)) || null;
     // #375: an issue's or a stage's expected footprint on its city (views/project/project-city-impact.js)
     c.impact ||= (window.CityImpact && window.ProjectCityImpact?.attach(c.city, { projectId: c.id })) || null;
+    // #376: a release on its city, the previous release in grey (views/project/project-city-release.js)
+    c.release ||= (window.CityRelease && window.ProjectCityRelease?.attach(c.city, { projectId: c.id })) || null;
     if (!c.box.contains(c.city.el)) {
       c.box.innerHTML = `<div data-testid="architecture" class="arch-city-mode"><div class="row arch-mode-row">${modeSwitch()}</div><div data-arch-city-slot></div></div>`;
       c.box.querySelector('[data-arch-city-slot]').appendChild(c.city.el);
@@ -556,6 +558,8 @@
     if (cur?.id !== id) {
       cur?.connections?.destroy();
       cur?.agents?.destroy();
+      cur?.impact?.destroy();
+      cur?.release?.destroy();
       cur?.city?.destroy(); // another project: the previous city gives its WebGL context back
       cur = { id, box, facts: null, view: null, reports: [], estimate: null, error: null, loadError: null, loading: false, reportId: null, since: '', until: '', includeMass: true, editing: false, seq: 0,
         cityMap: null, mapEstimate: null, mapStarting: false, mapRun: null, mapStep: null, city: null, agents: null, connections: null, focusFile: null,
@@ -611,17 +615,6 @@
     return true;
   }
 
-  /** The Refactor tab's proposals of project `id` in `box` (the tab's empty state stays when there is none). */
-  async function showRefactor(id, box, empty) {
-    let list = [];
-    try { list = (await api.refactorProposals(id)) || []; } catch (e) { box.innerHTML = `<div class="usage-unavailable" role="alert">Could not read the proposals: ${esc(errMsg(e))}</div>`; return; }
-    if (empty) empty.classList.toggle('hidden', list.length > 0);
-    box.innerHTML = list.length ? `<h3 class="arch-sub">Proposals</h3><ul class="arch-findings" data-testid="refactor-proposals">${list.map((p) => `<li class="arch-finding" data-testid="refactor-proposal">
-      <div class="row arch-finding-head"><b>${esc(p.title)}</b><span class="badge">${esc(p.source)}</span><span class="badge${p.severity === 'high' ? ' warn' : ''}">${esc(p.severity || '')}</span><span class="badge mono">${esc(p.kind || '')}</span></div>
-      <div class="small">${(p.files || []).map((x) => `<span class="mono">${esc(x.path)}</span>`).join(', ')}</div>
-      <div class="small"><b>Refactor:</b> ${esc(p.refactor || '')}</div></li>`).join('')}</ul>` : '';
-  }
-
   // the runs' events reach the tab whatever screen started the run
   if (typeof api !== 'undefined' && typeof api.onEvent === 'function') api.onEvent(onRunEvent);
 
@@ -631,6 +624,5 @@
     onRunEvent,
     openCity,
     show,
-    showRefactor,
   };
 })();

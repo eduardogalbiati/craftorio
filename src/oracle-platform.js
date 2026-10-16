@@ -55,7 +55,14 @@ function labelsResult(out) {
   return list.map((l) => (l.description ? { name: l.name, description: l.description } : { name: l.name }));
 }
 
+// #360: the CI's recent runs, the network read an analysis seed may declare (read-only)
+const CI_RUNS_LIMIT = 20;
+const ciRunsCommand = (platform, { target, limit = CI_RUNS_LIMIT }) => platformOrDefault(platform).ciRunsCommand({ target, limit });
+const ciRunsResult = (platform, text) => platformOrDefault(platform).parseCiRuns(text);
+
 module.exports = {
+  ciRunsCommand,
+  ciRunsResult,
   ISSUE_STATES,
   labelsCommand,
   labelsResult,

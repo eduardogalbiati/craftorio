@@ -15,6 +15,7 @@ const fs = require('fs');
 const path = require('path');
 const supervisor = require('./supervisor');
 const registry = require('./shared/providers');
+const Language = require('./shared/language');
 
 // the provider type of the default model's CLI (Claude Code)
 const DEFAULTS = { provider: registry.resolve('claude-opus-5-5').type, model: 'claude-opus-5-5', effort: '' };
@@ -35,15 +36,16 @@ const RULES = [
   'Flag problems early (for example: the issue already has an open PR, the worktree started from an old base, a loop repeating the same failure, the cost growing fast) and recommend an action. When you flag something, make the first line of your reply "FLAG: <one-line summary>".',
   'Never approve, reject or answer a human gate: say that a gate waits for the person and what they should weigh. Never prescribe a code fix: say which step or agent of the workflow should handle it, with the evidence and your hypotheses.',
   'You are read-only. Your working directory is the run folder: read events.jsonl, sessions/ and handoffs/ when you need details.',
-  'Write in English.',
+  'Answer briefly, in plain language, in the language the Language line names for chat replies (English when there is none).',
 ].join('\n');
 
 /**
  * The watches of a service. `events` is the service's EventEmitter (run:event in, supervisor:watch
- * out); `liveRun(runId)` the run in progress; `runFolder(runId)`, `workflowDirs()` and `skillsDirs()`
- * are read at call time; `notify(notice)` raises a desktop notification.
+ * out); `liveRun(runId)` the run in progress; `runFolder(runId)`, `workflowDirs()`, `skillsDirs()`
+ * and `language()` (Settings' language, #327: the [Language] line of each turn) are read at call
+ * time; `notify(notice)` raises a desktop notification.
  */
-function createWatches({ events, liveRun, runFolder, workflowDirs, skillsDirs, resolveCommand, notify = () => {}, batchMs = BATCH_MS }) {
+function createWatches({ events, liveRun, runFolder, workflowDirs, skillsDirs, resolveCommand, notify = () => {}, batchMs = BATCH_MS, language = () => null }) {
   const watches = new Map();
 
   events.on('run:event', (ev) => {
@@ -77,11 +79,13 @@ function createWatches({ events, liveRun, runFolder, workflowDirs, skillsDirs, r
   const publish = (w, message = null) => events.emit('supervisor:watch', { runId: w.runId, message, watch: { ...publicState(w), messages: undefined } });
 
   function prompt(w, body) {
+    // every turn starts with the [Language] line, so a change applies from the next one (#327);
     // a new conversation (first turn, or a provider that cannot resume) gets the rules and the report
-    if (w.sessionId) return body;
+    const line = Language.languageLine({ language: language() });
+    if (w.sessionId) return `${line}\n\n${body}`;
     const { resolveSkill, skillPrompt } = require('./skills');
     const skill = resolveSkill(skillsDirs(), 'run-supervisor');
-    return [skillPrompt(skill), RULES, supervisor.runReport(w.runDir, { workflowsDir: workflowDirs() }), body].join('\n\n');
+    return [skillPrompt(skill), line, RULES, supervisor.runReport(w.runDir, { workflowsDir: workflowDirs() }), body].join('\n\n');
   }
   const newEvents = (w) => (w.pending.length ? `New events in the run:\n${w.pending.join('\n')}` : '');
 

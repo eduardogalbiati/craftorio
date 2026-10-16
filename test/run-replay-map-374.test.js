@@ -19,8 +19,7 @@ function renderSummary(run, { cityAgents = true } = {}) {
   const buttons = new Map();
   const box = {
     _html: null,
-    set innerHTML(html) {
-      buttons.clear();
+    set innerHTML(html) { // stands for both #run-summary and the tab row's #run-actions (#410)
       for (const [, id] of html.matchAll(/id="([^"]+)"/g)) buttons.set(id, { id, onclick: null });
     },
     querySelector: () => null,
@@ -33,7 +32,7 @@ function renderSummary(run, { cityAgents = true } = {}) {
     document: { activeElement: {} }, // the title is not being edited
 
     state: { run, workflows: [] },
-    $: (sel) => (sel === '#run-summary' ? box : buttons.get(sel.replace(/^#/, '')) || null),
+    $: (sel) => (sel === '#run-summary' || sel === '#run-actions' ? box : buttons.get(sel.replace(/^#/, '')) || null),
     esc: (s) => String(s ?? ''),
     askPrStates: () => {},
     askScratch: () => {},

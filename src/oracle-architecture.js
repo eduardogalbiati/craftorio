@@ -1,8 +1,9 @@
 // The Oracle's architecture analysis of a project (#356): one turn, outside its conversation, that
 // reads the facts model (src/shared/architecture-model.js: hotspots, co-change pairs, languages)
 // and checks the top hotspots with its read-only repository tools (repo_read, repo_git). It
-// answers a report in English, { summary, areas: [{ area, verdict }], findings: [{ kind, title,
-// files: [{ path, lines }], evidence, severity, refactor }] }, checked against REPORT_SCHEMA with
+// answers a report in the agents language (#327: the [Language] line of oneTurn), { summary, areas: [{ area, verdict }], findings: [{ kind, title,
+// files: [{ path, lines }], evidence, severity, refactor }] }, checked against REPORT_SCHEMA
+// (src/shared/architecture-report.js, shared with the Refactor proposals workflow, #378) with
 // validateSchema (#338): an invalid answer is an error, never half a report. It never edits code
 // and never prescribes a fix to a run (the supervisor rule): a finding goes to the Refactor tab,
 // where the Product Owner prioritizes. The turn runs on the Oracle's model in its daily budget
@@ -20,45 +21,13 @@
 const fs = require('fs');
 const path = require('path');
 const { validateSchema } = require('./json-schema');
+const { KINDS, REPORT_SCHEMA, SEVERITIES } = require('./shared/architecture-report');
 
-const SEVERITIES = ['low', 'medium', 'high'];
-const KINDS = ['missing-abstraction', 'duplicated-rule', 'wrong-dependency', 'oversized-unit', 'test-gap', 'other'];
 const ESTIMATE_BASIS = 5;
 const PROMPT_ROWS = 15;
 const SETTINGS_FILE = 'settings.json';
 const CITY_PLAN_FILE = 'city-plan.json';
 const PLAN_HISTORY_DIR = 'city-plan-history';
-
-const LINE_TEXT = { type: 'string', minLength: 1 };
-const REPORT_SCHEMA = {
-  type: 'object',
-  required: ['summary', 'areas', 'findings'],
-  properties: {
-    summary: LINE_TEXT,
-    areas: {
-      type: 'array',
-      items: { type: 'object', required: ['area', 'verdict'], properties: { area: LINE_TEXT, verdict: LINE_TEXT } },
-    },
-    findings: {
-      type: 'array',
-      items: {
-        type: 'object',
-        required: ['kind', 'title', 'files', 'evidence', 'severity', 'refactor'],
-        properties: {
-          kind: LINE_TEXT,
-          title: LINE_TEXT,
-          files: {
-            type: 'array',
-            items: { type: 'object', required: ['path'], properties: { path: LINE_TEXT, lines: { type: ['string', 'integer'] } } },
-          },
-          evidence: LINE_TEXT,
-          severity: { type: 'string', enum: SEVERITIES },
-          refactor: LINE_TEXT,
-        },
-      },
-    },
-  },
-};
 
 // The JSON of an answer: an object, a ```json fence (the last one), or the text itself
 function parseAnswer(input) {
@@ -134,7 +103,7 @@ function analysisPrompt({ project, model }) {
     'Files that change together (share of the commits of either file):',
     ...(pairs.length ? pairs.map((p) => `- ${p.a} + ${p.b}: ${p.together} commits together (${Math.round(p.share * 100)}%)`) : ['- none']),
     '',
-    `Answer with one JSON object in a \`\`\`json fence, in English, matching this schema. kind is one of ${KINDS.join(', ')}; severity is one of ${SEVERITIES.join(', ')}; files give the lines ("12-40") your evidence points to.`,
+    `Answer with one JSON object in a \`\`\`json fence, its prose in the language the Language line names for documents (English when there is none), matching this schema. kind is one of ${KINDS.join(', ')}; severity is one of ${SEVERITIES.join(', ')}; files give the lines ("12-40") your evidence points to.`,
     JSON.stringify(REPORT_SCHEMA),
   ].join('\n');
 }
@@ -280,6 +249,7 @@ module.exports = {
   KINDS,
   listReports,
   mockReport,
+  parseAnswer,
   readPlan,
   readSettings,
   REPORT_SCHEMA,

@@ -72,6 +72,7 @@ async function renderSettings() {
     </div>`).join('');
   $('#set-ws-folders').querySelectorAll('[data-open]').forEach((b) => (b.onclick = () => api.openPath(b.dataset.open)));
   renderTimeZone();
+  window.LanguageSettings.render($('#set-language')); // #327, #328: settings-language.js
   window.Findings?.renderList($('#set-findings-list'));
   document.querySelectorAll('[data-setting]').forEach((el) => (el.checked = !!state.settings[el.dataset.setting]));
   const platform = $('#set-backlog-platform');
@@ -85,6 +86,7 @@ async function renderSettings() {
   renderConcurrency();
   renderFallbackSettings();
   renderMemoryGuard();
+  $('#set-base-check-on-red').value = { onRed: 'fix', ...(state.settings.baseCheck || {}) }.onRed;
   renderOracleSettings();
   renderSelfHealing();
   renderAppUpdate();
@@ -621,6 +623,7 @@ registerView({
                 </div>
               </div>
               <p id="ws-error" class="error small"></p>
+              <div id="set-language"></div>
               <h3 class="s-subtitle">Backlog</h3>
               <div class="s-group">
                 <div class="s-row">
@@ -847,6 +850,13 @@ registerView({
                   <div class="s-ctrl"><input type="number" id="set-mg-floor" data-testid="memory-guard-floor" min="0" max="50" step="1" class="s-num" aria-label="Free memory floor, percent" /></div>
                 </div>
               </div>
+              <h3 class="s-subtitle">Base check</h3>
+              <div class="s-group">
+                <div class="s-row">
+                  <div class="s-label"><b>When the base goes red</b><span>After a merge, the full unit suite runs on the base in a clean worktree, in simulation (#405). A test red there, or counted as pre-existing by 2 runs, files a bug issue; with a fix item, a new stage at the front of the roadmap fixes it. Nothing is pushed and no gate is answered.</span></div>
+                  <div class="s-ctrl">${window.Select.markup('id="set-base-check-on-red" aria-label="When the base goes red" data-testid="base-check-on-red"', [['off', 'Off'], ['issue', 'Issue only'], ['fix', 'Issue + fix item']], 'fix')}</div>
+                </div>
+              </div>
               <h3 class="s-subtitle">Oracle</h3>
               <div id="set-oracle" class="s-group">
                 <div class="s-row" id="set-oracle-self-healing-row">${selfHealingHtml({}, null)}</div>
@@ -941,6 +951,7 @@ registerView({
     $('#set-mp-auto').onclick = machineProfileToAuto;
     $('#set-mp-apply').onclick = applyMachineSuggestion;
     for (const sel of ['#set-mg-enabled', '#set-mg-limit', '#set-mg-floor']) $(sel).onchange = saveMemoryGuard;
+    $('#set-base-check-on-red').onchange = async (e) => { state.settings = await api.setSettings({ baseCheck: { onRed: e.target.value } }); };
     for (const sel of ['#set-oracle-budget', '#set-oracle-compact', '#set-oracle-park', '#set-oracle-self-healing']) $(sel).onchange = saveOracleSettings;
     $('#set-oracle-self-healing-perms').onclick = () => showView('nightwatch');
     for (const sel of ['#set-live-cap', '#set-live-stages', '#set-live-budget', '#set-live-refresh']) $(sel).onchange = saveLiveSettings;

@@ -8,7 +8,7 @@
 //   over runs:active, on load, focus, reconnect and after run events, so the sidebar's "waiting
 //   for you" survives a reload) and how a run is opened (selectRun, showRun, openGateOf);
 // - navigation: init(), showView, the sidebar's Run item and runs menu (renderNavRuns), the top
-//   bar (renderHeader, stopRun) and render(), which also draws the Run screen while it shows;
+//   bar (renderHeader) and render(), which also draws the Run screen while it shows;
 // - what the frame shows over any screen: desktop notifications' context, developer mode, the
 //   confirm dialog, toasts.
 // Shared pieces with a file of their own: start-drawer.js, usage-widget.js, gate-panel.js,
@@ -57,14 +57,14 @@ const state = {
   wf: null,           // workflow selected in the start panel
   category: null,     // panel category filter (null = all)
   // Runs followed in this window (several can be in progress: Settings › Execution › Concurrent
-  // runs), by run id; runId is the one the Run screen and the top bar show. state.run, sessions,
+  // runs), by run id; runId is the one the Run screen and the Run item show. state.run, sessions,
   // steps, orchLog, events, selected and openDetails read the selected run (defined below).
   runs: new Map(),
   runId: null,
   // run id → { title, customTitle, pr } (#84): what every list shows of a run, so they agree; from
   // runs:list, runs:active, the project's runs and 'run:meta' (PR state changes, a title set)
   runMeta: new Map(),
-  tab: 'detail',
+  tab: 'artifacts', // the Run screen's details tab: a run opens on its Artifacts (#410)
   workflowsTab: 'runs', // 'definitions' | 'runs' | 'builder' | 'pipelines' (the Workflows screen's tabs, each a menu entry)
   pendingProject: null, // project to preselect in the panel on open
   mainKey: null,      // the Start drawer's main free-text input (usually `task`), never remembered
@@ -103,9 +103,11 @@ const isRunLive = (runId) => state.runs.get(runId)?.run?.status === 'running';
 const liveRuns = () => [...state.runs.values()].filter((v) => v.run?.status === 'running');
 const pendingGates = () => [...state.runs.values()].flatMap((v) => [...v.approvals.values()]);
 
-// Shows a run in the top bar and, with `open`, opens it in the remembered run view (showRun).
+// Makes a run the selected one and, with `open`, opens it in the remembered run view (showRun).
+// Another run opens on its Artifacts tab (#410; renderRunScreen syncs the tabs to state.tab).
 function selectRun(runId, { open = true } = {}) {
   if (!state.runs.has(runId)) return;
+  if (runId !== state.runId) state.tab = 'artifacts';
   state.runId = runId;
   if (open) showRun(runId);
   scheduleRender();
@@ -123,6 +125,7 @@ function setRunView(view) {
 // not be here yet.
 function showRun(runId, { workflow, running } = {}) {
   const v = state.runs.get(runId);
+  if (v && runId !== state.runId) state.tab = 'artifacts';
   if (v) state.runId = runId;
   const live = running ?? isRunLive(runId);
   if (state.runView === 'chat' && window.openRunChat) {
@@ -146,6 +149,7 @@ async function openPastRun(runId) {
     v.run = { id: runId, status: 'loading', startedAt: Date.now(), workflow: null, inputs: {} };
     state.runs.set(runId, v);
   }
+  if (runId !== state.runId) state.tab = 'artifacts';
   state.runId = runId;
   showView('run');
   await hydrateRun(runId);
@@ -163,12 +167,7 @@ window.openPastRun = openPastRun;
 // Initialization
 // ---------------------------------------------------------------------------
 async function init() {
-  // top bar
-  $('#btn-stop').onclick = stopRun;
-  $('#btn-pause').onclick = pauseRun;
-  $('#btn-open-dir').onclick = () => api.openRunDir(state.run?.id);
-  $('#btn-quick-start').onclick = () => openDrawer();
-  $('#run-meta').onclick = () => state.run && selectRun(state.run.id);
+  // #412: Stop and Pause sit on the Run screen's tab row (run.js mount)
   $('#nav-run-gates').onclick = (e) => { e.stopPropagation(); openNextGate(); };
 
   // navigation (delegated: one listener for the static entries and those views/ added with registerView)
@@ -879,35 +878,10 @@ function totals(sessions = state.sessions) {
   return t;
 }
 
+// #412: the bar no longer shows a run (its status, KPIs, Stop live on the Run screen): the sidebar's
+// runs, the Start drawer's button and the dashboard
 function renderHeader() {
-  const r = state.run;
-  const pill = $('#run-status');
-  const st = r?.status || 'idle';
-  pill.className = `pill pill-${st}`;
-  pill.dataset.status = st;
-  pill.textContent = statusLabel(r);
-  $('#run-meta').classList.toggle('clickable', !!r);
-  $('#run-meta').title = r ? `View ${runLabel(r)}` : 'View the current run';
   renderNavRuns();
-  $('#run-id').textContent = r?.id || '';
-  $('#kpi-time').textContent = r ? fmtDur((r.finishedAt || Date.now()) - r.startedAt) : '—';
-  $('#kpi-time').title = r?.gateWaitMs ? `Of which ${fmtDur(r.gateWaitMs)} waiting for you at gates` : '';
-  $('#kpi-sessions').textContent = String([...state.sessions.keys()].filter((k) => k !== 'orchestrator').length);
-  const t = totals();
-  $('#kpi-tokens').textContent = `${fmtNum(t.input + t.cache_read)} / ${fmtNum(t.output)}`;
-  $('#kpi-reasoning').textContent = fmtNum(t.reasoning);
-  // #233: marked when part of it is estimated or was not recorded (run-list.js sessionsCostMarks)
-  $('#kpi-cost').innerHTML = `$${t.cost.toFixed(4)}${sessionsCostMarks([...state.sessions.values()])}`;
-  // several runs in progress: their total next to the selected run's numbers
-  const live = liveRuns();
-  const others = live.length > 1 || (live.length && !isRunLive(state.runId));
-  $('#kpi-all').classList.toggle('hidden', !others);
-  if (others) {
-    const all = live.reduce((a, v) => { const x = totals(v.sessions); return { tokens: a.tokens + x.input + x.cache_read + x.output, cost: a.cost + x.cost }; }, { tokens: 0, cost: 0 });
-    $('#kpi-all-value').textContent = `${live.length} · $${all.cost.toFixed(4)}`;
-    $('#kpi-all').title = `${live.length} runs in progress: ${fmtNum(all.tokens)} tokens, $${all.cost.toFixed(4)} in total`;
-  }
-  renderRunControls(r); // Stop and Pause (run-controls.js)
   const blocked = oneRunAtATime();
   setStartDisabled(blocked || !state.wf || !!state.wf.error);
   $('#btn-start').textContent = blocked ? 'A workflow is already running' : state.pipeline ? 'Start pipeline' : 'Start workflow';

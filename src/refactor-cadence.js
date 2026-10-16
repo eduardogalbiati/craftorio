@@ -1,0 +1,110 @@
+// The Refactor tab's cadence (#357): "Add a refactor to the roadmap every X runs", off by default,
+// X from 3 to 50. Pure: which runs count (the project's real finished runs, never a simulated or
+// unfinished one), how many runs until the next refactor, which proposal is picked (the top ranked
+// one with an issue and no unfinished roadmap item) and the roadmap stage it goes to (the Product
+// Owner's placement rules: the earliest stage after every stage holding an item that shares a file
+// with it, or that touches a file the conflict map records merge conflicts on as it does). The service
+// (src/service/channels/refactor.js) stores the cadence and adds the item through src/roadmap.js.
+
+'use strict';
+
+const RoadmapModel = require('./shared/roadmap-model');
+
+const CADENCE_MIN = 3;
+const CADENCE_MAX = 50;
+const DEFAULT_CADENCE = Object.freeze({ on: false, every: 10 });
+const UNFINISHED_RUN = new Set(['running', 'interrupted']);
+
+/** The project's real (not simulated) finished runs, finished after `since` when given. */
+function countedRuns(runs, project, since = null) {
+  const from = since ? Date.parse(since) : -Infinity;
+  return (runs || []).filter((r) => r && !r.mock && r.finishedAt && !UNFINISHED_RUN.has(r.status)
+    && r.projectId === project?.id && Date.parse(r.finishedAt) > from).length;
+}
+
+/** The runs still to finish before the next refactor joins the roadmap (0 when due). */
+const runsUntilNext = ({ runs, project, every, since = null }) => Math.max(0, every - countedRuns(runs, project, since));
+
+/** A valid cadence { on, every }; throws when every is not a whole number from 3 to 50. */
+function cleanCadence({ on, every } = {}) {
+  if (!Number.isInteger(every) || every < CADENCE_MIN || every > CADENCE_MAX) {
+    throw new Error(`A refactor every ${every} runs is out of range: pick a whole number from ${CADENCE_MIN} to ${CADENCE_MAX}.`);
+  }
+  return { on: !!on, every };
+}
+
+/** The issue numbers of the roadmap's items not finished yet (roadmap-model isFinished). */
+const unfinishedNumbers = (roadmap) => new Set((roadmap?.stages || []).flatMap((s) => s.items || [])
+  .filter((x) => !RoadmapModel.isFinished(x)).flatMap((x) => RoadmapModel.itemIssues(x).map((i) => Number(i.number))));
+
+/** The top ranked open proposal with an issue and no unfinished roadmap item, or null (nothing ready). */
+function pickNext(proposals, roadmap) {
+  const busy = unfinishedNumbers(roadmap);
+  const ready = (proposals || []).filter((p) => p && p.status !== 'dismissed' && Number.isInteger(p.rank) && p.issue && !busy.has(Number(p.issue)));
+  return ready.sort((a, b) => a.rank - b.rank)[0] || null;
+}
+
+// a file path, from a string or a finding's { path }
+const pathOf = (f) => (typeof f === 'string' ? f : f?.path || f?.file || '');
+
+/** A proposal's files: its files' paths, then its target, without repeats. */
+const filesOf = (p) => [...new Set([...(p?.files || []).map(pathOf), ...(p?.target ? [p.target] : [])].filter(Boolean))];
+
+// the files the conflict map records merge conflicts on (src/conflict-map.js files[].conflicts)
+const conflictFiles = (conflictMap) => new Set((conflictMap?.files || []).filter((f) => f.conflicts > 0).map((f) => f.file));
+
+// whether an item touches what the refactor touches: a shared file, or both touch conflicting files
+function clashes(item, files, hubs) {
+  const own = (item.files || []).map(pathOf);
+  if (own.some((f) => files.has(f))) return true;
+  return hubs.size > 0 && own.some((f) => hubs.has(f)) && [...files].some((f) => hubs.has(f));
+}
+
+/**
+ * The 0-based stage the refactor goes to (stages.length: a new stage at the end): after the last stage
+ * it clashes with, never in a stage already finished nor in a disabled one (#284).
+ */
+function placeRefactor({ roadmap, files, conflictMap = null }) {
+  const mine = new Set((files || []).map(pathOf).filter(Boolean));
+  const hubs = conflictFiles(conflictMap);
+  const stages = roadmap?.stages || [];
+  let last = -1;
+  stages.forEach((s, n) => { if ((s.items || []).some((x) => clashes(x, mine, hubs))) last = n; });
+  const open = stages.findIndex((s) => (s.items || []).some((x) => !RoadmapModel.isFinished(x)));
+  let stage = Math.max(last + 1, open < 0 ? stages.length : open);
+  while (stage < stages.length && stages[stage].disabled) stage++;
+  return { stage };
+}
+
+/**
+ * The proposals as the tab lists them: each with its issue's state on the platform (`issueState`,
+ * from the synced backlog's `issues`) and its roadmap item's (`roadmapStatus`, `roadmapStage`, from
+ * src/roadmap.js issueStages: number → { stage, status }), whether that item is unfinished
+ * (`roadmapUnfinished`, from unfinishedNumbers) and its files (`targetFiles`, filesOf).
+ */
+function withIssueStatus(proposals, stages, issues = [], unfinished = new Set()) {
+  const byNumber = new Map((issues || []).map((i) => [Number(i.number), i]));
+  return (proposals || []).map((p) => {
+    const n = Number(p.issue) || null;
+    const placed = n ? stages.get(n) : null;
+    return {
+      ...p, issueState: n ? byNumber.get(n)?.state || null : null, roadmapStatus: placed?.status || null, roadmapStage: placed?.stage || null,
+      roadmapUnfinished: !!n && unfinished.has(n), targetFiles: filesOf(p),
+    };
+  });
+}
+
+module.exports = {
+  CADENCE_MAX,
+  CADENCE_MIN,
+  cleanCadence,
+  countedRuns,
+  DEFAULT_CADENCE,
+  filesOf,
+  pathOf,
+  pickNext,
+  placeRefactor,
+  runsUntilNext,
+  unfinishedNumbers,
+  withIssueStatus,
+};

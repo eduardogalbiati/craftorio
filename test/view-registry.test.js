@@ -11,7 +11,7 @@ const vm = require('vm');
 
 const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'view-registry.js'), 'utf8');
 
-/** A sidebar and a content/body pair with just enough of the DOM API for registerView. */
+/** The sidebar's menu (#411) and a content/body pair with just enough of the DOM API for registerView. */
 function makeFakeDom({ navItems = [] } = {}) {
   const mainContent = { html: [], insertAdjacentHTML(_pos, markup) { this.html.push(markup); } };
   const body = { html: [], insertAdjacentHTML(_pos, markup) { this.html.push(markup); } };
@@ -20,10 +20,6 @@ function makeFakeDom({ navItems = [] } = {}) {
     querySelectorAll(sel) {
       if (sel !== '[data-order]') throw new Error(`unsupported selector: ${sel}`);
       return this.children.filter((c) => c.dataset.order !== undefined);
-    },
-    querySelector(sel) {
-      if (sel !== '.nav-spacer') throw new Error(`unsupported selector: ${sel}`);
-      return this.children.find((c) => c.className === 'nav-spacer') || null;
     },
     insertBefore(node, ref) {
       const idx = ref ? this.children.indexOf(ref) : this.children.length;
@@ -34,7 +30,7 @@ function makeFakeDom({ navItems = [] } = {}) {
   const document = {
     querySelector(sel) {
       if (sel === 'main.content') return mainContent;
-      if (sel === 'nav.sidebar') return sidebar;
+      if (sel === 'nav.sidebar .sidebar-menu') return sidebar;
       throw new Error(`unsupported selector: ${sel}`);
     },
     createElement(tag) { return { tagName: tag, className: '', dataset: {}, innerHTML: '' }; },
@@ -72,7 +68,7 @@ test('registerView: without markup or modals, neither main.content nor the body 
 });
 
 test('registerView: the nav button carries data-view, data-order and its icon/label, with no title by default', () => {
-  const dom = makeFakeDom({ navItems: [{ className: 'nav-spacer' }] });
+  const dom = makeFakeDom();
   const registerView = load(dom);
   registerView({ id: 'usage', nav: { label: 'Usage', order: 90, icon: '<svg></svg>' } });
   const btn = dom.sidebar.children[0];
@@ -84,7 +80,7 @@ test('registerView: the nav button carries data-view, data-order and its icon/la
 });
 
 test('registerView: a nav title is set on the button when given', () => {
-  const dom = makeFakeDom({ navItems: [{ className: 'nav-spacer' }] });
+  const dom = makeFakeDom();
   const registerView = load(dom);
   registerView({ id: 'sessions', nav: { label: 'Sessions', order: 10, title: 'Claude Code, Codex and Grok sessions' } });
   assert.equal(dom.sidebar.children[0].title, 'Claude Code, Codex and Grok sessions');
@@ -94,25 +90,23 @@ test('registerView: the nav entry is placed before the first entry with a greate
   const dom = makeFakeDom({ navItems: [
     { dataset: { order: '80' } }, // skills
     { dataset: { order: '100' } }, // analytics
-    { className: 'nav-spacer' },
   ] });
   const registerView = load(dom);
   registerView({ id: 'usage', nav: { label: 'Usage', order: 90 } });
-  assert.deepEqual(dom.sidebar.children.map(idOf), ['80', 'usage', '100', 'nav-spacer']);
+  assert.deepEqual(dom.sidebar.children.map(idOf), ['80', 'usage', '100']);
 });
 
-test('registerView: with no entry of a greater order, the nav entry lands right before the spacer (Settings after Analytics)', () => {
+test('registerView: with no entry of a greater order, the nav entry lands at the end of the menu (Settings after Analytics)', () => {
   const dom = makeFakeDom({ navItems: [
     { dataset: { order: '100' } }, // analytics
-    { className: 'nav-spacer' },
   ] });
   const registerView = load(dom);
   registerView({ id: 'settings', nav: { label: 'Settings', order: 110 } });
-  assert.deepEqual(dom.sidebar.children.map(idOf), ['100', 'settings', 'nav-spacer']);
+  assert.deepEqual(dom.sidebar.children.map(idOf), ['100', 'settings']);
 });
 
 test('registerView: without a nav entry, the sidebar is not touched', () => {
-  const dom = makeFakeDom({ navItems: [{ className: 'nav-spacer' }] });
+  const dom = makeFakeDom({ navItems: [{ dataset: { order: '100' } }] });
   const registerView = load(dom);
   registerView({ id: 'x', markup: '<section></section>' });
   assert.equal(dom.sidebar.children.length, 1);

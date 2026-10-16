@@ -30,9 +30,19 @@ function makeRepo(t, files) {
   return dir;
 }
 
-async function runRelease(t, { files = { 'package.json': PKG }, inputs: extra = {}, mockSequences = { suite: { unit: ['pass'], e2e: ['pass'] } } } = {}) {
+// #378: v1.9.0 on the base commit, v1.10.0 on a second one (HEAD): the semver order is not the text order
+function tagRepo(repo) {
+  git(repo, 'tag', 'v1.9.0');
+  fs.writeFileSync(path.join(repo, 'later.txt'), 'later\n');
+  git(repo, 'add', '-A');
+  git(repo, 'commit', '-q', '-m', 'later');
+  git(repo, 'tag', 'v1.10.0');
+}
+
+async function runRelease(t, { files = { 'package.json': PKG }, inputs: extra = {}, mockSequences = { suite: { unit: ['pass'], e2e: ['pass'] } }, setup = null } = {}) {
   const wf = loadWorkflow(WORKFLOW);
   const repo = makeRepo(t, files);
+  if (setup) setup(repo);
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'release-ver-runs-'));
   t.after(() => fs.rmSync(runsDir, { recursive: true, force: true, maxRetries: 5 }));
   const inputs = {};
@@ -55,6 +65,24 @@ async function runRelease(t, { files = { 'package.json': PKG }, inputs: extra = 
   const prompts = (stepId) => events.filter((e) => e.type === 'session.message_sent' && e.step_id === stepId).map((e) => String(e.prompt || ''));
   return { repo, events, started, shipGate, prompts };
 }
+
+// the version step's output (#378: its previous_version is release.yaml's `previous_version` output)
+const versionOutput = (events) => events.filter((e) => e.type === 'step.finished' && e.step_id === 'version').map((e) => e.output).pop() || {};
+
+test('release (mock): previous_version is the tag before the release in semver order, before Ship tags it (#378)', { timeout: 120000 }, async (t) => {
+  const { events } = await runRelease(t, { inputs: { version: '1.11.0' }, setup: tagRepo });
+  assert.equal(versionOutput(events).previous_version, 'v1.10.0');
+});
+
+test('release (mock): a release name that is not a semver gets the newest tag reachable from HEAD as previous_version (#378)', { timeout: 120000 }, async (t) => {
+  const { events } = await runRelease(t, { inputs: { version: 'spring-cleanup' }, setup: tagRepo });
+  assert.equal(versionOutput(events).previous_version, 'v1.10.0');
+});
+
+test('release (mock): a repository without tags has an empty previous_version (#378)', { timeout: 120000 }, async (t) => {
+  const { events } = await runRelease(t, { inputs: { version: '1.2.0' } });
+  assert.equal(versionOutput(events).previous_version, '');
+});
 
 // the events before the first `unit` step that are not a gate or a prompt
 const beforeUnit = (events) => {

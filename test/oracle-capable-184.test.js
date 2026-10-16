@@ -36,7 +36,8 @@ function scratchDir(t, prefix) {
 // A service on a workspace folder (a second call on the same folder = the app started again).
 function startService(t, dir) {
   process.env.MULTIAGENT_SIMULATION_ONLY = '1'; // tests never call real models
-  const service = createService({ host: { trashItem: async () => {}, appVersion: '9.9.9', isPackaged: false } });
+  // #408: an empty CLI home, never the machine's transcripts
+  const service = createService({ host: { trashItem: async () => {}, appVersion: '9.9.9', isPackaged: false, cliHome: path.join(dir, 'cli-home') } });
   let stopped = false;
   const stop = () => { if (!stopped) { stopped = true; service.shutdown(); } };
   t.after(stop);

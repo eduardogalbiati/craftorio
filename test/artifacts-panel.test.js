@@ -16,8 +16,9 @@ const appSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'ap
 const runSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'views', 'run', 'run.js'), 'utf8');
 
 test('the Run screen has an Artifacts tab next to Session and Events, with a count badge', () => {
-  assert.match(runSrc, /<button class="tab" data-tab="artifacts"[^>]*>Artifacts <span id="tab-artifacts-count"/);
-  assert.match(runSrc, /id="tab-artifacts" class="tab-body hidden"/);
+  // #410: Artifacts is the first tab and a run opens on it
+  assert.match(runSrc, /<button class="tab active"[^>]*data-tab="artifacts"[^>]*>Artifacts <span id="tab-artifacts-count"/);
+  assert.match(runSrc, /id="tab-artifacts" class="tab-body"/);
   assert.match(html, /<script src="artifacts-panel\.js"><\/script>/);
 });
 

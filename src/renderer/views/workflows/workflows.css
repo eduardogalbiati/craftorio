@@ -1,6 +1,11 @@
 /* Workflows screen › Definitions (views/workflows/workflows.js): sections by category, compact
    workflow cards and pipeline cards (#137); the Builder's rules are in builder.css, the run list's
    (.pr-*), the category badges (.badge.cat-*), .chip and .step-chip in style.css */
+/* #409: the Supervisor's round button (.po-fab, backlog.css) in the app's purple; room under every
+   tab so it never covers the last card, Load more or the Builder's panel */
+.sup-fab { border-color: #7C5CFF; }
+#view-workflows [data-wpage] { padding-bottom: 96px; }
+#view-workflows .wb-panel { max-height: calc(100vh - 226px); }
 .wf-toolbar .chips { margin-bottom: 0; }
 .wf-toolbar .wf-search { width: 260px; max-width: 40%; }
 .wf-list { display: grid; gap: 22px; }

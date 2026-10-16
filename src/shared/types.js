@@ -133,7 +133,7 @@
  * @typedef {EventEnvelope & { type: 'worktree.removed', dir: string, removed: boolean, branch: string | null, branch_deleted: boolean, wip_commit?: string, by?: 'cleanup' }} WorktreeRemovedEvent
  * @typedef {EventEnvelope & { type: 'worktree.kept', dir: string, branch: string | null }} WorktreeKeptEvent
  * @typedef {EventEnvelope & { type: 'worktree.processes_stopped', dir: string, after: any, processes: { pid: number, exe: string, cwd: string, reason: string, stopped: boolean, error: any }[] }} WorktreeProcessesStoppedEvent
- * @typedef {EventEnvelope & { type: 'limit.exceeded', limit: string, value: number, current?: number, children?: number, paused?: boolean }} LimitExceededEvent
+ * @typedef {EventEnvelope & { type: 'limit.exceeded', limit: string, value: number, current?: number, children?: number, paused?: boolean, worked_ms?: number, gate_wait_ms?: number }} LimitExceededEvent
  * @typedef {EventEnvelope & { type: 'limits.expanded', day: string, limits: object }} LimitsExpandedEvent
  * @typedef {EventEnvelope & { type: 'budget.exceeded', provider: string, usd: number, tokens: number, limit_usd: number | null, limit_tokens: number | null, blocked: boolean }} BudgetExceededEvent
  * @typedef {EventEnvelope & { type: 'approval.requested', approval_id: string, step_id: string, message: string, choices: object[] | null, feedback: object | null, brief: any, approve?: { label: string, help: string }, reject?: { label: string, help: string }, report?: string, work_dir?: string, run_app?: true, local_preview?: object, diff_base?: string, supervisor?: object, save_to_issue?: { choice: string, issue: object } }} ApprovalRequestedEvent
@@ -278,11 +278,11 @@
  * (docs/agents/engine/field-reference.md).
  * @typedef {object} WorkflowStep
  * @property {string} id
- * @property {'agent' | 'check' | 'human_approval' | 'project_map' | 'release_version' | 'screenshots' | 'suite' | 'test_ids' | 'workflow'} [type] agent when missing
+ * @property {'agent' | 'check' | 'human_approval' | 'project_map' | 'refactor_proposals' | 'release_version' | 'screenshots' | 'suite' | 'test_ids' | 'workflow'} [type] agent when missing
  * @property {string} [agent]
  * @property {string[]} [agents]
  * @property {string} [prompt]
- * @property {object} [output_schema]
+ * @property {object} [output_schema] a named schema in the YAML (#378) is replaced by its object at load
  * @property {string | (string | { path: string, content?: string })[] | { path: string, content?: string }} [save_as]
  * @property {string[]} [skills]
  * @property {object} [capabilities]

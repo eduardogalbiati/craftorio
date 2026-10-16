@@ -8,6 +8,7 @@ used_by: "via `uses`"
 # Review comment triage
 
 The platform skill tells you how to list comments and reply. This skill decides what each one means.
+Replies on the PR/MR are in the issues language the Language line names.
 
 ## Resume before you classify
 

@@ -20,6 +20,9 @@
 // files its body cites, the Product Owner's group, a new file expected in a district, the header with
 // the counts and the Danger Zone share); --mode city-stage shows a roadmap stage's footprint ("Show the
 // stage on the map": each item its colour, a building two items would change in red).
+// #376: --mode city-release is that city at release 1.1.1 in grey with release 1.1.2 in colour ("Show
+// on the map" of a release: a new file, changes on the ramp, a removed guide, a renamed script, the
+// header with the two-tag picker and the issue filter).
 // #382: --mode city-large is the City view at a real scale: the project is this repository itself
 // (the checkout the screenshot runs from, about 1,400 drawn files) with the proof of concept's city
 // plan (poc/project-map/plans/multiagent-orchestrator.city-plan.json), the one the POC's overview
@@ -29,6 +32,15 @@
 // #386: --mode facts-large is the Facts view at a real scale: the project is this repository itself
 // (about 1,400 files, its languages and Danger Zone from the checkout's git history) with those 60
 // findings moved onto its largest source files, so their scores use its Danger Zone.
+// #360: --mode seeds is the Architecture tab scrolled to its Seeds section: churn-complexity's result
+// (stale: commits since its run), two seeds never run and dependency-map with a tool (runs free); open
+// the result with --click "[data-testid=seed-open-churn-complexity]". --mode seeds-running and
+// seeds-error click Run on quality-gate-report (seeds:run never answers, or fails).
+// #357: the Refactor tab (refactor) on the Architecture demo: five proposals ranked by the Product
+// Owner (one filed and planned, one done that left the Danger Zone, one not improved, one dismissed:
+// --click "[data-testid=refactor-filter-dismissed]"), the cadence on with "next in 4 runs". Its states,
+// --mode: never (no Architecture report), empty (a report, no proposal), prioritizing
+// (refactor:prioritize never answers) and error (it fails), the last two after a click on prioritize.
 
 const { execFileSync } = require('child_process');
 const fs = require('fs');
@@ -185,6 +197,29 @@ const DEMO_IMPACT_STAGE = {
   ],
 };
 
+// #376: release 1.1.2 after 1.1.1 (the city's head) on simulated data: a new view (#21), the engine
+// and billing changed by a few and many lines (#22), a guide removed and a script renamed (#23)
+const RELEASE_COMMITS = [
+  ['2026-10-06', 'Add the invoice view (#21)', { 'src/renderer/views/invoice.js': cityFile(9) }],
+  ['2026-10-07', 'Faster engine, partner prices (#22)', { 'src/engine/part-2.js': cityFile(14), 'src/engine/part-5.js': cityFile(6), 'src/billing.js': jsBody(220) }],
+];
+function demoReleaseCity(folder) {
+  const git = (a, date) => execFileSync('git', ['-C', folder, '-c', 'user.name=Demo', '-c', 'user.email=demo@example.com', '-c', 'core.autocrlf=false', '-c', 'tag.gpgSign=false', ...a], { stdio: 'pipe', env: { ...process.env, ...(date ? { GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date } : {}) } });
+  git(['tag', '1.1.1']);
+  for (const [day, message, files] of RELEASE_COMMITS) {
+    for (const [rel, text] of Object.entries(files)) {
+      fs.mkdirSync(path.dirname(path.join(folder, rel)), { recursive: true });
+      fs.writeFileSync(path.join(folder, rel), text);
+    }
+    git(['add', '-A']);
+    git(['commit', '-q', '-m', message], `${day}T10:00:00Z`);
+  }
+  git(['rm', '-q', 'docs/guides/guide-5.md']);
+  git(['mv', 'scripts/build/part-1.js', 'scripts/build/bundle.js']);
+  git(['commit', '-q', '-m', 'Drop the old guide, name the bundle script (#23)'], '2026-10-08T10:00:00Z');
+  git(['tag', '1.1.2']);
+}
+
 const LARGE_PLAN = path.join('poc', 'project-map', 'plans', 'multiagent-orchestrator.city-plan.json');
 
 // #387: --mode large, the Architecture tab at a real scale: the latest report holds the 60 findings of
@@ -210,6 +245,32 @@ function largestSourceFiles(dir, count) {
   return listed.map((f) => [f, size(f)]).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, count).map(([f]) => f);
 }
 
+// #360: a churn-complexity result run on the first demo commit (so the seed is stale by the commits
+// since), the first two seeds never run, and dependency-map available as the project's tool
+const DEMO_SEED_FILES = [['src/billing.js', 9, 14], ['src/api.js', 6, 5], ['tools/export.py', 3, 4], ['README.md', 2, 1]];
+function demoSeedResult() {
+  const max = { churn: 10, complexity: 15 };
+  const dots = DEMO_SEED_FILES.map(([file, churn, complexity]) => {
+    const x = 40 + (churn / max.churn) * 320;
+    const y = 220 - (complexity / max.complexity) * 190;
+    return `<circle cx="${x}" cy="${y}" r="7" fill="${churn > 5 && complexity > 5 ? '#e5484d' : '#4c8bf5'}"/><text x="${x + 10}" y="${y + 4}">${file}</text>`;
+  }).join('');
+  const rows = DEMO_SEED_FILES.map(([f, c, x]) => `<tr><td>${f}</td><td>${c}</td><td>${x}</td></tr>`).join('');
+  const html = `<!doctype html><html><head><meta charset="utf-8"><style>body{font:13px system-ui,sans-serif;margin:16px;color:#1d2433}svg text{font-size:11px}table{border-collapse:collapse;margin-top:12px}td,th{padding:4px 10px;border-bottom:1px solid #dde}</style></head><body><h2>Churn against complexity</h2><p>4 files measured at the latest commit; 1 in the Danger Zone (src/billing.js).</p><svg width="480" height="250"><line x1="40" y1="220" x2="460" y2="220" stroke="#889"/><line x1="40" y1="20" x2="40" y2="220" stroke="#889"/><text x="400" y="240">commits</text><text x="4" y="16">complexity</text>${dots}</svg><table><tr><th>File</th><th>Commits</th><th>Complexity</th></tr>${rows}</table></body></html>`;
+  const model = { files: DEMO_SEED_FILES.map(([file, churn, complexity]) => ({ churn, complexity, file })), measured: 'indentation depth (no complexity tool installed)' };
+  return { html, model };
+}
+
+function demoSeeds(ws, project, firstCommit) {
+  const date = '2026-10-12T09-30-00-000Z';
+  const dir = path.join(ws.root, 'architecture', project.id, 'seeds', 'churn-complexity', date);
+  const { html, model } = demoSeedResult();
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'result.html'), html);
+  fs.writeFileSync(path.join(dir, 'model.json'), JSON.stringify(model, null, 2));
+  fs.writeFileSync(path.join(dir, 'run.json'), JSON.stringify({ source: 'oracle', costUsd: 0.38, tokens: { input: 21000, output: 4200 }, simulated: false, head: firstCommit, date, at: '2026-10-12T09:30:00.000Z', seed: 'churn-complexity', project_id: project.id, report: null }, null, 2));
+}
+
 function seedArchitecture(args, ws, project, { appDir, projects }) {
   if (args.mode === 'not-git') return;
   if (args.mode === 'facts-large') { // #386: this repository, with the 60 findings on its own files
@@ -224,13 +285,48 @@ function seedArchitecture(args, ws, project, { appDir, projects }) {
     require('../../../src/oracle-architecture').writePlan(path.join(ws.root, 'architecture'), project.id, plan, '2026-10-01T09:00:00.000Z');
     return;
   }
-  const city = ['city', 'city-agents', 'city-issue', 'city-stage'].includes(args.mode);
+  const city = ['city', 'city-agents', 'city-issue', 'city-release', 'city-stage'].includes(args.mode);
   const commits = args.mode === 'empty' ? [] : city ? CITY_COMMITS : ARCH_COMMITS;
   const head = demoArchitectureRepo(project.folder, commits);
+  if (args.mode === 'city-release') demoReleaseCity(project.folder);
   if (head && args.mode !== 'never') demoArchitectureReports(ws, project.id, { commit: head, date: '2026-09-15T10:00:00Z' });
   if (head && args.mode === 'large') demoLargeReport(ws, project.id, { commit: head, date: '2026-09-15T10:00:00Z' });
   if (args.mode === 'map-refresh') demoCityPlan(ws, project.id);
   if (city) require('../../../src/oracle-architecture').writePlan(path.join(ws.root, 'architecture'), project.id, CITY_PLAN, '2026-10-01T09:00:00.000Z');
+  if (head && args.mode?.startsWith('seeds')) {
+    const first = execFileSync('git', ['-C', project.folder, 'rev-list', '--max-parents=0', 'HEAD'], { encoding: 'utf8' }).trim().split('\n')[0];
+    demoSeeds(ws, project, first);
+    projects.updateProject(ws.projects, project.id, { seedTools: { 'dependency-map': 'node tools/dependency-map.js --json' } });
+  }
+}
+
+// #357: the Refactor tab's proposals on the Architecture demo (the roadmap's #10 planned, #11 done),
+// the Product Owner's ranking and the cadence on with 6 of its runs counted ("next in 4 runs")
+function demoRefactor(ws, projectId) {
+  const runs = require('../../../src/runs');
+  const cadence = require('../../../src/refactor-cadence');
+  const dir = path.join(ws.root, 'refactor', projectId);
+  const at = (days) => new Date(Date.now() - days * 864e5).toISOString();
+  const arch = (id, f, extra) => ({ id, source: 'architecture', key: `demo:${id}`, reportId: 'demo-report-2', kind: f.kind, title: f.title, files: f.files, evidence: f.evidence, severity: f.severity, refactor: f.refactor, createdAt: at(20), status: 'proposed', ...extra });
+  const owner = (id, target, improvement, extra) => ({ id, source: 'owner', key: `demo:${id}`, title: improvement, target, improvement, evidence: 'Hotspot rank 2, in the Danger Zone since July.', files: [target], createdAt: at(12), status: 'proposed', ...extra });
+  const proposals = [
+    arch('architecture-demo-1', DUPLICATED, { rank: 1, complexity: 2, rankReason: 'Highest Danger Zone score, and no unfinished roadmap item touches its files.', issue: 10, before: { quadrant: 'danger-zone', score: 82, file: 'src/billing.js', at: at(2) } }),
+    arch('architecture-demo-2', finding('god-module', 'Billing module holds 120 rate constants and the discount rule', [{ path: 'src/billing.js' }], 'high', 'The file grew in each of its 5 commits; 120 constants sit next to the rule.', 'Move the rates to a data file the rule reads.'), { rank: 2, complexity: 3, rankReason: 'Same hotspot as #1: after it, to avoid a conflict in src/billing.js.' }),
+    owner('owner-demo-3', 'src/api.js', 'Split the request parsing out of the API handlers', { rank: 3, complexity: 1, rankReason: 'Small and isolated: a cheap win on a busy file.', issue: 11, before: { quadrant: 'danger-zone', score: 64, file: 'src/api.js', at: at(9) }, outcome: { leftDangerZone: true, scoreDrop: 33, improved: true, after: { quadrant: 'healthy', score: 31 }, at: at(8) } }),
+    owner('owner-demo-4', 'tools/export.py', 'Give the export one entry point per format with a very long title that is cut at the edge of the row', { rank: 4, complexity: 4, rankReason: 'Low churn: little value until the export changes again.', issue: 21, before: { quadrant: 'danger-zone', score: 58, file: 'tools/export.py', at: at(30) }, outcome: { leftDangerZone: false, scoreDrop: 0, improved: false, after: { quadrant: 'danger-zone', score: 58 }, at: at(28) } }),
+    arch('architecture-demo-5', finding('naming', 'Export constants shout', [{ path: 'tools/export.py' }], 'low', 'RATE_0 to RATE_29 in upper case.', 'Rename them in snake case.'), { status: 'dismissed', dismissReason: 'Generated code, never edited by hand', dismissedAt: at(3) }),
+  ];
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'proposals.json'), JSON.stringify({ proposals }, null, 2));
+  const ranking = proposals.filter((p) => p.rank).map((p) => ({ id: p.id, rank: p.rank, reason: p.rankReason, complexity: p.complexity }));
+  fs.writeFileSync(path.join(dir, 'ranking.json'), JSON.stringify({ at: at(1), costUsd: 0.18, ranking }, null, 2));
+  // the cadence counts from the 7th latest real run: 6 counted, "next in 4 runs"
+  const project = { id: projectId };
+  const list = runs.listRuns(ws.runs);
+  const ends = list.filter((r) => r.projectId === projectId && !r.mock && r.finishedAt).map((r) => r.finishedAt).sort().reverse();
+  const since = ends[6] || null;
+  const every = Math.min(cadence.CADENCE_MAX, Math.max(cadence.CADENCE_MIN, cadence.countedRuns(list, project, since) + 4));
+  fs.writeFileSync(path.join(dir, 'cadence.json'), JSON.stringify({ on: true, every, since }, null, 2));
 }
 
 function seed({ appDir, args, projects, ws, project }) {
@@ -239,6 +335,11 @@ function seed({ appDir, args, projects, ws, project }) {
   demoChildRuns(ws, project.id);
   demoRunHistory(ws, project.id);
   if (args.tab === 'architecture') return seedArchitecture(args, ws, project, { appDir, projects });
+  if (args.tab === 'refactor') {
+    seedArchitecture({ mode: args.mode === 'never' ? 'never' : null }, ws, project, { appDir, projects });
+    if (args.mode !== 'never' && args.mode !== 'empty') demoRefactor(ws, project.id);
+    return;
+  }
   if (args.tab !== 'conflicts' || args.mode === 'not-git') return;
   if (args.mode === 'no-runs') {
     const git = (a) => execFileSync('git', ['-C', project.folder, ...a], { stdio: 'pipe' });
@@ -255,45 +356,76 @@ function seed({ appDir, args, projects, ws, project }) {
 
 const open = ({ js, project }) => js(`openProjectView(${JSON.stringify(project.id)})`);
 
+// #360: a seed's run that never ends, or fails with the Oracle's error
+function stubSeedRun(mode) {
+  const seedRun = { 'seeds-running': () => new Promise(() => {}), 'seeds-error': () => { throw new Error('The Oracle\'s answer has no JSON block: nothing was saved.'); } }[mode];
+  if (!seedRun) return false;
+  const { ipcMain } = require('electron');
+  ipcMain.removeHandler('seeds:run');
+  ipcMain.handle('seeds:run', seedRun);
+  return true;
+}
+
+// #360: the Seeds section in view; a stubbed run starts with the estimate's confirm accepted
+async function showSeeds({ click, js, seedRun }) {
+  if (seedRun) {
+    await js('window.confirm = () => true');
+    await click('[data-testid="seed-run-quality-gate-report"]');
+  }
+  await js('document.querySelector(\'[data-testid="seeds-section"]\')?.scrollIntoView()');
+}
+
+function stubChannel(channel, handler) {
+  const { ipcMain } = require('electron');
+  ipcMain.removeHandler(channel);
+  ipcMain.handle(channel, handler);
+}
+
+// The Architecture tab's modes: the stubs before the tab opens, then the clicks once it is open
+function stubArchitecture(mode) {
+  // #356, #381: "Analyze this project" starts a run that never ends (its state stays on screen) or
+  // fails to start with the Oracle's error
+  const analysis = { analyzing: () => ({ runId: '20261013-215046-bc771765' }), error: () => { throw new Error('The Oracle refused the analysis: the daily budget is reached (US$ 5.00 of US$ 5.00).'); } }[mode];
+  if (analysis) stubChannel('run:start', analysis);
+  if (mode === 'city-agents') stubChannel('architecture:agents', (_e, arg) => demoCityAgents(arg && arg.projectId));
+  // #375: the Product Owner's saved answers hold the issue's group (read, never asked)
+  if (mode === 'city-issue') stubChannel('po:history', () => DEMO_IMPACT_PO);
+  return { analysis: Boolean(analysis), seedRun: stubSeedRun(mode) };
+}
+
+async function showArchitecture({ mode, click, js, project, analysis, seedRun }) {
+  if (analysis) await click('[data-testid="architecture-analyze"]');
+  if (mode?.startsWith('seeds')) await showSeeds({ click, js, seedRun });
+  if (['city', 'city-agents', 'city-issue', 'city-large', 'city-release', 'city-stage'].includes(mode)) await click('[data-testid="architecture-mode-city"]');
+  // #375: "Show on the map" of an issue, "Show the stage on the map" of a roadmap stage
+  const pid = JSON.stringify(project.id);
+  if (mode === 'city-issue') await js(`ProjectCityImpact.showIssue(${pid}, ${JSON.stringify(DEMO_IMPACT_ISSUE)})`);
+  if (mode === 'city-stage') await js(`ProjectCityImpact.showStage(${pid}, ${JSON.stringify(DEMO_IMPACT_STAGE)})`);
+  // #376: "Show on the map" of release 1.1.2
+  if (mode === 'city-release') await js(`ProjectCityRelease.showRelease(${pid}, { from: '1.1.1', to: '1.1.2' })`);
+}
+
+// #357: "Ask the Product Owner to prioritize" never answers (its state stays on screen) or fails
+function stubRefactor(mode) {
+  const ranking = { prioritizing: () => new Promise(() => {}), error: () => { throw new Error('The Product Owner refused the ranking: the daily budget is reached (US$ 5.00 of US$ 5.00).'); } }[mode];
+  if (ranking) stubChannel('refactor:prioritize', ranking);
+  return Boolean(ranking);
+}
+
 async function afterOpen({ args, click, js, project }) {
   if (!args.tab) return;
   // the tab's first read never ends: its loading state stays on screen
-  if (args.tab === 'conflicts' && args.mode === 'loading') {
-    const { ipcMain } = require('electron');
-    ipcMain.removeHandler('analytics:performance');
-    ipcMain.handle('analytics:performance', () => new Promise(() => {}));
-  }
-  // #356, #381: "Analyze this project" starts a run that never ends (its state stays on screen) or
-  // fails to start with the Oracle's error
-  const analysis = { analyzing: () => ({ runId: '20261013-215046-bc771765' }), error: () => { throw new Error('The Oracle refused the analysis: the daily budget is reached (US$ 5.00 of US$ 5.00).'); } }[args.mode];
-  if (args.tab === 'architecture' && analysis) {
-    const { ipcMain } = require('electron');
-    ipcMain.removeHandler('run:start');
-    ipcMain.handle('run:start', analysis);
-  }
-  if (args.tab === 'architecture' && args.mode === 'city-agents') {
-    const { ipcMain } = require('electron');
-    ipcMain.removeHandler('architecture:agents');
-    ipcMain.handle('architecture:agents', (_e, arg) => demoCityAgents(arg && arg.projectId));
-  }
-  // #375: the Product Owner's saved answers hold the issue's group (read, never asked)
-  if (args.tab === 'architecture' && args.mode === 'city-issue') {
-    const { ipcMain } = require('electron');
-    ipcMain.removeHandler('po:history');
-    ipcMain.handle('po:history', () => DEMO_IMPACT_PO);
-  }
+  if (args.tab === 'conflicts' && args.mode === 'loading') stubChannel('analytics:performance', () => new Promise(() => {}));
+  const architecture = args.tab === 'architecture' && stubArchitecture(args.mode);
+  const ranking = args.tab === 'refactor' && stubRefactor(args.mode);
   await click(`[data-pv-tab="${args.tab}"]`);
-  if (args.tab === 'architecture' && analysis) await click('[data-testid="architecture-analyze"]');
-  if (args.tab === 'architecture' && ['city', 'city-agents', 'city-issue', 'city-large', 'city-stage'].includes(args.mode)) await click('[data-testid="architecture-mode-city"]');
-  // #375: "Show on the map" of an issue, "Show the stage on the map" of a roadmap stage
-  const pid = JSON.stringify(project.id);
-  if (args.tab === 'architecture' && args.mode === 'city-issue') await js(`ProjectCityImpact.showIssue(${pid}, ${JSON.stringify(DEMO_IMPACT_ISSUE)})`);
-  if (args.tab === 'architecture' && args.mode === 'city-stage') await js(`ProjectCityImpact.showStage(${pid}, ${JSON.stringify(DEMO_IMPACT_STAGE)})`);
+  if (ranking) await click('[data-testid="refactor-prioritize"]');
+  if (architecture) await showArchitecture({ mode: args.mode, click, js, project, ...architecture });
 }
 
 module.exports = {
   afterOpen,
-  modes: ['analyzing', 'city', 'city-agents', 'city-issue', 'city-large', 'city-stage', 'empty', 'error', 'facts-large', 'large', 'loading', 'map-refresh', 'never', 'no-runs', 'not-git'],
+  modes: ['analyzing', 'city', 'city-agents', 'city-issue', 'city-large', 'city-release', 'city-stage', 'empty', 'error', 'facts-large', 'large', 'loading', 'map-refresh', 'never', 'no-runs', 'not-git', 'prioritizing', 'seeds', 'seeds-error', 'seeds-running'],
   open,
   run: true,
   seed,

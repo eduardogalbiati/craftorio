@@ -109,6 +109,8 @@ function layout(root) {
     repos: path.join(root, 'repos'),
     projects: path.join(root, 'projects'),
     skills: path.join(root, 'skills'),
+    // analysis seeds, one folder each with its seed.md (bundled defaults are seeded here, see src/seeds.js, #360)
+    seeds: path.join(root, 'seeds'),
     // user-defined agents, one JSON file each (see src/agents.js)
     agents: path.join(root, 'agents'),
     // editable workflow YAML files (bundled defaults are seeded here, see src/workflows.js)
@@ -135,6 +137,10 @@ function layout(root) {
     attachments: path.join(root, 'attachments'),
     // discovery cards, private to the workspace (#256, src/discovery.js): <project id>/cards/<card id>/, created on demand
     discovery: path.join(root, 'discovery'),
+    // the Architecture tab's settings, city plans and reports (#356, src/oracle-architecture.js), created on demand
+    architecture: path.join(root, 'architecture'),
+    // the Refactor tab's proposals, ranking and cadence (#357, src/refactor-proposals.js), created on demand
+    refactor: path.join(root, 'refactor'),
     settings: path.join(root, 'settings.json'),
     // titles the user gave to CLI sessions on the Sessions screen ({ "<provider>:<id>": title })
     sessionTitles: path.join(root, 'session-titles.json'),
@@ -189,6 +195,9 @@ const DEFAULT_SETTINGS = {
   // Memory guard (#276, src/engine/memory-guard.js): a real run's process over limitPercent of the RAM
   // is stopped; suites and new runs wait while less than floorPercent is free (0 = no hold)
   memoryGuard: { enabled: true, limitPercent: 25, floorPercent: 10 },
+  // Main stays green (#405, src/base-health.js): what a red test on the base files: 'off', 'issue'
+  // (a bug issue only) or 'fix' (the issue and a fix item at the front of the roadmap)
+  baseCheck: { onRed: 'fix' },
   // Keep awake (#162, src/keep-awake.js): no sleep while runs, a roadmap or a queue have work to do
   keepAwake: false,
   // Control channel (#336, src/control): outside sessions drive this app through a loopback endpoint
@@ -236,6 +245,10 @@ const DEFAULT_SETTINGS = {
   // the owner's IANA time zone (#273, src/time-zone.js): screens, day/week/month cuts, the agents'
   // replies and the daily resets use it; null = this computer's (readSettings fills it in, unsaved)
   timeZone: null,
+  // the languages agents write in (#327, #328, src/shared/language.js): `agents` for chat replies, prose
+  // and documents ('interface' = Same as the interface, English until #329), `issues` for issues, PR/MR
+  // descriptions and commit messages
+  language: { agents: 'interface', issues: 'en' },
 };
 
 // settings.json as saved: null when there is none, {} when it is not valid JSON

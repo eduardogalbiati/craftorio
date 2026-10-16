@@ -14,6 +14,7 @@
 const fs = require('fs');
 const path = require('path');
 const { render } = require('./templates');
+const Language = require('../../shared/language');
 
 // ---------------------------------------------------------------------------
 // Structured output
@@ -172,7 +173,7 @@ const methods = {
   // answer, so those go along too (otherwise it answers "{}" or describes the errors).
   retryPrompt(agentName, prompt, previous, schema, errs) {
     const fix = `Your last response did not validate against the JSON Schema:\n- ${errs.join('\n- ')}\n`
-      + `Reply again with only a \`\`\`json block that validates against this schema, keeping the content of your answer, in English:\n`
+      + `Reply again with only a \`\`\`json block that validates against this schema, keeping the content of your answer, ${Language.retryLanguage(this.agentsLanguageCode())}:\n`
       + `\`\`\`json\n${JSON.stringify(schema, null, 2)}\n\`\`\``;
     const def = { ...(this.wf.defaults || {}), ...this.wf.agents[agentName] };
     if ((def.session || 'persistent') === 'persistent') return fix;

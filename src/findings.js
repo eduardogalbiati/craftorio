@@ -14,6 +14,7 @@
 // listFindings gives each one with its status: 'saved', 'sent' or 'filed'.
 const fs = require('fs');
 const path = require('path');
+const Language = require('./shared/language');
 
 const CONTEXT_KEYS = ['actions', 'app', 'calls', 'log', 'project', 'runIds', 'tab', 'theme', 'view', 'window'];
 const DENIED_KEYS = new Set([
@@ -197,8 +198,9 @@ function markLine(m) {
   return `${m.n}. Pin ${m.n} on \`${el.testid || '(no data-testid)'}\` (${where || 'no ids'})${box}${note}`;
 }
 
-/** The issue a finding is filed as: { title, body }, naming its folder so a run can read the bundle. */
-function issueOf(found, { imageUrl = null } = {}) {
+/** The issue a finding is filed as: { title, body }, naming its folder so a run can read the bundle (headings in issuesLanguage, #328). */
+function issueOf(found, { imageUrl = null, issuesLanguage = null } = {}) {
+  const h = Language.issueHeadings(issuesLanguage);
   const marks = readJson(path.join(found.dir, 'marks.json')) || [];
   const c = readJson(path.join(found.dir, 'context.json')) || {};
   const first = (found.note || '').split(/\r?\n/).find((l) => l.trim()) || '';
@@ -212,25 +214,25 @@ function issueOf(found, { imageUrl = null } = {}) {
     c.app && `app ${c.app.version || '?'} (${c.app.commit || 'unknown commit'})`,
   ].filter(Boolean);
   const body = [
-    '## Problem',
+    h.problem,
     '',
     found.note || '(no note: see the marks)',
     '',
-    '## Marks',
+    h.marks,
     '',
     ...(marks.length ? marks.map(markLine) : ['(none)']),
     '',
-    '## Screen',
+    h.screen,
     '',
     screen.length ? screen.join('; ') : '(no context)',
     '',
     imageUrl ? `![Marked screenshot](${imageUrl})` : `Marked screenshot: \`${path.join(found.dir, 'marked.png')}\``,
     '',
-    '## Finding bundle',
+    h.bundle,
     '',
     `\`${found.dir}\` (screenshot.png, marked.png, marks.json, context.json, note.md): read it as docs/agents/renderer.md "Reading a finding bundle" says.`,
     '',
-    '## Acceptance criteria',
+    h.criteria,
     '',
     '- [ ] Each marked element shows as the note describes, at the same view and tab (a screenshot of the screen after the fix).',
     '- [ ] A check that fails before the fix reproduces the finding (the view\'s screenshot seed, or a test of the marked element\'s module).',
@@ -247,5 +249,7 @@ module.exports = {
   issueOf,
   listFindings,
   markFiling,
+  redact,
   saveFinding,
+  scrub,
 };

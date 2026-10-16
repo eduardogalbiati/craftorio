@@ -20,7 +20,7 @@
 #             behaviour (file:line), estimates the files to change, rates impact 1-5 and
 #             complexity 1-5 (issue-triage rubric), searches issues and open PRs/MRs for
 #             duplicates and work in flight, and advises whether to run it alone or grouped.
-# 2. write:   the issue writer drafts the issue(s) in English (issue-writing): title, body with
+# 2. write:   the issue writer drafts the issue(s) in the issues language (issue-writing): title, body with
 #             evidence, the owner's decisions verbatim, tasks as acceptance criteria, labels.
 #             Independent parts become several cross-linked issues.
 # 3. review:  you see the scores, the grouping advice and the draft(s), and pick: create, create
@@ -160,7 +160,8 @@ agents:
       folder is the project ({{ inputs.project_path }}): it is read-only for you. Use git and
       {% if inputs.git_platform == 'gl' %}glab{% else %}gh{% endif %} only to read (log, grep, show; issue/PR/MR list and view, label list):
       never create, edit, comment, label, push or change anything. Nobody can answer questions:
-      record assumptions. Write everything in English, whatever the language of the request.
+      record assumptions. Write in the language the Language line names, whatever the language
+      of the request.
 
   issue_writer:
     provider: claude
@@ -171,9 +172,9 @@ agents:
     skills: [issue-writing, issue-triage, clarity-score]
     system_prompt: |
       You are the issue writer. You turn the owner's request and the analyzer's findings into
-      issues someone else can implement without asking (issue-writing). The repository is in
-      English: translate the request, keep the owner's intent and record their decisions
-      verbatim as "Decision (owner): ...". You only write drafts; you never file anything.
+      issues someone else can implement without asking (issue-writing). Issues are in the issues
+      language the Language line names: translate the request, keep the owner's intent and record
+      their decisions verbatim as "Decision (owner): ..." (that heading in the issues language). You only write drafts; you never file anything.
       The current folder is the project, read-only for you.
 
   issue_filer:
@@ -232,7 +233,7 @@ steps:
          a GitLab group epic), `title` its title, `match` `clear` when the issue plainly belongs to
          its theme, `unsure` when it might, `none` (with `id` and `title` "") when no epic fits or
          the project has none; `reason` in one line. Never create an epic.
-      `repo` is owner/name of the remote. Everything in English.
+      `repo` is owner/name of the remote. Prose in the language the Language line names.
     output_schema:
       type: object
       required: [repo, summary, kind, evidence, files, files_count, blast_radius, impact, complexity, duplicates, in_flight, grouping, grouping_reason, nearby, areas, labels_missing, follow_ups, epic, assumptions]
@@ -360,7 +361,8 @@ steps:
       {% for f in feedback %}- {{ f.text }}
       {% endfor %}{% endif %}
       Answer with `message` (two or three sentences to the owner: what you drafted, the split and
-      order if any), `issues`, `existing_issue`, `addition` and `follow_ups`. Everything in English.
+      order if any), `issues`, `existing_issue`, `addition` and `follow_ups`. `message` in the AI
+      agents language; the issues and the addition in the issues language (the Language line).
     output_schema:
       type: object
       required: [message, issues, existing_issue, addition, follow_ups]

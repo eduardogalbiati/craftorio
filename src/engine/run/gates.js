@@ -3,7 +3,9 @@
 // `check:` then `requestApproval` emits approval.requested (choices, feedback, local preview, diff,
 // the gate brief) and waits for `resolveApproval` (the public API the service and the UI answer
 // with; a `feedback_required` choice without a text is refused); `withdrawApproval` closes an
-// open gate, `pendingGates` lists them for runs:active. Automation never crosses a gate:
+// open gate, `pendingGates` lists them for runs:active. The time a gate is open is not run time
+// (`syncGateClock`, #416), and an answer given while the run is over a limit stops the run at the
+// gate before it is taken. Automation never crosses a gate:
 // `kind: escalation` only lets the supervisor on call try first (src/engine/run/supervision.js).
 
 'use strict';
@@ -70,6 +72,7 @@ const methods = {
     const a = this.approvals.get(id);
     if (!a) return;
     this.approvals.delete(id);
+    this.syncGateClock();
     this.emitEvent('approval.resolved', { approval_id: id, withdrawn: true, by: 'check', reason: `${check.state}: ${check.detail}` });
     this.setStatus(this.orchestrator, 'active');
     a.resolve({ withdrawn: check });
@@ -145,6 +148,7 @@ const methods = {
         resolve: (v) => { clearTimeout(timer); resolve(v); },
         reject: (e) => { clearTimeout(timer); reject(e); },
       });
+      this.syncGateClock();
     });
     this.emitEvent('approval.requested', { approval_id: id, step_id: step.id, message, choices, feedback, ...extra });
     if (this.approvals.has(id)) this.setStatus(this.orchestrator, 'waiting'); // not answered by a listener already
@@ -180,8 +184,21 @@ const methods = {
     const text = String(feedback ?? '').trim();
     if (!text && a.gate?.choices?.find((c) => c.id === answer)?.feedback_required) return false;
     // copied before the approval is taken: a failed copy throws and leaves the gate open to answer again
+    // #416: over a limit when the owner answers (e.g. the cost), the run stops at the gate before
+    // taking the answer: no approval.resolved, so Resume asks it again once the limit is raised.
+    // Returns true: the answer was received, the run ends with the reason.
+    try {
+      this.checkLimits();
+    } catch (e) {
+      this.approvals.delete(id);
+      this.syncGateClock();
+      this.setStatus(this.orchestrator, 'active');
+      a.reject(e);
+      return true;
+    }
     const stored = this.copyAttachments(checkAttachments(images), `${a.stepId}-feedback`);
     this.approvals.delete(id);
+    this.syncGateClock();
     if (stored.length) this.gateImages = stored;
     const waitMs = Math.max(0, Date.now() - Date.parse(a.gate?.requested_at || Date.now()));
     const w = (this.gateWaits[a.stepId] ??= { waits: 0, wait_ms: 0 });

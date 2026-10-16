@@ -29,6 +29,8 @@
 //   userDataDir      optional; the app's user data folder, where speech models live (src/speech.js)
 //   appDir           optional; the app folder Self-healing updates (#279, areas/app-update.js)
 //   relaunch()       optional; restarts the app (src/main.js); without it the app never updates itself
+//   cliHome          optional; the folder the CLIs' config folders (.claude, .codex, .grok) are read under
+//                    (#408, src/cli-config-dirs.js); the user's home (and CLAUDE_CONFIG_DIR/CODEX_HOME) without it
 
 const fs = require('fs');
 const path = require('path');

@@ -162,3 +162,58 @@ Feature: Settings
     And I search the time zone list for "Tokyo"
     Then the time zone list shows "Asia/Tokyo"
     And the time zone list hides "Europe/London"
+
+  # Assumes Settings › General gets a "Language" group (data-testid="settings-language") next to Time
+  # zone, holding an "AI agents" select (aria-label "AI agents", saved as language.agents in the
+  # workspace's settings) (#327)
+  @issue-327
+  Scenario: The AI agents language is the interface's until another is chosen, from the list of languages
+    Given the app is open
+    When I open "Settings" in the sidebar
+    And I open the "General" settings tab
+    Then the General settings show a "Language" group
+    And the "AI agents" language is "Same as the interface"
+    And the "AI agents" language list offers "Same as the interface, English, Português (Brasil), Español, Français, Deutsch, Italiano, 日本語, 中文, 한국어"
+
+  @issue-327
+  Scenario: A language chosen for the AI agents is kept after the app reloads
+    Given the app is open
+    When I open "Settings" in the sidebar
+    And I open the "General" settings tab
+    And I choose "Português (Brasil)" as the "AI agents" language
+    And I open "Runs" in the sidebar
+    And I reload the app
+    And I open "Settings" in the sidebar
+    And I open the "General" settings tab
+    Then the "AI agents" language is "Português (Brasil)"
+
+  # The same group gets an "Issues" select (aria-label "Issues", saved as language.issues), its help
+  # text tied to it with aria-describedby (#328)
+  @issue-328
+  Scenario: The Issues language is English by default, and its help names issues, PR descriptions and commit messages
+    Given the app is open
+    When I open "Settings" in the sidebar
+    And I open the "General" settings tab
+    Then the "Issues" language is "English"
+    And the "Issues" language list offers "English, Português (Brasil), Español, Français, Deutsch, Italiano, 日本語, 中文, 한국어"
+    And the "Issues" language's help names issues, PR/MR descriptions and commit messages
+
+  @issue-328
+  Scenario: A language chosen for issues is kept after the app reloads
+    Given the app is open
+    When I open "Settings" in the sidebar
+    And I open the "General" settings tab
+    And I choose "Español" as the "Issues" language
+    And I open "Runs" in the sidebar
+    And I reload the app
+    And I open "Settings" in the sidebar
+    And I open the "General" settings tab
+    Then the "Issues" language is "Español"
+
+  # #405: Settings › Execution's red-base choice (data-testid="base-check-on-red"), setting baseCheck.onRed
+  @issue-405
+  Scenario: Settings › Execution offers what happens when the base goes red, issue + fix item by default
+    Given the app is open
+    When I open "Settings" in the sidebar
+    And I open the "Execution" settings tab
+    Then the red-base choice offers "Off", "Issue only" and "Issue + fix item", with "Issue + fix item" selected

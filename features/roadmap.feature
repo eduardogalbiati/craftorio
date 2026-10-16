@@ -563,3 +563,26 @@ Feature: Roadmap statuses, done items, filters and run timers
     Then the roadmap refuses to move on while an agent turn is running, pointing to "Pause after current step"
     And the roadmap item "Pause item A" is not parked
     And the roadmap item "Pause item C" has not started
+
+  # ---- #405: main stays green: the base's known failures, the fix item of a red base ---------------------
+
+  @issue-405
+  Scenario: The Roadmap shows the base's known failures in one line, with a link to the details
+    Given the app is open
+    And the test "exports the monthly report" in "test/report.test.js" fails on the base of the demo project
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    Then the roadmap shows one line reading "1 known failure on the base"
+    When I open the base's known failures from that line
+    Then the details name the test "exports the monthly report" in "test/report.test.js"
+
+  # stage 1 is done and stage 2 ("Tonight") is the current one: the fix item's new stage takes its place
+  @issue-405
+  Scenario: A red test on the base puts a fix item, in Automatic mode, in a new stage before the current one
+    Given the app is open
+    And a base check after a merge finds the test "exports the monthly report" in "test/report.test.js" red
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    Then stage 2 holds only the fix item for "exports the monthly report"
+    And the roadmap item "exports the monthly report" is in "Automatic" mode
+    And stage 3 shows the item "Keyboard focus is lost after closing a dialog"

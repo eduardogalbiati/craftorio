@@ -108,27 +108,33 @@ module.exports = (ctx) => {
   // memory:stopStray stops it. Started with the workspace (strays of an earlier app session too),
   // never in automated checks. #406: a folder is live while any run uses it, here or in another app
   // process (a run resumed into an earlier run's worktree too), and a stray under it is named with
-  // the last run that used it (run ids start with their start time).
+  // the last run that used it (run ids start with their start time). #414: a run's temp folder
+  // (runs/<id>/tmp, where its tests write) is one more folder of run <id>, live while that run is.
   function watchStrayProcesses() {
     if (simulation.simulationOnly() || !ctx.ws) return;
     const guard = applyMemorySettings();
     if (!guard) return;
+    const subdirs = (dir) => { try { return fs.readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name); } catch { return []; } };
     const runsOfWorktrees = () => {
-      let names = [];
-      try { names = fs.readdirSync(ctx.ws.worktrees, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name); } catch { return []; }
-      if (!names.length) return [];
+      const names = subdirs(ctx.ws.worktrees);
+      const tmpIds = subdirs(ctx.ws.runs).filter((id) => fs.existsSync(path.join(ctx.ws.runs, id, 'tmp')));
+      if (!names.length && !tmpIds.length) return [];
       const ids = names.map((name) => name.replace(/-base$/, ''));
       // a run using a worktree started after the run it is named after
-      const since = ids.reduce((a, b) => (a && a < b ? a : b), '');
+      const since = [...ids, ...tmpIds].reduce((a, b) => (a && a < b ? a : b), '');
       const used = worktreeRuns(ctx.ws.runs, ctx.ws.worktrees, { since });
       const inUse = activeWorktreeDirs();
-      return names.map((name, i) => {
+      const worktrees = names.map((name, i) => {
         const id = ids[i];
         const main = path.join(ctx.ws.worktrees, id);
         const users = used.filter((r) => r.dirs.some((d) => samePath(d, main)));
         const live = active.has(id) || runAlive(id) || inUse.some((d) => samePath(d, main)) || users.some((r) => r.live);
         return { id: [id, ...users.map((r) => r.runId)].sort().pop(), worktree: path.join(ctx.ws.worktrees, name), live };
       });
+      const tmps = tmpIds.map((id) => ({
+        id, worktree: path.join(ctx.ws.runs, id, 'tmp'), live: active.has(id) || runAlive(id) || used.some((r) => r.runId === id && r.live),
+      }));
+      return [...worktrees, ...tmps];
     };
     guard.watchStrays({
       runs: runsOfWorktrees,
@@ -231,6 +237,35 @@ module.exports = (ctx) => {
     if (!run.mock && active.size) finishedPeers.push({ finishedAt: Date.now(), sessions: usageOf(run) });
     const oldest = Math.min(...budgetAt.values());
     finishedPeers = finishedPeers.filter((f) => f.finishedAt >= oldest); // none left when nothing runs
+  }
+
+  // What follows a run's end (its workflow.finished event): the next issues waiting in a Backlog
+  // queue start once this run is over; a queued issue whose run failed pauses its queue (a failure
+  // that repeats would otherwise burn through it)
+  function afterRunFinished(run, ev) {
+    if (run.issues && run.projectId && ev.status === 'failed' && !run.mock) {
+      try { backlog.setPaused(ctx.ws.backlog, run.projectId, true, `${run.issues.map((i) => `#${i.number}`).join(', ')} failed: resume to start the next issues.`); } catch (e) { console.error('backlog queue:', e); }
+    }
+    // the epic first (the chain may sync the backlog), then what the run's chain starts (#134)
+    ctx.placeFiledInEpic(run, ev).catch((e) => console.error('issue tracker epic:', e.message))
+      .then(() => ctx.continueChain(run, ev)).catch((e) => console.error('run chain:', e.message));
+    // a Backlog Refresh run edited or closed issues: the Backlog syncs the project (#161)
+    ctx.afterBacklogRefresh(run).catch((e) => console.error('backlog refresh sync:', e.message));
+    // a release run (#260): a shipped release is recorded and its cut line lets the roadmap go on
+    ctx.afterRelease(run, ev).catch((e) => console.error('release:', e.message));
+    // #405: a base check deferred while this release run held the base runs now
+    try { ctx.afterBaseReleased(run); } catch (e) { console.error('base health:', e.message); }
+    // a merged run changes the conflict map the Product Owner plans with (#150)
+    ctx.afterRunConflictMap(run, ev).catch((e) => console.error('conflict map:', e.message));
+    // a roadmap's next items first (its stage may be over), then the plain queue; a shutdown
+    // cancels it (#186: it would run after the workspace was closed, e.g. a test's removed one)
+    const dispatch = setTimeout(() => {
+      dispatchTimers.delete(dispatch);
+      if (!ctx.ws) return;
+      Promise.resolve().then(() => ctx.dispatchRoadmaps()).catch((e) => console.error('roadmap dispatch:', e))
+        .then(() => ctx.dispatchQueue()).catch((e) => console.error('backlog dispatch:', e));
+    }, 1000);
+    dispatchTimers.add(dispatch);
   }
 
   // What the UI shows of each run in progress (the Run menu list). `gates` are the gates the run
@@ -353,6 +388,8 @@ module.exports = (ctx) => {
         agentOverrides, fallbacks: settingsFallbacks(settings), models: settings.models || {},
         // #337: tonight's limits, read at each check (a raise reaches the run at its next one)
         nightLimits: () => nightLimits.tonightLimits(ws.oracle || path.join(ws.root, 'oracle')),
+        // #327: Settings › Language, read at each turn (a change reaches the run at its next turn)
+        language: () => workspace.readSettings(ws).language,
         // #367: the machine profile's test workers per run (auto from this machine, or the owner's)
         testWorkers: machineProfile.resolveLimits(settings, machineProfile.readMachine()).testWorkers,
         // `type: workflow` steps (#174): each child is a normal run of this service, linked to this one
@@ -368,6 +405,8 @@ module.exports = (ctx) => {
         actionsQuota: async (owner) => actionsUsage.quotaExhausted(await actionsUsage.getActionsUsage({ owner, includedMinutes: +settings.actionsIncludedMinutes || 0, timeZone: settings.timeZone })),
         // #381: the project map's analyze step runs the Oracle's architecture analysis with the service's Oracle
         architectureOracle: () => ({ oracle: ctx.oracleService(), agent: agents.readAgent(ws.agents, agents.ORACLE_ID) }),
+        // #378: the Refactor proposals workflow ranks with the Refactor tab's Product Owner (channels/refactor.js)
+        refactorPriorityOptions: (projectId) => ctx.refactorPriorityOptions?.(projectId) || null,
       });
       if (!mock) {
         // the runs in progress have not written their usage to disk yet
@@ -402,6 +441,11 @@ module.exports = (ctx) => {
         ctx.stopLocalPreview({ runId: run.runId, reason: ev.type === 'approval.resolved' ? 'the gate was answered' : 'the run ended' });
       }
       if (ev.type === 'worktree.merged') ctx.afterLocalMerge(run, ev).catch((e) => console.error('after local merge:', e));
+      // #405: pre-existing failures are tracked, and a merge starts the base check (areas/base-health.js)
+      try {
+        if (ev.type === 'step.finished') ctx.afterStepFinished(run, ev).catch((e) => console.error('base health:', e.message));
+        if (ev.type === 'worktree.merged') ctx.afterBaseMerge(run, ev);
+      } catch (e) { console.error('base health:', e.message); }
       if (ev.type === 'workflow.started' || ev.type === 'run.then') ctx.recordChain(run, ev);
       events.emit('run:event', ev);
       if (ev.type === 'workflow.started') markActiveRun(run.runId, runInfo);
@@ -411,31 +455,7 @@ module.exports = (ctx) => {
       }
       // a gate's notice carries its phone page link while Phone gates is on (#226)
       ctx.notify(notifier.runNotice(ev, runInfo, { gateLink: ctx.phoneGateLink() }), { projectId: run.projectId, issue: run.issues?.map((i) => `#${i.number}`).join(', ') || null });
-      // the next issues waiting in a Backlog queue start once this run is over; a queued issue whose
-      // run failed pauses its queue (a failure that repeats would otherwise burn through it)
-      if (ev.type === 'workflow.finished') {
-        if (run.issues && run.projectId && ev.status === 'failed' && !run.mock) {
-          try { backlog.setPaused(ctx.ws.backlog, run.projectId, true, `${run.issues.map((i) => `#${i.number}`).join(', ')} failed: resume to start the next issues.`); } catch (e) { console.error('backlog queue:', e); }
-        }
-        // the epic first (the chain may sync the backlog), then what the run's chain starts (#134)
-        ctx.placeFiledInEpic(run, ev).catch((e) => console.error('issue tracker epic:', e.message))
-          .then(() => ctx.continueChain(run, ev)).catch((e) => console.error('run chain:', e.message));
-        // a Backlog Refresh run edited or closed issues: the Backlog syncs the project (#161)
-        ctx.afterBacklogRefresh(run).catch((e) => console.error('backlog refresh sync:', e.message));
-        // a release run (#260): a shipped release is recorded and its cut line lets the roadmap go on
-        ctx.afterRelease(run, ev).catch((e) => console.error('release:', e.message));
-        // a merged run changes the conflict map the Product Owner plans with (#150)
-        ctx.afterRunConflictMap(run, ev).catch((e) => console.error('conflict map:', e.message));
-        // a roadmap's next items first (its stage may be over), then the plain queue; a shutdown
-        // cancels it (#186: it would run after the workspace was closed, e.g. a test's removed one)
-        const dispatch = setTimeout(() => {
-          dispatchTimers.delete(dispatch);
-          if (!ctx.ws) return;
-          Promise.resolve().then(() => ctx.dispatchRoadmaps()).catch((e) => console.error('roadmap dispatch:', e))
-            .then(() => ctx.dispatchQueue()).catch((e) => console.error('backlog dispatch:', e));
-        }, 1000);
-        dispatchTimers.add(dispatch);
-      }
+      if (ev.type === 'workflow.finished') afterRunFinished(run, ev);
     });
     // a failed roadmap item's run resumed from a step (#100): the new run takes its place
     if (resume?.runId && run.projectId) {

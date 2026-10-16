@@ -100,10 +100,13 @@ test('#391 stage menu: the stage\'s pause reads "Pause after current step"; its 
   assert.match(H.decode(entry.attrs.title || ''), /current turn/);
 });
 
+// #412: the pause button left the header for the Run screen's tab row (views/run/run.js, or
+// run-controls.js when it draws it); test/renderer-run-tabs-410.test.js checks where it shows
 test('#391 Run screen: the run\'s pause button reads "Pause after current step"', () => {
-  const html = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'index.html'), 'utf8');
-  const btn = H.findEl(html, (e) => e.attrs.id === 'btn-pause');
-  assert.ok(btn, '#btn-pause is in index.html');
+  const renderer = path.join(__dirname, '..', 'src', 'renderer');
+  const html = ['index.html', 'views/run/run.js', 'run-controls.js'].map((f) => fs.readFileSync(path.join(renderer, ...f.split('/')), 'utf8')).join('\n');
+  const btn = H.findEl(html, (e) => e.name === 'button' && (e.attrs.id === 'btn-pause' || e.attrs['data-testid'] === 'run-pause'));
+  assert.ok(btn, 'the run\'s pause button (#btn-pause or data-testid="run-pause") is on the Run screen');
   assert.equal(H.visibleText(btn.inner).trim(), 'Pause after current step');
 });
 

@@ -13,7 +13,7 @@ RFC, ADR, test plan, design sketch), blind peer review and lenses. It shows the 
 proposal and its scores for the others (with the real author of each anonymized proposal, which only
 you see), the synthesizer posts the final document, the verifier its verdict, and the supervisor asks
 you to accept, redo (with optional instructions for the synthesizer) or discard. A **Peer scores**
-panel ranks the contenders; past runs open as a chat from Workflows › Runs › **Open chat**.
+panel ranks the contenders; past runs open as a chat from Workflows › Runs › **Open run**, then its **Chat** tab.
 
 | Stage | Who | What it does |
 |---|---|---|

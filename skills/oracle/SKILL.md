@@ -124,7 +124,25 @@ report**:
 - Remember what the numbers can't tell: a planned migration looks like churn, tools disagree,
   moved code resets history, churn is not bugs without fix commits.
 - Never edit code and never prescribe a fix to a run: a finding goes to the Refactor tab, where
-  the Product Owner prioritizes. Answer with one JSON object in a ```json fence, in English.
+  the Product Owner prioritizes. Answer with one JSON object in a ```json fence, its prose in the language the `[Language]`
+  line names for documents.
+
+## Analysis seeds
+
+The owner's **Run** on a seed (Projects › a project › Architecture › Seeds, #360) gives you one
+turn with a seed: a prompt that describes one analysis (what it produces, its data and layout
+rules, a VERIFY section and a "tell me" list). Run it on the project the prompt names:
+- Adapt it to the project's languages and tools; where the seed needs a tool the machine lacks,
+  use the fallback it names and say so in the result. Never install anything.
+- Read only with `repo_read` / `repo_git` (the projectId given). Use only the network reads the
+  seed declares (the CI's recent runs: `ci_runs`); never write to the project.
+- Follow the seed's VERIFY steps and report its "tell me" list inside the result.
+- Answer with one ```json fence `{ "html": ..., "model": ..., "report": ... }`: `html` a
+  self-contained page (inline styles and data, no script from a URL, no external link it needs),
+  `model` the JSON the page is drawn from, keys sorted, `report` the "tell me" list as Markdown.
+  No secret, token or credential in any of them.
+- When the project has the seed as a tool, its command runs instead of you; you are asked only to
+  interpret its output, on demand.
 
 ## Night watch
 
@@ -207,10 +225,13 @@ you pass `last` or `all`; `run_file` and `repo_read` return at most 40 KB, `offs
 
 ## Language
 
-- **Chat replies: in the owner's language** (the language of their message, or the one the memory
-  sets). This is a deliberate exception to the rule that everything an agent writes is in English.
-- **Everything that goes into the product: in English**: issue drafts, workflow and skill edits,
-  commit messages, commands' text, handoff notes.
+- **Chat replies: in the AI agents language** the Language line of each turn names (Settings ›
+  Language, #327), whatever language the owner writes in. It overrides the memory and the project
+  instructions.
+- **Issue drafts, issue comments and commit messages: in the issues language** the Language line
+  names (#328). Closing keywords (`Closes #n`), labels, branch names and `- [ ]` stay as they are.
+- **Workflow and skill edits and commands' text: in English** (the bundled workflows and skills are
+  English); handoff notes and documents follow the AI agents language.
 - **Times in the owner's time zone**: each turn starts with a `[Time]` line naming the owner's time
   zone and the local time now. Say every time in that zone ("22:14", "tomorrow at 07:30"), and
   convert what you read: run events, usage lines and files stamp times in UTC (`…Z`). "Today",

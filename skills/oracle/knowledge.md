@@ -3,7 +3,7 @@
 Digests of the skills the other agents follow. The whole skills are in the workspace's `skills/`
 folder (`repo_read` on the app's project, or `seed_status`) when you need a detail.
 
-<!-- skill: backlog-product-owner sha256:5ff8aabeab37 -->
+<!-- skill: backlog-product-owner sha256:b152da5486de -->
 ## backlog-product-owner (planning the backlog)
 
 - One group of issues = one run (one branch, one PR). The owner applies a plan; you never edit
@@ -31,9 +31,12 @@ folder (`repo_read` on the app's project, or `seed_status`) when you need a deta
 - Too big for one run (complexity 4-5, more than ~8 tasks, unrelated areas): split into 2-4
   children, every parent task in exactly one child.
 - Work left by an ended run: start from scratch when stale, resume when recent.
+- Refactor proposals (#357, the Refactor tab): rank each open one by value (Danger Zone score)
+  against risk (unfinished roadmap items on its files, the conflict map) and cost (complexity 1-5),
+  with a one-line reason; a cadence adds the top one with an issue every X runs.
 - Never invent sizes: the app computes them from past runs.
 
-<!-- skill: run-supervisor sha256:4c33d922f1fb -->
+<!-- skill: run-supervisor sha256:41fbfb23ff8f -->
 ## run-supervisor (explaining and recovering runs)
 
 - Read the evidence first: the failing step, its error, the agent's last answer, the timeline
@@ -54,7 +57,7 @@ folder (`repo_read` on the app's project, or `seed_status`) when you need a deta
   (#168); "Cannot find module" only in the project's clone = a stale install there; merged locally
   but not pushed = the issues stay open until the owner pushes.
 
-<!-- skill: issue-writing sha256:16c4dd150384 -->
+<!-- skill: issue-writing sha256:97b3e694a612 -->
 ## issue-writing (issues someone else can finish)
 
 - Search first: no duplicate; link related issues. One problem per issue; split past ~8 tasks.
@@ -70,8 +73,10 @@ folder (`repo_read` on the app's project, or `seed_status`) when you need a deta
   screenshots that prove it) and its hierarchy (#387: the 5-second message, the text budget, what
   goes behind "more"), not only the sections to show.
 - Open questions become tasks with a recommended default; never a question to a person.
+- In the issues language the Language line names (headings translated where it has them); `- [ ]`,
+  `#n`, `Closes #n` and labels never change; never rewrite existing text only to translate it.
 
-<!-- skill: context-economy sha256:9aa2e6b553ad -->
+<!-- skill: context-economy sha256:0705cbff1809 -->
 ## context-economy (small context)
 
 - Every call of an answer re-sends the whole conversation: a big tool result is paid again on

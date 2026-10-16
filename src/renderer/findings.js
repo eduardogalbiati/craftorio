@@ -75,8 +75,10 @@
     button.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="2.5" /><line x1="12" y1="1.5" x2="12" y2="5" /><line x1="12" y1="19" x2="12" y2="22.5" /><line x1="1.5" y1="12" x2="5" y2="12" /><line x1="19" y1="12" x2="22.5" y2="12" /></svg><span>Findings</span>';
     // not a screen of the sidebar: app.js's navigation never sees this click
     button.addEventListener('click', (e) => { e.stopPropagation(); open(); });
-    const spacer = document.querySelector('nav.sidebar .nav-spacer');
-    if (spacer) spacer.after(button);
+    // #411 at the menu's end: entries registered later go before the highest order (view-registry.js)
+    button.dataset.order = '9999';
+    const menu = document.querySelector('nav.sidebar .sidebar-menu');
+    if (menu) menu.append(button);
     else document.body.appendChild(button);
   }
 

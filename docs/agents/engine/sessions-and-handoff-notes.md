@@ -13,6 +13,17 @@ Session modes (persistent, ephemeral, handoff), handoff notes, context and reque
   `handoff.saved` (with the `note`).
 - A fresh session of an agent that already has a note (handoff mode, a rotation, or a resumed run)
   gets `<system>…</system>`, then `<handoff_note>…</handoff_note>`, then the prompt.
+- **The Language line** (#327, #328): `agentTurn` adds one `[Language]` line to every turn, for
+  every CLI (`languageLine` in `src/shared/language.js`, from the WorkflowRun `language` option,
+  read at each turn: a change in Settings › Language applies from the next turn). It names the AI
+  agents language (prose, notes, documents) and the issues language (issues, PR/MR descriptions,
+  commit messages), and keeps JSON keys, enum values, paths, branches, labels and `Closes #n` as
+  they are; when both are English it is one short line (the develop prompt's 40K budget). Its
+  text only changes with the setting, so the prompt cache holds. It is not part of
+  the step prompt, so retries and test requests that resend the prompt do not repeat it. The
+  output instruction (`outputInstruction`), the schema retry (`retryLanguage`) and the handoff
+  request name English when unset (today's text) and otherwise ask for prose in the agents
+  language with keys and enum values exactly as the schema names them (#94).
 - When the next turn needs the note (handoff mode, or a rotation) and the answer has none, one
   follow-up turn in the same provider conversation asks only for it (`HANDOFF_ONLY`); if that fails
   too, a fallback note is built from the answer.

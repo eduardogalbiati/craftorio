@@ -2,20 +2,22 @@
 // gate card; the "Developer effort" field next to "Developer model" (#286); the chat of a run
 // interrupted at a gate (#288: the note "Interrupted at <step>" and its Resume button); AI
 // Development's Warm Up step (#301), its affected suite's card and run report (#304), and the "Not
-// tested green" pill of a run built without a green suite (#396). Locators are
+// tested green" pill of a run built without a green suite (#396), the Start panel's inputs of a
+// chosen workflow (features/pipelines.feature, #378). Locators are
 // roles and data-testid only (skills/ui-conventions).
 
 const fs = require('fs');
 const path = require('path');
 const { expect } = require('@playwright/test');
 const { Given, When, Then } = require('./fixtures');
+const { openStartPanel, runScreenStatus, runTab } = require('../support/run-screen');
 
 // a simulated run of software-development reaches its first gate in well under a minute
 const GATE_TIMEOUT = 120000;
 
+// #412: no Start in the header: the Start panel opens from Projects › the demo project's "Start workflow"
 When('I open the Start panel', async ({ e2e }) => {
-  await e2e.window.getByTestId('quick-start').click();
-  await expect(e2e.window.getByTestId('start-workflow')).toBeVisible();
+  await openStartPanel(e2e);
 });
 
 When('I pick {string} for {string}', async ({ e2e }, option, field) => {
@@ -33,14 +35,17 @@ Then('{string} is selected for {string}', async ({ e2e }, option, field) => {
 
 When('I start a simulated run with the task {string}', async ({ e2e }, task) => {
   const page = e2e.window;
-  if (!(await page.getByTestId('start-workflow').isVisible())) await page.getByTestId('quick-start').click();
+  await openStartPanel(e2e);
   await page.getByTestId('start-main-input').fill(task);
   await page.getByRole('checkbox', { name: /Simulation mode/ }).check();
   await page.getByTestId('start-workflow').click();
 });
 
+// #412: the run's status is on the Run screen's tab row
 Then('the run is running', async ({ e2e }) => {
-  await expect(e2e.window.getByTestId('run-status')).not.toHaveAttribute('data-status', 'idle', { timeout: 30000 });
+  const status = runScreenStatus(e2e.window);
+  await expect(status).toBeVisible({ timeout: 30000 });
+  await expect(status).not.toHaveAttribute('data-status', 'idle', { timeout: 30000 });
 });
 
 Then('a gate card waits for my approval', async ({ e2e }) => {
@@ -113,8 +118,11 @@ When('I open the run from Analytics', async ({ e2e }) => {
   await e2e.window.getByTestId('an-run-header').getByRole('button', { name: 'Open run', exact: true }).click();
 });
 
+// #412: no cost KPI in the header any more: the Run screen marks the estimated part on the cost of
+// the session it belongs to (data-testid session-cost, the same "estimated" badge)
 Then('the run\'s total cost is marked as estimated', async ({ e2e }) => {
-  await expect(e2e.window.getByTestId('run-total-cost')).toContainText(/estimated/i, { timeout: 30000 });
+  const costs = e2e.window.getByTestId('session-cost').filter({ visible: true });
+  await expect(costs.filter({ hasText: /estimated/i }).first()).toBeVisible({ timeout: 30000 });
 });
 
 Then('the run\'s {string} session shows {string}', async ({ e2e }, agent, text) => {
@@ -196,8 +204,26 @@ const visibleGroup = (page, name) => page.getByRole('radiogroup', { name, exact:
 
 When('I choose the workflow {string} in the Start panel', async ({ e2e }, name) => {
   const page = e2e.window;
-  if (!(await page.getByTestId('start-workflow').isVisible())) await page.getByTestId('quick-start').click();
+  await openStartPanel(e2e);
   await page.getByRole('combobox', { name: 'Workflow', exact: true }).selectOption(`${name}.yaml`);
+});
+
+// #378: the Start panel's inputs of the chosen workflow. A path input (project_path) is the
+// "Project" select, required when the label's "*" shows (its accessible name "Project *"); every
+// other input's control carries data-wi-input="<key>" (workflow-inputs.js), whether it is the main
+// "Input" box, upfront or in the collapsed "Advanced parameters" (so attached, not necessarily visible).
+const startInput = (page, key) => page.locator(`#inputs-form [data-wi-input="${key}"], #adv-form [data-wi-input="${key}"]`);
+
+Then('the Start panel requires a project', async ({ e2e }) => {
+  await expect(e2e.window.getByRole('combobox', { name: /^Project\s*\*/ })).toBeVisible();
+});
+
+Then('the Start panel has the input {string}', async ({ e2e }, key) => {
+  await expect(startInput(e2e.window, key)).toHaveCount(1);
+});
+
+Then('the Start panel\'s input {string} defaults to {string}', async ({ e2e }, key, value) => {
+  await expect(startInput(e2e.window, key)).toHaveValue(value);
 });
 
 // the field right after the other one in the same form; in the Start panel both may sit in
@@ -286,14 +312,15 @@ Given('the demo project has a run {string} interrupted at the gate {string}', as
   fs.writeFileSync(path.join(dir, 'events.jsonl'), `${events.map((e) => JSON.stringify(e)).join('\n')}\n`);
 });
 
-// Workflows › Runs, after `I search the runs for`: expands the run's row and clicks its "Open chat"
+// Workflows › Runs, after `I search the runs for`: expands the run's row, clicks its "Open run"
+// (the card's only way to the run since #409: it opens the Details) and switches to the Chat
 When('I open the chat of the run {string} from the list', async ({ e2e }, fragment) => {
   const page = e2e.window;
-  const row = page.locator(`[data-testid="run-list-row"][data-run$="${fragment}"]`).filter({ visible: true }).first();
-  await expect(row).toBeVisible({ timeout: LOAD_TIMEOUT });
-  const open = row.getByRole('button', { name: 'Open chat', exact: true });
-  if (!(await open.isVisible())) await row.locator('.pr-row').first().click();
-  await open.click();
+  await rowButton(page, fragment, 'Open run');
+  // a past run is rebuilt from its events: its workflow (which picks the AI Arena / Write & Review chat
+  // screens) is known only once it has loaded
+  await expect.poll(() => page.evaluate((f) => (typeof state === 'object' && state.view === 'run' && String(state.run?.id || '').endsWith(f) && state.run?.workflow) || null, fragment), { timeout: LOAD_TIMEOUT }).toBeTruthy();
+  await runTab(page, 'Chat').click({ timeout: LOAD_TIMEOUT });
 });
 
 Then('the run chat notes {string}', async ({ e2e }, text) => {
@@ -442,11 +469,13 @@ async function rowButton(page, fragment, name) {
 }
 
 When('I view the run {string} from the list', async ({ e2e }, fragment) => {
-  await rowButton(e2e.window, fragment, 'View run');
+  await rowButton(e2e.window, fragment, 'Open run');
 });
 
+// #409: the card has no "Open in Analytics" any more: Open run, then the Run screen's own button
 When('I open the run {string} in Analytics from the list', async ({ e2e }, fragment) => {
-  await rowButton(e2e.window, fragment, 'Open in Analytics');
+  await rowButton(e2e.window, fragment, 'Open run');
+  await e2e.window.getByRole('button', { name: 'Open in Analytics', exact: true }).filter({ visible: true }).first().click({ timeout: LOAD_TIMEOUT });
   await expect(e2e.window.getByTestId('an-run-header')).toContainText(fragment, { timeout: LOAD_TIMEOUT });
 });
 

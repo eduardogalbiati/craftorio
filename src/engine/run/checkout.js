@@ -16,6 +16,7 @@ const {
   git,
   prepareBaseWorktree,
   prepareWorktree,
+  removeRunTmp,
   removeScratch,
   removeWorktree,
   restoreWork,
@@ -161,9 +162,15 @@ const methods = {
   // (local-preview.scratchWorkspace). Agents get it in their environment, so the app's tools they
   // run from the worktree (npm run run, npm run screenshot, the app itself) never write to the
   // owner's workspace. Only runs with a worktree; created on the first agent turn, removed with it.
+  // #414: plus `tmp`, the run's temp folder (<run>/tmp, TMP/TEMP/TMPDIR in agentEnv) from the
+  // machine adapter; none in a simulation.
   scratchWorkspace() {
     if (!this.worktree) return null;
-    this.scratch ??= scratchWorkspace({ root: path.dirname(path.dirname(this.runDir)) }, path.join(this.runDir, 'scratch'));
+    if (!this.scratch) {
+      const scratch = scratchWorkspace({ root: path.dirname(path.dirname(this.runDir)) }, path.join(this.runDir, 'scratch'));
+      const tmp = this.machine.runTmp(this.runDir);
+      this.scratch = tmp ? { ...scratch, tmp } : scratch;
+    }
     return this.scratch;
   },
 
@@ -171,10 +178,12 @@ const methods = {
   // Success: remove the worktree and its local branch when merged, and the run's scratch workspace.
   // Otherwise (#202) the branch keeps the work (uncommitted changes as a WIP commit, a detached
   // worktree gets a branch) and the folder and the scratch go; a resume recreates the folder.
+  // Any end but paused: the run's temp folder goes (#414), with or without a worktree.
   async finishWorktree(status) {
+    const log = (level, message) => this.emitEvent('log', { level, message });
+    if (status !== 'paused' && removeRunTmp(this.runDir)) log('info', `worktree: removed the run's temp folder ${path.join(this.runDir, 'tmp')}`);
     const wt = this.worktree;
     if (!wt) return;
-    const log = (level, message) => this.emitEvent('log', { level, message });
     // the base checkout (base_worktree) is recreated when needed: it goes whatever the status
     if (this.baseWorktree) {
       const b = this.baseWorktree;

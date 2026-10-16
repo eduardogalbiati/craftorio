@@ -10,6 +10,8 @@
 // Saved pipelines (#135) are listed after the workflows (option value `pipe:<file>`): picking one
 // asks for its first stage's inputs (its fixed ones set), shows the whole chain with a cost estimate
 // instead of the ChainPicker, and Start calls api.runPipeline.
+// An analysis workflow (ANALYSIS_WORKFLOWS, refactor-proposals.yaml, #378) shows its model turn's
+// estimate from api.architectureEstimate (#wf-estimate) before the start.
 
 const LS_KEY = 'multiagent.inputs';
 const PIPE = 'pipe:';
@@ -127,6 +129,29 @@ function renderProjectInfo() {
   const p = state.projects.find((x) => x.id === $('#project-select').value);
   $('#project-info').textContent = p ? `${p.folder}${p.repo ? `\n${p.repo}` : ''}` : '';
   applyProjectHints();
+  window.renderAnalysisEstimate?.();
+}
+
+// #378: a workflow whose analysis is a real model call (the Refactor proposals) shows, under its
+// description, the Architecture tab's estimate for the chosen project (api.architectureEstimate: the
+// mean cost of its last real analyses, the workflow's runs included)
+const ANALYSIS_WORKFLOWS = ['refactor-proposals.yaml'];
+function renderAnalysisEstimate() {
+  const el = $('#wf-estimate');
+  if (!el) return;
+  const wf = state.wf;
+  const projectId = $('#project-select').value;
+  const on = !state.pipeline && ANALYSIS_WORKFLOWS.includes(wf?.file) && !!api.architectureEstimate;
+  el.classList.toggle('hidden', !on);
+  if (!on) { el.textContent = ''; return; }
+  if (!projectId) { el.textContent = 'The analysis is a real model call: pick a project to see its estimate.'; return; }
+  el.textContent = 'Estimating the analysis…';
+  api.architectureEstimate(projectId).then(({ estimate }) => {
+    if (state.wf !== wf || $('#project-select').value !== projectId) return;
+    el.textContent = estimate
+      ? `The analysis is a real model call: ≈ US$ ${Number(estimate.usd).toFixed(2)} (from the last ${estimate.basis} ${estimate.basis === 1 ? 'analysis' : 'analyses'} of this project), counted in the run's budget.`
+      : 'The analysis is a real model call: no estimate yet, the first real analysis of this project shows its cost.';
+  }).catch(() => { el.textContent = ''; el.classList.add('hidden'); });
 }
 
 // `file`: a workflow file, or `pipe:<file>` for a pipeline (its first stage's workflow is drawn).
@@ -179,6 +204,7 @@ function selectWorkflow(file) {
   setStartDisabled(!!wf.error || oneRunAtATime());
   drawerChain().refresh();
   renderDrawerPipeline();
+  window.renderAnalysisEstimate?.();
   window.renderEnvStatus?.(); // through window: the drawer's unit tests load selectWorkflow on its own
 }
 

@@ -62,11 +62,12 @@ const WRITE_UTILITIES = [
 const AGENT_ENV = { MULTIAGENT_SIMULATION_ONLY: '1' };
 // Folders of the run every agent with commands may write to (created by the engine, given to
 // Claude Code with --add-dir): evidence screenshots (evidence/<step>/round-<n>, #146, src/evidence.js),
-// logs of long commands, the run's scratch workspace (#120).
+// logs of long commands, the run's scratch workspace (#120), the run's temp folder (#414).
 const RUN_DIRS = [
   'evidence',
   'logs',
   'scratch',
+  'tmp',
 ];
 
 // Commands refused when the worktree's node_modules links the shared dependency cache (#198): a
@@ -85,12 +86,15 @@ const DEPS_DENIED_COMMANDS = [
 // The environment of an agent of a run: AGENT_ENV, plus the run's scratch workspace (#120) when it
 // has one ({ workspace, userData }, see WorkflowRun.scratchWorkspace), so `npm run run`, `npm run
 // screenshot` and the app started from the worktree never open the owner's workspace or user data.
+// scratch.tmp (#414): the run's temp folder (<run>/tmp), as TMP, TEMP and TMPDIR, so the tests a
+// turn runs write their temp files inside the run (removed when it ends), not in the user's %TEMP%.
 // workers: { testWorkers } of the machine profile (#367): the test workers per run, passed to the
 // test runners as MULTIAGENT_TEST_WORKERS / MULTIAGENT_E2E_WORKERS (src/machine-profile.js workerEnv).
 function agentEnv(scratch = null, workers = null) {
   const env = { ...AGENT_ENV, ...(workers?.testWorkers ? workerEnv(workers) : {}) };
   if (!scratch) return env;
-  return { ...env, MULTIAGENT_USER_DATA: scratch.userData, MULTIAGENT_WORKSPACE: scratch.workspace };
+  const tmp = scratch.tmp ? { TMP: scratch.tmp, TEMP: scratch.tmp, TMPDIR: scratch.tmp } : {};
+  return { ...env, MULTIAGENT_USER_DATA: scratch.userData, MULTIAGENT_WORKSPACE: scratch.workspace, ...tmp };
 }
 
 // Flags that take no value: never passed twice (clap-based CLIs refuse a repeated flag).

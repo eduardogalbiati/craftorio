@@ -304,6 +304,7 @@ module.exports = (ctx) => {
 
   return {
     afterRelease,
+    isReleaseRun,
     listReleases,
     markReleasedIssues,
     readReleaseSummary,

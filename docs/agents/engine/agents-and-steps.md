@@ -62,7 +62,25 @@ fields (references between steps, agents, transitions, groups) are the named rul
   transitions route it. The other failures are checked on the base by the step itself (#211): their
   test files run in the base checkout (`suiteBase`, prepared on demand, so `run_existing`/`off` runs
   get it too), cached per base commit + file in `cache/base-tests/`; those failing there too become
-  `preexisting_failures` (the run's list, the summary, the workspace's `failing-on-main.json`). The
+  `preexisting_failures` (the run's list, the summary, the project's base-health store below).
+  **Main stays green (#405, `src/base-health.js`, wired in `src/service/areas/base-health.js`)**: a
+  real run's `preexisting_failures` are recorded per project in `backlog/base-health/<project>.json`
+  (test, file, first/last seen, runs; the engine records them, the service files); seen by 2 runs, a
+  failure files one bug issue, updated (a comment) by every later sighting, never a second one.
+  After each `worktree.merged` of a real run
+  (`tested: 'not green'` makes it trigger `not-green`), the base check runs the whole suite on a
+  clean detached checkout of the local base tip (`worktrees/base-check-<project>`), with no agent,
+  `MULTIAGENT_SIMULATION_ONLY=1`, its own lock folder, the suite timeout from the project's recent
+  durations, one check at a time. While a release run holds the base it is deferred, and runs when
+  that release run ends. A red test files (or updates) its issue with the commit range (the last
+  green check, the first red commit) and the log; a test red again after a green check reopens its
+  issue. Settings › Execution `baseCheck.onRed` (`off` | `issue` | `fix`, default `fix`)
+  adds a fix item, mode auto, in a new stage before the roadmap's current one (`insertFrontStage`;
+  none while the roadmap plans that issue already). The fix item runs the project's default
+  development workflow (Settings › General › Backlog `defaultWorkflow`, #195, through
+  `DefaultWorkflow.resolve`, #413; unset or missing, its fallback, the local workflow). A red or failed check notifies the owner.
+  It never pushes, never answers a gate and never changes a running item. The Roadmap bar shows
+  "N known failures on the base" (`backlog:get` `baseFailures`). The
   suite gets a shell-like env (`suiteEnv`: no Electron/npm/inspector variables, no scratch
   workspace, its own `MULTIAGENT_LOCKS_DIR`, #210); without a step `timeout`, the timeout is 3× the
   median of the project's recent durations (`cache/suite-durations.json`, min 10 min, 30 min with no
@@ -278,6 +296,7 @@ fields (references between steps, agents, transitions, groups) are the named rul
   gate is logged `oracle.escalated`, never answered; nothing in `NEVER_ALLOWED` gains a permission.
   The report has one window per Self-healing day (`selfHealingDays`, `selfHealingMetrics`).
 - `orchestrator.limits.max_total_context` (e.g. `20M`): the context the run's agents read (input + cache, summed over every turn). Past it, `contextGate` pauses the run before the next agent turn with a `<step>:context_limit` gate (choices `continue` = allow another block of the same size, `stop` = cancel; the worktree is kept). A turn is never cut; `limit.exceeded` is emitted with `paused: true`.
+- `orchestrator.limits.max_total_duration` measures the work (#416, `checkLimits`, `gateClockMs` in `src/engine/run/costs.js`): the run's elapsed time minus the time it waited for the owner at gates (every open approval, engine-made gates included, an open gate too; gates open together count once). A resumed run (an interrupted or paused gate asked again) starts its own clock and its gate does not count either. Past the limit the message says `Maximum duration exceeded (worked 9h of 8h).` and `limit.exceeded` carries `worked_ms` and `gate_wait_ms`; the summary keeps the wall-clock `duration_ms` and `timing.gate_wait_ms`. An answer given while the run is over a limit (e.g. the cost) is not taken: `resolveApproval` stops the run at the gate with the reason and emits no `approval.resolved`, so Resume asks the gate again once the limit is raised. Tonight's duration (#337) is measured the same way.
 - Effective limits at night (#337, `src/night-limits.js`, `effectiveLimits` in `src/engine/run/costs.js`): the run reads its limits at each check, never once at start: context and cost before each agent turn (`contextGate`, `checkLimits`), duration at its check, the turn timeout when a turn starts (`turnTimeout` × `turns`). The limit in force is the workflow's value (templates rendered, after the #262 per-model lift) × tonight's multiplier (1.5, 2 or 3), or tonight's custom value; never below the day value nor below the highest limit this run was granted (the morning never cuts a run: a run keeps it until it ends; runs started after the watch get the day limits). The settings come from the `nightLimits` option (the service passes `tonightLimits` of the Oracle's folder): only a Night watch with an end time has them, never Self-healing's standing watch. Each new grant is a `limits.expanded` event `{ day, limits }` (the morning summary's runs past a day limit). Never relaxed: a limit the workflow does not set (`max_total_cost_usd: 0` stays no limit), the provider monthly budgets (`checkBudget`), the memory guard (#276). A raise never answers a gate: an open `context_limit` gate stays open with a `note` (`noteLimitsRaised`, in `pendingGates()`).
 - `groups: [{ name, steps }]` (optional, top level): progress views only, the graph ignores it;
   `validateGroups` in `loadWorkflow`. Recorded in `workflow.started` and `summary.groups`, with

@@ -1,8 +1,10 @@
 // Run chat: any workflow run as a conversation (RunChatModel in run-chat-model.js), live or
 // replayed from its events.jsonl. Agents get their robot (robots.js) by provider and model, fan-out
 // steps sit side by side, human gates are answered inline (never automatically). Opened from the
-// runs lists ("Open chat"), the Backlog and the Run screen's Chat / Details toggle, and by every
-// way of opening a run while Chat is the remembered run view (showRun in app.js). A run always
+// runs lists ("Open chat"), the Backlog and the Run screen's Chat tab, and by every way of opening a
+// run while Chat is the remembered run view (showRun in app.js). Its header is the same tab row as
+// the Run screen's (#410: Chat | Details | 3D first, in the same place), then the title, status,
+// cost, Run folder and Stop. A run always
 // opens at its latest message; "Jump to latest" shows while scrolled up.
 // Write & Review and AI Arena runs keep their own chat screens (openChatFor routes them).
 // Registers itself with registerView; its mount also wires the Run screen's Chat button.
@@ -271,8 +273,8 @@
     // the run's title (editable) and PR (#84, app.js), its workflow next to them
     const run = { ...r, id: r.id };
     if (!$c('#rc-title .run-title-input')) $c('#rc-title').innerHTML = r.id
-      ? `<b>${window.runTitleHtml ? runTitleHtml(run) : esc(r.workflow)}</b> ${window.runPrBadge ? runPrBadge(run) : ''} <span class="muted small">${esc(r.workflow)}</span>${r.mock ? ' <span class="badge p-mock">Simulated</span>' : ''}${r.chain && window.ChainModel ? ` ${ChainModel.chainBadgesHtml(r.chain)}` : ''} <span class="muted small mono">${esc(r.id)}</span>`
-      : `<span class="muted mono">${esc(chat.runId || '')}</span>`;
+      ? `<b>${window.runTitleHtml ? runTitleHtml(run) : esc(r.workflow)}</b> ${window.runPrBadge ? runPrBadge(run) : ''} <span class="muted small">${esc(r.workflow)}</span>${r.mock ? ' <span class="badge p-mock">Simulated</span>' : ''}${r.chain && window.ChainModel ? ` ${ChainModel.chainBadgesHtml(r.chain)}` : ''} <span class="muted small mono" data-testid="run-screen-id">${esc(r.id)}</span>`
+      : `<span class="muted mono" data-testid="run-screen-id">${esc(chat.runId || '')}</span>`;
     const status = chat.loading ? 'loading' : r.status === 'running' && !chat.live && !chat.elsewhere ? 'interrupted' : r.status || 'unknown';
     const waiting = chat.live && chat.model.pendingGates().length;
     const pill = $c('#rc-status');
@@ -422,14 +424,14 @@
     id: 'runchat',
     markup: `
       <section id="view-runchat" class="view hidden">
-        <header class="duo-chat-head">
-          <div class="seg sm" role="group" aria-label="Run view">
-            <button type="button" class="active" aria-pressed="true">Chat</button>
-            <button id="rc-details" type="button" title="Sessions, prompts and events of this run">Details</button>
+        <header class="duo-chat-head run-tab-row" data-testid="run-tab-row">
+          <div class="tabs" role="tablist" aria-label="Run view">
+            <button class="tab active" type="button" role="tab" aria-selected="true">Chat</button>
+            <button id="rc-details" class="tab" type="button" role="tab" aria-selected="false" title="Sessions, prompts and events of this run">Details</button>
+            <button id="rc-3d" class="tab" type="button" role="tab" aria-selected="false" data-run3d="chat" data-testid="run-3d" title="Show this run in 3D">3D</button>
           </div>
-          <button id="rc-3d" class="btn ghost sm" type="button" data-run3d="chat" data-testid="run-3d" title="Show this run in 3D">3D</button>
           <div id="rc-title" class="rc-title"></div>
-          <span id="rc-status" class="pill"></span>
+          <span id="rc-status" class="pill" data-testid="run-screen-status"></span>
           <div class="spacer"></div>
           <span id="rc-cost" class="mono small muted" title="Cost so far"></span>
           <button id="rc-logs" class="btn ghost sm" type="button" title="Open the run folder (events, sessions, artifacts)">Run folder</button>

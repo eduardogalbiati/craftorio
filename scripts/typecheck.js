@@ -24,6 +24,7 @@ const CHECKED = [
   'src/engine/run/machine-steps.js',
   'src/engine/run/outputs.js',
   'src/engine/run/project-map-steps.js',
+  'src/engine/run/refactor-proposals-steps.js',
   'src/engine/run/resume.js',
   'src/engine/run/sessions.js',
   'src/engine/run/setup.js',

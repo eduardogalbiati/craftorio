@@ -41,6 +41,31 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   (Sonnet) until the owner has the cost of the UI review on the last 10 UI items and decides
   whether UI-heavy items get a stronger one. Why: the UI review approved screens that were not
   made for a human to read (2026-10-13).
+- **2026-10-13** (#327, #328, #361; of 2026-10-12 and 2026-10-13): what the AI agents write is a setting (Settings › Language): every
+  chat reply, step output, handoff note, decision log and generated document follows the AI agents
+  language (default "Same as the interface", English until #329). Issues, PR/MR descriptions and
+  commit messages follow a separate issues language (default English), and so do Findings' "File as
+  issue" and the epic body line (one place: `src/shared/language.js`). JSON keys and enum values,
+  paths, branches, labels, `- [ ]`, `#n` and closing keywords never change; the source, the bundled
+  workflows and skills, logs and tests stay English. Grill me's questions come from the clarity
+  rubric (`src/clarity.js`, no model call): app text, so they follow the interface language (#329),
+  not this setting. Why: an owner who works in another language
+  read English summaries and documents, and a repository's issues are not always in the owner's
+  chat language; the output contract keeps the keys in English so #94 does not come back.
+- **2026-10-13** (#357, #378): refactor proposals (Architecture findings or the owner's) are prioritized
+  by the Product Owner (rank, reason, complexity; the Danger Zone score as value, the conflict map
+  and the roadmap's unfinished items as risk), and a cadence, off by default, adds the top ranked one
+  that has an issue to the roadmap every X real runs of the project (3 to 50). The item counts in the
+  budget cap and never crosses a gate. Success is measured on the map: the target's Danger Zone score
+  before and after, kept with the proposal. Why: agents left alone add features and rarely
+  restructure, so the cadence has to be explicit. #378: the suggestions are also a workflow
+  (`refactor-proposals.yaml`), so a saved pipeline runs them after a release
+  (`release-then-refactors.yaml`: release → proposals since `previous_version` → the Product Owner).
+  It reuses #356's prompt and report schema (a named `output_schema: architecture_report`, not a
+  copy) and #357's store, ranking and filing; known findings (an open or dismissed proposal, an open
+  `refactor` issue) are dropped and named. Auto mode files the top `limit`; validated mode asks at a
+  gate, where a proposal is dropped by dismissing it on the Refactor tab. Why: refactors suggested
+  after every release without clicking through two tabs; the release's gates stay human.
 - **2026-10-13** (#381, #382): one click analyses a project: "Analyze this project" in the
   Architecture tab runs the project map (the city plan) and the Oracle's analysis together, as one
   run of `project-map.yaml`, with its combined estimate shown first and no human gate (validated
@@ -71,6 +96,18 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   the owner resumes a paused run (never the Night watch, the Oracle or the supervisor). Why: Stop cut
   the turn in progress and Pause on the roadmap let the runs in progress go on, so updating the app,
   the CLIs or the issues meant waiting for the runs or losing work.
+- **2026-10-13** (#360): analyses beyond the Architecture tab's fixed one are **analysis seeds**:
+  prompts adapted from Kent Beck's ToolSeeds (MIT), bundled in `seeds/<name>/seed.md` and seeded
+  into the workspace like skills. The Oracle runs a seed read-only on any project, in one turn of its
+  daily budget, after the cost estimate; the result (a self-contained HTML page and a JSON model,
+  scrubbed of secrets) is saved under `architecture/<project id>/seeds/` and shown in a sandboxed
+  frame with no network. **Make it a tool** files an issue in the project's tracker (the Product
+  Owner plans it like any item) to build the seed as a deterministic tool, following
+  `promptToDeterministicTool`; once its command is recorded in the project's settings, running the
+  seed runs that command, with no model cost. A seed uses only the network reads it declares, each
+  a builder and parser in both platform adapters. Why: projects differ in languages, CI and quality
+  gates, so a fixed analysis misses what matters or needs a tool the machine lacks; a seed that
+  proves useful should become free and repeatable.
 
 - **2026-10-13** (#356): a project's Architecture tab works for any language. The deterministic
   facts (lines, churn, hotspots, co-change, languages) are computed by the app from git, through a
@@ -100,24 +137,15 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   belongs to the Product Owner; workflows, skills and runs belong to the Supervisor. The Oracle
   reads everything, diagnoses and proposes, but routes every change to the owning agent. Why: the
   Oracle's changes ended in its own history, made by an agent that does not hold that area's rules.
-- **2026-10-03** (#332, from the owner's session; options of #203, scenarios of #223): in AI
-  Development (local hero included), unit and E2E tests are `write_and_run` by default. Cost is cut
-  in prompts, retries and context, never by lowering test inputs. Replaces #199's "E2E scenarios
-  run only at release time". Why: the tests are why the app works (#222), so savings go where they
-  do not lower what is tested.
-- **2026-10-03** (#238, #168): the git platform (GitHub) is the only source of truth for issues
-  (#168, 2026-10-02). The local data is a read-only replica: the sync updates it, the app re-reads
-  an issue right before a run starts, and issue changes are never made locally. Archiving an issue
-  closes it on the platform (GitHub: "not planned") with an `archived` label; restoring reopens it
-  (#238, replacing the retired `deprioritized` label). Why: planned items kept stale copies, so an
-  issue edited after planning ran with its old text; there was no way to put an issue aside, and
-  the Product Owner kept proposing unwanted ideas.
-- **2026-10-03** (#222, #211): tests are run and judged by the machine, never by a model. E2E
-  tests stay on Playwright + BDD (`playwright-bdd`), run deterministically; an LLM only writes and
-  repairs them. Which test failures are the run's (and which were already on the base) is decided
-  by the orchestrator (failing tests rerun on the base), never by an agent. Why: the old E2E tests
-  asserted little and the release run paid a model to run the suite, and failures already on main
-  made every round fail and the run looped.
-- **2026-09-29** (#47): only the test writer writes, edits or deletes tests; the developer changes
-  production code only. Why: overlapping test responsibilities made one run pay for the full suite
-  up to four times.
+- **2026-10-03** (#332, #222, #211, and #47 of 2026-09-29; options of #203, scenarios of #223):
+  tests are run and judged by the machine, never by a model. E2E tests stay on Playwright + BDD
+  (`playwright-bdd`), run deterministically; an LLM only writes and repairs them. Which test
+  failures are the run's (and which were already on the base) is decided by the orchestrator
+  (failing tests rerun on the base), never by an agent. Only the test writer writes, edits or
+  deletes tests; the developer changes production code only. In AI Development (local hero
+  included), unit and E2E tests are `write_and_run` by default (#332, from the owner's session);
+  cost is cut in prompts, retries and context, never by lowering test inputs. Replaces #199's "E2E
+  scenarios run only at release time". Why: the old E2E tests asserted little, the release run paid
+  a model to run the suite, failures already on main made every round fail and the run looped, and
+  overlapping test responsibilities made one run pay for the full suite up to four times; the tests
+  are why the app works, so savings go where they do not lower what is tested.

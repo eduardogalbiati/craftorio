@@ -17,6 +17,7 @@ const capabilities = require('../capabilities');
 const { PROBES } = require('../probes');
 const { validateWorkflowStep } = require('../workflow-step');
 const testPaths = require('../test-paths');
+const architectureReport = require('../../shared/architecture-report');
 const chain = require('../../shared/chain-model');
 const { render } = require('./templates');
 const {
@@ -87,9 +88,11 @@ const stepCapabilities = (s, ctx) => capabilities.validate(s.capabilities, `Step
 function screenshotsFrom(s, ctx) {
   if (s.type === 'screenshots' && !ctx.ids.has(s.from)) fail(ctx, 'from must be the step whose output lists the screenshots.');
 }
-// `type: project_map` (#372): every action but facts and analyze reads the output of its `from` step
+// `type: project_map` (#372): every action but facts and analyze reads the output of its `from` step;
+// `type: refactor_proposals` (#378): every action but facts
 function projectMapFrom(s, ctx) {
-  if (s.type === 'project_map' && !['facts', 'analyze'].includes(s.action) && !ctx.ids.has(s.from)) fail(ctx, `from must be the step whose output the ${s.action} action reads.`);
+  const reads = (s.type === 'project_map' && !['facts', 'analyze'].includes(s.action)) || (s.type === 'refactor_proposals' && s.action !== 'facts');
+  if (reads && !ctx.ids.has(s.from)) fail(ctx, `from must be the step whose output the ${s.action} action reads.`);
 }
 function filesWithoutScope(s, ctx) {
   if (s.type === 'suite' && s.files !== undefined && s.scope !== undefined) fail(ctx, 'files and scope cannot be combined.');
@@ -167,6 +170,17 @@ function checkOnFail(s, ctx) {
 function checkRecover(s, ctx) {
   if (s.check !== undefined) recoverSteps(s.check.recover, s.check.on_fail, 'check', ctx);
 }
+// #378: `output_schema: <name>` is a schema the app defines once (the Oracle's architecture report),
+// replaced here by its copy, so a step answers what the app's own turn answers
+const NAMED_SCHEMAS = {
+  architecture_report: architectureReport.REPORT_SCHEMA,
+};
+function namedSchema(s, ctx) {
+  if (typeof s.output_schema !== 'string') return;
+  const schema = NAMED_SCHEMAS[s.output_schema];
+  if (!schema) fail(ctx, `output_schema "${s.output_schema}" is not a named schema (${Object.keys(NAMED_SCHEMAS).join(', ')}); write the schema inline.`);
+  s.output_schema = structuredClone(schema);
+}
 function stallFieldsInSchema(s, ctx) {
   const props = s.stall !== undefined && s.output_schema?.properties;
   const unknown = props && s.stall.same_output_fields.find((f) => !(f in props));
@@ -230,7 +244,7 @@ const TRANSITION_CHECKS = resolveChecks('steps[].transitions[].', [
   'ship.tag', shipOnHumanGate, shipNeedsWorktree,
 ]);
 const STEP_CHECKS = resolveChecks('steps[].', [
-  stepCapabilities, 'display', 'edits_tests', 'protect_files', 'test_map', 'agent', 'agents',
+  stepCapabilities, namedSchema, 'display', 'edits_tests', 'protect_files', 'test_map', 'agent', 'agents',
   // the step types without an agent, then the agent steps (one applies to a step)
   screenshotsFrom, 'folder', 'command', 'timeout', 'scope', 'files', filesWithoutScope, 'expect', expectWithFiles,
   childWorkflow, 'steps', 'renderer', 'version', 'dir', 'branch', 'action', projectMapFrom, fanOutGoal, knownAgents,
@@ -251,15 +265,26 @@ const WORKFLOW_CHECKS = resolveChecks('', [
 ]);
 
 // #389: the parsed YAML of each file, kept while its mtime and size do not change (the Backlog and
-// the roadmap load the same workflows many times); every call checks and hands out its own copy
-const parsedCache = new Map(); // file → { key, wf }
+// the roadmap load the same workflows many times); every call checks and hands out its own copy.
+// #407: a rewrite of the same size within the mtime's resolution keeps the mtime, so an entry read
+// less than RACY_MS after the file's mtime is checked against the text (still no parse) until the
+// file is older than that (git's "racy clean" rule)
+const RACY_MS = 2000; // above the coarsest mtime resolution we meet (FAT: 2 s)
+const parsedCache = new Map(); // file → { key, readAt, text, wf }
 function parseWorkflowFile(file) {
-  let key = null;
-  try { const st = fs.statSync(file); key = `${st.mtimeMs}:${st.size}`; } catch { /* readFileSync says why */ }
+  let st = null;
+  try { st = fs.statSync(file); } catch { /* readFileSync says why */ }
+  const key = st && `${st.mtimeMs}:${st.size}`;
   const hit = key && parsedCache.get(path.resolve(file));
-  if (hit && hit.key === key) return structuredClone(hit.wf);
-  const wf = yaml.load(fs.readFileSync(file, 'utf8'));
-  if (key) parsedCache.set(path.resolve(file), { key, wf: structuredClone(wf) });
+  if (st && hit && hit.key === key && hit.readAt - st.mtimeMs > RACY_MS) return structuredClone(hit.wf);
+  const readAt = Date.now();
+  const text = fs.readFileSync(file, 'utf8');
+  if (hit && hit.key === key && hit.text === text) {
+    hit.readAt = readAt;
+    return structuredClone(hit.wf);
+  }
+  const wf = yaml.load(text);
+  if (key) parsedCache.set(path.resolve(file), { key, readAt, text, wf: structuredClone(wf) });
   return wf;
 }
 

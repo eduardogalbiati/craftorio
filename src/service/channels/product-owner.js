@@ -27,6 +27,7 @@ const path = require('path');
 const agents = require('../../agents');
 const backlog = require('../../backlog');
 const DefaultWorkflow = require('../../shared/default-workflow');
+const Language = require('../../shared/language');
 const notifier = require('../../notifications');
 const productOwner = require('../../product-owner');
 const projects = require('../../projects');
@@ -82,6 +83,18 @@ module.exports = (ctx) => {
       return { ...res, syncError: e.message, backlog: ctx.withIssueRuns(backlog.readBacklog(ctx.ws.backlog, id)) };
     }
   };
+  // What any Product Owner turn runs with: its agent, the project's folder, the skills and its budget (no backlog needed).
+  const agentOptions = (id, simulated, settings = workspace.readSettings(ctx.ws)) => ({
+    backlogDir: ctx.ws.backlog,
+    projectId: id,
+    folder: projects.readProject(ctx.ws.projects, id)?.folder,
+    agent: agents.readAgent(ctx.ws.agents, agents.PRODUCT_OWNER_ID),
+    skillsDirs: [ctx.ws.skills, ctx.BUNDLED_SKILLS_DIR],
+    resolveCommand,
+    // its own past calls and the Oracle's are in no run: add them to what the runs used this month
+    budget: simulated ? null : usage.withPeerUsage(usage.budgetBaseline({ runsDir: ctx.ws.runs, settings, extraRuns: ctx.agentUsageRuns() }), productOwner.monthUsage(ctx.ws.backlog, new Date(), settings.timeZone), settings.prices),
+    language: settings.language, // #327, #328: the turn's [Language] line, the simulated draft's headings
+  });
   // What every question to the Product Owner reads: the synced backlog, the runs, the workflows, its agent and budget.
   const askOptions = (id, simulated) => {
     const p = projects.readProject(ctx.ws.projects, id);
@@ -89,20 +102,13 @@ module.exports = (ctx) => {
     if (!data) throw new Error('Sync the backlog first: the Product Owner reads the synced issues.');
     const settings = workspace.readSettings(ctx.ws);
     return {
-      backlogDir: ctx.ws.backlog,
-      projectId: id,
+      ...agentOptions(id, simulated, settings),
       runsDir: ctx.ws.runs,
       data,
       activeRuns: ctx.activeRuns().filter((r) => r.projectId === id),
       runs: runs.runsForProject(runs.listRuns(ctx.ws.runs), p),
       workflows: ctx.listWorkflows().filter((w) => !w.error && w.inputs?.task),
       defaultWorkflow: settings.defaultWorkflow, // #195
-      folder: p?.folder,
-      agent: agents.readAgent(ctx.ws.agents, agents.PRODUCT_OWNER_ID),
-      skillsDirs: [ctx.ws.skills, ctx.BUNDLED_SKILLS_DIR],
-      resolveCommand,
-      // its own past calls and the Oracle's are in no run: add them to what the runs used this month
-      budget: simulated ? null : usage.withPeerUsage(usage.budgetBaseline({ runsDir: ctx.ws.runs, settings, extraRuns: ctx.agentUsageRuns() }), productOwner.monthUsage(ctx.ws.backlog, new Date(), settings.timeZone), settings.prices),
       mock: simulated,
       // #206: the prices of the estimates
       prices: settings.prices || {},
@@ -111,6 +117,8 @@ module.exports = (ctx) => {
   };
   // a discovery card's commit proposal asks the same Product Owner (#258, src/service/channels/discovery.js)
   ctx.productOwnerOptions = askOptions;
+  // the Refactor tab's ranking reads no issue (#357, src/service/channels/refactor.js)
+  ctx.productOwnerAgentOptions = agentOptions;
 
   // ---- the inbox's mechanical kinds (#240): the code of the owner's own buttons ------------------
   const numbersOf = (list) => [...new Set((Array.isArray(list) ? list : [list]).map(Number).filter((n) => Number.isInteger(n) && n > 0))];
@@ -306,6 +314,7 @@ module.exports = (ctx) => {
           cached: (t.data.issues || []).find((i) => i.number === Number(number)) || null,
           placeEpic: !!epic,
           timeZone: workspace.readSettings(ctx.ws).timeZone, // #273: the drawer previews the same day
+          issuesLanguage: Language.issuesLanguage(workspace.readSettings(ctx.ws)), // #328
           epicList: t.data.epics || [],
         });
         return resync(res, t);
@@ -335,6 +344,7 @@ module.exports = (ctx) => {
         const res = await productOwner.applySplit({
           backlogDir: ctx.ws.backlog, projectId: t.id, runsDir: ctx.ws.runs, at, split, preview: !!preview || simulation.simulationOnly(), platform: t.platform, repo: t.repo, data: t.data,
           timeZone: workspace.readSettings(ctx.ws).timeZone, // #273
+          issuesLanguage: Language.issuesLanguage(workspace.readSettings(ctx.ws)), // #328
         });
         return resync(res, t);
       },
@@ -348,6 +358,7 @@ module.exports = (ctx) => {
         const t = target(projectId);
         const res = await productOwner.applyEpicProposal({
           backlogDir: ctx.ws.backlog, projectId: t.id, runsDir: ctx.ws.runs, at, key, epic, issues, preview: !!preview || simulation.simulationOnly(), platform: t.platform, repo: t.repo, data: t.data,
+          issuesLanguage: Language.issuesLanguage(workspace.readSettings(ctx.ws)), // #328
         });
         return resync(res, t);
       },

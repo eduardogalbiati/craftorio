@@ -107,6 +107,44 @@ Then('the Supervisor chat opens as a drawer on the right', async ({ e2e }) => {
   expect(Math.round(box.x + box.width), 'the drawer reaches the right edge').toBeGreaterThanOrEqual(width - 2);
 });
 
+// #409: the Workflows screen's round Supervisor button (data-testid="supervisor-fab"), in the
+// bottom-right corner of every tab like the Backlog's Product Owner (#btn-bl-po.po-fab); the header's
+// "◆ Supervisor" button is gone
+const supervisorFab = (page) => page.getByTestId('supervisor-fab').filter({ visible: true });
+
+Then('the Workflows screen shows the Supervisor\'s round button in its bottom-right corner', async ({ e2e }) => {
+  const page = e2e.window;
+  await expect(workflowsTabs(page)).toBeVisible();
+  const fab = supervisorFab(page);
+  await expect(fab).toHaveCount(1);
+  const box = await fab.boundingBox();
+  const { width, height } = await page.evaluate(() => ({ width: window.innerWidth, height: window.innerHeight }));
+  expect(box.x + box.width / 2, 'the button sits in the right quarter').toBeGreaterThan(width * 0.75);
+  expect(box.y + box.height / 2, 'the button sits in the bottom quarter').toBeGreaterThan(height * 0.75);
+  // round: as wide as it is tall
+  expect(Math.abs(box.width - box.height), `the button is ${box.width}x${box.height}`).toBeLessThanOrEqual(2);
+});
+
+// no "◆ Supervisor" button in the screen's header: the round button is the screen's only one
+Then('the Workflows screen has no other Supervisor button', async ({ e2e }) => {
+  const page = e2e.window;
+  await expect(supervisorFab(page)).toHaveCount(1);
+  const buttons = page.getByRole('main').getByRole('button', { name: /supervisor/i }).filter({ visible: true });
+  await expect(buttons).toHaveCount(1);
+  await expect(buttons).toHaveAttribute('data-testid', 'supervisor-fab');
+});
+
+When('I open the Supervisor from its round button', async ({ e2e }) => {
+  await supervisorFab(e2e.window).click();
+  await expect(svcDrawer(e2e.window)).toBeVisible();
+});
+
+When('I close the Supervisor chat', async ({ e2e }) => {
+  const drawer = svcDrawer(e2e.window);
+  await drawer.getByRole('button', { name: /^Close/ }).click();
+  await expect(drawer).toHaveAttribute('aria-hidden', 'true');
+});
+
 // ---- the request messages ---------------------------------------------------------------------------
 
 const poDrawer = (page) => page.getByRole('complementary', { name: 'Product Owner', exact: true });

@@ -111,6 +111,8 @@ module.exports = {
   'architecture:estimate': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   // #375: a fresh project has no plan and no hit rate yet (no record: the suite writes nothing)
   'architecture:impact': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
+  // #376: a plain folder has no tag and no commit: no release to draw
+  'architecture:release': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   'architecture:facts': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   'architecture:report': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   'architecture:reports': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
@@ -192,7 +194,16 @@ module.exports = {
   'projects:remove': { setup: project, arg: ({ projectId }) => projectId, invalid: { arg: '..' } },
   'projects:runs': { setup: project, arg: ({ projectId }) => ({ id: projectId }), invalid: { arg: { id: 42 } } },
   'projects:update': { setup: project, arg: ({ projectId }) => ({ id: projectId, patch: { name: 'A renamed contract project' } }), invalid: { arg: { id: 42 } } },
+  // #357: an owner proposal, the cadence (off by default), a ranking of no proposal (simulated); the
+  // proposal channels refuse an unknown proposal (dismiss, file and addToRoadmap write nothing then)
+  'refactor:add': { setup: project, arg: ({ projectId }) => ({ projectId, target: 'src/a.js', improvement: 'Split a', evidence: 'Every fix touches it' }), invalid: BAD_PROJECT },
+  'refactor:addToRoadmap': { setup: project, arg: ({ projectId }) => ({ projectId, id: 'none' }), status: 400, invalid: BAD_PROJECT },
+  'refactor:cadence': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
+  'refactor:dismiss': { setup: project, arg: ({ projectId }) => ({ projectId, id: 'none', reason: 'Not worth it' }), status: 400, invalid: BAD_PROJECT },
+  'refactor:file': { setup: project, arg: ({ projectId }) => ({ projectId, id: 'none', preview: true }), status: 400, invalid: BAD_PROJECT },
+  'refactor:prioritize': { setup: project, arg: ({ projectId }) => ({ projectId, mock: true }), invalid: BAD_PROJECT },
   'refactor:proposals': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
+  'refactor:setCadence': { setup: project, arg: ({ projectId }) => ({ projectId, on: false, every: 10 }), invalid: BAD_PROJECT },
   'releases:list': { arg: {}, invalid: BAD_PROJECT },
   'releases:notes': { setup: project, arg: ({ projectId }) => ({ projectId, notes: 'Contract notes.' }), invalid: BAD_PROJECT },
   'roadmap:clear': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
@@ -223,6 +234,14 @@ module.exports = {
   'run:cancel-pause': onRun({ arg: ({ runId }) => ({ runId }), invalid: BAD_RUN }),
   'run:pause': onRun({ arg: ({ runId }) => ({ runId }), invalid: BAD_RUN }),
   'run:stop': { setup: run, arg: ({ runId }) => ({ runId }), invalid: BAD_RUN },
+  // #360: analysis seeds on the contract project (a plain folder, no git, no repository)
+  'seeds:estimate': { setup: project, arg: ({ projectId }) => ({ projectId, seedId: 'churn-complexity' }), invalid: BAD_PROJECT },
+  'seeds:history': { setup: project, arg: ({ projectId }) => ({ projectId, seedId: 'churn-complexity' }), invalid: BAD_PROJECT },
+  'seeds:list': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
+  'seeds:makeTool': { setup: project, arg: ({ projectId }) => ({ projectId, seedId: 'churn-complexity' }), invalid: BAD_PROJECT },
+  'seeds:result': { setup: project, arg: ({ projectId }) => ({ projectId, seedId: 'churn-complexity', date: 'none' }), status: 400, invalid: BAD_PROJECT },
+  'seeds:run': { setup: project, arg: ({ projectId }) => ({ projectId, seedId: 'churn-complexity', mock: true }), invalid: BAD_PROJECT },
+  'seeds:setTool': { setup: project, arg: ({ projectId }) => ({ projectId, seedId: 'churn-complexity', command: null }), invalid: { arg: { projectId: 'p', seedId: 'churn-complexity', command: 42 } } },
   'settings:get': { arg: null },
   'settings:machineProfile': { arg: null },
   'settings:set': { arg: {}, invalid: { arg: 42 } },

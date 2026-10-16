@@ -25,6 +25,7 @@ const backlog = require('../../backlog');
 const commits = require('../../discovery-commit');
 const imports = require('../../discovery-import');
 const discovery = require('../../discovery');
+const Language = require('../../shared/language');
 const productOwner = require('../../product-owner');
 const projects = require('../../projects');
 const releases = require('../../releases');
@@ -273,14 +274,15 @@ module.exports = (ctx) => {
         const platform = data.platform || workspace.readSettings(ctx.ws).backlogPlatform || backlog.DEFAULT_PLATFORM;
         const repo = data.repo || project?.repo;
         const simulated = simulation.simulationOnly();
-        if (preview && !simulated) return commits.commitCard({ dir: dir(), projectId, cardId, split, platform, repo, preview: true });
+        const issuesLanguage = Language.issuesLanguage(workspace.readSettings(ctx.ws)); // #328
+        if (preview && !simulated) return commits.commitCard({ dir: dir(), projectId, cardId, split, platform, repo, preview: true, issuesLanguage });
         const key = `${id}/${cardId}`;
         if (committing.has(key)) throw new Error('This card is being committed: its issues are being filed.');
         committing.add(key);
         let res;
         try {
           res = await commits.commitCard({
-            dir: dir(), projectId, cardId, split, platform, repo, by: owner(),
+            dir: dir(), projectId, cardId, split, platform, repo, by: owner(), issuesLanguage,
             ...(simulated ? { exec: commits.simulatedExec({ backlogDir: ctx.ws.backlog, projectId: id, platform, repo }) } : {}),
           });
         } finally {

@@ -6,6 +6,8 @@
 // in the run) and the releases shipped, newest first (version, date, issues, runs, cost, the unit
 // and E2E results, notes, the release summary its release run wrote: #290, read when it is opened).
 // Nothing here pushes: Ship is the release run's own gate.
+// #376: a tagged release's "Show on the map" opens the project city at the previous tag in grey, what
+// the release changed in colour (window.ProjectCityRelease, views/project/project-city-release.js).
 // Registers itself with registerView (view-registry.js); uses app.js globals ($, esc, state, api,
 // errMsg, dateOf, devMode, confirmDialog, markdownHtml) and window.CurrentProject, window.showRun.
 
@@ -77,6 +79,7 @@
           ${suiteBadge('Unit', tests.unit)}${suiteBadge('E2E', tests.e2e)}
           <span class="badge" title="The runs merged into this release, its release run included">${plural(count(r.runs), 'run')}</span>
           ${r.cost != null ? `<span class="badge" title="What its runs cost">${usd(r.cost)}</span>` : ''}
+          ${r.tag ? `<button type="button" class="btn sm" data-testid="release-show-map" data-tag="${esc(r.tag)}" title="The project city at the previous release in grey, what this release changed in colour">Show on the map</button>` : ''}
         </div>
         ${issuesHtml(r.issues)}
         ${r.notes ? `<details class="rel-notes"><summary class="small muted">Notes</summary><div class="md md-compact">${markdownHtml(r.notes)}</div></details>` : ''}
@@ -167,7 +170,9 @@
       box.addEventListener('click', (e) => {
         const run = e.target.closest('[data-rel-run]');
         const summary = e.target.closest('[data-rel-summary]');
+        const map = e.target.closest('[data-testid="release-show-map"]');
         if (run) window.showRun(run.dataset.relRun);
+        else if (map) window.ProjectCityRelease?.showRelease(rel.projectId, { to: map.dataset.tag });
         else if (summary) openSummary(summary);
         else if (e.target.closest('[data-rel-start]')) start();
       });

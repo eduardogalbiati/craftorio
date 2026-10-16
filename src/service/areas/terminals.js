@@ -9,11 +9,13 @@ const path = require('path');
 const { resolveCommand } = require('../../engine/providers');
 const simulation = require('../../engine/simulation');
 const projects = require('../../projects');
+const Language = require('../../shared/language');
 const registry = require('../../shared/providers');
 const skills = require('../../skills');
 const supervisor = require('../../supervisor');
 const notifier = require('../../notifications');
 const { Terminals } = require('../../terminals');
+const workspace = require('../../workspace');
 const { SCOPE_HINT } = require('../../actions-usage');
 const { followSession } = require('../../session-tail');
 const {
@@ -48,7 +50,8 @@ module.exports = (ctx) => {
     fs.writeFileSync(ctxFile, supervisor.runReport(runDir, { workflowsDir: ctx.workflowDirs() }));
     const cmd = resolveCommand(cfg.provider.command || 'claude');
     if (!cmd) throw new Error(`The supervisor needs ${cfg.provider.command}, which is not installed.`);
-    const first = `You are the supervisor of the multi-agent workflow run in this folder. Read ${path.join(skill.path, 'SKILL.md')} (your method) and supervisor/context.md (the run report); events.jsonl, sessions/ and the other files have the details. Then explain briefly what happened in this run and wait for my questions. Do not change any file.`;
+    // #327: the [Language] line of Settings › Language leads its first message (one line: a CLI argument)
+    const first = `${Language.languageLine(workspace.readSettings(ctx.ws))} You are the supervisor of the multi-agent workflow run in this folder. Read ${path.join(skill.path, 'SKILL.md')} (your method) and supervisor/context.md (the run report); events.jsonl, sessions/ and the other files have the details. Then explain briefly what happened in this run and wait for my questions. Do not change any file.`;
     // read-only: the CLI's own plan mode, sandbox or tool list (its adapter's readOnlyChatArgs)
     const args = registry.byType(cfg.provider.type)?.readOnlyChatArgs?.({ model: cfg.model, skillDir: skill.path, prompt: first }) || [first];
     return { title: `supervisor · ${path.basename(runDir)}`, cwd: runDir, file: cmd.file, args, env: cliEnv() };

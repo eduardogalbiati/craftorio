@@ -18,7 +18,7 @@ async function open(page) {
     // a pipeline is the Start panel's option "pipe:<file>" (start-drawer.js); never an Electron
     // argument: one with a colon makes Electron exit before this script runs
     await api.setSettings({ developerMode: true, lastWorkflow: ${JSON.stringify(args.pipeline ? `pipe:${args.pipeline}` : args.workflow)} });
-    document.querySelector('#btn-quick-start').click();
+    openDrawer(); // #412: Start left the top bar
     await new Promise((r) => setTimeout(r, 500));
     document.querySelector('#project-select').value = ${JSON.stringify(project.id)};
     document.querySelector('#in-task').value = 'Add a /health endpoint';

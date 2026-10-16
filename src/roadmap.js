@@ -46,6 +46,8 @@
 // `parkStage`): it counts as finished, the next stage starts and the run keeps waiting at its gate,
 // the owner's to answer. Answered later, the item takes the run's outcome (done, or failed without
 // pausing the roadmap). A later stage's runs start without the parked change.
+// Main stays green (#405, src/base-health.js): a red test on the base puts a fix item in a new stage
+// before the current one (`insertFrontStage`).
 // Screen: src/renderer/views/backlog/backlog-roadmap.js; channels: src/service/channels/roadmap.js.
 
 const fs = require('fs');
@@ -396,6 +398,25 @@ function restoreStages(dir, projectId, change, { alive = null } = {}) {
 // The issue numbers of the items not finished yet.
 function plannedNumbers(roadmap) {
   return new Set(allItems(roadmap).filter((x) => !isFinished(x) && !testsLater(x)).flatMap((x) => itemIssues(x).map((i) => i.number)));
+}
+
+/**
+ * #405: a fix for the base's red tests goes at the front of the roadmap: a new stage `raw` (as for
+ * cleanStages) before the current one, at the end when none is left. The other stages and items stay
+ * as they are; a done roadmap is paused (the owner resumes it, it never starts by itself).
+ * @returns {object|null} the stage added, or null when its issues are all planned already
+ */
+function insertFrontStage(dir, projectId, raw) {
+  const [stage] = cleanStages([raw]);
+  const have = plannedNumbers(readRoadmap(dir, projectId));
+  if (!stage || stage.items.every((x) => itemIssues(x).every((i) => have.has(i.number)))) return null;
+  updateRoadmap(dir, projectId, (r) => {
+    const stages = [...r.stages];
+    const at = currentStage(r);
+    stages.splice(at < 0 ? stages.length : at, 0, stage);
+    return { ...r, stages, state: r.state === 'done' ? 'paused' : r.state };
+  });
+  return stage;
 }
 
 /**
@@ -838,6 +859,7 @@ module.exports = {
   finishRoadmap,
   fromQueue,
   holdRelease,
+  insertFrontStage,
   issueStages,
   itemAction,
   markStarted,

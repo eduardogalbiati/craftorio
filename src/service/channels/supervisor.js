@@ -42,6 +42,7 @@ module.exports = (ctx) => {
   const watches = createWatches({
     events: ctx.events, liveRun: ctx.liveRun, runFolder: ctx.runFolder, workflowDirs: ctx.workflowDirs,
     skillsDirs: () => [ctx.ws.skills, ctx.BUNDLED_SKILLS_DIR], resolveCommand, notify: ctx.notify,
+    language: () => workspace.readSettings(ctx.ws).language, // #327: the [Language] line of each turn
   });
   const tools = supervisorTools(ctx);
   const chats = new Map(); // workspace root → its chat (the workspace can change)
@@ -54,6 +55,8 @@ module.exports = (ctx) => {
         tools: () => tools, bridge, mcpCommand: () => mcpCommand(!!ctx.host?.isPackaged, resolveCommand),
         skillsDirs: () => [ctx.ws.skills, ctx.BUNDLED_SKILLS_DIR], resolveCommand, refuseReal: simulation.refuseReal,
         timeZone: () => workspace.readSettings(ctx.ws).timeZone,
+        // #327: Settings › Language, the [Language] line of each question
+        language: () => workspace.readSettings(ctx.ws).language,
       }));
     }
     return chats.get(root);
@@ -89,6 +92,7 @@ module.exports = (ctx) => {
       fn: ({ runId, question, attachments }) => supervisor.analyzeRun({
         runDir: ctx.runFolder(runId), question, workflowsDir: ctx.workflowDirs(), skillsDirs: [ctx.ws.skills, ctx.BUNDLED_SKILLS_DIR], resolveCommand,
         attachments: Array.isArray(attachments) ? attachments : [],
+        language: workspace.readSettings(ctx.ws).language, // #327
       }),
     },
     // resuming needs no supervisor: runs:resume is the channel; this one is kept for older clients
@@ -125,13 +129,14 @@ module.exports = (ctx) => {
     },
     { channel: 'supervisor:watchState', method: 'watchState', params: 'runId', schema: { params: RUN_ID, result: OBJECT }, fn: (runId) => watches.state(runId) },
     { event: 'supervisor:watch', method: 'onWatch' },
-    // The app-wide chat (the drawer opened from Workflows): { question, screen, mock, model }.
-    // `mock` and MULTIAGENT_SIMULATION_ONLY answer from the simulated supervisor (no model call).
+    // The app-wide chat (the drawer opened from Workflows): { question, screen, mock, model, run }
+    // (#409 run: the run a run card's Send to supervisor attached). `mock` and
+    // MULTIAGENT_SIMULATION_ONLY answer from the simulated supervisor (no model call).
     {
       channel: 'supervisor:chat',
       method: 'askSupervisorChat',
       params: 'opts',
-      schema: { params: { type: ['object', 'null'], properties: { question: STRING, screen: ANY, mock: FLAG, model: nullable(STRING) } }, result: CHAT_ANSWER },
+      schema: { params: { type: ['object', 'null'], properties: { question: STRING, screen: ANY, mock: FLAG, model: nullable(STRING), run: ANY } }, result: CHAT_ANSWER },
       fn: async (opts) => {
         // #180: its progress is pushed on chat:progress; chat:cancel ('supervisor') stops it
         const turn = ctx.chatTurns.start('supervisor');

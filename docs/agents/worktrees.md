@@ -103,6 +103,17 @@ actions, or any code that deletes or checks out branches.
   evidence agents keep lives in `runs/<id>/logs` and `runs/<id>/evidence`, which stay. Without
   the variable, `resolveWorkspace` under `MULTIAGENT_SIMULATION_ONLY=1` falls back to
   `<os tmp>/multiagent-simulation/workspace`, never the registered workspace.
+- **The run's temp folder (#414)**: `runs/<id>/tmp`, one of `RUN_DIRS` (so Claude Code gets it with
+  `--add-dir`). `TMP`, `TEMP` and `TMPDIR` point to it for the agents of a non-mock run with a
+  worktree (`scratch.tmp` from `WorkflowRun.scratchWorkspace` → `capabilities.agentEnv`) and for
+  every suite / e2e round (`runSuite` creates it, `suiteEnv({ tmpDir })`), so the tests' temp files
+  stay in the workspace (the antivirus exclusion covers them) and go with the run. A short name
+  directly under the run, for `MAX_PATH`. Removed at every end but `paused` (`finishWorktree`,
+  `removeRunTmp` in `src/engine/worktree.js`, with or without a worktree); `cleanupWorktrees` removes
+  the `tmp` of ended runs like their scratch (a live run or one waiting at a gate keeps it). A
+  resumed run has its own id, so its own fresh `tmp`. The stray-process watcher attributes a process
+  under `runs/<id>/tmp` to run `<id>` (`watchStrayProcesses` in `src/service/areas/runs.js`), and
+  `walkFiles` skips `tmp/` (not artifacts). A mock run creates none.
 - **One app per workspace (#112)**: `src/main.js` takes Electron's single-instance lock (the owner's
   user data folder) and `<workspace>/.lock` (pid, host, heartbeat; `lockWorkspace` in
   `src/run-owner.js`). A second copy offers a scratch copy or quit; a stale lock (dead pid, old

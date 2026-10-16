@@ -11,7 +11,7 @@
 // test files in the base checkout (`base()`, the run's <run_id>-base worktree), same command filtered
 // to those files (`filteredCommand`: npm/pnpm/yarn test or run <script>, pytest, node --test), log
 // logs/suite-<round>-base.log. A test failing there too is pre-existing (`preexisting_failures` in the
-// output: the engine adds them to the run's list and to the workspace's failing-on-main.json); files
+// output: the engine adds them to the run's list and to the project's base-health store, #405); files
 // the base does not have are the run's. The base's result per file is cached by base commit + file
 // (<workspace>/cache/base-tests/<commit>.json), so the next round and other runs reuse it.
 // A step with `base_check: false` (#260, release.yaml: its worktree is the base itself) gets no
@@ -280,9 +280,10 @@ function isFullSuiteCommand(cmd, suiteCommand) {
 // runs one file at a time under an inspector). Set: MULTIAGENT_SIMULATION_ONLY=1, MULTIAGENT_AGENT_MODE=1
 // (#219: a runner that knows it prints the failures-only JSON, src/engine/agent-test-report.js) and,
 // with locksDir, MULTIAGENT_LOCKS_DIR (the suite's own screenshot slot); with testWorkers, the run's
-// test workers (#367, src/machine-profile.js workerEnv), never an inherited value. → { env, removed: [names] }
+// test workers (#367, src/machine-profile.js workerEnv), never an inherited value; with tmpDir, TMP,
+// TEMP and TMPDIR (#414: the run's temp folder over the user's). → { env, removed: [names] }
 const DROP_ENV = /^(ELECTRON_|CHROME_CRASHPAD|NPM_|CLAUDECODE$|NODE_TEST_CONTEXT$|VSCODE_INSPECTOR_OPTIONS$|MULTIAGENT_)/i;
-function suiteEnv(env = {}, { locksDir, testWorkers } = {}) {
+function suiteEnv(env = {}, { locksDir, testWorkers, tmpDir } = {}) {
   const out = {};
   const removed = [];
   for (const [k, v] of Object.entries(env)) {
@@ -300,6 +301,7 @@ function suiteEnv(env = {}, { locksDir, testWorkers } = {}) {
   out.MULTIAGENT_AGENT_MODE = '1';
   if (locksDir) out.MULTIAGENT_LOCKS_DIR = locksDir;
   if (testWorkers) Object.assign(out, workerEnv({ testWorkers }));
+  if (tmpDir) Object.assign(out, { TMP: tmpDir, TEMP: tmpDir, TMPDIR: tmpDir });
   const replaced = (k) => /^MULTIAGENT_(SIMULATION_ONLY|AGENT_MODE|LOCKS_DIR)$/i.test(k) || (!!testWorkers && /^MULTIAGENT_(TEST|E2E)_WORKERS$/i.test(k));
   return { env: out, removed: removed.filter((k) => !replaced(k)).sort() };
 }
@@ -565,25 +567,6 @@ async function checkOnBase({ command, failures, base, mock, env, timeoutMs, sign
   return { onBase: failures.filter((f) => present.some((p) => sameFile(p, f.file)) && baseFailing.some((x) => sameTest(f, x))), info };
 }
 
-// The workspace's list of tests failing on the base (#211), <workspace>/failing-on-main.json:
-// { updated_at, failures: [{ project, base, commit, test, file, error, first_seen, last_seen, runs }] },
-// one entry per project + file + test, so a follow-up issue (#186) can take them instead of every run.
-function noteFailingOnMain(file, { project, base, commit, runId, failures }) {
-  if (!file || !failures?.length) return;
-  try {
-    const data = readJson(file);
-    const list = Array.isArray(data.failures) ? data.failures : [];
-    const now = new Date().toISOString();
-    for (const f of failures) {
-      let e = list.find((x) => x.project === project && x.file === f.file && x.test === f.test);
-      if (!e) list.push(e = { project, base: base || null, commit: null, test: f.test, file: f.file, error: '', first_seen: now, last_seen: now, runs: [] });
-      Object.assign(e, { base: base || e.base, commit: commit || e.commit, error: String(f.error || e.error || '').split('\n')[0], last_seen: now });
-      if (runId && !e.runs.includes(runId)) e.runs = [...e.runs, runId].slice(-HISTORY);
-    }
-    writeJson(file, { updated_at: now, failures: list });
-  } catch { /* reported in the run anyway */ }
-}
-
 // The passed / failed counts a runner prints at the end (node:test, TAP, Jest, pytest), null when
 // none is recognized.
 function parseCounts(text) {
@@ -748,6 +731,16 @@ async function rerunTimedOut(out, { preexisting, signal, logName, round, ...args
   return alone;
 }
 
+// The suite log's header: the command, and what the suite gets, so a slow round can be compared with
+// a shell (#210), and the base commit the round tests on (#403).
+function writeLogHeader(logFile, out, { mock, childEnv, timeoutWhy, baseCommit }) {
+  fs.mkdirSync(path.dirname(logFile), { recursive: true });
+  const about = mock ? '' : `# engine: os.availableParallelism()=${os.availableParallelism()}, cpus=${os.cpus().length}; timeout ${Math.round(out.timeout_ms / 60e3)} min (${timeoutWhy})\n`
+    + `# env: removed ${childEnv.removed.join(', ') || 'nothing'}; set MULTIAGENT_SIMULATION_ONLY=1, MULTIAGENT_AGENT_MODE=1, MULTIAGENT_LOCKS_DIR=${childEnv.env.MULTIAGENT_LOCKS_DIR}, MULTIAGENT_TEST_HUMAN_LOG=${humanLog(logFile)}\n`;
+  const onBase = baseCommit ? `# base: tested on top of ${baseCommit}\n` : '';
+  fs.writeFileSync(logFile, `$ ${out.command}${mock ? '   (simulated: nothing was run)' : ''}\n${about}${onBase}`);
+}
+
 // command: rendered (empty: detected); cwd: the worktree; runDir: the run folder (log under logs/);
 // round: the step's visit; env: the engine's environment (suiteEnv cleans it);
 // preexisting: the run's known pre-existing failures [{ test, file, reason }]; mockResult: see above;
@@ -807,15 +800,11 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
   const recent = mock ? [] : suiteDurations(hist);
   out.timeout_ms = timeoutMs || suiteTimeout(recent);
   const timeoutWhy = timeoutMs ? 'the step\'s timeout' : recent.length ? `${TIMEOUT_FACTOR}× the median of the last ${plural(recent.length, 'suite run')}` : 'the default, no suite run measured yet';
-  const childEnv = mock ? null : suiteEnv(env || process.env, { locksDir: path.join(runDir, 'locks'), testWorkers });
-  if (logFile) {
-    fs.mkdirSync(path.dirname(logFile), { recursive: true });
-    // what the suite gets, so a slow round can be compared with a shell (#210)
-    const about = mock ? '' : `# engine: os.availableParallelism()=${os.availableParallelism()}, cpus=${os.cpus().length}; timeout ${Math.round(out.timeout_ms / 60e3)} min (${timeoutWhy})\n`
-      + `# env: removed ${childEnv.removed.join(', ') || 'nothing'}; set MULTIAGENT_SIMULATION_ONLY=1, MULTIAGENT_AGENT_MODE=1, MULTIAGENT_LOCKS_DIR=${childEnv.env.MULTIAGENT_LOCKS_DIR}, MULTIAGENT_TEST_HUMAN_LOG=${humanLog(logFile)}\n`;
-    const onBase = baseCommit ? `# base: tested on top of ${baseCommit}\n` : '';
-    fs.writeFileSync(logFile, `$ ${out.command}${mock ? '   (simulated: nothing was run)' : ''}\n${about}${onBase}`);
-  }
+  // #414: the suite's temp files go to the run's temp folder, removed when the run ends
+  const tmpDir = mock ? null : path.join(runDir, 'tmp');
+  if (tmpDir) fs.mkdirSync(tmpDir, { recursive: true });
+  const childEnv = mock ? null : suiteEnv(env || process.env, { locksDir: path.join(runDir, 'locks'), testWorkers, tmpDir });
+  if (logFile) writeLogHeader(logFile, out, { mock, childEnv, timeoutWhy, baseCommit });
   const t0 = Date.now();
   let text = '';
   if (mock) {
@@ -973,7 +962,6 @@ module.exports = {
   detectTestCommand,
   filteredCommand,
   isFullSuiteCommand,
-  noteFailingOnMain,
   parseCounts,
   parseFailures,
   redCheck,
@@ -982,6 +970,7 @@ module.exports = {
   runSuite,
   saveCoverage,
   SUITE_TIMEOUT_MS,
+  suiteDurations,
   suiteEnv,
   suiteMessage,
   suiteScope,

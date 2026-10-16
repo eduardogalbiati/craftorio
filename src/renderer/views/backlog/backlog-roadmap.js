@@ -1,5 +1,5 @@
 // The Roadmap screen (#106; Code & Build › Roadmap since #254, drawn by backlog.js): a project's ordered stages of runs (src/roadmap.js), each stage started
-// when the previous one has finished and merged. The item card reads in three bands (#282). 1: its
+// when the previous one has finished and merged; the bar names the base's known failures (#405, src/base-health.js). The item card reads in three bands (#282). 1: its
 // issues' titles (what leads: a list, one line per issue, linked, #110; under it "4 issues ·
 // complexity 9", the total of their `complexity:n` labels) | cost and time (one line each: the
 // estimate, or the real value against it with a verdict and a bar; the time of a run at work is its
@@ -704,11 +704,11 @@
     const moveOn = (why) => `<button type="button" role="menuitem" data-rm-park-stage data-testid="roadmap-stage-move-on"${why ? ' data-refused="true"' : ''} title="${esc(why || 'Park its items waiting at a gate (the gates keep waiting for you) and skip its planned items: the next stage starts')}">Move on from this stage</button>${why && moveOnWhy === stage.id ? `<div class="bl-menu-why small muted" role="alert" data-testid="roadmap-move-on-refused">${esc(why)}</div>` : ''}`;
     const entries = [
       // #284: a finished stage has nothing left to hold back (a disabled one can always be enabled)
-      off ? entry('data-rm-toggle-stage data-testid="roadmap-stage-toggle" aria-pressed="true"', 'Enable', 'Run this stage with the roadmap again, in its turn')
-        : done ? '' : entry('data-rm-toggle-stage data-testid="roadmap-stage-toggle" aria-pressed="false"', 'Disable', 'Skip this stage while the roadmap runs; it stays in the list', acts.disable.reason),
+      off ? entry('data-rm-toggle-stage data-testid="roadmap-stage-toggle" aria-pressed="true"', 'Enable', 'Run this stage with the roadmap again, in its turn') : done ? '' : entry('data-rm-toggle-stage data-testid="roadmap-stage-toggle" aria-pressed="false"', 'Disable', 'Skip this stage while the roadmap runs; it stays in the list', acts.disable.reason),
       entry('data-rm-run-stage', '<span aria-hidden="true">▶ </span>Run this stage', 'Run only this stage\'s items; the roadmap pauses when they are done', acts.start.reason),
       // #368: nothing is cut: its agents finish their turns, then its runs and the roadmap pause
       done ? '' : entry('data-rm-pause-stage data-testid="roadmap-stage-pause"', 'Pause after current step', 'Its runs stop once their agents finish the current turn and no step starts after them; Resume continues them where they stopped', acts.pauseStage.reason),
+      done ? '' : entry('data-rm-stop-stage data-testid="roadmap-stage-stop"', 'Stop', 'Stop this stage\'s runs in progress (asks first, naming them): the roadmap pauses and offers Resume, Retry or Skip', acts.stopStage.reason), // #412
       // #395: its items at a gate are parked (their gates stay yours), its planned ones skipped; the next stage starts
       done ? '' : moveOn(acts.parkStage.reason),
       stage.release?.name ? '' : entry('data-rm-release="add"', '<span aria-hidden="true">✂ </span>Release here', 'Draw a cut line after this stage: when the roadmap reaches it, the whole unit and E2E suites run and you Ship or Hold; the stages below wait for it'),
@@ -1091,8 +1091,8 @@
     const menu = `<span class="bl-menu-wrap rm-menu-wrap"><button class="btn sm ghost rm-menu-btn" type="button" data-rm-menu data-testid="roadmap-menu-button" aria-label="Roadmap actions" title="More actions" aria-haspopup="menu" aria-expanded="${menuOpen}">⋮</button>${menuOpen ? `<div class="bl-menu rm-menu" role="menu" data-testid="roadmap-menu" aria-label="Roadmap actions">${menuItems.map((m) => `<button type="button" role="menuitem" data-rm="${m.id}" title="${esc(m.title)}">${esc(m.label)}</button>`).join('')}</div>` : ''}</span>`;
     const bar = `
       <div class="bl-queue rm-bar" data-testid="roadmap-bar">
-        <span class="rm-bar-title">${dot}<b>Roadmap</b> ${scopeBadge} ${r.stages.length} stage${r.stages.length === 1 ? '' : 's'}${offStages.length ? `, ${offStages.length} disabled` : ''}${parked}</span>
-        ${note}${leftOut}
+        <span class="rm-bar-title">${dot}<b>Roadmap</b> ${scopeBadge} ${plural(r.stages.length, 'stage')}${offStages.length ? `, ${offStages.length} disabled` : ''}${parked}</span>
+        ${note}${leftOut}${data?.baseFailures?.length ? `<details class="small rm-base-failures" data-testid="base-failures"><summary><span class="warn-text">${plural(data.baseFailures.length, 'known failure')} on the base</span> <span class="link-btn" data-testid="base-failures-link">Details</span></summary><ul>${data.baseFailures.map((f) => `<li><span class="mono">${esc(f.test)}</span> · <span class="muted" title="${esc(f.file)}">${esc(f.file)}</span>${f.issue?.url ? ` · <a href="${esc(f.issue.url)}" target="_blank" rel="noopener">${esc(f.issue.number ? `#${f.issue.number}` : 'issue')}</a>` : ''}</li>`).join('')}</ul></details>` : ''}
         <span class="spacer"></span>
         ${acts.start.allowed || acts.resume.allowed ? `<label class="check small dev-only"><input type="checkbox" id="rm-simulate"${state.simulationOnly || r.simulated ? ' checked' : ''} /><span>Simulated</span></label>
           <button class="btn sm primary" type="button" data-rm="start"${scoped >= 0 && acts.resume.allowed ? ` title="Resume stage ${scoped + 1} only"` : ''}>${acts.resume.allowed ? 'Resume' : 'Start'}</button>` : ''}
@@ -1454,10 +1454,10 @@
     ctx.setData(await (act === 'stop' ? api.pauseRoadmap(id, true) : act === 'cancel-pause' ? api.cancelRoadmapPause(id) : api.pauseRoadmap(id, false, act === 'pause-now' ? 'now' : 'stage')));
   }
 
-  // The stage menu's Pause after current step (#368): one click, nothing is lost; its pause line says what it waits for.
-  async function pauseStage(ctx, stages, target) {
-    const stage = stages[locate(stages, target).s];
-    if (stage) ctx.setData(await api.pauseRoadmapStage(ctx.projectId, stage.id));
+  // The stage menu's Pause after current step (#368): one click, nothing is lost; its pause line says what it waits for. Its Stop (#412, `stop`): its live runs stop (stopRuns, run-controls.js, asks first); the engine then pauses the roadmap.
+  async function pauseStage(ctx, stages, target, stop = false) {
+    const { s } = locate(stages, target);
+    if (stages[s]) await (stop ? stopRuns((stages[s].items || []).filter((x) => x.status === 'running' && x.runId).map((x) => x.runId), `stage ${s + 1}`) : api.pauseRoadmapStage(ctx.projectId, stages[s].id).then((d) => ctx.setData(d)));
   }
 
   // #284: Disable / Enable a stage: skipped while the roadmap runs; saved at once, Undo in its toast
@@ -1751,8 +1751,8 @@
         ctx.setData(await api.startRoadmap(ctx.projectId, simulated, scope));
       } else if (e.target.closest('[data-rm-run-stage]')) {
         await runStage(ctx, r, locate(stages, e.target).s);
-      } else if (e.target.closest('[data-rm-pause-stage]')) {
-        await pauseStage(ctx, stages, e.target);
+      } else if (e.target.closest('[data-rm-pause-stage], [data-rm-stop-stage]')) {
+        await pauseStage(ctx, stages, e.target, !!e.target.closest('[data-rm-stop-stage]'));
       } else if (e.target.closest('[data-rm-park-stage]')) {
         await moveOnStage(ctx, stages, e.target);
       } else if (act === 'budget-raise' || act === 'budget-resume') {

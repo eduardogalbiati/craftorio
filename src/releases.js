@@ -360,6 +360,7 @@ function testResults(steps = {}) {
 }
 
 module.exports = {
+  compareSemver,
   historyError,
   historyText,
   lastRelease,
@@ -369,6 +370,7 @@ module.exports = {
   recordRelease,
   releaseCards,
   releaseNotes,
+  releaseSemver,
   releasesFile,
   saveNextNotes,
   shipRelease,

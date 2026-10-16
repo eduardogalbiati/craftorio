@@ -17,7 +17,8 @@
 //   Architecture and Refactor, the selected one with aria-selected="true", re-rendered when the
 //   selection changes; a click on a tab is delegated (to its container, the section or the document);
 // - the Overview is data-testid="project-overview"; the Refactor tab shows
-//   data-testid="project-refactor-empty" (the Architecture tab is #356's, features/architecture.feature).
+//   data-testid="refactor-state-no-report" until the project has an Architecture report (#357;
+//   the Architecture tab is #356's, features/architecture.feature).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('path');
@@ -252,10 +253,10 @@ test('#354 choosing another project in the header switches the open project page
   assert.equal(app.callsTo('listProjectRuns').at(-1)[0], 'p2');
 });
 
-test('#354 the Refactor tab shows an empty state saying it will hold the refactors', async () => {
+test('#354 #357 the Refactor tab of a project with no Architecture report points to the Architecture tab', async () => {
   const app = page();
   await app.boot();
   await openProject(app, 'p1');
   await selectTab(app, 'Refactor');
-  assert.match(H.visibleText(region(app, 'project-refactor-empty')), /refactor/i);
+  assert.match(H.visibleText(region(app, 'refactor-state-no-report')), /architecture/i);
 });

@@ -2,7 +2,8 @@
 #view-runchat { padding: 0; overflow: hidden; position: relative; }
 .rc-jump { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 5; box-shadow: 0 6px 18px rgba(0,0,0,.35); }
 #view-runchat:not(.hidden) { display: flex; flex-direction: column; }
-#view-runchat .duo-chat-head { flex-wrap: wrap; }
+/* #410: the same tab row as the Run screen's (.run-tab-row, style.css), so the tabs never move */
+#view-runchat .duo-chat-head { flex-wrap: wrap; padding: 0 16px; gap: 6px 12px; }
 .rc-title { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
 .rc-title b { font-size: 14px; }
 .rc-scroll { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; }

@@ -65,6 +65,7 @@ const path = require('path');
 const actions = require('./oracle-actions');
 const agentsUsage = require('./agents-usage');
 const TimeZone = require('./time-zone');
+const Language = require('./shared/language');
 const knowledge = require('./oracle-knowledge');
 const { mockSteps, partialText } = require('./chat-progress');
 const night = require('./night-watch');
@@ -519,7 +520,7 @@ function createOracle({
     let note = '';
     try { note = fs.readFileSync(files().stateNote, 'utf8').trim(); } catch { note = latestHandoff().trim(); }
     const prompt = [
-      skill || 'You are the Oracle of the Multiagent Orchestrator: read-only, grounded in your tools, answer in the owner\'s language and write everything for the product in English.',
+      skill || 'You are the Oracle of the Multiagent Orchestrator: read-only, grounded in your tools, answer and write everything for the product in the languages the Language line of each turn names.',
       known,
       `## Memory (the owner's standing decisions; only the owner changes it)\n${mem || '(empty)'}`,
       note && `## Where the conversation stands (kept by the app; your previous session is gone)\n${note}`,
@@ -576,8 +577,9 @@ function createOracle({
     const fresh = !st.sessionId;
     // #280: why this session starts, for usage.jsonl (state.json keeps it until a turn answers)
     const startReason = fresh ? st.startReason || 'first' : null;
-    // #273: the owner's zone and local time, one line in each turn (not in the skill: the cache stays)
-    const timed = `[Time] ${TimeZone.nowLine(timeZone())}\n\n${text}`;
+    // #273: the owner's zone and local time, one line in each turn (not in the skill: the cache stays);
+    // #327: the agents and issues languages of Settings › Language, one line too
+    const timed = `[Time] ${TimeZone.nowLine(timeZone())}\n${Language.languageLine(settings())}\n\n${text}`;
     const prompt = fresh ? openingPrompt(timed, heading) : timed;
     const res = mock
       ? await mockTurn({ prompt, sessionId: st.sessionId, screen, mockContextTokens, fresh, attachments, about, wake })
@@ -675,9 +677,10 @@ function createOracle({
     history,
     memory,
     state: status,
-    // #356: one turn outside the conversation (src/oracle-architecture.js), in the daily budget
+    // #356: one turn outside the conversation (src/oracle-architecture.js), in the daily budget;
+    // it starts with the [Language] line like a chat turn (#327)
     budgetRefusal: refusal,
-    oneTurn: realTurn,
+    oneTurn: (o) => realTurn({ ...o, prompt: `${Language.languageLine(settings())}\n\n${o.prompt}` }),
 
     /**
      * { question, screen, images, context, mock, mockContextTokens } → { message, messages, state }, or

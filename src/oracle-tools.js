@@ -13,7 +13,7 @@
 // Oracle's own kinds (ORACLE_KINDS: a check, stopping a stray process).
 // #184: run_analysis (runs' cost by agent and step, rounds, timeouts, the test writer's context:
 // src/oracle-run-analysis.js; #321: its focuses time, context, tools, cache and tests in
-// src/oracle-run-focus.js; #335: regressions, over the whole run list), issues_search / issue_view / labels (gh / glab read commands built in
+// src/oracle-run-focus.js; #335: regressions, over the whole run list), issues_search / issue_view / labels / ci_runs (#360) (gh / glab read commands built in
 // src/oracle-platform.js, run with ctx.execCli or backlog.execCli) and the checker delegate.
 // Nothing else here writes: git runs without a pager, external diff or optional locks, every option
 // that writes or starts a program is refused (refusedGitArg), and every path stays in its folder.
@@ -378,6 +378,15 @@ function oracleTools(ctx, hooks = {}) {
       description: 'The labels that exist on a project\'s repository (gh / glab, read-only): an issue card uses only these (its kind, one area:*, a complexity:n).',
       inputSchema: obj({ projectId }, ['projectId']),
       run: async ({ projectId: id } = {}) => json(platform.labelsResult(await execCli(platform.labelsCommand(issueTarget(id))))),
+    },
+    {
+      name: 'ci_runs',
+      description: 'The recent CI runs of a project\'s repository (gh / glab, read-only): name, status, conclusion, created and updated times, link. The network read an analysis seed declares (e.g. pipeline-anatomy\'s timings).',
+      inputSchema: obj({ projectId }, ['projectId']),
+      run: async ({ projectId: id } = {}) => {
+        const t = issueTarget(id);
+        return json(platform.ciRunsResult(t.platform, await execCli(platform.ciRunsCommand(t.platform, { target: t.target }))));
+      },
     },
     {
       name: 'propose_action',

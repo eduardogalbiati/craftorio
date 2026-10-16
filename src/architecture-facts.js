@@ -18,6 +18,9 @@
 // src/shared/city-model.js, with the edges' sources read at the same commit (the tracked files, the
 // relative require/import lines of JavaScript/TypeScript files in one `git grep`, the Cargo.toml
 // files), cached per facts read (a refresh rebuilds it) and plan hash. Used by src/service/channels/architecture.js.
+// opts.ref (#376, src/release-city.js): the facts and the city at any commit-ish (a release's previous
+// tag) instead of the default branch; an unknown ref is the state 'unknown-ref'.
+// changedSince (#378): the files changed between a tag or commit and the default branch's commit.
 
 'use strict';
 
@@ -242,14 +245,17 @@ async function qualityGate(folder, commit, files) {
 /**
  * The facts of the repository in `folder`: { state: 'ok' | 'not-git' | 'no-commits', model, gate }.
  * opts: { since, until, exclude: [pattern], includeMass, includeTests (the city's: the test files
- * kept), refresh }.
+ * kept), refresh, ref (a commit-ish read instead of the default branch, #376) }.
  */
 async function readFacts(folder, opts = {}) {
   // the folder's own repository (.git: a folder, or a file in a worktree), never an enclosing one
   if (!folder || !fs.existsSync(path.join(folder, '.git'))) return { state: 'not-git', model: null, gate: [] };
-  const target = await defaultBranch(folder);
+  // a release's base city (#376) is read at its previous tag (or any commit) instead of the default branch
+  const target = opts.ref ? { branch: String(opts.ref), ref: String(opts.ref) } : await defaultBranch(folder);
   if (!target) return { state: 'no-commits', model: null, gate: [] };
-  const commit = (await git(folder, ['rev-parse', `${target.ref}^{commit}`])).trim();
+  const resolved = opts.ref ? await tryGit(folder, ['rev-parse', '--verify', '-q', `${target.ref}^{commit}`]) : await git(folder, ['rev-parse', `${target.ref}^{commit}`]);
+  if (!resolved) return { state: 'unknown-ref', model: null, gate: [] };
+  const commit = resolved.trim();
   const window = { since: opts.since || null, until: opts.until || null };
   const exclude = (opts.exclude || []).map(String).filter(Boolean);
   const includeMass = opts.includeMass !== false;
@@ -324,7 +330,7 @@ async function citySources(folder, commit) {
 async function readCity(folder, opts = {}) {
   const exclude = (opts.exclude || []).map(String).filter(Boolean);
   // the city draws the tests (its campus, #372), which the hotspots leave out
-  const { state, model } = await readFacts(folder, { exclude, includeTests: true });
+  const { state, model } = await readFacts(folder, { exclude, includeTests: true, ref: opts.ref || null });
   if (state !== 'ok') return { state, model: null, validation: null };
   const commit = model.head.commit;
   const plan = opts.plan || null;
@@ -341,7 +347,25 @@ async function readCity(folder, opts = {}) {
   return { state, ...cities.get(key) };
 }
 
+/**
+ * The files changed between `since` (a tag or a commit) and the default branch's commit (#378, the
+ * Refactor proposals workflow): { branch, head, files: [path] }, files null when `since` is unknown;
+ * null for a folder that is not a git repository or has no commit.
+ */
+async function changedSince(folder, since) {
+  if (!folder || !fs.existsSync(path.join(folder, '.git'))) return null;
+  const target = await defaultBranch(folder);
+  if (!target) return null;
+  const head = (await tryGit(folder, ['rev-parse', `${target.ref}^{commit}`]) || '').trim() || null;
+  if (!since) return { branch: target.branch, head, files: [] };
+  // a ref is never an option
+  if (String(since).startsWith('-')) return { branch: target.branch, head, files: null };
+  const out = await tryGit(folder, ['diff', '--name-only', '--no-renames', String(since), target.ref, '--']);
+  return { branch: target.branch, head, files: out == null ? null : out.split(/\r?\n/).map((l) => l.trim()).filter(Boolean) };
+}
+
 module.exports = {
+  changedSince,
   parseLizard,
   readCity,
   readFacts,

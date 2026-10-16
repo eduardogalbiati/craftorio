@@ -7,6 +7,8 @@
 // a zone's: its kind, districts, files, lines, its purpose.
 // html({ layout, model, colour, light, target, pinned }) → the card's HTML ('' for an unknown
 // target); `colour` / `light`: the "Colour by" mode and theme, for the pill's colour.
+// dot(colour), countsHtml(list, testid, label): the overlays' card pieces (project-city-impact.js,
+// project-city-release.js).
 // Uses app.js globals at call time: esc. Browser: window.ProjectCityCards.
 (() => {
   const plural = (n, unit) => `${n} ${n === 1 ? unit.replace(/s$/, '') : unit}`;
@@ -59,5 +61,14 @@
     return `${head(`Zone · ${esc(z.kind)}`, z.name, null)}<dl class="r3d-rows">${row('Districts', String(layout.districts.filter((d) => d.zone === z.id).length))}${row('Files', String(z.files))}${row('Lines', z.lines.toLocaleString('en-US'))}</dl>${purpose(z)}`;
   }
 
-  window.ProjectCityCards = { html };
+  // the overlays' cards (#375 impact, #376 release): a colour dot, and a list of counts by district or zone
+  const dot = (colour) => `<i class="r3d-dot" style="--c:${esc(colour)}"></i>`;
+  const countsHtml = (list, testid, label) => (list.length
+    ? `<ul class="pci-counts" aria-label="${esc(label)}">${list.map((d) => `<li data-testid="${testid}"><span title="${esc(d.name)}">${esc(d.name)}</span> <strong>${d.count}</strong></li>`).join('')}</ul>` : '');
+
+  window.ProjectCityCards = {
+    countsHtml,
+    dot,
+    html,
+  };
 })();

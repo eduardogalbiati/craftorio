@@ -8,8 +8,8 @@ used_by: "issue-tracker (code_analyzer, issue_filer), backlog planner (#30), any
 
 # Issue creator: GitHub (gh CLI)
 
-Requires an authenticated `gh` (`gh auth status`). Write the content following `issue-writing`;
-this skill covers only the commands.
+Requires an authenticated `gh` (`gh auth status`). Write the content following `issue-writing`,
+in the issues language the Language line names; this skill covers only the commands.
 
 ## How to call gh
 

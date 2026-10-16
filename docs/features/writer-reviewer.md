@@ -22,7 +22,7 @@ the run shows up under that project. The **Write & Review** screen
 Whatever you write at these questions goes into every later prompt of the writer, the reviewer
 and the supervisor, and takes precedence over the goal where they conflict.
 
-Past runs open as a chat again from Workflows › Runs › **Open chat**.
+Past runs open as a chat again from Workflows › Runs › **Open run**, then its **Chat** tab.
 
 **Document type** (optional, the `document_skill` input): the skill the writer and the reviewer load,
 with its structure and rubric: `issue-writing` (an enriched issue), `rfc-writing`, `prd-writing`,

@@ -47,6 +47,7 @@ const MACHINE_STEP_TYPES = [
   'check',
   'human_approval',
   'project_map',
+  'refactor_proposals',
   'release_version',
   'screenshots',
   'suite',
@@ -58,6 +59,8 @@ const MACHINE_STEP_TYPES = [
 const GATE_KINDS = ['decision', 'escalation'];
 // `type: project_map` (#372, analyze #381): what the step does (src/engine/run/project-map-steps.js)
 const PROJECT_MAP_ACTIONS = ['facts', 'validate', 'save', 'analyze', 'fail'];
+// `type: refactor_proposals` (#378): what the step does (src/engine/run/refactor-proposals-steps.js)
+const REFACTOR_PROPOSALS_ACTIONS = ['facts', 'propose', 'prioritize', 'file'];
 const DISPLAY_MAX = 40;
 
 // The value types of the table: name → check of a value that is set (a template is checked before)
@@ -82,7 +85,7 @@ const TYPES = {
 
 // Where a step field applies: every step type, a list of types, or every type except some
 const AGENT_STEPS = { except: MACHINE_STEP_TYPES };
-const NO_AGENT_TYPES = ['check', 'project_map', 'release_version', 'screenshots', 'suite', 'test_ids'];
+const NO_AGENT_TYPES = ['check', 'project_map', 'refactor_proposals', 'release_version', 'screenshots', 'suite', 'test_ids'];
 const GATE = ['human_approval'];
 const AGENTS = 'agents and defaults';
 const WORKFLOW = 'workflow';
@@ -148,6 +151,8 @@ const FIELD_RULES = [
   text('branch', ['release_version']),
   // `type: project_map` (#372): the project map's machine steps, `from` the step whose output they read
   entry('steps[].action', ['project_map'], 'one of', `action must be one of ${PROJECT_MAP_ACTIONS.join(', ')}, on a project_map step.`, { values: PROJECT_MAP_ACTIONS, required: true, elsewhere: 'skip' }),
+  // `type: refactor_proposals` (#378): the Refactor proposals workflow's machine steps, `from` as above
+  entry('steps[].action', ['refactor_proposals'], 'one of', `action must be one of ${REFACTOR_PROPOSALS_ACTIONS.join(', ')}, on a refactor_proposals step.`, { values: REFACTOR_PROPOSALS_ACTIONS, required: true, elsewhere: 'skip' }),
   entry('steps[].goal.until', 'all', 'any', 'goal requires "until".', { required: true, present: 'truthy' }),
   entry('steps[].wait', { except: GATE }, 'any', 'wait is only valid on a single-agent step with a loop.'),
   entry('steps[].wait.probe', 'all', 'one of', `wait.probe must be one of ${PROBES.join(', ')}.`, { values: PROBES, required: true }),
@@ -279,6 +284,7 @@ module.exports = {
   parseRequests,
   parseTokens,
   PROJECT_MAP_ACTIONS,
+  REFACTOR_PROPOSALS_ACTIONS,
   resolveChecks,
   runChecks,
   SESSION_MODES,

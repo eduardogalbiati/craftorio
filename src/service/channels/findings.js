@@ -11,10 +11,12 @@
 const path = require('path');
 const backlog = require('../../backlog');
 const findings = require('../../findings');
+const Language = require('../../shared/language');
 const mainLog = require('../../main-log');
 const productOwner = require('../../product-owner');
 const projects = require('../../projects');
 const simulation = require('../../engine/simulation');
+const workspace = require('../../workspace');
 const { DEFAULT_PLATFORM, findPlatform } = require('../../shared/platforms');
 const { BUNDLED_SKILLS_DIR, clientError, requireObject } = require('../common');
 const {
@@ -109,7 +111,8 @@ module.exports = (ctx) => {
         }
         const simulated = !!mock || simulation.simulationOnly();
         const imageUrl = simulated ? null : publishImage(projectId, found);
-        const { title, body } = findings.issueOf(found, { imageUrl });
+        const issuesLanguage = Language.issuesLanguage(workspace.readSettings(ctx.ws)); // #328
+        const { title, body } = findings.issueOf(found, { imageUrl, issuesLanguage });
         const ref = `findings-${found.id}-${Math.random().toString(36).slice(2, 6)}`;
         const out = await ctx.productOwnerRequest({
           projectId, kind: 'issue.file', params: { title, body }, reason: found.note || `Finding ${found.id}`, from: 'findings', ref, mock: simulated,

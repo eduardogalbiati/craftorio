@@ -1,0 +1,7 @@
+/* A release on the project city (#376, project-city-release.js): its card takes the impact card's
+   place and look (project-city-impact.css .pci), with the two-tag picker, the status counts and the
+   issue filter (run3d.css .r3d-chip, .r3d-dot, .r3d-primary). */
+.pcr-picker, .pcr-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.pcr-picker select, .pcr-actions select { max-width: 120px; font-family: var(--mono); }
+.pcr-counts { display: flex; flex-wrap: wrap; gap: 10px; margin: 0; font-size: 13px; color: var(--r3d-ink); }
+.pcr-count { display: inline-flex; align-items: center; gap: 6px; }

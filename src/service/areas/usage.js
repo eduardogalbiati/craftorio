@@ -64,8 +64,9 @@ module.exports = (ctx) => {
   }
 
   // #389: the CLIs' transcripts are scanned in a worker thread, incrementally, with each file's state
-  // kept in the workspace's index: the main process never blocks on them
-  const localUsage = () => readLocalUsageAsync({ index: storeFor(ctx.ws.runs)?.path });
+  // kept in the workspace's index: the main process never blocks on them. #408: under host.cliHome when
+  // set (tests), the user's home otherwise
+  const localUsage = () => readLocalUsageAsync({ home: ctx.host.cliHome, index: storeFor(ctx.ws.runs)?.path });
 
   // the totals are computed in the usage worker (#389), from the run folders and the CLIs' transcripts
   async function usageSnapshot(scope = 'orchestrator') {
@@ -75,7 +76,7 @@ module.exports = (ctx) => {
     }));
     const installed = Object.fromEntries(usage.PROVIDERS.map((p, i) => [p.id, !!found[i]]));
     const out = await computeUsageAsync({
-      runsDir: ctx.ws.runs, settings: workspace.readSettings(ctx.ws), live, installed, scope, extraRuns: agentUsageRuns(), index: storeFor(ctx.ws.runs)?.path,
+      runsDir: ctx.ws.runs, settings: workspace.readSettings(ctx.ws), live, installed, scope, extraRuns: agentUsageRuns(), home: ctx.host.cliHome, index: storeFor(ctx.ws.runs)?.path,
     });
     // #206: today's (or tonight's) spending against the budget, for the top bar ("$38 / $60 today")
     let spending = null;
@@ -134,6 +135,7 @@ module.exports = (ctx) => {
       report: analytics.analyticsReport(a), from: a.from, to: a.to, scope: a.scope, question, mock: !!mock,
       attachments: Array.isArray(attachments) ? attachments : [],
       reportsDir: ctx.ws.reports, skillsDirs: [ctx.ws.skills, BUNDLED_SKILLS_DIR], resolveCommand,
+      language: workspace.readSettings(ctx.ws).language, // #327
     });
   }
 

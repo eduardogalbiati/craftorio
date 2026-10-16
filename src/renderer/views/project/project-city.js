@@ -25,8 +25,8 @@
 //   ProjectCity.stats() → { firstFrameMs, fps }: the time to the first frame and the frame rate
 //   while the camera moves (for the PR's measures).
 //   A created city also has `model`, `setPins(paths)` (#382: the files whose connections stay drawn,
-//   the connections panel's, project-city-connections.js) and `onLayout(fn)` (called after a new
-//   layout; returns the unsubscribe).
+//   the connections panel's, project-city-connections.js), `onLayout(fn)` (called after a new
+//   layout; returns the unsubscribe) and `reload(answer?)` (#376: draws another city answer, a release's base; none reads the project's again).
 // Uses app.js globals at call time: api, esc, errMsg. Browser: window.ProjectCity.
 (() => {
   const BUNDLE = '../../generated/project-city.js';
@@ -385,8 +385,8 @@
         // the tab re-renders on each event: keep the drawn HUD (the search's text, the hover card)
         else if (factsChanged || estimateChanged || analysisChanged || !hud.innerHTML) render();
       },
-      /** Reads the city again (after a refresh of the facts, or a run that saved a plan). */
-      reload() { c.answer = null; load(); },
+      /** Reads the city again (after a refresh of the facts, or a run that saved a plan); with `answer` ({ state, model, validation }), draws that city instead (#376). */
+      reload(answer) { if (answer) { c.seq++; Object.assign(c, { answer, loading: false, error: null }); relayout(); } else { c.answer = null; load(); } },
       flyTo,
       /** Repaints after a change of the overlay's layers. */
       refreshOverlay() { if (c.handle && c.layout) c.handle.update(paint()); },

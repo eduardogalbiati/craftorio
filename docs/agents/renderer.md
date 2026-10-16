@@ -30,7 +30,10 @@ Read this before changing anything in `src/renderer/`.
   `src/renderer/views/<view>/<view>.js` + `<view>.css`, plus the screen's other parts in the same
   folder; `index.html` holds no screen, only the app frame (top bar, sidebar with the Run item and
   runs menu, `main.content`, the drawers, the terminal dock, the shared dialogs) and the generated
-  file lists. The folders:
+  file lists. The sidebar has two parts (#411): the menu (`.sidebar-menu`, `data-testid="sidebar-menu"`,
+  where `registerView` places the entries and groups) is the only part that scrolls; the footer
+  (`.sidebar-footer`, `data-testid="sidebar-footer"`: Keeping awake, the Run item, the runs) stays
+  pinned at the bottom, every run listed, capped at 50vh; past it only `#nav-runs` scrolls. The folders:
   - `views/dashboard/`: Home, the start screen (#255: the flow overview and the Analytics tab; its section has no `hidden`; `renderDashboard` is also called on run events: it paints from the last read and reads again at most every 30 s);
   - `views/sessions/`: `sessions.js` (`window.SessionsView` for notifications and terminal events) and `sessions.css`;
   - `views/projects/`: the Projects screen (#354: Code & Build, before Backlog; `showProjects`), its project cards, and the New / Edit project dialog (`openProjectModal`, also opened from the Start drawer and the header's project selector);
@@ -40,7 +43,7 @@ Read this before changing anything in `src/renderer/`.
     (the Product Owner drawer, put inside `.shell` like the other drawers; `backlog-po.js` wires it as it loads, so
     its header says `load: after views/backlog/backlog.js`) and `backlog.css`;
   - `views/artifacts/`: the Artifacts screen, a tab of Workflows › Runs (#254: no menu entry, its `menu` keeps Runs lit; `openArtifactsAt` stays a global deep link);
-  - `views/workflows/`: `workflows.js` (Definitions, Runs, Pipelines, the screen's tablist and its menu entries, the Supervisor button, the deep links
+  - `views/workflows/`: `workflows.js` (Definitions, Runs, Pipelines, the screen's tablist and its menu entries, the Supervisor's round button at the bottom right of every tab (#409), the deep links
     `showRunInList` / `showWorkflowDefinition`), `builder.js` + `builder.css` (Builder and its two dialogs);
   - `views/run/`: Run Details (no sidebar entry: the Run item and the runs menu are the shell's): the
     failure banner, the gate cards (`renderRunGates`), the summary, the steps, the sessions and the tabs;
@@ -70,7 +73,7 @@ Read this before changing anything in `src/renderer/`.
   `registerView({ id, nav: { label, icon, order, title, group, tab }, section, menu, markup, modals, mount, show })`
   (`view-registry.js`, loaded before `app.js`): `markup` is the screen's whole
   `<section id="view-<id>" class="view hidden">`, added to `main.content`; `modals` its own dialogs,
-  added to the body; `nav` its sidebar entry, placed by `order` among the other entries'
+  added to the body; `nav` its entry in the sidebar's menu, placed by `order` among the other entries'
   `data-order` (20 = Home … 130 = AI Arena: pick a free number between two); `mount()` wires its
   controls once (and adds what `nav` can't: a badge); `show()` runs on each `showView(id)`.
   The menu is grouped by the flow (#254, `nav-groups.js`): `nav.group` (`plan`, `code`, `workflows`,
@@ -108,7 +111,7 @@ Read this before changing anything in `src/renderer/`.
   (`node_modules`) stay hand-kept outside the markers. The CSP and the packaged app are unchanged:
   the page still lists plain files.
 - Several runs can be in progress: `state.runs` (run id → view: run, sessions, steps, log, gates) and
-  `state.runId` (the one the Run screen and the top bar show); `state.run`, `state.sessions`… read the
+  `state.runId` (the one the Run screen shows; #412: the top bar shows no run); `state.run`, `state.sessions`… read the
   selected one. Route anything run-specific by `ev.run_id` and pass the `runId` to `stopRun`,
   `resolveApproval` and the terminals. There is no approval dialog: a gate is answered inside its run
   (the run chats, or the gate card on its Run screen, `renderRunGates`); elsewhere the Run badge, a
@@ -142,13 +145,20 @@ Read this before changing anything in `src/renderer/`.
   ends with `runchat-elsewhere-note`, its gate says to answer it there, and no Resume.
 - **How a run is opened**: one global run view, `state.runView` (`'details' | 'chat'`, saved in
   localStorage `multiagent.runView`). Every way of opening a run (sidebar Run menu, toasts,
-  notifications, "View run", Backlog run links, the gate badge, a resume) goes through
+  notifications, a run card's "Open run", Backlog run links, the gate badge, a resume) goes through
   `selectRun(runId)` / `showRun(runId, { workflow, running })` in `app.js`, which open that run's
   chat (Write & Review and AI Arena: their own screens) or its Run screen (a run this window does
   not follow: loaded from disk by `openPastRun`). Only the explicit
-  switches change the choice (`setRunView`): the Run screen's Chat button, the chat's Details
-  button and "Open chat". A chat always opens at its latest message ("Jump to latest" while
-  scrolled up).
+  switches change the choice (`setRunView`): the Run screen's Chat tab, the chat's Details
+  tab and a run card's "Open run" (#409: always the Details). A chat always opens at its latest
+  message ("Jump to latest" while scrolled up). Both screens start with the same tab row (#410, `data-testid="run-tab-row"`,
+  tablist "Run view": Chat | Details | 3D, at the same place so switching never moves it); on the
+  Run screen it also holds the status (`run-screen-status`), the id, the run's actions
+  (`#run-actions`, filled by `renderRunSummary`) and Pause / Stop (`run-controls.js`, #412). The
+  chain banner (`run-chain-banner`) sits below the row, only with a chain, its editor or linked
+  runs. Opening another run resets `state.tab` to `'artifacts'` (the Details' first tab).
+  The top bar (#412) holds no run: Project select, 24/7 chip, usage, then the Oracle, the bell and
+  the account at the right end.
 - Check changes by looking at screenshots: `npm run screenshot -- --view <view> [--tab|--mode|--click]
   --out <dir>` opens one screen with demo data and quits by itself (`--ref origin/main` for the
   "original"; usage at the top of `scripts/screenshot.js`). Each view is a seed module
@@ -397,7 +407,7 @@ the gate. The phone page (`src/mobile-gates.js`) prints the same line from `runs
 
 `findings.js` (`window.Findings`) and `src/shared/findings-model.js` (`window.FindingsModel`, pure: visibility,
 Ctrl+Shift+F, `resolvePin`) are the development tool after ToolSeeds' `sightline`. The button is a
-sidebar entry (`[data-testid="findings-button"]`). It shows from source, or with
+sidebar entry at the menu's end (`[data-testid="findings-button"]`). It shows from source, or with
 `settings.findingsButton`, and never in `scripts/screenshot.js` captures unless the setting is on
 (app:info's `isPackaged` and `screenshot`). It opens `[data-testid="findings-overlay"]` over the
 window's capture (`window:capture`, desktop only). Pins are DOM `[data-testid="findings-pin"]`

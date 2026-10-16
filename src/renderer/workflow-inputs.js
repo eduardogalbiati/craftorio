@@ -148,7 +148,7 @@
     const k = kind(key, def);
     const val = value ?? def.default ?? '';
     const af = autofocus ? ' autofocus' : '';
-    const ctl = `id="${esc(id)}" data-wi-input="${esc(key)}" ${attrs}`;
+    const ctl = `id="${esc(id)}" data-wi-input="${esc(key)}" data-testid="input-${esc(key)}" ${attrs}`;
     let control;
     if (k === 'switch') {
       const flag = def.type === 'boolean' ? 'bool' : 'text';

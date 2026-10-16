@@ -1,7 +1,7 @@
 # Third-party notices
 
 Multiagent Orchestrator is released under the MIT License (see [LICENSE](LICENSE)). Some of its
-bundled skills and workflows are adapted from other open-source projects, under the MIT License or
+bundled skills, workflows and analysis seeds are adapted from other open-source projects, under the MIT License or
 the Apache License 2.0. Both ask that the source's notice travel with the adapted work, so each
 source is listed here with its license.
 
@@ -35,6 +35,16 @@ Libraries installed through npm keep their own licenses in `node_modules`; they 
   - skills: `bug-diagnosis` (diagnosing-bugs), `merge-conflict-resolver` (resolving-merge-conflicts),
     `pr-description` (pr), `run-retrospective` (retro)
   - workflows: `run-retrospective.yaml` (retro)
+
+### KentBeck/ToolSeeds
+
+- Source: https://github.com/KentBeck/ToolSeeds
+- Copyright (c) Kent Beck
+- License: MIT
+- Used by:
+  - seeds: `churn-complexity` (turbulence), `dependency-map` (dependencyMap), `pipeline-anatomy`
+    (pipelineAnatomy), `quality-gate-report` (qualityGateReport); the "Make it a tool" issue
+    (promptToDeterministicTool)
 
 ### MIT permission notice
 

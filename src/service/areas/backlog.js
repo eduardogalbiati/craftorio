@@ -10,6 +10,7 @@ const simulation = require('../../engine/simulation');
 const workspace = require('../../workspace');
 const projects = require('../../projects');
 const backlog = require('../../backlog');
+const baseHealth = require('../../base-health');
 const refreshes = require('../../backlog-refresh');
 const { git } = require('../../engine/worktree');
 const epics = require('../../epics');
@@ -50,7 +51,9 @@ module.exports = (ctx) => {
     const releases = ctx.roadmapReleases(project, live);
     // #150: the saved conflict map, shown beside the Roadmap (null until a plan or a merge builds it)
     const conflictMap = ctx.savedConflictMap(data.projectId);
-    return { ...data, queue, local, roadmap, refresh, autoPush: !!project?.autoPush, autoEpic: !!project?.autoEpic, issues, releases, conflictMap };
+    // #405: the tests known to fail on the base (the Roadmap's "N known failures on the base" line)
+    const baseFailures = baseHealth.knownFailures(ws.root, data.projectId);
+    return { ...data, queue, local, roadmap, refresh, autoPush: !!project?.autoPush, autoEpic: !!project?.autoEpic, issues, releases, conflictMap, baseFailures };
   }
 
   // The Backlog Refresh banner (#161, src/backlog-refresh.js): the merges on the base since the

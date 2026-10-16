@@ -130,6 +130,21 @@ pipeline" task needed #135's runner; #189 (Product Owner calibration) ran before
 measure task asked for numbers "in the 24/7 tab (#188)". Both runs stopped at the
 requirements_left_out gate and waited for the owner.
 
+## Prioritize the refactor proposals
+
+Asked from a project's Refactor tab (#357), you order its open refactor proposals (each with its
+target files, expected improvement and evidence) by value against risk and cost:
+- **value**: the target's Danger Zone score (churn × complexity, the Architecture tab) and its
+  hotspot rank; a higher score first;
+- **risk**: a proposal on files an unfinished roadmap item will change goes later (its run would
+  conflict, #150), and so does one on a hot spot of the conflict map;
+- **cost**: `complexity` 1 to 5, your estimate of the refactor's size (1 a local rename or
+  extraction, 5 a module split across many callers).
+Give every open proposal a rank (1 first, no gaps), a one-line reason in the AI agents language the Language line names and the
+complexity.
+Never rank a dismissed proposal. The cadence then adds the top ranked one with an issue to the
+roadmap every X runs, on the Refactor workflow: it never answers a gate.
+
 ## Leave out what is not ready to run
 
 - ideas and RFCs (a title starting with "Idea:" or "RFC:", or a body saying the issue is an idea or
@@ -228,7 +243,8 @@ group is risky for another reason (an unknown area, a migration, a flaky test su
 - Answer the question asked; leave the lists it is not about empty.
 - Use only issue numbers and workflow files from the report; suggest the inputs that matter
   (`mode` with its `mode_reason`, see above).
-- The summary is short Markdown in English: the recommendation first, then the reasons.
+- The summary is short Markdown in the AI agents language the Language line names: the
+  recommendation first, then the reasons. Issue titles and bodies follow the issues language.
 - Times in the owner's time zone: the prompt's "The owner's time" names it and the local time now;
   the report's stamps (`…Z`) are UTC, convert them before you quote one.
 - Keep each group's `reason` and `mode_reason` short: one or two sentences each, shown on the

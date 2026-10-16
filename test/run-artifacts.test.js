@@ -154,6 +154,19 @@ test('artifactIndex: events.jsonl, meta.json, summary.json and sessions/ are nev
   assert.deepEqual(relOf(idx), ['report.md']);
 });
 
+test('artifactIndex: what the run\'s tests leave in its temp folder (tmp/, #414) is never listed as an artifact', async (t) => {
+  const { base, runDir } = tmpRun();
+  t.after(() => rm(base));
+  fs.writeFileSync(path.join(runDir, 'events.jsonl'), '');
+  fs.mkdirSync(path.join(runDir, 'tmp', 'service-ws-a1b2'), { recursive: true });
+  fs.writeFileSync(path.join(runDir, 'tmp', 'service-ws-a1b2', 'settings.json'), '{}');
+  fs.writeFileSync(path.join(runDir, 'tmp', 'notes.md'), '# left by a test');
+  fs.writeFileSync(path.join(runDir, 'report.md'), '# r');
+
+  const idx = await artifactIndex(runDir);
+  assert.deepEqual(relOf(idx), ['report.md']);
+});
+
 test('runsOfArtifact: a path under runs/<id>/ gives [id] straight from the path, with nothing to read', async (t) => {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'run-arts-'));
   t.after(() => rm(base));

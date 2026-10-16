@@ -33,7 +33,8 @@ const { sharedMemoryGuard } = require('./memory-guard');
 const machineActions = require('./machine-actions');
 const { StepTrail } = require('../shared/run-progress-model');
 const chain = require('../shared/chain-model');
-const { BUNDLED_SKILLS, methods: sessionsMethods, OUTPUT_LANGUAGE } = require('./run/sessions');
+const Language = require('../shared/language');
+const { BUNDLED_SKILLS, methods: sessionsMethods } = require('./run/sessions');
 const { evalExpr, render, testsPlan } = require('./run/templates');
 const {
   loadWorkflow,
@@ -65,6 +66,7 @@ const { methods: supervisionMethods } = require('./run/supervision');
 const { methods: checkoutMethods } = require('./run/checkout');
 const { methods: machineStepsMethods } = require('./run/machine-steps');
 const { methods: projectMapStepsMethods } = require('./run/project-map-steps');
+const { methods: refactorProposalsStepsMethods } = require('./run/refactor-proposals-steps');
 const { methods: testRequestsMethods } = require('./run/test-requests');
 const { methods: resumeMethods, pausedError } = require('./run/resume');
 const { methods: setupMethods } = require('./run/setup');
@@ -72,12 +74,14 @@ const { methods: setupMethods } = require('./run/setup');
 const stepAgentLabel = (s) => (s.agents ? s.agents.join(' · ') : s.agent || null);
 
 // The machine steps whose output is all there is (no worktree processes, no supervisor): type → method.
-// project_map (#372): the project map's facts, validation and save; release_version (#325): never
+// project_map (#372): the project map's facts, validation and save; refactor_proposals (#378): the
+// Refactor proposals workflow's facts, proposals, ranking and filing; release_version (#325): never
 // fails the run, the output says what was written; test_ids (#246): the missing test ids; check
 // (#404): the project's rule checks (its command sweeps what it leaves running)
 const PLAIN_MACHINE_STEPS = {
   check: 'runCheckStep',
   project_map: 'runProjectMapStep',
+  refactor_proposals: 'runRefactorProposalsStep',
   release_version: 'runReleaseVersionStep',
   test_ids: 'runTestIdsStep',
 };
@@ -100,6 +104,8 @@ function runMachine(machine, mock, sequences) {
 
 // The run's test workers (#367): { testWorkers } for a whole number from 1, else null (not set).
 const runWorkers = (testWorkers) => (Number.isInteger(testWorkers) && testWorkers >= 1 ? { testWorkers } : null);
+// A service hook given as an option (architectureOracle, refactorPriorityOptions): the function, else null
+const functionOrNull = (f) => (typeof f === 'function' ? f : null);
 // #396: the failures of the suite steps that ended red, with their class (in or outside the change)
 const testedFailures = (steps) => Object.entries(steps)
   .filter(([, s]) => s?.output?.kind === 'suite' && s.output.status === 'fail')
@@ -162,13 +168,20 @@ class WorkflowRun extends EventEmitter {
   // architectureOracle (#381): () => { oracle, agent }, the service's Oracle ({ oneTurn, budgetRefusal }
   //   of src/oracle.js) and its agent, for a `type: project_map` step's analyze action
   //   (src/engine/run/project-map-steps.js); null = no Oracle (a simulation needs none).
-  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issues, issue, resume, worktreesDir, mockSequences, notices, stopProcesses, probe, actionsQuota, peerSessions, idleWarnMs, personas, localPreview, attachments, then, from, parent, startChild, memoryGuard, agentOverrides, fallbacks, models, nightLimits, testWorkers, machine, architectureOracle }) {
+  // refactorPriorityOptions (#378): (projectId) => the Product Owner's turn options (refactor:prioritize's),
+  //   for a `type: refactor_proposals` step's prioritize action (src/engine/run/refactor-proposals-steps.js);
+  //   null = no Product Owner (a simulation needs none).
+  // language (#327): () => the settings' language ({ agents, issues }) or null, called at each turn: every
+  //   turn's [Language] line and the output instruction follow it (src/shared/language.js); null = English.
+  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issues, issue, resume, worktreesDir, mockSequences, notices, stopProcesses, probe, actionsQuota, peerSessions, idleWarnMs, personas, localPreview, attachments, then, from, parent, startChild, memoryGuard, agentOverrides, fallbacks, models, nightLimits, testWorkers, machine, architectureOracle, refactorPriorityOptions, language }) {
     super();
     refreshWindowsPath(); // actions (e.g. gh pr merge) need the refreshed PATH
     this.file = file;
     this.wf = loadWorkflow(file);
     this.mock = !!mock;
-    this.architectureOracle = typeof architectureOracle === 'function' ? architectureOracle : null;
+    this.language = functionOrNull(language);
+    this.architectureOracle = functionOrNull(architectureOracle);
+    this.refactorPriorityOptions = functionOrNull(refactorPriorityOptions);
     this.mockSequences = mockSequences || null;
     this.machine = runMachine(machine, this.mock, this.mockSequences);
     this.notices = notices || [];
@@ -284,6 +297,7 @@ class WorkflowRun extends EventEmitter {
     this.localPreview = localPreview || this.wf.orchestrator?.local_preview || null;
     this.ctx.local_preview = this.localPreview;
     this.gateWaits = {}; // gate step id -> { waits, wait_ms } (summary.timing.gates): owner time, not agent time
+    this.gateClock = { total: 0, since: null }; // ms with a gate open, not counted by max_total_duration (#416)
     this.preexisting = []; // [{ step, test, file, reason }] (notePreexistingFailures)
     this.stalls = []; // last stall signals [{ step, kind, detail, ts }] (recordStall), for the supervisor on call
     this.liveTurns = new Map(); // step id -> Set of stop(decision) of its running turns (a slow step's interrupt)
@@ -687,7 +701,7 @@ class WorkflowRun extends EventEmitter {
     if (schema) {
       prompt += '\n\n---\nAt the end of your response you MUST include a ```json block with an object that validates against this JSON Schema:\n```json\n'
         + JSON.stringify(schema, null, 2) + '\n```\n'
-        + OUTPUT_LANGUAGE;
+        + Language.outputInstruction(this.agentsLanguageCode());
     }
     const hint = { stepId: step.id, visit, schema, agent: agentName, sequences: this.mockSequences };
     // images (#129): those of the inputs its prompt uses, and those of the last gate's feedback
@@ -852,6 +866,7 @@ mixin(
   checkoutMethods,
   machineStepsMethods,
   projectMapStepsMethods,
+  refactorProposalsStepsMethods,
   testRequestsMethods,
   resumeMethods,
   setupMethods,
