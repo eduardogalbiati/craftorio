@@ -7,6 +7,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+const en = require('../src/shared/i18n/en.json');
 
 const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'views', 'backlog', 'backlog.js'), 'utf8');
 
@@ -26,7 +27,8 @@ test('renderList and renderKanban both filter their issues through the same isSh
 test('filtering() and the "No issues match" message both account for the epic filter, like labels and the search', () => {
   assert.match(src, /const filtering = \(\) => !!bl\.q \|\| bl\.labels\.length > 0 \|\| !!bl\.epic;/);
   const noMatch = /const noMatch = \(\) => `[\s\S]*?`;/.exec(src)[0];
-  assert.match(noMatch, /bl\.epic \? `Epic: /);
+  assert.match(noMatch, /bl\.epic \? t\('backlog\.epic_value'/);
+  assert.match(en['backlog.epic_value'], /^Epic: /);
 });
 
 test('the epic select is hidden with no epics, and in the Epics view (it shows on the Board and the Roadmap, #217)', () => {

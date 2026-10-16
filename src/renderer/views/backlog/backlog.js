@@ -600,7 +600,7 @@
     const numbers = assignNumbers();
     if (!numbers.length) return;
     const inRoadmap = planned(numbers);
-    if (inRoadmap.length && !await confirmDialog(t('backlog.already_in_the_roadmap'), `${inRoadmap.map((i) => `#${i.number} (stage ${i.roadmap.stage})`).join(', ')} ${inRoadmap.length > 1 ? 'are' : 'is'} planned in the roadmap. Assigning takes ${inRoadmap.length > 1 ? 'them' : 'it'} out of the roadmap and into the queue.`, t('backlog.assign_anyway'))) return;
+    if (inRoadmap.length && !await confirmDialog(t('backlog.already_in_the_roadmap'), t(inRoadmap.length > 1 ? 'backlog.planned_in_roadmap_many' : 'backlog.planned_in_roadmap_one', { list: inRoadmap.map((i) => t('backlog.number_stage', { number: i.number, stage: i.roadmap.stage })).join(', ') }), t('backlog.assign_anyway'))) return;
     const btn = $b('#btn-assign-ok');
     btn.disabled = true;
     try {
@@ -717,7 +717,7 @@
   const filtering = () => !!bl.q || bl.labels.length > 0 || !!bl.epic;
   const epicById = (id) => (bl.data?.epics || []).find((e) => e.id === id) || null;
   const noMatch = () => `<div class="empty-state"><b>${t('backlog.no_issues_match_the_filters')}</b>
-    <p class="muted">${bl.epic ? t('backlog.epic_value', { value: esc(bl.epic === NO_EPIC ? 'No epic' : epicById(bl.epic)?.title || bl.epic) }) : ''}${bl.labels.length ? t('backlog.labels_value', { value: esc(bl.labels.join(', ')) }) : ''}${bl.q ? t('backlog.search_q', { q: esc(bl.q) }) : ''}</p>
+    <p class="muted">${bl.epic ? t('backlog.epic_value', { value: esc(bl.epic === NO_EPIC ? t('backlog.no_epic') :epicById(bl.epic)?.title || bl.epic) }) : ''}${bl.labels.length ? t('backlog.labels_value', { value: esc(bl.labels.join(', ')) }) : ''}${bl.q ? t('backlog.search_q', { q: esc(bl.q) }) : ''}</p>
     <button class="btn sm ghost" type="button" data-clear-filters>${t('backlog.clear_filters')}</button></div>`;
 
   const colorStyle = (color) => (color ? ` style="--lc:${esc(color)}"` : '');

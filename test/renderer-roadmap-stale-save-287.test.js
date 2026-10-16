@@ -13,6 +13,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const { withI18n } = require('./i18n-sandbox.js');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', ...p), 'utf8');
 const roadmapSrc = read('views', 'backlog', 'backlog-roadmap.js');
@@ -61,7 +62,7 @@ function loadRoadmap(opts = {}) {
   sandbox.setTimeout = setTimeout;
   sandbox.clearTimeout = clearTimeout;
   sandbox.window = sandbox;
-  vm.createContext(sandbox);
+  vm.createContext(withI18n(sandbox));
   for (const m of MODULES) vm.runInContext(m, sandbox);
   vm.runInContext(roadmapSrc, sandbox);
   return { BacklogRoadmap: sandbox.BacklogRoadmap, saved, sandbox };
@@ -232,7 +233,7 @@ function loadBacklog({ shown, next }) {
   sandbox.api.getBacklog = async () => state.data;
   sandbox.window = sandbox;
   sandbox.state.view = 'backlog';
-  vm.createContext(sandbox);
+  vm.createContext(withI18n(sandbox));
   for (const m of MODULES) vm.runInContext(m, sandbox);
   vm.runInContext(roadmapSrc, sandbox);
   Object.assign(sandbox.BacklogRoadmap, { busy: () => state.editing, closeEdit: () => { state.editing = false; } });

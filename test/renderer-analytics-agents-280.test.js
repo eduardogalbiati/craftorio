@@ -20,6 +20,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const { withI18n } = require('./i18n-sandbox.js');
 const { displayName } = require('../src/shared/display-name.js');
 
 const FILE = path.join(__dirname, '..', 'src', 'renderer', 'views', 'analytics', 'analytics-agents.js');
@@ -89,7 +90,7 @@ async function loadTab({ data = payload(), fail = null, failFirst = null, load =
     showView: () => {},
   };
   window.document = sandbox.document;
-  vm.createContext(sandbox);
+  vm.createContext(withI18n(sandbox));
   vm.runInContext(fs.readFileSync(FILE, 'utf8'), sandbox, { filename: FILE });
   const tab = window.AnalyticsTabs?.agents;
   assert.ok(tab, 'window.AnalyticsTabs.agents is registered');

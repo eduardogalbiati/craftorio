@@ -7,13 +7,14 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const { withI18n } = require('./i18n-sandbox.js');
 
 const SRC = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'agent-overrides.js'), 'utf8');
 
 function load() {
   const sandbox = { document: { addEventListener() {} } };
   sandbox.window = sandbox;
-  vm.createContext(sandbox);
+  vm.createContext(withI18n(sandbox));
   vm.runInContext(SRC, sandbox);
   return sandbox.window.AgentOverrides;
 }

@@ -11,6 +11,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const { withI18n } = require('./i18n-sandbox.js');
 
 const appSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'app.js'), 'utf8');
 const workflowInputsSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'workflow-inputs.js'), 'utf8');
@@ -91,7 +92,7 @@ function loadDefs({ workflows = [], pipelines = [], api = {} } = {}) {
   };
   sandbox.$ = (sel) => els[sel];
   sandbox.window = sandbox; // WorkflowInputs (browser build) attaches itself to window
-  vm.createContext(sandbox);
+  vm.createContext(withI18n(sandbox));
   vm.runInContext(workflowInputsSrc, sandbox);
   vm.runInContext(pieces.join('\n'), sandbox);
   sandbox.helpers.wfDefs.pipelines = pipelines;

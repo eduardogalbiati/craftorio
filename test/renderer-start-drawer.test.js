@@ -9,6 +9,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const { withI18n } = require('./i18n-sandbox.js');
 
 const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'app.js'), 'utf8');
 const drawerSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'start-drawer.js'), 'utf8');
@@ -130,7 +131,7 @@ function loadStartDrawer({ workflows = [], projects = [], settings = {}, runs = 
   };
   sandbox.$ = (sel) => getEl(sel.slice(1));
   sandbox.window = sandbox; // WorkflowInputs (browser build) attaches itself to window
-  vm.createContext(sandbox);
+  vm.createContext(withI18n(sandbox));
   vm.runInContext(workflowInputsSrc, sandbox);
   vm.runInContext(Object.values(code).join('\n') + '\nthis.helpers = { startRun, selectWorkflow, setStartDisabled, closeDrawer, mainField, oneRunAtATime, renderDrawerPipeline };', sandbox);
   return { sandbox, helpers: sandbox.helpers, getEl, storage, calls };
@@ -157,7 +158,7 @@ function envStatusHtml(cliStates, requirements = { clis: ['claude', 'codex', 'gi
     commandHint: (cmd, opts) => `[${opts?.signIn ? 'sign-in' : 'run'}: ${cmd}]`,
     devMode: () => dev,
   };
-  vm.createContext(sandbox);
+  vm.createContext(withI18n(sandbox));
   vm.runInContext(`${m[0]}\nrenderEnvStatus();`, sandbox);
   return box.innerHTML;
 }

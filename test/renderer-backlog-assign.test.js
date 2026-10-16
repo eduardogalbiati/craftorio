@@ -6,6 +6,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+const en = require('../src/shared/i18n/en.json');
 
 const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'views', 'backlog', 'backlog.js'), 'utf8');
 
@@ -25,8 +26,10 @@ test('updateAssignNote: the real-run note drops the "one at a time" / ordering c
 test('status(): a run the supervisor sent back after a failed merge shows a "sent back" badge with its record', () => {
   const status = /function status\(i\)[\s\S]*?\n  \}/.exec(src)[0];
   assert.match(status, /const recovered = r\.recovery \? `<span class="badge bl-recovered"/);
-  assert.match(status, /title="\$\{esc\(`Supervisor: \$\{r\.recovery\}`\)\}"/);
-  assert.match(status, /sent back after a failed merge<\/span>` : ''/);
+  assert.match(status, /title="\$\{esc\(t\('backlog\.supervisor_recovery', \{ recovery: r\.recovery \}\)\)\}"/);
+  assert.equal(en['backlog.supervisor_recovery'], 'Supervisor: {recovery}');
+  assert.match(status, /\$\{t\('backlog\.sent_back_after_a_failed_merge'\)\}<\/span>` : ''/);
+  assert.equal(en['backlog.sent_back_after_a_failed_merge'], 'sent back after a failed merge');
 });
 
 // ---- renderAssignInputs (#116): human labels/pills/switches via WorkflowInputs, not raw selects ---
@@ -48,8 +51,11 @@ test('renderAssignInputs: the workflow\'s "About" details only appear when its d
 test('submitAssign: assigning an issue the roadmap already plans asks first, and takes it out of the roadmap', () => {
   const fn = /async function submitAssign\(e\)[\s\S]*?\n  \}/.exec(src)[0];
   assert.match(fn, /const inRoadmap = planned\(numbers\);/);
-  assert.match(fn, /if \(inRoadmap\.length && !await confirmDialog\('Already in the roadmap'/);
-  assert.match(fn, /takes \$\{inRoadmap\.length > 1 \? 'them' : 'it'\} out of the roadmap and into the queue/);
+  assert.match(fn, /if \(inRoadmap\.length && !await confirmDialog\(t\('backlog\.already_in_the_roadmap'\)/);
+  assert.equal(en['backlog.already_in_the_roadmap'], 'Already in the roadmap');
+  assert.match(fn, /t\(inRoadmap\.length > 1 \? 'backlog\.planned_in_roadmap_many' : 'backlog\.planned_in_roadmap_one'/);
+  assert.match(en['backlog.planned_in_roadmap_many'], /takes them out of the roadmap and into the queue/);
+  assert.match(en['backlog.planned_in_roadmap_one'], /takes it out of the roadmap and into the queue/);
 });
 
 // ---- The kept-work question (#170): assign and queue resume share the same two named choices ---
@@ -145,7 +151,8 @@ test('render: Assign workflow… and Send to Product Owner (n) toggle together f
   const fn = /function render\(\)[\s\S]*?\n  \}/.exec(src)[0];
   assert.match(fn, /const n = shownSelected\(\)\.length;/);
   assert.match(fn, /\$b\('#btn-bl-assign'\)\.classList\.toggle\('hidden', !n\);/);
-  assert.match(fn, /\$b\('#btn-bl-assign'\)\.textContent = `Assign workflow… \(\$\{n\}\)`;/);
+  assert.match(fn, /\$b\('#btn-bl-assign'\)\.textContent = t\('backlog\.assign_workflow_n', \{ n \}\);/);
+  assert.equal(en['backlog.assign_workflow_n'], 'Assign workflow… ({n})');
   assert.match(fn, /\$b\('#btn-bl-send-po'\)\.classList\.toggle\('hidden', !n\);/);
   assert.match(fn, /\$b\('#btn-bl-send-po'\)\.dataset\.n = String\(n\);/);
   assert.match(fn, /\$b\('#btn-bl-send-po'\)\.textContent = `Send to Product Owner \(\$\{n\}\)`;/);

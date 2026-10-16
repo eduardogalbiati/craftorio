@@ -9,6 +9,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const { withI18n } = require('./i18n-sandbox.js');
 
 const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'app.js'), 'utf8');
 const gateSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'gate-panel.js'), 'utf8');
@@ -70,7 +71,7 @@ function loadHelpers() {
     // run.js settles the pasted images of the answer (src/renderer/paste-image.js)
     PasteImage: { settle: async () => {}, attachments: () => [] },
   };
-  vm.createContext(sandbox);
+  vm.createContext(withI18n(sandbox));
   vm.runInContext(`${esc}\n${pendingGates}\n${onRunGateClick}\nthis.helpers = { pendingGates, onRunGateClick };`, sandbox);
   return { sandbox, calls, toasts, helpers: sandbox.helpers };
 }
@@ -155,7 +156,7 @@ function loadGateToolsHtml() {
     assert.ok(code, `${name} not found in gate-panel.js: the source moved`);
   }
   const sandbox = {};
-  vm.createContext(sandbox);
+  vm.createContext(withI18n(sandbox));
   vm.runInContext(`${esc}\n${runAppLabel}\n${gateToolsHtml}\nthis.gateToolsHtml = gateToolsHtml;`, sandbox);
   return sandbox.gateToolsHtml;
 }
@@ -218,7 +219,7 @@ function loadGateBrief() {
     assert.ok(code, `${name} not found in gate-panel.js: the source moved`);
   }
   const sandbox = { state: { runs: new Map() }, window: {} };
-  vm.createContext(sandbox);
+  vm.createContext(withI18n(sandbox));
   vm.runInContext(
     `${esc}\n${gateTriesChange}\n${gateSideHtml}\n${lastOutput}\n${scenarioPill}\n${scenarioLabel}\n${openScenarios}\n${gateScenariosHtml}\n${gateBriefHtml}\n`
     + 'this.helpers = { gateTriesChange, gateSideHtml, gateScenariosHtml, gateBriefHtml };',
@@ -377,7 +378,7 @@ function loadPaintGateApps() {
     state: { runs: new Map([['r1', { preview: null }]]) },
     dock: { tabs: [] },
   };
-  vm.createContext(sandbox);
+  vm.createContext(withI18n(sandbox));
   vm.runInContext(`${paintGateApps}\nthis.paintGateApps = paintGateApps;`, sandbox);
   return { paintGateApps: sandbox.paintGateApps, sandbox, stopBtn, termBtn, stateEl, errEl };
 }
@@ -441,7 +442,7 @@ function loadMountGateSides() {
     window: { ArtifactsPanel: artifactsPanel },
     DiffViewer: { open: (opts) => diffViewerCalls.push(opts) },
   };
-  vm.createContext(sandbox);
+  vm.createContext(withI18n(sandbox));
   // mountGateSides also calls mountGateScenarios(root) first (#143); these tests are about the
   // Artifacts panel, not the E2E scenarios block, so a no-op stub keeps them focused.
   vm.runInContext(
@@ -592,7 +593,7 @@ function loadMountGateScenarios() {
     window: {},
     document: { createElement: () => ({ classList: { add() {} }, textContent: '', title: '' }) },
   };
-  vm.createContext(sandbox);
+  vm.createContext(withI18n(sandbox));
   vm.runInContext(
     `${openScenarios}\n${scenarioShots}\n${mountGateScenarios}\n`
     + 'this.mountGateScenarios = mountGateScenarios; this.openScenarios = openScenarios; this.scenarioShots = scenarioShots;',
@@ -650,7 +651,7 @@ function loadRunAppHtml() {
     assert.ok(code, `${name} not found in app.js or gate-panel.js: the source moved`);
   }
   const sandbox = {};
-  vm.createContext(sandbox);
+  vm.createContext(withI18n(sandbox));
   vm.runInContext(
     `${esc}\n${runAppCommandHtml}\n${runAppConfirmHtml}\n${runAppInstallHtml}\n${runAppSetupHtml}\n`
     + 'this.helpers = { runAppCommandHtml, runAppConfirmHtml, runAppInstallHtml, runAppSetupHtml };',
@@ -765,7 +766,7 @@ function loadGateChoices() {
   const gateChoices = /function gateChoices\(gate\) \{[\s\S]*?\n\}/.exec(gateSrc)[0];
   assert.ok(gateChoices, 'gateChoices not found in gate-panel.js: the source moved');
   const sandbox = {};
-  vm.createContext(sandbox);
+  vm.createContext(withI18n(sandbox));
   vm.runInContext(`${gateChoices}\nthis.gateChoices = gateChoices;`, sandbox);
   return sandbox.gateChoices;
 }

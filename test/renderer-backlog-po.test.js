@@ -7,6 +7,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const { withI18n } = require('./i18n-sandbox.js');
 
 const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'views', 'backlog', 'backlog-po.js'), 'utf8');
 const defaultWorkflowSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'shared', 'default-workflow.js'), 'utf8');
@@ -23,7 +24,7 @@ function loadWorkflowSelect() {
   }
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
   const sandbox = { esc, state: { workflows: [], settings: { defaultWorkflow: null } } };
-  vm.createContext(sandbox);
+  vm.createContext(withI18n(sandbox));
   vm.runInContext(defaultWorkflowSrc, sandbox);
   vm.runInContext(`${draftWorkflow}\n${workflowForFn}\n${workflowSelectFn}\nthis.helpers = { workflowSelect, workflowFor, draftWorkflow };`, sandbox);
   return { helpers: sandbox.helpers, sandbox };
@@ -46,7 +47,7 @@ function loadAppliedState() {
   let issues = [];
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
   const sandbox = { esc, issueOf: (n) => issues.find((i) => i.number === n) };
-  vm.createContext(sandbox);
+  vm.createContext(withI18n(sandbox));
   vm.runInContext(
     `${liveRun}\n${inRoadmap}\n${groupStateFn}\n${stagesLabel}\n${appliedBadgeFn}\n${appliedFn}\n${appliedTitleFn}\n`
     + 'this.helpers = { groupState, appliedBadge, applied, appliedTitle, stagesLabel };',
@@ -79,7 +80,7 @@ test('groupHtml (#216): the workflow by its name, not its file, and its inputs a
 test('groupHtml (#216): the reason, the mode reason and the warnings are rendered as Markdown in labelled sections', () => {
   assert.match(src, /markdownHtml\([^)]*reason/);
   assert.match(src, /markdownHtml\([^)]*modeReason/);
-  assert.match(src, />\s*Why\s*</);
+  assert.match(src, /\$\{t\('backlog_po\.why'\)\}/);
   assert.match(src, />\s*Files\s*</);
   assert.match(src, />\s*Estimate\s*</);
   assert.match(src, /callout/); // the warnings
@@ -204,7 +205,7 @@ test('groupHtml: an applied group is shown dimmed with its badge, Assign and Add
   assert.match(fn, /const done = applied\(st\);/);
   assert.match(fn, /<div class="po-group\$\{done \? ' applied' : ''\}"/);
   assert.match(fn, /const off = done \? ` disabled title="\$\{esc\(appliedTitle\(st\)\)\}"` : '';/);
-  assert.match(fn, /<button class="btn sm primary" type="button" data-po-act="assign"\$\{off \|\| ' title="Open the assign dialog with these issues as one run"'\}>Assign…<\/button>/);
+  assert.match(fn, /<button class="btn sm primary" type="button" data-po-act="assign"\$\{off \|\| ` title="\$\{t\('backlog_po\.open_the_assign_dialog_with_these'\)\}"`\}>\$\{t\('backlog_po\.assign'\)\}<\/button>/);
   assert.match(fn, /st\.kind === 'partly'/);
   assert.match(fn, /Add the rest<\/button>/);
   assert.match(fn, /\$\{appliedBadge\(st, already\)\}/);
@@ -232,7 +233,7 @@ test('the drawer re-renders (keeping its scroll position, #148: render() itself 
 
 test('messageHtml (#189): a user message with a per-question override shows "for <Step>"; a po answer shows "Planned for <Step>", adding "· this question" when it was an override', () => {
   const fn = /function messageHtml\(msg, m\)[\s\S]*?\n  \}/.exec(src)[0];
-  assert.match(fn, /const once = \[msg\.calibrationOverride \? window\.PoCalibration\.step\(msg\.calibration\)\.name : '', msg\.costOverride \? window\.PoCalibration\.cost\.step\(msg\.cost\)\.name : ''\]\.filter\(Boolean\)/);
+  assert.match(fn, /const once = \[msg\.calibrationOverride \? window\.PoCalibration\.nameOf\(msg\.calibration\) : '', msg\.costOverride \? window\.PoCalibration\.cost\.nameOf\(msg\.cost\) : ''\]\.filter\(Boolean\)/);
   assert.match(fn, /\.map\(\(name\) => ` · <span class="badge" title="For this question only: the saved setting is unchanged">for \$\{esc\(name\)\}<\/span>`\)\.join\(''\);/);
   assert.match(fn, /const once = msg\.calibrationOverride \|\| msg\.costOverride;/);
   assert.match(fn, /const calib = msg\.calibration \? ` <span class="badge" title="\$\{esc\(`\$\{once \? 'For this question only\. ' : ''\}\$\{window\.PoCalibration\.tooltip\(msg\.calibration\)\}\$\{msg\.cost \? `\\n\\n\$\{window\.PoCalibration\.cost\.tooltip\(msg\.cost\)\}` : ''\}`\)\}">Planned for \$\{esc\(window\.PoCalibration\.plannedFor\(msg\.calibration, msg\.cost \?\? null\)\)\}\$\{once \? ' · this question' : ''\}<\/span>` : '';/);
@@ -241,14 +242,14 @@ test('messageHtml (#189): a user message with a per-question override shows "for
 
 test('sizeText marks the estimate as an estimate and warns when some complexities were guessed', () => {
   const fn = /const sizeText = \(g\) => \{[\s\S]*?\n  \};/.exec(src)[0];
-  assert.match(fn, /\(estimate from \$\{esc\(g\.estimate\.basis\)\}\)/);
-  assert.match(fn, /no past run to estimate from/);
+  assert.match(fn, /t\('backlog_po\.estimate_from_basis', \{ basis: esc\(g\.estimate\.basis\) \}\)/);
+  assert.match(fn, /t\('backlog_po\.no_past_run_to_estimate_from'\)/);
   assert.match(fn, /\(some guessed\)/);
 });
 
 test('answerHtml shows proposed runs, pairs not to run in parallel, and issues to enrich with a link to #103', () => {
   const fn = /function answerHtml\(a, m\)[\s\S]*?\n  \}/.exec(src)[0];
-  assert.match(fn, /Proposed runs/);
+  assert.match(fn, /t\('backlog_po\.proposed_runs'\)/);
   assert.match(fn, /Do not run in parallel/);
   assert.match(fn, /Enrich first/);
   assert.match(fn, /href="\$\{esc\(e\.link\)\}"/); // e.link: the #103 enrich-an-issue link, computed in src\/product-owner.js
@@ -319,7 +320,7 @@ function loadAsk() {
     state: { view: 'backlog' },
     document: { hidden: false },
   };
-  vm.createContext(sandbox);
+  vm.createContext(withI18n(sandbox));
   vm.runInContext(`${poLit}\n${watchingFn}\n${askFn}\nthis.ask = ask; this.po = po;`, sandbox);
   Object.assign(sandbox.po, { projectId: 'demo', open: true });
   return { ask: sandbox.ask, po: sandbox.po, calls, settings, settle: (out) => settle(out), fail: (e) => fail(e) };
@@ -399,7 +400,7 @@ test('the live turn follows this project\'s chat:progress events only, applying 
 test('messageHtml: a stopped answer shows a "Stopped" badge in its meta line (#180)', () => {
   const metaLine = /const meta = `Product Owner[\s\S]*?`;/.exec(src)[0];
   assert.ok(metaLine, 'the message meta line not found in backlog-po.js: the source moved');
-  assert.match(metaLine, /msg\.stopped \? ' <span class="badge warn" title="You stopped this turn: the answer is what was written until then">Stopped<\/span>' : ''/);
+  assert.match(metaLine, /msg\.stopped \? ` <span class="badge warn" title="\$\{t\('backlog_po\.you_stopped_this_turn_the_answer'\)\}">\$\{t\('backlog_po\.stopped'\)\}<\/span>` : ''/);
 });
 
 test('the conversation and the applied-group notes reset when the drawer switches to another project', () => {
@@ -427,7 +428,7 @@ test('draftActions never files by itself: Create, Add to #n instead and Discard 
   const fn = /function draftActions\(x, m\)[\s\S]*?\n  \}/.exec(src)[0];
   assert.match(fn, /data-po-act="create"/);
   assert.match(fn, /data-po-act="append" data-n="\$\{n\}"/);
-  assert.match(fn, /Add to #\$\{n\}\$\{x\.draft \? ' instead' : ''\}/);
+  assert.match(fn, /\$\{t\('backlog_po\.add_to'\)\}\$\{n\}\$\{x\.draft \? t\('backlog_po\.instead'\) : ''\}/);
   assert.match(fn, /data-po-act="discard"/);
   assert.match(fn, /data-po-act="revise"/);
   assert.doesNotMatch(fn, /api\.(fileProductOwnerDraft|discardProductOwnerDraft)/); // rendering never files or discards by itself
@@ -542,13 +543,13 @@ test('open: switching project drops attachments not sent yet, including the Back
 test('syncSendButton disables the Backlog\'s Send to Product Owner button and names it "Product Owner is answering…" while busy, its count once the answer lands', () => {
   const fn = /function syncSendButton\(\)[\s\S]*?\n  \}/.exec(src)[0];
   assert.match(fn, /b\.disabled = po\.busy;/);
-  assert.match(fn, /b\.textContent = po\.busy \? 'Product Owner is answering…' : `Send to Product Owner \(\$\{b\.dataset\.n \|\| 0\}\)`;/);
+  assert.match(fn, /b\.textContent = po\.busy \? t\('backlog_po\.product_owner_is_answering'\) : t\('backlog_po\.send_to_product_owner_value', \{ value: b\.dataset\.n \|\| 0 \}\);/);
 });
 
 test('suggestedHtml: an unchecked checkbox per group.suggested issue, "suggested, not selected", disabled once the group is already applied', () => {
   const fn = /function suggestedHtml\(g, key, done\)[\s\S]*?\n  \}/.exec(src)[0];
   assert.match(fn, /if \(!g\.suggested\?\.length\) return '';/);
-  assert.match(fn, /Could join \(suggested, not selected\)/);
+  assert.match(fn, /t\('backlog_po\.could_join_suggested_not_selected'\)/);
   assert.match(fn, /data-po-extra="\$\{s\.issue\}"\$\{extrasOf\(key\)\.includes\(s\.issue\) \? ' checked' : ''\}\$\{done \? ' disabled' : ''\}/);
 });
 
@@ -565,7 +566,7 @@ test('withExtras adds only the checked suggested issues not already in the group
 
 test('answerHtml: attached issues closed meanwhile are left out of every group, shown as "Left out (closed)"', () => {
   const fn = /function answerHtml\(a, m\)[\s\S]*?\n  \}/.exec(src)[0];
-  assert.match(fn, /if \(a\.closed\?\.length\) parts\.push\(`<div class="small muted">Left out \(closed\): \$\{a\.closed\.map\(issueRef\)\.join\(' '\)\}<\/div>`\);/);
+  assert.match(fn, /if \(a\.closed\?\.length\) parts\.push\(`<div class="small muted">\$\{t\('backlog_po\.left_out_closed'\)\} \$\{a\.closed\.map\(issueRef\)\.join\(' '\)\}<\/div>`\);/);
 });
 
 test('messageHtml: a user message shows its attached issues as badges, alongside any file attachments', () => {
@@ -577,7 +578,7 @@ test('messageHtml: a user message shows its attached issues as badges, alongside
 
 test('render: a staged attachment\'s × is disabled while busy, titled that it was already sent with this turn; the files click handler also refuses to remove one while busy', () => {
   const render = /function render\(\{ scroll = 'keep' \} = \{\}\)[\s\S]*?\n  \}/.exec(src)[0];
-  assert.match(render, /const sent = po\.busy \? ' disabled title="Already sent with this question: you can remove it once the Product Owner answers"' : '';/);
+  assert.match(render, /const sent = po\.busy \? ` disabled title="\$\{t\('backlog_po\.already_sent_with_this_question_you'\)\}"` : '';/);
   assert.match(render, /data-po-unattach="\$\{n\}" aria-label="Remove \$\{esc\(f\.name\)\}"\$\{sent\}/);
   const onclick = /\$p\('#po-files'\)\.onclick = \(e\) => \{[\s\S]*?\n  \};/.exec(src)[0];
   assert.match(onclick, /if \(b && !po\.busy\) \{ po\.files\.splice\(Number\(b\.dataset\.poUnattach\), 1\); render\(\); \}/);
@@ -658,7 +659,7 @@ test('renderButton: the unread dot (reusing the sidebar\'s status-dot styling) s
   assert.match(fn, /const unread = po\.unread && !po\.busy;/);
   assert.match(fn, /<span class="status-dot" aria-hidden="true"><\/span>/);
   assert.match(fn, /b\.classList\.toggle\('st-waiting', unread\);/);
-  assert.match(fn, /b\.setAttribute\('aria-label', unread \? 'Product Owner: a new answer' : 'Product Owner'\);/);
+  assert.match(fn, /b\.setAttribute\('aria-label', unread \? t\('backlog_po\.product_owner_a_new_answer'\) : t\('backlog_po\.product_owner'\)\);/);
 });
 
 test('ask: an answer that lands while the owner is not watching the drawer marks it unread; render() clears it as soon as the owner is watching again', () => {

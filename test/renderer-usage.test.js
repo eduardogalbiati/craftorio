@@ -9,6 +9,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const { withI18n } = require('./i18n-sandbox.js');
 
 const usageSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'views', 'usage', 'usage.js'), 'utf8');
 
@@ -23,7 +24,7 @@ function loadUsageMarkup() {
     state: {},
   };
   sandbox.window = sandbox;
-  vm.createContext(sandbox);
+  vm.createContext(withI18n(sandbox));
   const providerCard = /function providerCard\(p, u\) \{[\s\S]*?\n\}/.exec(usageSrc)[0];
   const actionsCard = /function actionsCard\(\) \{[\s\S]*?\n\}/.exec(usageSrc)[0];
   for (const [name, code] of Object.entries({ providerCard, actionsCard })) {

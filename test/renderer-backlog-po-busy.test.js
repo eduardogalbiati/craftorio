@@ -18,6 +18,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const { withI18n } = require('./i18n-sandbox.js');
 
 const R = path.join(__dirname, '..', 'src', 'renderer');
 const read = (...p) => fs.readFileSync(path.join(R, ...p), 'utf8');
@@ -127,7 +128,7 @@ function loadDrawer({ projectId = 'demo' } = {}) {
     addEventListener: () => {},
   };
   sandbox.window = sandbox;
-  vm.createContext(sandbox);
+  vm.createContext(withI18n(sandbox));
   vm.runInContext(read('live-turn.js'), sandbox);
   // #274: the drawer's chat goes through the agents' shared component
   vm.runInContext(read('agent-chat.js'), sandbox);

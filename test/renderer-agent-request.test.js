@@ -6,13 +6,14 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const { withI18n } = require('./i18n-sandbox.js');
 
 function load() {
   const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'agent-request.js'), 'utf8');
   const window = {};
   const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   const sandbox = { window, esc, document: { addEventListener() {}, querySelectorAll: () => [] }, setTimeout };
-  vm.createContext(sandbox);
+  vm.createContext(withI18n(sandbox));
   vm.runInContext(src, sandbox);
   return window.AgentRequest;
 }
@@ -80,7 +81,7 @@ function loadClicks(api) {
   class CustomEvent { constructor(type, init) { this.type = type; this.detail = init?.detail; } }
   const document = { addEventListener: (type, fn) => { if (type === 'click') onClick = fn; }, querySelectorAll: () => [] };
   const sandbox = { window, esc, document, setTimeout, CustomEvent };
-  vm.createContext(sandbox);
+  vm.createContext(withI18n(sandbox));
   vm.runInContext(src, sandbox);
   return { click: (target) => onClick({ target, preventDefault() {} }), events };
 }

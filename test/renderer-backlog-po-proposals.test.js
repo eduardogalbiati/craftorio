@@ -7,6 +7,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const { withI18n } = require('./i18n-sandbox.js');
 
 const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'views', 'backlog', 'backlog-po-proposals.js'), 'utf8');
 const defaultWorkflowSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'shared', 'default-workflow.js'), 'utf8');
@@ -33,7 +34,7 @@ function loadProposals({ confirmDialog, devMode, splitProductOwnerIssue, propose
   };
   sandbox.window = sandbox;
   sandbox.window.BacklogActions = { data: () => ({ epics: [] }), showData: () => {}, showRoadmap: () => {} };
-  vm.createContext(sandbox);
+  vm.createContext(withI18n(sandbox));
   vm.runInContext(defaultWorkflowSrc, sandbox); // the real DefaultWorkflow module (#195)
   vm.runInContext(src, sandbox);
   return { BacklogPoProposals: sandbox.window.BacklogPoProposals, sandbox, proposeCalls };

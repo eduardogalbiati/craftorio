@@ -16,6 +16,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const { withI18n } = require('./i18n-sandbox.js');
 const AgentColors = require('../src/renderer/agent-colors.js');
 const { displayName } = require('../src/shared/display-name.js');
 
@@ -61,7 +62,7 @@ function evalStatusPill(sandbox) {
 // ---- sandboxes ---------------------------------------------------------------------------------
 function loadRobots() {
   const sandbox = { window: {} };
-  vm.createContext(sandbox);
+  vm.createContext(withI18n(sandbox));
   vm.runInContext(read('robots.js'), sandbox);
   return sandbox.window.Robots;
 }
@@ -89,7 +90,7 @@ function loadRunList({ now = NOW } = {}) {
     requestAnimationFrame: () => 0,
   };
   sandbox.window = sandbox;
-  vm.createContext(sandbox);
+  vm.createContext(withI18n(sandbox));
   const setNow = installClock(sandbox, now);
   evalStatusPill(sandbox);
   vm.runInContext(read('..', 'shared', 'run-progress-model.js'), sandbox);
@@ -143,7 +144,7 @@ function loadRoadmap({ listWorkflows, now = NOW, runTitle } = {}) {
   sandbox.window = sandbox;
   sandbox.window.showRun = () => {};
   if (runTitle) sandbox.runTitle = runTitle;
-  vm.createContext(sandbox);
+  vm.createContext(withI18n(sandbox));
   const setNow = installClock(sandbox, now);
   // the run-list sandbox's clock follows too (its chips may read the time)
   const both = (ms) => { setNow(ms); rl.setNow(ms); };
@@ -169,7 +170,7 @@ function loadRunLink({ runTitle = (r) => r.title || 'workflow' } = {}) {
   assert.ok(m, 'runLink not found in backlog.js: the source moved');
   const sandbox = { esc, displayName, runTitle, console };
   sandbox.window = sandbox;
-  vm.createContext(sandbox);
+  vm.createContext(withI18n(sandbox));
   evalStatusPill(sandbox);
   vm.runInContext(`${m[0]}\nthis.runLink = runLink;`, sandbox);
   return sandbox.runLink;

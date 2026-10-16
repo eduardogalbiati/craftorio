@@ -19,6 +19,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const { withI18n } = require('./i18n-sandbox.js');
 const night = require('../src/night-watch');
 
 const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'views', 'nightwatch', 'nightwatch.js'), 'utf8');
@@ -138,7 +139,7 @@ function loadView(state, apiOverrides = {}) {
     },
   };
   sandbox.window = sandbox;
-  vm.createContext(sandbox);
+  vm.createContext(withI18n(sandbox));
   vm.runInContext(src, sandbox);
   assert.ok(view, 'nightwatch.js did not call registerView');
   return { view, box, calls };

@@ -10,6 +10,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const { withI18n } = require('./i18n-sandbox.js');
 
 const BACKLOG = path.join(__dirname, '..', 'src', 'renderer', 'views', 'backlog');
 const src = fs.readFileSync(path.join(BACKLOG, 'backlog-po-proposals.js'), 'utf8');
@@ -29,7 +30,7 @@ function load() {
   };
   sandbox.window = sandbox;
   sandbox.window.BacklogActions = { data: () => ({ epics: [] }), showData: () => {}, showRoadmap: () => {} };
-  vm.createContext(sandbox);
+  vm.createContext(withI18n(sandbox));
   vm.runInContext(defaultWorkflowSrc, sandbox);
   vm.runInContext(src, sandbox);
   return sandbox.window.BacklogPoProposals;

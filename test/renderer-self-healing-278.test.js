@@ -18,6 +18,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const { withI18n } = require('./i18n-sandbox.js');
 const night = require('../src/night-watch');
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -50,7 +51,7 @@ function loadOracleSettings(oracle) {
       nightWatchState: async () => ({ oracle: true, permissions: { catalog: night.PERMISSIONS, never: night.NEVER_ALLOWED, allowed: ['retry', 'refresh'] } }),
     },
   };
-  vm.createContext(sandbox);
+  vm.createContext(withI18n(sandbox));
   vm.runInContext(`${render}\n${save}\nthis.renderOracleSettings = renderOracleSettings;\nthis.saveOracleSettings = saveOracleSettings;`, sandbox);
   return { sandbox, box, calls };
 }
@@ -59,7 +60,7 @@ function selfHealingHtml(o, nw) {
   const m = /function selfHealingHtml\([^)]*\) \{[\s\S]*?\n\}/.exec(settingsSrc);
   assert.ok(m, 'function selfHealingHtml(o, nw) not found in settings.js');
   const sandbox = { esc, t };
-  vm.createContext(sandbox);
+  vm.createContext(withI18n(sandbox));
   vm.runInContext(`${m[0]}\nthis.out = selfHealingHtml(${JSON.stringify(o)}, ${JSON.stringify(nw)});`, sandbox);
   return String(sandbox.out);
 }
@@ -145,7 +146,7 @@ async function nightScreen(watch) {
     },
   };
   sandbox.window = sandbox;
-  vm.createContext(sandbox);
+  vm.createContext(withI18n(sandbox));
   vm.runInContext(nightSrc, sandbox);
   assert.ok(view, 'nightwatch.js did not call registerView');
   view.mount();

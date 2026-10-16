@@ -596,7 +596,7 @@
         <button class="btn sm ghost" type="button" data-po-act="create-roadmap"${busy} title="${t('backlog_po.file_it_then_plan_it_as', { m: esc(DefaultWorkflow.label(workflowFor(m))) })}">${t('backlog_po.create_roadmap')}</button>
         ${workflowSelect(m, busy)}
         <button class="btn sm ghost" type="button" data-po-act="create-assign"${busy} title="${t('backlog_po.file_it_then_open_the_assign')}">${t('backlog_po.create_assign')}</button>` : ''}
-        ${into.map((n) => `<button class="btn sm${x.draft ? ' ghost' : ' primary'}" type="button" data-po-act="append" data-n="${n}"${busy} title="${t('backlog_po.append_value_to_n_s_description', { value: x.existingIssue === n && x.addition ? 'the addition' : 'this draft', n })}">${t('backlog_po.add_to')}${n}${x.draft ? ' instead' : ''}</button>
+        ${into.map((n) => `<button class="btn sm${x.draft ? ' ghost' : ' primary'}" type="button" data-po-act="append" data-n="${n}"${busy} title="${t('backlog_po.append_value_to_n_s_description', { value: x.existingIssue === n && x.addition ? t('backlog_po.the_addition') : t('backlog_po.this_draft'), n })}">${t('backlog_po.add_to')}${n}${x.draft ? t('backlog_po.instead') : ''}</button>
           <button class="link-btn small" type="button" data-po-act="comment" data-n="${n}"${busy} title="${t('backlog_po.add_it_as_a_comment_on', { n })}">${t('backlog_po.comment_on')}${n}</button>`).join('')}
         <button class="btn sm ghost" type="button" data-po-act="revise"${busy} title="${t('backlog_po.tell_the_product_owner_what_to')}">${t('backlog_po.revise')}</button>
         <button class="btn sm ghost" type="button" data-po-act="discard"${busy} title="${t('backlog_po.drop_this_draft_nothing_is_filed')}">${t('backlog_po.discard')}</button>

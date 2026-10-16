@@ -7,6 +7,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const { withI18n } = require('./i18n-sandbox.js');
 
 const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'app.js'), 'utf8');
 const runSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'views', 'run', 'run.js'), 'utf8');
@@ -40,7 +41,7 @@ function loadHelpers({ runs = new Map(), runView = 'details' } = {}) {
   sandbox.window = sandbox;
   sandbox.window.openRunChat = (arg) => calls.openRunChat.push(arg);
   sandbox.window.showCodeBanner = () => { calls.showCodeBanner += 1; };
-  vm.createContext(sandbox);
+  vm.createContext(withI18n(sandbox));
   vm.runInContext(
     `${runViewKey}\n${needsRestart}\n${missingChannel}\n${errMsg}\n${isRunLive}\n${selectRun}\n${setRunView}\n${showRun}\n`
     + 'this.helpers = { NEEDS_RESTART, missingChannel, errMsg, selectRun, setRunView, showRun };',
@@ -121,7 +122,7 @@ test("views/run/run.js: registerView's show() schedules a render", () => {
   let registered = null;
   let calls = 0;
   const sandbox = { registerView: (def) => { registered = def; }, scheduleRender: () => { calls += 1; }, window: {}, document: {} };
-  vm.createContext(sandbox);
+  vm.createContext(withI18n(sandbox));
   vm.runInContext(runSrc, sandbox);
   assert.equal(registered?.id, 'run');
   assert.equal(typeof registered.show, 'function');
@@ -137,7 +138,7 @@ function renderToolCall(item) {
   assert.ok(subagentLabel && renderItem, 'subagentLabel/renderItem not found in run.js: the source moved');
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
   const sandbox = { esc };
-  vm.createContext(sandbox);
+  vm.createContext(withI18n(sandbox));
   vm.runInContext(`${subagentLabel}\n${renderItem}\nthis.renderItem = renderItem;`, sandbox);
   return sandbox.renderItem('s1', 1, item, 0);
 }

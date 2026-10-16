@@ -19,6 +19,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const { withI18n } = require('./i18n-sandbox.js');
 
 const FILE = path.join(__dirname, '..', 'src', 'renderer', 'views', 'analytics', 'analytics-occupancy.js');
 const LS = 'multiagent.analytics.occupancy';
@@ -75,6 +76,7 @@ async function loadTab({ data = payload() } = {}) {
   };
   window.document = sandbox.document;
   window.navigator = sandbox.navigator;
+  sandbox.t = withI18n({}).t; // the text only: the dates keep following the machine's locale here
   vm.createContext(sandbox);
   vm.runInContext(fs.readFileSync(FILE, 'utf8'), sandbox, { filename: FILE });
   const tab = window.AnalyticsTabs?.occupancy;

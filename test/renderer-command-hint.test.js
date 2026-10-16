@@ -8,6 +8,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const { withI18n } = require('./i18n-sandbox.js');
 
 const appSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'app.js'), 'utf8');
 const hintSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'command-hint.js'), 'utf8');
@@ -33,7 +34,7 @@ function loadCommandHint({ confirmResult = true, openTerminal } = {}) {
     errMsg: (e) => String(e?.message || e),
   };
   sandbox.window = sandbox;
-  vm.createContext(sandbox);
+  vm.createContext(withI18n(sandbox));
   const esc = /const esc = \(s\) => [^\n]+;/.exec(appSrc)[0];
   assert.ok(esc, 'esc not found in app.js: the source moved');
   vm.runInContext(`${esc}\n${hintSrc}\nthis.commandHint = commandHint;\nthis.runSuggestedCommand = runSuggestedCommand;`, sandbox);

@@ -9,6 +9,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const { withI18n } = require('./i18n-sandbox.js');
 
 const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'views', 'backlog', 'backlog.js'), 'utf8');
 const settle = () => new Promise((r) => setTimeout(r, 0));
@@ -48,7 +49,7 @@ function load({ mode = 'roadmap', data = { issues: [{ number: 1, status: 'todo' 
   };
   sandbox.window.BacklogRoadmap = { busy: () => state.editing, closeEdit: () => { state.editing = false; state.closed += 1; } };
   sandbox.window.state = sandbox.state;
-  vm.createContext(sandbox);
+  vm.createContext(withI18n(sandbox));
   vm.runInContext(
     `let bl = { mode: ${JSON.stringify(mode)}, projectId: 'p1', data: null, syncing: false, seq: 0, selected: new Set() };
      let watching = true;

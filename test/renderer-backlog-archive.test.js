@@ -23,6 +23,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+const en = require('../src/shared/i18n/en.json');
 
 const VIEW = path.join(__dirname, '..', 'src', 'renderer', 'views', 'backlog');
 const src = fs.readFileSync(path.join(VIEW, 'backlog.js'), 'utf8');
@@ -109,9 +110,11 @@ test('index.html loads backlog-archive.js with the other shared modules', () => 
 
 test('selection bar: an "Archive (n)" button next to Send to Product Owner and Clear selection, shown with the selection', () => {
   const markup = /<button id="btn-bl-send-po"[\s\S]*?<button id="btn-bl-clear"/.exec(src)?.[0] || '';
-  assert.match(markup, /<button id="btn-bl-archive"[^>]*>Archive<\/button>/, 'Archive sits between Send to Product Owner and Clear selection');
+  assert.match(markup, /<button id="btn-bl-archive"[^>]*>\$\{t\('backlog\.archive'\)\}<\/button>/, 'Archive sits between Send to Product Owner and Clear selection');
+  assert.equal(en['backlog.archive'], 'Archive');
   assert.match(src, /\$b\('#btn-bl-archive'\)\.classList\.toggle\('hidden', !n\);/);
-  assert.match(src, /\$b\('#btn-bl-archive'\)\.textContent = `Archive \(\$\{n\}\)`;/);
+  assert.match(src, /\$b\('#btn-bl-archive'\)\.textContent = t\('backlog\.archive_n', \{ n \}\);/);
+  assert.equal(en['backlog.archive_n'], 'Archive ({n})');
 });
 
 test('Archive asks first with the confirm naming the issues, then calls api.archiveIssues for the project', () => {
@@ -136,9 +139,12 @@ test('an issue that cannot be archived has its Archive action disabled, with the
 
 test('a fourth state chip Archived; Closed shows the other closed issues (the chips filter through issueState)', () => {
   const filters = /const FILTERS = \[[^\n]*\];/.exec(src)?.[0] || '';
-  assert.match(filters, /\['open', 'Open'\]/);
-  assert.match(filters, /\['closed', 'Closed'\]/);
-  assert.match(filters, /\['archived', 'Archived'\]/);
+  assert.match(filters, /'open'/);
+  assert.equal(en['backlog.filter_open'], 'Open');
+  assert.match(filters, /'closed'/);
+  assert.equal(en['backlog.filter_closed'], 'Closed');
+  assert.match(filters, /'archived'/);
+  assert.equal(en['backlog.filter_archived'], 'Archived');
   const inState = /const inState = [^\n]*/.exec(src)?.[0] || '';
   assert.match(inState, /issueState\(i\)/, 'the state filter compares issueState, so archived issues leave Closed');
   assert.doesNotMatch(inState, /i\.state === bl\.filter/);
@@ -146,7 +152,8 @@ test('a fourth state chip Archived; Closed shows the other closed issues (the ch
 
 test('archived issues have Restore (data-restore), which calls api.restoreIssues for the project', () => {
   assert.match(src, /data-restore="\$\{i\.number\}"/);
-  assert.match(src, />Restore</);
+  assert.match(src, />\$\{t\('backlog\.restore'\)\}</);
+  assert.equal(en['backlog.restore'], 'Restore');
   assert.match(src, /api\.restoreIssues\(bl\.projectId, /);
 });
 
@@ -160,7 +167,8 @@ test('the ⋯ menu holds Enrich in Write & Review above Archive; rows and cards 
   assert.ok(enrichAt >= 0, 'Enrich is a menu item');
   assert.ok(archiveAt > enrichAt, 'Enrich sits above Archive');
   assert.match(menu, /data-testid="backlog-enrich"/);
-  assert.match(menu, />Enrich in Write &amp; Review</);
+  assert.match(menu, />\$\{t\('backlog\.enrich_in_write_review'\)\}</);
+  assert.equal(en['backlog.enrich_in_write_review'], 'Enrich in Write &amp; Review');
   // the separate link is gone: Enrich appears in the view only inside the menu
   const drawers = chunks.filter((c) => /data-enrich="/.test(c.text)).map((c) => c.name);
   assert.deepEqual(drawers, ['issueMenu']);

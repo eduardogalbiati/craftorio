@@ -12,6 +12,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const vm = require('vm');
+const { withI18n } = require('./i18n-sandbox.js');
 const roadmaps = require('../src/roadmap');
 
 function tmp(t) {
@@ -83,7 +84,7 @@ function loadRoadmap({ listWorkflows, confirmDialog, keptWorkDialog, choiceDialo
   // `opts` is built inside the vm realm: keep only primitives so assert.deepEqual (strict, cross-realm
   // objects never compare equal) can check it without reaching into the sandbox.
   sandbox.window.showRun = (runId, opts) => showRunCalls.push({ runId, workflow: opts?.workflow });
-  vm.createContext(sandbox);
+  vm.createContext(withI18n(sandbox));
   vm.runInContext(statusPillSrc, sandbox); // the real StatusPill module (#266: the readable statuses)
   vm.runInContext(estimatesSrc, sandbox); // the real Estimates module (#215; #272: the run timer's tooltip)
   vm.runInContext(runProgressSrc, sandbox); // the real RunProgress module (#194), not reimplemented

@@ -9,6 +9,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const { withI18n } = require('./i18n-sandbox.js');
 const { displayName } = require('../src/shared/display-name.js');
 
 const RENDERER = path.join(__dirname, '..', 'src', 'renderer');
@@ -38,7 +39,7 @@ function loadSuiteCards() {
   const fn = /function suiteCardsHtml\(runId, stepNames\) \{[\s\S]*?\n\}/.exec(src);
   assert.ok(shown && fn, 'suiteCardsHtml not found in views/run/run.js: the source moved');
   const sandbox = { esc, displayName, agentLabel: (slug, names) => displayName(slug, names), state: { runs: new Map() } };
-  vm.createContext(sandbox);
+  vm.createContext(withI18n(sandbox));
   vm.runInContext(`${shown[0]}\n${fn[0]}\nthis.suiteCardsHtml = suiteCardsHtml;`, sandbox);
   // cardsOf([[stepId, output], ...]): the cards of a run whose steps finished with these outputs
   return (finishedSteps, stepNames = {}) => {
@@ -128,7 +129,7 @@ async function suiteRows(suiteRounds) {
     fmtNum: (v) => String(v ?? 0), fmtTok: (v) => String(v ?? 0), dateOf: (s) => String(s).slice(0, 10),
     costMarks: () => '',
   };
-  vm.createContext(sandbox);
+  vm.createContext(withI18n(sandbox));
   vm.runInContext(fs.readFileSync(file, 'utf8'), sandbox, { filename: file });
   const tab = window.AnalyticsTabs.run;
   await tab.load();
@@ -176,7 +177,7 @@ function loadStepName() {
     state: { workflows: [{ file: 'ai-development-local-hero.yaml', name: 'AI development (local hero)', steps: [{ id: 'warm_up', display: 'Warm Up' }, { id: 'develop', display: 'Develop' }] }] },
     chat: { model: { run: null, stepName: (id) => `recorded:${id}` } },
   };
-  vm.createContext(sandbox);
+  vm.createContext(withI18n(sandbox));
   vm.runInContext(`${names[0]}\n${stepName[0]}\nthis.stepName = stepName;`, sandbox);
   return sandbox;
 }
