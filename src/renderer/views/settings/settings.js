@@ -20,9 +20,9 @@ function showSettingsTab(tab) {
 function renderTimeZone() {
   const zone = TimeZone.current();
   const sel = $('#set-time-zone');
-  sel.innerHTML = TimeZone.zones(zone).map((z) => `<option value="${esc(z)}">${esc(z)}${z === TimeZone.systemZone() ? ' (this computer)' : ''}</option>`).join('');
+  sel.innerHTML = TimeZone.zones(zone).map((z) => `<option value="${esc(z)}">${esc(z)}${z === TimeZone.systemZone() ? t('settings.time_zone.this_computer') : ''}</option>`).join('');
   sel.value = zone;
-  $('#set-time-zone-now').textContent = `Now ${TimeZone.formatDateTime(Date.now(), zone)} (${TimeZone.offsetLabel(Date.now(), zone)})`;
+  $('#set-time-zone-now').textContent = t('settings.time_zone.now', { time: TimeZone.formatDateTime(Date.now(), zone), offset: TimeZone.offsetLabel(Date.now(), zone) });
 }
 
 // Control channel (#336, src/control): main's endpoint state { enabled, port, file, error, ctlPath }.
@@ -36,7 +36,7 @@ function renderControlChannel(s, failure) {
   const box = document.querySelector('[data-setting="controlChannel"]');
   if (box) box.disabled = !available;
   const on = !!s?.enabled;
-  status.textContent = !available ? 'Not available in the browser client' : on ? `Listening on 127.0.0.1:${s.port} · ${s.file}` : 'Off';
+  status.textContent = !available ? t('settings.control.unavailable') : on ? t('settings.control.listening', { port: s.port, file: s.file }) : t('settings.off');
   status.title = status.textContent;
   status.className = `badge ${on ? 'cat-monitor' : ''}`;
   $('#set-control-error').textContent = failure || s?.error || '';
@@ -63,12 +63,12 @@ async function renderSettings() {
   state.settings = await api.getSettings();
   const ws = state.ws;
   $('#set-ws-path').textContent = ws.root;
-  $('#set-ws-registry').textContent = ws.registry || 'MULTIAGENT_WORKSPACE environment variable (not saved)';
-  const folders = [['runs', 'Run logs (one directory per run).'], ['repos', 'Repositories cloned from git URLs.'], ['projects', 'Project registry (one .json per project).'], ['skills', 'Skills (one folder with a SKILL.md per skill).']];
-  $('#set-ws-folders').innerHTML = folders.map(([k, d]) => `
+  $('#set-ws-registry').textContent = ws.registry || t('settings.general.registry_env');
+  const folders = ['runs', 'repos', 'projects', 'skills'];
+  $('#set-ws-folders').innerHTML = folders.map((k) => `
     <div class="s-row">
-      <div class="s-label"><b>${k}/</b><span>${esc(d)}</span><code>${esc(ws[k])}</code></div>
-      <div class="s-ctrl"><button class="btn sm ghost" data-open="${esc(ws[k])}">Open</button></div>
+      <div class="s-label"><b>${k}/</b><span>${t(`settings.folders.${k}`)}</span><code>${esc(ws[k])}</code></div>
+      <div class="s-ctrl"><button class="btn sm ghost" data-open="${esc(ws[k])}">${t('settings.open')}</button></div>
     </div>`).join('');
   $('#set-ws-folders').querySelectorAll('[data-open]').forEach((b) => (b.onclick = () => api.openPath(b.dataset.open)));
   renderTimeZone();
@@ -76,7 +76,7 @@ async function renderSettings() {
   window.Findings?.renderList($('#set-findings-list'));
   document.querySelectorAll('[data-setting]').forEach((el) => (el.checked = !!state.settings[el.dataset.setting]));
   const platform = $('#set-backlog-platform');
-  platform.innerHTML = Object.entries(window.BACKLOG_PLATFORMS || {}).map(([id, p]) => `<option value="${id}">${esc(p.label)}${p.soon ? ' (sync not available yet)' : ''}</option>`).join('');
+  platform.innerHTML = Object.entries(window.BACKLOG_PLATFORMS || {}).map(([id, p]) => `<option value="${id}">${esc(p.label)}${p.soon ? t('settings.backlog.sync_soon') : ''}</option>`).join('');
   platform.value = state.settings.backlogPlatform || window.Platforms.DEFAULT_PLATFORM;
   $('#set-backlog-group').value = state.settings.backlogMaxGroup || 5;
   state.workflows = await api.listWorkflows();
@@ -108,10 +108,10 @@ function renderDefaultWorkflow() {
   const list = (state.workflows || []).filter((w) => !w.error && w.inputs?.task);
   const cur = DefaultWorkflow.current();
   const sel = $('#set-default-workflow');
-  sel.innerHTML = list.map((w) => `<option value="${esc(w.file)}">${esc(w.name || w.file)} (${esc(w.file)}${w.merge === 'local' ? ', local merge' : w.merge === 'remote' ? ', pushes and opens PRs' : ''})</option>`).join('');
+  sel.innerHTML = list.map((w) => `<option value="${esc(w.file)}">${esc(w.name || w.file)} (${esc(w.file)}${w.merge === 'local' ? t('settings.backlog.local_merge') : w.merge === 'remote' ? t('settings.backlog.remote_merge') : ''})</option>`).join('');
   sel.value = cur.file;
   const note = $('#set-default-wf-note');
-  note.textContent = cur.missing ? `${cur.missing} no longer exists: ${cur.file} is used instead.` : '';
+  note.textContent = cur.missing ? t('settings.backlog.workflow_missing', { missing: cur.missing, file: cur.file }) : '';
   note.classList.toggle('hidden', !cur.missing);
 }
 
@@ -124,18 +124,18 @@ function renderFallbackSettings() {
   const providers = state.settings.providers || {};
   const catalog = Object.values(window.ChatModels?.PROVIDERS || {});
   const names = [...new Set([...catalog.map((p) => p.key), ...Object.keys(providers)])];
-  const hint = (name) => catalog.filter((p) => p.key !== name).map((p) => `e.g. ${p.key}:${p.models[0]}`)[0] || '';
+  const hint = (name) => catalog.filter((p) => p.key !== name).map((p) => t('settings.fallbacks.example', { entry: `${p.key}:${p.models[0]}` }))[0] || '';
   $('#set-fallbacks').innerHTML = names.map((name) => `<div class="s-row">
-      <div class="s-label"><b>${esc(name)}</b><span>Out of credits on ${esc(name)}: try these next.</span></div>
-      <div class="s-ctrl"><input type="text" class="s-fallbacks" data-fb-provider="${esc(name)}" value="${esc((providers[name]?.fallbacks || []).join(', '))}" placeholder="${esc(hint(name))}" aria-label="Fallbacks of ${esc(name)}" spellcheck="false" /></div>
+      <div class="s-label"><b>${esc(name)}</b><span>${t('settings.fallbacks.row', { provider: esc(name) })}</span></div>
+      <div class="s-ctrl"><input type="text" class="s-fallbacks" data-fb-provider="${esc(name)}" value="${esc((providers[name]?.fallbacks || []).join(', '))}" placeholder="${esc(hint(name))}" aria-label="${t('settings.fallbacks.label', { provider: esc(name) })}" spellcheck="false" /></div>
     </div>`).join('');
   const models = state.settings.models || {};
   const ids = [...new Set([...catalog.flatMap((p) => p.models), ...Object.keys(models)])];
   $('#set-model-limits').innerHTML = ids.map((id) => `<div class="s-row" data-ml-model="${esc(id)}">
       <div class="s-label"><b class="mono">${esc(id)}</b></div>
       <div class="s-ctrl">
-        <label class="small">Timeout × <input type="number" class="s-num" data-ml="timeout_factor" min="0.1" step="0.1" value="${esc(models[id]?.timeout_factor ?? '')}" placeholder="1" aria-label="Turn timeout factor of ${esc(id)}" /></label>
-        <label class="small">Cost limit US$ <input type="number" class="s-num" data-ml="max_total_cost_usd" min="1" step="1" value="${esc(models[id]?.max_total_cost_usd ?? '')}" placeholder="workflow's" aria-label="Run cost limit with ${esc(id)}" /></label>
+        <label class="small">${t('settings.limits.timeout')} <input type="number" class="s-num" data-ml="timeout_factor" min="0.1" step="0.1" value="${esc(models[id]?.timeout_factor ?? '')}" placeholder="1" aria-label="${t('settings.limits.timeout_label', { model: esc(id) })}" /></label>
+        <label class="small">${t('settings.limits.cost')} <input type="number" class="s-num" data-ml="max_total_cost_usd" min="1" step="1" value="${esc(models[id]?.max_total_cost_usd ?? '')}" placeholder="${t('settings.limits.cost_placeholder')}" aria-label="${t('settings.limits.cost_label', { model: esc(id) })}" /></label>
       </div>
     </div>`).join('');
   $('#set-fallbacks-msg').textContent = '';
@@ -147,7 +147,7 @@ async function saveFallbackSettings() {
   for (const el of document.querySelectorAll('#set-fallbacks [data-fb-provider]')) {
     const entries = el.value.split(/[,\s]+/).map((s) => s.trim()).filter(Boolean);
     const bad = entries.find((e) => !FALLBACK_ENTRY.test(e));
-    if (bad) { msg.className = 'small error'; msg.textContent = `"${bad}" is not provider:model (e.g. codex:gpt-6-luna).`; el.focus({ preventScroll: true }); return; }
+    if (bad) { msg.className = 'small error'; msg.textContent = t('settings.fallbacks.invalid', { entry: bad }); el.focus({ preventScroll: true }); return; }
     const { fallbacks: _old, ...rest } = providers[el.dataset.fbProvider] || {};
     providers[el.dataset.fbProvider] = entries.length ? { ...rest, fallbacks: entries } : rest;
     if (!Object.keys(providers[el.dataset.fbProvider]).length) delete providers[el.dataset.fbProvider];
@@ -158,7 +158,7 @@ async function saveFallbackSettings() {
     for (const el of row.querySelectorAll('[data-ml]')) {
       const n = Number(el.value);
       el.classList.toggle('invalid', el.value !== '' && !(n > 0));
-      if (el.value !== '' && !(n > 0)) { msg.className = 'small error'; msg.textContent = 'A factor or a cost limit is a positive number.'; el.focus({ preventScroll: true }); return; }
+      if (el.value !== '' && !(n > 0)) { msg.className = 'small error'; msg.textContent = t('settings.limits.invalid'); el.focus({ preventScroll: true }); return; }
       if (el.value !== '') lim[el.dataset.ml] = n;
     }
     if (Object.keys(lim).length) models[row.dataset.mlModel] = lim;
@@ -166,7 +166,7 @@ async function saveFallbackSettings() {
   state.settings = await api.setSettings({ providers, models });
   renderFallbackSettings();
   msg.className = 'small muted';
-  msg.textContent = 'Saved: the next runs use them.';
+  msg.textContent = t('settings.fallbacks.saved');
 }
 
 // Settings › Execution › Concurrent runs (settings.concurrentRuns) and the machine profile (#367,
@@ -184,19 +184,19 @@ async function renderConcurrency() {
   const st = mp?.state || 'unknown';
   const badge = $('#set-mp-state');
   badge.dataset.state = st;
-  badge.textContent = { auto: 'Auto', manual: 'Manual', unknown: 'Unknown' }[st];
+  badge.textContent = { auto: t('settings.machine.auto'), manual: t('settings.machine.manual'), unknown: t('settings.machine.unknown') }[st];
   badge.className = `badge${st === 'auto' ? ' live' : st === 'unknown' ? ' warn' : ''}`;
-  $('#set-mp-line').textContent = mp?.line || "This machine's threads and memory couldn't be read.";
-  $('#set-mp-hint').textContent = st === 'manual' ? ` Your values: ${mp.concurrentRuns} at once, ${mp.testWorkers} test worker${mp.testWorkers === 1 ? '' : 's'} per run; they stay as they are on any machine.`
-    : st === 'unknown' ? ' Today\'s defaults apply; type values below to set your own.' : ' The values below follow this machine.';
+  $('#set-mp-line').textContent = mp?.line || t('settings.machine.unread');
+  $('#set-mp-hint').textContent = ` ${st === 'manual' ? t('settings.machine.manual_hint', { runs: mp.concurrentRuns, workers: t('settings.machine.workers', { count: mp.testWorkers }) })
+    : st === 'unknown' ? t('settings.machine.unknown_hint') : t('settings.machine.auto_hint')}`;
   // Use these values: turns concurrent runs on with the machine's values (nothing to use when unknown)
   $('#set-mp-use').classList.toggle('hidden', !mp?.proposal || (st === 'auto' && !!c.enabled));
   $('#set-mp-auto').classList.toggle('hidden', st !== 'manual');
   const s = mp?.suggestion;
   $('#set-mp-suggestion').classList.toggle('hidden', !s);
   if (s) {
-    $('#set-mp-suggestion-title').textContent = `The memory guard stepped in on ${s.days.length} days this week: lower to ${s.concurrentRuns} run${s.concurrentRuns === 1 ? '' : 's'} at once?`;
-    $('#set-mp-suggestion-evidence').textContent = `Days: ${s.days.join(', ')}. Runs held or stopped: ${s.runs.join(', ') || 'none recorded'}. Nothing changes until you apply it.`;
+    $('#set-mp-suggestion-title').textContent = t('settings.machine.suggestion', { days: s.days.length, runs: t('settings.machine.runs_at_once', { count: s.concurrentRuns }) });
+    $('#set-mp-suggestion-evidence').textContent = t('settings.machine.evidence', { days: s.days.join(', '), runs: s.runs.join(', ') || t('settings.machine.none_recorded') });
   }
 }
 
@@ -252,8 +252,8 @@ async function applyMachineSuggestion() {
     concurrentRuns: crSettings({ max: s.concurrentRuns }),
     machineProfile: { mode: 'manual', concurrentRuns: s.concurrentRuns, ...(workers ? { testWorkers: workers } : {}) },
   });
-  window.showToast?.(`Lowered to ${s.concurrentRuns} runs at once`, 'Settings › Execution › Concurrent runs', null, null, {
-    action: { label: 'Undo', run: () => saveMachineProfile(before) },
+  window.showToast?.(t('settings.machine.lowered', { runs: t('settings.machine.runs_at_once', { count: s.concurrentRuns }) }), t('settings.machine.lowered_where'), null, null, {
+    action: { label: t('common.undo'), run: () => saveMachineProfile(before) },
   });
 }
 
@@ -269,7 +269,7 @@ async function renderMemoryGuard() {
   if (!state.totalMemoryBytes) state.totalMemoryBytes = (await api.appInfo().catch(() => null))?.totalMemoryBytes || null;
   const total = Number(state.totalMemoryBytes);
   const gb = total > 0 ? ((total * g.limitPercent) / 100 / 1024 ** 3).toFixed(1) : null;
-  $('#set-mg-limit-hint').textContent = `${gb ? `${gb} GB on this machine. ` : ''}Between 5 and 90. Measured as committed memory on Windows, resident memory elsewhere.`;
+  $('#set-mg-limit-hint').textContent = `${gb ? t('settings.memory.on_machine', { gb: I18n.formatNumber(Number(gb), undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) }) : ''}${t('settings.memory.limit_hint')}`;
 }
 
 // Saves the group when a field changes; a value out of its range shows the field's error state and nothing is saved.
@@ -281,7 +281,7 @@ async function saveMemoryGuard() {
     const ok = raw !== '' && Number.isFinite(n) && n >= min && n <= max;
     el.classList.toggle('invalid', !ok);
     if (ok) el.removeAttribute('aria-invalid'); else el.setAttribute('aria-invalid', 'true');
-    el.title = ok ? '' : `Between ${min} and ${max}: not saved.`;
+    el.title = ok ? '' : t('settings.memory.out_of_range', { min, max });
     return ok ? n : null;
   };
   const limitPercent = field('#set-mg-limit', 5, 90);
@@ -372,16 +372,16 @@ async function saveOracleSettings() {
 // Oracle that cannot start in this workspace (nw.oracle false) disables the switch, with the reason.
 function selfHealingHtml(o, nw) {
   const p = nw && nw.permissions;
-  const count = p ? ` (${p.allowed.length} of ${p.catalog.length})` : '';
+  const count = p ? t('settings.healing.count', { allowed: p.allowed.length, total: p.catalog.length }) : '';
   const on = !!o && o.selfHealing === true;
   // it can always be turned off: only turning it on needs the Oracle
   const unavailable = !!nw && !nw.oracle && !on;
-  return `<div class="s-label"><b>Self-healing</b>
-      <span>The Oracle watches every run and roadmap, day and night, and repairs what its permissions allow. It never answers a gate, pushes, closes an issue or deletes data.</span>
-      <span><button type="button" class="link-btn" id="set-oracle-self-healing-perms" data-testid="self-healing-permissions" title="Opens the Night watch's checklist: one list for both">What it may do alone${esc(count)} ›</button></span>
-      ${unavailable ? '<span class="error small" data-testid="self-healing-unavailable">The Oracle cannot start in this workspace, so Self-healing cannot be turned on.</span>' : ''}
+  return `<div class="s-label"><b>${t('settings.healing.title')}</b>
+      <span>${t('settings.healing.help')}</span>
+      <span><button type="button" class="link-btn" id="set-oracle-self-healing-perms" data-testid="self-healing-permissions" title="${t('settings.healing.perms_title')}">${t('settings.healing.perms')}${esc(count)} ›</button></span>
+      ${unavailable ? `<span class="error small" data-testid="self-healing-unavailable">${t('settings.healing.unavailable')}</span>` : ''}
     </div>
-    <label class="switch"${unavailable ? ' title="The Oracle cannot start in this workspace"' : ''}><input type="checkbox" id="set-oracle-self-healing" data-testid="oracle-self-healing" aria-label="Self-healing"${on ? ' checked' : ''}${unavailable ? ' disabled' : ''} /><span></span></label>`;
+    <label class="switch"${unavailable ? ` title="${t('settings.healing.unavailable_short')}"` : ''}><input type="checkbox" id="set-oracle-self-healing" data-testid="oracle-self-healing" aria-label="${t('settings.healing.title')}"${on ? ' checked' : ''}${unavailable ? ' disabled' : ''} /><span></span></label>`;
 }
 
 // Draws the Self-healing row again with the permissions' count and whether the Oracle can start
@@ -407,17 +407,17 @@ async function renderSelfHealing() {
 function appUpdateHtml(o, info) {
   const healing = !!o && o.selfHealing === true;
   const applies = !!info && info.applies === true;
-  const why = !info ? 'Checking whether this app runs from a project of this workspace…'
-    : !applies ? `Unavailable: ${info.reason}.`
-      : !healing ? 'Turn Self-healing on first.' : '';
+  const why = !info ? t('settings.app_update.checking')
+    : !applies ? t('settings.app_update.unavailable', { reason: info.reason })
+      : !healing ? t('settings.app_update.healing_first') : '';
   const on = applies && healing && o.appUpdate === true;
-  const behind = applies ? (info.behind > 0 ? `${info.behind} commit${info.behind === 1 ? '' : 's'} ahead of this app` : 'the app is up to date') : '';
-  return `<div class="s-label"><b>Apply merged fixes to this app</b>
-      <span>After a roadmap stage ends, the app updates itself from the local main of the project that is its repository: it pauses the roadmap, waits for the runs in progress (a gate is never answered), fast-forwards, restarts and resumes the roadmap. It never pushes.</span>
-      ${applies ? `<span data-testid="app-update-source">Source: <b>${esc(info.project?.name || info.project?.id || '')}</b>, local main (<code>${esc(info.short)}</code>, ${esc(behind)})</span>` : ''}
+  const behind = applies ? (info.behind > 0 ? t('settings.app_update.behind', { count: info.behind }) : t('settings.app_update.up_to_date')) : '';
+  return `<div class="s-label"><b>${t('settings.app_update.title')}</b>
+      <span>${t('settings.app_update.help')}</span>
+      ${applies ? `<span data-testid="app-update-source">${t('settings.app_update.source', { project: esc(info.project?.name || info.project?.id || ''), short: esc(info.short), behind: esc(behind) })}</span>` : ''}
       ${why ? `<span class="muted small" data-testid="app-update-reason">${esc(why)}</span>` : ''}
     </div>
-    <label class="switch"><input type="checkbox" id="set-app-update" data-testid="app-update-switch" aria-label="Apply merged fixes to this app"${on ? ' checked' : ''}${applies && healing ? '' : ' disabled'} /><span></span></label>`;
+    <label class="switch"><input type="checkbox" id="set-app-update" data-testid="app-update-switch" aria-label="${t('settings.app_update.title')}"${on ? ' checked' : ''}${applies && healing ? '' : ' disabled'} /><span></span></label>`;
 }
 
 // Draws the row; `fresh` reads where it applies again (when the screen opens), else the last answer.
@@ -439,20 +439,20 @@ async function renderAppUpdate(fresh = true) {
 // The Oracle's wake-ups (#123, src/oracle-wake.js): which runs wake it and on which events, saved
 // with the rest of settings.oracle. The kinds (oracle-wake.js WAKE_KINDS), in display order.
 const ORACLE_WAKE_KINDS = [
-  ['gate', 'Human gates waiting'],
-  ['finished', 'Runs that finish'],
-  ['merge', 'Merge conflicts'],
-  ['limit', 'Limits and budgets'],
-  ['stall', 'Stalls, supervisor decisions'],
-  ['invalid', 'Repeated invalid outputs'],
-  ['interrupted', 'Interrupted runs'],
+  ['gate', () => t('settings.wake.gate')],
+  ['finished', () => t('settings.wake.finished')],
+  ['merge', () => t('settings.wake.merge')],
+  ['limit', () => t('settings.wake.limit')],
+  ['stall', () => t('settings.wake.stall')],
+  ['invalid', () => t('settings.wake.invalid')],
+  ['interrupted', () => t('settings.wake.interrupted')],
 ];
 function renderOracleWake() {
   const o = state.settings.oracle || {};
   const scope = ['all', 'watched', 'off'].includes(o.wakeScope) ? o.wakeScope : 'all';
   $('#set-oracle-wake').value = scope;
   const on = Array.isArray(o.wakeOn) ? o.wakeOn : ORACLE_WAKE_KINDS.map(([k]) => k);
-  $('#set-oracle-wake-on').innerHTML = ORACLE_WAKE_KINDS.map(([k, label]) => `<label class="check small"><input type="checkbox" data-oracle-wake-kind="${k}"${on.includes(k) ? ' checked' : ''}${scope === 'off' ? ' disabled' : ''} /> ${esc(label)}</label>`).join('');
+  $('#set-oracle-wake-on').innerHTML = ORACLE_WAKE_KINDS.map(([k, label]) => `<label class="check small"><input type="checkbox" data-oracle-wake-kind="${k}"${on.includes(k) ? ' checked' : ''}${scope === 'off' ? ' disabled' : ''} /> ${esc(label())}</label>`).join('');
   $('#set-oracle-wake-on').querySelectorAll('[data-oracle-wake-kind]').forEach((el) => (el.onchange = saveOracleWake));
 }
 
@@ -467,7 +467,7 @@ async function saveOracleWake() {
 }
 
 // Settings › General › Voice input (#82): the whisper.cpp CLI, the model and the language (src/speech.js).
-const VOICE_LANGUAGES = { auto: 'Auto-detect', pt: 'Portuguese', en: 'English', es: 'Spanish', fr: 'French', de: 'German', it: 'Italian' };
+const VOICE_LANGUAGES = ['auto', 'de', 'en', 'es', 'fr', 'it', 'pt'];
 async function renderVoice(st) {
   try {
     st = st || await api.speechStatus();
@@ -477,8 +477,8 @@ async function renderVoice(st) {
   }
   $('#set-voice-command').value = state.settings.voiceCommand || '';
   $('#set-voice-cli').innerHTML = st.path
-    ? `Found: <code>${esc(st.path)}</code>`
-    : `Not found (command "${esc(st.command)}"). Install: ${st.installCommand ? commandHint(st.installCommand) : esc(st.installHint)}`;
+    ? t('settings.voice.found', { path: esc(st.path) })
+    : t('settings.voice.not_found', { command: esc(st.command), install: st.installCommand ? commandHint(st.installCommand) : esc(st.installHint) });
   const known = st.models.some((m) => m.id === st.model);
   $('#set-voice-model').innerHTML = st.models.map((m) =>
     `<option value="${esc(m.id)}">${esc(m.label)} · ${esc(m.size)} · ${esc(m.note)}${m.downloaded ? ' ✓' : ''}</option>`).join('')
@@ -487,23 +487,23 @@ async function renderVoice(st) {
   const btn = $('#btn-voice-download');
   btn.classList.toggle('hidden', !known || st.modelReady);
   btn.disabled = false;
-  btn.textContent = 'Download';
+  btn.textContent = t('settings.voice.download');
   $('#set-voice-model-info').textContent = st.modelReady
-    ? `Ready. Stored in ${st.modelsDir}.`
-    : known ? `Not downloaded yet. It goes to ${st.modelsDir}.` : 'Model file not found.';
-  $('#set-voice-language').innerHTML = st.languages.map((l) => `<option value="${esc(l)}">${esc(VOICE_LANGUAGES[l] || l)}</option>`).join('');
+    ? t('settings.voice.ready', { dir: st.modelsDir })
+    : known ? t('settings.voice.not_downloaded', { dir: st.modelsDir }) : t('settings.voice.model_missing');
+  $('#set-voice-language').innerHTML = st.languages.map((l) => `<option value="${esc(l)}">${esc(VOICE_LANGUAGES.includes(l) ? t(`settings.voice.lang.${l}`) : l)}</option>`).join('');
   $('#set-voice-language').value = st.language;
 }
 
 async function downloadVoiceModel() {
   const btn = $('#btn-voice-download');
   btn.disabled = true;
-  btn.textContent = 'Downloading…';
+  btn.textContent = t('settings.voice.downloading');
   try {
     await renderVoice(await api.downloadSpeechModel($('#set-voice-model').value));
   } catch (e) {
     btn.disabled = false;
-    btn.textContent = 'Download';
+    btn.textContent = t('settings.voice.download');
     $('#set-voice-model-info').textContent = errMsg(e);
   }
 }
@@ -514,7 +514,7 @@ async function renderIndexStatus(note = '') {
   try {
     const st = await api.indexStatus();
     $('#set-index-path').textContent = st.path;
-    el.textContent = note || (st.open ? `${st.runs} run${st.runs === 1 ? '' : 's'} indexed.` : `Not available: ${st.error || 'unknown error'}. Everything still works from the files.`);
+    el.textContent = note || (st.open ? t('settings.index.indexed', { count: st.runs }) : t('settings.index.unavailable', { error: st.error || t('settings.index.unknown_error') }));
     $('#btn-index-rebuild').disabled = !st.open;
   } catch (e) { el.textContent = errMsg(e); }
 }
@@ -522,24 +522,26 @@ async function renderIndexStatus(note = '') {
 async function rebuildIndex() {
   const btn = $('#btn-index-rebuild');
   btn.disabled = true;
-  $('#set-index-status').textContent = 'Rebuilding from runs/…';
+  $('#set-index-status').textContent = t('settings.index.rebuilding');
   try {
     const r = await api.rebuildIndex();
-    await renderIndexStatus(`Rebuilt: ${r.runs} run${r.runs === 1 ? '' : 's'} read from runs/.`);
+    await renderIndexStatus(t('settings.index.rebuilt', { count: r.runs }));
   } catch (e) {
     $('#set-index-status').textContent = errMsg(e);
   } finally { btn.disabled = false; }
 }
 
 // The dependency cache (#198): size, entries, and Clear (the entries a worktree links stay)
-const fmtCacheSize = (n) => (n >= 1024 ** 3 ? `${(n / 1024 ** 3).toFixed(1)} GB` : `${Math.round(n / 1024 ** 2)} MB`);
+const fmtCacheSize = (n) => (n >= 1024 ** 3
+  ? `${I18n.formatNumber(n / 1024 ** 3, undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} GB`
+  : `${I18n.formatNumber(Math.round(n / 1024 ** 2))} MB`);
 async function renderDepsCache(note) {
   const el = $('#set-deps-status');
   try {
     const c = await api.depsCacheInfo();
     $('#set-deps-path').textContent = c.dir;
-    $('#set-deps-size').textContent = c.entries ? fmtCacheSize(c.bytes) : 'Empty';
-    el.textContent = note || (c.entries ? `${c.entries} entr${c.entries === 1 ? 'y' : 'ies'}, ${c.linked} in use by a worktree.` : 'Nothing cached yet: the first run of a project installs once.');
+    $('#set-deps-size').textContent = c.entries ? fmtCacheSize(c.bytes) : t('settings.deps.empty');
+    el.textContent = note || (c.entries ? t('settings.deps.entries', { entries: t('settings.deps.count', { count: c.entries }), linked: c.linked }) : t('settings.deps.nothing'));
     $('#btn-deps-clear').disabled = !c.entries;
   } catch (e) { el.textContent = errMsg(e); }
 }
@@ -547,10 +549,11 @@ async function renderDepsCache(note) {
 async function clearDepsCache() {
   const btn = $('#btn-deps-clear');
   btn.disabled = true;
-  $('#set-deps-status').textContent = 'Clearing…';
+  $('#set-deps-status').textContent = t('settings.deps.clearing');
   try {
     const r = await api.clearDepsCache();
-    await renderDepsCache(`Cleared ${r.removed} entr${r.removed === 1 ? 'y' : 'ies'} (${fmtCacheSize(r.freedBytes)})${r.kept ? `; ${r.kept} kept: in use by a worktree or an install` : ''}.`);
+    const kept = r.kept ? t('settings.deps.kept', { count: r.kept }) : '';
+    await renderDepsCache(t('settings.deps.cleared', { entries: t('settings.deps.count', { count: r.removed }), size: fmtCacheSize(r.freedBytes), kept }));
   } catch (e) {
     $('#set-deps-status').textContent = errMsg(e);
     btn.disabled = false;
@@ -559,25 +562,25 @@ async function clearDepsCache() {
 
 async function renderTools() {
   const box = $('#set-tools');
-  box.innerHTML = '<div class="s-row"><div class="s-label"><span>Checking…</span></div></div>';
+  box.innerHTML = `<div class="s-row"><div class="s-label"><span>${t('settings.checking')}</span></div></div>`;
   const tools = await api.envDetails();
   if (typeof setCliStates === 'function') setCliStates(tools); // the Start panel's missing CLIs follow (#319)
-  box.innerHTML = tools.map((t) => `
+  box.innerHTML = tools.map((tool) => `
     <div class="s-row">
       <div class="s-label">
-        <b>${esc(t.name)}</b>
-        <span>${t.path ? esc(t.version || 'unknown version') : 'Not found in PATH.'}${t.account ? ` · account <b>${esc(t.account)}</b>` : ''}</span>
-        ${t.path ? `<code>${esc(t.path)}</code>` : t.installCommand ? commandHint(t.installCommand) : t.installHint ? `<span>Install: ${esc(t.installHint)}</span>` : ''}
-        ${t.path && !t.connected && t.auth && t.signInCommand ? commandHint(t.signInCommand, { signIn: true }) : ''}
-        ${t.path && !t.connected && t.output ? `<pre class="small muted">${esc(t.output)}</pre>` : ''}
+        <b>${esc(tool.name)}</b>
+        <span>${tool.path ? esc(tool.version || t('settings.tools.unknown_version')) : t('settings.tools.not_in_path')}${tool.account ? t('settings.tools.account', { account: esc(tool.account) }) : ''}</span>
+        ${tool.path ? `<code>${esc(tool.path)}</code>` : tool.installCommand ? commandHint(tool.installCommand) : tool.installHint ? `<span>${t('settings.tools.install', { hint: esc(tool.installHint) })}</span>` : ''}
+        ${tool.path && !tool.connected && tool.auth && tool.signInCommand ? commandHint(tool.signInCommand, { signIn: true }) : ''}
+        ${tool.path && !tool.connected && tool.output ? `<pre class="small muted">${esc(tool.output)}</pre>` : ''}
       </div>
-      <div class="s-ctrl"><span class="conn ${t.connected ? 'on' : 'off'}"><span class="conn-dot"></span>${t.connected ? 'Connected' : t.path ? (t.auth ? 'Not signed in' : 'Error') : 'Not installed'}</span></div>
+      <div class="s-ctrl"><span class="conn ${tool.connected ? 'on' : 'off'}"><span class="conn-dot"></span>${tool.connected ? t('settings.tools.connected') : tool.path ? (tool.auth ? t('setup.status.signed_out') : t('settings.tools.error')) : t('setup.status.missing')}</span></div>
     </div>`).join('');
 }
 
 async function renderAbout() {
   const i = await api.appInfo();
-  $('#set-about').innerHTML = [['App version', i.version], ['Electron', i.electron], ['Node', i.node], ['Workflows folder', i.workflowsDir]].map(([k, v]) =>
+  $('#set-about').innerHTML = [[t('settings.about.version'), i.version], ['Electron', i.electron], ['Node', i.node], [t('settings.about.workflows'), i.workflowsDir]].map(([k, v]) =>
     `<div class="s-row"><div class="s-label"><b>${esc(k)}</b></div><div class="s-ctrl mono small">${esc(v)}</div></div>`).join('');
 }
 

@@ -1,6 +1,6 @@
 // The languages agents write in (#327, #328): Settings › General › Language saves
-// settings.language = { agents, issues } in the workspace. `agents` ('interface' by default: "Same as
-// the interface", English until the interface language exists, #329) is what chat replies, the prose
+// settings.language = { agents, issues, interface } in the workspace. `agents` ('interface' by default:
+// "Same as the interface", settings.language.interface (#329), English while unset) is what chat replies, the prose
 // of step outputs, handoff notes, decision logs and documents are written in; `issues` (English by
 // default) is what goes to the repository host: issues, comments, PR/MR descriptions, commit messages.
 // - LANGUAGES: [{ code, label }] for the Settings selects; SAME_AS_INTERFACE: the agents' default value;
@@ -33,8 +33,11 @@
   const known = (code) => LANGUAGES.some((l) => l.code === code);
   const codeOf = (value) => (known(value) ? value : ENGLISH);
 
-  /** The AI agents' language code: "Same as the interface" is English until #329. */
-  const agentsLanguage = (settings) => codeOf(settings?.language?.agents);
+  /** The AI agents' language code: "Same as the interface" is the saved interface language (#329), English when unset. */
+  const agentsLanguage = (settings) => {
+    const agents = settings?.language?.agents;
+    return codeOf(agents === SAME_AS_INTERFACE || !agents ? settings?.language?.interface : agents);
+  };
   /** The issues' language code (its own setting, never the agents'). */
   const issuesLanguage = (settings) => codeOf(settings?.language?.issues);
   const labelOf = (code) => (LANGUAGES.find((l) => l.code === code) || LANGUAGES[0]).label;
