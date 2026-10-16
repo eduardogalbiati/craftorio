@@ -943,6 +943,7 @@ function animate(now) {
   const dt = Math.min(0.1, (now - lastAnim) / 1000); lastAnim = now;
   const t = now / 1000;
   starMat.uniforms.uTime.value = t; winUniforms.uTime.value = t; waterUniforms.uTime.value = t;
+  arcsOut.material.dashOffset = -t * 7; arcsIn.material.dashOffset = -t * 7; // the dashes flow along the dependency
   driftClouds(dt);
   if (kinds) {
     for (const c of cranes) { // the arm turns around the mast
@@ -975,15 +976,29 @@ function drive(now) {
 }
 let mode = model.meta.measured ? 'quadrant' : 'zone';
 
-const haloHover = new THREE.Mesh(unitBox, new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.18, depthWrite: false }));
+const haloHover = new THREE.Mesh(unitBox, new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.1, depthWrite: false }));
 const haloPin = new THREE.Mesh(unitBox, new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.3, depthWrite: false, toneMapped: false }));
 const ringPin = new THREE.Mesh(new THREE.RingGeometry(1, 1.08, 48), new THREE.MeshBasicMaterial({ transparent: true, toneMapped: false, side: THREE.DoubleSide }));
 ringPin.rotation.x = -Math.PI / 2;
 haloHover.visible = haloPin.visible = ringPin.visible = false;
 scene.add(haloHover, haloPin, ringPin);
-const placeHalo = (m, it, pad) => { m.position.set(it.x, Y0 - 0.02, it.z); m.scale.set(it.w + pad, (it.top || it.h) + pad * 0.6, it.d + pad); m.visible = true; };
-const arcsOut = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ transparent: true, opacity: 0.85, toneMapped: false }));
-const arcsIn = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ transparent: true, opacity: 0.85, toneMapped: false }));
+const placeHalo = (m, it, pad) => { m.position.set(it.x, Y0 - 0.02, it.z); m.scale.set(it.w + pad, Math.min(it.h, it.top || it.h) + pad * 0.6, it.d + pad); m.visible = true; };
+// the dependency arcs: dashed, the dashes flow along the dependency (see animate); a light on the roof of every connected file
+const arcsOut = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineDashedMaterial({ transparent: true, opacity: 0.95, toneMapped: false, dashSize: 2.4, gapSize: 1.4 }));
+const arcsIn = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineDashedMaterial({ transparent: true, opacity: 0.95, toneMapped: false, dashSize: 2.4, gapSize: 1.4 }));
+const DEP_DOTS = 600;
+const depDots = new THREE.InstancedMesh(lightGeo, new THREE.MeshBasicMaterial({ toneMapped: false }), DEP_DOTS);
+depDots.count = 0; depDots.frustumCulled = false; scene.add(depDots);
+/** Lights the roofs of the connected files: `to` in the accent colour, `from` in amber, the hovered one white. */
+function lightRoofs(centre, to, from) {
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3(), c = new THREE.Color();
+  let i = 0;
+  const put = (it, colour, size) => { if (i >= DEP_DOTS) return; const r = roof(it); m.compose(p.set(r.x, r.y + 0.3, r.z), q, s.set(size, size, size)); depDots.setMatrixAt(i, m); depDots.setColorAt(i, c.set(colour)); i++; };
+  if (centre) put(centre, T.ink, 1.1);
+  for (const it of to) put(it, T.accent, 0.8);
+  for (const it of from) put(it, T.status.changes, 0.8);
+  depDots.count = i; depDots.instanceMatrix.needsUpdate = true; if (depDots.instanceColor) depDots.instanceColor.needsUpdate = true;
+}
 scene.add(arcsOut, arcsIn);
 
 // ---------- textures ----------
@@ -1359,12 +1374,12 @@ function showPin(it) {
 function unpin() { pinned = null; detail.hidden = true; haloPin.visible = ringPin.visible = false; }
 
 // ---------- hover arcs ----------
-const setArcs = (geometry, points) => { geometry.setFromPoints(points.length ? points : [new THREE.Vector3(), new THREE.Vector3()]); geometry.computeBoundingSphere(); };
+const setArcs = (lines, points) => { lines.geometry.setFromPoints(points.length ? points : [new THREE.Vector3(), new THREE.Vector3()]); lines.geometry.computeBoundingSphere(); lines.computeLineDistances(); };
 const roof = (it) => new THREE.Vector3(it.x, Y0 + it.top, it.z);
 const districtAnchor = (g) => new THREE.Vector3(g.block.x + g.block.w / 2, Y0 + 4, g.block.y + g.block.h / 2);
 /** Draws the hovered thing's dependencies and dims the rest; null clears. */
 function showDeps(target) {
-  let out = [], inn = [], focus = null;
+  let out = [], inn = [], focus = null, lit = [null, [], []];
   if (target && target.it) {
     const i = target.it.index, modelIndex = model.buildings.indexOf(target.b);
     const to = (deps.out.get(modelIndex) || []).map((j) => byLayout(model.buildings[j].path)).filter(Boolean);
@@ -1373,6 +1388,7 @@ function showDeps(target) {
       focus = new Set([i, ...to.map((it) => it.index), ...from.map((it) => it.index)]);
       out = to.flatMap((it) => arc(roof(target.it), roof(it)));
       inn = from.flatMap((it) => arc(roof(it), roof(target.it)));
+      lit = [target.it, to, from];
     }
   } else if (target && target.g) {
     const to = (districtDeps.out.get(target.g.d.id) || []).map((e) => layout.districts.find((g) => g.d.id === e.id)).filter(Boolean);
@@ -1384,8 +1400,9 @@ function showDeps(target) {
       inn = from.flatMap((g) => arc(districtAnchor(g), districtAnchor(target.g)));
     }
   }
-  setArcs(arcsOut.geometry, out); setArcs(arcsIn.geometry, inn);
+  setArcs(arcsOut, out); setArcs(arcsIn, inn);
   arcsOut.visible = out.length > 0; arcsIn.visible = inn.length > 0;
+  lightRoofs(...lit);
   if ((focus && !focusSet) || (!focus && focusSet) || (focus && focusSet && (focus.size !== focusSet.size || [...focus].some((i) => !focusSet.has(i))))) { focusSet = focus; paint(); }
 }
 
