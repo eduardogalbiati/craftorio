@@ -70,9 +70,9 @@
   // the one-off seed of #138: the Product Owner proposes epics for the open issues (same text as its chip)
   const ORGANIZE = 'Organize the open issues into epics';
   // #238: Archived = closed with the `archived` label; Closed shows the other closed issues
-  const FILTERS = [['open', 'Open'], ['closed', 'Closed'], ['archived', 'Archived'], ['all', 'All']];
+  const FILTERS = ['open', 'closed', 'archived', 'all'];
   // 'local': merged into the local base by a local workflow, not pushed yet (shown when there is any)
-  const COLUMNS = [['todo', 'To do'], ['in_progress', 'In progress'], ['waiting', 'Waiting for approval'], ['local', 'Merged locally'], ['done', 'Done']];
+  const COLUMNS = ['todo', 'in_progress', 'waiting', 'local', 'done'];
 
   const load = (key) => { try { return localStorage.getItem(key); } catch { return null; } };
   const save = (key, v) => { try { localStorage.setItem(key, v); } catch { /* storage unavailable */ } };
@@ -939,11 +939,11 @@
   function renderKanban(issues) {
     const shown = sortIssues(issues.filter(isShown), bl.sort);
     const withLocal = bl.data?.local?.ahead > 0 || issues.some((i) => i.column === 'local');
-    const columns = COLUMNS.filter(([col]) => col !== 'local' || withLocal);
-    return `${!shown.length && issues.length && filtering() ? noMatch() : ''}<div class="bl-board${withLocal ? ' with-local' : ''}" data-testid="backlog-board">${columns.map(([col, title]) => {
+    const columns = COLUMNS.filter((col) => col !== 'local' || withLocal);
+    return `${!shown.length && issues.length && filtering() ? noMatch() : ''}<div class="bl-board${withLocal ? ' with-local' : ''}" data-testid="backlog-board">${columns.map((col) => {
       const items = shown.filter((i) => (i.column || (i.state === 'closed' ? 'done' : 'todo')) === col);
       return `<section class="bl-col bl-col-${col}">
-        <h3>${title} <span class="muted">${items.length}</span></h3>
+        <h3>${t(`backlog.column_${col}`)} <span class="muted">${items.length}</span></h3>
         <div class="bl-col-body">${items.map(card).join('') || `<p class="muted small">${t('backlog.nothing_here')}</p>`}</div>
       </section>`;
     }).join('')}</div>`;
@@ -1284,8 +1284,8 @@
     const count = (f) => board.filter((i) => f === 'all' || issueState(i) === f).length;
     const filters = $b('#bl-filters');
     filters.classList.toggle('hidden', bl.mode !== 'list');
-    filters.innerHTML = FILTERS.map(([f, label]) =>
-      `<button class="chip${bl.filter === f ? ' active' : ''}" data-f="${f}" data-testid="backlog-state-${f}">${label} <span class="muted">${count(f)}</span></button>`).join('');
+    filters.innerHTML = FILTERS.map((f) =>
+      `<button class="chip${bl.filter === f ? ' active' : ''}" data-f="${f}" data-testid="backlog-state-${f}">${t(`backlog.filter_${f}`)} <span class="muted">${count(f)}</span></button>`).join('');
     renderLabelFilter(board);
     renderEpicFilter(board);
     // (after renderLabelFilter, which shows the labels button whenever there are labels)

@@ -417,7 +417,7 @@
             <button class="btn primary an-usage-only" id="an-analyze" type="button" title="${t('analytics.the_supervisor_writes_a_report_on')}">${t('analytics.ask_the_supervisor')}</button>
           </div>
         </div>
-        <div class="tabs page-tabs" role="tablist" aria-label="${t('analytics.analytics')}"><button type="button" class="tab" role="tab" data-an-tab="usage">${t('analytics.usage')}</button><button type="button" class="tab" role="tab" data-an-tab="performance" title="${t('analytics.repository_performance_how_well_the_repository')}">${t('analytics.performance')}</button>${extraTabs().map((t) => `<button type="button" class="tab" role="tab" data-an-tab="${t.id}" data-testid="an-tab-${t.id}">${t.label}</button>`).join('')}</div>
+        <div class="tabs page-tabs" role="tablist" aria-label="${t('analytics.analytics')}"><button type="button" class="tab" role="tab" data-an-tab="usage">${t('analytics.usage')}</button><button type="button" class="tab" role="tab" data-an-tab="performance" title="${t('analytics.repository_performance_how_well_the_repository')}">${t('analytics.performance')}</button>${extraTabs().map((x) => `<button type="button" class="tab" role="tab" data-an-tab="${x.id}" data-testid="an-tab-${x.id}">${t(`analytics.tab_${x.id}`)}</button>`).join('')}</div>
         <div id="an-body"></div>
       </div>`,
     show() {

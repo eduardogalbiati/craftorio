@@ -62,7 +62,7 @@
         <form${attr('id', ids.form)} class="agent-chat-form ${cls.form || ''}" data-agent-chat-form>
           <textarea${attr('id', ids.input)} class="${cls.input || ''}" rows="2" data-testid="agent-chat-input"${attr('placeholder', o.placeholder)} aria-label="${e(`Message to ${o.agent}`)}"></textarea>
           ${slotHtml('actions')}
-          <button${attr('id', ids.send)} class="btn primary agent-chat-send ${cls.send || ''}" type="submit" data-testid="agent-chat-send">${e(o.sendLabel || 'Send')}</button>
+          <button${attr('id', ids.send)} class="btn primary agent-chat-send ${cls.send || ''}" type="submit" data-testid="agent-chat-send">${e(o.sendLabel || t('agent_chat.send'))}</button>
         </form>
         ${slotHtml('foot')}
       </div>
