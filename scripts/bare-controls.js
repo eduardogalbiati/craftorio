@@ -47,7 +47,7 @@ const BASELINE = {
   'src/renderer/views/project/project-city-agents.js': { select: 1 },
   'src/renderer/views/project/project-city.js': { select: 1 },
   'src/renderer/views/sessions/sessions.js': { select: 2 },
-  'src/renderer/views/settings/settings.js': { select: 6 },
+  'src/renderer/views/settings/settings-markup.js': { select: 6 },
   'src/renderer/views/workflows/builder.js': { select: 4 },
   'src/renderer/views/workflows/workflows.js': { select: 3 },
   'src/renderer/workflow-inputs.js': { select: 1 },
