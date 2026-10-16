@@ -149,3 +149,42 @@ test('#414 cleanupWorktrees: removes the tmp an ended run left behind without a 
   assert.equal(fs.existsSync(path.join(liveDir, 'tmp', 'service-ws-a1b2', 'settings.json')), true, 'a live run keeps its tmp');
   assert.equal(fs.existsSync(path.join(gateDir, 'tmp', 'service-ws-a1b2', 'settings.json')), true, 'a run waiting at a gate keeps its tmp');
 });
+
+test('#414 cleanupWorktrees: a tmp a process still holds stays without an error, and the next cleanup removes it once free', async (t) => {
+  const { cleanupWorktrees, samePath } = loadWorktree();
+  const tmp = tmpdir(t, 'tmp-414-locked-');
+  const runsDir = path.join(tmp, 'runs');
+  const worktreesDir = path.join(tmp, 'worktrees');
+  fs.mkdirSync(worktreesDir, { recursive: true });
+  const at = new Date(Date.now() - 10 * 864e5).toISOString();
+  const runDir = endedRun(runsDir, '20261005-130000-lock0414', { summary: { status: 'success', started_at: at, finished_at: at } });
+  seedTmp(runDir);
+  daysAgo(runDir, 10);
+  const held = path.join(runDir, 'tmp');
+  const origRmSync = fs.rmSync.bind(fs);
+  const busy = t.mock.method(fs, 'rmSync', (target, opts) => {
+    if (samePath(target, held)) throw Object.assign(new Error('EBUSY: resource busy or locked'), { code: 'EBUSY' });
+    return origRmSync(target, opts);
+  });
+
+  await cleanupWorktrees({ worktreesDir, runsDir, active: [] });
+  assert.equal(fs.existsSync(path.join(held, 'service-ws-a1b2', 'settings.json')), true, 'still there: left for the next cleanup');
+
+  busy.mock.restore();
+  await cleanupWorktrees({ worktreesDir, runsDir, active: [] });
+  assert.equal(fs.existsSync(held), false, 'removed once no process holds it');
+});
+
+// ---- suiteEnv: the option runSuite passes --------------------------------------------------------
+
+test('#414 suiteEnv: tmpDir sets TMP, TEMP and TMPDIR over the inherited ones; without it the inherited values pass through and nothing more is removed', () => {
+  const { suiteEnv } = loadSuite();
+  const inherited = { PATH: '/bin', TMP: 'C:/Users/u/AppData/Local/Temp', TEMP: 'C:/Users/u/AppData/Local/Temp', TMPDIR: '/tmp' };
+  const tmp = path.join('C:/ws/runs/r1', 'tmp');
+  const withTmp = suiteEnv(inherited, { tmpDir: tmp });
+  assert.deepEqual(tmpVars(withTmp.env), [tmp, tmp, tmp]);
+  assert.equal(withTmp.env.PATH, '/bin');
+  const without = suiteEnv(inherited);
+  assert.deepEqual(tmpVars(without.env), ['C:/Users/u/AppData/Local/Temp', 'C:/Users/u/AppData/Local/Temp', '/tmp']);
+  assert.deepEqual(withTmp.removed, without.removed, 'the temp variables are replaced, not reported as removed');
+});
