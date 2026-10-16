@@ -153,3 +153,7 @@
 .run-gate-actions { flex-wrap: wrap; gap: 8px; }
 /* #410: the tab row's actions, on the right; they wrap on a narrow window, never scroll it sideways */
 .run-actions { margin-left: auto; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px 8px; min-width: 0; padding: 6px 0; }
+/* #412: the row itself never wraps, only its actions do: Pause after current step and Stop stay on the first line, at the right end */
+#view-run .run-tab-row { flex-wrap: nowrap; }
+#view-run .run-tab-row > :not(.run-actions) { flex: none; }
+#view-run .run-tab-row > .run-actions { flex: 1 1 0; min-width: auto; }
