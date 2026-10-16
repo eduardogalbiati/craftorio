@@ -3,8 +3,9 @@
 // workflow's machine steps (src/refactor-proposals-run.js does the work). `action` says which:
 // - facts: the Architecture facts at the default branch, the files changed since the input `since`
 //   and the analyst's prompt (#356's, focused on the Danger Zone and the changed files);
-// - propose: the `from` step's report (#356's format) added to the Refactor tab's proposals; the
-//   findings that match a proposal or an open `refactor` issue are dropped, and the output says which;
+// - propose: the `from` step's report (#356's format) saved in the Architecture tab's history with
+//   that step's cost (its sessions), then added to the Refactor tab's proposals; the findings that
+//   match a proposal or an open `refactor` issue are dropped, and the output says which;
 // - prioritize: #357's Product Owner ranking (a simulation ranks without a model; a real run takes
 //   the Product Owner from the run's `refactorPriorityOptions` option, the service's), the top
 //   `inputs.limit` of the `from` step's new proposals kept;
@@ -37,7 +38,12 @@ const methods = {
       return output;
     }
     if (step.action === 'propose') {
-      const output = work.proposeFindings({ ...place, report: from, runId: this.runId });
+      // the analysis turn's cost (its sessions) and the facts step's head, saved with the report
+      const turns = [...this.sessions.values()].filter((s) => s.stepId === step.from);
+      const costUsd = turns.reduce((sum, s) => sum + (s.costUsd || 0) + (s.cliOnlyUsd || 0), 0);
+      const factsId = this.wf.steps.find((s) => s.type === 'refactor_proposals' && s.action === 'facts')?.id;
+      const at = factsId ? this.ctx.steps[factsId]?.output : null;
+      const output = work.proposeFindings({ ...place, report: from, costUsd, tokens: turns[0]?.tokens || null, simulated, at });
       log('info', `${output.added.length} new proposal(s); ${output.dropped.length} finding(s) dropped${output.dropped.length ? `: ${output.dropped.map((d) => `${d.title} (${d.reason})`).join('; ')}` : ''}.`);
       return output;
     }

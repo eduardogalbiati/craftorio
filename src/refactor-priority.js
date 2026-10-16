@@ -6,11 +6,17 @@
 // `mock` (and MULTIAGENT_SIMULATION_ONLY, decided by the service) answers with mockPriority: no model
 // call, no cost. Kept out of src/product-owner.js (at its size ceiling): the turn copies callAgent's
 // shape and records its usage with the Product Owner's (recordUsage, checkBudget).
+// rankProject assembles what the turn reads from the workspace and saves the ranking: the Refactor
+// tab (refactor:prioritize) and the Refactor proposals workflow (#378) both rank through it.
 
 'use strict';
 
+const conflictMaps = require('./conflict-map');
+const proposalsStore = require('./refactor-proposals');
+const roadmaps = require('./roadmap');
 const { validateSchema } = require('./json-schema');
 const { filesOf, pathOf } = require('./refactor-cadence');
+const { unfinishedItems } = require('./shared/roadmap-model');
 
 const SKILLS = ['backlog-product-owner'];
 const STEP_ID = 'product-owner-refactor';
@@ -109,6 +115,43 @@ async function prioritize({ proposals, unfinished = [], dangerScores = {}, hotSp
   return { ...normalizeRanking(raw, proposals), model: agent.model, costUsd: res.costUsd || 0 };
 }
 
+const numbersOf = (issues) => (issues || []).map((i) => Number(typeof i === 'object' ? i?.number : i)).filter(Boolean);
+
+/** The files each planned issue will change (Map number → files): a refactor's proposal, else the Product Owner's last plan group. */
+function plannedFiles({ refactorRoot, backlogDir, projectId }) {
+  const out = new Map();
+  let messages = [];
+  try { messages = require('./product-owner').readConversation(backlogDir, projectId).filter((m) => m.role === 'po' && m.answer); } catch { /* no conversation */ }
+  for (const m of messages) for (const g of m.answer?.groups || []) for (const n of g.issues || []) if (g.files?.length) out.set(Number(n), g.files);
+  for (const x of proposalsStore.listProposals(refactorRoot, projectId)) if (x.issue) out.set(Number(x.issue), filesOf(x));
+  return out;
+}
+
+/** A roadmap item with the files its issues will change (`planned`: plannedFiles). */
+const withFiles = (item, planned) => ({ ...item, files: numbersOf(item.issues).flatMap((n) => planned.get(n) || []) });
+
+/**
+ * The Product Owner's ranking of a project's open proposals, read and saved in the workspace:
+ * the proposals (<refactorRoot>), the roadmap's unfinished items with their planned files and the
+ * conflict map's hot spots (<backlogDir>), the Danger Zone scores of `model` (the architecture
+ * facts, null for none). `mock`, or no open proposal: mockPriority; otherwise `options()` gives the
+ * Product Owner's turn. → { list, ranking, costUsd, saved } (saved: saveRanking's answer).
+ */
+async function rankProject({ refactorRoot, backlogDir, projectId, model, mock, options }) {
+  const list = proposalsStore.listProposals(refactorRoot, projectId);
+  const planned = plannedFiles({ refactorRoot, backlogDir, projectId });
+  const unfinished = unfinishedItems(roadmaps.readRoadmap(backlogDir, projectId)).map((x) => ({ issue: numbersOf(x.issues)[0] || x.number, files: withFiles(x, planned).files }));
+  const dangerScores = Object.fromEntries((model?.danger_zone || []).map((r) => [r.file, r.score]));
+  const hotSpots = conflictMaps.hotSpots(conflictMaps.readConflictMap(backlogDir, projectId));
+  const turn = mock || !open(list).length ? { mock: true } : options();
+  const answer = await prioritize({ proposals: list, unfinished, dangerScores, hotSpots, ...turn });
+  const errors = validatePriority({ ranking: answer.ranking });
+  if (errors.length) throw new Error(`The Product Owner's ranking is not valid: ${errors.join('; ')}`);
+  const costUsd = answer.costUsd || 0;
+  const saved = proposalsStore.saveRanking(refactorRoot, projectId, { ranking: answer.ranking }, { at: new Date().toISOString(), costUsd });
+  return { list, ranking: answer.ranking, costUsd, saved };
+}
+
 // One read-only Claude Code turn, as product-owner.js callAgent runs them
 async function runPriorityTurn({ data, folder, agent, skillsDirs, resolveCommand }) {
   const fs = require('fs');
@@ -138,7 +181,10 @@ async function runPriorityTurn({ data, folder, agent, skillsDirs, resolveCommand
 module.exports = {
   mockPriority,
   normalizeRanking,
+  plannedFiles,
   prioritize,
   PRIORITY_SCHEMA,
+  rankProject,
   validatePriority,
+  withFiles,
 };

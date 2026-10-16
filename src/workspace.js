@@ -137,6 +137,10 @@ function layout(root) {
     attachments: path.join(root, 'attachments'),
     // discovery cards, private to the workspace (#256, src/discovery.js): <project id>/cards/<card id>/, created on demand
     discovery: path.join(root, 'discovery'),
+    // the Architecture tab's settings, city plans and reports (#356, src/oracle-architecture.js), created on demand
+    architecture: path.join(root, 'architecture'),
+    // the Refactor tab's proposals, ranking and cadence (#357, src/refactor-proposals.js), created on demand
+    refactor: path.join(root, 'refactor'),
     settings: path.join(root, 'settings.json'),
     // titles the user gave to CLI sessions on the Sessions screen ({ "<provider>:<id>": title })
     sessionTitles: path.join(root, 'session-titles.json'),

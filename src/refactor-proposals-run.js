@@ -4,11 +4,13 @@
 // - facts: the Architecture facts (#356) at the default branch, the files changed since `since` (a tag
 //   or a commit) and the analyst's prompt (#356's analysisPrompt, focused on the Danger Zone and on
 //   the changed files);
-// - propose: the report's findings added to the Refactor tab's proposals (<workspace>/refactor), as
-//   "Send to Refactor" adds them; a finding that matches a proposal (open or dismissed) or an open
-//   `refactor` issue of the synced backlog is dropped, with the reason;
-// - rank: #357's Product Owner ranking of the open proposals (saved as the tab saves it), the run's
-//   new proposals in rank order, the top `limit` kept;
+// - propose: the report saved in the Architecture tab's history with the analysis turn's cost (so
+//   architecture:estimate follows the workflow's runs too), then its findings added to the Refactor
+//   tab's proposals (<workspace>/refactor), as "Send to Refactor" adds them; a finding that matches a
+//   proposal (open or dismissed) or an open `refactor` issue of the synced backlog (every file of the
+//   finding in the issue's Target list) is dropped, with the reason;
+// - rank: #357's Product Owner ranking of the open proposals (src/refactor-priority.js rankProject,
+//   the tab's own), the run's new proposals in rank order, the top `limit` kept;
 // - file: the kept proposals filed as `refactor` issues naming the Refactor workflow
 //   (src/refactor-issues.js); a proposal dismissed since the ranking (the owner's "drop" at the
 //   gate) is skipped. A simulation previews: no gh/glab, simulated numbers so a pipeline's next
@@ -16,28 +18,21 @@
 
 'use strict';
 
-const path = require('path');
 const arch = require('./oracle-architecture');
 const backlog = require('./backlog');
-const conflictMaps = require('./conflict-map');
 const facts = require('./architecture-facts');
 const priority = require('./refactor-priority');
 const projects = require('./projects');
 const proposals = require('./refactor-proposals');
 const refactorIssues = require('./refactor-issues');
-const roadmaps = require('./roadmap');
 const { filesOf } = require('./refactor-cadence');
-const { unfinishedItems } = require('./shared/roadmap-model');
+const { hasLabel, issueState } = require('./shared/backlog-archive');
+const { layout } = require('./workspace');
 
 const DANGER_ROWS = 10;
 
-/** The workspace's folders of the run: { refactor, architecture, backlog, projects }. */
-const storesOf = (wsRoot) => ({
-  architecture: path.join(wsRoot, 'architecture'),
-  backlog: path.join(wsRoot, 'backlog'),
-  projects: path.join(wsRoot, 'projects'),
-  refactor: path.join(wsRoot, 'refactor'),
-});
+/** The workspace's folders of the run (src/workspace.js layout: refactor, architecture, backlog, projects…). */
+const storesOf = (wsRoot) => layout(wsRoot);
 
 function projectOf(stores, projectId, folder) {
   try { return projects.readProject(stores.projects, projectId); } catch { return { id: projectId, name: projectId, folder }; }
@@ -80,22 +75,30 @@ async function readRunFacts({ folder, wsRoot, projectId, since }) {
   };
 }
 
-const labelName = (l) => String(typeof l === 'string' ? l : l?.name || '').toLowerCase();
 // the synced backlog's open `refactor` issues
 function openRefactorIssues(stores, projectId) {
   const issues = backlog.readBacklog(stores.backlog, projectId)?.issues || [];
-  return issues.filter((i) => String(i.state || 'open').toLowerCase() === 'open' && (i.labels || []).some((l) => labelName(l) === refactorIssues.LABEL));
+  return issues.filter((i) => issueState(i) === 'open' && hasLabel(i, refactorIssues.LABEL));
+}
+
+// the files of an issue's Target list (the "- `path`" lines refactor-issues.js issueText writes under "## Target")
+function targetFiles(issue) {
+  const section = String(issue?.body || '').split(/^## Target[ \t]*$/m)[1]?.split(/^## /m)[0] || '';
+  return new Set([...section.matchAll(/^- `([^`]+)`/gm)].map((m) => m[1]));
 }
 
 /**
- * The propose step: the report's findings added to the Refactor tab's proposals.
- * → { added: [{ id, title }], dropped: [{ id, title, status, reason }] }
+ * The propose step: the report saved in the Architecture tab's history (with the analysis turn's
+ * `costUsd`, `tokens` and `simulated`, head and branch of `at`: the facts step's output), then its
+ * findings added to the Refactor tab's proposals.
+ * → { report_id, added: [{ id, title }], dropped: [{ id, title, status, reason }] }
  */
-function proposeFindings({ wsRoot, projectId, report, runId }) {
+function proposeFindings({ wsRoot, projectId, report, costUsd = null, tokens = null, simulated = false, at = null }) {
   const stores = storesOf(wsRoot);
   const checked = arch.validateReport(report);
   if (checked.error) throw new Error(checked.error);
-  const issues = openRefactorIssues(stores, projectId);
+  const saved = arch.saveReport(stores.architecture, projectId, { date: new Date().toISOString(), head: at?.head || null, branch: at?.branch || null, costUsd, tokens, simulated: !!simulated, report: checked.report });
+  const issues = openRefactorIssues(stores, projectId).map((i) => ({ number: i.number, files: targetFiles(i) }));
   const added = [];
   const dropped = [];
   for (const finding of checked.report.findings) {
@@ -107,20 +110,20 @@ function proposeFindings({ wsRoot, projectId, report, runId }) {
       continue;
     }
     const paths = (files || []).map((f) => f.path);
-    const issue = issues.find((i) => paths.some((p) => `${i.title || ''}\n${i.body || ''}`.includes(p)));
+    const issue = paths.length ? issues.find((i) => paths.every((p) => i.files.has(p))) : null;
     if (issue) {
-      dropped.push({ id: null, title, status: 'issue', issue: issue.number, reason: `the open refactor issue #${issue.number} names its files` });
+      dropped.push({ id: null, title, status: 'issue', issue: issue.number, reason: `the open refactor issue #${issue.number} targets its files` });
       continue;
     }
-    const stored = proposals.addProposal(stores.refactor, projectId, { source: 'architecture', key, reportId: runId ? `run:${runId}` : null, kind, title, files, evidence, severity, refactor });
+    const stored = proposals.addProposal(stores.refactor, projectId, { source: 'architecture', key, reportId: saved.id, kind, title, files, evidence, severity, refactor });
     added.push({ id: stored.id, title: stored.title });
   }
-  return { added, dropped };
+  return { report_id: saved.id, added, dropped };
 }
 
 /**
- * The prioritize step: the Product Owner's ranking of the open proposals, saved as the Refactor tab
- * saves it; the run's new proposals (`ids`) in rank order, the first `limit` kept.
+ * The prioritize step: the Product Owner's ranking of the open proposals (rankProject, as the
+ * Refactor tab ranks and saves it); the run's new proposals (`ids`) in rank order, the first `limit` kept.
  * `options`: the Product Owner's turn (the service's, refactor:prioritize's realOptions), unless `mock`.
  * → { ranked: [{ id, title, rank, reason, complexity, files }], kept: [id], limit, cost_usd, simulated }
  */
@@ -130,19 +133,12 @@ async function rankProposals({ folder, wsRoot, projectId, ids, limit, mock, opti
   const empty = { ranked: [], kept: [], limit, cost_usd: 0, simulated: !!mock };
   if (!wanted.size) return empty;
   if (!mock && !options) throw new Error('The Product Owner is not available to this run: the ranking needs the app service.');
-  const list = proposals.listProposals(stores.refactor, projectId);
   const model = await modelOf(folder, stores, projectId).catch(() => null);
-  const dangerScores = Object.fromEntries((model?.danger_zone || []).map((r) => [r.file, r.score]));
-  const unfinished = unfinishedItems(roadmaps.readRoadmap(stores.backlog, projectId)).map((x) => ({ issue: Number(x.issues?.[0]?.number ?? x.issues?.[0] ?? x.number) || null, files: [] }));
-  const hotSpots = conflictMaps.hotSpots(conflictMaps.readConflictMap(stores.backlog, projectId));
-  const answer = await priority.prioritize({ proposals: list, unfinished, dangerScores, hotSpots, ...(mock ? { mock: true } : options) });
-  const errors = priority.validatePriority({ ranking: answer.ranking });
-  if (errors.length) throw new Error(`The Product Owner's ranking is not valid: ${errors.join('; ')}`);
-  proposals.saveRanking(stores.refactor, projectId, { ranking: answer.ranking }, { at: new Date().toISOString(), costUsd: answer.costUsd || 0 });
+  const { list, ranking, costUsd } = await priority.rankProject({ refactorRoot: stores.refactor, backlogDir: stores.backlog, projectId, model, mock: !!mock, options: () => options });
   const byId = new Map(list.map((p) => [p.id, p]));
-  const ranked = answer.ranking.filter((r) => wanted.has(r.id)).sort((a, b) => a.rank - b.rank)
+  const ranked = ranking.filter((r) => wanted.has(r.id)).sort((a, b) => a.rank - b.rank)
     .map((r) => ({ id: r.id, title: byId.get(r.id)?.title || r.id, rank: r.rank, reason: r.reason, complexity: r.complexity, files: filesOf(byId.get(r.id) || {}) }));
-  return { ranked, kept: ranked.slice(0, Math.max(0, Number(limit) || 0)).map((r) => r.id), limit, cost_usd: answer.costUsd || 0, simulated: !!mock };
+  return { ranked, kept: ranked.slice(0, Math.max(0, Number(limit) || 0)).map((r) => r.id), limit, cost_usd: costUsd, simulated: !!mock };
 }
 
 /**

@@ -9,6 +9,7 @@
   const RETIRED_LABEL = 'deprioritized';
   const ACTIVE_RUN = new Set(['paused', 'running', 'waiting']);
   const key = (name) => String(name || '').trim().toLowerCase();
+  // whether `issue` carries the label `name` (lowercase), its labels as names or { name }
   const hasLabel = (issue, name) => (issue?.labels || []).some((l) => key(typeof l === 'string' ? l : l?.name) === name);
   const isClosed = (issue) => key(issue?.state) === 'closed';
 
@@ -46,7 +47,7 @@
     return (issues || []).filter((i) => !isClosed(i) && hasLabel(i, RETIRED_LABEL));
   }
 
-  const api = { ARCHIVED_LABEL, archiveBlockReason, archiveConfirmText, deprioritizedIssues, isArchived, issueState };
+  const api = { ARCHIVED_LABEL, archiveBlockReason, archiveConfirmText, deprioritizedIssues, hasLabel, isArchived, issueState };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.BacklogArchive = api;
 })(typeof window !== 'undefined' ? window : globalThis);

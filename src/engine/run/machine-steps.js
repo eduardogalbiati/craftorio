@@ -21,6 +21,8 @@ const suiteStep = require('../suite-step');
 const { changedFiles, selectionLines } = require('../affected-tests');
 const { runWorkflowStep } = require('../workflow-step');
 const testIds = require('../test-ids');
+const { previousTag } = require('../../release-city');
+const { releaseSemver } = require('../../releases');
 const { render } = require('./templates');
 const { parseDuration, renderFileList } = require('./load');
 const { pausedError } = require('./resume');
@@ -45,17 +47,15 @@ function testedTree(dir) {
 }
 
 // #378: the tag before the release `version` (release.yaml's `previous_version` output, the `since`
-// a refactor-proposals stage reads): the newest tag reachable from the release's tag when it already
-// exists (a rerun), else from HEAD (Ship has not tagged yet); '' without a git checkout or a tag
-function previousReleaseTag(dir, version) {
+// a refactor-proposals stage reads), as the Release city tab names it (src/release-city.js
+// previousTag: semver order for a semver name, even before Ship tags it); a name that is not a
+// semver and not tagged yet: the newest tag reachable from HEAD. '' without a git checkout or a tag
+async function previousReleaseTag(dir, version) {
   if (!dir || !fs.existsSync(dir)) return '';
-  const git = (...args) => execFileSync('git', args, { cwd: dir, encoding: 'utf8', windowsHide: true, timeout: 30000, stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  const tag = await previousTag(dir, version);
+  if (tag || releaseSemver(version)) return tag || '';
   try {
-    let from = 'HEAD';
-    try {
-      if (version && git('tag', '--list', version) === version) from = `${version}^`;
-    } catch { /* no tag list: from HEAD */ }
-    return git('describe', '--tags', '--abbrev=0', from);
+    return execFileSync('git', ['describe', '--tags', '--abbrev=0', 'HEAD'], { cwd: dir, encoding: 'utf8', windowsHide: true, timeout: 30000, stdio: ['ignore', 'pipe', 'ignore'] }).trim();
   } catch {
     return '';
   }
@@ -441,7 +441,7 @@ const methods = {
     }
     // what ships with the release (a simulation: what a real run would write)
     const change = r.written || (simulated && r.files.length) ?`package.json ${r.from || '(no version)'} → ${r.to}` : '';
-    const output = { kind: 'release_version', status: r.written ? 'written' : 'unchanged', version, ...r, change, previous_version: previousReleaseTag(dir, version), message: r.reason };
+    const output = { kind: 'release_version', status: r.written ? 'written' : 'unchanged', version, ...r, change, previous_version: await previousReleaseTag(dir, version), message: r.reason };
     this.emitEvent('log', { level: error ? 'warn' : 'info', kind: 'release_version', step_id: step.id, message: `${step.id}: ${r.reason}` });
     return output;
   },

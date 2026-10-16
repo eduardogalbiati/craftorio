@@ -29,7 +29,6 @@ const refactorIssues = require('../../refactor-issues');
 const roadmaps = require('../../roadmap');
 const runs = require('../../runs');
 const simulation = require('../../engine/simulation');
-const { unfinishedItems } = require('../../shared/roadmap-model');
 const { clientError, requireId } = require('../common');
 const {
   args,
@@ -121,19 +120,10 @@ module.exports = (ctx) => {
       return out.state === 'ok' ? out.model : null;
     } catch { return null; }
   }
-  const dangerScores = (model) => Object.fromEntries((model?.danger_zone || []).map((r) => [r.file, r.score]));
-  // the files each planned issue will change: a refactor's proposal, else the Product Owner's last plan group
-  function plannedFiles(id) {
-    const out = new Map();
-    for (const m of productOwnerMessages(id)) for (const g of m.answer?.groups || []) for (const n of g.issues || []) if (g.files?.length) out.set(Number(n), g.files);
-    for (const x of proposals.listProposals(root(), id)) if (x.issue) out.set(Number(x.issue), filesOf(x));
-    return out;
-  }
-  function productOwnerMessages(id) {
-    try { return require('../../product-owner').readConversation(ctx.ws.backlog, id).filter((m) => m.role === 'po' && m.answer); } catch { return []; }
-  }
+  // the files each planned issue will change (src/refactor-priority.js plannedFiles)
+  const plannedFiles = (id) => priority.plannedFiles({ refactorRoot: root(), backlogDir: ctx.ws.backlog, projectId: id });
   const { filesOf } = cadenceRules;
-  const withFiles = (item, planned) => ({ ...item, files: numbersOf(item.issues).flatMap((n) => planned.get(n) || []) });
+  const { withFiles } = priority;
   const syncedIssues = (id) => backlog.readBacklog(ctx.ws.backlog, id)?.issues || [];
 
   // ---- the roadmap item --------------------------------------------------------------------------
@@ -186,15 +176,8 @@ module.exports = (ctx) => {
     prioritizing.add(p.id);
     try {
       const simulated = !!mock || simulation.simulationOnly();
-      const list = proposals.listProposals(root(), p.id);
-      const planned = plannedFiles(p.id);
-      const unfinished = unfinishedItems(roadmapOf(p.id)).map((x) => ({ issue: numbersOf(x.issues)[0] || x.number, files: withFiles(x, planned).files }));
-      const conflictMap = conflictMaps.readConflictMap(ctx.ws.backlog, p.id);
-      const options = simulated || !list.some((x) => x.status !== 'dismissed') ? { mock: true } : realOptions(p);
-      const answer = await priority.prioritize({ proposals: list, unfinished, dangerScores: dangerScores(await modelOf(p)), hotSpots: conflictMaps.hotSpots(conflictMap), ...options });
-      const errors = priority.validatePriority({ ranking: answer.ranking });
-      if (errors.length) throw new Error(`The Product Owner's ranking is not valid: ${errors.join('; ')}`);
-      return proposals.saveRanking(root(), p.id, { ranking: answer.ranking }, { at: new Date().toISOString(), costUsd: answer.costUsd || 0 });
+      const { saved } = await priority.rankProject({ refactorRoot: root(), backlogDir: ctx.ws.backlog, projectId: p.id, model: await modelOf(p), mock: simulated, options: () => realOptions(p) });
+      return saved;
     } finally {
       prioritizing.delete(p.id);
     }
