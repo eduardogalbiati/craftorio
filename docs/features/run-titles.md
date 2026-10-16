@@ -24,3 +24,11 @@ order: 600
   rebuilt from its `events.jsonl`, read-only (no Stop, no gates). After a reload (Ctrl+R) or
   reopening the app, the runs in progress are rebuilt the same way, so their steps, sessions,
   orchestrator log and pending gates are all there.
+- **The Run screen's tab row** (#410, #412) is its first row, the same on the run chat: the tabs
+  **Chat | Details | 3D**, the run's status and id, then on the right the run's actions (on Details:
+  "+ When it finishes…" for a live run without a chain, Ask the supervisor, Watch, Resume from
+  step…, Review changes, Save to issue…, Open in Analytics, the map buttons) and, for a live run
+  of this window, **Pause after current step** and **Stop**. On a narrow window the actions wrap
+  to a second line. The fail, pause, chain and gate banners come below it; a live run without a
+  chain shows no chain banner. In Details the right panel opens on **Artifacts**, before Session
+  and Events.
