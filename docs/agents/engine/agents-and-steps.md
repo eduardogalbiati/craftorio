@@ -76,7 +76,9 @@ fields (references between steps, agents, transitions, groups) are the named rul
   green check, the first red commit) and the log; a test red again after a green check reopens its
   issue. Settings › Execution `baseCheck.onRed` (`off` | `issue` | `fix`, default `fix`)
   adds a fix item, mode auto, in a new stage before the roadmap's current one (`insertFrontStage`;
-  none while the roadmap plans that issue already). A red or failed check notifies the owner.
+  none while the roadmap plans that issue already). The fix item runs the project's default
+  development workflow (Settings › General › Backlog `defaultWorkflow`, #195, through
+  `DefaultWorkflow.resolve`, #413; unset or missing, its fallback, the local workflow). A red or failed check notifies the owner.
   It never pushes, never answers a gate and never changes a running item. The Roadmap bar shows
   "N known failures on the base" (`backlog:get` `baseFailures`). The
   suite gets a shell-like env (`suiteEnv`: no Electron/npm/inspector variables, no scratch

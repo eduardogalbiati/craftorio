@@ -5,13 +5,15 @@
 // "not tested green"). A check deferred while a release run held the base runs when a run of the
 // project ends and nothing holds it any more (afterBaseReleased). Both read Settings › Execution
 // baseCheck.onRed each time, and file through the project's synced platform and repository. A red
-// or failed check is a notice. A simulated run never reaches here; the check itself runs the suite
-// in simulation, never pushes.
+// or failed check is a notice. The fix item runs the project's default development workflow
+// (settings.defaultWorkflow through DefaultWorkflow.resolve, read each time, #413). A simulated run
+// never reaches here; the check itself runs the suite in simulation, never pushes.
 
 const fs = require('fs');
 const path = require('path');
 const baseHealth = require('../../base-health');
 const backlog = require('../../backlog');
+const DefaultWorkflow = require('../../shared/default-workflow');
 const projects = require('../../projects');
 const roadmaps = require('../../roadmap');
 const workspace = require('../../workspace');
@@ -29,6 +31,11 @@ module.exports = (ctx) => {
   // projectId -> the merge whose check a release deferred (the latest one: it checks the newest tip)
   const pending = new Map();
   const onRed = () => ({ ...workspace.DEFAULT_SETTINGS.baseCheck, ...(workspace.readSettings(ctx.ws).baseCheck || {}) }).onRed;
+  // #413: the fix item runs the default development workflow, as the Product Owner's plans and the Assign dialog
+  const fixWorkflow = () => DefaultWorkflow.resolve(
+    workspace.readSettings(ctx.ws).defaultWorkflow,
+    (ctx.listWorkflows?.() || []).filter((w) => !w.error && w.inputs?.task).map((w) => w.file),
+  ).file;
   // where an issue goes: the synced backlog's platform and repository (else the project's); none in simulation
   function issueTarget(projectId) {
     const data = backlog.readBacklog(ctx.ws.backlog, projectId);
@@ -46,7 +53,7 @@ module.exports = (ctx) => {
     const failures = ev.output?.preexisting_failures;
     if (!run.projectId || run.mock || !Array.isArray(failures) || !failures.length) return null;
     return baseHealth.recordPreexisting(ctx.ws.root, {
-      projectId: run.projectId, runId: run.runId, commit: ev.output.base_check?.commit, failures, onRed: onRed(), ...issueTarget(run.projectId),
+      projectId: run.projectId, runId: run.runId, commit: ev.output.base_check?.commit, failures, onRed: onRed(), workflow: fixWorkflow(), ...issueTarget(run.projectId),
     });
   }
 
@@ -90,7 +97,7 @@ module.exports = (ctx) => {
     const project = projects.readProject(ctx.ws.projects, run.projectId);
     if (!project.isGit || !base) return null;
     const check = baseHealth.runBaseCheck(ctx.ws.root, {
-      projectId: project.id, repo: project.folder, base, onRed: onRed(),
+      projectId: project.id, repo: project.folder, base, onRed: onRed(), workflow: fixWorkflow(),
       trigger: tested === 'not green' ? 'not-green' : 'merge',
       releaseHoldsBase: () => releaseHoldsBase(project.id),
       runSuite: suiteFor(project),
