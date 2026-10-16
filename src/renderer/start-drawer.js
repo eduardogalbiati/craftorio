@@ -10,6 +10,8 @@
 // Saved pipelines (#135) are listed after the workflows (option value `pipe:<file>`): picking one
 // asks for its first stage's inputs (its fixed ones set), shows the whole chain with a cost estimate
 // instead of the ChainPicker, and Start calls api.runPipeline.
+// An analysis workflow (ANALYSIS_WORKFLOWS, refactor-proposals.yaml, #378) shows its model turn's
+// estimate from api.architectureEstimate (#wf-estimate) before the start.
 
 const LS_KEY = 'multiagent.inputs';
 const PIPE = 'pipe:';
