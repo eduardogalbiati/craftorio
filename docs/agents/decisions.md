@@ -137,3 +137,15 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   belongs to the Product Owner; workflows, skills and runs belong to the Supervisor. The Oracle
   reads everything, diagnoses and proposes, but routes every change to the owning agent. Why: the
   Oracle's changes ended in its own history, made by an agent that does not hold that area's rules.
+- **2026-10-03** (#332, #222, #211, and #47 of 2026-09-29; options of #203, scenarios of #223):
+  tests are run and judged by the machine, never by a model. E2E tests stay on Playwright + BDD
+  (`playwright-bdd`), run deterministically; an LLM only writes and repairs them. Which test
+  failures are the run's (and which were already on the base) is decided by the orchestrator
+  (failing tests rerun on the base), never by an agent. Only the test writer writes, edits or
+  deletes tests; the developer changes production code only. In AI Development (local hero
+  included), unit and E2E tests are `write_and_run` by default (#332, from the owner's session);
+  cost is cut in prompts, retries and context, never by lowering test inputs. Replaces #199's "E2E
+  scenarios run only at release time". Why: the old E2E tests asserted little, the release run paid
+  a model to run the suite, failures already on main made every round fail and the run looped, and
+  overlapping test responsibilities made one run pay for the full suite up to four times; the tests
+  are why the app works, so savings go where they do not lower what is tested.

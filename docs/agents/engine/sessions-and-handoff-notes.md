@@ -18,7 +18,8 @@ Session modes (persistent, ephemeral, handoff), handoff notes, context and reque
   read at each turn: a change in Settings › Language applies from the next turn). It names the AI
   agents language (prose, notes, documents) and the issues language (issues, PR/MR descriptions,
   commit messages), and keeps JSON keys, enum values, paths, branches, labels and `Closes #n` as
-  they are. Its text only changes with the setting, so the prompt cache holds. It is not part of
+  they are; when both are English it is one short line (the develop prompt's 40K budget). Its
+  text only changes with the setting, so the prompt cache holds. It is not part of
   the step prompt, so retries and test requests that resend the prompt do not repeat it. The
   output instruction (`outputInstruction`), the schema retry (`retryLanguage`) and the handoff
   request name English when unset (today's text) and otherwise ask for prose in the agents

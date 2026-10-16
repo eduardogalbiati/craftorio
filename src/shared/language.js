@@ -7,8 +7,8 @@
 // - agentsLanguage(settings) / issuesLanguage(settings): the code each setting resolves to ('en' when
 //   unset or unknown); labelOf(code): its own name;
 // - languageLine(settings): the one [Language] line every agent turn gets (engine steps, the Oracle,
-//   the Product Owner, the Supervisor), what follows each language and what never changes; its text
-//   changes only with the setting, so the prompt cache holds;
+//   the Product Owner, the Supervisor), what follows each language and what never changes (a short
+//   line when both are English); its text changes only with the setting, so the prompt cache holds;
 // - outputInstruction(code) / retryLanguage(code) / handoffLanguage(code): the engine's texts on a
 //   step's JSON, its schema retry and its handoff note (English: today's exact texts);
 // - issueHeadings(code): the structure the app writes itself in an issue (## Tasks, Related:,
@@ -39,14 +39,19 @@
   const issuesLanguage = (settings) => codeOf(settings?.language?.issues);
   const labelOf = (code) => (LANGUAGES.find((l) => l.code === code) || LANGUAGES[0]).label;
 
+  // English everywhere: a short line, the prompts' own English texts already say the rest (the develop
+  // prompt's 40K budget, test/slow/develop-prompt-300.slow.test.js)
+  const ENGLISH_LINE = '[Language] English: prose, issues, PRs and commits.';
+
   /** The [Language] line of a turn: one line, deterministic for the same settings. */
   function languageLine(settings) {
-    const agents = labelOf(agentsLanguage(settings));
-    const issues = labelOf(issuesLanguage(settings));
-    return `[Language] Write chat replies, the prose of step outputs, handoff notes, decision logs and documents in ${agents};`
-      + ` write issues, issue comments, PR/MR descriptions and commit messages in ${issues}.`
-      + ' Keep JSON keys and enum values exactly as the schema names them, and file paths, branch names, test ids and label names unchanged;'
-      + ' code and code comments follow the project\'s conventions; closing keywords stay English (Closes #n, Fixes #n).'
+    const agentsCode = agentsLanguage(settings);
+    const issuesCode = issuesLanguage(settings);
+    if (agentsCode === ENGLISH && issuesCode === ENGLISH) return ENGLISH_LINE;
+    return `[Language] Write chat replies, the prose of step outputs, handoff notes, decision logs and documents in ${labelOf(agentsCode)};`
+      + ` issues, issue comments, PR/MR descriptions and commit messages in ${labelOf(issuesCode)}.`
+      + ' Keep JSON keys and enum values exactly as the schema names them, and paths, branch names, test ids and labels unchanged;'
+      + ' code follows the project\'s conventions; closing keywords stay English (Closes #n).'
       + ' This line overrides what CLAUDE.md, AGENTS.md or a skill say about language.';
   }
 
