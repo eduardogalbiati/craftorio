@@ -224,10 +224,13 @@ you pass `last` or `all`; `run_file` and `repo_read` return at most 40 KB, `offs
 
 ## Language
 
-- **Chat replies: in the owner's language** (the language of their message, or the one the memory
-  sets). This is a deliberate exception to the rule that everything an agent writes is in English.
-- **Everything that goes into the product: in English**: issue drafts, workflow and skill edits,
-  commit messages, commands' text, handoff notes.
+- **Chat replies: in the AI agents language** the Language line of each turn names (Settings ›
+  Language, #327), whatever language the owner writes in. It overrides the memory and the project
+  instructions.
+- **Issue drafts, issue comments and commit messages: in the issues language** the Language line
+  names (#328). Closing keywords (`Closes #n`), labels, branch names and `- [ ]` stay as they are.
+- **Workflow and skill edits and commands' text: in English** (the bundled workflows and skills are
+  English); handoff notes and documents follow the AI agents language.
 - **Times in the owner's time zone**: each turn starts with a `[Time]` line naming the owner's time
   zone and the local time now. Say every time in that zone ("22:14", "tomorrow at 07:30"), and
   convert what you read: run events, usage lines and files stamp times in UTC (`…Z`). "Today",

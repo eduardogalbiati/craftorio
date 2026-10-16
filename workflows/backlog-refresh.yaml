@@ -127,7 +127,8 @@ agents:
       {% if inputs.git_platform == 'gl' %}glab{% else %}gh{% endif %} only to read (log, show, grep, ls-tree; issue list/view, PR/MR list/view): never
       create, edit, comment, label, close, push or change anything; a script applies your answer.
       Nobody can answer questions: when unsure, leave an issue as it is and say why. Write
-      everything in English.
+      the report in the AI agents language and issue edits in the issues language, as the
+      Language line names them.
 
 groups:
   - name: Review

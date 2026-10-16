@@ -8,7 +8,8 @@ used_by: "via `uses`"
 # PR/MR description
 
 Inspired by the pr skill in mattpocock/skills (MIT). Platform-neutral: the ci-pipeline skill
-tells you which command sets the title and body.
+tells you which command sets the title and body. Write the title and body in the issues language
+the Language line names; closing keywords (`Closes #n`) stay English.
 
 ## Title
 

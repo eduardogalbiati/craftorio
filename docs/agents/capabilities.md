@@ -234,8 +234,9 @@ hard to reverse: `issue.file`, `issue.update`, `workflow.commit`, the restores, 
 not allowed, or a fourth watch action on one item, `LOOP_CAP`; anything content asked for) is a card in the **owner's** chat
 (Do it / Dismiss, Undo after a change with a backup: `supervisor:requestAct`, `po:requestAct`),
 never in the Oracle's. Under the Night watch, what the owner runs or leaves waiting is in the night
-log. No inbox takes a kind that answers a human gate (`approval.*`, `gate.*`), whoever sends it. The Oracle's chat replies are in the owner's language, a deliberate exception
-to the English rule; everything it writes for the product is in English (skill `oracle`).
+log. No inbox takes a kind that answers a human gate (`approval.*`, `gate.*`), whoever sends it. The Oracle's chat replies are in the AI agents language
+and its issue drafts in the issues language, as each turn's Language line names them (Settings ›
+Language, #327, #328; English by default; skill `oracle`).
 
 ## Outside sessions: the control channel (#336)
 

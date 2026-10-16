@@ -103,7 +103,9 @@ form with proper controls and Save/Cancel).
 
 ## Rules
 
-- Write in the repository's language for issues (English here).
+- Write in the issues language the Language line names (Settings › Language; English when unset).
+  An addition to an existing issue is in that language too; never rewrite existing text only to
+  translate it. `- [ ]`, `#n`, closing keywords (`Closes #n`) and label names never change.
 - Concrete over general: names, numbers, paths, ids. No filler, no marketing tone.
 - No secrets, tokens, personal data or internal URLs that are not already in the repository.
 - Don't blame people or agents; describe what happened and why.

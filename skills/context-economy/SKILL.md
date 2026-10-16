@@ -103,7 +103,8 @@ or to read a long failure output.
 ## Leave a good handoff note
 
 Your next turn may start in a fresh session that only has your handoff note (the orchestrator
-asks for it at the end of each turn). Write it in English so that turn can act without re-exploring:
+asks for it at the end of each turn). Write it in the language the Language line names (English when there is none) so that turn can
+act without re-exploring:
 - the branch, the commits (hashes) and what each one does;
 - what is left, in order, and the decisions you made with their reasons;
 - the key files with the line ranges that matter;

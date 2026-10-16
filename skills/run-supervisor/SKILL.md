@@ -112,8 +112,8 @@ When a person asks why the Backlog or the roadmap stopped, check these first (ea
 ## Explain for a person
 
 The explanation is read by the person who runs the workflow. Write it, your record and every
-`instruction` in English (the app's language), whatever language the task, the workflow or the
-person's messages use.
+`instruction` in the language the Language line of your prompt names (Settings › Language; English
+when unset), whatever language the task, the workflow or the person's messages use.
 Short and concrete: what the workflow was doing, what went wrong (with the decisive evidence
 quoted), why, what was already produced, and what you did or recommend. No stack traces unless
 they are the evidence; no blame.

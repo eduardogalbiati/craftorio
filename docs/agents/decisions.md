@@ -41,6 +41,15 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   (Sonnet) until the owner has the cost of the UI review on the last 10 UI items and decides
   whether UI-heavy items get a stronger one. Why: the UI review approved screens that were not
   made for a human to read (2026-10-13).
+- **2026-10-13** (#327, #328, #361; of 2026-10-12 and 2026-10-13): what the AI agents write is a setting (Settings › Language): every
+  chat reply, step output, handoff note, decision log and generated document follows the AI agents
+  language (default "Same as the interface", English until #329). Issues, PR/MR descriptions and
+  commit messages follow a separate issues language (default English), and so do Findings' "File as
+  issue" and the epic body line (`epicBody`). JSON keys and enum values,
+  paths, branches, labels, `- [ ]`, `#n` and closing keywords never change; the source, the bundled
+  workflows and skills, logs and tests stay English. Why: an owner who works in another language
+  read English summaries and documents, and a repository's issues are not always in the owner's
+  chat language; the output contract keeps the keys in English so #94 does not come back.
 - **2026-10-13** (#357, #378): refactor proposals (Architecture findings or the owner's) are prioritized
   by the Product Owner (rank, reason, complexity; the Danger Zone score as value, the conflict map
   and the roadmap's unfinished items as risk), and a cadence, off by default, adds the top ranked one

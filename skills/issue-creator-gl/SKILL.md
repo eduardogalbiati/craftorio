@@ -9,7 +9,8 @@ used_by: "issue-tracker (code_analyzer, issue_filer), backlog planner (#30), any
 # Issue creator: GitLab (glab CLI)
 
 Requires an authenticated `glab` (`glab auth status`). Write the content following
-`issue-writing`; this skill covers only the commands.
+`issue-writing`, in the issues language the Language line names; this skill covers only the
+commands.
 
 ## How to call glab
 
