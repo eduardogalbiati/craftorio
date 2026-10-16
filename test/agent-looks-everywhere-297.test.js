@@ -29,6 +29,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const { withI18n } = require('./i18n-sandbox.js');
 
 const RENDERER = path.join(__dirname, '..', 'src', 'renderer');
 const read = (...p) => fs.readFileSync(path.join(RENDERER, ...p), 'utf8');
@@ -49,7 +50,7 @@ const WF = {
 
 function loadRobots() {
   const sandbox = { window: {}, document: { dispatchEvent() {} }, CustomEvent: class { constructor(type, init) { this.type = type; this.detail = init?.detail; } } };
-  vm.createContext(sandbox);
+  vm.createContext(withI18n(sandbox));
   vm.runInContext(read('robots.js'), sandbox);
   return sandbox.window.Robots;
 }
@@ -75,7 +76,7 @@ function loadView(windowGlobals) {
     window: { Run3DTheme: { pick: (name) => ({ name: name || 'dark', status: {} }) }, ...windowGlobals },
     console,
   };
-  vm.createContext(sandbox);
+  vm.createContext(withI18n(sandbox));
   vm.runInContext(`${src}\nthis.__mod = { ${names.join(', ')} };`, sandbox, { filename: 'run3d/view.js' });
   return sandbox.__mod;
 }
@@ -258,7 +259,7 @@ function loadAgentsScreen({ agents = AGENTS } = {}) {
     api: { listAgents: async () => agents, listSkills: async () => [], saveAgent: async () => ({}), createAgent: async () => ({}), removeAgent: async () => ({}) },
   };
   sandbox.window = sandbox;
-  vm.createContext(sandbox);
+  vm.createContext(withI18n(sandbox));
   vm.runInContext(read('views', 'agents', 'agents.js'), sandbox, { filename: 'views/agents/agents.js' });
   const view = defs.find((d) => d.id === 'agents');
   assert.ok(view, 'agents.js registers the "agents" view');

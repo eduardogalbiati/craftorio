@@ -20,8 +20,8 @@ test('itemHtml: every item shows a pencil and a trash can, not only a resumed CL
   const itemHtml = /function itemHtml\(\{[\s\S]*?\n  \}/.exec(src)[0];
   assert.match(itemHtml, /class="icon-btn sx-item-rename"/);
   assert.match(itemHtml, /class="icon-btn sx-item-close"/);
-  assert.match(itemHtml, /aria-label="Rename"/);
-  assert.match(itemHtml, /aria-label="\$\{exited \? 'Close' : 'End session'\}"/);
+  assert.match(itemHtml, /aria-label="\$\{t\('sessions\.rename'\)\}"/);
+  assert.match(itemHtml, /aria-label="\$\{t\(exited \? 'common\.close' : 'sessions\.end_session'\)\}"/);
   // both icons sit together so hover/focus-within reveals them as one group (sessions.css)
   assert.match(itemHtml, /sx-item-actions/);
 });

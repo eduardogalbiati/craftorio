@@ -9,6 +9,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const { withI18n } = require('./i18n-sandbox.js');
 const RunBadges = require('../src/renderer/run-badges');
 
 // run titles, issues and PRs moved into run-meta.js: both files are searched
@@ -91,7 +92,7 @@ function load() {
       }[sel] || null),
     },
   };
-  vm.createContext(sandbox);
+  vm.createContext(withI18n(sandbox));
   vm.runInContext(`${body}\nthis.helpers = { navRunsList, navRunState, renderNavRuns, statusLabel };`, sandbox);
   return { ...sandbox.helpers, state, elements: { gates, item, count, box } };
 }

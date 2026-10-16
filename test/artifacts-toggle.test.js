@@ -10,6 +10,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const { withI18n } = require('./i18n-sandbox.js');
 
 const renderSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'artifact-render.js'), 'utf8');
 const artifactsSrc = fs.readFileSync(
@@ -92,7 +93,7 @@ function load({ runs = [], q = '', projectId = '', showSim = false, developerMod
     errMsg: (e) => String(e?.message || e),
     StatusPill: require('../src/renderer/status-pill.js'), // the real readable statuses (#266)
   };
-  vm.createContext(sandbox);
+  vm.createContext(withI18n(sandbox));
   vm.runInContext(
     `${body}\nthis.fns = { artifactRunsFiltered, renderArtifactList, paintArtToggleAll, toggleAllArtGroups, artGroupOpen, setArtGroupOpen };`,
     sandbox,

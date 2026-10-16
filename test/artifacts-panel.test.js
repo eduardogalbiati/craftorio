@@ -9,6 +9,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const { withI18n } = require('./i18n-sandbox.js');
 
 const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'artifacts-panel.js'), 'utf8');
 const html = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'index.html'), 'utf8');
@@ -17,7 +18,7 @@ const runSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'vi
 
 test('the Run screen has an Artifacts tab next to Session and Events, with a count badge', () => {
   // #410: Artifacts is the first tab and a run opens on it
-  assert.match(runSrc, /<button class="tab active"[^>]*data-tab="artifacts"[^>]*>Artifacts <span id="tab-artifacts-count"/);
+  assert.match(runSrc, /<button class="tab active"[^>]*data-tab="artifacts"[^>]*>\$\{t\('run\.artifacts'\)\} <span id="tab-artifacts-count"/);
   assert.match(runSrc, /id="tab-artifacts" class="tab-body"/);
   assert.match(html, /<script src="artifacts-panel\.js"><\/script>/);
 });
@@ -66,7 +67,7 @@ function loadPanel(opts = {}) {
     document: {},
     setTimeout, clearTimeout, Date,
   };
-  vm.createContext(sandbox);
+  vm.createContext(withI18n(sandbox));
   vm.runInContext(src, sandbox);
   return { ArtifactsPanel: sandbox.window.ArtifactsPanel, calls };
 }

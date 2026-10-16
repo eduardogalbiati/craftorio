@@ -7,6 +7,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const { withI18n } = require('./i18n-sandbox.js');
 
 const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'run-list.js'), 'utf8');
 
@@ -24,7 +25,7 @@ function loadHelpers() {
     code[name] = m[0];
   }
   const sandbox = { esc: (s) => s };
-  vm.createContext(sandbox);
+  vm.createContext(withI18n(sandbox));
   vm.runInContext(Object.values(code).join('\n') + '\nthis.helpers = { nestChildRuns, childRunBadges, groupArtifacts };', sandbox);
   return sandbox.helpers;
 }

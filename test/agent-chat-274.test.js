@@ -56,6 +56,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const { withI18n } = require('./i18n-sandbox.js');
 const { createDom, textOf } = require('./mini-dom');
 
 const ROOT = path.join(__dirname, '..');
@@ -109,7 +110,7 @@ function loadModule() {
   sandbox.self = sandbox;
   sandbox.document = dom.document;
   Object.assign(sandbox, dom.classes);
-  vm.createContext(sandbox);
+  vm.createContext(withI18n(sandbox));
   vm.runInContext(fs.readFileSync(path.join(RENDERER, 'live-turn.js'), 'utf8'), sandbox, { filename: 'live-turn.js' });
   vm.runInContext(fs.readFileSync(MODULE, 'utf8'), sandbox, { filename: 'agent-chat.js' });
   assert.equal(typeof sandbox.AgentChat?.create, 'function', 'agent-chat.js sets window.AgentChat with a create function');

@@ -26,6 +26,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const { withI18n } = require('./i18n-sandbox.js');
 const yaml = require('js-yaml');
 const AgentColors = require('../src/renderer/agent-colors.js');
 const { displayName } = require('../src/shared/display-name.js');
@@ -88,7 +89,7 @@ function tooltipText(html) {
 
 function loadRobots() {
   const sandbox = { window: {} };
-  vm.createContext(sandbox);
+  vm.createContext(withI18n(sandbox));
   vm.runInContext(read('robots.js'), sandbox);
   return sandbox.window.Robots;
 }
@@ -110,7 +111,7 @@ function loadRunList() {
     requestAnimationFrame: () => 0,
   };
   sandbox.window = sandbox;
-  vm.createContext(sandbox);
+  vm.createContext(withI18n(sandbox));
   vm.runInContext(read('status-pill.js'), sandbox);
   vm.runInContext(read('..', 'shared', 'run-progress-model.js'), sandbox);
   vm.runInContext(read('run-list.js'), sandbox);
@@ -154,7 +155,7 @@ function loadRoadmap() {
   sandbox.clearTimeout = clearTimeout;
   sandbox.window = sandbox;
   sandbox.window.showRun = () => {};
-  vm.createContext(sandbox);
+  vm.createContext(withI18n(sandbox));
   vm.runInContext(read('status-pill.js'), sandbox);
   vm.runInContext(read('..', 'shared', 'run-progress-model.js'), sandbox);
   vm.runInContext(read('..', 'shared', 'default-workflow.js'), sandbox);
@@ -190,7 +191,7 @@ function loadPanel({ ev, files }) {
     document: {},
     setTimeout, clearTimeout, Date,
   };
-  vm.createContext(sandbox);
+  vm.createContext(withI18n(sandbox));
   vm.runInContext(read('artifacts-panel.js'), sandbox);
   return sandbox.window.ArtifactsPanel;
 }
