@@ -28,8 +28,14 @@ function method(entry) {
   return (...args) => ipcRenderer.invoke(entry.channel, payload(entry.params, args));
 }
 
-// externalTerminal: { available, reason? }, whether the ↗ buttons can open a terminal window (#318)
-const api = { platform: process.platform, externalTerminal: ipcRenderer.sendSync('terminal:external-sync') };
+// externalTerminal: { available, reason? }, whether the ↗ buttons can open a terminal window (#318).
+// engineConnection: where the engine of this window runs; a window with this preload always shows
+// the engine of this computer (a remote engine's window has no preload: api-http.js says 'remote').
+const api = {
+  platform: process.platform,
+  externalTerminal: ipcRenderer.sendSync('terminal:external-sync'),
+  engineConnection: { mode: 'local' },
+};
 for (const entry of ipcRenderer.sendSync('api:manifest') || []) {
   if (entry.method) api[entry.method] = method(entry);
 }
