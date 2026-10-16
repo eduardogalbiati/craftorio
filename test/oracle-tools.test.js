@@ -30,7 +30,8 @@ steps:
 function makeCtx(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'oracle-tools-'));
   process.env.MULTIAGENT_SIMULATION_ONLY = '1'; // tests never call real models
-  const service = createService({ host: { trashItem: async () => {}, appVersion: '9.9.9', isPackaged: false } });
+  // #408: an empty CLI home, never the machine's transcripts
+  const service = createService({ host: { trashItem: async () => {}, appVersion: '9.9.9', isPackaged: false, cliHome: path.join(dir, 'cli-home') } });
   t.after(async () => {
     for (const run of service.api['runs:active']()) {
       try { service.api['run:stop']({ runId: run.runId }); } catch { /* already ended */ }
