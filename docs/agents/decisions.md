@@ -41,13 +41,20 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   (Sonnet) until the owner has the cost of the UI review on the last 10 UI items and decides
   whether UI-heavy items get a stronger one. Why: the UI review approved screens that were not
   made for a human to read (2026-10-13).
-- **2026-10-13** (#357): refactor proposals (Architecture findings or the owner's) are prioritized
+- **2026-10-13** (#357, #378): refactor proposals (Architecture findings or the owner's) are prioritized
   by the Product Owner (rank, reason, complexity; the Danger Zone score as value, the conflict map
   and the roadmap's unfinished items as risk), and a cadence, off by default, adds the top ranked one
   that has an issue to the roadmap every X real runs of the project (3 to 50). The item counts in the
   budget cap and never crosses a gate. Success is measured on the map: the target's Danger Zone score
   before and after, kept with the proposal. Why: agents left alone add features and rarely
-  restructure, so the cadence has to be explicit.
+  restructure, so the cadence has to be explicit. #378: the suggestions are also a workflow
+  (`refactor-proposals.yaml`), so a saved pipeline runs them after a release
+  (`release-then-refactors.yaml`: release → proposals since `previous_version` → the Product Owner).
+  It reuses #356's prompt and report schema (a named `output_schema: architecture_report`, not a
+  copy) and #357's store, ranking and filing; known findings (an open or dismissed proposal, an open
+  `refactor` issue) are dropped and named. Auto mode files the top `limit`; validated mode asks at a
+  gate, where a proposal is dropped by dismissing it on the Refactor tab. Why: refactors suggested
+  after every release without clicking through two tabs; the release's gates stay human.
 - **2026-10-13** (#381, #382): one click analyses a project: "Analyze this project" in the
   Architecture tab runs the project map (the city plan) and the Oracle's analysis together, as one
   run of `project-map.yaml`, with its combined estimate shown first and no human gate (validated

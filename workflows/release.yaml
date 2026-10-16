@@ -516,6 +516,14 @@ outputs:
     type: string
     description: The release's name (the tag Ship pushes).
     value: "{{ inputs.version or ('release-' ~ run_id) }}"
+  previous_version:
+    type: string
+    description: "The tag before this release (empty when the project has none): the `since` of a refactor-proposals stage (#378)."
+    value: "{{ steps.version.output.previous_version or '' }}"
+  commit:
+    type: string
+    description: "The shipped commit (empty when the run did not ship, or in a simulation)."
+    value: "{{ release.commit if release and release.commit else '' }}"
   unit_status:
     type: string
     description: "pass, fail or blocked: the last pass of the unit suite."

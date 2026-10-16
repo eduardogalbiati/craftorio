@@ -103,6 +103,8 @@ function runMachine(machine, mock, sequences) {
 
 // The run's test workers (#367): { testWorkers } for a whole number from 1, else null (not set).
 const runWorkers = (testWorkers) => (Number.isInteger(testWorkers) && testWorkers >= 1 ? { testWorkers } : null);
+// A service hook given as an option (architectureOracle, refactorPriorityOptions): the function, else null
+const functionOrNull = (f) => (typeof f === 'function' ? f : null);
 // #396: the failures of the suite steps that ended red, with their class (in or outside the change)
 const testedFailures = (steps) => Object.entries(steps)
   .filter(([, s]) => s?.output?.kind === 'suite' && s.output.status === 'fail')
@@ -174,8 +176,8 @@ class WorkflowRun extends EventEmitter {
     this.file = file;
     this.wf = loadWorkflow(file);
     this.mock = !!mock;
-    this.architectureOracle = typeof architectureOracle === 'function' ? architectureOracle : null;
-    this.refactorPriorityOptions = typeof refactorPriorityOptions === 'function' ? refactorPriorityOptions : null;
+    this.architectureOracle = functionOrNull(architectureOracle);
+    this.refactorPriorityOptions = functionOrNull(refactorPriorityOptions);
     this.mockSequences = mockSequences || null;
     this.machine = runMachine(machine, this.mock, this.mockSequences);
     this.notices = notices || [];

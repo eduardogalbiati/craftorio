@@ -247,19 +247,19 @@ function pipelineCard(p) {
     const map = Object.entries(s.map || {}).map(([input, output]) => `<span class="badge" title="${esc(`Output "${output}" of the previous workflow → input "${input}"`)}">${esc(output === '@run' ? 'the run' : output)} → ${esc(input)}</span>`).join('');
     const link = i ? `<div class="wf-link"><span class="wf-link-arrow" aria-hidden="true">→</span>${map}<span class="muted small">on ${esc(s.on || s.when || 'success')}</span></div>` : '';
     if (s.target === 'product_owner') {
-      return `${link}<span class="wf-stage wf-stage-target" title="The Product Owner places the produced issues in the project's roadmap as planned stages"><b>Product Owner</b><span class="badge">roadmap</span></span>`;
+      return `${link}<span class="wf-stage wf-stage-target" data-testid="pipeline-stage" title="The Product Owner places the produced issues in the project's roadmap as planned stages"><b>Product Owner</b><span class="badge">roadmap</span></span>`;
     }
-    return `${link}<button class="wf-stage" data-goto="${esc(s.workflow)}" title="${esc(w ? `${s.target === 'queue' ? 'The produced issues are queued for ' : ''}${w.name} (${s.workflow})` : `${s.workflow}: not in the workflows folder`)}">
+    return `${link}<button class="wf-stage" data-testid="pipeline-stage" data-goto="${esc(s.workflow)}" title="${esc(w ? `${s.target === 'queue' ? 'The produced issues are queued for ' : ''}${w.name} (${s.workflow})` : `${s.workflow}: not in the workflows folder`)}">
       <b>${s.target === 'queue' ? 'Queue: ' : ''}${esc(w?.name || s.workflow)}</b>
       ${w ? `<span class="badge cat-${esc(wfSectionOf(w.category))}">${esc(wfSectionName(wfSectionOf(w.category)))}</span>` : '<span class="badge warn">missing</span>'}
     </button>`;
   }).join('');
   return `
-    <article class="wf-pipe" data-pipe="${esc(p.file)}" data-files="${esc(p.stages.map((s) => s.workflow || '').join('|'))}" tabindex="-1">
+    <article class="wf-pipe" data-testid="pipeline-card" data-pipe="${esc(p.file)}" data-files="${esc(p.stages.map((s) => s.workflow || '').join('|'))}" tabindex="-1">
       <div class="wf-pipe-head">
         <span class="badge">pipeline</span>
         <h3 title="${esc(p.name)}">${esc(p.name)}</h3>
-        <span class="muted small wf-desc" title="${esc(p.error ? `Error: ${p.error}` : p.description || '')}">${esc(p.error ? `Error: ${p.error}` : p.description || '')}</span>
+        <span class="muted small wf-desc" data-testid="pipeline-description" title="${esc(p.error ? `Error: ${p.error}` : p.description || '')}">${esc(p.error ? `Error: ${p.error}` : p.description || '')}</span>
         <span class="spacer"></span>
         ${p.origin ? originBadge(p) : ''}
         <span class="badge mono wf-file" title="${esc(p.file)}">${esc(p.file)}</span>

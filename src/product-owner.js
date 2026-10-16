@@ -1620,7 +1620,9 @@ function lastWorkflow(backlogDir, projectId) {
 }
 
 async function callAgent({ mode = 'plan', question = '', report, previous = [], attachments = [], selection = [], folder, agent, skillsDirs, resolveCommand, onItem = () => {}, signal = null, calibration = null, cost = null, workflow = null, costOff = false, timeZone = null }) {
-  const { extractJson, validateSchema, render } = require('./engine/workflow');
+  // the run modules, not engine/workflow: the engine reaches this module through refactor-priority (#378)
+  const { extractJson, validateSchema } = require('./engine/run/outputs');
+  const { render } = require('./engine/run/templates');
   const { runTurn, isImagePath } = require('./engine/providers');
   const { resolveSkill, skillPrompt } = require('./skills');
   const { providerArgs, normalize, dedupeFlags } = require('./engine/capabilities');

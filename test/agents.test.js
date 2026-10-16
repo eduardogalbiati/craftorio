@@ -237,6 +237,7 @@ test('listAgents(dir, { workflowsDir }) lists every agent of every workflow afte
     'workflow:multi-model-review.yaml:blaster',
     'workflow:multi-model-review.yaml:judge',
     'workflow:project-map.yaml:cartographer',
+    'workflow:refactor-proposals.yaml:analyst',
     'workflow:refactor.yaml:test_writer',
     'workflow:refactor.yaml:developer',
     'workflow:refactor.yaml:reviewer',
