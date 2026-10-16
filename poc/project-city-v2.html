@@ -112,6 +112,10 @@
   .tag.port { background: var(--r3d-accent); color: var(--r3d-on-accent); }
   .tag.port span { color: inherit; opacity: .8; }
   .tag.port .dot { background: var(--r3d-on-accent); opacity: .75; }
+  /* the score badges over the buildings of the district in focus (the Facts tab's score) */
+  .tag.score { padding: 2px 7px; font-size: 11px; font-weight: 750; background: var(--c, var(--r3d-grey)); color: #0b0d12; box-shadow: 0 2px 8px rgba(0, 0, 0, .4); gap: 0; }
+  .tag.score .dot { display: none; }
+  .score-badge { display: inline-block; min-width: 34px; text-align: center; padding: 2px 8px; border-radius: 999px; background: var(--c, var(--r3d-grey)); color: #0b0d12; font-weight: 750; }
 
   /* top bar: .r3d-top, .r3d-brand, .r3d-search, .r3d-chip, .r3d-close */
   .top { top: 14px; left: 14px; right: 14px; height: 54px; display: flex; align-items: center; gap: 12px; padding: 0 10px 0 16px; }
@@ -1092,7 +1096,7 @@ function paint() {
 /** (Re)builds the meshes from a layout: the floor and slabs, labels, the instanced buildings and their details, docks and tags. */
 function build(l) {
   layout = l;
-  city.clear(); blockMeshes = []; zoneMeshes = []; districtLabels = []; tags = []; beacons = []; tagLayer.innerHTML = '';
+  city.clear(); blockMeshes = []; zoneMeshes = []; districtLabels = []; tags = []; beacons = []; tagLayer.innerHTML = ''; scoreTags = []; scoreDistrict = null;
   const b = l.bounds, quay = 14, shore = 170;
   // the water around the city (the ports' docks stand over it) and the ground: a quay past the ring road
   city.add(slab({ x: b.x - shore, y: b.y - shore, w: b.w + 2 * shore, h: b.h + 2 * shore }, -0.18, 0.4, 14, waterMaterial()));
@@ -1329,6 +1333,7 @@ function cardRows(b) {
   return `<dl class="rows">
     <dt>District</dt><dd title="${esc(b.district)}">${esc(d ? d.name : b.district)}</dd>
     <dt>Zone</dt><dd>${esc(z ? z.name : b.zone)} <span class="muted">· ${esc((z || {}).kind || '')}</span></dd>
+    <dt>Score</dt><dd>${b.score == null ? '—' : `<span class="score-badge" style="--c:${T.quadrant[b.quadrant] || T.unmeasured}">${b.score.toFixed(1)}</span>`}</dd>
     <dt>Model</dt><dd>${esc((layout && byLayout(b.path) || {}).kind || '—')}</dd>
     <dt>Lines</dt><dd>${fmt(b.loc)}</dd>
     <dt>Complexity</dt><dd>${b.complexity == null ? '—' : `${fmt(b.complexity)} <span class="muted">· worst ${fmt(b.worst)}</span>`}</dd>
@@ -1485,7 +1490,7 @@ function legend() {
   if (mode === 'quadrant') html = `<h4>Quadrant (complexity × churn)</h4>${Object.keys(T.quadrant).map((k) => row(T.quadrant[k], k, QUADRANT_WHY[k])).join('')}${row(T.unmeasured, 'Not measured', 'Rust, CSS, YAML, JSON…')}${row(T.campus, 'Campus (tests)', 'no complexity, shown lower')}`;
   else if (mode === 'zone') html = `<h4>Zones (a material per kind)</h4>${model.zones.map((z) => row(kindOf(z.kind).tint, z.name, z.kind)).join('')}`;
   else html = `<h4>Churn (commits that touched the file)</h4><div class="ramp"></div><div class="ramp-ends"><span>0</span><span>${fmt(MAX_CHURN)}</span></div>`;
-  $('legend').innerHTML = `${html}<div class="how">Footprint grows with the lines, height with the complexity (the lines when there is none); the shape is the file's model (shed, pavilion, hall, block, tower, complex) plus its quadrant's props; windows are real floors, lit by churn; the mast is the worst function. Avenues separate zones, streets separate districts.</div>`;
+  $('legend').innerHTML = `${html}<div class="how">Footprint grows with the lines, height with the complexity (the lines when there is none); the shape is the file's model (shed, pavilion, hall, block, tower, complex) plus its quadrant's props; windows are real floors, lit by churn; the mast is the worst function. Up close, the district in focus shows each file's score. Avenues separate zones, streets separate districts.</div>`;
 }
 function setMode(m) { mode = m; for (const b of $('mode').querySelectorAll('button')) b.classList.toggle('on', b.dataset.mode === m); legend(); paint(); }
 $('mode').addEventListener('click', (ev) => { const b = ev.target.closest('button'); if (b) setMode(b.dataset.mode); });
@@ -1545,6 +1550,25 @@ function lod(force) {
   for (const l of districtLabels) l.visible = level >= 1;
   for (const k in kinds) if (kinds[k].userData.detail) kinds[k].visible = level >= 1;
 }
+// the scores: up close, every building of the district under the camera's target wears its score (the Facts tab's)
+let scoreTags = [], scoreDistrict = null;
+function showScores(g) {
+  if (g === scoreDistrict) return;
+  for (const t of scoreTags) { t.el.remove(); tags.splice(tags.indexOf(t), 1); }
+  scoreTags = []; scoreDistrict = g;
+  if (!g) return;
+  for (const it of layout.buildings) {
+    if (it.district !== g || it.b.score == null) continue;
+    const t = tag(it.b.score.toFixed(1), '', new THREE.Vector3(it.x, Y0 + it.top + 0.8, it.z), T.quadrant[it.b.quadrant] || T.unmeasured, 'score');
+    t.el.style.setProperty('--c', T.quadrant[it.b.quadrant] || T.unmeasured);
+    tags.push(t); scoreTags.push(t);
+  }
+}
+function scoresFollow() {
+  if (lodLevel < 2 || !layout || layout.showroom) { showScores(null); return; }
+  const x = controls.target.x, z = controls.target.z;
+  showScores(layout.districts.find((g) => x >= g.rect.x && x <= g.rect.x + g.rect.w && z >= g.rect.y && z <= g.rect.y + g.rect.h) || null);
+}
 const v = new THREE.Vector3();
 /** Projects the tags; one that would overlap another already placed moves up until it is clear. */
 function placeTags() {
@@ -1599,7 +1623,7 @@ function frame(now) {
     if (t) showTip(t, lastEvent); else showTip(null);
     renderer.domElement.style.cursor = t ? 'pointer' : '';
   }
-  placeTags();
+  scoresFollow(); placeTags();
   drive(now); animate(now);
   if (glow) composer.render(); else renderer.render(scene, camera);
   window.cityFrames++;
