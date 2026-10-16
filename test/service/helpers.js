@@ -116,12 +116,15 @@ steps:
 // the service down and only then removes the workspace directory. node:test runs t.after hooks
 // in the order they were added, so registering this before any test-specific hook (which may
 // also try to stop the same run, harmlessly, once it is already gone) keeps rmSync last.
+// #408: the CLIs' transcripts are read from an empty home of the test (host.cliHome), never from the
+// machine's ~/.claude, ~/.codex and ~/.grok (slow, and different on every machine).
 function makeService(t, hostExtra = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'service-ws-'));
+  const cliHome = fs.mkdtempSync(path.join(os.tmpdir(), 'service-cli-home-'));
   process.env.MULTIAGENT_SIMULATION_ONLY = '1'; // tests never call real models
   process.env.MULTIAGENT_MOCK_DELAY_SCALE ??= '0.05';
   const trashed = [];
-  const service = createService({ host: { trashItem: async (p) => { trashed.push(p); }, appVersion: '9.9.9', isPackaged: false, ...hostExtra } });
+  const service = createService({ host: { trashItem: async (p) => { trashed.push(p); }, appVersion: '9.9.9', isPackaged: false, cliHome, ...hostExtra } });
   t.after(async () => {
     for (const run of service.api['runs:active']()) {
       try { service.api['run:stop']({ runId: run.runId }); } catch { /* already ended */ }
@@ -130,6 +133,7 @@ function makeService(t, hostExtra = {}) {
     service.shutdown();
   });
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  t.after(() => fs.rmSync(cliHome, { recursive: true, force: true }));
   service.setWorkspace(setupWorkspace(dir, { persist: false }));
   fs.writeFileSync(path.join(service.workspace().workflows, 'fixture-service.yaml'), WORKFLOW);
   return { service, api: service.api, trashed };
