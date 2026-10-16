@@ -211,6 +211,26 @@ test('#412 a past (finished) run: no Stop and no Pause on the tab row', async ()
   assert.equal(hasIn(row.outer, buttonText('Pause after current step')), false);
 });
 
+test('#412 an interrupted run opened from disk (status still running, past view): no Stop and no Pause on the tab row', async () => {
+  const { html } = await runScreen({ status: 'running', past: true });
+  const row = tabRow(html);
+  assert.equal(hasIn(row.outer, buttonText('Stop')), false);
+  assert.equal(hasIn(row.outer, buttonText('Pause after current step')), false);
+});
+
+test('#410 a run that ended: no "+ When it finishes…" on the tab row', async () => {
+  for (const status of ['success', 'failed']) {
+    const { html } = await runScreen({ status, past: true });
+    assert.equal(hasIn(tabRow(html).outer, (e) => e.attrs['data-chain'] === 'edit'), false, `none for a ${status} run`);
+  }
+});
+
+test('#410 a live run with a chain set: no "+ When it finishes…" on the tab row (Edit is in the banner)', async () => {
+  const chain = { then: { action: 'start', workflow: 'docs.yaml' }, state: 'waiting' };
+  const { html } = await runScreen({ status: 'running', chain });
+  assert.equal(hasIn(tabRow(html).outer, (e) => e.attrs['data-chain'] === 'edit'), false);
+});
+
 // ---- the details panel's tabs -------------------------------------------------------------------
 
 test('#410 the details panel\'s tabs read Artifacts | Session | Events, in that order', () => {
@@ -231,6 +251,17 @@ test('#410 a run opens on Artifacts: state.tab defaults to \'artifacts\' and the
   assert.deepEqual(active, ['artifacts'], 'the Artifacts tab is the active one');
   assert.equal(staticHidden(H.findEl(markup, byId('tab-artifacts'))), false, 'its body shows');
   assert.equal(staticHidden(H.findEl(markup, byId('tab-detail'))), true, 'the Session body is hidden');
+});
+
+test('#410 switching to another run opens it on Artifacts; selecting the same run keeps the tab', async () => {
+  const { app } = await runScreen({ status: 'running' });
+  app.run("(() => { const v = newRunView(); v.run = { id: 'r2', status: 'success', startedAt: Date.now() - 60000, finishedAt: Date.now(), workflow: 'software-development', file: 'software-development.yaml', inputs: {} }; state.runs.set('r2', v); })()");
+  app.run("state.tab = 'detail'");
+  app.run("selectRun('r1', { open: false })");
+  assert.equal(app.state().tab, 'detail', 'the same run keeps the Session tab');
+  app.run("selectRun('r2', { open: false })");
+  assert.equal(app.state().tab, 'artifacts', 'another run opens on Artifacts');
+  await app.settle();
 });
 
 // this file's own reading of the screen (passes before and after the change): the run's actions render
