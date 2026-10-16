@@ -16,8 +16,8 @@ const { LOAD_TIMEOUT, escapeRe, runTabRow, runTabs, runTab } = require('../suppo
 const ROW_TOLERANCE = 2;
 const overlay = (page) => page.getByTestId('run3d');
 const detailsTabs = (page) => page.getByRole('tablist', { name: 'Run details', exact: true }).filter({ visible: true }).first();
-// the row's buttons, by name (the "+ When it finishes…" link-button too)
-const rowButton = (page, name) => runTabRow(page).getByRole('button', { name: new RegExp(`^\\s*${escapeRe(name)}`) }).filter({ visible: true }).first();
+// the row's buttons, by name (the "+ When it finishes…" link-button too); a glyph may lead the name ("◆ Watch")
+const rowButton = (page, name) => runTabRow(page).getByRole('button', { name: new RegExp(`(^|\\s)${escapeRe(name)}`) }).filter({ visible: true }).first();
 
 // the tabs, in this order, and nothing of the Run screen above the row (banners, gate cards, panels)
 Then('the Run screen\'s first row is the tab row {string}, {string} and {string}', async ({ e2e }, a, b, c) => {
@@ -30,9 +30,23 @@ Then('the Run screen\'s first row is the tab row {string}, {string} and {string}
   const above = await row.evaluate((el, tolerance) => {
     const view = el.closest('section') || el.parentElement;
     const top = el.getBoundingClientRect().top;
+    // the part of a box its scrolling ancestors show: the run chat's messages, scrolled to the latest, sit
+    // above the row in layout but not on screen
+    const shown = (n) => {
+      let box = n.getBoundingClientRect();
+      for (let p = n.parentElement; p && p !== view; p = p.parentElement) {
+        if (getComputedStyle(p).overflowY === 'visible') continue;
+        const clip = p.getBoundingClientRect();
+        box = { top: Math.max(box.top, clip.top), bottom: Math.min(box.bottom, clip.bottom) };
+      }
+      return box;
+    };
     return [...view.querySelectorAll('*')]
       .filter((n) => !el.contains(n) && !n.contains(el) && n.checkVisibility() && n.getBoundingClientRect().height > 0)
-      .filter((n) => n.getBoundingClientRect().top < top - tolerance)
+      .filter((n) => {
+        const box = shown(n);
+        return box.bottom > box.top && box.top < top - tolerance;
+      })
       .map((n) => n.getAttribute('data-testid') || n.id || n.className || n.tagName);
   }, ROW_TOLERANCE);
   expect(above, 'nothing of the Run screen sits above its tab row').toEqual([]);
