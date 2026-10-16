@@ -19,7 +19,11 @@
   the avenues' sidewalks and lamps on the street corners (`propsOf`), crosswalks at the crossings,
   cars driving the avenues with their lights (`makeTraffic`, `drive`), water around the city with the
   ports as piers, a bloom pass over the lights (the "Glow" button) and a vignette. Big data and prose
-  files (`DATA_LANGS`) are low halls rather than grey towers. The model is loaded from project-city-v2.data.js
+  files (`DATA_LANGS`) are low halls rather than grey towers. The sky is a gradient dome with stars
+  that twinkle at night and clouds drifting high over the city; at night the sun is a cool moonlight
+  with a fill from the far side and pools of light under the lamps. The city lives: crane arms turn,
+  warning lights pulse, windows switch on and off slowly, the water ripples, the cars drive, and left
+  alone for 20 s the camera drifts around what it looks at (`animate`). The model is loaded from project-city-v2.data.js
   (a classic script, so this page stays readable); everything else below is the first proof of concept.
 
   The first proof of concept: a repository as a 3D city (three.js), one file, no build step. It is drawn like
@@ -237,12 +241,12 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 // ramp, the docks and plinths, and a ground / plate / building tint / label ink per zone kind.
 const THEMES = {
   dark: {
-    name: 'dark', sky: '#0e1014', floor: '#181c26', pad: '#242a39', lane: '#2c3345', wallCap: '#343c52',
-    shadow: { color: '#000000', opacity: 0.38 }, light: { sky: '#FFFFFF', ground: '#8f9ab8', hemi: 1.85, sun: 1.4 },
+    name: 'dark', sky: '#0e1014', skyTop: '#06070c', skyHorizon: '#161c2c', cloud: '#1c2334', floor: '#181c26', pad: '#242a39', lane: '#2c3345', wallCap: '#343c52',
+    shadow: { color: '#000000', opacity: 0.38 }, light: { sky: '#e4eaff', ground: '#6a7594', hemi: 1.7, sun: 1.25, sunColor: '#c9d4ff' },
     accent: '#7c9cff', ink: '#e6e8ee', muted: '#8a91a3', mast: '#596079',
     status: { pending: '#6f788c', running: '#7c9cff', done: '#4ade80', changes: '#facc15', failed: '#f87171' },
     quadrant: { 'Danger Zone': '#f87171', 'Cowboy Code': '#facc15', 'Fertile Ground': '#7c9cff', 'Healthy Closure': '#4ade80' },
-    unmeasured: '#6f788c', campus: '#3e4659', dim: '#242a37', dash: '#3a4357', dock: '#2b3247', hall: '#3d4766', plinth: '#343c52', beacon: '#7c9cff', garden: '#4f9c74', lawn: '#2c4a38', water: '#17233b', night: 1.0,
+    unmeasured: '#6f788c', campus: '#3e4659', dim: '#242a37', dash: '#3a4357', dock: '#2b3247', hall: '#3d4766', plinth: '#343c52', beacon: '#7c9cff', garden: '#4f9c74', lawn: '#2c4a38', water: '#17233b', pool: '#ffd9a0', night: 1.0,
     churn: ['#2a3040', '#facc15', '#fb923c', '#f87171'],
     kinds: { // grounds a step above the floor (#181c26), plates a step above the pad (#242a39), as run3d's floor / pad / wall steps
       civic: { ground: '#2b2d34', block: '#3b3e47', tint: '#c9b58f', ink: '#dad5c7' },
@@ -258,12 +262,12 @@ const THEMES = {
     },
   },
   light: {
-    name: 'light', sky: '#E8EDF7', floor: '#EDF0F8', pad: '#FFFFFF', lane: '#DDE3F0', wallCap: '#FFFFFF',
+    name: 'light', sky: '#E8EDF7', skyTop: '#9fbde8', skyHorizon: '#e3e9f4', cloud: '#ffffff', floor: '#EDF0F8', pad: '#FFFFFF', lane: '#DDE3F0', wallCap: '#FFFFFF',
     shadow: { color: '#3A4A7A', opacity: 0.13 }, light: { sky: '#FFFFFF', ground: '#CBD5EC', hemi: 1.95, sun: 1.45 },
     accent: '#4C6FFF', ink: '#1B2233', muted: '#7A859C', mast: '#12141A',
     status: { pending: '#A7B0C2', running: '#4C6FFF', done: '#1FAE6E', changes: '#E39A12', failed: '#EA4E4B' },
     quadrant: { 'Danger Zone': '#EA4E4B', 'Cowboy Code': '#E39A12', 'Fertile Ground': '#4C6FFF', 'Healthy Closure': '#1FAE6E' },
-    unmeasured: '#A7B0C2', campus: '#D5DAE5', dim: '#E2E6EE', dash: '#F4F6FA', dock: '#2B3350', hall: '#5E6E8C', plinth: '#FFFFFF', beacon: '#4C6FFF', garden: '#86D2AC', lawn: '#BFDCAA', water: '#B9D0EC', night: 0.12,
+    unmeasured: '#A7B0C2', campus: '#D5DAE5', dim: '#E2E6EE', dash: '#F4F6FA', dock: '#2B3350', hall: '#5E6E8C', plinth: '#FFFFFF', beacon: '#4C6FFF', garden: '#86D2AC', lawn: '#BFDCAA', water: '#B9D0EC', pool: '#ffffff', night: 0.12,
     churn: ['#E9ECF2', '#F6D55C', '#F0883E', '#D7263D'],
     kinds: {
       civic: { ground: '#D3CEC2', block: '#F1EEE7', tint: '#D8C7A4', ink: '#5A5244' },
@@ -308,6 +312,9 @@ const $ = (id) => document.getElementById(id);
 const fmt = (n) => (n == null ? '—' : Number(n).toLocaleString('en-US'));
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const mix = (a, b, t) => `#${new THREE.Color(a).lerp(new THREE.Color(b), t).getHexString()}`;
+// a stable hash and a seeded generator: the same path (or seed) always gives the same shapes
+const hashOf = (s) => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
+const rngOf = (seed) => () => { seed = (seed + 0x6D2B79F5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 
 // ---------- model ----------
 const model = window.CITY_DATA || {};
@@ -521,11 +528,12 @@ const camera = new THREE.PerspectiveCamera(30, innerWidth / innerHeight, 2, 5000
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true; controls.dampingFactor = 0.12;
 controls.screenSpacePanning = false;
-controls.minPolarAngle = 0.3; controls.maxPolarAngle = 1.25; controls.minDistance = 12; controls.maxDistance = 1600; controls.zoomSpeed = 0.8;
+controls.minPolarAngle = 0.3; controls.maxPolarAngle = 1.42; // down to 8 degrees over the horizon: the sky shows along a street controls.minDistance = 12; controls.maxDistance = 1600; controls.zoomSpeed = 0.8;
 controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
 
 const hemi = new THREE.HemisphereLight(0xffffff, 0xffffff, 1);
 const sun = new THREE.DirectionalLight(0xffffff, 1);
+const fillLight = new THREE.DirectionalLight(0xffffff, 0.3); fillLight.position.set(300, 180, -420); scene.add(fillLight); // a cool fill from the far side: the shaded faces keep their shape
 sun.position.set(-12, 26, 15).normalize().multiplyScalar(520);
 sun.castShadow = true;
 sun.shadow.mapSize.set(4096, 4096);
@@ -539,6 +547,39 @@ sky.rotation.x = -Math.PI / 2; sky.position.y = -0.5;
 const shade = new THREE.Mesh(new THREE.CircleGeometry(900, 64), new THREE.ShadowMaterial({ transparent: true }));
 shade.rotation.x = -Math.PI / 2; shade.position.y = -0.49; shade.receiveShadow = true;
 scene.add(sky, shade);
+// the sky: a gradient dome (horizon to zenith), stars that twinkle at night, clouds drifting over the city
+const skyDome = new THREE.Mesh(new THREE.SphereGeometry(2400, 32, 16), new THREE.ShaderMaterial({
+  side: THREE.BackSide, depthWrite: false, fog: false,
+  uniforms: { top: { value: new THREE.Color() }, horizon: { value: new THREE.Color() } },
+  vertexShader: 'varying vec3 vW; void main() { vW = (modelMatrix * vec4(position, 1.0)).xyz; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: 'uniform vec3 top; uniform vec3 horizon; varying vec3 vW; void main() { float h = clamp(vW.y / 2400.0, 0.0, 1.0); gl_FragColor = vec4(mix(horizon, top, pow(h, 0.55)), 1.0); }',
+}));
+scene.add(skyDome);
+const STARS = 1600, starPos = new Float32Array(STARS * 3), starPhase = new Float32Array(STARS), starSize = new Float32Array(STARS);
+{ const r = rngOf(3); for (let i = 0; i < STARS; i++) { const a = r() * Math.PI * 2, e = 0.08 + Math.pow(r(), 0.7) * 1.4, R = 2250; starPos.set([Math.cos(a) * Math.cos(e) * R, Math.sin(e) * R, Math.sin(a) * Math.cos(e) * R], i * 3); starPhase[i] = r() * 6.3; starSize[i] = 1.6 + r() * r() * 3.2; } }
+const starGeo = new THREE.BufferGeometry();
+starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3)); starGeo.setAttribute('phase', new THREE.BufferAttribute(starPhase, 1)); starGeo.setAttribute('size', new THREE.BufferAttribute(starSize, 1));
+const starMat = new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false, fog: false,
+  uniforms: { uTime: { value: 0 }, uOpacity: { value: 1 } },
+  vertexShader: 'attribute float phase; attribute float size; uniform float uTime; varying float vA; void main() { vA = 0.5 + 0.5 * sin(uTime * 1.3 + phase); gl_PointSize = size * (0.7 + 0.5 * vA); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: 'uniform float uOpacity; varying float vA; void main() { float d = length(gl_PointCoord - 0.5); if (d > 0.5) discard; gl_FragColor = vec4(0.85, 0.9, 1.0, uOpacity * (0.35 + 0.65 * vA) * (1.0 - d * 1.6)); }',
+});
+const stars = new THREE.Points(starGeo, starMat); scene.add(stars);
+const CLOUDS = 12, cloudBlobs = CLOUDS * 4;
+const clouds = new THREE.InstancedMesh(new THREE.SphereGeometry(0.5, 12, 10), new THREE.MeshStandardMaterial({ roughness: 1, transparent: true, opacity: 0.9 }), cloudBlobs);
+clouds.castShadow = false; clouds.frustumCulled = false; scene.add(clouds);
+const cloudList = [];
+{ const r = rngOf(5); for (let i = 0; i < CLOUDS; i++) { const c = { x: (r() - 0.5) * 1100, z: (r() - 0.5) * 900, y: 260 + r() * 90, speed: 1.2 + r() * 1.6, blobs: [] }; for (let k = 0; k < 4; k++) c.blobs.push({ dx: (k - 1.5) * (9 + r() * 6), dz: (r() - 0.5) * 10, dy: r() * 3, sx: 16 + r() * 14, sy: 5 + r() * 4, sz: 11 + r() * 8 }); cloudList.push(c); } }
+function driftClouds(dt) {
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3();
+  let i = 0;
+  for (const c of cloudList) {
+    c.x += c.speed * dt; if (c.x > 620) c.x = -620;
+    for (const b of c.blobs) { m.compose(p.set(c.x + b.dx, c.y + b.dy, c.z + b.dz), q, s.set(b.sx, b.sy, b.sz)); clouds.setMatrixAt(i++, m); }
+  }
+  clouds.instanceMatrix.needsUpdate = true;
+}
 // the glow: a bloom pass over the lit windows, beacons, lamps and lights (the "Glow" button turns it off)
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
@@ -577,19 +618,40 @@ const coneGeo = new THREE.ConeGeometry(0.5, 1, 12); coneGeo.translate(0, 0.5, 0)
 const blobGeo = new THREE.IcosahedronGeometry(0.5, 1); blobGeo.translate(0, 0.5, 0);
 const lightGeo = new THREE.SphereGeometry(0.5, 12, 10);
 const boxGeo = unitBox.clone(); // the walls' own copy: it carries the windows attribute
-const winUniforms = { uNight: { value: 1 } };
+const winUniforms = { uNight: { value: 1 }, uTime: { value: 0 } };
+const waterUniforms = { uTime: { value: 0 } };
+/** The water: a standard material whose colour ripples slowly with time. */
+function waterMaterial() {
+  const mat = new THREE.MeshStandardMaterial({ color: T.water, roughness: 0.22, metalness: 0.15 });
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.uTime = waterUniforms.uTime;
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vWp;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvWp = (modelMatrix * vec4(position, 1.0)).xyz;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uTime; varying vec3 vWp;')
+      .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb *= 1.0 + 0.07 * sin(vWp.x * 0.22 + uTime * 0.9) * sin(vWp.z * 0.17 - uTime * 0.7) + 0.03 * sin(vWp.x * 0.9 + vWp.z * 0.6 + uTime * 1.7);');
+  };
+  return mat;
+}
+/** A soft disc texture for the pools of light under the lamps. */
+function poolTexture() {
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const g = c.getContext('2d'), grad = g.createRadialGradient(64, 64, 4, 64, 64, 64);
+  grad.addColorStop(0, 'rgba(255,255,255,1)'); grad.addColorStop(0.5, 'rgba(255,255,255,0.35)'); grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad; g.fillRect(0, 0, 128, 128);
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; return tex;
+}
+const poolTex = poolTexture();
 /** The walls' material: windows at a real floor height on every facade, lit by churn (an instance attribute `aWin`: on, seed, lit share, height), and a touch of occlusion at the base. */
 function windowMaterial() {
   const mat = new THREE.MeshStandardMaterial({ roughness: 0.62, metalness: 0 });
   const P = WIN_PITCH.toFixed(2), F = FLOOR_H.toFixed(2);
   mat.onBeforeCompile = (sh) => {
-    sh.uniforms.uNight = winUniforms.uNight;
+    sh.uniforms.uNight = winUniforms.uNight; sh.uniforms.uTime = winUniforms.uTime;
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', '#include <common>\nattribute vec4 aWin; attribute vec4 aStyle; varying vec4 vWin; varying vec4 vStyle; varying vec3 vLocal; varying vec3 vSize; varying vec3 vNrm;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWin = aWin; vStyle = aStyle; vSize = vec3(length(instanceMatrix[0].xyz), length(instanceMatrix[1].xyz), length(instanceMatrix[2].xyz)); vLocal = position * vSize; vNrm = normal;');
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>
-uniform float uNight; varying vec4 vWin; varying vec4 vStyle; varying vec3 vLocal; varying vec3 vSize; varying vec3 vNrm;
+uniform float uNight; uniform float uTime; varying vec4 vWin; varying vec4 vStyle; varying vec3 vLocal; varying vec3 vSize; varying vec3 vNrm;
 float hash3(vec3 p) { p = fract(p * 0.1031); p += dot(p, p.yzx + 33.33); return fract((p.x + p.y) * p.z); }`)
       .replace('#include <color_fragment>', `#include <color_fragment>
 vec3 winGlow = vec3(0.0);
@@ -614,7 +676,7 @@ if (vWin.x > 0.5 && abs(vNrm.y) < 0.4) {
     if (inWin) {
       float side = onX ? sign(vNrm.x) : 2.0 + sign(vNrm.z);
       float rnd = hash3(vec3(floor(cu), floor(cy), vWin.y * 97.0 + side));
-      float lit = door ? 0.0 : step(1.0 - vWin.z, rnd);
+      float lit = door ? 0.0 : step(1.0 - vWin.z, rnd + 0.05 * sin(uTime * 0.35 + rnd * 80.0)); // the windows near the threshold switch on and off slowly
       vec3 glass = mix(mix(diffuseColor.rgb * 0.3, vec3(0.06, 0.08, 0.12), 0.55), vec3(0.16, 0.24, 0.38), vStyle.w * 0.8);
       diffuseColor.rgb = mix(diffuseColor.rgb, glass, fade);
       winGlow = fade * lit * uNight * mix(vec3(1.0, 0.78, 0.5), vec3(0.72, 0.84, 1.0), step(0.82, rnd)) * (0.7 + 0.4 * hash3(vec3(rnd, side, 1.0)));
@@ -655,7 +717,7 @@ const KINDS = {
 };
 const city = new THREE.Group(); scene.add(city);
 const tagLayer = $('tags');
-let layout = null, kinds = null, boxOwner = null, blockMeshes = [], zoneMeshes = [], districtLabels = [], tags = [], pinned = null, beacons = [];
+let layout = null, kinds = null, boxOwner = null, blockMeshes = [], zoneMeshes = [], districtLabels = [], tags = [], pinned = null, beacons = [], cranes = [], blinkers = [];
 
 // ---------- buildings: archetypes and parts ----------
 // A building is a list of parts on the instanced geometries above, chosen by an archetype from its
@@ -667,9 +729,7 @@ let layout = null, kinds = null, boxOwner = null, blockMeshes = [], zoneMeshes =
 // props: Danger Zone pipes, tanks and a chimney (a warning light over the limit), Cowboy Code a
 // water tower, Fertile Ground a crane on the big ones, Healthy Closure a roof garden. The mast keeps
 // its meaning (the worst function). The walls' windows are real floors (FLOOR_H), lit by churn.
-const hashOf = (s) => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
-const rngOf = (seed) => () => { seed = (seed + 0x6D2B79F5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
-const tierOf = (b) => (b.complexity == null ? (b.loc > 600 ? 1 : 0) : b.complexity < 40 ? 0 : b.complexity < 120 ? 1 : b.complexity < 300 ? 2 : 3);
+const tierOf =(b) => (b.complexity == null ? (b.loc > 600 ? 1 : 0) : b.complexity < 40 ? 0 : b.complexity < 120 ? 1 : b.complexity < 300 ? 2 : 3);
 // data and prose, not code: big ones are halls (lower and wide: the lines are volume, not complexity) rather than grey towers
 const DATA_LANGS = new Set(['json', 'yaml', 'toml', 'md', 'text', 'tsv', 'html', 'css', 'gherkin', 'sql', 'cmd', 'sh', 'lock']);
 function archetypeOf(it) {
@@ -796,8 +856,9 @@ function partsOf(it) {
     } else if (b.quadrant === 'Fertile Ground' && tier >= 1 && big > 6) { // a crane: the file keeps being built
       const p = { x: main.x + (main.w / 2 - 0.7) * sign(), z: main.z + (main.d / 2 - 0.7) * sign() }, ch = H * 0.5 + 3, arm = big * 0.9;
       add('mast', p.x, main.y, p.z, 2.2, ch, 2.2, 'amber');
-      add('box', p.x + (alongX ? arm * 0.3 : 0), main.y + ch, p.z + (alongX ? 0 : arm * 0.3), alongX ? arm : 0.3, 0.3, alongX ? 0.3 : arm, 'amber');
-      add('box', p.x - (alongX ? arm * 0.2 : 0), main.y + ch - 0.6, p.z - (alongX ? 0 : arm * 0.2), alongX ? 1.2 : 0.6, 0.6, alongX ? 0.6 : 1.2, 'trim');
+      const crane = { x: p.x, y: main.y + ch, z: p.z, seed: r() * 6.3 }; // the arm and its counterweight swing around the mast (see animate)
+      add('box', p.x + (alongX ? arm * 0.3 : 0), main.y + ch, p.z + (alongX ? 0 : arm * 0.3), alongX ? arm : 0.3, 0.3, alongX ? 0.3 : arm, 'amber').crane = crane;
+      add('box', p.x - (alongX ? arm * 0.2 : 0), main.y + ch - 0.6, p.z - (alongX ? 0 : arm * 0.2), alongX ? 1.2 : 0.6, 0.6, alongX ? 0.6 : 1.2, 'trim').crane = crane;
       top = Math.max(top, main.y + ch + 0.3);
     } else if (b.quadrant === 'Healthy Closure' && tier >= 1) { // a roof garden
       for (let i = 0; i < 2 + tier; i++) { const s = 0.5 + r() * 0.7, p = place(main, s, s); add('green', p.x, main.y, p.z, s, s * 0.8, s, 'green'); }
@@ -823,7 +884,7 @@ function propsOf(l) {
   };
   const lamp = (x, z, y = SIDEWALK_TOP, h = 3.4) => {
     out.push({ g: 'mast', x, y, z, w: 1, h, d: 1, colour: T.mast });
-    out.push({ g: 'light', x, y: y + h + 0.15, z, w: 0.34, h: 0.34, d: 0.34, colour: lampC });
+    out.push({ g: 'light', x, y: y + h + 0.15, z, w: 0.34, h: 0.34, d: 0.34, colour: lampC, pool: y });
   };
   // the district streets: a lamp at each corner of the sidewalk; the lawns: trees and a bench
   for (const g of l.districts) {
@@ -873,6 +934,33 @@ function makeTraffic(l) {
 }
 let lastDrive = 0;
 const driveM = new THREE.Matrix4(), driveQ = new THREE.Quaternion(), driveP = new THREE.Vector3(), driveS = new THREE.Vector3();
+// ---------- the living city: time in the shaders, clouds, cranes, blinkers, an idle camera ----------
+const IDLE_MS = 20000, UP = new THREE.Vector3(0, 1, 0);
+let lastInput = performance.now(), lastAnim = 0;
+for (const ev of ['pointerdown', 'pointermove', 'wheel', 'keydown', 'touchstart']) window.addEventListener(ev, () => { lastInput = performance.now(); }, { passive: true });
+const animM = new THREE.Matrix4(), animR = new THREE.Matrix4(), animT = new THREE.Matrix4(), animS = new THREE.Matrix4();
+function animate(now) {
+  const dt = Math.min(0.1, (now - lastAnim) / 1000); lastAnim = now;
+  const t = now / 1000;
+  starMat.uniforms.uTime.value = t; winUniforms.uTime.value = t; waterUniforms.uTime.value = t;
+  driftClouds(dt);
+  if (kinds) {
+    for (const c of cranes) { // the arm turns around the mast
+      const k = c.p.crane, ry = Math.sin(t * 0.11 + k.seed) * 1.1;
+      animM.makeTranslation(c.it.x + k.x, Y0 + k.y, c.it.z + k.z).multiply(animR.makeRotationY(ry)).multiply(animT.makeTranslation(c.p.x - k.x, c.p.y - k.y, c.p.z - k.z)).multiply(animS.makeScale(c.p.w, c.p.h, c.p.d));
+      kinds[c.p.g].setMatrixAt(c.p.i, animM);
+    }
+    if (cranes.length) kinds.box.instanceMatrix.needsUpdate = true;
+    for (const b of blinkers) { // the warning lights pulse
+      const s = b.p.w * (0.5 + 0.5 * Math.max(0, Math.sin(t * 5 + b.p.i)));
+      animM.makeTranslation(b.it.x + b.p.x, Y0 + b.p.y, b.it.z + b.p.z).multiply(animS.makeScale(s, s, s));
+      kinds.light.setMatrixAt(b.p.i, animM);
+    }
+    if (blinkers.length) kinds.light.instanceMatrix.needsUpdate = true;
+  }
+  // left alone, the camera drifts slowly around what it looks at; any input stops it
+  if (!flight && now - lastInput > IDLE_MS) { const d = camera.position.clone().sub(controls.target); d.applyAxisAngle(UP, dt * 0.04); camera.position.copy(controls.target).add(d); }
+}
 function drive(now) {
   const dt = Math.min(0.1, (now - lastDrive) / 1000); lastDrive = now;
   if (!carMesh) return;
@@ -992,7 +1080,7 @@ function build(l) {
   city.clear(); blockMeshes = []; zoneMeshes = []; districtLabels = []; tags = []; beacons = []; tagLayer.innerHTML = '';
   const b = l.bounds, quay = 14, shore = 170;
   // the water around the city (the ports' docks stand over it) and the ground: a quay past the ring road
-  city.add(slab({ x: b.x - shore, y: b.y - shore, w: b.w + 2 * shore, h: b.h + 2 * shore }, -0.18, 0.4, 14, new THREE.MeshStandardMaterial({ color: T.water, roughness: 0.22, metalness: 0.15 })));
+  city.add(slab({ x: b.x - shore, y: b.y - shore, w: b.w + 2 * shore, h: b.h + 2 * shore }, -0.18, 0.4, 14, waterMaterial()));
   city.add(slab({ x: b.x - quay, y: b.y - quay, w: b.w + 2 * quay, h: b.h + 2 * quay }, 0, 0.6, 4, new THREE.MeshStandardMaterial({ color: T.floor, roughness: 0.95 })));
   // the roads: the avenues and the ring road around the city, in the lane colour, a thin slab on the floor
   city.add(slab(inset(b, -AVENUE / 2), 0.06, 0.12, 2.5, new THREE.MeshStandardMaterial({ color: T.lane, roughness: 0.95 })));
@@ -1077,6 +1165,16 @@ function build(l) {
     m.compose(pos.set(p.x, p.y, p.z), q.identity(), scl.set(p.w, p.h, p.d)); kinds[p.g].setMatrixAt(i, m); kinds[p.g].setColorAt(i, pc.set(p.colour));
     if (p.g === 'box') { boxOwner[i] = -1; win.set([0, 0, 0, 0], i * 4); }
   }
+  // the animated parts: crane arms swing, the warning lights blink
+  cranes = []; blinkers = [];
+  for (const it of l.buildings) for (const p of it.parts) { if (p.crane) cranes.push({ p, it }); if (p.g === 'light' && p.role === 'warn') blinkers.push({ p, it }); }
+  // pools of light under the lamps at night
+  const poolAt = props.filter((p) => p.pool != null);
+  if (poolAt.length && T.name === 'dark') {
+    const pools = new THREE.InstancedMesh(flat, new THREE.MeshBasicMaterial({ map: poolTex, color: T.pool, transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, depthWrite: false }), poolAt.length);
+    poolAt.forEach((p, i) => { m.compose(pos.set(p.x, p.pool + 0.05, p.z), q.identity(), scl.set(7.5, 1, 7.5)); pools.setMatrixAt(i, m); });
+    pools.frustumCulled = false; city.add(pools);
+  }
   boxGeo.setAttribute('aWin', new THREE.InstancedBufferAttribute(win, 4));
   boxGeo.setAttribute('aStyle', new THREE.InstancedBufferAttribute(style, 4));
   for (const k in kinds) { kinds[k].instanceMatrix.needsUpdate = true; }
@@ -1135,9 +1233,14 @@ function applyTheme(name, rebuild = true) {
   T = THEMES[name] || THEMES.dark;
   document.documentElement.dataset.theme = T.name;
   try { localStorage.setItem(THEME_KEY, T.name); } catch { /* no storage */ }
-  renderer.setClearColor(T.sky);
-  scene.fog = new THREE.Fog(T.sky, 1100, 2400);
-  sky.material.color.set(T.sky);
+  renderer.setClearColor(T.skyHorizon);
+  scene.fog = new THREE.Fog(T.skyHorizon, 1100, 2400);
+  sky.material.color.set(T.skyHorizon);
+  skyDome.material.uniforms.top.value.set(T.skyTop); skyDome.material.uniforms.horizon.value.set(T.skyHorizon);
+  starMat.uniforms.uOpacity.value = T.name === 'dark' ? 1 : 0; stars.visible = T.name === 'dark';
+  clouds.material.color.set(T.cloud); clouds.material.opacity = T.name === 'dark' ? 0.5 : 0.85;
+  sun.color.set(T.light.sunColor || '#ffffff');
+  fillLight.color.set(T.name === 'dark' ? '#8fa6ff' : '#ffffff'); fillLight.intensity = T.name === 'dark' ? 0.35 : 0.22;
   shade.material.color.set(T.shadow.color); shade.material.opacity = T.shadow.opacity;
   hemi.color.set(T.light.sky); hemi.groundColor.set(T.light.ground); hemi.intensity = T.light.hemi;
   sun.intensity = T.light.sun;
@@ -1480,7 +1583,7 @@ function frame(now) {
     renderer.domElement.style.cursor = t ? 'pointer' : '';
   }
   placeTags();
-  drive(now);
+  drive(now); animate(now);
   if (glow) composer.render(); else renderer.render(scene, camera);
   window.cityFrames++;
   if (window.cityFrames === 2) window.cityReady = true;
