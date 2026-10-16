@@ -2,7 +2,8 @@
 // #254, #264): open the app, move through the sidebar's menu (grouped by the flow: Home, Plan &
 // Design, Code & Build, Workflows, AI, Night watch, Settings; a group's title collapses it), the
 // header (project selector, Oracle, notifications bell), the Workflows screen's tabs, Settings
-// (#276: Execution's Memory guard group), the failed app update banner (#279).
+// (#276: Execution's Memory guard group), the failed app update banner (#279), the Pipelines tab's
+// cards (features/pipelines.feature, #378).
 // Locators are roles and data-testid only (skills/ui-conventions).
 // #254: a menu group is a role="group" named by its title, holding its title's toggle button
 // (aria-expanded, named like the group) and its items' buttons; the header's project selector is a
@@ -161,6 +162,32 @@ Then('the {string} menu group is collapsed, hiding {string}', async ({ e2e }, na
 
 Then('the Workflows screen is on its {string} tab', async ({ e2e }, name) => {
   await expect(workflowsTabs(e2e.window).getByRole('tab', { name, exact: true })).toHaveAttribute('aria-selected', 'true');
+});
+
+// ---- the Pipelines tab's cards (#378: the bundled release-then-refactors pipeline) ---------------------
+// A pipeline card is data-testid="pipeline-card" with data-pipe="<file name>" (its display name is
+// not fixed); its description data-testid="pipeline-description"; each stage data-testid="pipeline-stage"
+// (a workflow's carries data-goto="<workflow file>", the Product Owner's reads "Product Owner").
+const LIST_TIMEOUT = 30000;
+const pipelineCard = (page, file) => page.locator(`[data-testid="pipeline-card"][data-pipe="${file}"]`).filter({ visible: true });
+
+Then('the Pipelines tab lists the pipeline {string}', async ({ e2e }, file) => {
+  await expect(pipelineCard(e2e.window, file)).toHaveCount(1, { timeout: LIST_TIMEOUT });
+});
+
+Then('the pipeline {string} runs {string}, then {string}, then the Product Owner', async ({ e2e }, file, first, second) => {
+  const stages = pipelineCard(e2e.window, file).getByTestId('pipeline-stage');
+  await expect(stages).toHaveCount(3);
+  await expect(stages.nth(0)).toHaveAttribute('data-goto', first);
+  await expect(stages.nth(1)).toHaveAttribute('data-goto', second);
+  await expect(stages.nth(2)).toContainText('Product Owner');
+});
+
+// the description says the analysis is a real model call and gives a cost estimate (an amount in dollars)
+Then('the description of the pipeline {string} says {string} and gives a cost estimate', async ({ e2e }, file, text) => {
+  const description = pipelineCard(e2e.window, file).getByTestId('pipeline-description');
+  await expect(description).toContainText(new RegExp(escapeRe(text), 'i'));
+  await expect(description).toContainText(/\$\s?\d|\d(\.\d+)?\s*(USD|dollars?)\b/i);
 });
 
 // ---- the header: project selector, Oracle, notifications (#254) --------------------------------------

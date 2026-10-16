@@ -2,7 +2,8 @@
 // gate card; the "Developer effort" field next to "Developer model" (#286); the chat of a run
 // interrupted at a gate (#288: the note "Interrupted at <step>" and its Resume button); AI
 // Development's Warm Up step (#301), its affected suite's card and run report (#304), and the "Not
-// tested green" pill of a run built without a green suite (#396). Locators are
+// tested green" pill of a run built without a green suite (#396), the Start panel's inputs of a
+// chosen workflow (features/pipelines.feature, #378). Locators are
 // roles and data-testid only (skills/ui-conventions).
 
 const fs = require('fs');
@@ -198,6 +199,24 @@ When('I choose the workflow {string} in the Start panel', async ({ e2e }, name) 
   const page = e2e.window;
   if (!(await page.getByTestId('start-workflow').isVisible())) await page.getByTestId('quick-start').click();
   await page.getByRole('combobox', { name: 'Workflow', exact: true }).selectOption(`${name}.yaml`);
+});
+
+// #378: the Start panel's inputs of the chosen workflow. A path input (project_path) is the
+// "Project" select, required when the label's "*" shows (its accessible name "Project *"); every
+// other input's control carries data-wi-input="<key>" (workflow-inputs.js), whether it is the main
+// "Input" box, upfront or in the collapsed "Advanced parameters" (so attached, not necessarily visible).
+const startInput = (page, key) => page.locator(`#inputs-form [data-wi-input="${key}"], #adv-form [data-wi-input="${key}"]`);
+
+Then('the Start panel requires a project', async ({ e2e }) => {
+  await expect(e2e.window.getByRole('combobox', { name: /^Project\s*\*/ })).toBeVisible();
+});
+
+Then('the Start panel has the input {string}', async ({ e2e }, key) => {
+  await expect(startInput(e2e.window, key)).toHaveCount(1);
+});
+
+Then('the Start panel\'s input {string} defaults to {string}', async ({ e2e }, key, value) => {
+  await expect(startInput(e2e.window, key)).toHaveValue(value);
 });
 
 // the field right after the other one in the same form; in the Start panel both may sit in
