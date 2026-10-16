@@ -314,7 +314,10 @@ const methods = {
     const caps = capabilities.merge(agent.capabilities, stepCaps);
     // agents with commands: the folders they may write to, and how to run commands unattended
     const runDirs = capabilities.runDirs(caps, this.runDir);
-    for (const dir of runDirs) fs.mkdirSync(dir, { recursive: true });
+    // the temp folder (#414) comes from the machine adapter: none in a simulation
+    const tmpDir = path.join(this.runDir, 'tmp');
+    for (const dir of runDirs) if (dir !== tmpDir) fs.mkdirSync(dir, { recursive: true });
+    if (runDirs.includes(tmpDir)) this.machine.runTmp(this.runDir);
     const agentEnv = capabilities.agentEnv(this.scratchWorkspace(), this.workers);
     const shotsDir = hint?.visit ? evidence.roundDir(this.runDir, stepId, hint.visit) : null;
     const commands = capabilities.commandGuide(caps, this.runDir, agentEnv, shotsDir);

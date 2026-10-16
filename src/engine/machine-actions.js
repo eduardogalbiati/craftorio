@@ -85,6 +85,12 @@ function real() {
     captureScreenshots: (opts) => captureScreenshots({ ...opts, mock: false }),
     writeReleaseVersion: (opts) => writeReleaseVersion({ ...opts, mock: false }),
     provider: (agent, providers) => providers?.[agent.provider],
+    // #414: the run's temp folder (<run>/tmp), created → its path
+    runTmp(runDir) {
+      const tmp = path.join(runDir, 'tmp');
+      fs.mkdirSync(tmp, { recursive: true });
+      return tmp;
+    },
   };
 }
 
@@ -130,6 +136,8 @@ function simulated({ sequences = null } = {}) {
     // writes nothing: says what a real run would set
     writeReleaseVersion: (opts) => writeReleaseVersion({ ...opts, mock: true }),
     provider: () => ({ type: 'mock' }),
+    // #414: no temp folder (a mock run changes nothing on disk it did not before)
+    runTmp: () => null,
   };
 }
 

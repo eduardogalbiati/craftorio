@@ -9,7 +9,6 @@
 
 'use strict';
 
-const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const {
@@ -163,14 +162,14 @@ const methods = {
   // (local-preview.scratchWorkspace). Agents get it in their environment, so the app's tools they
   // run from the worktree (npm run run, npm run screenshot, the app itself) never write to the
   // owner's workspace. Only runs with a worktree; created on the first agent turn, removed with it.
-  // #414: plus `tmp`, the run's temp folder (<run>/tmp, TMP/TEMP/TMPDIR in agentEnv); not in a mock run.
+  // #414: plus `tmp`, the run's temp folder (<run>/tmp, TMP/TEMP/TMPDIR in agentEnv) from the
+  // machine adapter; none in a simulation.
   scratchWorkspace() {
     if (!this.worktree) return null;
     if (!this.scratch) {
       const scratch = scratchWorkspace({ root: path.dirname(path.dirname(this.runDir)) }, path.join(this.runDir, 'scratch'));
-      const tmp = path.join(this.runDir, 'tmp');
-      if (!this.mock) fs.mkdirSync(tmp, { recursive: true });
-      this.scratch = this.mock ? scratch : { ...scratch, tmp };
+      const tmp = this.machine.runTmp(this.runDir);
+      this.scratch = tmp ? { ...scratch, tmp } : scratch;
     }
     return this.scratch;
   },
