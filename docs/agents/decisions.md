@@ -78,6 +78,18 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   the owner resumes a paused run (never the Night watch, the Oracle or the supervisor). Why: Stop cut
   the turn in progress and Pause on the roadmap let the runs in progress go on, so updating the app,
   the CLIs or the issues meant waiting for the runs or losing work.
+- **2026-10-13** (#360): analyses beyond the Architecture tab's fixed one are **analysis seeds**:
+  prompts adapted from Kent Beck's ToolSeeds (MIT), bundled in `seeds/<name>/seed.md` and seeded
+  into the workspace like skills. The Oracle runs a seed read-only on any project, in one turn of its
+  daily budget, after the cost estimate; the result (a self-contained HTML page and a JSON model,
+  scrubbed of secrets) is saved under `architecture/<project id>/seeds/` and shown in a sandboxed
+  frame with no network. **Make it a tool** files an issue in the project's tracker (the Product
+  Owner plans it like any item) to build the seed as a deterministic tool, following
+  `promptToDeterministicTool`; once its command is recorded in the project's settings, running the
+  seed runs that command, with no model cost. A seed uses only the network reads it declares, each
+  a builder and parser in both platform adapters. Why: projects differ in languages, CI and quality
+  gates, so a fixed analysis misses what matters or needs a tool the machine lacks; a seed that
+  proves useful should become free and repeatable.
 
 - **2026-10-13** (#356): a project's Architecture tab works for any language. The deterministic
   facts (lines, churn, hotspots, co-change, languages) are computed by the app from git, through a
@@ -107,16 +119,18 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   belongs to the Product Owner; workflows, skills and runs belong to the Supervisor. The Oracle
   reads everything, diagnoses and proposes, but routes every change to the owning agent. Why: the
   Oracle's changes ended in its own history, made by an agent that does not hold that area's rules.
-- **2026-10-03** (#332, #222, #211; options of #203, scenarios of #223): tests are run and judged
-  by the machine, never by a model. E2E tests stay on Playwright + BDD (`playwright-bdd`), run
-  deterministically; an LLM only writes and repairs them. Which test failures are the run's (and
-  which were already on the base) is decided by the orchestrator (failing tests rerun on the base),
-  never by an agent. In AI Development (local hero included), unit and E2E tests are
-  `write_and_run` by default (#332, from the owner's session); cost is cut in prompts, retries and
-  context, never by lowering test inputs. Replaces #199's "E2E scenarios run only at release time".
-  Why: the old E2E tests asserted little, the release run paid a model to run the suite, failures
-  already on main made every round fail and the run looped; the tests are why the app works, so
-  savings go where they do not lower what is tested.
+- **2026-10-03** (#332, #222, #211, and #47 of 2026-09-29; options of #203, scenarios of #223):
+  tests are run and judged by the machine, never by a model. E2E tests stay on Playwright + BDD
+  (`playwright-bdd`), run deterministically; an LLM only writes and repairs them. Which test
+  failures are the run's (and which were already on the base) is decided by the orchestrator
+  (failing tests rerun on the base), never by an agent. Only the test writer writes, edits or
+  deletes tests; the developer changes production code only. In AI Development (local hero
+  included), unit and E2E tests are `write_and_run` by default (#332, from the owner's session);
+  cost is cut in prompts, retries and context, never by lowering test inputs. Replaces #199's "E2E
+  scenarios run only at release time". Why: the old E2E tests asserted little, the release run paid
+  a model to run the suite, failures already on main made every round fail and the run looped, and
+  overlapping test responsibilities made one run pay for the full suite up to four times; the tests
+  are why the app works, so savings go where they do not lower what is tested.
 - **2026-10-03** (#238, #168): the git platform (GitHub) is the only source of truth for issues
   (#168, 2026-10-02). The local data is a read-only replica: the sync updates it, the app re-reads
   an issue right before a run starts, and issue changes are never made locally. Archiving an issue
@@ -124,6 +138,3 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   (#238, replacing the retired `deprioritized` label). Why: planned items kept stale copies, so an
   issue edited after planning ran with its old text; there was no way to put an issue aside, and
   the Product Owner kept proposing unwanted ideas.
-- **2026-09-29** (#47): only the test writer writes, edits or deletes tests; the developer changes
-  production code only. Why: overlapping test responsibilities made one run pay for the full suite
-  up to four times.
