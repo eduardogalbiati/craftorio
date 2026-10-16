@@ -1,7 +1,7 @@
 {
-  "_comment": "#250 baseline, reshaped by #323 (test/run-event-lanes.js): recorded on a4dd9ab (two runs, identical), then one intended move from #387 (3732ed2): the developer loads design-system, so its 'skill loaded' log is one more in develop#1 run and one less in code_review#1 run.",
+  "_comment": "#250 baseline, reshaped by #323 (test/run-event-lanes.js): recorded on a4dd9ab (two runs, identical), then one intended move from #387 (3732ed2): the developer loads design-system, so its 'skill loaded' log is one more in develop#1 run and one less in code_review#1 run; then #418: merge-conflict-resolver loads on resolve_merge only, so develop#1 run has one 'skill loaded' log less (181 events).",
   "status": "success",
-  "count": 182,
+  "count": 181,
   "steps": [
     "workflow.started",
     "step.started acceptance_tests",
@@ -120,7 +120,6 @@
       "session.closed"
     ],
     "develop#1 run": [
-      "log",
       "log",
       "log",
       "log",
