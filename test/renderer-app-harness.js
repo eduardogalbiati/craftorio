@@ -17,6 +17,7 @@
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const { FileXHR, setCurrentScript } = require('./page-i18n');
 
 const RENDERER = path.join(__dirname, '..', 'src', 'renderer');
 // window.api's plain values (not methods), as src/preload.js exposes them
@@ -303,6 +304,7 @@ function loadApp({ api: apiOverrides = {}, storage = {}, session = {}, state: st
     Terminal: class { loadAddon() {} open() {} onData() {} onResize() {} write() {} dispose() {} focus() {} },
     FitAddon: { FitAddon: class { fit() {} proposeDimensions() { return null; } } },
   };
+  sandbox.XMLHttpRequest = FileXHR; // i18n.js reads its catalogs (#329)
   sandbox.window = sandbox;
   sandbox.self = sandbox;
   sandbox.globalThis = sandbox;
@@ -317,6 +319,7 @@ function loadApp({ api: apiOverrides = {}, storage = {}, session = {}, state: st
   if (only) scripts = scripts.filter(only);
   for (const src of scripts) {
     const code = fs.readFileSync(path.join(RENDERER, ...src.split('/')), 'utf8');
+    setCurrentScript(sandbox.document, path.join(RENDERER, ...src.split('/')));
     try {
       vm.runInContext(code, sandbox, { filename: src });
     } catch (e) {

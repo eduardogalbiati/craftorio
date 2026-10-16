@@ -12,6 +12,7 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 const { createDom } = require('./mini-dom');
+const { FileXHR, setCurrentScript } = require('./page-i18n');
 // pageScripts / makeStorage are shared with the selector-keyed harness (requiring it also records
 // unhandled rejections a view leaves behind instead of failing the run)
 const { pageScripts, makeStorage, RENDERER } = require('./renderer-app-harness');
@@ -98,6 +99,7 @@ async function loadPage({ api: overrides = {} } = {}) {
     FitAddon: { FitAddon: class { fit() {} proposeDimensions() { return null; } } },
     innerWidth: 1600,
     innerHeight: 1000,
+    XMLHttpRequest: FileXHR, // i18n.js reads its catalogs (#329)
   };
   const dom = createDom({ window: sandbox });
   sandbox.window = sandbox;
@@ -108,6 +110,7 @@ async function loadPage({ api: overrides = {} } = {}) {
   dom.loadBody(fs.readFileSync(path.join(RENDERER, 'index.html'), 'utf8'));
   for (const src of pageScripts()) {
     try {
+      setCurrentScript(dom.document, path.join(RENDERER, ...src.split('/')));
       vm.runInContext(fs.readFileSync(path.join(RENDERER, ...src.split('/')), 'utf8'), sandbox, { filename: src });
     } catch (e) {
       errors.push(Object.assign(e, { script: src }));
