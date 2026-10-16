@@ -249,6 +249,14 @@ const methods = {
     return res;
   },
 
+  // creates the run folders an agent with commands may write to; the temp folder (#414) comes from
+  // the machine adapter: none in a simulation
+  prepareRunDirs(runDirs) {
+    const tmpDir = path.join(this.runDir, 'tmp');
+    for (const dir of runDirs) if (dir !== tmpDir) fs.mkdirSync(dir, { recursive: true });
+    if (runDirs.includes(tmpDir)) this.machine.runTmp(this.runDir);
+  },
+
   // opts.attachments: images for this turn ([{ name, path }] in the run folder, #129); a provider that
   // cannot open images still gets their paths, with one warning per step and agent.
   async agentTurn(agentName, prompt, turnOpts = {}) {
@@ -314,10 +322,7 @@ const methods = {
     const caps = capabilities.merge(agent.capabilities, stepCaps);
     // agents with commands: the folders they may write to, and how to run commands unattended
     const runDirs = capabilities.runDirs(caps, this.runDir);
-    // the temp folder (#414) comes from the machine adapter: none in a simulation
-    const tmpDir = path.join(this.runDir, 'tmp');
-    for (const dir of runDirs) if (dir !== tmpDir) fs.mkdirSync(dir, { recursive: true });
-    if (runDirs.includes(tmpDir)) this.machine.runTmp(this.runDir);
+    this.prepareRunDirs(runDirs);
     const agentEnv = capabilities.agentEnv(this.scratchWorkspace(), this.workers);
     const shotsDir = hint?.visit ? evidence.roundDir(this.runDir, stepId, hint.visit) : null;
     const commands = capabilities.commandGuide(caps, this.runDir, agentEnv, shotsDir);
