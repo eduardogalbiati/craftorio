@@ -286,14 +286,13 @@ Given('the demo project has a run {string} interrupted at the gate {string}', as
   fs.writeFileSync(path.join(dir, 'events.jsonl'), `${events.map((e) => JSON.stringify(e)).join('\n')}\n`);
 });
 
-// Workflows › Runs, after `I search the runs for`: expands the run's row and clicks its "Open chat"
+// Workflows › Runs, after `I search the runs for`: expands the run's row, clicks its "Open run"
+// (the card's only way to the run since #409: it opens the Details) and switches to the Chat
 When('I open the chat of the run {string} from the list', async ({ e2e }, fragment) => {
   const page = e2e.window;
-  const row = page.locator(`[data-testid="run-list-row"][data-run$="${fragment}"]`).filter({ visible: true }).first();
-  await expect(row).toBeVisible({ timeout: LOAD_TIMEOUT });
-  const open = row.getByRole('button', { name: 'Open chat', exact: true });
-  if (!(await open.isVisible())) await row.locator('.pr-row').first().click();
-  await open.click();
+  await rowButton(page, fragment, 'Open run');
+  await page.getByRole('group', { name: 'Run view', exact: true }).filter({ visible: true }).first()
+    .getByRole('button', { name: 'Chat', exact: true }).click({ timeout: LOAD_TIMEOUT });
 });
 
 Then('the run chat notes {string}', async ({ e2e }, text) => {
@@ -442,11 +441,13 @@ async function rowButton(page, fragment, name) {
 }
 
 When('I view the run {string} from the list', async ({ e2e }, fragment) => {
-  await rowButton(e2e.window, fragment, 'View run');
+  await rowButton(e2e.window, fragment, 'Open run');
 });
 
+// #409: the card has no "Open in Analytics" any more: Open run, then the Run screen's own button
 When('I open the run {string} in Analytics from the list', async ({ e2e }, fragment) => {
-  await rowButton(e2e.window, fragment, 'Open in Analytics');
+  await rowButton(e2e.window, fragment, 'Open run');
+  await e2e.window.getByRole('button', { name: 'Open in Analytics', exact: true }).filter({ visible: true }).first().click({ timeout: LOAD_TIMEOUT });
   await expect(e2e.window.getByTestId('an-run-header')).toContainText(fragment, { timeout: LOAD_TIMEOUT });
 });
 

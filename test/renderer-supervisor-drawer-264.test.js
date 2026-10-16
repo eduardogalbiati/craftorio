@@ -1,6 +1,6 @@
 // #264 (with #254): the Supervisor button leaves the top bar and the Supervisor screen leaves the
 // menu; the supervisor's conversation (history, input, agent inbox) opens as a right-side drawer
-// from the Workflows screen (#btn-wf-supervisor), like the Product Owner's drawer in the Backlog.
+// from the Workflows screen (#409: its round Supervisor button), like the Product Owner's drawer in the Backlog.
 // Esc and the backdrop still close it; a run's "Ask the supervisor" keeps working.
 // The views are the real page (test/renderer-app-harness.js loads index.html's scripts in a vm).
 const test = require('node:test');
@@ -36,14 +36,15 @@ test('the Supervisor screen and its menu entry are gone', () => {
   assert.doesNotMatch(markup, /id="view-supervisor"/);
 });
 
-test('the Workflows screen opens the Supervisor drawer (#btn-wf-supervisor)', async () => {
+// #409: the header's button became a round button at the bottom right (data-testid supervisor-fab)
+test('the Workflows screen opens the Supervisor drawer (its round Supervisor button, #409)', async () => {
   const app = loadApp();
   await app.boot();
   app.run("showView('workflows')");
   await app.settle();
-  assert.match(app.defs.get('workflows').markup, /id="btn-wf-supervisor"/);
+  assert.match(app.defs.get('workflows').markup, /data-testid="supervisor-fab"/);
   assert.equal(drawerOpen(app), false);
-  await app.click('#btn-wf-supervisor', { within: ['#view-workflows'] });
+  await app.click('[data-testid="supervisor-fab"]', { within: ['#view-workflows'] });
   assert.equal(drawerOpen(app), true);
 });
 

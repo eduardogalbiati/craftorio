@@ -51,3 +51,30 @@ Feature: The expanded run card
     And I expand the run "res00225" in the list
     And I review the run card's changes
     Then the changes viewer opens
+
+  # #409: the card's actions are only "◆ Send to supervisor" and "Open run" (plus "Resume from step…"
+  # on a resumable run: res00225 succeeded, so not here); Open run opens the Run screen on Details
+  @issue-409
+  Scenario: An expanded run offers only Send to supervisor and Open run, and Open run shows its details
+    Given the app is open
+    And a finished demo run "res00225" with a result summary, screenshots, tests, reports, process and internal files
+    When I open "Runs" in the sidebar
+    And I search the runs for "res00225"
+    And I expand the run "res00225" in the list
+    Then the run card's actions are "Send to supervisor" and "Open run"
+    And the run card offers none of "Open logs", "Ask the supervisor", "Watch with the supervisor", "Open chat", "View run" and "Open in Analytics"
+    When I click the run card's "Open run"
+    Then the Run screen shows the run "res00225" on its Details tab
+
+  # #409: no model call until the person sends: the drawer opens with the run attached, nothing asked
+  @issue-409
+  Scenario: Send to supervisor opens the Supervisor's drawer with the run attached
+    Given the app is open
+    And a finished demo run "res00225" with a result summary, screenshots, tests, reports, process and internal files
+    When I open "Runs" in the sidebar
+    And I search the runs for "res00225"
+    And I expand the run "res00225" in the list
+    And I click the run card's "Send to supervisor"
+    Then the Supervisor chat opens as a drawer on the right
+    And the Supervisor chat has the run "res00225" attached
+    And the Supervisor chat has not answered anything

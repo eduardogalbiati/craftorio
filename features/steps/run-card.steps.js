@@ -12,6 +12,9 @@
 //                              (the short hash and the subject), run-card-commits-more ("Show n more")
 //   run-card-review-changes    "Review changes": opens the changes viewer (diff-viewer.js: a dialog
 //                              named "Changes")
+//   run-card-actions           #409: the action buttons ("◆ Send to supervisor", "Open run", "Resume
+//                              from step…" on a resumable run); Send to supervisor opens the
+//                              Supervisor's drawer (svc-drawer) with supervisor-attachment (the run)
 
 const fs = require('fs');
 const path = require('path');
@@ -130,4 +133,56 @@ When('I review the run card\'s changes', async ({ e2e }) => {
 
 Then('the changes viewer opens', async ({ e2e }) => {
   await expect(e2e.window.getByRole('dialog', { name: 'Changes', exact: true })).toBeVisible({ timeout: LOAD_TIMEOUT });
+});
+
+// ---- the card's actions (#409) -------------------------------------------------------------------------
+// run-card-actions: the expanded row's action buttons, on the right: "◆ Send to supervisor" and "Open
+// run" (plus "Resume from step…" on a resumable run). A button's name may start with the ◆ mark.
+
+const actions = (page) => page.getByTestId('run-card-actions').filter({ visible: true }).first();
+const actionName = (name) => new RegExp(`^(◆\\s*)?${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`);
+
+Then('the run card\'s actions are {string} and {string}', async ({ e2e }, a, b) => {
+  const box = actions(e2e.window);
+  await expect(box).toBeVisible({ timeout: LOAD_TIMEOUT });
+  const names = (await box.getByRole('button').filter({ visible: true }).allInnerTexts()).map((t) => t.replace(/^◆\s*/, '').trim());
+  expect(names).toEqual([a, b]);
+});
+
+Then('the run card offers none of {string}, {string}, {string}, {string}, {string} and {string}', async ({ e2e }, a, b, c, d, e, f) => {
+  const names = [a, b, c, d, e, f];
+  const row = e2e.window.locator('[data-testid="run-list-row"]').filter({ visible: true }).filter({ has: e2e.window.getByTestId('run-card-artifacts') }).first();
+  await expect(row.getByTestId('run-card-actions')).toBeVisible({ timeout: LOAD_TIMEOUT });
+  for (const name of names) {
+    await expect(row.getByRole('button', { name: actionName(name) }), `the run card's "${name}"`).toHaveCount(0);
+  }
+});
+
+When('I click the run card\'s {string}', async ({ e2e }, name) => {
+  await actions(e2e.window).getByRole('button', { name: actionName(name) }).click();
+});
+
+Then('the Run screen shows the run {string} on its Details tab', async ({ e2e }, fragment) => {
+  const page = e2e.window;
+  const modes = page.getByRole('group', { name: 'Run view', exact: true }).filter({ visible: true }).first();
+  await expect(modes.getByRole('button', { name: 'Details', exact: true })).toHaveAttribute('aria-pressed', 'true', { timeout: LOAD_TIMEOUT });
+  // the run in view (app.js shownRunId)
+  await expect.poll(() => page.evaluate(() => (typeof shownRunId === 'function' ? shownRunId() : null)), { timeout: LOAD_TIMEOUT }).toMatch(new RegExp(`${fragment}$`));
+});
+
+// the Supervisor's drawer (#svc-drawer) with the run as its context: supervisor-attachment, naming
+// the run id, before anything is sent
+const svcDrawer = (page) => page.getByTestId('svc-drawer');
+
+Then('the Supervisor chat has the run {string} attached', async ({ e2e }, fragment) => {
+  const attachment = svcDrawer(e2e.window).getByTestId('supervisor-attachment');
+  await expect(attachment).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(attachment).toContainText(fragment);
+});
+
+// no model call until the person sends: no Supervisor answer in the drawer, the question box ready
+Then('the Supervisor chat has not answered anything', async ({ e2e }) => {
+  const drawer = svcDrawer(e2e.window);
+  await expect(drawer.getByRole('textbox').first()).toBeEditable();
+  await expect(drawer.getByText(/Simulated supervisor/)).toHaveCount(0);
 });
