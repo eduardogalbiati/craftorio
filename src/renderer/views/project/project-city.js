@@ -151,13 +151,13 @@
       stage.innerHTML = `<div class="r3d-message"${alert ? ' role="alert"' : ' role="status"'} data-testid="${testid}">${html}</div>`;
     }
 
-    const toFacts = '<button type="button" class="r3d-primary inline" data-pc-facts>Show the Facts</button>';
+    const toFacts = `<button type="button" class="r3d-primary inline" data-pc-facts>${t('project_city.show_the_facts')}</button>`;
 
     async function draw() {
       if (!c.layout) return;
       const problem = webglProblem();
       if (problem) {
-        stageMessage(`<p>${esc(problem)} The Facts view has the same numbers, as tables.</p>${toFacts}`, { alert: true });
+        stageMessage(`<p>${esc(problem)} ${t('project_city.the_facts_view_has_the_same')}</p>${toFacts}`, { alert: true });
         return;
       }
       const painted = paint();
@@ -168,7 +168,7 @@
         c.drawn = c.layout;
         return;
       }
-      if (!stage.querySelector('canvas')) stageMessage('<p>Loading the city…</p><span class="r3d-bar open"><i></i></span>');
+      if (!stage.querySelector('canvas')) stageMessage(`<p>${t('project_city.loading_the_city')}</p><span class="r3d-bar open"><i></i></span>`);
       try {
         await loadBundle();
       } catch (e) {
@@ -185,7 +185,7 @@
         });
         c.drawn = c.layout;
       } catch (e) {
-        stageMessage(`<p>The city could not be drawn: ${esc(errMsg(e))}</p>${toFacts}`, { alert: true });
+        stageMessage(`<p>${t('project_city.the_city_could_not_be_drawn')} ${esc(errMsg(e))}</p>${toFacts}`, { alert: true });
       }
     }
 
@@ -209,11 +209,11 @@
         <div class="r3d-run"><b title="${esc(title)}">${esc(title)}</b> <small title="${esc(facts1)}" data-testid="project-city-facts">${esc(facts1)}</small></div>
         <span class="r3d-grow"></span>
         <label class="r3d-search"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="7" cy="7" r="5"/><path d="M11 11l4 4"/></svg>
-          <input type="search" list="pc-targets-${esc(projectId)}" placeholder="Fly to a file or a district" aria-label="Search the city" data-pc-search data-testid="project-city-search" /></label>
+          <input type="search" list="pc-targets-${esc(projectId)}" placeholder="${t('project_city.fly_to_a_file_or_a')}" aria-label="${t('project_city.search_the_city')}" data-pc-search data-testid="project-city-search" /></label>
         <datalist id="pc-targets-${esc(projectId)}">${targets.map((t) => `<option value="${esc(t)}"></option>`).join('')}</datalist>
-        <label class="r3d-chip"><span>Colour by</span><select data-pc-colour aria-label="Colour by" data-testid="project-city-colour">${options}</select></label>
-        <label class="r3d-chip" title="Show or hide the test files (smaller and lower buildings)"><input type="checkbox" data-pc-tests data-testid="project-city-tests" ${c.tests ? 'checked' : ''} /> Tests</label>
-        <button type="button" class="r3d-close" data-pc-theme data-testid="project-city-theme" aria-label="${light ? 'Dark theme' : 'Light theme'}" title="${light ? 'Switch to the dark theme' : 'Switch to the light theme'} (the run's 3D view follows)">${light ? '☾' : '☀'}</button>
+        <label class="r3d-chip"><span>${t('project_city.colour_by')}</span><select data-pc-colour aria-label="${t('project_city.colour_by')}" data-testid="project-city-colour">${options}</select></label>
+        <label class="r3d-chip" title="${t('project_city.show_or_hide_the_test_files')}"><input type="checkbox" data-pc-tests data-testid="project-city-tests" ${c.tests ? 'checked' : ''} /> ${t('project_city.tests')}</label>
+        <button type="button" class="r3d-close" data-pc-theme data-testid="project-city-theme" aria-label="${light ? 'Dark theme' : 'Light theme'}" title="${t('project_city.value_the_run_s_3d_view', { value: light ? 'Switch to the dark theme' : 'Switch to the light theme' })}">${light ? '☾' : '☀'}</button>
         <button type="button" class="r3d-close r3d-theme" data-pc-expand data-testid="project-city-expand" aria-pressed="${c.expanded}" aria-label="${c.expanded ? 'Close the full screen' : 'Expand to the whole window'}" title="${c.expanded ? 'Back into the tab (Esc)' : 'Expand the city over the whole window'}">${c.expanded ? ICON_CLOSE : ICON_EXPAND}</button>
       </div>`;
     }
@@ -234,22 +234,22 @@
       const a = c.answer;
       if (!c.layout || !a) {
         hud.innerHTML = '';
-        if (c.error) stageMessage(`<p>Could not read the city: ${esc(c.error)}</p><button type="button" class="r3d-primary inline" data-pc-retry>Retry</button>`, { alert: true, testid: 'project-city-error' });
-        else if (c.loading || !a) stageMessage('<p>Reading the facts and laying out the city…</p><span class="r3d-bar open"><i></i></span>', { testid: 'project-city-loading' });
+        if (c.error) stageMessage(`<p>${t('project_city.could_not_read_the_city')} ${esc(c.error)}</p><button type="button" class="r3d-primary inline" data-pc-retry>${t('project_city.retry')}</button>`, { alert: true, testid: 'project-city-error' });
+        else if (c.loading || !a) stageMessage(`<p>${t('project_city.reading_the_facts_and_laying_out')}</p><span class="r3d-bar open"><i></i></span>`, { testid: 'project-city-loading' });
         else if (a.state === 'not-git') stateMessage('project-city-not-git', 'Not a git repository', 'The project folder is not a git repository: there is no history to draw. Point the project to a git checkout.');
         else if (a.state === 'no-commits') stateMessage('project-city-no-commits', 'No commits yet', 'The city is drawn from the files at the last commit of the default branch.');
-        else stageMessage(`<p>The city could not be laid out${window.CityLayout ? '' : ' (its layout script did not load)'}.</p>${toFacts}`, { alert: true });
+        else stageMessage(`<p>${t('project_city.the_city_could_not_be_laid', { value: window.CityLayout ? '' : ' (its layout script did not load)' })}</p>${toFacts}`, { alert: true });
         return;
       }
       const model = a.model;
       hud.innerHTML = `${headerHtml(model, a.validation)}${notesHtml(model, a.validation)}
         <div class="r3d-card pc-legend" data-testid="project-city-legend"></div>
-        <div class="r3d-zoom r3d-card" role="toolbar" aria-label="Camera">
-          <button type="button" title="Zoom in" aria-label="Zoom in" data-pc-zoom="in">+</button>
-          <button type="button" title="Zoom out" aria-label="Zoom out" data-pc-zoom="out">−</button>
-          <button type="button" title="The whole city" aria-label="The whole city" data-pc-home data-testid="project-city-home">⌂</button>
+        <div class="r3d-zoom r3d-card" role="toolbar" aria-label="${t('project_city.camera')}">
+          <button type="button" title="${t('project_city.zoom_in')}" aria-label="${t('project_city.zoom_in')}" data-pc-zoom="in">+</button>
+          <button type="button" title="${t('project_city.zoom_out')}" aria-label="${t('project_city.zoom_out')}" data-pc-zoom="out">−</button>
+          <button type="button" title="${t('project_city.the_whole_city')}" aria-label="${t('project_city.the_whole_city')}" data-pc-home data-testid="project-city-home">⌂</button>
         </div>
-        <div class="r3d-hint r3d-card">Drag to pan, right-drag to rotate, scroll to zoom; click a building to pin its card</div>
+        <div class="r3d-hint r3d-card">${t('project_city.drag_to_pan_right_drag_to')}</div>
         <div class="r3d-card pc-hover hidden" data-pc-hover data-testid="project-city-hover"></div>
         <div class="r3d-detail r3d-card hidden" data-pc-detail data-testid="project-city-card"></div>`;
       c.legend = CityLayout.colourBy(c.layout, c.colour, { light: c.theme === 'light' }).legend;
@@ -284,7 +284,7 @@
       if (!box) return;
       const html = c.pinned && c.layout ? cardHtml(c.pinned, true) : '';
       box.classList.toggle('hidden', !html);
-      box.innerHTML = html ? `<button type="button" class="pc-detail-close" data-pc-unpin aria-label="Close the card" title="Close">×</button>${html}` : '';
+      box.innerHTML = html ? `<button type="button" class="pc-detail-close" data-pc-unpin aria-label="${t('project_city.close_the_card')}" title="${t('common.close')}">×</button>${html}` : '';
       renderHover();
     }
 

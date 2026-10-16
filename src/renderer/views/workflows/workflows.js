@@ -134,12 +134,12 @@ function renderWorkflowDefinitions() {
   const filters = $('#wf-sections');
   // #254: the Pipelines tab is this page with the pipelines alone
   const pipesOnly = state.workflowsTab === 'pipelines';
-  const pipesError = wfDefs.pipelinesError ? `<p class="error small">Pipelines could not be read: ${esc(wfDefs.pipelinesError)}</p>` : '';
+  const pipesError = wfDefs.pipelinesError ? `<p class="error small">${t('workflows.pipelines_could_not_be_read')} ${esc(wfDefs.pipelinesError)}</p>` : '';
   if (pipesOnly ? !wfDefs.pipelines.length : !state.workflows.length) {
     filters.innerHTML = '';
     box.innerHTML = pipesOnly
-      ? `${pipesError}<div class="empty-state"><b>No pipelines yet</b><p class="muted">A pipeline chains workflows. Start a workflow with a "When it finishes" chain, then use Save as pipeline on its run.</p></div>`
-      : '<div class="empty-state"><b>No workflows</b><p class="muted">Add .yaml files to the workflows folder.</p></div>';
+      ? `${pipesError}<div class="empty-state"><b>${t('workflows.no_pipelines_yet')}</b><p class="muted">${t('workflows.a_pipeline_chains_workflows_start_a')}</p></div>`
+      : `<div class="empty-state"><b>${t('workflows.no_workflows')}</b><p class="muted">${t('workflows.add_yaml_files_to_the_workflows')}</p></div>`;
     return;
   }
   const q = wfDefs.query.trim().toLowerCase();
@@ -161,7 +161,7 @@ function renderWorkflowDefinitions() {
 
   const shown = keys.filter((k) => (wfDefs.section === 'all' || wfDefs.section === k) && count(k));
   if (!shown.length) {
-    box.innerHTML = `<div class="empty-state"><b>No ${pipesOnly ? 'pipeline' : 'workflow'} matches</b><p class="muted">Nothing${q ? ` matches "${esc(wfDefs.query.trim())}"` : ''} in ${esc(wfDefs.section === 'all' ? 'any section' : wfSectionName(wfDefs.section))}.</p><button class="btn ghost sm" data-clear>Clear the filters</button></div>`;
+    box.innerHTML = `<div class="empty-state"><b>${t('workflows.no_value_matches', { value: pipesOnly ? 'pipeline' : 'workflow' })}</b><p class="muted">${t('workflows.nothing_value_in_value2', { value: q ? ` matches "${esc(wfDefs.query.trim())}"` : '', value2: esc(wfDefs.section === 'all' ? 'any section' : wfSectionName(wfDefs.section)) })}</p><button class="btn ghost sm" data-clear>${t('workflows.clear_the_filters')}</button></div>`;
     box.querySelector('[data-clear]').onclick = () => { wfDefs.section = 'all'; wfDefs.query = ''; $('#wf-search').value = ''; renderWorkflowDefinitions(); };
     return;
   }
@@ -192,7 +192,7 @@ function stepFlow(w) {
   const wfReadable = (id, def) => def?.display || (typeof displayName === 'function' ? displayName(id) : String(id || ''));
   const chip = (s) => `<span class="step-chip ${s.type === 'human_approval' ? 'human' : ''}" title="${esc(s.type === 'human_approval' ? `${s.id} (human approval)` : s.id)}">${esc(wfReadable(s.id, s))}</span>`;
   const shown = steps.length > 7 ? steps.slice(0, 6) : steps;
-  return shown.map(chip).join('<span class="arrow">›</span>') + (steps.length > shown.length ? `<span class="muted small">+${steps.length - shown.length} more</span>` : '');
+  return shown.map(chip).join('<span class="arrow">›</span>') + (steps.length > shown.length ? `<span class="muted small">${t('workflows.value_more', { value: steps.length - shown.length })}</span>` : '');
 }
 
 function workflowCard(w) {
@@ -212,7 +212,7 @@ function workflowCard(w) {
   const builderTip = w.origin !== 'custom' ? 'See it in the visual builder (read-only: clone it to change it)' : w.builder ? 'Edit it in the visual builder' : 'See it in the visual builder: its agents and prompts can be changed there, its steps stay as they are';
   // #319: what it needs beyond Claude Code and Git, and whether Start offers it (the Setup hides the unpicked ones)
   const model = typeof SetupModel === 'undefined' ? null : SetupModel;
-  const needs = (model ? model.requirementBadges(w.requirements) : []).map((b) => `<span class="badge" title="The CLIs it needs, with its default inputs">${esc(b)}</span>`).join('');
+  const needs = (model ? model.requirementBadges(w.requirements) : []).map((b) => `<span class="badge" title="${t('workflows.the_clis_it_needs_with_its')}">${esc(b)}</span>`).join('');
   const shown = !model || !(state.settings?.hiddenWorkflows || []).includes(model.workflowId(w.file));
   return `
     <article class="wf-card${w.origin === 'custom' ? ' custom' : ''}" data-file="${esc(w.file)}" tabindex="-1">
@@ -224,17 +224,17 @@ function workflowCard(w) {
         ${avatars ? `<div class="wf-avs">${avatars}</div>` : ''}
       </div>
       <p class="muted small wf-desc" title="${esc(w.error ? `Error: ${w.error}` : w.description || '')}">${esc(w.error ? `Error: ${w.error}` : w.description || '')}</p>
-      ${(w.warnings || []).map((m) => `<p class="small warn-text wf-warning" role="status" data-testid="workflow-warning">Warning: ${esc(m)}</p>`).join('')}
+      ${(w.warnings || []).map((m) => `<p class="small warn-text wf-warning" role="status" data-testid="workflow-warning">${t('workflows.warning')} ${esc(m)}</p>`).join('')}
       ${modes || outputs || needs ? `<div class="wf-tags">${modes}${outputs}${needs}</div>` : ''}
-      ${(w.steps || []).length ? `<button class="wf-flow steps-mini" data-flow aria-expanded="${open}" title="${open ? 'Hide the steps' : 'Show every step'}"><span class="badge">${w.steps.length} step${w.steps.length === 1 ? '' : 's'}</span>${stepFlow(w)}<span class="wf-flow-caret" aria-hidden="true">${open ? '▴' : '▾'}</span></button>` : ''}
+      ${(w.steps || []).length ? `<button class="wf-flow steps-mini" data-flow aria-expanded="${open}" title="${open ? 'Hide the steps' : 'Show every step'}"><span class="badge">${w.steps.length} ${t('workflows.step')}${w.steps.length === 1 ? '' : 's'}</span>${stepFlow(w)}<span class="wf-flow-caret" aria-hidden="true">${open ? '▴' : '▾'}</span></button>` : ''}
       ${open ? `<ol class="wf-steps">${stepList(w)}</ol>` : ''}
-      ${used ? `<p class="small wf-used"><span class="muted">Used in</span> ${used}</p>` : ''}
+      ${used ? `<p class="small wf-used"><span class="muted">${t('workflows.used_in')}</span> ${used}</p>` : ''}
       <div class="row wf-actions">
-        ${w.restorable ? '<button class="btn ghost sm" data-restore title="Move your edited copy to the trash and use the default bundled with the app">Restore default</button>' : ''}
-        <label class="wf-show-start small" title="Off: Start does not offer it (nothing is deleted)"><label class="switch"><input type="checkbox" data-show-start data-testid="workflow-show-in-start" aria-label="Show in Start: ${esc(w.name)}" ${shown ? 'checked' : ''} /><span></span></label>Show in Start</label>
+        ${w.restorable ? `<button class="btn ghost sm" data-restore title="${t('workflows.move_your_edited_copy_to_the')}">${t('workflows.restore_default')}</button>` : ''}
+        <label class="wf-show-start small" title="${t('workflows.off_start_does_not_offer_it')}"><label class="switch"><input type="checkbox" data-show-start data-testid="workflow-show-in-start" aria-label="${t('workflows.show_in_start_name', { name: esc(w.name) })}" ${shown ? 'checked' : ''} /><span></span></label>${t('workflows.show_in_start')}</label>
         <span class="spacer"></span>
-        <button class="btn ghost sm" data-builder ${w.error ? 'disabled' : ''} title="${esc(builderTip)}">Open in builder</button>
-        <button class="btn primary sm" data-run ${w.error ? 'disabled' : ''}>Run</button>
+        <button class="btn ghost sm" data-builder ${w.error ? 'disabled' : ''} title="${esc(builderTip)}">${t('workflows.open_in_builder')}</button>
+        <button class="btn primary sm" data-run ${w.error ? 'disabled' : ''}>${t('workflows.run')}</button>
       </div>
     </article>`;
 }
@@ -245,26 +245,26 @@ function pipelineCard(p) {
   const stages = p.stages.map((s, i) => {
     const w = s.workflow ? wfByFile(s.workflow) : null;
     const map = Object.entries(s.map || {}).map(([input, output]) => `<span class="badge" title="${esc(`Output "${output}" of the previous workflow → input "${input}"`)}">${esc(output === '@run' ? 'the run' : output)} → ${esc(input)}</span>`).join('');
-    const link = i ? `<div class="wf-link"><span class="wf-link-arrow" aria-hidden="true">→</span>${map}<span class="muted small">on ${esc(s.on || s.when || 'success')}</span></div>` : '';
+    const link = i ? `<div class="wf-link"><span class="wf-link-arrow" aria-hidden="true">→</span>${map}<span class="muted small">${t('workflows.on')} ${esc(s.on || s.when || 'success')}</span></div>` : '';
     if (s.target === 'product_owner') {
-      return `${link}<span class="wf-stage wf-stage-target" data-testid="pipeline-stage" title="The Product Owner places the produced issues in the project's roadmap as planned stages"><b>Product Owner</b><span class="badge">roadmap</span></span>`;
+      return `${link}<span class="wf-stage wf-stage-target" data-testid="pipeline-stage" title="${t('workflows.the_product_owner_places_the_produced')}"><b>${t('workflows.product_owner')}</b><span class="badge">${t('workflows.roadmap')}</span></span>`;
     }
     return `${link}<button class="wf-stage" data-testid="pipeline-stage" data-goto="${esc(s.workflow)}" title="${esc(w ? `${s.target === 'queue' ? 'The produced issues are queued for ' : ''}${w.name} (${s.workflow})` : `${s.workflow}: not in the workflows folder`)}">
       <b>${s.target === 'queue' ? 'Queue: ' : ''}${esc(w?.name || s.workflow)}</b>
-      ${w ? `<span class="badge cat-${esc(wfSectionOf(w.category))}">${esc(wfSectionName(wfSectionOf(w.category)))}</span>` : '<span class="badge warn">missing</span>'}
+      ${w ? `<span class="badge cat-${esc(wfSectionOf(w.category))}">${esc(wfSectionName(wfSectionOf(w.category)))}</span>` : `<span class="badge warn">${t('workflows.missing')}</span>`}
     </button>`;
   }).join('');
   return `
     <article class="wf-pipe" data-testid="pipeline-card" data-pipe="${esc(p.file)}" data-files="${esc(p.stages.map((s) => s.workflow || '').join('|'))}" tabindex="-1">
       <div class="wf-pipe-head">
-        <span class="badge">pipeline</span>
+        <span class="badge">${t('workflows.pipeline')}</span>
         <h3 title="${esc(p.name)}">${esc(p.name)}</h3>
         <span class="muted small wf-desc" data-testid="pipeline-description" title="${esc(p.error ? `Error: ${p.error}` : p.description || '')}">${esc(p.error ? `Error: ${p.error}` : p.description || '')}</span>
         <span class="spacer"></span>
         ${p.origin ? originBadge(p) : ''}
         <span class="badge mono wf-file" title="${esc(p.file)}">${esc(p.file)}</span>
-        ${p.restorable ? '<button class="btn ghost sm" data-restore-pipe title="Move your edited copy to the trash and use the default bundled with the app">Restore default</button>' : ''}
-        <button class="btn primary sm" data-run-pipe ${p.error || !wfByFile(p.stages[0]?.workflow) ? 'disabled' : ''} title="Opens the Start drawer on the pipeline: it asks for the first stage's inputs, then runs every stage, each fed by the previous one">Run pipeline</button>
+        ${p.restorable ? `<button class="btn ghost sm" data-restore-pipe title="${t('workflows.move_your_edited_copy_to_the')}">${t('workflows.restore_default')}</button>` : ''}
+        <button class="btn primary sm" data-run-pipe ${p.error || !wfByFile(p.stages[0]?.workflow) ? 'disabled' : ''} title="${t('workflows.opens_the_start_drawer_on_the')}">${t('workflows.run_pipeline')}</button>
       </div>
       ${p.error ? `<p class="error small wf-pipe-error">${esc(p.error)}</p>` : ''}
       ${stages ? `<div class="wf-pipe-stages">${stages}</div>` : ''}
@@ -341,8 +341,8 @@ function stepList(w) {
       <span class="wf-step-n">${i + 1}</span>
       <div class="wf-step-body">
         <div class="wf-step-head" title="${esc(s.id)}"><b>${esc(wfReadable(s.id, s))}</b>
-          ${s.agents ? '<span class="badge">parallel</span>' : ''}${s.goal ? '<span class="badge">/goal</span>' : ''}${s.loop ? '<span class="badge">/loop</span>' : ''}
-          ${skillNames.map((k) => `<span class="badge" title="skill">⚡ ${esc(k.replace(/\{\{\s*inputs\.(\w+)\s*\}\}/g, '‹$1›'))}</span>`).join('')}</div>
+          ${s.agents ? `<span class="badge">${t('workflows.parallel')}</span>` : ''}${s.goal ? `<span class="badge">${t('workflows.goal')}</span>` : ''}${s.loop ? `<span class="badge">${t('workflows.loop')}</span>` : ''}
+          ${skillNames.map((k) => `<span class="badge" title="${t('workflows.skill')}">⚡ ${esc(k.replace(/\{\{\s*inputs\.(\w+)\s*\}\}/g, '‹$1›'))}</span>`).join('')}</div>
         <div class="muted small">${human ? 'human approval' : s.type === 'screenshots' ? 'screenshots (no agent)' : s.type === 'suite' ? 'test suite (no agent)' : s.type === 'test_ids' ? 'test id check (no agent)' : s.type === 'check' ? 'rule checks (no agent)' : s.type === 'release_version' ? 'release version (no agent)' : s.type === 'project_map' ? 'project map (no agent)' :s.type === 'workflow' ? `runs ${esc(s.workflow || 'a workflow')}${s.foreach ? ` for each item${s.max_parallel ? `, ${esc(String(s.max_parallel))} at a time` : ''}` : ''}` : who}</div>
         ${others.length ? `<div class="wf-step-next small">↳ ${others.map((n) => `<span title="${esc(n)}">${esc(wfReadable(n, w.steps.find((x) => x.id === n)))}</span>`).join(', ')}</div>` : ''}
       </div>
@@ -353,12 +353,12 @@ function stepList(w) {
 // Where a workflow file comes from (see src/seed.js): the bundled default, edited by the user or user-created.
 function originBadge(w) {
   const badges = {
-    default: '<span class="badge" title="Default bundled with the app; updated automatically with new app versions">default</span>',
-    modified: '<span class="badge warn" title="Bundled default edited by you; app updates do not overwrite it">modified</span>',
-    custom: '<span class="badge cat-build" title="Created by you">custom</span>',
+    default: `<span class="badge" title="${t('workflows.default_bundled_with_the_app_updated')}">${t('workflows.default')}</span>`,
+    modified: `<span class="badge warn" title="${t('workflows.bundled_default_edited_by_you_app')}">${t('workflows.modified')}</span>`,
+    custom: `<span class="badge cat-build" title="${t('workflows.created_by_you')}">${t('workflows.custom')}</span>`,
   };
   const update = w.updateAvailable
-    ? `<span class="badge warn" title="The app ships a newer default than the one you edited. Restore default to use it (your copy goes to the trash).">newer default${w.bundledVersion ? ` v${esc(w.bundledVersion)}` : ''}</span>`
+    ? `<span class="badge warn" title="${t('workflows.the_app_ships_a_newer_default')}">${t('workflows.newer_default')}${w.bundledVersion ? ` v${esc(w.bundledVersion)}` : ''}</span>`
     : '';
   return (badges[w.origin] || '') + update;
 }
@@ -406,106 +406,106 @@ registerView({
       <section id="view-workflows" class="view hidden">
         <div class="page-head">
           <div>
-            <h1>Workflows <span class="muted">›</span> <span id="workflows-page-title">Runs</span></h1>
-            <p class="muted small"><span id="workflows-page-hint"></span> Folder: <span id="workflows-dir" class="mono"></span> (defaults bundled with the app are copied there; your edits are kept on app updates).</p>
+            <h1>${t('workflows.workflows')} <span class="muted">›</span> <span id="workflows-page-title">${t('workflows.runs')}</span></h1>
+            <p class="muted small"><span id="workflows-page-hint"></span> ${t('workflows.folder')} <span id="workflows-dir" class="mono"></span> ${t('workflows.defaults_bundled_with_the_app_are')}</p>
           </div>
           <div class="row keep-awake-head">
             <div id="workflows-keep-awake" class="keep-awake">
               <div class="keep-awake-top">
-                <b>Keep awake</b>
+                <b>${t('workflows.keep_awake')}</b>
                 <span class="badge keep-awake-status" data-keep-awake-status></span>
-                <label class="switch" title="Keep awake"><input type="checkbox" data-keep-awake-toggle aria-label="Keep awake" /><span></span></label>
+                <label class="switch" title="${t('workflows.keep_awake')}"><input type="checkbox" data-keep-awake-toggle aria-label="${t('workflows.keep_awake')}" /><span></span></label>
               </div>
-              <span class="muted small">Keeps this computer from sleeping while runs or a roadmap are active (this workspace). Sleep, the lid and the power plan still apply.</span>
+              <span class="muted small">${t('workflows.keeps_this_computer_from_sleeping_while')}</span>
               <span class="error small" data-keep-awake-error></span>
             </div>
-            <button id="btn-workflows-folder" class="btn ghost">Open folder</button>
+            <button id="btn-workflows-folder" class="btn ghost">${t('workflows.open_folder')}</button>
           </div>
         </div>
-        <div class="tabs page-tabs" role="tablist" aria-label="Workflows">
-          <button type="button" class="tab" role="tab" data-wtab="definitions">Definitions</button>
-          <button type="button" class="tab" role="tab" data-wtab="runs">Runs</button>
-          <button type="button" class="tab" role="tab" data-wtab="builder">Builder</button>
-          <button type="button" class="tab" role="tab" data-wtab="pipelines">Pipelines</button>
+        <div class="tabs page-tabs" role="tablist" aria-label="${t('workflows.workflows')}">
+          <button type="button" class="tab" role="tab" data-wtab="definitions">${t('workflows.definitions')}</button>
+          <button type="button" class="tab" role="tab" data-wtab="runs">${t('workflows.runs')}</button>
+          <button type="button" class="tab" role="tab" data-wtab="builder">${t('workflows.builder')}</button>
+          <button type="button" class="tab" role="tab" data-wtab="pipelines">${t('workflows.pipelines')}</button>
         </div>
         <div data-wpage="runs">
           <div class="pr-toolbar">
             <!-- #254: the runs' artifacts (views/artifacts/) are a tab of Runs -->
-            <div class="seg sm" role="tablist" aria-label="Runs">
-              <button type="button" class="active" role="tab" aria-selected="true">All runs</button>
-              <button type="button" role="tab" id="wf-tab-artifacts" aria-selected="false" title="The files the runs produced: a run's artifacts and the list of every run's">Artifacts</button>
+            <div class="seg sm" role="tablist" aria-label="${t('workflows.runs')}">
+              <button type="button" class="active" role="tab" aria-selected="true">${t('workflows.all_runs')}</button>
+              <button type="button" role="tab" id="wf-tab-artifacts" aria-selected="false" title="${t('workflows.the_files_the_runs_produced_a')}">${t('workflows.artifacts')}</button>
             </div>
             <div id="workflow-run-filters" class="chips"></div>
             <!-- #310: the runs of one workflow (run-list.js fills it) -->
-            <select id="workflow-run-workflow" data-testid="runs-workflow-filter" aria-label="Workflow" title="Show the runs of one workflow"></select>
+            <select id="workflow-run-workflow" data-testid="runs-workflow-filter" aria-label="${t('workflows.workflow')}" title="${t('workflows.show_the_runs_of_one_workflow')}"></select>
             <span class="spacer"></span>
-            <input type="text" id="workflow-run-search" class="pr-search" placeholder="Search runs" aria-label="Search runs" spellcheck="false" />
-            <label class="check small"><input type="checkbox" id="workflow-show-sim" /><span>Show simulated</span></label>
-            <button id="btn-workflow-runs-refresh" class="btn sm ghost">Refresh</button>
+            <input type="text" id="workflow-run-search" class="pr-search" placeholder="${t('workflows.search_runs')}" aria-label="${t('workflows.search_runs')}" spellcheck="false" />
+            <label class="check small"><input type="checkbox" id="workflow-show-sim" /><span>${t('workflows.show_simulated')}</span></label>
+            <button id="btn-workflow-runs-refresh" class="btn sm ghost">${t('workflows.refresh')}</button>
           </div>
           <p id="workflow-runs-error" class="error small"></p>
           <div id="workflow-runs" class="pr-list"></div>
         </div>
         <div data-wpage="definitions" class="hidden">
           <div class="pr-toolbar wf-toolbar">
-            <div id="wf-sections" class="chips" role="group" aria-label="Section"></div>
+            <div id="wf-sections" class="chips" role="group" aria-label="${t('workflows.section')}"></div>
             <span class="spacer"></span>
-            <input type="text" id="wf-search" class="wf-search" placeholder="Search workflows and pipelines" aria-label="Search workflows and pipelines" spellcheck="false" />
+            <input type="text" id="wf-search" class="wf-search" placeholder="${t('workflows.search_workflows_and_pipelines')}" aria-label="${t('workflows.search_workflows_and_pipelines')}" spellcheck="false" />
           </div>
           <div id="workflows-list" class="wf-list"></div>
         </div>
         <div data-wpage="builder" class="hidden">
           <div id="wb" class="wb">
             <div class="wb-bar">
-              <input type="text" id="wb-name" class="wb-name" placeholder="Workflow name" aria-label="Workflow name" spellcheck="false" />
-              <select id="wb-category" aria-label="Category"></select>
+              <input type="text" id="wb-name" class="wb-name" placeholder="${t('workflows.workflow_name')}" aria-label="${t('workflows.workflow_name')}" spellcheck="false" />
+              <select id="wb-category" aria-label="${t('workflows.category')}"></select>
               <span class="spacer"></span>
-              <select id="wb-open" aria-label="Open a workflow in the builder"></select>
-              <button id="wb-new" class="btn ghost sm" type="button">New</button>
-              <button id="wb-clone" class="btn ghost sm hidden" type="button" title="Make your own copy of this workflow (custom), which you can change">Clone</button>
-              <button id="wb-save" class="btn sm" type="button">Save</button>
-              <button id="wb-run" class="btn primary sm" type="button" title="Save and open the start panel">Run</button>
+              <select id="wb-open" aria-label="${t('workflows.open_a_workflow_in_the_builder')}"></select>
+              <button id="wb-new" class="btn ghost sm" type="button">${t('workflows.new')}</button>
+              <button id="wb-clone" class="btn ghost sm hidden" type="button" title="${t('workflows.make_your_own_copy_of_this')}">${t('workflows.clone')}</button>
+              <button id="wb-save" class="btn sm" type="button">${t('common.save')}</button>
+              <button id="wb-run" class="btn primary sm" type="button" title="${t('workflows.save_and_open_the_start_panel')}">${t('workflows.run')}</button>
             </div>
-            <textarea id="wb-description" class="wb-description" rows="2" placeholder="What it does (shown when you start it)" aria-label="Description"></textarea>
+            <textarea id="wb-description" class="wb-description" rows="2" placeholder="${t('workflows.what_it_does_shown_when_you')}" aria-label="${t('workflows.description')}"></textarea>
             <p id="wb-banner" class="wb-banner small hidden"></p>
-            <div class="wb-meta muted small"><span class="mono" id="wb-file"></span><span id="wb-dirty" class="badge warn hidden">unsaved</span>
+            <div class="wb-meta muted small"><span class="mono" id="wb-file"></span><span id="wb-dirty" class="badge warn hidden">${t('workflows.unsaved')}</span>
               <span class="spacer"></span>
-              <button id="wb-add-desk" class="btn ghost sm" type="button" title="Add an agent desk after the selected one">+ Desk</button>
-              <button id="wb-add-gate" class="btn ghost sm" type="button" title="Add an approval gate after the selected desk">+ Approval gate</button>
+              <button id="wb-add-desk" class="btn ghost sm" type="button" title="${t('workflows.add_an_agent_desk_after_the')}">${t('workflows.desk')}</button>
+              <button id="wb-add-gate" class="btn ghost sm" type="button" title="${t('workflows.add_an_approval_gate_after_the')}">${t('workflows.approval_gate')}</button>
             </div>
             <div class="wb-main">
-              <div id="wb-canvas" class="wb-canvas" aria-label="Steps, in order"></div>
+              <div id="wb-canvas" class="wb-canvas" aria-label="${t('workflows.steps_in_order')}"></div>
               <aside id="wb-panel" class="wb-panel"></aside>
             </div>
             <p id="wb-error" class="error small wb-error"></p>
           </div>
         </div>
         <!-- #409: the Supervisor, on every tab (views/supervisor/ draws its robot and unseen dot) -->
-        <button id="btn-wf-sup-fab" class="po-fab sup-fab" type="button" data-testid="supervisor-fab" title="Ask the Supervisor about workflows and runs: its chat opens at the side" aria-label="Supervisor"></button>
+        <button id="btn-wf-sup-fab" class="po-fab sup-fab" type="button" data-testid="supervisor-fab" title="${t('workflows.ask_the_supervisor_about_workflows_and')}" aria-label="${t('workflows.supervisor')}"></button>
       </section>`,
   modals: `
-  <!-- Workflows > Builder: the skills of a desk -->
+  <!-- Workflows > ${t('workflows.builder_the_skills_of_a_desk')}
   <div id="wb-skills-modal" class="modal hidden">
     <div class="modal-card wide" role="dialog" aria-labelledby="wb-skills-title">
-      <h3 id="wb-skills-title">Skills of this agent <span id="wb-skill-count" class="muted small"></span></h3>
-      <input type="text" id="wb-skill-search" placeholder="Filter skills" aria-label="Filter skills" />
+      <h3 id="wb-skills-title">${t('workflows.skills_of_this_agent')} <span id="wb-skill-count" class="muted small"></span></h3>
+      <input type="text" id="wb-skill-search" placeholder="${t('workflows.filter_skills')}" aria-label="${t('workflows.filter_skills')}" />
       <div id="wb-skill-list" class="ag-skills wb-skill-list"></div>
       <div class="modal-actions">
-        <button type="button" id="btn-wb-skills-cancel" class="btn ghost">Cancel</button>
-        <button type="button" id="btn-wb-skills-ok" class="btn primary">Apply</button>
+        <button type="button" id="btn-wb-skills-cancel" class="btn ghost">${t('common.cancel')}</button>
+        <button type="button" id="btn-wb-skills-ok" class="btn primary">${t('workflows.apply')}</button>
       </div>
     </div>
   </div>
-  <!-- Workflows > Builder: import an agent (Agents menu) into a desk -->
+  <!-- Workflows > ${t('workflows.builder_import_an_agent_agents_menu')}
   <div id="wb-agents-modal" class="modal hidden">
     <div class="modal-card wb-agents-card" role="dialog" aria-labelledby="wb-agents-title">
-      <h3 id="wb-agents-title">Import an agent</h3>
-      <p class="muted small">Its look, prompt and skills go to the desk; you can still adjust them there.</p>
+      <h3 id="wb-agents-title">${t('workflows.import_an_agent')}</h3>
+      <p class="muted small">${t('workflows.its_look_prompt_and_skills_go')}</p>
       <div id="wb-agents-list" class="card-grid agents-grid wb-agents-list"></div>
       <div class="modal-actions">
-        <button type="button" id="btn-wb-agents-manage" class="btn ghost">Manage agents</button>
+        <button type="button" id="btn-wb-agents-manage" class="btn ghost">${t('workflows.manage_agents')}</button>
         <span class="spacer"></span>
-        <button type="button" id="btn-wb-agents-cancel" class="btn ghost">Cancel</button>
+        <button type="button" id="btn-wb-agents-cancel" class="btn ghost">${t('common.cancel')}</button>
       </div>
     </div>
   </div>`,

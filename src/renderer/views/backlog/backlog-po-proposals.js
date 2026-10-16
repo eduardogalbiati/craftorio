@@ -38,7 +38,7 @@
     const value = splitWorkflow(key);
     const list = (state.workflows || []).filter((w) => !w.error && w.inputs?.task);
     const options = list.some((w) => w.file === value) ? list : [{ file: value, name: value }, ...list];
-    return `<select class="po-wf" data-split-wf aria-label="Workflow of the children in the roadmap" title="The workflow of the children's roadmap items (the default comes from Settings › General › Backlog)"${off(ctx)}>${options.map((w) =>
+    return `<select class="po-wf" data-split-wf aria-label="${t('backlog_po_proposals.workflow_of_the_children_in_the')}" title="${t('backlog_po_proposals.the_workflow_of_the_children_s')}"${off(ctx)}>${options.map((w) =>
       `<option value="${esc(w.file)}"${w.file === value ? ' selected' : ''}>${esc(w.name || w.file)}${w.file === DefaultWorkflow.current().file ? ' (default)' : ''}</option>`).join('')}</select>`;
   }
 
@@ -59,34 +59,34 @@
   function childrenHtml(s, p) {
     const text = (k) => s.tasks?.[k - 1]?.text || `Task ${k}`;
     return `<ol class="po-children">${p.children.map((c) => `<li class="po-child">
-        <div class="po-child-head"><span class="badge" title="Children of the same stage can run together">stage ${c.stage}</span><span class="badge bl-triage bl-complexity lvl-${c.complexity}" title="Complexity ${c.complexity}/5">C${c.complexity}</span><b class="po-child-title" title="${esc(c.title)}">${esc(c.title)}</b></div>
+        <div class="po-child-head"><span class="badge" title="${t('backlog_po_proposals.children_of_the_same_stage_can')}">${t('backlog_po_proposals.stage')} ${c.stage}</span><span class="badge bl-triage bl-complexity lvl-${c.complexity}" title="${t('backlog_po_proposals.complexity_complexity_5', { complexity: c.complexity })}">C${c.complexity}</span><b class="po-child-title" title="${esc(c.title)}">${esc(c.title)}</b></div>
         <ul class="po-tasks small">${c.tasks.map((k) => `<li data-testid="po-split-task" title="${esc(taskPlain(text(k)))}"><span class="muted mono">${k}.</span> ${taskHtml(text(k))}</li>`).join('')}</ul>
         ${c.reason ? `<div class="small muted">${esc(c.reason)}</div>` : ''}
       </li>`).join('')}</ol>
-      <div class="small"><span class="muted">Then #${s.issue}:</span> ${p.parent === 'close' ? 'closed in favour of its children, with a comment linking them' : 'an umbrella, with a task list linking its children'}</div>`;
+      <div class="small"><span class="muted">${t('backlog_po_proposals.then_issue', { issue: s.issue })}</span> ${p.parent === 'close' ? 'closed in favour of its children, with a comment linking them' : 'an umbrella, with a task list linking its children'}</div>`;
   }
 
   function editHtml(s, e) {
     const tasks = s.tasks || [];
     return `<div class="po-edit">
-        <div class="field"><label>Then #${s.issue}</label>
-          <div class="seg sm" role="group" aria-label="What becomes of #${s.issue}">
-            <button type="button" class="${e.parent === 'umbrella' ? 'active' : ''}" data-split-parent="umbrella">Umbrella</button>
-            <button type="button" class="${e.parent === 'close' ? 'active' : ''}" data-split-parent="close">Close</button>
+        <div class="field"><label>${t('backlog_po_proposals.then')}${s.issue}</label>
+          <div class="seg sm" role="group" aria-label="${t('backlog_po_proposals.what_becomes_of_issue', { issue: s.issue })}">
+            <button type="button" class="${e.parent === 'umbrella' ? 'active' : ''}" data-split-parent="umbrella">${t('backlog_po_proposals.umbrella')}</button>
+            <button type="button" class="${e.parent === 'close' ? 'active' : ''}" data-split-parent="close">${t('common.close')}</button>
           </div>
-          <div class="hint">Umbrella: a task list linking the children is added to it. Close: a comment links them and it is closed.</div></div>
+          <div class="hint">${t('backlog_po_proposals.umbrella_a_task_list_linking_the')}</div></div>
         ${e.children.map((c, i) => `<div class="po-edit-child">
-          <div class="field"><label for="po-split-title-${s.issue}-${i}">Child ${i + 1}</label>
+          <div class="field"><label for="po-split-title-${s.issue}-${i}">${t('backlog_po_proposals.child')} ${i + 1}</label>
             <input type="text" id="po-split-title-${s.issue}-${i}" data-split-title="${i}" value="${esc(c.title)}" /></div>
           <div class="row small">
-            <label class="po-edit-num">Stage <input type="number" min="1" max="9" data-split-stage="${i}" value="${c.stage}" /></label>
-            <label class="po-edit-num">Complexity <select data-split-cx="${i}">${[1, 2, 3, 4, 5].map((k) => `<option value="${k}"${c.complexity === k ? ' selected' : ''}>${k}</option>`).join('')}</select></label>
-            ${i < e.children.length - 1 ? `<button class="link-btn small" type="button" data-split-merge="${i}" title="Child ${i + 2}'s tasks join this one">merge with child ${i + 2}</button>` : ''}
+            <label class="po-edit-num">${t('backlog_po_proposals.stage_2')} <input type="number" min="1" max="9" data-split-stage="${i}" value="${c.stage}" /></label>
+            <label class="po-edit-num">${t('backlog_po_proposals.complexity')} <select data-split-cx="${i}">${[1, 2, 3, 4, 5].map((k) => `<option value="${k}"${c.complexity === k ? ' selected' : ''}>${k}</option>`).join('')}</select></label>
+            ${i < e.children.length - 1 ? `<button class="link-btn small" type="button" data-split-merge="${i}" title="${t('backlog_po_proposals.child_value_s_tasks_join_this', { value: i + 2 })}">${t('backlog_po_proposals.merge_with_child')} ${i + 2}</button>` : ''}
           </div></div>`).join('')}
-        <div class="field"><label>Tasks</label><div class="po-edit-tasks">${tasks.map((t) => `<label class="po-edit-task"><span class="small" title="${esc(taskPlain(t.text))}"><span class="muted mono">${t.n}.</span> ${taskHtml(t.text)}</span>
-            <select data-split-task="${t.n}" aria-label="Child of task ${t.n}">${e.children.map((c, i) => `<option value="${i}"${c.tasks.includes(t.n) ? ' selected' : ''}>Child ${i + 1}</option>`).join('')}</select></label>`).join('')}</div>
-          <div class="hint">Every task goes to exactly one child.</div></div>
-        <div class="row"><button class="btn sm primary" type="button" data-split-act="save">Save</button><button class="btn sm ghost" type="button" data-split-act="cancel">Cancel</button></div>
+        <div class="field"><label>${t('backlog_po_proposals.tasks')}</label><div class="po-edit-tasks">${tasks.map((t) => `<label class="po-edit-task"><span class="small" title="${esc(taskPlain(t.text))}"><span class="muted mono">${t.n}.</span> ${taskHtml(t.text)}</span>
+            <select data-split-task="${t.n}" aria-label="${I18n.t('backlog_po_proposals.child_of_task_n', { n: t.n })}">${e.children.map((c, i) => `<option value="${i}"${c.tasks.includes(t.n) ? ' selected' : ''}>${I18n.t('backlog_po_proposals.child')} ${i + 1}</option>`).join('')}</select></label>`).join('')}</div>
+          <div class="hint">${t('backlog_po_proposals.every_task_goes_to_exactly_one')}</div></div>
+        <div class="row"><button class="btn sm primary" type="button" data-split-act="save">${t('common.save')}</button><button class="btn sm ghost" type="button" data-split-act="cancel">${t('common.cancel')}</button></div>
       </div>`;
   }
 
@@ -97,16 +97,16 @@
     const title = s.title || ctx.issueOf(s.issue)?.title || '';
     return `<div class="po-group po-split${done ? ' applied' : ''}" data-split="${s.issue}" data-testid="po-split-card">
         <div class="po-group-head">${ctx.issueRef(s.issue)}<b class="po-split-title" title="${esc(title)}">${esc(title)}</b>
-          <span class="badge">${s.tasks?.length || 0} tasks</span>
-          ${done ? `<span class="badge live">Split into ${esc(done.children.map((c) => (c.number ? `#${c.number}` : c.title)).join(', '))}</span>` : saved.has(key) ? '<span class="badge warn" title="You edited this proposal: the edit is what Split files">edited</span>' : ''}</div>
+          <span class="badge">${s.tasks?.length || 0} ${t('backlog_po_proposals.tasks_2')}</span>
+          ${done ? `<span class="badge live">${t('backlog_po_proposals.split_into')} ${esc(done.children.map((c) => (c.number ? `#${c.number}` : c.title)).join(', '))}</span>` : saved.has(key) ? `<span class="badge warn" title="${t('backlog_po_proposals.you_edited_this_proposal_the_edit')}">${t('backlog_po_proposals.edited')}</span>` : ''}</div>
         <ul class="po-list small">${s.reasons.map((r) => `<li class="warn-text">${esc(r)}</li>`).join('')}</ul>
-        ${s.repaired ? '<div class="small muted">The proposal was adjusted so that every task is in exactly one child.</div>' : ''}
+        ${s.repaired ? `<div class="small muted">${t('backlog_po_proposals.the_proposal_was_adjusted_so_that')}</div>` : ''}
         ${edit ? editHtml(s, edit) : childrenHtml(s, current(msg, s))}
         ${done || edit ? '' : `<div class="row po-group-actions">
-          <button class="btn sm primary" type="button" data-split-act="split"${off(ctx)} title="File the children, then update #${s.issue}">Split</button>
-          <button class="btn sm ghost" type="button" data-split-act="split-roadmap"${off(ctx)} title="File the children, then plan them in the roadmap in this order (${esc(DefaultWorkflow.label(splitWorkflow(key)))})">Split + roadmap</button>
+          <button class="btn sm primary" type="button" data-split-act="split"${off(ctx)} title="${t('backlog_po_proposals.file_the_children_then_update_issue', { issue: s.issue })}">${t('backlog_po_proposals.split')}</button>
+          <button class="btn sm ghost" type="button" data-split-act="split-roadmap"${off(ctx)} title="${t('backlog_po_proposals.file_the_children_then_plan_them', { key: esc(DefaultWorkflow.label(splitWorkflow(key))) })}">${t('backlog_po_proposals.split_roadmap')}</button>
           ${workflowSelect(key, ctx)}
-          <button class="btn sm ghost" type="button" data-split-act="edit"${off(ctx)} title="Move a task, merge two children, rename them">Edit…</button>
+          <button class="btn sm ghost" type="button" data-split-act="edit"${off(ctx)} title="${t('backlog_po_proposals.move_a_task_merge_two_children')}">${t('backlog_po_proposals.edit')}</button>
           ${noteHtml(key)}</div>`}
       </div>`;
   }
@@ -114,7 +114,7 @@
   function splitsHtml(ctx, msg) {
     const list = msg.answer?.splits || [];
     if (!list.length) return '';
-    return `<div class="po-sec"><div class="sup-h">Split what is too big</div>${list.map((s) => splitHtml(ctx, msg, s)).join('')}</div>`;
+    return `<div class="po-sec"><div class="sup-h">${t('backlog_po_proposals.split_what_is_too_big')}</div>${list.map((s) => splitHtml(ctx, msg, s)).join('')}</div>`;
   }
 
   // ---- epics (#138) -------------------------------------------------------------------------------------
@@ -125,27 +125,27 @@
     for (const p of ep.place || []) { if (!byEpic.has(p.epic)) byEpic.set(p.epic, []); byEpic.get(p.epic).push(p); }
     const action = (key, label, title) => {
       const done = appliedEpic(ctx, msg, key);
-      return done ? `<span class="badge live">${esc(done.epic?.id || '')} done</span>`
+      return done ? `<span class="badge live">${esc(done.epic?.id || '')} ${t('backlog_po_proposals.done')}</span>`
         : `<div class="row po-group-actions"><button class="btn sm primary" type="button" data-epic-act="${esc(key)}"${off(ctx)} title="${esc(title)}">${label}</button>${noteHtml(epicKey(msg, key))}</div>`;
     };
     const place = [...byEpic].map(([id, list]) => `<div class="po-group${appliedEpic(ctx, msg, `place:${id}`) ? ' applied' : ''}">
-        <div class="po-group-head"><span class="badge bl-epic" title="Epic ${esc(id)}">${esc(list[0].epicTitle || epicTitle(id))}</span><span class="po-issues">${list.map((p) => ctx.issueRef(p.issue)).join('')}</span></div>
+        <div class="po-group-head"><span class="badge bl-epic" title="${t('backlog_po_proposals.epic_id', { id: esc(id) })}">${esc(list[0].epicTitle || epicTitle(id))}</span><span class="po-issues">${list.map((p) => ctx.issueRef(p.issue)).join('')}</span></div>
         <ul class="po-list small">${list.map((p) => `<li>#${p.issue} ${esc(ctx.issueOf(p.issue)?.title || '')}${p.reason ? ` <span class="muted">${esc(p.reason)}</span>` : ''}</li>`).join('')}</ul>
         ${action(`place:${id}`, 'Place in epic', `Move ${list.map((p) => `#${p.issue}`).join(', ')} into this epic`)}
       </div>`).join('');
     const create = (ep.create || []).map((c, n) => `<div class="po-group${appliedEpic(ctx, msg, `create:${n}`) ? ' applied' : ''}">
-        <div class="po-group-head"><b class="po-split-title" title="${esc(c.title)}">${esc(c.title)}</b><span class="badge">new epic</span><span class="po-issues">${c.issues.map(ctx.issueRef).join('')}</span></div>
+        <div class="po-group-head"><b class="po-split-title" title="${esc(c.title)}">${esc(c.title)}</b><span class="badge">${t('backlog_po_proposals.new_epic')}</span><span class="po-issues">${c.issues.map(ctx.issueRef).join('')}</span></div>
         ${c.goal ? `<div class="small">${esc(c.goal)}</div>` : ''}
         ${action(`create:${n}`, 'Create epic', `Create the epic and place ${c.issues.map((x) => `#${x}`).join(', ')} in it`)}
       </div>`).join('');
     const advice = [
-      ...(ep.merge || []).map((m) => `<li>Merge ${m.epics.map((id) => `<span class="badge bl-epic">${esc(epicTitle(id))}</span>`).join(' + ')} ${esc(m.reason)}</li>`),
-      ...(ep.split || []).map((s) => `<li>Split <span class="badge bl-epic">${esc(epicTitle(s.epic))}</span> ${esc(s.reason)}</li>`),
+      ...(ep.merge || []).map((m) => `<li>${t('backlog_po_proposals.merge')} ${m.epics.map((id) => `<span class="badge bl-epic">${esc(epicTitle(id))}</span>`).join(' + ')} ${esc(m.reason)}</li>`),
+      ...(ep.split || []).map((s) => `<li>${t('backlog_po_proposals.split')} <span class="badge bl-epic">${esc(epicTitle(s.epic))}</span> ${esc(s.reason)}</li>`),
     ].join('');
-    return `<div class="po-sec"><div class="sup-h">Epics</div>
-        ${place ? `<div class="small muted">Place in existing epics</div>${place}` : ''}
-        ${create ? `<div class="small muted">Epics to create</div>${create}` : ''}
-        ${advice ? `<div class="small muted">Epics to merge or split</div><ul class="po-list">${advice}</ul>` : ''}
+    return `<div class="po-sec"><div class="sup-h">${t('backlog_po_proposals.epics')}</div>
+        ${place ? `<div class="small muted">${t('backlog_po_proposals.place_in_existing_epics')}</div>${place}` : ''}
+        ${create ? `<div class="small muted">${t('backlog_po_proposals.epics_to_create')}</div>${create}` : ''}
+        ${advice ? `<div class="small muted">${t('backlog_po_proposals.epics_to_merge_or_split')}</div><ul class="po-list">${advice}</ul>` : ''}
       </div>`;
   }
 

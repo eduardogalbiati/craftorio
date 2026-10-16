@@ -40,8 +40,8 @@ async function showCodeBanner() {
         : `The app's code changed on disk. Close and open the app to use it${inProgress}.`;
   const el = $('#code-banner');
   el.innerHTML = `<span>${esc(text)}</span>
-    ${codeState.reload ? '<button class="btn sm primary" type="button" data-code="reload">Reload</button>' : desktop ? '<button class="btn sm primary" type="button" data-code="restart">Restart</button>' : ''}
-    <button class="btn sm ghost" type="button" data-code="dismiss" title="Hide until the next check">Later</button>`;
+    ${codeState.reload ? `<button class="btn sm primary" type="button" data-code="reload">${t('code_banner.reload')}</button>` : desktop ? `<button class="btn sm primary" type="button" data-code="restart">${t('code_banner.restart')}</button>` : ''}
+    <button class="btn sm ghost" type="button" data-code="dismiss" title="${t('code_banner.hide_until_the_next_check')}">${t('code_banner.later')}</button>`;
   el.classList.remove('hidden');
 }
 window.showCodeBanner = showCodeBanner;
@@ -75,10 +75,10 @@ function showRestartInterrupted() {
   } catch { return; }
   if (!Array.isArray(list) || !list.length) return;
   const el = $('#code-banner');
-  el.innerHTML = `<span>The restart interrupted ${list.length} run${list.length > 1 ? 's' : ''}:</span>
+  el.innerHTML = `<span>${t('code_banner.the_restart_interrupted_length_run_value', { length: list.length, value: list.length > 1 ? 's' : '' })}</span>
     ${list.map((r) => `<span class="code-banner-run"><span class="mono small">${esc(r.workflow || 'workflow')} ${esc(r.runId)}</span>
-      <button class="btn sm primary" type="button" data-code="resume" data-run="${esc(r.runId)}">Resume…</button></span>`).join('')}
-    <button class="btn sm ghost" type="button" data-code="dismiss">Dismiss</button>`;
+      <button class="btn sm primary" type="button" data-code="resume" data-run="${esc(r.runId)}">${t('code_banner.resume')}</button></span>`).join('')}
+    <button class="btn sm ghost" type="button" data-code="dismiss">${t('common.dismiss')}</button>`;
   el.classList.remove('hidden');
 }
 
@@ -93,9 +93,9 @@ async function checkFailedAppUpdate() {
   if (!f) { box.innerHTML = ''; return; }
   const subjects = (f.subjects || []).slice(0, 5);
   box.innerHTML = `<div class="code-banner app-update-banner" role="alert" data-testid="app-update-failed-banner">
-    <span>The app update to <b class="mono">${esc(String(f.to || '').slice(0, 7))}</b> did not start: no record came from the new code within 2 minutes of the restart.${subjects.length ? ` It brought: ${subjects.map((s) => esc(s)).join('; ')}${f.subjects.length > subjects.length ? '; …' : ''}.` : ''}</span>
-    <span>To go back to <span class="mono">${esc(String(f.from || '').slice(0, 7))}</span>, close the app and run <code class="mono">${esc(f.command)}</code>, then open it again.</span>
-    <button class="btn sm ghost" type="button" data-app-update="dismiss" title="Deletes the update's record: the banner does not come back">Dismiss</button>
+    <span>${t('code_banner.the_app_update_to')} <b class="mono">${esc(String(f.to || '').slice(0, 7))}</b> ${t('code_banner.did_not_start_no_record_came')}${subjects.length ? ` It brought: ${subjects.map((s) => esc(s)).join('; ')}${f.subjects.length > subjects.length ? '; …' : ''}.` : ''}</span>
+    <span>${t('code_banner.to_go_back_to')} <span class="mono">${esc(String(f.from || '').slice(0, 7))}</span>${t('code_banner.close_the_app_and_run')} <code class="mono">${esc(f.command)}</code>${t('code_banner.then_open_it_again')}</span>
+    <button class="btn sm ghost" type="button" data-app-update="dismiss" title="${t('code_banner.deletes_the_update_s_record_the')}">${t('common.dismiss')}</button>
   </div>`;
   box.querySelector('[data-app-update="dismiss"]').onclick = async () => {
     try { await api.dismissAppUpdate(); box.innerHTML = ''; } catch (e) { showToast('Could not dismiss', errMsg(e)); }

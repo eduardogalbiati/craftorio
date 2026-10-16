@@ -119,8 +119,8 @@ function renderWorkflowOptions(preferred) {
 function renderProjectOptions(preferred) {
   const sel = $('#project-select');
   sel.innerHTML = state.projects.length
-    ? `<option value="">— select a project —</option>${state.projects.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}${p.exists ? '' : ' (folder not found)'}</option>`).join('')}`
-    : '<option value="">No projects — click +</option>';
+    ? `<option value="">${t('start_drawer.select_a_project')}</option>${state.projects.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}${p.exists ? '' : ' (folder not found)'}</option>`).join('')}`
+    : `<option value="">${t('start_drawer.no_projects_click')}</option>`;
   if (state.projects.some((p) => p.id === preferred)) sel.value = preferred;
   renderProjectInfo();
 }
@@ -183,8 +183,8 @@ function selectWorkflow(file) {
   for (const [key, def] of entries) values[key] = (def.type === 'run' || key === mainKey ? null : saved[key]) ?? def.default ?? '';
   // the other inputs: human labels and the control that fits each (workflow-inputs.js, #116)
   const field = ([key, def]) => WorkflowInputs.fieldHtml(key, def, { value: values[key], id: `in-${key}`, attrs: `name="${esc(key)}"`, context: values });
-  const mainHtml = ([key, def]) => `<div class="field"><label for="in-${key}">Input ${def.required ? '<span class="req">*</span>' : ''}</label>`
-    + `<textarea id="in-${key}" name="${key}" data-testid="start-main-input" data-wi-input="${esc(key)}" rows="7" placeholder="Describe what needs to be done…">${esc(values[key])}</textarea>`
+  const mainHtml = ([key, def]) => `<div class="field"><label for="in-${key}">${t('start_drawer.input')} ${def.required ? '<span class="req">*</span>' : ''}</label>`
+    + `<textarea id="in-${key}" name="${key}" data-testid="start-main-input" data-wi-input="${esc(key)}" rows="7" placeholder="${t('start_drawer.describe_what_needs_to_be_done')}">${esc(values[key])}</textarea>`
     + `${def.description ? `<div class="hint">${esc(def.description)}</div>` : ''}</div>`;
   // a workflow's `mode` (e.g. auto | validated) and its tests (#203: unit_tests, e2e_tests, about
   // half of a run's cost) and its screenshots (#205) change how the run goes: shown next to the task, not in Advanced
@@ -236,7 +236,7 @@ function renderEnvStatus() {
     return t.signInCommand ? commandHint(t.signInCommand, { signIn: true }) : '';
   };
   const lines = missing.map((id) => {
-    if (id === 'forge') return '<span class="missing">✗ Needs the GitHub CLI or the GitLab CLI, signed in</span>';
+    if (id === 'forge') return `<span class="missing">${I18n.t('start_drawer.needs_the_github_cli_or_the')}</span>`;
     const t = tool(id);
     const why = state.cliStates[id] === 'signed-out' ? 'not signed in' : 'not installed';
     return `<span class="missing">✗ ${esc(SetupModel.toolName(id))}: ${why}</span>${action(t)}`;
@@ -260,10 +260,10 @@ function renderDrawerPipeline() {
   if (!p) { box.innerHTML = ''; return; }
   for (const [k, v] of Object.entries(p.stages[0].inputs || {})) WorkflowInputs.set($('#drawer'), k, v);
   const names = Object.fromEntries(state.workflows.map((w) => [w.file, w.name]));
-  box.innerHTML = `<div class="drawer-pipeline-head"><span class="chain-banner-title">Pipeline</span><span class="badge">${p.stages.length} stages</span></div>
+  box.innerHTML = `<div class="drawer-pipeline-head"><span class="chain-banner-title">${t('start_drawer.pipeline')}</span><span class="badge">${p.stages.length} ${t('start_drawer.stages')}</span></div>
     ${ChainModel.pipelineStagesHtml(p, { names, current: 0 })}
-    <p class="muted small">You give the first stage's inputs; each next stage takes the previous one's outputs. A stage that fails or stops pauses the pipeline, and every gate still waits for you.</p>
-    <p class="muted small" data-pipe-estimate>Estimating the cost…</p>`;
+    <p class="muted small">${t('start_drawer.you_give_the_first_stage_s')}</p>
+    <p class="muted small" data-pipe-estimate>${t('start_drawer.estimating_the_cost')}</p>`;
   if (!api.pipelineEstimate) { box.querySelector('[data-pipe-estimate]').remove(); return; }
   api.pipelineEstimate(p.file).then((est) => {
     const el = box.querySelector('[data-pipe-estimate]');
@@ -344,9 +344,9 @@ async function startRun({ keepOpen = false } = {}) {
     }
     // what started, and a way to open it, while the drawer stays on the next one
     const info = $('#start-info');
-    info.innerHTML = `<button type="button" class="link-btn" title="Open this run">Started ${esc(runLabel(view?.run || { workflow: wf.name, project: project?.name }))}</button>`;
+    info.innerHTML = `<button type="button" class="link-btn" title="${t('start_drawer.open_this_run')}">${t('start_drawer.started')} ${esc(runLabel(view?.run || { workflow: wf.name, project: project?.name }))}</button>`;
     info.querySelector('button').onclick = () => { closeDrawer(); selectRun(runId, { open: true }); };
-    if (oneRunAtATime()) info.insertAdjacentHTML('beforeend', '<br>Turn on concurrent runs in Settings › Execution to start several runs in a row.');
+    if (oneRunAtATime()) info.insertAdjacentHTML('beforeend', `<br>${t('start_drawer.turn_on_concurrent_runs_in_settings')}`);
     main?.focus({ preventScroll: true });
   } catch (e) {
     $('#start-error').textContent = errMsg(e);

@@ -13,28 +13,28 @@ async function refreshProjects() {
   window.CurrentProject.refresh();
   const box = $('#projects-list');
   if (!state.projects.length) {
-    box.innerHTML = `<div class="empty-state"><b>No projects yet</b><p class="muted">Create a project that points to a local folder or a git repository.</p><button class="btn primary" id="empty-new-project">New project</button></div>`;
+    box.innerHTML = `<div class="empty-state"><b>${t('projects.no_projects_yet')}</b><p class="muted">${t('projects.create_a_project_that_points_to')}</p><button class="btn primary" id="empty-new-project">${t('projects.new_project')}</button></div>`;
     $('#empty-new-project').onclick = () => openProjectModal(null);
     return;
   }
   box.innerHTML = state.projects.map((p) => `
-    <div class="card clickable" data-testid="project-card" data-id="${esc(p.id)}" title="Open this project: its runs, conflict map, architecture and refactors">
+    <div class="card clickable" data-testid="project-card" data-id="${esc(p.id)}" title="${t('projects.open_this_project_its_runs_conflict')}">
       <div class="card-head">
         <span class="card-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></svg></span>
         <b class="card-title">${esc(p.name)}</b>
-        ${p.error ? '<span class="badge warn">error</span>' : p.isGit ? '<span class="badge">git</span>' : ''}
+        ${p.error ? `<span class="badge warn">${t('projects.error')}</span>` : p.isGit ? `<span class="badge">${t('projects.git')}</span>` : ''}
       </div>
       ${p.description ? `<p class="muted small">${esc(p.description)}</p>` : ''}
       <dl class="kv">
-        <dt>folder</dt><dd class="${p.exists ? '' : 'warn-text'}">${esc(p.folder || '—')}${p.exists ? '' : ' (not found)'}</dd>
-        <dt>repository</dt><dd>${esc(p.repo || '—')}</dd>
+        <dt>${t('projects.folder')}</dt><dd class="${p.exists ? '' : 'warn-text'}">${esc(p.folder || '—')}${p.exists ? '' : ' (not found)'}</dd>
+        <dt>${t('projects.repository')}</dt><dd>${esc(p.repo || '—')}</dd>
       </dl>
       <div class="card-actions">
-        <button class="btn sm primary" data-act="run">Start workflow</button>
-        <button class="btn sm ghost" data-act="open" ${p.exists ? '' : 'disabled'}>Open folder</button>
+        <button class="btn sm primary" data-act="run">${t('projects.start_workflow')}</button>
+        <button class="btn sm ghost" data-act="open" ${p.exists ? '' : 'disabled'}>${t('projects.open_folder')}</button>
         <span class="spacer"></span>
-        <button class="btn sm ghost" data-act="edit">Edit</button>
-        <button class="btn sm ghost danger" data-act="remove">Remove</button>
+        <button class="btn sm ghost" data-act="edit">${t('projects.edit')}</button>
+        <button class="btn sm ghost danger" data-act="remove">${t('projects.remove')}</button>
       </div>
     </div>`).join('');
 }
@@ -105,8 +105,8 @@ async function detectProjectRun() {
   let s = null;
   try { s = await api.suggestLocalPreview(folder); } catch { /* an unreadable folder suggests nothing */ }
   if (seq !== pjDetectSeq || !s?.command) return;
-  box.innerHTML = `Detected: ${runAppCommandHtml(s)}${s.url ? ` at ${esc(s.url)}` : ''} <span class="muted">(from ${esc(s.from || 'the folder')})</span>
-    <button type="button" class="btn sm ghost" id="btn-pj-lp-use">Use it</button>`;
+  box.innerHTML = `Detected: ${runAppCommandHtml(s)}${s.url ? ` at ${esc(s.url)}` : ''} <span class="muted">${t('projects.from_value', { value: esc(s.from || 'the folder') })}</span>
+    <button type="button" class="btn sm ghost" id="btn-pj-lp-use">${t('projects.use_it')}</button>`;
   box.classList.remove('hidden');
   $('#btn-pj-lp-use').onclick = () => {
     $('#pj-lp-install').value = s.install || '';
@@ -154,12 +154,12 @@ registerView({
       <section id="view-projects" class="view hidden" data-testid="projects-screen">
         <div class="page-head">
           <div>
-            <h1>Projects</h1>
-            <p class="muted small">Each project points to a local folder and, optionally, a git repository. Stored in <span id="projects-dir" class="mono"></span></p>
+            <h1>${t('projects.projects')}</h1>
+            <p class="muted small">${t('projects.each_project_points_to_a_local')} <span id="projects-dir" class="mono"></span></p>
           </div>
           <div class="row">
-            <button id="btn-projects-folder" class="btn ghost nowrap" type="button">Open folder</button>
-            <button id="btn-new-project" class="btn primary nowrap" type="button">New project</button>
+            <button id="btn-projects-folder" class="btn ghost nowrap" type="button">${t('projects.open_folder')}</button>
+            <button id="btn-new-project" class="btn primary nowrap" type="button">${t('projects.new_project')}</button>
           </div>
         </div>
         <div id="projects-list" class="card-grid"></div>
@@ -167,42 +167,42 @@ registerView({
   modals: `
   <div id="project-modal" class="modal hidden">
     <form id="project-form" class="modal-card wide">
-      <h3 id="project-modal-title">New project</h3>
+      <h3 id="project-modal-title">${t('projects.new_project')}</h3>
       <div class="field">
-        <label for="pj-name">Name <span class="req">*</span></label>
+        <label for="pj-name">${t('projects.name')} <span class="req">*</span></label>
         <input type="text" id="pj-name" name="name" required />
       </div>
       <div class="field">
-        <label for="pj-description">Description</label>
+        <label for="pj-description">${t('projects.description')}</label>
         <input type="text" id="pj-description" name="description" />
       </div>
       <div class="field">
-        <label for="pj-repo">Git repository <span class="muted">(optional)</span></label>
-        <input type="text" id="pj-repo" name="repo" placeholder="https://github.com/owner/repo.git" />
-        <div class="hint">If the folder is not a git repository, the repo is cloned into it.</div>
+        <label for="pj-repo">${t('projects.git_repository')} <span class="muted">${t('projects.optional')}</span></label>
+        <input type="text" id="pj-repo" name="repo" placeholder="${t('projects.https_github_com_owner_repo_git')}" />
+        <div class="hint">${t('projects.if_the_folder_is_not_a')}</div>
       </div>
       <div class="field">
-        <label for="pj-folder">Folder</label>
+        <label for="pj-folder">${t('projects.folder_2')}</label>
         <div class="row">
           <input type="text" id="pj-folder" name="folder" />
           <button type="button" id="btn-pj-pick" class="btn sm">…</button>
         </div>
-        <div id="pj-folder-hint" class="hint">Leave empty to create it in &lt;workspace&gt;/projects/&lt;name&gt;.</div>
+        <div id="pj-folder-hint" class="hint">${t('projects.leave_empty_to_create_it_in')}</div>
       </div>
       <div class="field">
-        <label for="pj-lp-command">Local preview <span class="muted">(optional)</span></label>
+        <label for="pj-lp-command">${t('projects.local_preview')} <span class="muted">${t('projects.optional')}</span></label>
         <div class="row">
-          <input type="text" id="pj-lp-install" name="lp_install" placeholder="Install: npm ci" />
-          <input type="text" id="pj-lp-command" name="lp_command" placeholder="Run: npm start" />
-          <input type="text" id="pj-lp-url" name="lp_url" placeholder="URL: http://localhost:5173" />
+          <input type="text" id="pj-lp-install" name="lp_install" placeholder="${t('projects.install_npm_ci')}" />
+          <input type="text" id="pj-lp-command" name="lp_command" placeholder="${t('projects.run_npm_start')}" />
+          <input type="text" id="pj-lp-url" name="lp_url" placeholder="${t('projects.url_http_localhost_5173')}" />
         </div>
         <div id="pj-lp-detected" class="hint pj-lp-detected hidden"></div>
-        <div class="hint">How to run a run's worktree: adds Run locally to the gates that offer it (e.g. developer_check). The install runs only when dependencies are missing or the lockfile changed. Overrides the workflow's orchestrator.local_preview.</div>
+        <div class="hint">${t('projects.how_to_run_a_run_s')}</div>
       </div>
       <p id="pj-error" class="error small"></p>
       <div class="modal-actions">
-        <button type="button" id="btn-pj-cancel" class="btn ghost">Cancel</button>
-        <button type="submit" id="btn-pj-save" class="btn primary">Create project</button>
+        <button type="button" id="btn-pj-cancel" class="btn ghost">${t('common.cancel')}</button>
+        <button type="submit" id="btn-pj-save" class="btn primary">${t('projects.create_project')}</button>
       </div>
     </form>
   </div>`,

@@ -94,9 +94,9 @@
     const cats = CATEGORIES.filter(([id]) => counts[id] || filter.category === id).map(([id, label]) => chip('category', id, label, counts[id] || 0, filter.category === id));
     const kindChips = KINDS.filter(([id]) => kinds[id] || filter.kind === id).map(([id, label]) => chip('kind', id, label, kinds[id] || 0, filter.kind === id));
     return `<div class="ap-filters">
-      <div class="seg sm" role="group" aria-label="Artifacts view">${view('produced', 'Produced', 'What the run produced: its result, screenshots, tests and reports')}${view('all', 'Show all', 'Also the handoff notes, the decision log and the agents\' logs')}</div>
-      ${cats.length ? `<div class="ap-chips" role="group" aria-label="Filter by category">${cats.join('')}</div>` : ''}
-      ${kindChips.length > 1 || filter.kind ? `<div class="ap-chips" role="group" aria-label="Filter by kind">${kindChips.join('')}</div>` : ''}
+      <div class="seg sm" role="group" aria-label="${t('artifacts_panel.artifacts_view')}">${view('produced', 'Produced', 'What the run produced: its result, screenshots, tests and reports')}${view('all', 'Show all', 'Also the handoff notes, the decision log and the agents\' logs')}</div>
+      ${cats.length ? `<div class="ap-chips" role="group" aria-label="${t('artifacts_panel.filter_by_category')}">${cats.join('')}</div>` : ''}
+      ${kindChips.length > 1 || filter.kind ? `<div class="ap-chips" role="group" aria-label="${t('artifacts_panel.filter_by_kind')}">${kindChips.join('')}</div>` : ''}
     </div>`;
   }
 
@@ -182,7 +182,7 @@
     const who = window.displayName ? [f.step, f.agent].filter(Boolean).map((x) => window.displayName(x)).join(' · ') : [f.step, f.agent].filter(Boolean).join(' · ');
     return `<button type="button" class="ap-file${f.exists === false ? ' missing' : ''}" data-testid="artifact-item" data-ap-file="${esc(f.path)}" title="${esc(f.path)}">
       ${artKindIcon(f.kind)}
-      <span class="ap-file-main"><span class="ap-file-name">${esc(f.name)}${f.location === 'external' ? ' <span class="badge">project copy</span>' : ''}${f.exists === false ? ' <span class="badge">deleted</span>' : ''}</span>
+      <span class="ap-file-main"><span class="ap-file-name">${esc(f.name)}${f.location === 'external' ? ` <span class="badge">${t('artifacts_panel.project_copy')}</span>` : ''}${f.exists === false ? ` <span class="badge">${t('artifacts_panel.deleted')}</span>` : ''}</span>
       <span class="ap-file-sub muted">${who ? esc(who) : `<code>${esc(slash(f.rel || ''))}</code>`}</span></span>
       <span class="ap-file-size muted">${esc(fmtSize(f.size))}</span></button>`;
   }
@@ -195,17 +195,17 @@
       // changesReported: no git diff (a simulated run has no worktree, #115), the developer's files_changed
       const reported = x.changesReported || null;
       const label = reported === 'simulated' ? 'simulated' : 'reported by the developer';
-      out.push(`<div class="ap-group"><div class="ap-group-head">Changed files${list.length ? ` <span class="muted">${list.length}</span>` : ''}${reported ? ` <span class="badge" title="No git diff for this run: the files the developer step reported">${label}</span>` : ''}</div>
+      out.push(`<div class="ap-group"><div class="ap-group-head">${t('artifacts_panel.changed_files')}${list.length ? ` <span class="muted">${list.length}</span>` : ''}${reported ? ` <span class="badge" title="${t('artifacts_panel.no_git_diff_for_this_run')}">${label}</span>` : ''}</div>
         ${typeof x.changes === 'string' ? `<p class="muted small ap-pad">${esc(x.changes)}</p>` : !list.length ? `<p class="muted small ap-pad">${reported ? 'The developer reported no changed files.' : 'No changes against the base.'}</p>`
     : list.map((c) => {
       const main = `<span class="ap-file-main"><span class="ap-file-name mono">${esc(baseOf(c.file))}</span><span class="ap-file-sub muted mono">${esc(dirOf(c.file) === slash(c.file) ? '' : dirOf(c.file))}</span></span>`;
       if (reported) return `<div class="ap-file ap-change ap-reported" title="${esc(c.file)}">${main}<span class="ap-file-size muted">${label}</span></div>`;
-      return `<button type="button" class="ap-file ap-change" data-ap-change="${esc(c.file)}" title="Show the diff of ${esc(c.file)}">${main}
-            <span class="ap-file-size">${c.added == null ? '<span class="muted">binary</span>' : `<span class="ap-add">+${c.added}</span> <span class="ap-del">−${c.deleted}</span>`}</span></button>`;
+      return `<button type="button" class="ap-file ap-change" data-ap-change="${esc(c.file)}" title="${t('artifacts_panel.show_the_diff_of_file', { file: esc(c.file) })}">${main}
+            <span class="ap-file-size">${c.added == null ? `<span class="muted">${t('artifacts_panel.binary')}</span>` : `<span class="ap-add">+${c.added}</span> <span class="ap-del">−${c.deleted}</span>`}</span></button>`;
     }).join('')}</div>`);
     }
     if (x.notes?.length) {
-      out.push(`<div class="ap-group"><div class="ap-group-head">From the developer</div>${x.notes.map((n, i) => `<button type="button" class="ap-file" data-ap-note="${i}">
+      out.push(`<div class="ap-group"><div class="ap-group-head">${t('artifacts_panel.from_the_developer')}</div>${x.notes.map((n, i) => `<button type="button" class="ap-file" data-ap-note="${i}">
         ${artKindIcon('markdown')}<span class="ap-file-main"><span class="ap-file-name">${esc(n.title)}</span><span class="ap-file-sub muted">${esc(String(n.text).split('\n')[0].slice(0, 90))}</span></span></button>`).join('')}</div>`);
     }
     return out.join('');
@@ -215,17 +215,17 @@
 
   function listHtml(p) {
     const head = `<div class="ap-head"><span class="muted small">${p.files ? `${p.files.length} artifact${p.files.length === 1 ? '' : 's'}` : ''}</span>
-      <span class="row">${p.run?.runDir ? '<button type="button" class="btn sm ghost" data-ap-folder title="The run\'s whole folder, its internal files (seeded workspace, locks) included">Open run folder</button>' : ''}
-      ${p.runId ? '<button type="button" class="btn sm ghost" data-ap-full title="All of this run\'s files in the Artifacts screen">Open in Artifacts</button>' : ''}</span></div>`;
+      <span class="row">${p.run?.runDir ? `<button type="button" class="btn sm ghost" data-ap-folder title="${t('artifacts_panel.the_run_s_whole_folder_its')}">${t('artifacts_panel.open_run_folder')}</button>` : ''}
+      ${p.runId ? `<button type="button" class="btn sm ghost" data-ap-full title="${t('artifacts_panel.all_of_this_run_s_files')}">${t('artifacts_panel.open_in_artifacts')}</button>` : ''}</span></div>`;
     p.context = [];
-    if (!p.runId) return '<p class="empty muted">Select a run to see its artifacts.</p>';
+    if (!p.runId) return `<p class="empty muted">${t('artifacts_panel.select_a_run_to_see_its')}</p>`;
     const extras = extrasHtml(p.extras);
-    if (p.files == null) return listWrap(`${head}${extras}<p class="muted small ap-pad">Loading…</p>`);
-    const error = p.error ? `<p class="error small ap-pad">Could not load artifacts: ${esc(p.error)}</p>` : '';
+    if (p.files == null) return listWrap(`${head}${extras}<p class="muted small ap-pad">${t('artifacts_panel.loading')}</p>`);
+    const error = p.error ? `<p class="error small ap-pad">${t('artifacts_panel.could_not_load_artifacts')} ${esc(p.error)}</p>` : '';
     if (p.flat) return listWrap(flatHtml(p, head, extras, error));
     const shots = shotsHtml(p);
     if (!p.files.length) {
-      return listWrap(`${head}${extras}${error}<div class="ap-empty"><b>No artifacts yet</b><p class="muted small">Handoff notes, the decision log, documents the steps save and the evidence step's screenshots appear here as the run produces them.</p></div>`);
+      return listWrap(`${head}${extras}${error}<div class="ap-empty"><b>${t('artifacts_panel.no_artifacts_yet')}</b><p class="muted small">${t('artifacts_panel.handoff_notes_the_decision_log_documents')}</p></div>`);
     }
     const f = p.filter;
     // the screenshots of the manifest show as cards; their files are not listed again
@@ -252,13 +252,13 @@
   function flatHtml(p, head, extras, error) {
     const shots = shotsHtml(p);
     if (!p.files.length) {
-      return `${head}${p.extras?.capture ? shots : ''}${extras}${error}<div class="ap-empty"><b>No artifacts yet</b><p class="muted small">Handoff notes, the decision log, documents the steps save and the evidence step's screenshots appear here as the run produces them.</p></div>`;
+      return `${head}${p.extras?.capture ? shots : ''}${extras}${error}<div class="ap-empty"><b>${t('artifacts_panel.no_artifacts_yet')}</b><p class="muted small">${t('artifacts_panel.handoff_notes_the_decision_log_documents')}</p></div>`;
     }
     const files = filterFiles(p.files, p.filter).sort(newest);
     const counts = countBy(filterFiles(p.files, p.filter, { ignoreCategory: true }), categoryOf);
     const kinds = countBy(filterFiles(p.files, { ...p.filter, kind: null }), chipKindOf);
     const list = files.length ? files.map(fileHtml).join('') : `<p class="muted small ap-pad">${p.filter.show === 'produced' ? 'Nothing produced yet: Show all lists the handoff notes, decisions and logs.' : 'Nothing matches this filter.'}</p>`;
-    return `${head}${shots}${extras}${error}<div class="ap-group">${extras || shots ? '<div class="ap-group-head">Run files</div>' : ''}${filtersHtml(p.filter, counts, kinds)}${list}</div>`;
+    return `${head}${shots}${extras}${error}<div class="ap-group">${extras || shots ? `<div class="ap-group-head">${t('artifacts_panel.run_files')}</div>` : ''}${filtersHtml(p.filter, counts, kinds)}${list}</div>`;
   }
 
   // ---------------------------------------------------------------- screenshots (#146)
@@ -315,8 +315,8 @@
       return `<figure><figcaption class="muted small" title="${esc(x.path)}">${esc(sideLabel(ev, x))}</figcaption><img ${ImageViewer.THUMB} alt="${esc(`${s.caption || s.key}: ${sideLabel(ev, x)}`)}" data-ap-img="${esc(x.file)}" data-ap-shot="${esc(tkey(x))}"${src ? ` src="${esc(src)}"` : ''} /></figure>`;
     };
     const isNew = sides.length === 1 && sides[0].side === 'modified' && fresh.has(s.key);
-    const only = isNew ? '<span class="badge ap-shot-badge new" title="The change adds this element: the original side (the base) has nothing to capture">new element (no original)</span>'
-      : sides.length === 1 ? `<span class="badge">${sides[0].side} only</span>` : '';
+    const only = isNew ? `<span class="badge ap-shot-badge new" title="${t('artifacts_panel.the_change_adds_this_element_the')}">${t('artifacts_panel.new_element_no_original')}</span>`
+      : sides.length === 1 ? `<span class="badge">${sides[0].side} ${t('artifacts_panel.only')}</span>` : '';
     return `<div class="ap-shot" data-testid="artifact-shot"><div class="ap-shot-head"><b class="ap-shot-title" title="${esc(s.key)}">${esc(s.caption || s.key)}</b>${only}</div>
       <div class="ap-pair${sides.length === 1 ? ' single' : ''}">${sides.map(fig).join('')}</div></div>`;
   }
@@ -353,8 +353,8 @@
     p.cards = shots.length;
     const fresh = newElementKeys(cap);
     const body = shots.length ? shots.map((s) => shotCardHtml(ev, s, fresh)).join('')
-      : `<div class="ap-empty"><b>No screenshots:</b> <span class="muted">${esc(cap.reason || 'none were captured')}</span></div>`;
-    return `<div class="ap-group ap-shots"><div class="ap-group-head">Screenshots <span class="badge">latest</span> <span class="muted" title="${esc(`Captured before this gate (${cap.folder})`)}">${esc(roundText(p, cap.folder, cap.round))}</span></div>
+      : `<div class="ap-empty"><b>${t('artifacts_panel.no_screenshots')}</b> <span class="muted">${esc(cap.reason || 'none were captured')}</span></div>`;
+    return `<div class="ap-group ap-shots"><div class="ap-group-head">${t('artifacts_panel.screenshots')} <span class="badge">${t('artifacts_panel.latest')}</span> <span class="muted" title="${esc(`Captured before this gate (${cap.folder})`)}">${esc(roundText(p, cap.folder, cap.round))}</span></div>
       ${captureSummaryHtml(cap)}${body}${ev?.images?.length ? historyHtml(p, ev, (x) => !latest(x)) : ''}</div>`;
   }
 
@@ -363,7 +363,7 @@
     if (p.evidence === undefined) return ''; // not loaded yet
     const ev = p.evidence;
     if (p.extras?.capture) return captureHtml(p, ev, p.extras.capture);
-    if (!ev?.images?.length) return '<div class="ap-group ap-shots"><p class="muted small ap-pad">No screenshots in this run.</p></div>';
+    if (!ev?.images?.length) return `<div class="ap-group ap-shots"><p class="muted small ap-pad">${t('artifacts_panel.no_screenshots_in_this_run')}</p></div>`;
     const shots = finalShots(ev);
     const issues = [...new Set(shots.map((s) => s.issue || ''))];
     const cap = captureFor(p, ev);
@@ -379,7 +379,7 @@
     }).join('');
     p.context = ordered;
     p.cards = ordered.length;
-    return `<div class="ap-group ap-shots"><div class="ap-group-head">Screenshots <span class="badge">final</span> <span class="muted" title="${esc(whereTip)}">${esc(where)}</span></div>${captureSummaryHtml(cap)}${body}${historyHtml(p, ev)}</div>`;
+    return `<div class="ap-group ap-shots"><div class="ap-group-head">${t('artifacts_panel.screenshots')} <span class="badge">${t('artifacts_panel.final')}</span> <span class="muted" title="${esc(whereTip)}">${esc(where)}</span></div>${captureSummaryHtml(cap)}${body}${historyHtml(p, ev)}</div>`;
   }
 
   // Older rounds and steps (isOld: the images that are not shown above), newest first, each image
@@ -394,7 +394,7 @@
       const list = old.filter((x) => x.step === r.step && x.round === r.round);
       return list.length ? `<div class="ap-sub-head" title="${esc(r.step)}">${esc(roundText(p, r.step, r.round))}</div>${list.map(item).join('')}` : '';
     }).join('');
-    return `<details class="ap-history"${p.historyOpen ? ' open' : ''}><summary class="ap-group-head" data-ap-history>History <span class="muted">${old.length}</span></summary>${groups}</details>`;
+    return `<details class="ap-history"${p.historyOpen ? ' open' : ''}><summary class="ap-group-head" data-ap-history>${t('artifacts_panel.history')} <span class="muted">${old.length}</span></summary>${groups}</details>`;
   }
 
   // Reads the screenshots shown without their image yet (once per file and capture)
@@ -492,9 +492,9 @@
     const s = p.sel;
     const meta = s.path ? (p.files || []).find((f) => f.path === s.path) || {} : {};
     const name = s.title || meta.name || baseOf(s.path);
-    return `<div class="ap-bar"><button type="button" class="btn sm ghost" data-ap-back title="Back to the list">← Artifacts</button>
+    return `<div class="ap-bar"><button type="button" class="btn sm ghost" data-ap-back title="${t('artifacts_panel.back_to_the_list')}">${t('artifacts_panel.artifacts')}</button>
       ${s.path ? artKindIcon(meta.kind) : ''}<b class="ap-title" title="${esc(s.path || name)}">${esc(name)}</b>
-      ${s.path ? '<button type="button" class="btn sm ghost" data-ap-full>Open in Artifacts</button>' : ''}</div>
+      ${s.path ? `<button type="button" class="btn sm ghost" data-ap-full>${t('artifacts_panel.open_in_artifacts')}</button>` : ''}</div>
       <div class="ap-body"></div>`;
   }
 
@@ -516,17 +516,17 @@
     const s = p.sel;
     if (s.text != null) { body.innerHTML = `<article class="md">${markdownHtml(s.text)}</article>`; return; }
     const d = p.doc;
-    if (!d) { body.innerHTML = '<p class="muted small ap-pad">Loading…</p>'; return; }
+    if (!d) { body.innerHTML = `<p class="muted small ap-pad">${t('artifacts_panel.loading')}</p>`; return; }
     if (d.error) { body.innerHTML = `<p class="error small ap-pad">${esc(d.error)}</p>`; return; }
     const meta = (p.files || []).find((f) => f.path === s.path) || d;
-    const notice = d.truncated ? '<div class="art-notice">This file is larger than 5 MB: only the first 5 MB are shown.</div>' : '';
+    const notice = d.truncated ? `<div class="art-notice">${t('artifacts_panel.this_file_is_larger_than_5')}</div>` : '';
     if (d.image && d.shot) {
       body.innerHTML = shotCardHtml(p.evidence, shotOf(p.evidence, d.shot), newElementKeys(captureFor(p, p.evidence)));
       paintThumbs(p);
       return;
     }
     if (d.image) { body.innerHTML = `<div class="art-image"><img ${ImageViewer.THUMB} src="${esc(d.image)}" alt="${esc(meta.name || '')}" data-ap-img="${esc(s.path)}" /></div>`; return; }
-    if (d.binary || d.text == null || meta.kind === 'other') { body.innerHTML = `${notice}<p class="muted small ap-pad">Preview not available for this file: open it in Artifacts.</p>`; return; }
+    if (d.binary || d.text == null || meta.kind === 'other') { body.innerHTML = `${notice}<p class="muted small ap-pad">${t('artifacts_panel.preview_not_available_for_this_file')}</p>`; return; }
     if (meta.kind === 'markdown') { body.innerHTML = `${notice}<article class="md">${markdownHtml(d.text)}</article>`; return; }
     if (meta.kind === 'json') { body.innerHTML = `${notice}<pre class="art-code json">${renderJsonText(d.text, /\.jsonl$/i.test(s.path))}</pre>`; return; }
     if (meta.kind === 'table') { body.innerHTML = `${notice}${renderDelimited(d.text, /\.csv$/i.test(s.path) ? ',' : '\t')}`; return; }

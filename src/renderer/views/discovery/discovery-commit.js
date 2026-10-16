@@ -37,8 +37,8 @@
     const why = score === null ? `A card is committed from ${BAR}% clarity: this one has no score yet.`
       : `A card is committed from ${BAR}% clarity: this one is at ${score}%. Close the gaps listed under Clarity (Grill me).`;
     return `
-      <div class="row dsc-actions" role="group" aria-label="Ready">
-        <button type="button" class="btn sm primary" data-testid="discovery-commit" data-detail="commit"${under ? ' disabled' : ''} title="${esc(under ? why : 'The Product Owner proposes the issues this card becomes; you edit and confirm before anything is filed')}">Commit to the backlog</button>
+      <div class="row dsc-actions" role="group" aria-label="${t('discovery_commit.ready')}">
+        <button type="button" class="btn sm primary" data-testid="discovery-commit" data-detail="commit"${under ? ' disabled' : ''} title="${esc(under ? why : 'The Product Owner proposes the issues this card becomes; you edit and confirm before anything is filed')}">${t('discovery_commit.commit_to_the_backlog')}</button>
       </div>
       <p class="muted small dsc-actions-hint" data-testid="discovery-commit-hint">${esc(under ? why : 'The card becomes one or more issues in the Backlog and leaves the board for the Committed list: it never comes back.')}</p>`;
   }
@@ -57,7 +57,7 @@
         <div class="dsc-delivery-head">${stageHtml(d)} <span class="muted small" data-testid="discovery-delivery-counts">${esc(counts)}</span></div>
         <ul class="dsc-delivery-issues">${(d.issues || []).map((i) => `
           <li>
-            ${i.url ? `<a class="mono" href="${esc(i.url)}" target="_blank" rel="noopener" title="Open the issue">#${esc(i.number)}</a>` : `<span class="mono">#${esc(i.number)}</span>`}
+            ${i.url ? `<a class="mono" href="${esc(i.url)}" target="_blank" rel="noopener" title="${t('discovery_commit.open_the_issue')}">#${esc(i.number)}</a>` : `<span class="mono">#${esc(i.number)}</span>`}
             <span class="dsc-delivery-title" title="${esc(i.title || '')}">${esc(i.title || 'not synced yet')}</span>
             ${i.release ? pill('released', `Shipped in ${i.release}`) : pill(i.column)}
           </li>`).join('')}</ul>
@@ -68,10 +68,10 @@
   function committedHtml(cards, openId) {
     if (!cards?.length) return '';
     return `
-      <aside class="dsc-committed" data-testid="discovery-committed" aria-label="Committed">
+      <aside class="dsc-committed" data-testid="discovery-committed" aria-label="${t('discovery_commit.committed')}">
         <header class="dsc-col-head">
-          <h3 title="Committed to the backlog: these cards follow their issues to the release and never return to the board">Committed</h3>
-          <span class="badge dsc-count" title="${cards.length} committed">${cards.length}</span>
+          <h3 title="${t('discovery_commit.committed_to_the_backlog_these_cards')}">${t('discovery_commit.committed')}</h3>
+          <span class="badge dsc-count" title="${t('discovery_commit.length_committed', { length: cards.length })}">${cards.length}</span>
         </header>
         <div class="dsc-committed-list">${cards.map((c) => `
           <article class="dsc-card dsc-committed-card${openId === c.id ? ' active' : ''}" data-testid="discovery-committed-card" data-card="${esc(c.id)}" data-stage="${esc(c.delivery?.stage || '')}">
@@ -85,15 +85,15 @@
   const MODAL = `
   <div id="dsc-commit-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="dsc-commit-title" data-testid="discovery-commit-dialog">
     <form id="dsc-commit-form" class="modal-card wide">
-      <h3 id="dsc-commit-title">Commit to the backlog</h3>
+      <h3 id="dsc-commit-title">${t('discovery_commit.commit_to_the_backlog')}</h3>
       <p id="dsc-commit-what" class="muted small"></p>
       <div id="dsc-commit-body"></div>
-      <label class="check dsc-commit-roadmap"><input type="checkbox" id="dsc-commit-roadmap" data-testid="discovery-commit-roadmap" /> <span>Plan them in the roadmap, in this order</span></label>
+      <label class="check dsc-commit-roadmap"><input type="checkbox" id="dsc-commit-roadmap" data-testid="discovery-commit-roadmap" /> <span>${t('discovery_commit.plan_them_in_the_roadmap_in')}</span></label>
       <p id="dsc-commit-error" class="error small" role="alert"></p>
       <div class="modal-actions">
         <span class="spacer"></span>
-        <button type="button" id="btn-dsc-commit-cancel" class="btn ghost">Cancel</button>
-        <button type="submit" id="btn-dsc-commit-file" class="btn primary" data-testid="discovery-commit-file" disabled>File the issues</button>
+        <button type="button" id="btn-dsc-commit-cancel" class="btn ghost">${t('common.cancel')}</button>
+        <button type="submit" id="btn-dsc-commit-file" class="btn primary" data-testid="discovery-commit-file" disabled>${t('discovery_commit.file_the_issues')}</button>
       </div>
     </form>
   </div>`;
@@ -111,31 +111,31 @@
     <li class="po-group dsc-commit-issue" data-testid="discovery-commit-issue" data-commit-issue="${i}">
       <div class="po-edit">
         <div class="field">
-          <label for="dsc-commit-title-${i}">Issue ${i + 1} <span class="req">*</span></label>
+          <label for="dsc-commit-title-${i}">${t('discovery_commit.issue')} ${i + 1} <span class="req">*</span></label>
           <input type="text" id="dsc-commit-title-${i}" data-commit-title maxlength="200" value="${esc(issue.title)}" autocomplete="off" />
         </div>
         <div class="dsc-commit-grid">
           <div class="field">
-            <label for="dsc-commit-cx-${i}">Complexity</label>
-            <select id="dsc-commit-cx-${i}" data-commit-cx title="1 (small) to 5 (too big for one run)">${[1, 2, 3, 4, 5].map((k) => `<option value="${k}"${Number(issue.complexity) === k ? ' selected' : ''}>${k}</option>`).join('')}</select>
+            <label for="dsc-commit-cx-${i}">${t('discovery_commit.complexity')}</label>
+            <select id="dsc-commit-cx-${i}" data-commit-cx title="${t('discovery_commit.n1_small_to_5_too_big')}">${[1, 2, 3, 4, 5].map((k) => `<option value="${k}"${Number(issue.complexity) === k ? ' selected' : ''}>${k}</option>`).join('')}</select>
           </div>
           <div class="field">
-            <label for="dsc-commit-wf-${i}">Workflow</label>
-            <select id="dsc-commit-wf-${i}" data-commit-wf title="The workflow that implements it (its roadmap item's)">${workflowOptions(issue.workflow || defaultWorkflow())}</select>
+            <label for="dsc-commit-wf-${i}">${t('discovery_commit.workflow')}</label>
+            <select id="dsc-commit-wf-${i}" data-commit-wf title="${t('discovery_commit.the_workflow_that_implements_it_its')}">${workflowOptions(issue.workflow || defaultWorkflow())}</select>
           </div>
         </div>
         <div class="field">
-          <label for="dsc-commit-tasks-${i}">Tasks <span class="req">*</span></label>
+          <label for="dsc-commit-tasks-${i}">${t('discovery_commit.tasks')} <span class="req">*</span></label>
           <textarea id="dsc-commit-tasks-${i}" data-commit-tasks rows="${Math.min(8, Math.max(2, issue.tasks.length))}"></textarea>
-          <div class="hint">One per line: each becomes a checkbox of the issue.${issue.reason ? ` ${esc(issue.reason)}` : ''}</div>
+          <div class="hint">${t('discovery_commit.one_per_line_each_becomes_a')}${issue.reason ? ` ${esc(issue.reason)}` : ''}</div>
         </div>
-        ${i < all.length - 1 ? `<div class="row"><button class="link-btn small" type="button" data-commit-merge="${i}" title="Issue ${i + 2}'s tasks join this one">merge with issue ${i + 2}</button></div>` : ''}
+        ${i < all.length - 1 ? `<div class="row"><button class="link-btn small" type="button" data-commit-merge="${i}" title="${t('discovery_commit.issue_value_s_tasks_join_this', { value: i + 2 })}">${t('discovery_commit.merge_with_issue')} ${i + 2}</button></div>` : ''}
       </div>
     </li>`;
 
   function renderDialog() {
     const body = $('#dsc-commit-body');
-    if (cm.loading) body.innerHTML = '<p class="muted small" data-testid="discovery-commit-loading">The Product Owner is proposing the split…</p>';
+    if (cm.loading) body.innerHTML = `<p class="muted small" data-testid="discovery-commit-loading">${t('discovery_commit.the_product_owner_is_proposing_the')}</p>`;
     else {
       body.innerHTML = `${cm.note ? `<p class="muted small" data-testid="discovery-commit-note">${esc(cm.note)}</p>` : ''}
         <ol class="dsc-commit-issues">${cm.issues.map(issueHtml).join('')}</ol>`;

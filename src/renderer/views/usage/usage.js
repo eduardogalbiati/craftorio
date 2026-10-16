@@ -9,7 +9,7 @@ function renderUsage() {
   const err = $('#usage-error');
   err.classList.toggle('hidden', !state.usageError);
   err.innerHTML = state.usageError
-    ? `<b>Usage unavailable</b>${u ? ' — showing the last loaded data.' : '.'} <span class="small">${esc(state.usageError)}</span>`
+    ? `<b>${t('usage.usage_unavailable')}</b>${u ? ' — showing the last loaded data.' : '.'} <span class="small">${esc(state.usageError)}</span>`
     : '';
   $('#usage-extra').classList.toggle('hidden', !u);
   $('#usage-live').classList.toggle('hidden', !u?.live);
@@ -18,7 +18,7 @@ function renderUsage() {
     : "Tokens and cost of the orchestrator's runs";
   $('#usage-cards').classList.toggle('stale', usageStale());
   if (!u) {
-    $('#usage-cards').innerHTML = state.usageError ? '' : '<p class="muted">Loading…</p>';
+    $('#usage-cards').innerHTML = state.usageError ? '' : `<p class="muted">${t('usage.loading')}</p>`;
     return;
   }
   $('#usage-month').textContent = monthLabel(u.month);
@@ -35,14 +35,14 @@ function planBlock(p, u) {
   const pl = p.plan;
   if (!pl) {
     return p.id === 'codex' && u.scope !== 'machine'
-      ? '<p class="muted small u-note">Switch to <b>This machine</b> to see the plan\'s rate limits and credits.</p>' : '';
+      ? `<p class="muted small u-note">${t('usage.switch_to')} <b>${t('usage.this_machine')}</b> ${t('usage.to_see_the_plan_s_rate')}</p>` : '';
   }
   const c = pl.credits;
   const credits = !c ? '' : c.unlimited ? 'unlimited credits' : c.balance != null ? `credit balance ${fmtNum(c.balance)}` : c.hasCredits ? 'has credits' : 'no credits';
   return `<div class="u-plan">
-    <div class="u-plan-head"><b>Plan</b>${pl.planType ? `<span class="badge">${esc(pl.planType)}</span>` : ''}${credits ? `<span class="muted small">${esc(credits)}</span>` : ''}
-      <span class="spacer"></span>${pl.updatedAt ? `<span class="muted small">as of ${esc(shortDate(pl.updatedAt))}</span>` : ''}</div>
-    ${pl.limitReached ? `<p class="error small u-note">Limit reached: ${esc(pl.limitReached)}</p>` : ''}
+    <div class="u-plan-head"><b>${t('usage.plan')}</b>${pl.planType ? `<span class="badge">${esc(pl.planType)}</span>` : ''}${credits ? `<span class="muted small">${esc(credits)}</span>` : ''}
+      <span class="spacer"></span>${pl.updatedAt ? `<span class="muted small">${t('usage.as_of')} ${esc(shortDate(pl.updatedAt))}</span>` : ''}</div>
+    ${pl.limitReached ? `<p class="error small u-note">${t('usage.limit_reached')} ${esc(pl.limitReached)}</p>` : ''}
     ${(pl.windows || []).map((w) => meterRaw(w.label || 'window', w.usedPercent == null ? null : w.usedPercent / 100,
       `${w.usedPercent == null ? '—' : Math.round(w.usedPercent) + '%'}${w.resetsAt ? ' · resets ' + shortDate(w.resetsAt) : ''}`)).join('')}
   </div>`;
@@ -55,8 +55,8 @@ function orchestratorSplit(p) {
   const part = o.tokens?.total || 0;
   const pct = total ? Math.min(100, (part / total) * 100) : 0;
   return `<div class="u-orch">
-    <div class="split-bar" title="Orchestrator share of this month's tokens"><span style="width:${pct.toFixed(1)}%"></span></div>
-    <span class="small muted">of which orchestrator: <b class="mono">${fmtTok(part)} tok · ${fmtUsd(o.costUsd)}</b>${total ? ` (${pct < 1 && part ? '&lt;1' : Math.round(pct)}%)` : ''}</span>
+    <div class="split-bar" title="${t('usage.orchestrator_share_of_this_month_s')}"><span style="width:${pct.toFixed(1)}%"></span></div>
+    <span class="small muted">${t('usage.of_which_orchestrator')} <b class="mono">${fmtTok(part)} ${t('usage.tok')} ${fmtUsd(o.costUsd)}</b>${total ? ` (${pct < 1 && part ? '&lt;1' : Math.round(pct)}%)` : ''}</span>
   </div>`;
 }
 
@@ -75,32 +75,32 @@ function providerCard(p, u) {
         <span class="spacer"></span>
         ${meters.length ? `<span class="u-status st-${esc(p.status)}"><span class="u-dot st-${esc(p.status)}"></span>${esc(STATUS_TEXT[p.status] || p.status)}</span>` : ''}
       </div>
-      ${p.localAvailable === false ? `<p class="muted small u-note">No local logs found${u.sources?.[p.id] ? ` at <span class="mono">${esc(u.sources[p.id])}</span>` : ''}.</p>` : ''}
+      ${p.localAvailable === false ? `<p class="muted small u-note">${I18n.t('usage.no_local_logs_found_value', { value: u.sources?.[p.id] ? ` at <span class="mono">${esc(u.sources[p.id])}</span>` : '' })}</p>` : ''}
       ${p.installed ? '' : p.installCommand
-    ? `<div class="u-install"><span class="muted small">Install with</span>${commandHint(p.installCommand)}${p.installNote ? `<span class="muted small">${esc(p.installNote)}</span>` : ''}</div>`
-    : `<div class="u-install"><span class="muted small">Install with</span><code>${esc(p.installHint || '')}</code></div>`}
+    ? `<div class="u-install"><span class="muted small">${I18n.t('usage.install_with')}</span>${commandHint(p.installCommand)}${p.installNote ? `<span class="muted small">${esc(p.installNote)}</span>` : ''}</div>`
+    : `<div class="u-install"><span class="muted small">${I18n.t('usage.install_with')}</span><code>${esc(p.installHint || '')}</code></div>`}
       <div class="u-stats">
-        <div class="u-stat"><label>Month tokens</label><b>${fmtTok(t.total)}</b></div>
-        <div class="u-stat"><label>Month cost</label><b>${fmtUsd(m.costUsd)}</b></div>
-        <div class="u-stat"><label>Cost today</label><b>${fmtUsd(p.today?.costUsd)}</b></div>
+        <div class="u-stat"><label>${I18n.t('usage.month_tokens')}</label><b>${fmtTok(t.total)}</b></div>
+        <div class="u-stat"><label>${I18n.t('usage.month_cost')}</label><b>${fmtUsd(m.costUsd)}</b></div>
+        <div class="u-stat"><label>${I18n.t('usage.cost_today')}</label><b>${fmtUsd(p.today?.costUsd)}</b></div>
       </div>
       ${orchestratorSplit(p)}
       <div class="u-breakdown mono">
-        <span>in <b>${fmtTok(t.input)}</b></span><span>out <b>${fmtTok(t.output)}</b></span>
-        <span>cache read <b>${fmtTok(t.cache_read)}</b></span><span>cache write <b>${fmtTok(t.cache_write)}</b></span>
+        <span>${I18n.t('usage.in')} <b>${fmtTok(t.input)}</b></span><span>${I18n.t('usage.out')} <b>${fmtTok(t.output)}</b></span>
+        <span>${I18n.t('usage.cache_read')} <b>${fmtTok(t.cache_read)}</b></span><span>${I18n.t('usage.cache_write')} <b>${fmtTok(t.cache_write)}</b></span>
       </div>
-      ${p.costReported === false ? '<p class="muted small u-note">This CLI does not report cost. Set prices per model below to estimate it, or use a token budget.</p>' : ''}
-      ${m.unpricedTokens > 0 ? `<p class="warn-text small u-note">${fmtTok(m.unpricedTokens)} tokens have no reported cost and no price, so the cost shown is incomplete.</p>` : ''}
+      ${p.costReported === false ? `<p class="muted small u-note">${I18n.t('usage.this_cli_does_not_report_cost')}</p>` : ''}
+      ${m.unpricedTokens > 0 ? `<p class="warn-text small u-note">${fmtTok(m.unpricedTokens)} ${I18n.t('usage.tokens_have_no_reported_cost_and')}</p>` : ''}
       ${meters.length ? `<div class="u-meters">${meters.join('')}</div>` : ''}
       ${planBlock(p, u)}
       ${models.length ? `<table class="u-table compact">
-        <thead><tr><th>Model</th><th class="num">Tokens</th><th class="num">Cost</th></tr></thead>
+        <thead><tr><th>${I18n.t('usage.model')}</th><th class="num">${I18n.t('usage.tokens')}</th><th class="num">${I18n.t('usage.cost')}</th></tr></thead>
         <tbody>${models.map((x) => `<tr><td class="mono">${esc(x.model)}</td><td class="num mono">${fmtTok(x.month?.tokens?.total)}</td><td class="num mono">${fmtUsd(x.month?.costUsd)}</td></tr>`).join('')}</tbody>
-      </table>` : '<p class="muted small">No usage this month.</p>'}
+      </table>` : `<p class="muted small">${I18n.t('usage.no_usage_this_month')}</p>`}
       <div class="card-actions">
-        <span class="muted small">${meters.length ? (b.blockOnLimit ? 'Runs are blocked at the limit.' : 'Warning only, runs are not blocked.') : 'No budget set.'}${meters.length && b.countOutside ? '<br>Budget counts all usage on this machine.' : ''}</span>
+        <span class="muted small">${meters.length ? (b.blockOnLimit ? 'Runs are blocked at the limit.' : 'Warning only, runs are not blocked.') : 'No budget set.'}${meters.length && b.countOutside ? `<br>${I18n.t('usage.budget_counts_all_usage_on_this')}` : ''}</span>
         <span class="spacer"></span>
-        <button class="btn sm ghost" data-budget="${esc(p.id)}">Edit budget</button>
+        <button class="btn sm ghost" data-budget="${esc(p.id)}">${I18n.t('usage.edit_budget')}</button>
       </div>
     </div>`;
 }
@@ -124,33 +124,33 @@ function actionsCard() {
   const fmtMin = (n) => Math.round(Number(n) || 0).toLocaleString('en-US');
   const head = (status) => `<div class="card-head">
       <span class="card-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><polyline points="12 7 12 12 15 14" /></svg></span>
-      <b class="card-title">GitHub Actions</b>
+      <b class="card-title">${t('usage.github_actions')}</b>
       <span class="spacer"></span>
       ${status ? `<span class="u-status st-${esc(status)}"><span class="u-dot st-${esc(status)}"></span>${esc(ACTIONS_STATUS_TEXT[status] || status)}</span>` : ''}
     </div>`;
-  if (!a) return `<div class="card usage-card" data-provider="actions">${head()}<p class="muted small">Loading…</p></div>`;
+  if (!a) return `<div class="card usage-card" data-provider="actions">${head()}<p class="muted small">${t('usage.loading')}</p></div>`;
   if (a.error) {
     return `<div class="card usage-card" data-provider="actions">${head()}
-      <p class="muted small u-note">Actions minutes unavailable: ${esc(a.error)}.</p>
-      ${a.hint ? `<div class="u-install"><span class="muted small">Allow gh to read billing usage (optional)</span>${commandHint(a.hint)}</div>` : ''}
+      <p class="muted small u-note">${t('usage.actions_minutes_unavailable_error', { error: esc(a.error) })}</p>
+      ${a.hint ? `<div class="u-install"><span class="muted small">${t('usage.allow_gh_to_read_billing_usage')}</span>${commandHint(a.hint)}</div>` : ''}
     </div>`;
   }
   const note = a.status === 'over'
-    ? `<p class="warn-text small u-note">Quota exhausted: Actions stop until ${esc(a.resetsOn)} unless the spending limit allows more. The CI step reports it and waits at its gate.</p>`
-    : a.status === 'warn' ? `<p class="warn-text small u-note">Over 80% of the included minutes: CI, previews and deploys stop when they run out (resets ${esc(a.resetsOn)}).</p>` : '';
+    ? `<p class="warn-text small u-note">${t('usage.quota_exhausted_actions_stop_until_resetson', { resetsOn: esc(a.resetsOn) })}</p>`
+    : a.status === 'warn' ? `<p class="warn-text small u-note">${t('usage.over_80_of_the_included_minutes', { resetsOn: esc(a.resetsOn) })}</p>` : '';
   return `<div class="card usage-card" data-provider="actions">${head(a.status)}
       <div class="u-stats">
-        <div class="u-stat"><label>Quota minutes</label><b>${fmtMin(a.usedMinutes)}</b></div>
-        <div class="u-stat"><label>Runner minutes</label><b>${fmtMin(a.realMinutes)}</b></div>
-        <div class="u-stat"><label>Usage value</label><b>${fmtUsd(a.grossUsd)}</b></div>
+        <div class="u-stat"><label>${t('usage.quota_minutes')}</label><b>${fmtMin(a.usedMinutes)}</b></div>
+        <div class="u-stat"><label>${t('usage.runner_minutes')}</label><b>${fmtMin(a.realMinutes)}</b></div>
+        <div class="u-stat"><label>${t('usage.usage_value')}</label><b>${fmtUsd(a.grossUsd)}</b></div>
       </div>
       <div class="u-meters">${meterHtml('Included minutes', a.pct, fmtMin(a.usedMinutes), fmtMin(a.includedMinutes))}</div>
       ${note}
       ${(a.skus || []).length ? `<table class="u-table compact">
-        <thead><tr><th>Runner</th><th class="num">Minutes</th><th class="num">Quota minutes</th></tr></thead>
+        <thead><tr><th>${t('usage.runner')}</th><th class="num">${t('usage.minutes')}</th><th class="num">${t('usage.quota_minutes')}</th></tr></thead>
         <tbody>${a.skus.map((s) => `<tr><td class="mono">${esc(s.sku)}</td><td class="num mono">${fmtMin(s.minutes)}</td><td class="num mono">${fmtMin(s.minutes * s.multiplier)} (×${s.multiplier})</td></tr>`).join('')}</tbody>
-      </table>` : '<p class="muted small">No Actions minutes this month.</p>'}
-      <div class="card-actions"><span class="muted small">Account ${esc(a.login || '')} · resets ${esc(a.resetsOn)} · included minutes: <span class="mono">actionsIncludedMinutes</span> in settings.json.</span></div>
+      </table>` : `<p class="muted small">${t('usage.no_actions_minutes_this_month')}</p>`}
+      <div class="card-actions"><span class="muted small">${t('usage.account_value_resets_resetson_included_minutes', { value: esc(a.login || ''), resetsOn: esc(a.resetsOn) })} <span class="mono">${t('usage.actionsincludedminutes')}</span> ${t('usage.in_settings_json')}</span></div>
     </div>`;
 }
 
@@ -199,12 +199,12 @@ function renderPrices() {
   (u.providers || []).filter((p) => p.costReported === false).forEach((p) => (p.models || []).forEach((m) => models.add(m.model)));
   const row = (model) => `
     <tr data-model="${esc(model)}">
-      <td class="mono">${model == null ? '<input type="text" class="price-model" placeholder="model name" />' : `${esc(model)}${prices[model] ? '' : ' <span class="badge warn">no price</span>'}`}</td>
+      <td class="mono">${model == null ? `<input type="text" class="price-model" placeholder="${t('usage.model_name')}" />` : `${esc(model)}${prices[model] ? '' : ` <span class="badge warn">${t('usage.no_price')}</span>`}`}</td>
       ${PRICE_KEYS.map(([k]) => `<td class="num"><input type="text" inputmode="decimal" data-k="${k}" value="${esc(prices[model]?.[k] ?? '')}" placeholder="0.00" /></td>`).join('')}
       <td class="num"><span class="price-msg small"></span><button class="btn sm ${model == null ? '' : 'ghost'}" data-save-price>${model == null ? 'Add' : 'Save'}</button></td>
     </tr>`;
   $('#usage-prices').innerHTML = `<table class="u-table prices">
-    <thead><tr><th>Model</th>${PRICE_KEYS.map(([, l]) => `<th class="num">${l}</th>`).join('')}<th></th></tr></thead>
+    <thead><tr><th>${t('usage.model')}</th>${PRICE_KEYS.map(([, l]) => `<th class="num">${l}</th>`).join('')}<th></th></tr></thead>
     <tbody>${[...models].sort().map(row).join('')}${row(null)}</tbody>
   </table>`;
   $('#usage-prices').querySelectorAll('[data-save-price]').forEach((b) => (b.onclick = () => savePrice(b.closest('tr'))));
@@ -245,47 +245,47 @@ registerView({
       <section id="view-usage" class="view hidden">
         <div class="page-head">
           <div>
-            <h1>Usage</h1>
-            <p class="muted small"><span id="usage-sub">Tokens and cost of the orchestrator's runs</span> — <span id="usage-month">this month</span>. <span id="usage-live" class="badge live hidden">includes the running workflow</span></p>
+            <h1>${t('usage.usage')}</h1>
+            <p class="muted small"><span id="usage-sub">${t('usage.tokens_and_cost_of_the_orchestrator')}</span> — <span id="usage-month">${t('usage.this_month')}</span>. <span id="usage-live" class="badge live hidden">${t('usage.includes_the_running_workflow')}</span></p>
           </div>
           <div class="row">
-            <div class="seg" role="group" aria-label="Usage scope"><button type="button" data-scope="orchestrator">Orchestrator</button><button type="button" data-scope="machine">This machine</button></div>
-            <button id="btn-usage-refresh" class="btn ghost">Refresh</button>
+            <div class="seg" role="group" aria-label="${t('usage.usage_scope')}"><button type="button" data-scope="orchestrator">${t('usage.orchestrator')}</button><button type="button" data-scope="machine">${t('usage.this_machine')}</button></div>
+            <button id="btn-usage-refresh" class="btn ghost">${t('usage.refresh')}</button>
           </div>
         </div>
         <div id="usage-error" class="usage-unavailable hidden"></div>
         <div id="usage-cards" class="usage-cards"></div>
 
         <div id="usage-extra" class="hidden">
-          <h3 class="s-subtitle">Prices <span class="muted">(for providers that don't report cost)</span></h3>
-          <p class="muted small">USD per 1M tokens, used to estimate cost when the CLI does not report it.</p>
+          <h3 class="s-subtitle">${t('usage.prices')} <span class="muted">${t('usage.for_providers_that_don_t_report')}</span></h3>
+          <p class="muted small">${t('usage.usd_per_1m_tokens_used_to')}</p>
           <div id="usage-prices" class="s-group table-wrap"></div>
 
-          <h3 class="s-subtitle">Recent runs</h3>
+          <h3 class="s-subtitle">${t('usage.recent_runs')}</h3>
           <div id="usage-runs" class="s-group table-wrap"></div>
         </div>
 
-        <p class="muted small usage-note">Costs reported by the CLIs are API-equivalent prices. On subscription plans, treat them as a usage indicator rather than an actual bill.</p>
+        <p class="muted small usage-note">${t('usage.costs_reported_by_the_clis_are')}</p>
       </section>`,
   modals: `
   <div id="budget-modal" class="modal hidden">
     <form id="budget-form" class="modal-card">
-      <h3 id="budget-modal-title">Edit budget</h3>
+      <h3 id="budget-modal-title">${t('usage.edit_budget')}</h3>
       <div class="field">
-        <label for="bd-usd">Monthly limit (USD)</label>
-        <input type="text" inputmode="decimal" id="bd-usd" placeholder="No limit" />
+        <label for="bd-usd">${t('usage.monthly_limit_usd')}</label>
+        <input type="text" inputmode="decimal" id="bd-usd" placeholder="${t('usage.no_limit')}" />
       </div>
       <div class="field">
-        <label for="bd-tokens">Monthly limit (tokens)</label>
-        <input type="text" inputmode="numeric" id="bd-tokens" placeholder="No limit" />
-        <div class="hint">Leave empty for no limit. Accepts values like 500K or 1.5M. A warning is shown at 80%.</div>
+        <label for="bd-tokens">${t('usage.monthly_limit_tokens')}</label>
+        <input type="text" inputmode="numeric" id="bd-tokens" placeholder="${t('usage.no_limit')}" />
+        <div class="hint">${t('usage.leave_empty_for_no_limit_accepts')}</div>
       </div>
-      <label class="check"><input type="checkbox" id="bd-block" /><span>Block runs when the limit is reached</span></label>
-      <label class="check bd-outside"><input type="checkbox" id="bd-outside" /><span>Count usage outside the orchestrator (this machine's CLI logs) toward this budget</span></label>
+      <label class="check"><input type="checkbox" id="bd-block" /><span>${t('usage.block_runs_when_the_limit_is')}</span></label>
+      <label class="check bd-outside"><input type="checkbox" id="bd-outside" /><span>${t('usage.count_usage_outside_the_orchestrator_this')}</span></label>
       <p id="bd-error" class="error small"></p>
       <div class="modal-actions">
-        <button type="button" id="btn-bd-cancel" class="btn ghost">Cancel</button>
-        <button type="submit" class="btn primary">Save</button>
+        <button type="button" id="btn-bd-cancel" class="btn ghost">${t('common.cancel')}</button>
+        <button type="submit" class="btn primary">${t('common.save')}</button>
       </div>
     </form>
   </div>`,

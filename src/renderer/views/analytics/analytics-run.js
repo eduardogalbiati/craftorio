@@ -60,22 +60,22 @@
       const cur = rx.runs.find((r) => r.runId === rx.runId);
       if (cur) list.unshift(cur);
     }
-    return list.length ? list.map((r) => `<option value="${esc(r.runId)}"${r.runId === rx.runId ? ' selected' : ''}>${esc(r.title)}${r.issues?.length ? ` · ${esc(issuesText(r.issues))}` : ''} · ${esc(r.workflow || '')} · ${r.startedAt ? esc(dateOf(r.startedAt)) : ''}${r.mock ? ' · simulated' : ''}</option>`).join('') : '<option value="">No run matches</option>';
+    return list.length ? list.map((r) => `<option value="${esc(r.runId)}"${r.runId === rx.runId ? ' selected' : ''}>${esc(r.title)}${r.issues?.length ? ` · ${esc(issuesText(r.issues))}` : ''} · ${esc(r.workflow || '')} · ${r.startedAt ? esc(dateOf(r.startedAt)) : ''}${r.mock ? ' · simulated' : ''}</option>`).join('') : `<option value="">${t('analytics_run.no_run_matches')}</option>`;
   }
   function picker() {
     return `<div class="card an-project-pick an-run-pick">
-      <label class="an-field"><span class="small muted">Search runs</span><input type="text" id="an-run-search" data-testid="an-run-search" placeholder="Run id, issue (#219) or title" value="${esc(rx.query)}" /></label>
-      <label class="an-field"><span class="small muted">Run</span><select id="an-run-pick" data-testid="an-run-pick" aria-label="Run">${options()}</select></label>
+      <label class="an-field"><span class="small muted">${t('analytics_run.search_runs')}</span><input type="text" id="an-run-search" data-testid="an-run-search" placeholder="${t('analytics_run.run_id_issue_219_or_title')}" value="${esc(rx.query)}" /></label>
+      <label class="an-field"><span class="small muted">${t('analytics_run.run')}</span><select id="an-run-pick" data-testid="an-run-pick" aria-label="${t('analytics_run.run')}">${options()}</select></label>
     </div>`;
   }
 
   // "▲ +46% · $7.00 more than the median"; the verdict also in a word, not colour only
   function diffText(c, kind) {
     if (!c) return '<span class="muted small">—</span>';
-    if (c.verdict === 'same') return '<span class="an-verdict neutral">= the median</span>';
+    if (c.verdict === 'same') return `<span class="an-verdict neutral">${t('analytics_run.the_median')}</span>`;
     const sign = c.diff > 0 ? '▲ +' : '▼ −';
     const pctText = c.diffPct == null ? '' : `${sign}${Math.abs(Math.round(c.diffPct))}% · `;
-    return `<span class="an-verdict ${esc(c.level)}" title="${c.verdict === 'worse' ? 'Worse' : 'Better'} than the median of the compared runs (p25–p75: ${esc(fmt(c.p25, kind))} – ${esc(fmt(c.p75, kind))})">${pctText}${esc(fmt(Math.abs(c.diff), kind))} ${c.diff > 0 ? 'more' : 'less'} than the median · <b>${c.verdict}</b></span>`;
+    return `<span class="an-verdict ${esc(c.level)}" title="${t('analytics_run.value_than_the_median_of_the', { value: c.verdict === 'worse' ? 'Worse' : 'Better', p25: esc(fmt(c.p25, kind)), p75: esc(fmt(c.p75, kind)) })}">${pctText}${esc(fmt(Math.abs(c.diff), kind))} ${c.diff > 0 ? 'more' : 'less'} ${t('analytics_run.than_the_median')} <b>${c.verdict}</b></span>`;
   }
 
   // #233: the estimated / cost not recorded badges (run-list.js's costMarks, a renderer global)
@@ -85,8 +85,8 @@
     const stat = (label, value, title = '', testid = '') => `<div class="u-stat"${title ? ` title="${esc(title)}"` : ''}${testid ? ` data-testid="${testid}"` : ''}><label>${esc(label)}</label><b>${value}</b></div>`;
     return `<div class="card an-card an-run-head" data-testid="an-run-header">
         <div class="row an-card-head"><div><h3 class="an-run-title" title="${esc(f.title || f.runId)}">${esc(f.title || f.workflow || f.runId)}</h3>
-          <div class="muted small"><span class="badge">${esc(f.workflow || '—')}</span> ${f.issues?.length ? esc(issuesText(f.issues)) : ''} · <span class="mono" title="${esc(f.runId)}">${esc(f.runId)}</span>${f.startedAt ? ` · ${esc(dateOf(f.startedAt))}` : ''}${f.mock ? ' · <span class="badge">simulated</span>' : ''}</div></div>
-          <div class="row"><span class="badge ${f.status === 'success' ? 'cat-monitor' : f.status === 'failed' ? 'warn' : ''}" data-status="${esc(f.status)}">${esc(StatusPill.statusLabel(f.status))}</span><button type="button" class="btn sm ghost" data-an-open-run="${esc(f.runId)}" data-workflow="${esc(f.file || '')}">Open run</button></div></div>
+          <div class="muted small"><span class="badge">${esc(f.workflow || '—')}</span> ${f.issues?.length ? esc(issuesText(f.issues)) : ''} · <span class="mono" title="${esc(f.runId)}">${esc(f.runId)}</span>${f.startedAt ? ` · ${esc(dateOf(f.startedAt))}` : ''}${f.mock ? ` · <span class="badge">${t('analytics_run.simulated')}</span>` : ''}</div></div>
+          <div class="row"><span class="badge ${f.status === 'success' ? 'cat-monitor' : f.status === 'failed' ? 'warn' : ''}" data-status="${esc(f.status)}">${esc(StatusPill.statusLabel(f.status))}</span><button type="button" class="btn sm ghost" data-an-open-run="${esc(f.runId)}" data-workflow="${esc(f.file || '')}">${t('analytics_run.open_run')}</button></div></div>
         <div class="an-totals">
           ${stat('Total cost', `${fmtUsd(f.costUsd)}${marksOf(f)}`, '', 'an-run-total-cost')}
           ${stat('Cost per issue', fmt(f.costPerIssue, 'usd'))}
@@ -101,20 +101,20 @@
 
   function comparison(f, cmp) {
     if (!cmp) return '';
-    if (cmp.tooFew) return `<p class="muted small an-note" data-testid="an-run-compare">Only ${cmp.count} other successful real run${cmp.count === 1 ? '' : 's'} of ${esc(f.workflow || 'this workflow')}: at least ${cmp.minRuns} are needed to compare.</p>`;
+    if (cmp.tooFew) return `<p class="muted small an-note" data-testid="an-run-compare">${t('analytics_run.only_count_other_successful_real_run', { count: cmp.count, value: cmp.count === 1 ? '' : 's', value2: esc(f.workflow || 'this workflow'), minRuns: cmp.minRuns })}</p>`;
     const rows = FIGURES.map(([key, label, kind]) => {
       const c = cmp.metrics[key];
       return `<tr><td>${esc(label)}</td><td class="num">${esc(fmt(f[key], kind))}</td><td class="num">${c ? esc(fmt(c.median, kind)) : '—'}</td><td class="num nowrap">${c ? `${esc(fmt(c.p25, kind))} – ${esc(fmt(c.p75, kind))}` : '—'}</td><td>${diffText(c, kind)}</td></tr>`;
     }).join('');
-    return `<h4 class="small muted" data-testid="an-run-compare">Compared with the last ${cmp.count} successful real runs of ${esc(f.workflow || 'this workflow')}</h4>
-      <div class="table-wrap"><table class="u-table an-sessions"><thead><tr><th>Figure</th><th class="num">This run</th><th class="num">Median</th><th class="num">p25 – p75</th><th>Difference</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    return `<h4 class="small muted" data-testid="an-run-compare">${t('analytics_run.compared_with_the_last_count_successful', { count: cmp.count })} ${esc(f.workflow || 'this workflow')}</h4>
+      <div class="table-wrap"><table class="u-table an-sessions"><thead><tr><th>${t('analytics_run.figure')}</th><th class="num">${t('analytics_run.this_run')}</th><th class="num">${t('analytics_run.median')}</th><th class="num">p25 – p75</th><th>${t('analytics_run.difference')}</th></tr></thead><tbody>${rows}</tbody></table></div>`;
   }
 
   // The Gantt: one row per agent (role colour) and the orchestrator's machine steps; gates hatched.
   function timeline(f) {
     const t0 = Date.parse(f.startedAt || f.timeline[0]?.from || 0);
     const t1 = Math.max(Date.parse(f.finishedAt || 0) || 0, ...f.timeline.map((b) => Date.parse(b.to)), ...f.gates.map((g) => Date.parse(g.to || 0) || 0));
-    if (!f.timeline.length || !(t1 > t0)) return '<p class="muted small an-empty">No step recorded.</p>';
+    if (!f.timeline.length || !(t1 > t0)) return `<p class="muted small an-empty">${t('analytics_run.no_step_recorded')}</p>`;
     const rows = [...new Set(f.timeline.map((b) => b.row))].sort((a, b) => (a === 'orchestrator') - (b === 'orchestrator'));
     const W = 1000;
     const RH = 26;
@@ -124,19 +124,19 @@
     const bars = f.timeline.map((b) => {
       const y = rows.indexOf(b.row) * RH + 4;
       const w = Math.max(2, x(b.to) - x(b.from));
-      return `<rect x="${x(b.from).toFixed(1)}" y="${y}" width="${w.toFixed(1)}" height="${RH - 8}" rx="3" style="fill:${colorOf(b.row)}"><title>${esc(readable(b.step, f.stepNames))} (${esc(b.step)}) · visit ${b.visit} · ${esc(fmtDur(b.durationMs))}${b.costUsd ? ` · ${esc(fmtUsd(b.costUsd))}` : ''}${b.costEstimatedUsd ? ` (${esc(fmtUsd(b.costEstimatedUsd))} estimated)` : ''}${b.costNotRecorded ? ' · cost not recorded' : ''}</title></rect>
+      return `<rect x="${x(b.from).toFixed(1)}" y="${y}" width="${w.toFixed(1)}" height="${RH - 8}" rx="3" style="fill:${colorOf(b.row)}"><title>${esc(readable(b.step, f.stepNames))} ${t('analytics_run.step_visit_visit', { step: esc(b.step), visit: b.visit })} ${esc(fmtDur(b.durationMs))}${b.costUsd ? ` · ${esc(fmtUsd(b.costUsd))}` : ''}${b.costEstimatedUsd ? ` (${esc(fmtUsd(b.costEstimatedUsd))} estimated)` : ''}${b.costNotRecorded ? ' · cost not recorded' : ''}</title></rect>
         ${w > 60 ? `<text x="${(x(b.from) + 4).toFixed(1)}" y="${y + RH / 2 + 1}" class="an-gantt-label">${esc(readable(b.step, f.stepNames))}</text>` : ''}`;
     }).join('');
     const gy = rows.length * RH + 4;
     const gates = f.gates.map((g) => {
       const to = g.to || f.finishedAt || new Date(t1).toISOString();
       const w = Math.max(2, x(to) - x(g.from));
-      return `<rect x="${x(g.from).toFixed(1)}" y="0" width="${w.toFixed(1)}" height="${H - 4}" class="an-gantt-gate"><title>Waiting at the gate "${esc(readable(g.gate, f.stepNames))}" (${esc(g.gate)}): ${esc(fmtDur(g.waitMs))}</title></rect>
+      return `<rect x="${x(g.from).toFixed(1)}" y="0" width="${w.toFixed(1)}" height="${H - 4}" class="an-gantt-gate"><title>${t('analytics_run.waiting_at_the_gate_gate_gate2', { gate: esc(readable(g.gate, f.stepNames)), gate2: esc(g.gate) })} ${esc(fmtDur(g.waitMs))}</title></rect>
         <text x="${(x(g.from) + 4).toFixed(1)}" y="${gy + RH / 2 + 1}" class="an-gantt-label muted">${esc(readable(g.gate, f.stepNames))} · ${esc(fmtDur(g.waitMs))}</text>`;
     }).join('');
     const rowName = (r) => (r === 'gates' ? 'waiting for you' : r === 'orchestrator' ? r : readable(r, f.agentNames));
     const labels = [...rows, 'gates'].map((r, i) => `<text x="4" y="${i * RH + RH / 2 + 2}" class="an-gantt-row">${esc(rowName(r))}</text>`).join('');
-    return `<div class="an-gantt" data-testid="an-run-timeline"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Timeline of the run by agent">
+    return `<div class="an-gantt" data-testid="an-run-timeline"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${t('analytics_run.timeline_of_the_run_by_agent')}">
       <defs><pattern id="an-hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" class="an-hatch-line" /></pattern></defs>
       ${gates}${bars}${labels}</svg>
       <div class="an-xlabels"><span style="left:${(LW / W) * 100}%">${esc(dateOf(new Date(t0).toISOString()))}</span><span style="left:96%">${esc(fmtDur(t1 - t0))}</span></div></div>`;
@@ -145,7 +145,7 @@
   function hbars(items, { stacked = false } = {}) {
     // `keep`: shown even at zero (a cost not recorded); `marks`: HTML after the value; `testid`: per bar
     const list = items.filter((x) => x.keep || (stacked ? x.parts.reduce((s, p) => s + p.value, 0) : x.value) > 0);
-    if (!list.length) return '<p class="muted small">None recorded.</p>';
+    if (!list.length) return `<p class="muted small">${t('analytics_run.none_recorded')}</p>`;
     const totalOf = (x) => (stacked ? x.parts.reduce((s, p) => s + p.value, 0) : x.value);
     const max = Math.max(...list.map(totalOf)) || 1;
     return `<div class="an-bars">${list.map((x) => `<div class="an-bar" title="${esc(x.title || x.label)}"${x.testid ? ` data-testid="${x.testid}"` : ''}>
@@ -177,22 +177,22 @@
       title: `${name(a.agent)} (${a.agent}): ${Object.keys(TOKEN_LABELS).map((k) => `${TOKEN_LABELS[k]} ${fmtNum(a.tokens[k])}`).join(', ')}; effective ${a.usdPerMTokens == null ? '—' : fmtUsd(a.usdPerMTokens)} per million tokens`,
       parts: Object.keys(TOKEN_LABELS).map((k) => ({ value: a.tokens[k], color: TOKEN_COLORS[k], title: `${TOKEN_LABELS[k]}: ${fmtNum(a.tokens[k])}` })),
       // #308: the sub-agents' share, already counted in the agent's tokens
-      marks: a.subagents ? ` <span class="muted small" data-testid="an-agent-subagents">· of which sub-agents: ${fmtNum(a.subagents.calls)} call${a.subagents.calls === 1 ? '' : 's'}, ${fmtTok(a.subagents.tokens)} tokens</span>` : '',
+      marks: a.subagents ? ` <span class="muted small" data-testid="an-agent-subagents">${t('analytics_run.of_which_sub_agents_calls_call', { calls: fmtNum(a.subagents.calls), value: a.subagents.calls === 1 ? '' : 's', tokens: fmtTok(a.subagents.tokens) })}</span>` : '',
       testid: 'an-agent-tokens',
     })), { stacked: true });
     return `<div class="an-grid">
-        <div class="card an-card"><h3>Time per agent <span class="muted small">(active, then waiting on tools)</span></h3>${time}</div>
-        <div class="card an-card"><h3>Turns per agent</h3>${turns}</div>
-        <div class="card an-card"><h3>Cost per agent</h3>${cost}</div>
+        <div class="card an-card"><h3>${t('analytics_run.time_per_agent')} <span class="muted small">${t('analytics_run.active_then_waiting_on_tools')}</span></h3>${time}</div>
+        <div class="card an-card"><h3>${t('analytics_run.turns_per_agent')}</h3>${turns}</div>
+        <div class="card an-card"><h3>${t('analytics_run.cost_per_agent')}</h3>${cost}</div>
       </div>
-      <div class="card an-card"><div class="row an-card-head"><h3>Tokens per agent <span class="muted small">(and the effective $/M tokens)</span></h3>
+      <div class="card an-card"><div class="row an-card-head"><h3>${t('analytics_run.tokens_per_agent')} <span class="muted small">${t('analytics_run.and_the_effective_m_tokens')}</span></h3>
         <div class="an-legend">${Object.keys(TOKEN_LABELS).map((k) => `<span><i style="background:${TOKEN_COLORS[k]}"></i>${TOKEN_LABELS[k]}</span>`).join('')}</div></div>${tokens}</div>`;
   }
 
   function tables(f) {
-    const steps = f.steps.length ? `<table class="u-table an-sessions"><thead><tr><th>Step</th><th>Agent</th><th class="num">Visits</th><th class="num">Duration</th></tr></thead><tbody>
-      ${f.steps.map((s) => `<tr><td title="${esc(s.step)}">${esc(readable(s.step, f.stepNames))}</td><td>${s.agent ? `<span class="an-agent" title="${esc(s.agent)}"><i style="background:${colorOf(s.agent)}"></i>${esc(readable(s.agent, f.agentNames))}</span>` : '<span class="muted">orchestrator</span>'}</td><td class="num">${s.visits}</td><td class="num">${fmtDur(s.durationMs)}</td></tr>`).join('')}</tbody></table>`
-      : '<p class="muted small an-empty">No step recorded.</p>';
+    const steps = f.steps.length ? `<table class="u-table an-sessions"><thead><tr><th>${t('analytics_run.step')}</th><th>${t('analytics_run.agent')}</th><th class="num">${t('analytics_run.visits')}</th><th class="num">${t('analytics_run.duration')}</th></tr></thead><tbody>
+      ${f.steps.map((s) => `<tr><td title="${esc(s.step)}">${esc(readable(s.step, f.stepNames))}</td><td>${s.agent ? `<span class="an-agent" title="${esc(s.agent)}"><i style="background:${colorOf(s.agent)}"></i>${esc(readable(s.agent, f.agentNames))}</span>` : `<span class="muted">${t('analytics_run.orchestrator')}</span>`}</td><td class="num">${s.visits}</td><td class="num">${fmtDur(s.durationMs)}</td></tr>`).join('')}</tbody></table>`
+      : `<p class="muted small an-empty">${t('analytics_run.no_step_recorded')}</p>`;
     // #304: a round of a `scope: affected` suite: what it ran, and why each file was selected
     // (a red check's round runs the files its step lists: every reason is "listed by <step>")
     const listed = (sel) => Object.values(sel.reasons || {}).length > 0 && Object.values(sel.reasons).every((why) => /^listed by /.test(why));
@@ -202,29 +202,29 @@
       const reasons = Object.entries(r.selection.reasons || {}).map(([file, why]) => `${file}: ${why}`).join('; ');
       return reasons || r.selection.why || '';
     };
-    const suite = f.suiteRounds.length ? `<table class="u-table an-sessions"><thead><tr><th class="num">Round</th><th>Result</th><th>Scope</th><th class="num">Duration</th><th class="num">Failures</th><th class="num">Pre-existing</th></tr></thead><tbody>
+    const suite = f.suiteRounds.length ? `<table class="u-table an-sessions"><thead><tr><th class="num">${t('analytics_run.round')}</th><th>${t('analytics_run.result')}</th><th>${t('analytics_run.scope')}</th><th class="num">${t('analytics_run.duration')}</th><th class="num">${t('analytics_run.failures')}</th><th class="num">${t('analytics_run.pre_existing')}</th></tr></thead><tbody>
       ${f.suiteRounds.map((r) => `<tr data-testid="an-suite-round"><td class="num">${r.round}</td><td><span class="badge ${r.status === 'pass' ? 'cat-monitor' : 'warn'}">${esc(r.status || '—')}</span></td><td class="an-title"><span class="badge" title="${esc(r.selection?.why || '')}">${esc(scopeOf(r))}</span>${whyOf(r) ? `<div class="muted small an-suite-why" title="${esc(whyOf(r))}">${esc(whyOf(r))}</div>` : ''}</td><td class="num">${fmtDur(r.durationMs)}</td><td class="num">${r.failures}</td><td class="num">${r.preexisting}</td></tr>`).join('')}</tbody></table>`
-      : '<p class="muted small an-empty">No suite round in this run.</p>';
-    const tools = f.slowestTools.length ? `<table class="u-table an-sessions"><thead><tr><th>Command</th><th>Agent</th><th class="num">Time</th></tr></thead><tbody>
+      : `<p class="muted small an-empty">${t('analytics_run.no_suite_round_in_this_run')}</p>`;
+    const tools = f.slowestTools.length ? `<table class="u-table an-sessions"><thead><tr><th>${t('analytics_run.command')}</th><th>${t('analytics_run.agent')}</th><th class="num">${t('analytics_run.time')}</th></tr></thead><tbody>
       ${f.slowestTools.map((t) => `<tr><td class="an-title"><code class="an-file" title="${esc(t.command)}">${esc(t.command)}</code></td><td${t.agent ? ` title="${esc(t.agent)}"` : ''}>${esc(t.agent ? readable(t.agent, f.agentNames) : '—')}</td><td class="num">${fmtDur(t.durationMs)}</td></tr>`).join('')}</tbody></table>`
-      : '<p class="muted small an-empty">No tool call recorded.</p>';
+      : `<p class="muted small an-empty">${t('analytics_run.no_tool_call_recorded')}</p>`;
     return `<div class="an-grid an-grid-2">
-        <div><h3 class="s-subtitle">Steps</h3><div class="card table-wrap">${steps}</div></div>
-        <div><h3 class="s-subtitle">Suite rounds</h3><div class="card table-wrap">${suite}</div></div>
+        <div><h3 class="s-subtitle">${t('analytics_run.steps')}</h3><div class="card table-wrap">${steps}</div></div>
+        <div><h3 class="s-subtitle">${t('analytics_run.suite_rounds')}</h3><div class="card table-wrap">${suite}</div></div>
       </div>
-      <h3 class="s-subtitle">Slowest tool calls <span class="muted small">(top 10)</span></h3><div class="card table-wrap">${tools}</div>`;
+      <h3 class="s-subtitle">${t('analytics_run.slowest_tool_calls')} <span class="muted small">${t('analytics_run.top_10')}</span></h3><div class="card table-wrap">${tools}</div>`;
   }
 
   function render(body) {
     const head = picker();
-    if (rx.error) { body.innerHTML = `${head}<div class="usage-unavailable" role="alert">Could not load the run: ${esc(rx.error)}</div>`; wire(body); return; }
-    if (rx.loading && !rx.data) { body.innerHTML = `${head}<p class="muted">Loading…</p>`; wire(body); return; }
-    if (!rx.runs.length) { body.innerHTML = '<div class="empty-state"><b>No runs yet</b><p class="muted">Start a run: each one can be read here in depth.</p></div>'; return; }
+    if (rx.error) { body.innerHTML = `${head}<div class="usage-unavailable" role="alert">${t('analytics_run.could_not_load_the_run')} ${esc(rx.error)}</div>`; wire(body); return; }
+    if (rx.loading && !rx.data) { body.innerHTML = `${head}<p class="muted">${t('analytics_run.loading')}</p>`; wire(body); return; }
+    if (!rx.runs.length) { body.innerHTML = `<div class="empty-state"><b>${t('analytics_run.no_runs_yet')}</b><p class="muted">${t('analytics_run.start_a_run_each_one_can')}</p></div>`; return; }
     const d = rx.data;
-    if (!d?.figures) { body.innerHTML = `${head}<p class="muted">Pick a run.</p>`; wire(body); return; }
+    if (!d?.figures) { body.innerHTML = `${head}<p class="muted">${t('analytics_run.pick_a_run')}</p>`; wire(body); return; }
     const f = d.figures;
     body.innerHTML = `${head}${header(f, d.comparison)}
-      <h3 class="s-subtitle">Timeline <span class="muted small">(one row per agent; hatched: waiting for you at a gate)</span></h3>
+      <h3 class="s-subtitle">${t('analytics_run.timeline')} <span class="muted small">${t('analytics_run.one_row_per_agent_hatched_waiting')}</span></h3>
       <div class="card an-card">${timeline(f)}</div>
       ${agentCharts(f, d.comparison)}
       ${tables(f)}`;

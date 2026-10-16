@@ -162,26 +162,26 @@ function renderWatch() {
     const meta = `${m.role === 'user' ? 'You' : '◆ Supervisor'} · ${esc(new Date(m.ts).toLocaleTimeString(undefined, { timeZone: TimeZone.current() }))}${m.costUsd != null ? ` · ${esc(fmtCost(m.costUsd))}` : ''}`;
     return `<div class="${cls}"><div class="sup-wmsg-meta">${meta}</div><div class="md md-compact">${markdownHtml(m.text)}</div></div>`;
   }).join('')
-    + (w?.busy ? '<div class="sup-loading"><span class="spinner"></span><span>The supervisor is reading the run…</span></div>' : '')
+    + (w?.busy ? `<div class="sup-loading"><span class="spinner"></span><span>${t('supervisor_drawer.the_supervisor_is_reading_the_run')}</span></div>` : '')
     + (sup.watchError ? `<p class="error small">${esc(sup.watchError)}</p>` : '');
   log.scrollTop = log.scrollHeight;
 }
 
 function renderSupervisor() {
   const sup = state.sup;
-  $('#sup-run').innerHTML = `<span class="mono">${esc(sup.runId || '')}</span>${sup.workflow ? ` · ${esc(sup.workflow)}` : ''}${sup.issues?.length === 1 ? ` · <b>#${esc(sup.issues[0].number)}</b> ${esc(sup.issues[0].title || '')}` : sup.issues?.length ? ` · <b>${esc(issueRefs(sup))}</b>` : ''}${sup.status ? ` ${StatusPill.statusPill(sup.status)}` : ''}${sup.mock ? ' <span class="badge p-mock">Simulated</span>' : ''}`;
+  $('#sup-run').innerHTML = `<span class="mono">${esc(sup.runId || '')}</span>${sup.workflow ? ` · ${esc(sup.workflow)}` : ''}${sup.issues?.length === 1 ? ` · <b>#${esc(sup.issues[0].number)}</b> ${esc(sup.issues[0].title || '')}` : sup.issues?.length ? ` · <b>${esc(issueRefs(sup))}</b>` : ''}${sup.status ? ` ${StatusPill.statusPill(sup.status)}` : ''}${sup.mock ? ` <span class="badge p-mock">${t('supervisor_drawer.simulated')}</span>` : ''}`;
   $('#btn-sup-analyze').disabled = sup.loading;
   $('#btn-sup-analyze').textContent = sup.result ? 'Analyze again' : 'Analyze';
   const box = $('#sup-result');
   if (sup.loading) {
-    box.innerHTML = '<div class="sup-loading"><span class="spinner"></span><span>The supervisor is reading the run… (this can take a minute)</span></div>';
+    box.innerHTML = `<div class="sup-loading"><span class="spinner"></span><span>${t('supervisor_drawer.the_supervisor_is_reading_the_run_2')}</span></div>`;
     return;
   }
   if (sup.error) { box.innerHTML = `<p class="error small">${esc(sup.error)}</p>`; return; }
   const res = sup.result;
   if (!res) {
-    box.innerHTML = `${sup.runError ? `<div class="sup-runerror"><div class="sup-h">Error</div><pre>${esc(sup.runError)}</pre></div>` : ''}
-      <p class="muted small">The supervisor reads the run's events, outputs and logs, explains what happened and suggests how to continue. You can also chat with it in a terminal.</p>`;
+    box.innerHTML = `${sup.runError ? `<div class="sup-runerror"><div class="sup-h">${t('supervisor_drawer.error')}</div><pre>${esc(sup.runError)}</pre></div>` : ''}
+      <p class="muted small">${t('supervisor_drawer.the_supervisor_reads_the_run_s')}</p>`;
     return;
   }
   const a = res.analysis || {};
@@ -190,11 +190,11 @@ function renderSupervisor() {
   box.innerHTML = `
     <div class="sup-meta muted small">
       <span>${esc(res.model || 'supervisor')}${res.costUsd != null ? ` · ${esc(fmtCost(res.costUsd))}` : ''}</span>
-      ${res.artifactPath ? '<button class="link-btn small" id="sup-open-art">Open in Artifacts</button>' : ''}
+      ${res.artifactPath ? `<button class="link-btn small" id="sup-open-art">${t('supervisor_drawer.open_in_artifacts')}</button>` : ''}
     </div>
-    <section class="sup-sec"><div class="sup-h">What happened</div><div class="md md-compact">${markdownHtml(a.summary || '_No summary._')}</div></section>
-    ${a.root_cause ? `<section class="sup-sec"><div class="sup-h">Root cause</div><div class="md md-compact">${markdownHtml(a.root_cause)}</div></section>` : ''}
-    ${recs.length ? `<section class="sup-sec"><div class="sup-h">Recommendations</div>${recs.map((r, i) => recCard(r, i, steps)).join('')}</section>` : ''}`;
+    <section class="sup-sec"><div class="sup-h">${t('supervisor_drawer.what_happened')}</div><div class="md md-compact">${markdownHtml(a.summary || '_No summary._')}</div></section>
+    ${a.root_cause ? `<section class="sup-sec"><div class="sup-h">${t('supervisor_drawer.root_cause')}</div><div class="md md-compact">${markdownHtml(a.root_cause)}</div></section>` : ''}
+    ${recs.length ? `<section class="sup-sec"><div class="sup-h">${t('supervisor_drawer.recommendations')}</div>${recs.map((r, i) => recCard(r, i, steps)).join('')}</section>` : ''}`;
   $('#sup-open-art')?.addEventListener('click', () => {
     closeSupervisor();
     openArtifactsAt({ projectId: '', path: res.artifactPath, mock: sup.mock });
@@ -210,9 +210,9 @@ function recCard(r, i, steps) {
   if (r.action === 'resume') {
     const pre = steps.includes(r.step) ? r.step : steps[0];
     ctrl = `${resumeFields(`rec-${i}`, steps.map((s) => ({ id: s })), pre, r.instruction || '')}
-      <div class="row"><button class="btn sm primary" data-rec="${i}">Resume from this step</button>${msg}</div>`;
+      <div class="row"><button class="btn sm primary" data-rec="${i}">${t('supervisor_drawer.resume_from_this_step')}</button>${msg}</div>`;
   } else if (r.action === 'rerun') {
-    ctrl = `${r.instruction ? `<p class="small muted sup-ins">${esc(r.instruction)}</p>` : ''}<div class="row"><button class="btn sm" data-rec="${i}">Run again</button>${msg}</div>`;
+    ctrl = `${r.instruction ? `<p class="small muted sup-ins">${esc(r.instruction)}</p>` : ''}<div class="row"><button class="btn sm" data-rec="${i}">${t('supervisor_drawer.run_again')}</button>${msg}</div>`;
   } else if (r.instruction) {
     ctrl = `<p class="small muted sup-ins">${esc(r.instruction)}</p>`;
   }

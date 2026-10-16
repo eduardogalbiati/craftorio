@@ -108,7 +108,7 @@ function openArtifactsAt({ projectId, runId, path, mock }) {
 function renderArtifacts() {
   const a = state.art;
   const sel = $('#art-project');
-  sel.innerHTML = `<option value="">All projects</option>${state.projects.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}`;
+  sel.innerHTML = `<option value="">${t('artifacts.all_projects')}</option>${state.projects.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}`;
   sel.value = a.projectId;
   if (sel.value !== a.projectId) a.projectId = '';
   $('#art-search').value = a.q;
@@ -135,7 +135,7 @@ function artFileHtml(f) {
         <button class="art-file ${a.sel === f.path ? 'active' : ''} ${f.exists ? '' : 'missing'}" data-testid="artifact-item" data-path="${esc(f.path)}" title="${esc(f.path)}">
           ${artKindIcon(f.kind)}
           <span class="art-file-main">
-            <span class="art-file-name">${esc(caption || f.name)}${f.location === 'external' ? ' <span class="badge">project copy</span>' : ''}${f.exists ? '' : ' <span class="badge">deleted</span>'}</span>
+            <span class="art-file-name">${esc(caption || f.name)}${f.location === 'external' ? ` <span class="badge">${t('artifacts.project_copy')}</span>` : ''}${f.exists ? '' : ` <span class="badge">${t('artifacts.deleted')}</span>`}</span>
             <span class="art-file-sub muted">${caption ? `${esc(f.name)} · ` : ''}${where}</span>
           </span>
           <span class="art-file-size muted">${esc(fmtSize(f.size))}</span>
@@ -145,8 +145,8 @@ function artFileHtml(f) {
 // An open group's files: loading, error (Retry), or what the run produced first, grouped by category
 // (the panel's switch and chips; state.art.filter, one for the screen), with "Show more".
 function artFilesHtml(e) {
-  if (!e || e.status === 'loading') return '<p class="muted small art-pad">Loading…</p>';
-  if (e.status === 'error') return `<p class="error small art-pad">Could not load the files: ${esc(e.error)} <button type="button" class="btn sm ghost" data-art-retry>Retry</button></p>`;
+  if (!e || e.status === 'loading') return `<p class="muted small art-pad">${t('artifacts.loading')}</p>`;
+  if (e.status === 'error') return `<p class="error small art-pad">${t('artifacts.could_not_load_the_files')} ${esc(e.error)} <button type="button" class="btn sm ghost" data-art-retry>${t('artifacts.retry')}</button></p>`;
   const filter = (state.art.filter ||= ArtifactsPanel.newFilter());
   const all = ArtifactsPanel.filterFiles(e.files, filter, { ignoreCategory: true });
   const files = ArtifactsPanel.filterFiles(e.files, filter);
@@ -160,20 +160,20 @@ function artFilesHtml(e) {
     ? groups.map(([label, list]) => `<div class="art-step muted" data-testid="artifact-category-title">${esc(label)} · ${list.length}</div>${list.map((f) => artFileHtml(e.evidence ? { ...f, caption: ArtifactsPanel.captionOf(e.evidence, f.path) } : f)).join('')}`).join('')
     : `<p class="muted small art-pad">${filter.show === 'produced' && !filter.category && !filter.kind ? 'Nothing produced: Show all lists the handoff notes, decisions and logs.' : 'Nothing matches this filter.'}</p>`;
   return `<div class="art-files" data-testid="artifact-list">${ArtifactsPanel.filtersHtml(filter, count(all, ArtifactsPanel.categoryOf), count(ArtifactsPanel.filterFiles(e.files, { ...filter, kind: null }, { ignoreCategory: true }), kindOfChip))}${body}`
-    + (left > 0 ? `<button type="button" class="btn sm ghost art-more" data-art-more ${e.pending ? 'disabled' : ''}>${e.pending ? 'Loading…' : `Show ${Math.min(left, ART_PAGE)} more${left > ART_PAGE ? ` <span class="muted">(${left} left)</span>` : ''}`}</button>` : '')
+    + (left > 0 ? `<button type="button" class="btn sm ghost art-more" data-art-more ${e.pending ? 'disabled' : ''}>${e.pending ? 'Loading…' : `Show ${Math.min(left, ART_PAGE)} more${left > ART_PAGE ? ` <span class="muted">${t('artifacts.left_left', { left })}</span>` : ''}`}</button>` : '')
     + '</div>';
 }
 
 function renderArtifactList() {
   const a = state.art;
   const box = $('#art-list');
-  if (a.runs == null) { box.innerHTML = a.error ? '' : '<p class="muted small art-pad">Loading…</p>'; paintArtToggleAll([], false); return; }
+  if (a.runs == null) { box.innerHTML = a.error ? '' : `<p class="muted small art-pad">${t('artifacts.loading')}</p>`; paintArtToggleAll([], false); return; }
   const runs = artifactRunsFiltered();
   const hiddenSim = devMode() ? a.hiddenSim || 0 : 0;
   const filtered = !!(a.loadedQ || a.projectId);
   if (!runs.length) {
     paintArtToggleAll([], false);
-    box.innerHTML = `<div class="art-pad muted small">${filtered ? 'No artifacts match these filters.' : 'No run has produced documents or files yet.'}${hiddenSim ? `<br>${hiddenSim} simulated run${hiddenSim > 1 ? 's' : ''} hidden.` : ''}</div>`;
+    box.innerHTML = `<div class="art-pad muted small">${filtered ? 'No artifacts match these filters.' : 'No run has produced documents or files yet.'}${hiddenSim ? `<br>${hiddenSim} ${t('artifacts.simulated_run_value_hidden', { value: hiddenSim > 1 ? 's' : '' })}` : ''}</div>`;
     return;
   }
   if (a.reveal && runs.some((r) => r.runId === a.reveal)) { setArtGroupOpen(a.reveal, true); a.reveal = null; }
@@ -185,12 +185,12 @@ function renderArtifactList() {
     return `
     <div class="art-run ${open ? 'open' : ''}" data-run="${esc(r.runId)}">
       <button class="art-run-head" title="${esc(r.task || '')}" aria-expanded="${open}">
-        <div class="row"><span class="art-chev" aria-hidden="true">${open ? '▾' : '▸'}</span><b class="art-run-name">${esc(r.workflow || 'workflow')}</b>${StatusPill.statusPill(r.status)}${r.mock ? '<span class="badge p-mock">Simulated</span>' : ''}</div>
+        <div class="row"><span class="art-chev" aria-hidden="true">${open ? '▾' : '▸'}</span><b class="art-run-name">${esc(r.workflow || 'workflow')}</b>${StatusPill.statusPill(r.status)}${r.mock ? `<span class="badge p-mock">${t('artifacts.simulated')}</span>` : ''}</div>
         <div class="muted small art-run-sub">${r.project ? `${esc(r.project.name)} · ` : ''}${r.startedAt ? esc(dateOf(r.startedAt)) : ''} · ${files}${r.imageCount ? ` · ${r.imageCount} image${r.imageCount === 1 ? '' : 's'}` : ''}</div>
       </button>
       ${open ? artFilesHtml(a.files.get(r.runId)) : ''}
     </div>`;
-  }).join('') + (hiddenSim ? `<p class="muted small art-pad">${hiddenSim} simulated run${hiddenSim > 1 ? 's' : ''} hidden.</p>` : '');
+  }).join('') + (hiddenSim ? `<p class="muted small art-pad">${hiddenSim} ${t('artifacts.simulated_run_value_hidden', { value: hiddenSim > 1 ? 's' : '' })}</p>` : '');
   box.querySelectorAll('.art-file').forEach((b) => {
     b.onclick = () => selectArtifact(b.dataset.path);
     // right-click or Shift+F10: Copy to clipboard / Copy file / Copy path (artifact-menu.js, #114)
@@ -310,7 +310,7 @@ function renderArtifactViewer() {
   const d = a.doc;
   if (!d) {
     bar.classList.add('hidden');
-    body.innerHTML = '<div class="art-empty muted">Select a file to preview it.</div>';
+    body.innerHTML = `<div class="art-empty muted">${t('artifacts.select_a_file_to_preview_it')}</div>`;
     return;
   }
   const meta = { ...(findArtifactMeta(d.path) || {}), ...d };
@@ -321,11 +321,11 @@ function renderArtifactViewer() {
       ${artKindIcon(meta.kind)}
       <div class="art-title-text"><b>${esc(name)}</b><span class="mono muted art-path" title="${esc(d.path)}">${esc(d.path)}</span></div>
     </div>
-    ${meta.kind === 'markdown' && d.text != null ? `<div class="seg sm"><button type="button" data-mode="rendered" class="${a.mode === 'rendered' ? 'active' : ''}">Rendered</button><button type="button" data-mode="source" class="${a.mode === 'source' ? 'active' : ''}">Source</button></div>` : ''}
+    ${meta.kind === 'markdown' && d.text != null ? `<div class="seg sm"><button type="button" data-mode="rendered" class="${a.mode === 'rendered' ? 'active' : ''}">${t('artifacts.rendered')}</button><button type="button" data-mode="source" class="${a.mode === 'source' ? 'active' : ''}">${t('artifacts.source')}</button></div>` : ''}
     <div class="row">
-      <button class="btn sm ghost" data-art-act="open" ${meta.exists === false ? 'disabled' : ''}>Open</button>
-      <button class="btn sm ghost" data-art-act="reveal" ${meta.exists === false ? 'disabled' : ''}>Show in folder</button>
-      <button class="btn sm ghost" data-art-act="copy">Copy path</button>
+      <button class="btn sm ghost" data-art-act="open" ${meta.exists === false ? 'disabled' : ''}>${t('artifacts.open')}</button>
+      <button class="btn sm ghost" data-art-act="reveal" ${meta.exists === false ? 'disabled' : ''}>${t('artifacts.show_in_folder')}</button>
+      <button class="btn sm ghost" data-art-act="copy">${t('artifacts.copy_path')}</button>
     </div>
     <span class="muted small art-msg"></span>`;
   bar.querySelectorAll('[data-mode]').forEach((b) => (b.onclick = () => { a.mode = b.dataset.mode; renderArtifactViewer(); }));
@@ -341,9 +341,9 @@ function renderArtifactViewer() {
   }));
 
   body.scrollTop = 0;
-  if (d.loading) { body.innerHTML = '<div class="art-empty muted">Loading…</div>'; return; }
+  if (d.loading) { body.innerHTML = `<div class="art-empty muted">${t('artifacts.loading')}</div>`; return; }
   if (d.error) { body.innerHTML = `<div class="art-empty"><p class="error">${esc(d.error)}</p></div>`; return; }
-  const notice = d.truncated ? '<div class="art-notice">This file is larger than 5 MB: only the first 5 MB are shown.</div>' : '';
+  const notice = d.truncated ? `<div class="art-notice">${t('artifacts.this_file_is_larger_than_5')}</div>` : '';
   if (meta.kind === 'image' && d.image) {
     body.innerHTML = `<div class="art-image"><img ${ImageViewer.THUMB} src="${esc(d.image)}" alt="${esc(name)}" /></div>`;
     const img = body.querySelector('.art-image img');
@@ -358,7 +358,7 @@ function renderArtifactViewer() {
     return;
   }
   if (d.binary || d.text == null || meta.kind === 'other') {
-    body.innerHTML = `${notice}<div class="art-empty"><p class="muted">Preview not available for this file.</p><button class="btn primary" id="art-open-default">Open</button></div>`;
+    body.innerHTML = `${notice}<div class="art-empty"><p class="muted">${t('artifacts.preview_not_available_for_this_file')}</p><button class="btn primary" id="art-open-default">${t('artifacts.open')}</button></div>`;
     $('#art-open-default').onclick = () => api.openArtifact(d.path).catch(() => {});
     return;
   }
@@ -396,7 +396,7 @@ function renderMarkdownDoc(body, text, notice) {
   if (heads.length >= 4 && tocItems.length) {
     const toc = body.querySelector('.md-toc');
     toc.classList.remove('hidden');
-    toc.innerHTML = `<div class="md-toc-title">Contents</div>${tocItems.map((h) =>
+    toc.innerHTML = `<div class="md-toc-title">${t('artifacts.contents')}</div>${tocItems.map((h) =>
       `<a href="#" class="${h.tagName === 'H3' ? 'sub' : ''}" data-id="${esc(h.id)}">${esc(h.textContent)}</a>`).join('')}`;
     toc.querySelectorAll('[data-id]').forEach((l) => (l.onclick = (e) => { e.preventDefault(); scrollTo(l.dataset.id); }));
   }
@@ -411,23 +411,23 @@ registerView({
         <div class="art-layout">
           <aside class="art-side">
             <div class="art-side-head">
-              <div class="seg sm art-tabs" role="tablist" aria-label="Runs">
-                <button type="button" role="tab" id="art-tab-runs" aria-selected="false" title="Every run, live or finished">All runs</button>
-                <button type="button" class="active" role="tab" aria-selected="true">Artifacts</button>
+              <div class="seg sm art-tabs" role="tablist" aria-label="${t('artifacts.runs')}">
+                <button type="button" role="tab" id="art-tab-runs" aria-selected="false" title="${t('artifacts.every_run_live_or_finished')}">${t('artifacts.all_runs')}</button>
+                <button type="button" class="active" role="tab" aria-selected="true">${t('artifacts.artifacts')}</button>
               </div>
               <div class="row">
-                <h1>Artifacts</h1>
+                <h1>${t('artifacts.artifacts')}</h1>
                 <span class="spacer"></span>
-                <button id="btn-art-refresh" class="btn sm ghost" title="Reload the list">Refresh</button>
+                <button id="btn-art-refresh" class="btn sm ghost" title="${t('artifacts.reload_the_list')}">${t('artifacts.refresh')}</button>
               </div>
-              <select id="art-project" aria-label="Project"></select>
-              <input type="text" id="art-search" placeholder="Search files, workflows, tasks…" aria-label="Search" />
+              <select id="art-project" aria-label="${t('artifacts.project')}"></select>
+              <input type="text" id="art-search" placeholder="${t('artifacts.search_files_workflows_tasks')}" aria-label="${t('artifacts.search')}" />
         <!-- Collapse all / Expand all the run groups (#126): label, icon and state set by renderArtifactList -->
         <button type="button" id="art-toggle-all" class="btn sm ghost btn-icon art-toggle-all" aria-pressed="false">
           <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><polyline points="18 15 12 9 6 15" /></svg>
-          <span>Collapse all</span>
+          <span>${t('artifacts.collapse_all')}</span>
         </button>
-              <label class="check small dev-only"><input type="checkbox" id="art-show-sim" /><span>Show simulated</span></label>
+              <label class="check small dev-only"><input type="checkbox" id="art-show-sim" /><span>${t('artifacts.show_simulated')}</span></label>
             </div>
             <p id="art-error" class="error small"></p>
             <div id="art-list" class="art-list"></div>
@@ -435,7 +435,7 @@ registerView({
           <section class="art-viewer">
             <div id="art-toolbar" class="art-toolbar hidden"></div>
             <div id="art-body" class="art-body">
-              <div class="art-empty muted">Select a file to preview it.</div>
+              <div class="art-empty muted">${t('artifacts.select_a_file_to_preview_it')}</div>
             </div>
           </section>
         </div>

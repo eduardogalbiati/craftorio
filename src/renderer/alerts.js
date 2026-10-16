@@ -52,7 +52,7 @@
         <div class="alert-body"><b class="alert-title">${escHtml(a.title)}</b>${a.text ? `<span class="alert-text">${escHtml(a.text)}</span>` : ''}</div>
         <div class="alert-actions">${(a.actions || []).map((action, n) => actionHtml(a, action, n)).join('')}</div>
         ${list.length > 1 ? `<span class="alerts-nav">${nav('prev', 'Previous alert')}<span class="alerts-count" data-testid="alerts-counter">${at + 1}/${list.length}</span>${nav('next', 'Next alert')}</span>` : ''}
-        ${a.dismissible && level !== 'error' ? `<button type="button" class="icon-btn alert-close" data-alert-dismiss="${escHtml(a.id)}" aria-label="Dismiss" title="Dismiss: it comes back when it happens again">×</button>` : ''}
+        ${a.dismissible && level !== 'error' ? `<button type="button" class="icon-btn alert-close" data-alert-dismiss="${escHtml(a.id)}" aria-label="${t('common.dismiss')}" title="${t('alerts.dismiss_it_comes_back_when_it')}">×</button>` : ''}
       </div>
     </div>`;
   }

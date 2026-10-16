@@ -120,10 +120,10 @@
           <div class="agent-card-text">
             <div class="card-head">
               <b class="card-title">${esc(a.name)}</b>
-              ${a.system ? '<span class="badge">system</span>' : ''}${a.workflow ? `<span class="badge" title="Defined in the ${esc(a.workflow.name)} workflow (read-only here)">workflow</span>` : ''}${selected ? '<span class="badge">selected</span>' : ''}
+              ${a.system ? `<span class="badge">${t('agents.system')}</span>` : ''}${a.workflow ? `<span class="badge" title="${t('agents.defined_in_the_name_workflow_read', { name: esc(a.workflow.name) })}">${t('agents.workflow')}</span>` : ''}${selected ? `<span class="badge">${t('agents.selected')}</span>` : ''}
             </div>
             ${a.workflow ? `<p class="muted agent-facts mono">${esc(modelLine(a))} · ${esc(a.session)}</p>
-            <p class="muted agent-facts" title="Capabilities">${esc(a.capabilities || '')}</p>`
+            <p class="muted agent-facts" title="${t('agents.capabilities')}">${esc(a.capabilities || '')}</p>`
               : `<p class="muted small clamp">${esc(a.error ? `Error: ${a.error}` : a.description || (a.prompt ? a.prompt.slice(0, 160) : 'No description.'))}</p>`}
             <div class="agent-skills">${(a.skills || []).slice(0, 4).map((s) =>
               `<span class="agent-skill mono${fixed || skillIds.has(s) ? '' : ' missing'}" title="${fixed || skillIds.has(s) ? 'Skill' : 'This skill is not in the workspace'}">${esc(s)}</span>`).join('')}${
@@ -133,15 +133,15 @@
         ${actions && a.workflow ? `<div class="card-actions">
           <span class="muted small">${esc(a.workflow.name)}</span>
           <span class="spacer"></span>
-          <button class="btn sm ghost" data-act="edit">Customize look</button>
-          <button class="btn sm ghost" data-act="open-workflow">Open in workflow</button>
-          <button class="btn sm ghost" data-act="duplicate">Duplicate</button>
+          <button class="btn sm ghost" data-act="edit">${t('agents.customize_look')}</button>
+          <button class="btn sm ghost" data-act="open-workflow">${t('agents.open_in_workflow')}</button>
+          <button class="btn sm ghost" data-act="duplicate">${t('agents.duplicate')}</button>
         </div>` : actions ? `<div class="card-actions">
           <span class="muted small">${a.system ? (a.calibration ? `Look, model and planning · ${esc(a.model)}` : a.model ? `Look and model · ${esc(a.model)}` : 'Look only') : a.updatedAt ? `updated ${esc(dateOf(a.updatedAt))}` : ''}</span>
           ${a.calibration ? `<span class="badge" title="${esc(PoCalibration.tooltip(a.calibration))}">${esc(PoCalibration.step(a.calibration).name)}</span> <span class="badge" title="${esc(PoCalibration.cost.tooltip(a.cost))}">${esc(PoCalibration.cost.step(a.cost).name)}</span>` : ''}
           <span class="spacer"></span>
           <button class="btn sm ghost" data-act="edit">${a.system ? 'Customize' : 'Edit'}</button>
-          ${a.system ? '' : '<button class="btn sm ghost danger" data-act="remove">Remove</button>'}
+          ${a.system ? '' : `<button class="btn sm ghost danger" data-act="remove">${t('agents.remove')}</button>`}
         </div>` : ''}
       </div>`;
   }
@@ -155,7 +155,7 @@
       const of = list.filter((a) => a.workflow.file === file);
       const broken = of.find((a) => a.workflowError);
       return `<div class="agents-group"><h3>${esc(of[0].workflow.name)}</h3><span class="muted small mono">${esc(file)}</span>${
-        broken ? `<p class="error small">Could not load this workflow: ${esc(broken.error)}</p>` : ''}</div>${
+        broken ? `<p class="error small">${t('agents.could_not_load_this_workflow')} ${esc(broken.error)}</p>` : ''}</div>${
         of.filter((a) => !a.workflowError).map((a) => agentCard(a, { skillIds, actions: true })).join('')}`;
     }).join('');
   }
@@ -165,7 +165,7 @@
     try {
       [agents, state.skills] = await Promise.all([api.listAgents(), api.listSkills()]);
     } catch (e) {
-      box.innerHTML = `<div class="empty-state"><b>Could not load the agents</b><p class="muted">${esc(errMsg(e))}</p></div>`;
+      box.innerHTML = `<div class="empty-state"><b>${t('agents.could_not_load_the_agents')}</b><p class="muted">${esc(errMsg(e))}</p></div>`;
       return;
     }
     applySupervisorLook();
@@ -175,9 +175,9 @@
     const fromWorkflows = agents.filter((a) => a.workflow);
     box.innerHTML = own.map((a) => agentCard(a, { skillIds, actions: true })).join('') + (custom.length ? '' : `
       <div class="card agent-empty">
-        <b>Create your first agent</b>
-        <p class="muted small">Give it a look, a prompt that says what it is for and the skills it needs. Workflows will be able to use it later.</p>
-        <div><button class="btn primary sm" id="empty-new-agent" type="button">New agent</button></div>
+        <b>${t('agents.create_your_first_agent')}</b>
+        <p class="muted small">${t('agents.give_it_a_look_a_prompt')}</p>
+        <div><button class="btn primary sm" id="empty-new-agent" type="button">${t('agents.new_agent')}</button></div>
       </div>`) + workflowSections(fromWorkflows, skillIds);
     $a('#empty-new-agent')?.addEventListener('click', () => openAgentModal(null));
     box.querySelectorAll('.agent-card').forEach((c) => (c.onclick = async (e) => {
@@ -310,8 +310,8 @@
         <div class="ag-color-head" data-testid="agent-color-row-head"><b>${c.label}</b> <span class="muted">${c.hint}</span></div>
         <div class="ag-swatches">
           ${c.swatches.map((h) => `<button type="button" class="ag-swatch${h.toUpperCase() === hex ? ' active' : ''}" data-hex="${h}" style="background:${h}" title="${h}" aria-label="${c.label} ${h}"></button>`).join('')}
-          <label class="ag-custom${custom ? ' active' : ''}" title="${custom ? `Custom color ${hex}` : 'Any color'}"><input type="color" value="${hex.toLowerCase()}" aria-label="${c.label}: any color" /><span class="ag-custom-swatch${custom ? ' active' : ''}" data-testid="agent-color-custom" aria-pressed="${custom ? 'true' : 'false'}" style="${custom ? `background:${hex}` : ''}">${custom ? '' : '+'}</span></label>
-          <input type="text" class="ag-hex mono" data-testid="agent-color-hex" value="${hex}" maxlength="7" spellcheck="false" aria-label="${c.label} hex" aria-invalid="${error ? 'true' : 'false'}" placeholder="#RRGGBB" />
+          <label class="ag-custom${custom ? ' active' : ''}" title="${custom ? `Custom color ${hex}` : 'Any color'}"><input type="color" value="${hex.toLowerCase()}" aria-label="${t('agents.label_any_color', { label: c.label })}" /><span class="ag-custom-swatch${custom ? ' active' : ''}" data-testid="agent-color-custom" aria-pressed="${custom ? 'true' : 'false'}" style="${custom ? `background:${hex}` : ''}">${custom ? '' : '+'}</span></label>
+          <input type="text" class="ag-hex mono" data-testid="agent-color-hex" value="${hex}" maxlength="7" spellcheck="false" aria-label="${t('agents.label_hex', { label: c.label })}" aria-invalid="${error ? 'true' : 'false'}" placeholder="${t('agents.rrggbb')}" />
         </div>
         <div class="ag-hex-error small" data-testid="agent-color-hex-error" role="alert">${esc(error)}</div>
       </div>`;
@@ -320,7 +320,7 @@
       `<button type="button" data-eyes="${k}" class="${k === ed.look.eyes ? 'active' : ''}">${EYE_LABELS[k] || k}</button>`).join('');
     $a('#ag-emblems').innerHTML = Robots.EMBLEMS.map((k) =>
       `<button type="button" class="ag-emblem${k === ed.look.emblem ? ' active' : ''}" data-emblem="${k}" title="${EMBLEM_LABELS[k] || k}" aria-label="${EMBLEM_LABELS[k] || k}">${
-        k === 'none' ? '<span class="ag-none" aria-hidden="true"></span>' : Robots.emblem(k)}</button>`).join('');
+        k !== 'none' ? Robots.emblem(k) : '<span class="ag-none" aria-hidden="true"></span>'}</button>`).join('');
   }
 
   function setLook(patch) {
@@ -354,7 +354,7 @@
     if (isReadOnly()) {
       const from = isWorkflow() ? 'from the workflow' : 'built in';
       box.innerHTML = [...ed.skills].map((s) => `<div class="ag-skill fixed"><span class="mono">${esc(s)}</span><span class="muted small">${from}</span></div>`).join('')
-        || '<p class="muted small">No skills.</p>';
+        || `<p class="muted small">${t('agents.no_skills')}</p>`;
       return;
     }
     const q = ed.filter.trim().toLowerCase();
@@ -366,7 +366,7 @@
     box.innerHTML = rows.length ? rows.map((s) => `
       <label class="ag-skill${ed.skills.has(s.id) ? ' on' : ''}">
         <input type="checkbox" data-skill="${esc(s.id)}"${ed.skills.has(s.id) ? ' checked' : ''} />
-        <span class="ag-skill-text"><span class="ag-skill-name"><b class="mono">${esc(s.name)}</b>${s.missing ? '<span class="badge warn">missing</span>' : ''}</span>
+        <span class="ag-skill-text"><span class="ag-skill-name"><b class="mono">${esc(s.name)}</b>${s.missing ? `<span class="badge warn">${t('agents.missing')}</span>` : ''}</span>
           <span class="muted small">${esc(s.missing ? 'Not in the workspace anymore.' : s.description || '')}</span></span>
       </label>`).join('') : `<p class="muted small">${all.length ? 'No skill matches the filter.' : 'No skills in the workspace yet (Skills menu).'}</p>`;
   }
@@ -469,11 +469,11 @@
       <section id="view-agents" class="view hidden">
         <div class="page-head">
           <div>
-            <h1>Agents</h1>
-            <p class="muted small">Reusable agents: a look, a prompt with what the agent is for, and the skills it always gets. In <span id="agents-dir" class="mono"></span></p>
+            <h1>${t('agents.agents')}</h1>
+            <p class="muted small">${t('agents.reusable_agents_a_look_a_prompt')} <span id="agents-dir" class="mono"></span></p>
           </div>
           <div class="row">
-            <button id="btn-new-agent" class="btn primary nowrap">New agent</button>
+            <button id="btn-new-agent" class="btn primary nowrap">${t('agents.new_agent')}</button>
           </div>
         </div>
         <div id="agents-list" class="card-grid agents-grid"></div>
@@ -483,71 +483,71 @@
     <form id="agent-form" class="modal-card agent-editor">
       <aside class="ag-preview">
         <div id="ag-robot" class="ag-robot" data-testid="agent-editor-robot"></div>
-        <div id="ag-states" class="ag-states" role="group" aria-label="Preview state"></div>
+        <div id="ag-states" class="ag-states" role="group" aria-label="${t('agents.preview_state')}"></div>
         <div class="ag-look-actions">
-          <button type="button" id="btn-ag-shuffle" class="btn ghost sm" title="Pick random colors, eyes and emblem">Shuffle look</button>
-          <button type="button" id="btn-ag-reset" class="btn ghost sm" title="Back to the default look">Reset look</button>
+          <button type="button" id="btn-ag-shuffle" class="btn ghost sm" title="${t('agents.pick_random_colors_eyes_and_emblem')}">${t('agents.shuffle_look')}</button>
+          <button type="button" id="btn-ag-reset" class="btn ghost sm" title="${t('agents.back_to_the_default_look')}">${t('agents.reset_look')}</button>
         </div>
       </aside>
       <div class="ag-form">
-        <h3 id="agent-modal-title">New agent</h3>
-        <p id="ag-system-note" class="ag-note hidden">Built into the platform: its prompt and skills can't be changed. You can change <span id="ag-system-can">how it looks</span>; the new look shows wherever <span id="ag-system-where">the supervisor appears (e.g. Write &amp; Review)</span>.</p>
-        <p id="ag-workflow-note" class="ag-note hidden">Defined in the <b id="ag-workflow-name"></b> workflow: its prompt, skills, model and tools are changed there (Open in workflow). You can change how it looks; the new look shows in this workflow's runs, its chat and Write &amp; Review.</p>
+        <h3 id="agent-modal-title">${t('agents.new_agent')}</h3>
+        <p id="ag-system-note" class="ag-note hidden">${t('agents.built_into_the_platform_its_prompt')} <span id="ag-system-can">${t('agents.how_it_looks')}</span>${t('agents.the_new_look_shows_wherever')} <span id="ag-system-where">${t('agents.the_supervisor_appears_e_g_write')}</span>.</p>
+        <p id="ag-workflow-note" class="ag-note hidden">${t('agents.defined_in_the')} <b id="ag-workflow-name"></b> ${t('agents.workflow_its_prompt_skills_model_and')}</p>
         <div class="field">
-          <label for="ag-name">Name <span class="req" id="ag-name-req">*</span></label>
-          <input type="text" id="ag-name" maxlength="60" placeholder="e.g. Security reviewer" />
+          <label for="ag-name">${t('agents.name')} <span class="req" id="ag-name-req">*</span></label>
+          <input type="text" id="ag-name" maxlength="60" placeholder="${t('agents.e_g_security_reviewer')}" />
         </div>
         <div class="field">
-          <label for="ag-description">Description <span class="muted">(one line, shown on the card)</span></label>
-          <input type="text" id="ag-description" maxlength="200" placeholder="e.g. Reviews diffs for injection, secrets and unsafe defaults" />
+          <label for="ag-description">${t('agents.description')} <span class="muted">${t('agents.one_line_shown_on_the_card')}</span></label>
+          <input type="text" id="ag-description" maxlength="200" placeholder="${t('agents.e_g_reviews_diffs_for_injection')}" />
         </div>
         <!-- the Product Owner only (#189): how it trades speed for quality when it plans (first: its main setting) -->
         <div id="ag-planning" class="hidden">
-          <h4 class="ag-section">Planning</h4>
+          <h4 class="ag-section">${t('agents.planning')}</h4>
           <div class="field">
-            <label for="ag-calibration">Speed ↔ Quality</label>
+            <label for="ag-calibration">${t('agents.speed_quality')}</label>
             <div id="ag-calibration-box"></div>
-            <p class="hint">What this changes: how many runs share a stage, how big a run gets, which issues stop for your look (validated mode) and where an issue goes in the roadmap, in every plan answer, Add to roadmap proposal and live roadmap refill. The same setting is in the Product Owner's drawer (the settings button next to Clear).</p>
+            <p class="hint">${t('agents.what_this_changes_how_many_runs')}</p>
           </div>
           <div class="field">
-            <label for="ag-cost">Cost: Economy ↔ Generous</label>
+            <label for="ag-cost">${t('agents.cost_economy_generous')}</label>
             <div id="ag-cost-box"></div>
-            <p class="hint">What this changes: how many issues share a run (one run overhead for a whole area at Economy), which tests the planned items run, whether they take screenshots and, where a workflow allows it, cheaper agents. When it disagrees with Speed ↔ Quality, cost wins. You can still change each item's inputs on the roadmap.</p>
+            <p class="hint">${t('agents.what_this_changes_how_many_issues')}</p>
           </div>
         </div>
 
-        <h4 class="ag-section">Look</h4>
+        <h4 class="ag-section">${t('agents.look')}</h4>
         <div id="ag-colors" class="ag-colors"></div>
         <div class="field">
-          <label>Eyes</label>
-          <div id="ag-eyes" class="seg ag-eyes" role="group" aria-label="Eyes"></div>
+          <label>${t('agents.eyes')}</label>
+          <div id="ag-eyes" class="seg ag-eyes" role="group" aria-label="${t('agents.eyes')}"></div>
         </div>
         <div class="field">
-          <label>Emblem</label>
-          <div id="ag-emblems" class="ag-emblems" role="group" aria-label="Emblem"></div>
+          <label>${t('agents.emblem')}</label>
+          <div id="ag-emblems" class="ag-emblems" role="group" aria-label="${t('agents.emblem')}"></div>
         </div>
 
-        <h4 class="ag-section">Behavior</h4>
+        <h4 class="ag-section">${t('agents.behavior')}</h4>
         <div class="field">
-          <label for="ag-prompt">Prompt <span class="req" id="ag-prompt-req">*</span> <span class="muted">(the agent's context: what it is for, how it works, what it must never do)</span></label>
-          <textarea id="ag-prompt" rows="9" placeholder="You are a security reviewer. You read diffs and point out..."></textarea>
+          <label for="ag-prompt">${t('agents.prompt')} <span class="req" id="ag-prompt-req">*</span> <span class="muted">${t('agents.the_agent_s_context_what_it')}</span></label>
+          <textarea id="ag-prompt" rows="9" placeholder="${t('agents.you_are_a_security_reviewer_you')}"></textarea>
         </div>
         <div class="field">
-          <label>Skills <span class="muted">(<span id="ag-skill-count">0</span> selected; always given to this agent)</span></label>
-          <input type="text" id="ag-skill-search" placeholder="Filter skills…" />
+          <label>${t('agents.skills')} <span class="muted">(<span id="ag-skill-count">0</span> ${t('agents.selected_always_given_to_this_agent')}</span></label>
+          <input type="text" id="ag-skill-search" placeholder="${t('agents.filter_skills')}" />
           <div id="ag-skills" class="ag-skills"></div>
         </div>
         <!-- the Product Owner only (#105): its model and effort (Claude Code) -->
         <div id="ag-model-row" class="row hidden">
           <div class="field">
-            <label for="ag-model">Model <span class="muted">(Claude Code)</span></label>
-            <input type="text" id="ag-model" list="ag-model-list" maxlength="80" placeholder="claude-opus-5-5" />
+            <label for="ag-model">${t('agents.model')} <span class="muted">${t('agents.claude_code')}</span></label>
+            <input type="text" id="ag-model" list="ag-model-list" maxlength="80" placeholder="${t('agents.claude_opus_5_5')}" />
             <datalist id="ag-model-list"></datalist>
             <p id="ag-model-hint" class="hint"></p>
           </div>
           <div class="field">
-            <label>Effort</label>
-            <div id="ag-effort" class="seg sm" role="group" aria-label="Effort"></div>
+            <label>${t('agents.effort')}</label>
+            <div id="ag-effort" class="seg sm" role="group" aria-label="${t('agents.effort')}"></div>
             <p id="ag-effort-hint" class="hint"></p>
           </div>
         </div>
@@ -556,12 +556,12 @@
 
         <p id="ag-error" class="error small"></p>
         <div class="modal-actions">
-          <button type="button" id="btn-ag-remove" class="btn ghost danger hidden">Remove</button>
-          <button type="button" id="btn-ag-open-workflow" class="btn ghost hidden">Open in workflow</button>
-          <button type="button" id="btn-ag-duplicate" class="btn ghost hidden">Duplicate as my agent</button>
+          <button type="button" id="btn-ag-remove" class="btn ghost danger hidden">${t('agents.remove')}</button>
+          <button type="button" id="btn-ag-open-workflow" class="btn ghost hidden">${t('agents.open_in_workflow')}</button>
+          <button type="button" id="btn-ag-duplicate" class="btn ghost hidden">${t('agents.duplicate_as_my_agent')}</button>
           <span class="spacer"></span>
-          <button type="button" id="btn-ag-cancel" class="btn ghost">Cancel</button>
-          <button type="submit" id="btn-ag-save" class="btn primary">Save</button>
+          <button type="button" id="btn-ag-cancel" class="btn ghost">${t('common.cancel')}</button>
+          <button type="submit" id="btn-ag-save" class="btn primary">${t('common.save')}</button>
         </div>
       </div>
     </form>

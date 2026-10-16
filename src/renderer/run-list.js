@@ -77,7 +77,7 @@ function renderRunList(rl, { prefix, box: boxSel, empty, start, rerender, reload
 
   const filters = $(`#${prefix}-run-filters`);
   filters.innerHTML = RUN_FILTERS.map(([id, label]) =>
-    `<button type="button" class="chip ${rl.filter === id ? 'active' : ''}" data-filter="${id}" ${id === 'failed' ? 'title="Failed, cancelled or interrupted"' : ''}>${label} <span class="muted">${rl.counts ? rl.counts[id] ?? 0 : ''}</span></button>`).join('');
+    `<button type="button" class="chip ${rl.filter === id ? 'active' : ''}" data-filter="${id}" ${id === 'failed' ? `title="${t('run_list.failed_cancelled_or_interrupted')}"` : ''}>${label} <span class="muted">${rl.counts ? rl.counts[id] ?? 0 : ''}</span></button>`).join('');
   filters.querySelectorAll('[data-filter]').forEach((b) => (b.onclick = () => { rl.filter = b.dataset.filter; rerender(); reload(); }));
   // the workflow filter (#310, a list that has one): the workflows with runs, named as the rows name them;
   // the picked one stays an option when it has none
@@ -86,7 +86,7 @@ function renderRunList(rl, { prefix, box: boxSel, empty, start, rerender, reload
     const list = [...(rl.workflows || [])];
     if (rl.workflow && !list.some((w) => w.workflow === rl.workflow)) list.push({ workflow: rl.workflow, count: 0 });
     const label = (file) => stepName(String(file).replace(/\.ya?ml$/i, ''));
-    wfSelect.innerHTML = `<option value="">All workflows</option>${list.map((w) =>
+    wfSelect.innerHTML = `<option value="">${t('run_list.all_workflows')}</option>${list.map((w) =>
       `<option value="${esc(w.workflow)}" title="${esc(w.workflow)}"${w.workflow === rl.workflow ? ' selected' : ''}>${esc(label(w.workflow))} (${w.count})</option>`).join('')}`;
     wfSelect.value = rl.workflow || '';
   }
@@ -96,13 +96,13 @@ function renderRunList(rl, { prefix, box: boxSel, empty, start, rerender, reload
   if (box.contains(document.activeElement) && document.activeElement.classList.contains('run-title-input')) return;
   rl.observer?.disconnect();
   if (rl.runs == null) {
-    box.innerHTML = rl.error ? '' : '<p class="muted">Loading…</p>';
+    box.innerHTML = rl.error ? '' : `<p class="muted">${t('run_list.loading')}</p>`;
     return;
   }
   const hiddenSim = rl.hiddenSim || 0;
-  const simNote = hiddenSim ? `<p class="muted small">${hiddenSim} simulated run${hiddenSim > 1 ? 's' : ''} hidden.</p>` : '';
+  const simNote = hiddenSim ? `<p class="muted small">${hiddenSim} ${t('run_list.simulated_run_value_hidden', { value: hiddenSim > 1 ? 's' : '' })}</p>` : '';
   if (!rl.runs.length && !rl.counts?.all && !rl.q && !rl.workflow) {
-    box.innerHTML = `<div class="empty-state"><b>${esc(empty)}</b>${simNote}<button class="btn primary" data-empty-start>Start workflow</button></div>`;
+    box.innerHTML = `<div class="empty-state"><b>${esc(empty)}</b>${simNote}<button class="btn primary" data-empty-start>${t('run_list.start_workflow')}</button></div>`;
     box.querySelector('[data-empty-start]').onclick = start;
     return;
   }
@@ -110,8 +110,8 @@ function renderRunList(rl, { prefix, box: boxSel, empty, start, rerender, reload
   // the open rows' artifacts (again when their count changed) and changes load before the rows are drawn
   for (const r of runs) if (rl.expanded.has(r.runId)) { ensureRunArtifacts(rl, r, rerender); ensureRunRepo(rl, r, rerender); }
   const more = !rl.hasMore ? '' : rl.moreError
-    ? `<div class="pr-more" data-more><span class="error small">Could not load more runs: ${esc(rl.moreError)}</span> <button type="button" class="btn sm ghost" data-more-retry>Retry</button></div>`
-    : '<div class="pr-more muted small" data-more>Loading more…</div>';
+    ? `<div class="pr-more" data-more><span class="error small">${t('run_list.could_not_load_more_runs')} ${esc(rl.moreError)}</span> <button type="button" class="btn sm ghost" data-more-retry>${t('run_list.retry')}</button></div>`
+    : `<div class="pr-more muted small" data-more>${t('run_list.loading_more')}</div>`;
   box.innerHTML = (nestChildRuns(runs).map((r) => runListRow(r, rl)).join('') || `<p class="muted pr-none">${rl.q ? 'No runs match this search.' : 'No runs match this filter.'}</p>`) + more + simNote;
   askPrStates(runs);
 
@@ -206,7 +206,7 @@ function issueFallbackBadge(r) {
   const used = issuesOfRun(r).filter((i) => i.fallback);
   if (!used.length) return '';
   const what = used.map((i) => `#${i.number}: ${i.fallback === 'cache' ? `the cache of ${i.cachedAt ? dateOf(i.cachedAt) : 'the last sync'}` : 'the copy saved with the planned item'}`).join('; ');
-  return ` <span class="badge warn" title="${esc(`The platform could not be read when this run started, so it used ${what}. See the run's log.`)}">issue from cache</span>`;
+  return ` <span class="badge warn" title="${esc(`The platform could not be read when this run started, so it used ${what}. See the run's log.`)}">${t('run_list.issue_from_cache')}</span>`;
 }
 
 // Child runs of a `type: workflow` step (#174) right under their parent (by item, then start), marked
@@ -232,9 +232,9 @@ function nestChildRuns(list) {
 function childRunBadges(r) {
   const p = r.parentRun;
   const kids = r.childRuns || [];
-  const parent = p?.run_id ? ` <span class="badge" title="${esc(`Started by run ${p.run_id}${p.workflow ? ` (${p.workflow})` : ''}, step ${p.step_id || '?'}`)}">child${Number.isInteger(p.index) ? ` · item ${p.index + 1}` : ''}</span>` : '';
+  const parent = p?.run_id ? ` <span class="badge" title="${esc(`Started by run ${p.run_id}${p.workflow ? ` (${p.workflow})` : ''}, step ${p.step_id || '?'}`)}">${t('run_list.child')}${Number.isInteger(p.index) ? ` · item ${p.index + 1}` : ''}</span>` : '';
   const waiting = kids.filter((c) => c.status === 'running').length;
-  const children = kids.length ? ` <span class="badge" title="${esc(kids.map((c) => `${c.run_id}: ${c.status}`).join('\n'))}">${kids.length} child run${kids.length === 1 ? '' : 's'}${waiting ? ` · ${waiting} running` : ''}</span>` : '';
+  const children = kids.length ? ` <span class="badge" title="${esc(kids.map((c) => `${c.run_id}: ${c.status}`).join('\n'))}">${kids.length} ${t('run_list.child_run')}${kids.length === 1 ? '' : 's'}${waiting ? ` · ${waiting} running` : ''}</span>` : '';
   return parent + children;
 }
 
@@ -245,16 +245,16 @@ function runListRow(r, pv) {
   const dur = r.status === 'running' && r.startedAt ? Date.now() - Date.parse(r.startedAt) : r.durationMs;
   return `
     <div class="pr-run ${open ? 'open' : ''}${r.nested ? ' pr-child' : ''}" data-testid="run-list-row" data-run="${esc(r.runId)}"${r.nested ? ` style="--nest:${r.nested}"` : ''}>
-      <div class="pr-row" title="${open ? 'Hide' : 'Show'} sessions">
+      <div class="pr-row" title="${t('run_list.value_sessions', { value: open ? 'Hide' : 'Show' })}">
         ${StatusPill.runPill(r.status, r.resumedBy)}
         <div class="pr-main">
-          <div><b>${runTitleHtml(r)}</b>${StatusPill.resumedLink(r.resumedBy)}${prBadge(r)} <span class="muted small" title="${esc(`Workflow: ${r.workflow || r.file || ''}`)}">${esc(stepName(String(r.workflow || r.file || 'workflow').replace(/\.ya?ml$/i, '')))}${r.version ? ` v${esc(r.version)}` : ''}</span>${r.mock ? ' <span class="badge p-mock">Simulated</span>' : ''}${r.current ? ' <span class="badge live">this window</span>' : ''}${r.runningElsewhere ? ' <span class="badge" title="Another app process on this workspace runs it: stop or resume it there">another window</span>' : ''}${r.retryOf ? ` <span class="badge" title="Started by a retry of the same roadmap item: the two runs do the same work">retry of ${esc(String(r.retryOf).slice(9))}</span>` : ''}${issueFallbackBadge(r)}${r.chain && window.ChainModel ? ` ${ChainModel.chainBadgesHtml(r.chain)}` : ''}${childRunBadges(r)}${!pv.id && r.project ? ` <span class="badge" title="project">${esc(r.project.name)}</span>` : ''}</div>
+          <div><b>${runTitleHtml(r)}</b>${StatusPill.resumedLink(r.resumedBy)}${prBadge(r)} <span class="muted small" title="${esc(`Workflow: ${r.workflow || r.file || ''}`)}">${esc(stepName(String(r.workflow || r.file || 'workflow').replace(/\.ya?ml$/i, '')))}${r.version ? ` v${esc(r.version)}` : ''}</span>${r.mock ? ` <span class="badge p-mock">${t('run_list.simulated')}</span>` : ''}${r.current ? ` <span class="badge live">${t('run_list.this_window')}</span>` : ''}${r.runningElsewhere ? ` <span class="badge" title="${t('run_list.another_app_process_on_this_workspace')}">${t('run_list.another_window')}</span>` : ''}${r.retryOf ? ` <span class="badge" title="${t('run_list.started_by_a_retry_of_the')}">${t('run_list.retry_of')} ${esc(String(r.retryOf).slice(9))}</span>` : ''}${issueFallbackBadge(r)}${r.chain && window.ChainModel ? ` ${ChainModel.chainBadgesHtml(r.chain)}` : ''}${childRunBadges(r)}${!pv.id && r.project ? ` <span class="badge" title="${t('run_list.project')}">${esc(r.project.name)}</span>` : ''}</div>
           <div class="muted small pr-task" title="${esc(task)}">${esc(firstLine || 'No task')}</div>
         </div>
-        <span class="pr-meta"><label>started</label>${r.startedAt ? `<span data-testid="run-list-started"${typeof TimeZone !== 'undefined' ? ` title="${esc(TimeZone.titleOf(r.startedAt, TimeZone.current()))}"` : ''}>${esc(dateOf(r.startedAt))}</span>` : '—'}</span>
-        <span class="pr-meta"><label>duration</label>${fmtDur(dur)}</span>
-        <span class="pr-meta"><label>tokens</label>${fmtTok(r.tokens?.total)}</span>
-        <span class="pr-meta"><label>cost</label>${fmtUsd(r.costUsd)}${r.childrenCostUsd ? ` <span class="muted small" title="What its child runs cost (their own children included), not in its cost">+ ${fmtUsd(r.childrenCostUsd)} child runs</span>` : ''}</span>
+        <span class="pr-meta"><label>${t('run_list.started')}</label>${r.startedAt ? `<span data-testid="run-list-started"${typeof TimeZone !== 'undefined' ? ` title="${esc(TimeZone.titleOf(r.startedAt, TimeZone.current()))}"` : ''}>${esc(dateOf(r.startedAt))}</span>` : '—'}</span>
+        <span class="pr-meta"><label>${t('run_list.duration')}</label>${fmtDur(dur)}</span>
+        <span class="pr-meta"><label>${t('run_list.tokens')}</label>${fmtTok(r.tokens?.total)}</span>
+        <span class="pr-meta"><label>${t('run_list.cost')}</label>${fmtUsd(r.costUsd)}${r.childrenCostUsd ? ` <span class="muted small" title="${t('run_list.what_its_child_runs_cost_their')}">${t('run_list.childrencostusd_child_runs', { childrenCostUsd: fmtUsd(r.childrenCostUsd) })}</span>` : ''}</span>
         <span class="pr-chev" aria-hidden="true">${open ? '▾' : '▸'}</span>
         ${runProgressStrip(r)}
       </div>
@@ -265,7 +265,7 @@ function runListRow(r, pv) {
 // The card's Send to supervisor (#409): its label and title, busy while the Supervisor answers
 // (views/supervisor/ syncs the shown buttons when that changes).
 function sendToSupervisorHtml(busy) {
-  return busy ? 'Supervisor is answering…' : '<span class="sup-mark">◆</span> Send to supervisor';
+  return busy ? 'Supervisor is answering…' : `<span class="sup-mark">◆</span> ${t('run_list.send_to_supervisor')}`;
 }
 function sendToSupervisorTitle(busy) {
   return busy ? 'Supervisor is answering: wait for the answer' : 'Open the Supervisor\'s chat with this run attached: nothing is sent until you write and send';
@@ -280,15 +280,15 @@ function projectRunBody(r, pv) {
       <span class="muted small mono" data-testid="run-id">${esc(r.runId)}</span>
       <span class="spacer"></span>
       <div class="row" data-testid="run-card-actions">
-        ${canResume(r) ? '<button class="btn sm ghost" data-run-act="resume" title="Start a new run from a step of this one, keeping the previous outputs (no supervisor call)">Resume from step…</button>' : ''}
+        ${canResume(r) ? `<button class="btn sm ghost" data-run-act="resume" title="${t('run_list.start_a_new_run_from_a')}">${t('run_list.resume_from_step')}</button>` : ''}
         <button class="btn sm ghost sup-btn" data-run-act="send-sup" title="${esc(sendToSupervisorTitle(busy))}"${busy ? ' disabled' : ''}>${sendToSupervisorHtml(busy)}</button>
-        <button class="btn sm" data-run-act="open" title="${r.current || state.runs.has(r.runId) ? 'Open its Run screen (Details)' : 'Open its Run screen (Details), rebuilt from its recorded events (read-only)'}">Open run</button>
+        <button class="btn sm" data-run-act="open" title="${r.current || state.runs.has(r.runId) ? 'Open its Run screen (Details)' : 'Open its Run screen (Details), rebuilt from its recorded events (read-only)'}">${t('run_list.open_run')}</button>
       </div>
     </div>
     ${r.error ? `<pre class="pr-error">${esc(r.error)}</pre>` : ''}
     ${runTaskBlock(r)}
     ${sessions.length ? `<table class="u-table pr-sessions">
-      <thead><tr><th>Agent</th><th>Provider · model</th><th>Status</th><th class="num">Turns</th><th class="num">Tokens</th><th class="num">Cost</th><th>Next turn</th><th></th></tr></thead>
+      <thead><tr><th>${t('run_list.agent')}</th><th>${t('run_list.provider_model')}</th><th>${t('run_list.status')}</th><th class="num">${t('run_list.turns')}</th><th class="num">${t('run_list.tokens_2')}</th><th class="num">${t('run_list.cost_2')}</th><th>${t('run_list.next_turn')}</th><th></th></tr></thead>
       <tbody>${[...sessions].sort((a, b) => isOrchSession(b) - isOrchSession(a)).map((s) => {
         const m = pv.msgs.get(`${r.runId}:${s.id}`);
         return `<tr data-session="${esc(s.id)}" data-agent="${esc(s.agent)}" data-testid="run-session-card">
@@ -307,7 +307,7 @@ function projectRunBody(r, pv) {
         </tr>`;
       }).join('')}</tbody>
       ${sessionsTotalRow(sessions)}
-    </table>` : '<p class="muted small">No agent sessions in this run.</p>'}
+    </table>` : `<p class="muted small">${t('run_list.no_agent_sessions_in_this_run')}</p>`}
     ${runColumnsBlock(r, pv)}
   </div>`;
 }
@@ -360,10 +360,10 @@ function runArtifactsColumn(r, pv) {
   const e = pv.arts?.get(r.runId);
   if (!r.artifactCount && !e?.files?.length) return '';
   if (e?.status === 'ok' && !e.files.length) return '';
-  const head = (n, m) => `<div class="pr-arts-head">Artifacts${n == null ? '' : ` <span class="muted">${n} of ${m}</span>`}</div>`;
+  const head = (n, m) => `<div class="pr-arts-head">${t('run_list.artifacts')}${n == null ? '' : ` <span class="muted">${n} ${t('run_list.of')} ${m}</span>`}</div>`;
   const wrap = (html) => `<div class="pr-arts pr-col" data-testid="run-card-artifacts">${html}</div>`;
-  if (!e || e.status === 'loading') return wrap(`${head()}<p class="muted small">Loading…</p>`);
-  if (e.status === 'error') return wrap(`${head()}<p class="error small">Could not load the artifacts: ${esc(e.error)} <button type="button" class="btn sm ghost" data-art-retry>Retry</button></p>`);
+  if (!e || e.status === 'loading') return wrap(`${head()}<p class="muted small">${t('run_list.loading')}</p>`);
+  if (e.status === 'error') return wrap(`${head()}<p class="error small">${t('run_list.could_not_load_the_artifacts')} ${esc(e.error)} <button type="button" class="btn sm ghost" data-art-retry>${t('run_list.retry')}</button></p>`);
   const AP = ArtifactsPanel;
   const f = artifactFilter(e);
   const listed = AP.filterFiles(e.files, { show: 'all', category: null, kind: null }); // every file but the internal ones
@@ -378,7 +378,7 @@ function runArtifactsColumn(r, pv) {
     const nothing = f.show === 'produced' && !f.category && !f.kind;
     return wrap(`${head(0, listed.length)}${filters}<div class="pr-arts-empty">
       <b>${nothing ? 'Nothing produced yet' : 'Nothing matches this filter'}</b>
-      ${nothing ? `<p class="muted small">Its handoff notes, decision log and logs are behind Show all.</p><button type="button" class="btn sm ghost" data-art-show-all>Show all (${listed.length})</button>` : '<p class="muted small">Choose another chip.</p>'}
+      ${nothing ? `<p class="muted small">${t('run_list.its_handoff_notes_decision_log_and')}</p><button type="button" class="btn sm ghost" data-art-show-all>${t('run_list.show_all_length', { length: listed.length })}</button>` : `<p class="muted small">${t('run_list.choose_another_chip')}</p>`}
     </div>`);
   }
   const sections = AP.CATEGORIES.map(([id, label]) => {
@@ -387,15 +387,15 @@ function runArtifactsColumn(r, pv) {
       <div class="pr-arts-list">${list.map(artifactRowHtml).join('')}</div></div>` : '';
   }).join('');
   return wrap(`${head(files.length, listed.length)}${filters}${sections}
-    ${left > 0 ? `<button type="button" class="btn sm ghost pr-arts-more" data-art-more>Show ${Math.min(left, ART_PAGE)} more${left > ART_PAGE ? ` <span class="muted">(${left} left)</span>` : ''}</button>` : ''}`);
+    ${left > 0 ? `<button type="button" class="btn sm ghost pr-arts-more" data-art-more>${t('run_list.show_left_more', { left: Math.min(left, ART_PAGE) })}${left > ART_PAGE ? ` <span class="muted">${t('run_list.left_left', { left })}</span>` : ''}</button>` : ''}`);
 }
 
 // One file row: its kind, its name, the step that saved it (a small label), its size.
 function artifactRowHtml(a) {
   return `<button type="button" class="pr-art ${a.exists ? '' : 'missing'}" data-testid="run-card-artifact" data-art="${esc(a.path)}" title="${esc(a.path)}">
     ${artKindIcon(a.kind)}<span class="pr-art-name">${esc(a.name)}</span>
-    ${a.step ? `<span class="pr-art-step mono muted small" title="The step that saved it">${esc(a.step)}</span>` : ''}
-    ${a.location === 'external' ? '<span class="badge">project copy</span>' : ''}${a.exists ? '' : '<span class="muted small">deleted</span>'}
+    ${a.step ? `<span class="pr-art-step mono muted small" title="${t('run_list.the_step_that_saved_it')}">${esc(a.step)}</span>` : ''}
+    ${a.location === 'external' ? `<span class="badge">${t('run_list.project_copy')}</span>` : ''}${a.exists ? '' : `<span class="muted small">${t('run_list.deleted')}</span>`}
     <span class="muted small">${esc(fmtSize(a.size))}</span>
   </button>`;
 }
@@ -405,32 +405,32 @@ function artifactRowHtml(a) {
 function runRepositoryColumn(r, pv) {
   const e = pv.repo?.get(r.runId);
   const wrap = (html, { reviewable = false, why = '' } = {}) => `<div class="pr-repo pr-col" data-testid="run-card-repository">
-    <div class="pr-arts-head pr-repo-head">Repository <button type="button" class="btn sm" data-testid="run-card-review-changes" data-repo-review${reviewable ? '' : ' disabled'} title="${esc(reviewable ? 'The changed files and the commits of this run, in the changes viewer' : why)}">Review changes</button></div>
+    <div class="pr-arts-head pr-repo-head">${t('run_list.repository')} <button type="button" class="btn sm" data-testid="run-card-review-changes" data-repo-review${reviewable ? '' : ' disabled'} title="${esc(reviewable ? 'The changed files and the commits of this run, in the changes viewer' : why)}">${t('run_list.review_changes')}</button></div>
     ${html}</div>`;
-  if (r.mock) return wrap('<p class="muted small">Simulated: nothing was committed.</p>', { why: 'A simulated run commits nothing.' });
-  if (!e || e.status === 'loading') return wrap('<p class="muted small">Loading…</p>', { why: 'Loading the run\'s changes…' });
-  if (e.status === 'error') return wrap(`<p class="error small">Could not load the changes: ${esc(e.error)} <button type="button" class="btn sm ghost" data-repo-retry>Retry</button></p>`, { why: `The run's changes could not be read: ${e.error}` });
+  if (r.mock) return wrap(`<p class="muted small">${t('run_list.simulated_nothing_was_committed')}</p>`, { why: 'A simulated run commits nothing.' });
+  if (!e || e.status === 'loading') return wrap(`<p class="muted small">${t('run_list.loading')}</p>`, { why: 'Loading the run\'s changes…' });
+  if (e.status === 'error') return wrap(`<p class="error small">${t('run_list.could_not_load_the_changes')} ${esc(e.error)} <button type="button" class="btn sm ghost" data-repo-retry>${t('run_list.retry')}</button></p>`, { why: `The run's changes could not be read: ${e.error}` });
   const d = e.data;
   const commits = d.commits || [];
   const files = d.files || [];
-  if (d.simulated) return wrap('<p class="muted small">Simulated: nothing was committed.</p>', { why: 'A simulated run commits nothing.' });
+  if (d.simulated) return wrap(`<p class="muted small">${t('run_list.simulated_nothing_was_committed')}</p>`, { why: 'A simulated run commits nothing.' });
   if (d.unavailable && !commits.length) {
     const gone = !!d.branchGone || /\bgone\b/i.test(d.unavailable);
     return wrap(`${repoBranchHtml(r, d)}<p class="muted small">${gone ? 'The branch is gone: nothing is left to compare.' : esc(d.unavailable)}</p>`, { reviewable: files.length > 0, why: 'This run has no changes to show.' });
   }
-  if (!commits.length) return wrap(`${repoBranchHtml(r, d)}<p class="muted small">This run made no commits.</p>`, { reviewable: files.length > 0, why: 'This run made no commits.' });
+  if (!commits.length) return wrap(`${repoBranchHtml(r, d)}<p class="muted small">${t('run_list.this_run_made_no_commits')}</p>`, { reviewable: files.length > 0, why: 'This run made no commits.' });
   const added = files.reduce((n, f) => n + (f.added || 0), 0);
   const deleted = files.reduce((n, f) => n + (f.deleted || 0), 0);
   const shown = commits.slice(0, e.shown);
   const left = commits.length - shown.length;
   const when = (iso) => { const t = Date.parse(iso); return Number.isFinite(t) ? timeOf(iso).replace(/:\d\d (AM|PM)$/, ' $1') : ''; };
   return wrap(`${repoBranchHtml(r, d)}
-    <div class="muted small pr-repo-totals" data-testid="run-card-repo-totals">${commits.length} commit${commits.length === 1 ? '' : 's'} · ${files.length} file${files.length === 1 ? '' : 's'} · <span class="pr-add">+${added}</span> <span class="pr-del">−${deleted}</span></div>
-    <ul class="pr-commits" data-testid="run-card-commits" aria-label="Commits of this run, newest first">${shown.map((c) => `
+    <div class="muted small pr-repo-totals" data-testid="run-card-repo-totals">${commits.length} ${t('run_list.commit_value_length_file_value2', { value: commits.length === 1 ? '' : 's', length: files.length, value2: files.length === 1 ? '' : 's' })} <span class="pr-add">+${added}</span> <span class="pr-del">−${deleted}</span></div>
+    <ul class="pr-commits" data-testid="run-card-commits" aria-label="${t('run_list.commits_of_this_run_newest_first')}">${shown.map((c) => `
       <li><button type="button" class="pr-commit" data-testid="run-card-commit" data-sha="${esc(c.sha)}" aria-label="${esc(`${c.short || shortSha(c.sha)} ${c.subject}`)}" title="${esc(`${c.subject}\n${c.author || ''} · ${c.date ? dateOf(c.date) : ''}`)}">
         <span class="mono pr-commit-sha">${esc(c.short || shortSha(c.sha))}</span><span class="pr-commit-subject">${esc(c.subject)}</span><span class="muted small pr-commit-time">${esc(when(c.date))}</span>
       </button></li>`).join('')}</ul>
-    ${left > 0 ? `<button type="button" class="btn sm ghost" data-testid="run-card-commits-more" data-repo-more>Show ${Math.min(left, REPO_PAGE)} more${left > REPO_PAGE ? ` <span class="muted">(${left} left)</span>` : ''}</button>` : ''}`, { reviewable: true });
+    ${left > 0 ? `<button type="button" class="btn sm ghost" data-testid="run-card-commits-more" data-repo-more>${t('run_list.show_left_more', { left: Math.min(left, REPO_PAGE) })}${left > REPO_PAGE ? ` <span class="muted">${t('run_list.left_left', { left })}</span>` : ''}</button>` : ''}`, { reviewable: true });
 }
 
 // The branch (mono), its base and the state badge: merged (the PR), pushed (the PR link), merged
@@ -440,10 +440,10 @@ function repoBranchHtml(r, d) {
   const merge = r.localMerge || r.summary?.local_merge;
   const branch = d.branch || merge?.branch || r.branch || '';
   const base = d.base || merge?.base || r.base || '';
-  const state = pr?.state === 'merged' ? `<span class="badge st-success" data-testid="run-card-repo-state">Merged${pr.number ? ` · #${esc(String(pr.number))}` : ''}</span>`
-    : pr?.url ? `<a class="badge" data-testid="run-card-repo-state" href="${esc(pr.url)}" target="_blank" rel="noopener" title="Pushed: its pull request">Pushed · ${esc(pr.number ? `#${pr.number}` : 'PR')}</a>`
-    : merge?.commit ? `<span class="badge st-success" data-testid="run-card-repo-state" title="Merged into ${esc(merge.base || base || 'the base')} on this machine">Merged locally at <span class="mono">${esc(shortSha(merge.commit))}</span></span>`
-    : (d.commits || []).length ? '<span class="badge" data-testid="run-card-repo-state">Not merged</span>' : '';
+  const state = pr?.state === 'merged' ? `<span class="badge st-success" data-testid="run-card-repo-state">${t('run_list.merged')}${pr.number ? ` · #${esc(String(pr.number))}` : ''}</span>`
+    : pr?.url ? `<a class="badge" data-testid="run-card-repo-state" href="${esc(pr.url)}" target="_blank" rel="noopener" title="${t('run_list.pushed_its_pull_request')}">${t('run_list.pushed')} ${esc(pr.number ? `#${pr.number}` : 'PR')}</a>`
+    : merge?.commit ? `<span class="badge st-success" data-testid="run-card-repo-state" title="${t('run_list.merged_into_value_on_this_machine', { value: esc(merge.base || base || 'the base') })}">${t('run_list.merged_locally_at')} <span class="mono">${esc(shortSha(merge.commit))}</span></span>`
+    : (d.commits || []).length ? `<span class="badge" data-testid="run-card-repo-state">${t('run_list.not_merged')}</span>` : '';
   return `<div class="pr-repo-branch"><span class="mono" data-testid="run-card-repo-branch" title="${esc(branch ? 'The run\'s branch' : 'The run\'s branch is not recorded')}">${esc(branch || 'branch not recorded')}</span>${base ? ` <span class="muted small">← ${esc(base)}</span>` : ''} ${state}</div>`;
 }
 
@@ -498,7 +498,7 @@ function tokensCell(t) {
 // model calls), or that misses a stopped attempt of a run recorded before costs were estimated.
 // The one badge pair for it: the run lists, the Run screen (views/run/run.js) and Analytics' Run tab.
 function costMarks(estimatedUsd, notRecorded) {
-  return `${estimatedUsd > 0 ? ` <span class="badge" title="${esc(`${fmtUsd(estimatedUsd)} of it estimated from the model calls of attempts stopped before their result`)}">estimated</span>` : ''}${notRecorded ? ' <span class="badge warn" title="An attempt stopped before its result: its cost was not recorded">cost not recorded</span>' : ''}`;
+  return `${estimatedUsd > 0 ? ` <span class="badge" title="${esc(`${fmtUsd(estimatedUsd)} of it estimated from the model calls of attempts stopped before their result`)}">${t('run_list.estimated')}</span>` : ''}${notRecorded ? ` <span class="badge warn" title="${t('run_list.an_attempt_stopped_before_its_result')}">${t('run_list.cost_not_recorded')}</span>` : ''}`;
 }
 // The Run screen's top-bar cost (app.js renderHeader): the run's sessions' marks after the total.
 function sessionsCostMarks(sessions) {
@@ -511,8 +511,8 @@ const providerModel = (entry) => String(entry || '').replace(':', ' · ');
 function sessionProviderCell(s) {
   const provider = s.simulates || s.provider;
   const fb = s.fallbackFrom;
-  return `<span class="badge p-${esc(provider)}"${s.simulates ? ' title="Simulated: no model was called"' : ''}>${esc(provider)}</span> <span class="mono small">${esc(s.model || '')}</span>${fb
-    ? `<div class="pr-fallback small" data-testid="run-session-fallback" title="${esc(fb.reason || '')}"><span class="badge warn">fallback</span> from <span class="mono">${esc(providerModel(fb.from))}</span>: ${esc(String(fb.reason || '').slice(0, 80))}</div>` : ''}`;
+  return `<span class="badge p-${esc(provider)}"${s.simulates ? ` title="${t('run_list.simulated_no_model_was_called')}"` : ''}>${esc(provider)}</span> <span class="mono small">${esc(s.model || '')}</span>${fb
+    ? `<div class="pr-fallback small" data-testid="run-session-fallback" title="${esc(fb.reason || '')}"><span class="badge warn">${t('run_list.fallback')}</span> ${t('run_list.from')} <span class="mono">${esc(providerModel(fb.from))}</span>: ${esc(String(fb.reason || '').slice(0, 80))}</div>` : ''}`;
 }
 // #369: a session on a model the installed Claude Code does not know (estimate: the snapshot's
 // cost_estimate): its cost estimated from tokens, or none with no price for the model; the CLI's own
@@ -522,19 +522,19 @@ function costEstimateNote(estimate) {
   const model = estimate.model || 'the model';
   const why = `Claude Code${estimate.cli_version ? ` ${estimate.cli_version}` : ''} does not know ${model}: it priced the turns at another model's rates (${fmtUsd(estimate.cli_cost_usd)}). Update it with \`claude update\`.`;
   return estimate.source === 'unknown'
-    ? ` <span class="badge warn" data-testid="session-cost-note" title="${esc(`${why} Add a price for ${model} in Usage › Prices.`)}">no price for ${esc(model)}</span>`
-    : ` <span class="badge" data-testid="session-cost-note" title="${esc(why)}">estimated from tokens</span>`;
+    ? ` <span class="badge warn" data-testid="session-cost-note" title="${esc(`${why} Add a price for ${model} in Usage › Prices.`)}">${t('run_list.no_price_for')} ${esc(model)}</span>`
+    : ` <span class="badge" data-testid="session-cost-note" title="${esc(why)}">${t('run_list.estimated_from_tokens')}</span>`;
 }
 // Tokens with no cost: a model with no price (Codex, unpriced models), not a free session.
 function sessionCostCell(s) {
   if (s.costEstimate?.source === 'unknown') return `<td class="num mono muted" data-testid="session-cost">—${costEstimateNote(s.costEstimate)}</td>`;
-  if (!s.costUsd && s.tokens?.total && s.provider !== 'mock' && !s.costNotRecorded) return '<td class="num mono muted" data-testid="session-cost" title="No price for this model: see Usage › Prices">—</td>';
+  if (!s.costUsd && s.tokens?.total && s.provider !== 'mock' && !s.costNotRecorded) return `<td class="num mono muted" data-testid="session-cost" title="${t('run_list.no_price_for_this_model_see')}">—</td>`;
   return `<td class="num mono" data-testid="session-cost">${fmtUsd(s.costUsd)}${costMarks(s.costEstimatedUsd, s.costNotRecorded)}${costEstimateNote(s.costEstimate)}</td>`;
 }
 function sessionsTotalRow(sessions) {
   const sum = (f) => sessions.reduce((a, s) => a + (f(s) || 0), 0);
   const tokens = Object.fromEntries([...TOKEN_PARTS.map(([k]) => [k, sum((s) => s.tokens?.[k])]), ['total', sum((s) => s.tokens?.total)]]);
-  return `<tfoot><tr class="pr-total"><td colspan="3">Total</td><td class="num mono">${fmtNum(sum((s) => s.turns))}</td>
+  return `<tfoot><tr class="pr-total"><td colspan="3">${t('run_list.total')}</td><td class="num mono">${fmtNum(sum((s) => s.turns))}</td>
     ${tokensCell(tokens)}<td class="num mono" data-testid="run-total-cost">${fmtUsd(sum((s) => s.costUsd))}${costMarks(sum((s) => s.costEstimatedUsd), sessions.some((s) => s.costNotRecorded))}</td><td></td><td></td></tr></tfoot>`;
 }
 // #320: how the session's next turn starts (src/renderer/session-cache.js): the text leads, the
@@ -546,7 +546,7 @@ function nextTurnCell(s, now = Date.now()) {
 
 function runTaskBlock(r) {
   const t = String(r.task || '').trim();
-  return t.includes('\n') || t.length > 120 ? `<details class="pr-fulltask"><summary class="muted small">Full task</summary><pre>${esc(t)}</pre></details>` : '';
+  return t.includes('\n') || t.length > 120 ? `<details class="pr-fulltask"><summary class="muted small">${I18n.t('run_list.full_task')}</summary><pre>${esc(t)}</pre></details>` : '';
 }
 
 // Run progress in the runs lists: the groups a run visited, with their agents' avatars
@@ -603,7 +603,7 @@ function progressAvatar(a, chip, names, workflow, stepNames) {
   // the hover card: the agent's name with its role chip (#227), then the steps, provider, time and cost
   // (#236: the human gate's too; never a native title, which would open over the card)
   const card = a.human
-    ? `<span class="rp-card" role="tooltip"><span><b>You (human gate)</b></span><span class="muted">${esc(tip)}</span></span>`
+    ? `<span class="rp-card" role="tooltip"><span><b>${t('run_list.you_human_gate')}</b></span><span class="muted">${esc(tip)}</span></span>`
     : `<span class="rp-card" role="tooltip"><span><b>${esc(agentLabel(a.agent, names))}</b>${window.AgentColors ? AgentColors.roleChip(a.agent, def) : ''}</span><span class="muted">${esc(tip)}</span></span>`;
   return `<span class="rp-av${a.human ? ' human' : a.provider ? '' : ' engine'}" data-testid="progress-agent"${color ? ` style="--agent-color:${esc(color)}"` : ''} tabindex="0" aria-label="${esc(tip)}">${art}${card}</span>`;
 }

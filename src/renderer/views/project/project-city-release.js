@@ -36,8 +36,8 @@
   function pickerMarkup(tags, from, to) {
     const refs = [...tags, ...[to, from].filter((r) => r && !tags.includes(r))];
     return `<div class="pcr-picker">
-        <label class="r3d-chip"><span>From</span>${selectMarkup({ 'data-pcr-from': '', 'data-testid': 'city-release-from', 'aria-label': 'The previous release' }, options(refs, from))}</label>
-        <label class="r3d-chip"><span>To</span>${selectMarkup({ 'data-pcr-to': '', 'data-testid': 'city-release-to', 'aria-label': 'The release' }, options(refs, to))}</label>
+        <label class="r3d-chip"><span>${t('project_city_release.from')}</span>${selectMarkup({ 'data-pcr-from': '', 'data-testid': 'city-release-from', 'aria-label': 'The previous release' }, options(refs, from))}</label>
+        <label class="r3d-chip"><span>${t('project_city_release.to')}</span>${selectMarkup({ 'data-pcr-to': '', 'data-testid': 'city-release-to', 'aria-label': 'The release' }, options(refs, to))}</label>
       </div>`;
   }
 
@@ -50,14 +50,14 @@
     return `<div class="pci-header" data-testid="city-release-header">
       <div class="pci-title"><span title="${esc(project)}">${esc(project)}</span></div>
       ${pickerMarkup(tags, from, to)}
-      <p class="pcr-counts">${chips || '<span class="muted">No file changed</span>'}</p>
+      <p class="pcr-counts">${chips || `<span class="muted">${t('project_city_release.no_file_changed')}</span>`}</p>
       ${countsHtml(header.districts || [], 'city-release-district', 'By district')}
       ${countsHtml(header.zones || [], 'city-release-zone', 'By zone')}
       <div class="pcr-actions">
-        <label class="r3d-chip"><span>Issue</span>${selectMarkup({ 'data-pcr-issue': '', 'data-testid': 'city-release-issue', 'aria-label': 'Filter by issue' },
-          `<option value="" ${issue == null ? 'selected' : ''}>All issues</option>${options(issues, issue, (n) => `#${n}`)}`)}</label>
+        <label class="r3d-chip"><span>${t('project_city_release.issue')}</span>${selectMarkup({ 'data-pcr-issue': '', 'data-testid': 'city-release-issue', 'aria-label': 'Filter by issue' },
+          `<option value="" ${issue == null ? 'selected' : ''}>${t('project_city_release.all_issues')}</option>${options(issues, issue, (n) => `#${n}`)}`)}</label>
         <span class="r3d-grow"></span>
-        <button type="button" class="r3d-primary inline" data-pcr-save data-testid="city-release-save-image" title="Save a PNG of this view with a caption, for release notes">Save image</button>
+        <button type="button" class="r3d-primary inline" data-pcr-save data-testid="city-release-save-image" title="${t('project_city_release.save_a_png_of_this_view')}">${t('project_city_release.save_image')}</button>
       </div>
     </div>`;
   }
@@ -143,16 +143,16 @@
         return;
       }
       const title = data && data.from && data.to ? `Release ${esc(data.to)}` : 'Release';
-      const head = `<div class="pci-head"><b>${title}</b><button type="button" class="link-btn" data-pcr-close data-testid="city-release-close">Close</button></div>`;
-      if (error) { el.innerHTML = `${head}<p class="small" role="alert">Could not read the release: ${esc(error)}</p>`; return; }
-      if (!data) { el.innerHTML = `${head}<p class="muted small">Reading the release and the city at the previous tag…</p>`; return; }
+      const head = `<div class="pci-head"><b>${title}</b><button type="button" class="link-btn" data-pcr-close data-testid="city-release-close">${t('common.close')}</button></div>`;
+      if (error) { el.innerHTML = `${head}<p class="small" role="alert">${t('project_city_release.could_not_read_the_release')} ${esc(error)}</p>`; return; }
+      if (!data) { el.innerHTML = `${head}<p class="muted small">${t('project_city_release.reading_the_release_and_the_city')}</p>`; return; }
       if (data.state !== 'ok') {
         // two tags or commits or more: another pair can still be picked
         const tags = data.tags || [];
         el.innerHTML = `${head}<p class="small" role="alert">${esc(stateText(data))}</p>${tags.length > 1 ? pickerMarkup(tags, data.from, data.to) : ''}`;
         return;
       }
-      if (!city.layout || city.model !== applied) { el.innerHTML = `${head}<p class="muted small">Laying out the city at ${esc(data.from)}…</p>`; return; }
+      if (!city.layout || city.model !== applied) { el.innerHTML = `${head}<p class="muted small">${t('project_city_release.laying_out_the_city_at_from', { from: esc(data.from) })}</p>`; return; }
       const list = changes();
       const overlay = CityRelease.releaseOverlay(list);
       header = CityRelease.releaseHeader(city.layout, list);

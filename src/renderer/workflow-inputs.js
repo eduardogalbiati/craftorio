@@ -168,7 +168,7 @@
     } else if (k === 'select') {
       control = `<select ${ctl}${af}>${def.enum.map((o) => `<option value="${esc(o)}"${String(o) === String(val) ? ' selected' : ''}>${esc(optionLabel(def, o))}</option>`).join('')}</select>`;
     } else if (k === 'run') {
-      control = `<input type="text" ${ctl} class="mono wi-compact" value="${esc(val)}" placeholder="latest" spellcheck="false"${af} />`;
+      control = `<input type="text" ${ctl} class="mono wi-compact" value="${esc(val)}" placeholder="${t('workflow_inputs.latest')}" spellcheck="false"${af} />`;
     } else if (k === 'number') {
       control = `<input type="number" ${ctl} class="wi-number" value="${esc(val)}"${af} />`;
     } else if (k === 'textarea') {

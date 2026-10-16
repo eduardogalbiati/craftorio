@@ -61,11 +61,11 @@
       ${stat('30 days', occ(o.cards.month.occupancy), `${hours(o.cards.month.activeHours)} active of ${hours(o.cards.month.hours)}`)}
       ${stat('Active streak', o.streakMinutes ? fmtDur(o.streakMinutes * 60e3) : '—', o.running ? 'A run is active now' : `Idle now for ${fmtDur(o.idleNowMinutes * 60e3)}`)}
       ${stat('Longest idle gap (week)', g ? `${fmtDur(g.minutes * 60e3)} <span class="muted small">${esc(CAUSE_LABEL[g.cause] || g.cause)}</span>` : '—', g ? `${dateOf(g.from)} → ${dateOf(g.to)}` : '')}
-      ${stat('Runs at once', `${o.avgConcurrent == null ? '—' : (Math.round(o.avgConcurrent * 10) / 10).toFixed(1)} <span class="muted small">avg · peak ${fmtNum(o.peakConcurrent)}</span>`, 'Average while at least one run is active, and the peak')}
+      ${stat('Runs at once', `${o.avgConcurrent == null ? '—' : (Math.round(o.avgConcurrent * 10) / 10).toFixed(1)} <span class="muted small">${t('analytics_occupancy.avg_peak')} ${fmtNum(o.peakConcurrent)}</span>`, 'Average while at least one run is active, and the peak')}
     </div>`;
   }
 
-  const legend = () => `<div class="an-legend"><span><i style="background:${ACTIVE}"></i>Active</span>${CAUSES.map(([, l, c]) => `<span><i style="background:${c}"></i>${l}</span>`).join('')}</div>`;
+  const legend = () => `<div class="an-legend"><span><i style="background:${ACTIVE}"></i>${t('analytics_occupancy.active')}</span>${CAUSES.map(([, l, c]) => `<span><i style="background:${c}"></i>${l}</span>`).join('')}</div>`;
 
   // active vs idle by cause, one bar per local day
   function dayChart(days) {
@@ -78,11 +78,11 @@
         y -= h;
         return v > 0 ? `<rect x="${(i * bw + 2).toFixed(1)}" y="${y.toFixed(1)}" width="${Math.max(1, bw - 4).toFixed(1)}" height="${h.toFixed(1)}" style="fill:${c}"><title>${esc(fmtDay(d.day, true))} · ${esc(k === 'active' ? 'Active' : CAUSE_LABEL[k])}: ${hours(v)}</title></rect>` : '';
       }).join('');
-      return `<g>${parts}<rect x="${(i * bw).toFixed(1)}" y="0" width="${bw.toFixed(1)}" height="${H}" class="an-hit"><title>${esc(fmtDay(d.day, true))}: ${pct(d.occupancy)} active (${hours(d.activeHours)} of ${hours(span)})${d.partial ? ', partial day' : ''}</title></rect></g>`;
+      return `<g>${parts}<rect x="${(i * bw).toFixed(1)}" y="0" width="${bw.toFixed(1)}" height="${H}" class="an-hit"><title>${esc(fmtDay(d.day, true))}${t('analytics_occupancy.occupancy_active_activehours_of_span', { occupancy: pct(d.occupancy), activeHours: hours(d.activeHours), span: hours(span) })}${d.partial ? ', partial day' : ''}</title></rect></g>`;
     }).join('');
     const every = Math.ceil(days.length / 10);
     const labels = days.map((d, i) => (i % every === 0 ? `<span style="left:${((i + 0.5) / days.length) * 100}%">${esc(fmtDay(d.day))}</span>` : '')).join('');
-    return `<div class="an-chart" data-testid="an-occ-days"><div class="an-ymax muted small">24 h</div><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Active and idle hours per day">${bars}</svg><div class="an-xlabels">${labels}</div></div>`;
+    return `<div class="an-chart" data-testid="an-occ-days"><div class="an-ymax muted small">24 h</div><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${t('analytics_occupancy.active_and_idle_hours_per_day')}">${bars}</svg><div class="an-xlabels">${labels}</div></div>`;
   }
 
   // a 24-hour strip per day, newest first: the share of each local hour with a run active, as one of
@@ -95,34 +95,35 @@
   function heatStrip(days) {
     const rows = [...days].reverse().map((d) => `<div class="an-heat-row"><span class="an-heat-day mono small" title="${esc(fmtDay(d.day, true))}">${esc(fmtDay(d.day))}</span>${d.hourly.map((v, h) => heatCell(d.day, h, v)).join('')}</div>`).join('');
     const axis = `<div class="an-heat-row an-heat-axis"><span class="an-heat-day"></span>${Array.from({ length: 24 }, (_, h) => `<em>${h % 3 === 0 ? h : ''}</em>`).join('')}</div>`;
-    return `<div class="an-heat" data-testid="an-occ-heat" role="img" aria-label="Active share of each hour, per day">${rows}${axis}</div>`;
+    return `<div class="an-heat" data-testid="an-occ-heat" role="img" aria-label="${t('analytics_occupancy.active_share_of_each_hour_per')}">${rows}${axis}</div>`;
   }
-  const heatLegend = () => `<div class="an-legend an-heat-legend" data-testid="an-occ-heat-legend" aria-label="Heatmap scale"><span class="an-heat-scale">Idle ${HEAT_LABELS.map((l, i) => `<i class="an-heat-cell an-heat-l${i}" title="${esc(l)}"></i>`).join('')} Fully active</span><span><i class="an-heat-cell an-heat-nodata"></i>No data</span></div>`;
+  const heatLegend = () => `<div class="an-legend an-heat-legend" data-testid="an-occ-heat-legend" aria-label="${t('analytics_occupancy.heatmap_scale')}"><span class="an-heat-scale">${t('analytics_occupancy.idle_value_fully_active', { value: HEAT_LABELS.map((l, i) => `<i class="an-heat-cell an-heat-l${i}" title="${esc(l)}"></i>`).join('') })}</span><span><i class="an-heat-cell an-heat-nodata"></i>${t('analytics_occupancy.no_data')}</span></div>`;
 
+  const causeColor = (cause) => CAUSES.find(([k]) => k === cause)?.[2] || 'inherit';
   function gapsTable(gaps) {
-    if (!gaps.length) return '<p class="muted small an-empty">No idle gap longer than 15 minutes.</p>';
-    return `<table class="u-table an-sessions"><thead><tr><th>From</th><th>To</th><th class="num">Length</th><th>Cause</th><th>Ended by</th></tr></thead><tbody>
+    if (!gaps.length) return `<p class="muted small an-empty">${t('analytics_occupancy.no_idle_gap_longer_than_15')}</p>`;
+    return `<table class="u-table an-sessions"><thead><tr><th>${t('analytics_occupancy.from')}</th><th>${t('analytics_occupancy.to')}</th><th class="num">${t('analytics_occupancy.length')}</th><th>${t('analytics_occupancy.cause')}</th><th>${t('analytics_occupancy.ended_by')}</th></tr></thead><tbody>
       ${[...gaps].reverse().slice(0, 60).map((g) => `<tr><td class="nowrap">${esc(dateOf(g.from))}</td><td class="nowrap">${esc(dateOf(g.to))}</td><td class="num">${fmtDur(g.minutes * 60e3)}</td>
-        <td><span class="badge an-cause" style="color:${CAUSES.find(([k]) => k === g.cause)?.[2] || 'inherit'}">${esc(CAUSE_LABEL[g.cause] || g.cause)}</span></td><td class="small">${esc(g.endedBy || 'still idle')}</td></tr>`).join('')}</tbody></table>`;
+        <td><span class="badge an-cause" style="color:${causeColor(g.cause)}">${esc(CAUSE_LABEL[g.cause] || g.cause)}</span></td><td class="small">${esc(g.endedBy || t('analytics_occupancy.still_idle'))}</td></tr>`).join('')}</tbody></table>`;
   }
 
   function idleSplit(idle) {
     const total = idle.total || 0;
-    if (!total) return '<span class="muted small">No idle time.</span>';
+    if (!total) return `<span class="muted small">${t('analytics_occupancy.no_idle_time')}</span>`;
     return `<div class="an-stack">${CAUSES.filter(([k]) => idle[k] > 0).map(([k, l, c]) => `<span style="flex:${idle[k]};background:${c}" title="${esc(l)}: ${hours(idle[k])}"></span>`).join('')}</div>`;
   }
 
   function nightWatch(o) {
     const nw = o.nightWatch;
     const row = (label, s) => `<tr><td>${label}</td><td class="num">${hours(s.hours)}</td><td class="num">${occ(s.occupancy)}</td><td class="an-idle-cell">${idleSplit(s.idleHours)}</td><td class="num">${fmtNum(s.issues)}</td><td class="num">${fmtUsd(s.costUsd)}</td></tr>`;
-    const nights = o.nights.length ? `<table class="u-table an-sessions"><thead><tr><th>Night</th><th>Window</th><th class="num">Occupancy</th><th class="num">Incidents</th><th class="num">Actions</th><th class="num">Hours saved</th><th class="num">Cost</th><th></th></tr></thead><tbody>
-      ${o.nights.map((n) => `<tr><td class="nowrap" title="${esc(n.startedAt)}">${esc(fmtWhenDay(n.startedAt))}${n.watch ? '' : ' <span class="badge" title="No Night watch this night: 00:00-08:00 shown">no watch</span>'}</td>
+    const nights = o.nights.length ? `<table class="u-table an-sessions"><thead><tr><th>${t('analytics_occupancy.night')}</th><th>${t('analytics_occupancy.window')}</th><th class="num">${t('analytics_occupancy.occupancy')}</th><th class="num">${t('analytics_occupancy.incidents')}</th><th class="num">${t('analytics_occupancy.actions')}</th><th class="num">${t('analytics_occupancy.hours_saved')}</th><th class="num">${t('analytics_occupancy.cost')}</th><th></th></tr></thead><tbody>
+      ${o.nights.map((n) => `<tr><td class="nowrap" title="${esc(n.startedAt)}">${esc(fmtWhenDay(n.startedAt))}${n.watch ? '' : ` <span class="badge" title="${t('analytics_occupancy.no_night_watch_this_night_00')}">${t('analytics_occupancy.no_watch')}</span>`}</td>
         <td class="nowrap small">${esc(dateOf(n.window.from))} → ${esc(dateOf(n.window.to))}</td><td class="num">${occ(n.occupancy)}</td>
         <td class="num">${n.incidents == null ? '—' : n.incidents}</td><td class="num">${n.actions == null ? '—' : n.actions}</td><td class="num">${n.hoursSaved == null ? '—' : hours(n.hoursSaved)}</td>
-        <td class="num">${fmtUsd(n.costUsd || 0)}</td><td>${n.watch ? `<button type="button" class="link-btn" data-occ-night="${esc(n.startedAt)}">Night watch →</button>` : ''}</td></tr>`).join('')}</tbody></table>`
-      : '<p class="muted small an-empty">No night in this range.</p>';
-    return `<div class="card table-wrap"><table class="u-table an-sessions" data-testid="an-occ-nightwatch"><thead><tr><th></th><th class="num">Hours</th><th class="num">Occupancy</th><th>Idle by cause</th><th class="num">Issues delivered</th><th class="num">Cost</th></tr></thead><tbody>
-        ${row(`Under the Night watch <span class="muted small">(${nw.nights} night${nw.nights === 1 ? '' : 's'})</span>`, nw.inside)}${row('Outside it', nw.outside)}</tbody></table></div>
+        <td class="num">${fmtUsd(n.costUsd || 0)}</td><td>${n.watch ? `<button type="button" class="link-btn" data-occ-night="${esc(n.startedAt)}">${t('analytics_occupancy.night_watch')}</button>` : ''}</td></tr>`).join('')}</tbody></table>`
+      : `<p class="muted small an-empty">${t('analytics_occupancy.no_night_in_this_range')}</p>`;
+    return `<div class="card table-wrap"><table class="u-table an-sessions" data-testid="an-occ-nightwatch"><thead><tr><th></th><th class="num">${t('analytics_occupancy.hours')}</th><th class="num">${t('analytics_occupancy.occupancy')}</th><th>${t('analytics_occupancy.idle_by_cause')}</th><th class="num">${t('analytics_occupancy.issues_delivered')}</th><th class="num">${t('analytics_occupancy.cost')}</th></tr></thead><tbody>
+        ${row(`Under the Night watch <span class="muted small">${t('analytics_occupancy.nights_night_value', { nights: nw.nights, value: nw.nights === 1 ? '' : 's' })}</span>`, nw.inside)}${row('Outside it', nw.outside)}</tbody></table></div>
       <div class="card table-wrap">${nights}</div>`;
   }
 
@@ -130,12 +131,12 @@
   function costTrend(days) {
     const pts = days.map((d) => (d.activeHours > 0.05 ? d.costUsd / d.activeHours : null));
     const vals = pts.filter((v) => v != null);
-    if (vals.length < 2) return '<p class="muted small">Not enough active days for a trend.</p>';
+    if (vals.length < 2) return `<p class="muted small">${t('analytics_occupancy.not_enough_active_days_for_a')}</p>`;
     const W = 900; const H = 90; const max = Math.max(...vals) || 1;
     const xy = pts.map((v, i) => (v == null ? null : [((i + 0.5) / days.length) * W, H - 6 - (v / max) * (H - 12)]));
     const path = xy.filter(Boolean).map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
-    const dots = xy.map((p, i) => (p ? `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3" class="an-trend-dot"><title>${esc(fmtDay(days[i].day, true))}: ${fmtUsd(pts[i])} per active hour</title></circle>` : '')).join('');
-    return `<div class="an-chart"><div class="an-ymax muted small">${fmtUsd(max)}/h</div><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Cost per active hour, per day"><path d="${path}" class="an-trend" />${dots}</svg></div>`;
+    const dots = xy.map((p, i) => (p ? `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3" class="an-trend-dot"><title>${esc(fmtDay(days[i].day, true))}${t('analytics_occupancy.value_per_active_hour', { value: fmtUsd(pts[i]) })}</title></circle>` : '')).join('');
+    return `<div class="an-chart"><div class="an-ymax muted small">${fmtUsd(max)}/h</div><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${t('analytics_occupancy.cost_per_active_hour_per_day')}"><path d="${path}" class="an-trend" />${dots}</svg></div>`;
   }
 
   function costCard(o) {
@@ -149,30 +150,30 @@
         ${stat('Cost per delivered issue', c.perIssue == null ? '—' : fmtUsd(c.perIssue), `${fmtNum(o.issues)} issue(s) delivered`)}
         ${stat('Cost per 100 lines', c.per100Lines == null ? '—' : fmtUsd(c.per100Lines), o.lines ? `${fmtNum(o.lines)} lines changed by the local merges` : 'No local merge with lines in this range')}
       </div>
-      <div class="card table-wrap"><table class="u-table an-sessions"><thead><tr><th></th><th class="num">Per active hour</th><th class="num">Per issue</th><th class="num">Per 100 lines</th></tr></thead><tbody>
-        <tr><td>Under the Night watch</td>${side(o.nightWatch.inside)}</tr><tr><td>Outside it</td>${side(o.nightWatch.outside)}</tr></tbody></table></div>
-      <div class="card an-card"><h3>Cost per active hour, per day</h3>${costTrend(o.days)}</div>`;
+      <div class="card table-wrap"><table class="u-table an-sessions"><thead><tr><th></th><th class="num">${t('analytics_occupancy.per_active_hour')}</th><th class="num">${t('analytics_occupancy.per_issue')}</th><th class="num">${t('analytics_occupancy.per_100_lines')}</th></tr></thead><tbody>
+        <tr><td>${t('analytics_occupancy.under_the_night_watch')}</td>${side(o.nightWatch.inside)}</tr><tr><td>${t('analytics_occupancy.outside_it')}</td>${side(o.nightWatch.outside)}</tr></tbody></table></div>
+      <div class="card an-card"><h3>${t('analytics_occupancy.cost_per_active_hour_per_day')}</h3>${costTrend(o.days)}</div>`;
   }
 
   function calibrationCard(list) {
-    if (!list.length) return '<p class="muted small an-empty">No run was planned by a Product Owner answer with a calibration in this range.</p>';
-    return `<table class="u-table an-sessions" data-testid="an-occ-calibration"><thead><tr><th>Calibration</th><th class="num">Runs</th><th class="num">Runs per stage</th><th class="num" title="Runs that went through resolve_merge">resolve_merge</th><th class="num">Review rounds (avg)</th><th class="num">Cost per issue</th></tr></thead><tbody>
+    if (!list.length) return `<p class="muted small an-empty">${t('analytics_occupancy.no_run_was_planned_by_a')}</p>`;
+    return `<table class="u-table an-sessions" data-testid="an-occ-calibration"><thead><tr><th>${t('analytics_occupancy.calibration')}</th><th class="num">${t('analytics_occupancy.runs')}</th><th class="num">${t('analytics_occupancy.runs_per_stage')}</th><th class="num" title="${t('analytics_occupancy.runs_that_went_through_resolve_merge')}">${t('analytics_occupancy.resolve_merge')}</th><th class="num">${t('analytics_occupancy.review_rounds_avg')}</th><th class="num">${t('analytics_occupancy.cost_per_issue')}</th></tr></thead><tbody>
       ${list.map((c) => `<tr><td>${esc(c.label || String(c.calibration))}</td><td class="num">${c.runs}</td><td class="num">${c.runsPerStage == null ? '—' : (Math.round(c.runsPerStage * 10) / 10).toFixed(1)}</td><td class="num">${pct(c.resolveMergeShare)}</td><td class="num">${(Math.round(c.reviewRounds * 10) / 10).toFixed(1)}</td><td class="num">${c.costPerIssue == null ? '—' : fmtUsd(c.costPerIssue)}</td></tr>`).join('')}</tbody></table>`;
   }
 
   function hint(h) {
     if (!h) return '';
     const go = { noWork: 'Open the Live roadmap', appClosed: 'Open Keep awake', gate: 'Open the Night watch' }[h.cause];
-    return `<div class="card an-card an-hint" role="note" data-testid="an-occ-hint"><b>${esc(CAUSE_LABEL[h.cause])}: ${pct(h.share)} of the idle time.</b> ${esc(h.text)} <button type="button" class="btn sm ghost" data-occ-hint="${esc(h.cause)}">${esc(go)}</button></div>`;
+    return `<div class="card an-card an-hint" role="note" data-testid="an-occ-hint"><b>${esc(CAUSE_LABEL[h.cause])}${t('analytics_occupancy.share_of_the_idle_time', { share: pct(h.share) })}</b> ${esc(h.text)} <button type="button" class="btn sm ghost" data-occ-hint="${esc(h.cause)}">${esc(go)}</button></div>`;
   }
 
   function render(body) {
-    const seg = `<div class="row an-card-head"><div class="seg sm" role="group" aria-label="24/7 range"><button type="button" data-occ-days="7" class="${ox.days === 7 ? 'active' : ''}">7 days</button><button type="button" data-occ-days="30" class="${ox.days === 30 ? 'active' : ''}">30 days</button></div>
-      <span class="muted small">Your local time · simulated runs never count</span></div>`;
-    if (ox.error) { body.innerHTML = `${seg}<div class="usage-unavailable" role="alert">Could not load the 24/7 meter: ${esc(ox.error)}</div>`; wire(body); return; }
+    const seg = `<div class="row an-card-head"><div class="seg sm" role="group" aria-label="${t('analytics_occupancy.n24_7_range')}"><button type="button" data-occ-days="7" class="${ox.days === 7 ? 'active' : ''}">${t('analytics_occupancy.n7_days')}</button><button type="button" data-occ-days="30" class="${ox.days === 30 ? 'active' : ''}">${t('analytics_occupancy.n30_days')}</button></div>
+      <span class="muted small">${t('analytics_occupancy.your_local_time_simulated_runs_never')}</span></div>`;
+    if (ox.error) { body.innerHTML = `${seg}<div class="usage-unavailable" role="alert">${t('analytics_occupancy.could_not_load_the_24_7')} ${esc(ox.error)}</div>`; wire(body); return; }
     const o = ox.data;
-    if (!o) { body.innerHTML = `${seg}<p class="muted">Loading…</p>`; wire(body); return; }
-    if (o.empty) { body.innerHTML = `${seg}<div class="empty-state" data-testid="an-occ-empty"><b>No runs yet: start one to measure</b><p class="muted">The meter counts the time with at least one real run active.</p></div>`; wire(body); return; }
+    if (!o) { body.innerHTML = `${seg}<p class="muted">${t('analytics_occupancy.loading')}</p>`; wire(body); return; }
+    if (o.empty) { body.innerHTML = `${seg}<div class="empty-state" data-testid="an-occ-empty"><b>${t('analytics_occupancy.no_runs_yet_start_one_to')}</b><p class="muted">${t('analytics_occupancy.the_meter_counts_the_time_with')}</p></div>`; wire(body); return; }
     const notes = [
       o.partialSince ? `The app records when it runs since ${dateOf(o.partialSince)}: before that, "app closed" time counts as no work.` : '',
       !o.appLog ? 'The app has no heartbeat log yet: "app closed / asleep" time cannot be told apart from no work.' : '',
@@ -182,17 +183,17 @@
       ${notes.length ? `<p class="muted small an-note an-occ-note" data-testid="an-occ-partial">${notes.map(esc).join(' ')}</p>` : ''}
       ${hint(o.hint)}
       ${cards(o)}
-      <div class="card an-card"><div class="row an-card-head"><h3>Day by day</h3>${legend()}</div>${dayChart(o.days)}</div>
-      <div class="card an-card" data-testid="an-occ-hours"><div class="row an-card-head"><h3>Hours of the day <span class="muted small">(more active hours are stronger)</span></h3>${heatLegend()}</div>${heatStrip(o.days)}</div>
-      <h3 class="s-subtitle">Night watch <span class="muted small">(inside its windows vs outside, last ${o.span} days)</span></h3>
+      <div class="card an-card"><div class="row an-card-head"><h3>${t('analytics_occupancy.day_by_day')}</h3>${legend()}</div>${dayChart(o.days)}</div>
+      <div class="card an-card" data-testid="an-occ-hours"><div class="row an-card-head"><h3>${t('analytics_occupancy.hours_of_the_day')} <span class="muted small">${t('analytics_occupancy.more_active_hours_are_stronger')}</span></h3>${heatLegend()}</div>${heatStrip(o.days)}</div>
+      <h3 class="s-subtitle">${t('analytics_occupancy.night_watch_2')} <span class="muted small">${t('analytics_occupancy.inside_its_windows_vs_outside_last', { span: o.span })}</span></h3>
       ${nightWatch(o)}
-      <h3 class="s-subtitle">24/7 at what price</h3>
+      <h3 class="s-subtitle">${t('analytics_occupancy.n24_7_at_what_price')}</h3>
       ${costCard(o)}
-      <h3 class="s-subtitle">By the Product Owner's calibration</h3>
+      <h3 class="s-subtitle">${t('analytics_occupancy.by_the_product_owner_s_calibration')}</h3>
       <div class="card table-wrap">${calibrationCard(o.calibration || [])}</div>
-      <h3 class="s-subtitle">Idle gaps over 15 minutes</h3>
+      <h3 class="s-subtitle">${t('analytics_occupancy.idle_gaps_over_15_minutes')}</h3>
       <div class="card table-wrap" data-testid="an-occ-gaps">${gapsTable(o.gaps)}</div>
-      <p class="muted small an-note">"Blocked" counts failed and interrupted runs, and the incidents the Night watch logged (a paused roadmap, a stall). Outside the Night watch windows nothing records when the roadmap was paused, so that time counts as no work.</p>`;
+      <p class="muted small an-note">${t('analytics_occupancy.blocked_counts_failed_and_interrupted_runs')}</p>`;
     wire(body);
   }
 

@@ -318,7 +318,7 @@ function renderTermTabs() {
     <div class="term-tab ${t === dock.active ? 'active' : ''}" data-i="${i}" role="tab" aria-selected="${t === dock.active}" title="${esc(t.title)}${t.kind === 'live' ? ' (read-only)' : ''}">
       <span class="term-dot ${t.exited ? 'exited' : t.id ? 'running' : 'starting'}"></span>
       <span class="term-title">${esc(t.title)}</span>
-      <button class="term-close" data-close="${i}" title="Close (ends the process)" aria-label="Close">×</button>
+      <button class="term-close" data-close="${i}" title="${I18n.t('term_dock.close_ends_the_process')}" aria-label="${I18n.t('common.close')}">×</button>
     </div>`).join('');
   box.querySelectorAll('.term-tab').forEach((el) => (el.onclick = (e) => {
     const t = dock.tabs[Number(el.dataset.i)];

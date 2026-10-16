@@ -37,7 +37,7 @@ function renderAccount(s) {
   const needsLogin = s.required && !s.user;
   $('#login-screen').classList.toggle('hidden', !needsLogin);
   $('#login-waiting').classList.toggle('hidden', !s.signingIn);
-  $('#login-providers').innerHTML = s.providers.map((p) => `<button class="btn ${p.enabled ? '' : 'ghost'}" type="button" data-provider="${esc(p.id)}" ${p.enabled && !s.signingIn ? '' : 'disabled'}>Continue with ${esc(p.name)}${p.enabled ? '' : ' <span class="soon">coming soon</span>'}</button>`).join('');
+  $('#login-providers').innerHTML = s.providers.map((p) => `<button class="btn ${p.enabled ? '' : 'ghost'}" type="button" data-provider="${esc(p.id)}" ${p.enabled && !s.signingIn ? '' : 'disabled'}>${t('account.continue_with')} ${esc(p.name)}${p.enabled ? '' : ` <span class="soon">${t('account.coming_soon')}</span>`}</button>`).join('');
   $('#login-providers').querySelectorAll('[data-provider]').forEach((b) => (b.onclick = () => signIn(b.dataset.provider)));
   if (needsLogin && !s.configured) $('#login-error').textContent = 'Sign-in is not configured in this build.';
 

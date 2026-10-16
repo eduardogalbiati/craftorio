@@ -160,16 +160,16 @@ function homeNeeds(d) {
 }
 
 const HOME_NEED_BADGES = {
-  gate: '<span class="badge warn">Gate</span>',
-  card: '<span class="badge warn">Question</span>',
-  'failed-item': '<span class="pill pill-failed">Failed</span>',
+  gate: `<span class="badge warn">${t('dashboard.gate')}</span>`,
+  card: `<span class="badge warn">${t('dashboard.question')}</span>`,
+  'failed-item': `<span class="pill pill-failed">${t('dashboard.failed')}</span>`,
   'paused-run': StatusPill.statusPill('paused'),
 };
 // the one button of a "What needs you" row
 function homeNeedButton(n) {
-  if (n.kind === 'gate' || n.kind === 'paused-run') return `<button type="button" class="btn sm primary" data-home-run="${esc(n.runId)}">Open run</button>`;
-  if (n.kind === 'card') return `<button type="button" class="btn sm primary" data-home-card="${esc(n.cardId)}">Answer</button>`;
-  return `<button type="button" class="btn sm" data-home-roadmap="${n.stage}">Open roadmap</button>`;
+  if (n.kind === 'gate' || n.kind === 'paused-run') return `<button type="button" class="btn sm primary" data-home-run="${esc(n.runId)}">${t('dashboard.open_run')}</button>`;
+  if (n.kind === 'card') return `<button type="button" class="btn sm primary" data-home-card="${esc(n.cardId)}">${t('dashboard.answer')}</button>`;
+  return `<button type="button" class="btn sm" data-home-roadmap="${n.stage}">${t('dashboard.open_roadmap')}</button>`;
 }
 
 function homeStripHtml(d) {
@@ -179,17 +179,17 @@ function homeStripHtml(d) {
       <button type="button" class="home-count" data-testid="home-flow-count" data-stage="${s.id}" aria-label="${esc(`${s.label}: ${counts[s.id]}. Open it`)}">${counts[s.id]}</button>
       <span class="home-stage-label">${esc(s.label)}</span>
     </div>`);
-  return `<section class="home-block" aria-label="Flow">
-    <h2 class="home-title">Flow${project ? ` <span class="muted" title="The header's project">· ${esc(project.name)}</span>` : ''}</h2>
-    <div class="card home-strip" data-testid="home-flow-strip" role="group" aria-label="Flow from Inbox to Release">${stages.join('<span class="home-arrow" aria-hidden="true">→</span>')}</div>
+  return `<section class="home-block" aria-label="${t('dashboard.flow')}">
+    <h2 class="home-title">${t('dashboard.flow')}${project ? ` <span class="muted" title="${t('dashboard.the_header_s_project')}">· ${esc(project.name)}</span>` : ''}</h2>
+    <div class="card home-strip" data-testid="home-flow-strip" role="group" aria-label="${t('dashboard.flow_from_inbox_to_release')}">${stages.join('<span class="home-arrow" aria-hidden="true">→</span>')}</div>
   </section>`;
 }
 
 function homeNeedsHtml(d) {
   const needs = homeNeeds(d);
   const rows = needs.map((n) => {
-    const age = n.since && Date.parse(n.since) ? `<span class="muted small home-need-age" title="Asked ${esc(dateOf(n.since))}">waiting ${esc(homeAge(n.since))}</span>` : '';
-    const phone = n.phoneUrl ? `<a class="small home-need-phone" href="${esc(n.phoneUrl)}" target="_blank" rel="noopener" title="This gate's page for a paired phone (Settings › Phone gates)">Phone link</a>` : '';
+    const age = n.since && Date.parse(n.since) ? `<span class="muted small home-need-age" title="${t('dashboard.asked_since', { since: esc(dateOf(n.since)) })}">${t('dashboard.waiting')} ${esc(homeAge(n.since))}</span>` : '';
+    const phone = n.phoneUrl ? `<a class="small home-need-phone" href="${esc(n.phoneUrl)}" target="_blank" rel="noopener" title="${t('dashboard.this_gate_s_page_for_a')}">${t('dashboard.phone_link')}</a>` : '';
     return `<div class="home-need" data-testid="home-needs-item" data-kind="${n.kind}">
       ${HOME_NEED_BADGES[n.kind]}
       <span class="home-need-text"><b title="${esc(n.title)}">${esc(n.title)}</b><span class="muted small" title="${esc(n.detail)}">${esc(n.detail)}</span></span>
@@ -197,9 +197,9 @@ function homeNeedsHtml(d) {
       ${homeNeedButton(n)}
     </div>`;
   });
-  return `<section class="home-block" data-testid="home-needs-you" aria-label="What needs you">
-    <h2 class="home-title">What needs you${needs.length ? ` <span class="badge warn">${needs.length}</span>` : ''}</h2>
-    <div class="card home-needs">${rows.join('') || '<p class="muted small home-none">Nothing waits for you.</p>'}</div>
+  return `<section class="home-block" data-testid="home-needs-you" aria-label="${t('dashboard.what_needs_you')}">
+    <h2 class="home-title">${t('dashboard.what_needs_you')}${needs.length ? ` <span class="badge warn">${needs.length}</span>` : ''}</h2>
+    <div class="card home-needs">${rows.join('') || `<p class="muted small home-none">${t('dashboard.nothing_waits_for_you')}</p>`}</div>
   </section>`;
 }
 
@@ -228,8 +228,8 @@ function homeTodayHtml(d) {
   // `attrs`: a test id and, while its figure loads, aria-busy
   const stat = (label, value, title, attrs = '') => `<div class="u-stat" title="${esc(title)}"${attrs}><label>${esc(label)}</label><b>${value}</b></div>`;
   const busy = (on) => (on ? ' aria-busy="true"' : '');
-  return `<section class="home-block" data-testid="home-today" aria-label="Today">
-    <h2 class="home-title">Today</h2>
+  return `<section class="home-block" data-testid="home-today" aria-label="${t('dashboard.today')}">
+    <h2 class="home-title">${t('dashboard.today')}</h2>
     <div class="home-stats">
       ${stat('Cost today', esc(costBusy ? '…' : usd(sp?.day)), costBusy ? 'Reading the usage…' : 'Spent today by real runs (live runs included)', ` data-testid="home-cost-today"${busy(costBusy)}`)}
       ${stat(night[0], esc(night[1]), night[2])}
@@ -242,15 +242,15 @@ function homeTodayHtml(d) {
 }
 
 const HOME_EMPTY_HTML = `<div class="empty-state home-empty" data-testid="home-empty">
-    <b>Welcome: three steps to your first run</b>
-    <p class="muted">Home shows the flow from an idea to a release once a project has work in it.</p>
+    <b>${t('dashboard.welcome_three_steps_to_your_first')}</b>
+    <p class="muted">${t('dashboard.home_shows_the_flow_from_an')}</p>
     <div class="home-steps">
-      <div class="home-step"><b>1. Create a project</b><span class="muted small">The repository or folder the agents work in.</span>
-        <button type="button" class="btn primary" data-testid="home-empty-create-project" data-home-act="project">Create a project</button></div>
-      <div class="home-step"><b>2. Capture a first idea</b><span class="muted small">A line in the Inbox is enough; it becomes an issue later.</span>
-        <button type="button" class="btn" data-testid="home-empty-capture-idea" data-home-act="idea">Capture an idea</button></div>
-      <div class="home-step"><b>3. Run a workflow</b><span class="muted small">Pick a workflow and a task; simulation mode costs nothing.</span>
-        <button type="button" class="btn" data-testid="home-empty-run-workflow" data-home-act="run">Run a workflow</button></div>
+      <div class="home-step"><b>${t('dashboard.n1_create_a_project')}</b><span class="muted small">${t('dashboard.the_repository_or_folder_the_agents')}</span>
+        <button type="button" class="btn primary" data-testid="home-empty-create-project" data-home-act="project">${t('dashboard.create_a_project')}</button></div>
+      <div class="home-step"><b>${t('dashboard.n2_capture_a_first_idea')}</b><span class="muted small">${t('dashboard.a_line_in_the_inbox_is')}</span>
+        <button type="button" class="btn" data-testid="home-empty-capture-idea" data-home-act="idea">${t('dashboard.capture_an_idea')}</button></div>
+      <div class="home-step"><b>${t('dashboard.n3_run_a_workflow')}</b><span class="muted small">${t('dashboard.pick_a_workflow_and_a_task')}</span>
+        <button type="button" class="btn" data-testid="home-empty-run-workflow" data-home-act="run">${t('dashboard.run_a_workflow')}</button></div>
     </div>
   </div>`;
 
@@ -259,7 +259,7 @@ function paintHome() {
   const d = homeView.data;
   const body = $('#home-body');
   const fresh = d && !state.projects.length && !state.runs.size && !d.runs.length;
-  const html = !d ? '<p class="muted small home-none">Loading…</p>' : fresh ? HOME_EMPTY_HTML : homeStripHtml(d) + homeNeedsHtml(d) + homeTodayHtml(d);
+  const html = !d ? `<p class="muted small home-none">${t('dashboard.loading')}</p>` : fresh ? HOME_EMPTY_HTML : homeStripHtml(d) + homeNeedsHtml(d) + homeTodayHtml(d);
   if (html === homeView.html) return;
   homeView.html = html;
   // the button in focus keeps it across the redraw
@@ -338,7 +338,7 @@ registerView({
   markup: `
       <section id="view-dashboard" class="view">
         <div class="home-main">
-          <div class="tabs page-tabs" role="tablist" aria-label="Home"><button type="button" class="tab active" role="tab" aria-selected="true" data-home-tab="overview" data-testid="home-tab-overview">Overview</button><button type="button" class="tab" role="tab" aria-selected="false" data-home-tab="analytics" data-testid="home-tab-analytics">Analytics</button></div>
+          <div class="tabs page-tabs" role="tablist" aria-label="${t('dashboard.home')}"><button type="button" class="tab active" role="tab" aria-selected="true" data-home-tab="overview" data-testid="home-tab-overview">${t('dashboard.overview')}</button><button type="button" class="tab" role="tab" aria-selected="false" data-home-tab="analytics" data-testid="home-tab-analytics">${t('dashboard.analytics')}</button></div>
           <div id="home-overview" class="home-overview" role="tabpanel">
             <div id="dash-nightwatch" class="home-night hidden"></div>
             <div id="home-body"></div>

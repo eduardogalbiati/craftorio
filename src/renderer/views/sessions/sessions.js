@@ -121,7 +121,7 @@
   // rename: the pencil's data attributes (a recorded session's provider and id, or an open
   // terminal's key); close: the key of an open terminal, for the trash can. Both show on hover/focus.
   function itemHtml({ provider, title, sub, time, open, exited, active, sessionAttr, rename, close }) {
-    const pencil = rename ? `<button type="button" class="icon-btn sx-item-rename" ${rename} title="Rename" aria-label="Rename">
+    const pencil = rename ? `<button type="button" class="icon-btn sx-item-rename" ${rename} title="${t('sessions.rename')}" aria-label="${t('sessions.rename')}">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></svg></button>` : '';
     const trash = close ? `<button type="button" class="icon-btn sx-item-close" data-close-tab="${esc(close)}" title="${exited ? 'Close' : 'End session'}" aria-label="${exited ? 'Close' : 'End session'}">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18" /><path d="M8 6V4h8v2" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /></svg></button>` : '';
@@ -143,7 +143,7 @@
     const box = $s('#sx-list');
     const parts = [];
     if (sx.tabs.length) {
-      parts.push('<div class="sx-group">Open terminals</div>');
+      parts.push(`<div class="sx-group">${t('sessions.open_terminals')}</div>`);
       for (const t of sx.tabs) {
         parts.push(itemHtml({
           provider: t.provider, title: t.title, sub: esc(t.meta), time: t.exited ? 'exited' : '',
@@ -153,7 +153,7 @@
       }
     }
     if (sx.error) parts.push(`<p class="error small sx-pad">${esc(sx.error)}</p>`);
-    else if (!sx.sessions) parts.push('<p class="muted small sx-pad">Reading the sessions…</p>');
+    else if (!sx.sessions) parts.push(`<p class="muted small sx-pad">${t('sessions.reading_the_sessions')}</p>`);
     else {
       const list = filtered();
       if (!list.length) parts.push(`<p class="muted small sx-pad">${sx.sessions.length ? 'No session matches.' : 'No Claude Code, Codex or Grok sessions on this machine yet.'}</p>`);
@@ -163,7 +163,7 @@
         if (g !== group) { parts.push(`<div class="sx-group">${esc(g)}</div>`); group = g; }
         const tab = sx.tabs.find((t) => t.key === resumeKey(s.provider, s.id));
         const where = s.project ? `<b>${esc(s.project.name)}</b>` : esc(folderName(s.cwd) || 'unknown folder');
-        const tags = [s.model && esc(s.model), s.workflowAgent && '<span class="sx-tag">agent</span>'].filter(Boolean).join(' · ');
+        const tags = [s.model && esc(s.model), s.workflowAgent && `<span class="sx-tag">${t('sessions.agent')}</span>`].filter(Boolean).join(' · ');
         parts.push(itemHtml({
           provider: s.provider, title: s.title, sub: `${where}${tags ? ` · ${tags}` : ''}`, time: ago(s.updatedAt),
           open: !!tab, exited: tab?.exited, active: tab && tab === sx.active,
@@ -171,7 +171,7 @@
           rename: `data-rename-provider="${esc(s.provider)}" data-rename-id="${esc(s.id)}"`,
         }));
       }
-      if (list.length > 300) parts.push(`<p class="muted small sx-pad">${list.length - 300} older sessions not shown: search to find them.</p>`);
+      if (list.length > 300) parts.push(`<p class="muted small sx-pad">${list.length - 300} ${t('sessions.older_sessions_not_shown_search_to')}</p>`);
     }
     box.innerHTML = parts.join('');
     const onOpen = (el, fn) => {
@@ -429,7 +429,7 @@
     };
     const projects = state.projects || [];
     if (!projects.some((p) => p.id === sx.form.projectId)) sx.form.projectId = '';
-    $s('#sx-project').innerHTML = `<option value="">None</option>${projects.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}`;
+    $s('#sx-project').innerHTML = `<option value="">${t('sessions.none')}</option>${projects.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}`;
     $s('#sx-project').value = sx.form.projectId;
     $s('#sx-folder').value = '';
     $s('#sx-error').textContent = '';
@@ -459,7 +459,7 @@
     if (f.model && !p.models.some((m) => m.id === f.model)) f.custom = true;
     const sel = $s('#sx-model-select');
     sel.innerHTML = `${p.models.map((m) => `<option value="${esc(m.id)}">${esc(m.name !== m.id ? `${m.name} (${m.id})` : m.id)}</option>`).join('')}
-      <option value="">CLI default</option><option value="${OTHER}">Other…</option>`;
+      <option value="">${t('sessions.cli_default')}</option><option value="${OTHER}">${t('sessions.other')}</option>`;
     sel.value = f.custom ? OTHER : f.model;
     const custom = $s('#sx-model');
     custom.classList.toggle('hidden', !f.custom);
@@ -552,41 +552,41 @@
       <section id="view-sessions" class="view view-sessions hidden">
         <aside class="sx-side">
           <div class="sx-head">
-            <h1>Sessions</h1>
-            <button id="btn-sx-refresh" class="icon-btn" type="button" title="Reload the sessions list">
+            <h1>${t('sessions.sessions')}</h1>
+            <button id="btn-sx-refresh" class="icon-btn" type="button" title="${t('sessions.reload_the_sessions_list')}">
               <svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="23 4 23 10 17 10" /><path d="M20.5 15a9 9 0 1 1-2.1-9.4L23 10" /></svg>
             </button>
           </div>
           <button id="btn-sx-new" class="btn primary btn-icon sx-new" type="button">
             <svg class="icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
-            New session
+            ${t('sessions.new_session')}
           </button>
-          <input id="sx-search" class="sx-search" type="search" placeholder="Search title, folder, model…" aria-label="Search sessions" />
-          <div id="sx-filters" class="chips sx-filters" role="group" aria-label="Provider"></div>
-          <label class="sx-toggle small muted"><input type="checkbox" id="sx-show-agents" /> Show workflow agents' sessions</label>
+          <input id="sx-search" class="sx-search" type="search" placeholder="${t('sessions.search_title_folder_model')}" aria-label="${t('sessions.search_sessions')}" />
+          <div id="sx-filters" class="chips sx-filters" role="group" aria-label="${t('sessions.provider')}"></div>
+          <label class="sx-toggle small muted"><input type="checkbox" id="sx-show-agents" /> ${t('sessions.show_workflow_agents_sessions')}</label>
           <div id="sx-list" class="sx-list" role="list"></div>
         </aside>
         <section class="sx-main">
           <div id="sx-empty" class="sx-empty">
             <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" /><polyline points="7 9 10 12 7 15" /><line x1="12.5" y1="15" x2="17" y2="15" /></svg>
-            <b>Pick a session or start a new one</b>
-            <p class="muted">Reopening a session runs its CLI (<span class="mono">claude</span>, <span class="mono">codex</span> or <span class="mono">grok</span>) in the session's folder, resuming the same conversation. It is the real CLI: everything you type goes to it.</p>
-            <button id="btn-sx-new-empty" class="btn primary" type="button">New session</button>
+            <b>${t('sessions.pick_a_session_or_start_a')}</b>
+            <p class="muted">${t('sessions.reopening_a_session_runs_its_cli')}<span class="mono">${t('sessions.claude')}</span>, <span class="mono">${t('sessions.codex')}</span> ${t('sessions.or')} <span class="mono">${t('sessions.grok')}</span>${t('sessions.in_the_session_s_folder_resuming')}</p>
+            <button id="btn-sx-new-empty" class="btn primary" type="button">${t('sessions.new_session')}</button>
           </div>
           <div id="sx-term-head" class="sx-term-head hidden">
             <span id="sx-term-badge" class="sx-badge"></span>
             <div class="sx-term-title">
               <span class="sx-title-row">
                 <b id="sx-term-title"></b>
-                <button id="btn-sx-rename" class="icon-btn sx-rename" type="button" title="Rename this session">
+                <button id="btn-sx-rename" class="icon-btn sx-rename" type="button" title="${t('sessions.rename_this_session')}">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></svg>
                 </button>
               </span>
               <span id="sx-term-meta" class="muted small mono"></span>
             </div>
             <span id="sx-term-msg" class="muted small"></span>
-            <button id="btn-sx-restart" class="btn ghost sm hidden" type="button" title="Run the CLI again in this terminal">Restart</button>
-            <button id="btn-sx-close" class="btn ghost sm danger" type="button" title="End the CLI and everything it started, and close the terminal (the conversation stays recorded)">End session</button>
+            <button id="btn-sx-restart" class="btn ghost sm hidden" type="button" title="${t('sessions.run_the_cli_again_in_this')}">${t('sessions.restart')}</button>
+            <button id="btn-sx-close" class="btn ghost sm danger" type="button" title="${t('sessions.end_the_cli_and_everything_it')}">${t('sessions.end_session')}</button>
           </div>
           <div id="sx-term-body" class="sx-term-body"></div>
         </section>
@@ -594,37 +594,37 @@
     modals: `
   <div id="sx-modal" class="modal hidden">
     <form id="sx-form" class="modal-card wide">
-      <h3>New session</h3>
+      <h3>${t('sessions.new_session')}</h3>
       <div class="field">
-        <label>Provider</label>
-        <div id="sx-providers" class="sx-providers" role="radiogroup" aria-label="Provider"></div>
+        <label>${t('sessions.provider')}</label>
+        <div id="sx-providers" class="sx-providers" role="radiogroup" aria-label="${t('sessions.provider')}"></div>
       </div>
       <div class="field">
-        <label for="sx-model-select">Model</label>
+        <label for="sx-model-select">${t('sessions.model')}</label>
         <select id="sx-model-select"></select>
-        <input type="text" id="sx-model" class="hidden sx-model-custom" autocomplete="off" placeholder="Model id, e.g. gpt-5.6-terra" aria-label="Model id" />
+        <input type="text" id="sx-model" class="hidden sx-model-custom" autocomplete="off" placeholder="${t('sessions.model_id_e_g_gpt_5')}" aria-label="${t('sessions.model_id')}" />
         <div id="sx-model-hint" class="hint"></div>
       </div>
       <div class="field">
-        <label>Effort</label>
-        <div id="sx-efforts" class="seg" role="radiogroup" aria-label="Effort"></div>
+        <label>${t('sessions.effort')}</label>
+        <div id="sx-efforts" class="seg" role="radiogroup" aria-label="${t('sessions.effort')}"></div>
       </div>
       <div class="field">
-        <label for="sx-project">Project</label>
+        <label for="sx-project">${t('sessions.project')}</label>
         <select id="sx-project"></select>
       </div>
       <div class="field">
-        <label for="sx-folder">Folder</label>
+        <label for="sx-folder">${t('sessions.folder')}</label>
         <div class="row">
-          <input type="text" id="sx-folder" placeholder="The project's folder, or your home folder" />
+          <input type="text" id="sx-folder" placeholder="${t('sessions.the_project_s_folder_or_your')}" />
           <button type="button" id="btn-sx-pick" class="btn sm">…</button>
         </div>
-        <div class="hint">Where the CLI starts: it works on the files in this folder.</div>
+        <div class="hint">${t('sessions.where_the_cli_starts_it_works')}</div>
       </div>
       <p id="sx-error" class="error small"></p>
       <div class="modal-actions">
-        <button type="button" id="btn-sx-cancel" class="btn ghost">Cancel</button>
-        <button type="submit" id="btn-sx-start" class="btn primary">Start session</button>
+        <button type="button" id="btn-sx-cancel" class="btn ghost">${t('common.cancel')}</button>
+        <button type="submit" id="btn-sx-start" class="btn primary">${t('sessions.start_session')}</button>
       </div>
     </form>
   </div>`,

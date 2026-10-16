@@ -61,7 +61,7 @@ const prBadge = (r, opts) => RunBadges.prBadgeHtml(runPr(r), opts);
 // an empty title goes back to the default.
 const PENCIL_SVG = '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path fill="currentColor" d="M11.013 1.427a1.75 1.75 0 0 1 2.474 0l1.086 1.086a1.75 1.75 0 0 1 0 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 0 1-.927-.928l.929-3.25c.081-.286.235-.547.445-.758l8.61-8.61Zm1.414 1.06a.25.25 0 0 0-.354 0L10.811 3.75l1.439 1.44 1.263-1.263a.25.25 0 0 0 0-.354Zm-2.677 2.323L3.13 11.43a.25.25 0 0 0-.064.108l-.558 1.953 1.953-.558a.25.25 0 0 0 .108-.064l6.62-6.62Z"/></svg>';
 function runTitleHtml(r, runId = r?.runId || r?.id) {
-  return `<span class="run-title" data-title-run="${esc(runId)}"><span class="run-title-text">${esc(runTitle(r))}</span><button type="button" class="icon-btn run-title-edit" data-title-edit title="Rename this run (only its display title)">${PENCIL_SVG}</button></span>`;
+  return `<span class="run-title" data-title-run="${esc(runId)}"><span class="run-title-text">${esc(runTitle(r))}</span><button type="button" class="icon-btn run-title-edit" data-title-edit title="${t('run_meta.rename_this_run_only_its_display')}">${PENCIL_SVG}</button></span>`;
 }
 function editRunTitle(btn) {
   const box = btn.closest('[data-title-run]');

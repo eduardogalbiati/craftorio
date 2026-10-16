@@ -23,7 +23,7 @@
 
     const rowHtml = (r) => `<li><button type="button" class="pcc-file${pins.includes(r.path) ? ' on' : ''}" data-pcc-file="${esc(r.path)}" data-testid="city-connection" aria-pressed="${pins.includes(r.path)}" title="${esc(`${r.path}: requires ${r.requires}, required by ${r.requiredBy}. Click to ${pins.includes(r.path) ? 'unpin' : 'fly to it and pin'} its connections`)}">`
       + `<span class="pcc-name"><b>${esc(base(r.path))}</b><small class="r3d-mono">${esc(dir(r.path))}</small></span>`
-      + `<span class="pcc-counts"><em class="out" title="requires">${r.requires}</em><em class="in" title="required by">${r.requiredBy}</em></span></button></li>`;
+      + `<span class="pcc-counts"><em class="out" title="${t('project_city_connections.requires')}">${r.requires}</em><em class="in" title="${t('project_city_connections.required_by')}">${r.requiredBy}</em></span></button></li>`;
 
     function draw() {
       if (destroyed) return;
@@ -32,16 +32,16 @@
       if (!layout || !model || !window.CityConnections) { el.classList.add('hidden'); return; }
       el.classList.remove('hidden');
       const state = CityConnections.edgesState(model);
-      const head = `<div class="pcc-head"><b>Most connected</b>${pins.length ? `<button type="button" class="link-btn" data-pcc-clear data-testid="city-connections-clear">Clear pins (${pins.length})</button>` : ''}</div>`;
+      const head = `<div class="pcc-head"><b>${t('project_city_connections.most_connected')}</b>${pins.length ? `<button type="button" class="link-btn" data-pcc-clear data-testid="city-connections-clear">${t('project_city_connections.clear_pins_length', { length: pins.length })}</button>` : ''}</div>`;
       if (!state.ok) {
-        el.innerHTML = `${head}<p class="pcc-empty muted" data-testid="city-connections-empty">No connections to list: arcs ${esc(state.reason)}.</p>`;
+        el.innerHTML = `${head}<p class="pcc-empty muted" data-testid="city-connections-empty">${t('project_city_connections.no_connections_to_list_arcs_reason', { reason: esc(state.reason) })}</p>`;
         return;
       }
       const rows = CityConnections.rank(layout, { query });
       el.innerHTML = `${head}
-        <label class="r3d-search pcc-search"><input type="search" placeholder="Filter the files" aria-label="Filter the most connected files" data-pcc-query data-testid="city-connections-search" value="${esc(query)}" /></label>
-        ${rows.length ? `<ul class="pcc-list" data-testid="city-connections-list">${rows.map(rowHtml).join('')}</ul>` : `<p class="pcc-empty muted">No file matches "${esc(query)}".</p>`}
-        <p class="pcc-hint muted"><em class="out">requires</em> · <em class="in">required by</em>; a click pins the arcs</p>`;
+        <label class="r3d-search pcc-search"><input type="search" placeholder="${t('project_city_connections.filter_the_files')}" aria-label="${t('project_city_connections.filter_the_most_connected_files')}" data-pcc-query data-testid="city-connections-search" value="${esc(query)}" /></label>
+        ${rows.length ? `<ul class="pcc-list" data-testid="city-connections-list">${rows.map(rowHtml).join('')}</ul>` : `<p class="pcc-empty muted">${t('project_city_connections.no_file_matches_query', { query: esc(query) })}</p>`}
+        <p class="pcc-hint muted"><em class="out">${t('project_city_connections.requires')}</em> · <em class="in">${t('project_city_connections.required_by')}</em>${t('project_city_connections.a_click_pins_the_arcs')}</p>`;
     }
 
     function setPins(next) {

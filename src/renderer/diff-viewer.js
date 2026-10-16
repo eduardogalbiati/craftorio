@@ -34,21 +34,21 @@
     el.setAttribute('aria-label', 'Changes');
     el.innerHTML = `<div class="dv-card">
         <div class="dv-bar">
-          <div class="dv-title"><b>Changes</b>${opts.title ? ` <span class="dv-run" title="${esc(opts.title)}">${esc(opts.title)}</span>` : ''}<span class="dv-range muted small mono" data-dv-range></span></div>
-          <label class="dv-commit small hidden" title="All the branch's changes, or only one of its commits">Commits <select data-dv-commit></select></label>
-          <div class="seg sm" role="group" aria-label="Diff layout">
-            <button type="button" data-dv-mode="split" title="Before on the left, after on the right">Split</button>
-            <button type="button" data-dv-mode="unified" title="One column, removed and added lines interleaved">Unified</button>
+          <div class="dv-title"><b>${t('diff_viewer.changes')}</b>${opts.title ? ` <span class="dv-run" title="${esc(opts.title)}">${esc(opts.title)}</span>` : ''}<span class="dv-range muted small mono" data-dv-range></span></div>
+          <label class="dv-commit small hidden" title="${t('diff_viewer.all_the_branch_s_changes_or')}">${t('diff_viewer.commits')} <select data-dv-commit></select></label>
+          <div class="seg sm" role="group" aria-label="${t('diff_viewer.diff_layout')}">
+            <button type="button" data-dv-mode="split" title="${t('diff_viewer.before_on_the_left_after_on')}">${t('diff_viewer.split')}</button>
+            <button type="button" data-dv-mode="unified" title="${t('diff_viewer.one_column_removed_and_added_lines')}">${t('diff_viewer.unified')}</button>
           </div>
-          <label class="small dv-wrap"><input type="checkbox" data-dv-wrap> Wrap lines</label>
+          <label class="small dv-wrap"><input type="checkbox" data-dv-wrap> ${t('diff_viewer.wrap_lines')}</label>
           <span class="badge" data-dv-viewed></span>
-          <button type="button" class="btn sm ghost" data-dv-close title="Close (Esc)" aria-label="Close">✕</button>
+          <button type="button" class="btn sm ghost" data-dv-close title="${t('diff_viewer.close_esc')}" aria-label="${t('common.close')}">✕</button>
         </div>
         <div class="dv-note small hidden" data-dv-note></div>
         <div class="dv-body">
           <aside class="dv-files">
-            <input type="text" class="dv-filter" data-dv-filter placeholder="Filter files…" spellcheck="false" aria-label="Filter files">
-            <div class="dv-list" data-dv-list role="listbox" tabindex="0" aria-label="Changed files (↑ ↓ or j k)"></div>
+            <input type="text" class="dv-filter" data-dv-filter placeholder="${t('diff_viewer.filter_files')}" spellcheck="false" aria-label="${t('diff_viewer.filter_files_2')}">
+            <div class="dv-list" data-dv-list role="listbox" tabindex="0" aria-label="${t('diff_viewer.changed_files_or_j_k')}"></div>
             <div class="dv-totals small muted" data-dv-totals></div>
           </aside>
           <section class="dv-main" data-dv-main></section>
@@ -129,7 +129,7 @@
     const commits = data?.commits || [];
     const pick = el.querySelector('[data-dv-commit]');
     pick.closest('.dv-commit').classList.toggle('hidden', !commits.length);
-    pick.innerHTML = `<option value="">All changes (${commits.length} commit${commits.length === 1 ? '' : 's'})</option>${commits.map((c) => `<option value="${esc(c.sha)}" title="${esc(`${c.subject} · ${c.author} · ${c.date}`)}">${esc(c.short)} ${esc(c.subject.length > 60 ? `${c.subject.slice(0, 59)}…` : c.subject)}</option>`).join('')}`;
+    pick.innerHTML = `<option value="">${t('diff_viewer.all_changes_length_commit_value', { length: commits.length, value: commits.length === 1 ? '' : 's' })}</option>${commits.map((c) => `<option value="${esc(c.sha)}" title="${esc(`${c.subject} · ${c.author} · ${c.date}`)}">${esc(c.short)} ${esc(c.subject.length > 60 ? `${c.subject.slice(0, 59)}…` : c.subject)}</option>`).join('')}`;
     pick.value = cur.commit || '';
     const range = el.querySelector('[data-dv-range]');
     range.textContent = data?.base ? (cur.commit ? `commit ${cur.commit.slice(0, 7)}` : `${data.base}...HEAD`) : '';
@@ -171,7 +171,7 @@
           <span class="dv-icon st-${esc(f.status)}" title="${esc(label)}" aria-label="${esc(label)}">${icon}</span>
           <span class="dv-name">${esc(name)}</span>
           <span class="dv-counts small mono">${counts(f)}</span>
-          ${cur.viewed.has(f.file) ? '<span class="dv-seen" title="Viewed">✓</span>' : ''}
+          ${cur.viewed.has(f.file) ? `<span class="dv-seen" title="${t('diff_viewer.viewed')}">✓</span>` : ''}
         </div>`;
       }).join('')}`).join('') : `<p class="muted small dv-empty">${cur.data.files.length ? 'No file matches the filter.' : 'No changed files.'}</p>`;
     const files = cur.data.files;
@@ -229,8 +229,8 @@
   function paintMain() {
     const main = cur.el.querySelector('[data-dv-main]');
     if (!cur.data) {
-      main.innerHTML = cur.error ? `<div class="dv-msg"><p class="error">Could not load the changes: ${esc(cur.error)}</p><button type="button" class="btn sm" data-dv-retry>Retry</button></div>`
-        : '<div class="dv-msg muted">Loading the changes…</div>';
+      main.innerHTML = cur.error ? `<div class="dv-msg"><p class="error">${t('diff_viewer.could_not_load_the_changes')} ${esc(cur.error)}</p><button type="button" class="btn sm" data-dv-retry>${t('diff_viewer.retry')}</button></div>`
+        : `<div class="dv-msg muted">${t('diff_viewer.loading_the_changes')}</div>`;
       return;
     }
     const f = fileOf(cur.selected);
@@ -244,7 +244,7 @@
         <span class="badge dv-status st-${esc(f.status)}" title="${esc(label)}">${icon} ${esc(label.split(' ')[0].toLowerCase())}</span>
         <span class="dv-path mono" title="${esc(f.file)}">${f.oldFile ? `<span class="muted">${esc(f.oldFile)} → </span>` : ''}${esc(f.file)}</span>
         <span class="dv-counts small mono">${counts(f)}</span>
-        <label class="small dv-viewed-box${seen ? ' on' : ''}"><input type="checkbox" data-dv-viewed-file="${esc(f.file)}"${seen ? ' checked' : ''}> Viewed</label>
+        <label class="small dv-viewed-box${seen ? ' on' : ''}"><input type="checkbox" data-dv-viewed-file="${esc(f.file)}"${seen ? ' checked' : ''}> ${t('diff_viewer.viewed')}</label>
       </div>`;
     const scroll = main.querySelector('.dv-scroll');
     const keep = scroll && main.dataset.file === f.file ? scroll.scrollTop : 0;
@@ -257,10 +257,10 @@
     const st = fileState(f.file);
     const msg = (text, extra = '') => `<div class="dv-msg muted">${text}${extra}</div>`;
     if (f.status === 'reported') return msg(cur.data.simulated ? 'Simulated: no diff for this file.' : 'No diff: the run\'s worktree could not be read.');
-    if (st.error) return msg(`<span class="error">Could not load this file: ${esc(st.error)}</span>`, ' <button type="button" class="btn sm" data-dv-load>Retry</button>');
+    if (st.error) return msg(`<span class="error">${t('diff_viewer.could_not_load_this_file')} ${esc(st.error)}</span>`, ` <button type="button" class="btn sm" data-dv-load>${t('diff_viewer.retry')}</button>`);
     if (f.binary && f.image) {
       if (!st.contents) { loadFile(f.file); return msg('Loading the previews…'); }
-      const pane = (src, label) => `<figure class="dv-img"><figcaption class="small muted">${label}</figcaption>${src ? `<img src="${esc(src)}" alt="${label}" tabindex="0" role="button" title="Click to enlarge" data-dv-image="${label}">` : '<div class="dv-img-none muted small">none</div>'}</figure>`;
+      const pane = (src, label) => `<figure class="dv-img"><figcaption class="small muted">${label}</figcaption>${src ? `<img src="${esc(src)}" alt="${label}" tabindex="0" role="button" title="${t('diff_viewer.click_to_enlarge')}" data-dv-image="${label}">` : `<div class="dv-img-none muted small">${t('diff_viewer.none')}</div>`}</figure>`;
       return `<div class="dv-images">${pane(st.contents.before, 'Before')}${pane(st.contents.after, 'After')}</div>`;
     }
     if (f.binary) return msg('Binary file changed.');
@@ -268,7 +268,7 @@
     if (!patch) {
       if (f.large) {
         if (st.loading) return msg('Loading the diff…');
-        return msg(`This diff is large (${(f.added || 0) + (f.deleted || 0)} lines changed): collapsed.`, ' <button type="button" class="btn sm" data-dv-load>Load diff</button>');
+        return msg(`This diff is large (${(f.added || 0) + (f.deleted || 0)} lines changed): collapsed.`, ` <button type="button" class="btn sm" data-dv-load>${t('diff_viewer.load_diff')}</button>`);
       }
       return msg('No diff for this file.');
     }

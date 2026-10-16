@@ -75,13 +75,13 @@
     $a('#arena-count').textContent = `${n} of ${MAX}`;
     box.innerHTML = setup.contenders.map((c, i) => `
       <div class="ar-card" style="--role:${SLOT_COLORS[i]}" data-slot="${i}">
-        ${n > MIN ? `<button type="button" class="ar-remove" data-remove="${i}" title="Remove this model" aria-label="Remove this model">×</button>` : ''}
+        ${n > MIN ? `<button type="button" class="ar-remove" data-remove="${i}" title="${t('arena.remove_this_model')}" aria-label="${t('arena.remove_this_model')}">×</button>` : ''}
         <div class="ar-card-head"><span class="duo-robot" data-slot-robot="${i}"></span></div>
-        <div class="ar-card-title">Contender ${i + 1}</div>
-        <div class="field"><label>Provider</label><select data-field="provider">${Object.entries(PROVIDERS).map(([k, p]) => `<option value="${k}"${k === c.provider ? ' selected' : ''}>${p.label}</option>`).join('')}</select></div>
-        <div class="field"><label>Model</label><select data-field="model">${PROVIDERS[c.provider].models.map((m) => `<option${m === c.model ? ' selected' : ''}>${m}</option>`).join('')}</select></div>
-        <div class="field"><label>Effort</label><div class="seg duo-effort">${EFFORTS.map((e) => `<button type="button" data-effort="${e}" class="${e === c.effort ? 'active' : ''}">${e}</button>`).join('')}</div></div>
-      </div>`).join('') + (n < MAX ? '<button type="button" class="ar-add" id="arena-add"><b>+</b>Add a model</button>' : '');
+        <div class="ar-card-title">${t('arena.contender')} ${i + 1}</div>
+        <div class="field"><label>${t('arena.provider')}</label><select data-field="provider">${Object.entries(PROVIDERS).map(([k, p]) => `<option value="${k}"${k === c.provider ? ' selected' : ''}>${p.label}</option>`).join('')}</select></div>
+        <div class="field"><label>${t('arena.model')}</label><select data-field="model">${PROVIDERS[c.provider].models.map((m) => `<option${m === c.model ? ' selected' : ''}>${m}</option>`).join('')}</select></div>
+        <div class="field"><label>${t('arena.effort')}</label><div class="seg duo-effort">${EFFORTS.map((e) => `<button type="button" data-effort="${e}" class="${e === c.effort ? 'active' : ''}">${e}</button>`).join('')}</div></div>
+      </div>`).join('') + (n < MAX ? `<button type="button" class="ar-add" id="arena-add"><b>+</b>${t('arena.add_a_model')}</button>` : '');
     setup.contenders.forEach((c, i) => {
       $a(`[data-slot-robot="${i}"]`).innerHTML = robotSvg({ ...c, side: 'left' }, 'idle');
       const card = $a(`.ar-card[data-slot="${i}"]`);
@@ -164,7 +164,7 @@
     try { projects = await api.listProjects(); } catch { projects = []; }
     const sel = $a('#arena-project');
     const current = sel.value || saved.project || '';
-    sel.innerHTML = '<option value="">No project (the request only)</option>' + projects.map((p) =>
+    sel.innerHTML = `<option value="">${t('arena.no_project_the_request_only')}</option>` + projects.map((p) =>
       `<option value="${esc(p.id)}"${p.exists ? '' : ' disabled'}${p.id === current && p.exists ? ' selected' : ''}>${esc(p.name)}${p.exists ? '' : ' (folder missing)'}</option>`).join('');
     const hint = () => {
       const p = projects.find((x) => x.id === sel.value);
@@ -199,8 +199,8 @@
     const box = $a('#arena-card');
     box.classList.toggle('hidden', !fromCard);
     if (!fromCard) { box.innerHTML = ''; return; }
-    box.innerHTML = `<span>For the Discovery card <b>${esc(fromCard.title)}</b>: when the run finishes, its final document comes back to the card as a new version.</span>
-      <button type="button" class="link-btn small" id="arena-card-clear" title="Write a document that is not about this card">not about this card</button>`;
+    box.innerHTML = `<span>${t('arena.for_the_discovery_card')} <b>${esc(fromCard.title)}</b>${t('arena.when_the_run_finishes_its_final')}</span>
+      <button type="button" class="link-btn small" id="arena-card-clear" title="${t('arena.write_a_document_that_is_not')}">${t('arena.not_about_this_card')}</button>`;
     $a('#arena-card-clear').onclick = () => { fromCard = null; renderCardBanner(); };
   }
 
@@ -237,7 +237,7 @@
   const fmtSize = (n) => (n >= 1024 ? `${(n / 1024).toFixed(0)} KB` : `${n} B`);
   function renderAttachments() {
     $a('#arena-attachments').innerHTML = attachments.map((a, i) =>
-      `<span class="ar-chip" title="${esc(a.name)}"><span>${esc(a.name)}</span><small>${fmtSize(a.size)}</small><button type="button" data-unattach="${i}" title="Remove" aria-label="Remove ${esc(a.name)}">×</button></span>`).join('');
+      `<span class="ar-chip" title="${esc(a.name)}"><span>${esc(a.name)}</span><small>${fmtSize(a.size)}</small><button type="button" data-unattach="${i}" title="${t('arena.remove')}" aria-label="${t('arena.remove_name', { name: esc(a.name) })}">×</button></span>`).join('');
     $a('#arena-attach-hint').classList.toggle('hidden', attachments.length > 0);
     $a('#arena-attachments').querySelectorAll('[data-unattach]').forEach((b) => (b.onclick = () => { attachments.splice(+b.dataset.unattach, 1); renderAttachments(); }));
   }
@@ -311,7 +311,7 @@
   // ---------------------------------------------------------------- header
   function renderCast() {
     $a('#arena-cast').innerHTML = Object.keys(roles).map((r) =>
-      `<span class="duo-cast" title="${esc(roles[r].name)}"><span class="duo-robot head" data-arena-cast="${esc(r)}"></span><span data-arena-cast-state="${esc(r)}">idle</span></span>`).join('');
+      `<span class="duo-cast" title="${esc(roles[r].name)}"><span class="duo-robot head" data-arena-cast="${esc(r)}"></span><span data-arena-cast-state="${esc(r)}">${t('arena.idle')}</span></span>`).join('');
     Object.keys(roles).forEach((r) => setCast(r, roles[r].state || 'idle', true));
     const n = contenders().length;
     $a('#arena-chat-title').textContent = n ? `AI Arena · ${n} models` : 'AI Arena';
@@ -406,12 +406,12 @@
 
   const note = (html, cls = 'plain') => addToChat(`<div class="duo-note ${cls}"><span>${html}</span></div>`);
   const addCheck = (cls, text) => $a('#arena-checks').insertAdjacentHTML('beforeend', `<li class="${cls}">${esc(text)}</li>`);
-  const docCard = (role, tab, title, text) => `<button type="button" class="duo-doc-card ar-doc-card" ${styleOf(role)} data-tab="${esc(tab)}">${ICON_DOC}<span><b>${esc(title)}</b><small>${words(text)} words · click to view</small></span></button>`;
+  const docCard = (role, tab, title, text) => `<button type="button" class="duo-doc-card ar-doc-card" ${styleOf(role)} data-tab="${esc(tab)}">${ICON_DOC}<span><b>${esc(title)}</b><small>${words(text)} ${t('arena.words_click_to_view')}</small></span></button>`;
   // "Proposal N" → the contender who wrote it (the run's shuffled order, see arena-shuffle.js)
   const authorOf = (n) => chat.order[n - 1];
   const proposalLabel = (n) => {
     const a = authorOf(n);
-    return a && roles[a] ? `<span class="ar-author" ${styleOf(a)}>Proposal ${n} · ${esc(roles[a].name)}</span>` : `<span class="ar-author">Proposal ${n}</span>`;
+    return a && roles[a] ? `<span class="ar-author" ${styleOf(a)}>${t('arena.proposal_n', { n })} ${esc(roles[a].name)}</span>` : `<span class="ar-author">${t('arena.proposal')} ${n}</span>`;
   };
 
   // ---------------------------------------------------------------- side panel
@@ -424,7 +424,7 @@
     $a('#arena-doc-tabs').innerHTML = tabs.map((t) => `<button type="button" ${styleOf(t.role)} class="${t.id === chat.docTab ? 'active' : ''}" data-tab="${esc(t.id)}" title="${esc(t.label)}">${esc(t.label)}</button>`).join('');
     const [kind, key] = String(chat.docTab || '').split(/:(.*)/);
     const text = kind === 'p' ? chat.proposals[key] : kind === 'f' ? chat.finals[+key] : kind === 'a' ? chat.attachments[+key]?.text : null;
-    $a('#arena-doc-body').innerHTML = text == null ? '<p class="muted">No proposal yet.</p>' : md(text);
+    $a('#arena-doc-body').innerHTML = text == null ? `<p class="muted">${t('arena.no_proposal_yet')}</p>` : md(text);
   }
   function showDoc(tab) {
     chat.docTab = tab;
@@ -437,13 +437,13 @@
     const list = contenders();
     const avg = (r) => (chat.scores[r]?.length ? chat.scores[r].reduce((a, b) => a + b, 0) / chat.scores[r].length : null);
     const best = Math.max(-1, ...list.map((r) => avg(r) ?? -1));
-    $a('#arena-board').innerHTML = !list.length ? '<p class="muted small">No contenders yet.</p>' : list.map((r) => {
+    $a('#arena-board').innerHTML = !list.length ? `<p class="muted small">${t('arena.no_contenders_yet')}</p>` : list.map((r) => {
       const v = avg(r);
       const n = chat.scores[r]?.length || 0;
-      return `<div class="ar-board-row${v != null && v === best ? ' best' : ''}" ${styleOf(r)} title="${n} score${n === 1 ? '' : 's'} from the other models" data-testid="arena-score-row">
+      return `<div class="ar-board-row${v != null && v === best ? ' best' : ''}" ${styleOf(r)} title="${t('arena.n_score_value_from_the_other', { n, value: n === 1 ? '' : 's' })}" data-testid="arena-score-row">
         <span class="name" data-testid="arena-score-name">${esc(roles[r].name)}</span><span class="bar" data-testid="arena-score-bar"><i style="width:${v == null ? 0 : Math.min(100, v * 10)}%"></i></span>
         <span class="val" data-testid="arena-score-value">${v == null ? '—' : v.toFixed(1)}</span></div>`;
-    }).join('') + (chat.peer ? '' : '<p class="muted small">Peer review is off for this run.</p>');
+    }).join('') + (chat.peer ? '' : `<p class="muted small">${t('arena.peer_review_is_off_for_this')}</p>`);
   }
 
   // ---------------------------------------------------------------- events → chat
@@ -492,12 +492,12 @@
     renderCast();
     renderBoard();
     addToChat(`<div class="duo-msg user"><div class="duo-bubble">
-      <div class="duo-meta"><b>You</b><span class="time">${clock(ev.ts)}</span></div>
-      <p><b>Request</b> <span class="duo-msg-text">${esc(i.task)}</span></p>${chat.attachments.length ? `<p>${chat.attachments.map((a, k) =>
-        `<button type="button" class="ar-chip" data-tab="a:${k}" title="Open ${esc(a.name)}">📎 <span>${esc(a.name)}</span></button>`).join('')}</p>` : ''}</div></div>`);
+      <div class="duo-meta"><b>${t('arena.you')}</b><span class="time">${clock(ev.ts)}</span></div>
+      <p><b>${t('arena.request')}</b> <span class="duo-msg-text">${esc(i.task)}</span></p>${chat.attachments.length ? `<p>${chat.attachments.map((a, k) =>
+        `<button type="button" class="ar-chip" data-tab="a:${k}" title="${t('arena.open_name', { name: esc(a.name) })}">📎 <span>${esc(a.name)}</span></button>`).join('')}</p>` : ''}</div></div>`);
     const project = i.project_path ? (projects.find((p) => p.folder === i.project_path)?.name || i.project_path) : '';
-    note(`Run started${ev.mock ? ' · <b>simulation</b>' : ''} · ${names.length} models · document <b>${esc(i.document_skill || 'prd-writing')}</b>`
-      + `${chat.peer ? ' · blind peer review' : ''}${i.lenses === 'on' ? ' · different lenses' : ''}${project ? ` · project <b>${esc(project)}</b> (read-only)` : ''}`);
+    note(`Run started${ev.mock ? ` · <b>${t('arena.simulation')}</b>` : ''} · ${names.length} models · document <b>${esc(i.document_skill || 'prd-writing')}</b>`
+      + `${chat.peer ? ' · blind peer review' : ''}${i.lenses === 'on' ? ' · different lenses' : ''}${project ? ` · project <b>${esc(project)}</b> ${t('arena.read_only')}` : ''}`);
     addCheck('ok', `Run started${ev.mock ? ' (simulation, no model calls)' : ''}`);
     $a('#arena-chat-status').textContent = 'running';
   }
@@ -521,12 +521,12 @@
     if (PHASES.some(([p]) => p === id)) enterPhase(id);
     const agents = String(ev.agent || '').split(' · ').filter((a) => roles[a]);
     agents.forEach((a) => { chat.usage[`${id}:${a}`] = { input: 0, output: 0, cost: 0, ms: 0 }; chat.invalid[a] = 0; });
-    if (id === 'compete') note(`<b>Compete</b> · ${agents.length} models write their own proposal in parallel, without seeing each other's work`);
+    if (id === 'compete') note(`<b>${t('arena.compete')}</b> ${t('arena.length_models_write_their_own_proposal', { length: agents.length })}`);
     if (id === 'critique') {
       const map = chat.order.map((a, k) => `${k + 1} = ${esc(roles[a]?.name || a)}`).join(', ');
-      note(`<b>Blind critique</b> · each model scores the others' proposals, anonymized${map ? ` (only you know: ${map})` : ''}`);
+      note(`<b>${t('arena.blind_critique')}</b> ${t('arena.each_model_scores_the_others_proposals')}${map ? ` (only you know: ${map})` : ''}`);
     }
-    if (id === 'synthesize' && ev.visit > 1) note(`<b>New synthesis</b> · v${ev.visit}`);
+    if (id === 'synthesize' && ev.visit > 1) note(`<b>${t('arena.new_synthesis')}</b> · v${ev.visit}`);
     agents.forEach((a) => setWorking(a, id === 'compete' ? 'thinking' : 'reading'));
   }
 
@@ -578,7 +578,7 @@
     if (!chat.docTab) chat.docTab = `p:${role}`;
     renderDocs();
     setCast(role, 'done');
-    message(role, `<p class="duo-msg-text">My proposal is ready.</p>${docCard(role, `p:${role}`, `proposal · ${roles[role].name}`, text)}`, ts, `compete:${role}`);
+    message(role, `<p class="duo-msg-text">${t('arena.my_proposal_is_ready')}</p>${docCard(role, `p:${role}`, `proposal · ${roles[role].name}`, text)}`, ts, `compete:${role}`);
   }
 
   function postCritique(role, o, ts) {
@@ -592,12 +592,12 @@
       const details = list(e.strengths, 'ar-plus', '+') + list(e.weaknesses, 'ar-minus', '−') + list(e.errors, 'ar-err', '!');
       return `<li class="ar-eval" ${target ? styleOf(target) : ''}>${proposalLabel(+e.proposal)}
         <span class="duo-score-bar"><i style="width:${Math.min(100, score * 10)}%"></i></span><span class="ar-eval-num">${score.toFixed(1)}</span>
-        ${details ? `<details><summary>strengths and weaknesses</summary><ul>${details}</ul></details>` : ''}</li>`;
+        ${details ? `<details><summary>${t('arena.strengths_and_weaknesses')}</summary><ul>${details}</ul></details>` : ''}</li>`;
     }).join('');
     const ideas = (o.best_ideas || []).map((x) => `<li>${esc(x)}</li>`).join('');
-    message(role, `<p class="duo-msg-text">My scores for the other proposals:</p>${evals ? `<ul class="ar-evals">${evals}</ul>` : ''}
-      ${ideas ? `<details><summary class="muted small">Best ideas I saw</summary><ul>${ideas}</ul></details>` : ''}
-      ${o.self_revision ? `<p class="muted small"><b>What I would change in mine:</b> <span class="duo-msg-text">${esc(o.self_revision)}</span></p>` : ''}`, ts, `critique:${role}`);
+    message(role, `<p class="duo-msg-text">${t('arena.my_scores_for_the_other_proposals')}</p>${evals ? `<ul class="ar-evals">${evals}</ul>` : ''}
+      ${ideas ? `<details><summary class="muted small">${t('arena.best_ideas_i_saw')}</summary><ul>${ideas}</ul></details>` : ''}
+      ${o.self_revision ? `<p class="muted small"><b>${t('arena.what_i_would_change_in_mine')}</b> <span class="duo-msg-text">${esc(o.self_revision)}</span></p>` : ''}`, ts, `critique:${role}`);
     renderBoard();
   }
 
@@ -649,7 +649,7 @@
       // a failure the supervisor already explained in the chat needs no second row
       if (chat.supervised !== id) {
         if (role) failRow(role, `${roles[role].name} failed: ${String(o.error || 'unknown error').slice(0, 200)}`);
-        else if (id === 'compete' || id === 'critique') note(`<b>${esc(id)} failed</b> · ${esc(String(o.error || '').slice(0, 220))}`, 'failed');
+        else if (id === 'compete' || id === 'critique') note(`<b>${esc(id)} ${t('arena.failed')}</b> · ${esc(String(o.error || '').slice(0, 220))}`, 'failed');
       }
       chat.supervised = null;
       return;
@@ -681,7 +681,7 @@
       const pass = o.verdict === 'pass';
       setCast('verifier', pass ? 'done' : 'idle');
       const issues = (o.issues || []).map((x) => `<li>${esc(typeof x === 'string' ? x : JSON.stringify(x))}</li>`).join('');
-      message('verifier', `${pass ? '<div class="duo-ready">✓ Pass</div>' : '<div class="duo-not-ready">↺ Issues found</div>'}
+      message('verifier', `${pass ? `<div class="duo-ready">${t('arena.pass')}</div>` : `<div class="duo-not-ready">${t('arena.issues_found')}</div>`}
         ${!pass && issues ? `<ul class="ar-issues">${issues}</ul>` : ''}<p class="muted small">${pass ? 'The final document is consistent with the skill and the proposals.' : 'The synthesizer fixes them once; what is still open goes to you.'}</p>`, ev.ts, 'verify:verifier');
       addCheck(pass ? 'ok' : 'warn', pass ? 'Verifier: pass' : `Verifier: ${(o.issues || []).length} issue(s)`);
     }
@@ -715,7 +715,7 @@
       gate.querySelector('.duo-ask-label')?.remove();
     }
     addToChat(`<div class="duo-msg user reply"><div class="duo-bubble">
-      <div class="duo-meta"><b>You</b><span class="time">${clock(ev.ts)}</span></div>
+      <div class="duo-meta"><b>${t('arena.you')}</b><span class="time">${clock(ev.ts)}</span></div>
       <p><b>${esc(chat.labels?.[choice] || choice)}</b></p>${ev.feedback ? `<p class="duo-msg-text">${esc(ev.feedback)}</p>` : ''}</div></div>`);
     if (ev.feedback) addCheck('act', `Your instruction: ${ev.feedback.slice(0, 120)}`);
     Object.keys(roles).forEach((r) => setCast(r, 'idle'));
@@ -733,7 +733,7 @@
     const cost = `$${(s.cost_usd ?? chat.cost).toFixed(2)}`;
     const dur = fmtDur(s.duration_ms || 0);
     if (ev.status === 'success') {
-      note(`<b>Done</b> · ${chat.finals.length ? `final document saved to <span class="mono">arena/final.md</span>` : 'finished'} · ${cost} · ${dur}`, 'done');
+      note(`<b>${t('arena.done')}</b> · ${chat.finals.length ? `final document saved to <span class="mono">${t('arena.arena_final_md')}</span>` : 'finished'} · ${cost} · ${dur}`, 'done');
       Object.keys(roles).forEach((r) => setCast(r, 'done'));
       setSuperPill('success', 'done');
       addCheck('ok', 'Run finished');
@@ -871,48 +871,48 @@
         <div id="arena-setup" class="duo-setup">
           <div class="page-head">
             <div>
-              <h1>AI Arena <span class="duo-lab">lab</span> <button id="arena-help-open" class="duo-help-btn" type="button" title="How the AI Arena works" aria-label="How the AI Arena works">?</button></h1>
-              <p class="muted small">Up to five models write the same document in parallel, blindly critique each other, and a synthesizer merges the best of each. Runs the <span class="mono">ai-arena</span> workflow; past runs are in Workflows › Runs.</p>
+              <h1>${t('arena.ai_arena')} <span class="duo-lab">${t('arena.lab')}</span> <button id="arena-help-open" class="duo-help-btn" type="button" title="${t('arena.how_the_ai_arena_works')}" aria-label="${t('arena.how_the_ai_arena_works')}">?</button></h1>
+              <p class="muted small">${t('arena.up_to_five_models_write_the')} <span class="mono">${t('arena.ai_arena_2')}</span> ${t('arena.workflow_past_runs_are_in_workflows')}</p>
             </div>
-            <button id="arena-edit-workflow" class="btn ghost sm" type="button" title="Open the workflow YAML">ai-arena.yaml</button>
+            <button id="arena-edit-workflow" class="btn ghost sm" type="button" title="${t('arena.open_the_workflow_yaml')}">${t('arena.ai_arena_yaml')}</button>
           </div>
 
           <div class="duo-brief">
             <!-- prefilled from a Discovery card ("Open in AI Arena", arena.js openArenaForCard) -->
             <div id="arena-card" class="duo-issue hidden"></div>
             <div class="field">
-              <label for="arena-task">Request <span class="req">*</span></label>
-              <textarea id="arena-task" rows="3" placeholder="What should the models write? E.g. a PRD for an appointment-booking app for small clinics.">Write a PRD for an appointment-booking app for small clinics: problem, users, scope, non-goals, rollout and success metrics.</textarea>
+              <label for="arena-task">${t('arena.request')} <span class="req">*</span></label>
+              <textarea id="arena-task" rows="3" placeholder="${t('arena.what_should_the_models_write_e')}">${t('arena.write_a_prd_for_an_appointment')}</textarea>
             </div>
             <div class="field ar-attach" id="arena-drop">
-              <label>Reference documents <span class="muted">(optional)</span></label>
+              <label>${t('arena.reference_documents')} <span class="muted">${t('arena.optional')}</span></label>
               <div class="row">
-                <button id="arena-attach" class="btn sm" type="button" title="Attach text files: Markdown, plain text, JSON, YAML, CSV, HTML, code">
+                <button id="arena-attach" class="btn sm" type="button" title="${t('arena.attach_text_files_markdown_plain_text')}">
                   <svg class="icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M21.4 11.1l-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5" /></svg>
-                  Attach files
+                  ${t('arena.attach_files')}
                 </button>
                 <input id="arena-files" type="file" multiple hidden accept=".md,.markdown,.txt,.json,.yaml,.yml,.csv,.tsv,.html,.htm,.xml,.rst,.adoc,.log,.sql,.js,.ts,.py,.go,.java,.cs,text/*" />
                 <div id="arena-attachments" class="ar-chips"></div>
-                <span id="arena-attach-hint" class="muted small">or drop files here. Every model reads them (e.g. an existing PRD to improve, research notes, a spec).</span>
+                <span id="arena-attach-hint" class="muted small">${t('arena.or_drop_files_here_every_model')}</span>
               </div>
             </div>
             <div class="field duo-project">
-              <label for="arena-project">Project <span class="muted">(optional)</span></label>
+              <label for="arena-project">${t('arena.project')} <span class="muted">${t('arena.optional')}</span></label>
               <div class="row">
                 <select id="arena-project"></select>
-                <span id="arena-project-hint" class="muted small">The models read its files (read-only) and a copy of the final document is saved in it.</span>
+                <span id="arena-project-hint" class="muted small">${t('arena.the_models_read_its_files_read')}</span>
               </div>
             </div>
             <div class="duo-rules ar-rules">
-              <label title="The skill that defines the document's structure and scoring rubric">Document <select id="arena-skill"></select></label>
-              <label class="duo-switch" title="Each model scores the other proposals (anonymized) before the synthesis: better quality, higher cost"><input id="arena-peer" type="checkbox" checked /> <span>Blind peer review</span></label>
-              <label class="duo-switch" title="Each model writes under a different forced lens (user value, lean MVP, risk first, feasibility, evidence) for more divergent proposals"><input id="arena-lenses" type="checkbox" /> <span>Different lenses</span></label>
+              <label title="${t('arena.the_skill_that_defines_the_document')}">${t('arena.document')} <select id="arena-skill"></select></label>
+              <label class="duo-switch" title="${t('arena.each_model_scores_the_other_proposals')}"><input id="arena-peer" type="checkbox" checked /> <span>${t('arena.blind_peer_review')}</span></label>
+              <label class="duo-switch" title="${t('arena.each_model_writes_under_a_different')}"><input id="arena-lenses" type="checkbox" /> <span>${t('arena.different_lenses')}</span></label>
             </div>
           </div>
 
           <div class="ar-section-head">
-            <h2>Contenders <span id="arena-count" class="muted small"></span></h2>
-            <span class="muted small">Pick 2 to 5 models. Mixing families (Claude, GPT, Grok) gives more distinct proposals.</span>
+            <h2>${t('arena.contenders')} <span id="arena-count" class="muted small"></span></h2>
+            <span class="muted small">${t('arena.pick_2_to_5_models_mixing')}</span>
           </div>
           <div id="arena-contenders" class="ar-contenders"></div>
 
@@ -920,30 +920,30 @@
             <div class="duo-agent ar-internal-card" style="--role: var(--ar-synth)">
               <div class="duo-agent-head">
                 <span class="duo-robot md" data-arena-robot="synthesizer"></span>
-                <div><b>Synthesizer</b><div class="muted small">Did not compete. Picks the best proposal as the base and grafts the best ideas of the others.</div></div>
+                <div><b>${t('arena.synthesizer')}</b><div class="muted small">${t('arena.did_not_compete_picks_the_best')}</div></div>
               </div>
             </div>
             <div class="duo-agent ar-internal-card" style="--role: var(--ar-verify)">
               <div class="duo-agent-head">
                 <span class="duo-robot md" data-arena-robot="verifier"></span>
-                <div><b>Verifier</b><div class="muted small">Another model family checks the final document; one round of fixes at most.</div></div>
+                <div><b>${t('arena.verifier')}</b><div class="muted small">${t('arena.another_model_family_checks_the_final')}</div></div>
               </div>
             </div>
             <div class="duo-agent ar-internal-card" style="--role: var(--supervisor)">
               <div class="duo-agent-head">
                 <span class="duo-robot md" data-arena-robot="supervisor"></span>
-                <div><b>Supervisor</b><div class="muted small">Steps in when a turn fails and asks you to accept, redo or discard the final document.</div></div>
+                <div><b>${t('arena.supervisor')}</b><div class="muted small">${t('arena.steps_in_when_a_turn_fails')}</div></div>
               </div>
             </div>
           </div>
 
           <div class="duo-actions">
             <span id="arena-error" class="error duo-error"></span>
-            <label class="duo-switch dev-only" id="arena-scenario-wrap" title="What the simulated agents do">Scenario <select id="arena-scenario"></select></label>
-            <label class="duo-switch dev-only" title="Simulated agents: no CLI is called and nothing is spent"><input id="arena-mock" type="checkbox" /> <span>Simulation (no model calls)</span></label>
+            <label class="duo-switch dev-only" id="arena-scenario-wrap" title="${t('arena.what_the_simulated_agents_do')}">${t('arena.scenario')} <select id="arena-scenario"></select></label>
+            <label class="duo-switch dev-only" title="${t('arena.simulated_agents_no_cli_is_called')}"><input id="arena-mock" type="checkbox" /> <span>${t('arena.simulation_no_model_calls')}</span></label>
             <button id="arena-run" class="btn primary btn-icon" type="button">
               <svg class="icon" width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l12-7.5a1 1 0 0 0 0-1.72l-12-7.5A1 1 0 0 0 7 4.5z" /></svg>
-              Run
+              ${t('arena.run')}
             </button>
           </div>
         </div>
@@ -952,38 +952,38 @@
         <div id="arena-chat" class="duo-chat hidden">
           <div class="duo-chat-main">
             <header class="duo-chat-head">
-              <button id="arena-back" class="icon-btn" type="button" title="Back to setup"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6" /></svg></button>
+              <button id="arena-back" class="icon-btn" type="button" title="${t('arena.back_to_setup')}"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6" /></svg></button>
               <div id="arena-cast" class="duo-pair ar-cast"></div>
               <div class="duo-chat-title">
-                <b id="arena-chat-title">AI Arena</b>
-                <div id="arena-chat-status" class="muted small">starting…</div>
+                <b id="arena-chat-title">${t('arena.ai_arena')}</b>
+                <div id="arena-chat-status" class="muted small">${t('arena.starting')}</div>
               </div>
               <div class="spacer"></div>
               <div id="arena-phases" class="ar-phases"></div>
-              <button id="arena-help-open2" class="duo-help-btn sm" type="button" title="How the AI Arena works" aria-label="How the AI Arena works">?</button>
-              <button id="arena-logs" class="btn ghost sm" type="button" title="Open the run folder (events, proposals, final document)">Run folder</button>
-              <button id="arena-stop" class="btn danger sm hidden" type="button">Stop</button>
+              <button id="arena-help-open2" class="duo-help-btn sm" type="button" title="${t('arena.how_the_ai_arena_works')}" aria-label="${t('arena.how_the_ai_arena_works')}">?</button>
+              <button id="arena-logs" class="btn ghost sm" type="button" title="${t('arena.open_the_run_folder_events_proposals')}">${t('arena.run_folder')}</button>
+              <button id="arena-stop" class="btn danger sm hidden" type="button">${t('arena.stop')}</button>
             </header>
             <div id="arena-messages" class="duo-messages"></div>
           </div>
 
           <aside class="duo-side ar-side" data-testid="arena-side">
             <section class="duo-doc" data-testid="arena-doc-section">
-              <div class="duo-side-head"><h2>Documents</h2></div>
+              <div class="duo-side-head"><h2>${t('arena.documents')}</h2></div>
               <div id="arena-doc-tabs" class="ar-doc-tabs" data-testid="arena-doc-tabs"></div>
-              <article id="arena-doc-body" class="duo-doc-body md md-compact">No proposal yet.</article>
+              <article id="arena-doc-body" class="duo-doc-body md md-compact">${t('arena.no_proposal_yet')}</article>
             </section>
             <section class="ar-board-panel" data-testid="arena-scores-section">
-              <div class="duo-side-head"><h2>Peer scores</h2><span class="muted small">average, 0–10</span></div>
+              <div class="duo-side-head"><h2>${t('arena.peer_scores')}</h2><span class="muted small">${t('arena.average_0_10')}</span></div>
               <div id="arena-board" class="ar-board"></div>
             </section>
             <section class="duo-super-panel" data-testid="arena-supervisor-section">
               <div class="duo-side-head">
-                <h2>Supervisor</h2>
-                <span id="arena-super-state" class="pill pill-running">watching</span>
+                <h2>${t('arena.supervisor')}</h2>
+                <span id="arena-super-state" class="pill pill-running">${t('arena.watching')}</span>
               </div>
               <ul id="arena-checks" class="duo-checks"></ul>
-              <div class="muted small">Interventions <b id="arena-interventions" class="mono">0/6</b></div>
+              <div class="muted small">${t('arena.interventions')} <b id="arena-interventions" class="mono">0/6</b></div>
             </section>
           </aside>
         </div>
@@ -992,46 +992,46 @@
   <div id="arena-help" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="arena-help-title">
     <div class="modal-card duo-help-card">
       <div class="duo-help-head">
-        <h3 id="arena-help-title">How the AI Arena works</h3>
-        <button id="arena-help-close" class="icon-btn" type="button" title="Close (Esc)" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" /></svg></button>
+        <h3 id="arena-help-title">${t('arena.how_the_ai_arena_works')}</h3>
+        <button id="arena-help-close" class="icon-btn" type="button" title="${t('arena.close_esc')}" aria-label="${t('common.close')}"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" /></svg></button>
       </div>
       <div class="duo-help-body">
-        <p class="duo-help-lead">Up to five models get the same request and write their own version of the document, without seeing each other's work. They then score each other's proposals blindly, a <b class="c-synth">synthesizer</b> merges the best of each into one document, a <b class="c-verify">verifier</b> checks it, and the <b class="c-supervisor">supervisor</b> asks you what to do with it.</p>
+        <p class="duo-help-lead">${t('arena.up_to_five_models_get_the')} <b class="c-synth">${t('arena.synthesizer_2')}</b> ${t('arena.merges_the_best_of_each_into')} <b class="c-verify">${t('arena.verifier_2')}</b> ${t('arena.checks_it_and_the')} <b class="c-supervisor">${t('arena.supervisor_2')}</b> ${t('arena.asks_you_what_to_do_with')}</p>
         <div class="duo-help-cast" id="arena-help-cast"></div>
 
-        <h4>1. Set up a run</h4>
+        <h4>${t('arena.n1_set_up_a_run')}</h4>
         <ul>
-          <li><b>Request</b>: what to write (a PRD, an ADR, a tech spec…).</li>
-          <li><b>Project</b> (optional): the models read its files (<b>read-only</b>) to ground their proposals; the final document stays in the run folder (workspace), not in the project. Without a project they work from the request only.</li>
-          <li><b>Reference documents</b> (optional): text files (Markdown, plain text, JSON, YAML, CSV…) that every model reads, e.g. an existing PRD to improve, research notes or a spec. Attach them with the button or drop them on the card; up to 200 KB each, 400 KB in total. PDF and Word files must be exported to text first. They show up in the chat and in the <b>Documents</b> panel.</li>
-          <li><b>Document</b>: the type of document, i.e. the skill with its structure and scoring rubric: <b>PRD</b>, <b>Design doc</b>, <b>RFC</b>, <b>ADR</b>, <b>Test plan</b> or <b>Design sketch</b>. Your own skills named <span class="mono">*-writing</span> show up too.</li>
-          <li><b>Blind peer review</b>: each model scores the others' proposals, anonymized as "Proposal 1, 2…", before the synthesis. Better quality, more turns.</li>
-          <li><b>Different lenses</b>: each contender writes with a forced emphasis (user value, lean MVP, risk first, feasibility, evidence), so the proposals diverge more.</li>
-          <li><b>Contenders</b>: 2 to 5 models. Pick the CLI (Claude Code, Codex, Grok), the model and the effort of each. The synthesizer, the verifier and the supervisor are fixed.</li>
+          <li><b>${t('arena.request')}</b>${t('arena.what_to_write_a_prd_an')}</li>
+          <li><b>${t('arena.project')}</b> ${t('arena.optional_the_models_read_its_files')}<b>${t('arena.read_only_2')}</b>${t('arena.to_ground_their_proposals_the_final')}</li>
+          <li><b>${t('arena.reference_documents')}</b> ${t('arena.optional_text_files_markdown_plain_text')} <b>${t('arena.documents')}</b> ${t('arena.panel')}</li>
+          <li><b>${t('arena.document')}</b>${t('arena.the_type_of_document_i_e')} <b>${t('arena.prd')}</b>, <b>${t('arena.design_doc')}</b>, <b>${t('arena.rfc')}</b>, <b>${t('arena.adr')}</b>, <b>${t('arena.test_plan')}</b> ${t('arena.or')} <b>${t('arena.design_sketch')}</b>${t('arena.your_own_skills_named')} <span class="mono">${t('arena.writing')}</span> ${t('arena.show_up_too')}</li>
+          <li><b>${t('arena.blind_peer_review')}</b>${t('arena.each_model_scores_the_others_proposals_2')}</li>
+          <li><b>${t('arena.different_lenses')}</b>${t('arena.each_contender_writes_with_a_forced')}</li>
+          <li><b>${t('arena.contenders')}</b>${t('arena.n2_to_5_models_pick_the')}</li>
         </ul>
 
-        <h4>2. The flow</h4>
+        <h4>${t('arena.n2_the_flow')}</h4>
         <div class="duo-help-flow">
-          <span>Compete</span><i>→</i><span>Critique</span><i>→</i><span class="c-synth">Synthesize</span><i>→</i><span class="c-verify">Verify</span><i>→</i><span class="c-you">You decide</span><i>→</i><span class="c-ok">Done</span>
+          <span>${t('arena.compete')}</span><i>→</i><span>${t('arena.critique')}</span><i>→</i><span class="c-synth">${t('arena.synthesize')}</span><i>→</i><span class="c-verify">${t('arena.verify')}</span><i>→</i><span class="c-you">${t('arena.you_decide')}</span><i>→</i><span class="c-ok">${t('arena.done')}</span>
         </div>
         <ul>
-          <li>All contenders work <b>in parallel</b>; the run goes on if at least two deliver a proposal.</li>
-          <li>The models never learn who wrote which proposal. <b>You</b> do: the chat and the <b>Peer scores</b> panel show the real author of each proposal.</li>
-          <li>If the verifier finds issues, the synthesizer fixes them once, then the supervisor asks you.</li>
+          <li>${t('arena.all_contenders_work')} <b>${t('arena.in_parallel')}</b>${t('arena.the_run_goes_on_if_at')}</li>
+          <li>${t('arena.the_models_never_learn_who_wrote')} <b>${t('arena.you')}</b> ${t('arena.do_the_chat_and_the')} <b>${t('arena.peer_scores')}</b> ${t('arena.panel_show_the_real_author_of')}</li>
+          <li>${t('arena.if_the_verifier_finds_issues_the')}</li>
         </ul>
 
-        <h4>3. Your decision</h4>
+        <h4>${t('arena.n3_your_decision')}</h4>
         <ul>
-          <li><b>Accept</b> the document, <b>redo the synthesis</b> (twice at most) or <b>discard</b> it.</li>
-          <li>When you redo it, you can type <b>instructions</b>, e.g. "Use Proposal 2 as the base". They go to the synthesizer and the verifier.</li>
-          <li>Nothing crosses this question automatically: the run waits for you.</li>
+          <li><b>${t('arena.accept')}</b> ${t('arena.the_document')} <b>${t('arena.redo_the_synthesis')}</b> ${t('arena.twice_at_most_or')} <b>${t('arena.discard')}</b> ${t('arena.it')}</li>
+          <li>${t('arena.when_you_redo_it_you_can')} <b>${t('arena.instructions')}</b>${t('arena.e_g_use_proposal_2_as')}</li>
+          <li>${t('arena.nothing_crosses_this_question_automatically_the')}</li>
         </ul>
 
-        <h4>4. Where the results are</h4>
+        <h4>${t('arena.n4_where_the_results_are')}</h4>
         <ul>
-          <li>In the run folder: <b>arena/proposals/</b> (one per contender), <b>arena/reviews/</b> and <b>arena/final.md</b>. Click a proposal in the chat, or use the tabs of the <b>Documents</b> panel, to read it.</li>
-          <li>Every run is in <b>Workflows › Runs</b>; <b>Open chat</b> replays it, or follows it while it runs.</li>
-          <li>With <b>Settings › Execution › Developer mode</b>, <b>Simulation</b> runs the whole flow with simulated agents (no CLI calls, no cost).</li>
+          <li>${t('arena.in_the_run_folder')} <b>${t('arena.arena_proposals')}</b> ${t('arena.one_per_contender')} <b>${t('arena.arena_reviews')}</b> ${t('arena.and')} <b>${t('arena.arena_final_md')}</b>${t('arena.click_a_proposal_in_the_chat')} <b>${t('arena.documents')}</b> ${t('arena.panel_to_read_it')}</li>
+          <li>${t('arena.every_run_is_in')} <b>${t('arena.workflows_runs')}</b>; <b>${t('arena.open_chat')}</b> ${t('arena.replays_it_or_follows_it_while')}</li>
+          <li>${t('arena.with')} <b>${t('arena.settings_execution_developer_mode')}</b>, <b>${t('arena.simulation_2')}</b> ${t('arena.runs_the_whole_flow_with_simulated')}</li>
         </ul>
       </div>
     </div>

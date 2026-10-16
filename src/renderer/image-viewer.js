@@ -25,7 +25,7 @@
 (() => {
   const M = window.ImageViewerModel;
   const S = window.ImageSequence;
-  const THUMB = 'tabindex="0" role="button" title="Click to enlarge" data-iv-thumb';
+  const THUMB = `tabindex="0" role="button" title="${t('image_viewer.click_to_enlarge')}" data-iv-thumb`;
   let cur = null;
 
   // { title, items } or { title, images, index } → the items and where to start
@@ -51,17 +51,17 @@
         <div class="iv-title"><b data-testid="image-viewer-title"></b>${nav ? '<span class="badge iv-counter" data-testid="image-viewer-counter" aria-live="polite"></span>' : ''}<span class="iv-caption muted small"></span></div>
         <div class="iv-tabs-slot"></div>
         <div class="iv-zoom">
-          <button type="button" class="btn sm ghost" data-iv-zoom="out" title="Zoom out (−)" aria-label="Zoom out">−</button>
+          <button type="button" class="btn sm ghost" data-iv-zoom="out" title="${t('image_viewer.zoom_out')}" aria-label="${t('image_viewer.zoom_out_2')}">−</button>
           <span class="iv-pct mono small" aria-live="polite"></span>
-          <button type="button" class="btn sm ghost" data-iv-zoom="in" title="Zoom in (+)" aria-label="Zoom in">+</button>
-          <button type="button" class="btn sm ghost" data-iv-zoom="fit" title="Fit to the window (0)">Fit</button>
-          <button type="button" class="btn sm ghost" data-iv-zoom="actual" title="Actual size (1)">100%</button>
+          <button type="button" class="btn sm ghost" data-iv-zoom="in" title="${t('image_viewer.zoom_in')}" aria-label="${t('image_viewer.zoom_in_2')}">+</button>
+          <button type="button" class="btn sm ghost" data-iv-zoom="fit" title="${t('image_viewer.fit_to_the_window_0')}">${t('image_viewer.fit')}</button>
+          <button type="button" class="btn sm ghost" data-iv-zoom="actual" title="${t('image_viewer.actual_size_1')}">100%</button>
         </div>
-        <button type="button" class="btn sm ghost iv-close" data-iv-close title="Close (Esc)" aria-label="Close">✕</button>
+        <button type="button" class="btn sm ghost iv-close" data-iv-close title="${t('image_viewer.close_esc')}" aria-label="${t('common.close')}">✕</button>
       </div>
       <div class="iv-stage"><img class="iv-img" alt="" draggable="false" /><p class="iv-msg muted hidden"></p>${nav ? `
-        <button type="button" class="iv-arrow iv-prev" data-iv-nav="prev" aria-label="Previous image" title="Previous image (←, Home: the first)">‹</button>
-        <button type="button" class="iv-arrow iv-next" data-iv-nav="next" aria-label="Next image" title="Next image (→, End: the last)">›</button>` : ''}</div>`;
+        <button type="button" class="iv-arrow iv-prev" data-iv-nav="prev" aria-label="${t('image_viewer.previous_image')}" title="${t('image_viewer.previous_image_home_the_first')}">‹</button>
+        <button type="button" class="iv-arrow iv-next" data-iv-nav="next" aria-label="${t('image_viewer.next_image')}" title="${t('image_viewer.next_image_end_the_last')}">›</button>` : ''}</div>`;
     document.body.appendChild(el);
     cur = { el, seq, item: -1, image: -1, view: null, size: null, opener: document.activeElement, drag: null, load: 0 };
     const stage = el.querySelector('.iv-stage');
@@ -114,7 +114,7 @@
     cur.item = index;
     const keyOf = (im) => (im.side === 'original' ? 'O' : im.side === 'modified' ? 'M' : '');
     cur.el.querySelector('.iv-tabs-slot').innerHTML = images.length > 1
-      ? `<div class="seg sm iv-tabs" role="tablist">${images.map((im, i) => `<button type="button" role="tab" data-iv-tab="${i}" title="${esc(im.label || '')} (${keyOf(im) ? `${keyOf(im)} or ` : ''}Space to switch)">${esc(im.label || `Image ${i + 1}`)}</button>`).join('')}</div>`
+      ? `<div class="seg sm iv-tabs" role="tablist">${images.map((im, i) => `<button type="button" role="tab" data-iv-tab="${i}" title="${t('image_viewer.value_value2_space_to_switch', { value: esc(im.label || ''), value2: keyOf(im) ? `${keyOf(im)} or ` : '' })}">${esc(im.label || `Image ${i + 1}`)}</button>`).join('')}</div>`
       : '';
   }
 

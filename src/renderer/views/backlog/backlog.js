@@ -334,7 +334,7 @@
     p.className = 'small muted bl-stale';
     p.dataset.blStale = '';
     // (the text is counts and fixed words only, never data from the files)
-    p.innerHTML = `<span data-bl-stale-text data-testid="roadmap-changed-notice" role="status">${text}</span> <button type="button" class="link-btn small" data-bl-stale-reload>Reload</button>`;
+    p.innerHTML = `<span data-bl-stale-text data-testid="roadmap-changed-notice" role="status">${text}</span> <button type="button" class="link-btn small" data-bl-stale-reload>${t('backlog.reload')}</button>`;
     p.querySelector('button').addEventListener('click', () => {
       window.BacklogRoadmap?.closeEdit();
       document.activeElement?.blur?.();
@@ -420,9 +420,9 @@
     $b('#assign-chain').classList.toggle('hidden', !!pipe);
     const strip = $b('#assign-pipeline');
     strip.classList.toggle('hidden', !pipe);
-    strip.innerHTML = pipe ? `<div class="drawer-pipeline-head"><span class="chain-banner-title">Pipeline</span><span class="badge">${pipe.stages.length} stages</span></div>
+    strip.innerHTML = pipe ? `<div class="drawer-pipeline-head"><span class="chain-banner-title">${t('backlog.pipeline')}</span><span class="badge">${pipe.stages.length} ${t('backlog.stages')}</span></div>
       ${ChainModel.pipelineStagesHtml(pipe, { names: Object.fromEntries((bl.chainWorkflows || []).map((w) => [w.file, w.name])), current: 0 })}
-      <p class="muted small">Each issue's run is the first stage; the next stages follow it when it succeeds. A failed or stopped stage pauses its pipeline.</p>` : '';
+      <p class="muted small">${t('backlog.each_issue_s_run_is_the')}</p>` : '';
     // a roadmap stage runs one workflow: a pipeline is assigned, not planned
     const toRoadmap = $b('#btn-assign-roadmap');
     if (toRoadmap) {
@@ -466,9 +466,9 @@
     if (!busy.length) { box.innerHTML = ''; return; }
     const plural = busy.length > 1;
     box.innerHTML = `
-      <span class="warn-text small"><b>${busy.length} of the selected issues ${plural ? 'already have' : 'already has'} work in flight.</b> Starting ${plural ? 'them' : 'it'} again may duplicate it.</span>
+      <span class="warn-text small"><b>${busy.length} ${t('backlog.of_the_selected_issues_value_work', { value: plural ? 'already have' : 'already has' })}</b> ${t('backlog.starting_value_again_may_duplicate_it', { value: plural ? 'them' : 'it' })}</span>
       <ul class="small">${busy.map((i) => `<li>#${i.number} ${esc(i.title)}: ${esc(inFlight(i).join(', '))}</li>`).join('')}</ul>
-      <label class="check"><input type="checkbox" id="assign-skip-busy" checked /><span>Skip ${plural ? 'them' : 'it'} (uncheck to assign anyway)</span></label>`;
+      <label class="check"><input type="checkbox" id="assign-skip-busy" checked /><span>${t('backlog.skip_value_uncheck_to_assign_anyway', { value: plural ? 'them' : 'it' })}</span></label>`;
     $b('#assign-skip-busy').onchange = updateAssignNote;
   }
 
@@ -528,7 +528,7 @@
     for (const [k, v] of Object.entries(prefill?.inputs || {})) WorkflowInputs.set($b('#assign-inputs'), k, v);
     // #216: what the Product Owner chose, as the same pills as its card (the Settings below edit them)
     const proposed = prefill?.inputs ? WorkflowInputs.inputPills(bl.workflows.find((w) => w.file === prefill.workflow) || null, prefill.inputs, { defaults: true }) : '';
-    $b('#assign-proposed').innerHTML = proposed ? `<span class="muted">Product Owner's choices:</span> ${proposed}` : '';
+    $b('#assign-proposed').innerHTML = proposed ? `<span class="muted">${t('backlog.product_owner_s_choices')}</span> ${proposed}` : '';
     $b('#assign-proposed').classList.toggle('hidden', !proposed);
     openModal('#assign-modal');
   }
@@ -716,9 +716,9 @@
   }
   const filtering = () => !!bl.q || bl.labels.length > 0 || !!bl.epic;
   const epicById = (id) => (bl.data?.epics || []).find((e) => e.id === id) || null;
-  const noMatch = () => `<div class="empty-state"><b>No issues match the filters</b>
+  const noMatch = () => `<div class="empty-state"><b>${t('backlog.no_issues_match_the_filters')}</b>
     <p class="muted">${bl.epic ? `Epic: ${esc(bl.epic === NO_EPIC ? 'No epic' : epicById(bl.epic)?.title || bl.epic)}. ` : ''}${bl.labels.length ? `Labels: ${esc(bl.labels.join(', '))}. ` : ''}${bl.q ? `Search: “${esc(bl.q)}”.` : ''}</p>
-    <button class="btn sm ghost" type="button" data-clear-filters>Clear filters</button></div>`;
+    <button class="btn sm ghost" type="button" data-clear-filters>${t('backlog.clear_filters')}</button></div>`;
 
   const colorStyle = (color) => (color ? ` style="--lc:${esc(color)}"` : '');
   // A label chip toggles its label in the filter (`on` while selected).
@@ -731,7 +731,7 @@
   const triage = (i) => {
     const s = triageScores(i);
     return [['impact', 'I', 'Impact'], ['complexity', 'C', 'Complexity']].filter(([k]) => s[k] != null)
-      .map(([k, short, name]) => `<span class="badge bl-triage bl-${k} lvl-${s[k]}" title="${name} ${s[k]}/5 (issue triage)">${short}${s[k]}</span>`).join('');
+      .map(([k, short, name]) => `<span class="badge bl-triage bl-${k} lvl-${s[k]}" title="${t('backlog.name_value_5_issue_triage', { name, value: s[k] })}">${short}${s[k]}</span>`).join('');
   };
   // Its epic (#138) as a small badge that filters by it (an epic issue already shows its `epic` label).
   const epicBadge = (i) => {
@@ -753,7 +753,7 @@
     const epics = bl.data?.epics || [];
     sel.classList.toggle('hidden', !epics.length || bl.mode === 'epics');
     if (!epics.length) return;
-    sel.innerHTML = `<option value="">All epics</option>${epicChoices(issues).map((o) => `<option value="${esc(o.id)}">${esc(o.title)} (${o.count})</option>`).join('')}`;
+    sel.innerHTML = `<option value="">${t('backlog.all_epics')}</option>${epicChoices(issues).map((o) => `<option value="${esc(o.id)}">${esc(o.title)} (${o.count})</option>`).join('')}`;
     sel.value = bl.epic;
     sel.classList.toggle('active', !!bl.epic);
   }
@@ -762,20 +762,20 @@
   function renderEpics(issues) {
     const epics = bl.data?.epics || [];
     const bar = `<div class="bl-queue bl-epics-bar">
-        <span><b>Epics</b> <span class="muted small">${epics.length} · ${esc(platformOf(bl.data?.platform).epicHelp)}</span></span>
-        ${bl.data?.epicsError ? `<span class="warn-text small" title="${esc(bl.data.epicsError)}">members could not be read: last known</span>` : ''}
+        <span><b>${t('backlog.epics')}</b> <span class="muted small">${epics.length} · ${esc(platformOf(bl.data?.platform).epicHelp)}</span></span>
+        ${bl.data?.epicsError ? `<span class="warn-text small" title="${esc(bl.data.epicsError)}">${t('backlog.members_could_not_be_read_last')}</span>` : ''}
         <span class="spacer"></span>
-        <label class="check small" title="A new issue the Product Owner registers joins the existing epic it clearly matches, with no extra click. Creating an epic always asks."><input type="checkbox" data-auto-epic${bl.data?.autoEpic ? ' checked' : ''} /><span>Auto-place new issues</span></label>
-        <button class="btn sm ghost" type="button" data-organize title="Ask the Product Owner to propose epics for the open issues: nothing is created until you apply a proposal">Organize into epics…</button>
+        <label class="check small" title="${t('backlog.a_new_issue_the_product_owner')}"><input type="checkbox" data-auto-epic${bl.data?.autoEpic ? ' checked' : ''} /><span>${t('backlog.auto_place_new_issues')}</span></label>
+        <button class="btn sm ghost" type="button" data-organize title="${t('backlog.ask_the_product_owner_to_propose')}">${t('backlog.organize_into_epics')}</button>
       </div>`;
     if (!epics.length) {
-      return `${bar}<div class="empty-state"><b>No epics yet</b><p class="muted">An epic groups the issues of one theme. Ask the Product Owner to organize the open issues into epics: you review each proposal and apply it with a click.</p>
-        <button class="btn sm primary" type="button" data-organize>Organize into epics…</button></div>`;
+      return `${bar}<div class="empty-state"><b>${t('backlog.no_epics_yet')}</b><p class="muted">${t('backlog.an_epic_groups_the_issues_of')}</p>
+        <button class="btn sm primary" type="button" data-organize>${t('backlog.organize_into_epics')}</button></div>`;
     }
     const byNumber = new Map(issues.map((i) => [i.number, i]));
     const member = (n) => {
       const i = byNumber.get(n);
-      if (!i) return `<li class="bl-epic-member muted"><span class="bl-num mono">#${n}</span> not synced</li>`;
+      if (!i) return `<li class="bl-epic-member muted"><span class="bl-num mono">#${n}</span> ${t('backlog.not_synced')}</li>`;
       return `<li class="bl-epic-member" title="${esc(`#${i.number} ${i.title}`)}"><span class="bl-state ${i.state}"></span><span class="bl-num mono">#${i.number}</span><a class="bl-epic-member-title" href="${esc(i.url)}" target="_blank" rel="noopener">${esc(i.title)}</a>${window.BacklogRoadmap.badge(i)}</li>`;
     };
     const cards = epics.map((e) => {
@@ -787,17 +787,17 @@
           ${e.url ? `<a class="bl-epic-title" href="${esc(e.url)}" target="_blank" rel="noopener" title="${esc(`${e.id} ${e.title}`)}">${esc(e.title)}</a>` : `<b class="bl-epic-title" title="${esc(e.title)}">${esc(e.title)}</b>`}
           <span class="badge" title="${e.kind === 'group' ? 'A GitLab group epic' : 'The epic issue'}">${esc(e.id)}</span>
           <span class="spacer"></span>
-          <span class="bl-tasks" title="${p.done} of ${p.total} members done (closed, or done in the roadmap)"><span class="bl-bar"><span style="width:${pct}%"></span></span><span class="mono small">${p.done}/${p.total}</span></span>
+          <span class="bl-tasks" title="${t('backlog.done_of_total_members_done_closed', { done: p.done, total: p.total })}"><span class="bl-bar"><span style="width:${pct}%"></span></span><span class="mono small">${p.done}/${p.total}</span></span>
         </div>
-        <div class="small muted">${p.open} open · ${p.closed} closed · ${p.roadmapDone} done in the roadmap${p.inRoadmap > p.roadmapDone ? ` · ${p.inRoadmap - p.roadmapDone} planned` : ''}</div>
-        ${e.members.length ? `<ul class="bl-epic-members">${e.members.map(member).join('')}</ul>` : '<p class="muted small">No members yet.</p>'}
-        ${e.members.length ? `<button class="link-btn small" type="button" data-epic-filter="${esc(e.id)}">Show its issues in the list</button>` : ''}
+        <div class="small muted">${p.open} ${t('backlog.open_closed_closed_roadmapdone_done_in', { closed: p.closed, roadmapDone: p.roadmapDone })}${p.inRoadmap > p.roadmapDone ? ` · ${p.inRoadmap - p.roadmapDone} planned` : ''}</div>
+        ${e.members.length ? `<ul class="bl-epic-members">${e.members.map(member).join('')}</ul>` : `<p class="muted small">${t('backlog.no_members_yet')}</p>`}
+        ${e.members.length ? `<button class="link-btn small" type="button" data-epic-filter="${esc(e.id)}">${t('backlog.show_its_issues_in_the_list')}</button>` : ''}
       </section>`;
     }).join('');
     const loose = issues.filter((i) => i.state === 'open' && matchesEpic(i, NO_EPIC));
     const none = `<section class="bl-epic-card bl-epic-none">
-        <div class="bl-epic-head"><b class="bl-epic-title">No epic</b><span class="spacer"></span><span class="muted small">${loose.length} open issue${loose.length === 1 ? '' : 's'}</span></div>
-        ${loose.length ? `<button class="link-btn small" type="button" data-epic-filter="${NO_EPIC}">Show them in the list</button>` : '<p class="muted small">Every open issue is in an epic.</p>'}
+        <div class="bl-epic-head"><b class="bl-epic-title">${t('backlog.no_epic')}</b><span class="spacer"></span><span class="muted small">${loose.length} ${t('backlog.open_issue')}${loose.length === 1 ? '' : 's'}</span></div>
+        ${loose.length ? `<button class="link-btn small" type="button" data-epic-filter="${NO_EPIC}">${t('backlog.show_them_in_the_list')}</button>` : `<p class="muted small">${t('backlog.every_open_issue_is_in_an')}</p>`}
       </section>`;
     return `${bar}<div class="bl-epics">${cards}${none}</div>`;
   }
@@ -820,41 +820,41 @@
         <span class="bl-label"${colorStyle(l.color)}>${esc(l.name)}</span><span class="muted small">${l.count}</span></label>`).join('') : '';
     const color = new Map(options.map((l) => [l.name.toLowerCase(), l.color]));
     $b('#bl-label-active').innerHTML = bl.labels.length ? `${bl.labels.map((name) =>
-      `<button class="bl-label on" type="button" data-label="${esc(name)}" title="Remove from the label filter"${colorStyle(color.get(name.toLowerCase()))}>${esc(name)} ×</button>`).join('')}
-      <button class="link-btn small" type="button" data-label-clear title="Remove every label from the filter">clear</button>` : '';
+      `<button class="bl-label on" type="button" data-label="${esc(name)}" title="${t('backlog.remove_from_the_label_filter')}"${colorStyle(color.get(name.toLowerCase()))}>${esc(name)} ×</button>`).join('')}
+      <button class="link-btn small" type="button" data-label-clear title="${t('backlog.remove_every_label_from_the_filter')}">${t('backlog.clear')}</button>` : '';
   }
   const tasks = (i) => {
     if (!i.tasks?.total) return '';
     const pct = Math.round((i.tasks.done / i.tasks.total) * 100);
-    return `<span class="bl-tasks" title="${i.tasks.done} of ${i.tasks.total} tasks done"><span class="bl-bar"><span style="width:${pct}%"></span></span><span class="mono small">${i.tasks.done}/${i.tasks.total}</span></span>`;
+    return `<span class="bl-tasks" title="${t('backlog.done_of_total_tasks_done', { done: i.tasks.done, total: i.tasks.total })}"><span class="bl-bar"><span style="width:${pct}%"></span></span><span class="mono small">${i.tasks.done}/${i.tasks.total}</span></span>`;
   };
   // the run's readable status (#266), its title and its PR (#84: state icon, #n link opening the PR, not the run)
-  const runLink = (r) => `<button class="bl-run" type="button" data-testid="run-chip" data-run="${esc(r.runId)}" data-workflow="${esc(r.workflow || '')}" title="Open run ${esc(r.runId)} (${esc(r.workflow || 'workflow')})">
-      ${StatusPill.statusPill(r.status, { waiting: r.waiting })}<span>${esc(window.runTitle ? runTitle(r) : r.workflow || 'workflow')}</span>${window.runPrBadge ? runPrBadge(r, { compact: true }) : ''}${r.mock ? '<span class="badge p-mock">Simulated</span>' : ''}</button>`;
+  const runLink = (r) => `<button class="bl-run" type="button" data-testid="run-chip" data-run="${esc(r.runId)}" data-workflow="${esc(r.workflow || '')}" title="${t('backlog.open_run_runid_value', { runId: esc(r.runId), value: esc(r.workflow || 'workflow') })}">
+      ${StatusPill.statusPill(r.status, { waiting: r.waiting })}<span>${esc(window.runTitle ? runTitle(r) : r.workflow || 'workflow')}</span>${window.runPrBadge ? runPrBadge(r, { compact: true }) : ''}${r.mock ? `<span class="badge p-mock">${t('backlog.simulated')}</span>` : ''}</button>`;
   // Open PRs/MRs that refer to the issue, each a link to it.
   const prBadges = (i) => (i.pullRequests || []).map((p) =>
     `<a class="badge bl-pr${p.draft ? ' draft' : ''}" href="${esc(p.url)}" target="_blank" rel="noopener" title="${esc(`Open ${p.draft ? 'draft ' : ''}${prName(p)}: ${p.title}`)}">${esc(prName(p))}</a>`).join('');
   // The other issues of the same run (a group sent as one run: one branch, one PR/MR).
   const groupBadge = (others) => (others?.length
-    ? `<span class="badge bl-group" title="One run, one branch and one PR/MR for these issues">grouped with ${esc(others.map((n) => `#${n}`).join(', '))}</span>` : '');
-  const checkbox = (i) => (selectable(i) ? `<input type="checkbox" class="bl-check" data-sel="${i.number}" aria-label="Select #${i.number}"${bl.selected.has(i.number) ? ' checked' : ''} />` : '');
+    ? `<span class="badge bl-group" title="${t('backlog.one_run_one_branch_and_one')}">${t('backlog.grouped_with')} ${esc(others.map((n) => `#${n}`).join(', '))}</span>` : '');
+  const checkbox = (i) => (selectable(i) ? `<input type="checkbox" class="bl-check" data-sel="${i.number}" aria-label="${t('backlog.select_number', { number: i.number })}"${bl.selected.has(i.number) ? ' checked' : ''} />` : '');
   // What the automation is doing with the issue: queued, its latest run, the gate waiting for you.
   function status(i) {
     // its place in the roadmap ("Roadmap: stage 2", backlog-roadmap.js)
     const rm = window.BacklogRoadmap.badge(i);
     if (i.queued) {
-      return `${rm}<span class="bl-queued"><span class="badge">queued #${i.queued.position}</span><span class="small">${esc(i.queued.workflow)}</span>${i.queued.mock ? '<span class="badge p-mock">Simulated</span>' : ''}${groupBadge(i.queued.groupedWith)}
-        <button class="link-btn small" type="button" data-unqueue="${i.number}" title="Take it out of the queue">remove</button></span>`;
+      return `${rm}<span class="bl-queued"><span class="badge">${t('backlog.queued')}${i.queued.position}</span><span class="small">${esc(i.queued.workflow)}</span>${i.queued.mock ? `<span class="badge p-mock">${t('backlog.simulated')}</span>` : ''}${groupBadge(i.queued.groupedWith)}
+        <button class="link-btn small" type="button" data-unqueue="${i.number}" title="${t('backlog.take_it_out_of_the_queue')}">${t('backlog.remove')}</button></span>`;
     }
     const e = enriching(i);
     const r = i.runs?.find((x) => !x.enrich);
     if (!r) return rm + e;
     const notPushed = i.column === 'local'
-      ? `<span class="badge bl-notpushed" title="Merged into the local ${esc(r.localMerge?.base || 'base')}; the issue closes when it is pushed (Push, above)">not pushed</span>` : '';
-    const recovered = r.recovery ? `<span class="badge bl-recovered" title="${esc(`Supervisor: ${r.recovery}`)}">sent back after a failed merge</span>` : '';
+      ? `<span class="badge bl-notpushed" title="${t('backlog.merged_into_the_local_value_the', { value: esc(r.localMerge?.base || 'base') })}">${t('backlog.not_pushed')}</span>` : '';
+    const recovered = r.recovery ? `<span class="badge bl-recovered" title="${esc(`Supervisor: ${r.recovery}`)}">${t('backlog.sent_back_after_a_failed_merge')}</span>` : '';
     const watch = r.status === 'running' && isRunLive(r.runId)
-      ? `<button class="btn sm ghost sup-btn" type="button" data-watch="${esc(r.runId)}" data-workflow="${esc(r.workflow || '')}" title="The supervisor follows this run and explains it in a chat (opt-in: it costs tokens)"><span class="sup-mark">◆</span> Watch</button>` : '';
-    return `${rm}${runLink(r)}${notPushed}${recovered}${groupBadge(r.groupedWith)}${r.waiting ? '<button class="btn sm primary" type="button" data-gate>Review approval</button>' : ''}${watch}${e}`;
+      ? `<button class="btn sm ghost sup-btn" type="button" data-watch="${esc(r.runId)}" data-workflow="${esc(r.workflow || '')}" title="${t('backlog.the_supervisor_follows_this_run_and')}"><span class="sup-mark">◆</span> ${t('backlog.watch')}</button>` : '';
+    return `${rm}${runLink(r)}${notPushed}${recovered}${groupBadge(r.groupedWith)}${r.waiting ? `<button class="btn sm primary" type="button" data-gate>${t('backlog.review_approval')}</button>` : ''}${watch}${e}`;
   }
   // Its latest Write & Review run (#103): "being enriched" while it runs or waits, "enriched" once
   // accepted; a link to the run (the Write & Review chat, with Save to issue).
@@ -867,22 +867,22 @@
 
   // Updated by the last Backlog Refresh run (#161), for a day after it ended.
   const refreshedBadge = (i) => (i.refreshed
-    ? `<span class="badge bl-refreshed" title="${esc(`Paths, lines or tasks updated by the Backlog Refresh run ${bl.data?.refresh?.lastRun?.runId || ''}`)}">refreshed</span>` : '');
+    ? `<span class="badge bl-refreshed" title="${esc(`Paths, lines or tasks updated by the Backlog Refresh run ${bl.data?.refresh?.lastRun?.runId || ''}`)}">${t('backlog.refreshed')}</span>` : '');
 
   // The issue's actions (#238), at the right of a row and the top right of a card: an open issue has
   // a ⋯ menu with Enrich in Write & Review (#103: Write & Review prefilled with the issue, nothing
   // starts by itself) and Archive (disabled, with the reason shown, while it is planned in the roadmap
   // or has a run in progress); an archived issue has Restore.
   function issueMenu(i) {
-    if (isArchived(i)) return `<button class="btn sm ghost" type="button" data-restore="${i.number}" data-testid="backlog-restore" title="Reopen it on the platform and remove its archived label">Restore</button>`;
+    if (isArchived(i)) return `<button class="btn sm ghost" type="button" data-restore="${i.number}" data-testid="backlog-restore" title="${t('backlog.reopen_it_on_the_platform_and')}">${t('backlog.restore')}</button>`;
     if (i.state !== 'open') return '';
     const why = archiveBlockReason(i);
     const open = bl.menu === i.number;
     return `<span class="bl-menu-wrap">
-        <button class="btn sm ghost" type="button" data-menu="${i.number}" data-testid="backlog-issue-menu" aria-haspopup="menu" aria-expanded="${open}" aria-label="Actions for #${i.number}" title="Actions">⋯</button>
-        ${open ? `<div class="bl-menu" role="menu" aria-label="Actions for #${i.number}">
-          <button type="button" role="menuitem" data-enrich="${i.number}" data-testid="backlog-enrich" title="Enrich this issue in Write & Review (e.g. into a fuller issue or an RFC), then save the result back to it">Enrich in Write &amp; Review</button><button type="button" role="menuitem" data-show-map="${i.number}" data-testid="show-on-map" title="Open the project city with the files this issue is expected to change (#375)">Show on the map</button>
-          <button type="button" role="menuitem" data-archive="${i.number}" data-testid="backlog-archive"${why ? ' disabled' : ''} title="${esc(why || 'Close it as not planned on the platform and label it archived')}">Archive</button>
+        <button class="btn sm ghost" type="button" data-menu="${i.number}" data-testid="backlog-issue-menu" aria-haspopup="menu" aria-expanded="${open}" aria-label="${t('backlog.actions_for_number', { number: i.number })}" title="${t('backlog.actions')}">⋯</button>
+        ${open ? `<div class="bl-menu" role="menu" aria-label="${t('backlog.actions_for_number', { number: i.number })}">
+          <button type="button" role="menuitem" data-enrich="${i.number}" data-testid="backlog-enrich" title="${t('backlog.enrich_this_issue_in_write_review')}">${t('backlog.enrich_in_write_review')}</button><button type="button" role="menuitem" data-show-map="${i.number}" data-testid="show-on-map" title="${t('backlog.open_the_project_city_with_the')}">${t('backlog.show_on_the_map')}</button>
+          <button type="button" role="menuitem" data-archive="${i.number}" data-testid="backlog-archive"${why ? ' disabled' : ''} title="${esc(why || 'Close it as not planned on the platform and label it archived')}">${t('backlog.archive')}</button>
           ${why ? `<p class="muted small bl-menu-why">${esc(why)}</p>` : ''}
         </div>` : ''}
       </span>`;
@@ -891,7 +891,7 @@
   // Filed from a discovery card (#258, the service's `discoveryCard`): the card's title; a click opens
   // the card on the Discovery board, read-only.
   const discoveryBadge = (i) => (i.discoveryCard
-    ? `<button class="badge bl-discovery" type="button" data-testid="issue-discovery-card" data-discovery-card="${esc(i.discoveryCard.id)}" title="${esc(`Filed from the discovery card "${i.discoveryCard.title}": open it (read-only)`)}">card: ${esc(i.discoveryCard.title)}</button>` : '');
+    ? `<button class="badge bl-discovery" type="button" data-testid="issue-discovery-card" data-discovery-card="${esc(i.discoveryCard.id)}" title="${esc(`Filed from the discovery card "${i.discoveryCard.title}": open it (read-only)`)}">${t('backlog.card')} ${esc(i.discoveryCard.title)}</button>` : '');
 
   function issueRow(i) {
     const open = bl.expanded.has(i.number);
@@ -909,31 +909,31 @@
           </div>
           <span class="bl-status">${prBadges(i)}${status(i)}</span>
           ${tasks(i) || '<span></span>'}
-          <span class="pr-meta"><label>Updated</label>${esc(dateOf(i.updatedAt))}</span>
+          <span class="pr-meta"><label>${t('backlog.updated')}</label>${esc(dateOf(i.updatedAt))}</span>
           <span class="bl-actions">${issueMenu(i)}</span>
         </div>
         ${open ? `
         <div class="pr-body">
-          <div class="muted small">Opened by ${esc(i.author || 'unknown')} on ${esc(dateOf(i.createdAt))}${i.assignees.length ? ` · assigned to ${esc(i.assignees.join(', '))}` : ''}</div>
-          ${i.pullRequests?.length ? `<div class="bl-prs"><span class="muted small">Open ${platformOf(bl.data?.platform).request.short}s</span>${i.pullRequests.map((p) => `<span class="small">${prBadges({ pullRequests: [p] })} ${esc(p.title)}</span>`).join('')}</div>` : ''}
-          ${i.runs?.length ? `<div class="bl-runs"><span class="muted small">Runs</span>${i.runs.map(runLink).join('')}</div>` : ''}
-          <div class="md bl-md">${i.body.trim() ? markdownHtml(i.body) : '<p class="muted">No description.</p>'}</div>
-          <div class="row"><a class="btn sm ghost" href="${esc(i.url)}" target="_blank" rel="noopener">Open on ${esc(host)}</a></div>
+          <div class="muted small">${t('backlog.opened_by_value_on', { value: esc(i.author || 'unknown') })} ${esc(dateOf(i.createdAt))}${i.assignees.length ? ` · assigned to ${esc(i.assignees.join(', '))}` : ''}</div>
+          ${i.pullRequests?.length ? `<div class="bl-prs"><span class="muted small">${t('backlog.open_short_s', { short: platformOf(bl.data?.platform).request.short })}</span>${i.pullRequests.map((p) => `<span class="small">${prBadges({ pullRequests: [p] })} ${esc(p.title)}</span>`).join('')}</div>` : ''}
+          ${i.runs?.length ? `<div class="bl-runs"><span class="muted small">${t('backlog.runs')}</span>${i.runs.map(runLink).join('')}</div>` : ''}
+          <div class="md bl-md">${i.body.trim() ? markdownHtml(i.body) : `<p class="muted">${t('backlog.no_description')}</p>`}</div>
+          <div class="row"><a class="btn sm ghost" href="${esc(i.url)}" target="_blank" rel="noopener">${t('backlog.open_on')} ${esc(host)}</a></div>
         </div>` : ''}
       </div>`;
   }
 
   const card = (i) => `
     <div class="bl-card${bl.selected.has(i.number) ? ' selected' : ''}" data-n="${i.number}">
-      <div class="bl-card-head">${checkbox(i)}<span class="bl-num mono">#${i.number}</span><a class="bl-card-title" href="${esc(i.url)}" target="_blank" rel="noopener" title="Open on ${esc(PLATFORMS[bl.data?.platform]?.label || 'the platform')}">${esc(i.title)}</a>${issueMenu(i)}</div>
+      <div class="bl-card-head">${checkbox(i)}<span class="bl-num mono">#${i.number}</span><a class="bl-card-title" href="${esc(i.url)}" target="_blank" rel="noopener" title="${t('backlog.open_on_value', { value: esc(PLATFORMS[bl.data?.platform]?.label || 'the platform') })}">${esc(i.title)}</a>${issueMenu(i)}</div>
       <div class="bl-labels">${refreshedBadge(i)}${discoveryBadge(i)}${epicBadge(i)}${triage(i)}${labels(i)}</div>
-      ${tasks(i)}<button type="button" class="btn sm ghost bl-card-map" data-show-map="${i.number}" data-testid="show-on-map" title="Open the project city with the files this issue is expected to change">Show on the map</button>
+      ${tasks(i)}<button type="button" class="btn sm ghost bl-card-map" data-show-map="${i.number}" data-testid="show-on-map" title="${t('backlog.open_the_project_city_with_the_2')}">${t('backlog.show_on_the_map')}</button>
       ${prBadges(i) || status(i) ? `<div class="bl-card-run">${prBadges(i)}${status(i)}</div>` : ''}
     </div>`;
 
   function renderList(issues) {
     const shown = sortIssues(issues.filter(isShown), bl.sort);
-    return shown.length ? shown.map(issueRow).join('') : filtering() ? noMatch() : '<p class="muted">No issues match.</p>';
+    return shown.length ? shown.map(issueRow).join('') : filtering() ? noMatch() : `<p class="muted">${t('backlog.no_issues_match')}</p>`;
   }
 
   function renderKanban(issues) {
@@ -944,7 +944,7 @@
       const items = shown.filter((i) => (i.column || (i.state === 'closed' ? 'done' : 'todo')) === col);
       return `<section class="bl-col bl-col-${col}">
         <h3>${title} <span class="muted">${items.length}</span></h3>
-        <div class="bl-col-body">${items.map(card).join('') || '<p class="muted small">Nothing here.</p>'}</div>
+        <div class="bl-col-body">${items.map(card).join('') || `<p class="muted small">${t('backlog.nothing_here')}</p>`}</div>
       </section>`;
     }).join('')}</div>`;
   }
@@ -956,12 +956,12 @@
     const skipped = q?.skipped || [];
     box.classList.toggle('hidden', !n && !q?.error && !skipped.length);
     if (!n && !q?.error && !skipped.length) { box.innerHTML = ''; return; }
-    const mode = q.paused ? '<span class="badge warn">paused</span>' : '<span class="badge live">active</span>';
+    const mode = q.paused ? `<span class="badge warn">${t('backlog.paused')}</span>` : `<span class="badge live">${t('backlog.active')}</span>`;
     // issues taken out right before their start, with why (removing one dismisses it)
-    const skips = skipped.map((s) => `<span class="bl-skipped small"><span class="warn-text">Skipped #${s.number}: ${esc(s.reason)}</span>
-      <button class="link-btn small" type="button" data-unqueue="${s.number}" title="Dismiss">dismiss</button></span>`).join('');
+    const skips = skipped.map((s) => `<span class="bl-skipped small"><span class="warn-text">${t('backlog.skipped_number', { number: s.number })} ${esc(s.reason)}</span>
+      <button class="link-btn small" type="button" data-unqueue="${s.number}" title="${t('common.dismiss')}">${t('backlog.dismiss')}</button></span>`).join('');
     box.innerHTML = `
-      <span><b>Queue</b> ${mode} ${n ? `${n} run${n > 1 ? 's' : ''} waiting · next ${esc((q.items[0].issues || [q.items[0]]).map((x) => `#${x.number}`).join(', '))} (${esc(q.items[0].workflowName || q.items[0].workflow)})` : 'empty'}</span>
+      <span><b>${t('backlog.queue')}</b> ${mode} ${n ? `${n} run${n > 1 ? 's' : ''} waiting · next ${esc((q.items[0].issues || [q.items[0]]).map((x) => `#${x.number}`).join(', '))} (${esc(q.items[0].workflowName || q.items[0].workflow)})` : 'empty'}</span>
       ${skips}
       <span class="spacer"></span>
       <button class="btn sm${q.paused ? ' primary' : ' ghost'}" type="button" data-pause="${q.paused ? 'off' : 'on'}">${q.paused ? 'Resume' : 'Pause'}</button>`;
@@ -1168,7 +1168,7 @@
     const p = project();
     $b('#push-title').textContent = `Push ${l.ahead} commit${l.ahead === 1 ? '' : 's'} to origin/${l.base}`;
     $b('#push-message').textContent = `git push origin ${l.base} in ${l.repo || p?.folder || 'the project\'s repository'} (never forced).${l.issues?.length ? ` GitHub/GitLab closes ${issueRefs(l.issues)}.` : ''}`;
-    $b('#push-commits').innerHTML = (l.commits || []).map((c) => `<li><span class="mono">${esc(c.sha.slice(0, 8))}</span> ${esc(c.subject)}${c.issues.length ? ` <span class="muted">(closes ${esc(issueRefs(c.issues))})</span>` : ''}</li>`).join('');
+    $b('#push-commits').innerHTML = (l.commits || []).map((c) => `<li><span class="mono">${esc(c.sha.slice(0, 8))}</span> ${esc(c.subject)}${c.issues.length ? ` <span class="muted">${t('backlog.closes_issues', { issues: esc(issueRefs(c.issues)) })}</span>` : ''}</li>`).join('');
     $b('#push-error').textContent = '';
     bl.conflictFiles = null;
     $b('#btn-push-resolve').classList.add('hidden');
@@ -1302,13 +1302,13 @@
 
     const list = $b('#bl-list');
     if (!bl.projects.length) {
-      list.innerHTML = '<div class="empty-state"><b>No projects yet</b><p class="muted">Create a project with a repository (New project… in the header, or Projects in the menu) to see its issues here.</p></div>';
+      list.innerHTML = `<div class="empty-state"><b>${t('backlog.no_projects_yet')}</b><p class="muted">${t('backlog.create_a_project_with_a_repository')}</p></div>`;
     } else if (!p?.repo) {
-      list.innerHTML = '<div class="empty-state"><b>This project has no repository</b><p class="muted">Add a repository URL to the project in Projects (Edit) to sync its issues, or choose another project in the header.</p></div>';
+      list.innerHTML = `<div class="empty-state"><b>${t('backlog.this_project_has_no_repository')}</b><p class="muted">${t('backlog.add_a_repository_url_to_the')}</p></div>`;
     } else if (PLATFORMS[bl.platform]?.soon) {
-      list.innerHTML = `<div class="empty-state"><b>${esc(PLATFORMS[bl.platform].label)} sync is not available yet</b><p class="muted">Pick GitHub or GitLab.</p></div>`;
+      list.innerHTML = `<div class="empty-state"><b>${esc(PLATFORMS[bl.platform].label)} ${t('backlog.sync_is_not_available_yet')}</b><p class="muted">${t('backlog.pick_github_or_gitlab')}</p></div>`;
     } else if (!bl.data) {
-      list.innerHTML = bl.syncing ? '<p class="muted">Loading issues…</p>' : '<p class="muted">Not synced yet.</p>';
+      list.innerHTML = bl.syncing ? `<p class="muted">${t('backlog.loading_issues')}</p>` : `<p class="muted">${t('backlog.not_synced_yet')}</p>`;
     } else {
       list.innerHTML = bl.mode === 'roadmap' ? window.BacklogRoadmap.html(bl.data, render, { epic: bl.epic, epicOptions: epicChoices(board), showAll: bl.showAll, since: bl.since, release: bl.release, project: bl.projectId, synced: $b('#bl-synced').textContent }) :bl.mode === 'epics' ? renderEpics(issues) : bl.mode === 'kanban' ? renderKanban(board) : renderList(board);
       // the open item's "When it finishes" (#134); the next page when its "Loading…" row comes near (#268)
@@ -1338,25 +1338,25 @@
   // the Product Owner's drawer (backlog-po.js): inside the app shell, like the other drawers
   const PO_DRAWER = `
     <div id="po-backdrop" class="drawer-backdrop sup-backdrop hidden"></div>
-    <aside id="po-drawer" class="drawer sup-drawer po-drawer" aria-hidden="true" aria-label="Product Owner" data-testid="po-drawer">
+    <aside id="po-drawer" class="drawer sup-drawer po-drawer" aria-hidden="true" aria-label="${t('backlog.product_owner')}" data-testid="po-drawer">
       <div class="drawer-head">
         <div class="po-head">
           <span id="po-avatar" class="po-avatar" aria-hidden="true"></span>
           <div class="sup-head">
-            <h2 class="drawer-title">Product Owner</h2>
+            <h2 class="drawer-title">${t('backlog.product_owner')}</h2>
             <div id="po-for" class="po-for small" data-testid="po-for"></div>
             <div id="po-sub" class="muted small"></div>
           </div>
         </div>
         <div class="row">
-          <select id="po-calib-chip" class="po-calib-chip" aria-label="Calibration of the next answer"></select>
-          <select id="po-cost-chip" class="po-calib-chip" aria-label="Cost of the next answer"></select>
-          <button id="btn-po-settings" class="icon-btn" type="button" title="Calibrate the Product Owner" aria-label="Calibrate the Product Owner">
+          <select id="po-calib-chip" class="po-calib-chip" aria-label="${t('backlog.calibration_of_the_next_answer')}"></select>
+          <select id="po-cost-chip" class="po-calib-chip" aria-label="${t('backlog.cost_of_the_next_answer')}"></select>
+          <button id="btn-po-settings" class="icon-btn" type="button" title="${t('backlog.calibrate_the_product_owner')}" aria-label="${t('backlog.calibrate_the_product_owner')}">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h3M11 7h9M4 17h9M17 17h3" /><circle cx="9" cy="7" r="2" /><circle cx="15" cy="17" r="2" /></svg>
           </button>
-          <button id="btn-po-clear" class="btn sm ghost" type="button" title="Forget this project's conversation">Clear</button>
-          <button class="icon-btn" type="button" data-agents-window="product-owner" data-testid="agent-chat-open-window" title="Open in a window (Ctrl+Shift+A)" aria-label="Open the Product Owner in a window"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="14" height="14" rx="2" /><path d="M9 3h12v12M21 3l-9 9" /></svg></button>
-          <button id="btn-po-close" class="icon-btn" title="Close (Esc)">
+          <button id="btn-po-clear" class="btn sm ghost" type="button" title="${t('backlog.forget_this_project_s_conversation')}">${t('backlog.clear_2')}</button>
+          <button class="icon-btn" type="button" data-agents-window="product-owner" data-testid="agent-chat-open-window" title="${t('backlog.open_in_a_window_ctrl_shift')}" aria-label="${t('backlog.open_the_product_owner_in_a')}"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="14" height="14" rx="2" /><path d="M9 3h12v12M21 3l-9 9" /></svg></button>
+          <button id="btn-po-close" class="icon-btn" title="${t('backlog.close_esc')}">
             <svg viewBox="0 0 24 24" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg>
           </button>
         </div>
@@ -1365,68 +1365,68 @@
       <div id="po-chat" class="agent-chat-flat">
       <div id="po-log" class="drawer-body po-log"></div>
       <div class="drawer-foot po-foot">
-        <div id="po-sim" class="po-sim hidden" role="group" aria-label="Simulated scenario" title="Simulation only, not part of the app: forces the simulated Product Owner's next answers">
-          <span class="po-sim-label">Simulated scenario</span><span id="po-scenario" class="po-sim-opts"></span>
+        <div id="po-sim" class="po-sim hidden" role="group" aria-label="${t('backlog.simulated_scenario')}" title="${t('backlog.simulation_only_not_part_of_the')}">
+          <span class="po-sim-label">${t('backlog.simulated_scenario')}</span><span id="po-scenario" class="po-sim-opts"></span>
         </div>
-        <div id="po-mode" class="seg sm" role="group" aria-label="What to do with the Product Owner">
-          <button type="button" data-po-mode="plan">Plan the backlog</button>
-          <button type="button" data-po-mode="issue">Register an issue</button>
+        <div id="po-mode" class="seg sm" role="group" aria-label="${t('backlog.what_to_do_with_the_product')}">
+          <button type="button" data-po-mode="plan">${t('backlog.plan_the_backlog')}</button>
+          <button type="button" data-po-mode="issue">${t('backlog.register_an_issue')}</button>
         </div>
         <div id="po-chips" class="chips po-chips"></div>
         <!-- #235: the workflow a plan question is for, and that workflow's own options -->
         <div id="po-wf-row" class="po-wf-row hidden">
-          <label class="po-wf-pick small"><span class="muted">Plan with</span>
-            <select id="po-workflow" class="po-wf" data-testid="po-workflow" aria-label="Workflow the Product Owner plans with"></select>
+          <label class="po-wf-pick small"><span class="muted">${t('backlog.plan_with')}</span>
+            <select id="po-workflow" class="po-wf" data-testid="po-workflow" aria-label="${t('backlog.workflow_the_product_owner_plans_with')}"></select>
           </label>
           <div id="po-workflow-options" class="po-wf-options" data-testid="po-workflow-options"></div>
         </div>
         <div id="po-files" class="po-files hidden"></div>
-        <div id="po-attached" class="po-files po-attached hidden" aria-label="Attached issues"></div>
+        <div id="po-attached" class="po-files po-attached hidden" aria-label="${t('backlog.attached_issues')}"></div>
         <!-- #234: the turn in flight, where the click happened; a click with no project says why nothing was sent -->
         <div id="po-working" class="po-working small hidden" data-testid="po-working" role="status" aria-live="polite"></div>
         <p id="po-notice" class="error small hidden" data-testid="po-notice" role="alert"></p>
         <div class="row po-ask">
-          <textarea id="po-question" rows="2" placeholder="Ask about the backlog: which issues should go first?" aria-label="Message to Product Owner"></textarea>
-          <button id="btn-po-attach" class="icon-btn hidden" type="button" title="Attach screenshots or files (you can also paste or drop them)" aria-label="Attach files">
+          <textarea id="po-question" rows="2" placeholder="${t('backlog.ask_about_the_backlog_which_issues')}" aria-label="${t('backlog.message_to_product_owner')}"></textarea>
+          <button id="btn-po-attach" class="icon-btn hidden" type="button" title="${t('backlog.attach_screenshots_or_files_you_can')}" aria-label="${t('backlog.attach_files')}">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5l-8.5 8.5a5 5 0 0 1-7-7L14 4.5a3.5 3.5 0 0 1 5 5L10.5 18a2 2 0 0 1-3-3L15 7.5" /></svg>
           </button>
-          <button id="btn-po-ask" class="btn primary" type="button">Ask</button>
+          <button id="btn-po-ask" class="btn primary" type="button">${t('backlog.ask')}</button>
           <input id="po-file-input" type="file" multiple hidden />
         </div>
         <p id="po-note" class="muted small"></p>
       </div>
       </div>
       <!-- #189: the Product Owner's settings (backlog-po-settings.js), over the conversation -->
-      <div id="po-settings" class="po-settings hidden" role="region" aria-label="Calibrate the Product Owner">
+      <div id="po-settings" class="po-settings hidden" role="region" aria-label="${t('backlog.calibrate_the_product_owner')}">
         <div class="po-settings-head">
-          <button id="btn-po-settings-back" class="icon-btn" type="button" title="Back to the conversation" aria-label="Back to the conversation">
+          <button id="btn-po-settings-back" class="icon-btn" type="button" title="${t('backlog.back_to_the_conversation')}" aria-label="${t('backlog.back_to_the_conversation')}">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6" /></svg>
           </button>
-          <h2 class="drawer-title">Calibrate the Product Owner</h2>
+          <h2 class="drawer-title">${t('backlog.calibrate_the_product_owner')}</h2>
         </div>
         <div class="po-settings-body">
           <div class="field">
-            <label for="po-set-calibration">Speed ↔ Quality</label>
+            <label for="po-set-calibration">${t('backlog.speed_quality')}</label>
             <div id="po-set-calibration-box"></div>
-            <p class="hint">What this changes: how many runs share a stage, how big a run gets, which issues stop for your look and where an issue goes, in every plan answer and live roadmap refill.</p>
+            <p class="hint">${t('backlog.what_this_changes_how_many_runs')}</p>
           </div>
           <div class="field">
-            <label for="po-set-cost">Cost: Economy ↔ Generous</label>
+            <label for="po-set-cost">${t('backlog.cost_economy_generous')}</label>
             <div id="po-set-cost-box"></div>
-            <p class="hint">What this changes: how many issues share a run, which tests and screenshots the planned items take and, where a workflow allows it, cheaper agents. When it disagrees with Speed ↔ Quality, cost wins.</p>
+            <p class="hint">${t('backlog.what_this_changes_how_many_issues')}</p>
           </div>
           <div class="row">
             <div class="field">
-              <label for="po-set-model">Model <span class="muted">(Claude Code)</span></label>
-              <input type="text" id="po-set-model" list="po-set-model-list" maxlength="80" placeholder="claude-opus-5-5" />
+              <label for="po-set-model">${t('backlog.model')} <span class="muted">${t('backlog.claude_code')}</span></label>
+              <input type="text" id="po-set-model" list="po-set-model-list" maxlength="80" placeholder="${t('backlog.claude_opus_5_5')}" />
               <datalist id="po-set-model-list"></datalist>
             </div>
             <div class="field">
-              <label>Effort</label>
-              <div id="po-set-effort" class="seg sm" role="group" aria-label="Effort"></div>
+              <label>${t('backlog.effort')}</label>
+              <div id="po-set-effort" class="seg sm" role="group" aria-label="${t('backlog.effort')}"></div>
             </div>
           </div>
-          <p id="po-set-status" class="po-settings-status muted small">Applies to the next answer.</p>
+          <p id="po-set-status" class="po-settings-status muted small">${t('backlog.applies_to_the_next_answer')}</p>
         </div>
       </div>
     </aside>
@@ -1594,43 +1594,43 @@
       <section id="view-backlog" class="view hidden">
         <div class="page-head">
           <div>
-            <h1 id="bl-title">Backlog</h1>
-            <p class="muted small"><span id="bl-hint">A project's issues, synced from its git platform.</span> The last sync is kept in <span id="backlog-dir" class="mono"></span></p>
+            <h1 id="bl-title">${t('backlog.backlog')}</h1>
+            <p class="muted small"><span id="bl-hint">${t('backlog.a_project_s_issues_synced_from')}</span> ${t('backlog.the_last_sync_is_kept_in')} <span id="backlog-dir" class="mono"></span></p>
           </div>
           <div class="row">
-            <select id="bl-platform" aria-label="Platform"></select>
-            <button id="btn-bl-sync" class="btn primary nowrap">Sync</button>
-            <button id="btn-bl-new-issue" class="btn ghost nowrap" type="button" title="Describe a problem or an idea in a few words: the issue-tracker workflow analyses the code, rates impact and complexity, drafts the issue and files it once you approve">New issue…</button>
+            <select id="bl-platform" aria-label="${t('backlog.platform')}"></select>
+            <button id="btn-bl-sync" class="btn primary nowrap">${t('backlog.sync')}</button>
+            <button id="btn-bl-new-issue" class="btn ghost nowrap" type="button" title="${t('backlog.describe_a_problem_or_an_idea')}">${t('backlog.new_issue')}</button>
           </div>
         </div>
-        <div id="bl-tabs" class="tabs page-tabs" role="tablist" aria-label="Backlog">
-          <button type="button" class="tab" role="tab" data-bl-tab="board" title="The issues as a list or a kanban">Board</button>
-          <button type="button" class="tab" role="tab" data-bl-tab="epics" data-mode="epics" title="The epics: themes of issues, with their progress and members">Epics</button>
+        <div id="bl-tabs" class="tabs page-tabs" role="tablist" aria-label="${t('backlog.backlog')}">
+          <button type="button" class="tab" role="tab" data-bl-tab="board" title="${t('backlog.the_issues_as_a_list_or')}">${t('backlog.board')}</button>
+          <button type="button" class="tab" role="tab" data-bl-tab="epics" data-mode="epics" title="${t('backlog.the_epics_themes_of_issues_with')}">${t('backlog.epics')}</button>
         </div>
         <div id="bl-alerts" class="hidden"></div>
         <div class="pr-toolbar" id="bl-toolbar" data-testid="filter-row">
-          <span id="bl-mode" class="seg sm" role="group" aria-label="Board view">
-            <button type="button" data-mode="list">List</button>
-            <button type="button" data-mode="kanban">Kanban</button>
+          <span id="bl-mode" class="seg sm" role="group" aria-label="${t('backlog.board_view')}">
+            <button type="button" data-mode="list">${t('backlog.list')}</button>
+            <button type="button" data-mode="kanban">${t('backlog.kanban')}</button>
           </span>
           <span id="bl-count" class="small muted" data-testid="backlog-count"></span>
           <div id="bl-filters" class="chips"></div>
-          <input type="text" id="bl-search" placeholder="Search issues, labels…" aria-label="Search" />
+          <input type="text" id="bl-search" placeholder="${t('backlog.search_issues_labels')}" aria-label="${t('backlog.search')}" />
           <div id="bl-labels-wrap" class="bl-labels-wrap">
-            <button id="btn-bl-labels" class="btn sm ghost" type="button" aria-haspopup="true" title="Filter by labels. Labels of different groups (the prefix before ':') must all match; labels of the same group match any of them, e.g. bug AND (complexity:1 OR complexity:2). Whole names, any case.">Labels</button>
-            <div id="bl-labels-pop" class="bl-labels-pop hidden" role="menu" aria-label="Labels"></div>
+            <button id="btn-bl-labels" class="btn sm ghost" type="button" aria-haspopup="true" title="${t('backlog.filter_by_labels_labels_of_different')}">${t('backlog.labels')}</button>
+            <div id="bl-labels-pop" class="bl-labels-pop hidden" role="menu" aria-label="${t('backlog.labels')}"></div>
           </div>
           <span id="bl-label-active" class="bl-label-active"></span>
-          <select id="bl-epic" class="hidden" aria-label="Epic" title="Show the issues of one epic, or those in no epic"></select>
-          <select id="bl-sort" aria-label="Sort" title="Sort by the triage labels (impact:1-5, complexity:1-5); issues without them go last">
-            <option value="updated">Recently updated</option>
-            <option value="impact">Impact (highest first)</option>
-            <option value="complexity">Complexity (smallest first)</option>
+          <select id="bl-epic" class="hidden" aria-label="${t('backlog.epic')}" title="${t('backlog.show_the_issues_of_one_epic')}"></select>
+          <select id="bl-sort" aria-label="${t('backlog.sort')}" title="${t('backlog.sort_by_the_triage_labels_impact')}">
+            <option value="updated">${t('backlog.recently_updated')}</option>
+            <option value="impact">${t('backlog.impact_highest_first')}</option>
+            <option value="complexity">${t('backlog.complexity_smallest_first')}</option>
           </select>
-          <button id="btn-bl-assign" class="btn sm primary hidden" type="button">Assign workflow…</button>
-          <button id="btn-bl-send-po" class="btn sm ghost hidden" type="button" title="Ask the Product Owner about the selected issues before planning them">Send to Product Owner</button>
-          <button id="btn-bl-archive" class="btn sm ghost hidden" type="button" data-testid="backlog-archive-selection">Archive</button>
-          <button id="btn-bl-clear" class="btn sm ghost hidden" type="button">Clear selection</button>
+          <button id="btn-bl-assign" class="btn sm primary hidden" type="button">${t('backlog.assign_workflow')}</button>
+          <button id="btn-bl-send-po" class="btn sm ghost hidden" type="button" title="${t('backlog.ask_the_product_owner_about_the')}">${t('backlog.send_to_product_owner')}</button>
+          <button id="btn-bl-archive" class="btn sm ghost hidden" type="button" data-testid="backlog-archive-selection">${t('backlog.archive')}</button>
+          <button id="btn-bl-clear" class="btn sm ghost hidden" type="button">${t('backlog.clear_selection')}</button>
           <span class="spacer"></span>
           <span id="bl-synced" class="muted small"></span>
         </div>
@@ -1638,96 +1638,96 @@
         <div id="bl-queue" class="bl-queue hidden"></div>
         <p id="bl-error" class="error small"></p>
         <div id="bl-list" class="pr-list" data-testid="backlog-list"></div>
-        <button id="btn-bl-po" class="po-fab" type="button" title="Ask the Product Owner: which issues to run together, which not, in what order" aria-label="Product Owner"></button>
+        <button id="btn-bl-po" class="po-fab" type="button" title="${t('backlog.ask_the_product_owner_which_issues')}" aria-label="${t('backlog.product_owner')}"></button>
       </section>`,
     modals: `
   <div id="unqueue-modal" class="modal hidden">
     <div class="modal-card">
-      <h3>Remove from a grouped run</h3>
+      <h3>${t('backlog.remove_from_a_grouped_run')}</h3>
       <p id="unqueue-message" class="muted"></p>
       <div class="modal-actions">
-        <button type="button" id="btn-unqueue-keep" class="btn ghost">Keep it</button>
-        <button type="button" id="btn-unqueue-one" class="btn">Remove it from the group</button>
-        <button type="button" id="btn-unqueue-all" class="btn danger-solid">Cancel the group</button>
+        <button type="button" id="btn-unqueue-keep" class="btn ghost">${t('backlog.keep_it')}</button>
+        <button type="button" id="btn-unqueue-one" class="btn">${t('backlog.remove_it_from_the_group')}</button>
+        <button type="button" id="btn-unqueue-all" class="btn danger-solid">${t('backlog.cancel_the_group')}</button>
       </div>
     </div>
   </div>
   <div id="push-modal" class="modal hidden">
     <div class="modal-card">
-      <h3 id="push-title">Push the local merges</h3>
+      <h3 id="push-title">${t('backlog.push_the_local_merges')}</h3>
       <p id="push-message" class="muted small"></p>
       <ul id="push-commits" class="bl-push-commits small"></ul>
       <p id="push-error" class="error small"></p>
       <div class="modal-actions">
-        <label id="push-resolve-mock-wrap" class="check small hidden" title="Developer mode: the run is simulated, no CLI is called"><input type="checkbox" id="push-resolve-mock" /><span>Simulate</span></label>
-        <button type="button" id="btn-push-cancel" class="btn ghost">Cancel</button>
-        <button type="button" id="btn-push-resolve" class="btn primary hidden" title="Start a run of the local workflow: its developer merges origin into the local commits and resolves the conflict">Resolve in a run</button>
-        <button type="button" id="btn-push-update" class="btn hidden">Update and push</button>
-        <button type="button" id="btn-push-ok" class="btn primary">Push</button>
+        <label id="push-resolve-mock-wrap" class="check small hidden" title="${t('backlog.developer_mode_the_run_is_simulated')}"><input type="checkbox" id="push-resolve-mock" /><span>${t('backlog.simulate')}</span></label>
+        <button type="button" id="btn-push-cancel" class="btn ghost">${t('common.cancel')}</button>
+        <button type="button" id="btn-push-resolve" class="btn primary hidden" title="${t('backlog.start_a_run_of_the_local')}">${t('backlog.resolve_in_a_run')}</button>
+        <button type="button" id="btn-push-update" class="btn hidden">${t('backlog.update_and_push')}</button>
+        <button type="button" id="btn-push-ok" class="btn primary">${t('backlog.push')}</button>
       </div>
     </div>
   </div>
   <div id="cut-line-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="cut-line-title" data-testid="cut-line-modal">
     <form id="cut-line-form" class="modal-card">
-      <h3 id="cut-line-title">Release here</h3>
-      <p class="muted small">A cut line after this stage. When the roadmap reaches it, a release run checks the whole unit and E2E suites, then you Ship or Hold; the stages after the line wait for it.</p>
+      <h3 id="cut-line-title">${t('backlog.release_here')}</h3>
+      <p class="muted small">${t('backlog.a_cut_line_after_this_stage')}</p>
       <div class="field">
-        <label for="cut-line-name">Release name</label>
+        <label for="cut-line-name">${t('backlog.release_name')}</label>
         <input type="text" id="cut-line-name" placeholder="e.g. v1.4" autocomplete="off" />
-        <div class="hint">A name or a version: Ship tags the release with it.</div>
+        <div class="hint">${t('backlog.a_name_or_a_version_ship')}</div>
       </div>
       <p id="cut-line-error" class="error small"></p>
       <div class="modal-actions">
-        <button type="button" id="btn-cut-line-cancel" class="btn ghost">Cancel</button>
-        <button type="submit" id="btn-cut-line-ok" class="btn primary">Add cut line</button>
+        <button type="button" id="btn-cut-line-cancel" class="btn ghost">${t('common.cancel')}</button>
+        <button type="submit" id="btn-cut-line-ok" class="btn primary">${t('backlog.add_cut_line')}</button>
       </div>
     </form>
   </div>
   <div id="rm-versions-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="rm-versions-title">
     <div class="modal-card">
-      <h3 id="rm-versions-title">Restore an earlier version</h3>
-      <p class="muted small">The roadmap as it was before each of your last edits (the last 20 are kept), newest first. Restore puts the stages, their order and their names back; items that started since keep their runs, items added since stay, and no run is stopped.</p>
+      <h3 id="rm-versions-title">${t('backlog.restore_an_earlier_version')}</h3>
+      <p class="muted small">${t('backlog.the_roadmap_as_it_was_before')}</p>
       <ul id="rm-versions" class="rm-versions" data-testid="roadmap-versions"></ul>
       <p id="rm-versions-error" class="error small" role="alert"></p>
       <div class="modal-actions">
-        <button type="button" id="btn-rm-versions-close" class="btn ghost">Close</button>
+        <button type="button" id="btn-rm-versions-close" class="btn ghost">${t('common.close')}</button>
       </div>
     </div>
   </div>
   <div id="assign-modal" class="modal hidden">
     <form id="assign-form" class="modal-card">
-      <h3 id="assign-title">Assign a workflow</h3>
+      <h3 id="assign-title">${t('backlog.assign_a_workflow')}</h3>
       <div class="assign-body">
-        <ul id="assign-issues" class="assign-issues" aria-label="Issues"></ul>
+        <ul id="assign-issues" class="assign-issues" aria-label="${t('backlog.issues')}"></ul>
         <div id="assign-busy" class="bl-busy hidden"></div>
         <fieldset id="assign-grouping" class="bl-grouping hidden">
-          <legend class="small">Send them as</legend>
-          <label class="check"><input type="radio" name="assign-group" value="separate" checked /><span>Separate runs: one per issue (one branch and one PR/MR each), in the order selected</span></label>
-          <label class="check"><input type="radio" name="assign-group" value="group" /><span>One run for all: one branch and one PR/MR that closes every issue</span></label>
+          <legend class="small">${t('backlog.send_them_as')}</legend>
+          <label class="check"><input type="radio" name="assign-group" value="separate" checked /><span>${t('backlog.separate_runs_one_per_issue_one')}</span></label>
+          <label class="check"><input type="radio" name="assign-group" value="group" /><span>${t('backlog.one_run_for_all_one_branch')}</span></label>
         </fieldset>
         <div class="field">
-          <label for="assign-workflow">Workflow</label>
+          <label for="assign-workflow">${t('backlog.workflow')}</label>
           <select id="assign-workflow"></select>
           <div id="assign-wf-desc" class="hint"></div>
-          <details id="assign-wf-about" class="assign-about"><summary>About this workflow</summary><p id="assign-wf-about-text"></p></details>
+          <details id="assign-wf-about" class="assign-about"><summary>${t('backlog.about_this_workflow')}</summary><p id="assign-wf-about-text"></p></details>
           <div id="assign-proposed" class="small hidden"></div>
         </div>
         <fieldset id="assign-settings" class="assign-settings">
-          <legend>Settings</legend>
+          <legend>${t('backlog.settings')}</legend>
           <div id="assign-inputs" class="wi-grid" data-wi-scope></div>
         </fieldset>
-        <details id="assign-agents" class="adv hidden"><summary>Agents</summary><div id="assign-agents-list"></div></details>
+        <details id="assign-agents" class="adv hidden"><summary>${t('backlog.agents')}</summary><div id="assign-agents-list"></div></details>
         <div id="assign-chain"></div>
         <div id="assign-pipeline" class="drawer-pipeline hidden"></div>
-        <label class="check dev-only"><input type="checkbox" id="assign-mock" /><span>Simulation (no CLI is called, nothing is spent)</span></label>
+        <label class="check dev-only"><input type="checkbox" id="assign-mock" /><span>${t('backlog.simulation_no_cli_is_called_nothing')}</span></label>
       </div>
       <div class="assign-foot">
         <p id="assign-note" class="small"></p>
         <p id="assign-error" class="error small"></p>
         <div class="modal-actions">
-          <button type="button" id="btn-assign-cancel" class="btn ghost">Cancel</button>
-          <button type="button" id="btn-assign-roadmap" class="btn ghost" title="Plan it instead: a new stage at the end of the roadmap, started with the roadmap">Add to roadmap</button>
-          <button type="submit" id="btn-assign-ok" class="btn primary">Start</button>
+          <button type="button" id="btn-assign-cancel" class="btn ghost">${t('common.cancel')}</button>
+          <button type="button" id="btn-assign-roadmap" class="btn ghost" title="${t('backlog.plan_it_instead_a_new_stage')}">${t('backlog.add_to_roadmap')}</button>
+          <button type="submit" id="btn-assign-ok" class="btn primary">${t('backlog.start')}</button>
         </div>
       </div>
     </form>

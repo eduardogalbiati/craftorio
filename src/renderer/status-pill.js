@@ -75,7 +75,7 @@
 
   function resumedLink(resumedBy) {
     if (!resumedBy?.runId) return '';
-    return ` <a href="#" class="badge" role="link" data-testid="run-resumed-link" data-run="${esc(resumedBy.runId)}" title="${esc(`Resumed as run ${resumedBy.runId}: open it`)}">Resumed → ${esc(statusLabel(resumedBy.status).toLowerCase())}</a>`;
+    return ` <a href="#" class="badge" role="link" data-testid="run-resumed-link" data-run="${esc(resumedBy.runId)}" title="${esc(`Resumed as run ${resumedBy.runId}: open it`)}">${t('status_pill.resumed')} ${esc(statusLabel(resumedBy.status).toLowerCase())}</a>`;
   }
 
   const api = {

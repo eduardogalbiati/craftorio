@@ -24,7 +24,7 @@
     if (b.aggregate) {
       return `${head('Small files', plural(b.aggregate, 'files'), { text: districtName(b.district) })}
         <dl class="r3d-rows">${row('Lines', b.lines.toLocaleString('en-US'))}${row('Most commits', String(b.churn))}</dl>
-        <div class="r3d-note">Over 5,000 files the smallest are drawn as one block per district.</div>`;
+        <div class="r3d-note">${t('project_city_cards.over_5_000_files_the_smallest')}</div>`;
     }
     let pill = '';
     try { pill = window.CityLayout.colourBy(layout, colour, { light }).colours[i]; } catch { /* no colour: the pill keeps the theme's */ }
@@ -39,7 +39,7 @@
         ${row('District', districtName(b.district))}${row('Zone', zoneName(b.zone))}
         ${edges ? row('Arcs', edges) : `${row('Requires', plural(rel.requires.length, 'files'))}${row('Required by', plural(rel.requiredBy.length, 'files'))}`}
         ${b.lastChange ? row('Last change', String(b.lastChange).slice(0, 10)) : ''}</dl>
-      ${pinned ? '<button type="button" class="r3d-primary" data-pc-open-facts data-testid="project-city-open-facts">Open in Facts</button>' : ''}`;
+      ${pinned ? `<button type="button" class="r3d-primary" data-pc-open-facts data-testid="project-city-open-facts">${t('project_city_cards.open_in_facts')}</button>` : ''}`;
   }
 
   /** The card of `target` ({ kind, id }), see the header. */

@@ -33,10 +33,10 @@
 
   function fields({ testid = 'date-range', from = '', to = '', fromAttrs = '', toAttrs = '', presets = false, active = null } = {}) {
     const buttons = presets
-      ? `<div class="seg sm date-range-presets" role="group" aria-label="Quick range">${PRESETS.map((p) => `<button type="button" data-date-preset="${p.id}" class="${p.id === active ? 'active' : ''}" aria-pressed="${p.id === active}">${esc(p.label)}</button>`).join('')}</div>`
+      ? `<div class="seg sm date-range-presets" role="group" aria-label="${t('date_range.quick_range')}">${PRESETS.map((p) => `<button type="button" data-date-preset="${p.id}" class="${p.id === active ? 'active' : ''}" aria-pressed="${p.id === active}">${esc(p.label)}</button>`).join('')}</div>`
       : '';
     const field = (label, which, value, attrs) => `<label class="date-range-field small muted">${label} <input type="date" data-testid="date-range-${which}" ${attrs} value="${esc(value)}" /></label>`;
-    return `<div class="date-range" data-testid="${esc(testid)}" role="group" aria-label="Date range">${buttons}${field('From', 'from', from, fromAttrs)}${field('To', 'to', to, toAttrs)}</div>`;
+    return `<div class="date-range" data-testid="${esc(testid)}" role="group" aria-label="${t('date_range.date_range')}">${buttons}${field('From', 'from', from, fromAttrs)}${field('To', 'to', to, toAttrs)}</div>`;
   }
 
   const api = {

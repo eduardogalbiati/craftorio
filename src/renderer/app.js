@@ -942,7 +942,7 @@ function renderNavRuns() {
     return `<button type="button" class="nav-run-item st-${gate ? 'waiting' : runSessionStatus(r.status)}${r.id === state.runId ? ' selected' : ''}" data-run="${esc(r.id)}"${gate ? ' data-gate="1"' : ''} title="${esc(refs ? `${title} · ${refs}` : title)}">
       <span class="status-dot"></span>
       <span class="nav-run-text"><span class="nav-run-title">${esc(runTitle(r))}</span><span class="nav-run-sub">${refs ? `<span class="nav-run-issues">${esc(refs)}</span>` : ''}<span class="nav-run-at">${esc(at)}</span></span>${r.workflow || runPr(r) ? `<span class="nav-run-sub">${r.workflow ? `<span class="nav-run-wf">${esc(r.workflow.replace(/\.ya?ml$/i, ''))}</span>` : ''}${prBadge(r, { compact: true })}</span>` : ''}</span>
-      ${approvals.size ? `<span class="nav-gates" title="Approval waiting">${approvals.size}</span>` : ''}
+      ${approvals.size ? `<span class="nav-gates" title="${t('app.approval_waiting')}">${approvals.size}</span>` : ''}
     </button>`;
   }).join('');
   if (box.dataset.html === html) return;

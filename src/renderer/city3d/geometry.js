@@ -61,16 +61,9 @@ export function roundedMaterial(radius, params) {
   m.onBeforeCompile = (shader) => {
     shader.vertexShader = shader.vertexShader
       .replace('#include <beginnormal_vertex>', `#include <beginnormal_vertex>
-#ifdef USE_INSTANCING
-  vec3 rbScale = vec3(length(instanceMatrix[0].xyz), length(instanceMatrix[1].xyz), length(instanceMatrix[2].xyz));
-  objectNormal *= rbScale;
-#endif`)
+${t('city3d_geometry.ifdef_use_instancing_vec3_rbscale_vec3')}`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
-#ifdef USE_INSTANCING
-  float rbRad = min(${R}, 0.45 * min(rbScale.x, min(rbScale.y, rbScale.z)));
-  vec3 rbCore = sign(position) * min(abs(position), vec3(${core}));
-  transformed = (rbCore / ${core} * (0.5 * rbScale - rbRad) + (position - rbCore) * (rbRad / ${r})) / max(rbScale, vec3(1e-4));
-#endif`);
+${t('city3d_geometry.ifdef_use_instancing_float_rbrad_min', { R, core, core2: core, r })}`);
   };
   m.customProgramCacheKey = () => `city-rounded-${R}`;
   return m;

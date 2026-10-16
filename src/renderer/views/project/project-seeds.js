@@ -49,46 +49,46 @@
         <b class="seed-name">${esc(row.name)}</b>
         <span class="badge ${cls}" data-testid="seed-status-${id}">${esc(status)}</span>
         <span class="spacer"></span>
-        <button type="button" class="btn sm primary" data-seed-run="${id}" data-testid="seed-run-${id}" ${busy ? 'disabled' : ''}>Run</button>
-        <button type="button" class="btn sm ghost" data-seed-open="${id}" data-testid="seed-open-${id}" ${row.lastRun ? '' : 'disabled'}>Open result</button>
-        <button type="button" class="btn sm ghost" data-seed-history="${id}" data-testid="seed-history-${id}" aria-expanded="${!!history}">History</button>
-        <button type="button" class="btn sm ghost" data-seed-make-tool="${id}" data-testid="seed-make-tool-${id}">Make it a tool</button>
+        <button type="button" class="btn sm primary" data-seed-run="${id}" data-testid="seed-run-${id}" ${busy ? 'disabled' : ''}>${t('project_seeds.run')}</button>
+        <button type="button" class="btn sm ghost" data-seed-open="${id}" data-testid="seed-open-${id}" ${row.lastRun ? '' : 'disabled'}>${t('project_seeds.open_result')}</button>
+        <button type="button" class="btn sm ghost" data-seed-history="${id}" data-testid="seed-history-${id}" aria-expanded="${!!history}">${t('project_seeds.history')}</button>
+        <button type="button" class="btn sm ghost" data-seed-make-tool="${id}" data-testid="seed-make-tool-${id}">${t('project_seeds.make_it_a_tool')}</button>
       </div>
       <div class="small muted seed-summary" title="${esc(row.summary)}">${esc(row.summary)}</div>
       <div class="small muted">${row.lastRun ? `Last run ${esc(shortDate(row.lastRun.date))} · ${esc(costText(row.lastRun))}` : `Cost: ${esc(row.cost || 'one Oracle turn')}`}
         · <button type="button" class="link-btn" data-seed-tool-edit="${id}" data-testid="seed-tool-edit-${id}">${row.tool ? `Tool: <span class="mono">${esc(row.tool)}</span>` : 'Tool command'}</button></div>
       ${editing ? `<div class="seed-tool-edit" data-testid="seed-tool-form-${id}">
-        <label class="small" for="seed-tool-input-${id}">The command that prints the seed's JSON model, run in the project's folder (empty: run the Oracle)</label>
-        <input type="text" id="seed-tool-input-${id}" class="mono" data-seed-tool-input="${id}" value="${esc(row.tool || '')}" spellcheck="false" placeholder="node tools/${id}.js --json" />
-        <div class="row"><button type="button" class="btn sm primary" data-seed-tool-save="${id}">Save</button><button type="button" class="btn sm ghost" data-seed-tool-cancel="${id}">Cancel</button></div>
+        <label class="small" for="seed-tool-input-${id}">${t('project_seeds.the_command_that_prints_the_seed')}</label>
+        <input type="text" id="seed-tool-input-${id}" class="mono" data-seed-tool-input="${id}" value="${esc(row.tool || '')}" spellcheck="false" placeholder="${t('project_seeds.node_tools_id_js_json', { id })}" />
+        <div class="row"><button type="button" class="btn sm primary" data-seed-tool-save="${id}">${t('common.save')}</button><button type="button" class="btn sm ghost" data-seed-tool-cancel="${id}">${t('common.cancel')}</button></div>
       </div>` : ''}
       ${note ? `<div class="small" role="status" data-testid="seed-note-${id}">${note}</div>` : ''}
-      ${history ? `<ul class="seed-history" data-testid="seed-history-list-${id}">${history.length ? history.map((h) => `<li class="row small"><span>${esc(shortDate(h.date))}</span><span class="badge">${esc(h.source)}</span><span class="muted">${esc(costText(h))}</span><button type="button" class="link-btn" data-seed-open="${id}" data-seed-date="${esc(h.date)}">Open</button></li>`).join('') : '<li class="small muted">No run yet.</li>'}</ul>` : ''}
+      ${history ? `<ul class="seed-history" data-testid="seed-history-list-${id}">${history.length ? history.map((h) => `<li class="row small"><span>${esc(shortDate(h.date))}</span><span class="badge">${esc(h.source)}</span><span class="muted">${esc(costText(h))}</span><button type="button" class="link-btn" data-seed-open="${id}" data-seed-date="${esc(h.date)}">${t('project_seeds.open')}</button></li>`).join('') : `<li class="small muted">${t('project_seeds.no_run_yet')}</li>`}</ul>` : ''}
     </li>`;
   }
 
   function frameHtml() {
     const o = cur.open;
     if (!o) return '';
-    if (o.error) return `<div class="usage-unavailable" role="alert">Could not open the result: ${esc(o.error)}</div>`;
-    if (!o.html) return '<p class="small muted" role="status">Opening the result…</p>';
+    if (o.error) return `<div class="usage-unavailable" role="alert">${t('project_seeds.could_not_open_the_result')} ${esc(o.error)}</div>`;
+    if (!o.html) return `<p class="small muted" role="status">${t('project_seeds.opening_the_result')}</p>`;
     return `<div class="seed-result" data-testid="seed-result">
-      <div class="row arch-finding-head"><b>${esc(o.name)}</b><span class="muted small">${esc(shortDate(o.date))}</span><span class="spacer"></span><button type="button" class="btn sm ghost" data-seed-close>Close</button></div>
-      <iframe class="seed-frame" data-testid="seed-frame" title="${esc(o.name)} result" sandbox="" referrerpolicy="no-referrer" srcdoc="${esc(framed(o.html))}"></iframe>
+      <div class="row arch-finding-head"><b>${esc(o.name)}</b><span class="muted small">${esc(shortDate(o.date))}</span><span class="spacer"></span><button type="button" class="btn sm ghost" data-seed-close>${t('common.close')}</button></div>
+      <iframe class="seed-frame" data-testid="seed-frame" title="${t('project_seeds.name_result', { name: esc(o.name) })}" sandbox="" referrerpolicy="no-referrer" srcdoc="${esc(framed(o.html))}"></iframe>
     </div>`;
   }
 
   function render() {
     if (!cur?.box) return;
     const body = cur.error
-      ? `<div class="usage-unavailable" role="alert">Could not read the seeds: ${esc(cur.error)}</div>`
-      : !cur.rows ? '<p class="small muted" role="status">Loading the seeds…</p>'
-        : !cur.rows.length ? '<div class="empty-state"><b>No analysis seed</b><p class="muted">Add one under the workspace\'s seeds/ folder (seeds/&lt;name&gt;/seed.md).</p></div>'
+      ? `<div class="usage-unavailable" role="alert">${t('project_seeds.could_not_read_the_seeds')} ${esc(cur.error)}</div>`
+      : !cur.rows ? `<p class="small muted" role="status">${t('project_seeds.loading_the_seeds')}</p>`
+        : !cur.rows.length ? `<div class="empty-state"><b>${t('project_seeds.no_analysis_seed')}</b><p class="muted">${t('project_seeds.add_one_under_the_workspace_s')}</p></div>`
           : `<ul class="arch-findings">${cur.rows.map(rowHtml).join('')}</ul>`;
     // the tool command being typed survives a re-render
     const draft = cur.editing ? cur.box.querySelector(`[data-seed-tool-input="${cur.editing}"]`)?.value : undefined;
-    cur.box.innerHTML = `<section class="seeds" data-testid="seeds-section" aria-label="Seeds">
-      <h3 class="arch-sub">Seeds <span class="muted small">analyses the Oracle runs read-only on this project</span></h3>
+    cur.box.innerHTML = `<section class="seeds" data-testid="seeds-section" aria-label="${t('project_seeds.seeds')}">
+      <h3 class="arch-sub">${t('project_seeds.seeds')} <span class="muted small">${t('project_seeds.analyses_the_oracle_runs_read_only')}</span></h3>
       ${body}
       ${frameHtml()}
     </section>`;
@@ -204,7 +204,7 @@
       const out = await api.makeSeedTool({ projectId: c.id, seedId });
       c.notes.set(seedId, out?.preview
         ? `Preview only (simulation): nothing was filed. The issue would be “${esc(out.title)}”.`
-        : out?.url ? `Filed <a href="${esc(out.url)}" target="_blank" rel="noopener">${esc(out.title)}</a>: the Product Owner plans it like any item.` : `Filed “${esc(out?.title || '')}”.`);
+        : out?.url ? `Filed <a href="${esc(out.url)}" target="_blank" rel="noopener">${esc(out.title)}</a>${t('project_seeds.the_product_owner_plans_it_like')}` : `Filed “${esc(out?.title || '')}”.`);
     } catch (e) {
       c.notes.set(seedId, `Could not file the tool issue: ${esc(errMsg(e))}`);
     }

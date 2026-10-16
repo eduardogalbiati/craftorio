@@ -88,11 +88,11 @@ function parseDelimited(text, sep) {
 
 function renderDelimited(text, sep) {
   const rows = parseDelimited(text, sep);
-  if (!rows.length) return '<div class="art-empty muted">Empty file.</div>';
+  if (!rows.length) return `<div class="art-empty muted">${t('artifact_render.empty_file')}</div>`;
   const MAX = 2000;
   const [head, ...rest] = rows;
   return `<div class="md-table art-table"><table>
     <thead><tr>${head.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead>
     <tbody>${rest.slice(0, MAX).map((r) => `<tr>${head.map((_, i) => `<td>${esc(r[i] ?? '')}</td>`).join('')}</tr>`).join('')}</tbody>
-  </table></div>${rest.length > MAX ? `<p class="muted small art-pad">Showing the first ${MAX} of ${rest.length} rows.</p>` : ''}`;
+  </table></div>${rest.length > MAX ? `<p class="muted small art-pad">${t('artifact_render.showing_the_first_max_of_length', { MAX, length: rest.length })}</p>` : ''}`;
 }

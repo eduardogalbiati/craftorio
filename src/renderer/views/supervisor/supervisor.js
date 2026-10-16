@@ -170,14 +170,14 @@
     if (msg.role === 'request') return window.AgentRequest.cardHtml(msg, all, { testid: 'svc-request', owner: 'supervisor' });
     if (window.AgentRequest.inCard(msg)) return '';
     if (msg.role === 'user') {
-      return `<div class="sup-wmsg user"><div class="sup-wmsg-meta">You · ${esc(time)}${msg.screen ? ` · <span title="What the supervisor was told about the screen">${esc(msg.screen)}</span>` : ''}${msg.run?.runId ? ` · <span class="badge" title="${esc(`The run sent with this question${msg.run.workflow ? `: ${msg.run.workflow}` : ''}${msg.run.status ? `, ${msg.run.status}` : ''}`)}">run <span class="mono">${esc(msg.run.runId)}</span></span>` : ''}</div><div>${esc(msg.text)}</div></div>`;
+      return `<div class="sup-wmsg user"><div class="sup-wmsg-meta">${t('supervisor.you')} ${esc(time)}${msg.screen ? ` · <span title="${t('supervisor.what_the_supervisor_was_told_about')}">${esc(msg.screen)}</span>` : ''}${msg.run?.runId ? ` · <span class="badge" title="${esc(`The run sent with this question${msg.run.workflow ? `: ${msg.run.workflow}` : ''}${msg.run.status ? `, ${msg.run.status}` : ''}`)}">${t('supervisor.run')} <span class="mono">${esc(msg.run.runId)}</span></span>` : ''}</div><div>${esc(msg.text)}</div></div>`;
     }
     if (msg.role === 'system') return `<div class="sup-wmsg system${msg.error ? ' error' : ''}"><div class="sup-wmsg-meta">${esc(time)}</div><div>${esc(msg.text)}</div></div>`;
-    const meta = `Supervisor · ${esc(time)}${msg.simulated ? ' · simulated' : msg.model ? ` · ${esc(msg.model)}` : ''} · ${esc(fmtCost(msg.costUsd || 0))}${msg.stopped ? ' · <span class="badge warn" title="You stopped this turn: the answer is what was written until then">Stopped</span>' : ''}`;
+    const meta = `Supervisor · ${esc(time)}${msg.simulated ? ' · simulated' : msg.model ? ` · ${esc(msg.model)}` : ''} · ${esc(fmtCost(msg.costUsd || 0))}${msg.stopped ? ` · <span class="badge warn" title="${t('supervisor.you_stopped_this_turn_the_answer')}">${t('supervisor.stopped')}</span>` : ''}`;
     return `<div class="sup-wmsg svc-msg"><div class="sup-wmsg-meta"><span class="sup-mark">◆</span> ${meta}</div><div class="md md-compact">${markdownHtml(msg.text || '')}</div></div>`;
   }
 
-  const emptyHtml = () => '<div class="svc-empty muted small">Ask about anything in the app: workflows, projects, runs, skills, agents, usage. I know which screen you are on, and I read the app\'s data (never your repositories\' code). I cannot change anything yet: I tell you what to change and where.</div>';
+  const emptyHtml = () => `<div class="svc-empty muted small">${t('supervisor.ask_about_anything_in_the_app')}</div>`;
 
   function render() {
     const simulated = devMode();
@@ -211,7 +211,7 @@
     if (!box) return;
     const r = sv.attached;
     box.classList.toggle('hidden', !r);
-    box.innerHTML = r ? `<span class="muted small">Attached</span><span class="badge po-file" data-testid="supervisor-attachment" title="${esc(`Run ${r.runId}${r.workflow ? ` (${r.workflow})` : ''}, ${r.status || 'unknown status'}${r.error ? `: ${r.error}` : ''}`)}"><span class="mono">${esc(r.runId)}</span> <span class="muted">${esc([r.workflow, r.status].filter(Boolean).join(' · '))}</span><button type="button" data-svc-unattach aria-label="Remove the run"${sv.busy ? ' disabled' : ''}>×</button></span>` : '';
+    box.innerHTML = r ? `<span class="muted small">${t('supervisor.attached')}</span><span class="badge po-file" data-testid="supervisor-attachment" title="${esc(`Run ${r.runId}${r.workflow ? ` (${r.workflow})` : ''}, ${r.status || 'unknown status'}${r.error ? `: ${r.error}` : ''}`)}"><span class="mono">${esc(r.runId)}</span> <span class="muted">${esc([r.workflow, r.status].filter(Boolean).join(' · '))}</span><button type="button" data-svc-unattach aria-label="${t('supervisor.remove_the_run')}"${sv.busy ? ' disabled' : ''}>×</button></span>` : '';
   }
 
   // #409: the Workflows screen's round button: the Supervisor's robot, and the yellow dot of an
@@ -289,17 +289,17 @@
     id: 'supervisor',
     modals: `
   <div id="svc-backdrop" class="drawer-backdrop sup-backdrop hidden"></div>
-  <aside id="svc-drawer" class="drawer sup-drawer svc-drawer" data-testid="svc-drawer" aria-hidden="true" aria-label="Supervisor">
+  <aside id="svc-drawer" class="drawer sup-drawer svc-drawer" data-testid="svc-drawer" aria-hidden="true" aria-label="${t('supervisor.supervisor')}">
     <div class="drawer-head">
       <div class="sup-head">
-        <h2 class="drawer-title"><span class="sup-mark">◆</span> Supervisor</h2>
-        <div class="muted small">On: <span id="svc-screen"></span></div>
+        <h2 class="drawer-title"><span class="sup-mark">◆</span> ${t('supervisor.supervisor')}</h2>
+        <div class="muted small">${t('supervisor.on')} <span id="svc-screen"></span></div>
       </div>
       <div class="row">
-        <button id="btn-svc-full" class="btn ghost sm" type="button" aria-pressed="false" title="The whole conversation and what the supervisor can read, over the whole screen">Expand</button>
-        <button class="btn ghost sm svc-clear" type="button" title="New conversation: the supervisor forgets this one">New</button>
-        <button class="icon-btn" type="button" data-agents-window="supervisor" data-testid="agent-chat-open-window" title="Open in a window (Ctrl+Shift+A)" aria-label="Open the Supervisor in a window"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="14" height="14" rx="2" /><path d="M9 3h12v12M21 3l-9 9" /></svg></button>
-        <button id="btn-svc-close" class="icon-btn" title="Close (Esc)">
+        <button id="btn-svc-full" class="btn ghost sm" type="button" aria-pressed="false" title="${t('supervisor.the_whole_conversation_and_what_the')}">${t('supervisor.expand')}</button>
+        <button class="btn ghost sm svc-clear" type="button" title="${t('supervisor.new_conversation_the_supervisor_forgets_this')}">${t('supervisor.new')}</button>
+        <button class="icon-btn" type="button" data-agents-window="supervisor" data-testid="agent-chat-open-window" title="${t('supervisor.open_in_a_window_ctrl_shift')}" aria-label="${t('supervisor.open_the_supervisor_in_a_window')}"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="14" height="14" rx="2" /><path d="M9 3h12v12M21 3l-9 9" /></svg></button>
+        <button id="btn-svc-close" class="icon-btn" title="${t('supervisor.close_esc')}">
           <svg viewBox="0 0 24 24" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg>
         </button>
       </div>
@@ -307,7 +307,7 @@
     <div class="drawer-body sup-body svc-body">
       <div id="svc-chat" class="svc-main"></div>
       <aside id="svc-side" class="svc-side card hidden">
-        <div class="sup-h">What it can read</div>
+        <div class="sup-h">${t('supervisor.what_it_can_read')}</div>
         <ul id="svc-tools" class="svc-tools small"></ul>
       </aside>
     </div>

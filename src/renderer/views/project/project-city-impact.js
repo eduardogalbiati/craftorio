@@ -35,14 +35,14 @@
     const cmp = comparison ? `<div class="pci-cmp" data-testid="city-impact-comparison">
         <strong class="pci-rate">${comparison.hitRate == null ? 'Nothing was predicted' : `${pct(comparison.hitRate)} hit rate`}</strong>
         ${SETS.map((s) => `<span data-testid="city-impact-${s.key}">${dot(s.colour)}${(comparison[s.key] || []).length} ${s.label}</span>`).join('')}
-        ${preview.history && preview.history.length > 1 ? `<small class="muted">Earlier runs: ${preview.history.slice(0, -1).map((h) => pct(h.hitRate)).join(', ')}</small>` : ''}
+        ${preview.history && preview.history.length > 1 ? `<small class="muted">${t('project_city_impact.earlier_runs')} ${preview.history.slice(0, -1).map((h) => pct(h.hitRate)).join(', ')}</small>` : ''}
       </div>` : '';
     return `<div class="pci-header" data-testid="city-impact-header">
       <div class="pci-title"><strong>#${esc(issue.number)}</strong> <span title="${esc(issue.title)}">${esc(issue.title)}</span></div>
-      <p class="pci-total">${plural(total, 'file')} on the map · <span data-testid="city-impact-danger">${pct(header.dangerShare)} in the Danger Zone</span></p>
+      <p class="pci-total">${plural(total, 'file')} ${t('project_city_impact.on_the_map')} <span data-testid="city-impact-danger">${pct(header.dangerShare)} ${t('project_city_impact.in_the_danger_zone')}</span></p>
       ${countsHtml(header.districts || [], 'city-impact-district', 'By district')}
       ${countsHtml(header.zones || [], 'city-impact-zone', 'By zone')}
-      ${newFiles.length ? `<ul class="pci-new" aria-label="New files">${newFiles.map((f) => `<li data-testid="city-impact-new-file"><code title="${esc(f.path)}">${esc(f.path)}</code> <small class="muted">${esc(f.note)}</small></li>`).join('')}</ul>` : ''}
+      ${newFiles.length ? `<ul class="pci-new" aria-label="${t('project_city_impact.new_files')}">${newFiles.map((f) => `<li data-testid="city-impact-new-file"><code title="${esc(f.path)}">${esc(f.path)}</code> <small class="muted">${esc(f.note)}</small></li>`).join('')}</ul>` : ''}
       ${cmp}
     </div>`;
   }
@@ -51,11 +51,11 @@
   function stageMarkup(view) {
     const conflicts = view.conflicts.length
       ? `<ul>${view.conflicts.map((c) => `<li><code title="${esc(c.path)}">${esc(c.path)}</code> <small class="muted">${esc(c.items.map((id) => view.titles[id] || id).join(' · '))}</small></li>`).join('')}</ul>`
-      : '<p class="muted small">No building is changed by two items.</p>';
+      : `<p class="muted small">${t('project_city_impact.no_building_is_changed_by_two')}</p>`;
     return `<div class="pci-header" data-testid="city-impact-stage">
-      <div class="pci-title"><strong>Stage</strong> <span title="${esc(view.name)}">${esc(view.name)}</span></div>
-      <p class="pci-total">${plural(view.items.length, 'item')} · ${plural(view.total, 'file')} on the map</p>
-      <div class="pci-conflicts" data-testid="city-impact-conflicts" role="status"><b>Changed by two items</b>${conflicts}</div>
+      <div class="pci-title"><strong>${t('project_city_impact.stage')}</strong> <span title="${esc(view.name)}">${esc(view.name)}</span></div>
+      <p class="pci-total">${plural(view.items.length, 'item')} ${t('project_city_impact.total_on_the_map', { total: plural(view.total, 'file') })}</p>
+      <div class="pci-conflicts" data-testid="city-impact-conflicts" role="status"><b>${t('project_city_impact.changed_by_two_items')}</b>${conflicts}</div>
     </div>`;
   }
 
@@ -100,7 +100,7 @@
       const box = city.el.querySelector('[data-testid="project-city-legend"]');
       if (!box) return;
       const old = box.querySelector('[data-pci-legend]');
-      const html = legend.length ? `<b>Impact</b><ul>${legend.map((l) => `<li>${dot(l.colour)}<span title="${esc(l.label)}">${esc(l.label)}</span></li>`).join('')}</ul>` : '';
+      const html = legend.length ? `<b>${t('project_city_impact.impact')}</b><ul>${legend.map((l) => `<li>${dot(l.colour)}<span title="${esc(l.label)}">${esc(l.label)}</span></li>`).join('')}</ul>` : '';
       if (old && old.dataset.html === html) return;
       if (old) old.remove();
       if (!html) return;
@@ -159,10 +159,10 @@
         el.innerHTML = '';
         return;
       }
-      const close = '<button type="button" class="link-btn" data-pci-close data-testid="city-impact-close">Close</button>';
+      const close = `<button type="button" class="link-btn" data-pci-close data-testid="city-impact-close">${t('common.close')}</button>`;
       const head = `<div class="pci-head"><b>${request.stage ? 'Stage footprint' : 'Impact preview'}</b>${close}</div>`;
-      if (error) { el.innerHTML = `${head}<p class="small" role="alert">Could not read the preview: ${esc(error)}</p>`; return; }
-      if (!data || !layout()) { el.innerHTML = `${head}<p class="muted small">Reading the issue's expected files…</p>`; return; }
+      if (error) { el.innerHTML = `${head}<p class="small" role="alert">${t('project_city_impact.could_not_read_the_preview')} ${esc(error)}</p>`; return; }
+      if (!data || !layout()) { el.innerHTML = `${head}<p class="muted small">${t('project_city_impact.reading_the_issue_s_expected_files')}</p>`; return; }
       const view = request.stage ? stageView() : issueView();
       ProjectCity.overlay(LAYER, { highlight: view.highlight });
       layered = true;

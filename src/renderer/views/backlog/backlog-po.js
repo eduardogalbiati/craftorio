@@ -333,11 +333,11 @@
   const sizeText = (g) => {
     const time = minutesOf(g) != null ? `≈ ${Estimates.formatMinutes(minutesOf(g))} · ` : '';
     const est = g.costEstimate
-      ? `${time}≈ $${Number(g.costEstimate.usd).toFixed(2)} <span class="muted" title="${esc(g.costEstimate.basis)}">(estimate from ${g.costEstimate.runs} past run${g.costEstimate.runs > 1 ? 's' : ''}${g.costEstimate.estimated ? ', partly from token prices' : ''})</span>`
+      ? `${time}≈ $${Number(g.costEstimate.usd).toFixed(2)} <span class="muted" title="${esc(g.costEstimate.basis)}">${t('backlog_po.estimate_from_runs_past_run_value', { runs: g.costEstimate.runs, value: g.costEstimate.runs > 1 ? 's' : '', value2: g.costEstimate.estimated ? ', partly from token prices' : '' })}</span>`
       : g.estimate
-      ? `${time}≈ $${Number(g.estimate.costUsd).toFixed(2)} <span class="muted">(estimate from ${esc(g.estimate.basis)})</span>`
-      : '<span class="muted">no past run to estimate from</span>';
-    return `complexity ${g.complexity}${g.guessed ? ' <span class="muted" title="Some issues have no complexity:n label: counted as 3">(some guessed)</span>' : ''} · ${est}`;
+      ? `${time}≈ $${Number(g.estimate.costUsd).toFixed(2)} <span class="muted">${t('backlog_po.estimate_from_basis', { basis: esc(g.estimate.basis) })}</span>`
+      : `<span class="muted">${t('backlog_po.no_past_run_to_estimate_from')}</span>`;
+    return `complexity ${g.complexity}${g.guessed ? ` <span class="muted" title="${t('backlog_po.some_issues_have_no_complexity_n')}">${t('backlog_po.some_guessed')}</span>` : ''} · ${est}`;
   };
 
   // ---- a group already applied (#140): derived from the Backlog's data (its issues' roadmap place,
@@ -368,13 +368,13 @@
   function appliedBadge(st, already) {
     if (st.kind === 'roadmap') {
       const label = already ? 'Already in the roadmap' : `In roadmap · ${stagesLabel(st.stages)}`;
-      return `<button class="badge po-applied" type="button" data-po-stage="${st.stages[0]}" title="Open the Roadmap at stage ${st.stages[0]}">${esc(label)}</button>`;
+      return `<button class="badge po-applied" type="button" data-po-stage="${st.stages[0]}" title="${t('backlog_po.open_the_roadmap_at_stage_value', { value: st.stages[0] })}">${esc(label)}</button>`;
     }
-    if (st.kind === 'running' && st.runId) return `<button class="badge po-applied live" type="button" data-po-run="${esc(st.runId)}" title="Open run ${esc(st.runId)}">Running</button>`;
-    if (st.kind === 'running' || st.kind === 'queued') return '<span class="badge po-applied" title="Assigned: in the queue, it starts when a slot is free">Queued</span>';
+    if (st.kind === 'running' && st.runId) return `<button class="badge po-applied live" type="button" data-po-run="${esc(st.runId)}" title="${t('backlog_po.open_run_runid', { runId: esc(st.runId) })}">${t('backlog_po.running')}</button>`;
+    if (st.kind === 'running' || st.kind === 'queued') return `<span class="badge po-applied" title="${t('backlog_po.assigned_in_the_queue_it_starts')}">${t('backlog_po.queued')}</span>`;
     if (st.kind === 'partly') {
       const where = st.stages.length ? 'in the roadmap' : 'assigned';
-      return `<span class="badge warn" title="${esc(`${st.covered.map((x) => `#${x}`).join(', ')} already ${where}; ${st.rest.map((x) => `#${x}`).join(', ')} not yet`)}">Partly ${where} (${esc(st.covered.map((x) => `#${x}`).join(', '))})</span>`;
+      return `<span class="badge warn" title="${esc(`${st.covered.map((x) => `#${x}`).join(', ')} already ${where}; ${st.rest.map((x) => `#${x}`).join(', ')} not yet`)}">${t('backlog_po.partly_where_value', { where, value: esc(st.covered.map((x) => `#${x}`).join(', ')) })}</span>`;
     }
     return '';
   }
@@ -387,7 +387,7 @@
   const withExtras = (issues, key) => [...issues, ...extrasOf(key).filter((x) => !issues.includes(x) && issueOf(x)?.state !== 'closed')];
   function suggestedHtml(g, key, done) {
     if (!g.suggested?.length) return '';
-    return `<div class="po-suggested"><div class="small muted">Could join (suggested, not selected)</div>
+    return `<div class="po-suggested"><div class="small muted">${t('backlog_po.could_join_suggested_not_selected')}</div>
       ${g.suggested.map((s) => {
         const i = issueOf(s.issue);
         const tip = `${i ? `#${s.issue} ${i.title}` : `#${s.issue}`}${s.reason ? ` · ${s.reason}` : ''}`;
@@ -402,7 +402,7 @@
     const li = (f) => `<li><code>${esc(f)}</code></li>`;
     const rest = files.slice(FILES_SHOWN);
     return `<ul class="po-files">${files.slice(0, FILES_SHOWN).map(li).join('')}</ul>${rest.length
-      ? `<details class="po-files-more"><summary class="small muted">+${rest.length} more</summary><ul class="po-files">${rest.map(li).join('')}</ul></details>` : ''}`;
+      ? `<details class="po-files-more"><summary class="small muted">${t('backlog_po.length_more', { length: rest.length })}</summary><ul class="po-files">${rest.map(li).join('')}</ul></details>` : ''}`;
   };
   const workflowOf = (file) => (state.workflows || []).find((w) => w.file === file) || null;
   // A workflow as people read it: software-development-local-hero → "Software development, local
@@ -486,26 +486,26 @@
     return `
       <div class="po-group${done ? ' applied' : ''}" data-msg="${m}" data-group="${n}">
         <div class="po-group-head">
-          <span class="badge">stage ${g.stage}</span>
+          <span class="badge">${t('backlog_po.stage')} ${g.stage}</span>
           <b>${esc(g.name)}</b>
           <span class="po-issues">${g.issues.map(issueRef).join('')}</span>
           ${appliedBadge(st, already)}
         </div>
         <div class="po-wf"><span class="badge po-wf-name" title="${esc(g.workflow)}">${esc(workflowTitle(wf, g.workflow))}</span>${WorkflowInputs.inputPills(wf, g.inputs, { defaults: true })}</div>
         <dl class="po-secs small">
-          ${g.reason ? `<dt>Why</dt><dd class="md md-compact">${markdownHtml(g.reason)}</dd>` : ''}
-          ${g.modeReason ? `<dt>Mode</dt><dd class="md md-compact">${markdownHtml(g.modeReason)}</dd>` : ''}
-          ${g.files?.length ? `<dt>Files</dt><dd>${filesHtml(g.files)}</dd>` : ''}
-          <dt>Estimate</dt><dd class="po-size">${sizeText(g)}</dd>
-          ${g.cost ? `<dt>Cost</dt><dd>${costHtml(g)}</dd>` : ''}
+          ${g.reason ? `<dt>${t('backlog_po.why')}</dt><dd class="md md-compact">${markdownHtml(g.reason)}</dd>` : ''}
+          ${g.modeReason ? `<dt>${t('backlog_po.mode')}</dt><dd class="md md-compact">${markdownHtml(g.modeReason)}</dd>` : ''}
+          ${g.files?.length ? `<dt>${t('backlog_po.files')}</dt><dd>${filesHtml(g.files)}</dd>` : ''}
+          <dt>${t('backlog_po.estimate')}</dt><dd class="po-size">${sizeText(g)}</dd>
+          ${g.cost ? `<dt>${t('backlog_po.cost')}</dt><dd>${costHtml(g)}</dd>` : ''}
         </dl>
         ${g.warnings?.length ? `<div class="po-callout warn small" role="note">${g.warnings.map((w) => `<div>⚠ ${esc(w)}</div>`).join('')}</div>` : ''}
         ${suggestedHtml(g, key, done)}
         <div class="row po-group-actions">
-          <button class="btn sm primary" type="button" data-po-act="assign"${off || ' title="Open the assign dialog with these issues as one run"'}>Assign…</button>
+          <button class="btn sm primary" type="button" data-po-act="assign"${off || ` title="${t('backlog_po.open_the_assign_dialog_with_these')}"`}>${t('backlog_po.assign')}</button>
           ${st.kind === 'partly'
-            ? `<button class="btn sm ghost" type="button" data-po-act="roadmap" title="${esc(`Plan ${st.rest.map((x) => `#${x}`).join(', ')} as a new stage at the end of the roadmap`)}">Add the rest</button>`
-            : `<button class="btn sm ghost" type="button" data-po-act="roadmap"${off || ' title="Plan this group as a new stage at the end of the roadmap"'}>Add to roadmap</button>`}
+            ? `<button class="btn sm ghost" type="button" data-po-act="roadmap" title="${esc(`Plan ${st.rest.map((x) => `#${x}`).join(', ')} as a new stage at the end of the roadmap`)}">${t('backlog_po.add_the_rest')}</button>`
+            : `<button class="btn sm ghost" type="button" data-po-act="roadmap"${off || ` title="${t('backlog_po.plan_this_group_as_a_new')}"`}>${t('backlog_po.add_to_roadmap')}</button>`}
           ${po.notes[key] ? `<span class="small ${po.notes[key].error ? 'error' : 'muted'}">${esc(po.notes[key].text)}</span>` : ''}
         </div>
       </div>`;
@@ -517,39 +517,39 @@
     if (!g.cost) return '';
     const set = Object.entries(g.cost.inputs || {}).map(([k, v]) => `${k}: ${v}`).join(', ');
     const tip = [set && `Set by the Cost step: ${set}`, g.cost.grouping, ...(g.cost.notAdjustable || [])].filter(Boolean).join('\n');
-    return `<div class="po-cost"><span class="badge po-cost-name" title="${esc(tip)}">${esc(g.cost.name)}</span>${WorkflowInputs.inputPills(workflowOf(g.workflow), g.cost.inputs, { defaults: true })}${g.cost.grouping ? ` <span class="muted">${esc(g.cost.grouping)}</span>` : ''}${(g.cost.notAdjustable || []).some((x) => /^Agents/.test(x)) ? ' <span class="muted">· agents: not adjustable</span>' : ''}</div>`;
+    return `<div class="po-cost"><span class="badge po-cost-name" title="${esc(tip)}">${esc(g.cost.name)}</span>${WorkflowInputs.inputPills(workflowOf(g.workflow), g.cost.inputs, { defaults: true })}${g.cost.grouping ? ` <span class="muted">${esc(g.cost.grouping)}</span>` : ''}${(g.cost.notAdjustable || []).some((x) => /^Agents/.test(x)) ? ` <span class="muted">${t('backlog_po.agents_not_adjustable')}</span>` : ''}</div>`;
   }
 
   function answerHtml(a, m) {
     if (!a) return '';
     const parts = [];
     // #206: the plan's estimated total
-    if (a.estimateUsd != null && a.groups?.length) parts.push(`<div class="small"><span class="badge" title="The sum of the groups' estimates from past runs${a.estimateMissing ? `; ${a.estimateMissing} group(s) have no estimate yet` : ''}">Plan ≈ $${Number(a.estimateUsd).toFixed(2)}</span>${a.estimateMissing ? ` <span class="muted">${a.estimateMissing} without an estimate</span>` : ''}</div>`);
+    if (a.estimateUsd != null && a.groups?.length) parts.push(`<div class="small"><span class="badge" title="${t('backlog_po.the_sum_of_the_groups_estimates', { value: a.estimateMissing ? `; ${a.estimateMissing} group(s) have no estimate yet` : '' })}">${t('backlog_po.plan')}${Number(a.estimateUsd).toFixed(2)}</span>${a.estimateMissing ? ` <span class="muted">${a.estimateMissing} ${t('backlog_po.without_an_estimate')}</span>` : ''}</div>`);
     if (a.groups?.length) {
       const allDone = a.groups.every((g) => applied(groupState(g)));
       const allTitle = allDone ? 'Every group is already in the roadmap or assigned' : 'Every group as a planned stage (by its stage number) at the end of the roadmap';
-      parts.push(`<div class="po-sec"><div class="sup-h">Proposed runs</div>${a.groups.map((g, n) => groupHtml(g, m, n)).join('')}
-        <div class="row"><button class="btn sm ghost" type="button" data-po-act="roadmap-all" data-msg="${m}" title="${allTitle}"${allDone ? ' disabled' : ''}>Add all to the roadmap</button>
+      parts.push(`<div class="po-sec"><div class="sup-h">${t('backlog_po.proposed_runs')}</div>${a.groups.map((g, n) => groupHtml(g, m, n)).join('')}
+        <div class="row"><button class="btn sm ghost" type="button" data-po-act="roadmap-all" data-msg="${m}" title="${allTitle}"${allDone ? ' disabled' : ''}>${t('backlog_po.add_all_to_the_roadmap')}</button>
         ${po.notes[`${m}:all`] ? `<span class="small ${po.notes[`${m}:all`].error ? 'error' : 'muted'}">${esc(po.notes[`${m}:all`].text)}</span>` : ''}</div></div>`);
     }
     // #169: attached issues closed meanwhile are in no group
-    if (a.closed?.length) parts.push(`<div class="small muted">Left out (closed): ${a.closed.map(issueRef).join(' ')}</div>`);
+    if (a.closed?.length) parts.push(`<div class="small muted">${t('backlog_po.left_out_closed')} ${a.closed.map(issueRef).join(' ')}</div>`);
     if (a.conflicts?.length) {
-      parts.push(`<div class="po-sec"><div class="sup-h">Do not run in parallel</div><ul class="po-list">${a.conflicts.map((c) =>
+      parts.push(`<div class="po-sec"><div class="sup-h">${t('backlog_po.do_not_run_in_parallel')}</div><ul class="po-list">${a.conflicts.map((c) =>
         `<li>${c.issues.map(issueRef).join(' ⟷ ')} ${esc(c.reason)}${c.files?.length ? ` <span class="muted mono small">${c.files.map(esc).join(', ')}</span>` : ''}</li>`).join('')}</ul></div>`);
     }
     // #150: the conflict map's hot spots, each filed as an issue on the owner's click
     if (a.decongest?.length) {
       const ts = po.messages[m]?.ts;
       const filed = (n) => po.messages.some((x) => x.decongestFiled && x.decongestFiled.at === ts && x.decongestFiled.index === n && !x.decongestFiled.preview);
-      parts.push(`<div class="po-sec" data-msg="${m}"><div class="sup-h">Decongest (hot spots of the conflict map)</div><ul class="po-list">${a.decongest.map((d, n) =>
-        `<li><span class="mono">${esc(d.line ? `${d.file}:${d.line}` : d.file)}</span>${d.runs && d.of ? ` <span class="badge">${d.runs} of ${d.of} runs</span>` : ''} ${esc(d.fix)}
-          ${filed(n) ? '<span class="badge">Filed</span>' : `<button class="btn sm ghost" type="button" data-po-decongest="${n}" title="File this fix as an issue on the project's repository"${po.busy ? ' disabled' : ''}>File as issue</button>`}
+      parts.push(`<div class="po-sec" data-msg="${m}"><div class="sup-h">${t('backlog_po.decongest_hot_spots_of_the_conflict')}</div><ul class="po-list">${a.decongest.map((d, n) =>
+        `<li><span class="mono">${esc(d.line ? `${d.file}:${d.line}` : d.file)}</span>${d.runs && d.of ? ` <span class="badge">${d.runs} ${t('backlog_po.of_of_runs', { of: d.of })}</span>` : ''} ${esc(d.fix)}
+          ${filed(n) ? `<span class="badge">${t('backlog_po.filed')}</span>` : `<button class="btn sm ghost" type="button" data-po-decongest="${n}" title="${t('backlog_po.file_this_fix_as_an_issue')}"${po.busy ? ' disabled' : ''}>${t('backlog_po.file_as_issue')}</button>`}
           ${po.notes[`decongest:${m}:${n}`] ? `<span class="small ${po.notes[`decongest:${m}:${n}`].error ? 'error' : 'muted'}">${esc(po.notes[`decongest:${m}:${n}`].text)}</span>` : ''}</li>`).join('')}</ul></div>`);
     }
     if (a.enrich?.length) {
-      parts.push(`<div class="po-sec"><div class="sup-h">Enrich first</div><ul class="po-list">${a.enrich.map((e) =>
-        `<li>${issueRef(e.issue)} ${esc(e.reason)} <a class="small" href="${esc(e.link)}" target="_blank" rel="noopener" title="Add what is missing (the goal, the acceptance criteria, the files or screens it touches), or use Enrich in Write &amp; Review in the issue's ⋯ menu">how to enrich</a></li>`).join('')}</ul></div>`);
+      parts.push(`<div class="po-sec"><div class="sup-h">${t('backlog_po.enrich_first')}</div><ul class="po-list">${a.enrich.map((e) =>
+        `<li>${issueRef(e.issue)} ${esc(e.reason)} <a class="small" href="${esc(e.link)}" target="_blank" rel="noopener" title="${t('backlog_po.add_what_is_missing_the_goal')}">${t('backlog_po.how_to_enrich')}</a></li>`).join('')}</ul></div>`);
     }
     // #124 / #138: issues too big for one run, and the epics section
     const msg = po.messages[m];
@@ -583,7 +583,7 @@
     const def = DefaultWorkflow.current().file;
     const list = (state.workflows || []).filter((w) => !w.error && w.inputs?.task);
     const options = list.some((w) => w.file === value) ? list : [{ file: value, name: value }, ...list];
-    return `<select class="po-wf" data-po-wf aria-label="Workflow of the filed issue" title="The workflow Create + roadmap plans it with (the default comes from Settings › General › Backlog)"${busy}>${options.map((w) =>
+    return `<select class="po-wf" data-po-wf aria-label="${t('backlog_po.workflow_of_the_filed_issue')}" title="${t('backlog_po.the_workflow_create_roadmap_plans_it')}"${busy}>${options.map((w) =>
       `<option value="${esc(w.file)}"${w.file === value ? ' selected' : ''}>${esc(w.name || w.file)}${w.file === def ? ' (default)' : ''}</option>`).join('')}</select>`;
   }
 
@@ -592,14 +592,14 @@
     const note = po.notes[`draft:${m}`];
     const into = candidates(x);
     return `<div class="row po-draft-actions">
-        ${x.draft ? `<button class="btn sm primary" type="button" data-po-act="create"${busy} title="File this draft as a new issue">Create</button>
-        <button class="btn sm ghost" type="button" data-po-act="create-roadmap"${busy} title="File it, then plan it as a new roadmap stage (${esc(DefaultWorkflow.label(workflowFor(m)))})">Create + roadmap</button>
+        ${x.draft ? `<button class="btn sm primary" type="button" data-po-act="create"${busy} title="${t('backlog_po.file_this_draft_as_a_new')}">${t('backlog_po.create')}</button>
+        <button class="btn sm ghost" type="button" data-po-act="create-roadmap"${busy} title="${t('backlog_po.file_it_then_plan_it_as', { m: esc(DefaultWorkflow.label(workflowFor(m))) })}">${t('backlog_po.create_roadmap')}</button>
         ${workflowSelect(m, busy)}
-        <button class="btn sm ghost" type="button" data-po-act="create-assign"${busy} title="File it, then open the assign dialog with it">Create + assign…</button>` : ''}
-        ${into.map((n) => `<button class="btn sm${x.draft ? ' ghost' : ' primary'}" type="button" data-po-act="append" data-n="${n}"${busy} title="Append ${x.existingIssue === n && x.addition ? 'the addition' : 'this draft'} to #${n}'s description as a dated section, keeping what is there">Add to #${n}${x.draft ? ' instead' : ''}</button>
-          <button class="link-btn small" type="button" data-po-act="comment" data-n="${n}"${busy} title="Add it as a comment on #${n} instead">comment on #${n}</button>`).join('')}
-        <button class="btn sm ghost" type="button" data-po-act="revise"${busy} title="Tell the Product Owner what to change">Revise</button>
-        <button class="btn sm ghost" type="button" data-po-act="discard"${busy} title="Drop this draft: nothing is filed">Discard</button>
+        <button class="btn sm ghost" type="button" data-po-act="create-assign"${busy} title="${t('backlog_po.file_it_then_open_the_assign')}">${t('backlog_po.create_assign')}</button>` : ''}
+        ${into.map((n) => `<button class="btn sm${x.draft ? ' ghost' : ' primary'}" type="button" data-po-act="append" data-n="${n}"${busy} title="${t('backlog_po.append_value_to_n_s_description', { value: x.existingIssue === n && x.addition ? 'the addition' : 'this draft', n })}">${t('backlog_po.add_to')}${n}${x.draft ? ' instead' : ''}</button>
+          <button class="link-btn small" type="button" data-po-act="comment" data-n="${n}"${busy} title="${t('backlog_po.add_it_as_a_comment_on', { n })}">${t('backlog_po.comment_on')}${n}</button>`).join('')}
+        <button class="btn sm ghost" type="button" data-po-act="revise"${busy} title="${t('backlog_po.tell_the_product_owner_what_to')}">${t('backlog_po.revise')}</button>
+        <button class="btn sm ghost" type="button" data-po-act="discard"${busy} title="${t('backlog_po.drop_this_draft_nothing_is_filed')}">${t('backlog_po.discard')}</button>
         ${note ? `<span class="small ${note.error ? 'error' : 'muted'}">${esc(note.text)}</span>` : ''}
       </div>`;
   }
@@ -610,25 +610,25 @@
     if (x.questions?.length) parts.push(`<ol class="po-list po-questions">${x.questions.map((q) => `<li>${esc(q)}</li>`).join('')}</ol>`);
     if (x.draft) {
       const d = x.draft;
-      parts.push(`<div class="po-sec"><div class="sup-h">Draft</div><div class="po-draft">
+      parts.push(`<div class="po-sec"><div class="sup-h">${t('backlog_po.draft')}</div><div class="po-draft">
         <div class="po-draft-title" title="${esc(d.title)}">${esc(d.title)}</div>
         <div class="po-draft-meta">${d.labels.map((l) => `<span class="badge">${esc(l)}</span>`).join('')}
-          ${d.related.length ? `<span class="muted small">Related</span> ${d.related.map(issueRef).join('')}` : ''}</div>
-        ${d.epic ? `<div class="po-draft-meta"><span class="muted small">Epic</span> <span class="badge bl-epic" title="Epic ${esc(d.epic)}">${esc(d.epicTitle || d.epic)}</span>
-          ${m === openDraftIndex() ? `<label class="check small" title="Create also places the new issue in this epic"><input type="checkbox" data-po-epic${placeEpic(m) ? ' checked' : ''} /><span>Place in epic</span></label>` : ''}</div>` : ''}
+          ${d.related.length ? `<span class="muted small">${t('backlog_po.related')}</span> ${d.related.map(issueRef).join('')}` : ''}</div>
+        ${d.epic ? `<div class="po-draft-meta"><span class="muted small">${t('backlog_po.epic')}</span> <span class="badge bl-epic" title="${t('backlog_po.epic_epic', { epic: esc(d.epic) })}">${esc(d.epicTitle || d.epic)}</span>
+          ${m === openDraftIndex() ? `<label class="check small" title="${t('backlog_po.create_also_places_the_new_issue')}"><input type="checkbox" data-po-epic${placeEpic(m) ? ' checked' : ''} /><span>${t('backlog_po.place_in_epic')}</span></label>` : ''}</div>` : ''}
         <div class="md md-compact po-draft-body">${markdownHtml(d.body)}</div>
       </div></div>`);
     }
     if (x.existingIssue && x.addition) {
       const i = issueOf(x.existingIssue);
-      parts.push(`<div class="po-sec"><div class="sup-h">Addition to #${x.existingIssue}${i ? ` ${esc(i.title)}` : ''}</div><div class="po-draft">
+      parts.push(`<div class="po-sec"><div class="sup-h">${t('backlog_po.addition_to')}${x.existingIssue}${i ? ` ${esc(i.title)}` : ''}</div><div class="po-draft">
         <div class="md md-compact po-draft-body">${markdownHtml(`## Update (${typeof TimeZone !== 'undefined' ? TimeZone.dayKey(Date.now(), TimeZone.current()) : new Date().toISOString().slice(0, 10)})\n\n${x.addition}`)}</div></div></div>`);
     }
     if (x.duplicates?.length) {
-      parts.push(`<div class="po-sec"><div class="sup-h">Close issues</div><ul class="po-list">${x.duplicates.map((d) =>
-        `<li>${issueRef(d.number)} <span class="badge${d.relation === 'duplicate' ? ' warn' : ''}">${esc(d.relation)}</span> ${esc(d.title)}${d.state === 'closed' ? ' <span class="muted small">(closed)</span>' : ''}${d.reason ? ` <span class="muted small">${esc(d.reason)}</span>` : ''}</li>`).join('')}</ul></div>`);
+      parts.push(`<div class="po-sec"><div class="sup-h">${t('backlog_po.close_issues')}</div><ul class="po-list">${x.duplicates.map((d) =>
+        `<li>${issueRef(d.number)} <span class="badge${d.relation === 'duplicate' ? ' warn' : ''}">${esc(d.relation)}</span> ${esc(d.title)}${d.state === 'closed' ? ` <span class="muted small">${t('backlog_po.closed')}</span>` : ''}${d.reason ? ` <span class="muted small">${esc(d.reason)}</span>` : ''}</li>`).join('')}</ul></div>`);
     }
-    if (x.assumptions?.length) parts.push(`<details class="small"><summary class="muted">Assumptions (${x.assumptions.length})</summary><ul class="po-list">${x.assumptions.map((a) => `<li>${esc(a)}</li>`).join('')}</ul></details>`);
+    if (x.assumptions?.length) parts.push(`<details class="small"><summary class="muted">${t('backlog_po.assumptions_length', { length: x.assumptions.length })}</summary><ul class="po-list">${x.assumptions.map((a) => `<li>${esc(a)}</li>`).join('')}</ul></details>`);
     if (m === openDraftIndex()) parts.push(draftActions(x, m));
     return parts.join('');
   }
@@ -641,17 +641,17 @@
     if (msg.role === 'user') {
       const files = [...(msg.issues || []).map(issueRef), ...(msg.attachments || []).map((f) => `<span class="badge" title="${esc(f)}">${esc(f.split(/[\\/]/).pop())}</span>`)].join(' ');
       const once = [msg.calibrationOverride ? window.PoCalibration.step(msg.calibration).name : '', msg.costOverride ? window.PoCalibration.cost.step(msg.cost).name : ''].filter(Boolean)
-        .map((name) => ` · <span class="badge" title="For this question only: the saved setting is unchanged">for ${esc(name)}</span>`).join('');
-      return `<div class="sup-wmsg user" data-testid="po-message-you"><div class="sup-wmsg-meta">You · ${esc(time)}${once}</div><div>${esc(msg.text)}</div>${files ? `<div class="po-files">${files}</div>` : ''}</div>`;
+        .map((name) => ` · <span class="badge" title="${t('backlog_po.for_this_question_only_the_saved')}">${t('backlog_po.for')} ${esc(name)}</span>`).join('');
+      return `<div class="sup-wmsg user" data-testid="po-message-you"><div class="sup-wmsg-meta">${t('backlog_po.you')} ${esc(time)}${once}</div><div>${esc(msg.text)}</div>${files ? `<div class="po-files">${files}</div>` : ''}</div>`;
     }
     // #189: the calibration it planned with (marked when it was for this question only)
     // #205: and the Cost step ("Planned for Speed · Economy")
     const once = msg.calibrationOverride || msg.costOverride;
-    const calib = msg.calibration ? ` <span class="badge" title="${esc(`${once ? 'For this question only. ' : ''}${window.PoCalibration.tooltip(msg.calibration)}${msg.cost ? `\n\n${window.PoCalibration.cost.tooltip(msg.cost)}` : ''}`)}">Planned for ${esc(window.PoCalibration.plannedFor(msg.calibration, msg.cost ?? null))}${once ? ' · this question' : ''}</span>` : '';
-    const meta = `Product Owner · ${esc(time)}${msg.model ? ` · ${esc(msg.model)}` : ''} · ${esc(fmtCost(msg.costUsd || 0))}${calib}${msg.stopped ? ' <span class="badge warn" title="You stopped this turn: the answer is what was written until then">Stopped</span>' : ''}`;
+    const calib = msg.calibration ? ` <span class="badge" title="${esc(`${once ? 'For this question only. ' : ''}${window.PoCalibration.tooltip(msg.calibration)}${msg.cost ? `\n\n${window.PoCalibration.cost.tooltip(msg.cost)}` : ''}`)}">${t('backlog_po.planned_for')} ${esc(window.PoCalibration.plannedFor(msg.calibration, msg.cost ?? null))}${once ? ' · this question' : ''}</span>` : '';
+    const meta = `Product Owner · ${esc(time)}${msg.model ? ` · ${esc(msg.model)}` : ''} · ${esc(fmtCost(msg.costUsd || 0))}${calib}${msg.stopped ? ` <span class="badge warn" title="${t('backlog_po.you_stopped_this_turn_the_answer')}">${t('backlog_po.stopped')}</span>` : ''}`;
     return `<div class="sup-wmsg po-msg${msg.error ? ' error' : ''}" data-msg="${m}"><div class="sup-wmsg-meta">${meta}</div>
       <div class="md md-compact">${msg.error ? esc(msg.text) : markdownHtml(msg.text || '')}</div>
-      ${msg.invalid ? `<p class="small muted">The answer had no valid ${msg.mode === 'issue' ? 'draft' : 'proposal'} (${esc(msg.invalid)}): shown as text only.</p>` : ''}
+      ${msg.invalid ? `<p class="small muted">${t('backlog_po.the_answer_had_no_valid_value', { value: msg.mode === 'issue' ? 'draft' : 'proposal', invalid: esc(msg.invalid) })}</p>` : ''}
       ${answerHtml(msg.answer, m)}${issueHtml(msg.issue, m)}</div>`;
   }
 
@@ -694,7 +694,7 @@
     // #234: locked while a question is in flight (the text box stays free). Drawn before the chat's
     // update, so the chat locks them too while its send is still in flight after ask() has ended
     $p('#po-chips').innerHTML = issueMode ? '' : [...QUESTIONS.map((q) => `<button class="chip" type="button" data-testid="po-pill" data-q="${esc(q)}"${po.busy ? ' disabled' : ''}>${esc(q)}</button>`),
-      `<button class="chip" type="button" data-testid="po-pill" data-mode="issue"${po.busy ? ' disabled' : ''} title="Describe an issue; the Product Owner drafts it and you file it">${esc(REGISTER)}…</button>`].join('');
+      `<button class="chip" type="button" data-testid="po-pill" data-mode="issue"${po.busy ? ' disabled' : ''} title="${t('backlog_po.describe_an_issue_the_product_owner')}">${esc(REGISTER)}…</button>`].join('');
     $p('#po-chips').classList.toggle('hidden', issueMode);
     // #274: the messages, the question in flight, the live turn and the error, through the shared chat
     chat.update({ messages: po.messages, live: po.live, error: po.error, busy: po.busy, turn: turnFor(chat) });
@@ -711,19 +711,19 @@
     showNotice(po.notice);
     $p('#po-files').classList.toggle('hidden', !issueMode || !po.files.length);
     // #148: an attachment sent with the question in flight can't be removed until the answer
-    const sent = po.busy ? ' disabled title="Already sent with this question: you can remove it once the Product Owner answers"' : '';
-    $p('#po-files').innerHTML = po.files.map((f, n) => `<span class="badge po-file" title="${esc(f.path)}"><span>${esc(f.name)}</span> <span class="muted">${esc(fmtSize(f.size))}</span><button type="button" data-po-unattach="${n}" aria-label="Remove ${esc(f.name)}"${sent}>×</button></span>`).join('');
+    const sent = po.busy ? ` disabled title="${t('backlog_po.already_sent_with_this_question_you')}"` : '';
+    $p('#po-files').innerHTML = po.files.map((f, n) => `<span class="badge po-file" title="${esc(f.path)}"><span>${esc(f.name)}</span> <span class="muted">${esc(fmtSize(f.size))}</span><button type="button" data-po-unattach="${n}" aria-label="${t('backlog_po.remove_name', { name: esc(f.name) })}"${sent}>×</button></span>`).join('');
     $p('#btn-po-attach').classList.toggle('hidden', !issueMode);
     $p('#btn-po-attach').disabled = po.busy;
     // #169: the issues sent from the Backlog (plan questions only); a closed one is struck through
     const attached = !issueMode && po.attached.length;
     $p('#po-attached').classList.toggle('hidden', !attached);
-    $p('#po-attached').innerHTML = attached ? `<span class="muted small">Attached</span>${po.attached.map((n) => {
+    $p('#po-attached').innerHTML = attached ? `<span class="muted small">${t('backlog_po.attached')}</span>${po.attached.map((n) => {
       const i = issueOf(n);
       const closed = i?.state === 'closed';
       const tip = `${i ? `#${n} ${i.title}` : `#${n} (not synced)`}${closed ? ' · closed: left out of the proposal' : ''}`;
-      return `<span class="badge po-file${closed ? ' closed' : ''}" title="${esc(tip)}"><span>#${n}</span> <span class="muted">${esc(i?.title || '')}</span><button type="button" data-po-unattach-issue="${n}" aria-label="Remove #${n}"${po.busy ? ' disabled' : ''}>×</button></span>`;
-    }).join('')}<button class="link-btn small" type="button" data-po-unattach-all${po.busy ? ' disabled' : ''} title="Ask about the whole backlog again">clear</button>` : '';
+      return `<span class="badge po-file${closed ? ' closed' : ''}" title="${esc(tip)}"><span>#${n}</span> <span class="muted">${esc(i?.title || '')}</span><button type="button" data-po-unattach-issue="${n}" aria-label="${t('backlog_po.remove_n', { n })}"${po.busy ? ' disabled' : ''}>×</button></span>`;
+    }).join('')}<button class="link-btn small" type="button" data-po-unattach-all${po.busy ? ' disabled' : ''} title="${t('backlog_po.ask_about_the_whole_backlog_again')}">${t('backlog_po.clear')}</button>` : '';
     $p('#po-question').placeholder = issueMode
       ? (openDraftIndex() >= 0 ? 'What should change? Or "add this to #n"…' : 'Describe the issue in a few words (paste or drop screenshots)…')
       : attached ? 'Ask about the attached issues…' : 'Ask about the backlog: which issues should go first?';
@@ -881,7 +881,7 @@
     agent: 'Product Owner',
     renderMessage: (msg, m) => messageHtml(msg, m),
     emptyHtml,
-    pendingHtml: () => (pendingShown() ? `<div class="sup-wmsg user" data-testid="po-message-you"><div class="sup-wmsg-meta">You</div><div>${esc(po.pending)}</div></div>` : ''),
+    pendingHtml: () => (pendingShown() ? `<div class="sup-wmsg user" data-testid="po-message-you"><div class="sup-wmsg-meta">${t('backlog_po.you_2')}</div><div>${esc(po.pending)}</div></div>` : ''),
     // #234: no silent no-op when no project is selected (the text stays in the box)
     beforeSend: () => { if (po.projectId) return true; showNotice(NO_PROJECT); return false; },
     send: async (q) => { po.liveIn = from(); await ask(q); return po.error ? { ok: false } : null; },

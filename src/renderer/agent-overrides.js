@@ -34,14 +34,14 @@
       a.capabilities, a.isolated === false ? 'not isolated' : '', a.fallbacks?.length ? `fallbacks: ${a.fallbacks.join(', ')}` : ''].filter(Boolean).join(' · ');
     return `<fieldset class="ao-agent${changed ? ' changed' : ''}" data-ao-agent="${esc(key)}" data-testid="agent-override">
       <legend title="${esc(key)}">${esc(nameOf(key, a))}</legend>
-      <span class="ao-changed badge">changed for this run</span>
+      <span class="ao-changed badge">${t('agent_overrides.changed_for_this_run')}</span>
       <div class="ao-fields">
-        <div class="field"><label for="${id}-provider">Provider</label>
+        <div class="field"><label for="${id}-provider">${t('agent_overrides.provider')}</label>
           <select id="${id}-provider" data-ao="provider" data-ao-default="${esc(def.provider)}">${providers.map((p) => `<option value="${esc(p)}" data-type="${esc(type(p))}"${p === v.provider ? ' selected' : ''}>${esc(p)}</option>`).join('')}</select></div>
-        <div class="field"><label for="${id}-model">Model</label>
+        <div class="field"><label for="${id}-model">${t('agent_overrides.model')}</label>
           <input type="text" id="${id}-model" data-ao="model" data-ao-default="${esc(def.model)}" value="${esc(v.model)}" list="${id}-models" spellcheck="false" autocomplete="off">
           <datalist id="${id}-models">${datalist([...new Set([v.model, ...modelsOf(type(v.provider))].filter(Boolean))])}</datalist></div>
-        <div class="field"><label for="${id}-effort">Effort</label>
+        <div class="field"><label for="${id}-effort">${t('agent_overrides.effort')}</label>
           <select id="${id}-effort" data-ao="effort" data-ao-default="${esc(def.effort)}">${efforts.map(([e, label]) => option(e, label, e === v.effort)).join('')}</select></div>
       </div>
       ${caps ? `<div class="agent-caps">${esc(caps)}</div>` : ''}
@@ -52,8 +52,8 @@
   function html(wf, { prefix = 'ao', values = {}, hideLegend = false } = {}) {
     const agents = Object.entries(wf?.agents || {});
     if (!agents.length) return '';
-    return `<fieldset class="ao" data-testid="agent-overrides"><legend${hideLegend ? ' class="sr-only"' : ''}>Agents</legend>
-      <p class="muted small">The provider, model and effort of each agent for this run only; the workflow keeps its own.</p>
+    return `<fieldset class="ao" data-testid="agent-overrides"><legend${hideLegend ? ' class="sr-only"' : ''}>${t('agent_overrides.agents')}</legend>
+      <p class="muted small">${t('agent_overrides.the_provider_model_and_effort_of')}</p>
       ${agents.map(([key, a]) => agentHtml(wf, key, a, prefix, values?.[key])).join('')}
     </fieldset>`;
   }

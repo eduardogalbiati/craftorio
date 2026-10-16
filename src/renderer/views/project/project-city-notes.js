@@ -24,8 +24,8 @@
   function stateHtml(analysis, ready) {
     const a = analysis;
     if (!a) return '';
-    if (a.running) return `<div class="r3d-card pc-note" role="status" data-testid="project-city-analyzing"><b>Analyzing this project</b><p><span class="r3d-dot live"></span> ${esc(a.step || 'starting the run')}…</p></div>`;
-    if (a.error) return `<div class="r3d-card pc-note warn" role="alert" data-testid="project-city-analysis-error"><b>The analysis failed</b><p>${esc(a.error)}</p>${actionHtml('Analyze again', a, ready)}</div>`;
+    if (a.running) return `<div class="r3d-card pc-note" role="status" data-testid="project-city-analyzing"><b>${t('project_city_notes.analyzing_this_project')}</b><p><span class="r3d-dot live"></span> ${esc(a.step || 'starting the run')}…</p></div>`;
+    if (a.error) return `<div class="r3d-card pc-note warn" role="alert" data-testid="project-city-analysis-error"><b>${t('project_city_notes.the_analysis_failed')}</b><p>${esc(a.error)}</p>${actionHtml('Analyze again', a, ready)}</div>`;
     return '';
   }
 
@@ -35,9 +35,9 @@
     const running = !!analysis?.running;
     const action = running ? '' : actionHtml('Analyze this project', analysis, ready);
     if (model.grouping !== 'plan') {
-      notes.push(note('project-city-no-plan', '', `<b>No city plan yet</b><p>The districts are the folders. "Analyze this project" has the cartographer name the zones, the districts, the landmarks and the ports, then the Oracle analyses the hotspots.</p>${action}`));
+      notes.push(note('project-city-no-plan', '', `<b>${t('project_city_notes.no_city_plan_yet')}</b><p>${t('project_city_notes.the_districts_are_the_folders_analyze')}</p>${action}`));
     } else if ((validation?.coverage ?? 1) < STALE_COVERAGE) {
-      notes.push(note('project-city-stale', 'warn', `<b>The plan is older than the code</b><p>${pct(1 - validation.coverage)} of the files (${validation.drawn - validation.matched} of ${validation.drawn}) match no district: they stand in the Outskirts. "Analyze this project" refreshes the map (the names you saw stay) and the analysis.</p>${action}`));
+      notes.push(note('project-city-stale', 'warn', `<b>${t('project_city_notes.the_plan_is_older_than_the')}</b><p>${pct(1 - validation.coverage)} ${t('project_city_notes.of_the_files_value_of_drawn', { value: validation.drawn - validation.matched, drawn: validation.drawn })}</p>${action}`));
     }
     const state = stateHtml(analysis, ready);
     if (state) notes.push(state);
@@ -49,10 +49,10 @@
       ...(v.missingPaths || []).map((p) => `${p} is not in the repository at this commit (a landmark or a port's file).`),
       ...(v.emptyDistricts || []).map((id) => `District ${id} has no file.`),
     ];
-    if (model.grouping === 'plan' && problems.length) notes.push(note('project-city-problems', 'warn', `<b>${plural(problems.length, 'problems')} in the city plan</b><ul>${problems.map((p) => `<li>${esc(p)}</li>`).join('')}</ul>`));
+    if (model.grouping === 'plan' && problems.length) notes.push(note('project-city-problems', 'warn', `<b>${plural(problems.length, 'problems')} ${t('project_city_notes.in_the_city_plan')}</b><ul>${problems.map((p) => `<li>${esc(p)}</li>`).join('')}</ul>`));
     const notRead = typeof model.edges === 'string' ? [model.edges] : model.edgesNotRead || [];
-    if (notRead.length) notes.push(note('project-city-edges', '', `<b>Arcs</b> ${esc(notRead.join(', '))}: hovering those files draws no arc.`));
-    if (layout.aggregated) notes.push(note('project-city-aggregated', '', `<b>Over 5,000 files</b> ${esc(layout.note)}`));
+    if (notRead.length) notes.push(note('project-city-edges', '', `<b>${t('project_city_notes.arcs')}</b> ${esc(notRead.join(', '))}${t('project_city_notes.hovering_those_files_draws_no_arc')}`));
+    if (layout.aggregated) notes.push(note('project-city-aggregated', '', `<b>${t('project_city_notes.over_5_000_files')}</b> ${esc(layout.note)}`));
     return notes.length ? `<div class="pc-notes">${notes.join('')}</div>` : '';
   }
 

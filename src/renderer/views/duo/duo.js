@@ -155,7 +155,7 @@
     try { projects = await api.listProjects(); } catch { projects = []; }
     const sel = $d('#duo-project');
     const current = sel.value || saved.project || '';
-    sel.innerHTML = '<option value="">No project (prompt and goal only)</option>' + projects.map((p) =>
+    sel.innerHTML = `<option value="">${t('duo.no_project_prompt_and_goal_only')}</option>` + projects.map((p) =>
       `<option value="${esc(p.id)}"${p.exists ? '' : ' disabled'}${p.id === current && p.exists ? ' selected' : ''}>${esc(p.name)}${p.exists ? '' : ' (folder missing)'}</option>`).join('');
     const hint = () => {
       const p = projects.find((x) => x.id === sel.value);
@@ -184,15 +184,15 @@
     const box = $d('#duo-issue');
     box.classList.toggle('hidden', !fromIssue && !fromCard);
     if (fromCard) {
-      box.innerHTML = `<span>For the Discovery card <b>${esc(fromCard.title)}</b>: when the run finishes, its document comes back to the card as a new version.</span>
-      <button type="button" class="link-btn small" id="duo-card-clear" title="Write a document that is not about this card">not about this card</button>`;
+      box.innerHTML = `<span>${t('duo.for_the_discovery_card')} <b>${esc(fromCard.title)}</b>${t('duo.when_the_run_finishes_its_document')}</span>
+      <button type="button" class="link-btn small" id="duo-card-clear" title="${t('duo.write_a_document_that_is_not')}">${t('duo.not_about_this_card')}</button>`;
       $d('#duo-card-clear').onclick = () => { fromCard = null; renderIssueBanner(); };
       return;
     }
     if (!fromIssue) { box.innerHTML = ''; return; }
     const i = fromIssue.issue;
-    box.innerHTML = `<span>Enriching issue <a href="${esc(i.url)}" target="_blank" rel="noopener">#${esc(i.number)}</a> <b>${esc(i.title)}</b>: once you accept the document, you can save it back to the issue.</span>
-      <button type="button" class="link-btn small" id="duo-issue-clear" title="Write a document that is not about this issue">not about this issue</button>`;
+    box.innerHTML = `<span>${t('duo.enriching_issue')} <a href="${esc(i.url)}" target="_blank" rel="noopener">#${esc(i.number)}</a> <b>${esc(i.title)}</b>${t('duo.once_you_accept_the_document_you')}</span>
+      <button type="button" class="link-btn small" id="duo-issue-clear" title="${t('duo.write_a_document_that_is_not_2')}">${t('duo.not_about_this_issue')}</button>`;
     $d('#duo-issue-clear').onclick = () => { fromIssue = null; renderIssueBanner(); };
   }
 
@@ -323,7 +323,7 @@
   function renderDoc() {
     $d('#duo-versions').innerHTML = chat.docs.map((_, i) => `<button type="button" class="${i === chat.docView ? 'active' : ''}" data-v="${i}">v${i + 1}</button>`).join('');
     $d('#duo-versions').querySelectorAll('button').forEach((b) => (b.onclick = () => { chat.docView = +b.dataset.v; renderDoc(); }));
-    $d('#duo-doc-body').innerHTML = chat.docView < 0 ? '<p class="muted">No draft yet.</p>' : md(chat.docs[chat.docView]);
+    $d('#duo-doc-body').innerHTML = chat.docView < 0 ? `<p class="muted">${t('duo.no_draft_yet')}</p>` : md(chat.docs[chat.docView]);
   }
 
   function addCheck(cls, text) {
@@ -395,13 +395,13 @@
     $d('#duo-round').textContent = `0/${chat.maxRounds}`;
     $d('#duo-chat-title').innerHTML = `<span style="color:var(--writer)">${esc(roles.writer.model)}</span> <span class="muted">⇄</span> <span style="color:var(--reviewer)">${esc(roles.reviewer.model)}</span>`;
     addToChat(`<div class="duo-msg user"><div class="duo-bubble">
-      <div class="duo-meta"><b>You</b><span class="time">${clock(ev.ts)}</span></div>
-      ${issue ? `<p><b>Issue</b> <a href="${esc(issue.url)}" target="_blank" rel="noopener">#${esc(issue.number)}</a> ${esc(issue.title || '')}</p>` : ''}
-      ${chat.docSkill ? `<p><b>Document</b> ${esc(docLabel(chat.docSkill))} <span class="mono small">${esc(chat.docSkill)}</span></p>` : ''}
-      <p><b>Prompt</b> <span class="duo-msg-text">${esc(i.prompt)}</span></p>
-      <p><b>Goal</b> <span class="duo-msg-text">${esc(i.goal)}</span></p></div></div>`);
+      <div class="duo-meta"><b>${t('duo.you')}</b><span class="time">${clock(ev.ts)}</span></div>
+      ${issue ? `<p><b>${t('duo.issue')}</b> <a href="${esc(issue.url)}" target="_blank" rel="noopener">#${esc(issue.number)}</a> ${esc(issue.title || '')}</p>` : ''}
+      ${chat.docSkill ? `<p><b>${t('duo.document')}</b> ${esc(docLabel(chat.docSkill))} <span class="mono small">${esc(chat.docSkill)}</span></p>` : ''}
+      <p><b>${t('duo.prompt')}</b> <span class="duo-msg-text">${esc(i.prompt)}</span></p>
+      <p><b>${t('duo.goal')}</b> <span class="duo-msg-text">${esc(i.goal)}</span></p></div></div>`);
     const project = i.project_path ? (projects.find((p) => p.folder === i.project_path)?.name || i.project_path) : '';
-    note(`Run started${ev.mock ? ' · <b>simulation</b>' : ''}${issue ? ` · about issue <b>#${esc(issue.number)}</b>` : ''}${project ? ` · project <b>${esc(project)}</b> (read-only)` : ''} · approve at ${chat.threshold}/10 · max ${chat.maxRounds} rounds`);
+    note(`Run started${ev.mock ? ` · <b>${t('duo.simulation')}</b>` : ''}${issue ? ` · about issue <b>#${esc(issue.number)}</b>` : ''}${project ? ` · project <b>${esc(project)}</b> ${t('duo.read_only')}` : ''} · approve at ${chat.threshold}/10 · max ${chat.maxRounds} rounds`);
     addCheck('ok', `Run started${ev.mock ? ' (simulation, no model calls)' : ''}`);
     $d('#duo-chat-status').textContent = 'running';
   }
@@ -487,7 +487,7 @@
       renderDoc();
       const words = String(o.document || '').split(/\s+/).filter(Boolean).length;
       message('writer', `<p class="duo-msg-text">${esc(o.message)}</p>
-        <button type="button" class="duo-doc-card" data-v="${chat.docView}">${ICON_DOC}<span><b>document.md · v${chat.docs.length}</b><small>${words} words · click to view</small></span></button>`, ev.ts, 'write');
+        <button type="button" class="duo-doc-card" data-v="${chat.docView}">${ICON_DOC}<span><b>${t('duo.document_md_v')}${chat.docs.length}</b><small>${words} ${t('duo.words_click_to_view')}</small></span></button>`, ev.ts, 'write');
     }
     if (ev.step_id === 'review') {
       const score = +o.score || 0;
@@ -503,7 +503,7 @@
     }
     if (ev.step_id === 'signoff') {
       const checks = (o.checks || []).map((c) => `<li class="${c.ok ? 'ok' : 'no'}"><b>${c.ok ? '✓' : '✗'}</b><span>${esc(c.item)}</span></li>`).join('');
-      message('supervisor', `${o.ready ? '<div class="duo-ready">✓ Ready</div>' : '<div class="duo-not-ready">↺ Not ready yet</div>'}
+      message('supervisor', `${o.ready ? `<div class="duo-ready">${t('duo.ready')}</div>` : `<div class="duo-not-ready">${t('duo.not_ready_yet')}</div>`}
         <p class="duo-msg-text">${esc(o.summary)}</p>${checks ? `<ul class="duo-checklist">${checks}</ul>` : ''}`, ev.ts, 'signoff');
       addCheck(o.ready ? 'ok' : 'warn', o.ready ? 'Final check against the goal: passed' : 'Final check: sent back to the writer');
     }
@@ -541,7 +541,7 @@
     }
     const label = (ev.intent && chat.labels?.[`${choice}:${ev.intent}`]) || chat.labels?.[choice] || choice;
     addToChat(`<div class="duo-msg user reply"><div class="duo-bubble">
-      <div class="duo-meta"><b>You</b><span class="time">${clock(ev.ts)}</span></div>
+      <div class="duo-meta"><b>${t('duo.you')}</b><span class="time">${clock(ev.ts)}</span></div>
       <p><b>${esc(label)}</b></p>${ev.feedback ? `<p class="duo-msg-text">${esc(ev.feedback)}</p>` : ''}</div></div>`);
     if (ev.feedback) addCheck('act', `Your instruction: ${ev.feedback.slice(0, 120)}`);
     ['writer', 'reviewer', 'supervisor'].forEach((r) => setCast(r, 'idle'));
@@ -557,14 +557,14 @@
     const last = chat.scores.at(-1);
     if (ev.status === 'success') {
       const rounds = chat.scores.length;
-      note(`<b>Done</b>${last != null ? ` · ${last.toFixed(1)}/10` : ''} after ${rounds} round${rounds === 1 ? '' : 's'} · saved to <span class="mono">document.md</span> · ${cost} · ${dur}`, 'done');
+      note(`<b>${t('duo.done')}</b>${last != null ? ` · ${last.toFixed(1)}/10` : ''} ${t('duo.after_rounds_round_value_saved_to', { rounds, value: rounds === 1 ? '' : 's' })} <span class="mono">${t('duo.document_md')}</span> · ${cost} · ${dur}`, 'done');
       ['writer', 'reviewer', 'supervisor'].forEach((r) => setCast(r, 'done'));
       setSuperPill('success', 'done');
       addCheck('ok', 'Run finished');
       $d('#duo-chat-status').textContent = 'Finished';
       // accepted and about an issue: Save to issue, now or later (a replayed run keeps it)
       if (chat.issue) {
-        note(`<button type="button" class="btn sm primary" data-save-issue title="Preview it, then confirm: it changes the issue on ${chat.mock ? 'the platform (simulated run: preview only)' : 'GitHub/GitLab'}">Save to issue #${esc(chat.issue.number)}…</button>
+        note(`<button type="button" class="btn sm primary" data-save-issue title="${t('duo.preview_it_then_confirm_it_changes', { value: chat.mock ? 'the platform (simulated run: preview only)' : 'GitHub/GitLab' })}">${t('duo.save_to_issue_number', { number: esc(chat.issue.number) })}</button>
           <span class="muted small">${chat.mock ? 'simulated run: preview only, nothing is sent' : 'replace its description or add it as a comment; you confirm first'}</span>`, 'done duo-save-row');
       }
     } else {
@@ -631,7 +631,7 @@
   async function previewSave() {
     const { runId } = saveRun;
     $d('#duo-save-error').textContent = '';
-    $d('#duo-save-preview').innerHTML = '<p class="muted">Loading the preview…</p>';
+    $d('#duo-save-preview').innerHTML = `<p class="muted">${t('duo.loading_the_preview')}</p>`;
     try {
       const p = await api.saveDocToIssue(runId, saveMode(), true);
       if (saveRun?.runId !== runId) return;
@@ -770,41 +770,41 @@
         <div id="duo-setup" class="duo-setup">
           <div class="page-head">
             <div>
-              <h1>Write &amp; Review <span class="duo-lab">lab</span> <button id="duo-help-open" class="duo-help-btn" type="button" title="How Write &amp; Review works" aria-label="How Write &amp; Review works">?</button></h1>
-              <p class="muted small">A writer drafts, a reviewer scores it against the goal and sends notes back, until the goal is met. Runs the <span class="mono">writer-reviewer</span> workflow; past runs are in Workflows › Runs.</p>
+              <h1>${t('duo.write_review')} <span class="duo-lab">${t('duo.lab')}</span> <button id="duo-help-open" class="duo-help-btn" type="button" title="${t('duo.how_write_review_works')}" aria-label="${t('duo.how_write_review_works')}">?</button></h1>
+              <p class="muted small">${t('duo.a_writer_drafts_a_reviewer_scores')} <span class="mono">${t('duo.writer_reviewer')}</span> ${t('duo.workflow_past_runs_are_in_workflows')}</p>
             </div>
-            <button id="duo-edit-workflow" class="btn ghost sm" type="button" title="Open the workflow YAML">writer-reviewer.yaml</button>
+            <button id="duo-edit-workflow" class="btn ghost sm" type="button" title="${t('duo.open_the_workflow_yaml')}">${t('duo.writer_reviewer_yaml')}</button>
           </div>
 
           <div class="duo-brief">
             <!-- prefilled from a Backlog issue ("Enrich in Write & Review", duo.js openDuoForIssue) -->
             <div id="duo-issue" class="duo-issue hidden"></div>
             <div class="field duo-skill">
-              <label for="duo-skill">Document type <span class="muted">(optional)</span></label>
+              <label for="duo-skill">${t('duo.document_type')} <span class="muted">${t('duo.optional')}</span></label>
               <div class="row">
                 <select id="duo-skill"></select>
-                <span class="muted small">The writer and the reviewer load this skill: its structure and its rubric.</span>
+                <span class="muted small">${t('duo.the_writer_and_the_reviewer_load')}</span>
               </div>
             </div>
             <div class="field">
-              <label for="duo-prompt">Prompt <span class="req">*</span></label>
-              <textarea id="duo-prompt" rows="3" placeholder="What should be written? E.g. a PRD for offline mode in the mobile app, a blog post, a migration plan...">Write a one-page PRD for adding offline mode to our mobile note-taking app: problem, users, scope, non-goals, rollout and success metrics.</textarea>
+              <label for="duo-prompt">${t('duo.prompt')} <span class="req">*</span></label>
+              <textarea id="duo-prompt" rows="3" placeholder="${t('duo.what_should_be_written_e_g')}">${t('duo.write_a_one_page_prd_for')}</textarea>
             </div>
             <div class="field">
-              <label for="duo-goal">Goal <span class="req">*</span></label>
-              <textarea id="duo-goal" rows="2" placeholder="When is the document good enough? The reviewer scores against this.">A PM can hand it to engineering as-is: every requirement is testable, conflicts during sync are addressed, and the metrics have targets.</textarea>
+              <label for="duo-goal">${t('duo.goal')} <span class="req">*</span></label>
+              <textarea id="duo-goal" rows="2" placeholder="${t('duo.when_is_the_document_good_enough')}">${t('duo.a_pm_can_hand_it_to')}</textarea>
             </div>
             <div class="field duo-project">
-              <label for="duo-project">Project <span class="muted">(optional)</span></label>
+              <label for="duo-project">${t('duo.project')} <span class="muted">${t('duo.optional')}</span></label>
               <div class="row">
                 <select id="duo-project"></select>
-                <span id="duo-project-hint" class="muted small">The writer and the reviewer read its files (read-only) to ground the document.</span>
+                <span id="duo-project-hint" class="muted small">${t('duo.the_writer_and_the_reviewer_read')}</span>
               </div>
             </div>
             <div class="duo-rules">
-              <label>Approve at <input id="duo-threshold" type="number" min="1" max="10" step="0.5" value="8" /> / 10</label>
-              <label>Max rounds <input id="duo-rounds" type="number" min="1" max="10" value="5" /></label>
-              <span class="muted small">If the rounds run out, the run stops at a human gate.</span>
+              <label>${t('duo.approve_at')} <input id="duo-threshold" type="number" min="1" max="10" step="0.5" value="8" /> / 10</label>
+              <label>${t('duo.max_rounds')} <input id="duo-rounds" type="number" min="1" max="10" value="5" /></label>
+              <span class="muted small">${t('duo.if_the_rounds_run_out_the')}</span>
             </div>
           </div>
 
@@ -812,29 +812,29 @@
             <div class="duo-agent writer">
               <div class="duo-agent-head">
                 <span class="duo-robot xl writer" data-robot="writer"></span>
-                <div><b>Writer</b><div class="muted small">Drafts the document and applies the reviewer's notes.</div></div>
+                <div><b>${t('duo.writer')}</b><div class="muted small">${t('duo.drafts_the_document_and_applies_the')}</div></div>
               </div>
               <div class="duo-agent-form">
-                <div class="field"><label>Provider</label><select data-role="writer" data-field="provider"></select></div>
-                <div class="field"><label>Model</label><select data-role="writer" data-field="model"></select></div>
-                <div class="field"><label>Effort</label><div class="seg duo-effort" data-role="writer"></div></div>
+                <div class="field"><label>${t('duo.provider')}</label><select data-role="writer" data-field="provider"></select></div>
+                <div class="field"><label>${t('duo.model')}</label><select data-role="writer" data-field="model"></select></div>
+                <div class="field"><label>${t('duo.effort')}</label><div class="seg duo-effort" data-role="writer"></div></div>
               </div>
             </div>
 
             <div class="duo-link" aria-hidden="true">
               <svg viewBox="0 0 48 24"><path d="M4 8h36l-5-5M44 16H8l5 5" /></svg>
-              <span class="muted small">draft<br />score + notes</span>
+              <span class="muted small">${t('duo.draft')}<br />${t('duo.score_notes')}</span>
             </div>
 
             <div class="duo-agent reviewer">
               <div class="duo-agent-head">
                 <span class="duo-robot xl reviewer" data-robot="reviewer"></span>
-                <div><b>Reviewer</b><div class="muted small">Scores each draft 0–10 against the goal and lists what to fix.</div></div>
+                <div><b>${t('duo.reviewer')}</b><div class="muted small">${t('duo.scores_each_draft_0_10_against')}</div></div>
               </div>
               <div class="duo-agent-form">
-                <div class="field"><label>Provider</label><select data-role="reviewer" data-field="provider"></select></div>
-                <div class="field"><label>Model</label><select data-role="reviewer" data-field="model"></select></div>
-                <div class="field"><label>Effort</label><div class="seg duo-effort" data-role="reviewer"></div></div>
+                <div class="field"><label>${t('duo.provider')}</label><select data-role="reviewer" data-field="provider"></select></div>
+                <div class="field"><label>${t('duo.model')}</label><select data-role="reviewer" data-field="model"></select></div>
+                <div class="field"><label>${t('duo.effort')}</label><div class="seg duo-effort" data-role="reviewer"></div></div>
               </div>
             </div>
           </div>
@@ -842,17 +842,17 @@
           <div class="duo-agent supervisor">
             <div class="duo-agent-head">
               <span class="duo-robot xl supervisor" data-robot="supervisor"></span>
-              <div class="spacer"><b>Supervisor</b><div class="muted small">The platform's own agent. Watches the loop, steps in when a turn fails or the loop stalls (max 6 interventions) and signs off at the end. It never edits the document.</div></div>
+              <div class="spacer"><b>${t('duo.supervisor')}</b><div class="muted small">${t('duo.the_platform_s_own_agent_watches')}</div></div>
             </div>
           </div>
 
           <div class="duo-actions">
             <span id="duo-error" class="error duo-error"></span>
-            <label class="duo-switch dev-only" id="duo-scenario-wrap" title="What the simulated agents do">Scenario <select id="duo-scenario"></select></label>
-            <label class="duo-switch dev-only" title="Simulated agents: no CLI is called and nothing is spent"><input id="duo-mock" type="checkbox" /> <span>Simulation (no model calls)</span></label>
+            <label class="duo-switch dev-only" id="duo-scenario-wrap" title="${t('duo.what_the_simulated_agents_do')}">${t('duo.scenario')} <select id="duo-scenario"></select></label>
+            <label class="duo-switch dev-only" title="${t('duo.simulated_agents_no_cli_is_called')}"><input id="duo-mock" type="checkbox" /> <span>${t('duo.simulation_no_model_calls')}</span></label>
             <button id="duo-run" class="btn primary btn-icon" type="button">
               <svg class="icon" width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l12-7.5a1 1 0 0 0 0-1.72l-12-7.5A1 1 0 0 0 7 4.5z" /></svg>
-              Run
+              ${t('duo.run')}
             </button>
           </div>
         </div>
@@ -861,38 +861,38 @@
         <div id="duo-chat" class="duo-chat hidden">
           <div class="duo-chat-main">
             <header class="duo-chat-head">
-              <button id="duo-back" class="icon-btn" type="button" title="Back to setup"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6" /></svg></button>
+              <button id="duo-back" class="icon-btn" type="button" title="${t('duo.back_to_setup')}"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6" /></svg></button>
               <div class="duo-pair">
-                <span class="duo-cast"><span class="duo-robot head writer" data-cast="writer"></span><span data-cast-state="writer">idle</span></span>
-                <span class="duo-cast"><span class="duo-robot head reviewer" data-cast="reviewer"></span><span data-cast-state="reviewer">idle</span></span>
-                <span class="duo-cast"><span class="duo-robot head supervisor" data-cast="supervisor"></span><span data-cast-state="supervisor">idle</span></span>
+                <span class="duo-cast"><span class="duo-robot head writer" data-cast="writer"></span><span data-cast-state="writer">${t('duo.idle')}</span></span>
+                <span class="duo-cast"><span class="duo-robot head reviewer" data-cast="reviewer"></span><span data-cast-state="reviewer">${t('duo.idle')}</span></span>
+                <span class="duo-cast"><span class="duo-robot head supervisor" data-cast="supervisor"></span><span data-cast-state="supervisor">${t('duo.idle')}</span></span>
               </div>
               <div class="duo-chat-title">
-                <b id="duo-chat-title">Writer &amp; Reviewer</b>
-                <div id="duo-chat-status" class="muted small">starting…</div>
+                <b id="duo-chat-title">${t('duo.writer_reviewer_2')}</b>
+                <div id="duo-chat-status" class="muted small">${t('duo.starting')}</div>
               </div>
               <div class="spacer"></div>
-              <div class="duo-round"><label class="muted small">Round</label> <b id="duo-round" class="mono">0/5</b></div>
-              <div class="duo-scores" id="duo-scores" title="Reviewer score per round"></div>
-              <button id="duo-help-open2" class="duo-help-btn sm" type="button" title="How Write &amp; Review works" aria-label="How Write &amp; Review works">?</button>
-              <button id="duo-logs" class="btn ghost sm" type="button" title="Open the run folder (events, drafts, document.md)">Run folder</button>
-              <button id="duo-stop" class="btn danger sm hidden" type="button">Stop</button>
+              <div class="duo-round"><label class="muted small">${t('duo.round')}</label> <b id="duo-round" class="mono">0/5</b></div>
+              <div class="duo-scores" id="duo-scores" title="${t('duo.reviewer_score_per_round')}"></div>
+              <button id="duo-help-open2" class="duo-help-btn sm" type="button" title="${t('duo.how_write_review_works')}" aria-label="${t('duo.how_write_review_works')}">?</button>
+              <button id="duo-logs" class="btn ghost sm" type="button" title="${t('duo.open_the_run_folder_events_drafts')}">${t('duo.run_folder')}</button>
+              <button id="duo-stop" class="btn danger sm hidden" type="button">${t('duo.stop')}</button>
             </header>
             <div id="duo-messages" class="duo-messages"></div>
           </div>
 
           <aside class="duo-side">
             <section class="duo-doc">
-              <div class="duo-side-head"><h2>Document</h2><div id="duo-versions" class="seg sm"></div></div>
-              <article id="duo-doc-body" class="duo-doc-body md md-compact">No draft yet.</article>
+              <div class="duo-side-head"><h2>${t('duo.document')}</h2><div id="duo-versions" class="seg sm"></div></div>
+              <article id="duo-doc-body" class="duo-doc-body md md-compact">${t('duo.no_draft_yet')}</article>
             </section>
             <section class="duo-super-panel">
               <div class="duo-side-head">
-                <h2>Supervisor</h2>
-                <span id="duo-super-state" class="pill pill-running">watching</span>
+                <h2>${t('duo.supervisor')}</h2>
+                <span id="duo-super-state" class="pill pill-running">${t('duo.watching')}</span>
               </div>
               <ul id="duo-checks" class="duo-checks"></ul>
-              <div class="muted small">Interventions <b id="duo-interventions" class="mono">0/6</b></div>
+              <div class="muted small">${t('duo.interventions')} <b id="duo-interventions" class="mono">0/6</b></div>
             </section>
           </aside>
         </div>
@@ -900,20 +900,20 @@
     modals: `
   <div id="duo-save-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="duo-save-title">
     <div class="modal-card duo-save-card">
-      <h3 id="duo-save-title">Save to issue</h3>
+      <h3 id="duo-save-title">${t('duo.save_to_issue')}</h3>
       <p id="duo-save-issue" class="muted small"></p>
       <fieldset class="bl-grouping">
-        <legend class="small">How</legend>
-        <label class="check"><input type="radio" name="duo-save-mode" value="replace" checked /><span>Replace the description: the document becomes the issue's body, the original is kept at the end in a collapsed "Original description" block</span></label>
-        <label class="check"><input type="radio" name="duo-save-mode" value="comment" /><span>Add as a comment: the issue's description stays as it is</span></label>
+        <legend class="small">${t('duo.how')}</legend>
+        <label class="check"><input type="radio" name="duo-save-mode" value="replace" checked /><span>${t('duo.replace_the_description_the_document_becomes')}</span></label>
+        <label class="check"><input type="radio" name="duo-save-mode" value="comment" /><span>${t('duo.add_as_a_comment_the_issue')}</span></label>
       </fieldset>
-      <div class="small muted">Command: <span id="duo-save-command" class="mono"></span></div>
+      <div class="small muted">${t('duo.command')} <span id="duo-save-command" class="mono"></span></div>
       <div id="duo-save-preview" class="md duo-save-preview"></div>
       <p id="duo-save-note" class="small"></p>
       <p id="duo-save-error" class="error small"></p>
       <div class="modal-actions">
-        <button type="button" id="btn-duo-save-cancel" class="btn ghost">Cancel</button>
-        <button type="button" id="btn-duo-save-ok" class="btn primary">Save to issue</button>
+        <button type="button" id="btn-duo-save-cancel" class="btn ghost">${t('common.cancel')}</button>
+        <button type="button" id="btn-duo-save-ok" class="btn primary">${t('duo.save_to_issue')}</button>
       </div>
     </div>
   </div>
@@ -921,67 +921,67 @@
   <div id="duo-help" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="duo-help-title">
     <div class="modal-card duo-help-card">
       <div class="duo-help-head">
-        <h3 id="duo-help-title">How Write &amp; Review works</h3>
-        <button id="duo-help-close" class="icon-btn" type="button" title="Close (Esc)" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" /></svg></button>
+        <h3 id="duo-help-title">${t('duo.how_write_review_works')}</h3>
+        <button id="duo-help-close" class="icon-btn" type="button" title="${t('duo.close_esc')}" aria-label="${t('common.close')}"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" /></svg></button>
       </div>
       <div class="duo-help-body">
-        <p class="duo-help-lead">Three AI agents write a document for you. A <b class="c-writer">writer</b> drafts it, a <b class="c-reviewer">reviewer</b> scores it against your goal and sends notes back until it passes, and the <b class="c-supervisor">supervisor</b> checks the result and asks you what to do. You follow it as a chat, and you decide at the end.</p>
+        <p class="duo-help-lead">${t('duo.three_ai_agents_write_a_document')} <b class="c-writer">${t('duo.writer_2')}</b> ${t('duo.drafts_it_a')} <b class="c-reviewer">${t('duo.reviewer_2')}</b> ${t('duo.scores_it_against_your_goal_and')} <b class="c-supervisor">${t('duo.supervisor_2')}</b> ${t('duo.checks_the_result_and_asks_you')}</p>
         <div class="duo-help-cast" id="duo-help-cast"></div>
 
-        <h4>1. Set up a run</h4>
+        <h4>${t('duo.n1_set_up_a_run')}</h4>
         <ul>
-          <li><b>Prompt</b>: what to write (a PRD, a migration plan, a blog post…).</li>
-          <li><b>Goal</b>: when the document is good enough. The reviewer scores every draft against it, so make it concrete ("every requirement is testable", "metrics have targets").</li>
-          <li><b>Project</b> (optional): the writer and the reviewer work in the project's folder and read its files to ground the document. They are <b>read-only</b> there: they can't create, edit or delete anything, and the drafts are saved in the run folder, not in the project.</li>
-          <li><b>Approve at</b>: the minimum score (0-10) for a draft to pass. <b>Max rounds</b>: how many reviews before you are asked what to do.</li>
-          <li><b>Writer and reviewer</b>: pick the CLI (Claude Code, Codex, Grok), the model and the effort of each one. Different models in the two roles give the review a second perspective. The <b>supervisor</b> is the platform's own agent: it is fixed and not configurable.</li>
+          <li><b>${t('duo.prompt')}</b>${t('duo.what_to_write_a_prd_a')}</li>
+          <li><b>${t('duo.goal')}</b>${t('duo.when_the_document_is_good_enough')}</li>
+          <li><b>${t('duo.project')}</b> ${t('duo.optional_the_writer_and_the_reviewer')} <b>${t('duo.read_only_2')}</b> ${t('duo.there_they_can_t_create_edit')}</li>
+          <li><b>${t('duo.approve_at')}</b>${t('duo.the_minimum_score_0_10_for')} <b>${t('duo.max_rounds')}</b>${t('duo.how_many_reviews_before_you_are')}</li>
+          <li><b>${t('duo.writer_and_reviewer')}</b>${t('duo.pick_the_cli_claude_code_codex')} <b>${t('duo.supervisor_2')}</b> ${t('duo.is_the_platform_s_own_agent')}</li>
         </ul>
 
-        <h4>2. The flow</h4>
+        <h4>${t('duo.n2_the_flow')}</h4>
         <div class="duo-help-flow">
-          <span class="c-writer">Write</span><i>→</i><span class="c-reviewer">Review</span><i>→</i><span class="c-ok">score ≥ approve at?</span><i>→</i><span class="c-supervisor">Supervisor check</span><i>→</i><span class="c-you">You decide</span><i>→</i><span class="c-ok">Done</span>
+          <span class="c-writer">${t('duo.write')}</span><i>→</i><span class="c-reviewer">${t('duo.review')}</span><i>→</i><span class="c-ok">${t('duo.score_approve_at')}</span><i>→</i><span class="c-supervisor">${t('duo.supervisor_check')}</span><i>→</i><span class="c-you">${t('duo.you_decide')}</span><i>→</i><span class="c-ok">${t('duo.done')}</span>
         </div>
         <ul>
-          <li>Below the score, the reviewer's notes go back to the writer, who sends a new version (v2, v3…). The reviewer also checks whether its previous notes were addressed.</li>
-          <li>The <b>engine</b> decides whether a draft passes, from the score and your threshold. The agents don't.</li>
-          <li>If the rounds run out, the supervisor asks you: accept the last draft, one more round, or stop.</li>
-          <li>When a draft passes, the supervisor checks it against each part of your goal ("✓ Ready" or "↺ Not ready yet") and recommends what to do.</li>
+          <li>${t('duo.below_the_score_the_reviewer_s')}</li>
+          <li>${t('duo.the')} <b>${t('duo.engine')}</b> ${t('duo.decides_whether_a_draft_passes_from')}</li>
+          <li>${t('duo.if_the_rounds_run_out_the_2')}</li>
+          <li>${t('duo.when_a_draft_passes_the_supervisor')}</li>
         </ul>
 
-        <h4>3. Talking to the supervisor</h4>
+        <h4>${t('duo.n3_talking_to_the_supervisor')}</h4>
         <ul>
-          <li>The supervisor <b>always asks you</b> before the run ends: <b>accept</b> the document, <b>send it back</b> to the writer, or <b>stop</b>.</li>
-          <li>You can also type <b>instructions</b>, e.g. "Keep the pricing and the launch date as open questions: they are decided later". Your instructions go into every later prompt of the writer, the reviewer and the supervisor. They take precedence over the goal, and the reviewer won't count them against the draft.</li>
-          <li>Nothing crosses these questions automatically: the run waits for you.</li>
+          <li>${t('duo.the_supervisor')} <b>${t('duo.always_asks_you')}</b> ${t('duo.before_the_run_ends')} <b>${t('duo.accept')}</b> ${t('duo.the_document')} <b>${t('duo.send_it_back')}</b> ${t('duo.to_the_writer_or')} <b>${t('duo.stop_2')}</b>.</li>
+          <li>${t('duo.you_can_also_type')} <b>${t('duo.instructions')}</b>${t('duo.e_g_keep_the_pricing_and')}</li>
+          <li>${t('duo.nothing_crosses_these_questions_automatically_th')}</li>
         </ul>
 
-        <h4>4. Reading the chat</h4>
+        <h4>${t('duo.n4_reading_the_chat')}</h4>
         <ul>
-          <li><b>Robots</b>: one per model (Claude, ChatGPT, Grok…), with the model on its name plate. The robot below the last message shows what the agent is doing right now: thinking, reading, writing, waiting for you, error, done. The same states are shown for all three agents in the header.</li>
-          <li><b>Writer</b> messages carry the draft (<i>document.md · vN</i>): click it, or use v1, v2… in the <b>Document</b> panel, to read any version.</li>
-          <li><b>Reviewer</b> messages show the score and its bar (the tick is your threshold), a summary and the notes. <span class="sev major">major</span> notes block approval and <span class="sev minor">minor</span> notes don't. The header chart shows the score per round.</li>
-          <li>The <b>Supervisor</b> panel lists what it checked and each intervention. Every message shows its tokens, cost and time. <b>Stop</b> ends the run and <b>Run folder</b> opens its files.</li>
+          <li><b>${t('duo.robots')}</b>${t('duo.one_per_model_claude_chatgpt_grok')}</li>
+          <li><b>${t('duo.writer')}</b> ${t('duo.messages_carry_the_draft')}<i>${t('duo.document_md_vn')}</i>${t('duo.click_it_or_use_v1_v2')} <b>${t('duo.document')}</b> ${t('duo.panel_to_read_any_version')}</li>
+          <li><b>${t('duo.reviewer')}</b> ${t('duo.messages_show_the_score_and_its')} <span class="sev major">${t('duo.major')}</span> ${t('duo.notes_block_approval_and')} <span class="sev minor">${t('duo.minor')}</span> ${t('duo.notes_don_t_the_header_chart')}</li>
+          <li>${t('duo.the')} <b>${t('duo.supervisor')}</b> ${t('duo.panel_lists_what_it_checked_and')} <b>${t('duo.stop')}</b> ${t('duo.ends_the_run_and')} <b>${t('duo.run_folder')}</b> ${t('duo.opens_its_files')}</li>
         </ul>
 
-        <h4>5. When something goes wrong</h4>
+        <h4>${t('duo.n5_when_something_goes_wrong')}</h4>
         <ul>
-          <li>If an agent's answer doesn't have the expected format, it's rejected (red robot) and the agent is asked again, up to twice.</li>
-          <li>If it still fails, the supervisor steps in: it explains what happened and retries with an instruction, or asks you. It routes problems to the agents and never edits the document itself.</li>
-          <li>Real runs check before starting that the CLIs are installed, the budgets allow it and the project folder exists.</li>
+          <li>${t('duo.if_an_agent_s_answer_doesn')}</li>
+          <li>${t('duo.if_it_still_fails_the_supervisor')}</li>
+          <li>${t('duo.real_runs_check_before_starting_that')}</li>
         </ul>
 
-        <h4>6. Where the results are</h4>
+        <h4>${t('duo.n6_where_the_results_are')}</h4>
         <ul>
-          <li>In the run folder: <b>document.md</b> (the last version) and <b>drafts/v1.md, v2.md…</b>, plus the full log of the run. They also show up in <b>Artifacts</b>.</li>
-          <li>Every run is in <b>Workflows › Runs</b>, and under the project when you picked one. <b>Open chat</b> replays the conversation, or follows it if it's still running.</li>
-          <li>Under the hood it's the <span class="mono">writer-reviewer</span> workflow (Workflows › Definitions), which you can also start from the Start panel.</li>
+          <li>${t('duo.in_the_run_folder')} <b>${t('duo.document_md')}</b> ${t('duo.the_last_version_and')} <b>${t('duo.drafts_v1_md_v2_md')}</b>${t('duo.plus_the_full_log_of_the')} <b>${t('duo.artifacts')}</b>.</li>
+          <li>${t('duo.every_run_is_in')} <b>${t('duo.workflows_runs')}</b>${t('duo.and_under_the_project_when_you')} <b>${t('duo.open_chat')}</b> ${t('duo.replays_the_conversation_or_follows_it')}</li>
+          <li>${t('duo.under_the_hood_it_s_the')} <span class="mono">${t('duo.writer_reviewer')}</span> ${t('duo.workflow_workflows_definitions_which_you_can')}</li>
         </ul>
 
-        <h4>7. Simulation (developer mode)</h4>
+        <h4>${t('duo.n7_simulation_developer_mode')}</h4>
         <ul>
-          <li>Turn on <b>Settings › Execution › Developer mode</b> to see the <b>Simulation</b> checkbox (checked by default). Simulated agents call no CLI and cost nothing.</li>
-          <li>The <b>Scenario</b> picker sets what the simulated agents do: approved on the 3rd review (5.5 → 7 → 8.6), approved on the 1st, never reaches the score (the rounds run out), the supervisor finds gaps, the reviewer answers in the wrong format (the supervisor steps in).</li>
-          <li>Real runs use your CLIs' plans. Every round is a writer turn and a reviewer turn, plus one supervisor check at the end.</li>
+          <li>${t('duo.turn_on')} <b>${t('duo.settings_execution_developer_mode')}</b> ${t('duo.to_see_the')} <b>${t('duo.simulation_2')}</b> ${t('duo.checkbox_checked_by_default_simulated_agents')}</li>
+          <li>${t('duo.the')} <b>${t('duo.scenario')}</b> ${t('duo.picker_sets_what_the_simulated_agents')}</li>
+          <li>${t('duo.real_runs_use_your_clis_plans')}</li>
         </ul>
       </div>
     </div>

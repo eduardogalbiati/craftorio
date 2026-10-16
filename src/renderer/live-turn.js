@@ -148,13 +148,13 @@
     const md = typeof markdownHtml === 'function' ? markdownHtml : (t) => `<p>${escape(t)}</p>`;
     const n = v.stepCount;
     const steps = n ? `<div class="live-turn-steps">
-        <button type="button" class="link-btn small" data-live-steps aria-expanded="${turn.stepsOpen}">${n} step${n === 1 ? '' : 's'}</button>
+        <button type="button" class="link-btn small" data-live-steps aria-expanded="${turn.stepsOpen}">${n} ${t('live_turn.step')}${n === 1 ? '' : 's'}</button>
         ${turn.stepsOpen ? `<ol class="live-turn-list">${v.stepCount > v.steps.length ? '<li class="muted">…</li>' : ''}${v.steps.map((s) => `<li class="live-step ${s.state}" title="${e(s.detail || s.label)}"><span class="live-step-mark" aria-hidden="true"></span><span>${e(s.label)}</span></li>`).join('')}</ol>` : ''}
       </div>` : '';
     return `<div class="live-turn${v.stale ? ' stale' : ''}" data-live-status="${e(v.status)}" role="status" aria-live="polite">
       <div class="live-turn-status">${v.active ? '<span class="spinner" aria-hidden="true"></span>' : ''}<span class="live-turn-label">${e(v.label)}</span>
-        <span class="live-turn-time muted small" title="Time since the question was sent">${e(v.elapsed)}</span>
-        ${stop && v.active ? `<button type="button" class="btn sm ghost" data-live-stop${v.status === 'stopping' ? ' disabled' : ''} title="End this turn: what was written so far is kept">Stop</button>` : ''}</div>
+        <span class="live-turn-time muted small" title="${t('live_turn.time_since_the_question_was_sent')}">${e(v.elapsed)}</span>
+        ${stop && v.active ? `<button type="button" class="btn sm ghost" data-live-stop${v.status === 'stopping' ? ' disabled' : ''} title="${t('live_turn.end_this_turn_what_was_written')}">${t('live_turn.stop')}</button>` : ''}</div>
       ${steps}
       ${v.text ? `<div class="live-turn-text md md-compact">${md(v.text)}</div>` : ''}
     </div>`;

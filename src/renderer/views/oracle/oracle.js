@@ -341,7 +341,7 @@
     if (!names.length) return '';
     return `<div class="oracle-thumbs">${names.map((n) => {
       const url = attachmentCache.get(n);
-      return `<span class="oracle-thumb" title="${esc(n)}">${typeof url === 'string' ? `<img src="${esc(url)}" alt="Pasted image ${esc(n)}" />` : '<span class="muted small">image</span>'}</span>`;
+      return `<span class="oracle-thumb" title="${esc(n)}">${typeof url === 'string' ? `<img src="${esc(url)}" alt="${t('oracle.pasted_image_n', { n: esc(n) })}" />` : `<span class="muted small">${t('oracle.image')}</span>`}</span>`;
     }).join('')}</div>`;
   }
   function loadAttachments(names = []) {
@@ -358,25 +358,25 @@
   }
   // each proposal as a card; "Use this text" fills the gate's feedback box (never answers it)
   const feedbackCardsHtml = (blocks, ref) => blocks.map((b) => `<div class="oracle-feedback-card" data-testid="oracle-feedback-card">
-      <div class="muted small">Proposed text for "Ask for changes"</div>
+      <div class="muted small">${t('oracle.proposed_text_for_ask_for_changes')}</div>
       <div class="oracle-text">${esc(b)}</div>
-      ${ref ? `<div class="row oracle-card-actions"><button class="btn primary sm" type="button" data-oracle-use-text="${esc(ref)}" data-text="${esc(b)}" title="Put this text in the gate's feedback box; you still choose the answer">Use this text</button></div>` : ''}
+      ${ref ? `<div class="row oracle-card-actions"><button class="btn primary sm" type="button" data-oracle-use-text="${esc(ref)}" data-text="${esc(b)}" title="${t('oracle.put_this_text_in_the_gate')}">${t('oracle.use_this_text')}</button></div>` : ''}
     </div>`).join('');
   function messageHtml(m, ref = '') {
     if (m.role === 'user') {
       loadAttachments(m.attachments);
-      return `<div class="sup-wmsg user"><div class="sup-wmsg-meta oracle-meta">You · ${esc(time(m.ts))}${m.screen ? ` · <span class="oracle-cut" title="${esc(m.screen)}">${esc(m.screen)}</span>` : ''}${m.unanswered ? ' · <span class="badge warn">no answer</span>' : ''}${m.refused ? ` · <span class="badge warn" title="${esc(m.refused.text || '')}">not sent: ${m.refused.reason === 'daily-budget' ? 'daily budget' : 'monthly budget'}</span>` : ''}</div>${m.context?.label ? `<div class="oracle-cut small muted" title="${esc(m.context.label)}">About: ${esc(m.context.label)}</div>` : ''}<div class="oracle-text">${esc(m.text)}</div>${thumbsHtml(m.attachments)}</div>`;
+      return `<div class="sup-wmsg user"><div class="sup-wmsg-meta oracle-meta">${t('oracle.you')} ${esc(time(m.ts))}${m.screen ? ` · <span class="oracle-cut" title="${esc(m.screen)}">${esc(m.screen)}</span>` : ''}${m.unanswered ? ` · <span class="badge warn">${t('oracle.no_answer')}</span>` : ''}${m.refused ? ` · <span class="badge warn" title="${esc(m.refused.text || '')}">${t('oracle.not_sent')} ${m.refused.reason === 'daily-budget' ? 'daily budget' : 'monthly budget'}</span>` : ''}</div>${m.context?.label ? `<div class="oracle-cut small muted" title="${esc(m.context.label)}">${t('oracle.about')} ${esc(m.context.label)}</div>` : ''}<div class="oracle-text">${esc(m.text)}</div>${thumbsHtml(m.attachments)}</div>`;
     }
     if (m.kind === 'action' && m.action) return cardHtml(m);
     if (m.kind === 'delegation') {
-      return `<div class="sup-wmsg system oracle-delegation${m.failed ? ' error' : ''}"><div class="sup-wmsg-meta oracle-meta">${M.delegationParts(m, { fmtTime: time, fmtCost }).map(esc).join(' · ')}${m.failed ? ' · <span class="pill pill-failed">Failed</span>' : ''}</div>
+      return `<div class="sup-wmsg system oracle-delegation${m.failed ? ' error' : ''}"><div class="sup-wmsg-meta oracle-meta">${M.delegationParts(m, { fmtTime: time, fmtCost }).map(esc).join(' · ')}${m.failed ? ` · <span class="pill pill-failed">${t('oracle.failed')}</span>` : ''}</div>
         <div class="oracle-cut small" title="${esc(m.question)}">${esc(m.question)}</div>
-        <details class="oracle-fold"><summary>Answer${m.ref ? ` <span class="muted small">(${esc(m.ref)})</span>` : ''}</summary><div class="md md-compact oracle-md">${markdownHtml(m.text || '')}</div></details></div>`;
+        <details class="oracle-fold"><summary>${t('oracle.answer')}${m.ref ? ` <span class="muted small">(${esc(m.ref)})</span>` : ''}</summary><div class="md md-compact oracle-md">${markdownHtml(m.text || '')}</div></details></div>`;
     }
     // #240: a request it sent to an owner's inbox: one short line, the link opens the owner's message
     if (m.kind === 'request') {
       const owner = OWNERS[m.to] || m.to;
-      return `<div class="sup-wmsg system oracle-request${m.failed ? ' error' : ''}" data-testid="oracle-request"><div class="sup-wmsg-meta oracle-meta">Sent to the ${esc(owner)} · <span class="badge">${esc(m.requestKind)}</span> · <span class="pill ${m.failed ? 'pill-failed">Failed' : m.pending ? `pill-cancelled" title="A card waits for your click in the ${esc(owner)}'s chat">Waits for your click` : 'pill-success">Done'}</span> · ${esc(window.AgentRequest.usd(m.costUsd))} · ${esc(time(m.ts))} · <a href="#" data-oracle-open-request="${esc(m.to)}" data-ref="${esc(m.ref)}" data-project="${esc(m.projectId || '')}" title="The request and its result in the ${esc(owner)}'s conversation">Open</a></div><div class="oracle-cut small" title="${esc(m.text)}">${esc(m.text)}</div></div>`;
+      return `<div class="sup-wmsg system oracle-request${m.failed ? ' error' : ''}" data-testid="oracle-request"><div class="sup-wmsg-meta oracle-meta">${t('oracle.sent_to_the_owner', { owner: esc(owner) })} <span class="badge">${esc(m.requestKind)}</span> · <span class="pill ${m.failed ? 'pill-failed">Failed' : m.pending ? `pill-cancelled" title="${t('oracle.a_card_waits_for_your_click', { owner: esc(owner) })}">Waits for your click` : 'pill-success">Done'}</span> · ${esc(window.AgentRequest.usd(m.costUsd))} · ${esc(time(m.ts))} · <a href="#" data-oracle-open-request="${esc(m.to)}" data-ref="${esc(m.ref)}" data-project="${esc(m.projectId || '')}" title="The request and its result in the ${esc(owner)}'s conversation">Open</a></div><div class="oracle-cut small" title="${esc(m.text)}">${esc(m.text)}</div></div>`;
     }
     if (m.kind === 'wake') {
       const mutes = (m.runIds || []).map((id) => {
@@ -388,18 +388,18 @@
     }
     // #244: a routine run event, written by the app (no model call): the status leads, the run id opens the run
     if (m.kind === 'notice') {
-      return `<div class="sup-wmsg system oracle-notice-msg" data-testid="oracle-run-notice" data-run="${esc(m.runId || '')}"><div class="sup-wmsg-meta oracle-meta">${esc(time(m.ts))} · ${StatusPill.statusPill(m.status || 'notice')}${m.runId ? ` · <a href="#" data-oracle-open-run="${esc(m.runId)}" title="Open the run">${esc(m.runId)}</a>` : ''}</div><div>${esc(m.text)}</div></div>`;
+      return `<div class="sup-wmsg system oracle-notice-msg" data-testid="oracle-run-notice" data-run="${esc(m.runId || '')}"><div class="sup-wmsg-meta oracle-meta">${esc(time(m.ts))} · ${StatusPill.statusPill(m.status || 'notice')}${m.runId ? ` · <a href="#" data-oracle-open-run="${esc(m.runId)}" title="${t('oracle.open_the_run')}">${esc(m.runId)}</a>` : ''}</div><div>${esc(m.text)}</div></div>`;
     }
     // #244: the wake-ups a budget refused, as one digest
     if (m.kind === 'wake-refused') {
-      return `<div class="sup-wmsg system oracle-wake"><details class="oracle-fold"><summary><span class="sup-wmsg-meta">${esc(time(m.lastTs || m.ts))}</span> <span class="badge warn">Paused by budget</span> ${esc(m.text)}</summary>
+      return `<div class="sup-wmsg system oracle-wake"><details class="oracle-fold"><summary><span class="sup-wmsg-meta">${esc(time(m.lastTs || m.ts))}</span> <span class="badge warn">${t('oracle.paused_by_budget')}</span> ${esc(m.text)}</summary>
         <ul class="oracle-events small">${(m.events || []).map((l) => `<li>${esc(l)}</li>`).join('')}</ul></details></div>`;
     }
     if (m.role === 'system') return `<div class="sup-wmsg system${m.error ? ' error' : ''}"><div class="sup-wmsg-meta">${esc(time(m.ts))}</div><div>${esc(m.text)}</div></div>`;
     const meta = M.metaParts(m, { fmtTime: time, fmtCost }).map(esc).join(' · ');
-    const tag = m.wake ? ' · <span class="badge">wake-up</span>' : m.kind === 'night-summary' ? ' · <span class="badge warn">Night watch</span>' : m.stopped ? ' · <span class="badge warn" title="You stopped this turn: the answer is what was written until then">Stopped</span>' : '';
+    const tag = m.wake ? ` · <span class="badge">${t('oracle.wake_up')}</span>` : m.kind === 'night-summary' ? ` · <span class="badge warn">${t('oracle.night_watch')}</span>` : m.stopped ? ` · <span class="badge warn" title="${t('oracle.you_stopped_this_turn_the_answer')}">${t('oracle.stopped')}</span>` : '';
     const fb = feedbackBlocks(m.text);
-    return `<div class="sup-wmsg oracle-msg"><div class="sup-wmsg-meta oracle-meta">${avatar('xs')} Oracle · ${meta}${tag}</div><div class="md md-compact oracle-md">${markdownHtml(fb.rest)}</div>${feedbackCardsHtml(fb.blocks, ref)}${m.kind === 'night-summary' ? summaryUndoHtml(m) : ''}</div>`;
+    return `<div class="sup-wmsg oracle-msg"><div class="sup-wmsg-meta oracle-meta">${avatar('xs')} ${t('oracle.oracle')} ${meta}${tag}</div><div class="md md-compact oracle-md">${markdownHtml(fb.rest)}</div>${feedbackCardsHtml(fb.blocks, ref)}${m.kind === 'night-summary' ? summaryUndoHtml(m) : ''}</div>`;
   }
   // a card: the title leads; what changes, where, the backup and why; who asked; its buttons
   function cardHtml(m) {
@@ -407,21 +407,21 @@
     const v = M.actionView({ ...a, status: or.acting.has(a.id) ? 'running' : a.status }, { unavailable: view().state === 'unavailable' });
     const field = (label, value) => (value ? `<dt>${label}</dt><dd>${esc(value)}</dd>` : '');
     return `<div class="sup-wmsg oracle-msg oracle-card${v.fromContent ? ' from-content' : ''}" data-oracle-card="${esc(a.id)}">
-      <div class="sup-wmsg-meta oracle-meta">${avatar('xs')} Oracle · ${esc(time(m.ts))}</div>
+      <div class="sup-wmsg-meta oracle-meta">${avatar('xs')} ${t('oracle.oracle')} ${esc(time(m.ts))}</div>
       <div class="oracle-card-head"><span class="oracle-card-title" title="${esc(a.title)}">${esc(a.title)}</span><span class="pill pill-${esc(v.pill)}">${esc(v.label)}</span></div>
       <dl class="oracle-card-fields small">${field('Change', a.change)}${field('Where', a.where)}${field('Backup', a.backup)}${field('Why', a.why)}</dl>
-      <div class="oracle-card-from small${v.fromContent ? ' warn' : ' muted'}">${v.auto ? '<span class="badge warn">Night watch</span> Done without asking. ' : ''}${esc(v.requester)}</div>
+      <div class="oracle-card-from small${v.fromContent ? ' warn' : ' muted'}">${v.auto ? `<span class="badge warn">${t('oracle.night_watch')}</span> ${t('oracle.done_without_asking')} ` : ''}${esc(v.requester)}</div>
       ${a.result ? `<div class="oracle-card-result small${a.result.ok ? '' : ' error'}">${esc(a.result.text)}</div>` : ''}
       ${v.canDo || v.canUndo ? `<div class="row oracle-card-actions">
-        ${v.canDo ? `<button class="btn primary sm" type="button" data-oracle-act="${esc(a.id)}">Do it</button><button class="btn ghost sm" type="button" data-oracle-dismiss="${esc(a.id)}">Dismiss</button>` : ''}
-        ${v.canUndo ? `<button class="btn ghost sm" type="button" data-oracle-undo="${esc(a.id)}" title="Put back the backup taken before the action">Undo</button>` : ''}
+        ${v.canDo ? `<button class="btn primary sm" type="button" data-oracle-act="${esc(a.id)}">${t('oracle.do_it')}</button><button class="btn ghost sm" type="button" data-oracle-dismiss="${esc(a.id)}">${t('common.dismiss')}</button>` : ''}
+        ${v.canUndo ? `<button class="btn ghost sm" type="button" data-oracle-undo="${esc(a.id)}" title="${t('oracle.put_back_the_backup_taken_before')}">${t('common.undo')}</button>` : ''}
       </div>` : ''}
     </div>`;
   }
   // the morning summary's Undo buttons, for the actions that can still be undone
   function summaryUndoHtml(m) {
     const cards = or.messages.filter((x) => x.kind === 'action' && (m.actions || []).includes(x.action?.id) && x.action.result?.undoable);
-    return cards.length ? `<div class="row oracle-card-actions">${cards.map((x) => `<button class="btn ghost sm oracle-cut" type="button" data-oracle-undo="${esc(x.action.id)}" title="Undo: ${esc(x.action.title)}">Undo: ${esc(x.action.title)}</button>`).join('')}</div>` : '';
+    return cards.length ? `<div class="row oracle-card-actions">${cards.map((x) => `<button class="btn ghost sm oracle-cut" type="button" data-oracle-undo="${esc(x.action.id)}" title="${t('oracle.undo_title', { title: esc(x.action.title) })}">${t('oracle.undo')} ${esc(x.action.title)}</button>`).join('')}</div>` : '';
   }
   // the Night watch (its form, or its strip while on) and the runs watched or muted
   function opsHtml(w) {
@@ -431,26 +431,26 @@
       const f = or.nightForm;
       parts.push(`<form class="oracle-night-form" data-oracle-night-form>
         <div class="field">
-          <label for="oracle-night-until-${w}">Night watch until</label>
+          <label for="oracle-night-until-${w}">${t('oracle.night_watch_until')}</label>
           <input type="datetime-local" id="oracle-night-until-${w}" class="oracle-night-until" value="${esc(f.until || '')}"${f.saving ? ' disabled' : ''} />
-          <div class="hint">Until then the Oracle fixes what stops the roadmap without asking, but only with the permissions you chose on the Night watch screen (by default: retry a failed item and refresh issue text). Each action is logged with its backup and sent as a notification. Gates stay yours; it never closes issues or pushes.</div>
+          <div class="hint">${t('oracle.until_then_the_oracle_fixes_what')}</div>
           ${f.error ? `<p class="error small">${esc(f.error)}</p>` : ''}
         </div>
-        <div class="row"><button class="btn primary sm" type="submit"${f.saving ? ' disabled' : ''}>Start</button><button class="btn ghost sm" type="button" data-oracle-night-cancel>Cancel</button></div>
+        <div class="row"><button class="btn primary sm" type="submit"${f.saving ? ' disabled' : ''}>${t('oracle.start')}</button><button class="btn ghost sm" type="button" data-oracle-night-cancel>${t('common.cancel')}</button></div>
       </form>`);
     } else if (nw.active) {
-      parts.push(`<div class="row oracle-ops-row"><span class="badge warn" title="Repairs that keep the roadmap going run without asking; everything else waits for you${nw.selfHealing ? '. Turn it off in Settings › Execution › Oracle' : ''}">${esc(nw.label)}</span><span class="spacer"></span>${nw.selfHealing ? '' : '<button class="btn ghost sm" type="button" data-oracle-night-off>Turn off</button>'}</div>`);
+      parts.push(`<div class="row oracle-ops-row"><span class="badge warn" title="${t('oracle.repairs_that_keep_the_roadmap_going', { value: nw.selfHealing ? '. Turn it off in Settings › Execution › Oracle' : '' })}">${esc(nw.label)}</span><span class="spacer"></span>${nw.selfHealing ? '' : `<button class="btn ghost sm" type="button" data-oracle-night-off>${t('oracle.turn_off')}</button>`}</div>`);
     }
     // the runs and roadmaps watched, the runs muted: one compact row (the full id on hover)
     const watching = (or.wake?.watching || []).map((x) => {
       const name = x.runId ? x.runId : `roadmap of ${x.projectId}`;
-      return `<button class="btn ghost sm oracle-cut" type="button" data-oracle-unwatch="${esc(JSON.stringify(x.runId ? { runId: x.runId } : { projectId: x.projectId }))}" title="Watching ${esc(name)}: its events wake the Oracle until it ends. Click to stop watching.">${esc(name)} ×</button>`;
+      return `<button class="btn ghost sm oracle-cut" type="button" data-oracle-unwatch="${esc(JSON.stringify(x.runId ? { runId: x.runId } : { projectId: x.projectId }))}" title="${t('oracle.watching_name_its_events_wake_the', { name: esc(name) })}">${esc(name)} ×</button>`;
     });
-    const muted = (or.wake?.muted || []).map((id) => `<button class="btn ghost sm oracle-cut" type="button" data-oracle-mute="${esc(id)}" data-on="0" title="Muted: ${esc(id)}'s events do not wake the Oracle. Click to unmute.">${esc(id)} ×</button>`);
+    const muted = (or.wake?.muted || []).map((id) => `<button class="btn ghost sm oracle-cut" type="button" data-oracle-mute="${esc(id)}" data-on="0" title="${t('oracle.muted_id_s_events_do_not', { id: esc(id) })}">${esc(id)} ×</button>`);
     if (watching.length || muted.length) {
-      parts.push(`<div class="row oracle-ops-row small">${watching.length ? `<span class="muted">Watching</span>${watching.join('')}` : ''}${muted.length ? `<span class="muted">Muted</span>${muted.join('')}` : ''}</div>`);
+      parts.push(`<div class="row oracle-ops-row small">${watching.length ? `<span class="muted">${t('oracle.watching')}</span>${watching.join('')}` : ''}${muted.length ? `<span class="muted">${t('oracle.muted')}</span>${muted.join('')}` : ''}</div>`);
     }
-    if (or.wake?.wakeScope === 'off') parts.push('<div class="muted small">Run events do not wake the Oracle (Settings › Execution › Oracle).</div>');
+    if (or.wake?.wakeScope === 'off') parts.push(`<div class="muted small">${t('oracle.run_events_do_not_wake_the')}</div>`);
     return parts.join('');
   }
   // an answer's "Use this text" belongs to the gate its question was about
@@ -459,19 +459,19 @@
     return '';
   }
   // the conversation's own parts around the shared chat's messages (#274)
-  const emptyHtml = () => '<div class="svc-empty muted small">The Oracle keeps one conversation for the whole app. It reads your runs (events, sessions, decisions, costs), the roadmaps and the Backlog, the workflows and skills, and your projects\' repositories, read-only. Ask it why a run failed, where the tokens go or what to do next. Run events wake it when they need you. It changes nothing itself: it sends each change to the agent that owns it (the Product Owner for the Backlog, the Supervisor for runs, workflows and skills), where it is done or waits for your click.</div>';
-  const pendingHtml = (f) => `<div class="sup-wmsg user"><div class="sup-wmsg-meta">You</div><div class="oracle-text">${esc(or.pending || f.text)}</div>${or.drafts.images.length ? `<div class="oracle-thumbs">${or.drafts.images.map((i) => `<span class="oracle-thumb"><img src="${esc(i.dataUrl)}" alt="" /></span>`).join('')}</div>` : ''}</div>`;
+  const emptyHtml = () => `<div class="svc-empty muted small">${t('oracle.the_oracle_keeps_one_conversation_for')}</div>`;
+  const pendingHtml = (f) => `<div class="sup-wmsg user"><div class="sup-wmsg-meta">${t('oracle.you_2')}</div><div class="oracle-text">${esc(or.pending || f.text)}</div>${or.drafts.images.length ? `<div class="oracle-thumbs">${or.drafts.images.map((i) => `<span class="oracle-thumb"><img src="${esc(i.dataUrl)}" alt="" /></span>`).join('')}</div>` : ''}</div>`;
   // the questions waiting for the one in flight (#183), and an error of the Oracle's own buttons
-  const afterHtml = () => or.queue.map(({ q, context }) => `<div class="sup-wmsg user oracle-queued"><div class="sup-wmsg-meta">You · <span class="badge">queued</span>${context ? ` · <span class="muted" title="${esc(context.label)}">${esc(context.label)}</span>` : ''}</div><div class="oracle-text">${esc(q)}</div></div>`).join('')
-    + (or.error ? `<div class="sup-wmsg system error"><div class="sup-wmsg-meta">now</div><div>${esc(or.error)}</div></div>` : '');
+  const afterHtml = () => or.queue.map(({ q, context }) => `<div class="sup-wmsg user oracle-queued"><div class="sup-wmsg-meta">${t('oracle.you')} <span class="badge">${t('oracle.queued')}</span>${context ? ` · <span class="muted" title="${esc(context.label)}">${esc(context.label)}</span>` : ''}</div><div class="oracle-text">${esc(q)}</div></div>`).join('')
+    + (or.error ? `<div class="sup-wmsg system error"><div class="sup-wmsg-meta">${t('oracle.now')}</div><div>${esc(or.error)}</div></div>` : '');
   function noticeHtml(v) {
     if (v.state === 'paused') {
       const t = v.today || {};
-      return `<div class="oracle-notice-box"><span class="badge warn">Paused by budget</span> <span>Spent ${esc(money(t.spentUsd))} of ${esc(money(t.limitUsd))} today. <a href="#" data-oracle-settings>Raise it in Settings</a>, or it resumes tomorrow.</span></div>`;
+      return `<div class="oracle-notice-box"><span class="badge warn">${I18n.t('oracle.paused_by_budget')}</span> <span>${I18n.t('oracle.spent_spentusd_of_limitusd_today', { spentUsd: esc(money(t.spentUsd)), limitUsd: esc(money(t.limitUsd)) })} <a href="#" data-oracle-settings>${I18n.t('oracle.raise_it_in_settings')}</a>${I18n.t('oracle.or_it_resumes_tomorrow')}</span></div>`;
     }
     if (v.state === 'unavailable') {
       const o = v.owner;
-      return `<div class="oracle-notice-box"><span class="badge">Unavailable</span> <span>The Oracle answers in another app process (pid ${esc(String(o.pid))} on ${esc(o.host || '?')}${o.since ? `, since ${esc(time(o.since))}` : ''}). Ask it there, or close that window.</span></div>`;
+      return `<div class="oracle-notice-box"><span class="badge">${t('oracle.unavailable')}</span> <span>${t('oracle.the_oracle_answers_in_another_app', { pid: esc(String(o.pid)), value: esc(o.host || '?'), value2: o.since ? `, since ${esc(time(o.since))}` : '' })}</span></div>`;
     }
     return '';
   }
@@ -479,22 +479,22 @@
     const f = or.memory;
     if (!or.memoryOpen) return '';
     if (!f.editing) {
-      return `<div class="oracle-memory-view"><div class="row oracle-memory-head"><b>Memory</b><span class="badge">saved</span><span class="spacer"></span><button class="btn ghost sm" type="button" data-oracle-mem-edit>Edit</button><button class="btn ghost sm" type="button" data-oracle-mem-close>Close</button></div>
-        <div class="oracle-memory-text small">${f.text.trim() ? esc(f.text) : '<span class="muted">Empty.</span>'}</div></div>`;
+      return `<div class="oracle-memory-view"><div class="row oracle-memory-head"><b>${t('oracle.memory')}</b><span class="badge">${t('oracle.saved')}</span><span class="spacer"></span><button class="btn ghost sm" type="button" data-oracle-mem-edit>${t('oracle.edit')}</button><button class="btn ghost sm" type="button" data-oracle-mem-close>${t('common.close')}</button></div>
+        <div class="oracle-memory-text small">${f.text.trim() ? esc(f.text) : `<span class="muted">${t('oracle.empty')}</span>`}</div></div>`;
     }
     return `<form class="oracle-memory-form" data-oracle-mem-form>
       <div class="field">
-        <label for="oracle-mem-${w}">Memory</label>
+        <label for="oracle-mem-${w}">${t('oracle.memory')}</label>
         <textarea id="oracle-mem-${w}" class="oracle-mem-input" rows="8"${f.saving ? ' disabled' : ''}>${esc(f.draft)}</textarea>
-        <div class="hint">Your standing decisions (e.g. "UI issues need UI criteria", "reply in Portuguese"). The Oracle reads them at every session start; only you change them. Import adds decisions from a pasted text.</div>
+        <div class="hint">${t('oracle.your_standing_decisions_e_g_ui')}</div>
         ${f.error ? `<p class="error small oracle-mem-error">${esc(f.error)}</p>` : ''}
       </div>
-      <div class="row"><button class="btn primary sm" type="submit"${f.saving ? ' disabled' : ''}>Save</button><button class="btn ghost sm" type="button" data-oracle-mem-cancel>Cancel</button><span class="spacer"></span><button class="btn ghost sm" type="button" data-oracle-mem-import-open data-testid="oracle-memory-import-open" title="Add standing decisions from a pasted text, e.g. a Claude Code memory index"${f.importing ? ' aria-expanded="true"' : ''}>Import</button></div>
+      <div class="row"><button class="btn primary sm" type="submit"${f.saving ? ' disabled' : ''}>${t('common.save')}</button><button class="btn ghost sm" type="button" data-oracle-mem-cancel>${t('common.cancel')}</button><span class="spacer"></span><button class="btn ghost sm" type="button" data-oracle-mem-import-open data-testid="oracle-memory-import-open" title="${t('oracle.add_standing_decisions_from_a_pasted')}"${f.importing ? ' aria-expanded="true"' : ''}>${t('oracle.import')}</button></div>
       ${f.importing ? `<div class="field oracle-mem-import" data-testid="oracle-memory-import">
-        <label for="oracle-mem-import-${w}">Pasted text</label>
-        <textarea id="oracle-mem-import-${w}" class="oracle-mem-import-input" rows="4" placeholder="e.g. a Claude Code memory index: - [Title](file.md) - the decision">${esc(f.importText || '')}</textarea>
-        <div class="hint">One decision per line; headings and links to memory files are dropped. They are added to the memory above, and kept when you Save.</div>
-        <div class="row"><button class="btn primary sm" type="button" data-oracle-mem-import>Import</button><button class="btn ghost sm" type="button" data-oracle-mem-import-cancel>Cancel</button></div>
+        <label for="oracle-mem-import-${w}">${t('oracle.pasted_text')}</label>
+        <textarea id="oracle-mem-import-${w}" class="oracle-mem-import-input" rows="4" placeholder="${t('oracle.e_g_a_claude_code_memory')}">${esc(f.importText || '')}</textarea>
+        <div class="hint">${t('oracle.one_decision_per_line_headings_and')}</div>
+        <div class="row"><button class="btn primary sm" type="button" data-oracle-mem-import>${t('oracle.import')}</button><button class="btn ghost sm" type="button" data-oracle-mem-import-cancel>${t('common.cancel')}</button></div>
       </div>` : ''}
     </form>`;
   }
@@ -503,9 +503,9 @@
     const s = or.service;
     if (!s?.model) return '';
     const mode = s.sessionMode === 'fresh'
-      ? '<span class="badge" data-testid="oracle-session-mode" title="The last turn started a new session from the skill, the memory and the app\'s state note">fresh session</span>'
+      ? `<span class="badge" data-testid="oracle-session-mode" title="${t('oracle.the_last_turn_started_a_new')}">${t('oracle.fresh_session')}</span>`
       : s.sessionMode === 'resumed'
-        ? '<span class="badge" data-testid="oracle-session-mode" title="The last turn went on with the same session (its cache was warm)">resumed session</span>' : '';
+        ? `<span class="badge" data-testid="oracle-session-mode" title="${t('oracle.the_last_turn_went_on_with')}">${t('oracle.resumed_session')}</span>` : '';
     return `<span class="badge" data-testid="oracle-model" title="${esc(s.model)}${s.effort ? `, effort ${esc(s.effort)}` : ''}">${esc(Robots.plaqueFor(s.model))}</span> ${mode}`;
   }
   function footHtml(v) {
@@ -556,14 +556,14 @@
       $(`#oracle-status-${w}`).innerHTML = statusHtml();
       $(`#oracle-notice-${w}`).innerHTML = noticeHtml(v);
       // #183: with a context chip, its starters stay under the box (asked while busy, they queue)
-      $(`#oracle-context-${w}`).innerHTML = or.context ? `<span class="oracle-context-chip" data-testid="oracle-context-chip" title="${esc(or.context.label)}"><span class="oracle-cut">${esc(or.context.label)}</span><button class="icon-btn" type="button" data-oracle-uncontext aria-label="Remove the gate context" title="Remove the gate context: the next questions are not about this gate"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg></button></span>` : '';
+      $(`#oracle-context-${w}`).innerHTML = or.context ? `<span class="oracle-context-chip" data-testid="oracle-context-chip" title="${esc(or.context.label)}"><span class="oracle-cut">${esc(or.context.label)}</span><button class="icon-btn" type="button" data-oracle-uncontext aria-label="${t('oracle.remove_the_gate_context')}" title="${t('oracle.remove_the_gate_context_the_next')}"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg></button></span>` : '';
       const starters = or.context?.starters?.length ? or.context.starters : null;
       const startersOn = v.state !== 'unavailable' && (v.chipsEnabled || v.state === 'answering');
       $(`#oracle-starters-${w}`).innerHTML = starters
         ? starters.map((q) => `<button class="chip" type="button" data-oracle-q="${esc(q)}"${startersOn ? '' : ' disabled'}>${esc(q)}</button>`).join('') : '';
       $(`#oracle-chips-${w}`).innerHTML = !starters && (v.state === 'empty' || (v.state === 'answering' && !or.messages.length))
         ? SUGGESTIONS.map((q) => `<button class="chip" type="button" data-oracle-q="${esc(q)}"${v.chipsEnabled ? '' : ' disabled'}>${esc(q)}</button>`).join('') : '';
-      $(`#oracle-thumbs-${w}`).innerHTML = v.attachments.map((i) => `<span class="oracle-thumb draft" title="${esc(i.name || 'Pasted image')}"><img src="${esc(i.dataUrl)}" alt="Pasted image" /><button class="icon-btn" type="button" data-oracle-unpaste="${esc(i.id)}" title="Remove this image" aria-label="Remove this image"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg></button></span>`).join('');
+      $(`#oracle-thumbs-${w}`).innerHTML = v.attachments.map((i) => `<span class="oracle-thumb draft" title="${esc(i.name || 'Pasted image')}"><img src="${esc(i.dataUrl)}" alt="${t('oracle.pasted_image')}" /><button class="icon-btn" type="button" data-oracle-unpaste="${esc(i.id)}" title="${t('oracle.remove_this_image')}" aria-label="${t('oracle.remove_this_image')}"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg></button></span>`).join('');
       chat.form.classList.toggle('hidden', v.state === 'unavailable');
       // Send and the text box follow the state (paused, unavailable, answering); the chips just redrawn get the busy lock
       chat.refresh();
@@ -617,21 +617,21 @@
   }
 
   // #263: the drawer's "Open in a window" (the Agents window on the Oracle; agents-window.js hides it in the browser UI)
-  const OPEN_WINDOW_BUTTON = '<button class="icon-btn" type="button" data-agents-window="oracle" data-testid="agent-chat-open-window" title="Open in a window (Ctrl+Shift+A)" aria-label="Open the Oracle in a window"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="14" height="14" rx="2" /><path d="M9 3h12v12M21 3l-9 9" /></svg></button>';
+  const OPEN_WINDOW_BUTTON = `<button class="icon-btn" type="button" data-agents-window="oracle" data-testid="agent-chat-open-window" title="${t('oracle.open_in_a_window_ctrl_shift')}" aria-label="${t('oracle.open_the_oracle_in_a_window')}"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="14" height="14" rx="2" /><path d="M9 3h12v12M21 3l-9 9" /></svg></button>`;
   const surfaceHtml = (w) => `
     <div class="drawer-head oracle-head">
       <div class="oracle-who">${avatar()}
         <div class="sup-head">
-          <h2 class="drawer-title oracle-title">Oracle</h2>
-          <div class="muted small oracle-cut">On: <span id="oracle-screen-${w}"></span></div>
+          <h2 class="drawer-title oracle-title">${t('oracle.oracle_2')}</h2>
+          <div class="muted small oracle-cut">${t('oracle.on')} <span id="oracle-screen-${w}"></span></div>
           <div class="small oracle-status" id="oracle-status-${w}"></div>
         </div>
       </div>
       <div class="row">
-        <button class="btn ghost sm" type="button" data-oracle-night title="Let the Oracle fix what stops the roadmap without asking, until a time you choose">Night watch</button>
-        <button class="btn ghost sm" type="button" data-oracle-memory title="The owner's standing decisions, read at every session start">Memory</button>
-        <button class="btn ghost sm" type="button" data-oracle-reset title="A new session from a handoff note; the conversation and the memory are kept">New session</button>
-        ${w === WINDOW ? '' : OPEN_WINDOW_BUTTON}${w === 'drawer' ? '<button id="btn-oracle-close" class="icon-btn" type="button" title="Close (Esc)"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg></button>' : ''}
+        <button class="btn ghost sm" type="button" data-oracle-night title="${t('oracle.let_the_oracle_fix_what_stops')}">${t('oracle.night_watch')}</button>
+        <button class="btn ghost sm" type="button" data-oracle-memory title="${t('oracle.the_owner_s_standing_decisions_read')}">${t('oracle.memory')}</button>
+        <button class="btn ghost sm" type="button" data-oracle-reset title="${t('oracle.a_new_session_from_a_handoff')}">${t('oracle.new_session')}</button>
+        ${w === WINDOW ? '' : OPEN_WINDOW_BUTTON}${w === 'drawer' ? `<button id="btn-oracle-close" class="icon-btn" type="button" title="${t('oracle.close_esc')}"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg></button>` : ''}
       </div>
     </div>
     <div id="oracle-chat-${w}" class="drawer-body svc-body oracle-body"></div>`;
@@ -665,7 +665,7 @@
       <div id="oracle-chips-${w}" class="svc-chips"></div>`;
     chat.slot('compose').innerHTML = `<div id="oracle-thumbs-${w}" class="oracle-thumbs"></div>
       <div id="oracle-context-${w}" class="oracle-context"></div>`;
-    chat.slot('foot').innerHTML = `<div id="oracle-starters-${w}" class="svc-chips oracle-starters" role="group" aria-label="Suggested questions about the gate"></div>
+    chat.slot('foot').innerHTML = `<div id="oracle-starters-${w}" class="svc-chips oracle-starters" role="group" aria-label="${t('oracle.suggested_questions_about_the_gate')}"></div>
       <p id="oracle-paste-error-${w}" class="error small oracle-paste-error hidden"></p>
       <p id="oracle-foot-${w}" class="muted small svc-note"></p>`;
     chats[w] = chat;
@@ -716,19 +716,19 @@
     id: 'oracle',
     modals: `
   <div id="oracle-backdrop" class="drawer-backdrop sup-backdrop hidden"></div>
-  <aside id="oracle-drawer" class="drawer sup-drawer oracle-drawer" aria-hidden="true" aria-label="Oracle">${surfaceHtml('drawer')}</aside>`,
+  <aside id="oracle-drawer" class="drawer sup-drawer oracle-drawer" aria-hidden="true" aria-label="${t('oracle.oracle_2')}">${surfaceHtml('drawer')}</aside>`,
     mount() {
       // the dock on Home (its section is in place: views load in path order)
       const dash = $('#view-dashboard');
       dash.classList.add('oracle-docked');
-      dash.insertAdjacentHTML('beforeend', `<aside id="oracle-dock" class="card oracle-dock" aria-label="Oracle">${surfaceHtml('dock')}</aside>`);
+      dash.insertAdjacentHTML('beforeend', `<aside id="oracle-dock" class="card oracle-dock" aria-label="${t('oracle.oracle_2')}">${surfaceHtml('dock')}</aside>`);
       // the header's button (#254), at the top right before the notifications bell
       const btn = document.createElement('button');
       btn.id = 'nav-oracle';
       btn.type = 'button';
       btn.className = 'btn ghost btn-icon nav-oracle';
       btn.title = 'Talk to the Oracle (on Home: its panel)';
-      btn.innerHTML = `${avatar('nav')}<span>Oracle</span><span id="nav-oracle-count" class="nav-badge oracle-unread hidden"></span>`;
+      btn.innerHTML = `${avatar('nav')}<span>${t('oracle.oracle_2')}</span><span id="nav-oracle-count" class="nav-badge oracle-unread hidden"></span>`;
       btn.onclick = (e) => { e.stopPropagation(); if (or.drawer) closeDrawer(); else openDrawer(); };
       const corner = $('.topbar .header-right');
       corner.insertBefore(btn, corner.querySelector('.notif-wrap'));

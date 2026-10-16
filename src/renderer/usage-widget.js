@@ -190,18 +190,18 @@ function renderUsagePopover() {
     const m = p.month || {}, b = p.budget || {};
     const bar = p.usedPctUsd != null ? meterHtml('USD budget', p.usedPctUsd, fmtUsd(m.costUsd), fmtUsd(b.monthlyUsd), true)
       : p.usedPctTokens != null ? meterHtml('Token budget', p.usedPctTokens, fmtTok(m.tokens?.total), fmtTok(b.monthlyTokens), true)
-      : '<div class="muted small">no budget</div>';
+      : `<div class="muted small">${t('usage_widget.no_budget')}</div>`;
     return `<div class="up-row">
       <div class="up-line">
         <b>${esc(p.name)}</b>
         <span class="u-inst ${p.installed ? 'on' : 'off'}">${p.installed ? 'installed' : 'not installed'}</span>
-        ${planWorst(p) != null ? `<span class="u-plan-pct st-${pctStatus(planWorst(p) / 100)}" title="Most used plan rate-limit window">plan ${Math.round(planWorst(p))}%</span>` : ''}
+        ${planWorst(p) != null ? `<span class="u-plan-pct st-${pctStatus(planWorst(p) / 100)}" title="${t('usage_widget.most_used_plan_rate_limit_window')}">${t('usage_widget.plan_p', { p: Math.round(planWorst(p)) })}</span>` : ''}
         <span class="spacer"></span>
-        <span class="mono small">${fmtTok(m.tokens?.total)} tok · ${fmtUsd(m.costUsd)}</span>
+        <span class="mono small">${fmtTok(m.tokens?.total)} ${t('usage_widget.tok')} ${fmtUsd(m.costUsd)}</span>
       </div>
       ${bar}
     </div>`;
-  }).join('') || '<p class="muted small up-empty">No providers.</p>';
+  }).join('') || `<p class="muted small up-empty">${t('usage_widget.no_providers')}</p>`;
 }
 
 // Highest used % (0..100) across the plan's rate-limit windows, or null.
@@ -213,10 +213,10 @@ function planWorst(p) {
 // Recent runs table, shared by Usage > Recent runs and Workflows > Runs.
 function runsTableHtml(u) {
   const runs = u.runs || [];
-  if (!runs.length) return '<div class="s-row"><div class="s-label"><span>No runs recorded yet (simulation runs are not counted).</span></div></div>';
+  if (!runs.length) return `<div class="s-row"><div class="s-label"><span>${t('usage_widget.no_runs_recorded_yet_simulation_runs')}</span></div></div>`;
   const names = Object.fromEntries((u.providers || []).map((p) => [p.id, p.name]));
   return `<table class="u-table">
-    <thead><tr><th>Date</th><th>Workflow</th><th>Status</th><th class="num">Tokens</th><th class="num">Cost</th><th>By provider</th></tr></thead>
+    <thead><tr><th>${t('usage_widget.date')}</th><th>${t('usage_widget.workflow')}</th><th>${t('usage_widget.status')}</th><th class="num">${t('usage_widget.tokens')}</th><th class="num">${t('usage_widget.cost')}</th><th>${t('usage_widget.by_provider')}</th></tr></thead>
     <tbody>${runs.map((r) => `<tr title="${esc(r.runId)}">
       <td class="nowrap">${r.startedAt ? esc(dateOf(r.startedAt)) : '—'}</td>
       <td>${esc(r.workflow || '—')}</td>

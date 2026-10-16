@@ -25,7 +25,7 @@
     const sel = select();
     sel.innerHTML = `${projects.length
       ? projects.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')
-      : '<option value="">No project</option>'}<option value="${NEW}">New project…</option>`;
+      : `<option value="">${t('current_project.no_project')}</option>`}<option value="${NEW}">${t('current_project.new_project')}</option>`;
     sel.value = current || '';
   }
 

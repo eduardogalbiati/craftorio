@@ -51,11 +51,11 @@
   // ---- markup -------------------------------------------------------------------------------------
   function headMarkup(c, open) {
     const cd = c.cadence;
-    const ranked = cd?.rankedAt ? `<span class="muted small" data-testid="refactor-ranked-at">Ranked on ${esc(day(cd.rankedAt))}${cd.rankCostUsd ? ` · ${esc(usd(cd.rankCostUsd))}` : ''}</span>` : '';
-    const left = cd ? `<span class="badge rf-good" data-testid="refactor-left-danger" title="Files that left the Danger Zone through refactor runs">Left the Danger Zone: ${cd.left30 || 0} in 30 days · ${cd.left90 || 0} in 90 days</span>` : '';
+    const ranked = cd?.rankedAt ? `<span class="muted small" data-testid="refactor-ranked-at">${t('project_refactor.ranked_on')} ${esc(day(cd.rankedAt))}${cd.rankCostUsd ? ` · ${esc(usd(cd.rankCostUsd))}` : ''}</span>` : '';
+    const left = cd ? `<span class="badge rf-good" data-testid="refactor-left-danger" title="${t('project_refactor.files_that_left_the_danger_zone')}">${t('project_refactor.left_the_danger_zone_value_in', { value: cd.left30 || 0, value2: cd.left90 || 0 })}</span>` : '';
     return `<div class="row rf-head">
       <button type="button" class="btn primary sm" data-testid="refactor-prioritize" data-rf-prioritize ${c.prioritizing || !open ? 'disabled' : ''}
-        title="One Product Owner turn orders the open proposals by value against risk and cost">Ask the Product Owner to prioritize</button>
+        title="${t('project_refactor.one_product_owner_turn_orders_the')}">${t('project_refactor.ask_the_product_owner_to_prioritize')}</button>
       ${ranked}<span class="spacer"></span>${left}
     </div>`;
   }
@@ -64,16 +64,16 @@
     const cd = c.cadence || { on: false, every: 10, nextIn: 10, ready: false };
     const next = cd.nextIn > 0 ? `next in ${plural(cd.nextIn, 'run')}` : 'due at the next finished run';
     return `<div class="row rf-cadence" data-testid="refactor-cadence">
-      <label class="check"><input type="checkbox" data-testid="refactor-cadence-toggle" data-rf-cadence-on aria-label="Add a refactor to the roadmap every X runs" ${cd.on ? 'checked' : ''} /><span>Add a refactor to the roadmap every</span></label>
-      <input type="number" class="rf-every" min="3" max="50" step="1" value="${Number(cd.every) || 10}" data-testid="refactor-cadence-every" data-rf-cadence-every aria-label="Runs between two refactors (3 to 50)" />
-      <span>runs</span>
+      <label class="check"><input type="checkbox" data-testid="refactor-cadence-toggle" data-rf-cadence-on aria-label="${t('project_refactor.add_a_refactor_to_the_roadmap_2')}" ${cd.on ? 'checked' : ''} /><span>${t('project_refactor.add_a_refactor_to_the_roadmap')}</span></label>
+      <input type="number" class="rf-every" min="3" max="50" step="1" value="${Number(cd.every) || 10}" data-testid="refactor-cadence-every" data-rf-cadence-every aria-label="${t('project_refactor.runs_between_two_refactors_3_to')}" />
+      <span>${t('project_refactor.runs')}</span>
       ${cd.on ? `<span class="badge" data-testid="refactor-cadence-next">${esc(next)}</span>` : ''}
-      ${cd.on && !cd.ready ? '<span class="muted small" data-testid="refactor-nothing-ready">Nothing ready to add: prioritize or file a proposal</span>' : ''}
+      ${cd.on && !cd.ready ? `<span class="muted small" data-testid="refactor-nothing-ready">${t('project_refactor.nothing_ready_to_add_prioritize_or')}</span>` : ''}
     </div>`;
   }
 
   function issueMarkup(p) {
-    if (!p.issue) return '<span class="muted small">no issue</span>';
+    if (!p.issue) return `<span class="muted small">${t('project_refactor.no_issue')}</span>`;
     const link = `<span class="badge" data-testid="refactor-proposal-issue" title="${esc(p.issueUrl || '')}">#${esc(p.issue)}${p.issueState ? ` ${esc(String(p.issueState).toLowerCase())}` : ''}</span>`;
     const status = p.roadmapStatus ? `<span class="badge${STATUS_TONE[p.roadmapStatus] ?? ''}" data-testid="refactor-proposal-status">${esc(p.roadmapStatus)}</span>` : '';
     return link + status;
@@ -81,10 +81,10 @@
 
   function outcomeMarkup(p) {
     const o = p.outcome;
-    if (o?.leftDangerZone) return '<span class="badge rf-good" data-testid="refactor-proposal-outcome">left the Danger Zone</span>';
-    if (o?.improved) return `<span class="badge rf-good" data-testid="refactor-proposal-outcome">score −${esc(o.scoreDrop)}</span>`;
-    if (o) return '<span class="badge warn" data-testid="refactor-proposal-outcome" title="The target\'s Danger Zone score did not drop">not improved</span>';
-    if (p.before) return `<span class="muted small" title="The target's Danger Zone score before the run">score ${esc(p.before.score)} before</span>`;
+    if (o?.leftDangerZone) return `<span class="badge rf-good" data-testid="refactor-proposal-outcome">${t('project_refactor.left_the_danger_zone')}</span>`;
+    if (o?.improved) return `<span class="badge rf-good" data-testid="refactor-proposal-outcome">${t('project_refactor.score')}${esc(o.scoreDrop)}</span>`;
+    if (o) return `<span class="badge warn" data-testid="refactor-proposal-outcome" title="${t('project_refactor.the_target_s_danger_zone_score')}">${t('project_refactor.not_improved')}</span>`;
+    if (p.before) return `<span class="muted small" title="${t('project_refactor.the_target_s_danger_zone_score_2')}">${t('project_refactor.score_score_before', { score: esc(p.before.score) })}</span>`;
     return '';
   }
 
@@ -93,17 +93,17 @@
     const busy = c.busy === p.id ? 'disabled' : '';
     const placed = !!p.roadmapUnfinished;
     return `<div class="row rf-actions">
-      ${p.issue ? '' : `<button type="button" class="btn sm" data-rf-file="${esc(p.id)}" data-testid="refactor-file" ${busy}>File as issue</button>`}
-      ${p.issue && !placed ? `<button type="button" class="btn sm" data-rf-roadmap="${esc(p.id)}" data-testid="refactor-add-roadmap" ${busy}>Add to roadmap now</button>` : ''}
-      <button type="button" class="btn sm ghost" data-rf-dismiss="${esc(p.id)}" data-testid="refactor-dismiss" aria-label="Dismiss ${esc(p.title || p.target || 'proposal')}" ${busy}>Dismiss</button>
+      ${p.issue ? '' : `<button type="button" class="btn sm" data-rf-file="${esc(p.id)}" data-testid="refactor-file" ${busy}>${t('project_refactor.file_as_issue')}</button>`}
+      ${p.issue && !placed ? `<button type="button" class="btn sm" data-rf-roadmap="${esc(p.id)}" data-testid="refactor-add-roadmap" ${busy}>${t('project_refactor.add_to_roadmap_now')}</button>` : ''}
+      <button type="button" class="btn sm ghost" data-rf-dismiss="${esc(p.id)}" data-testid="refactor-dismiss" aria-label="${t('project_refactor.dismiss_value', { value: esc(p.title || p.target || 'proposal') })}" ${busy}>${t('common.dismiss')}</button>
     </div>`;
   }
 
   function dismissMarkup(p) {
     return `<div class="row rf-dismiss-form">
-      <input type="text" class="rf-reason" data-testid="refactor-dismiss-reason" data-rf-reason aria-label="Why dismiss ${esc(p.title || 'this proposal')}" placeholder="Why it should not be done" spellcheck="false" />
-      <button type="button" class="btn sm" data-rf-dismiss-confirm="${esc(p.id)}" data-testid="refactor-dismiss-confirm">Dismiss</button>
-      <button type="button" class="btn sm ghost" data-rf-dismiss-cancel>Cancel</button>
+      <input type="text" class="rf-reason" data-testid="refactor-dismiss-reason" data-rf-reason aria-label="${t('project_refactor.why_dismiss_value', { value: esc(p.title || 'this proposal') })}" placeholder="${t('project_refactor.why_it_should_not_be_done')}" spellcheck="false" />
+      <button type="button" class="btn sm" data-rf-dismiss-confirm="${esc(p.id)}" data-testid="refactor-dismiss-confirm">${t('common.dismiss')}</button>
+      <button type="button" class="btn sm ghost" data-rf-dismiss-cancel>${t('common.cancel')}</button>
     </div>`;
   }
 
@@ -111,14 +111,14 @@
     const files = p.targetFiles || [];
     const dismissed = p.status === 'dismissed';
     return `<li class="rf-row" data-testid="refactor-proposal">
-      <span class="rf-rank" data-testid="refactor-proposal-rank" title="Rank">${p.rank ? `#${esc(p.rank)}` : '—'}</span>
+      <span class="rf-rank" data-testid="refactor-proposal-rank" title="${t('project_refactor.rank')}">${p.rank ? `#${esc(p.rank)}` : '—'}</span>
       <div class="rf-body">
         <div class="rf-line"><b class="rf-title" title="${esc(p.title || '')}">${esc(p.title || p.improvement || p.target || 'Proposal')}</b>
-          ${p.complexity ? `<span class="badge" data-testid="refactor-proposal-complexity" title="Complexity from 1 to 5">complexity ${esc(p.complexity)}</span>` : ''}
+          ${p.complexity ? `<span class="badge" data-testid="refactor-proposal-complexity" title="${t('project_refactor.complexity_from_1_to_5')}">${t('project_refactor.complexity')} ${esc(p.complexity)}</span>` : ''}
           ${issueMarkup(p)}${outcomeMarkup(p)}</div>
         <div class="rf-line small"><span class="mono muted rf-target" title="${esc(files.join(', '))}">${esc(files.join(', ') || '—')}</span></div>
         ${p.rankReason ? `<div class="small" data-testid="refactor-proposal-reason">${esc(p.rankReason)}</div>` : ''}
-        ${dismissed ? `<div class="small muted" data-testid="refactor-proposal-dismiss-reason">Dismissed: ${esc(p.dismissReason || '')}</div>` : ''}
+        ${dismissed ? `<div class="small muted" data-testid="refactor-proposal-dismiss-reason">${t('project_refactor.dismissed')} ${esc(p.dismissReason || '')}</div>` : ''}
         ${c.dismissing === p.id ? dismissMarkup(p) : actionsMarkup(c, p)}
       </div>
     </li>`;
@@ -127,23 +127,23 @@
   function addFormMarkup() {
     return `<div class="rf-add" data-testid="refactor-add-form">
       <div class="rf-add-grid">
-        <div class="field"><label for="rf-add-target">Target</label><input type="text" id="rf-add-target" data-rf-add-target placeholder="src/billing/invoice.js" spellcheck="false" /><div class="hint">A file or a folder.</div></div>
-        <div class="field"><label for="rf-add-improvement">Expected improvement</label><input type="text" id="rf-add-improvement" data-rf-add-improvement placeholder="Split the tax rules out of the invoice builder" /></div>
+        <div class="field"><label for="rf-add-target">${t('project_refactor.target')}</label><input type="text" id="rf-add-target" data-rf-add-target placeholder="${t('project_refactor.src_billing_invoice_js')}" spellcheck="false" /><div class="hint">${t('project_refactor.a_file_or_a_folder')}</div></div>
+        <div class="field"><label for="rf-add-improvement">${t('project_refactor.expected_improvement')}</label><input type="text" id="rf-add-improvement" data-rf-add-improvement placeholder="${t('project_refactor.split_the_tax_rules_out_of')}" /></div>
       </div>
-      <div class="field"><label for="rf-add-evidence">Evidence</label><textarea id="rf-add-evidence" rows="2" data-rf-add-evidence placeholder="What shows it is needed: hotspot rank, Danger Zone score, bugs"></textarea></div>
-      <div class="row"><button type="button" class="btn sm primary" data-rf-add-save>Save</button><button type="button" class="btn sm ghost" data-rf-add-cancel>Cancel</button></div>
+      <div class="field"><label for="rf-add-evidence">${t('project_refactor.evidence')}</label><textarea id="rf-add-evidence" rows="2" data-rf-add-evidence placeholder="${t('project_refactor.what_shows_it_is_needed_hotspot')}"></textarea></div>
+      <div class="row"><button type="button" class="btn sm primary" data-rf-add-save>${t('common.save')}</button><button type="button" class="btn sm ghost" data-rf-add-cancel>${t('common.cancel')}</button></div>
     </div>`;
   }
 
   function listMarkup(c, open, dismissed) {
     const shown = (c.filter === 'dismissed' ? dismissed : open).slice().sort(byRank);
     const filters = `<div class="row rf-filters">
-      <div class="chips" role="group" aria-label="Proposals">
-        <button type="button" class="chip${c.filter === 'open' ? ' active' : ''}" data-rf-filter="open" aria-pressed="${c.filter === 'open'}">Open ${open.length}</button>
-        <button type="button" class="chip${c.filter === 'dismissed' ? ' active' : ''}" data-rf-filter="dismissed" data-testid="refactor-filter-dismissed" aria-pressed="${c.filter === 'dismissed'}">Dismissed ${dismissed.length}</button>
+      <div class="chips" role="group" aria-label="${t('project_refactor.proposals')}">
+        <button type="button" class="chip${c.filter === 'open' ? ' active' : ''}" data-rf-filter="open" aria-pressed="${c.filter === 'open'}">${t('project_refactor.open')} ${open.length}</button>
+        <button type="button" class="chip${c.filter === 'dismissed' ? ' active' : ''}" data-rf-filter="dismissed" data-testid="refactor-filter-dismissed" aria-pressed="${c.filter === 'dismissed'}">${t('project_refactor.dismissed_2')} ${dismissed.length}</button>
       </div>
       <span class="spacer"></span>
-      ${c.adding ? '' : '<button type="button" class="btn sm ghost" data-rf-add data-testid="refactor-add">Write a proposal</button>'}
+      ${c.adding ? '' : `<button type="button" class="btn sm ghost" data-rf-add data-testid="refactor-add">${t('project_refactor.write_a_proposal')}</button>`}
     </div>`;
     const empty = c.filter === 'dismissed' ? 'No dismissed proposal.' : 'No open proposal: send findings from the Architecture tab or write one.';
     return `${filters}${c.adding ? addFormMarkup() : ''}
@@ -151,16 +151,16 @@
   }
 
   function stateMarkup(c, open, dismissed) {
-    if (!c.loaded) return '<p class="muted" data-testid="refactor-loading">Reading the proposals…</p>';
+    if (!c.loaded) return `<p class="muted" data-testid="refactor-loading">${t('project_refactor.reading_the_proposals')}</p>`;
     if (!c.reports.length && !open.length && !dismissed.length && !c.adding) {
-      return `<div class="empty-state" data-testid="refactor-state-no-report"><b>No Architecture report yet</b>
-        <p class="muted">The proposals come from the Architecture tab's findings: analyze the project there, then send its findings to Refactor.</p>
-        <div class="row rf-center"><button type="button" class="btn sm primary" data-rf-open-architecture>Open the Architecture tab</button><button type="button" class="btn sm ghost" data-rf-add>Write a proposal</button></div></div>`;
+      return `<div class="empty-state" data-testid="refactor-state-no-report"><b>${t('project_refactor.no_architecture_report_yet')}</b>
+        <p class="muted">${t('project_refactor.the_proposals_come_from_the_architecture')}</p>
+        <div class="row rf-center"><button type="button" class="btn sm primary" data-rf-open-architecture>${t('project_refactor.open_the_architecture_tab')}</button><button type="button" class="btn sm ghost" data-rf-add>${t('project_refactor.write_a_proposal')}</button></div></div>`;
     }
     if (!open.length && !dismissed.length && !c.adding) {
-      return `<div class="empty-state" data-testid="refactor-state-empty"><b>No refactor proposals yet</b>
-        <p class="muted">Send findings from the Architecture tab, or write a proposal with its target and the improvement expected.</p>
-        <div class="row rf-center"><button type="button" class="btn sm primary" data-rf-add>Write a proposal</button><button type="button" class="btn sm ghost" data-rf-open-architecture>Open the Architecture tab</button></div></div>`;
+      return `<div class="empty-state" data-testid="refactor-state-empty"><b>${t('project_refactor.no_refactor_proposals_yet')}</b>
+        <p class="muted">${t('project_refactor.send_findings_from_the_architecture_tab')}</p>
+        <div class="row rf-center"><button type="button" class="btn sm primary" data-rf-add>${t('project_refactor.write_a_proposal')}</button><button type="button" class="btn sm ghost" data-rf-open-architecture>${t('project_refactor.open_the_architecture_tab')}</button></div></div>`;
     }
     return listMarkup(c, open, dismissed);
   }
@@ -174,7 +174,7 @@
     const error = c.error || c.loadError;
     c.box.innerHTML = `<div class="rf-tab" data-testid="refactor">
       ${c.loaded ? headMarkup(c, open.length > 0) : ''}
-      ${c.prioritizing ? '<p class="muted small rf-busy" data-testid="refactor-prioritizing" role="status">The Product Owner is ranking the proposals…</p>' : ''}
+      ${c.prioritizing ? `<p class="muted small rf-busy" data-testid="refactor-prioritizing" role="status">${t('project_refactor.the_product_owner_is_ranking_the')}</p>` : ''}
       ${error ? `<div class="usage-unavailable" role="alert" data-testid="refactor-state-error">${esc(error)}</div>` : ''}
       ${c.loaded ? cadenceMarkup(c) : ''}
       ${stateMarkup(c, open, dismissed)}

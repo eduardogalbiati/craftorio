@@ -36,7 +36,7 @@ function renderRunGates() {
     // a report (#290: the release summary) leads, as Markdown, above the rest of the message
     const parts = typeof gateReportParts === 'function' ? gateReportParts(g) : { reportHtml: '', message: g.message || '' };
     const message = `${parts.reportHtml}<pre class="run-gate-message" data-testid="run-gate-message">${esc(parts.message)}</pre>`;
-    const main = `<div class="run-gate-head"><b>Approval required</b><span class="muted small mono">${esc(`${v.run ? `${runLabel(v.run)} · ` : ''}step: ${g.step_id}`)}</span></div>
+    const main = `<div class="run-gate-head"><b>${t('run.approval_required')}</b><span class="muted small mono">${esc(`${v.run ? `${runLabel(v.run)} · ` : ''}step: ${g.step_id}`)}</span></div>
       ${gateCardHtml(g.run_id, g, message) || message}${gateToolsHtml(g)}${field}<div class="row gate-choices run-gate-actions">${buttons}</div>${gateButtonsHelpHtml(g)}`;
     const side = gateSideHtml(g);
     const rec = g.brief?.recommendation?.answer;
@@ -165,7 +165,7 @@ function testedPillHtml(r) {
   if (r.tested !== 'not green') return '';
   const fails = (r.testedFailures || []).map((f) => `${f.test}${f.file ? ` (${f.file})` : ''}${f.class ? `: ${f.class}` : ''}`);
   const title = `The run reached the build without a green suite.${fails.length ? `\n${fails.join('\n')}` : ''}`;
-  return ` <span class="badge warn" data-testid="run-tested-pill" title="${esc(title)}">Not tested green</span>`;
+  return ` <span class="badge warn" data-testid="run-tested-pill" title="${esc(title)}">${t('run.not_tested_green')}</span>`;
 }
 
 // #304: a suite step with `scope: affected`, its latest round as a card: the scope (the affected test
@@ -185,12 +185,12 @@ function suiteCardsHtml(runId, stepNames) {
     const reasons = Object.entries(sel.reasons || {});
     const more = reasons.length - SUITE_REASONS_SHOWN;
     const list = reasons.length
-      ? `<ul>${reasons.slice(0, SUITE_REASONS_SHOWN).map(([f, why]) => `<li><span class="mono" title="${esc(f)}">${esc(f)}</span>: ${esc(why)}</li>`).join('')}${more > 0 ? `<li class="muted">and ${more} more</li>` : ''}</ul>`
+      ? `<ul>${reasons.slice(0, SUITE_REASONS_SHOWN).map(([f, why]) => `<li><span class="mono" title="${esc(f)}">${esc(f)}</span>: ${esc(why)}</li>`).join('')}${more > 0 ? `<li class="muted">${t('run.and_more_more', { more })}</li>` : ''}</ul>`
       : '';
     const logBtn = (log, label, testid) => (log ? `<button type="button" class="link-btn small" data-testid="${testid}" data-suite-log="${esc(log)}" title="${esc(log)}">${label}</button>` : '');
     const affectedLog = out.affected ? out.affected.log : out.scope === 'files' ? out.log : '';
     return `<div class="run-suite-card" data-testid="run-suite-card">
-      <div><b title="${esc(stepId)}">${esc(agentLabel(stepId, stepNames))}</b> <span class="badge" data-testid="run-suite-scope" title="${esc(sel.why || '')}">${esc(scope)}</span>${out.round ? ` <span class="muted small">round ${esc(out.round)}</span>` : ''}</div>
+      <div><b title="${esc(stepId)}">${esc(agentLabel(stepId, stepNames))}</b> <span class="badge" data-testid="run-suite-scope" title="${esc(sel.why || '')}">${esc(scope)}</span>${out.round ? ` <span class="muted small">${t('run.round')} ${esc(out.round)}</span>` : ''}</div>
       <div class="small run-suite-selection" data-testid="run-suite-selection">${list}${sel.why ? `<div class="muted">${esc(sel.why)}</div>` : ''}</div>
       <div class="row">${logBtn(affectedLog, listed ? 'Listed tests\' log' : 'Affected tests\' log', 'run-suite-affected-log')}${out.affected && out.scope === 'full' ? logBtn(out.log, 'Whole suite\'s log', 'run-suite-full-log') : ''}</div>
     </div>`;
@@ -220,8 +220,8 @@ function askScratch(runId) {
 function scratchHtml(runId) {
   const s = scratchOfRun.get(runId)?.info;
   if (!s) return '';
-  return `<div class="small run-scratch" title="A scratch copy of the workspace for the checks of this run's agents (simulated runs, screenshots): not artifacts, removed once the run ends. ${esc(s.dir)}">`
-    + `Scratch workspace (${esc(s.files)} file${s.files === 1 ? '' : 's'}, ${esc(fmtSize(s.bytes))}) <button class="btn sm ghost" id="btn-run-scratch">Open folder</button></div>`;
+  return `<div class="small run-scratch" title="${t('run.a_scratch_copy_of_the_workspace', { dir: esc(s.dir) })}">`
+    + `Scratch workspace (${esc(s.files)} file${s.files === 1 ? '' : 's'}, ${esc(fmtSize(s.bytes))}) <button class="btn sm ghost" id="btn-run-scratch">${t('run.open_folder')}</button></div>`;
 }
 
 // #384: the run that resumed an ended run (its row's resumedBy, runs:list { ids }), read at most every
@@ -256,10 +256,10 @@ function renderRunSummary() {
   // its title (editable) and PR first, the workflow under it (#84); a past run opened from disk is read-only
   const html = `
     <div class="run-summary-name"><b>${runTitleHtml(r)}</b>${StatusPill.resumedLink(resumedOfRun.get(r.id)?.by)} ${prBadge(r)}${testedPillHtml(r)}</div>
-    <div class="small muted">${esc(r.workflow || '')}${r.version ? ` v${esc(r.version)}` : ''}${selectedView().past ? ' · <span title="Opened from its recorded events: nothing here can change it">read-only</span>' : ''}</div>
-    ${r.project ? `<div class="small">Project: <b>${esc(r.project)}</b></div>` : ''}
-    ${(r.issueSaves || []).map((s) => `<div class="small" title="The accepted document was saved to the issue (Save to issue, Write & Review)">Saved to issue: <a href="${esc(s.commentUrl || s.url)}" target="_blank" rel="noopener">#${esc(s.number)}</a> · ${s.mode === 'comment' ? 'as a comment' : 'description replaced'} · ${esc(new Date(s.at).toLocaleString('en-US'))}</div>`).join('')}
-    ${r.gateWaitMs ? `<div class="small" title="Time the run waited for your answers at its human gates: no agent works (or costs) meanwhile">Waiting for you at gates: <b>${esc(fmtDur(r.gateWaitMs))}</b></div>` : ''}
+    <div class="small muted">${esc(r.workflow || '')}${r.version ? ` v${esc(r.version)}` : ''}${selectedView().past ? ` · <span title="${t('run.opened_from_its_recorded_events_nothing')}">${t('run.read_only')}</span>` : ''}</div>
+    ${r.project ? `<div class="small">${t('run.project')} <b>${esc(r.project)}</b></div>` : ''}
+    ${(r.issueSaves || []).map((s) => `<div class="small" title="${t('run.the_accepted_document_was_saved_to')}">${t('run.saved_to_issue')} <a href="${esc(s.commentUrl || s.url)}" target="_blank" rel="noopener">#${esc(s.number)}</a> · ${s.mode === 'comment' ? 'as a comment' : 'description replaced'} · ${esc(new Date(s.at).toLocaleString('en-US'))}</div>`).join('')}
+    ${r.gateWaitMs ? `<div class="small" title="${t('run.time_the_run_waited_for_your')}">${t('run.waiting_for_you_at_gates')} <b>${esc(fmtDur(r.gateWaitMs))}</b></div>` : ''}
     ${testsPlanHtml(r.testsPlan)}
     ${suiteCardsHtml(r.id, r.stepNames)}
     ${scratchHtml(r.id)}
@@ -269,14 +269,14 @@ function renderRunSummary() {
     ${window.gateScenariosHtml ? window.gateScenariosHtml(r.id) : ''}`;
   // #410: the run's actions sit on the tab row, on the right; "+ When it finishes…" first while it goes without a chain
   const chainLink = r.status === 'running' && !r.chain?.then && !selectedView().past
-    ? '<button type="button" class="link-btn small" data-chain="edit" title="Start a workflow when this run succeeds (#134)">+ When it finishes…</button>' : '';
+    ? `<button type="button" class="link-btn small" data-chain="edit" title="${t('run.start_a_workflow_when_this_run')}">${t('run.when_it_finishes')}</button>` : '';
   const actionsHtml = `${chainLink}
-      <button class="btn sm ghost sup-btn" id="btn-run-sup" title="Ask the AI supervisor to explain this run and suggest how to continue"><span class="sup-mark">◆</span> Ask the supervisor</button>
-      ${r.status === 'running' ? `<button class="btn sm ghost sup-btn" id="btn-run-watch" title="${WATCH_TITLE}"><span class="sup-mark">◆</span> Watch</button>` : ''}
-      ${canResume(r) ? '<button class="btn sm ghost" id="btn-run-resume" title="Start a new run from a step of this one, keeping the previous outputs (no supervisor call)">Resume from step…</button>' : ''}
-      ${hasChanges(r.id) ? '<button class="btn sm ghost" id="btn-run-diff" title="The files this run changed on its branch, file by file, split or unified">Review changes</button>' : ''}
-      ${saveIssue ? `<button class="btn sm ghost" id="btn-run-save-issue" title="Save the accepted document to its issue (preview first, then confirm)">Save to issue #${esc(saveIssue.number)}…</button>` : ''}
-      <button class="btn sm ghost" id="btn-run-analytics" title="Its timeline, cost and tokens per agent, compared with its workflow's runs (Analytics › Run, #228)">Open in Analytics</button>
+      <button class="btn sm ghost sup-btn" id="btn-run-sup" title="${t('run.ask_the_ai_supervisor_to_explain')}"><span class="sup-mark">◆</span> ${t('run.ask_the_supervisor')}</button>
+      ${r.status === 'running' ? `<button class="btn sm ghost sup-btn" id="btn-run-watch" title="${WATCH_TITLE}"><span class="sup-mark">◆</span> ${t('run.watch')}</button>` : ''}
+      ${canResume(r) ? `<button class="btn sm ghost" id="btn-run-resume" title="${t('run.start_a_new_run_from_a')}">${t('run.resume_from_step')}</button>` : ''}
+      ${hasChanges(r.id) ? `<button class="btn sm ghost" id="btn-run-diff" title="${t('run.the_files_this_run_changed_on')}">${t('run.review_changes')}</button>` : ''}
+      ${saveIssue ? `<button class="btn sm ghost" id="btn-run-save-issue" title="${t('run.save_the_accepted_document_to_its')}">${t('run.save_to_issue_number', { number: esc(saveIssue.number) })}</button>` : ''}
+      <button class="btn sm ghost" id="btn-run-analytics" title="${t('run.its_timeline_cost_and_tokens_per')}">${t('run.open_in_analytics')}</button>
       ${replayMapHtml(r)}${releaseMapHtml(r)}`;
   // rendered on every event: rebuilt only when it changes, so a hover popover over an input stays open
   const box = $('#run-summary');
@@ -309,14 +309,14 @@ function renderRunSummary() {
   // Replay on the map (#374): a finished run of a project plays its agents' files over the city
   function replayMapHtml(run) {
     if (!run.projectId || run.status === 'running' || !window.ProjectCityAgents) return '';
-    return '<button class="btn sm ghost" id="btn-run-replay-map" data-testid="run-replay-map" title="Play the files this run\'s agents read and changed over its project\'s city (#374)">Replay on the map</button>';
+    return `<button class="btn sm ghost" id="btn-run-replay-map" data-testid="run-replay-map" title="${t('run.play_the_files_this_run_s')}">${t('run.replay_on_the_map')}</button>`;
   }
 
   // #376: a shipped release run (workflows/release.yaml) shows its release on the city, the previous tag in grey
   function releaseMapHtml(run) {
     const shipped = run.projectId && run.status === 'success' && run.inputs?.version && /(^|[\\/])release\.yaml$/.test(String(run.file || ''));
     if (!shipped || !window.ProjectCityRelease) return '';
-    return `<button class="btn sm ghost" id="btn-run-release-map" data-testid="run-release-map" title="The project city at the previous release in grey, what ${esc(run.inputs.version)} changed in colour (#376)">Show on the map</button>`;
+    return `<button class="btn sm ghost" id="btn-run-release-map" data-testid="run-release-map" title="${t('run.the_project_city_at_the_previous', { version: esc(run.inputs.version) })}">${t('run.show_on_the_map')}</button>`;
   }
 
   function mountReplayMap(run) {
@@ -419,8 +419,8 @@ function renderRunBanner() {
   const key = `${r.id}:${issueRefs(r)}:${r.error || ''}`;
   if (box.dataset.key === key) return;
   box.dataset.key = key;
-  box.innerHTML = `<div class="fail-banner-text"><b>The workflow failed: ${esc(runLabel(r))}</b><span class="muted small mono">${esc(r.id)}</span>${r.error ? `<span class="mono small" title="${esc(r.error)}">${esc(r.error)}</span>` : ''}</div>
-    <button class="btn sm sup-btn solid" id="btn-banner-sup"><span class="sup-mark">◆</span> Ask the supervisor</button>`;
+  box.innerHTML = `<div class="fail-banner-text"><b>${t('run.the_workflow_failed')} ${esc(runLabel(r))}</b><span class="muted small mono">${esc(r.id)}</span>${r.error ? `<span class="mono small" title="${esc(r.error)}">${esc(r.error)}</span>` : ''}</div>
+    <button class="btn sm sup-btn solid" id="btn-banner-sup"><span class="sup-mark">◆</span> ${t('run.ask_the_supervisor')}</button>`;
   $('#btn-banner-sup').onclick = () => openSupervisorForCurrent();
 }
 
@@ -458,8 +458,8 @@ function renderPauseBanner() {
   box.dataset.key = key;
   if (!p) { box.innerHTML = ''; return; }
   const action = p.state === 'pausing'
-    ? '<button type="button" class="btn sm ghost" data-pause-act="cancel" data-testid="run-cancel-pause" title="Take the pause back: the run goes on after the current turn">Cancel pause</button>'
-    : '<button type="button" class="btn sm primary" data-pause-act="resume" data-testid="run-resume" title="Continue this run where it paused: no finished turn runs again">Resume</button>';
+    ? `<button type="button" class="btn sm ghost" data-pause-act="cancel" data-testid="run-cancel-pause" title="${t('run.take_the_pause_back_the_run')}">${t('run.cancel_pause')}</button>`
+    : `<button type="button" class="btn sm primary" data-pause-act="resume" data-testid="run-resume" title="${t('run.continue_this_run_where_it_paused')}">${t('run.resume')}</button>`;
   box.innerHTML = `<div class="run-pause-state" data-testid="run-pause-state" data-state="${esc(p.state)}"><span class="run-pause-text">${esc(RunProgress.pauseLabel(p))}</span>${action}</div>`;
 }
 
@@ -527,7 +527,7 @@ function renderChainBanner() {
   const btn = (act, label, cls = 'ghost') => `<button type="button" class="btn sm ${cls}" data-chain="${act}"${chainUi.busy ? ' disabled' : ''}>${esc(label)}</button>`;
   // a chain set up by hand (not already a pipeline's) can be saved as a pipeline
   const savePipe = then && !pipe && !savingPipe && !saved && typeof api.savePipeline === 'function'
-    ? '<button type="button" class="link-btn small" data-chain="save-pipe-open" title="Save this run\'s workflow and its chain as a pipeline you can start like a workflow">Save as pipeline</button>' : '';
+    ? `<button type="button" class="link-btn small" data-chain="save-pipe-open" title="${t('run.save_this_run_s_workflow_and')}">${t('run.save_as_pipeline')}</button>` : '';
   let actions = '';
   let text = '';
   if (editing) {
@@ -542,19 +542,19 @@ function renderChainBanner() {
     text = c.reason || 'The chain paused.';
   } else if (then) {
     text = c.reason || '';
-    if (c.nextRunId) actions = `<button type="button" class="link-btn small" data-run-link="${esc(c.nextRunId)}">Open the next run</button>`;
+    if (c.nextRunId) actions = `<button type="button" class="link-btn small" data-run-link="${esc(c.nextRunId)}">${t('run.open_the_next_run')}</button>`;
   }
   const badges = c ? ChainModel.chainBadgesHtml(c) : '';
   const names = Object.fromEntries((chainUi.workflows || []).map((w) => [w.file, w.name]));
-  const strip = pipeRun ? `<div class="chain-banner-pipe"><span class="muted small">Pipeline <b>${esc(pipeRun.name)}</b>${pipeRun.state === 'paused' ? ' · <span class="warn-text">paused</span>' : ''}</span>
+  const strip = pipeRun ? `<div class="chain-banner-pipe"><span class="muted small">${t('run.pipeline')} <b>${esc(pipeRun.name)}</b>${pipeRun.state === 'paused' ? ` · <span class="warn-text">${t('run.paused')}</span>` : ''}</span>
       ${ChainModel.pipelineStagesHtml(pipeRun, { names, runs: pipeRun.runs, current: pipe.stage })}</div>` : '';
   // what the owner typed survives a redraw (busy, an error)
   const draft = chainUi.pipeDraft?.runId === r.id ? chainUi.pipeDraft : { name: then ? `${r.workflow || 'Run'} → ${ChainModel.thenLabel(then)}` : '', category: 'build', description: '' };
   const pipeForm = savingPipe ? `<div class="chain-banner-edit pipe-save-form">
-      <div class="field"><label for="pipe-save-name">Name</label><input type="text" id="pipe-save-name" value="${esc(draft.name)}" spellcheck="false" /></div>
-      <div class="field"><label for="pipe-save-category">Category</label>${window.Select.markup('id="pipe-save-category"', PIPE_CATEGORIES, draft.category)}</div>
-      <div class="field pipe-save-desc"><label for="pipe-save-description">Description</label><input type="text" id="pipe-save-description" value="${esc(draft.description)}" placeholder="What the pipeline does (shown when you start it)" /></div>
-      <p class="muted small">Saved in the workspace's pipelines folder: this run's workflow, then each step of its chain with its mapping. Start it from the Start drawer or Workflows › Definitions.</p>
+      <div class="field"><label for="pipe-save-name">${t('run.name')}</label><input type="text" id="pipe-save-name" value="${esc(draft.name)}" spellcheck="false" /></div>
+      <div class="field"><label for="pipe-save-category">${t('run.category')}</label>${window.Select.markup('id="pipe-save-category"', PIPE_CATEGORIES, draft.category)}</div>
+      <div class="field pipe-save-desc"><label for="pipe-save-description">${t('run.description')}</label><input type="text" id="pipe-save-description" value="${esc(draft.description)}" placeholder="${t('run.what_the_pipeline_does_shown_when')}" /></div>
+      <p class="muted small">${t('run.saved_in_the_workspace_s_pipelines')}</p>
     </div>` : '';
   if (saved) text = `Saved as the pipeline "${saved.name}" (${saved.file}).`;
   box.innerHTML = `<div class="chain-banner-head">
@@ -581,14 +581,14 @@ function childRunsStrip(r) {
   const kids = r.childRuns || [];
   if (!p?.run_id && !kids.length) return '';
   const link = (id, text, tip) => `<button type="button" class="link-btn small" data-run-link="${esc(id)}" title="${esc(tip)}">${esc(text)}</button>`;
-  const parent = p?.run_id ? `<span class="muted small">Child run of</span> ${link(p.run_id, p.workflow || p.run_id, `Open run ${p.run_id} (step ${p.step_id || '?'})`)}${Number.isInteger(p.index) ? ` <span class="badge">item ${p.index + 1}</span>` : ''}` : '';
+  const parent = p?.run_id ? `<span class="muted small">${t('run.child_run_of')}</span> ${link(p.run_id, p.workflow || p.run_id, `Open run ${p.run_id} (step ${p.step_id || '?'})`)}${Number.isInteger(p.index) ? ` <span class="badge">${t('run.item')} ${p.index + 1}</span>` : ''}` : '';
   const cost = childRunsCost(r);
-  const children = kids.length ? `<span class="muted small">Child runs${cost ? ` · ${esc(fmtCost(cost))}` : ''}</span> ${kids.map((k) => {
+  const children = kids.length ? `<span class="muted small">${t('run.child_runs')}${cost ? ` · ${esc(fmtCost(cost))}` : ''}</span> ${kids.map((k) => {
     const name = k.label || (Number.isInteger(k.index) ? `item ${k.index + 1}` : k.workflow || k.run_id);
     // a resumed parent's children (#175): reused when they had succeeded, else resumed
     const how = k.reused ? `, reused from the previous run` : k.resumed_from ? `, resumes ${k.resumed_from}` : '';
     return k.run_id
-      ? `<span class="child-run">${link(k.run_id, name, `Open run ${k.run_id} (${k.workflow || 'workflow'}, step ${k.step_id}${how}${k.cost_usd ? `, ${fmtCost(k.cost_usd)}` : ''})`)} ${StatusPill.statusPill(k.status)}${k.reused ? ' <span class="badge">reused</span>' : k.resumed_from ? ' <span class="badge">resumed</span>' : ''}</span>`
+      ? `<span class="child-run">${link(k.run_id, name, `Open run ${k.run_id} (${k.workflow || 'workflow'}, step ${k.step_id}${how}${k.cost_usd ? `, ${fmtCost(k.cost_usd)}` : ''})`)} ${StatusPill.statusPill(k.status)}${k.reused ? ` <span class="badge">${t('run.reused')}</span>` : k.resumed_from ? ` <span class="badge">${t('run.resumed')}</span>` : ''}</span>`
       : `<span class="child-run muted small">${esc(name)} ${StatusPill.statusPill(k.status)}</span>`;
   }).join('')}` : '';
   return `<div class="chain-banner-pipe child-runs">${parent}${children}</div>`;
@@ -678,7 +678,7 @@ function renderSteps() {
   const hidden = all.length - all.filter((s) => s.visits > 0).length;
   const toggle = hidden ? `<button type="button" class="link-btn small" data-all-steps>${v.allSteps ? 'Hide the steps that did not run' : `Show all steps (${hidden} not run)`}</button>` : '';
   const box = $('#steps');
-  const out = (html || '<p class="muted small">No step has run yet.</p>') + toggle;
+  const out = (html || `<p class="muted small">${t('run.no_step_has_run_yet')}</p>`) + toggle;
   if (box.dataset.html === out) return;
   box.dataset.html = out;
   box.innerHTML = out;
@@ -710,18 +710,18 @@ function renderSessions() {
       <div class="badges">
         <span class="badge p-${esc(s.provider)}">${esc(s.provider)}</span>
         <span class="badge">${esc(s.model)}</span>
-        ${isOrch ? '' : `<span class="badge">${s.turns || 0} turn(s)</span>`}
+        ${isOrch ? '' : `<span class="badge">${s.turns || 0} ${I18n.t('run.turn_s')}</span>`}
       </div>
       <div class="metrics">
-        <div class="metric"><label>open</label><b>${fmtDur(liveDuration(s))}</b></div>
+        <div class="metric"><label>${I18n.t('run.open')}</label><b>${fmtDur(liveDuration(s))}</b></div>
         ${isOrch ? `
-        <div class="metric"><label>steps</label><b>${[...state.steps.values()].reduce((a, x) => a + x.visits, 0)}</b></div>
-        <div class="metric"><label>child sessions</label><b>${list.length - 1}</b></div>
-        <div class="metric"><label>total cost</label><b>${fmtCost(totals().cost)}${marks(estimated, notRecorded(list))}</b></div>${state.run?.childRuns?.length ? `
-        <div class="metric" title="What its child runs cost (their own children included), not in its total cost"><label>child runs cost</label><b>${fmtCost(childRunsCost(state.run))}</b></div>` : ''}` : `
-        <div class="metric"><label>active</label><b>${fmtDur(s.active_ms)}</b></div>
-        <div class="metric"><label>in / out</label><b>${fmtNum((t.input || 0) + (t.cache_read || 0))} / ${fmtNum(t.output)}</b></div>
-        <div class="metric"><label>cost</label><b data-testid="session-cost">${s.cost_estimate?.source === 'unknown' ? '—' : fmtCost(s.cost_usd)}${marks(Number(s.estimated_cost_usd) || 0, notRecorded([s]))}${costEstimateNote(s.cost_estimate)}</b></div>
+        <div class="metric"><label>${I18n.t('run.steps')}</label><b>${[...state.steps.values()].reduce((a, x) => a + x.visits, 0)}</b></div>
+        <div class="metric"><label>${I18n.t('run.child_sessions')}</label><b>${list.length - 1}</b></div>
+        <div class="metric"><label>${I18n.t('run.total_cost')}</label><b>${fmtCost(totals().cost)}${marks(estimated, notRecorded(list))}</b></div>${state.run?.childRuns?.length ? `
+        <div class="metric" title="${I18n.t('run.what_its_child_runs_cost_their')}"><label>${I18n.t('run.child_runs_cost')}</label><b>${fmtCost(childRunsCost(state.run))}</b></div>` : ''}` : `
+        <div class="metric"><label>${I18n.t('run.active')}</label><b>${fmtDur(s.active_ms)}</b></div>
+        <div class="metric"><label>${I18n.t('run.in_out')}</label><b>${fmtNum((t.input || 0) + (t.cache_read || 0))} / ${fmtNum(t.output)}</b></div>
+        <div class="metric"><label>${I18n.t('run.cost')}</label><b data-testid="session-cost">${s.cost_estimate?.source === 'unknown' ? '—' : fmtCost(s.cost_usd)}${marks(Number(s.estimated_cost_usd) || 0, notRecorded([s]))}${costEstimateNote(s.cost_estimate)}</b></div>
         ${nextTurnMetric(s)}`}
       </div>
     </div>`;
@@ -735,7 +735,7 @@ function renderSessions() {
 // #320: how the session's next turn starts (session-cache.js), like the run lists' Next turn column
 function nextTurnMetric(s) {
   const t = SessionCache.currentTurn(s);
-  return `<div class="metric next-turn"${t ? ` data-next-turn="${esc(t.kind)}"` : ''} data-testid="session-next-turn" title="${esc(SessionCache.turnTitle(t))}"><label>next turn</label><b>${esc(SessionCache.turnText(t))}</b></div>`;
+  return `<div class="metric next-turn"${t ? ` data-next-turn="${esc(t.kind)}"` : ''} data-testid="session-next-turn" title="${esc(SessionCache.turnTitle(t))}"><label>${I18n.t('run.next_turn')}</label><b>${esc(SessionCache.turnText(t))}</b></div>`;
 }
 
 function detailsBlock(key, cls, label, body) {
@@ -755,12 +755,12 @@ function renderItem(sid, turn, item, i) {
   const key = `${sid}:${turn}:${i}`;
   switch (item.kind) {
     case 'thinking': return detailsBlock(key, 'thinking', 'thinking', item.text);
-    case 'text': return `<div class="item text"><div class="label">output</div><pre>${esc(item.text)}</pre></div>`;
-    case 'tool_call': return `<div class="item tool_call"><div class="label">tool · ${esc(item.name)}${subagentLabel(item)}</div><pre>${esc(typeof item.input === 'string' ? item.input : JSON.stringify(item.input, null, 2))}</pre></div>`;
+    case 'text': return `<div class="item text"><div class="label">${t('run.output')}</div><pre>${esc(item.text)}</pre></div>`;
+    case 'tool_call': return `<div class="item tool_call"><div class="label">${t('run.tool')} ${esc(item.name)}${subagentLabel(item)}</div><pre>${esc(typeof item.input === 'string' ? item.input : JSON.stringify(item.input, null, 2))}</pre></div>`;
     case 'tool_result': return detailsBlock(key, 'tool_result', `result${item.is_error ? ' (error)' : ''}`, item.output);
-    case 'stderr': return `<div class="item stderr"><div class="label">stderr</div><pre>${esc(item.text)}</pre></div>`;
-    case 'spawn': return `<div class="item spawn"><div class="label">process</div><pre>${esc(item.command)} ${esc(item.args.join(' '))}\ncwd: ${esc(item.cwd)}</pre></div>`;
-    default: return `<div class="item raw"><div class="label">event</div><pre>${esc(item.text || JSON.stringify(item.event))}</pre></div>`;
+    case 'stderr': return `<div class="item stderr"><div class="label">${t('run.stderr')}</div><pre>${esc(item.text)}</pre></div>`;
+    case 'spawn': return `<div class="item spawn"><div class="label">${t('run.process')}</div><pre>${esc(item.command)} ${esc(item.args.join(' '))}\ncwd: ${esc(item.cwd)}</pre></div>`;
+    default: return `<div class="item raw"><div class="label">${t('run.event')}</div><pre>${esc(item.text || JSON.stringify(item.event))}</pre></div>`;
   }
 }
 
@@ -776,17 +776,17 @@ function renderDetail() {
       <div class="detail-actions">
         ${termButtons('live', s.id === 'orchestrator' ? 'Follow the orchestrator log (steps, transitions, sessions, approvals) in a terminal' : 'Follow this session live in a terminal')}
         ${s.id === 'orchestrator' ? '' : termButtons('cli', '', cliBlocked(s))}
-        ${s.id === 'orchestrator' ? '<button class="btn sm ghost sup-btn" data-sup><span class="sup-mark">◆</span> Ask the supervisor</button>' : ''}
+        ${s.id === 'orchestrator' ? `<button class="btn sm ghost sup-btn" data-sup><span class="sup-mark">◆</span> ${t('run.ask_the_supervisor')}</button>` : ''}
         <span class="muted small" data-term-msg></span>
       </div>
       <dl class="kv">
-        <dt>session</dt><dd>${esc(s.id)}</dd>
-        <dt>provider session</dt><dd>${esc(s.provider_session_id || '—')}</dd>
-        <dt>status</dt><dd data-status="${esc(s.status)}">${esc(StatusPill.statusLabel(s.status))}</dd>
-        <dt>opened at</dt><dd>${esc(timeOf(s.opened_at))}${s.closed_at ? ' → ' + esc(timeOf(s.closed_at)) : ''}</dd>
-        <dt>duration / active / idle</dt><dd>${fmtDur(liveDuration(s))} / ${fmtDur(s.active_ms)} / ${fmtDur(s.idle_ms)}</dd>
-        <dt>tokens</dt><dd>in ${fmtNum(s.tokens?.input)} · cache r/w ${fmtNum(s.tokens?.cache_read)}/${fmtNum(s.tokens?.cache_write)} · out ${fmtNum(s.tokens?.output)} · reasoning ${fmtNum(s.tokens?.reasoning)}</dd>
-        <dt>cost</dt><dd>${fmtCost(s.cost_usd)}</dd>
+        <dt>${t('run.session')}</dt><dd>${esc(s.id)}</dd>
+        <dt>${t('run.provider_session')}</dt><dd>${esc(s.provider_session_id || '—')}</dd>
+        <dt>${t('run.status')}</dt><dd data-status="${esc(s.status)}">${esc(StatusPill.statusLabel(s.status))}</dd>
+        <dt>${t('run.opened_at')}</dt><dd>${esc(timeOf(s.opened_at))}${s.closed_at ? ' → ' + esc(timeOf(s.closed_at)) : ''}</dd>
+        <dt>${t('run.duration_active_idle')}</dt><dd>${fmtDur(liveDuration(s))} / ${fmtDur(s.active_ms)} / ${fmtDur(s.idle_ms)}</dd>
+        <dt>${t('run.tokens')}</dt><dd>${t('run.in_input_cache_r_w_cache', { input: fmtNum(s.tokens?.input), cache_read: fmtNum(s.tokens?.cache_read), cache_write: fmtNum(s.tokens?.cache_write), output: fmtNum(s.tokens?.output) })} ${fmtNum(s.tokens?.reasoning)}</dd>
+        <dt>${t('run.cost')}</dt><dd>${fmtCost(s.cost_usd)}</dd>
       </dl>
     </div>`;
 
@@ -797,18 +797,18 @@ function renderDetail() {
     html += [...s.turnLog.values()].map((t) => `
       <div class="turn">
         <div class="turn-head">
-          <span class="t">Turn ${t.n}</span><span class="muted">${esc(t.stepId || '')}</span>
+          <span class="t">${I18n.t('run.turn')} ${t.n}</span><span class="muted">${esc(t.stepId || '')}</span>
           <span class="meta">${t.result ? `${fmtDur(t.result.duration)} · in ${fmtNum((t.result.usage?.input || 0) + (t.result.usage?.cache_read || 0))} · out ${fmtNum(t.result.usage?.output)} · ${fmtCost(t.result.cost)}` : 'in progress…'}</span>
         </div>
         <div class="turn-body">
           ${t.prompt != null ? detailsBlock(`${s.id}:${t.n}:prompt`, 'prompt', 'prompt sent', t.prompt) : ''}
           ${t.items.map((it, i) => renderItem(s.id, t.n, it, i)).join('')}
           ${t.result ? `<div class="usage-row">
-              <span>input ${fmtNum(t.result.usage?.input)}</span><span>cache read ${fmtNum(t.result.usage?.cache_read)}</span>
-              <span>cache write ${fmtNum(t.result.usage?.cache_write)}</span><span>output ${fmtNum(t.result.usage?.output)}</span>
-              <span>reasoning ${fmtNum(t.result.usage?.reasoning)}</span></div>` : ''}
+              <span>${I18n.t('run.input')} ${fmtNum(t.result.usage?.input)}</span><span>${I18n.t('run.cache_read')} ${fmtNum(t.result.usage?.cache_read)}</span>
+              <span>${I18n.t('run.cache_write')} ${fmtNum(t.result.usage?.cache_write)}</span><span>${I18n.t('run.output')} ${fmtNum(t.result.usage?.output)}</span>
+              <span>${I18n.t('run.reasoning')} ${fmtNum(t.result.usage?.reasoning)}</span></div>` : ''}
         </div>
-      </div>`).join('') || '<p class="empty muted">Waiting for the first turn…</p>';
+      </div>`).join('') || `<p class="empty muted">${t('run.waiting_for_the_first_turn')}</p>`;
   }
 
   box.innerHTML = html;
@@ -845,17 +845,17 @@ registerView({
   markup: `
       <section id="view-run" class="view hidden">
         <div class="run-tab-row" data-testid="run-tab-row">
-          <div class="tabs" role="tablist" aria-label="Run view">
-            <button id="run-mode-chat" class="tab" type="button" role="tab" aria-selected="false" title="Follow this run as a chat">Chat</button>
-            <button class="tab active" type="button" role="tab" aria-selected="true">Details</button>
-            <button id="run-mode-3d" class="tab" type="button" role="tab" aria-selected="false" data-run3d="run" data-testid="run-3d" title="Show this run in 3D">3D</button>
+          <div class="tabs" role="tablist" aria-label="${t('run.run_view')}">
+            <button id="run-mode-chat" class="tab" type="button" role="tab" aria-selected="false" title="${t('run.follow_this_run_as_a_chat')}">${t('run.chat')}</button>
+            <button class="tab active" type="button" role="tab" aria-selected="true">${t('run.details')}</button>
+            <button id="run-mode-3d" class="tab" type="button" role="tab" aria-selected="false" data-run3d="run" data-testid="run-3d" title="${t('run.show_this_run_in_3d')}">3D</button>
           </div>
-          <span id="run-screen-status" class="pill pill-idle" data-testid="run-screen-status" data-status="idle">Idle</span>
+          <span id="run-screen-status" class="pill pill-idle" data-testid="run-screen-status" data-status="idle">${t('run.idle')}</span>
           <span id="run-screen-id" class="muted mono small" data-testid="run-screen-id"></span>
           <div id="run-actions" class="run-actions"></div>
           <!-- #368: the run ends paused once its agents finish their current turn (run-controls.js pauseRun); #391 the owner's words: "step" -->
-          <button id="btn-pause" class="btn ghost sm hidden" type="button" data-testid="run-pause" title="The agents finish their current turn, then no step starts after them; Resume continues">Pause after current step</button>
-          <button id="btn-stop" class="btn danger sm hidden" type="button" data-testid="run-stop">Stop</button>
+          <button id="btn-pause" class="btn ghost sm hidden" type="button" data-testid="run-pause" title="${t('run.the_agents_finish_their_current_turn')}">${t('run.pause_after_current_step')}</button>
+          <button id="btn-stop" class="btn danger sm hidden" type="button" data-testid="run-stop">${t('run.stop')}</button>
         </div>
         <div id="run-fail-banner" class="fail-banner hidden"></div>
         <div id="run-pause-banner" class="run-pause-banner hidden" aria-live="polite"></div>
@@ -864,30 +864,30 @@ registerView({
         <div class="run-layout">
           <aside class="panel config">
             <section>
-              <h2>Workflow</h2>
-              <div id="run-summary" class="run-summary"><p class="muted small">No workflow started.</p></div>
+              <h2>${t('run.workflow')}</h2>
+              <div id="run-summary" class="run-summary"><p class="muted small">${t('run.no_workflow_started')}</p></div>
             </section>
             <section>
-              <h2>Steps</h2>
+              <h2>${t('run.steps_2')}</h2>
               <div id="steps" class="step-groups" data-testid="run-steps"></div>
             </section>
           </aside>
 
           <section class="panel sessions-panel">
-            <h2>Sessions</h2>
+            <h2>${t('run.sessions')}</h2>
             <div id="sessions" class="sessions">
-              <p class="empty muted">No sessions yet. Start a workflow from Home, Projects or Workflows › Definitions.</p>
+              <p class="empty muted">${t('run.no_sessions_yet_start_a_workflow')}</p>
             </div>
           </section>
 
           <section class="panel detail-panel">
-            <div class="tabs" role="tablist" aria-label="Run details">
-              <button class="tab active" type="button" role="tab" aria-selected="true" data-tab="artifacts" data-testid="run-tab-artifacts" title="The files this run produced">Artifacts <span id="tab-artifacts-count" class="tab-count hidden"></span></button>
-              <button class="tab" type="button" role="tab" aria-selected="false" data-tab="detail">Session</button>
-              <button class="tab" type="button" role="tab" aria-selected="false" data-tab="events">Events</button>
+            <div class="tabs" role="tablist" aria-label="${t('run.run_details')}">
+              <button class="tab active" type="button" role="tab" aria-selected="true" data-tab="artifacts" data-testid="run-tab-artifacts" title="${t('run.the_files_this_run_produced')}">${t('run.artifacts')} <span id="tab-artifacts-count" class="tab-count hidden"></span></button>
+              <button class="tab" type="button" role="tab" aria-selected="false" data-tab="detail">${t('run.session_2')}</button>
+              <button class="tab" type="button" role="tab" aria-selected="false" data-tab="events">${t('run.events')}</button>
             </div>
             <div id="tab-detail" class="tab-body hidden">
-              <p class="empty muted">Select a session to see prompts, thinking, tool calls and output.</p>
+              <p class="empty muted">${t('run.select_a_session_to_see_prompts')}</p>
             </div>
             <div id="tab-events" class="tab-body hidden"></div>
             <div id="tab-artifacts" class="tab-body"></div>

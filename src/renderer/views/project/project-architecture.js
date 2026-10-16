@@ -81,7 +81,7 @@
 
   const modeSwitch = () => {
     const b = (m, label, title) => `<button type="button" class="${mode === m ? 'active' : ''}" data-arch-mode="${m}" data-testid="architecture-mode-${m}" aria-pressed="${mode === m}" title="${title}">${label}</button>`;
-    return `<div class="seg arch-mode" role="group" aria-label="Architecture view">${b('facts', 'Facts', 'The git facts and the Oracle&#39;s report, as tables')}${b('city', 'City', 'The project as a 3D city: zones, districts and a building per file')}</div>`;
+    return `<div class="seg arch-mode" role="group" aria-label="${t('project_architecture.architecture_view')}">${b('facts', 'Facts', 'The git facts and the Oracle&#39;s report, as tables')}${b('city', 'City', 'The project as a 3D city: zones, districts and a building per file')}</div>`;
   };
 
   const plural = (n, unit) => `${n} ${n === 1 ? unit.replace(/s$/, '') : unit}`;
@@ -111,7 +111,7 @@
       r.unmatchedShare > 0.05 ? `${Math.round(r.unmatchedShare * 100)}% of the drawn files match no district` : '',
       r.newFolders.length ? `new top-level ${r.newFolders.length === 1 ? 'folder' : 'folders'}: ${r.newFolders.join(', ')}` : '',
     ].filter(Boolean).join('; ');
-    return `<p class="small" role="status" data-testid="architecture-map-refresh-advised"><span class="badge warn">Refresh advised</span> ${esc(why)}. "Analyze this project" asks the cartographer for new rules (the names you saw stay); nothing starts on its own.</p>`;
+    return `<p class="small" role="status" data-testid="architecture-map-refresh-advised"><span class="badge warn">${t('project_architecture.refresh_advised')}</span> ${esc(why)}${t('project_architecture.analyze_this_project_asks_the_cartographer')}</p>`;
   }
 
   function actionHtml() {
@@ -124,8 +124,8 @@
     const running = !!cur.mapRun;
     const label = cur.mapStarting ? 'Starting…' : running ? 'Analyzing…' : 'Analyze this project';
     const title = running ? `Run ${cur.mapRun}: ${stepLabel(cur.mapStep)}` : `One run: the cartographer maps the project${hasPlan ? ' (a refresh keeps the names you saw)' : ''}, then the Oracle analyses its hotspots. ${e.title}`;
-    const progress = running ? `<p class="small" role="status" data-testid="architecture-analyzing" title="${esc(cur.mapRun)}"><span class="badge live">Analyzing this project</span> ${esc(stepLabel(cur.mapStep))}…</p>` : '';
-    const error = cur.error ? `<div class="usage-unavailable" role="alert" data-testid="architecture-state-error">The analysis failed: ${esc(cur.error)}</div>` : '';
+    const progress = running ? `<p class="small" role="status" data-testid="architecture-analyzing" title="${esc(cur.mapRun)}"><span class="badge live">${t('project_architecture.analyzing_this_project')}</span> ${esc(stepLabel(cur.mapStep))}…</p>` : '';
+    const error = cur.error ? `<div class="usage-unavailable" role="alert" data-testid="architecture-state-error">${t('project_architecture.the_analysis_failed')} ${esc(cur.error)}</div>` : '';
     return `<section class="arch-action" data-testid="architecture-action">
       <div class="row">
         <button type="button" class="btn primary" data-testid="architecture-analyze" data-arch-analyze ${running || cur.mapStarting ? 'disabled' : ''} title="${esc(title)}">${label} <span class="arch-estimate" data-testid="architecture-estimate">${esc(e.text)}</span></button>
@@ -202,8 +202,8 @@
   function findingHtml(f, key) {
     const gone = f.status === 'gone';
     const open = cur.expanded.has(key);
-    const send = gone ? '' : f.sent ? '<span class="badge" data-testid="architecture-send-refactor">Sent to Refactor</span>'
-      : `<button type="button" class="btn sm" data-testid="architecture-send-refactor" data-arch-send="${f.index}">Send to Refactor</button>`;
+    const send = gone ? '' : f.sent ? `<span class="badge" data-testid="architecture-send-refactor">${t('project_architecture.sent_to_refactor')}</span>`
+      : `<button type="button" class="btn sm" data-testid="architecture-send-refactor" data-arch-send="${f.index}">${t('project_architecture.send_to_refactor')}</button>`;
     const files = (f.files || []).map((x) => `<span class="mono" title="${esc(x.path)}">${esc(x.lines ? `${x.path}:${x.lines}` : x.path)}</span>`).join(', ');
     return `<li class="arch-finding arch-row ${severityClass(f.severity)}${gone ? ' arch-gone' : ''}" data-testid="${gone ? 'architecture-finding-gone' : 'architecture-finding'}">
       <span class="arch-score" data-testid="architecture-finding-score" title="${esc(`${f.severity || 'no'} severity. ${ArchitectureFactsView.SCORE_FORMULA}`)}">${f.score}</span>
@@ -215,7 +215,7 @@
         <div class="arch-finding-details small${open ? '' : ' hidden'}" data-testid="architecture-finding-details">
           <div class="row"><span class="badge${f.severity === 'high' ? ' warn' : ''}">${esc(f.severity)}</span><span class="badge mono">${esc(f.kind)}</span>${files}</div>
           <p class="muted">${esc(f.evidence)}</p>
-          <p><b>Refactor:</b> ${esc(f.refactor)}</p>
+          <p><b>${t('project_architecture.refactor')}</b> ${esc(f.refactor)}</p>
         </div>
       </div>
     </li>`;
@@ -231,18 +231,18 @@
     const unsent = shownFindings().filter((f) => !f.sent).length;
     const title = unsent ? `Sends the ${plural(unsent, 'findings')} shown and not sent yet to the Refactor tab` : 'Every finding shown was sent to the Refactor tab already';
     return `<div class="row arch-toolbar">
-      <div class="seg" role="group" aria-label="Filter by severity">${b('', 'all', all.length)}${['high', 'medium', 'low'].map((k) => b('severity', k, counts.severity[k])).join('')}</div>
-      <div class="seg" role="group" aria-label="Filter by new or kept">${['new', 'kept'].map((k) => b('status', k, counts.status[k])).join('')}</div>
+      <div class="seg" role="group" aria-label="${t('project_architecture.filter_by_severity')}">${b('', 'all', all.length)}${['high', 'medium', 'low'].map((k) => b('severity', k, counts.severity[k])).join('')}</div>
+      <div class="seg" role="group" aria-label="${t('project_architecture.filter_by_new_or_kept')}">${['new', 'kept'].map((k) => b('status', k, counts.status[k])).join('')}</div>
       <span class="spacer"></span>
-      <button type="button" class="btn sm" data-testid="architecture-send-all" data-arch-send-all ${unsent && !cur.sending ? '' : 'disabled'} title="${esc(title)}">Send all to Refactor</button>
+      <button type="button" class="btn sm" data-testid="architecture-send-all" data-arch-send-all ${unsent && !cur.sending ? '' : 'disabled'} title="${esc(title)}">${t('project_architecture.send_all_to_refactor')}</button>
     </div>`;
   }
 
   function reportMeta(saved, view) {
-    const cost = saved.simulated ? '<span class="badge p-mock">simulated</span>' : saved.costUsd != null ? `<span class="badge" title="The real cost of this analysis">${esc(fmtUsd(saved.costUsd))}</span>` : '';
-    const tokens = saved.tokens && Object.keys(saved.tokens).length ? `<span class="badge" title="Tokens: ${esc(JSON.stringify(saved.tokens))}">${fmtNum(Object.values(saved.tokens).reduce((s, n) => s + (Number(n) || 0), 0))} tokens</span>` : '';
-    const since = view.runsSince ? `<span class="badge${view.runsSince >= STALE_RUNS ? ' warn' : ''}" data-testid="architecture-runs-since">${plural(view.runsSince, 'runs')} since this analysis</span>` : '';
-    return `<div class="row small muted arch-meta">Analysed ${esc(day(saved.date))} at ${esc(short(saved.head?.commit))} ${cost}${tokens}${since}</div>`;
+    const cost = saved.simulated ? `<span class="badge p-mock">${t('project_architecture.simulated')}</span>` : saved.costUsd != null ? `<span class="badge" title="${t('project_architecture.the_real_cost_of_this_analysis')}">${esc(fmtUsd(saved.costUsd))}</span>` : '';
+    const tokens = saved.tokens && Object.keys(saved.tokens).length ? `<span class="badge" title="${t('project_architecture.tokens_tokens', { tokens: esc(JSON.stringify(saved.tokens)) })}">${fmtNum(Object.values(saved.tokens).reduce((s, n) => s + (Number(n) || 0), 0))} ${t('project_architecture.tokens')}</span>` : '';
+    const since = view.runsSince ? `<span class="badge${view.runsSince >= STALE_RUNS ? ' warn' : ''}" data-testid="architecture-runs-since">${plural(view.runsSince, 'runs')} ${t('project_architecture.since_this_analysis')}</span>` : '';
+    return `<div class="row small muted arch-meta">${t('project_architecture.analysed_date_at', { date: esc(day(saved.date)) })} ${esc(short(saved.head?.commit))} ${cost}${tokens}${since}</div>`;
   }
 
   function reportHtml() {
@@ -253,7 +253,7 @@
     const shown = shownFindings();
     const findings = shown.map((f) => findingHtml(f, `f${f.index}`)).join('') || `<li class="muted">${all.length ? 'No finding matches the filter.' : 'No finding.'}</li>`;
     const goneList = ArchitectureFactsView.rankFindings(view.gone, dangerZone());
-    const gone = goneList.length ? `<details class="arch-gone-list"><summary class="small muted">Gone since the previous report (${goneList.length})</summary><ul class="arch-findings">${goneList.map((f) => findingHtml(f, `g${f.index}`)).join('')}</ul></details>` : '';
+    const gone = goneList.length ? `<details class="arch-gone-list"><summary class="small muted">${t('project_architecture.gone_since_the_previous_report_length', { length: goneList.length })}</summary><ul class="arch-findings">${goneList.map((f) => findingHtml(f, `g${f.index}`)).join('')}</ul></details>` : '';
     return `<section class="card arch-report" data-testid="architecture-report">
       ${reportMeta(saved, view)}
       <p class="arch-summary" data-testid="architecture-report-summary" title="${esc(saved.report.summary)}">${esc(saved.report.summary)}</p>
@@ -268,7 +268,7 @@
 
   function languagesHtml(languages) {
     const shares = ArchitectureFactsView.languageShares(languages);
-    if (!shares.length) return '<p class="small muted">No code counted.</p>';
+    if (!shares.length) return `<p class="small muted">${t('project_architecture.no_code_counted')}</p>`;
     const tip = (s) => `${fmtNum(s.lines)} lines${s.others?.length ? ` (${s.others.join(', ')})` : ''}`;
     const segments = shares.map((s) => `<span class="arch-lang-seg" data-testid="architecture-language-segment" style="width:${s.percent}%;background-color:${s.color}" title="${esc(`${s.language} ${s.percent}%`)}"></span>`).join('');
     const legend = shares.map((s) => `<li data-testid="architecture-language-entry" title="${esc(tip(s))}"><span class="arch-lang-dot" style="background-color:${s.color}"></span><span>${esc(s.language)}</span> <span class="muted">${s.percent}%</span></li>`).join('');
@@ -278,7 +278,7 @@
 
   function verdictHtml() {
     const summary = cur.view?.report?.report?.summary;
-    if (!summary) return '<p class="arch-verdict muted" data-testid="architecture-verdict">Not analysed yet: "Analyze this project" asks the Oracle for a verdict.</p>';
+    if (!summary) return `<p class="arch-verdict muted" data-testid="architecture-verdict">${t('project_architecture.not_analysed_yet_analyze_this_project')}</p>`;
     return `<p class="arch-verdict" data-testid="architecture-verdict" title="${esc(summary)}">${esc(ArchitectureFactsView.firstSentence(summary))}</p>`;
   }
 
@@ -287,13 +287,13 @@
       <span class="arch-score" data-testid="architecture-risk-score" title="${esc(ArchitectureFactsView.SCORE_FORMULA)}">${f.score}</span>
       <div class="arch-risk-text"><span class="arch-risk-title">${esc(findingSummary(f))}</span><span class="mono small muted">${esc(target(f))}</span></div></div>`).join('');
     const measured = model?.complexity?.status === 'measured';
-    const count = measured ? `<b class="arch-ov-num">${fmtNum(model.danger_zone.length)}</b> <span class="small muted">files in the Danger Zone</span>`
-      : '<b class="arch-ov-num">—</b> <span class="small muted">Danger Zone: complexity not measured</span>';
+    const count = measured ? `<b class="arch-ov-num">${fmtNum(model.danger_zone.length)}</b> <span class="small muted">${t('project_architecture.files_in_the_danger_zone')}</span>`
+      : `<b class="arch-ov-num">—</b> <span class="small muted">${t('project_architecture.danger_zone_complexity_not_measured')}</span>`;
     return `<section class="arch-overview" data-testid="architecture-overview">
       ${verdictHtml()}
       <div class="arch-ov-row">
-        <div class="arch-risks">${cards || '<p class="small muted">No risk yet: the report\'s findings show here.</p>'}</div>
-        ${model ? `<div class="card arch-ov-tile" data-testid="architecture-danger-count" title="Files both complex and changing often (above both medians)">${count}</div>
+        <div class="arch-risks">${cards || `<p class="small muted">${t('project_architecture.no_risk_yet_the_report_s')}</p>`}</div>
+        ${model ? `<div class="card arch-ov-tile" data-testid="architecture-danger-count" title="${t('project_architecture.files_both_complex_and_changing_often')}">${count}</div>
         <div class="card arch-ov-tile arch-ov-langs">${languagesHtml(model.languages)}</div>` : ''}
       </div>
     </section>`;
@@ -301,18 +301,18 @@
 
   function controlsHtml() {
     const reports = cur.reports || [];
-    const picker = reports.length ? `<label class="an-date small muted">Report <select data-arch-report data-testid="architecture-report-picker">${reports.map((r) => `<option value="${esc(r.id)}" ${r.id === (cur.view?.report?.id) ? 'selected' : ''}>${esc(day(r.date))} · ${plural(r.findings, 'findings')}${r.simulated ? ' (simulated)' : ''}</option>`).join('')}</select></label>` : '';
+    const picker = reports.length ? `<label class="an-date small muted">${t('project_architecture.report')} <select data-arch-report data-testid="architecture-report-picker">${reports.map((r) => `<option value="${esc(r.id)}" ${r.id === (cur.view?.report?.id) ? 'selected' : ''}>${esc(day(r.date))} · ${plural(r.findings, 'findings')}${r.simulated ? ' (simulated)' : ''}</option>`).join('')}</select></label>` : '';
     return `<div class="row pcm-controls" data-testid="architecture-controls">
       ${picker}
       ${window.DateRange.fields({ testid: 'architecture-date-range', from: cur.since || '', to: cur.until || '', fromAttrs: 'data-arch-since', toAttrs: 'data-arch-until' })}
-      <label class="check small" title="Commits that touched more than 25% of the files (a reformat, a rename): counted unless unchecked"><input type="checkbox" data-arch-mass ${cur.includeMass ? 'checked' : ''} /><span>Count mass changes</span></label>
-      <button type="button" class="btn" data-arch-refresh ${cur.loading ? 'disabled' : ''}>Refresh</button>
+      <label class="check small" title="${t('project_architecture.commits_that_touched_more_than_25')}"><input type="checkbox" data-arch-mass ${cur.includeMass ? 'checked' : ''} /><span>${t('project_architecture.count_mass_changes')}</span></label>
+      <button type="button" class="btn" data-arch-refresh ${cur.loading ? 'disabled' : ''}>${t('project_architecture.refresh')}</button>
     </div>`;
   }
 
   function stateHtml() {
     if (cur.view?.report) return reportHtml();
-    return '<div class="empty-state" data-testid="architecture-state-never"><b>Never analysed</b><p class="muted">The facts below come from git, no model. "Analyze this project" maps the project into zones and districts (the City view) and has the Oracle read the top hotspots and the files that change together with its read-only tools and write a report: a summary, a verdict per area, and findings you can send to the Refactor tab.</p></div>';
+    return `<div class="empty-state" data-testid="architecture-state-never"><b>${t('project_architecture.never_analysed')}</b><p class="muted">${t('project_architecture.the_facts_below_come_from_git')}</p></div>`;
   }
 
   function complexityCells(r, measured) {
@@ -328,11 +328,11 @@
     const rows = [...top, ...focus].map((r) => `<tr data-arch-file="${esc(r.file)}"${r.file === cur.focusFile ? ' class="arch-focus" data-testid="architecture-focus-row"' : ''}>
       <td class="an-title"><span class="an-file mono" title="${esc(r.file)}">${esc(r.file)}</span> <span class="muted small">${esc(r.language)}</span></td>
       <td class="num">${fmtNum(r.lines)}</td><td class="num">${r.commits}</td><td class="num">${r.rank}</td>
-      <td>${r.co_change ? `<span class="mono small" title="${esc(r.co_change.file)}">${esc(r.co_change.file)}</span> <span class="badge">${Math.round(r.co_change.share * 100)}%</span>` : '<span class="muted small">none</span>'}</td>
+      <td>${r.co_change ? `<span class="mono small" title="${esc(r.co_change.file)}">${esc(r.co_change.file)}</span> <span class="badge">${Math.round(r.co_change.share * 100)}%</span>` : `<span class="muted small">${t('project_architecture.none')}</span>`}</td>
       ${complexityCells(r, measured)}</tr>`).join('');
-    const head = `<th>File</th><th class="num">Lines</th><th class="num">Commits</th><th class="num" title="Lines × commits, highest first">Hotspot rank</th><th>Changes most with</th>${measured ? '<th class="num">Complexity</th><th class="num">Worst function</th><th>Quadrant</th>' : ''}`;
-    const more = model.files.length > TABLE_ROWS ? `<p class="muted small">The top ${TABLE_ROWS} of ${model.files.length} files.</p>` : '';
-    return `<h3 class="arch-sub">Hotspots</h3><div class="card table-wrap"><table class="u-table an-sessions an-files" data-testid="architecture-hotspots"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>${more}`;
+    const head = `<th>${t('project_architecture.file')}</th><th class="num">${t('project_architecture.lines')}</th><th class="num">${t('project_architecture.commits')}</th><th class="num" title="${t('project_architecture.lines_commits_highest_first')}">${t('project_architecture.hotspot_rank')}</th><th>${t('project_architecture.changes_most_with')}</th>${measured ? `<th class="num">${t('project_architecture.complexity')}</th><th class="num">${t('project_architecture.worst_function')}</th><th>${t('project_architecture.quadrant')}</th>` : ''}`;
+    const more = model.files.length > TABLE_ROWS ? `<p class="muted small">${t('project_architecture.the_top_table_rows_of_length', { TABLE_ROWS, length: model.files.length })}</p>` : '';
+    return `<h3 class="arch-sub">${t('project_architecture.hotspots')}</h3><div class="card table-wrap"><table class="u-table an-sessions an-files" data-testid="architecture-hotspots"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>${more}`;
   }
 
   function scatterHtml(model) {
@@ -343,10 +343,10 @@
     const y = (r) => 200 - 180 * (maxU ? Math.log1p(r.complexity) / maxU : 0);
     const dots = rows.map((r) => `<circle cx="${x(r).toFixed(1)}" cy="${y(r).toFixed(1)}" r="4" class="${r.quadrant === 'Danger Zone' ? 'arch-dot-danger' : 'arch-dot'}"><title>${esc(`${r.file}: complexity ${r.complexity}, ${r.commits} commits, ${r.quadrant}`)}</title></circle>`).join('');
     const frames = (model.frames || []).filter((f) => f.entered.length || f.left.length).map((f) => `<li><b>${esc(f.month)}</b> ${f.entered.length ? `entered: ${f.entered.map((n) => `<span class="mono">${esc(n)}</span>`).join(', ')}` : ''}${f.left.length ? ` left: ${f.left.map((n) => `<span class="mono">${esc(n)}</span>`).join(', ')}` : ''}</li>`).join('');
-    return `<h3 class="arch-sub" title="${esc(`${model.complexity.metric} complexity from ${model.complexity.tool}`)}">Quadrants</h3>
-      <svg class="arch-scatter" viewBox="0 0 400 220" role="img" aria-label="Commits against complexity, log1p axes"><line x1="20" y1="200" x2="390" y2="200" class="arch-axis"/><line x1="20" y1="10" x2="20" y2="200" class="arch-axis"/>${dots}<text x="390" y="214" text-anchor="end" class="arch-label">commits →</text><text x="24" y="16" class="arch-label">complexity ↑</text></svg>
-      <details class="small muted"><summary>How the quadrants are computed</summary><p>Split at the medians: Danger Zone (complex and changing), Cowboy Code (complex, rarely touched), Fertile Ground (simple, changing), Healthy Closure (simple, stable). The Danger Zone ranks by <span class="mono">score = √(u² + v²)</span>, u = log1p(complexity) / its maximum, v = log1p(commits) / its maximum.</p></details>
-      ${frames ? `<details class="small"><summary class="muted">Monthly frames: files that entered or left the Danger Zone</summary><p class="muted">Each frame uses the churn up to that month and today's complexity, so a move reflects churn alone.</p>
+    return `<h3 class="arch-sub" title="${esc(`${model.complexity.metric} complexity from ${model.complexity.tool}`)}">${t('project_architecture.quadrants')}</h3>
+      <svg class="arch-scatter" viewBox="0 0 400 220" role="img" aria-label="${t('project_architecture.commits_against_complexity_log1p_axes')}"><line x1="20" y1="200" x2="390" y2="200" class="arch-axis"/><line x1="20" y1="10" x2="20" y2="200" class="arch-axis"/>${dots}<text x="390" y="214" text-anchor="end" class="arch-label">${t('project_architecture.commits_2')}</text><text x="24" y="16" class="arch-label">${t('project_architecture.complexity_2')}</text></svg>
+      <details class="small muted"><summary>${t('project_architecture.how_the_quadrants_are_computed')}</summary><p>${t('project_architecture.split_at_the_medians_danger_zone')} <span class="mono">${t('project_architecture.score_u_v')}</span>${t('project_architecture.u_log1p_complexity_its_maximum_v')}</p></details>
+      ${frames ? `<details class="small"><summary class="muted">${t('project_architecture.monthly_frames_files_that_entered_or')}</summary><p class="muted">${t('project_architecture.each_frame_uses_the_churn_up')}</p>
       <ul class="small arch-frames" data-testid="architecture-frames">${frames}</ul></details>` : ''}`;
   }
 
@@ -366,10 +366,10 @@
     if (!c.unmeasured?.length) return `<p class="small muted" data-testid="architecture-complexity" title="${title}">${line}</p>`;
     const names = c.unmeasured.map((l) => `<span class="badge" data-testid="architecture-unmeasured-language">${esc(l)}</span>`).join(' ');
     const how = c.install
-      ? `To measure them, install lizard: <span class="mono">${esc(c.install)}</span> (lizard needs Python).`
+      ? `To measure them, install lizard: <span class="mono">${esc(c.install)}</span> ${t('project_architecture.lizard_needs_python')}`
       : `They need ${esc((c.needed || []).join(', ') || 'lizard')}${c.reason ? ` (${esc(c.reason)})` : ''}.`;
-    return `<details class="small muted arch-measure" data-testid="architecture-measure-note"><summary title="${title}"><span data-testid="architecture-complexity">${line}</span> · <span class="link-btn">How to measure</span></summary>
-      <p>Complexity not measured for ${names}: their files show no complexity, never 0. ${how}</p></details>`;
+    return `<details class="small muted arch-measure" data-testid="architecture-measure-note"><summary title="${title}"><span data-testid="architecture-complexity">${line}</span> · <span class="link-btn">${t('project_architecture.how_to_measure')}</span></summary>
+      <p>${t('project_architecture.complexity_not_measured_for_names_their', { names })} ${how}</p></details>`;
   }
 
   const EXCLUDED_LABELS = { build: 'build output', generated: 'generated', lock: 'lock files', project: 'your patterns', tests: 'tests', vendored: 'vendored' };
@@ -378,18 +378,18 @@
     const groups = Object.entries(model.excluded).filter(([, n]) => n).map(([g, n]) => `${esc(EXCLUDED_LABELS[g] || g)} ${fmtNum(n)}`).join(' · ') || 'nothing';
     const list = cur.facts.exclude || [];
     if (cur.editing) {
-      return `<div class="card arch-edit" data-testid="architecture-exclude-form"><label class="field">Excluded paths, one pattern per line<textarea rows="4" data-arch-exclude-text spellcheck="false">${esc(list.join('\n'))}</textarea></label>
-        <p class="hint">Gitignore-style patterns (docs/**, *.generated.ts). Lock files, build output, tests, vendored and linguist-generated files are excluded already.</p>
-        <div class="row"><button type="button" class="btn primary" data-arch-exclude-save>Save</button><button type="button" class="btn ghost" data-arch-exclude-cancel>Cancel</button></div></div>`;
+      return `<div class="card arch-edit" data-testid="architecture-exclude-form"><label class="field">${t('project_architecture.excluded_paths_one_pattern_per_line')}<textarea rows="4" data-arch-exclude-text spellcheck="false">${esc(list.join('\n'))}</textarea></label>
+        <p class="hint">${t('project_architecture.gitignore_style_patterns_docs_generated_ts')}</p>
+        <div class="row"><button type="button" class="btn primary" data-arch-exclude-save>${t('common.save')}</button><button type="button" class="btn ghost" data-arch-exclude-cancel>${t('common.cancel')}</button></div></div>`;
     }
-    return `<p class="small muted arch-excluded">Excluded: ${groups} <button type="button" class="link-btn" data-arch-exclude-edit data-testid="architecture-exclude-edit">${list.length ? `Edit the project's list (${list.length})` : 'Exclude more paths'}</button></p>`;
+    return `<p class="small muted arch-excluded">${t('project_architecture.excluded')} ${groups} <button type="button" class="link-btn" data-arch-exclude-edit data-testid="architecture-exclude-edit">${list.length ? `Edit the project's list (${list.length})` : 'Exclude more paths'}</button></p>`;
   }
 
   // the project's own quality gate as one row of chips (#386): measured ✓ with its value, pending or missing
   function gateHtml(gate) {
     if (!Array.isArray(gate)) return '';
     const chips = ArchitectureFactsView.qualityGateRow(gate).map((c) => `<span class="badge arch-gate-chip gate-${c.state}" data-testid="architecture-gate-chip" title="${esc(c.title)}">${esc(c.label)}</span>`).join('');
-    return `<div class="row arch-gate" data-testid="architecture-gate"><span class="small muted">Quality gate</span>${chips}</div>`;
+    return `<div class="row arch-gate" data-testid="architecture-gate"><span class="small muted">${t('project_architecture.quality_gate')}</span>${chips}</div>`;
   }
 
   function factsHtml() {
@@ -398,7 +398,7 @@
     const mass = model.mass_changes.length ? `${plural(model.mass_changes.length, 'mass changes')} (${model.include_mass ? 'counted' : 'not counted'})` : 'no mass change';
     const window = model.window.since || model.window.until ? `${esc(day(model.window.since) || 'the start')} to ${esc(day(model.window.until) || 'now')}` : 'the whole history';
     return `<div class="arch-facts" data-testid="architecture-facts">
-      <p class="small muted">${esc(model.branch)} at <span class="mono">${esc(short(model.head?.commit))}</span> (${esc(day(model.head?.date))}) · ${window} · ${plural(model.commits, 'commits')} · ${mass}${model.shallow ? ' · <span class="badge warn">shallow clone: history cut</span>' : ''}</p>
+      <p class="small muted">${esc(model.branch)} ${t('project_architecture.at')} <span class="mono">${esc(short(model.head?.commit))}</span> (${esc(day(model.head?.date))}) · ${window} · ${plural(model.commits, 'commits')} · ${mass}${model.shallow ? ` · <span class="badge warn">${t('project_architecture.shallow_clone_history_cut')}</span>` : ''}</p>
       ${gateHtml(f.gate)}
       ${excludeHtml(model)}
       ${complexityHtml(model)}
@@ -408,16 +408,16 @@
   }
 
   // the facts' title with an ⓘ that opens what the numbers can't tell (#386: not printed on the page)
-  const factsHeadHtml = () => `<h3 class="arch-sub arch-facts-title">Facts <button type="button" class="icon-btn arch-info" data-testid="architecture-caveats" data-arch-caveats aria-expanded="${!!cur.caveats}" aria-label="ⓘ What the numbers can't tell" title="What the numbers can't tell">ⓘ</button></h3>
-    <div class="card arch-limits small${cur.caveats ? '' : ' hidden'}" data-testid="architecture-limits"><b>What the numbers can't tell</b><ul>${LIMITS.map((l) => `<li>${esc(l)}</li>`).join('')}</ul></div>`;
+  const factsHeadHtml = () => `<h3 class="arch-sub arch-facts-title">${t('project_architecture.facts')} <button type="button" class="icon-btn arch-info" data-testid="architecture-caveats" data-arch-caveats aria-expanded="${!!cur.caveats}" aria-label="${t('project_architecture.what_the_numbers_can_t_tell_2')}" title="${t('project_architecture.what_the_numbers_can_t_tell')}">ⓘ</button></h3>
+    <div class="card arch-limits small${cur.caveats ? '' : ' hidden'}" data-testid="architecture-limits"><b>${t('project_architecture.what_the_numbers_can_t_tell')}</b><ul>${LIMITS.map((l) => `<li>${esc(l)}</li>`).join('')}</ul></div>`;
 
   function bodyHtml() {
-    if (cur.loadError) return `<div class="usage-unavailable" role="alert" data-testid="architecture-state-error">Could not read the facts: ${esc(cur.loadError)}</div>`;
-    if (!cur.facts) return '<p class="muted" role="status">Loading…</p>';
+    if (cur.loadError) return `<div class="usage-unavailable" role="alert" data-testid="architecture-state-error">${t('project_architecture.could_not_read_the_facts')} ${esc(cur.loadError)}</div>`;
+    if (!cur.facts) return `<p class="muted" role="status">${t('project_architecture.loading')}</p>`;
     if (cur.facts.state === 'not-git') {
-      return `<div class="empty-state" data-testid="architecture-state-not-git"><b>Not a git repository</b><p class="muted">The project folder is not a git repository: there are no commits to read and nothing to analyse. Point the project to a git checkout to see its hotspots.</p></div>`;
+      return `<div class="empty-state" data-testid="architecture-state-not-git"><b>${t('project_architecture.not_a_git_repository')}</b><p class="muted">${t('project_architecture.the_project_folder_is_not_a')}</p></div>`;
     }
-    const noCommits = cur.facts.state === 'no-commits' ? '<div class="empty-state" data-testid="architecture-state-no-commits"><b>No commits in this range</b><p class="muted">Widen the From / To range: churn counts the commits of the default branch inside it.</p></div>' : '';
+    const noCommits = cur.facts.state === 'no-commits' ? `<div class="empty-state" data-testid="architecture-state-no-commits"><b>${t('project_architecture.no_commits_in_this_range')}</b><p class="muted">${t('project_architecture.widen_the_from_to_range_churn')}</p></div>` : '';
     const model = cur.facts.model;
     const lead = model || cur.view?.report ? overviewHtml(model) : '';
     return `${actionHtml()}${controlsHtml()}${lead}${stateHtml()}${noCommits}${factsHeadHtml()}${model ? factsHtml() : ''}`;
@@ -437,7 +437,7 @@
   function renderCity() {
     const c = cur;
     if (!window.ProjectCity) {
-      c.box.innerHTML = `<div data-testid="architecture"><div class="row arch-mode-row">${modeSwitch()}</div><div class="usage-unavailable" role="alert">The City view did not load: the Facts view has the same numbers.</div></div>`;
+      c.box.innerHTML = `<div data-testid="architecture"><div class="row arch-mode-row">${modeSwitch()}</div><div class="usage-unavailable" role="alert">${t('project_architecture.the_city_view_did_not_load')}</div></div>`;
       return;
     }
     c.city ||= ProjectCity.create({ projectId: c.id, name: projectName(c.id), onOpenFacts: (file) => { if (cur === c) { c.focusFile = file; setMode('facts'); } }, onAnalyze: () => { if (cur === c) analyze(); } });

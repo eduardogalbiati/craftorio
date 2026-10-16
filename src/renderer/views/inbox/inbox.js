@@ -71,11 +71,11 @@
   function renderList() {
     const box = $('#inbox-list');
     if (!inbox.projectId) {
-      box.innerHTML = '<div class="empty-state"><b>No project chosen</b><p class="muted">Choose a project in the header: each project has its own Inbox.</p></div>';
+      box.innerHTML = `<div class="empty-state"><b>${t('inbox.no_project_chosen')}</b><p class="muted">${t('inbox.choose_a_project_in_the_header')}</p></div>`;
       return;
     }
     if (!inbox.cards.length) {
-      box.innerHTML = '<div class="empty-state" data-testid="inbox-empty"><b>The Inbox is empty</b><p class="muted">Capture an idea above: a title is enough. It stays private to this workspace.</p></div>';
+      box.innerHTML = `<div class="empty-state" data-testid="inbox-empty"><b>${t('inbox.the_inbox_is_empty')}</b><p class="muted">${t('inbox.capture_an_idea_above_a_title')}</p></div>`;
       return;
     }
     box.innerHTML = inbox.cards.map((c) => {
@@ -91,7 +91,7 @@
             <span class="inbox-card-files" data-testid="inbox-card-attachments" title="${esc(plural(n, 'attachment'))}">${CLIP} ${n}</span>
           </span>
         </div>
-        <button type="button" class="btn sm ghost" data-action="accept" data-card="${esc(c.id)}" title="Move to Discovery › Triage">Accept</button>
+        <button type="button" class="btn sm ghost" data-action="accept" data-card="${esc(c.id)}" title="${t('inbox.move_to_discovery_triage')}">${t('inbox.accept')}</button>
       </div>`;
     }).join('');
   }
@@ -109,7 +109,7 @@
       <span class="inbox-file" title="${esc(f.name)}">
         <span class="inbox-file-name">${esc(f.name)}</span>
         <span class="muted small">${esc(formatSize(f.size))}</span>
-        <button type="button" class="inbox-file-x" data-unstage="${i}" aria-label="Remove ${esc(f.name)}">×</button>
+        <button type="button" class="inbox-file-x" data-unstage="${i}" aria-label="${t('inbox.remove_name', { name: esc(f.name) })}">×</button>
       </span>`).join('');
   }
 
@@ -174,7 +174,7 @@
   const IMPORT_EDITS = { merge: 'Merge into', nest: 'Nest under' };
   const importBox = () => $('#inbox-import-panel');
   const firstLines = (text) => String(text || '').split('\n').map((l) => l.trim()).filter(Boolean).slice(0, 2).join(' · ');
-  const clarityBadge = (n) => `<span class="badge ${n >= 85 ? 'inbox-import-clear' : n >= 50 ? 'warn' : 'muted'}" title="The clarity score the card gets (#166): ${n}%">Clarity ${n}%</span>`;
+  const clarityBadge = (n) => `<span class="badge ${n >= 85 ? 'inbox-import-clear' : n >= 50 ? 'warn' : 'muted'}" title="${t('inbox.the_clarity_score_the_card_gets', { n })}">${t('inbox.clarity_n', { n })}</span>`;
   // what an item becomes: a duplicate may be skipped or merged into its card; anything else is a new card
   const actionOf = (it) => (it.duplicate && (it.action === 'skip' || (it.action === 'merge' && it.duplicate.kind === 'card')) ? it.action : 'keep');
   const importCounts = (items) => ({
@@ -200,13 +200,13 @@
     const d = it.duplicate;
     if (!d) return '';
     const link = d.kind === 'card'
-      ? `<button type="button" class="link-btn small" data-import-card="${esc(d.id)}" title="Open the card">${esc(d.title)}</button>`
-      : `<a class="small" href="${esc(d.url || '#')}" target="_blank" rel="noopener" title="Open the issue">#${esc(d.number)} ${esc(d.title)}</a>`;
+      ? `<button type="button" class="link-btn small" data-import-card="${esc(d.id)}" title="${t('inbox.open_the_card')}">${esc(d.title)}</button>`
+      : `<a class="small" href="${esc(d.url || '#')}" target="_blank" rel="noopener" title="${t('inbox.open_the_issue')}">#${esc(d.number)} ${esc(d.title)}</a>`;
     const options = [['keep', 'Keep as a new card'], ['skip', 'Skip it'], ...(d.kind === 'card' ? [['merge', 'Merge into that card']] : [])];
     return `
       <span class="inbox-import-dup" data-testid="inbox-import-duplicate">
-        <span class="badge warn">Duplicate of ${d.kind === 'card' ? 'a card' : 'an open issue'}</span> ${link}
-        <select data-import-action="${i}" aria-label="What to do with the duplicate of ${esc(d.title)}">
+        <span class="badge warn">${t('inbox.duplicate_of')} ${d.kind === 'card' ? 'a card' : 'an open issue'}</span> ${link}
+        <select data-import-action="${i}" aria-label="${t('inbox.what_to_do_with_the_duplicate', { title: esc(d.title) })}">
           ${options.map(([v, label]) => `<option value="${v}"${actionOf(it) === v ? ' selected' : ''}>${label}</option>`).join('')}
         </select>
       </span>`;
@@ -222,12 +222,12 @@
         <div class="inbox-import-main">
           ${inbox.importing.renaming === i ? `
           <div class="row inbox-import-rename">
-            <input type="text" id="inbox-import-rename" maxlength="200" value="${esc(it.title)}" aria-label="New title of item ${i + 1}" />
-            <button type="button" class="btn sm primary" data-import-op="rename-save" data-index="${i}">Save</button>
-            <button type="button" class="btn sm ghost" data-import-op="rename-cancel" data-index="${i}">Cancel</button>
+            <input type="text" id="inbox-import-rename" maxlength="200" value="${esc(it.title)}" aria-label="${t('inbox.new_title_of_item_value', { value: i + 1 })}" />
+            <button type="button" class="btn sm primary" data-import-op="rename-save" data-index="${i}">${t('common.save')}</button>
+            <button type="button" class="btn sm ghost" data-import-op="rename-cancel" data-index="${i}">${t('common.cancel')}</button>
           </div>` : `<b class="inbox-import-title" title="${esc(it.title)}">${esc(it.title)}</b>`}
           <span class="inbox-card-meta muted small">
-            <span class="badge" data-testid="inbox-import-criteria" title="Its - [ ] lines, the card's acceptance criteria">${n} ${n === 1 ? 'criterion' : 'criteria'}</span>
+            <span class="badge" data-testid="inbox-import-criteria" title="${t('inbox.its_lines_the_card_s_acceptance')}">${n} ${n === 1 ? 'criterion' : 'criteria'}</span>
             ${clarityBadge(it.clarity)}
             <span class="inbox-import-lines" title="${esc(it.text || '')}">${esc(firstLines(it.text)) || 'No text: a title only.'}</span>
           </span>
@@ -237,14 +237,14 @@
             <label class="small" for="inbox-import-target">${esc(IMPORT_EDITS[pick.op])}</label>
             <select id="inbox-import-target">${others.map(([o, k]) => `<option value="${k}">${k + 1}. ${esc(o.title)}</option>`).join('')}</select>
             <button type="button" class="btn sm primary" data-import-op="apply" data-index="${i}">${pick.op === 'merge' ? 'Merge' : 'Nest'}</button>
-            <button type="button" class="btn sm ghost" data-import-op="unpick" data-index="${i}">Cancel</button>
+            <button type="button" class="btn sm ghost" data-import-op="unpick" data-index="${i}">${t('common.cancel')}</button>
           </div>` : ''}
         </div>
         <div class="row inbox-import-actions">
-          <button type="button" class="btn sm ghost" data-import-op="rename" data-index="${i}" aria-label="Rename ${esc(it.title)}">Rename</button>
-          ${others.length ? `<button type="button" class="btn sm ghost" data-import-op="merge" data-index="${i}" title="Join its text and criteria into another item">Merge into…</button>
-          <button type="button" class="btn sm ghost" data-import-op="nest" data-index="${i}" title="Make it a section of another item">Nest under…</button>` : ''}
-          <button type="button" class="btn sm ghost danger" data-import-op="drop" data-index="${i}" aria-label="Drop ${esc(it.title)}">Drop</button>
+          <button type="button" class="btn sm ghost" data-import-op="rename" data-index="${i}" aria-label="${t('inbox.rename_title', { title: esc(it.title) })}">${t('inbox.rename')}</button>
+          ${others.length ? `<button type="button" class="btn sm ghost" data-import-op="merge" data-index="${i}" title="${t('inbox.join_its_text_and_criteria_into')}">${t('inbox.merge_into')}</button>
+          <button type="button" class="btn sm ghost" data-import-op="nest" data-index="${i}" title="${t('inbox.make_it_a_section_of_another')}">${t('inbox.nest_under')}</button>` : ''}
+          <button type="button" class="btn sm ghost danger" data-import-op="drop" data-index="${i}" aria-label="${t('inbox.drop_title', { title: esc(it.title) })}">${t('inbox.drop')}</button>
         </div>
       </li>`;
   }
@@ -257,22 +257,22 @@
     const message = `<p class="error small" data-testid="inbox-import-message" role="status">${esc(st.message || '')}</p>`;
     if (!st.items) {
       box.innerHTML = `
-        <div class="inbox-import-head"><h2>Import a backlog document</h2></div>
-        <p class="muted small">A <span class="mono">.md</span> or <span class="mono">.txt</span> file (choose it or drop it here) or pasted text. Each top-level heading or list item becomes an idea card, its <span class="mono">- [ ]</span> lines its acceptance criteria. Nothing is written until you confirm the preview.</p>
+        <div class="inbox-import-head"><h2>${t('inbox.import_a_backlog_document')}</h2></div>
+        <p class="muted small">A <span class="mono">${t('inbox.md')}</span> ${t('inbox.or')} <span class="mono">${t('inbox.txt')}</span> ${t('inbox.file_choose_it_or_drop_it')} <span class="mono">- [ ]</span> ${t('inbox.lines_its_acceptance_criteria_nothing_is')}</p>
         <div class="row">
-          <button type="button" id="btn-inbox-import-pick" class="btn sm" data-import-op="pick">Choose a file…</button>
-          <input type="file" id="inbox-import-file" data-testid="inbox-import-file" class="hidden" accept=".md,.markdown,.txt,text/markdown,text/plain" aria-label="Backlog document to import" />
-          <span class="muted small">or drop it on this panel</span>
+          <button type="button" id="btn-inbox-import-pick" class="btn sm" data-import-op="pick">${t('inbox.choose_a_file')}</button>
+          <input type="file" id="inbox-import-file" data-testid="inbox-import-file" class="hidden" accept=".md,.markdown,.txt,text/markdown,text/plain" aria-label="${t('inbox.backlog_document_to_import')}" />
+          <span class="muted small">${t('inbox.or_drop_it_on_this_panel')}</span>
         </div>
         <div class="field">
-          <label for="inbox-import-text">Or paste the text</label>
-          <textarea id="inbox-import-text" rows="5" class="mono" placeholder="# First idea&#10;What it is about.&#10;- [ ] A criterion"></textarea>
+          <label for="inbox-import-text">${t('inbox.or_paste_the_text')}</label>
+          <textarea id="inbox-import-text" rows="5" class="mono" placeholder="${t('inbox.first_idea_what_it_is_about')}"></textarea>
         </div>
         ${message}
         <div class="row">
           <span class="spacer"></span>
-          <button type="button" class="btn ghost" data-import-op="cancel">Cancel</button>
-          <button type="button" class="btn primary" data-import-op="paste"${st.busy ? ' disabled' : ''}>Preview</button>
+          <button type="button" class="btn ghost" data-import-op="cancel">${t('common.cancel')}</button>
+          <button type="button" class="btn primary" data-import-op="paste"${st.busy ? ' disabled' : ''}>${t('inbox.preview')}</button>
         </div>`;
       return;
     }
@@ -281,16 +281,16 @@
     box.innerHTML = `
       <div data-testid="inbox-import-preview" class="inbox-import-preview">
         <div class="inbox-import-head">
-          <h2>Preview: ${esc(plural(st.items.length, 'item'))}</h2>
+          <h2>${t('inbox.preview_2')} ${esc(plural(st.items.length, 'item'))}</h2>
           <span class="badge" title="${esc(st.name || 'pasted text')}">${esc(st.name || 'pasted')}</span>
         </div>
-        <p class="muted small">${esc(st.note)} Nothing is written yet: rename, drop, merge or nest items, then create the cards.</p>
-        ${st.undo ? `<p class="small inbox-import-undo">${esc(st.undo.what)} <button type="button" class="link-btn small" data-import-op="undo">Undo</button></p>` : ''}
+        <p class="muted small">${esc(st.note)} ${t('inbox.nothing_is_written_yet_rename_drop')}</p>
+        ${st.undo ? `<p class="small inbox-import-undo">${esc(st.undo.what)} <button type="button" class="link-btn small" data-import-op="undo">${t('common.undo')}</button></p>` : ''}
         <ol class="inbox-import-list">${st.items.map((it, i) => importItemHtml(it, i, st.items)).join('')}</ol>
         ${message}
         <div class="row">
           <span class="spacer"></span>
-          <button type="button" class="btn ghost" data-testid="inbox-import-cancel" data-import-op="cancel">Cancel</button>
+          <button type="button" class="btn ghost" data-testid="inbox-import-cancel" data-import-op="cancel">${t('common.cancel')}</button>
           <button type="button" class="btn primary" data-testid="inbox-import-confirm" data-import-op="confirm"${create + merge && !st.busy ? '' : ' disabled'}>${esc(confirm)}</button>
         </div>
       </div>`;
@@ -492,23 +492,23 @@
       return `
         <div class="inbox-edit">
           <div class="field">
-            <label for="inbox-edit-title">Title <span class="req">*</span></label>
+            <label for="inbox-edit-title">${t('inbox.title')} <span class="req">*</span></label>
             <input type="text" id="inbox-edit-title" maxlength="200" value="${esc(c.title)}" />
           </div>
           <div class="field">
-            <label for="inbox-edit-doc">Document (Markdown)</label>
+            <label for="inbox-edit-doc">${t('inbox.document_markdown')}</label>
             <textarea id="inbox-edit-doc" rows="12" class="mono">${esc(c.document)}</textarea>
           </div>
           <div class="row">
             <span class="spacer"></span>
-            <button type="button" class="btn sm ghost" data-detail="cancel-edit">Cancel</button>
-            <button type="button" class="btn sm primary" data-detail="save">Save</button>
+            <button type="button" class="btn sm ghost" data-detail="cancel-edit">${t('common.cancel')}</button>
+            <button type="button" class="btn sm primary" data-detail="save">${t('common.save')}</button>
           </div>
         </div>`;
     }
     return String(c.document || '').trim()
       ? `<article class="md md-compact inbox-doc">${markdownHtml(c.document)}</article>`
-      : '<p class="muted small">No document yet. Edit the card to write it.</p>';
+      : `<p class="muted small">${t('inbox.no_document_yet_edit_the_card')}</p>`;
   }
 
   function renderDetail() {
@@ -516,44 +516,44 @@
     if (!c) return;
     $('#inbox-layout').classList.add('with-detail');
     $('#inbox-detail').innerHTML = `
-      <aside class="inbox-detail" data-testid="inbox-card-detail" aria-label="Card: ${esc(c.title)}">
+      <aside class="inbox-detail" data-testid="inbox-card-detail" aria-label="${t('inbox.card_title', { title: esc(c.title) })}">
         <div class="inbox-detail-head">
           <h2 data-testid="card-document-title" title="${esc(c.title)}">${esc(c.title)}</h2>
-          <button type="button" class="btn sm ghost" data-detail="close" title="Close (Esc)">Close</button>
+          <button type="button" class="btn sm ghost" data-detail="close" title="${t('inbox.close_esc')}">${t('common.close')}</button>
         </div>
         <p class="inbox-card-meta muted small">
           <span class="badge">${esc(c.type)}</span>
           <span>${esc(c.author)}</span>
           <span>${esc(dateOf(c.created))}</span>
-          <span class="mono" title="The card's folder in the workspace's discovery/">${esc(c.id)}</span>
+          <span class="mono" title="${t('inbox.the_card_s_folder_in_the')}">${esc(c.id)}</span>
         </p>
-        <div class="row inbox-triage" role="group" aria-label="Triage">
-          <button type="button" class="btn sm primary" data-testid="card-accept" data-detail="accept" title="Move to Discovery › Triage">Accept</button>
-          <button type="button" class="btn sm ghost" data-testid="card-merge" data-detail="merge" title="Join this card's document and attachments into another card">Merge into…</button>
-          <button type="button" class="btn sm ghost danger" data-testid="card-discard" data-detail="discard" title="Archive with a reason">Discard</button>
+        <div class="row inbox-triage" role="group" aria-label="${t('inbox.triage')}">
+          <button type="button" class="btn sm primary" data-testid="card-accept" data-detail="accept" title="${t('inbox.move_to_discovery_triage')}">${t('inbox.accept')}</button>
+          <button type="button" class="btn sm ghost" data-testid="card-merge" data-detail="merge" title="${t('inbox.join_this_card_s_document_and')}">${t('inbox.merge_into')}</button>
+          <button type="button" class="btn sm ghost danger" data-testid="card-discard" data-detail="discard" title="${t('inbox.archive_with_a_reason')}">${t('inbox.discard')}</button>
         </div>
         <p id="inbox-detail-error" class="error small"></p>
         <section class="inbox-section">
           <div class="inbox-section-head">
-            <h3>Document</h3>
-            ${inbox.editing ? '' : '<button type="button" class="btn sm ghost" data-detail="edit">Edit</button>'}
+            <h3>${t('inbox.document')}</h3>
+            ${inbox.editing ? '' : `<button type="button" class="btn sm ghost" data-detail="edit">${t('inbox.edit')}</button>`}
           </div>
           ${documentHtml(c)}
         </section>
         <section class="inbox-section">
           <div class="inbox-section-head">
-            <h3>Attachments</h3>
-            <button type="button" class="btn sm ghost" data-detail="attach">Attach files</button>
-            <input type="file" id="inbox-detail-file" class="hidden" multiple aria-label="Attach files to the card" />
+            <h3>${t('inbox.attachments')}</h3>
+            <button type="button" class="btn sm ghost" data-detail="attach">${t('inbox.attach_files')}</button>
+            <input type="file" id="inbox-detail-file" class="hidden" multiple aria-label="${t('inbox.attach_files_to_the_card')}" />
           </div>
           <div id="inbox-detail-files" class="inbox-files"></div>
         </section>
         <section class="inbox-section">
-          <div class="inbox-section-head"><h3>Thread</h3></div>
+          <div class="inbox-section-head"><h3>${t('inbox.thread')}</h3></div>
           <div id="inbox-detail-thread" class="inbox-thread"></div>
           <div class="inbox-note">
-            <textarea id="inbox-note" rows="2" placeholder="Add a note (Enter sends)" aria-label="Add a note"></textarea>
-            <button type="button" class="btn sm" data-detail="note">Add note</button>
+            <textarea id="inbox-note" rows="2" placeholder="${t('inbox.add_a_note_enter_sends')}" aria-label="${t('inbox.add_a_note')}"></textarea>
+            <button type="button" class="btn sm" data-detail="note">${t('inbox.add_note')}</button>
           </div>
         </section>
       </aside>`;
@@ -565,14 +565,14 @@
   // A card's attachments (`previews`: "<card id>/<name>" → discovery:attachment's answer): each
   // with data-detail="view" / "unattach" and data-name, for the panel's click handler.
   function attachmentsHtml(c, previews) {
-    if (!c.attachments.length) return '<p class="muted small">No attachment. Paste or drop images and files on this card.</p>';
+    if (!c.attachments.length) return `<p class="muted small">${t('inbox.no_attachment_paste_or_drop_images')}</p>`;
     return c.attachments.map((name) => {
       const url = previews.get(`${c.id}/${name}`)?.dataUrl;
       return `
       <span class="inbox-file${url ? ' image' : ''}" title="${esc(name)}">
         ${url ? `<img class="inbox-thumb" ${window.ImageViewer?.THUMB || 'tabindex="0" role="button"'} src="${esc(url)}" alt="${esc(name)}" data-detail="view" data-name="${esc(name)}" />` : ''}
         <button type="button" class="link-btn inbox-file-name" data-detail="view" data-name="${esc(name)}">${esc(name)}</button>
-        <button type="button" class="inbox-file-x" data-detail="unattach" data-name="${esc(name)}" aria-label="Remove ${esc(name)}">×</button>
+        <button type="button" class="inbox-file-x" data-detail="unattach" data-name="${esc(name)}" aria-label="${t('inbox.remove_name', { name: esc(name) })}">×</button>
       </span>`;
     }).join('');
   }
@@ -601,8 +601,8 @@
       <div class="inbox-entry">
         <div class="muted small"><b>${esc(m.author || 'unknown')}</b> <span title="${esc(m.ts ? dateOf(m.ts) : '')}">${esc(m.ts ? ncAgo(m.ts) : '')}</span>${m.kind && m.kind !== 'note' ? ` <span class="badge">${esc(m.kind)}</span>` : ''}</div>
         <div class="inbox-entry-text">${esc(m.text || '')}</div>
-        ${m.runId ? `<div class="muted small inbox-entry-run"><button type="button" class="link-btn small" data-open-run="${esc(m.runId)}" data-testid="thread-run" title="Open the run">run ${esc(m.runId)}</button>${typeof m.costUsd === 'number' ? ` · <span data-testid="thread-run-cost">$${esc(m.costUsd.toFixed(2))}</span>` : ''}</div>` : ''}
-      </div>`).join('') : '<p class="muted small">No note yet.</p>');
+        ${m.runId ? `<div class="muted small inbox-entry-run"><button type="button" class="link-btn small" data-open-run="${esc(m.runId)}" data-testid="thread-run" title="${t('inbox.open_the_run')}">${t('inbox.run')} ${esc(m.runId)}</button>${typeof m.costUsd === 'number' ? ` · <span data-testid="thread-run-cost">$${esc(m.costUsd.toFixed(2))}</span>` : ''}</div>` : ''}
+      </div>`).join('') : `<p class="muted small">${t('inbox.no_note_yet')}</p>`);
 
   function renderThread() {
     const box = $('#inbox-detail-thread');
@@ -810,29 +810,29 @@
       <section id="view-inbox" class="view hidden">
         <div class="page-head">
           <div>
-            <h1>Inbox</h1>
-            <p class="muted small">Raw ideas of the project chosen in the header, kept privately in this workspace (<span class="mono">discovery/</span>), never on the git platform. Accept one to start its discovery.</p>
+            <h1>${t('inbox.inbox')}</h1>
+            <p class="muted small">${t('inbox.raw_ideas_of_the_project_chosen')}<span class="mono">${t('inbox.discovery')}</span>${t('inbox.never_on_the_git_platform_accept')}</p>
           </div>
-          <button type="button" id="btn-inbox-import" class="btn" data-testid="inbox-import" title="Import a backlog document (.md, .txt or pasted text): one card per item, previewed first">Import…</button>
+          <button type="button" id="btn-inbox-import" class="btn" data-testid="inbox-import" title="${t('inbox.import_a_backlog_document_md_txt')}">${t('inbox.import')}</button>
         </div>
-        <div id="inbox-import-panel" class="inbox-import hidden" role="region" aria-label="Import a backlog document"></div>
-        <div id="inbox-capture-box" class="inbox-capture" role="group" aria-label="Quick capture">
+        <div id="inbox-import-panel" class="inbox-import hidden" role="region" aria-label="${t('inbox.import_a_backlog_document')}"></div>
+        <div id="inbox-capture-box" class="inbox-capture" role="group" aria-label="${t('inbox.quick_capture')}">
           <div class="field">
-            <label for="inbox-title">Idea <span class="req">*</span></label>
-            <input type="text" id="inbox-title" data-testid="inbox-capture-title" maxlength="200" placeholder="A title for the idea" autocomplete="off" />
+            <label for="inbox-title">${t('inbox.idea')} <span class="req">*</span></label>
+            <input type="text" id="inbox-title" data-testid="inbox-capture-title" maxlength="200" placeholder="${t('inbox.a_title_for_the_idea')}" autocomplete="off" />
           </div>
           <div class="field">
-            <label for="inbox-text">Details</label>
-            <textarea id="inbox-text" data-testid="inbox-capture-text" rows="3" placeholder="What is it about? Paste or drop images and files here."></textarea>
-            <p class="hint">Enter captures · Shift+Enter adds a line</p>
+            <label for="inbox-text">${t('inbox.details')}</label>
+            <textarea id="inbox-text" data-testid="inbox-capture-text" rows="3" placeholder="${t('inbox.what_is_it_about_paste_or')}"></textarea>
+            <p class="hint">${t('inbox.enter_captures_shift_enter_adds_a')}</p>
           </div>
           <div id="inbox-files" class="inbox-files"></div>
           <p id="inbox-capture-error" class="error small"></p>
           <div class="row">
-            <button type="button" id="btn-inbox-attach" class="btn sm ghost">Attach files</button>
-            <input type="file" id="inbox-file-input" class="hidden" multiple aria-label="Attach files to the idea" />
+            <button type="button" id="btn-inbox-attach" class="btn sm ghost">${t('inbox.attach_files')}</button>
+            <input type="file" id="inbox-file-input" class="hidden" multiple aria-label="${t('inbox.attach_files_to_the_idea')}" />
             <span class="spacer"></span>
-            <button type="button" id="inbox-capture" class="btn primary">Capture</button>
+            <button type="button" id="inbox-capture" class="btn primary">${t('inbox.capture')}</button>
           </div>
         </div>
         <p id="inbox-list-error" class="error small"></p>
@@ -844,33 +844,33 @@
     modals: `
   <div id="inbox-discard-modal" class="modal hidden">
     <form id="inbox-discard-form" class="modal-card">
-      <h3>Discard card</h3>
+      <h3>${t('inbox.discard_card')}</h3>
       <p id="inbox-discard-what" class="muted small"></p>
       <div class="field">
-        <label for="inbox-discard-reason">Reason <span class="req">*</span></label>
-        <textarea id="inbox-discard-reason" data-testid="discard-reason" rows="3" placeholder="Why is it discarded? Kept with the archived card."></textarea>
+        <label for="inbox-discard-reason">${t('inbox.reason')} <span class="req">*</span></label>
+        <textarea id="inbox-discard-reason" data-testid="discard-reason" rows="3" placeholder="${t('inbox.why_is_it_discarded_kept_with')}"></textarea>
       </div>
       <p id="inbox-discard-error" class="error small"></p>
       <div class="modal-actions">
         <span class="spacer"></span>
-        <button type="button" id="btn-inbox-discard-cancel" class="btn ghost">Cancel</button>
-        <button type="submit" class="btn danger-solid" data-testid="discard-confirm">Discard</button>
+        <button type="button" id="btn-inbox-discard-cancel" class="btn ghost">${t('common.cancel')}</button>
+        <button type="submit" class="btn danger-solid" data-testid="discard-confirm">${t('inbox.discard')}</button>
       </div>
     </form>
   </div>
   <div id="inbox-merge-modal" class="modal hidden">
     <form id="inbox-merge-form" class="modal-card">
-      <h3>Merge into…</h3>
+      <h3>${t('inbox.merge_into')}</h3>
       <p id="inbox-merge-what" class="muted small"></p>
       <div class="field">
-        <label for="inbox-merge-target">Card</label>
+        <label for="inbox-merge-target">${t('inbox.card')}</label>
         <select id="inbox-merge-target" data-testid="merge-target"></select>
       </div>
       <p id="inbox-merge-error" class="error small"></p>
       <div class="modal-actions">
         <span class="spacer"></span>
-        <button type="button" id="btn-inbox-merge-cancel" class="btn ghost">Cancel</button>
-        <button type="submit" id="btn-inbox-merge" class="btn primary" data-testid="merge-confirm">Merge</button>
+        <button type="button" id="btn-inbox-merge-cancel" class="btn ghost">${t('common.cancel')}</button>
+        <button type="submit" id="btn-inbox-merge" class="btn primary" data-testid="merge-confirm">${t('inbox.merge')}</button>
       </div>
     </form>
   </div>`,

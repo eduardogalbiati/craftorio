@@ -55,13 +55,13 @@
   // the card's body: agents, collision risks, buildings under construction, cranes
   function bodyHtml(data, scene, projectId) {
     const runs = data.runs || [];
-    if (!runs.length) return '<p class="pca-empty muted" data-testid="city-agents-empty">No agent is working on this project</p>';
+    if (!runs.length) return `<p class="pca-empty muted" data-testid="city-agents-empty">${t('project_city_agents.no_agent_is_working_on_this')}</p>`;
     const agents = runs.flatMap((r) => (r.agents || []).map((a) => agentHtml(a, r))).join('');
     const district = (id) => (window.ProjectCity?.current()?.layout?.districts || []).find((d) => d.id === id)?.name || id;
-    return `${agents ? `<ul class="pca-list">${agents}</ul>` : '<p class="muted small">The runs in progress have not touched a file yet.</p>'}
-      ${(data.collisions || []).map((c) => `<div class="pca-collision" data-testid="city-collision" role="alert"><b>Collision risk</b> <code title="${esc(c.path)}">${esc(c.path)}</code><small class="muted">changed by ${c.runs.length} runs in progress: ${c.runs.map((id) => esc(short(id))).join(', ')}</small>${window.ProjectConflictMap ? ProjectConflictMap.linkHtml(projectId) : ''}</div>`).join('')}
-      ${scene.building.length ? `<p class="small pca-new" data-testid="city-under-construction"><b>Under construction</b> ${scene.building.map((b) => `<code title="${esc(`A new file in ${district(b.district)}`)}">${esc(b.path)}</code>`).join(' ')}</p>` : ''}
-      ${scene.cranes.length ? `<p class="small muted">${scene.cranes.length} building${scene.cranes.length === 1 ? '' : 's'} with uncommitted changes (cranes)</p>` : ''}`;
+    return `${agents ? `<ul class="pca-list">${agents}</ul>` : `<p class="muted small">${t('project_city_agents.the_runs_in_progress_have_not')}</p>`}
+      ${(data.collisions || []).map((c) => `<div class="pca-collision" data-testid="city-collision" role="alert"><b>${t('project_city_agents.collision_risk')}</b> <code title="${esc(c.path)}">${esc(c.path)}</code><small class="muted">${t('project_city_agents.changed_by_length_runs_in_progress', { length: c.runs.length })} ${c.runs.map((id) => esc(short(id))).join(', ')}</small>${window.ProjectConflictMap ? ProjectConflictMap.linkHtml(projectId) : ''}</div>`).join('')}
+      ${scene.building.length ? `<p class="small pca-new" data-testid="city-under-construction"><b>${t('project_city_agents.under_construction')}</b> ${scene.building.map((b) => `<code title="${esc(`A new file in ${district(b.district)}`)}">${esc(b.path)}</code>`).join(' ')}</p>` : ''}
+      ${scene.cranes.length ? `<p class="small muted">${scene.cranes.length} ${t('project_city_agents.building_value_with_uncommitted_changes_cranes', { value: scene.cranes.length === 1 ? '' : 's' })}</p>` : ''}`;
   }
 
   function attach(city, { projectId }) {
@@ -105,16 +105,16 @@
         return;
       }
       const head = replay
-        ? `<div class="pca-head"><b>Replay of run ${esc(short(replay.runId))}</b><button type="button" class="link-btn" data-pca-close data-testid="city-replay-close">Close</button></div>
+        ? `<div class="pca-head"><b>${t('project_city_agents.replay_of_run')} ${esc(short(replay.runId))}</b><button type="button" class="link-btn" data-pca-close data-testid="city-replay-close">${t('common.close')}</button></div>
           <div class="pca-replay">
             <button type="button" class="btn sm" data-pca-play data-testid="city-replay-play">${replay.player.playing ? 'Pause' : 'Play'}</button>
-            <input type="range" min="0" max="${replay.player.duration}" value="${replay.player.time}" data-pca-seek data-testid="city-replay-timeline" aria-label="Replay timeline">
-            <select data-pca-speed data-testid="city-replay-speed" aria-label="Replay speed">${CityAgents.SPEEDS.map((s) => `<option value="${s}"${s === replay.player.speed ? ' selected' : ''}>${s}×</option>`).join('')}</select>
+            <input type="range" min="0" max="${replay.player.duration}" value="${replay.player.time}" data-pca-seek data-testid="city-replay-timeline" aria-label="${t('project_city_agents.replay_timeline')}">
+            <select data-pca-speed data-testid="city-replay-speed" aria-label="${t('project_city_agents.replay_speed')}">${CityAgents.SPEEDS.map((s) => `<option value="${s}"${s === replay.player.speed ? ' selected' : ''}>${s}×</option>`).join('')}</select>
             <small class="muted" data-pca-clock>${clock(replay.player.time / replay.scale)} / ${clock(replay.player.duration / replay.scale)}</small>
           </div>`
-        : `<div class="pca-head"><b>Agents at work</b>${answer && answer.runs.length ? `<small class="muted">${answer.runs.length} run${answer.runs.length === 1 ? '' : 's'} in progress</small>` : ''}</div>`;
-      const body = error ? `<p class="small" role="alert">Could not read the agents: ${esc(error)}</p>`
-        : d ? bodyHtml(d, scene, projectId) : '<p class="muted small">Looking for agents at work…</p>';
+        : `<div class="pca-head"><b>${t('project_city_agents.agents_at_work')}</b>${answer && answer.runs.length ? `<small class="muted">${answer.runs.length} ${t('project_city_agents.run_value_in_progress', { value: answer.runs.length === 1 ? '' : 's' })}</small>` : ''}</div>`;
+      const body = error ? `<p class="small" role="alert">${t('project_city_agents.could_not_read_the_agents')} ${esc(error)}</p>`
+        : d ? bodyHtml(d, scene, projectId) : `<p class="muted small">${t('project_city_agents.looking_for_agents_at_work')}</p>`;
       el.innerHTML = `${head}<div class="pca-body">${body}</div>`;
     }
 

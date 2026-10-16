@@ -184,24 +184,24 @@
         <div class="dsc-card-foot">
           <div class="dsc-card-meta muted small">
             <span class="badge dsc-type" data-testid="discovery-card-type">${esc(c.type)}</span>
-            <span data-testid="discovery-card-age" title="In ${esc(columnOf(c.column)?.title || c.column)} since ${esc(dateOf(since(c)))}">${esc(age(since(c)))}</span>
-            ${score != null ? `<span class="badge${score < bar ? ' warn' : ''}" data-testid="clarity-badge" title="${esc(score < bar ? `Needs grilling: below the clarity bar of ${bar}%` : `At or above the clarity bar of ${bar}%`)}"><span data-testid="discovery-card-clarity">clarity ${esc(score)}%</span></span>` : ''}
-            ${override ? `<span class="badge warn" data-testid="clarity-override" title="${esc(`Moved to Ready below the clarity bar: ${override.reason}`)}">moved anyway</span>` : ''}
-            ${c.automation?.state === 'running' ? `<span class="badge live dsc-auto-badge" data-testid="discovery-card-automation" title="${esc(`${c.automation.name || 'The automation'} is running (run ${c.automation.runId || '…'}): its result comes back to the card`)}">Running…</span>` : ''}
-            ${estimate ? `<span data-testid="discovery-card-estimate" title="Estimate">${esc(estimate)}</span>` : ''}
+            <span data-testid="discovery-card-age" title="${t('discovery.in_value_since_c', { value: esc(columnOf(c.column)?.title || c.column), c: esc(dateOf(since(c))) })}">${esc(age(since(c)))}</span>
+            ${score != null ? `<span class="badge${score < bar ? ' warn' : ''}" data-testid="clarity-badge" title="${esc(score < bar ? `Needs grilling: below the clarity bar of ${bar}%` : `At or above the clarity bar of ${bar}%`)}"><span data-testid="discovery-card-clarity">${t('discovery.clarity_score', { score: esc(score) })}</span></span>` : ''}
+            ${override ? `<span class="badge warn" data-testid="clarity-override" title="${esc(`Moved to Ready below the clarity bar: ${override.reason}`)}">${t('discovery.moved_anyway')}</span>` : ''}
+            ${c.automation?.state === 'running' ? `<span class="badge live dsc-auto-badge" data-testid="discovery-card-automation" title="${esc(`${c.automation.name || 'The automation'} is running (run ${c.automation.runId || '…'}): its result comes back to the card`)}">${t('discovery.running')}</span>` : ''}
+            ${estimate ? `<span data-testid="discovery-card-estimate" title="${t('discovery.estimate')}">${esc(estimate)}</span>` : ''}
             <span class="inbox-card-files" data-testid="discovery-card-attachments" title="${esc(plural(files, 'attachment'))}">${parts().CLIP} ${files}</span>
             <span class="inbox-card-files" data-testid="discovery-card-thread" title="${esc(`${notes} in the thread`)}">${THREAD} ${notes}</span>
           </div>
           <span class="bl-menu-wrap dsc-move">
-            <button type="button" class="btn sm ghost" data-testid="card-move" data-move-menu="${esc(c.id)}" aria-haspopup="menu" aria-expanded="${menu}" title="Move this card to another column">Move to…</button>
-            ${menu ? `<div class="bl-menu dsc-menu" role="menu" aria-label="Move to">
+            <button type="button" class="btn sm ghost" data-testid="card-move" data-move-menu="${esc(c.id)}" aria-haspopup="menu" aria-expanded="${menu}" title="${t('discovery.move_this_card_to_another_column')}">${t('discovery.move_to')}</button>
+            ${menu ? `<div class="bl-menu dsc-menu" role="menu" aria-label="${t('discovery.move_to_2')}">
               ${columns().filter((col) => col.id !== c.column).map((col) => `<button type="button" role="menuitem" data-move-to="${esc(col.id)}" data-card="${esc(c.id)}">${esc(col.title)}</button>`).join('')}
             </div>` : ''}
           </span>
         </div>
-        ${dv.refused?.id === c.id ? `<div class="dsc-card-refused" role="group" aria-label="Below the clarity bar">
-          <button type="button" class="btn sm" data-testid="grill-me" data-grill="${esc(c.id)}" title="An interview in the card's thread: one question at a time, each answer written into the card">Grill me</button>
-          <button type="button" class="btn sm warn-ghost" data-testid="clarity-move-anyway" data-move-anyway="${esc(c.id)}" title="To Ready below the bar: needs a reason, kept on the card">Move anyway</button>
+        ${dv.refused?.id === c.id ? `<div class="dsc-card-refused" role="group" aria-label="${t('discovery.below_the_clarity_bar')}">
+          <button type="button" class="btn sm" data-testid="grill-me" data-grill="${esc(c.id)}" title="${t('discovery.an_interview_in_the_card_s')}">${t('discovery.grill_me')}</button>
+          <button type="button" class="btn sm warn-ghost" data-testid="clarity-move-anyway" data-move-anyway="${esc(c.id)}" title="${t('discovery.to_ready_below_the_bar_needs')}">${t('discovery.move_anyway')}</button>
         </div>` : ''}
       </article>`;
   }
@@ -220,9 +220,9 @@
     return `
         <div class="dsc-forecast">
           <span data-testid="ready-forecast" title="${esc(`${plural(f.count, 'card')} in Ready at or above the clarity bar; a night is ${f.nightHours} h`)}"><b>${esc(head)}</b> <span class="muted">(${esc(detail)})</span></span>
-          <span class="muted small" data-testid="clarity-bar-summary">Clarity bar ${esc(s.bar)}%${kinds ? ` (${esc(kinds)})` : ''} · night ${esc(s.night.start)} to ${esc(s.night.end)}</span>
+          <span class="muted small" data-testid="clarity-bar-summary">${t('discovery.clarity_bar_bar_value_night_start', { bar: esc(s.bar), value: kinds ? ` (${esc(kinds)})` : '', start: esc(s.night.start) })} ${esc(s.night.end)}</span>
           <span class="spacer"></span>
-          <button type="button" class="btn sm ghost" data-testid="clarity-settings" data-clarity-settings title="Change the clarity bar, a bar per type and the night's hours">Bar and night…</button>
+          <button type="button" class="btn sm ghost" data-testid="clarity-settings" data-clarity-settings title="${t('discovery.change_the_clarity_bar_a_bar')}">${t('discovery.bar_and_night')}</button>
         </div>`;
   }
 
@@ -234,15 +234,15 @@
     const count = c.wip == null
       ? `<span class="badge dsc-count" data-testid="discovery-column-count" title="${esc(plural(n, 'card'))}">${n}</span>`
       : `<span class="badge dsc-count${over ? ' warn' : ''}" data-testid="discovery-column-count" title="${esc(`${plural(n, 'card')}, WIP limit ${c.wip}${over ? ': over the limit' : ''}`)}">${n} / ${esc(c.wip)}</span>
-          <button type="button" class="icon-btn dsc-wip-edit" data-testid="discovery-wip-edit" data-column="${esc(c.id)}" aria-label="Change the WIP limit of ${esc(c.title)}" title="Change the WIP limit">${PENCIL}</button>`;
+          <button type="button" class="icon-btn dsc-wip-edit" data-testid="discovery-wip-edit" data-column="${esc(c.id)}" aria-label="${t('discovery.change_the_wip_limit_of_title', { title: esc(c.title) })}" title="${t('discovery.change_the_wip_limit')}">${PENCIL}</button>`;
     const editor = `<span class="dsc-wip-form">
           <span class="muted small">${n} /</span>
-          <input type="number" class="dsc-wip-input" data-wip-input="${esc(c.id)}" min="1" step="1" value="${esc(c.wip)}" aria-label="WIP limit of ${esc(c.title)}" title="Enter saves, Esc cancels" />
+          <input type="number" class="dsc-wip-input" data-wip-input="${esc(c.id)}" min="1" step="1" value="${esc(c.wip)}" aria-label="${t('discovery.wip_limit_of_title', { title: esc(c.title) })}" title="${t('discovery.enter_saves_esc_cancels')}" />
         </span>`;
     // the column's automation (#259): its mode on the button, the rest in its settings
     const auto = c.on_enter;
     const mode = auto ? (AUTOMATION_MODES[auto.mode] ? auto.mode : 'ask') : null;
-    const automation = !auto ? '' : `<button type="button" class="btn sm ghost dsc-auto-btn" data-testid="discovery-column-automation" data-column="${esc(c.id)}" data-mode="${esc(mode)}" aria-label="${esc(`Automation of ${c.title}: ${auto.name || auto.pipeline || auto.workflow || 'automation'}, ${AUTOMATION_MODES[mode]}`)}" title="${esc(`Entering ${c.title} ${mode === 'off' ? 'runs nothing' : mode === 'on' ? 'runs' : 'proposes'} ${auto.name || auto.pipeline || auto.workflow || 'an automation'}${mode === 'off' ? ` (${auto.name || 'the automation'} is off)` : ''}: change it`)}">${BOLT}<span class="dsc-auto-mode">Automation: ${esc(AUTOMATION_MODES[mode])}</span></button>`;
+    const automation = !auto ? '' : `<button type="button" class="btn sm ghost dsc-auto-btn" data-testid="discovery-column-automation" data-column="${esc(c.id)}" data-mode="${esc(mode)}" aria-label="${esc(`Automation of ${c.title}: ${auto.name || auto.pipeline || auto.workflow || 'automation'}, ${AUTOMATION_MODES[mode]}`)}" title="${esc(`Entering ${c.title} ${mode === 'off' ? 'runs nothing' : mode === 'on' ? 'runs' : 'proposes'} ${auto.name || auto.pipeline || auto.workflow || 'an automation'}${mode === 'off' ? ` (${auto.name || 'the automation'} is off)` : ''}: change it`)}">${BOLT}<span class="dsc-auto-mode">${t('discovery.automation')} ${esc(AUTOMATION_MODES[mode])}</span></button>`;
     return `
       <section class="dsc-col" data-testid="discovery-column" data-column="${esc(c.id)}" data-drop="${esc(c.id)}"${over ? ' data-over-wip="true"' : ''} style="grid-column:${i + 1}" aria-label="${esc(c.title)}">
         <header class="dsc-col-head">
@@ -259,25 +259,25 @@
     $('#dsc-refused').textContent = dv.refused?.text || '';
     const box = $('#dsc-board-box');
     if (!dv.projectId) {
-      box.innerHTML = '<div class="empty-state"><b>No project chosen</b><p class="muted">Choose a project in the header: each project has its own Discovery board.</p></div>';
+      box.innerHTML = `<div class="empty-state"><b>${t('discovery.no_project_chosen')}</b><p class="muted">${t('discovery.choose_a_project_in_the_header')}</p></div>`;
       return;
     }
-    if (!dv.board) { box.innerHTML = dv.loadError ? '' : '<p class="muted small">Loading the board…</p>'; return; }
+    if (!dv.board) { box.innerHTML = dv.loadError ? '' : `<p class="muted small">${t('discovery.loading_the_board')}</p>`; return; }
     const cols = columns();
     const lists = cols.map((c) => cardsIn(c.id));
     const shown = dv.cards.filter(matches).length;
     const note = !dv.cards.length
-      ? '<p class="muted small dsc-note" data-testid="discovery-empty">No card on the board yet. Accept an idea in the Inbox: it lands in Triage.</p>'
-      : shown < dv.cards.length ? `<p class="muted small dsc-note">${shown} of ${plural(dv.cards.length, 'card')} shown: the filters hide the others.</p>` : '';
+      ? `<p class="muted small dsc-note" data-testid="discovery-empty">${t('discovery.no_card_on_the_board_yet')}</p>`
+      : shown < dv.cards.length ? `<p class="muted small dsc-note">${shown} ${t('discovery.of_length_shown_the_filters_hide', { length: plural(dv.cards.length, 'card') })}</p>` : '';
     // the Committed list sits beside the columns once a card was committed (#258)
     const committed = commit().committedHtml(dv.committed, dv.open?.id);
     box.innerHTML = `${note}
       <div data-testid="discovery-board">${forecastHtml()}
         ${committed ? '<div class="dsc-board-row">' : ''}
         <div class="dsc-board" style="--dsc-cols:${cols.length}">
-          <section class="dsc-lane" data-testid="discovery-fast-lane" aria-label="Fast lane: bugs and hotfixes">
-            <h3 class="dsc-lane-title">Fast lane <span class="muted">bugs and hotfixes · may skip Shape</span></h3>
-            ${cols.map((c, i) => `<div class="dsc-lane-cell" data-testid="discovery-lane-cell" data-drop="${esc(c.id)}" aria-label="Fast lane, ${esc(c.title)}">${lists[i].filter((x) => isFast(x) && matches(x)).map(cardHtml).join('')}</div>`).join('')}
+          <section class="dsc-lane" data-testid="discovery-fast-lane" aria-label="${t('discovery.fast_lane_bugs_and_hotfixes')}">
+            <h3 class="dsc-lane-title">${t('discovery.fast_lane')} <span class="muted">${t('discovery.bugs_and_hotfixes_may_skip_shape')}</span></h3>
+            ${cols.map((c, i) => `<div class="dsc-lane-cell" data-testid="discovery-lane-cell" data-drop="${esc(c.id)}" aria-label="${t('discovery.fast_lane_title', { title: esc(c.title) })}">${lists[i].filter((x) => isFast(x) && matches(x)).map(cardHtml).join('')}</div>`).join('')}
           </section>
           ${cols.map((c, i) => columnHtml(c, i, lists[i])).join('')}
         </div>
@@ -750,84 +750,84 @@
     const ro = readOnly();
     const off = ro ? ' hidden' : '';
     $('#dsc-detail').innerHTML = `
-      <aside class="drawer open dsc-detail${ro ? ' read-only' : ''}" data-testid="discovery-card-detail" aria-label="Card: ${esc(c.title)}">
+      <aside class="drawer open dsc-detail${ro ? ' read-only' : ''}" data-testid="discovery-card-detail" aria-label="${t('discovery.card_title', { title: esc(c.title) })}">
         <div class="drawer-head">
           <h2 class="drawer-title dsc-detail-title" data-testid="card-document-title" title="${esc(c.title)}">${esc(c.title)}</h2>
-          <button type="button" class="icon-btn" data-detail="close" title="Close (Esc)" aria-label="Close the card">${CLOSE}</button>
+          <button type="button" class="icon-btn" data-detail="close" title="${t('discovery.close_esc')}" aria-label="${t('discovery.close_the_card')}">${CLOSE}</button>
         </div>
         <div class="drawer-body dsc-detail-body">
           <p class="inbox-card-meta muted small">
             <span>${esc(c.author)}</span>
             <span>${esc(dateOf(c.created))}</span>
-            <span class="mono" title="The card's folder in the workspace's discovery/">${esc(c.id)}</span>
-            ${c.links?.from ? `<span data-testid="card-from" title="New learning from the committed card ${esc(c.links.from)}">from <span class="mono">${esc(c.links.from)}</span></span>` : ''}
-            ${ro ? '<span class="badge" data-testid="card-read-only" title="Committed to the backlog: the card is kept as it was committed">committed · read-only</span>' : ''}
+            <span class="mono" title="${t('discovery.the_card_s_folder_in_the')}">${esc(c.id)}</span>
+            ${c.links?.from ? `<span data-testid="card-from" title="${t('discovery.new_learning_from_the_committed_card', { from: esc(c.links.from) })}">${t('discovery.from')} <span class="mono">${esc(c.links.from)}</span></span>` : ''}
+            ${ro ? `<span class="badge" data-testid="card-read-only" title="${t('discovery.committed_to_the_backlog_the_card')}">${t('discovery.committed_read_only')}</span>` : ''}
           </p>
           <div class="dsc-fields">
             <div class="field">
-              <label for="dsc-type">Type</label>
+              <label for="dsc-type">${t('discovery.type')}</label>
               <select id="dsc-type" data-testid="card-type"${ro ? ' disabled' : ''}>${TYPES.map((t) => `<option value="${t}"${t === c.type ? ' selected' : ''}>${t}</option>`).join('')}</select>
             </div>
             <div class="field">
-              <label for="dsc-tags">Tags</label>
-              <input type="text" id="dsc-tags" data-testid="card-tags" value="${esc((c.tags || []).join(', '))}" placeholder="Comma-separated" autocomplete="off"${ro ? ' disabled' : ''} />
+              <label for="dsc-tags">${t('discovery.tags')}</label>
+              <input type="text" id="dsc-tags" data-testid="card-tags" value="${esc((c.tags || []).join(', '))}" placeholder="${t('discovery.comma_separated')}" autocomplete="off"${ro ? ' disabled' : ''} />
             </div>
           </div>
           <div id="dsc-detail-actions"></div>
           <p id="dsc-detail-error" class="error small"></p>
-          <section id="dsc-clarity" class="inbox-section dsc-clarity" aria-label="Clarity"></section>
+          <section id="dsc-clarity" class="inbox-section dsc-clarity" aria-label="${t('discovery.clarity')}"></section>
           <section class="inbox-section">
             <div class="inbox-section-head">
-              <h3>Document</h3>
-              <div class="seg sm${off}" role="group" aria-label="Document">
-                <button type="button" data-detail="tab" data-tab="preview">Preview</button>
-                <button type="button" data-detail="tab" data-tab="edit">Edit</button>
+              <h3>${t('discovery.document')}</h3>
+              <div class="seg sm${off}" role="group" aria-label="${t('discovery.document')}">
+                <button type="button" data-detail="tab" data-tab="preview">${t('discovery.preview')}</button>
+                <button type="button" data-detail="tab" data-tab="edit">${t('discovery.edit')}</button>
               </div>
             </div>
-            <p id="dsc-unsaved" class="muted small hidden">A preview of unsaved changes: Save or Cancel them in Edit.</p>
+            <p id="dsc-unsaved" class="muted small hidden">${t('discovery.a_preview_of_unsaved_changes_save')}</p>
             <article id="dsc-preview" class="md md-compact inbox-doc" data-testid="card-document-preview"></article>
             <div id="dsc-edit" class="inbox-edit hidden">
               <div class="field">
-                <label for="dsc-title">Title <span class="req">*</span></label>
+                <label for="dsc-title">${t('discovery.title')} <span class="req">*</span></label>
                 <input type="text" id="dsc-title" maxlength="200" value="${esc(c.title)}" />
               </div>
               <div class="field">
-                <label for="dsc-doc">Document (Markdown)</label>
+                <label for="dsc-doc">${t('discovery.document_markdown')}</label>
                 <textarea id="dsc-doc" data-testid="card-document-editor" rows="14" class="mono"></textarea>
               </div>
               <div class="row">
                 <span class="spacer"></span>
-                <button type="button" class="btn sm ghost" data-detail="cancel-doc">Cancel</button>
-                <button type="button" class="btn sm primary" data-detail="save-doc">Save</button>
+                <button type="button" class="btn sm ghost" data-detail="cancel-doc">${t('common.cancel')}</button>
+                <button type="button" class="btn sm primary" data-detail="save-doc">${t('common.save')}</button>
               </div>
             </div>
           </section>
           <section class="inbox-section">
             <div class="inbox-section-head">
-              <h3>Acceptance criteria</h3>
-              <button type="button" id="dsc-acc-edit" class="btn sm ghost" data-detail="edit-acc">Edit</button>
+              <h3>${t('discovery.acceptance_criteria')}</h3>
+              <button type="button" id="dsc-acc-edit" class="btn sm ghost" data-detail="edit-acc">${t('discovery.edit')}</button>
             </div>
             <div id="dsc-acceptance" data-testid="card-acceptance"></div>
           </section>
           <section class="inbox-section">
             <div class="inbox-section-head">
-              <h3>Attachments</h3>
-              <button type="button" class="btn sm ghost${off}" data-detail="attach">Attach files</button>
-              <input type="file" id="dsc-file" class="hidden" multiple aria-label="Attach files to the card" />
+              <h3>${t('discovery.attachments')}</h3>
+              <button type="button" class="btn sm ghost${off}" data-detail="attach">${t('discovery.attach_files')}</button>
+              <input type="file" id="dsc-file" class="hidden" multiple aria-label="${t('discovery.attach_files_to_the_card')}" />
             </div>
             <div id="dsc-files" class="inbox-files" data-testid="card-attachments"></div>
           </section>
           <section class="inbox-section">
-            <div class="inbox-section-head"><h3>Thread</h3></div>
+            <div class="inbox-section-head"><h3>${t('discovery.thread')}</h3></div>
             <div id="dsc-thread" class="inbox-thread" data-testid="card-thread"></div>
             <div id="dsc-grill"></div>
             <div class="inbox-note${off}">
-              <textarea id="dsc-note" rows="2" placeholder="Add a note (Enter sends)" aria-label="Add a note"></textarea>
-              <button type="button" id="dsc-note-send" class="btn sm" data-detail="note">Add note</button>
+              <textarea id="dsc-note" rows="2" placeholder="${t('discovery.add_a_note_enter_sends')}" aria-label="${t('discovery.add_a_note')}"></textarea>
+              <button type="button" id="dsc-note-send" class="btn sm" data-detail="note">${t('discovery.add_note')}</button>
             </div>
           </section>
           <section class="inbox-section">
-            <div class="inbox-section-head"><h3>Version history</h3></div>
+            <div class="inbox-section-head"><h3>${t('discovery.version_history')}</h3></div>
             <div id="dsc-versions" class="dsc-versions" data-testid="card-versions"></div>
           </section>
         </div>
@@ -848,7 +848,7 @@
   function renderTab() {
     const edit = dv.tab === 'edit';
     const doc = $('#dsc-doc').value;
-    $('#dsc-preview').innerHTML = doc.trim() ? markdownHtml(doc) : '<p class="muted small">No document yet. Write it in Edit.</p>';
+    $('#dsc-preview').innerHTML = doc.trim() ? markdownHtml(doc) : `<p class="muted small">${t('discovery.no_document_yet_write_it_in')}</p>`;
     $('#dsc-preview').classList.toggle('hidden', edit);
     $('#dsc-edit').classList.toggle('hidden', !edit);
     $('#dsc-unsaved').classList.toggle('hidden', edit || !documentDirty());
@@ -866,21 +866,21 @@
     if (dv.open.column === 'ready') { box.innerHTML = commit().actionHtml(dv.open); return; }
     if (readOnly()) {
       box.innerHTML = `
-      <section class="inbox-section dsc-delivery-box" aria-label="Delivery">
-        <div class="inbox-section-head"><h3>Delivery</h3></div>
+      <section class="inbox-section dsc-delivery-box" aria-label="${t('discovery.delivery')}">
+        <div class="inbox-section-head"><h3>${t('discovery.delivery')}</h3></div>
         ${commit().deliveryHtml(committedOf(dv.open.id) || dv.open)}
         <div class="row dsc-actions">
-          <button type="button" class="btn sm" data-testid="card-new-from" data-detail="new-from" title="A committed card never returns to the board: new learning starts a new card in the Inbox, linked to this one">New card from this one</button>
+          <button type="button" class="btn sm" data-testid="card-new-from" data-detail="new-from" title="${t('discovery.a_committed_card_never_returns_to')}">${t('discovery.new_card_from_this_one')}</button>
         </div>
       </section>`;
       return;
     }
     box.innerHTML = dv.open.column !== 'shape' ? '' : `
-      <div class="row dsc-actions" role="group" aria-label="Shape">
-        <button type="button" class="btn sm" data-testid="card-open-write-review" data-detail="open-write-review" title="A writer and a reviewer work on this card's document">Open in Write &amp; Review</button>
-        <button type="button" class="btn sm" data-testid="card-open-arena" data-detail="open-arena" title="Several models write from this card's document and the best of each is merged">Open in AI Arena</button>
+      <div class="row dsc-actions" role="group" aria-label="${t('discovery.shape')}">
+        <button type="button" class="btn sm" data-testid="card-open-write-review" data-detail="open-write-review" title="${t('discovery.a_writer_and_a_reviewer_work')}">${t('discovery.open_in_write_review')}</button>
+        <button type="button" class="btn sm" data-testid="card-open-arena" data-detail="open-arena" title="${t('discovery.several_models_write_from_this_card')}">${t('discovery.open_in_ai_arena')}</button>
       </div>
-      <p class="muted small dsc-actions-hint">The card's document is the input. When the run finishes, its document comes back here as a new version and a thread entry.</p>`;
+      <p class="muted small dsc-actions-hint">${t('discovery.the_card_s_document_is_the')}</p>`;
   }
 
   // The card's clarity (#166): its score against the bar of its type, who scored it and when, the
@@ -898,14 +898,14 @@
     const missing = Array.isArray(gaps) ? gaps : [];
     box.innerHTML = `
       <div class="inbox-section-head">
-        <h3>Clarity</h3>
-        ${score == null ? '<span class="badge">not scored</span>' : `<span class="badge${below ? ' warn' : ''}">${esc(score)}%</span>`}
+        <h3>${t('discovery.clarity')}</h3>
+        ${score == null ? `<span class="badge">${t('discovery.not_scored')}</span>` : `<span class="badge${below ? ' warn' : ''}">${esc(score)}%</span>`}
         <span class="muted small">${below ? `needs grilling: the bar is ${esc(bar)}%` : uncommittable ? `at the bar of ${esc(bar)}%, but a commit needs ${commit().BAR}%` : `at or above the bar of ${esc(bar)}%`}</span>
-        ${(below || uncommittable) && !readOnly() ? '<button type="button" class="btn sm" data-testid="card-grill-me" data-detail="grill" title="An interview in this thread: one question at a time, each answer written into the card">Grill me</button>' : ''}
+        ${(below || uncommittable) && !readOnly() ? `<button type="button" class="btn sm" data-testid="card-grill-me" data-detail="grill" title="${t('discovery.an_interview_in_this_thread_one')}">${t('discovery.grill_me')}</button>` : ''}
       </div>
-      ${score != null && (by || ts) ? `<p class="muted small" data-testid="clarity-scored">Scored by <b>${esc(by || 'unknown')}</b> ${when(ts)}</p>` : ''}
-      ${override ? `<p class="small" data-testid="clarity-override"><span class="badge warn">moved anyway</span> <b>${esc(override.by)}</b> moved it to Ready ${override.score == null ? 'without a score' : `at ${esc(override.score)}%`} ${when(override.ts)}: ${esc(override.reason)}</p>` : ''}
-      ${missing.length ? `<p class="muted small">Missing:</p><ul class="dsc-missing" data-testid="clarity-missing">${missing.map((g) => `<li>${esc(g)}</li>`).join('')}</ul>` : ''}`;
+      ${score != null && (by || ts) ? `<p class="muted small" data-testid="clarity-scored">${t('discovery.scored_by')} <b>${esc(by || 'unknown')}</b> ${when(ts)}</p>` : ''}
+      ${override ? `<p class="small" data-testid="clarity-override"><span class="badge warn">${t('discovery.moved_anyway')}</span> <b>${esc(override.by)}</b> ${t('discovery.moved_it_to_ready_value_ts', { value: override.score == null ? 'without a score' : `at ${esc(override.score)}%`, ts: when(override.ts) })} ${esc(override.reason)}</p>` : ''}
+      ${missing.length ? `<p class="muted small">${t('discovery.missing')}</p><ul class="dsc-missing" data-testid="clarity-missing">${missing.map((g) => `<li>${esc(g)}</li>`).join('')}</ul>` : ''}`;
   }
 
   function renderAcceptance() {
@@ -916,19 +916,19 @@
     if (!dv.editAcceptance) {
       box.innerHTML = String(c.acceptance || '').trim()
         ? `<article class="md md-compact inbox-doc">${markdownHtml(c.acceptance)}</article>`
-        : '<p class="muted small">No acceptance criteria yet.</p>';
+        : `<p class="muted small">${t('discovery.no_acceptance_criteria_yet')}</p>`;
       return;
     }
     box.innerHTML = `
       <div class="inbox-edit">
         <div class="field">
-          <label for="dsc-acc">Acceptance criteria (Markdown)</label>
+          <label for="dsc-acc">${t('discovery.acceptance_criteria_markdown')}</label>
           <textarea id="dsc-acc" rows="6" class="mono"></textarea>
         </div>
         <div class="row">
           <span class="spacer"></span>
-          <button type="button" class="btn sm ghost" data-detail="cancel-acc">Cancel</button>
-          <button type="button" class="btn sm primary" data-detail="save-acc">Save</button>
+          <button type="button" class="btn sm ghost" data-detail="cancel-acc">${t('common.cancel')}</button>
+          <button type="button" class="btn sm primary" data-detail="save-acc">${t('common.save')}</button>
         </div>
       </div>`;
     $('#dsc-acc').value = c.acceptance;
@@ -960,11 +960,11 @@
     const q = waitingGrill();
     $('#dsc-grill').innerHTML = !q ? '' : `
       <div class="dsc-grill" data-testid="grill-interview">
-        <p class="small"><b>Grill me</b> waits for your answer: it is written into the card, and the card is scored again.</p>
-        ${q.proposal ? `<p class="muted small">A proposed answer, from the card:</p><pre class="dsc-grill-proposal" data-testid="grill-proposal">${esc(q.proposal)}</pre>` : ''}
+        <p class="small"><b>${t('discovery.grill_me')}</b> ${t('discovery.waits_for_your_answer_it_is')}</p>
+        ${q.proposal ? `<p class="muted small">${t('discovery.a_proposed_answer_from_the_card')}</p><pre class="dsc-grill-proposal" data-testid="grill-proposal">${esc(q.proposal)}</pre>` : ''}
         <div class="row">
-          ${q.proposal ? '<button type="button" class="btn sm" data-testid="grill-use-proposal" data-detail="grill-use">Use this answer</button>' : ''}
-          <button type="button" class="btn sm ghost" data-testid="grill-end" data-detail="grill-end">End the interview</button>
+          ${q.proposal ? `<button type="button" class="btn sm" data-testid="grill-use-proposal" data-detail="grill-use">${t('discovery.use_this_answer')}</button>` : ''}
+          <button type="button" class="btn sm ghost" data-testid="grill-end" data-detail="grill-end">${t('discovery.end_the_interview')}</button>
         </div>
       </div>`;
     const note = $('#dsc-note');
@@ -996,11 +996,11 @@
           <span class="muted small" title="${esc(dateOf(v.ts))}">${esc(ncAgo(v.ts))}</span>
           <span class="spacer"></span>
           <button type="button" class="btn sm ghost" data-testid="card-version-open" data-detail="version-open" data-name="${esc(v.name)}" aria-expanded="${shown}">${shown ? 'Close' : 'Open'}</button>
-          <button type="button" class="btn sm ghost" data-testid="card-version-restore" data-detail="version-restore" data-name="${esc(v.name)}" title="Make this version the document again; the current document is kept as a version">Restore</button>
+          <button type="button" class="btn sm ghost" data-testid="card-version-restore" data-detail="version-restore" data-name="${esc(v.name)}" title="${t('discovery.make_this_version_the_document_again')}">${t('discovery.restore')}</button>
         </div>
-        ${shown ? `<article class="md md-compact inbox-doc dsc-version-text" data-testid="card-version-text">${dv.viewing.text.trim() ? markdownHtml(dv.viewing.text) : '<p class="muted small">An empty document.</p>'}</article>` : ''}
+        ${shown ? `<article class="md md-compact inbox-doc dsc-version-text" data-testid="card-version-text">${dv.viewing.text.trim() ? markdownHtml(dv.viewing.text) : `<p class="muted small">${t('discovery.an_empty_document')}</p>`}</article>` : ''}
       </div>`;
-    }).join('') : '<p class="muted small">No version yet. One is kept on each move, restore and run result.</p>';
+    }).join('') : `<p class="muted small">${t('discovery.no_version_yet_one_is_kept')}</p>`;
   }
 
   async function openVersion(name) {
@@ -1378,29 +1378,29 @@
       <section id="view-discovery" class="view hidden">
         <div class="page-head">
           <div>
-            <h1>Discovery</h1>
-            <p class="muted small">The cards accepted in the Inbox, worked on until they are clear enough to commit: Triage → Shape → Define → Ready. Private to this workspace (<span class="mono">discovery/</span>). Drag a card or use its "Move to…" menu; bugs and hotfixes take the fast lane.</p>
+            <h1>${t('discovery.discovery')}</h1>
+            <p class="muted small">${t('discovery.the_cards_accepted_in_the_inbox')}<span class="mono">${t('discovery.discovery_2')}</span>${t('discovery.drag_a_card_or_use_its')}</p>
           </div>
         </div>
-        <div class="dsc-toolbar" role="group" aria-label="Filters">
+        <div class="dsc-toolbar" role="group" aria-label="${t('discovery.filters')}">
           <div class="field">
-            <label for="dsc-filter-type">Type</label>
+            <label for="dsc-filter-type">${t('discovery.type')}</label>
             <select id="dsc-filter-type" data-testid="discovery-filter-type">
-              <option value="">All types</option>
+              <option value="">${t('discovery.all_types')}</option>
               ${TYPES.map((t) => `<option value="${t}">${t}</option>`).join('')}
             </select>
           </div>
           <div class="field">
-            <label for="dsc-filter-tag">Tag</label>
-            <select id="dsc-filter-tag" data-testid="discovery-filter-tag"><option value="">All tags</option></select>
+            <label for="dsc-filter-tag">${t('discovery.tag')}</label>
+            <select id="dsc-filter-tag" data-testid="discovery-filter-tag"><option value="">${t('discovery.all_tags')}</option></select>
           </div>
           <div class="field">
-            <label for="dsc-filter-author">Author</label>
-            <select id="dsc-filter-author" data-testid="discovery-filter-author"><option value="">All authors</option></select>
+            <label for="dsc-filter-author">${t('discovery.author')}</label>
+            <select id="dsc-filter-author" data-testid="discovery-filter-author"><option value="">${t('discovery.all_authors')}</option></select>
           </div>
           <div class="field dsc-search">
-            <label for="dsc-search">Search</label>
-            <input type="text" id="dsc-search" data-testid="discovery-search" placeholder="Titles and documents" autocomplete="off" />
+            <label for="dsc-search">${t('discovery.search')}</label>
+            <input type="text" id="dsc-search" data-testid="discovery-search" placeholder="${t('discovery.titles_and_documents')}" autocomplete="off" />
           </div>
         </div>
         <p id="dsc-error" class="error small"></p>
@@ -1411,82 +1411,82 @@
     modals: `
   <div id="dsc-override-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="dsc-override-title" data-testid="clarity-override-dialog">
     <form id="dsc-override-form" class="modal-card">
-      <h3 id="dsc-override-title">Move anyway</h3>
+      <h3 id="dsc-override-title">${t('discovery.move_anyway')}</h3>
       <p id="dsc-override-what" class="muted small"></p>
       <div class="field">
-        <label for="dsc-override-reason">Reason <span class="req">*</span></label>
-        <textarea id="dsc-override-reason" data-testid="clarity-override-reason" rows="3" placeholder="Why does it go to Ready below the bar? Kept on the card."></textarea>
+        <label for="dsc-override-reason">${t('discovery.reason')} <span class="req">*</span></label>
+        <textarea id="dsc-override-reason" data-testid="clarity-override-reason" rows="3" placeholder="${t('discovery.why_does_it_go_to_ready')}"></textarea>
       </div>
       <p id="dsc-override-error" class="error small"></p>
       <div class="modal-actions">
         <span class="spacer"></span>
-        <button type="button" id="btn-dsc-override-cancel" class="btn ghost">Cancel</button>
-        <button type="submit" id="btn-dsc-override-confirm" class="btn primary" data-testid="clarity-override-confirm" disabled>Move to Ready</button>
+        <button type="button" id="btn-dsc-override-cancel" class="btn ghost">${t('common.cancel')}</button>
+        <button type="submit" id="btn-dsc-override-confirm" class="btn primary" data-testid="clarity-override-confirm" disabled>${t('discovery.move_to_ready')}</button>
       </div>
     </form>
   </div>
   <div id="dsc-clarity-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="dsc-clarity-title" data-testid="clarity-settings-dialog">
     <form id="dsc-clarity-form" class="modal-card">
-      <h3 id="dsc-clarity-title">Clarity bar and night</h3>
-      <p class="muted small">A card enters Ready at or above the bar of this project. A type with a bar of its own uses it instead (a hotfix may pass lower); leave it empty to use the project's.</p>
+      <h3 id="dsc-clarity-title">${t('discovery.clarity_bar_and_night')}</h3>
+      <p class="muted small">${t('discovery.a_card_enters_ready_at_or')}</p>
       <div class="dsc-clarity-grid">
         <div class="field">
-          <label for="dsc-bar">Bar (%) <span class="req">*</span></label>
+          <label for="dsc-bar">${t('discovery.bar')} <span class="req">*</span></label>
           <input type="number" id="dsc-bar" data-testid="clarity-bar" min="0" max="100" step="1" required />
         </div>
         ${TYPES.map((t) => `<div class="field">
           <label for="dsc-bar-${t}">${t} (%)</label>
-          <input type="number" id="dsc-bar-${t}" data-testid="clarity-bar-${t}" data-bar-kind="${t}" min="0" max="100" step="1" placeholder="project's" />
+          <input type="number" id="dsc-bar-${t}" data-testid="clarity-bar-${t}" data-bar-kind="${t}" min="0" max="100" step="1" placeholder="${I18n.t('discovery.project_s')}" />
         </div>`).join('')}
       </div>
       <div class="dsc-clarity-grid">
         <div class="field">
-          <label for="dsc-night-start">Night from <span class="req">*</span></label>
+          <label for="dsc-night-start">${t('discovery.night_from')} <span class="req">*</span></label>
           <input type="time" id="dsc-night-start" data-testid="clarity-night-start" required />
         </div>
         <div class="field">
-          <label for="dsc-night-end">Night to <span class="req">*</span></label>
+          <label for="dsc-night-end">${t('discovery.night_to')} <span class="req">*</span></label>
           <input type="time" id="dsc-night-end" data-testid="clarity-night-end" required />
         </div>
       </div>
-      <p class="hint">The night is when agents work alone: the ready forecast counts in nights of this length.</p>
+      <p class="hint">${t('discovery.the_night_is_when_agents_work')}</p>
       <p id="dsc-clarity-error" class="error small"></p>
       <div class="modal-actions">
         <span class="spacer"></span>
-        <button type="button" id="btn-dsc-clarity-cancel" class="btn ghost">Cancel</button>
-        <button type="submit" class="btn primary" data-testid="clarity-settings-save">Save</button>
+        <button type="button" id="btn-dsc-clarity-cancel" class="btn ghost">${t('common.cancel')}</button>
+        <button type="submit" class="btn primary" data-testid="clarity-settings-save">${t('common.save')}</button>
       </div>
     </form>
   </div>
   <div id="dsc-automation-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="dsc-automation-title" data-testid="discovery-automation-dialog">
     <form id="dsc-automation-form" class="modal-card">
-      <h3 id="dsc-automation-title">Automation</h3>
+      <h3 id="dsc-automation-title">${t('discovery.automation_2')}</h3>
       <p id="dsc-automation-what" class="muted small"></p>
       <div class="field dsc-automation-field">
-        <label for="dsc-automation-mode">When a card enters</label>
+        <label for="dsc-automation-mode">${t('discovery.when_a_card_enters')}</label>
         <select id="dsc-automation-mode" data-testid="discovery-automation-mode">
           ${Object.entries(AUTOMATION_MODES).map(([v, label]) => `<option value="${v}">${label}</option>`).join('')}
         </select>
-        <div class="hint">Ask me proposes it with its cost estimate, On starts it with the move, Off does nothing. Every gate of a run still waits for you; the card never moves by itself.</div>
+        <div class="hint">${t('discovery.ask_me_proposes_it_with_its')}</div>
       </div>
       <p id="dsc-automation-error" class="error small" role="alert"></p>
       <div class="modal-actions">
         <span class="spacer"></span>
-        <button type="button" id="btn-dsc-automation-close" class="btn ghost">Close</button>
+        <button type="button" id="btn-dsc-automation-close" class="btn ghost">${t('common.close')}</button>
       </div>
     </form>
   </div>
   <div id="dsc-proposal-modal" class="dsc-proposal-dock hidden" role="dialog" aria-modal="false" aria-labelledby="dsc-proposal-title" data-testid="discovery-automation-proposal">
     <form id="dsc-proposal-form" class="modal-card">
-      <h3 id="dsc-proposal-title">Run the automation?</h3>
+      <h3 id="dsc-proposal-title">${t('discovery.run_the_automation')}</h3>
       <p id="dsc-proposal-what" class="small" data-testid="discovery-automation-what"></p>
       <p id="dsc-proposal-estimate" class="muted small" data-testid="discovery-automation-estimate"></p>
       <p id="dsc-proposal-hint" class="hint"></p>
       <p id="dsc-proposal-error" class="error small" role="alert"></p>
       <div class="modal-actions">
         <span class="spacer"></span>
-        <button type="button" id="btn-dsc-proposal-skip" class="btn ghost" data-testid="discovery-automation-skip">Not now</button>
-        <button type="button" id="btn-dsc-proposal-run" class="btn primary" data-testid="discovery-automation-run">Run</button>
+        <button type="button" id="btn-dsc-proposal-skip" class="btn ghost" data-testid="discovery-automation-skip">${t('discovery.not_now')}</button>
+        <button type="button" id="btn-dsc-proposal-run" class="btn primary" data-testid="discovery-automation-run">${t('discovery.run')}</button>
       </div>
     </form>
   </div>${window.DiscoveryCommit.MODAL}`,

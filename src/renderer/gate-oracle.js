@@ -27,7 +27,7 @@
   const OUTPUT_FIELDS = ['summary', 'files_changed', 'test_notes', 'evidence_plan', 'left_out'];
   // what the Oracle is told with the context (the context itself is data, this is how to use it)
   const GUIDE = [
-    'The owner is at this human gate and asks you about it. The context below names the run, its branch and base; read the diff and the files with your tools when you need them (repo_git: git diff <base>...<branch> in the project\'s repository; run_events and run_file for the run).',
+    `The owner is at this human gate and asks you about it. The context below names the run, its branch and base; read the diff and the files with your tools when you need them (repo_git: git diff <base>...<branch> ${t('gate_oracle.in_the_project_s_repository_run')}`,
     'When the run\'s worktree was removed, the diff still comes from the branch; when neither exists, say the diff is not available.',
     'Never answer the gate: the owner does. When the owner should ask for changes, propose the text for "Ask for changes" in a fenced block tagged gate-feedback (```gate-feedback ... ```): the app shows it with a "Use this text" button.',
   ].join('\n');

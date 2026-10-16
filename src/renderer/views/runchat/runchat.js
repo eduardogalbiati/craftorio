@@ -73,11 +73,11 @@
     const { prose, json, decisions } = splitAnswer(it.text);
     let body = prose ? md(prose) : '';
     if (!body && json) body = `<pre class="rc-json">${esc(json)}</pre>`;
-    if (!body) body = '<p class="muted small">(no text)</p>';
+    if (!body) body = `<p class="muted small">${t('runchat.no_text')}</p>`;
     const extras = [];
-    if (json && prose) extras.push(`<details class="rc-more"><summary>Structured answer</summary><pre class="rc-json">${esc(json)}</pre></details>`);
-    if (decisions) extras.push(`<details class="rc-more"><summary>Decision log</summary><pre class="rc-json">${esc(decisions)}</pre></details>`);
-    if (it.handoff) extras.push(`<details class="rc-more"><summary>Handoff note</summary><div class="rc-body md">${md(it.handoff)}</div></details>`);
+    if (json && prose) extras.push(`<details class="rc-more"><summary>${t('runchat.structured_answer')}</summary><pre class="rc-json">${esc(json)}</pre></details>`);
+    if (decisions) extras.push(`<details class="rc-more"><summary>${t('runchat.decision_log')}</summary><pre class="rc-json">${esc(decisions)}</pre></details>`);
+    if (it.handoff) extras.push(`<details class="rc-more"><summary>${t('runchat.handoff_note')}</summary><div class="rc-body md">${md(it.handoff)}</div></details>`);
     const tools = it.activity.filter((a) => a.kind === 'tool');
     const thinking = it.activity.filter((a) => a.kind === 'thinking');
     if (it.activity.length) {
@@ -101,29 +101,29 @@
   // #262: the provider and the model that answered the turn (a simulated one: its workflow provider)
   function turnModelTag(it) {
     const provider = it.simulates || (it.provider === 'mock' ? '' : it.provider);
-    return `<span class="tag" data-testid="run-chat-turn-model" data-step="${esc(it.stepId || '')}"${it.simulates ? ' title="Simulated: no model was called"' : ''}>${esc([provider, it.model].filter(Boolean).join(' · '))}</span>`;
+    return `<span class="tag" data-testid="run-chat-turn-model" data-step="${esc(it.stepId || '')}"${it.simulates ? ` title="${t('runchat.simulated_no_model_was_called')}"` : ''}>${esc([provider, it.model].filter(Boolean).join(' · '))}</span>`;
   }
   // #262: an agent's provider out of credits (or past its usage limit): the turn moved on to the next one
   const fallbackEntry = (entry) => String(entry || '').replace(':', ' · ');
   function fallbackHtml(it) {
-    return `<div class="rc-sys warn" data-item="${it.id}" data-testid="run-chat-fallback" title="${esc(it.reason)}"><span><b>${esc(nameOf(it.agent))}</b> fell back in ${stepTag(it.stepId, it.visit, it.sub)}: <span class="mono">${esc(fallbackEntry(it.from))}</span> → <span class="mono">${esc(fallbackEntry(it.to))}</span> · ${esc(it.reason.slice(0, 160))}</span><time>${clock(it.ts)}</time></div>`;
+    return `<div class="rc-sys warn" data-item="${it.id}" data-testid="run-chat-fallback" title="${esc(it.reason)}"><span><b>${esc(nameOf(it.agent))}</b> ${t('runchat.fell_back_in_stepid', { stepId: stepTag(it.stepId, it.visit, it.sub) })} <span class="mono">${esc(fallbackEntry(it.from))}</span> → <span class="mono">${esc(fallbackEntry(it.to))}</span> · ${esc(it.reason.slice(0, 160))}</span><time>${clock(it.ts)}</time></div>`;
   }
 
   // #288: a run whose events never ended (no workflow.finished) and that no app runs any more: the
   // app closed while it ran or waited at a gate. Nothing waits for an answer; Resume goes on.
   // A run another app window runs (runningElsewhere, #112) is neither: its gates are answered there.
   const interrupted = () => !chat.live && !chat.loading && !chat.elsewhere && chat.model.run.status === 'running';
-  const elsewhereHtml = () => `<div class="duo-note plain rc-interrupted" data-testid="runchat-elsewhere-note"><span><b data-status="running">Running in another app window</b> (${esc(chat.elsewhere.host || 'this computer')}): follow it and answer its gates there</span></div>`;
+  const elsewhereHtml = () => `<div class="duo-note plain rc-interrupted" data-testid="runchat-elsewhere-note"><span><b data-status="running">${t('runchat.running_in_another_app_window')}</b> ${t('runchat.value_follow_it_and_answer_its', { value: esc(chat.elsewhere.host || 'this computer') })}</span></div>`;
   // where it stopped: the gate left waiting, else the step it was at
   const stoppedStep = () => chat.model.pendingGates().at(-1)?.stepId || chat.model.run.stepId || null;
-  const resumeButton = () => `<button type="button" class="btn sm primary" data-testid="runchat-resume" data-resume-at="${esc(stoppedStep() || '')}" title="Resume the run where it stopped (Resume from step…, that step chosen)">Resume</button>`;
+  const resumeButton = () => `<button type="button" class="btn sm primary" data-testid="runchat-resume" data-resume-at="${esc(stoppedStep() || '')}" title="${t('runchat.resume_the_run_where_it_stopped')}">${t('runchat.resume')}</button>`;
   // the chat's last message while the run is interrupted (drawn by draw, after the items)
   function interruptedHtml() {
     const r = chat.model.run;
     const at = stoppedStep();
     const spent = r.lastTs && r.startedAt ? Date.parse(r.lastTs) - Date.parse(r.startedAt) : 0;
-    return `<div class="duo-note failed rc-interrupted" data-testid="runchat-interrupted-note"><span><b data-status="interrupted">Interrupted at <span title="${esc(at || '')}">${esc(at ? stepName(at) : 'its first step')}</span></b> (the app closed) · $${(r.cost || 0).toFixed(2)} · ${fmtSecs(spent)}</span>
-      ${resumeButton()}<button type="button" class="link-btn small" data-resume title="Start a new run from another step of this one, keeping the previous outputs (no supervisor call)">Resume from step…</button></div>`;
+    return `<div class="duo-note failed rc-interrupted" data-testid="runchat-interrupted-note"><span><b data-status="interrupted">${t('runchat.interrupted_at')} <span title="${esc(at || '')}">${esc(at ? stepName(at) : 'its first step')}</span></b> ${t('runchat.the_app_closed_value', { value: (r.cost || 0).toFixed(2) })} ${fmtSecs(spent)}</span>
+      ${resumeButton()}<button type="button" class="link-btn small" data-resume title="${t('runchat.start_a_new_run_from_another')}">${t('runchat.resume_from_step')}</button></div>`;
   }
 
   function gateHtml(it) {
@@ -148,9 +148,9 @@
     const tools = open && typeof gateToolsHtml === 'function' ? gateToolsHtml(it, { runId: chat.runId }) : '';
     const field = it.feedback && !it.resolved && !it.closed ? `<label class="duo-ask-label">${esc(it.feedback.label || 'Instructions (optional)')}</label>
       <textarea class="duo-ask-text" rows="2" placeholder="${esc(it.feedback.placeholder || '')}"${off}></textarea>` : '';
-    const state = it.resolved ? '' : it.closed ? '<p class="muted small">The run ended before an answer.</p>'
-      : stale ? '<p class="muted small" data-testid="runchat-gate-interrupted">This gate was waiting when the run was interrupted (the app closed). Resuming the run brings it back.</p>'
-        : away ? '<p class="muted small" data-testid="runchat-gate-elsewhere">This gate waits in another app window: answer it there.</p>' : '';
+    const state = it.resolved ? '' : it.closed ? `<p class="muted small">${t('runchat.the_run_ended_before_an_answer')}</p>`
+      : stale ? `<p class="muted small" data-testid="runchat-gate-interrupted">${t('runchat.this_gate_was_waiting_when_the')}</p>`
+        : away ? `<p class="muted small" data-testid="runchat-gate-elsewhere">${t('runchat.this_gate_waits_in_another_app')}</p>` : '';
     // every gate's summary card (#213), the long message in its Details; a gate that tries the change
     // (#108) also gets the run's Artifacts panel on the right while it waits
     // a report (#290: the release summary) leads the message, rendered on its own
@@ -160,7 +160,7 @@
       : open ? window.gateBriefHtml?.(chat.runId, it, full) : '';
     const help = !it.resolved && !it.closed && !waits ?window.gateButtonsHelpHtml?.(it) || '' : '';
     const side = open && typeof gateSideHtml === 'function' ? gateSideHtml(it, chat.runId) : '';
-    const main = `<div class="duo-meta"><b>Human gate</b>${stepTag(it.stepId)}<span class="time">${clock(it.ts)}</span></div>
+    const main = `<div class="duo-meta"><b>${t('runchat.human_gate')}</b>${stepTag(it.stepId)}<span class="time">${clock(it.ts)}</span></div>
       ${card || full}${tools}${field}<div class="row gate-choices">${buttons}</div>${help}${state}`;
     return `<div class="rc-gate" data-item="${it.id}"><div class="duo-ask${side ? ' run-gate-wide' : ''}" data-gate="${esc(it.approvalId)}">
       ${side ? `<div class="run-gate-main">${main}</div>${side}` : main}</div></div>`;
@@ -169,15 +169,15 @@
   function groupHtml(it) {
     const state = !it.done ? StatusPill.statusPill('running')
       : it.error ? StatusPill.statusPill('failed')
-        : it.failed?.length ? `<span class="pill pill-warn">${it.failed.length} failed</span>` : StatusPill.statusPill('done');
+        : it.failed?.length ? `<span class="pill pill-warn">${it.failed.length} ${t('runchat.failed')}</span>` : StatusPill.statusPill('done');
     return `<div class="rc-group" data-item="${it.id}"><div class="rc-group-head">
-      <span>Parallel · ${stepTag(it.stepId, it.visit)} · ${it.agents.map((a) => `<b${colorStyle(a)} title="${esc(a)}">${esc(nameOf(a))}</b>`).join(', ')}</span>${state}</div>
+      <span>${t('runchat.parallel_stepid', { stepId: stepTag(it.stepId, it.visit) })} ${it.agents.map((a) => `<b${colorStyle(a)} title="${esc(a)}">${esc(nameOf(a))}</b>`).join(', ')}</span>${state}</div>
       <div class="rc-group-body"></div></div>`;
   }
 
   // #396: the end's pill of a run that went on without a green suite (the event's summary, else its row's `tested`)
   const testedPill = (it) => ((it.tested || chat.tested) === 'not green'
-    ? ' <span class="pill pill-warn" data-testid="runchat-tested" title="The run reached the build without a green suite: see its suite step">Not tested green</span>' : '');
+    ? ` <span class="pill pill-warn" data-testid="runchat-tested" title="${t('runchat.the_run_reached_the_build_without')}">${t('runchat.not_tested_green')}</span>` : '');
 
   const SUP_WHAT = { retry:'Asked for a new attempt.', fix_output: 'Fixed the answer so the run can continue.', ask_human: 'Needs you: see the gate below.', fail: 'Could not recover this step.' };
   function itemHtml(it) {
@@ -186,22 +186,22 @@
         const issue = it.issues.length ? `${it.issues.length > 1 ? 'Issues' : 'Issue'} ${it.issues.map((i) => `<a href="${esc(i.url)}" target="_blank" rel="noopener">#${esc(i.number)}</a> ${esc(i.title || '')}`).join(' · ')}` : '';
         const inputs = Object.entries(it.inputs).filter(([k, v]) => k !== 'task' && v !== '' && v != null);
         return `<div data-item="${it.id}" class="rc-start"><div class="duo-msg user"><div class="duo-bubble">
-          <div class="duo-meta"><b>${esc(it.workflow)}</b>${it.version ? `<span class="tag">v${esc(it.version)}</span>` : ''}${it.mock ? '<span class="badge p-mock">Simulated</span>' : ''}<span class="time">${clock(it.ts)}</span></div>
-          ${it.task ? `<div class="rc-body md">${md(it.task)}</div>` : '<p class="muted small">No task.</p>'}
-          ${inputs.length ? `<details class="rc-more"><summary>Inputs</summary><dl class="rc-inputs">${inputs.map(([k, v]) => `<dt class="mono">${esc(k)}</dt><dd class="mono">${esc(typeof v === 'string' ? v : JSON.stringify(v))}</dd>`).join('')}</dl></details>` : ''}
-          </div></div>${it.resumedFrom ? `<div class="duo-note plain"><span>Resumed from ${esc(it.resumedFrom.run_id)} at <span title="${esc(it.resumedFrom.step)}">${esc(stepName(it.resumedFrom.step))}</span></span></div>` : ''}${issue ? `<div class="duo-note plain"><span>${issue}</span></div>` : ''}</div>`;
+          <div class="duo-meta"><b>${esc(it.workflow)}</b>${it.version ? `<span class="tag">v${esc(it.version)}</span>` : ''}${it.mock ? `<span class="badge p-mock">${t('runchat.simulated')}</span>` : ''}<span class="time">${clock(it.ts)}</span></div>
+          ${it.task ? `<div class="rc-body md">${md(it.task)}</div>` : `<p class="muted small">${t('runchat.no_task')}</p>`}
+          ${inputs.length ? `<details class="rc-more"><summary>${t('runchat.inputs')}</summary><dl class="rc-inputs">${inputs.map(([k, v]) => `<dt class="mono">${esc(k)}</dt><dd class="mono">${esc(typeof v === 'string' ? v : JSON.stringify(v))}</dd>`).join('')}</dl></details>` : ''}
+          </div></div>${it.resumedFrom ? `<div class="duo-note plain"><span>${t('runchat.resumed_from_run_id_at', { run_id: esc(it.resumedFrom.run_id) })} <span title="${esc(it.resumedFrom.step)}">${esc(stepName(it.resumedFrom.step))}</span></span></div>` : ''}${issue ? `<div class="duo-note plain"><span>${issue}</span></div>` : ''}</div>`;
       }
       case 'turn': return turnHtml(it);
       case 'fallback': return fallbackHtml(it);
       case 'group': return groupHtml(it);
       case 'gate': return gateHtml(it);
       case 'system': return `<div class="rc-sys ${it.level}" data-item="${it.id}"><span>${esc(it.text)}</span><time>${clock(it.ts)}</time></div>`;
-      case 'fail': return `<div class="rc-sys error" data-testid="run-chat-fail" data-item="${it.id}"><span title="${esc(it.stepId)}">${esc(stepName(it.stepId))} failed: ${esc(it.text.slice(0, 400))}</span><time>${clock(it.ts)}</time></div>`;
+      case 'fail': return `<div class="rc-sys error" data-testid="run-chat-fail" data-item="${it.id}"><span title="${esc(it.stepId)}">${esc(stepName(it.stepId))} ${t('runchat.failed_2')} ${esc(it.text.slice(0, 400))}</span><time>${clock(it.ts)}</time></div>`;
       case 'reply': return `<div class="duo-msg user reply" data-item="${it.id}"><div class="duo-bubble">
         <div class="duo-meta"><b>${it.by === 'user' ? 'You' : esc(it.by)}</b>${stepTag(it.stepId)}<span class="time">${clock(it.ts)}</span></div>
         <p><b>${esc(it.label)}</b></p>${it.feedback ? `<p class="duo-msg-text">${esc(it.feedback)}</p>` : ''}</div></div>`;
       case 'supervisor': return `<div class="duo-msg supervisor" data-item="${it.id}">${avatar({ agent: 'supervisor' })}<div class="duo-bubble">
-        <div class="duo-meta"><b>Supervisor</b>${stepTag(it.stepId)}<span class="tag">${esc(it.action)}${it.goto ? ` → ${esc(it.goto)}` : ''}${it.causeClass ? ` · ${esc(it.causeClass)}` : ''}</span><span class="time">${clock(it.ts)}</span></div>
+        <div class="duo-meta"><b>${t('runchat.supervisor')}</b>${stepTag(it.stepId)}<span class="tag">${esc(it.action)}${it.goto ? ` → ${esc(it.goto)}` : ''}${it.causeClass ? ` · ${esc(it.causeClass)}` : ''}</span><span class="time">${clock(it.ts)}</span></div>
         <p class="duo-msg-text">${esc(it.explanation)}</p>${it.instruction ? `<p class="duo-msg-text">${esc(it.instruction)}</p>` : ''}
         ${SUP_WHAT[it.action] ? `<p class="muted small">${SUP_WHAT[it.action]}</p>` : ''}</div></div>`;
       case 'end': {
@@ -209,7 +209,7 @@
         const tested = testedPill(it);
         // #384: the run that resumed this one (its row's resumedBy, read when a past run opens)
         return `<div class="duo-note ${ok ? 'done' : 'failed'}" data-item="${it.id}" data-testid="run-chat-finished"><span><b data-status="${esc(it.status)}">${ok ? 'Done' : esc(StatusPill.statusLabel(it.status))}</b>${tested}${!ok && it.error ? ` · ${esc(it.error.slice(0, 240))}` : ''} · $${(it.cost || 0).toFixed(2)} · ${fmtSecs(it.durationMs)}${StatusPill.resumedLink(chat.resumedBy)}</span>
-          <button type="button" class="link-btn small" data-resume title="Start a new run from a step of this one, keeping the previous outputs (no supervisor call)">Resume from step…</button></div>`;
+          <button type="button" class="link-btn small" data-resume title="${t('runchat.start_a_new_run_from_a')}">${t('runchat.resume_from_step')}</button></div>`;
       }
       default: return '';
     }
@@ -273,7 +273,7 @@
     // the run's title (editable) and PR (#84, app.js), its workflow next to them
     const run = { ...r, id: r.id };
     if (!$c('#rc-title .run-title-input')) $c('#rc-title').innerHTML = r.id
-      ? `<b>${window.runTitleHtml ? runTitleHtml(run) : esc(r.workflow)}</b> ${window.runPrBadge ? runPrBadge(run) : ''} <span class="muted small">${esc(r.workflow)}</span>${r.mock ? ' <span class="badge p-mock">Simulated</span>' : ''}${r.chain && window.ChainModel ? ` ${ChainModel.chainBadgesHtml(r.chain)}` : ''} <span class="muted small mono" data-testid="run-screen-id">${esc(r.id)}</span>`
+      ? `<b>${window.runTitleHtml ? runTitleHtml(run) : esc(r.workflow)}</b> ${window.runPrBadge ? runPrBadge(run) : ''} <span class="muted small">${esc(r.workflow)}</span>${r.mock ? ` <span class="badge p-mock">${t('runchat.simulated')}</span>` : ''}${r.chain && window.ChainModel ? ` ${ChainModel.chainBadgesHtml(r.chain)}` : ''} <span class="muted small mono" data-testid="run-screen-id">${esc(r.id)}</span>`
       : `<span class="muted mono" data-testid="run-screen-id">${esc(chat.runId || '')}</span>`;
     const status = chat.loading ? 'loading' : r.status === 'running' && !chat.live && !chat.elsewhere ? 'interrupted' : r.status || 'unknown';
     const waiting = chat.live && chat.model.pendingGates().length;
@@ -309,7 +309,7 @@
       events = await api.runEvents(runId, { activity: true }); // with tool calls and thinking
     } catch (e) {
       chat.loading = false;
-      $c('#rc-messages').innerHTML = `<p class="error">Could not load the run: ${esc(errMsg(e))}</p>`;
+      $c('#rc-messages').innerHTML = `<p class="error">${t('runchat.could_not_load_the_run')} ${esc(errMsg(e))}</p>`;
       drawHead();
       return;
     }
@@ -425,23 +425,23 @@
     markup: `
       <section id="view-runchat" class="view hidden">
         <header class="duo-chat-head run-tab-row" data-testid="run-tab-row">
-          <div class="tabs" role="tablist" aria-label="Run view">
-            <button class="tab active" type="button" role="tab" aria-selected="true">Chat</button>
-            <button id="rc-details" class="tab" type="button" role="tab" aria-selected="false" title="Sessions, prompts and events of this run">Details</button>
-            <button id="rc-3d" class="tab" type="button" role="tab" aria-selected="false" data-run3d="chat" data-testid="run-3d" title="Show this run in 3D">3D</button>
+          <div class="tabs" role="tablist" aria-label="${t('runchat.run_view')}">
+            <button class="tab active" type="button" role="tab" aria-selected="true">${t('runchat.chat')}</button>
+            <button id="rc-details" class="tab" type="button" role="tab" aria-selected="false" title="${t('runchat.sessions_prompts_and_events_of_this')}">${t('runchat.details')}</button>
+            <button id="rc-3d" class="tab" type="button" role="tab" aria-selected="false" data-run3d="chat" data-testid="run-3d" title="${t('runchat.show_this_run_in_3d')}">3D</button>
           </div>
           <div id="rc-title" class="rc-title"></div>
           <span id="rc-status" class="pill" data-testid="run-screen-status"></span>
           <div class="spacer"></div>
-          <span id="rc-cost" class="mono small muted" title="Cost so far"></span>
-          <button id="rc-logs" class="btn ghost sm" type="button" title="Open the run folder (events, sessions, artifacts)">Run folder</button>
-          <button id="rc-stop" class="btn danger sm hidden" type="button">Stop</button>
+          <span id="rc-cost" class="mono small muted" title="${t('runchat.cost_so_far')}"></span>
+          <button id="rc-logs" class="btn ghost sm" type="button" title="${t('runchat.open_the_run_folder_events_sessions')}">${t('runchat.run_folder')}</button>
+          <button id="rc-stop" class="btn danger sm hidden" type="button">${t('runchat.stop')}</button>
         </header>
         <div id="rc-scroll" class="rc-scroll">
           <div id="rc-messages" class="duo-messages rc-messages"></div>
           <div id="rc-typing" class="rc-typing"></div>
         </div>
-        <button id="rc-jump" class="btn sm rc-jump hidden" type="button" title="Scroll to the latest message">Jump to latest ↓</button>
+        <button id="rc-jump" class="btn sm rc-jump hidden" type="button" title="${t('runchat.scroll_to_the_latest_message')}">${t('runchat.jump_to_latest')}</button>
       </section>`,
     mount: init,
   });

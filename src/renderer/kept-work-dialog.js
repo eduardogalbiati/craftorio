@@ -20,7 +20,7 @@ function choiceDialog(title, message, choices, opts = {}) {
   if (details.length) {
     const box = document.createElement('details');
     box.className = 'confirm-more small muted';
-    box.innerHTML = `<summary>Details</summary><ul>${details.map((d) => `<li>${esc(d)}</li>`).join('')}</ul>`;
+    box.innerHTML = `<summary>${t('kept_work_dialog.details')}</summary><ul>${details.map((d) => `<li>${esc(d)}</li>`).join('')}</ul>`;
     lines.after(box);
     added.push(box);
   }

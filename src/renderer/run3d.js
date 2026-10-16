@@ -88,7 +88,7 @@
   function message(text, { error = false } = {}) {
     if (!current) return;
     current.el.querySelector('.r3d-root').innerHTML = `<div class="r3d-message"${error ? ' role="alert"' : ''}>
-      <p>${esc(text)}</p><button type="button" class="r3d-primary inline" data-r3d-close>Close</button></div>`;
+      <p>${esc(text)}</p><button type="button" class="r3d-primary inline" data-r3d-close>${t('common.close')}</button></div>`;
   }
 
   async function open(runId, opener = null) {

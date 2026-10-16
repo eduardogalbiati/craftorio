@@ -38,7 +38,7 @@ async function renderNotificationPanel() {
           ${n.body ? `<span class="nc-body">${esc(n.body)}</span>` : ''}
           <span class="nc-meta muted small">${esc(ncAgo(n.createdAt))}${n.issue ? ` · ${esc(n.issue)}` : ''}</span>
         </span>
-      </button>`).join('') : '<p class="muted small nc-empty">No notifications yet.</p>';
+      </button>`).join('') : `<p class="muted small nc-empty">${t('notification_center.no_notifications_yet')}</p>`;
     const byId = new Map(items.map((n) => [String(n.id), n]));
     list.querySelectorAll('.nc-item').forEach((b) => (b.onclick = () => openNotification(byId.get(b.dataset.id))));
   } catch (e) {

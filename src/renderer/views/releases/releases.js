@@ -19,7 +19,7 @@
   const count = (runs) => (Array.isArray(runs) ? runs.length : Number(runs) || 0);
   const issuesHtml = (issues) => (issues?.length
     ? `<ul class="rel-issues">${issues.map((i) => `<li><span class="mono muted">#${esc(i.number)}</span> <span title="${esc(i.title || '')}">${esc(i.title || '')}</span></li>`).join('')}</ul>`
-    : '<p class="muted small rel-none">No issue.</p>');
+    : `<p class="muted small rel-none">${t('releases.no_issue')}</p>`);
 
   // A suite's result as a badge: "Unit ✔ 412 passed". `t`: 'pass' | 'fail' | { status?, passed?, failed? }.
   function suiteBadge(name, t) {
@@ -39,25 +39,25 @@
     const version = n.version || d.line?.name || '';
     const going = d.run
       ? `<span class="badge live">${d.run.waiting ? 'waiting for your Ship' : 'release run in progress'}${d.run.mock ? ' · simulated' : ''}</span>
-          <button class="btn sm" type="button" data-rel-run="${esc(d.run.runId)}">Open the run</button>`
-      : `<label class="check small dev-only" title="Developer mode: the run is simulated, nothing is run or pushed"><input type="checkbox" id="rel-simulate"${state.simulationOnly ? ' checked' : ''} /><span>Simulated</span></label>
-          <button class="btn sm primary" type="button" data-rel-start title="Runs the whole unit suite and the whole E2E suite on the local base, then asks you to Ship or Hold. Nothing is pushed before your Ship.">Run the release checks</button>`;
+          <button class="btn sm" type="button" data-rel-run="${esc(d.run.runId)}">${t('releases.open_the_run')}</button>`
+      : `<label class="check small dev-only" title="${t('releases.developer_mode_the_run_is_simulated')}"><input type="checkbox" id="rel-simulate"${state.simulationOnly ? ' checked' : ''} /><span>${t('releases.simulated')}</span></label>
+          <button class="btn sm primary" type="button" data-rel-start title="${t('releases.runs_the_whole_unit_suite_and')}">${t('releases.run_the_release_checks')}</button>`;
     return `
-      <section class="rel-next" data-testid="release-next" aria-label="Next release">
+      <section class="rel-next" data-testid="release-next" aria-label="${t('releases.next_release')}">
         <div class="rel-head">
-          <b class="rel-title">Next release</b>
-          ${d.line ? `<span class="badge" title="The roadmap's cut line waiting for this release">cut line: ${esc(d.line.name)}</span>` : ''}
+          <b class="rel-title">${t('releases.next_release')}</b>
+          ${d.line ? `<span class="badge" title="${t('releases.the_roadmap_s_cut_line_waiting')}">${t('releases.cut_line')} ${esc(d.line.name)}</span>` : ''}
           <span class="muted small">${esc(what.join(' · '))}${n.since ? ` since ${esc(dateOf(n.since))}` : ''}</span>
         </div>
         ${issuesHtml(n.issues)}
         <div class="field">
-          <label for="rel-notes">Release notes</label>
+          <label for="rel-notes">${t('releases.release_notes')}</label>
           <textarea id="rel-notes" data-testid="release-notes" rows="8" spellcheck="true">${esc(n.notes || '')}</textarea>
-          <div class="hint">Generated from the issues and runs until you edit them; saved when you leave the field (empty: generated again). Ship records them with the release.</div>
+          <div class="hint">${t('releases.generated_from_the_issues_and_runs')}</div>
         </div>
         <div class="rel-actions">
           <div class="field rel-version-field">
-            <label for="rel-version">Version</label>
+            <label for="rel-version">${t('releases.version')}</label>
             <input type="text" id="rel-version" value="${esc(version)}" placeholder="e.g. v1.4" autocomplete="off"${d.run ? ' disabled' : ''} />
           </div>
           <span class="spacer"></span>
@@ -77,14 +77,14 @@
           <span class="muted small">${r.date ? esc(dateOf(r.date)) : ''}</span>
           <span class="spacer"></span>
           ${suiteBadge('Unit', tests.unit)}${suiteBadge('E2E', tests.e2e)}
-          <span class="badge" title="The runs merged into this release, its release run included">${plural(count(r.runs), 'run')}</span>
-          ${r.cost != null ? `<span class="badge" title="What its runs cost">${usd(r.cost)}</span>` : ''}
-          ${r.tag ? `<button type="button" class="btn sm" data-testid="release-show-map" data-tag="${esc(r.tag)}" title="The project city at the previous release in grey, what this release changed in colour">Show on the map</button>` : ''}
+          <span class="badge" title="${t('releases.the_runs_merged_into_this_release')}">${plural(count(r.runs), 'run')}</span>
+          ${r.cost != null ? `<span class="badge" title="${t('releases.what_its_runs_cost')}">${usd(r.cost)}</span>` : ''}
+          ${r.tag ? `<button type="button" class="btn sm" data-testid="release-show-map" data-tag="${esc(r.tag)}" title="${t('releases.the_project_city_at_the_previous')}">${t('releases.show_on_the_map')}</button>` : ''}
         </div>
         ${issuesHtml(r.issues)}
-        ${r.notes ? `<details class="rel-notes"><summary class="small muted">Notes</summary><div class="md md-compact">${markdownHtml(r.notes)}</div></details>` : ''}
-        ${r.summary ? `<details class="rel-notes"><summary class="small muted" data-testid="release-summary-link" data-rel-summary="${esc(r.version)}" title="What the release run did: its rounds, its fixes, what to check before shipping, follow-ups">Release summary</summary>
-          <div class="md md-compact rel-summary" data-testid="release-summary"><p class="muted small">Loading…</p></div></details>` : ''}
+        ${r.notes ? `<details class="rel-notes"><summary class="small muted">${t('releases.notes')}</summary><div class="md md-compact">${markdownHtml(r.notes)}</div></details>` : ''}
+        ${r.summary ? `<details class="rel-notes"><summary class="small muted" data-testid="release-summary-link" data-rel-summary="${esc(r.version)}" title="${t('releases.what_the_release_run_did_its')}">${t('releases.release_summary')}</summary>
+          <div class="md md-compact rel-summary" data-testid="release-summary"><p class="muted small">${t('releases.loading')}</p></div></details>` : ''}
       </article>`;
   }
 
@@ -106,13 +106,13 @@
     const d = rel.data;
     const box = $('#rel-body');
     if (!d?.next && !d?.releases?.length) {
-      box.innerHTML = '<div class="empty-state"><b>No project yet</b><p class="muted">Choose or create a project in the header: its releases show here.</p></div>';
+      box.innerHTML = `<div class="empty-state"><b>${t('releases.no_project_yet')}</b><p class="muted">${t('releases.choose_or_create_a_project_in')}</p></div>`;
       return;
     }
     const list = d.releases?.length
       ? d.releases.map(rowHtml).join('')
-      : '<div class="empty-state"><b>No release yet</b><p class="muted">Draw a cut line on the Roadmap ("Release here") or run the release checks: your Ship pushes the local base, tags it and lists the release here.</p></div>';
-    box.innerHTML = `${nextHtml(d)}<h2 class="rel-list-title">Shipped</h2><div class="rel-list" data-testid="releases-list">${list}</div>`;
+      : `<div class="empty-state"><b>${t('releases.no_release_yet')}</b><p class="muted">${t('releases.draw_a_cut_line_on_the')}</p></div>`;
+    box.innerHTML = `${nextHtml(d)}<h2 class="rel-list-title">${t('releases.shipped')}</h2><div class="rel-list" data-testid="releases-list">${list}</div>`;
   }
 
   async function refresh() {
@@ -157,8 +157,8 @@
       <section id="view-releases" class="view hidden">
         <div class="page-head">
           <div>
-            <h1>Releases</h1>
-            <p class="muted small">What shipped and what the next release holds, for the project chosen in the header. A release run checks the whole unit and E2E suites; nothing is pushed without your Ship.</p>
+            <h1>${t('releases.releases')}</h1>
+            <p class="muted small">${t('releases.what_shipped_and_what_the_next')}</p>
           </div>
         </div>
         <p id="rel-error" class="error small"></p>

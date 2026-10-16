@@ -82,8 +82,8 @@ function renderProjectView() {
       ${p?.description ? `<p class="muted">${esc(p.description)}</p>` : ''}
     </div>
     <div class="row">
-      <button class="btn ghost" id="pv-open-folder" ${p?.exists ? '' : 'disabled'}>Open folder</button>
-      <button class="btn primary" id="pv-start">Start workflow</button>
+      <button class="btn ghost" id="pv-open-folder" ${p?.exists ? '' : 'disabled'}>${t('project.open_folder')}</button>
+      <button class="btn primary" id="pv-start">${t('project.start_workflow')}</button>
     </div>`;
   $('#pv-open-folder').onclick = () => p && api.openPath(p.folder);
   $('#pv-start').onclick = () => openDrawer({ project: pv.id });
@@ -99,9 +99,9 @@ function renderProjectView() {
   if (pv.tab !== 'overview') return;
   $('#project-info').innerHTML = `
     <dl class="kv">
-      <dt>folder</dt><dd class="${p && !p.exists ? 'warn-text' : ''}">${esc(p?.folder || '—')}${p && !p.exists ? ' (not found)' : ''}</dd>
-      <dt>repository</dt><dd>${esc(p?.repo || '—')}</dd>
-      ${pv.local?.ahead > 0 ? `<dt>not pushed</dt><dd class="warn-text">${pv.local.ahead} commit${pv.local.ahead === 1 ? '' : 's'} on the local ${esc(pv.local.base)}${pv.local.issues?.length ? ` (closes ${esc(pv.local.issues.map((n) => `#${n}`).join(', '))})` : ''}: push from the Backlog</dd>` : ''}
+      <dt>${t('project.folder')}</dt><dd class="${p && !p.exists ? 'warn-text' : ''}">${esc(p?.folder || '—')}${p && !p.exists ? ' (not found)' : ''}</dd>
+      <dt>${t('project.repository')}</dt><dd>${esc(p?.repo || '—')}</dd>
+      ${pv.local?.ahead > 0 ? `<dt>${t('project.not_pushed')}</dt><dd class="warn-text">${pv.local.ahead} ${t('project.commit_value_on_the_local_base', { value: pv.local.ahead === 1 ? '' : 's', base: esc(pv.local.base), value2: pv.local.issues?.length ? ` (closes ${esc(pv.local.issues.map((n) => `#${n}`).join(', '))})` : '' })}</dd>` : ''}
     </dl>`;
   renderRunList(pv, {
     prefix: 'project', box: '#project-runs', empty: 'No workflows have run in this project yet.',
@@ -127,29 +127,29 @@ registerView({
   menu: 'projects',
   markup: `
       <section id="view-project" class="view hidden" data-testid="project-page">
-        <button id="btn-project-back" class="link-btn back-link" type="button">← Projects</button>
+        <button id="btn-project-back" class="link-btn back-link" type="button">${t('project.projects')}</button>
         <div id="project-head" class="page-head"></div>
-        <div id="project-tabs" class="tabs page-tabs" role="tablist" aria-label="Project"></div>
-        <div id="project-panel-overview" role="tabpanel" aria-label="Overview" data-testid="project-overview">
+        <div id="project-tabs" class="tabs page-tabs" role="tablist" aria-label="${t('project.project')}"></div>
+        <div id="project-panel-overview" role="tabpanel" aria-label="${t('project.overview')}" data-testid="project-overview">
           <div id="project-info" class="pr-head-info"></div>
           <div class="pr-toolbar">
             <div id="project-run-filters" class="chips"></div>
             <span class="spacer"></span>
-            <input type="text" id="project-run-search" class="pr-search" placeholder="Search runs" aria-label="Search runs" spellcheck="false" />
-            <label class="check small"><input type="checkbox" id="project-show-sim" /><span>Show simulated</span></label>
-            <button id="btn-project-refresh" class="btn sm ghost">Refresh</button>
+            <input type="text" id="project-run-search" class="pr-search" placeholder="${t('project.search_runs')}" aria-label="${t('project.search_runs')}" spellcheck="false" />
+            <label class="check small"><input type="checkbox" id="project-show-sim" /><span>${t('project.show_simulated')}</span></label>
+            <button id="btn-project-refresh" class="btn sm ghost">${t('project.refresh')}</button>
           </div>
           <p id="project-runs-error" class="error small"></p>
           <div id="project-runs" class="pr-list"></div>
         </div>
-        <div id="project-panel-conflicts" class="hidden" role="tabpanel" aria-label="Conflict map" data-testid="project-conflict-map">
+        <div id="project-panel-conflicts" class="hidden" role="tabpanel" aria-label="${t('project.conflict_map')}" data-testid="project-conflict-map">
           <div id="project-conflicts"></div>
         </div>
-        <div id="project-panel-architecture" class="hidden" role="tabpanel" aria-label="Architecture" data-testid="project-architecture">
+        <div id="project-panel-architecture" class="hidden" role="tabpanel" aria-label="${t('project.architecture')}" data-testid="project-architecture">
           <div id="project-architecture"></div>
           <div id="project-seeds"></div>
         </div>
-        <div id="project-panel-refactor" class="hidden" role="tabpanel" aria-label="Refactor">
+        <div id="project-panel-refactor" class="hidden" role="tabpanel" aria-label="${t('project.refactor')}">
           <div id="project-refactor"></div>
         </div>
       </section>`,

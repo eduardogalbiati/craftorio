@@ -72,7 +72,7 @@
     button.className = 'nav-item nav-findings hidden';
     button.dataset.testid = 'findings-button';
     button.title = `Findings: freeze this view, mark what is wrong, save or file it (${M.SHORTCUT})`;
-    button.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="2.5" /><line x1="12" y1="1.5" x2="12" y2="5" /><line x1="12" y1="19" x2="12" y2="22.5" /><line x1="1.5" y1="12" x2="5" y2="12" /><line x1="19" y1="12" x2="22.5" y2="12" /></svg><span>Findings</span>';
+    button.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="2.5" /><line x1="12" y1="1.5" x2="12" y2="5" /><line x1="12" y1="19" x2="12" y2="22.5" /><line x1="1.5" y1="12" x2="5" y2="12" /><line x1="19" y1="12" x2="22.5" y2="12" /></svg><span>${t('findings.findings')}</span>`;
     // not a screen of the sidebar: app.js's navigation never sees this click
     button.addEventListener('click', (e) => { e.stopPropagation(); open(); });
     // #411 at the menu's end: entries registered later go before the highest order (view-registry.js)
@@ -123,27 +123,27 @@
     el.setAttribute('aria-modal', 'true');
     el.setAttribute('aria-label', 'Findings');
     el.innerHTML = `
-      <div class="fd-bar" data-testid="findings-toolbar" role="toolbar" aria-label="Marking tools">
+      <div class="fd-bar" data-testid="findings-toolbar" role="toolbar" aria-label="${t('findings.marking_tools')}">
         <div class="seg sm fd-tools">${TOOLS.map(([k, label]) => `<button type="button" data-fd-tool="${k}" data-testid="findings-tool-${k}" aria-pressed="false">${label}</button>`).join('')}</div>
-        <button type="button" class="btn sm ghost" data-fd-undo data-testid="findings-undo" title="Remove the last mark (Ctrl+Z)">Undo mark</button>
+        <button type="button" class="btn sm ghost" data-fd-undo data-testid="findings-undo" title="${t('findings.remove_the_last_mark_ctrl_z')}">${t('findings.undo_mark')}</button>
         <span class="fd-spacer"></span>
-        <span class="fd-status small" data-testid="findings-status" role="status" aria-live="polite"><span class="fd-status-text">Marking: click the frozen view to place a numbered pin.</span></span>
-        <button type="button" class="btn sm primary" data-fd-save data-testid="findings-save">Save</button>
-        <button type="button" class="btn sm" data-fd-file data-testid="findings-file-issue" title="Send it to the Product Owner of the current project, who files it as an issue">File as issue</button>
-        <button type="button" class="btn sm ghost" data-fd-cancel data-testid="findings-cancel" title="Close without saving (Esc)">Cancel</button>
+        <span class="fd-status small" data-testid="findings-status" role="status" aria-live="polite"><span class="fd-status-text">${t('findings.marking_click_the_frozen_view_to')}</span></span>
+        <button type="button" class="btn sm primary" data-fd-save data-testid="findings-save">${t('common.save')}</button>
+        <button type="button" class="btn sm" data-fd-file data-testid="findings-file-issue" title="${t('findings.send_it_to_the_product_owner')}">${t('findings.file_as_issue')}</button>
+        <button type="button" class="btn sm ghost" data-fd-cancel data-testid="findings-cancel" title="${t('findings.close_without_saving_esc')}">${t('common.cancel')}</button>
       </div>
       <div class="fd-main">
         <div class="fd-stage">
           <div class="fd-frame" data-testid="findings-frame">
-            <span class="fd-frame-label">Frozen view · ${size.width}×${size.height}</span>
-            ${image ? '<img class="fd-img" alt="The frozen view" draggable="false" />' : '<div class="fd-img fd-blank"></div>'}
-            <canvas class="fd-canvas" data-testid="findings-canvas" aria-label="The frozen view: click or drag to mark it"></canvas>
+            <span class="fd-frame-label">${t('findings.frozen_view_width', { width: size.width })}${size.height}</span>
+            ${image ? `<img class="fd-img" alt="${t('findings.the_frozen_view')}" draggable="false" />` : '<div class="fd-img fd-blank"></div>'}
+            <canvas class="fd-canvas" data-testid="findings-canvas" aria-label="${t('findings.the_frozen_view_click_or_drag')}"></canvas>
             <div class="fd-pins"></div>
           </div>
         </div>
         <aside class="fd-side">
-          <label class="fd-field"><span>Note</span><textarea data-testid="findings-note" rows="5" placeholder="What is wrong on this screen, and what did you expect?"></textarea></label>
-          <div class="fd-field"><span>Marks</span><ol class="fd-marks" data-testid="findings-marks" data-empty="No marks yet."></ol></div>
+          <label class="fd-field"><span>${t('findings.note')}</span><textarea data-testid="findings-note" rows="5" placeholder="${t('findings.what_is_wrong_on_this_screen')}"></textarea></label>
+          <div class="fd-field"><span>${t('findings.marks')}</span><ol class="fd-marks" data-testid="findings-marks" data-empty="No marks yet."></ol></div>
           <p class="muted small">${esc(at.view || '?')}${at.tab ? ` › ${esc(at.tab)}` : ''} · ${size.width}×${size.height}</p>
         </aside>
       </div>`;
@@ -312,8 +312,8 @@
     list.innerHTML = cur.marks.map((m, i) => `
       <li class="fd-mark">
         <span class="fd-mark-name" title="${esc(markLabel(m))}">${esc(markLabel(m))}</span>
-        <input type="text" data-fd-note="${i}" value="${esc(m.note || '')}" placeholder="Note (optional)" aria-label="Note for ${esc(markLabel(m))}" />
-        <button type="button" class="link-btn" data-fd-remove="${i}" aria-label="Remove ${esc(markLabel(m))}" title="Remove this mark">✕</button>
+        <input type="text" data-fd-note="${i}" value="${esc(m.note || '')}" placeholder="${t('findings.note_optional')}" aria-label="${t('findings.note_for_m', { m: esc(markLabel(m)) })}" />
+        <button type="button" class="link-btn" data-fd-remove="${i}" aria-label="${t('findings.remove_m', { m: esc(markLabel(m)) })}" title="${t('findings.remove_this_mark')}">✕</button>
       </li>`).join('');
     renderPins();
   }
@@ -443,7 +443,7 @@
       const saved = await api.saveFinding({ image, marked, marks, note, context: mine.context });
       mine.saved = saved;
       if (cur !== mine) return saved;
-      setStatus('saved', `Saved to findings/${saved.id}`, `<button type="button" class="btn sm ghost" data-fd-open="${esc(saved.dir)}">Open folder</button>`);
+      setStatus('saved', `Saved to findings/${saved.id}`, `<button type="button" class="btn sm ghost" data-fd-open="${esc(saved.dir)}">${t('findings.open_folder')}</button>`);
       return saved;
     } catch (e) {
       if (cur === mine) setStatus('error', `Not saved: ${errMsg(e)}`);
@@ -503,9 +503,9 @@
       <li class="fd-item" data-testid="settings-finding">
         <span class="fd-item-note" title="${esc(f.note || '')}">${esc(f.note || '(no note)')}</span>
         <span class="badge fd-badge-${esc(f.status)}">${esc(STATUS[f.status] || f.status)}</span>
-        ${f.issueUrl ? `<a class="small" href="${esc(f.issueUrl)}" target="_blank" rel="noopener">Issue</a>` : ''}
+        ${f.issueUrl ? `<a class="small" href="${esc(f.issueUrl)}" target="_blank" rel="noopener">${t('findings.issue')}</a>` : ''}
         <span class="muted small mono" title="${esc(f.dir)}">${esc(f.id)}</span>
-        <button type="button" class="btn sm ghost" data-fd-open="${esc(f.dir)}">Open folder</button>
+        <button type="button" class="btn sm ghost" data-fd-open="${esc(f.dir)}">${t('findings.open_folder')}</button>
       </li>`).join('');
     el.querySelectorAll('[data-fd-open]').forEach((b) => (b.onclick = () => api.openPath(b.dataset.fdOpen).catch(() => {})));
   }

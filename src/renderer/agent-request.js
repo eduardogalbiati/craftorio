@@ -44,15 +44,15 @@
     const st = stateOf(msg, result);
     const failed = st.pill === 'failed';
     const outcome = !result ? (msg.pending && msg.waits ? `<div class="small muted">${esc(msg.waits)}</div>` : '')
-      : result.answer ? `<div class="small">Answered below.</div>`
+      : result.answer ? `<div class="small">${t('agent_request.answered_below')}</div>`
         : `<div class="md md-compact">${esc(result.text || '')}</div>`;
     const cost = result ? `<div class="sup-wmsg-meta">${esc(usd(result.costUsd))} · ${result.model ? esc(result.model) : 'no model call'}</div>` : '';
-    const back = r.from === 'oracle' ? ` · <a href="#" data-open-oracle-chat title="The Oracle's message that sent this request">Oracle's chat</a>` : '';
+    const back = r.from === 'oracle' ? ` · <a href="#" data-open-oracle-chat title="${t('agent_request.the_oracle_s_message_that_sent')}">${t('agent_request.oracle_s_chat')}</a>` : '';
     const buttons = !owner ? ''
-      : st.canDo ? `<button class="btn primary sm" type="button" data-request-act="do" data-testid="request-do">Do it</button><button class="btn ghost sm" type="button" data-request-act="dismiss" data-testid="request-dismiss">Dismiss</button>`
-        : st.canUndo ? `<button class="btn ghost sm" type="button" data-request-act="undo" data-testid="request-undo" title="Put back the backup taken before the change">Undo</button>` : '';
+      : st.canDo ? `<button class="btn primary sm" type="button" data-request-act="do" data-testid="request-do">${t('agent_request.do_it')}</button><button class="btn ghost sm" type="button" data-request-act="dismiss" data-testid="request-dismiss">${t('common.dismiss')}</button>`
+        : st.canUndo ? `<button class="btn ghost sm" type="button" data-request-act="undo" data-testid="request-undo" title="${t('agent_request.put_back_the_backup_taken_before')}">${t('common.undo')}</button>` : '';
     return `<div class="sup-wmsg system agent-request${failed ? ' error' : ''}" data-testid="${esc(testid)}" data-request-ref="${esc(r.ref || '')}"${owner ? ` data-request-owner="${esc(owner)}" data-request-project="${esc(projectId || '')}"` : ''}>
-      <div class="sup-wmsg-meta">Request from ${esc(sender(r.from))} at ${esc(hhmm(msg.ts))} · <span class="badge">${esc(r.kind || '')}</span> · <span class="pill pill-${st.pill}" data-testid="request-state">${esc(st.label)}</span>${back}</div>
+      <div class="sup-wmsg-meta">${t('agent_request.request_from_from_at_ts', { from: esc(sender(r.from)), ts: esc(hhmm(msg.ts)) })} <span class="badge">${esc(r.kind || '')}</span> · <span class="pill pill-${st.pill}" data-testid="request-state">${esc(st.label)}</span>${back}</div>
       ${msg.reason ? `<div>${esc(msg.reason)}</div>` : ''}
       ${question ? `<div class="small muted">${esc(question.text)}</div>` : ''}
       ${outcome}${cost}${buttons ? `<div class="row agent-request-actions">${buttons}</div>` : ''}</div>`;

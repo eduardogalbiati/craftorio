@@ -94,7 +94,7 @@
       ind = document.createElement('span');
       ind.className = 'voice-busy';
       ind.setAttribute('role', 'status');
-      ind.innerHTML = '<span class="voice-busy-spin" aria-hidden="true"></span>Transcribing…';
+      ind.innerHTML = `<span class="voice-busy-spin" aria-hidden="true"></span>${t('voice.transcribing')}`;
       ta._voiceInd = ind;
       ta._voiceBtn.after(ind);
     }

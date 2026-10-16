@@ -45,27 +45,27 @@
         const rows = Object.entries(defs).filter(([k, d]) => mappable(k, d));
         const srcOptions = (k) => {
           const cur = then.map?.[k] || '';
-          const o = [`<option value=""${!cur ? ' selected' : ''}>Not mapped (its default)</option>`];
-          for (const [name, d] of Object.entries(outs)) o.push(`<option value="${esc(name)}"${cur === name ? ' selected' : ''} title="${esc(d?.description || '')}">Output: ${esc(name)}</option>`);
-          o.push(`<option value="${ChainModel.RUN_SOURCE}"${cur === ChainModel.RUN_SOURCE ? ' selected' : ''}>The previous run itself</option>`);
+          const o = [`<option value=""${!cur ? ' selected' : ''}>${t('chain_picker.not_mapped_its_default')}</option>`];
+          for (const [name, d] of Object.entries(outs)) o.push(`<option value="${esc(name)}"${cur === name ? ' selected' : ''} title="${esc(d?.description || '')}">${t('chain_picker.output')} ${esc(name)}</option>`);
+          o.push(`<option value="${ChainModel.RUN_SOURCE}"${cur === ChainModel.RUN_SOURCE ? ' selected' : ''}>${t('chain_picker.the_previous_run_itself')}</option>`);
           return o.join('');
         };
         const own = Object.fromEntries(Object.entries(defs).filter(([k, d]) => ownInput(k, d)));
-        body = `<div class="field"><label for="${id}-wf">Next workflow</label><select id="${id}-wf" data-cp-wf>${list().map((w) => `<option value="${esc(w.file)}"${w.file === then.workflow ? ' selected' : ''}>${esc(w.name)}</option>`).join('')}</select></div>`
+        body = `<div class="field"><label for="${id}-wf">${t('chain_picker.next_workflow')}</label><select id="${id}-wf" data-cp-wf>${list().map((w) => `<option value="${esc(w.file)}"${w.file === then.workflow ? ' selected' : ''}>${esc(w.name)}</option>`).join('')}</select></div>`
           + (rows.length ? `<div class="cp-map wi-grid">${rows.map(([k, d]) => `<div class="field"><label for="${id}-m-${esc(k)}">${esc(label(k, d))} ←</label><select id="${id}-m-${esc(k)}" data-cp-map="${esc(k)}">${srcOptions(k)}</select>${d.description ? `<div class="hint">${esc(d.description)}</div>` : ''}</div>`).join('')}</div>` : '')
           + (Object.keys(own).length ? `<div class="cp-own wi-grid" data-wi-scope>${WorkflowInputs.formHtml(own, { values: then.inputs || {}, id: (k) => `${id}-in-${k}`, attrs: (k) => `data-cp-input="${esc(k)}"` })}</div>` : '')
-          + '<p class="hint">Its folder, branch and language come from this run. Its gates still wait for you.</p>';
+          + `<p class="hint">${t('chain_picker.its_folder_branch_and_language_come')}</p>`;
       } else if (action === 'queue') {
         const targets = list().filter((w) => w.inputs?.task);
-        body = `<div class="field"><label for="${id}-wf">Queue for</label><select id="${id}-wf" data-cp-wf>${targets.map((w) => `<option value="${esc(w.file)}"${w.file === then.workflow ? ' selected' : ''}>${esc(w.name)}</option>`).join('')}</select>`
-          + '<div class="hint">The produced issues go to the Backlog queue, grouped when the analysis advised it.</div></div>';
+        body = `<div class="field"><label for="${id}-wf">${t('chain_picker.queue_for')}</label><select id="${id}-wf" data-cp-wf>${targets.map((w) => `<option value="${esc(w.file)}"${w.file === then.workflow ? ' selected' : ''}>${esc(w.name)}</option>`).join('')}</select>`
+          + `<div class="hint">${t('chain_picker.the_produced_issues_go_to_the')}</div></div>`;
       } else if (action === 'product_owner') {
-        body = '<p class="hint">The Product Owner proposes where the produced issues go in the roadmap, as planned stages: nothing starts until you press Start.</p>';
+        body = `<p class="hint">${t('chain_picker.the_product_owner_proposes_where_the')}</p>`;
       }
       el.innerHTML = `<div class="chain-picker">
-        <div class="field"><label for="${id}-action">When it finishes</label>
+        <div class="field"><label for="${id}-action">${t('chain_picker.when_it_finishes')}</label>
           <select id="${id}-action" data-cp-action>${opt('none')}${opt('workflow')}${opt('product_owner', !producesIssues(), issuesTip)}${opt('queue', !producesIssues(), issuesTip)}</select>
-          ${action === 'none' ? '<div class="hint">Optional: hand this run\'s result to another workflow, the Product Owner or the queue. Only a successful run goes on.</div>' : ''}
+          ${action === 'none' ? `<div class="hint">${t('chain_picker.optional_hand_this_run_s_result')}</div>` : ''}
         </div>
         ${body}
         ${action === 'none' ? '' : '<p class="hint cp-estimate" data-cp-estimate></p>'}

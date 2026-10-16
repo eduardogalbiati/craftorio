@@ -62,11 +62,11 @@
   }
   const money = (n) => `$${(Number(n) || 0).toFixed(2)}`;
   function headerHtml(d) {
-    if (!d) return '<span class="muted">No agent</span>';
+    if (!d) return `<span class="muted">${t('agents_window.no_agent')}</span>`;
     const h = (typeof d.header === 'function' ? d.header() : null) || {};
-    const parts = [h.model && `<span class="mono aw-model" title="Model">${esc(h.model)}</span>`,
-      h.cost != null && `<span title="What this conversation cost">${esc(money(h.cost))}</span>`,
-      h.tokens != null && `<span title="Tokens of this conversation">${esc(Number(h.tokens).toLocaleString('en-US'))} tokens</span>`,
+    const parts = [h.model && `<span class="mono aw-model" title="${t('agents_window.model')}">${esc(h.model)}</span>`,
+      h.cost != null && `<span title="${t('agents_window.what_this_conversation_cost')}">${esc(money(h.cost))}</span>`,
+      h.tokens != null && `<span title="${t('agents_window.tokens_of_this_conversation')}">${esc(Number(h.tokens).toLocaleString('en-US'))} ${t('agents_window.tokens')}</span>`,
       h.note && `<span class="aw-note" title="${esc(h.note)}">${esc(h.note)}</span>`].filter(Boolean);
     return `<span class="aw-head-avatar" aria-hidden="true">${avatarHtml(d)}</span><h1 class="aw-title">${esc(d.name)}</h1>${parts.length ? `<span class="muted small aw-facts">${parts.join(' · ')}</span>` : ''}`;
   }
@@ -95,7 +95,7 @@
     if (prev !== d || !pane.childNodes.length) {
       pane.innerHTML = '';
       aw.selected = d.id;
-      try { d.mount(pane); } catch (e) { console.error('[agents-window] mount:', e); pane.innerHTML = `<p class="error small">Could not open ${esc(d.name)}: ${esc(e.message || e)}</p>`; }
+      try { d.mount(pane); } catch (e) { console.error('[agents-window] mount:', e); pane.innerHTML = `<p class="error small">${t('agents_window.could_not_open_name', { name: esc(d.name) })} ${esc(e.message || e)}</p>`; }
     }
     aw.selected = d.id;
     paint();
@@ -109,7 +109,7 @@
     aw.root = el;
     aw.selected = null;
     el.classList.add('aw');
-    el.innerHTML = `<nav class="aw-rail" data-testid="agents-rail" aria-label="Agents"></nav>
+    el.innerHTML = `<nav class="aw-rail" data-testid="agents-rail" aria-label="${t('agents_window.agents')}"></nav>
       <section class="aw-pane" data-testid="agents-window-pane">
         <header class="aw-header" data-testid="agents-window-header"></header>
         <div class="aw-chat"></div>

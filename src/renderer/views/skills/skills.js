@@ -7,7 +7,7 @@ async function refreshSkills() {
   state.skills = await api.listSkills();
   const box = $('#skills-list');
   if (!state.skills.length) {
-    box.innerHTML = `<div class="empty-state"><b>No skills yet</b><p class="muted">Skills are reusable instructions (SKILL.md) that agents can follow.</p><button class="btn primary" id="empty-new-skill">New skill</button></div>`;
+    box.innerHTML = `<div class="empty-state"><b>${t('skills.no_skills_yet')}</b><p class="muted">${t('skills.skills_are_reusable_instructions_skill_md')}</p><button class="btn primary" id="empty-new-skill">${t('skills.new_skill')}</button></div>`;
     $('#empty-new-skill').onclick = () => openSkillModal(null);
     return;
   }
@@ -21,8 +21,8 @@ async function refreshSkills() {
       <div class="card-actions">
         <span class="muted small">${s.updatedAt ? `updated ${esc(dateOf(s.updatedAt))}` : ''}${s.files?.length ? ` · +${s.files.length} file(s)` : ''}</span>
         <span class="spacer"></span>
-        <button class="btn sm ghost" data-act="open">Folder</button>
-        <button class="btn sm ghost danger" data-act="remove">Remove</button>
+        <button class="btn sm ghost" data-act="open">${t('skills.folder')}</button>
+        <button class="btn sm ghost danger" data-act="remove">${t('skills.remove')}</button>
       </div>
     </div>`).join('');
   box.querySelectorAll('.card').forEach((c) => (c.onclick = async (e) => {
@@ -72,12 +72,12 @@ registerView({
       <section id="view-skills" class="view hidden">
         <div class="page-head">
           <div>
-            <h1>Skills</h1>
-            <p class="muted small">One folder per skill with a <span class="mono">SKILL.md</span> (Claude Code format). In <span id="skills-dir" class="mono"></span></p>
+            <h1>${t('skills.skills')}</h1>
+            <p class="muted small">${t('skills.one_folder_per_skill_with_a')} <span class="mono">${t('skills.skill_md')}</span> ${t('skills.claude_code_format_in')} <span id="skills-dir" class="mono"></span></p>
           </div>
           <div class="row">
-            <button id="btn-skills-folder" class="btn ghost">Open folder</button>
-            <button id="btn-new-skill" class="btn primary">New skill</button>
+            <button id="btn-skills-folder" class="btn ghost">${t('skills.open_folder')}</button>
+            <button id="btn-new-skill" class="btn primary">${t('skills.new_skill')}</button>
           </div>
         </div>
         <div id="skills-list" class="card-grid"></div>
@@ -85,25 +85,25 @@ registerView({
   modals: `
   <div id="skill-modal" class="modal hidden">
     <form id="skill-form" class="modal-card wide">
-      <h3 id="skill-modal-title">New skill</h3>
+      <h3 id="skill-modal-title">${t('skills.new_skill')}</h3>
       <div class="field" id="sk-name-field">
-        <label for="sk-name">Name <span class="req">*</span></label>
-        <input type="text" id="sk-name" name="name" placeholder="e.g. code-review-checklist" />
+        <label for="sk-name">${t('skills.name')} <span class="req">*</span></label>
+        <input type="text" id="sk-name" name="name" placeholder="${t('skills.e_g_code_review_checklist')}" />
       </div>
       <div class="field">
-        <label for="sk-description">Description <span class="muted">(when the agent should use the skill)</span></label>
+        <label for="sk-description">${t('skills.description')} <span class="muted">${t('skills.when_the_agent_should_use_the')}</span></label>
         <input type="text" id="sk-description" name="description" />
       </div>
       <div class="field">
-        <label for="sk-body">Instructions (Markdown)</label>
+        <label for="sk-body">${t('skills.instructions_markdown')}</label>
         <textarea id="sk-body" name="body" rows="14" class="mono"></textarea>
       </div>
       <p id="sk-error" class="error small"></p>
       <div class="modal-actions">
-        <button type="button" id="btn-sk-folder" class="btn ghost hidden">Open folder</button>
+        <button type="button" id="btn-sk-folder" class="btn ghost hidden">${t('skills.open_folder')}</button>
         <span class="spacer"></span>
-        <button type="button" id="btn-sk-cancel" class="btn ghost">Cancel</button>
-        <button type="submit" class="btn primary">Save</button>
+        <button type="button" id="btn-sk-cancel" class="btn ghost">${t('common.cancel')}</button>
+        <button type="submit" class="btn primary">${t('common.save')}</button>
       </div>
     </form>
   </div>`,
