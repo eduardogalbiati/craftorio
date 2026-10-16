@@ -5,7 +5,8 @@
 // The token comes from MULTIAGENT_SERVER_TOKEN, else a random one is generated; open the printed
 // URL (it carries the token once, then a cookie keeps it). A desktop app saves the token: set
 // MULTIAGENT_SERVER_TOKEN so it stays the same across restarts. Same workspace as the app unless
-// --workspace is given. Runs need the same account as the app: sign in from the browser UI (the
+// --workspace is given; like the app, the server locks its workspace (#112): it refuses to start on a
+// workspace the desktop app (or another server) has open. Runs need the same account as the app: sign in from the browser UI (the
 // sign-in page opens on this machine) or set MULTIAGENT_AUTH=off. A desktop app on another computer
 // cannot sign this server in (the sign-in page would open here): it uses MULTIAGENT_AUTH=off.
 //
@@ -23,6 +24,7 @@ const { createService } = require('../src/service');
 const { createServer } = require('../src/server');
 const { createAuth, fileStorage } = require('../src/auth');
 const authConfig = require('../src/auth-config');
+const runOwner = require('../src/run-owner');
 const { isTailscaleIp, lanAddresses, resolveListenHost } = require('../src/engine-connection');
 
 function parseArgs(argv) {
@@ -55,8 +57,18 @@ if (listen.error) {
   console.error(listen.error);
   process.exit(1);
 }
-const found =args.workspace ? { dir: args.workspace, source: 'arg' } : workspace.resolveWorkspace();
+const found = args.workspace ? { dir: args.workspace, source: 'arg' } : workspace.resolveWorkspace();
 const ws = workspace.setupWorkspace(found.dir || found.fallback, { persist: !['arg', 'env', 'simulation'].includes(found.source) });
+
+// One engine per workspace (#112): the desktop app holds this lock on the workspace it opens, and so
+// does the server; two engines on one workspace would take each other's runs for interrupted.
+const lock = runOwner.lockWorkspace(ws.root, { app: path.join(__dirname, '..'), server: true });
+if (!lock.ok) {
+  const h = lock.holder;
+  console.error(`This workspace is already open${h ? ` in process ${h.pid} on ${h.host}, since ${h.started_at}` : ' in another copy of the app'}: ${ws.root}`);
+  console.error('Close the desktop app (or the other server) on this computer first, or pass --workspace <another folder>.');
+  process.exit(1);
+}
 
 // The account session of the server lives next to the user's home, readable only by this user
 // (there is no OS encryption here as in the desktop app).
@@ -125,6 +137,7 @@ server.listen(args.port, listen.host, async () => {
 
 const stop = () => {
   service.shutdown();
+  lock.release();
   server.close(() => process.exit(0));
   setTimeout(() => process.exit(0), 3000).unref();
 };

@@ -137,8 +137,10 @@ $env:MULTIAGENT_AUTH = "off"
 npm run serve -- --host tailscale --port 7300
 ```
 
-Keep `MULTIAGENT_SERVER_TOKEN` the same: the app saves the token, and without the variable the
-server makes a new one at every start. `--host tailscale` keeps the engine off the local network;
+Close the desktop app on that computer first: like the app, the server locks its workspace (one
+engine per workspace) and refuses to start on a workspace the app has open (or pass
+`--workspace <another folder>`). Keep `MULTIAGENT_SERVER_TOKEN` the same: the app saves the token,
+and without the variable the server makes a new one at every start. `--host tailscale` keeps the engine off the local network;
 `--host 0.0.0.0` listens everywhere.
 
 On the computer with the app: **Settings › Execution › Engine › Change…**, choose **Remote engine**,
