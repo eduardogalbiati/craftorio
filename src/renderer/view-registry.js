@@ -3,8 +3,8 @@
 // load: early (registerView exists before app.js and the views)
 //   registerView({ id, nav: { label, icon, order, title, group, tab }, section, menu, markup, modals, mount, show })
 // `markup` is the screen's whole `<section id="view-<id>" class="view hidden">`, added to the content
-// container; `modals` its own dialogs, added to the body; `nav` a sidebar entry, placed before the
-// first entry with a higher `data-order` (static entries carry one too, until they move to a folder),
+// container; `modals` its own dialogs, added to the body; `nav` an entry of the sidebar's menu
+// (`.sidebar-menu`, #411), placed before the first entry with a higher `data-order`, else at the menu's end,
 // or a list of entries (the Workflows tabs: each opens the screen on its `tab`). An entry's `group`
 // (#254, nav-groups.js: plan, code, workflows, ai) puts it under that group's title, which folds.
 // `section`: the screen is drawn in another screen's section (the Roadmap, in the Backlog's);
@@ -20,7 +20,7 @@ const navNext = (box, order) => [...box.querySelectorAll('[data-order]')]
   .find((el) => (el.parentNode || box) === box && Number(el.dataset.order) > order);
 
 // A group's box, created with its title on the group's first entry; the title folds it (remembered).
-function navGroupBox(sidebar, group) {
+function navGroupBox(menu, group) {
   if (navGroupBoxes.has(group.id)) return navGroupBoxes.get(group.id);
   const el = document.createElement('div');
   el.className = 'nav-group';
@@ -49,7 +49,7 @@ function navGroupBox(sidebar, group) {
   };
   paint();
   el.append(title, box);
-  sidebar.insertBefore(el, navNext(sidebar, group.order) || sidebar.querySelector('.nav-spacer'));
+  menu.insertBefore(el, navNext(menu, group.order) || null);
   navGroupBoxes.set(group.id, box);
   return box;
 }
@@ -59,9 +59,9 @@ function registerView(def) {
   if (markup) document.querySelector('main.content').insertAdjacentHTML('beforeend', markup);
   if (modals) document.body.insertAdjacentHTML('beforeend', modals);
   for (const entry of [].concat(nav || [])) {
-    const sidebar = document.querySelector('nav.sidebar');
+    const menu = document.querySelector('nav.sidebar .sidebar-menu'); // #411 the sidebar's scrolling part
     const group = entry.group && window.NavGroups.GROUPS.find((g) => g.id === entry.group);
-    const box = group ? navGroupBox(sidebar, group) : sidebar;
+    const box = group ? navGroupBox(menu, group) : menu;
     const btn = document.createElement('button');
     btn.className = 'nav-item';
     btn.dataset.view = id;
@@ -69,7 +69,7 @@ function registerView(def) {
     btn.dataset.order = String(entry.order);
     if (entry.title) btn.title = entry.title;
     btn.innerHTML = `${entry.icon || ''}<span>${entry.label}</span>`;
-    box.insertBefore(btn, navNext(box, entry.order) || (group ? null : sidebar.querySelector('.nav-spacer')));
+    box.insertBefore(btn, navNext(box, entry.order) || null);
   }
   viewRegistry.set(id, def);
   def.mount?.();

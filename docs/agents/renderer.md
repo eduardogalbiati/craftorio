@@ -30,7 +30,10 @@ Read this before changing anything in `src/renderer/`.
   `src/renderer/views/<view>/<view>.js` + `<view>.css`, plus the screen's other parts in the same
   folder; `index.html` holds no screen, only the app frame (top bar, sidebar with the Run item and
   runs menu, `main.content`, the drawers, the terminal dock, the shared dialogs) and the generated
-  file lists. The folders:
+  file lists. The sidebar has two parts (#411): the menu (`.sidebar-menu`, `data-testid="sidebar-menu"`,
+  where `registerView` places the entries and groups) is the only part that scrolls; the footer
+  (`.sidebar-footer`, `data-testid="sidebar-footer"`: Keeping awake, the Run item, the runs) stays
+  pinned at the bottom, every run listed, capped at 50vh; past it only `#nav-runs` scrolls. The folders:
   - `views/dashboard/`: Home, the start screen (#255: the flow overview and the Analytics tab; its section has no `hidden`; `renderDashboard` is also called on run events: it paints from the last read and reads again at most every 30 s);
   - `views/sessions/`: `sessions.js` (`window.SessionsView` for notifications and terminal events) and `sessions.css`;
   - `views/projects/`: the Projects screen (#354: Code & Build, before Backlog; `showProjects`), its project cards, and the New / Edit project dialog (`openProjectModal`, also opened from the Start drawer and the header's project selector);
@@ -70,7 +73,7 @@ Read this before changing anything in `src/renderer/`.
   `registerView({ id, nav: { label, icon, order, title, group, tab }, section, menu, markup, modals, mount, show })`
   (`view-registry.js`, loaded before `app.js`): `markup` is the screen's whole
   `<section id="view-<id>" class="view hidden">`, added to `main.content`; `modals` its own dialogs,
-  added to the body; `nav` its sidebar entry, placed by `order` among the other entries'
+  added to the body; `nav` its entry in the sidebar's menu, placed by `order` among the other entries'
   `data-order` (20 = Home … 130 = AI Arena: pick a free number between two); `mount()` wires its
   controls once (and adds what `nav` can't: a badge); `show()` runs on each `showView(id)`.
   The menu is grouped by the flow (#254, `nav-groups.js`): `nav.group` (`plan`, `code`, `workflows`,
@@ -404,7 +407,7 @@ the gate. The phone page (`src/mobile-gates.js`) prints the same line from `runs
 
 `findings.js` (`window.Findings`) and `src/shared/findings-model.js` (`window.FindingsModel`, pure: visibility,
 Ctrl+Shift+F, `resolvePin`) are the development tool after ToolSeeds' `sightline`. The button is a
-sidebar entry (`[data-testid="findings-button"]`). It shows from source, or with
+sidebar entry at the menu's end (`[data-testid="findings-button"]`). It shows from source, or with
 `settings.findingsButton`, and never in `scripts/screenshot.js` captures unless the setting is on
 (app:info's `isPackaged` and `screenshot`). It opens `[data-testid="findings-overlay"]` over the
 window's capture (`window:capture`, desktop only). Pins are DOM `[data-testid="findings-pin"]`

@@ -121,19 +121,23 @@
   <div class="shell">
     <!-- ================= Sidebar ================= -->
     <nav class="sidebar">
-      <div class="nav-spacer"></div>
-      <!-- Keep awake (#162, keep-awake.js): shown while the computer is kept from sleeping -->
-      <button id="nav-keep-awake" class="nav-item nav-keep-awake hidden" type="button">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" /><line x1="3" y1="3" x2="21" y2="21" /></svg>
-        <span>Keeping awake</span>
-      </button>
-      <button id="nav-run" class="nav-item nav-run st-idle hidden" data-view="run" title="No run in progress">
-        <span id="nav-run-dot" class="status-dot"></span>
-        <span>Run</span>
-        <span id="nav-run-count" class="nav-run-count hidden"></span>
-        <span id="nav-run-gates" class="nav-gates hidden" role="button"></span>
-      </button>
-      <div id="nav-runs" class="nav-runs hidden" aria-label="Runs in progress"></div>
+      <!-- #411 the menu (view-registry.js fills it) is the only part that scrolls -->
+      <div class="sidebar-menu" data-testid="sidebar-menu"></div>
+      <!-- #411 the footer, pinned to the bottom: Keeping awake, the Run item and the runs -->
+      <div class="sidebar-footer" data-testid="sidebar-footer">
+        <!-- Keep awake (#162, keep-awake.js): shown while the computer is kept from sleeping -->
+        <button id="nav-keep-awake" class="nav-item nav-keep-awake hidden" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" /><line x1="3" y1="3" x2="21" y2="21" /></svg>
+          <span>Keeping awake</span>
+        </button>
+        <button id="nav-run" class="nav-item nav-run st-idle hidden" data-view="run" title="No run in progress">
+          <span id="nav-run-dot" class="status-dot"></span>
+          <span>Run</span>
+          <span id="nav-run-count" class="nav-run-count hidden"></span>
+          <span id="nav-run-gates" class="nav-gates hidden" role="button"></span>
+        </button>
+        <div id="nav-runs" class="nav-runs hidden" aria-label="Runs in progress"></div>
+      </div>
     </nav>
 
     <main class="content">
