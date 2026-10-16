@@ -16,9 +16,9 @@ const WORKFLOW = path.join(__dirname, '..', '..', 'workflows', 'ai-development-l
 const git = (cwd, ...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'init.defaultBranch=main', '-c', 'core.autocrlf=false', ...args], { cwd, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
 
 // one mock run of the normal path; the prompt of each turn with the agent that received it
-async function mockRun(t) {
+async function mockRun(t, { runsPrefix = 'dev-prompt-runs-' } = {}) {
   const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'dev-prompt-repo-'));
-  const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dev-prompt-runs-'));
+  const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), runsPrefix));
   t.after(() => {
     fs.rmSync(repo, { recursive: true, force: true, maxRetries: 5 });
     fs.rmSync(runsDir, { recursive: true, force: true, maxRetries: 5 });
@@ -83,6 +83,17 @@ test('develop prompt (#303): no self-review paragraph and no code-review skill; 
   assert.match(prompt, /```run-tests/, 'the focused run-tests block');
   for (const field of ['evidence_plan', 'screenshots', 'left_out', 'test_notes']) assert.ok(prompt.includes(`\`${field}\``) || prompt.includes(`"${field}"`), `the ${field} output stays`);
   assert.match(prompt, /Handoff note:/, 'the handoff rules stay');
+});
+
+// #418: the run folder's path is written into the develop prompt several times (logs, evidence,
+// red check log, test map), so the 40K budget must leave room for a long path, not only for this
+// machine's temp folder (the base went red at 40052 characters on another one)
+test('develop prompt (#418): stays under 40K characters with a long run folder path', { timeout: 120000 }, async (t) => {
+  const { finished, turns } = await mockRun(t, { runsPrefix: `dev-prompt-runs-${'long-folder-name-'.repeat(4)}` });
+  assert.equal(finished.status, 'success', finished.error);
+  const develop = turns.find((x) => x.step === 'develop');
+  assert.ok(develop, 'the developer had a turn');
+  assert.ok(develop.prompt.length < 40000, `the develop prompt stays under 40K characters with a long run folder (got ${develop.prompt.length})`);
 });
 
 test('shared skills (#300): a section addressed to the developer or the test writer reaches only that role\'s prompt', { timeout: 120000 }, async (t) => {
