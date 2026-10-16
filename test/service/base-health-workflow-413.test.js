@@ -101,6 +101,28 @@ test('#413 a red base check after a merge gets a fix item that runs the default 
   assert.deepEqual(fixItems(ws, project), [{ workflow: AI_DEV, mode: 'auto' }]);
 });
 
+// The service's own wiring: the area as createService builds it (its shared ctx, with the workflows
+// area's listWorkflows), not a hand-made ctx. The area module's export is wrapped in the require
+// cache only to keep hold of the ctx the service gives it.
+test('#413 through the service\'s own wiring, a run\'s pre-existing failure gets a fix item that runs the default workflow', async (t) => {
+  const areaFile = require.resolve('../../src/service/areas/base-health');
+  const factory = loadArea();
+  let shared = null;
+  require.cache[areaFile].exports = (ctx) => { shared = ctx; return factory(ctx); };
+  t.after(() => { require.cache[areaFile].exports = factory; });
+  const { service, api } = makeService(t);
+  require.cache[areaFile].exports = factory;
+  assert.ok(shared && typeof shared.afterStepFinished === 'function', 'the service built the area');
+  const ws = service.workspace();
+  const repo = gitRepo(t);
+  const project = await api['projects:create']({ name: 'bh413w', folder: repo.dir });
+  const health = loadHealth();
+  const realRecord = health.recordPreexisting;
+  t.mock.method(health, 'recordPreexisting', (root, opts) => realRecord(root, { ...opts, platform: 'github', repo: 'o/r', exec: fakeExec() }));
+  api['settings:set']({ defaultWorkflow: AI_DEV });
+  assert.deepEqual(await fixItemFromRuns(shared, ws, project), [{ workflow: AI_DEV, mode: 'auto' }]);
+});
+
 test('#413 onRed \'issue\' with a default workflow set: the issue is filed, no fix item', async (t) => {
   const { api, ws, project, area } = await setup(t);
   api['settings:set']({ defaultWorkflow: AI_DEV, baseCheck: { onRed: 'issue' } });
