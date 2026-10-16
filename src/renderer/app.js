@@ -227,6 +227,7 @@ async function init() {
 
   state.ws = await api.getWorkspace();
   state.settings = await api.getSettings();
+  window.InterfaceLanguage.apply(state.settings); // #329: the saved interface language (interface-language.js)
   TimeZone.notify(); // #273: what was drawn before the settings arrived redraws in the saved zone
   const appInfo = await api.appInfo();
   state.simulationOnly = !!appInfo.simulationOnly;
@@ -396,7 +397,7 @@ function applyDeveloperMode() {
 function openModal(sel) { $(sel).classList.remove('hidden'); }
 function closeModal(sel) { $(sel).classList.add('hidden'); }
 
-function confirmDialog(title, message, yes = 'Confirm') {
+function confirmDialog(title, message, yes = t('common.confirm')) {
   $('#confirm-title').textContent = title;
   $('#confirm-message').textContent = message;
   $('#confirm-details').classList.add('hidden');
@@ -953,7 +954,7 @@ function renderNavRuns() {
 // action (#281): { label, run, done? }, a button inside the toast ("Undo"). toast.js (openToast)
 // draws it, runs it and counts the toast down: 10 s with an action, 15 for a gate, 7 otherwise.
 function showToast(title, detail, runId = null, gate = null, { action = null } = {}) {
-  const html = (head, text) => `<button type="button" class="toast-close" aria-label="Dismiss" title="Dismiss">×</button><b>${esc(head)}</b>${text ? `<span>${esc(String(text).slice(0, 220))}</span>` : ''}`;
+  const html = (head, text) => `<button type="button" class="toast-close" aria-label="${t('common.dismiss')}" title="${t('common.dismiss')}">×</button><b>${esc(head)}</b>${text ? `<span>${esc(String(text).slice(0, 220))}</span>` : ''}`;
   const onClick = (e) => {
     if (e.target.closest('.toast-close')) return; // dismissed only
     // a gate still waiting opens inside its run (its chat, or the Run screen's gate card)

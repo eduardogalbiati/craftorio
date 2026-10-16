@@ -19,15 +19,19 @@
 // Registers its dialog with registerView (view-registry.js, modals only: no screen, no menu entry); uses app.js globals ($, esc,
 // state, api, errMsg, confirmDialog, showToast, openDrawer, applyDeveloperMode, CATEGORIES),
 // start-drawer.js's loadCliStatus and command-hint.js's runSuggestedCommand / canRunCommands.
+// #329: every text comes from the catalog through t (src/shared/i18n.js, setup.* keys); the
+// Interface language select above the stepper opens on the interface language (the saved one, else
+// the computer's when it has a catalog, else English), saves settings.language.interface and redraws
+// the app in it (interface-language.js); the dialog repaints its texts on I18n.onChange.
 
 (function () {
   const STEPS = [
-    { id: 'agents', name: 'Agents', title: 'Connect your agents', lead: 'Each agent turn runs one of these CLIs on this computer: install the ones you want and sign in to them.' },
-    { id: 'try-it-safely', name: 'Try it safely', title: 'Try it safely', lead: 'See a whole workflow run before it spends anything.' },
-    { id: 'workflows', name: 'Workflows', title: 'Pick your workflows', lead: 'The picked workflows are offered in Start; the others stay in Workflows › Definitions.' },
-    { id: 'first-project', name: 'First project', title: 'Add your first project', lead: 'A project is the folder or repository the workflows work on.' },
+    { id: 'agents', name: () => t('setup.agents.name'), title: () => t('setup.agents.title'), lead: () => t('setup.agents.lead') },
+    { id: 'try-it-safely', name: () => t('setup.try.name'), title: () => t('setup.try.name'), lead: () => t('setup.try.lead') },
+    { id: 'workflows', name: () => t('setup.workflows.name'), title: () => t('setup.workflows.title'), lead: () => t('setup.workflows.lead') },
+    { id: 'first-project', name: () => t('setup.project.name'), title: () => t('setup.project.title'), lead: () => t('setup.project.lead') },
   ];
-  const ACTION = { install: '▶ Install', signIn: '▶ Sign in' };
+  const ACTION = { install: () => t('setup.install'), signIn: () => t('setup.sign_in') };
   const setup = {
     step: 0,
     open: false,
@@ -38,52 +42,80 @@
   };
   const $s = (sel) => document.querySelector(`#setup-modal ${sel}`);
 
-  const modals = `
+  const stepperHtml = () => STEPS.map((s, i) => `<li class="setup-step" data-step="${s.id}" data-testid="setup-step-${s.id}"><span class="setup-num" aria-hidden="true">${i + 1}</span>${esc(s.name())}</li>`).join('');
+  // the interface language: the saved one, else the one the page runs in (I18n.resolveLanguage)
+  const languageHtml = () => `<label class="setup-language small"><span class="muted">${t('setup.language')}</span>
+          ${window.Select.markup(`data-setup-language data-testid="setup-language" aria-label="${t('setup.language')}"`, window.I18n.languages().map((code) => [code, window.Language.labelOf(code)]), window.I18n.getLanguage())}</label>`;
+
+  const modals = () => `
     <div id="setup-modal" class="modal setup-modal hidden" role="dialog" aria-modal="true" aria-labelledby="setup-title" aria-describedby="setup-lead" data-testid="setup">
       <div class="modal-card setup-card">
-        <ol class="setup-stepper" aria-label="Setup steps">
-          ${STEPS.map((s, i) => `<li class="setup-step" data-step="${s.id}" data-testid="setup-step-${s.id}"><span class="setup-num" aria-hidden="true">${i + 1}</span>${esc(s.name)}</li>`).join('')}
-        </ol>
+        <div class="row setup-top">
+          <ol class="setup-stepper" aria-label="${t('setup.steps')}">${stepperHtml()}</ol>
+          <span class="spacer"></span>
+          <span id="setup-language-box">${languageHtml()}</span>
+        </div>
         <h3 id="setup-title"></h3>
         <p id="setup-lead" class="muted"></p>
         <div id="setup-body" class="setup-body"></div>
         <div class="modal-actions setup-actions">
-          <button type="button" id="btn-setup-skip" class="btn ghost" data-testid="setup-skip">Skip</button>
+          <button type="button" id="btn-setup-skip" class="btn ghost" data-testid="setup-skip">${t('setup.skip')}</button>
           <span class="spacer"></span>
-          <button type="button" id="btn-setup-back" class="btn ghost" data-testid="setup-back">Back</button>
-          <button type="button" id="btn-setup-next" class="btn primary" data-testid="setup-next">Next</button>
+          <button type="button" id="btn-setup-back" class="btn ghost" data-testid="setup-back">${t('setup.back')}</button>
+          <button type="button" id="btn-setup-next" class="btn primary" data-testid="setup-next">${t('setup.next')}</button>
         </div>
       </div>
     </div>`;
+
+  // a new interface language (#329): the dialog's own texts, then the step
+  function repaint() {
+    const modal = document.getElementById('setup-modal');
+    if (!modal) return;
+    $s('.setup-stepper').innerHTML = stepperHtml();
+    $s('.setup-stepper').setAttribute('aria-label', t('setup.steps'));
+    $s('#setup-language-box').innerHTML = languageHtml();
+    $s('#btn-setup-skip').textContent = t('setup.skip');
+    $s('#btn-setup-back').textContent = t('setup.back');
+    if (setup.open) render();
+    else $s('#btn-setup-next').textContent = t('setup.next');
+  }
+
+  async function saveLanguage(code) {
+    try {
+      state.settings = await api.setSettings(window.LanguageSettings.patch(state.settings, 'interface', code));
+    } catch (e) { showToast(t('setup.save_failed'), errMsg(e)); return; }
+    window.InterfaceLanguage?.apply(state.settings);
+  }
 
   // ---------- Agents ----------
   const statesOf = () => Object.fromEntries((setup.tools || []).map((t) => [t.id, window.SetupModel.statusBadge(t).state]));
   const bundled = () => (state.workflows || []).filter((w) => !w.error && w.origin !== 'custom' && w.requirements);
 
-  function actionButton(t) {
+  function actionButton(tool) {
     const off = !canRunCommands();
     const tip = off ? ` title="${esc(NO_TERMINAL_HINT)}"` : '';
-    if (!t.path && t.installCommand) return `<button type="button" class="btn sm primary" data-setup-run="${esc(t.installCommand)}" data-testid="setup-install-${esc(t.id)}"${tip}${off ? ' disabled' : ''}>${ACTION.install}</button>`;
-    if (t.path && !t.connected && t.auth && t.signInCommand) return `<button type="button" class="btn sm primary" data-setup-run="${esc(t.signInCommand)}" data-sign-in data-testid="setup-sign-in-${esc(t.id)}"${tip}${off ? ' disabled' : ''}>${ACTION.signIn}</button>`;
+    if (!tool.path && tool.installCommand) return `<button type="button" class="btn sm primary" data-setup-run="${esc(tool.installCommand)}" data-testid="setup-install-${esc(tool.id)}"${tip}${off ? ' disabled' : ''}>${ACTION.install()}</button>`;
+    if (tool.path && !tool.connected && tool.auth && tool.signInCommand) return `<button type="button" class="btn sm primary" data-setup-run="${esc(tool.signInCommand)}" data-sign-in data-testid="setup-sign-in-${esc(tool.id)}"${tip}${off ? ' disabled' : ''}>${ACTION.signIn()}</button>`;
     return '';
   }
 
-  function cliRow(t) {
-    const badge = window.SetupModel.statusBadge(t);
-    const need = window.SetupModel.toolRequirement(t.id);
-    const detail = t.checking ? '' : t.path ? [t.version, t.account ? `account ${t.account}` : ''].filter(Boolean).join(' · ') : !t.installCommand && t.installHint ? `Install: ${t.installHint}` : '';
-    const command = !t.checking && !t.path ? t.installCommand : !t.checking && !t.connected && t.auth ? t.signInCommand : null;
+  function cliRow(tool) {
+    const badge = window.SetupModel.statusBadge(tool);
+    const need = window.SetupModel.toolRequirement(tool.id);
+    const detail = tool.checking ? '' : tool.path ? [tool.version, tool.account ? t('setup.account', { account: tool.account }) : ''].filter(Boolean).join(' · ')
+      : !tool.installCommand && tool.installHint ? t('setup.install_hint', { hint: tool.installHint }) : '';
+    const command = !tool.checking && !tool.path ? tool.installCommand : !tool.checking && !tool.connected && tool.auth ? tool.signInCommand : null;
     return `
-      <div class="s-row setup-cli" data-testid="setup-cli-${esc(t.id)}">
+      <div class="s-row setup-cli" data-testid="setup-cli-${esc(tool.id)}">
         <div class="s-label">
-          <b>${esc(t.name || window.SetupModel.toolName(t.id))}</b>
-          <span><span class="badge${need === 'Required' ? ' setup-required' : ''}">${esc(need)}</span>${detail ? ` <span title="${esc(detail)}">${esc(detail)}</span>` : ''}</span>
+          <b>${esc(tool.name || window.SetupModel.toolName(tool.id))}</b>
+          <span><span class="badge${need === t('setup.required') ? ' setup-required' : ''}">${esc(need)}</span>${detail ? ` <span title="${esc(detail)}">${esc(detail)}</span>` : ''}</span>
           ${command ? `<code class="setup-cmd" title="${esc(command)}">${esc(command)}</code>` : ''}
-          ${t.output && badge.state !== 'ready' ? `<pre class="setup-out" data-testid="setup-cli-output">${esc(t.output)}</pre>` : ''}
+          ${tool.output && badge.state !== 'ready' ? `<pre class="setup-out" data-testid="setup-cli-output">${esc(tool.output)}</pre>` : ''}
         </div>
         <div class="s-ctrl">
           <span class="conn setup-conn ${badge.state === 'ready' ? 'on' : 'off'}" data-state="${badge.state}"><span class="conn-dot"></span>${esc(badge.label)}</span>
-          ${t.checking ? '' : actionButton(t)}
+          ${tool.checking ? '' : actionButton(tool)}
         </div>
       </div>`;
   }
@@ -93,10 +125,10 @@
     if (!setup.tools) return '';
     const states = statesOf();
     const blocked = bundled().filter((w) => window.SetupModel.missingRequirements(w.requirements, states).length);
-    if (!blocked.length) return '<p class="small setup-note">Every bundled workflow can run on this computer.</p>';
+    if (!blocked.length) return `<p class="small setup-note">${t('setup.all_ready')}</p>`;
     const core = ['claude', 'git'].filter((id) => states[id] !== 'ready').map(window.SetupModel.toolName);
-    const head = core.length ? `Without ${core.join(' and ')}, no workflow runs for real (simulations still do).` : `Not ready yet: ${blocked.map((w) => w.name).join(', ')}.`;
-    return `<p class="small warn-text setup-note" data-testid="setup-missing-note">${esc(head)} You can go on and come back later from Settings › Agents &amp; CLIs.</p>`;
+    const head = core.length ? t('setup.without_core', { names: core.join(t('setup.and')) }) : t('setup.not_ready', { names: blocked.map((w) => w.name).join(', ') });
+    return `<p class="small warn-text setup-note" data-testid="setup-missing-note">${esc(head)} ${t('setup.come_back')}</p>`;
   }
 
   function renderAgents() {
@@ -105,8 +137,8 @@
     return `
       <div class="s-group setup-clis">${tools.map(cliRow).join('')}</div>
       <div class="row setup-row">
-        <button type="button" class="btn sm ghost" data-setup-check data-testid="setup-check-again" ${setup.tools ? '' : 'disabled'}>Check again</button>
-        <span class="muted small">After installing or signing in, press Check again (or end its terminal: the rows check again by themselves).</span>
+        <button type="button" class="btn sm ghost" data-setup-check data-testid="setup-check-again" ${setup.tools ? '' : 'disabled'}>${t('setup.check_again')}</button>
+        <span class="muted small">${t('setup.check_again_help')}</span>
       </div>
       ${agentsNote()}`;
   }
@@ -127,22 +159,22 @@
   // ---------- Try it safely ----------
   function renderTry() {
     return `
-      <p>Real runs use your own CLI subscriptions or API credits: each agent turn is billed by its provider.</p>
-      <p>A simulation runs the whole flow (steps, gates, results) with made-up answers: no CLI is called and nothing is spent.</p>
+      <p>${t('setup.try.real')}</p>
+      <p>${t('setup.try.simulation')}</p>
       <div class="s-group">
         <div class="s-row">
-          <div class="s-label"><b>Show simulation mode</b><span>Adds a Simulation checkbox to Start, checked by default. Turn it off later in Settings › Execution › Developer mode.</span></div>
-          <label class="switch"><input type="checkbox" data-setup-sim data-testid="setup-simulation" aria-label="Show simulation mode" ${setup.simulation ? 'checked' : ''} /><span></span></label>
+          <div class="s-label"><b>${t('setup.try.show')}</b><span>${t('setup.try.show_help')}</span></div>
+          <label class="switch"><input type="checkbox" data-setup-sim data-testid="setup-simulation" aria-label="${t('setup.try.show')}" ${setup.simulation ? 'checked' : ''} /><span></span></label>
         </div>
         <div class="s-row">
-          <div class="s-label"><b>Runs at once</b><span data-testid="machine-profile-line">${esc(setup.machine?.line || 'Reading this machine…')}</span><span>Sized from this machine's threads and memory. Turn on several runs at once, or set your own values, in Settings › Execution › Concurrent runs.</span></div>
+          <div class="s-label"><b>${t('setup.try.runs')}</b><span data-testid="machine-profile-line">${esc(setup.machine?.line || t('setup.try.reading'))}</span><span>${t('setup.try.runs_help')}</span></div>
         </div>
       </div>`;
   }
 
   // the machine profile (#367): the line the Try it safely step shows
   async function loadMachineProfile() {
-    try { setup.machine = await api.machineProfile(); } catch { setup.machine = { line: "This machine's threads and memory couldn't be read." }; }
+    try { setup.machine = await api.machineProfile(); } catch { setup.machine = { line: t('settings.machine.unread') }; }
     if (setup.open && STEPS[setup.step].id === 'try-it-safely') render();
   }
 
@@ -154,19 +186,19 @@
     const ready = !missing.length;
     return `
       <label class="setup-wf${setup.picked.includes(id) ? ' picked' : ''}" data-testid="setup-workflow-${esc(id)}">
-        <input type="checkbox" data-setup-wf="${esc(id)}" ${setup.picked.includes(id) ? 'checked' : ''} aria-label="Show ${esc(w.name)} in Start" />
+        <input type="checkbox" data-setup-wf="${esc(id)}" ${setup.picked.includes(id) ? 'checked' : ''} aria-label="${esc(t('setup.workflows.show', { name: w.name }))}" />
         <span class="setup-wf-main">
           <b title="${esc(w.name)}">${esc(w.name)}</b>
           <span class="muted small setup-wf-desc" title="${esc(w.description || '')}">${esc(w.description || '')}</span>
-          <span class="setup-wf-tags">${badges}<span class="pill ${ready ? 'pill-success' : 'pill-cancelled'}" title="${esc(ready ? 'Everything it needs is installed and signed in' : window.SetupModel.missingLabel(missing))}">${esc(ready ? 'Ready' : window.SetupModel.missingLabel(missing))}</span></span>
+          <span class="setup-wf-tags">${badges}<span class="pill ${ready ? 'pill-success' : 'pill-cancelled'}" title="${esc(ready ? t('setup.workflows.ready_title') : window.SetupModel.missingLabel(missing))}">${esc(ready ? t('setup.status.ready') : window.SetupModel.missingLabel(missing))}</span></span>
         </span>
       </label>`;
   }
 
   function renderWorkflows() {
-    if (!setup.tools) return '<p class="muted">Checking the CLIs…</p>';
+    if (!setup.tools) return `<p class="muted">${t('setup.workflows.checking')}</p>`;
     const list = bundled();
-    if (!list.length) return '<p class="muted">No bundled workflows found in the workspace\'s workflows/ folder.</p>';
+    if (!list.length) return `<p class="muted">${t('setup.workflows.none')}</p>`;
     if (!setup.picked) {
       const hidden = state.settings.hiddenWorkflows || [];
       // a first run picks what is ready; a run again starts from what Start shows today
@@ -177,7 +209,7 @@
     return Object.entries(CATEGORIES).map(([cat, label]) => {
       const items = list.filter((w) => (w.category || 'build') === cat).sort(first);
       return items.length ? `<section class="setup-wf-group"><h4 class="badge cat-${esc(cat)}">${esc(label)}</h4><div class="setup-wfs">${items.map(workflowCard).join('')}</div></section>` : '';
-    }).join('') + `<p class="muted small" data-testid="setup-picked-count">${setup.picked.length ? `${setup.picked.length} picked` : 'None picked: Start keeps offering them all'}. Workflows › Definitions › Show in Start changes it later; nothing is deleted.</p>`;
+    }).join('') + `<p class="muted small" data-testid="setup-picked-count">${setup.picked.length ? t('setup.workflows.picked', { count: setup.picked.length }) : t('setup.workflows.none_picked')} ${t('setup.workflows.picked_help')}</p>`;
   }
 
   // ---------- First project ----------
@@ -185,8 +217,8 @@
     const projects = state.projects || [];
     const list = projects.length
       ? `<div class="s-group">${projects.map((p) => `<div class="s-row"><div class="s-label"><b title="${esc(p.name)}">${esc(p.name)}</b><span title="${esc(p.folder)}">${esc(p.folder)}</span></div></div>`).join('')}</div>`
-      : '<div class="empty-state setup-empty"><b>No project yet</b><p class="muted small">Add the folder of a repository you work on. Simulations do not need one.</p></div>';
-    return `${list}<div class="row setup-row"><button type="button" class="btn sm" data-setup-project data-testid="setup-new-project">New project</button><span class="muted small">Finish opens Start on your first picked workflow.</span></div>`;
+      : `<div class="empty-state setup-empty"><b>${t('setup.project.empty')}</b><p class="muted small">${t('setup.project.empty_help')}</p></div>`;
+    return `${list}<div class="row setup-row"><button type="button" class="btn sm" data-setup-project data-testid="setup-new-project">${t('setup.project.new')}</button><span class="muted small">${t('setup.project.finish_help')}</span></div>`;
   }
 
   function newProject() {
@@ -210,11 +242,11 @@
       if (i === setup.step) li.setAttribute('aria-current', 'step');
       else li.removeAttribute('aria-current');
     });
-    $s('#setup-title').textContent = step.title;
-    $s('#setup-lead').textContent = step.lead;
+    $s('#setup-title').textContent = step.title();
+    $s('#setup-lead').textContent = step.lead();
     $s('#setup-body').innerHTML = { agents: renderAgents, 'try-it-safely': renderTry, workflows: renderWorkflows, 'first-project': renderProject }[step.id]();
     $s('#btn-setup-back').disabled = setup.step === 0;
-    $s('#btn-setup-next').textContent = setup.step === STEPS.length - 1 ? 'Finish' : 'Next';
+    $s('#btn-setup-next').textContent = setup.step === STEPS.length - 1 ? t('setup.finish') : t('setup.next');
   }
 
   async function saveSimulation() {
@@ -226,7 +258,7 @@
   async function go(delta) {
     try {
       if (STEPS[setup.step].id === 'try-it-safely') await saveSimulation();
-    } catch (e) { showToast('Could not save', errMsg(e)); return; }
+    } catch (e) { showToast(t('setup.save_failed'), errMsg(e)); return; }
     setup.step = Math.max(0, Math.min(STEPS.length - 1, setup.step + delta));
     render();
     if (STEPS[setup.step].id === 'first-project' && !(state.projects || []).length && delta > 0) newProject();
@@ -248,19 +280,19 @@
     const hidden = [...new Set([...(state.settings.hiddenWorkflows || []).filter((id) => !ids.includes(id)), ...unpicked])];
     try {
       state.settings = await api.setSettings({ setupDone: true, developerMode: setup.simulation, hiddenWorkflows: hidden });
-    } catch (e) { showToast('Could not save the setup', errMsg(e)); return; }
+    } catch (e) { showToast(t('setup.save_setup_failed'), errMsg(e)); return; }
     applyDeveloperMode();
     close();
     const first = picked.includes(window.SetupModel.FIRST) ? window.SetupModel.FIRST : ids.find((id) => picked.includes(id));
     const file = first && (state.workflows || []).find((w) => window.SetupModel.workflowId(w.file) === first)?.file;
-    openDrawer(file ? { workflow: file } : {}).catch((e) => showToast('Could not open Start', errMsg(e)));
+    openDrawer(file ? { workflow: file } : {}).catch((e) => showToast(t('setup.open_start_failed'), errMsg(e)));
   }
 
   async function skip() {
-    if (!(await confirmDialog('Skip the setup?', 'Nothing more is changed. You can run it again from Settings › Agents & CLIs.', 'Skip'))) return;
+    if (!(await confirmDialog(t('setup.skip_title'), t('setup.skip_body'), t('setup.skip')))) return;
     try {
       state.settings = await api.setSettings({ setupDone: true });
-    } catch (e) { showToast('Could not save', errMsg(e)); return; }
+    } catch (e) { showToast(t('setup.save_failed'), errMsg(e)); return; }
     close();
   }
 
@@ -304,6 +336,10 @@
       render();
       $s(`[data-setup-wf="${CSS.escape(id)}"]`)?.focus({ preventScroll: true });
     });
+    $s('#setup-language-box').addEventListener('change', (e) => {
+      if (e.target.matches('[data-setup-language]')) saveLanguage(e.target.value);
+    });
+    window.I18n.onChange(repaint);
     // Enter = Next, except on a control that has its own Enter (a button, a field, a link)
     document.getElementById('setup-modal').addEventListener('keydown', (e) => {
       if (e.key !== 'Enter' || e.target.closest('button, a, input, select, textarea')) return;

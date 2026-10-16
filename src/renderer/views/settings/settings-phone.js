@@ -10,7 +10,7 @@
   const ph = { state: null, pairing: null, check: null, error: null, form: null, poll: null };
 
   const PUBLIC_EXAMPLE = 'https://my-pc.tailnet.ts.net';
-  const localUrl =(s) => s.url || `http://127.0.0.1:${s.port || 7400}`;
+  const localUrl = (s) => s.url || `http://127.0.0.1:${s.port || 7400}`;
   const when = (iso) => (iso ? TimeZone.formatLocale(iso, { dateStyle: 'short', timeStyle: 'medium' }, TimeZone.current()) : t('settings.phone.never'));
 
   function statusHtml(s) {
