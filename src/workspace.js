@@ -246,8 +246,9 @@ const DEFAULT_SETTINGS = {
   // replies and the daily resets use it; null = this computer's (readSettings fills it in, unsaved)
   timeZone: null,
   // the languages agents write in (#327, #328, src/shared/language.js): `agents` for chat replies, prose
-  // and documents ('interface' = Same as the interface, English until #329), `issues` for issues, PR/MR
-  // descriptions and commit messages
+  // and documents ('interface' = Same as the interface), `issues` for issues, PR/MR descriptions and
+  // commit messages; `interface` (#329, src/shared/i18n.js), the app's own language, is unset until
+  // chosen: the computer's language when it has a catalog, else English
   language: { agents: 'interface', issues: 'en' },
 };
 

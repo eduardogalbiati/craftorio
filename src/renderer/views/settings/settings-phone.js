@@ -4,46 +4,49 @@
 // where, "Pair a phone" (a one-time code and its QR code), the setup steps to reach the page
 // privately from outside (Tailscale serve, Cloudflare Tunnel with access rules), the address from
 // outside with Save and Check, and the paired phones with Revoke. Drawn into #set-phone by
-// settings.js when the tab opens; uses app.js globals ($, esc, errMsg, state, confirmDialog).
+// settings.js when the tab opens; uses app.js globals ($, esc, errMsg, state, confirmDialog) and the
+// catalog's t (src/shared/i18n.js, #329: its texts are settings.phone.*).
 (() => {
   const ph = { state: null, pairing: null, check: null, error: null, form: null, poll: null };
 
+  const PUBLIC_EXAMPLE = 'https://my-pc.tailnet.ts.net';
   const localUrl = (s) => s.url || `http://127.0.0.1:${s.port || 7400}`;
-  const when = (iso) => (iso ? new Date(iso).toLocaleString(undefined, { timeZone: TimeZone.current() }) : 'never');
+  const when = (iso) => (iso ? TimeZone.formatLocale(iso, { dateStyle: 'short', timeStyle: 'medium' }, TimeZone.current()) : t('settings.phone.never'));
 
   function statusHtml(s) {
     return s.running
-      ? `<span class="badge live" data-testid="phone-status">Served at ${esc(s.url)}</span>`
-      : '<span class="badge" data-testid="phone-status">Off</span>';
+      ? `<span class="badge live" data-testid="phone-status">${t('settings.phone.served_at', { url: esc(s.url) })}</span>`
+      : `<span class="badge" data-testid="phone-status">${t('settings.off')}</span>`;
   }
 
   function checkHtml() {
     const c = ph.check;
     if (!c) return '';
-    const one = (label, r) => (r == null ? `<span class="badge">${label}: not set</span>`
-      : r.ok ? `<span class="badge live">${label}: reachable</span>`
-        : `<span class="badge warn" title="${esc(r.error || `HTTP ${r.status}`)}">${label}: not reachable</span>`);
-    return `<span class="row phone-check" data-testid="phone-reachability">${one('This computer', c.local)}${one('From outside', c.public)}</span>`;
+    const one = (label, r) => (r == null ? `<span class="badge">${t('settings.phone.not_set', { label })}</span>`
+      : r.ok ? `<span class="badge live">${t('settings.phone.reachable_state', { label })}</span>`
+        : `<span class="badge warn" title="${esc(r.error || `HTTP ${r.status}`)}">${t('settings.phone.not_reachable', { label })}</span>`);
+    return `<span class="row phone-check" data-testid="phone-reachability">${one(t('settings.phone.this_computer'), c.local)}${one(t('settings.phone.from_outside'), c.public)}</span>`;
   }
 
   function stepsHtml(s) {
-    const local = localUrl(s);
+    const local = esc(localUrl(s));
     return `<ol class="phone-steps small" data-testid="phone-setup-steps">
-        <li>The page listens on <code>${esc(local)}</code>, on this computer only. It shows only the open gates: nothing else of the app is served there.</li>
-        <li>To reach it from your phone, privately: install <b>Tailscale</b> on this computer and on the phone (same account) and run <code>tailscale serve --bg ${esc(String(s.port || 7400))}</code>; only your devices reach the https address it prints. Or a named <b>Cloudflare Tunnel</b> to <code>${esc(local)}</code> behind a Cloudflare Access policy that allows only your email. Never a public address without access rules.</li>
-        <li>Paste that https address in <b>Address from outside</b> above, Save, and press <b>Check</b>: the gate links in the notifications use it.</li>
-        <li>Press <b>Pair a phone</b> and scan the QR code with the phone (or open the page and type the code). The phone keeps its own token: revoke it here at any time.</li>
-        <li>A gate link works for that gate only, for 30 minutes; every answer asks you to confirm, showing what the button does.</li>
+        <li>${t('settings.phone.step_listen', { url: local })}</li>
+        <li>${t('settings.phone.step_reach', { port: esc(String(s.port || 7400)), url: local })}</li>
+        <li>${t('settings.phone.step_address')}</li>
+        <li>${t('settings.phone.step_pair')}</li>
+        <li>${t('settings.phone.step_link')}</li>
       </ol>`;
   }
 
   function pairingHtml() {
     const p = ph.pairing;
     if (!p) return '';
+    const until = TimeZone.formatLocale(p.expiresAt, { timeStyle: 'medium' }, TimeZone.current());
     return `<div class="phone-pair" data-testid="phone-pairing">
-        <img class="phone-qr" src="${esc(p.qr)}" alt="QR code to pair a phone" width="168" height="168" />
+        <img class="phone-qr" src="${esc(p.qr)}" alt="${t('settings.phone.qr_alt')}" width="168" height="168" />
         <div class="phone-pair-text">
-          <div class="muted small">Pairing code (one use, until ${esc(new Date(p.expiresAt).toLocaleTimeString(undefined, { timeZone: TimeZone.current() }))})</div>
+          <div class="muted small">${t('settings.phone.code_until', { time: esc(until) })}</div>
           <div class="phone-code mono" data-testid="phone-pairing-code">${esc(p.code)}</div>
           <div class="muted small phone-link" title="${esc(p.link)}">${esc(p.link)}</div>
         </div>
@@ -52,24 +55,24 @@
 
   function devicesHtml(s) {
     const rows = s.devices.map((d) => `<div class="s-row">
-        <div class="s-label"><b>${esc(d.name)}</b><span>Paired ${esc(when(d.pairedAt))} · last answer ${esc(when(d.lastSeen))}</span></div>
-        <div class="s-ctrl"><button class="btn sm ghost" type="button" data-phone-revoke="${esc(d.id)}">Revoke</button></div>
+        <div class="s-label"><b>${esc(d.name)}</b><span>${t('settings.phone.paired_line', { paired: esc(when(d.pairedAt)), seen: esc(when(d.lastSeen)) })}</span></div>
+        <div class="s-ctrl"><button class="btn sm ghost" type="button" data-phone-revoke="${esc(d.id)}">${t('settings.phone.revoke')}</button></div>
       </div>`).join('');
-    return `<div class="s-group" data-testid="phone-devices">${rows || '<div class="s-row"><div class="s-label"><span>No phone is paired yet.</span></div></div>'}</div>`;
+    return `<div class="s-group" data-testid="phone-devices">${rows || `<div class="s-row"><div class="s-label"><span>${t('settings.phone.no_devices')}</span></div></div>`}</div>`;
   }
 
   function formHtml(s) {
     const f = ph.form || { port: s.port || 7400, publicUrl: s.publicUrl || '' };
     return `<div class="s-row">
-        <div class="s-label"><b>Port</b><span>The page's port on this computer (127.0.0.1). The next free port is used when it is taken.</span></div>
-        <div class="s-ctrl"><input type="number" id="set-phone-port" class="s-num" min="1024" max="65535" step="1" value="${esc(String(f.port))}" aria-label="Phone gates port" /></div>
+        <div class="s-label"><b>${t('settings.phone.port')}</b><span>${t('settings.phone.port_help')}</span></div>
+        <div class="s-ctrl"><input type="number" id="set-phone-port" class="s-num" min="1024" max="65535" step="1" value="${esc(String(f.port))}" aria-label="${t('settings.phone.port_label')}" /></div>
       </div>
       <div class="s-row">
-        <div class="s-label"><b>Address from outside</b><span>Your private https address for the page (Tailscale or Cloudflare Tunnel), used in the gate links. Empty: the links use this computer's address.</span></div>
-        <div class="s-ctrl"><input type="text" id="set-phone-public" class="phone-public" placeholder="https://my-pc.tailnet.ts.net" value="${esc(f.publicUrl)}" aria-label="Address from outside" /></div>
+        <div class="s-label"><b>${t('settings.phone.address')}</b><span>${t('settings.phone.address_help')}</span></div>
+        <div class="s-ctrl"><input type="text" id="set-phone-public" class="phone-public" placeholder="${PUBLIC_EXAMPLE}" value="${esc(f.publicUrl)}" aria-label="${t('settings.phone.address')}" /></div>
       </div>
       <div class="s-row" id="phone-form-actions"${ph.form ? '' : ' hidden'}><div class="s-label">${ph.form && ph.error ? `<span class="error small">${esc(ph.error)}</span>` : ''}</div>
-        <div class="s-ctrl row"><button class="btn sm ghost" type="button" id="btn-phone-cancel">Cancel</button><button class="btn sm primary" type="button" id="btn-phone-save">Save</button></div></div>`;
+        <div class="s-ctrl row"><button class="btn sm ghost" type="button" id="btn-phone-cancel">${t('common.cancel')}</button><button class="btn sm primary" type="button" id="btn-phone-save">${t('common.save')}</button></div></div>`;
   }
 
   function draw() {
@@ -77,26 +80,26 @@
     const s = ph.state;
     if (!box || !s) return;
     box.innerHTML = `
-      <p class="muted small phone-intro">Answer the human gates from your phone: a page with only the open gates, for your paired phones. An agent, a script or the supervisor never answers through it.</p>
+      <p class="muted small phone-intro">${t('settings.phone.intro')}</p>
       <div class="s-group">
         <div class="s-row">
-          <div class="s-label"><b>Serve the gates page</b><span>${statusHtml(s)}</span></div>
-          <label class="switch"><input type="checkbox" id="set-phone-enabled" aria-label="Serve the gates page"${s.enabled ? ' checked' : ''} /><span></span></label>
+          <div class="s-label"><b>${t('settings.phone.serve')}</b><span>${statusHtml(s)}</span></div>
+          <label class="switch"><input type="checkbox" id="set-phone-enabled" aria-label="${t('settings.phone.serve')}"${s.enabled ? ' checked' : ''} /><span></span></label>
         </div>
         ${formHtml(s)}
         <div class="s-row">
-          <div class="s-label"><b>Reachable</b><span>Whether the page answers on this computer and at the address from outside.</span>${checkHtml()}</div>
-          <div class="s-ctrl"><button class="btn sm ghost" type="button" id="btn-phone-check">Check</button></div>
+          <div class="s-label"><b>${t('settings.phone.reachable')}</b><span>${t('settings.phone.reachable_help')}</span>${checkHtml()}</div>
+          <div class="s-ctrl"><button class="btn sm ghost" type="button" id="btn-phone-check">${t('settings.phone.check')}</button></div>
         </div>
         <div class="s-row">
-          <div class="s-label"><b>Pair a phone</b><span>A one-time code, valid 10 minutes. Turns the page on.</span>${pairingHtml()}</div>
-          <div class="s-ctrl"><button class="btn sm" type="button" id="btn-phone-pair">Pair a phone</button></div>
+          <div class="s-label"><b>${t('settings.phone.pair')}</b><span>${t('settings.phone.pair_help')}</span>${pairingHtml()}</div>
+          <div class="s-ctrl"><button class="btn sm" type="button" id="btn-phone-pair">${t('settings.phone.pair')}</button></div>
         </div>
         ${!ph.form && ph.error ? `<div class="s-row"><span class="error small">${esc(ph.error)}</span></div>` : ''}
       </div>
-      <h3 class="s-subtitle">Setup</h3>
+      <h3 class="s-subtitle">${t('settings.phone.setup')}</h3>
       ${stepsHtml(s)}
-      <h3 class="s-subtitle">Paired phones</h3>
+      <h3 class="s-subtitle">${t('settings.phone.paired')}</h3>
       ${devicesHtml(s)}`;
     wire();
   }
@@ -129,7 +132,7 @@
     });
     document.querySelectorAll('[data-phone-revoke]').forEach((b) => (b.onclick = () => act(async () => {
       const d = ph.state.devices.find((x) => x.id === b.dataset.phoneRevoke);
-      if (!(await confirmDialog(`Revoke ${d?.name || 'this phone'}?`, 'Its gates page stops working at once; pair it again to use it.', 'Revoke'))) return;
+      if (!(await confirmDialog(t('settings.phone.revoke_title', { name: d?.name || t('settings.phone.this_phone') }), t('settings.phone.revoke_body'), t('settings.phone.revoke')))) return;
       ph.state = await api.revokePhone(b.dataset.phoneRevoke);
     })));
   }
@@ -152,7 +155,7 @@
   async function render() {
     try { ph.state = await api.phoneGatesState(); ph.error = null; } catch (e) { ph.error = errMsg(e); }
     if (ph.state) draw();
-    else $('#set-phone').innerHTML = `<p class="error small">${esc(ph.error || 'Phone gates are not available.')}</p>`;
+    else $('#set-phone').innerHTML = `<p class="error small">${esc(ph.error || t('settings.phone.unavailable'))}</p>`;
   }
 
   window.PhoneGatesSettings = { render };

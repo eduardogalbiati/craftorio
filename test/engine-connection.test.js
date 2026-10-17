@@ -268,6 +268,7 @@ test('the remote window loads only the engine\'s origin; its connection path, ot
   assert.equal(conn.routeUrl('http://my-pc:7300/src/renderer/index.html', origin), 'stay');
   assert.equal(conn.routeUrl('http://my-pc:7300/?token=x', origin), 'stay');
   assert.equal(conn.routeUrl(`http://my-pc:7300${conn.CONNECTION_PATH}`, origin), 'connection');
+  assert.equal(conn.routeUrl(`http://my-pc:7300${conn.CONNECTION_PATH}?lang=pt-BR`, origin), 'connection');
   assert.equal(conn.routeUrl(`http://my-pc:7301${conn.CONNECTION_PATH}`, origin), 'external');
   assert.equal(conn.routeUrl('https://github.com/eduardogalbiati/multiagent-orchestrator/pull/1', origin), 'external');
   assert.equal(conn.routeUrl('http://evil.example:7300/', origin), 'external');
@@ -322,7 +323,7 @@ test('--host tailscale listens on the Tailscale address only; other hosts are ke
 // ---- the browser client: src/renderer/api-http.js ----------------------------------------------
 
 // api-http.js in a vm sandbox with the given user agent and manifest; window.open is recorded
-function loadApiHttp({ userAgent = '', manifest = [] } = {}) {
+function loadApiHttp({ userAgent = '', manifest = [], language = null } = {}) {
   const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'api-http.js'), 'utf8');
   function FakeXHR() {}
   FakeXHR.prototype.open = function open() {};
@@ -331,7 +332,7 @@ function loadApiHttp({ userAgent = '', manifest = [] } = {}) {
   FakeWebSocket.OPEN = 1;
   const opened = [];
   const sandbox = {
-    window: { open: (url) => { opened.push(url); return null; } },
+    window: { open: (url) => { opened.push(url); return null; }, ...(language && { I18n: { getLanguage: () => language } }) },
     navigator: { clipboard: {}, userAgent },
     location: { protocol: 'http:', host: 'my-pc:7300' },
     XMLHttpRequest: FakeXHR, WebSocket: FakeWebSocket, fetch: async () => ({ ok: false }),
@@ -370,4 +371,62 @@ test('in a plain browser the page says so, and cannot open the desktop app\'s co
   assert.equal(api.engineConnection.mode, 'browser');
   await assert.rejects(api.openEngineConnection(), /Choosing where the engine runs is only available in the desktop app/);
   assert.deepEqual(opened, []);
+});
+
+test('#329 the engine\'s page sends its interface language along to the connection page', async () => {
+  const { api, opened } = loadApiHttp({ userAgent: `Mozilla/5.0 ${conn.CLIENT_MARK}`, manifest: DESKTOP_MANIFEST(), language: 'pt-BR' });
+  await api.openEngineConnection();
+  assert.deepEqual(opened, [`${conn.CONNECTION_PATH}?lang=pt-BR`]);
+});
+
+// ---- the interface language (#329): Settings › Execution › Engine and the connection page ----------
+
+const I18N_DIR = path.join(__dirname, '..', 'src', 'shared', 'i18n');
+const catalog = (lang) => JSON.parse(fs.readFileSync(path.join(I18N_DIR, `${lang}.json`), 'utf8'));
+
+// settings-engine.js in a vm sandbox, its t the catalog's in `lang`
+function engineSettingsMarkup(lang, engineConnection, canChange = true) {
+  const I18n = require('../src/shared/i18n');
+  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'views', 'settings', 'settings-engine.js'), 'utf8');
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+  const api = { platform: engineConnection.mode === 'local' ? 'win32' : 'browser', engineConnection, ...(canChange && { openEngineConnection: async () => true }) };
+  const sandbox = { window: {}, api, esc, errMsg: (e) => e.message, t: (key, params) => I18n.t(key, params, lang) };
+  vm.createContext(sandbox);
+  vm.runInContext(src, sandbox);
+  const w = sandbox.window.EngineSettings;
+  return w.markup(w.where());
+}
+
+test('#329 Settings › Execution › Engine speaks the interface language', () => {
+  const en = engineSettingsMarkup('en', { mode: 'local' });
+  assert.match(en, /This computer runs the engine/);
+  assert.match(en, />Change…</);
+  const pt = engineSettingsMarkup('pt-BR', { mode: 'local' });
+  assert.match(pt, /Este computador roda o engine/);
+  assert.match(pt, />Alterar…</);
+  assert.match(pt, />Este computador</);
+  const remote = engineSettingsMarkup('pt-BR', { mode: 'remote', host: 'my-pc:7300' });
+  assert.match(remote, /Esta janela mostra o engine em my-pc:7300/);
+  assert.match(remote, /Engine remoto · my-pc:7300/);
+  assert.match(remote, /data-engine-mode="remote"/);
+  const browser = engineSettingsMarkup('pt-BR', { mode: 'browser', host: 'my-pc:7300' }, false);
+  assert.match(browser, /Esta página é servida pelo engine em my-pc:7300/);
+  assert.doesNotMatch(browser, /settings-engine-change/, 'a plain browser has no Change…');
+});
+
+test('#329 every text key of the connection page is in both catalogs', () => {
+  const dir = path.join(__dirname, '..', 'src', 'renderer', 'connection');
+  const html = fs.readFileSync(path.join(dir, 'connection.html'), 'utf8');
+  const js = fs.readFileSync(path.join(dir, 'connection.js'), 'utf8');
+  const keys = new Set([
+    ...[...html.matchAll(/data-i18n(?:-placeholder)?="([\w.]+)"/g)].map((m) => m[1]),
+    ...[...js.matchAll(/'((?:connection|common)\.[\w.]+)'/g)].map((m) => m[1]),
+  ]);
+  assert.ok(keys.size > 30, `${keys.size} keys`);
+  for (const lang of ['en', 'pt-BR']) {
+    const c = catalog(lang);
+    const missing = [...keys].filter((k) => !(k in c));
+    assert.deepEqual(missing, [], `missing from ${lang}.json`);
+  }
+  assert.match(html, /<script src="\.\.\/\.\.\/shared\/i18n\.js"><\/script>\s*<script src="connection\.js">/, 'the catalog loads before the page\'s script');
 });

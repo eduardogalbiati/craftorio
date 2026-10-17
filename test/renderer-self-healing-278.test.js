@@ -21,7 +21,9 @@ const vm = require('vm');
 const night = require('../src/night-watch');
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-const settingsSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'views', 'settings', 'settings.js'), 'utf8');
+// #329: the markup lives in settings-markup.js, its texts in the catalog
+const { settingsSource, t } = require('./settings-source-329');
+const settingsSrc = settingsSource();
 const nightSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'views', 'nightwatch', 'nightwatch.js'), 'utf8');
 
 // ---- Settings › Oracle -------------------------------------------------------------------------
@@ -41,6 +43,7 @@ function loadOracleSettings(oracle) {
   const sandbox = {
     $: (sel) => els[sel] || null,
     esc,
+    t,
     state: { settings: { oracle } },
     api: {
       setSettings: async (patch) => { calls.push(JSON.parse(JSON.stringify(patch))); sandbox.state.settings = { ...sandbox.state.settings, ...patch }; return sandbox.state.settings; },
@@ -55,7 +58,7 @@ function loadOracleSettings(oracle) {
 function selfHealingHtml(o, nw) {
   const m = /function selfHealingHtml\([^)]*\) \{[\s\S]*?\n\}/.exec(settingsSrc);
   assert.ok(m, 'function selfHealingHtml(o, nw) not found in settings.js');
-  const sandbox = { esc };
+  const sandbox = { esc, t };
   vm.createContext(sandbox);
   vm.runInContext(`${m[0]}\nthis.out = selfHealingHtml(${JSON.stringify(o)}, ${JSON.stringify(nw)});`, sandbox);
   return String(sandbox.out);

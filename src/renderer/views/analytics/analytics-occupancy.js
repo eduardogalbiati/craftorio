@@ -25,10 +25,10 @@
   const hours = (h) => (h == null ? '—' : `${(Math.round(h * 10) / 10).toFixed(1)} h`);
   const level = (x) => window.OccupancyChip?.chipModel({ occupancy: x || 0 }).level || 'none';
 
-  // dates in the owner's convention: the locale of the app; a day key (the engine cuts d.day in the
+  // dates in the interface language (#329); a day key (the engine cuts d.day in the
   // owner's zone, #273) is drawn from its own date, an instant from its day in that zone
   const dayFormat = (opts) => {
-    try { return new Intl.DateTimeFormat(navigator.language || undefined, opts); } catch { return new Intl.DateTimeFormat(undefined, opts); }
+    try { return new Intl.DateTimeFormat(window.I18n?.getLanguage() || undefined, opts); } catch { return new Intl.DateTimeFormat(undefined, opts); }
   };
   const DAY_SHORT = dayFormat({ day: '2-digit', month: '2-digit' });
   const DAY_LONG = dayFormat({ weekday: 'short', day: '2-digit', month: '2-digit' });

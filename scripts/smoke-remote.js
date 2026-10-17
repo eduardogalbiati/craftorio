@@ -5,7 +5,7 @@
 // Starts scripts/serve.js on 127.0.0.1 (a free port) with a scratch workspace, simulation only and
 // no account, writes a scratch user data folder whose engine connection points at it, then opens
 // the app (src/main): it must open no workspace of its own, show the engine's page (window.api over
-// HTTP: a project created through it is the engine's), say "Remote engine" in Settings › Execution ›
+// HTTP: a project created through it is the engine's), say "remote" in Settings › Execution ›
 // Engine, open the connection page from Change… (its Cancel closes it), and, once the engine stops,
 // replace its window with the connection page and the reason (its close button then reads Quit). Saves remote.png, connection.png and unreachable.png in
 // <out-dir>. Never calls a model: MULTIAGENT_SIMULATION_ONLY=1 (decideMode only uses an engine on
@@ -105,8 +105,10 @@ async function checkRemoteWindow(origin) {
   if (!engineProjects.some((f) => f.startsWith(project.id))) throw new Error('the project was not created in the engine\'s workspace');
   await js('showView("settings"); showSettingsTab("execution")');
   await waitFor(remote, 'document.querySelector("[data-testid=settings-engine-mode]")', 'Settings › Execution › Engine');
+  // what the row says, in any interface language (#329): its mode attribute, then its badge's text
+  const mode = await js('document.querySelector("[data-testid=settings-engine]").dataset.engineMode');
   const badge = await js('document.querySelector("[data-testid=settings-engine-mode]").textContent');
-  if (!badge.startsWith('Remote engine')) throw new Error(`Settings › Engine says "${badge}"`);
+  if (mode !== 'remote' || !badge.includes(new URL(origin).host)) throw new Error(`Settings › Engine says ${mode}: "${badge}"`);
   await capture(remote, 'remote.png');
   console.log(`remote window: ${remote.webContents.getURL()} (${badge})`);
   return remote;
@@ -120,8 +122,8 @@ async function checkConnectionPage(remote, origin) {
   if (!now.includes(new URL(origin).host)) throw new Error(`the connection page says "${now}"`);
   await capture(page, 'connection.png');
   // Cancel closes it and leaves the engine's window as it was
-  const label = await page.webContents.executeJavaScript('document.querySelector("[data-testid=engine-connection-cancel]").textContent');
-  if (label !== 'Cancel') throw new Error(`the page's close button reads "${label}" over the engine's window`);
+  const close = await page.webContents.executeJavaScript('document.querySelector("[data-testid=engine-connection-cancel]").dataset.close');
+  if (close !== 'cancel') throw new Error(`the page's close button is "${close}" over the engine's window`);
   await page.webContents.executeJavaScript('document.querySelector("[data-testid=engine-connection-cancel]").click()');
   for (let i = 0; i < 50 && !page.isDestroyed(); i++) await sleep(100);
   if (!page.isDestroyed() || remote.isDestroyed()) throw new Error('Cancel did not close the page alone');
@@ -137,8 +139,8 @@ async function checkUnreachable(remote) {
   console.log(`engine stopped: ${await page.webContents.executeJavaScript('document.querySelector("#cn-failure-text").textContent')}`);
   await capture(page, 'unreachable.png');
   // the app's only window: its close button quits the app instead (not clicked: the check ends here)
-  const label = await page.webContents.executeJavaScript('document.querySelector("[data-testid=engine-connection-cancel]").textContent');
-  if (label !== 'Quit') throw new Error(`the page alone reads "${label}", not Quit`);
+  const close = await page.webContents.executeJavaScript('document.querySelector("[data-testid=engine-connection-cancel]").dataset.close');
+  if (close !== 'quit') throw new Error(`the page alone has a "${close}" button, not Quit`);
 }
 
 async function main() {

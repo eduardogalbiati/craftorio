@@ -5,7 +5,8 @@
 // their sign-in), Execution (where the engine runs (settings-engine.js), developer mode, Keep awake (keep-awake.js), notifications, concurrent runs, the Oracle's Self-healing switch (#278) and its "Apply merged fixes to this app" row (#279), daily budget and compaction threshold) and About. Registers
 // itself with registerView (view-registry.js); uses app.js globals ($, esc, errMsg, state,
 // applyDeveloperMode, renderHeader, renderWorkspacePaths), commandHint (command-hint.js: the install
-// commands of missing CLIs) and window.BACKLOG_PLATFORMS (backlog.js).
+// commands of missing CLIs) and window.BACKLOG_PLATFORMS (backlog.js). #329: its markup is
+// settings-markup.js, every text from the catalog through t (src/shared/i18n.js, settings.* keys).
 
 function showSettingsTab(tab) {
   document.querySelectorAll('.settings-tab').forEach((b) => b.classList.toggle('active', b.dataset.stab === tab));
@@ -20,9 +21,9 @@ function showSettingsTab(tab) {
 function renderTimeZone() {
   const zone = TimeZone.current();
   const sel = $('#set-time-zone');
-  sel.innerHTML = TimeZone.zones(zone).map((z) => `<option value="${esc(z)}">${esc(z)}${z === TimeZone.systemZone() ? ' (this computer)' : ''}</option>`).join('');
+  sel.innerHTML = TimeZone.zones(zone).map((z) => `<option value="${esc(z)}">${esc(z)}${z === TimeZone.systemZone() ? t('settings.time_zone.this_computer') : ''}</option>`).join('');
   sel.value = zone;
-  $('#set-time-zone-now').textContent = `Now ${TimeZone.formatDateTime(Date.now(), zone)} (${TimeZone.offsetLabel(Date.now(), zone)})`;
+  $('#set-time-zone-now').textContent = t('settings.time_zone.now', { time: TimeZone.formatDateTime(Date.now(), zone), offset: TimeZone.offsetLabel(Date.now(), zone) });
 }
 
 // Control channel (#336, src/control): main's endpoint state { enabled, port, file, error, ctlPath }.
@@ -36,7 +37,7 @@ function renderControlChannel(s, failure) {
   const box = document.querySelector('[data-setting="controlChannel"]');
   if (box) box.disabled = !available;
   const on = !!s?.enabled;
-  status.textContent = !available ? 'Not available in the browser client' : on ? `Listening on 127.0.0.1:${s.port} · ${s.file}` : 'Off';
+  status.textContent = !available ? t('settings.control.unavailable') : on ? t('settings.control.listening', { port: s.port, file: s.file }) : t('settings.off');
   status.title = status.textContent;
   status.className = `badge ${on ? 'cat-monitor' : ''}`;
   $('#set-control-error').textContent = failure || s?.error || '';
@@ -63,12 +64,12 @@ async function renderSettings() {
   state.settings = await api.getSettings();
   const ws = state.ws;
   $('#set-ws-path').textContent = ws.root;
-  $('#set-ws-registry').textContent = ws.registry || 'MULTIAGENT_WORKSPACE environment variable (not saved)';
-  const folders = [['runs', 'Run logs (one directory per run).'], ['repos', 'Repositories cloned from git URLs.'], ['projects', 'Project registry (one .json per project).'], ['skills', 'Skills (one folder with a SKILL.md per skill).']];
-  $('#set-ws-folders').innerHTML = folders.map(([k, d]) => `
+  $('#set-ws-registry').textContent = ws.registry || t('settings.general.registry_env');
+  const folders = ['runs', 'repos', 'projects', 'skills'];
+  $('#set-ws-folders').innerHTML = folders.map((k) => `
     <div class="s-row">
-      <div class="s-label"><b>${k}/</b><span>${esc(d)}</span><code>${esc(ws[k])}</code></div>
-      <div class="s-ctrl"><button class="btn sm ghost" data-open="${esc(ws[k])}">Open</button></div>
+      <div class="s-label"><b>${k}/</b><span>${t(`settings.folders.${k}`)}</span><code>${esc(ws[k])}</code></div>
+      <div class="s-ctrl"><button class="btn sm ghost" data-open="${esc(ws[k])}">${t('settings.open')}</button></div>
     </div>`).join('');
   $('#set-ws-folders').querySelectorAll('[data-open]').forEach((b) => (b.onclick = () => api.openPath(b.dataset.open)));
   renderTimeZone();
@@ -77,7 +78,7 @@ async function renderSettings() {
   window.Findings?.renderList($('#set-findings-list'));
   document.querySelectorAll('[data-setting]').forEach((el) => (el.checked = !!state.settings[el.dataset.setting]));
   const platform = $('#set-backlog-platform');
-  platform.innerHTML = Object.entries(window.BACKLOG_PLATFORMS || {}).map(([id, p]) => `<option value="${id}">${esc(p.label)}${p.soon ? ' (sync not available yet)' : ''}</option>`).join('');
+  platform.innerHTML = Object.entries(window.BACKLOG_PLATFORMS || {}).map(([id, p]) => `<option value="${id}">${esc(p.label)}${p.soon ? t('settings.backlog.sync_soon') : ''}</option>`).join('');
   platform.value = state.settings.backlogPlatform || window.Platforms.DEFAULT_PLATFORM;
   $('#set-backlog-group').value = state.settings.backlogMaxGroup || 5;
   state.workflows = await api.listWorkflows();
@@ -109,10 +110,10 @@ function renderDefaultWorkflow() {
   const list = (state.workflows || []).filter((w) => !w.error && w.inputs?.task);
   const cur = DefaultWorkflow.current();
   const sel = $('#set-default-workflow');
-  sel.innerHTML = list.map((w) => `<option value="${esc(w.file)}">${esc(w.name || w.file)} (${esc(w.file)}${w.merge === 'local' ? ', local merge' : w.merge === 'remote' ? ', pushes and opens PRs' : ''})</option>`).join('');
+  sel.innerHTML = list.map((w) => `<option value="${esc(w.file)}">${esc(w.name || w.file)} (${esc(w.file)}${w.merge === 'local' ? t('settings.backlog.local_merge') : w.merge === 'remote' ? t('settings.backlog.remote_merge') : ''})</option>`).join('');
   sel.value = cur.file;
   const note = $('#set-default-wf-note');
-  note.textContent = cur.missing ? `${cur.missing} no longer exists: ${cur.file} is used instead.` : '';
+  note.textContent = cur.missing ? t('settings.backlog.workflow_missing', { missing: cur.missing, file: cur.file }) : '';
   note.classList.toggle('hidden', !cur.missing);
 }
 
@@ -125,18 +126,18 @@ function renderFallbackSettings() {
   const providers = state.settings.providers || {};
   const catalog = Object.values(window.ChatModels?.PROVIDERS || {});
   const names = [...new Set([...catalog.map((p) => p.key), ...Object.keys(providers)])];
-  const hint = (name) => catalog.filter((p) => p.key !== name).map((p) => `e.g. ${p.key}:${p.models[0]}`)[0] || '';
+  const hint = (name) => catalog.filter((p) => p.key !== name).map((p) => t('settings.fallbacks.example', { entry: `${p.key}:${p.models[0]}` }))[0] || '';
   $('#set-fallbacks').innerHTML = names.map((name) => `<div class="s-row">
-      <div class="s-label"><b>${esc(name)}</b><span>Out of credits on ${esc(name)}: try these next.</span></div>
-      <div class="s-ctrl"><input type="text" class="s-fallbacks" data-fb-provider="${esc(name)}" value="${esc((providers[name]?.fallbacks || []).join(', '))}" placeholder="${esc(hint(name))}" aria-label="Fallbacks of ${esc(name)}" spellcheck="false" /></div>
+      <div class="s-label"><b>${esc(name)}</b><span>${t('settings.fallbacks.row', { provider: esc(name) })}</span></div>
+      <div class="s-ctrl"><input type="text" class="s-fallbacks" data-fb-provider="${esc(name)}" value="${esc((providers[name]?.fallbacks || []).join(', '))}" placeholder="${esc(hint(name))}" aria-label="${t('settings.fallbacks.label', { provider: esc(name) })}" spellcheck="false" /></div>
     </div>`).join('');
   const models = state.settings.models || {};
   const ids = [...new Set([...catalog.flatMap((p) => p.models), ...Object.keys(models)])];
   $('#set-model-limits').innerHTML = ids.map((id) => `<div class="s-row" data-ml-model="${esc(id)}">
       <div class="s-label"><b class="mono">${esc(id)}</b></div>
       <div class="s-ctrl">
-        <label class="small">Timeout × <input type="number" class="s-num" data-ml="timeout_factor" min="0.1" step="0.1" value="${esc(models[id]?.timeout_factor ?? '')}" placeholder="1" aria-label="Turn timeout factor of ${esc(id)}" /></label>
-        <label class="small">Cost limit US$ <input type="number" class="s-num" data-ml="max_total_cost_usd" min="1" step="1" value="${esc(models[id]?.max_total_cost_usd ?? '')}" placeholder="workflow's" aria-label="Run cost limit with ${esc(id)}" /></label>
+        <label class="small">${t('settings.limits.timeout')} <input type="number" class="s-num" data-ml="timeout_factor" min="0.1" step="0.1" value="${esc(models[id]?.timeout_factor ?? '')}" placeholder="1" aria-label="${t('settings.limits.timeout_label', { model: esc(id) })}" /></label>
+        <label class="small">${t('settings.limits.cost')} <input type="number" class="s-num" data-ml="max_total_cost_usd" min="1" step="1" value="${esc(models[id]?.max_total_cost_usd ?? '')}" placeholder="${t('settings.limits.cost_placeholder')}" aria-label="${t('settings.limits.cost_label', { model: esc(id) })}" /></label>
       </div>
     </div>`).join('');
   $('#set-fallbacks-msg').textContent = '';
@@ -148,7 +149,7 @@ async function saveFallbackSettings() {
   for (const el of document.querySelectorAll('#set-fallbacks [data-fb-provider]')) {
     const entries = el.value.split(/[,\s]+/).map((s) => s.trim()).filter(Boolean);
     const bad = entries.find((e) => !FALLBACK_ENTRY.test(e));
-    if (bad) { msg.className = 'small error'; msg.textContent = `"${bad}" is not provider:model (e.g. codex:gpt-6-luna).`; el.focus({ preventScroll: true }); return; }
+    if (bad) { msg.className = 'small error'; msg.textContent = t('settings.fallbacks.invalid', { entry: bad }); el.focus({ preventScroll: true }); return; }
     const { fallbacks: _old, ...rest } = providers[el.dataset.fbProvider] || {};
     providers[el.dataset.fbProvider] = entries.length ? { ...rest, fallbacks: entries } : rest;
     if (!Object.keys(providers[el.dataset.fbProvider]).length) delete providers[el.dataset.fbProvider];
@@ -159,7 +160,7 @@ async function saveFallbackSettings() {
     for (const el of row.querySelectorAll('[data-ml]')) {
       const n = Number(el.value);
       el.classList.toggle('invalid', el.value !== '' && !(n > 0));
-      if (el.value !== '' && !(n > 0)) { msg.className = 'small error'; msg.textContent = 'A factor or a cost limit is a positive number.'; el.focus({ preventScroll: true }); return; }
+      if (el.value !== '' && !(n > 0)) { msg.className = 'small error'; msg.textContent = t('settings.limits.invalid'); el.focus({ preventScroll: true }); return; }
       if (el.value !== '') lim[el.dataset.ml] = n;
     }
     if (Object.keys(lim).length) models[row.dataset.mlModel] = lim;
@@ -167,7 +168,7 @@ async function saveFallbackSettings() {
   state.settings = await api.setSettings({ providers, models });
   renderFallbackSettings();
   msg.className = 'small muted';
-  msg.textContent = 'Saved: the next runs use them.';
+  msg.textContent = t('settings.fallbacks.saved');
 }
 
 // Settings › Execution › Concurrent runs (settings.concurrentRuns) and the machine profile (#367,
@@ -185,19 +186,19 @@ async function renderConcurrency() {
   const st = mp?.state || 'unknown';
   const badge = $('#set-mp-state');
   badge.dataset.state = st;
-  badge.textContent = { auto: 'Auto', manual: 'Manual', unknown: 'Unknown' }[st];
+  badge.textContent = { auto: t('settings.machine.auto'), manual: t('settings.machine.manual'), unknown: t('settings.machine.unknown') }[st];
   badge.className = `badge${st === 'auto' ? ' live' : st === 'unknown' ? ' warn' : ''}`;
-  $('#set-mp-line').textContent = mp?.line || "This machine's threads and memory couldn't be read.";
-  $('#set-mp-hint').textContent = st === 'manual' ? ` Your values: ${mp.concurrentRuns} at once, ${mp.testWorkers} test worker${mp.testWorkers === 1 ? '' : 's'} per run; they stay as they are on any machine.`
-    : st === 'unknown' ? ' Today\'s defaults apply; type values below to set your own.' : ' The values below follow this machine.';
+  $('#set-mp-line').textContent = mp?.line || t('settings.machine.unread');
+  $('#set-mp-hint').textContent = ` ${st === 'manual' ? t('settings.machine.manual_hint', { runs: mp.concurrentRuns, workers: t('settings.machine.workers', { count: mp.testWorkers }) })
+    : st === 'unknown' ? t('settings.machine.unknown_hint') : t('settings.machine.auto_hint')}`;
   // Use these values: turns concurrent runs on with the machine's values (nothing to use when unknown)
   $('#set-mp-use').classList.toggle('hidden', !mp?.proposal || (st === 'auto' && !!c.enabled));
   $('#set-mp-auto').classList.toggle('hidden', st !== 'manual');
   const s = mp?.suggestion;
   $('#set-mp-suggestion').classList.toggle('hidden', !s);
   if (s) {
-    $('#set-mp-suggestion-title').textContent = `The memory guard stepped in on ${s.days.length} days this week: lower to ${s.concurrentRuns} run${s.concurrentRuns === 1 ? '' : 's'} at once?`;
-    $('#set-mp-suggestion-evidence').textContent = `Days: ${s.days.join(', ')}. Runs held or stopped: ${s.runs.join(', ') || 'none recorded'}. Nothing changes until you apply it.`;
+    $('#set-mp-suggestion-title').textContent = t('settings.machine.suggestion', { days: s.days.length, runs: t('settings.machine.runs_at_once', { count: s.concurrentRuns }) });
+    $('#set-mp-suggestion-evidence').textContent = t('settings.machine.evidence', { days: s.days.join(', '), runs: s.runs.join(', ') || t('settings.machine.none_recorded') });
   }
 }
 
@@ -253,8 +254,8 @@ async function applyMachineSuggestion() {
     concurrentRuns: crSettings({ max: s.concurrentRuns }),
     machineProfile: { mode: 'manual', concurrentRuns: s.concurrentRuns, ...(workers ? { testWorkers: workers } : {}) },
   });
-  window.showToast?.(`Lowered to ${s.concurrentRuns} runs at once`, 'Settings › Execution › Concurrent runs', null, null, {
-    action: { label: 'Undo', run: () => saveMachineProfile(before) },
+  window.showToast?.(t('settings.machine.lowered', { runs: t('settings.machine.runs_at_once', { count: s.concurrentRuns }) }), t('settings.machine.lowered_where'), null, null, {
+    action: { label: t('common.undo'), run: () => saveMachineProfile(before) },
   });
 }
 
@@ -270,7 +271,7 @@ async function renderMemoryGuard() {
   if (!state.totalMemoryBytes) state.totalMemoryBytes = (await api.appInfo().catch(() => null))?.totalMemoryBytes || null;
   const total = Number(state.totalMemoryBytes);
   const gb = total > 0 ? ((total * g.limitPercent) / 100 / 1024 ** 3).toFixed(1) : null;
-  $('#set-mg-limit-hint').textContent = `${gb ? `${gb} GB on this machine. ` : ''}Between 5 and 90. Measured as committed memory on Windows, resident memory elsewhere.`;
+  $('#set-mg-limit-hint').textContent = `${gb ? t('settings.memory.on_machine', { gb: I18n.formatNumber(Number(gb), undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) }) : ''}${t('settings.memory.limit_hint')}`;
 }
 
 // Saves the group when a field changes; a value out of its range shows the field's error state and nothing is saved.
@@ -282,7 +283,7 @@ async function saveMemoryGuard() {
     const ok = raw !== '' && Number.isFinite(n) && n >= min && n <= max;
     el.classList.toggle('invalid', !ok);
     if (ok) el.removeAttribute('aria-invalid'); else el.setAttribute('aria-invalid', 'true');
-    el.title = ok ? '' : `Between ${min} and ${max}: not saved.`;
+    el.title = ok ? '' : t('settings.memory.out_of_range', { min, max });
     return ok ? n : null;
   };
   const limitPercent = field('#set-mg-limit', 5, 90);
@@ -373,16 +374,16 @@ async function saveOracleSettings() {
 // Oracle that cannot start in this workspace (nw.oracle false) disables the switch, with the reason.
 function selfHealingHtml(o, nw) {
   const p = nw && nw.permissions;
-  const count = p ? ` (${p.allowed.length} of ${p.catalog.length})` : '';
+  const count = p ? t('settings.healing.count', { allowed: p.allowed.length, total: p.catalog.length }) : '';
   const on = !!o && o.selfHealing === true;
   // it can always be turned off: only turning it on needs the Oracle
   const unavailable = !!nw && !nw.oracle && !on;
-  return `<div class="s-label"><b>Self-healing</b>
-      <span>The Oracle watches every run and roadmap, day and night, and repairs what its permissions allow. It never answers a gate, pushes, closes an issue or deletes data.</span>
-      <span><button type="button" class="link-btn" id="set-oracle-self-healing-perms" data-testid="self-healing-permissions" title="Opens the Night watch's checklist: one list for both">What it may do alone${esc(count)} ›</button></span>
-      ${unavailable ? '<span class="error small" data-testid="self-healing-unavailable">The Oracle cannot start in this workspace, so Self-healing cannot be turned on.</span>' : ''}
+  return `<div class="s-label"><b>${t('settings.healing.title')}</b>
+      <span>${t('settings.healing.help')}</span>
+      <span><button type="button" class="link-btn" id="set-oracle-self-healing-perms" data-testid="self-healing-permissions" title="${t('settings.healing.perms_title')}">${t('settings.healing.perms')}${esc(count)} ›</button></span>
+      ${unavailable ? `<span class="error small" data-testid="self-healing-unavailable">${t('settings.healing.unavailable')}</span>` : ''}
     </div>
-    <label class="switch"${unavailable ? ' title="The Oracle cannot start in this workspace"' : ''}><input type="checkbox" id="set-oracle-self-healing" data-testid="oracle-self-healing" aria-label="Self-healing"${on ? ' checked' : ''}${unavailable ? ' disabled' : ''} /><span></span></label>`;
+    <label class="switch"${unavailable ? ` title="${t('settings.healing.unavailable_short')}"` : ''}><input type="checkbox" id="set-oracle-self-healing" data-testid="oracle-self-healing" aria-label="${t('settings.healing.title')}"${on ? ' checked' : ''}${unavailable ? ' disabled' : ''} /><span></span></label>`;
 }
 
 // Draws the Self-healing row again with the permissions' count and whether the Oracle can start
@@ -408,17 +409,17 @@ async function renderSelfHealing() {
 function appUpdateHtml(o, info) {
   const healing = !!o && o.selfHealing === true;
   const applies = !!info && info.applies === true;
-  const why = !info ? 'Checking whether this app runs from a project of this workspace…'
-    : !applies ? `Unavailable: ${info.reason}.`
-      : !healing ? 'Turn Self-healing on first.' : '';
+  const why = !info ? t('settings.app_update.checking')
+    : !applies ? t('settings.app_update.unavailable', { reason: info.reason })
+      : !healing ? t('settings.app_update.healing_first') : '';
   const on = applies && healing && o.appUpdate === true;
-  const behind = applies ? (info.behind > 0 ? `${info.behind} commit${info.behind === 1 ? '' : 's'} ahead of this app` : 'the app is up to date') : '';
-  return `<div class="s-label"><b>Apply merged fixes to this app</b>
-      <span>After a roadmap stage ends, the app updates itself from the local main of the project that is its repository: it pauses the roadmap, waits for the runs in progress (a gate is never answered), fast-forwards, restarts and resumes the roadmap. It never pushes.</span>
-      ${applies ? `<span data-testid="app-update-source">Source: <b>${esc(info.project?.name || info.project?.id || '')}</b>, local main (<code>${esc(info.short)}</code>, ${esc(behind)})</span>` : ''}
+  const behind = applies ? (info.behind > 0 ? t('settings.app_update.behind', { count: info.behind }) : t('settings.app_update.up_to_date')) : '';
+  return `<div class="s-label"><b>${t('settings.app_update.title')}</b>
+      <span>${t('settings.app_update.help')}</span>
+      ${applies ? `<span data-testid="app-update-source">${t('settings.app_update.source', { project: esc(info.project?.name || info.project?.id || ''), short: esc(info.short), behind: esc(behind) })}</span>` : ''}
       ${why ? `<span class="muted small" data-testid="app-update-reason">${esc(why)}</span>` : ''}
     </div>
-    <label class="switch"><input type="checkbox" id="set-app-update" data-testid="app-update-switch" aria-label="Apply merged fixes to this app"${on ? ' checked' : ''}${applies && healing ? '' : ' disabled'} /><span></span></label>`;
+    <label class="switch"><input type="checkbox" id="set-app-update" data-testid="app-update-switch" aria-label="${t('settings.app_update.title')}"${on ? ' checked' : ''}${applies && healing ? '' : ' disabled'} /><span></span></label>`;
 }
 
 // Draws the row; `fresh` reads where it applies again (when the screen opens), else the last answer.
@@ -440,20 +441,20 @@ async function renderAppUpdate(fresh = true) {
 // The Oracle's wake-ups (#123, src/oracle-wake.js): which runs wake it and on which events, saved
 // with the rest of settings.oracle. The kinds (oracle-wake.js WAKE_KINDS), in display order.
 const ORACLE_WAKE_KINDS = [
-  ['gate', 'Human gates waiting'],
-  ['finished', 'Runs that finish'],
-  ['merge', 'Merge conflicts'],
-  ['limit', 'Limits and budgets'],
-  ['stall', 'Stalls, supervisor decisions'],
-  ['invalid', 'Repeated invalid outputs'],
-  ['interrupted', 'Interrupted runs'],
+  ['gate', () => t('settings.wake.gate')],
+  ['finished', () => t('settings.wake.finished')],
+  ['merge', () => t('settings.wake.merge')],
+  ['limit', () => t('settings.wake.limit')],
+  ['stall', () => t('settings.wake.stall')],
+  ['invalid', () => t('settings.wake.invalid')],
+  ['interrupted', () => t('settings.wake.interrupted')],
 ];
 function renderOracleWake() {
   const o = state.settings.oracle || {};
   const scope = ['all', 'watched', 'off'].includes(o.wakeScope) ? o.wakeScope : 'all';
   $('#set-oracle-wake').value = scope;
   const on = Array.isArray(o.wakeOn) ? o.wakeOn : ORACLE_WAKE_KINDS.map(([k]) => k);
-  $('#set-oracle-wake-on').innerHTML = ORACLE_WAKE_KINDS.map(([k, label]) => `<label class="check small"><input type="checkbox" data-oracle-wake-kind="${k}"${on.includes(k) ? ' checked' : ''}${scope === 'off' ? ' disabled' : ''} /> ${esc(label)}</label>`).join('');
+  $('#set-oracle-wake-on').innerHTML = ORACLE_WAKE_KINDS.map(([k, label]) => `<label class="check small"><input type="checkbox" data-oracle-wake-kind="${k}"${on.includes(k) ? ' checked' : ''}${scope === 'off' ? ' disabled' : ''} /> ${esc(label())}</label>`).join('');
   $('#set-oracle-wake-on').querySelectorAll('[data-oracle-wake-kind]').forEach((el) => (el.onchange = saveOracleWake));
 }
 
@@ -468,7 +469,7 @@ async function saveOracleWake() {
 }
 
 // Settings › General › Voice input (#82): the whisper.cpp CLI, the model and the language (src/speech.js).
-const VOICE_LANGUAGES = { auto: 'Auto-detect', pt: 'Portuguese', en: 'English', es: 'Spanish', fr: 'French', de: 'German', it: 'Italian' };
+const VOICE_LANGUAGES = ['auto', 'de', 'en', 'es', 'fr', 'it', 'pt'];
 async function renderVoice(st) {
   try {
     st = st || await api.speechStatus();
@@ -478,8 +479,8 @@ async function renderVoice(st) {
   }
   $('#set-voice-command').value = state.settings.voiceCommand || '';
   $('#set-voice-cli').innerHTML = st.path
-    ? `Found: <code>${esc(st.path)}</code>`
-    : `Not found (command "${esc(st.command)}"). Install: ${st.installCommand ? commandHint(st.installCommand) : esc(st.installHint)}`;
+    ? t('settings.voice.found', { path: esc(st.path) })
+    : t('settings.voice.not_found', { command: esc(st.command), install: st.installCommand ? commandHint(st.installCommand) : esc(st.installHint) });
   const known = st.models.some((m) => m.id === st.model);
   $('#set-voice-model').innerHTML = st.models.map((m) =>
     `<option value="${esc(m.id)}">${esc(m.label)} · ${esc(m.size)} · ${esc(m.note)}${m.downloaded ? ' ✓' : ''}</option>`).join('')
@@ -488,23 +489,23 @@ async function renderVoice(st) {
   const btn = $('#btn-voice-download');
   btn.classList.toggle('hidden', !known || st.modelReady);
   btn.disabled = false;
-  btn.textContent = 'Download';
+  btn.textContent = t('settings.voice.download');
   $('#set-voice-model-info').textContent = st.modelReady
-    ? `Ready. Stored in ${st.modelsDir}.`
-    : known ? `Not downloaded yet. It goes to ${st.modelsDir}.` : 'Model file not found.';
-  $('#set-voice-language').innerHTML = st.languages.map((l) => `<option value="${esc(l)}">${esc(VOICE_LANGUAGES[l] || l)}</option>`).join('');
+    ? t('settings.voice.ready', { dir: st.modelsDir })
+    : known ? t('settings.voice.not_downloaded', { dir: st.modelsDir }) : t('settings.voice.model_missing');
+  $('#set-voice-language').innerHTML = st.languages.map((l) => `<option value="${esc(l)}">${esc(VOICE_LANGUAGES.includes(l) ? t(`settings.voice.lang.${l}`) : l)}</option>`).join('');
   $('#set-voice-language').value = st.language;
 }
 
 async function downloadVoiceModel() {
   const btn = $('#btn-voice-download');
   btn.disabled = true;
-  btn.textContent = 'Downloading…';
+  btn.textContent = t('settings.voice.downloading');
   try {
     await renderVoice(await api.downloadSpeechModel($('#set-voice-model').value));
   } catch (e) {
     btn.disabled = false;
-    btn.textContent = 'Download';
+    btn.textContent = t('settings.voice.download');
     $('#set-voice-model-info').textContent = errMsg(e);
   }
 }
@@ -515,7 +516,7 @@ async function renderIndexStatus(note = '') {
   try {
     const st = await api.indexStatus();
     $('#set-index-path').textContent = st.path;
-    el.textContent = note || (st.open ? `${st.runs} run${st.runs === 1 ? '' : 's'} indexed.` : `Not available: ${st.error || 'unknown error'}. Everything still works from the files.`);
+    el.textContent = note || (st.open ? t('settings.index.indexed', { count: st.runs }) : t('settings.index.unavailable', { error: st.error || t('settings.index.unknown_error') }));
     $('#btn-index-rebuild').disabled = !st.open;
   } catch (e) { el.textContent = errMsg(e); }
 }
@@ -523,24 +524,26 @@ async function renderIndexStatus(note = '') {
 async function rebuildIndex() {
   const btn = $('#btn-index-rebuild');
   btn.disabled = true;
-  $('#set-index-status').textContent = 'Rebuilding from runs/…';
+  $('#set-index-status').textContent = t('settings.index.rebuilding');
   try {
     const r = await api.rebuildIndex();
-    await renderIndexStatus(`Rebuilt: ${r.runs} run${r.runs === 1 ? '' : 's'} read from runs/.`);
+    await renderIndexStatus(t('settings.index.rebuilt', { count: r.runs }));
   } catch (e) {
     $('#set-index-status').textContent = errMsg(e);
   } finally { btn.disabled = false; }
 }
 
 // The dependency cache (#198): size, entries, and Clear (the entries a worktree links stay)
-const fmtCacheSize = (n) => (n >= 1024 ** 3 ? `${(n / 1024 ** 3).toFixed(1)} GB` : `${Math.round(n / 1024 ** 2)} MB`);
+const fmtCacheSize = (n) => (n >= 1024 ** 3
+  ? `${I18n.formatNumber(n / 1024 ** 3, undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} GB`
+  : `${I18n.formatNumber(Math.round(n / 1024 ** 2))} MB`);
 async function renderDepsCache(note) {
   const el = $('#set-deps-status');
   try {
     const c = await api.depsCacheInfo();
     $('#set-deps-path').textContent = c.dir;
-    $('#set-deps-size').textContent = c.entries ? fmtCacheSize(c.bytes) : 'Empty';
-    el.textContent = note || (c.entries ? `${c.entries} entr${c.entries === 1 ? 'y' : 'ies'}, ${c.linked} in use by a worktree.` : 'Nothing cached yet: the first run of a project installs once.');
+    $('#set-deps-size').textContent = c.entries ? fmtCacheSize(c.bytes) : t('settings.deps.empty');
+    el.textContent = note || (c.entries ? t('settings.deps.entries', { entries: t('settings.deps.count', { count: c.entries }), linked: c.linked }) : t('settings.deps.nothing'));
     $('#btn-deps-clear').disabled = !c.entries;
   } catch (e) { el.textContent = errMsg(e); }
 }
@@ -548,10 +551,11 @@ async function renderDepsCache(note) {
 async function clearDepsCache() {
   const btn = $('#btn-deps-clear');
   btn.disabled = true;
-  $('#set-deps-status').textContent = 'Clearing…';
+  $('#set-deps-status').textContent = t('settings.deps.clearing');
   try {
     const r = await api.clearDepsCache();
-    await renderDepsCache(`Cleared ${r.removed} entr${r.removed === 1 ? 'y' : 'ies'} (${fmtCacheSize(r.freedBytes)})${r.kept ? `; ${r.kept} kept: in use by a worktree or an install` : ''}.`);
+    const kept = r.kept ? t('settings.deps.kept', { count: r.kept }) : '';
+    await renderDepsCache(t('settings.deps.cleared', { entries: t('settings.deps.count', { count: r.removed }), size: fmtCacheSize(r.freedBytes), kept }));
   } catch (e) {
     $('#set-deps-status').textContent = errMsg(e);
     btn.disabled = false;
@@ -560,25 +564,25 @@ async function clearDepsCache() {
 
 async function renderTools() {
   const box = $('#set-tools');
-  box.innerHTML = '<div class="s-row"><div class="s-label"><span>Checking…</span></div></div>';
+  box.innerHTML = `<div class="s-row"><div class="s-label"><span>${t('settings.checking')}</span></div></div>`;
   const tools = await api.envDetails();
   if (typeof setCliStates === 'function') setCliStates(tools); // the Start panel's missing CLIs follow (#319)
-  box.innerHTML = tools.map((t) => `
+  box.innerHTML = tools.map((tool) => `
     <div class="s-row">
       <div class="s-label">
-        <b>${esc(t.name)}</b>
-        <span>${t.path ? esc(t.version || 'unknown version') : 'Not found in PATH.'}${t.account ? ` · account <b>${esc(t.account)}</b>` : ''}</span>
-        ${t.path ? `<code>${esc(t.path)}</code>` : t.installCommand ? commandHint(t.installCommand) : t.installHint ? `<span>Install: ${esc(t.installHint)}</span>` : ''}
-        ${t.path && !t.connected && t.auth && t.signInCommand ? commandHint(t.signInCommand, { signIn: true }) : ''}
-        ${t.path && !t.connected && t.output ? `<pre class="small muted">${esc(t.output)}</pre>` : ''}
+        <b>${esc(tool.name)}</b>
+        <span>${tool.path ? esc(tool.version || t('settings.tools.unknown_version')) : t('settings.tools.not_in_path')}${tool.account ? t('settings.tools.account', { account: esc(tool.account) }) : ''}</span>
+        ${tool.path ? `<code>${esc(tool.path)}</code>` : tool.installCommand ? commandHint(tool.installCommand) : tool.installHint ? `<span>${t('settings.tools.install', { hint: esc(tool.installHint) })}</span>` : ''}
+        ${tool.path && !tool.connected && tool.auth && tool.signInCommand ? commandHint(tool.signInCommand, { signIn: true }) : ''}
+        ${tool.path && !tool.connected && tool.output ? `<pre class="small muted">${esc(tool.output)}</pre>` : ''}
       </div>
-      <div class="s-ctrl"><span class="conn ${t.connected ? 'on' : 'off'}"><span class="conn-dot"></span>${t.connected ? 'Connected' : t.path ? (t.auth ? 'Not signed in' : 'Error') : 'Not installed'}</span></div>
+      <div class="s-ctrl"><span class="conn ${tool.connected ? 'on' : 'off'}"><span class="conn-dot"></span>${tool.connected ? t('settings.tools.connected') : tool.path ? (tool.auth ? t('setup.status.signed_out') : t('settings.tools.error')) : t('setup.status.missing')}</span></div>
     </div>`).join('');
 }
 
 async function renderAbout() {
   const i = await api.appInfo();
-  $('#set-about').innerHTML = [['App version', i.version], ['Electron', i.electron], ['Node', i.node], ['Workflows folder', i.workflowsDir]].map(([k, v]) =>
+  $('#set-about').innerHTML = [[t('settings.about.version'), i.version], ['Electron', i.electron], ['Node', i.node], [t('settings.about.workflows'), i.workflowsDir]].map(([k, v]) =>
     `<div class="s-row"><div class="s-label"><b>${esc(k)}</b></div><div class="s-ctrl mono small">${esc(v)}</div></div>`).join('');
 }
 
@@ -593,313 +597,11 @@ async function changeWorkspace() {
   }
 }
 
+let settingsWatching = false;
 registerView({
   id: 'settings',
   nav: { label: 'Settings', order: 110, icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" /></svg>' },
-  markup: `
-      <section id="view-settings" class="view hidden">
-        <div class="settings">
-          <aside class="settings-nav" data-testid="settings-tabs">
-            <h1>Settings</h1>
-            <button class="settings-tab active" data-stab="general">General</button>
-            <button class="settings-tab" data-stab="agents">Agents &amp; CLIs</button>
-            <button class="settings-tab" data-stab="execution">Execution</button>
-            <button class="settings-tab" data-stab="phone">Phone gates</button>
-            <button class="settings-tab" data-stab="about">About</button>
-          </aside>
-          <div class="settings-body">
-            <div class="settings-page" data-spage="general">
-              <h2 class="settings-title">General</h2>
-              <div class="s-group">
-                <div class="s-row">
-                  <div class="s-label"><b>Workspace folder</b><span>Where runs, repos, projects, skills and settings.json live.</span><code id="set-ws-path"></code></div>
-                  <div class="s-ctrl row"><button id="btn-ws-open" class="btn sm ghost">Open</button><button id="btn-ws-change" class="btn sm">Change…</button></div>
-                </div>
-                <div class="s-row">
-                  <div class="s-label"><b>Path registry entry</b><span>The workspace path is loaded from here the next time the app opens.</span><code id="set-ws-registry"></code></div>
-                </div>
-                <div class="s-row">
-                  <div class="s-label"><b>Time zone</b><span>Times on every screen, where days, nights and months start (Analytics, Usage, budgets, the Oracle's daily limit) and the times the agents report. Until one is chosen: this computer's.</span><span id="set-time-zone-now" class="muted small"></span></div>
-                  <div class="s-ctrl">${window.Select.markup('id="set-time-zone" aria-label="Time zone" data-testid="settings-time-zone"')}</div>
-                </div>
-              </div>
-              <p id="ws-error" class="error small"></p>
-              <div id="set-language"></div>
-              <h3 class="s-subtitle">Backlog</h3>
-              <div class="s-group">
-                <div class="s-row">
-                  <div class="s-label"><b>Default platform</b><span>Where the Backlog screen syncs a project's issues from. It can be changed on the Backlog screen too. GitHub uses the gh CLI and GitLab the glab CLI; Bitbucket sync is not available yet.</span></div>
-                  <div class="s-ctrl"><select id="set-backlog-platform" aria-label="Default backlog platform"></select></div>
-                </div>
-                <div class="s-row">
-                  <div class="s-label"><b>Default development workflow</b><span>Used wherever a workflow is not picked by hand: the Product Owner's plans, Split + roadmap, Create + roadmap, the Assign dialog with nothing remembered. Unset: the local workflow (no push, no PR, no CI) when the workspace has it.</span><span id="set-default-wf-note" class="warn-text hidden"></span></div>
-                  <div class="s-ctrl"><select id="set-default-workflow" aria-label="Default development workflow" data-testid="settings-default-workflow"></select></div>
-                </div>
-                <div class="s-row">
-                  <div class="s-label"><b>Issues per run</b><span>The most issues Assign workflow sends as one run (one branch, one PR/MR that closes all of them).</span></div>
-                  <div class="s-ctrl"><input type="number" id="set-backlog-group" min="2" max="20" aria-label="Most issues in one run" /></div>
-                </div>
-                <div class="s-row">
-                  <div class="s-label"><b>Suggest a backlog refresh every</b><span>The Backlog offers to run Backlog Refresh (it updates the issues' paths, lines and done tasks) when the last refresh is older than this and the base branch got merges since. It never starts a run by itself.</span></div>
-                  <div class="s-ctrl"><select id="set-backlog-refresh" aria-label="Suggest a backlog refresh every">
-                    <option value="12">12 hours</option>
-                    <option value="24">24 hours</option>
-                    <option value="48">2 days</option>
-                    <option value="168">7 days</option>
-                    <option value="0">Off</option>
-                  </select></div>
-                </div>
-              </div>
-              <h3 class="s-subtitle">Live roadmap</h3>
-              <div id="set-live" class="s-group">
-                <div class="s-row">
-                  <div class="s-label"><b>Highest complexity</b><span>A refill picks open issues with a complexity:n label up to this value, lowest first; issues without one are left out.</span></div>
-                  <div class="s-ctrl"><input type="number" id="set-live-cap" min="1" max="10" class="s-num" aria-label="Highest complexity a refill picks" /></div>
-                </div>
-                <div class="s-row">
-                  <div class="s-label"><b>Stages per refill</b><span>The most stages the Product Owner adds each time the roadmap's last stage ends.</span></div>
-                  <div class="s-ctrl"><input type="number" id="set-live-stages" min="1" max="10" class="s-num" aria-label="Most stages per refill" /></div>
-                </div>
-                <div class="s-row">
-                  <div class="s-label"><b>Daily budget (USD)</b><span>The live roadmap's runs and refills over the last 24 hours; once reached, it ends after its current stages and adds nothing more. 0: no cap.</span></div>
-                  <div class="s-ctrl"><input type="number" id="set-live-budget" min="0" max="10000" step="1" class="s-num" aria-label="Live roadmap daily budget in USD" /></div>
-                </div>
-                <div class="s-row">
-                  <div class="s-label"><b>Sync before a refill</b><span>Sync the backlog from its platform before the Product Owner reads it, so it picks from current issues.</span></div>
-                  <div class="s-ctrl"><label class="switch"><input type="checkbox" role="switch" id="set-live-refresh" aria-label="Sync the backlog before a refill" /><span></span></label></div>
-                </div>
-              </div>
-              <h3 class="s-subtitle">Budget</h3>
-              <p class="muted small">What real runs spend (live runs included; Codex runs priced from tokens × the model prices of Usage). When the next roadmap item's estimate would pass a budget, the roadmap pauses before starting it and tells you: raise it for today, or resume anyway. A run already started finishes; no gate is answered. The top bar shows today's spending against it.</p>
-              <div id="set-budget" class="s-group">
-                <div class="s-row">
-                  <div class="s-label"><b>Daily budget (USD)</b><span>Per calendar day, every roadmap, the live roadmap's refills and the Night watch included. Empty: no cap.</span></div>
-                  <div class="s-ctrl"><input type="number" id="set-budget-day" min="0" max="100000" step="1" class="s-num" placeholder="no cap" aria-label="Daily budget in USD" /></div>
-                </div>
-                <div class="s-row">
-                  <div class="s-label"><b>Nightly budget (USD)</b><span>While the Night watch is on, from its start. Empty: no cap (the daily one still applies).</span></div>
-                  <div class="s-ctrl"><input type="number" id="set-budget-night" min="0" max="100000" step="1" class="s-num" placeholder="no cap" aria-label="Nightly budget in USD" /></div>
-                </div>
-              </div>
-              <h3 class="s-subtitle">Voice input</h3>
-              <p class="muted small">Dictate into any field with the OS: <b>Win+H</b> on Windows, <b>Dictation</b> on macOS (press Fn twice). Or use the mic button on the long text fields (or Ctrl+Shift+M): the recording is transcribed on this machine by whisper.cpp, inserted at the cursor for review, and deleted right after. Nothing leaves the machine.</p>
-              <div id="set-voice" class="s-group">
-                <div class="s-row">
-                  <div class="s-label"><b>Speech-to-text CLI</b><span id="set-voice-cli">Checking…</span></div>
-                  <div class="s-ctrl"><input type="text" id="set-voice-command" spellcheck="false" placeholder="whisper-cli" aria-label="Speech-to-text command or path" /></div>
-                </div>
-                <div class="s-row">
-                  <div class="s-label"><b>Model</b><span id="set-voice-model-info">Bigger models transcribe better and slower. Downloaded once into the app's data folder.</span></div>
-                  <div class="s-ctrl row"><select id="set-voice-model" aria-label="Speech model"></select><button id="btn-voice-download" class="btn sm">Download</button></div>
-                </div>
-                <div class="s-row">
-                  <div class="s-label"><b>Language</b><span>The language you speak. Auto detects it on each recording (less reliable on short ones).</span></div>
-                  <div class="s-ctrl"><select id="set-voice-language" aria-label="Spoken language"></select></div>
-                </div>
-              </div>
-              <h3 class="s-subtitle">Folders</h3>
-              <div id="set-ws-folders" class="s-group"></div>
-              <h3 class="s-subtitle">Index</h3>
-              <div class="s-group">
-                <div class="s-row">
-                  <div class="s-label"><b>index.db</b><span>A SQLite index next to the files: the runs list cache, the Backlog queues, the gates waiting for you and the notifications. The files stay the source of truth: rebuilding reads every run again from runs/. <span id="set-index-status"></span></span><code id="set-index-path"></code></div>
-                  <div class="s-ctrl"><button id="btn-index-rebuild" class="btn sm">Rebuild index</button></div>
-                </div>
-              </div>
-              <h3 class="s-subtitle">Dependency cache</h3>
-              <div class="s-group">
-                <div class="s-row">
-                  <div class="s-label"><b>Dependencies <span id="set-deps-size" class="badge">…</span></b><span>Each project's dependencies are installed once per lockfile and linked into the runs' worktrees. Entries no worktree uses are removed after 14 days or above 20 GB; clearing keeps the ones in use. <span id="set-deps-status"></span></span><code id="set-deps-path"></code></div>
-                  <div class="s-ctrl"><button id="btn-deps-clear" class="btn sm">Clear dependency cache</button></div>
-                </div>
-              </div>
-              <h3 class="s-subtitle">Findings</h3>
-              <div class="s-group">
-                <div class="s-row">
-                  <div class="s-label"><b>Findings button</b><span>For the people building this app: freeze the view, mark what is wrong and save it with the state behind it, or file it as an issue (Ctrl+Shift+F). Always shown when the app runs from source.</span></div>
-                  <label class="switch"><input type="checkbox" data-setting="findingsButton" data-testid="settings-findings-button" aria-label="Findings button" /><span></span></label>
-                </div>
-                <div class="s-row fd-list-row">
-                  <div class="s-label"><b>Saved findings</b><span>In the workspace's findings/ folder, newest first.</span>
-                    <ul id="set-findings-list" class="fd-list" data-testid="settings-findings-list" aria-label="Saved findings" data-empty="No findings yet: the Findings button saves them here."></ul>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div class="settings-page hidden" data-spage="agents">
-              <h2 class="settings-title">Agents &amp; CLIs</h2>
-              <p class="muted small">Agent sessions are opened with these CLIs. A CLI that is not signed in shows its sign-in command; <b>Run setup again</b> walks through installing and signing in to each one.</p>
-              <div id="set-tools" class="s-group"><div class="s-row"><div class="s-label"><span>Checking…</span></div></div></div>
-              <div class="row">
-                <button id="btn-tools-refresh" class="btn sm ghost">Check again</button>
-                <button id="btn-setup-again" class="btn sm ghost" data-testid="setup-again">Run setup again</button>
-              </div>
-              <h3 class="s-subtitle">Fallbacks</h3>
-              <p class="muted small">When an agent's provider runs out of credits or hits its usage limit, its turn moves on to the next entry, in order (<code>provider:model</code>, e.g. <code>codex:gpt-6-luna</code>), for the rest of the run. Used for an agent whose workflow declares no <code>fallbacks</code>.</p>
-              <div id="set-fallbacks" class="s-group" data-testid="settings-fallbacks"></div>
-              <h3 class="s-subtitle">Limits per model</h3>
-              <p class="muted small">An agent on this model gets its turn timeout multiplied by the factor; a run with an agent on it may spend up to the cost limit (when it is above the workflow's). A workflow's own <code>models</code> win.</p>
-              <div id="set-model-limits" class="s-group" data-testid="settings-model-limits"></div>
-              <div class="row">
-                <span id="set-fallbacks-msg" class="small"></span>
-                <span class="spacer"></span>
-                <button id="btn-fallbacks-cancel" class="btn sm ghost" type="button">Cancel</button>
-                <button id="btn-fallbacks-save" class="btn sm primary" type="button" data-testid="settings-fallbacks-save">Save</button>
-              </div>
-            </div>
-
-            <div class="settings-page hidden" data-spage="execution">
-              <h2 class="settings-title">Execution</h2>
-              <!-- where the engine runs: this computer or a remote one (settings-engine.js) -->
-              <div id="set-engine"></div>
-              <div class="s-group">
-                <div class="s-row">
-                  <div class="s-label"><b>Developer mode</b><span>Shows the "Simulation" checkboxes, checked by default, and the simulation scenarios of Write &amp; Review. Simulated runs call no CLI and cost nothing. Off: every run is real.</span></div>
-                  <label class="switch"><input type="checkbox" data-setting="developerMode" /><span></span></label>
-                </div>
-                <div class="s-row">
-                  <div class="s-label"><b>Open the run on start</b><span>Switch to the sessions screen as soon as a workflow starts.</span></div>
-                  <label class="switch"><input type="checkbox" data-setting="openRunOnStart" /><span></span></label>
-                </div>
-                <div class="s-row">
-                  <div class="s-label"><b>Confirm before stopping</b><span>Ask for confirmation when clicking Stop.</span></div>
-                  <label class="switch"><input type="checkbox" data-setting="confirmStop" /><span></span></label>
-                </div>
-                <div class="s-row">
-                  <div class="s-label"><b>24/7 chip in the top bar</b><span>Shows the share of the last 24 h with at least one run active (green from 90%, amber from 60%, red below). A click opens Analytics › 24/7.</span></div>
-                  <label class="switch"><input type="checkbox" data-setting="showOccupancyChip" data-testid="setting-occupancy-chip" /><span></span></label>
-                </div>
-                <div class="s-row">
-                  <div class="s-label"><b>Keep awake</b><span>Keeps this computer from sleeping while runs or a roadmap are active (this workspace; also on the Workflows screen). The display may still turn off; choosing Sleep, closing the lid and the Windows power plan still apply.</span>
-                    <span class="keep-awake-line"><span class="badge keep-awake-status" data-keep-awake-status></span><span class="error small" data-keep-awake-error></span></span></div>
-                  <label class="switch"><input type="checkbox" data-keep-awake-toggle aria-label="Keep awake" /><span></span></label>
-                </div>
-                <div class="s-row">
-                  <div class="s-label"><b>Allow outside sessions to control this app</b><span>A terminal or another agent on this computer can read runs, the backlog and settings and act on roadmaps through a local endpoint (control/endpoint.json) with the multiagent-ctl client. Human gates stay closed to it.</span>
-                    <span class="keep-awake-line"><span class="badge" data-testid="control-channel-status" id="set-control-status"></span><span class="error small" id="set-control-error"></span></span>
-                    <span class="keep-awake-line hidden" id="set-control-ctl"><span class="muted small">Client:</span><code class="small" data-testid="control-ctl-path" id="set-control-ctl-path"></code><button type="button" class="btn sm ghost" data-testid="control-ctl-copy" id="btn-control-ctl-copy" aria-label="Copy the multiagent-ctl path">Copy</button></span></div>
-                  <label class="switch"><input type="checkbox" data-setting="controlChannel" data-testid="setting-control-channel" aria-label="Allow outside sessions to control this app" /><span></span></label>
-                </div>
-              </div>
-              <div class="s-group">
-                <div class="s-row">
-                  <div class="s-label"><b>Notify on run status changes</b><span>A desktop notification when a run starts, waits for you at a gate, succeeds, fails, is cancelled or was interrupted. Not shown while this window is focused on that run.</span></div>
-                  <label class="switch"><input type="checkbox" data-setting="notifyRuns" /><span></span></label>
-                </div>
-                <div class="s-row">
-                  <div class="s-label"><b>Notify when a session waits for you</b><span>A desktop notification when a CLI in a Sessions terminal stops and waits for your answer (a question, a permission prompt, the end of its turn). Not shown while this window is focused on that terminal.</span></div>
-                  <label class="switch"><input type="checkbox" data-setting="notifySessions" /><span></span></label>
-                </div>
-                <div class="s-row">
-                  <div class="s-label"><b>Notify when the Product Owner answers</b><span>A desktop notification when the Backlog's Product Owner answers a question. Not shown while this window shows its drawer for that project.</span></div>
-                  <label class="switch"><input type="checkbox" data-setting="notifyPO" /><span></span></label>
-                </div>
-                <div class="s-row">
-                  <div class="s-label"><b>Notify when the Oracle acts under Night watch</b><span>A desktop notification for each repair the Oracle makes without asking while its Night watch is on.</span></div>
-                  <label class="switch"><input type="checkbox" data-setting="notifyOracle" /><span></span></label>
-                </div>
-                <div class="s-row">
-                  <div class="s-label"><b>Keep notifications</b><span>Days the notification center (the bell at the top right) keeps notifications; older ones are deleted. 0: keep them all.</span></div>
-                  <div class="s-ctrl"><input type="number" id="set-notif-retention" min="0" max="3650" step="1" class="s-num" aria-label="Days to keep notifications" /></div>
-                </div>
-              </div>
-              <h3 class="s-subtitle">Concurrent runs</h3>
-              <div id="set-concurrency" class="s-group">
-                <div class="s-row">
-                  <div class="s-label"><b>Allow several workflows at the same time</b><span>Off: one run at a time. On: runs start while there are free slots, and the Backlog queues fill them. Each run works in its own git worktree.</span></div>
-                  <label class="switch"><input type="checkbox" id="set-cr-enabled" /><span></span></label>
-                </div>
-                <div class="s-row" id="set-mp-row">
-                  <div class="s-label"><b>This machine <span class="badge" id="set-mp-state" data-testid="machine-profile-state"></span></b><span id="set-mp-line" data-testid="machine-profile-line"></span><span id="set-mp-hint" class="muted small"></span></div>
-                  <div class="s-ctrl">
-                    <button type="button" class="btn sm" id="set-mp-use" data-testid="machine-profile-use">Use these values</button>
-                    <button type="button" class="link-btn" id="set-mp-auto" data-testid="machine-profile-back-to-auto">back to auto</button>
-                  </div>
-                </div>
-                <div class="s-row hidden" id="set-mp-suggestion" data-testid="machine-profile-suggestion">
-                  <div class="s-label"><b id="set-mp-suggestion-title"></b><span id="set-mp-suggestion-evidence"></span></div>
-                  <div class="s-ctrl"><button type="button" class="btn sm" id="set-mp-apply" data-testid="machine-profile-apply">Apply</button></div>
-                </div>
-                <div class="s-row">
-                  <div class="s-label"><b>Maximum concurrent runs</b><span>A new run is refused while this many are in progress (when several workflows are allowed). A value you set is kept, on any machine.</span></div>
-                  <div class="s-ctrl"><input type="number" id="set-cr-max" min="1" max="20" step="1" class="s-num" aria-label="Maximum concurrent runs" /></div>
-                </div>
-                <div class="s-row">
-                  <div class="s-label"><b>Test workers per run</b><span>Each run's agents and suite get it as MULTIAGENT_TEST_WORKERS and pass it to the test runner (--workers, --maxWorkers, -n).</span></div>
-                  <div class="s-ctrl"><input type="number" id="set-mp-workers" data-testid="machine-profile-test-workers" min="1" max="64" step="1" class="s-num" aria-label="Test workers per run" /></div>
-                </div>
-                <div class="s-row cr-opt">
-                  <div class="s-label"><b>Maximum per project</b><span>So one project's queue can't take every slot. Empty: no limit per project.</span></div>
-                  <div class="s-ctrl"><input type="number" id="set-cr-project" min="1" max="20" step="1" class="s-num" placeholder="no limit" aria-label="Maximum concurrent runs per project" /></div>
-                </div>
-                <div class="s-row cr-opt">
-                  <div class="s-label"><b>Simulations count toward the limits</b><span>Off: simulated runs (no CLI, no cost) start even when the real runs use every slot.</span></div>
-                  <label class="switch"><input type="checkbox" id="set-cr-sims" /><span></span></label>
-                </div>
-              </div>
-              <h3 class="s-subtitle">Memory guard</h3>
-              <div id="set-memory-guard" class="s-group">
-                <div class="s-row">
-                  <div class="s-label"><b>Stop a run's runaway process</b><span>A test, a build or a script a real run started that passes the limit below is stopped with its children, before it exhausts the machine. The agent CLI itself, the app and your other programs are never stopped.</span></div>
-                  <label class="switch"><input type="checkbox" id="set-mg-enabled" data-testid="memory-guard-enabled" aria-label="Memory guard on" /><span></span></label>
-                </div>
-                <div class="s-row mg-opt">
-                  <div class="s-label"><b>Stop a process over (% of the RAM)</b><span id="set-mg-limit-hint" data-testid="memory-guard-limit-hint"></span></div>
-                  <div class="s-ctrl"><input type="number" id="set-mg-limit" data-testid="memory-guard-limit" min="5" max="90" step="1" class="s-num" aria-label="Memory limit per process, percent of the RAM" /></div>
-                </div>
-                <div class="s-row mg-opt">
-                  <div class="s-label"><b>Hold while free memory is under (%)</b><span>Suites and new runs wait while less than this share of the memory is free (a suite at most 10 minutes). 0: never hold. Between 0 and 50.</span></div>
-                  <div class="s-ctrl"><input type="number" id="set-mg-floor" data-testid="memory-guard-floor" min="0" max="50" step="1" class="s-num" aria-label="Free memory floor, percent" /></div>
-                </div>
-              </div>
-              <h3 class="s-subtitle">Base check</h3>
-              <div class="s-group">
-                <div class="s-row">
-                  <div class="s-label"><b>When the base goes red</b><span>After a merge, the full unit suite runs on the base in a clean worktree, in simulation (#405). A test red there, or counted as pre-existing by 2 runs, files a bug issue; with a fix item, a new stage at the front of the roadmap fixes it. Nothing is pushed and no gate is answered.</span></div>
-                  <div class="s-ctrl">${window.Select.markup('id="set-base-check-on-red" aria-label="When the base goes red" data-testid="base-check-on-red"', [['off', 'Off'], ['issue', 'Issue only'], ['fix', 'Issue + fix item']], 'fix')}</div>
-                </div>
-              </div>
-              <h3 class="s-subtitle">Oracle</h3>
-              <div id="set-oracle" class="s-group">
-                <div class="s-row" id="set-oracle-self-healing-row">${selfHealingHtml({}, null)}</div>
-                <div class="s-row" id="set-app-update-row" data-testid="app-update-row">${appUpdateHtml({}, null)}</div>
-                <div class="s-row">
-                  <div class="s-label"><b>Daily budget (USD)</b><span>Once today's Oracle spend reaches it, questions are refused until tomorrow (UTC); an answer already running is not cut. It also counts in the monthly Claude Code budget. 0: no cap.</span></div>
-                  <div class="s-ctrl"><input type="number" id="set-oracle-budget" min="0" max="10000" step="0.5" class="s-num" aria-label="Oracle daily budget in USD" /></div>
-                </div>
-                <div class="s-row">
-                  <div class="s-label"><b>Compact past (tokens)</b><span>When a turn's context passes this size, the next question starts a new session from the skill, the memory and a handoff note. The history is kept.</span></div>
-                  <div class="s-ctrl"><input type="number" id="set-oracle-compact" min="10000" max="1000000" step="10000" class="s-num" aria-label="Oracle compaction threshold in tokens" /></div>
-                </div>
-                <div class="s-row">
-                  <div class="s-label"><b>Move on past a gate after (minutes)</b><span>With the Night watch's "Skip an item" permission, a roadmap run waiting this long at a human gate, with nothing else of its roadmap running, is moved past: the next stage starts and the gate keeps waiting for you.</span></div>
-                  <div class="s-ctrl"><input type="number" id="set-oracle-park" min="1" max="1440" step="1" class="s-num" aria-label="Minutes at a gate before the Night watch moves on" data-testid="settings-oracle-park-after" /></div>
-                </div>
-                <div class="s-row">
-                  <div class="s-label"><b>Wake on run events</b><span>Which runs' events wake the Oracle: every run (except the runs you mute from its chat), only the runs and roadmaps it watches, or none. Each wake-up is one short model call, batched over 30 seconds.</span></div>
-                  <div class="s-ctrl"><select id="set-oracle-wake" aria-label="Which runs wake the Oracle"><option value="all">Every run</option><option value="watched">Watched runs only</option><option value="off">Off</option></select></div>
-                </div>
-                <div class="s-row">
-                  <div class="s-label"><b>Events that wake it</b><span>Routine events (agent output, tool calls, steps starting) never wake it.</span></div>
-                  <div class="s-ctrl oracle-wake-kinds" id="set-oracle-wake-on"></div>
-                </div>
-              </div>
-            </div>
-
-            <!-- #226: answering the human gates from a paired phone (settings-phone.js) -->
-            <div class="settings-page hidden" data-spage="phone">
-              <h2 class="settings-title">Phone gates</h2>
-              <div id="set-phone" data-testid="phone-gates"></div>
-            </div>
-
-            <div class="settings-page hidden" data-spage="about">
-              <h2 class="settings-title">About</h2>
-              <div id="set-about" class="s-group"></div>
-            </div>
-          </div>
-        </div>
-      </section>`,
+  markup: () => window.SettingsMarkup(),
   mount() {
     document.querySelectorAll('.settings-tab').forEach((b) => (b.onclick = () => showSettingsTab(b.dataset.stab)));
     $('#btn-ws-open').onclick = () => api.openWorkspace();
@@ -914,13 +616,15 @@ registerView({
       if (el.dataset.setting === 'controlChannel') refreshControlChannel();
       if (el.dataset.setting === 'findingsButton') window.Findings?.refresh();
     }));
-    api.onControlChannelChange?.(renderControlChannel);
+    // mount runs again when the interface language redraws the markup (#329): subscribe once
+    if (!settingsWatching) api.onControlChannelChange?.(renderControlChannel);
+    settingsWatching = true;
     $('#btn-control-ctl-copy').onclick = async (e) => {
       const btn = e.currentTarget;
       try {
         await api.clipboardWrite($('#set-control-ctl-path').textContent);
-        btn.textContent = 'Copied';
-        setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+        btn.textContent = t('settings.execution.copied');
+        setTimeout(() => { btn.textContent = t('settings.execution.copy'); }, 1500);
       } catch (err) {
         $('#set-control-error').textContent = errMsg(err);
       }

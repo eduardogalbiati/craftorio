@@ -9,6 +9,8 @@
 // - shiftDay(key, n): a day key n days later (calendar math, no zone);
 // - formatTime ('22:14'), formatDate ('2026-10-04'), formatDateTime ('2026-10-04 22:14'),
 //   offsetLabel ('UTC-03:00'), titleOf (a tooltip naming the zone), nowLine (the agents' turn line);
+// - formatLocale(t, options, tz, lang): the instant in words (Intl options) in the interface language
+//   (#329, src/shared/i18n.js) unless lang is given ('04/10/2026' in pt-BR, '10/4/26' in English);
 // - inputValue / parseInput: a datetime-local field's value in the zone; nextAt(h, mi): the next local h:mi;
 // - zones(): the IANA list for the Settings select; current(): the renderer's zone (state.settings);
 //   onChange(fn) / notify(): open screens redraw when the zone is loaded or changed.
@@ -152,6 +154,17 @@
     return p ? `${dayKey(t, tz)} ${pad(p.h)}:${pad(p.mi)}` : '';
   }
 
+  // the interface language (#329), at call time: in the browser i18n.js is a separate script
+  const i18n = () => (typeof module === 'object' && module.exports ? require('./i18n') : root.I18n);
+
+  /** The instant in words, as Intl.DateTimeFormat(lang, options) writes it in the zone; lang: the interface language when omitted. */
+  function formatLocale(t, options, tz, lang) {
+    const ms = msOf(t);
+    if (!Number.isFinite(ms)) return '';
+    const locale = lang || i18n()?.getLanguage() || 'en';
+    return new Intl.DateTimeFormat(locale, { ...options, timeZone: zoneOf(tz) }).format(new Date(ms));
+  }
+
   /** 'UTC-03:00' at the instant. */
   function offsetLabel(t, tz) {
     const ms = msOf(t);
@@ -201,6 +214,7 @@
     dayKey,
     formatDate,
     formatDateTime,
+    formatLocale,
     formatTime,
     inputValue,
     monthKey,

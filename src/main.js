@@ -35,6 +35,8 @@ const {
   terminalLaunch,
 } = require('./external-terminal');
 const { pathKey } = require('./platform-paths');
+const I18n = require('./shared/i18n');
+const { t } = I18n;
 const workspace = require('./workspace');
 const localPreview = require('./local-preview');
 const runOwner = require('./run-owner');
@@ -132,6 +134,8 @@ const service = createService({
     trashItem: (p) => shell.trashItem(p),
     appVersion: app.getVersion(),
     isPackaged: app.isPackaged,
+    // #329: the interface language until one is chosen (areas/interface-language.js)
+    get locale() { return app.getLocale(); }, // read once the app is ready
     userDataDir: app.getPath('userData'),
     // #318: the microphone permission asked on macOS before recording (src/mic-permission.js)
     systemPreferences,
@@ -172,7 +176,7 @@ ipcMain.on('api:manifest', (e) => {
 function broadcast(channel, payload) {
   for (const w of [win, agentsWindow?.current()]) if (w && !w.isDestroyed()) w.webContents.send(channel, payload);
 }
-for (const channel of ['backlog:changed', 'chat:progress', 'notifications:changed','oracle:changed', 'run:event', 'run:meta', 'supervisor:watch', 'term:data', 'term:exit']) {
+for (const channel of ['backlog:changed', 'chat:progress', 'notifications:changed','oracle:changed', 'run:event', 'run:meta', 'settings:changed', 'supervisor:watch', 'term:data', 'term:exit']) {
   service.events.on(channel, (payload) => broadcast(channel, payload));
 }
 
@@ -247,16 +251,18 @@ async function ensureWorkspace() {
   const r = workspace.resolveWorkspace();
   if (r.dir) return workspace.setupWorkspace(r.dir, { persist: r.source !== 'env' && r.source !== 'simulation' });
 
+  // #329: no workspace, so no setting yet: the computer's language when it has a catalog
+  const lang = I18n.resolveLanguage('', app.getLocale());
   const reason = r.registered
-    ? `The registered workspace folder no longer exists:\n${r.registered}`
-    : `Workspace folder not found:\n${r.fallback}`;
+    ? t('dialog.workspace_gone', { path: r.registered }, lang)
+    : t('dialog.workspace_missing', { path: r.fallback }, lang);
   for (;;) {
     const { response } = await dialog.showMessageBox({
       type: 'question',
-      title: 'Workspace',
-      message: 'Choose the workspace folder',
-      detail: `${reason}\n\nIt holds the run logs and cloned repositories. The path is saved and reloaded the next time the app opens.`,
-      buttons: [`Create ${r.fallback}`, 'Choose another folder…', 'Quit'],
+      title: t('dialog.workspace', {}, lang),
+      message: t('dialog.workspace_choose', {}, lang),
+      detail: `${reason}\n\n${t('dialog.workspace_detail', {}, lang)}`,
+      buttons: [t('dialog.workspace_create', { path: r.fallback }, lang), t('dialog.workspace_other', {}, lang), t('dialog.quit', {}, lang)],
       defaultId: 0,
       cancelId: 2,
       noLink: true,
@@ -274,13 +280,16 @@ async function claimWorkspace(ws) {
   const lock = secondCopy ? { ok: false, holder: null } : runOwner.lockWorkspace(ws.root, { app: APP_DIR });
   if (lock.ok) { workspaceLock = lock; return ws; }
   const h = lock.holder;
-  const who = h ? `process ${h.pid} on ${h.host}, open since ${h.started_at}${h.app ? ` (from ${h.app})` : ''}` : 'another copy of the app';
+  let chosen = '';
+  try { chosen = workspace.readSettings(ws).language?.interface; } catch { /* defaults */ }
+  const lang = I18n.resolveLanguage(chosen, app.getLocale()); // #329
+  const who = h ? t('dialog.in_use_process', { pid: h.pid, host: h.host, since: h.started_at, from: h.app ? t('dialog.in_use_from', { app: h.app }, lang) : '' }, lang) : t('dialog.in_use_other', {}, lang);
   const { response } = await dialog.showMessageBox({
     type: 'warning',
-    title: 'Workspace in use',
-    message: 'This workspace is already open in another copy of the app',
-    detail: `${ws.root}\n\nIt is open in ${who}. Two copies on one workspace would take each other's runs for interrupted and start them twice.\n\nOpen a scratch copy (your agents, skills, workflows and settings copied to a new workspace; simulations only), or quit.`,
-    buttons: ['Open a scratch copy', 'Quit'],
+    title: t('dialog.in_use_title', {}, lang),
+    message: t('dialog.in_use_message', {}, lang),
+    detail: `${ws.root}\n\n${t('dialog.in_use_detail', { who }, lang)}`,
+    buttons: [t('dialog.in_use_scratch', {}, lang), t('dialog.quit', {}, lang)],
     defaultId: 0,
     cancelId: 1,
     noLink: true,
@@ -294,7 +303,7 @@ async function claimWorkspace(ws) {
 }
 
 async function pickWorkspaceDir(parent) {
-  const opts = { title: 'Workspace folder', properties: ['openDirectory', 'createDirectory'], defaultPath: service.workspace()?.root || os.homedir() };
+  const opts = { title: t('dialog.workspace_folder'), properties: ['openDirectory', 'createDirectory'], defaultPath: service.workspace()?.root || os.homedir() };
   const r = parent ? await dialog.showOpenDialog(parent, opts) : await dialog.showOpenDialog(opts);
   return r.canceled ? null : r.filePaths[0];
 }

@@ -9,7 +9,9 @@ const assert = require('node:assert/strict');
 const { loadApp } = require('./renderer-app-harness');
 
 const allEls = (app) => [...app.elements.values(), ...app.created];
-const allMarkup = (app) => [...app.defs.values()].map((d) => d.markup || '').concat(allEls(app).map((e) => e.innerHTML || '')).join('\n');
+// a view's markup may be a function, drawn again in the interface language (#329)
+const markupOf = (d) => (typeof d.markup === 'function' ? d.markup() : d.markup || '');
+const allMarkup = (app) => [...app.defs.values()].map(markupOf).concat(allEls(app).map((e) => e.innerHTML || '')).join('\n');
 
 async function page(api = {}) {
   const app = loadApp({

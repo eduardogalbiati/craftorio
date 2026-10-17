@@ -9,7 +9,8 @@
 // - the window stays off-screen, so a run never takes the owner's screen (MULTIAGENT_E2E_SHOW=1
 //   shows it, e.g. to watch a scenario); Chromium keeps painting it (no occlusion throttling);
 // - the main process's clock starts at MULTIAGENT_E2E_NOW (ms) when set: the visual scenarios
-//   render at a fixed instant (#362, features/support/fixed-clock.js).
+//   render at a fixed instant (#362, features/support/fixed-clock.js);
+// - the locale is en-US, so the interface is English until a scenario chooses another (#329).
 
 const path = require('path');
 const { app, ipcMain, nativeTheme } = require('electron');
@@ -29,6 +30,8 @@ const show = process.env.MULTIAGENT_E2E_SHOW === '1';
 app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
 app.commandLine.appendSwitch('disable-renderer-backgrounding');
 app.commandLine.appendSwitch('disable-background-timer-throttling');
+// #329: the scenarios run in English whatever the computer's language (the interface follows it until chosen)
+app.commandLine.appendSwitch('lang', 'en-US');
 
 app.on('browser-window-created', (_e, win) => {
   win.setMinimumSize(400, 300);

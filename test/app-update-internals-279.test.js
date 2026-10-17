@@ -92,7 +92,7 @@ const settingsSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer'
 function appUpdateHtml(o, info) {
   const src = /function appUpdateHtml\(o, info\) \{[\s\S]*?\n\}/.exec(settingsSrc)?.[0];
   assert.ok(src, 'appUpdateHtml not found in settings.js');
-  const sandbox = { esc };
+  const sandbox = { esc, t: require('./settings-source-329').t }; // #329: the row's texts come from the catalog
   vm.runInNewContext(`${src}\nthis.appUpdateHtml = appUpdateHtml;`, sandbox);
   return sandbox.appUpdateHtml(o, info);
 }

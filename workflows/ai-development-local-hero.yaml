@@ -378,11 +378,12 @@ agents:
     protect_files:
       - "{{ steps.acceptance_tests.output.tests_added }}"
       - "{% if inputs.e2e_tests != 'off' %}{{ steps.acceptance_tests.output.e2e_files }}{% endif %}"
-    # bug-diagnosis: fixes delegated after failures; merge-conflict-resolver: resolve_merge;
+    # bug-diagnosis: fixes delegated after failures; merge-conflict-resolver is a step skill of
+    # resolve_merge (#418: kept out of the develop prompt's 40K budget);
     # long-commands: installs, builds and focused checks in the foreground; ui-conventions: changes
     # that touch a screen (shared components, controls, the states to capture, the design plan);
     # design-system (#387): the tokens it builds with, the ones the ui_reviewer checks against
-    skills: [long-commands, bug-diagnosis, merge-conflict-resolver, context-economy, decision-log, ui-conventions, design-system]
+    skills: [long-commands, bug-diagnosis, context-economy, decision-log, ui-conventions, design-system]
     system_prompt: |
       You are a senior software engineer. Make small, cohesive changes to the production code
       that follow the architecture and conventions of the existing code.
@@ -2185,6 +2186,8 @@ steps:
     agent: developer
     # a rebase replays the test writer's commits: resolving their conflicts is part of the job
     edits_tests: true
+    # #418: loaded here, on each visit, instead of in the developer's first-turn system part
+    skills: [merge-conflict-resolver]
     prompt: |
       Merging branch `{{ steps.develop.output.branch }}` into the local `{{ inputs.base_branch }}` failed:
       {{ action_error.message if action_error else 'unknown error' }}

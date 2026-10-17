@@ -32,6 +32,8 @@ module.exports = (ctx) => {
     if (ctx.isRunning()) throw new Error('Cannot change the workspace while workflows are running.');
     ws = next;
     seedDefaults();
+    // the OS notifications follow its interface language (#329, areas/interface-language.js)
+    ctx.applyInterfaceLanguage?.();
     ctx.openIndex();
     // the Backlog screen follows the backlog/ files live (#204, areas/backlog-watch.js)
     ctx.watchBacklog();

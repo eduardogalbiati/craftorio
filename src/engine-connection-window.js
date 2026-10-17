@@ -61,7 +61,8 @@ function createEngineConnection({
     return { width: Math.min(PAGE_SIZE.width, area.width - 24), height: Math.min(PAGE_SIZE.height, area.height - 24) };
   }
 
-  function openPage() {
+  // lang: the interface language of the page that asked (#329), a language code or nothing
+  function openPage({ lang = null } = {}) {
     const open = live(page);
     if (open) {
       open.webContents.send('engine-connection:changed');
@@ -104,7 +105,8 @@ function createEngineConnection({
       page = null;
       if (pageAlone()) quit();
     });
-    w.loadFile(path.join(dirname, 'renderer', 'connection', 'connection.html'));
+    const query = typeof lang === 'string' && /^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})?$/.test(lang) ? { query: { lang } } : undefined;
+    w.loadFile(path.join(dirname, 'renderer', 'connection', 'connection.html'), query);
     return w;
   }
 
@@ -134,7 +136,7 @@ function createEngineConnection({
   // what a link or a navigation of the remote window does (conn.routeUrl): true when it stays
   function follow(url, origin) {
     const where = conn.routeUrl(url, origin);
-    if (where === 'connection') openPage();
+    if (where === 'connection') openPage({ lang: new URL(url).searchParams.get('lang') });
     else if (where === 'external') shell.openExternal(url);
     return where === 'stay';
   }

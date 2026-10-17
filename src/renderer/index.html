@@ -55,11 +55,12 @@
     <!-- #254: the bar's own content (it wraps, #208; its children keep their indentation), then the top right corner -->
     <div class="topbar-main">
     <div class="brand">Multiagent <span>Orchestrator</span></div>
-    <span id="sim-only-badge" class="sim-only-badge hidden" title="MULTIAGENT_SIMULATION_ONLY is set: real runs and CLI terminals are refused, only simulations run.">Simulation only</span>
+    <!-- #329: data-i18n (the text), data-i18n-title and data-i18n-aria-label name catalog keys; interface-language.js paints them in the interface language -->
+    <span id="sim-only-badge" class="sim-only-badge hidden" title="MULTIAGENT_SIMULATION_ONLY is set: real runs and CLI terminals are refused, only simulations run." data-i18n="shell.sim_only" data-i18n-title="shell.sim_only_title">Simulation only</span>
     <!-- the app's project (#254, current-project.js): the Backlog, the Roadmap, Analytics and the Product Owner read it -->
-    <label class="header-project" title="The project every screen shows">
-      <span class="small muted">Project</span>
-      <select id="header-project" data-testid="header-project" aria-label="Project"></select>
+    <label class="header-project" title="The project every screen shows" data-i18n-title="shell.project_title">
+      <span class="small muted" data-i18n="shell.project">Project</span>
+      <select id="header-project" data-testid="header-project" aria-label="Project" data-i18n-aria-label="shell.project"></select>
     </label>
     <!-- #412: the 24/7 chip and the usage take the run KPIs' place; a run's status, cost, Stop and Pause live on its Run screen -->
     <div class="actions">
@@ -69,16 +70,16 @@
         <span class="occ-text mono">24/7 · —</span>
       </button>
       <div class="usage-wrap">
-        <button id="usage-widget" class="btn ghost usage-widget" type="button" title="Usage this month" aria-haspopup="dialog" aria-expanded="false" aria-busy="true" data-testid="usage-widget">
+        <button id="usage-widget" class="btn ghost usage-widget" type="button" title="Usage this month" data-i18n-title="shell.usage_month" aria-haspopup="dialog" aria-expanded="false" aria-busy="true" data-testid="usage-widget">
           <span id="usage-widget-dot" class="u-dot"></span>
           <span id="usage-widget-text" class="mono">—</span>
-          <span id="usage-widget-scope" class="u-scope hidden">machine</span>
+          <span id="usage-widget-scope" class="u-scope hidden" data-i18n="shell.usage_machine_short">machine</span>
           <span id="usage-widget-today" class="u-today mono hidden"></span>
         </button>
-        <div id="usage-pop" class="usage-pop hidden" role="dialog" aria-label="Usage this month">
-          <div class="usage-pop-head"><div><b>Usage</b> <span id="usage-pop-month" class="muted small"></span></div><div class="seg sm" role="group" aria-label="Usage scope"><button type="button" data-scope="orchestrator">Orchestrator</button><button type="button" data-scope="machine">This machine</button></div></div>
+        <div id="usage-pop" class="usage-pop hidden" role="dialog" aria-label="Usage this month" data-i18n-aria-label="shell.usage_month">
+          <div class="usage-pop-head"><div><b data-i18n="shell.usage">Usage</b> <span id="usage-pop-month" class="muted small"></span></div><div class="seg sm" role="group" aria-label="Usage scope" data-i18n-aria-label="shell.usage_scope"><button type="button" data-scope="orchestrator" data-i18n="shell.usage_orchestrator">Orchestrator</button><button type="button" data-scope="machine" data-i18n="shell.usage_machine">This machine</button></div></div>
           <div id="usage-pop-body" class="usage-pop-body"></div>
-          <div class="usage-pop-foot"><button id="usage-pop-open" class="link-btn" type="button">Open usage →</button></div>
+          <div class="usage-pop-foot"><button id="usage-pop-open" class="link-btn" type="button" data-i18n="shell.usage_open">Open usage →</button></div>
         </div>
       </div>
     </div>
@@ -86,16 +87,16 @@
     <!-- #254: the top right corner: the Oracle's button (views/oracle/oracle.js adds it here), the notifications bell with its centre (notification-center.js), then the account (#412: last, at the right end) -->
     <div class="header-right">
       <div class="notif-wrap">
-        <button id="nav-notifications" class="btn ghost btn-icon header-bell" type="button" title="Notifications" aria-haspopup="dialog" aria-expanded="false" aria-controls="notification-center">
+        <button id="nav-notifications" class="btn ghost btn-icon header-bell" type="button" title="Notifications" data-i18n-title="shell.notifications" aria-haspopup="dialog" aria-expanded="false" aria-controls="notification-center">
           <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0" /></svg>
-          <span class="sr-only">Notifications</span>
+          <span class="sr-only" data-i18n="shell.notifications">Notifications</span>
           <span id="nav-notifications-count" class="nav-badge hidden"></span>
         </button>
-        <div id="notification-center" class="notification-center hidden" role="dialog" aria-label="Notifications">
+        <div id="notification-center" class="notification-center hidden" role="dialog" aria-label="Notifications" data-i18n-aria-label="shell.notifications">
           <div class="nc-head">
-            <b>Notifications</b>
-            <button id="nc-read-all" class="btn sm ghost" type="button">Mark all read</button>
-            <button id="nc-close" class="icon-btn" type="button" aria-label="Close" title="Close">×</button>
+            <b data-i18n="shell.notifications">Notifications</b>
+            <button id="nc-read-all" class="btn sm ghost" type="button" data-i18n="shell.mark_all_read">Mark all read</button>
+            <button id="nc-close" class="icon-btn" type="button" aria-label="Close" title="Close" data-i18n-aria-label="common.close" data-i18n-title="common.close">×</button>
           </div>
           <div id="nc-list" class="nc-list"></div>
         </div>
@@ -105,10 +106,10 @@
           <span id="account-avatar" class="account-avatar" aria-hidden="true"></span>
           <span id="account-chip-name" class="account-chip-name"></span>
         </button>
-        <div id="account-pop" class="account-pop hidden" role="dialog" aria-label="Account">
+        <div id="account-pop" class="account-pop hidden" role="dialog" aria-label="Account" data-i18n-aria-label="shell.account">
           <b id="account-name"></b>
           <div id="account-email" class="muted small"></div>
-          <button id="btn-sign-out" class="btn ghost sm" type="button">Sign out</button>
+          <button id="btn-sign-out" class="btn ghost sm" type="button" data-i18n="shell.sign_out">Sign out</button>
         </div>
       </div>
     </div>
@@ -128,15 +129,15 @@
         <!-- Keep awake (#162, keep-awake.js): shown while the computer is kept from sleeping -->
         <button id="nav-keep-awake" class="nav-item nav-keep-awake hidden" type="button">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" /><line x1="3" y1="3" x2="21" y2="21" /></svg>
-          <span>Keeping awake</span>
+          <span data-i18n="shell.keeping_awake">Keeping awake</span>
         </button>
         <button id="nav-run" class="nav-item nav-run st-idle hidden" data-view="run" title="No run in progress">
           <span id="nav-run-dot" class="status-dot"></span>
-          <span>Run</span>
+          <span data-i18n="shell.run">Run</span>
           <span id="nav-run-count" class="nav-run-count hidden"></span>
           <span id="nav-run-gates" class="nav-gates hidden" role="button"></span>
         </button>
-        <div id="nav-runs" class="nav-runs hidden" aria-label="Runs in progress"></div>
+        <div id="nav-runs" class="nav-runs hidden" aria-label="Runs in progress" data-i18n-aria-label="shell.runs_in_progress"></div>
       </div>
     </nav>
 
@@ -263,12 +264,12 @@
   <div id="login-screen" class="login-screen hidden" data-testid="login-screen">
     <div class="login-card">
       <div class="brand">Multiagent <span>Orchestrator</span></div>
-      <h3>Sign in</h3>
-      <p class="muted">Create a free account. It only tells us how many people use the app.</p>
+      <h3 data-i18n="shell.sign_in">Sign in</h3>
+      <p class="muted" data-i18n="shell.sign_in_lead">Create a free account. It only tells us how many people use the app.</p>
       <div id="login-providers" class="login-providers"></div>
       <div id="login-waiting" class="login-waiting hidden">
-        <span class="muted small">Finish signing in in your browser…</span>
-        <button id="btn-login-cancel" class="link-btn" type="button">Cancel</button>
+        <span class="muted small" data-i18n="shell.sign_in_waiting">Finish signing in in your browser…</span>
+        <button id="btn-login-cancel" class="link-btn" type="button" data-i18n="common.cancel">Cancel</button>
       </div>
       <p id="login-error" class="error" role="alert"></p>
     </div>
@@ -278,12 +279,12 @@
 
   <div id="confirm-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="confirm-title" data-testid="confirm-modal">
     <div class="modal-card">
-      <h3 id="confirm-title">Confirm</h3>
+      <h3 id="confirm-title" data-i18n="common.confirm">Confirm</h3>
       <p id="confirm-message" class="muted"></p>
       <ul id="confirm-details" class="muted hidden"></ul>
       <div class="modal-actions">
-        <button id="btn-confirm-no" class="btn ghost">Cancel</button>
-        <button id="btn-confirm-yes" class="btn danger-solid">Confirm</button>
+        <button id="btn-confirm-no" class="btn ghost" data-i18n="common.cancel">Cancel</button>
+        <button id="btn-confirm-yes" class="btn danger-solid" data-i18n="common.confirm">Confirm</button>
       </div>
     </div>
   </div>
@@ -291,17 +292,17 @@
   <!-- Resume from step…: a new run from a step of a finished run (no supervisor call) -->
   <div id="resume-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="resume-title">
     <div class="modal-card resume-card">
-      <h3 id="resume-title">Resume from step</h3>
+      <h3 id="resume-title" data-i18n="shell.resume_title">Resume from step</h3>
       <div id="resume-run" class="muted small"></div>
       <div id="resume-body"></div>
       <label class="check dev-only">
         <input type="checkbox" id="resume-mock" />
-        <span>Simulation mode <small class="muted">(does not call the CLIs)</small></span>
+        <span><span data-i18n="shell.simulation_mode">Simulation mode</span> <small class="muted" data-i18n="shell.no_cli_calls">(does not call the CLIs)</small></span>
       </label>
       <p id="resume-msg" class="small"></p>
       <div class="modal-actions">
-        <button id="btn-resume-no" class="btn ghost">Cancel</button>
-        <button id="btn-resume-yes" class="btn primary">Resume from this step</button>
+        <button id="btn-resume-no" class="btn ghost" data-i18n="common.cancel">Cancel</button>
+        <button id="btn-resume-yes" class="btn primary" data-i18n="shell.resume_yes">Resume from this step</button>
       </div>
     </div>
   </div>
@@ -337,6 +338,7 @@
   <script src="../shared/display-name.js"></script>
   <script src="../shared/findings-model.js"></script>
   <script src="../shared/globs.js"></script>
+  <script src="../shared/i18n.js"></script>
   <script src="../shared/json-schema.js"></script>
   <script src="../shared/language.js"></script>
   <script src="../shared/po-calibration.js"></script>
@@ -380,6 +382,7 @@
   <script src="image-sequence.js"></script>
   <script src="image-viewer-model.js"></script>
   <script src="image-viewer.js"></script>
+  <script src="interface-language.js"></script>
   <script src="keep-awake.js"></script>
   <script src="kept-work-dialog.js"></script>
   <script src="live-turn.js"></script>
@@ -447,6 +450,7 @@
   <script src="views/sessions/sessions.js"></script>
   <script src="views/settings/settings-engine.js"></script>
   <script src="views/settings/settings-language.js"></script>
+  <script src="views/settings/settings-markup.js"></script>
   <script src="views/settings/settings-phone.js"></script>
   <script src="views/settings/settings.js"></script>
   <script src="views/skills/skills.js"></script>

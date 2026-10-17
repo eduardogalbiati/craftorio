@@ -17,6 +17,15 @@ const vm = require('vm');
 const renderer = path.join(__dirname, '..', 'src', 'renderer');
 const read = (...p) => fs.readFileSync(path.join(...p), 'utf8');
 
+// #329: the page's window.I18n (src/shared/i18n.js; its Node instance here, with the catalogs) and a
+// bare `t` alias, when the module exists
+function i18nGlobals() {
+  try {
+    const I18n = require('../src/shared/i18n.js');
+    return { I18n, t: (...a) => I18n.t(...a) };
+  } catch { return {}; }
+}
+
 function loadView({ settings = {} } = {}) {
   const sandbox = {
     esc: (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]),
@@ -24,6 +33,7 @@ function loadView({ settings = {} } = {}) {
     state: { settings },
     api: { setSettings: async (p) => p },
     console,
+    ...i18nGlobals(),
   };
   sandbox.window = sandbox;
   vm.createContext(sandbox);
@@ -86,4 +96,72 @@ test('#327 settings.js mounts the Language group in General, and index.html load
   assert.match(html, /<script src="\.\.\/shared\/language\.js"><\/script>/);
   assert.match(html, /<script src="views\/settings\/settings-language\.js"><\/script>/);
   assert.ok(html.indexOf('views/settings/settings-language.js') < html.indexOf('views/settings/settings.js'), 'loaded before settings.js');
+});
+
+// ---- #329 the Interface select, and Settings drawn in the interface language --------------------
+// The group gets an "Interface" select (data-testid settings-language-interface): the languages with a
+// catalog (I18n.languages()), the saved settings.language.interface selected, else the language the
+// page runs in (I18n.getLanguage(): the computer's when it has a catalog, else English). A change saves
+// settings.language.interface with the other two values. Settings' markup (every script of
+// views/settings/, in index.html's order) is drawn with I18n.t: in pt-BR the General tab reads "Geral".
+const loadI18n = () => require('../src/shared/i18n.js');
+
+function settingsMarkup(lang) {
+  const I18n = loadI18n();
+  I18n.setLanguage(lang);
+  try {
+    const defs = [];
+    const sandbox = loadView();
+    sandbox.registerView = (def) => { defs.push(def); };
+    const html = read(renderer, 'index.html');
+    const scripts = [...html.matchAll(/<script src="(views\/settings\/[^"]+)"><\/script>/g)].map((m) => m[1])
+      .filter((src) => src !== 'views/settings/settings-language.js');
+    for (const src of scripts) vm.runInContext(read(renderer, ...src.split('/')), sandbox, { filename: src });
+    const def = defs.find((d) => d.id === 'settings');
+    assert.ok(def, 'settings registers its view');
+    return typeof def.markup === 'function' ? def.markup() : def.markup;
+  } finally {
+    I18n.setLanguage('en');
+  }
+}
+
+test('#329 the Language group has an Interface select listing the languages with a catalog', () => {
+  const { languages } = loadI18n();
+  const opts = optionsOf(loadView().LanguageSettings.markup({}), 'settings-language-interface');
+  const values = opts.map((o) => o.value);
+  assert.ok(values.includes('en') && values.includes('pt-BR'), values.join(', '));
+  assert.deepEqual([...values].sort(), Array.from(languages()).sort());
+});
+
+test('#329 Interface: the saved settings.language.interface is selected', () => {
+  const settings = { language: { agents: 'interface', issues: 'en', interface: 'pt-BR' } };
+  const html = loadView({ settings }).LanguageSettings.markup(settings);
+  assert.deepEqual(optionsOf(html, 'settings-language-interface').filter((o) => o.selected).map((o) => o.value), ['pt-BR']);
+});
+
+test('#329 Interface: nothing saved, the language the page runs in is selected', () => {
+  const I18n = loadI18n();
+  I18n.setLanguage('pt-BR');
+  try {
+    const html = loadView().LanguageSettings.markup({});
+    assert.deepEqual(optionsOf(html, 'settings-language-interface').filter((o) => o.selected).map((o) => o.value), ['pt-BR']);
+  } finally {
+    I18n.setLanguage('en');
+  }
+});
+
+test('#329 Interface: a change saves settings.language.interface with the agents and issues values', () => {
+  const { LanguageSettings } = loadView();
+  const patch = JSON.parse(JSON.stringify(LanguageSettings.patch({ language: { agents: 'es', issues: 'fr' } }, 'interface', 'pt-BR')));
+  assert.deepEqual(patch, { language: { agents: 'es', issues: 'fr', interface: 'pt-BR' } });
+  // changing the agents' language keeps the saved interface language
+  const kept = JSON.parse(JSON.stringify(LanguageSettings.patch({ language: { agents: 'interface', issues: 'en', interface: 'pt-BR' } }, 'agents', 'es')));
+  assert.deepEqual(kept, { language: { agents: 'es', issues: 'en', interface: 'pt-BR' } });
+});
+
+test('#329 Settings in pt-BR: the General tab reads "Geral"; in English "General"', () => {
+  const pt = settingsMarkup('pt-BR');
+  assert.match(pt, />\s*Geral\s*</);
+  assert.doesNotMatch(pt, />\s*General\s*</);
+  assert.match(settingsMarkup('en'), />\s*General\s*</);
 });

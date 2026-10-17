@@ -17,8 +17,10 @@
 // toast.js (the toast's countdown and its action).
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-const fmtNum = (n) => (n || 0).toLocaleString('en-US');
-const fmtCost = (n) => (n == null ? '—' : `$${Number(n).toFixed(4)}`);
+// numbers, costs and dates in the interface language (#329, shared/i18n.js); English stays en-US
+const uiLocale = () => { const l = window.I18n?.getLanguage(); return !l || l === 'en' ? 'en-US' : l; };
+const fmtNum = (n) => (n || 0).toLocaleString(uiLocale());
+const fmtCost = (n) => (n == null ? '—' : uiLocale() === 'en-US' ? `$${Number(n).toFixed(4)}` : window.I18n.formatCost(n, uiLocale(), 4));
 function fmtDur(ms) {
   if (ms == null) return '—';
   const s = Math.floor(ms / 1000);
@@ -26,8 +28,8 @@ function fmtDur(ms) {
   return h ? `${h}h${String(m).padStart(2, '0')}m` : m ? `${m}m${String(r).padStart(2, '0')}s` : `${r}s`;
 }
 // in the workspace's time zone (#273, time-zone.js); TimeZone.titleOf names the zone for a tooltip
-const timeOf = (iso) => new Date(iso).toLocaleTimeString('en-US', { timeZone: TimeZone.current() });
-const dateOf = (iso) => new Date(iso).toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short', timeZone: TimeZone.current() });
+const timeOf = (iso) => new Date(iso).toLocaleTimeString(uiLocale(), { timeZone: TimeZone.current() });
+const dateOf = (iso) => new Date(iso).toLocaleString(uiLocale(), { dateStyle: 'short', timeStyle: 'short', timeZone: TimeZone.current() });
 const USAGE_SCOPE_KEY = 'multiagent.usageScope';
 const RUN_VIEW_KEY = 'multiagent.runView';
 // A channel or method the running main process (or server) doesn't have: the code on disk is newer
@@ -227,6 +229,7 @@ async function init() {
 
   state.ws = await api.getWorkspace();
   state.settings = await api.getSettings();
+  window.InterfaceLanguage.apply(state.settings); // #329: the saved interface language (interface-language.js)
   TimeZone.notify(); // #273: what was drawn before the settings arrived redraws in the saved zone
   const appInfo = await api.appInfo();
   state.simulationOnly = !!appInfo.simulationOnly;
@@ -396,7 +399,7 @@ function applyDeveloperMode() {
 function openModal(sel) { $(sel).classList.remove('hidden'); }
 function closeModal(sel) { $(sel).classList.add('hidden'); }
 
-function confirmDialog(title, message, yes = 'Confirm') {
+function confirmDialog(title, message, yes = t('common.confirm')) {
   $('#confirm-title').textContent = title;
   $('#confirm-message').textContent = message;
   $('#confirm-details').classList.add('hidden');
@@ -953,7 +956,7 @@ function renderNavRuns() {
 // action (#281): { label, run, done? }, a button inside the toast ("Undo"). toast.js (openToast)
 // draws it, runs it and counts the toast down: 10 s with an action, 15 for a gate, 7 otherwise.
 function showToast(title, detail, runId = null, gate = null, { action = null } = {}) {
-  const html = (head, text) => `<button type="button" class="toast-close" aria-label="Dismiss" title="Dismiss">×</button><b>${esc(head)}</b>${text ? `<span>${esc(String(text).slice(0, 220))}</span>` : ''}`;
+  const html = (head, text) => `<button type="button" class="toast-close" aria-label="${t('common.dismiss')}" title="${t('common.dismiss')}">×</button><b>${esc(head)}</b>${text ? `<span>${esc(String(text).slice(0, 220))}</span>` : ''}`;
   const onClick = (e) => {
     if (e.target.closest('.toast-close')) return; // dismissed only
     // a gate still waiting opens inside its run (its chat, or the Run screen's gate card)

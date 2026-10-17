@@ -1,6 +1,6 @@
 // UI smoke test: opens the app, starts the workflow in mock mode, approves the
 // gates automatically and saves a screenshot.
-// Usage: npx electron scripts/smoke.js <output.png>
+// Usage: npx electron scripts/smoke.js <output.png> [--lang pt-BR]
 //        npx electron scripts/smoke.js --startup-budget     the startup budget (#389), below
 //
 // Never calls a real model: MULTIAGENT_SIMULATION_ONLY=1 makes the engine refuse real runs, the app
@@ -25,8 +25,13 @@ process.env.MULTIAGENT_SIMULATION_ONLY = '1';
 process.env.MULTIAGENT_MOCK_DELAY_SCALE ??= '0.2';
 const wsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'multiagent-smoke-ws-'));
 process.env.MULTIAGENT_WORKSPACE = wsDir; // scratch workspace, no workspace dialog
+// --lang <code> (#329): the interface language (a code of src/shared/i18n/), English by default
+// whatever the computer's language, so the checks keep their English selectors
+const langAt = process.argv.indexOf('--lang');
+const lang = (langAt >= 0 && process.argv[langAt + 1]) || 'en';
+app.commandLine.appendSwitch('lang', lang === 'en' ? 'en-US' : lang);
 // a workspace already set up: the first-run Setup (#319) would cover the run in the screenshot
-fs.writeFileSync(path.join(wsDir, 'settings.json'), JSON.stringify({ setupDone: true }));
+fs.writeFileSync(path.join(wsDir, 'settings.json'), JSON.stringify({ setupDone: true, language: { interface: lang } }));
 
 const budget = process.argv.includes('--startup-budget');
 const STARTUP_RUNS = 300;

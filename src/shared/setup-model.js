@@ -10,35 +10,39 @@
 // - preselectedWorkflows(workflows, states): the ready ids, ai-development-local-hero first;
 // - visibleWorkflows(workflows, hidden): the workflows not hidden from Start, order kept;
 // - workflowId(file): the id hiddenWorkflows keeps (the file name without .yaml).
+// The labels are in the interface language (#329, src/shared/i18n.js); the states never change.
 // Browser: window.SetupModel; Node: module.exports (src/workflow-requirements.js, the tests).
 (function (root) {
+  const node = typeof module === 'object' && module.exports;
+  // the catalog's helper, at call time (in the browser i18n.js may load after this file)
+  const t = (...a) => (node ? require('./i18n') : root.I18n)?.t(...a) ?? a[0];
   const NAMES = { claude: 'Claude Code', codex: 'Codex CLI', grok: 'Grok Build', gh: 'GitHub CLI', glab: 'GitLab CLI', git: 'Git' };
   const SHORT = { claude: 'Claude Code', codex: 'Codex', grok: 'Grok', git: 'Git' };
   const REQUIRED = ['claude', 'git'];
   const FIRST = 'ai-development-local-hero';
-  const FORGE = 'GitHub or GitLab CLI';
+  const forge = () => t('setup.forge');
 
   const toolName = (id) => NAMES[id] || String(id || '');
   /** A workflow's id in settings.hiddenWorkflows: its file name without .yaml. */
   const workflowId = (file) => String(file || '').replace(/\.ya?ml$/i, '');
 
   function statusBadge(tool) {
-    if (tool?.checking) return { label: 'Checking…', state: 'checking' };
-    if (!tool?.path) return { label: 'Not installed', state: 'missing' };
-    if (!tool.connected) return { label: 'Not signed in', state: 'signed-out' };
-    return { label: 'Ready', state: 'ready' };
+    if (tool?.checking) return { label: t('setup.status.checking'), state: 'checking' };
+    if (!tool?.path) return { label: t('setup.status.missing'), state: 'missing' };
+    if (!tool.connected) return { label: t('setup.status.signed_out'), state: 'signed-out' };
+    return { label: t('setup.status.ready'), state: 'ready' };
   }
 
   function toolRequirement(id) {
-    if (REQUIRED.includes(id)) return 'Required';
-    if (id === 'gh' || id === 'glab') return 'Optional: Backlog sync and pull requests';
-    return 'Optional: multi-model workflows';
+    if (REQUIRED.includes(id)) return t('setup.required');
+    if (id === 'gh' || id === 'glab') return t('setup.optional_forge');
+    return t('setup.optional_models');
   }
 
   /** Badges for what a workflow needs beyond the required Claude Code and Git. */
   function requirementBadges(reqs) {
-    const out = (reqs?.clis || []).filter((id) => !REQUIRED.includes(id)).map((id) => `Needs ${SHORT[id] || toolName(id)}`);
-    if (reqs?.forge) out.push(`Needs ${FORGE}`);
+    const out = (reqs?.clis || []).filter((id) => !REQUIRED.includes(id)).map((id) => t('setup.needs', { name: SHORT[id] || toolName(id) }));
+    if (reqs?.forge) out.push(t('setup.needs', { name: forge() }));
     return out;
   }
 
@@ -50,7 +54,7 @@
 
   function missingLabel(missing) {
     if (!missing?.length) return '';
-    return `Missing ${missing.map((id) => (id === 'forge' ? FORGE : toolName(id))).join(', ')}`;
+    return t('setup.missing', { names: missing.map((id) => (id === 'forge' ? forge() : toolName(id))).join(', ') });
   }
 
   function preselectedWorkflows(workflows, states) {

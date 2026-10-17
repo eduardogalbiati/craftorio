@@ -4,10 +4,14 @@
 // when it is the app's only window (the engine failed) the button reads Quit and quits the app
 // (Esc does not: quitting is never one stray key). Talks only to window.connection
 // (src/engine-connection-preload.js); the saved token never comes back to the page (a blank token
-// field keeps it).
+// field keeps it). Its texts are connection.* keys of the catalog (#329, window.I18n): the language
+// the engine's page asked for (?lang=, remembered for the next time), else the one this computer's
+// app last showed, else the computer's; the main process's messages (test results, failures) stay
+// English, like the engine's errors.
 (() => {
   const $ = (sel) => document.querySelector(sel);
   const api = window.connection;
+  const I18n = window.I18n;
   let view = null; // the last state(): { mode, saved, failure, app, remoteHost }
   let busy = false;
 
@@ -22,28 +26,42 @@
     el.dataset.kind = kind || '';
   }
 
-  function showResult(t) {
-    if (!t) return setResult('');
-    if (t.ok) return setResult(t.message, t.sameContract ? 'ok' : 'warn');
-    return setResult(t.message, 'error');
+  function showResult(r) {
+    if (!r) return setResult('');
+    if (r.ok) return setResult(r.message, r.sameContract ? 'ok' : 'warn');
+    return setResult(r.message, 'error');
+  }
+
+  // the language the engine's page asked for (?lang=), kept for the page's next opening
+  function chooseLanguage() {
+    const asked = new URLSearchParams(location.search).get('lang');
+    if (!asked || !I18n.languages().includes(asked)) return;
+    I18n.setLanguage(asked);
+    try { localStorage.setItem('interfaceLanguage', asked); } catch { /* no storage: this time only */ }
+  }
+
+  // the static texts of connection.html (data-i18n, data-i18n-placeholder)
+  function paintTexts() {
+    document.documentElement.lang = I18n.getLanguage();
+    document.title = `${t('connection.title')} · Multiagent Orchestrator`;
+    document.querySelectorAll('[data-i18n]').forEach((el) => { el.textContent = t(el.dataset.i18n); });
+    document.querySelectorAll('[data-i18n-placeholder]').forEach((el) => { el.placeholder = t(el.dataset.i18nPlaceholder); });
   }
 
   function nowText(v) {
     if (v.failure) return '';
-    if (v.mode === 'remote') return `This window shows the engine on ${v.remoteHost || v.saved.address}.`;
-    return `This computer runs the engine (app ${v.app}).`;
+    if (v.mode === 'remote') return t('connection.now_remote', { host: v.remoteHost || v.saved.address });
+    return t('connection.now_local', { app: v.app });
   }
 
   function paintMode() {
     const remote = chosen() === 'remote';
     $('#cn-remote').classList.toggle('hidden', !remote);
     const same = view && chosen() === view.mode && !view.failure;
-    $('#cn-save').textContent = remote ? 'Test, save and restart' : 'Save and restart';
+    $('#cn-save').textContent = t(remote ? 'connection.save_remote' : 'connection.save');
     $('#cn-save').disabled = busy || (same && !remote);
     $('#cn-test').disabled = busy;
-    $('#cn-foot-hint').textContent = remote
-      ? 'Saving tests the engine first, then restarts the app on it.'
-      : 'Switching restarts the app on this computer\'s engine and workspace.';
+    $('#cn-foot-hint').textContent = t(remote ? 'connection.foot_remote' : 'connection.foot_local');
   }
 
   function paint(v) {
@@ -52,13 +70,15 @@
     $('.cn-failure').classList.toggle('hidden', !failed);
     $('#cn-failure-text').textContent = failed ? v.failure.message : '';
     $('#cn-now').textContent = nowText(v);
-    $('#cn-cancel').textContent = v.alone ? 'Quit' : 'Cancel';
-    $('#cn-cancel').title = v.alone ? 'Quit the app (this is its only window)' : 'Close without changing anything (Esc)';
+    // data-close: what the button does, whatever the language
+    $('#cn-cancel').dataset.close = v.alone ? 'quit' : 'cancel';
+    $('#cn-cancel').textContent = t(v.alone ? 'connection.quit' : 'common.cancel');
+    $('#cn-cancel').title = t(v.alone ? 'connection.quit_title' : 'connection.cancel_title');
     const mode = failed || v.saved.mode === 'remote' ? 'remote' : v.mode;
     document.querySelector(`input[name="cn-mode"][value="${mode}"]`).checked = true;
     $('#cn-address').value = v.saved.address || '';
     $('#cn-token').value = '';
-    $('#cn-token').placeholder = v.saved.hasToken ? 'Saved (leave blank to keep it)' : '';
+    $('#cn-token').placeholder = v.saved.hasToken ? t('connection.token_saved') : '';
     setResult('');
     paintMode();
   }
@@ -95,7 +115,7 @@
   }
 
   const testNow = () => run(async () => {
-    setResult('Testing…', 'busy');
+    setResult(t('connection.testing'), 'busy');
     const { address, token } = fields();
     showResult(await api.test(address, token));
   });
@@ -103,16 +123,16 @@
   const save = () => run(async () => {
     const mode = chosen();
     const { address, token } = fields();
-    setResult(mode === 'remote' ? 'Testing…' : 'Saving…', 'busy');
+    setResult(t(mode === 'remote' ? 'connection.testing' : 'connection.saving'), 'busy');
     const r = await api.save(mode, address, token);
     if (r.test) showResult(r.test);
     if (!r.saved) return;
-    if (r.restarting) setResult(`${r.test?.ok ? `${r.test.message} ` : ''}Restarting…`, 'ok');
-    else { setResult(r.message || 'Saved.', 'ok'); await load(); }
+    if (r.restarting) setResult(`${r.test?.ok ? `${r.test.message} ` : ''}${t('connection.restarting')}`, 'ok');
+    else { await load(); setResult(t('connection.saved'), 'ok'); }
   });
 
   const retry = () => run(async () => {
-    setResult('Connecting…', 'busy');
+    setResult(t('connection.connecting'), 'busy');
     const r = await api.retry();
     if (!r.ok && r.failure) {
       $('#cn-failure-text').textContent = r.failure.message;
@@ -142,6 +162,8 @@
     paintMode();
     save();
   });
+  chooseLanguage();
+  paintTexts();
   api.onChanged(load);
   load();
 })();

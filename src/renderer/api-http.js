@@ -121,7 +121,14 @@
 
   // Desktop-only methods the browser can still do its own way; the others throw.
   const browser = {
-    ...(desktopClient && { openEngineConnection: async () => { window.open('/__desktop__/engine-connection'); return true; } }),
+    // the page's interface language goes along (#329): the connection page speaks it too
+    ...(desktopClient && {
+      openEngineConnection: async () => {
+        const lang = window.I18n?.getLanguage?.();
+        window.open(`/__desktop__/engine-connection${lang ? `?lang=${encodeURIComponent(lang)}` : ''}`);
+        return true;
+      },
+    }),
     // no native folder picker in the browser: the path is typed (a folder on the server)
     pickFolder: async () => window.prompt('Folder path on the server:')?.trim() || null,
     clipboardRead: () => navigator.clipboard.readText(),

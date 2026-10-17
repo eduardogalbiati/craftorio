@@ -22,7 +22,9 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 
-const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'views', 'settings', 'settings.js'), 'utf8');
+// #329: the markup lives in settings-markup.js, its texts in the catalog
+const { settingsSource, t } = require('./settings-source-329');
+const src = settingsSource();
 const GIB = 1024 ** 3;
 const TESTIDS = ['memory-guard-enabled', 'memory-guard-limit', 'memory-guard-floor', 'memory-guard-limit-hint'];
 
@@ -77,6 +79,8 @@ function loadMemoryGuard({ memoryGuard, totalMemoryBytes = 32 * GIB } = {}) {
   const setSettingsCalls = [];
   const sandbox = {
     $: find,
+    t,
+    I18n: require('../src/shared/i18n'),
     esc: (s) => String(s ?? ''),
     errMsg: (e) => String(e?.message || e),
     renderHeader() {},

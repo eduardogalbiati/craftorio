@@ -5,7 +5,10 @@
 body.setup-open .term-dock { z-index: 11; }
 .setup-card { width: min(880px, 94vw); max-height: 88vh; display: flex; flex-direction: column; gap: 4px; }
 .setup-card h3 { margin: 12px 0 2px; font-size: 18px; }
-.setup-stepper { list-style: none; display: flex; gap: 6px; padding: 0 0 12px; margin: 0; border-bottom: 1px solid var(--border); }
+.setup-top { align-items: center; gap: 12px; padding: 0 0 12px; border-bottom: 1px solid var(--border); }
+.setup-stepper { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; padding: 0; margin: 0; }
+/* #329 the interface language, at the stepper's right */
+.setup-language { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
 .setup-step { display: inline-flex; align-items: center; gap: 7px; padding: 4px 12px 4px 4px; border-radius: 99px; border: 1px solid var(--border); color: var(--muted); font-size: 12px; white-space: nowrap; }
 .setup-num { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; background: var(--panel-2); font-size: 11px; font-weight: 600; }
 .setup-step.done { color: var(--text); }

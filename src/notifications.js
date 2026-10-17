@@ -13,8 +13,13 @@
 //            or a Night watch ended (its morning summary, #172); target = { view: 'nightwatch' }
 //
 // Nothing is shown while the window is focused on the notice's run, session or Product Owner drawer.
+// Titles and bodies are in the interface language (#329, src/shared/i18n.js, set by
+// src/service/areas/interface-language.js); what they quote (titles, messages, commands) is not translated.
+
+const { t } = require('./shared/i18n');
 
 const SETTING = { oracle: 'notifyOracle', po: 'notifyPO', run: 'notifyRuns', session: 'notifySessions' };
+// the event names (English, never translated); their words come from notify.status.*
 const STATUS_LABEL = { success: 'succeeded', failed: 'failed', cancelled: 'cancelled', interrupted: 'interrupted' };
 
 const clip = (s, n = 180) => {
@@ -27,32 +32,38 @@ const clip = (s, n = 180) => {
 // `gateLink(runId, approvalId)` (#226, src/mobile-gates.js, set while phone gates are on): a gate's
 // notice carries `url`, the signed link to that gate's phone page.
 function runNotice(ev, run = {}, { gateLink } = {}) {
-  const workflow = run.workflow || ev.workflow || 'Workflow';
+  const workflow = run.workflow || ev.workflow || t('notify.workflow');
   const name = () => (run.title ? `${run.title} (${workflow})` : workflow);
-  const lines = (detail) => [`Project: ${run.project || 'none'}${run.mock ? ' (simulation)' : ''}`, detail && clip(detail)].filter(Boolean).join('\n');
+  const project = t('notify.project', { name: run.project || t('notify.none') }) + (run.mock ? t('notify.simulation') : '');
+  const lines = (detail) => [project, detail && clip(detail)].filter(Boolean).join('\n');
   const notice = (event, title, detail) => ({
     kind: 'run', event, title, body: lines(detail), target: { runId: ev.run_id, workflow },
   });
   switch (ev.type) {
     case 'workflow.started':
-      return notice('started', `Run started: ${name()}`, ev.resumed_from ? `Resumed from ${ev.resumed_from.run_id} at ${ev.resumed_from.step}` : '');
+      return notice('started', t('notify.run_started', { name: name() }), ev.resumed_from ? t('notify.resumed_from', { run: ev.resumed_from.run_id, step: ev.resumed_from.step }) : '');
     case 'approval.requested': {
       // the gate's "What happened" line (#213), else its message
-      const n = notice('waiting', `Waiting for you: ${name()}`, ev.brief?.headline || ev.message || `Approval needed at ${ev.step_id}`);
+      const n = notice('waiting', t('notify.waiting', { name: name() }), ev.brief?.headline || ev.message || t('notify.approval_needed', { step: ev.step_id }));
       if (gateLink && ev.approval_id) n.url = gateLink(ev.run_id, ev.approval_id);
       return n;
     }
     case 'workflow.finished': {
       const label = STATUS_LABEL[ev.status] || ev.status;
-      const ok = ev.status === 'success' ? (ev.summary?.local_merge ? `Merged locally into ${ev.summary.local_merge.base}, not pushed yet.` : '') : ev.error;
-      return notice(ev.status === 'success' ? 'succeeded' : label, `Run ${label}: ${name()}`, ok);
+      const ok = ev.status === 'success' ? (ev.summary?.local_merge ? t('notify.merged_locally', { base: ev.summary.local_merge.base }) : '') : ev.error;
+      const status = STATUS_LABEL[ev.status] ? t(`notify.status.${label}`) : label;
+      return notice(ev.status === 'success' ? 'succeeded' : label, t('notify.run_finished', { status, name: name() }), ok);
     }
     // #276: the memory guard stopped the same command a second time in a step (the engine sets notify once)
     case 'process.killed':
-      return ev.notify ? notice('memory', `Process stopped again for memory: ${name()}`, `${ev.step_id || 'A step'} ran \`${ev.command_line}\` again and the memory guard stopped it again (${(ev.bytes / 1024 ** 3).toFixed(1)} GB, over the ${(ev.limit_bytes / 1024 ** 3).toFixed(1)} GB limit).`) : null;
+      return ev.notify ? notice('memory', t('notify.memory_title', { name: name() }), t('notify.memory_body', {
+        step: ev.step_id || t('notify.a_step'), command: ev.command_line, used: (ev.bytes / 1024 ** 3).toFixed(1), limit: (ev.limit_bytes / 1024 ** 3).toFixed(1),
+      })) : null;
     // #262: an agent's provider ran out of credits or hit its usage limit; the turn moved on to the next one
     case 'agent.fallback':
-      return notice('fallback', `Provider fell back: ${name()}`, `${ev.agent} fell back in ${ev.step_id || 'a turn'}: ${ev.from} → ${ev.to} (${clip(ev.reason, 120)}). The provider may be out of credits.`);
+      return notice('fallback', t('notify.fallback_title', { name: name() }), t('notify.fallback_body', {
+        agent: ev.agent, step: ev.step_id || t('notify.a_turn'), from: ev.from, to: ev.to, reason: clip(ev.reason, 120),
+      }));
     default:
       return null;
   }
@@ -60,7 +71,7 @@ function runNotice(ev, run = {}, { gateLink } = {}) {
 
 // The notice for a run that died with the app (found at the next start).
 function interruptedNotice({ runId, workflow, project, mock, title }) {
-  return runNotice({ type: 'workflow.finished', run_id: runId, status: 'interrupted', error: 'The app closed while the run was in progress. Resume it from the run screen.' }, { workflow, project, mock, title });
+  return runNotice({ type: 'workflow.finished', run_id: runId, status: 'interrupted', error: t('notify.interrupted_body') }, { workflow, project, mock, title });
 }
 
 // The notice for a process of a finished run that keeps using CPU (#390, src/engine/memory-guard.js
@@ -68,8 +79,8 @@ function interruptedNotice({ runId, workflow, project, mock, title }) {
 function strayNotice({ pid, runId, commandLine, cpuShare } = {}) {
   return {
     kind: 'run', event: 'stray',
-    title: `A process of a finished run keeps using CPU: ${clip(runId || 'run', 60)}`,
-    body: clip(`PID ${pid}, ${Math.round((Number(cpuShare) || 0) * 100)}% of a core: ${commandLine || 'unknown command'}. Stop it with memory:stopStray, or end it in the Task Manager.`, 240),
+    title: t('notify.stray_title', { run: clip(runId || 'run', 60) }),
+    body: clip(t('notify.stray_body', { pid, share: Math.round((Number(cpuShare) || 0) * 100), command: commandLine || t('notify.unknown_command') }), 240),
     target: { runId: runId || null },
   };
 }
@@ -78,8 +89,8 @@ function strayNotice({ pid, runId, commandLine, cpuShare } = {}) {
 function sessionNotice(terminalId, { title } = {}, message = '') {
   return {
     kind: 'session', event: 'waiting',
-    title: `Waiting for you: ${clip(title || 'CLI session', 80)}`,
-    body: clip(message) || 'The CLI stopped and is waiting for your answer.',
+    title: t('notify.waiting', { name: clip(title || t('notify.cli_session'), 80) }),
+    body: clip(message) || t('notify.session_body'),
     target: { terminalId },
   };
 }
@@ -90,8 +101,8 @@ function pushConflictNotice({ project = {}, base, files = [], error } = {}) {
   const list = (files || []).map(String);
   return {
     kind: 'run', event: 'conflict',
-    title: `Merge conflict: ${clip(project.name || project.id || 'project', 80)}`,
-    body: clip([list.length ? `Local ${base || 'base'} conflicts with origin in ${list.join(', ')}.` : '', error].filter(Boolean).join(' ')) || 'The local base conflicts with origin.',
+    title: t('notify.conflict_title', { project: clip(project.name || project.id || 'project', 80) }),
+    body: clip([list.length ? t('notify.conflict_files', { base: base || 'base', files: list.join(', ') }) : '', error].filter(Boolean).join(' ')) || t('notify.conflict_body'),
     target: { view: 'backlog', projectId: project.id || null },
   };
 }
@@ -103,8 +114,8 @@ function productOwnerNotice({ project = {}, message = {} } = {}) {
   const draft = message.mode === 'issue' && message.issue?.draft?.title;
   return {
     kind: 'po', event: message.error ? 'failed' : 'answered',
-    title: message.error ? `The Product Owner could not answer: ${name}` : `The Product Owner answered: ${name}`,
-    body: clip(draft ? `Draft: ${draft}` : message.text) || 'Open the Backlog to read the answer.',
+    title: t(message.error ? 'notify.po_failed' : 'notify.po_answered', { project: name }),
+    body: clip(draft ? t('notify.po_draft', { title: draft }) : message.text) || t('notify.po_body'),
     target: { view: 'backlog', projectId: project.id || null, openPO: true },
   };
 }
@@ -115,7 +126,7 @@ function oracleNotice({ title, body, ok = true } = {}) {
   return {
     kind: 'oracle', event: ok ? 'acted' : 'failed',
     title: clip(title || 'Oracle', 120),
-    body: clip(body) || 'Open the Oracle to see what it did.',
+    body: clip(body) || t('notify.oracle_body'),
     target: { openOracle: true },
   };
 }
@@ -125,8 +136,8 @@ function oracleNotice({ title, body, ok = true } = {}) {
 function nightWatchNotice({ ran, did, waits, safety, alarm = false } = {}) {
   return {
     kind: 'oracle', event: alarm ? 'night-alarm' : 'night-summary',
-    title: alarm ? 'Night watch ended: safety alarm' : 'Night watch ended',
-    body: clip([did, waits, alarm ? safety : ran].filter(Boolean).join(' '), 240) || 'Open the Night watch to see the night.',
+    title: t(alarm ? 'notify.night_alarm' : 'notify.night_ended'),
+    body: clip([did, waits, alarm ? safety : ran].filter(Boolean).join(' '), 240) || t('notify.night_body'),
     target: { view: 'nightwatch' },
   };
 }
@@ -136,20 +147,20 @@ function nightWatchNotice({ ran, did, waits, safety, alarm = false } = {}) {
 function findingsWaitingNotice({ text = '' } = {}) {
   return {
     kind: 'oracle', event: 'findings-waiting',
-    title: 'Self-healing: findings are waiting',
-    body: clip(`The Oracle is paused, so it cannot look at what Self-healing detected. ${text}`, 240),
+    title: t('notify.findings_title'),
+    body: clip(t('notify.findings_body', { text }), 240),
     target: { view: 'nightwatch' },
   };
 }
 
 // The notice for a run's chain (#134, src/service/areas/chain.js): `state` started | paused | done,
 // `message` what happened; opens the run (paused: to resume or drop the chain), or the next run.
-const CHAIN_TITLE = { done: 'Chain done', paused: 'Chain paused', started: 'Chain: next run started' };
+const CHAIN_TITLE = { done: () => t('notify.chain_done'), paused: () => t('notify.chain_paused'), started: () => t('notify.chain_started') };
 function chainNotice({ runId, workflow, state, message, nextRunId = null } = {}) {
   return {
     kind: 'run', event: state === 'paused' ? 'failed' : 'finished',
-    title: `${CHAIN_TITLE[state] || 'Chain'}: ${clip(workflow || runId || 'run', 60)}`,
-    body: clip(message) || 'Open the run to see its chain.',
+    title: `${CHAIN_TITLE[state]?.() || t('notify.chain')}: ${clip(workflow || runId || 'run', 60)}`,
+    body: clip(message) || t('notify.chain_body'),
     target: { runId: nextRunId || runId, workflow: workflow || null },
   };
 }
@@ -157,17 +168,17 @@ function chainNotice({ runId, workflow, state, message, nextRunId = null } = {})
 // The notice for a live roadmap's refill (#164): `refill` is the roadmap's liveRefill ({ status,
 // added, message }, src/live-roadmap.js); opens the project's Backlog.
 const LIVE_TITLE = {
-  added: (r) => `Live roadmap: +${r.added} stage${r.added === 1 ? '' : 's'}`,
-  budget: () => 'Live roadmap stopped: daily budget reached',
-  empty: () => 'Live roadmap: nothing left to pick',
-  failed: () => 'Live roadmap paused: the refill failed',
+  added: (r) => t('notify.live_added', { count: r.added }),
+  budget: () => t('notify.live_budget'),
+  empty: () => t('notify.live_empty'),
+  failed: () => t('notify.live_failed'),
 };
 function liveRoadmapNotice({ project = {}, refill = {} } = {}) {
-  const title = (LIVE_TITLE[refill.status] || (() => 'Live roadmap'))(refill);
+  const title = (LIVE_TITLE[refill.status] || (() => t('notify.live')))(refill);
   return {
     kind: 'run', event: refill.status === 'added' ? 'refilled' : refill.status || 'refilled',
     title: `${title}: ${clip(project.name || project.id || 'project', 60)}`,
-    body: clip(refill.message) || 'Open the Roadmap to see it.',
+    body: clip(refill.message) || t('notify.live_body'),
     target: { view: 'roadmap', projectId: project.id || null },
   };
 }

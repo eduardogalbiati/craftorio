@@ -3,6 +3,7 @@
 // resolve_merge runs again to finish the rebase and the run goes on to the scoped re-check and merges.
 // A whole mock run (a new transition): the local merge fails once (action_errors), the
 // developer's resolve_merge answers are pinned (the mock fills every optional string).
+// #418: the merge-conflict-resolver skill reaches resolve_merge on each visit, not the develop prompt.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -72,6 +73,17 @@ test('ai-development-local-hero (#380): a test conflict needing new lines goes t
   assert.match(second.prompt, /The test writer resolved the test conflict/);
   // the developer never got a turn to write the test lines itself in between
   assert.equal(turns.slice(first + 1, secondAt).some((x) => x.agent === 'developer'), false);
+
+  // #418: merge-conflict-resolver is a step skill of resolve_merge, on each visit, and no longer in the
+  // developer's system part (the develop prompt's 40K budget)
+  const SKILL = '<skill name="merge-conflict-resolver"';
+  assert.equal(turns[first].prompt.includes(SKILL), true, 'the first resolve_merge visit gets the merge-conflict-resolver skill');
+  assert.equal(second.prompt.includes(SKILL), true, 'the return visit after the test writer gets it again');
+  const agentOf = {};
+  for (const e of events) if (e.type === 'session.opened') agentOf[e.session.id] = e.session.agent;
+  const develop = events.find((e) => e.type === 'session.message_sent' && e.step_id === 'develop' && agentOf[e.session_id] === 'developer');
+  assert.ok(develop, 'the developer had a develop turn');
+  assert.equal(develop.prompt.includes(SKILL), false, 'the develop prompt does not carry the merge-conflict-resolver skill');
 
   const transitions = events.filter((e) => e.type === 'step.transition').map((e) => `${e.from}>${e.to}`);
   assert.ok(transitions.includes('resolve_merge>code_review'), transitions.join(', '));

@@ -114,6 +114,7 @@
 //   --paste-big <css>  the same with a 12 MB image: the red "Image too large" chip
 //                      (--workflow on a view other than run: the workflow the Start drawer opens on)
 //   --theme <t>        dark | light | system: the theme Electron reports (prefers-color-scheme)
+//   --lang <code>      the interface language (#329): en | pt-BR, a language with a catalog in src/shared/i18n/
 //   --size <WxH>       window content size (default 1400x900)
 //   --ref <git ref>    captures the app as it is at this ref (e.g. main, for the "original" shots)
 //   --out <dir>        output folder (default runs/screenshots); --name <file> without .png
@@ -151,6 +152,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync, execFileSync } = require('child_process');
 const evidence = require('../src/evidence');
+const I18n = require('../src/shared/i18n');
 const machineSlot = require('../src/engine/machine-slot');
 const {
   demoKeepAwake,
@@ -183,8 +185,23 @@ const VIEWS = loadViews(VIEWS_DIR);
 const THEMES = ['dark', 'light', 'system'];
 const KEEP_AWAKE = ['off', 'idle', 'active', 'error'];
 
+// #329 --lang <code>: the interface language of the capture, one with a catalog (src/shared/i18n/).
+// Taken out of argv here so parseArgs does not grow (scripts/code-health.js); sets a.lang.
+function takeLang(argv, a) {
+  const rest = [...argv];
+  const at = rest.indexOf('--lang');
+  if (at < 0) return rest;
+  const lang = rest[at + 1];
+  const known = I18n.languages();
+  if (!known.includes(lang)) throw new Error(`--lang takes ${known.join(' | ')}`);
+  rest.splice(at, 2);
+  a.lang = lang;
+  return rest;
+}
+
 function parseArgs(argv, views = VIEWS) {
-  const a = { view: 'dashboard', tab: null, mode: null, run: 'mock', workflow: 'software-development.yaml', clicks: [], contexts: [], presses: [], keys: [], pastes: [], inputs: {}, stopAt: null, keepAwake: null, theme: null, size: [1400, 900], ref: null, out: null, name: null, side: null, caption: null, wait: null, timeout: 90000, demoShots: true };
+  const a = { view: 'dashboard', tab: null, mode: null, run: 'mock', workflow: 'software-development.yaml', clicks: [], contexts: [], presses: [], keys: [], pastes: [], inputs: {}, stopAt: null, keepAwake: null, theme: null, size: [1400, 900], ref: null, out: null, name: null, side: null, caption: null, wait: null, timeout: 90000, demoShots: true, lang: null };
+  argv = takeLang(argv, a);
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i];
     const next = () => { const v = argv[++i]; if (v === undefined) throw new Error(`${k} needs a value`); return v; };
@@ -267,7 +284,7 @@ function parseArgs(argv, views = VIEWS) {
   }
   if ((a.stopAt || Object.keys(a.inputs).length) && !v.live) throw new Error('--stop-at and --input apply to --view run');
   a.wait ??= v.live ? 20000 : 1500;
-  a.name ??= [a.agentsWindow ? `agents-window-${a.agentsWindow}` : a.view, a.tab, a.mode, a.oracle && `oracle-${a.oracle}`, a.po && `po-${a.po}`, a.theme].filter(Boolean).join('-');
+  a.name ??= [a.agentsWindow ? `agents-window-${a.agentsWindow}` : a.view, a.tab, a.mode, a.oracle && `oracle-${a.oracle}`, a.po && `po-${a.po}`, a.theme, a.lang].filter(Boolean).join('-');
   if (!/^[\w.-]+$/.test(a.name)) throw new Error(`--name must be a plain file name: ${a.name}`);
   if (a.side && !SIDES.includes(a.side)) throw new Error(`--side takes ${SIDES.join(' | ')}`);
   if (a.caption && !(a.out && runOfRound(path.resolve(a.out)))) throw new Error('--caption needs --out <run_dir>/evidence/<step>/round-<n>');
@@ -406,6 +423,8 @@ function main() {
       developerMode: true, lastWorkflow: 'software-development.yaml', lastProject: project.id, keepAwake: !!args.keepAwake && args.keepAwake !== 'off',
       // the Setup is done (#319: the setup view's seed shows a first run)
       setupDone: true,
+      // #329: the interface language, English unless --lang says otherwise (never the machine's)
+      language: { ...workspace.DEFAULT_SETTINGS.language, interface: args.lang || 'en' },
     });
     fs.mkdirSync(ws.backlog, { recursive: true });
     fs.writeFileSync(path.join(ws.backlog, `${project.id}.json`), JSON.stringify(demoBacklog(project.id, src('backlog').taskProgress), null, 2));

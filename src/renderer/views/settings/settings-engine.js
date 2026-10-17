@@ -3,9 +3,10 @@
 // src/preload.js or src/renderer/api-http.js). The desktop app on this computer's engine and the
 // desktop app showing a remote engine both offer Change…, which opens the app's connection page
 // (src/engine-connection-window.js: this computer or a remote engine, address and token, Test
-// connection); a plain browser on `npm run serve` only says which engine serves it.
+// connection); a plain browser on `npm run serve` only says which engine serves it. Its texts are
+// settings.engine.* keys of the catalog (#329), drawn again when the interface language changes.
 // window.EngineSettings = { where(), markup(where), render(el) }: settings.js draws it into #set-engine;
-// uses app.js globals (esc, errMsg).
+// uses app.js globals (esc, errMsg) and the catalog's t.
 (() => {
   /** { mode: 'local' | 'remote' | 'browser', host?, canChange } */
   function where() {
@@ -13,21 +14,22 @@
     return { mode: c.mode, host: c.host || '', canChange: typeof api.openEngineConnection === 'function' && c.mode !== 'browser' };
   }
 
-  const TEXT = {
-    local: () => 'This computer runs the engine: runs, terminals and the workspace are here. Another computer of yours can run it instead (npm run serve), and this app becomes its window.',
-    remote: (w) => `This window shows the engine on ${w.host}: runs, terminals, files and settings are on that computer. Change… switches back to this computer or to another engine (the app restarts).`,
-    browser: (w) => `This page is served by the engine on ${w.host}. The desktop app on another computer can show this engine too: Settings › Execution › Engine there.`,
-  };
-  const BADGE = { local: 'This computer', remote: 'Remote engine', browser: 'Browser' };
+  const MODES = ['local', 'remote', 'browser'];
+  const modeOf = (w) => (MODES.includes(w.mode) ? w.mode : 'local');
 
   /** The group's markup for where(). */
   function markup(w) {
-    const text = (TEXT[w.mode] || TEXT.local)(w);
-    return `<div class="s-group" data-testid="settings-engine" data-engine-mode="${esc(w.mode)}">
+    const mode = modeOf(w);
+    const text = t(`settings.engine.${mode}_help`, { host: w.host });
+    const badge = t(`settings.engine.badge_${mode}`) + (mode === 'remote' && w.host ? ` · ${w.host}` : '');
+    const change = w.canChange
+      ? `<div class="s-ctrl"><button type="button" class="btn sm" data-testid="settings-engine-change" aria-describedby="set-engine-help">${esc(t('settings.engine.change'))}</button></div>`
+      : '';
+    return `<div class="s-group" data-testid="settings-engine" data-engine-mode="${esc(mode)}">
         <div class="s-row">
-          <div class="s-label"><b>Engine</b><span id="set-engine-help">${esc(text)}</span>
-            <span class="keep-awake-line"><span class="badge${w.mode === 'remote' ? ' cat-monitor' : ''}" data-testid="settings-engine-mode">${esc(BADGE[w.mode] || BADGE.local)}${w.mode === 'remote' && w.host ? ` · ${esc(w.host)}` : ''}</span><span class="error small" id="set-engine-error"></span></span></div>
-          ${w.canChange ? '<div class="s-ctrl"><button type="button" class="btn sm" data-testid="settings-engine-change" aria-describedby="set-engine-help">Change…</button></div>' : ''}
+          <div class="s-label"><b>${esc(t('settings.engine.title'))}</b><span id="set-engine-help">${esc(text)}</span>
+            <span class="keep-awake-line"><span class="badge${mode === 'remote' ? ' cat-monitor' : ''}" data-testid="settings-engine-mode">${esc(badge)}</span><span class="error small" id="set-engine-error"></span></span></div>
+          ${change}
         </div>
       </div>`;
   }
@@ -35,8 +37,7 @@
   /** Draws the group into el; Change… opens the connection page. */
   function render(el) {
     if (!el) return;
-    const w = where();
-    el.innerHTML = markup(w);
+    el.innerHTML = markup(where());
     const btn = el.querySelector('[data-testid="settings-engine-change"]');
     if (btn) {
       btn.onclick = async () => {

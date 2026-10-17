@@ -24,7 +24,7 @@ function fakeElectron() {
   class FakeWindow extends EventEmitter {
     constructor(opts) { super(); this.opts = opts; this.webContents = new FakeContents(); this.destroyed = false; windows.push(this); }
     loadURL(u) { this.loadedUrl = u; }
-    loadFile(f) { this.loadedFile = f; }
+    loadFile(f, options) { this.loadedFile = f; this.loadOptions = options; }
     isDestroyed() { return this.destroyed; }
     destroy() { if (this.destroyed) return; this.destroyed = true; this.emit('closed'); }
     // the window's X (or BrowserWindow.close()): closed like a destroy here
@@ -340,4 +340,17 @@ test('the page always has the OS title bar with its close button, and fits a sma
   const d = setup({ mode: 'local', saved: { mode: 'local', address: '', token: '' } });
   d.c.openPage();
   assert.deepEqual([d.pageOf().opts.width, d.pageOf().opts.height], [640, 700]);
+});
+
+test('#329 the connection page opens in the language of the engine\'s page that asked for it', async () => {
+  const s = setup();
+  await s.c.startRemote(decision());
+  s.remoteOf().webContents.openHandler({ url: `${URL_}${conn.CONNECTION_PATH}?lang=pt-BR` });
+  assert.deepEqual(s.pageOf().loadOptions, { query: { lang: 'pt-BR' } });
+  s.pageOf().close();
+  s.remoteOf().webContents.openHandler({ url: `${URL_}${conn.CONNECTION_PATH}?lang=%22%3E%3Cscript` });
+  assert.equal(s.pageOf().loadOptions, undefined, 'not a language code: no query');
+  s.pageOf().close();
+  s.c.openPage();
+  assert.equal(s.pageOf().loadOptions, undefined, 'from the desktop: the page\'s own remembered language');
 });
