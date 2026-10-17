@@ -233,7 +233,10 @@ test('memory Import: entries pasted from a Claude Code memory index join the mem
 test('memory drawer: the Memory panel has an Import action that calls importOracleMemory', () => {
   const src = fs.readFileSync(path.join(ROOT, 'src', 'renderer', 'views', 'oracle', 'oracle.js'), 'utf8');
   assert.match(src, /importOracleMemory/);
-  assert.match(src, />\s*Import\b/);
+  // #330: the button's text comes from the catalog
+  assert.match(src, />\s*\$\{t\('oracle\.import'\)\}/);
+  const en = JSON.parse(fs.readFileSync(path.join(ROOT, 'src', 'shared', 'i18n', 'en.json'), 'utf8'));
+  assert.equal(en['oracle.import'], 'Import');
 });
 
 // ---- 3. run_analysis ---------------------------------------------------------------------------
