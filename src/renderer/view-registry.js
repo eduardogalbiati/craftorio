@@ -66,10 +66,69 @@ function navGroupBox(menu, group) {
   return box;
 }
 
+// #330 a language change repaints a drawn markup in place (redrawMarkup): each text node and labelled
+// attribute that still shows the previous language's text takes the new one, matched node by node with
+// the markup drawn before. What the screen drew since (its lists, states, chats, terminals) stays and
+// its show() draws it again, so mount() runs once. A markup whose structure changed, or a page without
+// a DOM walker (the tests' stub), draws the screen again and mounts it again. A mount that adds markup
+// elsewhere (a drawer in the shell, a dock in another screen) draws it with ViewRegistry.draw(container,
+// () => html) to be repainted too.
+const LABELLED = ['title', 'placeholder', 'aria-label', 'alt'];
+const drawnMarkups = []; // { source, def (a view's own markup), html, nodes: the live nodes in document order }
+
+// the nodes and their element and text descendants, in document order
+function nodesOf(tops) {
+  const out = [];
+  for (const top of tops) {
+    out.push(top);
+    const walker = document.createTreeWalker(top, 5); // NodeFilter.SHOW_ELEMENT | SHOW_TEXT
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) out.push(n);
+  }
+  return out;
+}
+
+function parsedNodes(html) {
+  const tpl = document.createElement('template');
+  tpl.innerHTML = html;
+  return nodesOf([...tpl.content.childNodes]);
+}
+
+/** Puts the new texts on the live nodes still showing the old ones; false when the structure differs. */
+function repaintNodes(live, before, after) {
+  if (live.length !== after.length || before.length !== after.length) return false;
+  if (after.some((n, i) => n.nodeName !== before[i].nodeName || n.nodeName !== live[i].nodeName)) return false;
+  after.forEach((n, i) => {
+    const el = live[i];
+    if (!el.isConnected) return;
+    if (n.nodeType === 3) {
+      if (el.nodeValue === before[i].nodeValue) el.nodeValue = n.nodeValue;
+      return;
+    }
+    for (const name of LABELLED) {
+      const was = before[i].getAttribute(name);
+      const now = n.getAttribute(name);
+      if (now != null && now !== was && el.getAttribute(name) === was) el.setAttribute(name, now);
+    }
+  });
+  return true;
+}
+
+// draws a markup (a string, or a function drawn again in a new language) at the end of container,
+// remembering its nodes for a repaint; `def` when it is that view's own markup
+function drawInto(container, source, def) {
+  const html = markupOf(source);
+  const last = container.lastChild;
+  container.insertAdjacentHTML('beforeend', html);
+  if (typeof document.createTreeWalker !== 'function') return;
+  const tops = [];
+  for (let n = last ? last.nextSibling : container.firstChild; n; n = n.nextSibling) tops.push(n);
+  drawnMarkups.push({ source, def, html, nodes: nodesOf(tops) });
+}
+
 function registerView(def) {
   const { id, nav, markup, modals } = def;
-  if (markup) document.querySelector('main.content').insertAdjacentHTML('beforeend', markupOf(markup));
-  if (modals) document.body.insertAdjacentHTML('beforeend', markupOf(modals));
+  if (markup) drawInto(document.querySelector('main.content'), markup, def);
+  if (modals) drawInto(document.body, modals);
   for (const entry of [].concat(nav || [])) {
     const menu = document.querySelector('nav.sidebar .sidebar-menu'); // #411 the sidebar's scrolling part
     const group = entry.group && window.NavGroups.GROUPS.find((g) => g.id === entry.group);
@@ -108,18 +167,41 @@ function relabelNav() {
   }
 }
 
-/** Draws again the screens whose markup is a function (#329), keeping which one shows, and mounts them again. */
+/**
+ * Puts the screens whose markup or modals are functions in the new language (#329, #330): repainted in
+ * place, else (structure changed, no DOM walker) the markup drawn again and mounted again; the screen
+ * showing is shown again.
+ */
 function redrawMarkup() {
+  const repainted = new Set();
+  for (const drawn of drawnMarkups) {
+    if (typeof drawn.source !== 'function') continue;
+    const html = drawn.source();
+    if (!repaintNodes(drawn.nodes, parsedNodes(drawn.html), parsedNodes(html))) continue;
+    drawn.html = html;
+    if (drawn.def) repainted.add(drawn.def);
+  }
   for (const [id, def] of viewRegistry) {
     if (typeof def.markup !== 'function') continue;
     const old = document.getElementById(`view-${id}`);
     if (!old) continue;
     const hidden = old.classList.contains('hidden');
-    old.insertAdjacentHTML('afterend', def.markup());
-    old.remove();
-    document.getElementById(`view-${id}`)?.classList.toggle('hidden', hidden);
-    def.mount?.();
+    if (!repainted.has(def)) {
+      const html = def.markup();
+      old.insertAdjacentHTML('afterend', html);
+      old.remove();
+      const drawn = drawnMarkups.find((d) => d.def === def);
+      const now = document.getElementById(`view-${id}`);
+      if (drawn && now) Object.assign(drawn, { html, nodes: nodesOf([now]) });
+      now?.classList.toggle('hidden', hidden);
+      def.mount?.();
+    }
     if (!hidden) def.show?.();
   }
 }
-window.ViewRegistry = { redrawMarkup, relabelNav };
+window.ViewRegistry = {
+  draw: (container, source) => drawInto(container, source),
+  redrawMarkup,
+  relabelNav,
+  repaintNodes,
+};
