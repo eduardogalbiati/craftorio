@@ -150,7 +150,7 @@ async function saveProject(e) {
 registerView({
   id: 'projects',
   nav: { label: 'Projects', order: 38, group: 'code', title: 'Your projects: each one\'s runs, conflict map, architecture and refactors', icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></svg>' },
-  markup: `
+  markup: () => `
       <section id="view-projects" class="view hidden" data-testid="projects-screen">
         <div class="page-head">
           <div>
@@ -164,7 +164,7 @@ registerView({
         </div>
         <div id="projects-list" class="card-grid"></div>
       </section>`,
-  modals: `
+  modals: () => `
   <div id="project-modal" class="modal hidden">
     <form id="project-form" class="modal-card wide">
       <h3 id="project-modal-title">${t('projects.new_project')}</h3>

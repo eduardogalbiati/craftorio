@@ -714,14 +714,14 @@
 
   registerView({
     id: 'oracle',
-    modals: `
+    modals: () => `
   <div id="oracle-backdrop" class="drawer-backdrop sup-backdrop hidden"></div>
   <aside id="oracle-drawer" class="drawer sup-drawer oracle-drawer" aria-hidden="true" aria-label="${t('oracle.oracle_2')}">${surfaceHtml('drawer')}</aside>`,
     mount() {
       // the dock on Home (its section is in place: views load in path order)
       const dash = $('#view-dashboard');
       dash.classList.add('oracle-docked');
-      dash.insertAdjacentHTML('beforeend', `<aside id="oracle-dock" class="card oracle-dock" aria-label="${t('oracle.oracle_2')}">${surfaceHtml('dock')}</aside>`);
+      (window.ViewRegistry?.draw || ((box, html) => box.insertAdjacentHTML('beforeend', html())))(dash, () => `<aside id="oracle-dock" class="card oracle-dock" aria-label="${t('oracle.oracle_2')}">${surfaceHtml('dock')}</aside>`);
       // the header's button (#254), at the top right before the notifications bell
       const btn = document.createElement('button');
       btn.id = 'nav-oracle';

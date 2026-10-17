@@ -153,7 +153,7 @@
   registerView({
     id: 'releases',
     nav: { label: 'Releases', order: 47, group: 'code', title: 'What shipped and what the next release holds: checked by the release workflow, pushed only on your Ship', icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z" /><circle cx="7.5" cy="7.5" r="1.5" /></svg>' },
-    markup: `
+    markup: () => `
       <section id="view-releases" class="view hidden">
         <div class="page-head">
           <div>

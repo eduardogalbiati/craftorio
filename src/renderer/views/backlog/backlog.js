@@ -1336,7 +1336,7 @@
   const flipLabel = (name) => { setLabels(toggleLabel(bl.labels, name)); render(); };
 
   // the Product Owner's drawer (backlog-po.js): inside the app shell, like the other drawers
-  const PO_DRAWER = `
+  const PO_DRAWER = () => `
     <div id="po-backdrop" class="drawer-backdrop sup-backdrop hidden"></div>
     <aside id="po-drawer" class="drawer sup-drawer po-drawer" aria-hidden="true" aria-label="${t('backlog.product_owner')}" data-testid="po-drawer">
       <div class="drawer-head">
@@ -1434,7 +1434,7 @@
 
   // ---- events --------------------------------------------------------------------------------
   function mount() {
-    $b('.shell').insertAdjacentHTML('beforeend', PO_DRAWER);
+    (window.ViewRegistry?.draw || ((box, html) => box.insertAdjacentHTML('beforeend', html())))($b('.shell'), PO_DRAWER);
     // the sidebar entry's count of commits merged locally and not pushed (app.js refreshUnpushed)
     $b('nav.sidebar [data-view="backlog"]').insertAdjacentHTML('beforeend', '<span id="nav-backlog-unpushed" class="nav-badge warn hidden"></span>');
     $b('#bl-platform').onchange = (e) => {
@@ -1590,7 +1590,7 @@
   registerView({
     id: 'backlog',
     nav: { label: 'Backlog', order: 40, group: 'code', icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 6 1.5 1.5L8 5" /><path d="m4 12 1.5 1.5L8 11" /><path d="m4 18 1.5 1.5L8 17" /><path d="M11 6h9M11 12h9M11 18h9" /></svg>' },
-    markup: `
+    markup: () => `
       <section id="view-backlog" class="view hidden">
         <div class="page-head">
           <div>
@@ -1640,7 +1640,7 @@
         <div id="bl-list" class="pr-list" data-testid="backlog-list"></div>
         <button id="btn-bl-po" class="po-fab" type="button" title="${t('backlog.ask_the_product_owner_which_issues')}" aria-label="${t('backlog.product_owner')}"></button>
       </section>`,
-    modals: `
+    modals: () => `
   <div id="unqueue-modal" class="modal hidden">
     <div class="modal-card">
       <h3>${t('backlog.remove_from_a_grouped_run')}</h3>

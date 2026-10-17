@@ -402,7 +402,7 @@
     // showView('analytics') opens Home on this tab
     section: 'dashboard',
     menu: 'dashboard',
-    panel: `
+    panel: () => `
       <div id="view-analytics" class="hidden" role="tabpanel">
         <div class="page-head">
           <div>

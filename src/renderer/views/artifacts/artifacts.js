@@ -406,7 +406,7 @@ registerView({
   id: 'artifacts',
   // #254: a tab of Workflows › Runs (no menu entry of its own: Runs stays lit)
   menu: 'workflows',
-  markup: `
+  markup: () => `
       <section id="view-artifacts" class="view hidden">
         <div class="art-layout">
           <aside class="art-side">

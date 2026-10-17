@@ -842,7 +842,7 @@ function renderEvents() {
 
 registerView({
   id: 'run',
-  markup: `
+  markup: () => `
       <section id="view-run" class="view hidden">
         <div class="run-tab-row" data-testid="run-tab-row">
           <div class="tabs" role="tablist" aria-label="${t('run.run_view')}">

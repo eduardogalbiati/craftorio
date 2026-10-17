@@ -287,7 +287,7 @@
 
   registerView({
     id: 'supervisor',
-    modals: `
+    modals: () => `
   <div id="svc-backdrop" class="drawer-backdrop sup-backdrop hidden"></div>
   <aside id="svc-drawer" class="drawer sup-drawer svc-drawer" data-testid="svc-drawer" aria-hidden="true" aria-label="${t('supervisor.supervisor')}">
     <div class="drawer-head">

@@ -125,7 +125,7 @@ function onProjectPageClick(e) {
 registerView({
   id: 'project',
   menu: 'projects',
-  markup: `
+  markup: () => `
       <section id="view-project" class="view hidden" data-testid="project-page">
         <button id="btn-project-back" class="link-btn back-link" type="button">${t('project.projects')}</button>
         <div id="project-head" class="page-head"></div>

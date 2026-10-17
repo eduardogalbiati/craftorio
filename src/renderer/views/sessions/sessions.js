@@ -548,7 +548,7 @@
   registerView({
     id: 'sessions',
     nav: { label: 'Sessions', order: 50, group: 'code', title: 'Claude Code, Codex and Grok sessions on this machine, in embedded terminals', icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" /><polyline points="7 9 10 12 7 15" /><line x1="12.5" y1="15" x2="17" y2="15" /></svg>' },
-    markup: `
+    markup: () => `
       <section id="view-sessions" class="view view-sessions hidden">
         <aside class="sx-side">
           <div class="sx-head">
@@ -591,7 +591,7 @@
           <div id="sx-term-body" class="sx-term-body"></div>
         </section>
       </section>`,
-    modals: `
+    modals: () => `
   <div id="sx-modal" class="modal hidden">
     <form id="sx-form" class="modal-card wide">
       <h3>${t('sessions.new_session')}</h3>

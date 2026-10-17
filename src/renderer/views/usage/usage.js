@@ -241,7 +241,7 @@ function renderUsageRuns() {
 registerView({
   id: 'usage',
   nav: { label: 'Usage', order: 90, group: 'ai', icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 17a9 9 0 1 1 17 0" /><path d="m12 14 4-5" /><circle cx="12" cy="14.5" r="1.3" /></svg>' },
-  markup: `
+  markup: () => `
       <section id="view-usage" class="view hidden">
         <div class="page-head">
           <div>
@@ -267,7 +267,7 @@ registerView({
 
         <p class="muted small usage-note">${t('usage.costs_reported_by_the_clis_are')}</p>
       </section>`,
-  modals: `
+  modals: () => `
   <div id="budget-modal" class="modal hidden">
     <form id="budget-form" class="modal-card">
       <h3 id="budget-modal-title">${t('usage.edit_budget')}</h3>

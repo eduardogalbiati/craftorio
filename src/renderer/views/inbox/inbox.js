@@ -806,7 +806,7 @@
       label: 'Inbox', order: 110, group: 'plan', title: 'Capture raw ideas privately and triage them',
       icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 12h-6l-2 3h-4l-2-3H2" /><path d="M5.5 5h13L22 12v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-6z" /></svg>',
     },
-    markup: `
+    markup: () => `
       <section id="view-inbox" class="view hidden">
         <div class="page-head">
           <div>
@@ -841,7 +841,7 @@
           <div id="inbox-detail"></div>
         </div>
       </section>`,
-    modals: `
+    modals: () => `
   <div id="inbox-discard-modal" class="modal hidden">
     <form id="inbox-discard-form" class="modal-card">
       <h3>${t('inbox.discard_card')}</h3>

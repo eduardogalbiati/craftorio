@@ -335,7 +335,7 @@ registerView({
   // #254: the menu's first entry, Home
   nav: { label: 'Home', order: 20, icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 11 9-8 9 8" /><path d="M5 9.5V20h14V9.5" /><path d="M10 20v-6h4v6" /></svg>' },
   // the only section shown before any showView: no `hidden`
-  markup: `
+  markup: () => `
       <section id="view-dashboard" class="view">
         <div class="home-main">
           <div class="tabs page-tabs" role="tablist" aria-label="${t('dashboard.home')}"><button type="button" class="tab active" role="tab" aria-selected="true" data-home-tab="overview" data-testid="home-tab-overview">${t('dashboard.overview')}</button><button type="button" class="tab" role="tab" aria-selected="false" data-home-tab="analytics" data-testid="home-tab-analytics">${t('dashboard.analytics')}</button></div>
@@ -343,7 +343,7 @@ registerView({
             <div id="dash-nightwatch" class="home-night hidden"></div>
             <div id="home-body"></div>
           </div>
-          ${viewRegistry.get('analytics')?.panel || '<div id="view-analytics" class="hidden"></div>'}
+          ${viewRegistry.get('analytics')?.panel?.() ||'<div id="view-analytics" class="hidden"></div>'}
         </div>
       </section>`,
   mount() {

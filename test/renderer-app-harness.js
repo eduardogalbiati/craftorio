@@ -45,6 +45,16 @@ function pageScripts() {
     .filter((src) => !src.startsWith('../../') && src !== 'api-http.js');
 }
 
+// #330 a view's markup, modals and panel are functions (drawn again in a new language): the tests read
+// them as the string they draw in the current language; everything else is the view's own definition
+function drawnDef(def) {
+  const out = Object.create(def);
+  for (const key of ['markup', 'modals', 'panel']) {
+    if (typeof def[key] === 'function') Object.defineProperty(out, key, { get: () => def[key](), enumerable: true });
+  }
+  return out;
+}
+
 function makeStorage(initial = {}) {
   const store = new Map(Object.entries(initial).map(([k, v]) => [k, String(v)]));
   return {
@@ -329,7 +339,7 @@ function loadApp({ api: apiOverrides = {}, storage = {}, session = {}, state: st
     if (src === 'view-registry.js' && typeof sandbox.registerView === 'function' && !sandbox.registerView.wrapped) {
       const original = sandbox.registerView;
       const wrapper = (def) => {
-        defs.set(def.id, def);
+        defs.set(def.id, drawnDef(def));
         try { return original(def); } catch (e) { errors.push(Object.assign(e, { script: `mount of ${def.id}` })); return undefined; }
       };
       wrapper.wrapped = true;

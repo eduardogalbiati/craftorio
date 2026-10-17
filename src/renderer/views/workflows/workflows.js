@@ -403,7 +403,7 @@ registerView({
     { label: 'Builder', order: 62, group: 'workflows', tab: 'builder', icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="6" r="2.5" /><circle cx="18" cy="12" r="2.5" /><circle cx="6" cy="18" r="2.5" /><path d="M8.5 6H12a3 3 0 0 1 3 3v.5M8.5 18H12a3 3 0 0 0 3-3v-.5" /></svg>' },
     { label: 'Pipelines', order: 63, group: 'workflows', tab: 'pipelines', icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="9" width="5" height="6" rx="1.5" /><rect x="16" y="9" width="5" height="6" rx="1.5" /><path d="M8 12h8" /><path d="m13 9.5 2.5 2.5-2.5 2.5" /></svg>' },
   ],
-  markup: `
+  markup: () => `
       <section id="view-workflows" class="view hidden">
         <div class="page-head">
           <div>
@@ -484,7 +484,7 @@ registerView({
         <!-- #409: the Supervisor, on every tab (views/supervisor/ draws its robot and unseen dot) -->
         <button id="btn-wf-sup-fab" class="po-fab sup-fab" type="button" data-testid="supervisor-fab" title="${t('workflows.ask_the_supervisor_about_workflows_and')}" aria-label="${t('workflows.supervisor')}"></button>
       </section>`,
-  modals: `
+  modals: () => `
   <!-- Workflows > ${t('workflows.builder_the_skills_of_a_desk')}
   <div id="wb-skills-modal" class="modal hidden">
     <div class="modal-card wide" role="dialog" aria-labelledby="wb-skills-title">

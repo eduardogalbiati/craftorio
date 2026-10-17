@@ -764,7 +764,7 @@
     id: 'duo',
     nav: { label: 'Write &amp; Review', order: 120, group: 'plan', title: 'Layout preview: writer and reviewer agents in a chat',
       icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z" /><path d="M9 10h6M9 13.5h4" /></svg>' },
-    markup: `
+    markup: () => `
       <section id="view-duo" class="view hidden">
         <!-- Setup -->
         <div id="duo-setup" class="duo-setup">
@@ -897,7 +897,7 @@
           </aside>
         </div>
       </section>`,
-    modals: `
+    modals: () => `
   <div id="duo-save-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="duo-save-title">
     <div class="modal-card duo-save-card">
       <h3 id="duo-save-title">${t('duo.save_to_issue')}</h3>

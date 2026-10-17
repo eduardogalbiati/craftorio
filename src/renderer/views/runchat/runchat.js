@@ -422,7 +422,7 @@
 
   registerView({
     id: 'runchat',
-    markup: `
+    markup: () => `
       <section id="view-runchat" class="view hidden">
         <header class="duo-chat-head run-tab-row" data-testid="run-tab-row">
           <div class="tabs" role="tablist" aria-label="${t('runchat.run_view')}">

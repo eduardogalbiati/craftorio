@@ -1374,7 +1374,7 @@
       label: 'Discovery', order: 115, group: 'plan', title: 'Shape accepted ideas until they are ready: Triage, Shape, Define, Ready',
       icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="5" height="16" rx="1" /><rect x="10" y="4" width="5" height="10" rx="1" /><rect x="17" y="4" width="4" height="13" rx="1" /></svg>',
     },
-    markup: `
+    markup: () => `
       <section id="view-discovery" class="view hidden">
         <div class="page-head">
           <div>
@@ -1408,7 +1408,7 @@
         <div id="dsc-board-box"></div>
         <div id="dsc-detail"></div>
       </section>`,
-    modals: `
+    modals: () => `
   <div id="dsc-override-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="dsc-override-title" data-testid="clarity-override-dialog">
     <form id="dsc-override-form" class="modal-card">
       <h3 id="dsc-override-title">${t('discovery.move_anyway')}</h3>
