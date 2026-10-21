@@ -82,7 +82,8 @@
     const S = summarize({ stages, releases: stages.flatMap((s, at) => (s.release ? [{ version: s.release.name, at, estimate: s.release.estimate }] : [])) });
     const t = (...a) => (node ? require('./i18n') : root.I18n)?.t(...a) ?? a[0];
     const plan = (p) => `≈ ${money(p.usd)} · ≈ ${minutes(p.minutes)}`;
-    const none = (p) => (p.withoutEstimate.length ? ` <span class="warn-text" title="${esc(t('backlog_roadmap.summary_without_estimate_tip', { items: p.withoutEstimate.map((x) => x.title).join(', ') }))}">${esc(t('backlog_roadmap.summary_without_estimate', { count: p.withoutEstimate.length }))}</span>` : '');
+    const titles = (p) => p.withoutEstimate.map((x) => x.title).join(', ');
+    const none = (p) => (p.withoutEstimate.length ? ` <span class="warn-text" title="${esc(t('backlog_roadmap.summary_without_estimate_tip', { items: titles(p) }))}">${esc(t('backlog_roadmap.summary_without_estimate', { count: p.withoutEstimate.length }))}</span>` : '');
     const rows = S.releases.map((x) => `<div class="rm-summary-row" data-testid="roadmap-summary-release-row"><b>${esc(x.after ? t('backlog_roadmap.summary_after_last_cut') : x.version)}</b><span class="muted">${plan(x)}${none(x)}</span></div>`);
     const list = open ? `<div class="bl-menu rm-summary-releases" data-testid="roadmap-summary-releases">${rows.join('')}</div>` : '';
     const toggle = S.releases.length ? `<span class="bl-menu-wrap"><button class="btn sm ghost" type="button" data-rm-summary-releases data-testid="roadmap-summary-by-release" aria-expanded="${open}" title="${esc(t('backlog_roadmap.summary_by_release_tip'))}">${open ? '▴' : '▾'} ${esc(t('backlog_roadmap.summary_by_release'))}</button>${list}</span>` : '';

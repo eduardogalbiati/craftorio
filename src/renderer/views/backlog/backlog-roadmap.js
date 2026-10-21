@@ -1636,8 +1636,8 @@
       focusStageMenu(stageMenu, '[data-rm-park-stage]');
       return true;
     }
-    const closing = (menuOpen && !e.target.closest('.rm-menu-wrap')) || (pauseOpen && !e.target.closest('.rm-pause-wrap'));
-    if (closing) menuOpen = pauseOpen = false;
+    const closing = (menuOpen && !e.target.closest('.rm-menu-wrap')) || (pauseOpen && !e.target.closest('.rm-pause-wrap')) || (byReleaseOpen && !e.target.closest('.rm-summary .bl-menu-wrap'));
+    if (closing) menuOpen = pauseOpen = byReleaseOpen = false; // #421: the summary's By release list too
     // #282: a stage's menu closes on any click but its own button's: hidden at once (the click's
     // action may open a dialog), not redrawn, so the clicked control stays in the page (a checkbox
     // still gets its change, an entry still finds its stage); the redraw follows the action
