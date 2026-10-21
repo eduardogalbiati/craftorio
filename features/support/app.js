@@ -10,6 +10,9 @@
 // src/engine/machine-slot.js, in machineSlotDir: not the suite step's own MULTIAGENT_LOCKS_DIR,
 // so a release run waits for other runs' captures) and frees it on close; the behaviour lane's
 // launches (slot: false) never wait for it. close() removes the scratch folder.
+// The app runs in English whatever the computer's language (#444): the demo workspace chooses
+// English as its interface language, and the launch pins the locale (en-US, LANG/LC_ALL), so an
+// empty workspace (Setup, #319) is English too; a scenario that wants Portuguese chooses it.
 
 const fs = require('fs');
 const os = require('os');
@@ -30,7 +33,9 @@ async function seedWorkspace(wsDir) {
   // the repository is set afterwards: createProject would clone it
   const created = await projects.createProject(ws.projects, { name: 'demo-app', description: 'Sample project (simulated data)' });
   const project = projects.updateProject(ws.projects, created.id, { repo: demo.DEMO_REPO });
-  workspace.writeSettings(ws, { developerMode: true, lastWorkflow: 'software-development.yaml', lastProject: project.id });
+  // #444: English chosen, not "same as the computer" (writeSettings merges one level: keep the language defaults)
+  const language = { ...workspace.readSettings(ws).language, interface: 'en' };
+  workspace.writeSettings(ws, { developerMode: true, lastWorkflow: 'software-development.yaml', lastProject: project.id, language });
   fs.mkdirSync(ws.backlog, { recursive: true });
   fs.writeFileSync(path.join(ws.backlog, `${project.id}.json`), JSON.stringify(demo.demoBacklog(project.id, src('backlog').taskProgress), null, 2));
   demo.demoLocalMerge(ws, project.id);
@@ -60,6 +65,7 @@ function appEnv(scratch, { theme, size, now, mockDelayScale = 0.02 }) {
     MULTIAGENT_MOCK_DELAY_SCALE: String(mockDelayScale),
     MULTIAGENT_E2E_THEME: theme,
     MULTIAGENT_E2E_SIZE: size,
+    LANG: 'en_US.UTF-8', LC_ALL: 'en_US.UTF-8',
     HOME: home, USERPROFILE: home, APPDATA: path.join(home, 'AppData'),
     GH_CONFIG_DIR: path.join(home, 'gh'), GLAB_CONFIG_DIR: path.join(home, 'glab'),
   };
@@ -111,6 +117,7 @@ async function launchApp({ theme = 'light', size = '1400x900', empty = false, no
       args: [path.join(__dirname, 'electron-main.js')],
       cwd: root,
       env: appEnv(scratch, { theme, size, now, mockDelayScale }),
+      locale: 'en-US',
       timeout: 60000,
     });
     const window = await app.firstWindow();

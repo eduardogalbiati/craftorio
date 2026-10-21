@@ -5,6 +5,7 @@
 // about:blank: the steps set their routes, then load the served URL. Same window settings as
 // features/support/electron-main.js (fixed size MULTIAGENT_E2E_SIZE, off-screen unless
 // MULTIAGENT_E2E_SHOW=1, keeps painting off-screen), applied the same way: after the window exists.
+// The browser runs in English (en-US) whatever the computer's language (#444).
 
 const { app, BrowserWindow } = require('electron');
 
@@ -18,6 +19,8 @@ if (process.env.MULTIAGENT_USER_DATA) app.setPath('userData', process.env.MULTIA
 app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
 app.commandLine.appendSwitch('disable-renderer-backgrounding');
 app.commandLine.appendSwitch('disable-background-timer-throttling');
+// #444: the served UI follows navigator.language when its workspace chose no language
+app.commandLine.appendSwitch('lang', 'en-US');
 
 // as electron-main.js: the window is created with plain options and moved off-screen after; a window
 // created at a negative x with an explicit sandbox crashed Electron at launch (0x80000003)

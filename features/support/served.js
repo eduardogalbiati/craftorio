@@ -7,6 +7,7 @@
 // own browsers may not be. The window starts on about:blank: a step can set routes (page.route) before
 // it opens the served UI (open()). Takes the machine's screenshot slot like launchApp (#199), only
 // with slot: true (the visual lane, #365); close() stops the window and the server and removes the scratch folder.
+// The browser's locale is en-US (LANG/LC_ALL too) whatever the computer's language (#444).
 
 const fs = require('fs');
 const os = require('os');
@@ -32,6 +33,7 @@ function servedEnv(scratch, { size }) {
     MULTIAGENT_AUTH: 'off',
     MULTIAGENT_MOCK_DELAY_SCALE: '0.02',
     MULTIAGENT_E2E_SIZE: size,
+    LANG: 'en_US.UTF-8', LC_ALL: 'en_US.UTF-8',
     HOME: home, USERPROFILE: home, APPDATA: path.join(home, 'AppData'),
     GH_CONFIG_DIR: path.join(home, 'gh'), GLAB_CONFIG_DIR: path.join(home, 'glab'),
   };
@@ -81,6 +83,7 @@ async function launchServedUi({ size = '1400x900', slot: takeSlot = true } = {})
       args: [path.join(__dirname, 'browser-main.js')],
       cwd: root,
       env,
+      locale: 'en-US',
       timeout: 60000,
     });
     const window = await app.firstWindow();
