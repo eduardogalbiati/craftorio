@@ -115,8 +115,11 @@ test('renderAssignInputs: a pipeline sets its first stage\'s fixed inputs, shows
 });
 
 test('queue resume (data-pause="off"): an ended run\'s kept work opens the kept-work dialog; only "scratch" resumes the queue again, confirmed', () => {
-  const fn = /\$b\('#bl-queue'\)\.onclick = async \(e\) => \{[\s\S]*?\n    \};/.exec(src)[0];
-  assert.match(fn, /let out = await api\.pauseQueue\(bl\.projectId, b\.dataset\.pause === 'on'\);/);
+  // the panel's toggle and the queue alert's Resume (#422) share setQueuePaused
+  const panel = /\$b\('#bl-queue'\)\.onclick = async \(e\) => \{[\s\S]*?\n    \};/.exec(src)[0];
+  assert.match(panel, /if \(b\) await setQueuePaused\(b, b\.dataset\.pause === 'on'\);/);
+  const fn = /async function setQueuePaused\(button, on\) \{[\s\S]*?\n  \}/.exec(src)[0];
+  assert.match(fn, /let out = await api\.pauseQueue\(bl\.projectId, on\);/);
   assert.match(fn, /if \(out\?\.kept && await keptWorkDialog\(out\.kept\) === 'scratch'\) out = await api\.pauseQueue\(bl\.projectId, false, true\);/);
 });
 
