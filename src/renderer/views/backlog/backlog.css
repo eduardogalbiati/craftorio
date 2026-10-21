@@ -284,6 +284,8 @@ button.bl-label { font-family: inherit; cursor: pointer; }
 .rm-bar .btn.danger { border-color: rgba(248,113,113,.45); }
 .rm-bar .btn.danger:hover:not(:disabled) { border-color: var(--red); }
 .rm-menu-btn { padding: 2px 8px; font-size: 14px; line-height: 1.3; }
+/* the ⋮ stays at the bar's right when the bar wraps (#421's summary): its menu opens leftwards, never under the sidebar */
+.rm-bar > .rm-menu-wrap { margin-left: auto; }
 /* the filter row above the bar (#269): the epic, Planned | All, the date range, Group by epic */
 .rm-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
 .rm-filters select { width: auto; flex: none; max-width: 220px; padding: 3px 6px; font-size: 12px; }
