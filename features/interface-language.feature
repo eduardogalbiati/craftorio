@@ -63,6 +63,29 @@ Feature: Every screen in the interface language
     And the Product Owner's live turn shows its step count in "Português (Brasil)"
     And the Product Owner's live turn offers its Stop button in "Português (Brasil)"
 
+  # #444: the suite pins the app it starts and the browser windows on a served UI to English
+  # (features/support/app.js, features/support/browser-main.js), whatever the computer's language:
+  # on a computer in Portuguese the scenarios that read English text or compare screenshots failed.
+  # The scenarios above that want Portuguese choose it in Settings. "The page is shown in" reads the
+  # page's language (the html lang attribute the renderer sets, src/renderer/interface-language.js,
+  # src/renderer/connection/connection.js); "the browser's language" is navigator.language.
+  @issue-444
+  Scenario: The app under test opens in English whatever the computer's language
+    Given the app is open
+    Then the browser's language is "en-US"
+    And the page is shown in "English"
+    And the sidebar offers "Settings"
+    When I open "Settings" in the sidebar
+    And I open the "General" settings tab
+    Then the "Interface" language is "English"
+
+  @issue-444
+  Scenario: The browser on a served UI opens in English whatever the computer's language
+    Given the engine is served on this machine
+    When I open the served UI in the browser
+    Then the browser's language is "en-US"
+    And the page is shown in "English"
+
   @issue-423
   Scenario: In English the Product Owner's live turn still reads in English
     Given the app is open with slow simulated turns

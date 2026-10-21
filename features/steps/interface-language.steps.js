@@ -8,7 +8,8 @@
 // app.steps.js ("the sidebar offers {string}"). These steps read the sidebar and Settings' tabs
 // (data-testid="settings-tabs") in whichever language is shown, so they never wait on an English
 // entry such as "Home". Also #424 (the AI agents' "Same as the interface" names its language) and
-// #423 (the Product Owner's live turn in the interface language), in their sections below. Locators
+// #423 (the Product Owner's live turn in the interface language) and #444 (the app and the browser
+// under test in English), in their sections below. Locators
 // are roles and data-testid only (skills/ui-conventions).
 
 const fs = require('fs');
@@ -158,6 +159,20 @@ Then('the Product Owner\'s live turn offers its Stop button in {string}', async 
   if (!code) throw new Error(`no catalog for the language "${language}"`);
   await expect(stop).toHaveAccessibleName(catalog(code)['live_turn.stop']);
   if (language !== 'English') await expect(stop).not.toHaveAccessibleName('Stop');
+});
+
+// ---- #444: the app and the browser under test in English ------------------------------------------
+// The browser's language is navigator.language (Electron's --lang / the window's locale); the page's
+// language is the html lang attribute the renderer sets to the interface language it resolved
+// (the catalog's code: "en", "pt-BR").
+Then('the browser\'s language is {string}', async ({ e2e }, locale) => {
+  await expect.poll(() => e2e.window.evaluate(() => navigator.language), { message: 'navigator.language', timeout: LOAD_TIMEOUT }).toBe(locale);
+});
+
+Then('the page is shown in {string}', async ({ e2e }, language) => {
+  const code = LANGUAGE_FILES[language];
+  if (!code) throw new Error(`no catalog for the language "${language}" (known: ${Object.keys(LANGUAGE_FILES).join(', ')})`);
+  await expect(e2e.window.locator('html')).toHaveAttribute('lang', code, { timeout: LOAD_TIMEOUT });
 });
 
 Then('Settings offers the {string} tab', async ({ e2e }, name) => {
