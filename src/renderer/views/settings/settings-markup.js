@@ -163,6 +163,8 @@
 
             <div class="settings-page hidden" data-spage="execution">
               <h2 class="settings-title">${t('settings.tabs.execution')}</h2>
+              <!-- where the engine runs: this computer or a remote one (settings-engine.js) -->
+              <div id="set-engine"></div>
               <div class="s-group">
                 <div class="s-row">
                   <div class="s-label"><b>${t('settings.execution.developer')}</b><span>${t('settings.execution.developer_help')}</span></div>

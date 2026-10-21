@@ -11,4 +11,5 @@ shown and never blocks anything; an offline start with a stored session stays si
   machine through the account.
 
 Running from source, `MULTIAGENT_AUTH=off` skips the sign-in (development, tests, screenshots, the
-local preview and `npm run serve`). The account's database is defined in `supabase/migrations/`.
+local preview and `npm run serve`). An app showing a remote engine (Settings › Execution › Engine)
+cannot sign that engine's server in yet: the server runs with `MULTIAGENT_AUTH=off`. The account's database is defined in `supabase/migrations/`.

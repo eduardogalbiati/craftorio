@@ -40,6 +40,9 @@ const DESKTOP = [
   { channel: 'clipboard:writeFile', method: 'clipboardWriteFile', params: ['path'], desktop: 'Copying a file' },
   // restarts the app (the code changed on disk); refuses with runs in progress unless interruptRuns
   { channel: 'app:relaunch', method: 'relaunchApp', params: ['interruptRuns'], desktop: 'Restarting the app' },
+  // the engine connection page (src/engine-connection-window.js): this computer or a remote engine;
+  // the desktop app showing a remote engine opens it through api-http.js (CONNECTION_PATH)
+  { channel: 'engine:openConnection', method: 'openEngineConnection', desktop: 'Choosing where the engine runs' },
   // a click on a desktop notification ({ runId, workflow } | { terminalId })
   { event: 'notify:open', method: 'onNotificationClick' },
   // Keep awake (#162, src/keep-awake.js): the blocker's state, re-checked; pushed when it changes

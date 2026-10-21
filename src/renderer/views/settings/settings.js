@@ -2,7 +2,7 @@
 // Settings screen (Phone gates, #226: settings-phone.js): General (workspace folder, backlog defaults with the default development workflow
 // (#195, default-workflow.js), voice input, the workspace index and
 // its Rebuild index, src/store.js), Agents & CLIs (installed CLIs and
-// their sign-in), Execution (developer mode, Keep awake (keep-awake.js), notifications, concurrent runs, the Oracle's Self-healing switch (#278) and its "Apply merged fixes to this app" row (#279), daily budget and compaction threshold) and About. Registers
+// their sign-in), Execution (where the engine runs (settings-engine.js), developer mode, Keep awake (keep-awake.js), notifications, concurrent runs, the Oracle's Self-healing switch (#278) and its "Apply merged fixes to this app" row (#279), daily budget and compaction threshold) and About. Registers
 // itself with registerView (view-registry.js); uses app.js globals ($, esc, errMsg, state,
 // applyDeveloperMode, renderHeader, renderWorkspacePaths), commandHint (command-hint.js: the install
 // commands of missing CLIs) and window.BACKLOG_PLATFORMS (backlog.js). #329: its markup is
@@ -74,6 +74,7 @@ async function renderSettings() {
   $('#set-ws-folders').querySelectorAll('[data-open]').forEach((b) => (b.onclick = () => api.openPath(b.dataset.open)));
   renderTimeZone();
   window.LanguageSettings.render($('#set-language')); // #327, #328: settings-language.js
+  window.EngineSettings.render($('#set-engine')); // this computer or a remote engine: settings-engine.js
   window.Findings?.renderList($('#set-findings-list'));
   document.querySelectorAll('[data-setting]').forEach((el) => (el.checked = !!state.settings[el.dataset.setting]));
   const platform = $('#set-backlog-platform');

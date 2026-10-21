@@ -1,12 +1,18 @@
-// Runs the engine as a server: the HTTP/WebSocket API (src/server) and the UI in a browser.
-//   npm run serve -- [--port 7300] [--host 127.0.0.1] [--workspace <dir>]
+// Runs the engine as a server: the HTTP/WebSocket API (src/server) and the UI in a browser, or in
+// the desktop app of another computer (Settings › Execution › Engine, src/engine-connection.js).
+//   npm run serve -- [--port 7300] [--host 127.0.0.1 | 0.0.0.0 | tailscale | <ip>] [--workspace <dir>]
 //
 // The token comes from MULTIAGENT_SERVER_TOKEN, else a random one is generated; open the printed
-// URL (it carries the token once, then a cookie keeps it). Same workspace as the app unless
-// --workspace is given. Runs need the same account as the app: sign in from the browser UI (the
-// sign-in page opens on this machine) or set MULTIAGENT_AUTH=off in development.
+// URL (it carries the token once, then a cookie keeps it). A desktop app saves the token: set
+// MULTIAGENT_SERVER_TOKEN so it stays the same across restarts. Same workspace as the app unless
+// --workspace is given; like the app, the server locks its workspace (#112): it refuses to start on a
+// workspace the desktop app (or another server) has open. Runs need the same account as the app: sign in from the browser UI (the
+// sign-in page opens on this machine) or set MULTIAGENT_AUTH=off. A desktop app on another computer
+// cannot sign this server in (the sign-in page would open here): it uses MULTIAGENT_AUTH=off.
 //
-// Outside 127.0.0.1 the traffic is plain HTTP: put it behind a reverse proxy with TLS.
+// --host tailscale listens on this computer's Tailscale address only (100.64.0.0/10), not on the
+// local network. Outside 127.0.0.1 the traffic is plain HTTP: put it behind a reverse proxy with TLS
+// (on a tailnet WireGuard already encrypts it; `tailscale serve` adds HTTPS).
 
 const fs = require('fs');
 const os = require('os');
@@ -18,6 +24,8 @@ const { createService } = require('../src/service');
 const { createServer } = require('../src/server');
 const { createAuth, fileStorage } = require('../src/auth');
 const authConfig = require('../src/auth-config');
+const runOwner = require('../src/run-owner');
+const { isTailscaleIp, lanAddresses, resolveListenHost } = require('../src/engine-connection');
 
 function parseArgs(argv) {
   const a = { port: 7300, host: '127.0.0.1', workspace: null };
@@ -44,8 +52,23 @@ function openBrowser(url) {
 }
 
 const args = parseArgs(process.argv.slice(2));
+const listen = resolveListenHost(args.host, os.networkInterfaces());
+if (listen.error) {
+  console.error(listen.error);
+  process.exit(1);
+}
 const found = args.workspace ? { dir: args.workspace, source: 'arg' } : workspace.resolveWorkspace();
 const ws = workspace.setupWorkspace(found.dir || found.fallback, { persist: !['arg', 'env', 'simulation'].includes(found.source) });
+
+// One engine per workspace (#112): the desktop app holds this lock on the workspace it opens, and so
+// does the server; two engines on one workspace would take each other's runs for interrupted.
+const lock = runOwner.lockWorkspace(ws.root, { app: path.join(__dirname, '..'), server: true });
+if (!lock.ok) {
+  const h = lock.holder;
+  console.error(`This workspace is already open${h ? ` in process ${h.pid} on ${h.host}, since ${h.started_at}` : ' in another copy of the app'}: ${ws.root}`);
+  console.error('Close the desktop app (or the other server) on this computer first, or pass --workspace <another folder>.');
+  process.exit(1);
+}
 
 // The account session of the server lives next to the user's home, readable only by this user
 // (there is no OS encryption here as in the desktop app).
@@ -84,12 +107,27 @@ service.clearPastedImages();
 
 const token = process.env.MULTIAGENT_SERVER_TOKEN || crypto.randomBytes(24).toString('base64url');
 const server = createServer({ service, auth, token });
-server.listen(args.port, args.host, async () => {
+// Beyond this machine: the addresses another computer can type (Tailscale's first), and where the
+// desktop app takes them.
+function printRemoteAccess(host, port) {
+  const wildcard = host === '0.0.0.0' || host === '::';
+  const addrs = wildcard ? lanAddresses(os.networkInterfaces()) : [{ address: host, tailscale: isTailscaleIp(host) }];
+  const at = (a) => (a.address.includes(':') ? `[${a.address}]` : a.address);
+  for (const a of addrs) console.log(`  reachable at http://${at(a)}:${port}${a.tailscale ? '  (Tailscale: this machine\'s MagicDNS name works too)' : ''}`);
+  const first = addrs[0] ? `${at(addrs[0])}:${port}` : `<this machine>:${port}`;
+  console.log(`Desktop app on another computer: Settings › Execution › Engine › Change… › Remote engine, address ${first}, and the token.`);
+  if (!process.env.MULTIAGENT_SERVER_TOKEN) console.warn('The token changes at every start: set MULTIAGENT_SERVER_TOKEN to keep it (the desktop app saves it).');
+  console.warn('Listening beyond this machine over plain HTTP: use a reverse proxy with TLS.');
+  if (addrs.some((a) => a.tailscale)) console.log('On a tailnet WireGuard encrypts the traffic; `tailscale serve` adds HTTPS.');
+}
+
+server.listen(args.port, listen.host, async () => {
   const { port } = server.address();
-  const shown = args.host === '0.0.0.0' || args.host === '::' ? os.hostname() : args.host.includes(':') ? `[${args.host}]` : args.host;
+  const host = listen.host;
+  const shown = host === '0.0.0.0' || host === '::' ? os.hostname() : host.includes(':') ? `[${host}]` : host;
   console.log(`Multiagent Orchestrator engine server — workspace ${ws.root}`);
   console.log(`Open: http://${shown}:${port}/?token=${encodeURIComponent(token)}`);
-  if (!['127.0.0.1', 'localhost', '::1'].includes(args.host)) console.warn('Listening beyond this machine over plain HTTP: use a reverse proxy with TLS.');
+  if (!['127.0.0.1', 'localhost', '::1'].includes(host)) printRemoteAccess(host, port);
   if (authOff) console.warn('MULTIAGENT_AUTH=off: runs do not need an account.');
   else {
     const s = await auth.refresh().catch(() => auth.state());
@@ -99,6 +137,7 @@ server.listen(args.port, args.host, async () => {
 
 const stop = () => {
   service.shutdown();
+  lock.release();
   server.close(() => process.exit(0));
   setTimeout(() => process.exit(0), 3000).unref();
 };

@@ -106,6 +106,10 @@ approves every human gate without interaction (tests only: in practice the AI mu
 npm run serve -- --port 7300 --host 127.0.0.1 --workspace C:/path/to/workspace
 ```
 
+`--host` is `127.0.0.1` by default; `0.0.0.0` listens on every network, `tailscale` on this
+computer's Tailscale address only (100.x.y.z), and the server then prints the addresses another
+computer can type.
+
 Runs the engine without Electron and serves the same UI to a browser: open the printed
 `http://…/?token=…` URL. The token (from `MULTIAGENT_SERVER_TOKEN`, else random) is kept in an
 HttpOnly cookie after the first visit; API clients send `Authorization: Bearer <token>`.
@@ -118,6 +122,51 @@ HttpOnly cookie after the first visit; API clients send `Authorization: Bearer <
   server behind a reverse proxy with TLS.
 - The server asks for the same account as the app (sign in from the browser UI; the sign-in page
   opens on the server machine). `MULTIAGENT_AUTH=off` disables it in development.
+
+### The app on one computer, the engine on another
+
+The desktop app can be only a window: the engine (runs, CLIs, terminals, the workspace) runs on
+another computer of yours with `npm run serve`, and the app shows it. The simple setup is both
+computers on the same [Tailscale](https://tailscale.com) tailnet.
+
+On the computer that runs the engine (a source checkout), in PowerShell:
+
+```powershell
+$env:MULTIAGENT_SERVER_TOKEN = "<a long random secret, at least 16 characters>"
+$env:MULTIAGENT_AUTH = "off"
+npm run serve -- --host tailscale --port 7300
+```
+
+Close the desktop app on that computer first: like the app, the server locks its workspace (one
+engine per workspace) and refuses to start on a workspace the app has open (or pass
+`--workspace <another folder>`). Keep `MULTIAGENT_SERVER_TOKEN` the same: the app saves the token,
+and without the variable the server makes a new one at every start. `--host tailscale` keeps the engine off the local network;
+`--host 0.0.0.0` listens everywhere.
+
+On the computer with the app: **Settings › Execution › Engine › Change…**, choose **Remote engine**,
+type the address (the machine's MagicDNS name such as `my-pc.tailnet.ts.net`, its `100.x.y.z`
+address, `host:port`, or a full `http(s)://` URL; port 7300 by default; pasting the `…/?token=…` URL
+the server printed fills both fields) and the token, then **Test connection** (the engine's version
+and interface, or why not: unreachable, refused token, not an engine) and **Test, save and restart**.
+The app restarts as a window onto that engine, named in its title bar: it runs no engine of its
+own, opens no workspace and starts nothing that needs one (workspace lock, Night watch, phone
+gates, Keep awake, the control channel). The setting is per computer, in the app's own data folder
+with the token encrypted by the OS, never in the workspace.
+
+- When the engine cannot be reached at start (or the window is reloaded while it is down), or it
+  refuses the token, the app shows the connection page with the reason: **Retry**, **Change the
+  address** or **Use this computer**.
+- Back to this computer: Settings › Execution › Engine › Change… › **This computer** (the address
+  and token stay saved for later). `MULTIAGENT_ENGINE=local` forces this computer for one start.
+- On the engine's computer, not in the window: the CLIs and their sign-ins, the terminals (shown
+  in the window, running there), files and folders (type that computer's paths: the folder picker is
+  not available), desktop notifications, Keep awake, the control channel, the ↗ external terminal
+  and the microphone.
+- **Sign-in**: a remote app cannot sign the server in yet (the provider's page would open on the
+  engine's computer), so the server runs with `MULTIAGENT_AUTH=off`; the account only counts users.
+- Plain HTTP over Tailscale is encrypted by WireGuard. For HTTPS, leave `npm run serve` on
+  `127.0.0.1`, run `tailscale serve --bg 7300` on that computer and type
+  `https://<machine>.<tailnet>.ts.net` in the app.
 - Desktop-only actions (native folder picker, opening files in their app, external console
   windows, changing the workspace) are not available in the browser; folder paths are typed.
   **Keep awake** is disabled there ("Not available in the browser client"): only the desktop app

@@ -114,8 +114,21 @@
     return out;
   }
 
+  // The desktop app showing this engine from another computer (src/engine-connection-window.js) marks
+  // its user agent; its Settings › Execution › Engine opens the app's connection page by opening a
+  // path the window catches (CONNECTION_PATH in src/engine-connection.js: the server never sees it).
+  const desktopClient = /\bMultiagentRemoteClient\b/.test(navigator.userAgent || '');
+
   // Desktop-only methods the browser can still do its own way; the others throw.
   const browser = {
+    // the page's interface language goes along (#329): the connection page speaks it too
+    ...(desktopClient && {
+      openEngineConnection: async () => {
+        const lang = window.I18n?.getLanguage?.();
+        window.open(`/__desktop__/engine-connection${lang ? `?lang=${encodeURIComponent(lang)}` : ''}`);
+        return true;
+      },
+    }),
     // no native folder picker in the browser: the path is typed (a folder on the server)
     pickFolder: async () => window.prompt('Folder path on the server:')?.trim() || null,
     clipboardRead: () => navigator.clipboard.readText(),
@@ -149,6 +162,8 @@
     platform: 'browser',
     // the ↗ buttons open a window on the desktop app's machine only (#318)
     externalTerminal: { available: false, reason: 'External terminal windows are only available in the desktop app.' },
+    // where this page's engine runs, seen from the window: 'remote' inside the desktop app, else 'browser'
+    engineConnection: { mode: desktopClient ? 'remote' : 'browser', host: location.host },
     onReconnect: (cb) => { reconnected.add(cb); return () => reconnected.delete(cb); },
   };
   for (const entry of manifest.result) {
