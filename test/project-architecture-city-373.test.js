@@ -11,6 +11,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const { withI18n } = require('./i18n-sandbox');
 const { createDom } = require('./mini-dom');
 const { buildModel } = require('../src/shared/architecture-model');
 
@@ -91,6 +92,7 @@ function loadWindow() {
   sandbox.document = dom.document;
   Object.assign(sandbox, dom.classes);
   dom.classes.Element.prototype.getContext = () => null; // no WebGL
+  withI18n(sandbox);
   vm.createContext(sandbox);
   const run = (file) => vm.runInContext(fs.readFileSync(file, 'utf8'), sandbox, { filename: path.relative(ROOT, file) });
   for (const name of SHARED) {

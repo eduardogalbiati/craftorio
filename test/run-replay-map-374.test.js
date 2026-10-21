@@ -8,6 +8,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const { withI18n } = require('./i18n-sandbox');
 
 const runSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'views', 'run', 'run.js'), 'utf8');
 
@@ -57,6 +58,7 @@ function renderSummary(run, { cityAgents = true } = {}) {
     mountInputImages: () => {},
     openSupervisorForCurrent: () => {},
   };
+  withI18n(sandbox);
   vm.createContext(sandbox);
   vm.runInContext(`${fn[0]}\nrenderRunSummary();`, sandbox);
   return {

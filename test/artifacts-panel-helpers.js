@@ -5,6 +5,7 @@
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const { withI18n } = require('./i18n-sandbox');
 
 const panelSrc = () => fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'artifacts-panel.js'), 'utf8');
 
@@ -34,6 +35,7 @@ function loadPanel(opts = {}) {
     document: {},
     setTimeout, clearTimeout, Date,
   };
+  withI18n(sandbox);
   vm.createContext(sandbox);
   vm.runInContext(panelSrc(), sandbox);
   return { ArtifactsPanel: sandbox.window.ArtifactsPanel, calls };

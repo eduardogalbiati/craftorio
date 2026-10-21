@@ -11,6 +11,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const { withI18n } = require('./i18n-sandbox');
 const { createDom } = require('./mini-dom');
 
 const ROOT = path.join(__dirname, '..');
@@ -56,6 +57,7 @@ function loadWindow({ runSeed = null } = {}) {
   };
   const dom = createDom({ window: sandbox });
   Object.assign(sandbox, { window: sandbox, document: dom.document }, dom.classes);
+  withI18n(sandbox);
   vm.createContext(sandbox);
   vm.runInContext(fs.readFileSync(path.join(ROOT, 'src', 'shared', 'json-schema.js'), 'utf8'), sandbox, { filename: 'json-schema.js' });
   vm.runInContext(fs.readFileSync(path.join(RENDERER, 'views', 'project', 'project-seeds.js'), 'utf8'), sandbox, { filename: 'project-seeds.js' });

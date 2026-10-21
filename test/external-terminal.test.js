@@ -11,6 +11,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const { withI18n } = require('./i18n-sandbox');
 
 const load = () => require('../src/external-terminal');
 
@@ -195,6 +196,7 @@ const dockSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 't
 function loadTermButtons(api) {
   const sandbox = { api, navigator: { platform: '' } };
   sandbox.window = sandbox;
+  withI18n(sandbox);
   vm.createContext(sandbox);
   const esc = /const esc = \(s\) => [^\n]+;/.exec(appSrc)?.[0];
   assert.ok(esc, 'esc not found in app.js: the source moved');

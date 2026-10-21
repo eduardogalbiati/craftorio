@@ -10,6 +10,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const { withI18n } = require('./i18n-sandbox');
 
 const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'gate-oracle.js'), 'utf8');
 
@@ -70,6 +71,7 @@ function sandbox({ body, runs = new Map(), onSelectRun = () => {} }) {
     api: { resolveApproval: (...a) => answered.push(a) },
   };
   ctx.window = ctx;
+  withI18n(ctx);
   vm.createContext(ctx);
   vm.runInContext(src, ctx, { filename: 'gate-oracle.js' });
   const flushFrames = () => { while (frames.length) frames.shift()(); };

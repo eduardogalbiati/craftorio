@@ -87,12 +87,14 @@ function parseAttrs(src) {
   return attrs;
 }
 
-// A view's markup (the `markup:` template of views/<view>/<view>.js), mounted under html > body > main.
+// A view's markup (the `markup: () => `...`` template of views/<view>/<view>.js, a function since #330
+// so a language change redraws it), mounted under html > body > main.
 function loadMarkup(view) {
   const src = fs.readFileSync(path.join(RENDERER, 'views', view, `${view}.js`), 'utf8');
-  const m = /markup:\s*`([\s\S]*?)`\s*,\s*\n\s*modals:/.exec(src);
+  const m = /markup:\s*(?:\(\)\s*=>\s*)?`([\s\S]*?)`\s*,\s*\n\s*modals:/.exec(src);
   assert.ok(m, `${view}.js has a markup template`);
-  const markup = m[1].replace(/<!--[\s\S]*?-->/g, '').replace(/\$\{[^}]*\}/g, '');
+  // ${t('key', { a: 1 })}: the params' braces too
+  const markup = m[1].replace(/<!--[\s\S]*?-->/g, '').replace(/\$\{(?:[^{}]|\{[^{}]*\})*\}/g, '');
   const htmlEl = el('html', {}, null);
   const body = el('body', {}, htmlEl);
   let cur = el('main', {}, body);

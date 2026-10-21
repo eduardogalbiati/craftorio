@@ -39,6 +39,7 @@ const os = require('os');
 const path = require('path');
 const http = require('http');
 const vm = require('vm');
+const { withI18n } = require('./i18n-sandbox');
 const { setupWorkspace } = require('../src/workspace');
 const { createService } = require('../src/service');
 const { createServer } = require('../src/server');
@@ -385,6 +386,7 @@ function loadBrowser({ builtFor, engine }) {
     setInterval: () => 0, clearInterval: () => {},
     console, URL,
   };
+  withI18n(sandbox);
   vm.createContext(sandbox);
   vm.runInContext(src, sandbox);
 

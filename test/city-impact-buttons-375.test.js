@@ -13,6 +13,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const { withI18n } = require('./i18n-sandbox');
 
 const ROOT = path.join(__dirname, '..');
 const read = (...p) => fs.readFileSync(path.join(ROOT, ...p), 'utf8');
@@ -43,6 +44,7 @@ function loadRoadmap() {
   };
   sandbox.window = sandbox;
   sandbox.showRun = () => {};
+  withI18n(sandbox);
   vm.createContext(sandbox);
   for (const f of ['src/renderer/status-pill.js', 'src/renderer/estimates.js', 'src/shared/run-progress-model.js', 'src/shared/default-workflow.js', 'src/shared/roadmap-model.js', 'src/renderer/workflow-inputs.js', 'src/renderer/views/backlog/backlog-roadmap.js']) {
     vm.runInContext(read(f), sandbox, { filename: path.basename(f) });
@@ -86,5 +88,7 @@ test('#375 the Backlog issue card has a "Show on the map" button', () => {
   const src = read('src', 'renderer', 'views', 'backlog', 'backlog.js');
   const m = /const card = \(i\) => `[\s\S]*?`;/.exec(src);
   assert.ok(m, 'the issue card markup (const card = (i) => `...`) is in backlog.js');
-  assert.match(m[0], /<button[^>]*data-testid="show-on-map"[^>]*>[\s\S]*?Show on the map[\s\S]*?<\/button>/);
+  // #330: the label comes from the catalog
+  assert.match(m[0], /<button[^>]*data-testid="show-on-map"[^>]*>\$\{t\('backlog\.show_on_the_map'\)\}<\/button>/);
+  assert.equal(require('../src/shared/i18n.js').t('backlog.show_on_the_map'), 'Show on the map');
 });

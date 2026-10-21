@@ -8,6 +8,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const { withI18n } = require('./i18n-sandbox');
 
 const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'artifact-menu.js'), 'utf8');
 
@@ -78,6 +79,7 @@ function load(opts = {}) {
     },
     setTimeout, clearTimeout,
   };
+  withI18n(sandbox);
   vm.createContext(sandbox);
   vm.runInContext(src, sandbox);
   return { ArtifactMenu: window.ArtifactMenu, toasts, document, docListeners: bodyListeners, winListeners };

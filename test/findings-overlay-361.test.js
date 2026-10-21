@@ -7,6 +7,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const { withI18n } = require('./i18n-sandbox');
 const { createDom } = require('./mini-dom');
 
 const RENDERER = path.join(__dirname, '..', 'src', 'renderer');
@@ -45,6 +46,7 @@ function loadOverlay() {
       configurable: true,
     });
   }
+  withI18n(sandbox);
   vm.createContext(sandbox);
   for (const file of ['../shared/findings-model.js', 'findings.js']) {
     vm.runInContext(fs.readFileSync(path.join(RENDERER, file), 'utf8'), sandbox, { filename: file });

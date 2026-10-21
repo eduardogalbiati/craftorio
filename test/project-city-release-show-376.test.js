@@ -15,6 +15,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const { withI18n } = require('./i18n-sandbox');
 const { createDom } = require('./mini-dom');
 const { buildModel } = require('../src/shared/architecture-model');
 const { buildCity } = require('../src/shared/city-model');
@@ -68,6 +69,7 @@ function load({ release = async () => RELEASE(), capture = async () => 'data:ima
   const dom = createDom({ window: sandbox });
   Object.assign(sandbox, { window: sandbox, document: dom.document }, dom.classes);
   dom.classes.Element.prototype.getContext = () => null;
+  withI18n(sandbox);
   vm.createContext(sandbox);
   for (const f of ['globs.js', 'json-schema.js', 'architecture-model.js', 'city-model.js', 'city-layout.js', 'city-agents.js', 'city-impact.js', 'city-release.js', 'roadmap-model.js']) {
     vm.runInContext(fs.readFileSync(path.join(ROOT, 'src', 'shared', f), 'utf8'), sandbox, { filename: f });

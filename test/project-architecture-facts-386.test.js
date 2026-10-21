@@ -12,6 +12,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const { withI18n } = require('./i18n-sandbox');
 const { createDom } = require('./mini-dom');
 
 const ROOT = path.join(__dirname, '..');
@@ -117,6 +118,7 @@ function loadWindow({ model = makeModel(), findings = FINDINGS, gate = GATE, rep
   const dom = createDom({ window: sandbox });
   Object.assign(sandbox, { window: sandbox, document: dom.document }, dom.classes);
   dom.classes.Element.prototype.getContext = () => null;
+  withI18n(sandbox);
   vm.createContext(sandbox);
   const shared = ['globs.js', 'json-schema.js', 'architecture-model.js', 'city-model.js', 'city-layout.js'];
   if (fs.existsSync(FACTS_VIEW)) shared.push('architecture-facts-view.js'); // #386's module, once it exists

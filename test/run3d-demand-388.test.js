@@ -8,6 +8,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const { withI18n } = require('./i18n-sandbox');
 
 const ROOT = path.join(__dirname, '..');
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
@@ -110,6 +111,7 @@ function overlaySandbox() {
     },
   };
   sandbox.window = sandbox;
+  withI18n(sandbox);
   vm.createContext(sandbox);
   vm.runInContext(read('src/renderer/run3d.js'), sandbox, { filename: 'run3d.js' });
   const fire = (type) => {

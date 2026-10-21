@@ -136,6 +136,11 @@ test('the overlay applies the remembered theme before the scene loads, and remem
   assert.match(src, /el\.dataset\.theme = Run3DTheme\.load\(\);/);
   assert.match(src, /onTheme: \(name\) => \{ el\.dataset\.theme = name; Run3DTheme\.save\(name\); \}/);
   const hud = read('src/renderer/run3d/hud.jsx');
-  assert.match(hud, /aria-label=\{`Switch to the \$\{next\} theme`\}/, 'the toggle has an accessible name');
-  assert.match(hud, /title=\{`Switch to the \$\{next\} theme`\}/, 'and a tooltip');
+  // #330: the name comes from the catalog ("Switch to the dark theme" in English)
+  assert.match(hud, /const switchTheme = t\('run3d\.switch_theme', \{ theme: t\(`run3d\.theme_\$\{next\}`\) \}\);/);
+  assert.match(hud, /data-testid="run3d-theme"/);
+  assert.match(hud, /aria-label=\{switchTheme\}/, 'the toggle has an accessible name');
+  assert.match(hud, /title=\{switchTheme\}/, 'and a tooltip');
+  const I18n = require('../src/shared/i18n.js');
+  assert.equal(I18n.t('run3d.switch_theme', { theme: I18n.t('run3d.theme_dark') }), 'Switch to the dark theme');
 });

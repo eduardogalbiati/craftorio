@@ -9,6 +9,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const { withI18n } = require('./i18n-sandbox');
 const { createDom } = require('./mini-dom');
 
 const ROOT = path.join(__dirname, '..');
@@ -50,6 +51,7 @@ function loadWindow({ runSeed, page = '<html><body><h1>Dependency map</h1></body
   };
   const dom = createDom({ window: sandbox });
   Object.assign(sandbox, { window: sandbox, document: dom.document }, dom.classes);
+  withI18n(sandbox);
   vm.createContext(sandbox);
   vm.runInContext(fs.readFileSync(path.join(ROOT, 'src', 'renderer', 'views', 'project', 'project-seeds.js'), 'utf8'), sandbox, { filename: 'project-seeds.js' });
   const PS = sandbox.ProjectSeeds;

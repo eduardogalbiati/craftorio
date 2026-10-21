@@ -12,6 +12,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const { withI18n } = require('./i18n-sandbox');
 const { createDom } = require('./mini-dom');
 
 const RENDERER = path.join(__dirname, '..', 'src', 'renderer');
@@ -94,6 +95,7 @@ function load(options = ZONES, attrs = '') {
     width: box.style.width, maxHeight: box.style.maxHeight,
     anchoredToSelect: anchor === sel, inPage: box.parentNode === dom.document.body,
   });
+  withI18n(sandbox);
   vm.createContext(sandbox);
   for (const f of ['select-search.js', 'select.js']) vm.runInContext(fs.readFileSync(path.join(RENDERER, f), 'utf8'), sandbox, { filename: f });
   dom.document.body.innerHTML = `<button id="outside">elsewhere</button><select data-testid="zone" aria-label="Time zone" ${attrs}>${options}</select>`;
