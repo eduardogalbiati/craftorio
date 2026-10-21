@@ -272,6 +272,10 @@ button.bl-label { font-family: inherit; cursor: pointer; }
    running; amber paused (--yellow, the waiting colour), red paused by a failure, grey planned, green
    done), Stop in red, the ⋮ menu */
 .rm-bar-title { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+/* #421: the bar's summary (planned, spent, By release) and its By release list, one row per cut line */
+.rm-summary { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.rm-summary-releases { min-width: 280px; max-width: 420px; }
+.rm-summary-row { display: flex; justify-content: space-between; gap: 12px; padding: 4px 8px; white-space: nowrap; }
 .rm-state-dot { position: relative; flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
 .rm-state-dot.is-running { background: var(--accent); animation: pulse 1.2s infinite; }
 .rm-state-dot.is-paused { background: var(--yellow); }

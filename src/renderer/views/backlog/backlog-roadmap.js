@@ -44,11 +44,12 @@
 // the run ends, "$22.21 of ≈ $15.18 ▲ +46%" and "3 h 41 min of ≈ 1 h 45 min" coloured by Estimates.verdict
 // (estimates.js: green at or under, amber up to +25%, red above, with an arrow), the difference and
 // the longest step in the tooltip; while it runs, "on track", then amber or red once past it.
-// A finished stage shows its real total against its estimate the same way.
+// A finished stage shows its real total against its estimate the same way. The bar sums them up (#421,
+// roadmap-summary.js): "Planned ≈ $X · ≈ T" left, "+ n without estimate", "Spent $Y", "By release".
 // Inputs (#216): the item's inputs as WorkflowInputs.inputPills ("Unit tests: Run existing").
 // What it shows (#217, #268): html()'s `view` ({ epic, showAll, since }, remembered by backlog.js). The
 // Planned | All switch: Planned (showAll off) is the open work, every item but the done and skipped
-// ones, a stage with nothing left hidden; All is every item. The date range (`since`: last 24 hours
+// ones, a stage with nothing left hidden, and only the latest release (#425); All is every item and release. The date range (`since`: last 24 hours
 // by default … Total) filters by an item's last activity (added, its run's start, its run's end): in
 // Planned the open items show whatever their date and the range picks the finished items folded
 // under a stage's green "+n done" chip (#267: a click unfolds that stage only, remembered per stage
@@ -76,7 +77,7 @@
 // its name, the state of its release run (in progress, on hold, failed, shipped) with a link to the
 // run, Rename and Remove while no run is going. The stages below wait until the release shipped; a
 // finished stage hidden by the open-work filter still shows its line while it waits, and so does
-// the view grouped by epic (the waiting lines lead it, each with its stage).
+// the view grouped by epic (the waiting lines lead it, each with its stage). Planned: the latest only (#425).
 // The bar (#269): the roadmap's state is a dot before its title (blue and pulsing while running, amber
 // paused, red paused by a failure, grey planned, green done; the readable state in its tooltip and
 // aria-label), then the counts, Start / Resume, Pause (amber, with its icon), Stop (red, with its icon,
@@ -143,10 +144,9 @@
   const RUN_FAILED = new Set(['failed', 'cancelled', 'interrupted']);
   const askable = (x) => x.status === 'failed' || refusedStart(x) || (x.status === 'planned' && RUN_FAILED.has(x.run?.status));
   const askOracleHtml = (x) => (askable(x) && window.GateOracle?.failureButtonHtml ? window.GateOracle.failureButtonHtml(x, 'data-rm-ask-oracle data-testid="roadmap-ask-oracle"') : '');
-  // #269: the bar's ⋮ menu (open or not) and its entries: a new action is a line here, the bar stays
-  let menuOpen = false;
-  // #391: the bar's Pause menu (after this stage, or now) and the "Pausing after stage" badge with its Cancel pause
-  let pauseOpen = false;
+  // #269: the bar's ⋮ menu (open or not) and its entries: a new action is a line here, the bar stays; #421: its summary's
+  // "By release" list; #391: its Pause menu (after this stage, or now) and the "Pausing after stage" badge with its Cancel pause
+  let [menuOpen, byReleaseOpen, pauseOpen] = [false, false, false];
   const pauseHtml = (r) => `<span class="bl-menu-wrap rm-pause-wrap"><button class="btn sm btn-icon warn-ghost" type="button" data-rm="pause" title="${t('backlog_roadmap.pause_after_this_stage_or_now')}" aria-haspopup="menu" aria-expanded="${pauseOpen}">${ICON.pause}${t('backlog_roadmap.pause')}</button>${pauseOpen ? `<div class="bl-menu rm-menu rm-pause-menu" role="menu" data-testid="roadmap-pause-menu" aria-label="${t('backlog_roadmap.pause_the_roadmap')}">${RoadmapModel.pauseChoices(r).map((c) => `<button type="button" role="menuitem" data-rm="pause-${c.after}" data-testid="roadmap-pause-${c.after === 'stage' ? 'after-stage' : 'now'}" title="${esc(c.hint)}">${esc(c.label)}<span class="bl-menu-why small muted">${esc(c.hint)}</span></button>`).join('')}</div>` : ''}</span>`;
   const pausingHtml = (r, at = RoadmapModel.pausingAfterStage(r)) => (at < 0 ? '' : `<span class="badge warn" data-testid="roadmap-pausing-badge">${t('backlog_roadmap.pausing_after_stage')} ${at + 1}</span> <button class="btn sm ghost" type="button" data-rm="cancel-pause" data-testid="roadmap-cancel-pause" title="${t('backlog_roadmap.take_the_pause_back_the_roadmap')}">${t('backlog_roadmap.cancel_pause')}</button>`);
   const MENU = [
@@ -1057,7 +1057,7 @@
     const [since, , sinceText, rangeMs] = SINCE.find(([id]) => id === view.since) || SINCE[0];
     const r = data?.roadmap || { state: 'planned', stages: [] };
     // #291: the releases, and the one the Releases filter chose
-    const rv = RoadmapModel.releaseView(r, data, view.release || '');
+    const rv = RoadmapModel.releaseView(r, data, view.release || '', !!view.showAll); // #425: Planned, the latest only
     const v = { epic: view.epic || '', showAll: !!view.showAll, since, rangeMs, runs: rv.runs };
     const key = `${view.project || ''}|${v.showAll ? 'all' : 'planned'}|${since}|${v.epic}|${rv.choice}`;
     if (pages.key !== key) pages = { key, more: 0, earlier: 0, fresh: true };
@@ -1092,7 +1092,7 @@
     const bar = `
       <div class="bl-queue rm-bar" data-testid="roadmap-bar">
         <span class="rm-bar-title">${dot}<b>${t('backlog_roadmap.roadmap_2')}</b> ${scopeBadge} ${plural(r.stages.length, 'backlog_roadmap.stages_count')}${offStages.length ? t('backlog_roadmap.length_disabled', { length: offStages.length }) : ''}${parked}</span>
-        ${note}${leftOut}${data?.baseFailures?.length ? `<details class="small rm-base-failures" data-testid="base-failures"><summary><span class="warn-text">${plural(data.baseFailures.length, 'backlog_roadmap.known_failures_count')} ${t('backlog_roadmap.on_the_base')}</span> <span class="link-btn" data-testid="base-failures-link">${t('backlog_roadmap.details')}</span></summary><ul>${data.baseFailures.map((f) => `<li><span class="mono">${esc(f.test)}</span> · <span class="muted" title="${esc(f.file)}">${esc(f.file)}</span>${f.issue?.url ? ` · <a href="${esc(f.issue.url)}" target="_blank" rel="noopener">${esc(f.issue.number ? `#${f.issue.number}` : t('backlog_roadmap.issue'))}</a>` : ''}</li>`).join('')}</ul></details>` : ''}
+        ${window.RoadmapSummary?.barHtml(r, { open: byReleaseOpen, money, minutes: mins }) || ''}${note}${leftOut}${data?.baseFailures?.length ? `<details class="small rm-base-failures" data-testid="base-failures"><summary><span class="warn-text">${plural(data.baseFailures.length, 'backlog_roadmap.known_failures_count')} ${t('backlog_roadmap.on_the_base')}</span> <span class="link-btn" data-testid="base-failures-link">${t('backlog_roadmap.details')}</span></summary><ul>${data.baseFailures.map((f) => `<li><span class="mono">${esc(f.test)}</span> · <span class="muted" title="${esc(f.file)}">${esc(f.file)}</span>${f.issue?.url ? ` · <a href="${esc(f.issue.url)}" target="_blank" rel="noopener">${esc(f.issue.number ? `#${f.issue.number}` : t('backlog_roadmap.issue'))}</a>` : ''}</li>`).join('')}</ul></details>` : ''}
         <span class="spacer"></span>
         ${acts.start.allowed || acts.resume.allowed ? `<label class="check small dev-only"><input type="checkbox" id="rm-simulate"${state.simulationOnly || r.simulated ? ' checked' : ''} /><span>${t('backlog_roadmap.simulated')}</span></label>
           <button class="btn sm primary" type="button" data-rm="start"${-1 < scoped && acts.resume.allowed ? ` title="${t('backlog_roadmap.resume_stage_value_only', { value: scoped + 1 })}"` : ''}>${t(acts.resume.allowed ? 'backlog_roadmap.resume' : 'backlog_roadmap.start')}</button>` : ''}
@@ -1664,6 +1664,7 @@
       focusMenu(menuOpen ? '[role="menuitem"]' : '[data-rm-menu]');
       return true;
     }
+    if (e.target.closest('[data-rm-summary-releases]')) { byReleaseOpen = !byReleaseOpen; ctx.render(); return true; } // #421: the summary's By release list
     // #282: a stage's ⋮ button, the same way (one menu open at a time)
     const stageBtn = e.target.closest('[data-rm-stage-menu]');
     if (stageBtn) {

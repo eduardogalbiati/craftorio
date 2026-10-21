@@ -171,6 +171,9 @@ function estimateItem(item, runs, { issues = [], prices = {}, complexity = null 
   };
 }
 
+// the release workflow a cut line starts (src/service/areas/releases.js, #260)
+const RELEASE_WORKFLOW = 'release.yaml';
+
 const runsOf = (item, runById) => [...new Set([...(item?.runs || []), ...(item?.runId ? [item.runId] : [])])].map((id) => runById.get(id)).filter(Boolean);
 
 /** The real cost of an item's runs (`runs`: listRuns rows by id), null when it has none. */
@@ -225,6 +228,8 @@ function withEstimates(roadmap, runs, { issues = [], prices = {} } = {}) {
       return {
         ...s,
         items,
+        // #421: a cut line whose release run has not started yet: that run's estimate (the Roadmap's By release)
+        ...(s.release && !s.release.runId ? { release: { ...s.release, estimate: estimateItem({ workflow: RELEASE_WORKFLOW }, runs, { prices, complexity: 1 }) } } : {}),
         estimate: known.length ? {
           usd: round(known.reduce((a, e) => a + e.usd, 0)),
           minutes: timed.length ? Math.max(...timed) : null,

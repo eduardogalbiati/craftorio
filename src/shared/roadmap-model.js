@@ -13,7 +13,7 @@
 //   retry, skip                  the item that failed or could not start (#196), never a paused one
 //   park                         the item's "Move on" (#395): its run waits at a human gate, the roadmap goes on
 //   parkStage                    the stage's "Move on from this stage" (#395): parks its items at a gate, skips the planned
-// The Roadmap view's rules: releaseView, the date ranges (SINCE, inRange) and its pages (pageOf).
+// The Roadmap view's rules: releaseView (Planned: the latest release only, #425), the date ranges (SINCE, inRange) and its pages (pageOf).
 // Any load order: read only when a screen draws.
 /** An item's status, ITEM_STATES as a type (#346): the file stores planned, done, parked or skipped.
  * @typedef {'done' | 'failed' | 'parked' | 'paused' | 'planned' | 'running' | 'skipped'} RoadmapItemStatus */
@@ -210,12 +210,15 @@
   /**
    * The Roadmap's Releases filter's choice (`wanted`: '' all, 'next' the next release, else a version):
    * { list, choice, shown (the releases drawn), runs (the run ids a chosen release narrows to, null: all), chosen }
+   * #425: with no choice, Planned (`showAll` false) draws only the latest placed release (greatest `at`), All every one.
    */
-  function releaseView(r, data, wanted) {
+  function releaseView(r, data, wanted, showAll) {
     const list = roadmapReleases(r, data);
     const chosen = wanted && wanted !== 'next' ? list.find((x) => x.version === wanted) || null : null;
     const choice = chosen ? wanted : wanted === 'next' && list.length ? 'next' : '';
-    if (!choice) return { list, choice, shown: list.filter((x) => x.at >= 0), runs: null, chosen: null };
+    const placed = list.filter((x) => x.at >= 0);
+    const latest = placed.reduce((a, x) => (!a || x.at > a.at ? x : a), null);
+    if (!choice) return { list, choice, shown: showAll ? placed : latest ? [latest] : [], runs: null, chosen: null };
     if (chosen) return { list, choice, shown: [chosen], runs: new Set(chosen.runs || []), chosen };
     // what merged since the last release: the done items' runs no shipped release holds
     const shipped = new Set(list.filter((x) => x.status === 'shipped').flatMap((x) => x.runs || []));
