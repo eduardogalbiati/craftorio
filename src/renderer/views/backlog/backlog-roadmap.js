@@ -45,7 +45,7 @@
 // (estimates.js: green at or under, amber up to +25%, red above, with an arrow), the difference and
 // the longest step in the tooltip; while it runs, "on track", then amber or red once past it.
 // A finished stage shows its real total against its estimate the same way. The bar sums them up (#421,
-// roadmap-summary.js): "Planned ≈ $X · ≈ T" left, "+ n without estimate", "Spent $Y", "By release".
+// roadmap-summary.js): "Planned ≈ $X · ≈ T" left, "+ n without estimate", "Spent $Y", "By release" (test ids: roadmap-summary-by-release, its list roadmap-summary-releases, one roadmap-summary-release-row per cut line).
 // Inputs (#216): the item's inputs as WorkflowInputs.inputPills ("Unit tests: Run existing").
 // What it shows (#217, #268): html()'s `view` ({ epic, showAll, since }, remembered by backlog.js). The
 // Planned | All switch: Planned (showAll off) is the open work, every item but the done and skipped
