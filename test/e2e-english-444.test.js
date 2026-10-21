@@ -36,3 +36,10 @@ test('the demo workspace of the E2E suite chooses English itself, not "same as t
   assert.deepEqual(shown, ['en', 'en', 'en', 'en']);
   assert.equal(typeof settings.language?.interface, 'string', 'an interface language is saved in the workspace settings');
 });
+
+test('pinning the interface language keeps the demo workspace\'s other language defaults (#444)', async (t) => {
+  const settings = await seeded(t);
+  // settings are merged one level deep: a language patch with only `interface` would drop these
+  assert.equal(settings.language?.agents, 'interface');
+  assert.equal(settings.language?.issues, 'en');
+});
