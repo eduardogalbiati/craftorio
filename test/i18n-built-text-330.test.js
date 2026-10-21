@@ -31,9 +31,14 @@ const files = () => [
 ];
 
 const WORD = "[A-Z][a-z]+(?:[ ,.:;!?…'’-]|$)";
+// a quoted phrase with a space in it (a trailing one too): 'draft ', 'a title', 'the platform (x: y)';
+// a catalog key, a class name or a separator (' · ') has none, or no word
+const PHRASE = "'[\\s.,;:·—-]*[A-Za-z(][A-Za-z()/:,;’-]*\\s[^'$`{}]*'";
+const T_PARAMS = "\\bt\\('[\\w.]+',\\s*\\{[^}]*?\\?\\s*";
 const RULES = [
   ['an English plural suffix', /[!=]==\s*1\s*\?\s*'(?:s|es)?'\s*:\s*'(?:s|es)?'/],
   ['an English word given to t() as a param', /\bt\('[\w.]+',\s*\{[^}]*?:\s*[^,}]*?\?\s*'[A-Za-z][a-z]+(?: [a-z]+)*'\s*:\s*'[A-Za-z][a-z]+/],
+  ['an English phrase given to t() as a param', new RegExp(`${T_PARAMS}(?:${PHRASE}|(?:'[^']*'|[^:?]+?)\\s*:\\s*${PHRASE})`)],
   ['an English sentence in a toast or a confirm', new RegExp(`\\b(?:showToast|confirmDialog)\\(\\s*[\`'"]${WORD}`)],
   ['an English text or label set by code', new RegExp(`\\.(?:textContent|innerText|title|placeholder)\\s*=\\s*[\`'"]${WORD}`)],
 ];
@@ -56,6 +61,10 @@ test('#330 the check finds each kind of built English text', () => {
     "confirmDialog(`Remove ${name}?`);",
     "el.textContent = 'Nothing here yet';",
     "btn.title = 'Click to open its run.';",
+    // #330 review: an English phrase as a t() param (a trailing space, a one-letter word, parentheses)
+    "x = t('backlog.open_value_p_title', { value: p.draft ? 'draft ' : '', p: prName(p) });",
+    "x = t('discovery_commit.issue_value_needs_value2', { value: 1, value2: ok ? t('a.b') : 'a title' });",
+    "x = t('duo.preview_it', { value: chat.mock ? 'the platform (simulated run: preview only)' : 'GitHub/GitLab' });",
   ];
   assert.deepEqual(bad.map((line) => builtEnglish(line, 'x.js').length), bad.map(() => 1));
   const good = [
@@ -64,6 +73,9 @@ test('#330 the check finds each kind of built English text', () => {
     "showToast(t('workflows.saved'));",
     "el.textContent = '';",
     "el.className = n === 1 ? 'one' : 'many';",
+    "x = t('run_list.meta', { sep: n ? ' · ' : '', cls: on ? 'is-on' : 'is-off' });",
+    "x = t('backlog.open_value_p_title', { value: p.draft ? t('backlog.draft_prefix') : '' });",
+    "x = `<a class=\"badge${p.draft ? ' draft' : ''}\">${t('backlog.pr')}</a>`;",
   ];
   assert.deepEqual(good.flatMap((line) => builtEnglish(line, 'x.js')), []);
 });

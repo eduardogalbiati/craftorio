@@ -7,6 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 const { providerType } = require('../src/renderer/views/runchat/run-chat-model.js');
+const { withI18n } = require('./i18n-sandbox');
 
 const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'views', 'runchat', 'runchat.js'), 'utf8');
 
@@ -142,12 +143,13 @@ test('turnHtml: a message on the right gets the rc-right class', () => {
 });
 
 // turnHtml's activity block (#160): a sub-agent entry gets its own class, a tag for its type and
-// its description (not the raw tool input); an ordinary tool keeps the plain rendering.
+// its description (not the raw tool input); an ordinary tool keeps the plain rendering. Its summary
+// comes from the catalog (#330: t() of src/shared/i18n.js, in the language I18n is set to).
 function activityExtras(activity) {
   const block = /const tools = it\.activity\.filter[\s\S]*?\n    \}\n/.exec(src)[0];
   assert.ok(block, 'activity block not found in runchat.js: the source moved');
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-  const sandbox = { esc, it: { activity } };
+  const sandbox = withI18n({ esc, it: { activity } });
   vm.createContext(sandbox);
   vm.runInContext(`const extras = [];\n${block}\nthis.extras = extras;`, sandbox);
   return sandbox.extras;
@@ -170,6 +172,18 @@ test('turnHtml activity: an ordinary tool call (no subagent) keeps the plain ren
 test('turnHtml activity: a failed sub-agent call still gets the err class alongside rc-subagent', () => {
   const [html] = activityExtras([{ kind: 'tool', name: 'Task', input: '{}', error: true, subagent: { type: 'Explore', description: 'Read the build log' } }]);
   assert.match(html, /<li class="rc-subagent err">/);
+});
+
+test('#330 turnHtml activity: the summary counts tool calls and sub-agents in the interface language', (t) => {
+  const I18n = require('../src/shared/i18n.js');
+  t.after(() => I18n.setLanguage('en'));
+  const calls = [
+    { kind: 'tool', name: 'Task', input: '{}', subagent: { type: 'Explore', description: 'Map it' } },
+    { kind: 'tool', name: 'Task', input: '{}', subagent: { type: 'Explore', description: 'Read it' } },
+  ];
+  assert.match(activityExtras(calls)[0], /<summary>2 tool calls · 2 sub-agents<\/summary>/);
+  I18n.setLanguage('pt-BR');
+  assert.match(activityExtras(calls)[0], /<summary>2 chamadas de ferramenta · 2 subagentes<\/summary>/);
 });
 
 // #80: a run's chat always opens scrolled to its latest message, live or past (it used to open a

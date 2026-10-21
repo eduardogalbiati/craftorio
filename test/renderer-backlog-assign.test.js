@@ -19,8 +19,20 @@ test('updateAssignNote: the real-run note drops the "one at a time" / ordering c
   const note = /function updateAssignNote\(\)[\s\S]*?\n  \}/.exec(src)[0];
   assert.doesNotMatch(note, /one at a time/);
   assert.doesNotMatch(note, /starting now if nothing else is running/);
-  // still switches the submit button text between Simulate and Start
-  assert.match(note, /\$b\('#btn-assign-ok'\)\.textContent = `\$\{mock \? 'Simulate' : 'Start'\}/);
+  // still switches the submit button text between Simulate and Start (#330: one plural catalog entry
+  // per variant, picked by the number of runs)
+  assert.match(note, /const runCount = \{ count: runs \};/);
+  assert.match(note, /\$b\('#btn-assign-ok'\)\.textContent = t\(mock \? 'backlog\.assign_simulate_runs' : 'backlog\.assign_start_runs', runCount\);/);
+  assert.deepEqual(en['backlog.assign_simulate_runs'], { one: 'Simulate {count} run', other: 'Simulate {count} runs' });
+  assert.deepEqual(en['backlog.assign_start_runs'], { one: 'Start {count} run', other: 'Start {count} runs' });
+});
+
+test('#330 the Assign button reads "Simulate 1 run" / "Start 3 runs" in English and its Portuguese text in pt-BR', () => {
+  const I18n = require('../src/shared/i18n.js');
+  assert.equal(I18n.t('backlog.assign_simulate_runs', { count: 1 }, 'en'), 'Simulate 1 run');
+  assert.equal(I18n.t('backlog.assign_start_runs', { count: 3 }, 'en'), 'Start 3 runs');
+  assert.equal(I18n.t('backlog.assign_simulate_runs', { count: 1 }, 'pt-BR'), 'Simular 1 execução');
+  assert.equal(I18n.t('backlog.assign_start_runs', { count: 3 }, 'pt-BR'), 'Iniciar 3 execuções');
 });
 
 test('status(): a run the supervisor sent back after a failed merge shows a "sent back" badge with its record', () => {
