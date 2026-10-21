@@ -64,13 +64,17 @@
     return { language: { ...saved(settings), [kind]: value } };
   }
 
+  // the element the group was last drawn into: redrawn in the new language when the interface
+  // language changes (I18n.onChange), its labels and the "Same as the interface (…)" name with it
+  let drawnIn = null;
+  window.I18n?.onChange?.(() => { if (drawnIn?.isConnected) render(drawnIn); });
+
   /** Draws the group into el and saves a change at once (a single choice, like Time zone). */
   function render(el) {
     if (!el) return;
-    el.innerHTML = markup(state.settings);
+    drawnIn = el;    el.innerHTML = markup(state.settings);
     el.onchange = async (e) => {
-      const kind = e.target.dataset?.language;
-      if (!kind) return;
+      const kind = e.target.dataset?.language;      if (!kind) return;
       state.settings = await api.setSettings(patch(state.settings, kind, e.target.value));
       if (kind === 'interface') window.InterfaceLanguage?.apply(state.settings);
     };

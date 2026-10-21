@@ -104,6 +104,7 @@ function repaintNodes(live, before, after) {
       if (el.nodeValue === before[i].nodeValue) el.nodeValue = n.nodeValue;
       return;
     }
+    if (n.nodeType !== 1) return; // a comment drawn at a markup's top level: nothing to repaint
     for (const name of LABELLED) {
       const was = before[i].getAttribute(name);
       const now = n.getAttribute(name);
