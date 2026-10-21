@@ -14,7 +14,6 @@
   const POLL_MS = 3000;
   let cur = null; // { id, box, rows, error, running: Set, history: Map, notes: Map, editing, open, timer }
 
-  const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
   const shortDate = (d) => {
     const iso = String(d || '').replace(/^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z.*$/, '$1T$2:$3:$4.$5Z');
     const t = Date.parse(iso);
@@ -22,19 +21,19 @@
   };
   // the page in standards mode with the CSP first (the page's own doctype dropped: one after content is ignored)
   const framed = (html) => `<!doctype html>${RESULT_CSP}${String(html).replace(/^\s*<!doctype[^>]*>/i, '')}`;
-  const costText =(r) => (r.simulated ? 'simulated' : r.source === 'tool' || r.costUsd === 0 ? 'free' : r.costUsd == null ? 'cost unknown' : fmtUsd(r.costUsd));
+  const costText =(r) => (r.simulated ? t('project_seeds.cost_simulated') : r.source === 'tool' || r.costUsd === 0 ? t('project_seeds.cost_free') : r.costUsd == null ? t('project_seeds.cost_unknown') : fmtUsd(r.costUsd));
 
   // the row's status: [text, badge class]
   function statusOf(row) {
     if (cur.running.has(row.id) || row.running) {
       const last = row.running?.last;
-      return [`Running${row.tool ? ' the tool' : ': the Oracle reads the project'}${last ? ` · ${last}` : '…'}`, 'live'];
+      return [`${t(row.tool ? 'project_seeds.status_running_tool' : 'project_seeds.status_running_oracle')}${last ? ` · ${last}` : '…'}`, 'live'];
     }
-    if (row.error) return [`Failed: ${row.error}`, 'warn'];
-    if (row.tool) return ['Tool available · runs free', 'cat-monitor'];
-    if (!row.lastRun) return ['Never run', ''];
-    if (row.commitsSince > 0) return [`Stale · ${plural(row.commitsSince, 'commit')} since`, 'warn'];
-    return ['Up to date', 'cat-monitor'];
+    if (row.error) return [t('project_seeds.status_failed', { error: row.error }), 'warn'];
+    if (row.tool) return [t('project_seeds.status_tool_available'), 'cat-monitor'];
+    if (!row.lastRun) return [t('project_seeds.status_never_run'), ''];
+    if (row.commitsSince > 0) return [t('project_seeds.status_stale_commits', { count: row.commitsSince }), 'warn'];
+    return [t('project_seeds.status_up_to_date'), 'cat-monitor'];
   }
 
   function rowHtml(row) {
@@ -55,8 +54,8 @@
         <button type="button" class="btn sm ghost" data-seed-make-tool="${id}" data-testid="seed-make-tool-${id}">${t('project_seeds.make_it_a_tool')}</button>
       </div>
       <div class="small muted seed-summary" title="${esc(row.summary)}">${esc(row.summary)}</div>
-      <div class="small muted">${row.lastRun ? t('project_seeds.last_run_date_lastrun', { date: esc(shortDate(row.lastRun.date)), lastRun: esc(costText(row.lastRun)) }) : t('project_seeds.cost_value', { value: esc(row.cost || 'one Oracle turn') })}
-        · <button type="button" class="link-btn" data-seed-tool-edit="${id}" data-testid="seed-tool-edit-${id}">${row.tool ? `Tool: <span class="mono">${esc(row.tool)}</span>` : t('project_seeds.tool_command')}</button></div>
+      <div class="small muted">${row.lastRun ? t('project_seeds.last_run_date_lastrun', { date: esc(shortDate(row.lastRun.date)), lastRun: esc(costText(row.lastRun)) }) : t('project_seeds.cost_amount', { cost: row.cost ? esc(row.cost) : t('project_seeds.one_oracle_turn') })}
+        · <button type="button" class="link-btn" data-seed-tool-edit="${id}" data-testid="seed-tool-edit-${id}">${row.tool ? `${t('project_seeds.tool_label')} <span class="mono">${esc(row.tool)}</span>` : t('project_seeds.tool_command')}</button></div>
       ${editing ? `<div class="seed-tool-edit" data-testid="seed-tool-form-${id}">
         <label class="small" for="seed-tool-input-${id}">${t('project_seeds.the_command_that_prints_the_seed')}</label>
         <input type="text" id="seed-tool-input-${id}" class="mono" data-seed-tool-input="${id}" value="${esc(row.tool || '')}" spellcheck="false" placeholder="${t('project_seeds.node_tools_id_js_json', { id })}" />
@@ -146,8 +145,8 @@
     try { estimate = await api.seedEstimate({ projectId: c.id, seedId }); } catch (e) { showToast(t('project_seeds.could_not_estimate_the_seed_s', { e: errMsg(e) })); return; }
     // a real model call costs money: say how much first (a tool or a simulated run is free)
     if (!estimate?.free && !state.simulationOnly) {
-      const cost = estimate?.costUsd != null ? `about ${fmtUsd(estimate.costUsd)}` : 'an unknown amount (no earlier run)';
-      if (!confirm(`The Oracle will run the seed ${seedId} read-only on this project in one turn. This calls a real model and costs ${cost}. Continue?`)) return;
+      const known = estimate?.costUsd != null;
+      if (!confirm(t(known ? 'project_seeds.confirm_run_cost' : 'project_seeds.confirm_run_cost_unknown', { seedId, cost: known ? fmtUsd(estimate.costUsd) : '' }))) return;
     }
     c.running.add(seedId);
     c.notes.delete(seedId);
@@ -155,7 +154,7 @@
     poll();
     try {
       const out = await api.runSeed({ projectId: c.id, seedId });
-      if (out?.refused) c.notes.set(seedId, esc(out.refused.text || `Refused: ${out.refused.reason}`));
+      if (out?.refused) c.notes.set(seedId, esc(out.refused.text || t('project_seeds.refused_reason', { reason: out.refused.reason })));
     } catch (e) {
       const row = rowOf(seedId);
       if (row) row.error = errMsg(e);
@@ -191,22 +190,22 @@
     try {
       c.history.set(seedId, (await api.seedHistory({ projectId: c.id, seedId })) || []);
     } catch (e) {
-      c.notes.set(seedId, `Could not read the history: ${esc(errMsg(e))}`);
+      c.notes.set(seedId, t('project_seeds.could_not_read_the_history', { error: esc(errMsg(e)) }));
     }
     if (cur === c) render();
   }
 
   async function makeTool(seedId) {
     const c = cur;
-    c.notes.set(seedId, 'Filing the tool issue…');
+    c.notes.set(seedId, t('project_seeds.filing_the_tool_issue'));
     render();
     try {
       const out = await api.makeSeedTool({ projectId: c.id, seedId });
       c.notes.set(seedId, out?.preview
-        ? `Preview only (simulation): nothing was filed. The issue would be “${esc(out.title)}”.`
-        : out?.url ? `Filed <a href="${esc(out.url)}" target="_blank" rel="noopener">${esc(out.title)}</a>${t('project_seeds.the_product_owner_plans_it_like')}` : `Filed “${esc(out?.title || '')}”.`);
+        ? t('project_seeds.tool_issue_preview', { title: esc(out.title) })
+        : out?.url ? `${t('project_seeds.filed')} <a href="${esc(out.url)}" target="_blank" rel="noopener">${esc(out.title)}</a>${t('project_seeds.the_product_owner_plans_it_like')}` : t('project_seeds.filed_title', { title: esc(out?.title || '') }));
     } catch (e) {
-      c.notes.set(seedId, `Could not file the tool issue: ${esc(errMsg(e))}`);
+      c.notes.set(seedId, t('project_seeds.could_not_file_the_tool_issue', { error: esc(errMsg(e)) }));
     }
     if (cur === c) render();
   }
@@ -220,7 +219,7 @@
       showToast(out?.tool ? t('project_seeds.the_seed_seedid_now_runs_tool', { seedId, tool: out.tool }) : t('project_seeds.the_seed_seedid_runs_the_oracle', { seedId }));
       await load();
     } catch (e) {
-      c.notes.set(seedId, `Could not save the tool command: ${esc(errMsg(e))}`);
+      c.notes.set(seedId, t('project_seeds.could_not_save_the_tool_command', { error: esc(errMsg(e)) }));
       render();
     }
   }

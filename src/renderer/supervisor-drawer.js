@@ -6,7 +6,7 @@
 // app.js's init(). The Supervisor screen (its settings) is views/supervisor/.
 
 // AI supervisor: analysis of a run, resume from a step, chat
-const SUP_ACTIONS = { retry: 'retry the step', fix_output: 'fix the output', goto: 'go to another step', ask_human: 'ask you', fail: 'stop the run', wait: 'keep waiting', interrupt: 'interrupt the idle agent' };
+const SUP_ACTIONS = { get retry() { return t('supervisor_drawer.action_retry'); }, get fix_output() { return t('supervisor_drawer.action_fix_output'); }, get goto() { return t('supervisor_drawer.action_goto'); }, get ask_human() { return t('supervisor_drawer.action_ask_human'); }, get fail() { return t('supervisor_drawer.action_fail'); }, get wait() { return t('supervisor_drawer.action_wait'); }, get interrupt() { return t('supervisor_drawer.action_interrupt'); } };
 
 const WATCH_TITLE = 'The supervisor follows this run and explains it in a chat, where you can ask questions (opt-in: it costs tokens)';
 

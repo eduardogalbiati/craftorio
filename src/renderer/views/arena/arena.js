@@ -237,7 +237,7 @@
   const fmtSize = (n) => (n >= 1024 ? `${(n / 1024).toFixed(0)} KB` : `${n} B`);
   function renderAttachments() {
     $a('#arena-attachments').innerHTML = attachments.map((a, i) =>
-      `<span class="ar-chip" title="${esc(a.name)}"><span>${esc(a.name)}</span><small>${fmtSize(a.size)}</small><button type="button" data-unattach="${i}" title="${t('arena.remove')}" aria-label="${t('arena.remove_name', { name: esc(a.name) })}">×</button></span>`).join('');
+      `<span class="ar-chip" title="${esc(a.name)}"><span>${esc(a.name)}</span><small>${fmtSize(a.size)}</small><button type="button" data-unattach="${i}" title="${t('common.remove')}" aria-label="${t('arena.remove_name', { name: esc(a.name) })}">×</button></span>`).join('');
     $a('#arena-attach-hint').classList.toggle('hidden', attachments.length > 0);
     $a('#arena-attachments').querySelectorAll('[data-unattach]').forEach((b) => (b.onclick = () => { attachments.splice(+b.dataset.unattach, 1); renderAttachments(); }));
   }
@@ -349,7 +349,7 @@
 
   // ---------------------------------------------------------------- the models at work
   // A fan-out has several models working at once: one row shows every robot that is busy.
-  const DOING = { thinking: 'thinking', writing: 'writing', reading: 'reading' };
+  const DOING = { thinking: 'arena.doing_thinking', writing: 'arena.doing_writing', reading: 'arena.doing_reading' };
   function setWorking(role, st) {
     if (!roles[role]) return;
     if (st) chat.working.set(role, st);
@@ -362,17 +362,17 @@
     box.querySelector('.ar-working')?.remove();
     const busy = [...chat.working.entries()];
     if (!busy.length) {
-      if (chat.running) $a('#arena-chat-status').textContent = 'running';
+      if (chat.running) $a('#arena-chat-status').textContent = t('arena.status_running');
       return;
     }
-    const label = busy.length === 1 ? `${roles[busy[0][0]].name} is ${DOING[busy[0][1]] || 'working'}` : `${busy.length} models are working`;
+    const label = busy.length === 1 ? t('arena.name_is_doing', { name: roles[busy[0][0]].name, doing: t(DOING[busy[0][1]] || 'arena.doing_working') }) : t('arena.models_are_working', { count: busy.length });
     $a('#arena-chat-status').textContent = `${label}…`;
     if (!chat.live) return;
     // the row sits on the right only when every busy robot does; its robots face the other side
     const right = busy.every(([r]) => roles[r].side === 'right');
     const stick = box.scrollHeight - box.scrollTop - box.clientHeight < 240;
     box.insertAdjacentHTML('beforeend', `<div class="ar-working${busy.length === 1 ? ' solo' : ''}${right ? ' right' : ''}">${busy.map(([r, st]) =>
-      `<figure ${styleOf(r)}><span class="duo-robot" aria-hidden="true">${robotSvg(roles[r], st, { mirror: !right })}</span><figcaption><b>${esc(roles[r].name)}</b> · ${esc(DOING[st] || st)}</figcaption></figure>`).join('')}
+      `<figure ${styleOf(r)}><span class="duo-robot" aria-hidden="true">${robotSvg(roles[r], st, { mirror: !right })}</span><figcaption><b>${esc(roles[r].name)}</b> · ${esc(DOING[st] ? t(DOING[st]) : st)}</figcaption></figure>`).join('')}
       <span class="duo-dots"><i></i><i></i><i></i></span></div>`);
     if (stick) box.scrollTop = box.scrollHeight;
   }
@@ -381,7 +381,7 @@
   function footOf(key) {
     const u = chat.usage[key];
     if (!u || !u.ms) return '';
-    return `${fmtK(u.input)} in / ${fmtK(u.output)} out · $${u.cost.toFixed(2)} · ${fmtDur(u.ms)}`;
+    return `${t('arena.tokens_in_out', { input: fmtK(u.input), output: fmtK(u.output) })} · $${u.cost.toFixed(2)} · ${fmtDur(u.ms)}`;
   }
 
   function message(role, body, ts, usageKey) {
@@ -440,7 +440,7 @@
     $a('#arena-board').innerHTML = !list.length ? `<p class="muted small">${t('arena.no_contenders_yet')}</p>` : list.map((r) => {
       const v = avg(r);
       const n = chat.scores[r]?.length || 0;
-      return `<div class="ar-board-row${v != null && v === best ? ' best' : ''}" ${styleOf(r)} title="${t('arena.n_score_value_from_the_other', { n, value: n === 1 ? '' : 's' })}" data-testid="arena-score-row">
+      return `<div class="ar-board-row${v != null && v === best ? ' best' : ''}" ${styleOf(r)} title="${t('arena.scores_from_the_other_models', { count: n })}" data-testid="arena-score-row">
         <span class="name" data-testid="arena-score-name">${esc(roles[r].name)}</span><span class="bar" data-testid="arena-score-bar"><i style="width:${v == null ? 0 : Math.min(100, v * 10)}%"></i></span>
         <span class="val" data-testid="arena-score-value">${v == null ? '—' : v.toFixed(1)}</span></div>`;
     }).join('') + (chat.peer ? '' : `<p class="muted small">${t('arena.peer_review_is_off_for_this')}</p>`);
@@ -460,7 +460,7 @@
       case 'supervisor.started':
         chat.supervised = ev.step_id;
         setWorking('supervisor', 'reading');
-        addCheck('act', `${ev.step_id} failed: ${String(ev.error || '').slice(0, 140)}`);
+        addCheck('act', t('arena.check_step_failed', { step: ev.step_id, error: String(ev.error || '').slice(0, 140) }));
         return;
       case 'supervisor.decision': return onDecision(ev);
       case 'step.finished': return onStepFinished(ev);
@@ -496,10 +496,10 @@
       <p><b>${t('arena.request')}</b> <span class="duo-msg-text">${esc(i.task)}</span></p>${chat.attachments.length ? `<p>${chat.attachments.map((a, k) =>
         `<button type="button" class="ar-chip" data-tab="a:${k}" title="${t('arena.open_name', { name: esc(a.name) })}">📎 <span>${esc(a.name)}</span></button>`).join('')}</p>` : ''}</div></div>`);
     const project = i.project_path ? (projects.find((p) => p.folder === i.project_path)?.name || i.project_path) : '';
-    note(`Run started${ev.mock ? ` · <b>${t('arena.simulation')}</b>` : ''} · ${names.length} models · document <b>${esc(i.document_skill || 'prd-writing')}</b>`
-      + `${chat.peer ? ' · blind peer review' : ''}${i.lenses === 'on' ? ' · different lenses' : ''}${project ? ` · project <b>${esc(project)}</b> ${t('arena.read_only')}` : ''}`);
-    addCheck('ok', `Run started${ev.mock ? ' (simulation, no model calls)' : ''}`);
-    $a('#arena-chat-status').textContent = 'running';
+    note(`${t('arena.run_started')}${ev.mock ? ` · <b>${t('arena.simulation')}</b>` : ''} · ${t('arena.models_count', { count: names.length })} · ${t('arena.document_skill', { skill: `<b>${esc(i.document_skill || 'prd-writing')}</b>` })}`
+      + `${chat.peer ? t('arena.blind_peer_review_suffix') : ''}${i.lenses === 'on' ? t('arena.different_lenses_suffix') : ''}${project ? ` · ${t('arena.project_name', { name: `<b>${esc(project)}</b>` })} ${t('arena.read_only')}` : ''}`);
+    addCheck('ok', `${t('arena.run_started')}${ev.mock ? t('arena.simulation_no_model_calls_suffix') : ''}`);
+    $a('#arena-chat-status').textContent = t('arena.status_running');
   }
 
   // Runs of older ai-arena versions have no contender inputs: the sessions say which model each one is.
@@ -578,7 +578,7 @@
     if (!chat.docTab) chat.docTab = `p:${role}`;
     renderDocs();
     setCast(role, 'done');
-    message(role, `<p class="duo-msg-text">${t('arena.my_proposal_is_ready')}</p>${docCard(role, `p:${role}`, `proposal · ${roles[role].name}`, text)}`, ts, `compete:${role}`);
+    message(role, `<p class="duo-msg-text">${t('arena.my_proposal_is_ready')}</p>${docCard(role, `p:${role}`, t('arena.proposal_of_name', { name: roles[role].name }), text)}`, ts, `compete:${role}`);
   }
 
   function postCritique(role, o, ts) {
@@ -609,16 +609,16 @@
       if (!role) return;
       // the engine asks again twice, then the step (or this model's part of it) fails
       const last = (chat.invalid[role] = (chat.invalid[role] || 0) + 1) >= 3;
-      failRow(role, `Answer rejected: ${msg.replace(/^Invalid output in \w+(?: \([^)]*\))?: /, '').slice(0, 160)}. ${last ? 'Gave up.' : 'Asked again.'}`);
-      addCheck('warn', `${roles[role].name}'s answer did not match its format; ${last ? 'gave up' : 'asked again'}`);
+      failRow(role, t(last ? 'arena.answer_rejected_gave_up' : 'arena.answer_rejected_asked_again', { reason: msg.replace(/^Invalid output in \w+(?: \([^)]*\))?: /, '').slice(0, 160) }));
+      addCheck('warn', t(last ? 'arena.check_format_gave_up' : 'arena.check_format_asked_again', { name: roles[role].name }));
       if (chat.live && !last) setWorking(role, 'thinking');
       return;
     }
     // a model of a fan-out step that did not deliver (the step goes on with the others)
     const f = /^\[(compete|critique)\] (\w+) failed: (.*)$/s.exec(msg);
     if (f && roles[f[2]]) {
-      failRow(f[2], `${roles[f[2]].name} dropped out of the ${f[1]}: ${f[3].slice(0, 180)}`);
-      addCheck('warn', `${roles[f[2]].name} dropped out of the ${f[1]}`);
+      failRow(f[2], `${t(`arena.dropped_out_of_${f[1]}`, { name: roles[f[2]].name })}: ${f[3].slice(0, 180)}`);
+      addCheck('warn', t(`arena.dropped_out_of_${f[1]}`, { name: roles[f[2]].name }));
       return;
     }
     if (ev.level === 'error' && /attempt \d+\/\d+ failed/.test(msg)) addCheck('warn', msg.slice(0, 160));
@@ -648,7 +648,7 @@
       const role = { synthesize: 'synthesizer', verify: 'verifier' }[id];
       // a failure the supervisor already explained in the chat needs no second row
       if (chat.supervised !== id) {
-        if (role) failRow(role, `${roles[role].name} failed: ${String(o.error || 'unknown error').slice(0, 200)}`);
+        if (role) failRow(role, t('arena.name_failed_error', { name: roles[role].name, error: String(o.error || t('arena.unknown_error')).slice(0, 200) }));
         else if (id === 'compete' || id === 'critique') note(`<b>${esc(id)} ${t('arena.failed')}</b> · ${esc(String(o.error || '').slice(0, 220))}`, 'failed');
       }
       chat.supervised = null;
@@ -659,12 +659,12 @@
       for (const [r, res] of Object.entries(o.results || {})) postProposal(r, res?.text, ev.ts);
       chat.order = arenaShuffle(o.succeeded || [], chat.runId);
       const n = (o.succeeded || []).length;
-      addCheck(n > 1 ? 'ok' : 'warn', `${n} proposal${n === 1 ? '' : 's'} delivered${o.failed?.length ? `, ${o.failed.length} dropped out` : ''}`);
+      addCheck(n > 1 ? 'ok' : 'warn', `${t('arena.proposals_delivered', { count: n })}${o.failed?.length ? t('arena.dropped_out_count', { count: o.failed.length }) : ''}`);
       renderBoard();
     }
     if (id === 'critique') {
       for (const [r, res] of Object.entries(o.results || {})) postCritique(r, res, ev.ts);
-      addCheck('ok', `Blind critique: ${Object.keys(o.results || {}).length} reviews`);
+      addCheck('ok', t('arena.check_blind_critique_reviews', { count: Object.keys(o.results || {}).length }));
     }
     if (id === 'synthesize') {
       setWorking('synthesizer', null);
@@ -674,7 +674,7 @@
       showDoc(`f:${v - 1}`);
       message('synthesizer', `<p class="duo-msg-text">${v === 1 ? t('arena.i_merged_the_proposals_the_best') : t('arena.here_is_the_new_version')}</p>
         ${docCard('synthesizer', `f:${v - 1}`, `final.md · v${v}`, o.text)}`, ev.ts, 'synthesize:synthesizer');
-      addCheck('ok', `Final document v${v}`);
+      addCheck('ok', t('arena.check_final_document', { version: v }));
     }
     if (id === 'verify') {
       setWorking('verifier', null);
@@ -683,7 +683,7 @@
       const issues = (o.issues || []).map((x) => `<li>${esc(typeof x === 'string' ? x : JSON.stringify(x))}</li>`).join('');
       message('verifier', `${pass ? `<div class="duo-ready">${t('arena.pass')}</div>` : `<div class="duo-not-ready">${t('arena.issues_found')}</div>`}
         ${!pass && issues ? `<ul class="ar-issues">${issues}</ul>` : ''}<p class="muted small">${pass ? t('arena.the_final_document_is_consistent_with') : t('arena.the_synthesizer_fixes_them_once_what')}</p>`, ev.ts, 'verify:verifier');
-      addCheck(pass ? 'ok' : 'warn', pass ? 'Verifier: pass' : `Verifier: ${(o.issues || []).length} issue(s)`);
+      addCheck(pass ? 'ok' : 'warn', pass ? t('arena.check_verifier_pass') : t('arena.check_verifier_issues', { count: (o.issues || []).length }));
     }
   }
 
@@ -695,7 +695,7 @@
     renderWorking();
     Object.keys(roles).forEach((r) => setCast(r, 'waiting'));
     const off = chat.live ? '' : ' disabled';
-    const choices = ev.choices || [{ id: true, label: t('arena.approve') }, { id: false, label: t('arena.reject') }];
+    const choices = ev.choices || [{ id: true, label: t('common.approve') }, { id: false, label: t('arena.reject') }];
     const buttons = choices.map((c, i) => `<button type="button" class="btn sm ${i === 0 ? 'primary' : ''}" data-approval="${esc(ev.approval_id)}" data-choice="${esc(c.id)}"${off}>${esc(c.label)}</button>`).join('');
     const field = ev.feedback ? `<label class="duo-ask-label">${esc(ev.feedback.label)}</label>
       <textarea class="duo-ask-text" rows="2" placeholder="${esc(ev.feedback.placeholder)}"${off}></textarea>` : '';

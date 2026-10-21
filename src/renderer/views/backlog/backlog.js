@@ -447,9 +447,9 @@
   // Selected issues that already have work in flight: an open PR/MR, or a run in progress or waiting.
   const prName = (p) => requestRef(bl.data?.platform, p.number);
   function inFlight(i) {
-    const why = (i.pullRequests || []).map((p) => `open ${prName(p)}${p.draft ? ' (draft)' : ''}`);
+    const why = (i.pullRequests || []).map((p) => t(p.draft ? 'backlog.open_pr_draft' : 'backlog.open_pr', { pr: prName(p) }));
     const r = i.runs?.[0];
-    if (r && (r.waiting || r.status === 'running')) why.push(`run ${r.waiting ? 'waiting for approval' : 'in progress'} (${r.workflow || 'workflow'})`);
+    if (r && (r.waiting || r.status === 'running')) why.push(t(r.waiting ? 'backlog.run_waiting_for_approval' : 'backlog.run_in_progress', { workflow: r.workflow || 'workflow' }));
     return why;
   }
   const busySelected = () => (bl.data?.issues || []).filter((i) => bl.selected.has(i.number) && isShown(i) && inFlight(i).length);
@@ -464,11 +464,11 @@
     const box = $b('#assign-busy');
     box.classList.toggle('hidden', !busy.length);
     if (!busy.length) { box.innerHTML = ''; return; }
-    const plural = busy.length > 1;
+    const count = busy.length;
     box.innerHTML = `
-      <span class="warn-text small"><b>${busy.length} ${t('backlog.of_the_selected_issues_value_work', { value: plural ? 'already have' : 'already has' })}</b> ${t('backlog.starting_value_again_may_duplicate_it', { value: plural ? 'them' : 'it' })}</span>
+      <span class="warn-text small"><b>${t('backlog.selected_issues_in_flight', { count })}</b> ${t('backlog.starting_again_may_duplicate', { count })}</span>
       <ul class="small">${busy.map((i) => `<li>#${i.number} ${esc(i.title)}: ${esc(inFlight(i).join(', '))}</li>`).join('')}</ul>
-      <label class="check"><input type="checkbox" id="assign-skip-busy" checked /><span>${t('backlog.skip_value_uncheck_to_assign_anyway', { value: plural ? 'them' : 'it' })}</span></label>`;
+      <label class="check"><input type="checkbox" id="assign-skip-busy" checked /><span>${t('backlog.skip_busy_uncheck_to_assign_anyway', { count })}</span></label>`;
     $b('#assign-skip-busy').onchange = updateAssignNote;
   }
 
@@ -673,7 +673,7 @@
   // cancel the whole group. Resolves 'one', 'all' or null (keep it).
   function askUnqueue(i) {
     const others = i.queued.groupedWith.map((n) => `#${n}`).join(', ');
-    $b('#unqueue-message').textContent = `#${i.number} is queued as one run with ${others}. Remove only #${i.number} (the others still go as one run), or cancel the whole group?`;
+    $b('#unqueue-message').textContent = t('backlog.unqueue_grouped_message', { number: i.number, others });
     openModal('#unqueue-modal');
     return new Promise((resolve) => {
       const done = (v) => { closeModal('#unqueue-modal'); resolve(v); };
@@ -796,7 +796,7 @@
     }).join('');
     const loose = issues.filter((i) => i.state === 'open' && matchesEpic(i, NO_EPIC));
     const none = `<section class="bl-epic-card bl-epic-none">
-        <div class="bl-epic-head"><b class="bl-epic-title">${t('backlog.no_epic')}</b><span class="spacer"></span><span class="muted small">${loose.length} ${t('backlog.open_issue')}${loose.length === 1 ? '' : 's'}</span></div>
+        <div class="bl-epic-head"><b class="bl-epic-title">${t('backlog.no_epic')}</b><span class="spacer"></span><span class="muted small">${t('backlog.open_issues_count', { count: loose.length })}</span></div>
         ${loose.length ? `<button class="link-btn small" type="button" data-epic-filter="${NO_EPIC}">${t('backlog.show_them_in_the_list')}</button>` : `<p class="muted small">${t('backlog.every_open_issue_is_in_an')}</p>`}
       </section>`;
     return `${bar}<div class="bl-epics">${cards}${none}</div>`;
@@ -961,7 +961,7 @@
     const skips = skipped.map((s) => `<span class="bl-skipped small"><span class="warn-text">${t('backlog.skipped_number', { number: s.number })} ${esc(s.reason)}</span>
       <button class="link-btn small" type="button" data-unqueue="${s.number}" title="${t('common.dismiss')}">${t('backlog.dismiss')}</button></span>`).join('');
     box.innerHTML = `
-      <span><b>${t('backlog.queue')}</b> ${mode} ${n ? `${n} run${n > 1 ? 's' : ''} waiting · next ${esc((q.items[0].issues || [q.items[0]]).map((x) => `#${x.number}`).join(', '))} (${esc(q.items[0].workflowName || q.items[0].workflow)})` : 'empty'}</span>
+      <span><b>${t('backlog.queue')}</b> ${mode} ${n ? t('backlog.queue_runs_waiting_next', { count: n, issues: esc((q.items[0].issues || [q.items[0]]).map((x) => `#${x.number}`).join(', ')), workflow: esc(q.items[0].workflowName || q.items[0].workflow) }) : t('backlog.queue_empty')}</span>
       ${skips}
       <span class="spacer"></span>
       <button class="btn sm${q.paused ? ' primary' : ' ghost'}" type="button" data-pause="${q.paused ? 'off' : 'on'}">${q.paused ? t('backlog.resume') : t('backlog.pause')}</button>`;
@@ -974,13 +974,13 @@
     const issues = (bl.data?.issues || []).filter((i) => numbers.includes(i.number));
     const blocked = issues.filter((i) => archiveBlockReason(i)).map((i) => `#${i.number}: ${archiveBlockReason(i)}`);
     const ok = issues.filter((i) => !archiveBlockReason(i)).map((i) => i.number);
-    if (!ok.length) { bl.error = blocked.length ? `Not archived: ${blocked.join(' · ')}` : null; render(); return false; }
-    if (!await confirmDialog(`Archive ${ok.length === 1 ? 'issue' : `${ok.length} issues`}`, archiveConfirmText(ok, bl.data?.platform || bl.platform), t('backlog.archive'))) return false;
+    if (!ok.length) { bl.error = blocked.length ? t('backlog.not_archived', { reasons: blocked.join(' · ') }) : null; render(); return false; }
+    if (!await confirmDialog(t('backlog.archive_issues_title', { count: ok.length }), archiveConfirmText(ok, bl.data?.platform || bl.platform), t('backlog.archive'))) return false;
     try {
       const out = await api.archiveIssues(bl.projectId, ok);
       if (out.backlog) setData(out.backlog);
       const failed = out.results.filter((r) => !r.ok).map((r) => `#${r.number}: ${r.error}`);
-      bl.error = failed.length || blocked.length ? `Not archived: ${[...blocked, ...failed].join(' · ')}` : null;
+      bl.error = failed.length || blocked.length ? t('backlog.not_archived', { reasons: [...blocked, ...failed].join(' · ') }) : null;
     } catch (err) { bl.error = errMsg(err); }
     render();
     return true;
@@ -994,7 +994,7 @@
       const out = await api.restoreIssues(bl.projectId, [number]);
       if (out.backlog) setData(out.backlog);
       const failed = out.results.filter((r) => !r.ok).map((r) => `#${r.number}: ${r.error}`);
-      bl.error = failed.length ? `Not restored: ${failed.join(' · ')}` : null;
+      bl.error = failed.length ? t('backlog.not_restored', { reasons: failed.join(' · ') }) : null;
     } catch (err) { bl.error = errMsg(err); }
     render();
   }
@@ -1008,8 +1008,8 @@
     return [{
       id: `deprioritized:${bl.projectId}`,
       level: 'warning',
-      title: `${list.map((i) => `#${i.number}`).join(', ')} still ${list.length === 1 ? 'carries' : 'carry'} the retired deprioritized label.`,
-      text: 'Archive replaces it: closed as not planned, labelled archived, restorable from the Archived chip.',
+      title: t('backlog.deprioritized_still_carry', { count: list.length, issues: list.map((i) => `#${i.number}`).join(', ') }),
+      text: t('backlog.archive_replaces_deprioritized'),
       dismissible: false,
       actions: [
         {
@@ -1029,7 +1029,7 @@
   // last refresh is older than Settings › General › Backlog's interval and the base got merges since
   // (or none ever ran); "Refreshing…" (an info) with a link while a refresh run is live. Never starts
   // a run by itself. "Dismiss for today" is remembered by the service; × hides it until it is due again.
-  const ago = (h) => (h >= 48 ? `${Math.floor(h / 24)} days ago` : `${h} h ago`);
+  const ago = (h) => (h >= 48 ? t('backlog.days_ago', { days: Math.floor(h / 24) }) : t('backlog.hours_ago', { hours: h }));
   function refreshAlert() {
     const r = bl.data?.refresh;
     if (!project()?.repo || !r || !(r.running || r.due)) return [];
@@ -1038,17 +1038,17 @@
         id: `refreshing:${bl.projectId}`,
         level: 'info',
         title: t('backlog.refreshing_the_backlog'),
-        text: 'A Backlog Refresh run is in progress.',
+        text: t('backlog.a_backlog_refresh_run_is_in_progress'),
         dismissible: true,
         actions: [{ label: t('backlog.open_the_run'), onClick: () => openRun({ dataset: { run: r.running.runId, workflow: r.running.workflow || '' } }) }],
       }];
     }
-    const when = r.lastRun ? `Backlog refreshed ${ago(r.hoursAgo)}${r.merges != null ? ` · ${r.merges} merge${r.merges === 1 ? '' : 's'} since` : ''}` : 'Backlog never refreshed';
+    const when = r.lastRun ? t('backlog.backlog_refreshed_ago', { ago: ago(r.hoursAgo), merges: r.merges != null ? t('backlog.merges_since', { count: r.merges }) : '' }) : t('backlog.backlog_never_refreshed');
     return [{
       id: `refresh:${bl.projectId}`,
       level: 'warning',
       title: when,
-      text: `Issues may cite moved files or tasks already done.${r.lastRun ? ` Last Backlog Refresh: run ${r.lastRun.runId}, ${dateOf(r.lastRun.startedAt)}.` : ''}`,
+      text: `${t('backlog.issues_may_cite_moved_files')}${r.lastRun ? t('backlog.last_backlog_refresh_run', { runId: r.lastRun.runId, date: dateOf(r.lastRun.startedAt) }) : ''}`,
       dismissible: true,
       actions: [
         { label: t('backlog.refresh_now'), primary: true, title: t('backlog.opens_the_start_panel_for_the'), attrs: { 'data-refresh-now': '' }, onClick: refreshNow },
@@ -1090,15 +1090,15 @@
     const l = bl.data?.local;
     if (!l) return [];
     if (l.ahead > 0) {
-      const commits = `${l.ahead} commit${l.ahead === 1 ? '' : 's'}`;
+      const commits = t('backlog.commits_on_the_local_base', { count: l.ahead, base: l.base });
       return [{
         id: `push:${bl.projectId}`,
         level: 'info',
         title: t('backlog.not_pushed_2'),
         text: [
-          `${commits} on the local ${l.base}${l.issues?.length ? ` · closes ${issueRefs(l.issues)} when pushed` : ''}`,
-          l.behind > 0 ? `origin/${l.base} has ${l.behind} new commit${l.behind === 1 ? '' : 's'}: the push updates first` : '',
-          l.fetchError ? 'origin not reached: last known state' : '',
+          `${commits}${l.issues?.length ? t('backlog.closes_issues_when_pushed', { issues: issueRefs(l.issues) }) : ''}`,
+          l.behind > 0 ? t('backlog.origin_has_new_commits_push_updates_first', { count: l.behind, base: l.base }) : '',
+          l.fetchError ? t('backlog.origin_not_reached_last_known_state') : '',
         ].filter(Boolean).join(' · '),
         dismissible: true,
         actions: [
@@ -1166,8 +1166,8 @@
     const l = bl.data?.local;
     if (!l?.ahead) return;
     const p = project();
-    $b('#push-title').textContent = t('backlog.push_ahead_commit_value_to_origin', { ahead: l.ahead, value: l.ahead === 1 ? '' : 's', base: l.base });
-    $b('#push-message').textContent = `git push origin ${l.base} in ${l.repo || p?.folder || 'the project\'s repository'} (never forced).${l.issues?.length ? ` GitHub/GitLab closes ${issueRefs(l.issues)}.` : ''}`;
+    $b('#push-title').textContent = t('backlog.push_commits_to_origin', { count: l.ahead, base: l.base });
+    $b('#push-message').textContent = `${t('backlog.push_message', { base: l.base, repo: l.repo || p?.folder || t('backlog.the_project_s_repository') })}${l.issues?.length ? t('backlog.platform_closes_issues', { issues: issueRefs(l.issues) }) : ''}`;
     $b('#push-commits').innerHTML = (l.commits || []).map((c) => `<li><span class="mono">${esc(c.sha.slice(0, 8))}</span> ${esc(c.subject)}${c.issues.length ? ` <span class="muted">${t('backlog.closes_issues', { issues: esc(issueRefs(c.issues)) })}</span>` : ''}</li>`).join('');
     $b('#push-error').textContent = '';
     bl.conflictFiles = null;
@@ -1259,7 +1259,7 @@
       b.setAttribute('aria-pressed', String(b.dataset.mode === bl.mode));
     });
     const shownCount = (bl.data?.issues || []).filter(isShown).length;
-    $b('#bl-count').textContent = tab === 'board' && bl.data ? `${shownCount} issue${shownCount === 1 ? '' : 's'}` : '';
+    $b('#bl-count').textContent = tab === 'board' && bl.data ? t('backlog.issues_count', { count: shownCount }) : '';
     const n = shownSelected().length;
     $b('#btn-bl-assign').classList.toggle('hidden', !n);
     $b('#btn-bl-assign').textContent = t('backlog.assign_workflow_n', { n });

@@ -66,7 +66,7 @@ function closeDrawer() {
 }
 
 function renderDrawerCategories() {
-  const chips = [[null, 'All'], ...Object.entries(CATEGORIES)];
+  const chips = [[null, t('start_drawer.all')], ...Object.entries(CATEGORIES)];
   $('#drawer-categories').innerHTML = chips.map(([id, label]) =>
     `<button type="button" class="chip ${state.category === id ? 'active' : ''}" data-cat="${id ?? ''}">${esc(label)}</button>`).join('');
   $('#drawer-categories').querySelectorAll('.chip').forEach((c) => (c.onclick = () => {
@@ -87,9 +87,9 @@ function renderWorkflowOptions(preferred) {
   const pipes = startablePipelines().filter((p) => !state.category || p.category === state.category);
   const sel = $('#wf-select');
   sel.disabled = !list.length && !pipes.length;
-  const options = list.map((w) => `<option value="${esc(w.file)}">${esc(w.name)}${w.version ? ' v' + esc(w.version) : ''}${w.error ? ' (error)' : ''}</option>`).join('');
+  const options = list.map((w) => `<option value="${esc(w.file)}">${esc(w.name)}${w.version ? ' v' + esc(w.version) : ''}${w.error ? t('start_drawer.error_suffix') : ''}</option>`).join('');
   sel.innerHTML = pipes.length
-    ? `<optgroup label="Workflows">${options}</optgroup><optgroup label="Pipelines">${pipes.map((p) => `<option value="${esc(PIPE + p.file)}">⛓ ${esc(p.name)}</option>`).join('')}</optgroup>`
+    ? `<optgroup label="${t('start_drawer.workflows')}">${options}</optgroup><optgroup label="${t('start_drawer.pipelines')}">${pipes.map((p) => `<option value="${esc(PIPE + p.file)}">⛓ ${esc(p.name)}</option>`).join('')}</optgroup>`
     : options;
   if (!list.length && !pipes.length) {
     state.wf = null;
@@ -97,7 +97,7 @@ function renderWorkflowOptions(preferred) {
     $('#drawer-pipeline').classList.add('hidden');
     const hidden = state.workflows.some((w) => (!state.category || w.category === state.category) && hiddenFromStart(w));
     $('#wf-desc').textContent = hidden
-      ? `Every ${state.category ? `${CATEGORIES[state.category]} ` : ''}workflow is hidden from Start: Workflows › Definitions › Show in Start brings one back.`
+      ? (state.category ? t('start_drawer.every_category_workflow_is_hidden', { category: CATEGORIES[state.category] }) : t('start_drawer.every_workflow_is_hidden'))
       : state.category
       ? t('start_drawer.no_value_workflows_yet_add_a', { value: CATEGORIES[state.category], category: state.category })
       : t('start_drawer.no_yaml_files_found_in_workflows');
@@ -149,7 +149,7 @@ function renderAnalysisEstimate() {
   api.architectureEstimate(projectId).then(({ estimate }) => {
     if (state.wf !== wf || $('#project-select').value !== projectId) return;
     el.textContent = estimate
-      ? t('start_drawer.the_analysis_is_a_real_model_2', { value: Number(estimate.usd).toFixed(2), basis: estimate.basis, value2: estimate.basis === 1 ? 'analysis' : 'analyses' })
+      ? t('start_drawer.analysis_estimate', { cost: Number(estimate.usd).toFixed(2), count: estimate.basis })
       : t('start_drawer.the_analysis_is_a_real_model_3');
   }).catch(() => { el.textContent = ''; el.classList.add('hidden'); });
 }
@@ -260,7 +260,7 @@ function renderDrawerPipeline() {
   if (!p) { box.innerHTML = ''; return; }
   for (const [k, v] of Object.entries(p.stages[0].inputs || {})) WorkflowInputs.set($('#drawer'), k, v);
   const names = Object.fromEntries(state.workflows.map((w) => [w.file, w.name]));
-  box.innerHTML = `<div class="drawer-pipeline-head"><span class="chain-banner-title">${t('start_drawer.pipeline')}</span><span class="badge">${p.stages.length} ${t('start_drawer.stages')}</span></div>
+  box.innerHTML = `<div class="drawer-pipeline-head"><span class="chain-banner-title">${t('start_drawer.pipeline')}</span><span class="badge">${t('start_drawer.stages_count', { count: p.stages.length })}</span></div>
     ${ChainModel.pipelineStagesHtml(p, { names, current: 0 })}
     <p class="muted small">${t('start_drawer.you_give_the_first_stage_s')}</p>
     <p class="muted small" data-pipe-estimate>${t('start_drawer.estimating_the_cost')}</p>`;
@@ -268,7 +268,7 @@ function renderDrawerPipeline() {
   api.pipelineEstimate(p.file).then((est) => {
     const el = box.querySelector('[data-pipe-estimate]');
     if (!el || state.pipeline !== p) return;
-    el.textContent = `${est.text || 'No past runs to estimate from.'}${est.productOwner ? ' The Product Owner places the issues: nothing starts until you press Start on the roadmap.' : ''}`;
+    el.textContent = `${est.text || t('start_drawer.no_past_runs_to_estimate_from')}${est.productOwner ? t('start_drawer.the_product_owner_places_the_issues') : ''}`;
   }).catch(() => box.querySelector('[data-pipe-estimate]')?.remove());
 }
 

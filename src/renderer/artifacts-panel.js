@@ -30,19 +30,21 @@
 // renderDelimited, errMsg, openArtifactsAt, dateOf) and ImageViewer.
 (() => {
   // #225: the categories in their order (the service gives each file its `category`)
+  // [id, label]: the label read in the interface language each time (a getter at index 1)
+  const labelled = (id, key) => Object.defineProperty([id], 1, { get: () => t(key), enumerable: true });
   const CATEGORIES = [
-    ['result', 'Result'],
-    ['screenshots', 'Screenshots & images'],
-    ['tests', 'Tests'],
-    ['reports', 'Reports'],
-    ['process', 'Process'],
+    labelled('result', 'artifacts_panel.category_result'),
+    labelled('screenshots', 'artifacts_panel.category_screenshots'),
+    labelled('tests', 'artifacts_panel.category_tests'),
+    labelled('reports', 'artifacts_panel.category_reports'),
+    labelled('process', 'artifacts_panel.category_process'),
   ];
   const PRODUCED = new Set(['result', 'screenshots', 'tests', 'reports']);
   const KINDS = [
-    ['image', 'Images'],
+    labelled('image', 'artifacts_panel.kind_images'),
     ['markdown', 'Markdown'],
     ['json', 'JSON'],
-    ['log', 'Logs'],
+    labelled('log', 'artifacts_panel.kind_logs'),
   ];
   const panels = new Set();
   const lists = new Map(); // runId -> { run, files, evidence, at } (the last listing)
@@ -50,7 +52,7 @@
   const slash = (p) => String(p || '').replace(/\\/g, '/');
   const dirOf = (p) => slash(p).replace(/\/[^/]*$/, '');
   const baseOf = (p) => slash(p).split('/').pop();
-  const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+  const sideWord = (side) => (side === 'original' ? t('artifacts_panel.side_original') : side === 'modified' ? t('artifacts_panel.side_modified') : side);
 
   function groupOf(f) {
     const rel = slash(f.rel || f.name);
@@ -94,7 +96,7 @@
     const cats = CATEGORIES.filter(([id]) => counts[id] || filter.category === id).map(([id, label]) => chip('category', id, label, counts[id] || 0, filter.category === id));
     const kindChips = KINDS.filter(([id]) => kinds[id] || filter.kind === id).map(([id, label]) => chip('kind', id, label, kinds[id] || 0, filter.kind === id));
     return `<div class="ap-filters">
-      <div class="seg sm" role="group" aria-label="${t('artifacts_panel.artifacts_view')}">${view('produced', 'Produced', 'What the run produced: its result, screenshots, tests and reports')}${view('all', 'Show all', 'Also the handoff notes, the decision log and the agents\' logs')}</div>
+      <div class="seg sm" role="group" aria-label="${t('artifacts_panel.artifacts_view')}">${view('produced', t('artifacts_panel.produced'), t('artifacts_panel.produced_title'))}${view('all', t('artifacts_panel.show_all'), t('artifacts_panel.show_all_title'))}</div>
       ${cats.length ? `<div class="ap-chips" role="group" aria-label="${t('artifacts_panel.filter_by_category')}">${cats.join('')}</div>` : ''}
       ${kindChips.length > 1 || filter.kind ? `<div class="ap-chips" role="group" aria-label="${t('artifacts_panel.filter_by_kind')}">${kindChips.join('')}</div>` : ''}
     </div>`;
@@ -194,7 +196,7 @@
       const list = Array.isArray(x.changes) ? x.changes : [];
       // changesReported: no git diff (a simulated run has no worktree, #115), the developer's files_changed
       const reported = x.changesReported || null;
-      const label = reported === 'simulated' ? 'simulated' : 'reported by the developer';
+      const label = reported === 'simulated' ? t('artifacts_panel.changes_simulated') : t('artifacts_panel.changes_reported');
       out.push(`<div class="ap-group"><div class="ap-group-head">${t('artifacts_panel.changed_files')}${list.length ? ` <span class="muted">${list.length}</span>` : ''}${reported ? ` <span class="badge" title="${t('artifacts_panel.no_git_diff_for_this_run')}">${label}</span>` : ''}</div>
         ${typeof x.changes === 'string' ? `<p class="muted small ap-pad">${esc(x.changes)}</p>` : !list.length ? `<p class="muted small ap-pad">${reported ? t('artifacts_panel.the_developer_reported_no_changed_files') : t('artifacts_panel.no_changes_against_the_base')}</p>`
     : list.map((c) => {
@@ -214,7 +216,7 @@
   const listWrap = (html) => `<div class="ap-list" data-testid="artifact-list">${html}</div>`;
 
   function listHtml(p) {
-    const head = `<div class="ap-head"><span class="muted small">${p.files ? `${p.files.length} artifact${p.files.length === 1 ? '' : 's'}` : ''}</span>
+    const head = `<div class="ap-head"><span class="muted small">${p.files ? t('artifacts_panel.artifacts_count', { count: p.files.length }) : ''}</span>
       <span class="row">${p.run?.runDir ? `<button type="button" class="btn sm ghost" data-ap-folder title="${t('artifacts_panel.the_run_s_whole_folder_its')}">${t('artifacts_panel.open_run_folder')}</button>` : ''}
       ${p.runId ? `<button type="button" class="btn sm ghost" data-ap-full title="${t('artifacts_panel.all_of_this_run_s_files')}">${t('artifacts_panel.open_in_artifacts')}</button>` : ''}</span></div>`;
     p.context = [];
@@ -269,9 +271,9 @@
 
   // "Original (main)" / "Modified (<branch> @<short sha>)", the parts the manifest knows
   function sideLabel(ev, x) {
-    if (x.side === 'original') return ev?.base ? `Original (${shortRef(ev.base)})` : 'Original';
+    if (x.side === 'original') return ev?.base ? t('artifacts_panel.original_ref', { ref: shortRef(ev.base) }) : t('artifacts_panel.original');
     const ref = [ev?.branch, x.commit ? `@${String(x.commit).slice(0, 7)}` : ''].filter(Boolean).join(' ');
-    return ref ? `Modified (${ref})` : 'Modified';
+    return ref ? t('artifacts_panel.modified_ref', { ref }) : t('artifacts_panel.modified');
   }
 
   // An image with its pair: { key, issue, caption, sides: { original?, modified? } }
@@ -316,7 +318,7 @@
     };
     const isNew = sides.length === 1 && sides[0].side === 'modified' && fresh.has(s.key);
     const only = isNew ? `<span class="badge ap-shot-badge new" title="${t('artifacts_panel.the_change_adds_this_element_the')}">${t('artifacts_panel.new_element_no_original')}</span>`
-      : sides.length === 1 ? `<span class="badge">${sides[0].side} ${t('artifacts_panel.only')}</span>` : '';
+      : sides.length === 1 ? `<span class="badge">${t('artifacts_panel.side_only', { side: esc(sideWord(sides[0].side)) })}</span>` : '';
     return `<div class="ap-shot" data-testid="artifact-shot"><div class="ap-shot-head"><b class="ap-shot-title" title="${esc(s.key)}">${esc(s.caption || s.key)}</b>${only}</div>
       <div class="ap-pair${sides.length === 1 ? ' single' : ''}">${sides.map(fig).join('')}</div></div>`;
   }
@@ -327,11 +329,11 @@
     const fresh = cap.new_elements || [];
     const errors = cap.errors || [];
     const parts = [
-      cap.taken ? `${plural(cap.taken, 'screenshot')} of ${plural(cap.screens || 0, 'screen')}` : '',
-      fresh.length ? `${plural(fresh.length, 'new element')} (no original)` : '',
-      errors.length ? plural(errors.length, 'error') : '',
+      cap.taken ? t('artifacts_panel.screenshots_of_screens', { shots: t('artifacts_panel.screenshots_count', { count: cap.taken }), screens: t('artifacts_panel.screens_count', { count: cap.screens || 0 }) }) : '',
+      fresh.length ? t('artifacts_panel.new_elements_count', { count: fresh.length }) : '',
+      errors.length ? t('artifacts_panel.errors_count', { count: errors.length }) : '',
     ].filter(Boolean);
-    const title = fresh.map((x) => `${x.caption || x.name}: not on the original (new element)`).join('\n');
+    const title = fresh.map((x) => t('artifacts_panel.not_on_the_original', { name: x.caption || x.name })).join('\n');
     const summary = parts.length ? `<p class="muted small ap-pad" data-testid="screenshots-summary"${title ? ` title="${esc(title)}"` : ''}>${esc(parts.join('; '))}</p>` : '';
     const lines = errors.map((e) => `${e.caption || e.name}${e.side ? ` (${e.side})` : ''}: ${e.error}`);
     return summary + lines.map((t) => `<p class="error small ap-pad" data-testid="screenshot-error" title="${esc(t)}">${esc(t)}</p>`).join('');
@@ -340,7 +342,7 @@
   // A round's head, "<step> · round <n>" (#245: the step's readable name; `stepNames` from the run's
   // workflow.started when the caller has them), the step id in its tooltip
   const stepLabel = (p, step) => (window.displayName ? window.displayName(step, p.stepNames || p.run?.stepNames) : step);
-  const roundText = (p, step, round) => `${stepLabel(p, step)} · round ${round}`;
+  const roundText = (p, step, round) => t('artifacts_panel.step_round', { step: stepLabel(p, step), round });
 
   // The gate right after a screenshots step (#144, extras.capture: its output): only that step's
   // round, original/modified side by side with captions, the failed captures listed; every other
@@ -368,8 +370,8 @@
     const issues = [...new Set(shots.map((s) => s.issue || ''))];
     const cap = captureFor(p, ev);
     const fresh = newElementKeys(cap);
-    const where = ev.legacy ? 'recorded before evidence rounds' : ev.final ? roundText(p, ev.final.step, ev.final.round) : '';
-    const whereTip = `The last round that captured${ev.final && !ev.legacy ? ` (${ev.final.step})` : ''}`;
+    const where = ev.legacy ? t('artifacts_panel.recorded_before_evidence_rounds') : ev.final ? roundText(p, ev.final.step, ev.final.round) : '';
+    const whereTip = ev.final && !ev.legacy ? t('artifacts_panel.last_round_that_captured_step', { step: ev.final.step }) : t('artifacts_panel.last_round_that_captured');
     const ordered = [];
     const body = issues.map((iss) => {
       const head = issues.length > 1 || iss ? `<div class="ap-sub-head">${iss ? t('artifacts_panel.issue_iss', { iss: esc(iss) }) : t('artifacts_panel.other_screens')}</div>` : '';
@@ -389,7 +391,7 @@
     if (!old.length) return '';
     const rounds = [...(ev.rounds || [])].reverse();
     const item = (x) => `<button type="button" class="ap-file" data-ap-hist="${esc(x.file)}" data-ap-img="${esc(x.file)}" title="${esc(x.path)}">${artKindIcon('image')}
-      <span class="ap-file-main"><span class="ap-file-name">${esc(x.caption || x.key)}</span><span class="ap-file-sub muted">${esc(x.key)}</span></span><span class="badge">${esc(x.side)}</span></button>`;
+      <span class="ap-file-main"><span class="ap-file-name">${esc(x.caption || x.key)}</span><span class="ap-file-sub muted">${esc(x.key)}</span></span><span class="badge">${esc(sideWord(x.side))}</span></button>`;
     const groups = rounds.map((r) => {
       const list = old.filter((x) => x.step === r.step && x.round === r.round);
       return list.length ? `<div class="ap-sub-head" title="${esc(r.step)}">${esc(roundText(p, r.step, r.round))}</div>${list.map(item).join('')}` : '';

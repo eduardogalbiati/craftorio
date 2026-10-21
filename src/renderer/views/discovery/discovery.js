@@ -1114,7 +1114,7 @@
 
   async function removeAttachment(name) {
     const id = dv.open.id;
-    if (!(await confirmDialog(t('discovery.remove_attachment'), t('discovery.delete_name_from_this_card', { name }), t('discovery.remove')))) return;
+    if (!(await confirmDialog(t('discovery.remove_attachment'), t('discovery.delete_name_from_this_card', { name }), t('common.remove')))) return;
     try {
       await api.removeDiscoveryAttachment(dv.openProject, id, name);
       dv.previews.delete(`${id}/${name}`);

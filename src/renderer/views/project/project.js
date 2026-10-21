@@ -101,7 +101,7 @@ function renderProjectView() {
     <dl class="kv">
       <dt>${t('project.folder')}</dt><dd class="${p && !p.exists ? 'warn-text' : ''}">${esc(p?.folder || '—')}${p && !p.exists ? t('project.not_found') : ''}</dd>
       <dt>${t('project.repository')}</dt><dd>${esc(p?.repo || '—')}</dd>
-      ${pv.local?.ahead > 0 ? `<dt>${t('project.not_pushed')}</dt><dd class="warn-text">${pv.local.ahead} ${t('project.commit_value_on_the_local_base', { value: pv.local.ahead === 1 ? '' : 's', base: esc(pv.local.base), value2: pv.local.issues?.length ? ` (closes ${esc(pv.local.issues.map((n) => `#${n}`).join(', '))})` : '' })}</dd>` : ''}
+      ${pv.local?.ahead > 0 ? `<dt>${t('project.not_pushed')}</dt><dd class="warn-text">${t(pv.local.issues?.length ? 'project.commits_on_local_base_closes' : 'project.commits_on_local_base', { count: pv.local.ahead, base: esc(pv.local.base), issues: esc((pv.local.issues || []).map((n) => `#${n}`).join(', ')) })}</dd>` : ''}
     </dl>`;
   renderRunList(pv, {
     prefix: 'project', box: '#project-runs', empty: t('project.no_workflows_have_run_in_this'),

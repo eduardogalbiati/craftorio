@@ -29,7 +29,7 @@ function renderRunGates() {
     // the choices, then "Interact with Oracle" at the end of the row (#183)
     const buttons = (g.choices
       ? gateChoices(g).map((c, i) => `<button type="button" class="btn sm ${i === 0 ? 'primary' : 'ghost'}" data-choice="${esc(c.id)}"${c.intent ? ` data-intent="${esc(c.intent)}" title="${esc(c.title)}"` : ''}${c.feedback_required ? ' data-needs-text="1"' : ''} data-testid="run-gate-choice">${esc(c.label)}</button>`).join('')
-      : `<button type="button" class="btn sm ghost" data-testid="run-gate-choice" data-answer="false">${esc(g.reject?.label || t('run.reject'))}</button><button type="button" class="btn sm primary" data-testid="run-gate-choice" data-answer="true">${esc(g.approve?.label || t('run.approve'))}</button>`)
+      : `<button type="button" class="btn sm ghost" data-testid="run-gate-choice" data-answer="false">${esc(g.reject?.label || t('run.reject'))}</button><button type="button" class="btn sm primary" data-testid="run-gate-choice" data-answer="true">${esc(g.approve?.label || t('common.approve'))}</button>`)
       + (window.GateOracle?.gateOracleButtonHtml(g) || '');
     const field = g.feedback ? `<label class="duo-ask-label">${esc(g.feedback.label || t('run.instructions_optional'))}</label>
       <textarea class="duo-ask-text run-gate-feedback" rows="3" placeholder="${esc(g.feedback.placeholder || '')}"></textarea>` : '';
@@ -164,7 +164,7 @@ function testsPlanHtml(plan) {
 function testedPillHtml(r) {
   if (r.tested !== 'not green') return '';
   const fails = (r.testedFailures || []).map((f) => `${f.test}${f.file ? ` (${f.file})` : ''}${f.class ? `: ${f.class}` : ''}`);
-  const title = `The run reached the build without a green suite.${fails.length ? `\n${fails.join('\n')}` : ''}`;
+  const title = `${t('run.reached_the_build_without_a_green_suite')}${fails.length ? `\n${fails.join('\n')}` : ''}`;
   return ` <span class="badge warn" data-testid="run-tested-pill" title="${esc(title)}">${t('run.not_tested_green')}</span>`;
 }
 
@@ -181,7 +181,7 @@ function suiteCardsHtml(runId, stepNames) {
   return [...last].map(([stepId, out]) => {
     const sel = out.selection;
     const listed = Object.values(sel.reasons || {}).length > 0 && Object.values(sel.reasons).every((why) => /^listed by /.test(why));
-    const scope = sel.mode === 'all' ? 'Whole suite' : listed ? 'Listed tests' : out.affected && out.scope === 'full' ? 'Affected tests, then the whole suite' : 'Affected tests only';
+    const scope = t(sel.mode === 'all' ? 'run.suite_whole' : listed ? 'run.suite_listed' : out.affected && out.scope === 'full' ? 'run.suite_affected_then_whole' : 'run.suite_affected_only');
     const reasons = Object.entries(sel.reasons || {});
     const more = reasons.length - SUITE_REASONS_SHOWN;
     const list = reasons.length
@@ -192,7 +192,7 @@ function suiteCardsHtml(runId, stepNames) {
     return `<div class="run-suite-card" data-testid="run-suite-card">
       <div><b title="${esc(stepId)}">${esc(agentLabel(stepId, stepNames))}</b> <span class="badge" data-testid="run-suite-scope" title="${esc(sel.why || '')}">${esc(scope)}</span>${out.round ? ` <span class="muted small">${t('run.round')} ${esc(out.round)}</span>` : ''}</div>
       <div class="small run-suite-selection" data-testid="run-suite-selection">${list}${sel.why ? `<div class="muted">${esc(sel.why)}</div>` : ''}</div>
-      <div class="row">${logBtn(affectedLog, listed ? 'Listed tests\' log' : 'Affected tests\' log', 'run-suite-affected-log')}${out.affected && out.scope === 'full' ? logBtn(out.log, 'Whole suite\'s log', 'run-suite-full-log') : ''}</div>
+      <div class="row">${logBtn(affectedLog, t(listed ? 'run.suite_listed_log' : 'run.suite_affected_log'), 'run-suite-affected-log')}${out.affected && out.scope === 'full' ? logBtn(out.log, t('run.suite_whole_log'), 'run-suite-full-log') : ''}</div>
     </div>`;
   }).join('');
 }
@@ -221,7 +221,7 @@ function scratchHtml(runId) {
   const s = scratchOfRun.get(runId)?.info;
   if (!s) return '';
   return `<div class="small run-scratch" title="${t('run.a_scratch_copy_of_the_workspace', { dir: esc(s.dir) })}">`
-    + `Scratch workspace (${esc(s.files)} file${s.files === 1 ? '' : 's'}, ${esc(fmtSize(s.bytes))}) <button class="btn sm ghost" id="btn-run-scratch">${t('run.open_folder')}</button></div>`;
+    + `${t('run.scratch_workspace_files', { count: s.files, size: esc(fmtSize(s.bytes)) })} <button class="btn sm ghost" id="btn-run-scratch">${t('run.open_folder')}</button></div>`;
 }
 
 // #384: the run that resumed an ended run (its row's resumedBy, runs:list { ids }), read at most every

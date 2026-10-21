@@ -193,7 +193,7 @@
         <button type="button" class="btn sm ghost" data-act="left" ${i ? '' : 'disabled'} title="${t('builder.move_before_the_previous_desk')}">${t('builder.move_up')}</button>
         <button type="button" class="btn sm ghost" data-act="right" ${i < last ? '' : 'disabled'} title="${t('builder.move_after_the_next_desk')}">${t('builder.move_down')}</button>
         <span class="spacer"></span>
-        <button type="button" class="btn sm ghost danger" data-act="remove" ${last ? '' : 'disabled'}>${t('builder.remove')}</button>
+        <button type="button" class="btn sm ghost danger" data-act="remove" ${last ? '' : 'disabled'}>${t('common.remove')}</button>
       </div>` : '';
     const idField = `<div class="field"><label for="wb-id">${t('builder.id')}</label><input type="text" id="wb-id" class="mono" value="${esc(s.id)}" spellcheck="false" ${structural() ? '' : 'disabled'} />
       ${structural() ? `<div class="hint">${t('builder.lowercase_letters_digits_and_used_in')}</div>` : ''}</div>

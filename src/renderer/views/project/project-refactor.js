@@ -23,7 +23,6 @@
   // dismissing (a proposal id), adding, prioritizing, busy (a proposal id), seq }
   let cur = null;
 
-  const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
   const usd = (v) => (typeof fmtUsd === 'function' ? fmtUsd(v) : `$${Number(v || 0).toFixed(2)}`);
   const day = (iso) => String(iso || '').slice(0, 10);
   const byRank = (a, b) => (a.rank || Infinity) - (b.rank || Infinity) || String(a.createdAt || '').localeCompare(String(b.createdAt || ''));
@@ -40,7 +39,7 @@
     if (cur !== c || seq !== c.seq) return;
     const value = (r) => (r.status === 'fulfilled' ? r.value : null);
     c.loaded = true;
-    c.loadError = list.status === 'rejected' ? `Could not read the proposals: ${errMsg(list.reason)}` : null;
+    c.loadError = list.status === 'rejected' ? t('project_refactor.could_not_read_the_proposals', { error: errMsg(list.reason) }) : null;
     c.list = value(list) || [];
     c.cadence = value(cadence) || c.cadence;
     c.reports = value(reports) || [];
@@ -62,7 +61,7 @@
 
   function cadenceMarkup(c) {
     const cd = c.cadence || { on: false, every: 10, nextIn: 10, ready: false };
-    const next = cd.nextIn > 0 ? `next in ${plural(cd.nextIn, 'run')}` : 'due at the next finished run';
+    const next = cd.nextIn > 0 ? t('project_refactor.next_in_runs', { count: cd.nextIn }) : t('project_refactor.due_at_the_next_finished_run');
     return `<div class="row rf-cadence" data-testid="refactor-cadence">
       <label class="check"><input type="checkbox" data-testid="refactor-cadence-toggle" data-rf-cadence-on aria-label="${t('project_refactor.add_a_refactor_to_the_roadmap_2')}" ${cd.on ? 'checked' : ''} /><span>${t('project_refactor.add_a_refactor_to_the_roadmap')}</span></label>
       <input type="number" class="rf-every" min="3" max="50" step="1" value="${Number(cd.every) || 10}" data-testid="refactor-cadence-every" data-rf-cadence-every aria-label="${t('project_refactor.runs_between_two_refactors_3_to')}" />
@@ -145,7 +144,7 @@
       <span class="spacer"></span>
       ${c.adding ? '' : `<button type="button" class="btn sm ghost" data-rf-add data-testid="refactor-add">${t('project_refactor.write_a_proposal')}</button>`}
     </div>`;
-    const empty = c.filter === 'dismissed' ? 'No dismissed proposal.' : 'No open proposal: send findings from the Architecture tab or write one.';
+    const empty = c.filter === 'dismissed' ? t('project_refactor.no_dismissed_proposal') : t('project_refactor.no_open_proposal');
     return `${filters}${c.adding ? addFormMarkup() : ''}
       ${shown.length ? `<ul class="rf-list" data-testid="refactor-proposals">${shown.map((p) => rowMarkup(c, p)).join('')}</ul>` : `<p class="muted small">${empty}</p>`}`;
   }
@@ -206,7 +205,7 @@
     await act(async () => {
       try {
         const out = await api.prioritizeRefactors(c.id);
-        if (out) showToast(`The Product Owner ranked ${plural(out.ranking?.length || 0, 'proposal')}${out.costUsd ? ` (${usd(out.costUsd)})` : ''}`);
+        if (out) showToast(`${t('project_refactor.the_po_ranked_proposals', { count: out.ranking?.length || 0 })}${out.costUsd ? ` (${usd(out.costUsd)})` : ''}`);
       } finally {
         c.prioritizing = false;
       }
@@ -215,7 +214,7 @@
 
   const fileIssue = (id) => act(async (c) => {
     const out = await api.fileRefactorIssue(c.id, id, {});
-    if (out?.preview) showToast(t('project_refactor.simulation_the_issue_would_be_filed', { value: out.command || 'the tracker\'s CLI' }));
+    if (out?.preview) showToast(t(out.command ? 'project_refactor.simulation_filed_with' : 'project_refactor.simulation_filed_with_tracker_cli', { command: out.command }));
     else if (out?.proposal?.issue) showToast(t('project_refactor.filed_as_issue', { issue: out.proposal.issue }));
   }, { busy: id });
 
@@ -226,11 +225,11 @@
 
   function dismiss(id) {
     const reason = cur.box.querySelector('[data-rf-reason]')?.value.trim() || '';
-    if (!reason) { cur.error = 'Say why the proposal is dismissed: the reason stays with it.'; render(); return; }
+    if (!reason) { cur.error = t('project_refactor.say_why_the_proposal_is_dismissed'); render(); return; }
     cur.dismissing = null;
     act(async (c) => {
       const out = await api.dismissRefactorProposal(c.id, id, reason);
-      showToast(t('project_refactor.dismissed_value', { value: out?.title || 'the proposal' }));
+      showToast(out?.title ? t('project_refactor.dismissed_title', { title: out.title }) : t('project_refactor.dismissed_the_proposal'));
     });
   }
 

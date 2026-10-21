@@ -110,7 +110,7 @@
     const live = oracleState(ref);
     const waits = busy ?? live.busy;
     const thinks = !waits && (thinking ?? live.thinking);
-    const tip = waits ? 'The Oracle is answering another question: yours waits in line' : title;
+    const tip = waits ? t('gate_oracle.answering_another_question') : title;
     return `<button type="button" class="btn sm ghost gate-oracle" ${attrs} title="${escHtml(tip)}">${avatarHtml(thinks)}<span class="gate-oracle-label">${waits ? t('gate_oracle.oracle_is_answering') : escHtml(label)}</span></button>`;
   }
 

@@ -22,7 +22,7 @@ async function refreshSkills() {
         <span class="muted small">${s.updatedAt ? `updated ${esc(dateOf(s.updatedAt))}` : ''}${s.files?.length ? t('skills.length_file_s', { length: s.files.length }) : ''}</span>
         <span class="spacer"></span>
         <button class="btn sm ghost" data-act="open">${t('skills.folder')}</button>
-        <button class="btn sm ghost danger" data-act="remove">${t('skills.remove')}</button>
+        <button class="btn sm ghost danger" data-act="remove">${t('common.remove')}</button>
       </div>
     </div>`).join('');
   box.querySelectorAll('.card').forEach((c) => (c.onclick = async (e) => {
@@ -30,7 +30,7 @@ async function refreshSkills() {
     const act = e.target.closest('[data-act]')?.dataset.act;
     if (act === 'open') return api.openPath(s.path);
     if (act === 'remove') {
-      if (await confirmDialog(t('skills.remove_skill'), t('skills.move_the_skill_name_to_the', { name: s.name }), t('skills.remove'))) { await api.removeSkill(s.id); refreshSkills(); }
+      if (await confirmDialog(t('skills.remove_skill'), t('skills.move_the_skill_name_to_the', { name: s.name }), t('common.remove'))) { await api.removeSkill(s.id); refreshSkills(); }
       return;
     }
     openSkillModal(s);

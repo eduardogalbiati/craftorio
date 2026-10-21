@@ -8,6 +8,7 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 const PoCalibration = require('../src/shared/po-calibration');
+const { withI18n } = require('./i18n-sandbox');
 
 const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'views', 'backlog', 'backlog-po-settings.js'), 'utf8');
 
@@ -30,7 +31,7 @@ function loadRenderChip() {
   for (const [name, code] of Object.entries({ stLit, agentFn, savedFn, savedCostFn, renderChipFn, renderCostChipFn })) assert.ok(code, `${name} not found in backlog-po-settings.js: the source moved`);
   const elements = {};
   const $s = (sel) => elements[sel] || (elements[sel] = fakeEl());
-  const sandbox = { PoCalibration, esc, $s, window: {} };
+  const sandbox = withI18n({ PoCalibration, esc, $s, window: {} });
   vm.createContext(sandbox);
   vm.runInContext(`${stLit}\n${agentFn}\n${savedFn}\n${savedCostFn}\n${renderChipFn}\n${renderCostChipFn}\nthis.renderChip = renderChip; this.st = st;`, sandbox);
   return { renderChip: sandbox.renderChip, st: sandbox.st, window: sandbox.window, chipEl: () => elements['#po-calib-chip'] };
@@ -85,7 +86,7 @@ function loadSave({ saveAgent } = {}) {
   const calls = [];
   const events = [];
   const defaultSaveAgent = async (id, data) => { calls.push({ id, data }); return { appearance: data.appearance, model: data.model, effort: data.effort, calibration: data.calibration }; };
-  const sandbox = {
+  const sandbox = withI18n({
     PoCalibration,
     $s,
     window: { productOwnerAgent: { appearance: { body: '#000000' }, model: 'claude-opus-5-5', effort: 'high', calibration: 2, cost: 1 }, ChatModels: { EFFORTS: ['low', 'medium', 'high', 'xhigh'] } },
@@ -93,7 +94,7 @@ function loadSave({ saveAgent } = {}) {
     errMsg: (e) => e.message,
     document: { dispatchEvent: (ev) => events.push(ev) },
     CustomEvent: class CustomEvent { constructor(type) { this.type = type; } },
-  };
+  });
   vm.createContext(sandbox);
   vm.runInContext(`${productOwnerConst}\n${stLit}\n${agentFn}\n${savedFn}\n${savedCostFn}\n${renderEffortFn}\n${statusFn}\n${saveFn}\nthis.save = save;`, sandbox);
   return { save: sandbox.save, window: sandbox.window, calls, events, statusEl: () => elements['#po-set-status'] };

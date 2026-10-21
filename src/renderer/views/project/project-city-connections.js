@@ -21,7 +21,7 @@
     let pins = [];
     let destroyed = false;
 
-    const rowHtml = (r) => `<li><button type="button" class="pcc-file${pins.includes(r.path) ? ' on' : ''}" data-pcc-file="${esc(r.path)}" data-testid="city-connection" aria-pressed="${pins.includes(r.path)}" title="${esc(t('project_city_connections.path_requires_requires_required_by_requiredby', { path: r.path, requires: r.requires, requiredBy: r.requiredBy, value: pins.includes(r.path) ? 'unpin' : 'fly to it and pin' }))}">`
+    const rowHtml = (r) => `<li><button type="button" class="pcc-file${pins.includes(r.path) ? ' on' : ''}" data-pcc-file="${esc(r.path)}" data-testid="city-connection" aria-pressed="${pins.includes(r.path)}" title="${esc(t(pins.includes(r.path) ? 'project_city_connections.file_unpin' : 'project_city_connections.file_fly_and_pin', { path: r.path, requires: r.requires, requiredBy: r.requiredBy }))}">`
       + `<span class="pcc-name"><b>${esc(base(r.path))}</b><small class="r3d-mono">${esc(dir(r.path))}</small></span>`
       + `<span class="pcc-counts"><em class="out" title="${t('project_city_connections.requires')}">${r.requires}</em><em class="in" title="${t('project_city_connections.required_by')}">${r.requiredBy}</em></span></button></li>`;
 

@@ -141,7 +141,7 @@
           ${a.calibration ? `<span class="badge" title="${esc(PoCalibration.tooltip(a.calibration))}">${esc(PoCalibration.nameOf(a.calibration))}</span> <span class="badge" title="${esc(PoCalibration.cost.tooltip(a.cost))}">${esc(PoCalibration.cost.nameOf(a.cost))}</span>` : ''}
           <span class="spacer"></span>
           <button class="btn sm ghost" data-act="edit">${a.system ? t('agents.customize') : t('agents.edit')}</button>
-          ${a.system ? '' : `<button class="btn sm ghost danger" data-act="remove">${t('agents.remove')}</button>`}
+          ${a.system ? '' : `<button class="btn sm ghost danger" data-act="remove">${t('common.remove')}</button>`}
         </div>` : ''}
       </div>`;
   }
@@ -211,7 +211,7 @@
   }
 
   async function removeAgent(a) {
-    if (!(await confirmDialog(t('agents.remove_agent'), t('agents.move_the_agent_name_to_the', { name: a.name }), t('agents.remove')))) return false;
+    if (!(await confirmDialog(t('agents.remove_agent'), t('agents.move_the_agent_name_to_the', { name: a.name }), t('common.remove')))) return false;
     try { await api.removeAgent(a.id); } catch (e) { $a('#ag-error').textContent = errMsg(e); return false; }
     refreshAgents();
     return true;
@@ -556,7 +556,7 @@
 
         <p id="ag-error" class="error small"></p>
         <div class="modal-actions">
-          <button type="button" id="btn-ag-remove" class="btn ghost danger hidden">${t('agents.remove')}</button>
+          <button type="button" id="btn-ag-remove" class="btn ghost danger hidden">${t('common.remove')}</button>
           <button type="button" id="btn-ag-open-workflow" class="btn ghost hidden">${t('agents.open_in_workflow')}</button>
           <button type="button" id="btn-ag-duplicate" class="btn ghost hidden">${t('agents.duplicate_as_my_agent')}</button>
           <span class="spacer"></span>

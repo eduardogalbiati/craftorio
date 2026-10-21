@@ -29,10 +29,10 @@ test('renderRunGates: the gate card names the run (workflow/project/issue via ru
   assert.match(renderRunGates, /runLabel\(v\.run\)/);
   assert.match(renderRunGates, /step: \$\{g\.step_id\}/);
   assert.match(renderRunGates, /data-answer="false">\$\{esc\(g\.reject\?\.label \|\| t\('run\.reject'\)\)\}/, 'the Reject button takes its label from the gate (#213), "Reject" by default');
-  assert.match(renderRunGates, /data-answer="true">\$\{esc\(g\.approve\?\.label \|\| t\('run\.approve'\)\)\}/, 'the Approve button takes its label from the gate (#213), "Approve" by default');
+  assert.match(renderRunGates, /data-answer="true">\$\{esc\(g\.approve\?\.label \|\| t\('common\.approve'\)\)\}/, 'the Approve button takes its label from the gate (#213), "Approve" by default');
   const en = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'src', 'shared', 'i18n', 'en.json'), 'utf8'));
   assert.equal(en['run.reject'], 'Reject');
-  assert.equal(en['run.approve'], 'Approve');
+  assert.equal(en['common.approve'], 'Approve');
   assert.match(renderRunGates, /gateChoices\(g\)\.map/, 'a gate with choices offers them (plus save_to_issue, #125) instead of Approve/Reject');
   assert.match(renderRunGates, /run-gate-feedback/, 'the optional feedback field');
 });
@@ -214,7 +214,7 @@ function loadGateBrief() {
   // gateBriefHtml calls gateScenariosHtml (#143): both must be in the sandbox, with its own deps.
   const scenarioPill = /const SCENARIO_PILL = [^\n]+/.exec(gateSrc)[0];
   // pending (#199): written and checked by the run, run at release by the E2E release workflow
-  const scenarioLabel = /const SCENARIO_LABEL = [^\n]+/.exec(gateSrc)[0];
+  const scenarioLabel = /const scenarioLabel = [^\n]+/.exec(gateSrc)[0];
   const openScenarios = /const openScenarios = new Set\(\);[^\n]*/.exec(gateSrc)[0];
   const gateScenariosHtml = /function gateScenariosHtml\(runId, g = \{\}\) \{[\s\S]*?\n\}/.exec(gateSrc)[0];
   const gateBriefHtml = /function gateBriefHtml\(runId, g, fullHtml\) \{[\s\S]*?\n\}/.exec(gateSrc)[0];

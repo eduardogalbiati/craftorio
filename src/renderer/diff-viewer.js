@@ -129,14 +129,14 @@
     const commits = data?.commits || [];
     const pick = el.querySelector('[data-dv-commit]');
     pick.closest('.dv-commit').classList.toggle('hidden', !commits.length);
-    pick.innerHTML = `<option value="">${t('diff_viewer.all_changes_length_commit_value', { length: commits.length, value: commits.length === 1 ? '' : 's' })}</option>${commits.map((c) => `<option value="${esc(c.sha)}" title="${esc(`${c.subject} · ${c.author} · ${c.date}`)}">${esc(c.short)} ${esc(c.subject.length > 60 ? `${c.subject.slice(0, 59)}…` : c.subject)}</option>`).join('')}`;
+    pick.innerHTML = `<option value="">${t('diff_viewer.all_changes_commits', { count: commits.length })}</option>${commits.map((c) => `<option value="${esc(c.sha)}" title="${esc(`${c.subject} · ${c.author} · ${c.date}`)}">${esc(c.short)} ${esc(c.subject.length > 60 ? `${c.subject.slice(0, 59)}…` : c.subject)}</option>`).join('')}`;
     pick.value = cur.commit || '';
     const range = el.querySelector('[data-dv-range]');
-    range.textContent = data?.base ? (cur.commit ? `commit ${cur.commit.slice(0, 7)}` : `${data.base}...HEAD`) : '';
+    range.textContent = data?.base ? (cur.commit ? t('diff_viewer.commit_short', { sha: cur.commit.slice(0, 7) }) : `${data.base}...HEAD`) : '';
     range.title = data?.base ? (cur.commit ? t('diff_viewer.only_this_commit_s_changes_against') : t('diff_viewer.git_diff_find_renames_base_head', { base: data.base, base2: data.base })) : '';
     const note = el.querySelector('[data-dv-note]');
-    const why = data?.simulated ? 'Simulated: no diff. These are the files the developer reported.'
-      : data?.unavailable ? `No diff: ${data.unavailable} These are the files the developer reported.` : '';
+    const why = data?.simulated ? t('diff_viewer.simulated_reported_files')
+      : data?.unavailable ? t('diff_viewer.no_diff_reported_files', { why: data.unavailable }) : '';
     note.textContent = why;
     note.classList.toggle('hidden', !why);
     paintViewed();
@@ -176,7 +176,7 @@
       }).join('')}`).join('') : `<p class="muted small dv-empty">${cur.data.files.length ? t('diff_viewer.no_file_matches_the_filter') : t('diff_viewer.no_changed_files')}</p>`;
     const files = cur.data.files;
     const sum = (k) => files.reduce((s, f) => s + (f[k] || 0), 0);
-    totals.innerHTML = files.length ? `${files.length} file${files.length === 1 ? '' : 's'}${files.some((f) => f.added != null) ? ` · ${counts({ added: sum('added'), deleted: sum('deleted') })}` : ''}` : '';
+    totals.innerHTML = files.length ? `${t('diff_viewer.files_count', { count: files.length })}${files.some((f) => f.added != null) ? ` · ${counts({ added: sum('added'), deleted: sum('deleted') })}` : ''}` : '';
   }
 
   function select(path) {
@@ -256,25 +256,25 @@
   function bodyHtml(f) {
     const st = fileState(f.file);
     const msg = (text, extra = '') => `<div class="dv-msg muted">${text}${extra}</div>`;
-    if (f.status === 'reported') return msg(cur.data.simulated ? 'Simulated: no diff for this file.' : 'No diff: the run\'s worktree could not be read.');
+    if (f.status === 'reported') return msg(cur.data.simulated ? t('diff_viewer.simulated_no_diff_for_this_file') : t('diff_viewer.no_diff_worktree_unreadable'));
     if (st.error) return msg(`<span class="error">${t('diff_viewer.could_not_load_this_file')} ${esc(st.error)}</span>`, ` <button type="button" class="btn sm" data-dv-load>${t('diff_viewer.retry')}</button>`);
     if (f.binary && f.image) {
-      if (!st.contents) { loadFile(f.file); return msg('Loading the previews…'); }
-      const pane = (src, label) => `<figure class="dv-img"><figcaption class="small muted">${label}</figcaption>${src ? `<img src="${esc(src)}" alt="${label}" tabindex="0" role="button" title="${t('diff_viewer.click_to_enlarge')}" data-dv-image="${label}">` : `<div class="dv-img-none muted small">${t('diff_viewer.none')}</div>`}</figure>`;
-      return `<div class="dv-images">${pane(st.contents.before, 'Before')}${pane(st.contents.after, 'After')}</div>`;
+      if (!st.contents) { loadFile(f.file); return msg(t('diff_viewer.loading_the_previews')); }
+      const pane = (src, label) => `<figure class="dv-img"><figcaption class="small muted">${esc(label)}</figcaption>${src ? `<img src="${esc(src)}" alt="${esc(label)}" tabindex="0" role="button" title="${t('diff_viewer.click_to_enlarge')}" data-dv-image="${esc(label)}">` : `<div class="dv-img-none muted small">${t('diff_viewer.none')}</div>`}</figure>`;
+      return `<div class="dv-images">${pane(st.contents.before, t('diff_viewer.before'))}${pane(st.contents.after, t('diff_viewer.after'))}</div>`;
     }
-    if (f.binary) return msg('Binary file changed.');
+    if (f.binary) return msg(t('diff_viewer.binary_file_changed'));
     const patch = f.patch || st.patch;
     if (!patch) {
       if (f.large) {
-        if (st.loading) return msg('Loading the diff…');
-        return msg(`This diff is large (${(f.added || 0) + (f.deleted || 0)} lines changed): collapsed.`, ` <button type="button" class="btn sm" data-dv-load>${t('diff_viewer.load_diff')}</button>`);
+        if (st.loading) return msg(t('diff_viewer.loading_the_diff'));
+        return msg(t('diff_viewer.large_diff_collapsed', { count: (f.added || 0) + (f.deleted || 0) }), ` <button type="button" class="btn sm" data-dv-load>${t('diff_viewer.load_diff')}</button>`);
       }
-      return msg('No diff for this file.');
+      return msg(t('diff_viewer.no_diff_for_this_file'));
     }
     const parsed = M.parsePatch(patch);
-    if (parsed.binary) return msg('Binary file changed.');
-    if (!parsed.hunks.length) return msg(f.status === 'renamed' ? 'File renamed without changes.' : 'No content changes (empty file or mode change).');
+    if (parsed.binary) return msg(t('diff_viewer.binary_file_changed'));
+    if (!parsed.hunks.length) return msg(f.status === 'renamed' ? t('diff_viewer.file_renamed_without_changes') : t('diff_viewer.no_content_changes'));
     const list = M.rows(parsed, st.contents, st.expanded);
     return cur.mode === 'split' ? splitHtml(list, f.file, st) : unifiedHtml(list, f.file, st);
   }
@@ -288,13 +288,13 @@
   }
 
   function gapHtml(g, cols, st) {
-    const n = g.hidden == null ? 'More unchanged lines' : `${g.hidden} unchanged line${g.hidden === 1 ? '' : 's'}`;
+    const n = g.hidden == null ? t('diff_viewer.more_unchanged_lines') : t('diff_viewer.unchanged_lines', { count: g.hidden });
     const busy = st.loading ? ' disabled' : '';
     const b = (dir, text, title) => `<button type="button" class="btn sm ghost" data-dv-expand="${dir}" data-gap="${g.index}" title="${title}"${busy}>${text}</button>`;
     return `<tr class="dv-gap"><td colspan="${cols}">
-      ${g.down ? b('down', `↓ ${M.EXPAND_STEP}`, `Show ${M.EXPAND_STEP} more lines below`) : ''}
-      ${g.up ? b('up', `↑ ${M.EXPAND_STEP}`, `Show ${M.EXPAND_STEP} more lines above`) : ''}
-      ${b('all', 'Expand all', 'Show every unchanged line here')}
+      ${g.down ? b('down', `↓ ${M.EXPAND_STEP}`, t('diff_viewer.show_more_lines_below', { count: M.EXPAND_STEP })) : ''}
+      ${g.up ? b('up', `↑ ${M.EXPAND_STEP}`, t('diff_viewer.show_more_lines_above', { count: M.EXPAND_STEP })) : ''}
+      ${b('all', t('diff_viewer.expand_all'), t('diff_viewer.show_every_unchanged_line_here'))}
       <span class="small muted">${n}</span></td></tr>`;
   }
 
@@ -342,7 +342,7 @@
     if (!cur || cur.selected !== selected) return;
     const itemOf = (path) => {
       const st = fileState(path);
-      const images = [['Before', st.contents?.before], ['After', st.contents?.after]].filter(([, src]) => src).map(([l, src]) => ({ src, label: l, caption: path }));
+      const images = [[t('diff_viewer.before'), st.contents?.before], [t('diff_viewer.after'), st.contents?.after]].filter(([, src]) => src).map(([l, src]) => ({ src, label: l, caption: path }));
       return images.length ? { title: path, images } : null;
     };
     const paths = changed.some((f) => f.file === selected) ? changed.map((f) => f.file) : [selected];

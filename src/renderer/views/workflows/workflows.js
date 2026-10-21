@@ -12,13 +12,14 @@
 // globals. Registers itself with registerView (view-registry.js); uses app.js globals ($, esc, state,
 // api, errMsg, showView, openDrawer, noteRunMeta, confirmDialog, showToast, CATEGORIES).
 
+// each tab's hint and title: catalog keys
 const WORKFLOW_PAGES = {
-  runs: 'Every run, live or finished.',
-  definitions: 'Workflows are YAML files in the workflows folder.',
-  builder: 'Draw a workflow: desks in a line, each with an agent, and approval gates. Saved as YAML in the workflows folder.',
-  pipelines: 'Pipelines chain workflows: each stage starts when the one before it has finished. Saved as YAML next to the workflows.',
+  runs: 'workflows.page_runs_hint',
+  definitions: 'workflows.page_definitions_hint',
+  builder: 'workflows.page_builder_hint',
+  pipelines: 'workflows.page_pipelines_hint',
 };
-const WORKFLOW_TITLES = { runs: 'Runs', definitions: 'Definitions', builder: 'Builder', pipelines: 'Pipelines' };
+const WORKFLOW_TITLES = { runs: 'workflows.runs', definitions: 'workflows.definitions', builder: 'workflows.builder', pipelines: 'workflows.pipelines' };
 function showWorkflowsTab(tab) {
   if (!WORKFLOW_PAGES[tab]) tab = 'runs';
   state.workflowsTab = tab;
@@ -33,8 +34,8 @@ function showWorkflowsTab(tab) {
   // Pipelines is the Definitions page showing the pipelines alone
   const page = tab === 'pipelines' ? 'definitions' : tab;
   document.querySelectorAll('[data-wpage]').forEach((p) => p.classList.toggle('hidden', p.dataset.wpage !== page));
-  $('#workflows-page-title').textContent = WORKFLOW_TITLES[tab];
-  $('#workflows-page-hint').textContent = WORKFLOW_PAGES[tab];
+  $('#workflows-page-title').textContent = t(WORKFLOW_TITLES[tab]);
+  $('#workflows-page-hint').textContent = t(WORKFLOW_PAGES[tab]);
   // Keep awake (#162) on Runs, Definitions and Pipelines; the Builder needs the room
   $('#workflows-keep-awake').classList.toggle('hidden', tab === 'builder');
   if (tab !== 'builder') refreshKeepAwake();
@@ -93,15 +94,16 @@ function loadWorkflowRunsThrottled() {
 // each a compact card (modes, declared outputs, agents, the steps as a one-line flow that expands),
 // and the saved pipelines (api.listPipelines, #135) as connected cards in their category's section.
 // A section filter (pills) and a search narrow both; "Used in" links a workflow to its pipelines.
+// each section's hint: catalog keys
 const WF_SECTIONS = {
-  plan: 'Turn a request into issues, designs or reviewed documents.',
-  build: 'Write, review, test and ship code.',
-  monitor: 'Look back at runs and improve how the agents work.',
-  other: 'Workflows whose category this app does not know.',
+  plan: 'workflows.section_plan_hint',
+  build: 'workflows.section_build_hint',
+  monitor: 'workflows.section_monitor_hint',
+  other: 'workflows.section_other_hint',
 };
 const wfDefs = { section: 'all', query: '', open: new Set(), pipelines: [], pipelinesError: null };
 const wfSectionOf = (category) => (CATEGORIES[category] ? category : 'other');
-const wfSectionName = (key) => CATEGORIES[key] || 'Other';
+const wfSectionName = (key) => CATEGORIES[key] || t('workflows.section_other');
 const wfByFile = (file) => state.workflows.find((w) => w.file === file);
 // A pipeline sits in its own category's section, else in its first workflow's.
 const pipeSection = (p) => wfSectionOf(p.category || wfByFile(p.stages[0]?.workflow)?.category);
@@ -154,27 +156,27 @@ function renderWorkflowDefinitions() {
   });
   const sections = Object.fromEntries(keys.map((k) => [k, inSection(k)]));
   const count = (k) => sections[k].workflows.length + sections[k].pipelines.length;
-  const pills = [['all', 'All', workflows.length + pipelines.length], ...keys.filter((k) => k !== 'other' || count(k)).map((k) => [k, wfSectionName(k), count(k)])];
+  const pills = [['all', t('workflows.section_all'), workflows.length + pipelines.length], ...keys.filter((k) => k !== 'other' || count(k)).map((k) => [k, wfSectionName(k), count(k)])];
   if (wfDefs.section !== 'all' && !keys.includes(wfDefs.section)) wfDefs.section = 'all';
   filters.innerHTML = pills.map(([k, label, n]) => `<button class="chip ${wfDefs.section === k ? 'active' : ''}" data-section="${k}" aria-pressed="${wfDefs.section === k}">${esc(label)} <span class="muted">${n}</span></button>`).join('');
   filters.querySelectorAll('[data-section]').forEach((b) => (b.onclick = () => { wfDefs.section = b.dataset.section; renderWorkflowDefinitions(); }));
 
   const shown = keys.filter((k) => (wfDefs.section === 'all' || wfDefs.section === k) && count(k));
   if (!shown.length) {
-    box.innerHTML = `<div class="empty-state"><b>${t('workflows.no_value_matches', { value: pipesOnly ? 'pipeline' : 'workflow' })}</b><p class="muted">${t('workflows.nothing_value_in_value2', { value: q ? ` matches "${esc(wfDefs.query.trim())}"` : '', value2: esc(wfDefs.section === 'all' ? 'any section' : wfSectionName(wfDefs.section)) })}</p><button class="btn ghost sm" data-clear>${t('workflows.clear_the_filters')}</button></div>`;
+    box.innerHTML = `<div class="empty-state"><b>${t(pipesOnly ? 'workflows.no_pipeline_matches' : 'workflows.no_workflow_matches')}</b><p class="muted">${t(q ? 'workflows.nothing_matches_query_in_section' : 'workflows.nothing_in_section', { query: esc(wfDefs.query.trim()), section: esc(wfDefs.section === 'all' ? t('workflows.any_section') : wfSectionName(wfDefs.section)) })}</p><button class="btn ghost sm" data-clear>${t('workflows.clear_the_filters')}</button></div>`;
     box.querySelector('[data-clear]').onclick = () => { wfDefs.section = 'all'; wfDefs.query = ''; $('#wf-search').value = ''; renderWorkflowDefinitions(); };
     return;
   }
   box.innerHTML = pipesError + shown.map((k) => {
     const s = sections[k];
-    const n = (x, one) => `${x} ${one}${x === 1 ? '' : 's'}`;
+    const n = (x, key) => t(key, { count: x });
     return `
     <section class="wf-section" data-section="${k}">
       <header class="wf-section-head">
         <h2>${esc(wfSectionName(k))}</h2>
-        ${pipesOnly ? '' : `<span class="badge cat-${k}">${n(s.workflows.length, 'workflow')}</span>`}
-        ${s.pipelines.length ? `<span class="badge${pipesOnly ? ` cat-${k}` : ''}">${n(s.pipelines.length, 'pipeline')}</span>` : ''}
-        <span class="muted small">${esc(WF_SECTIONS[k])}</span>
+        ${pipesOnly ? '' : `<span class="badge cat-${k}">${n(s.workflows.length, 'workflows.workflows_count')}</span>`}
+        ${s.pipelines.length ? `<span class="badge${pipesOnly ? ` cat-${k}` : ''}">${n(s.pipelines.length, 'workflows.pipelines_count')}</span>` : ''}
+        <span class="muted small">${esc(t(WF_SECTIONS[k]))}</span>
       </header>
       ${s.pipelines.length ? `<div class="wf-pipes">${s.pipelines.map(pipelineCard).join('')}</div>` : ''}
       ${s.workflows.length ? `<div class="wf-grid">${s.workflows.map(workflowCard).join('')}</div>` : ''}
@@ -201,15 +203,15 @@ function workflowCard(w) {
   const avatars = agents.slice(0, 6).map(([n, a]) => `<span class="wf-av" title="${esc(`${n} · ${a.provider}${a.model ? `/${a.model}` : ''}`)}">${robotAvatar(a.provider, a.model, 'idle', w.name, n)}</span>`).join('')
     + (agents.length > 6 ? `<span class="wf-av wf-av-more" title="${esc(agents.slice(6).map(([n, a]) => `${n} · ${a.provider}/${a.model}`).join('\n'))}">+${agents.length - 6}</span>` : '');
   const mode = Array.isArray(w.inputs?.mode?.enum) ? w.inputs.mode : null;
-  const modes = mode ? mode.enum.map((m) => `<span class="pill pill-idle" title="${esc(`${m === mode.default ? 'Default mode. ' : ''}${mode.description || ''}`)}">${esc(WorkflowInputs.optionLabel(mode, m))}</span>`).join('') : '';
-  const outputs = Object.entries(w.outputs || {}).map(([o, d]) => `<span class="badge wf-out" title="${esc(`${d?.description ? `${d.description} ` : ''}Declared output: a later workflow of a pipeline can take it as an input`)}">⇢ ${esc(o)}</span>`).join('');
+  const modes = mode ? mode.enum.map((m) => `<span class="pill pill-idle" title="${esc(`${m === mode.default ? t('workflows.default_mode') : ''}${mode.description || ''}`)}">${esc(WorkflowInputs.optionLabel(mode, m))}</span>`).join('') : '';
+  const outputs = Object.entries(w.outputs || {}).map(([o, d]) => `<span class="badge wf-out" title="${esc(`${d?.description ? `${d.description} ` : ''}${t('workflows.declared_output_tip')}`)}">⇢ ${esc(o)}</span>`).join('');
   const usedIn = wfDefs.pipelines.filter((p) => p.stages.some((s) => s.workflow === w.file));
   const used = usedIn.map((p) => {
     const i = p.stages.findIndex((s) => s.workflow === w.file);
-    const role = i === 0 ? 'starts it' : `stage ${i + 1} of ${p.stages.length}`;
+    const role = i === 0 ? t('workflows.starts_it') : t('workflows.stage_of_total', { stage: i + 1, total: p.stages.length });
     return `<button class="link-btn" data-goto-pipe="${esc(p.file)}" title="${esc(`${p.name}: ${role}`)}">${esc(p.name)}</button> <span class="muted">(${role})</span>`;
   }).join(', ');
-  const builderTip = w.origin !== 'custom' ? 'See it in the visual builder (read-only: clone it to change it)' : w.builder ? 'Edit it in the visual builder' : 'See it in the visual builder: its agents and prompts can be changed there, its steps stay as they are';
+  const builderTip = t(w.origin !== 'custom' ? 'workflows.builder_tip_bundled' : w.builder ? 'workflows.builder_tip_edit' : 'workflows.builder_tip_agents_only');
   // #319: what it needs beyond Claude Code and Git, and whether Start offers it (the Setup hides the unpicked ones)
   const model = typeof SetupModel === 'undefined' ? null : SetupModel;
   const needs = (model ? model.requirementBadges(w.requirements) : []).map((b) => `<span class="badge" title="${t('workflows.the_clis_it_needs_with_its')}">${esc(b)}</span>`).join('');
@@ -226,7 +228,7 @@ function workflowCard(w) {
       <p class="muted small wf-desc" title="${esc(w.error ? t('workflows.error_error', { error: w.error }) : w.description || '')}">${esc(w.error ? t('workflows.error_error', { error: w.error }) : w.description || '')}</p>
       ${(w.warnings || []).map((m) => `<p class="small warn-text wf-warning" role="status" data-testid="workflow-warning">${t('workflows.warning')} ${esc(m)}</p>`).join('')}
       ${modes || outputs || needs ? `<div class="wf-tags">${modes}${outputs}${needs}</div>` : ''}
-      ${(w.steps || []).length ? `<button class="wf-flow steps-mini" data-flow aria-expanded="${open}" title="${open ? t('workflows.hide_the_steps') : t('workflows.show_every_step')}"><span class="badge">${w.steps.length} ${t('workflows.step')}${w.steps.length === 1 ? '' : 's'}</span>${stepFlow(w)}<span class="wf-flow-caret" aria-hidden="true">${open ? '▴' : '▾'}</span></button>` : ''}
+      ${(w.steps || []).length ? `<button class="wf-flow steps-mini" data-flow aria-expanded="${open}" title="${open ? t('workflows.hide_the_steps') : t('workflows.show_every_step')}"><span class="badge">${t('workflows.steps_count', { count: w.steps.length })}</span>${stepFlow(w)}<span class="wf-flow-caret" aria-hidden="true">${open ? '▴' : '▾'}</span></button>` : ''}
       ${open ? `<ol class="wf-steps">${stepList(w)}</ol>` : ''}
       ${used ? `<p class="small wf-used"><span class="muted">${t('workflows.used_in')}</span> ${used}</p>` : ''}
       <div class="row wf-actions">
@@ -249,7 +251,7 @@ function pipelineCard(p) {
     if (s.target === 'product_owner') {
       return `${link}<span class="wf-stage wf-stage-target" data-testid="pipeline-stage" title="${t('workflows.the_product_owner_places_the_produced')}"><b>${t('workflows.product_owner')}</b><span class="badge">${t('workflows.roadmap')}</span></span>`;
     }
-    return `${link}<button class="wf-stage" data-testid="pipeline-stage" data-goto="${esc(s.workflow)}" title="${esc(w ? `${s.target === 'queue' ? 'The produced issues are queued for ' : ''}${w.name} (${s.workflow})` : t('workflows.workflow_not_in_the_workflows_folder', { workflow: s.workflow }))}">
+    return `${link}<button class="wf-stage" data-testid="pipeline-stage" data-goto="${esc(s.workflow)}" title="${esc(w ? `${s.target === 'queue' ? t('workflows.produced_issues_queued_for') : ''}${w.name} (${s.workflow})` : t('workflows.workflow_not_in_the_workflows_folder', { workflow: s.workflow }))}">
       <b>${s.target === 'queue' ? t('workflows.queue') : ''}${esc(w?.name || s.workflow)}</b>
       ${w ? `<span class="badge cat-${esc(wfSectionOf(w.category))}">${esc(wfSectionName(wfSectionOf(w.category)))}</span>` : `<span class="badge warn">${t('workflows.missing')}</span>`}
     </button>`;
@@ -344,7 +346,7 @@ function stepList(w) {
         <div class="wf-step-head" title="${esc(s.id)}"><b>${esc(wfReadable(s.id, s))}</b>
           ${s.agents ? `<span class="badge">${t('workflows.parallel')}</span>` : ''}${s.goal ? `<span class="badge">${t('workflows.goal')}</span>` : ''}${s.loop ? `<span class="badge">${t('workflows.loop')}</span>` : ''}
           ${skillNames.map((k) => `<span class="badge" title="${t('workflows.skill')}">⚡ ${esc(k.replace(/\{\{\s*inputs\.(\w+)\s*\}\}/g, '‹$1›'))}</span>`).join('')}</div>
-        <div class="muted small">${human ? t('workflows.human_approval') : s.type === 'screenshots' ? t('workflows.screenshots_no_agent') : s.type === 'suite' ? t('workflows.test_suite_no_agent') : s.type === 'test_ids' ? t('workflows.test_id_check_no_agent') : s.type === 'check' ? t('workflows.rule_checks_no_agent') : s.type === 'release_version' ? t('workflows.release_version_no_agent') : s.type === 'project_map' ? t('workflows.project_map_no_agent') :s.type === 'workflow' ? `runs ${esc(s.workflow || 'a workflow')}${s.foreach ? ` for each item${s.max_parallel ? `, ${esc(String(s.max_parallel))} at a time` : ''}` : ''}` : who}</div>
+        <div class="muted small">${human ? t('workflows.human_approval') : s.type === 'screenshots' ? t('workflows.screenshots_no_agent') : s.type === 'suite' ? t('workflows.test_suite_no_agent') : s.type === 'test_ids' ? t('workflows.test_id_check_no_agent') : s.type === 'check' ? t('workflows.rule_checks_no_agent') : s.type === 'release_version' ? t('workflows.release_version_no_agent') : s.type === 'project_map' ? t('workflows.project_map_no_agent') :s.type === 'workflow' ? `${t('workflows.runs_workflow', { workflow: esc(s.workflow || t('workflows.a_workflow')) })}${s.foreach ? t(s.max_parallel ? 'workflows.for_each_item_at_a_time' : 'workflows.for_each_item', { n: esc(String(s.max_parallel)) }) : ''}` : who}</div>
         ${others.length ? `<div class="wf-step-next small">↳ ${others.map((n) => `<span title="${esc(n)}">${esc(wfReadable(n, w.steps.find((x) => x.id === n)))}</span>`).join(', ')}</div>` : ''}
       </div>
     </li>`;

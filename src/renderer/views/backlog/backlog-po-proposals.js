@@ -155,7 +155,7 @@
     const p = current(msg, s);
     const simulated = devMode();
     if (!simulated && !await confirmDialog(t('backlog_po_proposals.split_issue_into_length_issues', { issue: s.issue, length: p.children.length }),
-      t('backlog_po_proposals.length_new_issues_are_filed_on', { length: p.children.length, issue: s.issue, issue2: s.issue, value: p.parent === 'close' ? 'gets a comment linking them and is closed' : 'gets a task list linking them' }), t('backlog_po_proposals.split'))) return;
+      t(p.parent === 'close' ? 'backlog_po_proposals.split_filed_parent_closed' : 'backlog_po_proposals.split_filed_parent_task_list', { count: p.children.length, issue: s.issue }), t('backlog_po_proposals.split'))) return;
     busy = true;
     notes.delete(key);
     ctx.render();
@@ -163,8 +163,8 @@
       const out = await api.splitProductOwnerIssue(ctx.projectId, msg.ts, clone(p), simulated);
       ctx.setMessages(out.messages);
       if (out.backlog) window.BacklogActions.showData(out.backlog);
-      if (out.syncError) notes.set(key, { text: `Filed, but the backlog sync failed: ${out.syncError}`, error: true });
-      if (roadmap && out.preview) notes.set(key, { text: 'Preview: the children would then be planned in the roadmap, stage by stage.' });
+      if (out.syncError) notes.set(key, { text: t('backlog_po_proposals.filed_but_the_sync_failed', { error: out.syncError }), error: true });
+      if (roadmap && out.preview) notes.set(key, { text: t('backlog_po_proposals.preview_children_planned_in_roadmap') });
       if (roadmap && !out.preview) {
         const workflow = splitWorkflow(key);
         const workflowName = (state.workflows || []).find((w) => w.file === workflow)?.name;
@@ -192,13 +192,13 @@
       const id = key.slice('place:'.length);
       issues = (ep.place || []).filter((p) => p.epic === id).map((p) => p.issue);
       epic = { id };
-      what = [`Place ${issues.length} issue${issues.length === 1 ? '' : 's'} in “${epicTitle(id)}”`, `${issues.map((n) => `#${n}`).join(', ')} move into the epic on the platform (an issue in another epic leaves it).`, 'Place'];
+      what = [t('backlog_po_proposals.place_issues_in_epic', { count: issues.length, epic: epicTitle(id) }), t('backlog_po_proposals.place_issues_detail', { issues: issues.map((n) => `#${n}`).join(', ') }), t('backlog_po_proposals.place')];
     } else {
       const c = ep.create?.[Number(key.slice('create:'.length))];
       if (!c) return;
       issues = c.issues;
       epic = { title: c.title, goal: c.goal };
-      what = [`Create the epic “${c.title}”`, `A new epic is created on the platform, then ${issues.map((n) => `#${n}`).join(', ')} are placed in it.`, 'Create'];
+      what = [t('backlog_po_proposals.create_the_epic', { title: c.title }), t('backlog_po_proposals.create_the_epic_detail', { issues: issues.map((n) => `#${n}`).join(', ') }), t('backlog_po_proposals.create')];
     }
     const simulated = devMode();
     if (!simulated && !await confirmDialog(...what)) return;

@@ -60,7 +60,8 @@
   }
   // the From / To fields: All shows no range
   const shownRange = () => (ax.preset === 'all' ? { from: '', to: '' } : range());
-  const rangeText = (r) => (ax.preset === 'all' ? 'all dates (the last year at most)' : `${r.from} to ${r.to}`);
+  const rangeText = (r) => (ax.preset === 'all' ? t('analytics.all_dates_last_year') : t('analytics.range_from_to', { from: r.from, to: r.to }));
+  const loadingText = (on) => (on ? t('analytics.loading_suffix') : '');
   function renderRange() {
     const s = shownRange();
     document.querySelectorAll('#view-analytics [data-date-preset]').forEach((b) => {
@@ -92,7 +93,7 @@
 
   async function analyze() {
     if (!ax.data || ax.analyzing) return;
-    const ok = window.confirm('The supervisor (Claude Code) will read a summary of these sessions and write a report. This calls a real model and costs money. Continue?');
+    const ok = window.confirm(t('analytics.confirm_supervisor_report'));
     if (!ok) return;
     ax.analyzing = true; ax.reportError = null;
     renderReport(); renderControls();
@@ -135,7 +136,7 @@
       if (document.activeElement !== $a('#an-marker')) $a('#an-marker').value = ax.marker;
       renderRange();
       $a('#an-refresh').disabled = ax.perfLoading;
-      $a('#an-sub').textContent = `Files runs collide on and merge conflicts${ax.perf?.project ? ` in ${ax.perf.project.name}` : ''}, ${rangeText(r)}${ax.perfLoading ? ' — loading…' : ''}`;
+      $a('#an-sub').textContent = `${t(ax.perf?.project ? 'analytics.sub_performance_in_project' : 'analytics.sub_performance', { name: ax.perf?.project?.name, range: rangeText(r) })}${loadingText(ax.perfLoading)}`;
       return;
     }
     document.querySelectorAll('#view-analytics [data-an-scope]').forEach((b) => b.classList.toggle('active', b.dataset.anScope === ax.scope));
@@ -143,7 +144,7 @@
     $a('#an-refresh').disabled = ax.loading;
     $a('#an-analyze').disabled = ax.analyzing || !ax.data;
     $a('#an-analyze').textContent = ax.analyzing ? t('analytics.analyzing') : t('analytics.ask_the_supervisor');
-    $a('#an-sub').textContent = `${ax.scope === 'machine' ? 'Every Claude Code, Codex and Grok session on this machine' : 'The sessions of the orchestrator\'s runs'}, ${rangeText(r)}${ax.loading ? ' — loading…' : ''}`;
+    $a('#an-sub').textContent = `${t(ax.scope === 'machine' ? 'analytics.sub_machine' : 'analytics.sub_orchestrator', { range: rangeText(r) })}${loadingText(ax.loading)}`;
   }
 
   // ---- charts ---------------------------------------------------------------------------
@@ -166,7 +167,7 @@
   }
 
   // Horizontal bars: [{ label, value, sub, color }]
-  function barList(items, { empty = 'No data in this range.', limit = 10 } = {}) {
+  function barList(items, { empty = t('analytics.no_data_in_this_range'), limit = 10 } = {}) {
     const list = items.filter((x) => x.value > 0).slice(0, limit);
     if (!list.length) return `<p class="muted small">${empty}</p>`;
     const max = Math.max(...list.map((x) => x.value));
@@ -213,9 +214,9 @@
       ${t.unpricedTokens ? `<p class="muted small an-note">${fmtTok(t.unpricedTokens)} ${I18n.t('analytics.tokens_have_no_cost_the_cli')}</p>` : ''}
       <div class="card an-card"><div class="row an-card-head"><h3>${I18n.t('analytics.tokens_per_day')}</h3><div class="an-legend">${Object.entries(PROVIDER_LABEL).map(([k, v]) => `<span><i style="background:${PROVIDER_COLOR[k]}"></i>${v}</span>`).join('')}</div></div>${dayChart(a.byDay)}</div>
       <div class="an-grid">
-        <div class="card an-card"><h3>${I18n.t('analytics.by_provider')}</h3>${barList(a.byProvider.map((p) => ({ label: p.name, value: p.tokens, sub: `${fmtTok(p.tokens)} · ${fmtUsd(p.costUsd)} · ${p.sessions} sessions`, color: PROVIDER_COLOR[p.id] })))}</div>
+        <div class="card an-card"><h3>${I18n.t('analytics.by_provider')}</h3>${barList(a.byProvider.map((p) => ({ label: p.name, value: p.tokens, sub: `${fmtTok(p.tokens)} · ${fmtUsd(p.costUsd)} · ${I18n.t('analytics.sessions_count', { count: p.sessions })}`, color: PROVIDER_COLOR[p.id] })))}</div>
         <div class="card an-card"><h3>${I18n.t('analytics.by_model')}</h3>${barList(a.byModel.map((x) => ({ label: x.model, value: x.tokens, sub: `${fmtTok(x.tokens)} · ${fmtUsd(x.costUsd)}`, color: PROVIDER_COLOR[x.provider] })))}</div>
-        <div class="card an-card"><h3>${I18n.t('analytics.by_project')}</h3>${barList(a.byProject.map((p) => ({ label: p.name, value: p.tokens, sub: `${fmtTok(p.tokens)} · ${p.sessions} sessions` })))}</div>
+        <div class="card an-card"><h3>${I18n.t('analytics.by_project')}</h3>${barList(a.byProject.map((p) => ({ label: p.name, value: p.tokens, sub: `${fmtTok(p.tokens)} · ${I18n.t('analytics.sessions_count', { count: p.sessions })}` })))}</div>
       </div>
       <div class="an-grid">
         <div class="card an-card"><h3>${I18n.t('analytics.tool_calls')}</h3>${stack(m.toolMix, TOOL_COLOR)}
@@ -245,7 +246,7 @@
     const th = (key, label) => `<th class="num an-sort${ax.sortKey === key ? ' active' : ''}" data-an-sort="${key}">${label}</th>`;
     return `<table class="u-table an-sessions"><thead><tr><th>${t('analytics.session')}</th><th>${t('analytics.project')}</th>${th('start', t('analytics.start'))}${th('active', t('analytics.active'))}<th class="num">${t('analytics.prompts_2')}</th>${th('tools', t('analytics.tools'))}<th class="num">${t('analytics.files')}</th>${th('tokens', t('analytics.tokens'))}<th class="num">${t('analytics.cache')}</th>${th('cost', t('analytics.cost'))}${th('complexity', t('analytics.complexity'))}</tr></thead><tbody>
       ${rows.map((s) => `<tr>
-        <td class="an-title"><span class="pill" style="color:${PROVIDER_COLOR[s.provider]}">${esc(PROVIDER_LABEL[s.provider] || s.provider)}</span> <span title="${esc(s.title || s.id || '')}">${esc(s.title || (s.run ? `${s.run.workflow || 'run'} · ${s.run.agent || ''}` : s.id || '—'))}</span>
+        <td class="an-title"><span class="pill" style="color:${PROVIDER_COLOR[s.provider]}">${esc(PROVIDER_LABEL[s.provider] || s.provider)}</span> <span title="${esc(s.title || s.id || '')}">${esc(s.title || (s.run ? `${s.run.workflow || t('analytics.run_word')} ·${s.run.agent || ''}` : s.id || '—'))}</span>
           <div class="muted small">${esc(s.model || '')} · ${esc(s.intent)}${s.run ? t('analytics.run_runid', { runId: esc(s.run.runId) }) : ''}</div></td>
         <td>${esc(s.project || '—')}</td>
         <td class="num nowrap">${s.start ? esc(dateOf(s.start)) : '—'}</td>
@@ -275,7 +276,7 @@
   // #197: the analysed project (#254: the one chosen in the header), at the top of the tab, and what the page counts
   function projectHeader(p) {
     const pr = p.project;
-    const summary = pr ? `<b>${esc(pr.name)}</b> ${t('analytics.value_run_value2_value3_to', { value: fmtNum(p.runs || 0), value2: p.runs === 1 ? '' : 's', value3: esc(p.from || '') })} ${esc(p.to || '')}` : '';
+    const summary = pr ? `<b>${esc(pr.name)}</b> ${t('analytics.project_runs_from_to', { count: p.runs || 0, n: fmtNum(p.runs || 0), from: esc(p.from || ''), to: esc(p.to || '') })}` : '';
     return `<div class="card an-project-shown" title="${t('analytics.the_project_chosen_in_the_header')}">
       <span class="small muted">${t('analytics.project_analysed')}</span>
       <div class="an-project-summary" data-testid="an-project-summary"><div>${summary}</div>${pr?.folder ? `<div class="muted small mono an-file" title="${esc(pr.folder)}">${esc(pr.folder)}</div>` : ''}</div>
@@ -297,7 +298,7 @@
 
   function parallelCard(par) {
     const maxH = Math.max(1, ...par.hours);
-    const hours = `<div class="an-hours" role="img" aria-label="${t('analytics.runs_active_per_hour_of_the')}">${par.hours.map((n, h) => `<span title="${t('analytics.value_00_n_run_value2_active', { value: String(h).padStart(2, '0'), n, value2: n === 1 ? '' : 's' })}"><i style="height:${Math.max(n ? 4 : 0, (n / maxH) * 100)}%"></i><em>${h % 3 === 0 ? h : ''}</em></span>`).join('')}</div>`;
+    const hours = `<div class="an-hours" role="img" aria-label="${t('analytics.runs_active_per_hour_of_the')}">${par.hours.map((n, h) => `<span title="${t('analytics.hour_runs_active', { hour: String(h).padStart(2, '0'), count: n })}"><i style="height:${Math.max(n ? 4 : 0, (n / maxH) * 100)}%"></i><em>${h % 3 === 0 ? h : ''}</em></span>`).join('')}</div>`;
     const days = par.days.length ? `<table class="u-table an-sessions"><thead><tr><th>${t('analytics.day')}</th><th class="num">${t('analytics.runs_started')}</th><th class="num" title="${t('analytics.the_most_runs_active_at_the')}">${t('analytics.at_once_peak')}</th><th class="num" title="${t('analytics.roadmap_stages_among_the_runs_at')}">${t('analytics.roadmap_stages')}</th><th class="num">${t('analytics.hit_a_conflict')}</th></tr></thead><tbody>
       ${[...par.days].reverse().map((d) => `<tr><td class="nowrap">${esc(d.day)}</td><td class="num">${d.runs}</td><td class="num">${d.peak}</td><td class="num">${d.stages || '—'}</td><td class="num">${d.conflicts ? `<span class="badge warn">${d.conflicts}</span>` : 0}</td></tr>`).join('')}</tbody></table>`
       : `<p class="muted small an-empty">${t('analytics.no_runs_in_this_range')}</p>`;
@@ -305,15 +306,15 @@
       <div class="card table-wrap">${days}</div>`;
   }
 
-  // Before/after the marker: [label, key, format, better when lower]
+  // Before/after the marker: [label's catalog key, key, format, better when lower]
   const COMPARE = [
-    ['Runs', 'runs', (x) => fmtNum(x), null],
-    ['Runs with commits', 'runsWithCommits', (x) => fmtNum(x), null],
-    ['Busiest file (% of runs)', (s) => s.topFile?.share ?? null, pct, true],
-    ['Files edited by more than the limit', 'filesOverLimit', (x) => fmtNum(x), true],
-    ['Runs that hit a conflict', 'conflictShare', pct, true],
-    ['Their share of the cost', 'conflictCostShare', pct, true],
-    ['Peak of runs at once', 'peak', (x) => fmtNum(x), null],
+    ['analytics.runs', 'runs', (x) => fmtNum(x), null],
+    ['analytics.runs_with_commits', 'runsWithCommits', (x) => fmtNum(x), null],
+    ['analytics.busiest_file_share', (s) => s.topFile?.share ?? null, pct, true],
+    ['analytics.files_edited_by_more_than_limit', 'filesOverLimit', (x) => fmtNum(x), true],
+    ['analytics.runs_that_hit_a_conflict', 'conflictShare', pct, true],
+    ['analytics.their_share_of_the_cost', 'conflictCostShare', pct, true],
+    ['analytics.peak_of_runs_at_once', 'peak', (x) => fmtNum(x), null],
   ];
   function compareCard(c, limit) {
     if (!c) return '';
@@ -324,8 +325,8 @@
       const a = get(c.after, key);
       const d = a != null && b != null ? a - b : null;
       const cls = d && lower != null ? ((d < 0) === lower ? ' an-better' : ' an-worse') : '';
-      const diff = d == null ? '—' : f === pct ? `${d > 0 ? '+' : ''}${Math.round(d * 100)} pts` : `${d > 0 ? '+' : ''}${fmtNum(d)}`;
-      return `<tr><td>${esc(label === 'Files edited by more than the limit' ? t('analytics.files_edited_by_more_than_limit', { limit: pct(limit) }) : label)}</td><td class="num">${b == null ? '—' : f(b)}</td><td class="num">${a == null ? '—' : f(a)}</td><td class="num${cls}">${diff}</td></tr>`;
+      const diff = d == null ? '—' : f === pct ? t('analytics.diff_points', { points: `${d > 0 ? '+' : ''}${Math.round(d * 100)}` }) : `${d > 0 ? '+' : ''}${fmtNum(d)}`;
+      return `<tr><td>${esc(t(label, { limit: pct(limit) }))}</td><td class="num">${b == null ? '—' : f(b)}</td><td class="num">${a == null ? '—' : f(a)}</td><td class="num${cls}">${diff}</td></tr>`;
     }).join('');
     return `<div class="card table-wrap an-compare"><table class="u-table"><thead><tr><th>${t('analytics.split_at_value', { value: esc(c.commit ? `${c.marker} (${c.commit.slice(0, 8)})` : c.marker) })} ${esc(dateOf(c.at))}</th><th class="num">${t('analytics.before')}</th><th class="num">${t('analytics.after')}</th><th class="num">${t('analytics.difference')}</th></tr></thead><tbody>${rows}</tbody></table></div>`;
   }

@@ -48,10 +48,8 @@
     'Churn says nothing about bugs unless it is joined with fix commits: a busy file is not a buggy file.',
   ];
   // what the run is doing, by its step (workflows/project-map.yaml)
-  const STEP_LABELS = {
-    facts: 'reading the repository', plan: 'the cartographer writes the city plan', validate: 'validating the plan', invalid: 'the plan failed its validation',
-    gate: 'the plan waits for your review', save: 'saving the plan', analyze: 'the Oracle analyses the hotspots',
-  };
+  // the map run's steps: catalog keys project_architecture.step_<id>
+  const STEP_LABELS = new Set(['facts', 'plan', 'validate', 'invalid', 'gate', 'save', 'analyze']);
   const MODE_KEY = 'multiagent.architecture.view';
   // the project on screen: { id, box, facts, view, reports, estimate, error, loadError, loading, reportId, since, until, includeMass, editing, seq,
   // cityMap, mapEstimate, mapStarting, mapRun, mapStep (the project map run, #372/#381: cityMap is architecture:city's answer),
@@ -81,13 +79,13 @@
 
   const modeSwitch = () => {
     const b = (m, label, title) => `<button type="button" class="${mode === m ? 'active' : ''}" data-arch-mode="${m}" data-testid="architecture-mode-${m}" aria-pressed="${mode === m}" title="${title}">${label}</button>`;
-    return `<div class="seg arch-mode" role="group" aria-label="${t('project_architecture.architecture_view')}">${b('facts', 'Facts', 'The git facts and the Oracle&#39;s report, as tables')}${b('city', 'City', 'The project as a 3D city: zones, districts and a building per file')}</div>`;
+    return `<div class="seg arch-mode" role="group" aria-label="${t('project_architecture.architecture_view')}">${b('facts', t('project_architecture.mode_facts'), esc(t('project_architecture.mode_facts_title')))}${b('city', t('project_architecture.mode_city'), esc(t('project_architecture.mode_city_title')))}</div>`;
   };
 
-  const plural = (n, unit) => `${n} ${n === 1 ? unit.replace(/s$/, '') : unit}`;
+  const plural = (n, key) => t(key, { count: n });
   const day = (iso) => String(iso || '').slice(0, 10);
   const short = (sha) => String(sha || '').slice(0, 10);
-  const stepLabel = (id) => STEP_LABELS[id] || (id ? `step ${id}` : 'starting the run');
+  const stepLabel = (id) => (STEP_LABELS.has(id) ? t(`project_architecture.step_${id}`) : id ? t('project_architecture.step_id', { id }) : t('project_architecture.starting_the_run'));
 
   // ---------- the one action (#381) ----------
 
@@ -95,21 +93,21 @@
   function estimateInfo() {
     const map = cur.mapEstimate?.items?.[0];
     const oracle = cur.estimate;
-    const simulated = typeof state !== 'undefined' && state.simulationOnly ? ' This app runs simulations only: no model is called.' : '';
+    const simulated = typeof state !== 'undefined' && state.simulationOnly ? ` ${t('project_architecture.simulations_only_no_model')}` : '';
     const parts = [];
     let usd = 0;
-    if (map?.basis) { usd += Number(map.costUsd) || 0; parts.push(`the map ≈ US$ ${(Number(map.costUsd) || 0).toFixed(2)} (from ${plural(map.basis, 'past runs')}, ~${map.minutes} min)`); }
-    if (oracle) { usd += Number(oracle.usd) || 0; parts.push(`the Oracle's analysis ≈ US$ ${Number(oracle.usd).toFixed(2)} (from the last ${plural(oracle.basis, 'analyses')})`); }
-    if (!parts.length) return { known: false, text: 'no estimate yet', title: t('project_architecture.no_cost_estimate_yet_the_first', { simulated }) };
-    const missing = !map?.basis ? '; the map has no estimate yet (no real run)' : !oracle ? '; the Oracle\'s analysis has no estimate yet (no real analysis)' : '';
+    if (map?.basis) { usd += Number(map.costUsd) || 0; parts.push(t('project_architecture.estimate_map', { count: map.basis, usd: (Number(map.costUsd) || 0).toFixed(2), minutes: map.minutes })); }
+    if (oracle) { usd += Number(oracle.usd) || 0; parts.push(t('project_architecture.estimate_oracle', { count: oracle.basis, usd: Number(oracle.usd).toFixed(2) })); }
+    if (!parts.length) return { known: false, text: t('project_architecture.no_estimate_yet'), title: t('project_architecture.no_cost_estimate_yet_the_first', { simulated }) };
+    const missing = !map?.basis ? `; ${t('project_architecture.estimate_map_missing')}` : !oracle ? `; ${t('project_architecture.estimate_oracle_missing')}` : '';
     return { known: true, text: `≈ US$ ${usd.toFixed(2)}`, title: `${parts.join('; ')}${missing}.${simulated}` };
   }
 
   function mapAdviceHtml(r) {
     if (!r?.suggested) return '';
     const why = [
-      r.unmatchedShare > 0.05 ? `${Math.round(r.unmatchedShare * 100)}% of the drawn files match no district` : '',
-      r.newFolders.length ? `new top-level ${r.newFolders.length === 1 ? 'folder' : 'folders'}: ${r.newFolders.join(', ')}` : '',
+      r.unmatchedShare > 0.05 ? t('project_architecture.refresh_unmatched_share', { share: Math.round(r.unmatchedShare * 100) }) : '',
+      r.newFolders.length ? t('project_architecture.refresh_new_folders', { count: r.newFolders.length, folders: r.newFolders.join(', ') }) : '',
     ].filter(Boolean).join('; ');
     return `<p class="small" role="status" data-testid="architecture-map-refresh-advised"><span class="badge warn">${t('project_architecture.refresh_advised')}</span> ${esc(why)}${t('project_architecture.analyze_this_project_asks_the_cartographer')}</p>`;
   }
@@ -118,12 +116,12 @@
     const city = cur.cityMap;
     const hasPlan = city?.model?.grouping === 'plan';
     const planText = !city || city.state !== 'ok' ? ''
-      : hasPlan ? `City plan: ${plural(city.model.districts.length, 'districts')}, ${Math.floor((city.validation?.coverage || 0) * 1000) / 10}% of the drawn files in a district.`
-        : 'No city plan yet: the city groups the files by folder.';
+      : hasPlan ? t('project_architecture.city_plan_districts', { count: city.model.districts.length, share: Math.floor((city.validation?.coverage || 0) * 1000) / 10 })
+        : t('project_architecture.no_city_plan_by_folder');
     const e = estimateInfo();
     const running = !!cur.mapRun;
-    const label = cur.mapStarting ? 'Starting…' : running ? 'Analyzing…' : 'Analyze this project';
-    const title = running ? `Run ${cur.mapRun}: ${stepLabel(cur.mapStep)}` : `One run: the cartographer maps the project${hasPlan ? ' (a refresh keeps the names you saw)' : ''}, then the Oracle analyses its hotspots. ${e.title}`;
+    const label = t(cur.mapStarting ? 'project_architecture.starting' : running ? 'project_architecture.analyzing' : 'project_architecture.analyze_this_project');
+    const title = running ? t('project_architecture.run_step', { run: cur.mapRun, step: stepLabel(cur.mapStep) }) : t(hasPlan ? 'project_architecture.analyze_title_refresh' : 'project_architecture.analyze_title', { estimate: e.title });
     const progress = running ? `<p class="small" role="status" data-testid="architecture-analyzing" title="${esc(cur.mapRun)}"><span class="badge live">${t('project_architecture.analyzing_this_project')}</span> ${esc(stepLabel(cur.mapStep))}…</p>` : '';
     const error = cur.error ? `<div class="usage-unavailable" role="alert" data-testid="architecture-state-error">${t('project_architecture.the_analysis_failed')} ${esc(cur.error)}</div>` : '';
     return `<section class="arch-action" data-testid="architecture-action">
@@ -230,7 +228,7 @@
       return `<button type="button" class="${on ? 'active' : ''}" data-arch-filter="${dim}:${key}" data-testid="architecture-filter-${key}" aria-pressed="${on}">${key === 'all' ? t('project_architecture.all') : key.charAt(0).toUpperCase() + key.slice(1)} <span class="muted">${n}</span></button>`;
     };
     const unsent = shownFindings().filter((f) => !f.sent).length;
-    const title = unsent ? `Sends the ${plural(unsent, 'findings')} shown and not sent yet to the Refactor tab` : 'Every finding shown was sent to the Refactor tab already';
+    const title = unsent ? t('project_architecture.send_all_title', { count: unsent }) : t('project_architecture.send_all_none_left');
     return `<div class="row arch-toolbar">
       <div class="seg" role="group" aria-label="${t('project_architecture.filter_by_severity')}">${b('', 'all', all.length)}${['high', 'medium', 'low'].map((k) => b('severity', k, counts.severity[k])).join('')}</div>
       <div class="seg" role="group" aria-label="${t('project_architecture.filter_by_new_or_kept')}">${['new', 'kept'].map((k) => b('status', k, counts.status[k])).join('')}</div>
@@ -242,7 +240,7 @@
   function reportMeta(saved, view) {
     const cost = saved.simulated ? `<span class="badge p-mock">${t('project_architecture.simulated')}</span>` : saved.costUsd != null ? `<span class="badge" title="${t('project_architecture.the_real_cost_of_this_analysis')}">${esc(fmtUsd(saved.costUsd))}</span>` : '';
     const tokens = saved.tokens && Object.keys(saved.tokens).length ? `<span class="badge" title="${t('project_architecture.tokens_tokens', { tokens: esc(JSON.stringify(saved.tokens)) })}">${fmtNum(Object.values(saved.tokens).reduce((s, n) => s + (Number(n) || 0), 0))} ${t('project_architecture.tokens')}</span>` : '';
-    const since = view.runsSince ? `<span class="badge${STALE_RUNS <= view.runsSince ? ' warn' : ''}" data-testid="architecture-runs-since">${plural(view.runsSince, 'runs')} ${t('project_architecture.since_this_analysis')}</span>` : '';
+    const since = view.runsSince ? `<span class="badge${STALE_RUNS <= view.runsSince ? ' warn' : ''}" data-testid="architecture-runs-since">${plural(view.runsSince, 'project_architecture.runs_since_this_analysis')}</span>` : '';
     return `<div class="row small muted arch-meta">${t('project_architecture.analysed_date_at', { date: esc(day(saved.date)) })} ${esc(short(saved.head?.commit))} ${cost}${tokens}${since}</div>`;
   }
 
@@ -302,7 +300,7 @@
 
   function controlsHtml() {
     const reports = cur.reports || [];
-    const picker = reports.length ? `<label class="an-date small muted">${t('project_architecture.report')} <select data-arch-report data-testid="architecture-report-picker">${reports.map((r) => `<option value="${esc(r.id)}" ${r.id === (cur.view?.report?.id) ? 'selected' : ''}>${esc(day(r.date))} · ${plural(r.findings, 'findings')}${r.simulated ? ' (simulated)' : ''}</option>`).join('')}</select></label>` : '';
+    const picker = reports.length ? `<label class="an-date small muted">${t('project_architecture.report')} <select data-arch-report data-testid="architecture-report-picker">${reports.map((r) => `<option value="${esc(r.id)}" ${r.id === (cur.view?.report?.id) ? 'selected' : ''}>${esc(day(r.date))} · ${plural(r.findings, 'project_architecture.findings_count')}${r.simulated ? ` (${t('project_architecture.simulated')})` : ''}</option>`).join('')}</select></label>` : '';
     return `<div class="row pcm-controls" data-testid="architecture-controls">
       ${picker}
       ${window.DateRange.fields({ testid: 'architecture-date-range', from: cur.since || '', to: cur.until || '', fromAttrs: 'data-arch-since', toAttrs: 'data-arch-until' })}
@@ -396,10 +394,10 @@
   function factsHtml() {
     const f = cur.facts;
     const model = f.model;
-    const mass = model.mass_changes.length ? `${plural(model.mass_changes.length, 'mass changes')} (${model.include_mass ? 'counted' : 'not counted'})` : 'no mass change';
-    const window = model.window.since || model.window.until ? `${esc(day(model.window.since) || 'the start')} to ${esc(day(model.window.until) || 'now')}` : 'the whole history';
+    const mass = model.mass_changes.length ? plural(model.mass_changes.length, model.include_mass ? 'project_architecture.mass_changes_counted' : 'project_architecture.mass_changes_not_counted') : t('project_architecture.no_mass_change');
+    const window = model.window.since || model.window.until ? t('project_architecture.window_range', { since: esc(day(model.window.since) || t('project_architecture.the_start')), until: esc(day(model.window.until) || t('project_architecture.now')) }) : t('project_architecture.the_whole_history');
     return `<div class="arch-facts" data-testid="architecture-facts">
-      <p class="small muted">${esc(model.branch)} ${t('project_architecture.at')} <span class="mono">${esc(short(model.head?.commit))}</span> (${esc(day(model.head?.date))}) · ${window} · ${plural(model.commits, 'commits')} · ${mass}${model.shallow ? ` · <span class="badge warn">${t('project_architecture.shallow_clone_history_cut')}</span>` : ''}</p>
+      <p class="small muted">${esc(model.branch)} ${t('project_architecture.at')} <span class="mono">${esc(short(model.head?.commit))}</span> (${esc(day(model.head?.date))}) · ${window} · ${plural(model.commits, 'project_architecture.commits_count')} · ${mass}${model.shallow ? ` · <span class="badge warn">${t('project_architecture.shallow_clone_history_cut')}</span>` : ''}</p>
       ${gateHtml(f.gate)}
       ${excludeHtml(model)}
       ${complexityHtml(model)}
@@ -524,7 +522,7 @@
       sent++;
     }
     c.sending = false;
-    showToast(sent ? t('project_architecture.sent_sent_to_the_refactor_tab', { sent: plural(sent, 'findings') }) : t('project_architecture.no_finding_sent_every_finding_shown'));
+    showToast(sent ? plural(sent, 'project_architecture.sent_findings_to_refactor') : t('project_architecture.no_finding_sent_every_finding_shown'));
     if (cur === c) render();
   }
 

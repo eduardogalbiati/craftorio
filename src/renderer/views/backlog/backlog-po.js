@@ -333,7 +333,7 @@
   const sizeText = (g) => {
     const time = minutesOf(g) != null ? `≈ ${Estimates.formatMinutes(minutesOf(g))} · ` : '';
     const est = g.costEstimate
-      ? `${time}≈ $${Number(g.costEstimate.usd).toFixed(2)} <span class="muted" title="${esc(g.costEstimate.basis)}">${t('backlog_po.estimate_from_runs_past_run_value', { runs: g.costEstimate.runs, value: g.costEstimate.runs > 1 ? 's' : '', value2: g.costEstimate.estimated ? ', partly from token prices' : '' })}</span>`
+      ? `${time}≈ $${Number(g.costEstimate.usd).toFixed(2)} <span class="muted" title="${esc(g.costEstimate.basis)}">${t(g.costEstimate.estimated ? 'backlog_po.estimate_from_past_runs_and_token_prices' : 'backlog_po.estimate_from_past_runs', { count: g.costEstimate.runs })}</span>`
       : g.estimate
       ? `${time}≈ $${Number(g.estimate.costUsd).toFixed(2)} <span class="muted">${t('backlog_po.estimate_from_basis', { basis: esc(g.estimate.basis) })}</span>`
       : `<span class="muted">${t('backlog_po.no_past_run_to_estimate_from')}</span>`;
@@ -651,7 +651,7 @@
     const meta = `Product Owner · ${esc(time)}${msg.model ? ` · ${esc(msg.model)}` : ''} · ${esc(fmtCost(msg.costUsd || 0))}${calib}${msg.stopped ? ` <span class="badge warn" title="${t('backlog_po.you_stopped_this_turn_the_answer')}">${t('backlog_po.stopped')}</span>` : ''}`;
     return `<div class="sup-wmsg po-msg${msg.error ? ' error' : ''}" data-msg="${m}"><div class="sup-wmsg-meta">${meta}</div>
       <div class="md md-compact">${msg.error ? esc(msg.text) : markdownHtml(msg.text || '')}</div>
-      ${msg.invalid ? `<p class="small muted">${t('backlog_po.the_answer_had_no_valid_value', { value: msg.mode === 'issue' ? 'draft' : 'proposal', invalid: esc(msg.invalid) })}</p>` : ''}
+      ${msg.invalid ? `<p class="small muted">${t(msg.mode === 'issue' ? 'backlog_po.the_answer_had_no_valid_draft' : 'backlog_po.the_answer_had_no_valid_proposal', { invalid: esc(msg.invalid) })}</p>` : ''}
       ${answerHtml(msg.answer, m)}${issueHtml(msg.issue, m)}</div>`;
   }
 
@@ -798,7 +798,7 @@
     if (!d || po.busy) return;
     const key = `decongest:${m}:${n}`;
     const simulated = devMode();
-    if (!simulated && !await confirmDialog(`File “Decongest ${d.line ? `${d.file}:${d.line}` : d.file}”`, t('backlog_po.an_issue_with_this_fix_is'), t('backlog_po.file'))) return;
+    if (!simulated && !await confirmDialog(t('backlog_po.file_decongest_title', { target: d.line ? `${d.file}:${d.line}` : d.file }),t('backlog_po.an_issue_with_this_fix_is'), t('backlog_po.file'))) return;
     Object.assign(po, { busy: true, error: null });
     po.notes[key] = null;
     render();

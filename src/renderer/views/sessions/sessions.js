@@ -303,7 +303,7 @@
     const input = document.createElement('input');
     input.className = 'sx-title-input';
     input.value = current;
-    input.placeholder = 'Empty = the default title';
+    input.placeholder = t('sessions.empty_the_default_title');
     input.setAttribute('aria-label', t('sessions.session_title'));
     el.replaceWith(input);
     sx.editing = true;
@@ -447,7 +447,7 @@
     const p = sx.providers.find((x) => x.id === f.provider) || { models: [], efforts: [] };
     $s('#sx-providers').innerHTML = sx.providers.map((x) => `
       <button type="button" class="sx-provider ${x.id === f.provider ? 'active' : ''}" data-provider="${esc(x.id)}" role="radio" aria-checked="${x.id === f.provider}" ${x.installed ? '' : 'disabled'}>
-        ${badge(x.id)}<span><b>${esc(x.name)}</b><span class="muted small">${x.installed ? `${x.models.length} model${x.models.length === 1 ? '' : 's'}` : t('sessions.not_installed')}</span></span>
+        ${badge(x.id)}<span><b>${esc(x.name)}</b><span class="muted small">${x.installed ? t('sessions.models_count', { count: x.models.length }) : t('sessions.not_installed')}</span></span>
       </button>`).join('');
     $s('#sx-providers').querySelectorAll('[data-provider]').forEach((b) => (b.onclick = () => {
       f.provider = b.dataset.provider;

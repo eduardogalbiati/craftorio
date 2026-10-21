@@ -51,10 +51,10 @@ function mountGateSides(root) {
     if (el.classList.contains('ap')) return; // already mounted
     const { gateSide: approval, run: runId, diff } = el.dataset;
     const dev = lastOutput(runId, (o) => o.test_notes || o.evidence_plan);
-    const notes = [['Test notes', dev?.test_notes], ['Evidence plan', dev?.evidence_plan]]
-      .filter(([, t]) => t).map(([title, t]) => ({ title, text: typeof t === 'string' ? t : JSON.stringify(t, null, 2) }));
+    const notes = [[t('gate_panel.test_notes'), dev?.test_notes], [t('gate_panel.evidence_plan'), dev?.evidence_plan]]
+      .filter(([, x]) => x).map(([title, x]) => ({ title, text: typeof x === 'string' ? x : JSON.stringify(x, null, 2) }));
     const onChange = (file) => DiffViewer.open({ runId, approvalId: approval, file });
-    const panel = ArtifactsPanel.mount(el, { runId, flat: true, extras: { notes, changes: diff ? 'Loading…' : null, onChange, capture: lastCapture(runId) } });
+    const panel = ArtifactsPanel.mount(el, { runId, flat: true, extras: { notes, changes: diff ? t('gate_panel.loading') : null, onChange, capture: lastCapture(runId) } });
     if (diff) {
       // the files the developer reported: a simulated run's only changes (#115), whatever git says
       // of its folder, and a real run's fallback when its worktree cannot be listed
@@ -66,7 +66,7 @@ function mountGateSides(root) {
       else {
         Promise.resolve(api.gateChanges(runId, approval))
           .then((list) => panel.setExtras({ ...panel.extras, changes: list || [] }))
-          .catch((e) => (reported.length ? showReported() : panel.setExtras({ ...panel.extras, changes: `Could not list them: ${errMsg(e)}` })));
+          .catch((e) => (reported.length ? showReported() : panel.setExtras({ ...panel.extras, changes: t('gate_panel.could_not_list_them', { error: errMsg(e) }) })));
       }
     }
   });
@@ -96,7 +96,7 @@ window.gateBriefHtml = gateBriefHtml;
 function gateAnswers(g) {
   if (g.approve || g.reject || !g.choices) {
     return [
-      { id: true, key: 'approve', label: g.approve?.label || t('gate_panel.approve'), help: g.approve?.help || '' },
+      { id: true, key: 'approve', label: g.approve?.label || t('common.approve'), help: g.approve?.help || '' },
       { id: false, key: 'reject', label: g.reject?.label || t('gate_panel.reject'), help: g.reject?.help || '' },
     ];
   }
@@ -118,7 +118,7 @@ function gateCardHtml(runId, g, fullHtml) {
   }
   const md = (t) => (typeof markdownHtml === 'function' ? markdownHtml(t) : `<pre>${esc(t)}</pre>`);
   const rec = b.recommendation;
-  const recHtml = rec && (rec.label || rec.reason) ? `<p class="gate-card-rec"><b>${t('gate_panel.recommended_value', { value: rec.source === 'supervisor' ? ' by the supervisor' : '' })}</b>
+  const recHtml = rec && (rec.label || rec.reason) ? `<p class="gate-card-rec"><b>${rec.source === 'supervisor' ? t('gate_panel.recommended_by_supervisor') : t('gate_panel.recommended')}</b>
     ${rec.label ? `<b>${esc(rec.label)}</b>${rec.reason ? '. ' : ''}` : ''}${esc(rec.reason || '')}</p>` : '';
   const options = b.options?.length ? `<ol class="gate-card-options small">${b.options.map((o) => `<li>${esc(o)}</li>`).join('')}</ol>` : '';
   const action = b.user_action ? `<p class="gate-card-action small"><b>${t('gate_panel.only_you_can_do_this')}</b> ${esc(b.user_action)}</p>` : '';
@@ -184,8 +184,10 @@ async function confirmGateAnswer(g, answer) {
   const rec = g.brief.recommendation;
   const key = answerKey(answer);
   const clicked = gateAnswers(g).find((a) => a.key === key)?.label || key;
-  const who = rec.source === 'supervisor' ? 'The supervisor' : 'The workflow';
-  return confirmDialog(`${clicked}?`, `${who} recommends ${rec.label || rec.answer}${rec.reason ? `: ${rec.reason}` : '.'} ${clicked} anyway?`, clicked);
+  const params = { answer: rec.label || rec.answer, reason: rec.reason, clicked };
+  const sup = rec.source === 'supervisor';
+  const text = rec.reason ? t(sup ? 'gate_panel.supervisor_recommends_reason' : 'gate_panel.workflow_recommends_reason', params) : t(sup ? 'gate_panel.supervisor_recommends' : 'gate_panel.workflow_recommends', params);
+  return confirmDialog(`${clicked}?`, text, clicked);
 }
 window.confirmGateAnswer = confirmGateAnswer;
 
@@ -196,7 +198,7 @@ window.confirmGateAnswer = confirmGateAnswer;
 // output has `scenarios` and the gate's message does not mention them (a workflow without E2E).
 const SCENARIO_PILL = { passed: 'pill-success', failed: 'pill-failed', skipped: 'pill-cancelled', pending: 'pill-idle' };
 // pending (#199): written and checked by the run, run at release by the E2E release workflow
-const SCENARIO_LABEL = { pending: 'written, run at release' };
+const scenarioLabel = (k) => ({ passed: t('gate_panel.scenario_passed'), failed: t('gate_panel.scenario_failed'), skipped: t('gate_panel.scenario_skipped'), pending: t('gate_panel.scenario_pending') })[k] || k;
 function gateScenariosHtml(runId, g = {}) {
   const out = lastOutput(runId, (o) => Array.isArray(o.scenarios));
   const head = (extra) => `<div class="gate-scenarios-head"><b>${t('gate_panel.e2e_scenarios')}</b> <span class="muted small">${t('gate_panel.for_the_dev_qa')}</span>${extra}</div>`;
@@ -208,7 +210,7 @@ function gateScenariosHtml(runId, g = {}) {
   const note = out.e2e_note ? `<p class="muted small gate-scenarios-note" title="${esc(out.e2e_note)}">${esc(out.e2e_note)}</p>` : '';
   if (!list.length) return `<div class="gate-scenarios">${head('')}<p class="muted small">${t('gate_panel.no_scenario_for_this_change')}</p>${note}</div>`;
   const count = (k) => list.filter((s) => s.status === k).length;
-  const counts = Object.keys(SCENARIO_PILL).filter(count).map((k) => `<span class="pill ${SCENARIO_PILL[k]}">${count(k)} ${SCENARIO_LABEL[k] || k}</span>`).join(' ');
+  const counts = Object.keys(SCENARIO_PILL).filter(count).map((k) => `<span class="pill ${SCENARIO_PILL[k]}">${count(k)} ${scenarioLabel(k)}</span>`).join(' ');
   const runDir = state.runs.get(runId)?.events?.find((e) => e.type === 'workflow.started')?.run_dir || '';
   const file = (p) => (/^([a-zA-Z]:)?[\\/]/.test(p) || !runDir ? p : `${runDir.replace(/[\\/]+$/, '')}/${p}`);
   const step = (t) => {
@@ -220,8 +222,8 @@ function gateScenariosHtml(runId, g = {}) {
     const shots = (Array.isArray(s.screenshots) ? s.screenshots : []).map((p) => String(typeof p === 'object' && p ? p.path : p || '')).filter(Boolean);
     const imgs = shots.length ? `<div class="gate-scenario-shots">${shots.map((p) => `<img ${window.ImageViewer?.THUMB || 'tabindex="0"'} alt="${esc(`${s.name}: ${p.split('/').pop()}`)}" data-gate-shot="${esc(file(p))}" data-gate-scenario="${esc(s.name)}" />`).join('')}</div>` : '';
     const key = `${runId}\n${s.feature || ''}\n${s.name}`;
-    return `<details class="gate-scenario st-${status}" data-scenario-key="${esc(key)}"${openScenarios.has(key) ? ' open' : ''}><summary><span class="pill ${SCENARIO_PILL[status]}">${SCENARIO_LABEL[status] || status}</span>
-      <span class="gate-scenario-name" title="${esc(s.feature ? `${s.name} (${s.feature})` : s.name)}">${esc(s.name)}</span>${s.reason ? `<span class="muted small gate-scenario-reason" title="${esc(s.reason)}">${esc(s.reason)}</span>` : ''}${shots.length ? `<span class="badge">${shots.length} ${t('gate_panel.screenshot')}${shots.length === 1 ? '' : 's'}</span>` : ''}</summary>
+    return `<details class="gate-scenario st-${status}" data-scenario-key="${esc(key)}"${openScenarios.has(key) ? ' open' : ''}><summary><span class="pill ${SCENARIO_PILL[status]}">${scenarioLabel(status)}</span>
+      <span class="gate-scenario-name" title="${esc(s.feature ? `${s.name} (${s.feature})` : s.name)}">${esc(s.name)}</span>${s.reason ? `<span class="muted small gate-scenario-reason" title="${esc(s.reason)}">${esc(s.reason)}</span>` : ''}${shots.length ? `<span class="badge">${t('gate_panel.screenshots_count', { count: shots.length })}</span>` : ''}</summary>
       <ol class="gate-scenario-steps">${(s.steps || []).map(step).join('')}</ol>${s.feature ? `<div class="muted small" title="${esc(s.feature)}">${esc(s.feature)}</div>` : ''}${imgs}</details>`;
   }).join('');
   return `<div class="gate-scenarios">${head(` ${counts}`)}${rows}${note}</div>`;
@@ -243,7 +245,7 @@ function mountGateScenarios(root) {
       const open = (el) => {
         const all = [...box.querySelectorAll('img[data-gate-shot]')];
         // every screenshot of the scenario, one item each (#182)
-        const title = `Scenario: ${el.dataset.gateScenario}`;
+        const title = t('gate_panel.scenario_title', { name: el.dataset.gateScenario });
         ImageViewer.open({ title, items: all.map((i) => ({ title, images: [{ file: i.dataset.gateShot, src: i.getAttribute('src') || undefined, label: i.alt }] })), index: all.indexOf(el) });
       };
       box.onclick = (e) => { const el = e.target.closest('img[data-gate-shot]'); if (el) open(el); };
@@ -259,7 +261,7 @@ function mountGateScenarios(root) {
     const missing = img.nextElementSibling?.classList.contains('gate-scenario-missing') ? img.nextElementSibling : null;
     img.hidden = !src;
     if (src) { img.src = src; missing?.remove(); } else if (!missing) {
-      img.after(Object.assign(document.createElement('span'), { className: 'muted small gate-scenario-missing', textContent: `Screenshot not found: ${img.dataset.gateShot.split(/[\\/]/).pop()}`, title: img.dataset.gateShot }));
+      img.after(Object.assign(document.createElement('span'), { className: 'muted small gate-scenario-missing', textContent: t('gate_panel.screenshot_not_found', { file: img.dataset.gateShot.split(/[\\/]/).pop() }), title: img.dataset.gateShot }));
     }
   });
 }
@@ -269,7 +271,7 @@ window.mountGateScenarios = mountGateScenarios;
 // about an issue (#125) also offers "Accept and save to issue #n", right after the choice it
 // answers: the same choice with intent save_to_issue (the Save to issue preview opens when the run ends).
 function gateChoices(gate) {
-  const choices = gate.choices || [{ id: true, label: gate.approve?.label || t('gate_panel.approve') }, { id: false, label: gate.reject?.label || t('gate_panel.reject') }];
+  const choices = gate.choices || [{ id: true, label: gate.approve?.label || t('common.approve') }, { id: false, label: gate.reject?.label || t('gate_panel.reject') }];
   const save = gate.save_to_issue;
   const at = save?.issue ? choices.findIndex((c) => String(c.id) === String(save.choice)) : -1;
   if (at < 0) return choices;
@@ -294,7 +296,7 @@ function gateToolsHtml(g, { disabled = false, runId = g.run_id || g.runId || '' 
   const base = dir ? g.diff_base || g.diffBase || null : null;
   if (!lp && !dir) return '';
   const off = disabled ? ' disabled' : '';
-  const how = lp ? `${lp.install ? `${lp.install} (when dependencies are missing or the lockfile changed), then ` : ''}${lp.command}` : '';
+  const how = lp ? `${lp.install ? t('gate_panel.install_then', { install: lp.install }) : ''}${lp.command}` : '';
   const runApp = !!lp || (!!(g.run_app || g.runApp) && !!dir);
   const run = runApp ? `<button type="button" class="btn sm" data-gate-tool="preview" title="${esc(lp ? t('gate_panel.how_in_dir_runs_in_simulation', { how, dir }) : t('gate_panel.asks_once_the_command_the_repository'))}"${off}>${esc(runAppLabel(lp))}</button>
     <span class="gate-app-state" data-gate-app-state></span>
@@ -309,7 +311,7 @@ function gateToolsHtml(g, { disabled = false, runId = g.run_id || g.runId || '' 
   return `<div class="row gate-tools" data-dir="${esc(dir || '')}" data-approval="${esc(g.approval_id || g.approvalId)}" data-run="${esc(runId)}">${run}${diff}${open}${more}</div>`;
 }
 
-const runAppLabel = (lp) => (lp?.command ? `▶ Run App: ${lp.command}` : '▶ Run App…');
+const runAppLabel = (lp) => (lp?.command ? t('gate_panel.run_app_command', { command: lp.command }) : t('gate_panel.run_app_setup'));
 
 // Run App's state on every gate shown (Run screen, run chat): the run view's `preview`, kept from
 // local_preview.started / .stopped and from a start that failed (e.g. the port already in use).
@@ -320,7 +322,7 @@ function paintGateApps() {
     const p = state.runs.get(box.dataset.run)?.preview || null;
     const status = p && (!p.approval || p.approval === box.dataset.approval) ? p.status : null;
     st.className = `gate-app-state${status ? ` st-${status}` : ''}`;
-    st.textContent = { running: '● running', stopped: '○ stopped', failed: '● failed' }[status] || '';
+    st.textContent = { running: t('gate_panel.app_running'), stopped: t('gate_panel.app_stopped'), failed: t('gate_panel.app_failed') }[status] || '';
     st.title = p?.command || '';
     box.querySelector('[data-gate-tool="stop"]')?.classList.toggle('hidden', status !== 'running');
     box.querySelector('[data-gate-tool="app-term"]')?.classList.toggle('hidden', !status || !dock.tabs.some((t) => t.key === `preview:${box.dataset.run}:${box.dataset.approval}`));
@@ -339,7 +341,7 @@ function setRunPreview(runId, preview) {
 }
 
 // The commands of a config as the confirmation shows them: `npm ci` + `npm start` (in apps/web)
-const runAppCommandHtml = (c) => `${c.install ? `<code>${esc(c.install)}</code> + ` : ''}<code>${esc(c.command)}</code>${c.cwd ? ` in <code>${esc(c.cwd)}</code>` : ''}`;
+const runAppCommandHtml = (c) => `${c.install ? `<code>${esc(c.install)}</code> + ` : ''}<code>${esc(c.command)}</code>${c.cwd ? t('gate_panel.in_folder', { folder: `<code>${esc(c.cwd)}</code>` }) : ''}`;
 
 // Run App's one-click confirmation (#115), a popover over the gate (never above its choices): a
 // declared command (the repository's .multiagent/local-preview.yaml or the workflow's) the owner has
@@ -351,9 +353,9 @@ function runAppConfirmHtml(info, cfg) {
   const pick = apps.length > 1 ? `<label class="small">${t('gate_panel.app')} <select data-setup-app>${apps.map((a, i) => `<option value="${i}"${a.cwd === cfg.cwd ? ' selected' : ''}>${esc(a.cwd)}</option>`).join('')}</select></label>` : '';
   const from = info.config ? info.from : cfg.from;
   const lead = info.changed ? `<div class="small gate-app-changed">${t('gate_panel.the_declared_run_command_changed_since')}</div>` : '';
-  const saved = !info.config && info.project ? ` Saved as the Local preview of <b>${esc(info.project.name)}</b>${t('gate_panel.so_the_next_gates_run_it')}` : '';
+  const saved = !info.config && info.project ? t('gate_panel.saved_as_local_preview_of', { name: esc(info.project.name) }) : '';
   const install = cfg.install ? `<div>${runAppInstallHtml(info)}</div>` : '';
-  const run = !info.config && info.project ? 'Save as this project\'s Run App and start' : 'Run';
+  const run = !info.config && info.project ? t('gate_panel.save_as_this_project_s_run') : t('gate_panel.run');
   return `${lead}<div>${t('gate_panel.run_with_cfg_value', { cfg: runAppCommandHtml(cfg), value: from ? ` <span class="muted small">${t('gate_panel.from_from', { from: esc(from) })}</span>` : '' })}</div>${pick}${install}
     <div class="muted small">${t('gate_panel.it_runs_this_repository_s_command')}${saved}</div>
     <div class="row"><button type="button" class="btn sm primary" data-gate-tool="app-run">${run}</button><button type="button" class="btn sm ghost" data-gate-tool="app-edit">${t('gate_panel.edit')}</button><button type="button" class="btn sm ghost" data-gate-tool="app-cancel">${t('common.cancel')}</button></div>`;
@@ -371,12 +373,12 @@ function runAppInstallHtml(info) {
 // project's Local preview and optionally written to the repository's .multiagent/local-preview.yaml.
 function runAppSetupHtml(info, cfg = {}) {
   const input = (k, label, ph, hint = '') => `<label class="small">${label}<input data-setup="${k}" value="${esc(cfg[k] || '')}" placeholder="${esc(ph)}" spellcheck="false">${hint ? `<span class="hint">${hint}</span>` : ''}</label>`;
-  const found = cfg.from ? `From ${esc(cfg.from)}.` : info.suggestion || info.config ? '' : 'Nothing found in the worktree: write how to run it.';
-  return `<div class="muted small">${found} ${info.project ? `Saving makes it the Run App of <b>${esc(info.project.name)}</b> ${t('gate_panel.projects_local_preview_the_next_gates')}` : t('gate_panel.this_run_has_no_project_it')}</div>
-    ${input('install', 'Install (only when dependencies are missing or the lockfile changed)', 'npm ci (optional)', runAppInstallHtml(info))}
-    ${input('command', 'Command', 'npm start')}
-    ${input('url', 'URL (optional)', 'http://localhost:3000')}
-    ${input('cwd', 'Folder (optional, a monorepo\'s app)', 'apps/web')}
+  const found = cfg.from ? t('gate_panel.from_source', { from: esc(cfg.from) }) : info.suggestion || info.config ? '' : t('gate_panel.nothing_found_in_the_worktree');
+  return `<div class="muted small">${found} ${info.project ? t('gate_panel.saving_makes_it_the_run_app_of', { name: esc(info.project.name) }) : t('gate_panel.this_run_has_no_project_it')}</div>
+    ${input('install', t('gate_panel.install_label'), t('gate_panel.install_placeholder'), runAppInstallHtml(info))}
+    ${input('command', t('gate_panel.command_label'), 'npm start')}
+    ${input('url', t('gate_panel.url_label'), 'http://localhost:3000')}
+    ${input('cwd', t('gate_panel.folder_label'), 'apps/web')}
     ${info.project ? `<label class="small gate-app-check"><input type="checkbox" data-setup-repo> ${t('gate_panel.also_write_it_to')} <code>${t('gate_panel.multiagent_local_preview_yaml')}</code> ${t('gate_panel.a_change_you_commit')}</label>` : ''}
     <div class="row"><button type="button" class="btn sm primary" data-gate-tool="app-save">${info.project ? t('gate_panel.save_as_this_project_s_run') : t('gate_panel.run')}</button><button type="button" class="btn sm ghost" data-gate-tool="app-cancel">${t('common.cancel')}</button></div>`;
 }

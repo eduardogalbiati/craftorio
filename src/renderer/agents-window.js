@@ -53,7 +53,7 @@
       const unread = Math.max(0, Number(typeof d.unread === 'function' ? d.unread() : 0) || 0);
       const busy = typeof d.busy === 'function' ? !!d.busy() : false;
       const color = colorOf(d);
-      return `<button type="button" class="aw-item${on ? ' active' : ''}" data-testid="agents-rail-item" data-agent="${esc(d.id)}" aria-label="${esc(d.name)}" title="${esc(d.name)}${busy ? ' (answering…)' : unread ? t('agents_window.unread_unread', { unread }) : ''}" aria-pressed="${on}" data-busy="${busy}"${color ? ` style="--aw-color:${esc(color)}"` : ''}>
+      return `<button type="button" class="aw-item${on ? ' active' : ''}" data-testid="agents-rail-item" data-agent="${esc(d.id)}" aria-label="${esc(d.name)}" title="${esc(d.name)}${busy ? t('agents_window.answering_suffix') : unread ? t('agents_window.unread_unread', { unread }) : ''}" aria-pressed="${on}" data-busy="${busy}"${color ? ` style="--aw-color:${esc(color)}"` : ''}>
         <span class="aw-avatar" aria-hidden="true">${avatarHtml(d)}</span>
         <span class="aw-name" aria-hidden="true">${esc(d.name)}</span>
         ${unread ? `<span class="aw-unread" data-testid="agents-rail-unread">${unread > 99 ? '99+' : unread}</span>` : ''}
@@ -77,7 +77,7 @@
     const head = aw.root.querySelector('[data-testid="agents-window-header"]');
     if (rail) rail.innerHTML = railHtml();
     if (head) head.innerHTML = headerHtml(byId(aw.selected));
-    if (isWindowPage() && root.document) root.document.title = t('agents_window.value_agents', { value: byId(aw.selected)?.name || 'Agents' });
+    if (isWindowPage() && root.document) root.document.title = byId(aw.selected)?.name ? t('agents_window.window_title_agent', { name: byId(aw.selected).name }) : t('agents_window.window_title');
   }
   // the rail and the header once per tick, however many agents changed
   function changed() {

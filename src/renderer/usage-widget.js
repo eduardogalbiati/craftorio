@@ -25,12 +25,12 @@ function parseAmount(v) {
   return Number(m[1].replace(',', '.')) * ({ k: 1e3, m: 1e6, b: 1e9 }[(m[2] || '').toLowerCase()] || 1);
 }
 const STATUS_RANK = { ok: 0, warn: 1, over: 2 };
-const STATUS_TEXT = { ok: 'Within budget', warn: 'Near limit', over: 'Over limit' };
+const STATUS_TEXT = { get ok() { return t('usage_widget.within_budget'); }, get warn() { return t('usage_widget.near_limit'); }, get over() { return t('usage_widget.over_limit'); } };
 const pctStatus = (p) => (p == null ? 'ok' : p >= 1 ? 'over' : p >= 0.8 ? 'warn' : 'ok');
 const worstStatus = (providers) => (providers || []).reduce((w, p) => ((STATUS_RANK[p.status] || 0) > STATUS_RANK[w] ? p.status : w), 'ok');
 function monthLabel(ym) {
   const [y, m] = String(ym || '').split('-').map(Number);
-  return y && m ? new Date(y, m - 1, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' }) : 'this month';
+  return y && m ? new Date(y, m - 1, 1).toLocaleString(typeof uiLocale === 'function' ? uiLocale() : 'en-US', { month: 'long', year: 'numeric' }) : t('usage_widget.this_month');
 }
 
 // #389: first paint first: the usage and the 24/7 chip (slow reads) are asked once Home is drawn
@@ -128,7 +128,8 @@ function renderUsageWidget() {
   $('#usage-widget-text').textContent = t('usage_widget.total_tok_costusd', { total: fmtTok(m.tokens?.total), costUsd: fmtUsd(m.costUsd) });
   $('#usage-widget-dot').className = `u-dot st-${worst}`;
   $('#usage-widget-scope').classList.toggle('hidden', !machine);
-  btn.title = t('usage_widget.value_in_month_total_tokens_costusd', { value: machine ? 'All CLI usage on this machine' : 'Orchestrator usage', month: monthLabel(u.month), total: fmtNum(m.tokens?.total), costUsd: fmtUsd(m.costUsd), value2: STATUS_TEXT[worst] });
+  const params = { month: monthLabel(u.month), total: fmtNum(m.tokens?.total), costUsd: fmtUsd(m.costUsd), status: STATUS_TEXT[worst] };
+  btn.title = machine ? t('usage_widget.machine_usage_in_month', params) : t('usage_widget.orchestrator_usage_in_month', params);
   renderSpending(u.spending);
 }
 
@@ -143,7 +144,10 @@ function renderSpending(sp) {
   const pct = p.limitUsd ? p.spentUsd / p.limitUsd : 0;
   el.textContent = sp.text;
   el.className = `u-today mono${pct >= 1 ? ' st-over' : pct >= 0.8 ? ' st-warn' : ''}`;
-  el.title = `${p === sp.night ? 'Spent since the Night watch started' : 'Spent today'} by real runs (live runs included)${p.limitUsd ? `, against the ${p === sp.night ? 'night' : 'daily'} budget${p.raised ? ' (raised for this period)' : ''}: the roadmaps pause before a start that would pass it` : ': no budget set (Settings › Budget)'}${p.estimated ? '. Some costs are estimated from tokens × the model prices' : ''}.`;
+  const night = p === sp.night;
+  const raised = p.raised ? t('usage_widget.raised_for_this_period') : '';
+  const budget = !p.limitUsd ? t('usage_widget.no_budget_set') : night ? t('usage_widget.against_the_night_budget', { raised }) : t('usage_widget.against_the_daily_budget', { raised });
+  el.title = `${night ? t('usage_widget.spent_since_the_night_watch') : t('usage_widget.spent_today')}${budget}${p.estimated ? t('usage_widget.some_costs_are_estimated') : ''}.`;
 }
 
 function toggleUsagePopover() {

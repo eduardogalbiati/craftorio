@@ -34,7 +34,7 @@ async function refreshProjects() {
         <button class="btn sm ghost" data-act="open" ${p.exists ? '' : 'disabled'}>${t('projects.open_folder')}</button>
         <span class="spacer"></span>
         <button class="btn sm ghost" data-act="edit">${t('projects.edit')}</button>
-        <button class="btn sm ghost danger" data-act="remove">${t('projects.remove')}</button>
+        <button class="btn sm ghost danger" data-act="remove">${t('common.remove')}</button>
       </div>
     </div>`).join('');
 }
@@ -53,7 +53,7 @@ async function onProjectsClick(e) {
   if (act.dataset.act === 'run') openDrawer({ project: p.id });
   if (act.dataset.act === 'open') api.openPath(p.folder);
   if (act.dataset.act === 'edit') openProjectModal(p);
-  if (act.dataset.act === 'remove' && await confirmDialog(t('projects.remove_project'), t('projects.remove_name_from_the_list_the', { name: p.name, folder: p.folder }), t('projects.remove'))) {
+  if (act.dataset.act === 'remove' && await confirmDialog(t('projects.remove_project'), t('projects.remove_name_from_the_list_the', { name: p.name, folder: p.folder }), t('common.remove'))) {
     await api.removeProject(p.id);
     refreshProjects();
   }

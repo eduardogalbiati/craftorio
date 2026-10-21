@@ -14,7 +14,7 @@
 (() => {
   const rel = { projectId: null, data: null };
 
-  const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+  const plural = (n, key) => t(key, { count: n });
   const usd = (n) => `$${(Number(n) || 0).toFixed(2)}`;
   const count = (runs) => (Array.isArray(runs) ? runs.length : Number(runs) || 0);
   const issuesHtml = (issues) => (issues?.length
@@ -27,15 +27,15 @@
     const o = typeof t === 'string' ? { status: t } : t;
     const failed = Number(o.failed) || 0;
     const ok = o.status ? o.status === 'pass' : !failed;
-    const counts = o.passed != null ? ` ${esc(o.passed)} passed${failed ? `, ${failed} failed` : ''}` : '';
-    return `<span class="badge ${ok ? 'rel-pass' : 'warn'}" title="${esc(I18n.t('releases.name_suite_value_when_the_release', { name, value: ok ? 'green' : 'red' }))}">${name} <span aria-hidden="true">${ok ? '✔' : '✖'}</span>${counts}</span>`;
+    const counts = o.passed != null ? ` ${I18n.t('releases.passed_count', { passed: esc(o.passed) })}${failed ? I18n.t('releases.failed_count_suffix', { failed }) : ''}` : '';
+    return `<span class="badge ${ok ? 'rel-pass' : 'warn'}" title="${esc(I18n.t(ok ? 'releases.suite_green_when_shipped' : 'releases.suite_red_when_shipped', { name }))}">${name} <span aria-hidden="true">${ok ? '✔' : '✖'}</span>${counts}</span>`;
   }
 
   // The next release: what it holds, its notes (editable until Ship) and the start of its release run.
   function nextHtml(d) {
     const n = d.next;
     if (!n) return '';
-    const what = [plural(n.issues?.length || 0, 'issue'), `${plural(Number(n.commits) || 0, 'commit')} not pushed`, plural(count(n.runs), 'run'), ...(n.cost ? [usd(n.cost)] : [])];
+    const what = [plural(n.issues?.length || 0, 'releases.issues_count'), plural(Number(n.commits) || 0, 'releases.commits_not_pushed_count'), plural(count(n.runs), 'releases.runs_count'), ...(n.cost ? [usd(n.cost)] : [])];
     const version = n.version || d.line?.name || '';
     const going = d.run
       ? `<span class="badge live">${d.run.waiting ? t('releases.waiting_for_your_ship') : t('releases.release_run_in_progress')}${d.run.mock ? t('releases.simulated_2') : ''}</span>
@@ -47,7 +47,7 @@
         <div class="rel-head">
           <b class="rel-title">${t('releases.next_release')}</b>
           ${d.line ? `<span class="badge" title="${t('releases.the_roadmap_s_cut_line_waiting')}">${t('releases.cut_line')} ${esc(d.line.name)}</span>` : ''}
-          <span class="muted small">${esc(what.join(' · '))}${n.since ? ` since ${esc(dateOf(n.since))}` : ''}</span>
+          <span class="muted small">${esc(what.join(' · '))}${n.since ? ` ${t('releases.since_date', { date: esc(dateOf(n.since)) })}` : ''}</span>
         </div>
         ${issuesHtml(n.issues)}
         <div class="field">
@@ -58,7 +58,7 @@
         <div class="rel-actions">
           <div class="field rel-version-field">
             <label for="rel-version">${t('releases.version')}</label>
-            <input type="text" id="rel-version" value="${esc(version)}" placeholder="e.g. v1.4" autocomplete="off"${d.run ? ' disabled' : ''} />
+            <input type="text" id="rel-version" value="${esc(version)}" placeholder="${t('releases.version_placeholder')}" autocomplete="off"${d.run ? ' disabled' : ''} />
           </div>
           <span class="spacer"></span>
           ${going}
@@ -68,16 +68,16 @@
 
   function rowHtml(r) {
     const tests = r.tests || {};
-    const where = [r.tag && r.tag !== r.version ? `tag ${r.tag}` : '', r.commit ? `commit ${String(r.commit).slice(0, 8)}` : ''].filter(Boolean).join(' · ');
+    const where = [r.tag && r.tag !== r.version ? t('releases.tag_name', { tag: r.tag }) : '', r.commit ? t('releases.commit_sha', { sha: String(r.commit).slice(0, 8) }) : ''].filter(Boolean).join(' · ');
     return `
       <article class="rel-row" data-testid="release-row">
         <div class="rel-head">
           <b class="rel-title"${where ? ` title="${esc(where)}"` : ''}>${esc(r.version)}</b>
-          <span class="badge rel-pass">${esc(r.status || 'shipped')}</span>
+          <span class="badge rel-pass">${esc(r.status || t('releases.status_shipped'))}</span>
           <span class="muted small">${r.date ? esc(dateOf(r.date)) : ''}</span>
           <span class="spacer"></span>
           ${suiteBadge('Unit', tests.unit)}${suiteBadge('E2E', tests.e2e)}
-          <span class="badge" title="${t('releases.the_runs_merged_into_this_release')}">${plural(count(r.runs), 'run')}</span>
+          <span class="badge" title="${t('releases.the_runs_merged_into_this_release')}">${plural(count(r.runs), 'releases.runs_count')}</span>
           ${r.cost != null ? `<span class="badge" title="${t('releases.what_its_runs_cost')}">${usd(r.cost)}</span>` : ''}
           ${r.tag ? `<button type="button" class="btn sm" data-testid="release-show-map" data-tag="${esc(r.tag)}" title="${t('releases.the_project_city_at_the_previous')}">${t('releases.show_on_the_map')}</button>` : ''}
         </div>

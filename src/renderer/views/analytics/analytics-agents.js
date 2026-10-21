@@ -17,16 +17,16 @@
     { id: 'supervisor', name: 'Supervisor', color: 'var(--purple)', testid: 'agents-card-supervisor' },
   ];
   const AGENT = Object.fromEntries(AGENTS.map((g) => [g.id, g]));
-  // why a session started or ended: the chip's label and its tooltip
+  // why a session started or ended: the catalog keys of the chip's label and its tooltip
   const REASONS = {
-    answered: ['Answered', 'Answered: a one-shot call ends with its answer'],
-    cleared: ['Cleared', 'Cleared: the conversation was cleared, the next message started a new session'],
-    compaction: ['Compaction', 'Compaction: the context passed the Oracle\'s limit (150,000 tokens unless changed in Settings), a new session started from a handoff note'],
-    first: ['First', 'First: there was no earlier session to resume'],
-    idle: ['Idle 55 min', 'Idle: the last turn was over 55 minutes before, past the prompt cache\'s lifetime; a fresh session costs less than resuming'],
-    'model-change': ['Model change', 'Model change: the agent\'s model changed, and a session stays on its model'],
-    'one-shot': ['One-shot', 'One-shot: the Product Owner starts a fresh call for every question, with the last exchanges re-sent'],
-    reset: ['Reset', 'Reset: "New session" in the Oracle, the next question started from a handoff note'],
+    answered: ['analytics_agents.reason_answered', 'analytics_agents.reason_answered_tip'],
+    cleared: ['analytics_agents.reason_cleared', 'analytics_agents.reason_cleared_tip'],
+    compaction: ['analytics_agents.reason_compaction', 'analytics_agents.reason_compaction_tip'],
+    first: ['analytics_agents.reason_first', 'analytics_agents.reason_first_tip'],
+    idle: ['analytics_agents.reason_idle', 'analytics_agents.reason_idle_tip'],
+    'model-change': ['analytics_agents.reason_model_change', 'analytics_agents.reason_model_change_tip'],
+    'one-shot': ['analytics_agents.reason_one_shot', 'analytics_agents.reason_one_shot_tip'],
+    reset: ['analytics_agents.reason_reset', 'analytics_agents.reason_reset_tip'],
   };
   const gx = {
     unit: (() => { try { return localStorage.getItem(LS) === 'tokens' ? 'tokens' : 'usd'; } catch { return 'usd'; } })(),
@@ -37,7 +37,8 @@
   const agentOf = (id) => gx.data?.agents?.[id] || null;
   const turnsOf = (a) => Number(a?.totals?.turns) || 0;
   const sumTokens = (t) => (t ? (Number(t.input) || 0) + (Number(t.output) || 0) + (Number(t.cache_read) || 0) + (Number(t.cache_write) || 0) : 0);
-  const count = (n, word) => `${fmtNum(Number(n) || 0)} ${word}${Number(n) === 1 ? '' : 's'}`;
+  // a plural catalog entry: `count` picks the form, `n` is the number as shown
+  const count = (n, key) => I18n.t(key, { count: Number(n) || 0, n: fmtNum(Number(n) || 0) });
 
   // `range`: the screen's { from, to }; without it (Retry) the last one is read again
   async function load(range) {
@@ -68,7 +69,7 @@
         ? `<span class="ag-line small" title="${I18n.t('analytics_agents.the_oracle_s_spend_today_utc')}">${I18n.t('analytics_agents.today_spent_of', { spent: fmtUsd(spent) })} ${fmtUsd(limit)}<span class="ag-budget${1 <= share ? ' full' : ''}"><i style="width:${Math.round(share * 100)}%"></i></span></span>`
         : `<span class="ag-line small" title="${I18n.t('analytics_agents.the_oracle_has_no_daily_budget')}">${I18n.t('analytics_agents.today_spent_no_daily_budget', { spent: fmtUsd(spent) })}</span>`;
     }
-    return `${budget}<span class="ag-line muted small" title="${I18n.t('analytics_agents.what_its_turns_answered_a_turn')}">${count(t.wakeUps, 'wake-up')} · ${count(t.questions, 'question')}</span>`;
+    return `${budget}<span class="ag-line muted small" title="${I18n.t('analytics_agents.what_its_turns_answered_a_turn')}">${count(t.wakeUps, 'analytics_agents.wake_ups_count')} · ${count(t.questions, 'analytics_agents.questions_count')}</span>`;
   }
 
   // a card is a button: it filters the sessions table to its agent (again: every agent)
@@ -84,10 +85,10 @@
       ${head(g, 'done')}
       <span class="ag-line ag-main"><b data-testid="agents-card-cost">${fmtUsd(cost)}</b> ${I18n.t('analytics_agents.tk_tokens', { tk: fmtTok(sumTokens(tk)) })}</span>
       <span class="ag-line muted small">${I18n.t('analytics_agents.input_input_output_output_cache_read', { input: fmtTok(tk.input), output: fmtTok(tk.output), cache_read: fmtTok(tk.cache_read) })} ${fmtTok(tk.cache_write)}</span>
-      ${t.turnsWithoutTokens ? `<span class="ag-line muted small" title="${I18n.t('analytics_agents.only_the_cost_of_these_turns')}">${I18n.t('analytics_agents.tokens_of_turnswithouttokens_not_recorded', { turnsWithoutTokens: count(t.turnsWithoutTokens, 'earlier turn') })}</span>` : ''}
-      <span class="ag-line" data-testid="agents-card-turns">${count(n, 'turn')} · ${count(t.sessions, 'session')}</span>
+      ${t.turnsWithoutTokens ? `<span class="ag-line muted small" title="${I18n.t('analytics_agents.only_the_cost_of_these_turns')}">${count(t.turnsWithoutTokens, 'analytics_agents.earlier_turns_tokens_not_recorded')}</span>` : ''}
+      <span class="ag-line" data-testid="agents-card-turns">${count(n, 'analytics_agents.turns_count')} · ${count(t.sessions, 'analytics_agents.sessions_count')}</span>
       <span class="ag-line muted small">${fmtUsd(cost / n)} ${I18n.t('analytics_agents.per_turn_value_of_the_three', { value: totalUsd > 0 ? Math.round((cost / totalUsd) * 100) : 0 })}</span>
-      ${g.id === 'oracle' ? oracleLines(a) : ''}${g.id === 'product-owner' ? `<span class="ag-line muted small">${count(t.projects, 'project')}</span>` : ''}
+      ${g.id === 'oracle' ? oracleLines(a) : ''}${g.id === 'product-owner' ? `<span class="ag-line muted small">${count(t.projects, 'analytics_agents.projects_count')}</span>` : ''}
     </button>`;
   }
 
@@ -103,7 +104,7 @@
 
   function dayChart() {
     const tokens = gx.unit === 'tokens';
-    const fmt = (v) => (tokens ? `${fmtTok(v)} tokens` : fmtUsd(v));
+    const fmt = (v) => (tokens ? t('analytics_agents.tokens_amount', { tokens: fmtTok(v) }) : fmtUsd(v));
     const byDay = AGENTS.map((g) => new Map((agentOf(g.id)?.days || []).map((d) => [d.day, tokens ? sumTokens(d.tokens) : Number(d.costUsd) || 0])));
     const days = axisDays();
     const max = Math.max(0, ...days.map((day) => byDay.reduce((s, m) => s + (m.get(day) || 0), 0))) || 1;
@@ -126,9 +127,9 @@
     return `<div class="card an-card" data-testid="agents-chart">
       <div class="row an-card-head"><h3>${t('analytics_agents.cost_per_day')}</h3>
         <div class="row ag-chart-controls"><div class="an-legend" data-testid="agents-cost-per-day-legend">${AGENTS.map((g) => `<span><i style="background:${g.color}"></i>${esc(g.name)}</span>`).join('')}</div>
-        <div class="seg sm" role="radiogroup" aria-label="${t('analytics_agents.cost_per_day')}">${unit('usd', 'US$')}${unit('tokens', 'Tokens')}</div></div>
+        <div class="seg sm" role="radiogroup" aria-label="${t('analytics_agents.cost_per_day')}">${unit('usd', 'US$')}${unit('tokens', t('analytics_agents.unit_tokens'))}</div></div>
       </div>
-      <div class="an-chart"><div class="an-ymax muted small">${esc(fmt(max))}</div><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${t('analytics_agents.value_per_day_stacked_by_agent', { value: tokens ? 'Tokens' : 'Cost' })}">${bars}</svg><div class="an-xlabels">${labels}</div></div>
+      <div class="an-chart"><div class="an-ymax muted small">${esc(fmt(max))}</div><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${t(tokens ? 'analytics_agents.tokens_per_day_stacked' : 'analytics_agents.cost_per_day_stacked')}">${bars}</svg><div class="an-xlabels">${labels}</div></div>
     </div>`;
   }
 
@@ -136,7 +137,7 @@
   function chip(reason, testid = '') {
     const id = testid ? ` data-testid="${testid}" data-reason="${esc(reason || '')}"` : '';
     const known = REASONS[reason];
-    if (known) return `<span class="badge"${id} title="${esc(known[1])}">${esc(known[0])}</span>`;
+    if (known) return `<span class="badge"${id} title="${esc(t(known[1]))}">${esc(t(known[0]))}</span>`;
     // a line from before #280 has no reason
     return `<span class="muted"${id}${reason ? '' : ` title="${t('analytics_agents.not_recorded_this_turn_is_from')}"`}>${esc(reason || '—')}</span>`;
   }
@@ -162,13 +163,13 @@
       .filter((s) => gx.filter === 'all' || s.agent === gx.filter)
       .sort((a, b) => Date.parse(b.start) - Date.parse(a.start));
     const rows = all.slice(0, gx.shown).map(sessionRow).join('');
-    const none = `<tr><td colspan="8" class="muted">${t('analytics_agents.no_sessions_value_in_this_range', { value: gx.filter === 'all' ? '' : ` of the ${esc(AGENT[gx.filter].name)}` })}</td></tr>`;
+    const none = `<tr><td colspan="8" class="muted">${gx.filter === 'all' ? t('analytics_agents.no_sessions_in_this_range') : t('analytics_agents.no_sessions_of_name_in_this_range', { name: esc(AGENT[gx.filter].name) })}</td></tr>`;
     const more = all.length > gx.shown
       ? `<tfoot><tr><td colspan="8"><button type="button" class="btn sm ghost" data-ag-more data-testid="agents-show-more">${t('analytics_agents.show_more')}</button> <span class="muted small">${fmtNum(gx.shown)} ${t('analytics_agents.of_length_sessions', { length: fmtNum(all.length) })}</span></td></tr></tfoot>` : '';
     const option = (id, label) => `<option value="${id}"${gx.filter === id ? ' selected' : ''}>${esc(label)}</option>`;
     return `<div class="card an-card">
       <div class="row an-card-head"><h3>${t('analytics_agents.sessions')}</h3>
-        <label class="an-date small muted">${t('analytics_agents.agent')} <select data-ag-filter data-testid="agents-sessions-filter">${option('all', 'All agents')}${AGENTS.map((g) => option(g.id, g.name)).join('')}</select></label>
+        <label class="an-date small muted">${t('analytics_agents.agent')} <select data-ag-filter data-testid="agents-sessions-filter">${option('all', t('analytics_agents.all_agents'))}${AGENTS.map((g) => option(g.id, g.name)).join('')}</select></label>
       </div>
       <div class="table-wrap"><table class="u-table an-sessions" data-testid="agents-sessions-table">
         <thead><tr><th>${t('analytics_agents.agent')}</th><th>${t('analytics_agents.started')}</th><th>${t('analytics_agents.why_it_started')}</th><th class="num">${t('analytics_agents.turns')}</th><th class="num">${t('analytics_agents.context_at_end')}</th><th class="num">${t('analytics_agents.cost_tokens')}</th><th>${t('analytics_agents.ended')}</th><th>${t('analytics_agents.why_it_ended')}</th></tr></thead>
@@ -234,7 +235,7 @@
     });
   }
 
-  const rangeText = () => (gx.range ? `${gx.range.from} to ${gx.range.to}` : 'the screen\'s range');
+  const rangeText = () => (gx.range ? t('analytics_agents.range_from_to', { from: gx.range.from, to: gx.range.to }) : t('analytics_agents.the_screen_s_range'));
 
   window.AnalyticsTabs = window.AnalyticsTabs || {};
   window.AnalyticsTabs.agents = {
@@ -244,7 +245,7 @@
     usesRange: true,
     load,
     render,
-    sub: () => `What the Oracle, the Product Owner and the Supervisor cost, and how their sessions start and end, ${rangeText()}${gx.loading ? ' — loading…' : ''}`,
-    context: () => `Agents tab, range ${rangeText()}: ${AGENTS.map((g) => `${g.name} ${fmtUsd(Number(agentOf(g.id)?.totals?.costUsd) || 0)} in ${count(turnsOf(agentOf(g.id)), 'turn')}`).join(', ')}`,
+    sub: () => `${t('analytics_agents.sub', { range: rangeText() })}${gx.loading ? t('analytics_agents.loading_suffix') : ''}`,
+    context: () => `Agents tab, range ${rangeText()}: ${AGENTS.map((g) => `${g.name} ${fmtUsd(Number(agentOf(g.id)?.totals?.costUsd) || 0)} in ${count(turnsOf(agentOf(g.id)), 'analytics_agents.turns_count')}`).join(', ')}`,
   };
 })();

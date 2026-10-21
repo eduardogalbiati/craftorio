@@ -14,8 +14,10 @@
   // (`names`: the run's own id → name map, from its workflow's display names)
   const readable = (id, names) => (typeof displayName === 'function' ? displayName(id, names) : String(id || ''));
   const TOKEN_COLORS = { input: 'var(--accent)', output: 'var(--green)', cache_read: 'var(--purple)', cache_write: 'var(--orange)' };
-  const TOKEN_LABELS = { input: 'new input', output: 'output', cache_read: 'cache read', cache_write: 'cache creation' };
-  const FIGURES = [['costUsd', 'Total cost', 'usd'], ['durationMs', 'Duration', 'ms'], ['costPerIssue', 'Cost per issue', 'usd']];
+  // the catalog keys of the token kinds' and the compared figures' labels
+  const TOKEN_KEYS = { input: 'analytics_run.token_input', output: 'analytics_run.token_output', cache_read: 'analytics_run.token_cache_read', cache_write: 'analytics_run.token_cache_write' };
+  const tokenLabel = (k) => t(TOKEN_KEYS[k]);
+  const FIGURES = [['costUsd', 'analytics_run.total_cost', 'usd'], ['durationMs', 'analytics_run.duration', 'ms'], ['costPerIssue', 'analytics_run.cost_per_issue', 'usd']];
   const rx = {
     runId: (() => { try { return sessionStorage.getItem(SS) || null; } catch { return null; } })(),
     query: '', runs: [], data: null, error: null, loading: false,
@@ -75,7 +77,7 @@
     if (c.verdict === 'same') return `<span class="an-verdict neutral">${t('analytics_run.the_median')}</span>`;
     const sign = c.diff > 0 ? '▲ +' : '▼ −';
     const pctText = c.diffPct == null ? '' : `${sign}${Math.abs(Math.round(c.diffPct))}% · `;
-    return `<span class="an-verdict ${esc(c.level)}" title="${t('analytics_run.value_than_the_median_of_the', { value: c.verdict === 'worse' ? 'Worse' : 'Better', p25: esc(fmt(c.p25, kind)), p75: esc(fmt(c.p75, kind)) })}">${pctText}${esc(fmt(Math.abs(c.diff), kind))} ${c.diff > 0 ? 'more' : 'less'} ${t('analytics_run.than_the_median')} <b>${c.verdict}</b></span>`;
+    return `<span class="an-verdict ${esc(c.level)}" title="${t(c.verdict === 'worse' ? 'analytics_run.worse_than_median_range' : 'analytics_run.better_than_median_range', { p25: esc(fmt(c.p25, kind)), p75: esc(fmt(c.p75, kind)) })}">${pctText}${t(c.diff > 0 ? 'analytics_run.amount_more_than_median' : 'analytics_run.amount_less_than_median', { amount: esc(fmt(Math.abs(c.diff), kind)) })} <b>${t(c.verdict === 'worse' ? 'analytics_run.verdict_worse' : 'analytics_run.verdict_better')}</b></span>`;
   }
 
   // #233: the estimated / cost not recorded badges (run-list.js's costMarks, a renderer global)
@@ -101,10 +103,10 @@
 
   function comparison(f, cmp) {
     if (!cmp) return '';
-    if (cmp.tooFew) return `<p class="muted small an-note" data-testid="an-run-compare">${t('analytics_run.only_count_other_successful_real_run', { count: cmp.count, value: cmp.count === 1 ? '' : 's', value2: esc(f.workflow || 'this workflow'), minRuns: cmp.minRuns })}</p>`;
+    if (cmp.tooFew) return `<p class="muted small an-note" data-testid="an-run-compare">${t('analytics_run.too_few_runs_to_compare', { count: cmp.count, workflow: esc(f.workflow || t('analytics_run.this_workflow')), minRuns: cmp.minRuns })}</p>`;
     const rows = FIGURES.map(([key, label, kind]) => {
       const c = cmp.metrics[key];
-      return `<tr><td>${esc(label)}</td><td class="num">${esc(fmt(f[key], kind))}</td><td class="num">${c ? esc(fmt(c.median, kind)) : '—'}</td><td class="num nowrap">${c ? `${esc(fmt(c.p25, kind))} – ${esc(fmt(c.p75, kind))}` : '—'}</td><td>${diffText(c, kind)}</td></tr>`;
+      return `<tr><td>${esc(t(label))}</td><td class="num">${esc(fmt(f[key], kind))}</td><td class="num">${c ? esc(fmt(c.median, kind)) : '—'}</td><td class="num nowrap">${c ? `${esc(fmt(c.p25, kind))} – ${esc(fmt(c.p75, kind))}` : '—'}</td><td>${diffText(c, kind)}</td></tr>`;
     }).join('');
     return `<h4 class="small muted" data-testid="an-run-compare">${t('analytics_run.compared_with_the_last_count_successful', { count: cmp.count })} ${esc(f.workflow || t('analytics_run.this_workflow'))}</h4>
       <div class="table-wrap"><table class="u-table an-sessions"><thead><tr><th>${t('analytics_run.figure')}</th><th class="num">${t('analytics_run.this_run')}</th><th class="num">${t('analytics_run.median')}</th><th class="num">p25 – p75</th><th>${t('analytics_run.difference')}</th></tr></thead><tbody>${rows}</tbody></table></div>`;
@@ -134,7 +136,7 @@
       return `<rect x="${x(g.from).toFixed(1)}" y="0" width="${w.toFixed(1)}" height="${H - 4}" class="an-gantt-gate"><title>${t('analytics_run.waiting_at_the_gate_gate_gate2', { gate: esc(readable(g.gate, f.stepNames)), gate2: esc(g.gate) })} ${esc(fmtDur(g.waitMs))}</title></rect>
         <text x="${(x(g.from) + 4).toFixed(1)}" y="${gy + RH / 2 + 1}" class="an-gantt-label muted">${esc(readable(g.gate, f.stepNames))} · ${esc(fmtDur(g.waitMs))}</text>`;
     }).join('');
-    const rowName = (r) => (r === 'gates' ? 'waiting for you' : r === 'orchestrator' ? r : readable(r, f.agentNames));
+    const rowName = (r) => (r === 'gates' ? t('analytics_run.waiting_for_you') : r === 'orchestrator' ? t('analytics_run.orchestrator') : readable(r, f.agentNames));
     const labels = [...rows, 'gates'].map((r, i) => `<text x="4" y="${i * RH + RH / 2 + 2}" class="an-gantt-row">${esc(rowName(r))}</text>`).join('');
     return `<div class="an-gantt" data-testid="an-run-timeline"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${t('analytics_run.timeline_of_the_run_by_agent')}">
       <defs><pattern id="an-hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" class="an-hatch-line" /></pattern></defs>
@@ -161,23 +163,23 @@
     const name = (a) => readable(a, f.agentNames);
     const chip = (a) => `<span class="an-agent"><i style="background:${colorOf(a)}"></i>${esc(name(a))}</span>`;
     const time = hbars(f.agents.map((a) => ({
-      label: name(a.agent), chip: chip(a.agent), sub: `${fmtDur(a.activeMs)} active · ${fmtDur(a.waitingMs)} on tools`, title: t('analytics_run.agent_agent2_activems_active_waitingms_waiting', { agent: name(a.agent), agent2: a.agent, activeMs: fmtDur(a.activeMs), waitingMs: fmtDur(a.waitingMs) }),
-      parts: [{ value: a.activeMs, color: colorOf(a.agent), title: `active ${fmtDur(a.activeMs)}` }, { value: a.waitingMs, color: 'var(--muted)', title: t('analytics_run.waiting_on_tools_waitingms', { waitingMs: fmtDur(a.waitingMs) }) }],
+      label: name(a.agent), chip: chip(a.agent), sub: t('analytics_run.active_then_on_tools', { active: fmtDur(a.activeMs), tools: fmtDur(a.waitingMs) }), title: t('analytics_run.agent_agent2_activems_active_waitingms_waiting', { agent: name(a.agent), agent2: a.agent, activeMs: fmtDur(a.activeMs), waitingMs: fmtDur(a.waitingMs) }),
+      parts: [{ value: a.activeMs, color: colorOf(a.agent), title: t('analytics_run.active_time', { time: fmtDur(a.activeMs) }) }, { value: a.waitingMs, color: 'var(--muted)', title: t('analytics_run.waiting_on_tools_waitingms', { waitingMs: fmtDur(a.waitingMs) }) }],
     })), { stacked: true });
-    const turns = hbars(f.agents.map((a) => ({ label: name(a.agent), title: `${name(a.agent)} (${a.agent})`, chip: chip(a.agent), value: a.turns, sub: `${fmtNum(a.turns)} turn${a.turns === 1 ? '' : 's'}`, color: colorOf(a.agent) })));
+    const turns = hbars(f.agents.map((a) => ({ label: name(a.agent), title: `${name(a.agent)} (${a.agent})`, chip: chip(a.agent), value: a.turns, sub: t('analytics_run.turns_count', { count: a.turns, n: fmtNum(a.turns) }), color: colorOf(a.agent) })));
     const cost = hbars(f.agents.map((a) => {
       const c = cmp?.agents?.[a.agent]?.costUsd;
       return {
-        label: name(a.agent), title: `${name(a.agent)} (${a.agent})`, chip: chip(a.agent), value: a.costUsd, sub: `${fmtUsd(a.costUsd)}${c ? ` (${c.diff > 0 ? '▲' : c.diff < 0 ? '▼' : '='} median ${fmtUsd(c.median)})` : ''}`, color: colorOf(a.agent),
+        label: name(a.agent), title: `${name(a.agent)} (${a.agent})`, chip: chip(a.agent), value: a.costUsd, sub: `${fmtUsd(a.costUsd)}${c ? ` (${c.diff > 0 ? '▲' : c.diff < 0 ? '▼' : '='} ${t('analytics_run.median_cost', { cost: fmtUsd(c.median) })})` : ''}`, color: colorOf(a.agent),
         marks: marksOf(a), keep: !!a.costNotRecorded, testid: 'an-agent-cost',
       };
     }));
     const tokens = hbars(f.agents.map((a) => ({
       label: name(a.agent), chip: chip(a.agent), sub: `${fmtTok(a.totalTokens)} · ${a.usdPerMTokens == null ? '—' : `${fmtUsd(a.usdPerMTokens)}/M`}`,
-      title: `${name(a.agent)} (${a.agent}): ${Object.keys(TOKEN_LABELS).map((k) => `${TOKEN_LABELS[k]} ${fmtNum(a.tokens[k])}`).join(', ')}; effective ${a.usdPerMTokens == null ? '—' : fmtUsd(a.usdPerMTokens)} per million tokens`,
-      parts: Object.keys(TOKEN_LABELS).map((k) => ({ value: a.tokens[k], color: TOKEN_COLORS[k], title: `${TOKEN_LABELS[k]}: ${fmtNum(a.tokens[k])}` })),
+      title: `${name(a.agent)} (${a.agent}): ${Object.keys(TOKEN_KEYS).map((k) => `${tokenLabel(k)} ${fmtNum(a.tokens[k])}`).join(', ')}; ${t('analytics_run.effective_per_million_tokens', { cost: a.usdPerMTokens == null ? '—' : fmtUsd(a.usdPerMTokens) })}`,
+      parts: Object.keys(TOKEN_KEYS).map((k) => ({ value: a.tokens[k], color: TOKEN_COLORS[k], title: `${tokenLabel(k)}: ${fmtNum(a.tokens[k])}` })),
       // #308: the sub-agents' share, already counted in the agent's tokens
-      marks: a.subagents ? ` <span class="muted small" data-testid="an-agent-subagents">${t('analytics_run.of_which_sub_agents_calls_call', { calls: fmtNum(a.subagents.calls), value: a.subagents.calls === 1 ? '' : 's', tokens: fmtTok(a.subagents.tokens) })}</span>` : '',
+      marks: a.subagents ? ` <span class="muted small" data-testid="an-agent-subagents">${t('analytics_run.sub_agents_calls_tokens', { count: a.subagents.calls, calls: fmtNum(a.subagents.calls), tokens: fmtTok(a.subagents.tokens) })}</span>` : '',
       testid: 'an-agent-tokens',
     })), { stacked: true });
     return `<div class="an-grid">
@@ -186,7 +188,7 @@
         <div class="card an-card"><h3>${t('analytics_run.cost_per_agent')}</h3>${cost}</div>
       </div>
       <div class="card an-card"><div class="row an-card-head"><h3>${t('analytics_run.tokens_per_agent')} <span class="muted small">${t('analytics_run.and_the_effective_m_tokens')}</span></h3>
-        <div class="an-legend">${Object.keys(TOKEN_LABELS).map((k) => `<span><i style="background:${TOKEN_COLORS[k]}"></i>${TOKEN_LABELS[k]}</span>`).join('')}</div></div>${tokens}</div>`;
+        <div class="an-legend">${Object.keys(TOKEN_KEYS).map((k) => `<span><i style="background:${TOKEN_COLORS[k]}"></i>${tokenLabel(k)}</span>`).join('')}</div></div>${tokens}</div>`;
   }
 
   function tables(f) {
@@ -196,14 +198,15 @@
     // #304: a round of a `scope: affected` suite: what it ran, and why each file was selected
     // (a red check's round runs the files its step lists: every reason is "listed by <step>")
     const listed = (sel) => Object.values(sel.reasons || {}).length > 0 && Object.values(sel.reasons).every((why) => /^listed by /.test(why));
-    const scopeOf = (r) => (!r.selection ? (r.scope === 'files' ? 'Files' : 'Whole suite') : r.selection.mode === 'all' ? 'Whole suite' : listed(r.selection) ? 'Listed tests' : r.affected && r.scope === 'full' ? 'Affected, then whole suite' : 'Affected');
+    // the catalog key of the round's scope
+    const scopeOf = (r) => (!r.selection ? (r.scope === 'files' ? 'analytics_run.scope_files' : 'analytics_run.scope_whole_suite') : r.selection.mode === 'all' ? 'analytics_run.scope_whole_suite' : listed(r.selection) ? 'analytics_run.scope_listed_tests' : r.affected && r.scope === 'full' ? 'analytics_run.scope_affected_then_whole_suite' : 'analytics_run.scope_affected');
     const whyOf = (r) => {
       if (!r.selection) return '';
       const reasons = Object.entries(r.selection.reasons || {}).map(([file, why]) => `${file}: ${why}`).join('; ');
       return reasons || r.selection.why || '';
     };
     const suite = f.suiteRounds.length ? `<table class="u-table an-sessions"><thead><tr><th class="num">${t('analytics_run.round')}</th><th>${t('analytics_run.result')}</th><th>${t('analytics_run.scope')}</th><th class="num">${t('analytics_run.duration')}</th><th class="num">${t('analytics_run.failures')}</th><th class="num">${t('analytics_run.pre_existing')}</th></tr></thead><tbody>
-      ${f.suiteRounds.map((r) => `<tr data-testid="an-suite-round"><td class="num">${r.round}</td><td><span class="badge ${r.status === 'pass' ? 'cat-monitor' : 'warn'}">${esc(r.status || '—')}</span></td><td class="an-title"><span class="badge" title="${esc(r.selection?.why || '')}">${esc(scopeOf(r))}</span>${whyOf(r) ? `<div class="muted small an-suite-why" title="${esc(whyOf(r))}">${esc(whyOf(r))}</div>` : ''}</td><td class="num">${fmtDur(r.durationMs)}</td><td class="num">${r.failures}</td><td class="num">${r.preexisting}</td></tr>`).join('')}</tbody></table>`
+      ${f.suiteRounds.map((r) => `<tr data-testid="an-suite-round"><td class="num">${r.round}</td><td><span class="badge ${r.status === 'pass' ? 'cat-monitor' : 'warn'}">${esc(r.status || '—')}</span></td><td class="an-title"><span class="badge" title="${esc(r.selection?.why || '')}">${esc(t(scopeOf(r)))}</span>${whyOf(r) ? `<div class="muted small an-suite-why" title="${esc(whyOf(r))}">${esc(whyOf(r))}</div>` : ''}</td><td class="num">${fmtDur(r.durationMs)}</td><td class="num">${r.failures}</td><td class="num">${r.preexisting}</td></tr>`).join('')}</tbody></table>`
       : `<p class="muted small an-empty">${t('analytics_run.no_suite_round_in_this_run')}</p>`;
     const tools = f.slowestTools.length ? `<table class="u-table an-sessions"><thead><tr><th>${t('analytics_run.command')}</th><th>${t('analytics_run.agent')}</th><th class="num">${t('analytics_run.time')}</th></tr></thead><tbody>
       ${f.slowestTools.map((t) => `<tr><td class="an-title"><code class="an-file" title="${esc(t.command)}">${esc(t.command)}</code></td><td${t.agent ? ` title="${esc(t.agent)}"` : ''}>${esc(t.agent ? readable(t.agent, f.agentNames) : '—')}</td><td class="num">${fmtDur(t.durationMs)}</td></tr>`).join('')}</tbody></table>`
@@ -247,7 +250,7 @@
     load,
     render,
     select,
-    sub: () => (rx.data?.figures ? `One run in depth: ${rx.data.figures.title || rx.data.figures.runId}` : 'One run in depth, compared with its workflow\'s runs'),
+    sub: () => (rx.data?.figures ? t('analytics_run.sub_run', { title: rx.data.figures.title || rx.data.figures.runId }) : t('analytics_run.sub_no_run')),
     context: () => (rx.data?.figures ? `Run tab, run ${rx.data.figures.runId} (${rx.data.figures.workflow || 'workflow'})` : 'Run tab, no run picked'),
   };
 })();

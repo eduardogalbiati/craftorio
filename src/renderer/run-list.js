@@ -232,9 +232,9 @@ function nestChildRuns(list) {
 function childRunBadges(r) {
   const p = r.parentRun;
   const kids = r.childRuns || [];
-  const parent = p?.run_id ? ` <span class="badge" title="${esc(`Started by run ${p.run_id}${p.workflow ? ` (${p.workflow})` : ''}, step ${p.step_id || '?'}`)}">${t('run_list.child')}${Number.isInteger(p.index) ? t('run_list.item_value', { value: p.index + 1 }) : ''}</span>` : '';
+  const parent = p?.run_id ? ` <span class="badge" title="${esc(p.workflow ? t('run_list.started_by_run_of_workflow', { run: p.run_id, workflow: p.workflow, step: p.step_id || '?' }) : t('run_list.started_by_run', { run: p.run_id, step: p.step_id || '?' }))}">${t('run_list.child')}${Number.isInteger(p.index) ? t('run_list.item_value', { value: p.index + 1 }) : ''}</span>` : '';
   const waiting = kids.filter((c) => c.status === 'running').length;
-  const children = kids.length ? ` <span class="badge" title="${esc(kids.map((c) => `${c.run_id}: ${c.status}`).join('\n'))}">${kids.length} ${t('run_list.child_run')}${kids.length === 1 ? '' : 's'}${waiting ? t('run_list.waiting_running', { waiting }) : ''}</span>` : '';
+  const children = kids.length ? ` <span class="badge" title="${esc(kids.map((c) => `${c.run_id}: ${c.status}`).join('\n'))}">${t('run_list.child_runs_count', { count: kids.length })}${waiting ? t('run_list.waiting_running', { waiting }) : ''}</span>` : '';
   return parent + children;
 }
 
@@ -245,7 +245,7 @@ function runListRow(r, pv) {
   const dur = r.status === 'running' && r.startedAt ? Date.now() - Date.parse(r.startedAt) : r.durationMs;
   return `
     <div class="pr-run ${open ? 'open' : ''}${r.nested ? ' pr-child' : ''}" data-testid="run-list-row" data-run="${esc(r.runId)}"${r.nested ? ` style="--nest:${r.nested}"` : ''}>
-      <div class="pr-row" title="${t('run_list.value_sessions', { value: open ? 'Hide' : 'Show' })}">
+      <div class="pr-row" title="${t(open ? 'run_list.hide_sessions' : 'run_list.show_sessions')}">
         ${StatusPill.runPill(r.status, r.resumedBy)}
         <div class="pr-main">
           <div><b>${runTitleHtml(r)}</b>${StatusPill.resumedLink(r.resumedBy)}${prBadge(r)} <span class="muted small" title="${esc(t('run_list.workflow_value', { value: r.workflow || r.file || '' }))}">${esc(stepName(String(r.workflow || r.file || 'workflow').replace(/\.ya?ml$/i, '')))}${r.version ? ` v${esc(r.version)}` : ''}</span>${r.mock ? ` <span class="badge p-mock">${t('run_list.simulated')}</span>` : ''}${r.current ? ` <span class="badge live">${t('run_list.this_window')}</span>` : ''}${r.runningElsewhere ? ` <span class="badge" title="${t('run_list.another_app_process_on_this_workspace')}">${t('run_list.another_window')}</span>` : ''}${r.retryOf ? ` <span class="badge" title="${t('run_list.started_by_a_retry_of_the')}">${t('run_list.retry_of')} ${esc(String(r.retryOf).slice(9))}</span>` : ''}${issueFallbackBadge(r)}${r.chain && window.ChainModel ? ` ${ChainModel.chainBadgesHtml(r.chain)}` : ''}${childRunBadges(r)}${!pv.id && r.project ? ` <span class="badge" title="${t('run_list.project')}">${esc(r.project.name)}</span>` : ''}</div>
@@ -265,10 +265,10 @@ function runListRow(r, pv) {
 // The card's Send to supervisor (#409): its label and title, busy while the Supervisor answers
 // (views/supervisor/ syncs the shown buttons when that changes).
 function sendToSupervisorHtml(busy) {
-  return busy ? 'Supervisor is answering…' : `<span class="sup-mark">◆</span> ${t('run_list.send_to_supervisor')}`;
+  return busy ? t('run_list.supervisor_is_answering') : `<span class="sup-mark">◆</span> ${t('run_list.send_to_supervisor')}`;
 }
 function sendToSupervisorTitle(busy) {
-  return busy ? 'Supervisor is answering: wait for the answer' : 'Open the Supervisor\'s chat with this run attached: nothing is sent until you write and send';
+  return busy ? t('run_list.supervisor_is_answering_wait') : t('run_list.send_to_supervisor_title');
 }
 
 function projectRunBody(r, pv) {
@@ -301,8 +301,8 @@ function projectRunBody(r, pv) {
           ${nextTurnCell(s)}
           <td class="pr-term">
             <span class="small ${m?.error ? 'error' : 'muted'}" data-term-msg>${esc(m?.text || '')}</span>
-            ${termButtons('live', isOrchSession(s) ? 'Follow the orchestrator log in a terminal' : '')}
-            ${termButtons('cli', '', s.cliAvailable ? '' : s.cliReason || 'Not available')}
+            ${termButtons('live', isOrchSession(s) ? t('run_list.follow_the_orchestrator_log') : '')}
+            ${termButtons('cli', '', s.cliAvailable ? '' : s.cliReason || t('run_list.not_available'))}
           </td>
         </tr>`;
       }).join('')}</tbody>
@@ -407,25 +407,25 @@ function runRepositoryColumn(r, pv) {
   const wrap = (html, { reviewable = false, why = '' } = {}) => `<div class="pr-repo pr-col" data-testid="run-card-repository">
     <div class="pr-arts-head pr-repo-head">${t('run_list.repository')} <button type="button" class="btn sm" data-testid="run-card-review-changes" data-repo-review${reviewable ? '' : ' disabled'} title="${esc(reviewable ? t('run_list.the_changed_files_and_the_commits') : why)}">${t('run_list.review_changes')}</button></div>
     ${html}</div>`;
-  if (r.mock) return wrap(`<p class="muted small">${t('run_list.simulated_nothing_was_committed')}</p>`, { why: 'A simulated run commits nothing.' });
-  if (!e || e.status === 'loading') return wrap(`<p class="muted small">${t('run_list.loading')}</p>`, { why: 'Loading the run\'s changes…' });
-  if (e.status === 'error') return wrap(`<p class="error small">${t('run_list.could_not_load_the_changes')} ${esc(e.error)} <button type="button" class="btn sm ghost" data-repo-retry>${t('run_list.retry')}</button></p>`, { why: `The run's changes could not be read: ${e.error}` });
+  if (r.mock) return wrap(`<p class="muted small">${t('run_list.simulated_nothing_was_committed')}</p>`, { why: t('run_list.a_simulated_run_commits_nothing') });
+  if (!e || e.status === 'loading') return wrap(`<p class="muted small">${t('run_list.loading')}</p>`, { why: t('run_list.loading_the_run_changes') });
+  if (e.status === 'error') return wrap(`<p class="error small">${t('run_list.could_not_load_the_changes')} ${esc(e.error)} <button type="button" class="btn sm ghost" data-repo-retry>${t('run_list.retry')}</button></p>`, { why: t('run_list.the_run_changes_could_not_be_read', { error: e.error }) });
   const d = e.data;
   const commits = d.commits || [];
   const files = d.files || [];
-  if (d.simulated) return wrap(`<p class="muted small">${t('run_list.simulated_nothing_was_committed')}</p>`, { why: 'A simulated run commits nothing.' });
+  if (d.simulated) return wrap(`<p class="muted small">${t('run_list.simulated_nothing_was_committed')}</p>`, { why: t('run_list.a_simulated_run_commits_nothing') });
   if (d.unavailable && !commits.length) {
     const gone = !!d.branchGone || /\bgone\b/i.test(d.unavailable);
-    return wrap(`${repoBranchHtml(r, d)}<p class="muted small">${gone ? t('run_list.the_branch_is_gone_nothing_is') : esc(d.unavailable)}</p>`, { reviewable: files.length > 0, why: 'This run has no changes to show.' });
+    return wrap(`${repoBranchHtml(r, d)}<p class="muted small">${gone ? t('run_list.the_branch_is_gone_nothing_is') : esc(d.unavailable)}</p>`, { reviewable: files.length > 0, why: t('run_list.this_run_has_no_changes_to_show') });
   }
-  if (!commits.length) return wrap(`${repoBranchHtml(r, d)}<p class="muted small">${t('run_list.this_run_made_no_commits')}</p>`, { reviewable: files.length > 0, why: 'This run made no commits.' });
+  if (!commits.length) return wrap(`${repoBranchHtml(r, d)}<p class="muted small">${t('run_list.this_run_made_no_commits')}</p>`, { reviewable: files.length > 0, why: t('run_list.this_run_made_no_commits_title') });
   const added = files.reduce((n, f) => n + (f.added || 0), 0);
   const deleted = files.reduce((n, f) => n + (f.deleted || 0), 0);
   const shown = commits.slice(0, e.shown);
   const left = commits.length - shown.length;
   const when = (iso) => { const t = Date.parse(iso); return Number.isFinite(t) ? timeOf(iso).replace(/:\d\d (AM|PM)$/, ' $1') : ''; };
   return wrap(`${repoBranchHtml(r, d)}
-    <div class="muted small pr-repo-totals" data-testid="run-card-repo-totals">${commits.length} ${t('run_list.commit_value_length_file_value2', { value: commits.length === 1 ? '' : 's', length: files.length, value2: files.length === 1 ? '' : 's' })} <span class="pr-add">+${added}</span> <span class="pr-del">−${deleted}</span></div>
+    <div class="muted small pr-repo-totals" data-testid="run-card-repo-totals">${t('run_list.commits_count', { count: commits.length })} · ${t('run_list.files_count', { count: files.length })} · <span class="pr-add">+${added}</span> <span class="pr-del">−${deleted}</span></div>
     <ul class="pr-commits" data-testid="run-card-commits" aria-label="${t('run_list.commits_of_this_run_newest_first')}">${shown.map((c) => `
       <li><button type="button" class="pr-commit" data-testid="run-card-commit" data-sha="${esc(c.sha)}" aria-label="${esc(`${c.short || shortSha(c.sha)} ${c.subject}`)}" title="${esc(`${c.subject}\n${c.author || ''} · ${c.date ? dateOf(c.date) : ''}`)}">
         <span class="mono pr-commit-sha">${esc(c.short || shortSha(c.sha))}</span><span class="pr-commit-subject">${esc(c.subject)}</span><span class="muted small pr-commit-time">${esc(when(c.date))}</span>

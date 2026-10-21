@@ -653,7 +653,7 @@
 
   async function removeAttachment(name) {
     const id = inbox.open.id;
-    if (!(await confirmDialog(t('inbox.remove_attachment'), t('inbox.delete_name_from_this_card', { name }), t('inbox.remove')))) return;
+    if (!(await confirmDialog(t('inbox.remove_attachment'), t('inbox.delete_name_from_this_card', { name }), t('common.remove')))) return;
     try {
       await api.removeDiscoveryAttachment(inbox.projectId, id, name);
       inbox.previews.delete(`${id}/${name}`);

@@ -13,18 +13,19 @@
 // Uses app.js globals at call time: api, esc, errMsg. Browser: window.ProjectCityImpact.
 (() => {
   const LAYER = 'impact';
-  const SOURCE_LABEL = { changed: 'Changed by its run', cited: 'Cited in the issue', po: "In the Product Owner's group" };
+  // the catalog keys of the legend's labels
+  const SOURCE_LABEL = { changed: 'project_city_impact.source_changed', cited: 'project_city_impact.source_cited', po: 'project_city_impact.source_po' };
   // predicted vs actual on the map
   const SETS = [
-    { key: 'hit', colour: '#3fb68b', label: 'changed as predicted' },
-    { key: 'missed', colour: '#f2a541', label: 'predicted, untouched' },
-    { key: 'unexpected', colour: '#e05297', label: 'changed, not predicted' },
+    { key: 'hit', colour: '#3fb68b', label: 'project_city_impact.set_hit' },
+    { key: 'missed', colour: '#f2a541', label: 'project_city_impact.set_missed' },
+    { key: 'unexpected', colour: '#e05297', label: 'project_city_impact.set_unexpected' },
   ];
   const handles = new Set();
   let pending = null; // { projectId, issue } or { projectId, stage }: the preview asked from the Backlog or the Roadmap
 
   const pct = (x) => `${Math.round((x || 0) * 100)}%`;
-  const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+  const plural = (n, key) => t(key, { count: n });
   const dot = (colour) => ProjectCityCards.dot(colour);
   const countsHtml = (list, testid, label) => ProjectCityCards.countsHtml(list, testid, label);
 
@@ -34,14 +35,14 @@
     const total = header.total || 0;
     const cmp = comparison ? `<div class="pci-cmp" data-testid="city-impact-comparison">
         <strong class="pci-rate">${comparison.hitRate == null ? t('project_city_impact.nothing_was_predicted') : t('project_city_impact.hitrate_hit_rate', { hitRate: pct(comparison.hitRate) })}</strong>
-        ${SETS.map((s) => `<span data-testid="city-impact-${s.key}">${dot(s.colour)}${(comparison[s.key] || []).length} ${s.label}</span>`).join('')}
+        ${SETS.map((s) => `<span data-testid="city-impact-${s.key}">${dot(s.colour)}${(comparison[s.key] || []).length} ${t(s.label)}</span>`).join('')}
         ${preview.history && preview.history.length > 1 ? `<small class="muted">${t('project_city_impact.earlier_runs')} ${preview.history.slice(0, -1).map((h) => pct(h.hitRate)).join(', ')}</small>` : ''}
       </div>` : '';
     return `<div class="pci-header" data-testid="city-impact-header">
       <div class="pci-title"><strong>#${esc(issue.number)}</strong> <span title="${esc(issue.title)}">${esc(issue.title)}</span></div>
-      <p class="pci-total">${plural(total, 'file')} ${t('project_city_impact.on_the_map')} <span data-testid="city-impact-danger">${pct(header.dangerShare)} ${t('project_city_impact.in_the_danger_zone')}</span></p>
-      ${countsHtml(header.districts || [], 'city-impact-district', 'By district')}
-      ${countsHtml(header.zones || [], 'city-impact-zone', 'By zone')}
+      <p class="pci-total">${plural(total, 'project_city_impact.files_count')} ${t('project_city_impact.on_the_map')} <span data-testid="city-impact-danger">${pct(header.dangerShare)} ${t('project_city_impact.in_the_danger_zone')}</span></p>
+      ${countsHtml(header.districts || [], 'city-impact-district', t('project_city_impact.by_district'))}
+      ${countsHtml(header.zones || [], 'city-impact-zone', t('project_city_impact.by_zone'))}
       ${newFiles.length ? `<ul class="pci-new" aria-label="${t('project_city_impact.new_files')}">${newFiles.map((f) => `<li data-testid="city-impact-new-file"><code title="${esc(f.path)}">${esc(f.path)}</code> <small class="muted">${esc(f.note)}</small></li>`).join('')}</ul>` : ''}
       ${cmp}
     </div>`;
@@ -54,7 +55,7 @@
       : `<p class="muted small">${t('project_city_impact.no_building_is_changed_by_two')}</p>`;
     return `<div class="pci-header" data-testid="city-impact-stage">
       <div class="pci-title"><strong>${t('project_city_impact.stage')}</strong> <span title="${esc(view.name)}">${esc(view.name)}</span></div>
-      <p class="pci-total">${plural(view.items.length, 'item')} ${t('project_city_impact.total_on_the_map', { total: plural(view.total, 'file') })}</p>
+      <p class="pci-total">${plural(view.items.length, 'project_city_impact.items_count')} ${t('project_city_impact.total_on_the_map', { total: plural(view.total, 'project_city_impact.files_count') })}</p>
       <div class="pci-conflicts" data-testid="city-impact-conflicts" role="status"><b>${t('project_city_impact.changed_by_two_items')}</b>${conflicts}</div>
     </div>`;
   }
@@ -128,10 +129,10 @@
       if (comparison) {
         highlight = {};
         for (const s of SETS) for (const p of comparison[s.key]) highlight[p] = s.colour;
-        legend = SETS.map((s) => ({ colour: s.colour, label: s.label }));
+        legend = SETS.map((s) => ({ colour: s.colour, label: t(s.label) }));
       } else {
         const used = new Set(preview.files.flatMap((f) => f.sources));
-        legend = Object.keys(SOURCE_LABEL).filter((s) => used.has(s)).map((s) => ({ colour: CityImpact.SOURCE_COLOURS[s], label: SOURCE_LABEL[s] }));
+        legend = Object.keys(SOURCE_LABEL).filter((s) => used.has(s)).map((s) => ({ colour: CityImpact.SOURCE_COLOURS[s], label: t(SOURCE_LABEL[s]) }));
       }
       const history = (data.history || {})[String(issue.number)] || [];
       return { html: headerMarkup({ issue, header, files: preview.files, newFiles: preview.newFiles, comparison, history }), highlight };

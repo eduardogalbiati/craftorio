@@ -173,7 +173,7 @@
     if (w?.active) {
       const n = nw.state.runs?.active || 0;
       b.textContent = `☾ ${n}`;
-      b.title = `${healing(w) ? 'Self-healing is on' : `Night watch on until ${hm(w.until)}`}: watching ${n} run${n === 1 ? '' : 's'}`;
+      b.title = `${healing(w) ? t('nightwatch.self_healing_is_on') : t('nightwatch.night_watch_on_until', { until: hm(w.until) })}: ${t('nightwatch.watching_runs', { count: n })}`;
     }
   }
   async function refreshBadge() {
@@ -188,18 +188,18 @@
     const f = nw.form;
     // under Self-healing the watch has no end time and its switch is the setting
     const standing = healing(w);
-    const watching = `watching ${s.runs.active} run${s.runs.active === 1 ? '' : 's'}${s.runs.waiting ? `, ${s.runs.waiting} at a gate` : ''}`;
-    const switchTitle = standing ? 'Self-healing keeps the watch on: turn it off in Settings › Execution › Oracle' : w.active ? 'Turn the Night watch off' : 'Turn the Night watch on (an end time is required)';
+    const watching = `${t('nightwatch.watching_runs', { count: s.runs.active })}${s.runs.waiting ? t('nightwatch.at_a_gate_count', { count: s.runs.waiting }) : ''}`;
+    const switchTitle = t(standing ? 'nightwatch.self_healing_keeps_the_watch_on' : w.active ? 'nightwatch.turn_the_night_watch_off' : 'nightwatch.turn_the_night_watch_on_end_time');
     const headline = standing ? `<b data-testid="nightwatch-self-healing">${t('nightwatch.self_healing_is_on')}</b>` : `<b>${w.active ? t('nightwatch.on_until_until', { until: esc(hm(w.until)) }) : t('nightwatch.off')}</b>`;
     const head = `<div class="row nw-switch-row">
         <label class="switch" title="${switchTitle}"><input type="checkbox" id="nw-switch" data-testid="nightwatch-switch" aria-label="${t('nightwatch.night_watch')}"${w.active || f ? ' checked' : ''}${nw.busy || standing ? ' disabled' : ''} /><span></span></label>
         <div class="nw-switch-state">
           <div class="row nw-headline">${headline}${w.active ? `<span class="badge live">${t('nightwatch.watching')}</span>` : ''}</div>
           <div class="muted small">${standing
-            ? `Day and night, with no end time${w.startedAt ? t('nightwatch.since_startedat', { startedAt: esc(dateOf(w.startedAt)) }) : ''} · ${watching} · <button type="button" class="link-btn" id="nw-open-settings" title="${t('nightwatch.self_healing_is_a_switch_in')}">${t('nightwatch.turn_it_off_in_settings')}</button>`
+            ? `${t('nightwatch.day_and_night_no_end_time')}${w.startedAt ? t('nightwatch.since_startedat', { startedAt: esc(dateOf(w.startedAt)) }) : ''} · ${watching} · <button type="button" class="link-btn" id="nw-open-settings" title="${t('nightwatch.self_healing_is_a_switch_in')}">${t('nightwatch.turn_it_off_in_settings')}</button>`
             : w.active
-              ? t('nightwatch.turned_on_by_value_at_startedat', { value: esc(w.by || 'the owner'), startedAt: esc(hm(w.startedAt)), watching })
-              : w.startedAt ? `Last on ${esc(dateOf(w.startedAt))}${w.by ? ` by ${esc(w.by)}` : ''}` : t('nightwatch.never_turned_on_in_this_workspace')}</div>
+              ? t('nightwatch.turned_on_by_at', { by: w.by ? esc(w.by) : t('nightwatch.the_owner'), startedAt: esc(hm(w.startedAt)), watching })
+              : w.startedAt ? t(w.by ? 'nightwatch.last_on_by' : 'nightwatch.last_on', { date: esc(dateOf(w.startedAt)), by: esc(w.by) }) : t('nightwatch.never_turned_on_in_this_workspace')}</div>
         </div>
       </div>${w.active && !standing && s.limits ? activeLimitsHtml(s.limits) : ''}`;
     const form = f ? `<form class="nw-form" id="nw-form">
@@ -243,7 +243,7 @@
     const sh = m.selfHealing;
     const title = sh ? `Self-healing · ${m.window.ongoing ? 'today so far' : 'day'}` : m.window.ongoing ? 'Tonight so far' : 'Night';
     return `<div class="card nw-card">
-      <div class="row nw-card-head"><h3>${title} · ${esc(day(m.window.from))} ${esc(hm(m.window.from))} → ${esc(hm(m.window.to))}</h3><span class="muted small">${hours(m.window.hours)} · ${sh ? t('nightwatch.the_utc_day_day', { day: esc(sh.day) }) : t('nightwatch.turned_on_by_value', { value: esc(m.window.by || 'the owner') })}</span></div>
+      <div class="row nw-card-head"><h3>${title} · ${esc(day(m.window.from))} ${esc(hm(m.window.from))} → ${esc(hm(m.window.to))}</h3><span class="muted small">${hours(m.window.hours)} · ${sh ? t('nightwatch.the_utc_day_day', { day: esc(sh.day) }) : t('nightwatch.turned_on_by', { by: m.window.by ? esc(m.window.by) : t('nightwatch.the_owner') })}</span></div>
       ${s.alarm ? `<div class="nw-alarm" role="alert"><b>${t('nightwatch.safety_alarm')}</b> ${esc(m.summary.safety)}</div>` : ''}
       ${sh ? `<div class="an-totals nw-totals" data-testid="nw-self-healing-day">
         ${stat(t('nightwatch.detected'), String(sh.detected), t('nightwatch.what_the_watch_and_its_detectors'))}

@@ -29,7 +29,7 @@
     chip.classList.toggle('override', st.override != null);
     chip.classList.toggle('hidden', issueMode);
     chip.disabled = busy;
-    chip.title = `${st.override != null ? 'For the next question only (the saved calibration is unchanged). ' : 'The saved calibration; pick another step for the next question only. '}${PoCalibration.tooltip(now)}`;
+    chip.title = `${t(st.override != null ? 'backlog_po_settings.calibration_next_question_only' : 'backlog_po_settings.calibration_saved')}${PoCalibration.tooltip(now)}`;
     renderCostChip({ busy, issueMode });
   }
 
@@ -42,7 +42,7 @@
     chip.classList.toggle('override', st.costOverride != null);
     chip.classList.toggle('hidden', issueMode);
     chip.disabled = busy;
-    chip.title = `${st.costOverride != null ? 'For the next question only (the saved cost is unchanged). ' : 'The saved cost; pick another step for the next question only. '}${PoCalibration.cost.tooltip(now)}`;
+    chip.title = `${t(st.costOverride != null ? 'backlog_po_settings.cost_next_question_only' : 'backlog_po_settings.cost_saved')}${PoCalibration.cost.tooltip(now)}`;
   }
 
   function renderEffort(effort) {
@@ -60,7 +60,7 @@
   async function openSettings() {
     st.open = true;
     $s('#po-settings').classList.remove('hidden');
-    status('Loading…');
+    status(t('backlog_po_settings.loading'));
     try {
       const list = await api.listAgents();
       window.productOwnerAgent = list.find((a) => a.id === PRODUCT_OWNER) || window.productOwnerAgent;
@@ -71,7 +71,7 @@
     $s('#po-set-model').value = a.model || '';
     $s('#po-set-model-list').innerHTML = (window.ChatModels?.models?.('claude') || []).map((m) => `<option value="${esc(m)}"></option>`).join('');
     renderEffort(a.effort || 'high');
-    if (agent()) status('Applies to the next answer.');
+    if (agent()) status(t('backlog_po_settings.applies_to_the_next_answer'));
     $s('#po-set-calibration')?.focus({ preventScroll: true });
   }
 
@@ -86,11 +86,11 @@
     const a = agent();
     if (!a) return;
     st.saving = true;
-    status('Saving…');
+    status(t('backlog_po_settings.saving'));
     try {
       const out = await api.saveAgent(PRODUCT_OWNER, { appearance: a.appearance, model: a.model, effort: a.effort, calibration: saved(), cost: savedCost(), ...patch });
       window.productOwnerAgent = { ...a, ...out };
-      status(`Saved. Applies to the next answer${patch.calibration ? ` (${PoCalibration.label(out.calibration)})` : patch.cost ? ` (${PoCalibration.cost.label(out.cost)})` : ''}.`);
+      status(t('backlog_po_settings.saved_applies_to_the_next_answer', { step: patch.calibration ? ` (${PoCalibration.label(out.calibration)})` : patch.cost ? ` (${PoCalibration.cost.label(out.cost)})` : '' }));
     } catch (e) {
       status(errMsg(e), true);
     } finally {

@@ -82,7 +82,7 @@
     const thinking = it.activity.filter((a) => a.kind === 'thinking');
     if (it.activity.length) {
       const subagents = tools.filter((a) => a.subagent).length;
-      const what = [tools.length ? `${tools.length} tool call${tools.length === 1 ? '' : 's'}` : '', subagents ? `${subagents} sub-agent${subagents === 1 ? '' : 's'}` : '', thinking.length ? 'thinking' : ''].filter(Boolean).join(' · ');
+      const what = [tools.length ? t('runchat.tool_calls_count', { count: tools.length }) : '', subagents ? t('runchat.sub_agents_count', { count: subagents }) : '', thinking.length ? t('runchat.thinking') : ''].filter(Boolean).join(' · ');
       // a sub-agent call shows its type and description, not its whole prompt
       const toolHtml = (a) => (a.subagent
         ? `<li class="rc-subagent${a.error ? ' err' : ''}"><b class="mono">${esc(a.name)}</b> <span class="tag">${esc(a.subagent.type)}</span> ${esc(a.subagent.description)}</li>`

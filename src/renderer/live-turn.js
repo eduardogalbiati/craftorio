@@ -33,33 +33,32 @@
     const cli = c.match(/^(gh|glab)\s+(issue|pr|mr|api|repo|run)\b(?:\s+(\w+))?(?:\s+#?(\d+))?/);
     if (cli) {
       const [, tool, what, verb, n] = cli;
-      const noun = { issue: 'issue', pr: 'pull request', mr: 'merge request', api: 'the API', repo: 'the repository', run: 'CI run' }[what];
-      if (what === 'api') return `Calling the platform API (${tool})`;
-      if (n) return `Reading ${noun} #${n} (${tool})`;
-      if (verb === 'list') return `Listing ${what === 'issue' ? 'open issues' : `${noun}s`} (${tool})`;
-      return `Reading ${noun}s (${tool})`;
+      if (what === 'api') return t('live_turn.calling_the_platform_api', { tool });
+      if (n) return t(`live_turn.reading_one_${what}`, { n, tool });
+      if (verb === 'list') return t(`live_turn.listing_${what}`, { tool });
+      return t(`live_turn.reading_${what}`, { tool });
     }
     const git = c.match(/^git\s+(log|diff|show|status|blame|grep)\b/);
-    if (git) return { log: 'Reading the git history', diff: 'Reading a diff', show: 'Reading a commit', status: 'Checking the git status', blame: 'Reading who changed a file', grep: 'Searching the code (git)' }[git[1]];
-    return `Running ${cut(c, 60)}`;
+    if (git) return t(`live_turn.git_${git[1]}`);
+    return t('live_turn.running_command', { command: cut(c, 60) });
   }
 
   /** What a tool call does, as the activity line says it. */
   function stepLabel({ name = '', input = {} } = {}) {
     const i = input || {};
     const mcp = String(name).match(/^mcp__[^_]+(?:_[^_]+)*?__(.+)$/);
-    if (mcp) return `Reading the app's data (${mcp[1].replace(/_/g, ' ')})`;
+    if (mcp) return t('live_turn.reading_the_app_data', { what: mcp[1].replace(/_/g, ' ') });
     switch (name) {
-      case 'Read': return `Reading ${shortPath(i.file_path || i.path) || 'a file'}`;
-      case 'Grep': return i.pattern ? `Searching the code for ${cut(i.pattern, 50)}` : 'Searching the code';
-      case 'Glob': return i.pattern ? `Listing files ${cut(i.pattern, 50)}` : 'Listing files';
-      case 'LS': return `Listing ${shortPath(i.path) || 'a folder'}`;
+      case 'Read': return t('live_turn.reading_what', { what: shortPath(i.file_path || i.path) || t('live_turn.a_file') });
+      case 'Grep': return i.pattern ? t('live_turn.searching_the_code_for', { pattern: cut(i.pattern, 50) }) : t('live_turn.searching_the_code');
+      case 'Glob': return i.pattern ? t('live_turn.listing_files_pattern', { pattern: cut(i.pattern, 50) }) : t('live_turn.listing_files');
+      case 'LS': return t('live_turn.listing_what', { what: shortPath(i.path) || t('live_turn.a_folder') });
       case 'Bash': case 'shell': return commandLabel(i.command);
-      case 'WebFetch': return `Reading ${cut(i.url, 60) || 'a web page'}`;
-      case 'WebSearch': return i.query ? `Searching the web for ${cut(i.query, 50)}` : 'Searching the web';
-      case 'Task': case 'Agent': return i.description ? `Asking a sub-agent: ${cut(i.description, 50)}` : 'Asking a sub-agent';
-      case 'TodoWrite': return 'Updating its plan';
-      default: return `Using ${name || 'a tool'}`;
+      case 'WebFetch': return t('live_turn.reading_what', { what: cut(i.url, 60) || t('live_turn.a_web_page') });
+      case 'WebSearch': return i.query ? t('live_turn.searching_the_web_for', { query: cut(i.query, 50) }) : t('live_turn.searching_the_web');
+      case 'Task': case 'Agent': return i.description ? t('live_turn.asking_a_sub_agent_about', { what: cut(i.description, 50) }) : t('live_turn.asking_a_sub_agent');
+      case 'TodoWrite': return t('live_turn.updating_its_plan');
+      default: return t('live_turn.using_tool', { tool: name || t('live_turn.a_tool') });
     }
   }
   // the tooltip: the whole path, pattern or command
@@ -123,12 +122,12 @@
     const idle = now - turn.lastAt;
     const stale = active && turn.status !== 'stopping' && idle >= STALE_MS;
     let label;
-    if (stale) label = `Still working: last step ${Math.floor(idle / 60e3)} min ago`;
-    else if (turn.status === 'starting') label = `Starting the ${turn.agent}…`;
-    else if (turn.status === 'stopping') label = 'Stopping…';
-    else if (turn.status === 'writing') label = 'Writing the answer…';
-    else if (turn.status === 'working') label = last?.state === 'running' && !turn.thinking ? last.label : 'Thinking…';
-    else label = { done: 'Done', failed: 'Failed', stopped: 'Stopped' }[turn.status] || '';
+    if (stale) label = t('live_turn.still_working', { minutes: Math.floor(idle / 60e3) });
+    else if (turn.status === 'starting') label = t('live_turn.starting_the_agent', { agent: turn.agent });
+    else if (turn.status === 'stopping') label = t('live_turn.stopping');
+    else if (turn.status === 'writing') label = t('live_turn.writing_the_answer');
+    else if (turn.status === 'working') label = last?.state === 'running' && !turn.thinking ? last.label : t('live_turn.thinking');
+    else label = { done: t('live_turn.done'), failed: t('live_turn.failed'), stopped: t('live_turn.stopped') }[turn.status] || '';
     return {
       status: turn.status, active, label, elapsed: duration(now - turn.startedAt), stale,
       steps: turn.steps.slice(-SHOWN_STEPS), stepCount: turn.steps.length, text: visibleText(turn.texts),
@@ -149,7 +148,7 @@
     const md = typeof markdownHtml === 'function' ? markdownHtml : (t) => `<p>${escape(t)}</p>`;
     const n = v.stepCount;
     const steps = n ? `<div class="live-turn-steps">
-        <button type="button" class="link-btn small" data-live-steps aria-expanded="${turn.stepsOpen}">${n} ${t('live_turn.step')}${n === 1 ? '' : 's'}</button>
+        <button type="button" class="link-btn small" data-live-steps aria-expanded="${turn.stepsOpen}">${t('live_turn.steps_count', { count: n })}</button>
         ${turn.stepsOpen ? `<ol class="live-turn-list">${v.stepCount > v.steps.length ? '<li class="muted">…</li>' : ''}${v.steps.map((s) => `<li class="live-step ${s.state}" title="${e(s.detail || s.label)}"><span class="live-step-mark" aria-hidden="true"></span><span>${e(s.label)}</span></li>`).join('')}</ol>` : ''}
       </div>` : '';
     return `<div class="live-turn${v.stale ? ' stale' : ''}" data-live-status="${e(v.status)}" role="status" aria-live="polite">

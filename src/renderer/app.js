@@ -43,9 +43,9 @@ const errMsg = (e) => {
 };
 
 const CATEGORIES = {
-  plan: 'Plan & Design',
-  build: 'Code & Build',
-  monitor: 'Monitor & Improve',
+  get plan() { return t('app.category_plan'); },
+  get build() { return t('app.category_build'); },
+  get monitor() { return t('app.category_monitor'); },
 };
 
 // ---------------------------------------------------------------------------
@@ -421,7 +421,7 @@ function renderWorkspacePaths() {
 
 const runSessionStatus = (st) => ({ running: 'active', success: 'success', failed: 'failed', interrupted: 'failed', cancelled: 'cancelled', paused: 'cancelled' })[st] || 'idle';
 // a run's status as people read it (#266, StatusPill): "Running (simulation)", "Succeeded", "Idle" without a run
-const statusLabel = (r) => `${StatusPill.statusLabel(r?.status || 'idle')}${r?.status === 'running' && r.mock ? ' (simulation)' : ''}`;
+const statusLabel = (r) => `${StatusPill.statusLabel(r?.status || 'idle')}${r?.status === 'running' && r.mock ? t('app.simulation_suffix') : ''}`;
 
 // ---------------------------------------------------------------------------
 // Sidebar: commits merged locally (local workflows) and not pushed yet, over every project, from
@@ -433,7 +433,7 @@ async function refreshUnpushed() {
   const badge = $('#nav-backlog-unpushed');
   badge.textContent = String(total);
   badge.classList.toggle('hidden', !total);
-  badge.title = list.map((x) => `${x.name}: ${x.ahead} commit${x.ahead === 1 ? '' : 's'} not pushed on ${x.base}`).join('\n');
+  badge.title = list.map((x) => t('app.commits_not_pushed_on', { name: x.name, count: x.ahead, base: x.base })).join('\n');
 }
 window.refreshUnpushed = refreshUnpushed;
 
@@ -581,7 +581,8 @@ function pruneRuns() {
 function onSupervisorDecision(v, ev) {
   const target = ev.action === 'goto' && ev.goto ? ` ${ev.goto}` : '';
   orch(ev, `◆ supervisor → ${ev.action}${target}${ev.cause_class ? ` [${ev.cause_class}]` : ''} — ${ev.explanation || ''}${ev.note ? ` (${ev.note})` : ''}`, 'supervisor');
-  if (!replaying) showToast(`◆ Supervisor on "${ev.step_id}"${liveRuns().length > 1 ? ` (${runLabel(v.run)})` : ''}: ${SUP_ACTIONS[ev.action] || ev.action}`, ev.explanation, ev.run_id);
+  const params = { step: ev.step_id, run: runLabel(v.run), action: SUP_ACTIONS[ev.action] || ev.action };
+  if (!replaying) showToast(liveRuns().length > 1 ? t('app.supervisor_on_step_of_run', params) : t('app.supervisor_on_step', params), ev.explanation, ev.run_id);
 }
 
 // #368: run.pausing / run.pause_cancelled → the run's pause (the Run screen's pause line) and the orchestrator's line.
@@ -756,7 +757,7 @@ function onEvent(ev) {
       if (replaying || shown) break;
       if (!window.duoShowsRun?.(ev.run_id) && !window.arenaShowsRun?.(ev.run_id) && !window.runChatShowsRun?.(ev.run_id)) {
         // the gate's "What happened" line (#213)
-        showToast(t('app.approval_waiting_run', { run: runLabel(v.run) }), `${ev.brief?.headline || `Step ${ev.step_id}.`} Click to open its run.`, ev.run_id, ev);
+        showToast(t('app.approval_waiting_run', { run: runLabel(v.run) }), t('app.gate_toast_click_to_open', { what: ev.brief?.headline || t('app.step_id', { step: ev.step_id }) }), ev.run_id, ev);
       }
       break;
     }
@@ -901,10 +902,9 @@ function navRunState(list) {
   const waiting = list.filter((v) => v.approvals.size).length;
   const running = list.filter((v) => v.run.status === 'running').length;
   const failed = list.length - list.filter((v) => v.approvals.size || v.run.status === 'running').length;
-  const n = (k, what) => `${k} run${k === 1 ? '' : 's'} ${what}`;
-  if (waiting) return { status: 'waiting', title: n(waiting, 'waiting for you') };
-  if (running) return { status: 'active', title: n(running, 'in progress') };
-  if (failed) return { status: 'failed', title: n(failed, 'failed or interrupted: open it to resume') };
+  if (waiting) return { status: 'waiting', title: t('app.runs_waiting_for_you', { count: waiting }) };
+  if (running) return { status: 'active', title: t('app.runs_in_progress', { count: running }) };
+  if (failed) return { status: 'failed', title: t('app.runs_failed_open_to_resume', { count: failed }) };
   return { status: 'idle', title: t('app.no_run_in_progress') };
 }
 
@@ -919,7 +919,7 @@ function renderNavRuns() {
   const badge = $('#nav-run-gates');
   badge.classList.toggle('hidden', !gates);
   badge.textContent = String(gates);
-  badge.title = t('app.gates_approval_value_waiting_click_to', { gates, value: gates === 1 ? '' : 's' });
+  badge.title = t('app.approvals_waiting_click_to_review', { count: gates });
   const list = navRunsList();
   askPrStates(list.map((v) => v.run));
   const sum = navRunState(list);

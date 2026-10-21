@@ -32,7 +32,7 @@
   const daysBack = (n) => (window.TimeZone ? window.TimeZone.shiftDay(today(), 1 - n) : new Date(Date.now() - (n - 1) * DAY).toISOString().slice(0, 10));
   const range = () => (view.days ? { from: daysBack(view.days), to: today() } : { from: view.from || daysBack(30), to: view.to || today() });
   const pct = (x) => (x == null ? '—' : `${Math.round(x * 100)}%`);
-  const plural = (n, unit) => `${n} ${n === 1 ? unit.replace(/s$/, '') : unit}`;
+  const plural = (n, key) => t(key, { count: n });
 
   // more than half of the map's newest 20 runs (src/conflict-map.js hotSpots)
   function isHot(map, runIds) {
@@ -45,11 +45,11 @@
   function trend(map, runIds) {
     const all = map?.runIds || [];
     const half = Math.floor(all.length / 2);
-    if (half < 2 || !runIds) return 'Trend: not enough runs in the conflict map yet';
+    if (half < 2 || !runIds) return t('project_conflict_map.trend_not_enough_runs');
     const newer = new Set(all.slice(0, half));
     const older = new Set(all.slice(half, half * 2));
     const count = (set) => runIds.filter((id) => set.has(id)).length;
-    return `Trend: ${count(older)} of the older ${half} → ${count(newer)} of the newest ${half} runs`;
+    return t('project_conflict_map.trend_older_newer', { older: count(older), newer: count(newer), half });
   }
 
   /** The files of both sources, one row each, ranked by how many runs edited them (the range's count, else the map's). */
@@ -90,7 +90,7 @@
   }
 
   // #197: what to do with a file over the shared limit, and its issue (open or to create)
-  const REC_LABEL = { generated: 'Generated', registry: 'Registry', large: 'Large file', stylesheet: 'Stylesheet', doc: 'Doc', test: 'Test file', hotspot: 'Hot spot' };
+  const REC_LABEL = { generated: 'rec_generated', registry: 'rec_registry', large: 'rec_large', stylesheet: 'rec_stylesheet', doc: 'rec_doc', test: 'rec_test', hotspot: 'rec_hotspot' };
   function recommendationHtml(f) {
     const r = f?.recommendation;
     if (!r) return '';
@@ -98,7 +98,7 @@
     const action = issue
       ? `<a href="#" class="link-btn" data-pr-url="${esc(issue.url || '')}" title="${esc(issue.title || '')}">${t('project_conflict_map.open_issue')}${esc(issue.number)}</a>`
       : `<button type="button" class="btn sm ghost" data-pcm-issue="${esc(f.file)}" data-testid="pcm-create-issue">${t('project_conflict_map.create_issue')}</button>`;
-    return `<div class="an-rec" data-testid="pcm-recommendation"><span class="badge warn">${esc(REC_LABEL[r.kind] || r.kind)}</span> <span>${esc(r.text)}</span><div class="an-rec-actions">${action}</div></div>`;
+    return `<div class="an-rec" data-testid="pcm-recommendation"><span class="badge warn">${esc(REC_LABEL[r.kind] ? t(`project_conflict_map.${REC_LABEL[r.kind]}`) : r.kind)}</span> <span>${esc(r.text)}</span><div class="an-rec-actions">${action}</div></div>`;
   }
 
   function detailHtml(r) {
@@ -109,10 +109,10 @@
       ? `<div class="pcm-ids" data-testid="conflict-map-runs">${runIds.map((id) => `<span class="badge mono" title="${esc(id)}">${esc(id)}</span>`).join('')}</div>`
       : `<span class="muted">${t('project_conflict_map.the_saved_conflict_map_has_no')}</span>`;
     const lineList = lines.length
-      ? `<ul class="pcm-lines">${lines.map((l) => `<li data-testid="conflict-map-line" aria-label="${esc(`${l.file}:${l.line}, ${plural((l.runIds || []).length, 'runs')}`)}"><span class="mono">${esc(`${l.file}:${l.line}`)}</span> <span class="mono muted pcm-line-text" title="${esc(l.text || '')}">${esc(l.text || '')}</span> <span class="badge">${plural((l.runIds || []).length, 'runs')}</span></li>`).join('')}</ul>`
+      ? `<ul class="pcm-lines">${lines.map((l) => `<li data-testid="conflict-map-line" aria-label="${esc(`${l.file}:${l.line}, ${plural((l.runIds || []).length, 'project_conflict_map.runs_count')}`)}"><span class="mono">${esc(`${l.file}:${l.line}`)}</span> <span class="mono muted pcm-line-text" title="${esc(l.text || '')}">${esc(l.text || '')}</span> <span class="badge">${plural((l.runIds || []).length, 'project_conflict_map.runs_count')}</span></li>`).join('')}</ul>`
       : `<span class="muted">${t('project_conflict_map.no_single_line_of_this_file')}</span>`;
     return `<tr class="pcm-detail-row"><td colspan="5"><div class="pcm-detail small" data-testid="project-conflict-detail">
-      <div><b>${t('project_conflict_map.runs_behind_the_count')}</b> <span class="muted">${t('project_conflict_map.the_saved_conflict_map_value', { value: map?.runs ? `, last ${plural(map.runs, 'finished runs')}` : '' })}</span>${runs}</div>
+      <div><b>${t('project_conflict_map.runs_behind_the_count')}</b> <span class="muted">${map?.runs ? plural(map.runs, 'project_conflict_map.saved_map_last_finished_runs') : t('project_conflict_map.saved_map')}</span>${runs}</div>
       <div><b>${t('project_conflict_map.lines_most_changed')}</b>${lineList}</div>
       <div class="muted">${esc(trend(map, runIds))}</div>
       ${recommendationHtml(r.perf)}
@@ -127,10 +127,10 @@
         const hot = isHot(map, r.map?.runIds);
         const over = r.perf && r.runs > 1 && r.share > limit;
         return `<tr class="pcm-row" data-testid="project-conflict-row" data-pcm-row="${esc(r.file)}" aria-expanded="${open}" tabindex="0" title="${t('project_conflict_map.file_click_to_see_the_runs', { file: esc(r.file) })}">
-          <td class="an-title" data-testid="conflict-map-file" aria-label="${esc(`${r.file}, ${plural(r.runs, 'runs')}`)}"><span class="an-file mono">${esc(r.file)}</span>${hot ? ` <span class="badge warn" title="${t('project_conflict_map.changed_by_more_than_half_of')}">${t('project_conflict_map.hot')}</span>` : ''}${r.perf?.generated ? ` <span class="badge" title="${t('project_conflict_map.a_tool_writes_this_file_a')}">${t('project_conflict_map.generated')}</span>` : ''}</td>
+          <td class="an-title" data-testid="conflict-map-file" aria-label="${esc(`${r.file}, ${plural(r.runs, 'project_conflict_map.runs_count')}`)}"><span class="an-file mono">${esc(r.file)}</span>${hot ? ` <span class="badge warn" title="${t('project_conflict_map.changed_by_more_than_half_of')}">${t('project_conflict_map.hot')}</span>` : ''}${r.perf?.generated ? ` <span class="badge" title="${t('project_conflict_map.a_tool_writes_this_file_a')}">${t('project_conflict_map.generated')}</span>` : ''}</td>
           <td class="num">${r.runs}</td>
           <td class="num">${over ? `<span class="badge warn" title="${t('project_conflict_map.more_than_limit_of_the_runs', { limit: pct(limit) })}">${pct(r.share)}</span>` : pct(r.share)}</td>
-          <td>${r.conflicts ? `<span class="badge" title="${t('project_conflict_map.merge_conflicts_that_named_this_file')}">${plural(r.conflicts, 'conflicts')}</span>` : `<span class="muted small">${t('project_conflict_map.none')}</span>`}</td>
+          <td>${r.conflicts ? `<span class="badge" title="${t('project_conflict_map.merge_conflicts_that_named_this_file')}">${plural(r.conflicts, 'project_conflict_map.conflicts_count')}</span>` : `<span class="muted small">${t('project_conflict_map.none')}</span>`}</td>
           <td class="num">${r.perf ? (r.perf.lines == null ? `<span class="badge" title="${t('project_conflict_map.no_longer_in_the_repository')}">${t('project_conflict_map.deleted')}</span>` : fmtNum(r.perf.lines)) : '—'}</td>
         </tr>${open ? detailHtml(r) : ''}`;
       }).join('')}</tbody></table>`;
@@ -147,8 +147,8 @@
     if (!rows.length) {
       return `${notGit}${mapNote}${p.project.isGit === false ? '' : `<div class="empty-state" data-testid="conflict-map-empty"><b>${t('project_conflict_map.no_runs_with_commits_on_this')}</b><p class="muted">${t('project_conflict_map.runs_count_once_their_work_is')}</p></div>`}`;
     }
-    const of = `${p.empty ? 'No run with commits in this range: the counts are the saved conflict map\'s' : `Of ${plural(p.runsWithCommits, 'runs with commits')}, ${esc(p.from)} to ${esc(p.to)}; each run counts once per file`}`;
-    return `${notGit}${mapNote}<p class="muted small">${of}${cur.map?.runs ? t('project_conflict_map.the_conflict_map_covers_the_last', { runs: plural(cur.map.runs, cur.map.source === 'git' ? 'commits of the branch' : 'finished runs') }) : ''}</p>
+    const of = p.empty ? t('project_conflict_map.no_run_with_commits_in_range') : t('project_conflict_map.of_runs_with_commits', { count: p.runsWithCommits, from: esc(p.from), to: esc(p.to) });
+    return `${notGit}${mapNote}<p class="muted small">${of}${cur.map?.runs ? plural(cur.map.runs, cur.map.source === 'git' ? 'project_conflict_map.covers_last_branch_commits' : 'project_conflict_map.covers_last_finished_runs') : ''}</p>
       <div id="pcm-plan-box">${planHtml()}</div>
       <div class="card table-wrap">${tableHtml(rows, p.sharedLimit)}</div>`;
   }
@@ -199,7 +199,7 @@
     const c = cur;
     const files = (c?.perf?.files || []).filter((f) => f.recommendation).map((f) => f.file);
     if (!files.length || c.planning) return;
-    if (!window.confirm(`The supervisor (Claude Code) will read the ${files.length} file(s) over the limit and their recommendations, and suggest a plan. This calls a real model and costs money. Continue?`)) return;
+    if (!window.confirm(t('project_conflict_map.confirm_ask_plan', { count: files.length }))) return;
     Object.assign(c, { planning: true, planError: null });
     render();
     try { c.plan = await api.askPerformancePlan({ projectId: c.id, files, mock: false }); } catch (e) { c.planError = errMsg(e); }

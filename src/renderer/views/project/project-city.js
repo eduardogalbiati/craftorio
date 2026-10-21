@@ -41,7 +41,7 @@
   let shown = null; // the city on screen (the overlay API's)
   const layers = new Map(); // the overlay's layers, by name, in the order they were set
 
-  const plural = (n, unit) => `${n} ${n === 1 ? unit.replace(/s$/, '') : unit}`;
+  const plural = (n, key) => t(key, { count: n });
   const pct = (x) => `${Math.round(x * 100)}%`;
   const theme = () => window.Run3DTheme?.load() || 'dark';
 
@@ -195,10 +195,10 @@
       const facts = c.facts?.model;
       const measured = facts?.complexity?.status === 'measured';
       const danger = measured ? facts.files.filter((r) => r.quadrant === 'Danger Zone').length : null;
-      const plan = model.grouping === 'plan' ? `plan covers ${pct(validation?.coverage ?? 1)}` : 'no plan: folders as districts';
+      const plan = model.grouping === 'plan' ? t('project_city.plan_covers', { share: pct(validation?.coverage ?? 1) }) : t('project_city.no_plan_folders_as_districts');
       const facts1 = [
-        plural(model.buildings.length, 'files'), plural(model.zones.length, 'zones'), plural(model.districts.length, 'districts'),
-        danger == null ? 'Danger Zone not measured' : `${danger} in the Danger Zone`, plan, model.commit ? String(model.commit).slice(0, 10) : '',
+        plural(model.buildings.length, 'project_city.files_count'), plural(model.zones.length, 'project_city.zones_count'), plural(model.districts.length, 'project_city.districts_count'),
+        danger == null ? t('project_city.danger_zone_not_measured') : t('project_city.in_the_danger_zone_count', { count: danger }), plan, model.commit ? String(model.commit).slice(0, 10) : '',
       ].filter(Boolean).join(' · ');
       const title = model.project || c.name || projectId;
       const options = window.CityLayout.COLOUR_BY.map((k) => `<option value="${k}" ${k === c.colour ? 'selected' : ''}>${COLOUR_LABEL[k]}</option>`).join('');
@@ -213,7 +213,7 @@
         <datalist id="pc-targets-${esc(projectId)}">${targets.map((t) => `<option value="${esc(t)}"></option>`).join('')}</datalist>
         <label class="r3d-chip"><span>${t('project_city.colour_by')}</span><select data-pc-colour aria-label="${t('project_city.colour_by')}" data-testid="project-city-colour">${options}</select></label>
         <label class="r3d-chip" title="${t('project_city.show_or_hide_the_test_files')}"><input type="checkbox" data-pc-tests data-testid="project-city-tests" ${c.tests ? 'checked' : ''} /> ${t('project_city.tests')}</label>
-        <button type="button" class="r3d-close" data-pc-theme data-testid="project-city-theme" aria-label="${light ? t('project_city.dark_theme') : t('project_city.light_theme')}" title="${t('project_city.value_the_run_s_3d_view', { value: light ? 'Switch to the dark theme' : 'Switch to the light theme' })}">${light ? '☾' : '☀'}</button>
+        <button type="button" class="r3d-close" data-pc-theme data-testid="project-city-theme" aria-label="${light ? t('project_city.dark_theme') : t('project_city.light_theme')}" title="${light ? t('project_city.switch_to_dark_theme') : t('project_city.switch_to_light_theme')}">${light ? '☾' : '☀'}</button>
         <button type="button" class="r3d-close r3d-theme" data-pc-expand data-testid="project-city-expand" aria-pressed="${c.expanded}" aria-label="${c.expanded ? t('project_city.close_the_full_screen') : t('project_city.expand_to_the_whole_window')}" title="${c.expanded ? t('project_city.back_into_the_tab_esc') : t('project_city.expand_the_city_over_the_whole')}">${c.expanded ? ICON_CLOSE : ICON_EXPAND}</button>
       </div>`;
     }

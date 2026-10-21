@@ -101,7 +101,7 @@
         : `<img class="paste-thumb" ${root.ImageViewer?.THUMB || 'tabindex="0" role="button"'} src="${escape(i.dataUrl)}" alt="${escape(i.name)}" data-paste-view="${escape(i.id)}" />`;
     const text = i.status === 'error' ? `<span title="${escape(i.error)}">${escape(i.error)}</span>` : `<span>${escape(i.name)}</span><small>${escape(formatSize(i.size))}</small>`;
     return `<span class="ar-chip paste-chip${i.status === 'error' ? ' error' : ''}" title="${escape(i.status === 'error' ? i.error : i.name)}">${lead}${text}`
-      + `<button type="button" data-paste-remove="${escape(i.id)}" title="${t('paste_image.remove')}" aria-label="${t('paste_image.remove_name', { name: escape(i.name) })}">×</button></span>`;
+      + `<button type="button" data-paste-remove="${escape(i.id)}" title="${t('common.remove')}" aria-label="${t('paste_image.remove_name', { name: escape(i.name) })}">×</button></span>`;
   };
 
   // The chip row sits under the field (after voice.js's mic and badge); no row while it is empty.

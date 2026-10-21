@@ -61,7 +61,7 @@
     return `${agents ? `<ul class="pca-list">${agents}</ul>` : `<p class="muted small">${t('project_city_agents.the_runs_in_progress_have_not')}</p>`}
       ${(data.collisions || []).map((c) => `<div class="pca-collision" data-testid="city-collision" role="alert"><b>${t('project_city_agents.collision_risk')}</b> <code title="${esc(c.path)}">${esc(c.path)}</code><small class="muted">${t('project_city_agents.changed_by_length_runs_in_progress', { length: c.runs.length })} ${c.runs.map((id) => esc(short(id))).join(', ')}</small>${window.ProjectConflictMap ? ProjectConflictMap.linkHtml(projectId) : ''}</div>`).join('')}
       ${scene.building.length ? `<p class="small pca-new" data-testid="city-under-construction"><b>${t('project_city_agents.under_construction')}</b> ${scene.building.map((b) => `<code title="${esc(t('project_city_agents.a_new_file_in_district', { district: district(b.district) }))}">${esc(b.path)}</code>`).join(' ')}</p>` : ''}
-      ${scene.cranes.length ? `<p class="small muted">${scene.cranes.length} ${t('project_city_agents.building_value_with_uncommitted_changes_cranes', { value: scene.cranes.length === 1 ? '' : 's' })}</p>` : ''}`;
+      ${scene.cranes.length ? `<p class="small muted">${t('project_city_agents.buildings_with_uncommitted_changes', { count: scene.cranes.length })}</p>` : ''}`;
   }
 
   function attach(city, { projectId }) {
@@ -112,7 +112,7 @@
             <select data-pca-speed data-testid="city-replay-speed" aria-label="${t('project_city_agents.replay_speed')}">${CityAgents.SPEEDS.map((s) => `<option value="${s}"${s === replay.player.speed ? ' selected' : ''}>${s}×</option>`).join('')}</select>
             <small class="muted" data-pca-clock>${clock(replay.player.time / replay.scale)} / ${clock(replay.player.duration / replay.scale)}</small>
           </div>`
-        : `<div class="pca-head"><b>${t('project_city_agents.agents_at_work')}</b>${answer && answer.runs.length ? `<small class="muted">${answer.runs.length} ${t('project_city_agents.run_value_in_progress', { value: answer.runs.length === 1 ? '' : 's' })}</small>` : ''}</div>`;
+        : `<div class="pca-head"><b>${t('project_city_agents.agents_at_work')}</b>${answer && answer.runs.length ? `<small class="muted">${t('project_city_agents.runs_in_progress', { count: answer.runs.length })}</small>` : ''}</div>`;
       const body = error ? `<p class="small" role="alert">${t('project_city_agents.could_not_read_the_agents')} ${esc(error)}</p>`
         : d ? bodyHtml(d, scene, projectId) : `<p class="muted small">${t('project_city_agents.looking_for_agents_at_work')}</p>`;
       el.innerHTML = `${head}<div class="pca-body">${body}</div>`;

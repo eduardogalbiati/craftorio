@@ -9,7 +9,6 @@
 // Uses app.js globals at call time: esc. Browser: window.ProjectCityNotes.
 (() => {
   const STALE_COVERAGE = 0.9; // under this share of matched files, the plan is older than the code
-  const plural = (n, unit) => `${n} ${n === 1 ? unit.replace(/s$/, '') : unit}`;
   const pct = (x) => `${Math.round(x * 100)}%`;
   const note = (testid, cls, body) => `<div class="r3d-card pc-note${cls ? ` ${cls}` : ''}" data-testid="${testid}">${body}</div>`;
 
@@ -17,7 +16,7 @@
   function actionHtml(label, analysis, ready) {
     const a = analysis || {};
     const estimate = a.estimate ? `<span class="pc-estimate" title="${esc(a.estimateTitle || '')}">${esc(a.estimate)}</span>` : '';
-    const title = a.running ? 'The analysis is running' : 'One run: the cartographer maps the project, then the Oracle analyses its hotspots; the map and the report refresh when it ends';
+    const title = a.running ? t('project_city_notes.the_analysis_is_running') : t('project_city_notes.analyze_title');
     return `<div class="pc-actions"><button type="button" class="r3d-primary inline" data-pc-analyze data-testid="project-city-analyze" ${ready && !a.running ? '' : 'disabled'} title="${esc(title)}">${esc(label)}</button>${estimate}</div>`;
   }
 
@@ -25,7 +24,7 @@
     const a = analysis;
     if (!a) return '';
     if (a.running) return `<div class="r3d-card pc-note" role="status" data-testid="project-city-analyzing"><b>${t('project_city_notes.analyzing_this_project')}</b><p><span class="r3d-dot live"></span> ${esc(a.step || t('project_city_notes.starting_the_run'))}…</p></div>`;
-    if (a.error) return `<div class="r3d-card pc-note warn" role="alert" data-testid="project-city-analysis-error"><b>${t('project_city_notes.the_analysis_failed')}</b><p>${esc(a.error)}</p>${actionHtml('Analyze again', a, ready)}</div>`;
+    if (a.error) return `<div class="r3d-card pc-note warn" role="alert" data-testid="project-city-analysis-error"><b>${t('project_city_notes.the_analysis_failed')}</b><p>${esc(a.error)}</p>${actionHtml(t('project_city_notes.analyze_again'), a, ready)}</div>`;
     return '';
   }
 
@@ -33,7 +32,7 @@
   function html({ model, validation, layout, analysis, ready }) {
     const notes = [];
     const running = !!analysis?.running;
-    const action = running ? '' : actionHtml('Analyze this project', analysis, ready);
+    const action = running ? '' : actionHtml(t('project_city_notes.analyze_this_project'), analysis, ready);
     if (model.grouping !== 'plan') {
       notes.push(note('project-city-no-plan', '', `<b>${t('project_city_notes.no_city_plan_yet')}</b><p>${t('project_city_notes.the_districts_are_the_folders_analyze')}</p>${action}`));
     } else if ((validation?.coverage ?? 1) < STALE_COVERAGE) {
@@ -43,13 +42,13 @@
     if (state) notes.push(state);
     const v = validation || {};
     const problems = [
-      ...(v.schemaErrors || []).map((s) => `The plan: ${s}`),
-      ...(v.unknownZones || []).map((u) => `District ${u.district} names an unknown zone ${u.zone}: drawn in the Outskirts.`),
-      ...(v.duplicateIds || []).map((id) => `The id ${id} is used twice.`),
-      ...(v.missingPaths || []).map((p) => `${p} is not in the repository at this commit (a landmark or a port's file).`),
-      ...(v.emptyDistricts || []).map((id) => `District ${id} has no file.`),
+      ...(v.schemaErrors || []).map((s) => t('project_city_notes.problem_schema', { error: s })),
+      ...(v.unknownZones || []).map((u) => t('project_city_notes.problem_unknown_zone', { district: u.district, zone: u.zone })),
+      ...(v.duplicateIds || []).map((id) => t('project_city_notes.problem_duplicate_id', { id })),
+      ...(v.missingPaths || []).map((p) => t('project_city_notes.problem_missing_path', { path: p })),
+      ...(v.emptyDistricts || []).map((id) => t('project_city_notes.problem_empty_district', { id })),
     ];
-    if (model.grouping === 'plan' && problems.length) notes.push(note('project-city-problems', 'warn', `<b>${plural(problems.length, 'problems')} ${t('project_city_notes.in_the_city_plan')}</b><ul>${problems.map((p) => `<li>${esc(p)}</li>`).join('')}</ul>`));
+    if (model.grouping === 'plan' && problems.length) notes.push(note('project-city-problems', 'warn', `<b>${t('project_city_notes.problems_in_the_city_plan', { count: problems.length })}</b><ul>${problems.map((p) => `<li>${esc(p)}</li>`).join('')}</ul>`));
     const notRead = typeof model.edges === 'string' ? [model.edges] : model.edgesNotRead || [];
     if (notRead.length) notes.push(note('project-city-edges', '', `<b>${t('project_city_notes.arcs')}</b> ${esc(notRead.join(', '))}${t('project_city_notes.hovering_those_files_draws_no_arc')}`));
     if (layout.aggregated) notes.push(note('project-city-aggregated', '', `<b>${t('project_city_notes.over_5_000_files')}</b> ${esc(layout.note)}`));

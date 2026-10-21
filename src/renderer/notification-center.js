@@ -22,7 +22,7 @@ function renderNotificationCount(unread) {
   const badge = $('#nav-notifications-count');
   badge.textContent = notificationCenter.unread > 99 ? '99+' : String(notificationCenter.unread);
   badge.classList.toggle('hidden', !notificationCenter.unread);
-  $('#nav-notifications').title = notificationCenter.unread ? t('notification_center.unread_unread_notification_value', { unread: notificationCenter.unread, value: notificationCenter.unread === 1 ? '' : 's' }) : t('notification_center.notifications');
+  $('#nav-notifications').title = notificationCenter.unread ? t('notification_center.unread_notifications', { count: notificationCenter.unread }) : t('notification_center.notifications');
 }
 
 async function renderNotificationPanel() {
