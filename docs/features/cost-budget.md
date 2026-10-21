@@ -23,6 +23,17 @@ estimate ("so far" while it runs). The Product Owner's plan answers show the pla
 Codex reports no cost, so its sessions are priced from tokens × the model prices of Usage, and the
 estimate is marked estimated.
 
+**The roadmap's summary** (#421, `src/shared/roadmap-summary.js`). The roadmap bar shows "Planned
+≈ $X · ≈ T (n items, m stages)" for what is left: the items of the enabled stages that are not
+finished, a running item for its estimate minus what its run has spent and elapsed (never below
+zero). Disabled stages, done and skipped items are left out. Stages run one after another and a stage
+lasts as long as its longest item, so the time is the sum of the stages' times: work time, human
+gates not included. Items without an estimate are listed as "+ n without estimate" (the tooltip
+names them), never counted as zero. "Spent $Y" next to it is the real cost of the roadmap's done and
+running items, since its oldest item. With release cut lines (#260), **By release** lists each cut
+line's stages (from the previous line) plus its release run when the release workflow has history,
+then the part after the last line.
+
 **A budget that pauses before overspending** (Settings › General › Budget: `budget.dailyUsd` per
 local day, `budget.nightlyUsd` per Night watch night, from its start; empty = no cap). Spending is
 what real runs recorded (their sessions' `cost_usd`, live runs included). The cap stops starts,

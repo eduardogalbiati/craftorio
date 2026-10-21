@@ -1143,21 +1143,30 @@
   }
 
   // ---- the page's alerts (#270, alerts.js) ---------------------------------------------------
-  // On top of the Board, the Epics view and the Roadmap, above the filter row, one at a time: a roadmap
-  // paused by an item and the queue's error (errors), a stale Backlog Refresh and the retired
-  // deprioritized label (warnings), local merges not pushed (an info). Set on every render: an alert
-  // leaves when its condition clears.
+  // On top of the Board, the Epics view and the Roadmap, above the filter row, one at a time: a roadmap paused by
+  // an item and the queue's error (errors; the queue's has Resume, #422), a stale Backlog Refresh and the retired
+  // deprioritized label (warnings), local merges not pushed (an info). Set on every render: it leaves when its cause clears.
   let pageAlerts = null;
   function renderAlerts() {
     pageAlerts ||= window.Alerts.mount($b('#bl-alerts'));
     const q = bl.data?.queue;
     pageAlerts.set([
       ...(window.BacklogRoadmap?.alerts(bl.data, roadmapCtx(), { shown: onRoadmapTab() }) || []),
-      ...(q?.error ? [{ id: `queue:${bl.projectId}`, level: 'error', title: t('backlog.queue'), text: q.error, dismissible: false, actions: [] }] : []),
+      ...(q?.error ? [{ id: `queue:${bl.projectId}`, level: 'error', title: t('backlog.queue'), text: q.error, dismissible: false, actions: [{ label: t('backlog.resume'), primary: true, onClick: (e) => setQueuePaused(e.target.closest('[data-alert-action]'), false) }] }] : []),
       ...refreshAlert(),
       ...deprioritizedAlert(),
       ...localAlert(),
     ]);
+  }
+  // #422: the Queue panel's Pause/Resume and the queue alert's Resume; kept work of an ended run (#170): resume it or start from scratch
+  async function setQueuePaused(button, on) {
+    button.disabled = true;
+    try {
+      let out = await api.pauseQueue(bl.projectId, on);
+      if (out?.kept && await keptWorkDialog(out.kept) === 'scratch') out = await api.pauseQueue(bl.projectId, false, true);
+      setData(out);
+    } catch (err) { bl.error = errMsg(err); }
+    render();
   }
 
   // What the push sends (the commits and the issues they close), then the push; a rejected push
@@ -1499,19 +1508,10 @@
       const out = e.target.closest('[data-unqueue]');
       if (out) {
         try { setData(await api.unqueueIssue(bl.projectId, Number(out.dataset.unqueue))); } catch (err) { bl.error = errMsg(err); }
-        render();
-        return;
+        return render();
       }
       const b = e.target.closest('[data-pause]');
-      if (!b) return;
-      b.disabled = true;
-      try {
-        let out = await api.pauseQueue(bl.projectId, b.dataset.pause === 'on');
-        // the next item would redo an ended run's kept work (#170): resume that run, or start it from scratch
-        if (out?.kept && await keptWorkDialog(out.kept) === 'scratch') out = await api.pauseQueue(bl.projectId, false, true);
-        setData(out);
-      } catch (err) { bl.error = errMsg(err); }
-      render();
+      if (b) await setQueuePaused(b, b.dataset.pause === 'on');
     };
     $b('#bl-live').onclick = async (e) => {
       const off = e.target.closest('[data-live-off]');
