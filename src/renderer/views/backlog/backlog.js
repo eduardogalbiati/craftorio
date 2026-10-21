@@ -833,7 +833,7 @@
       ${StatusPill.statusPill(r.status, { waiting: r.waiting })}<span>${esc(window.runTitle ? runTitle(r) : r.workflow || 'workflow')}</span>${window.runPrBadge ? runPrBadge(r, { compact: true }) : ''}${r.mock ? `<span class="badge p-mock">${t('backlog.simulated')}</span>` : ''}</button>`;
   // Open PRs/MRs that refer to the issue, each a link to it.
   const prBadges = (i) => (i.pullRequests || []).map((p) =>
-    `<a class="badge bl-pr${p.draft ? ' draft' : ''}" href="${esc(p.url)}" target="_blank" rel="noopener" title="${esc(t('backlog.open_value_p_title', { value: p.draft ? 'draft ' : '', p: prName(p), title: p.title }))}">${esc(prName(p))}</a>`).join('');
+    `<a class="badge bl-pr${p.draft ? ' draft' : ''}" href="${esc(p.url)}" target="_blank" rel="noopener" title="${esc(t(p.draft ? 'backlog.open_draft_p_title' : 'backlog.open_p_title', { p: prName(p), title: p.title }))}">${esc(prName(p))}</a>`).join('');
   // The other issues of the same run (a group sent as one run: one branch, one PR/MR).
   const groupBadge = (others) => (others?.length
     ? `<span class="badge bl-group" title="${t('backlog.one_run_one_branch_and_one')}">${t('backlog.grouped_with')} ${esc(others.map((n) => `#${n}`).join(', '))}</span>` : '');

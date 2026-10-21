@@ -228,7 +228,7 @@
     const issues = readIssues();
     const error = $('#dsc-commit-error');
     const bad = issues.findIndex((i) => !i.title || !i.tasks.length);
-    if (bad >= 0) { error.textContent = t('discovery_commit.issue_value_needs_value2', { value: bad + 1, value2: issues[bad].title ? 'at least one task' : 'a title' }); return; }
+    if (bad >= 0) { error.textContent = t(issues[bad].title ? 'discovery_commit.issue_value_needs_a_task' : 'discovery_commit.issue_value_needs_a_title', { value: bad + 1 }); return; }
     const { projectId, card, done, preview } = cm;
     const roadmap = $('#dsc-commit-roadmap').checked;
     Object.assign(cm, { issues, busy: true });

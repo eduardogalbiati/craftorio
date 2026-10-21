@@ -564,7 +564,7 @@
       $d('#duo-chat-status').textContent = t('duo.finished');
       // accepted and about an issue: Save to issue, now or later (a replayed run keeps it)
       if (chat.issue) {
-        note(`<button type="button" class="btn sm primary" data-save-issue title="${t('duo.preview_it_then_confirm_it_changes', { value: chat.mock ? 'the platform (simulated run: preview only)' : 'GitHub/GitLab' })}">${t('duo.save_to_issue_number', { number: esc(chat.issue.number) })}</button>
+        note(`<button type="button" class="btn sm primary" data-save-issue title="${t(chat.mock ? 'duo.preview_then_confirm_simulated' : 'duo.preview_then_confirm_on_platform')}">${t('duo.save_to_issue_number', { number: esc(chat.issue.number) })}</button>
           <span class="muted small">${chat.mock ? t('duo.simulated_run_preview_only_nothing_is') : t('duo.replace_its_description_or_add_it')}</span>`, 'done duo-save-row');
       }
     } else {

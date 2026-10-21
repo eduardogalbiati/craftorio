@@ -904,7 +904,7 @@
         ${(below || uncommittable) && !readOnly() ? `<button type="button" class="btn sm" data-testid="card-grill-me" data-detail="grill" title="${t('discovery.an_interview_in_this_thread_one')}">${t('discovery.grill_me')}</button>` : ''}
       </div>
       ${score != null && (by || ts) ? `<p class="muted small" data-testid="clarity-scored">${t('discovery.scored_by')} <b>${esc(by || 'unknown')}</b> ${when(ts)}</p>` : ''}
-      ${override ? `<p class="small" data-testid="clarity-override"><span class="badge warn">${t('discovery.moved_anyway')}</span> <b>${esc(override.by)}</b> ${t('discovery.moved_it_to_ready_value_ts', { value: override.score == null ? 'without a score' : `at ${esc(override.score)}%`, ts: when(override.ts) })} ${esc(override.reason)}</p>` : ''}
+      ${override ? `<p class="small" data-testid="clarity-override"><span class="badge warn">${t('discovery.moved_anyway')}</span> <b>${esc(override.by)}</b> ${t(override.score == null ? 'discovery.moved_it_to_ready_without_a_score_ts' : 'discovery.moved_it_to_ready_at_score_ts', { score: esc(override.score), ts: when(override.ts) })} ${esc(override.reason)}</p>` : ''}
       ${missing.length ? `<p class="muted small">${t('discovery.missing')}</p><ul class="dsc-missing" data-testid="clarity-missing">${missing.map((g) => `<li>${esc(g)}</li>`).join('')}</ul>` : ''}`;
   }
 

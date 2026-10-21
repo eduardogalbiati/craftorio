@@ -238,7 +238,7 @@
         else if (c.loading || !a) stageMessage(`<p>${t('project_city.reading_the_facts_and_laying_out')}</p><span class="r3d-bar open"><i></i></span>`, { testid: 'project-city-loading' });
         else if (a.state === 'not-git') stateMessage('project-city-not-git', 'Not a git repository', 'The project folder is not a git repository: there is no history to draw. Point the project to a git checkout.');
         else if (a.state === 'no-commits') stateMessage('project-city-no-commits', 'No commits yet', 'The city is drawn from the files at the last commit of the default branch.');
-        else stageMessage(`<p>${t('project_city.the_city_could_not_be_laid', { value: window.CityLayout ? '' : ' (its layout script did not load)' })}</p>${toFacts}`, { alert: true });
+        else stageMessage(`<p>${t(window.CityLayout ? 'project_city.the_city_could_not_be_laid' : 'project_city.the_city_could_not_be_laid_no_script')}</p>${toFacts}`, { alert: true });
         return;
       }
       const model = a.model;

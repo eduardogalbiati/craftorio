@@ -439,7 +439,7 @@
         <div class="row"><button class="btn primary sm" type="submit"${f.saving ? ' disabled' : ''}>${t('oracle.start')}</button><button class="btn ghost sm" type="button" data-oracle-night-cancel>${t('common.cancel')}</button></div>
       </form>`);
     } else if (nw.active) {
-      parts.push(`<div class="row oracle-ops-row"><span class="badge warn" title="${t('oracle.repairs_that_keep_the_roadmap_going', { value: nw.selfHealing ? '. Turn it off in Settings › Execution › Oracle' : '' })}">${esc(nw.label)}</span><span class="spacer"></span>${nw.selfHealing ? '' : `<button class="btn ghost sm" type="button" data-oracle-night-off>${t('oracle.turn_off')}</button>`}</div>`);
+      parts.push(`<div class="row oracle-ops-row"><span class="badge warn" title="${t(nw.selfHealing ? 'oracle.repairs_that_keep_the_roadmap_going_turn_off' : 'oracle.repairs_that_keep_the_roadmap_going')}">${esc(nw.label)}</span><span class="spacer"></span>${nw.selfHealing ? '' : `<button class="btn ghost sm" type="button" data-oracle-night-off>${t('oracle.turn_off')}</button>`}</div>`);
     }
     // the runs and roadmaps watched, the runs muted: one compact row (the full id on hover)
     const watching = (or.wake?.watching || []).map((x) => {

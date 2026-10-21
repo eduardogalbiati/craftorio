@@ -1862,8 +1862,8 @@
         const { s, n } = locate(stages, e.target);
         const [gone] = stages[s].items.splice(n, 1);
         // its stage goes with its last item (the service drops empty stages): the toast says so
-        const detail = stages[s].items.length ? '' : `Its ${stageName(stages[s], s)} went too.`;
-        await save(ctx, r, stages, { label: t('backlog_roadmap.removed_value_from_the_roadmap', { value: gone ? numbers(gone) : 'an item' }), detail });
+        const detail = stages[s].items.length ? '' : t('backlog_roadmap.its_stage_went_too', { stage: stageName(stages[s], s) });
+        await save(ctx, r, stages, { label: gone ? t('backlog_roadmap.removed_value_from_the_roadmap', { value: numbers(gone) }) : t('backlog_roadmap.removed_an_item_from_the_roadmap'), detail });
         return true;
       } else {
         return false;
