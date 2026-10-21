@@ -173,7 +173,7 @@ function renderArtifactList() {
   const filtered = !!(a.loadedQ || a.projectId);
   if (!runs.length) {
     paintArtToggleAll([], false);
-    box.innerHTML = `<div class="art-pad muted small">${filtered ? t('artifacts.no_artifacts_match_these_filters') : t('artifacts.no_run_has_produced_documents_or')}${hiddenSim ? `<br>${hiddenSim} ${t('artifacts.simulated_run_value_hidden', { value: hiddenSim > 1 ? 's' : '' })}` : ''}</div>`;
+    box.innerHTML = `<div class="art-pad muted small">${filtered ? t('artifacts.no_artifacts_match_these_filters') : t('artifacts.no_run_has_produced_documents_or')}${hiddenSim ? `<br>${t('artifacts.simulated_runs_hidden', { count: hiddenSim })}` : ''}</div>`;
     return;
   }
   if (a.reveal && runs.some((r) => r.runId === a.reveal)) { setArtGroupOpen(a.reveal, true); a.reveal = null; }
@@ -181,16 +181,16 @@ function renderArtifactList() {
   box.innerHTML = runs.map((r, i) => {
     const open = searching || artGroupOpen(r.runId, i === 0);
     if (open) ensureArtFiles(r);
-    const files = searching ? `${r.matchCount} of ${r.artifactCount} file${r.artifactCount > 1 ? 's' : ''}` : `${r.artifactCount} file${r.artifactCount > 1 ? 's' : ''}`;
+    const files = searching ? t('artifacts.matching_files_count', { matched: r.matchCount, count: r.artifactCount }) : t('artifacts.files_count', { count: r.artifactCount });
     return `
     <div class="art-run ${open ? 'open' : ''}" data-run="${esc(r.runId)}">
       <button class="art-run-head" title="${esc(r.task || '')}" aria-expanded="${open}">
         <div class="row"><span class="art-chev" aria-hidden="true">${open ? '▾' : '▸'}</span><b class="art-run-name">${esc(r.workflow || 'workflow')}</b>${StatusPill.statusPill(r.status)}${r.mock ? `<span class="badge p-mock">${t('artifacts.simulated')}</span>` : ''}</div>
-        <div class="muted small art-run-sub">${r.project ? `${esc(r.project.name)} · ` : ''}${r.startedAt ? esc(dateOf(r.startedAt)) : ''} · ${files}${r.imageCount ? t('artifacts.imagecount_image_value', { imageCount: r.imageCount, value: r.imageCount === 1 ? '' : 's' }) : ''}</div>
+        <div class="muted small art-run-sub">${r.project ? `${esc(r.project.name)} · ` : ''}${r.startedAt ? esc(dateOf(r.startedAt)) : ''} · ${files}${r.imageCount ? t('artifacts.images_count', { count: r.imageCount }) : ''}</div>
       </button>
       ${open ? artFilesHtml(a.files.get(r.runId)) : ''}
     </div>`;
-  }).join('') + (hiddenSim ? `<p class="muted small art-pad">${hiddenSim} ${t('artifacts.simulated_run_value_hidden', { value: hiddenSim > 1 ? 's' : '' })}</p>` : '');
+  }).join('') + (hiddenSim ? `<p class="muted small art-pad">${t('artifacts.simulated_runs_hidden', { count: hiddenSim })}</p>` : '');
   box.querySelectorAll('.art-file').forEach((b) => {
     b.onclick = () => selectArtifact(b.dataset.path);
     // right-click or Shift+F10: Copy to clipboard / Copy file / Copy path (artifact-menu.js, #114)

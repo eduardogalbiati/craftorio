@@ -150,7 +150,7 @@
     nextQueued = null;
     const images = queued ? [] : or.drafts.images;
     const ctx = queued ? queued.context : or.context;
-    Object.assign(or, { pending: q || `(${images.length} image${images.length > 1 ? 's' : ''})`, pendingSince: Date.now(), pendingRef: ctx?.ref || '', error: null, pasteError: null, live: window.LiveTurn.create({ agent: 'Oracle' }), liveIn: w });
+    Object.assign(or, { pending: q || t('oracle.pending_images', { count: images.length }), pendingSince: Date.now(), pendingRef: ctx?.ref || '', error: null, pasteError: null, live: window.LiveTurn.create({ agent: 'Oracle' }), liveIn: w });
     chats[w].setLiveTurn(or.live);
     render();
     try {
@@ -576,7 +576,7 @@
     const badge = $('#nav-oracle-count');
     badge.textContent = String(v.unread);
     badge.classList.toggle('hidden', !v.unread);
-    badge.title = t('oracle.unread_new_answer_value_from_the', { unread: v.unread, value: v.unread === 1 ? '' : 's' });
+    badge.title = t('oracle.new_answers_from_the_oracle', { count: v.unread });
     markRead();
     window.GateOracle?.paint?.();
     window.AgentsWindow?.changed?.();

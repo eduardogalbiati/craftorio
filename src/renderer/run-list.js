@@ -100,7 +100,7 @@ function renderRunList(rl, { prefix, box: boxSel, empty, start, rerender, reload
     return;
   }
   const hiddenSim = rl.hiddenSim || 0;
-  const simNote = hiddenSim ? `<p class="muted small">${hiddenSim} ${t('run_list.simulated_run_value_hidden', { value: hiddenSim > 1 ? 's' : '' })}</p>` : '';
+  const simNote = hiddenSim ? `<p class="muted small">${t('run_list.simulated_runs_hidden', { count: hiddenSim })}</p>` : '';
   if (!rl.runs.length && !rl.counts?.all && !rl.q && !rl.workflow) {
     box.innerHTML = `<div class="empty-state"><b>${esc(empty)}</b>${simNote}<button class="btn primary" data-empty-start>${t('run_list.start_workflow')}</button></div>`;
     box.querySelector('[data-empty-start]').onclick = start;

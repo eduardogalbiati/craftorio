@@ -10,10 +10,10 @@ async function stopRun() {
   if (r?.status !== 'running') return;
   // a run past a human gate holds work the owner already approved: always ask (#112)
   const passed = ((await api.listActiveRuns().catch(() => [])) || []).find((x) => x.runId === r.id)?.passedGates || [];
-  const why = passed.length ? `It has already passed the human gate${passed.length > 1 ? 's' : ''} ${passed.join(', ')}: a new run would redo that work. ` : '';
+  const why = passed.length ? t('run_controls.passed_human_gates', { count: passed.length, gates: passed.join(', ') }) : '';
   // its `type: workflow` steps' child runs in progress stop with it: always ask (#175)
   const kids = (r.childRuns || []).filter((c) => c.run_id && c.status === 'running');
-  const children = kids.length ? `Its ${kids.length} child run${kids.length > 1 ? 's' : ''} in progress (${kids.map((c) => c.label || c.run_id).join(', ')}) will be stopped too; resuming this run resumes them. ` : '';
+  const children = kids.length ? t('run_controls.child_runs_will_stop', { count: kids.length, runs: kids.map((c) => c.label || c.run_id).join(', ') }) : '';
   if ((state.settings.confirmStop || passed.length || kids.length) && !(await confirmDialog(t('run_controls.stop_workflow'), t('run_controls.why_children_running_sessions_of_r', { why, children, r: runLabel(r) }), t('run_controls.stop')))) return;
   api.stopRun(r.id);
 }
@@ -22,8 +22,7 @@ async function stopRun() {
 // The engine marks each cancelled item failed and pauses the roadmap (Resume / Retry / Skip).
 async function stopRuns(runIds, what) {
   if (!runIds.length) return false;
-  const many = runIds.length > 1;
-  if (!(await confirmDialog(t('run_controls.stop_what', { what }), `${many ? `Its ${runIds.length} runs` : 'Its run'} in progress (${runIds.join(', ')}) will be stopped and ${many ? 'their' : 'its'} running sessions closed. No gate is answered.`, t('run_controls.stop')))) return false;
+  if (!(await confirmDialog(t('run_controls.stop_what', { what }), t('run_controls.runs_will_stop_no_gate', { count: runIds.length, runs: runIds.join(', ') }), t('run_controls.stop')))) return false;
   for (const id of runIds) await api.stopRun(id).catch((e) => showToast(t('run_controls.could_not_stop_the_run'), `${id}: ${errMsg(e)}`));
   return true;
 }

@@ -594,7 +594,7 @@
       if (!run) return `<div ${attrs}>${inner}</div>`;
       // a click opens the run there (the gate: at the station that holds it)
       const at = st.gate ? st.host : st;
-      return `<button type="button" ${attrs} data-rm-chip="${esc(at.name)}" data-grouped="${at.grouped ? '1' : ''}" aria-label="${esc(t('backlog_roadmap.open_the_run_at_station', { name, state: stationWord(st.state), round: st.round > 1 ? t('backlog_roadmap.station_round', { round: st.round }) : '' }))}">${inner}</button>`;
+      return `<button type="button" ${attrs} data-rm-chip="${esc(at.name)}" data-grouped="${at.grouped ? '1' : ''}" aria-label="${esc(t('backlog_roadmap.open_the_run_at_station', { name, state: stationWord(st.state), round: 1 < st.round ? t('backlog_roadmap.station_round', { round: st.round }) : '' }))}">${inner}</button>`;
     }).join('<span class="rp-sep" aria-hidden="true">›</span>');
     return `<div class="rm-pipe" role="group" aria-label="${t('backlog_roadmap.the_workflow_s_pipeline')}" data-testid="roadmap-pipeline"${run ? ` data-rm-progress="${esc(x.runId)}" data-workflow="${esc(run.workflow || x.workflowName || '')}"` : ''}>${html}</div>`;
   }

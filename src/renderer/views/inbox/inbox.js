@@ -27,7 +27,7 @@
   const inbox = { projectId: null, cards: [], files: [], busy: false, open: null, thread: [], editing: false, previews: new Map(), seq: 0, openSeq: 0, acting: false, importing: null };
 
   const formatSize = (n) => (n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
-  const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+  const plural = (n, key) => t(key, { count: n }); // a plural catalog entry ({ one, other }) picked by n
   const toBase64 = (file) => new Promise((resolve, reject) => {
     const r = new FileReader();
     r.onload = () => resolve(String(r.result).replace(/^data:[^,]*,/, ''));
@@ -88,7 +88,7 @@
             <span class="badge">${esc(c.type)}</span>
             <span data-testid="inbox-card-author">${esc(c.author)}</span>
             <span data-testid="inbox-card-age" title="${esc(dateOf(c.created))}">${esc(ncAgo(c.created))}</span>
-            <span class="inbox-card-files" data-testid="inbox-card-attachments" title="${esc(plural(n, 'attachment'))}">${CLIP} ${n}</span>
+            <span class="inbox-card-files" data-testid="inbox-card-attachments" title="${esc(plural(n, 'inbox.attachments_count'))}">${CLIP} ${n}</span>
           </span>
         </div>
         <button type="button" class="btn sm ghost" data-action="accept" data-card="${esc(c.id)}" title="${t('inbox.move_to_discovery_triage')}">${t('inbox.accept')}</button>
@@ -277,12 +277,12 @@
       return;
     }
     const { create, merge } = importCounts(st.items);
-    const confirm = [create ? `Create ${plural(create, 'card')}` : '', merge ? `merge ${merge}` : ''].filter(Boolean).join(', ') || 'Nothing to create';
+    const confirm = [create ? plural(create, 'inbox.create_cards_count') : '', merge ? plural(merge, 'inbox.merge_count') : ''].filter(Boolean).join(', ') || t('inbox.nothing_to_create');
     box.innerHTML = `
       <div data-testid="inbox-import-preview" class="inbox-import-preview">
         <div class="inbox-import-head">
-          <h2>${t('inbox.preview_2')} ${esc(plural(st.items.length, 'item'))}</h2>
-          <span class="badge" title="${esc(st.name || t('inbox.pasted_text'))}">${esc(st.name || 'pasted')}</span>
+          <h2>${t('inbox.preview_2')} ${esc(plural(st.items.length, 'inbox.items_count'))}</h2>
+          <span class="badge" title="${esc(st.name || t('inbox.pasted_text'))}">${esc(st.name || t('inbox.pasted'))}</span>
         </div>
         <p class="muted small">${esc(st.note)} ${t('inbox.nothing_is_written_yet_rename_drop')}</p>
         ${st.undo ? `<p class="small inbox-import-undo">${esc(st.undo.what)} <button type="button" class="link-btn small" data-import-op="undo">${t('common.undo')}</button></p>` : ''}
@@ -361,8 +361,8 @@
     try {
       const done = await api.importDiscoveryItems(inbox.projectId, items, st.name ? { name: st.name, text: st.text } : { pasted: true }, confirmLarge);
       closeImport();
-      const parts = [`${plural(done.created.length, 'card')} created`, done.merged.length ? `${done.merged.length} merged` : '', done.skipped ? `${done.skipped} skipped` : ''].filter(Boolean);
-      showToast(t('inbox.imported_value', { value: st.name || 'the pasted text' }), t('inbox.value_in_the_inbox', { value: parts.join(', ') }));
+      const parts = [plural(done.created.length, 'inbox.cards_created_count'), done.merged.length ? plural(done.merged.length, 'inbox.merged_count') : '', done.skipped ? plural(done.skipped, 'inbox.skipped_count') : ''].filter(Boolean);
+      showToast(t('inbox.imported_value', { value: st.name || t('inbox.the_pasted_text') }), t('inbox.value_in_the_inbox', { value: parts.join(', ') }));
     } catch (e) {
       st.busy = false;
       st.message = errMsg(e);

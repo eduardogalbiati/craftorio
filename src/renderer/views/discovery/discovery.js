@@ -74,7 +74,7 @@
   };
 
   const parts = () => window.DiscoveryCardParts;
-  const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+  const plural = (n, key) => t(key, { count: n }); // a plural catalog entry ({ one, other }) picked by n
   // a textarea gives its text with \n line ends, whatever the file has
   const lines = (s) => String(s ?? '').replace(/\r\n/g, '\n');
   const isFast = (c) => FAST.includes(c.type);
@@ -187,9 +187,9 @@
             <span data-testid="discovery-card-age" title="${t('discovery.in_value_since_c', { value: esc(columnOf(c.column)?.title || c.column), c: esc(dateOf(since(c))) })}">${esc(age(since(c)))}</span>
             ${score != null ? `<span class="badge${score < bar ? ' warn' : ''}" data-testid="clarity-badge" title="${esc(score < bar ? t('discovery.needs_grilling_below_the_clarity_bar', { bar }) : t('discovery.at_or_above_the_clarity_bar', { bar }))}"><span data-testid="discovery-card-clarity">${t('discovery.clarity_score', { score: esc(score) })}</span></span>` : ''}
             ${override ? `<span class="badge warn" data-testid="clarity-override" title="${esc(t('discovery.moved_to_ready_below_the_clarity', { reason: override.reason }))}">${t('discovery.moved_anyway')}</span>` : ''}
-            ${c.automation?.state === 'running' ? `<span class="badge live dsc-auto-badge" data-testid="discovery-card-automation" title="${esc(t('discovery.value_is_running_run_value2_its', { value: c.automation.name || 'The automation', value2: c.automation.runId || '…' }))}">${t('discovery.running')}</span>` : ''}
+            ${c.automation?.state === 'running' ? `<span class="badge live dsc-auto-badge" data-testid="discovery-card-automation" title="${esc(t('discovery.value_is_running_run_value2_its', { value: c.automation.name || t('discovery.the_automation'), value2: c.automation.runId || '…' }))}">${t('discovery.running')}</span>` : ''}
             ${estimate ? `<span data-testid="discovery-card-estimate" title="${t('discovery.estimate')}">${esc(estimate)}</span>` : ''}
-            <span class="inbox-card-files" data-testid="discovery-card-attachments" title="${esc(plural(files, 'attachment'))}">${parts().CLIP} ${files}</span>
+            <span class="inbox-card-files" data-testid="discovery-card-attachments" title="${esc(plural(files, 'discovery.attachments_count'))}">${parts().CLIP} ${files}</span>
             <span class="inbox-card-files" data-testid="discovery-card-thread" title="${esc(t('discovery.notes_in_the_thread', { notes }))}">${THREAD} ${notes}</span>
           </div>
           <span class="bl-menu-wrap dsc-move">
@@ -212,14 +212,14 @@
     const f = dv.board.forecast;
     const s = dv.board.clarity;
     if (!f || !s) return '';
-    const loose = f.unestimated ? `; ${plural(f.unestimated, 'card')} not estimated` : '';
-    const [head, detail] = !f.count ? ['Nothing ready yet', 'an estimate from the cards in Ready at or above the clarity bar']
-      : !f.hours ? [`${plural(f.count, 'card')} ready`, 'no estimate of their agent work yet']
-        : [`${plural(f.nights, 'night')} ready`, `about ${f.hours} h of agent work, an estimate${loose}`];
+    const loose = f.unestimated ? plural(f.unestimated, 'discovery.forecast_cards_not_estimated') : '';
+    const [head, detail] = !f.count ? [t('discovery.forecast_nothing_ready'), t('discovery.forecast_nothing_ready_detail')]
+      : !f.hours ? [plural(f.count, 'discovery.forecast_cards_ready'), t('discovery.forecast_no_estimate_yet')]
+        : [plural(f.nights, 'discovery.forecast_nights_ready'), t('discovery.forecast_hours_detail', { hours: f.hours, loose })];
     const kinds = Object.entries(s.byKind || {}).map(([k, v]) => `${k} ${v}%`).join(', ');
     return `
         <div class="dsc-forecast">
-          <span data-testid="ready-forecast" title="${esc(t('discovery.count_in_ready_at_or_above', { count: plural(f.count, 'card'), nightHours: f.nightHours }))}"><b>${esc(head)}</b> <span class="muted">(${esc(detail)})</span></span>
+          <span data-testid="ready-forecast" title="${esc(t('discovery.count_in_ready_at_or_above', { count: plural(f.count, 'discovery.cards_count'), nightHours: f.nightHours }))}"><b>${esc(head)}</b> <span class="muted">(${esc(detail)})</span></span>
           <span class="muted small" data-testid="clarity-bar-summary">${t('discovery.clarity_bar_bar_value_night_start', { bar: esc(s.bar), value: kinds ? ` (${esc(kinds)})` : '', start: esc(s.night.start) })} ${esc(s.night.end)}</span>
           <span class="spacer"></span>
           <button type="button" class="btn sm ghost" data-testid="clarity-settings" data-clarity-settings title="${t('discovery.change_the_clarity_bar_a_bar')}">${t('discovery.bar_and_night')}</button>
@@ -232,8 +232,8 @@
     const n = list.length;
     const over = c.wip != null && n > c.wip;
     const count = c.wip == null
-      ? `<span class="badge dsc-count" data-testid="discovery-column-count" title="${esc(plural(n, 'card'))}">${n}</span>`
-      : `<span class="badge dsc-count${over ? ' warn' : ''}" data-testid="discovery-column-count" title="${esc(t('discovery.n_wip_limit_wip_value', { n: plural(n, 'card'), wip: c.wip, value: over ? ': over the limit' : '' }))}">${n} / ${esc(c.wip)}</span>
+      ? `<span class="badge dsc-count" data-testid="discovery-column-count" title="${esc(plural(n, 'discovery.cards_count'))}">${n}</span>`
+      : `<span class="badge dsc-count${over ? ' warn' : ''}" data-testid="discovery-column-count" title="${esc(t(over ? 'discovery.n_wip_limit_over' : 'discovery.n_wip_limit', { n: plural(n, 'discovery.cards_count'), wip: c.wip }))}">${n} / ${esc(c.wip)}</span>
           <button type="button" class="icon-btn dsc-wip-edit" data-testid="discovery-wip-edit" data-column="${esc(c.id)}" aria-label="${t('discovery.change_the_wip_limit_of_title', { title: esc(c.title) })}" title="${t('discovery.change_the_wip_limit')}">${PENCIL}</button>`;
     const editor = `<span class="dsc-wip-form">
           <span class="muted small">${n} /</span>
@@ -268,7 +268,7 @@
     const shown = dv.cards.filter(matches).length;
     const note = !dv.cards.length
       ? `<p class="muted small dsc-note" data-testid="discovery-empty">${t('discovery.no_card_on_the_board_yet')}</p>`
-      : shown < dv.cards.length ? `<p class="muted small dsc-note">${shown} ${t('discovery.of_length_shown_the_filters_hide', { length: plural(dv.cards.length, 'card') })}</p>` : '';
+      : shown < dv.cards.length ? `<p class="muted small dsc-note">${shown} ${t('discovery.of_length_shown_the_filters_hide', { length: plural(dv.cards.length, 'discovery.cards_count') })}</p>` : '';
     // the Committed list sits beside the columns once a card was committed (#258)
     const committed = commit().committedHtml(dv.committed, dv.open?.id);
     box.innerHTML = `${note}
@@ -385,7 +385,7 @@
     else if (a.status === 'running') showToast(`${a.name || 'The automation'} started`, t('discovery.on_title_entering_where_its_result', { title, where }), a.runId || null);
     else if (a.status === 'done') showToast(`${a.name || 'The automation'} done`, a.question ? t('discovery.a_question_waits_for_you_in', { title }) : t('discovery.on_title_entering_where', { title, where }));
     else if (a.status === 'failed') {
-      dv.error = `${a.name || 'The automation'} could not start on "${title}": ${a.error || 'unknown error'}`;
+      dv.error = t('discovery.automation_could_not_start', { name: a.name || t('discovery.the_automation'), title, error: a.error || t('discovery.unknown_error') });
       render();
     }
   }
@@ -394,10 +394,10 @@
   // costUsd from past runs, null without any; a simulation costs nothing).
   function estimateLine(est) {
     const usd = typeof est?.costUsd === 'number' ? est.costUsd : typeof est?.usd === 'number' ? est.usd : null;
-    if (usd == null) return `No cost estimate yet${est?.text ? `: ${est.text}` : ': no past runs to estimate from'}.`;
+    if (usd == null) return est?.text ? t('discovery.no_cost_estimate_yet_text', { text: est.text }) : t('discovery.no_cost_estimate_yet');
     const basis = (est.items || []).reduce((n, i) => n + (Number(i.basis) || 0), 0) || Number(est.runs) || 0;
-    const detail = est.simulated ? 'simulated run: the mock provider costs nothing' : basis ? `an estimate from ${plural(basis, 'past run')}` : 'an estimate';
-    return `Estimated cost: ≈ $${usd.toFixed(2)} (${detail}).`;
+    const detail = est.simulated ? t('discovery.cost_simulated_run') : basis ? plural(basis, 'discovery.cost_estimate_from_past_runs') : t('discovery.cost_an_estimate');
+    return t('discovery.estimated_cost', { usd: usd.toFixed(2), detail });
   }
 
   // The proposal of an "Ask me" column: the owner runs it or not; nothing runs by itself. Docked in a

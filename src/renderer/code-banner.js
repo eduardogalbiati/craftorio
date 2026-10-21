@@ -32,12 +32,12 @@ async function showCodeBanner() {
   let runs = [];
   try { runs = await api.listActiveRuns(); } catch { /* the count is left out */ }
   const n = runs.length;
-  const inProgress = n ? ` (${n} run${n > 1 ? 's' : ''} in progress will be interrupted and can be resumed)` : '';
+  const inProgress = n ? t('code_banner.runs_in_progress_will_be_interrupted', { count: n }) : '';
   const desktop = api.platform !== 'browser' && typeof api.relaunchApp === 'function';
-  const text = codeState.reload ? 'The server restarted with other code. Reload the page to use it.'
-    : desktop ? `The app's code changed on disk. Restart to use it${inProgress}.`
-      : api.platform === 'browser' ? `The app's code changed on disk. Restart the server (npm run serve) and reload the page to use it${inProgress}.`
-        : `The app's code changed on disk. Close and open the app to use it${inProgress}.`;
+  const text = codeState.reload ? t('code_banner.server_restarted_with_other_code')
+    : desktop ? t('code_banner.code_changed_restart', { inProgress })
+      : api.platform === 'browser' ? t('code_banner.code_changed_restart_server', { inProgress })
+        : t('code_banner.code_changed_reopen', { inProgress });
   const el = $('#code-banner');
   el.innerHTML = `<span>${esc(text)}</span>
     ${codeState.reload ? `<button class="btn sm primary" type="button" data-code="reload">${t('code_banner.reload')}</button>` : desktop ? `<button class="btn sm primary" type="button" data-code="restart">${t('code_banner.restart')}</button>` : ''}
@@ -52,9 +52,9 @@ async function restartApp() {
   let runs = [];
   try { runs = await api.listActiveRuns(); } catch { /* main still refuses with runs in progress */ }
   if (runs.length) {
-    const lines = runs.map((r) => `• ${r.workflow} (${r.runId}): ${r.waiting ? 'waiting for approval' : runningStepsOf(r.runId) || 'in progress'}`);
+    const lines = runs.map((r) => `• ${r.workflow} (${r.runId}): ${r.waiting ? t('code_banner.waiting_for_approval') : runningStepsOf(r.runId) || t('code_banner.in_progress')}`);
     const ok = await confirmDialog(t('code_banner.restart_and_interrupt_runs'),
-      t('code_banner.length_run_value_in_progress_will', { length: runs.length, value: runs.length > 1 ? 's' : '', value2: lines.join('\n') }), t('code_banner.restart'));
+      t('code_banner.runs_in_progress_will_be_interrupted_list', { count: runs.length, lines: lines.join('\n') }), t('code_banner.restart'));
     if (!ok) return;
   }
   try { localStorage.setItem(RESTART_KEY, JSON.stringify(runs.map((r) => ({ runId: r.runId, workflow: r.workflow })))); } catch { /* storage unavailable */ }
@@ -75,7 +75,7 @@ function showRestartInterrupted() {
   } catch { return; }
   if (!Array.isArray(list) || !list.length) return;
   const el = $('#code-banner');
-  el.innerHTML = `<span>${t('code_banner.the_restart_interrupted_length_run_value', { length: list.length, value: list.length > 1 ? 's' : '' })}</span>
+  el.innerHTML = `<span>${t('code_banner.the_restart_interrupted_runs', { count: list.length })}</span>
     ${list.map((r) => `<span class="code-banner-run"><span class="mono small">${esc(r.workflow || 'workflow')} ${esc(r.runId)}</span>
       <button class="btn sm primary" type="button" data-code="resume" data-run="${esc(r.runId)}">${t('code_banner.resume')}</button></span>`).join('')}
     <button class="btn sm ghost" type="button" data-code="dismiss">${t('common.dismiss')}</button>`;

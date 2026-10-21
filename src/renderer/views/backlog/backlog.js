@@ -483,17 +483,17 @@
     const runs = group ? 1 : n;
     const tooMany = group && n > maxGroup();
     const mock = $b('#assign-mock').checked;
-    const plural = runs > 1 ? 's' : '';
+    const runCount = { count: runs }; // a plural catalog entry ({ one, other }) picked by the number of runs
     $b('#assign-grouping').classList.toggle('hidden', n < 2);
     $b('#btn-assign-ok').disabled = !n || tooMany;
-    $b('#btn-assign-ok').textContent = `${mock ? 'Simulate' : 'Start'} ${runs} run${plural}`;
+    $b('#btn-assign-ok').textContent = t(mock ? 'backlog.assign_simulate_runs' : 'backlog.assign_start_runs', runCount);
     const note = $b('#assign-note');
     note.className = `small ${n && !tooMany ? 'muted' : 'warn-text'}`;
-    const what = group ? `${n} issues → 1 run, 1 ${platformOf(bl.data?.platform).request.short} closing ${numbers.map((x) => `#${x}`).join(', ')}.` : '';
+    const what = group ? `${t('backlog.assign_group_closing', { n, request: platformOf(bl.data?.platform).request.short, numbers: numbers.map((x) => `#${x}`).join(', ') })} ` : '';
     note.textContent = !n ? t('backlog.nothing_to_start_every_selected_issue')
       : tooMany ? t('backlog.one_run_takes_at_most_value', { value: maxGroup() })
-        : mock ? `${what ? `${what} ` : ''}${runs} simulated run${plural}: no CLI is called and nothing is spent.`
-          : `${what ? `${what} ` : ''}${runs} real run${plural}: ${runs > 1 ? 'they use' : 'it uses'} your CLI subscriptions. Human gates still wait for you.`;
+        : mock ? t('backlog.assign_simulated_runs_note', { ...runCount, what })
+          : t('backlog.assign_real_runs_note', { ...runCount, what });
   }
 
   // prefill: the Product Owner's proposed group (assignGroup): { workflow, inputs, group }

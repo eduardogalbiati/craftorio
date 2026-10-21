@@ -557,7 +557,7 @@
     const last = chat.scores.at(-1);
     if (ev.status === 'success') {
       const rounds = chat.scores.length;
-      note(`<b>${t('duo.done')}</b>${last != null ? ` · ${last.toFixed(1)}/10` : ''} ${t('duo.after_rounds_round_value_saved_to', { rounds, value: rounds === 1 ? '' : 's' })} <span class="mono">${t('duo.document_md')}</span> · ${cost} · ${dur}`, 'done');
+      note(`<b>${t('duo.done')}</b>${last != null ? ` · ${last.toFixed(1)}/10` : ''} ${t('duo.after_rounds_saved_to', { count: rounds })} <span class="mono">${t('duo.document_md')}</span> · ${cost} · ${dur}`, 'done');
       ['writer', 'reviewer', 'supervisor'].forEach((r) => setCast(r, 'done'));
       setSuperPill('success', 'done');
       addCheck('ok', 'Run finished');
