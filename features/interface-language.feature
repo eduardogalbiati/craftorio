@@ -44,3 +44,31 @@ Feature: Every screen in the interface language
     And I open "Backlog" in the sidebar
     Then the screen's "Sync, New issue…" buttons read in "English"
     And the screen's "Board, Epics" tabs read in "English"
+
+  # #423: the agent chats' live turn (src/renderer/live-turn.js) follows the interface language. Slow
+  # simulated turns (#368) keep the simulated Product Owner's turn live (thinking, then three steps of
+  # about 2.5 s) while its activity line, step count and Stop button are read; the expected texts are
+  # the catalogs' live_turn.* entries (features/steps/interface-language.steps.js). The Product Owner's
+  # button and drawer keep the name "Product Owner" in Portuguese.
+  @issue-423
+  Scenario: With Português (Brasil) as the interface language, the Product Owner's live turn is in Portuguese
+    Given the app is open with slow simulated turns
+    When I open "Settings" in the sidebar
+    And I open the "General" settings tab
+    And I choose "Português (Brasil)" as the "Interface" language
+    And I open "Backlog" in the sidebar
+    And I open the Product Owner
+    And I ask the Product Owner "Quais issues devem ir primeiro?"
+    Then the Product Owner's live turn shows its activity line in "Português (Brasil)"
+    And the Product Owner's live turn shows its step count in "Português (Brasil)"
+    And the Product Owner's live turn offers its Stop button in "Português (Brasil)"
+
+  @issue-423
+  Scenario: In English the Product Owner's live turn still reads in English
+    Given the app is open with slow simulated turns
+    When I open "Backlog" in the sidebar
+    And I open the Product Owner
+    And I ask the Product Owner "Which issues should go first?"
+    Then the Product Owner's live turn shows its activity line in "English"
+    And the Product Owner's live turn shows its step count in "English"
+    And the Product Owner's live turn offers its Stop button in "English"

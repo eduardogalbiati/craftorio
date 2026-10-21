@@ -63,7 +63,8 @@ test('#327 the Language group has an "AI agents" and an "Issues" select', () => 
 
 test('#327 AI agents: "Same as the interface" first (value interface), then every language; selected by default', () => {
   const opts = optionsOf(loadView().LanguageSettings.markup({}), 'settings-language-agents');
-  assert.deepEqual(opts[0], { value: 'interface', label: 'Same as the interface', selected: true });
+  // #424 adds the language it resolves to after the label ("Same as the interface (English)")
+  assert.deepEqual({ ...opts[0], label: opts[0].label.startsWith('Same as the interface') }, { value: 'interface', label: true, selected: true });
   assert.deepEqual(opts.slice(1).map((o) => o.value), LANGUAGE_CODES);
   assert.equal(opts.find((o) => o.value === 'pt-BR').label, 'Português (Brasil)');
 });
@@ -157,6 +158,53 @@ test('#329 Interface: a change saves settings.language.interface with the agents
   // changing the agents' language keeps the saved interface language
   const kept = JSON.parse(JSON.stringify(LanguageSettings.patch({ language: { agents: 'interface', issues: 'en', interface: 'pt-BR' } }, 'agents', 'es')));
   assert.deepEqual(kept, { language: { agents: 'es', issues: 'en', interface: 'pt-BR' } });
+});
+
+// ---- #424 "Same as the interface" names the language it resolves to -------------------------------
+// The AI agents' default option reads "Same as the interface (<language>)": the saved interface
+// language, else the language the page runs in (the computer's when it has a catalog, else English),
+// named as Language.labelOf names it; the text comes from the catalog through t().
+const agentsDefault = (settings, lang = 'en') => {
+  const I18n = loadI18n();
+  I18n.setLanguage(lang);
+  try {
+    return optionsOf(loadView({ settings }).LanguageSettings.markup(settings), 'settings-language-agents')[0];
+  } finally {
+    I18n.setLanguage('en');
+  }
+};
+
+test('#424 interface unset, the page in English: "Same as the interface (English)"', () => {
+  const opt = agentsDefault({});
+  assert.equal(opt.value, 'interface');
+  assert.ok(opt.label.startsWith('Same as the interface'), opt.label);
+  assert.ok(opt.label.includes('(English)'), opt.label);
+});
+
+test('#424 interface saved as pt-BR, the page still in English: "Same as the interface (Português (Brasil))"', () => {
+  const opt = agentsDefault({ language: { agents: 'interface', interface: 'pt-BR' } });
+  assert.ok(opt.label.startsWith('Same as the interface'), opt.label);
+  assert.ok(opt.label.includes('(Português (Brasil))'), opt.label);
+});
+
+test('#424 interface unset, the page in pt-BR (the computer\'s language): the label names Português (Brasil), in Portuguese', () => {
+  const opt = agentsDefault({}, 'pt-BR');
+  assert.equal(opt.value, 'interface');
+  assert.ok(opt.label.includes('Português (Brasil)'), opt.label);
+  assert.doesNotMatch(opt.label, /Same as the interface/);
+  assert.notEqual(opt.label, loadI18n().t('settings.language.same_as_interface', null, 'pt-BR'), 'the resolved language is named');
+});
+
+test('#424 an explicit agents language: the default option still names the interface\'s language, the explicit one stays selected', () => {
+  const settings = { language: { agents: 'es', interface: 'pt-BR' } };
+  const I18n = loadI18n();
+  try {
+    const opts = optionsOf(loadView({ settings }).LanguageSettings.markup(settings), 'settings-language-agents');
+    assert.ok(opts[0].label.includes('Português (Brasil)'), opts[0].label);
+    assert.deepEqual(opts.filter((o) => o.selected).map((o) => o.value), ['es']);
+  } finally {
+    I18n.setLanguage('en');
+  }
 });
 
 test('#329 Settings in pt-BR: the General tab reads "Geral"; in English "General"', () => {

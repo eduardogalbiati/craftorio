@@ -7,7 +7,9 @@
 // is {string}", "the {string} language list offers {string}"); the sidebar's entries reuse
 // app.steps.js ("the sidebar offers {string}"). These steps read the sidebar and Settings' tabs
 // (data-testid="settings-tabs") in whichever language is shown, so they never wait on an English
-// entry such as "Home". Locators are roles and data-testid only (skills/ui-conventions).
+// entry such as "Home". Also #424 (the AI agents' "Same as the interface" names its language) and
+// #423 (the Product Owner's live turn in the interface language), in their sections below. Locators
+// are roles and data-testid only (skills/ui-conventions).
 
 const fs = require('fs');
 const path = require('path');
@@ -87,6 +89,75 @@ Then('the run list row of {string} shows the status {string} in {string}', async
   const texts = translations(english, language);
   const row = e2e.window.locator(`[data-testid="run-list-row"][data-run$="${fragment}"]`).filter({ visible: true }).first();
   await expect(row.getByTestId('status-label').first()).toHaveText(anyOf(texts, false), { timeout: LOAD_TIMEOUT });
+});
+
+// ---- #424: the AI agents' "Same as the interface" names the language it resolves to -----------------
+// Settings › General › Language's "AI agents" select (settings-language.steps.js) labels its default
+// option "<Same as the interface> (<interface language>)": "Same as the interface (English)",
+// "Igual à interface (Português (Brasil))". The select's name and the option's text are read from the
+// catalogs in the shown language; the language's own name (the parenthesis) is written as is.
+Then('the {string} language reads {string} naming {string}, in {string}', async ({ e2e }, name, label, named, language) => {
+  const group = e2e.window.getByTestId('settings-language').filter({ visible: true });
+  const select = group.getByRole('combobox', { name: anyOf(translations(name, language), false) });
+  await expect(select).toBeVisible({ timeout: LOAD_TIMEOUT });
+  const option = new RegExp(`^(${translations(label, language).map(escapeRe).join('|')}) \\(${escapeRe(named)}\\)$`);
+  await expect(select.locator('option:checked')).toHaveText(option, { timeout: LOAD_TIMEOUT });
+});
+
+// ---- #423: the agent chats' live turn in the interface language -------------------------------------
+// The Product Owner's drawer (aside "Product Owner", the same name in both catalogs) shows the live turn
+// (src/renderer/live-turn.js) while a simulated turn runs (Given the app is open with slow simulated
+// turns: thinking, then Read / Grep / gh steps of about 2.5 s each). Contract for these steps:
+// data-testid="live-turn" on the live turn's root, "live-turn-label" on its activity line,
+// "live-turn-steps" on the step count toggle, "live-turn-stop" on its Stop button. The expected texts
+// are every live_turn.* entry of the language's catalog ({placeholders} match any text; the step count's
+// plural forms both count); in a language other than English none of English's may show.
+
+const TURN_TIMEOUT = 60000;
+const liveTurn = (page) => page.getByRole('complementary', { name: 'Product Owner', exact: true }).getByTestId('live-turn').filter({ visible: true }).first();
+
+// the live_turn.* texts of a language as patterns: "Lendo {what}" → /^Lendo .+$/
+function liveTurnPatterns(language, keyFilter = () => true) {
+  const code = LANGUAGE_FILES[language];
+  if (!code) throw new Error(`no catalog for the language "${language}" (known: ${Object.keys(LANGUAGE_FILES).join(', ')})`);
+  const texts = [];
+  for (const [key, value] of Object.entries(catalog(code))) {
+    if (!key.startsWith('live_turn.') || !keyFilter(key)) continue;
+    texts.push(...(typeof value === 'string' ? [value] : Object.values(value)));
+  }
+  return texts.map((s) => new RegExp(`^${s.split(/\{[^}]+\}/).map(escapeRe).join('.+')}$`));
+}
+const matchesAny = (text, patterns) => patterns.some((re) => re.test(text.replace(/\s+/g, ' ').trim()));
+
+async function expectLiveTurnText(page, testid, language, keyFilter, what) {
+  const turn = liveTurn(page);
+  await expect(turn, 'the Product Owner\'s live turn').toBeVisible({ timeout: TURN_TIMEOUT });
+  const el = turn.getByTestId(testid).first();
+  await expect(el, `the live turn's ${what}`).toBeVisible({ timeout: TURN_TIMEOUT });
+  const own = liveTurnPatterns(language, keyFilter);
+  const english = language === 'English' ? [] : liveTurnPatterns('English', keyFilter);
+  await expect.poll(async () => {
+    const text = (await el.innerText()).trim();
+    return matchesAny(text, own) && !(english.length && matchesAny(text, english)) ? 'ok' : text;
+  }, { message: `the live turn's ${what} in ${language}`, timeout: LOAD_TIMEOUT }).toBe('ok');
+}
+
+Then('the Product Owner\'s live turn shows its activity line in {string}', async ({ e2e }, language) => {
+  await expectLiveTurnText(e2e.window, 'live-turn-label', language, (k) => k !== 'live_turn.steps_count', 'activity line');
+});
+
+Then('the Product Owner\'s live turn shows its step count in {string}', async ({ e2e }, language) => {
+  await expectLiveTurnText(e2e.window, 'live-turn-steps', language, (k) => k === 'live_turn.steps_count', 'step count');
+});
+
+Then('the Product Owner\'s live turn offers its Stop button in {string}', async ({ e2e }, language) => {
+  const stop = liveTurn(e2e.window).getByTestId('live-turn-stop');
+  await expect(stop, 'the live turn\'s Stop button').toBeVisible({ timeout: TURN_TIMEOUT });
+  await expect(stop).toHaveRole('button');
+  const code = LANGUAGE_FILES[language];
+  if (!code) throw new Error(`no catalog for the language "${language}"`);
+  await expect(stop).toHaveAccessibleName(catalog(code)['live_turn.stop']);
+  if (language !== 'English') await expect(stop).not.toHaveAccessibleName('Stop');
 });
 
 Then('Settings offers the {string} tab', async ({ e2e }, name) => {

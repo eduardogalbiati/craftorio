@@ -211,3 +211,149 @@ test('onClick: the steps toggle flips stepsOpen and re-renders; a click elsewher
   assert.equal(onClick({ target: elsewhere }, turn, {}), false);
   assert.equal(onClick({ target: elsewhere }, null, {}), false);
 });
+
+// ---- #423 the live turn in the interface language (src/shared/i18n.js, I18n.setLanguage) -----------
+// Its text comes from the catalog through t(); what it quotes (paths, patterns, commands, the agent's
+// name, the answer) stays verbatim; a step's label follows the language at render time. The English
+// texts are the ones above. Each test puts English back.
+const I18n = require('../src/shared/i18n');
+const inPortuguese = () => I18n.setLanguage('pt-BR');
+test.afterEach(() => I18n.setLanguage('en'));
+
+// a turn at each status, rendered at `now`
+function turnAt(status, { agent = 'Product Owner' } = {}) {
+  let turn = create({ agent, now: 0 });
+  turn = apply(turn, { phase: 'start', turnId: 't1' }, 0);
+  if (status === 'starting') { turn.status = 'starting'; return turn; }
+  if (status === 'thinking') return apply(turn, { phase: 'items', turnId: 't1', items: [{ kind: 'thinking' }] }, 0);
+  if (status === 'writing') return apply(turn, { phase: 'items', turnId: 't1', items: [{ kind: 'text', text: 'Some prose' }] }, 0);
+  if (status === 'stale') return apply(turn, { phase: 'items', turnId: 't1', items: [{ kind: 'tool_call', id: 'c1', name: 'Grep', input: { pattern: 'x' } }] }, 0);
+  if (status === 'stopping') { turn.status = 'stopping'; return turn; }
+  return apply(turn, { phase: 'end', turnId: 't1', status }, 0);
+}
+const ENGLISH_VIEW = [
+  ['starting', 0, 'Starting the Product Owner…'],
+  ['stopping', 0, 'Stopping…'],
+  ['writing', 0, 'Writing the answer…'],
+  ['thinking', 0, 'Thinking…'],
+  ['done', 0, 'Done'],
+  ['failed', 0, 'Failed'],
+  ['stopped', 0, 'Stopped'],
+  ['stale', 61000, 'Still working: last step 1 min ago'],
+];
+
+test('#423 view in pt-BR: every status\'s label is not the English one, and keeps the agent\'s name and the minutes', () => {
+  for (const [status, now, english] of ENGLISH_VIEW) assert.equal(view(turnAt(status), now).label, english, `English ${status}`);
+  inPortuguese();
+  for (const [status, now, english] of ENGLISH_VIEW) {
+    const label = view(turnAt(status), now).label;
+    assert.ok(label, `${status}: a label`);
+    assert.notEqual(label, english, `${status}: ${label}`);
+    assert.equal(label.includes(english.replace(/…$/, '')), false, `${status}: ${label}`);
+  }
+  assert.ok(view(turnAt('starting'), 0).label.includes('Product Owner'), 'the agent\'s name stays');
+  assert.match(view(turnAt('stale'), 61000).label, /\b1\b/, 'the minutes stay');
+  assert.doesNotMatch(view(turnAt('stale'), 61000).label, /Still working|last step|ago/);
+});
+
+test('#423 stepLabel in pt-BR: Read, Grep and Bash keep the path, pattern and command verbatim; the fixed part is not English', () => {
+  inPortuguese();
+  const read = stepLabel({ name: 'Read', input: { file_path: 'C:\\project\\src\\deep\\nested\\roadmap.js' } });
+  assert.ok(read.includes('deep/nested/roadmap.js'), read);
+  assert.doesNotMatch(read, /Reading/);
+  const grep = stepLabel({ name: 'Grep', input: { pattern: 'dispatchRoadmaps' } });
+  assert.ok(grep.includes('dispatchRoadmaps'), grep);
+  assert.doesNotMatch(grep, /Searching the code/);
+  const bash = stepLabel({ name: 'Bash', input: { command: 'npm test -- --grep foo' } });
+  assert.ok(bash.includes('npm test -- --grep foo'), bash);
+  assert.doesNotMatch(bash, /Running/);
+  const gh = stepLabel({ name: 'Bash', input: { command: 'gh issue view 15' } });
+  assert.ok(gh.includes('#15') && gh.includes('(gh)'), gh);
+  assert.doesNotMatch(gh, /Reading issue/);
+  assert.doesNotMatch(stepLabel({ name: 'Bash', input: { command: 'git log --oneline' } }), /git history/);
+  assert.doesNotMatch(stepLabel({ name: 'TodoWrite' }), /Updating its plan/);
+  const other = stepLabel({ name: 'SomeOtherTool' });
+  assert.ok(other.includes('SomeOtherTool'), other);
+  assert.doesNotMatch(other, /Using/);
+});
+
+test('#423 html in pt-BR: 1 step and 15 steps are counted in Portuguese (singular and plural), never "step(s)"', () => {
+  const withSteps = (n) => {
+    let turn = create({ now: 0 });
+    turn = apply(turn, { phase: 'start', turnId: 't1' }, 0);
+    const items = Array.from({ length: n }, (_, i) => ({ kind: 'tool_call', id: `c${i}`, name: 'Read', input: { file_path: `f${i}.js` } }));
+    return apply(turn, { phase: 'items', turnId: 't1', items }, 0);
+  };
+  assert.match(html(withSteps(15), { now: 0 }), />15 steps</);
+  inPortuguese();
+  const one = html(withSteps(1), { now: 0 });
+  const many = html(withSteps(15), { now: 0 });
+  const count = (out) => />\s*([^<]*)<\/button>/.exec(out.slice(out.indexOf('data-live-steps')))[1].trim();
+  assert.match(count(one), /^1\s+\S+/, count(one));
+  assert.match(count(many), /^15\s+\S+/, count(many));
+  assert.doesNotMatch(count(one), /\bsteps?\b/, count(one));
+  assert.doesNotMatch(count(many), /\bsteps?\b/, count(many));
+  assert.notEqual(count(one).replace(/^1\s+/, ''), count(many).replace(/^15\s+/, ''), 'singular and plural differ');
+});
+
+test('#423 duration in pt-BR: the same numbers, in the units the catalog gives', () => {
+  inPortuguese();
+  for (const [ms, n] of [[45000, ['45']], [80000, ['1', '20']], [12 * 60000, ['12']]]) {
+    const d = duration(ms);
+    assert.deepEqual(d.match(/\d+/g), n, d);
+  }
+});
+
+test('#423 html in pt-BR: the Stop button\'s text and title, and the timer\'s title, are not English', () => {
+  let turn = create({ agent: 'PO', now: 0 });
+  turn = apply(turn, { phase: 'start', turnId: 't1' }, 0);
+  turn = apply(turn, { phase: 'items', turnId: 't1', items: [{ kind: 'tool_call', id: 'c1', name: 'Read', input: { file_path: 'a.js' } }] }, 0);
+  const en = html(turn, { now: 1000 });
+  assert.match(en, /data-live-stop[^>]*>Stop</);
+  inPortuguese();
+  const out = html(turn, { now: 1000 });
+  const stop = /<button[^>]*data-live-stop[^>]*title="([^"]*)"[^>]*>([^<]*)</.exec(out);
+  assert.ok(stop, 'the Stop button with a title');
+  assert.ok(stop[2].trim(), 'a text');
+  assert.notEqual(stop[2].trim(), 'Stop');
+  assert.doesNotMatch(stop[1], /End this turn/);
+  assert.doesNotMatch(out, /Time since the question was sent/);
+});
+
+test('#423 a step\'s label follows the language at render time: added in English, shown in Portuguese after the switch', () => {
+  let turn = create({ now: 0 });
+  turn = apply(turn, { phase: 'start', turnId: 't1' }, 0);
+  turn = apply(turn, { phase: 'items', turnId: 't1', items: [{ kind: 'tool_call', id: 'c1', name: 'Grep', input: { pattern: 'dispatchRoadmaps' } }] }, 0);
+  assert.equal(view(turn, 1000).label, 'Searching the code for dispatchRoadmaps');
+  inPortuguese();
+  const label = view(turn, 1000).label;
+  assert.ok(label.includes('dispatchRoadmaps'), label);
+  assert.doesNotMatch(label, /Searching the code/);
+  assert.doesNotMatch(view(turn, 1000).steps[0].label, /Searching the code/);
+  const out = html(turn, { now: 1000 });
+  assert.doesNotMatch(out, /Searching the code/);
+  assert.ok(out.includes('dispatchRoadmaps'));
+  // and back to English
+  I18n.setLanguage('en');
+  assert.equal(view(turn, 1000).label, 'Searching the code for dispatchRoadmaps');
+});
+
+test('#423 the answer is not translated: visibleText and the text block keep what the agent wrote', () => {
+  inPortuguese();
+  let turn = create({ now: 0 });
+  turn = apply(turn, { phase: 'start', turnId: 't1' }, 0);
+  turn = apply(turn, { phase: 'items', turnId: 't1', items: [{ kind: 'text', text: 'Done. Searching the code found nothing.' }] }, 0);
+  assert.equal(view(turn, 0).text, 'Done. Searching the code found nothing.');
+  assert.match(html(turn, { now: 0 }), /Done\. Searching the code found nothing\./);
+});
+
+test('#423 the untranslated-text check (#329, test/untranslated-text.js) scans live-turn.js and finds nothing', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const { sourceFiles, untranslated, report } = require('./untranslated-text');
+  const renderer = path.join(__dirname, '..', 'src', 'renderer');
+  const file = path.join(renderer, 'live-turn.js');
+  assert.ok(sourceFiles(renderer).includes(file), 'the whole-renderer check (test/i18n-every-screen-330) covers live-turn.js');
+  const found = untranslated(fs.readFileSync(file, 'utf8'), 'src/renderer/live-turn.js');
+  assert.deepEqual(found, [], report(found));
+});

@@ -74,6 +74,39 @@ test('#327 the Product Owner\'s turn without a language names English', async (t
   assert.equal(count(prompts[0], load().languageLine({})), 1);
 });
 
+// ---- #424 "Same as the interface" with the interface unset: the computer's language ------------
+// The computer's language comes in as host.locale, applied by src/service/areas/interface-language.js;
+// each test puts an English host back afterwards.
+const onComputer = (locale) => require('../src/service/areas/interface-language')({ events: { on() {} }, host: { locale } }).applyInterfaceLanguage({});
+function computerIn(t, locale) {
+  onComputer(locale);
+  t.after(() => { onComputer('en-US'); require('../src/shared/i18n').setLanguage('en'); });
+}
+const PT_LINE = () => load().languageLine({ language: { agents: 'pt-BR', issues: 'en' } });
+
+test('#424 the Product Owner\'s turn, interface unset and the computer in pt-BR: the Portuguese [Language] line', async (t) => {
+  computerIn(t, 'pt-BR');
+  const prompts = stubTurns(t);
+  await productOwner.ask({ ...PO_COMMON, backlogDir: tmp(t), language: { agents: 'interface', issues: 'en' } });
+  assert.equal(count(prompts[0], PT_LINE()), 1);
+  assert.equal(count(prompts[0], '[Language]'), 1);
+});
+
+test('#424 the Product Owner\'s turn without a language, the computer in pt-BR: the Portuguese [Language] line', async (t) => {
+  computerIn(t, 'pt-BR');
+  const prompts = stubTurns(t);
+  await productOwner.ask({ ...PO_COMMON, backlogDir: tmp(t) });
+  assert.equal(count(prompts[0], PT_LINE()), 1);
+});
+
+test('#424 the Oracle on a service whose host\'s locale is pt-BR, nothing set: the Portuguese [Language] line', async (t) => {
+  t.after(() => { onComputer('en-US'); require('../src/shared/i18n').setLanguage('en'); });
+  const { service, api } = makeService(t, { locale: 'pt-BR' });
+  await api['oracle:ask']({ question: 'What is going on?', mock: true });
+  const prompt = fs.readFileSync(path.join(service.workspace().oracle, 'session.md'), 'utf8');
+  assert.equal(count(prompt, PT_LINE()), 1);
+});
+
 // ---- the Supervisor chat --------------------------------------------------------------------------
 
 test('#327 Supervisor chat: a question carries the [Language] line when the language is given', () => {

@@ -165,15 +165,16 @@ Feature: Settings
 
   # Assumes Settings › General gets a "Language" group (data-testid="settings-language") next to Time
   # zone, holding an "AI agents" select (aria-label "AI agents", saved as language.agents in the
-  # workspace's settings) (#327)
+  # workspace's settings) (#327). Since #424 its default option names the language it resolves to:
+  # "Same as the interface (English)" in E2E.
   @issue-327
   Scenario: The AI agents language is the interface's until another is chosen, from the list of languages
     Given the app is open
     When I open "Settings" in the sidebar
     And I open the "General" settings tab
     Then the General settings show a "Language" group
-    And the "AI agents" language is "Same as the interface"
-    And the "AI agents" language list offers "Same as the interface, English, Português (Brasil), Español, Français, Deutsch, Italiano, 日本語, 中文, 한국어"
+    And the "AI agents" language is "Same as the interface (English)"
+    And the "AI agents" language list offers "Same as the interface (English), English, Português (Brasil), Español, Français, Deutsch, Italiano, 日本語, 中文, 한국어"
 
   @issue-327
   Scenario: A language chosen for the AI agents is kept after the app reloads
@@ -250,6 +251,29 @@ Feature: Settings
     And Settings offers the "General" tab
     And Settings no longer offers the "Geral" tab
     And the "Interface" language is "English"
+
+  # #424: the AI agents' "Same as the interface" option names the language it resolves to, in the
+  # interface language ("Igual à interface (Português (Brasil))"); the select's name and the option's
+  # words are read from the catalogs (features/steps/interface-language.steps.js), the language's name
+  # is written as is. It follows a change of the interface language at once, without a reload.
+  @issue-424
+  Scenario: With Português (Brasil) as the interface, the AI agents' default option names Português (Brasil)
+    Given the app is open
+    When I open "Settings" in the sidebar
+    And I open the "General" settings tab
+    And I choose "Português (Brasil)" as the "Interface" language
+    Then the "AI agents" language reads "Same as the interface" naming "Português (Brasil)", in "Português (Brasil)"
+
+  @issue-424
+  Scenario: Switching the interface back to English, the AI agents' default option names English at once
+    Given the app is open
+    When I open "Settings" in the sidebar
+    And I open the "General" settings tab
+    And I choose "Português (Brasil)" as the "Interface" language
+    Then the "AI agents" language reads "Same as the interface" naming "Português (Brasil)", in "Português (Brasil)"
+    When I choose "English" as the "Interface" language
+    Then the "AI agents" language reads "Same as the interface" naming "English", in "English"
+    And the "AI agents" language is "Same as the interface (English)"
 
   # #405: Settings › Execution's red-base choice (data-testid="base-check-on-red"), setting baseCheck.onRed
   @issue-405
