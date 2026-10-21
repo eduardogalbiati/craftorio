@@ -21,12 +21,12 @@
 // goes back to Produced when the card is reopened. A run event updates its own row (refreshRunRow:
 // runs:list { ids }); a running run's commits are read again when its row refreshes.
 
-// The filter chips; the service filters and counts (src/service/areas/run-lists.js RUN_FILTERS).
+// The filter chips (id, catalog key, read when drawn); the service filters and counts (src/service/areas/run-lists.js RUN_FILTERS).
 const RUN_FILTERS = [
-  ['all', 'All'],
-  ['running', 'Running'],
-  ['success', 'Success'],
-  ['failed', 'Failed'],
+  ['all', 'run_list.filter_all'],
+  ['running', 'run_list.filter_running'],
+  ['success', 'run_list.filter_success'],
+  ['failed', 'run_list.filter_failed'],
 ];
 const RUN_PAGE = 30;
 const ART_PAGE = 50;
@@ -77,7 +77,7 @@ function renderRunList(rl, { prefix, box: boxSel, empty, start, rerender, reload
 
   const filters = $(`#${prefix}-run-filters`);
   filters.innerHTML = RUN_FILTERS.map(([id, label]) =>
-    `<button type="button" class="chip ${rl.filter === id ? 'active' : ''}" data-filter="${id}" ${id === 'failed' ? `title="${t('run_list.failed_cancelled_or_interrupted')}"` : ''}>${label} <span class="muted">${rl.counts ? rl.counts[id] ?? 0 : ''}</span></button>`).join('');
+    `<button type="button" class="chip ${rl.filter === id ? 'active' : ''}" data-filter="${id}" ${id === 'failed' ? `title="${t('run_list.failed_cancelled_or_interrupted')}"` : ''}>${t(label)} <span class="muted">${rl.counts ? rl.counts[id] ?? 0 : ''}</span></button>`).join('');
   filters.querySelectorAll('[data-filter]').forEach((b) => (b.onclick = () => { rl.filter = b.dataset.filter; rerender(); reload(); }));
   // the workflow filter (#310, a list that has one): the workflows with runs, named as the rows name them;
   // the picked one stays an option when it has none
