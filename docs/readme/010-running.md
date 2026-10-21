@@ -162,6 +162,9 @@ with the token encrypted by the OS, never in the workspace.
   in the window, running there), files and folders (type that computer's paths: the folder picker is
   not available), desktop notifications, Keep awake, the control channel, the ↗ external terminal
   and the microphone.
+- **Language**: while Settings › General › Language › Interface is unset, the window shows its own
+  computer's language, but the AI agents ("Same as the interface") follow the engine's computer's
+  language, where they run. To make them agree, choose Interface or AI agents there.
 - **Sign-in**: a remote app cannot sign the server in yet (the provider's page would open on the
   engine's computer), so the server runs with `MULTIAGENT_AUTH=off`; the account only counts users.
 - Plain HTTP over Tailscale is encrypted by WireGuard. For HTTPS, leave `npm run serve` on

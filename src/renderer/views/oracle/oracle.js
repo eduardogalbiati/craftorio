@@ -150,7 +150,7 @@
     nextQueued = null;
     const images = queued ? [] : or.drafts.images;
     const ctx = queued ? queued.context : or.context;
-    Object.assign(or, { pending: q || t('oracle.pending_images', { count: images.length }), pendingSince: Date.now(), pendingRef: ctx?.ref || '', error: null, pasteError: null, live: window.LiveTurn.create({ agent: 'Oracle' }), liveIn: w });
+    Object.assign(or, { pending: q || t('oracle.pending_images', { count: images.length }), pendingSince: Date.now(), pendingRef: ctx?.ref || '', error: null, pasteError: null, live: window.LiveTurn.create({ agent: t('oracle.oracle_2') }), liveIn: w });
     chats[w].setLiveTurn(or.live);
     render();
     try {
@@ -766,7 +766,7 @@
         let started = false;
         if (!or.live) {
           if (p.phase === 'end' || or.pending) return;
-          Object.assign(or, { pending: '…', pendingSince: Date.now(), liveIn: null, live: window.LiveTurn.create({ agent: 'Oracle' }), elsewhere: true });
+          Object.assign(or, { pending: '…', pendingSince: Date.now(), liveIn: null, live: window.LiveTurn.create({ agent: t('oracle.oracle_2') }), elsewhere: true });
           started = true;
         }
         window.LiveTurn.apply(or.live, p);

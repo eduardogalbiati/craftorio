@@ -2624,6 +2624,9 @@
   "kept_work_dialog.choose_another_step": "choose another step…",
   "kept_work_dialog.could_not_resume_the_run": "Could not resume the run",
   "kept_work_dialog.details": "Details",
+  "live_time.minutes": "{m} min",
+  "live_time.minutes_seconds": "{m} min {s} s",
+  "live_time.seconds": "{s} s",
 
   "live_turn.a_file": "a file",
   "live_turn.a_folder": "a folder",
@@ -4378,6 +4381,7 @@
   "settings.language.issues": "Issues",
   "settings.language.issues_help": "Issues, issue comments, PR/MR descriptions and commit messages: what goes to the repository. Checkboxes, #n references, labels and closing keywords (Closes #n) stay as they are.",
   "settings.language.same_as_interface": "Same as the interface",
+  "settings.language.same_as_interface_named": "Same as the interface ({language})",
   "settings.language.title": "Language",
   "settings.limits.cost": "Cost limit US$",
   "settings.limits.cost_label": "Run cost limit with {model}",

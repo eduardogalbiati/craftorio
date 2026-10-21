@@ -10,6 +10,10 @@
 // message as before: the view drops the live turn when the ask returns.
 // Pure state (create, apply, view, stepLabel, visibleText, duration) and the markup (html, which uses
 // app.js's esc and markdownHtml); a view re-renders it on each event and on its own 1 s ticker.
+// Its text comes from the catalog (live_turn.*, live_time.*) through t(), in the interface language
+// (#423): a step stores its tool and input, and its label is resolved when drawn, so a language change
+// relabels an open turn; paths, patterns, commands, tool names, the tooltip and the answer stay verbatim.
+// Test ids: live-turn, live-turn-label, live-turn-steps, live-turn-stop.
 // Browser: window.LiveTurn; Node: module.exports.
 (function (root) {
   const t = (...a) => (typeof module === 'object' && module.exports ? require('../shared/i18n') : root.I18n)?.t(...a) ?? a[0];
@@ -88,7 +92,8 @@
     for (const it of payload.items || []) {
       turn.lastAt = now;
       if (it.kind === 'tool_call') {
-        turn.steps.push({ id: it.id || null, label: stepLabel(it), detail: stepDetail(it), state: 'running' });
+        // what it did; its label is resolved on each read, in the interface language of the moment (#423)
+        turn.steps.push({ id: it.id || null, name: it.name, input: it.input, detail: stepDetail(it), state: 'running', get label() { return stepLabel(this); } });
         turn.thinking = false;
       } else if (it.kind === 'tool_result') {
         const step = [...turn.steps].reverse().find((s) => (it.id ? s.id === it.id : s.state === 'running'));
@@ -104,12 +109,12 @@
     return turn;
   }
 
-  /** "45 s", "1 min 20 s", "12 min". */
+  /** "45 s", "1 min 20 s", "12 min", in the catalog's units (live_time.*, #423). */
   function duration(ms) {
     const s = Math.max(0, Math.floor(ms / 1000));
-    if (s < 60) return `${s} s`;
+    if (s < 60) return t('live_time.seconds', { s });
     const m = Math.floor(s / 60);
-    return m >= 10 || s % 60 === 0 ? `${m} min` : `${m} min ${s % 60} s`;
+    return m >= 10 || s % 60 === 0 ? t('live_time.minutes', { m }) : t('live_time.minutes_seconds', { m, s: s % 60 });
   }
 
   /**
@@ -126,11 +131,11 @@
     else if (turn.status === 'starting') label = t('live_turn.starting_the_agent', { agent: turn.agent });
     else if (turn.status === 'stopping') label = t('live_turn.stopping');
     else if (turn.status === 'writing') label = t('live_turn.writing_the_answer');
-    else if (turn.status === 'working') label = last?.state === 'running' && !turn.thinking ? last.label : t('live_turn.thinking');
+    else if (turn.status === 'working') label = last?.state === 'running' && !turn.thinking ? stepLabel(last) : t('live_turn.thinking');
     else label = { done: t('live_turn.done'), failed: t('live_turn.failed'), stopped: t('live_turn.stopped') }[turn.status] || '';
     return {
       status: turn.status, active, label, elapsed: duration(now - turn.startedAt), stale,
-      steps: turn.steps.slice(-SHOWN_STEPS), stepCount: turn.steps.length, text: visibleText(turn.texts),
+      steps: turn.steps.slice(-SHOWN_STEPS).map((s) => ({ ...s, label: stepLabel(s) })), stepCount: turn.steps.length, text: visibleText(turn.texts),
     };
   }
 
@@ -148,13 +153,13 @@
     const md = typeof markdownHtml === 'function' ? markdownHtml : (t) => `<p>${escape(t)}</p>`;
     const n = v.stepCount;
     const steps = n ? `<div class="live-turn-steps">
-        <button type="button" class="link-btn small" data-live-steps aria-expanded="${turn.stepsOpen}">${t('live_turn.steps_count', { count: n })}</button>
+        <button type="button" class="link-btn small" data-live-steps data-testid="live-turn-steps" aria-expanded="${turn.stepsOpen}">${t('live_turn.steps_count', { count: n })}</button>
         ${turn.stepsOpen ? `<ol class="live-turn-list">${v.stepCount > v.steps.length ? '<li class="muted">…</li>' : ''}${v.steps.map((s) => `<li class="live-step ${s.state}" title="${e(s.detail || s.label)}"><span class="live-step-mark" aria-hidden="true"></span><span>${e(s.label)}</span></li>`).join('')}</ol>` : ''}
       </div>` : '';
-    return `<div class="live-turn${v.stale ? ' stale' : ''}" data-live-status="${e(v.status)}" role="status" aria-live="polite">
-      <div class="live-turn-status">${v.active ? '<span class="spinner" aria-hidden="true"></span>' : ''}<span class="live-turn-label">${e(v.label)}</span>
+    return `<div class="live-turn${v.stale ? ' stale' : ''}" data-testid="live-turn" data-live-status="${e(v.status)}" role="status" aria-live="polite">
+      <div class="live-turn-status">${v.active ? '<span class="spinner" aria-hidden="true"></span>' : ''}<span class="live-turn-label" data-testid="live-turn-label" title="${e(v.label)}">${e(v.label)}</span>
         <span class="live-turn-time muted small" title="${t('live_turn.time_since_the_question_was_sent')}">${e(v.elapsed)}</span>
-        ${stop && v.active ? `<button type="button" class="btn sm ghost" data-live-stop${v.status === 'stopping' ? ' disabled' : ''} title="${t('live_turn.end_this_turn_what_was_written')}">${t('live_turn.stop')}</button>` : ''}</div>
+        ${stop && v.active ? `<button type="button" class="btn sm ghost" data-testid="live-turn-stop" data-live-stop${v.status === 'stopping' ? ' disabled' : ''} title="${t('live_turn.end_this_turn_what_was_written')}">${t('live_turn.stop')}</button>` : ''}</div>
       ${steps}
       ${v.text ? `<div class="live-turn-text md md-compact">${md(v.text)}</div>` : ''}
     </div>`;

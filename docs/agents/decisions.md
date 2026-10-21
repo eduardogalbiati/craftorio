@@ -43,7 +43,8 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   made for a human to read (2026-10-13).
 - **2026-10-13** (#327, #328, #361; of 2026-10-12 and 2026-10-13): what the AI agents write is a setting (Settings › Language): every
   chat reply, step output, handoff note, decision log and generated document follows the AI agents
-  language (default "Same as the interface", English until #329). Issues, PR/MR descriptions and
+  language (default "Same as the interface": the language the interface resolves to, an unset
+  Interface following the engine host's computer language when it has a catalog, else English, #424). Issues, PR/MR descriptions and
   commit messages follow a separate issues language (default English), and so do Findings' "File as
   issue" and the epic body line (one place: `src/shared/language.js`). JSON keys and enum values,
   paths, branches, labels, `- [ ]`, `#n` and closing keywords never change; the source, the bundled

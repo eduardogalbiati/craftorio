@@ -97,6 +97,8 @@ const service = createService({
     },
     appVersion: require('../package.json').version,
     isPackaged: false,
+    // the engine host's language, as the app's app.getLocale(): an unset Interface and the agents' default follow it (#424)
+    locale: Intl.DateTimeFormat().resolvedOptions().locale,
   },
 });
 service.setWorkspace(ws);

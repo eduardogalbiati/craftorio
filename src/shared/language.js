@@ -1,6 +1,8 @@
 // The languages agents write in (#327, #328): Settings › General › Language saves
 // settings.language = { agents, issues, interface } in the workspace. `agents` ('interface' by default:
-// "Same as the interface", settings.language.interface (#329), English while unset) is what chat replies, the prose
+// "Same as the interface", settings.language.interface (#329), while unset the language the interface resolves
+// to on the engine host: its computer's language when it has a catalog, else English, set by the service
+// through setComputerLanguage (#424); English in the window) is what chat replies, the prose
 // of step outputs, handoff notes, decision logs and documents are written in; `issues` (English by
 // default) is what goes to the repository host: issues, comments, PR/MR descriptions, commit messages.
 // - LANGUAGES: [{ code, label }] for the Settings selects; SAME_AS_INTERFACE: the agents' default value;
@@ -33,10 +35,17 @@
   const known = (code) => LANGUAGES.some((l) => l.code === code);
   const codeOf = (value) => (known(value) ? value : ENGLISH);
 
-  /** The AI agents' language code: "Same as the interface" is the saved interface language (#329), English when unset. */
+  // The computer's language with a catalog (#424): what an unset interface resolves to on the engine host.
+  let computer = ENGLISH;
+  /** Sets the language an unset interface resolves to (the service, from host.locale through I18n.resolveLanguage). */
+  const setComputerLanguage = (code) => { computer = codeOf(code); };
+
+  /** The AI agents' language code: "Same as the interface" is the saved interface language (#329), else the computer's (#424). */
   const agentsLanguage = (settings) => {
     const agents = settings?.language?.agents;
-    return codeOf(agents === SAME_AS_INTERFACE || !agents ? settings?.language?.interface : agents);
+    if (agents && agents !== SAME_AS_INTERFACE) return codeOf(agents);
+    const chosen = settings?.language?.interface;
+    return chosen ? codeOf(chosen) : computer;
   };
   /** The issues' language code (its own setting, never the agents'). */
   const issuesLanguage = (settings) => codeOf(settings?.language?.issues);
@@ -158,6 +167,7 @@
     outputInstruction,
     relatedPattern,
     retryLanguage,
+    setComputerLanguage,
   };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.Language = api;

@@ -2,7 +2,8 @@
 // Settings › General › Language (#327, #328, #329): the "Interface" select (the languages with a
 // catalog, I18n.languages(); unset, the language the page runs in: the computer's when it has a
 // catalog, else English), the "AI agents" select (chat replies, the prose of step outputs, handoff
-// notes, decision logs, documents; "Same as the interface" by default) and the "Issues" select
+// notes, decision logs, documents; "Same as the interface" by default, named with the language the
+// interface resolves to, "Same as the interface (Português (Brasil))", #424) and the "Issues" select
 // (issues, comments, PR/MR descriptions, commit messages; English by default). The languages come
 // from src/shared/language.js; a change saves the values as settings.language, every agent's next
 // turn reads it ([Language] line), and an Interface change redraws the open windows at once
@@ -44,7 +45,7 @@
             kind: 'agents',
             label: t('settings.language.agents'),
             help: t('settings.language.agents_help'),
-            options: [[window.Language.SAME_AS_INTERFACE, t('settings.language.same_as_interface')], ...languages()],
+            options: [[window.Language.SAME_AS_INTERFACE, t('settings.language.same_as_interface_named', { language: window.Language.labelOf(v.interface || window.I18n.getLanguage()) })], ...languages()],
             value: v.agents,
           })}
           ${row({

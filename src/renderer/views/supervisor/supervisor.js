@@ -80,7 +80,7 @@
   const sendFrom = (from) => async (q, _attachments, { fromBox } = {}) => {
     const c = from();
     const screen = screenContext();
-    Object.assign(sv, { busy: true, pending: q, since: Date.now(), liveIn: c, live: window.LiveTurn.create({ agent: 'supervisor' }) });
+    Object.assign(sv, { busy: true, pending: q, since: Date.now(), liveIn: c, live: window.LiveTurn.create({ agent: t('supervisor.supervisor') }) });
     c.setLiveTurn(sv.live);
     render();
     try {
@@ -110,7 +110,7 @@
       return;
     }
     if (sv.busy) return;
-    Object.assign(sv, { busy: true, elsewhere: true, pending: '…', since: Date.now(), liveIn: null, live: window.LiveTurn.create({ agent: 'supervisor' }) });
+    Object.assign(sv, { busy: true, elsewhere: true, pending: '…', since: Date.now(), liveIn: null, live: window.LiveTurn.create({ agent: t('supervisor.supervisor') }) });
     window.LiveTurn.apply(sv.live, p);
     for (const c of [chat, winChat]) c?.setLiveTurn(sv.live);
     await load();

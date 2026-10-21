@@ -235,7 +235,7 @@
     const workflow = mode === 'plan' ? po.workflow || null : null;
     const inputs = mode === 'plan' ? window.WorkflowInputs?.read($p('#po-workflow-options'), { all: true }) ?? null : null;
     const costOff = !!workflow && window.PoCalibration?.costApplies?.((state.workflows || []).find((w) => w.file === workflow)) === false;
-    Object.assign(po, { busy: true, pending: q, error: null, notice: '', since: Date.now(), live: window.LiveTurn.create({ agent: 'Product Owner' }) });
+    Object.assign(po, { busy: true, pending: q, error: null, notice: '', since: Date.now(), live: window.LiveTurn.create({ agent: t('backlog_po.product_owner') }) });
     // #234: the question and the live turn in view, whatever the scroll position was
     render({ scroll: 'end' });
     if (po.open) questionInView();
@@ -1035,7 +1035,7 @@
       return;
     }
     if (po.busy) return;
-    Object.assign(po, { busy: true, elsewhere: true, pending: '…', error: null, since: Date.now(), liveIn: null, live: window.LiveTurn.create({ agent: 'Product Owner' }) });
+    Object.assign(po, { busy: true, elsewhere: true, pending: '…', error: null, since: Date.now(), liveIn: null, live: window.LiveTurn.create({ agent: t('backlog_po.product_owner') }) });
     window.LiveTurn.apply(po.live, p);
     render({ scroll: 'end' });
     await loadHistory(projectId);

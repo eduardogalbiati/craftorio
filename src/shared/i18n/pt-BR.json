@@ -2624,6 +2624,9 @@
   "kept_work_dialog.choose_another_step": "escolher outra etapa…",
   "kept_work_dialog.could_not_resume_the_run": "Não foi possível retomar a execução",
   "kept_work_dialog.details": "Detalhes",
+  "live_time.minutes": "{m} min",
+  "live_time.minutes_seconds": "{m} min {s} s",
+  "live_time.seconds": "{s} s",
 
   "live_turn.a_file": "um arquivo",
   "live_turn.a_folder": "uma pasta",
@@ -4378,6 +4381,7 @@
   "settings.language.issues": "Issues",
   "settings.language.issues_help": "Issues, comentários de issues, descrições de PR/MR e mensagens de commit: o que vai para o repositório. Caixas de seleção, referências #n, labels e palavras de fechamento (Closes #n) ficam como estão.",
   "settings.language.same_as_interface": "Igual à interface",
+  "settings.language.same_as_interface_named": "Igual à interface ({language})",
   "settings.language.title": "Idioma",
   "settings.limits.cost": "Limite de custo US$",
   "settings.limits.cost_label": "Limite de custo da execução com {model}",
