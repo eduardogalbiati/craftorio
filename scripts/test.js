@@ -15,7 +15,8 @@
 //   npm test
 //   npm test -- test/a.test.js test/b.test.js
 // Every test has a timeout (#390; MULTIAGENT_TEST_TIMEOUT_MS, 0 = none) and a file's process exits
-// once its tests end (--test-force-exit): a hung test fails with its name and file instead of running,
+// once its tests end (scripts/test-exit.js, a short grace instead of --test-force-exit, which aborts
+// processes on Windows): a hung test fails with its name and file instead of running,
 // and holding the run's worktree, forever. The default budget is per file (#402,
 // src/engine/test-timeouts.js): 90 s for test/*.test.js, 5 min for the slow files, so the unit files
 // and the slow ones run as two node --test runs at the same time, each with its own --test-timeout
@@ -95,7 +96,7 @@ groups.forEach((g, i) => {
   if (groups.length > 1) say(`${g.files.length} file(s): --test-timeout=${g.timeout} ms, concurrency ${g.concurrency}`);
 });
 const argsOf = (g) => [
-  '--test', `--test-concurrency=${g.concurrency}`, `--test-timeout=${g.timeout}`, '--test-force-exit', ...coverage,
+  '--test', `--test-concurrency=${g.concurrency}`, `--test-timeout=${g.timeout}`, '--require', path.join(__dirname, 'test-exit.js'), ...coverage,
   '--test-reporter=spec', `--test-reporter-destination=${g.specFile || 'stdout'}`,
   ...(agent ? ['--test-reporter=./scripts/test-reporter-agent.js', `--test-reporter-destination=${g.reportFile}`] : []),
   '--test-reporter=./scripts/test-reporter-slowest.js', `--test-reporter-destination=${g.timesFile}`,
