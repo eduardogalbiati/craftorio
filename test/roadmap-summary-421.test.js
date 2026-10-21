@@ -77,6 +77,14 @@ test('#421 a running item counts what is left of its estimate (estimate minus wh
   assert.deepEqual([out.planned.usd, out.planned.minutes, out.planned.items], [1.25, 35, 1]);
 });
 
+test('#421 an estimate with a cost but no duration counts its cost, adds no time and is not "without estimate"', () => {
+  const out = summarize({
+    stages: [stage('s1', [item('a', 'planned', est(2, null)), item('b', 'planned', est(1, 30))])],
+    releases: [],
+  });
+  assert.deepEqual([out.planned.usd, out.planned.minutes, out.planned.items, out.planned.withoutEstimate.length], [3, 30, 2, 0]);
+});
+
 test('#421 a running item over its estimate counts zero, never below', () => {
   const out = summarize({
     stages: [stage('s1', [

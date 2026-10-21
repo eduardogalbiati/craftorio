@@ -89,6 +89,44 @@ test('#421 with a release cut line: a "By release" toggle', () => {
   assert.match(`${H.visibleText(toggle.outer)} ${toggle.attrs['aria-label'] || ''}`, /By release/);
 });
 
+const releaseRows = (html) => byTestId(html, 'roadmap-summary-release-row').map((e) => H.visibleText(e.inner));
+const openByRelease = async (R, d) => {
+  const { ctx } = H.makeCtx();
+  await R.onClick(H.clickOn(R.html(d, () => {}, VIEW), (e) => e.attrs['data-testid'] === 'roadmap-summary-by-release'), ctx, d);
+  return ctx;
+};
+
+test('#421 "By release" opens a list: the cut line\'s stages, then the part after the last cut line', async () => {
+  const { R } = load();
+  const d = fixture({ cut: true });
+  await openByRelease(R, d);
+  const html = R.html(d, () => {}, VIEW);
+  assert.equal(byTestId(html, 'roadmap-summary-releases').length, 1, 'the open list');
+  assert.equal(byTestId(html, 'roadmap-summary-by-release')[0].attrs['aria-expanded'], 'true');
+  const [cut, after, ...rest] = releaseRows(html);
+  assert.equal(rest.length, 0, 'one row per cut line, then the rest');
+  // 1.0.0: stages 1-2 left: i2 + i3 ($2.50, longest 40 min), i4 without estimate
+  assert.match(cut, /1\.0\.0/);
+  assert.match(cut, /≈ \$2\.50 · ≈ 40 min/, cut);
+  assert.match(cut, /1 without estimate/, cut);
+  // after the last cut line: stage 3, i5 ($3.00, 60 min)
+  assert.match(after, /after the last cut line/i);
+  assert.match(after, /≈ \$3\.00 · ≈ 1 h/, after);
+  assert.doesNotMatch(after, /without estimate/, after);
+});
+
+test('#421 the By release list closes with its toggle and with a click outside it', async () => {
+  const { R } = load();
+  const d = fixture({ cut: true });
+  await openByRelease(R, d);
+  await openByRelease(R, d); // its toggle again
+  assert.equal(byTestId(R.html(d, () => {}, VIEW), 'roadmap-summary-releases').length, 0, 'closed by its toggle');
+  await openByRelease(R, d);
+  const { ctx } = H.makeCtx();
+  await R.onClick(H.clickOn(R.html(d, () => {}, VIEW), (e) => e.attrs['data-testid'] === 'roadmap-stage'), ctx, d);
+  assert.equal(byTestId(R.html(d, () => {}, VIEW), 'roadmap-summary-releases').length, 0, 'closed by a click outside it');
+});
+
 test('#421 without cut lines: no "By release" toggle', () => {
   const html = load().R.html(fixture(), () => {}, VIEW);
   summaryOf(html); // the summary is there

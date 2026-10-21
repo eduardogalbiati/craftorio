@@ -124,6 +124,27 @@ test('withEstimates (#346): a stage mixing items with and without an estimate su
   assert.equal('actualUsd' in stage, false, 'no item ran');
 });
 
+// #421: three release.yaml runs (60, 90, 120 min, complexity 3 each) → 30 min per point; a release is complexity 1
+const releaseHistory = () => history().map((r) => ({ ...r, runId: `rel-${r.runId}`, file: 'release.yaml' }));
+const cutRoadmap = (release) => ({ state: 'planned', stages: [{ id: 's1', name: '', release, items: [{ id: 'a', status: 'planned', workflow: WF, inputs: {}, issues: [] }] }] });
+
+test('withEstimates (#421): a cut line whose release run has not started carries that run\'s estimate', () => {
+  const [stage] = costEstimate.withEstimates(cutRoadmap({ name: '1.0.0' }), [...history(), ...releaseHistory()]).stages;
+  assert.equal(stage.release.name, '1.0.0');
+  assert.equal(stage.release.estimate.minutes, 30);
+  assert.ok(stage.release.estimate.usd > 0, `a cost (${stage.release.estimate.usd})`);
+});
+
+test('withEstimates (#421): no release run in the history gives the cut line no estimate', () => {
+  const [stage] = costEstimate.withEstimates(cutRoadmap({ name: '1.0.0' }), history()).stages;
+  assert.equal(stage.release.estimate, null);
+});
+
+test('withEstimates (#421): a cut line whose release run started keeps its release as it is, without an estimate', () => {
+  const [stage] = costEstimate.withEstimates(cutRoadmap({ name: '1.0.0', runId: 'rel-live' }), [...history(), ...releaseHistory()]).stages;
+  assert.deepEqual(stage.release, { name: '1.0.0', runId: 'rel-live' });
+});
+
 test('withEstimates (#346): a stage whose items have no estimate has none, and an empty roadmap stays empty', () => {
   const roadmap = { state: 'planned', stages: [{ id: 's1', name: '', items: [{ id: 'x', status: 'planned', workflow: 'never-ran.yaml', inputs: {}, issues: [] }] }] };
   assert.equal(costEstimate.withEstimates(roadmap, history()).stages[0].estimate, null);

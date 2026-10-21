@@ -35,7 +35,7 @@ const rel = (file) => path.relative(ROOT, file).split(path.sep).join('/');
 const readJson = (file) => JSON.parse(fs.readFileSync(file, 'utf8'));
 
 // the src/shared/ modules the page loads that build screen text (a folder: every .js in it)
-const SHARED_SCREEN = ['roadmap-model.js', 'po-calibration.js', 'platforms/'];
+const SHARED_SCREEN = ['roadmap-model.js', 'roadmap-summary.js', 'po-calibration.js', 'platforms/'];
 const sharedScreenFiles = () => SHARED_SCREEN.flatMap((p) => (p.endsWith('/') ? sourceFiles(path.join(SHARED, p)) : [path.join(SHARED, p)]));
 
 const I18n = () => require(path.join(SHARED, 'i18n.js'));

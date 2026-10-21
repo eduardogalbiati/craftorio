@@ -15,7 +15,7 @@ const path = require('path');
 const ROOT = path.join(__dirname, '..');
 const RENDERER = path.join(ROOT, 'src', 'renderer');
 const SHARED = path.join(ROOT, 'src', 'shared');
-const SHARED_SCREEN = ['roadmap-model.js', 'po-calibration.js', 'platforms'];
+const SHARED_SCREEN = ['roadmap-model.js', 'roadmap-summary.js', 'po-calibration.js', 'platforms'];
 
 function jsFiles(dir) {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
