@@ -153,3 +153,27 @@ Feature: Backlog Board and Roadmap
     And I open the Board as a list
     And I open the menu of the issue "Dark scrollbars in the terminal dock"
     Then its Archive action is disabled with the reason "Planned in stage 5: remove it from the roadmap first"
+
+  # ---- #422: the "Queue" error alert offers Resume, never a dismiss × ---------------------------------
+  # The demo workspace has no issue queue: the Given pauses it the way the service does when a queued
+  # run failed ("#13 failed: resume to start the next issues."). The roadmap's own error ("Could not
+  # start #14") is another alert, so the scenarios bring the queue's alert into view first.
+
+  @issue-422
+  Scenario: The Queue error alert offers Resume and no close button
+    Given the app is open
+    And a queued run failed and paused the issue queue
+    When I open "Backlog" in the sidebar
+    And I show the alert "failed: resume to start the next issues"
+    Then the shown alert is at level "error" and says "Queue"
+    And the shown alert offers "Resume"
+    And the shown alert has no "Dismiss" button
+
+  @issue-422
+  Scenario: Resume in the Queue error alert resumes the queue and the alert goes away
+    Given the app is open
+    And a queued run failed and paused the issue queue
+    When I open "Backlog" in the sidebar
+    And I show the alert "failed: resume to start the next issues"
+    And I click "Resume" in the shown alert
+    Then the alerts no longer show "failed: resume to start the next issues"

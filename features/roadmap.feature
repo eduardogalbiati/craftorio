@@ -586,3 +586,79 @@ Feature: Roadmap statuses, done items, filters and run timers
     Then stage 2 holds only the fix item for "exports the monthly report"
     And the roadmap item "exports the monthly report" is in "Automatic" mode
     And stage 3 shows the item "Keyboard focus is lost after closing a dialog"
+
+  # ---- #421: the roadmap bar's summary of what is left ----------------------------------------------
+  # The demo roadmap has items left in stages 2 to 5, tonight's runs already spent money, the test-batch
+  # item (stage 4) has no estimate, and one cut line, "v0.10", closes stage 4 "Test batch": stage 5 is
+  # after the last cut line.
+
+  @issue-421
+  Scenario: The roadmap bar sums up the planned cost and time of what is left, and what was spent
+    Given the app is open
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    Then the roadmap bar shows the planned cost and time of what is left, with its items and stages
+    And the roadmap summary counts the items without an estimate
+    And the roadmap summary shows what was spent next to it
+    And the roadmap summary's tooltip says "work time; gates not included"
+
+  @issue-421
+  Scenario: "By release" lists the planned work of each cut line, then what comes after the last one
+    Given the app is open
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    And I open the roadmap summary by release
+    Then the release list has 2 rows
+    And release row 1 names "v0.10" with its planned cost and time
+    And release row 2 names "after the last cut line" with its planned cost and time
+
+  @issue-421
+  Scenario: Without cut lines the roadmap summary offers no "By release" toggle
+    Given the app is open
+    And the roadmap has no cut lines
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    Then the roadmap bar shows the planned cost and time of what is left, with its items and stages
+    And the roadmap summary offers no "By release" toggle
+
+  # ---- #425: Planned shows the latest release, All every release -----------------------------------
+  # The demo workspace has no release history: the scenarios ship "v0.9" with stage 1's runs and
+  # "v0.9.1" with stage 2's (as #291), so "v0.9.1" is the release furthest down the roadmap. The date
+  # filter is set to "Total" since stage 1's run is months old.
+
+  @issue-425
+  Scenario: In Planned the Roadmap shows only the most recent release
+    Given the app is open
+    And the project shipped the release "v0.9" with the done runs of stage 1
+    And the project shipped the release "v0.9.1" with the done runs of stage 2
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    And I set the roadmap's date filter to "Total"
+    Then the roadmap's item switch is on "Planned"
+    And the roadmap shows the release block "v0.9.1"
+    And the roadmap does not show the release block "v0.9"
+
+  @issue-425
+  Scenario: In All the Roadmap shows every release
+    Given the app is open
+    And the project shipped the release "v0.9" with the done runs of stage 1
+    And the project shipped the release "v0.9.1" with the done runs of stage 2
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    And I set the roadmap's date filter to "Total"
+    And I switch the roadmap to "All"
+    Then the roadmap shows the release block "v0.9"
+    And the roadmap shows the release block "v0.9.1"
+
+  @issue-425
+  Scenario: A release chosen in the Releases filter shows on its own, also in Planned
+    Given the app is open
+    And the project shipped the release "v0.9" with the done runs of stage 1
+    And the project shipped the release "v0.9.1" with the done runs of stage 2
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    And I set the roadmap's date filter to "Total"
+    And I choose the release "v0.9" in the Releases filter
+    Then the roadmap's item switch is on "Planned"
+    And the roadmap shows the release block "v0.9"
+    And the roadmap does not show the release block "v0.9.1"
