@@ -11,7 +11,8 @@
 // key = sha256 of the lockfile's content + the package manager and its version + the Node version
 // that runs the install + platform and arch (the Electron version of a project is in its lockfile).
 // Hit: the worktree's node_modules becomes a link to the entry (a directory junction on Windows, a
-// symlink elsewhere). Miss: the install runs in the worktree (its own lifecycle scripts see the
+// symlink elsewhere), then the project's own lifecycle scripts run there (`prepare` and the
+// install ones: what they build is gitignored, so a link alone leaves it missing). Miss: the install runs in the worktree (its own lifecycle scripts see the
 // whole project), then node_modules is moved into the cache and linked back. Native modules (an
 // Electron app's node-pty) keep working: Node resolves a module through its real path in the entry.
 // Safety: one installer per key (a lock file with pid and host; a dead holder's lock is taken over),
@@ -280,6 +281,26 @@ function clearNodeModules(nm) {
 
 const lastLines = (s, n = 3) => String(s || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(-n).join(' | ');
 
+// The project's own install scripts, in the order an install runs them: a hit only links
+// node_modules, so what they build (gitignored outputs, e.g. a bundle `prepare` writes) is missing
+const LIFECYCLE = ['preinstall', 'install', 'postinstall', 'preprepare', 'prepare', 'postprepare'];
+
+// Runs the worktree's lifecycle scripts after a hit → the names that failed (logged, never fatal)
+async function runLifecycle(workDir, d, { env, signal, log, run }) {
+  const scripts = readJson(path.join(workDir, 'package.json'))?.scripts || {};
+  const failed = [];
+  for (const name of LIFECYCLE.filter((n) => typeof scripts[n] === 'string')) {
+    // npm: each one once, without its own pre/post (they are in the list)
+    const args = d.manager === 'npm' ? ['run', '--ignore-scripts', name] : ['run', name];
+    const r = await run(d.manager, args, { cwd: workDir, env, signal });
+    if (r.code !== 0) {
+      failed.push(name);
+      log('warn', `dependency cache: ${d.manager} run ${name} exited ${r.code ?? '?'} in ${workDir}: ${lastLines(r.output)}`);
+    }
+  }
+  return failed;
+}
+
 /**
  * Gives `workDir` its dependencies from the cache (install once per key). Idempotent: a worktree
  * already linked to a usable entry of its current key costs a lockfile hash. `previous`: the last
@@ -321,7 +342,7 @@ async function ensureDeps({ workDir, cacheDir, project, env, signal, previous = 
   const projectDir = path.join(cacheDir, projectSlug(project));
   const usable = () => keyEntries(projectDir, key).find(entryUsable);
 
-  const link = (entry, status, extra = {}) => {
+  const link = async (entry, status, extra = {}) => {
     const target = path.join(entry, 'node_modules');
     const current = linkTarget(nm);
     if (current && samePath(current, target)) {
@@ -331,7 +352,8 @@ async function ensureDeps({ workDir, cacheDir, project, env, signal, previous = 
     if (!clearNodeModules(nm)) return null; // a real folder locked by a program: left alone
     fs.symlinkSync(target, nm, LINK_TYPE);
     touch(entry, nm);
-    return { status, ...base, key, entry, seconds: (Date.now() - t0) / 1000, ...extra };
+    const failed = await runLifecycle(workDir, d, { env, signal, log, run });
+    return { status, ...base, key, entry, seconds: (Date.now() - t0) / 1000, ...extra, ...(failed.length ? { scripts_failed: failed } : {}) };
   };
 
   // this folder's own entry, changed by its agent (a package added without a lockfile change):
@@ -344,7 +366,7 @@ async function ensureDeps({ workDir, cacheDir, project, env, signal, previous = 
   }
 
   let entry = usable();
-  if (entry) return link(entry, 'hit') || { status: 'local', ...base, key, reason: `${nm} is a folder in use: kept` };
+  if (entry) return (await link(entry, 'hit')) || { status: 'local', ...base, key, reason: `${nm} is a folder in use: kept` };
 
   let waited = false;
   const release = await acquireLock(path.join(projectDir, `${key}.lock`), {
@@ -353,7 +375,7 @@ async function ensureDeps({ workDir, cacheDir, project, env, signal, previous = 
   });
   try {
     entry = usable(); // installed by the run we waited for
-    if (entry) return link(entry, 'hit', { waited }) || { status: 'local', ...base, key, reason: `${nm} is a folder in use: kept` };
+    if (entry) return (await link(entry, 'hit', { waited })) || { status: 'local', ...base, key, reason: `${nm} is a folder in use: kept` };
 
     // an incomplete entry (no entry.json: a crash or a cancel) is ours to replace; an unusable
     // one may still be linked by other worktrees: the new install gets the next generation
