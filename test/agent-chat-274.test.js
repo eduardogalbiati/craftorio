@@ -193,7 +193,8 @@ test('#274 setLiveTurn draws the live turn (#180) at the end of the conversation
   c.chat.setMessages([{ role: 'user', text: 'Where is the roadmap code?' }]);
   const turn = c.sandbox.LiveTurn.create({ agent: 'Oracle' });
   turn.status = 'working';
-  turn.steps.push({ label: 'Reading src/roadmap.js', state: 'running' });
+  // a step stores its tool and input; its label is resolved when drawn (#423)
+  turn.steps.push({ name: 'Read', input: { file_path: 'src/roadmap.js' }, state: 'running' });
   c.chat.setLiveTurn(turn);
   const live = c.parts.messages().querySelector('.live-turn');
   assert.ok(live, 'the live turn (LiveTurn.html) is inside the conversation');
