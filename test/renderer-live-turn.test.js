@@ -338,6 +338,32 @@ test('#423 a step\'s label follows the language at render time: added in English
   assert.equal(view(turn, 1000).label, 'Searching the code for dispatchRoadmaps');
 });
 
+test('#423 html: the live turn, its label, step count and Stop carry their test ids; the label\'s full text is on hover', () => {
+  let turn = create({ now: 0 });
+  turn = apply(turn, { phase: 'start', turnId: 't1' }, 0);
+  turn = apply(turn, { phase: 'items', turnId: 't1', items: [{ kind: 'tool_call', id: 'c1', name: 'Grep', input: { pattern: 'dispatchRoadmaps' } }] }, 0);
+  const out = html(turn, { now: 1000 });
+  for (const id of ['live-turn', 'live-turn-label', 'live-turn-steps', 'live-turn-stop']) assert.ok(out.includes(`data-testid="${id}"`), id);
+  assert.match(out, /data-testid="live-turn-label" title="Searching the code for dispatchRoadmaps">Searching the code for dispatchRoadmaps</);
+  inPortuguese();
+  const pt = html(turn, { now: 1000 });
+  const label = /data-testid="live-turn-label" title="([^"]*)">([^<]*)</.exec(pt);
+  assert.ok(label, 'the label with a title');
+  assert.equal(label[1], label[2], 'the hover text is the whole label');
+  assert.doesNotMatch(label[1], /Searching the code/);
+});
+
+test('#423 the step\'s tooltip (the whole path or command) is never translated', () => {
+  let turn = create({ now: 0 });
+  turn = apply(turn, { phase: 'start', turnId: 't1' }, 0);
+  turn = apply(turn, { phase: 'items', turnId: 't1', items: [{ kind: 'tool_call', id: 'c1', name: 'Bash', input: { command: 'npm test -- --grep foo' } }] }, 0);
+  const tooltip = (out) => /<li class="live-step[^"]*" title="([^"]*)"/.exec(out)[1];
+  const en = tooltip(html(turn, { now: 1000 }));
+  inPortuguese();
+  assert.equal(tooltip(html(turn, { now: 1000 })), en);
+  assert.ok(en.includes('npm test -- --grep foo'), en);
+});
+
 test('#423 the answer is not translated: visibleText and the text block keep what the agent wrote', () => {
   inPortuguese();
   let turn = create({ now: 0 });
