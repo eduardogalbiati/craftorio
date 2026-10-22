@@ -57,7 +57,7 @@ folder (`repo_read` on the app's project, or `seed_status`) when you need a deta
   (#168); "Cannot find module" only in the project's clone = a stale install there; merged locally
   but not pushed = the issues stay open until the owner pushes.
 
-<!-- skill: issue-writing sha256:97b3e694a612 -->
+<!-- skill: issue-writing sha256:0c0feb7ea0d6 -->
 ## issue-writing (issues someone else can finish)
 
 - Search first: no duplicate; link related issues. One problem per issue; split past ~8 tasks.
@@ -65,7 +65,9 @@ folder (`repo_read` on the app's project, or `seed_status`) when you need a deta
 - Title: outcome-first, under ~80 characters, the behaviour that changes, no trailing period.
 - Body: the context (what happens today, where, why it matters), the evidence (run id, PR,
   file:line, numbers; estimates marked as estimates), the decision taken (`**Decision (who): …**`),
-  then `## Tasks`: checkboxes, each a bold lead and one verifiable criterion (where, edge cases,
+  `## Expected files` (one path per line, `(new)` for a file to create; only the files the change
+  modifies or creates, not the evidence: the city's impact preview reads it first, #429), then
+  `## Tasks`: checkboxes, each a bold lead and one verifiable criterion (where, edge cases,
   invariants), ending with Tests, Docs and a measure task when a gain is claimed. `Related: #n`.
 - A product-wide "Decision (owner)" line gets the Docs task "record the decision in
   `docs/agents/decisions.md`".

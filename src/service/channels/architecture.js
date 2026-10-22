@@ -21,7 +21,8 @@
 // An issue's impact preview (#375): architecture:impact gives the City view's impact overlay the
 // saved city plan (where a new file is expected) and the hit rates kept per issue
 // (<workspace>/architecture/<project id>/impact-history.json, CityImpact.recordHitRate); with
-// `record`, it first keeps an issue's hit rate for a run, stamped now. No model call.
+// `record`, it first keeps an issue's hit rate for a run, stamped now, and whether the issue had an
+// `## Expected files` section (withSection, #429). No model call.
 // A release on the city (#376): architecture:release gives the City view's release overlay the city at
 // `from` (the previous tag by default), what changed up to `to` (the newest tag by default) and the
 // release's commits (src/release-city.js), the tags for the two-tag picker (the latest commits when
@@ -78,7 +79,7 @@ const AGENTS = shape({
 }, ['projectId', 'runs', 'collisions']);
 // #375: an issue's hit rate for one run, and what the impact overlay reads
 const HIT_RATE = { type: 'number', minimum: 0, maximum: 1 };
-const HIT = shape({ hitRate: HIT_RATE, ts: STRING, run: STRING }, ['hitRate', 'ts', 'run']);
+const HIT = shape({ hitRate: HIT_RATE, ts: STRING, run: STRING, withSection: FLAG }, ['hitRate', 'ts', 'run']);
 const IMPACT = shape({ plan: nullable(OBJECT), history: { type: 'object', additionalProperties: listOf(HIT) }, error: nullable(STRING) }, ['plan', 'history']);
 const IMPACT_HISTORY = 'impact-history.json';
 // #376: a release on the city
@@ -259,7 +260,7 @@ module.exports = (ctx) => {
       method: 'architectureImpact',
       params: ['...opts'],
       schema: {
-        params: args({ projectId: PROJECT_ID, record: shape({ issue: INT, hitRate: HIT_RATE, run: STRING }, ['issue', 'hitRate', 'run']) }, ['projectId']),
+        params: args({ projectId: PROJECT_ID, record: shape({ issue: INT, hitRate: HIT_RATE, run: STRING, withSection: FLAG }, ['issue', 'hitRate', 'run']) }, ['projectId']),
         result: IMPACT,
       },
       fn: ({ projectId, record = null }) => {
@@ -280,7 +281,7 @@ module.exports = (ctx) => {
         // never overwrite a history that could not be read
         if (error) return { plan, history: {}, error };
         if (record) {
-          history = recordHitRate(history, record.issue, { hitRate: record.hitRate, ts: new Date().toISOString(), run: record.run });
+          history = recordHitRate(history, record.issue, { hitRate: record.hitRate, ts: new Date().toISOString(), run: record.run, withSection: record.withSection });
           fs.mkdirSync(path.dirname(file), { recursive: true });
           fs.writeFileSync(file, JSON.stringify(history, null, 2) + '\n');
         }

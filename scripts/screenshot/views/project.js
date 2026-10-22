@@ -180,12 +180,13 @@ const demoCityAgents = (projectId) => ({
   collisions: [{ path: 'src/billing.js', runs: ['20261013-100000-c1ty0001', '20261013-101500-c1ty0002'] }],
 });
 
-// #375: an open issue's impact preview (its body cites two city files, `file:line` and a plain path,
-// and a file the city does not have yet, expected in Views; the Product Owner's saved group adds an
-// engine file), and a roadmap stage of two items that would both change src/billing.js (simulated data)
+// #375: an open issue's impact preview (its body cites two city files, `file:line-line` (#427) and a
+// plain path, and its `## Expected files` section (#429) names one of them and a file the city does not
+// have yet, expected in Views; the Product Owner's saved group adds an engine file), and a roadmap
+// stage of two items that would both change src/billing.js (simulated data)
 const DEMO_IMPACT_ISSUE = {
   number: 412, title: 'Apply the loyalty discount to the invoice totals', runs: [],
-  body: 'The discount rule lives in `src/billing.js:42`; the totals come from src/engine/part-3.js.\nAdd the badge in `src/renderer/views/part-new.js`.',
+  body: 'The discount rule lives in `src/billing.js:42-58`; the totals come from src/engine/part-3.js.\n\n## Expected files\n\n- `src/billing.js`: the discount rule\n- `src/renderer/views/part-new.js` (new): the loyalty badge\n',
 };
 const DEMO_IMPACT_PO = [{ role: 'po', answer: { summary: 'One group.', groups: [{ issues: [412], workflow: 'software-development.yaml', reason: 'Billing rules.', files: ['src/billing.js', 'src/engine/part-0.js'] }], conflicts: [], enrich: [] } }];
 const DEMO_IMPACT_STAGE = {

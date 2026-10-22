@@ -41,6 +41,11 @@ prefixes, no trailing period.
 
 <Optional: a small table when the issue compares roles, options, states or columns.>
 
+## Expected files
+
+- `<repository-relative path>`: <why it changes>
+- `<path of a file to create>` (new): <what it holds>
+
 ## Tasks
 
 - [ ] **<Short bold lead>**: <one verifiable acceptance criterion: observable behaviour,
@@ -107,6 +112,10 @@ form with proper controls and Save/Cancel).
   An addition to an existing issue is in that language too; never rewrite existing text only to
   translate it. `- [ ]`, `#n`, closing keywords (`Closes #n`) and label names never change.
 - Concrete over general: names, numbers, paths, ids. No filler, no marketing tone.
+- `## Expected files` lists only the files the change is expected to modify or create, one
+  repository-relative path per line in backticks, a file to create marked `(new)`; files read as
+  evidence or context stay in the context. It is an estimate: the project city's impact preview
+  reads it first and measures it against the run's diff (#429). Omit it when no file can be named.
 - No secrets, tokens, personal data or internal URLs that are not already in the repository.
 - Don't blame people or agents; describe what happened and why.
 - Unattended agents record assumptions instead of asking; say which ones in the context.

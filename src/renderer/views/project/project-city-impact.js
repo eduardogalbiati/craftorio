@@ -1,11 +1,13 @@
 // An issue's impact preview on the project city (#375), an overlay of the City view (project-city.js)
 // built on its overlay API, so the city's own module does not grow. "Show on the map" (Backlog card,
 // roadmap item: showIssue(projectId, issue)) opens the project's City view and colours the issue's
-// expected buildings by source (cited in its body, the Product Owner's group, changed by its latest
-// finished run; src/shared/city-impact.js), the rest grey. A card (data-testid="city-impact") holds
-// the header (headerMarkup: the issue, the counts by district and zone, the Danger Zone share, the
-// new files with their district) and, after a run, predicted vs actual: the three sets on the map and
-// the hit rate, kept per issue (architecture:impact). "Show the stage on the map" (showStage(projectId,
+// expected buildings by source (its `## Expected files` section, cited in its body, the Product
+// Owner's group, changed by its latest finished run; src/shared/city-impact.js), the rest grey. A card
+// (data-testid="city-impact") holds the header (headerMarkup: the issue, the counts by district and
+// zone, the Danger Zone share, the new files with their district) and, after a run, predicted vs
+// actual: the three sets on the map and the hit rate, kept per issue with whether it had the section
+// (architecture:impact), the source of each hit and miss (city-impact-by-source) and the project's
+// average hit rate with the section against without (city-impact-section-rate, #429). "Show the stage on the map" (showStage(projectId,
 // stage)) colours each item of a roadmap stage in its colour and a building two items would change in
 // red (#150), listed in data-testid="city-impact-conflicts". The legend of the city
 // (project-city-legend) gets the overlay's rows. Close removes the layer. No model call: the Product
@@ -14,7 +16,7 @@
 (() => {
   const LAYER = 'impact';
   // the catalog keys of the legend's labels
-  const SOURCE_LABEL = { changed: 'project_city_impact.source_changed', cited: 'project_city_impact.source_cited', po: 'project_city_impact.source_po' };
+  const SOURCE_LABEL = { changed: 'project_city_impact.source_changed', expected: 'project_city_impact.source_expected', cited: 'project_city_impact.source_cited', po: 'project_city_impact.source_po' };
   // predicted vs actual on the map
   const SETS = [
     { key: 'hit', colour: '#3fb68b', label: 'project_city_impact.set_hit' },
@@ -29,6 +31,24 @@
   const dot = (colour) => ProjectCityCards.dot(colour);
   const countsHtml = (list, testid, label) => ProjectCityCards.countsHtml(list, testid, label);
 
+  // after a run, which source predicted each hit and miss (#429): one row per file and source
+  function bySourceMarkup(bySource) {
+    const rows = Object.keys(SOURCE_LABEL).filter((s) => bySource && bySource[s]).flatMap((s) => [
+      ...bySource[s].hit.map((p) => ({ p, s, set: SETS[0] })),
+      ...bySource[s].missed.map((p) => ({ p, s, set: SETS[1] })),
+    ]);
+    if (!rows.length) return '';
+    return `<ul class="pci-by-source" data-testid="city-impact-by-source" aria-label="${esc(t('project_city_impact.by_source'))}">${rows.map((r) => `<li>${dot(r.set.colour)}<code title="${esc(r.p)}">${esc(r.p)}</code> <small class="muted">${t(r.set.label)} · ${t(SOURCE_LABEL[r.s])}</small></li>`).join('')}</ul>`;
+  }
+
+  // the project's average hit rate of the issues with an Expected files section against those without (#429)
+  function sectionRateMarkup(history) {
+    const rate = CityImpact.hitRateBySection(history || {});
+    if (!rate.with.issues && !rate.without.issues) return '';
+    const avg = (x) => (x.average == null ? '—' : pct(x.average));
+    return `<small class="muted" data-testid="city-impact-section-rate">${t('project_city_impact.section_rate', { with: avg(rate.with), without: avg(rate.without) })}</small>`;
+  }
+
   /** The issue preview's header: the issue, the counts by district and zone, the Danger Zone share, the new files, predicted vs actual. */
   function headerMarkup(preview) {
     const { issue = {}, header = {}, newFiles = [], comparison = null } = preview || {};
@@ -37,6 +57,8 @@
         <strong class="pci-rate">${comparison.hitRate == null ? t('project_city_impact.nothing_was_predicted') : t('project_city_impact.hitrate_hit_rate', { hitRate: pct(comparison.hitRate) })}</strong>
         ${SETS.map((s) => `<span data-testid="city-impact-${s.key}">${dot(s.colour)}${(comparison[s.key] || []).length} ${t(s.label)}</span>`).join('')}
         ${preview.history && preview.history.length > 1 ? `<small class="muted">${t('project_city_impact.earlier_runs')} ${preview.history.slice(0, -1).map((h) => pct(h.hitRate)).join(', ')}</small>` : ''}
+        ${bySourceMarkup(comparison.bySource)}
+        ${sectionRateMarkup(preview.allHistory)}
       </div>` : '';
     return `<div class="pci-header" data-testid="city-impact-header">
       <div class="pci-title"><strong>#${esc(issue.number)}</strong> <span title="${esc(issue.title)}">${esc(issue.title)}</span></div>
@@ -118,7 +140,11 @@
     const expected = (issue, changed = []) => CityImpact.expectedFiles({ body: issue.body, poFiles: poFilesOf(data.conversation, issue.number), changed, files: repoFiles(), plan: data.plan });
     const pathsOf = (p) => [...p.files, ...p.newFiles].map((f) => f.path);
     // predicted vs actual, after a run: what the run changed against what was expected before it
-    const compare = (issue) => (data.run ? CityImpact.predictedVsActual(pathsOf(expected(issue)), data.changed) : null);
+    const compare = (issue) => {
+      if (!data.run) return null;
+      const p = expected(issue);
+      return CityImpact.predictedVsActual([...p.files, ...p.newFiles], data.changed);
+    };
 
     function issueView() {
       const { issue } = request;
@@ -135,7 +161,7 @@
         legend = Object.keys(SOURCE_LABEL).filter((s) => used.has(s)).map((s) => ({ colour: CityImpact.SOURCE_COLOURS[s], label: t(SOURCE_LABEL[s]) }));
       }
       const history = (data.history || {})[String(issue.number)] || [];
-      return { html: headerMarkup({ issue, header, files: preview.files, newFiles: preview.newFiles, comparison, history }), highlight };
+      return { html: headerMarkup({ issue, header, files: preview.files, newFiles: preview.newFiles, comparison, history, allHistory: data.history || {} }), highlight };
     }
 
     function stageView() {
@@ -191,7 +217,7 @@
         const rate = req.issue ? compare(req.issue)?.hitRate ?? null : null;
         if (rate == null || impact?.error) return;
         if ((data.history[String(req.issue.number)] || []).some((h) => h.run === data.run)) return;
-        const kept = await api.architectureImpact({ projectId, record: { issue: req.issue.number, hitRate: rate, run: data.run } }).catch(() => null);
+        const kept = await api.architectureImpact({ projectId, record: { issue: req.issue.number, hitRate: rate, run: data.run, withSection: CityImpact.expectedSection(req.issue.body) !== null } }).catch(() => null);
         if (kept && !destroyed && mine === seq) { data.history = kept.history; draw(); }
       } catch (e) {
         if (destroyed || mine !== seq) return;

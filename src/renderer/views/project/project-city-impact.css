@@ -13,9 +13,11 @@
 .pci-counts { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px; }
 .pci-counts li { display: flex; gap: 6px; padding: 2px 8px; border-radius: 999px; background: var(--r3d-hover); max-width: 100%; }
 .pci-counts li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pci-new, .pci-conflicts ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
-.pci-new li, .pci-conflicts li { display: flex; gap: 6px; min-width: 0; }
-.pci-new code, .pci-conflicts code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pci-new, .pci-conflicts ul, .pci-by-source { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.pci-new li, .pci-conflicts li, .pci-by-source li { display: flex; gap: 6px; min-width: 0; }
+.pci-new code, .pci-conflicts code, .pci-by-source code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pci-by-source li { align-items: center; }
+.pci-by-source small { flex: none; }
 .pci-cmp { display: grid; gap: 4px; padding-top: 6px; border-top: 1px solid var(--r3d-card-line); }
 .pci-cmp span { display: flex; align-items: center; gap: 6px; }
 .pci-rate { color: var(--r3d-ink); }

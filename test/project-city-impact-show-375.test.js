@@ -114,7 +114,7 @@ test('#375 impact preview records the run\'s hit rate once', async (t) => {
   const { calls, handle } = await open(t);
   await handle.show({ issue: ISSUE });
   await settle();
-  assert.deepEqual(records(calls), [{ projectId: 'p1', record: { issue: 375, hitRate: 0.5, run: 'run-1' } }]);
+  assert.deepEqual(records(calls), [{ projectId: 'p1', record: { issue: 375, hitRate: 0.5, run: 'run-1', withSection: false } }]);
 });
 
 test('#375 impact preview does not record again when the history already holds the run', async (t) => {

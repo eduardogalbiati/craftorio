@@ -3,14 +3,18 @@
 // asked again). Pure and deterministic: no I/O, clock or randomness. The City view's impact overlay
 // (src/renderer/views/project/project-city-impact.js) draws it on #373's layout.
 // - citedPaths(body) → the sorted repository-relative paths an issue body cites, in backticks or in
-//   plain text (`path:line[:col]` gives the path, trailing punctuation dropped); globs, URLs, issue
-//   refs and folders are not paths; a root file name counts only in backticks (`README.md`).
+//   plain text (`path:line[:col]` and `path:line-line[:col]`, hyphen or en dash, give the path (#427),
+//   trailing punctuation dropped); globs, URLs, issue refs and folders are not paths; a root file name
+//   counts only in backticks (`README.md`).
+// - expectedSection(body) → the sorted paths of the body's `## Expected files` section (#429: one path
+//   per line, "- `src/x.js`: why", `(new)` for a file to create), or null when it has none.
 // - expectedFiles({ body, poFiles, changed, files, plan }) → { files: [{ path, sources }], newFiles:
-//   [{ path, sources, district, note }] }: sources from ['changed', 'cited', 'po']; a path the
-//   repository (`files`) lacks is a new file, expected in the first plan district whose rules match
+//   [{ path, sources, district, note }] }: sources from ['changed', 'cited', 'expected', 'po']; a root
+//   file name from the body counts only when the repository (`files`) has it (#427); a path the
+//   repository lacks is a new file, expected in the first plan district whose rules match
 //   (CityModel.applyPlan, #371's glob rules).
 // - SOURCE_COLOURS, overlayOf(preview) → { highlight }: each expected building in the colour of its
-//   strongest source (changed > po > cited), for ProjectCity.overlay.
+//   strongest source (changed > expected > po > cited), for ProjectCity.overlay.
 // - countByDistrict(layout, paths) → { total, districts, zones }: the paths that are buildings of the
 //   layout counted by district and zone (also the release header's counts, src/shared/city-release.js).
 // - impactHeader(layout, paths, { quadrants }) → { total, districts, zones, dangerShare }: the counts
@@ -18,8 +22,11 @@
 // - stageFootprint(items [{ id, files }]) → { colours, highlight, conflicts }: each item its colour, a
 //   building two items would change in CONFLICT_COLOUR (#150: the items of one stage share no files),
 //   both from src/shared/city-agents.js (collisions, COLLISION_COLOUR), as the agents' collisions (#374).
-// - predictedVsActual(predicted, changed) → { hit, missed, unexpected, hitRate }.
-// - recordHitRate(history, issue, { hitRate, ts, run }) → a new history, one entry per run, ts order.
+// - predictedVsActual(predicted, changed) → { hit, missed, unexpected, hitRate }, and bySource
+//   ({ [source]: { hit, missed } }) when predicted holds { path, sources } items.
+// - recordHitRate(history, issue, { hitRate, ts, run, withSection }) → a new history, one entry per
+//   run, ts order; withSection (the issue had the Expected files section) kept when a boolean.
+// - hitRateBySection(history) → { with, without: { average, issues } }: each issue by its latest entry.
 // Browser: window.CityImpact; Node: module.exports.
 (function (root) {
   const node = typeof module === 'object' && module.exports;
@@ -29,10 +36,10 @@
   const cityAgents = () => (node ? require('./city-agents') : root.CityAgents);
   const conflictColour = () => cityAgents().COLLISION_COLOUR;
 
-  const SOURCES = ['changed', 'cited', 'po'];
-  // the strongest source first: what a run really changed, then the Product Owner's group, then the body
-  const STRENGTH = ['changed', 'po', 'cited'];
-  const SOURCE_COLOURS = { cited: '#4c9be8', po: '#9b6ef3', changed: '#3fb68b' };
+  const SOURCES = ['changed', 'cited', 'expected', 'po'];
+  // the strongest source first: what a run really changed, then the issue's Expected files section, the Product Owner's group, the body
+  const STRENGTH = ['changed', 'expected', 'po', 'cited'];
+  const SOURCE_COLOURS = { cited: '#4c9be8', po: '#9b6ef3', changed: '#3fb68b', expected: '#2ec4b6' };
   const ITEM_COLOURS = ['#4c9be8', '#3fb68b', '#f2a541', '#9b6ef3', '#2ec4b6', '#c3d350', '#5c7cfa', '#a1887f'];
   const DANGER = 'Danger Zone';
 
@@ -52,14 +59,14 @@
   const ROOT_FILE_RE = new RegExp(`^${NAME}$`);
   const EXT_RE = /[^./]\.[A-Za-z][A-Za-z0-9]*$/;
 
-  // a token as a path, or null: `file:line:col` and the punctuation around it dropped
+  // a token as a path, or null: `file:line:col`, `file:line-line[:col]` and the punctuation around it dropped
   function pathOf(token, quoted) {
     let t = token.replace(/^[("'<[]+/, '');
     if (GLOB_RE.test(t.replace(/[)\]]+[.,;:]*$/, ''))) return null;
     t = t.replace(/#L?\d+(?:-L?\d+)?$/, '');
     for (let prev = ''; prev !== t;) {
       prev = t;
-      t = t.replace(/[.,;:)'">]+$/, '').replace(/:\d+(?::\d+)?$/, '');
+      t = t.replace(/[.,;:)'">]+$/, '').replace(/:\d+(?:[-–]\d+)?(?::\d+)?$/, '');
     }
     t = clean(t);
     if (!t || !EXT_RE.test(t)) return null;
@@ -83,6 +90,20 @@
     return uniqueSorted(out);
   }
 
+  // the `## Expected files` heading (#429) and the next heading of its level or above, which ends the section
+  const SECTION_RE = /^##[ \t]+Expected files[ \t]*$/im;
+  const NEXT_HEADING_RE = /^#{1,2}[ \t]/m;
+
+  /** The paths of the body's `## Expected files` section, sorted and unique; null when the body has no such section. */
+  function expectedSection(body) {
+    if (typeof body !== 'string' || !body) return null;
+    const m = SECTION_RE.exec(body);
+    if (!m) return null;
+    const rest = body.slice(m.index + m[0].length);
+    const end = rest.search(NEXT_HEADING_RE);
+    return citedPaths(end < 0 ? rest : rest.slice(0, end));
+  }
+
   // ---------- the expected files ----------
 
   /** The issue's expected files, each with its sources; the ones the repository lacks apart, with their district. */
@@ -96,10 +117,13 @@
         sources.get(p).add(source);
       }
     };
-    add(citedPaths(body), 'cited');
+    const repo = new Set(arr(files).map(clean));
+    // a root file name from the body counts only when the repository has it (#427): an id or a log name is not a file to change
+    const inBody = (paths) => arr(paths).filter((p) => p.includes('/') || repo.has(p));
+    add(inBody(citedPaths(body)), 'cited');
+    add(inBody(expectedSection(body)), 'expected');
     add(poFiles, 'po');
     add(changed, 'changed');
-    const repo = new Set(arr(files).map(clean));
     const paths = [...sources.keys()].sort(byString);
     const missing = paths.filter((p) => !repo.has(p));
     const districts = plan && arr(plan.districts).length ? arr(plan.districts) : [];
@@ -179,28 +203,57 @@
 
   // ---------- predicted vs actual ----------
 
-  /** Changed as predicted, predicted but untouched, changed but not predicted, and the share of the predicted files hit. */
+  /**
+   * Changed as predicted, predicted but untouched, changed but not predicted, and the share of the predicted files hit;
+   * predicted items given as { path, sources } add bySource: which source predicted each hit and miss (#429).
+   */
   function predictedVsActual(predicted, changed) {
-    const want = uniqueSorted(arr(predicted).map(clean).filter(Boolean));
+    const items = arr(predicted);
+    const want = uniqueSorted(items.map((x) => clean(x && typeof x === 'object' ? x.path : x)).filter(Boolean));
     const got = uniqueSorted(arr(changed).map(clean).filter(Boolean));
     const isChanged = new Set(got);
     const isPredicted = new Set(want);
     const hit = want.filter((p) => isChanged.has(p));
-    return {
+    const out = {
       hit,
       missed: want.filter((p) => !isChanged.has(p)),
       unexpected: got.filter((p) => !isPredicted.has(p)),
       hitRate: want.length ? hit.length / want.length : null,
     };
+    if (!items.some((x) => x && typeof x === 'object')) return out;
+    const bySource = {};
+    for (const x of items) {
+      const p = clean(x && typeof x === 'object' ? x.path : x);
+      if (!p) continue;
+      for (const s of arr(x && x.sources)) {
+        if (!bySource[s]) bySource[s] = { hit: [], missed: [] };
+        bySource[s][isChanged.has(p) ? 'hit' : 'missed'].push(p);
+      }
+    }
+    for (const s of Object.keys(bySource)) bySource[s] = { hit: uniqueSorted(bySource[s].hit), missed: uniqueSorted(bySource[s].missed) };
+    return { ...out, bySource };
   }
 
-  /** A new history with the issue's hit rate of `run` (the same run again replaces its entry), in ts order. */
-  function recordHitRate(history, issue, { hitRate, ts, run }) {
+  /** A new history with the issue's hit rate of `run` (the same run again replaces its entry), in ts order; withSection kept when given. */
+  function recordHitRate(history, issue, { hitRate, ts, run, withSection }) {
     const key = String(issue);
     const list = arr(history && history[key]).filter((e) => e.run !== run).map((e) => ({ ...e }));
-    list.push({ hitRate, ts, run });
+    list.push(typeof withSection === 'boolean' ? { hitRate, ts, run, withSection } : { hitRate, ts, run });
     list.sort((a, b) => byString(String(a.ts), String(b.ts)));
     return { ...(history || {}), [key]: list };
+  }
+
+  /** The average hit rate of the issues with an Expected files section and of those without, each issue by its latest entry. */
+  function hitRateBySection(history) {
+    const rates = { with: [], without: [] };
+    for (const entries of Object.values(history || {})) {
+      const rated = arr(entries).filter((e) => e && typeof e.hitRate === 'number');
+      if (!rated.length) continue;
+      const latest = rated.reduce((a, b) => (byString(String(b.ts), String(a.ts)) >= 0 ? b : a));
+      rates[latest.withSection === true ? 'with' : 'without'].push(latest.hitRate);
+    }
+    const summary = (xs) => ({ average: xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null, issues: xs.length });
+    return { with: summary(rates.with), without: summary(rates.without) };
   }
 
   const api = {
@@ -209,6 +262,8 @@
     get CONFLICT_COLOUR() { return conflictColour(); },
     countByDistrict,
     expectedFiles,
+    expectedSection,
+    hitRateBySection,
     impactHeader,
     overlayOf,
     predictedVsActual,
