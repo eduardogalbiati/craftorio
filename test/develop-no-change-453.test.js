@@ -100,6 +100,19 @@ test('#453: develop answering no change but declaring its own gaps still goes ba
   assert.equal(firstGoto(stepOf('develop'), scope), 'develop');
 });
 
+test('#453: a simulated run (no worktree) keeps today\'s route: a no-change develop answer goes back to develop', () => {
+  const scope = noChangeScope(undefined, { testWriterCommit: true });
+  delete scope.worktree_dir;
+  assert.equal(firstGoto(stepOf('develop'), scope), 'develop');
+});
+
+test('#453: on a review round, a develop answer without a commit (and without no_change) goes back to the reviewer when the branch has commits', (t) => {
+  const dir = makeRepo(t, { testWriterCommit: true });
+  const scope = noChangeScope(dir, { testWriterCommit: true });
+  scope.steps.code_review = { output: { verdict: 'changes_requested', findings: [{ severity: 'major', title: 'add a test' }] } };
+  assert.equal(firstGoto(stepOf('develop'), scope), 'code_review');
+});
+
 // the code reviewer's prompt for the given develop answer
 function reviewerPrompt(develop) {
   return render(stepOf('code_review').prompt, {
