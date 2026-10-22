@@ -108,3 +108,16 @@ test('#458 findSource skips the plain folders and still finds the clone listed a
   assert.equal(s.behind, 1);
   assert.equal(cwds.filter((d) => inside(d, plainRoot)).length, 0);
 });
+
+// #458's choice: a project folder is the root of its repository (as projects.js isGit says); a folder
+// inside a clone, without its own .git, is no longer a source, and costs no git process either
+test('#458 findSource: a project folder inside a clone (not its root) is not the source', (t) => {
+  const r = appAndClone(t);
+  const sub = path.join(r.cloneDir, 'packages', 'app');
+  fs.mkdirSync(sub, { recursive: true });
+  const { appUpdate, cwds } = loadCounting(t);
+  const s = appUpdate.findSource({ appDir: r.appDir, isPackaged: false, projects: [{ id: 'sub', name: 'Sub', dir: sub }] });
+  assert.equal(s.ok, false);
+  assert.match(s.reason, /no project of this workspace is this app's repository/);
+  assert.equal(cwds.filter((d) => inside(d, sub)).length, 0);
+});

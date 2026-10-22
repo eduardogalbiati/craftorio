@@ -37,8 +37,9 @@ function makeRepo(t) {
 }
 
 // A mock run of one agent step `develop` whose agent protects test/acceptance.test.js.
-// `protectFiles` is the agent's protect_files value (a list or a template).
-async function runProtected(t, { protectFiles = ['test/acceptance.test.js'], onTurn }) {
+// `protectFiles` is the agent's protect_files value (a list or a template); `editsTests: false` adds
+// the agent's edits_tests guard; `stopOnRefusal` presses Stop at the first tests.refused (#456).
+async function runProtected(t, { protectFiles = ['test/acceptance.test.js'], editsTests, stopOnRefusal = false, onTurn }) {
   const repo = makeRepo(t);
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'protect-files-wf-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
@@ -52,7 +53,7 @@ async function runProtected(t, { protectFiles = ['test/acceptance.test.js'], onT
     'defaults:',
     '  working_dir: "{{ inputs.repo_path }}"',
     'agents:',
-    `  developer: { provider: claude, model: m, session: handoff, protect_files: ${JSON.stringify(protectFiles)}, capabilities: { tools: [read, edit, write, bash:git] } }`,
+    `  developer: { provider: claude, model: m, session: handoff, protect_files: ${JSON.stringify(protectFiles)},${editsTests === false ? ' edits_tests: false,' : ''} capabilities: { tools: [read, edit, write, bash:git] } }`,
     'steps:',
     '  - id: develop',
     '    agent: developer',
@@ -68,6 +69,7 @@ async function runProtected(t, { protectFiles = ['test/acceptance.test.js'], onT
   run.on('event', (ev) => {
     events.push(ev);
     if (ev.type === 'session.message_sent' && ev.step_id === 'develop') onTurn(repo, ++turn);
+    if (stopOnRefusal && ev.type === 'tests.refused') run.stop();
   });
   await run.start();
   return { events, finished: events.find((e) => e.type === 'workflow.finished'), repo };
@@ -108,6 +110,34 @@ test('protect_files: a protected file still changed after two send-backs fails t
   assert.match(finished.error, /developer changed protected files in develop and did not put them back: test\/acceptance\.test\.js/);
   assert.equal(events.filter((e) => e.type === 'tests.refused' && e.protected).length, 3);
   assert.equal(events.filter((e) => e.type === 'session.message_sent' && e.step_id === 'develop').length, 3);
+});
+
+test('edits_tests: false: Stop pressed at a refused test change ends the run there, with no send-back (#456)', { timeout: 60000 }, async (t) => {
+  const { events, finished } = await runProtected(t, {
+    protectFiles: [],
+    editsTests: false,
+    stopOnRefusal: true,
+    onTurn(repo, n) { if (n === 1) commit(repo, 'edit a test', { 'test/app.test.js': 'changed by the developer\n' }); },
+  });
+  assert.equal(finished.status, 'cancelled');
+  const refused = events.filter((e) => e.type === 'tests.refused');
+  assert.equal(refused.length, 1);
+  assert.equal(refused[0].protected, undefined, 'the edits_tests guard, not protect_files');
+  assert.deepEqual(refused[0].files, ['test/app.test.js']);
+  assert.equal(events.filter((e) => e.type === 'session.message_sent' && e.step_id === 'develop').length, 1, 'a stopped run sends nothing back');
+});
+
+test('edits_tests: false: without Stop the refused test change is still sent back (#456 keeps the guard)', { timeout: 60000 }, async (t) => {
+  const { events } = await runProtected(t, {
+    protectFiles: [],
+    editsTests: false,
+    onTurn(repo, n) {
+      if (n === 1) commit(repo, 'edit a test', { 'test/app.test.js': 'changed by the developer\n' });
+      if (n === 2) commit(repo, 'put it back', { 'test/app.test.js': 'ok\n' });
+    },
+  });
+  assert.equal(events.filter((e) => e.type === 'tests.refused').length, 1);
+  assert.equal(events.filter((e) => e.type === 'session.message_sent' && e.step_id === 'develop').length, 2);
 });
 
 test('protect_files: a turn that only edits the agent\'s own test file is not refused', { timeout: 60000 }, async (t) => {
