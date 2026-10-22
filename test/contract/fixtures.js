@@ -242,6 +242,8 @@ module.exports = {
   'seeds:result': { setup: project, arg: ({ projectId }) => ({ projectId, seedId: 'churn-complexity', date: 'none' }), status: 400, invalid: BAD_PROJECT },
   'seeds:run': { setup: project, arg: ({ projectId }) => ({ projectId, seedId: 'churn-complexity', mock: true }), invalid: BAD_PROJECT },
   'seeds:setTool': { setup: project, arg: ({ projectId }) => ({ projectId, seedId: 'churn-complexity', command: null }), invalid: { arg: { projectId: 'p', seedId: 'churn-complexity', command: 42 } } },
+  // #312: a folder that is not logged in (never created): only its files are read, no CLI is started
+  'settings:accountStatus': { arg: { provider: 'claude', dir: 'contract-account-312-missing' }, invalid: { arg: { provider: 42, dir: 'x' } } },
   'settings:get': { arg: null },
   'settings:machineProfile': { arg: null },
   'settings:set': { arg: {}, invalid: { arg: 42 } },
