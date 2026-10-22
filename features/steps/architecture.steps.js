@@ -39,6 +39,13 @@
 //   "<n> files" with the district and zone names, the Danger Zone share in %), the predicted files
 //   the repository lacks as list items "<path> … new file, expected in <district>", the stage's
 //   items in "project-city-legend" and "city-impact-conflicts" (the paths two items would change).
+// - Expected files (#427, #429): a path cited with a line range gives the path; a root name counts only
+//   when the repository has it. An issue's "## Expected files" section is the source "Expected files",
+//   a legend row (list item of "project-city-legend") with a colour of its own; after a run (a seeded
+//   real finished run with no worktree: its diff is the developer's files_changed),
+//   "city-impact-comparison" holds "city-impact-by-source" (one list item per hit or miss: path,
+//   "hit"/"missed", the source's label) and "city-impact-section-rate" (average hit rate with the
+//   section vs without).
 // - Complexity per language (#385): the hotspot table has a "Complexity" column whenever one file is
 //   measured (JavaScript/TypeScript always, inside the app), a measured file shows a whole number, a
 //   file not measured shows no number (never 0); data-testid="architecture-measure-note": which
@@ -541,6 +548,11 @@ const backlogDir = (e2e) => path.join(e2e.scratch, 'workspace', 'backlog');
 const repoOf = (name) => `https://github.com/example/${name}`;
 
 async function addCitingIssue(e2e, name, title, files) {
+  await addIssue(e2e, name, title, `Files to change:\n${files.map((f) => `- \`${f}\``).join('\n')}\n`);
+}
+
+// an open issue of the project's synced backlog with this body (the app reloads to read it)
+async function addIssue(e2e, name, title, body) {
   const { taskProgress } = require(path.join(root, 'src', 'backlog'));
   const project = projectOf(e2e, name);
   const file = path.join(backlogDir(e2e), `${project.id}.json`);
@@ -550,7 +562,6 @@ async function addCitingIssue(e2e, name, title, files) {
   const data = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8'))
     : { projectId: project.id, platform: 'github', repo, syncedAt: new Date().toISOString(), issues: [], epics: [], epicsError: null };
   const number = data.issues.reduce((n, i) => Math.max(n, i.number), 0) + 1;
-  const body = `Files to change:\n${files.map((f) => `- \`${f}\``).join('\n')}\n`;
   const now = new Date().toISOString();
   data.issues.push({ number, title, state: 'open', labels: [], body, url: `${repo}/issues/${number}`, author: 'octocat', assignees: [], tasks: taskProgress(body), createdAt: now, updatedAt: now });
   fs.writeFileSync(file, JSON.stringify(data, null, 2));
@@ -653,6 +664,104 @@ Then('the city does not mark {string} as a conflict of the stage', async ({ e2e 
   const conflicts = impactConflicts(e2e.window);
   await expect(conflicts).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(conflicts).not.toContainText(file);
+});
+
+// ---------- expected files (#427, #429) ----------
+
+Given('the backlog of {string} has the open issue {string} whose body is:', async ({ e2e }, name, title, body) => {
+  await addIssue(e2e, name, title, `${body}\n`);
+});
+
+// A real (not simulated) finished run of the project started for the issue (its task names the
+// issue's URL, backlog.linkRuns), with no worktree left: the run's diff is the files its developer
+// reported (step.finished output.files_changed, service/areas/diff.js reportedFiles).
+Given('a finished run of {string} for the issue {string} changed {string}', async ({ e2e }, name, title, file) => {
+  const project = projectOf(e2e, name);
+  const backlog = JSON.parse(fs.readFileSync(path.join(backlogDir(e2e), `${project.id}.json`), 'utf8'));
+  const issue = backlog.issues.find((x) => x.title === title);
+  if (!issue) throw new Error(`no issue "${title}" in the backlog of "${name}"`);
+  const min = 6e4;
+  const start = Date.now() - 864e5 + issue.number * 10 * min;
+  const at = (m) => new Date(start + m * min).toISOString();
+  const runId = `${at(0).slice(0, 10).replace(/-/g, '')}-101500-i429n${issue.number}`;
+  const workflow = 'software-development';
+  const task = `${issue.title}\n\n${issue.url}`;
+  const events = [
+    { seq: 1, ts: at(0), type: 'workflow.started', run_id: runId, workflow, file: `${workflow}.yaml`, project_id: project.id, mock: false, inputs: { task } },
+    { seq: 2, ts: at(1), type: 'step.started', run_id: runId, step: 'implement', agent: 'developer' },
+    { seq: 3, ts: at(9), type: 'step.finished', run_id: runId, step: 'implement', agent: 'developer', status: 'success', output: { summary: 'Done (simulated data).', files_changed: [file] } },
+    { seq: 4, ts: at(10), type: 'workflow.finished', run_id: runId, status: 'success' },
+  ];
+  const dir = path.join(e2e.scratch, 'workspace', 'runs', runId);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'events.jsonl'), `${events.map((e) => JSON.stringify(e)).join('\n')}\n`);
+  fs.writeFileSync(path.join(dir, 'summary.json'), JSON.stringify({
+    run_id: runId, workflow, project_id: project.id, mock: false, inputs: { task }, status: 'success', started_at: at(0), finished_at: at(10), duration_ms: 10 * min, sessions: [],
+  }, null, 2));
+  await e2e.window.reload();
+  await e2e.window.waitForLoadState('domcontentloaded');
+});
+
+Then('the city impact header counts {int} file(s), in the district {string} and the zone {string}', async ({ e2e }, files, district, zone) => {
+  const header = impactHeader(e2e.window);
+  await expect(header).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(header, `the header's ${files} files`).toContainText(new RegExp(`\\b${files}\\s+files?\\b`, 'i'), { timeout: LOAD_TIMEOUT });
+  for (const n of [district, zone]) await expect(header, `the header's "${n}"`).toContainText(n);
+});
+
+Then('the city lists no new file for the issue', async ({ e2e }) => {
+  const header = impactHeader(e2e.window);
+  await expect(header).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(header.getByTestId('city-impact-new-file')).toHaveCount(0);
+});
+
+Then('the city impact header does not mention {string}', async ({ e2e }, text) => {
+  const card = byId(e2e.window, 'city-impact');
+  await expect(impactHeader(e2e.window)).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(card).not.toContainText(text);
+});
+
+// each impact row of the legend is a list item: its colour dot (style --c) and its label
+const legendRow = (page, label) => visible(byId(page, 'project-city-legend').getByRole('listitem')
+  .filter({ hasText: new RegExp(escapeRe(label), 'i') })).first();
+const rowColour = (row) => row.evaluate((li) => {
+  const dot = li.querySelector('[style*="--c"]') || li;
+  return getComputedStyle(dot).getPropertyValue('--c').trim() || getComputedStyle(dot).backgroundColor;
+});
+
+Then('the city legend gives {string} a colour of its own, apart from {string}', async ({ e2e }, label, other) => {
+  const mine = legendRow(e2e.window, label);
+  const theirs = legendRow(e2e.window, other);
+  await expect(mine).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(theirs).toBeVisible({ timeout: LOAD_TIMEOUT });
+  const a = await rowColour(mine);
+  expect(a, `the colour of "${label}"`).toBeTruthy();
+  expect(a, `"${label}" and "${other}" share a colour`).not.toBe(await rowColour(theirs));
+});
+
+Then('the city impact card shows the hit rate of the run', async ({ e2e }) => {
+  const cmp = byId(e2e.window, 'city-impact-comparison');
+  await expect(cmp).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(cmp).toContainText(/\b\d{1,3}%/);
+});
+
+// #429: after a run, which source predicted each hit and each miss (data-testid="city-impact-by-source",
+// one list item per file: its path, "hit" or "missed", the source's legend label)
+Then('the city impact card credits the {word} {string} to {string}', async ({ e2e }, kind, file, source) => {
+  const box = byId(e2e.window, 'city-impact-by-source');
+  await expect(box).toBeVisible({ timeout: LOAD_TIMEOUT });
+  const word = kind === 'hit' ? /hit|as predicted/i : /miss|untouched/i;
+  const row = visible(box.getByRole('listitem').filter({ hasText: file }).filter({ hasText: new RegExp(escapeRe(source), 'i') }).filter({ hasText: word })).first();
+  await expect(row, `the ${kind} "${file}" credited to "${source}"`).toBeVisible({ timeout: LOAD_TIMEOUT });
+});
+
+// #429: the average hit rate of the project's issues with an "## Expected files" section and without
+// (data-testid="city-impact-section-rate")
+Then('the city impact card gives an average hit rate of {int}% with an Expected files section and {int}% without', async ({ e2e }, withRate, withoutRate) => {
+  const line = byId(e2e.window, 'city-impact-section-rate');
+  await expect(line).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(line).toContainText(new RegExp(`with[^%]*\\b${withRate}%`, 'i'), { timeout: LOAD_TIMEOUT });
+  await expect(line).toContainText(new RegExp(`without[^%]*\\b${withoutRate}%`, 'i'));
 });
 
 // ---------- complexity per language (#385) ----------

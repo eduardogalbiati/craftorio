@@ -232,6 +232,98 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     And the city marks "src/billing.js" as a conflict of the stage
     And the city does not mark "tools/export.py" as a conflict of the stage
 
+  @issue-427
+  Scenario: Paths cited with a line range count as the files they name
+    Given the app is open
+    And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
+    And the backlog of "billing-service" has the open issue "Change the discount rule" whose body cites "src/billing.js:10-20", "tools/export.py:4–9" and "src/billing.js:30-32:4"
+    When I open "Backlog" in the sidebar
+    And I choose the project "billing-service" in the header
+    And I open the Board as a list
+    And I click "Show on the map" on the Backlog issue "Change the discount rule"
+    Then the Architecture tab shows the project city
+    And the city impact header counts 2 files, in the districts "Billing" and "Export" and the zones "Backend" and "Tooling"
+    And the city lists no new file for the issue
+
+  @issue-427
+  Scenario: A root file name the repository lacks is not counted as an expected file
+    Given the app is open
+    And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
+    And the backlog of "billing-service" has the open issue "Change the discount rule" whose body cites "src/billing.js" and "1792597401661-0000.json"
+    When I open "Backlog" in the sidebar
+    And I choose the project "billing-service" in the header
+    And I open the Board as a list
+    And I click "Show on the map" on the Backlog issue "Change the discount rule"
+    Then the Architecture tab shows the project city
+    And the city impact header counts 1 file, in the district "Billing" and the zone "Backend"
+    And the city lists no new file for the issue
+    And the city impact header does not mention "1792597401661-0000.json"
+
+  @issue-427
+  Scenario: The stage footprint marks a file two items cite with line ranges as a conflict
+    Given the app is open
+    And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
+    And the backlog of "billing-service" has the open issue "Change the discount rule" whose body cites "src/billing.js:10-20"
+    And the backlog of "billing-service" has the open issue "Round the export totals" whose body cites "src/billing.js:40–52" and "tools/export.py"
+    And the roadmap of "billing-service" has the planned stage "Billing fixes" with the items "Change the discount rule" and "Round the export totals"
+    When I open "Backlog" in the sidebar
+    And I choose the project "billing-service" in the header
+    And I open the Roadmap
+    And I click "Show the stage on the map" on the roadmap stage "Billing fixes"
+    Then the Architecture tab shows the project city
+    And the city marks "src/billing.js" as a conflict of the stage
+    And the city does not mark "tools/export.py" as a conflict of the stage
+
+  @issue-429
+  Scenario: The issue's Expected files section is read as its own source with its own legend colour
+    Given the app is open
+    And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
+    And the backlog of "billing-service" has the open issue "Change the discount rule" whose body is:
+      """
+      The export in `tools/export.py` shows the old discount.
+
+      ## Expected files
+      - `src/billing.js`: the discount rule lives here
+      - `src/refunds.js` (new): refunds get their own module
+      """
+    When I open "Backlog" in the sidebar
+    And I choose the project "billing-service" in the header
+    And I open the Board as a list
+    And I click "Show on the map" on the Backlog issue "Change the discount rule"
+    Then the Architecture tab shows the project city
+    And the city impact header counts 2 files, in the districts "Billing" and "Export" and the zones "Backend" and "Tooling"
+    And the city lists "src/refunds.js" apart as a new file expected in "Billing"
+    And the city legend lists "Expected files" and "Cited in the issue"
+    And the city legend gives "Expected files" a colour of its own, apart from "Cited in the issue"
+
+  @issue-429
+  Scenario: After a run the impact card names the source of each hit and miss and compares issues with and without the section
+    Given the app is open
+    And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
+    And the backlog of "billing-service" has the open issue "Round the export totals" whose body cites "tools/export.py"
+    And the backlog of "billing-service" has the open issue "Change the discount rule" whose body is:
+      """
+      The discount is applied twice.
+
+      ## Expected files
+      - `src/billing.js`: the discount rule lives here
+      - `tools/export.py`: the export repeats the rule
+      """
+    And a finished run of "billing-service" for the issue "Round the export totals" changed "src/billing.js"
+    And a finished run of "billing-service" for the issue "Change the discount rule" changed "src/billing.js"
+    When I open "Backlog" in the sidebar
+    And I choose the project "billing-service" in the header
+    And I open the Board as a list
+    And I click "Show on the map" on the Backlog issue "Round the export totals"
+    Then the city impact card shows the hit rate of the run
+    When I open "Backlog" in the sidebar
+    And I choose the project "billing-service" in the header
+    And I open the Board as a list
+    And I click "Show on the map" on the Backlog issue "Change the discount rule"
+    Then the city impact card credits the hit "src/billing.js" to "Expected files"
+    And the city impact card credits the miss "tools/export.py" to "Expected files"
+    And the city impact card gives an average hit rate of 50% with an Expected files section and 0% without
+
   @issue-385
   Scenario: Without lizard the JavaScript file still has a measured complexity
     Given the complexity tool lizard is not installed on this machine
