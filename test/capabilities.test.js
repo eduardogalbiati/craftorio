@@ -84,6 +84,16 @@ test('agentEnv: the agent\'s environment is AGENT_ENV alone, unless the run has 
   });
 });
 
+test('agentEnv: with the run\'s temp folder, MULTIAGENT_LOCKS_DIR keeps the machine-wide slots\' folder, not one under the run (#455)', () => {
+  const { machineSlotDir } = require('../src/engine/machine-slot');
+  const machine = machineSlotDir();
+  const env = caps.agentEnv({ workspace: 'C:/run/scratch/workspace', userData: 'C:/run/scratch/user-data', tmp: 'C:/run/tmp' });
+  assert.equal(env.TMP, 'C:/run/tmp');
+  assert.equal(env.MULTIAGENT_LOCKS_DIR, machine);
+  assert.equal(String(env.MULTIAGENT_LOCKS_DIR).startsWith('C:/run'), false);
+  assert.equal('MULTIAGENT_LOCKS_DIR' in caps.agentEnv(), false, 'no scratch: nothing changes');
+});
+
 test('commandGuide: an agent given a scratch workspace is told every one of its own variables (plural wording) and where its own checks must write', () => {
   const withBash = caps.normalize({ tools: ['read', 'bash:npm'] });
   const env = caps.agentEnv({ workspace: 'C:/run/scratch/workspace', userData: 'C:/run/scratch/user-data' });
