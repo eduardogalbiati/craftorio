@@ -3,6 +3,14 @@
 // - buildingBox(): the one geometry of every building and ledge, its base at y = 0: the POC's unit
 //   RoundedBoxGeometry (2 segments, ROUND of its size) scaled per instance, so the rounding grows with
 //   the building. mastBox() and capBall() are the masts' and their caps'; flatPlane() a lane dash.
+// - partGeometries() (#449, poc/project-city-v2.html): the unit geometries of the v2 buildings' parts
+//   (src/shared/city-buildings.js `g`), every base at y = 0 but the cap's and the light's (centred):
+//   box (buildingBox), wedge (a gable roof, wedgeGeometry), barrel (a half cylinder along x), dome,
+//   cyl, cone, green (a blob of foliage), mast, cap and light. windowMaterial(uniforms, { floorH,
+//   pitch }) is the walls' material: windows at a real floor height on every facade, lit by churn
+//   (instance attribute `aWin`: on, seed, lit share, height), styled per zone kind (`aStyle`: column
+//   pitch, window width and height shares, glass tint), fading into the wall from far away (fwidth);
+//   uniforms { uNight, uTime }.
 // - roundedMaterial(radius, params) with unitBox(): a meshStandardMaterial for an InstancedMesh whose
 //   corners keep a radius of `radius` world units whatever each instance's scale (the district
 //   plates, whose rounding is the POC's fixed 1.0). The vertex shader splits each vertex of the unit
@@ -40,6 +48,79 @@ export function mastBox() {
 
 /** A mast's cap. */
 export const capBall = () => new THREE.SphereGeometry(0.34, 12, 10);
+
+/** A gable roof: a triangular prism, footprint 1 × 1 (x by z), ridge along x at height 1. */
+export function wedgeGeometry() {
+  const p = [-0.5, 0, -0.5, 0.5, 0, -0.5, 0.5, 0, 0.5, -0.5, 0, 0.5, -0.5, 1, 0, 0.5, 1, 0]; // 0..3 the base corners, 4..5 the ridge ends
+  const tri = [[0, 1, 4], [1, 5, 4], [3, 4, 2], [4, 5, 2], [0, 4, 3], [1, 2, 5], [0, 3, 1], [1, 3, 2]]; // south slope, north slope, the two gables, the bottom
+  const pos = [];
+  for (const t of tri) for (const i of t) pos.push(p[i * 3], p[i * 3 + 1], p[i * 3 + 2]);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.computeVertexNormals();
+  return g;
+}
+
+/** The unit geometries of the v2 buildings' parts, by city-buildings.js `g` (see the header). */
+export function partGeometries() {
+  const barrel = new THREE.CylinderGeometry(0.5, 0.5, 1, 18, 1, false, 0, Math.PI); // a half cylinder, axis along x, flat side down
+  barrel.rotateZ(Math.PI / 2); barrel.rotateY(Math.PI / 2); barrel.rotateX(-Math.PI / 2);
+  barrel.computeBoundingBox();
+  barrel.translate(0, -barrel.boundingBox.min.y, 0); barrel.scale(1, 2, 1); // base at y = 0, height 1 (the radius)
+  const dome = new THREE.SphereGeometry(0.5, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2); dome.scale(1, 2, 1);
+  const cyl = new THREE.CylinderGeometry(0.5, 0.5, 1, 14); cyl.translate(0, 0.5, 0);
+  const cone = new THREE.ConeGeometry(0.5, 1, 12); cone.translate(0, 0.5, 0);
+  const green = new THREE.IcosahedronGeometry(0.5, 1); green.translate(0, 0.5, 0);
+  return { barrel, box: buildingBox(), cap: capBall(), cone, cyl, dome, green, light: new THREE.SphereGeometry(0.5, 12, 10), mast: mastBox(), wedge: wedgeGeometry() };
+}
+
+/** The walls' material: windows at a real floor height, lit by churn, a touch of occlusion at the base (see the header). */
+export function windowMaterial(uniforms, { floorH, pitch }) {
+  const mat = new THREE.MeshStandardMaterial({ roughness: 0.62, metalness: 0 });
+  const P = pitch.toFixed(2), F = floorH.toFixed(2);
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.uNight = uniforms.uNight;
+    sh.uniforms.uTime = uniforms.uTime;
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute vec4 aWin; attribute vec4 aStyle; varying vec4 vWin; varying vec4 vStyle; varying vec3 vLocal; varying vec3 vSize; varying vec3 vNrm;') // i18n-ignore
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWin = aWin; vStyle = aStyle; vSize = vec3(length(instanceMatrix[0].xyz), length(instanceMatrix[1].xyz), length(instanceMatrix[2].xyz)); vLocal = position * vSize; vNrm = normal;'); // i18n-ignore
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>
+uniform float uNight; uniform float uTime; varying vec4 vWin; varying vec4 vStyle; varying vec3 vLocal; varying vec3 vSize; varying vec3 vNrm;
+float hash3(vec3 p) { p = fract(p * 0.1031); p += dot(p, p.yzx + 33.33); return fract((p.x + p.y) * p.z); }`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+vec3 winGlow = vec3(0.0);
+diffuseColor.rgb *= 0.72 + 0.28 * smoothstep(0.0, 2.4, vLocal.y);
+if (vWin.x > 0.5 && abs(vNrm.y) < 0.4) {
+  float pitch = ${P} * vStyle.x, ww = vStyle.y * 0.5, wh = vStyle.z * 0.5;
+  bool onX = abs(vNrm.x) > 0.5;
+  float fw = onX ? vSize.z : vSize.x;
+  float u = (onX ? vLocal.z : vLocal.x) + fw * 0.5;
+  float cols = floor((fw - 0.3) / pitch);
+  float mu = (fw - cols * pitch) * 0.5;
+  float floors = floor((vSize.y - 0.3) / ${F});
+  float cu = (u - mu) / pitch, cy = vLocal.y / ${F};
+  float px = fwidth(cu) + fwidth(cy);
+  float fade = 1.0 - smoothstep(0.18, 0.55, px);
+  if (cols >= 1.0 && cu >= 0.0 && cu < cols && cy >= 0.0 && cy < floors && fade > 0.0) {
+    vec2 cell = vec2(fract(cu), fract(cy));
+    bool door = floor(cy) < 0.5 && vWin.w > 1.6;
+    bool inWin = door ? (cell.x > 0.3 && cell.x < 0.7 && cell.y < 0.82) : (abs(cell.x - 0.5) < ww && abs(cell.y - 0.55) < wh);
+    if (inWin) {
+      float side = onX ? sign(vNrm.x) : 2.0 + sign(vNrm.z);
+      float rnd = hash3(vec3(floor(cu), floor(cy), vWin.y * 97.0 + side));
+      float lit = door ? 0.0 : step(1.0 - vWin.z, rnd + 0.05 * sin(uTime * 0.35 + rnd * 80.0));
+      vec3 glass = mix(mix(diffuseColor.rgb * 0.3, vec3(0.06, 0.08, 0.12), 0.55), vec3(0.16, 0.24, 0.38), vStyle.w * 0.8);
+      diffuseColor.rgb = mix(diffuseColor.rgb, glass, fade);
+      winGlow = fade * lit * uNight * mix(vec3(1.0, 0.78, 0.5), vec3(0.72, 0.84, 1.0), step(0.82, rnd)) * (0.7 + 0.4 * hash3(vec3(rnd, side, 1.0)));
+    }
+  }
+}`)
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += winGlow;'); // i18n-ignore
+  };
+  mat.customProgramCacheKey = () => `city-windows-${P}-${F}`;
+  return mat;
+}
 
 /** A unit plane lying on the ground (a lane dash). */
 export function flatPlane() {
