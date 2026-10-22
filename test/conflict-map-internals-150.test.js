@@ -12,11 +12,21 @@ const productOwner = require('../src/product-owner');
 
 // Isolated identity on every call: nothing depends on the machine's git config.
 const git = (cwd, ...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'init.defaultBranch=main', '-c', 'core.autocrlf=false', ...args], { cwd, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
-const commit = (cwd, file, text) => {
-  fs.writeFileSync(path.join(cwd, file), text);
-  git(cwd, 'add', file);
-  git(cwd, 'commit', '-q', '-m', `${file}: ${text.trim()}`);
-};
+// #492: a history of many commits ([file, text] each, one file per commit, oldest first) written by one
+// `git fast-import` process, not three git processes per commit (180 of them took over 60 s on a busy
+// Windows machine); the checkout then matches the last commit.
+function commits(cwd, list) {
+  const data = (s) => `data ${Buffer.byteLength(s)}\n${s}\n`;
+  const stream = list.map(([file, text], i) => [
+    'commit refs/heads/main',
+    `committer t <t@t> ${1700000000 + i * 60} +0000`,
+    data(`${file}: ${text.trim()}`).trimEnd(),
+    `M 100644 inline ${file}`,
+    data(text),
+  ].join('\n')).join('');
+  execFileSync('git', ['fast-import', '--quiet'], { cwd, input: stream, stdio: ['pipe', 'pipe', 'pipe'] });
+  git(cwd, 'reset', '-q', '--hard', 'main');
+}
 
 // A conversation holding one plan answer with two decongest fixes, at `at`.
 function decongestConversation(t) {
@@ -100,10 +110,12 @@ test('buildConflictMap (git fallback): hub lines count only the commits of the w
   git(repo, 'init', '-q');
   // five old commits change line 1 of hub.js, 53 commits touch their own file, then two more change hub.js line 1:
   // the newest 50 commits hold only the last two hub.js changes
-  for (let n = 1; n <= 5; n++) commit(repo, 'hub.js', `v${n}\n`);
-  for (let n = 1; n <= 53; n++) commit(repo, `f${n}.txt`, `${n}\n`);
-  commit(repo, 'hub.js', 'v6\n');
-  commit(repo, 'hub.js', 'v7\n');
+  const history = [];
+  for (let n = 1; n <= 5; n++) history.push(['hub.js', `v${n}\n`]);
+  for (let n = 1; n <= 53; n++) history.push([`f${n}.txt`, `${n}\n`]);
+  history.push(['hub.js', 'v6\n'], ['hub.js', 'v7\n']);
+  commits(repo, history);
+  assert.equal(git(repo, 'rev-list', '--count', 'HEAD'), '60');
   const map = await buildConflictMap({ runs: [], repo });
   assert.equal(map.source, 'git');
   assert.equal(map.runIds.length, 50);

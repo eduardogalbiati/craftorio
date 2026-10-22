@@ -77,7 +77,9 @@ function rebaseAndResolve(repo, resolved) {
 
 // A mock run of one step `resolve_merge` (as in ai-development-local-hero: the developer, edits_tests:
 // true, protect_files on the agent), on a run whose base branch is the local main.
-async function runResolve(t, onTurn) {
+// `stopOnRefusal` (#456): the run is stopped at the first protected refusal, so a test about it does not
+// wait for the two send-backs that follow (each one a full protect_files check, seconds on a busy machine).
+async function runResolve(t, onTurn, { stopOnRefusal = false } = {}) {
   const repo = makeRepo(t);
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'merge-380-wf-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
@@ -111,6 +113,7 @@ async function runResolve(t, onTurn) {
   run.on('event', (ev) => {
     events.push(ev);
     if (ev.type === 'session.message_sent' && ev.step_id === 'resolve_merge') onTurn(repo, ++turn);
+    if (stopOnRefusal && ev.type === 'tests.refused' && ev.protected) run.stop();
   });
   await run.start();
   return { events, finished: events.find((e) => e.type === 'workflow.finished'), repo };
@@ -129,12 +132,16 @@ test('protect_files: a conflicted protected test file resolved by combining both
 });
 
 test('protect_files: a conflicted protected test file resolved with a new line is still refused, naming the file', { timeout: 60000 }, async (t) => {
-  const { events } = await runResolve(t, (r, n) => {
+  const { events, finished } = await runResolve(t, (r, n) => {
     if (n === 1) rebaseAndResolve(r, BASE + MAIN_SIDE + BRANCH_SIDE + '    And a step neither side wrote\n');
-  });
+  }, { stopOnRefusal: true });
+  // #456: Stop pressed at the refusal ends the run there: no send-back turn, no further check
+  assert.equal(finished.status, 'cancelled');
+  assert.equal(events.filter((e) => e.type === 'session.message_sent' && e.step_id === 'resolve_merge').length, 1, 'a stopped run sends nothing back');
   const refused = events.filter((e) => e.type === 'tests.refused' && e.protected);
-  assert.ok(refused.length >= 1, 'the resolution that writes a new test line is refused');
+  assert.equal(refused.length, 1, 'the resolution that writes a new test line is refused (the run stops there)');
   assert.deepEqual(refused[0].files, [FEATURE]);
+  assert.equal(refused[0].attempt, 1);
 });
 
 // ---- workflows/ai-development-local-hero.yaml: a real test change goes to the test writer --------------
