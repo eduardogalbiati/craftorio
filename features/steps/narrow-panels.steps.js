@@ -242,7 +242,7 @@ Then('the suite card\'s test file paths end in {string} with the whole path in t
   const paths = card.getByTestId('run-suite-file');
   await expect(paths).toHaveCount(e2e.longPaths.length, { timeout: LOAD_TIMEOUT });
   for (const file of e2e.longPaths) {
-    const el = paths.filter({ hasText: file.slice(0, 20) }).first();
+    const el = paths.filter({ hasText: file }).first();
     await expect(el, `the path ${file}`).toHaveAttribute('title', file);
     const shown = await el.evaluate((node) => {
       const cs = getComputedStyle(node);
