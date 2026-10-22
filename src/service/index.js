@@ -26,6 +26,8 @@
 //   appVersion       shown in Settings
 //   isPackaged       the packaged app can't run itself as node (see terminalSpec)
 //   readPrJson(cmd, args)   optional; replaces the gh/glab call that reads a run's PR (tests, UI checks)
+//   fileIssue(draft) optional; files a refactor issue (#435, src/refactor-issues.js issueDraft) and
+//                    returns { number, url }, instead of gh/glab, in a simulation too (tests, UI checks)
 //   userDataDir      optional; the app's user data folder, where speech models live (src/speech.js)
 //   appDir           optional; the app folder Self-healing updates (#279, areas/app-update.js)
 //   relaunch()       optional; restarts the app (src/main.js); without it the app never updates itself

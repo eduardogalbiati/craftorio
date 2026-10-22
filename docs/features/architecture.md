@@ -41,7 +41,11 @@ edits code and never prescribes a fix to a run. An invalid answer is an error, n
 Reports are saved as `architecture/<project id>/<date>.json` in the workspace with their real cost
 and tokens; the tab shows the latest (or one you pick), its findings marked **new** or **gone**
 since the previous one, and how many real runs finished since. **Send to Refactor** makes a finding
-a proposal of the Refactor tab, where the Product Owner prioritizes.
+a proposal of the Refactor tab, files its issue and plans it in the roadmap's disabled stage
+"Refactor (waiting for your OK)" at the end (#435; see the Refactor tab). The button then stays in
+place, disabled, reading "Sent to Refactor", with a link to its issue and stage next to it ("#432 ·
+stage 117, waiting for your OK", #447). The same finding from a later analysis adds its evidence to
+the existing proposal instead of a second one.
 
 **The project city** (#371) adds structure to the same facts: which area of the product each file
 belongs to, and how areas depend on each other, as one deterministic model for the 3D view (#373).

@@ -1360,7 +1360,11 @@ edits code and never prescribes a fix to a run. An invalid answer is an error, n
 Reports are saved as `architecture/<project id>/<date>.json` in the workspace with their real cost
 and tokens; the tab shows the latest (or one you pick), its findings marked **new** or **gone**
 since the previous one, and how many real runs finished since. **Send to Refactor** makes a finding
-a proposal of the Refactor tab, where the Product Owner prioritizes.
+a proposal of the Refactor tab, files its issue and plans it in the roadmap's disabled stage
+"Refactor (waiting for your OK)" at the end (#435; see the Refactor tab). The button then stays in
+place, disabled, reading "Sent to Refactor", with a link to its issue and stage next to it ("#432 ·
+stage 117, waiting for your OK", #447). The same finding from a later analysis adds its evidence to
+the existing proposal instead of a second one.
 
 **The project city** (#371) adds structure to the same facts: which area of the product each file
 belongs to, and how areas depend on each other, as one deterministic model for the 3D view (#373).
@@ -1491,12 +1495,23 @@ the owner writes there (target, expected improvement, evidence). Saved in
 - **File as issue**: files the proposal in the project's tracker with the `refactor` label (created
   first when missing on GitHub; GitLab creates it on filing) and names the Refactor workflow. The row
   then shows the issue, whether it is open, and its roadmap item's status.
-- **Add to roadmap now**: one item on the Refactor workflow, placed by the Product Owner's rules
-  (the earliest stage that shares no file with it, never before an item it conflicts with).
+- **The waiting stage** (#435): Send to Refactor (the Architecture tab) files the issue as File as
+  issue does and plans an item on the Refactor workflow in a disabled stage at the end of the
+  roadmap, "Refactor (waiting for your OK)", created when there is none; the proposal records its
+  `before` score. Nothing runs until the owner enables that stage: enabling it is the authorization.
+  Later sends join it while it is disabled; once it is enabled, the next send opens a new waiting
+  stage at the end. Stages the Product Owner or the cadence add go before it, so it stays last. A
+  proposal on a file an item of the stage already changes joins that item (one run). Each row
+  names its issue and stage ("#432 · stage 117, waiting for your OK"). Without a synced backlog the
+  send only creates the proposal.
+- **Add to roadmap now**: one item on the Refactor workflow in the waiting stage, as above. **Run
+  now** plans it instead by the Product Owner's rules (the earliest stage that shares no file with
+  it, never before an item it conflicts with), and never inside the stage in progress: at the
+  earliest the stage after it, enabled.
 - **Dismiss** asks a reason; dismissed proposals stay under the **Dismissed** filter.
 - **The cadence** "Add a refactor to the roadmap every X runs" (off by default, X from 3 to 50):
   after every X finished real runs of the project, the top ranked proposal that has an issue and no
-  unfinished roadmap item joins the roadmap the same way. With none ready, nothing is added and the
+  unfinished roadmap item joins the roadmap by those rules (not in the waiting stage). With none ready, nothing is added and the
   tab says "Nothing ready to add: prioritize or file a proposal". The item counts in the budget cap
   like any other, and nothing answers a gate.
 - **Success on the map**: when a refactor joins the roadmap its target's quadrant and Danger Zone

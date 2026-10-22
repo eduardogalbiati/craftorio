@@ -231,6 +231,7 @@
  * @property {string} note
  * @property {RoadmapItem[]} items
  * @property {true} [disabled]
+ * @property {true} [waiting] the refactor stage waiting for the owner's OK (#435, src/refactor-cadence.js)
  * @property {RoadmapRelease} [release]
  */
 

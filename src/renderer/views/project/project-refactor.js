@@ -6,7 +6,9 @@
 // left the Danger Zone through refactor runs in the last 30 and 90 days, and when the ranking was made.
 // Actions: "Ask the Product Owner to prioritize" (refactor:prioritize, one turn, the simulated answer
 // in simulation), per row "File as issue" (refactor:file, a preview in simulation), "Add to roadmap
-// now" (refactor:addToRoadmap, once it has an issue) and "Dismiss" with a reason (refactor:dismiss,
+// now" (refactor:addToRoadmap, once it has an issue: the disabled waiting stage at the end, #435) and
+// "Run now" (the same with runNow: after the stage in progress, enabled), the row naming its issue and
+// stage ("#432 · stage 117, waiting for your OK", refactor-proposal-where), and "Dismiss" with a reason (refactor:dismiss,
 // kept under the "Dismissed" filter); the cadence switch "Add a refactor to the roadmap every X runs"
 // (refactor:cadence / refactor:setCadence, X from 3 to 50) with its "next in N runs" counter and
 // "Nothing ready to add" when no proposal has an issue and no unfinished item.
@@ -75,7 +77,15 @@
     if (!p.issue) return `<span class="muted small">${t('project_refactor.no_issue')}</span>`;
     const link = `<span class="badge" data-testid="refactor-proposal-issue" title="${esc(p.issueUrl || '')}">#${esc(p.issue)}${p.issueState ? ` ${esc(String(p.issueState).toLowerCase())}` : ''}</span>`;
     const status = p.roadmapStatus ? `<span class="badge${STATUS_TONE[p.roadmapStatus] ?? ''}" data-testid="refactor-proposal-status">${esc(p.roadmapStatus)}</span>` : '';
-    return link + status;
+    return link + status + whereMarkup(p);
+  }
+
+  // where the proposal went (#435): its issue and its roadmap stage, "waiting for your OK" in the waiting stage
+  function whereMarkup(p) {
+    if (!p.issue || !p.roadmapStage || !p.roadmapUnfinished) return '';
+    const where = t(p.roadmapWaiting ? 'project_refactor.where_waiting' : 'project_refactor.where', { issue: p.issue, stage: p.roadmapStage });
+    return p.issueUrl ? `<a class="small" data-testid="refactor-proposal-where" href="${esc(p.issueUrl)}" target="_blank" rel="noopener">${esc(where)}</a>`
+      : `<span class="small muted" data-testid="refactor-proposal-where">${esc(where)}</span>`;
   }
 
   function outcomeMarkup(p) {
@@ -93,7 +103,8 @@
     const placed = !!p.roadmapUnfinished;
     return `<div class="row rf-actions">
       ${p.issue ? '' : `<button type="button" class="btn sm" data-rf-file="${esc(p.id)}" data-testid="refactor-file" ${busy}>${t('project_refactor.file_as_issue')}</button>`}
-      ${p.issue && !placed ? `<button type="button" class="btn sm" data-rf-roadmap="${esc(p.id)}" data-testid="refactor-add-roadmap" ${busy}>${t('project_refactor.add_to_roadmap_now')}</button>` : ''}
+      ${p.issue && !placed ? `<button type="button" class="btn sm" data-rf-roadmap="${esc(p.id)}" data-testid="refactor-add-roadmap" ${busy}>${t('project_refactor.add_to_roadmap_now')}</button>
+      <button type="button" class="btn sm ghost" data-rf-run-now="${esc(p.id)}" data-testid="refactor-run-now" title="${t('project_refactor.run_now_title')}" ${busy}>${t('project_refactor.run_now')}</button>` : ''}
       <button type="button" class="btn sm ghost" data-rf-dismiss="${esc(p.id)}" data-testid="refactor-dismiss" aria-label="${t('project_refactor.dismiss_value', { value: esc(p.title || p.target || 'proposal') })}" ${busy}>${t('common.dismiss')}</button>
     </div>`;
   }
@@ -218,9 +229,11 @@
     else if (out?.proposal?.issue) showToast(t('project_refactor.filed_as_issue', { issue: out.proposal.issue }));
   }, { busy: id });
 
-  const addToRoadmap = (id) => act(async (c) => {
-    const out = await api.addRefactorToRoadmap(c.id, id);
-    if (out?.proposal) showToast(t('project_refactor.added_issue_to_the_roadmap_stage', { issue: out.proposal.issue, stage: out.stage }));
+  // the waiting stage by default (the owner enables it); runNow after the stage in progress (#435)
+  const addToRoadmap = (id, runNow = false) => act(async (c) => {
+    const out = await api.addRefactorToRoadmap(c.id, id, runNow ? { runNow: true } : {});
+    const key = out?.waiting ? 'project_refactor.added_issue_to_the_waiting_stage' : 'project_refactor.added_issue_to_the_roadmap_stage';
+    if (out?.proposal) showToast(t(key, { issue: out.proposal.issue, stage: out.stage }));
   }, { busy: id });
 
   function dismiss(id) {
@@ -265,6 +278,8 @@
     if (file) return () => fileIssue(file.dataset.rfFile);
     const roadmap = at('[data-rf-roadmap]');
     if (roadmap) return () => addToRoadmap(roadmap.dataset.rfRoadmap);
+    const runNow = at('[data-rf-run-now]');
+    if (runNow) return () => addToRoadmap(runNow.dataset.rfRunNow, true);
     const confirm = at('[data-rf-dismiss-confirm]');
     if (confirm) return () => dismiss(confirm.dataset.rfDismissConfirm);
     if (at('[data-rf-dismiss-cancel]')) return () => { Object.assign(cur, { dismissing: null, error: null }); render(); };

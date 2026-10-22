@@ -141,15 +141,22 @@ module.exports = (ctx) => {
   async function addToRoadmap(p, proposal, { mode = 'waiting' } = {}) {
     if (!proposal.issue) throw clientError('File the proposal as an issue first: a roadmap item runs an issue.');
     const number = Number(proposal.issue);
-    const roadmap = roadmapOf(p.id);
-    // unfinished as pickNext reads it: a failed and parked item is finished, so the cadence can add it again
-    if (cadenceRules.unfinishedNumbers(roadmap).has(number)) {
+    const files = filesOf(proposal);
+    const inRoadmap = (roadmap) => {
+      // unfinished as pickNext reads it: a failed and parked item is finished, so the cadence can add it again
+      if (!cadenceRules.unfinishedNumbers(roadmap).has(number)) return;
       const status = roadmaps.issueStages(roadmap).get(number)?.status;
       throw clientError(`Issue #${proposal.issue} is in the roadmap already (${status || 'unfinished'}).`);
-    }
+    };
+    inRoadmap(roadmapOf(p.id));
+    // the before score first: reading the facts after the roadmap write raced its file on Windows (EPERM);
+    // the roadmap is read again after it, so the write starts from the current stages
+    const target = files[0];
+    const before = outcomes.fileScore(await modelOf(p), target);
+    const roadmap = roadmapOf(p.id);
+    inRoadmap(roadmap);
     const planned = plannedFiles(p.id);
     const enriched = { ...roadmap, stages: roadmap.stages.map((s) => ({ ...s, items: s.items.map((x) => withFiles(x, planned)) })) };
-    const files = filesOf(proposal);
     const item = { workflow: WORKFLOW, workflowName: 'Refactor', issues: [{ number }], reason: proposal.rankReason || `Refactor: ${proposal.title || proposal.improvement || proposal.target}` };
     const issues = syncedIssues(p.id);
     const write = { issues, alive: ctx.runAlive };
@@ -175,8 +182,6 @@ module.exports = (ctx) => {
         roadmaps.saveStages(ctx.ws.backlog, p.id, stages, write);
       }
     });
-    const target = files[0];
-    const before = outcomes.fileScore(await modelOf(p), target);
     const stored = proposals.updateProposal(root(), p.id, proposal.id, { roadmapAt: new Date().toISOString(), outcome: undefined, ...(before ? { before: { ...before, file: target, at: new Date().toISOString() } } : {}) });
     try { await ctx.dispatchRoadmaps?.(); } catch (e) { console.error('Refactor roadmap:', e.message); }
     const placed = roadmaps.issueStages(roadmapOf(p.id)).get(number);

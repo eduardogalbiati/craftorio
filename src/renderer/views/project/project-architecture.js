@@ -6,7 +6,9 @@
 // on a bar coloured by severity, target, one sentence, new / kept) with "Read more" for the evidence
 // and the refactor, filters by severity and new / kept with their counts, "Send to Refactor" per
 // finding and "Send all to Refactor" for the ones shown (architecture:sendToRefactor, a proposal of
-// the Refactor tab), the gone ones folded. Then the git facts (architecture:facts, numbers from
+// the Refactor tab, its issue and the waiting stage, #435; once sent the same button, disabled,
+// "Sent to Refactor", with a link to its issue and stage next to it, #447; new / kept translated),
+// the gone ones folded. Then the git facts (architecture:facts, numbers from
 // src/shared/architecture-model.js), titled with an ⓘ that opens what the numbers cannot tell: the
 // commit, window, mass changes and shallow clone, the project's own quality gate as one row of
 // chips, the exclusions in one line (editable, architecture:setExclude), the complexity in one line
@@ -202,21 +204,38 @@
     return files.length ? `${files[0].path}${files.length > 1 ? ` +${files.length - 1}` : ''}` : f.kind || '';
   };
   const findingSummary = (f) => ArchitectureFactsView.firstSentence(f.title || f.evidence || f.kind);
+  // a finding's new / kept / gone in the interface language (#447)
+  const statusLabel = (s) => ({ gone: t('project_architecture.status_gone'), kept: t('project_architecture.status_kept'), new: t('project_architecture.status_new') })[s] ?? esc(s || '');
+  // where a sent finding went (#435): its issue and its roadmap stage, '' before it is filed
+  const sentWhere = (to) => {
+    if (!to?.issue) return '';
+    if (!to.stage) return `#${to.issue}`;
+    return t(to.waiting ? 'project_architecture.sent_where_waiting' : 'project_architecture.sent_where', { issue: to.issue, stage: to.stage });
+  };
+  // Send to Refactor; once sent the same button, disabled (#447), with a link to where it went next to it
+  function sendHtml(f) {
+    if (!f.sent) return `<button type="button" class="btn sm" data-testid="architecture-send-refactor" data-arch-send="${f.index}">${t('project_architecture.send_to_refactor')}</button>`;
+    const where = sentWhere(f.sentTo);
+    const title = where ? t('project_architecture.sent_to_refactor_title', { where }) : t('project_architecture.sent_to_refactor_no_issue');
+    const button = `<button type="button" class="btn sm" data-testid="architecture-send-refactor" disabled title="${esc(title)}">${t('project_architecture.sent_to_refactor')}</button>`;
+    const link = where && f.sentTo.issueUrl ? `<a class="arch-refactor-where small" data-testid="architecture-refactor-where" href="${esc(f.sentTo.issueUrl)}" target="_blank" rel="noopener" title="${esc(title)}">${esc(where)}</a>`
+      : where ? `<span class="arch-refactor-where small muted" data-testid="architecture-refactor-where">${esc(where)}</span>` : '';
+    return button + link;
+  }
 
   // a finding: one line (its score on a bar coloured by its severity, its target, one sentence,
   // new / kept), "Read more" opens the evidence and the refactor
   function findingHtml(f, key) {
     const gone = f.status === 'gone';
     const open = cur.expanded.has(key);
-    const send = gone ? '' : f.sent ? `<span class="badge" data-testid="architecture-send-refactor">${t('project_architecture.sent_to_refactor')}</span>`
-      : `<button type="button" class="btn sm" data-testid="architecture-send-refactor" data-arch-send="${f.index}">${t('project_architecture.send_to_refactor')}</button>`;
+    const send = gone ? '' : sendHtml(f);
     const files = (f.files || []).map((x) => `<span class="mono" title="${esc(x.path)}">${esc(x.lines ? `${x.path}:${x.lines}` : x.path)}</span>`).join(', ');
     return `<li class="arch-finding arch-row ${severityClass(f.severity)}${gone ? ' arch-gone' : ''}" data-testid="${gone ? 'architecture-finding-gone' : 'architecture-finding'}">
       <span class="arch-score" data-testid="architecture-finding-score" title="${esc(`${f.severity || 'no'} severity. ${ArchitectureFactsView.SCORE_FORMULA}`)}">${f.score}</span>
       <div class="arch-finding-body">
         <div class="arch-finding-line"><span class="mono arch-target" title="${esc(filePaths(f))}">${esc(target(f))}</span>
           <span class="arch-finding-summary" data-testid="architecture-finding-summary" title="${esc(f.title || '')}">${esc(findingSummary(f))}</span>
-          <span class="badge${f.status === 'new' ? ' live' : ''}">${esc(f.status || '')}</span>
+          <span class="badge${f.status === 'new' ? ' live' : ''}" data-testid="architecture-finding-status">${statusLabel(f.status)}</span>
           <button type="button" class="link-btn" data-testid="architecture-finding-more" data-arch-more="${esc(key)}" aria-expanded="${open}">${open ? t('project_architecture.read_less') : t('project_architecture.read_more')}</button>${send}</div>
         <div class="arch-finding-details small${open ? '' : ' hidden'}" data-testid="architecture-finding-details">
           <div class="row"><span class="badge${f.severity === 'high' ? ' warn' : ''}">${esc(f.severity)}</span><span class="badge mono">${esc(f.kind)}</span>${files}</div>
@@ -500,9 +519,10 @@
     const reportId = c?.view?.report?.id;
     if (!reportId) return;
     try {
-      const { proposal } = await api.sendFindingToRefactor(c.id, reportId, index);
-      if (c.view.findings[index]) c.view.findings[index].sent = true;
-      showToast(t('project_architecture.sent_title_to_the_refactor_tab', { title: proposal.title }));
+      const { proposal, sentTo } = await api.sendFindingToRefactor(c.id, reportId, index);
+      if (c.view.findings[index]) Object.assign(c.view.findings[index], { sent: true, sentTo: sentTo || null });
+      const where = sentWhere(sentTo);
+      showToast(where ? t('project_architecture.sent_title_to_refactor_where', { title: proposal.title, where }) : t('project_architecture.sent_title_to_the_refactor_tab', { title: proposal.title }));
     } catch (e) {
       c.error = errMsg(e);
     }
@@ -519,13 +539,14 @@
     render();
     let sent = 0;
     for (const f of list) {
+      let out;
       try {
-        await api.sendFindingToRefactor(c.id, reportId, f.index);
+        out = await api.sendFindingToRefactor(c.id, reportId, f.index);
       } catch (e) {
         c.error = errMsg(e);
         break;
       }
-      if (c.view.findings[f.index]) c.view.findings[f.index].sent = true;
+      if (c.view.findings[f.index]) Object.assign(c.view.findings[f.index], { sent: true, sentTo: out?.sentTo || null });
       sent++;
     }
     c.sending = false;

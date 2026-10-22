@@ -8,15 +8,16 @@
 
 const DANGER_ZONE = 'danger-zone';
 const DAY_MS = 24 * 3600e3;
+const UNMEASURED = 'unmeasured';
 
 /** A model quadrant ('Danger Zone', 'Healthy Closure'…) as the outcome stores it ('danger-zone'…), null when not measured. */
 const quadrantOf = (q) => (q ? String(q).trim().toLowerCase().replace(/\s+/g, '-') : null);
 
-/** The `{ quadrant, score }` of `file` in an architecture model (score 0 when not measured), or null without a model. */
+/** The `{ quadrant, score }` of `file` in an architecture model (score 0 and quadrant 'unmeasured' when not measured, #435), or null without a model. */
 function fileScore(model, file) {
   if (!model || !file) return null;
   const row = (model.files || []).find((r) => r.file === file);
-  return { quadrant: quadrantOf(row?.quadrant), score: Number(row?.score) || 0 };
+  return { quadrant: quadrantOf(row?.quadrant) || UNMEASURED, score: Number(row?.score) || 0 };
 }
 
 /** Whether the target left the Danger Zone, how much its score dropped, and whether it improved at all. */
