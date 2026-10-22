@@ -64,18 +64,24 @@ function runNotice(ev, run = {}, { gateLink } = {}) {
       return notice('fallback', t('notify.fallback_title', { name: name() }), t('notify.fallback_body', {
         agent: ev.agent, step: ev.step_id || t('notify.a_turn'), from: ev.from, to: ev.to, reason: clip(ev.reason, 120),
       }));
-    // #312: an account hit its usage limit and the turn moved to the provider's next account; or none is left
-    case 'agent.account_switch':
-      return notice('fallback', t('notify.account_switch_title', { name: name() }), t('notify.account_switch_body', {
-        agent: ev.agent, step: ev.step_id || t('notify.a_turn'), from: ev.from, to: ev.to,
-      }));
-    case 'run.waiting_credits':
-      return notice('fallback', t('notify.waiting_credits_title', { name: name() }), t('notify.waiting_credits_body', {
-        provider: ev.provider,
-      }));
     default:
-      return null;
+      return accountNotice(ev, notice, name);
   }
+}
+
+// #312: an account hit its usage limit and the turn moved to the provider's next account; or none is left
+function accountNotice(ev, notice, name) {
+  if (ev.type === 'agent.account_switch') {
+    return notice('fallback', t('notify.account_switch_title', { name: name() }), t('notify.account_switch_body', {
+      agent: ev.agent, step: ev.step_id || t('notify.a_turn'), from: ev.from, to: ev.to,
+    }));
+  }
+  if (ev.type === 'run.waiting_credits') {
+    return notice('fallback', t('notify.waiting_credits_title', { name: name() }), t('notify.waiting_credits_body', {
+      provider: ev.provider,
+    }));
+  }
+  return null;
 }
 
 // The notice for a run that died with the app (found at the next start).

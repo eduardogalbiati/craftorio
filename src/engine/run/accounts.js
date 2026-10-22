@@ -12,7 +12,12 @@
 
 'use strict';
 
-const { accountEnv, isQuotaError, quotaResetAt, sleep } = require('../providers');
+const {
+  accountEnv,
+  isQuotaError,
+  quotaResetAt,
+  sleep,
+} = require('../providers');
 
 // how long an account stays out when its limit message gives no reset time (Settings' accountCooldownMinutes)
 const DEFAULT_COOLDOWN_MS = 60 * 60e3;

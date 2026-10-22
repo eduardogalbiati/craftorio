@@ -19,8 +19,8 @@
   function rowHtml(account = {}, isNew = false) {
     return `<div class="acct-row" data-testid="settings-account-row"${isNew ? ' data-new="1"' : ''}>
         <div class="acct-fields">
-          <input type="text" data-acct="name" value="${esc(account.name || '')}" placeholder="Claude B" aria-label="${t('settings.accounts.name')}" spellcheck="false" />
-          <input type="text" data-acct="dir" class="mono" value="${esc(account.dir || '')}" placeholder="C:\\Users\\me\\.claude-b" aria-label="${t('settings.accounts.dir')}" spellcheck="false" title="${esc(account.dir || '')}" />
+          <input type="text" data-acct="name" value="${esc(account.name || '')}" placeholder="${esc(t('settings.accounts.name_placeholder'))}" aria-label="${t('settings.accounts.name')}" spellcheck="false" />
+          <input type="text" data-acct="dir" class="mono" value="${esc(account.dir || '')}" placeholder="${esc(t('settings.accounts.dir_placeholder'))}" aria-label="${t('settings.accounts.dir')}" spellcheck="false" title="${esc(account.dir || '')}" />
           <label class="small acct-enabled"><input type="checkbox" data-acct="enabled"${account.enabled === false ? '' : ' checked'} />${t('settings.accounts.enabled')}</label>
           <span class="pill pill-idle hidden" data-testid="settings-account-signed-in"></span>
           <button type="button" class="btn sm ghost" data-acct-remove aria-label="${t('settings.accounts.remove')}">${t('settings.accounts.remove')}</button>

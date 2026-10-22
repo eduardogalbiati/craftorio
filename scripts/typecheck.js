@@ -16,6 +16,7 @@ const ROOT = path.join(__dirname, '..');
 // files that opted in with // @ts-check (sorted, one per line)
 const CHECKED = [
   'src/cost-estimate.js',
+  'src/engine/run/accounts.js',
   'src/engine/run/checkout.js',
   'src/engine/run/costs.js',
   'src/engine/run/field-rules.js',

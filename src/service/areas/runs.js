@@ -55,6 +55,8 @@ const settingsFallbacks = (settings) => Object.fromEntries(Object.entries(settin
 const settingsAccounts = (settings) => Object.fromEntries(Object.entries(settings.providers || {})
   .map(([name, p]) => [name, (Array.isArray(p?.accounts) ? p.accounts : []).filter((a) => a?.name && a?.dir)])
   .filter(([, list]) => list.length));
+// #312: Settings' accountCooldownMinutes (60 by default) as the WorkflowRun `accountCooldownMs` option
+const settingsAccountCooldownMs = (settings) => (settings.accountCooldownMinutes ?? 60) * 60e3;
 
 module.exports = (ctx) => {
   const { events } = ctx;
@@ -400,7 +402,7 @@ module.exports = (ctx) => {
         localPreview: project?.localPreview?.command ? project.localPreview : null,
         budget, prices: settings.prices, projectId, issues, resume, attachments, mockSequences: mock ? mockSequences : null, then, from,
         agentOverrides, fallbacks: settingsFallbacks(settings), models: settings.models || {},
-        accounts: settingsAccounts(settings), accountCooldownMs: (settings.accountCooldownMinutes ?? 60) * 60e3,
+        accounts: settingsAccounts(settings), accountCooldownMs: settingsAccountCooldownMs(settings),
         // #337: tonight's limits, read at each check (a raise reaches the run at its next one)
         nightLimits: () => nightLimits.tonightLimits(ws.oracle || path.join(ws.root, 'oracle')),
         // #327: Settings › Language, read at each turn (a change reaches the run at its next turn)

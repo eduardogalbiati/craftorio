@@ -90,10 +90,11 @@ const methods = {
   // fallbackFrom: { from: '<provider>:<model>', reason } the session an agent fell back from (#262);
   // account: { name, dir } the provider account it runs on (#312; its folder is never recorded)
   openSession({ agent, provider, model, effort = null, parentId, stepId, mode = null, simulates = null, fallbackFrom = null, account = null }) {
+    const acct = /** @type {{ name?: string, dir?: string } | null} */ (account);
     const s = {
       id: agent === 'orchestrator' ? 'orchestrator' : `s${++this.nSession}`,
       agent, provider, model, effort, parentId, stepId, mode, simulates, fallbackFrom,
-      account: account?.name || null, accountDir: account?.dir || null,
+      account: acct?.name || null, accountDir: acct?.dir || null,
       openedAt: Date.now(), closedAt: null,
       turns: 0, activeMs: 0, tokens: emptyUsage(), costUsd: 0,
       status: 'idle', providerSessionId: null,
