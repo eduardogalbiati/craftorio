@@ -945,8 +945,11 @@ function showToast(title, detail, runId = null, gate = null, { action = null } =
 // #208: the page itself never scrolls (each view scrolls inside); a clipped root still scrolls
 // programmatically (scrollIntoView, focus), which shifted the whole app sideways: undo it at once.
 window.addEventListener('scroll', () => { if (window.scrollX || window.scrollY) window.scrollTo(0, 0); });
-// #466: a file dropped outside a drop zone never navigates the window to it (the zones handle their own)
-for (const type of ['dragover', 'drop']) document.addEventListener(type, (e) => e.preventDefault());
+// #466: a file or a link dropped outside a drop zone never navigates the window to it (the zones
+// handle their own); text dragged into a text box still drops there
+const navigatingDrop = (e) => [...(e.dataTransfer?.types || [])].some((t) => t === 'Files' || t === 'text/uri-list');
+document.addEventListener('dragover', (e) => e.preventDefault());
+document.addEventListener('drop', (e) => { if (navigatingDrop(e)) e.preventDefault(); });
 
 // The screens of views/ load after this script and register their markup as they load; the page may
 // yield between scripts (an IPC reply can run then), so init starts once every screen is in place.

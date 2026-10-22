@@ -7,13 +7,16 @@ Read this before changing anything in `src/renderer/`.
   or `api-http.js` over the engine server; a test keeps their method lists equal).
 - **The window never navigates** (#466, `src/window-guards.js` on the main, Agents and connection
   windows): every `will-navigate` is prevented (http(s) goes to the browser), `window.open` is
-  denied, no webview attaches, and `app.js` prevents `dragover`/`drop` at the document so a file
-  dropped outside a drop zone is ignored (a zone calls its own `preventDefault`; never
-  `stopPropagation` at the document). The CSP meta adds `form-action`, `object-src` and `base-uri 'none'`.
+  denied, no webview attaches (a page's own `location.reload` too: the desktop restarts through
+  `app:relaunch`), and `app.js` prevents `dragover`, and `drop` of files or links, at the document so
+  a file dropped outside a drop zone is ignored while text still drops into a text box (a zone calls
+  its own `preventDefault`; never `stopPropagation` at the document). The CSP meta adds
+  `form-action`, `object-src` and `base-uri 'none'`.
 - **Untrusted HTML keeps no forms** (#466): agent markdown, READMEs, PR and issue bodies go through
   `sanitizeHtml` (`artifact-render.js`), which forbids `form`, `input`, `button`, `textarea`,
-  `select`, `style` and the `action`/`formaction` attributes. A control the UI needs is built by
-  the screen's own code, never by rendered markdown.
+  `select`, `style` and the `action`/`formaction` attributes. The only control markdown keeps is a
+  task list's disabled checkbox: marked emits a `data-md-task` marker and `markdownHtml` draws the
+  checkbox after sanitizing. Any other control the UI needs is built by the screen's own code.
 - **IPC contract** (#467, `src/ipc-guard.js`): every channel `src/main.js` registers answers only
   the app's page (`isAppPage`, the Agents window's `?window=agents` included) in a window's top
   frame; another page or a subframe gets an error (an `on` channel: nothing, `sendSync` gets null)

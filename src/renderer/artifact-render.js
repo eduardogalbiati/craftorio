@@ -16,7 +16,10 @@ function fmtSize(n) {
 
 // ---- markdown ----
 let mdHooked = false;
-// #466: untrusted HTML keeps no form or form control (a click would navigate the window to a local page)
+let mdTasks = false;
+// #466: untrusted HTML keeps no form or form control (a click would navigate the window to a local page).
+// A task list's checkbox goes through as a marker (data-md-task) and markdownHtml draws it back as a
+// disabled checkbox, so done and not-done items still read apart.
 const PURIFY = {
   FORBID_TAGS: ['form', 'input', 'button', 'textarea', 'select', 'style'],
   FORBID_ATTR: ['action', 'formaction'],
@@ -39,8 +42,20 @@ const slugify = (s) => String(s).toLowerCase().trim().replace(/[^\p{L}\p{N}\s-]/
 // Sanitized markdown -> HTML string (escaped text when the libraries are missing).
 function markdownHtml(text) {
   if (typeof marked === 'undefined' || typeof DOMPurify === 'undefined') return `<pre class="art-code">${esc(text)}</pre>`;
+  if (!mdTasks) {
+    mdTasks = true;
+    marked.use({ renderer: { checkbox: ({ checked }) => `<span data-md-task="${checked ? 'done' : 'todo'}"></span> ` } });
+  }
   const tmp = document.createElement('div');
   tmp.innerHTML = sanitizeHtml(marked.parse(String(text || ''), { gfm: true }));
+  tmp.querySelectorAll('[data-md-task]').forEach((m) => {
+    const box = document.createElement('input');
+    // attributes, not properties: the markup leaves as an HTML string
+    box.setAttribute('type', 'checkbox');
+    box.setAttribute('disabled', '');
+    if (m.getAttribute('data-md-task') === 'done') box.setAttribute('checked', '');
+    m.replaceWith(box);
+  });
   // wide tables scroll on their own
   tmp.querySelectorAll('table').forEach((t) => { const w = document.createElement('div'); w.className = 'md-table'; t.replaceWith(w); w.appendChild(t); });
   return tmp.innerHTML;
