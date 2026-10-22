@@ -218,8 +218,8 @@
     const where = sentWhere(f.sentTo);
     const title = where ? t('project_architecture.sent_to_refactor_title', { where }) : t('project_architecture.sent_to_refactor_no_issue');
     const button = `<button type="button" class="btn sm" data-testid="architecture-send-refactor" disabled title="${esc(title)}">${t('project_architecture.sent_to_refactor')}</button>`;
-    const link = where && f.sentTo.issueUrl ? `<a class="small" data-testid="architecture-refactor-where" href="${esc(f.sentTo.issueUrl)}" target="_blank" rel="noopener" title="${esc(title)}">${esc(where)}</a>`
-      : where ? `<span class="small muted" data-testid="architecture-refactor-where">${esc(where)}</span>` : '';
+    const link = where && f.sentTo.issueUrl ? `<a class="small arch-sent-where" data-testid="architecture-refactor-where" href="${esc(f.sentTo.issueUrl)}" target="_blank" rel="noopener" title="${esc(title)}">${esc(where)}</a>`
+      : where ? `<span class="small muted arch-sent-where" data-testid="architecture-refactor-where" title="${esc(title)}">${esc(where)}</span>` : '';
     return button + link;
   }
 

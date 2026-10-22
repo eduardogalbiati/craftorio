@@ -13,7 +13,8 @@
 // (view-registry.js); uses app.js globals ($, esc, state, api, errMsg, showView, openDrawer,
 // noteRunMeta) and showProjects (views/projects/projects.js).
 
-const PV_TABS = [['overview', 'Overview'], ['conflicts', 'Conflict map'], ['architecture', 'Architecture'], ['refactor', 'Refactor']];
+// [id, i18n key of its label]
+const PV_TABS = [['overview', 'project.overview'], ['conflicts', 'project.conflict_map'], ['architecture', 'project.architecture'], ['refactor', 'project.refactor']];
 const PV_TABS_KEY = 'multiagent.projectTabs';
 
 // the tab each project was last shown on: { <projectId>: <tab> }
@@ -88,7 +89,7 @@ function renderProjectView() {
   $('#pv-open-folder').onclick = () => p && api.openPath(p.folder);
   $('#pv-start').onclick = () => openDrawer({ project: pv.id });
   $('#project-tabs').innerHTML = PV_TABS.map(([id, label]) =>
-    `<button type="button" class="tab${pv.tab === id ? ' active' : ''}" role="tab" data-pv-tab="${id}" aria-selected="${pv.tab === id}" aria-controls="project-panel-${id}">${label}</button>`).join('');
+    `<button type="button" class="tab${pv.tab === id ? ' active' : ''}" role="tab" data-pv-tab="${id}" aria-selected="${pv.tab === id}" aria-controls="project-panel-${id}">${t(label)}</button>`).join('');
   for (const [id] of PV_TABS) $(`#project-panel-${id}`).classList.toggle('hidden', pv.tab !== id);
   if (pv.tab === 'conflicts') window.ProjectConflictMap?.show(pv.id, $('#project-conflicts'));
   if (pv.tab === 'architecture') {

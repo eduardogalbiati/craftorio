@@ -9,7 +9,8 @@
 // enabling it is the owner's authorization), or with `runNow` after the stage in progress
 // (placeRunNow), written through src/roadmap.js, the target's Danger Zone score kept on the proposal
 // (`before`). ctx.planRefactor (#435) is the Architecture tab's Send to Refactor: it files the issue
-// and plans it the same way.
+// and plans it the same way (in a simulation without host.fileIssue, a simulated issue in the synced
+// backlog).
 // The cadence ("Add a refactor to the roadmap every X runs", <workspace>/refactor/<project id>/
 // cadence.json { on, every, since }) listens to run:event: after every X real finished runs of the
 // project since it was turned on (or since its last item) the top ranked proposal with an issue and
@@ -23,6 +24,7 @@ const agentsMod = require('../../agents');
 const arch = require('../../oracle-architecture');
 const backlog = require('../../backlog');
 const cadenceRules = require('../../refactor-cadence');
+const commits = require('../../discovery-commit');
 const conflictMaps = require('../../conflict-map');
 const facts = require('../../architecture-facts');
 const outcomes = require('../../refactor-outcome');
@@ -190,8 +192,8 @@ module.exports = (ctx) => {
 
   // ---- the issue (src/refactor-issues.js) ------------------------------------------------------
   // #435: host.fileIssue(draft) → { number, url } stands in for gh/glab (tests, UI checks), in simulation too
-  async function fileWithHost(p, proposal, draft) {
-    const out = await ctx.host.fileIssue(draft);
+  async function fileWithHost(p, proposal, draft, file = ctx.host.fileIssue) {
+    const out = await file(draft);
     const number = Number(out?.number) || null;
     if (!number) throw new Error('The issue was filed but its number could not be read: sync the backlog and link it.');
     return proposals.updateProposal(root(), p.id, proposal.id, { issue: number, issueUrl: out.url || null });
@@ -210,18 +212,31 @@ module.exports = (ctx) => {
     return { preview: false, command: draft.command.display, body: draft.body, proposal: stored };
   }
 
+  // #435: a simulation without a host filer files into the synced backlog with the next free number
+  // (src/discovery-commit.js simulatedExec), never gh/glab
+  function simulatedFiler(p) {
+    const exec = commits.simulatedExec({ backlogDir: ctx.ws.backlog, projectId: p.id });
+    return async (draft) => {
+      fs.mkdirSync(path.dirname(draft.file), { recursive: true });
+      fs.writeFileSync(draft.file, draft.body);
+      const url = String(await exec(draft.command.cli, draft.command.args)).trim();
+      return { number: Number(url.match(/\/(\d+)\/?$/)?.[1]) || null, url };
+    };
+  }
+
   /**
-   * #435 Send to Refactor: files `proposal` as an issue when it has none (as File as issue does) and
-   * plans it in the waiting stage. Without a synced backlog, or in a simulation without a host filer,
-   * the proposal stays as it is (the tab files it later). The stored proposal.
+   * #435 Send to Refactor: files `proposal` as an issue when it has none (as File as issue does; a
+   * simulation without a host filer files a simulated one) and plans it in the waiting stage. Without
+   * a synced backlog the proposal stays as it is (the tab files it later). The stored proposal.
    */
   async function planRefactor(projectId, proposal) {
     const p = projectOf(projectId);
     let stored = proposal;
     if (!stored.issue) {
-      const filer = !!ctx.host?.fileIssue || !simulation.simulationOnly();
-      if (!filer || !backlog.readBacklog(ctx.ws.backlog, p.id)) return stored;
-      stored = (await fileIssue({ projectId: p.id, id: stored.id })).proposal;
+      const data = backlog.readBacklog(ctx.ws.backlog, p.id);
+      if (!data) return stored;
+      if (ctx.host?.fileIssue || !simulation.simulationOnly()) stored = (await fileIssue({ projectId: p.id, id: stored.id })).proposal;
+      else stored = await fileWithHost(p, stored, asClient(() => refactorIssues.issueDraft({ root: root(), project: p, proposal: stored, data })), simulatedFiler(p));
     }
     if (stored.status === 'dismissed' || cadenceRules.unfinishedNumbers(roadmapOf(p.id)).has(Number(stored.issue))) return stored;
     return (await addToRoadmap(p, stored)).proposal;

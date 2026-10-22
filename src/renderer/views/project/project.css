@@ -78,8 +78,11 @@
 .arch-finding-body { padding: 6px 10px; min-width: 0; flex: 1; display: grid; gap: 4px; }
 .arch-finding-line { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .arch-target { flex: 0 1 auto; max-width: 32ch; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
-.arch-finding-summary { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* the line packs to the left, so Send to Refactor keeps its place when it turns into Sent (#447) and
+   the link to where it went, last, shrinks before the summary does */
+.arch-finding-summary { flex: 0 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .arch-finding-line .link-btn, .arch-finding-line .btn, .arch-finding-line .badge { flex: none; }
+.arch-sent-where { flex: 0 1000 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .arch-finding-details p { margin: 4px 0 0; }
 .arch-finding-details .row { gap: 6px; flex-wrap: wrap; align-items: center; }
 .arch-gone-list { margin-top: 10px; }
