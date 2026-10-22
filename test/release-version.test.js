@@ -127,3 +127,42 @@ test('#436 recentReleases of an empty or missing list is []', () => {
   assert.equal(recentReleases(undefined).length, 0);
   assert.equal(recentReleases([rel('1.2.0', '2026-10-20T10:00:00.000Z', 1, { status: 'held' })]).length, 0, 'none shipped');
 });
+
+// ---- two-part names (review) ---------------------------------------------------------------------------
+
+test('#436 a two-part last name stays two-part on a minor or a major: v1.4 → v1.5, v1.4 → v2.0', () => {
+  const { suggestVersion } = load();
+  assert.equal(suggestVersion({ last: 'v1.4', issues: [issue(1, 'enhancement')] }).version, 'v1.5');
+  assert.equal(suggestVersion({ last: 'v1.4', issues: [issue(1, 'breaking')] }).version, 'v2.0');
+});
+
+test('#436 a patch of a two-part last name takes the third part: v1.4 → v1.4.1', () => {
+  const out = load().suggestVersion({ last: 'v1.4', issues: [issue(1, 'bug')] });
+  assert.deepEqual([out.version, out.bump], ['v1.4.1', 'patch']);
+});
+
+// ---- releaseIssues: what a cut line ships (review) -----------------------------------------------------
+
+const st = (items, extra = {}) => ({ items: items.map(([number, status = 'planned']) => ({ number, status })), ...extra });
+const numbers = (list) => list.map((i) => i.number).sort((a, b) => a - b);
+
+test('#436 releaseIssues with no cut before: the issues done since the last release and the ones planned up to the cut', () => {
+  const stages = [st([[10, 'done'], [11]]), st([[12]]), st([[13]])];
+  const out = load().releaseIssues(stages, 1, [{ number: 9 }, { number: 10 }]);
+  assert.deepEqual(numbers(out), [9, 10, 11, 12], 'stage 3 is past the cut; #10 once');
+});
+
+test('#436 releaseIssues leaves out disabled stages and skipped items', () => {
+  const stages = [st([[11], [12, 'skipped']]), st([[13]], { disabled: true }), st([[14]])];
+  assert.deepEqual(numbers(load().releaseIssues(stages, 2, [])), [11, 14]);
+});
+
+test('#436 releaseIssues after a shipped cut: only the stages after it, and what is done since the last release', () => {
+  const stages = [st([[11]], { release: { name: '1.1.2', status: 'shipped' } }), st([[12]]), st([[13]])];
+  assert.deepEqual(numbers(load().releaseIssues(stages, 2, [{ number: 9 }])), [9, 12, 13]);
+});
+
+test('#436 releaseIssues after a cut not shipped yet: that cut holds what is done since the last release', () => {
+  const stages = [st([[11]], { release: { name: '1.2.0', status: 'planned' } }), st([[12]]), st([[13]])];
+  assert.deepEqual(numbers(load().releaseIssues(stages, 2, [{ number: 9 }])), [12, 13]);
+});

@@ -177,6 +177,26 @@ test('#426 epic filter: "Run later" passes the stages the epic hides (no item of
   assert.equal(ids(saved[0][1]), 'L,M,N,K', 'K lands after N, the next stage of the epic; L and M keep their order');
 });
 
+test('#426 date range: in All with "Last 24 hours", "Run later" passes the stages with nothing in the range', async () => {
+  const { R, saved } = load();
+  const recent = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const old = '2020-01-01T00:00:00.000Z';
+  const done = (id, n, origin) => H.item(id, 'done', n, `Issue ${n}`, { runId: null, runs: [], error: null, origin });
+  const d = {
+    roadmap: {
+      state: 'planned',
+      updatedAt: T1,
+      stages: [stage('K', [done('k1', 401, recent)]), stage('L', [done('l1', 402, old)]), stage('M', [done('m1', 403, old)]), stage('N', [done('n1', 404, recent)])],
+    },
+    issues: [],
+  };
+  const view = { showAll: true, since: '24h' }; // draws K and N
+  assert.equal(stageOf(R.html(d, () => {}, view), 1), null, 'L is out of the range (fixture check)');
+  await moveStage(R, d, 0, 'down', view);
+  assert.equal(saved.length, 1, 'one save');
+  assert.equal(ids(saved[0][1]), 'L,M,N,K', 'K lands after N, the next stage in the range; L and M keep their order');
+});
+
 // ---- 4. the toast and the history name the real stage numbers -----------------------------------------
 
 test('#426 the toast names the stage\'s number before and after the move, from the real indexes', async () => {
