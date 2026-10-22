@@ -187,6 +187,8 @@
 
   // what the screen shows, to tell an automatic refresh that changes nothing (#214)
   let shownData = '';
+  // (#491: the light state's mark and backlogChanged's answer, while the owner is busy)
+  let busyChecked = null;
   // (`edit`, #281: the id a save answers with for its Undo toast, is not something the screen shows:
   // with it in the key, the backlog:changed that follows every edit redrew the same list once more)
   const dataKey = (id, data) => `${id}:${JSON.stringify(data ? { ...data, edit: undefined } : null)}`;
@@ -194,6 +196,7 @@
   function setData(data, { merged = false } = {}) {
     bl.data = data;
     shownData = merged ? null : dataKey(bl.projectId, data);
+    busyChecked = null;
     // selected issues that left To do (assigned, closed) are dropped from the selection
     const ok = new Set((data?.issues || []).filter(selectable).map((i) => i.number));
     for (const n of [...bl.selected]) if (!ok.has(n)) bl.selected.delete(n);
@@ -322,10 +325,13 @@
         const merged = light && bl.projectId === id && !bl.syncing && window.BacklogRoadmap.mergeState(bl.data, light);
         shownState = merged ? key : '';
         if (merged) {
-          const view = $b('#view-backlog');
-          const top = view?.scrollTop;
-          setData(merged, { merged: true }); render();
-          if (view && top != null) view.scrollTop = top;
+          // like reload(): a drawing error keeps what is shown
+          try {
+            const view = $b('#view-backlog');
+            const top = view?.scrollTop;
+            setData(merged, { merged: true }); render();
+            if (view && top != null) view.scrollTop = top;
+          } catch { /* keep what is shown */ }
           return;
         }
       }
@@ -334,14 +340,23 @@
     await liveReload.running;
     if (liveReload.again) { liveReload.again = false; await liveReload(); }
   }
-  // whether the Backlog now differs from what is shown (kept in bl.latest for the notice)
+  // whether the Backlog now differs from what is shown (kept in bl.latest for the notice). #491: on
+  // the Roadmap the light state is read first; the whole Backlog only when the roadmap's stages or
+  // `updatedAt` moved since the last check (`busyChecked`), else the last answer stands
   async function backlogChanged() {
     const id = bl.projectId;
     if (!id) return false;
     try {
+      let mark = null;
+      if (bl.mode === 'roadmap' && api.getBacklogState) {
+        const lr = (await api.getBacklogState(id).catch(() => null))?.roadmap;
+        mark = lr ? `${id}:${lr.shape}:${lr.updatedAt}` : null;
+        if (mark && busyChecked?.mark === mark) return busyChecked.changed;
+      }
       const data = await api.getBacklog(id);
       const changed = !!data && bl.projectId === id && dataKey(id, data) !== (shownData ??= dataKey(id, bl.data));
       bl.latest = changed ? data : null;
+      busyChecked = mark ? { mark, changed } : null;
       return changed;
     } catch { return false; }
   }
@@ -366,7 +381,7 @@
     p.querySelector('button').addEventListener('click', () => {
       window.BacklogRoadmap?.closeEdit();
       document.activeElement?.blur?.();
-      shownData = ''; // the closed form is re-rendered even when the data changed back
+      shownData = ''; busyChecked = null; // the closed form is re-rendered even when the data changed back
       liveReload();
     });
     form.prepend(p);

@@ -703,7 +703,7 @@ function renderSteps() {
     const msg = await termAction(b, { sessionId: b.dataset.log || wrap.dataset.log, runId: v.run?.id || state.run?.id, label: b.dataset.log ? `${label} base` : label });
     const line = wrap.querySelector('[data-term-msg]');
     line.textContent = msg.text;
-    line.classList.toggle('err', msg.error);
+    line.classList.toggle('error', !!msg.error);
   }));
 }
 

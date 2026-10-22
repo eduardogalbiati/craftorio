@@ -39,8 +39,12 @@ const MAX_ENV_RERUNS = 2;
 
 // The name of a suite step's round log (logs/<name>.log): suite-<visit> for the `suite` step, else
 // <step>-<visit> (an e2e step, #223); an environment rerun adds -env, -env-2… (#276)
+function envSuffix(reruns) {
+  return reruns ? `-env${reruns > 1 ? `-${reruns}` : ''}` : '';
+}
+
 function roundLogName(stepId, visit, reruns) {
-  const env = reruns ? `-env${reruns > 1 ? `-${reruns}` : ''}` : '';
+  const env = envSuffix(reruns);
   return stepId === 'suite' && !env ? `suite-${visit}` : `${stepId}-${visit}${env}`;
 }
 
@@ -285,7 +289,8 @@ const methods = {
     const project = this.worktree?.repo || this.ctx.worktree_dir || '';
     const scope = step.scope ? render(String(step.scope), this.ctx).trim() : 'full';
     // an environment rerun logs next to the round's own log
-    const env = reruns ? `-env${reruns > 1 ? `-${reruns}` : ''}` : '';
+    const env = envSuffix(reruns);
+    const roundLog = roundLogName(step.id, st.visits, reruns);
     // #403: the change on top of the current local base (checkout.js bringBaseIn), before the tree is taken
     const sync = await this.bringBaseIn(step);
     // a rebase that could not be aborted leaves a half-rebased tree: never tested
@@ -320,10 +325,11 @@ const methods = {
           baseCacheDir: path.join(root, 'cache', 'base-tests'),
           log: (level, message) => this.emitEvent('log', { level, message }),
           // a suite step other than `suite` (an e2e step, #223) logs under its own name
-          ...(step.id === 'suite' && !env ? {} : { logName: roundLogName(step.id, st.visits, reruns) }),
+          ...(step.id === 'suite' && !env ? {} : { logName: roundLog }),
           // #465: the log the command writes to, followed by the step's live terminal
           onLog: ({ path: rel, command, base }) => this.emitEvent('step.log', { step_id: step.id, path: rel, command, ...(base ? { base: true } : {}) }),
-          ...(logPrefix && !extra.logName ? { logPrefix } : {}),
+          // the wait for memory was written to the round's log: kept when this execution writes that file
+          ...(logPrefix && (extra.logName ? `${extra.logName}${env}` : roundLog) === roundLog ? { logPrefix } : {}),
           // #225: `coverage: true` adds node's coverage; the summary covers the files the run changed
           // (#396: and the failures are classed in or outside the change; null: unknown, in the change)
           coverage: step.coverage === true,

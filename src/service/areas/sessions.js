@@ -52,8 +52,10 @@ module.exports = (ctx) => {
     const runDir = ctx.runFolder(runId);
     const rel = String(logPath || '').replace(/\\/g, '/');
     const file = path.resolve(runDir, rel);
-    const logs = path.join(path.resolve(runDir), 'logs') + path.sep;
-    if (!rel || path.isAbsolute(rel) || /^[a-z]:/i.test(rel) || !file.startsWith(logs)) {
+    const logs = path.join(path.resolve(runDir), 'logs');
+    const inside = folderMatcher();
+    // a path relative to the run folder only (an absolute one, even into logs/, is refused)
+    if (!rel || path.isAbsolute(rel) || /^[a-z]:/i.test(rel) || !inside(file, logs) || inside(logs, file)) {
       throw new Error('Only a log of the run (its logs/ folder) opens in a log terminal.');
     }
     return { dir: path.resolve(runDir), rel: path.relative(runDir, file).replace(/\\/g, '/'), file, title: `${rel.replace(/^logs\//, '')} · log` };

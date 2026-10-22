@@ -41,20 +41,22 @@
   // each item's status, runs and live run, the stages' pauses, the roadmap's state, the queue, the
   // refresh banner and the base check. Null when only the whole Backlog can tell: the stages were
   // edited (`shape`), a stage or an item the screen does not know, an item that ended (its error, PR
-  // and costs come with the full read) or the roadmap's state changed.
-  const LIVE = new Set(['running', 'queued', 'starting', 'waiting', 'parked']);
+  // and costs come with the full read), an item on another run (its workflow, steps and agents come
+  // with the full read) or the roadmap's state changed.
   const shape = (stages) => (stages || []).map((s) => `${s.id}:${(s.items || []).map((x) => x.id).join(',')}`).join('|');
   function mergeState(data, light) {
     const r = data?.roadmap;
     const lr = light?.roadmap;
     if (!r || !lr || (r.shape && lr.shape !== r.shape) || lr.state !== r.state) return null;
     if (shape(r.stages) !== shape(lr.stages)) return null;
+    const live = window.RoadmapModel?.LIVE_ITEM_STATES;
+    if (!live) return null;
     const items = new Map(lr.stages.flatMap((s) => s.items.map((x) => [x.id, x])));
-    const ended = r.stages.some((s) => s.items.some((x) => {
+    const stale = r.stages.some((s) => s.items.some((x) => {
       const l = items.get(x.id);
-      return l.status !== (x.status || null) && !LIVE.has(l.status);
+      return l.runId !== (x.runId || null) || (l.status !== (x.status || null) && !live.has(l.status));
     }));
-    if (ended) return null;
+    if (stale) return null;
     const pauses = new Map(lr.stages.map((s) => [s.id, s.pause]));
     const queue = light.queue && data.queue ? {
       ...data.queue,
@@ -86,7 +88,9 @@
 
   // the base check (#405) after a local merge: "running since HH:MM on <commit>" while its suite runs,
   // then green or red with the count; its log follows live in a read-only terminal either way.
-  // `clock`: the roadmap's HH:MM in the owner's time zone
+  // `clock`: the roadmap's HH:MM in the owner's time zone. The terminal's inline message is kept per
+  // check (`termMsg`), since the bar is drawn again on every live reload
+  let termMsg = null;
   function baseCheckHtml(c, clock) {
     if (!c?.status) return '';
     const commit = String(c.commit || '').slice(0, 8);
@@ -94,12 +98,17 @@
       : c.status === 'green' ? t('backlog_roadmap.base_check_green', { commit })
         : c.status === 'red' ? t('backlog_roadmap.base_check_red', { count: c.failures ?? 0, commit })
           : t('backlog_roadmap.base_check_failed', { error: c.error || '' });
-    return `<span class="rm-base-check small" data-testid="base-check-card" data-status="${esc(c.status)}"><span class="badge">${t('backlog_roadmap.base_check')}</span> <span title="${esc(c.commit || '')}">${esc(text)}</span>${termButtons('base-check', t('backlog_roadmap.follow_the_base_check_log'))}<span class="muted" data-term-msg></span></span>`;
+    const msg = termMsg?.key === `${c.commit}:${c.startedAt}` ? termMsg : null;
+    return `<span class="rm-base-check small" data-testid="base-check-card" data-status="${esc(c.status)}"><span class="badge">${t('backlog_roadmap.base_check')}</span> <span title="${esc(c.commit || '')}">${esc(text)}</span>${termButtons('base-check', t('backlog_roadmap.follow_the_base_check_log'))}<span class="muted${msg?.error ? ' error' : ''}" data-term-msg data-check="${esc(`${c.commit}:${c.startedAt}`)}">${esc(msg?.text || '')}</span></span>`;
   }
   async function baseCheckTerm({ ctx, target }, btn) {
     const msg = await termAction(btn, { sessionId: ctx.projectId, runId: null, label: t('backlog_roadmap.base_check') });
     const line = target.closest('.rm-base-check')?.querySelector('[data-term-msg]');
-    if (line) { line.textContent = msg.text; line.classList.toggle('error', msg.error); }
+    if (line) {
+      termMsg = { key: line.dataset.check, text: msg.text, error: !!msg.error };
+      line.textContent = msg.text;
+      line.classList.toggle('error', !!msg.error);
+    }
   }
 
   window.BacklogLive = {

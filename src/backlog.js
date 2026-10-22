@@ -55,6 +55,7 @@ const { writeJsonSafe } = require('./state-file');
 const { storeFor } = require('./store');
 const TimeZone = require('./time-zone');
 const { ARCHIVED_LABEL, archiveBlockReason } = require('./shared/backlog-archive');
+const { LIVE_ITEM_STATES } = require('./shared/roadmap-model');
 
 // the workflow of Write & Review: its runs enrich an issue's text, they do not implement it
 const ENRICH_WORKFLOW = 'writer-reviewer';
@@ -784,7 +785,6 @@ function runInputs(item, wf, folder) {
 // change), so it stays small however long the roadmap is. `shape`: a hash of the stages without what
 // runs change (statuses, runs, estimates), so the screen fetches the whole Backlog only when an edit
 // changed the stages (an issue added to an item, a note, a cut line), not on every status write
-const LIVE_ITEM = new Set(['running', 'queued', 'starting', 'waiting', 'parked']);
 const LIVE_KEYS = new Set([
   'actualMinutes',
   'actualTopStep',
@@ -809,7 +809,7 @@ function backlogState(data) {
   if (!data) return null;
   const r = data.roadmap || {};
   const runOf = (x) => {
-    if (!x.run || !LIVE_ITEM.has(x.status)) return {};
+    if (!x.run || !LIVE_ITEM_STATES.has(x.status)) return {};
     const { status, mock, startedAt, finishedAt, waiting, gate, atGate, progress, error } = x.run;
     return { run: { status, mock, startedAt, finishedAt, waiting, gate, atGate, progress, error } };
   };

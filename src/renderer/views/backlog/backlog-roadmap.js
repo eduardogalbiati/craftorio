@@ -1794,7 +1794,8 @@
       let base = { r, stages };
       await ReleaseName.cutLineDialog(from, ctx, data, at, async (name) => {
         const target = stage.id ? base.stages.find((s) => s.id === stage.id) : base.stages[at];
-        if (!target) return null;
+        // the stage was removed in the stored roadmap: nothing to save, the dialog says so
+        if (!target) return 'The stage was removed elsewhere: nothing was saved.';
         target.release = { name };
         const label = from ? t('backlog_roadmap.renamed_the_cut_line_name', { from, name }) : t('backlog_roadmap.set_the_cut_line_name', { name });
         const out = await save(ctx, base.r, base.stages, { label, dialog: true });

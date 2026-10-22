@@ -99,8 +99,10 @@ function runShot({ cwd, args, env, timeoutMs, signal, onSpawn, logFile = null })
     const done = (code, err) => {
       clearTimeout(timer);
       signal?.removeEventListener('abort', stop);
-      file?.end();
-      resolve({ code, output: err ? `${output}${err.message}` : output, timedOut });
+      const result = { code, output: err ? `${output}${err.message}` : output, timedOut };
+      // resolved once the log is flushed: the next capture's `$ <command>` line comes after this output
+      if (file && !file.writableEnded && !file.destroyed) file.end(() => resolve(result));
+      else resolve(result);
     };
     child.on('error', (e) => done(null, e));
     child.on('close', (code) => done(code));

@@ -28,6 +28,8 @@
   const ITEM_STATES = ['done', 'failed', 'parked', 'paused', 'planned', 'running', 'skipped'];
   // an item done (merged), skipped (the owner, or every issue closed) or parked counts as finished
   const FINISHED = new Set(['done', 'parked', 'skipped']);
+  // an item whose run still changes (#491): its live run is in the light backlog:state
+  const LIVE_ITEM_STATES = new Set(['parked', 'running']);
   const ACTIONS = ['disable', 'edit', 'enable', 'move', 'park', 'parkStage', 'pause', 'pauseStage', 'resume', 'retry', 'skip', 'start', 'stop'];
 
   // #395: a parked item (`parked`: { at, gate }) whose gate was answered later and whose run then
@@ -304,6 +306,7 @@
     ACTIONS,
     FINISHED,
     ITEM_STATES,
+    LIVE_ITEM_STATES,
     SINCE,
     STATES,
     allowedActions,
