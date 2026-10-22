@@ -881,6 +881,11 @@ steps:
   - id: suite
     fragment: test-pipeline
     type: suite
+    # also in the fragment's body; kept here (in the body's key order) so the raw workflow file says
+    # it records coverage (#225)
+    command: "{{ inputs.test_command }}"
+    scope: affected
+    coverage: true
   - id: test_failed
     fragment: test-pipeline
     type: human_approval
