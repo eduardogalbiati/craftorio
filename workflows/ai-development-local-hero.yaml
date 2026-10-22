@@ -1082,6 +1082,14 @@ steps:
         goto: code_review
       - when: "output.committed"
         goto: code_review
+      # #453: no commit this turn and no gaps, but the branch already has commits since the base
+      # (e.g. the test writer's commit already fixes the issue): the rule checks and the review judge
+      # those commits instead of develop looping until max_visits; a branch without any commit since
+      # the base still goes back to develop
+      - when: "not output.committed and worktree_dir | git_commits(inputs.base_branch) and worktree_dir | check_command(inputs.check_command)"
+        goto: rule_check
+      - when: "not output.committed and worktree_dir | git_commits(inputs.base_branch)"
+        goto: code_review
       - when: "true"
         goto: develop
         max_visits: 3
@@ -1366,6 +1374,7 @@ steps:
       `{{ inputs.base_branch }}` (`git diff {{ inputs.base_branch }}...{{ steps.develop.output.branch }}`).
       Task (the spec for the spec axis): {{ inputs.task }}
       Developer summary: {{ steps.develop.output.summary }}
+      {% if not steps.develop.output.committed %}The developer made no production change this turn (its summary above says why): review the commits already on the branch (e.g. the test writer's) against the task.{% endif %}
       {% if vars.accepted_gaps %}The owner accepted that the run goes on without these requirements (not blocking): {{ vars.accepted_gaps }}{% endif %}
       {% endif %}
       {% if inputs.issues | length > 1 and vars.recheck != 'resolution' %}
