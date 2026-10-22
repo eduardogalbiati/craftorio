@@ -11,8 +11,8 @@
 //     layer, card, legend rows and poll go), unless it is the same onLeave (a mode updating its title);
 //   city.leaveMode(): back to Explore (the mode's onLeave runs);
 //   city.closeMode(): what Close (data-testid="city-mode-close", the cards' own Close) and Esc (not in
-//     full screen) do: back to Explore, then `city.back()` once, the screen the mode was opened from
-//     (set by the Architecture tab's openCity; none in the tab itself).
+//     full screen) do: back to Explore, then `city.back()` once (#430: the city modal sets it to its
+//     own close, project-city-modal.js; none in the Architecture tab).
 // apply() (after each draw, city.applyUi()) writes the mode on the root and the header: the title
 // (data-testid="city-mode-title": the project in Explore, "Live", "Replay of run …", "Issue #n",
 // "Stage <name>", "Release <from> → <to>"), Close (none in Explore), the Live switch (city-live-toggle,

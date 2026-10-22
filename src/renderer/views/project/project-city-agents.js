@@ -12,7 +12,7 @@
 // (ProjectConflictMap.linkHtml); the new files as buildings under construction, with their district;
 // "No agent is working on this project" when no run of this project is in progress.
 // "Replay on the map" (replay(projectId, runId), the run screen's button): the project's City view
-// opens and plays that run's file touches (CityAgents.CityReplay) with a timeline, play/pause and a
+// opens (#430: in the city modal over the run's screen, project-city-modal.js) and plays that run's file touches (CityAgents.CityReplay) with a timeline, play/pause and a
 // speed, in the replay mode ("Replay of run …"); Close leaves it. The card is a panel (#441:
 // data-city-panel="agents" or "replay", its chevron; minimized it keeps updating), its runs' colours
 // are the legend's rows (city.setLegend). Never starts a run, answers a gate or calls a model.
@@ -244,6 +244,7 @@
 
     // live: polled while Live is on and the city on screen; a replay plays on its own clock
     const handle = {
+      city,
       el,
       projectId,
       refresh,
@@ -268,9 +269,10 @@
 
   /** "Replay on the map": opens the project's City view and plays the run's file touches over it. */
   function replay(projectId, runId) {
+    // #430: the city on screen, or the city modal over the run's screen (routed first: a new modal's attach reads nothing)
+    const targets = window.ProjectCityModal?.targets(handles, projectId, 'agents') || [...handles].filter((h) => h.projectId === projectId);
     pending = { projectId, runId };
-    for (const h of handles) if (h.projectId === projectId) h.refresh();
-    window.ProjectArchitecture?.openCity(projectId);
+    for (const h of targets) h.refresh();
   }
 
   window.ProjectCityAgents = {

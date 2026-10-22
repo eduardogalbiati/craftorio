@@ -1,6 +1,7 @@
 // An issue's impact preview on the project city (#375), an overlay of the City view (project-city.js)
 // built on its overlay API, so the city's own module does not grow. "Show on the map" (Backlog card,
-// roadmap item: showIssue(projectId, issue)) opens the project's City view and colours the issue's
+// roadmap item: showIssue(projectId, issue)) opens the project's City view (#430: in the city modal over
+// the screen, project-city-modal.js, unless a city of the project is on screen) and colours the issue's
 // expected buildings by source (its `## Expected files` section, cited in its body, the Product
 // Owner's group, changed by its latest finished run; src/shared/city-impact.js), the rest grey. A card
 // (data-testid="city-impact") holds the header (headerMarkup: the issue, the counts by district and
@@ -9,7 +10,9 @@
 // (architecture:impact), the source of each hit and miss (city-impact-by-source) and the project's
 // average hit rate with the section against without (city-impact-section-rate, #429). "Show the stage on the map" (showStage(projectId,
 // stage)) colours each item of a roadmap stage in its colour and a building two items would change in
-// red (#150), listed in data-testid="city-impact-conflicts". The legend of the city
+// red (#150), listed in data-testid="city-impact-conflicts" (#428: one muted line when there is none),
+// and names a run in progress of its items in the run's colour (city-impact-in-progress, architecture:agents
+// read once). The card sits at the top of the city's left column (#428, city.leftColumn). The legend of the city
 // (project-city-legend) gets the overlay's rows (city.setLegend). Each show puts the city in the
 // impact or the stage mode (#440, project-city-modes.js: "Issue #n", "Stage <name>"), whose leaving
 // is Close: the layer, the card and the rows go. The card is a panel (#441: data-city-panel="impact",
@@ -72,17 +75,28 @@
     </div>`;
   }
 
-  // a stage's card: its items in their colour, the buildings two items would change
+  // a stage's card: its items in their colour, the runs in progress (#428: their colour on the map is not
+  // the stage's), the buildings two items would change (#428: one muted line when there is none)
   function stageMarkup(view) {
     const conflicts = view.conflicts.length
-      ? `<ul>${view.conflicts.map((c) => `<li><code title="${esc(c.path)}">${esc(c.path)}</code> <small class="muted">${esc(c.items.map((id) => view.titles[id] || id).join(' · '))}</small></li>`).join('')}</ul>`
-      : `<p class="muted small">${t('project_city_impact.no_building_is_changed_by_two')}</p>`;
+      ? `<div class="pci-conflicts" data-testid="city-impact-conflicts" role="status"><b>${t('project_city_impact.changed_by_two_items')}</b><ul>${view.conflicts.map((c) => `<li><code title="${esc(c.path)}">${esc(c.path)}</code> <small class="muted">${esc(c.items.map((id) => view.titles[id] || id).join(' · '))}</small></li>`).join('')}</ul></div>`
+      : `<p class="pci-conflicts-none muted small" data-testid="city-impact-conflicts" role="status">${t('project_city_impact.no_building_is_changed_by_two')}</p>`;
+    const live = (view.live || []).map((r) => `<p class="pci-live" data-testid="city-impact-in-progress">${dot(r.colour)}<span>${t('project_city_impact.in_progress', { items: esc(r.items.join(' + ')) })}</span></p>`).join('');
     return `<div class="pci-header" data-testid="city-impact-stage">
       <div class="pci-title"><strong>${t('project_city_impact.stage')}</strong> <span title="${esc(view.name)}">${esc(view.name)}</span></div>
       <p class="pci-total">${plural(view.items.length, 'project_city_impact.items_count')} ${t('project_city_impact.total_on_the_map', { total: plural(view.total, 'project_city_impact.files_count') })}</p>
-      <div class="pci-conflicts" data-testid="city-impact-conflicts" role="status"><b>${t('project_city_impact.changed_by_two_items')}</b>${conflicts}</div>
+      ${live}
+      ${conflicts}
     </div>`;
   }
+
+  // the stage's items with a run in progress (architecture:agents' runs, matched by run id), one entry per run (#428)
+  function liveRuns(items, agents) {
+    return (agents?.runs || [])
+      .map((r) => ({ colour: r.colour, items: items.filter((it) => it.runs.some((x) => x.status === 'running' && x.runId === r.id)).map((it) => it.title) }))
+      .filter((r) => r.items.length);
+  }
+  const running = (stage) => (stage?.items || []).some((it) => (it.runs || []).some((r) => r.status === 'running'));
 
   // the Product Owner's saved files for an issue: its latest group that holds it
   function poFilesOf(conversation, number) {
@@ -110,9 +124,10 @@
     el.setAttribute('data-testid', 'city-impact');
     el.setAttribute('data-city-panel', 'impact'); // #440: the impact and stage modes' card; #441: its chevron
     el.setAttribute('aria-live', 'polite');
-    city.el.appendChild(el);
+    if (city.leftColumn) city.leftColumn(el); // #428: at the top of the city's left column, the notes under it
+    else city.el.appendChild(el);
     let request = null; // what to show: { issue } or { stage }
-    let data = null; // { plan, history, conversation, changed, run }
+    let data = null; // { plan, history, conversation, changed, run, agents }
     let error = null;
     let legend = []; // the legend's rows: [{ colour, label }]
     let layered = false; // the layer is set on the city
@@ -154,13 +169,13 @@
 
     function stageView() {
       const { stage } = request;
-      const items = (stage.items || []).map((it, i) => ({ id: String(it.id || it.number || i), title: it.title || `#${it.number}`, files: pathsOf(expected(it)) }));
+      const items = (stage.items || []).map((it, i) => ({ id: String(it.id || it.number || i), title: it.title || `#${it.number}`, files: pathsOf(expected(it)), runs: it.runs || [] }));
       const foot = CityImpact.stageFootprint(items);
       const titles = Object.fromEntries(items.map((it) => [it.id, it.title]));
       legend = [...items.map((it) => ({ colour: foot.colours[it.id], label: it.title })), ...(foot.conflicts.length ? [{ colour: CityImpact.CONFLICT_COLOUR, label: t('project_city_impact.changed_by_two_items') }] : [])];
       const onMap = new Set((layout()?.buildings || []).map((b) => b.path));
       const total = Object.keys(foot.highlight).filter((p) => onMap.has(p)).length;
-      return { html: stageMarkup({ name: stage.name || '', items, conflicts: foot.conflicts, titles, total }), highlight: foot.highlight };
+      return { html: stageMarkup({ name: stage.name || '', items, conflicts: foot.conflicts, titles, total, live: liveRuns(items, data.agents) }), highlight: foot.highlight };
     }
 
     // the card's markup; then the mode's panels and their states (#440, #441)
@@ -216,13 +231,15 @@
       layered = false;
       draw();
       try {
-        const [impact, conversation, ran] = await Promise.all([
+        const [impact, conversation, ran, agents] = await Promise.all([
           api.architectureImpact({ projectId }),
           api.productOwnerHistory(projectId).catch(() => []),
           req.issue ? changedOf(projectId, req.issue) : { run: null, changed: [] },
+          // #428: a stage with a run in progress names that run's colour; read once, not polled
+          running(req.stage) ? api.architectureAgents({ projectId }).catch(() => null) : null,
         ]);
         if (destroyed || mine !== seq) return;
-        data = { plan: impact?.plan || null, history: impact?.history || {}, conversation, ...ran };
+        data = { plan: impact?.plan || null, history: impact?.history || {}, conversation, ...ran, agents };
         draw();
         // the hit rate, kept per issue so the prediction can be judged over time: once per run, not per view
         // (an unreadable history is never rewritten: the channel refuses it)
@@ -243,6 +260,7 @@
     });
     const offLayout = city.onLayout(() => draw());
     const handle = {
+      city,
       projectId,
       show,
       destroy() {
@@ -264,15 +282,12 @@
     return handle;
   }
 
-  // opens the project's City view with a preview: the city's overlay takes it now or when it attaches
+  // shows a preview on the project's city on screen, or in the city modal over the screen it was asked from (#430)
   function open(projectId, req) {
-    pending = { projectId, ...req };
-    for (const h of handles) {
-      if (h.projectId !== projectId) continue;
-      pending = null;
-      h.show({ projectId, ...req });
-    }
-    window.ProjectArchitecture?.openCity(projectId);
+    pending = null;
+    const targets = window.ProjectCityModal?.targets(handles, projectId, 'impact') || [...handles].filter((h) => h.projectId === projectId);
+    if (!targets.length) pending = { projectId, ...req }; // a city that attaches later takes it
+    for (const h of targets) h.show({ projectId, ...req });
   }
 
   // a roadmap item as one preview: its issues (the backlog's copy has the body and the runs), their titles and bodies joined

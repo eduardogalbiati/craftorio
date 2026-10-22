@@ -1,7 +1,7 @@
-/* An issue's impact preview on the project city (#375, project-city-impact.js): its card, top centre
-   over the city, and its rows in the city's legend, with the run's 3D view classes (run3d.css
-   .r3d-card, .r3d-dot). */
-.pc-city .pci { position: absolute; top: 78px; left: 50%; transform: translateX(-50%); width: min(380px, calc(100% - 24px)); max-height: 45%; overflow: auto; padding: 10px 12px; font-size: 12px; color: var(--r3d-ink-2); z-index: 2; }
+/* An issue's impact preview on the project city (#375, project-city-impact.js): its card, at the top
+   of the city's left column (#428, project-city.css .pc-left), and its rows in the city's legend, with
+   the run's 3D view classes (run3d.css .r3d-card, .r3d-dot). */
+.pc-city .pci { position: relative; flex: none; max-height: 70%; overflow: auto; padding: 10px 12px; font-size: 12px; color: var(--r3d-ink-2); }
 .pc-city .pci.hidden { display: none; }
 .pci-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
 .pci-head > b { font-size: 11px; letter-spacing: .5px; text-transform: uppercase; color: var(--r3d-muted); }
@@ -23,4 +23,6 @@
 .pci-rate { color: var(--r3d-ink); }
 .pci-conflicts { display: grid; gap: 4px; padding: 8px 10px; border-radius: 9px; background: color-mix(in srgb, var(--r3d-red) 14%, var(--r3d-card)); }
 .pci-conflicts > b { color: var(--r3d-red); }
+.pci-conflicts-none { margin: 0; } /* #428: no conflict, one muted line */
+.pci-live { display: flex; align-items: center; gap: 6px; margin: 0; color: var(--r3d-ink); } /* #428: the run in progress, in its colour */
 .pci-legend { margin-top: 8px; }

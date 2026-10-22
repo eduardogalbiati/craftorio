@@ -2,8 +2,8 @@
 // folders as districts) or a stale plan (the unmatched share), each with the tab's one action
 // "Analyze this project" (#381: the map and the Oracle's analysis as one run, with its combined
 // estimate next to it) and the action's state (running with its step, or its error with "Analyze
-// again"), then the plan's validation problems, the edges not read, and the aggregation of small
-// files over 5,000. html({ model, validation, layout, analysis, ready }) → the notes' HTML ('' when
+// again"), then the plan's validation problems and the aggregation of small files over 5,000 (#428:
+// no note for the edges not read). html({ model, validation, layout, analysis, ready }) → the notes' HTML ('' when
 // there is none); `analysis`: { running, step, error, estimate, estimateTitle } from the Architecture
 // tab; `ready`: whether the action can start (the tab gave the city an onAnalyze). The notes are one
 // panel (#441: data-city-panel="notes", "City plan" with its chevron, project-city-panels.js).
@@ -50,8 +50,6 @@
       ...(v.emptyDistricts || []).map((id) => t('project_city_notes.problem_empty_district', { id })),
     ];
     if (model.grouping === 'plan' && problems.length) notes.push(note('project-city-problems', 'warn', `<b>${t('project_city_notes.problems_in_the_city_plan', { count: problems.length })}</b><ul>${problems.map((p) => `<li>${esc(p)}</li>`).join('')}</ul>`));
-    const notRead = typeof model.edges === 'string' ? [model.edges] : model.edgesNotRead || [];
-    if (notRead.length) notes.push(note('project-city-edges', '', `<b>${t('project_city_notes.arcs')}</b> ${esc(notRead.join(', '))}${t('project_city_notes.hovering_those_files_draws_no_arc')}`));
     if (layout.aggregated) notes.push(note('project-city-aggregated', '', `<b>${t('project_city_notes.over_5_000_files')}</b> ${esc(layout.note)}`));
     if (!notes.length) return '';
     // #441: one panel, "City plan", its chevron folds the notes to its title row

@@ -31,8 +31,9 @@
 // #382: its connections panel, views/project/project-city-connections.js); a building's "Open in
 // Facts" comes back here with its hotspot row marked and scrolled to. The city carries the agents of
 // the project's runs in progress (#374, views/project/project-city-agents.js); openCity(id) opens
-// the tab on the City view (a run's "Replay on the map", a release's "Show on the map", #376:
-// views/project/project-city-release.js).
+// the tab on the City view, for the Project screen only: every "Show on the map" (an issue, a stage,
+// a release, a run's replay) opens the city in a modal over the screen instead (#430,
+// views/project/project-city-modal.js).
 // Drawn into the box project.js gives it (show), its clicks and changes routed from the project
 // page's listeners (onClick, onChange). Uses app.js globals at call time: api, esc, errMsg, fmtNum,
 // fmtUsd (usage-widget.js), showToast, state (projects, simulationOnly). Browser: window.ProjectArchitecture.
@@ -71,13 +72,9 @@
     render();
   }
 
-  /** Opens project `id`'s Architecture tab on its City view (#374, "Replay on the map"). */
-  // the screen openCity came from, where the city mode's Close goes back to (#440)
-  let cityFrom = null;
+  /** Opens project `id`'s Architecture tab on its City view (the Project screen's own; #430: "Show on the map" opens the city modal). */
   function openCity(id) {
     rememberMode('city');
-    const from = typeof state !== 'undefined' ? state.view : null;
-    cityFrom = from && from !== 'project' ? from : null;
     openProjectView(id, { tab: 'architecture' });
   }
 
@@ -446,8 +443,6 @@
     c.city ||= ProjectCity.create({ projectId: c.id, name: projectName(c.id), onOpenFacts: (file) => { if (cur === c) { c.focusFile = file; setMode('facts'); } }, onAnalyze: () => { if (cur === c) analyze(); } });
     // #374: the agents of the project's runs in progress on its city (views/project/project-city-agents.js)
     c.agents ||= (window.CityAgents && window.ProjectCityAgents?.attach(c.city, { projectId: c.id, live: false })) || null;
-    // #440: the mode's Close goes back to the screen openCity came from (none: Explore)
-    if (cityFrom) { const from = cityFrom; cityFrom = null; c.city.back = () => showView(from); }
     // #382: the most connected files, a click pins their arcs (views/project/project-city-connections.js)
     c.connections ||= (window.CityConnections && window.ProjectCityConnections?.attach(c.city)) || null;
     // #375: an issue's or a stage's expected footprint on its city (views/project/project-city-impact.js)

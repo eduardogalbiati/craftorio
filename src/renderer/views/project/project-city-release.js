@@ -1,7 +1,7 @@
 // A release on the project city (#376), an overlay of the City view (project-city.js) built on its
 // overlay API, so the city's own module does not grow. "Show on the map" (a release of the Releases
 // screen, the release run's page: showRelease(projectId, { to, from? })) opens the project's City
-// view on the city as it was at the previous release (architecture:release: the tree and the facts at
+// view (#430: in the city modal over the screen, project-city-modal.js, unless a city of the project is on screen) on the city as it was at the previous release (architecture:release: the tree and the facts at
 // `from`, the current plan's rules; src/release-city.js), with what the release added in green, what
 // it changed on a ramp by the lines changed, renamed files on their old building and removed files
 // marked as ghosts (a ghost-coloured marker labelled "removed" on the base building: #373's overlay
@@ -257,6 +257,7 @@
       draw();
     });
     const handle = {
+      city,
       projectId,
       show,
       destroy() {
@@ -278,13 +279,11 @@
 
   /** "Show on the map": a release (its tag `to`, the previous tag by default as `from`) on its project's city. */
   function showRelease(projectId, { to = null, from = null, issue = null } = {}) {
-    pending = { projectId, to, from, issue };
-    for (const h of handles) {
-      if (h.projectId !== projectId) continue;
-      pending = null;
-      h.show({ to, from, issue });
-    }
-    window.ProjectArchitecture?.openCity(projectId);
+    pending = null;
+    // #430: the city on screen, or the city modal over the screen it was asked from
+    const targets = window.ProjectCityModal?.targets(handles, projectId, 'release') || [...handles].filter((h) => h.projectId === projectId);
+    if (!targets.length) pending = { projectId, to, from, issue };
+    for (const h of targets) h.show({ to, from, issue });
   }
 
   window.ProjectCityRelease = {
