@@ -1,6 +1,7 @@
 // @ts-check
 // Steps without an agent (#250, from src/engine/workflow.js): `type: screenshots` (`runScreenshots`,
 // #144), `type: suite` (`runSuiteStep` naming its command for a pause #368, `suiteRounds`, `suiteRound` with the memory guard's waits and reruns #276,
+// the machine-wide suite slot of a whole-suite round and its `suite_slot` log while it waits #455,
 // `redCheckOutput` #220, `failedFirstRound` for `scope: failed` #324), `type: test_ids`
 // (`runTestIdsStep`, #246), `type: check` (`runCheckStep`, the project's rule checks, #404), `type:
 // workflow` child runs (`runChildWorkflows`, #174), `type: release_version` (`runReleaseVersionStep`,
@@ -19,6 +20,7 @@ const evidence = require('../../evidence');
 const scenarios = require('../scenarios');
 const suiteStep = require('../suite-step');
 const { changedFiles, selectionLines } = require('../affected-tests');
+const { machineSlotDir } = require('../machine-slot');
 const { runWorkflowStep } = require('../workflow-step');
 const testIds = require('../test-ids');
 const { previousTag } = require('../../release-city');
@@ -296,6 +298,14 @@ const methods = {
           // #390: what the suite leaves running in the run's own worktree is stopped (never in a folder it does not own)
           sweep: !!this.worktree?.dir,
           ...(sync?.base_commit ? { baseCommit: sync.base_commit } : {}),
+          // #455: one whole suite at a time on the machine; another run's round holds it: wait and say whose
+          ...(this.machine.simulated ? {} : {
+            slot: {
+              dir: machineSlotDir(),
+              holder: this.runId,
+              onWait: (holder) => this.emitEvent('log', { level: 'info', kind: 'suite_slot', step_id: step.id, message: `${step.id}: waiting for the suite slot (run ${holder?.holder || '?'}, pid ${holder?.pid ?? '?'})` }),
+            },
+          }),
           ...extra,
           ...(env && extra.logName ? { logName: `${extra.logName}${env}` } : {}),
         });

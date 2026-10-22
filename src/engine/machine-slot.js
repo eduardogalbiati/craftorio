@@ -9,6 +9,9 @@
 // folder (shared by every workspace and every run's scratch workspace on this machine).
 // A child process started by the holder (the screenshots step runs `npm run screenshot`) inherits
 // the slot: the holder passes its token in SCREENSHOT_SLOT_ENV, and the child does not wait for it.
+// The `suite` slot (#455): one whole-suite round at a time per machine (the suite step, an agent's
+// full `npm test`), with its own inherit variable SUITE_SLOT_ENV and a hold limit above the
+// suite's largest timeout (SUITE_MAX_HOLD_MS). Each name has its defaults in SLOT_DEFAULTS.
 
 const fs = require('fs');
 const os = require('os');
@@ -19,6 +22,16 @@ const SCREENSHOT_SLOT = 'screenshot';
 const SCREENSHOT_SLOT_ENV = 'MULTIAGENT_SCREENSHOT_SLOT';
 const MAX_HOLD_MS = 15 * 60e3;
 const WAIT_MS = 20 * 60e3;
+const SUITE_SLOT = 'suite';
+const SUITE_SLOT_ENV = 'MULTIAGENT_SUITE_SLOT';
+// suite-step's MAX_TIMEOUT_MS (3 h) plus a margin for its grace and reruns (not imported: a cycle)
+const SUITE_MAX_HOLD_MS = 3 * 60 * 60e3 + 15 * 60e3;
+
+const SLOT_DEFAULTS = {
+  [SCREENSHOT_SLOT]: { maxHoldMs: MAX_HOLD_MS, env: SCREENSHOT_SLOT_ENV },
+  [SUITE_SLOT]: { maxHoldMs: SUITE_MAX_HOLD_MS, env: SUITE_SLOT_ENV },
+};
+const defaultsOf = (name) => SLOT_DEFAULTS[name] || SLOT_DEFAULTS[SCREENSHOT_SLOT];
 
 // The machine-wide folder, whatever MULTIAGENT_LOCKS_DIR says (a suite step sets its own): the E2E
 // suite's Electron launches take the slot here, so they wait for every other run's captures
@@ -33,7 +46,7 @@ function pidAlive(pid) {
 const readSlot = (file) => { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; } };
 
 /** Who holds the slot now ({ pid, host, token, started, holder }), null when it is free (a stale holder is removed). */
-function slotHolder(name, { dir = slotDir(), maxHoldMs = MAX_HOLD_MS } = {}) {
+function slotHolder(name, { dir = slotDir(), maxHoldMs = defaultsOf(name).maxHoldMs } = {}) {
   const file = slotFile(name, dir);
   if (!fs.existsSync(file)) return null;
   const held = readSlot(file);
@@ -48,7 +61,7 @@ function slotHolder(name, { dir = slotDir(), maxHoldMs = MAX_HOLD_MS } = {}) {
 }
 
 // One try: { release, token } when taken, { held } when someone else has it
-function tryTake(name, { dir = slotDir(), maxHoldMs = MAX_HOLD_MS, holder = '', inherit = process.env[SCREENSHOT_SLOT_ENV] } = {}) {
+function tryTake(name, { dir = slotDir(), maxHoldMs = defaultsOf(name).maxHoldMs, holder = '', inherit = process.env[defaultsOf(name).env] } = {}) {
   const file = slotFile(name, dir);
   const current = slotHolder(name, { dir, maxHoldMs });
   // the slot of the process that started this one
@@ -107,4 +120,7 @@ module.exports = {
   slotDir,
   slotFile,
   slotHolder,
+  SUITE_MAX_HOLD_MS,
+  SUITE_SLOT,
+  SUITE_SLOT_ENV,
 };

@@ -17,6 +17,7 @@
 
 const path = require('path');
 const { workerEnv } = require('../machine-profile');
+const { machineSlotDir } = require('./machine-slot');
 const registry = require('../shared/providers');
 
 const TOOL_RE =/^(read|edit|write|bash(:.+)?)$/;
@@ -88,12 +89,14 @@ const DEPS_DENIED_COMMANDS = [
 // screenshot` and the app started from the worktree never open the owner's workspace or user data.
 // scratch.tmp (#414): the run's temp folder (<run>/tmp), as TMP, TEMP and TMPDIR, so the tests a
 // turn runs write their temp files inside the run (removed when it ends), not in the user's %TEMP%.
+// With it, MULTIAGENT_LOCKS_DIR keeps the machine-wide slots' folder (#455, machineSlotDir, computed
+// here before TMP moves): an agent's whole `npm test` and its captures wait for other runs'.
 // workers: { testWorkers } of the machine profile (#367): the test workers per run, passed to the
 // test runners as MULTIAGENT_TEST_WORKERS / MULTIAGENT_E2E_WORKERS (src/machine-profile.js workerEnv).
 function agentEnv(scratch = null, workers = null) {
   const env = { ...AGENT_ENV, ...(workers?.testWorkers ? workerEnv(workers) : {}) };
   if (!scratch) return env;
-  const tmp = scratch.tmp ? { TMP: scratch.tmp, TEMP: scratch.tmp, TMPDIR: scratch.tmp } : {};
+  const tmp = scratch.tmp ? { TMP: scratch.tmp, TEMP: scratch.tmp, TMPDIR: scratch.tmp, MULTIAGENT_LOCKS_DIR: machineSlotDir() } : {};
   return { ...env, MULTIAGENT_USER_DATA: scratch.userData, MULTIAGENT_WORKSPACE: scratch.workspace, ...tmp };
 }
 

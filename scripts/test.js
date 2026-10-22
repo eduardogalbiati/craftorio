@@ -25,12 +25,15 @@
 // --experimental-test-coverage (`npm run test:coverage`, the suite step's `coverage: true`, #225)
 // passes on to node --test: each run's coverage table ends its report (coverage-summary.js merges them).
 //   npm run test:coverage [-- test/a.test.js]
+// One whole suite at a time per machine (#455): in agent mode, the whole suite (no file list) takes
+// the machine-wide `suite` slot first (src/engine/machine-slot.js), unless it inherits it.
 
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawn, spawnSync } = require('child_process');
 const { isAgentMode, REPORTER } = require('../src/engine/agent-test-report');
+const machineSlot = require('../src/engine/machine-slot');
 const { testTimeoutMs } = require('../src/engine/test-timeouts');
 
 // decided before the variable below is set: the orchestrator's own MULTIAGENT_SIMULATION_ONLY counts
@@ -63,6 +66,21 @@ const testFiles = (dir) => fs.readdirSync(path.join(root, dir), { withFileTypes:
 }).sort();
 const only = process.argv.slice(2).filter((a) => !a.startsWith('-'));
 const files = only.length ? only : testFiles('test');
+
+// #455: an agent's whole suite waits for the machine-wide suite slot (the suite step's own child
+// inherits it through SUITE_SLOT_ENV); a focused run never waits
+if (agent && !only.length && !process.env[machineSlot.SUITE_SLOT_ENV]) {
+  try {
+    const held = machineSlot.acquireSlotSync(machineSlot.SUITE_SLOT, {
+      holder: 'npm test (agent)',
+      waitMs: machineSlot.SUITE_MAX_HOLD_MS,
+      onWait: (h) => say(`waiting for the suite slot (run ${h?.holder || '?'}, pid ${h?.pid ?? '?'}): one whole suite at a time on this machine`),
+    });
+    process.on('exit', () => held.release());
+  } catch (e) {
+    say(`warning: ${e.message}; running without the suite slot`);
+  }
+}
 
 const cpus = Math.max(os.availableParallelism(), os.cpus().length);
 const concurrency = Math.max(1, Number(process.env.MULTIAGENT_TEST_CONCURRENCY) || cpus - 1);

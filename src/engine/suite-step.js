@@ -19,7 +19,8 @@
 // The suite runs as from a shell (#210): `suiteEnv` drops the app's variables (Electron's, npm's, an
 // inspector in NODE_OPTIONS that forces node --test to one file at a time, the scratch workspace that
 // every test process would share) and gives the suite its own lock folder (MULTIAGENT_LOCKS_DIR,
-// <run>/locks), so a test never waits for the machine-wide screenshot slot held by other runs. The
+// <run>/locks), so a test never waits for the machine-wide screenshot slot held by other runs; a
+// whole-suite round itself waits for the machine-wide `suite` slot (#455, `slot`). The
 // log starts with what the child gets (parallelism, the variables removed). Without a step
 // `timeout`, the timeout comes from the project's recent suite durations (<workspace>/cache/
 // suite-durations.json: 3× the median, at least 10 min; 30 min with no history; never under the
@@ -69,6 +70,7 @@ const { spawn } = require('child_process');
 const { classifyFailures, IN_CHANGE, OUTSIDE_CHANGE } = require('./affected-tests');
 const { parseAgentReport } = require('./agent-test-report');
 const { parseNodeCoverage, renderCoverageSummary } = require('../coverage-summary');
+const { suiteSlotRun } = require('./suite-slot');
 const {
   processTreeCommands,
   stopProcessesIn,
@@ -762,7 +764,9 @@ function writeLogHeader(logFile, out, { mock, childEnv, timeoutWhy, baseCommit }
 // platform (#400): whose command-line limit the filtered command (with its wrappers) must fit, else
 // the whole suite runs and `selection.why` and the message say why.
 // baseCommit (#403): the base commit the round tests on, named in the log's header.
-async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = 'pass', preexisting = [], signal, timeoutMs, history, base, baseCacheDir, run = runCommand, log = () => {}, files = null, selection = null, logName = null, coverage = false, changedFiles = null, onSpawn = null, testWorkers = null, sweep = true, platform = process.platform, baseCommit = null }) {
+// slot (#455, suite-slot.js): { dir, holder, onWait(holder), pollMs }, the machine-wide `suite` slot of
+// a whole-suite round (not focused, not simulated); without `slot`, nothing is taken.
+async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = 'pass', preexisting = [], signal, timeoutMs, history, base, baseCacheDir, run = runCommand, log = () => {}, files = null, selection = null, logName = null, coverage = false, changedFiles = null, onSpawn = null, testWorkers = null, sweep = true, platform = process.platform, baseCommit = null, slot = null }) {
   const logFile = runDir ? path.join(runDir, 'logs', `${logName || `suite-${round}`}.log`) : null;
   const out = {
     kind: 'suite', status: 'blocked', round, scope: 'full', command: null, log: logFile ? path.relative(runDir, logFile).split(path.sep).join('/') : null,
@@ -805,6 +809,8 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
   if (tmpDir) fs.mkdirSync(tmpDir, { recursive: true });
   const childEnv = mock ? null : suiteEnv(env || process.env, { locksDir: path.join(runDir, 'locks'), testWorkers, tmpDir });
   if (logFile) writeLogHeader(logFile, out, { mock, childEnv, timeoutWhy, baseCommit });
+  // #455: a whole-suite round waits for the machine-wide suite slot; the wait is not the round's time
+  const runRound = await suiteSlotRun({ slot, mock, scope: out.scope, signal, logFile, run });
   const t0 = Date.now();
   let text = '';
   if (mock) {
@@ -815,7 +821,7 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
     if (logFile) fs.appendFileSync(logFile, text);
   } else {
     log('info', `suite: ${out.command} (round ${round}, timeout ${Math.round(out.timeout_ms / 60e3)} min, log ${out.log})`);
-    const r = await run({ command: out.command, cwd, env: { ...childEnv.env, MULTIAGENT_TEST_HUMAN_LOG: humanLog(logFile) }, timeoutMs: out.timeout_ms, signal, logFile, ...optionalRunArgs({ onSpawn, sweep }) });
+    const r = await runRound({ command: out.command, cwd, env: { ...childEnv.env, MULTIAGENT_TEST_HUMAN_LOG: humanLog(logFile) }, timeoutMs: out.timeout_ms, signal, logFile, ...optionalRunArgs({ onSpawn, sweep }) });
     out.exit_code = r.code;
     out.timed_out = r.timedOut;
     out.running = r.running || [];

@@ -84,6 +84,16 @@ Read this before writing or changing tests, and before any check that could star
   `logs/tests-<step>-<n>.log`) and resumes the agent with a summary only (counts, each failure's
   test, file and first 3 lines, the log's path), at most 3 times per turn. One focused test file
   inside a turn stays allowed, with a timeout.
+- **One whole suite at a time per machine** (#455): the per-test budgets (#402) were measured
+  with one suite on the machine, so a whole-suite round (not a focused list of files, not the
+  simulated suite) takes the machine-wide `suite` slot (`src/engine/machine-slot.js`,
+  `<os tmp>/multiagent-orchestrator/locks/suite.slot`) before its command, and frees it when the
+  command ends, however it ends. An agent's own whole `npm test` (agent mode, no file list) takes
+  the same slot (agents get `MULTIAGENT_LOCKS_DIR` set to that folder); the suite step's child
+  inherits it through `MULTIAGENT_SUITE_SLOT`. While another run holds it, the round waits and
+  the run logs `kind: suite_slot` "suite: waiting for the suite slot (run …, pid …)"; the wait is
+  not counted in the round's timeout or duration. A holder whose process is gone, or a hold older
+  than `SUITE_MAX_HOLD_MS` (the largest suite timeout plus a margin), is taken over.
 - **Agent mode** (#219): `npm test` detects an agent (`isAgentMode` in
   `src/engine/agent-test-report.js`: `MULTIAGENT_AGENT_MODE=1/0` wins, then CI or a terminal stays
   human, then `MULTIAGENT_SIMULATION_ONLY` or an agent CLI's variable) and prints one failures-only
