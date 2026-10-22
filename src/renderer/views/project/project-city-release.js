@@ -262,7 +262,9 @@
     }
 
     el.addEventListener('click', (e) => {
-      if (e.target.closest('[data-pcr-close]')) { close(); city.closeMode?.(); }
+      // the card's Close leaves the release only: today's city and its notes come back (#439); the
+      // header's mode Close and Esc still close what the release opened (#430)
+      if (e.target.closest('[data-pcr-close]')) { close(); city.leaveMode?.(); }
       else if (e.target.closest('[data-pcr-save]')) saveImage(e.target.closest('[data-pcr-save]'));
     });
     el.addEventListener('change', (e) => {
