@@ -414,7 +414,7 @@ function cliInvocation({ provider, model, effort, providerSessionId, prompt, ext
 }
 
 function runCli(opts, parser) {
-  const { provider, providerSessionId, cwd, timeoutMs, signal, onItem, agentEnv } = opts;
+  const { provider, providerSessionId, cwd, timeoutMs, signal, onItem, agentEnv, accountEnv: account } = opts;
   const { args, prompt, promptFile } = cliInvocation(opts);
 
   const resolved = resolveCommand(provider.command);
@@ -430,6 +430,8 @@ function runCli(opts, parser) {
   // agents' own checks never start real runs, and need no `VAR=value` prefix (refused by allowlists);
   // agentEnv (capabilities.agentEnv): with the run's scratch workspace when it has one (#120)
   Object.assign(env, agentEnv || AGENT_ENV);
+  // #312: the turn's account (its config folder, accountEnv), for this process only
+  Object.assign(env, account);
 
   if (promptFile) fs.writeFileSync(promptFile, prompt);
 
@@ -675,6 +677,16 @@ function mockAnswer(h) {
 const mockTurns = new Map();
 const MOCK_HANDOFF = '```handoff\n- Goal: simulated goal of this agent\n- State: branch feat/mock-feature, commit abc1234\n- Done: simulated work of this turn\n- Left: nothing blocking\n- Decisions: none\n- Key files: src/auth/login.ts\n- Known problems: none\n```';
 
+// sequences.usage_limits: ['<provider>' | '<provider>:<model>' | '<provider>@<account>', ...] (#262,
+// #312): every turn of an agent on a listed provider (hint.provider, the agent's own, not `mock`),
+// provider:model or account of the provider (hint.account) answers with that CLI's usage-limit
+// message (hint.providerType), as a real CLI out of credits does
+function mockUsageLimited(hint, model) {
+  const limits = hint?.sequences?.usage_limits;
+  if (!Array.isArray(limits) || !hint.provider) return false;
+  return [hint.provider, `${hint.provider}:${model}`, hint.account && `${hint.provider}@${hint.account}`].some((k) => k && limits.includes(k));
+}
+
 async function runMock({ providerSessionId, model, hint, signal, onItem, attempt = 1, timeoutMs, attachments = [] }) {
   const sid = providerSessionId || `mock-${Math.random().toString(36).slice(2, 10)}`;
   const scale = +(process.env.MULTIAGENT_MOCK_DELAY_SCALE ?? 1);
@@ -685,11 +697,7 @@ async function runMock({ providerSessionId, model, hint, signal, onItem, attempt
 
   onItem({ kind: 'session', sessionId: sid, model });
   onItem({ kind: 'context', tokens: start });
-  // sequences.usage_limits: ['<provider>' | '<provider>:<model>', ...] (#262): every turn of an agent on a
-  // listed provider (hint.provider, the agent's own, not `mock`) or provider:model answers with that
-  // CLI's usage-limit message (hint.providerType), as a real CLI out of credits does
-  const limits = hint?.sequences?.usage_limits;
-  if (Array.isArray(limits) && hint.provider && (limits.includes(hint.provider) || limits.includes(`${hint.provider}:${model}`))) {
+  if (mockUsageLimited(hint, model)) {
     await d(200);
     throw new Error(registry.byType(hint.providerType)?.usageLimitMessage || `${hint.provider}: usage limit reached`);
   }
@@ -808,7 +816,23 @@ function isQuotaError(type, message) {
   return QUOTA_COMMON.test(text) || !!registry.byType(type)?.quotaPattern?.test(text);
 }
 
+// #312: when a CLI's usage limit resets (epoch ms), read from its message by its adapter, or null.
+// now: epoch ms or a Date, when the message was read (a clock time is its next occurrence)
+function quotaResetAt(type, message, now = Date.now()) {
+  const text = String(message?.message ?? message ?? '');
+  return registry.byType(type)?.quotaReset?.(text, +now) ?? null;
+}
+
+// #312: the CLI process's variable that selects an account ({ name, dir }): its config folder
+// through the adapter's configDirEnv; {} for no account or a CLI without one. Never agentEnv (printed
+// in prompts and allow rules)
+function accountEnv(type, account) {
+  const name = registry.byType(type)?.configDirEnv;
+  return account?.dir && name ? { [name]: account.dir } : {};
+}
+
 module.exports = {
+  accountEnv,
   ATTACHMENT_LIMITS,
   checkAttachments,
   cliDirs,
@@ -827,6 +851,7 @@ module.exports = {
   parseClaude,
   parseCodex,
   parseGrok,
+  quotaResetAt,
   refreshWindowsPath,
   resolveCommand,
   resolveCommandAsync,

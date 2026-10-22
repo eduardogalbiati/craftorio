@@ -111,6 +111,27 @@
     // #262: "You've hit your usage limit. Upgrade to Plus…", "Quota exceeded", insufficient_quota
     quotaPattern: /usage_limit_reached|rate_limit_exceeded.*quota/i,
     usageLimitMessage: "You've hit your usage limit. Upgrade to Plus to continue using Codex (https://openai.com/chatgpt/pricing), or try again later.",
+    // #312: when the limit resets (epoch ms, local time), or null: "try again at Oct 26th." (that
+    // day, this year or the next), "try again at 3:15 PM." (the next 15:15)
+    quotaReset: (message, now = Date.now()) => {
+      const text = String(message || '');
+      const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+      const day = /try again at\s+([a-z]{3})[a-z]*\.?\s+(\d{1,2})(?:st|nd|rd|th)?\b/i.exec(text);
+      const month = day ? MONTHS.indexOf(day[1].toLowerCase()) : -1;
+      if (month >= 0) {
+        const at = new Date(new Date(+now).getFullYear(), month, +day[2]);
+        if (at.getTime() <= +now) at.setFullYear(at.getFullYear() + 1);
+        return at.getTime();
+      }
+      const clock = /try again at\s+(\d{1,2}):(\d{2})\s*(am|pm)?\b/i.exec(text);
+      if (!clock) return null;
+      const at = new Date(+now);
+      at.setHours(clock[3] ? (+clock[1] % 12) + (/pm/i.test(clock[3]) ? 12 : 0) : +clock[1], +clock[2], 0, 0);
+      if (at.getTime() <= +now) at.setDate(at.getDate() + 1);
+      return at.getTime();
+    },
+    // #312: the variable that gives the CLI its config folder (one account per folder)
+    configDirEnv: 'CODEX_HOME',
     costReported: false,
     installNote: 'then `codex login`',
     // its conversations: <config>/sessions/YYYY/MM/DD/rollout-*.jsonl

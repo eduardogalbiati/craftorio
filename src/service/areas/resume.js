@@ -234,7 +234,7 @@ module.exports = (ctx) => {
     if (confirmedGate) steps[gate] = spec.steps[gate];
     return ctx.startWorkflowRun({
       file: spec.file, inputs: spec.inputs, attachments: spec.attachments, mock: spec.mock || mock === true, projectId: spec.projectId, issues: spec.issues, agentOverrides: spec.agentOverrides,
-      resume: { runId: spec.runId, fromStep, steps, sessions: spec.sessions, cliTotals: spec.cliTotals, handoffs: spec.handoffs, instruction: instruction || null, images: Array.isArray(images) ? images : [], worktree: spec.worktree, confirmedGate, childRuns: spec.childRuns, ...(pausedAt ? { paused: true } : {}) },
+      resume: { runId: spec.runId, fromStep, steps, sessions: spec.sessions, sessionAccounts: spec.sessionAccounts, cliTotals: spec.cliTotals, handoffs: spec.handoffs, instruction: instruction || null, images: Array.isArray(images) ? images : [], worktree: spec.worktree, confirmedGate, childRuns: spec.childRuns, ...(pausedAt ? { paused: true } : {}) },
       ...(child ? { parent: child.parent, onFinished: child.onFinished, notices: child.notices, signal: child.signal, onSlotWait: child.onSlotWait } : {}),
     });
   }

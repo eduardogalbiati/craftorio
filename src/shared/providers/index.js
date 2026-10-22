@@ -4,7 +4,8 @@
 // `providers.<name>.type`). An adapter: { id, type, cli, label, short, models, modelPrefixes,
 // imageInput, ... } and, for a CLI, its workflow provider `definition`, `resumeArgs(sessionId)`,
 // `isolationArgs`, the stream parser `parse(event, emit, acc)` (with `parse.flush` when it buffers),
-// `quotaPattern` and `usageLimitMessage`. Adding a provider: one adapter file and its lines below
+// `quotaPattern` and `usageLimitMessage`, `quotaReset(message, now)` (when the limit resets, #312) and
+// `configDirEnv` (the variable naming its config folder, one account per folder, #312). Adding a provider: one adapter file and its lines below
 // (its require, and its window global for the renderer).
 // - list() → the adapters; clis() → those that are a CLI;
 // - resolve(key) → the adapter of an id, a type, a CLI name or a model name (its modelPrefixes), or null;

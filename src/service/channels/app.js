@@ -57,6 +57,18 @@ module.exports = (ctx) => [
     }),
   },
   { channel: 'env:details', method: 'envDetails', schema: { result: listOf(OBJECT) }, fn: () => ctx.envDetails() },
+  // #312: a provider account's folder (Settings › Agents & CLIs › Accounts): whether it is signed in
+  // (never a credential) and the command that logs it in (null for a CLI without a folder variable)
+  {
+    channel: 'settings:accountStatus',
+    method: 'accountStatus',
+    params: ['provider', 'dir'],
+    schema: {
+      params: args({ provider: STRING, dir: STRING }, ['provider', 'dir']),
+      result: shape({ signedIn: BOOL, account: STRING, loginCommand: nullable(STRING) }, ['signedIn', 'loginCommand']),
+    },
+    fn: (opts) => ctx.accountStatus(opts),
+  },
   {
     channel: 'app:info',
     method: 'appInfo',

@@ -43,6 +43,7 @@
  * @property {number} [cli_total_cost_usd]
  * @property {string} [simulates]
  * @property {{ from: string, reason: string }} [fallback_from]
+ * @property {string} [account] the provider account's name (#312; never its folder)
  * @property {string | null} [last_turn_at] the cache state (#320): not on the orchestrator's session
  * @property {number | null} [context_tokens]
  * @property {number | null} [start_context_tokens]
@@ -156,6 +157,8 @@
  * @typedef {EventEnvelope & { type: 'tests.refused', agent: string, step_id: string, files: string[], attempt: number, protected?: true }} TestsRefusedEvent
  * @typedef {EventEnvelope & { type: 'tests.autocommitted', step_id: string, agent: string, files: string[], commit: string }} TestsAutocommittedEvent
  * @typedef {EventEnvelope & { type: 'agent.fallback', agent: string, step_id: string, from: string, to: string, reason: string }} AgentFallbackEvent
+ * @typedef {EventEnvelope & { type: 'agent.account_switch', agent: string, step_id: string | null, provider: string, from: string, to: string, reason: string, until: string | null }} AgentAccountSwitchEvent
+ * @typedef {EventEnvelope & { type: 'run.waiting_credits', agent: string, step_id: string | null, provider: string, until: string | null }} RunWaitingCreditsEvent
  * @typedef {EventEnvelope & { type: 'handoff.saved', agent: string, step_id: string, visit: number, session_id: string, path: string, note: string, fallback?: any }} HandoffSavedEvent
  * @typedef {EventEnvelope & { type: 'supervisor.started', step_id: string, error: string, kind?: string }} SupervisorStartedEvent
  * @typedef {EventEnvelope & { type: 'supervisor.decision', step_id: string, action: string, explanation: string, instruction: string | null, kind?: string, goto?: string | null, cause_class?: string | null, record?: any, route?: any, recommendation?: string, user_action?: string, command?: string, note?: string }} SupervisorDecisionEvent
@@ -173,7 +176,8 @@
  *   | FileSavedEvent | DecisionLoggedEvent | ScreenshotsWaitingEvent | MemoryHoldEvent | ChildStartedEvent
  *   | ChildFinishedEvent | SessionOpenedEvent | SessionStatusEvent | SessionClosedEvent | SessionUpdatedEvent
  *   | MessageSentEvent | SessionStreamEvent | MessageReceivedEvent | AttemptStoppedEvent | ProcessKilledEvent
- *   | TestsRefusedEvent | TestsAutocommittedEvent | AgentFallbackEvent | HandoffSavedEvent
+ *   | TestsRefusedEvent | TestsAutocommittedEvent | AgentFallbackEvent | AgentAccountSwitchEvent
+ *   | RunWaitingCreditsEvent | HandoffSavedEvent
  *   | SupervisorStartedEvent | SupervisorDecisionEvent | LocalPreviewStartedEvent | LocalPreviewStoppedEvent} RunEvent
  */
 
@@ -326,6 +330,7 @@
   /** @type {RunEvent['type'][]} */
   const RUN_EVENT_TYPES = [
     'action.executed',
+    'agent.account_switch',
     'agent.fallback',
     'approval.requested',
     'approval.resolved',
@@ -343,6 +348,7 @@
     'process.killed',
     'release.shipped',
     'run.then',
+    'run.waiting_credits',
     'screenshots.waiting',
     'session.attempt_stopped',
     'session.closed',

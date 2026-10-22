@@ -114,8 +114,12 @@
     isolationArgs,
     parse,
     // #262 (xAI API): "…used all available credits or reached its monthly spending limit"
-    quotaPattern: /used all available credits|spending limit/i,
+    // #312: "You've reached your free Grok Build usage limit" (no reset time in either message)
+    quotaPattern: /used all available credits|spending limit|free grok build usage limit/i,
     usageLimitMessage: 'Your team has either used all available credits or reached its monthly spending limit. To continue making API requests, please purchase more credits or raise your spending limit.',
+    quotaReset: () => null,
+    // #312: no known variable for its config folder (always ~/.grok): one account only
+    configDirEnv: null,
     costReported: true,
     installNote: 'then `grok login`',
     installHint: 'install Grok Build from x.ai (then `grok login`)',

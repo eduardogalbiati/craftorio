@@ -11,7 +11,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { emptyUsage, imageInput, isQuotaError } = require('../providers');
+const { emptyUsage, imageInput } = require('../providers');
 const { resolveSkill, skillPrompt } = require('../../skills');
 const {
   priceOf,
@@ -87,11 +87,13 @@ const MAX_CUTS = 3;
 const methods = {
   // ---- sessions -------------------------------------------------------------
   // simulates: a simulated session's workflow provider (provider is `mock`), shown instead of it (#262);
-  // fallbackFrom: { from: '<provider>:<model>', reason } the session an agent fell back from (#262)
-  openSession({ agent, provider, model, effort = null, parentId, stepId, mode = null, simulates = null, fallbackFrom = null }) {
+  // fallbackFrom: { from: '<provider>:<model>', reason } the session an agent fell back from (#262);
+  // account: { name, dir } the provider account it runs on (#312; its folder is never recorded)
+  openSession({ agent, provider, model, effort = null, parentId, stepId, mode = null, simulates = null, fallbackFrom = null, account = null }) {
     const s = {
       id: agent === 'orchestrator' ? 'orchestrator' : `s${++this.nSession}`,
       agent, provider, model, effort, parentId, stepId, mode, simulates, fallbackFrom,
+      account: account?.name || null, accountDir: account?.dir || null,
       openedAt: Date.now(), closedAt: null,
       turns: 0, activeMs: 0, tokens: emptyUsage(), costUsd: 0,
       status: 'idle', providerSessionId: null,
@@ -133,6 +135,8 @@ const methods = {
       ...(s.costEstimate ? { cost_estimate: { ...s.costEstimate } } : {}),
       ...(s.simulates ? { simulates: s.simulates } : {}),
       ...(s.fallbackFrom ? { fallback_from: s.fallbackFrom } : {}),
+      // #312: the name of the provider account the session runs on (Settings' accounts)
+      ...(s.account ? { account: s.account } : {}),
       ...this.cacheState(s),
     };
   },
@@ -317,9 +321,11 @@ const methods = {
     if (!session) {
       // #262: the first session after a fallback records what it fell back from
       const fallback = this.fallbackAt.get(agentName);
+      // #312: the provider account it runs on (src/engine/run/accounts.js), the same in a simulation
+      const account = await this.turnAccount(agentName, agent, stepId);
       session = this.openSession({
         agent: agentName, provider: simulated ? 'mock' : agent.provider, model: agent.model, effort: agent.effort || null,
-        parentId: this.orchestrator.id, stepId, mode, simulates: simulated ? agent.provider : null, fallbackFrom: fallback?.pending || null,
+        parentId: this.orchestrator.id, stepId, mode, simulates: simulated ? agent.provider : null, fallbackFrom: fallback?.pending || null, account,
       });
       if (fallback) fallback.pending = null;
       if (persistent) this.agentSessions.set(agentName, session.id);
@@ -399,7 +405,8 @@ const methods = {
     const visit = this.ctx.steps[String(stepId).split(':')[0]]?.visits || 0;
     // the agent's own provider (not `mock`): the simulation's usage_limits match it (#262)
     // maxRequests: the enforced budget (the simulation's request_budget ends a turn on it)
-    hint = { ...(hint || { stepId, visit }), handoff: wantNote, provider: agent.provider, providerType, maxRequests: enforced && !ownLimit ? budget : null };
+    // account: the session's account name (#312: the simulation's "<provider>@<account>" usage_limits)
+    hint = { ...(hint || { stepId, visit }), handoff: wantNote, provider: agent.provider, providerType, account: session.account, maxRequests: enforced && !ownLimit ? budget : null };
     // simulation: which answer of this step this is (mockSequences.invalid_answers: { step: n } makes the first n invalid)
     if (simulated) { this.mockCalls ??= {}; hint.call = this.mockCalls[hint.stepId] = (this.mockCalls[hint.stepId] || 0) + 1; }
 
@@ -412,24 +419,15 @@ const methods = {
         message: `[${agentName}] ${stepId}: ${providerType || agent.provider} cannot open attached images; it only gets their paths (${attachments.map((f) => f.name).join(', ')})`,
       });
     }
-    const call = { session, agentName, agent, provider, extraArgs, agentEnv, stepId, hint, attachments };
+    // accountEnv: the CLI process's config-folder variable of the session's account (#312), not agentEnv
+    const call = { session, agentName, agent, provider, extraArgs, agentEnv, accountEnv: this.sessionAccountEnv(session, providerType), stepId, hint, attachments };
     let res;
     try {
       res = await this.invokeTurn(call, turn, fullPrompt);
     } catch (e) {
-      // #262: out of credits / past its usage limit: the turn moves on to the next entry of the agent's
-      // fallback chain, in a fresh session (from its handoff note), and the agent stays there for the run
-      const next = !this.abort.signal.aborted && isQuotaError(providerType, e.message) ? this.nextFallback(agentName, agent) : null;
-      if (persistent && !next) this.setStatus(session, 'error');
-      else this.closeSession(session, 'failed');
-      if (!next) throw e;
-      if (persistent) this.agentSessions.delete(agentName);
-      const from = `${agent.provider}:${agent.model}`;
-      Object.assign(def, { provider: next.provider, model: next.model });
-      this.ctx.agents[agentName] = { provider: next.provider, model: next.model };
-      this.fallbackAt.get(agentName).pending = { from, reason: e.message };
-      this.emitEvent('agent.fallback',{ agent: agentName, step_id: stepId, from, to: `${next.provider}:${next.model}`, reason: e.message });
-      return this.agentTurn(agentName, prompt, turnOpts);
+      // #312 / #262: out of credits / past its usage limit: the next account of the provider, else the
+      // fallback chain, else a wait for credits, each in a fresh session (src/engine/run/accounts.js)
+      return this.recoverTurn(e, { session, persistent, agentName, agent, def, providerType, stepId, prompt, turnOpts });
     }
 
     // metrics: context at the start and peak of the turn, tokens, and whether they were wasted

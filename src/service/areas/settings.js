@@ -2,6 +2,7 @@
 // each CLI the workflows call (claude, codex, grok, gh, glab, git), and how to install a missing one
 // (src/install-commands.js) or sign in (#319). Claude Code's sign-in is read from its credentials
 // (src/claude-auth.js), never by running it; a failed probe returns its last output lines (`output`).
+// accountStatus (#312): a provider account's folder, signed in or not, with its login command.
 
 const { resolveCommandAsync } = require('../../engine/providers');
 const {
@@ -13,6 +14,7 @@ const {
   installHint,
   signInCommands,
 } = require('../../install-commands');
+const providerAccounts = require('../../provider-accounts');
 const { runTool } = require('../common');
 
 const lastLines = (text, n = 4) => String(text || '').split(/\r?\n/).filter((l) => l.trim()).slice(-n).join('\n') || null;
@@ -51,7 +53,14 @@ module.exports = () => {
     }));
   }
 
+  // #312: a provider account's folder: signed in or not, and its login command (src/provider-accounts.js)
+  async function accountStatus({ provider, dir } = {}) {
+    const status = await providerAccounts.accountStatus({ provider, dir });
+    return { ...status, loginCommand: providerAccounts.accountLoginCommand(provider, dir) };
+  }
+
   return {
+    accountStatus,
     envDetails,
   };
 };

@@ -335,6 +335,7 @@ function resumeSpec(runDir, fromStep) {
   const sessions = {};
   const handoffs = {};
   const cliTotals = {};
+  const sessionAccounts = {}; // #312: agent -> the account of its conversation (null: none)
   // #262: the run's agent overrides, then the fallbacks its agents took
   const agentOverrides = { ...(started.agent_overrides || {}) };
   let worktree = null; // the run's git worktree (worktree.ready / .kept / .removed): the resume continues there
@@ -345,6 +346,7 @@ function resumeSpec(runDir, fromStep) {
     if (ev.type === 'workflow.child_started' && ev.child_run_id) childRuns.set(ev.child_run_id, { run_id: ev.child_run_id, step_id: ev.step_id, ...(ev.index !== undefined ? { index: ev.index } : {}), label: ev.label ?? null, status: 'running' });
     if (ev.type === 'workflow.child_finished' && childRuns.has(ev.child_run_id)) childRuns.get(ev.child_run_id).status = ev.status;
     if (ev.session?.agent && ev.session.provider_session_id && ev.session.provider !== 'mock') sessions[ev.session.agent] = ev.session.provider_session_id;
+    noteSessionAccount(ev, sessionAccounts);
     // #233: the CLI's running total per CLI session, so the resumed turn costs only its own part
     if (ev.session?.provider_session_id && ev.session.cli_total_cost_usd != null) cliTotals[ev.session.provider_session_id] = ev.session.cli_total_cost_usd;
     if (/^worktree\./.test(ev.type) && ev.dir) worktree = { dir: ev.dir, branch: ev.branch || worktree?.branch || null };
@@ -356,8 +358,14 @@ function resumeSpec(runDir, fromStep) {
   // attachments: the images attached to inputs (#129), the previous run's copies (the new run copies them again)
   return { runId: path.basename(runDir), file: started.file, inputs: started.inputs || {}, attachments: started.attachments || null, mock: !!started.mock, projectId: started.project_id || null,
     // runs recorded before groups have a single `issue`
-    issues: started.issues || (started.issue ? [started.issue] : null), personas: started.personas || null, fromStep, steps, sessions, cliTotals, handoffs, worktree,
+    issues: started.issues || (started.issue ? [started.issue] : null), personas: started.personas || null, fromStep, steps, sessions, sessionAccounts, cliTotals, handoffs, worktree,
     childRuns: [...childRuns.values()], agentOverrides: Object.keys(agentOverrides).length ? agentOverrides : null };
+}
+
+// #312: the account (its name, null for none) of the conversation resumeSpec keeps for an agent: a
+// resumed run continues it only on that account (resumeSession, src/engine/run/resume.js)
+function noteSessionAccount(ev, accounts) {
+  if (ev.session?.agent && ev.session.provider_session_id && ev.session.provider !== 'mock') accounts[ev.session.agent] = ev.session.account || null;
 }
 
 /**

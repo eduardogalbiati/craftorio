@@ -60,10 +60,12 @@ const methods = {
   },
 
   // resumed run: continue the agent's previous conversation (its system prompt is already there),
-  // only for its first session in this run
+  // only for its first session in this run, and only on the account that opened it (#312: a
+  // conversation never moves to another account; the agent starts from its handoff note instead)
   resumeSession(agentName, session, persistent) {
     this.resumeSessions ??= { ...(this.resume?.sessions || {}) };
-    const previous = persistent && !this.machine.simulated &&this.resumeSessions[agentName];
+    const sameAccount = (this.resume?.sessionAccounts?.[agentName] || null) === (session.account || null);
+    const previous = persistent && !this.machine.simulated && sameAccount && this.resumeSessions[agentName];
     delete this.resumeSessions[agentName];
     if (previous) {
       session.providerSessionId = previous; session.turns = 1;

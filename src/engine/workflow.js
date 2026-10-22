@@ -60,6 +60,7 @@ const {
   IDLE_WARN_MS,
   methods: turnsMethods,
 } = require('./run/turns');
+const { methods: accountsMethods } = require('./run/accounts');
 const { childRunCost, methods: costsMethods } = require('./run/costs');
 const { methods: gatesMethods } = require('./run/gates');
 const { methods: supervisionMethods } = require('./run/supervision');
@@ -159,6 +160,9 @@ class WorkflowRun extends EventEmitter {
   //   workflow.started `agents`; an agent the workflow does not have, or an undefined provider, is refused.
   // fallbacks (#262): { <provider>: ["<provider>:<model>", ...] } Settings' chains per provider, for an agent whose
   //   workflow declares no `fallbacks` (see fallbackChain).
+  // accounts (#312): { <provider>: [{ name, dir, enabled }] } Settings' accounts per provider, in order (an
+  //   account is a CLI config folder); accountCooldownMs: how long an account at its usage limit stays out
+  //   when the message gives no reset time (default 1 h). See src/engine/run/accounts.js.
   // models (#262): { <model id>: { timeout_factor?, max_total_cost_usd? } } Settings' limits per model; the
   //   workflow's own `models` win per model (see modelLimits).
   // nightLimits (#337): () => tonight's limits ({ multiplier } | { values }) or null, called at each check
@@ -173,7 +177,7 @@ class WorkflowRun extends EventEmitter {
   //   null = no Product Owner (a simulation needs none).
   // language (#327): () => the settings' language ({ agents, issues }) or null, called at each turn: every
   //   turn's [Language] line and the output instruction follow it (src/shared/language.js); null = English.
-  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issues, issue, resume, worktreesDir, mockSequences, notices, stopProcesses, probe, actionsQuota, peerSessions, idleWarnMs, personas, localPreview, attachments, then, from, parent, startChild, memoryGuard, agentOverrides, fallbacks, models, nightLimits, testWorkers, machine, architectureOracle, refactorPriorityOptions, language }) {
+  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issues, issue, resume, worktreesDir, mockSequences, notices, stopProcesses, probe, actionsQuota, peerSessions, idleWarnMs, personas, localPreview, attachments, then, from, parent, startChild, memoryGuard, agentOverrides, fallbacks, accounts, accountCooldownMs, models, nightLimits, testWorkers, machine, architectureOracle, refactorPriorityOptions, language }) {
     super();
     refreshWindowsPath(); // actions (e.g. gh pr merge) need the refreshed PATH
     this.file = file;
@@ -248,6 +252,7 @@ class WorkflowRun extends EventEmitter {
     this.models = { ...(models || {}), ...(this.wf.models || {}) };
     this.providerFallbacks = fallbacks || {};
     this.fallbackAt = new Map(); // agent -> { chain, index } of its fallback chain (fallbackChain)
+    this.setupAccounts(accounts, accountCooldownMs); // #312 (src/engine/run/accounts.js)
     // #337: tonight's limits, read at each check (effectiveLimits); the highest granted so far stays
     this.nightLimits = typeof nightLimits === 'function' ? nightLimits : null;
     this.grantedLimits = null;
@@ -766,6 +771,7 @@ class WorkflowRun extends EventEmitter {
     const child = new WorkflowRun({
       file: found, inputs, mock: this.mock, runsDir: this.ctx.runs_dir, skillsDirs: this.skillsDirs.filter((d) => d !== BUNDLED_SKILLS),
       budget: this.budget, prices: this.prices, projectId: this.projectId, worktreesDir: this.worktreesDir, parent,
+      accounts: this.providerAccounts, accountCooldownMs: this.accountCooldownMs,
       ...(this.stopProcesses === null ? { stopProcesses: null } : {}), idleWarnMs: this.idleWarnMs, testWorkers: this.workers?.testWorkers,
       notices: [{ level: 'info', message: `Child run of ${this.runId} (step ${parent.step_id}${label ? `, ${label}` : ''}).` }],
     });
@@ -861,6 +867,7 @@ mixin(
   gatesMethods,
   sessionsMethods,
   turnsMethods,
+  accountsMethods,
   costsMethods,
   supervisionMethods,
   checkoutMethods,

@@ -224,6 +224,21 @@
     // #262: "Claude AI usage limit reached|<epoch>", "5-hour limit reached ∙ resets 3pm", "You've hit your limit"
     quotaPattern: /\blimit reached\b|you['’]ve hit your limit/i,
     usageLimitMessage: 'Claude AI usage limit reached|1760227200',
+    // #312: when the limit resets (epoch ms), read from its message, or null: "…|<epoch s>", or
+    // "resets 3pm" (the next 15:00, local)
+    quotaReset: (message, now = Date.now()) => {
+      const text = String(message || '');
+      const epoch = /limit reached\|(\d{9,})/i.exec(text);
+      if (epoch) return +epoch[1] * 1000;
+      const clock = /\bresets\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b/i.exec(text);
+      if (!clock) return null;
+      const at = new Date(+now);
+      at.setHours(clock[3] ? (+clock[1] % 12) + (/pm/i.test(clock[3]) ? 12 : 0) : +clock[1], +(clock[2] || 0), 0, 0);
+      if (at.getTime() <= +now) at.setDate(at.getDate() + 1);
+      return at.getTime();
+    },
+    // #312: the variable that gives the CLI its config folder (one account per folder)
+    configDirEnv: 'CLAUDE_CONFIG_DIR',
     costReported: true,
     installNote: 'then run `claude` once to log in',
     // its conversations: <config>/projects/<project>/<id>.jsonl (src/cli-sessions.js, src/local-usage.js)
