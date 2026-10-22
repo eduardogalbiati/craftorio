@@ -5,7 +5,8 @@
 /* #410: the same tab row as the Run screen's (.run-tab-row, style.css), so the tabs never move */
 #view-runchat .duo-chat-head { flex-wrap: wrap; padding: 0 16px; gap: 6px 12px; }
 .rc-title { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
-.rc-title b { font-size: 14px; }
+/* #437: the title shrinks (its .run-title ends in "…"), the file name and the id keep their width */
+.rc-title b { font-size: 14px; min-width: 0; overflow: hidden; }
 .rc-scroll { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; }
 .rc-messages { flex: none; overflow: visible; padding-bottom: 8px; }
 .pill-warn { background: rgba(250, 204, 21, .12); color: var(--yellow); border-color: rgba(250, 204, 21, .3); }
