@@ -101,7 +101,6 @@ const COMPLEXITY_EXCEPTIONS = {
   'src/renderer/views/backlog/backlog-po.js:ask': 31,
   'src/renderer/views/backlog/backlog-po.js:fileDraft': 27,
   'src/renderer/views/backlog/backlog-po.js:render': 33,
-  'src/renderer/views/backlog/backlog-roadmap.js:clicked': 94,
   'src/renderer/views/backlog/backlog-roadmap.js:html': 101,
   'src/renderer/views/backlog/backlog-roadmap.js:progressHtml': 28,
   'src/renderer/views/backlog/backlog.js:onclick(#bl-list)': 27,
