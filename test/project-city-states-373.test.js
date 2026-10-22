@@ -3,6 +3,10 @@
 // "Map this project" with its estimate), a stale plan (the unmatched share, "Refresh the map"), the
 // plan's validation problems, the edges not read, the header's counts, and the overlay API's
 // window.ProjectCity.current() / flyTo() on the city on screen.
+// #440/#441 (the contract in test/project-city-modes-440.test.js and test/project-city-panels-441.test.js):
+// a city on its own is in Explore (data-city-mode="explore", data-testid="city-mode-title" the project,
+// no data-testid="city-mode-close"); the legend closes (city-legend-close) and a "Legend" button
+// (city-legend-open) brings it back with the same rows.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -47,11 +51,13 @@ function load(answer) {
     vm.runInContext(fs.readFileSync(path.join(ROOT, 'src', 'shared', f), 'utf8'), sandbox);
   }
   // the view and its two helper modules (#381/#382: the notes and the cards have their own files)
-  for (const f of ['project-city-notes.js', 'project-city-cards.js', 'project-city.js']) {
+  // #440/#441: the modes' and the panels' helpers, when they have their own files
+  for (const f of [...OPTIONAL, 'project-city-notes.js', 'project-city-cards.js', 'project-city.js']) {
     vm.runInContext(fs.readFileSync(path.join(ROOT, 'src', 'renderer', 'views', 'project', f), 'utf8'), sandbox, { filename: f });
   }
   return sandbox;
 }
+const OPTIONAL = ['project-city-modes.js', 'project-city-panels.js'].filter((f) => fs.existsSync(path.join(ROOT, 'src', 'renderer', 'views', 'project', f)));
 
 const settle = async () => { for (let i = 0; i < 10; i++) await new Promise((r) => setImmediate(r)); };
 const q = (el, id) => el.querySelector(`[data-testid="${id}"]`);
@@ -157,4 +163,34 @@ test('#373 City: the overlay API reaches the city on screen, and Colour by chang
   assert.match(legend(), /commits/);
   city.destroy();
   assert.equal(w.ProjectCity.current(), null);
+});
+
+test('#440 City states: a city on its own is in Explore, titled with the project, without a Close', async () => {
+  const { city } = await open({ state: 'ok', ...buildCity({ plan: null, facts: facts() }) });
+  await settle();
+  assert.equal(String(city.el.getAttribute('data-city-mode') ?? ''), 'explore');
+  assert.equal(text(q(city.el, 'city-mode-title')), 'fixture-app');
+  assert.equal(q(city.el, 'city-mode-close') === null || q(city.el, 'city-mode-close').hidden === true, true, 'no Close in Explore');
+  city.destroy();
+});
+
+test('#441 City states: the legend closes and a small "Legend" button brings it back with the same rows', async () => {
+  const { city } = await open({ state: 'ok', ...buildCity({ plan: null, facts: facts() }) });
+  await settle();
+  const legend = () => q(city.el, 'project-city-legend');
+  const hidden = (el) => !el || el.hidden === true || el.classList.contains('hidden');
+  const rows = text(legend());
+  const x = q(city.el, 'city-legend-close');
+  assert.equal(x === null, false, 'a close button on the legend');
+  assert.equal(x.localName, 'button');
+  x.click();
+  assert.equal(hidden(legend()), true, 'the legend is closed');
+  const reopen = q(city.el, 'city-legend-open');
+  assert.equal(reopen === null || hidden(reopen), false, 'the "Legend" button');
+  assert.equal(text(reopen), 'Legend');
+  reopen.click();
+  assert.equal(hidden(legend()), false, 'the legend is back');
+  assert.equal(text(legend()), rows, 'with the same rows');
+  assert.equal(hidden(q(city.el, 'city-legend-open')), true, 'the "Legend" button gives way');
+  city.destroy();
 });

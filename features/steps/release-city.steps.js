@@ -139,6 +139,13 @@ When('I pick the issue {string} in the release\'s issue filter', async ({ e2e },
   await select.selectOption({ label: issue });
 });
 
+// #441: what the release panel shows survives minimizing it
+Then('the release\'s issue filter still shows {string}', async ({ e2e }, issue) => {
+  const select = visible(e2e.window.getByTestId('city-release-issue')).first();
+  await expect(select).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect.poll(() => select.evaluate((s) => (s.selectedOptions[0]?.textContent || '').trim()), { timeout: LOAD_TIMEOUT, message: 'the issue picked' }).toBe(issue);
+});
+
 When('I pick {string} as the earlier tag of the release comparison', async ({ e2e }, tag) => {
   const select = byId(e2e.window, 'city-release-from');
   await expect(select).toBeVisible({ timeout: LOAD_TIMEOUT });

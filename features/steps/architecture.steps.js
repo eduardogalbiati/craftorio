@@ -1090,3 +1090,147 @@ Then('the city on screen is the same one, not rebuilt, with its {int} buildings'
   expect(await canvas.evaluate((c) => c.__e2eCityMark === true), 'the canvas drawn before the switch is still the one shown').toBe(true);
   await expect.poll(async () => (await drawnBuildings(e2e.window))?.length ?? -1, { timeout: LOAD_TIMEOUT, message: 'the drawn buildings' }).toBe(count);
 });
+
+// --- City modes (#440) and its panels (#441) ---
+// The contract these steps assume: the city's root carries data-city-mode = explore | live | replay |
+// impact | stage | release (one at a time); its header title data-testid="city-mode-title" (the
+// project in Explore, "Live", "Issue #426", "Release 1.0.0 → 1.1.2"...), its Close button
+// data-testid="city-mode-close" (back to where the mode was opened from; in Architecture: Explore).
+// Each panel's root has data-city-panel = notes | connections | agents | impact | release | replay |
+// legend, with a chevron button data-testid="city-panel-toggle" whose aria-expanded is "true" or
+// "false" (minimized: only the title row shows). The legend closes with data-testid=
+// "city-legend-close"; a button data-testid="city-legend-open" ("Legend") brings it back; its rows are
+// list items. The Live switch data-testid="city-live-toggle" (a checkbox or a button with
+// aria-pressed / aria-checked) is off by default. The city may be a modal outside the Architecture
+// tab, so these locators are page-wide.
+
+const CITY_MODES = { explore: 'explore', live: 'live', 'run replay': 'replay', 'issue impact': 'impact', stage: 'stage', release: 'release' };
+const CITY_PANELS = {
+  notes: 'notes', 'city plan': 'notes', 'most connected': 'connections', 'agents at work': 'agents',
+  'impact preview': 'impact', release: 'release', replay: 'replay', legend: 'legend',
+};
+const cityModeOf = (name) => {
+  const mode = CITY_MODES[name.toLowerCase()];
+  if (!mode) throw new Error(`no city mode "${name}" (known: ${Object.keys(CITY_MODES).join(', ')})`);
+  return mode;
+};
+const cityPanelId = (name) => {
+  const id = CITY_PANELS[name.toLowerCase()];
+  if (!id) throw new Error(`no city panel "${name}" (known: ${Object.keys(CITY_PANELS).join(', ')})`);
+  return id;
+};
+const cityRoot = (page) => visible(page.locator('[data-city-mode]')).first();
+const cityPanel = (page, name) => page.locator(`[data-city-panel="${cityPanelId(name)}"]`).filter({ visible: true });
+const panelToggle = (panel) => panel.getByTestId('city-panel-toggle').first();
+const cityLegend = (page) => cityPanel(page, 'legend').first();
+const legendRowOf = (page, label) => cityLegend(page).getByRole('listitem').filter({ hasText: new RegExp(escapeRe(label), 'i') }).filter({ visible: true });
+const liveToggle = (page) => visible(page.getByTestId('city-live-toggle')).first();
+// a checkbox's checked, else aria-pressed / aria-checked
+const liveIsOn = (page) => liveToggle(page).evaluate((el) => (el.type === 'checkbox'
+  ? el.checked : (el.getAttribute('aria-pressed') || el.getAttribute('aria-checked')) === 'true'));
+
+Then('the city is in the {string} mode titled {string}', async ({ e2e }, mode, title) => {
+  const city = cityRoot(e2e.window);
+  await expect(city).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(city).toHaveAttribute('data-city-mode', cityModeOf(mode), { timeout: LOAD_TIMEOUT });
+  await expect(visible(e2e.window.locator('[data-city-mode]')), 'one city, in one mode').toHaveCount(1);
+  await expect(city.getByTestId('city-mode-title')).toContainText(title, { timeout: LOAD_TIMEOUT });
+});
+
+Then('the city shows the {string} panel', async ({ e2e }, name) => {
+  await expect(cityPanel(e2e.window, name).first(), `the "${name}" panel`).toBeVisible({ timeout: LOAD_TIMEOUT });
+});
+
+Then('the city shows no {string} panel', async ({ e2e }, name) => {
+  await expect(cityRoot(e2e.window)).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(cityPanel(e2e.window, name), `no "${name}" panel`).toHaveCount(0, { timeout: LOAD_TIMEOUT });
+});
+
+Then('the city\'s Live switch is {word}', async ({ e2e }, state) => {
+  const wanted = onOff(state) === 'true';
+  await expect(liveToggle(e2e.window)).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect.poll(() => liveIsOn(e2e.window), { timeout: LOAD_TIMEOUT, message: `the Live switch is ${state}` }).toBe(wanted);
+});
+
+When('I turn the city\'s Live switch {word}', async ({ e2e }, state) => {
+  const wanted = onOff(state) === 'true';
+  await expect(liveToggle(e2e.window)).toBeVisible({ timeout: LOAD_TIMEOUT });
+  expect(await liveIsOn(e2e.window), `the Live switch is not ${state} yet`).toBe(!wanted);
+  await liveToggle(e2e.window).click();
+  await expect.poll(() => liveIsOn(e2e.window), { timeout: LOAD_TIMEOUT, message: `the Live switch is ${state}` }).toBe(wanted);
+});
+
+When('I close the city\'s mode', async ({ e2e }) => {
+  const close = cityRoot(e2e.window).getByTestId('city-mode-close');
+  await expect(close).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await close.click();
+});
+
+Then('the city legend has the {string} row', async ({ e2e }, label) => {
+  await expect(cityLegend(e2e.window)).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(legendRowOf(e2e.window, label).first(), `the legend's "${label}"`).toBeVisible({ timeout: LOAD_TIMEOUT });
+});
+
+Then('the city legend has no {string} row', async ({ e2e }, label) => {
+  await expect(cityLegend(e2e.window)).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(legendRowOf(e2e.window, label), `no "${label}" in the legend`).toHaveCount(0, { timeout: LOAD_TIMEOUT });
+});
+
+When('I minimize the city\'s {string} panel', async ({ e2e }, name) => {
+  const toggle = panelToggle(cityPanel(e2e.window, name).first());
+  await expect(toggle).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false', { timeout: LOAD_TIMEOUT });
+});
+
+When('I expand the city\'s {string} panel', async ({ e2e }, name) => {
+  const toggle = panelToggle(cityPanel(e2e.window, name).first());
+  await expect(toggle).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true', { timeout: LOAD_TIMEOUT });
+});
+
+// minimized: the panel stays with its title row, its content (lists, fields, the rest) hidden
+Then('the city\'s {string} panel shows only its title row', async ({ e2e }, name) => {
+  const panel = cityPanel(e2e.window, name).first();
+  await expect(panel).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(panelToggle(panel)).toHaveAttribute('aria-expanded', 'false', { timeout: LOAD_TIMEOUT });
+  await expect(panel.locator('select, input, textarea, li, table').filter({ visible: true }), 'no content shows').toHaveCount(0, { timeout: LOAD_TIMEOUT });
+  const box = await panel.boundingBox();
+  expect(box && box.height, 'one title row high').toBeLessThan(80);
+});
+
+Then('the city\'s {string} panel is expanded', async ({ e2e }, name) => {
+  const panel = cityPanel(e2e.window, name).first();
+  await expect(panel).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(panelToggle(panel)).toHaveAttribute('aria-expanded', 'true', { timeout: LOAD_TIMEOUT });
+  await expect(panel.locator('select, input, textarea, li, table, p').filter({ visible: true }).first(), 'its content shows').toBeVisible({ timeout: LOAD_TIMEOUT });
+});
+
+When('I close the city legend', async ({ e2e }) => {
+  const close = cityLegend(e2e.window).getByTestId('city-legend-close');
+  await expect(close).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await close.click();
+});
+
+Then('the city shows no legend but a {string} button', async ({ e2e }, label) => {
+  await expect(cityPanel(e2e.window, 'legend'), 'the legend is closed').toHaveCount(0, { timeout: LOAD_TIMEOUT });
+  const open = visible(e2e.window.getByTestId('city-legend-open')).first();
+  await expect(open).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(open).toHaveRole('button');
+  await expect(open).toHaveAccessibleName(new RegExp(escapeRe(label), 'i'));
+});
+
+When('I bring the city legend back with its {string} button', async ({ e2e }, label) => {
+  const open = visible(e2e.window.getByTestId('city-legend-open')).first();
+  await expect(open).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(open).toContainText(label);
+  await open.click();
+});
+
+Then('the city shows no {string} button for the legend', async ({ e2e }, label) => {
+  await expect(cityLegend(e2e.window)).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(visible(e2e.window.getByTestId('city-legend-open')), `no "${label}" button`).toHaveCount(0);
+});

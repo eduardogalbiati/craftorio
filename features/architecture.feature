@@ -480,3 +480,131 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     When I turn the "Glow" switch of the city off
     Then the "Glow" switch of the city is off
     And the city on screen is the same one, not rebuilt, with its 2 buildings
+
+  # City modes (#440): the city is in one mode at a time (Explore by default, Live, Run replay, Issue
+  # impact, Stage, Release); opening one replaces the previous one's layers, panels and legend rows; the
+  # title names the mode; Close goes back to where it was opened from (in Architecture: Explore). The
+  # release project "shop" is the tagged repository of features/steps/release-city.steps.js.
+  @issue-440
+  Scenario: The city opens in Explore titled with the project, and shows the agents at work only in Live
+    Given the app is open
+    And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
+    And a run in progress of "billing-service" where the "developer" agent of step "implement" edits "src/billing.js"
+    When I open "Projects" in the sidebar
+    And I open the project "billing-service" from the Projects screen
+    And I open the "Architecture" project tab
+    And I switch the Architecture tab to "City"
+    Then the Architecture tab shows the project city
+    And the city is in the "Explore" mode titled "billing-service"
+    And the city shows the "Most connected" panel
+    And the city shows no "Agents at work" panel
+    And the city's Live switch is off
+    When I turn the city's Live switch on
+    Then the city is in the "Live" mode titled "Live"
+    And the city shows the "Agents at work" panel
+    And the city shows the agent "developer · implement"
+    And the city shows no "Most connected" panel
+
+  @issue-440
+  Scenario: A release opened on the map shows the release mode alone, nothing left of an earlier impact preview
+    Given the app is open
+    And the workspace has a git project "shop" tagged "1.1.0", "1.1.1" and "1.1.2" that shipped the release "1.1.2" with the issues "#12" and "#13"
+    And the backlog of "shop" has the open issue "Add the new module" whose body cites "src/new.js"
+    And a run in progress of "shop" where the "developer" agent of step "implement" edits "src/edit.js"
+    When I open "Backlog" in the sidebar
+    And I choose the project "shop" in the header
+    And I open the Board as a list
+    And I click "Show on the map" on the Backlog issue "Add the new module"
+    Then the city is in the "Issue impact" mode titled "Issue #1"
+    And the city legend has the "Cited in the issue" row
+    When I open "Releases" in the sidebar
+    And I choose the project "shop" in the header
+    And I click "Show on the map" on the release "1.1.2"
+    Then the city is in the "Release" mode titled "Release 1.1.1 → 1.1.2"
+    And the city release header compares "1.1.1" to "1.1.2"
+    And the city shows no "Agents at work" panel
+    And the city shows no "Most connected" panel
+    And the city shows no "Impact preview" panel
+    And the city legend has the "Added" row
+    And the city legend has no "Cited in the issue" row
+
+  @issue-440
+  Scenario: Closing an issue's impact preview goes back to the Backlog and leaves no impact behind on the city
+    Given the app is open
+    And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
+    And the backlog of "billing-service" has the open issue "Change the discount rule" whose body cites "src/billing.js"
+    When I open "Backlog" in the sidebar
+    And I choose the project "billing-service" in the header
+    And I open the Board as a list
+    And I click "Show on the map" on the Backlog issue "Change the discount rule"
+    Then the city is in the "Issue impact" mode titled "Issue #1"
+    And the city impact header names the issue "Change the discount rule"
+    And the city legend has the "Cited in the issue" row
+    When I close the city's mode
+    Then the Backlog screen is shown
+    When I open "Projects" in the sidebar
+    And I open the project "billing-service" from the Projects screen
+    And I open the "Architecture" project tab
+    And I switch the Architecture tab to "City"
+    Then the city is in the "Explore" mode titled "billing-service"
+    And the city shows no "Impact preview" panel
+    And the city shows the "Most connected" panel
+    And the city legend has no "Cited in the issue" row
+
+  # City panels (#441): every panel has a chevron that minimizes it to its title row and expands it with
+  # its content as it was; the legend closes and a small "Legend" button brings it back; what is
+  # minimized is remembered per mode.
+  @issue-441
+  Scenario: A minimized panel keeps only its title row and expands with its content as it was
+    Given the app is open
+    And the workspace has a git project "shop" tagged "1.1.0", "1.1.1" and "1.1.2" that shipped the release "1.1.2" with the issues "#12" and "#13"
+    When I open "Releases" in the sidebar
+    And I choose the project "shop" in the header
+    And I click "Show on the map" on the release "1.1.2"
+    And I pick the issue "#12" in the release's issue filter
+    Then the city release header counts 1 added, 0 changed and 0 removed
+    When I minimize the city's "Release" panel
+    Then the city's "Release" panel shows only its title row
+    When I expand the city's "Release" panel
+    Then the city's "Release" panel is expanded
+    And the release's issue filter still shows "#12"
+    And the city release header counts 1 added, 0 changed and 0 removed
+
+  @issue-441
+  Scenario: The legend closes and the "Legend" button brings it back
+    Given the app is open
+    And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
+    When I open "Projects" in the sidebar
+    And I open the project "billing-service" from the Projects screen
+    And I open the "Architecture" project tab
+    And I switch the Architecture tab to "City"
+    Then the Architecture tab shows the project city
+    When I colour the city by "Zone"
+    Then the city legend has the "Backend" row
+    When I close the city legend
+    Then the city shows no legend but a "Legend" button
+    When I bring the city legend back with its "Legend" button
+    Then the city legend has the "Backend" row
+    And the city legend has the "Tooling" row
+    And the city shows no "Legend" button for the legend
+
+  @issue-441
+  Scenario: A panel minimized in the release mode is still minimized when a release opens again, not in Explore
+    Given the app is open
+    And the workspace has a git project "shop" tagged "1.1.0", "1.1.1" and "1.1.2" that shipped the release "1.1.2" with the issues "#12" and "#13"
+    When I open "Releases" in the sidebar
+    And I choose the project "shop" in the header
+    And I click "Show on the map" on the release "1.1.2"
+    And I minimize the city's "Release" panel
+    And I close the city's mode
+    And I open "Projects" in the sidebar
+    And I open the project "shop" from the Projects screen
+    And I open the "Architecture" project tab
+    And I switch the Architecture tab to "City"
+    Then the city is in the "Explore" mode titled "shop"
+    And the city's "Most connected" panel is expanded
+    When I open "Releases" in the sidebar
+    And I choose the project "shop" in the header
+    And I click "Show on the map" on the release "1.1.2"
+    Then the city is in the "Release" mode titled "Release 1.1.1 → 1.1.2"
+    And the city's "Release" panel shows only its title row

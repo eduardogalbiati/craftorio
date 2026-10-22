@@ -10,6 +10,10 @@
 //   - a destroyed overlay (a project switch) no longer answers showRelease;
 //   - Save image: a PNG named after the project and the tags, the caption under the city; a failed
 //     capture is said on the card.
+// #440/#441 (the contract in test/project-city-modes-440.test.js and test/project-city-panels-441.test.js):
+// a release puts the city in its mode (data-city-mode="release", "Release 1.1.1 → 1.1.2"), with no
+// Live toggle and no plan problems of the release's base city; Close goes back to "explore"; the card
+// is a panel (data-city-panel="release") whose chevron minimizes it and keeps the issue picked.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -76,7 +80,9 @@ function load({ release = async () => RELEASE(), capture = async () => 'data:ima
   }
   // The app's select builder, so the pickers are built as in the app (#383).
   vm.runInContext(fs.readFileSync(path.join(ROOT, 'src', 'renderer', 'select.js'), 'utf8'), sandbox, { filename: 'select.js' });
-  for (const f of ['project-city-notes.js', 'project-city-cards.js', 'project-city.js']) {
+  // #440/#441: the modes' and the panels' helpers, when they have their own files
+  const optional = ['project-city-modes.js', 'project-city-panels.js'].filter((f) => fs.existsSync(path.join(DIR, f)));
+  for (const f of [...optional, 'project-city-notes.js', 'project-city-cards.js', 'project-city.js']) {
     vm.runInContext(fs.readFileSync(path.join(DIR, f), 'utf8'), sandbox, { filename: f });
   }
   const overlay = sandbox.ProjectCity.overlay;
@@ -208,4 +214,42 @@ test('#376 Save image when the window cannot be captured: the card says why, not
   await settle();
   assert.match(text(q(city.el, 'city-release')), /Could not save the image: capturing the window is only available in the desktop app/);
   assert.equal(calls.anchors.filter((a) => a.download).length, 0);
+});
+
+// a plan with a district naming an unknown zone: the release's base city has plan problems
+const PLAN = {
+  version: 1, project: 'fixture-app', zones: [{ id: 'core', name: 'Core', kind: 'industrial' }],
+  districts: [{ id: 'engine', name: 'Engine', zone: 'core', include: ['src/engine/**'] }, { id: 'lost', name: 'Lost', zone: 'nowhere', include: ['nothing/**'] }],
+};
+
+test('#440 a release puts the city in the release mode: its title, no Live, no plan problems; Close goes back to Explore', async (t) => {
+  const { city } = await shown(t, { release: async () => ({ ...RELEASE(), plan: PLAN, base: buildCity({ plan: PLAN, facts: facts() }) }) });
+  const mode = () => String(city.el.getAttribute('data-city-mode') ?? '');
+  assert.equal(mode(), 'release');
+  assert.equal(text(q(city.el, 'city-mode-title')), 'Release 1.1.1 → 1.1.2');
+  assert.equal(q(city.el, 'project-city-problems') === null, true, 'no plan problems on a past release');
+  const live = q(city.el, 'city-live-toggle');
+  assert.equal(live === null || live.hidden === true || live.disabled === true, true, 'no Live on a release');
+  q(city.el, 'city-release-close').click();
+  await settle();
+  assert.equal(mode(), 'explore');
+  assert.equal(text(q(city.el, 'city-mode-title')), 'fixture-app');
+});
+
+test('#441 the release card is a panel: minimized it keeps the issue picked, expanded it shows the same counts', async (t) => {
+  const { w, city } = await shown(t);
+  pick(w, q(city.el, 'city-release-issue'), '12');
+  await settle();
+  const chev = () => city.el.querySelector('[data-city-panel="release"] [data-testid="city-panel-toggle"]');
+  assert.equal(chev() === null, false, 'the release panel\'s chevron');
+  assert.equal(chev().localName, 'button');
+  assert.equal(String(chev().getAttribute('title') || '').trim() === '', false, 'a tooltip');
+  chev().click();
+  await settle();
+  assert.equal(String(chev()?.getAttribute('aria-expanded')), 'false');
+  assert.equal(String(q(city.el, 'city-release-issue')?.value ?? ''), '12', 'the issue picked is kept');
+  chev().click();
+  await settle();
+  assert.equal(String(chev()?.getAttribute('aria-expanded')), 'true');
+  assert.match(text(q(city.el, 'city-release-header')), /1 added/);
 });

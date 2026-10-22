@@ -8,6 +8,10 @@
 //   - a stage: a building two items would change is in the collision red and listed in
 //     data-testid="city-impact-conflicts";
 //   - Close removes the layer, and an answer arriving after Close is dropped.
+// #440/#441 (the contract in test/project-city-modes-440.test.js and test/project-city-panels-441.test.js):
+// the issue puts the city in its mode (data-city-mode="impact", "Issue #375"), a stage in "stage";
+// Close and a second show leave no legend row and no card of the previous preview; the card is a panel
+// (data-city-panel="impact") whose chevron minimizes it and keeps its content.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -68,7 +72,9 @@ function load({ impact = () => ({ plan: null, history: {}, error: null }) } = {}
   for (const f of ['globs.js', 'json-schema.js', 'architecture-model.js', 'city-model.js', 'city-layout.js', 'city-agents.js', 'city-impact.js', 'roadmap-model.js']) {
     vm.runInContext(fs.readFileSync(path.join(ROOT, 'src', 'shared', f), 'utf8'), sandbox, { filename: f });
   }
-  for (const f of ['project-city-notes.js', 'project-city-cards.js', 'project-city.js']) {
+  // #440/#441: the modes' and the panels' helpers, when they have their own files
+  const optional = ['project-city-modes.js', 'project-city-panels.js'].filter((f) => fs.existsSync(path.join(DIR, f)));
+  for (const f of [...optional, 'project-city-notes.js', 'project-city-cards.js', 'project-city.js']) {
     vm.runInContext(fs.readFileSync(path.join(DIR, f), 'utf8'), sandbox, { filename: f });
   }
   const overlay = sandbox.ProjectCity.overlay;
@@ -185,4 +191,60 @@ test('#375 an answer arriving after Close is dropped: no layer comes back, nothi
   assert.equal(layer === null || layer.spec === null, true, 'no impact layer after Close');
   assert.equal(records(calls).length, 0);
   assert.equal(q(city.el, 'city-impact-header') === null, true);
+});
+
+const legendText = (city) => text(q(city.el, 'project-city-legend'));
+const STAGE = {
+  name: 'Engine fixes',
+  items: [
+    { id: 'a', number: 1, title: 'First', body: 'Edit `src/engine/run.js`' },
+    { id: 'b', number: 2, title: 'Second', body: 'Edit `docs/a.md`' },
+  ],
+};
+
+test('#440 an issue puts the city in the impact mode; Close takes its legend rows away and the city back to Explore', async (t) => {
+  const { city, handle } = await open(t);
+  await handle.show({ issue: { ...ISSUE, runs: [] } });
+  await settle();
+  assert.equal(String(city.el.getAttribute('data-city-mode') ?? ''), 'impact');
+  assert.equal(text(q(city.el, 'city-mode-title')), 'Issue #375');
+  assert.match(legendText(city), /Cited in the issue/);
+  q(city.el, 'city-impact-close').click();
+  await settle();
+  assert.doesNotMatch(legendText(city), /Cited in the issue|Impact/i, 'no impact row left in the legend');
+  assert.equal(String(city.el.getAttribute('data-city-mode') ?? ''), 'explore');
+});
+
+test('#440 a second show replaces the first: the stage after the issue, no row and no card of the issue left', async (t) => {
+  const { city, handle } = await open(t);
+  await handle.show({ issue: { ...ISSUE, runs: [] } });
+  await settle();
+  await handle.show({ stage: STAGE });
+  await settle();
+  assert.equal(String(city.el.getAttribute('data-city-mode') ?? ''), 'stage');
+  assert.match(text(q(city.el, 'city-mode-title')), /Stage.*Engine fixes/);
+  assert.doesNotMatch(legendText(city), /Cited in the issue/);
+  assert.equal(q(city.el, 'city-impact-header') === null, true, 'no stale issue card');
+});
+
+test('#441 the impact card is a panel: its chevron minimizes it to its title row and keeps its content', async (t) => {
+  const { city, handle } = await open(t);
+  await handle.show({ issue: ISSUE });
+  await settle();
+  const panel = city.el.querySelector('[data-city-panel="impact"]');
+  assert.equal(panel === null, false, 'data-city-panel="impact"');
+  const chev = panel.querySelector('[data-testid="city-panel-toggle"]');
+  assert.equal(chev === null, false, 'its chevron');
+  assert.equal(chev.localName, 'button');
+  assert.equal(String(chev.getAttribute('aria-expanded')), 'true');
+  const before = text(q(city.el, 'city-impact-comparison'));
+  chev.click();
+  await settle();
+  const toggle = city.el.querySelector('[data-city-panel="impact"] [data-testid="city-panel-toggle"]');
+  assert.equal(String(toggle?.getAttribute('aria-expanded')), 'false');
+  assert.equal(text(q(city.el, 'city-impact-comparison')), before, 'the comparison is kept while minimized');
+  toggle.click();
+  await settle();
+  assert.equal(String(city.el.querySelector('[data-city-panel="impact"] [data-testid="city-panel-toggle"]')?.getAttribute('aria-expanded')), 'true');
+  assert.match(text(q(city.el, 'city-impact-comparison')), /50%/);
 });
