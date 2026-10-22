@@ -243,10 +243,11 @@
 
   // Re-reads the cached issues with their runs and queue (cheap, no sync). An automatic refresh
   // whose data is the same as what is shown renders nothing (#214: no flicker under the owner).
-  // #491: the scroll read right before the DOM is replaced (the owner's scroll during the read wins);
-  // `merged`: the light state merged by liveReload, shown without a read
-  async function reload(merged) {
+  // #491: the scroll read right before the DOM is replaced; `reload.merged`: liveReload's merged state
+  async function reload() {
     const id = bl.projectId;
+    const merged = reload.merged;
+    reload.merged = null;
     if (!id || bl.syncing) return;
     try {
       const data = merged || await api.getBacklog(id);
@@ -320,15 +321,14 @@
         if (light && bl.projectId === id && key === shownState) return;
         const merged = light && bl.projectId === id && !bl.syncing && window.BacklogRoadmap.mergeState(bl.data, light);
         shownState = merged ? key : '';
-        if (merged) return reload(merged);
+        reload.merged = merged || null;
       }
       await reload();
     })().finally(() => { liveReload.running = null; });
     await liveReload.running;
     if (liveReload.again) { liveReload.again = false; await liveReload(); }
   }
-  // whether the Backlog now differs from what is shown (kept in bl.latest for the notice); #491: read
-  // whole only when the light state's mark moved since the last answer (`busyChecked`)
+  // whether the Backlog differs from what is shown (bl.latest); #491: read whole only when the mark moved
   async function backlogChanged() {
     const id = bl.projectId;
     if (!id) return false;
