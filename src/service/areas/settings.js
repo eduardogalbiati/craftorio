@@ -53,9 +53,17 @@ module.exports = () => {
     }));
   }
 
+  // #312: the CLI's own sign-in probe (`codex login status`) run with the account's variable only:
+  // true/false, or null when the CLI has no probe or is not installed. Its output is not returned.
+  async function probeAccount(id, env) {
+    const tool = TOOLS.find((t) => t.id === id);
+    const r = tool?.auth && await resolveCommandAsync(id);
+    return r ? (await runTool(r.file, tool.auth, env)).ok : null;
+  }
+
   // #312: a provider account's folder: signed in or not, and its login command (src/provider-accounts.js)
   async function accountStatus({ provider, dir } = {}) {
-    const status = await providerAccounts.accountStatus({ provider, dir });
+    const status = await providerAccounts.accountStatus({ provider, dir, probe: probeAccount });
     return { ...status, loginCommand: providerAccounts.accountLoginCommand(provider, dir) };
   }
 

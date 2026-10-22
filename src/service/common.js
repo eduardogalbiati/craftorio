@@ -31,8 +31,8 @@ const num = (v) => (v === '' || v == null || !Number.isFinite(+v) || +v <= 0 ? n
 // a worker thread (#389, src/tool-worker.js): starting a CLI can block the starting thread for
 // seconds on Windows; here, if the worker cannot start.
 const toolWorker = workerClient(path.join(SRC, 'tool-worker.js'));
-function runTool(file, args) {
-  const opts = { windowsHide: true, timeout: 15000, env: { ...process.env } };
+function runTool(file, args, env = {}) {
+  const opts = { windowsHide: true, timeout: 15000, env: { ...process.env, ...env } };
   const here = () => new Promise((resolve) => {
     execShim(file, args, opts, (err, stdout, stderr) => resolve({ ok: !err, out: `${stdout || ''}${stderr || ''}`.trim() }));
   });

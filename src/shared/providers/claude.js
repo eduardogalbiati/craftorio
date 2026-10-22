@@ -7,6 +7,7 @@
   const node = typeof module === 'object' && module.exports;
   const { cacheTier } = node ? require('../session-cache') : {};
   const { contextTokens, emptyUsage } = node ? require('./usage') : {};
+  const { nextClockTime } = node ? require('./quota-reset') : {};
 
   const DEFINITION = {
     type: 'claude-code',
@@ -231,11 +232,7 @@
       const epoch = /limit reached\|(\d{9,})/i.exec(text);
       if (epoch) return +epoch[1] * 1000;
       const clock = /\bresets\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b/i.exec(text);
-      if (!clock) return null;
-      const at = new Date(+now);
-      at.setHours(clock[3] ? (+clock[1] % 12) + (/pm/i.test(clock[3]) ? 12 : 0) : +clock[1], +(clock[2] || 0), 0, 0);
-      if (at.getTime() <= +now) at.setDate(at.getDate() + 1);
-      return at.getTime();
+      return clock ? nextClockTime(clock[1], clock[2], clock[3], now) : null;
     },
     // #312: the variable that gives the CLI its config folder (one account per folder)
     configDirEnv: 'CLAUDE_CONFIG_DIR',
