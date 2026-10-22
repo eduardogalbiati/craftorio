@@ -409,7 +409,8 @@ function seedAiDevRun(e2e, suffix, task, steps, files = {}, summary = {}) {
 }
 
 const agentTurn = (at, from, to, step, agent, text) => {
-  const session = { agent, provider: 'claude', model: 'claude-opus-5-5' };
+  // the session carries its id, as the engine's snapshot does: the Sessions list selects a card by it (#465)
+  const session = { id: `s-${step}`, agent, provider: 'claude', model: 'claude-opus-5-5' };
   return [
     { ts: at(from), type: 'step.started', step_id: step, step_type: 'agent', agent, visit: 1 },
     { ts: at(from), type: 'session.opened', session_id: `s-${step}`, session },
