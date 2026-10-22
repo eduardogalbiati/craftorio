@@ -135,19 +135,20 @@ test('#376 releaseOverlay: added green, changed and renamed on the ramp (renamed
     { status: 'removed', path: 'src/z.js', lines: 2000 },
     { status: 'removed', path: 'docs/a.md', lines: 5 },
   ]));
-  assert.deepEqual(out, {
-    highlight: {
-      'src/fresh.js': ADDED_COLOUR,
-      'src/engine/big.js': ramp[0],
-      'src/engine/small.js': ramp[ramp.length - 1],
-    },
-    ghosts: ['docs/a.md', 'src/z.js'],
+  // #438: the overlay may carry more (the rename sign): highlight and ghosts are checked on their own
+  assert.deepEqual(out.highlight, {
+    'src/fresh.js': ADDED_COLOUR,
+    'src/engine/big.js': ramp[0],
+    'src/engine/small.js': ramp[ramp.length - 1],
   });
+  assert.deepEqual(out.ghosts, ['docs/a.md', 'src/z.js']);
 });
 
 test('#376 releaseOverlay: no change → nothing highlighted, no ghost', () => {
   const { releaseOverlay } = load();
-  assert.deepEqual(plain(releaseOverlay([])), { highlight: {}, ghosts: [] });
+  const out = plain(releaseOverlay([]));
+  assert.deepEqual(out.highlight, {});
+  assert.deepEqual(out.ghosts, []);
 });
 
 // ---------- issuesOf, filterByIssue ----------

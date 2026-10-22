@@ -12,7 +12,7 @@
 //     capture is said on the card.
 // #440/#441 (the contract in test/project-city-modes-440.test.js and test/project-city-panels-441.test.js):
 // a release puts the city in its mode (data-city-mode="release", "Release 1.1.1 → 1.1.2"), with no
-// Live toggle and no plan problems of the release's base city; Close goes back to "explore"; the card
+// Live toggle (#439: only the plan's real problems, not what the base commit lacks); Close goes back to "explore"; the card
 // is a panel (data-city-panel="release") whose chevron minimizes it and keeps the issue picked.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -222,12 +222,13 @@ const PLAN = {
   districts: [{ id: 'engine', name: 'Engine', zone: 'core', include: ['src/engine/**'] }, { id: 'lost', name: 'Lost', zone: 'nowhere', include: ['nothing/**'] }],
 };
 
-test('#440 a release puts the city in the release mode: its title, no Live, no plan problems; Close goes back to Explore', async (t) => {
+// #439 made a real plan problem (an unknown zone) still a problem on the release view: what a base
+// commit lacks is tested in test/project-city-release-438-439.test.js
+test('#440 a release puts the city in the release mode: its title, no Live; Close goes back to Explore', async (t) => {
   const { city } = await shown(t, { release: async () => ({ ...RELEASE(), plan: PLAN, base: buildCity({ plan: PLAN, facts: facts() }) }) });
   const mode = () => String(city.el.getAttribute('data-city-mode') ?? '');
   assert.equal(mode(), 'release');
   assert.equal(text(q(city.el, 'city-mode-title')), 'Release 1.1.1 → 1.1.2');
-  assert.equal(q(city.el, 'project-city-problems') === null, true, 'no plan problems on a past release');
   const live = q(city.el, 'city-live-toggle');
   assert.equal(live === null || live.hidden === true || live.disabled === true, true, 'no Live on a release');
   q(city.el, 'city-release-close').click();
