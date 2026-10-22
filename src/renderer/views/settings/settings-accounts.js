@@ -69,7 +69,7 @@
       if (add) {
         const list = add.closest('[data-provider]').querySelector('.acct-list');
         list.insertAdjacentHTML('beforeend', rowHtml({}, true));
-        list.lastElementChild.querySelector('[data-acct="name"]').focus();
+        list.lastElementChild.querySelector('[data-acct="name"]').focus({ preventScroll: true });
       }
       if (e.target.closest('[data-acct-remove]')) e.target.closest('[data-testid="settings-account-row"]').remove();
     });
