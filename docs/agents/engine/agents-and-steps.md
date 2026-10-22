@@ -253,6 +253,11 @@ fields (references between steps, agents, transitions, groups) are the named rul
   value_label, source }]` in `workflow.started` and the summary (runs.js `testsPlan`, the Run
   screen's badges). The gates and the verifier's prompt show it; nothing off is reported as tested.
   `test-batch.yaml` writes the skipped tests later, for a range of local commits, in one session.
+- **`env: { passthrough: [NAME, …] }`** (#470, workflow level): child processes get an allowlisted
+  environment (`src/engine/child-env.js`, [capabilities.md](../capabilities.md) "Child
+  environment"); these exact variable names are added to the agents', the transition actions' and
+  the suite's environment (a project whose tests need `DATABASE_URL`). The loader refuses an empty
+  or non-name list. Per-project passthrough does not exist yet.
 - **`base_worktree: true`** on an agent step (#198; needs `orchestrator.worktree`): before each visit the engine prepares the run's checkout of the base (`<worktreesDir>/<run_id>-base`, detached at the current base, dependencies linked from the shared cache) and gives it as `base_worktree_dir` (empty without a worktree), for the test writer's pre-existing-failure check. See [worktrees.md](../worktrees.md).
 - **`deps.ready`** (#198): the run's dependencies from the shared cache, after `worktree.ready`, for the base checkout and after an agent step that changed the lockfile (`{ for: worktree|base, after, status, hit, lockfile, manager, key, entry, seconds, waited, reason }`; nothing when the folder already links its key). Agents with commands get a line about it in their command guide (`depsGuide`). See [worktrees.md](../worktrees.md).
 - **Memory guard** (#276, `src/engine/memory-guard.js`; Settings › Execution, `settings.memoryGuard`

@@ -16,7 +16,8 @@
 // (<workspace>/cache/base-tests/<commit>.json), so the next round and other runs reuse it.
 // A step with `base_check: false` (#260, release.yaml: its worktree is the base itself) gets no
 // `base`: nothing is checked there, every failing test fails the step.
-// The suite runs as from a shell (#210): `suiteEnv` drops the app's variables (Electron's, npm's, an
+// The suite runs as from a shell (#210) with the allowlisted environment (#470, child-env.js plus the
+// workflow's env.passthrough): `suiteEnv` drops the app's variables (Electron's, npm's, an
 // inspector in NODE_OPTIONS that forces node --test to one file at a time, the scratch workspace that
 // every test process would share) and gives the suite its own lock folder (MULTIAGENT_LOCKS_DIR,
 // <run>/locks), so a test never waits for the machine-wide screenshot slot held by other runs; a
@@ -69,6 +70,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 const { classifyFailures, IN_CHANGE, OUTSIDE_CHANGE } = require('./affected-tests');
 const { parseAgentReport } = require('./agent-test-report');
+const { childEnv: allowlistedEnv } = require('./child-env');
 const { parseNodeCoverage, renderCoverageSummary } = require('../coverage-summary');
 const { suiteSlotRun } = require('./suite-slot');
 const {
@@ -283,14 +285,17 @@ function isFullSuiteCommand(cmd, suiteCommand) {
 // (#219: a runner that knows it prints the failures-only JSON, src/engine/agent-test-report.js) and,
 // with locksDir, MULTIAGENT_LOCKS_DIR (the suite's own screenshot slot); with testWorkers, the run's
 // test workers (#367, src/machine-profile.js workerEnv), never an inherited value; with tmpDir, TMP,
-// TEMP and TMPDIR (#414: the run's temp folder over the user's). → { env, removed: [names] }
+// TEMP and TMPDIR (#414: the run's temp folder over the user's). #470 (SEC-5): only the allowlisted
+// variables reach the repository's scripts (src/engine/child-env.js, no platform tokens), plus the
+// workflow's env.passthrough names; `removed` still names only the ones above. → { env, removed: [names] }
 const DROP_ENV = /^(ELECTRON_|CHROME_CRASHPAD|NPM_|CLAUDECODE$|NODE_TEST_CONTEXT$|VSCODE_INSPECTOR_OPTIONS$|MULTIAGENT_)/i;
-function suiteEnv(env = {}, { locksDir, testWorkers, tmpDir } = {}) {
+function suiteEnv(env = {}, { locksDir, testWorkers, tmpDir, passthrough = [] } = {}) {
   const out = {};
   const removed = [];
+  const allowed = allowlistedEnv(env, { passthrough });
   for (const [k, v] of Object.entries(env)) {
-    if (v == null) continue;
-    if (DROP_ENV.test(k)) { removed.push(k); continue; }
+    if (DROP_ENV.test(k) && v != null) { removed.push(k); continue; }
+    if (!Object.hasOwn(allowed, k)) continue;
     if (/^NODE_OPTIONS$/i.test(k)) {
       const opts = String(v).split(/\s+/).filter((o) => o && !/^--(inspect|debug)/.test(o)).join(' ');
       if (opts !== String(v).trim()) removed.push(`${k} (inspector flags)`);
@@ -773,7 +778,7 @@ function writeLogHeader(logFile, out, { mock, childEnv, timeoutWhy, baseCommit, 
 // onLog({ path, command, base? }) (#465): the log the command writes to (relative to runDir), called
 // once the log exists and before anything waits or runs, and again for the base check's log (base: true);
 // logPrefix: lines already in the log (a wait for memory), kept before the header.
-async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = 'pass', preexisting = [], signal, timeoutMs, history, base, baseCacheDir, run = runCommand, log = () => {}, files = null, selection = null, logName = null, coverage = false, changedFiles = null, onSpawn = null, testWorkers = null, sweep = true, platform = process.platform, baseCommit = null, slot = null, onLog = null, logPrefix = '' }) {
+async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = 'pass', preexisting = [], signal, timeoutMs, history, base, baseCacheDir, run = runCommand, log = () => {}, files = null, selection = null, logName = null, coverage = false, changedFiles = null, onSpawn = null, testWorkers = null, sweep = true, platform = process.platform, baseCommit = null, slot = null, onLog = null, logPrefix = '', passthrough = [] }) {
   const logFile = runDir ? path.join(runDir, 'logs', `${logName || `suite-${round}`}.log`) : null;
   const out = {
     kind: 'suite', status: 'blocked', round, scope: 'full', command: null, log: logFile ? path.relative(runDir, logFile).split(path.sep).join('/') : null,
@@ -814,7 +819,7 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
   // #414: the suite's temp files go to the run's temp folder, removed when the run ends
   const tmpDir = mock ? null : path.join(runDir, 'tmp');
   if (tmpDir) fs.mkdirSync(tmpDir, { recursive: true });
-  const childEnv = mock ? null : suiteEnv(env || process.env, { locksDir: path.join(runDir, 'locks'), testWorkers, tmpDir });
+  const childEnv = mock ? null : suiteEnv(env || process.env, { locksDir: path.join(runDir, 'locks'), testWorkers, tmpDir, passthrough });
   if (logFile) {
     writeLogHeader(logFile, out, { mock, childEnv, timeoutWhy, baseCommit, logPrefix });
     onLog?.({ path: out.log, command: out.command });

@@ -12,7 +12,7 @@ const { canonicalPath } = require('../../engine/worktree');
 const projects = require('../../projects');
 const runs = require('../../runs');
 const cliSessions = require('../../cli-sessions');
-const { trustFolder } = require('../../cli-trust');
+const cliTrust = require('../../cli-trust');
 const { tailCommand } = require('../../native-bin');
 const {
   cliEnv,
@@ -68,14 +68,15 @@ module.exports = (ctx) => {
       const tail = tailCommand(!!host.isPackaged, resolveCommand);
       return {
         title: target.title, cwd: target.dir, file: tail.command,
-        args: [...tail.args, target.dir, '--file', target.rel], env: { ...process.env, ...tail.env, FORCE_COLOR: '1' },
+        args: [...tail.args, target.dir, '--file', target.rel], env: { ...cliEnv(), ...tail.env, FORCE_COLOR: '1' },
       };
     }
     const found = findSession(runId, sessionId);
     if (!found) throw new Error('Session not found.');
     const { run, sess } = found;
     if (mode !== 'live') simulation.refuseReal(`the ${sess.provider} CLI`);
-    const env = { ...process.env };
+    // #470 (SEC-5): the allowlisted environment, not the app's whole one
+    const env = cliEnv();
     delete env.CLAUDECODE;
     if (mode === 'live') {
       // the multiagent-tail binary (#342), else session-tail.js under node (src/native-bin.js)
@@ -143,7 +144,7 @@ module.exports = (ctx) => {
       if (!sess) throw new Error('Session not found.');
       // the CLIs look conversations up by folder: resuming elsewhere would not find it
       if (!sess.cwd || !fs.existsSync(sess.cwd)) throw new Error(`The session's folder no longer exists: ${sess.cwd || 'unknown'}`);
-      trustWorkspaceFolder(provider, sess.cwd);
+      trustAppFolder(provider, sess.cwd);
       const title = sessionTitles()[titleKey(provider, sess.id)] || sess.title;
       return { title, cwd: sess.cwd, file: cmd.file, args: cliSessions.cliArgs(provider, { resume: sess.id }), env: cliEnv() };
     }
@@ -151,16 +152,18 @@ module.exports = (ctx) => {
     if (projectId && !project) throw new Error(`Project not found: ${projectId}`);
     const cwd = folder || project?.folder || os.homedir();
     if (!fs.existsSync(cwd) || !fs.statSync(cwd).isDirectory()) throw new Error(`Folder not found: ${cwd}`);
-    trustWorkspaceFolder(provider, cwd);
+    trustAppFolder(provider, cwd);
     const title = `${project?.name || path.basename(cwd) || cwd} · ${model || p.name}`;
     return { title, cwd, file: cmd.file, args: cliSessions.cliArgs(provider, { model, effort }), env: cliEnv() };
   }
 
-  // Folders inside the workspace are the app's own: the CLI does not ask whether to trust them.
-  // Folders elsewhere keep the CLI's own question (asked once per folder).
-  function trustWorkspaceFolder(provider, dir) {
-    if (!folderMatcher()(dir, ctx.ws.root)) return;
-    try { trustFolder(provider, canonicalPath(dir)); } catch (e) { console.warn(`folder trust (${provider}):`, e.message); }
+  // #468 (SEC-3): only the workspace folders the app writes itself (runs/, skills/, workflows/) are
+  // trusted for the CLI. repos/, worktrees/, project folders and folders elsewhere keep the CLI's
+  // own question, which it asks in the session's terminal (once per folder).
+  function trustAppFolder(provider, dir) {
+    try {
+      cliTrust.trustWorkspaceFolder(provider, canonicalPath(dir), { workspace: canonicalPath(ctx.ws.root) });
+    } catch (e) { console.warn(`folder trust (${provider}):`, e.message); }
   }
 
   return {

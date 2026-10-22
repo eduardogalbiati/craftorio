@@ -185,6 +185,8 @@ const FIELD_RULES = [
   entry('steps[].transitions[].merge', 'all', 'one of', 'transition merge must be "local".', { values: ['local'] }),
   // `ship: { tag }` (#260): only the answer a person gives at a decision gate ships a release
   entry('steps[].transitions[].ship.tag', 'all', 'non-blank value', 'transition ship needs a tag (ship: { tag: "{{ inputs.version }}" }).', { template: true, required: true }),
+  // #470 (SEC-5): variables passed to agents and commands beyond the allowlist (src/engine/child-env.js)
+  entry('env.passthrough', WORKFLOW, 'field names', 'env.passthrough must be a non-empty list of variable names.'),
   entry('orchestrator.limits.max_total_context', WORKFLOW, 'token count', 'orchestrator.limits.max_total_context must be a token count such as 20M.', { template: true, present: 'set' }),
   entry('orchestrator.local_preview.command', WORKFLOW, 'non-blank value', 'orchestrator.local_preview needs a command (e.g. "npm start").', { required: true, present: 'set' }),
   entry('orchestrator.supervisor.on_call', WORKFLOW, 'boolean', 'orchestrator.supervisor.on_call must be true or false.'),

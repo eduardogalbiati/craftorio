@@ -18,6 +18,7 @@ const fs = require('fs');
 const path = require('path');
 const capabilities = require('../capabilities');
 const checkStep = require('../check-step');
+const { childEnv } = require('../child-env');
 const evidence = require('../../evidence');
 const scenarios = require('../scenarios');
 const suiteStep = require('../suite-step');
@@ -148,7 +149,8 @@ const methods = {
         folder,
         round: st.visits,
         base: base || null,
-        env: { ...process.env, ...capabilities.agentEnv(this.scratchWorkspace(), this.workers) },
+        // #470: the repository's screenshot command gets the allowlisted environment
+        env: { ...childEnv(process.env, { passthrough: this.envPassthrough() }), ...capabilities.agentEnv(this.scratchWorkspace(), this.workers) },
         signal: this.abort.signal,
         timeoutMs: parseDuration(step.timeout, undefined),
         log: (level, message) => this.emitEvent('log', { level, message }),
@@ -313,6 +315,7 @@ const methods = {
           runDir: this.runDir,
           round: st.visits,
           env: { ...process.env, ...capabilities.agentEnv() },
+          passthrough: this.envPassthrough(),
           testWorkers: this.workers?.testWorkers,
           mockResult,
           preexisting: this.preexisting,
@@ -533,7 +536,7 @@ const methods = {
     const timeoutMs = step.timeout ? parseDuration(render(String(step.timeout), this.ctx).trim(), undefined) : undefined;
     const logFile = path.join(this.runDir, 'logs', `check-${st.visits}.log`);
     const onLog = ({ command: cmd }) => this.emitEvent('step.log', { step_id: step.id, path: `logs/check-${st.visits}.log`, command: cmd });
-    const output = { ...(await checkStep.runCheck({ dir: this.ctx.worktree_dir, command, logFile, timeoutMs, signal: this.abort.signal, onLog })), round: st.visits };
+    const output = { ...(await checkStep.runCheck({ dir: this.ctx.worktree_dir, command, logFile, env: { ...childEnv(process.env, { passthrough: this.envPassthrough() }), ...capabilities.AGENT_ENV }, timeoutMs, signal: this.abort.signal, onLog })), round: st.visits };
     this.emitEvent('log', { level: output.status === 'fail' ? 'warn' : 'info', kind: 'check', step_id: step.id, status: output.status, message: `${step.id}: ${output.message.split('\n')[0]}` });
     return output;
   },

@@ -58,6 +58,12 @@ const methods = {
     }
   },
 
+  // #470 (SEC-5): the variables the workflow passes to its agents and commands beyond the allowlist
+  // (`env: { passthrough: [NAME, ...] }`, src/engine/child-env.js)
+  envPassthrough() {
+    return (this.wf?.env?.passthrough || []).map(String);
+  },
+
   // the CLI process's variables for the session's account ({} without one)
   sessionAccountEnv(session, providerType) {
     return accountEnv(providerType, session.account ? { dir: session.accountDir } : null);

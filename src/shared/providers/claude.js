@@ -26,9 +26,11 @@
   function isolationArgs({ caps, isolated, mcp, denyEdits, denyCommands, runDir, env }, lib) {
     const args = [];
     if (isolated) {
-      // no user settings (plugins, hooks, permission rules), no MCP servers but the declared ones,
-      // no Chrome integration, no skill listing (the engine injects the workflow's skills), no auto-memory
-      args.push('--strict-mcp-config', '--no-chrome', '--setting-sources', 'project,local', '--disable-slash-commands',
+      // no settings source at all: neither the user's (plugins, hooks, permission rules) nor the
+      // checkout's .claude/settings*.json, whose hooks and permissions.allow the repository controls
+      // (#468, SEC-3); no MCP servers but the declared ones, no Chrome integration, no skill listing
+      // (the engine injects the workflow's skills), no auto-memory
+      args.push('--strict-mcp-config', '--no-chrome', '--setting-sources', '', '--disable-slash-commands',
         '--settings', JSON.stringify({ autoMemoryEnabled: false }));
     }
     if (caps && Object.keys(mcp).length) args.push('--mcp-config', JSON.stringify({ mcpServers: mcp }));

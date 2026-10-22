@@ -1,8 +1,9 @@
 // Folder trust for the interactive CLIs. Each CLI asks once per folder whether you trust it and
-// remembers the answer in its own config; folders inside the workspace (projects, repos, runs,
-// worktrees) are the app's own, so the Sessions screen records that answer before starting a CLI
-// there. Only the folder and its git repository's root are trusted: Claude Code does not inherit
-// a parent's trust past a repository root.
+// remembers the answer in its own config. Only the workspace folders the app writes itself (runs/,
+// skills/, workflows/) are trusted by the Sessions screen before starting a CLI there
+// (trustWorkspaceFolder, #468); repos/, worktrees/ and project folders hold repository-controlled
+// code, so the CLI asks in its own terminal. Only the folder and its git repository's root are
+// trusted: Claude Code does not inherit a parent's trust past a repository root.
 //
 //   Claude Code  ~/.claude.json                projects["C:/path"].hasTrustDialogAccepted = true
 //   Codex CLI    ~/.codex/config.toml          [projects.'C:\path']  trust_level = "trusted"
@@ -64,14 +65,47 @@ function trustToml(file, dirs, table, body) {
   return true;
 }
 
-/** Records that `dir` is trusted in the CLI's own config (its adapter's `trust`; no-op when it already is). */
-function trustFolder(provider, dir, { home } = {}) {
+function trustDirs(provider, dirs, home) {
   const trust = registry.byId(provider)?.trust;
-  if (!trust) return false;
-  const dirs = foldersToTrust(dir);
+  if (!trust || !dirs.length) return false;
   const cfg = cliConfigDirs(home);
   if (trust.format === 'claude-json') return trustClaude(cfg.claudeJson, dirs);
   return trustToml(path.join(cfg[provider], trust.file), dirs, trust.table, trust.entry());
 }
 
-module.exports = { trustFolder, foldersToTrust };
+/** Records that `dir` is trusted in the CLI's own config (its adapter's `trust`; no-op when it already is). */
+function trustFolder(provider, dir, { home } = {}) {
+  return trustDirs(provider, foldersToTrust(dir), home);
+}
+
+// #468 (SEC-3): the workspace folders the app writes itself. repos/, worktrees/ and project folders
+// hold repository-controlled code: the CLI keeps its own trust prompt there.
+const APP_FOLDERS = [
+  'runs',
+  'skills',
+  'workflows',
+];
+
+const samePathCase = (p) => (process.platform === 'win32' ? p.toLowerCase() : p);
+function isInside(dir, root) {
+  const rel = path.relative(samePathCase(path.resolve(root)), samePathCase(path.resolve(dir)));
+  return rel === '' || (!!rel && !rel.startsWith('..') && !path.isAbsolute(rel));
+}
+
+/**
+ * Trusts `dir` only when it is in one of the workspace's app folders (runs/, skills/, workflows/);
+ * a git root above it is trusted only when it is in one too. False, nothing written, otherwise.
+ */
+function trustWorkspaceFolder(provider, dir, { workspace, home } = {}) {
+  if (!workspace) return false;
+  const roots = APP_FOLDERS.map((f) => path.join(workspace, f));
+  const owned = (d) => roots.some((r) => isInside(d, r));
+  if (!owned(dir)) return false;
+  return trustDirs(provider, foldersToTrust(dir).filter(owned), home);
+}
+
+module.exports = {
+  foldersToTrust,
+  trustFolder,
+  trustWorkspaceFolder,
+};

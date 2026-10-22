@@ -22,6 +22,7 @@ const path = require('path');
 const readline = require('readline');
 const { refuseReal } = require('./simulation');
 const { AGENT_ENV } = require('./capabilities');
+const { childEnv } = require('./child-env');
 const { runShim } = require('../shell');
 const { setBrewLookup } = require('../install-commands');
 const registry = require('../shared/providers');
@@ -414,7 +415,7 @@ function cliInvocation({ provider, model, effort, providerSessionId, prompt, ext
 }
 
 function runCli(opts, parser) {
-  const { provider, providerSessionId, cwd, timeoutMs, signal, onItem, agentEnv, accountEnv: account } = opts;
+  const { provider, providerSessionId, cwd, timeoutMs, signal, onItem, agentEnv, accountEnv: account, envPlatforms, envPassthrough } = opts;
   const { args, prompt, promptFile } = cliInvocation(opts);
 
   const resolved = resolveCommand(provider.command);
@@ -422,9 +423,9 @@ function runCli(opts, parser) {
   if (!fs.existsSync(cwd)) return Promise.reject(new Error(`Working directory does not exist: ${cwd}`));
   if (signal?.aborted) return Promise.reject(new Error('Cancelled'));
 
-  onItem({ kind: 'spawn', command: resolved.file, args, cwd });
-
-  const env = withCliPath({ ...process.env }); // #397: the agent and its children (gh, npm shims' node) find what detection found
+  // #470 (SEC-5): the allowlisted environment (platform tokens per the agent's bash:gh / bash:glab,
+  // the workflow's env.passthrough); #397: the agent and its children (gh, npm shims' node) find what detection found
+  const env = withCliPath(childEnv(process.env, { platforms: envPlatforms || [], passthrough: envPassthrough || [] }));
   delete env.CLAUDECODE; // avoids the "nested session" block if the app is launched from inside Claude Code
   Object.assign(env, gitConfigEnv(env, { 'rerere.enabled': 'true' }));
   // agents' own checks never start real runs, and need no `VAR=value` prefix (refused by allowlists);
@@ -432,6 +433,9 @@ function runCli(opts, parser) {
   Object.assign(env, agentEnv || AGENT_ENV);
   // #312: the turn's account (its config folder, accountEnv), for this process only
   Object.assign(env, account);
+
+  // the recording names the environment's keys, never their values (#470)
+  onItem({ kind: 'spawn', command: resolved.file, args, cwd, env: Object.keys(env).sort() });
 
   if (promptFile) fs.writeFileSync(promptFile, prompt);
 

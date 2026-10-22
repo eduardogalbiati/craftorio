@@ -259,6 +259,7 @@ const STEP_CHECKS = resolveChecks('steps[].', [
 ]);
 const WORKFLOW_CHECKS = resolveChecks('', [
   'steps', 'agents', models, agents, testsPaths, steps,
+  'env.passthrough',
   'orchestrator.limits.max_total_context', 'orchestrator.local_preview.command', 'orchestrator.supervisor.on_call',
   'orchestrator.supervisor.max_cost_usd', 'orchestrator.supervisor.stall.same_output', 'orchestrator.supervisor.stall.slow_factor',
   groups, outputs,

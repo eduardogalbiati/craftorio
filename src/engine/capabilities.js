@@ -32,6 +32,7 @@ const CLAUDE_SUBAGENT_TOOLS = registry.byId('claude').subagentTools;
 // refused headless, where nobody can approve it. Read-only: any agent with commands gets them.
 // `[` is `test` in its bracket form (`[ -f file ] && ...`). `awk` (#299): a filter in a pipe; its
 // programs with braces are refused by the CLI's parser anyway. `sed` stays out: `sed -i` writes.
+// #470 (SEC-5): no printenv, env or set (piped to gh, they would publish the environment).
 const READ_UTILITIES = [
   '[',
   'awk',
@@ -43,7 +44,6 @@ const READ_UTILITIES = [
   'grep',
   'head',
   'ls',
-  'printenv',
   'pwd',
   'tail',
   'test',
@@ -142,6 +142,13 @@ const has = (caps, t) => caps.tools.includes(t);
 const bashRules = (caps) => caps.tools.filter((t) => t === 'bash' || t.startsWith('bash:'));
 const writes = (caps) => has(caps, 'edit') || has(caps, 'write');
 const readOnly = (caps) => !writes(caps) && !bashRules(caps).length;
+// #470 (SEC-5): the platforms whose tokens reach the agent's environment (src/engine/child-env.js):
+// gh with bash:gh, glab with bash:glab, both with a bare bash or no capabilities (any command).
+function platformsOf(caps) {
+  const bash = caps ? bashRules(caps) : [];
+  const any = !caps || bash.includes('bash');
+  return ['gh', 'glab'].filter((p) => any || bash.includes(`bash:${p}`));
+}
 
 // Claude Code allow rules for the agent's commands: each bash:<command>, the same with a prefix of
 // the agent's environment (env: agentEnv), and the utilities above (the write ones only for agents
@@ -178,7 +185,7 @@ function commandGuide(caps, runDir, agentVars = AGENT_ENV, shotsDir = null) {
     '- Avoid shell expansions the CLI cannot check (`$VAR`, `$(...)`, `$?`): write the value out; the tool already reports each command\'s exit code.',
     // screenshots: false (an agent that should not take any): only the logs' folder
     ...(logs ? [`- Write command logs to \`${logs}${path.sep}<name>.log\`${caps.screenshots === false ? '' : ` and screenshots to \`${shots}\` (as \`<issue>-<screen>-<state>.original.png\` / \`.modified.png\`)`}, never to /tmp, $TEMP or AppData (a gitignored folder of the working folder is fine too).`] : []),
-    '- Pipes and `;` chains are fine when every part is an allowed command or a simple utility (tail, head, grep, awk, ls, cat, echo, wc, printenv; mkdir -p, mktemp and sort when you may write files). When unsure, run one command per call; after a refusal, rephrase it once into an allowed form instead of retrying variants.',
+    '- Pipes and `;` chains are fine when every part is an allowed command or a simple utility (tail, head, grep, awk, ls, cat, echo, wc; mkdir -p, mktemp and sort when you may write files). When unsure, run one command per call; after a refusal, rephrase it once into an allowed form instead of retrying variants.',
     // #299: refused by the CLI's own parser whatever the allow list says
     '- The CLI\'s parser also refuses a `#` after a newline or a `$` inside a quoted argument, a heredoc (`cat > file <<\'EOF\'`, `node - <<\'EOF\'`) and an inline script with braces and quotes (`node -e "...{...}..."`, `awk \'{...}\'`): write the script to a file with your file tool, then run `node <file>`.',
   ].join('\n');
@@ -273,6 +280,7 @@ module.exports = {
   describe,
   merge,
   normalize,
+  platformsOf,
   providerArgs,
   READ_UTILITIES,
   RUN_DIRS,

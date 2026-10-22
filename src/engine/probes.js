@@ -17,6 +17,7 @@ const {
   homebrewInstalled,
   resolveCommand,
 } = require('./providers');
+const { childEnv } = require('./child-env');
 const { installHint } = require('../install-commands');
 const { execShim } = require('../shell');
 const github = require('../shared/platforms/github');
@@ -144,7 +145,8 @@ function run(cmd, args, { cwd, signal, timeout = 60000 }) {
   }
   const { file } = resolved;
   return new Promise((resolve, reject) => {
-    execShim(file, args, { cwd, signal, timeout, windowsHide: true, env: process.env, maxBuffer: 16 * 1024 * 1024 }, (err, stdout, stderr) => {
+    // #470 (SEC-5): the allowlisted environment with the platform tokens gh / glab authenticate with
+    execShim(file, args, { cwd, signal, timeout, windowsHide: true, env: childEnv(process.env, { platforms: ['gh', 'glab'] }), maxBuffer: 16 * 1024 * 1024 }, (err, stdout, stderr) => {
       if (err) return reject(new Error(`${cmd} ${args.slice(0, 3).join(' ')}: ${String(stderr || err.message).trim().slice(0, 300)}`));
       try { resolve(JSON.parse(String(stdout).replace(/^﻿/, ''))); } catch { reject(new Error(`${cmd} ${args.slice(0, 3).join(' ')}: the output is not JSON`)); }
     });

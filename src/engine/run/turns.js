@@ -146,7 +146,8 @@ const methods = {
   // session.message_sent / .stream / .message_received. The answer comes back without its
   // ```handoff block (res.handoff), with its tool calls (res.tools) and context size (res.context).
   // accountEnv: the session's account variable (#312), for the CLI process only
-  async invokeTurn({ session, agentName, agent, provider, extraArgs, agentEnv, accountEnv, stepId, hint, attempts, attachments = [] }, turn, fullPrompt) {
+  // envPlatforms / envPassthrough (#470): the platform tokens and declared variables of the CLI's environment
+  async invokeTurn({ session, agentName, agent, provider, extraArgs, agentEnv, accountEnv, envPlatforms, envPassthrough, stepId, hint, attempts, attachments = [] }, turn, fullPrompt) {
     const timeoutMs = this.turnTimeout(agent);
     this.emitEvent('session.message_sent', { session_id: session.id, turn, step_id: stepId, prompt: fullPrompt, timeout_ms: timeoutMs, ...(attachments.length ? { attachments } : {}) });
     // a retry after a failed attempt that did work (a timeout, a crash) starts with what it did
@@ -250,7 +251,7 @@ const methods = {
       try {
         const res = await providers.runTurn({
           provider, model: agent.model, effort: agent.effort, providerSessionId: session.providerSessionId,
-          prompt, cwd: (session.cwd = this.workingDir(agent)), extraArgs, agentEnv, accountEnv, attachments,
+          prompt, cwd: (session.cwd = this.workingDir(agent)), extraArgs, agentEnv, accountEnv, envPlatforms, envPassthrough, attachments,
           timeoutMs, attempt: a,
           signal: turnAbort.signal, hint, render, onSpawn,
           onItem: (item) => { track(item); idle.item(item); this.emitEvent('session.stream', { session_id: session.id, turn, item }); },

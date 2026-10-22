@@ -39,7 +39,7 @@ them in `~/.cargo/bin`) on the PATH the app starts with; nothing else is install
 
 | | Claude Code | Codex CLI | Grok Build |
 |---|---|---|---|
-| Isolation | `--strict-mcp-config` (only `--mcp-config`), `--no-chrome`, `--setting-sources project,local` (no user settings: plugins, hooks, permission rules), `--disable-slash-commands` (no skill listing; the engine injects the workflow's skills), `--settings {"autoMemoryEnabled":false}` | `-c mcp_servers={…declared}`, `--disable plugins apps browser_use computer_use in_app_browser image_generation memories` | none from the command line: user MCP servers, skills and memory still load (`grok inspect` shows them) |
+| Isolation | `--strict-mcp-config` (only `--mcp-config`), `--no-chrome`, `--setting-sources ''` (no settings file at all: neither the user's plugins, hooks and permission rules nor the checkout's `.claude/settings*.json`, #468), `--disable-slash-commands` (no skill listing; the engine injects the workflow's skills), `--settings {"autoMemoryEnabled":false}` | `-c mcp_servers={…declared}`, `--disable plugins apps browser_use computer_use in_app_browser image_generation memories` | none from the command line: user MCP servers, skills and memory still load (`grok inspect` shows them) |
 | Tools | `--tools` (only these built-ins are offered: fewer definitions in context) + `--allowedTools` (`Bash(git:*)` per `bash:git`) | `-s read-only`, or `workspace-write` when `edit`/`write` | read-only sets: `--tools read_file,list_dir,grep[,web_search,web_fetch]` |
 | Writes | `--permission-mode acceptEdits` with `edit`/`write` | workspace-write sandbox (no network for commands) | not restricted (`--always-approve`) |
 | Commands | allowlist per command (`Bash(npm:*)`), plus the same with the `AGENT_ENV` prefix and the shell utilities (below); `--add-dir <run_dir>/evidence`, `<run_dir>/logs` and `<run_dir>/scratch` | **not enforceable** (the sandbox limits writes, not which command runs) | not restricted |
@@ -72,6 +72,16 @@ README (`~/.grok/README.md`, section "AGENTS.md", 1.0.41), reads `Agents.md`, `C
 characters per file): it gets `AGENTS.md` too, plus the one-line `CLAUDE.md`, which it does not
 expand (harmless).
 
+**Repository-controlled input (#468, SEC-3)**: the checkout's `CLAUDE.md` / `AGENTS.md` (and the
+other names above) and its `.claude/` folder come from the repository, not from the user: a cloned
+project or a PR branch can write them. The instructions files are read by design (a
+prompt-injection channel the capabilities above contain: an agent still has only its tools). The
+`.claude/settings*.json` files are not loaded under isolation (`--setting-sources ''`): they could
+declare hooks and `permissions.allow` rules that Claude Code honours before `--allowedTools`. The
+app auto-trusts only its own folders (`runs/`, `skills/`, `workflows/`, `trustWorkspaceFolder` in
+`src/cli-trust.js`); `repos/`, `worktrees/` and project folders keep each CLI's own trust prompt,
+which a live "cli-new" terminal shows to the user.
+
 `--bare` would isolate Claude further but only accepts API keys (no OAuth/subscription), so it is
 not used. Measured on this repo (first request of a Claude agent, Haiku, "reply OK"): **41.1k
 tokens with the user's setup → 22.0k isolated with the developer's capabilities**.
@@ -86,6 +96,28 @@ shows its login command (`src/provider-accounts.js`, e.g. `CLAUDE_CONFIG_DIR=<fo
 and whether the folder is signed in, read from that folder only (Claude: `claudeSignedIn` with only
 that variable and no Keychain; Codex: `auth.json` exists, never read); no credential is stored,
 logged or shown.
+
+## Child environment (#470, SEC-5)
+
+Every child process (agent turns in `providers.runCli`, transition actions, probes, the suite step,
+the terminals' `cliEnv`) gets `childEnv` from `src/engine/child-env.js`, never the app's whole
+environment:
+- **Always**: `PATH`, `HOME` / `USERPROFILE`, `TMP` / `TEMP` / `TMPDIR`, `LANG` / `LC_*`,
+  `SystemRoot` / `ComSpec` / `APPDATA` / `LOCALAPPDATA`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `GIT_*`,
+  plus the non-secret system variables node, npm and the CLIs need (`PATHEXT`, `windir`,
+  `ProgramFiles*`, `USERNAME`, `TERM`, `NODE_OPTIONS`… the `ALLOWED_NAMES` list).
+- **Platform tokens**: `GH_*` and `GITHUB_TOKEN` only for an agent with `bash:gh` (or a free
+  `bash`), `GITLAB_*` only with `bash:glab` (`platformsOf` in `src/engine/capabilities.js`).
+  Transition actions, probes and the terminals get both (they run the workflow's own `gh`/`glab`
+  commands); the suite step gets none.
+- **On top**: the engine's `AGENT_ENV`, the scratch variables, the account's config folder and
+  git's config, set by each caller as before.
+- **`env.passthrough`**: a workflow's `env: { passthrough: [NAME, …] }` adds those exact names to
+  agents, actions and the suite (a project whose tests need `DATABASE_URL`, or an `ANTHROPIC_API_KEY`
+  login). Not per project yet.
+
+Everything else stays out: `AWS_*`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `NPM_*`, `SSH_AUTH_SOCK`,
+proxies. The recorded `spawn` event lists the env's keys (sorted), never its values.
 
 ## Sub-agents (who gets them and why)
 
@@ -111,7 +143,7 @@ Headless, Claude Code refuses any Bash call it would ask about, and the agent lo
 trip per refusal (136 of 2,437 tool calls in 7 real runs, #96). The engine removes the four causes:
 
 - **Utilities**: an agent with `bash:<command>` rules also gets `READ_UTILITIES` (`cat`, `echo`,
-  `grep`, `head`, `ls`, `tail`, `wc`, `printenv`, `test`…), so pipes and `;` chains of allowed
+  `grep`, `head`, `ls`, `tail`, `wc`, `test`…; never `printenv`, `env` or `set`, #470), so pipes and `;` chains of allowed
   commands run. `WRITE_UTILITIES` (`mkdir`, `mktemp`, `sort`, `uniq`: they can create files) only
   for agents with `edit`/`write`, whose writes `acceptEdits` keeps inside the working folder and the
   `--add-dir` folders. A read-only agent (the reviewer: `bash: git`) gets no write utility and no

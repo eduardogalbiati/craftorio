@@ -253,6 +253,15 @@ shown and never blocks anything; an offline start with a stored session stays si
 - **Not stored**: your code, prompts, runs, artifacts or usage. Nothing of your work leaves your
   machine through the account.
 
+**What a repository controls**: a project you clone or a PR branch you run can ship `CLAUDE.md` /
+`AGENTS.md` and a `.claude/` folder. Agents read the instructions files (they can try to steer an
+agent, which still has only its workflow's tools), but isolated agents never load the checkout's
+`.claude/settings*.json` (hooks, permission rules), and the app never marks `repos/`, `worktrees/` or
+your project folders as trusted for the CLIs. Agents, the project's tests and the terminals get an
+allowlisted environment: cloud keys, API keys and the SSH agent stay out; GitHub/GitLab tokens reach
+only agents allowed to run `gh`/`glab`. A workflow lists any other variable its tests need in
+`env: { passthrough: [...] }`.
+
 Running from source, `MULTIAGENT_AUTH=off` skips the sign-in (development, tests, screenshots, the
 local preview and `npm run serve`). An app showing a remote engine (Settings › Execution › Engine)
 cannot sign that engine's server in yet: the server runs with `MULTIAGENT_AUTH=off`. The account's database is defined in `supabase/migrations/`.

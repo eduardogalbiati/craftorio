@@ -4,6 +4,7 @@
 
 const path = require('path');
 const { execFileSync } = require('child_process');
+const { childEnv } = require('../engine/child-env');
 const {
   resolveCommand,
   withCliPath,
@@ -177,9 +178,10 @@ function requireArgs(arg, params) {
 }
 
 // The environment of a CLI or a shell started from the app (not nested in Claude Code, not as node),
-// with the folders the CLI lookup searches on its PATH (#397).
+// with the folders the CLI lookup searches on its PATH (#397). #470 (SEC-5): the allowlisted
+// environment (src/engine/child-env.js) with the gh / glab tokens, so a user's gh still works there.
 const cliEnv = (platform = process.platform) => {
-  const env = withCliPath({ ...process.env }, platform);
+  const env = withCliPath(childEnv(process.env, { platforms: ['gh', 'glab'] }), platform);
   delete env.CLAUDECODE;
   delete env.ELECTRON_RUN_AS_NODE;
   return env;

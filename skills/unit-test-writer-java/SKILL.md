@@ -10,7 +10,7 @@ used_by: "test writer"
 
 **Test workers (#367)**: a run gets `MULTIAGENT_TEST_WORKERS` (and `MULTIAGENT_E2E_WORKERS`) in its
 environment, the workers this machine gives each run so parallel runs do not overload it. Read it
-once (`printenv MULTIAGENT_TEST_WORKERS`) and pass the number to the runner you call: Maven `-DforkCount=<n>`, Gradle `--max-workers=<n>`.
+from the variables line of the command guide (`MULTIAGENT_TEST_WORKERS=<n>`) and pass the number to the runner you call: Maven `-DforkCount=<n>`, Gradle `--max-workers=<n>`.
 Unset: leave the runner's default.
 
 ## Build and commands (never switch frameworks)

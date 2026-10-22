@@ -424,7 +424,11 @@ const methods = {
       });
     }
     // accountEnv: the CLI process's config-folder variable of the session's account (#312), not agentEnv
-    const call = { session, agentName, agent, provider, extraArgs, agentEnv, accountEnv: this.sessionAccountEnv(session, providerType), stepId, hint, attachments };
+    // envPlatforms / envPassthrough (#470): which platform tokens and declared variables reach the CLI
+    const call = {
+      session, agentName, agent, provider, extraArgs, agentEnv, accountEnv: this.sessionAccountEnv(session, providerType), stepId, hint, attachments,
+      envPlatforms: capabilities.platformsOf(caps), envPassthrough: this.envPassthrough(),
+    };
     let res;
     try {
       res = await this.invokeTurn(call, turn, fullPrompt);
