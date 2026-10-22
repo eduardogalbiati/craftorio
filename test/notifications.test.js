@@ -32,6 +32,19 @@ test('a run notice names the workflow, the project and the new status', () => {
   assert.equal(runNotice({ type: 'step.started', run_id: 'r1' }, RUN), null);
 });
 
+test('#312 an account switch and a run waiting for credits are notified with the agent, the accounts and the provider', () => {
+  const sw = runNotice({ type: 'agent.account_switch', run_id: 'r1', agent: 'writer', step_id: 'write', provider: 'claude', from: 'Claude A', to: 'Claude B', reason: 'Claude AI usage limit reached', until: null }, RUN);
+  assert.equal(sw.event, 'fallback');
+  assert.equal(sw.title, 'Account switched: software-development');
+  assert.equal(sw.body, 'Project: demo\nwriter moved to the account Claude B in write: Claude A hit its usage limit.');
+  assert.deepEqual(sw.target, { runId: 'r1', workflow: 'software-development' });
+
+  const wait = runNotice({ type: 'run.waiting_credits', run_id: 'r1', agent: 'writer', step_id: 'write', provider: 'claude', until: null }, RUN);
+  assert.equal(wait.event, 'fallback');
+  assert.equal(wait.title, 'Waiting for credits: software-development');
+  assert.equal(wait.body, 'Project: demo\nNo claude account has credits left. The run waits: add or enable an account, or stop the run.');
+});
+
 test('a run\'s display title (#84) is shown with its workflow; without one the workflow alone is used', () => {
   const titled = { ...RUN, title: 'Notifications, 2nd try after conflict' };
   const started = runNotice({ type: 'workflow.started', run_id: 'r1', workflow: 'software-development' }, titled);

@@ -111,8 +111,12 @@ function newRun(t, yamlText, options = {}) {
   fs.writeFileSync(file, yamlText);
   const runsDir = path.join(dir, 'runs');
   const run = new WorkflowRun({ file, inputs: {}, mock: true, runsDir, skillsDirs: [], ...options });
+  // the run folder as the service records it (events.jsonl, sessions/, summary.json)
+  const { Recorder } = require('../src/engine/recorder');
+  const rec = new Recorder(run.runDir, run.wf.observability?.capture?.redact);
   const events = [];
   run.on('event', (ev) => {
+    rec.write(ev);
     events.push(ev);
     if (ev.type === 'approval.requested') setImmediate(() => run.resolveApproval(ev.approval_id, true));
   });
@@ -206,7 +210,8 @@ test('#312 a usage limit on account A repeats the turn on account B in a new ses
   assert.equal(sw.until === null || !Number.isNaN(Date.parse(sw.until)), true, `until is an ISO time or null: ${sw.until}`);
   assert.equal(fallbacksOf(events).length, 0, 'no provider switch');
   assert.deepEqual(answeredAccounts(events, 'write'), ['Claude B']);
-  assert.deepEqual(answered(events, 'write').map((e) => e.session?.provider), ['claude']);
+  // a simulated session records provider 'mock' and the workflow's provider in simulates (#353)
+  assert.deepEqual(answered(events, 'write').map((e) => e.session?.simulates), ['claude']);
   const sent = events.filter((e) => e.type === 'session.message_sent' && e.step_id === 'write').map((e) => e.session_id);
   assert.equal(new Set(sent).size, 2, 'the turn on B runs in a new session');
   // the run's cost breakdown (summary.json sessions) names the account of each session
@@ -293,4 +298,39 @@ test('#312 no credential of an account reaches the run folder', async (t) => {
   const leaks = filesUnder(run.runDir).filter((f) => fs.readFileSync(f, 'utf8').includes('sk-ant-fake-312-secret'));
   assert.deepEqual(leaks, []);
   assert.equal(JSON.stringify(events).includes('sk-ant-fake-312-secret'), false);
+});
+
+// ---- resumed runs: a conversation continues only on the account that opened it ----------------
+test('#312 resumeSpec records the account of each agent\'s last conversation (null without accounts)', (t) => {
+  const supervisor = require('../src/supervisor');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'run-312-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const ev = (o) => JSON.stringify({ ts: '2026-10-22T10:00:00Z', ...o });
+  const got = (agent, cli, account) => ev({ type: 'session.message_received', step_id: 'check', session: { agent, provider: 'claude', provider_session_id: cli, ...(account ? { account } : {}) } });
+  fs.writeFileSync(path.join(dir, 'events.jsonl'), [
+    ev({ type: 'workflow.started', workflow: 'wf', file: 'wf.yaml', inputs: { task: 'x' } }),
+    ev({ type: 'step.started', step_id: 'check', visit: 1 }),
+    got('a', 'ps-a1', 'Claude A'),
+    got('a', 'ps-a2', 'Claude B'),
+    got('b', 'ps-b', null),
+    ev({ type: 'step.finished', step_id: 'check', visit: 1, output: { verdict: 'pass' } }),
+    ev({ type: 'workflow.finished', status: 'failed', error: 'boom' }),
+  ].join('\n') + '\n');
+  const spec = supervisor.resumeSpec(dir, 'check');
+  assert.deepEqual(spec.sessions, { a: 'ps-a2', b: 'ps-b' });
+  assert.deepEqual(spec.sessionAccounts, { a: 'Claude B', b: null });
+});
+
+test('#312 a resumed run continues a conversation only when the agent is on the account that opened it', () => {
+  const { methods } = require('../src/engine/run/resume');
+  const resumeOn = (account, sessionAccount) => {
+    const run = { machine: { simulated: false }, resume: { sessions: { writer: 'ps-1' }, sessionAccounts: { writer: sessionAccount }, cliTotals: {} } };
+    const session = { account, providerSessionId: null, turns: 0 };
+    methods.resumeSession.call(run, 'writer', session, true);
+    return session.providerSessionId;
+  };
+  assert.equal(resumeOn('Claude A', 'Claude A'), 'ps-1');
+  assert.equal(resumeOn('Claude B', 'Claude A'), null, 'never on another account');
+  assert.equal(resumeOn(null, 'Claude A'), null, 'never once the provider has no account');
+  assert.equal(resumeOn(undefined, null), 'ps-1', 'without accounts, as before #312');
 });
