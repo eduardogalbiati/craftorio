@@ -809,3 +809,65 @@ test('gateChoices: out_of_rounds offers the same save-to-issue choice when it al
   const choices = gateChoices(gate);
   assert.equal(choices.find((c) => c.intent === 'save_to_issue')?.label, 'Accept and save to issue #7');
 });
+
+// ---- #443: a gate card's text stays inside the card in a narrow column ---------------------------
+// The card's markup (gateCardHtml, gateBriefHtml, the Run screen's .run-gate-message) is cascaded with
+// style.css by test/css-layout.js (no browser): a line of prose wraps (long words too) instead of being
+// cut at the card's edge; a line that ends in "…" keeps its whole text in a title.
+const { parseHtml, styleSheet, layoutOf, elements, textOf } = require('./css-layout.js');
+const NARROW = 260;
+const LONG_WORD = 'src/renderer/views/run/suite_card_overflow_guard_with_a_very_long_name.js';
+
+function loadGateCard() {
+  const esc = /const esc = \(s\) => [^\n]+/.exec(src)[0];
+  const gateCardHtml = /function gateCardHtml\(runId, g, fullHtml\) \{[\s\S]*?\n\}/.exec(gateSrc)[0];
+  assert.ok(gateCardHtml, 'gateCardHtml not found in gate-panel.js: the source moved');
+  const sandbox = {
+    window: {},
+    gateNextTurnsHtml: () => '', gateBriefHtml: () => '', gateTriesChange: () => false, gateScenariosHtml: () => '',
+    markdownHtml: (md) => `<ul>${String(md).split('\n').map((l) => `<li>${l.replace(/^- /, '')}</li>`).join('')}</ul>`,
+  };
+  vm.createContext(withI18n(sandbox));
+  vm.runInContext(`${esc}\n${gateCardHtml}\nthis.gateCardHtml = gateCardHtml;`, sandbox);
+  return sandbox.gateCardHtml;
+}
+
+// every <li> of `root` either wraps or ends in "…" with its whole text in a title
+function cutWithoutTitle(root, L) {
+  return elements(root).filter((e) => e.tag === 'li')
+    .filter((li) => L.computed(li).wrap === 'nowrap' && li.attrs.title !== textOf(li).trim())
+    .map((li) => `"${textOf(li).trim().slice(0, 60)}"`);
+}
+
+test('#443 gate card: the status lines (gateCardHtml) wrap in a 260px column, none is cut at the edge', () => {
+  const gateCardHtml = loadGateCard();
+  const card = String(gateCardHtml('r1', { brief: { headline: 'A revisão pede uma decisão sua antes da mesclagem', body: `- #443 não concluído: ${LONG_WORD} ainda corta o texto\n- #437 concluído: as pills ficam em uma linha em todas as telas` } }, '<pre>full</pre>'));
+  assert.match(card, /gate-card-status/, 'no status block in the gate card');
+  const root = parseHtml(`<div class="run-gate" data-testid="run-gate" style="width: ${NARROW}px">${card}</div>`);
+  const L = layoutOf(styleSheet(['style.css']));
+  const found = L.overflows(elements(root)[0], NARROW);
+  assert.deepEqual(found, [], `wider than their box:\n${found.join('\n')}`);
+  assert.deepEqual(cutWithoutTitle(root, L), [], 'a status line ends in "…" without its whole text in a title');
+});
+
+test('#443 gate brief: one line per issue (gateBriefHtml) wraps in a 260px column, none is cut at the edge', () => {
+  const { gateBriefHtml, sandbox } = loadGateBrief();
+  sandbox.state.runs.set('r1', { events: [{ type: 'step.finished', output: { summary: 'Implementei as duas issues.', issues: [
+    { issue: 'https://github.com/o/r/issues/443', done: true, summary: `O card da suíte cabe na coluna e ${LONG_WORD} termina em reticências.` },
+    { issue: 'https://github.com/o/r/issues/437', done: false, summary: 'As pills de status ficam em uma linha em todas as telas do aplicativo.' },
+  ] } }] });
+  const brief = String(gateBriefHtml('r1', { approval_id: 'a1', run_app: true, work_dir: '/wt' }, '<pre>full</pre>'));
+  assert.match(brief, /gate-issues/, 'no issue list in the gate brief');
+  const root = parseHtml(`<div class="run-gate" data-testid="run-gate" style="width: ${NARROW}px">${brief}</div>`);
+  const L = layoutOf(styleSheet(['style.css']));
+  const found = L.overflows(elements(root)[0], NARROW);
+  assert.deepEqual(found, [], `wider than their box:\n${found.join('\n')}`);
+  assert.deepEqual(cutWithoutTitle(root, L), [], 'an issue line ends in "…" without its whole text in a title');
+});
+
+test('#443 gate message: a long unbreakable token in the Run screen\'s gate message wraps instead of being cut', () => {
+  assert.match(runSrc, /<pre class="run-gate-message" data-testid="run-gate-message">/, 'the gate message markup moved');
+  const root = parseHtml(`<div class="run-gate" style="width: ${NARROW}px"><pre class="run-gate-message" data-testid="run-gate-message">Aprovar a mesclagem de ${LONG_WORD}?</pre></div>`);
+  const found = layoutOf(styleSheet(['style.css'])).overflows(elements(root)[0], NARROW);
+  assert.deepEqual(found, [], `wider than their box:\n${found.join('\n')}`);
+});

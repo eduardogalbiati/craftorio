@@ -153,3 +153,26 @@ test('#437 run card: the title truncates with "…" (overflow hidden, text-overf
   assert.ok(cut, `the run title is not truncated: none of ${chain.map((e) => `<${e.tag} class="${e.attrs.class || ''}">`).join(' < ')} has overflow: hidden + text-overflow: ellipsis + white-space: nowrap on a non-inline box`);
   for (let e = cut; e !== main; e = e.parent) assert.ok(L.canShrink(e), `<${e.tag} class="${e.attrs.class || ''}"> cannot be narrower than its content (inline, or min-width: auto as a flex/grid item)`);
 });
+
+// #437: runTitleHtml (run-meta.js) also heads the Run screen's summary (views/run/run.js, the side
+// column) and the run chat (views/runchat/runchat.js #rc-title): a long title that now stays on one
+// line must end in "…" there too, not run past the header's box.
+function runTitle437() {
+  const sandbox = { esc: (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]), console, state: { runMeta: new Map() }, RunBadges: { defaultTitle: () => '', prBadgeHtml: () => '' } };
+  sandbox.window = sandbox;
+  vm.createContext(withI18n(sandbox));
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'run-meta.js'), 'utf8'), sandbox);
+  return String(sandbox.runTitleHtml(run('r437', { title: LONG_TITLE, workflow: 'software-development.yaml' })));
+}
+
+test('#437 the Run screen\'s summary: a long title stays inside the 260px side column (ends in "…")', () => {
+  const html = `<aside class="panel config" style="width: 260px"><section><div class="run-summary"><div class="run-summary-name"><b>${runTitle437()}</b> <span class="pill pill-success">Sucesso</span></div></div></section></aside>`;
+  const found = layoutOf(styleSheet(['style.css', 'views/run/run.css'])).overflows(elements(parseHtml(html))[0], 260);
+  assert.deepEqual(found, [], `wider than their box:\n${found.join('\n')}`);
+});
+
+test('#437 the run chat\'s header: a long title stays inside a 420px header (ends in "…")', () => {
+  const html = `<div id="rc-title" class="rc-title" style="width: 420px"><b>${runTitle437()}</b> <span class="muted small">software-development.yaml</span> <span class="muted small mono" data-testid="run-screen-id">20261021-233447-c7dbd4e7</span></div>`;
+  const found = layoutOf(styleSheet(['style.css', 'views/runchat/runchat.css'])).overflows(elements(parseHtml(html))[0], 420);
+  assert.deepEqual(found, [], `wider than their box:\n${found.join('\n')}`);
+});
