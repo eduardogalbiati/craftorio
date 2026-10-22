@@ -3,7 +3,7 @@
 // Design, Code & Build, Workflows, AI, Night watch, Settings; a group's title collapses it), the
 // header (project selector, Oracle, notifications bell), the Workflows screen's tabs, Settings
 // (#276: Execution's Memory guard group), the failed app update banner (#279), the Pipelines tab's
-// cards (features/pipelines.feature, #378).
+// cards (features/pipelines.feature, #378), the window kept on the app's page (#466).
 // Locators are roles and data-testid only (skills/ui-conventions).
 // #254: a menu group is a role="group" named by its title, holding its title's toggle button
 // (aria-expanded, named like the group) and its items' buttons; the header's project selector is a
@@ -353,7 +353,47 @@ Then('no failed app update banner shows', async ({ e2e }) => {
   await expect(failedUpdateBanner(e2e.window)).toHaveCount(0);
 });
 
-// ---- no Supervisor in the header (#264) ---------------------------------------------------------------
+// ---- the window never leaves the app's page (#466) ----------------------------------------------------
+// A form, a link or a dropped file must never navigate the window away from the app's index.html. A
+// drop that Playwright dispatches is not a trusted event, so Chromium never navigates on it: the step
+// records whether the app refused it (dragover and drop default-prevented, which is what keeps a real
+// drop from opening the file), and the page is checked as well.
+
+Then('the app is still on its own page', async ({ e2e }) => {
+  const page = e2e.window;
+  // a navigation, if one was triggered, has had the time to start
+  await page.waitForTimeout(1000);
+  expect(page.url(), 'the window is on the app\'s page').toMatch(/\/index\.html([?#].*)?$/);
+  await expect(navItem(page, 'Home')).toBeVisible();
+});
+
+When('I drop an HTML file onto the Home screen, outside any drop box', async ({ e2e }) => {
+  const page = e2e.window;
+  await navItem(page, 'Home').click();
+  const target = page.getByRole('main').first();
+  await expect(target).toBeVisible({ timeout: LOAD_TIMEOUT });
+  e2e.lastDrop = await target.evaluate((el) => {
+    const data = new DataTransfer();
+    data.items.add(new File(['<h1>Not the app</h1>'], 'report.html', { type: 'text/html' }));
+    const fire = (type) => {
+      const ev = new DragEvent(type, { dataTransfer: data, bubbles: true, cancelable: true, composed: true });
+      el.dispatchEvent(ev);
+      return ev.defaultPrevented;
+    };
+    fire('dragenter');
+    const over = fire('dragover');
+    const drop = fire('drop');
+    return { over, drop };
+  });
+});
+
+Then('the window refuses the dropped file', async ({ e2e }) => {
+  expect(e2e.lastDrop, 'a file was dropped').toBeTruthy();
+  expect(e2e.lastDrop.over, 'the window refuses a file dragged over it').toBe(true);
+  expect(e2e.lastDrop.drop, 'the window refuses a file dropped on it').toBe(true);
+});
+
+// ---- no Supervisor in the header (#264)---------------------------------------------------------------
 
 // every screen the menu opens (a group's title only collapses its group: skipped)
 Then('no screen of the menu shows a {string} button in the header', async ({ e2e }, name) => {

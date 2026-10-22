@@ -5,6 +5,8 @@
 // nodeIntegration), says which agent to show, is one at a time (a second open focuses it), remembers
 // its bounds and the last agent in the state file (a JSON file in the workspace), and survives a
 // missing or corrupt state file. Acceptance tests, written before the code.
+// #466 CONTRACT: after open(), the window's webContents prevents EVERY 'will-navigate' (a file: URL
+// included) and every 'will-attach-webview' (src/window-guards.js guardWindow, or the same rule inline).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -32,7 +34,17 @@ function fakeElectron() {
       this.shown = 0;
       this.destroyed = false;
       this.bounds = { x: 10, y: 10, width: 800, height: 600 };
-      this.webContents = { send() {}, on() {}, once() {}, setWindowOpenHandler() {}, openDevTools() {} };
+      // #466: webContents records its listeners so a test can emit will-navigate / will-attach-webview
+      const wcListeners = {};
+      this.webContents = {
+        listeners: wcListeners,
+        send() {},
+        on(event, fn) { (wcListeners[event] ||= []).push(fn); return this; },
+        once(event, fn) { return this.on(event, fn); },
+        emit(event, ...args) { for (const fn of [...(wcListeners[event] || [])]) fn(...args); },
+        setWindowOpenHandler(fn) { this.openHandler = fn; },
+        openDevTools() {},
+      };
       windows.push(this);
     }
     loadFile(file, opts) { this.loads.push([file, opts]); return Promise.resolve(); }
@@ -146,6 +158,29 @@ test('#263 a missing state file: open() works with default sizes and no position
   assert.ok(Number(o.height) > 0, `a default height: ${o.height}`);
   assert.equal('x' in o, false, 'no x: the OS places the window');
   assert.equal('y' in o, false, 'no y');
+});
+
+// #466 the Agents window never navigates away from the app's page, not even to a file: page (a
+// sanitizer bypass, a dropped file), and never attaches a webview. No http URL here: the module
+// requires electron's shell lazily for those.
+const fakeEvent = () => ({ prevented: false, preventDefault() { this.prevented = true; } });
+
+test('#466 the Agents window prevents will-navigate to a file: URL', (t) => {
+  const { BrowserWindow, windows } = fakeElectron();
+  const aw = create({ BrowserWindow, statePath: statePathIn(t), dirname: SRC });
+  aw.open({ agent: 'oracle' });
+  const ev = fakeEvent();
+  windows[0].webContents.emit('will-navigate', ev, 'file:///C:/tmp/x.html');
+  assert.equal(ev.prevented, true);
+});
+
+test('#466 the Agents window prevents will-attach-webview', (t) => {
+  const { BrowserWindow, windows } = fakeElectron();
+  const aw = create({ BrowserWindow, statePath: statePathIn(t), dirname: SRC });
+  aw.open({ agent: 'oracle' });
+  const ev = fakeEvent();
+  windows[0].webContents.emit('will-attach-webview', ev, {}, {});
+  assert.equal(ev.prevented, true);
 });
 
 test('#263 a corrupt state file does not throw: open() works with default sizes and no position', (t) => {

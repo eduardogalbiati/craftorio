@@ -50,3 +50,15 @@ Feature: The app opens
     And the top bar's "24/7 chip" shows that it is loading or its figures
     And the top bar's "usage widget" then shows its figures
     And the top bar's "24/7 chip" then shows its figures
+
+  # #466: a file dropped anywhere outside the two drop boxes (the Backlog's Product Owner drop box, the
+  # Inbox's) no longer opens in the window in place of the app. Assumption: the app refuses such a drop
+  # (dragover and drop default-prevented); a drop Playwright dispatches is untrusted and never navigates
+  # by itself, so the refusal is what the scenario checks, with the page.
+  @issue-466
+  Scenario: A file dropped outside the drop boxes does not replace the app
+    Given the app is open
+    When I drop an HTML file onto the Home screen, outside any drop box
+    Then the window refuses the dropped file
+    And the app is still on its own page
+    And the sidebar offers "Backlog"

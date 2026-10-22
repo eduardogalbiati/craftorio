@@ -1,7 +1,8 @@
 // Steps of features/artifacts.feature and features/image-viewer.feature: a finished demo run's
 // artifacts on the Run screen's Artifacts tab and the Artifacts screen, Produced / Show all and the
 // category and kind chips (#225), the before/after screenshots with a new element (#185), and the
-// image viewer's previous / next navigation with its counter (#182). Locators are roles and
+// image viewer's previous / next navigation with its counter (#182), agent-written forms and local
+// links in a markdown artifact that never take the window off the app's page (#466). Locators are roles and
 // data-testid only (skills/ui-conventions).
 
 const fs = require('fs');
@@ -143,7 +144,61 @@ Then('the screenshot {string} shows its original and modified images', async ({ 
   await expect(thumbs(page, caption)).toHaveCount(2);
 });
 
-// ---- the image viewer's previous / next (#182) ---------------------------------------------------
+// ---- agent-written HTML in a markdown artifact (#466) ---------------------------------------------
+// The report is written into the demo run's folder (listed when the run's artifacts open); its form
+// and its link point at a local page planted in the scratch folder, which the window must never open.
+
+const { pathToFileURL } = require('url');
+
+const localPage = (e2e) => {
+  const dir = path.join(e2e.scratch, 'elsewhere');
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, 'not-the-app.html');
+  fs.writeFileSync(file, '<h1>Not the app</h1>');
+  return pathToFileURL(file).href;
+};
+
+const writeReport = (e2e, fragment, name, body) => {
+  const runs = path.join(e2e.scratch, 'workspace', 'runs');
+  const dir = (fs.existsSync(runs) ? fs.readdirSync(runs) : []).find((d) => d.endsWith(`-${fragment}`));
+  expect(dir, `the demo workspace has no run ending in -${fragment}`).toBeTruthy();
+  fs.writeFileSync(path.join(runs, dir, name), body);
+};
+
+Given('the demo run {string} has a report {string} reading {string} with a form button {string} to a local page', async ({ e2e }, fragment, name, text, button) => {
+  const url = localPage(e2e);
+  writeReport(e2e, fragment, name, `# Audit\n\n${text}\n\n<form action="${url}"><button>${button}</button></form>\n`);
+});
+
+Given('the demo run {string} has a report {string} reading {string} with a link {string} to a local page', async ({ e2e }, fragment, name, text, link) => {
+  const url = localPage(e2e);
+  writeReport(e2e, fragment, name, `# Audit\n\n${text}\n\nSee [${link}](${url}).\n`);
+});
+
+// the open artifact's rendered markdown (an <article>)
+const preview = (page) => page.getByRole('article').filter({ visible: true }).first();
+
+When('I open the artifact {string}', async ({ e2e }, name) => {
+  await artifacts(e2e.window).getByTestId('artifact-item').filter({ hasText: name }).first().click();
+  await expect(preview(e2e.window)).toBeVisible({ timeout: LOAD_TIMEOUT });
+});
+
+Then('the artifact shows {string}', async ({ e2e }, text) => {
+  await expect(preview(e2e.window)).toContainText(text, { timeout: LOAD_TIMEOUT });
+});
+
+Then('the artifact shows no {string} button', async ({ e2e }, name) => {
+  const doc = preview(e2e.window);
+  await expect(doc).toBeVisible({ timeout: LOAD_TIMEOUT });
+  // its words may stay as plain text: no control to press
+  await expect(doc.getByRole('button', { name })).toHaveCount(0);
+});
+
+When('I click the link {string} in the artifact', async ({ e2e }, name) => {
+  await preview(e2e.window).getByRole('link', { name, exact: true }).click();
+});
+
+// ---- the image viewer's previous / next (#182)---------------------------------------------------
 
 When('I enlarge the screenshot {string}', async ({ e2e }, caption) => {
   const page = e2e.window;

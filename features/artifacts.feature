@@ -80,3 +80,29 @@ Feature: Artifacts
     When I open the demo run "new00185"
     And I open the run's Artifacts tab
     Then a screenshot error mentions "Settings page"
+
+  # #466: agent-written markdown is untrusted. Its raw HTML keeps no form, button, input, textarea,
+  # select or style, and the window never navigates (a link opens nothing but http(s) pages, in the
+  # browser). The steps add a markdown report to the demo run "-res00225"; its form and link point
+  # at a local HTML page outside the app.
+  @issue-466
+  Scenario: A form in an agent's report shows its text but no button that leaves the app
+    Given the app is open
+    And the demo run "res00225" has a report "audit-report.md" reading "The audit found no issue." with a form button "Open the report" to a local page
+    When I open the demo run "res00225"
+    And I open the run's Artifacts tab
+    And I open the artifact "audit-report.md"
+    Then the artifact shows "The audit found no issue."
+    And the artifact shows no "Open the report" button
+    And the app is still on its own page
+
+  @issue-466
+  Scenario: A link to a local page in an agent's report keeps the app on its page
+    Given the app is open
+    And the demo run "res00225" has a report "audit-report.md" reading "The audit found no issue." with a link "the full log" to a local page
+    When I open the demo run "res00225"
+    And I open the run's Artifacts tab
+    And I open the artifact "audit-report.md"
+    And I click the link "the full log" in the artifact
+    Then the app is still on its own page
+    And the artifact shows "The audit found no issue."
