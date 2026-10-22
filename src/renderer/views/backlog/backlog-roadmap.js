@@ -1656,219 +1656,30 @@
     if (closing) ctx.render();
     return mine;
   }
+  // #432: the roadmap's clicks, in order: the first entry whose `selector` matches the click (or whose `acts` has the
+  // clicked control's `data-rm`) runs with the click's context and the matched element. CLICKS act at once; EDITS work on
+  // a copy of the stages and return 'handled' when they are done, or nothing: the roadmap is redrawn, a form or note focused
+  const matched = (list, target, act) => {
+    for (const h of list) {
+      const el = h.acts ? (h.acts.includes(act) ? target.closest('[data-rm]') : null) : target.closest(h.selector);
+      if (el) return [h, el];
+    }
+    return [];
+  };
   async function clicked(e, ctx, data) {
     // #354: the Conflict map link opens the project's page on its tab (drawn with or without a roadmap)
     if (window.ProjectConflictMap?.onLinkClick(e)) return true;
     const r = data?.roadmap;
     if (!r) return false;
-    // #269: the ⋮ button opens its menu (the first entry gets the focus) or closes it
-    if (e.target.closest('[data-rm-menu]')) {
-      [menuOpen, pauseOpen] = [!menuOpen, false];
-      ctx.render();
-      focusMenu(menuOpen ? '[role="menuitem"]' : '[data-rm-menu]');
-      return true;
-    }
-    if (e.target.closest('[data-rm-summary-releases]')) { byReleaseOpen = !byReleaseOpen; ctx.render(); return true; } // #421: the summary's By release list
-    // #282: a stage's ⋮ button, the same way (one menu open at a time)
-    const stageBtn = e.target.closest('[data-rm-stage-menu]');
-    if (stageBtn) {
-      const id = stageBtn.dataset.rmStageMenu;
-      stageMenu = stageMenu === id ? null : id;
-      moveOnWhy = null;
-      menuOpen = pauseOpen = false;
-      ctx.render();
-      focusStageMenu(id, stageMenu ? '[role="menuitem"]' : '[data-rm-stage-menu]');
-      return true;
-    }
-    // #271: the Oracle asked about the item's failure (gate-oracle.js: its drawer, the context chip, the question sent)
-    const askBtn = e.target.closest('[data-rm-ask-oracle]');
-    if (askBtn) {
-      const id = askBtn.closest('[data-item]')?.dataset.item;
-      const stage = r.stages.findIndex((s) => s.items.some((x) => x.id === id));
-      const item = r.stages[stage]?.items.find((x) => x.id === id);
-      if (item) window.GateOracle?.askAboutFailure({ item, roadmap: r, stage, project: ctx.projectId, run: state.runs?.get?.(item.runId)?.run || null });
-      return true;
-    }
-    // #268: the Planned | All switch (and the empty state's "Show all items"); #375: an item's or a stage's footprint on the project city
-    const viewBtn = e.target.closest('[data-rm-view]'), onMap = e.target.closest('[data-rm-map-item], [data-rm-map-stage]');
-    if (viewBtn) { ctx.setShowAll?.(viewBtn.dataset.rmView === 'all'); return true; } if (onMap) { window.ProjectCityImpact?.fromRoadmap(ctx.projectId, r, data.issues, onMap.dataset); return true; }
-    // #291: a release's empty state (its runs older than the date range): all time
-    if (e.target.closest('[data-rm-all-time]')) { ctx.setSince?.('total'); return true; }
-    // #267: a stage's "+n done" chip unfolds its finished items, that stage only
-    const doneChip = e.target.closest('[data-rm-done]');
-    if (doneChip) {
-      const key = doneChip.dataset.rmDone;
-      if (!unfolded.delete(key)) unfolded.add(key);
-      ctx.render();
-      return true;
-    }
-    // #268: the page above; the stage that led the list stays where the owner reads
-    const earlier = e.target.closest('[data-rm-earlier]');
-    if (earlier) {
-      const first = earlier.closest('.rm')?.querySelector('.rm-stage')?.dataset.stage;
-      pages.earlier += 1;
-      ctx.render();
-      document.querySelector(`#bl-list .rm-stage[data-stage="${first}"]`)?.scrollIntoView({ block: 'start' });
-      return true;
-    }
-    // a station of the pipeline (#282) opens the run there; the ring (#194): a click pins its summary open
-    // (hover shows it too)
-    const chip = e.target.closest('[data-rm-chip]');
-    if (chip) { openRunAt(chip); return true; }
-    const ring = e.target.closest('[data-rm-ring]');
-    if (ring) {
-      const id = ring.closest('[data-rm-progress]').dataset.rmProgress;
-      ringOpen = ringOpen === id ? null : id;
-      ctx.render();
-      return true;
-    }
-    // a link to an item of the roadmap (the paused roadmap's "Show the item" is the page alert's since
-    // #270 and calls showItem itself; a `data-rm-goto` element inside the Roadmap still works)
-    const goto = e.target.closest('[data-rm-goto]');
-    if (goto) { showItem(goto.dataset.rmGoto); return true; }
-    // #260: a cut line's release run (#291: the release block's Open run)
-    const releaseRun = e.target.closest('[data-rm-release-run]');
-    if (releaseRun) { window.showRun(releaseRun.dataset.rmReleaseRun); return true; }
-    // #291: a shipped release on the Releases screen
-    if (e.target.closest('[data-rm-open-releases]')) { showView('releases'); return true; }
-    // #288: an item's ended run, resumed from a step (Resume from step…, resume-dialog.js)
-    const resumeBtn = e.target.closest('[data-rm-resume]');
-    if (resumeBtn) { if (typeof openResumeDialog === 'function') openResumeDialog(resumeBtn.dataset.rmResume); return true; }
-    const act = e.target.closest('[data-rm]')?.dataset.rm;
-    const stages = clone(r.stages);
+    const c = { ctx, r, data, target: e.target };
+    const [click, at] = matched(CLICKS, e.target);
+    if (click) { click.run(c, at); return true; }
+    c.act = e.target.closest('[data-rm]')?.dataset.rm;
+    c.stages = clone(r.stages);
     try {
-      if (act === 'start') {
-        const simulated = !!document.querySelector('#rm-simulate')?.checked && devMode();
-        // Resume on a stage run on its own (#141) goes on with that stage only
-        // (a finished scope is not sent: #237); #243: a Resume's confirm says Resume
-        const at = r.state === 'paused' ? scopedStage(r) : -1;
-        const scope = at >= 0 ? r.stages[at].id : null;
-        if (!await checkPushes(ctx, r, scope)) return true;
-        const real = !simulated && r.stages.some((s) => !s.disabled && (!scope || s.id === scope) && s.items.some((x) => !x.mock && editable(x)));
-        const cost = 'they use your CLI subscriptions and cost money). Human gates still wait for you.';
-        const [title, body, label] = r.state !== 'paused'
-          ? ['Start the roadmap', 'Its items run as real runs: they use your CLI subscriptions and cost money. Human gates still wait for you.', 'Start']
-          : at >= 0
-            ? [`Resume stage ${at + 1}`, `Runs in progress keep going; the next planned items of stage ${at + 1} start as real runs (${cost} The roadmap pauses again when that stage is done.`, 'Resume']
-            : ['Resume the roadmap', `Runs in progress keep going; the next planned items start as real runs (${cost}`, 'Resume'];
-        if (real && !await confirmDialog(title, body, label)) return true;
-        ctx.setData(await api.startRoadmap(ctx.projectId, simulated, scope));
-      } else if (e.target.closest('[data-rm-run-stage]')) {
-        await runStage(ctx, r, locate(stages, e.target).s);
-      } else if (e.target.closest('[data-rm-pause-stage], [data-rm-stop-stage]')) {
-        await pauseStage(ctx, stages, e.target, !!e.target.closest('[data-rm-stop-stage]'));
-      } else if (e.target.closest('[data-rm-park-stage]')) {
-        await moveOnStage(ctx, stages, e.target);
-      } else if (act === 'budget-raise' || act === 'budget-resume') {
-        // #206: the budget cap paused it; real runs start again (they cost money)
-        if (act === 'budget-resume' && !await confirmDialog(t('backlog_roadmap.resume_anyway'), t('backlog_roadmap.the_roadmap_goes_on_past_the'), t('backlog_roadmap.resume'))) return true;
-        ctx.setData(await api.roadmapBudget(ctx.projectId, act === 'budget-raise' ? 'raise' : 'resume'));
-      } else if (/^(pause|pause-stage|pause-now|cancel-pause|stop)$/.test(act)) {
-        if (await pauseAct(ctx, act)) return true;
-      } else if (act === 'clear') {
-        menuOpen = false;
-        ctx.render();
-        if (!await confirmDialog(t('backlog_roadmap.clear_the_roadmap'), t('backlog_roadmap.every_stage_is_removed_runs_in'), t('backlog_roadmap.clear'))) return true;
-        const out = await api.clearRoadmap(ctx.projectId);
-        ctx.setData(out);
-        undoToast(ctx, out, t('backlog_roadmap.cleared_the_roadmap'), plural(r.stages.length, 'backlog_roadmap.stages_removed'));
-      } else if (act === 'versions') {
-        menuOpen = false;
-        ctx.render();
-        await openVersions(ctx);
-        return true;
-      } else if (act === 'from-queue') {
-        ctx.setData(await api.roadmapFromQueue(ctx.projectId));
-      } else if (act === 'propose' || act === 'replace') {
-        const text = document.querySelector('#rm-proposal')?.value.trim();
-        if (!text) return true;
-        let proposal;
-        try { proposal = JSON.parse(text); } catch { throw new Error(t('backlog_roadmap.the_proposal_is_not_valid_json')); }
-        if (act === 'replace' && r.stages.length && !await confirmDialog(t('backlog_roadmap.replace_the_roadmap'), t('backlog_roadmap.the_current_stages_are_removed_and'), t('backlog_roadmap.replace'))) return true;
-        const out = await api.proposeRoadmap(ctx.projectId, proposal, act === 'replace');
-        ctx.setData(out);
-        if (out.dropped?.length) ctx.setError(t('backlog_roadmap.already_in_the_roadmap_left_out', { issues: out.dropped.map((n) => `#${n}`).join(', ') }));
-        if (act === 'replace') undoToast(ctx, out, t('backlog_roadmap.replaced_the_roadmap'), plural(r.stages.length, 'backlog_roadmap.stages_gave_way'));
-      } else if (e.target.closest('[data-rm-item]')) {
-        const box = e.target.closest('[data-item]');
-        const action = e.target.closest('[data-rm-item]').dataset.rmItem;
-        if (action === 'park') await moveOn(ctx, r.stages.flatMap((s) => s.items).find((x) => x.id === box.dataset.item));
-        else await itemAction(ctx, box.dataset.item, action);
-      } else if (e.target.closest('[data-rm-mode]')) {
-        // the mode toggle: saved at once, on planned and failed items only
-        const { s, n } = locate(stages, e.target);
-        const item = stages[s]?.items[n];
-        if (!item || !editable(item)) return true;
-        item.inputs = { ...item.inputs, mode: e.target.closest('[data-rm-mode]').dataset.rmMode };
-        await save(ctx, r, stages, { label: t('backlog_roadmap.changed_the_mode_of_item', { item: numbers(item) }), quiet: true });
-        return true;
-      } else if (e.target.closest('[data-rm-edit]')) {
-        editing = e.target.closest('[data-item]').dataset.item;
-        adding = false;
-        kept = null;
-      } else if (e.target.closest('[data-rm-cancel]')) {
-        editing = null;
-        adding = false;
-        kept = null;
-      } else if (e.target.closest('[data-rm-addinput]')) {
-        adding = true;
-      } else if (e.target.closest('[data-rm-conflict-dismiss]')) {
-        lost = null;
-      } else if (e.target.closest('[data-rm-save]')) {
-        const { s, n } = locate(stages, e.target);
-        const item = stages[s]?.items[n];
-        if (!item || !editable(item)) return true;
-        applyForm(item, e.target.closest('.rm-form'));
-        editing = null;
-        adding = false;
-        kept = null;
-        lost = null;
-        await save(ctx, r, stages, { label: t('backlog_roadmap.edited_the_inputs_of_item', { item: numbers(item) }), quiet: true, form: item });
-        return true;
-      } else if (e.target.closest('[data-rm-release]')) {
-        // #260: a cut line after the stage: named in the dialog (add, rename) or removed, saved at once
-        const el = e.target.closest('[data-rm-release]');
-        const cut = el.closest('[data-cut-stage]');
-        const stage = stages[cut ? Number(cut.dataset.cutStage) : locate(stages, el).s];
-        if (!stage) return true;
-        if (el.dataset.rmRelease === 'remove') {
-          const name = stage.release?.name || ''; if (!await confirmDialog(t('backlog_roadmap.remove_the_cut_line'), t('backlog_roadmap.the_stages_after_it_no_longer', { name }), t('common.remove'))) return true;
-          delete stage.release; await save(ctx, r, stages, { label: t('backlog_roadmap.removed_the_cut_line_name', { name }).trim(), detail: t('backlog_roadmap.the_stages_after_it_no_longer_2') });
-        } else {
-          const name = await cutLineDialog(stage.release?.name || '', ctx, data, stages.indexOf(stage)); if (!name) return true;
-          stage.release = { name };
-          await save(ctx, r, stages, { label: t('backlog_roadmap.set_the_cut_line_name', { name }), quiet: true });
-        }
-        return true;
-      } else if (e.target.closest('[data-rm-toggle-stage]')) {
-        await toggleStage(ctx, r, stages, e.target);
-        return true;
-      } else if (e.target.closest('[data-rm-addnote]')) {
-        noteEditing = r.stages[locate(stages, e.target).s]?.id ?? null;
-      } else if (e.target.closest('[data-rm-stage]')) {
-        const { s } = locate(stages, e.target);
-        const up = e.target.closest('[data-rm-stage]').dataset.rmStage === 'up';
-        const t = RoadmapModel.moveStage(stages, s, up ? -1 : 1, drawnAt); // #426: past the stages the view hides
-        if (t < 0) return true;
-        await save(ctx, r, stages, { label: I18n.t(up ? 'backlog_roadmap.moved_stage_up' : 'backlog_roadmap.moved_stage_down', { stage: s + 1 }), detail: I18n.t('backlog_roadmap.it_is_stage_n_now', { stage: t + 1 }) });
-        return true;
-      } else if (e.target.closest('[data-rm-move]')) {
-        const { s, n } = locate(stages, e.target);
-        const up = e.target.closest('[data-rm-move]').dataset.rmMove === 'up';
-        const what = stages[s]?.items[n] ? numbers(stages[s].items[n]) : t('backlog_roadmap.an_item');
-        moveItem(stages, s, n, up ? -1 : 1);
-        await save(ctx, r, stages, { label: t(up ? 'backlog_roadmap.moved_item_up' : 'backlog_roadmap.moved_item_down', { what }) });
-        return true;
-      } else if (e.target.closest('[data-rm-remove]')) {
-        const { s, n } = locate(stages, e.target);
-        const [gone] = stages[s].items.splice(n, 1);
-        // its stage goes with its last item (the service drops empty stages): the toast says so
-        const detail = stages[s].items.length ? '' : t('backlog_roadmap.its_stage_went_too', { stage: stageName(stages[s], s) });
-        await save(ctx, r, stages, { label: gone ? t('backlog_roadmap.removed_value_from_the_roadmap', { value: numbers(gone) }) : t('backlog_roadmap.removed_an_item_from_the_roadmap'), detail });
-        return true;
-      } else {
-        return false;
-      }
+      const [edit, el] = matched(EDITS, e.target, c.act);
+      if (!edit) return false;
+      if (await edit.run(c, el) === 'handled') return true;
     } catch (err) {
       failed(ctx, 'edit', err);
     }
@@ -1877,6 +1688,181 @@
     document.querySelector('.rm [autofocus]')?.focus({ preventScroll: true });
     return true;
   }
+  function toggleStageMenu({ ctx }, el) {
+    const id = el.dataset.rmStageMenu;
+    stageMenu = stageMenu === id ? null : id;
+    moveOnWhy = null;
+    menuOpen = pauseOpen = false;
+    ctx.render();
+    focusStageMenu(id, stageMenu ? '[role="menuitem"]' : '[data-rm-stage-menu]');
+  }
+  function askOracleClicked({ ctx, r }, el) {
+    const id = el.closest('[data-item]')?.dataset.item;
+    const stage = r.stages.findIndex((s) => s.items.some((x) => x.id === id));
+    const item = r.stages[stage]?.items.find((x) => x.id === id);
+    if (item) window.GateOracle?.askAboutFailure({ item, roadmap: r, stage, project: ctx.projectId, run: state.runs?.get?.(item.runId)?.run || null });
+  }
+  function earlierClicked({ ctx }, el) {
+    const first = el.closest('.rm')?.querySelector('.rm-stage')?.dataset.stage;
+    pages.earlier += 1;
+    ctx.render();
+    document.querySelector(`#bl-list .rm-stage[data-stage="${first}"]`)?.scrollIntoView({ block: 'start' });
+  }
+  const CLICKS = [
+    // #269: the ⋮ button opens its menu (the first entry gets the focus) or closes it; #421: the summary's By release list
+    { selector: '[data-rm-menu]', run: ({ ctx }) => { [menuOpen, pauseOpen] = [!menuOpen, false]; ctx.render(); focusMenu(menuOpen ? '[role="menuitem"]' : '[data-rm-menu]'); } },
+    { selector: '[data-rm-summary-releases]', run: ({ ctx }) => { byReleaseOpen = !byReleaseOpen; ctx.render(); } },
+    { selector: '[data-rm-stage-menu]', run: toggleStageMenu }, // #282: a stage's ⋮ button, the same way (one menu open at a time)
+    { selector: '[data-rm-ask-oracle]', run: askOracleClicked }, // #271: the Oracle asked about the item's failure (gate-oracle.js)
+    // #268: the Planned | All switch (and the empty state's "Show all items"); #375: an item's or a stage's footprint on the project city
+    { selector: '[data-rm-view]', run: ({ ctx }, el) => ctx.setShowAll?.(el.dataset.rmView === 'all') },
+    { selector: '[data-rm-map-item], [data-rm-map-stage]', run: ({ ctx, r, data }, el) => window.ProjectCityImpact?.fromRoadmap(ctx.projectId, r, data.issues, el.dataset) },
+    { selector: '[data-rm-all-time]', run: ({ ctx }) => ctx.setSince?.('total') }, // #291: a release's empty state (its runs older than the date range): all time
+    // #267: a stage's "+n done" chip unfolds its finished items, that stage only
+    { selector: '[data-rm-done]', run: ({ ctx }, el) => { if (!unfolded.delete(el.dataset.rmDone)) unfolded.add(el.dataset.rmDone); ctx.render(); } },
+    { selector: '[data-rm-earlier]', run: earlierClicked }, // #268: the page above; the stage that led the list stays where the owner reads
+    // a station of the pipeline (#282) opens the run there; the ring (#194): a click pins its summary open (hover shows it too)
+    { selector: '[data-rm-chip]', run: (c, el) => openRunAt(el) },
+    { selector: '[data-rm-ring]', run: ({ ctx }, el) => { const id = el.closest('[data-rm-progress]').dataset.rmProgress; ringOpen = ringOpen === id ? null : id; ctx.render(); } },
+    // a link to an item of the roadmap (the paused roadmap's "Show the item" is the page alert's since #270 and calls showItem
+    // itself; a `data-rm-goto` element inside the Roadmap still works)
+    { selector: '[data-rm-goto]', run: (c, el) => showItem(el.dataset.rmGoto) },
+    { selector: '[data-rm-release-run]', run: (c, el) => window.showRun(el.dataset.rmReleaseRun) }, // #260: a cut line's release run (#291: the release block's Open run)
+    { selector: '[data-rm-open-releases]', run: () => showView('releases') }, // #291: a shipped release on the Releases screen
+    // #288: an item's ended run, resumed from a step (Resume from step…, resume-dialog.js)
+    { selector: '[data-rm-resume]', run: (c, el) => { if (typeof openResumeDialog === 'function') openResumeDialog(el.dataset.rmResume); } },
+  ];
+  async function startClicked({ ctx, r }) {
+    const simulated = !!document.querySelector('#rm-simulate')?.checked && devMode();
+    // Resume on a stage run on its own (#141) goes on with that stage only
+    // (a finished scope is not sent: #237); #243: a Resume's confirm says Resume
+    const at = r.state === 'paused' ? scopedStage(r) : -1;
+    const scope = at >= 0 ? r.stages[at].id : null;
+    if (!await checkPushes(ctx, r, scope)) return 'handled';
+    const real = !simulated && r.stages.some((s) => !s.disabled && (!scope || s.id === scope) && s.items.some((x) => !x.mock && editable(x)));
+    const cost = 'they use your CLI subscriptions and cost money). Human gates still wait for you.';
+    const [title, body, label] = r.state !== 'paused'
+      ? ['Start the roadmap', 'Its items run as real runs: they use your CLI subscriptions and cost money. Human gates still wait for you.', 'Start']
+      : at >= 0
+        ? [`Resume stage ${at + 1}`, `Runs in progress keep going; the next planned items of stage ${at + 1} start as real runs (${cost} The roadmap pauses again when that stage is done.`, 'Resume']
+        : ['Resume the roadmap', `Runs in progress keep going; the next planned items start as real runs (${cost}`, 'Resume'];
+    if (real && !await confirmDialog(title, body, label)) return 'handled';
+    ctx.setData(await api.startRoadmap(ctx.projectId, simulated, scope));
+  }
+  // #206: the budget cap paused it; real runs start again (they cost money)
+  async function budgetClicked({ ctx, act }) {
+    if (act === 'budget-resume' && !await confirmDialog(t('backlog_roadmap.resume_anyway'), t('backlog_roadmap.the_roadmap_goes_on_past_the'), t('backlog_roadmap.resume'))) return 'handled';
+    ctx.setData(await api.roadmapBudget(ctx.projectId, act === 'budget-raise' ? 'raise' : 'resume'));
+  }
+  async function clearClicked({ ctx, r }) {
+    menuOpen = false;
+    ctx.render();
+    if (!await confirmDialog(t('backlog_roadmap.clear_the_roadmap'), t('backlog_roadmap.every_stage_is_removed_runs_in'), t('backlog_roadmap.clear'))) return 'handled';
+    const out = await api.clearRoadmap(ctx.projectId);
+    ctx.setData(out);
+    undoToast(ctx, out, t('backlog_roadmap.cleared_the_roadmap'), plural(r.stages.length, 'backlog_roadmap.stages_removed'));
+  }
+  async function proposeClicked({ ctx, r, act }) {
+    const text = document.querySelector('#rm-proposal')?.value.trim();
+    if (!text) return 'handled';
+    let proposal;
+    try { proposal = JSON.parse(text); } catch { throw new Error(t('backlog_roadmap.the_proposal_is_not_valid_json')); }
+    if (act === 'replace' && r.stages.length && !await confirmDialog(t('backlog_roadmap.replace_the_roadmap'), t('backlog_roadmap.the_current_stages_are_removed_and'), t('backlog_roadmap.replace'))) return 'handled';
+    const out = await api.proposeRoadmap(ctx.projectId, proposal, act === 'replace');
+    ctx.setData(out);
+    if (out.dropped?.length) ctx.setError(t('backlog_roadmap.already_in_the_roadmap_left_out', { issues: out.dropped.map((n) => `#${n}`).join(', ') }));
+    if (act === 'replace') undoToast(ctx, out, t('backlog_roadmap.replaced_the_roadmap'), plural(r.stages.length, 'backlog_roadmap.stages_gave_way'));
+  }
+  async function itemClicked({ ctx, r, target }, el) {
+    const box = target.closest('[data-item]');
+    if (el.dataset.rmItem === 'park') await moveOn(ctx, r.stages.flatMap((s) => s.items).find((x) => x.id === box.dataset.item));
+    else await itemAction(ctx, box.dataset.item, el.dataset.rmItem);
+  }
+  // the mode toggle: saved at once, on planned and failed items only
+  async function modeClicked({ ctx, r, stages, target }, el) {
+    const { s, n } = locate(stages, target);
+    const item = stages[s]?.items[n];
+    if (!item || !editable(item)) return 'handled';
+    item.inputs = { ...item.inputs, mode: el.dataset.rmMode };
+    await save(ctx, r, stages, { label: t('backlog_roadmap.changed_the_mode_of_item', { item: numbers(item) }), quiet: true });
+    return 'handled';
+  }
+  async function saveClicked({ ctx, r, stages, target }) {
+    const { s, n } = locate(stages, target);
+    const item = stages[s]?.items[n];
+    if (!item || !editable(item)) return 'handled';
+    applyForm(item, target.closest('.rm-form'));
+    editing = null;
+    adding = false;
+    kept = null;
+    lost = null;
+    await save(ctx, r, stages, { label: t('backlog_roadmap.edited_the_inputs_of_item', { item: numbers(item) }), quiet: true, form: item });
+    return 'handled';
+  }
+  // #260: a cut line after the stage: named in the dialog (add, rename) or removed, saved at once
+  async function releaseClicked({ ctx, r, data, stages }, el) {
+    const cut = el.closest('[data-cut-stage]');
+    const stage = stages[cut ? Number(cut.dataset.cutStage) : locate(stages, el).s];
+    if (!stage) return 'handled';
+    if (el.dataset.rmRelease === 'remove') {
+      const name = stage.release?.name || ''; if (!await confirmDialog(t('backlog_roadmap.remove_the_cut_line'), t('backlog_roadmap.the_stages_after_it_no_longer', { name }), t('common.remove'))) return 'handled';
+      delete stage.release; await save(ctx, r, stages, { label: t('backlog_roadmap.removed_the_cut_line_name', { name }).trim(), detail: t('backlog_roadmap.the_stages_after_it_no_longer_2') });
+    } else {
+      const name = await cutLineDialog(stage.release?.name || '', ctx, data, stages.indexOf(stage)); if (!name) return 'handled';
+      stage.release = { name };
+      await save(ctx, r, stages, { label: t('backlog_roadmap.set_the_cut_line_name', { name }), quiet: true });
+    }
+    return 'handled';
+  }
+  async function stageMoveClicked({ ctx, r, stages, target }, el) {
+    const { s } = locate(stages, target);
+    const up = el.dataset.rmStage === 'up';
+    const t = RoadmapModel.moveStage(stages, s, up ? -1 : 1, drawnAt); // #426: past the stages the view hides
+    if (t < 0) return 'handled';
+    await save(ctx, r, stages, { label: I18n.t(up ? 'backlog_roadmap.moved_stage_up' : 'backlog_roadmap.moved_stage_down', { stage: s + 1 }), detail: I18n.t('backlog_roadmap.it_is_stage_n_now', { stage: t + 1 }) });
+    return 'handled';
+  }
+  async function itemMoveClicked({ ctx, r, stages, target }, el) {
+    const { s, n } = locate(stages, target);
+    const up = el.dataset.rmMove === 'up';
+    const what = stages[s]?.items[n] ? numbers(stages[s].items[n]) : t('backlog_roadmap.an_item');
+    moveItem(stages, s, n, up ? -1 : 1);
+    await save(ctx, r, stages, { label: t(up ? 'backlog_roadmap.moved_item_up' : 'backlog_roadmap.moved_item_down', { what }) });
+    return 'handled';
+  }
+  async function removeClicked({ ctx, r, stages, target }) {
+    const { s, n } = locate(stages, target);
+    const [gone] = stages[s].items.splice(n, 1);
+    // its stage goes with its last item (the service drops empty stages): the toast says so
+    const detail = stages[s].items.length ? '' : t('backlog_roadmap.its_stage_went_too', { stage: stageName(stages[s], s) });
+    await save(ctx, r, stages, { label: gone ? t('backlog_roadmap.removed_value_from_the_roadmap', { value: numbers(gone) }) : t('backlog_roadmap.removed_an_item_from_the_roadmap'), detail });
+    return 'handled';
+  }
+  const EDITS = [
+    { acts: ['start'], run: startClicked },
+    { selector: '[data-rm-run-stage]', run: async ({ ctx, r, stages, target }) => { await runStage(ctx, r, locate(stages, target).s); } },
+    { selector: '[data-rm-pause-stage], [data-rm-stop-stage]', run: async ({ ctx, stages, target }) => { await pauseStage(ctx, stages, target, !!target.closest('[data-rm-stop-stage]')); } },
+    { selector: '[data-rm-park-stage]', run: async ({ ctx, stages, target }) => { await moveOnStage(ctx, stages, target); } },
+    { acts: ['budget-raise', 'budget-resume'], run: budgetClicked },
+    { acts: ['pause', 'pause-stage', 'pause-now', 'cancel-pause', 'stop'], run: async ({ ctx, act }) => (await pauseAct(ctx, act) ? 'handled' : undefined) },
+    { acts: ['clear'], run: clearClicked },
+    { acts: ['versions'], run: async ({ ctx }) => { menuOpen = false; ctx.render(); await openVersions(ctx); return 'handled'; } },
+    { acts: ['from-queue'], run: async ({ ctx }) => { ctx.setData(await api.roadmapFromQueue(ctx.projectId)); } },
+    { acts: ['propose', 'replace'], run: proposeClicked },
+    { selector: '[data-rm-item]', run: itemClicked },
+    { selector: '[data-rm-mode]', run: modeClicked },
+    { selector: '[data-rm-edit]', run: ({ target }) => { editing = target.closest('[data-item]').dataset.item; adding = false; kept = null; } },
+    { selector: '[data-rm-cancel]', run: () => { editing = null; adding = false; kept = null; } },
+    { selector: '[data-rm-addinput]', run: () => { adding = true; } },
+    { selector: '[data-rm-conflict-dismiss]', run: () => { lost = null; } },
+    { selector: '[data-rm-save]', run: saveClicked },
+    { selector: '[data-rm-release]', run: releaseClicked },
+    { selector: '[data-rm-toggle-stage]', run: async ({ ctx, r, stages, target }) => { await toggleStage(ctx, r, stages, target); return 'handled'; } },
+    { selector: '[data-rm-addnote]', run: ({ r, stages, target }) => { noteEditing = r.stages[locate(stages, target).s]?.id ?? null; } },
+    { selector: '[data-rm-stage]', run: stageMoveClicked },
+    { selector: '[data-rm-move]', run: itemMoveClicked },
+    { selector: '[data-rm-remove]', run: removeClicked },
+  ];
 
   // The stage's name and note: saved when they change (the Edit form saves with its Save button).
   async function onChange(e, ctx, data) {
