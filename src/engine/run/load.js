@@ -272,8 +272,15 @@ function shellUnsafeReference(text, ctx) {
   }
   return null;
 }
+// `release` is safe only as far as what fills it: release.tag is the rendered ship.tag, so a build
+// that reads `release` holds ship.tag to the same rule.
+function readsRelease(text) {
+  return [...String(text).matchAll(SHELL_INTERPOLATION)].some((m) => [...(m[1] ?? m[2]).replace(STRING_LITERAL, "''")
+    .matchAll(NAME_TOKEN)].some(([, prefix, name]) => !prefix && name === 'release'));
+}
 function shellSafeTemplates(t, ctx) {
-  for (const [what, text] of [['transition action', t.action], ['ship.build', t.ship?.build]]) {
+  const tag = t.ship?.build != null && readsRelease(t.ship.build) ? [['ship.tag (read by ship.build as release.tag)', t.ship.tag]] : [];
+  for (const [what, text] of [['transition action', t.action], ['ship.build', t.ship?.build], ...tag]) {
     const ref = text != null && shellUnsafeReference(text, ctx);
     if (ref) fail(ctx, `${what} interpolates ${ref} into a shell command without a safe filter (${SHELL_SAFE_FILTERS.join(', ')}); unfiltered, it may use only ${SHELL_SAFE_NAMES.join(', ')} and an agent output field its output_schema types as number, integer or boolean.`);
   }
