@@ -18,7 +18,7 @@
 // - a building's height is H_MIN + H_K × √complexity (√(lines × the measured complexity per line,
 //   PER_LINE_DEFAULT when nothing is measured; campus files lower), heightOf; its ledges come from
 //   the functions (the lines otherwise), at most LEDGES_MAX spaced along the height (ledgesOf); a
-//   mast of ANTENNA_K × the worst function from ANTENNA_MIN;
+//   mast from the worst function (city-buildings.js antennaOf);
 // - ports are docks outside the city edge nearest their files, spread along it (layoutPorts).
 // Over MAX_BUILDINGS drawn files the smallest are drawn as one block per district (`aggregated`,
 // `note`). `quadrants` ({ path: quadrant }, from the facts) colours by quadrant; `scores` ({ path:
@@ -49,7 +49,6 @@
   const H_MIN = 1.0, H_K = 1.25, PER_LINE_DEFAULT = 0.12; // height = H_MIN + H_K × √complexity; complexity per line when nothing is measured
   const FLOOR_CAP = 40, FLOOR_LINES = 45, FLOOR_CAP_UNMEASURED = 12; // floors: the functions, or lines / FLOOR_LINES
   const LEDGES_MAX = 6; // ledges drawn on a building at most (#382: a few, never one per floor)
-  const ANTENNA_K = 0.25, ANTENNA_MIN = 8; // mast height = ANTENNA_K × the worst function, from ANTENNA_MIN
   const PORT_OFF = AVENUE * 0.9, PORT_SPACING = 22; // docks: outside the edge, apart along it
   const OUTSKIRTS_MIN = 28;
   const MAX_BUILDINGS = 5000;
@@ -83,6 +82,12 @@
   const quadrantNames = () => {
     const m = node ? require('./architecture-model') : root.ArchitectureModel;
     return (m && m.QUADRANTS) || [];
+  };
+  // the mast's rule is the v2 buildings' (src/shared/city-buildings.js, loaded before this file);
+  // without it no mast
+  const antennaOf = (b) => {
+    const m = node ? require('./city-buildings') : root.CityBuildings;
+    return m ? m.antennaOf(b) : 0;
   };
   let testMatchers = null;
   const isTest = (path) => {
@@ -211,7 +216,6 @@
   const floorsOf = (b) => (b.functions != null ? Math.min(FLOOR_CAP, b.functions) : Math.min(FLOOR_CAP_UNMEASURED, Math.round((b.lines || 0) / FLOOR_LINES)));
   /** The ledges drawn on a building: one less than its floors, at most LEDGES_MAX. */
   const ledgesOf = (b) => clamp(floorsOf(b) - 1, 0, LEDGES_MAX);
-  const antennaOf = (b) => (b.worst != null && b.worst >= ANTENNA_MIN ? ANTENNA_K * b.worst : 0);
   /** The gap around a building inside its cell of w × d: GAP, less in a small cell. */
   const gapOf = (w, d, gap = GAP) => Math.min(gap, w * 0.22, d * 0.22);
   // the width of a name (bold) and a count after it (smaller) in a strip `hUnits` deep, in ground units

@@ -14,7 +14,7 @@
 //   unless the system asks for reduced motion). Landmarks (a plinth, a pole and a beacon), ports (a
 //   dock, a hall and a mast outside the city edge, arcs to their `via` files) and the overlay's
 //   markers (a pin over a roof) stand on each building's `top`.
-// - Hovering a building shows a halo, draws dashed arcs flowing to what it requires (accent) and from
+// - Hovering a building shows a halo, draws dashed arcs to what it requires (accent) and from
 //   what requires it (amber), lights their roofs (RoofLights) and lightens those buildings; nothing
 //   else changes colour (#382: no flash across the city). Pinning (a click, or the connections
 //   panel's pins) keeps the arcs and a ring, and dims every building outside the pinned connections
@@ -261,7 +261,7 @@ function paintBuildings(meshes, set, layout, paint, focus, hoverLit, dim, T) {
   for (const m of Object.values(meshes)) if (m.instanceColor) m.instanceColor.needsUpdate = true;
 }
 
-// whether the city may move by itself (crane arms, warning lights, the arcs' flow)
+// whether the city may move by itself (crane arms, warning lights)
 const moves = () => !(typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches);
 
 function Buildings({ layout, T, paint, tests, level, focus, hoverLit, store }) {
@@ -409,25 +409,21 @@ function arc(out, a, b, segments = 18) {
 
 const roofOf = (b, top) => new THREE.Vector3(b.x + b.w / 2, Y0 + (top ?? b.h + (b.antenna || 0)), b.z + b.d / 2);
 
-// the arcs of a dependency: dashed, the dashes flowing along it (the POC's arcsOut / arcsIn), or plain
-function Arcs({ segments, color, opacity = 0.95, dashed = true, flow = false }) {
-  const ref = useRef(), mat = useRef();
+// the arcs of a dependency: dashed (the POC's arcsOut / arcsIn; three's LineDashedMaterial has no
+// dash offset, so the dashes stay still, as in the POC), or plain
+function Arcs({ segments, color, opacity = 0.95, dashed = true }) {
+  const ref = useRef();
   const geo = useDisposable(() => {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(segments, 3));
     return g;
   }, [segments]);
   useLayoutEffect(() => { if (dashed) ref.current?.computeLineDistances(); }, [geo, dashed]);
-  useFrame(({ clock, invalidate }) => {
-    if (!flow || !mat.current) return;
-    mat.current.dashOffset = -clock.elapsedTime * 7;
-    invalidate();
-  });
   if (!segments.length) return null;
   return (
     <lineSegments ref={ref} geometry={geo} raycast={noRaycast} renderOrder={2}>
       {dashed
-        ? <lineDashedMaterial ref={mat} color={color} transparent opacity={opacity} dashSize={2.4} gapSize={1.4} depthWrite={false} toneMapped={false} />
+        ? <lineDashedMaterial color={color} transparent opacity={opacity} dashSize={2.4} gapSize={1.4} depthWrite={false} toneMapped={false} />
         : <lineBasicMaterial color={color} transparent opacity={opacity} depthWrite={false} toneMapped={false} />}
     </lineSegments>
   );
@@ -734,7 +730,6 @@ export function CityScene({ store }) {
   const hoverFocus = useMemo(() => focusOf(layout, hovered, store.relationsOf, tops), [layout, hovered?.kind, hovered?.id, store, tops]); // eslint-disable-line react-hooks/exhaustive-deps
   const pinnedPaths = pinnedTargets.filter((t) => t.kind === 'building').map((t) => t.id);
   const focuses = useMemo(() => [focus, hoverFocus], [focus, hoverFocus]);
-  const flow = useMemo(moves, []);
   useEffect(() => {
     // the tags' anchors: above a landmark's beacon, a port's mast, a scored building's roof
     const at = Object.fromEntries(layout.buildings.map((b) => [b.path, b]));
@@ -756,10 +751,10 @@ export function CityScene({ store }) {
       <Ports layout={layout} T={T} topOf={topOf} />
       <Markers markers={markers} T={T} topOf={topOf} />
       <RoofLights layout={layout} focuses={focuses} tops={tops} T={T} />
-      {focus && <Arcs segments={focus.requires} color={T.accent} flow={flow} />}
-      {focus && <Arcs segments={focus.requiredBy} color={T.status.changes} flow={flow} />}
-      {hoverFocus && <Arcs segments={hoverFocus.requires} color={T.accent} flow={flow} />}
-      {hoverFocus && <Arcs segments={hoverFocus.requiredBy} color={T.status.changes} flow={flow} />}
+      {focus && <Arcs segments={focus.requires} color={T.accent} />}
+      {focus && <Arcs segments={focus.requiredBy} color={T.status.changes} />}
+      {hoverFocus && <Arcs segments={hoverFocus.requires} color={T.accent} />}
+      {hoverFocus && <Arcs segments={hoverFocus.requiredBy} color={T.status.changes} />}
     </group>
   );
 }
