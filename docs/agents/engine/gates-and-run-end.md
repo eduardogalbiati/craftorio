@@ -122,6 +122,14 @@ Human gates (feedback, choices, summaries), the supervisor, refused tool calls, 
   (`continueAfterCut`), an invalid output ends it before the schema retry; the visit is not counted and
   Resume starts that agent's fresh session from its note. The guards' turns (test or protected files
   put back, test results served to the agent) still run: they finish the turn in progress.
+- **Waiting for credits** (#312): a turn whose provider has no account left (every one of Settings'
+  accounts out after a usage limit, engine/providers.md) and no #262 fallback chain neither switches
+  provider nor fails: it emits `run.waiting_credits { agent, step_id, provider, until }` (`until`: the
+  earliest reset time, null when unknown), the orchestrator's status turns `waiting` and the step sleeps
+  until the first account is back (its reset time or the cooldown), then reruns the turn on it. The
+  run chat shows it (`run-waiting-credits`) and a `fallback` notice is sent. The owner can add or
+  enable an account for the next run, or Stop (the run ends `cancelled`). It is not a gate: nothing
+  is answered, and a human gate still waits for its answer as before.
 - **Parked roadmap items** (#395, Move on): a roadmap item whose run waits at a human gate (live, or
   interrupted there by a closed app) can be parked: `roadmap:item` `action: 'park'`, a stage's
   `roadmap:park-stage` (its gate items parked, its planned items skipped; refused while one of its

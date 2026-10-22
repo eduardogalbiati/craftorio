@@ -105,7 +105,15 @@
   }
   // #262: an agent's provider out of credits (or past its usage limit): the turn moved on to the next one
   const fallbackEntry = (entry) => String(entry || '').replace(':', ' · ');
+  // #312: a reset time as "Oct 26, 15:00" in the app's time zone
+  const untilText = (iso) => new Date(iso).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: TimeZone.current() });
+  const withUntil = (key, it, params) => t(it.until ? `${key}_until` : key, { ...params, until: it.until ? untilText(it.until) : '' });
+  const ACCOUNT_ITEMS = {
+    account: (it) => `<div class="rc-sys warn" data-item="${it.id}" data-testid="run-chat-account-switch" title="${esc(it.reason)}"><span><b>${esc(nameOf(it.agent))}</b> ${stepTag(it.stepId, it.visit, it.sub)} ${esc(withUntil('runchat.account_switch', it, { to: it.to, from: it.from }))}</span><time>${clock(it.ts)}</time></div>`,
+    credits: (it) => `<div class="rc-sys warn" data-item="${it.id}" data-testid="run-waiting-credits"><span><b>${esc(nameOf(it.agent))}</b> ${stepTag(it.stepId, it.visit, it.sub)} ${esc(withUntil('runchat.waiting_credits', it, { provider: it.provider }))}</span><time>${clock(it.ts)}</time></div>`,
+  };
   function fallbackHtml(it) {
+    if (ACCOUNT_ITEMS[it.variant]) return ACCOUNT_ITEMS[it.variant](it);
     return `<div class="rc-sys warn" data-item="${it.id}" data-testid="run-chat-fallback" title="${esc(it.reason)}"><span><b>${esc(nameOf(it.agent))}</b> ${t('runchat.fell_back_in_stepid', { stepId: stepTag(it.stepId, it.visit, it.sub) })} <span class="mono">${esc(fallbackEntry(it.from))}</span> → <span class="mono">${esc(fallbackEntry(it.to))}</span> · ${esc(it.reason.slice(0, 160))}</span><time>${clock(it.ts)}</time></div>`;
   }
 

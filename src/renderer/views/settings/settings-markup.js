@@ -150,6 +150,16 @@
               <h3 class="s-subtitle">${t('settings.fallbacks.title')}</h3>
               <p class="muted small">${t('settings.fallbacks.intro')}</p>
               <div id="set-fallbacks" class="s-group" data-testid="settings-fallbacks"></div>
+              <h3 class="s-subtitle">${t('settings.accounts.title')}</h3>
+              <p class="muted small">${t('settings.accounts.intro')}</p>
+              <p class="small acct-terms" data-testid="settings-accounts-terms">${t('settings.accounts.terms')}</p>
+              <div id="set-accounts" class="s-group" data-testid="settings-accounts"></div>
+              <div class="s-group">
+                <div class="s-row">
+                  <div class="s-label"><b>${t('settings.accounts.cooldown')}</b><span>${t('settings.accounts.cooldown_help')}</span></div>
+                  <input id="set-account-cooldown" type="number" min="1" step="1" class="s-num" data-testid="settings-account-cooldown" aria-label="${t('settings.accounts.cooldown')}" />
+                </div>
+              </div>
               <h3 class="s-subtitle">${t('settings.limits.title')}</h3>
               <p class="muted small">${t('settings.limits.intro')}</p>
               <div id="set-model-limits" class="s-group" data-testid="settings-model-limits"></div>

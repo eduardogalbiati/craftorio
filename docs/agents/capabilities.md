@@ -76,6 +76,17 @@ expand (harmless).
 not used. Measured on this repo (first request of a Claude agent, Haiku, "reply OK"): **41.1k
 tokens with the user's setup → 22.0k isolated with the developer's capabilities**.
 
+**Which account a CLI runs on (#312)**: each adapter names the variable of its config folder
+(`configDirEnv` in `src/shared/providers/<id>.js`: Claude `CLAUDE_CONFIG_DIR`, Codex `CODEX_HOME`, Grok
+none, always `~/.grok`); `src/cli-config-dirs.js` reads it from there. A session on one of Settings'
+accounts gets `{ <configDirEnv>: <folder> }` (`accountEnv` in `src/engine/providers.js`) added to the
+CLI process environment by `runCli`, after the agents' variables. It is never part of
+`capabilities.agentEnv`, which is printed in prompts and allow rules. Adding an account in Settings
+shows its login command (`src/provider-accounts.js`, e.g. `CLAUDE_CONFIG_DIR=<folder> claude /login`)
+and whether the folder is signed in, read from that folder only (Claude: `claudeSignedIn` with only
+that variable and no Keychain; Codex: `auth.json` exists, never read); no credential is stored,
+logged or shown.
+
 ## Sub-agents (who gets them and why)
 
 Every request of a turn re-sends the whole conversation, so the files an agent reads in its own

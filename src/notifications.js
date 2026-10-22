@@ -64,6 +64,15 @@ function runNotice(ev, run = {}, { gateLink } = {}) {
       return notice('fallback', t('notify.fallback_title', { name: name() }), t('notify.fallback_body', {
         agent: ev.agent, step: ev.step_id || t('notify.a_turn'), from: ev.from, to: ev.to, reason: clip(ev.reason, 120),
       }));
+    // #312: an account hit its usage limit and the turn moved to the provider's next account; or none is left
+    case 'agent.account_switch':
+      return notice('fallback', t('notify.account_switch_title', { name: name() }), t('notify.account_switch_body', {
+        agent: ev.agent, step: ev.step_id || t('notify.a_turn'), from: ev.from, to: ev.to,
+      }));
+    case 'run.waiting_credits':
+      return notice('fallback', t('notify.waiting_credits_title', { name: name() }), t('notify.waiting_credits_body', {
+        provider: ev.provider,
+      }));
     default:
       return null;
   }

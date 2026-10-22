@@ -140,6 +140,7 @@ function renderFallbackSettings() {
         <label class="small">${t('settings.limits.cost')} <input type="number" class="s-num" data-ml="max_total_cost_usd" min="1" step="1" value="${esc(models[id]?.max_total_cost_usd ?? '')}" placeholder="${t('settings.limits.cost_placeholder')}" aria-label="${t('settings.limits.cost_label', { model: esc(id) })}" /></label>
       </div>
     </div>`).join('');
+  window.AccountsSettings.render($('#set-accounts'), state.settings); // #312: settings-accounts.js
   $('#set-fallbacks-msg').textContent = '';
 }
 
@@ -154,6 +155,13 @@ async function saveFallbackSettings() {
     providers[el.dataset.fbProvider] = entries.length ? { ...rest, fallbacks: entries } : rest;
     if (!Object.keys(providers[el.dataset.fbProvider]).length) delete providers[el.dataset.fbProvider];
   }
+  // #312: the accounts of each provider, saved with the fallbacks
+  const accounts = window.AccountsSettings.collect($('#set-accounts'));
+  if (accounts.invalid) { msg.className = 'small error'; msg.textContent = t('settings.accounts.invalid'); accounts.invalid.focus({ preventScroll: true }); return; }
+  for (const [p, list] of Object.entries(accounts.accounts)) {
+    const { accounts: _old, ...rest } = providers[p] || {};
+    providers[p] = list.length ? { ...rest, accounts: list } : rest;
+  }
   const models = {};
   for (const row of document.querySelectorAll('#set-model-limits [data-ml-model]')) {
     const lim = {};
@@ -165,7 +173,7 @@ async function saveFallbackSettings() {
     }
     if (Object.keys(lim).length) models[row.dataset.mlModel] = lim;
   }
-  state.settings = await api.setSettings({ providers, models });
+  state.settings = await api.setSettings({ providers, models, ...(accounts.cooldown ? { accountCooldownMinutes: accounts.cooldown } : {}) });
   renderFallbackSettings();
   msg.className = 'small muted';
   msg.textContent = t('settings.fallbacks.saved');

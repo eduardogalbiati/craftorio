@@ -709,7 +709,7 @@ function renderSessions() {
       </div>
       <div class="badges">
         <span class="badge p-${esc(s.provider)}">${esc(s.provider)}</span>
-        <span class="badge">${esc(s.model)}</span>
+        <span class="badge">${esc(s.model)}</span>${s.account ? `<span class="badge" data-testid="run-session-account">${esc(s.account)}</span>` : ''}
         ${isOrch ? '' : `<span class="badge">${s.turns || 0} ${I18n.t('run.turn_s')}</span>`}
       </div>
       <div class="metrics">

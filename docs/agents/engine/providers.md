@@ -67,6 +67,21 @@ Turn timeouts, per-run agent overrides, fallback chains, limits per model, retri
   skipped. Simulation: `mockSequences.usage_limits: ['<provider>' | '<provider>:<model>', ...]` makes
   every turn on a listed entry fail with that CLI's usage-limit message (the hint carries the agent's
   own provider; a simulated session records it as `simulates`, shown instead of `mock`).
+- **Accounts per provider (#312)**: Settings' `providers.<provider>.accounts: [{ name, dir, enabled }]`
+  (WorkflowRun's `accounts`, from `settingsAccounts` in `src/service/areas/runs.js`; an account without
+  `enabled` counts as enabled) are config folders of the same CLI, in order (`src/engine/run/accounts.js`).
+  A new session runs on the first enabled account that is not out and records it (`session.account`,
+  shown in the run's cost breakdown); the folder reaches the CLI as described in capabilities.md. A
+  quota error on an account comes **before** the fallback chain: the account is out until the reset
+  time the message gives (the adapter's `quotaReset`, read by `quotaResetAt`; a time already past
+  counts as none) or for Settings' `accountCooldownMinutes` (60 by default), the session closes and the
+  same turn reruns at once in a fresh session (handoff note) on the next account of the **same**
+  provider, emitting `agent.account_switch { agent, step_id, provider, from, to, reason, until }`. The
+  agent stays on that account for its later turns. Only after the provider's last account does the
+  chain above apply (owner, 2026-10-13); with no chain the step waits for credits (gates-and-run-end.md).
+  The app never switches provider by itself (owner, 2026-10-08). A resumed run continues a session
+  only on the account that opened it. Simulation: a `usage_limits` entry `'<provider>@<account name>'`
+  limits only that account.
 - **Limits per model (#262)**: a top-level `models: { <model id>: { timeout_factor?, max_total_cost_usd? } }`
   (and Settings' `models`, the WorkflowRun option; the workflow's entry wins per model). `turnTimeout`
   multiplies by the agent's model's `timeout_factor`; the run's cost limit (`maxTotalCost`) is the

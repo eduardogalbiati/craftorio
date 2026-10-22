@@ -511,7 +511,7 @@ const providerModel = (entry) => String(entry || '').replace(':', ' · ');
 function sessionProviderCell(s) {
   const provider = s.simulates || s.provider;
   const fb = s.fallbackFrom;
-  return `<span class="badge p-${esc(provider)}"${s.simulates ? ` title="${t('run_list.simulated_no_model_was_called')}"` : ''}>${esc(provider)}</span> <span class="mono small">${esc(s.model || '')}</span>${fb
+  return `<span class="badge p-${esc(provider)}"${s.simulates ? ` title="${t('run_list.simulated_no_model_was_called')}"` : ''}>${esc(provider)}</span> <span class="mono small">${esc(s.model || '')}</span>${s.account ? ` <span class="badge" data-testid="run-session-account" title="${t('run_list.account')}">${esc(s.account)}</span>` : ''}${fb
     ? `<div class="pr-fallback small" data-testid="run-session-fallback" title="${esc(fb.reason || '')}"><span class="badge warn">${t('run_list.fallback')}</span> ${t('run_list.from')} <span class="mono">${esc(providerModel(fb.from))}</span>: ${esc(String(fb.reason || '').slice(0, 80))}</div>` : ''}`;
 }
 // #369: a session on a model the installed Claude Code does not know (estimate: the snapshot's

@@ -349,6 +349,17 @@
       this.add({ kind: 'fallback', ts: ev.ts, agent: ev.agent || '?', stepId, sub: subStep(ev.step_id), visit: this.visits[stepId] || 1, from: String(ev.from || ''), to: String(ev.to || ''), reason: String(ev.reason || '') });
     },
 
+    // #312: an account hit its usage limit: the turn moved to the provider's next account (a
+    // 'fallback' item with variant 'account'), or no account was left and the run waits for credits
+    'agent.account_switch'(ev) {
+      const stepId = baseStep(ev.step_id);
+      this.add({ kind: 'fallback', variant: 'account', ts: ev.ts, agent: ev.agent || '?', stepId, sub: subStep(ev.step_id), visit: this.visits[stepId] || 1, from: String(ev.from || ''), to: String(ev.to || ''), reason: String(ev.reason || ''), until: ev.until || null });
+    },
+    'run.waiting_credits'(ev) {
+      const stepId = baseStep(ev.step_id);
+      this.add({ kind: 'fallback', variant: 'credits', ts: ev.ts, agent: ev.agent || '?', stepId, sub: subStep(ev.step_id), visit: this.visits[stepId] || 1, provider: String(ev.provider || ''), until: ev.until || null, reason: '' });
+    },
+
     // #276: the memory guard stopped a process of the run
     'process.killed'(ev) { this.system(ev, 'warn', ev.message || `The memory guard stopped ${ev.command_line}`); },
 
