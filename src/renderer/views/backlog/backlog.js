@@ -1676,7 +1676,7 @@
         <div class="rel-version-row"><input type="text" id="cut-line-name" placeholder="e.g. v1.4" autocomplete="off" /><span id="cut-line-suggest"></span></div>
         <div class="hint">${t('backlog.a_name_or_a_version_ship')}</div><div id="cut-line-why"></div>
       </div>
-      <p id="cut-line-error" class="error small"></p>
+      <p id="cut-line-error" class="error small" role="alert" data-testid="cut-line-error"></p>
       <div class="modal-actions">
         <button type="button" id="btn-cut-line-cancel" class="btn ghost">${t('common.cancel')}</button>
         <button type="submit" id="btn-cut-line-ok" class="btn primary">${t('backlog.add_cut_line')}</button>

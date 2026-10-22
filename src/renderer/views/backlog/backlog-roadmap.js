@@ -788,7 +788,9 @@
 
   // The cut line's dialog (#cut-line-modal of backlog.js) after stage `at`: → its name, or null. #436: the last releases above
   // it; "Suggest version" (release-name.js) from the issues done since the last release and planned up to the cut.
-  function cutLineDialog(current, ctx, data, at) {
+  // #454 `submit(name)` saves it while the dialog stays open: → null (saved, the dialog closes) or the
+  // reason it was refused, shown in #cut-line-error with the name kept for another try.
+  function cutLineDialog(current, ctx, data, at, submit = async () => null) {
     const q = (sel) => document.querySelector(sel);
     const [modal, input] = [q('#cut-line-modal'), q('#cut-line-name')];
     input.value = current;
@@ -803,10 +805,17 @@
     modal.classList.remove('hidden'); input.focus({ preventScroll: true });
     return new Promise((resolve) => {
       const close = (value) => { modal.classList.add('hidden'); resolve(value); };
-      q('#cut-line-form').onsubmit = (e) => {
+      let busy = false;
+      q('#cut-line-form').onsubmit = async (e) => {
         e.preventDefault(); const name = input.value.trim();
         if (!name) { q('#cut-line-error').textContent = t('backlog_roadmap.give_the_release_a_name_or'); return; }
-        close(name);
+        if (busy) return;
+        busy = true; q('#cut-line-error').textContent = '';
+        const error = await submit(name).catch((err) => errMsg(err));
+        busy = false;
+        if (!error) { close(name); return; }
+        input.value = name; q('#cut-line-error').textContent = error;
+        modal.classList.remove('hidden'); input.focus({ preventScroll: true });
       };
       q('#btn-cut-line-cancel').onclick = () => close(null);
     });
@@ -1387,17 +1396,20 @@
 
   // `edit` (#281): { label, detail?, quiet? }: what the edit did, in the roadmap's words: the line of
   // the version kept before it (src/roadmap-history.js) and the title of its toast with Undo (not for a
-  // `quiet` one: a mode, an input, a note, a cut line set).
+  // `quiet` one: a mode, an input, a note).
   // #287 `r`: the roadmap the edit was made on (its updatedAt is the save's base); `edit.form`: the
-  // item with the Edit form's values, kept when the save is refused
+  // item with the Edit form's values, kept when the save is refused; `edit.dialog` (#454): a dialog
+  // shows a refusal itself (the screen still shows the stored roadmap). → the service's answer
   async function save(ctx, r, stages, edit = null) {
+    let out = null;
     try {
-      const out = await api.saveRoadmap(ctx.projectId, stages, edit?.label || null, r?.updatedAt || null);
+      out = await api.saveRoadmap(ctx.projectId, stages, edit?.label || null, r?.updatedAt || null);
       ctx.setData(out);
-      if (out?.conflict) refused(ctx, out, edit?.form);
+      if (out?.conflict) { if (!edit?.dialog) refused(ctx, out, edit?.form); }
       else if (edit && !edit.quiet) undoToast(ctx, out, edit.label, edit.detail);
     } catch (e) { failed(ctx, 'save', e); }
     ctx.render();
+    return out;
   }
   // #287: a save the service refused (the roadmap changed elsewhere in a way the edit cannot be
   // applied to): the screen shows the stored roadmap (set by save) and the reason; the Edit form
@@ -1808,9 +1820,21 @@
       const name = stage.release?.name || ''; if (!await confirmDialog(t('backlog_roadmap.remove_the_cut_line'), t('backlog_roadmap.the_stages_after_it_no_longer', { name }), t('common.remove'))) return 'handled';
       delete stage.release; await save(ctx, r, stages, { label: t('backlog_roadmap.removed_the_cut_line_name', { name }).trim(), detail: t('backlog_roadmap.the_stages_after_it_no_longer_2') });
     } else {
-      const name = await cutLineDialog(stage.release?.name || '', ctx, data, stages.indexOf(stage)); if (!name) return 'handled';
-      stage.release = { name };
-      await save(ctx, r, stages, { label: t('backlog_roadmap.set_the_cut_line_name', { name }), quiet: true });
+      // #454: saved from the open dialog with a toast and Undo; refused (#287), the dialog stays with the
+      // name and the reason, and the next try is made on the stored roadmap the answer carried
+      const from = stage.release?.name || '';
+      const at = stages.indexOf(stage);
+      let base = { r, stages };
+      await cutLineDialog(from, ctx, data, at, async (name) => {
+        const target = stage.id ? base.stages.find((s) => s.id === stage.id) : base.stages[at];
+        if (!target) return null;
+        target.release = { name };
+        const label = from ? t('backlog_roadmap.renamed_the_cut_line_name', { from, name }) : t('backlog_roadmap.set_the_cut_line_name', { name });
+        const out = await save(ctx, base.r, base.stages, { label, dialog: true });
+        if (!out?.conflict) return null;
+        base = { r: out.roadmap, stages: clone(out.roadmap?.stages || []) };
+        return out.conflict.reason || 'The roadmap changed elsewhere: nothing was saved.';
+      });
     }
     return 'handled';
   }
