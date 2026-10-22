@@ -190,8 +190,7 @@
   // (`edit`, #281: the id a save answers with for its Undo toast, is not something the screen shows:
   // with it in the key, the backlog:changed that follows every edit redrew the same list once more)
   const dataKey = (id, data) => `${id}:${JSON.stringify(data ? { ...data, edit: undefined } : null)}`;
-  // (#491: a Backlog merged from the light state has its key, null, computed only when a full read is
-  // compared to it, never on each live refresh: the whole Backlog is megabytes)
+  // (#491: merged from the light state, its key waits for a full read to compare: it is megabytes)
   function setData(data, { merged = false } = {}) {
     bl.data = data;
     shownData = merged ? null : dataKey(bl.projectId, data);
@@ -300,17 +299,13 @@
   // direct reload() is only for the owner's own actions (Sync, Reload, after Save). While the owner
   // is busy nothing replaces the DOM (#214): the notice is added once, and only when the data differs.
   // #491: one live reload in flight at a time (`running`); the requests made meanwhile run once after
-  // it. The Roadmap reads the light backlog:state (statuses, runs, the queue, no issue bodies) and
-  // merges it into what is shown; the whole Backlog is read only when the light state cannot tell
-  // (BacklogRoadmap.mergeState: the stages were edited, an item ended, the roadmap's state changed).
+  // it. The Roadmap merges the light backlog:state (statuses, runs, the queue, no issue bodies) into
+  // what is shown; the whole Backlog is read only when it cannot tell (backlog-live.js mergeState).
   // `shownState` is the last light state shown, without the timers that move every second.
   let shownState = '';
   async function liveReload() {
     if (!visible() || document.hidden) return;
-    if (liveReload.running) {
-      liveReload.again = true;
-      return liveReload.running;
-    }
+    if (liveReload.running) { liveReload.again = true; return liveReload.running; }
     liveReload.running = (async () => {
       if (ownerBusy()) {
         // read each time (#287): the notice says what changed since the form opened
@@ -329,8 +324,7 @@
         if (merged) {
           const view = $b('#view-backlog');
           const top = view?.scrollTop;
-          setData(merged, { merged: true });
-          render();
+          setData(merged, { merged: true }); render();
           if (view && top != null) view.scrollTop = top;
           return;
         }
@@ -338,10 +332,7 @@
       await reload();
     })().finally(() => { liveReload.running = null; });
     await liveReload.running;
-    if (liveReload.again) {
-      liveReload.again = false;
-      await liveReload();
-    }
+    if (liveReload.again) { liveReload.again = false; await liveReload(); }
   }
   // whether the Backlog now differs from what is shown (kept in bl.latest for the notice)
   async function backlogChanged() {
@@ -386,9 +377,7 @@
     if (ev?.projectId && ev.projectId === bl.projectId) liveReload();
   });
   // #465: the base check's card follows its start and end
-  api.onBaseCheckChanged?.((ev) => {
-    if (!ev?.projectId || ev.projectId === bl.projectId) liveReload();
-  });
+  api.onBaseCheckChanged?.((ev) => { if (!ev?.projectId || ev.projectId === bl.projectId) liveReload(); });
 
   // Opens a run in the remembered run view (Chat or Details, showRun in app.js).
   function openRun(el) {
@@ -1448,39 +1437,7 @@
         <p id="po-note" class="muted small"></p>
       </div>
       </div>
-      <!-- #189: the Product Owner's settings (backlog-po-settings.js), over the conversation -->
-      <div id="po-settings" class="po-settings hidden" role="region" aria-label="${t('backlog.calibrate_the_product_owner')}">
-        <div class="po-settings-head">
-          <button id="btn-po-settings-back" class="icon-btn" type="button" title="${t('backlog.back_to_the_conversation')}" aria-label="${t('backlog.back_to_the_conversation')}">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6" /></svg>
-          </button>
-          <h2 class="drawer-title">${t('backlog.calibrate_the_product_owner')}</h2>
-        </div>
-        <div class="po-settings-body">
-          <div class="field">
-            <label for="po-set-calibration">${t('backlog.speed_quality')}</label>
-            <div id="po-set-calibration-box"></div>
-            <p class="hint">${t('backlog.what_this_changes_how_many_runs')}</p>
-          </div>
-          <div class="field">
-            <label for="po-set-cost">${t('backlog.cost_economy_generous')}</label>
-            <div id="po-set-cost-box"></div>
-            <p class="hint">${t('backlog.what_this_changes_how_many_issues')}</p>
-          </div>
-          <div class="row">
-            <div class="field">
-              <label for="po-set-model">${t('backlog.model')} <span class="muted">${t('backlog.claude_code')}</span></label>
-              <input type="text" id="po-set-model" list="po-set-model-list" maxlength="80" placeholder="${t('backlog.claude_opus_5_5')}" />
-              <datalist id="po-set-model-list"></datalist>
-            </div>
-            <div class="field">
-              <label>${t('backlog.effort')}</label>
-              <div id="po-set-effort" class="seg sm" role="group" aria-label="${t('backlog.effort')}"></div>
-            </div>
-          </div>
-          <p id="po-set-status" class="po-settings-status muted small">${t('backlog.applies_to_the_next_answer')}</p>
-        </div>
-      </div>
+      ${window.BacklogPoSettingsPanel.html()}
     </aside>
 `;
 
