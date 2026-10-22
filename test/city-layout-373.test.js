@@ -282,6 +282,21 @@ test('#373 layoutCity: more lines, a larger footprint; more complexity, a taller
   assert.ok(b['src/engine/tall.js'].h > b['src/engine/flat.js'].h, `complexity 39 ${b['src/engine/tall.js'].h} vs 1 ${b['src/engine/flat.js'].h}`);
 });
 
+test('#449 layoutCity: the mast follows the worst function (a quarter of it from 8), none under it', () => {
+  const b = Object.fromEntries(load().layoutCity(planModel()).buildings.map((x) => [x.path, x]));
+  assert.ok(near(b['src/engine/tall.js'].antenna, 7.5), `worst 30: ${b['src/engine/tall.js'].antenna}`);
+  assert.equal(b['src/engine/big.js'].antenna, 0, 'worst 3: no mast');
+  assert.equal(b['README.md'].antenna, 0, 'not measured: no mast');
+});
+
+test('#449 layoutCity: each building carries its score from `scores`, null without one', () => {
+  const b = Object.fromEntries(load().layoutCity(planModel(), { scores: { 'src/engine/tall.js': 42, 'src/engine/flat.js': 0 } }).buildings.map((x) => [x.path, x]));
+  assert.equal(b['src/engine/tall.js'].score, 42);
+  assert.equal(b['src/engine/flat.js'].score, 0, 'a zero score is kept');
+  assert.equal(b['src/engine/big.js'].score, null);
+  assert.equal(load().layoutCity(planModel()).buildings.every((x) => x.score === null), true, 'no scores: every score null');
+});
+
 test('#373 layoutCity: unmatched files land in the outskirts district', () => {
   const layout = load().layoutCity(planModel());
   assert.ok(layout.districts.some((d) => d.id === 'outskirts'), 'an outskirts district');

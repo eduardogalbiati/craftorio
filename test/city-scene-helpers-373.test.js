@@ -91,3 +91,47 @@ test('#373 focusOf: a district with edges lights the buildings of the districts 
   assert.equal(f.requiredBy.length, 0);
   assert.equal(s.focusOf(LAYOUT, { kind: 'district', id: 'engine' }, relations({})), null, 'no district edges (a language without them): no focus');
 });
+
+// #449, the v2 buildings in the scene: buildingsOf gives each file its building (city-buildings.js),
+// a complex measured against its own district's median footprint
+const lot = (o) => ({ complexity: 200, functions: 60, lines: 900, quadrant: null, test: false, worst: null, churn: 0, ...o });
+const V2 = {
+  districts: [{ id: 'engine', zone: 'core', x: 0, z: 0, w: 60, d: 60 }, { id: 'ui', zone: 'core', x: 70, z: 0, w: 60, d: 60 }],
+  buildings: [
+    lot({ path: 'src/big.js', district: 'engine', x: 0, z: 0, w: 12, d: 12, h: 10 }),
+    lot({ path: 'src/s1.js', district: 'engine', x: 20, z: 0, w: 6, d: 6, h: 8, complexity: 60, functions: 20 }),
+    lot({ path: 'src/s2.js', district: 'engine', x: 30, z: 0, w: 6, d: 6, h: 8, complexity: 60, functions: 20 }),
+    lot({ path: 'ui/big.js', district: 'ui', x: 70, z: 0, w: 12, d: 12, h: 10 }),
+    lot({ path: 'ui/peer.js', district: 'ui', x: 90, z: 0, w: 12, d: 12, h: 10 }),
+  ],
+};
+
+test('#449 buildingsOf: one building per file, in order, the same list for the same layout; none without a layout', async (t) => {
+  const s = await loadScene(t);
+  if (!s) return;
+  const list = s.buildingsOf(V2);
+  assert.equal(list.length, V2.buildings.length);
+  for (const x of list) assert.ok(x.parts.length > 0 && Number.isFinite(x.top), 'parts and a top');
+  assert.equal(s.buildingsOf(V2) === list, true, 'computed once per layout');
+  assert.deepEqual(s.buildingsOf(null), []);
+});
+
+test('#449 buildingsOf: a footprint three times its district\'s median is a complex; among peers of its size it is not', async (t) => {
+  const s = await loadScene(t);
+  if (!s) return;
+  const kinds = s.buildingsOf(V2).map((x) => x.kind);
+  assert.equal(kinds[0], 'complex', 'src/big.js among 6 × 6 neighbours');
+  assert.notEqual(kinds[3], 'complex', 'ui/big.js among 12 × 12 neighbours');
+  assert.deepEqual([kinds[1], kinds[2]], ['block', 'block']);
+});
+
+test('#449 focusOf: given the buildings\' tops, the arcs leave from the roofs and the lit roofs are named', async (t) => {
+  const s = await loadScene(t);
+  if (!s) return;
+  const rel = relations({ 'building:src/a.js': { requires: ['src/b.js'], requiredBy: ['ui/c.js'] } });
+  const high = (f) => Math.max(...f.requires.filter((_, k) => k % 3 === 1));
+  const plain = s.focusOf(LAYOUT, { kind: 'building', id: 'src/a.js' }, rel);
+  const topped = s.focusOf(LAYOUT, { kind: 'building', id: 'src/a.js' }, rel, [30, 40, 35]);
+  assert.ok(high(topped) > high(plain), `an arc between taller roofs rises higher: ${high(topped)} vs ${high(plain)}`);
+  assert.deepEqual({ centre: [...topped.roofs.centre], to: [...topped.roofs.to], from: [...topped.roofs.from] }, { centre: [0], to: [1], from: [2] });
+});
