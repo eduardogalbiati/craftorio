@@ -87,6 +87,42 @@ test('ensureDeps: a miss installs and links node_modules; a second worktree with
   assert.equal(r3.status, 'linked');
 });
 
+test('ensureDeps: a hit runs the project\'s lifecycle scripts, so prepare\'s gitignored outputs (the 3D bundle) exist in the new worktree (#451)', async (t) => {
+  const cacheDir = tmpDir(t, 'cache-');
+  const scripts = { postinstall: 'node postinstall.js', prepare: 'node scripts/build-3d.js' };
+  const project = (dir) => {
+    npmProject(dir);
+    fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ name: 'p', scripts }));
+  };
+  // the fake npm: an install fills node_modules; `run <script>` does what the script would build
+  const install = fakeRun();
+  const run = async (cmd, args, opts = {}) => {
+    if (args[0] !== 'run') return install(cmd, args, opts);
+    const name = args[args.length - 1];
+    const out = path.join(opts.cwd, 'generated');
+    fs.mkdirSync(out, { recursive: true });
+    if (name === 'prepare') {
+      fs.writeFileSync(path.join(out, 'run3d-scene.js'), '// bundle');
+      fs.writeFileSync(path.join(out, 'project-city.js'), '// bundle');
+    }
+    if (name === 'postinstall') fs.writeFileSync(path.join(out, 'postinstall.txt'), 'ok');
+    return { code: 0, output: '', timedOut: false };
+  };
+
+  const wtA = tmpDir(t, 'wtA-');
+  project(wtA);
+  assert.equal((await depsCache.ensureDeps({ workDir: wtA, cacheDir, project: 'p', env: {}, run })).status, 'miss');
+
+  const wtB = tmpDir(t, 'wtB-');
+  project(wtB);
+  const r = await depsCache.ensureDeps({ workDir: wtB, cacheDir, project: 'p', env: {}, run });
+  assert.equal(r.status, 'hit');
+  assert.ok(depsCache.linkTarget(path.join(wtB, 'node_modules')), 'node_modules is a link into the cache');
+  assert.equal(fs.existsSync(path.join(wtB, 'generated', 'run3d-scene.js')), true, 'prepare built the 3D bundle in the new worktree');
+  assert.equal(fs.existsSync(path.join(wtB, 'generated', 'project-city.js')), true, 'prepare built the city bundle in the new worktree');
+  assert.equal(fs.existsSync(path.join(wtB, 'generated', 'postinstall.txt')), true, 'the install lifecycle scripts ran too');
+});
+
 test('ensureDeps: two concurrent installs of the same key install once; the one that loses the race waits and gets a hit', async (t) => {
   const cacheDir = tmpDir(t, 'cache-');
   const wtA = tmpDir(t, 'wtA-');
