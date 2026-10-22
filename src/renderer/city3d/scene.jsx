@@ -339,9 +339,10 @@ function Buildings({ layout, T, paint, tests, level, focus, hoverLit, store }) {
     onPointerOut: () => store.hover(null),
     onClick: (e) => { e.stopPropagation(); if (e.delta <= 4) store.pick('building', path(k, e)); },
   } : {});
+  const shown = (k) => !KINDS[k].detail || level >= 1;
   return (
     <group>
-      {Object.entries(meshes).map(([k, m]) => <primitive key={`${k}:${m.uuid}`} object={m} visible={!KINDS[k].detail || level >= 1} {...pointer(k)} />)}
+      {Object.entries(meshes).map(([k, m]) => <primitive key={`${k}:${m.uuid}`} object={m} visible={shown(k)} {...pointer(k)} />)}
     </group>
   );
 }

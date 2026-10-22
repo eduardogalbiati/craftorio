@@ -22,9 +22,8 @@
 //     buildings no layer highlights are greyed (city-layout.js applyOverlay);
 //   ProjectCity.flyTo(name) flies to a file, a district or a zone (false when there is none);
 //   ProjectCity.current() → { projectId, layout } of the city on screen (null when none);
-//   ProjectCity.stats() → { firstFrameMs, fps, buildings }: the time to the first frame and the frame
-//   rate while the camera moves (for the PR's measures), and per drawn file { path, archetype,
-//   greyed } (#449: src/shared/city-buildings.js's archetype, greyed by the overlay).
+//   ProjectCity.stats() → { firstFrameMs, fps, buildings }: first frame time and fps while the camera moves
+//   (the PR's measures); per drawn file { path, archetype, greyed } (#449: city-buildings.js, the overlay).
 //   A created city also has `model`, `setPins(paths)` (#382: the files whose connections stay drawn,
 //   the connections panel's, project-city-connections.js), `onLayout(fn)` (called after a new
 //   layout; returns the unsubscribe) and `reload(answer?)` (#376: draws another city answer, a release's base; none reads the project's again).
@@ -118,14 +117,12 @@
       relayout();
     }
 
-    // the facts' quadrant per file (the city model has none: they come from the same facts read)
-    const quadrants = () => Object.fromEntries((c.facts?.model?.files || []).filter((r) => r.quadrant).map((r) => [r.file, r.quadrant]));
-    // and its score (#449: the badges up close)
-    const scores = () => Object.fromEntries((c.facts?.model?.files || []).filter((r) => r.score != null).map((r) => [r.file, r.score]));
+    // the facts' quadrant and score per file (#449: the badges; the city model has none: same facts read)
+    const byFile = (key) => Object.fromEntries((c.facts?.model?.files || []).filter((r) => r[key] != null && r[key] !== '').map((r) => [r.file, r[key]]));
 
     function relayout() {
       const model = c.answer?.model;
-      c.layout = model && window.CityLayout ? CityLayout.layoutCity(model, { quadrants: quadrants(), scores: scores() }) : null;
+      c.layout = model && window.CityLayout ? CityLayout.layoutCity(model, { quadrants: byFile('quadrant'), scores: byFile('score') }) : null;
       if (c.layout && !c.colour) c.colour = CityLayout.defaultColourBy(model);
       // a new layout starts with nothing hovered or pinned (the scene drops its own too)
       c.hover = null;
