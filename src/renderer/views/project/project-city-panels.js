@@ -10,7 +10,8 @@
 // localStorage, STORE) and per mode: { [mode]: { min: [panel names], legend: false } }, so a mode opens
 // the way the owner left it. attach(city) (project-city.js, every city) handles the clicks and gives
 // apply() (the saved states on the panels drawn: the city calls it after each draw, city.applyUi())
-// and destroy(). Markup from poc/city-modes.html (panel(), the legend's head and its button).
+// and destroy(). It also gives the city's left column (#428, .pc-left[data-pc-left]): city.leftColumn(node)
+// puts a card at its top (the impact card), the notes of each draw go under it. Markup from poc/city-modes.html (panel(), the legend's head and its button).
 // Uses app.js globals at call time: esc. Browser: window.ProjectCityPanels.
 (() => {
   const STORE = 'multiagent.city.panels';
@@ -42,8 +43,25 @@
   function attach(city) {
     const el = city.el;
     const mode = () => el.getAttribute('data-city-mode') || 'explore';
+    // #428: the city's left column, the impact card at its top and the notes under it; the HUD is
+    // redrawn on each render, so apply() puts the column back with that draw's notes
+    const left = document.createElement('div');
+    left.className = 'pc-left';
+    left.setAttribute('data-pc-left', '');
+    function place() {
+      const hud = el.querySelector('[data-pc-hud]');
+      if (!hud || left.parentNode === hud) return;
+      for (const old of left.querySelectorAll('.pc-notes')) old.remove();
+      const notes = [...hud.children].find((n) => n.classList.contains('pc-notes'));
+      if (notes) left.appendChild(notes);
+      const header = hud.querySelector('[data-testid="project-city-header"]');
+      if (header?.nextSibling) hud.insertBefore(left, header.nextSibling);
+      else hud.appendChild(left);
+    }
+    city.leftColumn = (node) => { left.prepend(node); place(); };
 
     function apply() {
+      place();
       const s = states()[mode()] || {};
       const min = new Set(s.min || []);
       for (const p of el.querySelectorAll('[data-city-panel]')) {
