@@ -12,12 +12,14 @@
 //     position; onPick({ kind, id } | null) on a click (null: the empty sky).
 //   - handle: update(patch of the same keys; a new layout drops the hover and the pinned card, the
 //     pins stay), pin(target | null) (the card's target), flyTo(flyTarget), home(), zoom(factor),
-//     stats() → { firstFrameMs, fps } (the time to the first frame, the frame rate while the camera
-//     moves), unmount() (React Three Fiber gives the WebGL context back).
+//     stats() → { firstFrameMs, fps, buildings } (the time to the first frame, the frame rate while
+//     the camera moves; per drawn file { path, archetype, greyed }: its v2 building's kind,
+//     scene.jsx buildingsOf, and whether the overlay greys it), unmount() (React Three Fiber gives
+//     the WebGL context back).
 import { Component } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Canvas } from '@react-three/fiber';
-import { CityScene } from './scene.jsx';
+import { buildingsOf, CityScene } from './scene.jsx';
 import { cityTheme } from './theme.js';
 import { createStore, useStore } from './store.js';
 
@@ -31,9 +33,10 @@ class SceneBoundary extends Component {
   }
 }
 
-// the tags that float over the scene: landmarks (always visible) and ports; Rig moves them
+// the tags that float over the scene: landmarks (always visible), ports and, up close, the scores of
+// the district under the camera (#449, coloured as their building); Rig moves them
 function Tags({ store }) {
-  const { layout } = useStore(store);
+  const { layout, paint, scoreDistrict, tests } = useStore(store);
   const ref = (id) => (el) => { if (el) store.tagEls.set(id, el); else store.tagEls.delete(id); };
   return (
     <div className="r3d-tags">
@@ -49,6 +52,10 @@ function Tags({ store }) {
           <i className="r3d-dot" />
           {p.name} <span children={t('city3d.files', { count: p.via.length })} />
         </div>
+      ))}
+      {scoreDistrict && layout.buildings.map((b, i) => b.district === scoreDistrict && b.score != null && (tests || !b.test) && (
+        <div key={`score:${b.path}`} ref={ref(`score:${b.path}`)} className="r3d-tag pc-score" title={b.path}
+          style={{ '--c': paint.colours?.[i] || undefined }} children={Number(b.score).toFixed(1)} />
       ))}
     </div>
   );
@@ -76,7 +83,7 @@ function App({ store }) {
 const same = (a, b) => a?.kind === b?.kind && a?.id === b?.id;
 
 function mount(element, { layout, paint, markers = [], tests = true, pins = [], theme, relationsOf, onHover, onPick }) {
-  const store = createStore({ layout, layoutKey: 1, paint, markers, tests, pins: [...pins], theme: cityTheme(theme), level: 0, hover: null, pinned: null, glError: '' });
+  const store = createStore({ layout, layoutKey: 1, paint, markers, tests, pins: [...pins], theme: cityTheme(theme), level: 0, scoreDistrict: null, hover: null, pinned: null, glError: '' });
   Object.assign(store, {
     tagEls: new Map(),
     tagAnchors: new Map(),
@@ -103,14 +110,18 @@ function mount(element, { layout, paint, markers = [], tests = true, pins = [], 
       const next = { ...patch };
       if (patch.theme) next.theme = cityTheme(patch.theme);
       if (patch.pins) next.pins = [...patch.pins];
-      if (patch.layout && patch.layout !== store.get().layout) Object.assign(next, { layoutKey: store.get().layoutKey + 1, hover: null, pinned: null });
+      if (patch.layout && patch.layout !== store.get().layout) Object.assign(next, { layoutKey: store.get().layoutKey + 1, scoreDistrict: null, hover: null, pinned: null });
       store.set(next);
     },
     pin(target) { store.set({ pinned: target || null }); },
     flyTo(target) { if (target) store.rig?.fly(target); },
     home() { store.rig?.home(); },
     zoom(factor) { store.rig?.zoom(factor); },
-    stats: () => ({ firstFrameMs: store.stats.firstFrameMs, fps: store.stats.fps }),
+    stats: () => {
+      const { layout, paint } = store.get(), built = buildingsOf(layout);
+      const buildings = (layout?.buildings || []).map((b, i) => ({ path: b.path, archetype: built[i]?.kind || null, greyed: !!paint?.greyed?.[i] }));
+      return { firstFrameMs: store.stats.firstFrameMs, fps: store.stats.fps, buildings };
+    },
     unmount() { root.unmount(); },
   };
 }

@@ -6,17 +6,23 @@
 //   dashes along the avenues' centre lines), per zone a sidewalk, the zone's slab in its kind's
 //   ground texture and its name along its avenue side, per district a raised plate (instanced,
 //   round corners of a fixed radius: geometry.js roundedMaterial) with its name and file count.
-// - Buildings (instanced: geometry.js buildingBox, the POC's rounded box scaled per instance), a few
-//   thin ledges each (layout.ledges), masts for the worst function with a cap (red over
-//   COMPLEXITY_LIMIT), landmarks (a plinth, a pole and a beacon), ports (a dock, a hall and a mast
-//   outside the city edge, arcs to their `via` files) and the overlay's markers (a pin over a roof).
-// - Hovering a building shows a halo, draws arcs to what it requires (accent) and to what requires it
-//   (amber) and lightens those buildings; nothing else changes colour (#382: no flash across the
-//   city). Pinning (a click, or the connections panel's pins) keeps the arcs and a ring, and dims
-//   every building outside the pinned connections with a short fade (DIM_MS). A district's hover or
-//   pin does the same with district edges (Rust crates).
+// - Buildings (#449, poc/project-city-v2.html): each file is src/shared/city-buildings.js's archetype
+//   and parts (buildingsOf, once per layout), one InstancedMesh per part kind (KINDS, geometry.js
+//   partGeometries); the walls carry the windows (geometry.js windowMaterial: `aWin` lit by churn,
+//   `aStyle` the zone kind's facade, theme.js), each part coloured by its role from the building's
+//   colour (paintBuildings); crane arms swing and warning lights pulse near (level 1 and closer,
+//   unless the system asks for reduced motion). Landmarks (a plinth, a pole and a beacon), ports (a
+//   dock, a hall and a mast outside the city edge, arcs to their `via` files) and the overlay's
+//   markers (a pin over a roof) stand on each building's `top`.
+// - Hovering a building shows a halo, draws dashed arcs flowing to what it requires (accent) and from
+//   what requires it (amber), lights their roofs (RoofLights) and lightens those buildings; nothing
+//   else changes colour (#382: no flash across the city). Pinning (a click, or the connections
+//   panel's pins) keeps the arcs and a ring, and dims every building outside the pinned connections
+//   with a short fade (DIM_MS). A district's hover or pin does the same with district edges (Rust
+//   crates).
 // - Level of detail, by the camera's distance against the home view's: zones and their names only
-//   far away, district names closer (LOD_LABELS), ledges and masts near (LOD_DETAIL).
+//   far away, district names and the parts' details closer (LOD_LABELS), up close (LOD_DETAIL) the
+//   district under the camera's target shows its files' scores as tags (`scoreDistrict`).
 // - The camera (Rig): MapControls as the run's view, the POC's home view (the whole city in the frame,
 //   clear of the HUD: fitDistance), zoom and a fly to a target; the frame loop is on demand (a frame
 //   when something moves). The floating tags (landmarks, ports) are DOM nodes moved every frame.
@@ -24,8 +30,9 @@ import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useFrame, useThree } from '@react-three/fiber';
 import { MapControls } from 'three/addons/controls/MapControls.js';
-import { buildingBox, capBall, flatPlane, groundTexture, labelTexture, mastBox, mix, rbox, roundedMaterial, unitBox } from './geometry.js';
+import { buildingBox, flatPlane, groundTexture, labelTexture, mastBox, mix, partGeometries, rbox, roundedMaterial, unitBox, windowMaterial } from './geometry.js';
 import { useStore } from './store.js';
+import { buildingOf, FLOOR_H, hashOf, WIN_PITCH } from '../../shared/city-buildings.js';
 
 // the slabs: the floor's top is y = 0; the sidewalk, the zone slab and the district plate stack on it
 const SIDEWALK_TOP = 0.22, ZONE_TOP = 0.55, PLATE_TOP = 0.95, Y0 = PLATE_TOP;
@@ -33,7 +40,6 @@ const SIDEWALK_AV = 2.6; // the sidewalk along a zone's avenue side
 const FLOOR_MARGIN = 44;
 const HOME_DIR = new THREE.Vector3(0.5, 1.15, 1).normalize(); // the home view: from the south-east, 46 degrees up
 const LOD_LABELS = 0.8, LOD_DETAIL = 0.5; // shares of the home distance
-const COMPLEXITY_LIMIT = 25;
 const FOV = 30;
 const DIM_MS = 220; // the fade of the buildings outside a pinned file's connections
 const DIM = 0.8; // how far they go toward the theme's dim colour
@@ -64,10 +70,13 @@ export function fitDistance(camera, target, dir, rect, top) {
   return 4000;
 }
 
-// a mesh's geometry and material, freed when the component goes
+// a mesh's geometry and material (or a list, or an object of them), freed when the component goes
 function useDisposable(make, deps) {
   const value = useMemo(make, deps); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => () => { for (const x of [].concat(value)) x?.dispose?.(); }, [value]);
+  useEffect(() => () => {
+    const all = Array.isArray(value) ? value : value?.dispose ? [value] : Object.values(value || {});
+    for (const x of all) x?.dispose?.();
+  }, [value]);
   return value;
 }
 
@@ -182,94 +191,172 @@ export function buildingColours(layout, paint, { focus = null, hoverLit = null, 
   });
 }
 
-// the colour of every building and ledge, see buildingColours
-function paintBuildings({ body, band }, layout, ledges, paint, focus, hoverLit, dim, T) {
-  if (!body) return;
-  const colours = buildingColours(layout, paint, { focus, hoverLit, dim, T });
-  colours.forEach((c, i) => body.setColorAt(i, tint.set(c)));
-  if (body.instanceColor) body.instanceColor.needsUpdate = true;
-  if (band) {
-    ledges.forEach((l, k) => band.setColorAt(k, tint.set(mix(colours[l.i], '#000000', 0.2))));
-    if (band.instanceColor) band.instanceColor.needsUpdate = true;
-  }
+// the part kinds (poc/project-city-v2.html KINDS): `detail` kinds show from LOD level 1, `pick` kinds
+// take the pointer (the walls and the roofs), `params` their standard material's
+const KINDS = {
+  box: { pick: true },
+  wedge: { pick: true, params: { roughness: 0.75 } },
+  barrel: { pick: true, params: { roughness: 0.6 } },
+  dome: { pick: true, params: { roughness: 0.35, metalness: 0.1 } },
+  cyl: { detail: true, params: { roughness: 0.5, metalness: 0.15 } },
+  cone: { detail: true, params: { roughness: 0.6 } },
+  green: { detail: true, params: { roughness: 0.9 } },
+  mast: { detail: true, params: { roughness: 0.5 } },
+  cap: { detail: true, shadow: false, params: { roughness: 0.4 } },
+  light: { detail: true, shadow: false, basic: true },
+};
+const ACCESSORY = new Set(['amber', 'cap', 'green', 'metal', 'warn']); // the roles a greyed building greys too
+const built = new WeakMap();
+
+/** The v2 building of every file of `layout` (src/shared/city-buildings.js buildingOf), once per layout: a complex is measured against its district's median footprint. */
+export function buildingsOf(layout) {
+  if (!layout) return [];
+  if (built.has(layout)) return built.get(layout);
+  const areas = {};
+  for (const b of layout.buildings) (areas[b.district] ||= []).push(b.w * b.d);
+  const median = {};
+  for (const id of Object.keys(areas)) { const a = areas[id].sort((x, y) => x - y); median[id] = a[Math.floor(a.length / 2)] || 0; }
+  const out = layout.buildings.map((b) => buildingOf(b, { medianArea: median[b.district] }));
+  built.set(layout, out);
+  return out;
 }
 
+// the parts of a layout in the instanced meshes: each part's slot in its kind's mesh, the building
+// each pickable slot belongs to, the animated parts (crane arms, warning lights)
+function slotsOf(layout) {
+  const list = buildingsOf(layout), counts = Object.fromEntries(Object.keys(KINDS).map((k) => [k, 0]));
+  const slots = list.map((x) => x.parts.map((p) => counts[p.g]++));
+  const owner = Object.fromEntries(Object.keys(KINDS).filter((k) => KINDS[k].pick).map((k) => [k, new Int32Array(Math.max(1, counts[k]))]));
+  const moving = [];
+  list.forEach((x, i) => x.parts.forEach((p, k) => {
+    if (owner[p.g]) owner[p.g][slots[i][k]] = i;
+    if (p.crane || (p.g === 'light' && p.role === 'warn')) moving.push({ i, p, slot: slots[i][k] });
+  }));
+  return { list, counts, slots, owner, moving };
+}
+
+const m4 = new THREE.Matrix4(), mR = new THREE.Matrix4(), mT = new THREE.Matrix4(), mS = new THREE.Matrix4();
+const quat = new THREE.Quaternion(), euler = new THREE.Euler(), at3 = new THREE.Vector3(), scale3 = new THREE.Vector3();
+// a part's matrix on its lot (cx, cz the lot's centre), `s` 0 to hide it
+const partMatrix = (cx, cz, p, s) => m4.compose(at3.set(cx + p.x, Y0 + p.y, cz + p.z), quat.setFromEuler(euler.set(0, p.ry || 0, 0)), scale3.set(Math.max(0.03, p.w) * s, Math.max(0.03, p.h) * s, Math.max(0.03, p.d) * s));
+
+const BLACK = new THREE.Color('#000000'), WHITE = new THREE.Color('#ffffff');
+const ROLES = Object.fromEntries(['amber', 'body', 'cap', 'glass', 'green', 'metal', 'roof', 'trim', 'warn'].map((r) => [r, new THREE.Color()]));
+
+// the colour of every part: its building's (buildingColours, then a touch of its own tone so
+// neighbours differ), then its role's (the POC's roles); a greyed building greys its accessories too
+function paintBuildings(meshes, set, layout, paint, focus, hoverLit, dim, T) {
+  const colours = buildingColours(layout, paint, { focus, hoverLit, dim, T });
+  const R = ROLES, roofTo = new THREE.Color(T.dark ? '#0e1014' : '#ffffff'), accent = new THREE.Color(T.accent);
+  R.metal.set(T.mast); R.green.set(T.garden); R.warn.set(T.status.failed); R.amber.set(T.status.changes); R.cap.set(T.status.pending);
+  const metal = R.metal.clone(), green = R.green.clone(), warn = R.warn.clone(), amber = R.amber.clone(), cap = R.cap.clone();
+  set.list.forEach((x, i) => {
+    const c = R.body.set(colours[i]).lerp(x.tint < 0.5 ? BLACK : WHITE, Math.abs(x.tint - 0.5) * 0.22);
+    R.trim.copy(c).lerp(BLACK, T.dark ? 0.3 : 0.2); R.roof.copy(c).lerp(roofTo, 0.42); R.glass.copy(c).lerp(accent, 0.55);
+    const grey = !!paint.greyed?.[i];
+    if (grey) for (const r of ACCESSORY) R[r].copy(R.trim);
+    x.parts.forEach((p, k) => meshes[p.g].setColorAt(set.slots[i][k], R[p.role] || c));
+    if (grey) { R.metal.copy(metal); R.green.copy(green); R.warn.copy(warn); R.amber.copy(amber); R.cap.copy(cap); }
+  });
+  for (const m of Object.values(meshes)) if (m.instanceColor) m.instanceColor.needsUpdate = true;
+}
+
+// whether the city may move by itself (crane arms, warning lights, the arcs' flow)
+const moves = () => !(typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches);
+
 function Buildings({ layout, T, paint, tests, level, focus, hoverLit, store }) {
-  const body = useDisposable(() => [buildingBox(), new THREE.MeshStandardMaterial({ roughness: 0.6, metalness: 0 })], []);
-  const band = useDisposable(() => [buildingBox(), new THREE.MeshStandardMaterial({ roughness: 0.75 })], []);
-  const mast = useDisposable(() => [mastBox(), new THREE.MeshStandardMaterial({ roughness: 0.5 })], []);
-  const cap = useDisposable(() => [capBall(), new THREE.MeshStandardMaterial({ roughness: 0.4 })], []);
-  const bodyRef = useRef(), bandRef = useRef(), mastRef = useRef(), capRef = useRef();
-  // the ledges (a few per building, spaced along its height) and the masts, once per layout
-  const ledges = useMemo(() => {
-    const out = [];
-    layout.buildings.forEach((b, i) => { for (let k = 1; k <= (b.ledges || 0); k++) out.push({ i, y: Y0 + (b.h * k) / (b.ledges + 1) - 0.03 }); });
-    return out;
-  }, [layout]);
-  const masts = useMemo(() => layout.buildings.map((b, i) => ({ b, i })).filter((x) => x.b.antenna > 0), [layout]);
+  const set = useMemo(() => slotsOf(layout), [layout]);
+  const geos = useDisposable(() => partGeometries(), []);
+  const uniforms = useMemo(() => ({ uNight: { value: 0 }, uTime: { value: 0 } }), []);
+  const mats = useDisposable(() => Object.fromEntries(Object.entries(KINDS).map(([k, o]) => [k,
+    k === 'box' ? windowMaterial(uniforms, { floorH: FLOOR_H, pitch: WIN_PITCH })
+      : o.basic ? new THREE.MeshBasicMaterial({ toneMapped: false }) : new THREE.MeshStandardMaterial({ roughness: 0.7, ...o.params })])), [uniforms]);
+  // one instanced mesh per part kind, made again with the layout
+  const meshes = useMemo(() => Object.fromEntries(Object.keys(KINDS).map((k) => {
+    const m = new THREE.InstancedMesh(geos[k], mats[k], Math.max(1, set.counts[k]));
+    Object.assign(m, { count: set.counts[k], castShadow: KINDS[k].shadow !== false, receiveShadow: true, frustumCulled: false });
+    if (!KINDS[k].pick) m.raycast = noRaycast;
+    return [k, m];
+  })), [set, geos, mats]);
+  useEffect(() => () => { for (const m of Object.values(meshes)) m.dispose(); }, [meshes]);
+  const motion = useMemo(moves, []);
   useLayoutEffect(() => {
-    const shown = (b) => tests || !b.test;
-    const put = (m, i, x, y, z, sx, sy, sz) => { tmp.position.set(x, y, z); tmp.scale.set(sx, sy, sz); tmp.updateMatrix(); m.setMatrixAt(i, tmp.matrix); };
-    const done = (m) => { m.instanceMatrix.needsUpdate = true; m.computeBoundingSphere(); };
-    const B = layout.buildings;
+    const B = layout.buildings, maxChurn = B.reduce((m, b) => Math.max(m, b.churn || 0), 1);
+    const kindOf = Object.fromEntries(layout.zones.map((z) => [z.id, z.kind]));
+    const win = new Float32Array(Math.max(1, set.counts.box) * 4), style = new Float32Array(Math.max(1, set.counts.box) * 4);
     B.forEach((b, i) => {
-      const s = shown(b) ? 1 : 0;
-      put(bodyRef.current, i, b.x + b.w / 2, Y0, b.z + b.d / 2, Math.max(0.05, b.w) * s, b.h * s, Math.max(0.05, b.d) * s);
+      const s = tests || !b.test ? 1 : 0, cx = b.x + b.w / 2, cz = b.z + b.d / 2, facade = T.facade(kindOf[b.zone]);
+      const lit = b.test ? 0.05 : 0.1 + 0.6 * (Math.log1p(b.churn || 0) / Math.log1p(maxChurn)); // the share of lit windows: the churn
+      set.list[i].parts.forEach((p, k) => {
+        const j = set.slots[i][k];
+        meshes[p.g].setMatrixAt(j, partMatrix(cx, cz, p, s));
+        if (p.g === 'box') { win.set([p.win ? 1 : 0, (hashOf(`${b.path}:${k}`) % 1000) / 1000, lit, p.h], j * 4); style.set(facade, j * 4); }
+      });
     });
-    ledges.forEach((l, k) => {
-      const b = B[l.i], s = shown(b) ? 1 : 0;
-      put(bandRef.current, k, b.x + b.w / 2, l.y, b.z + b.d / 2, (b.w + 0.08) * s, 0.06 * s, (b.d + 0.08) * s);
-    });
-    masts.forEach(({ b }, k) => {
-      const s = shown(b) ? 1 : 0, top = Y0 + b.h;
-      put(mastRef.current, k, b.x + b.w / 2, top, b.z + b.d / 2, s, b.antenna * s, s);
-      put(capRef.current, k, b.x + b.w / 2, top + b.antenna, b.z + b.d / 2, s, s, s);
-      capRef.current.setColorAt(k, tint.set(b.worst > COMPLEXITY_LIMIT ? T.status.failed : T.status.pending));
-    });
-    for (const m of [bodyRef.current, bandRef.current, mastRef.current, capRef.current]) done(m);
-    if (capRef.current.instanceColor) capRef.current.instanceColor.needsUpdate = true;
-    mast[1].color.set(T.mast);
+    geos.box.setAttribute('aWin', new THREE.InstancedBufferAttribute(win, 4));
+    geos.box.setAttribute('aStyle', new THREE.InstancedBufferAttribute(style, 4));
+    for (const m of Object.values(meshes)) { m.instanceMatrix.needsUpdate = true; m.computeBoundingSphere(); }
+    uniforms.uNight.value = T.night;
     store.invalidate();
-  }, [layout, tests, ledges, masts, T, store, mast]);
+  }, [layout, set, meshes, geos, uniforms, tests, T, store]);
   // the fade of the dimming: toward 1 while something is pinned, toward 0 when nothing is
   const fade = useMemo(() => ({ value: 0 }), []);
   const want = focus ? 1 : 0;
   useLayoutEffect(() => {
-    paintBuildings({ body: bodyRef.current, band: bandRef.current }, layout, ledges, paint, focus, hoverLit, fade.value, T);
+    paintBuildings(meshes, set, layout, paint, focus, hoverLit, fade.value, T);
     store.invalidate();
-  }, [layout, ledges, paint, focus, hoverLit, T, store, fade]);
-  useFrame((_, dt) => {
-    if (fade.value === want) return;
-    const step = Math.min(dt, 0.1) * (1000 / DIM_MS);
-    fade.value = want > fade.value ? Math.min(want, fade.value + step) : Math.max(want, fade.value - step);
-    paintBuildings({ body: bodyRef.current, band: bandRef.current }, layout, ledges, paint, focus || store.lastFocus, hoverLit, fade.value, T);
+  }, [meshes, set, layout, paint, focus, hoverLit, T, store, fade]);
+  useFrame(({ clock }, dt) => {
+    if (fade.value !== want) {
+      const step = Math.min(dt, 0.1) * (1000 / DIM_MS);
+      fade.value = want > fade.value ? Math.min(want, fade.value + step) : Math.max(want, fade.value - step);
+      paintBuildings(meshes, set, layout, paint, focus || store.lastFocus, hoverLit, fade.value, T);
+      store.invalidate();
+    }
+    // the living city, near: the crane arms swing around their mast, the warning lights pulse
+    if (!motion || level < 1 || !set.moving.length) return;
+    const t = clock.elapsedTime;
+    uniforms.uTime.value = t;
+    for (const { i, p, slot } of set.moving) {
+      const b = layout.buildings[i], s = tests || !b.test ? 1 : 0, cx = b.x + b.w / 2, cz = b.z + b.d / 2;
+      if (p.crane) {
+        const k = p.crane;
+        m4.makeTranslation(cx + k.x, Y0 + k.y, cz + k.z).multiply(mR.makeRotationY(Math.sin(t * 0.11 + k.seed) * 1.1))
+          .multiply(mT.makeTranslation(p.x - k.x, p.y - k.y, p.z - k.z)).multiply(mS.makeScale(p.w * s, p.h * s, p.d * s));
+      } else {
+        const r = p.w * (0.5 + 0.5 * Math.max(0, Math.sin(t * 5 + slot))) * s;
+        m4.makeTranslation(cx + p.x, Y0 + p.y, cz + p.z).multiply(mS.makeScale(r, r, r));
+      }
+      meshes[p.g].setMatrixAt(slot, m4);
+      meshes[p.g].instanceMatrix.needsUpdate = true;
+    }
     store.invalidate();
   });
   if (focus) store.lastFocus = focus; // what fades out when the pins go
-  const path = (e) => layout.buildings[e.instanceId]?.path;
+  const path = (k, e) => layout.buildings[set.owner[k]?.[e.instanceId]]?.path;
+  const pointer = (k) => (KINDS[k].pick ? {
+    onPointerMove: (e) => { e.stopPropagation(); store.hover('building', path(k, e), e.nativeEvent); },
+    onPointerOut: () => store.hover(null),
+    onClick: (e) => { e.stopPropagation(); if (e.delta <= 4) store.pick('building', path(k, e)); },
+  } : {});
   return (
     <group>
-      <instancedMesh ref={bodyRef} args={[body[0], body[1], Math.max(1, layout.buildings.length)]} count={layout.buildings.length} castShadow receiveShadow
-        onPointerMove={(e) => { e.stopPropagation(); store.hover('building', path(e), e.nativeEvent); }}
-        onPointerOut={() => store.hover(null)}
-        onClick={(e) => { e.stopPropagation(); if (e.delta <= 4) store.pick('building', path(e)); }} />
-      <instancedMesh ref={bandRef} args={[band[0], band[1], Math.max(1, ledges.length)]} count={ledges.length} visible={level >= 2} raycast={noRaycast} />
-      <instancedMesh ref={mastRef} args={[mast[0], mast[1], Math.max(1, masts.length)]} count={masts.length} visible={level >= 2} castShadow raycast={noRaycast} />
-      <instancedMesh ref={capRef} args={[cap[0], cap[1], Math.max(1, masts.length)]} count={masts.length} visible={level >= 2} raycast={noRaycast} />
+      {Object.entries(meshes).map(([k, m]) => <primitive key={`${k}:${m.uuid}`} object={m} visible={!KINDS[k].detail || level >= 1} {...pointer(k)} />)}
     </group>
   );
 }
 
-// the halo of the hovered building and a ring under each pinned one
-function Halos({ layout, T, hover, pins }) {
+// the halo of the hovered building and a ring under each pinned one, as tall as its body (the POC's placeHalo)
+function Halos({ layout, T, hover, pins, topOf }) {
   const at = useMemo(() => Object.fromEntries(layout.buildings.map((b) => [b.path, b])), [layout]);
   const box = useDisposable(() => buildingBox(), []);
   const ring = useDisposable(() => new THREE.RingGeometry(1, 1.08, 48), []);
   const h = hover?.kind === 'building' ? at[hover.id] : null;
+  const tall = (b) => Math.min(b.h, topOf[b.path] ?? b.h);
   return (
     <group>
       {h && (
-        <mesh geometry={box} position={[h.x + h.w / 2, Y0 - 0.02, h.z + h.d / 2]} scale={[h.w + 0.7, h.h + 0.42, h.d + 0.7]} raycast={noRaycast}>
+        <mesh geometry={box} position={[h.x + h.w / 2, Y0 - 0.02, h.z + h.d / 2]} scale={[h.w + 0.7, tall(h) + 0.42, h.d + 0.7]} raycast={noRaycast}>
           <meshBasicMaterial color={T.ink} transparent opacity={0.18} depthWrite={false} />
         </mesh>
       )}
@@ -277,7 +364,7 @@ function Halos({ layout, T, hover, pins }) {
         const r = Math.max(b.w, b.d) / 2 + 1.6;
         return (
           <group key={b.path}>
-            <mesh geometry={box} position={[b.x + b.w / 2, Y0 - 0.02, b.z + b.d / 2]} scale={[b.w + 1, b.h + 0.6, b.d + 1]} raycast={noRaycast}>
+            <mesh geometry={box} position={[b.x + b.w / 2, Y0 - 0.02, b.z + b.d / 2]} scale={[b.w + 1, tall(b) + 0.6, b.d + 1]} raycast={noRaycast}>
               <meshBasicMaterial color={T.accent} transparent opacity={0.3} depthWrite={false} toneMapped={false} />
             </mesh>
             <mesh geometry={ring} rotation-x={-Math.PI / 2} position={[b.x + b.w / 2, Y0 + 0.08, b.z + b.d / 2]} scale={[r, r, 1]} raycast={noRaycast}>
@@ -292,13 +379,16 @@ function Halos({ layout, T, hover, pins }) {
 
 // ---------- landmarks, ports, markers, arcs ----------
 
-function Landmarks({ layout, T }) {
+// the top of a building: its highest part (the v2 building's `top`), its body and mast without one
+const topIn = (topOf, b) => topOf?.[b.path] ?? b.h + (b.antenna || 0);
+
+function Landmarks({ layout, T, topOf }) {
   const at = useMemo(() => Object.fromEntries(layout.buildings.map((b) => [b.path, b])), [layout]);
   const pole = useDisposable(() => mastBox(), []);
   return layout.landmarks.map((l) => {
     const b = at[l.path];
     if (!b) return null;
-    const px = b.x + b.w / 2 + b.w * 0.32, pz = b.z + b.d / 2 - b.d * 0.32, roof = Y0 + b.h, top = roof + b.antenna + 3;
+    const px = b.x + b.w / 2 + b.w * 0.32, pz = b.z + b.d / 2 - b.d * 0.32, roof = Y0 + Math.min(b.h, topIn(topOf, b)), top = Y0 + topIn(topOf, b) + 3;
     return (
       <group key={l.path}>
         <Slab r={{ x: b.x - 1.3, z: b.z - 1.3, w: b.w + 2.6, d: b.d + 2.6 }} top={Y0 + 0.5} thick={0.5} radius={0.25} c={T.plinth} rough={0.8} raycast={noRaycast} />
@@ -317,33 +407,75 @@ function arc(out, a, b, segments = 18) {
   for (let i = 0; i < pts.length - 1; i++) out.push(pts[i].x, pts[i].y, pts[i].z, pts[i + 1].x, pts[i + 1].y, pts[i + 1].z);
 }
 
-const roofOf = (b) => new THREE.Vector3(b.x + b.w / 2, Y0 + b.h + (b.antenna || 0), b.z + b.d / 2);
+const roofOf = (b, top) => new THREE.Vector3(b.x + b.w / 2, Y0 + (top ?? b.h + (b.antenna || 0)), b.z + b.d / 2);
 
-function Arcs({ segments, color, opacity = 0.85 }) {
+// the arcs of a dependency: dashed, the dashes flowing along it (the POC's arcsOut / arcsIn), or plain
+function Arcs({ segments, color, opacity = 0.95, dashed = true, flow = false }) {
+  const ref = useRef(), mat = useRef();
   const geo = useDisposable(() => {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(segments, 3));
     return g;
   }, [segments]);
+  useLayoutEffect(() => { if (dashed) ref.current?.computeLineDistances(); }, [geo, dashed]);
+  useFrame(({ clock, invalidate }) => {
+    if (!flow || !mat.current) return;
+    mat.current.dashOffset = -clock.elapsedTime * 7;
+    invalidate();
+  });
   if (!segments.length) return null;
   return (
-    <lineSegments geometry={geo} raycast={noRaycast} renderOrder={2}>
-      <lineBasicMaterial color={color} transparent opacity={opacity} depthWrite={false} toneMapped={false} />
+    <lineSegments ref={ref} geometry={geo} raycast={noRaycast} renderOrder={2}>
+      {dashed
+        ? <lineDashedMaterial ref={mat} color={color} transparent opacity={opacity} dashSize={2.4} gapSize={1.4} depthWrite={false} toneMapped={false} />
+        : <lineBasicMaterial color={color} transparent opacity={opacity} depthWrite={false} toneMapped={false} />}
     </lineSegments>
   );
 }
 
-function Ports({ layout, T }) {
+const ROOF_LIGHTS = 600;
+// a light on the roof of every connected file (the POC's lightRoofs): the hovered or pinned file in
+// the ink, what it requires in the accent, what requires it in amber
+function RoofLights({ layout, focuses, tops, T }) {
+  const ref = useRef();
+  const res = useDisposable(() => [new THREE.SphereGeometry(0.5, 12, 10), new THREE.MeshBasicMaterial({ toneMapped: false })], []);
+  useLayoutEffect(() => {
+    const m = ref.current;
+    if (!m) return;
+    let n = 0;
+    const put = (i, colour, size) => {
+      const b = layout.buildings[i];
+      if (n >= ROOF_LIGHTS || !b) return;
+      tmp.position.set(b.x + b.w / 2, Y0 + (tops[i] ?? b.h) + 0.3, b.z + b.d / 2);
+      tmp.scale.setScalar(size);
+      tmp.updateMatrix();
+      m.setMatrixAt(n, tmp.matrix);
+      m.setColorAt(n++, tint.set(colour));
+    };
+    for (const f of focuses) {
+      if (!f?.roofs) continue;
+      for (const i of f.roofs.centre) put(i, T.ink, 1.1);
+      for (const i of f.roofs.to) put(i, T.accent, 0.8);
+      for (const i of f.roofs.from) put(i, T.status.changes, 0.8);
+    }
+    m.count = n;
+    m.instanceMatrix.needsUpdate = true;
+    if (m.instanceColor) m.instanceColor.needsUpdate = true;
+  }, [layout, focuses, tops, T]);
+  return <instancedMesh ref={ref} args={[res[0], res[1], ROOF_LIGHTS]} frustumCulled={false} raycast={noRaycast} />;
+}
+
+function Ports({ layout, T, topOf }) {
   const at = useMemo(() => Object.fromEntries(layout.buildings.map((b) => [b.path, b])), [layout]);
   const mastOf = (p) => ({ x: p.x + (p.along ? 4.5 : 0), z: p.z + (p.along ? 0 : 4.5) });
   const segments = useMemo(() => {
     const out = [];
     for (const p of layout.ports) {
       const m = mastOf(p);
-      for (const v of p.via) if (at[v]) arc(out, new THREE.Vector3(m.x, 7.7, m.z), new THREE.Vector3(at[v].x + at[v].w / 2, Y0 + at[v].h, at[v].z + at[v].d / 2));
+      for (const v of p.via) if (at[v]) arc(out, new THREE.Vector3(m.x, 7.7, m.z), new THREE.Vector3(at[v].x + at[v].w / 2, Y0 + Math.min(at[v].h, topIn(topOf, at[v])), at[v].z + at[v].d / 2));
     }
     return out;
-  }, [layout, at]);
+  }, [layout, at, topOf]);
   const pole = useDisposable(() => mastBox(), []);
   return (
     <group>
@@ -360,19 +492,20 @@ function Ports({ layout, T }) {
           </group>
         );
       })}
-      <Arcs segments={segments} color={T.accent} opacity={0.4} />
+      <Arcs segments={segments} color={T.accent} opacity={0.4} dashed={false} />
     </group>
   );
 }
 
-function Markers({ markers, T }) {
+// the overlay's markers: a pin over the roof (applyOverlay's `y` is the body, the v2 building's top wins)
+function Markers({ markers, T, topOf }) {
   const ref = useRef();
   const res = useDisposable(() => [new THREE.ConeGeometry(0.6, 1.6, 16), new THREE.MeshStandardMaterial({ roughness: 0.4 })], []);
   useLayoutEffect(() => {
     const m = ref.current;
     if (!m) return;
     markers.forEach((k, i) => {
-      tmp.position.set(k.x, Y0 + k.y + 1.4, k.z);
+      tmp.position.set(k.x, Y0 + (topOf[k.path] ?? k.y) + 1.4, k.z);
       tmp.rotation.set(Math.PI, 0, 0);
       tmp.scale.set(1, 1, 1);
       tmp.updateMatrix();
@@ -383,23 +516,26 @@ function Markers({ markers, T }) {
     m.instanceMatrix.needsUpdate = true;
     if (m.instanceColor) m.instanceColor.needsUpdate = true;
     m.computeBoundingSphere();
-  }, [markers, T]);
+  }, [markers, T, topOf]);
   return <instancedMesh ref={ref} args={[res[0], res[1], Math.max(1, markers.length)]} count={markers.length} raycast={noRaycast} />;
 }
 
-// the arcs of one target (a building or a district) and the buildings it lights
-export function focusOf(layout, target, relationsOf) {
+// the arcs of one target (a building or a district) and the buildings it lights; `tops` (per
+// building, optional) the roofs the arcs leave from, the body and mast without; `roofs` the indexes
+// of the lit roofs (RoofLights): the target, what it requires, what requires it
+export function focusOf(layout, target, relationsOf, tops) {
   if (!target) return null;
   const index = new Map(layout.buildings.map((b, i) => [b.path, i]));
+  const roof = (i) => roofOf(layout.buildings[i], tops?.[i]);
   if (target.kind === 'building' && index.has(target.id)) {
     const rel = relationsOf('building', target.id);
     const i = index.get(target.id);
-    const from = roofOf(layout.buildings[i]);
+    const from = roof(i);
     const lit = new Set([i]);
-    const requires = [], requiredBy = [];
-    for (const p of rel.requires) if (index.has(p)) { lit.add(index.get(p)); arc(requires, from, roofOf(layout.buildings[index.get(p)])); }
-    for (const p of rel.requiredBy) if (index.has(p)) { lit.add(index.get(p)); arc(requiredBy, roofOf(layout.buildings[index.get(p)]), from); }
-    return { lit, requires, requiredBy };
+    const requires = [], requiredBy = [], roofs = { centre: [i], to: [], from: [] };
+    for (const p of rel.requires) if (index.has(p)) { const j = index.get(p); lit.add(j); roofs.to.push(j); arc(requires, from, roof(j)); }
+    for (const p of rel.requiredBy) if (index.has(p)) { const j = index.get(p); lit.add(j); roofs.from.push(j); arc(requiredBy, roof(j), from); }
+    return { lit, requires, requiredBy, roofs };
   }
   if (target.kind === 'district') {
     const rel = relationsOf('district', target.id);
@@ -413,16 +549,20 @@ export function focusOf(layout, target, relationsOf) {
     if (!self) return null;
     for (const id of rel.requires) if (of[id]) arc(requires, centre(self), centre(of[id]));
     for (const id of rel.requiredBy) if (of[id]) arc(requiredBy, centre(of[id]), centre(self));
-    return { lit, requires, requiredBy };
+    return { lit, requires, requiredBy, roofs: { centre: [], to: [], from: [] } };
   }
   return null;
 }
 
-/** The focus of several targets at once (the pinned card and the connections panel's pins): their lit sets and arcs merged; null when none has one. */
-export function focusOfAll(layout, targets, relationsOf) {
-  const parts = targets.map((t) => focusOf(layout, t, relationsOf)).filter(Boolean);
+/** The focus of several targets at once (the pinned card and the connections panel's pins): their lit sets, arcs and roofs merged; null when none has one. */
+export function focusOfAll(layout, targets, relationsOf, tops) {
+  const parts = targets.map((t) => focusOf(layout, t, relationsOf, tops)).filter(Boolean);
   if (!parts.length) return null;
-  return { lit: new Set(parts.flatMap((p) => [...p.lit])), requires: parts.flatMap((p) => p.requires), requiredBy: parts.flatMap((p) => p.requiredBy) };
+  const roofs = (k) => parts.flatMap((p) => p.roofs?.[k] || []);
+  return {
+    lit: new Set(parts.flatMap((p) => [...p.lit])), requires: parts.flatMap((p) => p.requires), requiredBy: parts.flatMap((p) => p.requiredBy),
+    roofs: { centre: roofs('centre'), to: roofs('to'), from: roofs('from') },
+  };
 }
 
 // ---------- lights and camera ----------
@@ -527,6 +667,10 @@ function Rig({ layout, store, T }) {
     const ratio = camera.position.distanceTo(controls.target) / home.distance;
     const level = ratio > LOD_LABELS ? 0 : ratio > LOD_DETAIL ? 1 : 2;
     if (level !== store.get().level) store.set({ level });
+    // up close, the district under the camera's target shows its files' scores (the POC's scoresFollow)
+    const at = controls.target;
+    const scored = level === 2 ? layout.districts.find((d) => at.x >= d.x && at.x <= d.x + d.w && at.z >= d.z && at.z <= d.z + d.d)?.id ?? null : null;
+    if (scored !== (store.get().scoreDistrict ?? null)) store.set({ scoreDistrict: scored });
     // the floating tags follow their anchors; one that would overlap another already placed moves up
     // until it is clear (the POC's placeTags), the lowest on screen placed first
     camera.updateMatrixWorld();
@@ -582,33 +726,40 @@ export function CityScene({ store }) {
     return list;
   }, [pins, pinned]);
   const pinsKey = pinnedTargets.map((t) => `${t.kind}:${t.id}`).join('|');
-  const focus = useMemo(() => focusOfAll(layout, pinnedTargets, store.relationsOf), [layout, pinsKey, store]); // eslint-disable-line react-hooks/exhaustive-deps
+  // the v2 buildings' tops, per building and per path (halos, landmarks, ports, markers, arcs, tags)
+  const tops = useMemo(() => buildingsOf(layout).map((x) => x.top), [layout]);
+  const topOf = useMemo(() => Object.fromEntries(layout.buildings.map((b, i) => [b.path, tops[i]])), [layout, tops]);
+  const focus = useMemo(() => focusOfAll(layout, pinnedTargets, store.relationsOf, tops), [layout, pinsKey, store, tops]); // eslint-disable-line react-hooks/exhaustive-deps
   const hovered = hover && !pinnedTargets.some((t) => t.kind === hover.kind && t.id === hover.id) ? hover : null;
-  const hoverFocus = useMemo(() => focusOf(layout, hovered, store.relationsOf), [layout, hovered?.kind, hovered?.id, store]); // eslint-disable-line react-hooks/exhaustive-deps
+  const hoverFocus = useMemo(() => focusOf(layout, hovered, store.relationsOf, tops), [layout, hovered?.kind, hovered?.id, store, tops]); // eslint-disable-line react-hooks/exhaustive-deps
   const pinnedPaths = pinnedTargets.filter((t) => t.kind === 'building').map((t) => t.id);
+  const focuses = useMemo(() => [focus, hoverFocus], [focus, hoverFocus]);
+  const flow = useMemo(moves, []);
   useEffect(() => {
-    // the tags' anchors: above a landmark's beacon, a port's mast
+    // the tags' anchors: above a landmark's beacon, a port's mast, a scored building's roof
     const at = Object.fromEntries(layout.buildings.map((b) => [b.path, b]));
     store.tagAnchors = new Map([
-      ...layout.landmarks.filter((l) => at[l.path]).map((l) => { const b = at[l.path]; return [`landmark:${l.path}`, new THREE.Vector3(b.x + b.w / 2 + b.w * 0.32, Y0 + b.h + b.antenna + 5.2, b.z + b.d / 2 - b.d * 0.32)]; }),
+      ...layout.landmarks.filter((l) => at[l.path]).map((l) => { const b = at[l.path]; return [`landmark:${l.path}`, new THREE.Vector3(b.x + b.w / 2 + b.w * 0.32, Y0 + topIn(topOf, b) + 5.2, b.z + b.d / 2 - b.d * 0.32)]; }),
       ...layout.ports.map((p) => [`port:${p.id}`, new THREE.Vector3(p.x + (p.along ? 4.5 : 0), 9.4, p.z + (p.along ? 0 : 4.5))]),
+      ...layout.buildings.filter((b) => b.score != null).map((b) => [`score:${b.path}`, new THREE.Vector3(b.x + b.w / 2, Y0 + topIn(topOf, b) + 0.8, b.z + b.d / 2)]),
     ]);
     invalidate();
-  }, [layout, store, invalidate]);
+  }, [layout, store, invalidate, topOf]);
   return (
     <group>
       <Lights layout={layout} T={T} />
       <Rig key={layoutKey} layout={layout} store={store} T={T} />
       <Ground layout={layout} T={T} level={level} store={store} />
       <Buildings layout={layout} T={T} paint={paint} tests={tests} level={level} focus={focus} hoverLit={hoverFocus?.lit || null} store={store} />
-      <Halos layout={layout} T={T} hover={hovered} pins={pinnedPaths} />
-      <Landmarks layout={layout} T={T} />
-      <Ports layout={layout} T={T} />
-      <Markers markers={markers} T={T} />
-      {focus && <Arcs segments={focus.requires} color={T.accent} />}
-      {focus && <Arcs segments={focus.requiredBy} color={T.status.changes} />}
-      {hoverFocus && <Arcs segments={hoverFocus.requires} color={T.accent} />}
-      {hoverFocus && <Arcs segments={hoverFocus.requiredBy} color={T.status.changes} />}
+      <Halos layout={layout} T={T} hover={hovered} pins={pinnedPaths} topOf={topOf} />
+      <Landmarks layout={layout} T={T} topOf={topOf} />
+      <Ports layout={layout} T={T} topOf={topOf} />
+      <Markers markers={markers} T={T} topOf={topOf} />
+      <RoofLights layout={layout} focuses={focuses} tops={tops} T={T} />
+      {focus && <Arcs segments={focus.requires} color={T.accent} flow={flow} />}
+      {focus && <Arcs segments={focus.requiredBy} color={T.status.changes} flow={flow} />}
+      {hoverFocus && <Arcs segments={hoverFocus.requires} color={T.accent} flow={flow} />}
+      {hoverFocus && <Arcs segments={hoverFocus.requiredBy} color={T.status.changes} flow={flow} />}
     </group>
   );
 }

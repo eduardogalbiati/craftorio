@@ -22,8 +22,9 @@
 //     buildings no layer highlights are greyed (city-layout.js applyOverlay);
 //   ProjectCity.flyTo(name) flies to a file, a district or a zone (false when there is none);
 //   ProjectCity.current() → { projectId, layout } of the city on screen (null when none);
-//   ProjectCity.stats() → { firstFrameMs, fps }: the time to the first frame and the frame rate
-//   while the camera moves (for the PR's measures).
+//   ProjectCity.stats() → { firstFrameMs, fps, buildings }: the time to the first frame and the frame
+//   rate while the camera moves (for the PR's measures), and per drawn file { path, archetype,
+//   greyed } (#449: src/shared/city-buildings.js's archetype, greyed by the overlay).
 //   A created city also has `model`, `setPins(paths)` (#382: the files whose connections stay drawn,
 //   the connections panel's, project-city-connections.js), `onLayout(fn)` (called after a new
 //   layout; returns the unsubscribe) and `reload(answer?)` (#376: draws another city answer, a release's base; none reads the project's again).
@@ -119,10 +120,12 @@
 
     // the facts' quadrant per file (the city model has none: they come from the same facts read)
     const quadrants = () => Object.fromEntries((c.facts?.model?.files || []).filter((r) => r.quadrant).map((r) => [r.file, r.quadrant]));
+    // and its score (#449: the badges up close)
+    const scores = () => Object.fromEntries((c.facts?.model?.files || []).filter((r) => r.score != null).map((r) => [r.file, r.score]));
 
     function relayout() {
       const model = c.answer?.model;
-      c.layout = model && window.CityLayout ? CityLayout.layoutCity(model, { quadrants: quadrants() }) : null;
+      c.layout = model && window.CityLayout ? CityLayout.layoutCity(model, { quadrants: quadrants(), scores: scores() }) : null;
       if (c.layout && !c.colour) c.colour = CityLayout.defaultColourBy(model);
       // a new layout starts with nothing hovered or pinned (the scene drops its own too)
       c.hover = null;
@@ -209,7 +212,7 @@
         <div class="r3d-run"><b title="${esc(title)}">${esc(title)}</b> <small title="${esc(facts1)}" data-testid="project-city-facts">${esc(facts1)}</small></div>
         <span class="r3d-grow"></span>
         <label class="r3d-search"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="7" cy="7" r="5"/><path d="M11 11l4 4"/></svg>
-          <input type="search" list="pc-targets-${esc(projectId)}" placeholder="${t('project_city.fly_to_a_file_or_a')}" aria-label="${t('project_city.search_the_city')}" data-pc-search data-testid="project-city-search" /></label>
+          <input type="search" role="searchbox" list="pc-targets-${esc(projectId)}" placeholder="${t('project_city.fly_to_a_file_or_a')}" aria-label="${t('project_city.search_the_city')}" data-pc-search data-testid="project-city-search" /></label>
         <datalist id="pc-targets-${esc(projectId)}">${targets.map((t) => `<option value="${esc(t)}"></option>`).join('')}</datalist>
         <label class="r3d-chip"><span>${t('project_city.colour_by')}</span><select data-pc-colour aria-label="${t('project_city.colour_by')}" data-testid="project-city-colour">${options}</select></label>
         <label class="r3d-chip" title="${t('project_city.show_or_hide_the_test_files')}"><input type="checkbox" data-pc-tests data-testid="project-city-tests" ${c.tests ? 'checked' : ''} /> ${t('project_city.tests')}</label>

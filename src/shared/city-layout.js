@@ -21,8 +21,9 @@
 //   mast of ANTENNA_K × the worst function from ANTENNA_MIN;
 // - ports are docks outside the city edge nearest their files, spread along it (layoutPorts).
 // Over MAX_BUILDINGS drawn files the smallest are drawn as one block per district (`aggregated`,
-// `note`). `quadrants` ({ path: quadrant }, from the facts) colours by quadrant.
-// - layoutCity(model, { quadrants }) → { zones, districts, buildings, avenues, ring, landmarks,
+// `note`). `quadrants` ({ path: quadrant }, from the facts) colours by quadrant; `scores` ({ path:
+// score }, the facts' too) is each building's `score`, the badge the city shows up close (#449).
+// - layoutCity(model, { quadrants, scores }) →{ zones, districts, buildings, avenues, ring, landmarks,
 //   ports, edges, bounds, aggregated, note, avenueWidth, scale }.
 // - squarify(items [{ id, weight }], rect { x, y, w, h }) → [{ id, x, y, w, h }]; stripLayout(items,
 //   rect) → [{ y0, y1, cells }], the order kept.
@@ -374,7 +375,7 @@
   }
 
   /** The city on the ground: see the header. */
-  function layoutCity(model, { quadrants = {} } = {}) {
+  function layoutCity(model, { quadrants = {}, scores = {} } = {}) {
     const districtsIn = arr(model && model.districts);
     const { buildings: drawn, aggregated, note } = aggregate(arr(model && model.buildings), districtsIn.map((d) => d.id));
     const { zoneGroups, campus } = groupByZone(model, drawn);
@@ -416,7 +417,7 @@
         aggregate: b.aggregate || 0, antenna: antennaOf(b), churn: b.churn || 0, complexity: b.complexity ?? null, d: p.d, district,
         floors: floorsOf(b), functions: b.functions ?? null, h: heightOf(b, { perLine, campus: isCampus }), landmark: null,
         lastChange: b.lastChange || null, ledges: ledgesOf(b), lines: b.lines || 0, path: b.path, quadrant: quadrants[b.path] || null,
-        test: isCampus, w: p.w, worst: b.worst ?? null, x: p.x, z: p.z, zone,
+        score: scores[b.path] ?? null, test: isCampus, w: p.w, worst: b.worst ?? null, x: p.x, z: p.z, zone,
       };
     };
     const zones = [], districts = [], buildings = [];
