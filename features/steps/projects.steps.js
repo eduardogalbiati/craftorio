@@ -9,7 +9,8 @@
 // - data-testid="projects-screen": the Projects screen, its header buttons "Open folder" and
 //   "New project"; data-testid="project-card": one card per project, holding its name;
 // - data-testid="project-page": a project's page, its name in a heading; its tabs are a
-//   role="tablist" named "Project", each a role="tab" with aria-selected;
+//   role="tablist" (named in the interface language, "Project" or "Projeto"), each a role="tab" with
+//   aria-selected;
 // - data-testid="project-overview": the Overview tab (folder, repository, unpushed commits, runs);
 // - data-testid="project-conflict-map": the Conflict map tab (its state says when the folder is not a
 //   git repository);
@@ -26,7 +27,8 @@ const visible = (locator) => locator.filter({ visible: true });
 const projectsScreen = (page) => visible(page.getByTestId('projects-screen')).first();
 const projectCard = (projects, name) => projects.getByTestId('project-card').filter({ hasText: name }).first();
 const projectPage = (page) => visible(page.getByTestId('project-page')).first();
-const projectTabs = (page) => projectPage(page).getByRole('tablist', { name: 'Project', exact: true });
+// the tablist is named in the interface language (pt-BR "Projeto"): the page has one tablist, found by role
+const projectTabs = (page) => projectPage(page).getByRole('tablist');
 const projectTab = (page, name) => projectTabs(page).getByRole('tab', { name, exact: true });
 const conflictMapLink = (page, text) => visible(page.getByTestId('conflict-map-link')).filter({ hasText: text }).first();
 
