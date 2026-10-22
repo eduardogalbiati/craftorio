@@ -123,6 +123,74 @@ test('ensureDeps: a hit runs the project\'s lifecycle scripts, so prepare\'s git
   assert.equal(fs.existsSync(path.join(wtB, 'generated', 'postinstall.txt')), true, 'the install lifecycle scripts ran too');
 });
 
+// An npm project with `scripts`, and a fake npm that records the scripts it is asked to run
+// (`run … <name>`) per worktree; the names in `failing` exit 1.
+function scriptProject(dir, scripts) {
+  npmProject(dir);
+  fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ name: 'p', scripts }));
+}
+function recordingRun({ failing = [] } = {}) {
+  const install = fakeRun();
+  const ran = [];
+  const run = async (cmd, args, opts = {}) => {
+    if (args[0] !== 'run') return install(cmd, args, opts);
+    const name = args[args.length - 1];
+    ran.push({ cwd: opts.cwd, name });
+    return failing.includes(name) ? { code: 1, output: `${name} broke`, timedOut: false } : { code: 0, output: '', timedOut: false };
+  };
+  return { run, scriptsIn: (dir) => ran.filter((r) => r.cwd === dir).map((r) => r.name) };
+}
+
+test('ensureDeps: a hit runs each lifecycle script the project has once, in install order; scripts it lacks or that are not lifecycle ones are not run (#451)', async (t) => {
+  const cacheDir = tmpDir(t, 'cache-');
+  const scripts = { build: 'x', test: 'x', postprepare: 'x', prepare: 'x', preprepare: 'x', postinstall: 'x' };
+  const { run, scriptsIn } = recordingRun();
+  const wtA = tmpDir(t, 'wtA-');
+  scriptProject(wtA, scripts);
+  await depsCache.ensureDeps({ workDir: wtA, cacheDir, project: 'p', env: {}, run });
+  const wtB = tmpDir(t, 'wtB-');
+  scriptProject(wtB, scripts);
+  const r = await depsCache.ensureDeps({ workDir: wtB, cacheDir, project: 'p', env: {}, run });
+  assert.equal(r.status, 'hit');
+  assert.deepEqual(scriptsIn(wtB), ['postinstall', 'preprepare', 'prepare', 'postprepare']);
+  assert.equal(r.scripts_failed, undefined, 'nothing failed');
+});
+
+test('ensureDeps: a lifecycle script that fails on a hit is never fatal: the worktree stays linked, the result names it and a warning is logged (#451)', async (t) => {
+  const cacheDir = tmpDir(t, 'cache-');
+  const scripts = { prepare: 'x', postprepare: 'x' };
+  const { run, scriptsIn } = recordingRun({ failing: ['prepare'] });
+  const wtA = tmpDir(t, 'wtA-');
+  scriptProject(wtA, scripts);
+  await depsCache.ensureDeps({ workDir: wtA, cacheDir, project: 'p', env: {}, run });
+  const wtB = tmpDir(t, 'wtB-');
+  scriptProject(wtB, scripts);
+  const logs = [];
+  const r = await depsCache.ensureDeps({ workDir: wtB, cacheDir, project: 'p', env: {}, run, log: (level, msg) => logs.push(`${level}: ${msg}`) });
+  assert.equal(r.status, 'hit');
+  assert.ok(depsCache.linkTarget(path.join(wtB, 'node_modules')), 'node_modules is still a link into the cache');
+  assert.deepEqual(r.scripts_failed, ['prepare']);
+  assert.deepEqual(scriptsIn(wtB), ['prepare', 'postprepare'], 'the scripts after the failed one still run');
+  const warn = logs.filter((l) => l.startsWith('warn:') && l.includes('prepare'));
+  assert.equal(warn.length >= 1, true, `a warning names the failed script: ${JSON.stringify(logs)}`);
+  assert.match(warn[0], /prepare broke/, 'with the end of its output');
+});
+
+test('ensureDeps: a worktree already linked to the entry is not rebuilt: its lifecycle scripts do not run again (#451)', async (t) => {
+  const cacheDir = tmpDir(t, 'cache-');
+  const scripts = { prepare: 'x' };
+  const { run, scriptsIn } = recordingRun();
+  const wtA = tmpDir(t, 'wtA-');
+  scriptProject(wtA, scripts);
+  await depsCache.ensureDeps({ workDir: wtA, cacheDir, project: 'p', env: {}, run });
+  const wtB = tmpDir(t, 'wtB-');
+  scriptProject(wtB, scripts);
+  assert.equal((await depsCache.ensureDeps({ workDir: wtB, cacheDir, project: 'p', env: {}, run })).status, 'hit');
+  const again = await depsCache.ensureDeps({ workDir: wtB, cacheDir, project: 'p', env: {}, run });
+  assert.equal(again.status, 'linked');
+  assert.deepEqual(scriptsIn(wtB), ['prepare'], 'prepare ran once, on the hit');
+});
+
 test('ensureDeps: two concurrent installs of the same key install once; the one that loses the race waits and gets a hit', async (t) => {
   const cacheDir = tmpDir(t, 'cache-');
   const wtA = tmpDir(t, 'wtA-');
