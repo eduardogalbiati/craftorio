@@ -45,6 +45,11 @@ test('#427 citedPaths: a range with a column (path:12-30:4) gives the path', () 
   assert.deepEqual(plain(citedPaths('`src/a/b.js:12-30:4` and src/c/d.js:12-30:4')), ['src/a/b.js', 'src/c/d.js']);
 });
 
+test('#427 citedPaths: a file name ending in a digit keeps its digit when a range is dropped', () => {
+  const { citedPaths } = load();
+  assert.deepEqual(plain(citedPaths('`src/engine/part-3.js:1-2` and src/engine/v2.js:10–12')), ['src/engine/part-3.js', 'src/engine/v2.js']);
+});
+
 test('#427 citedPaths: the #426 body gives backlog-roadmap.js', () => {
   const { citedPaths } = load();
   const body = [
@@ -114,6 +119,12 @@ test('#429 expectedSection: lists the paths of the section only, sorted, ranges 
     'src/renderer/views/project/project-city-impact.js',
     'src/shared/city-impact.js',
   ]);
+});
+
+test('#429 expectedSection: a body with CRLF line endings (edited on the web) is read the same', () => {
+  const { expectedSection } = load();
+  const body = '## Context\r\n\r\nSee `src/ctx/a.js`.\r\n\r\n## Expected files\r\n\r\n- `src/a.js`: why\r\n- `src/b/new.js` (new): created\r\n\r\n## Tasks\r\n\r\n- [ ] Touch `src/c.js`\r\n';
+  assert.deepEqual(plain(expectedSection(body)), ['src/a.js', 'src/b/new.js']);
 });
 
 test('#429 expectedSection: a body without the section gives null', () => {
@@ -223,4 +234,19 @@ test('#429 hitRateBySection: an issue counts once, by its latest entry; no issue
   };
   assert.deepEqual(plain(hitRateBySection(history)), { with: { average: 1, issues: 1 }, without: { average: null, issues: 0 } });
   assert.deepEqual(plain(hitRateBySection({})), { with: { average: null, issues: 0 }, without: { average: null, issues: 0 } });
+});
+
+test('#429 hitRateBySection: withSection null counts as without; an entry with no hit rate is left out', () => {
+  const { hitRateBySection } = load();
+  const history = {
+    10: [{ hitRate: 0.4, ts: '2026-10-21T10:00:00.000Z', run: 'r-1', withSection: null }],
+    11: [{ hitRate: null, ts: '2026-10-21T11:00:00.000Z', run: 'r-2', withSection: true }],
+  };
+  assert.deepEqual(plain(hitRateBySection(history)), { with: { average: null, issues: 0 }, without: { average: 0.4, issues: 1 } });
+});
+
+test('#429 recordHitRate: an entry recorded without the flag keeps today\'s shape', () => {
+  const { recordHitRate } = load();
+  const out = plain(recordHitRate({}, 375, { hitRate: 0.5, ts: '2026-10-21T10:00:00.000Z', run: 'r-1' }));
+  assert.deepEqual(out['375'], [{ hitRate: 0.5, ts: '2026-10-21T10:00:00.000Z', run: 'r-1' }]);
 });

@@ -5,7 +5,8 @@
 //     has the section, and no such row without it;
 //   - after a run, the record sent to architecture:impact carries withSection (true / false);
 //   - after a run, the card has data-testid="city-impact-by-source" naming which source predicted each
-//     hit and miss.
+//     hit and miss, and data-testid="city-impact-section-rate" the project's average hit rate with the
+//     section against without (absent when no hit rate is kept).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -35,7 +36,7 @@ const WITHOUT_SECTION = 'Change src/engine/run.js and src/engine/gates.js.\n\n##
 const RUNS = [{ runId: 'run-1', status: 'done', mock: false }];
 const CHANGED = ['src/engine/run.js', 'docs/a.md'];
 
-function load() {
+function load(history = {}) {
   const calls = { impact: [] };
   const sandbox = {
     console, setTimeout, clearTimeout, setInterval, clearInterval, Promise,
@@ -45,7 +46,7 @@ function load() {
       architectureCity: async () => ({ state: 'ok', ...buildCity({ plan: null, facts: facts() }) }),
       architectureImpact: async (arg) => {
         calls.impact.push(JSON.parse(JSON.stringify(arg)));
-        return { plan: null, history: {}, error: null };
+        return { plan: null, history: JSON.parse(JSON.stringify(history)), error: null };
       },
       productOwnerHistory: async () => [],
       getBacklog: async () => ({ issues: [] }),
@@ -74,8 +75,8 @@ const q = (el, id) => el.querySelector(`[data-testid="${id}"]`);
 const text = (el) => String(el?.textContent ?? '').replace(/\s+/g, ' ').trim();
 const records = (calls) => calls.impact.filter((a) => a.record).map((a) => a.record);
 
-async function open(t) {
-  const { w, calls } = load();
+async function open(t, history) {
+  const { w, calls } = load(history);
   const city = w.ProjectCity.create({ projectId: 'p1', name: 'fixture-app' });
   w.document.body.appendChild(city.el);
   city.update({ facts: { state: 'ok', model: facts() }, estimate: null });
@@ -142,4 +143,30 @@ test('#429 after a run the card names which source predicted each hit and miss',
   assert.equal(el !== null, true, 'data-testid="city-impact-by-source" is on the card');
   assert.equal(text(el).length > 0, true, 'it is not empty');
   assert.equal(q(city.el, 'city-impact').contains(el), true, 'it is inside the impact card');
+});
+
+// the project's kept hit rates: two issues with the section (1 and 0.5), one without (0.25)
+const HISTORY = {
+  426: [{ hitRate: 1, ts: '2026-10-21T10:00:00.000Z', run: 'r-1', withSection: true }],
+  427: [{ hitRate: 0.5, ts: '2026-10-21T11:00:00.000Z', run: 'r-2', withSection: true }],
+  422: [{ hitRate: 0.25, ts: '2026-10-21T12:00:00.000Z', run: 'r-3', withSection: false }],
+};
+
+test('#429 after a run the card gives the average hit rate with the section against without', async (t) => {
+  const { city, handle } = await open(t, HISTORY);
+  await handle.show({ issue: { number: 429, title: 'Expected files', body: WITH_SECTION, runs: RUNS } });
+  await settle();
+  const el = q(city.el, 'city-impact-section-rate');
+  assert.equal(el !== null, true, 'data-testid="city-impact-section-rate" is on the card');
+  const line = text(el);
+  assert.equal(line.includes('75%'), true, `with the section: ${line}`);
+  assert.equal(line.includes('25%'), true, `without: ${line}`);
+  assert.equal(line.indexOf('75%') < line.indexOf('25%'), true, `"with" comes first: ${line}`);
+});
+
+test('#429 with no kept hit rate the card has no average line', async (t) => {
+  const { city, handle } = await open(t, {});
+  await handle.show({ issue: { number: 429, title: 'Expected files', body: WITH_SECTION, runs: [] } });
+  await settle();
+  assert.equal(q(city.el, 'city-impact-section-rate') === null, true);
 });
