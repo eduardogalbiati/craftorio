@@ -786,21 +786,25 @@
       </div>`;
   }
 
-  // The cut line's dialog (the #cut-line-modal of backlog.js): → the release's name, or null when cancelled.
-  function cutLineDialog(current) {
+  // The cut line's dialog (#cut-line-modal of backlog.js) after stage `at`: → its name, or null. #436: the last releases above
+  // it; "Suggest version" (release-name.js) from the issues done since the last release and planned up to the cut.
+  function cutLineDialog(current, ctx, data, at) {
     const q = (sel) => document.querySelector(sel);
-    const modal = q('#cut-line-modal');
-    const input = q('#cut-line-name');
+    const [modal, input] = [q('#cut-line-modal'), q('#cut-line-name')];
     input.value = current;
-    q('#cut-line-error').textContent = '';
+    q('#cut-line-error').textContent = q('#cut-line-recent').innerHTML = ''; q('#cut-line-suggest').innerHTML = ReleaseName.suggestHtml(); q('#cut-line-why').innerHTML = ReleaseName.reasonHtml('cut-line-reason');
     q('#btn-cut-line-ok').textContent = current ? t('common.save') : t('backlog_roadmap.add_cut_line');
-    modal.classList.remove('hidden');
-    input.focus({ preventScroll: true });
+    const listed = Promise.resolve().then(() => api.listReleases(ctx.projectId)).catch(() => null)
+      .then((l) => { q('#cut-line-recent').innerHTML = ReleaseName.recentHtml(l?.releases); return l; });
+    q('#cut-line-form').onclick = async (e) => {
+      if (!e.target.closest('[data-testid="suggest-version"]')) return; const l = await listed;
+      ReleaseName.suggest({ input, reasonEl: q('#cut-line-reason'), releases: l?.releases, issues: ReleaseVersion.releaseIssues(data?.roadmap?.stages, at, l?.next?.issues), catalog: data?.issues || [] });
+    };
+    modal.classList.remove('hidden'); input.focus({ preventScroll: true });
     return new Promise((resolve) => {
       const close = (value) => { modal.classList.add('hidden'); resolve(value); };
       q('#cut-line-form').onsubmit = (e) => {
-        e.preventDefault();
-        const name = input.value.trim();
+        e.preventDefault(); const name = input.value.trim();
         if (!name) { q('#cut-line-error').textContent = t('backlog_roadmap.give_the_release_a_name_or'); return; }
         close(name);
       };
@@ -1828,13 +1832,10 @@
         const stage = stages[cut ? Number(cut.dataset.cutStage) : locate(stages, el).s];
         if (!stage) return true;
         if (el.dataset.rmRelease === 'remove') {
-          const name = stage.release?.name || '';
-          if (!await confirmDialog(t('backlog_roadmap.remove_the_cut_line'), t('backlog_roadmap.the_stages_after_it_no_longer', { name }), t('common.remove'))) return true;
-          delete stage.release;
-          await save(ctx, r, stages, { label: t('backlog_roadmap.removed_the_cut_line_name', { name }).trim(), detail: t('backlog_roadmap.the_stages_after_it_no_longer_2') });
+          const name = stage.release?.name || ''; if (!await confirmDialog(t('backlog_roadmap.remove_the_cut_line'), t('backlog_roadmap.the_stages_after_it_no_longer', { name }), t('common.remove'))) return true;
+          delete stage.release; await save(ctx, r, stages, { label: t('backlog_roadmap.removed_the_cut_line_name', { name }).trim(), detail: t('backlog_roadmap.the_stages_after_it_no_longer_2') });
         } else {
-          const name = await cutLineDialog(stage.release?.name || '');
-          if (!name) return true;
+          const name = await cutLineDialog(stage.release?.name || '', ctx, data, stages.indexOf(stage)); if (!name) return true;
           stage.release = { name };
           await save(ctx, r, stages, { label: t('backlog_roadmap.set_the_cut_line_name', { name }), quiet: true });
         }

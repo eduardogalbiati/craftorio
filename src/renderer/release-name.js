@@ -15,7 +15,7 @@
     return recent.map((r) => `<li><span class="mono">${esc(r.version)}</span> · ${esc(String(r.date || '').slice(0, 10))} · ${esc(t('releases.issues_count', { count: r.issues?.length || 0 }))}</li>`).join('');
   }
 
-  const recentHtml = (releases, id = '') => `<ul class="rel-recent small muted"${id ? ` id="${id}"` : ''} data-testid="recent-releases" aria-label="${t('release_version.last_releases')}">${recentItems(releases)}</ul>`;
+  const recentHtml = (releases) => `<ul class="rel-recent small muted" data-testid="recent-releases" aria-label="${t('release_version.last_releases')}">${recentItems(releases)}</ul>`;
   const suggestHtml = () => `<button type="button" class="btn sm ghost" data-testid="suggest-version" title="${t('release_version.suggest_tip')}">${t('release_version.suggest')}</button>`;
   const reasonHtml = (id) => `<div class="hint" id="${id}" data-testid="suggest-version-reason" aria-live="polite"></div>`;
 

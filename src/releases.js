@@ -315,10 +315,12 @@ function nextRelease({ history = null, runs = [], local = null, issues = [], ver
     .filter((r) => !r.mock && r.status === 'success' && r.localMerge && (!since || String(r.finishedAt || r.startedAt || '') > since))
     .sort((a, b) => String(a.startedAt || '').localeCompare(String(b.startedAt || '')));
   const titles = new Map((issues || []).map((i) => [Number(i.number), i.title]));
+  const labels = new Map((issues || []).filter((i) => i.labels?.length).map((i) => [Number(i.number), i.labels]));
   const found = new Map();
   for (const r of merged) for (const i of r.issues || []) if (i?.number && !found.has(Number(i.number))) found.set(Number(i.number), i.title || titles.get(Number(i.number)) || '');
   for (const n of local?.issues || []) if (!found.has(Number(n))) found.set(Number(n), titles.get(Number(n)) || '');
-  const list = [...found].map(([number, title]) => ({ number, title })).sort((a, b) => a.number - b.number);
+  // #436: the labels the Releases screen's "Suggest version" reads (only when the backlog has some)
+  const list = [...found].map(([number, title]) => (labels.has(number) ? { number, title, labels: labels.get(number) } : { number, title })).sort((a, b) => a.number - b.number);
   const runList = merged.map((r) => ({ runId: r.runId, workflow: r.workflow || '', title: r.title || '', cost: Number(r.costUsd) || 0 }));
   const saved = String(history?.next?.notes || '').trim();
   return {

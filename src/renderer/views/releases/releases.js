@@ -8,6 +8,7 @@
 // Nothing here pushes: Ship is the release run's own gate.
 // #376: a tagged release's "Show on the map" opens the project city at the previous tag in grey, what
 // the release changed in colour (window.ProjectCityRelease, views/project/project-city-release.js).
+// #436: the last three releases above the version field and "Suggest version" (window.ReleaseName).
 // Registers itself with registerView (view-registry.js); uses app.js globals ($, esc, state, api,
 // errMsg, dateOf, devMode, confirmDialog, markdownHtml) and window.CurrentProject, window.showRun.
 
@@ -57,8 +58,13 @@
         </div>
         <div class="rel-actions">
           <div class="field rel-version-field">
+            ${window.ReleaseName.recentHtml(d.releases)}
             <label for="rel-version">${t('releases.version')}</label>
-            <input type="text" id="rel-version" value="${esc(version)}" placeholder="${t('releases.version_placeholder')}" autocomplete="off"${d.run ? ' disabled' : ''} />
+            <div class="rel-version-row">
+              <input type="text" id="rel-version" value="${esc(version)}" placeholder="${t('releases.version_placeholder')}" autocomplete="off"${d.run ? ' disabled' : ''} />
+              ${d.run ? '' : window.ReleaseName.suggestHtml()}
+            </div>
+            ${window.ReleaseName.reasonHtml('rel-version-reason')}
           </div>
           <span class="spacer"></span>
           ${going}
@@ -175,6 +181,10 @@
         else if (map) window.ProjectCityRelease?.showRelease(rel.projectId, { to: map.dataset.tag });
         else if (summary) openSummary(summary);
         else if (e.target.closest('[data-rel-start]')) start();
+        // #436: fills the version from the last release and the next one's issues; never starts it
+        else if (e.target.closest('[data-testid="suggest-version"]')) {
+          window.ReleaseName.suggest({ input: $('#rel-version'), reasonEl: $('#rel-version-reason'), releases: rel.data?.releases, issues: rel.data?.next?.issues });
+        }
       });
     },
     show: refresh,

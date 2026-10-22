@@ -1670,11 +1670,11 @@
   <div id="cut-line-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="cut-line-title" data-testid="cut-line-modal">
     <form id="cut-line-form" class="modal-card">
       <h3 id="cut-line-title">${t('backlog.release_here')}</h3>
-      <p class="muted small">${t('backlog.a_cut_line_after_this_stage')}</p>
+      <p class="muted small">${t('backlog.a_cut_line_after_this_stage')}</p><div id="cut-line-recent"></div>
       <div class="field">
         <label for="cut-line-name">${t('backlog.release_name')}</label>
-        <input type="text" id="cut-line-name" placeholder="e.g. v1.4" autocomplete="off" />
-        <div class="hint">${t('backlog.a_name_or_a_version_ship')}</div>
+        <div class="rel-version-row"><input type="text" id="cut-line-name" placeholder="e.g. v1.4" autocomplete="off" /><span id="cut-line-suggest"></span></div>
+        <div class="hint">${t('backlog.a_name_or_a_version_ship')}</div><div id="cut-line-why"></div>
       </div>
       <p id="cut-line-error" class="error small"></p>
       <div class="modal-actions">
