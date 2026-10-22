@@ -249,6 +249,9 @@ const DEFAULT_SETTINGS = {
   // workflow ids (file names without .yaml) the Setup's Workflows step left unpicked: not offered by
   // Start (Home's Run a workflow opens it), shown again by Workflows › Definitions › Show in Start
   hiddenWorkflows: [],
+  // #474: the files not bundled with the app the owner confirmed are code they trust, "workflows/<file>"
+  // → the fingerprint of the text confirmed (src/service/areas/workflows.js); an edit elsewhere asks again
+  trustedFiles: {},
   // the owner's IANA time zone (#273, src/time-zone.js): screens, day/week/month cuts, the agents'
   // replies and the daily resets use it; null = this computer's (readSettings fills it in, unsaved)
   timeZone: null,

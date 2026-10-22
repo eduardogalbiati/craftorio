@@ -8,6 +8,17 @@ appears once, in its latest form, naming what it replaced. The hard rules of
 [AGENTS.md](../../AGENTS.md) are not repeated here. This is not the `decision-log` skill (a run's
 own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
 
+- **2026-10-22** (#469, #474): workflows, skills and seeds are code. Transition `action:` and
+  `ship.build` stay shell strings (the bundled ones use `&&` and `{% if %}`: an argv list would
+  break them); `loadWorkflow` refuses agent output interpolated there unless one field goes through
+  `github_repo`, `pr_url` or `shell_quote`, or its `output_schema` types it as a number or a boolean,
+  and `npm run check` loads every workflow. nunjucks cannot be sandboxed, so a template naming
+  `constructor`, `__proto__`, `require` or `process` is refused at load (one list, in
+  src/engine/run/templates.js). The Workflows screen says to install only trusted ones, and the
+  Builder asks once before saving a custom workflow, remembered per file by the fingerprint of its
+  text (settings' `trustedFiles`, like Run App's confirmation). Skills and seeds have no import or
+  save flow in the app yet, so only the notice covers them. Why: a downloaded workflow could run a
+  command an agent's output (or its own template) chose.
 - **2026-10-15** (#404): the developer finds the repository's rule check failures in its own turn,
   before the suite. `npm run check` runs the fast rule checks (lists, layers, file sizes, code
   health, decisions log, docs, types, the Oracle's capabilities) with the same code the rule tests
@@ -136,11 +147,11 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   only to count the people using it (the account gates nothing). The history is not rewritten.
   Why: without a licence the code is not open source, and the owner wants to know how many people
   use the app.
-- **2026-10-04** (#247): Ask for changes at a validation gate goes to the test writer first. It
+- **2026-10-04** (#247, #245): Ask for changes at a validation gate goes to the test writer first. It
   only checks whether the request changes the acceptance criteria: if so, it updates the affected
   acceptance tests and scenarios (then the red check); otherwise the run goes straight to the
   developer. Why: the locked tests still described the old behaviour and cost extra rounds.
-- **2026-10-04** (#245): no snake_case or file-name id is shown to people; agents and steps have a
+  (#245, same day) No snake_case or file-name id is shown to people; agents and steps have a
   readable `display` name, and ids stay in tooltips and details for debugging. Why: screens showed
   internal ids such as "acceptance_tests" where people read them.
 - **2026-10-04** (#241, #240, #105): each area has one owner. The Backlog (issues, roadmap, queue)

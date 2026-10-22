@@ -143,7 +143,8 @@ Human gates (feedback, choices, summaries), the supervisor, refused tool calls, 
 - `ship: { tag, build? }` on a transition (#260, release.yaml's `ship` and `ship_failed` gates; both
   templates): after the transition's `action` and `merge: local`, `shipRelease` (src/releases.js)
   pushes the local base to origin (never forced; a rejected push throws) and tags that commit, then
-  runs `build` when it renders non-empty. `loadWorkflow` only accepts it on a `human_approval` step
+  runs `build` when it renders non-empty (a shell command: the rule of `action:` applies, #469, see
+  [worktrees-and-template-context.md](worktrees-and-template-context.md)). `loadWorkflow` only accepts it on a `human_approval` step
   without `kind: escalation` and without `timeout`, with `orchestrator.worktree`. `shipGuard` runs
   before anything else of the transition (its merge included): the gate must have been answered by
   `'user'` (`st.answeredBy`: not the supervisor, a timeout, or scripts/run.js `--auto-approve`,

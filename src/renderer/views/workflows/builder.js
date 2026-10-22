@@ -394,14 +394,29 @@
     }
   }
 
+  // #474: a workflow not bundled with the app is code; its first save asks once (Cancel saves nothing)
+  function confirmCodeTrust(file) {
+    $('#wb-trust-text').textContent = t('workflows.code_warning_text', { file });
+    openModal('#wb-trust-modal');
+    $('#btn-wb-trust-ok').focus();
+    return new Promise((resolve) => {
+      const done = (v) => { closeModal('#wb-trust-modal'); resolve(v); };
+      $('#btn-wb-trust-cancel').onclick = () => done(false);
+      $('#btn-wb-trust-ok').onclick = () => done(true);
+    });
+  }
+
   async function save() {
     if (!editable()) return false;
     // a field still focused may not have fired "change" yet
     document.activeElement?.blur?.();
+    const entry = b.file && (state.workflows || []).find((w) => w.file === b.file);
+    const trust = !!entry && entry.origin === 'custom' && entry.trusted === false;
+    if (trust && !(await confirmCodeTrust(b.file))) return false;
     const btn = $('#wb-save');
     btn.disabled = true;
     try {
-      const r = await api.saveBuilderWorkflow(b.file, b.spec);
+      const r = await api.saveBuilderWorkflow(b.file, b.spec, trust);
       b.file = r.file;
       b.dirty = false;
       state.workflows = await api.listWorkflows();

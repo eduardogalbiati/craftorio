@@ -5,6 +5,8 @@
 // rule table of src/engine/run/field-rules.js (#352); the rules across fields (references between
 // steps, agents, transitions and groups) are the named functions here, one per rule. The sequences
 // (WORKFLOW_CHECKS, AGENT_CHECKS, STEP_CHECKS, TRANSITION_CHECKS) give the order errors are reported in.
+// Templates are code: a template reaching `constructor` / `process`… (#474) and agent output put
+// unquoted into an action or a ship.build (#469) are refused here, before any run.
 // With it, the YAML's vocabularies (`MACHINE_STEP_TYPES`, `isLooping` / `loopConfig`) and value parsers
 // (`toBoolean`, `parseDuration`, `parseTokens`, `parseRequests`, `renderFileList`) the run modules share.
 
@@ -19,7 +21,11 @@ const { validateWorkflowStep } = require('../workflow-step');
 const testPaths = require('../test-paths');
 const architectureReport = require('../../shared/architecture-report');
 const chain = require('../../shared/chain-model');
-const { render } = require('./templates');
+const {
+  render,
+  SHELL_SAFE_FILTERS,
+  UNSAFE_TEMPLATE_NAMES,
+} = require('./templates');
 const {
   FIELD_RULES,
   MACHINE_STEP_TYPES,
@@ -217,6 +223,31 @@ function shipOnHumanGate(t, ctx) {
 function shipNeedsWorktree(t, ctx) {
   if (t.ship !== undefined && !ctx.wf.orchestrator?.worktree) fail(ctx, 'ship needs orchestrator.worktree (the repository and its base branch).');
 }
+// #469: an action and a ship.build run in a shell, so agent output reaches them only as a field its
+// output_schema types as a number or a boolean, or through one filter that validates or quotes it
+// (`{{ steps.ci.output.pr_url | pr_url }}`). A `{% if %}` reads output without printing it; a `{% set %}`
+// or a `{% for %}` that takes it is checked like an interpolation.
+const SHELL_INTERPOLATION = /\{\{([\s\S]*?)\}\}|\{%-?\s*((?:set|for)\b[\s\S]*?)%\}/g;
+const OUTPUT_REFERENCE = /\bsteps\s*\[|\bsteps\.([A-Za-z0-9_]+)\.output\b(?:\.([A-Za-z0-9_]+))?/g;
+const FILTERED_OUTPUT = new RegExp(`^\\s*steps\\.[A-Za-z0-9_]+\\.output\\.[A-Za-z0-9_]+\\s*\\|\\s*(?:${SHELL_SAFE_FILTERS.join('|')})\\s*(?:\\([^()]*\\))?\\s*$`);
+const SHELL_SAFE_TYPES = ['boolean', 'integer', 'number'];
+function shellUnsafeOutput(text, ctx) {
+  for (const m of String(text).matchAll(SHELL_INTERPOLATION)) {
+    const expr = m[1] ?? m[2];
+    if (FILTERED_OUTPUT.test(expr)) continue;
+    for (const [ref, id, field] of expr.matchAll(OUTPUT_REFERENCE)) {
+      const type = id && field && ctx.wf.steps.find((s) => s.id === id)?.output_schema?.properties?.[field]?.type;
+      if (!SHELL_SAFE_TYPES.includes(type)) return ref;
+    }
+  }
+  return null;
+}
+function shellSafeTemplates(t, ctx) {
+  for (const [what, text] of [['transition action', t.action], ['ship.build', t.ship?.build]]) {
+    const ref = text != null && shellUnsafeOutput(text, ctx);
+    if (ref) fail(ctx, `${what} interpolates ${ref} into a shell command without a safe filter (${SHELL_SAFE_FILTERS.join(', ')}); only an output_schema field typed number, integer or boolean may go there unfiltered.`);
+  }
+}
 
 // the workflow's rules
 const models = (wf) => validateModels(wf.models);
@@ -241,7 +272,7 @@ const AGENT_CHECKS = resolveChecks('agents.*.', [
 ]);
 const TRANSITION_CHECKS = resolveChecks('steps[].transitions[].', [
   precheck, transitionRecover, 'set', knownTargets, 'status', statusEndsRun, 'merge', mergeNeedsWorktree,
-  'ship.tag', shipOnHumanGate, shipNeedsWorktree,
+  'ship.tag', shipOnHumanGate, shipNeedsWorktree, shellSafeTemplates,
 ]);
 const STEP_CHECKS = resolveChecks('steps[].', [
   stepCapabilities, namedSchema, 'display', 'edits_tests', 'protect_files', 'test_map', 'agent', 'agents',
@@ -323,9 +354,29 @@ function fragmentSources(wf) {
   });
 }
 
+// #474: nunjucks has no sandbox, so a template that names `constructor` (and the other
+// UNSAFE_TEMPLATE_NAMES) could run code in the app's process: refused in every {{ }} and {% %} of
+// the workflow, and in the whole text of an expression field (`when`, `until`, `agent_when`).
+// Prose outside the template blocks may use the words.
+const TEMPLATE_BLOCK = /\{\{([\s\S]*?)\}\}|\{%([\s\S]*?)%\}/g;
+const UNSAFE_NAME = new RegExp(`\\b(${UNSAFE_TEMPLATE_NAMES.join('|')})\\b`);
+const EXPRESSION_KEYS = ['agent_when', 'until', 'when'];
+function unsafeTemplates(v, where = '', expression = false) {
+  if (typeof v === 'string') {
+    const parts = expression ? [v] : [...v.matchAll(TEMPLATE_BLOCK)].map((m) => m[1] ?? m[2]);
+    const hit = parts.map((p) => UNSAFE_NAME.exec(p)).find(Boolean);
+    if (hit) throw new Error(`${where}: a template may not reach ${hit[1]} (templates run unsandboxed in the app; refused: ${UNSAFE_TEMPLATE_NAMES.join(', ')}).`);
+  } else if (Array.isArray(v)) {
+    v.forEach((x, i) => unsafeTemplates(x, `${where}[${i}]`, expression));
+  } else if (v && typeof v === 'object') {
+    for (const [k, x] of Object.entries(v)) unsafeTemplates(x, where ? `${where}.${k}` : k, expression || EXPRESSION_KEYS.includes(k));
+  }
+}
+
 function loadWorkflow(file) {
   const wf = parseWorkflowFile(file);
   expandFragments(wf);
+  unsafeTemplates(wf);
   const root = wf || {};
   runChecks(WORKFLOW_CHECKS, root, { prefix: '', wf: root, file, mcpServers: root.mcp_servers || {} });
   // #286: problems that do not stop a run, shown on the workflow's screen (not enumerable, so

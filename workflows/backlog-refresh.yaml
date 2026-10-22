@@ -203,7 +203,7 @@ steps:
       # the safe fixes are applied by the skill's script (no model), then the scope proposals
       # wait for the owner; with none, the run ends
       - when: "(output.scope or []) | length"
-        action: &apply_safe "node \"{{ skill_dir('backlog-refresh') }}/apply.js\" --platform {{ inputs.git_platform }} --mode safe --file \"{{ run_dir }}/refresh.json\" --project \"{{ inputs.project_path }}\" --run-id {{ run_id }}"
+        action: &apply_safe "node \"{{ skill_dir('backlog-refresh') }}/apply.js\" --platform {{ inputs.git_platform }} --mode safe --file \"{{ run_dir }}/refresh.json\" --project {{ inputs.project_path | shell_quote }} --run-id {{ run_id }}"
         on_error: apply_failed
         goto: scope
       - when: "true"
@@ -228,7 +228,7 @@ steps:
       - { id: skip,  label: "Skip: close nothing" }
     transitions:
       - when: "choice == 'apply'"
-        action: "node \"{{ skill_dir('backlog-refresh') }}/apply.js\" --platform {{ inputs.git_platform }} --mode scope --file \"{{ run_dir }}/refresh.json\" --project \"{{ inputs.project_path }}\" --run-id {{ run_id }}"
+        action: "node \"{{ skill_dir('backlog-refresh') }}/apply.js\" --platform {{ inputs.git_platform }} --mode scope --file \"{{ run_dir }}/refresh.json\" --project {{ inputs.project_path | shell_quote }} --run-id {{ run_id }}"
         on_error: apply_failed
         goto: end
       - when: "true"

@@ -455,6 +455,8 @@ registerView({
             <span class="spacer"></span>
             <input type="text" id="wf-search" class="wf-search" placeholder="${t('workflows.search_workflows_and_pipelines')}" aria-label="${t('workflows.search_workflows_and_pipelines')}" spellcheck="false" />
           </div>
+          <!-- #474: workflows, skills and seeds are code -->
+          <p class="small warn-text" role="note" data-testid="workflows-code-notice">${t('workflows.code_notice')}</p>
           <div id="workflows-list" class="wf-list"></div>
         </div>
         <div data-wpage="builder" class="hidden">
@@ -509,6 +511,18 @@ registerView({
         <button type="button" id="btn-wb-agents-manage" class="btn ghost">${t('workflows.manage_agents')}</button>
         <span class="spacer"></span>
         <button type="button" id="btn-wb-agents-cancel" class="btn ghost">${t('common.cancel')}</button>
+      </div>
+    </div>
+  </div>
+  <!-- #474: Workflows > Builder, the first save of a workflow not bundled with the app -->
+  <div id="wb-trust-modal" class="modal hidden">
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="wb-trust-title" data-testid="code-trust-warning">
+      <h3 id="wb-trust-title">${t('workflows.code_warning_title')}</h3>
+      <p id="wb-trust-text" class="small"></p>
+      <div class="modal-actions">
+        <span class="spacer"></span>
+        <button type="button" id="btn-wb-trust-cancel" class="btn ghost">${t('common.cancel')}</button>
+        <button type="button" id="btn-wb-trust-ok" class="btn primary">${t('workflows.code_warning_confirm')}</button>
       </div>
     </div>
   </div>`,

@@ -1,10 +1,11 @@
 // @ts-check
 // Templates and expressions of a run (#250, from src/engine/workflow.js): the nunjucks environment
 // (`render`, autoescape off) with the filters the workflows use (`to_yaml`, `to_json`, `shuffle(seed)`,
-// `clamp(lo, hi)`, `github_repo`, `pr_url`, `git_commits`, `git_log_stat`, `git_tags`, `project_version`,
+// `clamp(lo, hi)`, `github_repo`, `pr_url`, `shell_quote`, `git_commits`, `git_log_stat`, `git_tags`, `project_version`,
 // `filed_issues`, `developer_gaps`, `e2e_scenarios`, `suite_failures`, `missing_test_ids`, `check_command`, `issue_numbers`,
 // `issue_lines`, `one_line`, `suite_lines`), `evalExpr` for `when:` conditions, and `testsPlan` (the
-// unit/E2E test inputs as the templates read them). Pure: no run state.
+// unit/E2E test inputs as the templates read them). Pure: no run state. nunjucks has no sandbox: the
+// loader's checks (`SHELL_SAFE_FILTERS`, `UNSAFE_TEMPLATE_NAMES`, #469, #474) keep templates safe.
 
 'use strict';
 
@@ -56,6 +57,33 @@ tpl.addFilter('pr_url', (url) => {
   if (!ok) throw new Error(`not a pull/merge request URL: ${JSON.stringify(url)}`);
   return u;
 });
+
+// A value passed as one argument to the shell of an action (#469): single quotes for sh, double
+// quotes for cmd.exe, which cannot quote " % ! ^ or a line break, so those throw instead.
+tpl.addFilter('shell_quote', (v) => {
+  const s = String(v ?? '');
+  if (process.platform !== 'win32') return `'${s.replace(/'/g, `'\\''`)}'`;
+  if (/["%!^\r\n]/.test(s)) throw new Error(`not a value cmd.exe can quote: ${JSON.stringify(v)}`);
+  return `"${s}"`;
+});
+
+// The filters an action or a ship.build may pass agent output through (#469): each one validates or
+// quotes its value for a shell. The loader refuses any other interpolation of `steps.<id>.output`
+// there, unless the output schema types the field as a number or a boolean.
+const SHELL_SAFE_FILTERS = [
+  'github_repo',
+  'pr_url',
+  'shell_quote',
+];
+
+// The names a template may not reach (#474): nunjucks has no sandbox, so `''.constructor.constructor`
+// is the Function constructor and runs in the app's process. The loader refuses a template naming one.
+const UNSAFE_TEMPLATE_NAMES = [
+  '__proto__',
+  'constructor',
+  'process',
+  'require',
+];
 
 // A number kept between bounds, e.g. a timeout that grows with the run's issues:
 //   timeout: "{{ (30 + 10 * ((inputs.issues | length) - 1)) | clamp(30, 60) }}m"
@@ -182,5 +210,7 @@ const evalExpr = (expr, scope) => render(`{% if ${expr} %}1{% else %}0{% endif %
 module.exports = {
   evalExpr,
   render,
+  SHELL_SAFE_FILTERS,
   testsPlan,
+  UNSAFE_TEMPLATE_NAMES,
 };

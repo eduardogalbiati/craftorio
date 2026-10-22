@@ -2,10 +2,13 @@
 // (default, modified or custom), its declared outputs and what the visual builder can draw (the
 // saved pipelines are areas/pipelines.js's); the builder's load, save and
 // clone; and restoring a bundled default over an edited copy (the copy goes to the trash), for a
-// workflow or a skill.
+// workflow or a skill. A custom workflow is code: `trusted` says whether the owner confirmed its text
+// (#474, settings' trustedFiles).
 
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const workspace = require('../../workspace');
 const {
   loadWorkflow,
   render,
@@ -19,20 +22,37 @@ const { bundleStatus, restoreBundled } = require('../../seed');
 const { mergeOf } = require('../../shared/default-workflow');
 const { workflowRequirements } = require('../../workflow-requirements');
 
+// #474: a workflow not bundled with the app is code; the owner confirms it once per file, remembered
+// by the fingerprint of its text (like Run App's local preview confirmation, src/local-preview.js)
+const fingerprint = (text) => crypto.createHash('sha256').update(String(text)).digest('hex').slice(0, 16);
+const trustKey = (file) => `workflows/${file}`;
+
 module.exports = (ctx) => {
   const { host } = ctx;
+
+  const trustedFiles = () => workspace.readSettings(ctx.ws).trustedFiles || {};
+  function isTrusted(file, trusted = trustedFiles()) {
+    const fp = trusted[trustKey(file)];
+    try { return !!fp && fingerprint(fs.readFileSync(path.join(ctx.ws.workflows, file), 'utf8')) === fp; } catch { return false; }
+  }
+  const trustFile = (file, text) => workspace.writeSettings(ctx.ws, { trustedFiles: { ...trustedFiles(), [trustKey(file)]: fingerprint(text) } });
 
   function listWorkflows() {
     const { ws } = ctx;
     if (!fs.existsSync(ws.workflows)) return [];
     const status = workflows.workflowStatus(BUNDLED_WORKFLOWS_DIR, ws.workflows);
     const bundledVersion = (file) => { try { return loadWorkflow(path.join(BUNDLED_WORKFLOWS_DIR, file)).metadata?.version || null; } catch { return null; } };
+    const trusted = trustedFiles();
     return fs.readdirSync(ws.workflows)
       .filter(workflows.isWorkflowFile)
       .map((file) => {
         // origin: default (untouched bundled copy), modified (edited bundled copy) or custom (user-created)
         const st = status[file] || { origin: 'custom', updateAvailable: false, restorable: false };
-        const origin = { origin: st.origin, updateAvailable: st.updateAvailable, restorable: st.restorable, bundledVersion: st.updateAvailable ? bundledVersion(file) : null };
+        const origin = {
+          origin: st.origin, updateAvailable: st.updateAvailable, restorable: st.restorable, bundledVersion: st.updateAvailable ? bundledVersion(file) : null,
+          // #474: false for a custom file whose text the owner never confirmed (the builder warns once)
+          trusted: st.origin !== 'custom' || isTrusted(file, trusted),
+        };
         try {
           const wf = loadWorkflow(path.join(ws.workflows, file));
           // the visual builder opens it only when it draws everything the workflow uses
@@ -121,7 +141,9 @@ module.exports = (ctx) => {
   // A new workflow gets a file named after it (never overwriting one); an edited one keeps its file
   // and what the builder doesn't touch (providers, defaults, orchestrator, observability; for a
   // fixed spec, everything but the agents and the prompts).
-  function saveBuilderWorkflow({ file, spec }) {
+  // trust (#474): the owner confirmed the builder's warning; a file created here, or whose text was
+  // confirmed before, stays trusted with its new text.
+  function saveBuilderWorkflow({ file, spec, trust = false }) {
     const { ws } = ctx;
     const name = file ? path.basename(String(file)) : builder.fileNameFor(spec?.name);
     if (!workflows.isWorkflowFile(name)) throw new Error(`Not a workflow file: ${name}`);
@@ -129,6 +151,7 @@ module.exports = (ctx) => {
     if (!file && fs.existsSync(dest)) throw new Error(`A workflow file named ${name} already exists: pick another name.`);
     if (file && isBundled(name)) throw new Error(`"${name}" is bundled with the app: clone it to change it.`);
     const exists = file && fs.existsSync(dest);
+    const trusted = trust || !exists || isTrusted(name);
     const base = exists ? loadWorkflow(dest) : null;
     let text;
     if (spec?.fixed) {
@@ -143,6 +166,7 @@ module.exports = (ctx) => {
     fs.writeFileSync(tmp, text);
     try { loadWorkflow(tmp); } catch (e) { fs.rmSync(tmp, { force: true }); throw e; }
     fs.renameSync(tmp, dest);
+    if (trusted) trustFile(name, text);
     return { file: name };
   }
 
@@ -158,8 +182,11 @@ module.exports = (ctx) => {
       dest = path.join(ctx.ws.workflows, builder.fileNameFor(copyName));
       n++;
     } while (fs.existsSync(dest));
-    fs.writeFileSync(dest, builder.cloneText(fs.readFileSync(src, 'utf8'), copyName));
+    const text = builder.cloneText(fs.readFileSync(src, 'utf8'), copyName);
+    fs.writeFileSync(dest, text);
     try { loadWorkflow(dest); } catch (e) { fs.rmSync(dest, { force: true }); throw e; }
+    // #474: a copy of a bundled or a confirmed workflow is as trusted as its source
+    if (isBundled(name) || isTrusted(name)) trustFile(path.basename(dest), text);
     return { file: path.basename(dest) };
   }
 
