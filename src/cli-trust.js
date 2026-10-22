@@ -15,6 +15,7 @@
 const fs = require('fs');
 const path = require('path');
 const { cliConfigDirs } = require('./cli-config-dirs');
+const { pathKey } = require('./platform-paths');
 const registry = require('./shared/providers');
 
 /** The folder and the root of the git repository it is in (when it is in one). */
@@ -78,17 +79,17 @@ function trustFolder(provider, dir, { home } = {}) {
   return trustDirs(provider, foldersToTrust(dir), home);
 }
 
-// #468 (SEC-3): the workspace folders the app writes itself. repos/, worktrees/ and project folders
-// hold repository-controlled code: the CLI keeps its own trust prompt there.
+// #468 (SEC-3): the keys of the workspace layout (src/workspace.js) whose folders the app writes
+// itself. repos/, worktrees/ and project folders hold repository-controlled code: the CLI keeps its
+// own trust prompt there.
 const APP_FOLDERS = [
   'runs',
   'skills',
   'workflows',
 ];
 
-const samePathCase = (p) => (process.platform === 'win32' ? p.toLowerCase() : p);
 function isInside(dir, root) {
-  const rel = path.relative(samePathCase(path.resolve(root)), samePathCase(path.resolve(dir)));
+  const rel = path.relative(pathKey(root), pathKey(dir));
   return rel === '' || (!!rel && !rel.startsWith('..') && !path.isAbsolute(rel));
 }
 
@@ -98,7 +99,8 @@ function isInside(dir, root) {
  */
 function trustWorkspaceFolder(provider, dir, { workspace, home } = {}) {
   if (!workspace) return false;
-  const roots = APP_FOLDERS.map((f) => path.join(workspace, f));
+  const ws = require('./workspace').layout(workspace); // lazy: workspace.js loads the engine
+  const roots = APP_FOLDERS.map((f) => ws[f]);
   const owned = (d) => roots.some((r) => isInside(d, r));
   if (!owned(dir)) return false;
   return trustDirs(provider, foldersToTrust(dir).filter(owned), home);

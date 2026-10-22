@@ -179,13 +179,9 @@ function requireArgs(arg, params) {
 
 // The environment of a CLI or a shell started from the app (not nested in Claude Code, not as node),
 // with the folders the CLI lookup searches on its PATH (#397). #470 (SEC-5): the allowlisted
-// environment (src/engine/child-env.js) with the gh / glab tokens, so a user's gh still works there.
-const cliEnv = (platform = process.platform) => {
-  const env = withCliPath(childEnv(process.env, { platforms: ['gh', 'glab'] }), platform);
-  delete env.CLAUDECODE;
-  delete env.ELECTRON_RUN_AS_NODE;
-  return env;
-};
+// environment (src/engine/child-env.js) with the gh / glab tokens, so a user's gh still works there;
+// the allowlist already leaves out CLAUDECODE and ELECTRON_RUN_AS_NODE.
+const cliEnv = (platform = process.platform) => withCliPath(childEnv(process.env, { platforms: ['gh', 'glab'] }), platform);
 
 module.exports = {
   BUNDLED_SKILLS_DIR,

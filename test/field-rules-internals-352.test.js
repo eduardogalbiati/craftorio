@@ -36,6 +36,7 @@ const BAD = {
   'request count': 0,
   'text': 5,
   'token count': 'lots',
+  'variable names': ['AWS_*'],
 };
 const TYPES = [undefined, ...MACHINE_STEP_TYPES];
 const applies = (a, type) => (Array.isArray(a) ? a.includes(type) : typeof a === 'object' ? !a.except.includes(type) : true);

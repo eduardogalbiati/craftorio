@@ -105,7 +105,11 @@ environment:
 - **Always**: `PATH`, `HOME` / `USERPROFILE`, `TMP` / `TEMP` / `TMPDIR`, `LANG` / `LC_*`,
   `SystemRoot` / `ComSpec` / `APPDATA` / `LOCALAPPDATA`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `GIT_*`,
   plus the non-secret system variables node, npm and the CLIs need (`PATHEXT`, `windir`,
-  `ProgramFiles*`, `USERNAME`, `TERM`, `NODE_OPTIONS`… the `ALLOWED_NAMES` list).
+  `ProgramFiles*`, `USERNAME`, `TERM`, `NODE_OPTIONS`… the `ALLOWED_NAMES` list), and the
+  toolchain homes of the skills' languages (`JAVA_HOME`, `M2_HOME`, `MAVEN_HOME`,
+  `GRADLE_USER_HOME`, `GOPATH`, `GOROOT`, `GOFLAGS`, `DOTNET_ROOT`, `DOTNET_CLI_HOME`,
+  `VIRTUAL_ENV`, `PYTHONPATH`, `CARGO_HOME`, `RUSTUP_HOME`). Any other variable a toolchain needs
+  goes into `env.passthrough`.
 - **Platform tokens**: `GH_*` and `GITHUB_TOKEN` only for an agent with `bash:gh` (or a free
   `bash`), `GITLAB_*` only with `bash:glab` (`platformsOf` in `src/engine/capabilities.js`).
   Transition actions, probes and the terminals get both (they run the workflow's own `gh`/`glab`

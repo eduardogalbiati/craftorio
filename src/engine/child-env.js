@@ -10,9 +10,12 @@
 
 'use strict';
 
-// Exact names: the paths and folders a CLI, git, node and npm need; Windows' system variables
+// Exact names: the paths and folders a CLI, git, node and npm need; the toolchain homes of the
+// languages the skills support (java, go, csharp, python, rust: folders, not secrets); Windows'
+// system variables
 const ALLOWED_NAMES = [
   'APPDATA',
+  'CARGO_HOME',
   'CLAUDE_CODE_GIT_BASH_PATH',
   'CLAUDE_CONFIG_DIR',
   'CODEX_HOME',
@@ -23,13 +26,22 @@ const ALLOWED_NAMES = [
   'COMPUTERNAME',
   'COMSPEC',
   'DISPLAY',
+  'DOTNET_CLI_HOME',
+  'DOTNET_ROOT',
+  'GOFLAGS',
+  'GOPATH',
+  'GOROOT',
+  'GRADLE_USER_HOME',
   'HOME',
   'HOMEDRIVE',
   'HOMEPATH',
+  'JAVA_HOME',
   'LANG',
   'LANGUAGE',
   'LOCALAPPDATA',
   'LOGNAME',
+  'M2_HOME',
+  'MAVEN_HOME',
   'NODE_OPTIONS',
   'NUMBER_OF_PROCESSORS',
   'OS',
@@ -42,6 +54,8 @@ const ALLOWED_NAMES = [
   'PROGRAMFILES(X86)',
   'PROGRAMW6432',
   'PUBLIC',
+  'PYTHONPATH',
+  'RUSTUP_HOME',
   'SHELL',
   'SYSTEMDRIVE',
   'SYSTEMROOT',
@@ -53,6 +67,7 @@ const ALLOWED_NAMES = [
   'USERDOMAIN',
   'USERNAME',
   'USERPROFILE',
+  'VIRTUAL_ENV',
   'WAYLAND_DISPLAY',
   'WINDIR',
   'XDG_CONFIG_HOME',
@@ -68,6 +83,8 @@ const PLATFORM_PREFIXES = {
   gh: ['GH_', 'GITHUB_TOKEN'],
   glab: ['GITLAB_'],
 };
+// The name of an environment variable (a passthrough entry, a preview's env)
+const VARIABLE_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 /**
  * `parent` (process.env by default) reduced to the allowlist, plus the tokens of `platforms`
@@ -88,4 +105,5 @@ function childEnv(parent = process.env, { platforms = [], passthrough = [] } = {
 module.exports = {
   ALLOWED_NAMES,
   childEnv,
+  VARIABLE_NAME,
 };

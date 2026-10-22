@@ -75,9 +75,8 @@ module.exports = (ctx) => {
     if (!found) throw new Error('Session not found.');
     const { run, sess } = found;
     if (mode !== 'live') simulation.refuseReal(`the ${sess.provider} CLI`);
-    // #470 (SEC-5): the allowlisted environment, not the app's whole one
+    // #470 (SEC-5): the allowlisted environment, not the app's whole one (no CLAUDECODE either)
     const env = cliEnv();
-    delete env.CLAUDECODE;
     if (mode === 'live') {
       // the multiagent-tail binary (#342), else session-tail.js under node (src/native-bin.js)
       const tail = tailCommand(!!host.isPackaged, resolveCommand);

@@ -426,7 +426,6 @@ function runCli(opts, parser) {
   // #470 (SEC-5): the allowlisted environment (platform tokens per the agent's bash:gh / bash:glab,
   // the workflow's env.passthrough); #397: the agent and its children (gh, npm shims' node) find what detection found
   const env = withCliPath(childEnv(process.env, { platforms: envPlatforms || [], passthrough: envPassthrough || [] }));
-  delete env.CLAUDECODE; // avoids the "nested session" block if the app is launched from inside Claude Code
   Object.assign(env, gitConfigEnv(env, { 'rerere.enabled': 'true' }));
   // agents' own checks never start real runs, and need no `VAR=value` prefix (refused by allowlists);
   // agentEnv (capabilities.agentEnv): with the run's scratch workspace when it has one (#120)

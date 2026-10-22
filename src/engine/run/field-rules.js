@@ -12,6 +12,7 @@
 'use strict';
 
 const { PROBES } = require('../probes');
+const { VARIABLE_NAME } = require('../child-env');
 
 function parseDuration(v, def) {
   if (v == null) return def;
@@ -81,6 +82,7 @@ const TYPES = {
   'request count': (v) => Boolean(parseRequests(v)),
   'text': (v) => typeof v === 'string',
   'token count': (v) => Boolean(parseTokens(v)),
+  'variable names': (v) => Array.isArray(v) && v.length > 0 && v.every((f) => typeof f === 'string' && VARIABLE_NAME.test(f)),
 };
 
 // Where a step field applies: every step type, a list of types, or every type except some
@@ -186,7 +188,7 @@ const FIELD_RULES = [
   // `ship: { tag }` (#260): only the answer a person gives at a decision gate ships a release
   entry('steps[].transitions[].ship.tag', 'all', 'non-blank value', 'transition ship needs a tag (ship: { tag: "{{ inputs.version }}" }).', { template: true, required: true }),
   // #470 (SEC-5): variables passed to agents and commands beyond the allowlist (src/engine/child-env.js)
-  entry('env.passthrough', WORKFLOW, 'field names', 'env.passthrough must be a non-empty list of variable names.'),
+  entry('env.passthrough', WORKFLOW, 'variable names', 'env.passthrough must be a non-empty list of variable names.'),
   entry('orchestrator.limits.max_total_context', WORKFLOW, 'token count', 'orchestrator.limits.max_total_context must be a token count such as 20M.', { template: true, present: 'set' }),
   entry('orchestrator.local_preview.command', WORKFLOW, 'non-blank value', 'orchestrator.local_preview needs a command (e.g. "npm start").', { required: true, present: 'set' }),
   entry('orchestrator.supervisor.on_call', WORKFLOW, 'boolean', 'orchestrator.supervisor.on_call must be true or false.'),
