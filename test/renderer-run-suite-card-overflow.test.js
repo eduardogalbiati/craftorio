@@ -60,7 +60,7 @@ function loadRunParts() {
 function sideColumn() {
   const sb = loadRunParts();
   sb.state.runs.set('r1', { events: [{ type: 'step.finished', step_id: 'suite_affected', visit: 1, output: OUTPUT }] });
-  sb.scratchOfRun.set('r1', { info: { dir: 'C:/Users/Eduardo/multiagent-workspace/runs/20261021-233447-c7dbd4e7/scratch', files: 106, bytes: 946176 }, at: Date.now() });
+  sb.scratchOfRun.set('r1', { info: { dir: 'C:/Users/dev/multiagent-workspace/runs/20261021-233447-c7dbd4e7/scratch', files: 106, bytes: 946176 }, at: Date.now() });
   const card = String(sb.suiteCardsHtml('r1', STEP_NAMES));
   const scratch = String(sb.scratchHtml('r1'));
   assert.match(card, /data-testid="run-suite-card"/, 'no suite card rendered');
