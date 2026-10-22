@@ -20,12 +20,15 @@ const pick = (re) => {
 };
 
 // A fake Backlog: `editing` is the owner's open Edit form (BacklogRoadmap.busy()), `data` what getBacklog returns.
-function load({ mode = 'roadmap', data = { issues: [{ number: 1, status: 'todo' }] } } = {}) {
+// `light`: the Roadmap's light backlog:state (#491), served by api.getBacklogState with the real
+// BacklogLive (backlog-live.js) and RoadmapModel loaded; `lightReads` counts its calls.
+function load({ mode = 'roadmap', data = { issues: [{ number: 1, status: 'todo' }] }, light } = {}) {
   const clock = { now: 1000000 };
   const timers = [];
   const intervals = [];
   const fetches = [];
-  const state = { data, editing: false, closed: 0 };
+  const lightReads = [];
+  const state = { data, editing: false, closed: 0, light };
   const notice = { prepends: 0, el: null };
   const button = { handler: null };
   const form = {
@@ -50,11 +53,20 @@ function load({ mode = 'roadmap', data = { issues: [{ number: 1, status: 'todo' 
   sandbox.window.BacklogRoadmap = { busy: () => state.editing, closeEdit: () => { state.editing = false; state.closed += 1; } };
   sandbox.window.state = sandbox.state;
   vm.createContext(withI18n(sandbox));
+  if (light) {
+    sandbox.api.getBacklogState = async () => { lightReads.push(clock.now); return state.light; };
+    vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'src', 'shared', 'roadmap-model.js'), 'utf8'), sandbox);
+    sandbox.window.RoadmapModel ??= sandbox.RoadmapModel;
+    vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'views', 'backlog', 'backlog-live.js'), 'utf8'), sandbox);
+    sandbox.window.BacklogRoadmap.mergeState = (d, l) => sandbox.window.BacklogLive.mergeState(d, l);
+  }
   vm.runInContext(
     `let bl = { mode: ${JSON.stringify(mode)}, projectId: 'p1', data: null, syncing: false, seq: 0, selected: new Set() };
      let watching = true;
      let pendingReload = null;
      let shownData = '';
+     let busyChecked = null;
+     let shownState = '';
      const $b = (sel) => (sel === '#view-backlog .rm-form' && window.BacklogRoadmap.busy() ? FORM : null);
      const visible = () => state.view === 'backlog';
      const dataKey = (id, data) => \`\${id}:\${JSON.stringify(data ?? null)}\`;
@@ -66,7 +78,7 @@ function load({ mode = 'roadmap', data = { issues: [{ number: 1, status: 'todo' 
      ${pick(/const ownerBusy = \(\) => \{[\s\S]*?\n  \};/)}
      ${pick(/async function liveReload\(\) \{[\s\S]*?\n  \}/)}
      ${pick(/const RUN_THROTTLE_MS[\s\S]*?api\.onEvent\(\(ev\) => \{[\s\S]*?\n  \}\);/)}
-     this.helpers = { setData, reload, liveReload, getShown: () => shownData };`,
+     this.helpers = { setData, reload, liveReload, getShown: () => shownData, bl: () => bl };`,
     Object.assign(sandbox, { FORM: form, renders: 0 }),
   );
   const run = (ev) => sandbox.eventHandler(ev);
@@ -88,6 +100,8 @@ function load({ mode = 'roadmap', data = { issues: [{ number: 1, status: 'todo' 
     state,
     notice,
     fetches,
+    lightReads,
+    bl: () => sandbox.helpers.bl(),
     renders: () => sandbox.renders,
     run,
     advance,
@@ -196,4 +210,61 @@ test('the notice\'s Reload closes the form and renders the data even when it is 
   await settle();
   assert.equal(t.state.closed, 1, 'the form was closed');
   assert.equal(t.renders(), 1, 'Reload forces a render');
+});
+
+// #491: a Roadmap shown and its light state (one stage, one item running)
+const RM = (status = 'running', extra = {}) => ({
+  issues: [],
+  roadmap: { shape: 's1:a', state: 'running', updatedAt: 'u1', stages: [{ id: 's1', items: [{ id: 'a', title: 'A', body: 'big', status, runId: 'run-1', ...extra }] }] },
+});
+const LIGHT = (updatedAt = 'u1', item = {}) => ({
+  queue: null,
+  refresh: null,
+  roadmap: { shape: 's1:a', state: 'running', updatedAt, stages: [{ id: 's1', items: [{ id: 'a', status: 'running', runId: 'run-1', runs: ['run-1'], ...item }] }] },
+});
+
+test('Edit form open (#491): two live reloads with the same light mark read the whole Backlog once; a new mark reads it again', async () => {
+  const t = load({ data: RM(), light: LIGHT() });
+  t.setData(RM());
+  t.state.editing = true;
+  t.state.data = RM('running', { title: 'A changed elsewhere' });
+  await t.liveReload();
+  await t.liveReload();
+  assert.equal(t.fetches.length, 1, 'the same mark: the whole Backlog read once');
+  assert.equal(t.notice.prepends, 1);
+  t.state.light = LIGHT('u2');
+  await t.liveReload();
+  assert.equal(t.fetches.length, 2, 'a new updatedAt: read again');
+  assert.equal(t.renders(), 0, 'nothing drawn under the form');
+});
+
+test('Roadmap live reload (#491): a run change merges the light state without reading the whole Backlog', async () => {
+  const t = load({ data: RM(), light: LIGHT('u1', { waiting: 'memory' }) });
+  t.setData(RM());
+  await t.liveReload();
+  assert.equal(t.fetches.length, 0, 'no full read');
+  assert.equal(t.lightReads.length, 1);
+  assert.equal(t.renders(), 1, 'the merged state is drawn');
+  const item = t.bl().data.roadmap.stages[0].items[0];
+  assert.equal(item.waiting, 'memory');
+  assert.equal(item.body, 'big', 'the bodies the screen holds are kept');
+});
+
+test('Roadmap live reload (#491): the same light state again (only timers moved) draws nothing', async () => {
+  const t = load({ data: RM(), light: LIGHT('u1', { waiting: 'memory', elapsed: 1000 }) });
+  t.setData(RM());
+  await t.liveReload();
+  t.state.light = LIGHT('u1', { waiting: 'memory', elapsed: 6000 });
+  await t.liveReload();
+  assert.equal(t.renders(), 1);
+  assert.equal(t.fetches.length, 0);
+});
+
+test('Roadmap live reload (#491): an item that ended falls back to the whole Backlog', async () => {
+  const t = load({ data: RM(), light: LIGHT('u1', { status: 'done' }) });
+  t.setData(RM());
+  t.state.data = RM('done');
+  await t.liveReload();
+  assert.equal(t.fetches.length, 1, 'the full read brings the ended item');
+  assert.equal(t.bl().data.roadmap.stages[0].items[0].status, 'done');
 });

@@ -141,6 +141,25 @@ test('#454 after a refused cut line, submitting again sends the reloaded roadmap
   assert.ok(toasts.some((x) => /cut line/i.test(x.title) && x.title.includes('1.3.0')), `a toast: ${JSON.stringify(toasts)}`);
 });
 
+test('#454 after a refused cut line whose stage was removed elsewhere, submitting again saves nothing and says so', OPTS, async () => {
+  const gone = () => {
+    const stored = roadmapData(T2);
+    stored.roadmap.stages = stored.roadmap.stages.filter((s) => s.id !== 'st1');
+    return { ...stored, conflict: { reason: REASON } };
+  };
+  const { app, R, saves } = await boot([gone, savedOk]);
+  const { ctx } = H.makeCtx();
+  await openReleaseHere(app, R, roadmapData(), ctx);
+  app.el('#cut-line-name').value = '1.3.0';
+  await submit(app);
+  assert.equal(hidden(app), false, 'the refused save left the dialog open');
+  await submit(app);
+  assert.equal(saves.length, 1, 'nothing saved on a stage that is gone');
+  assert.equal(hidden(app), false, 'the dialog stays open');
+  assert.equal(String(app.el('#cut-line-name').value), '1.3.0', 'the typed name is kept');
+  assert.match(String(app.el('#cut-line-error').textContent), /removed elsewhere/i);
+});
+
 test('#454 Cancel after a refused cut line closes the dialog with nothing more saved and no error left on the Backlog', OPTS, async () => {
   const { app, R, saves } = await boot([refusedAnswer]);
   const { ctx, calls } = H.makeCtx();

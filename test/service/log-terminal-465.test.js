@@ -78,3 +78,23 @@ test('#465 terminalSpec(runId, path, \'log\'): the tail with <runDir> --file <pa
     assert.throws(() => service.terminalSpec(runId, bad, 'log'), (e) => !/Session not found/.test(e.message), `refused: ${bad}`);
   }
 });
+
+test('#465 a log terminal refuses the logs/ folder itself, an absolute path inside it and an empty path', (t) => {
+  const { service } = makeService(t);
+  const { runId, runDir } = runWithLog(service);
+  for (const bad of ['logs', 'logs/', '', path.join(runDir, 'logs', 'suite-1.log')]) {
+    assert.throws(() => service.terminalSpec(runId, bad, 'log'), (e) => !/Session not found/.test(e.message), `refused: ${JSON.stringify(bad)}`);
+  }
+});
+
+test('#465 a log the step has not written yet opens and shows its lines once it appears', async (t) => {
+  const { service, api } = makeService(t);
+  const { runId, runDir } = runWithLog(service);
+  const spec = service.terminalSpec(runId, 'logs/suite-2.log', 'log');
+  assert.equal(spec.args.map(String).includes('--file'), true);
+  const output = termOutput(service);
+  const opened = api['term:open']({ kind: 'log', runId, path: 'logs/suite-2.log', cols: 80, rows: 24 });
+  t.after(() => { try { api['term:kill']({ id: opened.id }); } catch { /* gone */ } });
+  fs.writeFileSync(path.join(runDir, 'logs', 'suite-2.log'), '$ npm test -- round 2\n');
+  await until(() => output(opened.id).includes('round 2'), 'the line of a log created after the open');
+});

@@ -177,6 +177,47 @@ test('#465 while a whole-suite round waits for another run\'s suite slot, its lo
   assert.match(during, /wait\w* for the suite slot/i, `the log while waiting: ${JSON.stringify(during)}`);
 });
 
+test('#465 scope failed after a wait for memory: the focused round\'s log keeps the wait, the -full round\'s log starts clean', async (t) => {
+  machineFolder(t);
+  const { state, runDir } = engineRun(t, repo(t));
+  const prev = { round: 1, status: 'fail', scope: 'full', failures: [{ file: 'test/a.test.js', test: 'a' }] };
+  const out = await state.suiteRound(
+    { id: 'suite', type: 'suite', command: 'npm test', scope: 'failed' },
+    { visits: 2, outputs: [prev] },
+    { execution: 2, reruns: 0, stopped: [], logPrefix: '# suite waits for memory before it starts\n' },
+  );
+  assert.equal(out.status, 'pass', out.message);
+  const focused = fs.readFileSync(path.join(runDir, 'logs', 'suite-2.log'), 'utf8');
+  const full = fs.readFileSync(path.join(runDir, 'logs', 'suite-2-full.log'), 'utf8');
+  assert.match(focused, /waits for memory/, `the focused round's log: ${JSON.stringify(focused.slice(0, 300))}`);
+  assert.doesNotMatch(full, /waits for memory/, `the -full round's log: ${JSON.stringify(full.slice(0, 300))}`);
+});
+
+test('#465 two captures: the second capture\'s "$ command" line comes after all of the first capture\'s output', async (t) => {
+  const { captureScreenshots } = require('../src/engine/screenshot-step');
+  const { state, runDir } = engineRun(t, repo(t));
+  // each capture writes its output in two parts, the second one late (as a stream flushing)
+  const run = async (opts) => {
+    const name = opts.args.join(' ');
+    if (opts.logFile) fs.appendFileSync(opts.logFile, `OUT-START ${name}\n`);
+    await new Promise((r) => setTimeout(r, 30));
+    if (opts.logFile) fs.appendFileSync(opts.logFile, `OUT-END ${name}\n`);
+    return { code: 1, output: '', timedOut: false };
+  };
+  const slot = async () => ({ token: 'tok', release() {} });
+  state.machine.captureScreenshots = (opts) => captureScreenshots({ ...opts, run, slot });
+  state.ctx.steps = { develop: { output: { screenshots: [
+    { name: '465-one', caption: 'One', args: ['--view', 'one'] },
+    { name: '465-two', caption: 'Two', args: ['--view', 'two'] },
+  ] } } };
+  await state.runScreenshots({ id: 'screens', type: 'screenshots', from: 'develop' }, { visits: 1 });
+  const lines = fs.readFileSync(path.join(runDir, 'logs', 'screenshots-1.log'), 'utf8').split(/\r?\n/);
+  const firstEnd = lines.findIndex((l) => l.includes('OUT-END') && l.includes('one'));
+  const secondCmd = lines.findIndex((l) => l.startsWith('$ ') && l.includes('two'));
+  assert.ok(firstEnd >= 0 && secondCmd >= 0, `both lines in the log: ${JSON.stringify(lines)}`);
+  assert.ok(firstEnd < secondCmd, `the first capture's output ends before the second command: ${JSON.stringify(lines)}`);
+});
+
 test('#465 while a suite step waits for memory (the memory guard), its log says so', async (t) => {
   machineFolder(t);
   const { state, runDir } = engineRun(t, repo(t));
