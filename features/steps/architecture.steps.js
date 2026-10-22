@@ -1034,3 +1034,59 @@ Then('the city highlights the building {string} and greys {string}', async ({ e2
   };
   await expect.poll(state, { timeout: LOAD_TIMEOUT, message: `"${lit}" highlighted, "${grey}" greyed` }).toEqual({ lit: true, grey: true });
 });
+
+// --- City life (#450) ---
+// The contract these steps assume: the city header has two toggle buttons with aria-pressed
+// "true"/"false": data-testid="project-city-life" (accessible name containing "City life", on by
+// default in the Architecture tab) and data-testid="project-city-glow" (name containing "Glow"),
+// the same ids as test/city-life-450.test.js.
+// window.ProjectCity.stats() adds `props`: how many life props (trees, benches, lamps, cars, lamp
+// pools) are shown, 0 when City life is off. "Not rebuilt": the city's canvas is marked (a JS
+// property, no attribute) the first time a switch is turned; afterwards the visible canvas still
+// carries the mark and stats().buildings keeps its count.
+
+const CITY_SWITCHES = { 'city life': 'project-city-life', glow: 'project-city-glow' };
+const citySwitch = (page, name) => {
+  const id = CITY_SWITCHES[name.toLowerCase()];
+  if (!id) throw new Error(`no city switch "${name}" (known: ${Object.keys(CITY_SWITCHES).join(', ')})`);
+  return byId(page, id);
+};
+const onOff = (word) => {
+  if (!/^(on|off)$/i.test(word)) throw new Error(`a switch is "on" or "off", not "${word}"`);
+  return /^on$/i.test(word) ? 'true' : 'false';
+};
+const cityCanvas = (page) => cityBox(page).locator('canvas').first();
+
+Then('the {string} switch of the city is {word}', async ({ e2e }, name, state) => {
+  const button = citySwitch(e2e.window, name);
+  await expect(button).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(button).toHaveRole('button');
+  await expect(button).toHaveAccessibleName(new RegExp(escapeRe(name), 'i'));
+  await expect(button).toHaveAttribute('aria-pressed', onOff(state), { timeout: LOAD_TIMEOUT });
+});
+
+When('I turn the {string} switch of the city {word}', async ({ e2e }, name, state) => {
+  const wanted = onOff(state);
+  const button = citySwitch(e2e.window, name);
+  await expect(button).toBeVisible({ timeout: LOAD_TIMEOUT });
+  // mark the city on screen once, so a later step can tell it was not rebuilt
+  await cityCanvas(e2e.window).evaluate((c) => { if (!c.__e2eCityMark) c.__e2eCityMark = true; });
+  await expect(button, `the "${name}" switch is not ${state} yet`).toHaveAttribute('aria-pressed', wanted === 'true' ? 'false' : 'true');
+  await button.click();
+  await expect(button).toHaveAttribute('aria-pressed', wanted, { timeout: LOAD_TIMEOUT });
+});
+
+Then('the city shows its trees, benches, lamps and cars', async ({ e2e }) => {
+  await expect.poll(async () => (await cityStats(e2e.window))?.props ?? -1, { timeout: LOAD_TIMEOUT, message: 'the city life props shown' }).toBeGreaterThan(0);
+});
+
+Then('the city shows no trees, benches, lamps or cars', async ({ e2e }) => {
+  await expect.poll(async () => (await cityStats(e2e.window))?.props ?? -1, { timeout: LOAD_TIMEOUT, message: 'the city life props shown' }).toBe(0);
+});
+
+Then('the city on screen is the same one, not rebuilt, with its {int} buildings', async ({ e2e }, count) => {
+  const canvas = cityCanvas(e2e.window);
+  await expect(canvas).toBeVisible({ timeout: LOAD_TIMEOUT });
+  expect(await canvas.evaluate((c) => c.__e2eCityMark === true), 'the canvas drawn before the switch is still the one shown').toBe(true);
+  await expect.poll(async () => (await drawnBuildings(e2e.window))?.length ?? -1, { timeout: LOAD_TIMEOUT, message: 'the drawn buildings' }).toBe(count);
+});

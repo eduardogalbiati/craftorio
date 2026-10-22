@@ -431,3 +431,52 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     Then the Architecture tab shows the project city
     And the city shows the agent "developer · implement"
     And the city highlights the building "src/billing.js" and greys "tools/export.py"
+
+  # City life (#450): a "City life" switch in the city header (a tree and a lamp) shows or hides the
+  # trees, benches, lamps, cars and lamp pools without rebuilding the city, on by default in the
+  # Architecture tab; a "Glow" switch turns the bloom off.
+  @issue-450
+  Scenario: City life is on by default and turning it off hides the trees and cars without rebuilding the city
+    Given the app is open
+    And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
+    When I open "Projects" in the sidebar
+    And I open the project "billing-service" from the Projects screen
+    And I open the "Architecture" project tab
+    And I switch the Architecture tab to "City"
+    Then the Architecture tab shows the project city
+    And the "City life" switch of the city is on
+    And the city shows its trees, benches, lamps and cars
+    When I turn the "City life" switch of the city off
+    Then the "City life" switch of the city is off
+    And the city shows no trees, benches, lamps or cars
+    And the city on screen is the same one, not rebuilt, with its 2 buildings
+
+  @issue-450
+  Scenario: Turning City life back on brings the trees and cars back
+    Given the app is open
+    And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
+    When I open "Projects" in the sidebar
+    And I open the project "billing-service" from the Projects screen
+    And I open the "Architecture" project tab
+    And I switch the Architecture tab to "City"
+    Then the Architecture tab shows the project city
+    When I turn the "City life" switch of the city off
+    Then the city shows no trees, benches, lamps or cars
+    When I turn the "City life" switch of the city on
+    Then the "City life" switch of the city is on
+    And the city shows its trees, benches, lamps and cars
+    And the city on screen is the same one, not rebuilt, with its 2 buildings
+
+  @issue-450
+  Scenario: The city's Glow can be turned off
+    Given the app is open
+    And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
+    When I open "Projects" in the sidebar
+    And I open the project "billing-service" from the Projects screen
+    And I open the "Architecture" project tab
+    And I switch the Architecture tab to "City"
+    Then the Architecture tab shows the project city
+    And the "Glow" switch of the city is on
+    When I turn the "Glow" switch of the city off
+    Then the "Glow" switch of the city is off
+    And the city on screen is the same one, not rebuilt, with its 2 buildings
