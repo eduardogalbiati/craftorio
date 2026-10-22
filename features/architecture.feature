@@ -164,7 +164,8 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     And I open the "Architecture" project tab
     And I switch the Architecture tab to "City"
     Then the Architecture tab shows the project city
-    And the city says "No agent is working on this project"
+    When I turn the city's Live switch on
+    Then the city says "No agent is working on this project"
 
   @issue-374
   Scenario: An agent of a run in progress shows on the city, and a run of another project does not
@@ -177,7 +178,8 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     And I open the "Architecture" project tab
     And I switch the Architecture tab to "City"
     Then the Architecture tab shows the project city
-    And the city shows the agent "developer · implement"
+    When I turn the city's Live switch on
+    Then the city shows the agent "developer · implement"
     And the city does not show the agent "tester · write_tests"
     And the city shows no collision risk
 
@@ -192,7 +194,8 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     And I open the "Architecture" project tab
     And I switch the Architecture tab to "City"
     Then the Architecture tab shows the project city
-    And the city shows the agent "developer · implement"
+    When I turn the city's Live switch on
+    Then the city shows the agent "developer · implement"
     And the city shows the agent "refactorer · refactor"
     And the city marks "src/billing.js" as a collision risk with a link to the Conflict map
     When I follow the city's link to the Conflict map
@@ -429,7 +432,8 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     And I open the "Architecture" project tab
     And I switch the Architecture tab to "City"
     Then the Architecture tab shows the project city
-    And the city shows the agent "developer · implement"
+    When I turn the city's Live switch on
+    Then the city shows the agent "developer · implement"
     And the city highlights the building "src/billing.js" and greys "tools/export.py"
 
   # City life (#450): a "City life" switch in the city header (a tree and a lamp) shows or hides the
