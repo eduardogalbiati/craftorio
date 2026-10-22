@@ -1,31 +1,25 @@
 // The City view of a project's Architecture tab (#373): the project drawn as a 3D city from #371's
 // model (architecture:city → src/shared/city-model.js), laid out by src/shared/city-layout.js and
-// drawn by the prebuilt bundle generated/project-city.js (scripts/build-3d.js, src/renderer/city3d/),
-// loaded with a plain <script src> the first time a City view shows, so the app's start does not
-// change. Without WebGL, or without the bundle, the view says so and points to the Facts.
+// drawn by the prebuilt bundle generated/project-city.js (scripts/build-3d.js, src/renderer/city3d/), loaded with a
+// plain <script src> the first time a City view shows. Without WebGL, or without the bundle, the view says so.
 // The HUD is this file's, with the run's 3D view classes (run3d.css; project-city.css places them):
-// - the header: the project, its files, zones and districts, the Danger Zone count, the plan's
-//   coverage and the commit; a search that flies to a file, a district or a zone; "Colour by"
-//   (Quadrant, the default when a tool measured the complexity, Zone otherwise, Churn) with its
-//   legend; the Tests toggle; City life and Glow (#450: switches on by default, sent as scene
-//   updates, the city not rebuilt); the dark / light toggle shared with the run's 3D view (Run3DTheme);
-//   Expand (#381): the city over the whole window (`expanded`), Close or Esc brings it back as it was;
-// - the notes under it (project-city-notes.js): no plan or a stale plan, each with the tab's one
-//   action "Analyze this project" (#381: the map and the Oracle's analysis as one run, `onAnalyze`,
-//   its combined estimate next to it) and its state, the plan's problems, the edges not read;
-// - the hover card of a building, a district or a zone, the card a click pins (a building's has
-//   "Open in Facts", its hotspot row; project-city-cards.js), the camera buttons (zoom, home);
-// - the states: the facts still loading, not a git repository, no commits, an error with Retry.
+// - the header: the project (the mode's title, #440), its files, zones and districts, the Danger Zone count, the plan's
+//   coverage and the commit; a search that flies to a file, a district or a zone; "Colour by" (Quadrant, the default
+//   when a tool measured the complexity, Zone otherwise, Churn) with its legend; the Tests toggle; City life and Glow
+//   (#450: switches on by default, sent as scene updates); the dark / light toggle shared with the run's 3D view
+//   (Run3DTheme); Expand (#381): the city over the whole window (`expanded`), Close or Esc brings it back as it was;
+// - the notes under it (project-city-notes.js): no plan or a stale plan, each with the tab's one action "Analyze this
+//   project" (#381: `onAnalyze`, its combined estimate next to it) and its state, the plan's problems, the edges not read;
+// - the hover card of a building, a district or a zone, the card a click pins (project-city-cards.js), the camera
+//   buttons (zoom, home); the states: the facts still loading, not a git repository, no commits, an error with Retry.
 // The overlay API, for the city epic's modules (they add their own files, not code here):
-//   ProjectCity.overlay(name, { highlight: { path: colour }, markers: [path | { path, colour, label }] } | null)
-//     sets or removes a named layer; the layers merge (later names win a file's colour) and the
-//     buildings no layer highlights are greyed (city-layout.js applyOverlay);
-//   ProjectCity.flyTo(name) flies to a file, a district or a zone (false when there is none);
-//   ProjectCity.current() → { projectId, layout } of the city on screen (null when none);
-//   ProjectCity.stats() → { firstFrameMs, fps, buildings, cityLife, glow, props }: first frame time and fps while the camera
-//   moves (the PR's measures); per drawn file { path, archetype, greyed } (#449); the switches and the life props shown (#450).
-//   A created city also has `model`, `setPins(paths)` (#382: the connections panel's pinned files), `onLayout(fn)` (called
-//   after a new layout; returns the unsubscribe) and `reload(answer?)` (#376: draws another answer; none reads the project's again).
+//   ProjectCity.overlay(name, { highlight: { path: colour }, markers: [path | { path, colour, label }] } | null) sets or removes
+//     a named layer; the layers merge (later names win) and the buildings no layer highlights are greyed (city-layout.js applyOverlay);
+//   ProjectCity.flyTo(name) flies to a file, a district or a zone (false when none); ProjectCity.current() → { projectId, layout };
+//   ProjectCity.stats() → { firstFrameMs, fps, buildings, cityLife, glow, props } (the PR's measures, #449's drawn files, #450's switches).
+//   A created city also has `model`, `setPins(paths)` (#382), `onLayout(fn)` (returns the unsubscribe), `reload(answer?)` (#376: another
+//   answer drawn), `setLegend(name, html | null)` (a mode's rows in place of Colour by's), `applyUi()` (after a panel's draw) and
+//   the modes and panels of project-city-modes.js and project-city-panels.js (#440: `setMode`, `leaveMode`, `closeMode`; #441).
 // Uses app.js globals at call time: api, esc, errMsg, state (its settings' cityGlow). Browser: window.ProjectCity.
 (() => {
   const BUNDLE = '../../generated/project-city.js';
@@ -93,7 +87,7 @@
     const hud = el.querySelector('[data-pc-hud]');
     const c = {
       projectId, name, el, answer: null, loading: false, error: null, facts: null, estimate: null, analysis: null,
-      colour: null, tests: true, theme: el.dataset.theme, layout: null, legend: [], handle: null, drawn: null,
+      colour: null, tests: true, theme: el.dataset.theme, layout: null, legend: [], rows: new Map(), ui: [], handle: null, drawn: null,
       pinned: null, hover: null, pins: [], expanded: false, seq: 0, destroyed: false, cityLife: true, glow: typeof state === 'undefined' || state?.settings?.cityGlow !== false,
     };
     const listeners = new Set(); // onLayout's
@@ -206,7 +200,7 @@
       const light = c.theme === 'light';
       return `<div class="r3d-top r3d-card" data-testid="project-city-header">
         <div class="r3d-brand"><i>${ICON_CITY}</i></div>
-        <div class="r3d-run"><b title="${esc(title)}">${esc(title)}</b> <small title="${esc(facts1)}" data-testid="project-city-facts">${esc(facts1)}</small></div>
+        <div class="r3d-run"><b title="${esc(title)}" data-testid="city-mode-title">${esc(title)}</b> <small title="${esc(facts1)}" data-testid="project-city-facts">${esc(facts1)}</small></div>
         <span class="r3d-grow"></span>
         <label class="r3d-search"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="7" cy="7" r="5"/><path d="M11 11l4 4"/></svg>
           <input type="search" role="searchbox" list="pc-targets-${esc(projectId)}" placeholder="${t('project_city.fly_to_a_file_or_a')}" aria-label="${t('project_city.search_the_city')}" data-pc-search data-testid="project-city-search" /></label>
@@ -219,13 +213,14 @@
       </div>`;
     }
 
-    // the notes under the header (project-city-notes.js): the action (#381), its state, the plan's problems
-    const notesHtml = (model, validation) => window.ProjectCityNotes?.html({ model, validation, layout: c.layout, analysis: c.analysis, ready: typeof onAnalyze === 'function' }) || '';
+    // the notes under the header (project-city-notes.js): the action (#381), its state, the plan's problems (none on a past release's city, #440)
+    const notesHtml = (model, validation) => (self.mode === 'release' ? '' : window.ProjectCityNotes?.html({ model, validation, layout: c.layout, analysis: c.analysis, ready: typeof onAnalyze === 'function' }) || '');
 
+    // a mode's own rows (setLegend) in place of Colour by's, after the legend's close (#441)
     function renderLegend() {
       const box = hud.querySelector('[data-testid="project-city-legend"]');
       if (!box) return;
-      box.innerHTML = `<b>${esc(COLOUR_LABEL[c.colour] || '')}</b><ul>${c.legend.map((l) => `<li><i class="r3d-dot" style="--c:${esc(l.colour)}"></i>${esc(l.label)}${l.sub ? `<small>${esc(l.sub)}</small>` : ''}</li>`).join('')}</ul>`;
+      box.innerHTML = `${window.ProjectCityPanels?.legendClose() || ''}${[...c.rows.values()].join('') || `<b>${esc(COLOUR_LABEL[c.colour] || '')}</b><ul>${c.legend.map((l) => `<li><i class="r3d-dot" style="--c:${esc(l.colour)}"></i>${esc(l.label)}${l.sub ? `<small>${esc(l.sub)}</small>` : ''}</li>`).join('')}</ul>`}`;
     }
 
     const stateMessage = (testid, title, text) => stageMessage(`<p><b>${esc(title)}</b></p><p>${esc(text)}</p>`, { testid });
@@ -244,7 +239,7 @@
       }
       const model = a.model;
       hud.innerHTML = `${headerHtml(model, a.validation)}${notesHtml(model, a.validation)}
-        <div class="r3d-card pc-legend" data-testid="project-city-legend"></div>
+        <div class="r3d-card pc-legend" data-testid="project-city-legend" data-city-panel="legend"></div>${window.ProjectCityPanels?.legendOpen() || ''}
         <div class="r3d-zoom r3d-card" role="toolbar" aria-label="${t('project_city.camera')}">
           <button type="button" title="${t('project_city.zoom_in')}" aria-label="${t('project_city.zoom_in')}" data-pc-zoom="in">+</button>
           <button type="button" title="${t('project_city.zoom_out')}" aria-label="${t('project_city.zoom_out')}" data-pc-zoom="out">−</button>
@@ -256,6 +251,7 @@
       c.legend = CityLayout.colourBy(c.layout, c.colour, { light: c.theme === 'light' }).legend;
       renderLegend();
       renderDetail();
+      self.applyUi();
     }
 
     // ---------- the cards ----------
@@ -394,10 +390,13 @@
       refreshOverlay() { if (c.handle && c.layout) c.handle.update(paint()); },
       setPins(paths) { c.pins = [...(paths || [])]; c.handle?.update({ pins: c.pins }); }, // #382: the files whose connections stay drawn
       onLayout(fn) { listeners.add(fn); return () => listeners.delete(fn); }, // calls `fn(layout)` after every new layout
+      setLegend(name, html) { if (html) c.rows.set(name, html); else c.rows.delete(name); renderLegend(); },
+      applyUi() { for (const u of c.ui) u.apply(); }, // the mode and the panels' states on what was drawn (#440, #441)
       expand: setExpanded,
       stats: () => c.handle?.stats() || null,
       destroy() {
         c.destroyed = true;
+        for (const u of c.ui) u.destroy();
         setExpanded(false);
         listeners.clear();
         if (shown === self) shown = null;
@@ -406,6 +405,7 @@
         el.remove();
       },
     };
+    c.ui = [window.ProjectCityModes, window.ProjectCityPanels].filter(Boolean).map((m) => m.attach(self));
     return self;
   }
 

@@ -16,6 +16,7 @@
     const el = document.createElement('div');
     el.className = 'r3d-card pcc';
     el.setAttribute('data-testid', 'city-connections');
+    el.setAttribute('data-city-panel', 'connections'); // #440: Explore's; #441: its chevron (project-city-panels.js)
     city.el.appendChild(el);
     let query = '';
     let pins = [];
@@ -32,16 +33,19 @@
       if (!layout || !model || !window.CityConnections) { el.classList.add('hidden'); return; }
       el.classList.remove('hidden');
       const state = CityConnections.edgesState(model);
-      const head = `<div class="pcc-head"><b>${t('project_city_connections.most_connected')}</b>${pins.length ? `<button type="button" class="link-btn" data-pcc-clear data-testid="city-connections-clear">${t('project_city_connections.clear_pins_length', { length: pins.length })}</button>` : ''}</div>`;
+      const title = t('project_city_connections.most_connected');
+      const head = `<div class="pcc-head pc-panel-head"><b>${esc(title)}</b><span class="r3d-grow"></span>${pins.length ? `<button type="button" class="link-btn" data-pcc-clear data-testid="city-connections-clear">${t('project_city_connections.clear_pins_length', { length: pins.length })}</button>` : ''}${window.ProjectCityPanels?.chevron(title) || ''}</div>`;
       if (!state.ok) {
-        el.innerHTML = `${head}<p class="pcc-empty muted" data-testid="city-connections-empty">${t('project_city_connections.no_connections_to_list_arcs_reason', { reason: esc(state.reason) })}</p>`;
+        el.innerHTML = `${head}<div data-city-panel-body><p class="pcc-empty muted" data-testid="city-connections-empty">${t('project_city_connections.no_connections_to_list_arcs_reason', { reason: esc(state.reason) })}</p></div>`;
+        city.applyUi?.();
         return;
       }
       const rows = CityConnections.rank(layout, { query });
-      el.innerHTML = `${head}
+      el.innerHTML = `${head}<div data-city-panel-body>
         <label class="r3d-search pcc-search"><input type="search" placeholder="${t('project_city_connections.filter_the_files')}" aria-label="${t('project_city_connections.filter_the_most_connected_files')}" data-pcc-query data-testid="city-connections-search" value="${esc(query)}" /></label>
         ${rows.length ? `<ul class="pcc-list" data-testid="city-connections-list">${rows.map(rowHtml).join('')}</ul>` : `<p class="pcc-empty muted">${t('project_city_connections.no_file_matches_query', { query: esc(query) })}</p>`}
-        <p class="pcc-hint muted"><em class="out">${t('project_city_connections.requires')}</em> · <em class="in">${t('project_city_connections.required_by')}</em>${t('project_city_connections.a_click_pins_the_arcs')}</p>`;
+        <p class="pcc-hint muted"><em class="out">${t('project_city_connections.requires')}</em> · <em class="in">${t('project_city_connections.required_by')}</em>${t('project_city_connections.a_click_pins_the_arcs')}</p></div>`;
+      city.applyUi?.();
     }
 
     function setPins(next) {

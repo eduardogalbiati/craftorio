@@ -1,6 +1,8 @@
 // The agents at work on the project city (#374), an overlay of the City view (project-city.js) built
-// on its overlay API, so the city's own module does not grow. attach(city, { projectId }) adds a card
-// to the city (data-testid="city-agents") and polls architecture:agents: the project's runs in
+// on its overlay API, so the city's own module does not grow. attach(city, { projectId, live = true })
+// adds a card to the city (data-testid="city-agents"); `live: false` (the Architecture tab, #440: Live
+// is a switch of Explore, off by default, never on a release's city) reads nothing until the header's
+// Live switch puts the city in the live mode (project-city-modes.js); while live, it polls architecture:agents: the project's runs in
 // progress, each agent session's last file, each run's trail of changed files and its uncommitted
 // files (src/shared/city-agents.js places them on the layout). On the city: a layer
 // (ProjectCity.overlay) lights each run's trail in the run's colour and the files two runs change in
@@ -11,7 +13,9 @@
 // "No agent is working on this project" when no run of this project is in progress.
 // "Replay on the map" (replay(projectId, runId), the run screen's button): the project's City view
 // opens and plays that run's file touches (CityAgents.CityReplay) with a timeline, play/pause and a
-// speed; Close goes back to the live view. Never starts a run, answers a gate or calls a model.
+// speed, in the replay mode ("Replay of run …"); Close leaves it. The card is a panel (#441:
+// data-city-panel="agents" or "replay", its chevron; minimized it keeps updating), its runs' colours
+// are the legend's rows (city.setLegend). Never starts a run, answers a gate or calls a model.
 // Uses app.js globals at call time: api, esc, errMsg, showRun. Browser: window.ProjectCityAgents.
 (() => {
   const POLL_MS = 5000;
@@ -64,7 +68,13 @@
       ${scene.cranes.length ? `<p class="small muted">${t('project_city_agents.buildings_with_uncommitted_changes', { count: scene.cranes.length })}</p>` : ''}`;
   }
 
-  function attach(city, { projectId }) {
+  // the legend's rows: each run's colour, the collisions' red (#440: the colours Live and a replay paint)
+  function legendHtml(d) {
+    const row = (colour, label) => `<li><i class="r3d-dot" style="--c:${esc(colour)}"></i><span>${esc(label)}</span></li>`;
+    return `<b>${t('project_city_agents.agents_at_work')}</b><ul>${d.runs.map((r) => row(r.colour, t('project_city_agents.run_id', { id: short(r.id) }))).join('')}${(d.collisions || []).length ? row(CityAgents.COLLISION_COLOUR, t('project_city_agents.collision_risk')) : ''}</ul>`;
+  }
+
+  function attach(city, { projectId, live = true }) {
     const el = document.createElement('div');
     el.className = 'r3d-card pca';
     el.setAttribute('data-testid', 'city-agents');
@@ -75,12 +85,14 @@
     let seq = 0;
     let replay = null; // { runId, player, scale, timer }
     let layered = ''; // the layer set on the city (JSON), '' for none
+    let legended = ''; // the legend's rows set on the city
+    let poll = null; // the live poll, while Live is on
     let destroyed = false;
     const layout = () => city.layout || window.ProjectCity?.current()?.layout || null;
 
-    // the live answer, or the replay's frame as a single run on the city
+    // the live answer (Live on), or the replay's frame as a single run on the city
     function data() {
-      if (!replay) return answer;
+      if (!replay) return live ? answer : null;
       const f = replay.player.frame();
       return { projectId, runs: [{ id: replay.runId, colour: REPLAY_COLOUR, agents: f.last, trail: CityAgents.trailOf(f.touches), dirty: [] }], collisions: [] };
     }
@@ -96,6 +108,12 @@
         ProjectCity.overlay(LAYER, key ? JSON.parse(key) : null);
         layered = key;
       }
+      const rows = key ? legendHtml(d) : '';
+      if (rows !== legended) {
+        city.setLegend?.(LAYER, rows || null);
+        legended = rows;
+      }
+      el.dataset.cityPanel = replay ? 'replay' : 'agents'; // #440: the replay mode's panel, or Live's
       const seek = tick && replay && el.querySelector('[data-pca-seek]');
       if (seek) {
         if (document.activeElement !== seek) seek.value = String(replay.player.time);
@@ -104,18 +122,22 @@
         el.querySelector('.pca-body').innerHTML = bodyHtml(d, scene, projectId);
         return;
       }
+      const chev = (title) => window.ProjectCityPanels?.chevron(title) || '';
+      const replayTitle = replay ? `${t('project_city_agents.replay_of_run')} ${short(replay.runId)}` : '';
       const head = replay
-        ? `<div class="pca-head"><b>${t('project_city_agents.replay_of_run')} ${esc(short(replay.runId))}</b><button type="button" class="link-btn" data-pca-close data-testid="city-replay-close">${t('common.close')}</button></div>
-          <div class="pca-replay">
+        ? `<div class="pca-head pc-panel-head"><b>${esc(replayTitle)}</b><span class="r3d-grow"></span><button type="button" class="link-btn" data-pca-close data-testid="city-replay-close">${t('common.close')}</button>${chev(replayTitle)}</div>
+          <div data-city-panel-body><div class="pca-replay">
             <button type="button" class="btn sm" data-pca-play data-testid="city-replay-play">${replay.player.playing ? t('project_city_agents.pause') : t('project_city_agents.play')}</button>
             <input type="range" min="0" max="${replay.player.duration}" value="${replay.player.time}" data-pca-seek data-testid="city-replay-timeline" aria-label="${t('project_city_agents.replay_timeline')}">
             <select data-pca-speed data-testid="city-replay-speed" aria-label="${t('project_city_agents.replay_speed')}">${CityAgents.SPEEDS.map((s) => `<option value="${s}"${s === replay.player.speed ? ' selected' : ''}>${s}×</option>`).join('')}</select>
             <small class="muted" data-pca-clock>${clock(replay.player.time / replay.scale)} / ${clock(replay.player.duration / replay.scale)}</small>
           </div>`
-        : `<div class="pca-head"><b>${t('project_city_agents.agents_at_work')}</b>${answer && answer.runs.length ? `<small class="muted">${t('project_city_agents.runs_in_progress', { count: answer.runs.length })}</small>` : ''}</div>`;
+        : `<div class="pca-head pc-panel-head"><b>${t('project_city_agents.agents_at_work')}</b>${answer && answer.runs.length ? `<small class="muted">${t('project_city_agents.runs_in_progress', { count: answer.runs.length })}</small>` : ''}<span class="r3d-grow"></span>${chev(t('project_city_agents.agents_at_work'))}</div>
+          <div data-city-panel-body>`;
       const body = error ? `<p class="small" role="alert">${t('project_city_agents.could_not_read_the_agents')} ${esc(error)}</p>`
         : d ? bodyHtml(d, scene, projectId) : `<p class="muted small">${t('project_city_agents.looking_for_agents_at_work')}</p>`;
-      el.innerHTML = `${head}<div class="pca-body">${body}</div>`;
+      el.innerHTML = `${head}<div class="pca-body">${body}</div></div>`;
+      city.applyUi?.(); // the mode's panels and their states (#440, #441)
     }
 
     function stopReplay() {
@@ -123,10 +145,44 @@
       replay = null;
     }
 
+    // the replay's mode left (its Close, Esc, another mode): no timeline, no trail, no tick
+    function endReplay() {
+      stopReplay();
+      if (live) refresh(); else draw();
+    }
+
+    function startPoll() {
+      if (poll) return;
+      poll = setInterval(() => { if (el.isConnected && !replay) refresh(); }, POLL_MS);
+      poll?.unref?.(); // under Node (the renderer's tests) the poll never keeps the process alive
+    }
+    function stopPoll() {
+      clearInterval(poll);
+      poll = null;
+    }
+
+    // Live (#440): Explore's switch; on, the agents at work and their poll; off (or another mode), none
+    function goLive() {
+      city.setMode?.('live', { title: t('project_city_modes.live'), onLeave: stopLive });
+      live = true;
+      startPoll();
+      refresh();
+    }
+    function stopLive() {
+      live = false;
+      stopPoll();
+      seq++;
+      answer = null;
+      error = null;
+      draw();
+    }
+
     function startReplay(answerReplay) {
       stopReplay();
       const player = new CityAgents.CityReplay(answerReplay.touches);
       replay = { runId: answerReplay.runId, player, scale: Math.max(1, player.duration / REPLAY_MS), timer: null };
+      // #440: the replay's mode, alone on the city (Live goes)
+      city.setMode?.('replay', { title: `${t('project_city_agents.replay_of_run')} ${short(replay.runId)}`, onLeave: endReplay });
       const r = replay;
       r.timer = setInterval(() => {
         if (el.isConnected === false) return stopReplay(); // the card left the screen
@@ -139,9 +195,9 @@
     }
 
     async function refresh() {
-      if (destroyed) return;
-      const mine = ++seq;
       const want = pending && pending.projectId === projectId ? pending.runId : null;
+      if (destroyed || (!want && !live)) return; // Live off: architecture:agents is not read
+      const mine = ++seq;
       try {
         const next = await api.architectureAgents(want ? { projectId, runId: want } : { projectId });
         if (destroyed || mine !== seq) return;
@@ -164,7 +220,7 @@
       const run = e.target.closest('[data-pca-run]');
       if (run) { showRun(run.dataset.pcaRun); return; }
       if (!replay) return;
-      if (e.target.closest('[data-pca-close]')) { stopReplay(); refresh(); return; }
+      if (e.target.closest('[data-pca-close]')) { endReplay(); city.closeMode?.(); return; }
       if (e.target.closest('[data-pca-play]')) {
         if (replay.player.playing) replay.player.pause(); else replay.player.play();
         draw();
@@ -176,10 +232,17 @@
     el.addEventListener('change', (e) => {
       if (replay && e.target.matches('[data-pca-speed]')) { replay.player.setSpeed(+e.target.value); draw(); }
     });
+    // the header's Live switch (project-city-modes.js draws it): a choice made in the city, so Close no longer goes back
+    const onLive = (e) => {
+      if (!e.target.matches?.('[data-pc-live]')) return;
+      city.back = null;
+      if (e.target.checked) goLive();
+      else if (city.leaveMode) city.leaveMode();
+      else stopLive();
+    };
+    city.el.addEventListener('change', onLive);
 
-    // live: polled while the city is on screen; a replay plays on its own clock
-    const poll = setInterval(() => { if (el.isConnected && !replay) refresh(); }, POLL_MS);
-    poll?.unref?.(); // under Node (the renderer's tests) the poll never keeps the process alive
+    // live: polled while Live is on and the city on screen; a replay plays on its own clock
     const handle = {
       el,
       projectId,
@@ -187,16 +250,19 @@
       destroy() {
         if (destroyed) return;
         destroyed = true;
-        clearInterval(poll);
+        stopPoll();
         stopReplay();
         handles.delete(handle);
+        city.el.removeEventListener('change', onLive);
+        city.setLegend?.(LAYER, null);
         if (layered) ProjectCity.overlay(LAYER, null);
         el.remove();
       },
     };
     handles.add(handle);
     draw();
-    refresh();
+    if (live) goLive();
+    else refresh(); // a replay asked before the City was drawn
     return handle;
   }
 

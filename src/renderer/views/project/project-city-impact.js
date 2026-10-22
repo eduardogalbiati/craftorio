@@ -10,8 +10,10 @@
 // average hit rate with the section against without (city-impact-section-rate, #429). "Show the stage on the map" (showStage(projectId,
 // stage)) colours each item of a roadmap stage in its colour and a building two items would change in
 // red (#150), listed in data-testid="city-impact-conflicts". The legend of the city
-// (project-city-legend) gets the overlay's rows. Close removes the layer. No model call: the Product
-// Owner's saved answers are read (po:history), never asked again.
+// (project-city-legend) gets the overlay's rows (city.setLegend). Each show puts the city in the
+// impact or the stage mode (#440, project-city-modes.js: "Issue #n", "Stage <name>"), whose leaving
+// is Close: the layer, the card and the rows go. The card is a panel (#441: data-city-panel="impact",
+// its chevron). No model call: the Product Owner's saved answers are read (po:history), never asked again.
 // Uses app.js globals at call time: api, esc, errMsg. Browser: window.ProjectCityImpact.
 (() => {
   const LAYER = 'impact';
@@ -106,6 +108,7 @@
     const el = document.createElement('div');
     el.className = 'r3d-card pci hidden';
     el.setAttribute('data-testid', 'city-impact');
+    el.setAttribute('data-city-panel', 'impact'); // #440: the impact and stage modes' card; #441: its chevron
     el.setAttribute('aria-live', 'polite');
     city.el.appendChild(el);
     let request = null; // what to show: { issue } or { stage }
@@ -118,24 +121,9 @@
     const repoFiles = () => (city.model?.buildings || []).map((b) => b.path);
     const layout = () => city.layout || null;
 
-    // the legend of the city keeps the overlay's rows (the city redraws its legend on each paint)
-    function decorateLegend() {
-      const box = city.el.querySelector('[data-testid="project-city-legend"]');
-      if (!box) return;
-      const old = box.querySelector('[data-pci-legend]');
-      const html = legend.length ? `<b>${t('project_city_impact.impact')}</b><ul>${legend.map((l) => `<li>${dot(l.colour)}<span title="${esc(l.label)}">${esc(l.label)}</span></li>`).join('')}</ul>` : '';
-      if (old && old.dataset.html === html) return;
-      if (old) old.remove();
-      if (!html) return;
-      const div = document.createElement('div');
-      div.className = 'pci-legend';
-      div.setAttribute('data-pci-legend', '');
-      div.dataset.html = html;
-      div.innerHTML = html;
-      box.appendChild(div);
-    }
-    const observer = typeof MutationObserver === 'function' ? new MutationObserver(() => decorateLegend()) : null;
-    observer?.observe(city.el, { childList: true, subtree: true });
+    // the overlay's rows in the city's legend, in place of Colour by's (#440: gone with the mode)
+    const legendHtml = () => (legend.length ? `<div class="pci-legend" data-pci-legend><b>${t('project_city_impact.impact')}</b><ul>${legend.map((l) => `<li>${dot(l.colour)}<span title="${esc(l.label)}">${esc(l.label)}</span></li>`).join('')}</ul></div>` : null);
+    const decorateLegend = () => city.setLegend?.(LAYER, legendHtml());
 
     const expected = (issue, changed = []) => CityImpact.expectedFiles({ body: issue.body, poFiles: poFilesOf(data.conversation, issue.number), changed, files: repoFiles(), plan: data.plan });
     const pathsOf = (p) => [...p.files, ...p.newFiles].map((f) => f.path);
@@ -175,7 +163,13 @@
       return { html: stageMarkup({ name: stage.name || '', items, conflicts: foot.conflicts, titles, total }), highlight: foot.highlight };
     }
 
+    // the card's markup; then the mode's panels and their states (#440, #441)
     function draw() {
+      drawCard();
+      city.applyUi?.();
+    }
+
+    function drawCard() {
       if (destroyed) return;
       el.classList.toggle('hidden', !request);
       if (!request) {
@@ -186,15 +180,24 @@
         el.innerHTML = '';
         return;
       }
+      const title = request.stage ? t('project_city_impact.stage_footprint') : t('project_city_impact.impact_preview');
       const close = `<button type="button" class="link-btn" data-pci-close data-testid="city-impact-close">${t('common.close')}</button>`;
-      const head = `<div class="pci-head"><b>${request.stage ? t('project_city_impact.stage_footprint') : t('project_city_impact.impact_preview')}</b>${close}</div>`;
-      if (error) { el.innerHTML = `${head}<p class="small" role="alert">${t('project_city_impact.could_not_read_the_preview')} ${esc(error)}</p>`; return; }
-      if (!data || !layout()) { el.innerHTML = `${head}<p class="muted small">${t('project_city_impact.reading_the_issue_s_expected_files')}</p>`; return; }
+      const head = `<div class="pci-head pc-panel-head"><b>${esc(title)}</b><span class="r3d-grow"></span>${close}${window.ProjectCityPanels?.chevron(title) || ''}</div>`;
+      const body = (html) => `${head}<div data-city-panel-body>${html}</div>`;
+      if (error) { el.innerHTML = body(`<p class="small" role="alert">${t('project_city_impact.could_not_read_the_preview')} ${esc(error)}</p>`); return; }
+      if (!data || !layout()) { el.innerHTML = body(`<p class="muted small">${t('project_city_impact.reading_the_issue_s_expected_files')}</p>`); return; }
       const view = request.stage ? stageView() : issueView();
       ProjectCity.overlay(LAYER, { highlight: view.highlight });
       layered = true;
-      el.innerHTML = `${head}${view.html}`;
+      el.innerHTML = body(view.html);
       decorateLegend();
+    }
+
+    // Close: nothing of the preview stays (its layer, its card, its legend rows)
+    function clear() {
+      seq++;
+      request = null;
+      draw();
     }
 
     async function show(req) {
@@ -202,6 +205,15 @@
       request = req;
       data = null;
       error = null;
+      // #440: an issue's or a stage's mode replaces the mode on screen (the previous preview's rows go with show's draw)
+      city.setMode?.(req.stage ? 'stage' : 'impact', {
+        title: req.stage ? t('project_city_modes.title_stage', { name: req.stage.name || '' }) : t('project_city_modes.title_issue', { number: req.issue?.number ?? '' }),
+        onLeave: clear,
+      });
+      legend = [];
+      decorateLegend();
+      if (layered) ProjectCity.overlay(LAYER, null);
+      layered = false;
       draw();
       try {
         const [impact, conversation, ran] = await Promise.all([
@@ -227,7 +239,7 @@
     }
 
     el.addEventListener('click', (e) => {
-      if (e.target.closest('[data-pci-close]')) { seq++; request = null; draw(); }
+      if (e.target.closest('[data-pci-close]')) { clear(); city.closeMode?.(); }
     });
     const offLayout = city.onLayout(() => draw());
     const handle = {
@@ -236,9 +248,9 @@
       destroy() {
         if (destroyed) return;
         destroyed = true;
-        observer?.disconnect();
         offLayout?.();
         handles.delete(handle);
+        city.setLegend?.(LAYER, null);
         if (layered) ProjectCity.overlay(LAYER, null);
         el.remove();
       },

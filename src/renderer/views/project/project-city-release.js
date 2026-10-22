@@ -9,12 +9,17 @@
 // holds the header (headerMarkup: the counts by status, district and zone, the two-tag picker, the
 // filter by issue through the commits that name it) and "Save image": a PNG of the city with the
 // project, the release and the counts in a caption, for release notes. Close draws the project's
-// own city again. No model call.
+// own city again. A release puts the city in its mode (#440, project-city-modes.js: "Release <from> →
+// <to>", no Live, no notes of today's plan) whose legend lists the release's colours (city.setLegend);
+// the card is a panel (#441: data-city-panel="release", its chevron). No model call.
 // Uses app.js globals at call time: api, esc, errMsg. Browser: window.ProjectCityRelease.
 (() => {
   const LAYER = 'release';
   const GHOST = '#9aa3b2';
   const CAPTION_PX = 40;
+  // the legend's rows (#440), in the order of the header's counts
+  const STATUSES = ['added', 'changed', 'renamed', 'removed'];
+  const LEGEND_LABEL = { added: 'project_city_release.legend_added', changed: 'project_city_release.legend_changed', renamed: 'project_city_release.legend_renamed', removed: 'project_city_release.legend_removed' };
   const handles = new Set();
   let pending = null; // { projectId, to, from }: the release asked from the Releases screen or a run
 
@@ -99,6 +104,7 @@
     const el = document.createElement('div');
     el.className = 'r3d-card pci pcr hidden';
     el.setAttribute('data-testid', 'city-release');
+    el.setAttribute('data-city-panel', 'release'); // #440: the release mode's card; #441: its chevron
     el.setAttribute('aria-live', 'polite');
     city.el.appendChild(el);
     let request = null; // { to, from }
@@ -133,32 +139,55 @@
       if (was && city.model === was) city.reload();
     }
 
+    // #440: the mode's title, "Release <from> → <to>" once the release is read
+    const enterMode = () => city.setMode?.('release', {
+      title: data?.from && data?.to ? t('project_city_modes.title_release', { from: data.from, to: data.to }) : t('project_city_modes.title_release_to', { to: request?.to || '' }),
+      onLeave: close,
+    });
+
+    // the legend's rows: the colours the release paints (added, the change ramp, renamed, removed as ghosts)
+    function legendHtml(counts) {
+      const ramp = `<i class="pcr-ramp" style="--ramp:linear-gradient(90deg, ${esc(CityRelease.CHANGE_RAMP.join(', '))})"></i>`;
+      const rows = STATUSES.filter((s) => counts[s] > 0).map((s) => `<li>${s === 'changed' ? ramp : dot(statusColour()[s])}<span>${t(LEGEND_LABEL[s])}</span><small>${counts[s]}</small></li>`);
+      return rows.length ? `<b>${t('project_city_release.changes')}</b><ul>${rows.join('')}</ul>` : null;
+    }
+
+    // the card's markup; then the mode's panels and their states (#440, #441)
     function draw() {
+      drawCard();
+      city.applyUi?.();
+    }
+
+    function drawCard() {
       if (destroyed) return;
       el.classList.toggle('hidden', !request);
       if (!request) {
+        city.setLegend?.(LAYER, null);
         if (layered) ProjectCity.overlay(LAYER, null);
         layered = false;
         el.innerHTML = '';
         return;
       }
-      const title = data && data.from && data.to ? `Release ${esc(data.to)}` : 'Release';
-      const head = `<div class="pci-head"><b>${title}</b><button type="button" class="link-btn" data-pcr-close data-testid="city-release-close">${t('common.close')}</button></div>`;
-      if (error) { el.innerHTML = `${head}<p class="small" role="alert">${t('project_city_release.could_not_read_the_release')} ${esc(error)}</p>`; return; }
-      if (!data) { el.innerHTML = `${head}<p class="muted small">${t('project_city_release.reading_the_release_and_the_city')}</p>`; return; }
+      const title = data && data.from && data.to ? `Release ${data.to}` : 'Release';
+      const head = `<div class="pci-head pc-panel-head"><b>${esc(title)}</b><span class="r3d-grow"></span><button type="button" class="link-btn" data-pcr-close data-testid="city-release-close">${t('common.close')}</button>${window.ProjectCityPanels?.chevron(title) || ''}</div>`;
+      const body = (html) => `${head}<div data-city-panel-body>${html}</div>`;
+      if (error) { el.innerHTML = body(`<p class="small" role="alert">${t('project_city_release.could_not_read_the_release')} ${esc(error)}</p>`); return; }
+      if (!data) { el.innerHTML = body(`<p class="muted small">${t('project_city_release.reading_the_release_and_the_city')}</p>`); return; }
+      enterMode();
       if (data.state !== 'ok') {
         // two tags or commits or more: another pair can still be picked
         const tags = data.tags || [];
-        el.innerHTML = `${head}<p class="small" role="alert">${esc(stateText(data))}</p>${tags.length > 1 ? pickerMarkup(tags, data.from, data.to) : ''}`;
+        el.innerHTML = body(`<p class="small" role="alert">${esc(stateText(data))}</p>${tags.length > 1 ? pickerMarkup(tags, data.from, data.to) : ''}`);
         return;
       }
-      if (!city.layout || city.model !== applied) { el.innerHTML = `${head}<p class="muted small">${t('project_city_release.laying_out_the_city_at_from', { from: esc(data.from) })}</p>`; return; }
+      if (!city.layout || city.model !== applied) { el.innerHTML = body(`<p class="muted small">${t('project_city_release.laying_out_the_city_at_from', { from: esc(data.from) })}</p>`); return; }
       const list = changes();
       const overlay = CityRelease.releaseOverlay(list);
       header = CityRelease.releaseHeader(city.layout, list);
       ProjectCity.overlay(LAYER, { highlight: overlay.highlight, markers: overlay.ghosts.map((p) => ({ path: p, colour: GHOST, label: 'removed' })) });
       layered = true;
-      el.innerHTML = `${head}${headerMarkup({ project: projectName(), from: data.from, to: data.to, header, tags: data.tags || [], issues: issuesOf(), issue })}${note ? `<p class="muted small" role="status">${esc(note)}</p>` : ''}`;
+      city.setLegend?.(LAYER, legendHtml(header.counts || {}));
+      el.innerHTML = body(`${headerMarkup({ project: projectName(), from: data.from, to: data.to, header, tags: data.tags || [], issues: issuesOf(), issue })}${note ? `<p class="muted small" role="status">${esc(note)}</p>` : ''}`);
     }
 
     function stateText(d) {
@@ -176,6 +205,8 @@
       error = null;
       note = '';
       issue = req.issue ?? null;
+      // #440: the release's mode replaces the one on screen before its city is drawn (no notes of today's plan on it)
+      enterMode();
       draw();
       try {
         const answer = await api.architectureRelease({ projectId, from: request.from, to: request.to });
@@ -207,7 +238,7 @@
     }
 
     el.addEventListener('click', (e) => {
-      if (e.target.closest('[data-pcr-close]')) close();
+      if (e.target.closest('[data-pcr-close]')) { close(); city.closeMode?.(); }
       else if (e.target.closest('[data-pcr-save]')) saveImage(e.target.closest('[data-pcr-save]'));
     });
     el.addEventListener('change', (e) => {
@@ -225,7 +256,7 @@
     });
     const offLayout = city.onLayout(() => {
       // another city drawn (the tab read the project's again): the release is gone from the map
-      if (request && applied && city.model !== applied) { seq++; request = null; data = null; applied = null; }
+      if (request && applied && city.model !== applied) { seq++; request = null; data = null; applied = null; city.leaveMode?.(); }
       draw();
     });
     const handle = {
@@ -237,6 +268,7 @@
         handles.delete(handle);
         el.remove();
         offLayout?.();
+        city.setLegend?.(LAYER, null);
         if (layered) ProjectCity.overlay(LAYER, null);
       },
     };

@@ -5,7 +5,8 @@
 // again"), then the plan's validation problems, the edges not read, and the aggregation of small
 // files over 5,000. html({ model, validation, layout, analysis, ready }) → the notes' HTML ('' when
 // there is none); `analysis`: { running, step, error, estimate, estimateTitle } from the Architecture
-// tab; `ready`: whether the action can start (the tab gave the city an onAnalyze).
+// tab; `ready`: whether the action can start (the tab gave the city an onAnalyze). The notes are one
+// panel (#441: data-city-panel="notes", "City plan" with its chevron, project-city-panels.js).
 // Uses app.js globals at call time: esc. Browser: window.ProjectCityNotes.
 (() => {
   const STALE_COVERAGE = 0.9; // under this share of matched files, the plan is older than the code
@@ -52,7 +53,11 @@
     const notRead = typeof model.edges === 'string' ? [model.edges] : model.edgesNotRead || [];
     if (notRead.length) notes.push(note('project-city-edges', '', `<b>${t('project_city_notes.arcs')}</b> ${esc(notRead.join(', '))}${t('project_city_notes.hovering_those_files_draws_no_arc')}`));
     if (layout.aggregated) notes.push(note('project-city-aggregated', '', `<b>${t('project_city_notes.over_5_000_files')}</b> ${esc(layout.note)}`));
-    return notes.length ? `<div class="pc-notes">${notes.join('')}</div>` : '';
+    if (!notes.length) return '';
+    // #441: one panel, "City plan", its chevron folds the notes to its title row
+    const title = t('project_city_notes.city_plan');
+    const head = `<div class="r3d-card pc-panel-head pc-notes-head"><b>${esc(title)}</b><span class="r3d-grow"></span>${window.ProjectCityPanels?.chevron(title) || ''}</div>`;
+    return `<div class="pc-notes" data-city-panel="notes">${head}<div class="pc-notes-body" data-city-panel-body>${notes.join('')}</div></div>`;
   }
 
   window.ProjectCityNotes = { html };
