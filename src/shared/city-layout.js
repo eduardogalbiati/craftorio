@@ -567,6 +567,8 @@
     MAX_BUILDINGS,
     neighbours,
     perLineOf,
+    SIDEWALK,
+    SIDEWALK_AV,
     squarify,
     STREET,
     stripLayout,

@@ -9,15 +9,12 @@
 //   texture and its name along its avenue side, per district a sidewalk around a raised plate
 //   (instanced, round corners of a fixed radius: geometry.js roundedMaterial) with its name, its file
 //   count and a lawn in front of its buildings (props.js lawnsOf).
-// - The city's life (#450, poc/project-city-v2.html; the switch of poc/city-modes.html): the trees,
-//   lamps and benches (Props, props.js propsOf, instanced per part kind), the lamps' pools of light at
-//   night (Pools), the cars of the avenues with their lights (Traffic), the sky (a gradient dome and
-//   the stars around the camera, clouds over the city: Sky), a moonlight and a fill light (Lights).
-//   City life off (the store's `cityLife`) shrinks the props' instance matrices and hides the cars,
-//   pools and clouds, the lights at LIFE_DIM, without rebuilding the city; on, the cars drive and the
-//   clouds drift (a frame after another, unless the system asks for reduced motion). The Glow (the
-//   store's `glow`): a bloom pass over the lights (three's UnrealBloomPass, from the bundle), else the
-//   scene drawn as it is. No prop takes the pointer; a lawn's trees stay below its lowest building.
+// - The city's life (#450, poc/project-city-v2.html; the switch of poc/city-modes.html): the props,
+//   pools, cars, sky and Glow of life.jsx, a moonlight and a fill light (Lights). City life off (the
+//   store's `cityLife`) shrinks the props' instance matrices and hides the cars, pools and clouds, the
+//   lights at LIFE_DIM, without rebuilding the city; on, a frame after another (unless the system asks
+//   for reduced motion), but none while the city is off screen (the store's `paused`, main.jsx). The
+//   Glow (the store's `glow`): the bloom pass, else the scene drawn as it is.
 // - Buildings (#449, poc/project-city-v2.html): each file is src/shared/city-buildings.js's archetype
 //   and parts (buildingsOf, once per layout), one InstancedMesh per part kind (KINDS, geometry.js
 //   partGeometries); the walls carry the windows (geometry.js windowMaterial: `aWin` lit by churn,
@@ -44,18 +41,14 @@ import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useFrame, useThree } from '@react-three/fiber';
 import { MapControls } from 'three/addons/controls/MapControls.js';
-import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
-import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-import { buildingBox, flatPlane, groundTexture, labelTexture, mastBox, mix, partGeometries, poolTexture, rbox, roundedMaterial, skyMaterial, stars, unitBox, waterMaterial, windowMaterial } from './geometry.js';
-import { carsOf, crosswalksOf, lawnsOf, PLATE_TOP, propsOf, SIDEWALK_AV, SIDEWALK_TOP, ZONE_TOP } from './props.js';
+import { buildingBox, flatPlane, groundTexture, KINDS, labelTexture, mastBox, mix, partGeometries, rbox, roundedMaterial, unitBox, waterMaterial, windowMaterial } from './geometry.js';
+import { Glow, LIFE_DIM, noRaycast, Pools, Props, Sky, Traffic, useDisposable } from './life.jsx';
+import { crosswalksOf, inset, lawnsOf, PLATE_TOP, SIDEWALK_AV, SIDEWALK_TOP, STREET, ZONE_TOP } from './props.js';
 import { useStore } from './store.js';
-import { buildingOf, FLOOR_H, hashOf, rngOf, WIN_PITCH } from '../../shared/city-buildings.js';
+import { buildingOf, FLOOR_H, hashOf, WIN_PITCH } from '../../shared/city-buildings.js';
 
 const Y0 = PLATE_TOP; // the buildings stand on the district plates (props.js has the slabs' tops)
 const QUAY = 6, SHORE = 170; // the floor past the ring road, the water past the floor (the POC's quay and shore)
-const STREET = 6; // between districts (city-layout.js)
 const HOME_DIR = new THREE.Vector3(0.5, 1.15, 1).normalize(); // the home view: from the south-east, 46 degrees up
 const IDLE_MS = 20000, IDLE_TURN = 0.04, UP = new THREE.Vector3(0, 1, 0); // the idle camera: after 20 s, radians a second
 const LOD_LABELS = 0.8, LOD_DETAIL = 0.5; // shares of the home distance
@@ -65,7 +58,6 @@ const DIM = 0.8; // how far they go toward the theme's dim colour
 const LIT = 0.3; // how far a hovered building's connections go toward the ink
 const tmp = new THREE.Object3D();
 const tint = new THREE.Color();
-const noRaycast = () => null; // a mesh that never takes the pointer
 
 /** The distance of the home view: the whole city in a frame of `aspect` (width / height). */
 export function homeOf(bounds, aspect) {
@@ -87,16 +79,6 @@ export function fitDistance(camera, target, dir, rect, top) {
     if (points.every((p) => { v.copy(p).project(probe); return Math.abs(v.x) < 0.94 && v.y < 0.76 && v.y > -0.95; })) return d;
   }
   return 4000;
-}
-
-// a mesh's geometry and material (or a list, or an object of them), freed when the component goes
-function useDisposable(make, deps) {
-  const value = useMemo(make, deps); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => () => {
-    const all = Array.isArray(value) ? value : value?.dispose ? [value] : Object.values(value || {});
-    for (const x of all) x?.dispose?.();
-  }, [value]);
-  return value;
 }
 
 // the POC's slab: a rounded box over a ground rect, its top at `top`, `thick` tall
@@ -122,8 +104,6 @@ function GroundLabel({ text, sub, strip, y, ink, T, centre = false, visible = tr
     </mesh>
   );
 }
-
-const inset = (r, m) => ({ x: r.x + m, z: r.z + m, w: Math.max(0, r.w - 2 * m), d: Math.max(0, r.d - 2 * m) });
 
 // ---------- the ground ----------
 
@@ -233,20 +213,6 @@ export function buildingColours(layout, paint, { focus = null, hoverLit = null, 
   });
 }
 
-// the part kinds (poc/project-city-v2.html KINDS): `detail` kinds show from LOD level 1, `pick` kinds
-// take the pointer (the walls and the roofs), `params` their standard material's
-const KINDS = {
-  box: { pick: true },
-  wedge: { pick: true, params: { roughness: 0.75 } },
-  barrel: { pick: true, params: { roughness: 0.6 } },
-  dome: { pick: true, params: { roughness: 0.35, metalness: 0.1 } },
-  cyl: { detail: true, params: { roughness: 0.5, metalness: 0.15 } },
-  cone: { detail: true, params: { roughness: 0.6 } },
-  green: { detail: true, params: { roughness: 0.9 } },
-  mast: { detail: true, params: { roughness: 0.5 } },
-  cap: { detail: true, shadow: false, params: { roughness: 0.4 } },
-  light: { detail: true, shadow: false, basic: true },
-};
 const ACCESSORY = new Set(['amber', 'cap', 'green', 'metal', 'warn']); // the roles a greyed building greys too
 const built = new WeakMap();
 
@@ -604,187 +570,6 @@ export function focusOfAll(layout, targets, relationsOf, tops) {
   };
 }
 
-// ---------- the city's life (#450) ----------
-
-const LIFE_KINDS = ['box', 'cyl', 'green', 'light', 'mast']; // the props' part kinds (KINDS)
-const HIDDEN = 0.0001; // City life off shrinks the props to this: the city is not rebuilt (poc/city-modes.html applyLife)
-const LIFE_DIM = 0.72; // and the lights go down to this share
-
-// the trees, lamps and benches (props.js propsOf): one instanced mesh per part kind, made with the
-// layout; City life switches them by their matrices only; the trees and lamps show from LOD level 1
-// (the POC's detail kinds); none takes the pointer
-function Props({ layout, T, level, life, store }) {
-  const props = propsOf(layout);
-  const geos = useDisposable(() => partGeometries(), []);
-  const mats = useDisposable(() => Object.fromEntries(LIFE_KINDS.map((k) => [k, KINDS[k].basic ? new THREE.MeshBasicMaterial({ toneMapped: false }) : new THREE.MeshStandardMaterial({ roughness: 0.7, ...KINDS[k].params })])), []);
-  const set = useMemo(() => {
-    const counts = Object.fromEntries(LIFE_KINDS.map((k) => [k, 0]));
-    return { slots: props.map((p) => counts[p.g]++), counts };
-  }, [props]);
-  const meshes = useMemo(() => Object.fromEntries(LIFE_KINDS.map((k) => {
-    const m = new THREE.InstancedMesh(geos[k], mats[k], Math.max(1, set.counts[k]));
-    Object.assign(m, { count: set.counts[k], castShadow: KINDS[k].shadow !== false, receiveShadow: true, frustumCulled: false, raycast: noRaycast });
-    return [k, m];
-  })), [set, geos, mats]);
-  useEffect(() => () => { for (const m of Object.values(meshes)) m.dispose(); }, [meshes]);
-  useLayoutEffect(() => {
-    const role = { bench: T.plinth, lamp: T.lamp, post: T.mast, trunk: T.trunk };
-    props.forEach((p, i) => meshes[p.g].setColorAt(set.slots[i], tint.set(p.role === 'leaf' ? mix(T.garden, '#000000', p.shade) : role[p.role])));
-    for (const m of Object.values(meshes)) if (m.instanceColor) m.instanceColor.needsUpdate = true;
-    store.invalidate();
-  }, [meshes, props, set, T, store]);
-  useLayoutEffect(() => {
-    const s = life ? 1 : HIDDEN;
-    quat.identity();
-    props.forEach((p, i) => meshes[p.g].setMatrixAt(set.slots[i], m4.compose(at3.set(p.x, p.y, p.z), quat, scale3.set(p.w * s, p.h * s, p.d * s))));
-    for (const m of Object.values(meshes)) m.instanceMatrix.needsUpdate = true;
-    store.invalidate();
-  }, [meshes, props, set, life, store]);
-  return (
-    <group>
-      {Object.entries(meshes).map(([k, m]) => <primitive key={`${k}:${m.uuid}`} object={m} visible={!KINDS[k].detail || level >= 1} />)}
-    </group>
-  );
-}
-
-// the pools of light under the lamps, at night only (additive soft discs)
-function Pools({ layout, T, life }) {
-  const at = useMemo(() => propsOf(layout).filter((p) => p.pool != null), [layout]);
-  const k = layout.scale || 1;
-  const res = useDisposable(() => {
-    const map = poolTexture();
-    return [flatPlane(), new THREE.MeshBasicMaterial({ map, transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, depthWrite: false }), map];
-  }, []);
-  const ref = useRef();
-  res[1].color.set(T.pool);
-  useLayoutEffect(() => {
-    const m = ref.current;
-    if (!m) return;
-    at.forEach((p, i) => { tmp.position.set(p.x, p.pool + 0.05, p.z); tmp.scale.set(7.5 * k, 1, 7.5 * k); tmp.updateMatrix(); m.setMatrixAt(i, tmp.matrix); });
-    m.instanceMatrix.needsUpdate = true;
-  }, [at, k, T.dark]);
-  if (!at.length || !T.dark) return null;
-  return <instancedMesh key={at.length} ref={ref} args={[res[0], res[1], at.length]} visible={life} frustumCulled={false} raycast={noRaycast} />;
-}
-
-const HEAD = '#fff6d8', TAIL = '#ff5a5a';
-// the cars of the avenues (props.js carsOf), their head and tail lights; they drive while City life
-// is on (and the system does not ask for reduced motion)
-function Traffic({ layout, life, motion }) {
-  const cars = useMemo(() => carsOf(layout).map((c) => ({ ...c })), [layout]);
-  const k = layout.scale || 1;
-  const res = useDisposable(() => [buildingBox(), new THREE.MeshStandardMaterial({ roughness: 0.4, metalness: 0.2 }), new THREE.SphereGeometry(0.5, 12, 10), new THREE.MeshBasicMaterial({ toneMapped: false })], []);
-  const body = useRef(), lights = useRef();
-  const place = () => {
-    const mb = body.current, ml = lights.current;
-    if (!mb || !ml) return;
-    quat.identity();
-    cars.forEach((c, i) => {
-      const along = c.axis === 'x', x = along ? c.x + c.t : c.x + c.off, z = along ? c.z + c.off : c.z + c.t, f = 0.85 * k * c.dir;
-      mb.setMatrixAt(i, m4.compose(at3.set(x, 0.07, z), quat, scale3.set((along ? 1.7 : 0.75) * k, 0.55 * k, (along ? 0.75 : 1.7) * k)));
-      ml.setMatrixAt(i * 2, m4.compose(at3.set(along ? x + f : x, 0.38 * k, along ? z : z + f), quat, scale3.setScalar(0.22 * k)));
-      ml.setMatrixAt(i * 2 + 1, m4.compose(at3.set(along ? x - f : x, 0.38 * k, along ? z : z - f), quat, scale3.setScalar(0.18 * k)));
-    });
-    mb.instanceMatrix.needsUpdate = true;
-    ml.instanceMatrix.needsUpdate = true;
-  };
-  useLayoutEffect(() => {
-    cars.forEach((c, i) => {
-      body.current?.setColorAt(i, tint.set(c.colour));
-      lights.current?.setColorAt(i * 2, tint.set(HEAD));
-      lights.current?.setColorAt(i * 2 + 1, tint.set(TAIL));
-    });
-    for (const m of [body.current, lights.current]) if (m?.instanceColor) m.instanceColor.needsUpdate = true;
-    place();
-  }, [cars]); // eslint-disable-line react-hooks/exhaustive-deps
-  useFrame((_, dt) => {
-    if (!life || !motion || !cars.length) return;
-    const step = Math.min(dt, 0.1);
-    for (const c of cars) c.t = (c.t + c.speed * step + c.length) % c.length;
-    place();
-  });
-  if (!cars.length) return null;
-  return (
-    <group visible={life}>
-      <instancedMesh key={`body:${cars.length}`} ref={body} args={[res[0], res[1], cars.length]} castShadow frustumCulled={false} raycast={noRaycast} />
-      <instancedMesh key={`lights:${cars.length}`} ref={lights} args={[res[2], res[3], cars.length * 2]} frustumCulled={false} raycast={noRaycast} />
-    </group>
-  );
-}
-
-const CLOUDS = 12, STARS = 1600;
-// the sky: a gradient dome and the stars of the night around the camera (as far as it sees), the
-// clouds over the city (with City life: they drift while it is on)
-function Sky({ layout, T, life, motion, uniforms }) {
-  const { camera } = useThree();
-  const b = layout.bounds, sc = Math.max(0.4, b.size / 450); // the POC's clouds were set for a city about 450 wide
-  const dome = useDisposable(() => [new THREE.SphereGeometry(1, 32, 16), skyMaterial()], []);
-  const night = useDisposable(() => stars(STARS, uniforms), [uniforms]);
-  const puff = useDisposable(() => [new THREE.SphereGeometry(0.5, 12, 10), new THREE.MeshStandardMaterial({ roughness: 1, transparent: true, opacity: 0.9 })], []);
-  const clouds = useMemo(() => {
-    const r = rngOf(5);
-    return Array.from({ length: CLOUDS }, () => ({
-      x: (r() - 0.5) * 1100 * sc, z: b.centerZ + (r() - 0.5) * 900 * sc, y: (260 + r() * 90) * sc, speed: (1.2 + r() * 1.6) * sc,
-      blobs: Array.from({ length: 4 }, (_, k) => ({ dx: (k - 1.5) * (9 + r() * 6) * sc, dz: (r() - 0.5) * 10 * sc, dy: r() * 3 * sc, sx: (16 + r() * 14) * sc, sy: (5 + r() * 4) * sc, sz: (11 + r() * 8) * sc })),
-    }));
-  }, [b.centerZ, sc]);
-  dome[1].uniforms.top.value.set(T.skyTop);
-  dome[1].uniforms.horizon.value.set(T.skyHorizon);
-  puff[1].color.set(T.cloud);
-  puff[1].opacity = T.cloudOpacity;
-  const around = useRef(), puffs = useRef();
-  const drift = (dt) => {
-    const m = puffs.current;
-    if (!m) return;
-    let i = 0;
-    quat.identity();
-    for (const c of clouds) {
-      c.x += c.speed * dt;
-      if (c.x > 620 * sc) c.x = -620 * sc;
-      for (const p of c.blobs) m.setMatrixAt(i++, m4.compose(at3.set(b.centerX + c.x + p.dx, c.y + p.dy, c.z + p.dz), quat, scale3.set(p.sx, p.sy, p.sz)));
-    }
-    m.instanceMatrix.needsUpdate = true;
-  };
-  useLayoutEffect(() => drift(0), [clouds]); // eslint-disable-line react-hooks/exhaustive-deps
-  useFrame((_, dt) => {
-    const g = around.current;
-    if (g) { g.position.copy(camera.position); g.scale.setScalar(camera.far * 0.9); }
-    if (life && motion) drift(Math.min(dt, 0.1));
-  });
-  return (
-    <>
-      <group ref={around}>
-        <mesh geometry={dome[0]} material={dome[1]} renderOrder={-1} frustumCulled={false} raycast={noRaycast} />
-        {T.stars && <points geometry={night[0]} material={night[1]} scale={0.95} frustumCulled={false} raycast={noRaycast} />}
-      </group>
-      <instancedMesh ref={puffs} args={[puff[0], puff[1], CLOUDS * 4]} visible={life} frustumCulled={false} raycast={noRaycast} />
-    </>
-  );
-}
-
-// the Glow: a bloom pass over the lit windows, beacons, lamps and lights (the POC's composer); off, the
-// scene is drawn as it is. This takes the frame over from React Three Fiber (priority 1).
-function Glow({ glow, T }) {
-  const { gl, scene, camera, size, invalidate } = useThree();
-  const fx = useMemo(() => {
-    const composer = new EffectComposer(gl);
-    const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.45, 0.55, 0.8);
-    composer.addPass(new RenderPass(scene, camera));
-    composer.addPass(bloom);
-    composer.addPass(new OutputPass());
-    return { composer, bloom };
-  }, [gl, scene, camera]);
-  useEffect(() => () => { fx.bloom.dispose(); fx.composer.dispose(); }, [fx]);
-  useEffect(() => {
-    fx.composer.setPixelRatio(gl.getPixelRatio());
-    fx.composer.setSize(size.width, size.height);
-    invalidate();
-  }, [fx, gl, size, invalidate]);
-  useEffect(() => { fx.bloom.strength = T.bloom; invalidate(); }, [fx, T, glow, invalidate]);
-  useFrame(() => { if (glow) fx.composer.render(); else gl.render(scene, camera); }, 1);
-  return null;
-}
-
 // ---------- lights and camera ----------
 
 function Lights({ layout, T, life }) {
@@ -959,16 +744,16 @@ function Rig({ layout, store, T }) {
 
 /** The whole city: lights, camera, ground, buildings, landmarks, ports, markers, the halos and the arcs. */
 export function CityScene({ store }) {
-  const { layout, layoutKey, paint, tests, level, markers, theme: T, hover, pinned, pins, cityLife = true, glow = true } = useStore(store);
+  const { layout, layoutKey, paint, tests, level, markers, theme: T, hover, pinned, pins, cityLife = true, glow = true, paused = false } = useStore(store);
   const { invalidate } = useThree();
   store.invalidate = invalidate;
   // #450: the time of the water and the stars; with City life on (and motion allowed) the city lives:
-  // a frame after another while the cars drive and the clouds drift
+  // a frame after another while the cars drive and the clouds drift, none while it is off screen
   const uniforms = useMemo(() => ({ uTime: { value: 0 } }), []);
   const motion = useMemo(moves, []);
-  useEffect(() => { invalidate(); }, [cityLife, glow, invalidate]);
+  useEffect(() => { invalidate(); }, [cityLife, glow, paused, invalidate]);
   useFrame(({ clock }) => {
-    if (!cityLife || !motion) return;
+    if (!cityLife || !motion || store.get().paused) return;
     uniforms.uTime.value = clock.elapsedTime;
     invalidate();
   });

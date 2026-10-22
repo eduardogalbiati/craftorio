@@ -13,18 +13,20 @@
 // - crosswalksOf(layout): the zebra stripes on the approaches of the avenues' crossings and ends.
 // - lifeCount(layout, on): how many life props the scene shows (props, cars, lamp pools), 0 when
 //   City life is off (main.jsx stats().props).
+// - inset(rect, m), and the layout's STREET and SIDEWALK_AV (city-layout.js owns them): for scene.jsx too.
 // The same layout always gives the same city (seeded, src/shared/city-buildings.js rngOf); each list
 // is computed once per layout.
 import { rngOf } from '../../shared/city-buildings.js';
+import { SIDEWALK, SIDEWALK_AV, STREET } from '../../shared/city-layout.js';
 
 // the slabs: the floor's top is y = 0; the sidewalk, the zone slab and the district plate stack on it
 export const SIDEWALK_TOP = 0.22, ZONE_TOP = 0.55, PLATE_TOP = 0.95;
-export const SIDEWALK_AV = 2.6; // the sidewalk along a zone's avenue side
-const STREET = 6, SIDEWALK = 1.4; // between districts: a street; inside a plate: a sidewalk (city-layout.js)
+export { SIDEWALK_AV, STREET }; // the layout's sidewalk along a zone's avenue side, its street between districts
 const PLAZA = 0.14; // the most of a plate's depth a lawn takes
 const CAR_COLOURS = ['#e6e8ee', '#b9bfce', '#596079', '#f87171', '#7c9cff', '#facc15', '#4ade80', '#2b3247'];
 
-const inset = (r, m) => ({ x: r.x + m, z: r.z + m, w: Math.max(0, r.w - 2 * m), d: Math.max(0, r.d - 2 * m) });
+/** A rect { x, z, w, d } moved in by `m` on every side (out when negative). */
+export const inset =(r, m) => ({ x: r.x + m, z: r.z + m, w: Math.max(0, r.w - 2 * m), d: Math.max(0, r.d - 2 * m) });
 const cache = (fn) => {
   const memo = new WeakMap();
   return (layout) => {

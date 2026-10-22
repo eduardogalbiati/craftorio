@@ -161,7 +161,7 @@ export function skyMaterial() {
     side: THREE.BackSide, depthWrite: false, fog: false,
     uniforms: { top: { value: new THREE.Color() }, horizon: { value: new THREE.Color() } },
     vertexShader: 'varying float vH; void main() { vH = normalize(position).y; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }', // i18n-ignore
-    fragmentShader: 'uniform vec3 top; uniform vec3 horizon; varying float vH; void main() { gl_FragColor = vec4(mix(horizon, top, pow(clamp(vH, 0.0, 1.0), 0.55)), 1.0); }', // i18n-ignore
+    fragmentShader: 'uniform vec3 top; uniform vec3 horizon; varying float vH; void main() { gl_FragColor = vec4(mix(horizon, top, pow(clamp(vH, 0.0, 1.0), 0.55)), 1.0);\n#include <colorspace_fragment>\n}', // i18n-ignore (linear to the output's colour space: a no-op in the Glow's render target)
   });
 }
 
@@ -184,7 +184,7 @@ export function stars(count, uniforms) {
     transparent: true, depthWrite: false, fog: false,
     uniforms: { uTime: uniforms.uTime },
     vertexShader: 'attribute float phase; attribute float size; uniform float uTime; varying float vA; void main() { vA = 0.5 + 0.5 * sin(uTime * 1.3 + phase); gl_PointSize = size * (0.7 + 0.5 * vA); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }', // i18n-ignore
-    fragmentShader: 'varying float vA; void main() { float d = length(gl_PointCoord - 0.5); if (d > 0.5) discard; gl_FragColor = vec4(0.85, 0.9, 1.0, (0.35 + 0.65 * vA) * (1.0 - d * 1.6)); }', // i18n-ignore
+    fragmentShader: 'varying float vA; void main() { float d = length(gl_PointCoord - 0.5); if (d > 0.5) discard; gl_FragColor = vec4(0.85, 0.9, 1.0, (0.35 + 0.65 * vA) * (1.0 - d * 1.6));\n#include <colorspace_fragment>\n}', // i18n-ignore
   });
   return [geo, mat];
 }
@@ -308,3 +308,18 @@ export function groundTexture(kind, T) {
   groundCache.set(key, tex);
   return tex;
 }
+
+// the part kinds (poc/project-city-v2.html KINDS): `detail` kinds show from LOD level 1, `pick` kinds
+// take the pointer (the walls and the roofs), `params` their standard material's
+export const KINDS = {
+  box: { pick: true },
+  wedge: { pick: true, params: { roughness: 0.75 } },
+  barrel: { pick: true, params: { roughness: 0.6 } },
+  dome: { pick: true, params: { roughness: 0.35, metalness: 0.1 } },
+  cyl: { detail: true, params: { roughness: 0.5, metalness: 0.15 } },
+  cone: { detail: true, params: { roughness: 0.6 } },
+  green: { detail: true, params: { roughness: 0.9 } },
+  mast: { detail: true, params: { roughness: 0.5 } },
+  cap: { detail: true, shadow: false, params: { roughness: 0.4 } },
+  light: { detail: true, shadow: false, basic: true },
+};

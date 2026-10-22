@@ -18,6 +18,8 @@
 //     building's kind, scene.jsx buildingsOf, and whether the overlay greys it; the two switches; the
 //     life props shown, props.js lifeCount, 0 with City life off), unmount() (React Three Fiber gives
 //     the WebGL context back). A switch's update changes the store only: the city is not rebuilt.
+//   While the element is off screen (another tab or view hides it) or the window is hidden, the store's
+//   `paused` stops City life's frames (scene.jsx CityScene).
 import { Component } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Canvas } from '@react-three/fiber';
@@ -87,7 +89,7 @@ function App({ store }) {
 const same = (a, b) => a?.kind === b?.kind && a?.id === b?.id;
 
 function mount(element, { layout, paint, markers = [], tests = true, pins = [], theme, cityLife = true, glow = true, relationsOf, onHover, onPick }) {
-  const store = createStore({ layout, layoutKey: 1, paint, markers, tests, pins: [...pins], theme: cityTheme(theme), cityLife: !!cityLife, glow: !!glow, level: 0, scoreDistrict: null, hover: null, pinned: null, glError: '' });
+  const store = createStore({ layout, layoutKey: 1, paint, markers, tests, pins: [...pins], theme: cityTheme(theme), cityLife: !!cityLife, glow: !!glow, paused: false, level: 0, scoreDistrict: null, hover: null, pinned: null, glError: '' });
   Object.assign(store, {
     tagEls: new Map(),
     tagAnchors: new Map(),
@@ -107,6 +109,13 @@ function mount(element, { layout, paint, markers = [], tests = true, pins = [], 
       onPick?.(next);
     },
   });
+  // off screen (display: none, out of view) or the window hidden: no frame of City life
+  let seen = true;
+  const page = typeof document === 'object' ? document : null;
+  const watch = () => { const paused = !seen || !!page?.hidden; if (paused !== store.get().paused) store.set({ paused }); };
+  const seer = typeof IntersectionObserver === 'function' ? new IntersectionObserver((entries) => { seen = entries[entries.length - 1].isIntersecting; watch(); }) : null;
+  seer?.observe(element);
+  page?.addEventListener('visibilitychange', watch);
   const root = createRoot(element);
   root.render(<App store={store} />);
   return {
@@ -126,7 +135,11 @@ function mount(element, { layout, paint, markers = [], tests = true, pins = [], 
       const buildings = (layout?.buildings || []).map((b, i) => ({ path: b.path, archetype: built[i]?.kind || null, greyed: !!paint?.greyed?.[i] }));
       return { firstFrameMs: store.stats.firstFrameMs, fps: store.stats.fps, buildings, cityLife, glow, props: lifeCount(layout, cityLife) };
     },
-    unmount() { root.unmount(); },
+    unmount() {
+      seer?.disconnect();
+      page?.removeEventListener('visibilitychange', watch);
+      root.unmount();
+    },
   };
 }
 
