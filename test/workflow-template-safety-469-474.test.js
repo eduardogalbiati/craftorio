@@ -107,6 +107,10 @@ test('#469 a ship.build reading release.tag is refused at load when ship.tag hol
   assert.notEqual(err, null, 'agent text must not reach the build through release.tag');
 });
 
+test('#469 a ship.tag holding agent text still loads when the build does not read release', (t) => {
+  assert.equal(errorOf(t, workflow({ transition: '        ship: { tag: "{{ steps.x.output.text }}", build: "npm run build" }\n' })), null);
+});
+
 test('#469 an action with an integer schema-typed output and the github_repo / pr_url filters still loads', (t) => {
   const action = 'gh pr merge {{ steps.ci.output.pr_number }} --repo {{ steps.ci.output.pr_url | github_repo }} --squash'
     + ' && node publish.js --pr-url {{ steps.ci.output.pr_url | pr_url }}';
