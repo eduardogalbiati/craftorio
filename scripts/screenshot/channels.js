@@ -73,8 +73,14 @@ function simulateChannels(ipcMain, keepAwake = null, missing = null, holdOracle 
     if (channel === 'backlog:save-doc') return handle(channel, (e, arg) => fn(e, { ...arg, preview: true }));
     // Archive and Restore (#238) are only recorded in the demo backlog: never call gh/glab
     if (channel === 'backlog:archive' || channel === 'backlog:restore') return handle(channel, (e, arg) => fn(e, { ...arg, simulate: true }));
-    // the diff viewer (#118): a demo branch, since a simulated run has no diff of its own
-    if (channel === 'run:diff') return handle(channel, (e, arg) => demoRunDiff(arg?.commit));
+    // the diff viewer (#118): a demo branch, since a simulated run has no diff of its own; a run whose
+    // developer reported its files (a seeded real run, #429's predicted vs actual) keeps its own diff
+    if (channel === 'run:diff') {
+      return handle(channel, async (e, arg) => {
+        const own = await Promise.resolve(fn(e, arg)).catch(() => null);
+        return own?.files?.length ? own : demoRunDiff(arg?.commit);
+      });
+    }
     if (channel === 'run:diffFile') return handle(channel, (e, arg) => demoRunDiffFile(arg?.file));
     return handle(channel, channel === 'backlog:sync' ? (e, arg) => handlers['backlog:get'](e, { projectId: arg?.projectId }) : fn);
   };
