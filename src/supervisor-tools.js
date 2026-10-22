@@ -7,8 +7,10 @@
 
 const fs = require('fs');
 const path = require('path');
+const yaml = require('js-yaml');
 const agents = require('./agents');
 const analytics = require('./analytics');
+const { fragmentSources } = require('./engine/run/load');
 const projects = require('./projects');
 const skills = require('./skills');
 const supervisor = require('./supervisor');
@@ -50,12 +52,17 @@ function supervisorTools(ctx) {
       name: 'read_workflow',
       description: 'One workflow\'s YAML and how the Builder opens it (full, fixed or readonly).',
       inputSchema: obj({ file: str('The workflow file name, e.g. software-development.yaml') }, ['file']),
+      // #434: followed by the fragments its steps include (fragments/<name>.yaml in the app folder,
+      // which no other tool reads), so the steps' prompts, schemas and transitions are in the answer
       run: ({ file }) => {
         const name = path.basename(String(file || ''));
-        const yaml = fs.readFileSync(path.join(ws().workflows, name), 'utf8');
+        const text = fs.readFileSync(path.join(ws().workflows, name), 'utf8');
         let mode = null;
         try { mode = ctx.loadBuilderWorkflow(name).mode; } catch { /* not drawn by the builder */ }
-        return `# ${name} (builder mode: ${mode || 'unknown'})\n\n${yaml}`;
+        let fragments = [];
+        try { fragments = fragmentSources(yaml.load(text)); } catch { /* the YAML alone */ }
+        const included = fragments.map((f) => `\n\n# fragments/${f.name}.yaml (the bodies of the steps with \`fragment: ${f.name}\`; the step's own keys win)\n\n${f.text}`);
+        return `# ${name} (builder mode: ${mode || 'unknown'})\n\n${text}${included.join('')}`;
       },
     },
     {

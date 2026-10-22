@@ -186,11 +186,8 @@ steps:
   # project's recent suite durations (#210).
   # scope affected (#212): each round runs the test files the change reaches (import graph since the
   # base, plus the files that failed before); when they pass, the whole suite runs once in the run.
+  # Its command, scope and coverage are the workflow step's own keys, not here.
   suite:
-    command: "{{ inputs.test_command }}"
-    scope: affected
-    # #225: node's coverage (an npm script's <name>:coverage, or a plain node --test) as a Tests artifact
-    coverage: true
     transitions:
       # after a merge conflict: the build and the verification already passed on the change; CI
       # builds the merged result, then the PR check, the preview and the owner's approval again

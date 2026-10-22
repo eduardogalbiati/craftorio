@@ -881,10 +881,10 @@ steps:
   - id: suite
     fragment: test-pipeline
     type: suite
-    # also in the fragment's body; kept here (in the body's key order) so the raw workflow file says
-    # it records coverage (#225)
+    # the suite's command, scope (#212) and coverage (#225) live here only, not in the fragment's body
     command: "{{ inputs.test_command }}"
     scope: affected
+    # #225: node's coverage (an npm script's <name>:coverage, or a plain node --test) as a Tests artifact
     coverage: true
   - id: test_failed
     fragment: test-pipeline

@@ -74,6 +74,7 @@ const FOLDERS = [
   ['src/service/channels/', 'The service\'s channels, one file per area (see `src/service/manifest.js`).'],
   ['native/', 'The cargo workspace of the native sidecars (#341), one crate per binary, shipped in `resources/bin/`: `multiagent-mcp`, the Rust twin of `src/supervisor-mcp.js` (started by `mcpCommand` when built). See [environment.md](environment.md).'],
   ['workflows/*.yaml', 'The bundled workflows (seeded into `<workspace>/workflows/`). See [engine.md](engine.md).'],
+  ['fragments/*.yaml', 'Step bodies the bundled workflows share (#434), included by a step\'s `fragment: <name>` and read from the app folder only. See [step-fragments.md](engine/step-fragments.md).'],
   ['skills/', 'The bundled skills, one folder each (`SKILL.md` + support files, seeded into `<workspace>/skills/`); the README table is generated from their frontmatter.'],
   ['docs/screens/', 'One fragment per screen (`menu`, `order`, text): the README\'s screens table.'],
   ['docs/features/', 'One fragment per feature (`order`, then `<!-- section:<name> -->` pieces): the README\'s generated workflows, engine, workspace and structure sections.'],

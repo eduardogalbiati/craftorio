@@ -293,20 +293,32 @@ function parseWorkflowFile(file) {
 // before the checks. The fragments ship with the app: a workflow copied to the workspace (or to a
 // scratch folder) still finds them.
 const FRAGMENTS_DIR = path.join(__dirname, '..', '..', '..', 'fragments');
+const fragmentName = (step) => path.basename(String(step.fragment));
+const fragmentFile = (name) => path.join(FRAGMENTS_DIR, `${name}.yaml`);
+const includesFragment = (step) => !!step && typeof step === 'object' && step.fragment != null;
 function expandFragments(wf) {
   if (!Array.isArray(wf?.steps)) return;
   const bodies = new Map(); // fragment name → its steps
   wf.steps = wf.steps.map((step, i) => {
-    if (!step || typeof step !== 'object' || step.fragment == null) return step;
+    if (!includesFragment(step)) return step;
     const { fragment, ...own } = step;
-    const name = path.basename(String(fragment));
+    const name = fragmentName(step);
     if (!bodies.has(name)) {
-      try { bodies.set(name, parseWorkflowFile(path.join(FRAGMENTS_DIR, `${name}.yaml`))?.steps || {}); }
+      try { bodies.set(name, parseWorkflowFile(fragmentFile(name))?.steps || {}); }
       catch (e) { throw new Error(`steps[${i}].fragment: cannot read fragments/${name}.yaml (${e.message})`); }
     }
     const body = bodies.get(name)[own.id];
     if (!body || typeof body !== 'object') throw new Error(`steps[${i}].fragment: fragments/${name}.yaml has no step "${own.id}"`);
     return { ...own, ...body, ...own };
+  });
+}
+
+// The fragments a parsed, not yet expanded workflow includes, with their text ([{ name, text }],
+// a missing one left out): the supervisor's read_workflow shows them next to the workflow's YAML.
+function fragmentSources(wf) {
+  const names = [...new Set((Array.isArray(wf?.steps) ? wf.steps : []).filter(includesFragment).map(fragmentName))];
+  return names.flatMap((name) => {
+    try { return [{ name, text: fs.readFileSync(fragmentFile(name), 'utf8') }]; } catch { return []; }
   });
 }
 
@@ -376,6 +388,7 @@ const loopConfig = (step) => step.loop || step.poll || {};
 
 module.exports = {
   FALLBACK_ENTRY,
+  fragmentSources,
   isLooping,
   loadWorkflow,
   loopConfig,
