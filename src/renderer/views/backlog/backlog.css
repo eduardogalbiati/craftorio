@@ -268,6 +268,12 @@ button.bl-label { font-family: inherit; cursor: pointer; }
 .rm { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; min-width: 0; }
 .rm .bl-queue { margin-bottom: 0; }
 .rm-bar > span { min-width: 0; overflow-wrap: anywhere; }
+/* #465: the base check card: its badge blue while running, green or red once it ended */
+.rm-base-check { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.rm-base-check[data-status="running"] .badge { color: var(--accent); }
+.rm-base-check[data-status="green"] .badge { color: var(--green); }
+.rm-base-check[data-status="red"] .badge, .rm-base-check[data-status="error"] .badge { color: var(--red); }
+.rm-base-check [data-term-msg]:empty { display: none; }
 /* the bar (#269): its state dot before the title (the sidebar's run indicator: blue and pulsing while
    running; amber paused (--yellow, the waiting colour), red paused by a failure, grey planned, green
    done), Stop in red, the ⋮ menu */

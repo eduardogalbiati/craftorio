@@ -163,7 +163,7 @@ function serialize(fn) {
  * @param {string} ws the workspace root
  * @param {{ projectId: string, repo: string, base: string, platform?: string, ghRepo?: string,
  *   trigger?: string, onRed?: string, releaseHoldsBase?: () => boolean,
- *   runSuite: ({ cwd, env }) => Promise<{ failures: object[], log?: string, error?: string }>,
+ *   runSuite: ({ cwd, env, commit }) => Promise<{ failures: object[], log?: string, error?: string }>,
  *   exec?: Function, workflow?: string, log?: Function }} opts
  */
 function runBaseCheck(ws, opts) {
@@ -181,7 +181,7 @@ function runBaseCheck(ws, opts) {
     try {
       // the check's own screenshot slot (#210), as each run's suite has
       const env = suiteEnv(process.env, { locksDir: path.join(ws, 'worktrees', `base-check-${slug(projectId)}-locks`) }).env;
-      result = await opts.runSuite({ cwd: info.workDir, env });
+      result = await opts.runSuite({ cwd: info.workDir, env, commit: info.commit });
     } catch (e) {
       result = { failures: [], log: '', error: e.message };
     } finally {
@@ -212,7 +212,11 @@ function runBaseCheck(ws, opts) {
   });
 }
 
+// the base check's suite log, next to its checkout (kept until the next check of the project, #465)
+const baseCheckLog = (ws, projectId) => path.join(ws, 'worktrees', `base-check-${slug(projectId)}-suite.log`);
+
 module.exports = {
+  baseCheckLog,
   knownFailures,
   ON_RED,
   recordPreexisting,

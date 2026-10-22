@@ -37,7 +37,7 @@ const TYPES = {
 const COOKIE = 'multiagent_token';
 // a pasted image of up to 10 MB travels as base64 (clipboard:saveImage, #130)
 const MAX_BODY = 15 * 1024 * 1024;
-const PUSHED = ['backlog:changed', 'chat:progress', 'notifications:changed','oracle:changed', 'run:event', 'run:meta', 'settings:changed', 'supervisor:watch', 'term:data', 'term:exit'];
+const PUSHED = ['backlog:changed', 'baseCheck:changed', 'chat:progress', 'notifications:changed','oracle:changed', 'run:event', 'run:meta', 'settings:changed', 'supervisor:watch', 'term:data', 'term:exit'];
 
 class HttpError extends Error {
   constructor(status, message) { super(message); this.status = status; }

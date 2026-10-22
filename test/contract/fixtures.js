@@ -127,6 +127,8 @@ module.exports = {
   'backlog:get': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   'backlog:local': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   'backlog:pause': { setup: project, arg: ({ projectId }) => ({ projectId, paused: false }), invalid: BAD_PROJECT },
+  'baseCheck:state': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
+  'backlog:state': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   'backlog:unpushed': { arg: null },
   'backlog:watching': { arg: null },
   'backlog:unqueue': { setup: project, arg: ({ projectId }) => ({ projectId, number: 1 }), invalid: BAD_PROJECT },

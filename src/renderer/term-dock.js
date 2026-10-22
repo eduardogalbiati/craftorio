@@ -6,12 +6,16 @@
 // initTerminalDock() runs from app.js's init().
 
 const CLI_TITLE = "Open the provider CLI resuming this conversation. Messages you send there become part of the agent's conversation.";
+// #465: a deterministic step's log (`log`, its sessionId the log's path in the run folder) and the
+// base check's (`base-check`, its sessionId the project) follow a file; like a live session, read-only
+const LOG_KINDS = ['base-check', 'log'];
+const readOnlyTerm = (kind) => kind === 'live' || LOG_KINDS.includes(kind);
 
 // "Live terminal" / "Open in CLI" (embedded in the dock) + "↗" (external window). The ↗ button is
 // disabled with the reason when the app found no terminal window to open (#318, api.externalTerminal).
 function termButtons(kind, title, blocked = '') {
-  const label = kind === 'live' ? 'Live terminal' : 'Open in CLI';
-  const t = blocked || title || (kind === 'cli' ? CLI_TITLE : 'Follow this session live in a terminal');
+  const label = readOnlyTerm(kind) ? 'Live terminal' : 'Open in CLI';
+  const t = blocked || title || (kind === 'cli' ? CLI_TITLE : LOG_KINDS.includes(kind) ? "Follow this step's log as it grows (read-only)" : 'Follow this session live in a terminal');
   const dis = blocked ? 'disabled' : '';
   const ext = api.externalTerminal || { available: true };
   const extBlocked = blocked || (ext.available ? '' : ext.reason || 'No terminal window available');
@@ -140,7 +144,7 @@ async function openTerminal({ kind, sessionId, runId, label, open }) {
   pane.className = 'term-pane';
   $('#term-body').appendChild(pane);
   const { term, fit } = createXterm(kind);
-  const tab = { key, id: null, kind, runId, sessionId, title: `${label || sessionId} · ${kind}`, term, fit, pane, exited: false, lastPaste: 0, sent: 0 };
+  const tab = { key, id: null, kind, runId, sessionId, title: `${label || sessionId} · ${LOG_KINDS.includes(kind) ? 'log' : kind}`, term, fit, pane, exited: false, lastPaste: 0, sent: 0 };
   dock.tabs.push(tab);
   showDock();
   term.open(pane);
@@ -151,7 +155,7 @@ async function openTerminal({ kind, sessionId, runId, label, open }) {
     const res = await (open ? open(term.cols, term.rows) : api.termOpen({ kind, runId, sessionId, cols: term.cols, rows: term.rows }));
     tab.id = res.id;
     if (res.windowsPty) term.options.windowsPty = res.windowsPty;
-    if (res.title) tab.title = res.title;
+    if (res.title && !(label && LOG_KINDS.includes(kind))) tab.title = res.title;
     renderTermTabs();
     replayPending(tab);
     fitActive();
@@ -179,8 +183,8 @@ function createXterm(kind) {
     fontFamily: css.getPropertyValue('--mono').trim() || 'Consolas, monospace',
     fontSize: 12,
     lineHeight: 1.2,
-    cursorBlink: kind !== 'live',
-    cursorStyle: kind === 'live' ? 'underline' : 'block',
+    cursorBlink: !readOnlyTerm(kind),
+    cursorStyle: readOnlyTerm(kind) ? 'underline' : 'block',
     cursorInactiveStyle: 'none',
     scrollback: 5000,
     convertEol: false,
@@ -194,7 +198,7 @@ function createXterm(kind) {
 function wireTerminal(tab) {
   const { term, pane } = tab;
   term.onData((d) => {
-    if (tab.kind === 'live' || tab.exited || !tab.id) return; // live tabs are read-only
+    if (readOnlyTerm(tab.kind) || tab.exited || !tab.id) return; // live and log tabs are read-only
     tab.sent++;
     api.termInput(tab.id, d);
   });
@@ -253,7 +257,7 @@ async function pasteIntoTerm(tab) {
     const text = await api.clipboardRead();
     tab.lastPaste = Date.now();
     if (!text) return;
-    if (tab.kind === 'live') (tab.flash || flashTermMsg)('This terminal is read-only.');
+    if (readOnlyTerm(tab.kind)) (tab.flash || flashTermMsg)('This terminal is read-only.');
     tab.term.paste(text); // onData ignores it for live tabs
   } catch (e) {
     (tab.flash || flashTermMsg)(errMsg(e), true);
@@ -315,7 +319,7 @@ function closeTab(tab, { kill = true } = {}) {
 function renderTermTabs() {
   const box = $('#term-tabs');
   box.innerHTML = dock.tabs.map((t, i) => `
-    <div class="term-tab ${t === dock.active ? 'active' : ''}" data-i="${i}" role="tab" aria-selected="${t === dock.active}" title="${esc(t.title)}${t.kind === 'live' ? ' (read-only)' : ''}">
+    <div class="term-tab ${t === dock.active ? 'active' : ''}" data-i="${i}" role="tab" aria-selected="${t === dock.active}" title="${esc(t.title)}${readOnlyTerm(t.kind) ? ' (read-only)' : ''}">
       <span class="term-dot ${t.exited ? 'exited' : t.id ? 'running' : 'starting'}"></span>
       <span class="term-title">${esc(t.title)}</span>
       <button class="term-close" data-close="${i}" title="${I18n.t('term_dock.close_ends_the_process')}" aria-label="${I18n.t('common.close')}">×</button>

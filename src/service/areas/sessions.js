@@ -42,7 +42,33 @@ module.exports = (ctx) => {
   // - live: follows the session's log (src/session-tail.js);
   // - cli: the provider's interactive CLI resuming the same conversation in the session's
   //   folder (claude --resume / codex resume / grok --resume).
+  // #465: a deterministic step's log (`logPath` relative to the run folder, only under its logs/) or
+  // the project's base check log (`projectId`): { dir, rel, file, title }
+  function logTarget({ runId, logPath, projectId }) {
+    if (projectId != null && runId == null) {
+      const file = ctx.baseCheckLog(path.basename(String(projectId)));
+      return { dir: path.dirname(file), rel: path.basename(file), file, title: 'Base check · log' };
+    }
+    const runDir = ctx.runFolder(runId);
+    const rel = String(logPath || '').replace(/\\/g, '/');
+    const file = path.resolve(runDir, rel);
+    const logs = path.join(path.resolve(runDir), 'logs') + path.sep;
+    if (!rel || path.isAbsolute(rel) || /^[a-z]:/i.test(rel) || !file.startsWith(logs)) {
+      throw new Error('Only a log of the run (its logs/ folder) opens in a log terminal.');
+    }
+    return { dir: path.resolve(runDir), rel: path.relative(runDir, file).replace(/\\/g, '/'), file, title: `${rel.replace(/^logs\//, '')} · log` };
+  }
+
   function terminalSpec(runId, sessionId, mode) {
+    // #465: a step's log (sessionId: its path in the run folder) or the base check's (sessionId: the project)
+    if (mode === 'log' || mode === 'base-check') {
+      const target = logTarget(mode === 'log' ? { runId, logPath: sessionId } : { projectId: sessionId });
+      const tail = tailCommand(!!host.isPackaged, resolveCommand);
+      return {
+        title: target.title, cwd: target.dir, file: tail.command,
+        args: [...tail.args, target.dir, '--file', target.rel], env: { ...process.env, ...tail.env, FORCE_COLOR: '1' },
+      };
+    }
     const found = findSession(runId, sessionId);
     if (!found) throw new Error('Session not found.');
     const { run, sess } = found;
@@ -138,6 +164,7 @@ module.exports = (ctx) => {
   return {
     cliSessionSpec,
     listCliSessions,
+    logTarget,
     renameCliSession,
     terminalSpec,
   };

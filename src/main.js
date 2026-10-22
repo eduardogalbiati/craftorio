@@ -177,7 +177,7 @@ ipcMain.on('api:manifest', (e) => {
 function broadcast(channel, payload) {
   for (const w of [win, agentsWindow?.current()]) if (w && !w.isDestroyed()) w.webContents.send(channel, payload);
 }
-for (const channel of ['backlog:changed', 'chat:progress', 'notifications:changed','oracle:changed', 'run:event', 'run:meta', 'settings:changed', 'supervisor:watch', 'term:data', 'term:exit']) {
+for (const channel of ['backlog:changed', 'baseCheck:changed', 'chat:progress', 'notifications:changed','oracle:changed', 'run:event', 'run:meta', 'settings:changed', 'supervisor:watch', 'term:data', 'term:exit']) {
   service.events.on(channel, (payload) => broadcast(channel, payload));
 }
 

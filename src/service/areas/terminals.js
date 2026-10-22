@@ -17,7 +17,10 @@ const notifier = require('../../notifications');
 const { Terminals } = require('../../terminals');
 const workspace = require('../../workspace');
 const { SCOPE_HINT } = require('../../actions-usage');
-const { followSession } = require('../../session-tail');
+const {
+  followFile,
+  followSession,
+} = require('../../session-tail');
 const {
   installCommands,
   signInCommands,
@@ -115,6 +118,12 @@ module.exports = (ctx) => {
       const opened = openProgram(spec, cols, rows);
       waiting.watch(opened.id, { title: spec.title });
       return { ...opened, cwd: spec.cwd };
+    }
+    // #465: a deterministic step's log (`path` in the run's logs/) or the base check's (`projectId`),
+    // followed in this process as it grows; read-only like a live session
+    if (kind === 'log' || kind === 'base-check') {
+      const target = ctx.logTarget(kind === 'log' ? { runId, logPath: opts.path ?? sessionId } : { projectId: opts.projectId ?? sessionId });
+      return terminals.openVirtual({ title: target.title, start: (write) => followFile(target.file, write) });
     }
     const spec = ctx.terminalSpec(runId, sessionId, kind === 'cli' ? 'cli' : 'live');
     if (kind !== 'cli') {

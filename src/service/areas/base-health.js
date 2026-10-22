@@ -63,18 +63,33 @@ module.exports = (ctx) => {
     return [...(ctx.active?.values?.() || [])].some((r) => r.projectId === projectId && ctx.isReleaseRun(r));
   }
 
+  // #465: the check tells the screens when it starts and ends (`baseCheck:changed`), so its log can be
+  // followed live; the last state per project answers `baseCheck:state` (a screen opened meanwhile)
+  const states = new Map();
+  const logOf = (projectId) => baseHealth.baseCheckLog(ctx.ws.root, projectId);
+  function announce(projectId, patch) {
+    const state = { ...(states.get(projectId) || {}), ...patch, projectId };
+    states.set(projectId, state);
+    ctx.events?.emit('baseCheck:changed', state);
+    return state;
+  }
+
   // The project's whole suite in the check's clean checkout: dependencies from the shared cache, the
   // detected command with the suite step's timeout (from the project's recent suite durations), its
-  // failures parsed from the log
-  const suiteFor = (project) => async ({ cwd, env }) => {
+  // failures parsed from the log. The log stays next to the checkout until the next check (#465)
+  const suiteFor = (project) => async ({ cwd, env, commit }) => {
+    const logFile = logOf(project.id);
+    fs.rmSync(logFile, { force: true });
+    fs.mkdirSync(path.dirname(logFile), { recursive: true });
+    announce(project.id, { status: 'running', commit: commit || null, log: logFile, startedAt: new Date().toISOString(), endedAt: null, failures: null, error: null });
     const command = detectTestCommand(cwd);
     if (!command) return { failures: [], log: '', error: 'no test command found' };
+    fs.appendFileSync(logFile, `$ ${command}\n`);
     await depsCache.ensureDeps({ workDir: cwd, cacheDir: path.join(ctx.ws.cache, 'deps'), env });
     const timeoutMs = suiteTimeout(suiteDurations({ file: path.join(ctx.ws.cache, 'suite-durations.json'), key: `${project.folder}\n${command}` }));
-    const logFile = path.join(cwd, '..', `${path.basename(cwd)}-suite.log`);
     const r = await runCommand({ command, cwd, env, timeoutMs, logFile });
     let log = '';
-    try { log = fs.readFileSync(logFile, 'utf8'); fs.rmSync(logFile, { force: true }); } catch { /* no log */ }
+    try { log = fs.readFileSync(logFile, 'utf8'); } catch { /* no log */ }
     const failures = parseFailures(log, { cwd });
     const error = r.timedOut ? 'the suite timed out' : r.error || (r.code && !failures.length ? `the suite exited with ${r.code}, no failure parsed` : null);
     return { failures, log, error };
@@ -105,10 +120,26 @@ module.exports = (ctx) => {
     });
     check.then((r) => {
       if (r.status === 'deferred') pending.set(project.id, { run, base, tested });
+      else ended(project.id, r);
       noticeOf(project, r);
-    }).catch((e) => noticeOf(project, { status: 'error', error: e.message }));
+    }).catch((e) => {
+      ended(project.id, { status: 'error', error: e.message });
+      noticeOf(project, { status: 'error', error: e.message });
+    });
     return check;
   }
+
+  // the check ended: green or red with the count, or the error; its log stays reachable (#465)
+  function ended(projectId, r) {
+    if (!states.has(projectId)) return;
+    announce(projectId, {
+      status: r.status, commit: r.commit || states.get(projectId).commit, endedAt: new Date().toISOString(),
+      failures: r.status === 'red' ? r.issues?.length ?? null : 0, error: r.error || null,
+    });
+  }
+
+  // the project's base check as last announced (null when none ran since the service started)
+  const baseCheckState = (projectId) => states.get(projectId) || null;
 
   // A run ended: a check a release deferred runs once nothing holds the project's base any more
   function afterBaseReleased(run) {
@@ -122,5 +153,7 @@ module.exports = (ctx) => {
     afterBaseMerge,
     afterBaseReleased,
     afterStepFinished,
+    baseCheckLog: logOf,
+    baseCheckState,
   };
 };

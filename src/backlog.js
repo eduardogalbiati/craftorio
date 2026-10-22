@@ -777,12 +777,43 @@ function runInputs(item, wf, folder) {
   return inputs;
 }
 
+// #491: what changes while runs go, from a Backlog with its runs (the service's withIssueRuns), for
+// the Roadmap's live reloads: the roadmap's state and each item's status and live run (its ring and
+// timer), the queue and the refresh banner; no issue bodies, no ended run's details (they no longer
+// change), so it stays small however long the roadmap is
+const LIVE_ITEM = new Set(['running', 'queued', 'starting', 'waiting', 'parked']);
+function backlogState(data) {
+  if (!data) return null;
+  const r = data.roadmap || {};
+  const runOf = (x) => {
+    if (!x.run || !LIVE_ITEM.has(x.status)) return {};
+    const { status, mock, startedAt, finishedAt, waiting, gate, atGate, progress, error } = x.run;
+    return { run: { status, mock, startedAt, finishedAt, waiting, gate, atGate, progress, error } };
+  };
+  const item = (x) => ({
+    id: x.id, status: x.status || null, runId: x.runId || null, runs: x.runs || [], waiting: !!x.waiting,
+    startedAt: x.run?.startedAt || null, elapsed: x.run?.startedAt ? (Date.parse(x.run.finishedAt) || Date.now()) - Date.parse(x.run.startedAt) : null,
+    ...runOf(x),
+  });
+  const queue = data.queue ? { ...data.queue, items: (data.queue.items || []).map(({ body, inputs, issues, ...rest }) => rest) } : null;
+  return {
+    projectId: data.projectId,
+    roadmap: {
+      state: r.state || null, updatedAt: r.updatedAt || null, scope: r.scope || null, pausedBy: r.pausedBy || null, error: r.error || null,
+      stages: (r.stages || []).map((s) => ({ id: s.id, pause: s.pause || null, items: (s.items || []).map(item) })),
+    },
+    queue,
+    refresh: data.refresh || null,
+  };
+}
+
 module.exports = {
   PLATFORMS, DEFAULT_PLATFORM, parseRepoUrl, platformOfHost, taskProgress, fetchIssues, readBacklog, syncBacklog, linkRuns,
   referencedIssues, fetchOpenPullRequests, attachPullRequests,
   readQueue, enqueue, unqueue, skipQueued, newPullRequests, setPaused, nextQueued, pauseAll, runInputs,
   itemIssues, runIssues, execCli, readLocal, writeLocal,
   archiveIssues,
+  backlogState,
   claimQueued,
   clearDonePause,
   cliTarget,

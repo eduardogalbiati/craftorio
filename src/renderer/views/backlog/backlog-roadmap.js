@@ -1010,6 +1010,23 @@
     return [String(f.message || '').replace(/^Live roadmap: /, ''), ''];
   }
 
+  // #465: the base check (#405) after a local merge: "running since HH:MM on <commit>" while its suite
+  // runs, then green or red with the count; its log follows live in a read-only terminal either way
+  function baseCheckHtml(c) {
+    if (!c?.status) return '';
+    const commit = String(c.commit || '').slice(0, 8);
+    const text = c.status === 'running' ? t('backlog_roadmap.base_check_running', { time: clock(c.startedAt), commit })
+      : c.status === 'green' ? t('backlog_roadmap.base_check_green', { commit })
+        : c.status === 'red' ? t('backlog_roadmap.base_check_red', { count: c.failures ?? 0, commit })
+          : t('backlog_roadmap.base_check_failed', { error: c.error || '' });
+    return `<span class="rm-base-check small" data-testid="base-check-card" data-status="${esc(c.status)}"><span class="badge">${t('backlog_roadmap.base_check')}</span> <span title="${esc(c.commit || '')}">${esc(text)}</span>${termButtons('base-check', t('backlog_roadmap.follow_the_base_check_log'))}<span class="muted" data-term-msg></span></span>`;
+  }
+  async function baseCheckTerm({ ctx, target }, btn) {
+    const msg = await termAction(btn, { sessionId: ctx.projectId, runId: null, label: t('backlog_roadmap.base_check') });
+    const line = target.closest('.rm-base-check')?.querySelector('[data-term-msg]');
+    if (line) { line.textContent = msg.text; line.classList.toggle('error', msg.error); }
+  }
+
   /** The banner at the top of the Backlog (every view) while the roadmap is live; '' when it is not. */
   function liveBanner(r) {
     if (!r?.live) return '';
@@ -1105,7 +1122,7 @@
     const bar = `
       <div class="bl-queue rm-bar" data-testid="roadmap-bar">
         <span class="rm-bar-title">${dot}<b>${t('backlog_roadmap.roadmap_2')}</b> ${scopeBadge} ${plural(r.stages.length, 'backlog_roadmap.stages_count')}${offStages.length ? t('backlog_roadmap.length_disabled', { length: offStages.length }) : ''}${parked}</span>
-        ${window.RoadmapSummary?.barHtml(r, { open: byReleaseOpen, money, minutes: mins }) || ''}${note}${leftOut}${data?.baseFailures?.length ? `<details class="small rm-base-failures" data-testid="base-failures"><summary><span class="warn-text">${plural(data.baseFailures.length, 'backlog_roadmap.known_failures_count')} ${t('backlog_roadmap.on_the_base')}</span> <span class="link-btn" data-testid="base-failures-link">${t('backlog_roadmap.details')}</span></summary><ul>${data.baseFailures.map((f) => `<li><span class="mono">${esc(f.test)}</span> · <span class="muted" title="${esc(f.file)}">${esc(f.file)}</span>${f.issue?.url ? ` · <a href="${esc(f.issue.url)}" target="_blank" rel="noopener">${esc(f.issue.number ? `#${f.issue.number}` : t('backlog_roadmap.issue'))}</a>` : ''}</li>`).join('')}</ul></details>` : ''}
+        ${window.RoadmapSummary?.barHtml(r, { open: byReleaseOpen, money, minutes: mins }) || ''}${note}${leftOut}${data?.baseFailures?.length ? `<details class="small rm-base-failures" data-testid="base-failures"><summary><span class="warn-text">${plural(data.baseFailures.length, 'backlog_roadmap.known_failures_count')} ${t('backlog_roadmap.on_the_base')}</span> <span class="link-btn" data-testid="base-failures-link">${t('backlog_roadmap.details')}</span></summary><ul>${data.baseFailures.map((f) => `<li><span class="mono">${esc(f.test)}</span> · <span class="muted" title="${esc(f.file)}">${esc(f.file)}</span>${f.issue?.url ? ` · <a href="${esc(f.issue.url)}" target="_blank" rel="noopener">${esc(f.issue.number ? `#${f.issue.number}` : t('backlog_roadmap.issue'))}</a>` : ''}</li>`).join('')}</ul></details>` : ''}${baseCheckHtml(data?.baseCheck)}
         <span class="spacer"></span>
         ${acts.start.allowed || acts.resume.allowed ? `<label class="check small dev-only"><input type="checkbox" id="rm-simulate"${state.simulationOnly || r.simulated ? ' checked' : ''} /><span>${t('backlog_roadmap.simulated')}</span></label>
           <button class="btn sm primary" type="button" data-rm="start"${-1 < scoped && acts.resume.allowed ? ` title="${t('backlog_roadmap.resume_stage_value_only', { value: scoped + 1 })}"` : ''}>${t(acts.resume.allowed ? 'backlog_roadmap.resume' : 'backlog_roadmap.start')}</button>` : ''}
@@ -1721,6 +1738,8 @@
     document.querySelector(`#bl-list .rm-stage[data-stage="${first}"]`)?.scrollIntoView({ block: 'start' });
   }
   const CLICKS = [
+    // #465: the base check card's "Live terminal" / ↗ follow its suite log
+    { selector: '.rm-base-check [data-term]', run: baseCheckTerm },
     // #269: the ⋮ button opens its menu (the first entry gets the focus) or closes it; #421: the summary's By release list
     { selector: '[data-rm-menu]', run: ({ ctx }) => { [menuOpen, pauseOpen] = [!menuOpen, false]; ctx.render(); focusMenu(menuOpen ? '[role="menuitem"]' : '[data-rm-menu]'); } },
     { selector: '[data-rm-summary-releases]', run: ({ ctx }) => { byReleaseOpen = !byReleaseOpen; ctx.render(); } },

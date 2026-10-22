@@ -54,6 +54,17 @@ module.exports = (ctx) => {
   };
   return [
     { channel: 'backlog:get', method: 'getBacklog', params: ['projectId'], schema: { params: ON_PROJECT, result: BACKLOG }, fn: ({ projectId }) => current(projectId) },
+    // #491: the Roadmap's live reloads read only what changes while runs go (src/backlog.js backlogState)
+    {
+      channel: 'backlog:state',
+      method: 'getBacklogState',
+      params: ['projectId'],
+      schema: {
+        params: ON_PROJECT,
+        result: described(nullable(OBJECT), 'The light state: { projectId, roadmap: { state, updatedAt, scope, pausedBy, error, stages: [{ id, pause, items: [{ id, status, runId, runs, waiting, startedAt, elapsed, run? }] }] }, queue, refresh }; no issue bodies.'),
+      },
+      fn: ({ projectId }) => backlog.backlogState(current(projectId)),
+    },
     // the Backlog Refresh banner's "Dismiss for today" (#161, src/backlog-refresh.js)
     {
       channel: 'backlog:dismiss-refresh',
@@ -121,6 +132,17 @@ module.exports = (ctx) => {
     // #204: a backlog/ file changed ({ projectId, file, watching }, areas/backlog-watch.js); watching:
     // false = the watcher failed, the screen polls while visible
     { event: 'backlog:changed', method: 'onBacklogChanged' },
+    // #465: the base check (#405) started or ended ({ projectId, status: running | green | red | error,
+    // commit, log, startedAt, endedAt, failures, error }, areas/base-health.js); its log opens in a
+    // 'base-check' terminal
+    { event: 'baseCheck:changed', method: 'onBaseCheckChanged' },
+    {
+      channel: 'baseCheck:state',
+      method: 'getBaseCheckState',
+      params: ['projectId'],
+      schema: { params: ON_PROJECT, result: described(nullable(OBJECT), 'The project\'s base check as last announced, null when none ran since the engine started.') },
+      fn: ({ projectId }) => ctx.baseCheckState(project(projectId)),
+    },
     { channel: 'backlog:watching', method: 'backlogWatching', schema: { result: BOOL }, fn: () => ctx.backlogWatching() },
     // Assign a workflow to issues: they are queued and start while there are free run slots (see dispatchQueue).
     // When an ended run kept work for them, the answer is the kept-work question { confirm, kept, runId }

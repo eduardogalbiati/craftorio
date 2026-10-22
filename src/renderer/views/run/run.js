@@ -651,11 +651,20 @@ function renderSteps() {
   const shown = v.allSteps ? all : all.filter((s) => s.visits > 0);
   const groupOf = new Map(v.groups.flatMap((g) => g.steps.map((id) => [id, g.name])));
   const current = v.trail?.steps.at(-1)?.step || all.find((s) => s.status === 'running' || s.status === 'waiting')?.id;
+  const logs = stepLogs(v);
+  // #465: a deterministic step that wrote a log follows it live, as a session does (read-only)
+  const logButtons = (s) => {
+    const log = logs.get(s.id);
+    if (s.agent || !log?.path) return '';
+    const base = log.base ? `<button type="button" class="btn sm ghost" data-term="log" data-log="${esc(log.base)}" title="${esc(t('run.follow_the_base_check_log'))}">${t('run.base_log')}</button>` : '';
+    return `<div class="step-term" data-log="${esc(log.path)}">${termButtons('log', `${log.command ? `$ ${log.command}\n` : ''}${log.path}`)}${base}<span class="muted small" data-term-msg></span></div>`;
+  };
   const item = (s) => `
-    <li class="${s.status}">
+    <li class="${s.status}" data-testid="run-step-card" data-step="${esc(s.id)}">
       <span class="dot"></span>
       <span><span title="${esc(s.id)}">${esc(agentLabel(s.id, v.run?.stepNames))}</span><br><span class="kind"${s.agent ? ` title="${esc(s.agent)}"` : ''}>${s.type === 'human_approval' ? t('run.human_approval') : s.type === 'screenshots' ? t('run.screenshots_no_agent') : s.type === 'suite' ? t('run.test_suite_no_agent') : s.type === 'test_ids' ? t('run.test_id_check_no_agent') : s.type === 'check' ? t('run.rule_checks_no_agent') : s.type === 'release_version' ? t('run.release_version_no_agent') : s.type === 'project_map' ? t('run.project_map_no_agent') :s.type === 'workflow' ? t('run.child_workflow_runs') : esc(agentLabel(s.agent, v.run?.agentNames))}</span></span>
       <span class="visits">${s.visits ? '×' + s.visits : ''}</span>
+      ${logButtons(s)}
     </li>`;
   // in the workflow's step order: a group where its first shown step is
   const sections = [];
@@ -687,6 +696,38 @@ function renderSteps() {
   }));
   const btn = box.querySelector('[data-all-steps]');
   if (btn) btn.onclick = () => { v.allSteps = !v.allSteps; renderSteps(); };
+  box.querySelectorAll('.step-term [data-term]').forEach((b) => (b.onclick = async () => {
+    const wrap = b.closest('.step-term');
+    const card = b.closest('[data-step]');
+    const label = agentLabel(card.dataset.step, v.run?.stepNames);
+    const msg = await termAction(b, { sessionId: b.dataset.log || wrap.dataset.log, runId: v.run?.id || state.run?.id, label: b.dataset.log ? `${label} base` : label });
+    const line = wrap.querySelector('[data-term-msg]');
+    line.textContent = msg.text;
+    line.classList.toggle('err', msg.error);
+  }));
+}
+
+// #465: each deterministic step's log for its terminal buttons: the latest round's (its step.log, else
+// the log its output names) and the base check's of that round (step.log with `base`), relative to the
+// run folder
+function stepLogs(v) {
+  const rel = (p) => {
+    const s = String(p || '').replace(/\\/g, '/');
+    const at = s.lastIndexOf('/logs/');
+    return at >= 0 ? s.slice(at + 1) : s.startsWith('logs/') ? s : null;
+  };
+  const out = new Map();
+  for (const ev of v.events || []) {
+    if (!ev.step_id) continue;
+    if (ev.type === 'step.started') out.delete(ev.step_id);
+    else if (ev.type === 'step.log' && rel(ev.path)) {
+      const cur = out.get(ev.step_id) || {};
+      out.set(ev.step_id, ev.base ? { ...cur, base: rel(ev.path) } : { ...cur, path: rel(ev.path), command: ev.command || null });
+    } else if (ev.type === 'step.finished' && rel(ev.output?.log) && !out.get(ev.step_id)?.path) {
+      out.set(ev.step_id, { ...out.get(ev.step_id), path: rel(ev.output.log), command: ev.output.command || null });
+    }
+  }
+  return out;
 }
 
 function renderSessions() {
