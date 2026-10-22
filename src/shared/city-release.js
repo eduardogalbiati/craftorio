@@ -64,7 +64,9 @@
   /**
    * The release's ramp (#438), spread over its own changed and renamed files: with four distinct line
    * counts or more, each shade holds a quarter of them (quantiles); with fewer, the shades split
-   * min..max geometrically. → { cuts: [[from, to]] per shade, colourOf(lines) }.
+   * min..max on a log scale: the fewest lines the lightest, the most the strongest, and a shade no
+   * whole line count fits in (close counts) gets a fractional, empty cut. The cuts never overlap.
+   * → { cuts: [[from, to]] per shade, colourOf(lines) }.
    */
   function releaseRamp(changes) {
     const k = CHANGE_RAMP.length;
@@ -75,10 +77,34 @@
       values.forEach((v, i) => groups[Math.floor((i * k) / values.length)].push(v));
       cuts = groups.map((g) => [g[0], g[g.length - 1]]);
     } else if (values.length) {
-      const lo = Math.max(1, values[0]);
-      const hi = Math.max(lo, values[values.length - 1]);
-      const bound = (s) => Math.round(lo * (hi / lo) ** (s / k));
-      cuts = CHANGE_RAMP.map((_, s) => [bound(s), s === k - 1 ? hi : Math.max(bound(s), bound(s + 1) - 1)]);
+      const m = values.length;
+      const lo = values[0];
+      const hi = values[m - 1];
+      const at = (v) => Math.log1p(v);
+      // the shade each count takes: a middle count where it sits between the fewest and the most
+      const shade = values.map((v, i) => (i === 0 ? 0 : i === m - 1 ? k - 1
+        : Math.min(k - 2, Math.max(1, Math.round(((at(v) - at(lo)) / (at(hi) - at(lo))) * (k - 1))))));
+      const from = [];
+      values.forEach((v, i) => { from[shade[i]] = v; });
+      // the shades between two counts (or above a single one) split the gap, whole numbers when it has room
+      values.forEach((va, i) => {
+        const a = shade[i];
+        const b = i + 1 < m ? shade[i + 1] : k;
+        const vb = i + 1 < m ? values[i + 1] : va + 1;
+        const room = vb - va - 1 >= b - a - 1;
+        for (let s = a + 1; s < b; s++) {
+          const share = (s - a) / (b - a);
+          from[s] = room
+            ? Math.min(vb - (b - s), Math.max(from[s - 1] + 1, Math.round(Math.expm1(at(va) + share * (at(vb) - at(va))))))
+            : va + share * (vb - va);
+        }
+      });
+      cuts = from.map((f, s) => {
+        if (!Number.isInteger(f)) return [f, f];
+        if (s === k - 1) return [f, Math.max(f, hi)];
+        const next = from[s + 1];
+        return [f, Number.isInteger(next) ? next - 1 : Math.floor(next)];
+      });
     }
     // the strongest shade whose cut starts at or under `lines`
     const colourOf = (lines) => {

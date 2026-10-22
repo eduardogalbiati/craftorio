@@ -45,7 +45,8 @@
   // the change ramp, lightest first; each shade says the lines it stands for (CityRelease.releaseRamp's cuts), under it in the legend
   function rampHtml(cuts, numbers = false) {
     const shades = CityRelease.CHANGE_RAMP.map((colour, i) => {
-      const [from, to] = (cuts || [])[i] || [];
+      // an empty shade (close counts) has a fractional cut: no line count to say
+      const [from, to] = ((cuts || [])[i] || []).filter(Number.isInteger);
       const said = from == null ? '' : t('project_city_release.ramp_lines', { from, to });
       const shade = `<i class="pcr-shade" data-testid="city-release-ramp-shade" style="--c:${esc(colour)}"${said ? ` title="${esc(said)}" aria-label="${esc(said)}"` : ''}></i>`;
       return numbers ? `<span class="pcr-step">${shade}<small>${from ?? ''}</small></span>` : shade;
