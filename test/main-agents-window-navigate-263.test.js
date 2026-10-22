@@ -10,8 +10,9 @@ const path = require('path');
 
 const mainSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'main.js'), 'utf8');
 const relay = () => {
-  const m = mainSrc.match(/ipcMain\.on\('agents-window:navigate'[\s\S]*?\n\s*\}\);/);
-  assert.ok(m, 'src/main.js listens to agents-window:navigate with ipcMain.on');
+  // through the sender guard (#467: ipc = guardIpc(ipcMain, ...)) or directly
+  const m = mainSrc.match(/\b(?:ipc|ipcMain)\.on\('agents-window:navigate'[\s\S]*?\n\s*\}\);/);
+  assert.ok(m, 'src/main.js listens to agents-window:navigate with ipc.on / ipcMain.on');
   return m[0];
 };
 

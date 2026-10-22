@@ -39,18 +39,26 @@ test('electron.d.ts still exports the ClipboardItem class the image/file handler
   assert.match(mainSrc, /\bClipboardItem\b/, 'src/main.js no longer imports ClipboardItem from electron');
 });
 
+// the handlers register through the IPC sender guard (#467: ipc = guardIpc(ipcMain, ...)) or directly
+const HANDLE = String.raw`\b(?:ipc|ipcMain)\.handle`;
+const handlerOf = (channel) => {
+  const m = mainSrc.match(new RegExp(`${HANDLE}\\('${channel}'[\\s\\S]*?\\n\\}\\);`));
+  assert.ok(m, `src/main.js answers ${channel}`);
+  return m[0];
+};
+
 test('clipboard:read / clipboard:write await the async text calls explicitly, not just return the promise', () => {
-  assert.match(mainSrc, /ipcMain\.handle\('clipboard:read',\s*async\s*\(\)\s*=>\s*clipboard\.readText\(\)\)/);
+  assert.match(mainSrc, new RegExp(`${HANDLE}\\('clipboard:read',\\s*async\\s*\\(\\)\\s*=>\\s*clipboard\\.readText\\(\\)\\)`));
   assert.match(mainSrc, /await clipboard\.writeText\(/);
 });
 
 test('clipboard:writeImage writes PNG data through write(), the replacement for the removed writeImage', () => {
-  const handler = mainSrc.match(/ipcMain\.handle\('clipboard:writeImage'[\s\S]*?\n\}\);/)[0];
+  const handler = handlerOf('clipboard:writeImage');
   assert.match(handler, /await clipboard\.write\(\[new ClipboardItem\(\{ 'image\/png':/);
 });
 
 test('clipboard:writeFile on macOS/Linux writes a file URL through write() and checks it stuck with has()', () => {
-  const handler = mainSrc.match(/ipcMain\.handle\('clipboard:writeFile'[\s\S]*?\n\}\);/)[0];
+  const handler = handlerOf('clipboard:writeFile');
   assert.match(handler, /await clipboard\.write\(\[new ClipboardItem\(/);
   assert.match(handler, /await clipboard\.has\(type\)/);
 });
