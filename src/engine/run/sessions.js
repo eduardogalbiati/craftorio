@@ -223,6 +223,7 @@ const methods = {
   // `protect_files` (#220; opts.protectFiles: the step's over the agent's, rendered now): the same
   // guard on exactly these files (e.g. the acceptance tests written before the code), whatever
   // edits_tests says, so the agent may still add and edit its own tests.
+  // Stop pressed at a refusal: the refusal is still reported, but no send-back and no new check (#456).
   async sendToAgent(agentName, prompt, opts = {}) {
     const agent = { ...(this.wf.defaults || {}), ...this.wf.agents[agentName] };
     const guarded = !!this.wf.agents[agentName] && (opts.editsTests ?? agent.edits_tests) === false;
@@ -242,6 +243,7 @@ const methods = {
       const stepId = opts.stepId || 'a delegated turn';
       this.emitEvent('tests.refused', { agent: agentName, step_id: opts.stepId || null, files, attempt });
       this.emitEvent('log', { level: 'warn', kind: 'tests_refused', agent: agentName, message: `[${agentName}] changed test files in ${stepId}, which it may not edit (edits_tests: false): ${files.join(', ')}` });
+      if (this.abort.signal.aborted) throw new Error('Cancelled');
       if (attempt > 2) throw new Error(`${agentName} changed test files in ${stepId} and did not put them back: ${files.join(', ')}. Only the test writer edits tests.`);
       res = await this.agentTurn(agentName, this.testsRefusedPrompt(agentName, prompt, res.text, files, snap.head), { ...opts, guarded, protect, retry: true });
     }
@@ -252,6 +254,7 @@ const methods = {
       const stepId = opts.stepId || 'a delegated turn';
       this.emitEvent('tests.refused', { agent: agentName, step_id: opts.stepId || null, files, attempt, protected: true });
       this.emitEvent('log', { level: 'warn', kind: 'protected_refused', agent: agentName, message: `[${agentName}] changed protected files in ${stepId} (protect_files): ${files.join(', ')}` });
+      if (this.abort.signal.aborted) throw new Error('Cancelled');
       if (attempt > 2) throw new Error(`${agentName} changed protected files in ${stepId} and did not put them back: ${files.join(', ')}.`);
       res = await this.agentTurn(agentName, this.protectedRefusedPrompt(agentName, prompt, res.text, files, psnap.head), { ...opts, guarded, protect, retry: true });
     }

@@ -60,6 +60,7 @@ function normalizeUrl(url) {
  * Which project of the workspace is the source of the app's updates: same `origin` URL as the app
  * folder, or a clone whose local main contains the app's commit. { ok: true, project, dir, head,
  * short, behind } or { ok: false, reason } (the reason the Settings row shows).
+ * A project folder without `.git` is skipped without starting a git process (#458).
  */
 function findSource({ appDir, isPackaged = false, projects = [] } = {}) {
   if (isPackaged) return { ok: false, reason: REASON_PACKAGED };
@@ -67,7 +68,7 @@ function findSource({ appDir, isPackaged = false, projects = [] } = {}) {
   if (!appHead) return { ok: false, reason: 'this app does not run from a git checkout' };
   const appOrigin = normalizeUrl(tryGit(appDir, ['remote', 'get-url', 'origin']));
   for (const p of projects) {
-    if (!p || !p.dir || !fs.existsSync(p.dir)) continue;
+    if (!p || !p.dir || !fs.existsSync(path.join(p.dir, '.git'))) continue;
     if (path.resolve(p.dir) === path.resolve(appDir)) continue;
     const main = mainOf(p.dir);
     if (!main) continue;
