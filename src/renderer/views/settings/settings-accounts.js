@@ -48,7 +48,7 @@
     login.classList.toggle('hidden', true);
     if (!dir) return;
     let status = { signedIn: false, loginCommand: null };
-    try { status = await api.accountStatus({ provider, dir }); } catch { /* an unreadable folder reads as not signed in */ }
+    try { status = await api.accountStatus({ provider, dir }); } catch (err) { console.warn('accountStatus failed:', err?.message || err); /* reads as not signed in */ }
     if (row.querySelector('[data-acct="dir"]').value.trim() !== dir) return;
     badge.textContent = t(status.signedIn ? 'settings.accounts.signed_in' : 'settings.accounts.not_signed_in');
     badge.className = `pill ${status.signedIn ? 'pill-success' : 'pill-cancelled'}`;
