@@ -55,3 +55,44 @@ Feature: Agent providers per run, and their fallbacks
     When I open the chat of the run "lim00262" from the list
     Then the run chat ends with the failure "You've hit your usage limit. Upgrade to Plus to continue using Codex"
     And the run chat shows no fallback
+
+  # #312: Settings › Agents & CLIs lists each provider's accounts in order (name, config folder, enabled),
+  # next to the Fallbacks editor. The workspace starts with one Claude account, "Claude A"; the new
+  # account's folder is empty, so it is not signed in yet.
+  @issue-312
+  Scenario: The owner adds a second Claude account and sees how to log it in
+    Given the app is open
+    And the workspace has the "claude" account "Claude A"
+    When I open "Settings" in the sidebar
+    And I open the "Agents & CLIs" settings tab
+    Then the "claude" accounts read "Claude A"
+    When I add the "claude" account "Claude B" on a new empty folder
+    Then the new account shows the command that logs "claude" in on its folder, then "/login"
+    And the new account shows "Not signed in"
+    And the accounts say that the owner must follow each provider's terms for using more than one account
+    When I save the Agents & CLIs settings
+    Then the "claude" accounts read "Claude A", then "Claude B"
+    And the "claude" account "Claude B" is enabled
+
+  # A simulated run (no model) with the Claude accounts "Claude A" then "Claude B" and the simulation
+  # scenario mockSequences.usage_limits: ["claude@Claude A"]: every turn on Claude A answers with
+  # Claude's usage-limit message, so the turn moves to Claude B and the run goes on to its gate.
+  @issue-312
+  Scenario: A turn whose Claude account hit its usage limit moves to the next Claude account
+    Given the app is open
+    And a simulated AI Development run is open where the "claude" account "Claude A" hits its usage limit and "Claude B" is next
+    Then a gate card waits for my approval
+    When I switch the run to its chat
+    Then the run chat says a turn moved to "Claude B" because "Claude A" hit its limit
+    And the run did not move to another provider than "claude"
+
+  # Both Claude accounts hit their usage limit and Claude has no fallback chain: the run waits for
+  # credits instead of failing or switching provider.
+  @issue-312
+  Scenario: With no account and no fallback left, the run waits for credits
+    Given the app is open
+    And a simulated AI Development run is open where both "claude" accounts "Claude A" and "Claude B" hit their usage limit, with no fallback
+    When I switch the run to its chat
+    Then the run shows it is waiting for "claude" credits
+    And the run has not failed
+    And the run did not move to another provider than "claude"

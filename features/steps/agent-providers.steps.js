@@ -1,4 +1,5 @@
-// Steps of features/agent-providers.feature (#262): each agent's provider, model and effort per run
+// Steps of features/agent-providers.feature (#262, #312: several accounts per provider, at the end):
+// each agent's provider, model and effort per run
 // (the Start panel's "Agents" section), the engine's fallback to the next provider/model when one hits
 // its usage limit (the `agent.fallback` event: from, to, reason), shown in the run chat, the run's
 // agents table (the run list's expanded row) and a notification; with no fallback left the run fails
@@ -234,4 +235,166 @@ Given('the demo project has a finished AI Development run {string} whose develop
     fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
     fs.writeFileSync(path.join(dir, rel), content);
   }
+});
+
+// ---- #312: several accounts per provider ----------------------------------------------------------------
+//
+// What the scenarios expect of the UI (NEW: to be added by #312):
+//   Settings › Agents & CLIs  settings-accounts: the accounts section (next to settings-fallbacks),
+//                 holding one settings-accounts-provider per provider (data-provider="<provider id>"),
+//                 each with its settings-account-row items in order and a settings-account-add button
+//                 ("Add account"). A row has the textboxes "Account name" and "Config folder" and the
+//                 checkbox "Enabled"; a row being added also shows settings-account-login-command (the
+//                 command that logs the folder in, e.g. `CLAUDE_CONFIG_DIR=<folder> claude`, then
+//                 `/login`) and settings-account-signed-in ("Signed in" / "Not signed in", never a
+//                 credential). settings-accounts-terms: the notice that the owner must follow each
+//                 provider's terms for using more than one account. Saved with settings-fallbacks-save.
+//   run chat      run-chat-account-switch: one line per agent.account_switch, e.g. "moved to Claude B:
+//                 Claude A hit its limit until Oct 26"; run-waiting-credits: the run waits for credits
+//                 (run.waiting_credits), naming the provider and the reset time when known.
+// What they expect of the engine (simulation only): Settings `providers.<p>.accounts: [{ name, dir,
+// enabled }]`, and `mockSequences.usage_limits` entries `"<provider>@<account name>"`: every turn on that
+// account answers with the provider's usage-limit message.
+
+const accountsOf = (page, provider) => page.getByTestId('settings-accounts').filter({ visible: true }).first()
+  .locator(`[data-testid="settings-accounts-provider"][data-provider="${provider}"]`);
+const accountRows = (page, provider) => accountsOf(page, provider).getByTestId('settings-account-row');
+const accountName = (row) => row.getByRole('textbox', { name: 'Account name', exact: true });
+
+// an empty config folder for an account, inside the scenario's scratch folder
+function accountFolder(e2e, name) {
+  const dir = path.join(e2e.scratch, 'accounts', name.toLowerCase().replace(/\W+/g, '-'));
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+Given('the workspace has the {string} account {string}', async ({ e2e }, provider, name) => {
+  const dir = accountFolder(e2e, name);
+  const res = await e2e.window.evaluate(async ({ provider, name, dir }) => {
+    try { await window.api.setSettings({ providers: { [provider]: { accounts: [{ name, dir, enabled: true }] } } }); return {}; } catch (e) { return { thrown: String(e?.message || e) }; }
+  }, { provider, name, dir });
+  expect(res.thrown, 'window.api.setSettings rejected').toBeFalsy();
+});
+
+async function expectAccounts(page, provider, names) {
+  const rows = accountRows(page, provider);
+  await expect(rows).toHaveCount(names.length, { timeout: LOAD_TIMEOUT });
+  for (const [i, name] of names.entries()) await expect(accountName(rows.nth(i))).toHaveValue(name);
+}
+
+Then('the {string} accounts read {string}', async ({ e2e }, provider, a) => {
+  await expectAccounts(e2e.window, provider, [a]);
+});
+
+Then('the {string} accounts read {string}, then {string}', async ({ e2e }, provider, a, b) => {
+  await expectAccounts(e2e.window, provider, [a, b]);
+});
+
+When('I add the {string} account {string} on a new empty folder', async ({ e2e }, provider, name) => {
+  const page = e2e.window;
+  const before = await accountRows(page, provider).count();
+  await accountsOf(page, provider).getByTestId('settings-account-add').click();
+  const row = accountRows(page, provider).nth(before);
+  await expect(row).toBeVisible({ timeout: LOAD_TIMEOUT });
+  e2e.addedAccount = { row, dir: accountFolder(e2e, name) };
+  await accountName(row).fill(name);
+  const folder = row.getByRole('textbox', { name: 'Config folder', exact: true });
+  await folder.fill(e2e.addedAccount.dir);
+  await folder.press('Tab');
+});
+
+Then('the new account shows the command that logs {string} in on its folder, then {string}', async ({ e2e }, cli, then) => {
+  const { row, dir } = e2e.addedAccount;
+  const command = row.getByTestId('settings-account-login-command');
+  await expect(command).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(command).toContainText(`${cli.toUpperCase()}_CONFIG_DIR`);
+  await expect(command).toContainText(dir);
+  await expect(command).toContainText(new RegExp(`\\b${escRe(cli)}\\b`));
+  await expect(command).toContainText(then);
+});
+
+Then('the new account shows {string}', async ({ e2e }, state) => {
+  await expect(e2e.addedAccount.row.getByTestId('settings-account-signed-in')).toHaveText(state, { timeout: LOAD_TIMEOUT });
+});
+
+Then('the accounts say that the owner must follow each provider\'s terms for using more than one account', async ({ e2e }) => {
+  const notice = visibleTestId(e2e.window, 'settings-accounts-terms').first();
+  await expect(notice).toBeVisible();
+  await expect(notice).toContainText(/terms/i);
+  await expect(notice).toContainText(/more than one account|several accounts|multiple accounts/i);
+});
+
+When('I save the Agents & CLIs settings', async ({ e2e }) => {
+  await visibleTestId(e2e.window, 'settings-fallbacks-save').first().click();
+});
+
+Then('the {string} account {string} is enabled', async ({ e2e }, provider, name) => {
+  const rows = accountRows(e2e.window, provider);
+  const n = await rows.count();
+  for (let i = 0; i < n; i += 1) {
+    if ((await accountName(rows.nth(i)).inputValue()) !== name) continue;
+    await expect(rows.nth(i).getByRole('checkbox', { name: 'Enabled', exact: true })).toBeChecked();
+    return;
+  }
+  throw new Error(`no "${provider}" account named "${name}"`);
+});
+
+// A simulated run started like the Start panel starts one (window.api.startRun), with the provider's
+// accounts in Settings (no fallback chain) and the simulation scenario mockSequences.usage_limits on
+// the given accounts; mode validated: the run stops at its "Developer check" gate after Develop.
+async function startAccountsRun(e2e, provider, names, limited) {
+  const page = e2e.window;
+  const accounts = names.map((name) => ({ name, dir: accountFolder(e2e, name), enabled: true }));
+  const res = await page.evaluate(async ({ file, provider, accounts, limited, projectId, folder }) => {
+    try {
+      await window.api.setSettings({ providers: { [provider]: { accounts, fallbacks: [] } } });
+      const out = await window.api.startRun({
+        file, mock: true, projectId,
+        inputs: { task: 'Add a /health endpoint', repo_path: folder, mode: 'validated' },
+        mockSequences: { usage_limits: limited.map((name) => `${provider}@${name}`) },
+      });
+      return { runId: out?.runId || null, answer: out };
+    } catch (e) { return { thrown: String(e?.message || e) }; }
+  }, { file: `${AI_DEV}.yaml`, provider, accounts, limited, projectId: e2e.project.id, folder: e2e.project.folder || e2e.project.repo });
+  expect(res.thrown, 'window.api.startRun rejected').toBeFalsy();
+  expect(res.runId, `the run started (${JSON.stringify(res.answer)})`).toBeTruthy();
+  e2e.startedRunId = res.runId;
+  await page.evaluate((runId) => window.showRun(runId, { running: true }), res.runId);
+}
+
+Given('a simulated AI Development run is open where the {string} account {string} hits its usage limit and {string} is next', async ({ e2e }, provider, a, b) => {
+  await startAccountsRun(e2e, provider, [a, b], [a]);
+});
+
+Given('a simulated AI Development run is open where both {string} accounts {string} and {string} hit their usage limit, with no fallback', async ({ e2e }, provider, a, b) => {
+  await startAccountsRun(e2e, provider, [a, b], [a, b]);
+});
+
+Then('the run chat says a turn moved to {string} because {string} hit its limit', async ({ e2e }, to, from) => {
+  const line = visibleTestId(e2e.window, 'run-chat-account-switch').filter({ hasText: to }).first();
+  await expect(line).toBeVisible({ timeout: RUN_TIMEOUT });
+  // "moved to Claude B: Claude A hit its limit (until …)"
+  await expect(line).toContainText(new RegExp(`${escRe(to)}[\\s\\S]*${escRe(from)}[\\s\\S]*limit`, 'i'));
+});
+
+Then('the run shows it is waiting for {string} credits', async ({ e2e }, provider) => {
+  const waiting = visibleTestId(e2e.window, 'run-waiting-credits').first();
+  await expect(waiting).toBeVisible({ timeout: RUN_TIMEOUT });
+  await expect(waiting).toContainText(/waiting for credits/i);
+  await expect(waiting).toContainText(new RegExp(escRe(provider), 'i'));
+});
+
+Then('the run has not failed', async ({ e2e }) => {
+  const page = e2e.window;
+  await expect(page.getByTestId('run-screen-status').filter({ visible: true }).first()).not.toHaveAttribute('data-status', 'failed');
+  await expect(visibleTestId(page, 'run-chat-finished').filter({ hasText: /Failed/ })).toHaveCount(0);
+});
+
+// no agent.fallback line, and every turn shown was answered on the run's provider
+Then('the run did not move to another provider than {string}', async ({ e2e }, provider) => {
+  const page = e2e.window;
+  await expect(visibleTestId(page, 'run-chat-fallback')).toHaveCount(0);
+  const tags = visibleTestId(page, 'run-chat-turn-model');
+  const n = await tags.count();
+  for (let i = 0; i < n; i += 1) await expect(tags.nth(i)).toContainText(new RegExp(escRe(provider), 'i'));
 });
