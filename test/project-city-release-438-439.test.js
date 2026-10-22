@@ -270,6 +270,28 @@ test('#439 Close brings back today\'s problems and drops the not-yet line', asyn
   assert.equal(innermost(c.el, /did not exist yet/i).filter(visible).length, 0, 'no not-yet line on today\'s city');
 });
 
+// mini-dom has no capture phase: the <details> toggle is dispatched bubbling to reach the card's listener
+const toggle = (w, d, open) => { d.open = open; d.dispatchEvent(new w.Event('toggle', { bubbles: true })); };
+const missing = (root) => root.querySelector('[data-testid="city-release-missing"]');
+const summaryExpanded = (root) => String(missing(root)?.querySelector('[data-testid="city-release-missing-toggle"]')?.getAttribute('aria-expanded'));
+
+test('#439 opening the list of what did not exist yet sets aria-expanded, and the list stays open when the card is redrawn', async (t) => {
+  const withIssues = () => ({ ...RELEASE(), commits: [{ commit: 'c'.repeat(40), subject: 'Edit run (#12)', issues: [12], files: ['src/engine/run.js'] }] });
+  const { w, city: c } = await shown(t, { release: async () => withIssues() });
+  assert.equal(summaryExpanded(c.el), 'false', 'closed at first');
+  toggle(w, missing(c.el), true);
+  assert.equal(summaryExpanded(c.el), 'true', 'aria-expanded follows the opened list');
+  const issue = q(c.el, 'city-release-issue');
+  assert.ok(issue, 'the issue filter');
+  issue.value = '12';
+  issue.dispatchEvent(new w.Event('change', { bubbles: true }));
+  await settle();
+  assert.equal(missing(c.el)?.open, true, 'still open after the issue filter redrew the card');
+  assert.equal(summaryExpanded(c.el), 'true');
+  toggle(w, missing(c.el), false);
+  assert.equal(summaryExpanded(c.el), 'false', 'aria-expanded follows the closed list');
+});
+
 test('#439 today\'s city still lists its missing files and empty districts as problems', async (t) => {
   const { city: c } = await open(t);
   const problems = visibleProblems(c.el);

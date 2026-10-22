@@ -7,6 +7,9 @@
 //   for a rename differs from the one for a change of the same lines in something other than the
 //   highlight colours (a list of renamed paths, markers, an outline: the property name is the
 //   change's), and that sign names the rename's drawn building (its old path) or its new path;
+// - releaseRamp(changes).cuts, the legend's cut points, match the overlay's shades with one, two or
+//   three close distinct counts and a 0-line change: a file's shade's cut holds its line count, no
+//   count is in two cuts, the fewest lines are the lightest shade and the most the strongest;
 // - unchanged: added files are ADDED_COLOUR, removed files are ghosts and never highlighted.
 // The ramp's cut points (the line counts each shade stands for) are checked through the legend in
 // test/project-city-release-438-439.test.js.
@@ -68,6 +71,60 @@ test('#438 the rename sign names the renamed file, whatever its shade', () => {
     const rest = withoutHighlight(out);
     assert.ok(rest.includes('src/old.js') || rest.includes('lib/new.js'), `a ${lines}-line rename is marked: ${rest}`);
     assert.equal(rest.includes('src/mid.js'), false, `the changed file carries no rename sign: ${rest}`);
+  }
+});
+
+// ---------- the cut points (releaseRamp) match the map's shades, few distinct counts included ----------
+
+const changedOf = (lines) => lines.map((n, i) => ({ status: 'changed', path: `src/c${i}.js`, lines: n }));
+// one or few distinct counts, close counts, a 0-line change (a binary or a pure rename) among them
+const CASES = [[50], [12, 300], [10, 11, 12], [1, 100], [0, 100], [0, 5, 10, 20, 40]];
+const shadeOf = (ramp, colour) => ramp.indexOf(colour);
+
+test('#438 the cut of the shade a changed file is drawn in contains its line count', () => {
+  const { releaseOverlay, releaseRamp, CHANGE_RAMP } = load();
+  const ramp = Array.from(CHANGE_RAMP);
+  for (const lines of CASES) {
+    const changes = changedOf(lines);
+    const cuts = plain(releaseRamp(changes).cuts);
+    const { highlight } = plain(releaseOverlay(changes));
+    for (const c of changes) {
+      const s = shadeOf(ramp, highlight[c.path]);
+      const [from, to] = cuts[s] || [];
+      assert.ok(from <= c.lines && c.lines <= to, `[${lines}] ${c.lines} lines drawn in shade ${s}, whose cut is ${JSON.stringify(cuts[s])}`);
+    }
+  }
+});
+
+test('#438 no line count falls in the cuts of two shades', () => {
+  const { releaseRamp } = load();
+  for (const lines of CASES) {
+    const cuts = plain(releaseRamp(changedOf(lines)).cuts);
+    assert.equal(cuts.length, 4, `[${lines}] four cuts`);
+    for (let i = 1; i < cuts.length; i++) {
+      assert.ok(cuts[i - 1][1] < cuts[i][0], `[${lines}] the cuts overlap: ${JSON.stringify(cuts)}`);
+    }
+  }
+});
+
+test('#438 with two distinct counts or more, the fewest lines get the lightest shade and the most the strongest', () => {
+  const { releaseOverlay, CHANGE_RAMP } = load();
+  const ramp = Array.from(CHANGE_RAMP);
+  for (const lines of CASES.filter((l) => new Set(l).size >= 2)) {
+    const changes = changedOf(lines);
+    const { highlight } = plain(releaseOverlay(changes));
+    const fewest = changes.reduce((a, b) => (b.lines < a.lines ? b : a));
+    const most = changes.reduce((a, b) => (b.lines > a.lines ? b : a));
+    assert.equal(highlight[fewest.path], ramp[0], `[${lines}] ${fewest.lines} lines is the lightest`);
+    assert.equal(highlight[most.path], ramp[3], `[${lines}] ${most.lines} lines is the strongest`);
+  }
+});
+
+test('#438 a 0-line change (a pure rename) puts the lightest cut at 0', () => {
+  const { releaseRamp } = load();
+  for (const lines of [[0, 100], [0, 5, 10, 20, 40]]) {
+    const cuts = plain(releaseRamp([...changedOf(lines.slice(1)), { status: 'renamed', from: 'src/old.js', path: 'lib/new.js', lines: 0 }]).cuts);
+    assert.equal(cuts[0][0], 0, `[${lines}] the lightest cut starts at 0: ${JSON.stringify(cuts)}`);
   }
 });
 
