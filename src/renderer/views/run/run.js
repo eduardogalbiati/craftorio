@@ -185,11 +185,11 @@ function suiteCardsHtml(runId, stepNames) {
     const reasons = Object.entries(sel.reasons || {});
     const more = reasons.length - SUITE_REASONS_SHOWN;
     const list = reasons.length
-      ? `<ul>${reasons.slice(0, SUITE_REASONS_SHOWN).map(([f, why]) => `<li><span class="mono" title="${esc(f)}">${esc(f)}</span>: ${esc(why)}</li>`).join('')}${more > 0 ? `<li class="muted">${t('run.and_more_more', { more })}</li>` : ''}</ul>`
+      ? `<ul>${reasons.slice(0, SUITE_REASONS_SHOWN).map(([f, why]) => `<li><span class="mono text-cut" data-testid="run-suite-file" title="${esc(f)}">${esc(f)}</span>: <span class="text-prose">${esc(why)}</span></li>`).join('')}${more > 0 ? `<li class="muted">${t('run.and_more_more', { more })}</li>` : ''}</ul>`
       : '';
     const logBtn = (log, label, testid) => (log ? `<button type="button" class="link-btn small" data-testid="${testid}" data-suite-log="${esc(log)}" title="${esc(log)}">${label}</button>` : '');
     const affectedLog = out.affected ? out.affected.log : out.scope === 'files' ? out.log : '';
-    return `<div class="run-suite-card" data-testid="run-suite-card">
+    return `<div class="run-suite-card fit-box" data-testid="run-suite-card">
       <div><b title="${esc(stepId)}">${esc(agentLabel(stepId, stepNames))}</b> <span class="badge" data-testid="run-suite-scope" title="${esc(sel.why || '')}">${esc(scope)}</span>${out.round ? ` <span class="muted small">${t('run.round')} ${esc(out.round)}</span>` : ''}</div>
       <div class="small run-suite-selection" data-testid="run-suite-selection">${list}${sel.why ? `<div class="muted">${esc(sel.why)}</div>` : ''}</div>
       <div class="row">${logBtn(affectedLog, t(listed ? 'run.suite_listed_log' : 'run.suite_affected_log'), 'run-suite-affected-log')}${out.affected && out.scope === 'full' ? logBtn(out.log, t('run.suite_whole_log'), 'run-suite-full-log') : ''}</div>
@@ -221,7 +221,7 @@ function scratchHtml(runId) {
   const s = scratchOfRun.get(runId)?.info;
   if (!s) return '';
   return `<div class="small run-scratch" title="${t('run.a_scratch_copy_of_the_workspace', { dir: esc(s.dir) })}">`
-    + `${t('run.scratch_workspace_files', { count: s.files, size: esc(fmtSize(s.bytes)) })} <button class="btn sm ghost" id="btn-run-scratch">${t('run.open_folder')}</button></div>`;
+    + `<span class="text-prose">${t('run.scratch_workspace_files', { count: s.files, size: esc(fmtSize(s.bytes)) })}</span> <button class="btn sm ghost" id="btn-run-scratch">${t('run.open_folder')}</button></div>`;
 }
 
 // #384: the run that resumed an ended run (its row's resumedBy, runs:list { ids }), read at most every
@@ -862,7 +862,7 @@ registerView({
         <div id="run-chain" class="chain-banner hidden" aria-live="polite" data-testid="run-chain-banner"></div>
         <div id="run-gates" class="run-gates hidden" aria-live="polite"></div>
         <div class="run-layout">
-          <aside class="panel config">
+          <aside class="panel config" data-testid="run-side-column">
             <section>
               <h2>${t('run.workflow')}</h2>
               <div id="run-summary" class="run-summary"><p class="muted small">${t('run.no_workflow_started')}</p></div>

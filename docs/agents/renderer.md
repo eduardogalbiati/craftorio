@@ -454,6 +454,14 @@ which the software-development developer and evidence agents load (#111). The de
 ai-development-local-hero's `ui_reviewer` reviews the screenshots against both. A token added or
 changed in `style.css` goes into that skill too.
 
+Long text in cards and panels (#443, #437) uses the shared classes of `style.css`, not a fix per
+card: `.fit-box` on a grid or flex card (its items get `min-width: 0`), `.text-cut` on a path or an
+id (one line ending in "…", the element carries the whole text in `title`), `.text-prose` on prose
+(wraps, long words too). A status pill (`.pill`) never wraps: the title next to it truncates
+(`.run-title-text`). `status_pill.*` labels stay at 16 characters or fewer in every language
+(`test/i18n-catalog-check-329.test.js`). Guards: `test/css-layout.js` cascades the stylesheets onto
+rendered markup and reports what would be wider than its box (`test/renderer-run-suite-card-overflow.test.js`).
+
 How a screen is built and reviewed (#387):
 - **Build**: ai-development-local-hero's developer loads both skills (`ui-conventions` and
   `design-system`): every colour, gap, size and radius comes from the `:root` tokens. The design
