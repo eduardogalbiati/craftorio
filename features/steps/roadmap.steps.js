@@ -7,7 +7,8 @@
 // the shipped releases' blocks, version lines and Releases filter (#291), the bar's Pause menu ("Pause
 // after this stage" / "Pause now", the pausing badge and Cancel pause, #391), "Move on" past an item at
 // a human gate, its parked card and "Move on from this stage" (#395), "Run later" / "Run earlier" past the
-// stages Planned hides (#426), on the demo roadmap (scripts/screenshot.js
+// stages Planned hides (#426), the live refresh keeping the scroll position and updating rows in
+// place (#491), on the demo roadmap (scripts/screenshot.js
 // demoRoadmap / demoRoadmapRuns). Locators are roles and data-testid only (skills/ui-conventions).
 //
 // What the screens expose (the renderer's contract for these steps):
@@ -1203,6 +1204,54 @@ Then('the stage actions menu offers {string}, enabled', async ({ e2e }, name) =>
   await expect(entry).toBeVisible();
   await expect(entry).toBeEnabled();
   await expect(entry).not.toHaveAttribute('aria-disabled', 'true');
+});
+
+// ---- #491: the live refresh keeps the owner's place ----------------------------------------------------
+// The card noted is marked on its element (a property on the DOM node, nothing in the app): a card
+// updated in place keeps it, a card drawn again loses it. Its place is its top on the screen
+// (getBoundingClientRect), whichever element scrolls.
+
+const placeNoted = new WeakMap();
+
+// brings more items in (infinite scroll, #268) until the card is there, then scrolls it into view
+When('I scroll the roadmap down to the item {string}', async ({ e2e }, title) => {
+  const page = e2e.window;
+  const items = page.getByTestId('roadmap-item');
+  await expect(items.first()).toBeVisible({ timeout: LOAD_TIMEOUT });
+  const target = items.filter({ hasText: title });
+  for (let round = 0; round < 30 && !(await target.count()); round += 1) {
+    const count = await items.count();
+    await items.last().scrollIntoViewIfNeeded();
+    await expect.poll(() => items.count(), { timeout: 3000 }).toBeGreaterThan(count).catch(() => {});
+  }
+  await expect(target.first()).toBeAttached({ timeout: LOAD_TIMEOUT });
+  await target.first().scrollIntoViewIfNeeded();
+  await expect(target.first()).toBeInViewport();
+});
+
+When('I note where the roadmap item {string} is on the screen', async ({ e2e }, title) => {
+  const item = roadmapItem(e2e.window, title);
+  await expect(item).toBeInViewport({ timeout: LOAD_TIMEOUT });
+  const top = await item.evaluate((el) => {
+    el.e2eNoted = true;
+    return el.getBoundingClientRect().top;
+  });
+  placeNoted.set(e2e, top);
+});
+
+Then('the roadmap item {string} was updated in place', async ({ e2e }, title) => {
+  const item = roadmapItem(e2e.window, title);
+  await expect(item).toBeVisible({ timeout: LOAD_TIMEOUT });
+  expect(await item.evaluate((el) => el.e2eNoted === true), `the card of "${title}" is the same element, updated in place`).toBe(true);
+});
+
+Then('the roadmap item {string} has not moved on the screen', async ({ e2e }, title) => {
+  const before = placeNoted.get(e2e);
+  expect(before, 'the place noted earlier').not.toBeUndefined();
+  const item = roadmapItem(e2e.window, title);
+  await expect(item).toBeInViewport({ timeout: LOAD_TIMEOUT });
+  const top = await item.evaluate((el) => el.getBoundingClientRect().top);
+  expect(Math.abs(top - before), `the card of "${title}" stays at ${before}px from the top, not ${top}px`).toBeLessThanOrEqual(4);
 });
 
 Then('the toast says stage {int} moved {word} and is stage {int} now', async ({ e2e }, before, direction, after) => {

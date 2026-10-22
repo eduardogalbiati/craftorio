@@ -696,3 +696,23 @@ Feature: Roadmap statuses, done items, filters and run timers
     When I choose "Run later" in the stage actions menu
     Then the toast says stage 5 moved down and is stage 7 now
     And stage 7 shows the item "Dark scrollbars in the terminal dock"
+
+  # ---- #491: the live refresh keeps my place ----------------------------------------------------------
+  # The demo run "run00016" is running, so the Roadmap refreshes while it is open. A long stage of
+  # planned items (#1001…) gives the page room to scroll; an issue appended to one of them outside the
+  # app (as #287) makes the screen refresh. The refreshed card is the same element on the page (updated
+  # in place, not drawn again) and the page does not jump back to the top.
+
+  @issue-491
+  Scenario: While a run is active, a refresh updates a row in place and keeps my scroll position
+    Given the app is open
+    And the roadmap has a stage of 40 planned items
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    Then the roadmap item "Keyboard focus is lost after closing a dialog" shows a run chip reading "Running"
+    When I scroll the roadmap down to the item "Planned item 1030"
+    And I note where the roadmap item "Planned item 1030" is on the screen
+    And the issue "Appended from elsewhere" is added to the roadmap item "Planned item 1030" outside the app
+    Then the roadmap item "Planned item 1030" shows "Appended from elsewhere"
+    And the roadmap item "Planned item 1030" was updated in place
+    And the roadmap item "Planned item 1030" has not moved on the screen

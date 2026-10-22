@@ -2,7 +2,8 @@
 // gate card; the "Developer effort" field next to "Developer model" (#286); the chat of a run
 // interrupted at a gate (#288: the note "Interrupted at <step>" and its Resume button); AI
 // Development's Warm Up step (#301), its affected suite's card and run report (#304), and the "Not
-// tested green" pill of a run built without a green suite (#396), the Start panel's inputs of a
+// tested green" pill of a run built without a green suite (#396), a deterministic step's "Live
+// terminal" and "↗" on its card (#465), the Start panel's inputs of a
 // chosen workflow (features/pipelines.feature, #378). Locators are
 // roles and data-testid only (skills/ui-conventions).
 
@@ -603,4 +604,65 @@ Then('the run chat\'s summary says {string}', async ({ e2e }, text) => {
   const line = visibleTestId(e2e.window, 'runchat-tested');
   await expect(line).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(line).toContainText(text);
+});
+
+// ---- #465: a deterministic step's live terminal ---------------------------------------------------
+// What the screen exposes:
+// - data-testid="run-step-card" (NEW): the card of a step on the Run screen's Details, holding the
+//   step's readable name ("Suite"); a deterministic step (suite, check, e2e) that is running or ended
+//   offers the buttons "Live terminal" (an embedded tab of the terminal dock) and "↗" (an external
+//   window), as the sessions' terminal buttons (term-dock.js termButtons), and no "Open in CLI".
+// - the terminal dock: the region "Terminals" (#term-dock, aria-label), its tabs role="tab" (the active
+//   one aria-selected="true"), a live tab marked read-only in its title ("… (read-only)"); the xterm
+//   text is in the dock.
+// - an agent's session: data-testid="run-session-card" with data-agent; selected, its details offer
+//   "Live terminal" and "Open in CLI" (unchanged).
+const stepCard = (page, step) => page.getByTestId('run-step-card').filter({ visible: true })
+  .filter({ has: page.getByText(step, { exact: true }) }).first();
+const termDock = (page) => page.getByRole('region', { name: 'Terminals', exact: true });
+
+Then('the {string} step card offers {string} and {string}', async ({ e2e }, step, a, b) => {
+  const card = stepCard(e2e.window, step);
+  await expect(card).toBeVisible({ timeout: LOAD_TIMEOUT });
+  for (const name of [a, b]) await expect(card.getByRole('button', { name, exact: true })).toBeVisible();
+  await expect(card.getByRole('button', { name: a, exact: true })).toBeEnabled();
+});
+
+Then('the {string} step card offers no {string} button', async ({ e2e }, step, name) => {
+  const card = stepCard(e2e.window, step);
+  await expect(card).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(card.getByRole('button', { name, exact: true })).toHaveCount(0);
+});
+
+When('I click {string} on the {string} step card', async ({ e2e }, name, step) => {
+  const card = stepCard(e2e.window, step);
+  await expect(card).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await card.getByRole('button', { name, exact: true }).click();
+});
+
+// the dock's active tab is the step's, marked read-only (its title, label or text says so)
+Then('a read-only terminal tab opens for {string}', async ({ e2e }, step) => {
+  const dock = termDock(e2e.window);
+  await expect(dock).toBeVisible({ timeout: LOAD_TIMEOUT });
+  const tab = dock.getByRole('tab', { selected: true });
+  await expect(tab).toHaveCount(1, { timeout: LOAD_TIMEOUT });
+  const said = async () => `${await tab.getAttribute('title') || ''} ${await tab.getAttribute('aria-label') || ''} ${await tab.innerText()}`;
+  await expect.poll(said, { timeout: LOAD_TIMEOUT }).toMatch(new RegExp(escRe(step), 'i'));
+  expect(await said(), 'the live tab says it is read-only').toMatch(/read-only/i);
+});
+
+Then('the terminal shows {string}', async ({ e2e }, text) => {
+  await expect(termDock(e2e.window)).toContainText(text, { timeout: LOAD_TIMEOUT });
+});
+
+When('I select the run\'s {string} session', async ({ e2e }, agent) => {
+  const card = e2e.window.locator(`[data-testid="run-session-card"][data-agent="${agent}"]`).filter({ visible: true }).first();
+  await expect(card).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await card.click();
+});
+
+Then('the session offers {string} and {string}', async ({ e2e }, a, b) => {
+  for (const name of [a, b]) {
+    await expect(e2e.window.getByRole('button', { name, exact: true }).filter({ visible: true }).first()).toBeVisible({ timeout: LOAD_TIMEOUT });
+  }
 });

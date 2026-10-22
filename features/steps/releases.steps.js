@@ -2,7 +2,8 @@
 // ("Release here", a name), the Releases screen (Code & Build › Releases: the shipped releases and
 // the next one, its notes editable before Ship), the release run's human-only Ship gate (Ship or
 // Hold), the recent releases and "Suggest version" in the cut line dialog and on the Releases screen
-// (#436). Locators are roles and data-testid only (skills/ui-conventions).
+// (#436), saving the cut line dialog: its toast with Undo, a save refused because the roadmap changed
+// elsewhere (#454). Locators are roles and data-testid only (skills/ui-conventions).
 
 const fs = require('fs');
 const path = require('path');
@@ -347,4 +348,75 @@ Then('the cut line dialog is still open', async ({ e2e }) => {
 Then('the release version holds the version suggested after {string}, with the reason', async ({ e2e }, previous) => {
   const page = e2e.window;
   await expectSuggestion(releaseVersionField(page), nextRelease(page).getByTestId('suggest-version-reason'), previous);
+});
+
+// ---- #454: saving the cut line dialog: the toast with Undo, a refused save -----------------------
+// What the screen exposes: the dialog (data-testid="cut-line-modal", role dialog, the textbox "Release
+// name", buttons "Add cut line" and "Cancel"); data-testid="cut-line-error" (NEW) on the dialog's
+// error line, where a refused save's reason shows; the toast (data-testid="toast", as #281) "Set the
+// cut line <name>" with "Undo"; each cut line data-testid="roadmap-cut-line" (as #260). A refused save
+// (the service's `conflict`, src/roadmap-merge.js) keeps the dialog open, or reopens it, with the
+// name typed. Stage n is the stage the roadmap numbers "Stage n" (stage 1, done, is hidden in Planned).
+
+const LOAD_TIMEOUT = 30000;
+const numberedStage = (page, n) => stages(page).filter({ hasText: new RegExp(`\\bStage ${n}\\b`) }).first();
+const cutLine = (page, name) => cutLines(page).filter({ hasText: new RegExp(`(^|\\s)${escapeRe(name)}(?![\\w.])`) });
+
+// the roadmap file edited outside the app (another window, the Oracle, a script), as the app follows it
+function editRoadmapFile(e2e, fn) {
+  const file = path.join(e2e.scratch, 'workspace', 'backlog', `${e2e.project.id}.roadmap.json`);
+  const r = JSON.parse(fs.readFileSync(file, 'utf8'));
+  fn(r);
+  const tmp = `${file}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify({ ...r, updatedAt: new Date().toISOString() }, null, 2));
+  fs.renameSync(tmp, file);
+}
+
+When('I type {string} as the release name in the cut line dialog', async ({ e2e }, name) => {
+  const dialog = cutLineDialog(e2e.window);
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('textbox', { name: 'Release name', exact: true }).fill(name);
+});
+
+When('the cut line {string} is drawn after stage {int} outside the app', async ({ e2e }, name, n) => {
+  editRoadmapFile(e2e, (r) => {
+    const stage = r.stages[n - 1];
+    expect(stage, `the demo roadmap's stage ${n}`).toBeTruthy();
+    stage.release = { name };
+  });
+});
+
+Then('the cut line dialog is closed', async ({ e2e }) => {
+  await expect(e2e.window.getByTestId('cut-line-modal')).toBeHidden({ timeout: LOAD_TIMEOUT });
+});
+
+// after stage n in the page, with no other stage between them
+Then('the roadmap shows the cut line {string} right after stage {int}', async ({ e2e }, name, n) => {
+  const page = e2e.window;
+  const line = cutLine(page, name);
+  await expect(line).toHaveCount(1, { timeout: LOAD_TIMEOUT });
+  await expect(line).toContainText('Release here');
+  const before = await line.evaluate((el) => {
+    const shown = Array.from(document.querySelectorAll('[data-testid="roadmap-stage"]'))
+      .filter((s) => s.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING);
+    return shown.length ? shown[shown.length - 1].textContent : '';
+  });
+  expect(before, `the stage right before the cut line "${name}"`).toMatch(new RegExp(`\\bStage ${n}\\b`));
+  await expect(numberedStage(page, n)).toBeVisible();
+});
+
+Then('the roadmap does not show the cut line {string}', async ({ e2e }, name) => {
+  const page = e2e.window;
+  await expect(stages(page).first()).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(cutLine(page, name)).toHaveCount(0, { timeout: LOAD_TIMEOUT });
+});
+
+Then("the cut line dialog's {string} field holds {string}", async ({ e2e }, label, value) => {
+  await expect(cutLineDialog(e2e.window).getByRole('textbox', { name: label, exact: true })).toHaveValue(value, { timeout: LOAD_TIMEOUT });
+});
+
+Then("the cut line dialog's error says {string}", async ({ e2e }, text) => {
+  const error = cutLineDialog(e2e.window).getByTestId('cut-line-error');
+  await expect(error).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(error).toContainText(new RegExp(escapeRe(text), 'i'));
 });

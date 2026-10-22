@@ -139,3 +139,43 @@ Feature: Releases
     When I open "Releases" in the sidebar
     And I click "Suggest version" next to the release version
     Then the release version holds the version suggested after "1.1.2", with the reason
+
+  # #454: saving the cut line dialog ("Release here"). Stage 3 of the demo roadmap ("Reports and
+  # health") has no cut line. A saved cut line shows a toast with Undo. A refused save (the roadmap
+  # changed elsewhere: here the same stage got another cut line outside the app while the dialog was
+  # open, which the service refuses as "changed elsewhere too") reopens the dialog with the typed name
+  # and the reason in the dialog's error; Cancel then closes it with nothing saved.
+
+  @issue-454
+  Scenario: Saving a cut line shows "Set the cut line" with Undo and draws the line after its stage
+    Given the app is open
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    And I open the stage actions menu of stage 3
+    And I choose "Release here" in the stage actions menu
+    And I type "1.3.0" as the release name in the cut line dialog
+    And I click "Add cut line" in the cut line dialog
+    Then the cut line dialog is closed
+    And a toast says "Set the cut line 1.3.0" with an "Undo" button
+    And the roadmap shows the cut line "1.3.0" right after stage 3
+    When I click "Undo" in the toast
+    Then the roadmap does not show the cut line "1.3.0"
+
+  @issue-454
+  Scenario: A cut line refused because the roadmap changed elsewhere reopens the dialog with the name and the reason, and Cancel saves nothing
+    Given the app is open
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    And I open the stage actions menu of stage 3
+    And I choose "Release here" in the stage actions menu
+    And I type "1.3.0" as the release name in the cut line dialog
+    And the cut line "1.2.9" is drawn after stage 3 outside the app
+    Then the roadmap shows the cut line "1.2.9" right after stage 3
+    When I click "Add cut line" in the cut line dialog
+    Then the cut line dialog is still open
+    And the cut line dialog's "Release name" field holds "1.3.0"
+    And the cut line dialog's error says "changed elsewhere"
+    When I click "Cancel" in the cut line dialog
+    Then the cut line dialog is closed
+    And the roadmap does not show the cut line "1.3.0"
+    And the roadmap shows the cut line "1.2.9" right after stage 3

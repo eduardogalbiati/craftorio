@@ -333,3 +333,35 @@ Feature: Runs and gates
     And I search the runs for "sui00304"
     And I view the run "sui00304" from the list
     Then the run shows no "Not tested green" pill
+
+  # ---- #465: a deterministic step's live terminal ----------------------------------------------------
+  # A deterministic step (suite, check, e2e) has no agent session, so no session buttons: its card on
+  # the Run screen offers "Live terminal" (an embedded, read-only tab in the terminal dock that shows
+  # the step's log) and "↗" (the same in an external window). The ended run "-sui00304" (#304) has an
+  # agent step (Develop, the developer) and a suite step whose log reads "$ npm test …". An agent step
+  # keeps its session's "Live terminal" and "Open in CLI".
+
+  @issue-465
+  Scenario: An ended suite step's card offers "Live terminal" and "↗", and Live terminal shows its log read-only
+    Given the app is open
+    And the demo project has a finished AI Development run "sui00304" whose suite ran the affected tests, then the whole suite
+    When I open "Runs" in the sidebar
+    And I search the runs for "sui00304"
+    And I view the run "sui00304" from the list
+    And I open the run's "Details" tab
+    Then the "Suite" step card offers "Live terminal" and "↗"
+    And the "Suite" step card offers no "Open in CLI" button
+    When I click "Live terminal" on the "Suite" step card
+    Then a read-only terminal tab opens for "Suite"
+    And the terminal shows "npm test"
+
+  @issue-465
+  Scenario: An agent step keeps its session's terminal buttons
+    Given the app is open
+    And the demo project has a finished AI Development run "sui00304" whose suite ran the affected tests, then the whole suite
+    When I open "Runs" in the sidebar
+    And I search the runs for "sui00304"
+    And I view the run "sui00304" from the list
+    And I open the run's "Details" tab
+    And I select the run's "developer" session
+    Then the session offers "Live terminal" and "Open in CLI"
