@@ -51,6 +51,11 @@ const settingsFallbacks = (settings) => Object.fromEntries(Object.entries(settin
   .filter(([, p]) => Array.isArray(p?.fallbacks) && p.fallbacks.length)
   .map(([name, p]) => [name, p.fallbacks.map(String)]));
 
+// #312: Settings' providers.<name>.accounts (those with a folder) as the WorkflowRun `accounts` option
+const settingsAccounts = (settings) => Object.fromEntries(Object.entries(settings.providers || {})
+  .map(([name, p]) => [name, (Array.isArray(p?.accounts) ? p.accounts : []).filter((a) => a?.name && a?.dir)])
+  .filter(([, list]) => list.length));
+
 module.exports = (ctx) => {
   const { events } = ctx;
   const active = new Map();
@@ -395,6 +400,7 @@ module.exports = (ctx) => {
         localPreview: project?.localPreview?.command ? project.localPreview : null,
         budget, prices: settings.prices, projectId, issues, resume, attachments, mockSequences: mock ? mockSequences : null, then, from,
         agentOverrides, fallbacks: settingsFallbacks(settings), models: settings.models || {},
+        accounts: settingsAccounts(settings), accountCooldownMs: (settings.accountCooldownMinutes ?? 60) * 60e3,
         // #337: tonight's limits, read at each check (a raise reaches the run at its next one)
         nightLimits: () => nightLimits.tonightLimits(ws.oracle || path.join(ws.root, 'oracle')),
         // #327: Settings › Language, read at each turn (a change reaches the run at its next turn)

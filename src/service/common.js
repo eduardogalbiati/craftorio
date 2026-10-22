@@ -58,6 +58,8 @@ function sessionView(x, live) {
     // #262: a simulated session's workflow provider, and the provider · model it fell back from ({ from, reason })
     ...(x.simulates ? { simulates: x.simulates } : {}),
     ...((live ? x.fallbackFrom : x.fallback_from) ? { fallbackFrom: live ? x.fallbackFrom : x.fallback_from } : {}),
+    // #312: the name of the provider account the session runs on
+    ...(x.account ? { account: x.account } : {}),
     // #320: the prompt-cache state of a snapshot and its next turn now (src/session-cache.js)
     ...(live ? {} : cacheView(x)),
   };

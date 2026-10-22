@@ -228,7 +228,11 @@ const DEFAULT_SETTINGS = {
   prices: {},
   // #262: per provider, the ordered fallback chain of an agent whose workflow declares none:
   // { <provider>: { fallbacks: ['<provider>:<model>', ...] } } (a turn out of credits moves on to the next)
+  // #312: and its accounts in order, { accounts: [{ name, dir, enabled }] } (dir: the CLI's config folder);
+  // a turn out of credits moves to the next account first, the fallback chain only after the last one
   providers: {},
+  // #312: how long an account stays out after a usage limit whose message gives no reset time
+  accountCooldownMinutes: 60,
   // #262: limits that follow the model an agent runs on: { <model id>: { timeout_factor?, max_total_cost_usd? } }
   // (the workflow's own `models` win per model)
   models: {},
