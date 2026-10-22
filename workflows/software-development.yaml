@@ -881,8 +881,6 @@ steps:
   - id: suite
     fragment: test-pipeline
     type: suite
-    # #225: node's coverage (an npm script's <name>:coverage, or a plain node --test) as a Tests artifact
-    coverage: true
   - id: test_failed
     fragment: test-pipeline
     type: human_approval
@@ -897,6 +895,7 @@ steps:
     agent: evidence
   - id: verify_change
     fragment: test-pipeline
+    display: Final verification
     agent: verifier
 
   - id: verify_failed
