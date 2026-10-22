@@ -492,15 +492,233 @@ function viewOf(ev) {
   return v;
 }
 
+const hydrating = new Map(); // run id -> live events held back while hydrateRun reads the recorded ones
+
+// One engine event into its run's view (applyRunEvent) and the app's state (the Run screen's run,
+// the runs kept). `live` is false for an event replayed from disk (hydrateRun): no Run screen switch
+// and no side effects. { v, effects } for runEventEffects; null when held back or applied already.
+function reduceEvent(ev, live) {
+  if (ev.type === 'workflow.started' || ev.type === 'workflow.finished') reportNotifyContext();
+  if (live) scheduleActiveSync();
+  const v = viewOf(ev);
+  if (live && hydrating.has(ev.run_id)) { hydrating.get(ev.run_id).push(ev); return null; }
+  const effects = applyRunEvent(v, ev);
+  if (!effects) return null;
+  if (ev.type === 'workflow.started') {
+    // a new run takes the Run screen only from a run that is over
+    if (live && (!isRunLive(state.runId) || state.runId === ev.run_id)) state.runId = ev.run_id;
+    pruneRuns();
+  }
+  // the Run screen moves on to a run still in progress when the one it showed ends elsewhere
+  if (ev.type === 'workflow.finished' && state.runId === ev.run_id && state.view !== 'run' && liveRuns().length) state.runId = liveRuns()[0].run.id;
+  return { v, effects };
+}
+
+// The run view's reducer: updates the view (run, steps, sessions, approvals, orchestrator log,
+// trail) and returns the side effects the event calls for, as data (RUN_EVENT_REDUCERS);
+// null for an event already applied (its `seq`).
+function applyRunEvent(v, ev) {
+  if (ev.seq) {
+    if (ev.seq <= v.lastSeq) return null; // replayed from disk already
+    v.lastSeq = ev.seq;
+  }
+  v.events.push(ev);
+  const effects = [];
+  const sess = ev.session_id ? v.sessions.get(ev.session_id) : null;
+  if (Object.hasOwn(RUN_EVENT_REDUCERS, ev.type)) RUN_EVENT_REDUCERS[ev.type](v, ev, sess, effects);
+  // the run's row in the runs lists follows its steps from here, without a reload
+  if (v.trail?.apply(ev)) effects.push({ renderRunLists: true });
+  return effects;
+}
+
+// #350: a run recorded before per-turn costs (#233) is read through the run record's upgrade
+// (src/shared/run-record.js), as the services read past runs: the events so far, upgraded, end with
+// this one (a turn's own cost, its session's corrected snapshot) and what it stands for (an old
+// `attempt N/M failed` log line: the stopped attempt after it)
+const upgradedTail = (v, ev) => (v.run?.costPerTurn ? [ev]
+  : RunRecord.upgradeRunRecord({ events: v.events.filter((e) => e.type !== 'session.stream') }).events.slice(-2));
+const takeSnapshot = (v, ev, sess) => { if (sess) Object.assign(sess, upgradedTail(v, ev).at(-1).session); };
+
+// One reducer per event type: (view, event, its session, effects) updates the view and pushes the
+// side effects as data: { toast: showToast's arguments }, { gateToast: the approval }, { saveToIssue },
+// { openSaveToIssue }, { loadUsage }, { loadUsageThrottled } ({ renderRunLists }: applyRunEvent).
+const RUN_EVENT_REDUCERS = {
+  'workflow.started': (v, ev) => {
+    v.run = { ...runInfo(ev), status: 'running', costPerTurn: ev.cost_accounting === 'per_turn' };
+    v.events = [ev];
+    v.steps = new Map((ev.steps || []).map((s) => [s.id, { ...s, visits: 0, status: 'pending' }]));
+    v.trail = new RunProgress.StepTrail();
+    v.groups = ev.groups || [];
+    orch(ev, `workflow "${ev.workflow}" started ${ev.mock ? '(simulation)' : ''}`);
+  },
+  // #368: pausing after the current turn (the Run screen's pause line), or the pause taken back
+  'run.pausing': (v, ev) => onPauseEvent(v, ev),
+  'run.pause_cancelled': (v, ev) => onPauseEvent(v, ev),
+  // the chain edited while the run goes (#134): the Run screen's chain banner
+  'run.then': (v, ev) => { if (v.run) v.run.chain = ChainModel.withThen(v.run.chain, ev.then); },
+  // a `type: workflow` step's child runs (#174): the Run screen links them
+  'workflow.child_started': (v, ev) => {
+    if (v.run && ev.child_run_id) {
+      v.run.childRuns = [...(v.run.childRuns || []).filter((c) => c.run_id !== ev.child_run_id), { run_id: ev.child_run_id, step_id: ev.step_id, index: ev.index, label: ev.label, workflow: ev.workflow, status: ev.reused ? 'success' : 'running', resumed_from: ev.resumed_from, reused: ev.reused }];
+    }
+    // a resumed parent reuses the children that succeeded and resumes the others (#175)
+    orch(ev, `child run ${ev.child_run_id} ${ev.reused ? 'reused' : ev.resumed_from ? `resumed from ${ev.resumed_from}` : 'started'} (${ev.workflow}${ev.label ? `: ${ev.label}` : ''})`, 'transition');
+  },
+  'workflow.child_finished': (v, ev) => {
+    const c = v.run?.childRuns?.find((x) => x.run_id && x.run_id === ev.child_run_id);
+    if (c) Object.assign(c, { status: ev.status, cost_usd: ev.cost_usd || 0 });
+    orch(ev, `child run ${ev.child_run_id || '(not started)'} ${ev.status}${ev.label ? ` (${ev.label})` : ''}${ev.error ? `: ${ev.error}` : ''}`, ev.status === 'success' ? 'transition' : 'error');
+  },
+  'workflow.finished': (v, ev, sess, effects) => {
+    v.run.status = ev.status;
+    v.run.finishedAt = Date.parse(ev.ts);
+    v.run.error = ev.error || null;
+    v.run.pause = finishedPause(ev);
+    // #396: the run went on without a green suite (views/run/run.js "Not tested green")
+    v.run.tested = ev.summary?.tested || null;
+    v.run.testedFailures = ev.summary?.tested_failures || null;
+    // what the chain did is read again once the service acted on it (#134, views/run/run.js)
+    v.chainLoaded = false;
+    v.steps.forEach((s) => { if (s.status !== 'pending') s.status = 'done'; });
+    v.approvals.clear();
+    orch(ev, `workflow finished: ${ev.status}${ev.error ? ' — ' + ev.error : ''}`, ev.status === 'success' ? 'transition' : 'error');
+    if (liveRuns().length) effects.push({ toast: [`${runLabel(v.run)}: ${statusLabel(v.run)}`, ev.error, ev.run_id] });
+    if (v.saveToIssue) effects.push({ openSaveToIssue: true });
+    effects.push({ loadUsage: true });
+  },
+  'session.opened': (v, ev) => {
+    v.sessions.set(ev.session_id, { ...ev.session, turnLog: new Map(), localOpenedAt: Date.parse(ev.ts) });
+    if (!v.selected) v.selected = ev.session_id;
+    if (ev.session_id !== 'orchestrator') orch(ev, `session ${ev.session_id} opened: ${ev.session.agent} (${ev.session.provider} · ${ev.session.model})`);
+  },
+  'session.status': (v, ev, sess) => { if (sess) sess.status = ev.status; },
+  'session.closed': (v, ev, sess) => {
+    takeSnapshot(v, ev, sess);
+    if (ev.session_id !== 'orchestrator') orch(ev, `session ${ev.session_id} closed (${ev.status})`);
+  },
+  'session.message_sent': (v, ev, sess) => {
+    if (!sess) return;
+    const turn = getTurn(sess, ev.turn);
+    turn.prompt = ev.prompt; turn.stepId = ev.step_id; turn.startedAt = Date.parse(ev.ts);
+    sess.turns_count = ev.turn;
+    orch(ev, `→ ${ev.session_id} turn ${ev.turn} (${ev.step_id})`);
+  },
+  'session.stream': (v, ev, sess) => {
+    if (!sess) return;
+    if (ev.item.kind === 'session' && ev.item.sessionId) sess.provider_session_id = ev.item.sessionId;
+    if (ev.item.kind !== 'usage' && ev.item.kind !== 'session') getTurn(sess, ev.turn).items.push(ev.item);
+  },
+  'session.message_received': (v, ev, sess, effects) => {
+    if (sess) {
+      const own = upgradedTail(v, ev).at(-1);
+      getTurn(sess, ev.turn).result = { usage: ev.usage, cost: own.cost_usd, duration: ev.duration_ms };
+      Object.assign(sess, own.session);
+      orch(ev, `← ${ev.session_id} replied in ${fmtDur(ev.duration_ms)}`);
+    }
+    if (v.run?.status === 'running') effects.push({ loadUsageThrottled: true });
+  },
+  // #233: an attempt stopped before its result: its estimated cost is in the session's snapshot
+  'session.attempt_stopped': takeSnapshot,
+  // #320: the snapshot after a persistent agent's whole turn: its note saved, its cache state
+  'session.updated': takeSnapshot,
+  'step.started': (v, ev) => {
+    const s = v.steps.get(ev.step_id);
+    if (s) { s.status = 'running'; s.visits = ev.visit; }
+    orch(ev, `▶ step ${ev.step_id} (visit ${ev.visit})`, 'transition');
+  },
+  'step.finished': (v, ev) => {
+    const s = v.steps.get(ev.step_id);
+    if (s) s.status = 'done';
+  },
+  'step.waiting': (v, ev) => {
+    const s = v.steps.get(ev.step_id);
+    if (s) s.status = 'waiting';
+    orch(ev, `⏳ ${ev.step_id}: /loop, next check in ${fmtDur(ev.interval_ms)}`);
+  },
+  'step.goal': (v, ev) => orch(ev, `🎯 /goal ${ev.met ? 'met' : 'pending'}: ${ev.goal} (iteration ${ev.iteration})`, ev.met ? 'transition' : ''),
+  'step.transition': (v, ev) => orch(ev, `${ev.from} → ${ev.to}   [${ev.when}]`, 'transition'),
+  'approval.requested': (v, ev, sess, effects) => {
+    v.approvals.set(ev.approval_id, ev);
+    orch(ev, `? approval requested at ${ev.step_id}`, 'warn');
+    effects.push({ gateToast: ev });
+  },
+  'approval.resolved': (v, ev, sess, effects) => {
+    v.approvals.delete(ev.approval_id);
+    // the owner's time at the gates, shown apart from agent time (Details, the Time KPI)
+    if (v.run && ev.wait_ms) v.run.gateWaitMs = (v.run.gateWaitMs || 0) + ev.wait_ms;
+    // "Accept and save to issue #n" (#125): the preview opens when the run ends (workflow.finished)
+    if (ev.intent === 'save_to_issue') effects.push({ saveToIssue: true });
+    if (ev.choice !== undefined) orch(ev, `human decision: ${ev.choice}${ev.intent ? ` (${ev.intent})` : ''} (${ev.by})`, 'transition');
+    else orch(ev, `approval ${ev.approved ? 'granted' : 'denied'} (${ev.by})`, ev.approved ? 'transition' : 'warn');
+  },
+  'action.executed': (v, ev) => orch(ev, `$ ${ev.command} ${ev.skipped ? '(not executed — simulation)' : `→ exit ${ev.exit_code}`}`),
+  'local_preview.started': (v, ev) => {
+    v.preview = { status: 'running', approval: ev.approval_id, url: ev.url || null, command: ev.command };
+    orch(ev, `local preview started at ${ev.step_id}: ${ev.command} in ${ev.dir}`);
+  },
+  'local_preview.stopped': (v, ev) => {
+    // exited by itself with an error: failed; stopped by the owner, the gate or the run: stopped
+    const failed = !ev.reason && ev.exit_code != null && ev.exit_code !== 0;
+    v.preview = { ...(v.preview || {}), status: failed ? 'failed' : 'stopped', approval: ev.approval_id, error: failed ? `The app exited with code ${ev.exit_code}: see its terminal.` : null };
+    orch(ev, `local preview stopped${ev.reason ? ` (${ev.reason})` : ev.exit_code != null ? ` (exit ${ev.exit_code})` : ''}`);
+  },
+  'limit.exceeded': (v, ev) => orch(ev, `limit exceeded: ${ev.limit}`, 'error'),
+  // #276: the memory guard stopped a process of this run / held a suite for low memory
+  'process.killed': (v, ev) => orch(ev, ev.message || `memory guard stopped ${ev.command_line}`, 'warn'),
+  'memory.hold': (v, ev) => orch(ev, `${ev.step_id || 'a step'} waited ${Math.round((ev.waited_ms || 0) / 1000)} s for memory${ev.recovered ? '' : ' (started anyway)'}`, 'warn'),
+  'file.saved': (v, ev) => orch(ev, `💾 ${ev.step_id}${ev.agent ? ` (${ev.agent})` : ''} saved to ${ev.path}`),
+  'budget.exceeded': (v, ev) => orch(ev, `💸 ${ev.provider} reached its monthly budget${ev.blocked ? ': turn blocked' : ' (not blocking)'}`, ev.blocked ? 'error' : 'warn'),
+  'decision.logged': (v, ev) => orch(ev, `📝 ${ev.agent} logged ${ev.count} decision(s) in ${ev.path}`),
+  log: (v, ev) => {
+    orch(ev, ev.message, ev.level);
+    // #233: a run recorded before costs were estimated: its agent's stopped attempt cost was never
+    // recorded (the upgrade's stopped attempt after the line)
+    const stopped = ev.level === 'error' && upgradedTail(v, ev).find((e) => e.type === 'session.attempt_stopped' && e.ts === ev.ts);
+    const owner = stopped && v.sessions.get(stopped.session_id);
+    if (owner) owner.costNotRecorded = true;
+  },
+  'supervisor.started': (v, ev) => orch(ev, `◆ supervisor called on ${ev.step_id}: ${ev.error || 'step failed'}`, 'supervisor'),
+  'supervisor.decision': (v, ev, sess, effects) => effects.push(onSupervisorDecision(v, ev)),
+};
+
+// A live event's side effects (a replay has none: hydrateRun reloads and renders once, at its end).
+function runEventEffects(v, ev, effects) {
+  for (const fx of effects) {
+    if (fx.toast) showToast(...fx.toast);
+    if (fx.gateToast) showGateToast(v, fx.gateToast);
+    if (fx.saveToIssue) v.saveToIssue = true;
+    if (fx.openSaveToIssue) openSaveAfterAccept(v);
+    if (fx.loadUsage) loadUsage();
+    if (fx.loadUsageThrottled) loadUsageThrottled();
+    if (fx.renderRunLists) renderRunListsSoon();
+  }
+  if (PROJECT_REFRESH_EVENTS.has(ev.type)) { loadProjectRunsThrottled(); loadWorkflowRunsThrottled(); }
+  if (RUN_ROW_EVENTS.has(ev.type)) refreshRunRow(ev.run_id);
+  if (ev.type === 'workflow.finished' || ev.type === 'file.saved') loadArtifactsThrottled();
+  if (ARTIFACT_EVENTS.has(ev.type)) window.ArtifactsPanel?.refreshRun(ev.run_id);
+  if (ev.type.startsWith('local_preview.')) paintGateApps();
+  // the service re-checks the project's commits not pushed right after a local merge
+  if (ev.type === 'worktree.merged' || ev.type === 'workflow.finished') setTimeout(refreshUnpushed, 1500);
+  scheduleRender();
+}
+
+// A gate asked: inside its run (the Run screen's gate card, the run chats) it asks there; elsewhere a
+// badge, a toast and the pending approvals list say it waits: nothing covers the screen
+function showGateToast(v, ev) {
+  const shown = state.view === 'run' && state.runId === ev.run_id;
+  if (shown || window.duoShowsRun?.(ev.run_id) || window.arenaShowsRun?.(ev.run_id) || window.runChatShowsRun?.(ev.run_id)) return;
+  // the gate's "What happened" line (#213)
+  showToast(t('app.approval_waiting_run', { run: runLabel(v.run) }), t('app.gate_toast_click_to_open', { what: ev.brief?.headline || t('app.step_id', { step: ev.step_id }) }), ev.run_id, ev);
+}
+
 // Runs picked up mid-way (a reload, a window opened while runs are in progress) and past runs
 // opened from disk: their steps, sessions, orchestrator log, trail and gates so far are replayed
-// from the recorded events through onEvent, the reducer of live events; the live events that come
-// in while the file is read wait in `hydrating` and follow in order. Every event has a `seq`: the
-// view keeps the last one applied (lastSeq), so a live event already replayed is ignored. The
-// replay reduces without rendering and renders once at the end; the streamed CLI output comes
-// compacted (runs:events `activity`: tool calls and thinking, what Details shows of a turn).
-const hydrating = new Map(); // run id -> live events held back
-let replaying = false;       // no toasts, dialogs, reloads or Run screen switches for past events
+// from the recorded events through reduceEvent, the reducer of live events, without their side
+// effects; the live events that come in while the file is read wait in `hydrating` and follow in
+// order. Every event has a `seq`: the view keeps the last one applied (lastSeq), so a live event
+// already replayed is ignored. The replay reduces without rendering and renders once at the end;
+// the streamed CLI output comes compacted (runs:events `activity`: tool calls and thinking, what
+// Details shows of a turn).
 async function hydrateRun(runId) {
   if (hydrating.has(runId)) return;
   hydrating.set(runId, []);
@@ -517,8 +735,7 @@ async function hydrateRun(runId) {
     v.run = run; // runs:active details until workflow.started is replayed
     v.past = past;
   }
-  replaying = true;
-  try { for (const ev of replay) onEvent(ev); } finally { replaying = false; }
+  for (const ev of replay) reduceEvent(ev, false);
   // a past run still "running" after its events: in progress in the engine after all (followed
   // from now on), or it ended with the app (interrupted, no gate)
   if (v.past && v.run?.status === 'running') {
@@ -579,12 +796,12 @@ function pruneRuns() {
   }
 }
 
-// The supervisor's decision on a step: the orchestrator's line, and a toast while live.
+// The supervisor's decision on a step: the orchestrator's line; returns its toast's effect (shown while live).
 function onSupervisorDecision(v, ev) {
   const target = ev.action === 'goto' && ev.goto ? ` ${ev.goto}` : '';
   orch(ev, `◆ supervisor → ${ev.action}${target}${ev.cause_class ? ` [${ev.cause_class}]` : ''} — ${ev.explanation || ''}${ev.note ? ` (${ev.note})` : ''}`, 'supervisor');
   const params = { step: ev.step_id, run: runLabel(v.run), action: SUP_ACTIONS[ev.action] || ev.action };
-  if (!replaying) showToast(liveRuns().length > 1 ? t('app.supervisor_on_step_of_run', params) : t('app.supervisor_on_step', params), ev.explanation, ev.run_id);
+  return { toast: [liveRuns().length > 1 ? t('app.supervisor_on_step_of_run', params) : t('app.supervisor_on_step', params), ev.explanation, ev.run_id] };
 }
 
 // #368: run.pausing / run.pause_cancelled → the run's pause (the Run screen's pause line) and the orchestrator's line.
@@ -597,254 +814,10 @@ function onPauseEvent(v, ev) {
 // #368: where a paused run stopped and whose turn is next (its Resume continues there); null for any other end.
 const finishedPause = (ev) => (ev.status === 'paused' && ev.paused ? { state: 'paused', ...ev.paused } : null);
 
+// A live engine event (window.api): its run's view (reduceEvent), then its side effects.
 function onEvent(ev) {
-  if (ev.type === 'workflow.started' || ev.type === 'workflow.finished') reportNotifyContext();
-  if (!replaying) scheduleActiveSync();
-  const v = viewOf(ev);
-  if (!replaying && hydrating.has(ev.run_id)) { hydrating.get(ev.run_id).push(ev); return; }
-  if (ev.seq) {
-    if (ev.seq <= v.lastSeq) return; // replayed from disk already
-    v.lastSeq = ev.seq;
-  }
-  v.events.push(ev);
-  const sess = ev.session_id ? v.sessions.get(ev.session_id) : null;
-  // #350: a run recorded before per-turn costs (#233) is read through the run record's upgrade
-  // (src/shared/run-record.js), as the services read past runs: the events so far, upgraded, end with
-  // this one (a turn's own cost, its session's corrected snapshot) and what it stands for (an old
-  // `attempt N/M failed` log line: the stopped attempt after it)
-  const upgraded = () => (v.run?.costPerTurn ? [ev]
-    : RunRecord.upgradeRunRecord({ events: v.events.filter((e) => e.type !== 'session.stream') }).events.slice(-2));
-  const withSnapshot = () => { Object.assign(sess, upgraded().at(-1).session); };
-
-  switch (ev.type) {
-    case 'workflow.started':
-      v.run = { ...runInfo(ev), status: 'running', costPerTurn: ev.cost_accounting === 'per_turn' };
-      v.events = [ev];
-      v.steps = new Map((ev.steps || []).map((s) => [s.id, { ...s, visits: 0, status: 'pending' }]));
-      v.trail = new RunProgress.StepTrail();
-      v.groups = ev.groups || [];
-      // a new run takes the Run screen only from a run that is over
-      if (!replaying && (!isRunLive(state.runId) || state.runId === ev.run_id)) state.runId = ev.run_id;
-      orch(ev, `workflow "${ev.workflow}" started ${ev.mock ? '(simulation)' : ''}`);
-      pruneRuns();
-      break;
-
-    // #368: pausing after the current turn (the Run screen's pause line), or the pause taken back
-    case 'run.pausing':
-    case 'run.pause_cancelled':
-      onPauseEvent(v, ev);
-      break;
-
-    // the chain edited while the run goes (#134): the Run screen's chain banner
-    case 'run.then':
-      if (v.run) v.run.chain = ChainModel.withThen(v.run.chain, ev.then);
-      break;
-
-    // a `type: workflow` step's child runs (#174): the Run screen links them
-    case 'workflow.child_started':
-      if (v.run && ev.child_run_id) {
-        v.run.childRuns = [...(v.run.childRuns || []).filter((c) => c.run_id !== ev.child_run_id), { run_id: ev.child_run_id, step_id: ev.step_id, index: ev.index, label: ev.label, workflow: ev.workflow, status: ev.reused ? 'success' : 'running', resumed_from: ev.resumed_from, reused: ev.reused }];
-      }
-      // a resumed parent reuses the children that succeeded and resumes the others (#175)
-      orch(ev, `child run ${ev.child_run_id} ${ev.reused ? 'reused' : ev.resumed_from ? `resumed from ${ev.resumed_from}` : 'started'} (${ev.workflow}${ev.label ? `: ${ev.label}` : ''})`, 'transition');
-      break;
-    case 'workflow.child_finished': {
-      const c = v.run?.childRuns?.find((x) => x.run_id && x.run_id === ev.child_run_id);
-      if (c) Object.assign(c, { status: ev.status, cost_usd: ev.cost_usd || 0 });
-      orch(ev, `child run ${ev.child_run_id || '(not started)'} ${ev.status}${ev.label ? ` (${ev.label})` : ''}${ev.error ? `: ${ev.error}` : ''}`, ev.status === 'success' ? 'transition' : 'error');
-      break;
-    }
-
-    case 'workflow.finished':
-      v.run.status = ev.status;
-      v.run.finishedAt = Date.parse(ev.ts);
-      v.run.error = ev.error || null;
-      v.run.pause = finishedPause(ev);
-      // #396: the run went on without a green suite (views/run/run.js "Not tested green")
-      v.run.tested = ev.summary?.tested || null;
-      v.run.testedFailures = ev.summary?.tested_failures || null;
-      // what the chain did is read again once the service acted on it (#134, views/run/run.js)
-      v.chainLoaded = false;
-      v.steps.forEach((s) => { if (s.status !== 'pending') s.status = 'done'; });
-      v.approvals.clear();
-      orch(ev, `workflow finished: ${ev.status}${ev.error ? ' — ' + ev.error : ''}`, ev.status === 'success' ? 'transition' : 'error');
-      // the Run screen moves on to a run still in progress when the one it showed ends elsewhere
-      if (state.runId === ev.run_id && state.view !== 'run' && liveRuns().length) state.runId = liveRuns()[0].run.id;
-      if (liveRuns().length && !replaying) showToast(`${runLabel(v.run)}: ${statusLabel(v.run)}`, ev.error, ev.run_id);
-      if (v.saveToIssue && !replaying) openSaveAfterAccept(v);
-      if (!replaying) loadUsage();
-      break;
-
-    case 'session.opened':
-      v.sessions.set(ev.session_id, { ...ev.session, turnLog: new Map(), localOpenedAt: Date.parse(ev.ts) });
-      if (!v.selected) v.selected = ev.session_id;
-      if (ev.session_id !== 'orchestrator') orch(ev, `session ${ev.session_id} opened: ${ev.session.agent} (${ev.session.provider} · ${ev.session.model})`);
-      break;
-
-    case 'session.status':
-      if (sess) sess.status = ev.status;
-      break;
-
-    case 'session.closed':
-      if (sess) withSnapshot();
-      if (ev.session_id !== 'orchestrator') orch(ev, `session ${ev.session_id} closed (${ev.status})`);
-      break;
-
-    case 'session.message_sent':
-      if (sess) {
-        const t = getTurn(sess, ev.turn);
-        t.prompt = ev.prompt; t.stepId = ev.step_id; t.startedAt = Date.parse(ev.ts);
-        sess.turns_count = ev.turn;
-        orch(ev, `→ ${ev.session_id} turn ${ev.turn} (${ev.step_id})`);
-      }
-      break;
-
-    case 'session.stream':
-      if (sess) {
-        if (ev.item.kind === 'session' && ev.item.sessionId) sess.provider_session_id = ev.item.sessionId;
-        if (ev.item.kind !== 'usage' && ev.item.kind !== 'session') getTurn(sess, ev.turn).items.push(ev.item);
-      }
-      break;
-
-    case 'session.message_received':
-      if (sess) {
-        const own = upgraded().at(-1);
-        getTurn(sess, ev.turn).result = { usage: ev.usage, cost: own.cost_usd, duration: ev.duration_ms };
-        Object.assign(sess, own.session);
-        orch(ev, `← ${ev.session_id} replied in ${fmtDur(ev.duration_ms)}`);
-      }
-      if (v.run?.status === 'running' && !replaying) loadUsageThrottled();
-      break;
-
-    // #233: an attempt stopped before its result: its estimated cost is in the session's snapshot
-    case 'session.attempt_stopped':
-      if (sess) withSnapshot();
-      break;
-
-    // #320: the snapshot after a persistent agent's whole turn: its note saved, its cache state
-    case 'session.updated':
-      if (sess) withSnapshot();
-      break;
-
-    case 'step.started': {
-      const s = v.steps.get(ev.step_id);
-      if (s) { s.status = 'running'; s.visits = ev.visit; }
-      orch(ev, `▶ step ${ev.step_id} (visit ${ev.visit})`, 'transition');
-      break;
-    }
-    case 'step.finished': {
-      const s = v.steps.get(ev.step_id);
-      if (s) s.status = 'done';
-      break;
-    }
-    case 'step.waiting': {
-      const s = v.steps.get(ev.step_id);
-      if (s) s.status = 'waiting';
-      orch(ev, `⏳ ${ev.step_id}: /loop, next check in ${fmtDur(ev.interval_ms)}`);
-      break;
-    }
-    case 'step.goal':
-      orch(ev, `🎯 /goal ${ev.met ? 'met' : 'pending'}: ${ev.goal} (iteration ${ev.iteration})`, ev.met ? 'transition' : '');
-      break;
-    case 'step.transition':
-      orch(ev, `${ev.from} → ${ev.to}   [${ev.when}]`, 'transition');
-      break;
-
-    case 'approval.requested': {
-      v.approvals.set(ev.approval_id, ev);
-      orch(ev, `? approval requested at ${ev.step_id}`, 'warn');
-      // asked inside its run (the Run screen's gate card, the run chats); elsewhere a badge, a toast
-      // and the pending approvals list say it waits: nothing covers the screen
-      const shown = state.view === 'run' && state.runId === ev.run_id;
-      if (replaying || shown) break;
-      if (!window.duoShowsRun?.(ev.run_id) && !window.arenaShowsRun?.(ev.run_id) && !window.runChatShowsRun?.(ev.run_id)) {
-        // the gate's "What happened" line (#213)
-        showToast(t('app.approval_waiting_run', { run: runLabel(v.run) }), t('app.gate_toast_click_to_open', { what: ev.brief?.headline || t('app.step_id', { step: ev.step_id }) }), ev.run_id, ev);
-      }
-      break;
-    }
-
-    case 'approval.resolved':
-      v.approvals.delete(ev.approval_id);
-      // the owner's time at the gates, shown apart from agent time (Details, the Time KPI)
-      if (v.run && ev.wait_ms) v.run.gateWaitMs = (v.run.gateWaitMs || 0) + ev.wait_ms;
-      // "Accept and save to issue #n" (#125): the preview opens when the run ends (workflow.finished)
-      if (ev.intent === 'save_to_issue' && !replaying) v.saveToIssue = true;
-      if (ev.choice !== undefined) orch(ev, `human decision: ${ev.choice}${ev.intent ? ` (${ev.intent})` : ''} (${ev.by})`, 'transition');
-      else orch(ev, `approval ${ev.approved ? 'granted' : 'denied'} (${ev.by})`, ev.approved ? 'transition' : 'warn');
-      break;
-
-    case 'action.executed':
-      orch(ev, `$ ${ev.command} ${ev.skipped ? '(not executed — simulation)' : `→ exit ${ev.exit_code}`}`);
-      break;
-
-    case 'local_preview.started':
-      v.preview = { status: 'running', approval: ev.approval_id, url: ev.url || null, command: ev.command };
-      orch(ev, `local preview started at ${ev.step_id}: ${ev.command} in ${ev.dir}`);
-      break;
-
-    case 'local_preview.stopped': {
-      // exited by itself with an error: failed; stopped by the owner, the gate or the run: stopped
-      const failed = !ev.reason && ev.exit_code != null && ev.exit_code !== 0;
-      v.preview = { ...(v.preview || {}), status: failed ? 'failed' : 'stopped', approval: ev.approval_id, error: failed ? `The app exited with code ${ev.exit_code}: see its terminal.` : null };
-      orch(ev, `local preview stopped${ev.reason ? ` (${ev.reason})` : ev.exit_code != null ? ` (exit ${ev.exit_code})` : ''}`);
-      break;
-    }
-
-    case 'limit.exceeded':
-      orch(ev, `limit exceeded: ${ev.limit}`, 'error');
-      break;
-
-    // #276: the memory guard stopped a process of this run / held a suite for low memory
-    case 'process.killed':
-      orch(ev, ev.message || `memory guard stopped ${ev.command_line}`, 'warn');
-      break;
-    case 'memory.hold':
-      orch(ev, `${ev.step_id || 'a step'} waited ${Math.round((ev.waited_ms || 0) / 1000)} s for memory${ev.recovered ? '' : ' (started anyway)'}`, 'warn');
-      break;
-
-    case 'file.saved':
-      orch(ev, `💾 ${ev.step_id}${ev.agent ? ` (${ev.agent})` : ''} saved to ${ev.path}`);
-      break;
-
-    case 'budget.exceeded':
-      orch(ev, `💸 ${ev.provider} reached its monthly budget${ev.blocked ? ': turn blocked' : ' (not blocking)'}`, ev.blocked ? 'error' : 'warn');
-      break;
-
-    case 'decision.logged':
-      orch(ev, `📝 ${ev.agent} logged ${ev.count} decision(s) in ${ev.path}`);
-      break;
-
-    case 'log': {
-      orch(ev, ev.message, ev.level);
-      // #233: a run recorded before costs were estimated: its agent's stopped attempt cost was never
-      // recorded (the upgrade's stopped attempt after the line)
-      const stopped = ev.level === 'error' && upgraded().find((e) => e.type === 'session.attempt_stopped' && e.ts === ev.ts);
-      const owner = stopped && v.sessions.get(stopped.session_id);
-      if (owner) owner.costNotRecorded = true;
-      break;
-    }
-
-    case 'supervisor.started':
-      orch(ev, `◆ supervisor called on ${ev.step_id}: ${ev.error || 'step failed'}`, 'supervisor');
-      break;
-
-    case 'supervisor.decision':
-      onSupervisorDecision(v, ev);
-      break;
-  }
-  // the run's row in the runs lists follows its steps from here, without a reload
-  if (v.trail?.apply(ev) && !replaying) renderRunListsSoon();
-  // a replay (hydrateRun) reloads and renders once, at its end
-  if (replaying) return;
-  if (PROJECT_REFRESH_EVENTS.has(ev.type)) { loadProjectRunsThrottled(); loadWorkflowRunsThrottled(); }
-  if (RUN_ROW_EVENTS.has(ev.type)) refreshRunRow(ev.run_id);
-  if (ev.type === 'workflow.finished' || ev.type === 'file.saved') loadArtifactsThrottled();
-  if (ARTIFACT_EVENTS.has(ev.type)) window.ArtifactsPanel?.refreshRun(ev.run_id);
-  if (ev.type.startsWith('local_preview.')) paintGateApps();
-  // the service re-checks the project's commits not pushed right after a local merge
-  if (ev.type === 'worktree.merged' || ev.type === 'workflow.finished') setTimeout(refreshUnpushed, 1500);
-  scheduleRender();
+  const applied = reduceEvent(ev, true);
+  if (applied) runEventEffects(applied.v, ev, applied.effects);
 }
 
 // a run starting or ending reloads the lists' loaded pages (throttled); the rest updates the run's own row (#200)

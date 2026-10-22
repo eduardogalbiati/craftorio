@@ -134,10 +134,13 @@ Read this before changing anything in `src/renderer/`.
   (the run chats, or the gate card on its Run screen, `renderRunGates`); elsewhere the Run badge, a
   dismissable toast, Home's "What needs you" list and a desktop notification say it waits.
   Nothing a run raises may cover the screen: dialogs are for the user's own clicks.
-- **Where run state comes from** (#74): a run's view is built only by `onEvent`, the reducer of
-  live `run:event`s, and `hydrateRun(runId)` replays the recorded events (`runs:events` with
+- **Where run state comes from** (#74): a run's view is built only by `reduceEvent` in app.js
+  (`applyRunEvent`, one reducer per event type in `RUN_EVENT_REDUCERS`, returns the side effects
+  as data), fed the live `run:event`s by `onEvent`, which then runs the effects
+  (`runEventEffects`). `hydrateRun(runId)` replays the recorded events (`runs:events` with
   `activity: true`: stream items compacted, the rest of the CLI output stays on disk) through the
-  same reducer, with `replaying` set (no toasts, no list reloads, one render at the end). It runs
+  same reducer with `live` false, dropping the effects (no toasts, no list reloads, one render at
+  the end). It runs
   for every run in `runs:active` when the window loads or reloads (`loadActiveRuns`), for a run first
   heard of mid-way (`viewOf`) and for a past run opened in Details (`openPastRun`, `v.past`:
   read-only, an unfinished one becomes interrupted). Live events that arrive during the replay wait

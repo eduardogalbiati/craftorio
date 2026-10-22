@@ -87,7 +87,6 @@ const COMPLEXITY_EXCEPTIONS = {
   'src/product-owner.js:fileDraft': 40,
   'src/product-owner.js:mockScenario': 28,
   'src/product-owner.js:normalizeAnswer/map callback #4': 28,
-  'src/renderer/app.js:onEvent': 151,
   'src/renderer/gate-oracle.js:failureContext': 28,
   'src/renderer/gate-oracle.js:gateContext': 28,
   'src/renderer/gate-panel.js:gateToolsHtml': 28,
