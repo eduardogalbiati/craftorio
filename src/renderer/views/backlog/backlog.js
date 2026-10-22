@@ -190,9 +190,11 @@
   // (`edit`, #281: the id a save answers with for its Undo toast, is not something the screen shows:
   // with it in the key, the backlog:changed that follows every edit redrew the same list once more)
   const dataKey = (id, data) => `${id}:${JSON.stringify(data ? { ...data, edit: undefined } : null)}`;
-  function setData(data) {
+  // (#491: a Backlog merged from the light state has its key, null, computed only when a full read is
+  // compared to it, never on each live refresh: the whole Backlog is megabytes)
+  function setData(data, { merged = false } = {}) {
     bl.data = data;
-    shownData = dataKey(bl.projectId, data);
+    shownData = merged ? null : dataKey(bl.projectId, data);
     // selected issues that left To do (assigned, closed) are dropped from the selection
     const ok = new Set((data?.issues || []).filter(selectable).map((i) => i.number));
     for (const n of [...bl.selected]) if (!ok.has(n)) bl.selected.delete(n);
@@ -240,15 +242,20 @@
 
   // Re-reads the cached issues with their runs and queue (cheap, no sync). An automatic refresh
   // whose data is the same as what is shown renders nothing (#214: no flicker under the owner).
+  // #491: the scroll position is read right before the DOM is replaced (a scroll the owner made while
+  // the data was read wins) and put back after.
   async function reload() {
     const id = bl.projectId;
     if (!id || bl.syncing) return;
     try {
       const data = await api.getBacklog(id);
       if (!data || bl.projectId !== id || bl.syncing) return;
-      if (dataKey(id, data) === shownData) return;
+      if (dataKey(id, data) === (shownData ??= dataKey(id, bl.data))) return;
+      const view = $b('#view-backlog');
+      const top = view?.scrollTop;
       setData(data);
       render();
+      if (view && top != null) view.scrollTop = top;
     } catch { /* keep what is shown */ }
   }
 
@@ -292,19 +299,49 @@
   // Every automatic refresh (run events, the 5 s poll, backlog:changed) goes through liveReload; a
   // direct reload() is only for the owner's own actions (Sync, Reload, after Save). While the owner
   // is busy nothing replaces the DOM (#214): the notice is added once, and only when the data differs.
+  // #491: one live reload in flight at a time (`running`); the requests made meanwhile run once after
+  // it. The Roadmap reads the light backlog:state (statuses, runs, the queue, no issue bodies) and
+  // merges it into what is shown; the whole Backlog is read only when the light state cannot tell
+  // (BacklogRoadmap.mergeState: the stages were edited, an item ended, the roadmap's state changed).
+  // `shownState` is the last light state shown, without the timers that move every second.
+  let shownState = '';
   async function liveReload() {
     if (!visible() || document.hidden) return;
-    if (ownerBusy()) {
-      // read each time (#287): the notice says what changed since the form opened
-      if (!(await backlogChanged()) && !pendingReload) return;
-      staleNotice();
-      pendingReload ??= setInterval(() => { if (!ownerBusy()) { clearInterval(pendingReload); pendingReload = null; liveReload(); } }, 1000);
-      return;
+    if (liveReload.running) {
+      liveReload.again = true;
+      return liveReload.running;
     }
-    const view = $b('#view-backlog');
-    const top = view?.scrollTop;
-    await reload();
-    if (view && top != null) view.scrollTop = top;
+    liveReload.running = (async () => {
+      if (ownerBusy()) {
+        // read each time (#287): the notice says what changed since the form opened
+        if (!(await backlogChanged()) && !pendingReload) return;
+        staleNotice();
+        pendingReload ??= setInterval(() => { if (!ownerBusy()) { clearInterval(pendingReload); pendingReload = null; liveReload(); } }, 1000);
+        return;
+      }
+      const id = bl.projectId;
+      if (bl.mode === 'roadmap' && bl.data?.roadmap && api.getBacklogState && !bl.syncing) {
+        const light = await api.getBacklogState(id).catch(() => null);
+        const key = `${id}:${JSON.stringify(light, (k, v) => (k === 'elapsed' ? undefined : v))}`;
+        if (light && bl.projectId === id && key === shownState) return;
+        const merged = light && bl.projectId === id && !bl.syncing && window.BacklogRoadmap.mergeState(bl.data, light);
+        shownState = merged ? key : '';
+        if (merged) {
+          const view = $b('#view-backlog');
+          const top = view?.scrollTop;
+          setData(merged, { merged: true });
+          render();
+          if (view && top != null) view.scrollTop = top;
+          return;
+        }
+      }
+      await reload();
+    })().finally(() => { liveReload.running = null; });
+    await liveReload.running;
+    if (liveReload.again) {
+      liveReload.again = false;
+      await liveReload();
+    }
   }
   // whether the Backlog now differs from what is shown (kept in bl.latest for the notice)
   async function backlogChanged() {
@@ -312,7 +349,7 @@
     if (!id) return false;
     try {
       const data = await api.getBacklog(id);
-      const changed = !!data && bl.projectId === id && dataKey(id, data) !== shownData;
+      const changed = !!data && bl.projectId === id && dataKey(id, data) !== (shownData ??= dataKey(id, bl.data));
       bl.latest = changed ? data : null;
       return changed;
     } catch { return false; }
@@ -347,6 +384,10 @@
     if (ev?.watching === false) { watching = false; return; }
     watching = true;
     if (ev?.projectId && ev.projectId === bl.projectId) liveReload();
+  });
+  // #465: the base check's card follows its start and end
+  api.onBaseCheckChanged?.((ev) => {
+    if (!ev?.projectId || ev.projectId === bl.projectId) liveReload();
   });
 
   // Opens a run in the remembered run view (Chat or Details, showRun in app.js).
@@ -1319,7 +1360,9 @@
     } else if (!bl.data) {
       list.innerHTML = bl.syncing ? `<p class="muted">${t('backlog.loading_issues')}</p>` : `<p class="muted">${t('backlog.not_synced_yet')}</p>`;
     } else {
-      list.innerHTML = bl.mode === 'roadmap' ? window.BacklogRoadmap.html(bl.data, render, { epic: bl.epic, epicOptions: epicChoices(board), showAll: bl.showAll, since: bl.since, release: bl.release, project: bl.projectId, synced: $b('#bl-synced').textContent }) :bl.mode === 'epics' ? renderEpics(issues) : bl.mode === 'kanban' ? renderKanban(board) : renderList(board);
+      // (#491: the Roadmap keeps its item rows when only their content changed)
+      if (bl.mode === 'roadmap') window.BacklogRoadmap.patch(list, window.BacklogRoadmap.html(bl.data, render, { epic: bl.epic, epicOptions: epicChoices(board), showAll: bl.showAll, since: bl.since, release: bl.release, project: bl.projectId, synced: $b('#bl-synced').textContent }));
+      else list.innerHTML = bl.mode === 'epics' ? renderEpics(issues) : bl.mode === 'kanban' ? renderKanban(board) : renderList(board);
       // the open item's "When it finishes" (#134); the next page when its "Loading…" row comes near (#268)
       if (bl.mode === 'roadmap') {
         window.BacklogRoadmap.mountChain(bl.data);
