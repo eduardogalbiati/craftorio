@@ -132,7 +132,7 @@ function makeService(t, hostExtra = {}) {
     await untilIdle(service);
     service.shutdown();
   });
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
   t.after(() => fs.rmSync(cliHome, { recursive: true, force: true }));
   service.setWorkspace(setupWorkspace(dir, { persist: false }));
   fs.writeFileSync(path.join(service.workspace().workflows, 'fixture-service.yaml'), WORKFLOW);
@@ -180,7 +180,8 @@ function watchRuns(service) {
 // A throwaway repository with two commits: `base` is the first one, HEAD (a.txt gains a line) is the second.
 function gitRepo(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'svc-git-'));
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  // #452: a local preview runs here; its killed cmd.exe can still hold the folder for a moment (EPERM on Windows)
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
   const cfgDir = fs.mkdtempSync(path.join(os.tmpdir(), 'svc-gitcfg-'));
   t.after(() => fs.rmSync(cfgDir, { recursive: true, force: true }));
   const cfg = path.join(cfgDir, 'config');
