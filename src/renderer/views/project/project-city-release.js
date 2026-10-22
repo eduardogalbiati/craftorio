@@ -152,11 +152,8 @@
       return rows.length ? `<b>${t('project_city_release.changes')}</b><ul>${rows.join('')}</ul>` : null;
     }
 
-    // the card's markup; then the mode's panels and their states (#440, #441)
-    function draw() {
-      drawCard();
-      city.applyUi?.();
-    }
+    // the card's markup, then the mode's panels and their saved states (#440, #441)
+    function draw() { drawCard(); city.applyUi?.(); }
 
     function drawCard() {
       if (destroyed) return;

@@ -80,6 +80,35 @@
 .pcc em.in { color: var(--r3d-amber); }
 .pcc-empty, .pcc-hint { margin: 0; font-size: 11.5px; }
 
+/* #440: the mode's header (its title, Live, Close); a panel the mode does not own is hidden */
+.pc-city [hidden] { display: none !important; }
+.pc-city .r3d-chip.pc-live.on { color: var(--r3d-green); background: var(--r3d-live-bg); }
+.pc-city .r3d-close.pc-close svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+
+/* #441: every panel's title row and its chevron; minimized, the panel keeps only that row */
+.pc-panel-head { display: flex; align-items: center; gap: 8px; min-height: 22px; }
+.pc-panel-head > b { color: var(--r3d-ink); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pc-panel-head > small { color: var(--r3d-muted); font-size: 11px; white-space: nowrap; }
+.pc-panel-head .r3d-grow { flex: 1; }
+.pc-chev, .pc-x { width: 24px; height: 24px; border-radius: 8px; display: grid; place-items: center; color: var(--r3d-ink-2); background: none; border: 0; padding: 0; cursor: pointer; flex: none; margin-right: -6px; }
+.pc-chev:hover, .pc-x:hover { background: var(--r3d-hover); }
+.pc-chev:focus-visible, .pc-x:focus-visible, .pc-legend-btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.pc-chev svg, .pc-x svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; transition: transform .12s; }
+.pc-chev svg { transform: rotate(180deg); } /* expanded: it folds up */
+.min > .pc-panel-head .pc-chev svg, .min .pc-chev svg { transform: none; } /* minimized: it opens down */
+[data-city-panel].min [data-city-panel-body] { display: none; }
+.pc-city .pcc.min { max-height: none; }
+.pc-notes-head { padding: 8px 12px; }
+.pc-notes-body { display: grid; gap: 8px; }
+@media (prefers-reduced-motion: reduce) { .pc-chev svg { transition: none; } }
+
+/* #441: the legend closes (its head's ×), a small "Legend" button in its corner brings it back */
+.pc-legend > .pc-x { float: right; margin: -4px -8px 0 6px; }
+.pc-legend .pcr-ramp { display: inline-block; width: 26px; height: 8px; border-radius: 4px; background: var(--ramp); flex: none; }
+.pc-legend-btn { position: absolute; left: 12px; bottom: 12px; height: 28px; padding: 0 12px; border-radius: 999px; font-size: 11px; font-weight: 650; color: var(--r3d-ink-2); border: 1px solid var(--r3d-card-line); cursor: pointer; display: flex; align-items: center; gap: 6px; }
+.pc-legend-btn:hover { color: var(--r3d-ink); }
+.pc-legend-btn svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+
 /* #449: a file's score over its roof, up close */
 .pc-city .r3d-tag.pc-score { pointer-events: none; padding: 2px 6px; gap: 0; font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; border-left: 3px solid var(--c, var(--r3d-muted)); }
 

@@ -72,8 +72,12 @@
   }
 
   /** Opens project `id`'s Architecture tab on its City view (#374, "Replay on the map"). */
+  // the screen openCity came from, where the city mode's Close goes back to (#440)
+  let cityFrom = null;
   function openCity(id) {
     rememberMode('city');
+    const from = typeof state !== 'undefined' ? state.view : null;
+    cityFrom = from && from !== 'project' ? from : null;
     openProjectView(id, { tab: 'architecture' });
   }
 
@@ -441,7 +445,9 @@
     }
     c.city ||= ProjectCity.create({ projectId: c.id, name: projectName(c.id), onOpenFacts: (file) => { if (cur === c) { c.focusFile = file; setMode('facts'); } }, onAnalyze: () => { if (cur === c) analyze(); } });
     // #374: the agents of the project's runs in progress on its city (views/project/project-city-agents.js)
-    c.agents ||= (window.CityAgents && window.ProjectCityAgents?.attach(c.city, { projectId: c.id })) || null;
+    c.agents ||= (window.CityAgents && window.ProjectCityAgents?.attach(c.city, { projectId: c.id, live: false })) || null;
+    // #440: the mode's Close goes back to the screen openCity came from (none: Explore)
+    if (cityFrom) { const from = cityFrom; cityFrom = null; c.city.back = () => showView(from); }
     // #382: the most connected files, a click pins their arcs (views/project/project-city-connections.js)
     c.connections ||= (window.CityConnections && window.ProjectCityConnections?.attach(c.city)) || null;
     // #375: an issue's or a stage's expected footprint on its city (views/project/project-city-impact.js)
