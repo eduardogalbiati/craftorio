@@ -313,6 +313,27 @@ Read this before changing anything in `src/renderer/`.
     pointer, `--key Space` to play, `--size 1150x780` for the narrow layout. The simulated run lasts
     a few seconds: for hours on the clock and a cut wait, give `--run <folder>` a run folder whose
     `events.jsonl` has them.
+- **Terminal buttons on machine steps** (#465): a `suite`, `e2e`, `check` or `screenshots` step's
+  card shows "Live terminal" and "↗" like an agent session (`termButtons` with `kind: 'log'`), while
+  it runs and after it ended. `run.js` keeps each step's latest log from its `step.log` events (else
+  the log its output names) and the base check's of that round (`step.log` with `base`); a new round
+  switches the tab to the new file. `term:open` with `kind: 'log'` follows `runs/<id>/logs/…` only
+  (the service refuses any other path) through `followFile` (`src/session-tail.js`) embedded, or
+  `multiagent-tail <runDir> --file <path>` in the external window (same ↗ rules as #318). The
+  terminal is read-only (no keys, no paste). The base check (#405) pushes `baseCheck:changed` when it
+  starts and ends (`baseCheck:state` answers a screen opened meanwhile); the Roadmap draws its card
+  ("Base check: running since HH:MM on <commit>", then green or red with the count) with
+  `term:open` `kind: 'base-check'` buttons (`views/backlog/backlog-live.js`).
+- **The Backlog's refresh model** (#491): the first load, Sync and the owner's reloads fetch the full
+  `backlog:get` (several MB: every issue's body). The live paths (run status events, the 5 s poll
+  while busy, `backlog:changed`) call `liveReload`, which fetches the light `backlog:state`
+  (statuses, runs, timings, the queue, the roadmap's state and `updatedAt`, no bodies) and merges it
+  into `bl.data` (`BacklogLive.mergeState`); the full fetch runs only when the state names a stage
+  or item the screen does not know, or the stages' shape changed. One reload is in flight at a time
+  (a request made meanwhile runs once after it). The scroll position is read right before the DOM
+  swap, and a scroll the owner made during the fetch wins. The Roadmap patches rows in place
+  (`BacklogLive.patch`: status, ring, waiting badge per `data-rm-item`) and rebuilds the list only
+  when the set or order of stages and items changed; expanded rows and open menus stay (#214).
 - Test changes with a temporary Electron script (see `scripts/smoke.js`:
   `npx electron scripts/smoke.js <out.png>` runs a mock run and takes a screenshot) and look at
   the screenshots. Never open real CLI terminals or start real runs in those checks. In a fresh

@@ -53,7 +53,11 @@ fields (references between steps, agents, transitions, groups) are the named rul
   `command` (template; empty → `detectTestCommand` from the worktree's files: package.json's test
   script → `npm test`, go.mod, pom.xml/mvnw, build.gradle/gradlew, *.sln/*.csproj, pyproject.toml…),
   `timeout` (default 30m). It runs in the worktree with the agents' environment, its whole output in
-  `<run_dir>/logs/suite-<visit>.log` (`file.saved`), and reads the failing tests from it
+  `<run_dir>/logs/suite-<visit>.log` (`file.saved`), announced before the first line by a
+  `step.log { step_id, path, command }` event (#465: path relative to the run folder; `base: true`
+  for the base check's `-base.log`; the `check` and `screenshots` steps emit it too, for
+  `logs/check-<visit>.log` and `logs/screenshots-<visit>.log`, and a suite waiting for the machine
+  writes that line to its log first), which the Run screen's live terminal follows, and reads the failing tests from it
   (`parseFailures`: node:test spec/TAP, Jest, pytest, go test, dotnet test, Maven). Output `{ kind:
   'suite', status: pass | fail | blocked, round, command, log, exit_code, duration_ms, timed_out,
   failures: [{ test, file, error }], preexisting, reason, message }`; the run's known pre-existing

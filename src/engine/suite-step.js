@@ -517,7 +517,7 @@ const sameFile = (a, b) => String(a || '').split(/[\\/]/).pop() === String(b || 
 // per commit + file). → { onBase: [failure], info: { status: done | skipped, commit, files, cached,
 // ran, log, reason } }; never throws. Too many files for the platform's command line (#400): skipped,
 // like a command that cannot run single files.
-async function checkOnBase({ command, failures, base, mock, env, timeoutMs, signal, run = runCommand, logFile, runDir, cacheDir, log = () => {}, platform = process.platform, onLog = null }) {
+async function checkOnBase({ command, failures, base, mock, env, timeoutMs, signal, run = runCommand, logFile, runDir, cacheDir, log = () => {}, platform = process.platform, onLog }) {
   const info = { status: 'skipped', commit: null, files: [], cached: [], ran: [], log: null, reason: null };
   const files = [...new Set(failures.map((f) => f.file).filter(Boolean))].sort();
   info.files = files;
@@ -544,9 +544,11 @@ async function checkOnBase({ command, failures, base, mock, env, timeoutMs, sign
     const cmd = filteredCommand(command, toRun);
     fs.mkdirSync(path.dirname(logFile), { recursive: true });
     fs.writeFileSync(logFile, `$ ${cmd}\n# in the base checkout ${b.dir}${info.commit ? ` (${String(info.commit).slice(0, 8)})` : ''}: are these failures already there?\n`);
-    if (runDir) info.log = path.relative(runDir, logFile).split(path.sep).join('/');
+    if (runDir) {
+      info.log = path.relative(runDir, logFile).split(path.sep).join('/');
+      onLog?.({ path: info.log, command: cmd, base: true });
+    }
     log('info', `suite: checking ${toRun.length} failing test file(s) on the base (log ${info.log || logFile})`);
-    if (info.log) onLog?.({ path: info.log, command: cmd, base: true });
     const r = await run({ command: cmd, cwd: b.dir, env, timeoutMs, signal, logFile });
     let text = '';
     try { text = fs.readFileSync(logFile, 'utf8'); } catch { /* no log */ }

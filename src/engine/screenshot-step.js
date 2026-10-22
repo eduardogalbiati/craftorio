@@ -132,13 +132,23 @@ function screenAxeFindings(dir, name, modified) {
   return screenChecks({ modified: checked, original: readChecks(path.join(dir, `${name}.original.png`)), screen: `${name}.modified.png` });
 }
 
+// #465: the captures' log, emptied and announced through onLog({ path, command }) (path relative to
+// runDir) → { line(text), opts } (the run options that append each capture's output); none: no-ops
+function openShotLog(logFile, runDir, command, onLog) {
+  if (!logFile) return { line: () => {}, opts: {} };
+  fs.mkdirSync(path.dirname(logFile), { recursive: true });
+  fs.writeFileSync(logFile, '');
+  onLog?.({ path: path.relative(runDir, logFile).split(path.sep).join('/'), command });
+  return { line: (text) => fs.appendFileSync(logFile, text), opts: { logFile } };
+}
+
 // entries: the developer's list; cwd: the worktree; base: the ref of the "original" side (none: modified
 // only); env: the agents' environment (simulation only, scratch workspace); run: runShot (replaceable);
 // slot: acquireSlot (replaceable); onSlotWait(holder): a capture waits for another run's screenshot;
 // onSpawn(pid): each capture's process (the memory guard, #276)
 // logFile (#465): the captures' output, one `$ <command>` line before each; onLog({ path, command }) is
 // called once before the first capture runs (path relative to runDir)
-async function captureScreenshots({ entries, cwd, runDir, folder, round, base, env, mock, signal, timeoutMs = SHOT_TIMEOUT_MS, run = runShot, log = () => {}, slot = acquireSlot, onSlotWait = () => {}, onSpawn = null, logFile = null, onLog = null }) {
+async function captureScreenshots({ entries, cwd, runDir, folder, round, base, env, mock, signal, timeoutMs = SHOT_TIMEOUT_MS, run = runShot, log = () => {}, slot = acquireSlot, onSlotWait = () => {}, onSpawn = null, logFile, onLog }) {
   const dir = runDir ? evidence.roundDir(runDir, folder, round) : null;
   const out = {
     kind: 'screenshots', folder, round, dir: dir ? path.relative(runDir, dir).split(path.sep).join('/') : null,
@@ -171,11 +181,7 @@ async function captureScreenshots({ entries, cwd, runDir, folder, round, base, e
   if (out.reason) return finish();
 
   fs.mkdirSync(dir, { recursive: true });
-  if (logFile) {
-    fs.mkdirSync(path.dirname(logFile), { recursive: true });
-    fs.writeFileSync(logFile, '');
-    onLog?.({ path: path.relative(runDir, logFile).split(path.sep).join('/'), command });
-  }
+  const shotLog = openShotLog(logFile, runDir, command, onLog);
   for (const e of valid) {
     let shot = false;
     let modified = false;
@@ -183,8 +189,8 @@ async function captureScreenshots({ entries, cwd, runDir, folder, round, base, e
       const args = [...e.args, '--out', dir, '--name', e.name, '--side', side, ...(side === 'original' ? ['--ref', base] : [])];
       const t0 = Date.now();
       log('info', `screenshots: ${command} -- ${args.join(' ')}`);
-      if (logFile) fs.appendFileSync(logFile, `$ ${command} -- ${args.join(' ')}\n`);
-      const r = await withSlot({ signal, onSlotWait, slot }, (token) => run({ cwd, args, env: { ...env, [SCREENSHOT_SLOT_ENV]: token }, timeoutMs, signal, ...(onSpawn ? { onSpawn } : {}), ...(logFile ? { logFile } : {}) }));
+      shotLog.line(`$ ${command} -- ${args.join(' ')}\n`);
+      const r = await withSlot({ signal, onSlotWait, slot }, (token) => run({ cwd, args, env: { ...env, [SCREENSHOT_SLOT_ENV]: token }, timeoutMs, signal, ...(onSpawn ? { onSpawn } : {}), ...shotLog.opts }));
       const file = path.join(dir, `${e.name}.${side}.png`);
       if (r.code === 0 && fs.existsSync(file)) {
         out.taken++;

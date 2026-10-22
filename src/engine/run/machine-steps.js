@@ -245,7 +245,7 @@ const methods = {
   // #276: a suite / e2e step waits while free memory is under the memory guard's floor (memory.hold:
   // the Night watch counts a long one). #465 `log` { file, command }: the round's log, where the wait is
   // written as it starts (step.log: its live terminal shows it) → the lines written, '' without a wait
-  async waitForMemory(stepId, log = null) {
+  async waitForMemory(stepId, log = /** @type {{ file: string, command?: string | null } | null} */ (null)) {
     let low = /** @type {{ freeBytes: number, floorBytes: number } | null} */ (null);
     let written = '';
     const note = (text) => {
