@@ -187,6 +187,8 @@ async function init() {
   initStartDrawer();
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
+    // the layer on top takes this Esc: the views' own Esc (the city's mode, #440) leaves it alone
+    if (document.querySelector('.modal:not(.hidden), #sup-drawer.open, #usage-pop:not(.hidden)')) e.preventDefault();
     if (!$('#usage-pop').classList.contains('hidden')) return closeUsagePopover();
     if ($('#sup-drawer').classList.contains('open')) return closeSupervisor();
     if (!$('#budget-modal').classList.contains('hidden')) return closeModal('#budget-modal');

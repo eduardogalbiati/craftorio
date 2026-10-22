@@ -95,8 +95,11 @@
       back?.();
     };
 
+    // Esc belongs to what is on top: app.js closes an open modal, the supervisor's drawer or the
+    // usage popover with the same key, without preventDefault.
+    const layerOnTop = () => !!document.querySelector('.modal:not(.hidden), #sup-drawer.open, #usage-pop:not(.hidden)');
     const onKey = (e) => {
-      if (e.key === 'Escape' && !e.defaultPrevented && cur.name !== 'explore' && !city.expanded && el.isConnected) city.closeMode();
+      if (e.key === 'Escape' && !e.defaultPrevented && cur.name !== 'explore' && !city.expanded && el.isConnected && !layerOnTop()) city.closeMode();
     };
     const onClick = (e) => { if (e.target.closest('[data-pc-mode-close]')) city.closeMode(); };
     document.addEventListener('keydown', onKey);
