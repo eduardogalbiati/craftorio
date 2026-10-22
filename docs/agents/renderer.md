@@ -5,6 +5,20 @@ Read this before changing anything in `src/renderer/`.
 - Plain HTML/CSS/JS, no bundler. Libraries loaded with `<script src="../../node_modules/...">`
   (UMD): xterm, addon-fit, marked, DOMPurify. Sandboxed: no Node, only `window.api` (`src/preload.js`,
   or `api-http.js` over the engine server; a test keeps their method lists equal).
+- **The window never navigates** (#466, `src/window-guards.js` on the main, Agents and connection
+  windows): every `will-navigate` is prevented (http(s) goes to the browser), `window.open` is
+  denied, no webview attaches, and `app.js` prevents `dragover`/`drop` at the document so a file
+  dropped outside a drop zone is ignored (a zone calls its own `preventDefault`; never
+  `stopPropagation` at the document). The CSP meta adds `form-action`, `object-src` and `base-uri 'none'`.
+- **Untrusted HTML keeps no forms** (#466): agent markdown, READMEs, PR and issue bodies go through
+  `sanitizeHtml` (`artifact-render.js`), which forbids `form`, `input`, `button`, `textarea`,
+  `select`, `style` and the `action`/`formaction` attributes. A control the UI needs is built by
+  the screen's own code, never by rendered markdown.
+- **IPC contract** (#467, `src/ipc-guard.js`): every channel `src/main.js` registers answers only
+  the app's page (`isAppPage`, the Agents window's `?window=agents` included) in a window's top
+  frame; another page or a subframe gets an error (an `on` channel: nothing, `sendSync` gets null)
+  and one `[ipc]` line in the main log. Register a new channel with `ipc.handle` / `ipc.on`, never
+  `ipcMain` directly. The engine server's channels are guarded by its token (#479).
 - **Shared modules** (#345): code both the page and the backend use lives in `src/shared/`, never in
   `src/renderer/` (the backend never requires the UI folder). Each is pure (no DOM, no fs, no
   Electron), requires nothing of the app and is dual-load: `module.exports` under Node, a `window`

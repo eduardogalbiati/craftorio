@@ -6,10 +6,12 @@
 // switches it to the asked agent); its bounds and the last agent shown are remembered in `statePath`
 // (a JSON file in the workspace, { bounds, agent }; a missing or corrupt file means the defaults and
 // the OS's placement; with `screen`, bounds on a display that is gone are dropped). The window loads
-// with the main window's preload and isolation (the same window.api and service channels). Closing it
-// never stops an agent's turn: the service runs the turns, the window only shows them.
+// with the main window's preload and isolation (the same window.api and service channels) and, like
+// it, never navigates (src/window-guards.js, #466). Closing it never stops an agent's turn: the
+// service runs the turns, the window only shows them.
 const fs = require('fs');
 const path = require('path');
+const { guardWindow } = require('./window-guards');
 
 const DEFAULTS = { width: 1100, height: 760 };
 const MIN = { width: 640, height: 480 };
@@ -86,12 +88,8 @@ function createAgentsWindow({ BrowserWindow, statePath, dirname, page = null, de
       },
     });
     const opened = win;
-    // external links go to the browser, never inside this window (as the main window)
-    opened.webContents.setWindowOpenHandler(({ url }) => {
-      if (/^https?:\/\//i.test(url)) require('electron').shell.openExternal(url);
-      return { action: 'deny' };
-    });
-    opened.webContents.on('will-navigate', (e, url) => { if (!url.startsWith('file:')) e.preventDefault(); });
+    // the window never navigates (#466): external links go to the browser, as in the main window
+    guardWindow(opened.webContents, { openExternal: (url) => require('electron').shell.openExternal(url) });
     opened.on('close', () => { try { writeState({ bounds: opened.getBounds(), agent }); } catch { /* the window is gone */ } });
     opened.on('closed', () => { if (win === opened) win = null; });
     setAgent(id);

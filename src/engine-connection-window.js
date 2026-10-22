@@ -20,6 +20,7 @@
 
 const path = require('path');
 const conn = require('./engine-connection');
+const { guardWindow } = require('./window-guards');
 
 const PAGE_SIZE = { width: 640, height: 700 };
 
@@ -93,11 +94,8 @@ function createEngineConnection({
       },
     });
     page = w;
-    w.webContents.setWindowOpenHandler(({ url }) => {
-      if (/^https?:\/\//i.test(url)) shell.openExternal(url);
-      return { action: 'deny' };
-    });
-    w.webContents.on('will-navigate', (e) => e.preventDefault());
+    // the page never navigates (#466): http(s) links go to the browser
+    guardWindow(w.webContents, { openExternal: (url) => shell.openExternal(url) });
     // the page closed by the user (X, Cancel, Quit): over a window nothing changes; alone, the app
     // quits (never left running without a window). A page replaced by another one is not this.
     w.on('closed', () => {
@@ -159,6 +157,7 @@ function createEngineConnection({
       return { action: 'deny' };
     });
     w.webContents.on('will-navigate', (e, url) => { if (!follow(url, origin)) e.preventDefault(); });
+    w.webContents.on('will-attach-webview', (e) => e.preventDefault()); // #466: no webview, in any window
     // a redirect leaving the engine's origin goes no further (the server only redirects to itself)
     w.webContents.on('will-redirect', (e, url) => { if (conn.routeUrl(url, origin) !== 'stay') e.preventDefault(); });
     w.webContents.on('did-fail-load', (_e, code, desc, _url, isMainFrame) => {

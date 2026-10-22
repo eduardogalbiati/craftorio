@@ -42,6 +42,8 @@ const workspace = require('./workspace');
 const localPreview = require('./local-preview');
 const runOwner = require('./run-owner');
 const { allowPermission } = require('./permissions');
+const { guardIpc } = require('./ipc-guard');
+const { guardWindow } = require('./window-guards');
 const { createService } = require('./service');
 const { createControlChannel } = require('./control');
 const { nativeBinaryPath } = require('./native-bin');
@@ -162,17 +164,21 @@ const account = {
   cancelSignIn: () => auth.cancelSignIn(),
   signOut: () => auth.signOut(),
 };
-for (const { channel, fn } of authChannels(account)) if (channel) ipcMain.handle(channel, (_e, arg) => fn(arg));
+// Every channel below answers only the app's page in a window's top frame (#467, src/ipc-guard.js):
+// another page or a subframe is refused and logged (the console, kept by src/main-log.js)
+const APP_PAGE = path.join(__dirname, 'renderer', 'index.html');
+const ipc = guardIpc(ipcMain, { appPage: APP_PAGE, log: (...a) => console.warn('[ipc]', ...a) });
+for (const { channel, fn } of authChannels(account)) if (channel) ipc.handle(channel, (arg) => fn(arg));
 
 // ---- IPC transport ------------------------------------------------------------------
-for (const [channel, fn] of Object.entries(service.api)) ipcMain.handle(channel, (_e, arg) => fn(arg));
+for (const [channel, fn] of Object.entries(service.api)) ipc.handle(channel, (arg) => fn(arg));
 // a fire-and-forget channel has no reply to carry a refusal: logged, like the server's (#333)
 for (const [channel, fn] of Object.entries(service.notifications)) {
-  ipcMain.on(channel, (_e, arg) => { try { fn(arg); } catch (e) { console.error(`${channel}:`, e.message); } });
+  ipc.on(channel, (arg) => { try { fn(arg); } catch (e) { console.error(`${channel}:`, e.message); } });
 }
 // what the preload builds window.api from, asked once when the window loads (sync: the page's
 // scripts use window.api right away); also when the window's code is recorded (#83)
-ipcMain.on('api:manifest', (e) => {
+ipc.on('api:manifest', (_arg, e) => {
   service.code.markLoaded();
   e.returnValue = service.manifest;
 });
@@ -190,9 +196,9 @@ for (const channel of PUSHED_EVENTS) {
 // shows (agents-window:agent) so it reopens there. A link in its chats to a screen of the app
 // (agents-window:navigate) is relayed to the main window (main-window:navigate), brought to the front.
 let agentsWindow = null;
-ipcMain.handle('agents-window:open', (_e, arg) => { agentsWindow?.open(arg || {}); });
-ipcMain.on('agents-window:agent', (_e, arg) => agentsWindow?.setAgent(arg?.agent));
-ipcMain.on('agents-window:navigate', (_e, arg) => {
+ipc.handle('agents-window:open', (arg) => { agentsWindow?.open(arg || {}); });
+ipc.on('agents-window:agent', (arg) => agentsWindow?.setAgent(arg?.agent));
+ipc.on('agents-window:navigate', (arg) => {
   if (!win || win.isDestroyed()) return;
   if (win.isMinimized()) win.restore();
   win.show();
@@ -217,7 +223,7 @@ function checkKeepAwake() {
 }
 service.events.on('run:event', checkKeepAwake);
 service.events.on('settings:changed', () => keepAwake.update());
-ipcMain.handle('keepAwake:state', () => keepAwake.update());
+ipc.handle('keepAwake:state', () => keepAwake.update());
 
 // ---- control channel (#336) ------------------------------------------------------------
 // Outside sessions drive this app through its own channels (src/control): opened and closed with
@@ -225,7 +231,7 @@ ipcMain.handle('keepAwake:state', () => keepAwake.update());
 const control = createControlChannel({ service, ctlPath: nativeBinaryPath('multiagent-ctl', { isPackaged: app.isPackaged }) });
 const updateControl = () => control.update().then((s) => { broadcast('control:changed', s); return s; });
 service.events.on('settings:changed', () => { updateControl().catch((e) => console.error('control channel:', e.message)); });
-ipcMain.handle('control:state', () => updateControl());
+ipc.handle('control:state', () => updateControl());
 
 // ---- desktop notifications -------------------------------------------------------------
 // The service decides what deserves one (settings, what the window shows); clicking it brings the
@@ -312,8 +318,6 @@ async function pickWorkspaceDir(parent) {
   return r.canceled ? null : r.filePaths[0];
 }
 
-const APP_PAGE = path.join(__dirname, 'renderer', 'index.html');
-
 // The microphone (voice input, #82) for the app's own page only, audio only; every other
 // permission and page is denied (see src/permissions.js). A check names the page through its
 // webContents (its origin is just "file://").
@@ -350,7 +354,7 @@ const connectionStore = {
 let remoteMode = false;
 let connection = null;
 // Settings › Execution › Engine › Change… (local mode; the remote engine's page opens it by itself)
-ipcMain.handle('engine:openConnection', () => { connection?.openPage(); return true; });
+ipc.handle('engine:openConnection', () => { connection?.openPage(); return true; });
 
 function createConnection(mode) {
   connection = createEngineConnection({
@@ -382,16 +386,8 @@ function createWindow() {
       devTools: !app.isPackaged,
     },
   });
-  win.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https?:\/\//i.test(url)) shell.openExternal(url);
-    return { action: 'deny' };
-  });
-  win.webContents.on('will-navigate', (e, url) => {
-    if (!url.startsWith('file:')) {
-      e.preventDefault();
-      if (/^https?:\/\//i.test(url)) shell.openExternal(url);
-    }
-  });
+  // the window never navigates, not even to a file: page (#466): http(s) links go to the browser
+  guardWindow(win.webContents, { openExternal: (url) => shell.openExternal(url) });
   win.loadFile(APP_PAGE);
   // a run that died with the app last time, once the window can open it
   win.webContents.once('did-finish-load', () => service.notifyInterruptedRun());
@@ -411,20 +407,20 @@ function createWindow() {
 }
 
 // ---- desktop-only actions ----------------------------------------------------------------
-ipcMain.handle('path:open', (_e, p) => {
+ipc.handle('path:open', (p) => {
   if (!service.openableFolders().some((dir) => pathKey(p) === pathKey(dir) || pathKey(p).startsWith(pathKey(dir) + path.sep))) throw new Error('Path is outside the workspace.');
   return shell.openPath(p);
 });
 
 // the window's real pixels for the Findings button (#361): a PNG data URL
-ipcMain.handle('window:capture', async (e) => (await e.sender.capturePage()).toDataURL());
+ipc.handle('window:capture', async (_arg, e) => (await e.sender.capturePage()).toDataURL());
 
-ipcMain.handle('dialog:pickFolder', async () => {
+ipc.handle('dialog:pickFolder', async () => {
   const r = await dialog.showOpenDialog(win, { properties: ['openDirectory', 'createDirectory'], defaultPath: service.workspace().projects });
   return r.canceled ? null : r.filePaths[0];
 });
 
-ipcMain.handle('workspace:change', async () => {
+ipc.handle('workspace:change', async () => {
   if (service.isRunning()) throw new Error('Cannot change the workspace while workflows are running.');
   const dir = await pickWorkspaceDir(win);
   if (dir) service.setWorkspace(workspace.setupWorkspace(dir));
@@ -433,16 +429,16 @@ ipcMain.handle('workspace:change', async () => {
   return service.workspace();
 });
 
-ipcMain.handle('workspace:open', () => shell.openPath(service.workspace().root));
+ipc.handle('workspace:open', () => shell.openPath(service.workspace().root));
 
-ipcMain.handle('run:openDir', (_e, arg) => {
+ipc.handle('run:openDir', (arg) => {
   const dir = service.runDir(arg?.runId) || service.workspace().runs;
   fs.mkdirSync(dir, { recursive: true });
   return shell.openPath(dir);
 });
 
 // Opens an artifact with the default app, or shows it in the file explorer.
-ipcMain.handle('artifacts:open', async (_e, { path: file, reveal }) => {
+ipc.handle('artifacts:open', async ({ path: file, reveal }) => {
   const found = await service.findArtifact(file);
   if (!found?.exists) throw new Error('Artifact not found.');
   if (reveal) { shell.showItemInFolder(found.path); return ''; }
@@ -451,13 +447,13 @@ ipcMain.handle('artifacts:open', async (_e, { path: file, reveal }) => {
 
 // Clipboard for the terminals (the sandboxed renderer has no clipboard module). Electron 44's
 // clipboard is async and ClipboardItem-based (#139): readText/writeText return promises.
-ipcMain.handle('clipboard:read', async () => clipboard.readText());
-ipcMain.handle('clipboard:write', async (_e, { text }) => { await clipboard.writeText(String(text ?? '')); return true; });
+ipc.handle('clipboard:read', async () => clipboard.readText());
+ipc.handle('clipboard:write', async ({ text }) => { await clipboard.writeText(String(text ?? '')); return true; });
 
 // An artifact's image, or the file itself, on the clipboard (#114). Only a run's artifact (a file of
 // its folder or its recorded project copy) is accepted: service.existingArtifact refuses the rest.
 // The image goes as PNG data (writeImage was removed in Electron 44, #139).
-ipcMain.handle('clipboard:writeImage', async (_e, { path: file }) => {
+ipc.handle('clipboard:writeImage', async ({ path: file }) => {
   const found = await service.existingArtifact(file);
   const img = nativeImage.createFromPath(found.path);
   if (img.isEmpty()) throw new Error(`Not an image the clipboard can hold: ${path.basename(found.path)}`);
@@ -469,7 +465,7 @@ ipcMain.handle('clipboard:writeImage', async (_e, { path: file }) => {
 // (CF_HDROP) through Windows PowerShell's Set-Clipboard -LiteralPath (Electron cannot write it).
 // macOS / Linux: the file URL as a ClipboardItem (public.file-url as a raw macOS format, text/uri-list
 // on Linux), checked with clipboard.has afterwards: a platform that drops the type gets a clear error.
-ipcMain.handle('clipboard:writeFile', async (_e, { path: file }) => {
+ipc.handle('clipboard:writeFile', async ({ path: file }) => {
   const found = await service.existingArtifact(file);
   if (process.platform === 'win32') {
     const literal = psQuote(found.path);
@@ -496,16 +492,16 @@ function openConsole({ title, cwd, file, args, env }) {
   child.unref();
 }
 
-ipcMain.on('terminal:external-sync', (e) => { e.returnValue = externalTerminal(terminalHost()); });
+ipc.on('terminal:external-sync', (_arg, e) => { e.returnValue = externalTerminal(terminalHost()); });
 
-ipcMain.handle('session:terminal', (_e, { sessionId, mode, runId }) => {
+ipc.handle('session:terminal', ({ sessionId, mode, runId }) => {
   openConsole(service.terminalSpec(runId, sessionId, mode));
   return true;
 });
 
 // Restart after the code changed on disk (#83): the service refuses while runs are in progress
 // unless the user confirmed interrupting them, and pauses the Backlog queues first.
-ipcMain.handle('app:relaunch', (_e, arg) => {
+ipc.handle('app:relaunch', (arg) => {
   const r = service.prepareRestart({ interruptRuns: !!arg?.interruptRuns });
   restartApp();
   return r;

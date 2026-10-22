@@ -16,6 +16,11 @@ function fmtSize(n) {
 
 // ---- markdown ----
 let mdHooked = false;
+// #466: untrusted HTML keeps no form or form control (a click would navigate the window to a local page)
+const PURIFY = {
+  FORBID_TAGS: ['form', 'input', 'button', 'textarea', 'select', 'style'],
+  FORBID_ATTR: ['action', 'formaction'],
+};
 function sanitizeHtml(html) {
   if (!mdHooked) {
     mdHooked = true;
@@ -26,7 +31,7 @@ function sanitizeHtml(html) {
       }
     });
   }
-  return DOMPurify.sanitize(html);
+  return DOMPurify.sanitize(html, PURIFY);
 }
 
 const slugify = (s) => String(s).toLowerCase().trim().replace(/[^\p{L}\p{N}\s-]/gu, '').replace(/\s+/g, '-');
