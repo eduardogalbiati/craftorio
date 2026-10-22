@@ -12,7 +12,8 @@ const TOOLCHAINS = ['bash:git', 'bash:npm'];
 // The read-only shell utilities every agent with a bash:<command> capability also gets (#96): no
 // refusal for a pipe or a `;` chain made of allowed commands, whatever the agent's own toolchain.
 // #299: read-only awk too (it writes nothing without a redirect); sed stays out (sed -i writes)
-const READ_BASH = ['[', 'awk', 'basename', 'cat', 'cut', 'dirname', 'echo', 'grep', 'head', 'ls', 'printenv', 'pwd', 'tail', 'test', 'tr', 'wc'].map((u) => `Bash(${u}:*)`);
+// #470: no printenv (an agent piping it to gh would publish the environment)
+const READ_BASH = ['[', 'awk', 'basename', 'cat', 'cut', 'dirname', 'echo', 'grep', 'head', 'ls', 'pwd', 'tail', 'test', 'tr', 'wc'].map((u) => `Bash(${u}:*)`);
 const WRITE_BASH = ['mkdir', 'mktemp', 'sort', 'uniq'].map((u) => `Bash(${u}:*)`);
 
 test('claude: capabilities become --tools (offered), --allowedTools (approved) and acceptEdits for writers', () => {
@@ -152,8 +153,22 @@ test('denyCommands: codex and grok cannot refuse a command, so they get a note w
 
 test('claude: isolated by default (no user MCP servers, settings, Chrome, skill listing or auto-memory)', () => {
   const { args } = caps.providerArgs('claude-code', { caps: null });
-  assert.deepEqual(args, ['--strict-mcp-config', '--no-chrome', '--setting-sources', 'project,local', '--disable-slash-commands', '--settings', '{"autoMemoryEnabled":false}']);
+  for (const a of ['--strict-mcp-config', '--no-chrome', '--disable-slash-commands']) assert.ok(args.includes(a), a);
+  assert.equal(argAfter(args, '--settings'), '{"autoMemoryEnabled":false}');
   assert.deepEqual(caps.providerArgs('claude-code', { caps: null, isolated: false }).args, []);
+});
+
+// #468 (SEC-3): the checkout's .claude/settings.json and settings.local.json (project, local) can
+// declare hooks and permissions.allow that run before any --allowedTools rule: an isolated agent
+// loads no settings source at all (user, project or local)
+test('claude: isolation loads neither the user\'s nor the checkout\'s settings (--setting-sources without project, local, user)', () => {
+  for (const c of [null, caps.normalize({ tools: ['read', 'bash:git'] }), caps.normalize({ tools: ['read', 'write', 'bash:npm'] })]) {
+    const { args } = caps.providerArgs('claude-code', { caps: c });
+    // left out, Claude Code would load every source: the flag stays, with no source the checkout controls
+    assert.ok(args.includes('--setting-sources'), args.join(' '));
+    const sources = String(argAfter(args, '--setting-sources')).split(',').map((s) => s.trim()).filter(Boolean);
+    for (const s of ['project', 'local', 'user']) assert.ok(!sources.includes(s), `--setting-sources ${sources.join(',')}`);
+  }
 });
 
 test('MCP servers: only the ones the agent declares, from the workflow definitions', () => {

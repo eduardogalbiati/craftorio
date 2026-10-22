@@ -49,3 +49,61 @@ test('Codex and Grok: TOML tables appended once; a CLI never set up is left alon
   assert.equal(trustFolder('grok', repo, { home }), true);
   assert.match(fs.readFileSync(path.join(home, '.grok', 'trusted_folders.toml'), 'utf8'), new RegExp(`\\[folders\\.'${repo.replace(/[\\.]/g, '\\$&')}'\\]\\ntrusted = true\\ndecided_at = \\d+`));
 });
+
+// #468 (SEC-3): only the app's own folders of the workspace are trusted automatically (runs/,
+// skills/, workflows/); repos/, worktrees/ and project folders hold third-party code: the CLI keeps
+// its own trust prompt there. `trustWorkspaceFolder(provider, dir, { workspace, home })` → boolean.
+function workspaceSetup(t) {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'home-'));
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'ws-'));
+  t.after(() => { fs.rmSync(home, { recursive: true, force: true }); fs.rmSync(workspace, { recursive: true, force: true }); });
+  fs.writeFileSync(path.join(home, '.claude.json'), JSON.stringify({ projects: {} }));
+  fs.mkdirSync(path.join(home, '.codex'));
+  fs.writeFileSync(path.join(home, '.codex', 'config.toml'), '');
+  const dir = (...p) => { const d = path.join(workspace, ...p); fs.mkdirSync(d, { recursive: true }); return d; };
+  return { home, workspace, dir };
+}
+const claudeTrusted = (home) => Object.keys(JSON.parse(fs.readFileSync(path.join(home, '.claude.json'), 'utf8')).projects || {});
+
+test('trustWorkspaceFolder refuses a clone under repos/ and its .git root: nothing is written to the CLI config', (t) => {
+  const { trustWorkspaceFolder } = require('../src/cli-trust');
+  const { home, workspace, dir } = workspaceSetup(t);
+  const clone = dir('repos', 'someone-else');
+  fs.mkdirSync(path.join(clone, '.git'));
+  const sub = dir('repos', 'someone-else', 'src');
+  assert.equal(trustWorkspaceFolder('claude', clone, { workspace, home }), false);
+  assert.equal(trustWorkspaceFolder('claude', sub, { workspace, home }), false);
+  assert.equal(trustWorkspaceFolder('codex', clone, { workspace, home }), false);
+  assert.deepEqual(claudeTrusted(home), []);
+  assert.equal(fs.readFileSync(path.join(home, '.codex', 'config.toml'), 'utf8'), '');
+});
+
+test('trustWorkspaceFolder refuses a run\'s worktree under worktrees/ and a project folder', (t) => {
+  const { trustWorkspaceFolder } = require('../src/cli-trust');
+  const { home, workspace, dir } = workspaceSetup(t);
+  const wt = dir('worktrees', '20261022-201530-abcdef12');
+  fs.writeFileSync(path.join(wt, '.git'), 'gitdir: elsewhere');
+  assert.equal(trustWorkspaceFolder('claude', wt, { workspace, home }), false);
+  assert.equal(trustWorkspaceFolder('claude', dir('projects', 'my-app'), { workspace, home }), false);
+  assert.equal(trustWorkspaceFolder('codex', wt, { workspace, home }), false);
+  assert.deepEqual(claudeTrusted(home), []);
+});
+
+test('trustWorkspaceFolder refuses a folder outside the workspace', (t) => {
+  const { trustWorkspaceFolder } = require('../src/cli-trust');
+  const { home, workspace } = workspaceSetup(t);
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'outside-'));
+  t.after(() => fs.rmSync(outside, { recursive: true, force: true }));
+  assert.equal(trustWorkspaceFolder('claude', outside, { workspace, home }), false);
+  assert.deepEqual(claudeTrusted(home), []);
+});
+
+test('trustWorkspaceFolder still trusts the app-owned folders: runs/, skills/, workflows/', (t) => {
+  const { trustWorkspaceFolder } = require('../src/cli-trust');
+  const { home, workspace, dir } = workspaceSetup(t);
+  const key = (d) => d.replace(/\\/g, '/');
+  const owned = [dir('runs', '20261022-201530-abcdef12'), dir('skills', 'code-review'), dir('workflows')];
+  for (const d of owned) assert.equal(trustWorkspaceFolder('claude', d, { workspace, home }), true, d);
+  const trusted = claudeTrusted(home);
+  for (const d of owned) assert.ok(trusted.includes(key(d)), `${d} in ${trusted.join(', ')}`);
+});
