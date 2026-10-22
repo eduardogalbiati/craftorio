@@ -1060,6 +1060,7 @@
   "backlog.pushing": "Enviando…",
   "backlog.queue": "Fila",
   "backlog.queue_empty": "vazia",
+  "backlog.queue_failed": "{issues} não deu certo: retome para iniciar as próximas issues.",
   "backlog.queue_runs_waiting_next": { "one": "{count} execução esperando · próxima {issues} ({workflow})", "other": "{count} execuções esperando · próxima {issues} ({workflow})" },
   "backlog.queued": "na fila #",
   "backlog.recently_updated": "Atualizadas recentemente",

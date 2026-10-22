@@ -221,6 +221,7 @@ module.exports = (ctx) => {
             allowKeptWork: keys.some((k) => keptWorkAllowed.has(k)),
             then: item.then || null,
             agentOverrides: item.agentOverrides || null,
+            fromQueue: true, // #445: its failure pauses this queue
           });
           for (const k of keys) keptWorkAllowed.delete(k);
           backlog.unqueue(ws.backlog, projectId, item.number, { cancelGroup: true });

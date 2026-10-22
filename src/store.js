@@ -96,6 +96,7 @@ const parse = (s, fallback = null) => {
   try { return JSON.parse(s); } catch { return fallback; }
 };
 const now = () => new Date().toISOString();
+const REASON_MARK = 'reason:';
 
 /** The open store whose workspace has `dir` as its runs or backlog folder, or null. */
 function storeFor(dir) {
@@ -265,14 +266,17 @@ function openStore(ws) {
       const q = db.prepare('SELECT * FROM queues WHERE project_id = ?').get(String(projectId));
       if (!q) return null;
       const items = db.prepare('SELECT item FROM queue_items WHERE project_id = ? ORDER BY position').all(String(projectId)).map((r) => parse(r.item)).filter(Boolean);
-      return { paused: !!q.paused, error: q.error ?? null, inputs: parse(q.inputs, {}), items, skipped: parse(q.skipped, []) };
+      // #445: a structured pause reason is kept in the error column as JSON (no schema change)
+      const reason = q.error?.startsWith(REASON_MARK) ? parse(q.error.slice(REASON_MARK.length)) : null;
+      return { paused: !!q.paused, error: reason ? null : q.error ?? null, ...(reason ? { reason } : {}), inputs: parse(q.inputs, {}), items, skipped: parse(q.skipped, []) };
     },
     writeQueue(projectId, queue) {
       const id = String(projectId);
+      const error = queue.reason ? REASON_MARK + JSON.stringify(queue.reason) : queue.error ?? null;
       transaction(() => {
         db.prepare(`INSERT INTO queues (project_id, paused, error, inputs, skipped) VALUES (?, ?, ?, ?, ?)
           ON CONFLICT(project_id) DO UPDATE SET paused = excluded.paused, error = excluded.error, inputs = excluded.inputs, skipped = excluded.skipped`)
-          .run(id, queue.paused ? 1 : 0, queue.error ?? null, JSON.stringify(queue.inputs || {}), JSON.stringify(queue.skipped || []));
+          .run(id, queue.paused ? 1 : 0, error, JSON.stringify(queue.inputs || {}), JSON.stringify(queue.skipped || []));
         db.prepare('DELETE FROM queue_items WHERE project_id = ?').run(id);
         const add = db.prepare('INSERT INTO queue_items (project_id, position, number, added_at, item) VALUES (?, ?, ?, ?, ?)');
         (queue.items || []).forEach((item, i) => add.run(id, i, Number.isFinite(+item.number) ? +item.number : null, item.addedAt ?? null, JSON.stringify(item)));
@@ -400,7 +404,7 @@ function migrateQueueFiles(store) {
       const q = JSON.parse(fs.readFileSync(file, 'utf8'));
       store.transaction(() => {
         if (!store.readQueue(projectId)) {
-          store.writeQueue(projectId, { paused: !!q.paused, error: q.error ?? null, inputs: q.inputs || {}, items: q.items || [], skipped: q.skipped || [] });
+          store.writeQueue(projectId, { paused: !!q.paused, error: q.error ?? null, reason: q.reason || null, inputs: q.inputs || {}, items: q.items || [], skipped: q.skipped || [] });
         }
       });
     } catch (e) { console.error(`backlog queue import (${f}):`, e.message); }

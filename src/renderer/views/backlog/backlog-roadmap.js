@@ -919,7 +919,7 @@
   const stageKey = (stage, s) => String(stage.id || `#${s}`);
   // #268: the pages drawn of the current view (`key`): `more` pages after the first, `earlier` before
   // it; RoadmapModel.pageOf cuts the visible stages into them
-  let pages = { key: '', more: 0, earlier: 0, fresh: false };
+  let pages = { key: '', more: 0, earlier: 0, fresh: false }, drawnAt = null; // #426: the real indexes of the stages html() drew
   /** The next page (the "Loading…" row came near the screen); the owner redraws. */
   function loadMore() {
     pages.more += 1;
@@ -1124,7 +1124,7 @@
     const sinceSelect = r.stages.length ? `<select class="rm-since" data-rm-since data-testid="roadmap-date-filter" aria-label="${t('backlog_roadmap.date_range')}" title="${t('backlog_roadmap.filter_by_each_item_s_last')}">${SINCE.map(([id, label]) =>
       `<option value="${id}"${id === since ? ' selected' : ''}>${label}</option>`).join('')}</select>` : '';
     const now = Date.now();
-    const vis = visibleStages(r, v, byNumber, now);
+    const vis = visibleStages(r, v, byNumber, now); drawnAt = vis.map((x) => x.s);
     const allItems = r.stages.filter((s) => !s.disabled).flatMap((s) => s.items);
     const offItems = offStages.flatMap((s) => s.items).length;
     const shownItems = vis.reduce((a, x) => a + (x.stage.disabled ? 0 : cardCount(x)), 0);
@@ -1292,11 +1292,11 @@
     const [item] = stages[s].items.splice(n, 1);
     const to = n + dir;
     if (to >= 0 && to <= stages[s].items.length) { stages[s].items.splice(to, 0, item); return; }
-    // past the stage's edge: into the previous/next stage (a new last stage when there is none)
-    const t = s + dir;
-    if (t < 0) { stages[s].items.unshift(item); return; }
-    if (!stages[t]) stages.push({ name: '', note: '', items: [] });
-    if (dir < 0) stages[t].items.push(item); else stages[t].items.unshift(item);
+    // past the stage's edge: into the previous/next drawn stage (#426: never a hidden one; a new last stage when there is none)
+    const t = RoadmapModel.drawnNeighbour(stages, s, dir, drawnAt);
+    if (t < 0 && dir < 0) { stages[s].items.unshift(item); return; }
+    const at = t < 0 ? stages.push({ name: '', note: '', items: [] }) - 1 : t;
+    if (dir < 0) stages[at].items.push(item); else stages[at].items.unshift(item);
   }
 
   // Why issue `d.issue` of item `d.from` can't join item `toId` ('' when it can; #163).
@@ -1847,9 +1847,8 @@
       } else if (e.target.closest('[data-rm-stage]')) {
         const { s } = locate(stages, e.target);
         const up = e.target.closest('[data-rm-stage]').dataset.rmStage === 'up';
-        const t = s + (up ? -1 : 1);
-        if (!stages[t]) return true;
-        [stages[s], stages[t]] = [stages[t], stages[s]];
+        const t = RoadmapModel.moveStage(stages, s, up ? -1 : 1, drawnAt); // #426: past the stages the view hides
+        if (t < 0) return true;
         await save(ctx, r, stages, { label: I18n.t(up ? 'backlog_roadmap.moved_stage_up' : 'backlog_roadmap.moved_stage_down', { stage: s + 1 }), detail: I18n.t('backlog_roadmap.it_is_stage_n_now', { stage: t + 1 }) });
         return true;
       } else if (e.target.closest('[data-rm-move]')) {

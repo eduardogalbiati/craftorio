@@ -1060,6 +1060,7 @@
   "backlog.pushing": "Pushing…",
   "backlog.queue": "Queue",
   "backlog.queue_empty": "empty",
+  "backlog.queue_failed": "{issues} failed: resume to start the next issues.",
   "backlog.queue_runs_waiting_next": { "one": "{count} run waiting · next {issues} ({workflow})", "other": "{count} runs waiting · next {issues} ({workflow})" },
   "backlog.queued": "queued #",
   "backlog.recently_updated": "Recently updated",

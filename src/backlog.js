@@ -259,8 +259,24 @@ const MAX_SKIPPED = 20;
 
 function readQueue(dir, projectId) {
   const store = storeFor(dir);
-  if (store) return { ...emptyQueue(), ...(store.readQueue(path.basename(String(projectId))) || {}) };
-  try { return { ...emptyQueue(), ...JSON.parse(fs.readFileSync(queueFile(dir, projectId), 'utf8')) }; } catch { return emptyQueue(); }
+  if (store) return withoutStalePause({ ...emptyQueue(), ...(store.readQueue(path.basename(String(projectId))) || {}) });
+  try { return withoutStalePause({ ...emptyQueue(), ...JSON.parse(fs.readFileSync(queueFile(dir, projectId), 'utf8')) }); } catch { return emptyQueue(); }
+}
+
+// #445: a run's failure pauses the queue with `reason` { key, values: { issues } } (drawn in the
+// interface language); before, `error` held the English sentence, still recognised here
+const QUEUE_FAILED = 'backlog.queue_failed';
+const LEGACY_FAILED = / failed: resume to start the next issues\.$/;
+const failureIssues = (q) => (q.reason?.key === QUEUE_FAILED ? (q.reason.values?.issues || []).map(Number)
+  : LEGACY_FAILED.test(q.error || '') ? (q.error.match(/#(\d+)/g) || []).map((s) => +s.slice(1)) : null);
+
+// A pause by a failure does not outlive its cause: an empty queue, or every issue it names done
+// (`done(number)`), is not paused (#445). A pause by hand or by a start that failed stays.
+function withoutStalePause(q, done = () => false) {
+  const issues = q.paused ? failureIssues(q) : null;
+  if (!issues || (q.items.length && !(issues.length && issues.every(done)))) return q;
+  const { reason: _reason, ...rest } = q;
+  return { ...rest, paused: false, error: null };
 }
 
 // What a queue must look like (#112: a write that breaks it is refused, src/state-file.js).
@@ -290,7 +306,7 @@ function writeQueue(dir, projectId, queue) {
 
 // read, change and write in one transaction (with the index): a concurrent change waits for it
 function updateQueue(dir, projectId, fn) {
-  const apply = () => writeQueue(dir, projectId, fn(readQueue(dir, projectId)) || readQueue(dir, projectId));
+  const apply = () => writeQueue(dir, projectId, withoutStalePause(fn(readQueue(dir, projectId)) || readQueue(dir, projectId)));
   const store = storeFor(dir);
   return store ? store.transaction(apply) : apply();
 }
@@ -379,8 +395,20 @@ async function newPullRequests({ item, platform, repo, exec }) {
   });
 }
 
-function setPaused(dir, projectId, paused, error = null) {
-  return updateQueue(dir, projectId, (q) => ({ ...q, paused: !!paused, error: paused ? error : null }));
+// `reason` (#445): a pause drawn in the interface language, { key, values }, instead of `error`
+function setPaused(dir, projectId, paused, error = null, reason = null) {
+  return updateQueue(dir, projectId, ({ reason: _old, ...q }) => ({ ...q, paused: !!paused, error: paused ? error : null, ...(paused && reason ? { reason } : {}) }));
+}
+
+/** #445: a run of the queue's own failed: its issues pause the queue (none when nothing waits). */
+function pauseForFailure(dir, projectId, numbers) {
+  return setPaused(dir, projectId, true, null, { key: QUEUE_FAILED, values: { issues: numbers.map(Number) } });
+}
+
+/** #445: the pause of a failure ends once each issue it names is done (`done(number)`). */
+function clearDonePause(dir, projectId, done) {
+  const q = readQueue(dir, projectId);
+  if (withoutStalePause(q, done) !== q) updateQueue(dir, projectId, (cur) => withoutStalePause(cur, done));
 }
 
 // Project ids with a queue (rows of the index, else queue files).
@@ -756,6 +784,7 @@ module.exports = {
   itemIssues, runIssues, execCli, readLocal, writeLocal,
   archiveIssues,
   claimQueued,
+  clearDonePause,
   cliTarget,
   fetchIssue,
   freshIssues,
@@ -764,6 +793,7 @@ module.exports = {
   issueCreateCommand,
   issueSaveBody,
   issueSaveCommand,
+  pauseForFailure,
   queuedProjects,
   readIssueSaves,
   recordedIssues,

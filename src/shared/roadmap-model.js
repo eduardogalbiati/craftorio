@@ -282,6 +282,24 @@
     return x?.number ? [{ number: x.number, url: x.url, title: x.title, body: x.body, knownPullRequests: x.knownPullRequests }] : [];
   }
 
+  // #426: the stage nearest to `s` towards `dir` (-1 up, 1 down) among those the view draws
+  // (`drawn`: their real indexes; every stage when absent), or -1 when none is drawn on that side
+  function drawnNeighbour(stages, s, dir, drawn) {
+    const side = (drawn || stages.map((_, i) => i)).filter((i) => i < stages.length && (dir < 0 ? i < s : i > s));
+    return side.length ? (dir < 0 ? Math.max(...side) : Math.min(...side)) : -1;
+  }
+
+  // #426: "Run earlier / later" moves stage `s` just before the previous / just after the next drawn
+  // stage (the hidden ones in between keep their order), to the roadmap's start / end when none is
+  // drawn on that side. Changes `stages`; returns the stage's new index, -1 when it cannot move.
+  function moveStage(stages, s, dir, drawn) {
+    const near = drawnNeighbour(stages, s, dir, drawn);
+    const to = near >= 0 ? near : dir < 0 ? 0 : stages.length - 1;
+    if (!stages[s] || to === s) return -1;
+    stages.splice(to, 0, ...stages.splice(s, 1));
+    return to;
+  }
+
   const api = {
     ACTIONS,
     FINISHED,
@@ -292,6 +310,7 @@
     atGate,
     cardCount,
     currentStage,
+    drawnNeighbour,
     earlierRuns,
     hasUnfinished,
     inRange,
@@ -299,6 +318,7 @@
     isOpen,
     itemIssues,
     itemRuns,
+    moveStage,
     pageOf,
     pauseChoices,
     pausingAfterStage,

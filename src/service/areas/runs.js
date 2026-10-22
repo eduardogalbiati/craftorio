@@ -241,10 +241,19 @@ module.exports = (ctx) => {
 
   // What follows a run's end (its workflow.finished event): the next issues waiting in a Backlog
   // queue start once this run is over; a queued issue whose run failed pauses its queue (a failure
-  // that repeats would otherwise burn through it)
+  // that repeats would otherwise burn through it). #445: only a run the queue started pauses it
+  // (not a roadmap item's, a release's, a chain's or one by hand), and the pause ends once the
+  // issues it names are done (closed on the platform, or a later run of them succeeded).
   function afterRunFinished(run, ev) {
-    if (run.issues && run.projectId && ev.status === 'failed' && !run.mock) {
-      try { backlog.setPaused(ctx.ws.backlog, run.projectId, true, `${run.issues.map((i) => `#${i.number}`).join(', ')} failed: resume to start the next issues.`); } catch (e) { console.error('backlog queue:', e); }
+    if (run.issues && run.projectId && !run.mock) {
+      try {
+        if (ev.status === 'failed' && run.fromQueue) backlog.pauseForFailure(ctx.ws.backlog, run.projectId, run.issues.map((i) => i.number));
+        else {
+          const ok = new Set(ev.status === 'success' ? run.issues.map((i) => i.number) : []);
+          const closed = new Set((backlog.readBacklog(ctx.ws.backlog, run.projectId)?.issues || []).filter((i) => i.state === 'closed').map((i) => i.number));
+          backlog.clearDonePause(ctx.ws.backlog, run.projectId, (n) => ok.has(n) || closed.has(n));
+        }
+      } catch (e) { console.error('backlog queue:', e); }
     }
     // the epic first (the chain may sync the backlog), then what the run's chain starts (#134)
     ctx.placeFiledInEpic(run, ev).catch((e) => console.error('issue tracker epic:', e.message))
@@ -311,7 +320,7 @@ module.exports = (ctx) => {
   // onFinished: (workflow.finished event) => void, called when the run ends (the parent's step waits on it)
   // agentOverrides: { <agent>: { provider?, model?, effort? } } this run's choice per agent (#262, WorkflowRun);
   // every run also gets Settings' fallback chains per provider and limits per model (settingsFallbacks)
-  async function startWorkflowRun({ file, inputs, mock, mockSequences = null, resume = null, projectId: forcedProject = null, issues = null, allowKeptWork = false, notices: startNotices = [], attachments = null, then = null, from = null, parent = null, onFinished = null, signal = null, onSlotWait = null, agentOverrides = null }) {
+  async function startWorkflowRun({ file, inputs, mock, mockSequences = null, resume = null, projectId: forcedProject = null, issues = null, allowKeptWork = false, notices: startNotices = [], attachments = null, then = null, from = null, parent = null, onFinished = null, signal = null, onSlotWait = null, agentOverrides = null, fromQueue = false }) {
     // simulation-only (automated checks): a real run is refused, never turned into a simulation
     if (!mock) simulation.refuseReal('a real run');
     // the same issues never get a second live run, from this app or another one (#112): resume that run instead
@@ -408,6 +417,7 @@ module.exports = (ctx) => {
         // #378: the Refactor proposals workflow ranks with the Refactor tab's Product Owner (channels/refactor.js)
         refactorPriorityOptions: (projectId) => ctx.refactorPriorityOptions?.(projectId) || null,
       });
+      run.fromQueue = !!fromQueue; // #445: only the queue's own runs pause it (afterRunFinished)
       if (!mock) {
         // the runs in progress have not written their usage to disk yet
         const problems = usage.preflight(run.wf, usage.withPeerUsage(budget, peerSessions(run), settings.prices), resolveCommand, run.inputs);

@@ -1149,10 +1149,10 @@
   let pageAlerts = null;
   function renderAlerts() {
     pageAlerts ||= window.Alerts.mount($b('#bl-alerts'));
-    const q = bl.data?.queue;
+    const q = bl.data?.queue, why = q?.reason ? t(q.reason.key, { issues: (q.reason.values?.issues || []).map((n) => `#${n}`).join(', ') }) : q?.error; // #445: in the interface language
     pageAlerts.set([
       ...(window.BacklogRoadmap?.alerts(bl.data, roadmapCtx(), { shown: onRoadmapTab() }) || []),
-      ...(q?.error ? [{ id: `queue:${bl.projectId}`, level: 'error', title: t('backlog.queue'), text: q.error, dismissible: false, actions: [{ label: t('backlog.resume'), primary: true, onClick: (e) => setQueuePaused(e.target.closest('[data-alert-action]'), false) }] }] : []),
+      ...(why ? [{ id: `queue:${bl.projectId}`, level: 'error', title: t('backlog.queue'), text: why, dismissible: false, actions: [{ label: t('backlog.resume'), primary: true, onClick: (e) => setQueuePaused(e.target.closest('[data-alert-action]'), false) }] }] : []),
       ...refreshAlert(),
       ...deprioritizedAlert(),
       ...localAlert(),
@@ -1635,7 +1635,7 @@
           <span id="bl-synced" class="muted small"></span>
         </div>
         <div id="bl-live" class="bl-live hidden" role="status"></div>
-        <div id="bl-queue" class="bl-queue hidden"></div>
+        <div id="bl-queue" class="bl-queue hidden" data-testid="queue-bar"></div>
         <p id="bl-error" class="error small"></p>
         <div id="bl-list" class="pr-list" data-testid="backlog-list"></div>
         <button id="btn-bl-po" class="po-fab" type="button" title="${t('backlog.ask_the_product_owner_which_issues')}" aria-label="${t('backlog.product_owner')}"></button>
