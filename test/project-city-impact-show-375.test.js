@@ -12,6 +12,9 @@
 // the issue puts the city in its mode (data-city-mode="impact", "Issue #375"), a stage in "stage";
 // Close and a second show leave no legend row and no card of the previous preview; the card is a panel
 // (data-city-panel="impact") whose chevron minimizes it and keeps its content.
+// #430 (the contract in test/project-city-modal-430.test.js): "Show on the map" (showIssue, showStage,
+// fromRoadmap) opens the impact in the City modal (data-testid="city-modal") over the screen it was
+// asked from, never the Project screen (no openProjectView); the attach / show contract above is unchanged.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -247,4 +250,44 @@ test('#441 the impact card is a panel: its chevron minimizes it to its title row
   await settle();
   assert.equal(String(city.el.querySelector('[data-city-panel="impact"] [data-testid="city-panel-toggle"]')?.getAttribute('aria-expanded')), 'true');
   assert.match(text(q(city.el, 'city-impact-comparison')), /50%/);
+});
+
+// #430: the entry points through the app's window (test/city-modes-harness.js: every city script,
+// project-city-modal.js included; openProjectView recorded in calls.openCity), on the Backlog
+const MODAL_FILE = path.join(DIR, 'project-city-modal.js');
+async function fromBacklog(t, show) {
+  assert.equal(fs.existsSync(MODAL_FILE), true, 'src/renderer/views/project/project-city-modal.js exists (#430)');
+  const H = require('./city-modes-harness');
+  const h = H.loadWindow();
+  h.w.state.view = 'backlog';
+  show(h.w);
+  await settle();
+  const modal = q(h.dom.document.body, 'city-modal');
+  t.after(() => { try { q(modal, 'city-modal-close')?.click(); } catch { /* already closed */ } });
+  return { ...h, modal, city: q(modal, 'project-city') };
+}
+
+test('#430 "Show on the map" on an issue opens its impact in the City modal, not on the Project screen', async (t) => {
+  const o = await fromBacklog(t, (w) => w.ProjectCityImpact.showIssue('p1', { ...ISSUE, runs: [] }));
+  assert.equal(o.modal === null, false, 'the City modal');
+  assert.equal(String(o.city?.getAttribute('data-city-mode') ?? ''), 'impact');
+  assert.match(text(q(o.city, 'city-impact-header')), /#375/);
+  assert.deepEqual(o.calls.openCity, [], 'no openProjectView');
+  assert.equal(String(o.w.state.view), 'backlog');
+});
+
+test('#430 a roadmap stage\'s "Show the stage on the map" (fromRoadmap) opens its footprint in the City modal', async (t) => {
+  const roadmap = { stages: [{ id: 'st1', name: 'Engine fixes', items: [
+    { id: 'it1', issues: [{ number: 1, title: 'First' }] },
+    { id: 'it2', issues: [{ number: 2, title: 'Second' }] },
+  ] }] };
+  const issues = [
+    { number: 1, title: 'First', body: 'Edit `src/engine/run.js`', runs: [] },
+    { number: 2, title: 'Second', body: 'Edit `src/engine/run.js`', runs: [] },
+  ];
+  const o = await fromBacklog(t, (w) => w.ProjectCityImpact.fromRoadmap('p1', roadmap, issues, { rmMapStage: '0' }));
+  assert.equal(o.modal === null, false, 'the City modal');
+  assert.equal(String(o.city?.getAttribute('data-city-mode') ?? ''), 'stage');
+  assert.match(text(q(o.city, 'city-impact-conflicts')), /src\/engine\/run\.js/);
+  assert.deepEqual(o.calls.openCity, [], 'no openProjectView');
 });

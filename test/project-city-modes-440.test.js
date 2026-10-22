@@ -252,61 +252,8 @@ test('#440 "Replay on the map" opens the replay mode alone; Close leaves no time
   assert.equal(o.calls.agents.length, before, 'Live stays off after the replay: nothing polls');
 });
 
-// Close goes back to where the owner came from (#440 with #430): the screen an entry point was called
-// from (state.view when ProjectArchitecture.openCity runs), Explore when that is the project's own tab.
-// openProjectView is the harness's stub, so the tab is mounted by hand after the entry point, as the
-// app's openProjectView would.
-async function fromScreen(t, view, open) {
-  const h = H.loadWindow();
-  const shown = [];
-  h.w.showView = (v) => { shown.push(String(v)); };
-  h.w.state.view = view;
-  open(h.w);
-  const box = h.dom.document.createElement('div');
-  h.dom.document.body.appendChild(box);
-  h.w.ProjectArchitecture.show('p1', box);
-  await settle();
-  const o = { ...h, box, root: q(box, 'project-city'), shown };
-  assert.ok(o.root, 'the City view is on screen');
-  t.after(() => { try { o.w.ProjectArchitecture.show('other', o.dom.document.createElement('div')); } catch { /* the tab is gone */ } });
-  return o;
-}
-
-test('#440 Close of an issue opened from the Backlog goes back to the Backlog, leaving the city in Explore', async (t) => {
-  const o = await fromScreen(t, 'backlog', (w) => w.ProjectCityImpact.showIssue('p1', ISSUE));
-  assert.equal(mode(o.root), 'impact');
-  await close(o);
-  assert.deepEqual(o.shown, ['backlog']);
-  assert.equal(mode(o.root), 'explore');
-  assert.doesNotMatch(legendText(o.root), /Cited in the issue/);
-});
-
-test('#440 Close of a replay opened from a run\'s screen goes back to that run', async (t) => {
-  const o = await fromScreen(t, 'run', (w) => w.ProjectCityAgents.replay('p1', H.REPLAY.runId));
-  assert.equal(mode(o.root), 'replay');
-  await close(o);
-  assert.deepEqual(o.shown, ['run']);
-  assert.equal(mode(o.root), 'explore');
-});
-
-test('#440 Close of a release opened from Releases goes back to Releases, once: a later mode\'s Close stays on the tab', async (t) => {
-  const o = await fromScreen(t, 'releases', (w) => w.ProjectCityRelease.showRelease('p1', { to: '1.1.2' }));
-  assert.equal(mode(o.root), 'release');
-  await close(o);
-  assert.deepEqual(o.shown, ['releases']);
-  o.w.state.view = 'project'; // the owner is back on the project's tab
-  await showIssue(o);
-  await close(o);
-  assert.deepEqual(o.shown, ['releases'], 'the second Close does not leave the tab again');
-  assert.equal(mode(o.root), 'explore');
-});
-
-test('#440 a mode opened inside the project\'s own tab closes back to Explore without leaving the tab', async (t) => {
-  const o = await fromScreen(t, 'project', (w) => w.ProjectCityImpact.showIssue('p1', ISSUE));
-  await close(o);
-  assert.deepEqual(o.shown, []);
-  assert.equal(mode(o.root), 'explore');
-});
+// An entry point called from another screen no longer navigates (#430): it opens the city in a modal
+// over that screen, and its Close leaves the screen as it was (test/project-city-modal-430.test.js).
 
 // Esc belongs to what is on top: an open modal, the supervisor's drawer or the usage popover closes
 // first (app.js), the city's mode stays.

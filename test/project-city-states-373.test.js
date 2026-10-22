@@ -1,7 +1,7 @@
 // #373, the City view's states (src/renderer/views/project/project-city.js) in a mini DOM without
 // WebGL: the facts still loading, not a git repository, an error with Retry, no plan (the folders,
 // "Map this project" with its estimate), a stale plan (the unmatched share, "Refresh the map"), the
-// plan's validation problems, the edges not read, the header's counts, and the overlay API's
+// plan's validation problems, no Arcs note for the edges not read (#428), the header's counts, and the overlay API's
 // window.ProjectCity.current() / flyTo() on the city on screen.
 // #440/#441 (the contract in test/project-city-modes-440.test.js and test/project-city-panels-441.test.js):
 // a city on its own is in Explore (data-city-mode="explore", data-testid="city-mode-title" the project,
@@ -116,7 +116,7 @@ test('#381 City states: the action follows the run (running with its step, then 
   assert.match(text(q(city.el, 'project-city-header')), /plan covers/);
 });
 
-test('#373 City states: a stale plan, its problems and the edges not read', async () => {
+test('#373 City states: a stale plan and its problems', async () => {
   const { city } = await open({ state: 'ok', ...buildCity({ plan: PLAN, facts: facts() }) });
   await settle();
   assert.match(text(q(city.el, 'project-city-stale')), /40% of the files \(2 of 5\)/);
@@ -124,8 +124,15 @@ test('#373 City states: a stale plan, its problems and the edges not read', asyn
   const problems = text(q(city.el, 'project-city-problems'));
   assert.match(problems, /District lost names an unknown zone nowhere/);
   assert.match(problems, /District lost has no file/);
-  assert.match(text(q(city.el, 'project-city-edges')), /not read for/);
   assert.match(text(q(city.el, 'project-city-header')), /plan covers 60%/);
+});
+
+// #428: the Arcs note (the edges not read) is gone from the notes
+test('#428 City states: no Arcs note when the edges were not read', async () => {
+  const { city } = await open({ state: 'ok', ...buildCity({ plan: PLAN, facts: facts() }) });
+  await settle();
+  assert.equal(q(city.el, 'project-city-edges') === null, true, 'no data-testid="project-city-edges"');
+  assert.doesNotMatch(text(city.el.querySelector('.pc-notes')), /\bArcs\b|draws no arc/);
 });
 
 test('#373 City: an update with the same facts and estimate keeps the HUD, a new estimate redraws the note', async () => {
