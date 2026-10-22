@@ -3253,6 +3253,8 @@
 
   "project_city.back_into_the_tab_esc": "Voltar para a aba (Esc)",
   "project_city.camera": "Câmera",
+  "project_city.city_life": "Vida na cidade",
+  "project_city.city_life_title": "Vida na cidade: árvores, postes, bancos e carros em volta dos prédios; desligada, só ficam os prédios, as ruas e as placas",
   "project_city.close_the_card": "Fechar o cartão",
   "project_city.close_the_full_screen": "Fechar a tela cheia",
   "project_city.colour_by": "Colorir por",
@@ -3265,6 +3267,8 @@
   "project_city.expand_to_the_whole_window": "Expandir para a janela inteira",
   "project_city.files_count": { "one": "{count} arquivo", "other": "{count} arquivos" },
   "project_city.fly_to_a_file_or_a": "Voar até um arquivo ou distrito",
+  "project_city.glow": "Brilho",
+  "project_city.glow_title": "Brilho: um bloom sobre as luzes e uma vinheta; desligue numa máquina mais lenta",
   "project_city.in_the_danger_zone_count": "{count} na Zona de perigo",
   "project_city.light_theme": "Tema claro",
   "project_city.loading_the_city": "Carregando a cidade…",

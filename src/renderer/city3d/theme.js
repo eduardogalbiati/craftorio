@@ -10,10 +10,16 @@
 // (how much the lit windows glow: full in the dark theme, faint in the light one), and
 // `facade(kind)`, the zone kind's facade [column pitch (× WIN_PITCH), window width share, window
 // height share, glass tint 0..1].
+// The city around them (#450, poc/project-city-v2.html THEMES and applyTheme): the sky dome's top and
+// horizon (the fog's colour too), the clouds and the stars (the dark theme's night), the lawns, the
+// water, the lamps and their pools, the trunks, the sun's colour (`moon`: a moonlight in the dark),
+// the fill light, the bloom's strength and the vignette's opacity.
 const CITY = {
   dark: {
     dim: '#242a37', dash: '#3a4357', dock: '#2b3247', hall: '#3d4766', plinth: '#343c52', beacon: '#7c9cff', danger: '#f87171', marker: '#facc15',
     garden: '#4f9c74', night: 1.0,
+    skyTop: '#06070c', skyHorizon: '#161c2c', cloud: '#1c2334', cloudOpacity: 0.5, stars: true, lawn: '#2c4a38', water: '#17233b', pool: '#ffd9a0',
+    trunk: '#3b3129', lamp: '#ffd9a0', moon: '#c9d4ff', fill: '#8fa6ff', fillIntensity: 0.35, bloom: 0.45, vignette: 1,
     // grounds a step above the floor (#181c26), plates a step above the pad (#242a39)
     kinds: {
       civic: { ground: '#2b2d34', block: '#3b3e47', ink: '#dad5c7' },
@@ -31,6 +37,8 @@ const CITY = {
   light: {
     dim: '#E2E6EE', dash: '#F4F6FA', dock: '#2B3350', hall: '#5E6E8C', plinth: '#FFFFFF', beacon: '#4C6FFF', danger: '#EA4E4B', marker: '#E39A12',
     garden: '#86D2AC', night: 0.12,
+    skyTop: '#9fbde8', skyHorizon: '#e3e9f4', cloud: '#ffffff', cloudOpacity: 0.85, stars: false, lawn: '#BFDCAA', water: '#B9D0EC', pool: '#ffffff',
+    trunk: '#6b5b4b', lamp: '#eef1f7', moon: '#ffffff', fill: '#ffffff', fillIntensity: 0.22, bloom: 0.18, vignette: 0.3,
     kinds: {
       civic: { ground: '#D3CEC2', block: '#F1EEE7', ink: '#5A5244' },
       commercial: { ground: '#D8CCB8', block: '#F3EEE5', ink: '#5E5040' },

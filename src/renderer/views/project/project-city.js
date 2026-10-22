@@ -7,9 +7,9 @@
 // - the header: the project, its files, zones and districts, the Danger Zone count, the plan's
 //   coverage and the commit; a search that flies to a file, a district or a zone; "Colour by"
 //   (Quadrant, the default when a tool measured the complexity, Zone otherwise, Churn) with its
-//   legend; the Tests toggle; the dark / light toggle shared with the run's 3D view (Run3DTheme);
-//   Expand (#381): the city over the whole window (the `expanded` class), Close or Esc brings it
-//   back, the camera where it was;
+//   legend; the Tests toggle; City life and Glow (#450: switches on by default, sent as scene
+//   updates, the city not rebuilt); the dark / light toggle shared with the run's 3D view (Run3DTheme);
+//   Expand (#381): the city over the whole window (`expanded`), Close or Esc brings it back as it was;
 // - the notes under it (project-city-notes.js): no plan or a stale plan, each with the tab's one
 //   action "Analyze this project" (#381: the map and the Oracle's analysis as one run, `onAnalyze`,
 //   its combined estimate next to it) and its state, the plan's problems, the edges not read;
@@ -22,11 +22,10 @@
 //     buildings no layer highlights are greyed (city-layout.js applyOverlay);
 //   ProjectCity.flyTo(name) flies to a file, a district or a zone (false when there is none);
 //   ProjectCity.current() → { projectId, layout } of the city on screen (null when none);
-//   ProjectCity.stats() → { firstFrameMs, fps, buildings }: first frame time and fps while the camera moves
-//   (the PR's measures); per drawn file { path, archetype, greyed } (#449: city-buildings.js, the overlay).
-//   A created city also has `model`, `setPins(paths)` (#382: the files whose connections stay drawn,
-//   the connections panel's, project-city-connections.js), `onLayout(fn)` (called after a new
-//   layout; returns the unsubscribe) and `reload(answer?)` (#376: draws another city answer, a release's base; none reads the project's again).
+//   ProjectCity.stats() → { firstFrameMs, fps, buildings, cityLife, glow, props }: first frame time and fps while the camera
+//   moves (the PR's measures); per drawn file { path, archetype, greyed } (#449); the switches and the life props shown (#450).
+//   A created city also has `model`, `setPins(paths)` (#382: the connections panel's pinned files), `onLayout(fn)` (called
+//   after a new layout; returns the unsubscribe) and `reload(answer?)` (#376: draws another answer; none reads the project's again).
 // Uses app.js globals at call time: api, esc, errMsg. Browser: window.ProjectCity.
 (() => {
   const BUNDLE = '../../generated/project-city.js';
@@ -34,8 +33,9 @@
   const ZOOM_IN = 0.72, ZOOM_OUT = 1.38;
   const COLOUR_LABEL = { quadrant: 'Quadrant', zone: 'Zone', churn: 'Churn' };
   const ICON_CITY = '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="1" y="7" width="4" height="8" rx="1"/><rect x="6" y="2" width="4" height="13" rx="1"/><rect x="11" y="5" width="4" height="10" rx="1"/></svg>';
-  const ICON_EXPAND = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 2.5h4v4M13.5 2.5 9 7M6.5 13.5h-4v-4M2.5 13.5 7 9"/></svg>';
-  const ICON_CLOSE = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M3 3l10 10M13 3 3 13"/></svg>';
+  const ICON_EXPAND = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 2.5h4v4M13.5 2.5 9 7M6.5 13.5h-4v-4M2.5 13.5 7 9"/></svg>', ICON_CLOSE = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M3 3l10 10M13 3 3 13"/></svg>'; // i18n-ignore
+  // #450's switches (poc/city-modes.html's icons: a tree and a lamp, a sun's rays): the flag, its test id and label key, its icon
+  const FLAGS = { cityLife: ['life', 'city_life', '<path d="M5 14V9M5 9a3.2 3.2 0 1 1 0-6.4A3.2 3.2 0 0 1 5 9zM11 14V5M11 5l-2.2 1.2M11 5l2.2 1.2M8.8 2.6h4.4"/>'], glow: ['glow', 'glow', '<circle cx="8" cy="8" r="2.6"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/>'] }; // i18n-ignore
   let bundle = null; // the bundle's load, once
   let gl = null; // why WebGL cannot draw here ('' = it can), checked once
   let shown = null; // the city on screen (the overlay API's)
@@ -94,7 +94,7 @@
     const c = {
       projectId, name, el, answer: null, loading: false, error: null, facts: null, estimate: null, analysis: null,
       colour: null, tests: true, theme: el.dataset.theme, layout: null, legend: [], handle: null, drawn: null,
-      pinned: null, hover: null, pins: [], expanded: false, seq: 0, destroyed: false,
+      pinned: null, hover: null, pins: [], expanded: false, seq: 0, destroyed: false, cityLife: true, glow: true,
     };
     const listeners = new Set(); // onLayout's
 
@@ -179,7 +179,7 @@
       stage.innerHTML = '';
       try {
         c.handle = ProjectCityScene.mount(stage, {
-          layout: c.layout, ...paint(), tests: c.tests, pins: c.pins, theme: c.theme, relationsOf,
+          layout: c.layout, ...paint(), tests: c.tests, pins: c.pins, theme: c.theme, cityLife: c.cityLife, glow: c.glow, relationsOf,
           onHover: (t) => { c.hover = t; renderHover(); },
           onPick: (t) => { c.pinned = t; renderDetail(); },
         });
@@ -213,6 +213,7 @@
         <datalist id="pc-targets-${esc(projectId)}">${targets.map((t) => `<option value="${esc(t)}"></option>`).join('')}</datalist>
         <label class="r3d-chip"><span>${t('project_city.colour_by')}</span><select data-pc-colour aria-label="${t('project_city.colour_by')}" data-testid="project-city-colour">${options}</select></label>
         <label class="r3d-chip" title="${t('project_city.show_or_hide_the_test_files')}"><input type="checkbox" data-pc-tests data-testid="project-city-tests" ${c.tests ? 'checked' : ''} /> ${t('project_city.tests')}</label>
+        ${Object.entries(FLAGS).map(([k, [id, key, icon]]) => `<button type="button" class="r3d-close pc-flag" data-pc-flag="${k}" data-testid="project-city-${id}" aria-pressed="${c[k]}" aria-label="${t(`project_city.${key}`)}" title="${t(`project_city.${key}_title`)}"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icon}</svg></button>`).join('')}
         <button type="button" class="r3d-close" data-pc-theme data-testid="project-city-theme" aria-label="${light ? t('project_city.dark_theme') : t('project_city.light_theme')}" title="${light ? t('project_city.switch_to_dark_theme') : t('project_city.switch_to_light_theme')}">${light ? '☾' : '☀'}</button>
         <button type="button" class="r3d-close r3d-theme" data-pc-expand data-testid="project-city-expand" aria-pressed="${c.expanded}" aria-label="${c.expanded ? t('project_city.close_the_full_screen') : t('project_city.expand_to_the_whole_window')}" title="${c.expanded ? t('project_city.back_into_the_tab_esc') : t('project_city.expand_the_city_over_the_whole')}">${c.expanded ? ICON_CLOSE : ICON_EXPAND}</button>
       </div>`;
@@ -344,6 +345,7 @@
       else if (t.closest('[data-pc-zoom]')) c.handle?.zoom(t.closest('[data-pc-zoom]').dataset.pcZoom === 'in' ? ZOOM_IN : ZOOM_OUT);
       else if (t.closest('[data-pc-theme]')) setTheme(c.theme === 'light' ? 'dark' : 'light');
       else if (t.closest('[data-pc-expand]')) setExpanded(!c.expanded);
+      else if (t.closest('[data-pc-flag]')) { const b = t.closest('[data-pc-flag]'), k = b.dataset.pcFlag; c[k] = !c[k]; b.setAttribute('aria-pressed', String(c[k])); c.handle?.update({ [k]: c[k] }); }
       else if (t.closest('[data-pc-analyze]')) onAnalyze?.(projectId);
     });
     el.addEventListener('change', (e) => {
@@ -390,10 +392,8 @@
       flyTo,
       /** Repaints after a change of the overlay's layers. */
       refreshOverlay() { if (c.handle && c.layout) c.handle.update(paint()); },
-      /** #382: the files whose connections stay drawn (the connections panel's pins). */
-      setPins(paths) { c.pins = [...(paths || [])]; c.handle?.update({ pins: c.pins }); },
-      /** Calls `fn(layout)` after every new layout; returns the unsubscribe. */
-      onLayout(fn) { listeners.add(fn); return () => listeners.delete(fn); },
+      setPins(paths) { c.pins = [...(paths || [])]; c.handle?.update({ pins: c.pins }); }, // #382: the files whose connections stay drawn
+      onLayout(fn) { listeners.add(fn); return () => listeners.delete(fn); }, // calls `fn(layout)` after every new layout
       expand: setExpanded,
       stats: () => c.handle?.stats() || null,
       destroy() {

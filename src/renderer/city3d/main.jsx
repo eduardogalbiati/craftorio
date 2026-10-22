@@ -3,22 +3,25 @@
 // (src/renderer/views/project/project-city.js) calls once the bundle has loaded. The HUD (header,
 // legend, cards, controls, the connections panel) is that classic script's; the bundle draws the
 // city and reports what the pointer is on.
-//   ProjectCityScene.mount(element, { layout, paint, markers, tests, pins, theme, relationsOf, onHover, onPick }) → handle
+//   ProjectCityScene.mount(element, { layout, paint, markers, tests, pins, theme, cityLife, glow, relationsOf, onHover, onPick }) → handle
 //   - layout: src/shared/city-layout.js layoutCity; paint: { colours: [hex], greyed: [bool] } per
 //     building (colourBy, then applyOverlay); markers: applyOverlay's; tests: draw the test files;
 //     pins: the file paths whose connections stay drawn (#382, the connections panel); theme: 'dark'
-//     | 'light' (run3d-theme.js); relationsOf(kind, id) → { requires, requiredBy } (city-layout.js
+//     | 'light' (run3d-theme.js); cityLife, glow (#450, both on by default): the street life (trees,
+//     lamps, benches, cars, the lamps' pools) and the bloom with its vignette; relationsOf(kind, id) → { requires, requiredBy } (city-layout.js
 //     neighbours / districtNeighbours); onHover({ kind, id, x, y } | null) with the pointer's client
 //     position; onPick({ kind, id } | null) on a click (null: the empty sky).
 //   - handle: update(patch of the same keys; a new layout drops the hover and the pinned card, the
 //     pins stay), pin(target | null) (the card's target), flyTo(flyTarget), home(), zoom(factor),
-//     stats() → { firstFrameMs, fps, buildings } (the time to the first frame, the frame rate while
-//     the camera moves; per drawn file { path, archetype, greyed }: its v2 building's kind,
-//     scene.jsx buildingsOf, and whether the overlay greys it), unmount() (React Three Fiber gives
-//     the WebGL context back).
+//     stats() → { firstFrameMs, fps, buildings, cityLife, glow, props } (the time to the first frame,
+//     the frame rate while the camera moves; per drawn file { path, archetype, greyed }: its v2
+//     building's kind, scene.jsx buildingsOf, and whether the overlay greys it; the two switches; the
+//     life props shown, props.js lifeCount, 0 with City life off), unmount() (React Three Fiber gives
+//     the WebGL context back). A switch's update changes the store only: the city is not rebuilt.
 import { Component } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Canvas } from '@react-three/fiber';
+import { lifeCount } from './props.js';
 import { buildingsOf, CityScene } from './scene.jsx';
 import { cityTheme } from './theme.js';
 import { createStore, useStore } from './store.js';
@@ -62,7 +65,7 @@ function Tags({ store }) {
 }
 
 function App({ store }) {
-  const { theme: T, glError } = useStore(store);
+  const { theme: T, glError, glow } = useStore(store);
   return (
     <>
       {glError ? <div className="r3d-message" role="alert" children={glError} /> : (
@@ -70,11 +73,12 @@ function App({ store }) {
           <Canvas shadows flat dpr={[1, 2]} frameloop="demand" camera={{ fov: 30, near: 1, far: 4000 }}
             onPointerMissed={() => store.pick(null)}
             onCreated={({ gl }) => gl.domElement.addEventListener('webglcontextlost', () => store.set({ glError: t('city3d.webgl_lost') }))}>
-            <color attach="background" args={[T.sky]} />
+            <color attach="background" args={[T.skyHorizon]} />
             <CityScene store={store} />
           </Canvas>
         </SceneBoundary>
       )}
+      {glow && !glError && <div className="pc-vignette" style={{ opacity: T.vignette }} />}
       <Tags store={store} />
     </>
   );
@@ -82,8 +86,8 @@ function App({ store }) {
 
 const same = (a, b) => a?.kind === b?.kind && a?.id === b?.id;
 
-function mount(element, { layout, paint, markers = [], tests = true, pins = [], theme, relationsOf, onHover, onPick }) {
-  const store = createStore({ layout, layoutKey: 1, paint, markers, tests, pins: [...pins], theme: cityTheme(theme), level: 0, scoreDistrict: null, hover: null, pinned: null, glError: '' });
+function mount(element, { layout, paint, markers = [], tests = true, pins = [], theme, cityLife = true, glow = true, relationsOf, onHover, onPick }) {
+  const store = createStore({ layout, layoutKey: 1, paint, markers, tests, pins: [...pins], theme: cityTheme(theme), cityLife: !!cityLife, glow: !!glow, level: 0, scoreDistrict: null, hover: null, pinned: null, glError: '' });
   Object.assign(store, {
     tagEls: new Map(),
     tagAnchors: new Map(),
@@ -118,9 +122,9 @@ function mount(element, { layout, paint, markers = [], tests = true, pins = [], 
     home() { store.rig?.home(); },
     zoom(factor) { store.rig?.zoom(factor); },
     stats: () => {
-      const { layout, paint } = store.get(), built = buildingsOf(layout);
+      const { layout, paint, cityLife, glow } = store.get(), built = buildingsOf(layout);
       const buildings = (layout?.buildings || []).map((b, i) => ({ path: b.path, archetype: built[i]?.kind || null, greyed: !!paint?.greyed?.[i] }));
-      return { firstFrameMs: store.stats.firstFrameMs, fps: store.stats.fps, buildings };
+      return { firstFrameMs: store.stats.firstFrameMs, fps: store.stats.fps, buildings, cityLife, glow, props: lifeCount(layout, cityLife) };
     },
     unmount() { root.unmount(); },
   };

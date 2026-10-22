@@ -3253,6 +3253,8 @@
 
   "project_city.back_into_the_tab_esc": "Back into the tab (Esc)",
   "project_city.camera": "Camera",
+  "project_city.city_life": "City life",
+  "project_city.city_life_title": "City life: trees, lamps, benches and cars around the buildings; off leaves only the buildings, streets and plates",
   "project_city.close_the_card": "Close the card",
   "project_city.close_the_full_screen": "Close the full screen",
   "project_city.colour_by": "Colour by",
@@ -3265,6 +3267,8 @@
   "project_city.expand_to_the_whole_window": "Expand to the whole window",
   "project_city.files_count": { "one": "{count} file", "other": "{count} files" },
   "project_city.fly_to_a_file_or_a": "Fly to a file or a district",
+  "project_city.glow": "Glow",
+  "project_city.glow_title": "Glow: a bloom over the lights and a vignette; turn it off on a slower machine",
   "project_city.in_the_danger_zone_count": "{count} in the Danger Zone",
   "project_city.light_theme": "Light theme",
   "project_city.loading_the_city": "Loading the city…",

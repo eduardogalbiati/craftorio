@@ -11,6 +11,10 @@
 //   (instance attribute `aWin`: on, seed, lit share, height), styled per zone kind (`aStyle`: column
 //   pitch, window width and height shares, glass tint), fading into the wall from far away (fwidth);
 //   uniforms { uNight, uTime }.
+// - #450, the city around the buildings (poc/project-city-v2.html): waterMaterial(uniforms, colour)
+//   (a colour rippling with uTime), poolTexture() (a lamp's pool of light), skyMaterial() (the sky
+//   dome's gradient, horizon to top, on a unit sphere) and stars(count, uniforms) (twinkling points on
+//   a unit sphere above the horizon).
 // - roundedMaterial(radius, params) with unitBox(): a meshStandardMaterial for an InstancedMesh whose
 //   corners keep a radius of `radius` world units whatever each instance's scale (the district
 //   plates, whose rounding is the POC's fixed 1.0). The vertex shader splits each vertex of the unit
@@ -120,6 +124,69 @@ if (vWin.x > 0.5 && abs(vNrm.y) < 0.4) {
   };
   mat.customProgramCacheKey = () => `city-windows-${P}-${F}`;
   return mat;
+}
+
+/** The water around the city: a standard material whose colour ripples slowly with `uniforms.uTime`. */
+export function waterMaterial(uniforms, color) {
+  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.22, metalness: 0.15 });
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.uTime = uniforms.uTime;
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vWp;') // i18n-ignore
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWp = (modelMatrix * vec4(position, 1.0)).xyz;'); // i18n-ignore
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform float uTime; varying vec3 vWp;') // i18n-ignore
+      .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb *= 1.0 + 0.07 * sin(vWp.x * 0.22 + uTime * 0.9) * sin(vWp.z * 0.17 - uTime * 0.7) + 0.03 * sin(vWp.x * 0.9 + vWp.z * 0.6 + uTime * 1.7);'); // i18n-ignore
+  };
+  mat.customProgramCacheKey = () => 'city-water';
+  return mat;
+}
+
+/** A soft white disc, the pools of light under the lamps. */
+export function poolTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d'), grad = g.createRadialGradient(64, 64, 4, 64, 64, 64);
+  grad.addColorStop(0, 'rgba(255,255,255,1)'); grad.addColorStop(0.5, 'rgba(255,255,255,0.35)'); grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 128, 128);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+/** The sky dome's material: a gradient from `horizon` to `top` by the direction's height, on a unit sphere seen from inside. */
+export function skyMaterial() {
+  return new THREE.ShaderMaterial({
+    side: THREE.BackSide, depthWrite: false, fog: false,
+    uniforms: { top: { value: new THREE.Color() }, horizon: { value: new THREE.Color() } },
+    vertexShader: 'varying float vH; void main() { vH = normalize(position).y; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }', // i18n-ignore
+    fragmentShader: 'uniform vec3 top; uniform vec3 horizon; varying float vH; void main() { gl_FragColor = vec4(mix(horizon, top, pow(clamp(vH, 0.0, 1.0), 0.55)), 1.0); }', // i18n-ignore
+  });
+}
+
+/** `count` stars on a unit sphere above the horizon (seeded), twinkling with `uniforms.uTime`: [geometry, material]. */
+export function stars(count, uniforms) {
+  const pos = new Float32Array(count * 3), phase = new Float32Array(count), size = new Float32Array(count);
+  let seed = 3;
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  for (let i = 0; i < count; i++) {
+    const a = rnd() * Math.PI * 2, e = 0.08 + Math.pow(rnd(), 0.7) * 1.4;
+    pos.set([Math.cos(a) * Math.cos(e), Math.sin(e), Math.sin(a) * Math.cos(e)], i * 3);
+    phase[i] = rnd() * 6.3;
+    size[i] = 1.6 + rnd() * rnd() * 3.2;
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('phase', new THREE.BufferAttribute(phase, 1));
+  geo.setAttribute('size', new THREE.BufferAttribute(size, 1));
+  const mat = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, fog: false,
+    uniforms: { uTime: uniforms.uTime },
+    vertexShader: 'attribute float phase; attribute float size; uniform float uTime; varying float vA; void main() { vA = 0.5 + 0.5 * sin(uTime * 1.3 + phase); gl_PointSize = size * (0.7 + 0.5 * vA); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }', // i18n-ignore
+    fragmentShader: 'varying float vA; void main() { float d = length(gl_PointCoord - 0.5); if (d > 0.5) discard; gl_FragColor = vec4(0.85, 0.9, 1.0, (0.35 + 0.65 * vA) * (1.0 - d * 1.6)); }', // i18n-ignore
+  });
+  return [geo, mat];
 }
 
 /** A unit plane lying on the ground (a lane dash). */

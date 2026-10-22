@@ -4,7 +4,8 @@
    inside the tab instead of over the whole app, and adds what the run's view has no class for: the
    notes under the header, the legend, the hover card, the connections panel (#382,
    views/project/project-city-connections.js), the expanded city (#381: over the whole window) and the
-   score badges up close (#449: .pc-score, a tag edged in its building's colour). */
+   score badges up close (#449: .pc-score, a tag edged in its building's colour), the City life and
+   Glow switches and the Glow's vignette over the scene (#450: .pc-flag, .pc-vignette). */
 .r3d.pc-city { position: relative; inset: auto; z-index: auto; height: calc(100vh - 318px); min-height: 460px; border-radius: 14px; border: 1px solid var(--border); margin-top: 10px; }
 .r3d.pc-city.expanded { position: fixed; inset: 0; z-index: 900; height: auto; min-height: 0; border-radius: 0; border: 0; margin: 0; }
 .pc-stage { position: absolute; inset: 0; }
@@ -18,6 +19,11 @@
 .pc-city .r3d-chip input[type="checkbox"] { margin: 0; accent-color: var(--r3d-accent); }
 .pc-city .r3d-chip > span { color: var(--r3d-muted); font-weight: 600; }
 .pc-city .r3d-close svg { width: 16px; height: 16px; }
+/* #450: the City life and Glow switches (on: the accent; off: muted), the vignette that follows the Glow */
+.pc-city .pc-flag[aria-pressed="true"] { color: var(--r3d-accent); }
+.pc-city .pc-flag[aria-pressed="false"] { color: var(--r3d-muted); opacity: .7; }
+.pc-city .pc-flag:focus-visible { outline: 2px solid var(--r3d-accent); outline-offset: 2px; }
+.pc-vignette { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 50%, rgba(0, 0, 0, .42) 100%); }
 .pc-city .r3d-zoom { top: auto; bottom: 12px; right: 12px; }
 .pc-city .r3d-detail { top: 78px; right: 12px; max-height: calc(100% - 150px); }
 .pc-city .r3d-hint { top: auto; bottom: 14px; }
