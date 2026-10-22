@@ -180,7 +180,13 @@ test('#440 the release mode: "Release 1.1.1 → 1.1.2", its card only: no agents
   assert.equal(shownId(root, 'city-agents'), false, 'no Agents at work card');
   assert.equal(shownPanel(root, 'connections'), false, 'no Most connected');
   assert.equal(shownId(root, 'city-connections'), false, 'no Most connected card');
-  assert.equal(shownId(root, 'project-city-problems'), false, 'no plan problems on a past release');
+  // #439: today's notes are gone; the release card keeps only the plan's own problems (the fixture's
+  // unknown zone), never a file or a district the base commit lacks
+  assert.equal(shownPanel(root, 'notes'), false, 'no notes of today\'s city on a past release');
+  const problems = [...root.querySelectorAll('[data-testid="project-city-problems"]')].filter((el) => H.visible(root, el));
+  assert.equal(problems.every((el) => H.panel(root, 'release')?.contains(el)), true, 'plan problems only in the release card');
+  const said = problems.map(H.text).join(' ');
+  assert.doesNotMatch(said, /not in the repository|has no file/, 'no missing file or empty district as a problem on a past release');
   assert.equal(shownId(root, 'project-city-analyze'), false, 'no "Analyze this project"');
   const toggle = live(o);
   assert.equal(!toggle || !shownId(root, 'city-live-toggle') || toggle.disabled === true, true, 'Live is not offered on a release');
