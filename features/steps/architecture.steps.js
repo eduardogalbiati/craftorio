@@ -969,3 +969,68 @@ Then('the Refactor tab of {string} has {int} proposals from the Architecture tab
   await expect.poll(() => listProposals(path.join(wsDir, 'refactor'), project.id).filter((p) => p.source === 'architecture').length, { timeout: LOAD_TIMEOUT })
     .toBe(count);
 });
+
+// --- City v2 buildings (#449) ---
+// The contract these steps assume: window.ProjectCity.stats() (the city on screen) keeps
+// { firstFrameMs, fps } and adds `buildings`: one entry per drawn file, { path, archetype, greyed },
+// archetype one of shed / pavilion / hall / block / tower / complex, greyed true when an overlay
+// layer is set and highlights another file. The hover card stays data-testid="project-city-hover",
+// the card a search pins "project-city-card" (with its "project-city-open-facts" button).
+
+const ARCHETYPES = ['shed', 'pavilion', 'hall', 'block', 'tower', 'complex'];
+const cityStats = (page) => page.evaluate(() => window.ProjectCity?.stats?.() || null);
+const drawnBuildings = async (page) => (await cityStats(page))?.buildings || null;
+
+Then('the city draws its {int} files as buildings of the new kinds', async ({ e2e }, count) => {
+  await expect.poll(async () => (await drawnBuildings(e2e.window))?.length ?? -1, { timeout: LOAD_TIMEOUT, message: 'the drawn buildings' }).toBe(count);
+  for (const b of await drawnBuildings(e2e.window)) {
+    expect(ARCHETYPES, `the kind of building of "${b.path}"`).toContain(b.archetype);
+  }
+});
+
+When('I search the city for {string}', async ({ e2e }, name) => {
+  const search = visible(tab(e2e.window).getByRole('searchbox', { name: /search the city/i })).first();
+  await expect(search).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await search.fill(name);
+  await search.press('Enter');
+});
+
+Then('the city card of {string} names its district {string} and its zone {string} and offers "Open in Facts"', async ({ e2e }, file, district, zone) => {
+  const card = byId(e2e.window, 'project-city-card');
+  await expect(card).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(card).toContainText(file.split('/').pop());
+  await expect(card).toContainText(district);
+  await expect(card).toContainText(zone);
+  await expect(card.getByRole('button', { name: /open in facts/i })).toBeVisible();
+});
+
+When('I close the city card', async ({ e2e }) => {
+  const card = byId(e2e.window, 'project-city-card');
+  await card.getByRole('button', { name: /close the card/i }).click();
+  await expect(visible(tab(e2e.window).getByTestId('project-city-card'))).toHaveCount(0);
+});
+
+// After the search the camera has flown to the file: its building is under the city's centre. The
+// pointer is moved there until the hover card names it (the camera's flight takes a moment).
+Then('pointing at the middle of the city shows the hover card of {string}', async ({ e2e }, file) => {
+  const canvas = byId(e2e.window, 'project-city').locator('canvas').first();
+  await expect(canvas).toBeVisible({ timeout: LOAD_TIMEOUT });
+  const hover = byId(e2e.window, 'project-city-hover');
+  const name = file.split('/').pop();
+  await expect.poll(async () => {
+    const box = await canvas.boundingBox();
+    if (!box) return '';
+    await e2e.window.mouse.move(box.x + box.width / 2 + 3, box.y + box.height / 2 + 3);
+    await e2e.window.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    return (await hover.isVisible()) ? (await hover.textContent()) || '' : '';
+  }, { timeout: LOAD_TIMEOUT, message: `the hover card of "${file}"` }).toContain(name);
+});
+
+Then('the city highlights the building {string} and greys {string}', async ({ e2e }, lit, grey) => {
+  const state = async () => {
+    const all = (await drawnBuildings(e2e.window)) || [];
+    const of = (p) => all.find((b) => b.path === p);
+    return { lit: of(lit) ? !of(lit).greyed : null, grey: of(grey) ? !!of(grey).greyed : null };
+  };
+  await expect.poll(state, { timeout: LOAD_TIMEOUT, message: `"${lit}" highlighted, "${grey}" greyed` }).toEqual({ lit: true, grey: true });
+});

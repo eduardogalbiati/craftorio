@@ -387,3 +387,47 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     Then the toast says "Sent 3 findings to the Refactor tab"
     And every finding of the Architecture tab is marked sent to Refactor
     And the Refactor tab of "billing-service" has 4 proposals from the Architecture tab
+
+  # City v2 (#449): each file is a building of one of six kinds (shed, pavilion, hall, block, tower,
+  # complex) instead of a plain box; its cards and the overlays behave as before.
+  @issue-449
+  Scenario: The city draws each file as a new building whose cards still open on search and on hover
+    Given the app is open
+    And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
+    When I open "Projects" in the sidebar
+    And I open the project "billing-service" from the Projects screen
+    And I open the "Architecture" project tab
+    And I switch the Architecture tab to "City"
+    Then the Architecture tab shows the project city
+    And the city header names "billing-service" with 2 files, 2 zones and 2 districts
+    And the city draws its 2 files as buildings of the new kinds
+    When I search the city for "src/billing.js"
+    Then the city card of "src/billing.js" names its district "Billing" and its zone "Backend" and offers "Open in Facts"
+    When I close the city card
+    Then pointing at the middle of the city shows the hover card of "src/billing.js"
+
+  @issue-449
+  Scenario: "Show on the map" still highlights the issue's building and greys the others
+    Given the app is open
+    And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
+    And the backlog of "billing-service" has the open issue "Change the discount rule" whose body cites "src/billing.js"
+    When I open "Backlog" in the sidebar
+    And I choose the project "billing-service" in the header
+    And I open the Board as a list
+    And I click "Show on the map" on the Backlog issue "Change the discount rule"
+    Then the Architecture tab shows the project city
+    And the city impact header names the issue "Change the discount rule"
+    And the city highlights the building "src/billing.js" and greys "tools/export.py"
+
+  @issue-449
+  Scenario: An agent at work still lights up the building it changes
+    Given the app is open
+    And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
+    And a run in progress of "billing-service" where the "developer" agent of step "implement" edits "src/billing.js"
+    When I open "Projects" in the sidebar
+    And I open the project "billing-service" from the Projects screen
+    And I open the "Architecture" project tab
+    And I switch the Architecture tab to "City"
+    Then the Architecture tab shows the project city
+    And the city shows the agent "developer · implement"
+    And the city highlights the building "src/billing.js" and greys "tools/export.py"
