@@ -353,7 +353,8 @@ test('engine:openConnection is a desktop channel the preload exposes as openEngi
   assert.equal(entry.method, 'openEngineConnection');
   assert.ok(entry.desktop);
   const main = fs.readFileSync(path.join(__dirname, '..', 'src', 'main.js'), 'utf8');
-  assert.match(main, /ipcMain\.handle\('engine:openConnection'/, 'src/main.js answers it');
+  // through the sender guard (#467: ipc = guardIpc(ipcMain, ...)) or directly
+  assert.match(main, /\b(?:ipc|ipcMain)\.handle\('engine:openConnection'/, 'src/main.js answers it');
 });
 
 test('in the desktop app showing a remote engine, the page knows it and opens the connection page through its path', async () => {
