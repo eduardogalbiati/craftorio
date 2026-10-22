@@ -35,7 +35,9 @@ module.exports = (ctx) => {
     const queue = backlog.readQueue(ws.backlog, data.projectId);
     const local = backlog.readLocal(ws.backlog, data.projectId);
     // the roadmap, each item with its run's live state, and each issue's stage ("Roadmap: stage 2")
-    const roadmap = ctx.roadmapView(data.projectId, live, data.issues);
+    // (#491 `shape`: what the light backlog:state compares to tell an edit of the stages)
+    const view = ctx.roadmapView(data.projectId, live, data.issues);
+    const roadmap = view && { ...view, shape: backlog.stagesShape(view.stages) };
     const stages = roadmaps.issueStages(roadmap);
     const refresh = refreshBanner(project, live, local);
     const refreshed = new Set(refresh.refreshed);
@@ -53,7 +55,9 @@ module.exports = (ctx) => {
     const conflictMap = ctx.savedConflictMap(data.projectId);
     // #405: the tests known to fail on the base (the Roadmap's "N known failures on the base" line)
     const baseFailures = baseHealth.knownFailures(ws.root, data.projectId);
-    return { ...data, queue, local, roadmap, refresh, autoPush: !!project?.autoPush, autoEpic: !!project?.autoEpic, issues, releases, conflictMap, baseFailures };
+    // #465: the base check's last state (running, green, red), the Roadmap's "Base check" card
+    const baseCheck = ctx.baseCheckState?.(data.projectId) || null;
+    return { ...data, queue, local, roadmap, refresh, autoPush: !!project?.autoPush, autoEpic: !!project?.autoEpic, issues, releases, conflictMap, baseFailures, baseCheck };
   }
 
   // The Backlog Refresh banner (#161, src/backlog-refresh.js): the merges on the base since the

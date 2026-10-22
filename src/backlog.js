@@ -26,6 +26,7 @@
 // The platform CLI helpers and the issue copies live in src/issues.js (re-exported here, #345).
 // Screen: src/renderer/views/backlog/backlog.js; channels: src/service/channels/backlog.js.
 
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { readEpics } = require('./epics');
@@ -780,8 +781,30 @@ function runInputs(item, wf, folder) {
 // #491: what changes while runs go, from a Backlog with its runs (the service's withIssueRuns), for
 // the Roadmap's live reloads: the roadmap's state and each item's status and live run (its ring and
 // timer), the queue and the refresh banner; no issue bodies, no ended run's details (they no longer
-// change), so it stays small however long the roadmap is
+// change), so it stays small however long the roadmap is. `shape`: a hash of the stages without what
+// runs change (statuses, runs, estimates), so the screen fetches the whole Backlog only when an edit
+// changed the stages (an issue added to an item, a note, a cut line), not on every status write
 const LIVE_ITEM = new Set(['running', 'queued', 'starting', 'waiting', 'parked']);
+const LIVE_KEYS = new Set([
+  'actualMinutes',
+  'actualTopStep',
+  'actualUsd',
+  'error',
+  'estimate',
+  'finishedAt',
+  'pause',
+  'run',
+  'runHistory',
+  'runId',
+  'runs',
+  'startedAt',
+  'status',
+  'updatedAt',
+  'waiting',
+]);
+const stagesShape = (stages) => crypto.createHash('sha1')
+  .update(JSON.stringify(stages || [], (k, v) => (LIVE_KEYS.has(k) ? undefined : v)))
+  .digest('hex').slice(0, 16);
 function backlogState(data) {
   if (!data) return null;
   const r = data.roadmap || {};
@@ -800,10 +823,12 @@ function backlogState(data) {
     projectId: data.projectId,
     roadmap: {
       state: r.state || null, updatedAt: r.updatedAt || null, scope: r.scope || null, pausedBy: r.pausedBy || null, error: r.error || null,
+      shape: r.shape || stagesShape(r.stages),
       stages: (r.stages || []).map((s) => ({ id: s.id, pause: s.pause || null, items: (s.items || []).map(item) })),
     },
     queue,
     refresh: data.refresh || null,
+    baseCheck: data.baseCheck || null,
   };
 }
 
@@ -833,6 +858,7 @@ module.exports = {
   repoLabels,
   restoreIssues,
   saveRunToIssue,
+  stagesShape,
   updateCachedIssue,
   withSyncedText,
 };

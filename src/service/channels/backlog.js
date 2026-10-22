@@ -61,7 +61,7 @@ module.exports = (ctx) => {
       params: ['projectId'],
       schema: {
         params: ON_PROJECT,
-        result: described(nullable(OBJECT), 'The light state: { projectId, roadmap: { state, updatedAt, scope, pausedBy, error, stages: [{ id, pause, items: [{ id, status, runId, runs, waiting, startedAt, elapsed, run? }] }] }, queue, refresh }; no issue bodies.'),
+        result: described(nullable(OBJECT), 'The light state: { projectId, roadmap: { state, updatedAt, scope, pausedBy, error, stages: [{ id, pause, items: [{ id, status, runId, runs, waiting, startedAt, elapsed, run? }] }] }, queue, refresh, baseCheck }; no issue bodies.'),
       },
       fn: ({ projectId }) => backlog.backlogState(current(projectId)),
     },
