@@ -22,7 +22,10 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { WebSocketServer } = require('ws');
-const { authChannels } = require('../service/manifest');
+const {
+  authChannels,
+  PUSHED_EVENTS,
+} = require('../service/manifest');
 const { contractHash } = require('../service/contract');
 const PKG = require('../../package.json');
 
@@ -37,19 +40,6 @@ const TYPES = {
 const COOKIE = 'multiagent_token';
 // a pasted image of up to 10 MB travels as base64 (clipboard:saveImage, #130)
 const MAX_BODY = 15 * 1024 * 1024;
-const PUSHED = [
-  'backlog:changed',
-  'baseCheck:changed',
-  'chat:progress',
-  'notifications:changed',
-  'oracle:changed',
-  'run:event',
-  'run:meta',
-  'settings:changed',
-  'supervisor:watch',
-  'term:data',
-  'term:exit',
-];
 
 class HttpError extends Error {
   constructor(status, message) { super(message); this.status = status; }
@@ -221,7 +211,7 @@ function createServer({ service, auth = null, token, root = ROOT }) {
     const msg = JSON.stringify({ channel, payload });
     for (const ws of wss.clients) if (ws.readyState === ws.OPEN) ws.send(msg);
   };
-  const unsubscribe = PUSHED.map((channel) => {
+  const unsubscribe = PUSHED_EVENTS.map((channel) => {
     const fn = broadcast(channel);
     service.events.on(channel, fn);
     return () => service.events.off(channel, fn);

@@ -77,6 +77,21 @@ function authChannels(auth) {
   ];
 }
 
+// The service events relayed to every window: by the main process (IPC) and the engine server (WebSocket)
+const PUSHED_EVENTS = [
+  'backlog:changed',
+  'baseCheck:changed',
+  'chat:progress',
+  'notifications:changed',
+  'oracle:changed',
+  'run:event',
+  'run:meta',
+  'settings:changed',
+  'supervisor:watch',
+  'term:data',
+  'term:exit',
+];
+
 // Every area file exports (ctx) => [entries]; ctx is the service's shared state and helpers.
 function loadChannels(ctx, dir = CHANNELS_DIR) {
   const files = fs.readdirSync(dir).filter((f) => f.endsWith('.js')).sort();
@@ -103,4 +118,5 @@ module.exports = {
   declarations,
   DESKTOP,
   loadChannels,
+  PUSHED_EVENTS,
 };

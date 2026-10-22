@@ -2,7 +2,7 @@
 // backlog-roadmap.js (re-exported as BacklogRoadmap.patch / mergeState) and backlog.js's liveReload.
 // patch: the list drawn again with its item rows kept in place; mergeState: the light backlog:state
 // (src/backlog.js backlogState) merged into the Backlog shown, or null when only the full read can
-// tell; baseCheckHtml / baseCheckTerm: the "Base check: running since HH:MM on <commit>" card in the
+// tell; readLight: that state read with its key and mark; baseCheckHtml / baseCheckTerm: the "Base check: running since HH:MM on <commit>" card in the
 // roadmap's bar and its read-only log terminal (term-dock.js termButtons / termAction).
 // Uses app.js globals (esc, t).
 (() => {
@@ -86,6 +86,18 @@
     };
   }
 
+  // backlog.js's live reload: the light state, its key without the timers that move every second
+  // (`elapsed`), and its `mark`, the roadmap's stages and `updatedAt` (whether a full read is needed)
+  async function readLight(api, id) {
+    const light = await api.getBacklogState(id).catch(() => null);
+    const lr = light?.roadmap;
+    return {
+      key: `${id}:${JSON.stringify(light, (k, v) => (k === 'elapsed' ? undefined : v))}`,
+      light,
+      mark: lr ? `${id}:${lr.shape}:${lr.updatedAt}` : null,
+    };
+  }
+
   // the base check (#405) after a local merge: "running since HH:MM on <commit>" while its suite runs,
   // then green or red with the count; its log follows live in a read-only terminal either way.
   // `clock`: the roadmap's HH:MM in the owner's time zone. The terminal's inline message is kept per
@@ -116,5 +128,6 @@
     baseCheckTerm,
     mergeState,
     patch,
+    readLight,
   };
 })();

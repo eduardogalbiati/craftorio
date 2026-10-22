@@ -45,7 +45,10 @@ const { allowPermission } = require('./permissions');
 const { createService } = require('./service');
 const { createControlChannel } = require('./control');
 const { nativeBinaryPath } = require('./native-bin');
-const { authChannels } = require('./service/manifest');
+const {
+  authChannels,
+  PUSHED_EVENTS,
+} = require('./service/manifest');
 const { contractHash } = require('./service/contract');
 const engineConnection = require('./engine-connection');
 const { createEngineConnection } = require('./engine-connection-window');
@@ -177,19 +180,7 @@ ipcMain.on('api:manifest', (e) => {
 function broadcast(channel, payload) {
   for (const w of [win, agentsWindow?.current()]) if (w && !w.isDestroyed()) w.webContents.send(channel, payload);
 }
-for (const channel of [
-  'backlog:changed',
-  'baseCheck:changed',
-  'chat:progress',
-  'notifications:changed',
-  'oracle:changed',
-  'run:event',
-  'run:meta',
-  'settings:changed',
-  'supervisor:watch',
-  'term:data',
-  'term:exit',
-]) {
+for (const channel of PUSHED_EVENTS) {
   service.events.on(channel, (payload) => broadcast(channel, payload));
 }
 
