@@ -5,10 +5,13 @@
 // the window title, the "Following" line, the colours, the clipping, local times. It waits for a file
 // that does not exist yet, reads what was appended every 400 ms (a partial line once complete), and
 // ends on Ctrl+C or when its window closes (stdout gone).
+// `multiagent-tail <runDir> --file <path in the run folder>` (#465, file.rs) follows a plain log instead.
 
+mod file;
 mod format;
 mod js;
 
+use file::FileTail;
 use format::Printer;
 use jiff::tz::TimeZone;
 use std::fs::File;
@@ -24,15 +27,32 @@ fn main() -> ExitCode {
         .skip(1)
         .map(|a| a.to_string_lossy().into_owned())
         .collect();
+    let usage = || {
+        let _ = writeln!(
+            io::stderr(),
+            "usage: session-tail <runDir> <sessionId> | session-tail <runDir> --file <path in the run folder>"
+        );
+        ExitCode::from(1)
+    };
     let (run_dir, session_id) = match (args.first(), args.get(1)) {
         (Some(r), Some(s)) if !r.is_empty() && !s.is_empty() => (r.clone(), s.clone()),
-        _ => {
-            let _ = writeln!(io::stderr(), "usage: session-tail <runDir> <sessionId>");
-            return ExitCode::from(1);
-        }
+        _ => return usage(),
     };
     #[cfg(windows)]
     let _ = anstyle_query::windows::enable_ansi_colors();
+
+    if session_id == "--file" {
+        let Some(rel) = args.get(2).filter(|r| !r.is_empty()) else {
+            return usage();
+        };
+        let file = js::join(&[&run_dir, rel]);
+        let head = format!(
+            "\x1b]0;{rel} · multiagent\x07{}\n",
+            format::dim(&format!("Following {file}\n"))
+        );
+        let mut tail = FileTail::new(file);
+        return follow(&head, || tail.read_new());
+    }
 
     let orchestrator = session_id == "orchestrator";
     let file = if orchestrator {
@@ -49,11 +69,16 @@ fn main() -> ExitCode {
             tz: TimeZone::system(),
         },
     };
-    let mut out = io::stdout().lock();
     let head = format!(
         "\x1b]0;{session_id} · multiagent\x07{}\n",
         format::dim(&format!("Following {file}\n"))
     );
+    follow(&head, || tail.read_new())
+}
+
+/// Prints the head, then what `read_new` returns every 400 ms, until stdout is gone.
+fn follow(head: &str, mut read_new: impl FnMut() -> String) -> ExitCode {
+    let mut out = io::stdout().lock();
     if out
         .write_all(head.as_bytes())
         .and_then(|()| out.flush())
@@ -62,7 +87,7 @@ fn main() -> ExitCode {
         return ExitCode::SUCCESS;
     }
     loop {
-        let text = tail.read_new();
+        let text = read_new();
         if !text.is_empty()
             && out
                 .write_all(text.as_bytes())

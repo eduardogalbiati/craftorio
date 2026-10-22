@@ -168,7 +168,7 @@ const methods = {
     if (!this.worktree) return null;
     if (!this.scratch) {
       const scratch = scratchWorkspace({ root: path.dirname(path.dirname(this.runDir)) }, path.join(this.runDir, 'scratch'));
-      const tmp = this.machine.runTmp(this.runDir);
+      const tmp = this.machine.runTmp?.(this.runDir);
       this.scratch = tmp ? { ...scratch, tmp } : scratch;
     }
     return this.scratch;

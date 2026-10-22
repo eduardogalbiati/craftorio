@@ -517,7 +517,7 @@ const sameFile = (a, b) => String(a || '').split(/[\\/]/).pop() === String(b || 
 // per commit + file). → { onBase: [failure], info: { status: done | skipped, commit, files, cached,
 // ran, log, reason } }; never throws. Too many files for the platform's command line (#400): skipped,
 // like a command that cannot run single files.
-async function checkOnBase({ command, failures, base, mock, env, timeoutMs, signal, run = runCommand, logFile, runDir, cacheDir, log = () => {}, platform = process.platform }) {
+async function checkOnBase({ command, failures, base, mock, env, timeoutMs, signal, run = runCommand, logFile, runDir, cacheDir, log = () => {}, platform = process.platform, onLog = null }) {
   const info = { status: 'skipped', commit: null, files: [], cached: [], ran: [], log: null, reason: null };
   const files = [...new Set(failures.map((f) => f.file).filter(Boolean))].sort();
   info.files = files;
@@ -546,6 +546,7 @@ async function checkOnBase({ command, failures, base, mock, env, timeoutMs, sign
     fs.writeFileSync(logFile, `$ ${cmd}\n# in the base checkout ${b.dir}${info.commit ? ` (${String(info.commit).slice(0, 8)})` : ''}: are these failures already there?\n`);
     if (runDir) info.log = path.relative(runDir, logFile).split(path.sep).join('/');
     log('info', `suite: checking ${toRun.length} failing test file(s) on the base (log ${info.log || logFile})`);
+    if (info.log) onLog?.({ path: info.log, command: cmd, base: true });
     const r = await run({ command: cmd, cwd: b.dir, env, timeoutMs, signal, logFile });
     let text = '';
     try { text = fs.readFileSync(logFile, 'utf8'); } catch { /* no log */ }
@@ -735,12 +736,13 @@ async function rerunTimedOut(out, { preexisting, signal, logName, round, ...args
 
 // The suite log's header: the command, and what the suite gets, so a slow round can be compared with
 // a shell (#210), and the base commit the round tests on (#403).
-function writeLogHeader(logFile, out, { mock, childEnv, timeoutWhy, baseCommit }) {
+// logPrefix (#465): lines the log already holds (a wait written before the round), kept first.
+function writeLogHeader(logFile, out, { mock, childEnv, timeoutWhy, baseCommit, logPrefix = '' }) {
   fs.mkdirSync(path.dirname(logFile), { recursive: true });
   const about = mock ? '' : `# engine: os.availableParallelism()=${os.availableParallelism()}, cpus=${os.cpus().length}; timeout ${Math.round(out.timeout_ms / 60e3)} min (${timeoutWhy})\n`
     + `# env: removed ${childEnv.removed.join(', ') || 'nothing'}; set MULTIAGENT_SIMULATION_ONLY=1, MULTIAGENT_AGENT_MODE=1, MULTIAGENT_LOCKS_DIR=${childEnv.env.MULTIAGENT_LOCKS_DIR}, MULTIAGENT_TEST_HUMAN_LOG=${humanLog(logFile)}\n`;
   const onBase = baseCommit ? `# base: tested on top of ${baseCommit}\n` : '';
-  fs.writeFileSync(logFile, `$ ${out.command}${mock ? '   (simulated: nothing was run)' : ''}\n${about}${onBase}`);
+  fs.writeFileSync(logFile, `${logPrefix}$ ${out.command}${mock ? '   (simulated: nothing was run)' : ''}\n${about}${onBase}`);
 }
 
 // command: rendered (empty: detected); cwd: the worktree; runDir: the run folder (log under logs/);
@@ -766,7 +768,10 @@ function writeLogHeader(logFile, out, { mock, childEnv, timeoutWhy, baseCommit }
 // baseCommit (#403): the base commit the round tests on, named in the log's header.
 // slot (#455, suite-slot.js): { dir, holder, onWait(holder), pollMs }, the machine-wide `suite` slot of
 // a whole-suite round (not focused, not simulated); without `slot`, nothing is taken.
-async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = 'pass', preexisting = [], signal, timeoutMs, history, base, baseCacheDir, run = runCommand, log = () => {}, files = null, selection = null, logName = null, coverage = false, changedFiles = null, onSpawn = null, testWorkers = null, sweep = true, platform = process.platform, baseCommit = null, slot = null }) {
+// onLog({ path, command, base? }) (#465): the log the command writes to (relative to runDir), called
+// once the log exists and before anything waits or runs, and again for the base check's log (base: true);
+// logPrefix: lines already in the log (a wait for memory), kept before the header.
+async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = 'pass', preexisting = [], signal, timeoutMs, history, base, baseCacheDir, run = runCommand, log = () => {}, files = null, selection = null, logName = null, coverage = false, changedFiles = null, onSpawn = null, testWorkers = null, sweep = true, platform = process.platform, baseCommit = null, slot = null, onLog = null, logPrefix = '' }) {
   const logFile = runDir ? path.join(runDir, 'logs', `${logName || `suite-${round}`}.log`) : null;
   const out = {
     kind: 'suite', status: 'blocked', round, scope: 'full', command: null, log: logFile ? path.relative(runDir, logFile).split(path.sep).join('/') : null,
@@ -808,7 +813,10 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
   const tmpDir = mock ? null : path.join(runDir, 'tmp');
   if (tmpDir) fs.mkdirSync(tmpDir, { recursive: true });
   const childEnv = mock ? null : suiteEnv(env || process.env, { locksDir: path.join(runDir, 'locks'), testWorkers, tmpDir });
-  if (logFile) writeLogHeader(logFile, out, { mock, childEnv, timeoutWhy, baseCommit });
+  if (logFile) {
+    writeLogHeader(logFile, out, { mock, childEnv, timeoutWhy, baseCommit, logPrefix });
+    onLog?.({ path: out.log, command: out.command });
+  }
   // #455: a whole-suite round waits for the machine-wide suite slot; the wait is not the round's time
   const runRound = await suiteSlotRun({ slot, mock, scope: out.scope, signal, logFile, run });
   const t0 = Date.now();
@@ -862,7 +870,7 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
     const { onBase, info } = await checkOnBase({
       command: out.command, failures: out.failures, base, mock, signal, run,
       env: childEnv ? { ...childEnv.env, MULTIAGENT_TEST_HUMAN_LOG: humanLog(path.join(runDir, 'logs', `suite-${round}-base.log`)) } : undefined, timeoutMs: out.timeout_ms,
-      logFile: logFile ? path.join(runDir, 'logs', `suite-${round}-base.log`) : null, runDir, cacheDir: baseCacheDir, log, platform,
+      logFile: logFile ? path.join(runDir, 'logs', `suite-${round}-base.log`) : null, runDir, cacheDir: baseCacheDir, log, platform, onLog,
     });
     out.base_check = info;
     if (onBase.length) {

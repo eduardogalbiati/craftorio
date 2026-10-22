@@ -11,11 +11,20 @@ const {
   SUITE_SLOT_ENV,
 } = require('./machine-slot');
 
-// slot: { dir, holder, onWait(holder), pollMs }; the wait ends with the signal (throws 'Cancelled')
+// slot: { dir, holder, onWait(holder), pollMs }; the wait ends with the signal (throws 'Cancelled').
+// #465: the wait is written to the round's log when it starts (its live terminal shows it).
 async function suiteSlotRun({ slot, mock, scope, signal, logFile, run }) {
   if (mock || !slot || scope === 'files') return run;
+  let said = false;
+  const onWait = (holder) => {
+    if (logFile && !said) {
+      said = true;
+      try { fs.appendFileSync(logFile, `# waiting for the suite slot (run ${holder?.holder || '?'}, pid ${holder?.pid ?? '?'})\n`); } catch { /* the log is a convenience */ }
+    }
+    slot.onWait?.(holder);
+  };
   const held = await acquireSlot(SUITE_SLOT, {
-    dir: slot.dir, holder: slot.holder, onWait: slot.onWait, pollMs: slot.pollMs, signal, waitMs: 2 * SUITE_MAX_HOLD_MS,
+    dir: slot.dir, holder: slot.holder, onWait, pollMs: slot.pollMs, signal, waitMs: 2 * SUITE_MAX_HOLD_MS,
   });
   if (held.waitedMs >= 1000 && logFile) fs.appendFileSync(logFile, `# waited ${Math.round(held.waitedMs / 1000)} s for the suite slot\n`);
   return async (opts) => {

@@ -7,9 +7,12 @@
 //   (no child process);
 // - script, for the external console window, run by the Electron binary in Node mode
 //   (ELECTRON_RUN_AS_NODE=1):  <electron> src/session-tail.js <runDir> <sessionId>
+// followFile (#465) follows a plain log instead (a machine step's output), printed as it is:
+// the script's `<runDir> --file <path in the run folder>`.
 
 const fs = require('fs');
 const path = require('path');
+const { StringDecoder } = require('string_decoder');
 
 
 const c = (code) => (s) => `\x1b[${code}m${s}\x1b[0m`;
@@ -128,14 +131,46 @@ const timer = setInterval(readNew, 400);
 return () => clearInterval(timer);
 }
 
-module.exports = { followSession };
+/**
+ * Follows a plain log (a machine step's command output, #465): prints it as it is, then what is
+ * appended, every 400 ms. Waits for a file that does not exist yet; a file that shrinks (rewritten)
+ * is read again from its start. Keeps following until stop().
+ * @returns stop()
+ */
+function followFile(file, write) {
+  const decoder = new StringDecoder('utf8');
+  let offset = 0;
+  function readNew() {
+    let size;
+    try { size = fs.statSync(file).size; } catch { return; }
+    if (size < offset) offset = 0;
+    if (size === offset) return;
+    const buf = Buffer.alloc(size - offset);
+    const fd = fs.openSync(file, 'r');
+    try { fs.readSync(fd, buf, 0, buf.length, offset); } finally { fs.closeSync(fd); }
+    offset = size;
+    const text = decoder.write(buf);
+    if (text) write(text);
+  }
+  write(`${dim(`Following ${file}\n`)}\n`);
+  readNew();
+  const timer = setInterval(readNew, 400);
+  return () => clearInterval(timer);
+}
+
+module.exports = { followFile, followSession };
 
 if (require.main === module) {
-  const [runDir, sessionId] = process.argv.slice(2);
-  if (!runDir || !sessionId) {
-    console.error('usage: session-tail <runDir> <sessionId>');
+  const [runDir, sessionId, rel] = process.argv.slice(2);
+  if (!runDir || !sessionId || (sessionId === '--file' && !rel)) {
+    console.error('usage: session-tail <runDir> <sessionId> | session-tail <runDir> --file <path in the run folder>');
     process.exit(1);
   }
-  process.stdout.write(`\x1b]0;${sessionId} · multiagent\x07`); // window title
-  followSession(runDir, sessionId, (text) => process.stdout.write(text));
+  if (sessionId === '--file') {
+    process.stdout.write(`\x1b]0;${rel} · multiagent\x07`); // window title
+    followFile(path.join(runDir, rel), (text) => process.stdout.write(text));
+  } else {
+    process.stdout.write(`\x1b]0;${sessionId} · multiagent\x07`); // window title
+    followSession(runDir, sessionId, (text) => process.stdout.write(text));
+  }
 }

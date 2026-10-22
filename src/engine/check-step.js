@@ -37,12 +37,14 @@ function findingLines(text) {
 }
 
 // → { kind: 'check', status: pass | fail | skipped, command, findings, message, log }
-async function runCheck({ dir, command, logFile, env = process.env, timeoutMs = DEFAULT_TIMEOUT_MS, signal }) {
+// onLog({ command }) (#465): called before the command starts, its output going to logFile
+async function runCheck({ dir, command, logFile, env = process.env, timeoutMs = DEFAULT_TIMEOUT_MS, signal, onLog = null }) {
   const base = { kind: 'check', command: null, findings: [], log: null };
   if (!dir || !fs.existsSync(dir)) return { ...base, status: 'skipped', message: 'Rule checks skipped: the run has no checkout.' };
   const cmd = checkCommand(dir, command);
   if (!cmd) return { ...base, status: 'skipped', message: 'Rule checks skipped: no check_command input and no `check` script in the project\'s package.json.' };
   fs.mkdirSync(path.dirname(logFile), { recursive: true });
+  onLog?.({ command: cmd });
   const t0 = Date.now();
   const r = await runCommand({ command: cmd, cwd: dir, env, timeoutMs, signal, logFile });
   let text = '';

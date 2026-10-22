@@ -5,7 +5,9 @@
 // `redCheckOutput` #220, `failedFirstRound` for `scope: failed` #324), `type: test_ids`
 // (`runTestIdsStep`, #246), `type: check` (`runCheckStep`, the project's rule checks, #404), `type:
 // workflow` child runs (`runChildWorkflows`, #174), `type: release_version` (`runReleaseVersionStep`,
-// #325), and the evidence a step leaves (`recordEvidence`, `saveScenarios`).
+// #325), and the evidence a step leaves (`recordEvidence`, `saveScenarios`). #465: a suite, check or
+// screenshots step emits step.log { step_id, path, command } when its command's log starts (its live
+// terminal follows it); a wait for memory or the suite slot is written to that log as it starts.
 // The steps' own logic is src/engine/suite-step.js, screenshot-step.js, test-ids.js, check-step.js and workflow-step.js;
 // what they run on the machine goes through the run's machine adapter (`this.machine`, #353).
 
@@ -34,6 +36,13 @@ const { gib } = require('./turns');
 // this many times a round that failed during a memory incident
 const MEMORY_WAIT_MS = 10 * 60e3;
 const MAX_ENV_RERUNS = 2;
+
+// The name of a suite step's round log (logs/<name>.log): suite-<visit> for the `suite` step, else
+// <step>-<visit> (an e2e step, #223); an environment rerun adds -env, -env-2… (#276)
+function roundLogName(stepId, visit, reruns) {
+  const env = reruns ? `-env${reruns > 1 ? `-${reruns}` : ''}` : '';
+  return stepId === 'suite' && !env ? `suite-${visit}` : `${stepId}-${visit}${env}`;
+}
 
 // #364: the commit a suite round tests and whether the worktree was clean when it started (no
 // uncommitted or untracked change), or { commit: null, clean: false } without a git checkout
@@ -146,6 +155,9 @@ const methods = {
         },
         // #276: each capture's process tree is watched by the memory guard
         onSpawn: (pid) => { watch?.stop(); watch = this.watchMemory({ rootPid: pid, stepId: step.id }); },
+        // #465: the captures' output in logs/screenshots-<visit>.log, followed by the step's live terminal
+        logFile: path.join(this.runDir, 'logs', `screenshots-${st.visits}.log`),
+        onLog: ({ path: rel, command }) => this.emitEvent('step.log', { step_id: step.id, path: rel, command }),
       });
     } catch (e) {
       const reason = `the capture failed: ${e.message}`;
@@ -211,10 +223,11 @@ const methods = {
     for (let reruns = 0; ; reruns++) {
       if (reruns) this.suiteEnvReruns[step.id] = (this.suiteEnvReruns[step.id] || 0) + 1;
       const execution = st.visits + (this.suiteEnvReruns[step.id] || 0);
-      if (guard) await this.waitForMemory(step.id);
+      const logFile = path.join(this.runDir, 'logs', `${roundLogName(step.id, st.visits, reruns)}.log`);
+      const logPrefix = guard ? await this.waitForMemory(step.id, { file: logFile, command: step.command ? render(String(step.command), this.ctx).trim() : '' }) : '';
       const stopped = [];
       const start = Date.now();
-      const output = await this.suiteRound(step, st, { execution, reruns, stopped });
+      const output = await this.suiteRound(step, st, { execution, reruns, stopped, logPrefix });
       const end = Date.now();
       if (stopped.length) {
         const list = [...new Set(stopped.map((ev) => `\`${ev.commandLine}\` (${gib(ev.bytes)} GB)`))].join(', ');
@@ -230,21 +243,42 @@ const methods = {
   },
 
   // #276: a suite / e2e step waits while free memory is under the memory guard's floor (memory.hold:
-  // the Night watch counts a long one)
-  async waitForMemory(stepId) {
+  // the Night watch counts a long one). #465 `log` { file, command }: the round's log, where the wait is
+  // written as it starts (step.log: its live terminal shows it) → the lines written, '' without a wait
+  async waitForMemory(stepId, log = null) {
     let low = /** @type {{ freeBytes: number, floorBytes: number } | null} */ (null);
+    let written = '';
+    const note = (text) => {
+      if (!log?.file) return;
+      try {
+        fs.mkdirSync(path.dirname(log.file), { recursive: true });
+        fs.appendFileSync(log.file, text);
+        written += text;
+      } catch { /* the log is a convenience */ }
+    };
     const r = await this.memoryGuard.waitForMemory({
       maxWaitMs: MEMORY_WAIT_MS,
       onWait: (info) => {
         low = info;
-        this.emitEvent('log', { level: 'warn', kind: 'memory_hold', step_id: stepId, message: `${stepId} waits for memory before it starts: ${gib(info.freeBytes)} GB free, under the memory guard's floor of ${gib(info.floorBytes)} GB (at most ${MEMORY_WAIT_MS / 60e3} min).` });
+        const message = `${stepId} waits for memory before it starts: ${gib(info.freeBytes)} GB free, under the memory guard's floor of ${gib(info.floorBytes)} GB (at most ${MEMORY_WAIT_MS / 60e3} min).`;
+        this.emitEvent('log', { level: 'warn', kind: 'memory_hold', step_id: stepId, message });
+        if (log?.file && !written) {
+          try { fs.rmSync(log.file, { force: true }); } catch { /* written over below */ }
+          note(`# ${message}\n`);
+          this.emitEvent('step.log', { step_id: stepId, path: path.relative(this.runDir, log.file).split(path.sep).join('/'), command: log.command || null });
+        }
       },
     });
-    if (low) this.emitEvent('memory.hold', { step_id: stepId, waited_ms: r.waitedMs, recovered: r.recovered, free_bytes: low.freeBytes, floor_bytes: low.floorBytes });
+    if (low) {
+      note(`# waited ${Math.round((r.waitedMs || 0) / 1000)} s for memory${r.recovered ? '' : ' (not recovered)'}\n`);
+      this.emitEvent('memory.hold', { step_id: stepId, waited_ms: r.waitedMs, recovered: r.recovered, free_bytes: low.freeBytes, floor_bytes: low.floorBytes });
+    }
+    return written;
   },
 
-  // One execution of a suite step (see runSuiteStep); stopped: what the memory guard stopped meanwhile.
-  async suiteRound(step, st, { execution, reruns, stopped }) {
+  // One execution of a suite step (see runSuiteStep); stopped: what the memory guard stopped meanwhile;
+  // logPrefix: what the round's log already holds (the wait for memory, #465)
+  async suiteRound(step, st, { execution, reruns, stopped, logPrefix = '' }) {
     const seq = this.mockSequences?.suite?.[step.id];
     const mockResult = Array.isArray(seq) && seq.length ? seq[Math.min(execution, seq.length) - 1] : step.expect === 'red' ? 'fail' : 'pass';
     const root = path.dirname(path.dirname(this.runDir));
@@ -286,7 +320,10 @@ const methods = {
           baseCacheDir: path.join(root, 'cache', 'base-tests'),
           log: (level, message) => this.emitEvent('log', { level, message }),
           // a suite step other than `suite` (an e2e step, #223) logs under its own name
-          ...(step.id === 'suite' && !env ? {} : { logName: `${step.id}-${st.visits}${env}` }),
+          ...(step.id === 'suite' && !env ? {} : { logName: roundLogName(step.id, st.visits, reruns) }),
+          // #465: the log the command writes to, followed by the step's live terminal
+          onLog: ({ path: rel, command, base }) => this.emitEvent('step.log', { step_id: step.id, path: rel, command, ...(base ? { base: true } : {}) }),
+          ...(logPrefix && !extra.logName ? { logPrefix } : {}),
           // #225: `coverage: true` adds node's coverage; the summary covers the files the run changed
           // (#396: and the failures are classed in or outside the change; null: unknown, in the change)
           coverage: step.coverage === true,
@@ -489,7 +526,8 @@ const methods = {
     const command = step.command ? render(String(step.command), this.ctx).trim() : '';
     const timeoutMs = step.timeout ? parseDuration(render(String(step.timeout), this.ctx).trim(), undefined) : undefined;
     const logFile = path.join(this.runDir, 'logs', `check-${st.visits}.log`);
-    const output = { ...(await checkStep.runCheck({ dir: this.ctx.worktree_dir, command, logFile, timeoutMs, signal: this.abort.signal })), round: st.visits };
+    const onLog = ({ command: cmd }) => this.emitEvent('step.log', { step_id: step.id, path: `logs/check-${st.visits}.log`, command: cmd });
+    const output = { ...(await checkStep.runCheck({ dir: this.ctx.worktree_dir, command, logFile, timeoutMs, signal: this.abort.signal, onLog })), round: st.visits };
     this.emitEvent('log', { level: output.status === 'fail' ? 'warn' : 'info', kind: 'check', step_id: step.id, status: output.status, message: `${step.id}: ${output.message.split('\n')[0]}` });
     return output;
   },

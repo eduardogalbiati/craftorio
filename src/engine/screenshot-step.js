@@ -68,7 +68,8 @@ function screenshotCommand(dir) {
 
 // Runs `npm run screenshot -- <args>` in cwd → { code, output, timedOut }; never rejects.
 // onSpawn(pid): the command's process, watched by the memory guard (#276).
-function runShot({ cwd, args, env, timeoutMs, signal, onSpawn }) {
+// logFile (#465): the command's output is appended to it as it comes (the step's live terminal).
+function runShot({ cwd, args, env, timeoutMs, signal, onSpawn, logFile = null }) {
   const npm = resolveCommand('npm');
   if (!npm) return Promise.resolve({ code: null, output: 'npm not found in PATH', timedOut: false });
   const argv = ['run', 'screenshot', '--', ...args];
@@ -87,7 +88,9 @@ function runShot({ cwd, args, env, timeoutMs, signal, onSpawn }) {
     if (child.pid) onSpawn?.(child.pid);
     let output = '';
     let timedOut = false;
-    const keep = (d) => { output = (output + d).slice(-4000); };
+    const file = logFile ? fs.createWriteStream(logFile, { flags: 'a' }) : null;
+    file?.on('error', () => {});
+    const keep = (d) => { output = (output + d).slice(-4000); file?.write(d); };
     child.stdout?.on('data', keep);
     child.stderr?.on('data', keep);
     const stop = () => killTree(child);
@@ -96,6 +99,7 @@ function runShot({ cwd, args, env, timeoutMs, signal, onSpawn }) {
     const done = (code, err) => {
       clearTimeout(timer);
       signal?.removeEventListener('abort', stop);
+      file?.end();
       resolve({ code, output: err ? `${output}${err.message}` : output, timedOut });
     };
     child.on('error', (e) => done(null, e));
@@ -132,7 +136,9 @@ function screenAxeFindings(dir, name, modified) {
 // only); env: the agents' environment (simulation only, scratch workspace); run: runShot (replaceable);
 // slot: acquireSlot (replaceable); onSlotWait(holder): a capture waits for another run's screenshot;
 // onSpawn(pid): each capture's process (the memory guard, #276)
-async function captureScreenshots({ entries, cwd, runDir, folder, round, base, env, mock, signal, timeoutMs = SHOT_TIMEOUT_MS, run = runShot, log = () => {}, slot = acquireSlot, onSlotWait = () => {}, onSpawn = null }) {
+// logFile (#465): the captures' output, one `$ <command>` line before each; onLog({ path, command }) is
+// called once before the first capture runs (path relative to runDir)
+async function captureScreenshots({ entries, cwd, runDir, folder, round, base, env, mock, signal, timeoutMs = SHOT_TIMEOUT_MS, run = runShot, log = () => {}, slot = acquireSlot, onSlotWait = () => {}, onSpawn = null, logFile = null, onLog = null }) {
   const dir = runDir ? evidence.roundDir(runDir, folder, round) : null;
   const out = {
     kind: 'screenshots', folder, round, dir: dir ? path.relative(runDir, dir).split(path.sep).join('/') : null,
@@ -165,6 +171,11 @@ async function captureScreenshots({ entries, cwd, runDir, folder, round, base, e
   if (out.reason) return finish();
 
   fs.mkdirSync(dir, { recursive: true });
+  if (logFile) {
+    fs.mkdirSync(path.dirname(logFile), { recursive: true });
+    fs.writeFileSync(logFile, '');
+    onLog?.({ path: path.relative(runDir, logFile).split(path.sep).join('/'), command });
+  }
   for (const e of valid) {
     let shot = false;
     let modified = false;
@@ -172,7 +183,8 @@ async function captureScreenshots({ entries, cwd, runDir, folder, round, base, e
       const args = [...e.args, '--out', dir, '--name', e.name, '--side', side, ...(side === 'original' ? ['--ref', base] : [])];
       const t0 = Date.now();
       log('info', `screenshots: ${command} -- ${args.join(' ')}`);
-      const r = await withSlot({ signal, onSlotWait, slot }, (token) => run({ cwd, args, env: { ...env, [SCREENSHOT_SLOT_ENV]: token }, timeoutMs, signal, ...(onSpawn ? { onSpawn } : {}) }));
+      if (logFile) fs.appendFileSync(logFile, `$ ${command} -- ${args.join(' ')}\n`);
+      const r = await withSlot({ signal, onSlotWait, slot }, (token) => run({ cwd, args, env: { ...env, [SCREENSHOT_SLOT_ENV]: token }, timeoutMs, signal, ...(onSpawn ? { onSpawn } : {}), ...(logFile ? { logFile } : {}) }));
       const file = path.join(dir, `${e.name}.${side}.png`);
       if (r.code === 0 && fs.existsSync(file)) {
         out.taken++;
