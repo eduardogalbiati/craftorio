@@ -288,8 +288,31 @@ function parseWorkflowFile(file) {
   return wf;
 }
 
+// #434: step bodies several workflows share (fragments/<name>.yaml, `steps: { <id>: body }`). A step
+// `{ id, fragment: <name>, ...keys }` becomes the fragment's body for its id under the step's own keys,
+// before the checks. The fragments ship with the app: a workflow copied to the workspace (or to a
+// scratch folder) still finds them.
+const FRAGMENTS_DIR = path.join(__dirname, '..', '..', '..', 'fragments');
+function expandFragments(wf) {
+  if (!Array.isArray(wf?.steps)) return;
+  const bodies = new Map(); // fragment name → its steps
+  wf.steps = wf.steps.map((step, i) => {
+    if (!step || typeof step !== 'object' || step.fragment == null) return step;
+    const { fragment, ...own } = step;
+    const name = path.basename(String(fragment));
+    if (!bodies.has(name)) {
+      try { bodies.set(name, parseWorkflowFile(path.join(FRAGMENTS_DIR, `${name}.yaml`))?.steps || {}); }
+      catch (e) { throw new Error(`steps[${i}].fragment: cannot read fragments/${name}.yaml (${e.message})`); }
+    }
+    const body = bodies.get(name)[own.id];
+    if (!body || typeof body !== 'object') throw new Error(`steps[${i}].fragment: fragments/${name}.yaml has no step "${own.id}"`);
+    return { ...own, ...body, ...own };
+  });
+}
+
 function loadWorkflow(file) {
   const wf = parseWorkflowFile(file);
+  expandFragments(wf);
   const root = wf || {};
   runChecks(WORKFLOW_CHECKS, root, { prefix: '', wf: root, file, mcpServers: root.mcp_servers || {} });
   // #286: problems that do not stop a run, shown on the workflow's screen (not enumerable, so
