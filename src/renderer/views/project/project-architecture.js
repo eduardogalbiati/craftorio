@@ -210,7 +210,7 @@
   const sentWhere = (to) => {
     if (!to?.issue) return '';
     if (!to.stage) return `#${to.issue}`;
-    return t(to.waiting ? 'project_architecture.sent_where_waiting' : 'project_architecture.sent_where', { issue: to.issue, stage: to.stage });
+    return t(to.waiting ? 'common.refactor_where_waiting' : 'common.refactor_where', { issue: to.issue, stage: to.stage });
   };
   // Send to Refactor; once sent the same button, disabled (#447), with a link to where it went next to it
   function sendHtml(f) {
@@ -218,8 +218,8 @@
     const where = sentWhere(f.sentTo);
     const title = where ? t('project_architecture.sent_to_refactor_title', { where }) : t('project_architecture.sent_to_refactor_no_issue');
     const button = `<button type="button" class="btn sm" data-testid="architecture-send-refactor" disabled title="${esc(title)}">${t('project_architecture.sent_to_refactor')}</button>`;
-    const link = where && f.sentTo.issueUrl ? `<a class="arch-refactor-where small" data-testid="architecture-refactor-where" href="${esc(f.sentTo.issueUrl)}" target="_blank" rel="noopener" title="${esc(title)}">${esc(where)}</a>`
-      : where ? `<span class="arch-refactor-where small muted" data-testid="architecture-refactor-where">${esc(where)}</span>` : '';
+    const link = where && f.sentTo.issueUrl ? `<a class="small" data-testid="architecture-refactor-where" href="${esc(f.sentTo.issueUrl)}" target="_blank" rel="noopener" title="${esc(title)}">${esc(where)}</a>`
+      : where ? `<span class="small muted" data-testid="architecture-refactor-where">${esc(where)}</span>` : '';
     return button + link;
   }
 

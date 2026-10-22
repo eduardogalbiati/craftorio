@@ -49,7 +49,8 @@
 // Main stays green (#405, src/base-health.js): a red test on the base puts a fix item in a new stage
 // before the current one (`insertFrontStage`).
 // The waiting refactor stage (#435): a disabled stage marked `waiting` (Send to Refactor's items,
-// src/service/channels/refactor.js) stays last: `propose` adds its stages before it. Enabled, it loses
+// src/service/channels/refactor.js) stays last: `propose` adds its stages before it, and so does
+// `cleanStages` with the stages a save adds after it (the owner's add stage). Enabled, it loses
 // the marker and becomes a plain stage.
 // Screen: src/renderer/views/backlog/backlog-roadmap.js; channels: src/service/channels/roadmap.js.
 
@@ -59,6 +60,7 @@ const crypto = require('crypto');
 const { itemIssues, withSyncedText } = require('./issues');
 const { normalizeThen } = require('./shared/chain-model');
 const { isArchived } = require('./shared/backlog-archive');
+const { dropWaitingSuffix } = require('./refactor-cadence');
 const {
   allowedActions,
   atGate,
@@ -330,8 +332,6 @@ function cleanRelease(raw, old) {
 
 // #284: a stage is not disabled while one of its items runs (nothing in progress would stop)
 const DISABLE_BUSY = 'An item of this stage is running: wait for it, or stop its run, before disabling the stage.';
-// #435: what the waiting refactor stage's name loses once the owner enables it (src/refactor-cadence.js WAITING_STAGE_NAME)
-const WAITING_SUFFIX = /\s*\(waiting for your OK\)$/i;
 
 /**
  * Validated stages from the UI or a proposal: [{ id?, name?, note?, release?: { name }, items: [...] }].
@@ -360,13 +360,19 @@ function cleanStages(stages, { issues = [], previous = null, alive = null } = {}
     const name = String(s?.name || '').trim();
     return {
       // no name: shown as "Stage <n>" wherever it is when shown (reordering renumbers it)
-      id: s?.id || newId('stage'), name: waiting && !disabled ? name.replace(WAITING_SUFFIX, '') : name, note: String(s?.note || '').trim(),
+      id: s?.id || newId('stage'), name: waiting && !disabled ? dropWaitingSuffix(name) : name, note: String(s?.note || '').trim(),
       ...(release ? { release } : {}),
       ...(disabled ? { disabled: true } : {}),
       ...(waiting && disabled ? { waiting: true } : {}),
       items: (Array.isArray(s?.items) ? s.items : []).map((x) => cleanItem(x, known, prevItems)),
     };
   }).filter((s) => s.items.length);
+  // #435: stages the owner adds after the waiting refactor stage (the Backlog's add stage, a move to
+  // a new last stage) go before it, so it stays last; reordering stored stages is left as asked
+  const prevIds = new Set((previous?.stages || []).map((s) => s?.id).filter(Boolean));
+  const prevLast = previous?.stages?.[previous.stages.length - 1];
+  const w = prevLast?.waiting ? out.findIndex((s) => s.id === prevLast.id && s.waiting) : -1;
+  if (w >= 0 && w < out.length - 1 && out.slice(w + 1).every((s) => !prevIds.has(s.id))) out.push(...out.splice(w, 1));
   assertUnique(out);
   return out;
 }

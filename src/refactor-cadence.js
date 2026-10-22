@@ -89,24 +89,32 @@ function placeRunNow({ roadmap, files, conflictMap = null }) {
   return { stage };
 }
 
-// #435: the stage Send to Refactor plans in, disabled until the owner enables it
-const WAITING_STAGE_NAME = 'Refactor (waiting for your OK)';
+// #435: the stage Send to Refactor plans in, disabled until the owner enables it; its name's suffix
+// (src/roadmap.js drops it once the stage is enabled)
+const WAITING_SUFFIX = '(waiting for your OK)';
+const WAITING_STAGE_NAME = `Refactor ${WAITING_SUFFIX}`;
 
 /** Whether stage `s` (or an issueStages entry) is the refactor stage waiting for the owner: disabled, marked or named so. */
-const isWaitingStage = (s) => !!s?.disabled && (!!s.waiting || /waiting for your OK/i.test(s.name || ''));
+const isWaitingStage = (s) => !!s?.disabled && (!!s.waiting || String(s.name || '').toLowerCase().includes(WAITING_SUFFIX.toLowerCase()));
+
+/** Stage name `name` without the waiting stage's suffix (an enabled stage no longer waits). */
+function dropWaitingSuffix(name) {
+  const text = String(name || '');
+  return text.toLowerCase().endsWith(WAITING_SUFFIX.toLowerCase()) ? text.slice(0, -WAITING_SUFFIX.length).trimEnd() : text;
+}
 
 /**
- * #435 where Send to Refactor plans: the waiting stage when it is the last one ({ stage }, else
+ * #435 where Send to Refactor plans: the last waiting stage, wherever it is ({ stage }, else
  * stages.length: a new one at the end) and, in it, the unfinished item that already changes one of
  * `files` (`item`, -1 for none: a new item). The items carry their `files` (refactor-priority withFiles).
  */
 function placeWaiting({ roadmap, files }) {
   const stages = roadmap?.stages || [];
-  const last = stages.length - 1;
-  if (last < 0 || !isWaitingStage(stages[last])) return { stage: stages.length, item: -1 };
+  const at = stages.findLastIndex(isWaitingStage);
+  if (at < 0) return { stage: stages.length, item: -1 };
   const mine = new Set((files || []).map(pathOf).filter(Boolean));
-  const item = (stages[last].items || []).findIndex((x) => !RoadmapModel.isFinished(x) && (x.files || []).map(pathOf).some((f) => mine.has(f)));
-  return { stage: last, item };
+  const item = (stages[at].items || []).findIndex((x) => !RoadmapModel.isFinished(x) && (x.files || []).map(pathOf).some((f) => mine.has(f)));
+  return { stage: at, item };
 }
 
 /**
@@ -134,6 +142,7 @@ module.exports = {
   cleanCadence,
   countedRuns,
   DEFAULT_CADENCE,
+  dropWaitingSuffix,
   filesOf,
   isWaitingStage,
   pathOf,
@@ -144,5 +153,6 @@ module.exports = {
   runsUntilNext,
   unfinishedNumbers,
   WAITING_STAGE_NAME,
+  WAITING_SUFFIX,
   withIssueStatus,
 };

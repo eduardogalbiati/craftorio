@@ -83,7 +83,7 @@
   // where the proposal went (#435): its issue and its roadmap stage, "waiting for your OK" in the waiting stage
   function whereMarkup(p) {
     if (!p.issue || !p.roadmapStage || !p.roadmapUnfinished) return '';
-    const where = t(p.roadmapWaiting ? 'project_refactor.where_waiting' : 'project_refactor.where', { issue: p.issue, stage: p.roadmapStage });
+    const where = t(p.roadmapWaiting ? 'common.refactor_where_waiting' : 'common.refactor_where', { issue: p.issue, stage: p.roadmapStage });
     return p.issueUrl ? `<a class="small" data-testid="refactor-proposal-where" href="${esc(p.issueUrl)}" target="_blank" rel="noopener">${esc(where)}</a>`
       : `<span class="small muted" data-testid="refactor-proposal-where">${esc(where)}</span>`;
   }
