@@ -111,3 +111,26 @@ test('#467 an `on` channel with a null senderFrame: the fn never runs, the liste
   assert.doesNotThrow(() => ons.get('notify:seen')({ sender: { mainFrame: { url: APP_URL } }, senderFrame: null }, 'x'));
   assert.equal(calls.length, 0);
 });
+
+// a sync channel (preload's sendSync: api:manifest, terminal:external-sync) answers through
+// event.returnValue; a refused one must still answer, or the page's sendSync never returns
+function syncChannel() {
+  const { guardIpc } = load();
+  const ons = new Map();
+  const ipc = guardIpc({ handle() {}, on(channel, listener) { ons.set(channel, listener); } }, { appPage: APP_PAGE, log: () => {} });
+  ipc.on('api:manifest', (_arg, e) => { e.returnValue = 'the manifest'; });
+  return ons.get('api:manifest');
+}
+
+test('#467 a sync channel from the app page answers through the event (returnValue)', () => {
+  const ev = topFrame(APP_URL);
+  syncChannel()(ev);
+  assert.equal(ev.returnValue, 'the manifest');
+});
+
+test('#467 a sync channel from a foreign page is refused with a null answer (the caller is not left waiting)', () => {
+  const ev = topFrame(FOREIGN_URL);
+  syncChannel()(ev);
+  assert.equal(ev.returnValue, null);
+  assert.equal('returnValue' in ev, true);
+});
