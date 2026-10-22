@@ -98,6 +98,43 @@ test('trustWorkspaceFolder refuses a folder outside the workspace', (t) => {
   assert.deepEqual(claudeTrusted(home), []);
 });
 
+test('trustWorkspaceFolder refuses a sibling folder whose name starts like an app folder (runs-old/, skills2/)', (t) => {
+  const { trustWorkspaceFolder } = require('../src/cli-trust');
+  const { home, workspace, dir } = workspaceSetup(t);
+  assert.equal(trustWorkspaceFolder('claude', dir('runs-old', 'x'), { workspace, home }), false);
+  assert.equal(trustWorkspaceFolder('claude', dir('skills2'), { workspace, home }), false);
+  assert.deepEqual(claudeTrusted(home), []);
+});
+
+test('trustWorkspaceFolder never trusts the git root above an app folder (a workspace kept in a repository)', (t) => {
+  const { trustWorkspaceFolder } = require('../src/cli-trust');
+  const { home, workspace, dir } = workspaceSetup(t);
+  fs.mkdirSync(path.join(workspace, '.git'));
+  const key = (d) => d.replace(/\\/g, '/');
+  const run = dir('runs', '20261022-201530-abcdef12');
+  assert.equal(trustWorkspaceFolder('claude', run, { workspace, home }), true);
+  assert.deepEqual(claudeTrusted(home), [key(run)]);
+  assert.equal(trustWorkspaceFolder('codex', run, { workspace, home }), true);
+  const codex = fs.readFileSync(path.join(home, '.codex', 'config.toml'), 'utf8');
+  assert.ok(codex.includes(`[projects.'${run}']`), codex);
+  assert.ok(!codex.includes(`[projects.'${workspace}']`), codex);
+});
+
+test('trustWorkspaceFolder recognises an app folder spelled with another case where the file system ignores case', { skip: !['win32', 'darwin'].includes(process.platform) }, (t) => {
+  const { trustWorkspaceFolder } = require('../src/cli-trust');
+  const { home, workspace, dir } = workspaceSetup(t);
+  const run = dir('runs', 'abc');
+  assert.equal(trustWorkspaceFolder('claude', run.toUpperCase(), { workspace, home }), true);
+  assert.equal(trustWorkspaceFolder('claude', dir('repos', 'x').replace(/repos/, 'REPOS'), { workspace, home }), false);
+});
+
+test('trustWorkspaceFolder without a workspace trusts nothing', (t) => {
+  const { trustWorkspaceFolder } = require('../src/cli-trust');
+  const { home, dir } = workspaceSetup(t);
+  assert.equal(trustWorkspaceFolder('claude', dir('runs', 'x'), { home }), false);
+  assert.deepEqual(claudeTrusted(home), []);
+});
+
 test('trustWorkspaceFolder still trusts the app-owned folders: runs/, skills/, workflows/', (t) => {
   const { trustWorkspaceFolder } = require('../src/cli-trust');
   const { home, workspace, dir } = workspaceSetup(t);

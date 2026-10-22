@@ -153,6 +153,104 @@ test('the terminals\' env (cliEnv) keeps PATH and drops the parent\'s secrets', 
   for (const k of Object.keys(SECRETS)) assert.ok(!keys.includes(k), `${k} must not reach a terminal`);
 });
 
+test('the suite step\'s env adds the workflow\'s env.passthrough names, and only those', () => {
+  const { suiteEnv } = require('../src/engine/suite-step');
+  const parent = { PATH: '/usr/bin', DATABASE_URL: 'postgres://x', OTHER_DB_URL: 'y', ...SECRETS };
+  const keys = upper(Object.keys(suiteEnv(parent, { passthrough: ['DATABASE_URL'] }).env));
+  assert.ok(keys.includes('DATABASE_URL'), keys.join(','));
+  assert.ok(!keys.includes('OTHER_DB_URL'));
+  for (const k of Object.keys(SECRETS)) assert.ok(!keys.includes(k), k);
+  assert.ok(!upper(Object.keys(suiteEnv(parent, {}).env)).includes('DATABASE_URL'), 'not passed without the list');
+});
+
+test('childEnv passes the toolchain homes the language skills need (folders, not secrets)', () => {
+  const { childEnv } = require('../src/engine/child-env');
+  const homes = ['JAVA_HOME', 'M2_HOME', 'MAVEN_HOME', 'GRADLE_USER_HOME', 'GOPATH', 'GOROOT', 'GOFLAGS', 'DOTNET_ROOT', 'DOTNET_CLI_HOME', 'VIRTUAL_ENV', 'PYTHONPATH', 'CARGO_HOME', 'RUSTUP_HOME'];
+  const parent = Object.fromEntries([...homes.map((k) => [k, `/opt/${k}`]), ...Object.entries(SECRETS)]);
+  const env = childEnv(parent);
+  assert.deepEqual(Object.keys(env).sort(), [...homes].sort());
+  assert.equal(env.JAVA_HOME, '/opt/JAVA_HOME', 'values unchanged');
+});
+
+test('childEnv keeps a key\'s own spelling (Windows\' Path) and matches names case-insensitively; platform tokens only on request', () => {
+  const { childEnv } = require('../src/engine/child-env');
+  const parent = { Path: 'C:\\bin', SystemRoot: 'C:\\Windows', lc_all: 'C', GITHUB_TOKEN: 't', GH_HOST: 'h', GITLAB_TOKEN: 'g', Database_Url: 'd' };
+  assert.deepEqual(Object.keys(childEnv(parent)).sort(), ['Path', 'SystemRoot', 'lc_all'].sort());
+  assert.deepEqual(Object.keys(childEnv(parent, { platforms: ['gh'] })).sort(), ['GH_HOST', 'GITHUB_TOKEN', 'Path', 'SystemRoot', 'lc_all'].sort());
+  assert.deepEqual(Object.keys(childEnv(parent, { platforms: ['glab'], passthrough: ['DATABASE_URL'] })).sort(), ['Database_Url', 'GITLAB_TOKEN', 'Path', 'SystemRoot', 'lc_all'].sort());
+});
+
+test('platformsOf: gh with bash:gh, glab with bash:glab, both with a bare bash or no capabilities, none otherwise', () => {
+  const caps = require('../src/engine/capabilities');
+  assert.deepEqual(caps.platformsOf(null), ['gh', 'glab']);
+  assert.deepEqual(caps.platformsOf(caps.normalize({ tools: ['read', 'bash'] })), ['gh', 'glab']);
+  assert.deepEqual(caps.platformsOf(caps.normalize({ tools: ['read', 'bash:gh'] })), ['gh']);
+  assert.deepEqual(caps.platformsOf(caps.normalize({ tools: ['read', 'bash:glab', 'bash:git'] })), ['glab']);
+  assert.deepEqual(caps.platformsOf(caps.normalize({ tools: ['read', 'bash:git', 'bash:npm'] })), []);
+  assert.deepEqual(caps.platformsOf(caps.normalize({ tools: ['read'] })), []);
+});
+
+test('the workflow loader takes env.passthrough as a list of variable names and refuses anything else', (t) => {
+  const { loadWorkflow } = require('../src/engine/workflow');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'passthrough-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const load = (value) => {
+    const f = path.join(dir, `wf-${Math.random().toString(36).slice(2)}.yaml`);
+    fs.writeFileSync(f, `env:\n  passthrough: ${value}\nagents:\n  a: { provider: claude, model: m }\nsteps:\n  - { id: s, agent: a, prompt: x }\n`);
+    return () => loadWorkflow(f);
+  };
+  assert.doesNotThrow(load('[DATABASE_URL]'));
+  assert.doesNotThrow(load('[DATABASE_URL, _PRIVATE_1]'));
+  assert.throws(load('["not a name!"]'), /env\.passthrough/);
+  assert.throws(load('["AWS_*"]'), /env\.passthrough/);
+  assert.throws(load('[]'), /env\.passthrough/);
+});
+
+// The check and screenshot steps run the repository's commands: the run state seam of
+// test/engine-step-log-465.test.js (WorkflowRun.prototype on a small state)
+function stepState(t, worktree, machine = {}) {
+  const { WorkflowRun } = require('../src/engine/workflow');
+  const runDir = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'child-env-run-')), 'runs', 'run-470');
+  fs.mkdirSync(path.join(runDir, 'logs'), { recursive: true });
+  t.after(() => fs.rmSync(path.dirname(path.dirname(runDir)), { recursive: true, force: true, maxRetries: 3 }));
+  const events = [];
+  const state = Object.create(WorkflowRun.prototype);
+  Object.assign(state, {
+    mock: false, mockSequences: {}, machine: { simulated: false, ...machine }, runDir, runId: 'run-470',
+    worktree: null, ctx: { worktree_dir: worktree, steps: {} }, abort: new AbortController(),
+    wf: { env: { passthrough: ['MY_PROJECT_VAR_470'] } },
+    watchMemory: () => ({ stop() {} }), emitEvent: (type, data) => events.push({ type, ...data }),
+  });
+  return { state, events };
+}
+
+test('a check step runs the repository\'s command with the allowlisted env plus the passthrough, never the secrets', { timeout: 60000 }, async (t) => {
+  withEnv(t, { ...SECRETS, ...PLATFORM, ...PASSTHROUGH });
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'child-env-check-'));
+  t.after(() => fs.rmSync(repo, { recursive: true, force: true, maxRetries: 3 }));
+  fs.writeFileSync(path.join(repo, 'package.json'), JSON.stringify({ name: 'p' }));
+  fs.writeFileSync(path.join(repo, 'keys.js'), "require('fs').writeFileSync('keys.json', JSON.stringify(Object.keys(process.env))); console.log('checks: pass');\n");
+  const { state } = stepState(t, repo);
+  const out = await state.runCheckStep({ id: 'rule_check', type: 'check', command: 'node keys.js' }, { visits: 1 });
+  assert.equal(out.status, 'pass', out.message);
+  const keys = upper(JSON.parse(fs.readFileSync(path.join(repo, 'keys.json'), 'utf8')));
+  assert.ok(keys.includes('PATH'), keys.join(','));
+  assert.ok(keys.includes('MY_PROJECT_VAR_470'), 'the workflow\'s passthrough');
+  for (const k of [...Object.keys(SECRETS), ...Object.keys(PLATFORM)]) assert.ok(!keys.includes(k), `${k} must not reach a check step`);
+});
+
+test('a screenshots step hands the repository\'s capture command the allowlisted env, never the secrets', async (t) => {
+  withEnv(t, { ...SECRETS, ...PLATFORM, ...PASSTHROUGH });
+  let env = null;
+  const { state } = stepState(t, os.tmpdir(), { captureScreenshots: async (opts) => { env = opts.env; return { status: 'skipped', screenshots: [], reason: 'stub' }; } });
+  await state.runScreenshots({ id: 'screens', type: 'screenshots', from: 'dev' }, { visits: 1 });
+  assert.ok(env, 'the capture was called with an env');
+  const keys = upper(Object.keys(env));
+  assert.ok(keys.includes('PATH'), keys.join(','));
+  assert.ok(keys.includes('MY_PROJECT_VAR_470'), 'the workflow\'s passthrough');
+  for (const k of [...Object.keys(SECRETS), ...Object.keys(PLATFORM)]) assert.ok(!keys.includes(k), `${k} must not reach a screenshot command`);
+});
+
 test('printenv is no longer an allowed read utility; env and set are not added', () => {
   const caps = require('../src/engine/capabilities');
   for (const u of ['printenv', 'env', 'set']) assert.ok(!caps.READ_UTILITIES.includes(u), u);
