@@ -85,6 +85,32 @@ test('#329 (b) a translation uses the same {placeholders} as its English text', 
   }
 });
 
+// #437: a status pill's label (status_pill.status_*) of any language fits a pill on one line: at most
+// STATUS_LABEL_MAX characters, so pt-BR reads as short as English ("Rodando", not "Em execução").
+const STATUS_LABEL_MAX = 16;
+const statusLabelsTooLong = (catalog) => Object.entries(catalog)
+  .filter(([k]) => k.startsWith('status_pill.status_'))
+  .flatMap(([k, v]) => (typeof v === 'string' ? [[k, v]] : Object.values(v || {}).map((s) => [k, s])))
+  .filter(([, s]) => [...String(s)].length > STATUS_LABEL_MAX)
+  .map(([k, s]) => `${k}: "${s}" (${[...String(s)].length} > ${STATUS_LABEL_MAX})`);
+
+test('#437 the length rule itself: a status pill label over 16 characters is reported, 16 or fewer is not', () => {
+  assert.deepEqual(statusLabelsTooLong({ 'status_pill.status_success': 'Concluído com sucesso', 'status_pill.status_running': 'Rodando', 'status_pill.status_waiting': 'Esperando você 16' }),
+    ['status_pill.status_success: "Concluído com sucesso" (21 > 16)', 'status_pill.status_waiting: "Esperando você 16" (17 > 16)']);
+  assert.deepEqual(statusLabelsTooLong({ 'status_pill.status_parked': 'Parado no gate', 'other.key': 'A long text that is not a status pill label' }), []);
+});
+
+test('#437 every status pill label (status_pill.status_*) of every catalog has at most 16 characters', () => {
+  const files = catalogFiles();
+  assert.ok(files.includes('pt-BR.json'), `catalogs: ${files.join(', ')}`);
+  for (const f of files) {
+    const cat = readJson(path.join(CATALOGS, f));
+    assert.ok(Object.keys(cat).some((k) => k.startsWith('status_pill.status_')), `${f} has no status pill labels`);
+    const long = statusLabelsTooLong(cat);
+    assert.deepEqual(long, [], `${f}: status pill labels longer than ${STATUS_LABEL_MAX} characters:\n${long.join('\n')}`);
+  }
+});
+
 // ---- (c) visible text outside t() in the moved files ---------------------------------------------
 // the checker itself lives in test/untranslated-text.js (#330 runs it over the whole renderer)
 

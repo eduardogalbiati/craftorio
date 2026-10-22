@@ -87,3 +87,22 @@ test('the pipeline strip shows each stage run status as its label, queued when i
     if (!had) delete globalThis.StatusPill;
   }
 });
+
+// #437: a status pill stays on one line (style.css .pill: white-space: nowrap), its label too, in
+// pt-BR. The pill's markup (StatusPill.statusPill) is cascaded with style.css by test/css-layout.js.
+test('#437 a status pill and its label keep one line (white-space: nowrap), in pt-BR', (t) => {
+  const I18n = require('../src/shared/i18n.js');
+  const { parseHtml, styleSheet, layoutOf, elements } = require('./css-layout.js');
+  I18n.setLanguage('pt-BR');
+  t.after(() => I18n.setLanguage('en'));
+  const { statusPill } = require('../src/renderer/status-pill');
+  const L = layoutOf(styleSheet(['style.css']));
+  for (const status of ['success', 'running', 'waiting', 'local', 'parked', 'failed_to_start']) {
+    const all = elements(parseHtml(statusPill(status)));
+    const pill = all.find((e) => e.classes.has('pill'));
+    const label = all.find((e) => e.attrs['data-testid'] === 'status-label');
+    assert.ok(pill && label, `${status}: no pill or no label`);
+    assert.equal(L.computed(pill).wrap, 'nowrap', `${status}: .pill wraps (no white-space: nowrap)`);
+    assert.equal(L.computed(label).wrap, 'nowrap', `${status}: the pill's label wraps`);
+  }
+});

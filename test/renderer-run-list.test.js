@@ -97,3 +97,59 @@ test('groupArtifacts: a step-less file inside the run folder is "Other files", o
   const labels = Array.from(groupArtifacts(files), ([label]) => label);
   assert.deepEqual(labels, ['plan', 'Other files', 'Project copies']);
 });
+
+// #437: a run card's title, next to its status pill, truncates with "…" and keeps its full text in a
+// title (the hover). The row (runListRow) is rendered with the real StatusPill and run-meta.js
+// (runTitleHtml), and style.css is cascaded onto it with test/css-layout.js (no browser here).
+const { parseHtml, styleSheet, layoutOf, elements, textOf } = require('./css-layout.js');
+
+const LONG_TITLE = 'Implementar o fluxo de pagamento com cartão salvo e reembolso parcial para pedidos antigos #437';
+
+function runCardRow(r) {
+  const fn = /function runListRow\(r, pv\) \{[\s\S]*?\n\}/.exec(src);
+  const badges = [/function issueFallbackBadge\(r\) \{[\s\S]*?\n\}/.exec(src), PATTERNS.childRunBadges.exec(src)];
+  assert.ok(fn && badges.every(Boolean), 'runListRow not found in run-list.js: the source moved');
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+  const sandbox = {
+    esc, console,
+    state: { runMeta: new Map() },
+    RunBadges: { defaultTitle: () => '', prBadgeHtml: () => '' },
+    StatusPill: require('../src/renderer/status-pill.js'),
+    stepName: (id) => String(id || ''), runProgressStrip: () => '',
+    fmtDur: () => '1m', fmtTok: () => '10', fmtUsd: () => '$0.10', dateOf: (s) => String(s).slice(0, 10),
+  };
+  sandbox.window = sandbox;
+  vm.createContext(withI18n(sandbox));
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'run-meta.js'), 'utf8'), sandbox);
+  vm.runInContext(`${fn[0]}\n${badges.map((m) => m[0]).join('\n')}\nthis.runListRow = runListRow;`, sandbox);
+  return String(sandbox.runListRow(r, { expanded: new Set(), id: null }));
+}
+
+function titleOfRunCard() {
+  const html = runCardRow(run('r437', { title: LONG_TITLE, status: 'success', workflow: 'software-development.yaml', task: 'Implement it' }));
+  const all = elements(parseHtml(`<div class="pr-list" style="width: 720px">${html}</div>`));
+  const main = all.find((e) => e.classes.has('pr-main'));
+  assert.ok(main, 'no .pr-main in the run card');
+  // the elements inside .pr-main that show the title alone, innermost first
+  const holders = all.filter((e) => textOf(e).trim() === LONG_TITLE).reverse();
+  assert.ok(holders.length, 'the run card does not show its title alone in an element');
+  return { all, main, holders };
+}
+
+test('#437 run card: the title next to the pill keeps its full text in a title (the hover)', () => {
+  const { holders, main } = titleOfRunCard();
+  const line = [];
+  for (let e = holders[holders.length - 1]; e && e !== main; e = e.parent) line.push(e);
+  assert.ok([...holders, ...line].some((e) => e.attrs.title === LONG_TITLE), 'no element around the run title carries title="<the full title>"');
+});
+
+test('#437 run card: the title truncates with "…" (overflow hidden, text-overflow: ellipsis, nowrap) inside .pr-main', () => {
+  const { holders, main } = titleOfRunCard();
+  const L = layoutOf(styleSheet(['style.css']));
+  // the title text or an element around it, up to the line in .pr-main, ends in "…"
+  const chain = [];
+  for (let e = holders[0]; e && e !== main; e = e.parent) chain.push(e);
+  const cut = chain.find((e) => L.truncates(e));
+  assert.ok(cut, `the run title is not truncated: none of ${chain.map((e) => `<${e.tag} class="${e.attrs.class || ''}">`).join(' < ')} has overflow: hidden + text-overflow: ellipsis + white-space: nowrap on a non-inline box`);
+  for (let e = cut; e !== main; e = e.parent) assert.ok(L.canShrink(e), `<${e.tag} class="${e.attrs.class || ''}"> cannot be narrower than its content (inline, or min-width: auto as a flex/grid item)`);
+});
