@@ -7,6 +7,10 @@
 // there is none); `analysis`: { running, step, error, estimate, estimateTitle } from the Architecture
 // tab; `ready`: whether the action can start (the tab gave the city an onAnalyze). The notes are one
 // panel (#441: data-city-panel="notes", "City plan" with its chevron, project-city-panels.js).
+// releaseHtml({ validation, from, plan, open }) → the release card's notes (#439): the base's validation
+// of today's plan keeps only the plan's own problems (schema, unknown zone, duplicate id); the files and
+// districts the base commit lacks arrived after that release, so one muted line "At <from>, N files and
+// M districts of today's plan did not exist yet" lists them behind a closed <details>.
 // Uses app.js globals at call time: esc. Browser: window.ProjectCityNotes.
 (() => {
   const STALE_COVERAGE = 0.9; // under this share of matched files, the plan is older than the code
@@ -43,13 +47,11 @@
     if (state) notes.push(state);
     const v = validation || {};
     const problems = [
-      ...(v.schemaErrors || []).map((s) => t('project_city_notes.problem_schema', { error: s })),
-      ...(v.unknownZones || []).map((u) => t('project_city_notes.problem_unknown_zone', { district: u.district, zone: u.zone })),
-      ...(v.duplicateIds || []).map((id) => t('project_city_notes.problem_duplicate_id', { id })),
+      ...planProblems(v),
       ...(v.missingPaths || []).map((p) => t('project_city_notes.problem_missing_path', { path: p })),
       ...(v.emptyDistricts || []).map((id) => t('project_city_notes.problem_empty_district', { id })),
     ];
-    if (model.grouping === 'plan' && problems.length) notes.push(note('project-city-problems', 'warn', `<b>${t('project_city_notes.problems_in_the_city_plan', { count: problems.length })}</b><ul>${problems.map((p) => `<li>${esc(p)}</li>`).join('')}</ul>`));
+    if (model.grouping === 'plan' && problems.length) notes.push(problemsNote(problems));
     if (layout.aggregated) notes.push(note('project-city-aggregated', '', `<b>${t('project_city_notes.over_5_000_files')}</b> ${esc(layout.note)}`));
     if (!notes.length) return '';
     // #441: one panel, "City plan", its chevron folds the notes to its title row
@@ -58,5 +60,33 @@
     return `<div class="pc-notes" data-city-panel="notes">${head}<div class="pc-notes-body" data-city-panel-body>${notes.join('')}</div></div>`;
   }
 
-  window.ProjectCityNotes = { html };
+  // the plan's own problems, whatever commit it is read at: a schema error, an unknown zone, a duplicate id
+  const planProblems = (v) => [
+    ...(v.schemaErrors || []).map((s) => t('project_city_notes.problem_schema', { error: s })),
+    ...(v.unknownZones || []).map((u) => t('project_city_notes.problem_unknown_zone', { district: u.district, zone: u.zone })),
+    ...(v.duplicateIds || []).map((id) => t('project_city_notes.problem_duplicate_id', { id })),
+  ];
+  const problemsNote = (problems) => note('project-city-problems', 'warn', `<b>${t('project_city_notes.problems_in_the_city_plan', { count: problems.length })}</b><ul>${problems.map((p) => `<li>${esc(p)}</li>`).join('')}</ul>`);
+
+  /** The release card's notes (#439), see the header. */
+  function releaseHtml({ validation, from, plan, open = false }) {
+    const v = validation || {};
+    const problems = planProblems(v);
+    const files = v.missingPaths || [];
+    const districts = (v.emptyDistricts || []).map((id) => (plan?.districts || []).find((d) => d.id === id)?.name || id);
+    const parts = [
+      files.length ? t('project_city.files_count', { count: files.length }) : '',
+      districts.length ? t('project_city.districts_count', { count: districts.length }) : '',
+    ].filter(Boolean);
+    const what = parts.length > 1 ? t('project_city_release.files_and_districts', { files: parts[0], districts: parts[1] }) : parts[0];
+    const later = what
+      ? `<details class="pcr-missing muted small" data-testid="city-release-missing" ${open ? 'open' : ''}><summary data-testid="city-release-missing-toggle" aria-expanded="${open}">${esc(t('project_city_release.did_not_exist_yet', { from: from || '?', what }))}</summary><ul>${[...files, ...districts].map((x) => `<li>${esc(x)}</li>`).join('')}</ul></details>`
+      : '';
+    return `${problems.length ? problemsNote(problems) : ''}${later}`;
+  }
+
+  window.ProjectCityNotes = {
+    html,
+    releaseHtml,
+  };
 })();

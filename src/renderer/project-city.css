@@ -109,7 +109,8 @@
 
 /* #441: the legend closes (its head's ×), a small "Legend" button in its corner brings it back */
 .pc-legend > .pc-x { float: right; margin: -4px -8px 0 6px; }
-.pc-legend .pcr-ramp { display: inline-block; width: 26px; height: 8px; border-radius: 4px; background: var(--ramp); flex: none; }
+/* #438: the release's ramp in the legend, each shade over its first line count */
+.pc-legend li .pcr-step small { margin: 0; padding: 0; font-family: var(--mono); }
 .pc-legend-btn { position: absolute; left: 12px; bottom: 12px; height: 28px; padding: 0 12px; border-radius: 999px; font-size: 11px; font-weight: 650; color: var(--r3d-ink-2); border: 1px solid var(--r3d-card-line); cursor: pointer; display: flex; align-items: center; gap: 6px; }
 .pc-legend-btn:hover { color: var(--r3d-ink); }
 .pc-legend-btn svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }

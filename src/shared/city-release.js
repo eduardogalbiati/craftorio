@@ -5,8 +5,11 @@
 // - parseNameStatus(text) → [{ status, path, from? }] sorted by path, from `git diff --name-status -M`:
 //   A → added, M/T → changed, D → removed, R → renamed (from the old path), C → added (the copy).
 // - ADDED_COLOUR, CHANGE_RAMP (light to strong), rampColour(lines, maxLines) → a ramp colour.
-// - releaseOverlay(changes) → { highlight, ghosts }: added green, changed and renamed on the ramp (a
-//   rename on its base building, the old path), removed paths as ghosts; for ProjectCity.overlay.
+// - releaseRamp(changes) → { cuts, colourOf }: the ramp spread over the release's own changes (#438:
+//   quantiles of the distinct line counts, a geometric split under four), its cut points for the legend.
+// - releaseOverlay(changes) → { highlight, ghosts, renamed }: added green, changed and renamed on the
+//   release's ramp (a rename on its base building, the old path), removed paths as ghosts, the renamed
+//   buildings for their sign (RENAME_COLOUR's marker, #438); for ProjectCity.overlay.
 // - issuesOf(message), filterByIssue(changes, commits, issue): one issue's footprint, through the
 //   commits that name it (`#n`).
 // - releaseModel(baseModel, changes, { plan }) → the base city plus a building per added file, in the
@@ -22,6 +25,7 @@
 
   const ADDED_COLOUR = '#3fb68b';
   const CHANGE_RAMP = ['#f6d58e', '#f2a541', '#e8743b', '#d9480f'];
+  const RENAME_COLOUR = '#7c9cff'; // the rename sign's marker (#438): no ramp shade, the app's accent
   const STATUSES = ['added', 'changed', 'removed', 'renamed'];
   const STATUS_OF = { A: 'added', C: 'added', D: 'removed', M: 'changed', R: 'renamed', T: 'changed' };
 
@@ -54,19 +58,52 @@
     return CHANGE_RAMP[Math.min(CHANGE_RAMP.length - 1, Math.max(0, Math.floor(share * CHANGE_RAMP.length)))];
   }
 
-  /** The city's layer of a release: highlight { path: colour } and the removed paths as ghosts. */
+  const isRamped = (c) => c.status === 'changed' || c.status === 'renamed';
+  const linesOf = (c) => Math.max(0, Number(c.lines) || 0);
+
+  /**
+   * The release's ramp (#438), spread over its own changed and renamed files: with four distinct line
+   * counts or more, each shade holds a quarter of them (quantiles); with fewer, the shades split
+   * min..max geometrically. → { cuts: [[from, to]] per shade, colourOf(lines) }.
+   */
+  function releaseRamp(changes) {
+    const k = CHANGE_RAMP.length;
+    const values = [...new Set(arr(changes).filter(isRamped).map(linesOf))].sort((a, b) => a - b);
+    let cuts = [];
+    if (values.length >= k) {
+      const groups = CHANGE_RAMP.map(() => []);
+      values.forEach((v, i) => groups[Math.floor((i * k) / values.length)].push(v));
+      cuts = groups.map((g) => [g[0], g[g.length - 1]]);
+    } else if (values.length) {
+      const lo = Math.max(1, values[0]);
+      const hi = Math.max(lo, values[values.length - 1]);
+      const bound = (s) => Math.round(lo * (hi / lo) ** (s / k));
+      cuts = CHANGE_RAMP.map((_, s) => [bound(s), s === k - 1 ? hi : Math.max(bound(s), bound(s + 1) - 1)]);
+    }
+    // the strongest shade whose cut starts at or under `lines`
+    const colourOf = (lines) => {
+      const n = Math.max(0, Number(lines) || 0);
+      let s = 0;
+      cuts.forEach(([from], i) => { if (from <= n) s = i; });
+      return CHANGE_RAMP[s];
+    };
+    return { cuts, colourOf };
+  }
+
+  /** The city's layer of a release: highlight { path: colour }, the removed paths as ghosts, the renamed ones' buildings (their sign). */
   function releaseOverlay(changes) {
     const list = arr(changes);
-    const ramped = list.filter((c) => c.status === 'changed' || c.status === 'renamed');
-    const max = ramped.reduce((m, c) => Math.max(m, Number(c.lines) || 0), 0);
+    const ramp = releaseRamp(list);
     const highlight = {};
     const ghosts = [];
+    const renamed = [];
     for (const c of list) {
       if (c.status === 'removed') ghosts.push(c.path);
       else if (c.status === 'added') highlight[c.path] = ADDED_COLOUR;
-      else if (ramped.includes(c)) highlight[drawnPath(c)] = rampColour(c.lines, max);
+      else if (isRamped(c)) highlight[drawnPath(c)] = ramp.colourOf(c.lines);
+      if (c.status === 'renamed') renamed.push(drawnPath(c));
     }
-    return { highlight, ghosts: ghosts.sort(byString) };
+    return { highlight, ghosts: ghosts.sort(byString), renamed: renamed.sort(byString) };
   }
 
   // ---------- by issue ----------
@@ -165,6 +202,8 @@
     releaseHeader,
     releaseModel,
     releaseOverlay,
+    releaseRamp,
+    RENAME_COLOUR,
   };
   if (node) module.exports = api;
   else root.CityRelease = api;

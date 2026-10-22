@@ -3,14 +3,19 @@
 // screen, the release run's page: showRelease(projectId, { to, from? })) opens the project's City
 // view (#430: in the city modal over the screen, project-city-modal.js, unless a city of the project is on screen) on the city as it was at the previous release (architecture:release: the tree and the facts at
 // `from`, the current plan's rules; src/release-city.js), with what the release added in green, what
-// it changed on a ramp by the lines changed, renamed files on their old building and removed files
+// it changed on the release's own ramp by the lines changed (#438: CityRelease.releaseRamp), renamed
+// files on their old building with the rename sign (an accent marker labelled "renamed") and removed files
 // marked as ghosts (a ghost-coloured marker labelled "removed" on the base building: #373's overlay
 // API has highlights and markers, no outline mode), the rest grey (src/shared/city-release.js). A card (data-testid="city-release")
-// holds the header (headerMarkup: the counts by status, district and zone, the two-tag picker, the
-// filter by issue through the commits that name it) and "Save image": a PNG of the city with the
+// holds the header (headerMarkup: the counts by status, the "changed" chip with the four shades
+// (city-release-ramp), the "renamed" one with the sign (city-release-rename-sign), by district and zone,
+// the two-tag picker, the filter by issue through the commits that name it), the base's plan notes
+// (#439, ProjectCityNotes.releaseHtml: only the plan's own problems, the files and districts that
+// did not exist yet at `from` in one muted line, city-release-missing) and "Save image": a PNG of the city with the
 // project, the release and the counts in a caption, for release notes. Close draws the project's
 // own city again. A release puts the city in its mode (#440, project-city-modes.js: "Release <from> →
-// <to>", no Live, no notes of today's plan) whose legend lists the release's colours (city.setLegend);
+// <to>", no Live, no notes of today's plan) whose legend lists the release's colours (city.setLegend; the
+// ramp's shades with the first line count of each);
 // the card is a panel (#441: data-city-panel="release", its chevron). No model call.
 // Uses app.js globals at call time: api, esc, errMsg. Browser: window.ProjectCityRelease.
 (() => {
@@ -34,8 +39,21 @@
     el.innerHTML = optionsHtml;
     return el.outerHTML;
   }
-  // the status chips: each count with its colour on the map
-  const statusColour = () => ({ added: CityRelease.ADDED_COLOUR, changed: CityRelease.CHANGE_RAMP[CityRelease.CHANGE_RAMP.length - 1], removed: GHOST, renamed: CityRelease.CHANGE_RAMP[1] });
+  // the status chips: each count with its sign on the map (#438: the ramp for changed, the rename marker for renamed)
+  const statusColour = () => ({ added: CityRelease.ADDED_COLOUR, removed: GHOST });
+  const renameSign = () => `<i class="pcr-rename" data-testid="city-release-rename-sign" style="--c:${esc(CityRelease.RENAME_COLOUR)}" aria-hidden="true"></i>`;
+  // the change ramp, lightest first; each shade says the lines it stands for (CityRelease.releaseRamp's cuts), under it in the legend
+  function rampHtml(cuts, numbers = false) {
+    const shades = CityRelease.CHANGE_RAMP.map((colour, i) => {
+      const [from, to] = (cuts || [])[i] || [];
+      const said = from == null ? '' : t('project_city_release.ramp_lines', { from, to });
+      const shade = `<i class="pcr-shade" data-testid="city-release-ramp-shade" style="--c:${esc(colour)}"${said ? ` title="${esc(said)}" aria-label="${esc(said)}"` : ''}></i>`;
+      return numbers ? `<span class="pcr-step">${shade}<small>${from ?? ''}</small></span>` : shade;
+    });
+    // spaced: the line counts read apart (flex drops the spaces on screen)
+    return `<span class="pcr-ramp" data-testid="city-release-ramp">${shades.join(' ')}</span>`;
+  }
+  const signHtml = (status, cuts, numbers) => (status === 'changed' ? rampHtml(cuts, numbers) : status === 'renamed' ? renameSign() : dot(statusColour()[status]));
 
   /** The two-tag picker; a commit typed elsewhere (a project without tags) stays selectable. */
   function pickerMarkup(tags, from, to) {
@@ -48,10 +66,10 @@
 
   /** The release's header: the project, the two-tag picker, the counts by status, district and zone, the issue filter, Save image. */
   function headerMarkup(view) {
-    const { project = '', from = null, to = null, header = {}, tags = [], issues = [], issue = null } = view || {};
+    const { project = '', from = null, to = null, header = {}, tags = [], issues = [], issue = null, cuts = [] } = view || {};
     const counts = header.counts || {};
     const chips = ['added', 'changed', 'renamed', 'removed'].filter((s) => counts[s] > 0)
-      .map((s) => `<span class="pcr-count" data-testid="city-release-count-${s}">${dot(statusColour()[s])}${counts[s]} ${s}</span>`).join(' ');
+      .map((s) => `<span class="pcr-count" data-testid="city-release-count-${s}">${signHtml(s, cuts)}${counts[s]} ${s}</span>`).join(' ');
     return `<div class="pci-header" data-testid="city-release-header">
       <div class="pci-title"><span title="${esc(project)}">${esc(project)}</span></div>
       ${pickerMarkup(tags, from, to)}
@@ -114,6 +132,7 @@
     let header = null;
     let error = null;
     let note = '';
+    let missingOpen = false; // #439: the list of what did not exist yet, open across redraws
     let layered = false;
     let seq = 0;
     let destroyed = false;
@@ -145,10 +164,9 @@
       onLeave: close,
     });
 
-    // the legend's rows: the colours the release paints (added, the change ramp, renamed, removed as ghosts)
-    function legendHtml(counts) {
-      const ramp = `<i class="pcr-ramp" style="--ramp:linear-gradient(90deg, ${esc(CityRelease.CHANGE_RAMP.join(', '))})"></i>`;
-      const rows = STATUSES.filter((s) => counts[s] > 0).map((s) => `<li>${s === 'changed' ? ramp : dot(statusColour()[s])}<span>${t(LEGEND_LABEL[s])}</span><small>${counts[s]}</small></li>`);
+    // the legend's rows: the colours the release paints (added, the change ramp with its cut points, the rename sign, removed as ghosts)
+    function legendHtml(counts, cuts) {
+      const rows = STATUSES.filter((s) => counts[s] > 0).map((s) => `<li>${signHtml(s, cuts, true)} <span>${t(LEGEND_LABEL[s])}</span> <small>${counts[s]}</small></li>`);
       return rows.length ? `<b>${t('project_city_release.changes')}</b><ul>${rows.join('')}</ul>` : null;
     }
 
@@ -180,11 +198,18 @@
       if (!city.layout || city.model !== applied) { el.innerHTML = body(`<p class="muted small">${t('project_city_release.laying_out_the_city_at_from', { from: esc(data.from) })}</p>`); return; }
       const list = changes();
       const overlay = CityRelease.releaseOverlay(list);
+      const { cuts } = CityRelease.releaseRamp(list);
       header = CityRelease.releaseHeader(city.layout, list);
-      ProjectCity.overlay(LAYER, { highlight: overlay.highlight, markers: overlay.ghosts.map((p) => ({ path: p, colour: GHOST, label: 'removed' })) });
+      const markers = [
+        ...overlay.ghosts.map((p) => ({ path: p, colour: GHOST, label: 'removed' })),
+        ...overlay.renamed.map((p) => ({ path: p, colour: CityRelease.RENAME_COLOUR, label: 'renamed' })),
+      ];
+      ProjectCity.overlay(LAYER, { highlight: overlay.highlight, markers });
       layered = true;
-      city.setLegend?.(LAYER, legendHtml(header.counts || {}));
-      el.innerHTML = body(`${headerMarkup({ project: projectName(), from: data.from, to: data.to, header, tags: data.tags || [], issues: issuesOf(), issue })}${note ? `<p class="muted small" role="status">${esc(note)}</p>` : ''}`);
+      city.setLegend?.(LAYER, legendHtml(header.counts || {}, cuts));
+      // #439: the base's validation of today's plan without what arrived after the release
+      const plan = window.ProjectCityNotes?.releaseHtml({ validation: data.base?.validation, from: data.from, plan: data.plan, open: missingOpen }) || '';
+      el.innerHTML = body(`${headerMarkup({ project: projectName(), from: data.from, to: data.to, header, tags: data.tags || [], issues: issuesOf(), issue, cuts })}${plan}${note ? `<p class="muted small" role="status">${esc(note)}</p>` : ''}`);
     }
 
     function stateText(d) {
@@ -201,6 +226,7 @@
       data = null;
       error = null;
       note = '';
+      missingOpen = false;
       issue = req.issue ?? null;
       // #440: the release's mode replaces the one on screen before its city is drawn (no notes of today's plan on it)
       enterMode();
@@ -251,6 +277,13 @@
         show({ from, to });
       }
     });
+    // <details> toggles do not bubble: caught on the way down, aria-expanded follows
+    el.addEventListener('toggle', (e) => {
+      const d = e.target;
+      if (!d.matches?.('[data-testid="city-release-missing"]')) return;
+      missingOpen = !!d.open;
+      d.querySelector('summary')?.setAttribute('aria-expanded', String(missingOpen));
+    }, true);
     const offLayout = city.onLayout(() => {
       // another city drawn (the tab read the project's again): the release is gone from the map
       if (request && applied && city.model !== applied) { seq++; request = null; data = null; applied = null; city.leaveMode?.(); }

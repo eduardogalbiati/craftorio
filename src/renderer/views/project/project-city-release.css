@@ -5,3 +5,14 @@
 .pcr-picker select, .pcr-actions select { max-width: 120px; font-family: var(--mono); }
 .pcr-counts { display: flex; flex-wrap: wrap; gap: 10px; margin: 0; font-size: 13px; color: var(--r3d-ink); }
 .pcr-count { display: inline-flex; align-items: center; gap: 6px; }
+/* #438: the change ramp (four shades, lightest first) and the rename sign (a ring: no ramp shade) */
+.pcr-ramp { display: inline-flex; align-items: flex-start; gap: 2px; flex: none; }
+.pcr-shade { display: inline-block; width: 8px; height: 10px; border-radius: 2px; background: var(--c); }
+.pcr-step { display: inline-flex; flex-direction: column; align-items: center; gap: 2px; min-width: 24px; }
+.pcr-step .pcr-shade { width: 100%; height: 8px; }
+.pcr-rename { display: inline-block; box-sizing: border-box; width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--c); background: transparent; flex: none; }
+/* #439: what did not exist yet at the release, one muted line over its folded list */
+.pcr-missing { margin: 0; }
+.pcr-missing summary { cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pcr-missing summary:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.pcr-missing ul { margin: 6px 0 0; padding-left: 16px; font-family: var(--mono); }
