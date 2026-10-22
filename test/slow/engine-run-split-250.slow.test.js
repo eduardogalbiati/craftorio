@@ -8,7 +8,8 @@
 // The baseline test/fixtures/events-ai-development-local-hero-250.json was recorded on the base
 // commit (a4dd9ab) with this same run (two runs, identical; 182 events), then follows one intended
 // move from #387 (3732ed2): the developer of this workflow loads design-system, so its "skill
-// loaded" log comes in develop instead of code_review. Its _comment says the same.
+// loaded" log comes in develop instead of code_review; #465 adds the machine steps' step.log
+// events (red_check, suite). Its _comment says the same.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');

@@ -1,13 +1,14 @@
 {
-  "_comment": "#250 baseline, reshaped by #323 (test/run-event-lanes.js): recorded on a4dd9ab (two runs, identical), then one intended move from #387 (3732ed2): the developer loads design-system, so its 'skill loaded' log is one more in develop#1 run and one less in code_review#1 run; then #418: merge-conflict-resolver loads on resolve_merge only, so develop#1 run has one 'skill loaded' log less (181 events).",
+  "_comment": "#250 baseline, reshaped by #323 (test/run-event-lanes.js): recorded on a4dd9ab (two runs, identical), then one intended move from #387 (3732ed2): the developer loads design-system, so its 'skill loaded' log is one more in develop#1 run and one less in code_review#1 run; then #418: merge-conflict-resolver loads on resolve_merge only, so develop#1 run has one 'skill loaded' log less (181 events); then #465: a machine step announces its log with step.log, once in red_check and twice in suite (focused round, then the whole suite) (184 events).",
   "status": "success",
-  "count": 181,
+  "count": 184,
   "steps": [
     "workflow.started",
     "step.started acceptance_tests",
     "step.finished acceptance_tests",
     "step.transition acceptance_tests>red_check",
     "step.started red_check",
+    "step.log red_check",
     "step.finished red_check",
     "step.transition red_check>warm_up",
     "step.started warm_up",
@@ -23,6 +24,8 @@
     "step.finished code_review",
     "step.transition code_review>suite",
     "step.started suite",
+    "step.log suite",
+    "step.log suite",
     "step.finished suite",
     "step.transition suite>build",
     "step.started build",
@@ -74,6 +77,7 @@
     ],
     "red_check#1 run": [
       "step.started red_check",
+      "step.log red_check",
       "file.saved red_check",
       "log red_check",
       "step.finished red_check",
@@ -177,7 +181,9 @@
     "suite#1 run": [
       "step.started suite",
       "log suite",
+      "step.log suite",
       "file.saved suite",
+      "step.log suite",
       "file.saved suite",
       "log suite",
       "step.finished suite",
