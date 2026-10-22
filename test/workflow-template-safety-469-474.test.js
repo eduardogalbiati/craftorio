@@ -101,6 +101,12 @@ test('#469 a ship.build interpolating an agent step\'s plain text output is refu
   assert.match(err, /build|ship/);
 });
 
+// release.tag is the rendered ship.tag: agent text put there must not reach the build's shell unquoted
+test('#469 a ship.build reading release.tag is refused at load when ship.tag holds an agent step\'s plain text', (t) => {
+  const err = errorOf(t, workflow({ transition: '        ship: { tag: "{{ steps.x.output.text }}", build: "echo {{ release.tag }}" }\n' }));
+  assert.notEqual(err, null, 'agent text must not reach the build through release.tag');
+});
+
 test('#469 an action with an integer schema-typed output and the github_repo / pr_url filters still loads', (t) => {
   const action = 'gh pr merge {{ steps.ci.output.pr_number }} --repo {{ steps.ci.output.pr_url | github_repo }} --squash'
     + ' && node publish.js --pr-url {{ steps.ci.output.pr_url | pr_url }}';
