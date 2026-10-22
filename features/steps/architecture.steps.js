@@ -64,6 +64,14 @@
 //   many went ("Sent 3 findings to the Refactor tab"). The quality gate "architecture-gate" is one row
 //   of "architecture-gate-chip"; "architecture-limits" is hidden until the ⓘ button
 //   "architecture-caveats" is clicked.
+// - Send to Refactor waits for the owner's OK (#435, #447): after the click "architecture-send-refactor"
+//   stays a <button class="btn sm">, disabled, its text "Sent to Refactor", its title (tooltip) naming
+//   the issue (#<n>) and the stage (stage <m>, waiting for your OK), at the same place and size; next
+//   to it, in the same finding line, the link data-testid="architecture-refactor-where" ("#432 · stage
+//   117, waiting for your OK"). The finding's new/kept badge is data-testid="architecture-finding-status"
+//   (in the interface language). The Refactor tab's row shows data-testid="refactor-proposal-where" with
+//   the same words. The roadmap's waiting stage is the last "roadmap-stage", data-disabled="true" with
+//   its "roadmap-stage-disabled" badge, its "Stage name" input "Refactor (waiting for your OK)".
 //
 // The git project is seeded in the scenario's scratch folder after the app opened (like app.steps.js's
 // second project): a repository on main with a .js and a .py file and three commits, the project
@@ -1233,4 +1241,112 @@ When('I bring the city legend back with its {string} button', async ({ e2e }, la
 Then('the city shows no {string} button for the legend', async ({ e2e }, label) => {
   await expect(cityLegend(e2e.window)).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(visible(e2e.window.getByTestId('city-legend-open')), `no "${label}" button`).toHaveCount(0);
+});
+
+// --- Send to Refactor waits for the owner's OK (#435, #447) ---
+
+// "#432 · stage 117, waiting for your OK": the issue, the stage, and that it waits for the owner
+const WHERE = /#\d+\s*·\s*stage\s+\d+\s*,\s*waiting for your OK/i;
+const ISSUE_REF = /#\d+/;
+const STAGE_WAITING = /stage\s+\d+[^]*waiting for your OK/i;
+// the place and size of a finding's Send to Refactor button before the click, per scenario
+const notedBoxes = new WeakMap();
+const sendButtonOf = (page, title) => findingRow(page, title).getByTestId('architecture-send-refactor');
+
+When('I note the place and size of the Send to Refactor button of the finding {string}', async ({ e2e }, title) => {
+  const button = sendButtonOf(e2e.window, title);
+  await expect(button).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(button).toBeEnabled();
+  await expect(button).toHaveText(/^\s*Send to Refactor\s*$/);
+  if (!notedBoxes.has(e2e)) notedBoxes.set(e2e, new Map());
+  notedBoxes.get(e2e).set(title, await button.boundingBox());
+});
+
+Then('the Send to Refactor button of the finding {string} is the same small button, disabled, reading {string}, in the same place and size', async ({ e2e }, title, text) => {
+  const button = sendButtonOf(e2e.window, title);
+  await expect(button).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(button, 'still a button, not a badge').toHaveRole('button');
+  await expect(button).toHaveClass(/(^|\s)btn(\s|$)/);
+  await expect(button).toHaveClass(/(^|\s)sm(\s|$)/);
+  await expect(button).toBeDisabled({ timeout: LOAD_TIMEOUT });
+  await expect(button).toHaveText(new RegExp(`^\\s*${escapeRe(text)}\\s*$`));
+  const before = notedBoxes.get(e2e)?.get(title);
+  expect(before, `the place and size of the button of "${title}" noted before the click`).toBeTruthy();
+  const after = await button.boundingBox();
+  expect(Math.abs(after.x - before.x), 'the same left edge').toBeLessThanOrEqual(2);
+  expect(Math.abs(after.y - before.y), 'the same top edge').toBeLessThanOrEqual(2);
+  expect(Math.abs(after.height - before.height), 'the same height').toBeLessThanOrEqual(2);
+  // "Send" and "Sent" differ by one letter: the width stays within a few pixels
+  expect(Math.abs(after.width - before.width), 'the same width').toBeLessThanOrEqual(Math.max(6, before.width * 0.1));
+});
+
+Then('the Send to Refactor button of the finding {string} has a tooltip naming its issue and a stage waiting for your OK', async ({ e2e }, title) => {
+  const button = sendButtonOf(e2e.window, title);
+  await expect(button).toHaveAttribute('title', ISSUE_REF, { timeout: LOAD_TIMEOUT });
+  await expect(button).toHaveAttribute('title', STAGE_WAITING);
+});
+
+Then('next to the Send to Refactor button of the finding {string} a link names its issue and a stage waiting for your OK', async ({ e2e }, title) => {
+  const row = findingRow(e2e.window, title);
+  const button = row.getByTestId('architecture-send-refactor');
+  const where = row.getByTestId('architecture-refactor-where');
+  await expect(where).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(where).toHaveRole('link');
+  await expect(where).toHaveText(WHERE);
+  // on the button's line, right beside it
+  const b = await button.boundingBox();
+  const w = await where.boundingBox();
+  expect(w.y < b.y + b.height && b.y < w.y + w.height, 'the link is on the button\'s line').toBe(true);
+  const gap = w.x >= b.x ? w.x - (b.x + b.width) : b.x - (w.x + w.width);
+  expect(gap, 'the link sits next to the button').toBeLessThanOrEqual(24);
+});
+
+Then('the Refactor proposal {string} names its issue and a stage waiting for your OK', async ({ e2e }, title) => {
+  const refactorTab = projectPage(e2e.window).locator('#project-panel-refactor');
+  const row = visible(refactorTab.getByTestId('refactor-proposal')).filter({ hasText: title }).first();
+  await expect(row).toBeVisible({ timeout: LOAD_TIMEOUT });
+  const where = row.getByTestId('refactor-proposal-where');
+  await expect(where).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(where).toHaveText(WHERE);
+});
+
+Then('the roadmap\'s last stage comes after {string}, is disabled, is named like {string} and holds {string}', async ({ e2e }, earlier, name, item) => {
+  const page = e2e.window;
+  const stages = page.getByTestId('roadmap-stage');
+  await expect(stages.first()).toBeVisible({ timeout: LOAD_TIMEOUT });
+  const names = async () => stages.evaluateAll((els) => els.map((el) => el.querySelector('input')?.value || ''));
+  await expect.poll(async () => (await names()).at(-1), { timeout: LOAD_TIMEOUT, message: 'the last stage\'s name' }).toBe(name);
+  const all = await names();
+  expect(all.indexOf(earlier), `the stage "${earlier}"`).toBeGreaterThanOrEqual(0);
+  expect(all.indexOf(earlier), `"${earlier}" comes before the waiting stage`).toBeLessThan(all.length - 1);
+  const last = stages.last();
+  await expect(last).toHaveAttribute('data-disabled', 'true');
+  await expect(last.getByTestId('roadmap-stage-disabled')).toHaveText('Disabled');
+  await expect(last.getByTestId('roadmap-item').filter({ hasText: item })).toHaveCount(1);
+});
+
+// Two reports: the earlier one with the `kept` finding only, the later one (a minute ago) with the
+// `kept` finding and the `added` one, so the later shows them "kept" and "new" (compareReports)
+Given('the workspace has a git project {string} with a JavaScript and a Python file and two saved architecture reports, the later one keeping {string} and adding {string}', async ({ e2e }, name, kept, added) => {
+  const pick = (title) => {
+    const f = SEVERITY_FINDINGS.find((x) => x.title === title);
+    if (!f) throw new Error(`no seeded finding "${title}" (known: ${SEVERITY_FINDINGS.map((x) => x.title).join(', ')})`);
+    return f;
+  };
+  await seedGitProject(e2e, name, { withReport: true, findings: [pick(kept), pick(added)] });
+  const projects = require(path.join(root, 'src', 'projects'));
+  const project = projects.listProjects(path.join(e2e.scratch, 'workspace', 'projects')).find((p) => p.name === name);
+  const dir = path.join(e2e.scratch, 'workspace', 'architecture', project.id);
+  const later = JSON.parse(fs.readFileSync(path.join(dir, fs.readdirSync(dir).find((f) => f.endsWith('.json') && f !== 'city-plan.json')), 'utf8'));
+  const date = new Date(Date.parse(later.date) - 3600e3).toISOString();
+  const earlier = { ...later, id: date.replace(/[:.]/g, '-'), date, report: { ...later.report, findings: [pick(kept)] } };
+  fs.writeFileSync(path.join(dir, `${earlier.id}.json`), JSON.stringify(earlier, null, 2));
+  await e2e.window.reload();
+  await e2e.window.waitForLoadState('domcontentloaded');
+});
+
+Then('the status badge of the finding {string} reads {string}', async ({ e2e }, title, text) => {
+  const badge = findingRow(e2e.window, title).getByTestId('architecture-finding-status');
+  await expect(badge).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(badge).toHaveText(new RegExp(`^\\s*${escapeRe(text)}\\s*$`, 'i'));
 });

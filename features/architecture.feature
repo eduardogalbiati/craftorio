@@ -612,3 +612,55 @@ Feature: A project's Architecture tab tells the owner where the code hurts and w
     And I click "Show on the map" on the release "1.1.2"
     Then the city is in the "Release" mode titled "Release 1.1.1 → 1.1.2"
     And the city's "Release" panel shows only its title row
+
+  # Send to Refactor waits for the owner's OK (#435, #447): the click files an issue and plans it in a
+  # disabled stage at the end of the roadmap, named like "Refactor (waiting for your OK)". The button
+  # stays where it was, the same `btn sm` button, disabled, reading "Sent to Refactor", its tooltip
+  # saying where it went; next to it a link names the issue and the stage ("#432 · stage 117, waiting
+  # for your OK"). The Refactor tab says the same per proposal. The backlog issue gives the project a
+  # synced GitHub backlog; in simulation the issue is never filed with gh. The new/kept badges follow
+  # the interface language.
+  @issue-435 @issue-447
+  Scenario: A finding sent to Refactor keeps a disabled "Sent to Refactor" button in place and links its issue and waiting stage
+    Given the app is open
+    And the workspace has a git project "billing-service" with a JavaScript and a Python file and a saved architecture report with high, medium and low findings
+    And the backlog of "billing-service" has the open issue "Change the discount rule" whose body cites "src/billing.js"
+    When I open "Projects" in the sidebar
+    And I open the project "billing-service" from the Projects screen
+    And I open the "Architecture" project tab
+    And I note the place and size of the Send to Refactor button of the finding "Billing module changes in every commit"
+    And I send the finding "Billing module changes in every commit" to Refactor
+    Then the Send to Refactor button of the finding "Billing module changes in every commit" is the same small button, disabled, reading "Sent to Refactor", in the same place and size
+    And the Send to Refactor button of the finding "Billing module changes in every commit" has a tooltip naming its issue and a stage waiting for your OK
+    And next to the Send to Refactor button of the finding "Billing module changes in every commit" a link names its issue and a stage waiting for your OK
+
+  @issue-435
+  Scenario: The sent finding waits in a disabled refactor stage at the end of the roadmap, and the Refactor tab says where it went
+    Given the app is open
+    And the workspace has a git project "billing-service" with a JavaScript and a Python file and a saved architecture report with high, medium and low findings
+    And the backlog of "billing-service" has the open issue "Change the discount rule" whose body cites "src/billing.js"
+    And the backlog of "billing-service" has the open issue "Round the export totals" whose body cites "tools/export.py"
+    And the roadmap of "billing-service" has the planned stage "Billing fixes" with the items "Change the discount rule" and "Round the export totals"
+    When I open "Projects" in the sidebar
+    And I open the project "billing-service" from the Projects screen
+    And I open the "Architecture" project tab
+    And I send the finding "Billing module changes in every commit" to Refactor
+    And I open the "Refactor" project tab
+    Then the Refactor proposal "Billing module changes in every commit" names its issue and a stage waiting for your OK
+    When I open "Backlog" in the sidebar
+    And I choose the project "billing-service" in the header
+    And I open the Roadmap
+    Then the roadmap's last stage comes after "Billing fixes", is disabled, is named like "Refactor (waiting for your OK)" and holds "Billing module changes in every commit"
+
+  @issue-447
+  Scenario: In Português (Brasil) the findings' new and kept badges read "novo" and "mantido"
+    Given the app is open
+    And the workspace has a git project "billing-service" with a JavaScript and a Python file and two saved architecture reports, the later one keeping "Discount rule duplicated in the API and the export" and adding "Billing module changes in every commit"
+    When I open "Settings" in the sidebar
+    And I open the "General" settings tab
+    And I choose "Português (Brasil)" as the "Interface" language
+    And I open "Projetos" in the sidebar
+    And I open the project "billing-service" from the Projects screen
+    And I open the "Arquitetura" project tab
+    Then the status badge of the finding "Billing module changes in every commit" reads "novo"
+    And the status badge of the finding "Discount rule duplicated in the API and the export" reads "mantido"
