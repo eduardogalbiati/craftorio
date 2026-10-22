@@ -52,7 +52,7 @@
     if (!cur) return;
     const { opener } = cur;
     teardown();
-    if (opener?.isConnected && typeof opener.focus === 'function') opener.focus();
+    if (opener?.isConnected && typeof opener.focus === 'function') opener.focus({ preventScroll: true });
   }
 
   /** Opens (or keeps) the modal on project `projectId`'s city → { city, agents, connections, impact, release }. */
@@ -107,7 +107,7 @@
       // must not cover the screen they opened
       else if (cur === mine && e.target.closest('[data-pca-run], [data-pcm-link]')) close();
     });
-    el.querySelector('[data-city-modal-close]').focus();
+    el.querySelector('[data-city-modal-close]').focus({ preventScroll: true });
     return cur;
   }
 
