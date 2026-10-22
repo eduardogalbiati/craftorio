@@ -132,7 +132,7 @@ function makeService(t, hostExtra = {}) {
     await untilIdle(service);
     service.shutdown();
   });
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
+  t.after(() => removeHeldDir(dir));
   t.after(() => fs.rmSync(cliHome, { recursive: true, force: true }));
   service.setWorkspace(setupWorkspace(dir, { persist: false }));
   fs.writeFileSync(path.join(service.workspace().workflows, 'fixture-service.yaml'), WORKFLOW);
@@ -143,6 +143,18 @@ function makeResumeService(t) {
   const { service, api } = makeService(t);
   fs.writeFileSync(path.join(service.workspace().workflows, 'fixture-resume.yaml'), RESUME_WORKFLOW);
   return { service, api };
+}
+
+// #452: a local preview runs in the repository (and its scratch workspace); a killed cmd.exe can hold
+// the folder for seconds on Windows (EPERM), longer than rmSync's own maxRetries waited under coverage.
+// Retries up to ~10 s, then throws the last error.
+async function removeHeldDir(dir) {
+  for (let i = 0; ; i++) {
+    try { fs.rmSync(dir, { recursive: true, force: true }); return; } catch (e) {
+      if (i >= 100 || !['EPERM', 'EBUSY', 'ENOTEMPTY'].includes(e.code)) throw e;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+  }
 }
 
 async function until(fn) { for (let i = 0; i < 200 && !fn(); i++) await new Promise((r) => setTimeout(r, 50)); assert.ok(fn()); }
@@ -180,8 +192,7 @@ function watchRuns(service) {
 // A throwaway repository with two commits: `base` is the first one, HEAD (a.txt gains a line) is the second.
 function gitRepo(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'svc-git-'));
-  // #452: a local preview runs here; its killed cmd.exe can still hold the folder for a moment (EPERM on Windows)
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
+  t.after(() => removeHeldDir(dir));
   const cfgDir = fs.mkdtempSync(path.join(os.tmpdir(), 'svc-gitcfg-'));
   t.after(() => fs.rmSync(cfgDir, { recursive: true, force: true }));
   const cfg = path.join(cfgDir, 'config');
