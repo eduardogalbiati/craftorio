@@ -104,3 +104,38 @@ Feature: Releases
     And I pick "1.1.0" as the earlier tag of the release comparison
     Then the city release header compares "1.1.0" to "1.1.2"
     And the city release header counts 2 added, 0 changed and 0 removed
+
+  # #436: the release name is picked with the recent releases in view and a suggested version. The
+  # demo project gets four shipped releases (see features/steps/releases.steps.js); stage 3 of the demo
+  # roadmap ("Reports and health") has no cut line yet. The suggestion depends on what the next release
+  # holds, so the scenarios check it is one bump of 1.1.2 whose reason names that bump.
+
+  @issue-436
+  Scenario: The cut line dialog shows the last three releases, and Suggest version fills the name without closing it
+    Given the app is open
+    And the project shipped these releases:
+      | version | date       | issues |
+      | 1.0.0   | 2026-09-01 | 2      |
+      | 1.1.0   | 2026-09-20 | 5      |
+      | 1.1.1   | 2026-10-02 | 3      |
+      | 1.1.2   | 2026-10-13 | 4      |
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    And I open the stage actions menu of stage 3
+    And I choose "Release here" in the stage actions menu
+    Then the cut line dialog shows the recent releases "1.1.2 · 2026-10-13 · 4 issues", "1.1.1 · 2026-10-02 · 3 issues" and "1.1.0 · 2026-09-20 · 5 issues" above the "Release name" field
+    And the cut line dialog does not list the release "1.0.0"
+    When I click "Suggest version" in the cut line dialog
+    Then the "Release name" field holds the version suggested after "1.1.2", with the reason
+    And the cut line dialog is still open
+
+  @issue-436
+  Scenario: Suggest version on the Releases screen fills the version field, saying why
+    Given the app is open
+    And the project shipped these releases:
+      | version | date       | issues |
+      | 1.1.1   | 2026-10-02 | 3      |
+      | 1.1.2   | 2026-10-13 | 4      |
+    When I open "Releases" in the sidebar
+    And I click "Suggest version" next to the release version
+    Then the release version holds the version suggested after "1.1.2", with the reason

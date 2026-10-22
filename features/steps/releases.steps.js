@@ -1,7 +1,8 @@
 // Steps of features/releases.feature (#260): a cut line drawn on the Roadmap between two stages
 // ("Release here", a name), the Releases screen (Code & Build › Releases: the shipped releases and
 // the next one, its notes editable before Ship), the release run's human-only Ship gate (Ship or
-// Hold). Locators are roles and data-testid only (skills/ui-conventions).
+// Hold), the recent releases and "Suggest version" in the cut line dialog and on the Releases screen
+// (#436). Locators are roles and data-testid only (skills/ui-conventions).
 
 const fs = require('fs');
 const path = require('path');
@@ -257,4 +258,93 @@ When('I open the release summary of the release {string}', async ({ e2e }, versi
 
 Then('the release summary shows {string}, {string}, {string} and {string}', async ({ e2e }, a, b, c, d) => {
   await expectReleaseSummary(e2e.window.getByTestId('release-summary').filter({ visible: true }).first(), [a, b, c, d]);
+});
+
+// ---- #436: the recent releases and "Suggest version" ---------------------------------------------
+// What the screens expose (new for #436), in the cut line dialog ("Release here" on the Roadmap) and
+// next to the Releases screen's version field (#rel-version, label "Version"):
+// - data-testid="recent-releases": the last three shipped releases as text, newest first, one per line
+//   ("1.1.2 · 2026-10-13 · 4 issues"), above the field; "No release yet" without any;
+// - data-testid="suggest-version": a button "Suggest version" (type="button": it never submits) that
+//   fills the field with the recommended next version;
+// - data-testid="suggest-version-reason": the line under the field saying why ("Minor: 6 enhancements
+//   and 3 bugs since 1.1.2").
+// Assumption: the suggestion is one bump of the latest shipped version (patch, minor or major, a "v"
+// prefix allowed), and its reason starts with that bump's name and names the version it follows.
+
+const cutLineDialog = (page) => page.getByRole('dialog').filter({ has: page.getByRole('textbox', { name: 'Release name', exact: true }) });
+const releaseVersionField = (page) => nextRelease(page).getByRole('textbox', { name: 'Version', exact: true });
+
+// The project's release history (the file of #260, <workspace>/releases/<projectId>.json): one shipped
+// release per row (version, date YYYY-MM-DD, issues: how many), replacing the history; the app reloads.
+Given('the project shipped these releases:', async ({ e2e }, table) => {
+  const releases = table.hashes().map((row, k) => ({
+    version: row.version, tag: row.version, date: `${row.date}T12:00:00.000Z`, base: 'main',
+    issues: Array.from({ length: Number(row.issues) }, (_, i) => ({ number: 500 + k * 20 + i, title: `Shipped change ${k + 1}.${i + 1}` })),
+    runs: [`${row.date.replace(/-/g, '')}-120000-rel${String(k).padStart(5, '0')}`], cost: 2.5,
+    tests: { unit: { status: 'pass', passed: 412, failed: 0 }, e2e: { status: 'pass', passed: 37, failed: 0 } },
+    notes: `# ${row.version}`, status: 'shipped',
+  }));
+  const dir = path.join(e2e.scratch, 'workspace', 'releases');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, `${e2e.project.id}.json`), JSON.stringify({ releases, next: { notes: '' } }, null, 2));
+  await e2e.window.reload();
+  await e2e.window.waitForLoadState('domcontentloaded');
+});
+
+Then('the cut line dialog shows the recent releases {string}, {string} and {string} above the {string} field', async ({ e2e }, a, b, c, label) => {
+  const dialog = cutLineDialog(e2e.window);
+  await expect(dialog).toBeVisible();
+  const recent = dialog.getByTestId('recent-releases');
+  await expect(recent).toBeVisible();
+  const text = (await recent.innerText()).replace(/\s+/g, ' ');
+  const at = [a, b, c].map((line) => text.indexOf(line));
+  expect(at.every((i) => i >= 0), `the recent releases read ${a}, ${b} and ${c}: "${text}"`).toBe(true);
+  expect(at[0] < at[1] && at[1] < at[2], `newest first: "${text}"`).toBe(true);
+  const box = await recent.boundingBox();
+  const field = await dialog.getByRole('textbox', { name: label, exact: true }).boundingBox();
+  expect(box.y + box.height, `the recent releases end above the "${label}" field`).toBeLessThanOrEqual(field.y + 1);
+});
+
+Then('the cut line dialog does not list the release {string}', async ({ e2e }, version) => {
+  await expect(cutLineDialog(e2e.window).getByTestId('recent-releases')).not.toContainText(new RegExp(`(^|\\s)${escapeRe(version)} ·`));
+});
+
+When('I click {string} in the cut line dialog', async ({ e2e }, name) => {
+  const button = cutLineDialog(e2e.window).getByRole('button', { name, exact: true });
+  if (name === 'Suggest version') await expect(button).toHaveAttribute('data-testid', 'suggest-version');
+  await button.click();
+});
+
+When('I click {string} next to the release version', async ({ e2e }, name) => {
+  const button = nextRelease(e2e.window).getByRole('button', { name, exact: true });
+  await expect(button).toBeVisible();
+  if (name === 'Suggest version') await expect(button).toHaveAttribute('data-testid', 'suggest-version');
+  await button.click();
+});
+
+// one bump of `previous` (x.y.z): patch, minor or major, and the reason names that bump and `previous`
+async function expectSuggestion(field, reason, previous) {
+  const [M, m, p] = previous.split('.').map(Number);
+  const bumps = { Patch: `${M}.${m}.${p + 1}`, Minor: `${M}.${m + 1}.0`, Major: `${M + 1}.0.0` };
+  await expect(field).toHaveValue(new RegExp(`^v?(${Object.values(bumps).map(escapeRe).join('|')})$`));
+  const value = (await field.inputValue()).replace(/^v/, '');
+  await expect(reason).toBeVisible();
+  const kind = Object.keys(bumps).find((k) => bumps[k] === value);
+  await expect(reason).toContainText(new RegExp(`^\\s*${kind}\\b`));
+  await expect(reason).toContainText(`since ${previous}`);
+}
+
+Then('the {string} field holds the version suggested after {string}, with the reason', async ({ e2e }, label, previous) => {
+  const dialog = cutLineDialog(e2e.window);
+  await expectSuggestion(dialog.getByRole('textbox', { name: label, exact: true }), dialog.getByTestId('suggest-version-reason'), previous);
+});
+
+Then('the cut line dialog is still open', async ({ e2e }) => {
+  await expect(cutLineDialog(e2e.window)).toBeVisible();
+});
+
+Then('the release version holds the version suggested after {string}, with the reason', async ({ e2e }, previous) => {
+  const page = e2e.window;
+  await expectSuggestion(releaseVersionField(page), nextRelease(page).getByTestId('suggest-version-reason'), previous);
 });

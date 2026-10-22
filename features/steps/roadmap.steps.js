@@ -6,7 +6,8 @@
 // stage actions menu (#282), disabling a stage (#284), no "Update the app after this" control (#285),
 // the shipped releases' blocks, version lines and Releases filter (#291), the bar's Pause menu ("Pause
 // after this stage" / "Pause now", the pausing badge and Cancel pause, #391), "Move on" past an item at
-// a human gate, its parked card and "Move on from this stage" (#395), on the demo roadmap (scripts/screenshot.js
+// a human gate, its parked card and "Move on from this stage" (#395), "Run later" / "Run earlier" past the
+// stages Planned hides (#426), on the demo roadmap (scripts/screenshot.js
 // demoRoadmap / demoRoadmapRuns). Locators are roles and data-testid only (skills/ui-conventions).
 //
 // What the screens expose (the renderer's contract for these steps):
@@ -1154,4 +1155,59 @@ Then('the roadmap refuses to move on while an agent turn is running, pointing to
   await expect(refusal).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(refusal).toContainText(/agent turn/i);
   await expect(refusal).toContainText(action);
+});
+
+// ---- #426: "Run later" / "Run earlier" pass the stages Planned hides ------------------------------------
+// Planned draws only the stages with open work (visibleStages): a finished stage is hidden. "↓ Run later"
+// / "↑ Run earlier" in the stage actions menu (role="menuitem", accessible names "Run later" / "Run
+// earlier": the arrow is aria-hidden) move the stage past the next / previous drawn stage; the hidden
+// stages passed keep their order. On the lowest drawn stage, with only hidden stages after it, "Run
+// later" is enabled and moves the stage to the end. The toast (data-testid="toast", as #281) names the
+// stage's number before and after: "Moved stage 6 down · It is stage 9 now."
+
+// a stage whose only item is a copy of one of tonight's done items (its run finished a few hours ago):
+// nothing open, so Planned hides it, and All (last 24 hours) draws it
+const finishedStage = (r, id, name) => {
+  const tonight = r.stages.find((s) => s.id === 'stage-tonight');
+  const done = tonight?.items.find((x) => x.status === 'done' && x.runId);
+  expect(done, 'a done item with a run in the demo stage "Tonight"').toBeTruthy();
+  return { id, name, note: '', items: [{ ...JSON.parse(JSON.stringify(done)), id: `${done.id}-${id}` }] };
+};
+
+Given('the roadmap has a finished stage {string} after stage {int}', async ({ e2e }, name, n) => {
+  editRoadmap(e2e, (r) => {
+    expect(r.stages[n - 1], `the demo roadmap's stage ${n}`).toBeTruthy();
+    r.stages.splice(n, 0, finishedStage(r, 'stage-finished-after', name));
+  });
+});
+
+Given('the roadmap ends with {int} finished stages', async ({ e2e }, count) => {
+  editRoadmap(e2e, (r) => {
+    for (let k = 1; k <= count; k += 1) r.stages.push(finishedStage(r, `stage-finished-${k}`, `Finished at the end ${k}`));
+  });
+});
+
+Then('stage {int} is not shown', async ({ e2e }, n) => {
+  const page = e2e.window;
+  await expect(page.getByTestId('roadmap-stage').first()).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(page.getByTestId('roadmap-stage').filter({ hasText: new RegExp(`\\bStage ${n}\\b`) })).toHaveCount(0);
+});
+
+// the stage's name is its editable "Stage name" field
+Then('stage {int} is the stage {string}', async ({ e2e }, n, name) => {
+  await expect(stage(e2e.window, n).getByRole('textbox', { name: 'Stage name', exact: true })).toHaveValue(name, { timeout: LOAD_TIMEOUT });
+});
+
+Then('the stage actions menu offers {string}, enabled', async ({ e2e }, name) => {
+  const entry = stageMenu(e2e.window).getByRole('menuitem', { name, exact: true });
+  await expect(entry).toBeVisible();
+  await expect(entry).toBeEnabled();
+  await expect(entry).not.toHaveAttribute('aria-disabled', 'true');
+});
+
+Then('the toast says stage {int} moved {word} and is stage {int} now', async ({ e2e }, before, direction, after) => {
+  const t = toast(e2e.window);
+  await expect(t).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(t).toContainText(`Moved stage ${before} ${direction}`);
+  await expect(t).toContainText(new RegExp(`it is stage ${after} now`, 'i'));
 });

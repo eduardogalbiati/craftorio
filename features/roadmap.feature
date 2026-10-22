@@ -662,3 +662,37 @@ Feature: Roadmap statuses, done items, filters and run timers
     Then the roadmap's item switch is on "Planned"
     And the roadmap shows the release block "v0.9"
     And the roadmap does not show the release block "v0.9.1"
+
+  # ---- #426: Run later / Run earlier pass the stages Planned hides ---------------------------------
+  # Planned hides the finished stages. The scenarios add finished stages (one item each, a copy of one
+  # of tonight's done items) to the demo roadmap: stage 3 is "Reports and health", stage 5 then "Test
+  # batch" and the last planned stage holds "Dark scrollbars in the terminal dock".
+
+  @issue-426
+  Scenario: Run later in Planned moves a stage past the next drawn stage, the hidden finished one keeping its order
+    Given the app is open
+    And the roadmap has a finished stage "Finished earlier" after stage 3
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    Then the roadmap's item switch is on "Planned"
+    And stage 4 is not shown
+    When I open the stage actions menu of stage 3
+    And I choose "Run later" in the stage actions menu
+    Then the toast says stage 3 moved down and is stage 5 now
+    And stage 5 is the stage "Reports and health"
+    And stage 4 sits between stage 2 and stage 5
+    When I switch the roadmap to "All"
+    Then stage 3 is the stage "Finished earlier"
+
+  @issue-426
+  Scenario: Run later on the lowest drawn stage, with finished stages after it, moves it to the end
+    Given the app is open
+    And the roadmap ends with 2 finished stages
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    Then stage 6 is not shown
+    When I open the stage actions menu of stage 5
+    Then the stage actions menu offers "Run later", enabled
+    When I choose "Run later" in the stage actions menu
+    Then the toast says stage 5 moved down and is stage 7 now
+    And stage 7 shows the item "Dark scrollbars in the terminal dock"

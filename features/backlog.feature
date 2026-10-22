@@ -177,3 +177,16 @@ Feature: Backlog Board and Roadmap
     And I show the alert "failed: resume to start the next issues"
     And I click "Resume" in the shown alert
     Then the alerts no longer show "failed: resume to start the next issues"
+
+  # ---- #445: a failed roadmap run leaves the plain queue alone ----------------------------------------
+  # The demo workspace's plain queue is empty and not paused; its roadmap's run of #13 ("Run reports")
+  # failed. That failure is the roadmap's, not the queue's: no "Queue: #13 failed" alert, no queue bar.
+
+  @issue-445
+  Scenario: A failed roadmap run does not pause the empty plain queue, and the Backlog shows no queue bar
+    Given the app is open
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    Then the roadmap item "Run reports" shows a run chip reading "Failed"
+    And the alerts no longer show "failed: resume to start the next issues"
+    And the Backlog shows no queue bar

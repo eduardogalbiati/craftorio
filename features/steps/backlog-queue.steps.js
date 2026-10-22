@@ -1,6 +1,7 @@
 // Steps of features/backlog.feature for the Backlog's "Queue" error alert (#422): shown when a queued
 // run failed and paused the issue queue, it offers Resume (which resumes the queue and takes the
-// alert away) and never a dismiss ×. Locators are roles and data-testid only (skills/ui-conventions).
+// alert away) and never a dismiss ×; an empty, not paused queue shows no queue bar and a failed
+// roadmap run does not pause it (#445). Locators are roles and data-testid only (skills/ui-conventions).
 //
 // What the screen exposes (the renderer's contract for these steps):
 // - #270's data-testid="page-alerts" / "page-alert" (data-level), one alert at a time, the queue's
@@ -52,6 +53,14 @@ Then('the shown alert has no {string} button', async ({ e2e }, name) => {
   await expect(alert).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(alert.getByRole('button', { name, exact: true })).toHaveCount(0);
   await expect(alert.getByRole('button', { name: '×', exact: true })).toHaveCount(0);
+});
+
+// #445: the plain queue's bar (data-testid="queue-bar", today's #bl-queue) is drawn only when the queue
+// has runs waiting, is paused, or has skipped issues to show; an empty queue that is not paused has none
+Then('the Backlog shows no queue bar', async ({ e2e }) => {
+  const page = e2e.window;
+  await expect(page.getByTestId('roadmap-item').or(page.getByTestId('backlog-list')).first()).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(page.getByTestId('queue-bar').filter({ visible: true })).toHaveCount(0);
 });
 
 Then('the alerts no longer show {string}', async ({ e2e }, text) => {
