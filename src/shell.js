@@ -9,6 +9,8 @@
 //   unchanged either way.
 // - execShim(file, args, opts, cb): the same with execFile's callback (err, stdout, stderr).
 // - cmdLine(file, args): the escaped cmd.exe command line (exported for tests).
+// - shQuote(s) / psQuote(s): a single-quoted literal for a POSIX shell (a quote inside closes,
+//   escapes and reopens it) and for PowerShell (a quote inside is doubled).
 //
 // Escaping (the scheme of cross-spawn): each argument is quoted for the child's own parser (MSVCRT:
 // backslashes before a quote and at the end doubled, quotes as \"), then every cmd.exe
@@ -33,6 +35,9 @@ function cmdLine(file, args = []) {
   return [String(file).replace(META, '^$1'), ...args.map(quoteArg)].join(' ');
 }
 
+const shQuote = (s) => `'${String(s).replace(/'/g, "'\\''")}'`;
+const psQuote = (s) => `'${String(s).replace(/'/g, "''")}'`;
+
 function runShim(file, args = [], opts = {}) {
   if (!isShim(file)) return spawn(file, args, { ...opts, shell: false });
   return spawn(cmdLine(file, args), { ...opts, shell: true });
@@ -48,5 +53,7 @@ module.exports = {
   cmdLine,
   execShim,
   isShim,
+  psQuote,
   runShim,
+  shQuote,
 };

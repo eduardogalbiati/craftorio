@@ -15,11 +15,9 @@ const path = require('path');
 const registry = require('./shared/providers');
 const { claudeAccount, claudeSignedIn } = require('./claude-auth');
 const { signInCommands } = require('./install-commands');
+const { psQuote, shQuote } = require('./shell');
 
-// a single-quoted literal: PowerShell doubles a quote inside, a POSIX shell closes and escapes it
-const quoted = (dir, platform) => (platform === 'win32'
-  ? `'${String(dir).replace(/'/g, "''")}'`
-  : `'${String(dir).replace(/'/g, "'\\''")}'`);
+const quoted = (dir, platform) => (platform === 'win32' ? psQuote(dir) : shQuote(dir));
 
 function accountLoginCommand(provider, dir, platform = process.platform) {
   const adapter = registry.resolve(provider);

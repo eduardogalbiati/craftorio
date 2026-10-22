@@ -10,6 +10,8 @@
 // the command line. No terminal found (Linux): terminalLaunch is null and externalTerminal says why,
 // so the renderer disables the button (src/renderer/term-dock.js termButtons).
 
+const { shQuote } = require('./shell');
+
 const LINUX_TERMINALS = [
   'x-terminal-emulator',
   'gnome-terminal',
@@ -32,7 +34,6 @@ function externalTerminal(opts) {
 }
 
 const winQuote = (a) => `"${String(a).replace(/"/g, '""')}"`;
-const shQuote = (a) => `'${String(a).replace(/'/g, "'\\''")}'`;
 const appleString = (s) => `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 
 // The variables of childEnv to set (or unset) in a terminal that does not inherit it.

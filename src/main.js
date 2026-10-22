@@ -35,6 +35,7 @@ const {
   terminalLaunch,
 } = require('./external-terminal');
 const { pathKey } = require('./platform-paths');
+const { psQuote } = require('./shell');
 const I18n = require('./shared/i18n');
 const { t } = I18n;
 const workspace = require('./workspace');
@@ -468,7 +469,7 @@ ipcMain.handle('clipboard:writeImage', async (_e, { path: file }) => {
 ipcMain.handle('clipboard:writeFile', async (_e, { path: file }) => {
   const found = await service.existingArtifact(file);
   if (process.platform === 'win32') {
-    const literal = `'${found.path.replace(/'/g, "''")}'`;
+    const literal = psQuote(found.path);
     await new Promise((resolve, reject) => execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `Set-Clipboard -LiteralPath ${literal}`],
       { windowsHide: true, timeout: 15000 }, (err, _out, stderr) => (err ? reject(new Error(`Could not copy the file: ${String(stderr || err.message).trim()}`)) : resolve())));
     return true;
