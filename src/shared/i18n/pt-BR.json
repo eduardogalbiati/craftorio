@@ -4337,6 +4337,8 @@
   "settings.engine.title": "Engine",
   "settings.execution.chip": "Indicador 24/7 na barra superior",
   "settings.execution.chip_help": "Mostra a fração das últimas 24 h com pelo menos uma execução ativa (verde a partir de 90%, âmbar a partir de 60%, vermelho abaixo). Um clique abre Análises › 24/7.",
+  "settings.execution.city_glow": "Brilho na cidade do projeto",
+  "settings.execution.city_glow_help": "O brilho sobre as luzes e a vinheta da cidade. Desligue em máquinas mais lentas; o botão Glow no cabeçalho da cidade ainda o liga.",
   "settings.execution.confirm_stop": "Confirmar antes de parar",
   "settings.execution.confirm_stop_help": "Pedir confirmação ao clicar em Parar.",
   "settings.execution.control": "Permitir que sessões externas controlem este app",

@@ -183,6 +183,10 @@
                   <label class="switch"><input type="checkbox" data-setting="showOccupancyChip" data-testid="setting-occupancy-chip" /><span></span></label>
                 </div>
                 <div class="s-row">
+                  <div class="s-label"><b>${t('settings.execution.city_glow')}</b><span>${t('settings.execution.city_glow_help')}</span></div>
+                  <label class="switch"><input type="checkbox" data-setting="cityGlow" data-testid="setting-city-glow" aria-label="${t('settings.execution.city_glow')}" /><span></span></label>
+                </div>
+                <div class="s-row">
                   <div class="s-label"><b>${t('settings.execution.keep_awake')}</b><span>${t('settings.execution.keep_awake_help')}</span>
                     <span class="keep-awake-line"><span class="badge keep-awake-status" data-keep-awake-status></span><span class="error small" data-keep-awake-error></span></span></div>
                   <label class="switch"><input type="checkbox" data-keep-awake-toggle aria-label="${t('settings.execution.keep_awake')}" /><span></span></label>

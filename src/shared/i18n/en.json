@@ -4337,6 +4337,8 @@
   "settings.engine.title": "Engine",
   "settings.execution.chip": "24/7 chip in the top bar",
   "settings.execution.chip_help": "Shows the share of the last 24 h with at least one run active (green from 90%, amber from 60%, red below). A click opens Analytics › 24/7.",
+  "settings.execution.city_glow": "Glow in the project city",
+  "settings.execution.city_glow_help": "The bloom over the city's lights and its vignette. Turn it off on slower machines; the Glow switch in the city's header still turns it on.",
   "settings.execution.confirm_stop": "Confirm before stopping",
   "settings.execution.confirm_stop_help": "Ask for confirmation when clicking Stop.",
   "settings.execution.control": "Allow outside sessions to control this app",

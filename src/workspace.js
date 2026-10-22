@@ -207,6 +207,9 @@ const DEFAULT_SETTINGS = {
   findingsButton: false,
   // the top bar's 24/7 chip (#188, src/renderer/occupancy-chip.js): the last 24 h occupancy
   showOccupancyChip: true,
+  // the project city's Glow (#450, src/renderer/views/project/project-city.js): the bloom over the
+  // lights and the vignette start on; off for slower machines (the header's switch still turns it on)
+  cityGlow: true,
   // warn when an agent shows no output for this long while a command it started is waiting; 0 = off
   idleWarningMinutes: 5,
   // monthly limits per provider (see src/usage.js); null = no limit

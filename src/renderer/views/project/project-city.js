@@ -26,7 +26,7 @@
 //   moves (the PR's measures); per drawn file { path, archetype, greyed } (#449); the switches and the life props shown (#450).
 //   A created city also has `model`, `setPins(paths)` (#382: the connections panel's pinned files), `onLayout(fn)` (called
 //   after a new layout; returns the unsubscribe) and `reload(answer?)` (#376: draws another answer; none reads the project's again).
-// Uses app.js globals at call time: api, esc, errMsg. Browser: window.ProjectCity.
+// Uses app.js globals at call time: api, esc, errMsg, state (its settings' cityGlow). Browser: window.ProjectCity.
 (() => {
   const BUNDLE = '../../generated/project-city.js';
   const MISSING = 'The City view is not built: run `npm run build:3d` (or `npm install`) and reload. The Facts view has the same numbers, as tables.';
@@ -94,7 +94,7 @@
     const c = {
       projectId, name, el, answer: null, loading: false, error: null, facts: null, estimate: null, analysis: null,
       colour: null, tests: true, theme: el.dataset.theme, layout: null, legend: [], handle: null, drawn: null,
-      pinned: null, hover: null, pins: [], expanded: false, seq: 0, destroyed: false, cityLife: true, glow: true,
+      pinned: null, hover: null, pins: [], expanded: false, seq: 0, destroyed: false, cityLife: true, glow: typeof state === 'undefined' || state?.settings?.cityGlow !== false,
     };
     const listeners = new Set(); // onLayout's
 

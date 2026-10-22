@@ -38,6 +38,8 @@
 // - The camera (Rig): MapControls as the run's view, the POC's home view (the whole city in the frame,
 //   clear of the HUD: fitDistance), zoom and a fly to a target; the frame loop is on demand (a frame
 //   when something moves). The floating tags (landmarks, ports) are DOM nodes moved every frame.
+//   Left alone for IDLE_MS with City life on (and motion allowed), the camera drifts slowly around
+//   what it looks at (#415's idle camera); any input stops it.
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useFrame, useThree } from '@react-three/fiber';
@@ -55,6 +57,7 @@ const Y0 = PLATE_TOP; // the buildings stand on the district plates (props.js ha
 const QUAY = 6, SHORE = 170; // the floor past the ring road, the water past the floor (the POC's quay and shore)
 const STREET = 6; // between districts (city-layout.js)
 const HOME_DIR = new THREE.Vector3(0.5, 1.15, 1).normalize(); // the home view: from the south-east, 46 degrees up
+const IDLE_MS = 20000, IDLE_TURN = 0.04, UP = new THREE.Vector3(0, 1, 0); // the idle camera: after 20 s, radians a second
 const LOD_LABELS = 0.8, LOD_DETAIL = 0.5; // shares of the home distance
 const FOV = 30;
 const DIM_MS = 220; // the fade of the buildings outside a pinned file's connections
@@ -836,7 +839,8 @@ function Rig({ layout, store, T }) {
     const distance = size.width && size.height ? fitDistance(probe, target, HOME_DIR, rect, 12) : homeOf(b, 1.6);
     return { target, distance };
   }, [b]); // eslint-disable-line react-hooks/exhaustive-deps
-  const state = useMemo(() => ({ goal: null, frames: 0, since: 0, first: false }), []);
+  const state = useMemo(() => ({ goal: null, frames: 0, since: 0, first: false, input: performance.now() }), []);
+  const motion = useMemo(moves, []);
   const controls = useMemo(() => {
     const c = new MapControls(camera, gl.domElement);
     Object.assign(c, { enableDamping: true, dampingFactor: 0.12, minDistance: 12 * (layout.scale || 1), maxDistance: home.distance * 3.2, minPolarAngle: 0.3, maxPolarAngle: 1.25, zoomSpeed: 0.8 });
@@ -855,9 +859,12 @@ function Rig({ layout, store, T }) {
   useEffect(() => {
     const onChange = () => invalidate();
     const stop = () => { state.goal = null; };
+    const touched = () => { state.input = performance.now(); };
     controls.addEventListener('change', onChange);
     gl.domElement.addEventListener('pointerdown', stop);
     gl.domElement.addEventListener('wheel', stop, { passive: true });
+    const INPUTS = ['keydown', 'pointerdown', 'pointermove', 'wheel'];
+    for (const ev of INPUTS) window.addEventListener(ev, touched, { passive: true });
     // the commands of the HUD: the home view, a zoom step, a fly to a target
     store.rig = {
       home: () => { state.goal = { target: home.target.clone(), dist: home.distance, angle: true }; invalidate(); },
@@ -872,6 +879,7 @@ function Rig({ layout, store, T }) {
       controls.removeEventListener('change', onChange);
       gl.domElement.removeEventListener('pointerdown', stop);
       gl.domElement.removeEventListener('wheel', stop);
+      for (const ev of INPUTS) window.removeEventListener(ev, touched);
       controls.dispose();
       store.rig = null;
     };
@@ -891,6 +899,11 @@ function Rig({ layout, store, T }) {
       camera.position.copy(controls.target).addScaledVector(off, d);
       if (controls.target.distanceTo(g.target) < 0.05 && Math.abs(g.dist - d) < 0.05 && (!g.angle || off.angleTo(HOME_DIR) < 0.004)) state.goal = null;
       invalidate();
+    }
+    // the idle camera: City life on keeps the frames coming, so the drift needs no frame of its own
+    if (!g && motion && store.get().cityLife && performance.now() - state.input > IDLE_MS) {
+      off.copy(camera.position).sub(controls.target).applyAxisAngle(UP, Math.min(dt, 0.1) * IDLE_TURN);
+      camera.position.copy(controls.target).add(off);
     }
     if (controls.update()) invalidate();
     // the level of detail
