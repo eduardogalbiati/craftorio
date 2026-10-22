@@ -249,6 +249,22 @@ test('#435 the cadence keeps its rule: its item is not put in the waiting stage,
   assert.equal(r.stages.indexOf(waiting[0]), r.stages.length - 1, 'the waiting stage stays last');
 });
 
+test('#435 a stage the owner saves after the waiting stage goes before it, and the next send joins the waiting stage', async (t) => {
+  const w = await setup(t);
+  const reportId = w.saveReport('2026-10-20T10:00:00.000Z', [finding('god-file', 'a.txt'), finding('god-file', 'b.txt')]);
+  await w.send(reportId, 0);
+  const stored = w.roadmap().stages;
+  const added = { name: 'Owner stage', note: '', items: [{ workflow: 'fixture-issue.yaml', number: 6, title: 'Issue 6', issues: [{ number: 6, url: URL_OF(6), title: 'Issue 6' }], status: 'planned' }] };
+  await w.api['roadmap:save']({ projectId: w.projectId, stages: [...stored, added] });
+  await w.send(reportId, 1);
+  const r = w.roadmap();
+  assert.deepEqual(r.stages.map((s) => s.name), ['Owner stage', stored[0].name]);
+  const waiting = waitingStages(r);
+  assert.equal(waiting.length, 1, 'still one waiting stage');
+  assert.equal(r.stages.indexOf(waiting[0]), 1, 'the waiting stage stays last');
+  assert.deepEqual(stageNumbers(waiting[0]), [432, 433]);
+});
+
 test('#435 unchanged: Dismiss keeps its reason on a sent proposal', async (t) => {
   const w = await setup(t);
   const reportId = w.saveReport('2026-10-20T10:00:00.000Z', [finding('god-file', 'a.txt')]);

@@ -32,6 +32,19 @@ test('placeWaiting finds a waiting stage that is no longer last', () => {
   assert.deepEqual(placeWaiting({ roadmap, files: [] }), { stage: 0, item: -1 });
 });
 
+test('placeWaiting joins the item that touches the file when the waiting stage is no longer last', () => {
+  const waiting = { ...previous.stages[1], items: [item('i2', 2, ['src/a.js']), item('i4', 4, ['src/b.js'])] };
+  const roadmap = { stages: [previous.stages[0], waiting, { id: 's3', name: 'After', items: [item('i3', 3, ['src/b.js'])] }] };
+  assert.deepEqual(placeWaiting({ roadmap, files: ['src/b.js'] }), { stage: 1, item: 1 });
+});
+
+test('a save that enables the waiting stage and adds a stage after it is kept as asked', () => {
+  const enabled = { ...previous.stages[1], disabled: false };
+  const saved = cleanStages([previous.stages[0], enabled, { name: 'New', note: '', items: [item(null, 3)] }], { previous });
+  assert.deepEqual(saved.map((s) => s.id === 's1' || s.id === 'sw' ? s.id : 'new'), ['s1', 'sw', 'new']);
+  assert.equal(!!saved[1].disabled, false);
+});
+
 test('dropWaitingSuffix removes only the waiting suffix', () => {
   assert.equal(dropWaitingSuffix(WAITING_STAGE_NAME), 'Refactor');
   assert.equal(dropWaitingSuffix('Cleanup'), 'Cleanup');
