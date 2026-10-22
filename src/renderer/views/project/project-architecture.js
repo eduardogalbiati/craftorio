@@ -78,6 +78,12 @@
     openProjectView(id, { tab: 'architecture' });
   }
 
+  /** Opens project `id`'s Architecture tab on its Facts (#430: the city modal's "Show the facts"). */
+  function openFacts(id) {
+    rememberMode('facts');
+    openProjectView(id, { tab: 'architecture' });
+  }
+
   const modeSwitch = () => {
     const b = (m, label, title) => `<button type="button" class="${mode === m ? 'active' : ''}" data-arch-mode="${m}" data-testid="architecture-mode-${m}" aria-pressed="${mode === m}" title="${title}">${label}</button>`;
     return `<div class="seg arch-mode" role="group" aria-label="${t('project_architecture.architecture_view')}">${b('facts', t('project_architecture.mode_facts'), esc(t('project_architecture.mode_facts_title')))}${b('city', t('project_architecture.mode_city'), esc(t('project_architecture.mode_city_title')))}</div>`;
@@ -623,6 +629,7 @@
     onClick,
     onRunEvent,
     openCity,
+    openFacts,
     show,
   };
 })();

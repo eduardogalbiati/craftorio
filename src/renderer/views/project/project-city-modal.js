@@ -77,8 +77,14 @@
         <button type="button" class="btn sm" data-city-modal-close data-testid="city-modal-close">${esc(t('project_city_modal.close'))}</button>
       </div><div class="city-modal-body" data-city-modal-body></div>`;
     document.body.appendChild(el);
-    // the City view without the tab's action (no onAnalyze): the overlays in the tab's order
-    const city = ProjectCity.create({ projectId, name });
+    // the City view without the tab's action (no onAnalyze): the overlays in the tab's order; "Show the
+    // facts" closes the modal, then the project's Architecture tab on its Facts
+    const toFacts = () => {
+      close();
+      if (window.ProjectArchitecture?.openFacts) window.ProjectArchitecture.openFacts(projectId);
+      else openProjectView(projectId, { tab: 'architecture' });
+    };
+    const city = ProjectCity.create({ projectId, name, onOpenFacts: toFacts });
     el.querySelector('[data-city-modal-body]').appendChild(city.el);
     cur = {
       projectId, el, city, opener,
@@ -97,6 +103,9 @@
     el.addEventListener('click', (e) => {
       if (e.target.closest('[data-city-modal-close]')) close();
       else if (e.target.closest('[data-city-modal-open]')) { close(); openProjectView(projectId, { tab: 'architecture' }); }
+      // a run of the agents layer, a collision's Conflict map link: their own handlers navigated, the modal
+      // must not cover the screen they opened
+      else if (cur === mine && e.target.closest('[data-pca-run], [data-pcm-link]')) close();
     });
     el.querySelector('[data-city-modal-close]').focus();
     return cur;
