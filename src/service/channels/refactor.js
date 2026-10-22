@@ -3,13 +3,17 @@
 // roadmap item's status (planned, running, failed, done, skipped); the Product Owner's ranking
 // (src/refactor-priority.js: one read-only turn, simulated under `mock` or MULTIAGENT_SIMULATION_ONLY,
 // one at a time per project) saved on the proposals; Dismiss with a reason; "File as issue"
-// (src/refactor-issues.js: the `refactor` label, a preview in simulation, never gh/glab); "Add to roadmap now" on the
-// Refactor workflow, placed by the Product Owner's rules (src/refactor-cadence.js placeRefactor) and
-// written through src/roadmap.js, the target's Danger Zone score kept on the proposal (`before`).
+// (src/refactor-issues.js: the `refactor` label, a preview in simulation, never gh/glab; host.fileIssue
+// stands in for gh/glab when given, #435); "Add to roadmap now" on the Refactor workflow, in the
+// disabled stage at the end waiting for the owner's OK (#435, src/refactor-cadence.js placeWaiting:
+// enabling it is the owner's authorization), or with `runNow` after the stage in progress
+// (placeRunNow), written through src/roadmap.js, the target's Danger Zone score kept on the proposal
+// (`before`). ctx.planRefactor (#435) is the Architecture tab's Send to Refactor: it files the issue
+// and plans it the same way.
 // The cadence ("Add a refactor to the roadmap every X runs", <workspace>/refactor/<project id>/
 // cadence.json { on, every, since }) listens to run:event: after every X real finished runs of the
 // project since it was turned on (or since its last item) the top ranked proposal with an issue and
-// no unfinished item joins the roadmap the same way. A finished refactor run records the proposal's
+// no unfinished item joins the roadmap where placeRefactor puts it (never in the waiting stage). A finished refactor run records the proposal's
 // `outcome` (src/refactor-outcome.js). It never answers a gate: an item counts in the budget cap
 // like any other. No model call outside refactor:prioritize.
 
@@ -127,36 +131,67 @@ module.exports = (ctx) => {
   const syncedIssues = (id) => backlog.readBacklog(ctx.ws.backlog, id)?.issues || [];
 
   // ---- the roadmap item --------------------------------------------------------------------------
-  /** Adds `proposal` (with an issue) to the roadmap on the Refactor workflow, placed by placeRefactor; records its `before`. */
-  async function addToRoadmap(p, proposal) {
+  /**
+   * Adds `proposal` (with an issue) to the roadmap on the Refactor workflow; records its `before`.
+   * `mode` (#435): 'waiting' (Send to Refactor, Add to roadmap now) plans it in the disabled stage at
+   * the end that waits for the owner's OK (placeWaiting: created when the last stage is not one, an
+   * item that already changes the same file takes the issue: one run); 'runNow' after the stage in
+   * progress (placeRunNow); 'cadence' where placeRefactor puts it (a new stage goes before the waiting one).
+   */
+  async function addToRoadmap(p, proposal, { mode = 'waiting' } = {}) {
     if (!proposal.issue) throw clientError('File the proposal as an issue first: a roadmap item runs an issue.');
+    const number = Number(proposal.issue);
     const roadmap = roadmapOf(p.id);
     // unfinished as pickNext reads it: a failed and parked item is finished, so the cadence can add it again
-    if (cadenceRules.unfinishedNumbers(roadmap).has(Number(proposal.issue))) {
-      const status = roadmaps.issueStages(roadmap).get(Number(proposal.issue))?.status;
+    if (cadenceRules.unfinishedNumbers(roadmap).has(number)) {
+      const status = roadmaps.issueStages(roadmap).get(number)?.status;
       throw clientError(`Issue #${proposal.issue} is in the roadmap already (${status || 'unfinished'}).`);
     }
     const planned = plannedFiles(p.id);
     const enriched = { ...roadmap, stages: roadmap.stages.map((s) => ({ ...s, items: s.items.map((x) => withFiles(x, planned)) })) };
-    const { stage } = cadenceRules.placeRefactor({ roadmap: enriched, files: filesOf(proposal), conflictMap: conflictMaps.readConflictMap(ctx.ws.backlog, p.id) });
-    const item = { workflow: WORKFLOW, workflowName: 'Refactor', issues: [{ number: Number(proposal.issue) }], reason: proposal.rankReason || `Refactor: ${proposal.title || proposal.improvement || proposal.target}` };
+    const files = filesOf(proposal);
+    const item = { workflow: WORKFLOW, workflowName: 'Refactor', issues: [{ number }], reason: proposal.rankReason || `Refactor: ${proposal.title || proposal.improvement || proposal.target}` };
     const issues = syncedIssues(p.id);
+    const write = { issues, alive: ctx.runAlive };
     asClient(() => {
+      if (mode === 'waiting') {
+        const at = cadenceRules.placeWaiting({ roadmap: enriched, files });
+        if (at.stage >= roadmap.stages.length) {
+          // a disabled stage runs nothing: a running roadmap goes on with its other stages
+          roadmaps.propose(ctx.ws.backlog, p.id, { stages: [{ name: cadenceRules.WAITING_STAGE_NAME, disabled: true, waiting: true, items: [item] }] }, { ...write, keepRunning: true });
+          return;
+        }
+        const join = (x) => ({ ...x, issues: [...(x.issues || []), { number }] });
+        const stages = roadmap.stages.map((s, n) => (n !== at.stage ? s : { ...s, items: at.item < 0 ? [...s.items, item] : s.items.map((x, k) => (k === at.item ? join(x) : x)) }));
+        roadmaps.saveStages(ctx.ws.backlog, p.id, stages, write);
+        return;
+      }
+      const place = mode === 'runNow' ? cadenceRules.placeRunNow : cadenceRules.placeRefactor;
+      const { stage } = place({ roadmap: enriched, files, conflictMap: conflictMaps.readConflictMap(ctx.ws.backlog, p.id) });
       if (stage >= roadmap.stages.length) {
-        roadmaps.propose(ctx.ws.backlog, p.id, { stages: [{ name: 'Refactor', items: [item] }] }, { issues, alive: ctx.runAlive, keepRunning: roadmap.state === 'running' });
+        roadmaps.propose(ctx.ws.backlog, p.id, { stages: [{ name: 'Refactor', items: [item] }] }, { ...write, keepRunning: roadmap.state === 'running' });
       } else {
         const stages = roadmap.stages.map((s, n) => (n === stage ? { ...s, items: [...s.items, item] } : s));
-        roadmaps.saveStages(ctx.ws.backlog, p.id, stages, { issues, alive: ctx.runAlive });
+        roadmaps.saveStages(ctx.ws.backlog, p.id, stages, write);
       }
     });
-    const target = filesOf(proposal)[0];
+    const target = files[0];
     const before = outcomes.fileScore(await modelOf(p), target);
     const stored = proposals.updateProposal(root(), p.id, proposal.id, { roadmapAt: new Date().toISOString(), outcome: undefined, ...(before ? { before: { ...before, file: target, at: new Date().toISOString() } } : {}) });
     try { await ctx.dispatchRoadmaps?.(); } catch (e) { console.error('Refactor roadmap:', e.message); }
-    return { proposal: stored, stage: stage + 1 };
+    const placed = roadmaps.issueStages(roadmapOf(p.id)).get(number);
+    return { proposal: stored, stage: placed?.stage || 0, waiting: cadenceRules.isWaitingStage(placed) };
   }
 
   // ---- the issue (src/refactor-issues.js) ------------------------------------------------------
+  // #435: host.fileIssue(draft) → { number, url } stands in for gh/glab (tests, UI checks), in simulation too
+  async function fileWithHost(p, proposal, draft) {
+    const out = await ctx.host.fileIssue(draft);
+    const number = Number(out?.number) || null;
+    if (!number) throw new Error('The issue was filed but its number could not be read: sync the backlog and link it.');
+    return proposals.updateProposal(root(), p.id, proposal.id, { issue: number, issueUrl: out.url || null });
+  }
+
   async function fileIssue({ projectId, id, preview }) {
     const p = projectOf(projectId);
     const proposal = proposalOf(p, id);
@@ -164,10 +199,29 @@ module.exports = (ctx) => {
     const data = backlog.readBacklog(ctx.ws.backlog, p.id);
     if (!data) throw clientError('Sync the backlog first: the issue is filed in the synced repository.');
     const draft = asClient(() => refactorIssues.issueDraft({ root: root(), project: p, proposal, data }));
+    if (!preview && ctx.host?.fileIssue) return { preview: false, command: draft.command.display, body: draft.body, proposal: await fileWithHost(p, proposal, draft) };
     if (preview || simulation.simulationOnly()) return { preview: true, command: draft.command.display, body: draft.body, proposal };
     const stored = await refactorIssues.createIssue({ root: root(), backlogDir: ctx.ws.backlog, project: p, proposal, draft });
     return { preview: false, command: draft.command.display, body: draft.body, proposal: stored };
   }
+
+  /**
+   * #435 Send to Refactor: files `proposal` as an issue when it has none (as File as issue does) and
+   * plans it in the waiting stage. Without a synced backlog, or in a simulation without a host filer,
+   * the proposal stays as it is (the tab files it later). The stored proposal.
+   */
+  async function planRefactor(projectId, proposal) {
+    const p = projectOf(projectId);
+    let stored = proposal;
+    if (!stored.issue) {
+      const filer = !!ctx.host?.fileIssue || !simulation.simulationOnly();
+      if (!filer || !backlog.readBacklog(ctx.ws.backlog, p.id)) return stored;
+      stored = (await fileIssue({ projectId: p.id, id: stored.id })).proposal;
+    }
+    if (stored.status === 'dismissed' || cadenceRules.unfinishedNumbers(roadmapOf(p.id)).has(Number(stored.issue))) return stored;
+    return (await addToRoadmap(p, stored)).proposal;
+  }
+  ctx.planRefactor = planRefactor;
 
   // ---- the ranking -------------------------------------------------------------------------------
   async function prioritize({ projectId, mock }) {
@@ -222,7 +276,7 @@ module.exports = (ctx) => {
     if (!c.on || cadenceRules.runsUntilNext({ runs: runsWith(p, summary), project: p, every: c.every, since: c.since }) > 0) return;
     const next = cadenceRules.pickNext(proposals.listProposals(root(), p.id), roadmapOf(p.id));
     if (!next) return; // nothing ready: the tab says so, the next run tries again
-    await addToRoadmap(p, next);
+    await addToRoadmap(p, next, { mode: 'cadence' });
     saveCadence(p.id, { on: c.on, every: c.every, since: new Date().toISOString() });
   }
 
@@ -288,11 +342,11 @@ module.exports = (ctx) => {
     {
       channel: 'refactor:addToRoadmap',
       method: 'addRefactorToRoadmap',
-      params: ['projectId', 'id'],
-      schema: { params: ON_PROPOSAL(), result: shape({ proposal: PROPOSAL, stage: INT }, ['proposal', 'stage']) },
-      fn: ({ projectId, id }) => {
+      params: ['projectId', 'id', '...opts'],
+      schema: { params: ON_PROPOSAL({ runNow: FLAG }), result: shape({ proposal: PROPOSAL, stage: INT, waiting: BOOL }, ['proposal', 'stage']) },
+      fn: ({ projectId, id, runNow }) => {
         const p = projectOf(projectId);
-        return addToRoadmap(p, proposalOf(p, id));
+        return addToRoadmap(p, proposalOf(p, id), { mode: runNow ? 'runNow' : 'waiting' });
       },
     },
     {

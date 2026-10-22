@@ -48,6 +48,9 @@
 // pausing the roadmap). A later stage's runs start without the parked change.
 // Main stays green (#405, src/base-health.js): a red test on the base puts a fix item in a new stage
 // before the current one (`insertFrontStage`).
+// The waiting refactor stage (#435): a disabled stage marked `waiting` (Send to Refactor's items,
+// src/service/channels/refactor.js) stays last: `propose` adds its stages before it. Enabled, it loses
+// the marker and becomes a plain stage.
 // Screen: src/renderer/views/backlog/backlog-roadmap.js; channels: src/service/channels/roadmap.js.
 
 const fs = require('fs');
@@ -327,6 +330,8 @@ function cleanRelease(raw, old) {
 
 // #284: a stage is not disabled while one of its items runs (nothing in progress would stop)
 const DISABLE_BUSY = 'An item of this stage is running: wait for it, or stop its run, before disabling the stage.';
+// #435: what the waiting refactor stage's name loses once the owner enables it (src/refactor-cadence.js WAITING_STAGE_NAME)
+const WAITING_SUFFIX = /\s*\(waiting for your OK\)$/i;
 
 /**
  * Validated stages from the UI or a proposal: [{ id?, name?, note?, release?: { name }, items: [...] }].
@@ -340,6 +345,7 @@ function cleanStages(stages, { issues = [], previous = null, alive = null } = {}
   const prevItems = new Map(allItems(previous || emptyRoadmap()).map((x) => [x.id, x]));
   const prevReleases = new Map((previous?.stages || []).filter((s) => s?.id && s.release).map((s) => [s.id, s.release]));
   const prevDisabled = new Set((previous?.stages || []).filter((s) => s?.id && s.disabled).map((s) => s.id));
+  const prevWaiting = new Set((previous?.stages || []).filter((s) => s?.id && s.waiting).map((s) => s.id));
   const prevBusy = new Set((previous?.stages || []).filter((s) => s?.id && (s.items || []).some((x) => runIsAlive(x, alive))).map((s) => s.id));
   const out = (Array.isArray(stages) ? stages : []).map((s) => {
     const release = cleanRelease(s?.release, prevReleases.get(s?.id));
@@ -348,11 +354,16 @@ function cleanStages(stages, { issues = [], previous = null, alive = null } = {}
     const disabled = s?.disabled === undefined ? prevDisabled.has(s?.id) : !!s.disabled;
     // the screen's Disable is off while an item of the stage runs; any other writer gets the same answer
     if (disabled && !prevDisabled.has(s?.id) && prevBusy.has(s?.id)) throw new Error(DISABLE_BUSY);
+    // #435: the refactor stage waiting for the owner's OK stays one while disabled; enabled, it is a
+    // plain stage that drops the "(waiting for your OK)" of its name
+    const waiting = (s?.waiting === undefined ? prevWaiting.has(s?.id) : !!s.waiting);
+    const name = String(s?.name || '').trim();
     return {
       // no name: shown as "Stage <n>" wherever it is when shown (reordering renumbers it)
-      id: s?.id || newId('stage'), name: String(s?.name || '').trim(), note: String(s?.note || '').trim(),
+      id: s?.id || newId('stage'), name: waiting && !disabled ? name.replace(WAITING_SUFFIX, '') : name, note: String(s?.note || '').trim(),
       ...(release ? { release } : {}),
       ...(disabled ? { disabled: true } : {}),
+      ...(waiting && disabled ? { waiting: true } : {}),
       items: (Array.isArray(s?.items) ? s.items : []).map((x) => cleanItem(x, known, prevItems)),
     };
   }).filter((s) => s.items.length);
@@ -458,9 +469,13 @@ function propose(dir, projectId, proposal, { replace = false, issues = [], alive
       }).filter((x) => x.issues.length),
     }));
     const added = cleanStages(fresh, { issues });
-    if (keepRunning) return { ...r, stages: [...r.stages, ...added] };
+    // #435: the refactor stage waiting for the owner's OK stays last
+    const last = r.stages[r.stages.length - 1];
+    const at = last && last.disabled && last.waiting && !added.some((s) => s.waiting) ? r.stages.length - 1 : r.stages.length;
+    const next = [...r.stages.slice(0, at), ...added, ...r.stages.slice(at)];
+    if (keepRunning) return { ...r, stages: next };
     const state = r.state === 'running' ? 'paused' : r.state === 'done' ? 'planned' : r.state;
-    return { ...r, state, error: r.state === 'running' && added.length ? `${added.length} stage(s) added from a proposal: press Start to continue.` : r.error, stages: [...r.stages, ...added] };
+    return { ...r, state, error: r.state === 'running' && added.length ? `${added.length} stage(s) added from a proposal: press Start to continue.` : r.error, stages: next };
   });
   return { roadmap, dropped };
 }
@@ -840,7 +855,7 @@ function skipClosed(dir, projectId, itemId) {
 function issueStages(roadmap) {
   const out = new Map();
   (roadmap.stages || []).forEach((s, n) => {
-    for (const x of s.items) for (const i of itemIssues(x)) if (!testsLater(x) || !out.has(i.number)) out.set(i.number, { stage: n + 1, name: s.name || `Stage ${n + 1}`, status: x.status, itemId: x.id, origin: x.origin || null, ...(s.disabled ? { disabled: true } : {}) });
+    for (const x of s.items) for (const i of itemIssues(x)) if (!testsLater(x) || !out.has(i.number)) out.set(i.number, { stage: n + 1, name: s.name || `Stage ${n + 1}`, status: x.status, itemId: x.id, origin: x.origin || null, ...(s.disabled ? { disabled: true } : {}), ...(s.disabled && s.waiting ? { waiting: true } : {}) });
   });
   return out;
 }

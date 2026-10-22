@@ -1,7 +1,8 @@
 // The Refactor tab's proposals of a project (#356): refactors suggested from outside a run, for the
 // Product Owner to prioritize. The Architecture tab's "Send to Refactor" adds one per Oracle
 // finding ({ source: 'architecture', reportId, kind, title, files, evidence, severity, refactor });
-// the same finding sent twice stays one proposal. Saved in <workspace>/refactor/<project id>/proposals.json.
+// the same finding sent twice (from any analysis, #435: the key is its kind and files) stays one
+// proposal, its evidence gathered. Saved in <workspace>/refactor/<project id>/proposals.json.
 // #357: the owner writes one on the tab ({ source: 'owner', target, improvement, evidence }); Dismiss
 // keeps it with its reason (status 'dismissed'); the Product Owner's ranking puts rank, rankReason
 // and complexity on each and is kept with its date and cost in ranking.json; updateProposal records
@@ -33,11 +34,21 @@ function listProposals(root, projectId) {
   }
 }
 
-/** Adds `proposal` ({ source, key, ... }) unless one with the same source and key exists; the stored one. */
+// the distinct texts of an evidence (a string, or a list of them)
+const evidenceTexts = (e) => (Array.isArray(e) ? e : [e]).map((x) => (typeof x === 'string' ? x.trim() : x)).filter(Boolean);
+
+/**
+ * Adds `proposal` ({ source, key, ... }) unless one with the same source and key exists; the stored one.
+ * #435: the known one (the same finding from another analysis) gets the new evidence, kept as a list.
+ */
 function addProposal(root, projectId, proposal, now = new Date()) {
   const list = listProposals(root, projectId);
   const known = list.find((p) => p.source === proposal.source && p.key === proposal.key);
-  if (known) return known;
+  if (known) {
+    const had = evidenceTexts(known.evidence);
+    const added = evidenceTexts(proposal.evidence).filter((e) => !had.some((h) => JSON.stringify(h) === JSON.stringify(e)));
+    return added.length ? updateProposal(root, projectId, known.id, { evidence: [...had, ...added] }) : known;
+  }
   const stored = { ...proposal, id: `${proposal.source}-${now.getTime().toString(36)}-${list.length + 1}`, createdAt: now.toISOString(), status: 'proposed' };
   writeProposals(root, projectId, [...list, stored]);
   return stored;

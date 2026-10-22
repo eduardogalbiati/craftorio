@@ -3,7 +3,10 @@
 // unfinished one), how many runs until the next refactor, which proposal is picked (the top ranked
 // one with an issue and no unfinished roadmap item) and the roadmap stage it goes to (the Product
 // Owner's placement rules: the earliest stage after every stage holding an item that shares a file
-// with it, or that touches a file the conflict map records merge conflicts on as it does). The service
+// with it, or that touches a file the conflict map records merge conflicts on as it does). #435: Send
+// to Refactor and Add to roadmap now plan in the waiting stage (placeWaiting: a disabled stage at the
+// end, an item that already changes the same file joined), "run it now" after the stage in progress
+// (placeRunNow); the cadence keeps placeRefactor. The service
 // (src/service/channels/refactor.js) stores the cadence and adds the item through src/roadmap.js.
 
 'use strict';
@@ -76,11 +79,42 @@ function placeRefactor({ roadmap, files, conflictMap = null }) {
   return { stage };
 }
 
+/** #435 "run it now": placeRefactor's stage, never before nor inside the stage in progress. */
+function placeRunNow({ roadmap, files, conflictMap = null }) {
+  const stages = roadmap?.stages || [];
+  const now = RoadmapModel.currentStage(roadmap || { stages: [] });
+  let { stage } = placeRefactor({ roadmap, files, conflictMap });
+  if (now >= 0) stage = Math.max(stage, now + 1);
+  while (stage < stages.length && stages[stage].disabled) stage++;
+  return { stage };
+}
+
+// #435: the stage Send to Refactor plans in, disabled until the owner enables it
+const WAITING_STAGE_NAME = 'Refactor (waiting for your OK)';
+
+/** Whether stage `s` (or an issueStages entry) is the refactor stage waiting for the owner: disabled, marked or named so. */
+const isWaitingStage = (s) => !!s?.disabled && (!!s.waiting || /waiting for your OK/i.test(s.name || ''));
+
+/**
+ * #435 where Send to Refactor plans: the waiting stage when it is the last one ({ stage }, else
+ * stages.length: a new one at the end) and, in it, the unfinished item that already changes one of
+ * `files` (`item`, -1 for none: a new item). The items carry their `files` (refactor-priority withFiles).
+ */
+function placeWaiting({ roadmap, files }) {
+  const stages = roadmap?.stages || [];
+  const last = stages.length - 1;
+  if (last < 0 || !isWaitingStage(stages[last])) return { stage: stages.length, item: -1 };
+  const mine = new Set((files || []).map(pathOf).filter(Boolean));
+  const item = (stages[last].items || []).findIndex((x) => !RoadmapModel.isFinished(x) && (x.files || []).map(pathOf).some((f) => mine.has(f)));
+  return { stage: last, item };
+}
+
 /**
  * The proposals as the tab lists them: each with its issue's state on the platform (`issueState`,
  * from the synced backlog's `issues`) and its roadmap item's (`roadmapStatus`, `roadmapStage`, from
- * src/roadmap.js issueStages: number → { stage, status }), whether that item is unfinished
- * (`roadmapUnfinished`, from unfinishedNumbers) and its files (`targetFiles`, filesOf).
+ * src/roadmap.js issueStages: number → { stage, status }), whether that stage waits for the owner's OK
+ * (`roadmapWaiting`, #435), whether that item is unfinished (`roadmapUnfinished`, from
+ * unfinishedNumbers) and its files (`targetFiles`, filesOf).
  */
 function withIssueStatus(proposals, stages, issues = [], unfinished = new Set()) {
   const byNumber = new Map((issues || []).map((i) => [Number(i.number), i]));
@@ -89,7 +123,7 @@ function withIssueStatus(proposals, stages, issues = [], unfinished = new Set())
     const placed = n ? stages.get(n) : null;
     return {
       ...p, issueState: n ? byNumber.get(n)?.state || null : null, roadmapStatus: placed?.status || null, roadmapStage: placed?.stage || null,
-      roadmapUnfinished: !!n && unfinished.has(n), targetFiles: filesOf(p),
+      roadmapWaiting: isWaitingStage(placed), roadmapUnfinished: !!n && unfinished.has(n), targetFiles: filesOf(p),
     };
   });
 }
@@ -101,10 +135,14 @@ module.exports = {
   countedRuns,
   DEFAULT_CADENCE,
   filesOf,
+  isWaitingStage,
   pathOf,
   pickNext,
   placeRefactor,
+  placeRunNow,
+  placeWaiting,
   runsUntilNext,
   unfinishedNumbers,
+  WAITING_STAGE_NAME,
   withIssueStatus,
 };
