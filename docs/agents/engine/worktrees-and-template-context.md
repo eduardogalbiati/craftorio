@@ -11,15 +11,22 @@ The run's worktree option, what templates can read, and transition actions.
   prompt `evidence_dir` (`<run_dir>/evidence/<step>/round-<visit>`, where its screenshots go).
 - Transition `action:` is a shell command run in the worktree (skipped in simulation); one that
   renders empty runs nothing. The PR screenshots cleanup on merge/close uses this.
-- `action:` and `ship.build` run through a shell (`exec`), so `loadWorkflow` refuses agent output
-  interpolated there unsafely (#469): a `{{ }}` (or a `{% set %}` / `{% for %}`) reading
-  `steps.<id>.output` passes only when it is one field through a filter that validates or quotes it
-  (`github_repo`, `pr_url`, `shell_quote`; `SHELL_SAFE_FILTERS` in src/engine/run/templates.js) or a
-  field the step's `output_schema` types `integer`, `number` or `boolean` (the schema is enforced
-  before the output is stored). A `{% if %}` condition may read any output. Other values that come
-  from the user (`inputs.project_path`) go through `shell_quote` (POSIX single quotes; on Windows
-  double quotes, and a value with `"`, `%`, `!`, `^` or a line break throws).
+- `action:` and `ship.build` run through a shell (`exec`), so `loadWorkflow` allows there only what
+  is safe for a shell (#469): a `{{ }}` (or a `{% set %}` / `{% for %}`) passes when it is one value
+  through a filter that validates or quotes it (`github_repo`, `pr_url`, `shell_quote`;
+  `SHELL_SAFE_FILTERS` in src/engine/run/templates.js), or when every name it reads is one the
+  workflow or the user controls (`SHELL_SAFE_NAMES` in src/engine/run/load.js: `inputs`, `run_id`,
+  the run's folders, `skill_dir()`, `release`, `iteration`, a gate's `choice`, names a `{% set %}` /
+  `{% for %}` binds) or an output field (`steps.<id>.output.<f>`, the step's own `output.<f>`) its
+  `output_schema` types `integer`, `number` or `boolean` (enforced before the output is stored).
+  Anything else (agent text, `vars.*`, `action_error`, a probe's detail) is refused. A `{% if %}`
+  condition may read any value. A path from the user (`inputs.project_path`) goes through
+  `shell_quote` (POSIX single quotes; on Windows double quotes with trailing backslashes doubled, and
+  a value with `"`, `%`, `!`, `^` or a line break throws).
 - Templates are code (#474): nunjucks has no sandbox, so `loadWorkflow` refuses any `{{ }}` / `{% %}`
   block, and the whole text of `when`, `until` and `agent_when`, naming `constructor`, `__proto__`,
-  `require` or `process` (`UNSAFE_TEMPLATE_NAMES`). Prose outside the blocks may use the words.
+  `require` or `process` (`UNSAFE_TEMPLATE_NAMES`; a step or input with one of those names must be
+  renamed), or with a subscript whose key is an expression (`x['const' ~ 'ructor']`; a literal or
+  a name is fine). Prose outside the blocks may use the words. These checks stop the tricks they
+  know; the trust warning stays the main control.
   `npm run check` loads every `workflows/*.yaml`, so these refusals are findings there too.

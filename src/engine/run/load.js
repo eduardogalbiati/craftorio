@@ -223,29 +223,59 @@ function shipOnHumanGate(t, ctx) {
 function shipNeedsWorktree(t, ctx) {
   if (t.ship !== undefined && !ctx.wf.orchestrator?.worktree) fail(ctx, 'ship needs orchestrator.worktree (the repository and its base branch).');
 }
-// #469: an action and a ship.build run in a shell, so agent output reaches them only as a field its
-// output_schema types as a number or a boolean, or through one filter that validates or quotes it
-// (`{{ steps.ci.output.pr_url | pr_url }}`). A `{% if %}` reads output without printing it; a `{% set %}`
-// or a `{% for %}` that takes it is checked like an interpolation.
+// #469: an action and a ship.build run in a shell, so they interpolate unfiltered only the names the
+// workflow or the user controls (SHELL_SAFE_NAMES: inputs, the run's folders, skill_dir(), a gate's
+// choice...) and an agent's output field its output_schema types as a number or a boolean
+// (`steps.ci.output.pr_number`, the step's own `output.n`). Any other value (agent text, `vars.*`, an
+// error, a probe's detail) goes through one filter that validates or quotes it
+// (`{{ steps.ci.output.pr_url | pr_url }}`). A `{% if %}` reads values without printing them; a
+// `{% set %}` or a `{% for %}` is checked like an interpolation, and the names it binds are then safe.
 const SHELL_INTERPOLATION = /\{\{([\s\S]*?)\}\}|\{%-?\s*((?:set|for)\b[\s\S]*?)%\}/g;
-const OUTPUT_REFERENCE = /\bsteps\s*\[|\bsteps\.([A-Za-z0-9_]+)\.output\b(?:\.([A-Za-z0-9_]+))?/g;
-const FILTERED_OUTPUT = new RegExp(`^\\s*steps\\.[A-Za-z0-9_]+\\.output\\.[A-Za-z0-9_]+\\s*\\|\\s*(?:${SHELL_SAFE_FILTERS.join('|')})\\s*(?:\\([^()]*\\))?\\s*$`);
+const SHELL_SAFE_NAMES = [
+  'choice',
+  'inputs',
+  'iteration',
+  'loop',
+  'release',
+  'run_dir',
+  'run_id',
+  'runs_dir',
+  'skill_dir',
+  'workflows_dir',
+  'worktree_dir',
+];
+const TEMPLATE_KEYWORDS = ['and', 'defined', 'else', 'false', 'for', 'if', 'in', 'is', 'none', 'not', 'null', 'or', 'set', 'true', 'undefined'];
+const STRING_LITERAL = /'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"/g;
+const NAME_TOKEN = /([.|]\s*)?\b([A-Za-z_][A-Za-z0-9_]*)\b/g;
+const FILTERED_VALUE = new RegExp(`^\\s*[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z0-9_]+|\\[\\s*\\d+\\s*\\])*\\s*\\|\\s*(?:${SHELL_SAFE_FILTERS.join('|')})\\s*(?:\\([^()]*\\))?\\s*$`);
 const SHELL_SAFE_TYPES = ['boolean', 'integer', 'number'];
-function shellUnsafeOutput(text, ctx) {
+const BOUND_NAMES = /\{%-?\s*(?:set|for)\s+([A-Za-z_][A-Za-z0-9_]*(?:\s*,\s*[A-Za-z_][A-Za-z0-9_]*)*)/g;
+function typedOutput(expr, at, ctx) {
+  const m = /^steps\.([A-Za-z0-9_]+)\.output\.([A-Za-z0-9_]+)\b(?!\s*[.[(])/.exec(expr.slice(at))
+    || /^(output)\.([A-Za-z0-9_]+)\b(?!\s*[.[(])/.exec(expr.slice(at));
+  if (!m) return false;
+  const step = m[1] === 'output' && !expr.startsWith('steps', at) ? ctx.step : ctx.wf.steps.find((s) => s.id === m[1]);
+  return SHELL_SAFE_TYPES.includes(step?.output_schema?.properties?.[m[2]]?.type);
+}
+function shellUnsafeReference(text, ctx) {
+  const bound = new Set([...String(text).matchAll(BOUND_NAMES)].flatMap((m) => m[1].split(',').map((n) => n.trim())));
   for (const m of String(text).matchAll(SHELL_INTERPOLATION)) {
     const expr = m[1] ?? m[2];
-    if (FILTERED_OUTPUT.test(expr)) continue;
-    for (const [ref, id, field] of expr.matchAll(OUTPUT_REFERENCE)) {
-      const type = id && field && ctx.wf.steps.find((s) => s.id === id)?.output_schema?.properties?.[field]?.type;
-      if (!SHELL_SAFE_TYPES.includes(type)) return ref;
+    if (FILTERED_VALUE.test(expr)) continue;
+    const code = expr.replace(STRING_LITERAL, "''");
+    for (const t of code.matchAll(NAME_TOKEN)) {
+      const [, prefix, name] = t;
+      if (prefix || TEMPLATE_KEYWORDS.includes(name) || SHELL_SAFE_NAMES.includes(name) || bound.has(name)) continue;
+      if ((name === 'steps' || name === 'output') && typedOutput(code, t.index, ctx)) continue;
+      return (/^[A-Za-z0-9_.]+/.exec(code.slice(t.index)) || [name])[0];
     }
   }
   return null;
 }
 function shellSafeTemplates(t, ctx) {
   for (const [what, text] of [['transition action', t.action], ['ship.build', t.ship?.build]]) {
-    const ref = text != null && shellUnsafeOutput(text, ctx);
-    if (ref) fail(ctx, `${what} interpolates ${ref} into a shell command without a safe filter (${SHELL_SAFE_FILTERS.join(', ')}); only an output_schema field typed number, integer or boolean may go there unfiltered.`);
+    const ref = text != null && shellUnsafeReference(text, ctx);
+    if (ref) fail(ctx, `${what} interpolates ${ref} into a shell command without a safe filter (${SHELL_SAFE_FILTERS.join(', ')}); unfiltered, it may use only ${SHELL_SAFE_NAMES.join(', ')} and an agent output field its output_schema types as number, integer or boolean.`);
   }
 }
 
@@ -357,15 +387,35 @@ function fragmentSources(wf) {
 // #474: nunjucks has no sandbox, so a template that names `constructor` (and the other
 // UNSAFE_TEMPLATE_NAMES) could run code in the app's process: refused in every {{ }} and {% %} of
 // the workflow, and in the whole text of an expression field (`when`, `until`, `agent_when`).
+// A subscript takes a literal or a name (`results[name]`), never a built key (`x['const' ~ 'ructor']`).
 // Prose outside the template blocks may use the words.
 const TEMPLATE_BLOCK = /\{\{([\s\S]*?)\}\}|\{%([\s\S]*?)%\}/g;
 const UNSAFE_NAME = new RegExp(`\\b(${UNSAFE_TEMPLATE_NAMES.join('|')})\\b`);
+const SIMPLE_KEY = /^\s*(?:''|-?\d+|[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)*)?\s*$/;
 const EXPRESSION_KEYS = ['agent_when', 'until', 'when'];
+// the first subscript of a template whose key is an expression, or null
+function builtSubscript(text) {
+  const code = text.replace(STRING_LITERAL, "''");
+  for (let i = 0; i < code.length; i++) {
+    const before = code[i] === '[' && /([A-Za-z0-9_]+|[)\]])\s*$/.exec(code.slice(0, i));
+    if (!before || TEMPLATE_KEYWORDS.includes(before[1])) continue;
+    let depth = 0, j = i;
+    for (; j < code.length; j++) {
+      if (code[j] === '[') depth++;
+      else if (code[j] === ']' && --depth === 0) break;
+    }
+    const key = code.slice(i + 1, j);
+    if (!SIMPLE_KEY.test(key)) return `[${key}]`;
+  }
+  return null;
+}
 function unsafeTemplates(v, where = '', expression = false) {
   if (typeof v === 'string') {
     const parts = expression ? [v] : [...v.matchAll(TEMPLATE_BLOCK)].map((m) => m[1] ?? m[2]);
     const hit = parts.map((p) => UNSAFE_NAME.exec(p)).find(Boolean);
-    if (hit) throw new Error(`${where}: a template may not reach ${hit[1]} (templates run unsandboxed in the app; refused: ${UNSAFE_TEMPLATE_NAMES.join(', ')}).`);
+    if (hit) throw new Error(`${where}: a template may not reach ${hit[1]} (templates run unsandboxed in the app; refused: ${UNSAFE_TEMPLATE_NAMES.join(', ')}). A step, input or variable with that name must be renamed.`);
+    const built = parts.map(builtSubscript).find(Boolean);
+    if (built) throw new Error(`${where}: a template subscript ${built} must be a literal or a name, not an expression (templates run unsandboxed in the app).`);
   } else if (Array.isArray(v)) {
     v.forEach((x, i) => unsafeTemplates(x, `${where}[${i}]`, expression));
   } else if (v && typeof v === 'object') {

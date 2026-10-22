@@ -10,9 +10,9 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
 
 - **2026-10-22** (#469, #474): workflows, skills and seeds are code. Transition `action:` and
   `ship.build` stay shell strings (the bundled ones use `&&` and `{% if %}`: an argv list would
-  break them); `loadWorkflow` refuses agent output interpolated there unless one field goes through
-  `github_repo`, `pr_url` or `shell_quote`, or its `output_schema` types it as a number or a boolean,
-  and `npm run check` loads every workflow. nunjucks cannot be sandboxed, so a template naming
+  break them); `loadWorkflow` allows there unfiltered only an allowlist of names the workflow or
+  the user controls and output fields its `output_schema` types as a number or a boolean, anything
+  else goes through `github_repo`, `pr_url` or `shell_quote`, and `npm run check` loads every workflow. nunjucks cannot be sandboxed, so a template naming
   `constructor`, `__proto__`, `require` or `process` is refused at load (one list, in
   src/engine/run/templates.js). The Workflows screen says to install only trusted ones, and the
   Builder asks once before saving a custom workflow, remembered per file by the fingerprint of its

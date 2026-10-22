@@ -59,17 +59,18 @@ tpl.addFilter('pr_url', (url) => {
 });
 
 // A value passed as one argument to the shell of an action (#469): single quotes for sh, double
-// quotes for cmd.exe, which cannot quote " % ! ^ or a line break, so those throw instead.
+// quotes for cmd.exe, which cannot quote " % ! ^ or a line break, so those throw instead. Trailing
+// backslashes are doubled there, or the argv parser reads `\"` as a literal quote (`"C:\proj\\"`).
 tpl.addFilter('shell_quote', (v) => {
   const s = String(v ?? '');
   if (process.platform !== 'win32') return `'${s.replace(/'/g, `'\\''`)}'`;
   if (/["%!^\r\n]/.test(s)) throw new Error(`not a value cmd.exe can quote: ${JSON.stringify(v)}`);
-  return `"${s}"`;
+  return `"${s.replace(/(\\+)$/, '$1$1')}"`;
 });
 
 // The filters an action or a ship.build may pass agent output through (#469): each one validates or
-// quotes its value for a shell. The loader refuses any other interpolation of `steps.<id>.output`
-// there, unless the output schema types the field as a number or a boolean.
+// quotes its value for a shell. The loader refuses there any other value than the names the workflow
+// or the user controls and an output field the output schema types as a number or a boolean.
 const SHELL_SAFE_FILTERS = [
   'github_repo',
   'pr_url',

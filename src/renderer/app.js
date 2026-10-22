@@ -199,6 +199,7 @@ async function init() {
     if (!$('#agent-modal').classList.contains('hidden')) return closeModal('#agent-modal');
     if (!$('#wb-skills-modal').classList.contains('hidden')) return $('#btn-wb-skills-cancel').click();
     if (!$('#wb-agents-modal').classList.contains('hidden')) return $('#btn-wb-agents-cancel').click();
+    if (!$('#wb-trust-modal').classList.contains('hidden')) return $('#btn-wb-trust-cancel').click();
     if (!$('#drawer').classList.contains('open')) return;
     closeDrawer();
   });
