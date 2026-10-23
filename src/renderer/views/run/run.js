@@ -875,7 +875,7 @@ function renderEvents() {
   const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
   box.innerHTML = state.events.slice(-400).map((ev) => {
     const { seq, ts, type, run_id, ...rest } = ev;
-    return `<div class="ev"><div class="ev-head"><span class="muted">#${seq}</span><span class="muted">${esc(timeOf(ts))}</span><span class="ev-type">${esc(type)}</span></div>
+    return `<div class="ev" data-testid="run-event"><div class="ev-head"><span class="muted">#${seq}</span><span class="muted">${esc(timeOf(ts))}</span><span class="ev-type">${esc(type)}</span></div>
       <pre>${esc(JSON.stringify(rest, null, 1)).slice(0, 2000)}</pre></div>`;
   }).join('');
   if (atBottom) box.scrollTop = box.scrollHeight;
@@ -930,7 +930,7 @@ registerView({
             <div id="tab-detail" class="tab-body hidden">
               <p class="empty muted">${t('run.select_a_session_to_see_prompts')}</p>
             </div>
-            <div id="tab-events" class="tab-body hidden"></div>
+            <div id="tab-events" class="tab-body hidden" data-testid="run-events"></div>
             <div id="tab-artifacts" class="tab-body"></div>
           </section>
         </div>

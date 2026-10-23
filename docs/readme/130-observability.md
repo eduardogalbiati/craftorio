@@ -15,6 +15,12 @@ Each run writes to `<workspace>/runs/<run_id>/`:
 - files written by `save_as` (e.g. `arena/`, `review.md`)
 - `decisions.tsv`: the agents' decision log (time, agent, step, phase, decision, why, evidence, result)
 
+Recordings are redacted before they are written (#475): a baseline the app always applies (bearer
+tokens, `…KEY=` / `…TOKEN=` / `…SECRET=` / `…PASSWORD=` pairs, PEM private keys, `ghp_`,
+`github_pat_`, `sk-` and `xox…` tokens, the `env` values of an agent's `--mcp-config`, the values
+of a `printenv` / `env` output), then the workflow's own `observability.capture.redact` rules.
+Still check a recording before you share it.
+
 The **24/7 chip** in the top bar (#188) shows one number: the share of the last 24 h with at least
 one real run active (**24/7 · 87%**; a run waiting at a human gate does not count, simulated runs
 never do), green from 90%, amber from 60%, red below, with a dot that pulses while a run is active.

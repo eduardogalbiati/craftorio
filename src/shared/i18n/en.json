@@ -3650,6 +3650,8 @@
   "projects.https_github_com_owner_repo_git": "https://github.com/owner/repo.git",
   "projects.if_the_folder_is_not_a": "If the folder is not a git repository, the repo is cloned into it.",
   "projects.install_npm_ci": "Install: npm ci",
+  "projects.install_without_scripts": "Install dependencies without running their scripts",
+  "projects.install_without_scripts_hint": "Starting a run executes the repository's own scripts (its dependency install, check and tests). On, the install skips the packages' install scripts (--ignore-scripts). Suggested on for a repository the app clones.",
   "projects.leave_empty_to_create_it_in": "Leave empty to create it in &lt;workspace&gt;/projects/&lt;name&gt;.",
   "projects.local_preview": "Local preview",
   "projects.name": "Name",

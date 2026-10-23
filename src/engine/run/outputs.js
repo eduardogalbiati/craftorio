@@ -14,6 +14,7 @@
 const fs = require('fs');
 const path = require('path');
 const { render } = require('./templates');
+const { canonicalPath } = require('../worktree');
 const Language = require('../../shared/language');
 
 // ---------------------------------------------------------------------------
@@ -184,16 +185,35 @@ const methods = {
   // templates have access to `agent`). Relative paths go in the run folder.
   // An entry can also be `{ path, content }`: `content` is a template with the step's `output`,
   // e.g. { path: document.md, content: "{{ output.document }}" } saves one field of a JSON answer.
+  // #473 (SEC-8): the target's real path (links resolved) must stay under the run folder, the run's
+  // worktree or the project folder; anything else is refused with a `log` event and fails the step.
   saveOutput(step, scope, text, output) {
     for (const t of step.save_as ? [step.save_as].flat() : []) {
       const rel = render(typeof t === 'object' ? t.path : t, scope).trim();
       if (!rel) continue;
       const content = typeof t === 'object' && t.content != null ? render(t.content, { ...scope, output }) : text;
       const file = path.resolve(this.runDir, rel);
+      if (!this.saveAsAllowed(file)) {
+        const reason = `save_as refused: ${file} is outside the run folder, the run's worktree and the project folder`;
+        this.emitEvent('log', { level: 'error', step_id: step.id, message: reason });
+        throw new Error(`Step "${step.id}": ${reason}`);
+      }
       fs.mkdirSync(path.dirname(file), { recursive: true });
       fs.writeFileSync(file, String(content ?? ''));
       this.emitEvent('file.saved', { step_id: step.id, agent: scope.agent, path: file });
     }
+  },
+
+  // #473: true when `file` (real path of its deepest existing parent) is under one of the roots
+  // save_as may write to: the run folder, the worktree (and the base worktree), the project folder
+  saveAsAllowed(file) {
+    const roots = [this.runDir, this.ctx.worktree_dir, this.ctx.base_worktree_dir, this.worktree?.repo,
+      this.ctx.inputs?.project_path, this.ctx.inputs?.repo_path].filter((r) => typeof r === 'string' && r);
+    const real = canonicalPath(file);
+    return roots.some((root) => {
+      const rel = path.relative(canonicalPath(root), real);
+      return !path.isAbsolute(rel) && rel.split(/[\\/]/)[0] !== '..';
+    });
   },
 
   // A step's output may list `preexisting_failures` ([{ test, file, reason }]): tests that also fail

@@ -177,7 +177,7 @@ class WorkflowRun extends EventEmitter {
   //   null = no Product Owner (a simulation needs none).
   // language (#327): () => the settings' language ({ agents, issues }) or null, called at each turn: every
   //   turn's [Language] line and the output instruction follow it (src/shared/language.js); null = English.
-  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issues, issue, resume, worktreesDir, mockSequences, notices, stopProcesses, probe, actionsQuota, peerSessions, idleWarnMs, personas, localPreview, attachments, then, from, parent, startChild, memoryGuard, agentOverrides, fallbacks, accounts, accountCooldownMs, models, nightLimits, testWorkers, machine, architectureOracle, refactorPriorityOptions, language }) {
+  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issues, issue, resume, worktreesDir, mockSequences, notices, stopProcesses, probe, actionsQuota, peerSessions, idleWarnMs, personas, localPreview, attachments, then, from, parent, startChild, memoryGuard, agentOverrides, fallbacks, accounts, accountCooldownMs, models, nightLimits, testWorkers, machine, architectureOracle, refactorPriorityOptions, language, ignoreInstallScripts }) {
     super();
     refreshWindowsPath(); // actions (e.g. gh pr merge) need the refreshed PATH
     this.file = file;
@@ -193,7 +193,8 @@ class WorkflowRun extends EventEmitter {
     this.runDir = path.join(runsDir, this.runId);
     this.skillsDirs = [...(skillsDirs || []), BUNDLED_SKILLS];
     this.projectId = projectId || null;
-    this.issues = issues?.length ? issues : issue ? [issue] : null;
+    this.ignoreInstallScripts = !!ignoreInstallScripts; // #472: the cache install runs with --ignore-scripts
+    this.issues =issues?.length ? issues : issue ? [issue] : null;
     this.then = chain.normalizeThen(then);
     const pipeline = chain.normalizePipeline(from?.pipeline);
     this.from = from?.run_id ? { run_id: String(from.run_id), workflow: from.workflow ? String(from.workflow) : undefined, ...(pipeline ? { pipeline } : {}) } : null;
@@ -732,15 +733,17 @@ class WorkflowRun extends EventEmitter {
 
     for (let attempt = 0; ; attempt++) {
       let errs;
+      let out;
       try {
-        const out = extractJson(res.text);
+        out = extractJson(res.text);
         errs = validateSchema(out, schema);
-        if (!errs.length) {
-          this.saveOutput(step, scope, JSON.stringify(out, null, 2), out);
-          return out;
-        }
       } catch (e) {
         errs = [e.message];
+      }
+      if (!errs.length) {
+        // outside the try: a refused save_as (#473) fails the step, it is not an invalid output to retry
+        this.saveOutput(step, scope, JSON.stringify(out, null, 2), out);
+        return out;
       }
       this.emitEvent('log', { level: 'warn', kind: 'invalid_output', step_id: step.id, message: `Invalid output in ${step.id}${step.agents ? ` (${agentName})` : ''}: ${errs.join('; ')}` });
       if (attempt >= 2) throw new Error(`Output of step "${step.id}" failed validation: ${errs.join('; ')}`);

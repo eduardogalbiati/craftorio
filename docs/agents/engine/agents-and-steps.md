@@ -34,6 +34,16 @@ fields (references between steps, agents, transitions, groups) are the named rul
   (`vars.ui_review_returned`), and the fix round is reviewed again before test/suite/E2E/build.
   Its `evidence` step only collects evidence (no `ui_findings`, no way back to develop).
 - `save_as` (string or list, relative to the run folder; `{ path, content }` saves one field), `on_error: <step>`;
+  #473 (SEC-8): the target's real path (its deepest existing parent's realpath, links resolved,
+  `canonicalPath` in worktree.js) must be under the run folder, the run's worktree (or base
+  worktree) or the project folder (`orchestrator.worktree.repo`, the `project_path` / `repo_path`
+  input); anything else (`../../x`, an absolute path elsewhere, a link out) writes nothing, emits a
+  `log` error for the step and fails it (outside the schema retry: `saveAsAllowed` in run/outputs.js).
+- Recordings (#475, SEC-10): the Recorder redacts every recorded string with the baseline of
+  src/engine/redact-baseline.js (bearer tokens, `…KEY=` / `…TOKEN=` / `…SECRET=` / `…PASSWORD=`
+  values, PEM private keys, `ghp_` / `github_pat_` / `sk-` / `xox…` tokens) before the workflow's
+  `observability.capture.redact` rules; a `spawn` item's `--mcp-config` env values and the output
+  of a `printenv` / `env` tool call (names kept, values dropped) are never recorded.
   `supervise: false` (#290): a failing agent step goes straight to its `on_error`, without the supervisor.
 - A **transition** can also take `on_error: <step>`: when its `action`, `merge: local` or `precheck` fails, the run goes there instead of failing, with the error in the template context as `action_error` (`{ step, message, at, check?, head?, supervisor?, diagnosis? }`; `head` = the worktree's HEAD after the failure, which a failed local merge leaves as it was: the last checked commit). `recoverFromActionError` in workflow.js.
   - `recover: [steps]` (needs `on_error`; agent steps only): the supervisor decides first (`superviseActionError`, `supervisor.actionSchema(recover)`: `goto` one of them | `escalate`; `goto` first = the mock's default). `goto` → that step, `action_error.supervisor = { goto, explanation, instruction, record }` (the step's prompt includes it); `escalate`, an invalid goto, no supervisor or no `max_total` left → `on_error` with `action_error.diagnosis`. Event `supervisor.decision` with `kind: action_error` and `record` ("went back to X at HH:MM UTC because …"), a `supervisor` row in `decisions.tsv`; `runs.js` exposes the latest record as `recovery` (Backlog card badge).

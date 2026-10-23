@@ -103,6 +103,9 @@ function detect(dir) {
   return other ? { notCached: NOT_CACHED[other] || NOT_CACHED['requirements.txt'], lockfile: other } : null;
 }
 
+// The install's args (`detect`'s): with `--ignore-scripts` under the project's setting (#472)
+const installArgs = (d, ignoreScripts) => (ignoreScripts ? [...d.args, '--ignore-scripts'] : d.args);
+
 // Runs `cmd args` (a .cmd shim through the shell on Windows) → { code, output, timedOut }; never rejects.
 function runCommand(cmd, args, { cwd, env, timeoutMs = INSTALL_TIMEOUT_MS, signal } = {}) {
   const exe = resolveCommand(cmd);
@@ -309,7 +312,7 @@ async function runLifecycle(workDir, d, { env, signal, log, run }) {
  *   status: none (no lockfile) · not_cached · linked (already) · hit · miss (installed now) ·
  *   local (installed in the worktree, could not go to the cache) · failed (the install failed)
  */
-async function ensureDeps({ workDir, cacheDir, project, env, signal, previous = null, log = () => {}, run = runCommand, waitMs = LOCK_WAIT_MS }) {
+async function ensureDeps({ workDir, cacheDir, project, env, signal, previous = null, log = () => {}, run = runCommand, waitMs = LOCK_WAIT_MS, ignoreScripts = false }) {
   const t0 = Date.now();
   const d = workDir && fs.existsSync(workDir) ? detect(workDir) : null;
   if (!d) return { status: 'none' };
@@ -352,7 +355,8 @@ async function ensureDeps({ workDir, cacheDir, project, env, signal, previous = 
     if (!clearNodeModules(nm)) return null; // a real folder locked by a program: left alone
     fs.symlinkSync(target, nm, LINK_TYPE);
     touch(entry, nm);
-    const failed = await runLifecycle(workDir, d, { env, signal, log, run });
+    // #472: the project's "install without scripts" setting runs none of its lifecycle scripts
+    const failed = ignoreScripts ? [] : await runLifecycle(workDir, d, { env, signal, log, run });
     return { status, ...base, key, entry, seconds: (Date.now() - t0) / 1000, ...extra, ...(failed.length ? { scripts_failed: failed } : {}) };
   };
 
@@ -385,8 +389,9 @@ async function ensureDeps({ workDir, cacheDir, project, env, signal, previous = 
     entry = taken.length ? path.join(projectDir, `${key}.${Date.now()}`) : path.join(projectDir, key);
 
     if (!clearNodeModules(nm)) return { status: 'failed', ...base, key, reason: `${nm} is in use by a program and could not be replaced` };
-    log('info', `dependency cache: installing ${d.lockfile} (${d.manager} ${d.args.join(' ')}) for key ${key}`);
-    const r = await run(d.manager, d.args, { cwd: workDir, env, signal });
+    const args = installArgs(d, ignoreScripts);
+    log('info', `dependency cache: installing ${d.lockfile} (${d.manager} ${args.join(' ')}) for key ${key}`);
+    const r = await run(d.manager, args, { cwd: workDir, env, signal });
     if (r.code !== 0) {
       const reason = r.timedOut ? 'the install timed out' : `${d.manager} ${d.args[0]} exited ${r.code ?? '?'}: ${lastLines(r.output)}`;
       return { status: 'failed', ...base, key, reason, seconds: (Date.now() - t0) / 1000 };
@@ -514,6 +519,7 @@ module.exports = {
   detect,
   ensureDeps,
   entryUsable,
+  installArgs,
   keyEntries,
   linkedBy,
   linkTarget,

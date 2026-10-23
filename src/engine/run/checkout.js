@@ -9,6 +9,7 @@
 
 'use strict';
 
+const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const {
@@ -24,6 +25,7 @@ const {
   syncWithBase,
 } = require('../worktree');
 const capabilities = require('../capabilities');
+const checkStep = require('../check-step');
 const depsCache = require('../deps-cache');
 const { scratchWorkspace } = require('../../local-preview');
 const { render } = require('./templates');
@@ -45,6 +47,7 @@ const methods = {
     const log = (level, message) => this.emitEvent('log', { level, message });
     if (!this.worktreesDir) {
       log('info', `worktree: ${this.machine.simulated ? 'simulation, ' : ''}no worktree for this run; agents work in ${repo}`);
+      this.logRepoCommands(repo);
       return;
     }
     const prev = this.resume?.worktree;
@@ -52,6 +55,7 @@ const methods = {
     const info = await prepareWorktree({ repo, base, dir, branch: prev?.branch || null, log, remote });
     if (!info) {
       log('info', `worktree: ${repo} is not a git repository; agents work in it directly`);
+      this.logRepoCommands(repo);
       return;
     }
     this.worktree = info;
@@ -69,7 +73,30 @@ const methods = {
       dir: info.dir, work_dir: info.workDir, repo: info.repo, base: info.base, ref: info.ref, commit: info.commit, reused: info.reused, recreated: info.recreated,
     });
     log('info', `worktree: ${how} ${info.dir} at ${info.ref || 'its branch'} (${String(info.commit || '').slice(0, 8)})`);
+    this.logRepoCommands(info.workDir);
     await this.prepareDeps('worktree', info.workDir, 'worktree ready');
+  },
+
+  // #472 (SEC-7): one `log` event, before the install and the first step, naming the commands the
+  // run executes from the repository (its dependency install, its check script, its test command),
+  // so the recording shows the repository code the run is about to run
+  logRepoCommands(dir) {
+    if (!dir) return;
+    const d = depsCache.detect(dir);
+    const hasPackage = fs.existsSync(path.join(dir, 'package.json'));
+    let install = null;
+    if (d?.manager && !d.notCached) install = `\`${d.manager} ${depsCache.installArgs(d, this.ignoreInstallScripts).join(' ')}\``;
+    else if (d?.notCached) install = `none by the run (${d.lockfile} is not cached: ${d.notCached})`;
+    else if (hasPackage) install = 'none by the run (package.json without a lockfile: npm scripts run only when an agent runs them)';
+    const check = checkStep.checkCommand(dir);
+    const tests = this.suiteCommand();
+    const parts = [
+      install && `dependency install ${install}`,
+      check && `check \`${check}\``,
+      tests && `tests \`${tests}\``,
+    ].filter(Boolean);
+    if (!parts.length) return;
+    this.emitEvent('log', { level: 'info', message: `repository commands: this run executes the repository's own scripts: ${parts.join('; ')}` });
   },
 
   // ---- dependencies from the shared cache (#198, src/engine/deps-cache.js) ---------------------
@@ -91,6 +118,7 @@ const methods = {
         signal: this.abort.signal,
         previous,
         log: (level, message) => this.emitEvent('log', { level, message }),
+        ignoreScripts: !!this.ignoreInstallScripts,
       });
     } catch (e) {
       if (this.abort.signal.aborted) throw e;

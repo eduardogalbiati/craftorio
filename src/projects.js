@@ -53,17 +53,22 @@ async function createProject(dir, data, { git = execGit, reposDir = null } = {})
   const defaultFolder = repo && reposDir ? path.join(reposDir, repoNameFromUrl(repo)) : path.join(dir, id);
   const folder = path.resolve(data.folder?.trim() || defaultFolder);
 
+  let cloned = false;
   if (repo && !isDir(path.join(folder, '.git'))) {
     if (isDir(folder) && fs.readdirSync(folder).length) throw new Error(`The folder ${folder} is not empty and is not a git repository; cannot clone into it.`);
     fs.mkdirSync(path.dirname(folder), { recursive: true });
     await git(['clone', repo, folder], path.dirname(folder));
+    cloned = true;
   } else {
     fs.mkdirSync(folder, { recursive: true });
     if (!repo && isDir(path.join(folder, '.git'))) repo = await git(['remote', 'get-url', 'origin'], folder).then((s) => s.trim() || null, () => null);
   }
 
   const localPreview = cleanLocalPreview(data.localPreview);
-  const project = { name, description: data.description?.trim() || '', folder, repo, ...(localPreview ? { localPreview } : {}), createdAt: new Date().toISOString() };
+  // #472: a repository the app cloned (not the user's own checkout) installs without its scripts
+  // until the owner turns the setting off; the project dialog's own choice wins
+  const ignoreInstallScripts = typeof data.ignoreInstallScripts === 'boolean' ? data.ignoreInstallScripts : cloned;
+  const project = { name, description: data.description?.trim() || '', folder, repo, ...(localPreview ? { localPreview } : {}), ...(ignoreInstallScripts ? { ignoreInstallScripts } : {}), createdAt: new Date().toISOString() };
   fs.writeFileSync(metaFile(dir, id), JSON.stringify(project, null, 2));
   return readProject(dir, id);
 }
@@ -78,6 +83,8 @@ function updateProject(dir, id, patch) {
   if (patch.autoPush !== undefined) next.autoPush = !!patch.autoPush;
   // #138: a new issue the Product Owner registers joins the existing epic it matches clearly, with no extra click
   if (patch.autoEpic !== undefined) next.autoEpic = !!patch.autoEpic;
+  // #472: the dependency install of a run skips the packages' scripts (--ignore-scripts)
+  if (patch.ignoreInstallScripts !== undefined) next.ignoreInstallScripts = !!patch.ignoreInstallScripts;
   // how to run a run's worktree from a gate (Run locally); overrides the workflow's orchestrator.local_preview
   if (patch.localPreview !== undefined) next.localPreview = cleanLocalPreview(patch.localPreview);
   // the fingerprint of the declared run command the owner confirmed (#115): a changed one asks again

@@ -3,6 +3,13 @@
 The run's worktree option, what templates can read, and transition actions.
 
 - `orchestrator.worktree: { repo, base }` + `defaults.working_dir: "{{ worktree_dir }}"`: see [worktrees.md](../worktrees.md).
+- Starting a run executes the repository's own scripts (#472, SEC-7): `prepareDeps` installs through
+  the deps cache (`npm ci` runs `postinstall`), then the check step (`npm run check`) and the suite
+  (the detected test command) run through a shell. `logRepoCommands` (src/engine/run/checkout.js),
+  called by `setupWorktree` before the install, emits one `log` event naming them. The project's
+  `ignoreInstallScripts` (Projects › Edit, on by default for a repository `createProject` clones)
+  reaches `WorkflowRun({ ignoreInstallScripts })` and `ensureDeps({ ignoreScripts })`: the install
+  gets `--ignore-scripts` and a cache hit skips the lifecycle scripts.
 - Template context: `inputs`, `steps.<id>.output/visits`, `steps.<id>.outputs` (every visit's output,
   oldest first; a resumed run only has the last), `trail` (the run's step visits so far:
   `{ step, visit, type, status, cost, durationMs, ts }`, StepTrail, #290), `run_id`, `run_dir`, `runs_dir`,

@@ -400,6 +400,8 @@ module.exports = (ctx) => {
         file: wfFile.file, inputs, mock, runsDir: ws.runs, skillsDirs: [ws.skills], notices,
         // Run locally at gates: the project's override of the workflow's orchestrator.local_preview
         localPreview: project?.localPreview?.command ? project.localPreview : null,
+        // #472: the project's "install dependencies without running their scripts"
+        ignoreInstallScripts: !!project?.ignoreInstallScripts,
         budget, prices: settings.prices, projectId, issues, resume, attachments, mockSequences: mock ? mockSequences : null, then, from,
         agentOverrides, fallbacks: settingsFallbacks(settings), models: settings.models || {},
         accounts: settingsAccounts(settings), accountCooldownMs: settingsAccountCooldownMs(settings),

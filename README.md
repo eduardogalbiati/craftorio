@@ -1908,6 +1908,13 @@ defaults:
   worktrees unused for 14 days; failed runs' worktrees stay until then so they can be resumed.
 - A fresh worktree has no installed dependencies: the developer and the test/build skills install
   them when missing (`npm ci`, `uv sync`, `dotnet restore`…).
+- **Starting a run executes the repository's own scripts** (#472): the dependency install at
+  checkout (`npm ci`, with its `postinstall`), `npm run check` when `package.json` has one, and the
+  detected test command run with your privileges before or without any agent turn. The run's first
+  `log` event names them. The project setting **Install dependencies without running their
+  scripts** (Projects › Edit) adds `--ignore-scripts` to the install; it is off for your own
+  folders and on for a repository the app cloned (Backlog / Discovery). The check and test
+  commands still run: only use repositories you trust.
 - Merge action: `gh pr merge` runs with `--repo <owner/repo>`, so gh merges and deletes the remote
   branch server side only. Without it, `--delete-branch` also checks out the base and deletes the
   local branch, which fails in a worktree (the base is checked out in the main checkout, and a
@@ -2317,6 +2324,12 @@ Each run writes to `<workspace>/runs/<run_id>/`:
 - `handoffs/`: the agents' handoff notes, one per turn
 - files written by `save_as` (e.g. `arena/`, `review.md`)
 - `decisions.tsv`: the agents' decision log (time, agent, step, phase, decision, why, evidence, result)
+
+Recordings are redacted before they are written (#475): a baseline the app always applies (bearer
+tokens, `…KEY=` / `…TOKEN=` / `…SECRET=` / `…PASSWORD=` pairs, PEM private keys, `ghp_`,
+`github_pat_`, `sk-` and `xox…` tokens, the `env` values of an agent's `--mcp-config`, the values
+of a `printenv` / `env` output), then the workflow's own `observability.capture.redact` rules.
+Still check a recording before you share it.
 
 The **24/7 chip** in the top bar (#188) shows one number: the share of the last 24 h with at least
 one real run active (**24/7 · 87%**; a run waiting at a human gate does not count, simulated runs

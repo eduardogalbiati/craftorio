@@ -81,6 +81,12 @@ function openProjectModal(p, { fromDrawer = false, fromHeader = false } = {}) {
   $('#pj-lp-install').value = p?.localPreview?.install || '';
   $('#pj-lp-command').value = p?.localPreview?.command || '';
   $('#pj-lp-url').value = p?.localPreview?.url || '';
+  // #472: a new project cloned by the app (a repository URL) suggests it on until the box is touched
+  const scripts = $('#pj-ignore-scripts');
+  scripts.checked = !!p?.ignoreInstallScripts;
+  scripts.dataset.touched = '';
+  scripts.onchange = () => { scripts.dataset.touched = '1'; };
+  $('#pj-repo').oninput = p ? null : () => { if (!scripts.dataset.touched) scripts.checked = !!$('#pj-repo').value.trim(); };
   $('#pj-folder').required = !!p;
   $('#pj-folder-hint').classList.toggle('hidden', !!p);
   $('#pj-error').textContent = '';
@@ -123,6 +129,8 @@ async function saveProject(e) {
   // the fields show install / command / URL; a monorepo app's folder and the env are kept
   const kept = pjDetected?.command === command ? pjDetected : editingProject?.localPreview || {};
   data.localPreview = { cwd: kept.cwd, env: kept.env, install, command, url };
+  // not a named field: FormData leaves an unchecked box out
+  data.ignoreInstallScripts = $('#pj-ignore-scripts').checked;
   pjDetected = null;
   const btn = $('#btn-pj-save');
   $('#pj-error').textContent = '';
@@ -166,7 +174,7 @@ registerView({
       </section>`,
   modals: () => `
   <div id="project-modal" class="modal hidden">
-    <form id="project-form" class="modal-card wide">
+    <form id="project-form" class="modal-card wide" data-testid="project-dialog">
       <h3 id="project-modal-title">${t('projects.new_project')}</h3>
       <div class="field">
         <label for="pj-name">${t('projects.name')} <span class="req">*</span></label>
@@ -198,6 +206,10 @@ registerView({
         </div>
         <div id="pj-lp-detected" class="hint pj-lp-detected hidden"></div>
         <div class="hint">${t('projects.how_to_run_a_run_s')}</div>
+      </div>
+      <div class="field">
+        <label class="check small"><input type="checkbox" id="pj-ignore-scripts" data-testid="project-ignore-scripts" /><span>${t('projects.install_without_scripts')}</span></label>
+        <div class="hint">${t('projects.install_without_scripts_hint')}</div>
       </div>
       <p id="pj-error" class="error small"></p>
       <div class="modal-actions">
