@@ -136,6 +136,56 @@ test('#486 projectManifest of a folder without a manifest is null', async (t) =>
   assert.equal(out, null);
 });
 
+test('#486 projectManifest of a folder whose manifest is not valid YAML returns its errors and no workflows', async (t) => {
+  const out = await projectManifest({ folder: folderWithManifest(t, 'version: 1\nworkflows: [\n  - name: a\n') });
+  assert.ok(out, 'not null: the manifest exists');
+  assert.ok(Array.isArray(out.errors) && out.errors.length > 0, `errors reported: ${JSON.stringify(out.errors)}`);
+  assert.match(String(out.errors[0]), /not valid YAML/i);
+  assert.deepEqual(names(out), []);
+});
+
+// ---- createProject on a repository it clones (the git runner is the boundary) -------------------
+
+// A git runner whose clone makes the folder a repository holding `.multiagent/project.yaml`
+function cloningGit(text = MANIFEST) {
+  const calls = [];
+  const git = async (args) => {
+    calls.push(args.join(' '));
+    if (args[0] === 'clone') {
+      const folder = args[2];
+      fs.mkdirSync(path.join(folder, '.git'), { recursive: true });
+      fs.mkdirSync(path.join(folder, '.multiagent'), { recursive: true });
+      fs.writeFileSync(path.join(folder, '.multiagent', 'project.yaml'), text);
+    }
+    return '';
+  };
+  return { git, calls };
+}
+
+test('#486 createProject on a freshly cloned repository with no workflows checked adopts the clone\'s manifest and derives the default', async (t) => {
+  const root = tempDir(t, 'pj-wf-486-clone-');
+  const { git, calls } = cloningGit();
+  const projects = require('../src/projects');
+  const p = await projects.createProject(path.join(root, 'projects'), { name: 'Cloned', repo: 'https://github.com/o/r.git' }, { git, reposDir: path.join(root, 'repos') });
+  assert.ok(calls.some((c) => c.startsWith('clone ')), 'the repository was cloned');
+  assert.deepEqual(setOf(p), MANIFEST_NAMES.map((n) => `${n}:manifest`));
+  // the first solo/team/build entry of the manifest (backlog-refresh is intake)
+  assert.equal(bare(p.defaultWorkflow), 'software-development');
+  const saved = projects.readProject(path.join(root, 'projects'), p.id);
+  assert.deepEqual(setOf(saved), MANIFEST_NAMES.map((n) => `${n}:manifest`), 'written on the record');
+  assert.equal(bare(saved.defaultWorkflow), 'software-development');
+});
+
+test('#486 createProject on a freshly cloned repository keeps the checked workflows, not the clone\'s manifest', async (t) => {
+  const root = tempDir(t, 'pj-wf-486-clone-checked-');
+  const { git } = cloningGit();
+  const projects = require('../src/projects');
+  const workflows = [{ name: 'writer-reviewer', origin: 'bundled', category: 'build' }];
+  const p = await projects.createProject(path.join(root, 'projects'), { name: 'Checked', repo: 'https://github.com/o/r.git', workflows }, { git, reposDir: path.join(root, 'repos') });
+  assert.deepEqual(setOf(p), ['writer-reviewer:bundled']);
+  assert.equal(bare(p.defaultWorkflow), 'writer-reviewer');
+});
+
 // ---- the channel ---------------------------------------------------------------------------------
 
 function service(t) {
@@ -149,6 +199,33 @@ test('#486 projects:manifest { folder } answers the manifest\'s entries, null wi
   const out = await api['projects:manifest']({ folder: folderWithManifest(t) });
   assert.deepEqual(names(out), MANIFEST_NAMES);
   assert.equal(await api['projects:manifest']({ folder: tempDir(t, 'pj-wf-486-none-') }), null);
+});
+
+// A self-hosted host (no gh / glab adapter): the channel reads the raw file with the global fetch,
+// stubbed here, so neither a CLI nor the network is reached
+function stubGlobalFetch(t, fn) {
+  const original = globalThis.fetch;
+  const urls = [];
+  globalThis.fetch = async (url, ...rest) => { urls.push(String(url)); return fn(String(url), ...rest); };
+  t.after(() => { globalThis.fetch = original; });
+  return urls;
+}
+
+test('#486 projects:manifest { url } of a public self-hosted repository reads the raw manifest through fetch', async (t) => {
+  const { api } = service(t);
+  const urls = stubGlobalFetch(t, async (url) => (/\.multiagent\/project\.yaml$/.test(url) ? response(200, MANIFEST) : response(404, 'Not Found')));
+  const out = await api['projects:manifest']({ url: 'https://git.example.test/o/r.git' });
+  assert.deepEqual(names(out), MANIFEST_NAMES);
+  assert.deepEqual(urls, ['https://git.example.test/o/r/-/raw/HEAD/.multiagent/project.yaml']);
+});
+
+test('#486 projects:manifest { url } that cannot be read (offline) says it will be read after cloning', async (t) => {
+  const { api } = service(t);
+  stubGlobalFetch(t, async () => { throw new Error('getaddrinfo ENOTFOUND git.example.test'); });
+  const out = await api['projects:manifest']({ url: 'https://git.example.test/o/r.git' });
+  assert.equal(out?.pending, true);
+  assert.match(String(out.message || ''), /after cloning/i);
+  assert.deepEqual(names(out), []);
 });
 
 test('#486 projects:manifest refuses a missing or non-object argument', async (t) => {
