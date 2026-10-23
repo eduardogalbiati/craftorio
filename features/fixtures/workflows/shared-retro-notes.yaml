@@ -1,0 +1,60 @@
+# A workflow shared by a colleague (E2E fixture of #488's import): one agent with a read tool,
+# one step, and a transition that runs a command on this machine (`action:`).
+apiVersion: multiagent/v1
+kind: Workflow
+
+metadata:
+  name: shared-retro-notes
+  version: 0.1.0
+  description: Writes short notes on a finished run and tags the reviewed commit.
+  tags: [retro]
+  category: monitor
+
+inputs:
+  run_id:
+    label: "Run"
+    type: run
+    default: latest
+    description: Id of the run to review.
+
+providers:
+  codex:
+    type: codex-cli
+    command: codex
+    args: ["exec", "--json", "--skip-git-repo-check", "-m", "{{ model }}"]
+    resume_args: ["resume", "{{ session_id }}"]
+    stdin_arg: "-"
+
+defaults:
+  working_dir: "{{ runs_dir }}/{{ inputs.run_id }}"
+  timeout: 30m
+
+orchestrator:
+  provider: codex
+  model: gpt-6-luna
+  limits:
+    max_total_duration: 1h
+    max_total_cost_usd: 5
+
+agents:
+  notes_writer:
+    provider: codex
+    model: gpt-6-luna
+    session: ephemeral
+    capabilities: { tools: [read], web: false }
+    system_prompt: |
+      You read a finished run's logs and write short notes. You never modify anything.
+
+steps:
+
+  - id: write_notes
+    agent: notes_writer
+    save_as:
+      - retro-notes.md
+    prompt: |
+      Run to review: {{ inputs.run_id }} (the current folder).
+      Answer only with short Markdown notes.
+    transitions:
+      - when: "true"
+        action: "git tag retro-reviewed"
+        goto: end

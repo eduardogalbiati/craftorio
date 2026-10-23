@@ -1,0 +1,39 @@
+# A malformed workflow (E2E fixture of #488's import): valid YAML the loader rejects, its only
+# step names an agent that is not declared ("ghost_agent") and goes to a step that does not exist.
+apiVersion: multiagent/v1
+kind: Workflow
+
+metadata:
+  name: broken-workflow
+  version: 0.1.0
+  description: A workflow the loader rejects.
+  category: monitor
+
+providers:
+  codex:
+    type: codex-cli
+    command: codex
+    args: ["exec", "--json", "--skip-git-repo-check", "-m", "{{ model }}"]
+    stdin_arg: "-"
+
+orchestrator:
+  provider: codex
+  model: gpt-6-luna
+
+agents:
+  writer:
+    provider: codex
+    model: gpt-6-luna
+    session: ephemeral
+    capabilities: { tools: [read], web: false }
+    system_prompt: You write.
+
+steps:
+
+  - id: only_step
+    agent: ghost_agent
+    prompt: |
+      Do something.
+    transitions:
+      - when: "true"
+        goto: missing_step

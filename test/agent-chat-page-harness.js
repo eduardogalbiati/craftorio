@@ -40,7 +40,8 @@ const API_DEFAULTS = {
   productOwnerHistory: () => [],
 };
 
-async function loadPage({ api: overrides = {} } = {}) {
+// location (#488): fields over the default file:///index.html one, e.g. { search: '?import=<url>' }
+async function loadPage({ api: overrides = {}, location = {} } = {}) {
   const calls = [];
   const handlers = {};
   const api = new Proxy({}, {
@@ -82,7 +83,7 @@ async function loadPage({ api: overrides = {} } = {}) {
     Audio: class { play() { return Promise.resolve(); } pause() {} },
     Notification: class { static requestPermission() { return Promise.resolve('denied'); } },
     navigator: { platform: 'Win32', userAgent: 'node', clipboard: { writeText: async () => {} }, language: 'en-US', mediaDevices: {} },
-    location: { hash: '', search: '', href: 'file:///index.html', protocol: 'file:', reload() {} },
+    location: { hash: '', search: '', href: 'file:///index.html', protocol: 'file:', reload() {}, ...location },
     history: { pushState() {}, replaceState() {} },
     matchMedia: () => ({ matches: false, addEventListener() {}, removeEventListener() {}, addListener() {} }),
     getComputedStyle: () => ({ getPropertyValue: () => '' }),
