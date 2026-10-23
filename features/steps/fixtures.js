@@ -56,6 +56,10 @@ const test = base.extend({
       await state.app.context().tracing.stop(kept ? { path: file } : {}).catch(() => {});
       if (fs.existsSync(file)) await testInfo.attach('trace', { path: file, contentType: 'application/zip' });
     }
+    // an unsaved workflow in the Builder (dirty) makes the window ask before it closes (beforeunload):
+    // Playwright cannot answer that native dialog and the close waits on it. The scenario is over, so
+    // the teardown destroys the windows (no beforeunload); the app's own behaviour is unchanged
+    await state.app?.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().forEach((w) => w.destroy())).catch(() => {});
     await state.close();
   },
 });
