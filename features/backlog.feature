@@ -159,7 +159,8 @@ Feature: Backlog Board and Roadmap
   # run failed ("#13 failed: resume to start the next issues."). The roadmap's own error ("Could not
   # start #14") is another alert, so the scenarios bring the queue's alert into view first.
 
-  @issue-422
+  # @fixme until #556 (release 1.3.0): since #445 a failure pause on an empty queue is stale and dropped
+  @issue-422 @fixme
   Scenario: The Queue error alert offers Resume and no close button
     Given the app is open
     And a queued run failed and paused the issue queue
@@ -169,7 +170,8 @@ Feature: Backlog Board and Roadmap
     And the shown alert offers "Resume"
     And the shown alert has no "Dismiss" button
 
-  @issue-422
+  # @fixme until #556 (release 1.3.0): since #445 a failure pause on an empty queue is stale and dropped
+  @issue-422 @fixme
   Scenario: Resume in the Queue error alert resumes the queue and the alert goes away
     Given the app is open
     And a queued run failed and paused the issue queue

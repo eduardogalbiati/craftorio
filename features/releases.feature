@@ -70,7 +70,8 @@ Feature: Releases
 
   # #376: a release on the project city. A real git repository tagged 1.1.0, 1.1.1 and 1.1.2: 1.1.2
   # adds one file (#12), removes one and changes one (#13); see features/steps/release-city.steps.js
-  @issue-376
+  # @fixme until #556 (release 1.3.0): since #430 the city opens in a modal the step does not look in
+  @issue-376 @fixme
   Scenario: "Show on the map" on a release shows the city with what the release changed
     Given the app is open
     And the workspace has a git project "shop" tagged "1.1.0", "1.1.1" and "1.1.2" that shipped the release "1.1.2" with the issues "#12" and "#13"

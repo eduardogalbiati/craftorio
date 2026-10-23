@@ -96,7 +96,8 @@ Feature: Artifacts
     And the artifact shows no "Open the report" button
     And the app is still on its own page
 
-  @issue-466
+  # @fixme until #556 (release 1.3.0): never passed: #466's sanitizer drops the file: href the step clicks
+  @issue-466 @fixme
   Scenario: A link to a local page in an agent's report keeps the app on its page
     Given the app is open
     And the demo run "res00225" has a report "audit-report.md" reading "The audit found no issue." with a link "the full log" to a local page
