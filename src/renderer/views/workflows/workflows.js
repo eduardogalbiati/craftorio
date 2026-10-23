@@ -94,16 +94,24 @@ function loadWorkflowRunsThrottled() {
 // each a compact card (modes, declared outputs, agents, the steps as a one-line flow that expands),
 // and the saved pipelines (api.listPipelines, #135) as connected cards in their category's section.
 // A section filter (pills) and a search narrow both; "Used in" links a workflow to its pipelines.
-// each section's hint: catalog keys
+// each section's hint: catalog keys. #485: first the four flows a repository's manifest files its
+// workflows under (src/project-manifest.js), shown always; the app's CATEGORIES (app.js) name the others
 const WF_SECTIONS = {
+  intake: 'workflows.section_intake_hint',
+  solo: 'workflows.section_solo_hint',
+  team: 'workflows.section_team_hint',
+  release: 'workflows.section_release_hint',
   plan: 'workflows.section_plan_hint',
   build: 'workflows.section_build_hint',
   monitor: 'workflows.section_monitor_hint',
   other: 'workflows.section_other_hint',
 };
-const wfDefs = { section: 'all', query: '', open: new Set(), pipelines: [], pipelinesError: null };
-const wfSectionOf = (category) => (CATEGORIES[category] ? category : 'other');
-const wfSectionName = (key) => CATEGORIES[key] || t('workflows.section_other');
+// repository: the projects' repository workflows (origin 'repository'), manifestErrors: a malformed
+// manifest's entry per project (#485); both apart from state.workflows, which other screens read
+const wfDefs = { section: 'all', query: '', open: new Set(), pipelines: [], pipelinesError: null, repository: [], manifestErrors: [] };
+const wfSectionOf = (category) => (category && Object.hasOwn(WF_SECTIONS, category) ? category : 'other');
+const wfSectionName = (key) => CATEGORIES[key] || { intake: t('workflows.section_intake'), solo: t('workflows.section_solo'), team: t('workflows.section_team'), release: t('workflows.section_release') }[key] || t('workflows.section_other');
+const isManifestError = (w) => w.origin === 'repository' && w.error && w.name === '.multiagent/project.yaml';
 const wfByFile = (file) => state.workflows.find((w) => w.file === file);
 // A pipeline sits in its own category's section, else in its first workflow's.
 const pipeSection = (p) => wfSectionOf(p.category || wfByFile(p.stages[0]?.workflow)?.category);
@@ -120,13 +128,31 @@ function pipeMatches(p, q) {
     .some((t) => String(t || '').toLowerCase().includes(q));
 }
 
+// #485: the projects with a folder, each asked for its repository workflows (a failing project lists none)
+async function repositoryLists() {
+  const projects = await (api.listProjects ? api.listProjects() : Promise.resolve([])).catch(() => []);
+  if (projects?.length) state.projects = projects;
+  return Promise.all((projects || []).filter((p) => p.folder).map((p) => api.listWorkflows({ projectId: p.id }).catch(() => [])));
+}
+
 async function refreshWorkflows() {
   wfDefs.pipelinesError = null;
-  const [workflows, pipelines] = await Promise.all([
+  const [workflows, pipelines, perProject] = await Promise.all([
     api.listWorkflows(),
     (api.listPipelines ? api.listPipelines() : Promise.resolve([])).catch((e) => { wfDefs.pipelinesError = errMsg(e); return []; }),
+    repositoryLists(),
   ]);
-  state.workflows = workflows;
+  // a workflow a manifest names without a file takes the manifest's category (the first project's)
+  const placed = new Map();
+  const repository = new Map();
+  const errors = new Map();
+  for (const w of [...perProject.flat(), ...workflows]) {
+    if (w.origin !== 'repository') { if (w.category && !placed.has(w.file)) placed.set(w.file, w.category); continue; }
+    (isManifestError(w) ? errors : repository).set(`${w.projectId}\n${w.file}`, w);
+  }
+  state.workflows = workflows.filter((w) => w.origin !== 'repository').map((w) => ({ ...w, category: placed.get(w.file) || w.category }));
+  wfDefs.repository = [...repository.values()];
+  wfDefs.manifestErrors = [...errors.values()];
   wfDefs.pipelines = pipelines;
   renderWorkflowDefinitions();
 }
@@ -137,21 +163,25 @@ function renderWorkflowDefinitions() {
   // #254: the Pipelines tab is this page with the pipelines alone
   const pipesOnly = state.workflowsTab === 'pipelines';
   const pipesError = wfDefs.pipelinesError ? `<p class="error small">${t('workflows.pipelines_could_not_be_read')} ${esc(wfDefs.pipelinesError)}</p>` : '';
-  if (pipesOnly ? !wfDefs.pipelines.length : !state.workflows.length) {
+  // #485: a malformed repository manifest, per project, above the sections (its project runs on the workspace's workflows)
+  const projectName = (id) => (state.projects || []).find((p) => p.id === id)?.name || id;
+  const manifestErrors = pipesOnly ? '' : wfDefs.manifestErrors.map((e) => `<p class="error small" role="alert" data-testid="workflows-manifest-error">${esc(`${projectName(e.projectId)}: ${e.error}`)}</p>`).join('');
+  if (pipesOnly ? !wfDefs.pipelines.length : !state.workflows.length && !wfDefs.repository.length) {
     filters.innerHTML = '';
     box.innerHTML = pipesOnly
       ? `${pipesError}<div class="empty-state"><b>${t('workflows.no_pipelines_yet')}</b><p class="muted">${t('workflows.a_pipeline_chains_workflows_start_a')}</p></div>`
-      : `<div class="empty-state"><b>${t('workflows.no_workflows')}</b><p class="muted">${t('workflows.add_yaml_files_to_the_workflows')}</p></div>`;
+      : `${manifestErrors}<div class="empty-state"><b>${t('workflows.no_workflows')}</b><p class="muted">${t('workflows.add_yaml_files_to_the_workflows')}</p></div>`;
     return;
   }
   const q = wfDefs.query.trim().toLowerCase();
-  const keys = [...Object.keys(CATEGORIES), 'other'];
-  const workflows = pipesOnly ? [] : state.workflows.filter((w) => wfMatches(w, q));
+  const keys = [...Object.keys(WF_FLOW_CATEGORIES), ...Object.keys(CATEGORIES), 'other'];
+  const workflows = pipesOnly ? [] : [...state.workflows, ...wfDefs.repository].filter((w) => wfMatches(w, q));
   const pipelines = wfDefs.pipelines.filter((p) => pipeMatches(p, q));
+  const yours = (w) => w.origin === 'custom' || w.origin === 'repository';
   const inSection = (key) => ({
-    // bundled workflows first, then yours, each by name
+    // bundled workflows first, then yours and the repositories', each by name
     workflows: workflows.filter((w) => wfSectionOf(w.category) === key)
-      .sort((a, b) => (a.origin === 'custom') - (b.origin === 'custom') || String(a.name).localeCompare(String(b.name))),
+      .sort((a, b) => yours(a) - yours(b) || String(a.name).localeCompare(String(b.name))),
     pipelines: pipelines.filter((p) => pipeSection(p) === key),
   });
   const sections = Object.fromEntries(keys.map((k) => [k, inSection(k)]));
@@ -161,25 +191,28 @@ function renderWorkflowDefinitions() {
   filters.innerHTML = pills.map(([k, label, n]) => `<button class="chip ${wfDefs.section === k ? 'active' : ''}" data-section="${k}" aria-pressed="${wfDefs.section === k}">${esc(label)} <span class="muted">${n}</span></button>`).join('');
   filters.querySelectorAll('[data-section]').forEach((b) => (b.onclick = () => { wfDefs.section = b.dataset.section; renderWorkflowDefinitions(); }));
 
-  const shown = keys.filter((k) => (wfDefs.section === 'all' || wfDefs.section === k) && count(k));
+  // the four flows stay visible, empty too, unless a search narrows the list
+  const always = (k) => !pipesOnly && !q && WF_FLOW_CATEGORIES[k];
+  const shown = keys.filter((k) => (wfDefs.section === 'all' || wfDefs.section === k) && (count(k) || always(k)));
   if (!shown.length) {
     box.innerHTML = `<div class="empty-state"><b>${t(pipesOnly ? 'workflows.no_pipeline_matches' : 'workflows.no_workflow_matches')}</b><p class="muted">${t(q ? 'workflows.nothing_matches_query_in_section' : 'workflows.nothing_in_section', { query: esc(wfDefs.query.trim()), section: esc(wfDefs.section === 'all' ? t('workflows.any_section') : wfSectionName(wfDefs.section)) })}</p><button class="btn ghost sm" data-clear>${t('workflows.clear_the_filters')}</button></div>`;
     box.querySelector('[data-clear]').onclick = () => { wfDefs.section = 'all'; wfDefs.query = ''; $('#wf-search').value = ''; renderWorkflowDefinitions(); };
     return;
   }
-  box.innerHTML = pipesError + shown.map((k) => {
+  box.innerHTML = pipesError + manifestErrors + shown.map((k) => {
     const s = sections[k];
     const n = (x, key) => t(key, { count: x });
     return `
-    <section class="wf-section" data-section="${k}">
+    <section class="wf-section" data-section="${k}" data-testid="workflow-category" data-category="${k}">
       <header class="wf-section-head">
         <h2>${esc(wfSectionName(k))}</h2>
         ${pipesOnly ? '' : `<span class="badge cat-${k}">${n(s.workflows.length, 'workflows.workflows_count')}</span>`}
         ${s.pipelines.length ? `<span class="badge${pipesOnly ? ` cat-${k}` : ''}">${n(s.pipelines.length, 'workflows.pipelines_count')}</span>` : ''}
-        <span class="muted small">${esc(t(WF_SECTIONS[k]))}</span>
+        <span class="muted small" data-testid="workflow-category-explanation">${esc(t(WF_SECTIONS[k]))}</span>
       </header>
       ${s.pipelines.length ? `<div class="wf-pipes">${s.pipelines.map(pipelineCard).join('')}</div>` : ''}
       ${s.workflows.length ? `<div class="wf-grid">${s.workflows.map(workflowCard).join('')}</div>` : ''}
+      ${count(k) ? '' : `<p class="muted small">${t('workflows.section_empty')}</p>`}
     </section>`;
   }).join('');
   wireWorkflowDefinitions(box);
@@ -216,8 +249,24 @@ function workflowCard(w) {
   const model = typeof SetupModel === 'undefined' ? null : SetupModel;
   const needs = (model ? model.requirementBadges(w.requirements) : []).map((b) => `<span class="badge" title="${t('workflows.the_clis_it_needs_with_its')}">${esc(b)}</span>`).join('');
   const shown = !model || !(state.settings?.hiddenWorkflows || []).includes(model.workflowId(w.file));
+  // #485: a repository's workflow, read-only and off until accepted for its commit
+  const repo = w.origin === 'repository';
+  const actions = repo
+    ? `<span class="badge ${w.accepted ? 'ok' : 'warn'}" data-testid="workflow-acceptance">${t(w.accepted ? 'workflows.accepted' : 'workflows.not_accepted')}</span>
+        ${w.accepted ? '' : `<button class="btn primary sm" data-accept data-testid="workflow-accept" title="${t('workflows.accept_tip')}">${t('workflows.accept')}</button>`}
+        <span class="spacer"></span>
+        <button class="btn ghost sm" data-clone data-testid="workflow-clone" ${w.error ? 'disabled' : ''}>${t('workflows.clone')}</button>
+        <button class="btn ghost sm" data-builder data-testid="workflow-open-builder" ${w.error ? 'disabled' : ''} title="${t('workflows.builder_tip_bundled')}">${t('workflows.open_in_builder')}</button>`
+    : `${w.restorable ? `<button class="btn ghost sm" data-restore title="${t('workflows.move_your_edited_copy_to_the')}">${t('workflows.restore_default')}</button>` : ''}
+        <label class="wf-show-start small" title="${t('workflows.off_start_does_not_offer_it')}"><label class="switch"><input type="checkbox" data-show-start data-testid="workflow-show-in-start" aria-label="${t('workflows.show_in_start_name', { name: esc(w.name) })}" ${shown ? 'checked' : ''} /><span></span></label>${t('workflows.show_in_start')}</label>
+        <span class="spacer"></span>
+        <button class="btn ghost sm" data-builder ${w.error ? 'disabled' : ''} title="${esc(builderTip)}">${t('workflows.open_in_builder')}</button>
+        <button class="btn primary sm" data-run ${w.error ? 'disabled' : ''}>${t('workflows.run')}</button>`;
+  const diff = repo && w.diff && !w.accepted
+    ? `<details class="wf-diff small"><summary>${t('workflows.changes_since', { commit: esc(String(w.acceptedCommit || '').slice(0, 7)) })}</summary><pre class="mono">${esc(w.diff)}</pre></details>`
+    : '';
   return `
-    <article class="wf-card${w.origin === 'custom' ? ' custom' : ''}" data-file="${esc(w.file)}" tabindex="-1">
+    <article class="wf-card${w.origin === 'custom' ? ' custom' : ''}" data-file="${esc(w.file)}" data-testid="${repo ? 'repository-workflow' : 'workflow-card'}"${repo ? ` data-project="${esc(w.projectId)}" data-commit="${esc(w.commit)}"` : ''} tabindex="-1">
       <div class="wf-card-head">
         <div class="wf-card-title">
           <h3 title="${esc(w.name)}">${esc(w.name)} ${w.version ? `<span class="muted small">v${esc(w.version)}</span>` : ''}</h3>
@@ -231,12 +280,9 @@ function workflowCard(w) {
       ${(w.steps || []).length ? `<button class="wf-flow steps-mini" data-flow aria-expanded="${open}" title="${open ? t('workflows.hide_the_steps') : t('workflows.show_every_step')}"><span class="badge">${t('workflows.steps_count', { count: w.steps.length })}</span>${stepFlow(w)}<span class="wf-flow-caret" aria-hidden="true">${open ? '▴' : '▾'}</span></button>` : ''}
       ${open ? `<ol class="wf-steps">${stepList(w)}</ol>` : ''}
       ${used ? `<p class="small wf-used"><span class="muted">${t('workflows.used_in')}</span> ${used}</p>` : ''}
+      ${diff}
       <div class="row wf-actions">
-        ${w.restorable ? `<button class="btn ghost sm" data-restore title="${t('workflows.move_your_edited_copy_to_the')}">${t('workflows.restore_default')}</button>` : ''}
-        <label class="wf-show-start small" title="${t('workflows.off_start_does_not_offer_it')}"><label class="switch"><input type="checkbox" data-show-start data-testid="workflow-show-in-start" aria-label="${t('workflows.show_in_start_name', { name: esc(w.name) })}" ${shown ? 'checked' : ''} /><span></span></label>${t('workflows.show_in_start')}</label>
-        <span class="spacer"></span>
-        <button class="btn ghost sm" data-builder ${w.error ? 'disabled' : ''} title="${esc(builderTip)}">${t('workflows.open_in_builder')}</button>
-        <button class="btn primary sm" data-run ${w.error ? 'disabled' : ''}>${t('workflows.run')}</button>
+        ${actions}
       </div>
     </article>`;
 }
@@ -278,7 +324,22 @@ function wireWorkflowDefinitions(box) {
   const cardOf = (el) => el.closest('.wf-card').dataset.file;
   const focus = (el) => { if (!el) return; el.scrollIntoView({ block: 'center', behavior: 'smooth' }); el.focus({ preventScroll: true }); el.classList.add('hl'); setTimeout(() => el.classList.remove('hl'), 1500); };
   box.querySelectorAll('[data-run]').forEach((b) => (b.onclick = () => openDrawer({ workflow: cardOf(b) })));
-  box.querySelectorAll('[data-builder]').forEach((b) => (b.onclick = () => window.openInBuilder?.(cardOf(b))));
+  // #485: a repository card carries its project and commit; the builder opens it read-only
+  const repoOf = (el) => { const c = el.closest('.wf-card'); return { projectId: c.dataset.project, file: c.dataset.file, commit: c.dataset.commit }; };
+  box.querySelectorAll('[data-builder]').forEach((b) => (b.onclick = () => window.openInBuilder?.(cardOf(b), { projectId: b.closest('.wf-card').dataset.project || null })));
+  box.querySelectorAll('[data-accept]').forEach((b) => (b.onclick = async () => {
+    b.disabled = true;
+    try { await api.acceptWorkflow(repoOf(b)); } catch (e) { b.disabled = false; return showToast(t('workflows.accept_failed'), errMsg(e)); }
+    refreshWorkflows();
+  }));
+  box.querySelectorAll('[data-clone]').forEach((b) => (b.onclick = async () => {
+    const { projectId, file } = repoOf(b);
+    try {
+      const r = await api.cloneRepositoryWorkflow({ projectId, file });
+      showToast(t('builder.workflow_cloned'), t('builder.file_your_own_copy_you_can', { file: r.file }));
+    } catch (e) { return showToast(t('workflows.could_not_save'), errMsg(e)); }
+    refreshWorkflows();
+  }));
   // #319: Show in Start, the way back from the Setup's Workflows step (settings.hiddenWorkflows)
   box.querySelectorAll('[data-show-start]').forEach((b) => (b.onchange = async () => {
     const id = SetupModel.workflowId(cardOf(b));
@@ -359,6 +420,8 @@ function originBadge(w) {
     default: `<span class="badge" title="${t('workflows.default_bundled_with_the_app_updated')}">${t('workflows.default')}</span>`,
     modified: `<span class="badge warn" title="${t('workflows.bundled_default_edited_by_you_app')}">${t('workflows.modified')}</span>`,
     custom: `<span class="badge cat-build" title="${t('workflows.created_by_you')}">${t('workflows.custom')}</span>`,
+    // #485: the repository's workflow at the commit it was read from
+    repository: `<span class="badge cat-plan mono" data-testid="workflow-origin-badge" title="${esc(t('workflows.repository_tip', { project: (state.projects || []).find((p) => p.id === w.projectId)?.name || w.projectId || '' }))}">${t('workflows.repository_at', { commit: esc(String(w.commit || '').slice(0, 7)) })}</span>`,
   };
   const update = w.updateAvailable
     ? `<span class="badge warn" title="${t('workflows.the_app_ships_a_newer_default')}">${t('workflows.newer_default')}${w.bundledVersion ? ` v${esc(w.bundledVersion)}` : ''}</span>`

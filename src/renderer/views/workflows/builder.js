@@ -382,11 +382,12 @@
     render();
   }
 
-  async function open(file, { force = false } = {}) {
+  // projectId (#485): a repository workflow of that project, its committed text, read-only
+  async function open(file, { force = false, projectId = null } = {}) {
     if (!file || (!force && !(await leaveOk()))) { renderOpenList(); return; }
     try {
-      const r = await api.loadBuilderWorkflow(file);
-      Object.assign(b, { file: r.file, mode: r.mode, problems: r.problems || [], spec: r.spec, sel: 0, dirty: false });
+      const r = projectId ? await api.loadRepositoryBuilderWorkflow({ projectId, file }) : await api.loadBuilderWorkflow(file);
+      Object.assign(b, { file: r.file, projectId, mode: r.mode, problems: r.problems || [], spec: r.spec, sel: 0, dirty: false });
       render();
     } catch (e) {
       showToast(t('builder.cannot_open_in_the_builder'), errMsg(e));
@@ -434,7 +435,7 @@
   async function clone() {
     if (!b.file || !(await leaveOk())) return;
     try {
-      const r = await api.cloneWorkflow(b.file);
+      const r = b.projectId ? await api.cloneRepositoryWorkflow({ projectId: b.projectId, file: b.file }) : await api.cloneWorkflow(b.file);
       state.workflows = await api.listWorkflows();
       await open(r.file, { force: true });
       showToast(t('builder.workflow_cloned'), t('builder.file_your_own_copy_you_can', { file: r.file }));
@@ -479,9 +480,10 @@
   };
 
   // "Send to builder" from Workflows > Definitions.
-  window.openInBuilder = async (file) => {
+  // opts.projectId (#485): a repository workflow of that project, read-only
+  window.openInBuilder = async (file, opts = {}) => {
     showWorkflowsTab('builder');
-    await open(file);
+    await open(file, { projectId: opts.projectId || null });
   };
 
   // What the Supervisor is told about this screen (supervisor-chat.js).

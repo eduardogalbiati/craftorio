@@ -116,13 +116,16 @@
   // inputs the Backlog fills itself when the run starts (as backlog.js's skipInput): never edited here
   const skipInput = (k, def) => k === 'task' || k === 'issue' || k === 'issues' || def.type === 'run' || ((def.type || 'string') === 'string' && /path|dir/i.test(k));
 
-  // The workflows' input definitions (file → workflow), loaded once when the Roadmap is first drawn.
+  // The workflows' input definitions (file → workflow), loaded once when the Roadmap is first drawn,
+  // again for another project: the project's repository workflows are in its list (#485).
   let workflows = null;
+  let workflowsOf = null;
   let loading = false;
-  function loadWorkflows(rerender) {
+  function loadWorkflows(rerender, projectId = null) {
+    if (projectId !== workflowsOf && !loading) { workflows = null; workflowsOf = projectId; }
     if (workflows || loading) return;
     loading = true;
-    api.listWorkflows()
+    api.listWorkflows(projectId ? { projectId } : undefined)
       .then((list) => { workflows = new Map((list || []).filter((w) => !w.error).map((w) => [w.file, w])); rerender?.(); })
       .catch(() => { workflows = new Map(); })
       .finally(() => { loading = false; });
@@ -1030,7 +1033,7 @@
    * left empty. A change of the view goes back to the first page.
    */
   function html(data, rerender, view = {}) {
-    loadWorkflows(rerender);
+    loadWorkflows(rerender, view.project || null);
     const { SINCE, cardCount } = RoadmapModel;
     const [since, , sinceText, rangeMs] = SINCE.find(([id]) => id === view.since) || SINCE[0];
     const r = data?.roadmap || { state: 'planned', stages: [] };
