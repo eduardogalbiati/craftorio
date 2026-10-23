@@ -73,12 +73,22 @@
     return rows.length ? `<ul class="wow-evidence">${rows.join('')}</ul>` : '';
   }
 
+  // the app's select (select.js, #383) from [value, label] tuples; a page without select.js (a test's mini
+  // DOM) gets the same element from the DOM
+  function selectMarkup(attrs, options, value) {
+    if (window.Select) return window.Select.markup(Object.entries(attrs).map(([k, v]) => `${k}="${esc(v)}"`).join(' '), options, value);
+    const el = document.createElement('select');
+    for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+    el.innerHTML = options.map(([v, l]) => `<option value="${esc(v)}"${String(v) === String(value ?? '') ? ' selected' : ''}>${esc(l)}</option>`).join('');
+    return el.outerHTML;
+  }
+
   function questionHtml(q) {
     const id = `wow-q-${esc(q.id)}`;
     const value = cur.answers[q.id];
     const control = q.type === 'number'
       ? `<input type="number" id="${id}" min="0" step="1" data-wow-answer="${esc(q.id)}" value="${esc(String(value))}" />`
-      : `<select id="${id}" data-wow-answer="${esc(q.id)}">${(q.options || []).map((o) => `<option value="${esc(o.value)}"${o.value === value ? ' selected' : ''}>${esc(o.label)}</option>`).join('')}</select>`;
+      : selectMarkup({ id, 'data-wow-answer': q.id }, (q.options || []).map((o) => [o.value, o.label]), value);
     return `<div class="field" data-testid="ways-of-working-question">
       <label for="${id}">${QUESTION_LABELS[q.id] ? t(QUESTION_LABELS[q.id]) : esc(q.label)}</label>
       ${control}
@@ -93,7 +103,7 @@
       const id = `wow-p-${f.id}`;
       const value = f.id === 'languages' ? (p.languages || []).join(', ') : (p[f.id] ?? '');
       const control = f.options
-        ? `<select id="${id}" data-wow-profile-field="${f.id}"><option value=""${value ? '' : ' selected'}>${t('ways_of_working.open')}</option>${f.options.map(([v, l]) => `<option value="${esc(v)}"${v === value ? ' selected' : ''}>${esc(l ? t(l) : v)}</option>`).join('')}</select>`
+        ? selectMarkup({ id, 'data-wow-profile-field': f.id }, [['', t('ways_of_working.open')], ...f.options.map(([v, l]) => [v, l ? t(l) : v])], value)
         : `<input type="text" id="${id}" data-wow-profile-field="${f.id}" value="${esc(String(value))}" />`;
       return `<div class="field"><label for="${id}">${t(f.label)}</label>${control}</div>`;
     }).join('');
