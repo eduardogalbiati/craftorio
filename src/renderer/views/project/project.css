@@ -132,3 +132,11 @@
 .pj-wf-more summary { cursor: pointer; font-size: 12px; color: var(--muted); }
 .pj-wf-more[open] summary { margin-bottom: 6px; }
 .pj-wf > .btn { justify-self: start; }
+/* the Ways of working interview drawer (project-ways-of-working.js, #487) */
+.wow-drawer { z-index: 6; }
+.wow-drawer section + section { margin-top: 16px; }
+.wow-profile .row { flex-wrap: wrap; gap: 6px; }
+.wow-evidence, .wow-proposed { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px; }
+.wow-proposed li { gap: 8px; min-width: 0; }
+.wow-proposed .mono { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wow-drawer .drawer-foot .btn.block + .btn.block { margin-top: 8px; }

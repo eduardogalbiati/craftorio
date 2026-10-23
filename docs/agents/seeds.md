@@ -36,6 +36,20 @@ both platform adapters (`src/shared/platforms/`), exposed through `src/oracle-pl
 recent runs: `ciRunsCommand` / `parseCiRuns` (`ciRunsCommand` / `ciRunsResult` there), read by the
 Oracle's read-only `ci_runs` tool (`src/oracle-tools.js`) with the project's own CLI auth.
 
+## ways-of-working: the interview's analysis (#487)
+
+`seeds/ways-of-working/seed.md` reads how a repository is worked on (authors per month, merges vs
+commits straight to main, tags and their cadence, CI files, test and build scripts, the Architecture
+facts' languages, an existing `.multiagent/`) and answers a fixed model: `profile` (`team`:
+solo|team, `merge`: local|pr, `release`: milestone|per-merge|train|rc-stable, `testCommand`, `ci`,
+`languages`) and `evidence` per field (`numbers` and `commits`). A field the history cannot settle
+is `null`: the interview asks it. It is not listed only in the Seeds section: the project page's
+"Ways of working" drawer (`src/renderer/views/project/project-ways-of-working.js`) shows its
+`seeds:estimate` first and runs it through `workflows:interview`
+(`src/service/areas/workflow-interview.js`), saved under the same `architecture/` root so the Seeds
+section's estimate and history see its runs. In simulation no model runs: the area reads the
+profile from git (authors, merge commits, tags) and leaves the release style open.
+
 ## As a tool
 
 "Make it a tool" (`src/seed-tool-issue.js`) files an issue asking for the seed as a deterministic
