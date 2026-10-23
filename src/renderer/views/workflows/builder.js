@@ -398,7 +398,7 @@
   function confirmCodeTrust(file) {
     $('#wb-trust-text').textContent = t('workflows.code_warning_text', { file });
     openModal('#wb-trust-modal');
-    $('#btn-wb-trust-ok').focus();
+    $('#btn-wb-trust-ok').focus({ preventScroll: true });
     return new Promise((resolve) => {
       const done = (v) => { closeModal('#wb-trust-modal'); resolve(v); };
       $('#btn-wb-trust-cancel').onclick = () => done(false);
