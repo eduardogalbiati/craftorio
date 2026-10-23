@@ -104,6 +104,9 @@ function normalizeConnection(c) {
   };
 }
 
+// the saved token's form: 'plain', 'encrypted' or null
+const storedTokenKind = (t) => (typeof t?.plain === 'string' ? 'plain' : typeof t?.encrypted === 'string' ? 'encrypted' : null);
+
 /**
  * Reads the setting; a missing or corrupt file is the default (this computer). The token is stored
  * `{ encrypted: <base64> }` (decrypt(Buffer) → string, e.g. safeStorage) or `{ plain }` when the
@@ -118,9 +121,10 @@ function readConnection(file, { decrypt = null } = {}) {
   }
   let token = '';
   const t = raw?.token;
+  const kind = storedTokenKind(t);
   try {
-    if (typeof t?.plain === 'string') token = t.plain;
-    else if (typeof t?.encrypted === 'string' && decrypt) token = String(decrypt(Buffer.from(t.encrypted, 'base64')));
+    if (kind === 'plain') token = t.plain;
+    else if (kind === 'encrypted' && decrypt) token = String(decrypt(Buffer.from(t.encrypted, 'base64')));
   } catch (e) {
     console.error(`engine connection: could not read the saved token: ${e.message}`);
   }
@@ -144,10 +148,7 @@ function tokenStorage(file) {
   } catch {
     return null;
   }
-  const t = raw?.token;
-  if (typeof t?.plain === 'string') return 'plain';
-  if (typeof t?.encrypted === 'string') return 'encrypted';
-  return null;
+  return storedTokenKind(raw?.token);
 }
 
 // What the connection page may see of the setting: never the token itself (the insecure opt-in, so the

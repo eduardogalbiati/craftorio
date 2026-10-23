@@ -19,22 +19,22 @@
 // Every request needs the server token: `Authorization: Bearer <token>`, or the cookie the server
 // sets after POST /session or when a browser opens /?token=<token> (the desktop app's startUrl). The
 // token is full control of the machine (a shell, gate approval, paid runs, #479). The cookie is
-// HttpOnly, SameSite=Strict, with a Max-Age, and Secure when the request came over HTTPS (TLS, or
-// x-forwarded-proto: https from a TLS proxy). Requests whose Origin is another site are refused
-// (CSRF, cross-site WebSocket hijacking): the engine runs the user's CLIs on the user's files. On a
-// loopback socket the Host must be localhost / 127.0.0.1 / [::1] (DNS rebinding, SEC-16), as
-// src/control/index.js does.
+// HttpOnly, SameSite=Strict, with a Max-Age renewed by every request it signs in, and Secure when the
+// request came over HTTPS (TLS, or x-forwarded-proto: https from a TLS proxy). Requests whose Origin
+// is another site are refused (CSRF, cross-site WebSocket hijacking): the engine runs the user's CLIs
+// on the user's files. A server bound to loopback answers only a Host of localhost / 127.0.0.1 /
+// [::1] (DNS rebinding, SEC-16), as src/control/index.js does (isLoopbackHost).
 
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const crypto = require('crypto');
 const { WebSocketServer } = require('ws');
 const {
   authChannels,
   PUSHED_EVENTS,
 } = require('../service/manifest');
 const { contractHash } = require('../service/contract');
+const { tokenCheck } = require('../token-check');
 const PKG = require('../../package.json');
 
 const ROOT = path.join(__dirname, '..', '..');
@@ -57,33 +57,32 @@ class HttpError extends Error {
   constructor(status, message) { super(message); this.status = status; }
 }
 
-function readJson(req) {
+// the request's body as text, refused (413) past max bytes
+function readBody(req, max) {
   return new Promise((resolve, reject) => {
     let size = 0;
     const chunks = [];
     req.on('data', (c) => {
       size += c.length;
-      if (size > MAX_BODY) { reject(new HttpError(413, 'Request body too large.')); req.destroy(); return; }
+      if (size > max) { reject(new HttpError(413, 'Request body too large.')); req.destroy(); return; }
       chunks.push(c);
     });
-    req.on('end', () => {
-      const text = Buffer.concat(chunks).toString('utf8');
-      try { resolve(text ? JSON.parse(text) : {}); } catch { reject(new HttpError(400, 'The body is not valid JSON.')); }
-    });
+    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
     req.on('error', reject);
   });
 }
+
+async function readJson(req) {
+  const text = await readBody(req, MAX_BODY);
+  try { return text ? JSON.parse(text) : {}; } catch { throw new HttpError(400, 'The body is not valid JSON.'); }
+}
+
+const readForm = async (req) => new URLSearchParams(await readBody(req, MAX_FORM));
 
 const sendJson = (res, status, body) => {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
   res.end(JSON.stringify(body));
 };
-
-// (token) => (candidate) => boolean, compared in constant time
-function tokenCheck(token) {
-  const expected = crypto.createHash('sha256').update(String(token)).digest();
-  return (t) => !!t && crypto.timingSafeEqual(crypto.createHash('sha256').update(String(t)).digest(), expected);
-}
 
 const bearer = (req) => (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
 
@@ -94,28 +93,22 @@ function sameOrigin(req) {
 }
 
 const isLoopbackAddress = (ip) => /^(::ffff:)?127\.\d+\.\d+\.\d+$/.test(String(ip || '')) || ip === '::1';
-const LOOPBACK_HOST = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
+const LOOPBACK_HOST = /^(localhost|127\.0\.0\.1|\[::1\])(?::(\d+))?$/i;
 
-// DNS rebinding (SEC-16): a request reaching a loopback socket names this machine in its Host;
-// another name means a page of another site whose name now points here.
-const hostAllowed = (req) => !isLoopbackAddress(req.socket?.localAddress) || LOOPBACK_HOST.test(req.headers.host || '');
+// a Host header naming this machine by a loopback name (with that port when one is given); the
+// control channel (src/control/index.js) uses it too
+function isLoopbackHost(host, port = null) {
+  const m = LOOPBACK_HOST.exec(String(host || ''));
+  return !!m && (port == null || m[2] === String(port));
+}
+
+// DNS rebinding (SEC-16): a server bound to loopback (--host 127.0.0.1) answers only a Host that names
+// this machine; another name means a page of another site whose name now points here. A server bound
+// to another address (0.0.0.0 with --insecure-http, a Tailscale IP) is reached by other names.
+const hostAllowed = (req, boundAddress) => !isLoopbackAddress(boundAddress) || isLoopbackHost(req.headers.host);
 
 // came over HTTPS: TLS here, or a TLS reverse proxy in front (its first x-forwarded-proto)
 const overHttps = (req) => !!req.socket?.encrypted || String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim().toLowerCase() === 'https';
-
-function readForm(req) {
-  return new Promise((resolve, reject) => {
-    let size = 0;
-    const chunks = [];
-    req.on('data', (c) => {
-      size += c.length;
-      if (size > MAX_FORM) { reject(new HttpError(413, 'Request body too large.')); req.destroy(); return; }
-      chunks.push(c);
-    });
-    req.on('end', () => resolve(new URLSearchParams(Buffer.concat(chunks).toString('utf8'))));
-    req.on('error', reject);
-  });
-}
 
 // what a browser without the token sees: the sign-in form (POST /session)
 const SIGN_IN_PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Multiagent Orchestrator: sign in</title>
@@ -155,6 +148,9 @@ function createServer({ service, auth = null, token, root = ROOT }) {
     try { return c ? decodeURIComponent(c.slice(COOKIE.length + 1)) : null; } catch { return null; }
   };
   const authorized = (req) => isToken(bearer(req)) || isToken(cookieToken(req));
+  // signed in by the cookie: its Max-Age starts again, so a window left open keeps working
+  const byCookie = (req) => !isToken(bearer(req)) && isToken(cookieToken(req));
+  const pinned = (req) => hostAllowed(req, server.address()?.address);
   const cookieHeader = (req) => `${COOKIE}=${encodeURIComponent(token)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${COOKIE_MAX_AGE_S}${overHttps(req) ? '; Secure' : ''}`;
 
   const api = { ...service.api };
@@ -210,7 +206,7 @@ function createServer({ service, auth = null, token, root = ROOT }) {
   const server = http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url, 'http://localhost');
-      if (!hostAllowed(req)) throw new HttpError(403, 'This server answers only to localhost, 127.0.0.1 or [::1].');
+      if (!pinned(req)) throw new HttpError(403, 'This server answers only to localhost, 127.0.0.1 or [::1].');
       // a browser opening the URL printed by the server: keep the token in a cookie and drop it
       // from the address bar
       if (req.method === 'GET' && url.searchParams.has('token')) {
@@ -234,6 +230,7 @@ function createServer({ service, auth = null, token, root = ROOT }) {
         }
         throw new HttpError(401, 'Missing or invalid token: sign in at /session, or open the URL printed by the server.');
       }
+      if (byCookie(req)) res.setHeader('Set-Cookie', cookieHeader(req));
       if (url.pathname === '/') {
         res.writeHead(302, { Location: '/src/renderer/index.html' });
         return res.end();
@@ -254,7 +251,7 @@ function createServer({ service, auth = null, token, root = ROOT }) {
     const { pathname } = new URL(req.url, 'http://localhost');
     const refuse = (status, text) => { socket.write(`HTTP/1.1 ${status} ${text}\r\nConnection: close\r\n\r\n`); socket.destroy(); };
     if (pathname !== '/ws') return refuse(404, 'Not Found');
-    if (!hostAllowed(req) || !sameOrigin(req)) return refuse(403, 'Forbidden');
+    if (!pinned(req) || !sameOrigin(req)) return refuse(403, 'Forbidden');
     if (!authorized(req)) return refuse(401, 'Unauthorized');
     wss.handleUpgrade(req, socket, head, (ws) => {
       ws.on('message', (data) => {
@@ -298,6 +295,7 @@ module.exports = {
   createServer,
   hostAllowed,
   HttpError,
+  isLoopbackHost,
   readJson,
   sameOrigin,
   sendJson,

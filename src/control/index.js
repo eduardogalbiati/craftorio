@@ -26,6 +26,7 @@ const {
   bearer,
   callChannel,
   HttpError,
+  isLoopbackHost,
   readJson,
   sameOrigin,
   sendJson,
@@ -99,7 +100,6 @@ function createControlChannel({ service, ctlPath = nativeBinaryPath('multiagent-
   }
 
   function handler({ isToken, root, port }) {
-    const hosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`]);
     return async (req, res) => {
       let channel = null;
       let args = null;
@@ -115,7 +115,7 @@ function createControlChannel({ service, ctlPath = nativeBinaryPath('multiagent-
           try { channel = decodeURIComponent(url.pathname.slice(5)); } catch { channel = url.pathname.slice(5); }
         }
         // a page of another site, or one reached by DNS rebinding, never gets in
-        if (!sameOrigin(req) || !hosts.has(req.headers.host)) throw new HttpError(403, 'Cross-origin requests are not allowed.');
+        if (!sameOrigin(req) || !isLoopbackHost(req.headers.host, port)) throw new HttpError(403, 'Cross-origin requests are not allowed.');
         if (!isToken(bearer(req))) throw new HttpError(401, 'Missing or invalid token: read it from control/endpoint.json.');
         if (channel === null) throw new HttpError(404, 'Not found: use POST /api/<channel>.');
         if (req.method === 'GET' && (channel === 'version' || channel === 'channels')) {
@@ -162,6 +162,8 @@ function createControlChannel({ service, ctlPath = nativeBinaryPath('multiagent-
           // readable by this user only where the OS honours the mode (SEC-25); the workflow's agents run
           // as this user and can still read it (SECURITY.md, threat model)
           fs.writeFileSync(file, `${JSON.stringify({ url, token, pid: process.pid, started: new Date().toISOString() }, null, 2)}\n`, { mode: 0o600 });
+          // the mode only applies to a new file: one left by a crash or an older version keeps its own
+          fs.chmodSync(file, 0o600);
         } catch (e) {
           srv.close();
           reject(e);

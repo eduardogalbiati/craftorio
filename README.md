@@ -543,8 +543,10 @@ published port), a dev container's `postStartCommand` (forwarded port), a Procfi
 Makefile `run`/`dev`/`start` target, the README's run command, Django, Go, Rust or .NET; each
 suggestion says where it came from. **Run** saves a detected command as the project's Local preview;
 **Edit** opens the fields, and **Save and run** can also write them to
-`.multiagent/local-preview.yaml` in the project folder (a change you commit). Projects › Add / Edit
-shows what the folder declares or is detected to run with (**Use it**), before any gate. For this
+`.multiagent/local-preview.yaml` in the project folder (a change you commit). Projects › Edit
+shows what the project's folder declares or is detected to run with (**Use it**), before any gate;
+Projects › Add detects nothing until the project is saved (only a project's folder or a run's
+worktree is read, so a browser on `npm run serve` cannot list any folder of the machine). For this
 app itself it proposes `npm ci` and `npm start`. In a simulation (no git worktree) the gate's
 **Changed files** are the ones the simulated developer reported, labelled "simulated".
 `developer_check` also offers **Show the diff**: the branch's changes since the base branch, in the

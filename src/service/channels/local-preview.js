@@ -7,7 +7,7 @@
 // gate:changes: the files a gate with diff_base changed, for its Artifacts panel.
 // #115: localPreview:start's confirm is the owner's one click on a declared or detected command;
 // localPreview:save stores the gate's config as the project's (and optionally in the repository's
-// .multiagent/local-preview.yaml); localPreview:suggest is what a folder runs with (Projects › Add).
+// .multiagent/local-preview.yaml); localPreview:suggest is what a project's folder runs with (Projects › Edit; SEC-26).
 
 const {
   args,

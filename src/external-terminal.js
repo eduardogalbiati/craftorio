@@ -36,8 +36,9 @@ function externalTerminal(opts) {
 
 const winQuote = (a) => `"${String(a).replace(/"/g, '""')}"`;
 // cmd.exe parses `start "<title>"` itself and `""` is no escape there: a title from a session or
-// agent name could end the quotes and chain a command (SEC-27), so its metacharacters are dropped
-const winTitle = (s) => String(s ?? '').replace(/["&|<>^]/g, '');
+// agent name could end the quotes and chain a command (SEC-27), so its metacharacters are dropped,
+// and % too (cmd.exe expands %VAR% inside the quotes)
+const winTitle = (s) => String(s ?? '').replace(/["&|<>^%]/g, '');
 const appleString = (s) => `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 
 // The variables of childEnv to set (or unset) in a terminal that does not inherit it.

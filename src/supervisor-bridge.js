@@ -12,6 +12,7 @@ const http = require('http');
 const path = require('path');
 const { nativeBinaryPath } = require('./native-bin');
 const { callTool, describeTools } = require('./supervisor-tools');
+const { tokenCheck } = require('./token-check');
 
 const MAX_BODY = 1024 * 1024;
 
@@ -36,9 +37,8 @@ function mcpCommand(isPackaged, resolveCommand, { binary = mcpBinaryPath({ isPac
 /** `tools()` returns the tool list at call time. start() resolves { url, token }; close() stops it. */
 function createBridge({ tools }) {
   const token = crypto.randomBytes(24).toString('hex');
-  // compared in constant time (SEC-21), as tokenCheck in src/server/index.js (not required here: it loads ws)
-  const expected = crypto.createHash('sha256').update(`Bearer ${token}`).digest();
-  const isToken = (h) => typeof h === 'string' && crypto.timingSafeEqual(crypto.createHash('sha256').update(h).digest(), expected);
+  // compared in constant time (SEC-21)
+  const isToken = tokenCheck(`Bearer ${token}`);
   let server = null;
   let ready = null;
 
