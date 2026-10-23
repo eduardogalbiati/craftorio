@@ -124,3 +124,16 @@ test('#527 guard: a run\'s suite counts a test confirmed red alone on the base a
   assert.ok(out.preexisting.some((f) => f.test === SLOW.test), 'listed as pre-existing');
   assert.equal(out.status, 'pass');
 });
+
+test('#527 a run\'s suite says which failures were red on the base too but not confirmed', async (t) => {
+  const logs = [];
+  await runSuiteFailingOnBaseToo(t, { confirmedOnBase: [], log: (level, message) => logs.push(String(message)) });
+  const line = logs.find((l) => /red on the base too but not confirmed/.test(l)) || '';
+  assert.ok(line.includes(SLOW.test), `the line names the test: ${JSON.stringify(logs)}`);
+});
+
+test('#527 a run\'s suite without a project (no confirmation list) keeps the #211 rule: red on the base is pre-existing', async (t) => {
+  const out = await runSuiteFailingOnBaseToo(t, { confirmedOnBase: null });
+  assert.ok(out.preexisting.some((f) => f.test === SLOW.test), 'listed as pre-existing');
+  assert.equal(out.status, 'pass');
+});
