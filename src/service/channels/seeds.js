@@ -2,19 +2,18 @@
 // each one's last run, its recorded tool and the commits since (seeds:list); the cost estimate
 // (free with a tool; else the mean of the seed's last real runs); a run (src/oracle-seeds.js: one
 // Oracle turn read-only in its daily budget, or the project's tool, simulated under mock or
-// MULTIAGENT_SIMULATION_ONLY; one run per project and seed at a time); the history and one result
+// MULTIAGENT_SIMULATION_ONLY; one run per project and seed at a time, shared with the Ways of working
+// interview: src/service/seed-runs.js); the history and one result
 // (<workspace>/architecture/<project id>/seeds/<seed id>/<stamp>/); the tool command recorded in the
 // project's settings (seedTools); and "Make it a tool" (src/seed-tool-issue.js: an issue in the
 // project's tracker, a preview in simulation). Nothing here crosses a human gate or writes to the project.
 
-const { execFile, exec: execShell } = require('child_process');
-const path = require('path');
-const agents = require('../../agents');
 const arch = require('../../oracle-architecture');
 const backlog = require('../../backlog');
 const projects = require('../../projects');
 const seeds = require('../../seeds');
 const oracleSeeds = require('../../oracle-seeds');
+const seedRuns = require('../seed-runs');
 const toolIssue = require('../../seed-tool-issue');
 const workspace = require('../../workspace');
 const simulation = require('../../engine/simulation');
@@ -41,48 +40,20 @@ const ROW = shape({
   lastRun: nullable(LAST_RUN), tool: nullable(STRING), commitsSince: nullable(INT), running: nullable(OBJECT), error: nullable(STRING),
 }, ['id', 'name', 'summary', 'lastRun', 'tool', 'commitsSince']);
 const RUN = shape({ date: STRING, source: STRING, costUsd: nullable(NUMBER), simulated: BOOL, refused: OBJECT }, []);
-const TOOL_TIMEOUT_MS = 10 * 60e3;
-const GIT_TIMEOUT_MS = 15e3;
-const MAX_OUTPUT = 64 * 1024 * 1024;
-const PROGRESS_TEXT = 160;
-
-// git in the project's folder → stdout trimmed, or null when it fails (not a repository, unknown commit)
-const git = (folder, argv) => new Promise((resolve) => {
-  execFile('git', argv, { cwd: folder, timeout: GIT_TIMEOUT_MS, windowsHide: true }, (err, out) => resolve(err ? null : String(out).trim()));
-});
-
-// A recorded tool's command, through the shell (the owner wrote it), in the project's folder → stdout
-const runTool = (command, { cwd }) => new Promise((resolve, reject) => {
-  execShell(command, { cwd, timeout: TOOL_TIMEOUT_MS, maxBuffer: MAX_OUTPUT, windowsHide: true }, (err, out, errOut) => {
-    if (err) reject(new Error(`${command} failed: ${String(errOut || err.message).trim().slice(0, 500)}`));
-    else resolve(String(out));
-  });
-});
 
 module.exports = (ctx) => {
-  const root = () => path.join(ctx.ws.root, 'architecture');
-  // `${projectId}/${seedId}` → the run in progress { since, items, last }, and the last run's error
-  const running = new Map();
-  const errors = new Map();
-  const key = (p, seedId) => `${p.id}/${seedId}`;
-
-  const projectOf = (projectId) => {
-    const id = requireId(projectId, 'project id');
-    let p = null;
-    try { p = projects.readProject(ctx.ws.projects, id); } catch (e) { if (e.code !== 'ENOENT') throw e; }
-    if (!p || !p.folder) throw clientError(`Unknown project: ${id}`);
-    return p;
-  };
+  const root = () => seedRuns.seedsRoot(ctx);
+  const projectOf = (projectId) => seedRuns.projectOf(ctx, projectId);
   const seedOf = (seedId) => {
     const seed = seeds.readSeed(ctx.ws.seeds, requireId(seedId, 'seed id'));
     if (!seed) throw clientError(`Unknown analysis seed: ${seedId}`);
     return seed;
   };
-  const toolOf = (p, seedId) => (p.seedTools && p.seedTools[seedId]) || null;
+  const { toolOf } = seedRuns;
 
   async function commitsSince(p, head) {
     if (!head || !p.isGit) return null;
-    const n = await git(p.folder, ['rev-list', '--count', `${head}..HEAD`]);
+    const n = await seedRuns.git(p.folder, ['rev-list', '--count', `${head}..HEAD`]);
     return n != null && /^\d+$/.test(n) ? Number(n) : null;
   }
 
@@ -90,14 +61,14 @@ module.exports = (ctx) => {
     const p = projectOf(projectId);
     return Promise.all(seeds.listSeeds(ctx.ws.seeds).map(async (s) => {
       const last = oracleSeeds.listSeedRuns(root(), p.id, s.id)[0] || null;
-      const now = running.get(key(p, s.id));
+      const state = seedRuns.runState(ctx, p, s.id);
       return {
         id: s.id, name: s.name, summary: s.summary, cost: s.cost, needs: s.needs, produces: s.produces,
         lastRun: last ? { date: last.date, source: last.source, costUsd: last.costUsd, simulated: last.simulated } : null,
         tool: toolOf(p, s.id),
         commitsSince: last ? await commitsSince(p, last.head) : null,
-        running: now ? { ...now } : null,
-        error: errors.get(key(p, s.id)) || s.error || null,
+        running: state.running,
+        error: state.error || s.error || null,
       };
     }));
   }
@@ -112,34 +83,9 @@ module.exports = (ctx) => {
   }
 
   async function run({ projectId, seedId, mock }) {
-    const p = projectOf(projectId);
-    const seed = seedOf(seedId);
-    const k = key(p, seed.id);
-    if (running.has(k)) return { refused: { reason: 'busy', text: `The seed ${seed.id} is already running on this project (since ${running.get(k).since}).` } };
-    const now = { since: new Date().toISOString(), items: 0, last: null };
-    running.set(k, now);
-    errors.delete(k);
-    try {
-      const simulated = !!mock || simulation.simulationOnly();
-      const command = toolOf(p, seed.id);
-      const head = p.isGit ? await git(p.folder, ['rev-parse', 'HEAD']) : null;
-      const onItem = (it) => {
-        now.items++;
-        now.last = String((it && (it.text || it.name || it.kind)) || '').slice(0, PROGRESS_TEXT) || null;
-      };
-      const out = await oracleSeeds.runSeed({
-        root: root(), project: p, seed, mock: simulated, head, onItem,
-        tool: command ? { command } : null, exec: runTool,
-        oracle: simulated || command ? null : ctx.oracleService(), agent: agents.readAgent(ctx.ws.agents, agents.ORACLE_ID),
-      });
-      if (out.refused) return { refused: out.refused };
-      return { date: out.date, source: out.source, costUsd: out.costUsd ?? null, simulated: !!out.simulated };
-    } catch (e) {
-      errors.set(k, e.message);
-      throw e;
-    } finally {
-      running.delete(k);
-    }
+    const out = await seedRuns.runSeed(ctx, { project: projectOf(projectId), seed: seedOf(seedId), mock });
+    if (out.refused) return { refused: out.refused };
+    return { date: out.date, source: out.source, costUsd: out.costUsd ?? null, simulated: !!out.simulated };
   }
 
   function result({ projectId, seedId, date }) {

@@ -1,38 +1,38 @@
 // Service area (#487): the Ways of working interview of a project. workflowInterview runs the
 // ways-of-working analysis seed (seeds/ways-of-working/seed.md, one read-only Oracle turn through
-// src/oracle-seeds.js, saved under <workspace>/architecture/ like the Architecture tab's seeds, so
-// seeds:estimate and seeds:history see it) and answers its profile, the evidence behind each field and
-// the questions the profile leaves open (src/workflow-compose.js openQuestions). Under
+// src/service/seed-runs.js, the same run the Architecture tab's seeds:run makes: saved under
+// <workspace>/architecture/, so seeds:estimate, seeds:list and seeds:history see it, and refused as
+// busy while that seed already runs on the project) and answers its profile, the evidence behind each
+// field and the questions the profile leaves open (src/workflow-compose.js openQuestions). Under
 // MULTIAGENT_SIMULATION_ONLY no model is called: the profile is read from the project's git history
-// (authors, merges, tags) and the release style is left open. workflowCompose builds the workflow set
-// from the last profile and the owner's answers; only with write: true are the files written to the
-// project's .multiagent/ (never committed: the owner commits) and the project's set updated.
+// (authors, merges) and files (test and check commands, languages) and the release style is left open.
+// workflowCompose builds the workflow set from the last profile and the owner's answers, its manifest
+// merged into the repository's .multiagent/project.yaml; only with write: true are the files written to
+// the project's .multiagent/ (never committed: the owner commits) and the project's set updated.
 
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { execFile } = require('child_process');
-const agents = require('../../agents');
 const builder = require('../../workflow-builder');
 const compose = require('../../workflow-compose');
 const oracleSeeds = require('../../oracle-seeds');
 const projects = require('../../projects');
+const seedRuns = require('../seed-runs');
 const seeds = require('../../seeds');
 const simulation = require('../../engine/simulation');
+const { checkCommand } = require('../../engine/check-step');
+const { detectLanguage } = require('../../project-inputs');
+const { detectTestCommand } = require('../../engine/suite-step');
 const { firstBuild } = require('../../shared/default-workflow');
 const { loadWorkflow } = require('../../engine/workflow');
-const { clientError, requireId } = require('../common');
+const { MANIFEST_FILE, readManifest } = require('../../project-manifest');
+const { clientError } = require('../common');
 
 const SEED_ID = 'ways-of-working';
-const GIT_TIMEOUT_MS = 15e3;
-
-// git in the project's folder → stdout trimmed, or null when it fails
-const git = (folder, argv) => new Promise((resolve) => {
-  execFile('git', argv, { cwd: folder, timeout: GIT_TIMEOUT_MS, windowsHide: true }, (err, out) => resolve(err ? null : String(out).trim()));
-});
+const { git } = seedRuns;
 const count = (out) => (out == null ? 0 : out.split('\n').filter((l) => l.trim()).length);
 
-// The profile of a simulated analysis: what git and package.json tell without a model; no release style
+// The profile of a simulated analysis: what git and the project's files tell without a model; no release style
 async function simulatedProfile(project) {
   const folder = project.folder;
   const [authors, merges, commits, tags, head] = await Promise.all([
@@ -42,8 +42,6 @@ async function simulatedProfile(project) {
     git(folder, ['tag', '--list']),
     git(folder, ['rev-parse', '--short', 'HEAD']),
   ]);
-  let pkg = null;
-  try { pkg = JSON.parse(fs.readFileSync(path.join(folder, 'package.json'), 'utf8')); } catch { /* not a node project */ }
   const ci = fs.existsSync(path.join(folder, '.github', 'workflows')) ? 'github-actions' : fs.existsSync(path.join(folder, '.gitlab-ci.yml')) ? 'gitlab-ci' : null;
   const nAuthors = count(authors);
   const nMerges = Number(merges) || 0;
@@ -53,9 +51,10 @@ async function simulatedProfile(project) {
       team: nAuthors > 1 ? 'team' : 'solo',
       merge: nMerges > 0 ? 'pr' : 'local',
       release: null,
-      testCommand: pkg?.scripts?.test ? 'npm test' : null,
+      testCommand: detectTestCommand(folder),
+      checkCommand: checkCommand(folder),
       ci,
-      languages: pkg ? ['javascript'] : [],
+      languages: (detectLanguage(folder) || '').split(',').filter(Boolean),
     },
     evidence: {
       team: { numbers: { authors: nAuthors, commits: Number(commits) || 0 }, commits: shas },
@@ -67,15 +66,8 @@ async function simulatedProfile(project) {
 }
 
 module.exports = (ctx) => {
-  const root = () => path.join(ctx.ws.root, 'architecture');
-
-  const projectOf = (projectId) => {
-    const id = requireId(projectId, 'project id');
-    let p = null;
-    try { p = projects.readProject(ctx.ws.projects, id); } catch (e) { if (e.code !== 'ENOENT') throw e; }
-    if (!p || !p.folder) throw clientError(`Unknown project: ${id}`);
-    return p;
-  };
+  const root = () => seedRuns.seedsRoot(ctx);
+  const projectOf = (projectId) => seedRuns.projectOf(ctx, projectId);
 
   // the last ways-of-working run's { profile, evidence }, or null
   async function lastProfile(p) {
@@ -87,17 +79,12 @@ module.exports = (ctx) => {
     return model.simulated ? simulatedProfile(p) : null;
   }
 
-  /** Runs the analysis → { profile, evidence, questions, simulated }, or { refused } (the Oracle's budget). */
+  /** Runs the analysis → { profile, evidence, questions, simulated }, or { refused } (busy, or the Oracle's budget). */
   async function workflowInterview({ projectId }) {
     const p = projectOf(projectId);
     const seed = seeds.readSeed(ctx.ws.seeds, SEED_ID);
     if (!seed) throw clientError(`The analysis seed ${SEED_ID} is missing from the workspace.`);
-    const mock = simulation.simulationOnly();
-    const head = p.isGit ? await git(p.folder, ['rev-parse', 'HEAD']) : null;
-    const out = await oracleSeeds.runSeed({
-      root: root(), project: p, seed, mock, head,
-      oracle: mock ? null : ctx.oracleService(), agent: agents.readAgent(ctx.ws.agents, agents.ORACLE_ID),
-    });
+    const out = await seedRuns.runSeed(ctx, { project: p, seed, mock: simulation.simulationOnly() });
     if (out.refused) return { refused: out.refused };
     const found = await lastProfile(p);
     if (!found) throw new Error(`The ${SEED_ID} analysis answered no profile.`);
@@ -120,14 +107,17 @@ module.exports = (ctx) => {
 
   /**
    * The workflow set of the project's last profile under the answers: { workflows: [{ name, category,
-   * path, yaml, mode, spec }], manifest: { path, yaml }, written }. write: the files go to the project's
-   * folder (uncommitted) and into the project's workflow set.
+   * path, yaml, mode, spec }], manifest: { path, yaml }, written }. The manifest keeps the repository's
+   * other entries, version and requires (a manifest with errors is refused: the owner fixes it first).
+   * write: the files go to the project's folder (uncommitted) and into the project's workflow set.
    */
   async function workflowCompose({ projectId, answers, write = false }) {
     const p = projectOf(projectId);
     const found = await lastProfile(p);
     if (!found) throw clientError('Run the Ways of working analysis first.');
-    const set = compose.composeWorkflowSet({ profile: found.profile, answers: answers || {} });
+    const existing = readManifest(p.folder);
+    if (existing.errors.length) throw clientError(`Fix ${MANIFEST_FILE} first: ${existing.errors.join(' ')}`);
+    const set = compose.composeWorkflowSet({ profile: found.profile, answers: answers || {}, existing });
     const workflows = set.workflows.map((w) => ({ ...w, ...builderSpec(w.yaml) }));
     if (!write) return { workflows, manifest: set.manifest, written: false };
     for (const f of [...set.workflows, set.manifest]) {

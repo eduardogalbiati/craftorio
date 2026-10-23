@@ -31,9 +31,10 @@ settle it: the interview asks the owner what stays `null`, so a guess costs more
   A tag per closed milestone or group of issues: `milestone`; a tag after (almost) every merge:
   `per-merge`; tags at a fixed cadence whatever is merged: `train`; `-rc.N` tags before each stable
   one: `rc-stable`; no tags: `null`.
-- **How it is tested** (`testCommand`, `ci`): the test script the project runs (`package.json`
-  scripts, a Makefile, `pytest`, `go test`...), the CI system (`github-actions`, `gitlab-ci`, other,
-  or `null`) and whether CI gates the merges.
+- **How it is tested** (`testCommand`, `checkCommand`, `ci`): the test script the project runs
+  (`package.json` scripts, a Makefile, `pytest`, `go test`...), the check it runs besides the tests
+  (lint, types, format: `npm run check`, `make lint`...; `null` when none), the CI system
+  (`github-actions`, `gitlab-ci`, other, or `null`) and whether CI gates the merges.
 - **What it is written in** (`languages`): the Architecture facts' languages, else the file
   extensions; an existing `.multiagent/project.yaml` is reported as is (what to keep).
 - Never copy a secret, a token, an e-mail address or an environment value into the result: count
@@ -53,6 +54,7 @@ settle it: the interview asks the owner what stays `null`, so a guess costs more
     "merge": "local | pr",
     "release": "milestone | per-merge | train | rc-stable | null",
     "testCommand": "npm test",
+    "checkCommand": "npm run check | null",
     "ci": "github-actions | gitlab-ci | other | null",
     "languages": ["javascript"]
   },
@@ -61,6 +63,7 @@ settle it: the interview asks the owner what stays `null`, so a guess costs more
     "merge": { "numbers": { "mergeCommits": 0, "pullRequests": 0 }, "commits": ["a1b2c3d"] },
     "release": { "numbers": { "tags": 6, "daysBetweenTags": 14 }, "commits": ["e4f5a6b"] },
     "testCommand": { "numbers": { "scripts": 1 }, "commits": [] },
+    "checkCommand": { "numbers": { "scripts": 1 }, "commits": [] },
     "ci": { "numbers": { "workflows": 1 }, "commits": [] },
     "languages": { "numbers": { "javascript": 240 }, "commits": [] }
   }

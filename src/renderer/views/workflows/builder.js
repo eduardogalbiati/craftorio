@@ -419,9 +419,20 @@
     btn.disabled = true;
     try {
       // #487: a composed workflow is first written as it was composed (checked by the loader, custom
-      // and trusted), then the owner's edits patch that file like any other
+      // and trusted), then the owner's edits patch that file like any other; a workflow file of that
+      // name (an earlier interview's) is replaced only when the owner confirms it
       if (!b.file && b.composedYaml) {
-        b.file = (await api.importWorkflow({ text: b.composedYaml, name: b.spec.name })).file;
+        const imported = (replace) => api.importWorkflow({ text: b.composedYaml, name: b.spec.name, replace });
+        let out;
+        try {
+          out = await imported(false);
+        } catch (e) {
+          if (!/already exists/.test(errMsg(e))) throw e;
+          const file = `${b.spec.name}.yaml`;
+          if (!(await confirmDialog(t('builder.composed_exists_title'), t('builder.composed_exists_text', { file }), t('builder.replace_file')))) return false;
+          out = await imported(true);
+        }
+        b.file = out.file;
         b.composedYaml = null;
       }
       const r = await api.saveBuilderWorkflow(b.file, b.spec, trust);

@@ -1,21 +1,26 @@
 // #487: a project's workflow set composed from its ways of working. The ways-of-working seed
 // (seeds/ways-of-working/seed.md) infers a profile from the repository (solo or team, local merge or
-// pull requests, the release style, the test command, CI, languages); the interview
+// pull requests, the release style, the test and check commands, CI, languages); the interview
 // (src/service/areas/workflow-interview.js) asks only what the profile leaves open (openQuestions),
-// and composeWorkflowSet builds the set from the step fragments (fragments/intake-pipeline,
+// and the owner may override any inferred field (answers named after the profile's fields, PROFILE_FIELDS).
+// composeWorkflowSet builds the set from the step fragments (fragments/intake-pipeline,
 // dev-pipeline, local-merge-pipeline, pr-pipeline, release-pipeline): an intake workflow, the
 // development workflow in the chosen merge style, the release workflow in the chosen release style,
-// with the project's facts (test command, languages, language skills) in the agents' prompts, and the
-// `.multiagent/project.yaml` manifest that lists them (src/project-manifest.js). Pure: it returns YAML
-// texts; writing them into the project is the service's, on the owner's click.
+// with the project's facts (test and check commands, languages, language skills) in the agents'
+// prompts, and the `.multiagent/project.yaml` manifest that lists them (src/project-manifest.js),
+// merged into the one the repository already has (mergeManifest). Pure: it returns YAML texts;
+// writing them into the project is the service's, on the owner's click.
 
 'use strict';
 
+const path = require('path');
 const yaml = require('js-yaml');
+const registry = require('./shared/providers');
+const { MANIFEST_FILE } = require('./project-manifest');
 
-const MULTIAGENT_DIR = '.multiagent';
-const MANIFEST_PATH = `${MULTIAGENT_DIR}/project.yaml`;
+const MULTIAGENT_DIR = path.posix.dirname(MANIFEST_FILE);
 
+const TEAM_STYLES = ['solo', 'team'];
 const MERGE_STYLES = ['local', 'pr'];
 const RELEASE_STYLES = ['milestone', 'per-merge', 'train', 'rc-stable'];
 const REVIEW_LEVELS = ['light', 'standard', 'strict'];
@@ -52,16 +57,10 @@ const TOOLCHAIN = {
 // a test command's runner the policy allows, beyond the language's own
 const RUNNERS = ['./gradlew', './mvnw', 'cargo', 'dotnet', 'go', 'gradle', 'mvn', 'node', 'npm', 'npx', 'pnpm', 'poetry', 'py', 'pytest', 'python', 'python3', 'uv', 'yarn'];
 
-const PROVIDERS = {
-  claude: {
-    type: 'claude-code',
-    command: 'claude',
-    args: ['-p', '--output-format', 'stream-json', '--verbose', '--model', '{{ model }}'],
-    effort_args: ['--effort', '{{ effort }}'],
-    resume_args: ['--resume', '{{ session_id }}'],
-    skill_args: ['--add-dir', '{{ skill_dir }}'],
-  },
-};
+// the workflow provider definition of the CLI the agents run on (its adapter's, as the Builder writes it)
+const PROVIDERS = { claude: registry.byId('claude').definition };
+// the profile's fields the owner may override with an answer of the same name
+const PROFILE_FIELDS = ['checkCommand', 'ci', 'languages', 'merge', 'release', 'team', 'testCommand'];
 const STRONG_MODEL = 'claude-opus-5-5';
 const FAST_MODEL = 'claude-sonnet-5';
 
@@ -85,8 +84,8 @@ const hasUi = (profile) => (profile?.languages || []).some((l) => LANGUAGE_KEYS[
 /**
  * The questions the profile leaves open, each with its default from the profile:
  * [{ id, label, question, type: 'choice'|'number', options?, default }]. Validation, the budget per
- * issue, screenshots and the review rigour are always the owner's; the release style and the merge
- * style only when the analysis could not settle them.
+ * issue, screenshots and the review rigour are always the owner's; the release style, the merge
+ * style and solo or team only when the analysis could not settle them.
  */
 function openQuestions(profile) {
   const team = isTeam(profile);
@@ -103,6 +102,22 @@ function openQuestions(profile) {
   if (!MERGE_STYLES.includes(profile?.merge)) {
     out.push({ id: 'merge', label: 'Merge', question: 'How changes land: merged locally or through pull requests.', type: 'choice', options: choice([['local', 'Local merge'], ['pr', 'Pull requests']]), default: team ? 'pr' : 'local' });
   }
+  if (!TEAM_STYLES.includes(profile?.team)) {
+    out.push({ id: 'team', label: 'Team', question: 'Who works on the project: one person, or a team that reviews each other\'s changes.', type: 'choice', options: choice([['solo', 'Solo'], ['team', 'Team']]), default: 'solo' });
+  }
+  return out;
+}
+
+const languageList = (v) => (Array.isArray(v) ? v : str(v).split(',')).map(str).filter(Boolean);
+
+/** The profile with the owner's overrides (answers named after its fields; an empty answer keeps the inferred value). */
+function withOverrides(profile, answers) {
+  const out = { ...(profile || {}) };
+  for (const f of PROFILE_FIELDS) {
+    const v = answers?.[f];
+    if (v == null || (typeof v === 'string' && !v.trim())) continue;
+    out[f] = f === 'languages' ? languageList(v) : v;
+  }
   return out;
 }
 
@@ -115,7 +130,7 @@ function settingsOf(profile = {}, answers = {}) {
   const budget = Number(a.budget);
   const testCommand = str(a.testCommand) || str(p.testCommand);
   return {
-    team: (a.team ?? p.team) === 'team' ? 'team' : 'solo',
+    team: [a.team, p.team].find((v) => TEAM_STYLES.includes(v)) || 'solo',
     merge: pick('merge', MERGE_STYLES),
     release: pick('release', RELEASE_STYLES),
     review: pick('review', REVIEW_LEVELS),
@@ -123,7 +138,8 @@ function settingsOf(profile = {}, answers = {}) {
     screenshots: a.screenshots === undefined ? defaults.screenshots === 'on' : a.screenshots === true || a.screenshots === 'on',
     budget: Number.isFinite(budget) && budget > 0 ? budget : defaults.budget,
     testCommand,
-    platform: /gitlab/i.test(str(p.ci)) ? 'gl' : 'gh',
+    checkCommand: str(a.checkCommand) || str(p.checkCommand),
+    platform: /gitlab/i.test(str(a.ci) || str(p.ci)) ? 'gl' : 'gh',
   };
 }
 
@@ -131,13 +147,14 @@ const runnerOf = (command) => {
   const first = str(command).split(/\s+/)[0];
   return RUNNERS.includes(first) ? [`bash:${first}`] : [];
 };
-const toolsOf = (s, facts, extra) => unique([...extra, ...(facts.languages || []).flatMap((k) => TOOLCHAIN[k] || []), ...runnerOf(s.testCommand)]).sort();
+const toolsOf = (s, facts, extra) => unique([...extra, ...(facts.languages || []).flatMap((k) => TOOLCHAIN[k] || []), ...runnerOf(s.testCommand), ...runnerOf(s.checkCommand)]).sort();
 
 // the project's facts, as a paragraph of an agent's system prompt
 function factsText(s, facts) {
   const langs = (facts.languages || []).length ? facts.languages.join(', ') : 'see the project\'s files';
   const tests = s.testCommand ? `\`${literal(s.testCommand)}\`` : 'the test command found from the project\'s files';
-  return `The project: languages ${langs}; its tests run with ${tests}.`;
+  const check = s.checkCommand ? `; its checks (lint, types) run with \`${literal(s.checkCommand)}\`` : '';
+  return `The project: languages ${langs}; its tests run with ${tests}${check}.`;
 }
 
 const agent = ({ model = STRONG_MODEL, effort, session = 'persistent', tools, skills, system }) => ({
@@ -312,11 +329,14 @@ const dump = (doc) => `${HEADER}\n${yaml.dump(doc, { lineWidth: -1, noRefs: true
 /**
  * The workflow set of a profile and the owner's answers (answers win over the profile):
  * { workflows: [{ name, category, path, yaml }], manifest: { path, yaml }, settings }. `facts`: the
- * project's { languages, skills } (default: the profile's languages, languageFacts). Writes nothing.
+ * project's { languages, skills } (default: the profile's languages, languageFacts). `existing`: the
+ * repository's manifest (src/project-manifest.js readManifest), which the composed one is merged
+ * into (mergeManifest). Writes nothing.
  */
-function composeWorkflowSet({ profile, answers, facts } = {}) {
-  const s = settingsOf(profile, answers);
-  const f = facts && Array.isArray(facts.skills) ? { languages: languageFacts(facts.languages).languages, skills: facts.skills } : languageFacts(profile?.languages);
+function composeWorkflowSet({ profile, answers, facts, existing } = {}) {
+  const prof = withOverrides(profile, answers);
+  const s = settingsOf(prof, answers);
+  const f = facts && Array.isArray(facts.skills) ? { languages: languageFacts(facts.languages).languages, skills: facts.skills } : languageFacts(prof.languages);
   const set = [
     { category: 'intake', doc: intakeWorkflow(s, f) },
     { category: s.team, doc: developmentWorkflow(s, f) },
@@ -328,19 +348,35 @@ function composeWorkflowSet({ profile, answers, facts } = {}) {
     path: `${MULTIAGENT_DIR}/workflows/${doc.metadata.name}.yaml`,
     yaml: dump(doc),
   }));
-  const manifest = {
-    version: 1,
-    workflows: set.map(({ category, doc }) => ({ name: doc.metadata.name, file: `workflows/${doc.metadata.name}.yaml`, category, description: doc.metadata.description })),
+  const manifest = mergeManifest(existing, set.map(({ category, doc }) => ({ name: doc.metadata.name, file: `workflows/${doc.metadata.name}.yaml`, category, description: doc.metadata.description })));
+  return { workflows, manifest: { path: MANIFEST_FILE, yaml: dump(manifest) }, settings: s };
+}
+
+/**
+ * The manifest of the repository's one (`existing`: { version, requires, workflows }, none: a new
+ * one) with the composed entries: they replace the entries of the same name, in their place; the
+ * other entries, version and requires stay.
+ */
+function mergeManifest(existing, entries) {
+  const clean = (e) => Object.fromEntries(Object.entries(e).filter(([, v]) => v != null));
+  const composed = new Map(entries.map((e) => [e.name, e]));
+  const kept = (existing?.workflows || []).map((e) => composed.get(e.name) || clean(e));
+  const added = entries.filter((e) => !kept.includes(e));
+  return {
+    version: existing?.version ?? 1,
+    ...(existing?.requires ? { requires: existing.requires } : {}),
+    workflows: [...kept, ...added],
   };
-  return { workflows, manifest: { path: MANIFEST_PATH, yaml: dump(manifest) }, settings: s };
 }
 
 module.exports = {
   composeWorkflowSet,
   languageFacts,
-  MANIFEST_PATH,
+  mergeManifest,
   MERGE_STYLES,
   openQuestions,
+  PROFILE_FIELDS,
   RELEASE_STYLES,
   REVIEW_LEVELS,
+  TEAM_STYLES,
 };
