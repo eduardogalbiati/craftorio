@@ -12,6 +12,7 @@ Which field is valid where, its type and the loader's message: [the field refere
 - [Evidence: screenshots per step and round (#146)](engine/evidence.md): Where a run's screenshots go (`evidence/<step>/round-<n>/`), the evidence index and who reads it.
 - [Gates, loops and how a run ends](engine/gates-and-run-end.md): Human gates (feedback, choices, summaries), the supervisor, refused tool calls, waits, how a run ends and ships, and the bundled workflows' rules for several issues.
 - [Providers](engine/providers.md): Turn timeouts, per-run agent overrides, fallback chains, limits per model, retries and other provider details.
+- [Repository workflows (#485)](engine/repository-workflows.md): A repository's `.multiagent/project.yaml`: the workflows a project is worked on with, how a name resolves, and why a repository's own workflow is accepted per commit and capped.
 - [Resume from a step](engine/resume.md): Resuming a run from a step: what the new run keeps, the service channels behind the dialog, and why a human gate always asks again.
 - [Roadmap pauses (#141, #368, #391)](engine/roadmap-pauses.md): The three ways to pause a roadmap, where each one is written and when each one stops.
 - [The engine's modules by area (#250)](engine/run-modules.md): Which file owns which part of a run: `src/engine/workflow.js` keeps the run loop, one module per area in `src/engine/run/` holds the rest, so an engine change touches one module.

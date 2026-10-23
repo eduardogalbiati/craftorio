@@ -472,7 +472,7 @@ function repositoryToolsInPolicy(wf, name, policy) {
   ];
   for (const [where, caps] of sources) {
     if (!caps) throw new Error(`Workflow "${name}" from the repository: ${where} declares no capabilities.tools (every tool); list its tools within the workspace's tool policy (${policy.join(', ')}).`);
-    const beyond = capabilities.normalize(caps).tools.filter((t) => !ok(t));
+    const beyond = (capabilities.normalize(caps)?.tools || []).filter((t) => !ok(t));
     if (beyond.length) throw new Error(`Workflow "${name}" from the repository: ${where} uses ${beyond.join(', ')}, beyond the workspace's tool policy (${policy.join(', ')}).`);
   }
 }

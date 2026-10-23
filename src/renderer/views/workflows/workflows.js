@@ -174,7 +174,9 @@ function renderWorkflowDefinitions() {
     return;
   }
   const q = wfDefs.query.trim().toLowerCase();
-  const keys = [...Object.keys(WF_FLOW_CATEGORIES), ...Object.keys(CATEGORIES), 'other'];
+  // the four flows (the sections the app's CATEGORIES do not name) lead, 'other' closes
+  const flows = Object.keys(WF_SECTIONS).filter((k) => k !== 'other' && !CATEGORIES[k]);
+  const keys = [...flows, ...Object.keys(CATEGORIES), 'other'];
   const workflows = pipesOnly ? [] : [...state.workflows, ...wfDefs.repository].filter((w) => wfMatches(w, q));
   const pipelines = wfDefs.pipelines.filter((p) => pipeMatches(p, q));
   const yours = (w) => w.origin === 'custom' || w.origin === 'repository';
@@ -192,7 +194,7 @@ function renderWorkflowDefinitions() {
   filters.querySelectorAll('[data-section]').forEach((b) => (b.onclick = () => { wfDefs.section = b.dataset.section; renderWorkflowDefinitions(); }));
 
   // the four flows stay visible, empty too, unless a search narrows the list
-  const always = (k) => !pipesOnly && !q && WF_FLOW_CATEGORIES[k];
+  const always = (k) => !pipesOnly && !q && flows.includes(k);
   const shown = keys.filter((k) => (wfDefs.section === 'all' || wfDefs.section === k) && (count(k) || always(k)));
   if (!shown.length) {
     box.innerHTML = `<div class="empty-state"><b>${t(pipesOnly ? 'workflows.no_pipeline_matches' : 'workflows.no_workflow_matches')}</b><p class="muted">${t(q ? 'workflows.nothing_matches_query_in_section' : 'workflows.nothing_in_section', { query: esc(wfDefs.query.trim()), section: esc(wfDefs.section === 'all' ? t('workflows.any_section') : wfSectionName(wfDefs.section)) })}</p><button class="btn ghost sm" data-clear>${t('workflows.clear_the_filters')}</button></div>`;
@@ -244,33 +246,18 @@ function workflowCard(w) {
     const role = i === 0 ? t('workflows.starts_it') : t('workflows.stage_of_total', { stage: i + 1, total: p.stages.length });
     return `<button class="link-btn" data-goto-pipe="${esc(p.file)}" title="${esc(`${p.name}: ${role}`)}">${esc(p.name)}</button> <span class="muted">(${role})</span>`;
   }).join(', ');
-  const builderTip = t(w.origin !== 'custom' ? 'workflows.builder_tip_bundled' : w.builder ? 'workflows.builder_tip_edit' : 'workflows.builder_tip_agents_only');
-  // #319: what it needs beyond Claude Code and Git, and whether Start offers it (the Setup hides the unpicked ones)
+  // #319: what it needs beyond Claude Code and Git (the Setup hides the unpicked ones)
   const model = typeof SetupModel === 'undefined' ? null : SetupModel;
   const needs = (model ? model.requirementBadges(w.requirements) : []).map((b) => `<span class="badge" title="${t('workflows.the_clis_it_needs_with_its')}">${esc(b)}</span>`).join('');
-  const shown = !model || !(state.settings?.hiddenWorkflows || []).includes(model.workflowId(w.file));
-  // #485: a repository's workflow, read-only and off until accepted for its commit
   const repo = w.origin === 'repository';
-  const actions = repo
-    ? `<span class="badge ${w.accepted ? 'ok' : 'warn'}" data-testid="workflow-acceptance">${t(w.accepted ? 'workflows.accepted' : 'workflows.not_accepted')}</span>
-        ${w.accepted ? '' : `<button class="btn primary sm" data-accept data-testid="workflow-accept" title="${t('workflows.accept_tip')}">${t('workflows.accept')}</button>`}
-        <span class="spacer"></span>
-        <button class="btn ghost sm" data-clone data-testid="workflow-clone" ${w.error ? 'disabled' : ''}>${t('workflows.clone')}</button>
-        <button class="btn ghost sm" data-builder data-testid="workflow-open-builder" ${w.error ? 'disabled' : ''} title="${t('workflows.builder_tip_bundled')}">${t('workflows.open_in_builder')}</button>`
-    : `${w.restorable ? `<button class="btn ghost sm" data-restore title="${t('workflows.move_your_edited_copy_to_the')}">${t('workflows.restore_default')}</button>` : ''}
-        <label class="wf-show-start small" title="${t('workflows.off_start_does_not_offer_it')}"><label class="switch"><input type="checkbox" data-show-start data-testid="workflow-show-in-start" aria-label="${t('workflows.show_in_start_name', { name: esc(w.name) })}" ${shown ? 'checked' : ''} /><span></span></label>${t('workflows.show_in_start')}</label>
-        <span class="spacer"></span>
-        <button class="btn ghost sm" data-builder ${w.error ? 'disabled' : ''} title="${esc(builderTip)}">${t('workflows.open_in_builder')}</button>
-        <button class="btn primary sm" data-run ${w.error ? 'disabled' : ''}>${t('workflows.run')}</button>`;
-  const diff = repo && w.diff && !w.accepted
-    ? `<details class="wf-diff small"><summary>${t('workflows.changes_since', { commit: esc(String(w.acceptedCommit || '').slice(0, 7)) })}</summary><pre class="mono">${esc(w.diff)}</pre></details>`
-    : '';
+  const actions = repo ? repositoryWorkflowActions() : workspaceWorkflowActions();
+  const diff = repo ? repositoryWorkflowDiff() : '';
   return `
     <article class="wf-card${w.origin === 'custom' ? ' custom' : ''}" data-file="${esc(w.file)}" data-testid="${repo ? 'repository-workflow' : 'workflow-card'}"${repo ? ` data-project="${esc(w.projectId)}" data-commit="${esc(w.commit)}"` : ''} tabindex="-1">
       <div class="wf-card-head">
         <div class="wf-card-title">
           <h3 title="${esc(w.name)}">${esc(w.name)} ${w.version ? `<span class="muted small">v${esc(w.version)}</span>` : ''}</h3>
-          <div class="badges">${originBadge(w)}<span class="badge mono wf-file" title="${esc(w.file)}">${esc(w.file)}</span></div>
+          <div class="badges">${originBadge(w)} <span class="badge mono wf-file" title="${esc(w.file)}">${esc(w.file)}</span></div>
         </div>
         ${avatars ? `<div class="wf-avs">${avatars}</div>` : ''}
       </div>
@@ -285,6 +272,32 @@ function workflowCard(w) {
         ${actions}
       </div>
     </article>`;
+
+  // a workspace workflow's actions: restore, whether Start offers it (#319), the builder and Run
+  function workspaceWorkflowActions() {
+    const builderTip = t(w.origin !== 'custom' ? 'workflows.builder_tip_bundled' : w.builder ? 'workflows.builder_tip_edit' : 'workflows.builder_tip_agents_only');
+    const shown = !model || !(state.settings?.hiddenWorkflows || []).includes(model.workflowId(w.file));
+    return `${w.restorable ? `<button class="btn ghost sm" data-restore title="${t('workflows.move_your_edited_copy_to_the')}">${t('workflows.restore_default')}</button>` : ''}
+        <label class="wf-show-start small" title="${t('workflows.off_start_does_not_offer_it')}"><label class="switch"><input type="checkbox" data-show-start data-testid="workflow-show-in-start" aria-label="${t('workflows.show_in_start_name', { name: esc(w.name) })}" ${shown ? 'checked' : ''} /><span></span></label>${t('workflows.show_in_start')}</label>
+        <span class="spacer"></span>
+        <button class="btn ghost sm" data-builder ${w.error ? 'disabled' : ''} title="${esc(builderTip)}">${t('workflows.open_in_builder')}</button>
+        <button class="btn primary sm" data-run ${w.error ? 'disabled' : ''}>${t('workflows.run')}</button>`;
+  }
+
+  // #485: a repository's workflow, read-only and off until accepted for its commit: no Run
+  function repositoryWorkflowActions() {
+    return `<span class="badge ${w.accepted ? 'ok' : 'warn'}" data-testid="workflow-acceptance">${t(w.accepted ? 'workflows.accepted' : 'workflows.not_accepted')}</span>
+        ${w.accepted ? '' : `<button class="btn primary sm" data-accept data-testid="workflow-accept" title="${t('workflows.accept_tip')}">${t('workflows.accept')}</button>`}
+        <span class="spacer"></span>
+        <button class="btn ghost sm" data-clone data-testid="workflow-clone" ${w.error ? 'disabled' : ''}>${t('workflows.clone')}</button>
+        <button class="btn ghost sm" data-builder data-testid="workflow-open-builder" ${w.error ? 'disabled' : ''} title="${t('workflows.builder_tip_bundled')}">${t('workflows.open_in_builder')}</button>`;
+  }
+
+  // #485: what changed in a repository workflow since the commit the owner last accepted
+  function repositoryWorkflowDiff() {
+    if (!w.diff || w.accepted) return '';
+    return `<details class="wf-diff small"><summary>${t('workflows.changes_since', { commit: esc(String(w.acceptedCommit || '').slice(0, 7)) })}</summary><pre class="mono">${esc(w.diff)}</pre></details>`;
+  }
 }
 
 // A pipeline (#135): its workflows connected, each arrow with the outputs it maps into the next
