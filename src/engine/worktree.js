@@ -99,6 +99,17 @@ async function listWorktrees(repo) {
 const isWorktree = async (repo, dir) => fs.existsSync(dir) && (await listWorktrees(repo)).some((w) => samePath(w.dir, dir));
 const refExists = async (repo, ref) => !!(await tryGit(['rev-parse', '--verify', '--quiet', `${ref}^{commit}`], repo));
 
+// A branch name git would accept (git check-ref-format --branch rules): the base comes from the
+// run's inputs (base_branch), and one starting with `-` would reach `git fetch origin <base>` as an
+// option (`--upload-pack=<program>` runs a program, SEC-23)
+function validBranchName(name) {
+  const s = String(name);
+  return !!s && !s.startsWith('-') && !/[\0- ~^:?*[\\\x7f]|\.\.|@\{|\/\/|\/\.|^\.|^\/|[/.]$|\.lock$|\.lock\//.test(s) && s !== '@';
+}
+function checkBase(base) {
+  if (base && !validBranchName(base)) throw new Error(`worktree: "${base}" is not a valid branch name for the base.`);
+}
+
 /**
  * Fetches origin/<base> (a missing remote or no network only warns) and picks the start point:
  * origin/<base>, else the local <base>, else the repository's HEAD.
@@ -113,7 +124,7 @@ async function baseRef(repo, base, log = () => {}, { remote = true } = {}) {
   }
   if (base) {
     try {
-      await git(['fetch', 'origin', base], repo, { timeout: FETCH_TIMEOUT_MS, auth: true });
+      await git(['fetch', '--end-of-options', 'origin', base], repo, { timeout: FETCH_TIMEOUT_MS, auth: true });
     } catch (e) {
       log('warn', `worktree: could not fetch origin/${base}, using what is available locally (${e.message.split('\n')[0]})`);
     }
@@ -140,6 +151,7 @@ async function baseRef(repo, base, log = () => {}, { remote = true } = {}) {
  *   null when `repo` is not a git repository (the caller then works in the repository folder).
  */
 async function prepareWorktree({ repo, base, dir, branch = null, log = () => {}, remote = true }) {
+  checkBase(base);
   const root = await repoRoot(repo);
   if (!root) return null;
   // canonical on both sides: a relative path between a short (8.3) or symlinked spelling and
@@ -199,6 +211,11 @@ async function isMerged(repo, branch, base) {
  */
 async function removeWorktree({ repo, dir, base, log = () => {}, remote = true }) {
   dir = canonicalPath(dir); // the spelling git registered the worktree with
+  if (base && !validBranchName(base)) {
+    // the worktree still goes; its branch is kept, as with no base to compare with (SEC-23)
+    log('warn', `worktree: "${base}" is not a valid branch name; the base is ignored`);
+    base = null;
+  }
   const branch = fs.existsSync(dir) ? await currentBranch(dir) : null;
   // the shared dependency cache (#198): its links go first, so no delete below ever follows one
   unlinkDeps(dir);
@@ -211,7 +228,7 @@ async function removeWorktree({ repo, dir, base, log = () => {}, remote = true }
   let branchDeleted = false;
   if (branch) {
     // local workflows merge into the local base (see mergeLocally): compare with it, not origin
-    if (base && remote) await tryGit(['fetch', 'origin', base], repo, { timeout: FETCH_TIMEOUT_MS, auth: true });
+    if (base && remote) await tryGit(['fetch', '--end-of-options', 'origin', base], repo, { timeout: FETCH_TIMEOUT_MS, auth: true });
     const into = base && remote && (await refExists(repo, `origin/${base}`)) ? `origin/${base}` : base;
     if (into && await isMerged(repo, branch, into)) {
       branchDeleted = !!(await tryGit(['branch', '-D', branch], repo));

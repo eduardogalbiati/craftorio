@@ -131,6 +131,10 @@ actions, or any code that deletes or checks out branches.
   after; CI runs a newer git than the local 2.32): don't match git messages in tests or code
   without accepting both.
 - Compare paths with `canonicalPath`/`samePath` (see [windows-gotchas.md](windows-gotchas.md)).
+- The base comes from the run's inputs (`base_branch`): `prepareWorktree` refuses a base that is not
+  a valid branch name (one starting with `-` would be a git option, `--upload-pack=<program>`), and
+  `removeWorktree` ignores it with a warning; `git fetch` passes `--end-of-options` before the ref
+  (SEC-23, #481). Git 2.24+ knows `--end-of-options`.
 
 ## Fewer merge conflicts between parallel runs (#77)
 

@@ -4,8 +4,9 @@
 // when it is the app's only window (the engine failed) the button reads Quit and quits the app
 // (Esc does not: quitting is never one stray key). Talks only to window.connection
 // (src/engine-connection-preload.js); the saved token never comes back to the page (a blank token
-// field keeps it). A plain-http address outside loopback and Tailscale shows "Allow an insecure
-// connection", and its warning every time it is checked (#480). Its texts are connection.* keys of the catalog (#329, window.I18n): the language
+// field keeps it); a warning shows when the token is (or would be) stored unencrypted (#479). A
+// plain-http address outside loopback and Tailscale shows "Allow an insecure connection", and its
+// warning every time it is checked (#480). Its texts are connection.* keys of the catalog (#329, window.I18n): the language
 // the engine's page asked for (?lang=, remembered for the next time), else the one this computer's
 // app last showed, else the computer's; the main process's messages (test results, failures) stay
 // English, like the engine's errors.
@@ -106,6 +107,10 @@
     $('#cn-insecure').checked = !!v.saved.insecure;
     $('#cn-token').value = '';
     $('#cn-token').placeholder = v.saved.hasToken ? t('connection.token_saved') : '';
+    // no encryption on this computer, or a token already saved as plain text (#479)
+    const plain = v.encryptionAvailable === false || v.saved.tokenEncrypted === false;
+    $('#cn-token-warning').hidden = !plain;
+    $('#cn-token-hint').textContent = t(plain ? 'connection.token_hint_plain' : 'connection.token_hint');
     setResult('');
     paintMode();
     checkAddress();

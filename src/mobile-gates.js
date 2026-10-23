@@ -6,7 +6,8 @@
 // control, files, terminals, settings, the /api channels) is reachable on this port.
 //
 //   GET  /                         the gates page (pairs the phone from `?pair=<code>`, then lists the gates)
-//   POST /pair                     { code, name } → { token, device: { id, name } }; wrong or used code → 403
+//   POST /pair                     { code, name } → { token, device: { id, name } }; wrong or used code → 403;
+//                                  10 wrong codes from one address in 15 min → 429 (SEC-20)
 //   GET  /gates.json               Bearer device → { gates: [{ runId, approvalId, stepId, message, url, … }] }
 //   GET  /gates/<run>/<id>?t=      the gate (its summary, recommendation, evidence, buttons); bad t → 403
 //   GET  /gates/<run>/<id>?t=&answer=<choice>   the confirmation page; a GET never answers
@@ -14,7 +15,9 @@
 //                                  401 device, 403 link, 400 confirmation or answer, 409 gate not open
 //
 // Gate links are `<url>/gates/<run>/<id>?t=<payload>.<hmac>`, payload { r, a, exp }, signed with the
-// workspace's key (`<workspace>/phone-gates/secret`, HMAC-SHA256), valid `linkTtlMs` (30 min). Paired devices are kept in the workspace
+// workspace's key (`<workspace>/phone-gates/secret`, HMAC-SHA256), valid `linkTtlMs` (30 min). A gate
+// link alone shows the gate's text (summary, recommendation, evidence) to whoever holds it; answering
+// still needs a paired device (SEC-20). Paired devices are kept in the workspace
 // (`<workspace>/phone-gates/devices.json`: id, name, the SHA-256 of their token, pairedAt, lastSeen);
 // a revoked device is removed and its token stops working at once. The answer goes through the
 // service's answerPhoneGate (src/service/areas/phone-gates.js, never a channel): the gate's
@@ -30,6 +33,9 @@ const { displayName } = require('./shared/display-name');
 const LINK_TTL_MS = 30 * 60e3;
 const CODE_TTL_MS = 10 * 60e3;
 const MAX_BODY = 64 * 1024;
+// wrong pairing codes one address may send in the window before /pair answers 429 (SEC-20)
+const PAIR_MAX_FAILURES = 10;
+const PAIR_WINDOW_MS = 15 * 60e3;
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O, 1/I: read off a screen
 
 const b64u = (buf) => Buffer.from(buf).toString('base64url');
@@ -153,6 +159,18 @@ function linkSecret(ws) {
 function createMobileGatesServer({ service, secret, now = Date.now, linkTtlMs = LINK_TTL_MS, publicUrl = () => '' } = {}) {
   const key = secret || crypto.randomBytes(32).toString('hex');
   const codes = new Map(); // code → expiry (ms)
+  const pairFailures = new Map(); // client address → { count, since (ms) } (SEC-20)
+  // too many wrong codes from this address in the window: refused before the code is looked at
+  function pairThrottled(ip) {
+    const f = pairFailures.get(ip);
+    if (f && now() - f.since > PAIR_WINDOW_MS) pairFailures.delete(ip);
+    return (pairFailures.get(ip)?.count || 0) >= PAIR_MAX_FAILURES;
+  }
+  function pairFailed(ip) {
+    if (pairFailures.size >= 1000 && !pairFailures.has(ip)) pairFailures.clear(); // never an unbounded map
+    const f = pairFailures.get(ip) || { count: 0, since: now() };
+    pairFailures.set(ip, { ...f, count: f.count + 1 });
+  }
   let server = null;
   let base = null;
   const ws = () => service.workspace();
@@ -215,6 +233,24 @@ function createMobileGatesServer({ service, secret, now = Date.now, linkTtlMs = 
     return page(gate.message || 'Gate', `<div class="card">${head}${what}${rec}${links}${turns}<div class="btns">${buttons}</div></div><p class="muted"><a href="/">All open gates</a></p>`);
   }
 
+  // POST /pair: a one-time code from the desktop → a device token
+  async function pair(req, res) {
+    const ip = req.socket.remoteAddress || '';
+    if (pairThrottled(ip)) throw new HttpError(429, 'Too many wrong pairing codes from this address: wait a few minutes.');
+    const body = await readJson(req);
+    const code = String(body.code || '').trim().toUpperCase();
+    const exp = codes.get(code);
+    if (!code || !exp || exp < now()) {
+      pairFailed(ip);
+      throw new HttpError(403, 'Wrong or used pairing code.');
+    }
+    codes.delete(code);
+    const token = crypto.randomBytes(32).toString('base64url');
+    const device = { id: `dev-${crypto.randomBytes(6).toString('hex')}`, name: String(body.name || 'Phone').slice(0, 80) };
+    writeDevices(ws(), [...readDevices(ws()), { ...device, tokenHash: sha(token), pairedAt: new Date(now()).toISOString(), lastSeen: null }]);
+    sendJson(res, 200, { token, device });
+  }
+
   async function handle(req, res) {
     const url = new URL(req.url, 'http://phone.local');
     const parts = url.pathname.split('/').slice(1);
@@ -225,15 +261,7 @@ function createMobileGatesServer({ service, secret, now = Date.now, linkTtlMs = 
       return;
     }
     if (req.method === 'POST' && url.pathname === '/pair') {
-      const body = await readJson(req);
-      const code = String(body.code || '').trim().toUpperCase();
-      const exp = codes.get(code);
-      if (!code || !exp || exp < now()) throw new HttpError(403, 'Wrong or used pairing code.');
-      codes.delete(code);
-      const token = crypto.randomBytes(32).toString('base64url');
-      const device = { id: `dev-${crypto.randomBytes(6).toString('hex')}`, name: String(body.name || 'Phone').slice(0, 80) };
-      writeDevices(ws(), [...readDevices(ws()), { ...device, tokenHash: sha(token), pairedAt: new Date(now()).toISOString(), lastSeen: null }]);
-      sendJson(res, 200, { token, device });
+      await pair(req, res);
       return;
     }
     if (req.method === 'GET' && url.pathname === '/gates.json') {

@@ -55,6 +55,7 @@ module.exports = (ctx) => [
     schema: { params: args({ runId: RUN_ID, approvalId: nullable(GATE_ID), config: CONFIG, writeRepoFile: FLAG }, ['runId']), result: shape({ project: OBJECT, config: OBJECT, file: nullable(STRING) }) },
     fn: (opts) => ctx.saveLocalPreview(opts),
   },
-  // dir: a folder of this machine (Projects › Add) → its suggested command, or null
+  // dir: a project's folder or a run's worktree (Projects › Edit) → its suggested command, or null
+  // (any other folder too, SEC-26)
   { channel: 'localPreview:suggest', method: 'suggestLocalPreview', params: ['dir'], schema: { params: args({ dir: STRING }), result: nullable(OBJECT) }, fn: (opts) => ctx.suggestLocalPreview(opts) },
 ];

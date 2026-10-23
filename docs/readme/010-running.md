@@ -106,13 +106,22 @@ approves every human gate without interaction (tests only: in practice the AI mu
 npm run serve -- --port 7300 --host 127.0.0.1 --workspace C:/path/to/workspace
 ```
 
-`--host` is `127.0.0.1` by default; `0.0.0.0` listens on every network, `tailscale` on this
-computer's Tailscale address only (100.x.y.z), and the server then prints the addresses another
-computer can type.
+**The token is full control of this machine**: whoever has it opens a shell, approves human gates
+and starts paid runs, as you would in the desktop app. Share it only with yourself.
+
+`--host` is `127.0.0.1` by default; `tailscale` listens on this computer's Tailscale address only
+(100.x.y.z), and the server then prints the addresses another computer can type. Any other address
+(`0.0.0.0`, a LAN IP) serves plain HTTP to the network and is refused unless you add
+`--insecure-http`: use it only behind a VPN or a reverse proxy with TLS.
 
 Runs the engine without Electron and serves the same UI to a browser: open the printed
-`http://…/?token=…` URL. The token (from `MULTIAGENT_SERVER_TOKEN`, else random) is kept in an
-HttpOnly cookie after the first visit; API clients send `Authorization: Bearer <token>`.
+`http://…/?token=…` URL (shown once: clear it from the shell history and the scrollback if others
+can read them), or open the server's address and type the token in its sign-in form (`POST /session`,
+the token stays out of the address bar). The token (from `MULTIAGENT_SERVER_TOKEN`, else random) is
+then kept in an HttpOnly, SameSite=Strict cookie for a week (`Secure` when the request came over
+HTTPS, e.g. `X-Forwarded-Proto: https` from a TLS proxy); API clients send
+`Authorization: Bearer <token>`. On `127.0.0.1` the server answers only requests whose `Host` is
+`localhost`, `127.0.0.1` or `[::1]` (DNS rebinding): a proxy in front must keep that `Host`.
 
 - API: `POST /api/<channel>` with `{ "arg": … }` → `{ "result": … }` or `{ "error": … }`. The channels are the
   desktop app's IPC channels (`projects:list`, `run:start`, `artifacts:read`, `auth:state`, …).
@@ -141,7 +150,7 @@ Close the desktop app on that computer first: like the app, the server locks its
 engine per workspace) and refuses to start on a workspace the app has open (or pass
 `--workspace <another folder>`). Keep `MULTIAGENT_SERVER_TOKEN` the same: the app saves the token,
 and without the variable the server makes a new one at every start. `--host tailscale` keeps the engine off the local network;
-`--host 0.0.0.0` listens everywhere.
+`--host 0.0.0.0 --insecure-http` listens everywhere over plain HTTP (only behind a VPN or a TLS proxy).
 
 On the computer with the app: **Settings › Execution › Engine › Change…**, choose **Remote engine**,
 type the address (the machine's MagicDNS name such as `my-pc.tailnet.ts.net`, its `100.x.y.z`
@@ -151,7 +160,8 @@ and interface, or why not: unreachable, refused token, not an engine) and **Test
 The app restarts as a window onto that engine, named in its title bar: it runs no engine of its
 own, opens no workspace and starts nothing that needs one (workspace lock, Night watch, phone
 gates, Keep awake, the control channel). The setting is per computer, in the app's own data folder
-with the token encrypted by the OS, never in the workspace.
+with the token encrypted by the OS, never in the workspace. A computer that offers no encryption
+(Linux without a keyring) stores it as plain text, and the connection page says so.
 
 - When the engine cannot be reached at start (or the window is reloaded while it is down), or it
   refuses the token, the app shows the connection page with the reason: **Retry**, **Change the

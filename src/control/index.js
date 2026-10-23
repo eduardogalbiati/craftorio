@@ -159,7 +159,9 @@ function createControlChannel({ service, ctlPath = nativeBinaryPath('multiagent-
         const file = path.join(controlDir(ws), 'endpoint.json');
         try {
           fs.mkdirSync(controlDir(ws), { recursive: true });
-          fs.writeFileSync(file, `${JSON.stringify({ url, token, pid: process.pid, started: new Date().toISOString() }, null, 2)}\n`);
+          // readable by this user only where the OS honours the mode (SEC-25); the workflow's agents run
+          // as this user and can still read it (SECURITY.md, threat model)
+          fs.writeFileSync(file, `${JSON.stringify({ url, token, pid: process.pid, started: new Date().toISOString() }, null, 2)}\n`, { mode: 0o600 });
         } catch (e) {
           srv.close();
           reject(e);

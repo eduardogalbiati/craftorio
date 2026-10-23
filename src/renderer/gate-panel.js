@@ -347,18 +347,26 @@ const runAppCommandHtml = (c) => `${c.install ? `<code>${esc(c.install)}</code> 
 // declared command (the repository's .multiagent/local-preview.yaml or the workflow's) the owner has
 // not confirmed for this project yet, or changed since; or one detected from the worktree
 // (localPreview:info → suggestConfig in src/local-preview.js), saved as the project's Local preview
-// on Run. A monorepo's apps: the owner picks one (stored as cwd).
+// on Run. A monorepo's apps: the owner picks one (stored as cwd). Everything that will run is shown
+// in full, the env variables too, and a command the repository declares is marked (#481, SEC-22):
+// a branch can change it, so it is never confirmed blind.
 function runAppConfirmHtml(info, cfg) {
   const apps = info.suggestion?.apps || [];
   const pick = apps.length > 1 ? `<label class="small">${t('gate_panel.app')} <select data-setup-app>${apps.map((a, i) => `<option value="${i}"${a.cwd === cfg.cwd ? ' selected' : ''}>${esc(a.cwd)}</option>`).join('')}</select></label>` : '';
   const from = info.config ? info.from : cfg.from;
+  const source = info.config ? info.source || '' : 'detected';
+  const sourceLabel = { repo: t('gate_panel.source_repo'), project: t('gate_panel.source_project'), workflow: t('gate_panel.source_workflow') }[source] || t('gate_panel.source_detected');
+  const badge = `<span class="badge${source === 'repo' ? ' warn' : ''}" data-testid="run-app-confirm-source" data-source="${esc(source)}">${sourceLabel}</span>`;
   const lead = info.changed ? `<div class="small gate-app-changed">${t('gate_panel.the_declared_run_command_changed_since')}</div>` : '';
   const saved = !info.config && info.project ? t('gate_panel.saved_as_local_preview_of', { name: esc(info.project.name) }) : '';
   const install = cfg.install ? `<div>${runAppInstallHtml(info)}</div>` : '';
+  const vars = Object.entries(cfg.env || {});
+  const line = (label, body) => `<div><span class="muted">${label}</span> ${body}</div>`;
+  const what = `<div class="gate-app-what small">${cfg.install ? line(t('gate_panel.install_label'), `<code data-testid="run-app-confirm-install">${esc(cfg.install)}</code>`) : ''}${line(t('gate_panel.command_label'), `<code data-testid="run-app-confirm-command">${esc(cfg.command)}</code>`)}${vars.length ? line(t('gate_panel.with_env'), vars.map(([k, v]) => `<code data-testid="run-app-confirm-env">${esc(k)}=${esc(v)}</code>`).join(' ')) : ''}</div>`;
   const run = !info.config && info.project ? t('gate_panel.save_as_this_project_s_run') : t('gate_panel.run');
-  return `${lead}<div>${t('gate_panel.run_with_cfg_value', { cfg: runAppCommandHtml(cfg), value: from ? ` <span class="muted small">${t('gate_panel.from_from', { from: esc(from) })}</span>` : '' })}</div>${pick}${install}
+  return `<div class="gate-app-confirm" data-testid="run-app-confirm">${lead}<div>${badge}</div><div>${t('gate_panel.run_with_cfg_value', { cfg: runAppCommandHtml(cfg), value: from ? ` <span class="muted small">${t('gate_panel.from_from', { from: esc(from) })}</span>` : '' })}</div>${what}${pick}${install}
     <div class="muted small">${t('gate_panel.it_runs_this_repository_s_command')}${saved}</div>
-    <div class="row"><button type="button" class="btn sm primary" data-gate-tool="app-run">${run}</button><button type="button" class="btn sm ghost" data-gate-tool="app-edit">${t('gate_panel.edit')}</button><button type="button" class="btn sm ghost" data-gate-tool="app-cancel">${t('common.cancel')}</button></div>`;
+    <div class="row"><button type="button" class="btn sm primary" data-gate-tool="app-run">${run}</button><button type="button" class="btn sm ghost" data-gate-tool="app-edit">${t('gate_panel.edit')}</button><button type="button" class="btn sm ghost" data-gate-tool="app-cancel">${t('common.cancel')}</button></div></div>`;
 }
 
 // Whether the install step runs in this worktree now (#119, localPreview:info's install): a badge and why.

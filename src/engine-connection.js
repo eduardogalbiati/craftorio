@@ -13,7 +13,9 @@
 //                               the setting in the app's user data folder (never the workspace): mode,
 //                               address, the insecure opt-in and the token, encrypted by the caller's
 //                               functions (safeStorage)
-//   connectionView(connection)  what a page may see of it: the token never leaves the main process
+//   tokenStorage(file)          'encrypted' | 'plain' | null: Settings warns on a token kept unencrypted (#479)
+//   connectionView(connection, { tokenStorage })   what a page may see of it: the token never leaves
+//                               the main process
 //   decideMode({ connection, env })   local, or remote with its URL and token (or why the setting is unusable)
 //   testConnection({ address, token, fetch, localContract })   GET /api/version with the token → the
 //                               engine's version and contract, or the reason it failed
@@ -21,7 +23,8 @@
 //                               the token as `Authorization: Bearer` instead, #480), the remote window's
 //                               navigation and permission rules (clipboard-read only over https)
 //   lanAddresses, resolveListenHost   the server's side (scripts/serve.js): the addresses another
-//                               computer can type, and `--host tailscale` (this computer's Tailscale address)
+//                               computer can type, and `--host tailscale` (this computer's Tailscale address);
+//                               another non-loopback host needs `--insecure-http` (#479)
 
 const fs = require('fs');
 const path = require('path');
@@ -133,11 +136,31 @@ function writeConnection(file, connection, { encrypt = null } = {}) {
   return c;
 }
 
+/** How the saved token is kept (#479): 'encrypted', 'plain' (no encryption on this computer), or null when none is saved. */
+function tokenStorage(file) {
+  let raw;
+  try {
+    raw = JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch {
+    return null;
+  }
+  const t = raw?.token;
+  if (typeof t?.plain === 'string') return 'plain';
+  if (typeof t?.encrypted === 'string') return 'encrypted';
+  return null;
+}
+
 // What the connection page may see of the setting: never the token itself (the insecure opt-in, so the
-// page warns every time, #480).
-const connectionView = (c) => {
+// page warns every time, #480); `tokenEncrypted` when the caller says how it is stored (tokenStorage).
+const connectionView = (c, { tokenStorage: storage } = {}) => {
   const n = normalizeConnection(c);
-  return { mode: n.mode, address: n.address, hasToken: !!n.token, ...(n.insecure ? { insecure: true } : {}) };
+  return {
+    mode: n.mode,
+    address: n.address,
+    hasToken: !!n.token,
+    ...(n.insecure ? { insecure: true } : {}),
+    ...(storage ? { tokenEncrypted: storage === 'encrypted' } : {}),
+  };
 };
 
 /**
@@ -242,11 +265,21 @@ function lanAddresses(interfaces) {
   return out.sort((x, y) => Number(y.tailscale) - Number(x.tailscale));
 }
 
-/** `--host` as typed → { host } to listen on, or { error }: 'tailscale' is this computer's Tailscale address only. */
-function resolveListenHost(host, interfaces) {
-  if (host !== 'tailscale') return { host };
-  const ts = lanAddresses(interfaces).find((a) => a.tailscale);
-  return ts ? { host: ts.address } : { error: '--host tailscale: this computer has no Tailscale address (100.64.0.0/10). Is Tailscale running and signed in?' };
+/**
+ * `--host` as typed → { host } to listen on, or { error }: 'tailscale' is this computer's Tailscale
+ * address only. Beyond loopback and Tailscale the token travels as plain HTTP to the network, and the
+ * token is full control of this machine (#479): refused unless `insecureHttp` (`--insecure-http`).
+ */
+function resolveListenHost(host, interfaces, { insecureHttp = false } = {}) {
+  if (host === 'tailscale') {
+    const ts = lanAddresses(interfaces).find((a) => a.tailscale);
+    return ts ? { host: ts.address } : { error: '--host tailscale: this computer has no Tailscale address (100.64.0.0/10). Is Tailscale running and signed in?' };
+  }
+  if (isLoopback(host) || isTailscaleIp(host) || insecureHttp) return { host };
+  return {
+    error: `--host ${host}: the engine would serve plain HTTP to the network, and its token is full control of this machine (a shell, gate approval, paid runs). `
+      + 'Use --host tailscale (or a VPN), or put it behind a reverse proxy with TLS and pass --insecure-http to accept plain HTTP on this address.',
+  };
 }
 
 // ---- the remote window's rules ------------------------------------------------------------
@@ -302,5 +335,6 @@ module.exports = {
   routeUrl,
   startUrl,
   testConnection,
+  tokenStorage,
   writeConnection,
 };

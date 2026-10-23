@@ -295,4 +295,6 @@ app writes `<workspace>/control/endpoint.json` (`url` on 127.0.0.1, `token`); `n
 <channel> [json]` (or `curl` / `Invoke-RestMethod`) calls a channel of `src/control/allowlist.js`,
 and each call is logged in `control/calls.jsonl`. The allowlist never holds a channel that answers,
 skips or bypasses a human gate, nor `settings:set`; `confirmGate` is refused on any channel
-(`src/control/index.js`, docs/features/control-channel.md).
+(`src/control/index.js`, docs/features/control-channel.md). The file is written with mode 0600, but
+the workflow's agents run as the same OS user and can read it: the allowlist is what limits that
+token (SEC-25, SECURITY.md's threat model).

@@ -81,8 +81,9 @@ const READ_GIT_COMMANDS = [
   'show',
   'status',
 ];
-// options that write a file, run a program or change the repository, whatever the subcommand
-const REFUSED_GIT_ARG = /^(--output|-O|--open-files-in-pager|--ext-diff|--textconv|--exec|--upload-pack|--receive-pack|--config|--git-dir|--work-tree|--write|--fix|--edit)/;
+// options that read outside the project (--no-index: any two files of the machine, SEC-24), write a
+// file, run a program or change the repository, whatever the subcommand
+const REFUSED_GIT_ARG = /^(--output|-O|--open-files-in-pager|--ext-diff|--textconv|--exec|--upload-pack|--receive-pack|--config|--git-dir|--work-tree|--write|--fix|--edit|--no-index)/;
 
 const json = (x) => JSON.stringify(x, null, 1);
 const readJson = (file) => { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; } };
@@ -95,7 +96,7 @@ function refusedGitCommand(command, args = []) {
   if (!READ_GIT_COMMANDS.includes(cmd)) return `git ${cmd || '(none)'} is not a read command: the Oracle may run git ${READ_GIT_COMMANDS.join(', ')}.`;
   if (!Array.isArray(args) || args.some((a) => typeof a !== 'string')) return 'args must be a list of strings.';
   const bad = args.find((a) => REFUSED_GIT_ARG.test(a));
-  return bad ? `The option ${bad} can write or run a program: refused.` : '';
+  return bad ? `The option ${bad} can write or run a program, or read outside the project: refused.` : '';
 }
 
 /** `rel` inside `root`, or throws (no absolute path, no "..", no escape through a link). */

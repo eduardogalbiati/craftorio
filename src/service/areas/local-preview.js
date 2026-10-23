@@ -7,6 +7,7 @@ const path = require('path');
 const projects = require('../../projects');
 const localPreview = require('../../local-preview');
 const { cliEnv } = require('../common');
+const { isUnder } = require('../../engine/worktree');
 
 module.exports = (ctx) => {
   const previews = new Map(); // runId -> { id (terminal), stepId, approvalId, title, url, dir, startedAt }
@@ -77,9 +78,14 @@ module.exports = (ctx) => {
     return { project: { id: project.id, name: project.name }, config: cfg, file };
   }
 
-  // Projects › Add / Edit (#115): what a folder declares or is detected to run with.
+  // Projects › Add / Edit (#115): what a folder declares or is detected to run with. Only a project's
+  // folder (or a subfolder) or a run's worktree is read (SEC-26): over `npm run serve` the channel
+  // would otherwise list what any folder of the engine's machine holds. Projects › Add detects
+  // nothing until the project is saved (its Edit form then does).
   function suggestLocalPreview({ dir }) {
     if (!dir || !fs.existsSync(String(dir))) return null;
+    const roots = [...projects.listProjects(ctx.ws.projects).map((p) => p.folder).filter(Boolean), ctx.ws.worktrees].filter(Boolean);
+    if (!roots.some((root) => isUnder(root, String(dir)))) return null;
     const repo = localPreview.readRepoConfig(String(dir));
     if (repo?.command) return repo;
     return localPreview.suggestConfig(String(dir));

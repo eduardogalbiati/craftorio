@@ -13,9 +13,17 @@
 //   GET  /                the UI (src/renderer + src/renderer/api-http.js) and the few libraries
 //                         it loads from node_modules.
 //
+//   POST /session         form body token=<token>: the one-shot sign-in (the 401 page of a browser is
+//                         its form) → 303 to / with the cookie; keeps the token out of the address bar
+//
 // Every request needs the server token: `Authorization: Bearer <token>`, or the cookie the server
-// sets when a browser opens /?token=<token>. Requests whose Origin is another site are refused
-// (CSRF, cross-site WebSocket hijacking): the engine runs the user's CLIs on the user's files.
+// sets after POST /session or when a browser opens /?token=<token> (the desktop app's startUrl). The
+// token is full control of the machine (a shell, gate approval, paid runs, #479). The cookie is
+// HttpOnly, SameSite=Strict, with a Max-Age, and Secure when the request came over HTTPS (TLS, or
+// x-forwarded-proto: https from a TLS proxy). Requests whose Origin is another site are refused
+// (CSRF, cross-site WebSocket hijacking): the engine runs the user's CLIs on the user's files. On a
+// loopback socket the Host must be localhost / 127.0.0.1 / [::1] (DNS rebinding, SEC-16), as
+// src/control/index.js does.
 
 const http = require('http');
 const fs = require('fs');
@@ -38,6 +46,10 @@ const TYPES = {
   '.json': 'application/json', '.map': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2',
 };
 const COOKIE = 'multiagent_token';
+// the cookie lasts a week: then the browser asks for the token again (#479)
+const COOKIE_MAX_AGE_S = 7 * 24 * 60 * 60;
+// the sign-in form's body: a token, nothing more
+const MAX_FORM = 4096;
 // a pasted image of up to 10 MB travels as base64 (clipboard:saveImage, #130)
 const MAX_BODY = 15 * 1024 * 1024;
 
@@ -81,6 +93,41 @@ function sameOrigin(req) {
   try { return new URL(req.headers.origin).host === req.headers.host; } catch { return false; }
 }
 
+const isLoopbackAddress = (ip) => /^(::ffff:)?127\.\d+\.\d+\.\d+$/.test(String(ip || '')) || ip === '::1';
+const LOOPBACK_HOST = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
+
+// DNS rebinding (SEC-16): a request reaching a loopback socket names this machine in its Host;
+// another name means a page of another site whose name now points here.
+const hostAllowed = (req) => !isLoopbackAddress(req.socket?.localAddress) || LOOPBACK_HOST.test(req.headers.host || '');
+
+// came over HTTPS: TLS here, or a TLS reverse proxy in front (its first x-forwarded-proto)
+const overHttps = (req) => !!req.socket?.encrypted || String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim().toLowerCase() === 'https';
+
+function readForm(req) {
+  return new Promise((resolve, reject) => {
+    let size = 0;
+    const chunks = [];
+    req.on('data', (c) => {
+      size += c.length;
+      if (size > MAX_FORM) { reject(new HttpError(413, 'Request body too large.')); req.destroy(); return; }
+      chunks.push(c);
+    });
+    req.on('end', () => resolve(new URLSearchParams(Buffer.concat(chunks).toString('utf8'))));
+    req.on('error', reject);
+  });
+}
+
+// what a browser without the token sees: the sign-in form (POST /session)
+const SIGN_IN_PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Multiagent Orchestrator: sign in</title>
+<meta name="viewport" content="width=device-width, initial-scale=1"></head>
+<body style="font: 13px system-ui, sans-serif; background: #0f1115; color: #e6e8ee; display: grid; place-items: center; min-height: 90vh">
+<form method="post" action="/session" style="display: grid; gap: 8px; width: 320px">
+<label for="token">Engine token</label>
+<input id="token" name="token" type="password" autocomplete="off" required autofocus>
+<small>MULTIAGENT_SERVER_TOKEN on the engine's computer, or the token= part of the URL it printed. It is full control of that machine.</small>
+<button type="submit">Sign in</button>
+</form></body></html>`;
+
 // Calls a channel's function: { status, body } as POST /api/<channel> answers it. An error of the
 // channel itself (same message the desktop app shows): a refused input (status 4xx,
 // src/service/common.js requireId/requireText) is the client's error.
@@ -108,6 +155,7 @@ function createServer({ service, auth = null, token, root = ROOT }) {
     try { return c ? decodeURIComponent(c.slice(COOKIE.length + 1)) : null; } catch { return null; }
   };
   const authorized = (req) => isToken(bearer(req)) || isToken(cookieToken(req));
+  const cookieHeader = (req) => `${COOKIE}=${encodeURIComponent(token)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${COOKIE_MAX_AGE_S}${overHttps(req) ? '; Secure' : ''}`;
 
   const api = { ...service.api };
   if (auth) for (const { channel, fn } of authChannels(auth)) if (channel) api[channel] = fn;
@@ -162,19 +210,30 @@ function createServer({ service, auth = null, token, root = ROOT }) {
   const server = http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url, 'http://localhost');
+      if (!hostAllowed(req)) throw new HttpError(403, 'This server answers only to localhost, 127.0.0.1 or [::1].');
       // a browser opening the URL printed by the server: keep the token in a cookie and drop it
       // from the address bar
       if (req.method === 'GET' && url.searchParams.has('token')) {
         if (!isToken(url.searchParams.get('token'))) throw new HttpError(401, 'Invalid token.');
         url.searchParams.delete('token');
-        res.writeHead(302, {
-          'Set-Cookie': `${COOKIE}=${encodeURIComponent(token)}; HttpOnly; SameSite=Strict; Path=/`,
-          Location: url.pathname + (url.search || ''),
-        });
+        res.writeHead(302, { 'Set-Cookie': cookieHeader(req), Location: url.pathname + (url.search || '') });
         return res.end();
       }
       if (!sameOrigin(req)) throw new HttpError(403, 'Cross-origin requests are not allowed.');
-      if (!authorized(req)) throw new HttpError(401, 'Missing or invalid token: open the URL printed by the server (with ?token=...).');
+      // the sign-in form: the token in the body, never in the address or the history
+      if (url.pathname === '/session' && req.method === 'POST') {
+        const form = await readForm(req);
+        if (!isToken(form.get('token'))) throw new HttpError(401, 'Invalid token.');
+        res.writeHead(303, { 'Set-Cookie': cookieHeader(req), Location: '/', 'Cache-Control': 'no-store' });
+        return res.end();
+      }
+      if (!authorized(req)) {
+        if (req.method === 'GET' && /text\/html/.test(req.headers.accept || '')) {
+          res.writeHead(401, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'X-Frame-Options': 'DENY' });
+          return res.end(SIGN_IN_PAGE);
+        }
+        throw new HttpError(401, 'Missing or invalid token: sign in at /session, or open the URL printed by the server.');
+      }
       if (url.pathname === '/') {
         res.writeHead(302, { Location: '/src/renderer/index.html' });
         return res.end();
@@ -195,7 +254,7 @@ function createServer({ service, auth = null, token, root = ROOT }) {
     const { pathname } = new URL(req.url, 'http://localhost');
     const refuse = (status, text) => { socket.write(`HTTP/1.1 ${status} ${text}\r\nConnection: close\r\n\r\n`); socket.destroy(); };
     if (pathname !== '/ws') return refuse(404, 'Not Found');
-    if (!sameOrigin(req)) return refuse(403, 'Forbidden');
+    if (!hostAllowed(req) || !sameOrigin(req)) return refuse(403, 'Forbidden');
     if (!authorized(req)) return refuse(401, 'Unauthorized');
     wss.handleUpgrade(req, socket, head, (ws) => {
       ws.on('message', (data) => {
@@ -237,6 +296,7 @@ module.exports = {
   bearer,
   callChannel,
   createServer,
+  hostAllowed,
   HttpError,
   readJson,
   sameOrigin,

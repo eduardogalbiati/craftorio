@@ -1,7 +1,8 @@
 // The terminal window the ↗ button opens (#318), per OS, and the spawn that opens it. Pure: the
 // caller (src/main.js openConsole) injects the platform, the environment and `exists(name)`, true
 // when a program is installed; nothing is spawned here.
-//   Windows  cmd.exe /c start "<title>" /D "<cwd>" cmd /k "<command line>" (unchanged)
+//   Windows  cmd.exe /c start "<title>" /D "<cwd>" cmd /k "<command line>" (unchanged; the title
+//            without "&|<>^, which cmd.exe would parse, SEC-27)
 //   macOS    Terminal.app through osascript (`do script`), which ships with the OS
 //   Linux    the first installed of $TERMINAL, x-terminal-emulator, gnome-terminal, konsole, xterm
 // On macOS and Linux the window runs `cd <cwd> && <command>`, then the user's shell, so it stays
@@ -34,6 +35,9 @@ function externalTerminal(opts) {
 }
 
 const winQuote = (a) => `"${String(a).replace(/"/g, '""')}"`;
+// cmd.exe parses `start "<title>"` itself and `""` is no escape there: a title from a session or
+// agent name could end the quotes and chain a command (SEC-27), so its metacharacters are dropped
+const winTitle = (s) => String(s ?? '').replace(/["&|<>^]/g, '');
 const appleString = (s) => `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 
 // The variables of childEnv to set (or unset) in a terminal that does not inherit it.
@@ -59,7 +63,7 @@ function terminalLaunch({ platform = process.platform, env = process.env, exists
     const cmdline = [file, ...args].map(winQuote).join(' ');
     return {
       file: 'cmd.exe',
-      args: ['/d', '/s', '/c', `start ${winQuote(title)} /D ${winQuote(cwd)} cmd /k "${cmdline}"`],
+      args: ['/d', '/s', '/c', `start "${winTitle(title)}" /D ${winQuote(cwd)} cmd /k "${cmdline}"`],
       options: { windowsVerbatimArguments: true, env: childEnv },
     };
   }

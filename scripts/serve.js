@@ -1,7 +1,9 @@
 // Runs the engine as a server: the HTTP/WebSocket API (src/server) and the UI in a browser, or in
 // the desktop app of another computer (Settings › Execution › Engine, src/engine-connection.js).
-//   npm run serve -- [--port 7300] [--host 127.0.0.1 | 0.0.0.0 | tailscale | <ip>] [--workspace <dir>]
+//   npm run serve -- [--port 7300] [--host 127.0.0.1 | tailscale | <ip>] [--insecure-http] [--workspace <dir>]
 //
+// The token is full control of this machine (a shell, gate approval, paid runs, #479): the banner
+// says so and prints the URL that carries it once (clear it from the shell history).
 // The token comes from MULTIAGENT_SERVER_TOKEN, else a random one is generated; open the printed
 // URL (it carries the token once, then a cookie keeps it). A desktop app saves the token: set
 // MULTIAGENT_SERVER_TOKEN so it stays the same across restarts. Same workspace as the app unless
@@ -12,7 +14,8 @@
 //
 // --host tailscale listens on this computer's Tailscale address only (100.64.0.0/10), not on the
 // local network. Outside 127.0.0.1 the traffic is plain HTTP: put it behind a reverse proxy with TLS
-// (on a tailnet WireGuard already encrypts it; `tailscale serve` adds HTTPS).
+// (on a tailnet WireGuard already encrypts it; `tailscale serve` adds HTTPS). Any other address
+// (0.0.0.0, a LAN IP) is refused unless --insecure-http is given: only behind a VPN or a TLS proxy.
 
 const fs = require('fs');
 const os = require('os');
@@ -28,12 +31,13 @@ const runOwner = require('../src/run-owner');
 const { isTailscaleIp, lanAddresses, resolveListenHost } = require('../src/engine-connection');
 
 function parseArgs(argv) {
-  const a = { port: 7300, host: '127.0.0.1', workspace: null };
+  const a = { port: 7300, host: '127.0.0.1', workspace: null, insecureHttp: false };
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i];
     const next = () => { const v = argv[++i]; if (v === undefined) throw new Error(`Missing value for ${k}`); return v; };
     if (k === '--port') a.port = Number(next());
     else if (k === '--host') a.host = next();
+    else if (k === '--insecure-http') a.insecureHttp = true;
     else if (k === '--workspace') a.workspace = path.resolve(next());
     else throw new Error(`Unknown argument: ${k}`);
   }
@@ -52,7 +56,7 @@ function openBrowser(url) {
 }
 
 const args = parseArgs(process.argv.slice(2));
-const listen = resolveListenHost(args.host, os.networkInterfaces());
+const listen = resolveListenHost(args.host, os.networkInterfaces(), { insecureHttp: args.insecureHttp });
 if (listen.error) {
   console.error(listen.error);
   process.exit(1);
@@ -119,7 +123,7 @@ function printRemoteAccess(host, port) {
   const first = addrs[0] ? `${at(addrs[0])}:${port}` : `<this machine>:${port}`;
   console.log(`Desktop app on another computer: Settings › Execution › Engine › Change… › Remote engine, address ${first}, and the token.`);
   if (!process.env.MULTIAGENT_SERVER_TOKEN) console.warn('The token changes at every start: set MULTIAGENT_SERVER_TOKEN to keep it (the desktop app saves it).');
-  console.warn('Listening beyond this machine over plain HTTP: use a reverse proxy with TLS.');
+  if (!addrs.every((a) => a.tailscale)) console.warn('Listening beyond this machine over plain HTTP (--insecure-http): only behind a VPN or a reverse proxy with TLS.');
   if (addrs.some((a) => a.tailscale)) console.log('On a tailnet WireGuard encrypts the traffic; `tailscale serve` adds HTTPS.');
 }
 
@@ -128,7 +132,9 @@ server.listen(args.port, listen.host, async () => {
   const host = listen.host;
   const shown = host === '0.0.0.0' || host === '::' ? os.hostname() : host.includes(':') ? `[${host}]` : host;
   console.log(`Multiagent Orchestrator engine server — workspace ${ws.root}`);
+  console.warn('The token is full control of this machine (a shell, gate approval, paid runs): share it only with yourself.');
   console.log(`Open: http://${shown}:${port}/?token=${encodeURIComponent(token)}`);
+  console.log('  (shown once: the page keeps it in a cookie; clear this line from the shell history and the terminal\'s scrollback if others can read them.)');
   if (!['127.0.0.1', 'localhost', '::1'].includes(host)) printRemoteAccess(host, port);
   if (authOff) console.warn('MULTIAGENT_AUTH=off: runs do not need an account.');
   else {

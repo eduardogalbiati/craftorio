@@ -1001,6 +1001,9 @@ body.resizing-dock .term-body { pointer-events: none; }
 .gate-app-setup input:not([type=checkbox]), .gate-app-setup select { width: 100%; box-sizing: border-box; font-family: var(--mono); font-size: 12px; padding: 5px 8px; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 6px; }
 .gate-app-setup code, .pj-lp-detected code { font-family: var(--mono); font-size: 12px; padding: 0 4px; border-radius: 4px; background: var(--panel-2); }
 .gate-app-setup .row { justify-content: flex-start; gap: 6px; }
+.gate-app-confirm { display: flex; flex-direction: column; align-items: stretch; gap: 8px; }
+.gate-app-confirm code { overflow-wrap: anywhere; }
+.gate-app-what { display: flex; flex-direction: column; gap: 4px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; }
 .gate-app-changed { color: var(--yellow, #e3b341); }
 
 /* Artifacts panel (artifacts-panel.js): the Run screen's Artifacts tab and a gate's side panel */

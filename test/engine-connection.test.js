@@ -315,9 +315,9 @@ test('the addresses another computer can type: IPv4 beyond loopback, Tailscale\'
   assert.deepEqual(conn.lanAddresses(undefined), []);
 });
 
-test('--host tailscale listens on the Tailscale address only; other hosts are kept as typed', () => {
+test('--host tailscale listens on the Tailscale address only; other hosts are kept as typed (beyond loopback with --insecure-http, #479)', () => {
   assert.deepEqual(conn.resolveListenHost('tailscale', INTERFACES), { host: '100.84.99.15' });
-  assert.deepEqual(conn.resolveListenHost('0.0.0.0', INTERFACES), { host: '0.0.0.0' });
+  assert.deepEqual(conn.resolveListenHost('0.0.0.0', INTERFACES, { insecureHttp: true }), { host: '0.0.0.0' });
   assert.deepEqual(conn.resolveListenHost('127.0.0.1', {}), { host: '127.0.0.1' });
   assert.match(conn.resolveListenHost('tailscale', { Ethernet: INTERFACES.Ethernet }).error, /no Tailscale address/);
 });

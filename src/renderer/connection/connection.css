@@ -26,6 +26,8 @@
 .cn-insecure input { flex: none; margin: 0; width: 16px; height: 16px; accent-color: var(--amber); }
 .cn-insecure input:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 .cn-insecure-warning { border: 1px solid rgba(250, 204, 21, .45); background: rgba(250, 204, 21, .09); color: var(--amber); border-radius: var(--radius); padding: 8px 12px; margin: 0 0 12px; font-size: 12px; }
+/* the token is (or would be) stored unencrypted on this computer (#479) */
+.cn-token-warning { margin: 6px 0 0; padding: 8px 10px; border: 1px solid var(--amber); border-radius: var(--radius); color: var(--amber); font-size: 12px; }
 .cn-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .cn-result { margin: 10px 0 0; min-height: 1.45em; }
 .cn-result[data-kind="ok"] { color: var(--green); }

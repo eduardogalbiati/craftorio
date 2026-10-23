@@ -28,7 +28,8 @@ const { guardWindow } = require('./window-guards');
 const PAGE_SIZE = { width: 640, height: 700 };
 
 /**
- * @param store       { read() → connection, write(connection) } (the setting in the user data folder)
+ * @param store       { read() → connection, write(connection), encryptionAvailable?(), tokenStorage?() }
+ *                    (the setting in the user data folder; the last two let the page warn on a plain token)
  * @param version     { app, contract } of this app (the connection test compares the contracts)
  * @param mode        'local' | 'remote': where this process's engine runs
  * @param windowOptions  the main window's size, colour and icon (the remote window uses them)
@@ -208,7 +209,9 @@ function createEngineConnection({
     const saved = store.read();
     return {
       mode,
-      saved: conn.connectionView(saved),
+      saved: conn.connectionView(saved, { tokenStorage: store.tokenStorage?.() }),
+      // false: a token saved now would be stored unencrypted (the page warns, #479)
+      encryptionAvailable: store.encryptionAvailable ? !!store.encryptionAvailable() : true,
       failure,
       app: version.app,
       // the engine this window shows, in remote mode
