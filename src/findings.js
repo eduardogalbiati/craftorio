@@ -15,6 +15,7 @@
 const fs = require('fs');
 const path = require('path');
 const Language = require('./shared/language');
+const { redactBaseline } = require('./engine/redact-baseline');
 
 const CONTEXT_KEYS = ['actions', 'app', 'calls', 'log', 'project', 'runIds', 'tab', 'theme', 'view', 'window'];
 const DENIED_KEYS = new Set([
@@ -31,7 +32,6 @@ const DENIED_KEYS = new Set([
   'token',
 ]);
 const DENIED_KEY_SHAPE = /token|secret|password|api[-_]?key|cookie|credential/i;
-const TOKEN_SHAPE = /\b(?:gh[pousr]_[A-Za-z0-9]{8,}|github_pat_[A-Za-z0-9_]{8,}|glpat-[A-Za-z0-9_-]{8,}|sk-[A-Za-z0-9_-]{8,})|\bBearer\s+[^\s"']+/g;
 const MAX_ACTIONS = 50;
 const MAX_CALLS = 50;
 const MAX_LOG_LINES = 200;
@@ -40,7 +40,7 @@ const ID_SHAPE = /^\d{8}-\d{6}(?:-\d+)?$/;
 
 const findingsDir = (ws) => path.join(ws.root, 'findings');
 
-const redact = (s) => String(s).replace(TOKEN_SHAPE, '<REDACTED>');
+const redact = (s) => redactBaseline(String(s));
 
 const deniedKey = (key) => DENIED_KEYS.has(String(key).toLowerCase()) || DENIED_KEY_SHAPE.test(key);
 

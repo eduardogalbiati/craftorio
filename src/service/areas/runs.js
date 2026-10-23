@@ -314,6 +314,14 @@ module.exports = (ctx) => {
   // The human gates a run in progress has passed (decided, or confirmed at resume): stopping it asks first (#112).
   const passedGates = (run) => run.wf.steps.filter((s) => s.type === 'human_approval' && run.ctx.steps[s.id]?.output).map((s) => s.id);
 
+  // #472: the project's "install dependencies without running their scripts"; a repository the run
+  // cloned from a URL with no project to hold the setting is not the user's checkout: on, with a notice
+  function installScriptsOff(project, fromUrl, notices) {
+    if (project) return !!project.ignoreInstallScripts;
+    if (fromUrl) notices.push({ level: 'info', message: 'dependencies install without their scripts (--ignore-scripts): the repository was cloned from a URL and has no project setting' });
+    return fromUrl;
+  }
+
   // mockSequences: simulation scenario ({ field: [value per visit] }, invalid_answers), ignored for real runs
   // allowKeptWork: the owner chose to start these issues again although an ended run kept commits
   // for them (run:start's confirmation, a confirmed roadmap Retry); otherwise that start is refused (#112)
@@ -363,7 +371,8 @@ module.exports = (ctx) => {
     let run;
     try {
       // repo_path can be a git URL: clones (or updates) it into <workspace>/repos.
-      if (workspace.isGitUrl(inputs?.repo_path)) {
+      const fromUrl = workspace.isGitUrl(inputs?.repo_path);
+      if (fromUrl) {
         inputs = { ...inputs, repo_path: (await workspace.cloneRepo(inputs.repo_path, ws.repos)).dir };
       }
       const settings = workspace.readSettings(ws);
@@ -400,8 +409,7 @@ module.exports = (ctx) => {
         file: wfFile.file, inputs, mock, runsDir: ws.runs, skillsDirs: [ws.skills], notices,
         // Run locally at gates: the project's override of the workflow's orchestrator.local_preview
         localPreview: project?.localPreview?.command ? project.localPreview : null,
-        // #472: the project's "install dependencies without running their scripts"
-        ignoreInstallScripts: !!project?.ignoreInstallScripts,
+        ignoreInstallScripts: installScriptsOff(project, fromUrl, notices),
         budget, prices: settings.prices, projectId, issues, resume, attachments, mockSequences: mock ? mockSequences : null, then, from,
         agentOverrides, fallbacks: settingsFallbacks(settings), models: settings.models || {},
         accounts: settingsAccounts(settings), accountCooldownMs: settingsAccountCooldownMs(settings),

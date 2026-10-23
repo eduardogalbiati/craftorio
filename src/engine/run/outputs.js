@@ -14,7 +14,7 @@
 const fs = require('fs');
 const path = require('path');
 const { render } = require('./templates');
-const { canonicalPath } = require('../worktree');
+const { isUnder } = require('../worktree');
 const Language = require('../../shared/language');
 
 // ---------------------------------------------------------------------------
@@ -209,11 +209,7 @@ const methods = {
   saveAsAllowed(file) {
     const roots = [this.runDir, this.ctx.worktree_dir, this.ctx.base_worktree_dir, this.worktree?.repo,
       this.ctx.inputs?.project_path, this.ctx.inputs?.repo_path].filter((r) => typeof r === 'string' && r);
-    const real = canonicalPath(file);
-    return roots.some((root) => {
-      const rel = path.relative(canonicalPath(root), real);
-      return !path.isAbsolute(rel) && rel.split(/[\\/]/)[0] !== '..';
-    });
+    return roots.some((root) => isUnder(root, file));
   },
 
   // A step's output may list `preexisting_failures` ([{ test, file, reason }]): tests that also fail

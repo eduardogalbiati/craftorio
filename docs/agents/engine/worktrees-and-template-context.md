@@ -7,7 +7,8 @@ The run's worktree option, what templates can read, and transition actions.
   the deps cache (`npm ci` runs `postinstall`), then the check step (`npm run check`) and the suite
   (the detected test command) run through a shell. `logRepoCommands` (src/engine/run/checkout.js),
   called by `setupWorktree` before the install, emits one `log` event naming them. The project's
-  `ignoreInstallScripts` (Projects › Edit, on by default for a repository `createProject` clones)
+  `ignoreInstallScripts` (Projects › Edit, on by default for a repository `createProject` clones,
+  and always on for a run whose `repo_path` is a URL with no project: `startRun` adds a notice)
   reaches `WorkflowRun({ ignoreInstallScripts })` and `ensureDeps({ ignoreScripts })`: the install
   gets `--ignore-scripts` and a cache hit skips the lifecycle scripts.
 - Template context: `inputs`, `steps.<id>.output/visits`, `steps.<id>.outputs` (every visit's output,

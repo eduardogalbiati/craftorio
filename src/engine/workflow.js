@@ -194,7 +194,7 @@ class WorkflowRun extends EventEmitter {
     this.skillsDirs = [...(skillsDirs || []), BUNDLED_SKILLS];
     this.projectId = projectId || null;
     this.ignoreInstallScripts = !!ignoreInstallScripts; // #472: the cache install runs with --ignore-scripts
-    this.issues =issues?.length ? issues : issue ? [issue] : null;
+    this.issues = issues?.length ? issues : issue ? [issue] : null;
     this.then = chain.normalizeThen(then);
     const pipeline = chain.normalizePipeline(from?.pipeline);
     this.from = from?.run_id ? { run_id: String(from.run_id), workflow: from.workflow ? String(from.workflow) : undefined, ...(pipeline ? { pipeline } : {}) } : null;

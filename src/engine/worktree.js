@@ -72,6 +72,12 @@ function canonicalPath(p) {
  */
 const samePath = (a, b) => platformSamePath(canonicalPath(a), canonicalPath(b));
 
+/** True when `file` is `root` or inside it, both compared as canonical paths (links resolved, see canonicalPath). */
+function isUnder(root, file) {
+  const rel = path.relative(canonicalPath(root), canonicalPath(file));
+  return !path.isAbsolute(rel) && rel.split(/[\\/]/)[0] !== '..';
+}
+
 /** Top-level folder (canonical) of the repository that contains `dir`, or null if it is not in a git repository. */
 async function repoRoot(dir) {
   if (!dir || !fs.existsSync(dir)) return null;
@@ -583,6 +589,7 @@ function removeEndedRunFolders({ worktreesDir, runsDir, scratchDays, log }) {
 module.exports = {
   prepareWorktree, removeWorktree, mergeLocally, cleanupWorktrees, listWorktrees, isMerged, repoRoot, currentBranch, samePath, canonicalPath,
   git, identityArgs, FETCH_TIMEOUT_MS,
+  isUnder,
   prepareBaseWorktree,
   removeRunTmp,
   removeScratch,
