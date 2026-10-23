@@ -208,3 +208,37 @@ test('#480 Save with the insecure opt-in saves the plain-http LAN engine with in
   assert.equal(r.saved, true);
   assert.deepEqual(s.store.writes.map((w) => [w.mode, w.address, w.insecure]), [['remote', 'http://192.168.1.10:7300', true]]);
 });
+
+// ---- insecureAddress edges and the setting's flag (review 1) ---------------------------------------
+
+const insecure = (address) => conn.insecureAddress(conn.parseAddress(address));
+
+test('#480 insecureAddress: IPv6 loopback, an uppercase *.TS.NET name and https need no opt-in', () => {
+  const needing = ['http://[::1]:7300', 'http://MY-PC.TAIL1234.TS.NET:7300', 'https://192.168.1.10'].filter((a) => insecure(a) !== null);
+  assert.deepEqual(needing, []);
+});
+
+test('#480 insecureAddress: just outside Tailscale\'s 100.64.0.0/10 (100.63.x, 100.128.x) needs the opt-in', () => {
+  const free = ['http://100.63.255.255:7300', 'http://100.128.0.1:7300'].filter((a) => typeof insecure(a) !== 'string');
+  assert.deepEqual(free, []);
+});
+
+test('#480 insecureAddress: an address that does not parse is not called insecure (its own error shows)', () => {
+  assert.equal(insecure(''), null);
+});
+
+test('#480 the page\'s view of the setting shows the opt-in only when it is on, never the token', () => {
+  const on = conn.connectionView({ mode: 'remote', address: 'http://192.168.1.10:7300', token: TOKEN, insecure: true });
+  assert.equal(on.insecure, true);
+  assert.equal(JSON.stringify(on).includes(TOKEN), false);
+  assert.equal('insecure' in conn.connectionView({ mode: 'remote', address: 'http://127.0.0.1:7300', token: TOKEN, insecure: false }), false);
+});
+
+test('#480 the saved setting drops an insecure flag that is not true', (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'engine-connection-480-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const file = path.join(dir, conn.FILE);
+  conn.writeConnection(file, { mode: 'remote', address: 'http://127.0.0.1:7300', token: TOKEN, insecure: false });
+  assert.equal('insecure' in JSON.parse(fs.readFileSync(file, 'utf8')), false);
+  assert.equal('insecure' in conn.readConnection(file), false);
+});

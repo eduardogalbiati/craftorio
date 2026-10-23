@@ -48,8 +48,22 @@ function setup() {
   c.openPage();
   const page = windows.find((w) => w.loadedFile);
   const call = (channel, arg) => handlers.get(channel)({ sender: page.webContents }, arg);
-  return { call, fetched };
+  const callFrom = (sender, channel, arg) => handlers.get(channel)({ sender }, arg);
+  return { call, callFrom, fetched, main };
 }
+
+test('#480 Test of an address that does not parse answers reason address, without a request', async () => {
+  const s = setup();
+  const r = await s.call('engine-connection:test', { address: 'ftp://192.168.1.10', token: '' });
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, 'address');
+  assert.deepEqual(s.fetched, []);
+});
+
+test('#480 engine-connection:check refuses a caller that is not the connection page', async () => {
+  const s = setup();
+  await assert.rejects(async () => s.callFrom(s.main.webContents, 'engine-connection:check', { address: LAN }), /connection page/);
+});
 
 test('#480 Test of a plain-http LAN address without the opt-in is refused before the engine is contacted', async () => {
   const s = setup();

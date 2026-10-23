@@ -156,3 +156,32 @@ test('#477 viewer: a markdown artifact still has its Open action (guard)', () =>
   const { toolbar } = renderViewer(MARKDOWN);
   assert.deepEqual(buttons(toolbar).filter((b) => /data-art-act="open"/.test(b.attrs)).map((b) => b.label), ['Open']);
 });
+
+// ---- checkOpenable edges (review 1) ----------------------------------------------------------
+
+test('#477 checkOpenable: what Windows also runs on open (.com .py .hta) is refused', (t) => {
+  const { checkOpenable } = load();
+  const s = scratch(t);
+  const opened = ['x.com', 'x.py', 'x.hta', 'x.PYW', 'x.reg'].filter((n) => checkOpenable(s.file(n), { platform: 'win32' }).ok !== false);
+  assert.deepEqual(opened, []);
+});
+
+test('#477 checkOpenable: on POSIX a file that cannot be read is refused with a reason', () => {
+  const { checkOpenable } = load();
+  const missing = () => { const e = new Error('no such file'); e.code = 'ENOENT'; throw e; };
+  const r = checkOpenable('/nowhere/notes.md', { platform: 'linux', stat: missing });
+  assert.equal(r.ok, false);
+  assert.match(r.reason, /ENOENT/);
+});
+
+test('#477 checkOpenable: on POSIX a folder opens although its mode has x bits (path:open)', () => {
+  const { checkOpenable } = load();
+  const folder = () => ({ mode: 0o40755, isDirectory: () => true });
+  assert.equal(checkOpenable('/home/me/project', { platform: 'linux', stat: folder }).ok, true);
+});
+
+test('#477 checkOpenable: an .app bundle stays refused although it is a folder', () => {
+  const { checkOpenable } = load();
+  const folder = () => ({ mode: 0o40755, isDirectory: () => true });
+  assert.equal(checkOpenable('/Users/me/run/notes.app', { platform: 'darwin', stat: folder }).ok, false);
+});
