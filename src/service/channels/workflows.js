@@ -6,6 +6,7 @@ const {
   ANY,
   args,
   BOOL,
+  FLAG,
   listOf,
   OBJECT,
   orNone,
@@ -25,8 +26,9 @@ const optionalFile = (file) => (file == null || file === '' ? file : requireId(f
 const SAVED = shape({ file: WORKFLOW_FILE }, ['file']);
 
 module.exports = (ctx) => [
-  // projectId (#485): with the project's repository workflows (origin 'repository', commit, accepted)
-  { channel: 'workflows:list', method: 'listWorkflows', params: 'opts', schema: { params: orNone(args({ projectId: orNone(PROJECT_ID) })), result: listOf(OBJECT) }, fn: (opts) => ctx.listWorkflows(opts?.projectId ? { projectId: requireId(opts.projectId, 'project id') } : {}) },
+  // projectId (#485): with the project's repository workflows (origin 'repository', commit, accepted);
+  // repositoryOnly: those alone, with the manifest's categories (areas/workflows.js listWorkflows)
+  { channel: 'workflows:list', method: 'listWorkflows', params: 'opts', schema: { params: orNone(args({ projectId: orNone(PROJECT_ID), repositoryOnly: FLAG })), result: listOf(OBJECT) }, fn: (opts) => ctx.listWorkflows(opts?.projectId ? { projectId: requireId(opts.projectId, 'project id'), repositoryOnly: !!opts.repositoryOnly } : {}) },
   // #485: the owner accepts a repository workflow for one commit (projects/<id>.json)
   { channel: 'workflows:accept', method: 'acceptWorkflow', params: ['projectId', 'file', 'commit'], schema: { params: args({ projectId: PROJECT_ID, file: WORKFLOW_FILE, commit: STRING }, ['projectId', 'file', 'commit']), result: BOOL }, fn: (arg) => ctx.acceptWorkflow({ ...repositoryArg(arg), commit: String(arg.commit) }) },
   { channel: 'workflows:pipelines', method: 'listPipelines', schema: { result: listOf(OBJECT) }, fn: () => ctx.listPipelines() },

@@ -10,13 +10,14 @@
 const fs = require('fs');
 const path = require('path');
 const yaml = require('js-yaml');
+const { WORKFLOW_CATEGORIES } = require('./workflow-categories');
 
 const MANIFEST_FILE = '.multiagent/project.yaml';
 
 // The Workflows screen's sections a repository files its workflows under
 const CATEGORIES = ['intake', 'solo', 'team', 'release'];
-// the bundled workflows' own metadata.category values (src/workflow-builder.js)
-const BUNDLED_CATEGORIES = ['build', 'monitor', 'plan'];
+// the bundled workflows' own metadata.category values
+const BUNDLED_CATEGORIES = WORKFLOW_CATEGORIES;
 
 // a repository's own workflow: one YAML file right under .multiagent/workflows/
 const REPO_FILE = /^workflows\/[^/\\]+\.ya?ml$/i;

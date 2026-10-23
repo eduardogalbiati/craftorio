@@ -63,9 +63,12 @@ module.exports = (ctx) => [
         attachments: nullable(OBJECT),
         then: ANY,
         agentOverrides: nullable(OBJECT),
+        workspace: FLAG,
       }),
       result: STARTED_OR_KEPT,
     },
+    // workspace: the workspace's workflow of that name even when the project's repository declares
+    // its own (#485: the Start drawer lists the workspace's workflows).
     // projectId/issues: a run started from a Backlog issue (Write & Review's "Enrich"), recorded in workflow.started.
     // When an ended run of those issues kept a worktree with commits, the answer is the kept-work
     // question { confirm, kept, runId } (that run can be resumed instead) until `confirmed` (#112, #170).
@@ -73,13 +76,13 @@ module.exports = (ctx) => [
     // then: what happens with the run's result when it finishes (#134, chain-model normalizeThen).
     // agentOverrides: { <agent>: { provider?, model?, effort? } } this run's choice per agent (#262, WorkflowRun).
     fn: (payload) => {
-      const { file, inputs, mock, mockSequences, projectId, issues, confirmed, attachments, then, agentOverrides } = requireObject(payload, 'run options');
+      const { file, inputs, mock, mockSequences, projectId, issues, confirmed, attachments, then, agentOverrides, workspace } = requireObject(payload, 'run options');
       const list = Array.isArray(issues) && issues.length
         ? issues.map((i) => ({ number: Number(i.number), url: String(i.url || ''), title: String(i.title || '') }))
         : undefined;
       const kept = list && !confirmed ? ctx.keptWorkForIssues(list) : null;
       if (kept) return { confirm: kept.text, kept, runId: kept.runId };
-      return ctx.startWorkflowRun({ file, inputs, mock, mockSequences, projectId: projectId || undefined, issues: list, allowKeptWork: true, attachments, then, agentOverrides });
+      return ctx.startWorkflowRun({ file, inputs, mock, mockSequences, projectId: projectId || undefined, issues: list, allowKeptWork: true, attachments, then, agentOverrides, workspaceWorkflow: !!workspace });
     },
   },
   // runId: the run to stop (without it, the only run in progress)

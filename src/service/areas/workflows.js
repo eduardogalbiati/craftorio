@@ -40,9 +40,12 @@ module.exports = (ctx) => {
   const trustFile = (file, text) => workspace.writeSettings(ctx.ws, { trustedFiles: { ...trustedFiles(), [trustKey(file)]: fingerprint(text) } });
 
   // projectId (#485): also the project's repository workflows (areas/repository-workflows.js), with
-  // their commit and acceptance, and an entry with `error` for a malformed manifest
-  function listWorkflows({ projectId = null } = {}) {
+  // their commit and acceptance, and an entry with `error` for a malformed manifest. repositoryOnly:
+  // those alone, plus { name, category, origin: 'manifest' } per workflow the manifest names without
+  // a file (the Workflows screen asks per project and lists the workspace's once)
+  function listWorkflows({ projectId = null, repositoryOnly = false } = {}) {
     const { ws } = ctx;
+    if (projectId && repositoryOnly) return repositoryList(projectId, (categories) => Object.entries(categories).map(([name, category]) => ({ name, category, origin: 'manifest', projectId })));
     if (!fs.existsSync(ws.workflows)) return [];
     const status = workflows.workflowStatus(BUNDLED_WORKFLOWS_DIR, ws.workflows);
     const bundledVersion = (file) => { try { return loadWorkflow(path.join(BUNDLED_WORKFLOWS_DIR, file)).metadata?.version || null; } catch { return null; } };
@@ -59,11 +62,16 @@ module.exports = (ctx) => {
         });
       });
     if (!projectId) return own;
+    // a workflow the manifest names without a file sits in the manifest's category for this project
+    return repositoryList(projectId, (categories) => own.map((w) => (categories[w.name] ? { ...w, category: categories[w.name] } : w)));
+  }
+
+  // leading(categories): what comes first, from the categories the manifest gives the workflows it
+  // names without a file; then the manifest's error and the repository's own workflows of a project
+  function repositoryList(projectId, leading) {
     const repo = ctx.repositoryWorkflows(projectId);
     const errors = repo.errors.length ? [{ file: 'project.yaml', name: MANIFEST_FILE, origin: 'repository', projectId, error: repo.errors.join('\n'), steps: [] }] : [];
-    // a workflow the manifest names without a file sits in the manifest's category for this project
-    const placed = own.map((w) => (repo.categories[w.name] ? { ...w, category: repo.categories[w.name] } : w));
-    return [...placed, ...errors, ...repo.items.map((w) => {
+    return [...leading(repo.categories), ...errors, ...repo.items.map((w) => {
       const item = describe(w.path, w.file, {
         origin: 'repository', projectId, commit: w.commit, accepted: w.accepted, acceptedCommit: w.acceptedCommit, diff: w.diff,
         updateAvailable: false, restorable: false, bundledVersion: null, trusted: w.accepted,

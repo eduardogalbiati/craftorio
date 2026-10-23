@@ -446,8 +446,29 @@ function loadWorkflow(file) {
 // #485: a repository's own workflow (.multiagent/workflows/, src/project-manifest.js) is code from the
 // checkout: off until the owner accepts it for its commit, and capped even then. It never ships, runs
 // its `action:`s only in the run's worktree and gives its agents only the tools of the workspace's
-// policy (Settings' repositoryWorkflowTools, else this default).
-const REPOSITORY_TOOL_POLICY = ['bash:git', 'bash:node', 'bash:npm', 'edit', 'read', 'write'];
+// policy: settings.json's `repositoryWorkflowTools` (no Settings field yet), else the tools the app's
+// bundled workflows give their agents (read, edit, write and their bash:<toolchain> commands, never
+// `bash`, any command), so a repository's copy of a bundled flow runs as the bundled one does.
+const BUNDLED_WORKFLOWS_DIR = path.join(__dirname, '..', '..', '..', 'workflows');
+let bundledPolicy = null;
+function repositoryToolPolicy() {
+  if (bundledPolicy) return bundledPolicy;
+  const tools = new Set(['edit', 'read', 'write']);
+  let files = [];
+  try { files = fs.readdirSync(BUNDLED_WORKFLOWS_DIR).filter((f) => /\.ya?ml$/i.test(f)); } catch { /* none bundled */ }
+  for (const f of files) {
+    let wf = null;
+    try { wf = yaml.load(fs.readFileSync(path.join(BUNDLED_WORKFLOWS_DIR, f), 'utf8')); } catch { continue; }
+    const caps = [wf?.defaults?.capabilities, ...Object.values(wf?.agents || {}).map((a) => a?.capabilities), ...[...stepNodes(wf?.steps)].map((n) => n.capabilities)];
+    for (const c of caps.filter(Boolean)) {
+      let normal = null;
+      try { normal = capabilities.normalize(c); } catch { continue; }
+      for (const t of normal?.tools || []) if (String(t).startsWith('bash:')) tools.add(t);
+    }
+  }
+  bundledPolicy = [...tools].sort();
+  return bundledPolicy;
+}
 
 // every object of the steps' tree (nested steps, transitions, recover / on_error steps)
 function* stepNodes(node) {
@@ -494,7 +515,7 @@ function loadRepositoryWorkflow(file, { accepted, policy } = { accepted: false }
   const shown = String(wf.metadata?.name || name());
   repositoryNoShip(wf, shown);
   repositoryActionsInWorktree(wf, shown);
-  repositoryToolsInPolicy(wf, shown, policy?.tools || REPOSITORY_TOOL_POLICY);
+  repositoryToolsInPolicy(wf, shown, policy?.tools || repositoryToolPolicy());
   return wf;
 }
 
@@ -563,7 +584,7 @@ module.exports = {
   parseRequests,
   parseTokens,
   renderFileList,
-  REPOSITORY_TOOL_POLICY,
+  repositoryToolPolicy,
   silentEfforts,
   toBoolean,
   validateModels,

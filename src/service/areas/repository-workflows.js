@@ -10,9 +10,11 @@ const fs = require('fs');
 const path = require('path');
 const projects = require('../../projects');
 const { MANIFEST_FILE, parseManifest } = require('../../project-manifest');
+const { repositoryEntry } = require('../../workflows');
 const { gitOut } = require('../common');
 
 const MULTIAGENT_DIR = path.posix.dirname(MANIFEST_FILE);
+// a commit's hash, short or full: 40 characters for SHA-1, 64 for a SHA-256 repository
 const SHA = /^[0-9a-f]{7,64}$/i;
 // the diff since the last accepted commit the screen shows, cut past this
 const MAX_DIFF = 20000;
@@ -32,11 +34,15 @@ module.exports = (ctx) => {
     return { head, manifest: parseManifest(text, { appVersion: ctx.host?.appVersion }) };
   }
 
+  const copiesDir = () => path.join(ctx.ws.root, 'repository-workflows');
+  // whether a path is one of those copies (a resumed run records the file it ran)
+  const isRepositoryCopy = (file) => path.resolve(String(file)).startsWith(copiesDir() + path.sep);
+
   // the committed text of a repository workflow, as a file of the workspace the engine can load
   function materialize(project, commit, rel) {
     const text = gitOut(project.folder, ['show', `${commit}:${rel}`]);
     if (text == null) return null;
-    const dest = path.join(ctx.ws.root, 'repository-workflows', path.basename(project.id), commit, path.posix.basename(rel));
+    const dest = path.join(copiesDir(), path.basename(project.id), commit, path.posix.basename(rel));
     if (!fs.existsSync(dest)) {
       fs.mkdirSync(path.dirname(dest), { recursive: true });
       fs.writeFileSync(dest, `${text}\n`);
@@ -80,7 +86,7 @@ module.exports = (ctx) => {
     const sha = String(commit || '');
     if (!SHA.test(sha) || gitOut(project.folder, ['cat-file', '-e', `${sha}^{commit}`]) == null) throw new Error(`Commit ${sha} is not in the repository of ${project.name || projectId}.`);
     const text = gitOut(project.folder, ['show', `${sha}:${MANIFEST_FILE}`]);
-    const entry = text == null ? null : parseManifest(text).workflows.find((e) => e.file && path.posix.basename(e.file) === path.basename(String(file || '')));
+    const entry = text == null ? null : repositoryEntry(parseManifest(text).workflows, path.basename(String(file || '')));
     const blob = entry && gitOut(project.folder, ['rev-parse', `${sha}:${MULTIAGENT_DIR}/${entry.file}`]);
     if (!blob) throw new Error(`Workflow ${file} is not declared in ${MANIFEST_FILE} at commit ${sha.slice(0, 7)}.`);
     const full = gitOut(project.folder, ['rev-parse', `${sha}^{commit}`]);
@@ -90,12 +96,14 @@ module.exports = (ctx) => {
 
   // The repository workflow a run of `file` in this project means, or null (the workspace's)
   function repositoryWorkflow(projectId, file) {
-    const want = path.basename(String(file || ''));
-    return repositoryWorkflows(projectId).items.find((w) => [w.file, w.entry.name, `${w.entry.name}.yaml`].includes(want)) || null;
+    const { items } = repositoryWorkflows(projectId);
+    const entry = repositoryEntry(items.map((w) => w.entry), path.basename(String(file || '')));
+    return items.find((w) => w.entry === entry) || null;
   }
 
   return {
     acceptWorkflow,
+    isRepositoryCopy,
     repositoryWorkflow,
     repositoryWorkflows,
   };

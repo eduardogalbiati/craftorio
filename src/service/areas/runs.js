@@ -324,9 +324,12 @@ module.exports = (ctx) => {
   }
 
   // #485: the project's repository workflow of that name wins (its committed text at HEAD), refused
-  // until the owner accepted it and capped even then (src/engine/run/load.js); else the workspace's
-  function runWorkflowFile(projectId, file, settings) {
-    const fromRepo = projectId ? ctx.repositoryWorkflow(projectId, file) : null;
+  // until the owner accepted it and capped even then (src/engine/run/load.js); else, and always with
+  // workspaceOnly (the Start drawer's pick), the workspace's. A path (a resumed run's recorded file)
+  // is that file, unless it is a repository workflow's copy: that one is checked again
+  function runWorkflowFile(projectId, file, settings, workspaceOnly = false) {
+    const own = path.isAbsolute(String(file || '')) && !ctx.isRepositoryCopy(file);
+    const fromRepo = projectId && !workspaceOnly && !own ? ctx.repositoryWorkflow(projectId, file) : null;
     if (!fromRepo) return ctx.workflowPath(file);
     loadRepositoryWorkflow(fromRepo.path, { accepted: fromRepo.accepted, policy: { tools: settings.repositoryWorkflowTools } });
     return { file: fromRepo.path, fallback: false };
@@ -345,7 +348,8 @@ module.exports = (ctx) => {
   // onFinished: (workflow.finished event) => void, called when the run ends (the parent's step waits on it)
   // agentOverrides: { <agent>: { provider?, model?, effort? } } this run's choice per agent (#262, WorkflowRun);
   // every run also gets Settings' fallback chains per provider and limits per model (settingsFallbacks)
-  async function startWorkflowRun({ file, inputs, mock, mockSequences = null, resume = null, projectId: forcedProject = null, issues = null, allowKeptWork = false, notices: startNotices = [], attachments = null, then = null, from = null, parent = null, onFinished = null, signal = null, onSlotWait = null, agentOverrides = null, fromQueue = false }) {
+  // workspaceWorkflow: the workspace's `file` even when the project's repository declares one (#485)
+  async function startWorkflowRun({ file, inputs, mock, mockSequences = null, resume = null, projectId: forcedProject = null, issues = null, allowKeptWork = false, notices: startNotices = [], attachments = null, then = null, from = null, parent = null, onFinished = null, signal = null, onSlotWait = null, agentOverrides = null, fromQueue = false, workspaceWorkflow = false }) {
     // simulation-only (automated checks): a real run is refused, never turned into a simulation
     if (!mock) simulation.refuseReal('a real run');
     // the same issues never get a second live run, from this app or another one (#112): resume that run instead
@@ -407,7 +411,7 @@ module.exports = (ctx) => {
       const baselineAt = Date.now();
       // the Oracle's spend (in no run folder) counts too
       const budget = usage.budgetBaseline({ runsDir: ws.runs, settings, local, extraRuns: ctx.agentUsageRuns() });
-      const wfFile = runWorkflowFile(projectId, file, settings);
+      const wfFile = runWorkflowFile(projectId, file, settings, workspaceWorkflow);
       const notices = [...(startNotices || [])];
       if (wfFile.fallback) {
         const msg = `workflow ${path.basename(wfFile.file)} is not in ${ws.workflows}; using the copy bundled with the app (${wfFile.file})`;

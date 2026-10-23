@@ -20,11 +20,12 @@
 
 const yaml = require('js-yaml');
 const registry = require('./shared/providers');
+const { WORKFLOW_CATEGORIES } = require('./workflow-categories');
 
 // The workflow provider definitions the builder writes, by CLI id: each adapter's `definition`.
 const PROVIDERS = Object.fromEntries(registry.clis().map((a) => [a.id, a.definition]));
 const EFFORTS = ['default', 'low', 'medium', 'high', 'xhigh'];
-const CATEGORIES = ['plan', 'build', 'monitor'];
+const CATEGORIES = WORKFLOW_CATEGORIES;
 const SOURCES = ['custom', 'agent', 'random'];
 const ACCESS = {
   read: { tools: ['read'], web: false },

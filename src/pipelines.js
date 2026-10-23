@@ -20,13 +20,14 @@ const yaml = require('js-yaml');
 const chain = require('./shared/chain-model');
 const { seedBundle, bundleStatus, restoreBundled } = require('./seed');
 const { WORKFLOW_KIND } = require('./workflows');
+const { WORKFLOW_CATEGORIES } = require('./workflow-categories');
 
 const BUNDLED_PIPELINES_DIR = path.join(__dirname, '..', 'pipelines');
 // one YAML file per pipeline, like the workflows
 const PIPELINE_KIND = WORKFLOW_KIND;
 const TARGETS = ['product_owner', 'queue', 'workflow'];
 const CONDITIONS = ['success'];
-const CATEGORIES = ['build', 'monitor', 'plan'];
+const CATEGORIES = WORKFLOW_CATEGORIES;
 const TARGET_LABELS = { product_owner: 'Product Owner (roadmap)', queue: 'Queue (Backlog)' };
 
 const plain = (v) => v && typeof v === 'object' && !Array.isArray(v);
