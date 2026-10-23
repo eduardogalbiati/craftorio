@@ -21,8 +21,16 @@ const skills = require('../../skills');
 const { BUNDLED_WORKFLOWS_DIR } = require('../common');
 const { bundleStatus, restoreBundled } = require('../../seed');
 const { mergeOf } = require('../../shared/default-workflow');
-const { MANIFEST_FILE } = require('../../project-manifest');
+const {
+  MANIFEST_FILE,
+  satisfies,
+} = require('../../project-manifest');
+const compose = require('../../shared/workflow-compose');
 const { workflowRequirements } = require('../../workflow-requirements');
+
+// #488: an import by url gives up after this long, and refuses a text larger than a workflow can be
+const IMPORT_TIMEOUT_MS = 30000;
+const IMPORT_MAX_CHARS = 1024 * 1024;
 
 // #474: a workflow not bundled with the app is code; the owner confirms it once per file, remembered
 // by the fingerprint of its text (like Run App's local preview confirmation, src/local-preview.js)
@@ -237,6 +245,65 @@ module.exports = (ctx) => {
     return { file: path.basename(dest) };
   }
 
+  // #488: Download, a workflow's YAML as it is on disk (comments and spacing kept)
+  function exportWorkflow(file) {
+    const name = path.basename(String(file || ''));
+    const src = path.join(ctx.ws.workflows, name);
+    if (name !== String(file || '') || !workflows.isWorkflowFile(name) || !fs.existsSync(src)) throw new Error(`Workflow not found: ${name || '(none)'}`);
+    return fs.readFileSync(src, 'utf8');
+  }
+  // a repository workflow's committed text (#485)
+  const exportRepositoryWorkflow = ({ projectId, file }) => fs.readFileSync(repositoryWorkflowOf(projectId, file).path, 'utf8');
+
+  // #488: a workflow written elsewhere (its text, or an https url), checked by the engine's loader and
+  // the app's version (`requires`) before anything is written. preview: the summary the trust dialog
+  // shows (src/shared/workflow-compose.js), nothing written; else <workspace>/workflows/<name>.yaml as
+  // custom, trusted (the owner confirmed the dialog, #474), never over an existing file without replace.
+  async function importWorkflow({ text, url, name, replace = false, preview = false }) {
+    const source = text != null ? String(text) : await fetchWorkflow(url);
+    fs.mkdirSync(ctx.ws.workflows, { recursive: true });
+    const tmp = path.join(ctx.ws.workflows, `.import-${crypto.randomUUID()}.tmp`);
+    fs.writeFileSync(tmp, source);
+    let wf;
+    try { wf = loadWorkflow(tmp); } catch (e) { fs.rmSync(tmp, { force: true }); throw e; }
+    const summary = compose.summarize(wf);
+    const refusal = requiresRefusal(summary.requires) || (preview ? null : nameRefusal(name, replace));
+    if (refusal || preview) {
+      fs.rmSync(tmp, { force: true });
+      if (refusal) throw new Error(refusal);
+      return { ok: true, summary };
+    }
+    const file = `${String(name).replace(/\.ya?ml$/i, '')}.yaml`;
+    fs.renameSync(tmp, path.join(ctx.ws.workflows, file));
+    trustFile(file, source);
+    return { ok: true, file, summary };
+  }
+  // https only, checked before any request; a size cap so a wrong url can't fill the memory
+  async function fetchWorkflow(url) {
+    if (url == null || url === '') throw new Error('Nothing to import: give the workflow\'s text or an https url.');
+    let parsed;
+    try { parsed = new URL(String(url)); } catch { throw new Error(`Not a url: ${url}`); }
+    if (parsed.protocol !== 'https:') throw new Error(`Only an https url can be imported: ${url}`);
+    const res = await globalThis.fetch(parsed.href, { signal: AbortSignal.timeout(IMPORT_TIMEOUT_MS) });
+    if (!res.ok) throw new Error(`Could not download ${url}: HTTP ${res.status}.`);
+    const body = await res.text();
+    if (body.length > IMPORT_MAX_CHARS) throw new Error(`${url} is too large for a workflow (${body.length} characters).`);
+    return body;
+  }
+  const requiresRefusal = (range) => {
+    if (range == null) return null;
+    const ok = satisfies(host.appVersion, range);
+    return ok === null ? `requires "${range}" is not a version range (e.g. >=1.2).`
+      : ok ? null : `This workflow requires app version ${range}, this app is ${host.appVersion}.`;
+  };
+  function nameRefusal(name, replace) {
+    const base = String(name ?? '').trim().replace(/\.ya?ml$/i, '');
+    const file = `${base}.yaml`;
+    if (!base || path.basename(base) !== base || !workflows.isWorkflowFile(file)) return `Not a workflow name: ${name ?? '(none)'}`;
+    if (!replace && fs.existsSync(path.join(ctx.ws.workflows, file))) return `A workflow file named ${file} already exists: pick another name or replace it.`;
+    return null;
+  }
+
   // Replaces the user's edited copy of a bundled workflow with the default; the edited copy goes to
   // the trash (recoverable).
   async function restoreWorkflow(file) {
@@ -261,6 +328,9 @@ module.exports = (ctx) => {
   return {
     cloneBuilderWorkflow,
     cloneRepositoryWorkflow,
+    exportRepositoryWorkflow,
+    exportWorkflow,
+    importWorkflow,
     listWorkflows,
     loadBuilderWorkflow,
     loadRepositoryBuilderWorkflow,

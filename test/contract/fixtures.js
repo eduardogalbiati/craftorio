@@ -259,6 +259,7 @@ module.exports = {
   'usage:actions': { arg: { force: false }, invalid: { arg: { force: 'yes' } } },
   'usage:get': { arg: {}, invalid: { arg: { scope: 42 } } },
   'voice:mic-access': { arg: null },
+  'workflows:export': { arg: 'writer-reviewer.yaml', invalid: BAD_FILE },
   'workflows:list': { arg: null },
   'workflows:pipelines': { arg: null },
   'workspace:get': { arg: null },

@@ -8,6 +8,14 @@
 #view-workflows .wb-panel { max-height: calc(100vh - 226px); }
 .wf-toolbar .chips { margin-bottom: 0; }
 .wf-toolbar .wf-search { width: 260px; max-width: 40%; }
+/* #488: Import (workflow-import.js): the URL field and the dialog's summary */
+.wf-toolbar .wf-import-url { width: 220px; max-width: 30%; }
+.wf-import-summary { display: grid; grid-template-columns: max-content 1fr; gap: 6px 12px; margin: 10px 0; }
+.wf-import-summary dt { color: var(--muted); }
+.wf-import-summary dd { margin: 0; min-width: 0; }
+.wf-import-agents { margin: 0; padding-left: 16px; }
+.wf-import-actions { margin: 0; white-space: pre-wrap; word-break: break-all; max-height: 160px; overflow: auto; }
+.wf-import-errors { white-space: pre-wrap; }
 .wf-list { display: grid; gap: 22px; }
 .wf-section { display: grid; gap: 10px; }
 .wf-section-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; padding-bottom: 6px; border-bottom: 1px solid var(--border); }

@@ -1,7 +1,8 @@
 /* global api */
 // Workflows screen and its tabs (state.workflowsTab; #254: each is an entry of the menu's Workflows
 // group and a tab of the screen): Definitions (#137: the workflows in sections by category, compact cards with
-// origin badge, Restore default, Open in builder, Run, and the saved pipelines connected), Runs (every run, in the shared run
+// origin badge, Restore default, Open in builder, Run, Download, and the saved pipelines connected; Import of a
+// file, a drop or a URL with its trust dialog, #488, in workflow-import.js), Runs (every run, in the shared run
 // list of run-list.js; its Artifacts tab opens views/artifacts/), Builder (builder.js, with its two dialogs) and Pipelines (the saved
 // pipelines alone). A round Supervisor button in the bottom-right corner on every tab (#409,
 // .po-fab.sup-fab, data-testid=supervisor-fab; its robot and unseen dot drawn by views/supervisor/)
@@ -158,6 +159,8 @@ async function refreshWorkflows() {
   wfDefs.manifestErrors = [...errors.values()];
   wfDefs.pipelines = pipelines;
   renderWorkflowDefinitions();
+  // #488: the import a public page linked to (?import=<url>), once the names are known
+  takePendingImport();
 }
 
 function renderWorkflowDefinitions() {
@@ -253,6 +256,8 @@ function workflowCard(w) {
   const model = typeof SetupModel === 'undefined' ? null : SetupModel;
   const needs = (model ? model.requirementBadges(w.requirements) : []).map((b) => `<span class="badge" title="${t('workflows.the_clis_it_needs_with_its')}">${esc(b)}</span>`).join('');
   const repo = w.origin === 'repository';
+  // #488: the YAML as it is on disk, as a file
+  const download = `<button class="btn ghost sm" data-download data-testid="workflow-download" title="${t('workflows.download_tip')}">${t('workflows.download')}</button>`;
   const actions = repo ? repositoryWorkflowActions() : workspaceWorkflowActions();
   const diff = repo ? repositoryWorkflowDiff() : '';
   return `
@@ -283,6 +288,7 @@ function workflowCard(w) {
     return `${w.restorable ? `<button class="btn ghost sm" data-restore title="${t('workflows.move_your_edited_copy_to_the')}">${t('workflows.restore_default')}</button>` : ''}
         <label class="wf-show-start small" title="${t('workflows.off_start_does_not_offer_it')}"><label class="switch"><input type="checkbox" data-show-start data-testid="workflow-show-in-start" aria-label="${t('workflows.show_in_start_name', { name: esc(w.name) })}" ${shown ? 'checked' : ''} /><span></span></label>${t('workflows.show_in_start')}</label>
         <span class="spacer"></span>
+        ${download}
         <button class="btn ghost sm" data-builder ${w.error ? 'disabled' : ''} title="${esc(builderTip)}">${t('workflows.open_in_builder')}</button>
         <button class="btn primary sm" data-run ${w.error ? 'disabled' : ''}>${t('workflows.run')}</button>`;
   }
@@ -292,6 +298,7 @@ function workflowCard(w) {
     return `<span class="badge ${w.accepted ? 'ok' : 'warn'}" data-testid="workflow-acceptance">${t(w.accepted ? 'workflows.accepted' : 'workflows.not_accepted')}</span>
         ${w.accepted ? '' : `<button class="btn primary sm" data-accept data-testid="workflow-accept" title="${t('workflows.accept_tip')}">${t('workflows.accept')}</button>`}
         <span class="spacer"></span>
+        ${download}
         <button class="btn ghost sm" data-clone data-testid="workflow-clone" ${w.error ? 'disabled' : ''}>${t('workflows.clone')}</button>
         <button class="btn ghost sm" data-builder data-testid="workflow-open-builder" ${w.error ? 'disabled' : ''} title="${t('workflows.builder_tip_bundled')}">${t('workflows.open_in_builder')}</button>`;
   }
@@ -356,6 +363,8 @@ function wireWorkflowDefinitions(box) {
     } catch (e) { return showToast(t('workflows.could_not_save'), errMsg(e)); }
     refreshWorkflows();
   }));
+  // #488: a repository's card carries its project (workflow-import.js picks the channel)
+  box.querySelectorAll('[data-download]').forEach((b) => (b.onclick = () => downloadWorkflow(b.closest('.wf-card'))));
   // #319: Show in Start, the way back from the Setup's Workflows step (settings.hiddenWorkflows)
   box.querySelectorAll('[data-show-start]').forEach((b) => (b.onchange = async () => {
     const id = SetupModel.workflowId(cardOf(b));
@@ -434,9 +443,9 @@ function stepList(w) {
 function originBadge(w) {
   const project = (state.projects || []).find((p) => p.id === w.projectId)?.name || w.projectId || '';
   const badges = {
-    default: `<span class="badge" title="${t('workflows.default_bundled_with_the_app_updated')}">${t('workflows.default')}</span>`,
-    modified: `<span class="badge warn" title="${t('workflows.bundled_default_edited_by_you_app')}">${t('workflows.modified')}</span>`,
-    custom: `<span class="badge cat-build" title="${t('workflows.created_by_you')}">${t('workflows.custom')}</span>`,
+    default: `<span class="badge" data-testid="workflow-origin-badge" title="${t('workflows.default_bundled_with_the_app_updated')}">${t('workflows.default')}</span>`,
+    modified: `<span class="badge warn" data-testid="workflow-origin-badge" title="${t('workflows.bundled_default_edited_by_you_app')}">${t('workflows.modified')}</span>`,
+    custom: `<span class="badge cat-build" data-testid="workflow-origin-badge" title="${t('workflows.created_by_you')}">${t('workflows.custom')}</span>`,
     // #485: the repository's workflow at the commit it was read from
     repository: `<span class="badge cat-plan mono" data-testid="workflow-origin-badge" title="${esc(t('workflows.repository_tip', { project }))}">${t('workflows.repository_at', { commit: esc(String(w.commit || '').slice(0, 7)) })}</span>`,
   };
@@ -534,6 +543,11 @@ registerView({
             <div id="wf-sections" class="chips" role="group" aria-label="${t('workflows.section')}"></div>
             <span class="spacer"></span>
             <input type="text" id="wf-search" class="wf-search" placeholder="${t('workflows.search_workflows_and_pipelines')}" aria-label="${t('workflows.search_workflows_and_pipelines')}" spellcheck="false" />
+            <!-- #488: Import a file (or a drop on this tab) or an https URL (workflow-import.js) -->
+            <input type="url" id="wf-import-url" class="wf-import-url" data-testid="workflow-import-url" placeholder="${t('workflows.import_url_placeholder')}" aria-label="${t('workflows.import_url_placeholder')}" spellcheck="false" />
+            <button type="button" id="btn-wf-import-url" class="btn ghost sm" data-testid="workflow-import-url-go">${t('workflows.import_url_go')}</button>
+            <button type="button" id="btn-wf-import" class="btn sm" data-testid="workflow-import" title="${t('workflows.import_file_tip')}">${t('workflows.import_file')}</button>
+            <input type="file" id="wf-import-file" class="hidden" accept=".yaml,.yml" data-testid="workflow-import-file" aria-label="${t('workflows.import_file')}" />
           </div>
           <!-- #474: workflows, skills and seeds are code -->
           <p class="small warn-text" role="note" data-testid="workflows-code-notice">${t('workflows.code_notice')}</p>
@@ -605,6 +619,18 @@ registerView({
         <button type="button" id="btn-wb-trust-ok" class="btn primary">${t('workflows.code_warning_confirm')}</button>
       </div>
     </div>
+  </div>
+  <!-- #488: Workflows > Definitions, what an imported workflow does before it is written (workflow-import.js) -->
+  <div id="wf-import-modal" class="modal hidden">
+    <div class="modal-card wide" role="dialog" aria-modal="true" aria-labelledby="wf-import-title" data-testid="workflow-import-dialog">
+      <h3 id="wf-import-title">${t('workflows.import_title')}</h3>
+      <div id="wf-import-body" class="wf-import-body"></div>
+      <div class="modal-actions">
+        <span class="spacer"></span>
+        <button type="button" id="btn-wf-import-cancel" class="btn ghost" data-testid="workflow-import-cancel">${t('common.cancel')}</button>
+        <button type="button" id="btn-wf-import-ok" class="btn primary" data-testid="workflow-import-confirm">${t('workflows.import_confirm')}</button>
+      </div>
+    </div>
   </div>`,
   mount() {
     $('#btn-workflows-folder').onclick = () => api.openPath(state.ws.workflows);
@@ -623,6 +649,8 @@ registerView({
       wrSearchTimer = setTimeout(() => { state.wr.q = e.target.value.trim(); loadWorkflowRuns(); }, 250);
     };
     $('#wf-search').oninput = (e) => { wfDefs.query = e.target.value; renderWorkflowDefinitions(); };
+    // #488: Import (file, drop, URL, ?import=<url>) and its dialog
+    wireWorkflowImport();
   },
   show: () => showWorkflowsTab(state.workflowsTab),
 });

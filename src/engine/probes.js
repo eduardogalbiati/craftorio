@@ -23,8 +23,8 @@ const { execShim } = require('../shell');
 const github = require('../shared/platforms/github');
 const gitlab = require('../shared/platforms/gitlab');
 const { PLATFORMS, findPlatform, resolvePlatform } = require('../shared/platforms');
-
-const PROBES = ['pr_checks', 'pr_changes', 'workflow_run', 'pr_mergeable'];
+// defined with the field rules (wait.probe), which load without Node (#488)
+const { PROBES } = require('./run/field-rules');
 
 // URL (agent output) → { platform (the short id: gh | gl), host, repo, kind: 'pr' | 'run', id }, or null.
 // The URL forms are the adapters' parseTargetUrl (src/shared/platforms/).

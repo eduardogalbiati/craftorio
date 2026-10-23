@@ -87,8 +87,9 @@ const PLATFORM_PREFIXES = {
 };
 // The platform CLIs (the adapters' `cli`, #351): `platforms` of a process that may run any of them
 const PLATFORM_CLIS = Object.freeze(PLATFORMS.map((p) => p.cli));
-// The name of an environment variable (a passthrough entry, a preview's env)
-const VARIABLE_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+// The name of an environment variable (a passthrough entry, a preview's env); defined with the field
+// rules, which load without Node (#488)
+const { VARIABLE_NAME } = require('./run/field-rules');
 
 /**
  * `parent` (process.env by default) reduced to the allowlist, plus the tokens of `platforms`

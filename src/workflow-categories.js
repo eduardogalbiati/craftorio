@@ -2,9 +2,14 @@
 // the modules that check them: src/pipelines.js, src/workflow-builder.js and a repository's manifest
 // (src/project-manifest.js, #485, which adds its four flows next to them). The renderer names them
 // in app.js (CATEGORIES).
+// Browser (the Builder on a static page, #488): window.WorkflowCategories; Node: module.exports.
 
-const WORKFLOW_CATEGORIES = ['build', 'monitor', 'plan'];
+(function (root) {
+  const WORKFLOW_CATEGORIES = ['build', 'monitor', 'plan'];
 
-module.exports = {
-  WORKFLOW_CATEGORIES,
-};
+  const api = {
+    WORKFLOW_CATEGORIES,
+  };
+  if (typeof module === 'object' && module.exports) module.exports = api;
+  else root.WorkflowCategories = api;
+})(typeof window !== 'undefined' ? window : globalThis);

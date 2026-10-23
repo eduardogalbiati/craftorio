@@ -78,7 +78,14 @@ Read this before changing anything in `src/renderer/`.
     its header says `load: after views/backlog/backlog.js`) and `backlog.css`;
   - `views/artifacts/`: the Artifacts screen, a tab of Workflows › Runs (#254: no menu entry, its `menu` keeps Runs lit; `openArtifactsAt` stays a global deep link);
   - `views/workflows/`: `workflows.js` (Definitions, Runs, Pipelines, the screen's tablist and its menu entries, the Supervisor's round button at the bottom right of every tab (#409), the deep links
-    `showRunInList` / `showWorkflowDefinition`), `builder.js` + `builder.css` (Builder and its two dialogs);
+    `showRunInList` / `showWorkflowDefinition`), `builder.js` + `builder.css` (Builder and its two dialogs),
+    `workflow-import.js` (#488: every card's Download, `workflow-download`, through `api.exportWorkflow` /
+    `api.exportRepositoryWorkflow`; Import of a file, a drop on the Definitions tab or an https URL, previewed by
+    `api.importWorkflow({ preview: true })` in the `workflow-import-dialog` modal (what the workflow does, the
+    #474 warning, the name and Replace, the loader's reasons in `workflow-import-errors`), then written as custom;
+    `?import=<url>` in `location.search` starts it once Definitions has loaded, the hook of a future public page.
+    The Builder, `shared/workflow-compose.js` and `engine/run/field-rules.js` load in a page without Node
+    (UMD globals, `test/browser-load-488.test.js`));
   - `views/run/`: Run Details (no sidebar entry: the Run item and the runs menu are the shell's): the
     failure banner, the gate cards (`renderRunGates`), the summary, the steps, the sessions and the tabs;
     `app.js`'s `render()` calls its `renderRunScreen()` while it shows;

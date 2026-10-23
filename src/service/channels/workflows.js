@@ -40,6 +40,12 @@ module.exports = (ctx) => [
   { channel: 'workflows:accept', method: 'acceptWorkflow', params: 'repo', schema: { params: args({ projectId: PROJECT_ID, file: WORKFLOW_FILE, commit: STRING }, ['projectId', 'file', 'commit']), result: BOOL }, fn: (arg) => ctx.acceptWorkflow({ ...repositoryArg(arg), commit: requireId(arg.commit, 'commit') }) },
   { channel: 'workflows:pipelines', method: 'listPipelines', schema: { result: listOf(OBJECT) }, fn: () => ctx.listPipelines() },
   { channel: 'workflows:restore', method: 'restoreWorkflow', params: 'file', schema: { params: WORKFLOW_FILE, result: BOOL }, fn: (file) => ctx.restoreWorkflow(requireId(file, 'workflow file')) },
+  // #488: Download, the YAML as it is on disk (a workspace or a repository workflow)
+  { channel: 'workflows:export', method: 'exportWorkflow', params: 'file', schema: { params: WORKFLOW_FILE, result: STRING }, fn: (file) => ctx.exportWorkflow(requireId(file, 'workflow file')) },
+  { channel: 'workflows:export-repository', method: 'exportRepositoryWorkflow', params: 'repo', schema: { params: REPOSITORY_WORKFLOW, result: STRING }, fn: (arg) => ctx.exportRepositoryWorkflow(repositoryArg(arg)) },
+  // #488: Import, a text or an https url checked by the loader and `requires`; preview: the summary
+  // only (the trust dialog), else written as custom under name (replace: over an existing file)
+  { channel: 'workflows:import', method: 'importWorkflow', params: 'workflow', schema: { params: args({ text: orNone(STRING), url: orNone(STRING), name: orNone(STRING), replace: FLAG, preview: FLAG }), result: OBJECT }, fn: (arg) => ctx.importWorkflow(requireObject(arg, 'workflow import')) },
   // → { file, mode, problems, spec }: the workflow as the builder edits it
   { channel: 'builder:load', method: 'loadBuilderWorkflow', params: 'file', schema: { params: WORKFLOW_FILE, result: shape({ file: STRING, mode: STRING, problems: listOf(ANY), spec: OBJECT }, ['spec']) }, fn: (file) => ctx.loadBuilderWorkflow(requireId(file, 'workflow file')) },
   // spec: the builder's workflow (src/workflow-builder.js turns it into YAML and checks it); trust: the

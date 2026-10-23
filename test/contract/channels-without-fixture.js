@@ -123,5 +123,7 @@ module.exports = [
   { channel: 'usage:setBudget', reason: DESTRUCTIVE },
   { channel: 'usage:setPrice', reason: DESTRUCTIVE },
   { channel: 'workflows:accept', reason: GIT },
+  { channel: 'workflows:export-repository', reason: GIT },
+  { channel: 'workflows:import', reason: 'writes a workflow (code) into the workspace and marks it trusted: unsafe against an engine at ENGINE_URL' },
   { channel: 'workflows:restore', reason: 'needs a bundled workflow edited first (a restore answers 500 when there is nothing to restore)' },
 ];
