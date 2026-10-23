@@ -86,16 +86,32 @@ function openProjectModal(p, { fromDrawer = false, fromHeader = false } = {}) {
   scripts.checked = !!p?.ignoreInstallScripts;
   scripts.dataset.touched = '';
   scripts.onchange = () => { scripts.dataset.touched = '1'; };
-  $('#pj-repo').oninput = p ? null : () => { if (!scripts.dataset.touched) scripts.checked = !!$('#pj-repo').value.trim(); };
+  // #486: the Workflows block, for a new project (the project's page edits the set): the repository's
+  // manifest read from the folder, else from the URL before cloning (project-workflows.js)
+  const wfBox = $('#pj-workflows');
+  $('#pj-workflows-field').classList.toggle('hidden', !!p);
+  if (p) wfBox.innerHTML = '';
+  else window.ProjectWorkflows.showDialog(wfBox, pjWorkflowsTarget());
+  $('#pj-repo').oninput = p ? null : () => {
+    if (!scripts.dataset.touched) scripts.checked = !!$('#pj-repo').value.trim();
+    window.ProjectWorkflows.scheduleDialog(wfBox, pjWorkflowsTarget);
+  };
   $('#pj-folder').required = !!p;
   $('#pj-folder-hint').classList.toggle('hidden', !!p);
   $('#pj-error').textContent = '';
   pjDetected = null;
-  $('#pj-folder').oninput = () => { clearTimeout(pjDetectTimer); pjDetectTimer = setTimeout(detectProjectRun, 400); };
+  $('#pj-folder').oninput = () => {
+    clearTimeout(pjDetectTimer);
+    pjDetectTimer = setTimeout(detectProjectRun, 400);
+    if (!editingProject) window.ProjectWorkflows.scheduleDialog(wfBox, pjWorkflowsTarget);
+  };
   detectProjectRun();
   openModal('#project-modal');
   $('#pj-name').focus({ preventScroll: true });
 }
+
+// #486: where the dialog reads the repository's workflows manifest from
+const pjWorkflowsTarget = () => ({ folder: $('#pj-folder').value.trim(), url: $('#pj-repo').value.trim() });
 
 // What the folder declares (.multiagent/local-preview.yaml) or is detected to run with (#115), so
 // the owner confirms it here ("Use it" fills Local preview) before any gate asks.
@@ -131,6 +147,9 @@ async function saveProject(e) {
   data.localPreview = { cwd: kept.cwd, env: kept.env, install, command, url };
   // not a named field: FormData leaves an unchecked box out
   data.ignoreInstallScripts = $('#pj-ignore-scripts').checked;
+  // #486: the workflows checked in the Workflows block; none keeps today's project (no set, no default)
+  const workflows = editingProject ? [] : window.ProjectWorkflows.selected($('#pj-workflows'));
+  if (workflows.length) data.workflows = workflows;
   pjDetected = null;
   const btn = $('#btn-pj-save');
   $('#pj-error').textContent = '';
@@ -197,6 +216,9 @@ registerView({
         </div>
         <div id="pj-folder-hint" class="hint">${t('projects.leave_empty_to_create_it_in')}</div>
       </div>
+      <div class="field" id="pj-workflows-field">
+        <div id="pj-workflows"></div>
+      </div>
       <div class="field">
         <label for="pj-lp-command">${t('projects.local_preview')} <span class="muted">${t('projects.optional')}</span></label>
         <div class="row">
@@ -224,7 +246,7 @@ registerView({
     $('#btn-projects-folder').onclick = () => api.openPath(state.ws.projects);
     $('#project-form').onsubmit = saveProject;
     $('#btn-pj-cancel').onclick = () => closeModal('#project-modal');
-    $('#btn-pj-pick').onclick = async () => { const d = await api.pickFolder(); if (d) { $('#pj-folder').value = d; detectProjectRun(); } };
+    $('#btn-pj-pick').onclick = async () => { const d = await api.pickFolder(); if (d) { $('#pj-folder').value = d; detectProjectRun(); if (!editingProject) window.ProjectWorkflows.showDialog($('#pj-workflows'), pjWorkflowsTarget()); } };
   },
   show: refreshProjects,
 });

@@ -1,6 +1,7 @@
 /* global api */
 // A project's page (Projects › a project, #354): its name, then the tabs Overview (its folder,
-// repository and unpushed commits, and its runs in the shared run list, run-list.js: paged with an
+// repository and unpushed commits, its workflow set and default, projects/project-workflows.js #486,
+// and its runs in the shared run list, run-list.js: paged with an
 // infinite scroll, filters and search answered by the service, #200), Conflict map
 // (project-conflict-map.js), Architecture (project-architecture.js, #356, with the Seeds section
 // below it, project-seeds.js, #360) and Refactor
@@ -104,6 +105,8 @@ function renderProjectView() {
       <dt>${t('project.repository')}</dt><dd>${esc(p?.repo || '—')}</dd>
       ${pv.local?.ahead > 0 ? `<dt>${t('project.not_pushed')}</dt><dd class="warn-text">${t(pv.local.issues?.length ? 'project.commits_on_local_base_closes' : 'project.commits_on_local_base', { count: pv.local.ahead, base: esc(pv.local.base), issues: esc((pv.local.issues || []).map((n) => `#${n}`).join(', ')) })}</dd>` : ''}
     </dl>`;
+  // #486: the project's workflow set and default, edited here (project-workflows.js)
+  window.ProjectWorkflows?.showPage(p, $('#project-workflows'));
   renderRunList(pv, {
     prefix: 'project', box: '#project-runs', empty: t('project.no_workflows_have_run_in_this'),
     start: () => openDrawer({ project: pv.id }), rerender: renderProjectView,
@@ -120,6 +123,7 @@ function onProjectPageClick(e) {
     renderProjectView();
     return;
   }
+  if (window.ProjectWorkflows?.onClick(e)) return;
   if (!window.ProjectArchitecture?.onClick(e) && !window.ProjectSeeds?.onClick(e) && !window.ProjectRefactor?.onClick(e)) window.ProjectConflictMap?.onClick(e);
 }
 
@@ -133,6 +137,7 @@ registerView({
         <div id="project-tabs" class="tabs page-tabs" role="tablist" aria-label="${t('project.project')}"></div>
         <div id="project-panel-overview" role="tabpanel" aria-label="${t('project.overview')}" data-testid="project-overview">
           <div id="project-info" class="pr-head-info"></div>
+          <div id="project-workflows"></div>
           <div class="pr-toolbar">
             <div id="project-run-filters" class="chips"></div>
             <span class="spacer"></span>
@@ -157,7 +162,7 @@ registerView({
   mount() {
     $('#btn-project-back').onclick = () => showProjects();
     $('#view-project').addEventListener('click', onProjectPageClick);
-    $('#view-project').addEventListener('change', (e) => window.ProjectArchitecture?.onChange(e) || window.ProjectRefactor?.onChange(e) || window.ProjectConflictMap?.onChange(e));
+    $('#view-project').addEventListener('change', (e) => window.ProjectWorkflows?.onChange(e) || window.ProjectArchitecture?.onChange(e) || window.ProjectRefactor?.onChange(e) || window.ProjectConflictMap?.onChange(e));
     // a Conflict map row opens from the keyboard too
     $('#view-project').addEventListener('keydown', (e) => {
       if ((e.key === 'Enter' || e.key === ' ') && e.target.closest('[data-pcm-row]')) { e.preventDefault(); window.ProjectConflictMap?.onClick(e); }

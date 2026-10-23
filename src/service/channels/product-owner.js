@@ -108,7 +108,7 @@ module.exports = (ctx) => {
       activeRuns: ctx.activeRuns().filter((r) => r.projectId === id),
       runs: runs.runsForProject(runs.listRuns(ctx.ws.runs), p),
       workflows: ctx.listWorkflows().filter((w) => !w.error && w.inputs?.task),
-      defaultWorkflow: settings.defaultWorkflow, // #195
+      defaultWorkflow: projects.projectDefaultWorkflow(p) || settings.defaultWorkflow, // #195; #486: the project's own first
       mock: simulated,
       // #206: the prices of the estimates
       prices: settings.prices || {},
@@ -142,7 +142,7 @@ module.exports = (ctx) => {
       return { text: `${refs(numbers)} queued on ${path.basename(String(p.workflow))}${p.group ? ' (one run)' : ''}.` };
     },
     // the Product Owner's Add to roadmap: a new planned stage at the end ({ issues, workflow?, inputs?, group? });
-    // the workflow defaults to Settings' default workflow, as the Product Owner's own plans do
+    // the workflow defaults to the project's default workflow (#486), else Settings', as the Product Owner's own plans do
     'roadmap.add': async (p) => {
       const id = p.projectId;
       const numbers = numbersOf(p.issues);
@@ -154,7 +154,7 @@ module.exports = (ctx) => {
       const archived = numbers.filter((n) => isArchived(issues.find((i) => i.number === n)));
       if (archived.length) throw new Error(`${refs(archived)} ${archived.length > 1 ? 'are' : 'is'} archived: restore ${archived.length > 1 ? 'them' : 'it'} in the Backlog before planning. Nothing was added.`);
       const files = ctx.listWorkflows().filter((w) => !w.error && w.inputs?.task).map((w) => w.file);
-      const workflow = p.workflow ? path.basename(String(p.workflow)) : DefaultWorkflow.resolve(workspace.readSettings(ctx.ws).defaultWorkflow, files).file;
+      const workflow = p.workflow ? path.basename(String(p.workflow)) : DefaultWorkflow.resolve(projects.projectDefaultWorkflow(projects.readProject(ctx.ws.projects, id)) || workspace.readSettings(ctx.ws).defaultWorkflow, files).file;
       if (!files.includes(workflow)) throw new Error(`Workflow ${workflow} is not installed, or has no task input to receive an issue.`);
       const inputs = p.inputs && typeof p.inputs === 'object' ? p.inputs : {};
       const items = p.group ? [{ workflow, inputs, issues: numbers }] : numbers.map((n) => ({ workflow, inputs, issues: [n] }));

@@ -116,3 +116,19 @@
 .rf-add-grid { display: grid; grid-template-columns: 1fr 2fr; gap: 12px; }
 .rf-add textarea, .rf-add input { width: 100%; box-sizing: border-box; }
 .rf-center { justify-content: center; gap: 8px; margin-top: 12px; }
+/* #486: the Workflows block (projects/project-workflows.js) in Create Project and on the Overview */
+.pj-wf { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; background: var(--panel-2); display: grid; gap: 8px; }
+#project-workflows .pj-wf { margin-bottom: 12px; max-width: 720px; }
+.pj-wf-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.pj-wf-title { font-size: 13px; font-weight: 600; }
+.pj-wf p.hint { margin: 0; }
+.pj-wf-group { display: grid; gap: 4px; }
+.pj-wf-group-head { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.pj-wf-group-name { font-size: 12px; font-weight: 600; text-transform: uppercase; color: var(--muted); }
+.pj-wf-group-head .hint { margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.pj-wf-row { display: flex; align-items: center; gap: 8px; min-height: 24px; }
+.pj-wf-row .check { min-width: 0; }
+.pj-wf-row .check > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pj-wf-more summary { cursor: pointer; font-size: 12px; color: var(--muted); }
+.pj-wf-more[open] summary { margin-bottom: 6px; }
+.pj-wf > .btn { justify-self: start; }

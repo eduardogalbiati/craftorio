@@ -176,7 +176,7 @@ module.exports = (ctx) => {
       activeRuns: ctx.activeRuns().filter((r) => r.projectId === p.id),
       runs: runs.runsForProject(runs.listRuns(ws.runs), p),
       workflows: ctx.listWorkflows().filter((w) => !w.error && w.inputs?.task),
-      defaultWorkflow: settings.defaultWorkflow, // #195
+      defaultWorkflow: projects.projectDefaultWorkflow(p) || settings.defaultWorkflow, // #195; #486: the project's own first
       folder: p.folder,
       agent: agents.readAgent(ws.agents, agents.PRODUCT_OWNER_ID),
       skillsDirs: [ws.skills, ctx.BUNDLED_SKILLS_DIR],

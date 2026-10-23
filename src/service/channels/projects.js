@@ -3,7 +3,7 @@
 
 const projects = require('../../projects');
 const projectInputs = require('../../project-inputs');
-const { requireId, requireObject } = require('../common');
+const { clientError, requireId, requireObject } = require('../common');
 const {
   ANY,
   args,
@@ -21,8 +21,17 @@ const {
 // A project's folder, or null when the project is unknown.
 const folderOf = (ctx, id) => { try { return projects.readProject(ctx.ws.projects, id).folder; } catch { return null; } };
 
-// a project's fields ({ name, folder, repo, ... }), checked by src/projects.js
+// a project's fields ({ name, folder, repo, workflows: [{ name, origin }], defaultWorkflow, ... }),
+// checked by src/projects.js
 const PROJECT_DATA = OBJECT;
+
+// #486: projects:manifest's one object, { url } (a remote repository) or { folder }
+const manifestTarget = (arg) => {
+  const target = requireObject(arg, 'manifest target');
+  if (typeof target.url === 'string' && target.url.trim()) return { url: target.url.trim() };
+  if (typeof target.folder === 'string' && target.folder.trim()) return { folder: target.folder.trim() };
+  throw clientError('Invalid manifest target: expected { url } or { folder }.');
+};
 
 module.exports = (ctx) => [
   { channel: 'projects:list', method: 'listProjects', schema: { result: listOf(OBJECT) }, fn: () => projects.listProjects(ctx.ws.projects) },
@@ -37,5 +46,7 @@ module.exports = (ctx) => [
     schema: { params: args({ id: PROJECT_ID, offset: NUMBER, limit: NUMBER, filter: ANY, showSim: FLAG, q: nullable(text(1000)) }, ['id']), result: OBJECT },
     fn: (opts) => ctx.projectRuns({ ...opts, id: requireId(opts.id, 'project id') }),
   },
+  // #486: a repository's workflows manifest before Create Project clones it: its entries, or null
+  { channel: 'projects:manifest', method: 'projectManifest', params: 'target', schema: { params: args({ url: STRING, folder: STRING }), result: nullable(OBJECT) }, fn: (target) => projects.projectManifest(manifestTarget(target)) },
   { channel: 'projects:inputHints', method: 'projectInputHints', params: 'id', schema: { params: nullable(STRING), result: OBJECT }, fn: (id) => projectInputs.inputHints(folderOf(ctx, id)) },
 ];

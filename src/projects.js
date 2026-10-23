@@ -3,6 +3,9 @@
 // With no folder given, a project with a repository is cloned into <workspace>/repos/<owner>-<repo>
 // (the same place git URLs given as repo_path go); one without a repository gets an empty
 // <workspace>/projects/<id>/.
+// #486: a project keeps its workflow set (`workflows: [{ name, origin, category? }]`) and its
+// `defaultWorkflow` (a name, used instead of Settings' default for its new items); projectManifest
+// reads a repository's `.multiagent/project.yaml` before the project is created.
 
 const fs = require('fs');
 const path = require('path');
@@ -68,7 +71,10 @@ async function createProject(dir, data, { git = execGit, reposDir = null } = {})
   // #472: a repository the app cloned (not the user's own checkout) installs without its scripts
   // until the owner turns the setting off; the project dialog's own choice wins
   const ignoreInstallScripts = typeof data.ignoreInstallScripts === 'boolean' ? data.ignoreInstallScripts : cloned;
-  const project = { name, description: data.description?.trim() || '', folder, repo, ...(localPreview ? { localPreview } : {}), ...(ignoreInstallScripts ? { ignoreInstallScripts } : {}), createdAt: new Date().toISOString() };
+  // #486: the workflows checked in Create Project's Workflows block, and the project's default
+  const workflows = cleanWorkflows(data.workflows);
+  const defaultWorkflow = workflows.length ? cleanWorkflowName(data.defaultWorkflow) || firstBuildWorkflow(workflows) : null;
+  const project = { name, description: data.description?.trim() || '', folder, repo, ...(localPreview ? { localPreview } : {}), ...(ignoreInstallScripts ? { ignoreInstallScripts } : {}), ...(workflows.length ? { workflows } : {}), ...(defaultWorkflow ? { defaultWorkflow } : {}), createdAt: new Date().toISOString() };
   fs.writeFileSync(metaFile(dir, id), JSON.stringify(project, null, 2));
   return readProject(dir, id);
 }
@@ -91,6 +97,9 @@ function updateProject(dir, id, patch) {
   if (patch.localPreviewConfirmed !== undefined) next.localPreviewConfirmed = patch.localPreviewConfirmed ? String(patch.localPreviewConfirmed) : null;
   // #485: the repository workflows the owner accepted, { <file>: { commit, blob } } (a changed file asks again)
   if (patch.acceptedWorkflows !== undefined) next.acceptedWorkflows = { ...(patch.acceptedWorkflows || {}) };
+  // #486: the project's workflow set ({ name, origin, category? }) and its default for new items
+  if (patch.workflows !== undefined) next.workflows = cleanWorkflows(patch.workflows);
+  if (patch.defaultWorkflow !== undefined) next.defaultWorkflow = cleanWorkflowName(patch.defaultWorkflow);
   // #360: each analysis seed's deterministic tool, { <seed id>: command }, run instead of the Oracle
   if (patch.seedTools !== undefined) next.seedTools = Object.fromEntries(Object.entries(patch.seedTools || {}).filter(([, c]) => String(c || '').trim()).map(([k, c]) => [k, String(c).trim()]));
   if (patch.folder !== undefined) {
@@ -106,6 +115,86 @@ function updateProject(dir, id, patch) {
 // { install, command, url, cwd?, env? } with empty fields dropped; null without a command (the action is hidden)
 const cleanLocalPreview = (v) => cleanConfig(v);
 
+// #486: a workflow's name without its .yaml suffix; null when empty
+const cleanWorkflowName = (v) => String(v ?? '').trim().replace(/\.ya?ml$/i, '') || null;
+
+// #486: [{ name, origin, category? }], one per name, in the given order
+function cleanWorkflows(list) {
+  const seen = new Set();
+  const out = [];
+  for (const w of Array.isArray(list) ? list : []) {
+    const name = cleanWorkflowName(w?.name);
+    if (!name || seen.has(name)) continue;
+    seen.add(name);
+    const category = String(w.category ?? '').trim();
+    out.push({ name, origin: String(w.origin ?? '').trim() || 'workspace', ...(category ? { category } : {}) });
+  }
+  return out;
+}
+
+// #486: without a given default, the first checked solo or team workflow
+const firstBuildWorkflow = (workflows) => workflows.find((w) => w.category === 'solo' || w.category === 'team')?.name || null;
+
+/** #486: the workflow file a project's new items use (`<name>.yaml`), or null for Settings' default. */
+function projectDefaultWorkflow(project) {
+  const name = cleanWorkflowName(project?.defaultWorkflow);
+  return name ? `${name}.yaml` : null;
+}
+
+const AFTER_CLONE = 'The repository could not be read without credentials: its workflows manifest will be read after cloning.';
+
+/**
+ * #486: a repository's workflows manifest (.multiagent/project.yaml, src/project-manifest.js) before the
+ * project exists: from a local folder, or from a remote repository through its provider's contents
+ * API (gh api / glab api), else an unauthenticated raw read for a public one. Never clones.
+ * @param {{ url?: string, folder?: string }} target
+ * @returns {Promise<{ workflows: object[], pending?: true, message?: string }|null>} null: no manifest
+ */
+async function projectManifest(target, { exec, fetch = globalThis.fetch } = {}) {
+  const { MANIFEST_FILE, parseManifest } = require('./project-manifest');
+  const entries = (text) => ({ workflows: parseManifest(text).workflows });
+  if (target?.folder) {
+    const file = path.join(String(target.folder), ...MANIFEST_FILE.split('/'));
+    if (!fs.existsSync(file)) return null;
+    return entries(fs.readFileSync(file, 'utf8'));
+  }
+  const issues = require('./issues');
+  const parsed = issues.parseRepoUrl(target?.url);
+  if (!parsed) return null;
+  const platform = issues.platformOfHost(parsed.host);
+  const adapter = platform && issues.adapterOf(platform);
+  if (adapter && (platform === 'github' || platform === 'gitlab')) {
+    const hostArgs = adapter.apiHostArgs(parsed);
+    const args = platform === 'github'
+      ? ['api', ...hostArgs, `repos/${parsed.path}/contents/${MANIFEST_FILE}`]
+      : ['api', ...hostArgs, `projects/${encodeURIComponent(parsed.path)}/repository/files/${encodeURIComponent(MANIFEST_FILE)}/raw?ref=HEAD`];
+    try {
+      const out = await (exec || issues.execCli)(platform === 'github' ? 'gh' : 'glab', args);
+      return entries(decodeContents(out));
+    } catch (e) {
+      if (/\b404\b|not found/i.test(String(e?.message))) return null;
+    }
+  }
+  // no CLI that can read it: a public repository's raw file
+  const raw = platform === 'github'
+    ? `https://raw.githubusercontent.com/${parsed.path}/HEAD/${MANIFEST_FILE}`
+    : `https://${parsed.host}/${parsed.path}/-/raw/HEAD/${MANIFEST_FILE}`;
+  try {
+    const res = typeof fetch === 'function' ? await fetch(raw) : null;
+    if (res?.ok) return entries(await res.text());
+  } catch { /* offline: read after cloning */ }
+  return { workflows: [], pending: true, message: AFTER_CLONE };
+}
+
+// gh api's contents JSON ({ content: base64 }) or a raw file's text
+function decodeContents(out) {
+  try {
+    const doc = JSON.parse(out);
+    if (doc && typeof doc.content === 'string') return Buffer.from(doc.content, doc.encoding || 'base64').toString('utf8');
+  } catch { /* the raw text */ }
+  return String(out ?? '');
+}
+
 /** Removes only the project entry; the project folder is not deleted. */
 function removeProject(dir, id) {
   fs.rmSync(metaFile(dir, id), { force: true });
@@ -116,6 +205,8 @@ function removeProject(dir, id) {
 module.exports = {
   createProject,
   listProjects,
+  projectDefaultWorkflow,
+  projectManifest,
   readProject,
   removeProject,
   slugify,
