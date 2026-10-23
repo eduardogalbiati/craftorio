@@ -29,6 +29,9 @@
     apiHostArgs: ({ host }) => (host === OWN_HOST ? [] : ['--hostname', host]),
     issuesUrl: ({ host, path }) => `https://${host}/${path}/-/issues/`,
     issueUrl: (base, number) => `${base}/-/issues/${number}`,
+    // a file of the default branch (#486): the repository files API (raw text), else a public raw read
+    fileCommand: ({ host, path }, file) => cmd(['api', ...gitlab.apiHostArgs({ host }), `projects/${encodeURIComponent(path)}/repository/files/${encodeURIComponent(file)}/raw?ref=HEAD`]),
+    rawFileUrl: ({ host, path }, file) => `https://${host}/${path}/-/raw/HEAD/${file}`,
 
     // ---- issues
     issueListCommand: (target) => cmd(['issue', 'list', '--repo', target, '--all', '--per-page', '100', '--output', 'json']),

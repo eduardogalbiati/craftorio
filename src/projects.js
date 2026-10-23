@@ -168,22 +168,17 @@ async function projectManifest(target, { exec, fetch = globalThis.fetch } = {}) 
   if (!parsed) return null;
   const platform = issues.platformOfHost(parsed.host);
   const adapter = platform && issues.adapterOf(platform);
-  if (adapter && (platform === 'github' || platform === 'gitlab')) {
-    const hostArgs = adapter.apiHostArgs(parsed);
-    const args = platform === 'github'
-      ? ['api', ...hostArgs, `repos/${parsed.path}/contents/${MANIFEST_FILE}`]
-      : ['api', ...hostArgs, `projects/${encodeURIComponent(parsed.path)}/repository/files/${encodeURIComponent(MANIFEST_FILE)}/raw?ref=HEAD`];
+  if (adapter?.fileCommand) {
+    const { cli, args } = adapter.fileCommand(parsed, MANIFEST_FILE);
     try {
-      const out = await (exec || issues.execCli)(platform === 'github' ? 'gh' : 'glab', args);
+      const out = await (exec || issues.execCli)(cli, args);
       return entries(decodeContents(out));
     } catch (e) {
       if (/\b404\b|not found/i.test(String(e?.message))) return null;
     }
   }
   // no CLI that can read it: a public repository's raw file
-  const raw = platform === 'github'
-    ? `https://raw.githubusercontent.com/${parsed.path}/HEAD/${MANIFEST_FILE}`
-    : `https://${parsed.host}/${parsed.path}/-/raw/HEAD/${MANIFEST_FILE}`;
+  const raw = require('./shared/platforms').rawFileUrl(platform, parsed, MANIFEST_FILE);
   try {
     const res = typeof fetch === 'function' ? await fetch(raw) : null;
     if (res?.ok) return entries(await res.text());

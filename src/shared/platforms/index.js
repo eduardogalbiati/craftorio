@@ -6,7 +6,8 @@
 // - resolvePlatform(name): the adapter, or an error naming the unknown platform;
 // - findPlatform(name): the adapter or null; platformOrDefault(name): the adapter or GitHub's;
 // - platformOfUrl(url): the adapter an issue, pull request or merge request URL belongs to, or null;
-// - requestRef(name, number): "PR #12" / "MR !12".
+// - requestRef(name, number): "PR #12" / "MR !12";
+// - rawFileUrl(name, repo, file): a public raw read of one file, GitLab's form for an unknown host.
 // Browser: window.Platforms (loads after the adapters); Node: module.exports.
 (function (root) {
   const node = typeof module === 'object' && module.exports;
@@ -39,7 +40,13 @@
     return `${r.short} ${r.sign}${number}`;
   }
 
-  const api = { DEFAULT_PLATFORM, findPlatform, platformOfUrl, platformOrDefault, PLATFORMS, requestRef, resolvePlatform };
+  // a public raw read of one file (#486); a self-hosted server without its own adapter is read
+  // GitLab's way (<host>/<path>/-/raw/HEAD/<file>), the form self-hosted servers most often serve
+  function rawFileUrl(name, repo, file) {
+    return (findPlatform(name) || findPlatform('gitlab')).rawFileUrl(repo, file);
+  }
+
+  const api = { DEFAULT_PLATFORM, findPlatform, platformOfUrl, platformOrDefault, PLATFORMS, rawFileUrl, requestRef, resolvePlatform };
   if (node) module.exports = api;
   else root.Platforms = api;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -5,6 +5,7 @@
 // - request: the terms of a pull request ("PR #12"); epics, readsLabels, closeReason, actionsQuota:
 //   what the platform offers (epics are issues whose sub-issues are their members, src/epics.js);
 // - cliTarget / apiHostArgs / issuesUrl / issueUrl: a repository ({ host, path }) as the CLI and links want it;
+//   fileCommand / rawFileUrl: one file of its default branch, through the CLI or a public raw read;
 // - *Command: the { cli, args } of each operation (issues, labels, pull requests, epics, the Oracle, probes);
 // - parse*: the CLI's JSON → the app's objects;
 // - parseIssueUrl / parseTargetUrl: issue, pull request and Actions run URLs.
@@ -39,6 +40,9 @@
     apiHostArgs: ({ host }) => (host === OWN_HOST ? [] : ['--hostname', host]),
     issuesUrl: ({ host, path }) => `https://${host}/${path}/issues/`,
     issueUrl: (base, number) => `${base}/issues/${number}`,
+    // a file of the default branch (#486): the contents API (JSON, base64 content), else a public raw read
+    fileCommand: ({ host, path }, file) => cmd(['api', ...github.apiHostArgs({ host }), `repos/${path}/contents/${file}`]),
+    rawFileUrl: ({ path }, file) => `https://raw.githubusercontent.com/${path}/HEAD/${file}`,
 
     // ---- issues
     issueListCommand: (target, limit) => cmd(['issue', 'list', '--repo', target, '--state', 'all', '--limit', String(limit), '--json', ISSUE_FIELDS]),
