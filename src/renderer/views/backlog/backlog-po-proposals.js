@@ -36,7 +36,7 @@
   const splitWorkflow = (key) => workflowOf.get(key) || DefaultWorkflow.current().file;
   function workflowSelect(key, ctx) {
     const value = splitWorkflow(key);
-    const list = (state.workflows || []).filter((w) => !w.error && w.inputs?.task);
+    const list = DefaultWorkflow.projectFirst((state.workflows || []).filter((w) => !w.error && w.inputs?.task));
     const options = list.some((w) => w.file === value) ? list : [{ file: value, name: value }, ...list];
     return `<select class="po-wf" data-split-wf aria-label="${t('backlog_po_proposals.workflow_of_the_children_in_the')}" title="${t('backlog_po_proposals.the_workflow_of_the_children_s')}"${off(ctx)}>${options.map((w) =>
       `<option value="${esc(w.file)}"${w.file === value ? ' selected' : ''}>${esc(w.name || w.file)}${w.file === DefaultWorkflow.current().file ? ' (default)' : ''}</option>`).join('')}</select>`;

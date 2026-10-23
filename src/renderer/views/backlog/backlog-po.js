@@ -434,7 +434,7 @@
   ];
   const isPathInput = (key) => /path|dir/i.test(key);
   const workflowKey = (projectId) => `po.workflow.${projectId}`;
-  const planWorkflows = () => (state.workflows || []).filter((w) => !w.error && w.inputs?.task);
+  const planWorkflows = () => DefaultWorkflow.projectFirst((state.workflows || []).filter((w) => !w.error && w.inputs?.task)); // #486: the project's set first
   /** The workflow last chosen for the project, else the default development workflow. */
   function chosenWorkflow() {
     let saved = null;

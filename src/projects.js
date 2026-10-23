@@ -11,6 +11,8 @@ const fs = require('fs');
 const path = require('path');
 const { execGit, repoNameFromUrl } = require('./workspace');
 const { cleanConfig } = require('./local-preview');
+// #486: without a given default, the first checked development (solo, team or build) workflow
+const { firstBuild } = require('./shared/default-workflow');
 
 const isDir = (p) => { try { return fs.statSync(p).isDirectory(); } catch { return false; } };
 
@@ -71,9 +73,11 @@ async function createProject(dir, data, { git = execGit, reposDir = null } = {})
   // #472: a repository the app cloned (not the user's own checkout) installs without its scripts
   // until the owner turns the setting off; the project dialog's own choice wins
   const ignoreInstallScripts = typeof data.ignoreInstallScripts === 'boolean' ? data.ignoreInstallScripts : cloned;
-  // #486: the workflows checked in Create Project's Workflows block, and the project's default
-  const workflows = cleanWorkflows(data.workflows);
-  const defaultWorkflow = workflows.length ? cleanWorkflowName(data.defaultWorkflow) || firstBuildWorkflow(workflows) : null;
+  // #486: the workflows checked in Create Project's Workflows block, and the project's default;
+  // none checked for a repository just cloned (its manifest could not be read before): the clone's manifest
+  let workflows = cleanWorkflows(data.workflows);
+  if (!workflows.length && cloned) workflows = cleanWorkflows((await projectManifest({ folder }))?.workflows?.map((w) => ({ ...w, origin: 'manifest' })));
+  const defaultWorkflow = workflows.length ? cleanWorkflowName(data.defaultWorkflow) || firstBuild(workflows) : null;
   const project = { name, description: data.description?.trim() || '', folder, repo, ...(localPreview ? { localPreview } : {}), ...(ignoreInstallScripts ? { ignoreInstallScripts } : {}), ...(workflows.length ? { workflows } : {}), ...(defaultWorkflow ? { defaultWorkflow } : {}), createdAt: new Date().toISOString() };
   fs.writeFileSync(metaFile(dir, id), JSON.stringify(project, null, 2));
   return readProject(dir, id);
@@ -132,9 +136,6 @@ function cleanWorkflows(list) {
   return out;
 }
 
-// #486: without a given default, the first checked solo or team workflow
-const firstBuildWorkflow = (workflows) => workflows.find((w) => w.category === 'solo' || w.category === 'team')?.name || null;
-
 /** #486: the workflow file a project's new items use (`<name>.yaml`), else `fallback` (Settings' default). */
 function projectDefaultWorkflow(project, fallback = null) {
   const name = cleanWorkflowName(project?.defaultWorkflow);
@@ -148,11 +149,15 @@ const AFTER_CLONE = 'The repository could not be read without credentials: its w
  * project exists: from a local folder, or from a remote repository through its provider's contents
  * API (gh api / glab api), else an unauthenticated raw read for a public one. Never clones.
  * @param {{ url?: string, folder?: string }} target
- * @returns {Promise<{ workflows: object[], pending?: true, message?: string }|null>} null: no manifest
+ * @returns {Promise<{ workflows: object[], errors?: string[], pending?: true, message?: string }|null>}
+ *   null: no manifest; errors: the manifest's own (invalid YAML, an unknown category), shown by the block
  */
 async function projectManifest(target, { exec, fetch = globalThis.fetch } = {}) {
   const { MANIFEST_FILE, parseManifest } = require('./project-manifest');
-  const entries = (text) => ({ workflows: parseManifest(text).workflows });
+  const entries = (text) => {
+    const { workflows, errors } = parseManifest(text);
+    return { workflows, ...(errors.length ? { errors } : {}) };
+  };
   if (target?.folder) {
     const file = path.join(String(target.folder), ...MANIFEST_FILE.split('/'));
     if (!fs.existsSync(file)) return null;

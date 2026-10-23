@@ -8,8 +8,9 @@
 // checked, and "Create one for this project" (the Builder). The Overview saves each change
 // (api.updateProject: workflows, defaultWorkflow). Each workflow is a checkbox carrying
 // data-workflow / data-origin / data-category; its label starts with the workflow's name.
-// Uses app.js globals ($, esc, t, state, errMsg, showToast, closeModal) and workflows.js's
-// WF_SECTIONS, wfSectionOf, wfSectionName and showWorkflowsTab.
+// Uses app.js globals ($, esc, t, state, errMsg, showToast, closeModal), workflows.js's
+// WF_SECTIONS, wfSectionOf, wfSectionName and showWorkflowsTab, and DefaultWorkflow.firstBuild
+// (the default's rule, shared with src/projects.js).
 
 window.ProjectWorkflows = (() => {
   const bare = (s) => String(s || '').replace(/\.ya?ml$/i, '');
@@ -17,13 +18,10 @@ window.ProjectWorkflows = (() => {
   const listed = (w) => !w.error && w.origin !== 'repository' && w.origin !== 'manifest';
   const nameOf = (w) => bare(w.file) || w.name;
 
-  // api.listWorkflows(), read once per page load (a new workflow shows after a reload of the page)
-  let all = null;
+  // api.listWorkflows(), read again at each opening of the dialog or the page (a workflow saved in
+  // the Builder since then is listed)
   async function installed() {
-    if (!all) {
-      try { all = (await api.listWorkflows()).filter(listed); } catch { return []; }
-    }
-    return all;
+    try { return (await api.listWorkflows()).filter(listed); } catch { return []; }
   }
 
   // [{ name, origin, category, description, checked }]: the chosen ones first, then the others
@@ -72,6 +70,7 @@ window.ProjectWorkflows = (() => {
       <div class="pj-wf" data-testid="project-workflows-block">
         <div class="pj-wf-head"><span class="pj-wf-title">${t('projects.workflows')}</span>${head}</div>
         ${manifest?.pending ? `<p class="hint warn-text">${t('projects.workflows_after_cloning')}</p>` : ''}
+        ${manifest?.errors?.length ? `<p class="error small" data-testid="project-workflows-manifest-errors">${t('projects.workflows_manifest_errors', { errors: esc(manifest.errors.join('; ')) })}</p>` : ''}
         ${intro ? `<p class="hint">${intro}</p>` : ''}
         ${rows.length ? '' : `<p class="muted small">${t('projects.workflows_none_installed')}</p>`}
         ${collapse ? groupsHtml(chosen, rowOpts) : groupsHtml(rows, rowOpts)}
@@ -83,9 +82,6 @@ window.ProjectWorkflows = (() => {
   // [{ name, origin, category? }] of the block's checked boxes, in their order
   const selected = (box) => [...(box?.querySelectorAll('input[data-workflow]') || [])].filter((i) => i.checked)
     .map((i) => ({ name: i.dataset.workflow, origin: i.dataset.origin || 'workspace', ...(i.dataset.category ? { category: i.dataset.category } : {}) }));
-
-  // the first checked solo or team workflow (the service's rule for a new project)
-  const firstBuild = (set) => set.find((w) => w.category === 'solo' || w.category === 'team')?.name || null;
 
   // ---- Create Project ------------------------------------------------------------------------
   let dialogSeq = 0;
@@ -138,7 +134,7 @@ window.ProjectWorkflows = (() => {
     const def = bare(p.defaultWorkflow);
     const head = `<span class="muted small" data-testid="project-default-workflow">${t('projects.workflows_default')}: <span class="mono">${esc(def || t('projects.workflows_settings_default'))}</span></span>`;
     box.innerHTML = blockHtml({
-      manifest: null,
+      manifest: manifest?.errors?.length ? { errors: manifest.errors } : null,
       rows,
       head,
       intro: t('projects.workflows_page_hint'),
@@ -151,6 +147,8 @@ window.ProjectWorkflows = (() => {
     if (!pv) return;
     try {
       pv.project = { ...pv.project, ...(await api.updateProject(pv.id, patch)) };
+      // the backlog's pickers read the header project's set and default from state.projects
+      state.projects = (state.projects || []).map((p) => (p.id === pv.id ? { ...p, ...pv.project } : p));
     } catch (err) {
       showToast(t('projects.workflows_save_failed'), errMsg(err));
     }
@@ -163,7 +161,8 @@ window.ProjectWorkflows = (() => {
     if (!input || !state.pv) return false;
     const workflows = selected($('#project-workflows'));
     const cur = bare(state.pv.project?.defaultWorkflow);
-    const defaultWorkflow = workflows.some((w) => w.name === cur) ? cur : firstBuild(workflows);
+    // the service's rule for a new project (src/shared/default-workflow.js)
+    const defaultWorkflow = workflows.some((w) => w.name === cur) ? cur : DefaultWorkflow.firstBuild(workflows);
     save({ workflows, defaultWorkflow });
     return true;
   }

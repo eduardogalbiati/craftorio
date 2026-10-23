@@ -108,7 +108,7 @@ async function renderSettings() {
 // workflow that was deleted or renamed falls back, and the note says so.
 function renderDefaultWorkflow() {
   const list = (state.workflows || []).filter((w) => !w.error && w.inputs?.task);
-  const cur = DefaultWorkflow.current();
+  const cur = DefaultWorkflow.current({ project: false });
   const sel = $('#set-default-workflow');
   sel.innerHTML = list.map((w) => `<option value="${esc(w.file)}">${esc(w.name || w.file)} (${esc(w.file)}${w.merge === 'local' ? t('settings.backlog.local_merge') : w.merge === 'remote' ? t('settings.backlog.remote_merge') : ''})</option>`).join('');
   sel.value = cur.file;

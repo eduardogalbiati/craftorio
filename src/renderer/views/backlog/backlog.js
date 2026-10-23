@@ -542,12 +542,12 @@
     const issues = shownSelected().map((n) => (bl.data?.issues || []).find((i) => i.number === n)).filter(Boolean);
     $b('#assign-issues').innerHTML = issues.map((i) => `<li title="${esc(`#${i.number} ${i.title}`)}"><span class="num">#${i.number}</span><span class="title">${esc(i.title)}</span></li>`).join('');
     const sel = $b('#assign-workflow');
-    const options = bl.workflows.map((w) => `<option value="${esc(w.file)}">${esc(w.name)}</option>`).join('');
+    const options = DefaultWorkflow.projectFirst(bl.workflows).map((w) => `<option value="${esc(w.file)}">${esc(w.name)}</option>`).join('');
     sel.innerHTML = bl.pipelines.length
       ? `<optgroup label="Workflows">${options}</optgroup><optgroup label="Pipelines">${bl.pipelines.map((p) => `<option value="${esc(PIPE + p.file)}">⛓ ${esc(p.name)}</option>`).join('')}</optgroup>`
       : options;
     const files = [...bl.workflows.map((w) => w.file), ...bl.pipelines.map((p) => PIPE + p.file)];
-    // nothing remembered: the default development workflow (#195, Settings › General › Backlog)
+    // nothing remembered: the default development workflow (#195, Settings › General › Backlog; #486: the project's own first, its set first in the list)
     sel.value = [prefill?.workflow, load(WORKFLOW_KEY), DefaultWorkflow.current().file, files[0]].find((f) => f && files.includes(f));
     // real runs by default: Simulation is opt-in (checked only where real runs are refused anyway)
     $b('#assign-mock').checked = !!state.simulationOnly;

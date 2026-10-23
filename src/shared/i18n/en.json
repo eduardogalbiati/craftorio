@@ -3683,6 +3683,7 @@
   "projects.workflows_add_another": "Add another workflow",
   "projects.workflows_after_cloning": "The repository can't be read without credentials: its workflows manifest will be read after cloning.",
   "projects.workflows_create": "Create one for this project",
+  "projects.workflows_manifest_errors": "The repository's workflows manifest has errors: {errors}",
   "projects.workflows_default": "Default workflow",
   "projects.workflows_default_badge": "default",
   "projects.workflows_from_manifest": "From the repository's manifest (.multiagent/project.yaml).",
