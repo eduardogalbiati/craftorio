@@ -135,10 +135,10 @@ function cleanWorkflows(list) {
 // #486: without a given default, the first checked solo or team workflow
 const firstBuildWorkflow = (workflows) => workflows.find((w) => w.category === 'solo' || w.category === 'team')?.name || null;
 
-/** #486: the workflow file a project's new items use (`<name>.yaml`), or null for Settings' default. */
-function projectDefaultWorkflow(project) {
+/** #486: the workflow file a project's new items use (`<name>.yaml`), else `fallback` (Settings' default). */
+function projectDefaultWorkflow(project, fallback = null) {
   const name = cleanWorkflowName(project?.defaultWorkflow);
-  return name ? `${name}.yaml` : null;
+  return name ? `${name}.yaml` : fallback;
 }
 
 const AFTER_CLONE = 'The repository could not be read without credentials: its workflows manifest will be read after cloning.';

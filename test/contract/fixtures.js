@@ -193,6 +193,8 @@ module.exports = {
   'projects:create': { arg: () => ({ name: unique('Contract project') }), invalid: NOT_AN_OBJECT },
   'projects:inputHints': { setup: project, arg: ({ projectId }) => projectId, invalid: { arg: 42 } },
   'projects:list': { arg: null },
+  // #486: a folder without .multiagent/project.yaml answers null; an object without url or folder is refused
+  'projects:manifest': { arg: () => ({ folder: __dirname }), invalid: { arg: {} } },
   'projects:remove': { setup: project, arg: ({ projectId }) => projectId, invalid: { arg: '..' } },
   'projects:runs': { setup: project, arg: ({ projectId }) => ({ id: projectId }), invalid: { arg: { id: 42 } } },
   'projects:update': { setup: project, arg: ({ projectId }) => ({ id: projectId, patch: { name: 'A renamed contract project' } }), invalid: { arg: { id: 42 } } },

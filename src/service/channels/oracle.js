@@ -380,7 +380,7 @@ module.exports = (ctx) => {
       activeRuns: ctx.activeRuns().filter((r) => r.projectId === id),
       runs: runs.runsForProject(runs.listRuns(ctx.ws.runs), p),
       workflows: ctx.listWorkflows().filter((w) => !w.error && w.inputs?.task),
-      defaultWorkflow: projects.projectDefaultWorkflow(p) || settings.defaultWorkflow, // #195; #486: the project's own first
+      defaultWorkflow: projects.projectDefaultWorkflow(p, settings.defaultWorkflow), // #195; #486: the project's own first
       folder: p.folder, agent: agents.readAgent(ctx.ws.agents, agents.PRODUCT_OWNER_ID),
       skillsDirs: [ctx.ws.skills, ctx.BUNDLED_SKILLS_DIR], resolveCommand,
       budget: sim ? null : usage.withPeerUsage(usage.budgetBaseline({ runsDir: ctx.ws.runs, settings, extraRuns: ctx.agentUsageRuns() }), productOwner.monthUsage(ctx.ws.backlog, new Date(), settings.timeZone), settings.prices),

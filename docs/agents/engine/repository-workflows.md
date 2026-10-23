@@ -27,4 +27,11 @@ A repository's `.multiagent/project.yaml`: the workflows a project is worked on 
   and their `bash:<toolchain>` commands, never a bare `bash`). Each refusal names the reason.
 - **Which file a run takes**: the roadmap and `run:start { projectId }` take the repository's entry of
   the name; the Start drawer passes `workspace: true` and runs the workspace's file, as before.
+- **Read at creation** (#486, `src/projects.js` `projectManifest`, channel `projects:manifest { url | folder }`):
+  a folder's manifest from disk; a remote one through `gh api .../contents/` or `glab api .../files/.../raw`,
+  else an unauthenticated raw read; never clones. No manifest: `null`; a repository nothing can read:
+  `{ workflows: [], pending: true }` ("will be read after cloning"). The project record keeps the checked
+  `workflows: [{ name, origin, category }]` and `defaultWorkflow` (a name, the first solo or team one);
+  `projectDefaultWorkflow(p)` gives the roadmap, the Product Owner, the chain and the Oracle that default
+  before Settings' one.
 - The owner's per-agent model choices stay in the workspace: a repository copy carries none.
