@@ -116,6 +116,40 @@ test('#485 workflows:list for a project files a workspace workflow the manifest 
   assert.equal(forProject.origin, plain.origin, 'still the workspace\'s workflow');
 });
 
+test('#485 builder:load-repository opens the committed text of a repository workflow read-only', async (t) => {
+  const { api, repo, project } = await projectWithRepo(t);
+  const item = repoFlowOf(await api['workflows:list']({ projectId: project.id }));
+  assert.ok(item, 'repo-flow is listed');
+  repo.write({ '.multiagent/workflows/repo-flow.yaml': repoFlow('uncommitted') });
+  const loaded = await api['builder:load-repository']({ projectId: project.id, file: item.file });
+  assert.equal(loaded.mode, 'readonly');
+  const spec = JSON.stringify(loaded.spec);
+  assert.equal(spec.includes('committed'), true, 'the committed step is in the spec');
+  assert.equal(spec.includes('uncommitted'), false, 'an uncommitted edit of the checkout is not read');
+});
+
+test('#485 builder:load-repository refuses a workflow the manifest does not declare', async (t) => {
+  const { api, project } = await projectWithRepo(t);
+  await assert.rejects(
+    async () => api['builder:load-repository']({ projectId: project.id, file: 'not-declared.yaml' }),
+    (e) => /not found/i.test(e.message) && /not-declared/.test(e.message),
+  );
+});
+
+test('#485 builder:clone-repository makes a custom, untrusted copy in the workspace and leaves the repository entry as is', async (t) => {
+  const { api, service, project } = await projectWithRepo(t);
+  const item = repoFlowOf(await api['workflows:list']({ projectId: project.id }));
+  assert.ok(item, 'repo-flow is listed');
+  const { file } = await api['builder:clone-repository']({ projectId: project.id, file: item.file });
+  assert.equal(file, 'repo-flow-copy.yaml');
+  assert.equal(fs.existsSync(path.join(service.workspace().workflows, 'repo-flow-copy.yaml')), true);
+  const list = await api['workflows:list']({ projectId: project.id });
+  const copy = list.find((w) => w.file === 'repo-flow-copy.yaml');
+  assert.equal(copy.origin, 'custom');
+  assert.equal(copy.trusted, false, 'not trusted until the owner confirms it (#474)');
+  assert.equal(repoFlowOf(list).accepted, false, 'cloning does not accept the repository workflow');
+});
+
 test('#485 a run of an unaccepted repository workflow is refused, naming it', async (t) => {
   const { api, project } = await projectWithRepo(t);
   const item = repoFlowOf(await api['workflows:list']({ projectId: project.id }));
