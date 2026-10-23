@@ -38,8 +38,9 @@ const projectOverview = (page) => visible(page.getByTestId('project-page')).firs
 const blockIn = (scope) => scope.getByTestId('project-workflows-block').first();
 const dialogBlock = (page) => blockIn(projectDialog(page));
 const overviewBlock = (page) => blockIn(projectOverview(page));
+// a category's heading is its section name, which may carry the group's name ("Build" is "Code & Build", the Workflows screen's section)
 const categoryIn = (page, block, name) => block.getByTestId('project-workflows-category')
-  .filter({ has: page.getByRole('heading', { name: new RegExp(`^\\s*${escapeRe(name)}\\b`, 'i') }) }).first();
+  .filter({ has: page.getByRole('heading', { name: new RegExp(`\\b${escapeRe(name)}\\b`, 'i') }) }).first();
 const workflowBox = (scope, name) => scope.getByRole('checkbox', { name: nameRe(name) }).first();
 
 // the scenario's folders, under its scratch folder (the workspace is <scratch>/workspace)
