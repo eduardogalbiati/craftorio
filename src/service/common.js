@@ -4,7 +4,7 @@
 
 const path = require('path');
 const { execFileSync } = require('child_process');
-const { childEnv } = require('../engine/child-env');
+const { childEnv, PLATFORM_CLIS } = require('../engine/child-env');
 const {
   resolveCommand,
   withCliPath,
@@ -181,7 +181,7 @@ function requireArgs(arg, params) {
 // with the folders the CLI lookup searches on its PATH (#397). #470 (SEC-5): the allowlisted
 // environment (src/engine/child-env.js) with the gh / glab tokens, so a user's gh still works there;
 // the allowlist already leaves out CLAUDECODE and ELECTRON_RUN_AS_NODE.
-const cliEnv = (platform = process.platform) => withCliPath(childEnv(process.env, { platforms: ['gh', 'glab'] }), platform);
+const cliEnv = (platform = process.platform) => withCliPath(childEnv(process.env, { platforms: PLATFORM_CLIS }), platform);
 
 module.exports = {
   BUNDLED_SKILLS_DIR,

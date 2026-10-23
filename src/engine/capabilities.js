@@ -16,6 +16,7 @@
 // docs/agents/capabilities.md; the gaps are logged once per agent in the run.
 
 const path = require('path');
+const { PLATFORM_CLIS } = require('./child-env');
 const { workerEnv } = require('../machine-profile');
 const { machineSlotDir } = require('./machine-slot');
 const registry = require('../shared/providers');
@@ -147,7 +148,7 @@ const readOnly = (caps) => !writes(caps) && !bashRules(caps).length;
 function platformsOf(caps) {
   const bash = caps ? bashRules(caps) : [];
   const any = !caps || bash.includes('bash');
-  return ['gh', 'glab'].filter((p) => any || bash.includes(`bash:${p}`));
+  return PLATFORM_CLIS.filter((p) => any || bash.includes(`bash:${p}`));
 }
 
 // Claude Code allow rules for the agent's commands: each bash:<command>, the same with a prefix of

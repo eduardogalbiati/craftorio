@@ -19,7 +19,7 @@ const {
   git,
   mergeLocally,
 } = require('./worktree');
-const { childEnv } = require('./child-env');
+const { childEnv, PLATFORM_CLIS } = require('./child-env');
 const { runProbe } = require('./probes');
 const { captureScreenshots } = require('./screenshot-step');
 const suiteStep = require('./suite-step');
@@ -60,7 +60,7 @@ function real() {
     // #470 (SEC-5): the allowlisted environment; the platform tokens pass (the workflow's own
     // `gh pr merge` / `glab mr merge`), plus the workflow's env.passthrough
     runAction: (cmd, { cwd, passthrough = [] } = {}) => new Promise((resolve) => {
-      exec(cmd, { cwd, windowsHide: true, env: childEnv(process.env, { platforms: ['gh', 'glab'], passthrough }) }, (err, stdout, stderr) => {
+      exec(cmd, { cwd, windowsHide: true, env: childEnv(process.env, { platforms: PLATFORM_CLIS, passthrough }) }, (err, stdout, stderr) => {
         resolve({ skipped: false, exit_code: err ? err.code ?? 1 : 0, output: `${stdout}${stderr}`.slice(-4000), stdout, stderr });
       });
     }),

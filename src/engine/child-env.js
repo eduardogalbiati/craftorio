@@ -10,6 +10,8 @@
 
 'use strict';
 
+const { PLATFORMS } = require('../shared/platforms');
+
 // Exact names: the paths and folders a CLI, git, node and npm need; the toolchain homes of the
 // languages the skills support (java, go, csharp, python, rust: folders, not secrets); Windows'
 // system variables
@@ -83,6 +85,8 @@ const PLATFORM_PREFIXES = {
   gh: ['GH_', 'GITHUB_TOKEN'],
   glab: ['GITLAB_'],
 };
+// The platform CLIs (the adapters' `cli`, #351): `platforms` of a process that may run any of them
+const PLATFORM_CLIS = Object.freeze(PLATFORMS.map((p) => p.cli));
 // The name of an environment variable (a passthrough entry, a preview's env)
 const VARIABLE_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
@@ -105,5 +109,6 @@ function childEnv(parent = process.env, { platforms = [], passthrough = [] } = {
 module.exports = {
   ALLOWED_NAMES,
   childEnv,
+  PLATFORM_CLIS,
   VARIABLE_NAME,
 };
