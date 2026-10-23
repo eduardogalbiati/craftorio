@@ -1,0 +1,58 @@
+# The local merge of a composed development workflow (#487, src/workflow-compose.js), adapted from
+# software-development-local-hero: the change lands with `merge: local` (on the transition the
+# composition writes after verify_change or the owner's approval); a merge that fails goes to
+# resolve_merge (the developer rebases and resolves on the run's branch), and merge_blocked asks the
+# owner when that cannot go on. Nothing is pushed. A step `{ id, fragment: local-merge-pipeline }`
+# gets the body under its id; the step's own keys win (src/engine/run/load.js, expandFragments).
+
+steps:
+  resolve_merge:
+    display: Resolve the merge
+    # a rebase replays the tests' commits: resolving their conflicts is part of the job
+    edits_tests: true
+    prompt: |
+      Merging branch `{{ steps.develop.output.branch }}` into the local `{{ inputs.base_branch }}` failed:
+      {{ action_error.message if action_error else 'unknown error' }}
+      If it is a conflict with the local {{ inputs.base_branch }}: on your branch run
+      `git rebase {{ inputs.base_branch }}`, resolve every conflict keeping the intent of both sides,
+      `git rebase --continue`, run the focused tests of the files you resolved and make sure everything
+      is committed. Never fetch, pull or push.
+      If it is anything you cannot fix on your branch (e.g. uncommitted changes where
+      {{ inputs.base_branch }} is checked out: the owner's work, do not touch it), change nothing and
+      answer blocked: true with the reason.
+    output_schema:
+      type: object
+      required: [resolved, blocked, summary]
+      properties:
+        resolved: { type: boolean }
+        blocked:  { type: boolean }
+        summary:  { type: string }
+    transitions:
+      - when: "output.blocked"
+        goto: merge_blocked
+      - when: "output.resolved"
+        merge: local
+        goto: end
+        on_error: merge_blocked
+      - when: "true"
+        goto: merge_blocked
+
+  merge_blocked:
+    type: human_approval
+    kind: escalation   # the supervisor on call tries first
+    display: Merge blocked
+    message: |
+      Branch `{{ steps.develop.output.branch }}` could not be merged into the local `{{ inputs.base_branch }}`:
+      {{ action_error.message if action_error else '' }}
+      {% if steps.resolve_merge.output %}Developer: {{ steps.resolve_merge.output.summary }}{% endif %}
+      Fix what is in the way (e.g. commit or stash the changes where {{ inputs.base_branch }} is
+      checked out), then approve to retry the merge; reject to stop the run as failed (its branch
+      keeps the work).
+    transitions:
+      - when: "approved"
+        merge: local
+        goto: end
+        on_error: fail
+      - when: "rejected"
+        goto: end
+        status: failed

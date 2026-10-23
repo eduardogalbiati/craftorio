@@ -1,0 +1,96 @@
+# The pull-request half of a composed development workflow (#487, src/workflow-compose.js), adapted
+# from software-development's ci and ci_failed: the CI pusher pushes the run's branch and opens the
+# PR/MR, the engine waits on its checks (`wait: pr_checks`) and calls the agent only when one failed;
+# a fix goes to the developer (delegate). pr_review hands the green PR/MR to the team, who merge it on
+# the platform. A step `{ id, fragment: pr-pipeline }` gets the body under its id; the step's own
+# keys win (src/engine/run/load.js, expandFragments). Reads the inputs base_branch and issue and the
+# step develop.
+
+steps:
+  ci:
+    display: Pull request and CI
+    goal:
+      description: "CI green on the PR/MR for branch {{ steps.develop.output.branch }}"
+      until: "output.ci_status == 'success'"
+      on_exhausted: ci_failed
+    loop:
+      interval: 1m
+      max_duration: 1h
+    wait:
+      probe: pr_checks
+      target: "{{ steps.ci.output.pr_url }}"
+      output: { ci_status: success, failure_log: "" }
+      infra_output: { ci_status: failed, failure_class: infra, failure_log: "{{ probe.detail }}" }
+      grace: 10m
+    prompt: |
+      Branch: `{{ steps.develop.output.branch }}` → base `{{ inputs.base_branch }}`.
+      {% if delegate_result %}The developer fixed a previous failure and pushed: {{ delegate_result.text }}
+      Check CI for that new commit, not an older run.
+      {% endif %}
+      1. Push the branch to the remote.
+      2. Make sure a PR/MR to the base is open (reuse it if it exists; else create one with a short
+         title and this summary: {{ steps.develop.output.summary }}){% if inputs.issue %}, its body
+         closing {{ inputs.issue }} with a line `Closes #<number>`{% endif %}.
+      3. Check its mergeability first: a conflict with the base never starts CI, answer ci_status:
+         failed with a failure_log saying so.
+      4. Check its CI: running or not started → pending; a failure → failed with failure_log (job,
+         step, error, probable cause); everything passed → success; CI that cannot run for account
+         reasons → failed with failure_class: infra.
+      pr_number is the PR number (GitHub) or the MR iid (GitLab).
+    output_schema:
+      type: object
+      required: [pr_url, pr_number, ci_status]
+      properties:
+        pr_url:        { type: string }
+        pr_number:     { type: integer }
+        ci_status:     { type: string, enum: [pending, failed, success] }
+        failure_log:   { type: string }
+        failure_class: { type: string, enum: [code, infra, unknown] }
+    transitions:
+      - when: "output.ci_status == 'success'"
+        goto: pr_review
+      - when: "output.ci_status == 'pending'"
+        goto: ci
+      - when: "output.ci_status == 'failed' and output.failure_class == 'infra'"
+        goto: ci_failed
+      - when: "output.ci_status == 'failed'"
+        delegate:
+          agent: developer
+          prompt: |
+            CI on PR/MR #{{ output.pr_number }} failed:
+            {{ output.failure_log }}
+            Fix it on branch `{{ steps.develop.output.branch }}`, check it with a focused test,
+            commit, then `git push`, and report the commit hash.
+        goto: ci
+        max_visits: 5
+        on_exhausted: ci_failed
+
+  ci_failed:
+    type: human_approval
+    kind: escalation   # the supervisor on call tries first
+    display: CI failed
+    message: |
+      CI on {{ steps.ci.output.pr_url }} did not pass (status: {{ steps.ci.output.ci_status }}).
+      Last error: {{ steps.ci.output.failure_log or '(none reported)' }}
+      Approve to check CI again (after a re-run or a fix of yours); reject to stop the run as failed
+      (the branch and the PR/MR keep the work).
+    transitions:
+      - when: "approved"
+        goto: ci
+      - when: "rejected"
+        goto: end
+        status: failed
+
+  # the team merges on the platform: the run ends once the PR/MR is green and handed over
+  pr_review:
+    type: human_approval
+    display: Team review
+    message: |
+      PR/MR #{{ steps.ci.output.pr_number }} ({{ steps.ci.output.pr_url }}) is green.
+      The team reviews and merges it on the platform. Approve to end the run; reject to stop it as failed.
+    transitions:
+      - when: "approved"
+        goto: end
+      - when: "rejected"
+        goto: end
+        status: failed

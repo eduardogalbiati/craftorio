@@ -1,0 +1,97 @@
+# The develop → code_review → suite → verify_change steps of a composed development workflow (#487,
+# src/workflow-compose.js), in either merge style. A step `{ id, fragment: dev-pipeline, ...keys }`
+# gets the body under its id; the composition writes the step's own agent, command and transitions
+# (the wiring the interview's answers choose), which win over the body's (src/engine/run/load.js,
+# expandFragments). The project's facts (test command, languages, skills) are in the composed
+# workflow's agents, not here. The bodies read only the inputs task, issue and base_branch and the
+# steps develop, code_review, suite and verify_change.
+
+steps:
+  develop:
+    display: Develop
+    prompt: |
+      {% if steps.develop.visits == 1 %}Implement this task on the run's branch (based on `{{ inputs.base_branch }}`):
+      <task>
+      {{ inputs.task }}
+      </task>
+      {% if inputs.issue %}Issue: {{ inputs.issue }}
+      {% endif %}{% else %}Back on your change:
+      {% if steps.code_review.output and not steps.code_review.output.approved %}The reviewer asked for changes:
+      {% for f in steps.code_review.output.findings %}- {{ f }}
+      {% endfor %}{% endif %}{% if steps.suite.output and steps.suite.output.status != 'pass' %}The test suite failed: {{ steps.suite.output.message }}
+      {% endif %}{% if steps.verify_change.output and steps.verify_change.output.verdict == 'not_verified' %}The verifier could not confirm the change: {{ steps.verify_change.output.evidence }}
+      {% endif %}{% if steps.validate.output and steps.validate.output.feedback %}The owner's note: {{ steps.validate.output.feedback }}
+      {% endif %}Fix it.{% endif %}
+      Write or update the tests the change needs, run the focused tests (not the whole suite: the
+      run's suite step runs it), commit on the branch and answer with the branch, a short summary and
+      the files you changed. Never push.
+    output_schema:
+      type: object
+      required: [branch, summary, files_changed]
+      properties:
+        branch:        { type: string }
+        summary:       { type: string }
+        files_changed: { type: array, items: { type: string } }
+
+  code_review:
+    display: Code review
+    prompt: |
+      Review the change on branch `{{ steps.develop.output.branch }}` against `{{ inputs.base_branch }}`
+      (`git diff {{ inputs.base_branch }}...HEAD`): {{ steps.develop.output.summary }}
+      Check that it does what the task asks, follows the project's conventions and has tests.
+      Answer approved: true when it can go on; otherwise approved: false with one finding per line
+      (file:line and what to change). Change nothing yourself.
+    output_schema:
+      type: object
+      required: [approved, findings]
+      properties:
+        approved: { type: boolean }
+        findings: { type: array, items: { type: string } }
+
+  # the project's own test command (the composition writes it as the step's command)
+  suite:
+    type: suite
+    display: Test suite
+    scope: affected
+
+  verify_change:
+    display: Final verification
+    prompt: |
+      Verify that the change on branch `{{ steps.develop.output.branch }}` does what the task asked:
+      <task>
+      {{ inputs.task }}
+      </task>
+      Run the one command that shows it (a focused test, the build, a request), read its result and
+      answer the verdict with the claim you checked, the command and what you observed.
+      {% if steps.suite.output %}Test suite: {{ steps.suite.output.message }}{% endif %}
+    output_schema:
+      type: object
+      required: [verdict, claim, evidence]
+      properties:
+        verdict:  { type: string, enum: [verified, not_verified, inconclusive] }
+        claim:    { type: string }
+        command:  { type: string }
+        evidence: { type: string }
+
+  # the owner's approval before the change lands (the interview's "validate every round")
+  validate:
+    type: human_approval
+    display: Your approval
+    feedback:
+      label: Your note (sent back to the developer when you reject)
+    message: |
+      Branch `{{ steps.develop.output.branch }}`: {{ steps.develop.output.summary }}
+      Verification: {{ steps.verify_change.output.verdict }} ({{ steps.verify_change.output.claim }})
+      {% if steps.suite.output %}Tests: {{ steps.suite.output.message }}{% endif %}
+      Approve to let it land; reject to send your note back to the developer.
+
+  verify_failed:
+    type: human_approval
+    kind: escalation   # the supervisor on call tries first
+    display: Verification failed
+    message: |
+      The change still does not pass its checks after the rounds of fixes.
+      {% if steps.verify_change.output %}Claim: {{ steps.verify_change.output.claim }}
+      Observed: {{ steps.verify_change.output.evidence }}{% endif %}
+      {% if steps.suite.output %}Tests: {{ steps.suite.output.message }}{% endif %}
+      Approve to let it land anyway; reject to stop the run as failed (its branch keeps the work).

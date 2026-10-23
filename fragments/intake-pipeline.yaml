@@ -1,0 +1,54 @@
+# The steps of a composed intake workflow (#487, src/workflow-compose.js), adapted from
+# issue-tracker: the issue writer reads the code and drafts the issue from the owner's request, the
+# owner reviews it (when the interview chose to validate), the filer files it with gh or glab. A step
+# `{ id, fragment: intake-pipeline }` gets the body under its id; the step's own keys win
+# (src/engine/run/load.js, expandFragments). Reads the inputs request and git_platform and the steps
+# write and review.
+
+steps:
+  write:
+    display: Draft the issue
+    prompt: |
+      {% if steps.write.visits == 1 %}Request from the owner (any language, maybe a few words):
+      <request>
+      {{ inputs.request }}
+      </request>
+      Find the code it touches (file:line) and today's behaviour, search the issues for a duplicate,
+      and draft the issue: a specific title, the context with that evidence, tasks as verifiable
+      acceptance criteria ending with tests and docs, and labels.
+      {% else %}The owner sent the draft back: {{ steps.review.output.feedback }}
+      Revise it; return the issue complete.{% endif %}
+    output_schema:
+      type: object
+      required: [title, body, labels]
+      properties:
+        title:  { type: string }
+        body:   { type: string }
+        labels: { type: array, items: { type: string } }
+
+  review:
+    type: human_approval
+    display: Your review
+    feedback:
+      label: Your note (sent back to the writer when you reject)
+    message: |
+      ### {{ steps.write.output.title }}
+      Labels: {{ steps.write.output.labels | join(', ') }}
+
+      {{ steps.write.output.body }}
+      Approve to file it; reject to send your note back to the writer.
+
+  file:
+    display: File the issue
+    prompt: |
+      File this issue with {% if inputs.git_platform == 'gl' %}glab{% else %}gh{% endif %}, with its labels
+      (use the existing labels only; create none), and answer its number and URL.
+      <issue title="{{ steps.write.output.title }}" labels="{{ steps.write.output.labels | join(',') }}">
+      {{ steps.write.output.body }}
+      </issue>
+    output_schema:
+      type: object
+      required: [number, url]
+      properties:
+        number: { type: integer }
+        url:    { type: string }

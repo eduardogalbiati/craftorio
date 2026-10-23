@@ -1,0 +1,90 @@
+# The steps of a composed release workflow (#487, src/workflow-compose.js), adapted from release.yaml
+# without its `ship:` (a repository's workflow never ships, src/engine/run/load.js
+# loadRepositoryWorkflow): the release manager gathers what is released and proposes the version,
+# the suite runs the project's tests on the base, the notes are written, the owner approves and the
+# tagger tags. Each release style (milestone, per-merge, train, rc-stable) picks its steps and its
+# prompts; rc-stable tags a release candidate first (tag_rc), lets it soak, then the stable tag. A
+# step `{ id, fragment: release-pipeline }` gets the body under its id; the step's own keys win.
+# Reads the inputs base_branch and scope and the steps prepare, suite and notes.
+
+steps:
+  prepare:
+    display: Prepare the release
+    prompt: |
+      Gather what this release contains on `{{ inputs.base_branch }}`, from the last release tag
+      (`git describe --tags --abbrev=0`, `git log <tag>..HEAD`){% if inputs.scope %}, for: {{ inputs.scope }}{% endif %}.
+      Propose the next version (semantic versioning from what changed) and list the changes, one per
+      line, with their issue numbers. Read only: create no tag and no commit.
+    output_schema:
+      type: object
+      required: [version, previous_tag, changes, summary]
+      properties:
+        version:      { type: string }
+        previous_tag: { type: string }
+        changes:      { type: array, items: { type: string } }
+        summary:      { type: string }
+
+  # the project's own test command on the base (the composition writes it as the step's command)
+  suite:
+    type: suite
+    display: Release tests
+    scope: full
+
+  notes:
+    display: Release notes
+    prompt: |
+      Write the release notes of {{ steps.prepare.output.version }} (since {{ steps.prepare.output.previous_tag }}):
+      {% for c in steps.prepare.output.changes %}- {{ c }}
+      {% endfor %}
+      Group them (features, fixes, other), one line each, in the project's own notes style (an
+      existing CHANGELOG.md or the previous releases). Change no file: answer the notes as Markdown
+      (the tag carries them).
+    output_schema:
+      type: object
+      required: [notes]
+      properties:
+        notes: { type: string }
+
+  approve:
+    type: human_approval
+    display: Approve the release
+    message: |
+      Release {{ steps.prepare.output.version }} (since {{ steps.prepare.output.previous_tag }}): {{ steps.prepare.output.summary }}
+      {% if steps.suite.output %}Tests: {{ steps.suite.output.message }}{% endif %}
+      {% if steps.notes.output %}{{ steps.notes.output.notes }}{% endif %}
+      Approve to tag it; reject to stop without a tag.
+
+  tag:
+    display: Tag the release
+    prompt: |
+      Tag {{ steps.prepare.output.version }} on `{{ inputs.base_branch }}`: an annotated tag
+      `v{{ steps.prepare.output.version }}` with the release notes as its message. Push the tag only
+      when the project releases through its remote (its tags are on the remote already). Answer the
+      tag and its commit.
+    output_schema:
+      type: object
+      required: [tag, commit]
+      properties:
+        tag:    { type: string }
+        commit: { type: string }
+
+  tag_rc:
+    display: Tag the release candidate
+    prompt: |
+      Tag the release candidate of {{ steps.prepare.output.version }} on `{{ inputs.base_branch }}`:
+      `v{{ steps.prepare.output.version }}-rc.<n>`, n one more than the last rc tag of that version
+      (1 when none). Push the tag only when the project releases through its remote. Answer the tag
+      and its commit.
+    output_schema:
+      type: object
+      required: [tag, commit]
+      properties:
+        tag:    { type: string }
+        commit: { type: string }
+
+  soak:
+    type: human_approval
+    display: Promote to stable
+    message: |
+      Release candidate {{ steps.tag_rc.output.tag }} is out. Once it has been tried, approve to tag
+      it as the stable {{ steps.prepare.output.version }}; reject to stop (fix and cut another rc).
