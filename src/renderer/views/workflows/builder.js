@@ -20,6 +20,7 @@
     sel: 0,         // selected desk
     dirty: false,
     agents: [],     // Agents menu, for "import an agent"
+    composedYaml: null, // #487: the YAML of a composed workflow not saved yet (window.openSpecInBuilder)
   };
   const editable = () => b.mode !== 'readonly';
   const structural = () => b.mode === 'full';
@@ -378,7 +379,7 @@
 
   async function startNew() {
     if (!(await leaveOk())) return;
-    Object.assign(b, { file: null, mode: 'full', problems: [], spec: newSpec(), sel: 0, dirty: false });
+    Object.assign(b, { file: null, mode: 'full', problems: [], spec: newSpec(), sel: 0, dirty: false, composedYaml: null });
     render();
   }
 
@@ -387,7 +388,7 @@
     if (!file || (!force && !(await leaveOk()))) { renderOpenList(); return; }
     try {
       const r = projectId ? await api.loadRepositoryBuilderWorkflow({ projectId, file }) : await api.loadBuilderWorkflow(file);
-      Object.assign(b, { file: r.file, projectId, mode: r.mode, problems: r.problems || [], spec: r.spec, sel: 0, dirty: false });
+      Object.assign(b, { file: r.file, projectId, mode: r.mode, problems: r.problems || [], spec: r.spec, sel: 0, dirty: false, composedYaml: null });
       render();
     } catch (e) {
       showToast(t('builder.cannot_open_in_the_builder'), errMsg(e));
@@ -417,6 +418,12 @@
     const btn = $('#wb-save');
     btn.disabled = true;
     try {
+      // #487: a composed workflow is first written as it was composed (checked by the loader, custom
+      // and trusted), then the owner's edits patch that file like any other
+      if (!b.file && b.composedYaml) {
+        b.file = (await api.importWorkflow({ text: b.composedYaml, name: b.spec.name })).file;
+        b.composedYaml = null;
+      }
       const r = await api.saveBuilderWorkflow(b.file, b.spec, trust);
       b.file = r.file;
       b.dirty = false;
@@ -484,6 +491,14 @@
   window.openInBuilder = async (file, opts = {}) => {
     showWorkflowsTab('builder');
     await open(file, { projectId: opts.projectId || null });
+  };
+
+  // #487: a workflow the Ways of working interview composed (not saved yet): { spec, mode, yaml }
+  window.openSpecInBuilder = async ({ spec, mode = 'fixed', problems = [], yaml = null }) => {
+    if (!(await leaveOk())) return;
+    Object.assign(b, { file: null, projectId: null, mode, problems, spec, sel: 0, dirty: true, composedYaml: yaml });
+    showWorkflowsTab('builder');
+    render();
   };
 
   // What the Supervisor is told about this screen (supervisor-chat.js).

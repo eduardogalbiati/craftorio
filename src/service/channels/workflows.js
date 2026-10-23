@@ -47,6 +47,12 @@ module.exports = (ctx) => [
   // only (the trust dialog) and the text's fingerprint, else written as custom under name (replace:
   // over an existing file; fingerprint: refused when the text is no longer the one previewed)
   { channel: 'workflows:import', method: 'importWorkflow', params: 'workflow', schema: { params: args({ text: orNone(STRING), url: orNone(STRING), name: orNone(STRING), replace: FLAG, preview: FLAG, fingerprint: orNone(STRING) }), result: OBJECT }, fn: (arg) => ctx.importWorkflow(requireObject(arg, 'workflow import')) },
+  // #487: the Ways of working interview (areas/workflow-interview.js): the analysis seed's profile,
+  // its evidence and the open questions, or { refused } (the Oracle's budget)
+  { channel: 'workflows:interview', method: 'workflowInterview', params: 'opts', schema: { params: args({ projectId: PROJECT_ID }, ['projectId']), result: OBJECT }, fn: (opts) => ctx.workflowInterview({ projectId: requireId(opts?.projectId, 'project id') }) },
+  // #487: the workflow set composed from the profile and the answers; write: into the project's
+  // .multiagent/ (not committed) and its workflow set, else nothing is written
+  { channel: 'workflows:compose', method: 'workflowCompose', params: 'opts', schema: { params: args({ projectId: PROJECT_ID, answers: orNone(OBJECT), write: FLAG }, ['projectId']), result: OBJECT }, fn: (opts) => ctx.workflowCompose({ projectId: requireId(opts?.projectId, 'project id'), answers: opts.answers || {}, write: !!opts.write }) },
   // → { file, mode, problems, spec }: the workflow as the builder edits it
   { channel: 'builder:load', method: 'loadBuilderWorkflow', params: 'file', schema: { params: WORKFLOW_FILE, result: shape({ file: STRING, mode: STRING, problems: listOf(ANY), spec: OBJECT }, ['spec']) }, fn: (file) => ctx.loadBuilderWorkflow(requireId(file, 'workflow file')) },
   // spec: the builder's workflow (src/workflow-builder.js turns it into YAML and checks it); trust: the

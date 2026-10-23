@@ -37,8 +37,9 @@ window.ProjectWorkflows = (() => {
     return rows;
   }
 
+  // #487: a workflow the repository's .multiagent/ declares (the interview writes it, even uncommitted)
   const rowHtml = (r, { isDefault = false, canDefault = false } = {}) => `
-    <div class="pj-wf-row">
+    <div class="pj-wf-row"${r.origin === 'manifest' ? ' data-testid="project-repository-workflow"' : ''}>
       <label class="check small"><input type="checkbox" data-workflow="${esc(r.name)}" data-origin="${esc(r.origin || 'workspace')}" data-category="${esc(r.category || '')}"${r.checked ? ' checked' : ''} /><span><span class="mono">${esc(r.name)}</span>${r.description ? ` <span class="muted">${esc(r.description)}</span>` : ''}</span></label>
       ${r.origin === 'manifest' && !r.checked ? `<span class="badge">${t('projects.workflows_in_repository')}</span>` : ''}
       ${isDefault ? `<span class="badge ok">${t('projects.workflows_default_badge')}</span>` : ''}

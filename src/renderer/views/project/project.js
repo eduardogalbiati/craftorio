@@ -8,7 +8,8 @@
 // (project-refactor.js, #357: the proposals ranked by the Product Owner and the cadence). The
 // selected tab is remembered per project. The page is the header's project: opening
 // one makes it the app's project, and choosing another in the header switches the page to it.
-// No sidebar entry of its own: Projects stays lit (`menu`).
+// No sidebar entry of its own: Projects stays lit (`menu`). The header's "Ways of working" opens the
+// interview drawer (project-ways-of-working.js, #487).
 // openProjectView (the Projects cards, the Conflict map links, scripts/screenshot.js) and
 // loadProjectRunsThrottled (app.js run events) stay globals. Registers itself with registerView
 // (view-registry.js); uses app.js globals ($, esc, state, api, errMsg, showView, openDrawer,
@@ -85,9 +86,12 @@ function renderProjectView() {
     </div>
     <div class="row">
       <button class="btn ghost" id="pv-open-folder" ${p?.exists ? '' : 'disabled'}>${t('project.open_folder')}</button>
+      <button class="btn ghost" id="pv-ways-of-working" data-testid="project-ways-of-working" ${p?.exists ? '' : 'disabled'}>${t('project.ways_of_working')}</button>
       <button class="btn primary" id="pv-start">${t('project.start_workflow')}</button>
     </div>`;
   $('#pv-open-folder').onclick = () => p && api.openPath(p.folder);
+  // #487: the interview drawer (project-ways-of-working.js)
+  $('#pv-ways-of-working').onclick = () => p && window.ProjectWaysOfWorking?.open(p);
   $('#pv-start').onclick = () => openDrawer({ project: pv.id });
   $('#project-tabs').innerHTML = PV_TABS.map(([id, label]) =>
     `<button type="button" class="tab${pv.tab === id ? ' active' : ''}" role="tab" data-pv-tab="${id}" aria-selected="${pv.tab === id}" aria-controls="project-panel-${id}">${t(label)}</button>`).join('');
