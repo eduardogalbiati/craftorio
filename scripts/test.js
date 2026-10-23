@@ -26,7 +26,8 @@
 // passes on to node --test: each run's coverage table ends its report (coverage-summary.js merges them).
 //   npm run test:coverage [-- test/a.test.js]
 // One whole suite at a time per machine (#455): in agent mode, the whole suite (no file list) takes
-// the machine-wide `suite` slot first (src/engine/machine-slot.js), unless it inherits it.
+// the machine-wide `suite` slot first (src/engine/machine-slot.js), unless it inherits it, and lends
+// it to the test files it runs (#528).
 
 const fs = require('fs');
 const os = require('os');
@@ -77,6 +78,8 @@ if (agent && !only.length && !process.env[machineSlot.SUITE_SLOT_ENV]) {
       onWait: (h) => say(`waiting for the suite slot (run ${h?.holder || '?'}, pid ${h?.pid ?? '?'}): one whole suite at a time on this machine`),
     });
     process.on('exit', () => held.release());
+    // #528: the test files inherit the slot, so a test taking it (runBaseCheck) never waits on this suite
+    process.env[machineSlot.SUITE_SLOT_ENV] = held.token;
   } catch (e) {
     say(`warning: ${e.message}; running without the suite slot`);
   }
