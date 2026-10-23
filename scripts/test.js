@@ -7,7 +7,8 @@
 // The unit report ends with the five slowest files and their wall time (#305): the suite's wall
 // time is bounded below by its longest file.
 // With test files as arguments (the suite step's check of failures on the base, #211), only those
-// run, without the full flow.
+// run, without the full flow. #553: the same with MULTIAGENT_TEST_FILES=<file> (one test path per
+// line, relative to the project), the suite step's selection too long for the command line.
 // Agent mode (#219, src/engine/agent-test-report.js isAgentMode: inside an agent or the orchestrator,
 // never in a terminal or CI; MULTIAGENT_AGENT_MODE=1/0 forces it): stdout is one JSON line, failures
 // only (scripts/test-reporter-agent.js), with the full flow's result; the human-readable report goes
@@ -25,7 +26,7 @@
 // --experimental-test-coverage (`npm run test:coverage`, the suite step's `coverage: true`, #225)
 // passes on to node --test: each run's coverage table ends its report (coverage-summary.js merges them).
 //   npm run test:coverage [-- test/a.test.js]
-// One whole suite at a time per machine (#455): in agent mode, the whole suite (no file list) takes
+// One whole suite at a time per machine (#455): in agent mode, the whole suite (no file, no list) takes
 // the machine-wide `suite` slot first (src/engine/machine-slot.js), unless it inherits it, and lends
 // it to the test files it runs (#528).
 
@@ -65,7 +66,15 @@ const testFiles = (dir) => fs.readdirSync(path.join(root, dir), { withFileTypes:
   if (e.isDirectory()) return e.name === 'fixtures' ? [] : testFiles(path.join(dir, e.name));
   return e.name.endsWith('.test.js') ? [path.join(dir, e.name)] : [];
 }).sort();
-const only = process.argv.slice(2).filter((a) => !a.startsWith('-'));
+// #553: the list file of a selection too long for the command line (src/engine/suite-step.js
+// TEST_FILES_ENV), read once and dropped, so the test files this run spawns never inherit it
+const listed = (() => {
+  const list = process.env.MULTIAGENT_TEST_FILES;
+  delete process.env.MULTIAGENT_TEST_FILES;
+  if (!list) return [];
+  return fs.readFileSync(path.resolve(list), 'utf8').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+})();
+const only = [...process.argv.slice(2).filter((a) => !a.startsWith('-')), ...listed];
 const files = only.length ? only : testFiles('test');
 
 // #455: an agent's whole suite waits for the machine-wide suite slot (the suite step's own child

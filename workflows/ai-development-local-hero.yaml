@@ -103,9 +103,10 @@
 #   default)"), and the run summary records it. Test later, all together: test-batch.yaml.
 #   suite (no agent, #177), `scope: affected` (#304, as #212): each round runs the test files the
 #   change reaches (import graph since the base, plus the files that failed before), log in
-#   logs/suite-<round>.log; when they pass and the whole suite has not passed yet in the run, the
+#   logs/suite-<round>.log; when they pass and the whole suite has not run yet in the run, the
 #   whole suite (`test_command`, else found from the project's files) runs once right after
-#   (logs/suite-<round>-full.log); a shared root or a project without a JS/TS graph runs it all. Failing
+#   (logs/suite-<round>-full.log), at most once per run (#553: after it, the files affected since it
+#   plus those that failed); a shared root or a project without a JS/TS graph runs it all. Failing
 #   tests go back to the test writer with the failures and the log (2 rounds, then test_failed).
 #   Tests that also fail on the base (the test writer's preexisting_failures) never count.
 #
@@ -1691,6 +1692,9 @@ steps:
   # project's recent suite durations (#210).
   # scope affected (#212, #304): each round runs the test files the change reaches (import graph since
   # the base, plus the files that failed before); when they pass, the whole suite runs once in the run.
+  # #553: at most once, pass or fail: later rounds run the files affected since it plus the files that
+  # failed (a shared root changed: the whole suite again); a selection over the command line goes to
+  # scripts/test.js as a list (MULTIAGENT_TEST_FILES) and still runs filtered.
   - id: suite
     display: Run suite (Unit)
     type: suite

@@ -233,6 +233,7 @@ class WorkflowRun extends EventEmitter {
     // test files that failed in a suite round (they join the next rounds' affected set)
     this.fullSuitePassed = false;
     this.suiteFailedFiles = [];
+    this.wholeSuiteRun = null; // #553: { round, commit } of the run's last whole suite (scope: affected), pass or fail
     this.testsAutocommitted = []; // [{ step_id, files, commit }] (#209, summary.tests_autocommitted)
     this.toolTimeouts = 0; // tool results cut by the tool's timeout (#178, summary.tool_timeouts)
     this.inputImages = this.checkInputAttachments(attachments || {});

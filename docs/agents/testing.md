@@ -76,9 +76,15 @@ Read this before writing or changing tests, and before any check that could star
   there, and keep big files split by area so `node --test` runs them in parallel (one file's tests
   run in sequence). See "Whole simulated runs" below.
 - **Who runs what**: the suite step with `scope: affected` (software-development and the local
-  hero) runs the affected files every round, and the whole suite once in the run, when the
+  hero) runs the affected files every round, and the whole suite at most once per run, when the
   affected files first pass (log `suite-<round>-full.log`); the files that failed in a round join
-  the next rounds' set. Without `scope` (test-batch, E2E release) a suite step runs the whole suite.
+  the next rounds' set. After that whole suite, pass or fail, the next rounds select the files
+  affected by the changes since its commit plus the files that failed, never the whole suite again
+  (#553); only a round whose changes touch a shared root runs a second whole suite, and its
+  `selection.why` says so. A selection too long for the command line (#400) reaches
+  `scripts/test.js` as a list file named by `MULTIAGENT_TEST_FILES` (one path per line) and still
+  runs filtered (`scope: files`, no suite slot); a runner that cannot read the list (its npm script
+  is not `node <file>` naming the variable) runs the whole suite, and the message says why. Without `scope` (test-batch, E2E release) a suite step runs the whole suite.
   Agents never run suites in their turn: they end a turn with a ```` ```run-tests ```` block (one
   test file per line, or `affected`), the engine runs them like the suite step (log
   `logs/tests-<step>-<n>.log`) and resumes the agent with a summary only (counts, each failure's

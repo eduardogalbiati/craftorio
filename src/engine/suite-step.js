@@ -55,10 +55,11 @@
 // Affected tests (#212): with `files`, only those test files run (`scope: files`, the step's
 // `scope: affected` rounds and agents' test requests, see src/engine/affected-tests.js); the output
 // says which files and why (`selection`), and `passed` / `failed` are the runner's counts.
-// The command line has a limit (#400, COMMAND_LINE_LIMITS: cmd.exe 8,191 characters, Linux 128 KiB,
-// macOS 256 KiB, minus a margin): a filtered command over it (wrappers included) runs the whole
-// suite instead (`selection.why` and the message say so), and the base check of too many files is
-// skipped with that reason. A timed-out file reruns alone, always short enough.
+// The command line has a limit (#400, src/engine/suite-command-line.js: cmd.exe 8,191 characters,
+// Linux 128 KiB, macOS 256 KiB, minus a margin): a filtered command over it (wrappers included) gives
+// its files through a list file the runner reads (#553), else runs the whole suite instead
+// (`selection.why` and the message say so), and the base check of too many files is skipped with
+// that reason. A timed-out file reruns alone, always short enough.
 // Agent mode (#219): the suite gets MULTIAGENT_AGENT_MODE=1 and MULTIAGENT_TEST_HUMAN_LOG (<log>.human.log);
 // a runner that knows them (this project's scripts/test.js) prints one failures-only JSON line,
 // which `parseFailures` / `parseCounts` read before any text format (`human_log`, `file_counts`).
@@ -71,6 +72,13 @@ const { spawn } = require('child_process');
 const { classifyFailures, IN_CHANGE, OUTSIDE_CHANGE } = require('./affected-tests');
 const { parseAgentReport } = require('./agent-test-report');
 const { childEnv: allowlistedEnv } = require('./child-env');
+const {
+  fitsCommandLine,
+  overCommandLine,
+  takesFileList,
+  TEST_FILES_ENV,
+  writeFileList,
+} = require('./suite-command-line');
 const { saveCoverage } = require('../coverage-summary');
 const { suiteSlotRun } = require('./suite-slot');
 const {
@@ -96,15 +104,6 @@ const SELECTION_LINES = 20;
 // a test file rerun alone after a timed-out round (#396)
 const MIN_FILE_TIMEOUT_MS = 2 * 60e3;
 const FILE_TIMEOUT_MS = 5 * 60e3;
-// The longest command line per platform (#400): cmd.exe takes 8,191 characters (spawn wraps the
-// command in `cmd.exe /d /s /c "…"`, hence the margin); `sh -c` gets it as one argument, at most
-// MAX_ARG_STRLEN (128 KiB) on Linux; macOS's ARG_MAX (1 MiB) also holds the environment.
-const COMMAND_LINE_LIMITS = {
-  darwin: { name: 'macOS', chars: 256 * 1024 },
-  linux: { name: 'Linux', chars: 128 * 1024 },
-  win32: { name: 'Windows', chars: 8191 },
-};
-const COMMAND_LINE_MARGIN = 100;
 // what a shell prints when it refuses a command line (#400): no test ran
 const SHELL_REFUSALS = [
   /argument list too long/i,
@@ -462,16 +461,6 @@ function filteredCommand(command, files) {
   return null;
 }
 
-// Whether a command fits the platform's command line (#400), with COMMAND_LINE_MARGIN to spare.
-const commandLineOf = (platform) => COMMAND_LINE_LIMITS[platform] || COMMAND_LINE_LIMITS.linux;
-const fitsCommandLine = (command, platform = process.platform) => String(command || '').length <= commandLineOf(platform).chars - COMMAND_LINE_MARGIN;
-// Why `n` test files cannot go on the command (#400), e.g. "319 test files would put the command
-// over the Windows command-line limit of 8,191 characters"
-function overCommandLine(n, platform = process.platform) {
-  const { name, chars } = commandLineOf(platform);
-  return `${plural(n, 'test file')} would put the command over the ${name} command-line limit of ${chars.toLocaleString('en-US')} characters`;
-}
-
 // Why the base check cannot run `files` on its own command line, or null: the command cannot take
 // single files, or (#400) too many of them for the platform's command line.
 function baseFilesSkip(command, files, platform) {
@@ -482,25 +471,33 @@ function baseFilesSkip(command, files, platform) {
 
 // Narrows a suite round to `files` (#212): out.scope and out.command when the filtered command fits
 // the command line with its coverage and workers wrappers (#400), else the whole suite runs and
-// out.selection.why says why. → { measure, tooLong }: whether the round measures the whole suite's
-// duration, and why its files did not fit (null when they did).
+// out.selection.why says why. #553: files that do not fit go through a list file (TEST_FILES_ENV)
+// when the runner reads it (takesFileList): the command stays without files and the round stays
+// `scope: files`. → { measure, tooLong, list }: whether the round measures the whole suite's
+// duration, why its files did not fit (null when they did or went through the list), and whether
+// they go through the list.
 function narrowToFiles(out, { files, mock, coverage, cwd, testWorkers, platform, log }) {
   const filtered = filteredCommand(out.command, files);
   if (!filtered) {
     if (out.selection) out.selection = { ...out.selection, why: `${out.selection.why}; \`${out.command}\` cannot run single test files: the whole suite ran` };
-    return { measure: true, tooLong: null };
+    return { measure: true, tooLong: null, list: false };
   }
   // #400: measured as it will run, with the coverage and workers wrappers
   const wrapped = mock ? filtered : withWorkers(coverage ? coverageCommand(filtered, cwd) : filtered, testWorkers);
   if (fitsCommandLine(wrapped, platform)) {
     out.scope = 'files';
     out.command = filtered;
-    return { measure: false, tooLong: null };
+    return { measure: false, tooLong: null, list: false };
   }
   const tooLong = overCommandLine(files.length, platform);
-  out.selection = { ...(out.selection || { files }), why: `${out.selection?.why ? `${out.selection.why}; ` : ''}${tooLong}: the whole suite ran` };
+  if (takesFileList(out.command, cwd, coverage)) {
+    out.scope = 'files';
+    log('info', `suite: ${tooLong}: they go through the list file named by ${TEST_FILES_ENV}`);
+    return { measure: false, tooLong: null, list: true };
+  }
+  out.selection = { ...(out.selection || { files }), why: `${out.selection?.why ? `${out.selection.why}; ` : ''}${tooLong}, and \`${out.command}\` cannot read the list of ${TEST_FILES_ENV}: the whole suite ran` };
   log('warn', `suite: ${tooLong}: the whole suite runs`);
-  return { measure: true, tooLong };
+  return { measure: true, tooLong, list: false };
 }
 
 // #400: why the shell refused the command line (its last log line) when no test ran, or null: not a
@@ -754,8 +751,9 @@ function writeLogHeader(logFile, out, { mock, childEnv, timeoutWhy, baseCommit, 
 // testWorkers (#367): the run's test workers per run, in the env and on the command (withWorkers).
 // sweep (#390): false when cwd is not a folder the run owns (no worktree): runCommand then stops only
 // the command's own tree, not every process running from cwd.
-// platform (#400): whose command-line limit the filtered command (with its wrappers) must fit, else
-// the whole suite runs and `selection.why` and the message say why.
+// platform (#400): whose command-line limit the filtered command (with its wrappers) must fit; #553:
+// else the files go through a list file (TEST_FILES_ENV, output `files_list`) when the runner reads
+// it, else the whole suite runs and `selection.why` and the message say why.
 // baseCommit (#403): the base commit the round tests on, named in the log's header.
 // slot (#455, suite-slot.js): { dir, holder, onWait(holder), pollMs }, the machine-wide `suite` slot of
 // a whole-suite round (not focused, not simulated); without `slot`, nothing is taken.
@@ -790,6 +788,7 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
   }
   const hist = history?.file && history.project ? { file: history.file, key: `${history.project}\n${out.command}` } : null;
   let measure = true;
+  let list = false;
   if (Array.isArray(files)) {
     if (!files.length) {
       out.scope = 'files';
@@ -797,7 +796,7 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
       out.message = `No test file to run in round ${round}: ${selection?.why || 'none selected'}.`;
       return out;
     }
-    ({ measure, tooLong } = narrowToFiles(out, { files, mock, coverage, cwd, testWorkers, platform, log }));
+    ({ measure, tooLong, list } = narrowToFiles(out, { files, mock, coverage, cwd, testWorkers, platform, log }));
   }
   if (!mock) out.command = withWorkers(coverage ? coverageCommand(out.command, cwd) : out.command, testWorkers);
   const recent = mock ? [] : suiteDurations(hist);
@@ -806,6 +805,8 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
   // #414: the suite's temp files go to the run's temp folder, removed when the run ends
   const tmpDir = mock ? null : path.join(runDir, 'tmp');
   if (tmpDir) fs.mkdirSync(tmpDir, { recursive: true });
+  // #553: the selection over the command-line limit, for this command only
+  const listEnv = writeFileList(out, { list, tmpDir, files, logName, round, runDir });
   const childEnv = mock ? null : suiteEnv(env || process.env, { locksDir: path.join(runDir, 'locks'), testWorkers, tmpDir, passthrough });
   if (logFile) {
     writeLogHeader(logFile, out, { mock, childEnv, timeoutWhy, baseCommit, logPrefix });
@@ -823,7 +824,7 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
     if (logFile) fs.appendFileSync(logFile, text);
   } else {
     log('info', `suite: ${out.command} (round ${round}, timeout ${Math.round(out.timeout_ms / 60e3)} min, log ${out.log})`);
-    const r = await runRound({ command: out.command, cwd, env: { ...childEnv.env, MULTIAGENT_TEST_HUMAN_LOG: humanLog(logFile) }, timeoutMs: out.timeout_ms, signal, logFile, ...optionalRunArgs({ onSpawn, sweep }) });
+    const r = await runRound({ command: out.command, cwd, env: { ...childEnv.env, MULTIAGENT_TEST_HUMAN_LOG: humanLog(logFile), ...listEnv }, timeoutMs: out.timeout_ms, signal, logFile, ...optionalRunArgs({ onSpawn, sweep }) });
     out.exit_code = r.code;
     out.timed_out = r.timedOut;
     out.running = r.running || [];

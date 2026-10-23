@@ -198,9 +198,11 @@ const methods = {
   // (bringBaseIn); the output's `base_commit` is the base commit it tested on.
   // `scope: affected` (#212): each visit runs only the affected test files (affectedSelection: the
   // import graph since the base, plus the files that failed in an earlier round); when they pass and
-  // the whole suite has not passed yet in this run, the whole suite runs right after (log
-  // suite-<visit>-full.log), so it runs once before the merge. A shared root changed or a project
-  // without a JS graph: the whole suite. The output's `selection` says which files and why.
+  // the whole suite has not run yet in this run, the whole suite runs right after (log
+  // suite-<visit>-full.log), so it runs once before the merge. #553: at most once per run: after it,
+  // pass or fail (this.wholeSuiteRun), the next rounds run the files affected since its commit plus
+  // the files that failed, never the whole suite after them. A shared root changed or a project
+  // without a JS graph: the whole suite (the only second one). The output's `selection` says which files and why.
   // `files` (#220): only these test files (a rendered list; those missing from the worktree are left
   // out), never the whole suite after them. With `expect: red` (tests written before the code) the
   // run is a red check: `red_check` sorts the files into red / green (already passing: they guard
@@ -372,17 +374,7 @@ const methods = {
     if (step.files !== undefined) {
       output = await this.listedFilesRound(step, st, once, mockResult);
     } else if (scope === 'affected') {
-      let selection;
-      try { selection = this.affectedSelection(); } catch (e) { selection = { mode: 'all', files: [], reasons: {}, changed: [], slow: [], why: `the affected tests could not be listed (${e.message}): the whole suite` }; }
-      this.emitEvent('log', { level: 'info', kind: 'suite', step_id: step.id, message: `${step.id}: ${selectionLines(selection).slice(0, 6).join('\n')}` });
-      output = await once(selection.mode === 'affected' ? { files: selection.files, selection } : { selection });
-      if (output.scope === 'files') this.suiteRuns.affected = (this.suiteRuns.affected || 0) + 1;
-      if (output.scope === 'files' && output.status === 'pass' && !this.fullSuitePassed) {
-        const affected = { command: output.command, log: output.log, passed: output.passed, failed: output.failed, duration_ms: output.duration_ms, files: selection.files };
-        if (output.log) this.emitEvent('file.saved', { step_id: step.id, path: path.join(this.runDir, output.log) });
-        output = await once({ selection: { ...selection, why: `the ${selection.files.length} affected test file(s) passed; the whole suite runs once before the merge` }, logName: `suite-${st.visits}-full` });
-        output.affected = affected;
-      }
+      output = await this.affectedRound(step, st, once, tested);
     } else if (scope === 'failed') {
       output = await this.failedFirstRound(step, st, once, tested);
     } else {
@@ -404,6 +396,31 @@ const methods = {
     if (output.base_check?.log) this.emitEvent('file.saved', { step_id: step.id, path: path.join(this.runDir, output.base_check.log) });
     if (output.coverage?.path) this.emitEvent('file.saved', { step_id: step.id, path: path.join(this.runDir, output.coverage.path) });
     this.emitEvent('log', { level: output.status === 'pass' ? 'info' : 'warn', kind: 'suite', step_id: step.id, status: output.status, failures: output.failures.length, message: `${step.id}: ${output.message}` });
+    return output;
+  },
+
+  // A `scope: affected` round (#212, see runSuiteStep): the affected files, then the whole suite once
+  // in the run when they pass. #553: after the run's whole suite, pass or fail (this.wholeSuiteRun,
+  // its commit as `tested` gave it), the selection takes the changes since that commit and no whole
+  // suite follows; only a whole-suite selection (a shared root changed) runs it again.
+  async affectedRound(step, st, once, tested) {
+    const whole = this.wholeSuiteRun?.commit ? this.wholeSuiteRun : null;
+    let selection;
+    try { selection = this.affectedSelection(whole ? { since: whole.commit } : {}); } catch (e) { selection = { mode: 'all', files: [], reasons: {}, changed: [], slow: [], why: `the affected tests could not be listed (${e.message}): the whole suite` }; }
+    if (whole) {
+      const since = `round ${whole.round}'s whole suite (${whole.commit.slice(0, 7)})`;
+      selection = { ...selection, why: selection.mode === 'affected' ? `since ${since}: ${selection.why}` : `${selection.why} again, after ${since}` };
+    }
+    this.emitEvent('log', { level: 'info', kind: 'suite', step_id: step.id, message: `${step.id}: ${selectionLines(selection).slice(0, 6).join('\n')}` });
+    let output = await once(selection.mode === 'affected' ? { files: selection.files, selection } : { selection });
+    if (output.scope === 'files') this.suiteRuns.affected = (this.suiteRuns.affected || 0) + 1;
+    if (output.scope === 'files' && output.status === 'pass' && !this.fullSuitePassed && !whole) {
+      const affected = { command: output.command, log: output.log, passed: output.passed, failed: output.failed, duration_ms: output.duration_ms, files: selection.files };
+      if (output.log) this.emitEvent('file.saved', { step_id: step.id, path: path.join(this.runDir, output.log) });
+      output = await once({ selection: { ...selection, why: `the ${selection.files.length} affected test file(s) passed; the whole suite runs once before the merge` }, logName: `suite-${st.visits}-full` });
+      output.affected = affected;
+    }
+    if (output.scope !== 'files' && (output.status === 'pass' || output.status === 'fail') && tested.commit) this.wholeSuiteRun = { round: st.visits, commit: tested.commit };
     return output;
   },
 

@@ -149,12 +149,16 @@ fields (references between steps, agents, transitions, groups) are the named rul
     still fails the visit. Applies to any step with this scope (unit or e2e).
     `filteredCommand` filters `npm|pnpm|yarn test`, a package script with no arguments of its own
     (`npm run test:e2e -- <files>`, `pnpm run e2e <files>`, `yarn e2e <files>`), pytest and
-    `node --test`. The command line has a limit (#400, `COMMAND_LINE_LIMITS` in suite-step.js:
-    Windows `cmd.exe` 8,191 characters, Linux 128 KiB, macOS 256 KiB, minus a 100-character
-    margin; the platform is `runSuite`'s `platform`): a filtered command over it, coverage and
-    workers wrappers included, runs the whole suite instead, `selection.why` and the message saying
-    "319 test files would put the command over the Windows command-line limit of 8,191 characters:
-    the whole suite ran". The same holds for every caller: the base check of more files than fit is
+    `node --test`. The command line has a limit (#400, `COMMAND_LINE_LIMITS` in
+    suite-command-line.js: Windows `cmd.exe` 8,191 characters, Linux 128 KiB, macOS 256 KiB, minus
+    a 100-character margin; the platform is `runSuite`'s `platform`): a filtered command over it,
+    coverage and workers wrappers included, gives its files through a list file named by
+    `MULTIAGENT_TEST_FILES` (#553, one path per line, `files_list` in the output) when the npm
+    script is `node <file>` and that file reads the variable (scripts/test.js), and stays
+    `scope: files`; any other runner runs the whole suite instead, `selection.why` and the message
+    saying "319 test files would put the command over the Windows command-line limit of 8,191
+    characters, and `npm test` cannot read the list of MULTIAGENT_TEST_FILES: the whole suite ran".
+    The same holds for every caller: the base check of more files than fit is
     skipped with that reason, and a timed-out file reruns alone (always short). A round the shell
     refused ("The command line is too long.", "Argument list too long": the log's last line, no test
     result) is `blocked`, not `fail`: the test writer is not sent to fix it, the gate says the suite

@@ -26,9 +26,10 @@ const methods = {
   // The test files the run's change can break (#212, src/engine/affected-tests.js), plus the files
   // that failed in an earlier round (`this.suiteFailedFiles`): { mode, files, reasons, why, ... }.
   // Simulation: two simulated files. A run without a worktree or a base: the whole suite (the
-  // machine adapter's affectedTests, src/engine/machine-actions.js).
-  affectedSelection() {
-    const base = this.worktree?.base || render(this.wf.orchestrator?.worktree?.base || '', this.ctx).trim();
+  // machine adapter's affectedTests, src/engine/machine-actions.js). #553 `since`: a commit (the run's
+  // whole suite) the changes are taken from instead of the base.
+  affectedSelection({ since = '' } = {}) {
+    const base = since || this.worktree?.base || render(this.wf.orchestrator?.worktree?.base || '', this.ctx).trim();
     return this.machine.affectedTests({ root: this.ctx.worktree_dir, base, failed: this.suiteFailedFiles });
   },
 
