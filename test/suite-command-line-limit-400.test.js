@@ -7,6 +7,11 @@
 //   run single files; each timed-out file reruns alone with a command that fits.
 // - A round where no test ran (the shell refused the command: no report, no test result in the log)
 //   is `blocked` ("could not run", with the log's last line), not `fail` with 0 failing tests.
+// #553 (acceptance tests written before the code): a selection too long for the command line no longer
+// runs the whole suite when the test command can take a list: the files go in a list file named by
+// MULTIAGENT_TEST_FILES (one path per line) and the round stays `scope: files`, with the whole list in
+// `selection.files`, without the machine-wide suite slot (#455). A runner that cannot take the list
+// (here `npm test` running mocha) falls back to the whole suite as #400 did, and says why.
 // Machine-independent: the platform is injected (`platform`), the child-process boundary (`run`) is
 // stubbed; nothing is spawned.
 const test = require('node:test');
@@ -15,8 +20,10 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { runSuite, checkOnBase, suiteMessage } = require('../src/engine/suite-step');
+const { SUITE_SLOT_ENV } = require('../src/engine/machine-slot');
 
 const WIN_LIMIT = 8191;
+const LIST_ENV = 'MULTIAGENT_TEST_FILES';
 
 function tmp(t, prefix = 'suite-400-') {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -24,12 +31,29 @@ function tmp(t, prefix = 'suite-400-') {
   return dir;
 }
 
-// the worktree: a package.json with a coverage script (as this repository has), the run folder
+// the worktree: a package.json with a coverage script (as this repository has), the run folder; its
+// runner (scripts/test.js) reads the list of #553
 function setup(t) {
   const cwd = tmp(t, 'suite-400-cwd-');
   fs.writeFileSync(path.join(cwd, 'package.json'), JSON.stringify({ scripts: { test: 'node scripts/test.js', 'test:coverage': 'node scripts/test.js --coverage' } }));
+  fs.mkdirSync(path.join(cwd, 'scripts'));
+  fs.writeFileSync(path.join(cwd, 'scripts', 'test.js'), `// the files to test: the command line, or the list named by process.env.${LIST_ENV}\n`);
   return { cwd, runDir: tmp(t, 'suite-400-run-') };
 }
+
+// a worktree whose `npm test` runs a runner that takes its files only on the command line (no list)
+function noListSetup(t) {
+  const cwd = tmp(t, 'suite-400-cwd-');
+  fs.writeFileSync(path.join(cwd, 'package.json'), JSON.stringify({ scripts: { test: 'mocha' } }));
+  return { cwd, runDir: tmp(t, 'suite-400-run-') };
+}
+
+// the list file a command was given (read while the command runs: the round may remove it after)
+const listOf = (env) => {
+  const file = env?.[LIST_ENV];
+  if (!file) return null;
+  return fs.readFileSync(path.resolve(file), 'utf8').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+};
 
 // n test paths of about 34 characters each, like the 319 files of run 20261015-103917-113af36c
 // (`npm run test:coverage -- <319 files>`: 10,931 characters)
@@ -39,8 +63,8 @@ const selectionOf = (files) => ({ mode: 'affected', files, reasons: {}, why: `${
 // The stubbed child-process boundary: every command passes, its log holds one test result.
 function passingRun() {
   const calls = [];
-  const run = async ({ command, cwd, logFile }) => {
-    calls.push({ command, cwd });
+  const run = async ({ command, cwd, logFile, env }) => {
+    calls.push({ command, cwd, list: listOf(env), slot: env?.[SUITE_SLOT_ENV] });
     if (logFile) fs.appendFileSync(logFile, 'ℹ tests 1\nℹ pass 1\nℹ fail 0\n');
     return { code: 0, timedOut: false, error: null };
   };
@@ -53,8 +77,45 @@ const namesAny = (command, files) => files.some((f) => String(command).includes(
 // The suite round
 // ---------------------------------------------------------------------------
 
-test('#400 win32: 319 selected test files over the command-line limit run the whole suite, and the selection and the message say why', async (t) => {
+test('#553 win32: a 400-file selection over the command-line limit runs only the selected files, through the list file', async (t) => {
   const s = setup(t);
+  const { run, calls } = passingRun();
+  const files = longSelection(400);
+  const out = await runSuite({ command: 'npm test', cwd: s.cwd, runDir: s.runDir, round: 1, run, files, selection: selectionOf(files), platform: 'win32' });
+  assert.equal(calls.length, 1, `one command ran: ${calls.map((c) => c.command.length)}`);
+  assert.ok(calls[0].command.length <= WIN_LIMIT, `the command fits cmd.exe (got ${calls[0].command.length} characters)`);
+  assert.equal(namesAny(calls[0].command, files), false, 'the files are not on the command line');
+  assert.deepEqual(calls[0].list, files, `${LIST_ENV} names a file listing the 400 selected files, one per line`);
+  assert.equal(out.scope, 'files');
+  assert.equal(out.status, 'pass');
+  assert.deepEqual(out.selection.files, files, 'selection.files keeps the whole list');
+  assert.doesNotMatch(`${out.selection.why}\n${out.message}\n${suiteMessage(out)}`, /whole suite ran/i, 'nothing says the whole suite ran');
+});
+
+test('#553 win32: a selection that runs through the list does not take the machine-wide suite slot (#455)', async (t) => {
+  const s = setup(t);
+  const { run, calls } = passingRun();
+  const files = longSelection(400);
+  const slot = { dir: tmp(t, 'suite-553-locks-'), holder: 'run-553', pollMs: 20 };
+  const out = await runSuite({ command: 'npm test', cwd: s.cwd, runDir: s.runDir, round: 1, run, files, selection: selectionOf(files), platform: 'win32', slot });
+  assert.equal(out.scope, 'files');
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].slot, undefined, 'the command runs without the suite slot');
+  assert.equal(fs.existsSync(path.join(slot.dir, 'suite.slot')), false, 'the slot was never taken');
+});
+
+test('#553 win32: a selection that fits the command line keeps the files on the command, without a list', async (t) => {
+  const s = setup(t);
+  const { run, calls } = passingRun();
+  const files = ['test/a.test.js', 'test/b.test.js'];
+  const out = await runSuite({ command: 'npm test', cwd: s.cwd, runDir: s.runDir, round: 1, run, files, selection: selectionOf(files), platform: 'win32' });
+  assert.equal(out.scope, 'files');
+  assert.equal(calls[0].command, 'npm test -- test/a.test.js test/b.test.js');
+  assert.equal(calls[0].list, null, `no ${LIST_ENV} for a selection that fits`);
+});
+
+test('#553 win32: a runner that cannot take the list (npm test → mocha) falls back to the whole suite, and the selection and the message say why', async (t) => {
+  const s = noListSetup(t);
   const { run, calls } = passingRun();
   const files = longSelection(319);
   const out = await runSuite({ command: 'npm test', cwd: s.cwd, runDir: s.runDir, round: 1, run, files, selection: selectionOf(files), platform: 'win32' });
@@ -79,7 +140,7 @@ test('#400 win32: a short selection still runs only the selected files', async (
   for (const f of files) assert.ok(calls[0].command.includes(f), `${f} is on the command: ${calls[0].command}`);
 });
 
-test('#400 win32: the coverage and workers wrappers count: a selection that fits bare but not wrapped runs the whole suite, never an over-limit command', async (t) => {
+test('#553 win32: the coverage and workers wrappers count: a selection that fits bare but not wrapped runs through the list with coverage, never an over-limit command', async (t) => {
   const s = setup(t);
   const { run, calls } = passingRun();
   // `npm test -- <files>` just under 8,191 characters; `npm run test:coverage -- <files>` is over
@@ -91,9 +152,10 @@ test('#400 win32: the coverage and workers wrappers count: a selection that fits
   assert.ok(`npm test -- ${files.join(' ')}`.length > WIN_LIMIT - 60, 'the bare command is close to the limit');
   const out = await runSuite({ command: 'npm test', cwd: s.cwd, runDir: s.runDir, round: 1, run, files, selection: selectionOf(files), platform: 'win32', coverage: true, testWorkers: 4 });
   for (const c of calls) assert.ok(c.command.length <= WIN_LIMIT, `no command over cmd.exe's limit (got ${c.command.length} characters)`);
-  assert.equal(out.scope, 'full');
-  assert.equal(namesAny(calls[0].command, files), false, 'the whole suite ran');
-  assert.match(calls[0].command, /test:coverage/, `the whole suite still runs with coverage: ${calls[0].command}`);
+  assert.equal(out.scope, 'files');
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0].list, files, 'the selected files go through the list');
+  assert.match(calls[0].command, /test:coverage/, `the round still runs with coverage: ${calls[0].command}`);
 });
 
 test('#400 linux: 319 selected test files fit ARG_MAX and run as files', async (t) => {
@@ -107,8 +169,8 @@ test('#400 linux: 319 selected test files fit ARG_MAX and run as files', async (
 });
 
 for (const platform of ['linux', 'darwin']) {
-  test(`#400 ${platform}: a selection of several MB, over ARG_MAX, runs the whole suite`, async (t) => {
-    const s = setup(t);
+  test(`#400 ${platform}: a selection of several MB, over ARG_MAX, runs the whole suite when the runner cannot take the list`, async (t) => {
+    const s = noListSetup(t);
     const { run, calls } = passingRun();
     const files = longSelection(100000);
     const out = await runSuite({ command: 'npm test', cwd: s.cwd, runDir: s.runDir, round: 1, run, files, selection: selectionOf(files), platform });
@@ -246,8 +308,8 @@ test('#400 a refusal line in a log that also has test results stays a failure (t
   assert.ok(out.failures.some((f) => f.test === 'a test'), JSON.stringify(out.failures));
 });
 
-test('#400 win32: the suite output of an over-limit round prints the whole-suite line with the limit', async (t) => {
-  const s = setup(t);
+test('#400 win32: the suite output of an over-limit round whose runner cannot take the list prints the whole-suite line with the limit', async (t) => {
+  const s = noListSetup(t);
   const { run } = passingRun();
   const files = longSelection(319);
   const out = await runSuite({ command: 'npm test', cwd: s.cwd, runDir: s.runDir, round: 1, run, files, selection: selectionOf(files), platform: 'win32' });
