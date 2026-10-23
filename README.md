@@ -258,8 +258,8 @@ The CLIs the workflows use are installed separately: see
 [Installing the CLIs on Windows](#installing-the-clis-on-windows) and its macOS and Linux part.
 
 **App icon.** `assets/icon.ico` (Windows), `assets/icon.icns` (macOS) and `assets/icon.png` (Linux)
-are generated from one source image, `assets/icon-source.png`, which is a placeholder for now. To
-replace the icon, put a square PNG of 1024 px or more at `assets/icon-source.png` (or pass its path)
+are generated from one source image, `assets/icon-source.png` (its origin and license are in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)). To replace the icon, put a square PNG of 1024 px or more at `assets/icon-source.png` (or pass its path)
 and run `npm run icons`, then commit the four files.
 
 ## Account and privacy
@@ -273,6 +273,12 @@ shown and never blocks anything; an offline start with a stored session stays si
   the app version and the OS.
 - **Not stored**: your code, prompts, runs, artifacts or usage. Nothing of your work leaves your
   machine through the account.
+- **Retention and deletion**: the account row is kept until you ask for it to be deleted. Open an
+  issue or write to the maintainer from the account's email, and the row (and its sign-in identity)
+  is deleted; nothing else about you is kept.
+- **Forks**: the Supabase URL and publishable key are built into `src/auth-config.js`, so a fork that
+  ships its own build must use its own Supabase project (replace both constants and apply
+  `supabase/migrations/`), or it reports its users to this project.
 
 **What a repository controls**: a project you clone or a PR branch you run can ship `CLAUDE.md` /
 `AGENTS.md` and a `.claude/` folder. Agents read the instructions files (they can try to steer an
@@ -295,6 +301,36 @@ tells agents that have tools what to do. The app refuses the template tricks it 
 (a template reaching `constructor`, `__proto__`, `require` or `process`, agent output put unquoted
 into a shell command; `npm run check` reports them too), and the Builder asks once before saving a
 workflow that was not bundled with the app (again when its file changed outside the app).
+
+## Security model
+
+What the app limits, and what it does not. Read it before you run a repository you did not write;
+how to report a vulnerability is in [SECURITY.md](SECURITY.md).
+
+- **Agents run as you.** An agent turn is a headless CLI (`claude -p`, `codex exec`, `grok`) started
+  with your user, your environment, your credentials and your network; the allowlisted environment
+  (see "Account and privacy") keeps cloud keys, API keys and the SSH agent out, nothing more.
+- **The engine shapes what the CLI offers the model; only Codex's sandbox is enforced by the OS.**
+  For Claude (`acceptEdits` and `--allowedTools`) and Grok (`--always-approve`) the tool limits are
+  prefix rules: `bash:git` becomes `Bash(git:*)`, and an allowed program steps around it
+  (`git -c alias.x='!cmd' x`, `npm exec` / `npm run <script>`, `node -e`, a `cargo` build script, a
+  `cat` of any file). A read-only agent is a convention, not a sandbox.
+- **The repository can add instructions.** `CLAUDE.md`, `AGENTS.md`, the README, the issues and the
+  PR comments an agent reads can try to steer it, with the tools its workflow gives it. Isolated
+  agents never load the checkout's `.claude/settings*.json`, but treat a repository's hooks as code
+  that may run until #468 is closed.
+- **Workflows, skills and seeds are code**: a workflow runs shell commands and templates in the
+  app's process, a skill or a seed tells agents with tools what to do. In short, workflows, skills
+  and seeds are code: install only ones you trust.
+- **The serve token is full control of the machine** (`npm run serve`): a shell, gate approval and
+  paid runs. Keep it like a password.
+- **The control endpoint file is readable by agents.** `<workspace>/control/endpoint.json` holds the
+  token of the loopback control channel; the agents run as you and can read it. Its allowlist
+  (`src/control/allowlist.js`) never resolves a human gate and never changes settings.
+
+Recommendation: run untrusted repositories only in a VM, a container or with Codex's sandbox
+(`workspace-write`), and assume every secret in the agents' environment is readable by them (see
+#470 for what is filtered).
 
 <!-- generated:workflows -->
 ## Software development flow (`workflows/software-development.yaml`)
@@ -1964,7 +2000,7 @@ Enabled in `software-development`. The other bundled workflows only read a folde
   pre-release `preview-pr-<n>` from the PR branch: the Windows build by default, `-f os=macos`,
   `linux` or `all` for the others. It keeps the builds a pre-release of the same commit already has
   (`-f rebuild=true` forces them) and skips `npm test` when the PR head has `ci/tested`.
-- `.github/workflows/deploy.yml`: production. Every push to `main` packages the app on
+- `.github/workflows/deploy.yml`: production. A pushed `vX.Y.Z` tag (or a manual dispatch) packages the app on
   `windows-latest` (win32 x64), `macos-latest` (darwin arm64), `macos-15-intel` (darwin x64) and
   `ubuntu-latest` (linux x64, AppImage and tar.gz), launches each package in simulation until it
   quits by itself (`scripts/smoke-package.js`, `xvfb-run` on Linux; a failure stops the release) and
@@ -2067,8 +2103,9 @@ agents:
 
 ### Agent capabilities and isolation
 
-What an agent may use is declared per agent (and per step when needed) and enforced by the engine,
-which turns it into each CLI's own flags:
+What an agent may use is declared per agent (and per step when needed); the engine turns it into
+each CLI's own flags. This is context economy (fewer tools offered, a smaller prompt), not a
+security boundary: only Codex's sandbox is enforced by the OS (see "Security model"):
 
 ```yaml
 agents:
@@ -2087,7 +2124,8 @@ steps:
 - **Isolated by default**: agents run the user's CLIs headless, but without the user's personal
   setup: no MCP servers (e.g. a logged-in browser), plugins, user settings, CLI skill listings or
   auto-memory; only the project and what the workflow declares. `isolation: false` on an agent (or
-  in `defaults`) turns it off. Claude Code isolates fully; Codex drops the user's MCP servers,
+  in `defaults`) turns it off. Claude Code drops the user's setup (the agent still runs as you);
+Codex drops the user's MCP servers,
   plugins, apps, browser/computer use and memories; Grok has no flags for it (only its tools are
   restricted). What a CLI can't enforce is written to the run log.
 - **Fewer tool definitions**: tools an agent can't use aren't offered at all (Claude `--tools`), which
@@ -2411,3 +2449,7 @@ vulnerability privately.
 
 [MIT](LICENSE), Copyright (c) 2026 Eduardo Galbiati. Some bundled skills and workflows are adapted
 from other MIT projects: see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+**Trademarks**: this project is not affiliated with Anthropic, OpenAI or xAI. Claude Code, Codex and
+Grok are their trademarks. The app drives the CLIs you install and sign in to: you are responsible
+for each CLI's terms of service and for the costs its runs incur.

@@ -9,6 +9,12 @@ shown and never blocks anything; an offline start with a stored session stays si
   the app version and the OS.
 - **Not stored**: your code, prompts, runs, artifacts or usage. Nothing of your work leaves your
   machine through the account.
+- **Retention and deletion**: the account row is kept until you ask for it to be deleted. Open an
+  issue or write to the maintainer from the account's email, and the row (and its sign-in identity)
+  is deleted; nothing else about you is kept.
+- **Forks**: the Supabase URL and publishable key are built into `src/auth-config.js`, so a fork that
+  ships its own build must use its own Supabase project (replace both constants and apply
+  `supabase/migrations/`), or it reports its users to this project.
 
 **What a repository controls**: a project you clone or a PR branch you run can ship `CLAUDE.md` /
 `AGENTS.md` and a `.claude/` folder. Agents read the instructions files (they can try to steer an

@@ -1,0 +1,16 @@
+# Dependency updates (#482): one weekly pull request batch per ecosystem, so the npm libraries the app
+# ships, the native sidecars' crates (native/) and the actions the workflows pin stay current.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: cargo
+    directory: /native
+    schedule:
+      interval: weekly
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

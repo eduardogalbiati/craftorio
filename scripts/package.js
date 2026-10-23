@@ -119,12 +119,15 @@ function packagerOptions({ platform, arch, out }) {
     asar: { unpack: '**/node_modules/node-pty/**' },
     // the native sidecars (buildNative), outside app.asar: resources/bin/multiagent-{ctl,mcp,tail}[.exe]
     extraResource: [nativeBinDir({ platform, arch, out })],
+    // the license texts of the shipped npm libraries (scripts/third-party-licenses.js, #482) next to
+    // app/ in the resources folder: buildPath is resources/app on every platform
+    afterCopy: [({ buildPath }) => require('fs').copyFileSync(path.join(root, 'resources', 'THIRD_PARTY_LICENSES.txt'), path.join(buildPath, '..', 'THIRD_PARTY_LICENSES.txt'))],
     // .claude/ may contain worktrees from other sessions (with their own node_modules); poc/ holds
     // proofs of concept, never part of the app; generated/ (the run's 3D view and the project city,
     // scripts/build-3d.js) is packed, and src/renderer/run3d/ and city3d/ (their sources) are not
     // needed once bundled; native/ (the Rust sources and cargo's target/) arrives as resources/bin/
-    // through extraResource
-    ignore: [/^\/(runs|dist|build|scripts|test|supabase|poc|native|\.github|\.claude)(\/|$)/, /^\/src\/renderer\/(run3d|city3d)(\/|$)/],
+    // through extraResource, and resources/ (the license file) through afterCopy
+    ignore: [/^\/(runs|dist|build|scripts|test|supabase|poc|native|resources|\.github|\.claude)(\/|$)/, /^\/src\/renderer\/(run3d|city3d)(\/|$)/],
     ...(platform === 'darwin' && {
       appBundleId: 'io.github.eduardogalbiati.multiagent-orchestrator',
       appCategoryType: 'public.app-category.developer-tools',

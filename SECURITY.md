@@ -13,6 +13,17 @@ on the report; once a fix is released, the advisory is published with credit to 
 
 Fixes go into the latest release only.
 
+## Scope
+
+A vulnerability is anything that lets content an agent or a repository produced (a file, a branch,
+an issue, a PR comment, an agent's output) act outside the run's worktree without the owner's click:
+read or change files elsewhere, cross a human gate, change settings, reach the engine server or the
+control channel beyond its allowlist, or run a command the workflow did not declare. Reports of what
+the documented model already says are not vulnerabilities: agents run as you with your
+environment, credentials and network; for Claude and Grok the tool limits are prefix rules an
+allowed program steps around; workflows, skills and seeds are code. That model is the README's
+[Security model](README.md#security-model) and the threat model below.
+
 ## Threat model
 
 What the app protects, and what it does not (the security review of 2026-10-22,

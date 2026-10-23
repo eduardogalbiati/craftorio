@@ -7,7 +7,7 @@ body:
     attributes:
       label: App version
       description: Settings shows it (or the commit, when running from source).
-      placeholder: 0.3.0
+      placeholder: 1.1.2
     validations:
       required: true
   - type: input

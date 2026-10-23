@@ -15,7 +15,7 @@
   pre-release `preview-pr-<n>` from the PR branch: the Windows build by default, `-f os=macos`,
   `linux` or `all` for the others. It keeps the builds a pre-release of the same commit already has
   (`-f rebuild=true` forces them) and skips `npm test` when the PR head has `ci/tested`.
-- `.github/workflows/deploy.yml`: production. Every push to `main` packages the app on
+- `.github/workflows/deploy.yml`: production. A pushed `vX.Y.Z` tag (or a manual dispatch) packages the app on
   `windows-latest` (win32 x64), `macos-latest` (darwin arm64), `macos-15-intel` (darwin x64) and
   `ubuntu-latest` (linux x64, AppImage and tar.gz), launches each package in simulation until it
   quits by itself (`scripts/smoke-package.js`, `xvfb-run` on Linux; a failure stops the release) and

@@ -1,11 +1,13 @@
-# Automatic production deploy: every push/merge to main builds the packaged app for Windows, macOS
-# and Linux (one job per OS and architecture), smoke-tests each package in simulation and publishes
-# them together as one GitHub Release. macOS builds are not signed nor notarized (README "Install").
+# Production release: pushing a vX.Y.Z tag (or running it by hand, which tags the commit
+# v<package.json version>) builds the packaged app for Windows, macOS and Linux (one job per OS and
+# architecture), smoke-tests each package in simulation and publishes them together as one GitHub
+# Release named after the tag. A merge to main publishes nothing (CONTRIBUTING "Releasing"). macOS
+# builds are not signed nor notarized (README "Install").
 name: Deploy
 
 on:
   push:
-    branches: [main]
+    tags: ['v*']
   workflow_dispatch:
 
 permissions:
@@ -130,7 +132,12 @@ jobs:
         run: |
           ls -l assets
           VERSION=$(node -p "require('./package.json').version")
-          TAG="v${VERSION}-build.${{ github.run_number }}"
+          TAG="v${VERSION}"
+          # a pushed tag must match package.json: the release name, its tag and the app's version agree
+          if [ "${{ github.ref_type }}" = "tag" ] && [ "${{ github.ref_name }}" != "$TAG" ]; then
+            echo "Tag ${{ github.ref_name }} does not match package.json version $VERSION" >&2
+            exit 1
+          fi
           gh release create "$TAG" assets/* \
             --target "${{ github.sha }}" --title "$TAG" --generate-notes --latest
           echo "Release published: $TAG"

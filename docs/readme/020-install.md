@@ -36,6 +36,6 @@ The CLIs the workflows use are installed separately: see
 [Installing the CLIs on Windows](#installing-the-clis-on-windows) and its macOS and Linux part.
 
 **App icon.** `assets/icon.ico` (Windows), `assets/icon.icns` (macOS) and `assets/icon.png` (Linux)
-are generated from one source image, `assets/icon-source.png`, which is a placeholder for now. To
-replace the icon, put a square PNG of 1024 px or more at `assets/icon-source.png` (or pass its path)
+are generated from one source image, `assets/icon-source.png` (its origin and license are in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)). To replace the icon, put a square PNG of 1024 px or more at `assets/icon-source.png` (or pass its path)
 and run `npm run icons`, then commit the four files.

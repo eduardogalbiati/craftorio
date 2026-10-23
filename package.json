@@ -39,6 +39,7 @@
     "build": "node scripts/package.js build",
     "build:3d": "node scripts/build-3d.js",
     "icons": "electron scripts/icons.js",
+    "licenses": "node scripts/third-party-licenses.js",
     "package": "node scripts/package.js"
   },
   "dependencies": {

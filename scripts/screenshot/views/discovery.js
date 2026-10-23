@@ -18,7 +18,7 @@ function demoDiscoveryBoard(ws, projectId) {
   const dir = ws.discovery;
   const hour = 3600000;
   const columns = ['triage', 'shape', 'define', 'ready'];
-  const card = (hoursAgo, to, { title, text = '', type = 'idea', author = 'eduardo', tags, clarity, gaps = [], estimate, acceptance, anyway }) => {
+  const card = (hoursAgo, to, { title, text = '', type = 'idea', author = 'maintainer', tags, clarity, gaps = [], estimate, acceptance, anyway }) => {
     const c = discovery.createCard(dir, projectId, { title, text, type, author, tags, column: 'triage' });
     // the score first: a move into Ready goes through the clarity bar (#166), `anyway` is the
     // owner's reason to move a card there below it
@@ -46,9 +46,9 @@ function demoDiscoveryBoard(ws, projectId) {
     acceptance: ['- [ ] One row per project with its runs, cost and tokens of the week', '- [ ] The report opens from the Dashboard on Monday'].join('\n'),
   });
   discovery.addAttachment(dir, projectId, report, { name: 'report-sketch.png', data: solidPng(320, 180, [124, 156, 255]) });
-  discovery.appendConversation(dir, projectId, report, { kind: 'note', author: 'eduardo', text: 'The Usage screen has the weekly totals already.', ts: new Date(Date.now() - 50 * hour).toISOString() });
+  discovery.appendConversation(dir, projectId, report, { kind: 'note', author: 'maintainer', text: 'The Usage screen has the weekly totals already.', ts: new Date(Date.now() - 50 * hour).toISOString() });
   discovery.recordResult(dir, projectId, report, {
-    source: 'write-review', runId: '20261003-1012-ab12', by: 'eduardo',
+    source: 'write-review', runId: '20261003-1012-ab12', by: 'maintainer',
     text: ['# Weekly cost report by project', '', '## Problem', '', 'The owner compares what each project spent week by week, and today adds the numbers up by hand from the Usage screen.', '',
       '## Goals', '', '- One report per week: runs, cost and tokens per project', '- Opened from the Dashboard on Monday morning', '',
       '## Non-goals', '', '- Budgets and alerts (the spending budget covers them)', '', '## Open questions', '', '- Per workflow too, or per project only?'].join('\n'),
@@ -80,11 +80,11 @@ function demoCommittedCards(ws, projectId) {
   const discovery = require('../../../src/discovery');
   const dir = ws.discovery;
   const committed = ({ title, text, acceptance, clarity, issues }) => {
-    const c = discovery.createCard(dir, projectId, { title, text, type: 'prd', author: 'eduardo', column: 'triage' });
+    const c = discovery.createCard(dir, projectId, { title, text, type: 'prd', author: 'maintainer', column: 'triage' });
     discovery.updateCard(dir, projectId, c.id, { acceptance, clarity: { score: clarity, gaps: [], by: 'Product Owner' } });
-    for (const column of ['shape', 'define', 'ready']) discovery.moveCard(dir, projectId, c.id, column, { by: 'eduardo' });
-    discovery.markCommitted(dir, projectId, c.id, { issues, by: 'eduardo' });
-    discovery.appendConversation(dir, projectId, c.id, { kind: 'commit', author: 'eduardo', issues, text: `Committed to the backlog: ${issues.map((n) => `#${n}`).join(', ')}.` });
+    for (const column of ['shape', 'define', 'ready']) discovery.moveCard(dir, projectId, c.id, column, { by: 'maintainer' });
+    discovery.markCommitted(dir, projectId, c.id, { issues, by: 'maintainer' });
+    discovery.appendConversation(dir, projectId, c.id, { kind: 'commit', author: 'maintainer', issues, text: `Committed to the backlog: ${issues.map((n) => `#${n}`).join(', ')}.` });
     return c.id;
   };
   committed({

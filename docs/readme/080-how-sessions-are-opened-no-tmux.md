@@ -42,8 +42,9 @@ agents:
 
 ### Agent capabilities and isolation
 
-What an agent may use is declared per agent (and per step when needed) and enforced by the engine,
-which turns it into each CLI's own flags:
+What an agent may use is declared per agent (and per step when needed); the engine turns it into
+each CLI's own flags. This is context economy (fewer tools offered, a smaller prompt), not a
+security boundary: only Codex's sandbox is enforced by the OS (see "Security model"):
 
 ```yaml
 agents:
@@ -62,7 +63,8 @@ steps:
 - **Isolated by default**: agents run the user's CLIs headless, but without the user's personal
   setup: no MCP servers (e.g. a logged-in browser), plugins, user settings, CLI skill listings or
   auto-memory; only the project and what the workflow declares. `isolation: false` on an agent (or
-  in `defaults`) turns it off. Claude Code isolates fully; Codex drops the user's MCP servers,
+  in `defaults`) turns it off. Claude Code drops the user's setup (the agent still runs as you);
+Codex drops the user's MCP servers,
   plugins, apps, browser/computer use and memories; Grok has no flags for it (only its tools are
   restricted). What a CLI can't enforce is written to the run log.
 - **Fewer tool definitions**: tools an agent can't use aren't offered at all (Claude `--tools`), which
