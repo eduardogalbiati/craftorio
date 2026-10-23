@@ -1,7 +1,10 @@
 // Workflows screen and the visual builder: the workflow files (workspace copies over the bundled
 // defaults) and the builder's load / save / clone.
 
-const { requireId } = require('../common');
+const {
+  requireId,
+  requireObject,
+} = require('../common');
 const {
   ANY,
   args,
@@ -19,7 +22,10 @@ const {
 // #485: a project's repository workflow (areas/repository-workflows.js); its channels take one
 // object { projectId, file[, commit] } (params 'repo'), the way the Workflows screen calls them
 const REPOSITORY_WORKFLOW = args({ projectId: PROJECT_ID, file: WORKFLOW_FILE }, ['projectId', 'file']);
-const repositoryArg = (arg) => ({ projectId: requireId(arg.projectId, 'project id'), file: requireId(arg.file, 'workflow file') });
+const repositoryArg = (arg) => {
+  const repo = requireObject(arg, 'repository workflow');
+  return { projectId: requireId(repo.projectId, 'project id'), file: requireId(repo.file, 'workflow file') };
+};
 
 // builder:save's file: none saves a new workflow under a name from its spec
 const optionalFile = (file) => (file == null || file === '' ? file : requireId(file, 'workflow file'));
@@ -31,7 +37,7 @@ module.exports = (ctx) => [
   // repositoryOnly: those alone, with the manifest's categories (areas/workflows.js listWorkflows)
   { channel: 'workflows:list', method: 'listWorkflows', params: 'opts', schema: { params: orNone(args({ projectId: orNone(PROJECT_ID), repositoryOnly: FLAG })), result: listOf(OBJECT) }, fn: (opts) => ctx.listWorkflows(opts?.projectId ? { projectId: requireId(opts.projectId, 'project id'), repositoryOnly: !!opts.repositoryOnly } : {}) },
   // #485: the owner accepts a repository workflow for one commit (projects/<id>.json)
-  { channel: 'workflows:accept', method: 'acceptWorkflow', params: 'repo', schema: { params: args({ projectId: PROJECT_ID, file: WORKFLOW_FILE, commit: STRING }, ['projectId', 'file', 'commit']), result: BOOL }, fn: (arg) => ctx.acceptWorkflow({ ...repositoryArg(arg), commit: String(arg.commit) }) },
+  { channel: 'workflows:accept', method: 'acceptWorkflow', params: 'repo', schema: { params: args({ projectId: PROJECT_ID, file: WORKFLOW_FILE, commit: STRING }, ['projectId', 'file', 'commit']), result: BOOL }, fn: (arg) => ctx.acceptWorkflow({ ...repositoryArg(arg), commit: requireId(arg.commit, 'commit') }) },
   { channel: 'workflows:pipelines', method: 'listPipelines', schema: { result: listOf(OBJECT) }, fn: () => ctx.listPipelines() },
   { channel: 'workflows:restore', method: 'restoreWorkflow', params: 'file', schema: { params: WORKFLOW_FILE, result: BOOL }, fn: (file) => ctx.restoreWorkflow(requireId(file, 'workflow file')) },
   // → { file, mode, problems, spec }: the workflow as the builder edits it
