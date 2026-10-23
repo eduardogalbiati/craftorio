@@ -3,7 +3,8 @@
 // saved pipelines are areas/pipelines.js's); the builder's load, save and
 // clone; and restoring a bundled default over an edited copy (the copy goes to the trash), for a
 // workflow or a skill. A custom workflow is code: `trusted` says whether the owner confirmed its text
-// (#474, settings' trustedFiles).
+// (#474, settings' trustedFiles). For a project, the list adds its repository workflows (#485,
+// areas/repository-workflows.js), which the builder opens read-only and Clone copies as custom.
 
 const crypto = require('crypto');
 const fs = require('fs');
@@ -20,6 +21,7 @@ const skills = require('../../skills');
 const { BUNDLED_WORKFLOWS_DIR } = require('../common');
 const { bundleStatus, restoreBundled } = require('../../seed');
 const { mergeOf } = require('../../shared/default-workflow');
+const { MANIFEST_FILE } = require('../../project-manifest');
 const { workflowRequirements } = require('../../workflow-requirements');
 
 // #474: a workflow not bundled with the app is code; the owner confirms it once per file, remembered
@@ -37,90 +39,108 @@ module.exports = (ctx) => {
   }
   const trustFile = (file, text) => workspace.writeSettings(ctx.ws, { trustedFiles: { ...trustedFiles(), [trustKey(file)]: fingerprint(text) } });
 
-  function listWorkflows() {
+  // projectId (#485): also the project's repository workflows (areas/repository-workflows.js), with
+  // their commit and acceptance, and an entry with `error` for a malformed manifest
+  function listWorkflows({ projectId = null } = {}) {
     const { ws } = ctx;
     if (!fs.existsSync(ws.workflows)) return [];
     const status = workflows.workflowStatus(BUNDLED_WORKFLOWS_DIR, ws.workflows);
     const bundledVersion = (file) => { try { return loadWorkflow(path.join(BUNDLED_WORKFLOWS_DIR, file)).metadata?.version || null; } catch { return null; } };
     const trusted = trustedFiles();
-    return fs.readdirSync(ws.workflows)
+    const own = fs.readdirSync(ws.workflows)
       .filter(workflows.isWorkflowFile)
       .map((file) => {
         // origin: default (untouched bundled copy), modified (edited bundled copy) or custom (user-created)
         const st = status[file] || { origin: 'custom', updateAvailable: false, restorable: false };
-        const origin = {
+        return describe(path.join(ws.workflows, file), file, {
           origin: st.origin, updateAvailable: st.updateAvailable, restorable: st.restorable, bundledVersion: st.updateAvailable ? bundledVersion(file) : null,
           // #474: false for a custom file whose text the owner never confirmed (the builder warns once)
           trusted: st.origin !== 'custom' || isTrusted(file, trusted),
-        };
-        try {
-          const wf = loadWorkflow(path.join(ws.workflows, file));
-          // the visual builder opens it only when it draws everything the workflow uses
-          const drawn = builder.fromWorkflow(wf).problems;
-          // #262: an agent's provider / model / effort with the inputs' defaults (they can be templates over them)
-          const defaults = Object.fromEntries(Object.entries(wf.inputs || {}).filter(([, d]) => d?.default !== undefined).map(([k, d]) => [k, d.default]));
-          const resolve = (v) => {
-            if (typeof v !== 'string' || !v.includes('{{')) return v ?? null;
-            try { return render(v, { inputs: defaults }).trim(); } catch { return null; }
-          };
-          return {
-            file,
-            ...origin,
-            builder: !drawn.length,
-            builderProblems: drawn,
-            name: wf.metadata?.name || file,
-            version: wf.metadata?.version,
-            description: wf.metadata?.description,
-            category: wf.metadata?.category || 'build',
-            tags: wf.metadata?.tags || [],
-            // #286: what does not stop a run but does not work as written (an effort never passed)
-            warnings: wf.warnings || [],
-            inputs: wf.inputs || {},
-            // the result contract a chain maps from (#134)
-            outputs: wf.outputs || {},
-            // how its work lands (#195): local (no push), remote (a branch and a PR/MR) or none
-            merge: mergeOf(wf),
-            // #319: the CLIs it needs with its default inputs ({ clis, forge }), for Setup and Start
-            requirements: workflowRequirements(wf),
-            // #282: the stations of the roadmap card's pipeline (RunProgress.workflowStations)
-            groups: (wf.groups || []).map((g) => ({ name: g.name, steps: g.steps || [] })),
-            agents: Object.fromEntries(Object.entries(wf.agents).map(([k, a]) => {
-              const d = { ...(wf.defaults || {}), ...a };
-              return [k, {
-                provider: a.provider, model: a.model, session: d.session || 'persistent', max_context: d.max_context || null, skills: a.skills || [],
-                capabilities: capabilities.describe(a.capabilities), isolated: d.isolation !== false,
-                // #224: the agent's colour in the run chat and the runs list (wins over its role's)
-                ...(a.color ? { color: String(a.color) } : {}),
-                // #245: the name the screens show instead of its key
-                ...(a.display ? { display: a.display } : {}),
-                // #262: what it runs on by default (templates resolved with the inputs' defaults), the
-                // Start drawer's Agents section; fallbacks: its own or `defaults`' chain
-                runs_on: { provider: resolve(a.provider), model: resolve(a.model), effort: resolve(a.effort) || '' },
-                ...(Array.isArray(d.fallbacks) ? { fallbacks: d.fallbacks } : {}),
-              }];
-            })),
-            // #262: the providers an agent can be moved to for one run (name → CLI type)
-            providers: Object.fromEntries(Object.entries(wf.providers || {}).map(([k, p]) => [k, p?.type || null])),
-            steps: wf.steps.map((s) => ({
-              id: s.id,
-              ...(s.display ? { display: s.display } : {}), // #245
-              type: s.type || 'agent',
-              agent: s.agents ? s.agents.join(' · ') : s.agent || null,
-              agents: s.agents || null,
-              skills: s.skills || [],
-              goal: !!s.goal,
-              loop: !!s.loop,
-              // `type: workflow` (#174): the child workflow, once or for each item
-              ...(s.type === 'workflow' ? { workflow: s.workflow, foreach: s.foreach !== undefined, max_parallel: s.max_parallel ?? null } : {}),
-              next: [...new Set((s.transitions || []).map((t) => t.goto).filter(Boolean))],
-              // #282: which transitions a mode turns on (the pipeline's human gate station)
-              transitions: (s.transitions || []).filter((t) => t.goto && /inputs\.mode\b/.test(String(t.when || ''))).map((t) => ({ goto: t.goto, when: String(t.when) })),
-            })),
-          };
-        } catch (e) {
-          return { file, ...origin, name: file, error: e.message, steps: [] };
-        }
+        });
       });
+    if (!projectId) return own;
+    const repo = ctx.repositoryWorkflows(projectId);
+    const errors = repo.errors.length ? [{ file: 'project.yaml', name: MANIFEST_FILE, origin: 'repository', projectId, error: repo.errors.join('\n'), steps: [] }] : [];
+    // a workflow the manifest names without a file sits in the manifest's category for this project
+    const placed = own.map((w) => (repo.categories[w.name] ? { ...w, category: repo.categories[w.name] } : w));
+    return [...placed, ...errors, ...repo.items.map((w) => {
+      const item = describe(w.path, w.file, {
+        origin: 'repository', projectId, commit: w.commit, accepted: w.accepted, acceptedCommit: w.acceptedCommit, diff: w.diff,
+        updateAvailable: false, restorable: false, bundledVersion: null, trusted: w.accepted,
+      });
+      return { ...item, ...(w.entry.category ? { category: w.entry.category } : {}), ...(w.entry.description ? { description: w.entry.description } : {}) };
+    })];
+  }
+
+  // One workflow file as the Workflows screen lists it; origin: where it comes from and its state
+  function describe(src, file, origin) {
+    try {
+      const wf = loadWorkflow(src);
+      // the visual builder opens it only when it draws everything the workflow uses
+      const drawn = builder.fromWorkflow(wf).problems;
+      // #262: an agent's provider / model / effort with the inputs' defaults (they can be templates over them)
+      const defaults = Object.fromEntries(Object.entries(wf.inputs || {}).filter(([, d]) => d?.default !== undefined).map(([k, d]) => [k, d.default]));
+      const resolve = (v) => {
+        if (typeof v !== 'string' || !v.includes('{{')) return v ?? null;
+        try { return render(v, { inputs: defaults }).trim(); } catch { return null; }
+      };
+      return {
+        file,
+        ...origin,
+        builder: !drawn.length,
+        builderProblems: drawn,
+        name: wf.metadata?.name || file,
+        version: wf.metadata?.version,
+        description: wf.metadata?.description,
+        category: wf.metadata?.category || 'build',
+        tags: wf.metadata?.tags || [],
+        // #286: what does not stop a run but does not work as written (an effort never passed)
+        warnings: wf.warnings || [],
+        inputs: wf.inputs || {},
+        // the result contract a chain maps from (#134)
+        outputs: wf.outputs || {},
+        // how its work lands (#195): local (no push), remote (a branch and a PR/MR) or none
+        merge: mergeOf(wf),
+        // #319: the CLIs it needs with its default inputs ({ clis, forge }), for Setup and Start
+        requirements: workflowRequirements(wf),
+        // #282: the stations of the roadmap card's pipeline (RunProgress.workflowStations)
+        groups: (wf.groups || []).map((g) => ({ name: g.name, steps: g.steps || [] })),
+        agents: Object.fromEntries(Object.entries(wf.agents).map(([k, a]) => {
+          const d = { ...(wf.defaults || {}), ...a };
+          return [k, {
+            provider: a.provider, model: a.model, session: d.session || 'persistent', max_context: d.max_context || null, skills: a.skills || [],
+            capabilities: capabilities.describe(a.capabilities), isolated: d.isolation !== false,
+            // #224: the agent's colour in the run chat and the runs list (wins over its role's)
+            ...(a.color ? { color: String(a.color) } : {}),
+            // #245: the name the screens show instead of its key
+            ...(a.display ? { display: a.display } : {}),
+            // #262: what it runs on by default (templates resolved with the inputs' defaults), the
+            // Start drawer's Agents section; fallbacks: its own or `defaults`' chain
+            runs_on: { provider: resolve(a.provider), model: resolve(a.model), effort: resolve(a.effort) || '' },
+            ...(Array.isArray(d.fallbacks) ? { fallbacks: d.fallbacks } : {}),
+          }];
+        })),
+        // #262: the providers an agent can be moved to for one run (name → CLI type)
+        providers: Object.fromEntries(Object.entries(wf.providers || {}).map(([k, p]) => [k, p?.type || null])),
+        steps: wf.steps.map((s) => ({
+          id: s.id,
+          ...(s.display ? { display: s.display } : {}), // #245
+          type: s.type || 'agent',
+          agent: s.agents ? s.agents.join(' · ') : s.agent || null,
+          agents: s.agents || null,
+          skills: s.skills || [],
+          goal: !!s.goal,
+          loop: !!s.loop,
+          // `type: workflow` (#174): the child workflow, once or for each item
+          ...(s.type === 'workflow' ? { workflow: s.workflow, foreach: s.foreach !== undefined, max_parallel: s.max_parallel ?? null } : {}),
+          next: [...new Set((s.transitions || []).map((t) => t.goto).filter(Boolean))],
+          // #282: which transitions a mode turns on (the pipeline's human gate station)
+          transitions: (s.transitions || []).filter((t) => t.goto && /inputs\.mode\b/.test(String(t.when || ''))).map((t) => ({ goto: t.goto, when: String(t.when) })),
+        })),
+      };
+    } catch (e) {
+      return { file, ...origin, name: file, error: e.message, steps: [] };
+    }
   }
 
 
@@ -170,10 +190,30 @@ module.exports = (ctx) => {
     return { file: name };
   }
 
+  // #485: a repository workflow (its committed text at the project's HEAD) in the builder, read-only:
+  // Clone makes it the owner's own
+  function repositoryWorkflowOf(projectId, file) {
+    const w = ctx.repositoryWorkflow(projectId, file);
+    if (!w?.path) throw new Error(`Repository workflow not found: ${path.basename(String(file || ''))}`);
+    return w;
+  }
+  function loadRepositoryBuilderWorkflow({ projectId, file }) {
+    const w = repositoryWorkflowOf(projectId, file);
+    const doc = loadWorkflow(w.path);
+    const drawn = builder.fromWorkflow(doc);
+    return { file: w.file, mode: 'readonly', problems: drawn.problems, spec: drawn.problems.length ? builder.describeWorkflow(doc) : drawn.spec };
+  }
+  // a copy in the workspace, custom and not trusted until the owner confirms it (#474)
+  const cloneRepositoryWorkflow = ({ projectId, file }) => cloneFrom(repositoryWorkflowOf(projectId, file).path, false);
+
   // A copy of any workflow as the user's own (custom): "<name>-copy", comments kept.
   function cloneBuilderWorkflow(file) {
     const name = path.basename(String(file || ''));
-    const src = path.join(ctx.ws.workflows, name);
+    // #474: a copy of a bundled or a confirmed workflow is as trusted as its source
+    return cloneFrom(path.join(ctx.ws.workflows, name), isBundled(name) || isTrusted(name));
+  }
+  function cloneFrom(src, trusted) {
+    const name = path.basename(src);
     const doc = loadWorkflow(src);
     const base = String(doc.metadata?.name || name.replace(/\.ya?ml$/i, ''));
     let n = 1, copyName, dest;
@@ -185,8 +225,7 @@ module.exports = (ctx) => {
     const text = builder.cloneText(fs.readFileSync(src, 'utf8'), copyName);
     fs.writeFileSync(dest, text);
     try { loadWorkflow(dest); } catch (e) { fs.rmSync(dest, { force: true }); throw e; }
-    // #474: a copy of a bundled or a confirmed workflow is as trusted as its source
-    if (isBundled(name) || isTrusted(name)) trustFile(path.basename(dest), text);
+    if (trusted) trustFile(path.basename(dest), text);
     return { file: path.basename(dest) };
   }
 
@@ -213,8 +252,10 @@ module.exports = (ctx) => {
 
   return {
     cloneBuilderWorkflow,
+    cloneRepositoryWorkflow,
     listWorkflows,
     loadBuilderWorkflow,
+    loadRepositoryBuilderWorkflow,
     restoreSkill,
     restoreWorkflow,
     saveBuilderWorkflow,

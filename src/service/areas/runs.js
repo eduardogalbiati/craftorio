@@ -11,6 +11,7 @@ const {
   loadWorkflow,
   WorkflowRun,
 } = require('../../engine/workflow');
+const { loadRepositoryWorkflow } = require('../../engine/run/load');
 const { Recorder } = require('../../engine/recorder');
 const { resolveCommand } = require('../../engine/providers');
 const simulation = require('../../engine/simulation');
@@ -397,7 +398,11 @@ module.exports = (ctx) => {
       const baselineAt = Date.now();
       // the Oracle's spend (in no run folder) counts too
       const budget = usage.budgetBaseline({ runsDir: ws.runs, settings, local, extraRuns: ctx.agentUsageRuns() });
-      const wfFile = ctx.workflowPath(file);
+      // #485: the project's repository workflow of that name wins (its committed text at HEAD), refused
+      // until the owner accepted it and capped even then (src/engine/run/load.js)
+      const fromRepo = projectId ? ctx.repositoryWorkflow(projectId, file) : null;
+      if (fromRepo) loadRepositoryWorkflow(fromRepo.path, { accepted: fromRepo.accepted, policy: { tools: settings.repositoryWorkflowTools } });
+      const wfFile = fromRepo ? { file: fromRepo.path, fallback: false } : ctx.workflowPath(file);
       const notices = [...(startNotices || [])];
       if (wfFile.fallback) {
         const msg = `workflow ${path.basename(wfFile.file)} is not in ${ws.workflows}; using the copy bundled with the app (${wfFile.file})`;

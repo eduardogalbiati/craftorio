@@ -33,6 +33,8 @@ module.exports = [
   { channel: 'backlog:save-doc', reason: GIT },
   { channel: 'backlog:sync', reason: GIT },
   { channel: 'backlog:update-push', reason: GIT },
+  { channel: 'builder:clone-repository', reason: GIT },
+  { channel: 'builder:load-repository', reason: GIT },
   { channel: 'chain:resume', reason: WIDE },
   { channel: 'cliSessions:rename', reason: 'needs a CLI session recorded on the engine machine' },
   { channel: 'clipboard:discardImage', reason: ATTACHMENT },
@@ -120,5 +122,6 @@ module.exports = [
   { channel: 'term:open', reason: TERMINAL },
   { channel: 'usage:setBudget', reason: DESTRUCTIVE },
   { channel: 'usage:setPrice', reason: DESTRUCTIVE },
+  { channel: 'workflows:accept', reason: GIT },
   { channel: 'workflows:restore', reason: 'needs a bundled workflow edited first (a restore answers 500 when there is nothing to restore)' },
 ];
