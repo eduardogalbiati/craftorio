@@ -81,12 +81,13 @@ module.exports = (ctx) => {
   }
 
   // #554: which copy of each repository workflow a run of the project uses ({ <file>: { copy, sha } }):
-  // the owner's edited workspace copy of that name, unless the project prefers the repository's
+  // the owner's edited workspace copy of the entry's name or file (as runWorkflowFile finds it), unless
+  // the project prefers the repository's
   function runsCopies(projectId, items) {
     let prefer = false;
     try { prefer = !!projects.readProject(ctx.ws.projects, projectId).preferRepositoryWorkflows; } catch { /* no project: the default */ }
     return Object.fromEntries(items.map((w) => [w.file, {
-      copy: !prefer && workflows.editedWorkspaceCopy([w.file], ctx.workflowDirs()) ? 'workspace' : 'repository',
+      copy: !prefer && workflows.editedWorkspaceCopy([w.entry?.name ? `${w.entry.name}.yaml` : '', w.file], ctx.workflowDirs()) ? 'workspace' : 'repository',
       sha: String(w.commit || '').slice(0, 7),
     }]));
   }
