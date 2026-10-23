@@ -32,9 +32,14 @@
       for (const a of [...row.attributes]) if (!fresh.hasAttribute(a.name)) row.removeAttribute(a.name);
       for (const a of [...fresh.attributes]) if (row.getAttribute(a.name) !== a.value) row.setAttribute(a.name, a.value);
       if (row.innerHTML !== fresh.innerHTML) row.innerHTML = fresh.innerHTML;
-      fresh.replaceWith(row);
     });
-    list.replaceChildren(...tpl.content.childNodes);
+    // a stage (or the bar) drawn the same also keeps its element: its header and its menu button are
+    // not replaced under the owner's pointer by a refresh that changed nothing there
+    const olds = [...list.childNodes];
+    const nodes = [...tpl.content.childNodes].map((fresh, k) => (olds[k]?.isEqualNode?.(fresh) ? olds[k] : fresh));
+    const kept = nodes.filter((n, k) => n === olds[k]);
+    after.forEach((fresh, k) => { if (!kept.some((n) => n.contains(before[k]))) fresh.replaceWith(before[k]); });
+    list.replaceChildren(...nodes);
     return true;
   }
 
