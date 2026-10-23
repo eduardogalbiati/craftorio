@@ -3,7 +3,8 @@
 // Design, Code & Build, Workflows, AI, Night watch, Settings; a group's title collapses it), the
 // header (project selector, Oracle, notifications bell), the Workflows screen's tabs, Settings
 // (#276: Execution's Memory guard group), the failed app update banner (#279), the Pipelines tab's
-// cards (features/pipelines.feature, #378), the window kept on the app's page (#466).
+// cards (features/pipelines.feature, #378), the window kept on the app's page (#466), Settings ›
+// About's warning when the app was started without Chromium's sandbox (#476).
 // Locators are roles and data-testid only (skills/ui-conventions).
 // #254: a menu group is a role="group" named by its title, holding its title's toggle button
 // (aria-expanded, named like the group) and its items' buttons; the header's project selector is a
@@ -391,6 +392,31 @@ Then('the window refuses the dropped file', async ({ e2e }) => {
   expect(e2e.lastDrop, 'a file was dropped').toBeTruthy();
   expect(e2e.lastDrop.over, 'the window refuses a file dragged over it').toBe(true);
   expect(e2e.lastDrop.drop, 'the window refuses a file dropped on it').toBe(true);
+});
+
+// ---- started without Chromium's sandbox (#476) --------------------------------------------------------
+// The Linux AppImage's launcher sets MULTIAGENT_NO_SANDBOX=1 when it falls back to --no-sandbox; the
+// scenario sets it the same way. Settings › About's warning: data-testid="settings-sandbox-warning".
+
+const sandboxWarning = (page) => page.getByTestId('settings-sandbox-warning');
+
+Given('the app was started without the Chromium sandbox', async ({ e2e }) => {
+  await e2e.open({ env: { MULTIAGENT_NO_SANDBOX: '1' } });
+});
+
+Then('Settings warns that the app runs without the sandbox', async ({ e2e }) => {
+  await expect(sandboxWarning(e2e.window)).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(sandboxWarning(e2e.window)).toContainText(/sandbox/i);
+});
+
+Then('the sandbox warning mentions {string}', async ({ e2e }, text) => {
+  await expect(sandboxWarning(e2e.window)).toContainText(text);
+});
+
+Then('Settings shows no sandbox warning', async ({ e2e }) => {
+  // the About tab has drawn (its app version shows) before the warning's absence counts
+  await expect(e2e.window.getByText('App version', { exact: true }).filter({ visible: true }).first()).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(sandboxWarning(e2e.window)).toHaveCount(0);
 });
 
 // ---- no Supervisor in the header (#264)---------------------------------------------------------------

@@ -86,6 +86,12 @@ test('#317 package.js: on macOS the ad-hoc signature is reset after the fuses fl
   assert.ok(src.indexOf('resetAdHocDarwinSignature') > src.indexOf('flipFuses'), 'the reset comes with the fuses, after flipFuses');
 });
 
+// #480 (SEC-15): the cookies of the remote engine's session (its token) are encrypted on disk
+test('#480 package.js: the fuses turn cookie encryption on', () => {
+  const src = read('scripts/package.js');
+  assert.match(src, /\[FuseV1Options\.EnableCookieEncryption\]:\s*true/);
+});
+
 // ---- packager options per OS ---------------------------------------------------------------------
 
 test('#317 packagerOptions: the target platform and arch, and the same ignore and unpack lists on every OS', () => {

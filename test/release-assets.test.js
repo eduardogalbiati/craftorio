@@ -48,3 +48,48 @@ test('release assets: every preview os choice but "all" picks at least one targe
   for (const choice of input.options.filter((o) => o !== 'all')) assert.ok(families.has(choice), choice);
   assert.deepEqual([...families].sort(), ['linux', 'macos', 'windows']);
 });
+
+// ---- #476 (SEC-11): the AppImage without Chromium's sandbox says so --------------------------------
+// CONTRACT (acceptance tests written before the code): scripts/release-assets.js also exports
+//   APP_RUN, the text of the AppImage's AppRun (a POSIX sh script). Its `--no-sandbox` branch (the
+//   `if … then … fi` checking apparmor_restrict_unprivileged_userns / unprivileged_userns_clone)
+//   writes a warning naming the sandbox to stderr (`>&2`) and starts the app with the environment
+//   variable MULTIAGENT_NO_SANDBOX=1 (the app's signal to show the warning once, Settings › About or a
+//   toast); the normal start (after `fi`) sets neither.
+const appRun = () => {
+  const { APP_RUN } = require('../scripts/release-assets');
+  assert.equal(typeof APP_RUN, 'string', 'scripts/release-assets.js exports APP_RUN (#476)');
+  return APP_RUN;
+};
+// the --no-sandbox branch (then … fi) and the normal start (after fi)
+const appRunParts = () => {
+  const text = appRun();
+  const m = /\bthen\n([\s\S]*?)\nfi\n([\s\S]*)$/.exec(text);
+  assert.ok(m, `AppRun has an if … then … fi branch: ${text}`);
+  assert.match(m[1], /--no-sandbox/, 'the branch is the --no-sandbox one');
+  return { fallback: m[1], normal: m[2] };
+};
+
+test('#476 AppRun: without the sandbox it writes a warning naming the sandbox to stderr', () => {
+  const { fallback } = appRunParts();
+  const warning = fallback.split('\n').find((line) => />&2/.test(line));
+  assert.ok(warning, `a line of the --no-sandbox branch writes to stderr: ${fallback}`);
+  assert.match(warning, /sandbox/i);
+});
+
+test('#476 AppRun: without the sandbox it starts the app with MULTIAGENT_NO_SANDBOX=1, the normal start without it', () => {
+  const { fallback, normal } = appRunParts();
+  assert.match(fallback, /MULTIAGENT_NO_SANDBOX=1/);
+  assert.doesNotMatch(normal, /MULTIAGENT_NO_SANDBOX/);
+});
+
+test('#476 README Install (Linux) documents the sysctl that keeps the sandbox on', () => {
+  const readme = fs.readFileSync(path.join(root, 'README.md'), 'utf8');
+  const install = readme.slice(readme.indexOf('\n## Install'), readme.indexOf('\n## Account and privacy'));
+  assert.ok(install.includes('kernel.apparmor_restrict_unprivileged_userns=0'), 'the Install section names the sysctl');
+});
+
+test('#476 the sandbox decision is recorded in docs/agents/decisions.md', () => {
+  const decisions = fs.readFileSync(path.join(root, 'docs', 'agents', 'decisions.md'), 'utf8');
+  assert.ok(decisions.includes('#476'), 'decisions.md has an entry for #476');
+});

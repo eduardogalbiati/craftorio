@@ -277,10 +277,12 @@ test('the remote window loads only the engine\'s origin; its connection path, ot
   assert.equal(conn.routeUrl('not a url', origin), 'deny');
 });
 
+// #480 (SEC-15): reading the clipboard only for an https engine; writing it on http too
 test('the remote window gets the clipboard for the engine\'s origin only, and nothing else', () => {
   const origin = 'http://my-pc:7300';
   assert.equal(conn.allowRemotePermission('clipboard-sanitized-write', 'http://my-pc:7300/src/renderer/index.html', origin), true);
-  assert.equal(conn.allowRemotePermission('clipboard-read', 'http://my-pc:7300', origin), true);
+  assert.equal(conn.allowRemotePermission('clipboard-read', 'http://my-pc:7300', origin), false, '#480: no clipboard-read over plain http');
+  assert.equal(conn.allowRemotePermission('clipboard-read', 'https://my-pc.tail1234.ts.net/src/renderer/index.html', 'https://my-pc.tail1234.ts.net'), true);
   assert.equal(conn.allowRemotePermission('clipboard-sanitized-write', 'http://other:7300/', origin), false);
   assert.equal(conn.allowRemotePermission('media', 'http://my-pc:7300/', origin), false);
   assert.equal(conn.allowRemotePermission('notifications', 'http://my-pc:7300/', origin), false);

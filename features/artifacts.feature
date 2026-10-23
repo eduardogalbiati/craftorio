@@ -106,3 +106,29 @@ Feature: Artifacts
     And I click the link "the full log" in the artifact
     Then the app is still on its own page
     And the artifact shows "The audit found no issue."
+
+  # #477 (SEC-12): a file of a kind the app does not know (an agent-written summary.cmd) is never
+  # opened with the system's default program from the Artifacts screen (on Windows a .cmd would run):
+  # its only action is "Show in folder"; documents keep "Open". Assumes the Artifacts screen's viewer
+  # (the selected file's toolbar and preview) gets data-testid="artifact-viewer". The step writes the
+  # file into the demo run "-res00225"'s folder; Show in folder is never clicked (it opens the file manager).
+  @issue-477
+  Scenario: A document on the Artifacts screen keeps its Open action
+    Given the app is open
+    And a finished demo run "res00225" with a result summary, screenshots, tests, reports, process and internal files
+    When I open the Artifacts tab of Runs
+    And I find the run "res00225" on the Artifacts screen
+    And I open the artifact "result.md"
+    Then the artifact viewer offers "Open"
+    And the artifact viewer offers "Show in folder"
+
+  @issue-477
+  Scenario: A file of unknown kind is only shown in its folder, never opened
+    Given the app is open
+    And the demo run "res00225" has an agent-written file "summary.cmd" reading "@echo off"
+    When I open the Artifacts tab of Runs
+    And I find the run "res00225" on the Artifacts screen
+    And I choose "Show all" in the artifacts
+    And I select the artifact "summary.cmd"
+    Then the artifact viewer offers "Show in folder"
+    And the artifact viewer offers no "Open"

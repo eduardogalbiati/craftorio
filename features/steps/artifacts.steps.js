@@ -2,7 +2,8 @@
 // artifacts on the Run screen's Artifacts tab and the Artifacts screen, Produced / Show all and the
 // category and kind chips (#225), the before/after screenshots with a new element (#185), and the
 // image viewer's previous / next navigation with its counter (#182), agent-written forms and local
-// links in a markdown artifact that never take the window off the app's page (#466). Locators are roles and
+// links in a markdown artifact that never take the window off the app's page (#466), the Artifacts
+// screen's Open kept for documents and replaced by Show in folder for unknown kinds (#477). Locators are roles and
 // data-testid only (skills/ui-conventions).
 
 const fs = require('fs');
@@ -196,6 +197,34 @@ Then('the artifact shows no {string} button', async ({ e2e }, name) => {
 
 When('I click the link {string} in the artifact', async ({ e2e }, name) => {
   await preview(e2e.window).getByRole('link', { name, exact: true }).click();
+});
+
+// ---- Open only for the kinds the app knows (#477) -----------------------------------------------
+// The Artifacts screen's viewer (data-testid="artifact-viewer": the selected file's toolbar and
+// preview). Its actions are buttons named "Open", "Show in folder", "Copy path"; none is clicked here.
+
+const artViewer = (page) => page.getByTestId('artifact-viewer').filter({ visible: true }).first();
+
+Given('the demo run {string} has an agent-written file {string} reading {string}', async ({ e2e }, fragment, name, text) => {
+  writeReport(e2e, fragment, name, `${text}\r\n`);
+});
+
+// a click on the listed file, whatever its kind (I open the artifact waits for a rendered document)
+When('I select the artifact {string}', async ({ e2e }, name) => {
+  await artifacts(e2e.window).getByTestId('artifact-item').filter({ hasText: name }).first().click();
+  await expect(artViewer(e2e.window)).toContainText(name, { timeout: LOAD_TIMEOUT });
+});
+
+Then('the artifact viewer offers {string}', async ({ e2e }, name) => {
+  await expect(artViewer(e2e.window).getByRole('button', { name, exact: true }).first()).toBeVisible({ timeout: LOAD_TIMEOUT });
+});
+
+Then('the artifact viewer offers no {string}', async ({ e2e }, name) => {
+  const viewer = artViewer(e2e.window);
+  // the file's preview has drawn (no "Loading…") before the absence counts
+  await expect(viewer.getByRole('button', { name: 'Show in folder', exact: true })).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(viewer).not.toContainText('Loading', { timeout: LOAD_TIMEOUT });
+  await expect(viewer.getByRole('button', { name, exact: true })).toHaveCount(0);
 });
 
 // ---- the image viewer's previous / next (#182)---------------------------------------------------

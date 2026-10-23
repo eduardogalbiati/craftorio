@@ -1,6 +1,6 @@
 // The engine connection's windows (src/engine-connection-window.js) with a fake Electron: in remote
-// mode the engine is tested before its window opens; the window loads `<url>/?token=` with no preload
-// in its own sandboxed session; leaving the engine's origin, a refused token or a page that does not
+// mode the engine is tested before its window opens; the window loads `<url>/` (never the token in
+// the address, #480) with no preload in its own sandboxed session; leaving the engine's origin, a refused token or a page that does not
 // load shows the connection page; the page's channels answer only that page, never give the token
 // back, test before saving, and refuse to switch while runs are in progress here.
 const test = require('node:test');
@@ -11,7 +11,9 @@ const conn = require('../src/engine-connection');
 const { createEngineConnection } = require('../src/engine-connection-window');
 
 const TOKEN = 'tok-0123456789abcdef';
-const URL_ = 'http://my-pc:7300';
+// a Tailscale MagicDNS name: plain http to it is allowed without the insecure opt-in (#480)
+const URL_ = 'http://my-pc.tail1234.ts.net:7300';
+const HOST = 'my-pc.tail1234.ts.net:7300';
 
 function fakeElectron() {
   const windows = [];
@@ -78,22 +80,25 @@ function setup({ mode = 'remote', saved = { mode: 'remote', address: URL_, token
   return { e, c, store, relaunched, quits, main, pageOf, remoteOf, call };
 }
 
-const decision = (over = {}) => ({ mode: 'remote', url: URL_, host: 'my-pc:7300', token: TOKEN, address: URL_, ...over });
+const decision = (over = {}) => ({ mode: 'remote', url: URL_, host: HOST, token: TOKEN, address: URL_, ...over });
 const navEvent = () => ({ prevented: false, preventDefault() { this.prevented = true; } });
 
-test('remote mode: the engine answers, its window loads <url>/?token= with no preload, isolated and sandboxed, in its own session', async () => {
+test('remote mode: the engine answers, its window loads <url>/ with no preload, isolated and sandboxed, in its own session', async () => {
   const s = setup();
   await s.c.startRemote(decision());
   const w = s.remoteOf();
   assert.ok(w, 'the remote window is open');
-  assert.equal(w.loadedUrl, `${URL_}/?token=${TOKEN}`);
+  // #480: the token goes in an Authorization header (onBeforeSendHeaders), never in the address
+  assert.equal(new URL(w.loadedUrl).origin, URL_);
+  assert.equal(w.loadedUrl.includes('token='), false, w.loadedUrl);
+  assert.equal(w.loadedUrl.includes(TOKEN), false, w.loadedUrl);
   const prefs = w.opts.webPreferences;
   assert.equal(prefs.preload, undefined, 'no preload for remote content');
   assert.equal(prefs.contextIsolation, true);
   assert.equal(prefs.nodeIntegration, false);
   assert.equal(prefs.sandbox, true);
   assert.equal(prefs.partition, conn.PARTITION);
-  assert.match(w.opts.title, /engine on my-pc:7300/);
+  assert.equal(w.opts.title.includes(`engine on ${HOST}`), true, w.opts.title);
   assert.match(s.e.ses.ua, new RegExp(`${conn.CLIENT_MARK}$`), 'the page can tell it is inside the desktop app');
   assert.equal(s.pageOf(), undefined, 'no connection page');
   // the clipboard only, for the engine's origin
@@ -158,7 +163,7 @@ test('the remote window keeps to the engine\'s origin: other sites go to the sys
   assert.ok(page, 'Change… on the engine\'s page opens the connection page');
   assert.equal(page.opts.parent, w, 'over the remote window');
   assert.equal(page.opts.modal, true);
-  assert.equal((await s.call('engine-connection:state')).remoteHost, 'my-pc:7300');
+  assert.equal((await s.call('engine-connection:state')).remoteHost, HOST);
   // asked again: the same page comes forward and reads its state again
   w.webContents.openHandler({ url: `${URL_}${conn.CONNECTION_PATH}` });
   assert.equal(s.e.windows.filter((x) => x.loadedFile).length, 1);
@@ -224,14 +229,14 @@ test('local mode: Save tests the engine, then saves it with its token and restar
   s.c.openPage();
   const page = s.pageOf();
   assert.equal(page.opts.parent, s.main, 'over the main window');
-  const refused = await s.call('engine-connection:save', { mode: 'remote', address: 'my-pc', token: 'wrong-token-0123456789' });
+  const refused = await s.call('engine-connection:save', { mode: 'remote', address: 'my-pc.tail1234.ts.net', token: 'wrong-token-0123456789' });
   assert.equal(refused.saved, false);
   assert.equal(refused.test.reason, 'token');
   assert.deepEqual(s.store.writes, []);
   assert.deepEqual(s.relaunched, []);
 
   reply = ENGINE_OK;
-  const ok = await s.call('engine-connection:save', { mode: 'remote', address: 'my-pc', token: ` ${TOKEN} ` });
+  const ok = await s.call('engine-connection:save', { mode: 'remote', address: 'my-pc.tail1234.ts.net', token: ` ${TOKEN} ` });
   assert.deepEqual([ok.saved, ok.restarting, ok.test.ok], [true, true, true]);
   assert.deepEqual(s.store.writes, [{ mode: 'remote', address: URL_, token: TOKEN }]);
   assert.equal(s.relaunched.length, 1);
@@ -240,7 +245,7 @@ test('local mode: Save tests the engine, then saves it with its token and restar
 test('local mode: runs in progress here refuse the switch before anything is saved', async () => {
   const s = setup({ mode: 'local', saved: { mode: 'local', address: '', token: '' }, prepareRestart: () => { throw new Error('1 run is in progress: confirm the restart to interrupt it (r1).'); } });
   s.c.openPage();
-  await assert.rejects(s.call('engine-connection:save', { mode: 'remote', address: 'my-pc', token: TOKEN }), /1 run is in progress/);
+  await assert.rejects(s.call('engine-connection:save', { mode: 'remote', address: 'my-pc.tail1234.ts.net', token: TOKEN }), /1 run is in progress/);
   assert.deepEqual(s.store.writes, []);
   assert.deepEqual(s.relaunched, []);
 });

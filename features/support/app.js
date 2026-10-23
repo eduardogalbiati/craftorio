@@ -53,7 +53,9 @@ async function seedWorkspace(wsDir) {
 // The launched app's environment: simulation only, the scratch workspace, no Node mode.
 // mockDelayScale: the simulated turns' speed (default 0.02: a turn in well under a second; #368's
 // pause scenarios use a larger one so an agent's turn lasts long enough to be paused during it)
-function appEnv(scratch, { theme, size, now, mockDelayScale = 0.02 }) {
+// extra: more variables for the app, e.g. { MULTIAGENT_NO_SANDBOX: '1' } (#476: what the Linux
+// AppImage's launcher sets when it starts the app without Chromium's sandbox)
+function appEnv(scratch, { theme, size, now, mockDelayScale = 0.02, extra = {} }) {
   const home = path.join(scratch, 'home');
   for (const d of [home, path.join(home, 'AppData'), path.join(scratch, 'user-data')]) fs.mkdirSync(d, { recursive: true });
   const env = {
@@ -68,6 +70,7 @@ function appEnv(scratch, { theme, size, now, mockDelayScale = 0.02 }) {
     LANG: 'en_US.UTF-8', LC_ALL: 'en_US.UTF-8',
     HOME: home, USERPROFILE: home, APPDATA: path.join(home, 'AppData'),
     GH_CONFIG_DIR: path.join(home, 'gh'), GLAB_CONFIG_DIR: path.join(home, 'glab'),
+    ...extra,
   };
   delete env.ELECTRON_RUN_AS_NODE;
   if (now != null) env.MULTIAGENT_E2E_NOW = String(now);
@@ -94,10 +97,11 @@ function removeScratch(dir) {
  * features/support/fixed-clock.js) for the seed and the app's main process, the real one without it.
  * mockDelayScale: MULTIAGENT_MOCK_DELAY_SCALE for the app (default 0.02).
  * slot: hold the machine's screenshot slot while the app is open (#365: the visual lane).
+ * env: more environment variables for the app (appEnv's extra, #476).
  * No recordVideo: with Electron 44 it stalls the window before its page loads (the trace's
  * screencast is the scenario's video, features/steps/fixtures.js).
  */
-async function launchApp({ theme = 'light', size = '1400x900', empty = false, now = null, mockDelayScale, slot: takeSlot = true } = {}) {
+async function launchApp({ theme = 'light', size = '1400x900', empty = false, now = null, mockDelayScale, slot: takeSlot = true, env = {} } = {}) {
   const slot = await screenshotSlot(takeSlot);
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'multiagent-e2e-'));
   let app = null;
@@ -116,7 +120,7 @@ async function launchApp({ theme = 'light', size = '1400x900', empty = false, no
       executablePath: require('electron'),
       args: [path.join(__dirname, 'electron-main.js')],
       cwd: root,
-      env: appEnv(scratch, { theme, size, now, mockDelayScale }),
+      env: appEnv(scratch, { theme, size, now, mockDelayScale, extra: env }),
       locale: 'en-US',
       timeout: 60000,
     });

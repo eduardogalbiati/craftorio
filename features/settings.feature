@@ -282,3 +282,23 @@ Feature: Settings
     When I open "Settings" in the sidebar
     And I open the "Execution" settings tab
     Then the red-base choice offers "Off", "Issue only" and "Issue + fix item", with "Issue + fix item" selected
+
+  # #476 (SEC-11): the Linux AppImage's launcher starts the app without Chromium's sandbox when the
+  # system forbids it, and then sets MULTIAGENT_NO_SANDBOX=1 (the scenario sets it as the launcher
+  # would). Assumes Settings › About gets data-testid="settings-sandbox-warning": that the app runs
+  # without the sandbox, with the documented alternative, the sysctl
+  # kernel.apparmor_restrict_unprivileged_userns=0 (README, Install on Linux)
+  @issue-476
+  Scenario: Started without the Chromium sandbox, Settings › About warns and gives the alternative
+    Given the app was started without the Chromium sandbox
+    When I open "Settings" in the sidebar
+    And I open the "About" settings tab
+    Then Settings warns that the app runs without the sandbox
+    And the sandbox warning mentions "kernel.apparmor_restrict_unprivileged_userns=0"
+
+  @issue-476
+  Scenario: Started normally, Settings › About shows no sandbox warning
+    Given the app is open
+    When I open "Settings" in the sidebar
+    And I open the "About" settings tab
+    Then Settings shows no sandbox warning
