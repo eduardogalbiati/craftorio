@@ -16,6 +16,7 @@
 const path = require('path');
 const yaml = require('js-yaml');
 const registry = require('./shared/providers');
+const { PLATFORMS } = require('./shared/platforms');
 const { MANIFEST_FILE } = require('./project-manifest');
 
 const MULTIAGENT_DIR = path.posix.dirname(MANIFEST_FILE);
@@ -121,6 +122,9 @@ function withOverrides(profile, answers) {
   return out;
 }
 
+// the platform a CI the seed names belongs to ("GitLab CI", "GitHub Actions"), GitHub's when none matches
+const platformOfCi = (ci) => PLATFORMS.find((p) => ci.toLowerCase().includes(p.id)) || PLATFORMS[0];
+
 // The profile under the owner's answers, each field checked: what the composition builds from
 function settingsOf(profile = {}, answers = {}) {
   const p = profile || {};
@@ -139,7 +143,7 @@ function settingsOf(profile = {}, answers = {}) {
     budget: Number.isFinite(budget) && budget > 0 ? budget : defaults.budget,
     testCommand,
     checkCommand: str(a.checkCommand) || str(p.checkCommand),
-    platform: /gitlab/i.test(str(a.ci) || str(p.ci)) ? 'gl' : 'gh',
+    platform: platformOfCi(str(a.ci) || str(p.ci)).short,
   };
 }
 
@@ -205,7 +209,7 @@ function intakeWorkflow(s) {
     inputs: {
       request: { label: 'Request', type: 'string', required: true, description: 'The problem or the idea, in a few words, in any language.' },
       project_path: { label: 'Project folder', type: 'string', required: true, description: 'The repository the issue is about (read-only).' },
-      git_platform: { label: 'Platform', type: 'string', enum: ['gh', 'gl'], default: s.platform, options: { gh: 'GitHub', gl: 'GitLab' }, description: 'Where the issue is filed.' },
+      git_platform: { label: 'Platform', type: 'string', enum: PLATFORMS.map((p) => p.short), default: s.platform, options: Object.fromEntries(PLATFORMS.map((p) => [p.short, p.label])), description: 'Where the issue is filed.' },
     },
   });
   const vcs = ['bash:gh', 'bash:git', 'bash:glab'];
