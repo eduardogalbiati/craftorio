@@ -5,6 +5,7 @@
     {"type":"session.opened","session.provider":"engine"},
     {"type":"session.status","status":"active"},
     {"type":"log"},
+    {"type":"log"},
     {"type":"step.started","step_id":"develop"},
     {"type":"log"},
     {"type":"log"},
