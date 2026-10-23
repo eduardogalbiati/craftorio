@@ -315,6 +315,10 @@ function renderArtifactViewer() {
   }
   const meta = { ...(findArtifactMeta(d.path) || {}), ...d };
   const name = meta.name || d.path.split(/[\\/]/).pop();
+  // a kind the index does not know (an agent's summary.cmd) is never opened with its default
+  // program, only shown in its folder (#477; main.js refuses programs too, src/open-guard.js)
+  const openable = meta.kind !== 'other';
+  const missing = meta.exists === false ? 'disabled' : '';
   bar.classList.remove('hidden');
   bar.innerHTML = `
     <div class="art-title">
@@ -323,8 +327,8 @@ function renderArtifactViewer() {
     </div>
     ${meta.kind === 'markdown' && d.text != null ? `<div class="seg sm"><button type="button" data-mode="rendered" class="${a.mode === 'rendered' ? 'active' : ''}">${t('artifacts.rendered')}</button><button type="button" data-mode="source" class="${a.mode === 'source' ? 'active' : ''}">${t('artifacts.source')}</button></div>` : ''}
     <div class="row">
-      <button class="btn sm ghost" data-art-act="open" ${meta.exists === false ? 'disabled' : ''}>${t('artifacts.open')}</button>
-      <button class="btn sm ghost" data-art-act="reveal" ${meta.exists === false ? 'disabled' : ''}>${t('artifacts.show_in_folder')}</button>
+      ${openable ? `<button class="btn sm ghost" data-art-act="open" ${missing}>${t('artifacts.open')}</button>` : ''}
+      <button class="btn sm ghost" data-art-act="reveal" ${missing}>${t('artifacts.show_in_folder')}</button>
       <button class="btn sm ghost" data-art-act="copy">${t('artifacts.copy_path')}</button>
     </div>
     <span class="muted small art-msg"></span>`;
@@ -357,7 +361,11 @@ function renderArtifactViewer() {
     img.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); img.click(); } };
     return;
   }
-  if (d.binary || d.text == null || meta.kind === 'other') {
+  if (!openable) {
+    body.innerHTML = `${notice}<div class="art-empty"><p class="muted">${t('artifacts.preview_not_available_for_this_file')}</p></div>`;
+    return;
+  }
+  if (d.binary || d.text == null) {
     body.innerHTML = `${notice}<div class="art-empty"><p class="muted">${t('artifacts.preview_not_available_for_this_file')}</p><button class="btn primary" id="art-open-default">${t('artifacts.open')}</button></div>`;
     $('#art-open-default').onclick = () => api.openArtifact(d.path).catch(() => {});
     return;
@@ -432,7 +440,7 @@ registerView({
             <p id="art-error" class="error small"></p>
             <div id="art-list" class="art-list"></div>
           </aside>
-          <section class="art-viewer">
+          <section class="art-viewer" data-testid="artifact-viewer">
             <div id="art-toolbar" class="art-toolbar hidden"></div>
             <div id="art-body" class="art-body">
               <div class="art-empty muted">${t('artifacts.select_a_file_to_preview_it')}</div>

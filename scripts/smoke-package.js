@@ -1,6 +1,7 @@
 // Smoke test of a packaged app (the release jobs in deploy.yml and preview.yml): starts it in simulation
 // (MULTIAGENT_SIMULATION_ONLY=1) on a scratch workspace and checks that its window loads and that it
-// quits by itself (src/main.js writes MULTIAGENT_SMOKE_FILE, then quits). Exits 1 otherwise.
+// quits by itself (src/main.js writes MULTIAGENT_SMOKE_FILE, then quits). Exits 1 otherwise. On Linux,
+// an AppImage the kernel makes start without Chromium's sandbox must warn about it on stderr (#476).
 //   node scripts/smoke-package.js [executable or AppImage]   (default: this machine's build in dist/)
 // Linux needs a display: run it under xvfb-run.
 
@@ -19,13 +20,21 @@ const report = path.join(scratch, 'loaded.txt');
 const workspace = path.join(scratch, 'workspace');
 fs.mkdirSync(workspace);
 
+// An AppImage on a system that forbids unprivileged user namespaces starts without Chromium's sandbox:
+// its launcher must say so on stderr (#476, scripts/release-assets.js APP_RUN)
+const readProc = (p) => { try { return fs.readFileSync(p, 'utf8').trim(); } catch { return ''; } };
+const expectSandboxWarning = process.platform === 'linux' && /\.AppImage$/i.test(exe)
+  && (readProc('/proc/sys/kernel/apparmor_restrict_unprivileged_userns') === '1' || readProc('/proc/sys/kernel/unprivileged_userns_clone') === '0');
+let stderr = '';
+
 console.log(`Smoke: starting ${exe} on ${workspace}`);
 // A packaged app ignores MULTIAGENT_USER_DATA: Chromium's --user-data-dir keeps its user data (sign-in,
 // window state) away from the machine's real install
 const child = spawn(exe, [`--user-data-dir=${path.join(scratch, 'user-data')}`], {
-  stdio: 'inherit',
+  stdio: expectSandboxWarning ? ['inherit', 'inherit', 'pipe'] : 'inherit',
   env: { ...process.env, MULTIAGENT_SIMULATION_ONLY: '1', MULTIAGENT_WORKSPACE: workspace, MULTIAGENT_SMOKE_FILE: report },
 });
+if (expectSandboxWarning) child.stderr.on('data', (d) => { stderr += d; process.stderr.write(d); });
 const fail = (why) => {
   console.error(`Smoke failed: ${why}`);
   process.exitCode = 1;
@@ -40,5 +49,6 @@ child.on('exit', (code, signal) => {
   if (process.exitCode) return;
   if (code !== 0) fail(`the app exited with ${signal || code}`);
   else if (!fs.existsSync(report)) fail('the app quit before its window loaded');
+  else if (expectSandboxWarning && !/without chromium's sandbox/i.test(stderr)) fail('the AppImage started without the sandbox but printed no warning on stderr (#476)');
   else console.log(`Smoke passed: ${fs.readFileSync(report, 'utf8').trim()}`);
 });

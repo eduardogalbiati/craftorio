@@ -4,10 +4,13 @@
 // Pure of Electron, like src/agents-window.js: createEngineConnection({ BrowserWindow, ipcMain, shell,
 // session, dirname, store, version, ... }) → { startRemote(decision), openPage(), window() }.
 //
-// - The remote window loads `<url>/?token=<token>` with no preload (remote content: context
-//   isolation, no Node, sandboxed) in its own session (PARTITION): only the engine's origin loads in
-//   it, other http(s) links open in the system browser, and the engine's page asks for the
-//   connection page by opening CONNECTION_PATH (Settings › Execution › Engine, api-http.js).
+// - The remote window loads `<url>/` with no preload (remote content: context isolation, no Node,
+//   sandboxed) in its own session (PARTITION): the token goes in an `Authorization: Bearer` header
+//   to the engine's origin only (webRequest.onBeforeSendHeaders), never in an address (#480); only
+//   the engine's origin loads in it, other http(s) links open in the system browser, and the engine's
+//   page asks for the connection page by opening CONNECTION_PATH (Settings › Execution › Engine, api-http.js).
+// - Saving a plain-http address outside loopback and Tailscale needs the page's "Allow an insecure
+//   connection" (insecure: true, kept in the setting); without it Save answers why, untested (#480).
 // - The engine is tested (GET /api/version) before its window opens; an engine that cannot be
 //   reached, a refused token or a page that does not load replaces the window with the connection
 //   page and the reason (Retry / Change the address / Use this computer), so the app is never locked out.
@@ -121,7 +124,12 @@ function createEngineConnection({
   }
 
   // ---- the remote engine's window ---------------------------------------------------------
-  function prepareSession(origin) {
+  // the engine's origin of a request (its WebSocket's ws(s):// counts as http(s)://), or null
+  const requestOrigin = (url) => {
+    try { return new URL(String(url).replace(/^ws(s?):/i, 'http$1:')).origin; } catch { return null; }
+  };
+
+  function prepareSession(origin, token) {
     const ses = session.fromPartition(conn.PARTITION);
     if (!sessionReady) {
       ses.setUserAgent(`${ses.getUserAgent()} ${conn.CLIENT_MARK}`);
@@ -129,6 +137,13 @@ function createEngineConnection({
     }
     ses.setPermissionRequestHandler((_wc, permission, callback, details) => callback(conn.allowRemotePermission(permission, details?.requestingUrl, origin)));
     ses.setPermissionCheckHandler((wc, permission, requestingOrigin) => conn.allowRemotePermission(permission, requestingOrigin || wc?.getURL(), origin));
+    // the token as `Authorization: Bearer`, to the engine's origin only, never in an address (#480);
+    // registered again at each start (Retry may bring another engine or token)
+    ses.webRequest?.onBeforeSendHeaders((details, callback) => {
+      if (!token || requestOrigin(details.url) !== origin) return callback({ requestHeaders: details.requestHeaders });
+      const headers = Object.fromEntries(Object.entries(details.requestHeaders || {}).filter(([k]) => k.toLowerCase() !== 'authorization'));
+      callback({ requestHeaders: { ...headers, Authorization: `Bearer ${token}` } });
+    });
   }
 
   // what a link or a navigation of the remote window does (conn.routeUrl): true when it stays
@@ -141,7 +156,7 @@ function createEngineConnection({
 
   function openRemoteWindow(d) {
     const origin = new URL(d.url).origin;
-    prepareSession(origin);
+    prepareSession(origin, d.token);
     const title = `Multiagent Orchestrator · engine on ${d.host}`;
     const w = new BrowserWindow({
       ...windowOptions,
@@ -170,7 +185,7 @@ function createEngineConnection({
       }
     });
     w.on('closed', () => { if (remoteWin === w) remoteWin = null; });
-    w.loadURL(conn.startUrl(d.url, d.token));
+    w.loadURL(`${d.url}/`);
     return w;
   }
 
@@ -206,7 +221,7 @@ function createEngineConnection({
   // a blank token tests with the saved one (the page never holds it)
   handle('engine-connection:test', ({ address, token }) => test(address, String(token || '').trim() || store.read().token));
 
-  handle('engine-connection:save', async ({ mode: want, address, token }) => {
+  handle('engine-connection:save', async ({ mode: want, address, token, insecure }) => {
     const saved = store.read();
     if (want !== 'remote') {
       // the address and token stay saved, for the next switch
@@ -220,12 +235,15 @@ function createEngineConnection({
       return { saved: true, restarting: true };
     }
     const parsed = conn.parseAddress(address);
+    // an unencrypted address needs the explicit opt-in, before the engine is even contacted (#480)
+    const unencrypted = conn.insecureAddress(parsed);
+    if (unencrypted && insecure !== true) return { saved: false, test: { ok: false, reason: 'insecure', url: parsed.url, host: parsed.host, message: unencrypted } };
     const tok = String(token || parsed.token || '').trim() || saved.token;
     const t = await test(address, tok);
     if (!t.ok) return { saved: false, test: t };
     // runs in progress on this computer: refused before anything is written
     prepareRestart();
-    store.write({ mode: 'remote', address: t.url, token: tok });
+    store.write({ mode: 'remote', address: t.url, token: tok, ...(unencrypted ? { insecure: true } : {}) });
     relaunch();
     return { saved: true, restarting: true, test: t };
   });

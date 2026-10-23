@@ -76,7 +76,7 @@ module.exports = (ctx) => [
     schema: {
       result: shape({
         version: STRING, electron: STRING, node: STRING, workflowsDir: STRING, simulationOnly: BOOL, totalMemoryBytes: NUMBER, startView: nullable(STRING),
-        isPackaged: BOOL, screenshot: BOOL,
+        isPackaged: BOOL, screenshot: BOOL, noSandbox: BOOL,
       },['simulationOnly']),
     },
     fn: () => ({
@@ -93,6 +93,9 @@ module.exports = (ctx) => [
       isPackaged: Boolean(ctx.host.isPackaged),
       // a scripts/screenshot.js capture: the Findings button stays hidden unless the setting is on
       screenshot: process.env.MULTIAGENT_SCREENSHOT === '1',
+      // the Linux AppImage's launcher started the app without Chromium's sandbox (#476,
+      // scripts/release-assets.js APP_RUN): Settings › About warns and gives the alternative
+      noSandbox: process.env.MULTIAGENT_NO_SANDBOX === '1',
     }),
   },
   // the engine's version and the contract its channels declare (#339): what GET /api/version answers

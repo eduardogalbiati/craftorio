@@ -49,6 +49,7 @@ async function hardenExe(exe, platform) {
     [FuseV1Options.EnableNodeCliInspectArguments]: false, // --inspect, --inspect-brk
     [FuseV1Options.EnableEmbeddedAsarIntegrityValidation]: true, // refuse a modified app.asar
     [FuseV1Options.OnlyLoadAppFromAsar]: true, // ignore a loose resources/app folder
+    [FuseV1Options.EnableCookieEncryption]: true, // the remote engine's session cookie, OS-encrypted on disk (#480)
   });
 }
 

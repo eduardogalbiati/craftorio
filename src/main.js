@@ -44,6 +44,7 @@ const runOwner = require('./run-owner');
 const { allowPermission } = require('./permissions');
 const { guardIpc } = require('./ipc-guard');
 const { guardWindow } = require('./window-guards');
+const { checkOpenable } = require('./open-guard');
 const { createService } = require('./service');
 const { createControlChannel } = require('./control');
 const { nativeBinaryPath } = require('./native-bin');
@@ -409,6 +410,9 @@ function createWindow() {
 // ---- desktop-only actions ----------------------------------------------------------------
 ipc.handle('path:open', (p) => {
   if (!service.openableFolders().some((dir) => pathKey(p) === pathKey(dir) || pathKey(p).startsWith(pathKey(dir) + path.sep))) throw new Error('Path is outside the workspace.');
+  // never run a program an agent wrote (#477): an executable extension or, on POSIX, the x bit
+  const openable = checkOpenable(p);
+  if (!openable.ok) throw new Error(openable.reason);
   return shell.openPath(p);
 });
 
@@ -437,11 +441,15 @@ ipc.handle('run:openDir', (arg) => {
   return shell.openPath(dir);
 });
 
-// Opens an artifact with the default app, or shows it in the file explorer.
+// Opens an artifact with the default app, or shows it in the file explorer. A program (an
+// executable extension, or the x bit on POSIX) is never opened: the answer is the reason (#477),
+// like shell.openPath's own error string.
 ipc.handle('artifacts:open', async ({ path: file, reveal }) => {
   const found = await service.findArtifact(file);
   if (!found?.exists) throw new Error('Artifact not found.');
   if (reveal) { shell.showItemInFolder(found.path); return ''; }
+  const openable = checkOpenable(found.path);
+  if (!openable.ok) return openable.reason;
   return shell.openPath(found.path);
 });
 

@@ -170,6 +170,11 @@ with the token encrypted by the OS, never in the workspace.
 - Plain HTTP over Tailscale is encrypted by WireGuard. For HTTPS, leave `npm run serve` on
   `127.0.0.1`, run `tailscale serve --bg 7300` on that computer and type
   `https://<machine>.<tailnet>.ts.net` in the app.
+- Any other plain `http://` address (a LAN IP such as `192.168.1.10`, a server on `0.0.0.0`) is not
+  encrypted: the token and every page could be read or replaced on the network. Saving it needs
+  **Allow an insecure connection**, and the connection page warns about it every time it shows it.
+  The app sends the token in an `Authorization` header, never in the address, and lets the engine's
+  page read the clipboard only over https (writing to it works on http too).
 - Desktop-only actions (native folder picker, opening files in their app, external console
   windows, changing the workspace) are not available in the browser; folder paths are typed.
   **Keep awake** is disabled there ("Not available in the browser client"): only the desktop app

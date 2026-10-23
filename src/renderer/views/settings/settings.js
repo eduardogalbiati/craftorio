@@ -590,7 +590,11 @@ async function renderTools() {
 
 async function renderAbout() {
   const i = await api.appInfo();
-  $('#set-about').innerHTML = [[t('settings.about.version'), i.version], ['Electron', i.electron], ['Node', i.node], [t('settings.about.workflows'), i.workflowsDir]].map(([k, v]) =>
+  // started by the Linux AppImage without Chromium's sandbox (#476): say so, with the alternative
+  const sandbox = i.noSandbox
+    ? `<div class="page-alerts"><div class="alert alert-warning" role="alert" data-testid="settings-sandbox-warning"><div class="alert-body">${esc(t('settings.about.sandbox_warning'))}</div></div></div>`
+    : '';
+  $('#set-about').innerHTML = sandbox + [[t('settings.about.version'), i.version], ['Electron', i.electron], ['Node', i.node], [t('settings.about.workflows'), i.workflowsDir]].map(([k, v]) =>
     `<div class="s-row"><div class="s-label"><b>${esc(k)}</b></div><div class="s-ctrl mono small">${esc(v)}</div></div>`).join('');
 }
 

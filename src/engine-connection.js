@@ -6,15 +6,20 @@
 //
 //   parseAddress(text)          'host', 'host:port' or an http(s):// URL → { url, host, ... } (port 7300 by
 //                               default); a pasted `…/?token=<t>` URL from the server gives its token too
+//   insecureAddress(parsed)     why a parsed address is not encrypted (plain http to a host that is neither
+//                               loopback nor Tailscale), or null: such an address needs the explicit
+//                               `insecure: true` opt-in, which the connection page shows every time (#480)
 //   readConnection(file, opts) / writeConnection(file, connection, opts)
 //                               the setting in the app's user data folder (never the workspace): mode,
-//                               address and the token, encrypted by the caller's functions (safeStorage)
+//                               address, the insecure opt-in and the token, encrypted by the caller's
+//                               functions (safeStorage)
 //   connectionView(connection)  what a page may see of it: the token never leaves the main process
 //   decideMode({ connection, env })   local, or remote with its URL and token (or why the setting is unusable)
 //   testConnection({ address, token, fetch, localContract })   GET /api/version with the token → the
 //                               engine's version and contract, or the reason it failed
-//   startUrl, routeUrl, allowRemotePermission   the remote window's address and its navigation and
-//                               permission rules
+//   startUrl, routeUrl, allowRemotePermission   the browser's first address (the remote window sends
+//                               the token as `Authorization: Bearer` instead, #480), the remote window's
+//                               navigation and permission rules (clipboard-read only over https)
 //   lanAddresses, resolveListenHost   the server's side (scripts/serve.js): the addresses another
 //                               computer can type, and `--host tailscale` (this computer's Tailscale address)
 
@@ -72,12 +77,28 @@ function parseAddress(text) {
   };
 }
 
+// Plain http carries the token and every page in clear text (#480): fine on this computer and over
+// Tailscale (WireGuard encrypts it: 100.64.0.0/10, a *.ts.net name), anywhere else only with the
+// explicit opt-in. Mirrored by src/renderer/connection/connection.js needsOptIn (the sandboxed page).
+function insecureAddress(parsed) {
+  if (!parsed || parsed.error || parsed.secure) return null;
+  const host = String(parsed.hostname || '').toLowerCase();
+  if (isLoopback(host) || isTailscaleIp(host) || /\.ts\.net$/.test(host)) return null;
+  return `${parsed.host} is plain http outside this computer and Tailscale: the connection is not encrypted, so the token and every page can be read on the network. Use https (tailscale serve) or a Tailscale address, or check "Allow an insecure connection".`;
+}
+
 // ---- the setting --------------------------------------------------------------------------
 
-// A stored connection → { mode: 'local' | 'remote', address, token } (token '' when none or unreadable).
+// A stored connection → { mode: 'local' | 'remote', address, token, insecure? } (token '' when none or
+// unreadable; insecure only when the user allowed an unencrypted address, #480).
 function normalizeConnection(c) {
   const mode = c?.mode === 'remote' ? 'remote' : 'local';
-  return { mode, address: typeof c?.address === 'string' ? c.address : '', token: typeof c?.token === 'string' ? c.token : '' };
+  return {
+    mode,
+    address: typeof c?.address === 'string' ? c.address : '',
+    token: typeof c?.token === 'string' ? c.token : '',
+    ...(c?.insecure === true ? { insecure: true } : {}),
+  };
 }
 
 /**
@@ -108,14 +129,15 @@ function writeConnection(file, connection, { encrypt = null } = {}) {
   const c = normalizeConnection(connection);
   const token = !c.token ? null : encrypt ? { encrypted: Buffer.from(encrypt(c.token)).toString('base64') } : { plain: c.token };
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, `${JSON.stringify({ mode: c.mode, address: c.address, ...(token ? { token } : {}) }, null, 2)}\n`);
+  fs.writeFileSync(file, `${JSON.stringify({ mode: c.mode, address: c.address, ...(c.insecure ? { insecure: true } : {}), ...(token ? { token } : {}) }, null, 2)}\n`);
   return c;
 }
 
-// What the connection page may see of the setting: never the token itself.
+// What the connection page may see of the setting: never the token itself (the insecure opt-in, so the
+// page warns every time, #480).
 const connectionView = (c) => {
   const n = normalizeConnection(c);
-  return { mode: n.mode, address: n.address, hasToken: !!n.token };
+  return { mode: n.mode, address: n.address, hasToken: !!n.token, ...(n.insecure ? { insecure: true } : {}) };
 };
 
 /**
@@ -125,6 +147,7 @@ const connectionView = (c) => {
  *   { mode: 'remote', error, address }                        remote, but the setting is unusable
  * MULTIAGENT_ENGINE=local forces this computer. Under MULTIAGENT_SIMULATION_ONLY=1 only an engine on
  * this computer (127.0.0.1) is used: a check must never drive an engine that can start real runs.
+ * An unencrypted address without the insecure opt-in is unusable (#480): no token is handed out.
  */
 function decideMode({ connection, env = {} }) {
   if (env.MULTIAGENT_ENGINE === 'local') return { mode: 'local', reason: 'MULTIAGENT_ENGINE=local' };
@@ -132,6 +155,8 @@ function decideMode({ connection, env = {} }) {
   if (c.mode !== 'remote') return { mode: 'local' };
   const parsed = parseAddress(c.address);
   if (parsed.error) return { mode: 'remote', address: c.address, error: `The saved engine address is not valid: ${parsed.error}` };
+  const insecure = insecureAddress(parsed);
+  if (insecure && !c.insecure) return { mode: 'remote', address: c.address, url: parsed.url, error: insecure };
   if (!c.token) return { mode: 'remote', address: c.address, url: parsed.url, error: 'No token is saved for the remote engine: type it again.' };
   if (env.MULTIAGENT_SIMULATION_ONLY === '1' && !isLoopback(parsed.hostname)) {
     return { mode: 'local', reason: 'Simulation only: a remote engine is used only on this computer (127.0.0.1).' };
@@ -226,8 +251,9 @@ function resolveListenHost(host, interfaces) {
 
 // ---- the remote window's rules ------------------------------------------------------------
 
-// The first address the remote window loads: the server keeps the token in a cookie and drops it
-// from the address (src/server/index.js).
+// A browser's first address with the token (scripts/serve.js prints it): the server keeps the token in
+// a cookie and drops it from the address (src/server/index.js). The desktop app's remote window never
+// uses it: it loads `<url>/` and sends the token as `Authorization: Bearer` (#480).
 const startUrl = (url, token) => `${url}/?token=${encodeURIComponent(token)}`;
 
 /**
@@ -246,9 +272,14 @@ function routeUrl(url, origin) {
 
 // The web permissions of the remote window: the clipboard (the terminals, Copy buttons) for the
 // engine's own origin; nothing else (the microphone needs a secure origin, and the rest is never used).
+// Reading the clipboard only over https (#480): a page replaced on the way must not read a password
+// the user just copied; writing it (Copy buttons) stays on http too.
 function allowRemotePermission(permission, requestingUrl, origin) {
   if (permission !== 'clipboard-sanitized-write' && permission !== 'clipboard-read') return false;
-  try { return new URL(requestingUrl).origin === origin; } catch { return false; }
+  let u;
+  try { u = new URL(requestingUrl); } catch { return false; }
+  if (u.origin !== origin) return false;
+  return permission === 'clipboard-sanitized-write' || u.protocol === 'https:';
 }
 
 module.exports = {
@@ -259,6 +290,7 @@ module.exports = {
   decideMode,
   DEFAULT_PORT,
   FILE,
+  insecureAddress,
   isLoopback,
   isTailscaleIp,
   lanAddresses,

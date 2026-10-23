@@ -42,6 +42,10 @@
         <input type="text" id="cn-address" data-testid="engine-connection-address" spellcheck="false" autocomplete="off" data-i18n-placeholder="connection.address_placeholder" />
         <div class="hint" data-i18n="connection.address_hint">A host name or IP address, with :port when it is not 7300; or a full http(s):// address. Pasting the URL the engine printed (with ?token=…) fills the token too.</div>
       </div>
+      <!-- #480: a plain-http address outside this computer and Tailscale needs this opt-in; the warning shows while it is checked -->
+      <label class="cn-insecure hidden" id="cn-insecure-row"><input type="checkbox" id="cn-insecure" data-testid="engine-connection-allow-insecure" />
+        <span data-i18n="connection.allow_insecure">Allow an insecure connection</span></label>
+      <p class="cn-insecure-warning hidden" id="cn-insecure-warning" role="alert" data-testid="engine-connection-insecure-warning" data-i18n="connection.insecure_warning">This connection is not encrypted: anyone on the network can read the token and every page, and change them. Use it only on a network you trust.</p>
       <div class="field">
         <label for="cn-token" data-i18n="connection.token">Token</label>
         <input type="password" id="cn-token" data-testid="engine-connection-token" spellcheck="false" autocomplete="off" />

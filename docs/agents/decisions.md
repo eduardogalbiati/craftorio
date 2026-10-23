@@ -8,6 +8,15 @@ appears once, in its latest form, naming what it replaced. The hard rules of
 [AGENTS.md](../../AGENTS.md) are not repeated here. This is not the `decision-log` skill (a run's
 own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
 
+- **2026-10-23** (#476): the Linux AppImage keeps its AppRun fallback to `--no-sandbox` when the
+  kernel forbids unprivileged user namespaces (Ubuntu 23.10+), but only as a last resort and never
+  silently: the launcher warns on stderr and sets `MULTIAGENT_NO_SANDBOX=1`, Settings › About shows
+  the warning, and the README gives the user's own alternative (the sysctl
+  `kernel.apparmor_restrict_unprivileged_userns=0`, with its system-wide trade-off). An AppArmor
+  profile shipped with the app needs root to install, which an AppImage cannot do; a `.deb` whose
+  `chrome-sandbox` is setuid (or that installs the profile) is the way to a sandbox by default and
+  stays a future packaging target. Assumption recorded by the run, not yet confirmed by the owner.
+  Why: on Ubuntu 24.04 the AppImage ran with Chromium's renderer sandbox off and nobody was told.
 - **2026-10-22** (#469, #474): workflows, skills and seeds are code. Transition `action:` and
   `ship.build` stay shell strings (the bundled ones use `&&` and `{% if %}`: an argv list would
   break them); `loadWorkflow` allows there unfiltered only an allowlist of names the workflow or
@@ -128,9 +137,8 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   seed runs that command, with no model cost. A seed uses only the network reads it declares, each
   a builder and parser in both platform adapters. Why: projects differ in languages, CI and quality
   gates, so a fixed analysis misses what matters or needs a tool the machine lacks; a seed that
-  proves useful should become free and repeatable.
-
-- **2026-10-13** (#356): a project's Architecture tab works for any language. The deterministic
+  proves useful should become free and repeatable. (#356, same day) A project's Architecture tab
+  works for any language. The deterministic
   facts (lines, churn, hotspots, co-change, languages) are computed by the app from git, through a
   pure core in `src/shared/`; complexity comes only from a real tool, never a regex; the analysis is
   the Oracle's, on demand, in its daily budget. What the Oracle finds feeds the Refactor tab, where
