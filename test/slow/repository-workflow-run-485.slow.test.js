@@ -58,7 +58,7 @@ async function sameNameInBoth(t) {
     await until(() => finished.has(runId));
     return { status: finished.get(runId), steps: steps.get(runId) || [] };
   };
-  return { run };
+  return { api, project, run };
 }
 
 test('#485 run:start with workspace: true runs the workspace\'s workflow of the repository workflow\'s name', async (t) => {
@@ -68,8 +68,11 @@ test('#485 run:start with workspace: true runs the workspace\'s workflow of the 
   assert.deepEqual(r.steps, ['workspace']);
 });
 
-test('#485 run:start without the workspace flag runs the project\'s repository workflow of that name', async (t) => {
-  const { run } = await sameNameInBoth(t);
+// #554: the workspace's copy here is the owner's own (custom), which wins unless the project prefers
+// the repository's workflows
+test('#485 run:start without the workspace flag runs the project\'s repository workflow of that name when the project prefers the repository\'s workflows', async (t) => {
+  const { api, project, run } = await sameNameInBoth(t);
+  await api['projects:update']({ id: project.id, patch: { preferRepositoryWorkflows: true } });
   const r = await run({});
   assert.equal(r.status, 'success');
   assert.deepEqual(r.steps, ['repository']);
