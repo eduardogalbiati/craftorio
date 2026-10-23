@@ -67,6 +67,17 @@ function parseEntry(entry, i) {
 }
 
 /**
+ * Why a `requires` range shuts this app out (the manifest's, or an imported workflow's, #488);
+ * null when it is absent or satisfied.
+ */
+function requiresProblem(appVersion, range) {
+  if (!range) return null;
+  const ok = satisfies(appVersion, range);
+  if (ok === null) return `requires "${range}" is not a version range (e.g. >=1.2).`;
+  return ok ? null : `requires app version ${range}, this app is ${appVersion}.`;
+}
+
+/**
  * Parses a manifest's text. A manifest with errors declares no workflows: the project runs on the
  * workspace's workflows as without one.
  * @returns {{ version: *, requires: string|null, workflows: object[], errors: string[] }}
@@ -85,11 +96,8 @@ function parseManifest(text, { appVersion } = {}) {
   }
   out.version = doc.version ?? null;
   out.requires = str(doc.requires);
-  if (out.requires && appVersion) {
-    const ok = satisfies(appVersion, out.requires);
-    if (ok === null) out.errors.push(`${MANIFEST_FILE}: requires "${out.requires}" is not a version range (e.g. >=1.2).`);
-    else if (!ok) out.errors.push(`${MANIFEST_FILE}: requires app version ${out.requires}, this app is ${appVersion}.`);
-  }
+  const problem = appVersion ? requiresProblem(appVersion, out.requires) : null;
+  if (problem) out.errors.push(`${MANIFEST_FILE}: ${problem}`);
   if (doc.workflows != null && !Array.isArray(doc.workflows)) {
     out.errors.push(`${MANIFEST_FILE}: workflows must be a list of { name, file?, category? }.`);
     return { ...out, workflows: [] };
@@ -122,5 +130,6 @@ module.exports = {
   MANIFEST_FILE,
   parseManifest,
   readManifest,
+  requiresProblem,
   satisfies,
 };

@@ -41,6 +41,7 @@ const importExists = (name) => !!importStem(name) && (state.workflows || []).som
 async function startWorkflowImport(source) {
   wfImport.source = source;
   wfImport.summary = null;
+  wfImport.fingerprint = null;
   renderImportDialog({ loading: true });
   $('#wf-import-modal').classList.remove('hidden');
   let res;
@@ -49,6 +50,7 @@ async function startWorkflowImport(source) {
   } catch (e) { return renderImportDialog({ error: errMsg(e) }); }
   if (!res?.ok) return renderImportDialog({ error: (res?.errors || [res?.error]).filter(Boolean).join('\n') || t('workflows.import_failed') });
   wfImport.summary = res.summary || {};
+  wfImport.fingerprint = res.fingerprint;
   renderImportDialog({});
 }
 
@@ -67,7 +69,12 @@ function renderImportDialog({ loading, error }) {
   }
   const none = `<span class="muted">${t('workflows.import_no_actions')}</span>`;
   const steps = (s.steps || []).map((id) => `<span class="badge mono">${esc(id)}</span>`).join(' ') || none;
-  const agents = (s.agents || []).map((a) => `<li><b>${esc(a.name)}</b> <span class="muted">·</span> <span class="mono">${a.tools?.length ? esc(a.tools.join(', ')) : t('workflows.import_no_tools')}</span></li>`).join('');
+  const toolsLine = (tools) => `<span class="mono">${tools?.length ? esc(tools.join(', ')) : t('workflows.import_no_tools')}</span>`;
+  // the agents' tools, then the steps that declare their own
+  const agents = [
+    ...(s.agents || []).map((a) => `<li><b>${esc(a.name)}</b> <span class="muted">·</span> ${toolsLine(a.tools)}</li>`),
+    ...(s.stepTools || []).map((x) => `<li><span class="badge mono">${esc(x.step)}</span> <span class="muted">·</span> ${toolsLine(x.tools)}</li>`),
+  ].join('');
   const actions = (s.actions || []).length ? `<pre class="mono wf-import-actions">${esc(s.actions.join('\n'))}</pre>` : none;
   const ship = Array.isArray(s.ship) && s.ship.length
     ? s.ship.map((x) => `<span class="badge warn">${t('workflows.import_ship_at', { step: esc(x.step), tag: esc(x.tag || '') })}</span>`).join(' ')
@@ -110,7 +117,9 @@ async function confirmWorkflowImport() {
   const replace = !!$('[data-testid="workflow-import-replace"]')?.checked;
   ok.disabled = true;
   try {
-    const res = await api.importWorkflow({ ...wfImport.source, name, ...(replace ? { replace: true } : {}) });
+    // the fingerprint of the text the dialog showed: the service refuses another one (#474)
+    const shown = wfImport.fingerprint ? { fingerprint: wfImport.fingerprint } : {};
+    const res = await api.importWorkflow({ ...wfImport.source, name, ...shown, ...(replace ? { replace: true } : {}) });
     closeWorkflowImport();
     showToast(t('workflows.imported'), t('workflows.imported_file', { file: res?.file || `${name}.yaml` }));
   } catch (e) {
