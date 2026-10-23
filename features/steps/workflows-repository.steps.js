@@ -122,3 +122,66 @@ Then('the {string} section is shown with its explanation', async ({ e2e }, name)
   await expect(explanation).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(explanation).not.toHaveText(/^\s*$/);
 });
+
+// ---- which copy of a workflow a project's run uses (#554) ---------------------------------------------
+// data-testid:
+//   workflow-runs-line   on a workspace card and on a repository card of the same workflow name, the line
+//                        saying which copy a project's run uses: "runs: workspace copy (your models)" on the
+//                        workspace card whose edited copy runs; "runs: repository @ <short sha>" on the
+//                        repository card whose copy runs; on the card whose copy does not run, a line saying
+//                        it does not run for this project ("does not run ..."/"not used ...").
+// The workspace's workflows folder is <scratch>/workspace/workflows (seeded with the bundled ones at start).
+
+const workspaceWorkflowsDir = (e2e) => path.join(e2e.scratch, 'workspace', 'workflows');
+const workspaceCard = (page, name) => visible(page.getByTestId('workflow-card'))
+  .filter({ has: page.getByRole('heading', { name: nameRe(name) }) }).first();
+const repositoryCard = (page, name) => visible(page.getByTestId('repository-workflow'))
+  .filter({ has: page.getByRole('heading', { name: nameRe(name) }) }).first();
+const runsLine = (c) => c.getByTestId('workflow-runs-line');
+
+// The owner's edit of the seeded bundled copy (origin "modified"): its file differs from the seeded one
+Given('the workspace holds an edited copy of the workflow {string}', async ({ e2e }, name) => {
+  const file = path.join(workspaceWorkflowsDir(e2e), `${name}.yaml`);
+  const yaml = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : fs.readFileSync(path.join(root, 'workflows', `${name}.yaml`), 'utf8');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, `${yaml.replace(/\s*$/, '')}\n# edited by the owner: the owner's models\n`);
+  await e2e.window.reload();
+  await e2e.window.waitForLoadState('domcontentloaded');
+});
+
+// The repository's own copy of a bundled workflow under the same name, declared by file
+Given('the project\'s repository declares its own copy of the workflow {string}', async ({ e2e }, name) => {
+  const yaml = fs.readFileSync(path.join(root, 'workflows', `${name}.yaml`), 'utf8')
+    .replace(/^(\s*category:\s*)\S+\s*$/m, '$1intake');
+  await commitToProject(e2e, {
+    '.multiagent/project.yaml': `version: 1\nworkflows:\n  - name: ${name}\n    file: workflows/${name}.yaml\n    category: intake\n`,
+    [`.multiagent/workflows/${name}.yaml`]: yaml,
+  });
+});
+
+Then('the workspace card of the workflow {string} says a project\'s run uses the workspace copy with the owner\'s models', async ({ e2e }, name) => {
+  const line = runsLine(workspaceCard(e2e.window, name));
+  await expect(line).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(line).toHaveText(/runs:\s*workspace copy\s*\(your models\)/i);
+});
+
+Then('the repository card of the workflow {string} says it does not run for this project', async ({ e2e }, name) => {
+  const line = runsLine(repositoryCard(e2e.window, name));
+  await expect(line).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(line).toHaveText(/\b(does not run|not used|doesn't run)\b/i);
+  await expect(line).not.toHaveText(/runs:\s*repository/i);
+});
+
+Then('the repository card of the workflow {string} says a project\'s run uses it at the repository\'s latest commit', async ({ e2e }, name) => {
+  const short = e2e.repoHead.slice(0, 7);
+  const line = runsLine(repositoryCard(e2e.window, name));
+  await expect(line).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(line).toHaveText(new RegExp(`runs:\\s*repository\\s*@\\s*${short}`, 'i'));
+});
+
+Then('the workspace card of the workflow {string} says it does not run for this project', async ({ e2e }, name) => {
+  const line = runsLine(workspaceCard(e2e.window, name));
+  await expect(line).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(line).toHaveText(/\b(does not run|not used|doesn't run)\b/i);
+  await expect(line).not.toHaveText(/runs:\s*workspace copy/i);
+});

@@ -33,3 +33,35 @@ Feature: Workflows a repository declares
     And the "Team" section explains "pull requests, CI and CD"
     And the "Intake" section explains "issues"
     And the "Release" section is shown with its explanation
+
+  # #554: a repository's copy of a workflow no longer shadows the owner's edited workspace copy of the same
+  # name; both cards say which copy a project's run uses. The workspace's "issue-tracker" is the seeded
+  # bundled copy; the repository declares its own copy under the same name.
+  @issue-554
+  Scenario: The owner's edited workspace copy runs instead of the repository's copy of the same workflow
+    Given the app is open
+    And the workspace holds an edited copy of the workflow "issue-tracker"
+    And the project's repository declares its own copy of the workflow "issue-tracker"
+    When I open "Definitions" in the sidebar
+    Then the workspace card of the workflow "issue-tracker" says a project's run uses the workspace copy with the owner's models
+    And the repository card of the workflow "issue-tracker" says it does not run for this project
+
+  @issue-554
+  Scenario: Without an edited workspace copy the repository's copy runs at its commit
+    Given the app is open
+    And the project's repository declares its own copy of the workflow "issue-tracker"
+    When I open "Definitions" in the sidebar
+    Then the repository card of the workflow "issue-tracker" says a project's run uses it at the repository's latest commit
+
+  @issue-554
+  Scenario: A project that prefers the repository's workflows runs the repository's copy over the owner's edited one
+    Given the app is open
+    And the workspace holds an edited copy of the workflow "issue-tracker"
+    And the project's repository declares its own copy of the workflow "issue-tracker"
+    When I open "Projects" in the sidebar
+    And I edit the project "demo-app" from the Projects screen
+    And I turn on "Prefer the repository's workflows" in the project dialog
+    And I save the project dialog
+    And I open "Definitions" in the sidebar
+    Then the repository card of the workflow "issue-tracker" says a project's run uses it at the repository's latest commit
+    And the workspace card of the workflow "issue-tracker" says it does not run for this project
