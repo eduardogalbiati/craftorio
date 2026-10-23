@@ -1,7 +1,8 @@
 // Steps of features/projects.feature (#354): Projects back in the menu (Code & Build, before
 // Backlog), out of Settings; the Projects screen's cards; a project's page with its tabs Overview,
 // Conflict map, Architecture and Refactor; the one-line "Conflict map: in Projects › <project>"
-// link that replaces the Roadmap's panel and Analytics › Performance's "Files most runs edit".
+// link that replaces the Roadmap's panel and Analytics › Performance's "Files most runs edit"; the
+// project dialog's per-project settings of features/472-install-scripts.feature (#472).
 // Locators are roles and data-testid only (skills/ui-conventions).
 //
 // What the screens expose (the renderer's contract for these steps):
@@ -17,6 +18,9 @@
 // - data-testid="project-architecture-empty" / "project-refactor-empty": the empty states of the
 //   Architecture and Refactor tabs;
 // - data-testid="conflict-map-link": the one-line link on the Roadmap and on Analytics › Performance.
+// - (#472) a project card's "Edit" button opens the project dialog, data-testid="project-dialog"
+//   (the New / Edit project modal card); its per-project settings are checkboxes named by their label
+//   ("Install dependencies without running their scripts"); its "Save" button saves and closes it.
 
 const { expect } = require('@playwright/test');
 const { When, Then } = require('./fixtures');
@@ -115,4 +119,33 @@ When('I follow the link {string}', async ({ e2e }, text) => {
   const link = conflictMapLink(e2e.window, text);
   await link.scrollIntoViewIfNeeded();
   await link.click();
+});
+
+// ---- the project dialog's per-project settings (#472) -------------------------------------------------
+
+const projectDialog = (page) => visible(page.getByTestId('project-dialog')).first();
+const dialogSetting = (page, label) => projectDialog(page).getByRole('checkbox', { name: label, exact: true });
+
+When('I edit the project {string} from the Projects screen', async ({ e2e }, name) => {
+  const card = projectCard(projectsScreen(e2e.window), name);
+  await expect(card).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await card.getByRole('button', { name: 'Edit', exact: true }).click();
+  await expect(projectDialog(e2e.window)).toBeVisible({ timeout: LOAD_TIMEOUT });
+});
+
+Then('the project dialog shows {string} turned {word}', async ({ e2e }, label, state) => {
+  const box = dialogSetting(e2e.window, label);
+  await expect(box, `the project setting "${label}"`).toBeVisible({ timeout: LOAD_TIMEOUT });
+  if (state === 'on') await expect(box).toBeChecked();
+  else if (state === 'off') await expect(box).not.toBeChecked();
+  else throw new Error(`"turned ${state}": expected "on" or "off"`);
+});
+
+When('I turn on {string} in the project dialog', async ({ e2e }, label) => {
+  await dialogSetting(e2e.window, label).check();
+});
+
+When('I save the project dialog', async ({ e2e }) => {
+  await projectDialog(e2e.window).getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(visible(e2e.window.getByTestId('project-dialog'))).toHaveCount(0, { timeout: LOAD_TIMEOUT });
 });

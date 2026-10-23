@@ -8,6 +8,9 @@
 // WebGL or the 3D bundle the tab is disabled and says why (its title or aria-description).
 // Locators are roles and data-testid only (skills/ui-conventions); the shared ones are in
 // features/support/run-screen.js.
+// #472 (features/472-install-scripts.feature): the Events tab's body is data-testid="run-events",
+// each event in it data-testid="run-event"; the start log event that names the commands the run
+// runs from the repository says "repository" in its text.
 
 const { expect } = require('@playwright/test');
 const { When, Then } = require('./fixtures');
@@ -100,6 +103,22 @@ Then('the run details\' side tabs read {string}, {string} and {string}, with {st
   const names = (await tabs.getByRole('tab').allInnerTexts()).map((t) => t.trim().split(/\s+/)[0]);
   expect(names).toEqual([a, b, c]);
   await expect(tabs.getByRole('tab', { name: new RegExp(`^${escapeRe(open)}\\b`) })).toHaveAttribute('aria-selected', 'true');
+});
+
+// ---- the Events tab (#472) ----------------------------------------------------------------------------
+
+When('I open the run details\' {string} tab', async ({ e2e }, name) => {
+  const tab = detailsTabs(e2e.window).getByRole('tab', { name: new RegExp(`^${escapeRe(name)}\\b`) });
+  await expect(tab).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await tab.click();
+  await expect(tab).toHaveAttribute('aria-selected', 'true', { timeout: LOAD_TIMEOUT });
+});
+
+Then('the run\'s events name the commands it runs from the repository, including {string}', async ({ e2e }, command) => {
+  const events = e2e.window.getByTestId('run-events').filter({ visible: true }).first();
+  await expect(events).toBeVisible({ timeout: LOAD_TIMEOUT });
+  const line = events.getByTestId('run-event').filter({ hasText: /repositor/i }).filter({ hasText: command }).first();
+  await expect(line).toBeVisible({ timeout: LOAD_TIMEOUT });
 });
 
 // ---- the row stays in place between Chat and Details ------------------------------------------------
