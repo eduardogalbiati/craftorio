@@ -145,3 +145,32 @@ test('#485 loadRepositoryWorkflow: tools beyond the workspace policy are refused
   assert.throws(() => loadRepositoryWorkflow(files.anyCommand, { accepted: true, policy: POLICY }), (e) => /\bbash\b/.test(e.message) && /polic/i.test(e.message));
   assert.throws(() => loadRepositoryWorkflow(files.stepTools, { accepted: true, policy: POLICY }), (e) => /bash:curl/.test(e.message) && /polic/i.test(e.message));
 });
+
+// Without a policy in the settings, the default policy is the tools the bundled workflows give their
+// agents: read, edit, write and their bash:<command>s, never `bash` (any command).
+test('#485 the default tool policy holds read, edit, write and the bundled workflows\' bash commands, never bash alone', () => {
+  const { repositoryToolPolicy } = load();
+  const policy = Array.from(repositoryToolPolicy());
+  for (const tool of ['read', 'edit', 'write', 'bash:git', 'bash:npm']) assert.equal(policy.includes(tool), true, tool);
+  assert.equal(policy.includes('bash'), false, 'bash (any command) is never in the default policy');
+  assert.equal(policy.includes('bash:curl'), false, 'a command no bundled workflow uses');
+  assert.equal(policy.every((t) => ['read', 'edit', 'write'].includes(t) || t.startsWith('bash:')), true, policy.join(', '));
+  // current behaviour, until the owner decides otherwise: the bundled flows' GitHub / GitLab CLIs are in
+  assert.equal(policy.includes('bash:gh'), true, 'bash:gh');
+  assert.equal(policy.includes('bash:glab'), true, 'bash:glab');
+});
+
+test('#485 without a policy, the default policy applies: a bundled-like workflow loads, bash alone is refused', (t) => {
+  const { loadRepositoryWorkflow } = load();
+  const files = write(t);
+  assert.equal(loadRepositoryWorkflow(files.plain, { accepted: true }).metadata.name, 'repo-flow');
+  assert.throws(() => loadRepositoryWorkflow(files.anyCommand, { accepted: true }), (e) => /\bbash\b/.test(e.message) && /polic/i.test(e.message));
+});
+
+test('#485 this repository\'s own ai-development-local-hero copy loads once accepted, under the default policy', () => {
+  const { loadRepositoryWorkflow } = load();
+  const file = path.join(__dirname, '..', '.multiagent', 'workflows', 'ai-development-local-hero.yaml');
+  const wf = loadRepositoryWorkflow(file, { accepted: true });
+  assert.equal(wf.metadata.name, 'ai-development-local-hero');
+  assert.throws(() => loadRepositoryWorkflow(file, { accepted: false }), (e) => /not accepted/i.test(e.message) && /ai-development-local-hero/.test(e.message));
+});

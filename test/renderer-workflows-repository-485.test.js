@@ -90,6 +90,37 @@ test('#485 Accept is offered on an unaccepted repository workflow only, and reco
   assert.equal(accepted[0].includes(SHA), true, 'the commit');
 });
 
+// The screen asks each project with a folder for its repository workflows alone (repositoryOnly): the
+// repository's own, plus { name, category, origin: 'manifest' } per workflow its manifest names.
+function perProject(repositoryItems) {
+  return async (opts) => (opts && opts.repositoryOnly ? repositoryItems : WORKFLOWS.filter((w) => w.origin !== 'repository'));
+}
+const workspaceCardIn = (page, category, name) => page.document
+  .querySelectorAll(`#view-workflows [data-testid="workflow-category"][data-category="${category}"] [data-testid="workflow-card"]`)
+  .some((c) => textOf(c).includes(name));
+
+test('#485 a workspace workflow the manifest names goes to the manifest\'s category section', async () => {
+  const listWorkflows = perProject([{ name: 'backlog-refresh', category: 'team', origin: 'manifest', projectId: 'p1' }]);
+  const page = await definitions({ listWorkflows });
+  assert.equal(workspaceCardIn(page, 'team', 'backlog-refresh'), true, 'backlog-refresh in the team section');
+  assert.equal(workspaceCardIn(page, 'intake', 'backlog-refresh'), false, 'no longer in its own intake section');
+  assert.equal(workspaceCardIn(page, 'release', 'release'), true, 'a workflow the manifest does not name keeps its category');
+});
+
+test('#485 a repository workflow changed since its accepted commit shows the diff and that commit', async () => {
+  const changed = { ...WORKFLOWS[4], acceptedCommit: ACCEPTED_SHA, diff: '-  prompt: old work\n+  prompt: new work' };
+  const kept = { ...WORKFLOWS[5], acceptedCommit: ACCEPTED_SHA, diff: '+  prompt: never shown' };
+  const page = await definitions({ listWorkflows: perProject([changed, kept]) });
+  const card = cardOf(page, 'repo-flow');
+  assert.equal(card !== null, true, 'repo-flow card');
+  const text = norm(textOf(card));
+  assert.equal(text.includes('+ prompt: new work'), true, text);
+  assert.equal(text.includes('9876543'), true, 'the accepted commit, short');
+  const keptCard = cardOf(page, 'kept-flow');
+  assert.equal(keptCard !== null, true, 'kept-flow card');
+  assert.equal(norm(textOf(keptCard)).includes('never shown'), false, 'an accepted workflow shows no diff');
+});
+
 test('#485 the four categories are sections with a one-line explanation each', async () => {
   const page = await definitions();
   const text = norm(textOf(page.$('#view-workflows')));

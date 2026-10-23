@@ -93,6 +93,29 @@ test('#485 a malformed manifest is reported and the project keeps the workspace 
   assert.equal(repoEntries(list).length, 0);
 });
 
+test('#485 workflows:list with repositoryOnly gives the repository workflows and the manifest\'s categories only', async (t) => {
+  const { api, project } = await projectWithRepo(t);
+  const list = await api['workflows:list']({ projectId: project.id, repositoryOnly: true });
+  assert.deepEqual([...new Set(list.map((w) => w.origin))].sort(), ['manifest', 'repository']);
+  assert.equal(list.some((w) => w.file === 'fixture-service.yaml'), false, 'no workspace workflow');
+  const own = repoFlowOf(list);
+  assert.ok(own, 'repo-flow is listed');
+  assert.equal(own.category, 'solo');
+  // a workflow the manifest names without a file: its name and the manifest's category
+  const named = list.filter((w) => w.origin === 'manifest').map((w) => `${w.name}:${w.category}`);
+  assert.deepEqual(named, ['writer-reviewer:team']);
+});
+
+test('#485 workflows:list for a project files a workspace workflow the manifest names under the manifest\'s category', async (t) => {
+  const { api, project } = await projectWithRepo(t);
+  const plain = (await api['workflows:list']()).find((w) => w.file === 'writer-reviewer.yaml');
+  assert.ok(plain, 'writer-reviewer is in the workspace');
+  assert.notEqual(plain.category, 'team', 'its own category is not the manifest\'s (else this test proves nothing)');
+  const forProject = (await api['workflows:list']({ projectId: project.id })).find((w) => w.file === 'writer-reviewer.yaml');
+  assert.equal(forProject.category, 'team');
+  assert.equal(forProject.origin, plain.origin, 'still the workspace\'s workflow');
+});
+
 test('#485 a run of an unaccepted repository workflow is refused, naming it', async (t) => {
   const { api, project } = await projectWithRepo(t);
   const item = repoFlowOf(await api['workflows:list']({ projectId: project.id }));
