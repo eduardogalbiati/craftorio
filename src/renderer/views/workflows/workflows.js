@@ -432,12 +432,13 @@ function stepList(w) {
 
 // Where a workflow file comes from (see src/seed.js): the bundled default, edited by the user or user-created.
 function originBadge(w) {
+  const project = (state.projects || []).find((p) => p.id === w.projectId)?.name || w.projectId || '';
   const badges = {
     default: `<span class="badge" title="${t('workflows.default_bundled_with_the_app_updated')}">${t('workflows.default')}</span>`,
     modified: `<span class="badge warn" title="${t('workflows.bundled_default_edited_by_you_app')}">${t('workflows.modified')}</span>`,
     custom: `<span class="badge cat-build" title="${t('workflows.created_by_you')}">${t('workflows.custom')}</span>`,
     // #485: the repository's workflow at the commit it was read from
-    repository: `<span class="badge cat-plan mono" data-testid="workflow-origin-badge" title="${esc(t('workflows.repository_tip', { project: (state.projects || []).find((p) => p.id === w.projectId)?.name || w.projectId || '' }))}">${t('workflows.repository_at', { commit: esc(String(w.commit || '').slice(0, 7)) })}</span>`,
+    repository: `<span class="badge cat-plan mono" data-testid="workflow-origin-badge" title="${esc(t('workflows.repository_tip', { project }))}">${t('workflows.repository_at', { commit: esc(String(w.commit || '').slice(0, 7)) })}</span>`,
   };
   const update = w.updateAvailable
     ? `<span class="badge warn" title="${t('workflows.the_app_ships_a_newer_default')}">${t('workflows.newer_default')}${w.bundledVersion ? ` v${esc(w.bundledVersion)}` : ''}</span>`
