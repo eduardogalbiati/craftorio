@@ -329,7 +329,7 @@ async function startRun({ keepOpen = false } = {}) {
     const agentOverrides = window.AgentOverrides?.read($('#wf-agents')) || {};
     const { runId } = state.pipeline
       ? await api.runPipeline(state.pipeline.file, inputs, mock, project?.id || null)
-      : await api.startRun({ file: wf.file, inputs, mock, then: drawerChain().value(), ...(attachments ? { attachments } : {}), ...(Object.keys(agentOverrides).length ? { agentOverrides } : {}) });
+      : await api.startRun({ file: wf.file, workspace: true, inputs, mock, then: drawerChain().value(), ...(attachments ? { attachments } : {}), ...(Object.keys(agentOverrides).length ? { agentOverrides } : {}) });
     state.settings = await api.setSettings({ lastWorkflow: wf.file, lastProject: project?.id || null });
     const view = state.runs.get(runId);
     if (view?.run && project) view.run.project = project.name;

@@ -128,11 +128,11 @@ function pipeMatches(p, q) {
     .some((t) => String(t || '').toLowerCase().includes(q));
 }
 
-// #485: the projects with a folder, each asked for its repository workflows (a failing project lists none)
+// #485: the projects with a folder, each asked for its repository workflows alone (a failing project lists none)
 async function repositoryLists() {
   const projects = await (api.listProjects ? api.listProjects() : Promise.resolve([])).catch(() => []);
   if (projects?.length) state.projects = projects;
-  return Promise.all((projects || []).filter((p) => p.folder).map((p) => api.listWorkflows({ projectId: p.id }).catch(() => [])));
+  return Promise.all((projects || []).filter((p) => p.folder).map((p) => api.listWorkflows({ projectId: p.id, repositoryOnly: true }).catch(() => [])));
 }
 
 async function refreshWorkflows() {
@@ -142,15 +142,18 @@ async function refreshWorkflows() {
     (api.listPipelines ? api.listPipelines() : Promise.resolve([])).catch((e) => { wfDefs.pipelinesError = errMsg(e); return []; }),
     repositoryLists(),
   ]);
-  // a workflow a manifest names without a file takes the manifest's category (the first project's)
+  // a workflow a manifest names without a file (origin 'manifest', by name: the file's stem) takes
+  // the manifest's category (the first project's)
   const placed = new Map();
   const repository = new Map();
   const errors = new Map();
   for (const w of [...perProject.flat(), ...workflows]) {
-    if (w.origin !== 'repository') { if (w.category && !placed.has(w.file)) placed.set(w.file, w.category); continue; }
+    if (w.origin === 'manifest') { if (w.category && !placed.has(w.name)) placed.set(w.name, w.category); continue; }
+    if (w.origin !== 'repository') continue;
     (isManifestError(w) ? errors : repository).set(`${w.projectId}\n${w.file}`, w);
   }
-  state.workflows = workflows.filter((w) => w.origin !== 'repository').map((w) => ({ ...w, category: placed.get(w.file) || w.category }));
+  const stem = (file) => String(file || '').replace(/\.ya?ml$/i, '');
+  state.workflows = workflows.filter((w) => w.origin !== 'repository' && w.origin !== 'manifest').map((w) => ({ ...w, category: placed.get(stem(w.file)) || w.category }));
   wfDefs.repository = [...repository.values()];
   wfDefs.manifestErrors = [...errors.values()];
   wfDefs.pipelines = pipelines;

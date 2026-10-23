@@ -22,5 +22,9 @@ A repository's `.multiagent/project.yaml`: the workflows a project is worked on 
 - **Caps** (`src/engine/run/load.js` `loadRepositoryWorkflow`): an unaccepted workflow is refused by
   name; an accepted one cannot `ship`, runs `action:`s only with `orchestrator.worktree` (in the run's
   worktree), and every agent and step must list `capabilities.tools` within the workspace's policy
-  (Settings' `repositoryWorkflowTools`, else `REPOSITORY_TOOL_POLICY`). Each refusal names the reason.
+  (`repositoryWorkflowTools` in `settings.json`, edited by hand: Settings has no field for it; else
+  `repositoryToolPolicy()`, the tools the bundled workflows give their agents: `read`, `edit`, `write`
+  and their `bash:<toolchain>` commands, never a bare `bash`). Each refusal names the reason.
+- **Which file a run takes**: the roadmap and `run:start { projectId }` take the repository's entry of
+  the name; the Start drawer passes `workspace: true` and runs the workspace's file, as before.
 - The owner's per-agent model choices stay in the workspace: a repository copy carries none.
