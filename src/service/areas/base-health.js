@@ -8,6 +8,9 @@
 // or failed check is a notice. The fix item runs the project's default development workflow
 // (settings.defaultWorkflow through DefaultWorkflow.resolve, read each time, #413). A simulated run
 // never reaches here; the check itself runs the suite in simulation, never pushes.
+// #527: the check waits for the machine-wide suite slot (announced `waiting`, "base check waiting for
+// the suite slot", and in the server log), re-runs a timing failure alone (runFileAlone) before filing,
+// and inserts no fix item for an issue a live run works on (ctx.liveRunForIssues).
 
 const fs = require('fs');
 const path = require('path');
@@ -23,6 +26,7 @@ const {
   detectTestCommand,
   parseFailures,
   runCommand,
+  runFileAlone,
   suiteDurations,
   suiteTimeout,
 } = require('../../engine/suite-step');
@@ -81,7 +85,7 @@ module.exports = (ctx) => {
     const logFile = logOf(project.id);
     fs.rmSync(logFile, { force: true });
     fs.mkdirSync(path.dirname(logFile), { recursive: true });
-    announce(project.id, { status: 'running', commit: commit || null, log: logFile, startedAt: new Date().toISOString(), endedAt: null, failures: null, error: null });
+    announce(project.id, { status: 'running', message: null, holder: null, commit: commit || null, log: logFile, startedAt: new Date().toISOString(), endedAt: null, failures: null, error: null });
     const command = detectTestCommand(cwd);
     if (!command) return { failures: [], log: '', error: 'no test command found' };
     fs.appendFileSync(logFile, `$ ${command}\n`);
@@ -94,6 +98,30 @@ module.exports = (ctx) => {
     const error = r.timedOut ? 'the suite timed out' : r.error || (r.code && !failures.length ? `the suite exited with ${r.code}, no failure parsed` : null);
     return { failures, log, error };
   };
+
+  // #527: one timing failure's file alone in the check's checkout (suite-step runFileAlone), its log
+  // next to the suite's (base-check-<project>-alone-<n>.log)
+  const aloneFor = (project) => {
+    let n = 0;
+    return async ({ cwd, env, file, timeoutMs }) => {
+      const command = detectTestCommand(cwd);
+      if (!command || !file) return { status: 'fail', failures: [], ms: 0 };
+      const logFile = logOf(project.id).replace(/-suite\.log$/, `-alone-${++n}.log`);
+      return runFileAlone({ command, file, cwd, where: 'in the base check', env, timeoutMs, run: runCommand, logFile, why: 'it failed on time in the whole suite' });
+    };
+  };
+
+  // #527: the wait for the machine-wide suite slot, in the server log and on the Roadmap
+  const slotFor = (project) => ({
+    holder: `base-check ${project.id}`,
+    onWait: (holder) => announce(project.id, {
+      status: 'waiting', message: 'base check waiting for the suite slot', holder: holder?.holder || null,
+      commit: null, startedAt: null, endedAt: null, failures: null, error: null,
+    }),
+  });
+  const serverLog = (level, message) => (level === 'warn' || level === 'error' ? console.warn : console.log)(String(message).startsWith('base check') ? message : `base check: ${message}`);
+  // the runs active while the check ran: the load a "red under load, green alone" line names
+  const load = () => [...(ctx.active?.values?.() || [])].map((r) => r.runId).filter(Boolean);
 
   // The owner hears of a red or failed check (a green or deferred one is silent)
   function noticeOf(project, r) {
@@ -116,6 +144,11 @@ module.exports = (ctx) => {
       trigger: tested === 'not green' ? 'not-green' : 'merge',
       releaseHoldsBase: () => releaseHoldsBase(project.id),
       runSuite: suiteFor(project),
+      runAlone: aloneFor(project),
+      slot: slotFor(project),
+      log: serverLog,
+      load,
+      liveRunForIssues: (list) => ctx.liveRunForIssues?.(list) || null,
       ...(({ platform, repo, exec }) => ({ platform, ghRepo: repo, exec }))(issueTarget(project.id)),
     });
     check.then((r) => {

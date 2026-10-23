@@ -149,6 +149,7 @@ const methods = {
       command: this.suiteCommand(), cwd, runDir: this.runDir, round: this.testRequests, logName: name,
       env: { ...process.env, ...capabilities.agentEnv() }, passthrough: this.envPassthrough(), testWorkers: this.workers?.testWorkers, preexisting: this.preexisting, signal: this.abort.signal,
       base: () => this.suiteBase(), baseCacheDir: path.join(root, 'cache', 'base-tests'),
+      confirmedOnBase: this.confirmedOnBase(root),
       files, selection: { mode: 'affected', files, reasons, why },
       log: (level, message) => this.emitEvent('log', { level, message }),
       // #390: what the tests leave running in the run's own worktree is stopped (never in a folder it does not own)

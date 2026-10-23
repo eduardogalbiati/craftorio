@@ -181,6 +181,12 @@ const methods = {
     return cmd || suiteStep.detectTestCommand(this.ctx.worktree_dir) || '';
   },
 
+  // #527: the failures a base check confirmed red alone (the only ones red on the base too that a
+  // suite round counts as pre-existing); null without a project: the #211 rule unchanged.
+  confirmedOnBase(root) {
+    return this.projectId ? this.machine.confirmedOnMain?.(root, this.projectId) ?? null : null;
+  },
+
   // `type: suite` (#177): the project's whole test suite once (src/engine/suite-step.js), with the
   // environment a shell would give it (simulation only, no scratch workspace shared by every test
   // process, its own lock folder, #210), its log in logs/suite-<visit>.log; the run's known
@@ -326,6 +332,7 @@ const methods = {
           // fails there too is the regression to fix, never a pre-existing failure to wave through
           base: step.base_check === false ? null : () => this.suiteBase(),
           baseCacheDir: path.join(root, 'cache', 'base-tests'),
+          confirmedOnBase: this.confirmedOnBase(root),
           log: (level, message) => this.emitEvent('log', { level, message }),
           // a suite step other than `suite` (an e2e step, #223) logs under its own name
           ...(step.id === 'suite' && !env ? {} : { logName: roundLog }),

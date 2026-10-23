@@ -1336,6 +1336,7 @@
   "backlog_roadmap.base_check_green": "verde em {commit}",
   "backlog_roadmap.base_check_red": { "one": "vermelha em {commit}: {count} falha", "other": "vermelha em {commit}: {count} falhas" },
   "backlog_roadmap.base_check_running": "rodando desde {time} em {commit}",
+  "backlog_roadmap.base_check_waiting": "aguardando o slot da suíte",
   "backlog_roadmap.budget_ignored_day_tip": "Este roadmap ignora o orçamento até o dia acabar; o orçamento fica como está",
   "backlog_roadmap.budget_ignored_night_tip": "Este roadmap ignora o orçamento até a noite acabar; o orçamento fica como está",
   "backlog_roadmap.budget_raise_day_tip": "O orçamento diário passa a ser o gasto mais a próxima etapa, só por hoje; o roadmap continua",

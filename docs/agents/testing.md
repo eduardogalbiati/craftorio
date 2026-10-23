@@ -93,7 +93,8 @@ Read this before writing or changing tests, and before any check that could star
   inherits it through `MULTIAGENT_SUITE_SLOT`. While another run holds it, the round waits and
   the run logs `kind: suite_slot` "suite: waiting for the suite slot (run …, pid …)"; the wait is
   not counted in the round's timeout or duration. A holder whose process is gone, or a hold older
-  than `SUITE_MAX_HOLD_MS` (the largest suite timeout plus a margin), is taken over.
+  than `SUITE_MAX_HOLD_MS` (the largest suite timeout plus a margin), is taken over. The base
+  check (#405) takes the same slot for its whole suite (#527) and waits for it the same way.
 - **Agent mode** (#219): `npm test` detects an agent (`isAgentMode` in
   `src/engine/agent-test-report.js`: `MULTIAGENT_AGENT_MODE=1/0` wins, then CI or a terminal stays
   human, then `MULTIAGENT_SIMULATION_ONLY` or an agent CLI's variable) and prints one failures-only
@@ -452,6 +453,12 @@ the simulated adapter gives every agent `{ type: 'mock' }`, its session records 
   Mock runs: `mockSequences.suite: { suite: ['fail', 'pass'] }` (a failing suite goes back to the
   test writer once, then passes), `['preexisting']` with `preexisting_failures: true` (only
   pre-existing failures: no loop).
+- **Pre-existing only when confirmed (#527)**: a failure that also fails on the base excuses the
+  run only when the base check confirmed it red alone after its last green check
+  (`confirmedFailures` of `src/engine/base-health-store.js`, passed as `runSuite({ confirmedOnBase })`
+  by `machine.confirmedOnMain`); a store entry without that confirmation (a sighting, a timeout
+  under load) stays the run's own failure. Without a project (`confirmedOnBase` null) the #211
+  rule holds unchanged.
 - **Unit / E2E test inputs (#203)**: `unit_tests` × `e2e_tests` of the development workflows take
   different paths (both off: no test step; run_existing + E2E off: suite only); mock runs cover each
   combination with `inputs: { unit_tests, e2e_tests }` and `tests_status: ['pass']`.

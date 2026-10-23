@@ -233,17 +233,7 @@ module.exports = (ctx) => {
     // derived statuses are not stored (roadmaps.persisted): only a stored change is written
     const changed = JSON.stringify({ ...roadmaps.persisted(roadmap), updatedAt: null }) !== JSON.stringify({ ...before, updatedAt: null });
     if (changed) roadmaps.updateRoadmap(ws.backlog, projectId, (cur) => (cur.updatedAt === before.updatedAt ? roadmap : null));
-    // a stage run on its own (#141) that finished pauses the roadmap without a failure
-    if (roadmap.state === 'paused' && before.state === 'running' && before.scope && !roadmap.scope && !roadmap.pausedBy) {
-      ctx.notify({ kind: 'run', event: 'succeeded', title: 'Roadmap stage done', body: String(roadmap.error || '').slice(0, 180) });
-    } else if (roadmap.state === 'paused' && before.state === 'running') {
-      ctx.notify({ kind: 'run', event: 'failed', title: 'Roadmap paused', body: String(roadmap.error || '').slice(0, 180) });
-    }
-    if (roadmap.state === 'done' && before.state === 'running') {
-      // #284: a disabled stage with work left was skipped, not done: the notice says so
-      const off = roadmap.stages.filter((s) => s.disabled && RoadmapModel.hasUnfinished(s)).length;
-      ctx.notify({ kind: 'run', event: 'succeeded', title: 'Roadmap finished', body: off ? `Every enabled stage of ${projectId} is done; ${off} disabled stage${off === 1 ? ' was' : 's were'} left out.` : `Every stage of ${projectId} is done.` });
-    }
+    notifyAdvance(projectId, before, roadmap);
     // #279: a stage that ended may update the app (areas/app-update.js): its cycle paused every
     // roadmap, nothing more starts here
     if (!before.simulated && appUpdateStarted(before, roadmap, mockOf)) return;
@@ -288,10 +278,33 @@ module.exports = (ctx) => {
         keptWorkAllowed.delete(`${projectId}:${item.id}`);
         roadmaps.markStarted(ws.backlog, projectId, item.id, { runId: started.runId });
       } catch (e) {
+        // #527: a base-health fix item whose issue a live run works on is skipped, the roadmap goes on
+        if (item.source === 'base-health' && e.runId) {
+          roadmaps.skipItem(ws.backlog, projectId, item.id, e.message);
+          console.log(`roadmap: base-health item ${item.id} skipped: ${e.message}`);
+          roadmapAgain = true;
+          continue;
+        }
         roadmaps.markStarted(ws.backlog, projectId, item.id, { error: e.message });
         ctx.notify({ kind: 'run', event: 'failed', title: 'Roadmap paused', body: `Could not start an item: ${e.message}`.slice(0, 180) });
         break;
       }
+    }
+  }
+
+  // The owner's notice of a roadmap step that paused or finished the roadmap
+  function notifyAdvance(projectId, before, roadmap) {
+    if (before.state !== 'running') return;
+    // a stage run on its own (#141) that finished pauses the roadmap without a failure
+    if (roadmap.state === 'paused' && before.scope && !roadmap.scope && !roadmap.pausedBy) {
+      ctx.notify({ kind: 'run', event: 'succeeded', title: 'Roadmap stage done', body: String(roadmap.error || '').slice(0, 180) });
+    } else if (roadmap.state === 'paused') {
+      ctx.notify({ kind: 'run', event: 'failed', title: 'Roadmap paused', body: String(roadmap.error || '').slice(0, 180) });
+    }
+    if (roadmap.state === 'done') {
+      // #284: a disabled stage with work left was skipped, not done: the notice says so
+      const off = roadmap.stages.filter((s) => s.disabled && RoadmapModel.hasUnfinished(s)).length;
+      ctx.notify({ kind: 'run', event: 'succeeded', title: 'Roadmap finished', body: off ? `Every enabled stage of ${projectId} is done; ${off} disabled stage${off === 1 ? ' was' : 's were'} left out.` : `Every stage of ${projectId} is done.` });
     }
   }
 

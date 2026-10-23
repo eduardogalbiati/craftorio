@@ -7,7 +7,11 @@
 //   them) → { totals: { lines, branches, functions }, files: [{ file, lines, branches, functions,
 //   uncovered }] } (files: the changed ones found, in changedFiles' order), or null without a report;
 //   several tables (scripts/test.js's two runs, #402) merge: each number the better of theirs;
-// - renderCoverageSummary(summary): the markdown of the artifact.
+// - renderCoverageSummary(summary): the markdown of the artifact;
+// - saveCoverage(text, runDir, changedFiles): writes it into the run folder (moved from suite-step, #527).
+const fs = require('fs');
+const path = require('path');
+
 const PREFIX = /^(?:ℹ|#) ?/;
 
 const num = (s) => {
@@ -107,7 +111,24 @@ function renderCoverageSummary(summary) {
   return out.join('\n');
 }
 
+// The coverage report of a suite's output → <run_dir>/coverage/coverage-summary.md and its numbers
+// ({ lines, branches, functions, files, path }), or null without a report. No model call.
+function saveCoverage(text, runDir, changedFiles) {
+  const head = parseNodeCoverage(text);
+  if (!head || !runDir) return null;
+  let changed = [];
+  try { changed = (typeof changedFiles === 'function' ? changedFiles() : changedFiles) || []; } catch { changed = []; }
+  const summary = parseNodeCoverage(text, { changedFiles: changed });
+  const rel = 'coverage/coverage-summary.md';
+  try {
+    fs.mkdirSync(path.join(runDir, 'coverage'), { recursive: true });
+    fs.writeFileSync(path.join(runDir, rel), renderCoverageSummary(summary));
+  } catch { return null; }
+  return { ...summary.totals, files: summary.files.length, path: rel };
+}
+
 module.exports = {
   parseNodeCoverage,
   renderCoverageSummary,
+  saveCoverage,
 };

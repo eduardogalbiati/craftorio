@@ -1336,6 +1336,7 @@
   "backlog_roadmap.base_check_green": "green on {commit}",
   "backlog_roadmap.base_check_red": { "one": "red on {commit}: {count} failure", "other": "red on {commit}: {count} failures" },
   "backlog_roadmap.base_check_running": "running since {time} on {commit}",
+  "backlog_roadmap.base_check_waiting": "waiting for the suite slot",
   "backlog_roadmap.budget_ignored_day_tip": "This roadmap ignores the budget until the day ends; the budget stays as it is",
   "backlog_roadmap.budget_ignored_night_tip": "This roadmap ignores the budget until the night ends; the budget stays as it is",
   "backlog_roadmap.budget_raise_day_tip": "The daily budget becomes what is spent plus the next stage, for today only; the roadmap goes on",

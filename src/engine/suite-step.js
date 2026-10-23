@@ -71,7 +71,7 @@ const { spawn } = require('child_process');
 const { classifyFailures, IN_CHANGE, OUTSIDE_CHANGE } = require('./affected-tests');
 const { parseAgentReport } = require('./agent-test-report');
 const { childEnv: allowlistedEnv } = require('./child-env');
-const { parseNodeCoverage, renderCoverageSummary } = require('../coverage-summary');
+const { saveCoverage } = require('../coverage-summary');
 const { suiteSlotRun } = require('./suite-slot');
 const {
   processTreeCommands,
@@ -617,31 +617,15 @@ function coverageCommand(command, cwd = null) {
   return c;
 }
 
-// The coverage report of a suite's output → <run_dir>/coverage/coverage-summary.md and its numbers
-// ({ lines, branches, functions, files, path }), or null without a report. No model call.
-function saveCoverage(text, runDir, changedFiles) {
-  const head = parseNodeCoverage(text);
-  if (!head || !runDir) return null;
-  let changed = [];
-  try { changed = (typeof changedFiles === 'function' ? changedFiles() : changedFiles) || []; } catch { changed = []; }
-  const summary = parseNodeCoverage(text, { changedFiles: changed });
-  const rel = 'coverage/coverage-summary.md';
-  try {
-    fs.mkdirSync(path.join(runDir, 'coverage'), { recursive: true });
-    fs.writeFileSync(path.join(runDir, rel), renderCoverageSummary(summary));
-  } catch { return null; }
-  return { ...summary.totals, files: summary.files.length, path: rel };
-}
-
 // runCommand's optional arguments, only when they differ from its defaults
 const optionalRunArgs = ({ onSpawn, sweep }) => ({ ...(onSpawn ? { onSpawn } : {}), ...(sweep ? {} : { sweep: false }) });
 
 // One test file run alone (#396), its log written whole → { status: pass | fail | hang, ms, timeout_ms,
-// failures, log }; never throws.
-async function runFileAlone({ command, file, cwd, where, env, timeoutMs, signal, run, logFile, runDir, cmdArgs = {} }) {
+// failures, log }; never throws. why: the log header's reason (#527: the base check's re-run of a timeout).
+async function runFileAlone({ command, file, cwd, where, env, timeoutMs, signal, run, logFile, runDir, cmdArgs = {}, why = 'it was still running when the round timed out' }) {
   const cmd = filteredCommand(command, [file]);
   fs.mkdirSync(path.dirname(logFile), { recursive: true });
-  fs.writeFileSync(logFile, `$ ${cmd}\n# ${file} alone ${where} (${cwd}), timeout ${Math.round(timeoutMs / 60e3)} min: it was still running when the round timed out\n`);
+  fs.writeFileSync(logFile, `$ ${cmd}\n# ${file} alone ${where} (${cwd}), timeout ${Math.round(timeoutMs / 60e3)} min: ${why}\n`);
   const t0 = Date.now();
   const r = await run({ command: cmd, cwd, env: env ? { ...env, MULTIAGENT_TEST_HUMAN_LOG: humanLog(logFile) } : env, timeoutMs, signal, logFile, ...cmdArgs });
   const ms = Date.now() - t0;
@@ -778,7 +762,10 @@ function writeLogHeader(logFile, out, { mock, childEnv, timeoutWhy, baseCommit, 
 // onLog({ path, command, base? }) (#465): the log the command writes to (relative to runDir), called
 // once the log exists and before anything waits or runs, and again for the base check's log (base: true);
 // logPrefix: lines already in the log (a wait for memory), kept before the header.
-async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = 'pass', preexisting = [], signal, timeoutMs, history, base, baseCacheDir, run = runCommand, log = () => {}, files = null, selection = null, logName = null, coverage = false, changedFiles = null, onSpawn = null, testWorkers = null, sweep = true, platform = process.platform, baseCommit = null, slot = null, onLog = null, logPrefix = '', passthrough = [] }) {
+// confirmedOnBase (#527): the failures the base check confirmed red alone since its last green check
+// (base-health-store confirmedFailures); as a list, a failure that fails on the base too is pre-existing
+// only when it is listed there, else it counts as the run's own. null: every one is pre-existing (#211).
+async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = 'pass', preexisting = [], signal, timeoutMs, history, base, baseCacheDir, run = runCommand, log = () => {}, files = null, selection = null, logName = null, coverage = false, changedFiles = null, onSpawn = null, testWorkers = null, sweep = true, platform = process.platform, baseCommit = null, slot = null, onLog = null, logPrefix = '', passthrough = [], confirmedOnBase = null }) {
   const logFile = runDir ? path.join(runDir, 'logs', `${logName || `suite-${round}`}.log`) : null;
   const out = {
     kind: 'suite', status: 'blocked', round, scope: 'full', command: null, log: logFile ? path.relative(runDir, logFile).split(path.sep).join('/') : null,
@@ -874,12 +861,17 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
   });
   // the failures the run does not know yet: do they fail on the base too? (#211)
   if (out.failures.length && (base || mock) && !signal?.aborted) {
-    const { onBase, info } = await checkOnBase({
+    const { onBase: redOnBase, info } = await checkOnBase({
       command: out.command, failures: out.failures, base, mock, signal, run,
       env: childEnv ? { ...childEnv.env, MULTIAGENT_TEST_HUMAN_LOG: humanLog(path.join(runDir, 'logs', `suite-${round}-base.log`)) } : undefined, timeoutMs: out.timeout_ms,
       logFile: logFile ? path.join(runDir, 'logs', `suite-${round}-base.log`) : null, runDir, cacheDir: baseCacheDir, log, platform, onLog,
     });
     out.base_check = info;
+    // #527: red on the base too excuses a failure only when a base check confirmed it alone
+    const confirmed = (f) => !Array.isArray(confirmedOnBase) || confirmedOnBase.some((c) => sameTest(f, c));
+    const onBase = redOnBase.filter(confirmed);
+    const unconfirmed = redOnBase.filter((f) => !onBase.includes(f));
+    if (unconfirmed.length) log('info', `suite: ${plural(unconfirmed.length, 'failure')} red on the base too but not confirmed by a base check, counted as the run's: ${unconfirmed.map((f) => f.test).join(', ')}`);
     if (onBase.length) {
       const where = info.commit && !String(info.commit).startsWith('(') ? ` (${String(info.commit).slice(0, 8)})` : '';
       out.preexisting.push(...onBase);
@@ -981,12 +973,14 @@ module.exports = {
   checkOnBase,
   coverageCommand,
   detectTestCommand,
+  FILE_TIMEOUT_MS,
   filteredCommand,
   isFullSuiteCommand,
   parseCounts,
   parseFailures,
   redCheck,
   runCommand,
+  runFileAlone,
   runningTestFiles,
   runSuite,
   saveCoverage,

@@ -86,11 +86,20 @@ fields (references between steps, agents, transitions, groups) are the named rul
   clean detached checkout of the local base tip (`worktrees/base-check-<project>`), with no agent,
   `MULTIAGENT_SIMULATION_ONLY=1`, its own lock folder, the suite timeout from the project's recent
   durations, one check at a time. While a release run holds the base it is deferred, and runs when
-  that release run ends. A red test files (or updates) its issue with the commit range (the last
+  that release run ends. The check takes the machine-wide `suite` slot (#527, like a run's
+  whole-suite round, #455) before its `npm test` and frees it on every exit (green, red, error);
+  while a run holds it the check waits, logs "base check waiting for the suite slot" in the server
+  log and shows `waiting` on the Roadmap's base-check card. A failure whose error is `test timed
+  out` or a timing assertion is re-run alone (`runFileAlone`, the per-test budget) in the base
+  checkout before anything is recorded: green alone, it is logged "red under load, green alone"
+  with the runs active at the time, and records, files and reopens nothing. Only confirmed
+  failures (red alone, or a plain assertion) are stored with `confirmed_at`. A red test files (or updates) its issue with the commit range (the last
   green check, the first red commit) and the log; a test red again after a green check reopens its
   issue. Settings › Execution `baseCheck.onRed` (`off` | `issue` | `fix`, default `fix`)
   adds a fix item, mode auto, in a new stage before the roadmap's current one (`insertFrontStage`;
-  none while the roadmap plans that issue already). The fix item runs the project's default
+  none while the roadmap plans that issue already, nor for an issue a live run works on, #527; the
+  item is marked `source: 'base-health'`, and the dispatcher skips it with a log line instead of
+  pausing the roadmap when its issue "already has a live run"). The fix item runs the project's default
   development workflow (Settings › General › Backlog `defaultWorkflow`, #195, through
   `DefaultWorkflow.resolve`, #413; unset or missing, its fallback, the local workflow). A red or failed check notifies the owner.
   It never pushes, never answers a gate and never changes a running item. The Roadmap bar shows

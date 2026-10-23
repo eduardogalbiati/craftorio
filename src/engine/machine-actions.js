@@ -25,7 +25,10 @@ const { captureScreenshots } = require('./screenshot-step');
 const suiteStep = require('./suite-step');
 const { affectedTests, relatedTests } = require('./affected-tests');
 const { shipRelease, writeReleaseVersion } = require('../releases');
-const { recordSightings } = require('./base-health-store');
+const {
+  confirmedFailures,
+  recordSightings,
+} = require('./base-health-store');
 
 // Simulation: probe states per call, per probe (mockSequences.probes: { step: [...] } overrides them).
 // The CI check fails once (the agent triages it), then passes without an agent turn.
@@ -73,6 +76,9 @@ function real() {
     // #211, #405: the run's pre-existing failures go to the project's base-health store (record only:
     // the service files the issue, src/service/areas/base-health.js)
     noteFailingOnMain: (root, info) => recordSightings(root, info).catch(() => { /* reported in the run anyway */ }),
+    // #527: the failures a base check confirmed red alone since its last green check, the only ones a
+    // run's suite counts as pre-existing (a store it cannot read: none confirmed)
+    confirmedOnMain: (root, projectId) => { try { return confirmedFailures(root, projectId); } catch { return []; } },
     // the test files the run's change can break (#212), plus those that failed in an earlier round
     affectedTests({ root, base, failed = [] }) {
       if (!root || !base) return { mode: 'all', files: [], reasons: {}, changed: [], slow: [], why: 'the run has no worktree or base branch: the whole suite' };
@@ -130,6 +136,8 @@ function simulated({ sequences = null } = {}) {
     relatedTests: () => ({ files: [], reasons: {}, why: '' }),
     existingFiles: (cwd, files) => [...files],
     noteFailingOnMain: () => {},
+    // no base check in a simulation: every failure on the base too stays pre-existing (#211)
+    confirmedOnMain: () => null,
     affectedTests: () => ({
       mode: 'affected', files: [...SIMULATED_FILES],
       reasons: { [SIMULATED_FILES[0]]: 'imports src/simulated.js', [SIMULATED_FILES[1]]: 'imports src/simulated.js (through src/simulated-user.js)' },

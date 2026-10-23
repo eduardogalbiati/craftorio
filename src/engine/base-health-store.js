@@ -34,6 +34,16 @@ function knownFailures(ws, projectId) {
   return readStore(ws, projectId).failures.filter((f) => !f.fixed_at).map((f) => ({ ...f, runs: [...(f.runs || [])], issue: f.issue || null }));
 }
 
+/**
+ * #527: the known failures a base check confirmed red alone since the last green check (confirmed_at,
+ * set by src/base-health.js runBaseCheck; a run's sightings never confirm): the only ones a run's
+ * suite may count as pre-existing.
+ */
+function confirmedFailures(ws, projectId) {
+  const { lastGreen } = readStore(ws, projectId);
+  return knownFailures(ws, projectId).filter((f) => f.confirmed_at && (!lastGreen?.at || f.confirmed_at > lastGreen.at));
+}
+
 // One update of a project's store at a time (a run's record and a check may end together)
 const locks = new Map();
 function withStore(ws, projectId, fn) {
@@ -55,6 +65,7 @@ function upsert(store, f, at, commit) {
     if (entry.issue) entry.reopen = true;
     delete entry.first_red_commit;
     delete entry.fixed_at;
+    delete entry.confirmed_at;
   }
   entry.last_seen = at;
   if (commit) {
@@ -97,6 +108,7 @@ function recordSightings(ws, opts) {
 
 module.exports = {
   addSightings,
+  confirmedFailures,
   HISTORY,
   knownFailures,
   readStore,

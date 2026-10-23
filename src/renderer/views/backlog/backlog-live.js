@@ -107,6 +107,8 @@
     if (!c?.status) return '';
     const commit = String(c.commit || '').slice(0, 8);
     const text = c.status === 'running' ? t('backlog_roadmap.base_check_running', { time: clock(c.startedAt), commit })
+      // #527: another run's whole suite holds the machine's suite slot
+      : c.status === 'waiting' ? t('backlog_roadmap.base_check_waiting')
       : c.status === 'green' ? t('backlog_roadmap.base_check_green', { commit })
         : c.status === 'red' ? t('backlog_roadmap.base_check_red', { count: c.failures ?? 0, commit })
           : t('backlog_roadmap.base_check_failed', { error: c.error || '' });

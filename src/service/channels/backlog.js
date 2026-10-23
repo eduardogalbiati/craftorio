@@ -132,9 +132,9 @@ module.exports = (ctx) => {
     // #204: a backlog/ file changed ({ projectId, file, watching }, areas/backlog-watch.js); watching:
     // false = the watcher failed, the screen polls while visible
     { event: 'backlog:changed', method: 'onBacklogChanged' },
-    // #465: the base check (#405) started or ended ({ projectId, status: running | green | red | error,
-    // commit, log, startedAt, endedAt, failures, error }, areas/base-health.js); its log opens in a
-    // 'base-check' terminal
+    // #465: the base check (#405) started or ended ({ projectId, status: waiting | running | green | red | error,
+    // commit, log, startedAt, endedAt, failures, error, message, holder }, areas/base-health.js; #527:
+    // waiting = for the machine's suite slot); its log opens in a 'base-check' terminal
     { event: 'baseCheck:changed', method: 'onBaseCheckChanged' },
     {
       channel: 'baseCheck:state',

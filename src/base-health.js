@@ -11,6 +11,10 @@
 //   commit range (last green, first red) and the log; with Settings › Execution's onRed 'fix' a
 //   fix item, mode auto, goes in a new stage before the roadmap's current one (src/roadmap.js
 //   insertFrontStage). It never pushes, never answers a gate and never touches a running item.
+//   #527: it holds the machine-wide `suite` slot (src/engine/machine-slot.js, #455) for its suite, so
+//   no run's whole suite loads the machine meanwhile; a timing failure (`test timed out`, a duration)
+//   is re-run alone first and only one red alone is recorded (confirmed_at) and filed; no fix item for
+//   an issue a live run works on (the dispatcher skips a base-health item whose issue has one).
 // - knownFailures: what the Roadmap shows ("N known failures on the base", backlog:get baseFailures).
 // Store: <workspace>/backlog/base-health/<project id>.json ({ failures, lastGreen }); the logs and
 // issue bodies next to it, in <project id>/ (the store itself: src/engine/base-health-store.js, so
@@ -22,7 +26,14 @@ const issues = require('./issues');
 const roadmaps = require('./roadmap');
 const { LOCAL } = require('./shared/default-workflow');
 const { prepareBaseWorktree, removeWorktree } = require('./engine/worktree');
-const { suiteEnv } = require('./engine/suite-step');
+const { FILE_TIMEOUT_MS, suiteEnv } = require('./engine/suite-step');
+const {
+  acquireSlot,
+  slotDir,
+  SUITE_MAX_HOLD_MS,
+  SUITE_SLOT,
+  SUITE_SLOT_ENV,
+} = require('./engine/machine-slot');
 const {
   addSightings,
   HISTORY,
@@ -96,14 +107,16 @@ async function fileIssue(ws, projectId, entry, { platform, repo, exec, ...ctx })
   return { url, number, action: 'created', test: entry.test };
 }
 
-// The fix item, mode auto, in a new stage before the roadmap's current one → the item or null
-function addFixItem(ws, projectId, filed, workflow) {
-  const list = filed.filter((x) => x.number).map((x) => ({ number: x.number, title: `Red on the base: ${x.test}`, url: x.url }));
+// The fix item, mode auto, in a new stage before the roadmap's current one → the item or null.
+// #527: none for an issue a live run works on (liveRunForIssues); the item is marked source 'base-health'.
+function addFixItem(ws, projectId, filed, workflow, liveRunForIssues) {
+  const list = filed.filter((x) => x.number && !liveRunForIssues?.([{ number: x.number }]))
+    .map((x) => ({ number: x.number, title: `Red on the base: ${x.test}`, url: x.url }));
   if (!list.length) return null;
   const stage = roadmaps.insertFrontStage(path.join(ws, 'backlog'), projectId, {
     name: 'Fix the base',
     note: 'Added by the base check (#405): a test is red on the base.',
-    items: [{ workflow: workflow || LOCAL, inputs: { mode: 'auto' }, issues: list, reason: 'Main stays green: the base has a red test.' }],
+    items: [{ workflow: workflow || LOCAL, inputs: { mode: 'auto' }, issues: list, reason: 'Main stays green: the base has a red test.', source: 'base-health' }],
   });
   return stage?.items[0] || null;
 }
@@ -121,7 +134,7 @@ async function report(ws, projectId, entries, opts) {
   for (const entry of entries) {
     try { filed.push(await fileIssue(ws, projectId, entry, { ...opts, repo })); } catch (e) { console.error(`base health: issue for ${entry.test}:`, e.message); }
   }
-  const fixItem = onRed === 'fix' && filed.length ? addFixItem(ws, projectId, filed, opts.workflow) : null;
+  const fixItem = onRed === 'fix' && filed.length ? addFixItem(ws, projectId, filed, opts.workflow, opts.liveRunForIssues) : null;
   return { issues: filed.map(({ url, action, test }) => ({ url, action, test })), fixItem };
 }
 
@@ -157,13 +170,41 @@ function serialize(fn) {
   return next;
 }
 
+// #527: a failure that may come from the machine's load, not from the code: a test timed out, or a
+// timing assertion (the slowest-file order, a duration)
+const TIMING_FAILURE = /test timed out|timed out after|\bslowest\b|\bduration\b|\btook \d+(\.\d+)? ?m?s\b/i;
+const aboutTime = (f) => TIMING_FAILURE.test(String(f.error || f.reason || ''));
+
+// #527: the timing failures re-run alone (runAlone), in the check's checkout while the slot is held
+// → the failures to record: the others, and the timing ones red alone. Without runAlone, all of them.
+async function confirmAlone(failures, { runAlone, cwd, env, commit, load, log }) {
+  if (typeof runAlone !== 'function') return failures;
+  const out = [];
+  for (const f of failures) {
+    if (!aboutTime(f)) { out.push(f); continue; }
+    let r;
+    try { r = await runAlone({ cwd, env, file: f.file, test: f.test, timeoutMs: FILE_TIMEOUT_MS, commit }); } catch (e) { r = { status: 'fail', error: e.message }; }
+    if (r?.status !== 'pass') { out.push(f); continue; }
+    let runs = [];
+    try { runs = (typeof load === 'function' ? load() : []) || []; } catch { runs = []; }
+    log('info', `base check: ${f.test} (${f.file || 'unknown file'}) red under load, green alone in ${((r.ms || 0) / 1e3).toFixed(1)} s (load: ${runs.length ? runs.join(', ') : 'no run active'})`);
+  }
+  return out;
+}
+
 /**
  * The base check: the suite on a clean checkout of the local base tip; a red test files its issue
  * and, with onRed 'fix', a fix item. → { status: green | red | deferred | error, commit, issues, fixItem }
+ * #527: it takes the machine-wide `suite` slot first (waiting for a run's whole suite, `slot.onWait`
+ * and a log line say so), frees it however it ends; a timing failure is re-run alone (`runAlone`) and
+ * recorded only when red alone (confirmed_at: what a run's suite may count as pre-existing).
  * @param {string} ws the workspace root
  * @param {{ projectId: string, repo: string, base: string, platform?: string, ghRepo?: string,
  *   trigger?: string, onRed?: string, releaseHoldsBase?: () => boolean,
  *   runSuite: ({ cwd, env, commit }) => Promise<{ failures: object[], log?: string, error?: string }>,
+ *   runAlone?: ({ cwd, env, file, test, timeoutMs, commit }) => Promise<{ status: string, failures: object[], ms: number }>,
+ *   slot?: { dir?: string, holder?: string, onWait?: Function, pollMs?: number },
+ *   liveRunForIssues?: (issues: object[]) => object|null, load?: () => string[],
  *   exec?: Function, workflow?: string, log?: Function }} opts
  */
 function runBaseCheck(ws, opts) {
@@ -175,22 +216,45 @@ function runBaseCheck(ws, opts) {
     const { projectId, repo, base, log = () => {} } = opts;
     const onRed = ON_RED.includes(opts.onRed) ? opts.onRed : 'fix';
     const dir = path.join(ws, 'worktrees', `base-check-${slug(projectId)}`);
-    const info = await prepareBaseWorktree({ repo, base, dir, log, remote: false });
-    if (!info) return { status: 'error', error: `${repo} is not a git repository`, commit: null, issues: [], fixItem: null };
-    let result;
+    // #527: one whole suite at a time per machine (#455), the base check's included
+    const slot = opts.slot || {};
+    let held;
     try {
-      // the check's own screenshot slot (#210), as each run's suite has
-      const env = suiteEnv(process.env, { locksDir: path.join(ws, 'worktrees', `base-check-${slug(projectId)}-locks`) }).env;
-      result = await opts.runSuite({ cwd: info.workDir, env, commit: info.commit });
+      held = await acquireSlot(SUITE_SLOT, {
+        dir: slot.dir || slotDir(), holder: slot.holder || `base-check ${projectId}`, pollMs: slot.pollMs, waitMs: 2 * SUITE_MAX_HOLD_MS,
+        onWait: (holder) => {
+          log('info', `base check waiting for the suite slot (run ${holder?.holder || '?'}, pid ${holder?.pid ?? '?'})`);
+          slot.onWait?.(holder);
+        },
+      });
     } catch (e) {
-      result = { failures: [], log: '', error: e.message };
-    } finally {
-      await removeWorktree({ repo: info.repo, dir: info.dir, remote: false, log }).catch(() => {});
+      return { status: 'error', error: e.message, commit: null, issues: [], fixItem: null };
     }
-    const failures = (result?.failures || []).filter((f) => f?.test);
+    let info;
+    let result;
+    let failures = [];
+    try {
+      info = await prepareBaseWorktree({ repo, base, dir, log, remote: false });
+      if (!info) return { status: 'error', error: `${repo} is not a git repository`, commit: null, issues: [], fixItem: null };
+      // the check's own screenshot slot (#210), as each run's suite has; its children inherit the suite slot
+      const env = { ...suiteEnv(process.env, { locksDir: path.join(ws, 'worktrees', `base-check-${slug(projectId)}-locks`) }).env, [SUITE_SLOT_ENV]: held.token };
+      try {
+        result = await opts.runSuite({ cwd: info.workDir, env, commit: info.commit });
+        failures = (result?.failures || []).filter((f) => f?.test);
+        if (failures.length) failures = await confirmAlone(failures, { ...opts, cwd: info.workDir, env, commit: info.commit, log });
+      } catch (e) {
+        result = { failures: [], log: '', error: e.message };
+      }
+    } finally {
+      if (info) await removeWorktree({ repo: info.repo, dir: info.dir, remote: false, log }).catch(() => {});
+      held.release();
+    }
+    const underLoad = (result?.failures || []).filter((f) => f?.test).length > 0;
     const at = new Date().toISOString();
     return withStore(ws, projectId, async () => {
       const store = readStore(ws, projectId);
+      // #527: red only under load, green alone: not a green suite either, nothing recorded
+      if (!failures.length && underLoad && !result?.error) return { status: 'green', alone: true, commit: info.commit, issues: [], fixItem: null };
       if (!failures.length) {
         if (result?.error) return { status: 'error', error: result.error, commit: info.commit, issues: [], fixItem: null };
         // green: the known failures are fixed (their entries keep the issue, should the test go red again)
@@ -203,7 +267,8 @@ function runBaseCheck(ws, opts) {
       fs.mkdirSync(dirLog, { recursive: true });
       const logFile = path.join(dirLog, `${stamp(at)}-suite.log`);
       fs.writeFileSync(logFile, String(result.log || ''));
-      const entries = failures.map((f) => Object.assign(upsert(store, f, at, info.commit), { base_check: { at, commit: info.commit, trigger: opts.trigger || 'merge' } }));
+      // #527: confirmed by this check (alone for a timing failure): a run's suite may count it as pre-existing
+      const entries = failures.map((f) => Object.assign(upsert(store, f, at, info.commit), { base_check: { at, commit: info.commit, trigger: opts.trigger || 'merge' }, confirmed_at: at }));
       writeStore(ws, projectId, store);
       const out = await report(ws, projectId, entries, { ...opts, onRed, commit: info.commit, lastGreen: store.lastGreen?.commit, logFile, logText: result.log });
       writeStore(ws, projectId, store);

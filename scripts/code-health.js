@@ -122,7 +122,6 @@ const COMPLEXITY_EXCEPTIONS = {
   'src/service/areas/live-roadmap.js:refill': 35,
   'src/service/areas/releases.js:settleRelease': 29,
   'src/service/areas/resume.js:keptWorkQuestion': 29,
-  'src/service/areas/roadmap.js:advanceRoadmap': 36,
   'src/service/areas/runs.js:startWorkflowRun': 41,
   'src/session-tail.js:print': 29,
   'src/session-tail.js:printOrchestrator': 45,

@@ -282,6 +282,8 @@ function cleanItem(raw, known, previous) {
   const reason = String(raw.reason ?? old?.reason ?? '').trim();
   const modeReason = String(raw.modeReason ?? raw.mode_reason ?? old?.modeReason ?? '').trim();
   const origin = String(raw.origin ?? old?.origin ?? '').trim();
+  // #527: who added the item ('base-health': the base check's fix item, skipped when its issue is in a live run)
+  const source = String(raw.source ?? old?.source ?? '').trim();
   // what happens with the item's run result when it finishes (#134), given to its start
   const then = normalizeThen(raw.then);
   // the Product Owner's Cost choices (#205), shown on the card
@@ -291,7 +293,7 @@ function cleanItem(raw, known, previous) {
   return {
     id: old ? old.id : newId('item'), workflow, workflowName: raw.workflowName || old?.workflowName || workflow,
     inputs: raw.inputs && typeof raw.inputs === 'object' ? raw.inputs : {}, mock: !!raw.mock,
-    ...(reason ? { reason } : {}), ...(modeReason ? { modeReason } : {}), ...(origin ? { origin } : {}), ...(then ? { then } : {}), ...(cost ? { cost } : {}),
+    ...(reason ? { reason } : {}), ...(modeReason ? { modeReason } : {}), ...(origin ? { origin } : {}), ...(source ? { source } : {}), ...(then ? { then } : {}), ...(cost ? { cost } : {}),
     ...(agentOverrides ? { agentOverrides } : {}),
     ...issues[0], issues,
     ...runState(state),
@@ -852,8 +854,13 @@ function waiveBudget(dir, projectId, key) {
 
 // An item whose issues were all found closed right before its start (#168: read again from the platform).
 function skipClosed(dir, projectId, itemId) {
+  return skipItem(dir, projectId, itemId, 'Every issue is closed.');
+}
+
+// An item skipped at its start, `why` kept as its error (#527: a base-health fix item whose issue a live run has).
+function skipItem(dir, projectId, itemId, why) {
   return updateRoadmap(dir, projectId, (r) => ({
-    ...r, stages: r.stages.map((s) => ({ ...s, items: s.items.map((x) => (x.id === itemId ? { ...x, status: 'skipped', error: 'Every issue is closed.' } : x)) })),
+    ...r, stages: r.stages.map((s) => ({ ...s, items: s.items.map((x) => (x.id === itemId ? { ...x, status: 'skipped', error: String(why || '') || null } : x)) })),
   }));
 }
 
@@ -902,6 +909,7 @@ module.exports = {
   setRelease,
   setState,
   skipClosed,
+  skipItem,
   stagePauseLine,
   takeRelease,
   testsLater,
